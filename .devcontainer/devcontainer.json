@@ -1,0 +1,26 @@
+{
+  "name": "Effect Plus",
+  "image": "mcr.microsoft.com/devcontainers/typescript-node:24-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+    "ghcr.io/devcontainers-community/features/deno:1": {},
+    "ghcr.io/devcontainers-extra/features/dprint-asdf:2": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+  "mounts": [
+    "type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock"
+  ],
+  "postCreateCommand": "curl -fsSL https://vite.plus | bash",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "vscode-icons-team.vscode-icons",
+        "qwtel.sqlite-viewer",
+        "ms-vscode.vscode-typescript-next",
+        "yoavbls.pretty-ts-errors",
+        "oxc.oxc-vscode",
+        "dprint.dprint"
+      ]
+    }
+  }
+}
