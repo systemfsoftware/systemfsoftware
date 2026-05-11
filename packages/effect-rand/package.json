@@ -1,0 +1,59 @@
+{
+  "name": "@systemfsoftware/effect-rand",
+  "version": "0.0.0",
+  "description": "Effect Random service implementations.",
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/effect-rand#readme",
+  "bugs": {
+    "url": "https://github.com/systemfsoftware/systemfsoftware/issues"
+  },
+  "license": "MIT",
+  "author": "systemfsoftware",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/systemfsoftware/systemfsoftware.git"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "default": "./dist/index.mjs"
+    },
+    "./pcg": {
+      "types": "./dist/pcg.d.mts",
+      "default": "./dist/pcg.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "vp pack",
+    "dev": "vp pack --watch",
+    "test": "vp test",
+    "check": "vp check",
+    "prepublishOnly": "vp run build"
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "@stryker-mutator/api": "catalog:",
+    "@stryker-mutator/core": "catalog:",
+    "@stryker-mutator/typescript-checker": "catalog:",
+    "@stryker-mutator/vitest-runner": "catalog:",
+    "@types/bun": "catalog:",
+    "@types/node": "catalog:",
+    "@typescript/native-preview": "catalog:",
+    "bumpp": "^11.0.1",
+    "effect": "catalog:",
+    "incur": "catalog:",
+    "typescript": "catalog:",
+    "vite-plus": "catalog:",
+    "vitest": "catalog:package"
+  },
+  "peerDependencies": {
+    "effect": "catalog:"
+  }
+}

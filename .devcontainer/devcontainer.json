@@ -7,9 +7,7 @@
     "ghcr.io/devcontainers-extra/features/dprint-asdf:2": {},
     "ghcr.io/devcontainers/features/github-cli:1": {}
   },
-  "mounts": [
-    "type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock"
-  ],
+  "mounts": ["type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock"],
   "postCreateCommand": "curl -fsSL https://vite.plus | bash",
   "customizations": {
     "vscode": {
