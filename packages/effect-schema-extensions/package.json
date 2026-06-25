@@ -1,0 +1,66 @@
+{
+  "name": "@systemfsoftware/effect-schema-extensions",
+  "license": "MIT",
+  "version": "0.1.0",
+  "author": "Ryan Lee <drdgvhbh@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
+    "directory": "packages/effect-schema-extensions"
+  },
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/effect-schema-extensions#readme",
+  "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
+  "description": "Extra Effect Schema codecs — hex-string and prefixed-hex schemas with branded types, decode/encode, and arbitraries.",
+  "keywords": [
+    "effect",
+    "effect-ts",
+    "schema",
+    "codec",
+    "hex",
+    "hexstring",
+    "branded-types",
+    "validation",
+    "typescript"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "@systemfsoftware/source": "./src/mod.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "clean": "rimraf dist",
+    "build": "tsdown",
+    "typecheck": "tsgo --noEmit --incremental",
+    "test": "vitest run",
+    "test:run": "vitest run",
+    "lint": "oxlint . ${AGENT:+--format=unix --quiet}"
+  },
+  "devDependencies": {
+    "@effect/vitest": "0.29.0",
+    "@systemfsoftware/effect-schema-law": "workspace:^",
+    "@systemfsoftware/oxlint-config": "workspace:^",
+    "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
+    "@vitest/coverage-v8": "^4",
+    "effect": "^3.21.2",
+    "fast-check": "^3",
+    "rimraf": "^6.1.3",
+    "tsdown": "^0.22.3",
+    "vitest": "^4"
+  },
+  "peerDependencies": {
+    "effect": "*"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": "./dist/index.mjs",
+      "./package.json": "./package.json"
+    }
+  }
+}

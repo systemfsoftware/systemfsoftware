@@ -1,0 +1,85 @@
+{
+  "name": "@systemfsoftware/stryker-plugins",
+  "license": "MIT",
+  "version": "0.1.0",
+  "author": "Ryan Lee <drdgvhbh@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
+    "directory": "packages/stryker-plugins"
+  },
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/stryker-plugins#readme",
+  "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
+  "description": "Stryker mutation-testing plugins for Effect-TS — ignore equivalent mutants on Effect Schema declarations (brands, TaggedClass/TaggedError tags) so the score reflects behaviour, not data.",
+  "keywords": [
+    "stryker",
+    "stryker-mutator",
+    "mutation-testing",
+    "effect",
+    "effect-ts",
+    "schema",
+    "ignorer",
+    "equivalent-mutants",
+    "test-quality",
+    "typescript"
+  ],
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "@systemfsoftware/source": "./src/mod.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./effect-schema-ignorer": {
+      "@systemfsoftware/source": "./src/effect-schema-ignorer/index.ts",
+      "default": "./dist/effect-schema-ignorer.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "clean": "rimraf dist",
+    "typecheck": "tsgo --noEmit --incremental",
+    "test": "vitest run",
+    "test:run": "vitest run --coverage",
+    "test:types": "tstyche",
+    "mutation": "stryker run --incremental",
+    "mutation:full": "stryker run",
+    "lint": "oxlint . ${AGENT:+--format=unix --quiet}"
+  },
+  "dependencies": {
+    "effect": "^3.21.2"
+  },
+  "devDependencies": {
+    "@babel/types": "^7.29.0",
+    "@effect/vitest": "0.29.0",
+    "@stryker-mutator/api": "^9.6.1",
+    "@stryker-mutator/core": "^9.6.1",
+    "@stryker-mutator/typescript-checker": "^9.6.1",
+    "@stryker-mutator/vitest-runner": "^9.6.1",
+    "@systemfsoftware/effect-schema-law": "workspace:^",
+    "@systemfsoftware/oxlint-config": "workspace:^",
+    "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
+    "@types/node": "^24",
+    "@vitest/coverage-v8": "^4",
+    "rimraf": "^6.1.3",
+    "tsdown": "^0.22.3",
+    "tstyche": "^7.1.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4"
+  },
+  "peerDependencies": {
+    "@stryker-mutator/api": "^9.6.1",
+    "typescript": ">=5.0.0"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": "./dist/index.mjs",
+      "./effect-schema-ignorer": "./dist/effect-schema-ignorer.mjs",
+      "./package.json": "./package.json"
+    }
+  }
+}

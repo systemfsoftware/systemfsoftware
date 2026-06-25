@@ -1,0 +1,114 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "tasks": {
+    "build": {
+      "outputLogs": "new-only",
+      "inputs": [
+        "src/**",
+        "tsconfig.json",
+        "tsconfig.build.json",
+        "tsconfig.*.json",
+        "package.json",
+        "tsdown.config.*"
+      ],
+      "outputs": [
+        "dist/**"
+      ],
+      "dependsOn": [
+        "^build"
+      ]
+    },
+    "typecheck": {
+      "outputLogs": "errors-only",
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "tsconfig.json",
+        "tsconfig.*.json"
+      ],
+      "outputs": [],
+      "dependsOn": [
+        "^build"
+      ],
+      "cache": false
+    },
+    "test": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "vitest.config.ts",
+        "vitest.config.*",
+        "src/**/*.test.ts",
+        "src/**/*.spec.ts",
+        "$TURBO_ROOT$/packages/vitest-config/lib/**"
+      ],
+      "outputLogs": "errors-only",
+      "dependsOn": [
+        "^build"
+      ],
+      "outputs": [
+        "coverage/**"
+      ],
+      "env": [
+        "NODE_ENV",
+        "CI"
+      ],
+      "cache": true
+    },
+    "mutation": {
+      "dependsOn": [
+        "^build"
+      ],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "stryker.config.json",
+        "vitest.config.ts",
+        "vitest.setup.ts",
+        "reports/stryker-incremental.json"
+      ],
+      "outputs": [
+        "reports/mutation-report.html",
+        "reports/mutation-report.json"
+      ],
+      "env": [
+        "NODE_ENV",
+        "CI"
+      ],
+      "cache": true
+    },
+    "lint": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "tsconfig.json",
+        "tsconfig.*.json",
+        "$TURBO_ROOT$/packages/oxlint-config/**"
+      ],
+      "outputs": [],
+      "dependsOn": [
+        "^build"
+      ],
+      "env": [
+        "NODE_ENV"
+      ],
+      "cache": true
+    },
+    "api:check": {
+      "outputLogs": "errors-only",
+      "inputs": [
+        "src/**",
+        "api-extractor.json",
+        "etc/*.api.md",
+        "tsconfig.build.json"
+      ],
+      "outputs": [
+        "dist/*.d.ts",
+        "etc/*.api.md",
+        "temp/**"
+      ],
+      "dependsOn": [
+        "build"
+      ]
+    },
+    "clean": {
+      "cache": false
+    }
+  }
+}

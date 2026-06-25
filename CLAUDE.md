@@ -1,0 +1,2 @@
+@CONSTITUTION.md
+@AGENTS.md

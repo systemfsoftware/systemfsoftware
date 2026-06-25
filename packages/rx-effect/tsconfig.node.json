@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "composite": true,
+    "noEmit": false
+  },
+  "include": [
+    "vitest.config.ts",
+    "vitest-setup.ts",
+    "tsdown.config.ts",
+    "oxlint.config.ts"
+  ]
+}

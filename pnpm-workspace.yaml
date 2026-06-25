@@ -1,0 +1,16 @@
+packages:
+  - "packages/*"
+
+minimumReleaseAge: 1440
+minimumReleaseAgeExclude:
+  - "@typescript/native-preview"
+  - "@typescript/native-preview-*"
+  - oxlint-tsgolint
+
+allowBuilds:
+  dprint: true
+  esbuild: true
+  unrs-resolver: true
+
+overrides:
+  vite: "^7"

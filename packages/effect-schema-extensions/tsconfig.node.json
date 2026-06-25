@@ -1,0 +1,8 @@
+{
+  "extends": "./tsconfig.json",
+  "include": [
+    "oxlint.config.ts",
+    "vitest.config.ts",
+    "vitest-setup.ts"
+  ]
+}
