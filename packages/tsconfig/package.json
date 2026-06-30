@@ -1,6 +1,5 @@
 {
   "name": "@systemfsoftware/tsconfig",
-  "private": true,
   "license": "MIT",
   "version": "1.0.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
