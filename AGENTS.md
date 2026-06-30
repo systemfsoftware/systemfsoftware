@@ -9,8 +9,8 @@
 ## Stack
 
 - **Package manager** — pnpm (`pnpm-workspace.yaml` is the source of truth). Run scripts as `pnpm --filter <pkg> <cmd>` from root; **never** `cd <dir> && <cmd>`. No `npx` — use `pnpm exec`.
-- **Types** — TypeScript 7 via `tsgo` (`@typescript/native-preview`); `effect-daemon-spec` additionally runs `tsc` for the api-extractor pipeline.
-- **Build** — tsdown (ESM, `.mjs` + `tsgo` dts). Build output is **gitignored — never committed.**
+- **Types** — TypeScript 7 via `tsc`; `effect-daemon-spec` additionally runs `tsc` for the api-extractor pipeline.
+- **Build** — tsdown (ESM, `.mjs` + `tsc` dts). Build output is **gitignored — never committed.**
 - **Tests** — Vitest + `@effect/vitest` + `fast-check` (PBT). Mutation via Stryker with the `typescript-checker`.
 - **Lint / format** — oxlint (self-hosted: the repo lints itself with `@systemfsoftware/oxlint-plugin` through `@systemfsoftware/oxlint-config`) + dprint.
 

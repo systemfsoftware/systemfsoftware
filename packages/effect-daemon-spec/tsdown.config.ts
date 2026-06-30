@@ -33,7 +33,7 @@ export default defineConfig({
     onlyBundle: false,
   },
   format: 'esm',
-  dts: { tsgo: true },
+  dts: { tsgo: { path: 'tsc' } },
   outExtensions: () => ({ js: '.mjs', dts: '.d.ts' }),
   tsconfig: './tsconfig.build.json',
   define: { 'import.meta.vitest': 'undefined' },

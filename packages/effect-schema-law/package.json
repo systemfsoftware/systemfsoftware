@@ -38,7 +38,7 @@
   "scripts": {
     "clean": "rimraf dist",
     "build": "tsdown",
-    "typecheck": "tsgo --noEmit --incremental",
+    "typecheck": "tsc --noEmit --incremental",
     "test": "vitest run",
     "test:run": "vitest run",
     "lint": "oxlint . ${AGENT:+--format=unix --quiet}"

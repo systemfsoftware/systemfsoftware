@@ -40,7 +40,7 @@
   "scripts": {
     "clean": "rimraf dist",
     "build": "tsdown",
-    "typecheck": "tsgo --noEmit --incremental && tsc --noEmit --incremental",
+    "typecheck": "tsc --noEmit --incremental",
     "test": "vitest run",
     "test:run": "vitest run",
     "mutation": "stryker run --incremental",
@@ -67,7 +67,7 @@
     "fast-check": "^3",
     "rimraf": "^6.1.3",
     "tsdown": "^0.22.3",
-    "typescript": "^6.0.3",
+    "typescript": "catalog:",
     "vite-tsconfig-paths": "^6.1.1",
     "vitest": "^4"
   },

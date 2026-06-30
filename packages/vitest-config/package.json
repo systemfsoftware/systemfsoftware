@@ -19,7 +19,7 @@
     "lib"
   ],
   "scripts": {
-    "typecheck": "tsgo --noEmit --incremental"
+    "typecheck": "tsc --noEmit --incremental"
   },
   "devDependencies": {
     "@systemfsoftware/tsconfig": "workspace:^",

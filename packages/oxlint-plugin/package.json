@@ -35,7 +35,7 @@
   "scripts": {
     "build": "tsdown",
     "clean": "rimraf dist",
-    "typecheck": "tsgo --noEmit --incremental",
+    "typecheck": "tsc --noEmit --incremental",
     "format": "dprint fmt",
     "test": "vitest run",
     "test:run": "vitest run --coverage",
@@ -59,7 +59,7 @@
     "oxlint": "^1.60.0",
     "rimraf": "^6.1.3",
     "tsdown": "^0.22.3",
-    "typescript": "^6.0.3",
+    "typescript": "catalog:",
     "vitest": "^4"
   },
   "peerDependencies": {

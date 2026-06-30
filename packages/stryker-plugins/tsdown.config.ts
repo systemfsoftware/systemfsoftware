@@ -6,7 +6,7 @@ export default defineConfig({
     'effect-schema-ignorer': './src/effect-schema-ignorer/index.ts',
   },
   format: 'esm',
-  dts: { tsgo: true },
+  dts: { tsgo: { path: 'tsc' } },
   tsconfig: './tsconfig.build.json',
   clean: false,
   exports: { devExports: '@systemfsoftware/source' },

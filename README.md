@@ -44,7 +44,7 @@ pnpm add -D @systemfsoftware/oxlint-plugin
 ```bash
 pnpm install
 pnpm build        # tsdown, in dependency order (turbo)
-pnpm typecheck    # tsgo (TypeScript 7) + tsc
+pnpm typecheck    # tsc (TypeScript 7)
 pnpm test         # vitest — property + composition suites
 pnpm lint         # dprint check + oxlint (self-hosted plugin)
 pnpm --filter @systemfsoftware/effect-daemon-spec mutation   # stryker, 100% gate

@@ -14,7 +14,7 @@
   ],
   "scripts": {
     "clean": "rimraf dist",
-    "typecheck": "tsgo --noEmit --incremental",
+    "typecheck": "tsc --noEmit --incremental",
     "lint": "oxlint . ${AGENT:+--format=unix --quiet}"
   },
   "dependencies": {

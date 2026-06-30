@@ -7,7 +7,7 @@ Requires Node 24+ and pnpm 11 (pinned via `packageManager`; `corepack enable` pi
 ```bash
 pnpm install
 pnpm build        # tsdown, dependency order
-pnpm typecheck    # tsgo (TypeScript 7)
+pnpm typecheck    # tsc (TypeScript 7)
 pnpm test         # vitest — property + composition suites
 pnpm lint         # dprint check + self-hosted oxlint
 ```
