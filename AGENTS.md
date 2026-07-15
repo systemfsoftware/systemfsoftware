@@ -65,6 +65,29 @@ Evidence is a runnable command, not "it worked here":
 5. `effect-daemon-spec` only: `pnpm --filter @systemfsoftware/effect-daemon-spec api:check` exit 0; commit `etc/*.api.md` when the surface changes.
 6. Conventional Commit (lower-case type, ≤72-char header, no scope). Allowed types and rules are enforced by `commitlint.config.ts`. No AI co-author trailers.
 
+## Version control — jj first
+
+The repo uses [Jujutsu](https://github.com/martinvonz/jj) (jj) colocated with git: `.jj/` and `.git/` both exist, and the colocated backend is the source of truth for working-copy state. Direct `git` CLI commands invoked through the Bash tool are blocked by a PreToolUse hook (exit 2 with a redirect to `jj`); `jj …` and indirect git usage by package scripts is allowed.
+
+Common command mappings:
+
+| git                                  | jj                                     |
+| ------------------------------------ | -------------------------------------- |
+| `git status`                         | `jj st`                                |
+| `git diff`                           | `jj diff`                              |
+| `git log`                            | `jj log`                               |
+| `git add <files>`                    | (none — `jj` records the working copy) |
+| `git commit -m "<msg>"`              | `jj commit -m "<msg>"`                 |
+| `git commit --amend`                 | `jj squash`                            |
+| `git rebase -i <upstream>`           | `jj rebase -i <upstream>`              |
+| `git branch <name>`                  | `jj bookmark create <name>`            |
+| `git switch <name>` / `git checkout` | `jj edit <name>` (or `jj new <name>`)  |
+| `git push`                           | `jj git push`                          |
+| `git fetch`                          | `jj git fetch`                         |
+| `git stash`                          | (use a named change + `jj edit`)       |
+
+Commit messages, signing, and the Conventional Commit + GPG rules in `## Commits` below are unchanged — jj writes a real git commit on `jj git push`, and that commit is what `commitlint` and git's signing pipeline see.
+
 ## Commits
 
 `pnpm exec commitlint` enforces the type-enum and `type-matches-diff-shape`. Files under `.claude/`, configs, and lockfiles are `chore`/`build`/`ci`/`deps`, not `docs`. `feat`/`fix` MUST touch production source. Commits are GPG-signed as `Ryan Lee <drdgvhbh@gmail.com>`.
