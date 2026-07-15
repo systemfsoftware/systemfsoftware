@@ -1,15 +1,51 @@
 import { execFileSync } from 'node:child_process'
 
+import pnpmScopes from '@commitlint/config-pnpm-scopes'
 import type { UserConfig } from '@commitlint/types'
 import { readdirSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { dirname, join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const packagesDir = join(dirname(fileURLToPath(import.meta.url)), 'packages')
-const packageScopes = readdirSync(packagesDir, { withFileTypes: true })
-  .filter((entry) => entry.isDirectory())
-  .map((entry) => entry.name)
-const allowedScopes = [...packageScopes, 'repo', 'deps', 'release', 'ci']
+const repoRoot = dirname(fileURLToPath(import.meta.url))
+const packagesDir = join(repoRoot, 'packages')
+
+/**
+ * Derive intermediate group scopes (e.g. `stryker-js`) for directories that
+ * contain workspace packages but are not packages themselves. Preserves the
+ * scopes used by historical commits in this repo.
+ */
+const discoverGroupScopes = (dir: string): readonly string[] => {
+  const groups: string[] = []
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue
+    const groupPath = join(dir, entry.name)
+    const hasPackageJson = (() => {
+      try {
+        return readdirSync(groupPath).includes('package.json')
+      } catch {
+        return false
+      }
+    })()
+    if (hasPackageJson) continue // it's a leaf package, not a group
+
+    const hasNestedPackage = readdirSync(groupPath, { withFileTypes: true })
+      .filter((e) => e.isDirectory())
+      .some((e) => {
+        try {
+          return readdirSync(join(groupPath, e.name)).includes('package.json')
+        } catch {
+          return false
+        }
+      })
+
+    if (hasNestedPackage) {
+      groups.push(relative(packagesDir, groupPath))
+    }
+  }
+  return groups
+}
+
+const EXTRA_SCOPES = ['repo', 'deps', 'release', 'ci', ...discoverGroupScopes(packagesDir)] as const
 
 const matchesAny = (...patterns: readonly RegExp[]) => (path: string) => patterns.some((p) => p.test(path))
 
@@ -71,16 +107,16 @@ const isTooling = matchesAny(
 const ALLOWED_BY_SHAPE: ReadonlyArray<{
   readonly name: string
   readonly match: (path: string) => boolean
-  readonly allowed: ReadonlySet<string>
+  readonly allowed: Readonly<Record<string, true>>
 }> = [
-  { name: 'docs', match: isDoc, allowed: new Set(['docs', 'chore', 'ai']) },
-  { name: 'test', match: isTest, allowed: new Set(['test', 'chore']) },
-  { name: 'CI', match: isCI, allowed: new Set(['ci', 'chore']) },
-  { name: 'lockfile', match: isLockfile, allowed: new Set(['deps', 'chore']) },
+  { name: 'docs', match: isDoc, allowed: { docs: true, chore: true, ai: true } },
+  { name: 'test', match: isTest, allowed: { test: true, chore: true } },
+  { name: 'CI', match: isCI, allowed: { ci: true, chore: true } },
+  { name: 'lockfile', match: isLockfile, allowed: { deps: true, chore: true } },
   {
     name: 'tooling',
     match: isTooling,
-    allowed: new Set(['chore', 'build', 'ci', 'deps', 'ai', 'security']),
+    allowed: { chore: true, build: true, ci: true, deps: true, ai: true, security: true },
   },
 ]
 
@@ -98,8 +134,23 @@ const stagedFiles = (): readonly string[] => {
   }
 }
 
+/**
+ * SOTA monorepo scope discovery:
+ * Use @commitlint/config-pnpm-scopes to derive scopes from pnpm-workspace.yaml,
+ * then append repo-wide meta scopes. This automatically handles nested workspace
+ * members like packages/stryker-js/* without hand-rolled recursion.
+ */
+const scopeEnum = async (context: Record<string, unknown>) => {
+  const base = (await pnpmScopes.rules['scope-enum'](context)) as [number, 'always' | 'never', readonly string[]]
+  return [
+    base[0],
+    base[1],
+    [...base[2], ...EXTRA_SCOPES],
+  ] as [number, 'always' | 'never', readonly string[]]
+}
+
 const configuration: UserConfig = {
-  extends: ['@commitlint/config-conventional'],
+  extends: ['@commitlint/config-conventional', '@commitlint/config-pnpm-scopes'],
 
   plugins: [
     {
@@ -150,8 +201,8 @@ const configuration: UserConfig = {
           const allMatch = (m: (p: string) => boolean) => files.every(m)
 
           for (const shape of ALLOWED_BY_SHAPE) {
-            if (allMatch(shape.match) && !shape.allowed.has(type)) {
-              const allowed = [...shape.allowed].sort().join(' / ')
+            if (allMatch(shape.match) && !shape.allowed[type]) {
+              const allowed = Object.keys(shape.allowed).sort().join(' / ')
               return [false, `'${type}' with 100% ${shape.name} paths — REQUIRED type: ${allowed}`]
             }
           }
@@ -204,12 +255,13 @@ const configuration: UserConfig = {
       ],
     ],
 
+    // Scopes — auto-discovered from pnpm-workspace.yaml plus repo-wide meta scopes
+    'scope-enum': scopeEnum as unknown as [number, 'always' | 'never', readonly string[]],
+    'scope-case': [2, 'always', 'kebab-case'],
+
     // Type constraints
     'type-case': [2, 'always', 'lower-case'],
     'type-empty': [2, 'never'],
-
-    'scope-enum': [2, 'always', allowedScopes],
-    'scope-case': [2, 'always', 'kebab-case'],
 
     // Subject constraints
     'subject-case': [2, 'always', 'lower-case'],

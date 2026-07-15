@@ -20,6 +20,7 @@
   "devDependencies": {
     "@commitlint/cli": "^20.5.0",
     "@commitlint/config-conventional": "^20.5.0",
+    "@commitlint/config-pnpm-scopes": "^20.5.2",
     "@commitlint/types": "^20.5.0",
     "@effect/language-service": "^0.85.1",
     "@semantic-release/commit-analyzer": "^13.0.1",

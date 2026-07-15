@@ -51,8 +51,7 @@ const packagesRoot = join(repoRoot, 'packages')
 
 /**
  * Recursively discover publishable packages under `packages/`.
- * Returns the repo-relative path under `packages/` for each package
- * (e.g. `effect-daemon-spec`, `stryker-js/core`).
+ * Returns the repo-relative path and the unscoped package name for each.
  */
 function discoverPackages(dir) {
   const entries = readdirSync(dir, { withFileTypes: true })
@@ -63,15 +62,33 @@ function discoverPackages(dir) {
     const packagePath = join(dir, entry.name)
     const manifestPath = join(packagePath, 'package.json')
 
-    try {
-      const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
-      if (manifest.private !== true) {
-        packages.push(relative(packagesRoot, packagePath))
+    const manifestExists = (() => {
+      try {
+        return readdirSync(packagePath).includes('package.json')
+      } catch {
+        return false
       }
-    } catch {
+    })()
+
+    if (!manifestExists) {
       // No package.json here — keep descending.
       packages.push(...discoverPackages(packagePath))
+      continue
     }
+
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
+    if (manifest.private === true) continue
+    if (typeof manifest.name !== 'string' || manifest.name.length === 0) {
+      throw new Error(
+        `Publishable package at ${relative(packagesRoot, packagePath)} is missing a valid "name" field`,
+      )
+    }
+
+    packages.push({
+      path: relative(packagesRoot, packagePath),
+      // Strip npm scope so tags and commitlint scopes stay consistent
+      name: manifest.name.replace(/^@[^/]+\//, ''),
+    })
   }
 
   return packages
@@ -92,20 +109,20 @@ const pluginsFor = () => [
 ]
 
 let failed = 0
-for (const packagePath of publishablePackages) {
+for (const { path: packagePath, name: packageName } of publishablePackages) {
   const cwd = join(packagesRoot, packagePath)
   try {
     const result = await semanticRelease({
       branches: ['main'],
-      tagFormat: `${packagePath}@v\${version}`,
+      tagFormat: `${packageName}@v\${version}`,
       dryRun,
       plugins: pluginsFor(),
     }, { cwd })
     const line = result === false ? 'no release' : `${result.nextRelease.type} -> ${result.nextRelease.version}`
-    console.log(`[${packagePath}] ${line}`)
+    console.log(`[${packageName}] ${line}`)
   } catch (error) {
     failed += 1
-    console.error(`[${packagePath}] failed:`, error?.message ?? error)
+    console.error(`[${packageName}] failed:`, error?.message ?? error)
   }
 }
 
