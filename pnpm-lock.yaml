@@ -131,9 +131,6 @@ importers:
       '@microsoft/api-extractor':
         specifier: ^7.58.7
         version: 7.58.9(@types/node@24.13.2)
-      '@stryker-mutator/core':
-        specifier: ^9.6.1
-        version: 9.6.1(@types/node@24.13.2)
       '@stryker-mutator/vitest-runner':
         specifier: ^9.6.1
         version: 9.6.1(@stryker-mutator/core@9.6.1(@types/node@24.13.2))(vitest@4.1.9)
@@ -146,6 +143,9 @@ importers:
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
         version: link:../oxlint-config
+      '@systemfsoftware/stryker-js-core':
+        specifier: workspace:^
+        version: link:../stryker-js/core
       '@systemfsoftware/stryker-js-typescript-checker':
         specifier: workspace:^
         version: link:../stryker-js/typescript-checker
@@ -328,12 +328,12 @@ importers:
         specifier: ^3.21.2
         version: 3.21.4
     devDependencies:
-      '@stryker-mutator/core':
-        specifier: ^9.6.1
-        version: 9.6.1(@types/node@24.13.2)
       '@stryker-mutator/vitest-runner':
         specifier: ^9.6.1
         version: 9.6.1(@stryker-mutator/core@9.6.1(@types/node@24.13.2))(vitest@4.1.9)
+      '@systemfsoftware/stryker-js-core':
+        specifier: workspace:^
+        version: link:../stryker-js/core
       '@systemfsoftware/stryker-js-typescript-checker':
         specifier: workspace:^
         version: link:../stryker-js/typescript-checker
@@ -577,9 +577,6 @@ importers:
       '@stryker-mutator/api':
         specifier: ^9.6.1
         version: 9.6.1
-      '@stryker-mutator/core':
-        specifier: ^9.6.1
-        version: 9.6.1(@types/node@24.13.2)
       '@stryker-mutator/vitest-runner':
         specifier: ^9.6.1
         version: 9.6.1(@stryker-mutator/core@9.6.1(@types/node@24.13.2))(vitest@4.1.9)
@@ -589,6 +586,9 @@ importers:
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
         version: link:../oxlint-config
+      '@systemfsoftware/stryker-js-core':
+        specifier: workspace:^
+        version: link:../stryker-js/core
       '@systemfsoftware/stryker-js-typescript-checker':
         specifier: workspace:^
         version: link:../stryker-js/typescript-checker
