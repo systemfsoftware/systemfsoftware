@@ -48,7 +48,6 @@ export class ChildProcessTestRunnerWorker implements TestRunner {
       !dryRunResult.mutantCoverage &&
       options.coverageAnalysis !== 'off'
     ) {
-      // @ts-expect-error global __mutantCoverage__ isn't statically typed
       dryRunResult.mutantCoverage = global.__mutantCoverage__;
     }
     if (dryRunResult.status === DryRunStatus.Error) {
