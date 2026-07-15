@@ -1,17 +1,14 @@
-packages:
-  - "packages/*"
-
-catalog:
-  typescript: ^7
-
-minimumReleaseAge: 1440
-minimumReleaseAgeExclude:
-  - "@oxlint-tsgolint"
-
 allowBuilds:
   dprint: true
   esbuild: true
   unrs-resolver: true
-
+catalog:
+  typescript: ^7
+minimumReleaseAge: 1440
+minimumReleaseAgeExclude:
+  - "@oxlint-tsgolint"
 overrides:
-  vite: "^7"
+  vite: ^7
+packages:
+  - packages/*
+  - packages/stryker-js/*

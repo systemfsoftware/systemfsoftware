@@ -1,0 +1,21 @@
+{
+  "extends": "@systemfsoftware/tsconfig/tsc/no-dom/library",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": ".",
+    "strict": false,
+    "verbatimModuleSyntax": false,
+    "noPropertyAccessFromIndexSignature": false,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "exactOptionalPropertyTypes": false,
+    "isolatedModules": false,
+    "noImplicitReturns": false,
+    "noImplicitOverride": false,
+    "preserveConstEnums": false,
+    "skipLibCheck": true,
+    "types": ["node", "vitest/globals"]
+  },
+  "include": ["src", "test"],
+  "exclude": ["node_modules", "dist"]
+}

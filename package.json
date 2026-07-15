@@ -36,13 +36,26 @@
     "rimraf": "^6.1.3",
     "semantic-release": "^24.2.9",
     "turbo": "^2.10.0",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "mocha": "^11",
+    "chai": "^5",
+    "sinon": "^21",
+    "chai-as-promised": "^7",
+    "sinon-chai": "^3",
+    "chai-jest-snapshot": "^2",
+    "source-map-support": "^0.5",
+    "c8": "^11",
+    "estree-walker": "^3",
+    "@types/mocha": "^10",
+    "@types/chai": "^5",
+    "@types/sinon": "^21",
+    "@types/chai-as-promised": "^7",
+    "@types/sinon-chai": "^3",
+    "@types/chai-jest-snapshot": "^1",
+    "@types/source-map-support": "^0.5"
   },
   "lint-staged": {
-    "*.{ts,tsx,mjs,cjs,js,json,jsonc,md,yaml,yml,toml}": "dprint fmt --"
-  },
-  "engines": {
-    "node": ">=24.x.x"
+    "*.{ts,tsx,mjs,cjs,js,json,jsonc,md,yaml,yml,toml}": "dprint fmt -- || test $? -eq 11"
   },
   "packageManager": "pnpm@11.9.0"
 }

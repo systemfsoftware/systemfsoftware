@@ -58,13 +58,9 @@ export interface CommonOpts<L extends LockConfig> {
 
 // @public (undocumented)
 export const Daemon: {
-    readonly poll: <A, E, R, L extends LockConfig>(opts: PollOpts<A, E, R, L>) => Worker_2<E, R, L>;
-    readonly stream: <A, E, R, L extends LockConfig>(opts: CommonOpts<L> & {
-        readonly stream: Stream.Stream<A, E, R>;
-    }) => Worker_2<E, R, L>;
-    readonly subscription: <A, E, R, L extends LockConfig>(opts: CommonOpts<L> & {
-        readonly acquire: Effect.Effect<A, E, R>;
-    }) => Worker_2<E, R, L>;
+    readonly poll: typeof poll;
+    readonly stream: typeof stream;
+    readonly subscription: typeof subscription;
 };
 
 // @public (undocumented)
@@ -285,11 +281,12 @@ export interface ReporterPolicyHooks {
 export const restForOne: <E, R, L extends LockConfig = LockConfig>(opts: SupervisorOpts<E, R, L>) => Supervisor<E, R, L>;
 
 // @public (undocumented)
-export const run: {
+const run_2: {
     readonly worker: typeof worker;
     readonly supervisor: typeof supervisor;
-    readonly dynamic: <E, R, Args>(spec: DynamicSpec<E, R, Args>) => Effect.Effect<DynamicHandle<Args, R | LeaderLock | DaemonReporter | Scope.Scope>, never, R | LeaderLock | DaemonReporter | Scope.Scope>;
+    readonly dynamic: typeof dynamic$1;
 };
+export { run_2 as run }
 
 // @public (undocumented)
 export const stream: <A, E, R, L extends LockConfig>(opts: CommonOpts<L> & {
@@ -481,6 +478,10 @@ export const WorkerTypeId: unique symbol;
 
 // @public (undocumented)
 export type WorkerTypeId = typeof WorkerTypeId;
+
+// Warnings were encountered during analysis:
+//
+// dist/index.d.ts:315:3 - (ae-forgotten-export) The symbol "dynamic$1" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 
