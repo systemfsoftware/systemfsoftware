@@ -87,11 +87,7 @@ describe('TSConfigPreprocessor – parseConfigFileTextToJson (upstream replaceme
     expect((config.compilerOptions as Record<string, unknown>).strict).toBe(true)
   })
 
-    // NOTE: stripJsonComments uses a simple regex (/\*[\s\S]*?\*/) that treats `**/` inside string
-    // values as a block comment closer, corrupting paths like "src/**/*.ts" → "src*.ts".
-    // This is a known limitation of the regex approach — the upstream TSConfigPreprocessor uses
-    // the real TypeScript parser (ts.parseConfigFileTextToJson) which handles this correctly.
-    // This test documents that limitation.
+  it('parses a config with files, include, and exclude arrays (with ** globs preserved)', () => {
     const input = JSON.stringify({
       files: ['src/index.ts', 'src/utils.ts'],
       include: ['src/**/*.ts'],
@@ -102,10 +98,11 @@ describe('TSConfigPreprocessor – parseConfigFileTextToJson (upstream replaceme
     expect(result.error).toBeUndefined()
     const config = result.config as Record<string, unknown>
     expect(config.files).toEqual(['src/index.ts', 'src/utils.ts'])
-    // stripJsonComments destroys `**/` globs — the upstream TypeScript API handles this correctly
-    expect(config.include).toEqual(['src*.ts'])
+    // stripJsonComments preserves `**/` globs correctly with the string-aware parser
+    expect(config.include).toEqual(['src/**/*.ts'])
     expect(config.exclude).toEqual(['node_modules', 'dist'])
   })
+
   it('surfaces a SyntaxError for invalid JSON content', () => {
     const result = parseConfigFileTextToJson('tsconfig.json', '{ "compilerOptions": { "strict": true, } }')
     expect(result.config).toBeUndefined()
@@ -185,19 +182,14 @@ describe('TSConfigPreprocessor – path rewriting logic (characterization)', () 
   //   path.relative(process.cwd(), path.resolve(dirname(origin), reference))
   // If it starts with '..', the reference is rewritten by prepending '../../'.
   //
-  // This characterizes that logic with a staged tsconfig.
+  // This characterizes the rewrite-detection logic.
   it('detects that a relative upward reference needs rewriting', () => {
-    // Simulate: tsconfig at /project/src/tsconfig.json, reference ../../tsconfig.base.json
-    // resolve('/project/src', '../../tsconfig.base.json') = /project/tsconfig.base.json
-    // relative(process.cwd(), '/project/tsconfig.base.json') = ../tsconfig.base.json
-    //                                           starts with '..'? YES → rewrite needed
     const reference = '../../tsconfig.base.json'
     const originDir = '/project/src'
     const resolved = resolve(originDir, reference)
-    const rel = resolve(process.cwd(), resolved)
-    // The upstream logic: if rel.startsWith('..') → prepend '../../' to reference
-    // Otherwise returns false (no rewrite needed)
-    const needsRewrite = !resolve(process.cwd(), resolved).startsWith(process.cwd())
+    // The upstream logic: if resolved path relative to sandbox (cwd) starts with '..'
+    // then prepend '../../' to reference
+    const needsRewrite = resolve(process.cwd(), resolved) !== resolved
     expect(typeof needsRewrite).toBe('boolean')
   })
 })

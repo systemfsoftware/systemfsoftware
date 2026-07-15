@@ -9,9 +9,62 @@
  * Strips block (slash-star) and line (slash-slash) comments from a JSON string.
  */
 export function stripJsonComments(json: string): string {
-  return json
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/\/\/.*$/gm, '')
+  let result = ''
+  let inString = false
+  let stringChar: string | null = null
+  let i = 0
+  while (i < json.length) {
+    const ch = json[i]
+    const next = json[i + 1]
+
+    // Track string boundaries
+    if (inString) {
+      result += ch
+      if (ch === '\\' && stringChar) {
+        i += 2 // skip escaped char
+        continue
+      }
+      if (ch === stringChar) {
+        inString = false
+        stringChar = null
+      }
+      i++
+      continue
+    }
+
+    if (ch === '"' || ch === "'") {
+      inString = true
+      stringChar = ch
+      result += ch
+      i++
+      continue
+    }
+
+    // Line comment
+    if (ch === '/' && next === '/') {
+      while (i < json.length && json[i] !== '\n') {
+        i++
+      }
+      continue
+    }
+
+    // Block comment
+    if (ch === '/' && next === '*') {
+      i += 2
+      while (i < json.length) {
+        if (json[i] === '*' && json[i + 1] === '/') {
+          i += 2
+          break
+        }
+        i++
+      }
+      continue
+    }
+
+    result += ch
+    i++
+  }
+  return result
 }
 
 export interface ParsedConfig {
