@@ -1,7 +1,7 @@
 {
   "name": "systemfsoftware",
   "private": true,
-  "description": "System F Software \u2014 Effect-TS libraries and the oxlint plugin that enforces the constitution.",
+  "description": "System F Software — Effect-TS libraries and the oxlint plugin that enforces the constitution.",
   "type": "module",
   "scripts": {
     "build": "turbo --concurrency=${TURBO_CONCURRENCY:-50%} build",
