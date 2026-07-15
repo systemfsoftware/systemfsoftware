@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "description": "A source-code fork of @stryker-mutator/core",
   "type": "module",
-  "private": true,
+  "publishConfig": {
+    "access": "public"
+  },
   "exports": {
     ".": {
       "@systemfsoftware/source": "./src/index.ts",
