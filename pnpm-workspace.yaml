@@ -2,7 +2,7 @@ packages:
   - "packages/*"
 
 catalog:
-  typescript: rc
+  typescript: ^7
 
 minimumReleaseAge: 1440
 minimumReleaseAgeExclude:
