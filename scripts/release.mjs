@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { dirname, join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import semanticRelease from 'semantic-release'
 
@@ -47,10 +47,37 @@ const presetConfig = {
   ],
 }
 
-const publishablePackages = readdirSync(join(repoRoot, 'packages'), { withFileTypes: true })
-  .filter((entry) => entry.isDirectory())
-  .map((entry) => entry.name)
-  .filter((name) => JSON.parse(readFileSync(join(repoRoot, 'packages', name, 'package.json'), 'utf8')).private !== true)
+const packagesRoot = join(repoRoot, 'packages')
+
+/**
+ * Recursively discover publishable packages under `packages/`.
+ * Returns the repo-relative path under `packages/` for each package
+ * (e.g. `effect-daemon-spec`, `stryker-js/core`).
+ */
+function discoverPackages(dir) {
+  const entries = readdirSync(dir, { withFileTypes: true })
+  const packages = []
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue
+    const packagePath = join(dir, entry.name)
+    const manifestPath = join(packagePath, 'package.json')
+
+    try {
+      const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
+      if (manifest.private !== true) {
+        packages.push(relative(packagesRoot, packagePath))
+      }
+    } catch {
+      // No package.json here — keep descending.
+      packages.push(...discoverPackages(packagePath))
+    }
+  }
+
+  return packages
+}
+
+const publishablePackages = discoverPackages(packagesRoot)
 
 const pluginsFor = () => [
   [filterPlugin, {
@@ -65,20 +92,20 @@ const pluginsFor = () => [
 ]
 
 let failed = 0
-for (const name of publishablePackages) {
-  const cwd = join(repoRoot, 'packages', name)
+for (const packagePath of publishablePackages) {
+  const cwd = join(packagesRoot, packagePath)
   try {
     const result = await semanticRelease({
       branches: ['main'],
-      tagFormat: `${name}@v\${version}`,
+      tagFormat: `${packagePath}@v\${version}`,
       dryRun,
       plugins: pluginsFor(),
     }, { cwd })
     const line = result === false ? 'no release' : `${result.nextRelease.type} -> ${result.nextRelease.version}`
-    console.log(`[${name}] ${line}`)
+    console.log(`[${packagePath}] ${line}`)
   } catch (error) {
     failed += 1
-    console.error(`[${name}] failed:`, error?.message ?? error)
+    console.error(`[${packagePath}] failed:`, error?.message ?? error)
   }
 }
 
