@@ -17,7 +17,8 @@
     ".turbo",
     "pnpm-lock.yaml",
     "**/etc/*.api.md",
-    "vendor/**"
+    "vendor/**",
+    "packages/stryker-js/typescript-checker/testResources/**"
   ],
   "plugins": [
     "https://plugins.dprint.dev/typescript-0.91.7.wasm",
