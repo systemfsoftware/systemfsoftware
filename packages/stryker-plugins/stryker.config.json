@@ -7,7 +7,7 @@
   ],
   "plugins": [
     "@stryker-mutator/vitest-runner",
-    "@stryker-mutator/typescript-checker"
+    "@systemfsoftware/stryker-js-typescript-checker"
   ],
   "reporters": [
     "progress",
