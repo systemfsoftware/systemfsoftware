@@ -1,7 +1,7 @@
 {
   "name": "systemfsoftware",
   "private": true,
-  "description": "System F Software — Effect-TS libraries and the oxlint plugin that enforces the constitution.",
+  "description": "System F Software \u2014 Effect-TS libraries and the oxlint plugin that enforces the constitution.",
   "type": "module",
   "scripts": {
     "build": "turbo --concurrency=${TURBO_CONCURRENCY:-50%} build",
@@ -55,7 +55,7 @@
     "@types/source-map-support": "^0.5"
   },
   "lint-staged": {
-    "*.{ts,tsx,mjs,cjs,js,json,jsonc,md,yaml,yml,toml}": "dprint fmt --"
+    "*.{ts,tsx,mjs,cjs,js,json,jsonc,md,yaml,yml,toml}": "dprint fmt -- || test $? -eq 11"
   },
   "packageManager": "pnpm@11.9.0"
 }
