@@ -116,7 +116,7 @@ describe('Typescript checker on a single project', () => {
 
   it('should be able to invalidate a mutant that results in an error in a different file', async () => {
     const actual = await sut.check([
-      createMutant('todo.ts', 'return totalCount;', '', '42'),
+      createMutant('todo.ts', 'return totalCount', '', '42'),
     ])
     expect(actual['42']!.status).toBe(CheckStatus.CompileError)
     expect((actual['42'] as FailedCheckResult).reason).toContain(
@@ -125,7 +125,7 @@ describe('Typescript checker on a single project', () => {
   })
 
   it('should be able to validate a mutant after a mutant in a different file resulted in a transpile error', async () => {
-    await sut.check([createMutant('todo.ts', 'return totalCount;', '')])
+    await sut.check([createMutant('todo.ts', 'return totalCount', '')])
     const result = await sut.check([
       createMutant(
         'todo.spec.ts',
@@ -166,7 +166,7 @@ describe('Typescript checker on a single project', () => {
     )
     const mutant2 = createMutant(
       'counter.ts',
-      'return this.currentNumber;',
+      'return this.currentNumber',
       'return "This should not return a string 🙄"',
       'mutId2',
     )
@@ -190,7 +190,7 @@ describe('Typescript checker on a single project', () => {
     )
     const mutant2 = createMutant(
       'errorInFileAbove2Mutants/counter.ts',
-      'return (this.currentNumber += numberToIncrementBy);',
+      'return (this.currentNumber += numberToIncrementBy)',
       'return "This should not return a string 🙄"',
       'mutId2',
     )
