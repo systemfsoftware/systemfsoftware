@@ -1,7 +1,7 @@
-import path from 'path';
-import fs from 'fs';
+import fs from 'fs'
+import path from 'path'
 
-import { isErrnoException } from '@stryker-mutator/util';
+import { isErrnoException } from '@stryker-mutator/util'
 
 export const fileUtils = {
   /**
@@ -9,24 +9,24 @@ export const fileUtils = {
    */
   async cleanDir(dirName: string): Promise<string | undefined> {
     try {
-      await fs.promises.lstat(dirName);
-      await fs.promises.rm(dirName, { recursive: true, force: true });
-      return fs.promises.mkdir(dirName, { recursive: true });
+      await fs.promises.lstat(dirName)
+      await fs.promises.rm(dirName, { recursive: true, force: true })
+      return fs.promises.mkdir(dirName, { recursive: true })
     } catch {
-      return fs.promises.mkdir(dirName, { recursive: true });
+      return fs.promises.mkdir(dirName, { recursive: true })
     }
   },
 
   async exists(fileName: string): Promise<boolean> {
     try {
-      await fs.promises.access(fileName);
-      return true;
+      await fs.promises.access(fileName)
+      return true
     } catch (err) {
       if (isErrnoException(err) && err.code === 'ENOENT') {
-        return false;
+        return false
       } else {
         // Oops, didn't mean to catch this one ⚾
-        throw err;
+        throw err
       }
     }
   },
@@ -39,11 +39,11 @@ export const fileUtils = {
    */
   importModule(moduleName: string): Promise<unknown> {
     if (moduleName.startsWith('.') || moduleName.startsWith('/') || moduleName.startsWith('file://')) {
-      return import(moduleName);
+      return import(moduleName)
     }
-    const { createRequire } = require('module') as typeof import('module');
-    const req = createRequire(process.cwd() + '/noop.js');
-    return import(req.resolve(moduleName));
+    const { createRequire } = require('module') as typeof import('module')
+    const req = createRequire(process.cwd() + '/noop.js')
+    return import(req.resolve(moduleName))
   },
 
   /**
@@ -53,23 +53,23 @@ export const fileUtils = {
    */
   moveDirectoryRecursiveSync(from: string, to: string): void {
     if (!fs.existsSync(from)) {
-      return;
+      return
     }
     if (!fs.existsSync(to)) {
-      fs.mkdirSync(to);
+      fs.mkdirSync(to)
     }
-    const files = fs.readdirSync(from);
+    const files = fs.readdirSync(from)
     for (const file of files) {
-      const fromFileName = path.join(from, file);
-      const toFileName = path.join(to, file);
-      const stats = fs.lstatSync(fromFileName);
+      const fromFileName = path.join(from, file)
+      const toFileName = path.join(to, file)
+      const stats = fs.lstatSync(fromFileName)
       if (stats.isFile()) {
-        fs.renameSync(fromFileName, toFileName);
+        fs.renameSync(fromFileName, toFileName)
       } else {
-        this.moveDirectoryRecursiveSync(fromFileName, toFileName);
+        this.moveDirectoryRecursiveSync(fromFileName, toFileName)
       }
     }
-    fs.rmdirSync(from);
+    fs.rmdirSync(from)
   },
 
   /**
@@ -78,8 +78,8 @@ export const fileUtils = {
    * @param from The thing you want to point from
    */
   async symlinkJunction(to: string, from: string): Promise<void> {
-    await fs.promises.mkdir(path.dirname(from), { recursive: true });
-    return fs.promises.symlink(to, from, 'junction');
+    await fs.promises.mkdir(path.dirname(from), { recursive: true })
+    return fs.promises.symlink(to, from, 'junction')
   },
 
   /**
@@ -91,31 +91,31 @@ export const fileUtils = {
     basePath: string,
     tempDirName?: string,
   ): Promise<string[]> {
-    const nodeModulesList: string[] = [];
-    const dirBfsQueue: string[] = ['.'];
+    const nodeModulesList: string[] = []
+    const dirBfsQueue: string[] = ['.']
 
-    let dir: string | undefined;
+    let dir: string | undefined
     while ((dir = dirBfsQueue.pop())) {
       if (path.basename(dir) === tempDirName) {
-        continue;
+        continue
       }
 
       if (path.basename(dir) === 'node_modules') {
-        nodeModulesList.push(dir);
-        continue;
+        nodeModulesList.push(dir)
+        continue
       }
 
-      const parentDir = dir;
+      const parentDir = dir
       const filesWithType = await fs.promises.readdir(
         path.join(basePath, dir),
         { withFileTypes: true },
-      );
+      )
       const dirs = filesWithType
         .filter((file) => file.isDirectory())
-        .map((childDir) => path.join(parentDir, childDir.name));
-      dirBfsQueue.push(...dirs);
+        .map((childDir) => path.join(parentDir, childDir.name))
+      dirBfsQueue.push(...dirs)
     }
 
-    return nodeModulesList;
+    return nodeModulesList
   },
-};
+}

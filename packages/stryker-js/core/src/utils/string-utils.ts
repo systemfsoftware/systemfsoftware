@@ -1,61 +1,61 @@
-import { propertyPath } from '@stryker-mutator/util';
-import { StrykerOptions, schema } from '@stryker-mutator/api/core';
-import emojiRegex from 'emoji-regex';
+import { schema, StrykerOptions } from '@stryker-mutator/api/core'
+import { propertyPath } from '@stryker-mutator/util'
+import emojiRegex from 'emoji-regex'
 
-const emojiRe = emojiRegex();
+const emojiRe = emojiRegex()
 
 export function padLeft(input: string): string {
   return input
     .split('\n')
     .map((str) => '\t' + str)
-    .join('\n');
+    .join('\n')
 }
 
 export function plural(items: number): string {
   if (items > 1) {
-    return 's';
+    return 's'
   } else {
-    return '';
+    return ''
   }
 }
 
 export function serialize(thing: unknown): string {
-  return JSON.stringify(thing);
+  return JSON.stringify(thing)
 }
 
 export function deserialize<T>(stringified: string): T {
-  return JSON.parse(stringified);
+  return JSON.parse(stringified)
 }
 
 export function getEmojiForStatus(status: schema.MutantStatus): string {
   switch (status) {
     case 'Killed':
-      return '✅';
+      return '✅'
     case 'NoCoverage':
-      return '🙈';
+      return '🙈'
     case 'Ignored':
-      return '🤥';
+      return '🤥'
     case 'Survived':
-      return '👽';
+      return '👽'
     case 'Timeout':
-      return '⏰';
+      return '⏰'
     case 'Pending':
-      return '⌛';
+      return '⌛'
     case 'RuntimeError':
     case 'CompileError':
-      return '💥';
+      return '💥'
   }
 }
 
 export function stringWidth(input: string): number {
-  let { length } = input;
+  let { length } = input
   for (const match of input.matchAll(emojiRe)) {
-    length = length - match[0].length + 2;
+    length = length - match[0].length + 2
   }
-  return length;
+  return length
 }
 
 /**
  * Print the name of (or path to) a stryker option
  */
-export const optionsPath = propertyPath<StrykerOptions>();
+export const optionsPath = propertyPath<StrykerOptions>()

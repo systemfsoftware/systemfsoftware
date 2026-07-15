@@ -1,7 +1,7 @@
 export interface ITodo {
-  name: string;
-  description: string;
-  completed: boolean;
+  name: string
+  description: string
+  completed: boolean
 }
 
 class Todo implements ITodo {
@@ -9,14 +9,14 @@ class Todo implements ITodo {
 }
 
 export class TodoList {
-  public static allTodos: Todo[] = [];
+  public static allTodos: Todo[] = []
   createTodoItem(name: string, description: string) {
-    let newItem = new Todo(name, description, false);
-    let totalCount: number = TodoList.allTodos.push(newItem);
-    return totalCount;
+    let newItem = new Todo(name, description, false)
+    let totalCount: number = TodoList.allTodos.push(newItem)
+    return totalCount
   }
 
   allTodoItems(): ITodo[] {
-    return TodoList.allTodos;
+    return TodoList.allTodos
   }
 }

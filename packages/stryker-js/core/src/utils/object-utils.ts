@@ -1,11 +1,6 @@
-import treeKill from 'tree-kill';
-import { StrykerError, KnownKeys } from '@stryker-mutator/util';
-import {
-  Location,
-  Position,
-  schema,
-  WarningOptions,
-} from '@stryker-mutator/api/core';
+import { Location, Position, schema, WarningOptions } from '@stryker-mutator/api/core'
+import { KnownKeys, StrykerError } from '@stryker-mutator/util'
+import treeKill from 'tree-kill'
 
 export const objectUtils = {
   /**
@@ -16,31 +11,31 @@ export const objectUtils = {
    * @returns
    */
   map<K, V, R>(subject: Map<K, V>, callbackFn: (value: V, key: K) => R): R[] {
-    const results: R[] = [];
-    subject.forEach((value, key) => results.push(callbackFn(value, key)));
-    return results;
+    const results: R[] = []
+    subject.forEach((value, key) => results.push(callbackFn(value, key)))
+    return results
   },
 
   /**
    * A wrapper around `process.env` (for testability)
    */
   getEnvironmentVariable(nameEnvironmentVariable: string): string | undefined {
-    return process.env[nameEnvironmentVariable];
+    return process.env[nameEnvironmentVariable]
   },
 
   undefinedEmptyString(str: string | undefined): string | undefined {
     if (str) {
-      return str;
+      return str
     }
-    return undefined;
+    return undefined
   },
 
   getEnvironmentVariableOrThrow(name: string): string {
-    const value = this.getEnvironmentVariable(name);
+    const value = this.getEnvironmentVariable(name)
     if (value === undefined) {
-      throw new StrykerError(`Missing environment variable "${name}"`);
+      throw new StrykerError(`Missing environment variable "${name}"`)
     } else {
-      return value;
+      return value
     }
   },
 
@@ -49,9 +44,9 @@ export const objectUtils = {
     warningOptions: WarningOptions | boolean,
   ): boolean {
     if (typeof warningOptions === 'boolean') {
-      return warningOptions;
+      return warningOptions
     } else {
-      return !!warningOptions[warningType];
+      return !!warningOptions[warningType]
     }
   },
 
@@ -59,25 +54,25 @@ export const objectUtils = {
    * A wrapper around `process.exitCode = n` (for testability)
    */
   setExitCode(n: number): void {
-    process.exitCode = n;
+    process.exitCode = n
   },
 
   kill(pid: number | undefined): Promise<void> {
     return new Promise((res, rej) => {
       treeKill(pid!, 'SIGKILL', (err?: Error & { code?: number }) => {
         if (err && !canIgnore(err.code)) {
-          rej(err);
+          rej(err)
         } else {
-          res();
+          res()
         }
-      });
+      })
 
       function canIgnore(code: number | undefined) {
         // https://docs.microsoft.com/en-us/windows/desktop/Debug/system-error-codes--0-499-
         // these error codes mean the program is _already_ closed.
-        return code === 255 || code === 128;
+        return code === 255 || code === 128
       }
-    });
+    })
   },
 
   /**
@@ -89,7 +84,7 @@ export const objectUtils = {
     return {
       end: this.toSchemaPosition(location.end),
       start: this.toSchemaPosition(location.start),
-    };
+    }
   },
 
   /**
@@ -101,6 +96,6 @@ export const objectUtils = {
     return {
       column: pos.column + 1,
       line: pos.line + 1,
-    };
+    }
   },
-};
+}

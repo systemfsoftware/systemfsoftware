@@ -1,59 +1,51 @@
-import { EOL } from 'os';
+import { EOL } from 'os'
 
-import { I, requireResolve } from '@stryker-mutator/util';
-import { Logger } from '@stryker-mutator/api/logging';
-import { commonTokens, tokens, Injector } from '@stryker-mutator/api/plugin';
-import { StrykerOptions, Mutant } from '@stryker-mutator/api/core';
-import { DryRunCompletedEvent, RunTiming } from '@stryker-mutator/api/report';
+import { Mutant, StrykerOptions } from '@stryker-mutator/api/core'
+import { Logger } from '@stryker-mutator/api/logging'
+import { commonTokens, Injector, tokens } from '@stryker-mutator/api/plugin'
+import { DryRunCompletedEvent, RunTiming } from '@stryker-mutator/api/report'
 import {
-  DryRunResult,
-  TestRunner,
-  DryRunStatus,
   CompleteDryRunResult,
-  TestStatus,
-  TestResult,
-  FailedTestResult,
+  DryRunResult,
+  DryRunStatus,
   ErrorDryRunResult,
-} from '@stryker-mutator/api/test-runner';
-import { lastValueFrom, of } from 'rxjs';
+  FailedTestResult,
+  TestResult,
+  TestRunner,
+  TestStatus,
+} from '@stryker-mutator/api/test-runner'
+import { I, requireResolve } from '@stryker-mutator/util'
+import { lastValueFrom, of } from 'rxjs'
 
-import { coreTokens } from '../di/index.js';
-import { Sandbox } from '../sandbox/sandbox.js';
-import { Timer } from '../utils/timer.js';
-import { createTestRunnerFactory } from '../test-runner/index.js';
-import { MutationTestReportHelper } from '../reporters/mutation-test-report-helper.js';
-import { ConfigError } from '../errors.js';
-import {
-  ConcurrencyTokenProvider,
-  Pool,
-  createTestRunnerPool,
-} from '../concurrent/index.js';
-import { FileMatcher } from '../config/index.js';
-import {
-  IncrementalDiffer,
-  MutantTestPlanner,
-  TestCoverage,
-} from '../mutants/index.js';
-import { CheckerFacade } from '../checker/index.js';
-import { StrictReporter } from '../reporters/index.js';
-import { objectUtils } from '../utils/object-utils.js';
+import { CheckerFacade } from '../checker/index.js'
+import { ConcurrencyTokenProvider, createTestRunnerPool, Pool } from '../concurrent/index.js'
+import { FileMatcher } from '../config/index.js'
+import { coreTokens } from '../di/index.js'
+import { ConfigError } from '../errors.js'
+import { IncrementalDiffer, MutantTestPlanner, TestCoverage } from '../mutants/index.js'
+import { StrictReporter } from '../reporters/index.js'
+import { MutationTestReportHelper } from '../reporters/mutation-test-report-helper.js'
+import { Sandbox } from '../sandbox/sandbox.js'
+import { createTestRunnerFactory } from '../test-runner/index.js'
+import { objectUtils } from '../utils/object-utils.js'
+import { Timer } from '../utils/timer.js'
 
-import { IdGenerator } from '../child-proxy/id-generator.js';
+import { IdGenerator } from '../child-proxy/id-generator.js'
 
-import { MutationTestContext } from './4-mutation-test-executor.js';
-import { MutantInstrumenterContext } from './2-mutant-instrumenter-executor.js';
+import { MutantInstrumenterContext } from './2-mutant-instrumenter-executor.js'
+import { MutationTestContext } from './4-mutation-test-executor.js'
 
-const INITIAL_TEST_RUN_MARKER = 'Initial test run';
+const INITIAL_TEST_RUN_MARKER = 'Initial test run'
 
 export interface DryRunContext extends MutantInstrumenterContext {
-  [coreTokens.sandbox]: I<Sandbox>;
-  [coreTokens.mutants]: readonly Mutant[];
-  [coreTokens.checkerPool]: I<Pool<I<CheckerFacade>>>;
-  [coreTokens.concurrencyTokenProvider]: I<ConcurrencyTokenProvider>;
+  [coreTokens.sandbox]: I<Sandbox>
+  [coreTokens.mutants]: readonly Mutant[]
+  [coreTokens.checkerPool]: I<Pool<I<CheckerFacade>>>
+  [coreTokens.concurrencyTokenProvider]: I<ConcurrencyTokenProvider>
 }
 
 function isFailedTest(testResult: TestResult): testResult is FailedTestResult {
-  return testResult.status === TestStatus.Failed;
+  return testResult.status === TestStatus.Failed
 }
 
 export class DryRunExecutor {
@@ -65,7 +57,7 @@ export class DryRunExecutor {
     coreTokens.concurrencyTokenProvider,
     coreTokens.sandbox,
     coreTokens.reporter,
-  );
+  )
 
   constructor(
     private readonly injector: Injector<DryRunContext>,
@@ -85,21 +77,19 @@ export class DryRunExecutor {
         coreTokens.testRunnerConcurrencyTokens,
         this.concurrencyTokenProvider.testRunnerToken$,
       )
-      .provideFactory(coreTokens.testRunnerPool, createTestRunnerPool);
+      .provideFactory(coreTokens.testRunnerPool, createTestRunnerPool)
     const testRunnerPool = testRunnerInjector.resolve(
       coreTokens.testRunnerPool,
-    );
+    )
     const { result, timing } = await lastValueFrom(
-      testRunnerPool.schedule(of(0), (testRunner) =>
-        this.executeDryRun(testRunner),
-      ),
-    );
+      testRunnerPool.schedule(of(0), (testRunner) => this.executeDryRun(testRunner)),
+    )
 
-    this.logInitialTestRunSucceeded(result.tests, timing);
+    this.logInitialTestRunSucceeded(result.tests, timing)
     if (!result.tests.length && !this.options.allowEmpty) {
       throw new ConfigError(
         'No tests were executed. Stryker will exit prematurely. Please check your configuration.',
-      );
+      )
     }
 
     return testRunnerInjector
@@ -113,7 +103,7 @@ export class DryRunExecutor {
         coreTokens.mutationTestReportHelper,
         MutationTestReportHelper,
       )
-      .provideClass(coreTokens.workerIdGenerator, IdGenerator);
+      .provideClass(coreTokens.workerIdGenerator, IdGenerator)
   }
 
   private validateResultCompleted(
@@ -121,23 +111,23 @@ export class DryRunExecutor {
   ): asserts runResult is CompleteDryRunResult {
     switch (runResult.status) {
       case DryRunStatus.Complete: {
-        const failedTests = runResult.tests.filter(isFailedTest);
+        const failedTests = runResult.tests.filter(isFailedTest)
         if (failedTests.length) {
-          this.logFailedTestsInInitialRun(failedTests);
+          this.logFailedTestsInInitialRun(failedTests)
           throw new ConfigError(
             'There were failed tests in the initial test run.',
-          );
+          )
         }
-        return;
+        return
       }
       case DryRunStatus.Error:
-        this.logErrorsInInitialRun(runResult);
-        break;
+        this.logErrorsInInitialRun(runResult)
+        break
       case DryRunStatus.Timeout:
-        this.logTimeoutInitialRun();
-        break;
+        this.logTimeoutInitialRun()
+        break
     }
-    throw new Error('Something went wrong in the initial test run');
+    throw new Error('Something went wrong in the initial test run')
   }
 
   private async executeDryRun(
@@ -146,39 +136,36 @@ export class DryRunExecutor {
     if (this.options.dryRunOnly) {
       this.log.info(
         'Note: running the dry-run only. No mutations will be tested.',
-      );
+      )
     }
 
-    const dryRunTimeout = this.options.dryRunTimeoutMinutes * 1000 * 60;
-    const project = this.injector.resolve(coreTokens.project);
-    const dryRunFiles = objectUtils.map(project.filesToMutate, (_, name) =>
-      this.sandbox.sandboxFileFor(name),
-    );
-    const testFiles =
-      project.testFiles.length > 0
-        ? project.testFiles.map((file) => this.sandbox.sandboxFileFor(file))
-        : undefined;
-    this.timer.mark(INITIAL_TEST_RUN_MARKER);
+    const dryRunTimeout = this.options.dryRunTimeoutMinutes * 1000 * 60
+    const project = this.injector.resolve(coreTokens.project)
+    const dryRunFiles = objectUtils.map(project.filesToMutate, (_, name) => this.sandbox.sandboxFileFor(name))
+    const testFiles = project.testFiles.length > 0
+      ? project.testFiles.map((file) => this.sandbox.sandboxFileFor(file))
+      : undefined
+    this.timer.mark(INITIAL_TEST_RUN_MARKER)
     this.log.info(
       `Starting initial test run (${this.options.testRunner} test runner with "${this.options.coverageAnalysis}" coverage analysis). This may take a while.`,
-    );
-    this.log.debug(`Using timeout of ${dryRunTimeout} ms.`);
+    )
+    this.log.debug(`Using timeout of ${dryRunTimeout} ms.`)
     const result = await testRunner.dryRun({
       timeout: dryRunTimeout,
       coverageAnalysis: this.options.coverageAnalysis,
       disableBail: this.options.disableBail,
       files: dryRunFiles,
       testFiles,
-    });
-    const grossTimeMS = this.timer.elapsedMs(INITIAL_TEST_RUN_MARKER);
-    const capabilities = await testRunner.capabilities();
-    this.validateResultCompleted(result);
+    })
+    const grossTimeMS = this.timer.elapsedMs(INITIAL_TEST_RUN_MARKER)
+    const capabilities = await testRunner.capabilities()
+    this.validateResultCompleted(result)
 
-    this.remapSandboxFilesToOriginalFiles(result);
-    const timing = this.calculateTiming(grossTimeMS, result.tests);
-    const dryRunCompleted = { result, timing, capabilities };
-    this.reporter.onDryRunCompleted(dryRunCompleted);
-    return dryRunCompleted;
+    this.remapSandboxFilesToOriginalFiles(result)
+    const timing = this.calculateTiming(grossTimeMS, result.tests)
+    const dryRunCompleted = { result, timing, capabilities }
+    this.reporter.onDryRunCompleted(dryRunCompleted)
+    return dryRunCompleted
   }
 
   /**
@@ -188,10 +175,10 @@ export class DryRunExecutor {
   private remapSandboxFilesToOriginalFiles(dryRunResult: CompleteDryRunResult) {
     const disableTypeCheckingFileMatcher = new FileMatcher(
       this.options.disableTypeChecks,
-    );
+    )
     dryRunResult.tests.forEach((test) => {
       if (test.fileName) {
-        test.fileName = this.sandbox.originalFileFor(test.fileName);
+        test.fileName = this.sandbox.originalFileFor(test.fileName)
 
         // HACK line numbers of the tests can be offset by 1 because the disable type checks preprocessor could have added a `// @ts-nocheck` line.
         // We correct for that here if needed
@@ -200,16 +187,16 @@ export class DryRunExecutor {
           test.startPosition &&
           disableTypeCheckingFileMatcher.matches(test.fileName)
         ) {
-          test.startPosition.line--;
+          test.startPosition.line--
         }
       }
-    });
+    })
   }
 
   private logInitialTestRunSucceeded(tests: TestResult[], timing: RunTiming) {
     if (!tests.length) {
-      this.log.info('No tests were found');
-      return;
+      this.log.info('No tests were found')
+      return
     }
 
     this.log.info(
@@ -218,7 +205,7 @@ export class DryRunExecutor {
       this.timer.humanReadableElapsed(INITIAL_TEST_RUN_MARKER),
       timing.net,
       timing.overhead,
-    );
+    )
   }
 
   /**
@@ -235,28 +222,28 @@ export class DryRunExecutor {
     const netTimeMS = tests.reduce(
       (total, test) => total + test.timeSpentMs,
       0,
-    );
-    const overheadTimeMS = grossTimeMS - netTimeMS;
+    )
+    const overheadTimeMS = grossTimeMS - netTimeMS
     return {
       net: netTimeMS,
       overhead: overheadTimeMS < 0 ? 0 : overheadTimeMS,
-    };
+    }
   }
 
   private logFailedTestsInInitialRun(failedTests: FailedTestResult[]): void {
-    let message = 'One or more tests failed in the initial test run:';
+    let message = 'One or more tests failed in the initial test run:'
     failedTests.forEach((test) => {
-      message += `${EOL}\t${test.name}`;
-      message += `${EOL}\t\t${test.failureMessage}`;
-    });
-    this.log.error(message);
+      message += `${EOL}\t${test.name}`
+      message += `${EOL}\t\t${test.failureMessage}`
+    })
+    this.log.error(message)
   }
   private logErrorsInInitialRun(runResult: ErrorDryRunResult) {
-    const message = `One or more tests resulted in an error:${EOL}\t${runResult.errorMessage}`;
-    this.log.error(message);
+    const message = `One or more tests resulted in an error:${EOL}\t${runResult.errorMessage}`
+    this.log.error(message)
   }
 
   private logTimeoutInitialRun() {
-    this.log.error('Initial test run timed out!');
+    this.log.error('Initial test run timed out!')
   }
 }

@@ -1,5 +1,5 @@
-import { TestRunner } from '@stryker-mutator/api/test-runner';
-import { notEmpty } from '@stryker-mutator/util';
+import { TestRunner } from '@stryker-mutator/api/test-runner'
+import { notEmpty } from '@stryker-mutator/util'
 import {
   BehaviorSubject,
   filter,
@@ -12,51 +12,51 @@ import {
   takeUntil,
   tap,
   zip,
-} from 'rxjs';
-import { Disposable, tokens } from 'typed-inject';
+} from 'rxjs'
+import { Disposable, tokens } from 'typed-inject'
 
-import { CheckerFacade } from '../checker/index.js';
-import { coreTokens } from '../di/index.js';
+import { CheckerFacade } from '../checker/index.js'
+import { coreTokens } from '../di/index.js'
 
-const MAX_CONCURRENT_INIT = 2;
+const MAX_CONCURRENT_INIT = 2
 
 /**
  * Represents a TestRunner that is also a Resource (with an init and dispose)
  */
-export type TestRunnerResource = Resource & TestRunner;
+export type TestRunnerResource = Resource & TestRunner
 
 export interface Resource extends Partial<Disposable> {
-  init?(): Promise<void>;
+  init?(): Promise<void>
 }
 
 createTestRunnerPool.inject = tokens(
   coreTokens.testRunnerFactory,
   coreTokens.testRunnerConcurrencyTokens,
-);
+)
 export function createTestRunnerPool(
   factory: () => TestRunnerResource,
   concurrencyToken$: Observable<number>,
 ): Pool<TestRunner> {
-  return new Pool(factory, concurrencyToken$);
+  return new Pool(factory, concurrencyToken$)
 }
 
 createCheckerPool.inject = tokens(
   coreTokens.checkerFactory,
   coreTokens.checkerConcurrencyTokens,
-);
+)
 export function createCheckerPool(
   factory: () => CheckerFacade,
   concurrencyToken$: Observable<number>,
 ): Pool<CheckerFacade> {
-  return new Pool<CheckerFacade>(factory, concurrencyToken$);
+  return new Pool<CheckerFacade>(factory, concurrencyToken$)
 }
 
 /**
  * Represents a work item: an input with a task and with a `result$` observable where the result (exactly one) will be streamed to.
  */
 class WorkItem<TResource extends Resource, TIn, TOut> {
-  private readonly resultSubject = new Subject<TOut>();
-  public readonly result$ = this.resultSubject.asObservable();
+  private readonly resultSubject = new Subject<TOut>()
+  public readonly result$ = this.resultSubject.asObservable()
 
   /**
    * @param input The input to the ask
@@ -72,20 +72,20 @@ class WorkItem<TResource extends Resource, TIn, TOut> {
 
   public async execute(resource: TResource) {
     try {
-      const output = await this.task(resource, this.input);
-      this.resultSubject.next(output);
-      this.resultSubject.complete();
+      const output = await this.task(resource, this.input)
+      this.resultSubject.next(output)
+      this.resultSubject.complete()
     } catch (err) {
-      this.resultSubject.error(err);
+      this.resultSubject.error(err)
     }
   }
 
   public reject(error: unknown) {
-    this.resultSubject.error(error);
+    this.resultSubject.error(error)
   }
 
   public complete() {
-    this.resultSubject.complete();
+    this.resultSubject.complete()
   }
 }
 
@@ -97,41 +97,41 @@ class WorkItem<TResource extends Resource, TIn, TOut> {
  */
 export class Pool<TResource extends Resource> implements Disposable {
   // The init subject. Using an RxJS subject instead of a promise, so errors are silently ignored when nobody is listening
-  private readonly initSubject = new ReplaySubject<void>();
+  private readonly initSubject = new ReplaySubject<void>()
 
   // The disposedSubject emits true when it is disposed, and false when not disposed yet
-  private readonly disposedSubject = new BehaviorSubject(false);
+  private readonly disposedSubject = new BehaviorSubject(false)
 
   // The dispose$ only emits one `true` value when disposed (never emits `false`). Useful for `takeUntil`
   private readonly dispose$ = this.disposedSubject.pipe(
     filter((isDisposed) => isDisposed),
-  );
+  )
 
-  private readonly createdResources: TResource[] = [];
+  private readonly createdResources: TResource[] = []
   // The queued work items. This is a replay subject, so scheduled work items can easily be rejected after it was picked up
   private readonly todoSubject = new ReplaySubject<
     WorkItem<TResource, any, any>
-  >();
+  >()
 
   constructor(factory: () => TResource, concurrencyToken$: Observable<number>) {
     // Stream resources that are ready to pick up work
-    const resourcesSubject = new Subject<TResource>();
+    const resourcesSubject = new Subject<TResource>()
 
     // Stream ongoing work.
     zip(resourcesSubject, this.todoSubject)
       .pipe(
         mergeMap(async ([resource, workItem]) => {
-          await workItem.execute(resource);
-          resourcesSubject.next(resource); // recycle resource so it can pick up more work
+          await workItem.execute(resource)
+          resourcesSubject.next(resource) // recycle resource so it can pick up more work
         }),
         ignoreElements(),
         takeUntil(this.dispose$),
       )
       .subscribe({
         error: (error) => {
-          this.todoSubject.subscribe((workItem) => workItem.reject(error));
+          this.todoSubject.subscribe((workItem) => workItem.reject(error))
         },
-      });
+      })
 
     // Create resources
     concurrencyToken$
@@ -140,29 +140,29 @@ export class Pool<TResource extends Resource> implements Disposable {
         mergeMap(async () => {
           if (this.disposedSubject.value) {
             // Don't create new resources when disposed
-            return;
+            return
           }
-          const resource = factory();
-          this.createdResources.push(resource);
-          await resource.init?.();
-          return resource;
+          const resource = factory()
+          this.createdResources.push(resource)
+          await resource.init?.()
+          return resource
         }, MAX_CONCURRENT_INIT),
         filter(notEmpty),
         tap({
           complete: () => {
             // Signal init complete
-            this.initSubject.next();
-            this.initSubject.complete();
+            this.initSubject.next()
+            this.initSubject.complete()
           },
           error: (err) => {
-            this.initSubject.error(err);
+            this.initSubject.error(err)
           },
         }),
       )
       .subscribe({
         next: (resource) => resourcesSubject.next(resource),
         error: (err) => resourcesSubject.error(err),
-      });
+      })
   }
 
   /**
@@ -170,7 +170,7 @@ export class Pool<TResource extends Resource> implements Disposable {
    * This is optional, resources will get initialized either way.
    */
   public async init(): Promise<void> {
-    await lastValueFrom(this.initSubject);
+    await lastValueFrom(this.initSubject)
   }
 
   /**
@@ -184,11 +184,11 @@ export class Pool<TResource extends Resource> implements Disposable {
   ): Observable<TOut> {
     return input$.pipe(
       mergeMap((input) => {
-        const workItem = new WorkItem(input, task);
-        this.todoSubject.next(workItem);
-        return workItem.result$;
+        const workItem = new WorkItem(input, task)
+        this.todoSubject.next(workItem)
+        return workItem.result$
       }),
-    );
+    )
   }
 
   /**
@@ -196,14 +196,14 @@ export class Pool<TResource extends Resource> implements Disposable {
    */
   public async dispose(): Promise<void> {
     if (!this.disposedSubject.value) {
-      this.disposedSubject.next(true);
-      this.todoSubject.subscribe((workItem) => workItem.complete());
-      this.todoSubject.complete();
+      this.disposedSubject.next(true)
+      this.todoSubject.subscribe((workItem) => workItem.complete())
+      this.todoSubject.complete()
       await Promise.all(
         // We're mixing promises with undefined values, which triggers the lint warning. We can safely ignore it here.
         // eslint-disable-next-line @typescript-eslint/await-thenable
         this.createdResources.map((resource) => resource.dispose?.()),
-      );
+      )
     }
   }
 }

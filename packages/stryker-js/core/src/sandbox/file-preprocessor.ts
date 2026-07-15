@@ -1,4 +1,4 @@
-import { Project } from '../fs/project.js';
+import { Project } from '../fs/project.js'
 
 /**
  * A preprocessor changes files before writing them to the sandbox.
@@ -6,5 +6,5 @@ import { Project } from '../fs/project.js';
  * This is a private api that we might want to open up in the future.
  */
 export interface FilePreprocessor {
-  preprocess(files: Project): Promise<void>;
+  preprocess(files: Project): Promise<void>
 }

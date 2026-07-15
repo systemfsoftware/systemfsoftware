@@ -1,34 +1,34 @@
-import { Logger } from '@stryker-mutator/api/logging';
-import { LogLevel } from './log-level.js';
-import { LoggingEvent } from './logging-event.js';
-import { LoggingSink } from './logging-sink.js';
+import { Logger } from '@stryker-mutator/api/logging'
+import { LogLevel } from './log-level.js'
+import { LoggingEvent } from './logging-event.js'
+import { LoggingSink } from './logging-sink.js'
 
 export class LoggerImpl implements Logger {
-  #categoryName;
-  #loggingBackend;
+  #categoryName
+  #loggingBackend
 
   constructor(categoryName: string, loggingBackend: LoggingSink) {
-    this.#categoryName = categoryName;
-    this.#loggingBackend = loggingBackend;
+    this.#categoryName = categoryName
+    this.#loggingBackend = loggingBackend
   }
 
   isTraceEnabled(): boolean {
-    return this.#loggingBackend.isEnabled(LogLevel.Trace);
+    return this.#loggingBackend.isEnabled(LogLevel.Trace)
   }
   isDebugEnabled(): boolean {
-    return this.#loggingBackend.isEnabled(LogLevel.Debug);
+    return this.#loggingBackend.isEnabled(LogLevel.Debug)
   }
   isInfoEnabled(): boolean {
-    return this.#loggingBackend.isEnabled(LogLevel.Information);
+    return this.#loggingBackend.isEnabled(LogLevel.Information)
   }
   isWarnEnabled(): boolean {
-    return this.#loggingBackend.isEnabled(LogLevel.Warning);
+    return this.#loggingBackend.isEnabled(LogLevel.Warning)
   }
   isErrorEnabled(): boolean {
-    return this.#loggingBackend.isEnabled(LogLevel.Error);
+    return this.#loggingBackend.isEnabled(LogLevel.Error)
   }
   isFatalEnabled(): boolean {
-    return this.#loggingBackend.isEnabled(LogLevel.Fatal);
+    return this.#loggingBackend.isEnabled(LogLevel.Fatal)
   }
   trace(message: string, ...args: any[]): void {
     this.#loggingBackend.log(
@@ -36,7 +36,7 @@ export class LoggerImpl implements Logger {
         message,
         ...args,
       ]),
-    );
+    )
   }
   debug(message: string, ...args: any[]): void {
     this.#loggingBackend.log(
@@ -44,7 +44,7 @@ export class LoggerImpl implements Logger {
         message,
         ...args,
       ]),
-    );
+    )
   }
   info(message: string, ...args: any[]): void {
     this.#loggingBackend.log(
@@ -52,7 +52,7 @@ export class LoggerImpl implements Logger {
         message,
         ...args,
       ]),
-    );
+    )
   }
   warn(message: string, ...args: any[]): void {
     this.#loggingBackend.log(
@@ -60,7 +60,7 @@ export class LoggerImpl implements Logger {
         message,
         ...args,
       ]),
-    );
+    )
   }
   error(message: string, ...args: any[]): void {
     this.#loggingBackend.log(
@@ -68,7 +68,7 @@ export class LoggerImpl implements Logger {
         message,
         ...args,
       ]),
-    );
+    )
   }
   fatal(message: string, ...args: any[]): void {
     this.#loggingBackend.log(
@@ -76,6 +76,6 @@ export class LoggerImpl implements Logger {
         message,
         ...args,
       ]),
-    );
+    )
   }
 }

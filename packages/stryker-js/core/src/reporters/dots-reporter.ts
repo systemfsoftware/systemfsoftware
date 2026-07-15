@@ -1,33 +1,33 @@
-import os from 'os';
+import os from 'os'
 
-import chalk from 'chalk';
-import { Reporter } from '@stryker-mutator/api/report';
-import type { MutantResult } from '@stryker-mutator/api/core';
+import type { MutantResult } from '@stryker-mutator/api/core'
+import { Reporter } from '@stryker-mutator/api/report'
+import chalk from 'chalk'
 
 export class DotsReporter implements Reporter {
   public onMutantTested(result: MutantResult): void {
-    let toLog: string;
+    let toLog: string
     switch (result.status) {
       case 'Killed':
-        toLog = '.';
-        break;
+        toLog = '.'
+        break
       case 'Timeout':
-        toLog = chalk.yellow('T');
-        break;
+        toLog = chalk.yellow('T')
+        break
       case 'Survived':
-        toLog = chalk.bold.red('S');
-        break;
+        toLog = chalk.bold.red('S')
+        break
       case 'RuntimeError':
-        toLog = chalk.yellow('E');
-        break;
+        toLog = chalk.yellow('E')
+        break
       default:
-        toLog = '';
-        break;
+        toLog = ''
+        break
     }
-    process.stdout.write(toLog);
+    process.stdout.write(toLog)
   }
 
   public onMutationTestReportReady(): void {
-    process.stdout.write(os.EOL);
+    process.stdout.write(os.EOL)
   }
 }

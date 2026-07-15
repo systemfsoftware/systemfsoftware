@@ -18,7 +18,8 @@
     "pnpm-lock.yaml",
     "**/etc/*.api.md",
     "vendor/**",
-    "packages/stryker-js/typescript-checker/testResources/**"
+    "repos/**",
+    "packages/stryker-js/typescript-checker/testResources/errors/invalid-tsconfig/tsconfig.json"
   ],
   "plugins": [
     "https://plugins.dprint.dev/typescript-0.91.7.wasm",

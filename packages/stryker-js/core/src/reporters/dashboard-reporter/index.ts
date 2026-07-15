@@ -1,16 +1,11 @@
-import {
-  commonTokens,
-  Injector,
-  PluginContext,
-  tokens,
-} from '@stryker-mutator/api/plugin';
-import { HttpClient } from 'typed-rest-client/HttpClient.js';
+import { commonTokens, Injector, PluginContext, tokens } from '@stryker-mutator/api/plugin'
+import { HttpClient } from 'typed-rest-client/HttpClient.js'
 
-import { determineCIProvider } from '../ci/provider.js';
+import { determineCIProvider } from '../ci/provider.js'
 
-import { DashboardReporter } from './dashboard-reporter.js';
-import { DashboardReporterClient } from './dashboard-reporter-client.js';
-import { dashboardReporterTokens } from './tokens.js';
+import { DashboardReporterClient } from './dashboard-reporter-client.js'
+import { DashboardReporter } from './dashboard-reporter.js'
+import { dashboardReporterTokens } from './tokens.js'
 
 export function dashboardReporterFactory(
   injector: Injector<PluginContext>,
@@ -25,6 +20,6 @@ export function dashboardReporterFactory(
       DashboardReporterClient,
     )
     .provideFactory(dashboardReporterTokens.ciProvider, determineCIProvider)
-    .injectClass(DashboardReporter);
+    .injectClass(DashboardReporter)
 }
-dashboardReporterFactory.inject = tokens(commonTokens.injector);
+dashboardReporterFactory.inject = tokens(commonTokens.injector)

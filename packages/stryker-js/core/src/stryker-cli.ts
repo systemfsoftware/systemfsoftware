@@ -1,67 +1,62 @@
-import semver from 'semver';
+import semver from 'semver'
 
-guardMinimalNodeVersion();
-import { Argument, Command } from 'commander';
-import {
-  DashboardOptions,
-  ALL_REPORT_TYPES,
-  PartialStrykerOptions,
-} from '@stryker-mutator/api/core';
+guardMinimalNodeVersion()
+import { ALL_REPORT_TYPES, DashboardOptions, PartialStrykerOptions } from '@stryker-mutator/api/core'
+import { Argument, Command } from 'commander'
 
-import { initializerFactory } from './initializer/index.js';
-import { Stryker } from './stryker.js';
-import { defaultOptions } from './config/index.js';
-import { strykerEngines, strykerVersion } from './stryker-package.js';
-import { StrykerServer, StrykerServerOptions } from './stryker-server.js';
-import { createInjector } from 'typed-inject';
+import { createInjector } from 'typed-inject'
+import { defaultOptions } from './config/index.js'
+import { initializerFactory } from './initializer/index.js'
+import { strykerEngines, strykerVersion } from './stryker-package.js'
+import { StrykerServer, StrykerServerOptions } from './stryker-server.js'
+import { Stryker } from './stryker.js'
 
-const list = createSplitter(',');
+const list = createSplitter(',')
 
 function createSplitter(sep: string) {
-  return (val: string) => val.split(sep).filter(Boolean);
+  return (val: string) => val.split(sep).filter(Boolean)
 }
 
 function parseBoolean(val: string) {
-  const v = val.toLocaleLowerCase();
-  return v !== 'false' && v !== '0';
+  const v = val.toLocaleLowerCase()
+  return v !== 'false' && v !== '0'
 }
 
 function parseCleanDirOption(val: string) {
-  const v = val.toLocaleLowerCase();
-  return v === 'always' ? v : v !== 'false' && v !== '0';
+  const v = val.toLocaleLowerCase()
+  return v === 'always' ? v : v !== 'false' && v !== '0'
 }
 
 function parseConcurrency(val: string): number | string {
   // If it's a pure number, parse as integer
   if (/^\d+$/.test(val)) {
-    return parseInt(val, 10);
+    return parseInt(val, 10)
   }
   // Otherwise keep as string (for percentage values like "50%")
-  return val;
+  return val
 }
 
 const configFileArgument = new Argument(
   '[configFile]',
   'Path to the config file',
-);
+)
 
 export class StrykerCli {
   constructor(
     private readonly argv: string[],
     private readonly program: Command = new Command(),
-    private readonly runMutationTest = async (options: PartialStrykerOptions) =>
-      new Stryker(options).runMutationTest(),
+    private readonly runMutationTest = async (options: PartialStrykerOptions) => new Stryker(options).runMutationTest(),
     private readonly runMutationTestingServer = (
       serverOptions: StrykerServerOptions,
       cliStrykerOptions: PartialStrykerOptions,
     ) => {
-      const server = new StrykerServer(serverOptions, cliStrykerOptions);
-      return server.start();
+      const server = new StrykerServer(serverOptions, cliStrykerOptions)
+      return server.start()
     },
   ) {}
 
   public run(createInjectorImpl = createInjector): void {
-    this.program.version(strykerVersion);
+    this.program.version(strykerVersion)
 
     this.#provideStrykerOptions(this.program.command('run'))
       .addArgument(configFileArgument)
@@ -69,36 +64,36 @@ export class StrykerCli {
         await this.runMutationTest(
           // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
           this.#readStrykerOptions(options, configFile),
-        );
-      });
+        )
+      })
 
     this.program
       .command('init')
       .description('Initialize Stryker for your project')
       .action(async () => {
-        const inj = createInjectorImpl();
+        const inj = createInjectorImpl()
         try {
-          const initializer = await initializerFactory(inj);
-          await initializer.initialize();
+          const initializer = await initializerFactory(inj)
+          await initializer.initialize()
         } finally {
-          await inj.dispose();
+          await inj.dispose()
         }
-      });
+      })
 
     this.#provideStrykerOptions(this.program.command('runServer'))
       .addArgument(configFileArgument)
       .description('[DEPRECATED] use serve instead')
       .action(async (configFile, options) => {
         // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
-        const cliOptions = this.#readStrykerOptions(options, configFile);
+        const cliOptions = this.#readStrykerOptions(options, configFile)
         const port = await this.runMutationTestingServer(
           {
             channel: 'socket',
           },
           cliOptions,
-        );
-        console.log(JSON.stringify({ port }));
-      });
+        )
+        console.log(JSON.stringify({ port }))
+      })
 
     this.program
       .command('serve')
@@ -132,13 +127,13 @@ export class StrykerCli {
           const command = this.#provideStrykerOptions(new Command()).parse(
             remainingArguments,
             { from: 'user' },
-          );
-          const runOptions = command.opts();
-          const [configFile] = command.args;
+          )
+          const runOptions = command.opts()
+          const [configFile] = command.args
           const strykerOptions = this.#readStrykerOptions(
             runOptions,
             configFile,
-          );
+          )
           if (channel === 'socket') {
             const port = await this.runMutationTestingServer(
               {
@@ -146,17 +141,17 @@ export class StrykerCli {
                 ...socketOptions,
               },
               strykerOptions,
-            );
+            )
             process.stderr.write(
               `Stryker server listening on ${socketOptions.address}:${port}\n`,
-            );
+            )
           } else {
-            void this.runMutationTestingServer({ channel }, strykerOptions);
-            process.stderr.write(`Stryker server started on stdio channel\n`);
+            void this.runMutationTestingServer({ channel }, strykerOptions)
+            process.stderr.write(`Stryker server started on stdio channel\n`)
           }
         },
-      );
-    this.program.showSuggestionAfterError().parse(this.argv);
+      )
+    this.program.showSuggestionAfterError().parse(this.argv)
   }
 
   #provideStrykerOptions(command: Command) {
@@ -327,7 +322,7 @@ export class StrykerCli {
         '--cleanTempDir <true | false | always>',
         `Choose whether or not to clean the temp dir (which is "${defaultOptions.tempDirName}" inside the current working directory by default) after a run.\n- false: Never delete the temp dir;\n- true: Delete the tmp dir after a successful run;\n- always: Always delete the temp dir, regardless of whether the run was successful.`,
         parseCleanDirOption,
-      );
+      )
   }
 
   #readStrykerOptions(
@@ -335,20 +330,20 @@ export class StrykerCli {
     configFile: string,
   ): PartialStrykerOptions {
     // Cleanup commander state
-    delete options.version;
+    delete options.version
     Object.keys(options)
       .filter((key) => key.startsWith('dashboard.'))
       .forEach((key) => {
-        options.dashboard ??= {};
-        const dashboardOpt = key.split('.')[1] as keyof DashboardOptions;
-        options.dashboard[dashboardOpt] = options[key] as any;
-        delete options[key];
-      });
+        options.dashboard ??= {}
+        const dashboardOpt = key.split('.')[1] as keyof DashboardOptions
+        options.dashboard[dashboardOpt] = options[key] as any
+        delete options[key]
+      })
 
     if (configFile) {
-      options.configFile = configFile;
+      options.configFile = configFile
     }
-    return options;
+    return options
   }
 }
 
@@ -358,6 +353,6 @@ export function guardMinimalNodeVersion(
   if (!semver.satisfies(processVersion, strykerEngines.node)) {
     throw new Error(
       `Node.js version ${processVersion} detected. StrykerJS requires version to match ${strykerEngines.node}. Please update your Node.js version or visit https://nodejs.org/ for additional instructions`,
-    );
+    )
   }
 }

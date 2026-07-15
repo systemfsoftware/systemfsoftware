@@ -1,18 +1,18 @@
-import fs from 'fs';
-import path from 'path';
+import fs from 'fs'
+import path from 'path'
 
-import { createRequire } from 'module';
+import { createRequire } from 'module'
 
-import { schema, StrykerOptions } from '@stryker-mutator/api/core';
-import { Logger } from '@stryker-mutator/api/logging';
-import { commonTokens, tokens } from '@stryker-mutator/api/plugin';
-import { Reporter } from '@stryker-mutator/api/report';
+import { schema, StrykerOptions } from '@stryker-mutator/api/core'
+import { Logger } from '@stryker-mutator/api/logging'
+import { commonTokens, tokens } from '@stryker-mutator/api/plugin'
+import { Reporter } from '@stryker-mutator/api/report'
 
-import { pathToFileURL } from 'url';
-import { reporterUtil } from './reporter-util.js';
+import { pathToFileURL } from 'url'
+import { reporterUtil } from './reporter-util.js'
 
 export class HtmlReporter implements Reporter {
-  private mainPromise: Promise<void> | undefined;
+  private mainPromise: Promise<void> | undefined
 
   constructor(
     private readonly options: StrykerOptions,
@@ -22,34 +22,34 @@ export class HtmlReporter implements Reporter {
   public static readonly inject = tokens(
     commonTokens.options,
     commonTokens.logger,
-  );
+  )
 
   public onMutationTestReportReady(report: schema.MutationTestResult): void {
-    this.mainPromise = this.generateReport(report);
+    this.mainPromise = this.generateReport(report)
   }
 
   public wrapUp(): Promise<void> | undefined {
-    return this.mainPromise;
+    return this.mainPromise
   }
 
   private async generateReport(report: schema.MutationTestResult) {
-    this.log.debug(`Using file "${this.options.htmlReporter.fileName}"`);
-    const html = await createReportHtml(report);
-    await reporterUtil.writeFile(this.options.htmlReporter.fileName, html);
+    this.log.debug(`Using file "${this.options.htmlReporter.fileName}"`)
+    const html = await createReportHtml(report)
+    await reporterUtil.writeFile(this.options.htmlReporter.fileName, html)
     this.log.info(
       `Your report can be found at: ${pathToFileURL(path.resolve(this.options.htmlReporter.fileName)).href}`,
-    );
+    )
   }
 }
 
 async function createReportHtml(
   report: schema.MutationTestResult,
 ): Promise<string> {
-  const require = createRequire(import.meta.url);
+  const require = createRequire(import.meta.url)
   const scriptContent = await fs.promises.readFile(
     require.resolve('mutation-testing-elements/dist/mutation-test-elements.js'),
     'utf-8',
-  );
+  )
 
   return `<!DOCTYPE html>
   <html>
@@ -75,13 +75,13 @@ async function createReportHtml(
       updateTheme();
     </script>
   </body>
-  </html>`;
+  </html>`
 }
 
 /**
  * Escapes the HTML tags inside strings in a JSON input by breaking them apart.
  */
 function escapeHtmlTags(json: string) {
-  const j = json.replace(/</g, '<"+"');
-  return j;
+  const j = json.replace(/</g, '<"+"')
+  return j
 }

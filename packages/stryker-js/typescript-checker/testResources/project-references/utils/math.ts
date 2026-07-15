@@ -1,3 +1,3 @@
 export function count(array: any[]) {
-  return array.length;
+  return array.length
 }

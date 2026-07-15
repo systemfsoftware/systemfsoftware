@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-import { StrykerCli } from '../dist/index.mjs';
+import { StrykerCli } from '../dist/index.mjs'
 
-process.title = 'stryker';
+process.title = 'stryker'
 // Run the Stryker CLI
-new StrykerCli(process.argv).run();
+new StrykerCli(process.argv).run()

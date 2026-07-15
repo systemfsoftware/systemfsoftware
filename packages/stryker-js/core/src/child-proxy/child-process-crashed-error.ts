@@ -1,4 +1,4 @@
-import { StrykerError } from '@stryker-mutator/util';
+import { StrykerError } from '@stryker-mutator/util'
 
 export class ChildProcessCrashedError extends StrykerError {
   constructor(
@@ -8,9 +8,9 @@ export class ChildProcessCrashedError extends StrykerError {
     public readonly signal?: string,
     innerError?: Error,
   ) {
-    super(message, innerError);
-    Error.captureStackTrace(this, ChildProcessCrashedError);
+    super(message, innerError)
+    Error.captureStackTrace(this, ChildProcessCrashedError)
     // TS recommendation: https://github.com/Microsoft/TypeScript/wiki/Breaking-Changes#extending-built-ins-like-error-array-and-map-may-no-longer-work
-    Object.setPrototypeOf(this, ChildProcessCrashedError.prototype);
+    Object.setPrototypeOf(this, ChildProcessCrashedError.prototype)
   }
 }

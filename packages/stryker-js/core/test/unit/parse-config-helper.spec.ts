@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest'
-import { stripJsonComments, parseConfigFileTextToJson } from '../../src/sandbox/parse-config-helper.js'
+import { describe, expect, it } from 'vitest'
+import { parseConfigFileTextToJson, stripJsonComments } from '../../src/sandbox/parse-config-helper.js'
 
 describe('stripJsonComments', () => {
   it('removes block comments (/* comment */)', () => {

@@ -1,6 +1,6 @@
-import { FileDescriptions, StrykerOptions } from '@stryker-mutator/api/core';
+import { FileDescriptions, StrykerOptions } from '@stryker-mutator/api/core'
 
-import type { LoggingServerAddress } from '../logging/index.js';
+import type { LoggingServerAddress } from '../logging/index.js'
 
 export enum WorkerMessageKind {
   Init,
@@ -35,53 +35,53 @@ export enum ParentMessageKind {
   DisposeCompleted,
 }
 
-export type WorkerMessage = CallMessage | DisposeMessage | InitMessage;
+export type WorkerMessage = CallMessage | DisposeMessage | InitMessage
 export type ParentMessage =
   | InitRejectionResult
   | RejectionResult
   | WorkResult
   | {
-      kind:
-        | ParentMessageKind.DisposeCompleted
-        | ParentMessageKind.Initialized
-        | ParentMessageKind.Ready;
-    };
+    kind:
+      | ParentMessageKind.DisposeCompleted
+      | ParentMessageKind.Initialized
+      | ParentMessageKind.Ready
+  }
 
 export interface InitMessage {
-  kind: WorkerMessageKind.Init;
-  loggingServerAddress: LoggingServerAddress;
-  options: StrykerOptions;
-  fileDescriptions: FileDescriptions;
-  pluginModulePaths: readonly string[];
-  workingDirectory: string;
-  namedExport: string;
-  modulePath: string;
+  kind: WorkerMessageKind.Init
+  loggingServerAddress: LoggingServerAddress
+  options: StrykerOptions
+  fileDescriptions: FileDescriptions
+  pluginModulePaths: readonly string[]
+  workingDirectory: string
+  namedExport: string
+  modulePath: string
 }
 
 export interface DisposeMessage {
-  kind: WorkerMessageKind.Dispose;
+  kind: WorkerMessageKind.Dispose
 }
 
 export interface WorkResult {
-  kind: ParentMessageKind.CallResult;
-  correlationId: number;
-  result: any;
+  kind: ParentMessageKind.CallResult
+  correlationId: number
+  result: any
 }
 
 export interface RejectionResult {
-  kind: ParentMessageKind.CallRejection;
-  correlationId: number;
-  error: string;
+  kind: ParentMessageKind.CallRejection
+  correlationId: number
+  error: string
 }
 
 export interface InitRejectionResult {
-  kind: ParentMessageKind.InitError;
-  error: string;
+  kind: ParentMessageKind.InitError
+  error: string
 }
 
 export interface CallMessage {
-  correlationId: number;
-  kind: WorkerMessageKind.Call;
-  args: any[];
-  methodName: string;
+  correlationId: number
+  kind: WorkerMessageKind.Call
+  args: any[]
+  methodName: string
 }

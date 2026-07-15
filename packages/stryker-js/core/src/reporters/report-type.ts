@@ -6,6 +6,6 @@
 export const ReportType = {
   Full: 'full',
   MutationScore: 'mutationScore',
-} as const;
+} as const
 
-export type ReportType = (typeof ReportType)[keyof typeof ReportType];
+export type ReportType = (typeof ReportType)[keyof typeof ReportType]

@@ -1,4 +1,4 @@
-import { LogLevel } from './log-level.js';
+import { LogLevel } from './log-level.js'
 
 export const logLevelPriority = Object.freeze({
   [LogLevel.Trace]: 0,
@@ -8,8 +8,8 @@ export const logLevelPriority = Object.freeze({
   [LogLevel.Error]: 4,
   [LogLevel.Fatal]: 5,
   [LogLevel.Off]: 6,
-});
+})
 
 export function minPriority(a: LogLevel, b: LogLevel): LogLevel {
-  return logLevelPriority[a] < logLevelPriority[b] ? a : b;
+  return logLevelPriority[a] < logLevelPriority[b] ? a : b
 }

@@ -1,15 +1,15 @@
-import { FileDescriptions, StrykerOptions } from '@stryker-mutator/api/core';
-import { LoggerFactoryMethod } from '@stryker-mutator/api/logging';
-import { commonTokens, tokens } from '@stryker-mutator/api/plugin';
+import { FileDescriptions, StrykerOptions } from '@stryker-mutator/api/core'
+import { LoggerFactoryMethod } from '@stryker-mutator/api/logging'
+import { commonTokens, tokens } from '@stryker-mutator/api/plugin'
 
-import { IdGenerator } from '../child-proxy/id-generator.js';
+import { IdGenerator } from '../child-proxy/id-generator.js'
 
-import { coreTokens } from '../di/index.js';
+import { coreTokens } from '../di/index.js'
 
-import { CheckerChildProcessProxy } from './checker-child-process-proxy.js';
-import { CheckerFacade } from './checker-facade.js';
-import { CheckerRetryDecorator } from './checker-retry-decorator.js';
-import { LoggingServerAddress } from '../logging/index.js';
+import { LoggingServerAddress } from '../logging/index.js'
+import { CheckerChildProcessProxy } from './checker-child-process-proxy.js'
+import { CheckerFacade } from './checker-facade.js'
+import { CheckerRetryDecorator } from './checker-retry-decorator.js'
 
 createCheckerFactory.inject = tokens(
   commonTokens.options,
@@ -18,7 +18,7 @@ createCheckerFactory.inject = tokens(
   coreTokens.pluginModulePaths,
   commonTokens.getLogger,
   coreTokens.workerIdGenerator,
-);
+)
 export function createCheckerFactory(
   options: StrykerOptions,
   fileDescriptions: FileDescriptions,
@@ -42,5 +42,5 @@ export function createCheckerFactory(
             ),
           getLogger(CheckerRetryDecorator.name),
         ),
-    );
+    )
 }

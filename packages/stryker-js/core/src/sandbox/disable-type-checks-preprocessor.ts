@@ -1,18 +1,18 @@
-import path from 'path';
+import path from 'path'
 
-import { commonTokens, tokens } from '@stryker-mutator/api/plugin';
-import { StrykerOptions } from '@stryker-mutator/api/core';
-import type { disableTypeChecks } from '@stryker-mutator/instrumenter';
-import { Logger } from '@stryker-mutator/api/logging';
+import { StrykerOptions } from '@stryker-mutator/api/core'
+import { Logger } from '@stryker-mutator/api/logging'
+import { commonTokens, tokens } from '@stryker-mutator/api/plugin'
+import type { disableTypeChecks } from '@stryker-mutator/instrumenter'
 
-import { optionsPath } from '../utils/index.js';
-import { coreTokens } from '../di/index.js';
-import { objectUtils } from '../utils/object-utils.js';
-import { FileMatcher } from '../config/index.js';
+import { FileMatcher } from '../config/index.js'
+import { coreTokens } from '../di/index.js'
+import { optionsPath } from '../utils/index.js'
+import { objectUtils } from '../utils/object-utils.js'
 
-import { Project } from '../fs/project.js';
+import { Project } from '../fs/project.js'
 
-import { FilePreprocessor } from './file-preprocessor.js';
+import { FilePreprocessor } from './file-preprocessor.js'
 
 /**
  * Disabled type checking by inserting `@ts-nocheck` atop TS/JS files and removing other @ts-xxx directives from comments:
@@ -23,7 +23,7 @@ export class DisableTypeChecksPreprocessor implements FilePreprocessor {
     commonTokens.logger,
     commonTokens.options,
     coreTokens.disableTypeChecksHelper,
-  );
+  )
   constructor(
     private readonly log: Logger,
     private readonly options: StrykerOptions,
@@ -31,8 +31,8 @@ export class DisableTypeChecksPreprocessor implements FilePreprocessor {
   ) {}
 
   public async preprocess(project: Project): Promise<void> {
-    const matcher = new FileMatcher(this.options.disableTypeChecks);
-    let warningLogged = false;
+    const matcher = new FileMatcher(this.options.disableTypeChecks)
+    let warningLogged = false
     await Promise.all(
       objectUtils.map(project.files, async (file, name) => {
         if (matcher.matches(path.resolve(name))) {
@@ -40,8 +40,8 @@ export class DisableTypeChecksPreprocessor implements FilePreprocessor {
             const { content } = await this.impl(
               await file.toInstrumenterFile(),
               { plugins: this.options.mutator.plugins },
-            );
-            file.setContent(content);
+            )
+            file.setContent(content)
           } catch (err) {
             if (
               objectUtils.isWarningEnabled(
@@ -49,22 +49,24 @@ export class DisableTypeChecksPreprocessor implements FilePreprocessor {
                 this.options.warnings,
               )
             ) {
-              warningLogged = true;
+              warningLogged = true
               this.log.warn(
-                `Unable to disable type checking for file "${name}". Shouldn't type checking be disabled for this file? Consider configuring a more restrictive "${optionsPath(
-                  'disableTypeChecks',
-                )}" settings (or turn it completely off with \`false\`)`,
+                `Unable to disable type checking for file "${name}". Shouldn't type checking be disabled for this file? Consider configuring a more restrictive "${
+                  optionsPath(
+                    'disableTypeChecks',
+                  )
+                }" settings (or turn it completely off with \`false\`)`,
                 err,
-              );
+              )
             }
           }
         }
       }),
-    );
+    )
     if (warningLogged) {
       this.log.warn(
         `(disable "${optionsPath('warnings', 'preprocessorErrors')}" to ignore this warning`,
-      );
+      )
     }
   }
 }

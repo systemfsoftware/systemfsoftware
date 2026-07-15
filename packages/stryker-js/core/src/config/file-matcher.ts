@@ -1,24 +1,24 @@
-import path from 'path';
+import path from 'path'
 
-import { minimatch } from 'minimatch';
-import { normalizeFileName } from '@stryker-mutator/util';
+import { normalizeFileName } from '@stryker-mutator/util'
+import { minimatch } from 'minimatch'
 
 /**
  * A helper class for matching files using the `disableTypeChecks` setting.
  */
 export class FileMatcher {
-  private readonly pattern: boolean | string;
+  private readonly pattern: boolean | string
 
   constructor(
     pattern: boolean | string,
     private readonly allowHiddenFiles = true,
   ) {
     if (typeof pattern === 'string') {
-      this.pattern = normalizeFileName(path.resolve(pattern));
+      this.pattern = normalizeFileName(path.resolve(pattern))
     } else if (pattern) {
-      this.pattern = '**/*.{js,ts,jsx,tsx,html,vue,mjs,mts,cts,cjs}';
+      this.pattern = '**/*.{js,ts,jsx,tsx,html,vue,mjs,mts,cts,cjs}'
     } else {
-      this.pattern = pattern;
+      this.pattern = pattern
     }
   }
 
@@ -28,9 +28,9 @@ export class FileMatcher {
         normalizeFileName(path.resolve(fileName)),
         this.pattern,
         { dot: this.allowHiddenFiles },
-      );
+      )
     } else {
-      return this.pattern;
+      return this.pattern
     }
   }
 }

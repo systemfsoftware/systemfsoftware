@@ -1,6 +1,6 @@
 export class IdGenerator {
-  private id = 0;
+  private id = 0
   public next(): number {
-    return this.id++;
+    return this.id++
   }
 }

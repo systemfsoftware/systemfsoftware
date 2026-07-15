@@ -1,22 +1,22 @@
-import path from 'path';
+import path from 'path'
 
-import { StrykerOptions } from '@stryker-mutator/api/core';
-import { tokens, commonTokens } from '@stryker-mutator/api/plugin';
-import { Logger } from '@stryker-mutator/api/logging';
+import { StrykerOptions } from '@stryker-mutator/api/core'
+import { Logger } from '@stryker-mutator/api/logging'
+import { commonTokens, tokens } from '@stryker-mutator/api/plugin'
 
-import { Project } from '../fs/project.js';
+import { Project } from '../fs/project.js'
 
-import { FilePreprocessor } from './file-preprocessor.js';
-import { parseConfigFileTextToJson } from './parse-config-helper.js';
-import { resolveProjectReferencePath } from './resolve-reference-helper.js';
+import { FilePreprocessor } from './file-preprocessor.js'
+import { parseConfigFileTextToJson } from './parse-config-helper.js'
+import { resolveProjectReferencePath } from './resolve-reference-helper.js'
 
 export interface TSConfig {
-  references?: Array<{ path: string }>;
-  extends?: string;
-  files?: string[];
-  exclude?: string[];
-  include?: string[];
-  compilerOptions?: Record<string, unknown>;
+  references?: Array<{ path: string }>
+  extends?: string
+  files?: string[]
+  exclude?: string[]
+  include?: string[]
+  compilerOptions?: Record<string, unknown>
 }
 /**
  * A helper class that rewrites `references` and `extends` file paths if they end up falling outside of the sandbox.
@@ -36,11 +36,11 @@ export interface TSConfig {
  * }
  */
 export class TSConfigPreprocessor implements FilePreprocessor {
-  private readonly touched = new Set<string>();
+  private readonly touched = new Set<string>()
   public static readonly inject = tokens(
     commonTokens.logger,
     commonTokens.options,
-  );
+  )
   constructor(
     private readonly log: Logger,
     private readonly options: StrykerOptions,
@@ -49,13 +49,13 @@ export class TSConfigPreprocessor implements FilePreprocessor {
   public async preprocess(project: Project): Promise<void> {
     if (this.options.inPlace) {
       // If stryker is running 'inPlace', we don't have to change the tsconfig file
-      return;
+      return
     } else {
-      this.touched.clear();
+      this.touched.clear()
       await this.rewriteTSConfigFile(
         project,
         path.resolve(this.options.tsconfigFile),
-      );
+      )
     }
   }
 
@@ -64,25 +64,25 @@ export class TSConfigPreprocessor implements FilePreprocessor {
     tsconfigFileName: string,
   ): Promise<void> {
     if (!this.touched.has(tsconfigFileName)) {
-      this.touched.add(tsconfigFileName);
-      const tsconfigFile = project.files.get(tsconfigFileName);
+      this.touched.add(tsconfigFileName)
+      const tsconfigFile = project.files.get(tsconfigFileName)
       if (tsconfigFile) {
-        this.log.debug('Rewriting file %s', tsconfigFile);
+        this.log.debug('Rewriting file %s', tsconfigFile)
         const { config } = parseConfigFileTextToJson(
           tsconfigFileName,
           await tsconfigFile.readContent(),
-        );
+        )
         if (config) {
-          await this.rewriteExtends(project, config, tsconfigFileName);
+          await this.rewriteExtends(project, config, tsconfigFileName)
           await this.rewriteProjectReferences(
             project,
             config,
             tsconfigFileName,
-          );
-          this.rewriteFileArrayProperty(config, tsconfigFileName, 'include');
-          this.rewriteFileArrayProperty(config, tsconfigFileName, 'exclude');
-          this.rewriteFileArrayProperty(config, tsconfigFileName, 'files');
-          tsconfigFile.setContent(JSON.stringify(config, null, 2));
+          )
+          this.rewriteFileArrayProperty(config, tsconfigFileName, 'include')
+          this.rewriteFileArrayProperty(config, tsconfigFileName, 'exclude')
+          this.rewriteFileArrayProperty(config, tsconfigFileName, 'files')
+          tsconfigFile.setContent(JSON.stringify(config, null, 2))
         }
       }
     }
@@ -93,16 +93,16 @@ export class TSConfigPreprocessor implements FilePreprocessor {
     config: TSConfig,
     tsconfigFileName: string,
   ): Promise<void> {
-    const extend = config.extends;
+    const extend = config.extends
     if (typeof extend === 'string') {
-      const rewritten = this.tryRewriteReference(extend, tsconfigFileName);
+      const rewritten = this.tryRewriteReference(extend, tsconfigFileName)
       if (rewritten) {
-        config.extends = rewritten;
+        config.extends = rewritten
       } else {
         await this.rewriteTSConfigFile(
           project,
           path.resolve(path.dirname(tsconfigFileName), extend),
-        );
+        )
       }
     }
   }
@@ -112,16 +112,16 @@ export class TSConfigPreprocessor implements FilePreprocessor {
     tsconfigFileName: string,
     prop: 'exclude' | 'files' | 'include',
   ): void {
-    const fileArray = config[prop];
+    const fileArray = config[prop]
     if (Array.isArray(fileArray)) {
       config[prop] = fileArray.map((pattern) => {
-        const rewritten = this.tryRewriteReference(pattern, tsconfigFileName);
+        const rewritten = this.tryRewriteReference(pattern, tsconfigFileName)
         if (rewritten) {
-          return rewritten;
+          return rewritten
         } else {
-          return pattern;
+          return pattern
         }
-      });
+      })
     }
   }
 
@@ -132,18 +132,18 @@ export class TSConfigPreprocessor implements FilePreprocessor {
   ): Promise<void> {
     if (Array.isArray(config.references)) {
       for (const reference of config.references) {
-        const referencePath = resolveProjectReferencePath(reference);
+        const referencePath = resolveProjectReferencePath(reference)
         const rewritten = this.tryRewriteReference(
           referencePath,
           originTSConfigFileName,
-        );
+        )
         if (rewritten) {
-          reference.path = rewritten;
+          reference.path = rewritten
         } else {
           await this.rewriteTSConfigFile(
             project,
             path.resolve(path.dirname(originTSConfigFileName), referencePath),
-          );
+          )
         }
       }
     }
@@ -153,16 +153,16 @@ export class TSConfigPreprocessor implements FilePreprocessor {
     reference: string,
     originTSConfigFileName: string,
   ): string | false {
-    const dirName = path.dirname(originTSConfigFileName);
-    const fileName = path.resolve(dirName, reference);
-    const relativeToSandbox = path.relative(process.cwd(), fileName);
+    const dirName = path.dirname(originTSConfigFileName)
+    const fileName = path.resolve(dirName, reference)
+    const relativeToSandbox = path.relative(process.cwd(), fileName)
     if (relativeToSandbox.startsWith('..')) {
-      return this.join('..', '..', reference);
+      return this.join('..', '..', reference)
     }
-    return false;
+    return false
   }
 
   private join(...pathSegments: string[]) {
-    return pathSegments.map((segment) => segment.replace(/\\/g, '/')).join('/');
+    return pathSegments.map((segment) => segment.replace(/\\/g, '/')).join('/')
   }
 }

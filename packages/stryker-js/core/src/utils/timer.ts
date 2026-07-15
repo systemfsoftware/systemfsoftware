@@ -1,50 +1,49 @@
 export class Timer {
-  private readonly start: Date;
-  private readonly markers: Record<string, Date | undefined> =
-    Object.create(null);
+  private readonly start: Date
+  private readonly markers: Record<string, Date | undefined> = Object.create(null)
 
   constructor(private readonly now = () => new Date()) {
-    this.start = this.now();
+    this.start = this.now()
   }
   public humanReadableElapsed(sinceMarker?: string): string {
-    const elapsedSeconds = this.elapsedSeconds(sinceMarker);
+    const elapsedSeconds = this.elapsedSeconds(sinceMarker)
     return new Intl.ListFormat('en').format(
       [
         Timer.humanReadableElapsedMinutes(elapsedSeconds),
         Timer.humanReadableElapsedSeconds(elapsedSeconds),
       ].filter(Boolean),
-    );
+    )
   }
 
   public elapsedSeconds(sinceMarker?: string): number {
-    const elapsedMs = this.elapsedMs(sinceMarker);
-    return Math.floor(elapsedMs / 1000);
+    const elapsedMs = this.elapsedMs(sinceMarker)
+    return Math.floor(elapsedMs / 1000)
   }
 
   public elapsedMs(sinceMarker?: string): number {
-    const marker = sinceMarker && this.markers[sinceMarker];
+    const marker = sinceMarker && this.markers[sinceMarker]
     if (marker) {
-      return this.now().getTime() - marker.getTime();
+      return this.now().getTime() - marker.getTime()
     } else {
-      return this.now().getTime() - this.start.getTime();
+      return this.now().getTime() - this.start.getTime()
     }
   }
 
   public mark(name: string): void {
-    this.markers[name] = this.now();
+    this.markers[name] = this.now()
   }
 
   private static humanReadableElapsedSeconds(elapsedSeconds: number) {
-    const restSeconds = elapsedSeconds % 60;
-    return this.formatTime('second', restSeconds);
+    const restSeconds = elapsedSeconds % 60
+    return this.formatTime('second', restSeconds)
   }
 
   private static humanReadableElapsedMinutes(elapsedSeconds: number) {
-    const elapsedMinutes = Math.floor(elapsedSeconds / 60);
+    const elapsedMinutes = Math.floor(elapsedSeconds / 60)
     if (elapsedMinutes === 0) {
-      return '';
+      return ''
     } else {
-      return this.formatTime('minute', elapsedMinutes);
+      return this.formatTime('minute', elapsedMinutes)
     }
   }
 
@@ -53,6 +52,6 @@ export class Timer {
       unit: word,
       style: 'unit',
       unitDisplay: 'long',
-    });
+    })
   }
 }

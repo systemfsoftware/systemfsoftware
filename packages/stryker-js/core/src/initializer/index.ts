@@ -1,18 +1,18 @@
-import { Injector } from 'typed-inject';
-import { execaCommand, execaCommandSync } from 'execa';
-import { resolveFromCwd } from '@stryker-mutator/util';
+import { resolveFromCwd } from '@stryker-mutator/util'
+import { execaCommand, execaCommandSync } from 'execa'
+import { Injector } from 'typed-inject'
 
-import { coreTokens } from '../di/index.js';
+import { coreTokens } from '../di/index.js'
 
-import * as initializerTokens from './initializer-tokens.js';
-import { NpmClient } from './npm-client.js';
-import { StrykerConfigWriter } from './stryker-config-writer.js';
-import { StrykerInitializer } from './stryker-initializer.js';
-import { StrykerInquirer } from './stryker-inquirer.js';
-import { createInitializers } from './custom-initializers/index.js';
-import { GitignoreWriter } from './gitignore-writer.js';
-import { createNpmRegistryClient, getRegistry } from './npm-registry.js';
-import { provideLogging, provideLoggingBackend } from '../logging/index.js';
+import { provideLogging, provideLoggingBackend } from '../logging/index.js'
+import { createInitializers } from './custom-initializers/index.js'
+import { GitignoreWriter } from './gitignore-writer.js'
+import * as initializerTokens from './initializer-tokens.js'
+import { NpmClient } from './npm-client.js'
+import { createNpmRegistryClient, getRegistry } from './npm-registry.js'
+import { StrykerConfigWriter } from './stryker-config-writer.js'
+import { StrykerInitializer } from './stryker-initializer.js'
+import { StrykerInquirer } from './stryker-inquirer.js'
 
 export async function initializerFactory(
   injector: Injector,
@@ -29,7 +29,7 @@ export async function initializerFactory(
     .provideClass(initializerTokens.gitignoreWriter, GitignoreWriter)
     .provideClass(initializerTokens.inquirer, StrykerInquirer)
     .provideFactory(initializerTokens.customInitializers, createInitializers)
-    .injectClass(StrykerInitializer);
+    .injectClass(StrykerInitializer)
 }
 
-export { initializerTokens };
+export { initializerTokens }
