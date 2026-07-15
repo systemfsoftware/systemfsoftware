@@ -1,0 +1,18 @@
+{
+  "name": "@systemfsoftware/stryker-js-core",
+  "version": "0.1.0",
+  "description": "Inline helpers replacing removed TS7 APIs in @stryker-mutator/core",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
+    "@types/node": "^24",
+    "vitest": "^4",
+    "typescript": "catalog:"
+  }
+}
