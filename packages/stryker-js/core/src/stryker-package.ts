@@ -6,7 +6,7 @@ import { deepFreeze } from '@stryker-mutator/util';
 const pkg = deepFreeze(
   JSON.parse(
     fs.readFileSync(
-      fileURLToPath(new URL('../../package.json', import.meta.url)),
+      fileURLToPath(new URL('../package.json', import.meta.url)),
       'utf-8',
     ),
   ) as {

@@ -1,4 +1,5 @@
-import { StrykerOptions, ReportType, schema } from '@stryker-mutator/api/core';
+import { StrykerOptions, schema } from '@stryker-mutator/api/core';
+import { ReportType } from '../report-type.js';
 import { Logger } from '@stryker-mutator/api/logging';
 import { commonTokens, tokens } from '@stryker-mutator/api/plugin';
 import { Reporter } from '@stryker-mutator/api/report';

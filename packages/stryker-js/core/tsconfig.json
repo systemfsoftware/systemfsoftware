@@ -12,6 +12,7 @@
     "isolatedModules": false,
     "noImplicitReturns": false,
     "noImplicitOverride": false,
+    "preserveConstEnums": false,
     "skipLibCheck": true,
     "types": ["node", "vitest/globals"]
   },

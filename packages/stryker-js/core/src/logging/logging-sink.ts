@@ -1,4 +1,4 @@
-import { LogLevel } from '@stryker-mutator/api/core';
+import { LogLevel } from './log-level.js';
 import { LoggingEvent } from './logging-event.js';
 
 export interface LoggingSink {

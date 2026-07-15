@@ -40,7 +40,7 @@ export class ChildProcessTestRunnerProxy implements TestRunner {
     this.log = getLogger(ChildProcessTestRunnerProxy.name);
     this.worker = ChildProcessProxy.create(
       new URL(
-        './child-process-test-runner-worker.js',
+        './child-process-test-runner-worker.mjs',
         import.meta.url,
       ).toString(),
       loggingServerAddress,

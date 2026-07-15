@@ -4,7 +4,7 @@ import { LoggingSink } from './logging-sink.js';
 import net from 'node:net';
 import { Disposable } from '@stryker-mutator/api/plugin';
 import { promisify } from 'node:util';
-import { LogLevel } from '@stryker-mutator/api/core';
+import { LogLevel } from './log-level.js';
 
 export interface LoggingServerAddress {
   port: number;

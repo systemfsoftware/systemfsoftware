@@ -9,6 +9,18 @@
       "@systemfsoftware/source": "./src/index.ts",
       "default": "./dist/index.mjs"
     },
+    "./checker-worker": {
+      "@systemfsoftware/source": "./src/checker/checker-worker.ts",
+      "default": "./dist/checker-worker.mjs"
+    },
+    "./child-process-proxy-worker": {
+      "@systemfsoftware/source": "./src/child-proxy/child-process-proxy-worker.ts",
+      "default": "./dist/child-process-proxy-worker.mjs"
+    },
+    "./child-process-test-runner-worker": {
+      "@systemfsoftware/source": "./src/test-runner/child-process-test-runner-worker.ts",
+      "default": "./dist/child-process-test-runner-worker.mjs"
+    },
     "./package.json": "./package.json"
   },
   "bin": {
@@ -64,5 +76,14 @@
   "engines": {
     "node": ">=20.0.0"
   },
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "publishConfig": {
+    "exports": {
+      ".": "./dist/index.mjs",
+      "./checker-worker": "./dist/checker-worker.mjs",
+      "./child-process-proxy-worker": "./dist/child-process-proxy-worker.mjs",
+      "./child-process-test-runner-worker": "./dist/child-process-test-runner-worker.mjs",
+      "./package.json": "./package.json"
+    }
+  }
 }

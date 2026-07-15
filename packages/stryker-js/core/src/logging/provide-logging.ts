@@ -7,7 +7,7 @@ import { coreTokens } from '../di/index.js';
 import { LoggingServer, LoggingServerAddress } from './logging-server.js';
 import { LoggingBackend } from './logging-backend.js';
 import { LoggingClient } from './logging-client.js';
-import { LogLevel } from '@stryker-mutator/api/core';
+import { LogLevel } from './log-level.js';
 
 function getLoggerFactory(loggingSink: LoggingSink) {
   return (categoryName?: string): Logger =>

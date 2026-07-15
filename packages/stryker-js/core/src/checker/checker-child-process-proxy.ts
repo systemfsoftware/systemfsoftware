@@ -30,7 +30,7 @@ export class CheckerChildProcessProxy
     idGenerator: IdGenerator,
   ) {
     this.childProcess = ChildProcessProxy.create(
-      new URL('./checker-worker.js', import.meta.url).toString(),
+      new URL('./checker-worker.mjs', import.meta.url).toString(),
       loggingServerAddress,
       options,
       fileDescriptions,
