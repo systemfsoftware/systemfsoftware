@@ -1,1 +1,1 @@
-vendor/constitution/CONSTITUTION.md
+repos/constitution/CONSTITUTION.md

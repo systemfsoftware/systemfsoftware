@@ -4,7 +4,7 @@
 
 ## Supreme law
 
-🛑 **Read `CONSTITUTION.md` (vendored at the repo root via the `vendor/constitution/` subtree) BEFORE any work.** It is the supreme authority — it supersedes this file and every leaf delta. It governs the pure functional core / imperative shell split every package here follows. Amend it only at its source repo (`systemfsoftware/constitution`), never in the vendored copy.
+🛑 **Read `CONSTITUTION.md` (vendored at the repo root via the `repos/constitution/` subtree) BEFORE any work.** It is the supreme authority — it supersedes this file and every leaf delta. It governs the pure functional core / imperative shell split every package here follows. Amend it only at its source repo (`systemfsoftware/constitution`), never in the vendored copy.
 
 ## Stack
 
