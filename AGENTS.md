@@ -1,95 +1,56 @@
 # AGENTS.md — systemfsoftware monorepo
 
-> Effect-TS libraries + the oxlint plugin that enforces the constitution. Root file holds workspace-wide invariants only; tooling-enforced rules (dprint, oxlint, tsconfig) are not duplicated here. Per-package rules live in leaf `AGENTS.md` deltas.
-
-## Supreme law
-
-🛑 **Read `CONSTITUTION.md` (vendored at the repo root via the `repos/constitution/` subtree) BEFORE any work.** It is the supreme authority — it supersedes this file and every leaf delta. It governs the pure functional core / imperative shell split every package here follows. Amend it only at its source repo (`systemfsoftware/constitution`), never in the vendored copy.
+Effect-TS libraries + the oxlint plugin enforcing the constitution (at `repos/constitution/`; amend upstream, never vendored copy). Root holds workspace invariants; leaf packages have deltas.
 
 ## Stack
 
-- **Package manager** — pnpm (`pnpm-workspace.yaml` is the source of truth). Run scripts as `pnpm --filter <pkg> <cmd>` from root; **never** `cd <dir> && <cmd>`. No `npx` — use `pnpm exec`.
-- **Types** — TypeScript 7 via `tsc`; `effect-daemon-spec` additionally runs `tsc` for the api-extractor pipeline.
-- **Build** — tsdown (ESM, `.mjs` + `tsc` dts). Build output is **gitignored — never committed.**
-- **Tests** — Vitest + `@effect/vitest` + `fast-check` (PBT). Mutation via Stryker with the `typescript-checker`.
-- **Lint / format** — oxlint (self-hosted: the repo lints itself with `@systemfsoftware/oxlint-plugin` through `@systemfsoftware/oxlint-config`) + dprint.
+| Concern | Tool | Note |
+|---------|------|------|
+| Pkg mgr | pnpm | `pnpm --filter <pkg> <cmd>` from root; **never** `cd`. No `npx` |
+| Types | tsc | `effect-daemon-spec` additionally runs api-extractor |
+| Build | tsdown | ESM (`.mjs` + tsc dts). Build output in `dist/` is gitignored |
+| Tests | Vitest + `@effect/vitest` + fast-check | PBT on pure core; composition through I/O sandwich |
+| Mutation | Stryker (typescript-checker) | Targets pure-core files |
+| Lint | oxlint (self-hosted) + dprint | Self-hosted: `@systemfsoftware/oxlint-plugin` lints itself |
 
-## Package layout
+## Packages
 
-| Package                                        | Published as                                | Visibility                |
-| ---------------------------------------------- | ------------------------------------------- | ------------------------- |
-| `effect-gherkin-spec`                          | `@systemfsoftware/effect-gherkin-spec`      | public                    |
-| `effect-daemon-spec`                           | `@systemfsoftware/effect-daemon-spec`       | public                    |
-| `oxlint-plugin`                                | `@systemfsoftware/oxlint-plugin`            | public                    |
-| `effect-schema-law`                            | `@systemfsoftware/effect-schema-law`        | public                    |
-| `stryker-plugins`                              | `@systemfsoftware/stryker-plugins`          | public                    |
-| `rx-effect`                                    | `@systemfsoftware/rx-effect`                | public                    |
-| `effect-schema-extensions`                     | `@systemfsoftware/effect-schema-extensions` | public                    |
-| `tsconfig` · `oxlint-config` · `vitest-config` | —                                           | private (build/test only) |
+Published (`"private": false`): effect-gherkin-spec, effect-daemon-spec, oxlint-plugin, effect-schema-law, stryker-plugins, rx-effect, effect-schema-extensions — all as `@systemfsoftware/<name>`. Private: tsconfig, oxlint-config, vitest-config — no `publishConfig`.
 
-🛑 **Published packages have no `"private": true`; internal tooling does.** A package that is `private` is never npm-published; do not add a `publishConfig` to one.
+🛑 Don't hand-edit `package.json#exports` on tsdown packages — change `tsdown.config.ts`. Dev condition `@systemfsoftware/source`; `default` resolves `dist`. Keep both in sync.
 
-## Critical invariants
+## Repo layout
 
-🛑 **Effect / Mastra / tsdown / Stryker APIs are stale or absent in training data.** Consult the vendored `effect/` sources or the package's own existing code before generating these APIs — do not invent them.
+| Path | Purpose |
+|------|---------|
+| `packages/<name>/` | Published package |
+| `repos/constitution/` | Vendored constitution (locked — read-only) |
+| `repos/effect/` | Vendored Effect-TS sources — **consult before using stale APIs** |
+| `docs/solutions/` | Past solutions with YAML frontmatter |
 
-❌ **NO type suppression** — `as any`, `@ts-ignore`, `@ts-expect-error`, empty catch blocks are forbidden.
-
-❌ **NO decode-by-cast** — turn external/untrusted data into domain types through a `Schema` decode, never an `as` assertion. (Constitution §II.5.)
-
-❌ **NO committed build output** — `dist/`, `.turbo/`, `coverage/`, `reports/` are gitignored. Ship source; consumers get `dist` from the npm tarball, not git.
-
-❌ **NO second schema for structured output** — derive JSON Schema from the same Effect `Schema` you decode with.
-
-❌ **NO hand-edit of `package.json#exports` / `publishConfig.exports`** on tsdown-built packages — tsdown regenerates them; change `tsdown.config.ts` instead.
-
-❌ **NO `| head` / `| tail` on bash commands** — the harness truncates already.
-
-⚠️ **`docs/solutions/`** — documented solutions to past problems (bugs, best practices, workflow patterns), organized by category with YAML frontmatter (`module`, `tags`, `problem_type`). Relevant when implementing or debugging in documented areas.
-⚠️ **The single-source dev condition is `@systemfsoftware/source`.** Package exports map it to `./src/*.ts` so in-repo consumers resolve source (no prebuild); the `default` condition resolves built `dist`. Keep both in sync when adding a subpath.
-
-## `@systemfsoftware/tsconfig`
-
-The shared TypeScript base configs live in `packages/tsconfig/` — one source of truth every package extends. Modernized to 2026 SOTA (es2024 / esnext + the full strict set); bump `target`/`lib`/strictness there.
-
-🛑 **NEVER enable `isolatedDeclarations`.** It is structurally incompatible with idiomatic Effect — `Schema.Class` extends-clauses (TS9021) and inferred `Layer`/`Metric`/`Schema` value exports cannot be annotated, so it forces either banned `@ts-` suppression or de-idiomatized code. Verified empirically (153 errors, ~71% unannotatable). Excluded on purpose; do not "modernize" it back in.
+Locked: AGENTS.md, repos/. Editable: packages/. Human-controlled: merge/deploy/publish/creds.
 
 ## Definition of Done
 
-Evidence is a runnable command, not "it worked here":
+Evidence from THIS session:
+```bash
+pnpm install --frozen-lockfile && pnpm lint && pnpm typecheck && pnpm test
+```
+Then `pnpm --filter <pkg> mutation` — **100%** on changed pure-core files. For `effect-daemon-spec`: `pnpm api:check`. Any failure blocks done. **Never** delete `reports/stryker-incremental.json`.
 
-1. `pnpm typecheck` exit 0 — no `any`, no suppression.
-2. `pnpm test` exit 0 — property tests on the pure core (≥100 runs, 0 rejects) + composition tests through the I/O sandwich with at least one boundary unmocked. No tautological tests; no pure-core test dressed as integration.
-3. `pnpm lint` exit 0 (dprint check + oxlint).
-4. Mutation **100%** on changed pure-core files (`pnpm --filter <pkg> mutation`); kill survivors with a sharper property or by deleting the dead branch. **Never** delete `reports/stryker-incremental.json` (gitignored but not disposable — deleting forces a full re-run).
-5. `effect-daemon-spec` only: `pnpm --filter @systemfsoftware/effect-daemon-spec api:check` exit 0; commit `etc/*.api.md` when the surface changes.
-6. Conventional Commit (lower-case type, ≤72-char header, no scope). Allowed types and rules are enforced by `commitlint.config.ts`. No AI co-author trailers.
+## Version control — jj
 
-## Version control — jj first
+jj colocated with git. Direct `git` blocked by hook; `jj …` and package-script git allowed.
 
-The repo uses [Jujutsu](https://github.com/martinvonz/jj) (jj) colocated with git: `.jj/` and `.git/` both exist, and the colocated backend is the source of truth for working-copy state. Direct `git` CLI commands invoked through the Bash tool are blocked by a PreToolUse hook (exit 2 with a redirect to `jj`); `jj …` and indirect git usage by package scripts is allowed.
-
-Common command mappings:
-
-| git                                  | jj                                     |
-| ------------------------------------ | -------------------------------------- |
-| `git status`                         | `jj st`                                |
-| `git diff`                           | `jj diff`                              |
-| `git log`                            | `jj log`                               |
-| `git add <files>`                    | (none — `jj` records the working copy) |
-| `git commit -m "<msg>"`              | `jj commit -m "<msg>"`                 |
-| `git commit --amend`                 | `jj squash`                            |
-| `git rebase -i <upstream>`           | `jj rebase -i <upstream>`              |
-| `git branch <name>`                  | `jj bookmark create <name>`            |
-| `git switch <name>` / `git checkout` | `jj edit <name>` (or `jj new <name>`)  |
-| `git push`                           | `jj git push`                          |
-| `git fetch`                          | `jj git fetch`                         |
-| `git stash`                          | (use a named change + `jj edit`)       |
-
-Commit messages, signing, and the Conventional Commit + GPG rules in `## Commits` below are unchanged — jj writes a real git commit on `jj git push`, and that commit is what `commitlint` and git's signing pipeline see.
+| git | jj |
+|-----|----|
+| status/diff/log | `jj st` / `jj diff` / `jj log --no-graph` |
+| commit -m / --amend | `jj commit -m` / `jj squash` |
+| rebase / branch / switch | `jj rebase` / `jj bookmark` / `jj edit\|jj new` |
+| push / fetch / stash | `jj git push` / `jj git fetch` / named change + `jj edit` |
 
 ## Commits
 
-`pnpm exec commitlint` enforces the type-enum and `type-matches-diff-shape`. Files under `.claude/`, configs, and lockfiles are `chore`/`build`/`ci`/`deps`, not `docs`. `feat`/`fix` MUST touch production source. Commits are GPG-signed as `Ryan Lee <drdgvhbh@gmail.com>`.
+`pnpm exec commitlint`: `type(scope): subject ≤72 chars`. Types: feat/fix/chore/build/ci/deps/docs/perf/refactor/revert/style/test. Scope: package dir or `repo`/`deps`/`release`/`ci`. `feat`/`fix` MUST touch production source; configs/`.claude/` → `chore/build/ci/deps`. GPG-signed `Ryan Lee <drdgvhbh@gmail.com>`. No AI co-author trailers.
 
-**Scopes are allowed and encouraged** (this is a monorepo). The scope is optional; when present it must be a package directory name under `packages/` (the `scope-enum` is derived from the filesystem, so it auto-tracks new packages) or one of `repo` / `deps` / `release` / `ci`. Example: `feat(rx-effect): add fromObservable backpressure`.
+🛑 **NEVER enable `isolatedDeclarations`** — incompatible with idiomatic Effect (verified 153 errors).
