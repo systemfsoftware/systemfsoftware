@@ -12,6 +12,7 @@
     "api:check": "turbo --concurrency=${TURBO_CONCURRENCY:-50%} api:check",
     "format": "dprint fmt",
     "format:check": "dprint check",
+    "check": "pnpm install --frozen-lockfile && concurrently --group --no-bail \"pnpm lint\" \"pnpm typecheck\" \"pnpm test\"",
     "check:ci": "concurrently --group --no-bail \"pnpm lint:ci\" \"pnpm typecheck\" \"pnpm api:check\" \"CI=true pnpm test\"",
     "release": "node scripts/release.mjs",
     "prepare": "husky",

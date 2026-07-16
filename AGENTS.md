@@ -32,9 +32,8 @@ Locked: AGENTS.md, repos/. Editable: packages/. Human-controlled: merge/deploy/p
 
 ## Definition of Done
 
-Evidence from THIS session:
 ```bash
-pnpm install --frozen-lockfile && pnpm lint && pnpm typecheck && pnpm test
+pnpm check  # install --frozen-lockfile → lint + typecheck + test (concurrent)
 ```
 Then `pnpm --filter <pkg> mutation` — **100%** on changed pure-core files. For `effect-daemon-spec`: `pnpm api:check`. Any failure blocks done. **Never** delete `reports/stryker-incremental.json`.
 
