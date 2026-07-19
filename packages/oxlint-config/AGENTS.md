@@ -1,3 +1,3 @@
 # AGENTS.md — `@systemfsoftware/oxlint-config`
 
-Config-only — shared oxlint configuration. No tests, no build output, no mutation. Root AGENTS.md governs all work.
+> **Location:** `packages/oxlint-config/` — shared oxlint configuration. Config-only: no tests, no build output, no mutation. Universal agent rules live in the root `AGENTS.md`.

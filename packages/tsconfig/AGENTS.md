@@ -1,3 +1,5 @@
 # AGENTS.md — `@systemfsoftware/tsconfig`
 
-Config-only — shared TypeScript base configs. No tests, no build output, no mutation. Root AGENTS.md governs all work. Extend from `@systemfsoftware/tsconfig/<preset>`.
+> **Location:** `packages/tsconfig/` — shared TypeScript base configs. Config-only: no tests, no build output, no mutation. Universal agent rules live in the root `AGENTS.md`.
+
+Extend from `@systemfsoftware/tsconfig/<preset>`.

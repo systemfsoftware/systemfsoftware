@@ -95,7 +95,7 @@ A task is done only when ALL of the following are true:
 pnpm check  # install --frozen-lockfile → lint + typecheck + test (concurrent)
 ```
 
-Then `pnpm --filter <pkg> mutation` — **100%** on changed pure-core files. For `effect-daemon-spec`: `pnpm api:check`. Any failure blocks done. **Never** delete the per-package `reports/stryker-incremental.json` (Stryker's incremental baseline).
+Then `pnpm --filter <pkg> mutation` — **100%** on changed pure-core files. For `effect-daemon-spec`: `pnpm api:check`. Any failure blocks done. Never delete the per-package Stryker incremental baseline (each package writes its own reports/stryker-incremental.json).
 
 ### Anti-Bypass Rules
 

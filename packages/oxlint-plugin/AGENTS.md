@@ -1,6 +1,6 @@
-# AGENTS.md — Oxlint Plugin
+# AGENTS.md — `@systemfsoftware/oxlint-plugin`
 
-> **Location:** `packages/oxlint-plugin/` — the `@systemfsoftware/oxlint-plugin` rule package. Universal agent rules live in the root `AGENTS.md`; this file carries only plugin-specific deltas.
+> **Location:** `packages/oxlint-plugin/` — the oxlint rule package for System F Software. Universal agent rules live in the root `AGENTS.md`; this file carries only `oxlint-plugin/`-specific deltas.
 
 ## Critical
 

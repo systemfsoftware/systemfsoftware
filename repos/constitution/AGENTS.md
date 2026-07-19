@@ -6,7 +6,7 @@ Universal rules (startup workflow, definition of done, verification, working rul
 
 ## Critical
 
-**MUST** invoke relevant skills before domain-specific work.
+
 
 ## Constitution-specific deltas
 

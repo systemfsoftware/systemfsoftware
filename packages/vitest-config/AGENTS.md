@@ -1,3 +1,3 @@
 # AGENTS.md — `@systemfsoftware/vitest-config`
 
-Config-only — shared vitest configuration. No tests, no build output, no mutation. Root AGENTS.md governs all work.
+> **Location:** `packages/vitest-config/` — shared vitest configuration. Config-only: no tests, no build output, no mutation. Universal agent rules live in the root `AGENTS.md`.
