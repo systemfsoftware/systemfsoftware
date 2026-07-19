@@ -3,15 +3,18 @@ import { generateNotes as baseGenerateNotes } from '@semantic-release/release-no
 import { execFileSync } from 'node:child_process'
 import { relative } from 'node:path'
 
-const repoRoot = () => execFileSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' }).trim()
+const repoRoot = () =>
+  execFileSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8', maxBuffer: 10 * 1024 * 1024 }).trim()
 
 const filesInCommit = (hash, root) =>
-  execFileSync('git', ['diff-tree', '--no-commit-id', '--name-only', '-r', '-m', hash], {
+  execFileSync('git', ['diff-tree', '--no-commit-id', '--name-only', '-r', '-m', hash, '--', '.', ':!repos'], {
     cwd: root,
     encoding: 'utf8',
+    maxBuffer: 10 * 1024 * 1024,
   })
     .split('\n')
     .filter(Boolean)
+    .filter((f) => !f.startsWith('repos/'))
 
 const commitsForPackage = (context) => {
   const root = repoRoot()
