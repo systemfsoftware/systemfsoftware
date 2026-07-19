@@ -74,7 +74,7 @@ This root file holds workspace-wide invariants only. Directories with distinct b
 | `packages/effect-schema-extensions/`      | yes — extensions                               | Distinct extensions build.          |
 | `repos/constitution/`                     | yes — vendored read-only                       | Vendored; changes go upstream.      |
 | `repos/effect/`                           | yes — vendored reference                       | Vendored; consult only, never edit. |
-| `repos/typescript-go/`                    | yes — vendored reference                       | Vendored; consult only, never edit. |
+| `repos/typescript-go/`                    | no leaf — pure vendored lock content            | Read-only Microsoft repo; no agent instruction needed.   |
 | `docs/solutions/`                         | no leaf needed — content                       | Same build and boundaries as root.  |
 | `scripts/`                                | no leaf needed — tool scripts                  | Same build and boundaries as root.  |
 
@@ -95,7 +95,7 @@ A task is done only when ALL of the following are true:
 pnpm check  # install --frozen-lockfile → lint + typecheck + test (concurrent)
 ```
 
-Then `pnpm --filter <pkg> mutation` — **100%** on changed pure-core files. For `effect-daemon-spec`: `pnpm api:check`. Any failure blocks done. **Never** delete `reports/stryker-incremental.json`.
+Then `pnpm --filter <pkg> mutation` — **100%** on changed pure-core files. For `effect-daemon-spec`: `pnpm api:check`. Any failure blocks done. **Never** delete the per-package `reports/stryker-incremental.json` (Stryker's incremental baseline).
 
 ### Anti-Bypass Rules
 

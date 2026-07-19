@@ -1,10 +1,6 @@
----
-version: "2026-04-15"
----
-
 # AGENTS.md — Oxlint Plugin
 
-> **Delta ONLY**: Oxlint-plugin-specific additions. Root AGENTS.md defines universal policies.
+> **Location:** `packages/oxlint-plugin/` — the `@systemfsoftware/oxlint-plugin` rule package. Universal agent rules live in the root `AGENTS.md`; this file carries only plugin-specific deltas.
 
 ## Critical
 
@@ -12,9 +8,7 @@ version: "2026-04-15"
 
 ## 1. Rule File Structure
 
-Rules use ESLint-compatible API via `@typescript-eslint/utils` for compatibility with oxlint's `jsPlugins` feature.
-
-### Standard Rule Template
+Rules use ESLint-compatible API via `@typescript-eslint/utils` for compatibility with oxlint's `jsPlugins` feature. Standard template:
 
 ```typescript
 import { ESLintUtils, TSESTree } from '@typescript-eslint/utils'
@@ -29,47 +23,25 @@ export const rule = createRule<Options, MessageIds>({
   meta: {
     type: 'suggestion',
     docs: { description: 'Rule description' },
-    schema: [], // JSON Schema for options
-    messages: {
-      errorKey: '{{name}} is forbidden. Expected: {{expected}}. Actual: {{actual}}. Fix: {{fix}}.',
-    },
-    fixable: 'code', // if auto-fixable
-    hasSuggestions: true, // if providing suggestions
+    schema: [],
+    messages: { errorKey: '{{name}} is forbidden. Expected: {{expected}}. Actual: {{actual}}. Fix: {{fix}}.' },
+    fixable: 'code',         // if auto-fixable
+    hasSuggestions: true,    // if providing suggestions
   },
   defaultOptions: [],
-  create(context) {
-    // Rule logic here
-    return {
-      // AST selectors
-    }
-  },
+  create(context) { /* AST selectors */ },
 })
 ```
 
 ### Error Message Format (MANDATORY)
 
-**ALL error messages MUST use AI-Native format:**
-
-```
-'{{name}} is forbidden. Expected: {{expected}}. Actual: {{actual}}. Fix: {{fix}}.'
-```
-
-| Component      | Purpose                  | Example                           |
-| -------------- | ------------------------ | --------------------------------- |
-| `{{name}}`     | The violating element    | `eval`, `Data.TaggedError`        |
-| `{{expected}}` | What should be used      | `Schema.TaggedError`              |
-| `{{actual}}`   | What was detected        | `Data.TaggedError`                |
-| `{{fix}}`      | Concrete fix instruction | `Replace with Schema.TaggedError` |
+`ALL` error messages MUST use the AI-native format `'{{name}} is forbidden. Expected: {{expected}}. Actual: {{actual}}. Fix: {{fix}}.'`. Each placeholder carries: violating element, correct alternative, detected element, concrete fix.
 
 ## 2. Testing Requirements
 
-### Test Framework
+- **REQUIRED:** `oxlint/plugins-dev` `RuleTester` (per Issue #2092). Structure: `valid: [...]` and `invalid: [...]`. Run: `pnpm --filter @systemfsoftware/oxlint-plugin test`.
 
-- **REQUIRED:** `oxlint/plugins-dev` RuleTester (per Issue #2092)
-- **Structure:** `valid: [...]` and `invalid: [...]` cases
-- **Run:** `pnpm --filter @systemfsoftware/oxlint-plugin test`
-
-### Test File Template
+Test file template:
 
 ```typescript
 import { RuleTester } from 'oxlint/plugins-dev'
@@ -84,82 +56,57 @@ RuleTester.describe = vitest.describe
 const ruleTester = new RuleTester()
 
 ruleTester.run('rule-name', rule, {
-  valid: [
-    { name: 'Should_Pass_When_...', code: '...' },
-  ],
-  invalid: [
-    {
-      name: 'Should_Report_When_...',
-      code: '...',
-      output: '...',  // For auto-fix rules
-      errors: [{ messageId: '...', data: { ... } }],
-    },
-  ],
+  valid: [{ name: 'Should_Pass_When_...', code: '...' }],
+  invalid: [{
+    name: 'Should_Report_When_...',
+    code: '...',
+    output: '...',         // For auto-fix rules
+    errors: [{ messageId: '...', data: { ... } }],
+  }],
 })
 ```
 
-### Coverage Requirements
+### Coverage
 
-| Metric     | Threshold | Config Location               |
-| ---------- | --------- | ----------------------------- |
-| Statements | 100%      | `vitest.config.ts:thresholds` |
-| Branches   | 100%      | `vitest.config.ts:thresholds` |
-| Functions  | 100%      | `vitest.config.ts:thresholds` |
-| Lines      | 100%      | `vitest.config.ts:thresholds` |
+100% statements/branches/functions/lines — thresholds in `vitest.config.ts`.
 
 ## 3. Oxlint JS Plugin Integration
 
-### How Oxlint Loads This Plugin
+How oxlint loads this plugin (`oxlint-config/src/oxlint-config.base.ts`):
 
 ```typescript
-// In oxlint-config/src/oxlint-config.base.ts
 import { defineConfig } from 'oxlint'
 
 export default defineConfig({
   jsPlugins: ['@systemfsoftware/oxlint-plugin'],
-  rules: {
-    '@systemfsoftware/oxlint-plugin/rule-name': 'error',
-  },
+  rules: { '@systemfsoftware/oxlint-plugin/rule-name': 'error' },
 })
 ```
 
-### Rule Export Format
+Rule export format (`src/index.ts`):
 
 ```typescript
-// src/index.ts
 import { rule as myRule } from './rules/my-rule.js'
 
 export default {
   meta: { name: '@systemfsoftware/oxlint-plugin' },
-  rules: {
-    'my-rule': myRule,
-  },
+  rules: { 'my-rule': myRule },
 }
 ```
 
 ## 4. Migration from ESLint Plugin
 
-When migrating rules from `@systemfsoftware/eslint-plugin`:
-
-1. **Copy** rule file to `src/rules/{name}.ts`
-2. **Keep** all rule logic, AST selectors, and message formats
-3. **Copy** test file to `src/rules/__tests__/{name}.test.ts`
-4. **Update** test import to use `oxlint/plugins-dev`:
-   ```typescript
-   import { RuleTester } from 'oxlint/plugins-dev'
-   ```
-5. **Update** import paths (`.js` extension for ESM)
-6. **Add** rule export to `src/index.ts`
+1. Copy rule file to `src/rules/{name}.ts`.
+2. Keep all rule logic, AST selectors, message formats.
+3. Copy test file to `src/rules/__tests__/{name}.test.ts`.
+4. Update test import to `oxlint/plugins-dev`.
+5. Update import paths (`.js` extension for ESM).
+6. Add rule export to `src/index.ts`.
 
 ## 5. Commands
 
 ```bash
-# Type check
 pnpm --filter @systemfsoftware/oxlint-plugin typecheck
-
-# Run tests (with coverage, 100% threshold enforced)
-pnpm --filter @systemfsoftware/oxlint-plugin test
-
-# Lint
+pnpm --filter @systemfsoftware/oxlint-plugin test        # 100% coverage enforced
 pnpm --filter @systemfsoftware/oxlint-plugin lint
 ```
