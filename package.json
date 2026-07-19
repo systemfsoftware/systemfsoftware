@@ -16,7 +16,8 @@
     "check:ci": "concurrently --group --no-bail \"pnpm lint:ci\" \"pnpm typecheck\" \"pnpm api:check\" \"CI=true pnpm test\"",
     "release": "node scripts/release.mjs",
     "prepare": "husky",
-    "release:dry": "node scripts/release.mjs --dry-run"
+    "release:dry": "node scripts/release.mjs --dry-run",
+    "bump:minor": "node scripts/bump-all-minor.mjs"
   },
   "devDependencies": {
     "@commitlint/cli": "^20.5.0",
