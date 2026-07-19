@@ -5,7 +5,7 @@ export default defineConfig({
     index: './src/index.ts',
   },
   format: 'esm',
-  dts: { tsgo: { path: 'tsc' } },
+  dts: true,
   tsconfig: './tsconfig.build.json',
   clean: false,
   exports: {},

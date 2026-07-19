@@ -55,6 +55,11 @@ export default defineConfig({
         '@systemfsoftware/oxlint-plugin/no-native-settimeout-in-effect': 'off',
         '@systemfsoftware/oxlint-plugin/no-new-promise-in-effect': 'off',
         '@systemfsoftware/oxlint-plugin/no-direct-tag-access': 'off',
+        // The Gherkin step DSL and Effect.runSync-based helpers nest `expect`
+        // inside Effect callbacks — vitest plugin cannot statically see these
+        // as test blocks. Assertions are real; the rules don't model them.
+        'vitest/expect-expect': 'off',
+        'vitest/no-standalone-expect': 'off',
       },
     },
   ],

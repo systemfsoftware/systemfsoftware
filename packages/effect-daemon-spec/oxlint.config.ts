@@ -109,12 +109,6 @@ export default defineConfig({
         'require-yield': 'off',
         'typescript/consistent-type-assertions': 'off',
         'typescript/no-deprecated': 'off',
-        // The Gherkin step DSL nests `expect` inside Given/When/Then step
-        // callbacks, which the vitest plugin cannot statically see as test
-        // blocks — assertions are real, just not in a shape these rules model.
-        // Mirrors the jest variants already disabled in oxlint-config base.
-        'vitest/expect-expect': 'off',
-        'vitest/no-standalone-expect': 'off',
       },
     },
   ],

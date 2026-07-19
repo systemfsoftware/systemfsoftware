@@ -4,9 +4,11 @@ allowBuilds:
   unrs-resolver: true
 catalog:
   typescript: ^7
+catalogs:
+  oxlint:
+    oxlint: ^1.74.0
+    "@oxlint/plugins": ^1.74.0
 minimumReleaseAge: 1440
-minimumReleaseAgeExclude:
-  - "@oxlint-tsgolint"
 overrides:
   vite: ^7
 packages:

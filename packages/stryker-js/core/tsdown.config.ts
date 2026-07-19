@@ -8,7 +8,7 @@ export default defineConfig({
     'child-process-test-runner-worker': './src/test-runner/child-process-test-runner-worker.ts',
   },
   format: 'esm',
-  dts: { tsgo: { path: 'tsc' } },
+  dts: true,
   exports: { devExports: '@systemfsoftware/source' },
   clean: false,
 })
