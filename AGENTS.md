@@ -47,11 +47,11 @@ Effect-TS libraries + the oxlint plugin enforcing the constitution (at `repos/co
 
 ## Surface Classes
 
-| Surface              | Examples                                                                                               | Rule                                                                 |
-| -------------------- | ------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------- |
-| **Locked**           | `AGENTS.md`, `repos/`, `.github/workflows/`, evaluation scripts                                        | Read and propose changes, but do not edit to make verification pass. |
-| **Editable**         | `packages/*/`, `scripts/`, `docs/solutions/`, `tsdown.config.ts`, `dprint.json`, `pnpm-workspace.yaml` | Edit freely within the active task.                                  |
-| **Human-controlled** | Merge to `main`, publish, deploy, destructive ops, credentials                                         | Ask the user before acting.                                          |
+| Surface              | Examples                                                                                               | Rule                                                                                                                                                                                                                                                                                      |
+| -------------------- | ------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Locked**           | `AGENTS.md`, `repos/`, `.github/workflows/`, evaluation scripts                                        | Read and propose changes, but do not edit to make verification pass.                                                                                                                                                                                                                      |
+| **Editable**         | `packages/*/`, `scripts/`, `docs/solutions/`, `tsdown.config.ts`, `dprint.json`, `pnpm-workspace.yaml` | Edit freely within the active task. `docs/solutions/` holds documented solutions to past problems (bugs, best practices, workflow patterns), organized by category with YAML frontmatter (`module`, `tags`, `problem_type`); relevant when implementing or debugging in documented areas. |
+| **Human-controlled** | Merge to `main`, publish, deploy, destructive ops, credentials                                         | Ask the user before acting.                                                                                                                                                                                                                                                               |
 
 ## Startup Workflow
 
