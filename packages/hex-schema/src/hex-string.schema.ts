@@ -5,7 +5,11 @@ export const HexString = pipe(
   S.transform(
     S.String.pipe(
       S.pattern(/^(0x)?[0-9a-fA-F]*$/),
-      S.annotations({ arbitrary: () => (fc) => fc.stringMatching(/^(0x)?[0-9a-fA-F]*$/) }),
+      S.annotations({
+        arbitrary: () => (fc) => fc.stringMatching(/^(0x)?[0-9a-fA-F]*$/),
+        identifier: 'HexStringInput',
+        description: 'A hex string, optionally prefixed with 0x (empty string allowed)',
+      }),
     ),
     StrictHex,
     {

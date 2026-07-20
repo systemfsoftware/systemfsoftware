@@ -19,6 +19,7 @@
     "hex",
     "hexstring",
     "branded-types",
+    "validation",
     "typescript"
   ],
   "type": "module",
@@ -35,7 +36,7 @@
   ],
   "scripts": {
     "clean": "rimraf dist",
-    "build": "tsdown",
+    "build": "tsdown && api-extractor run --local",
     "typecheck": "tsc --noEmit --incremental",
     "test": "vitest run",
     "api:check": "api-extractor run",
