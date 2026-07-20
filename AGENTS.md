@@ -65,7 +65,7 @@ Before writing code:
    pnpm check  # install --frozen-lockfile → lint + typecheck + test
    ```
 5. **Confirm the active task** with the user or via the task list.
-6. **Review recent commits** with `jj log --no-graph -5`.
+6. **Review recent commits** with `git log --oneline -5`.
 
 If baseline verification fails, repair it first before adding new scope.
 

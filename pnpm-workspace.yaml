@@ -1,7 +1,10 @@
 allowBuilds:
-  dprint: true
-  esbuild: true
-  unrs-resolver: true
+  dprint: false
+  esbuild: false
+  onnxruntime-node: false
+  protobufjs: false
+  sharp: false
+  unrs-resolver: false
 catalog:
   typescript: ^7
   effect: ^3.22.0
@@ -19,6 +22,7 @@ catalog:
   oxc-parser: ^0.140.0
   "@oxc-project/types": ^0.140.0
   "@semantic-release/git": ^10.0.1
+  "@oh-my-pi/pi-coding-agent": ^17.0.5
 catalogMode: prefer
 catalogs:
   oxlint:
@@ -39,3 +43,5 @@ packages:
   - packages/*
   - packages/stryker-js/*
   - packages/arethetypeswrong/*
+  - omp/extensions/*
+  - omp/packages/*
