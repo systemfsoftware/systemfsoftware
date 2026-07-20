@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/rx-effect",
   "license": "MIT",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -48,6 +48,8 @@
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
+    "@microsoft/api-extractor": "catalog:",
+    "@systemfsoftware/arethetypeswrong-cli": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
@@ -58,9 +60,7 @@
     "rimraf": "catalog:",
     "rxjs": "^7.8.2",
     "tsdown": "catalog:",
-    "vitest": "catalog:",
-    "@systemfsoftware/arethetypeswrong-cli": "workspace:^",
-    "@microsoft/api-extractor": "catalog:"
+    "vitest": "catalog:"
   },
   "peerDependencies": {
     "effect": "*",
