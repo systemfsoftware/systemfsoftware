@@ -47,20 +47,19 @@ const presetConfig = {
   ],
 }
 
-const packagesRoot = join(repoRoot, 'packages')
+const packagesRoots = [join(repoRoot, 'packages'), join(repoRoot, 'omp', 'packages')]
 
 /**
- * Recursively discover publishable packages under `packages/`.
- * Returns the repo-relative path and the unscoped package name for each.
+ * Recursively discover publishable packages under `root`.
+ * Returns the root-relative path and the unscoped package name for each.
  */
-function discoverPackages(dir) {
+function discoverPackages(root, dir = root) {
   const entries = readdirSync(dir, { withFileTypes: true })
   const packages = []
 
   for (const entry of entries) {
     if (!entry.isDirectory()) continue
     const packagePath = join(dir, entry.name)
-    const manifestPath = join(packagePath, 'package.json')
 
     const manifestExists = (() => {
       try {
@@ -72,20 +71,20 @@ function discoverPackages(dir) {
 
     if (!manifestExists) {
       // No package.json here — keep descending.
-      packages.push(...discoverPackages(packagePath))
+      packages.push(...discoverPackages(root, packagePath))
       continue
     }
 
-    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
+    const manifest = JSON.parse(readFileSync(join(packagePath, 'package.json'), 'utf8'))
     if (manifest.private === true) continue
     if (typeof manifest.name !== 'string' || manifest.name.length === 0) {
       throw new Error(
-        `Publishable package at ${relative(packagesRoot, packagePath)} is missing a valid "name" field`,
+        `Publishable package at ${relative(root, packagePath)} is missing a valid "name" field`,
       )
     }
 
     packages.push({
-      path: relative(packagesRoot, packagePath),
+      path: relative(root, packagePath),
       // Strip npm scope so tags and commitlint scopes stay consistent
       name: manifest.name.replace(/^@[^/]+\//, ''),
     })
@@ -94,7 +93,7 @@ function discoverPackages(dir) {
   return packages
 }
 
-const publishablePackages = discoverPackages(packagesRoot)
+const publishablePackages = packagesRoots.flatMap((root) => discoverPackages(root).map((pkg) => ({ ...pkg, root })))
 
 const pluginsFor = () => [
   [filterPlugin, {
@@ -113,8 +112,8 @@ const pluginsFor = () => [
 ]
 
 let failed = 0
-for (const { path: packagePath, name: packageName } of publishablePackages) {
-  const cwd = join(packagesRoot, packagePath)
+for (const { path: packagePath, name: packageName, root } of publishablePackages) {
+  const cwd = join(root, packagePath)
   try {
     const result = await semanticRelease({
       branches: ['main'],

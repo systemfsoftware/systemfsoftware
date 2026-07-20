@@ -1,0 +1,28 @@
+# OMP plugin practice configuration
+# Skills that MUST NOT be delegated to subagent dispatches (task / Agent).
+# Adding or removing a skill is a config edit, never a code edit.
+no_delegate_skills = [
+  "lfg",
+  "ce-babysit-pr",
+  "ce-brainstorm",
+  "ce-code-review",
+  "ce-commit",
+  "ce-commit-push-pr",
+  "ce-compound",
+  "ce-compound-refresh",
+  "ce-debug",
+  "ce-doc-review",
+  "ce-explain",
+  "ce-ideate",
+  "ce-optimize",
+  "ce-plan",
+  "ce-pov",
+  "ce-proof",
+  "ce-resolve-pr-feedback",
+  "ce-riffrec-feedback-analysis",
+  "ce-simplify-code",
+  "ce-strategy",
+  "ce-test-browser",
+  "ce-work",
+  "ce-worktree",
+]

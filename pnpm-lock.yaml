@@ -21,6 +21,9 @@ catalogs:
     '@semantic-release/git':
       specifier: ^10.0.1
       version: 10.0.1
+    '@std/toml':
+      specifier: jsr:^1.0.11
+      version: 1.0.11
     '@types/node':
       specifier: ^24
       version: 24.13.2
@@ -200,15 +203,14 @@ importers:
         specifier: 'catalog:'
         version: 7.0.2
 
-  omp/extensions/omp-hook-dispatcher:
-    dependencies:
+  omp/packages/omp-agent-discipline:
+    devDependencies:
       '@oh-my-pi/pi-coding-agent':
         specifier: 'catalog:'
         version: 17.0.5
-    devDependencies:
       '@systemfsoftware/omp-utils':
         specifier: workspace:^
-        version: link:../../packages/omp-utils
+        version: link:../omp-utils
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
         version: link:../../../packages/oxlint-config
@@ -231,34 +233,14 @@ importers:
         specifier: 'catalog:'
         version: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/coverage-v8@4.1.9)(vite@7.3.5(@types/node@24.13.2)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0))
 
-  omp/extensions/omp-inject-instructions:
-    dependencies:
+  omp/packages/omp-claude-compat:
+    devDependencies:
       '@oh-my-pi/pi-coding-agent':
         specifier: 'catalog:'
         version: 17.0.5
-    devDependencies:
-      '@systemfsoftware/oxlint-config':
+      '@systemfsoftware/omp-utils':
         specifier: workspace:^
-        version: link:../../../packages/oxlint-config
-      '@systemfsoftware/tsconfig':
-        specifier: workspace:^
-        version: link:../../../packages/tsconfig
-      rimraf:
-        specifier: 'catalog:'
-        version: 6.1.3
-      tsdown:
-        specifier: 'catalog:'
-        version: 0.22.9(typescript@7.0.2)(unrun@0.2.39)
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
-
-  omp/extensions/omp-xd-retry-guard:
-    dependencies:
-      '@oh-my-pi/pi-coding-agent':
-        specifier: 'catalog:'
-        version: 17.0.5
-    devDependencies:
+        version: link:../omp-utils
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
         version: link:../../../packages/oxlint-config
@@ -282,6 +264,10 @@ importers:
         version: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/coverage-v8@4.1.9)(vite@7.3.5(@types/node@24.13.2)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0))
 
   omp/packages/omp-utils:
+    dependencies:
+      '@std/toml':
+        specifier: 'catalog:'
+        version: '@jsr/std__toml@1.0.11'
     devDependencies:
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
@@ -289,6 +275,9 @@ importers:
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../../packages/tsconfig
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.2
       rimraf:
         specifier: 'catalog:'
         version: 6.1.3
@@ -300,7 +289,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: 'catalog:'
-        version: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@25.9.5)(@vitest/coverage-v8@4.1.9)(vite@7.3.5(@types/node@25.9.5)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0))
+        version: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/coverage-v8@4.1.9)(vite@7.3.5(@types/node@24.13.2)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0))
 
   packages/arethetypeswrong/cli:
     dependencies:
@@ -1913,6 +1902,12 @@ packages:
 
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
+
+  '@jsr/std__collections@1.3.0':
+    resolution: {integrity: sha512-oJ5V5ZvsWyO5VLdGk3TaRHaVibfVKHvDC8KJdgmxIucHN2QzAXlMt36ApyTUBncfrhXdN/5Q3yMNvloAKym8RA==, tarball: https://npm.jsr.io/~/11/@jsr/std__collections/1.3.0.tgz}
+
+  '@jsr/std__toml@1.0.11':
+    resolution: {integrity: sha512-+LZAizoPAPwMDmRZr86/xPrbO8E0Oq0BJ70mr1fNMobJ/6X6v15Jk16ZClFGukWgzBMd8ggiMWnzp24+N3VNZg==, tarball: https://npm.jsr.io/~/11/@jsr/std__toml/1.0.11.tgz}
 
   '@kurkle/color@0.3.4':
     resolution: {integrity: sha512-M5UknZPHRu3DEDWoipU6sE8PdkZ6Z/S+v4dD+Ke8IaNlpdSQah50lz1KtcFBa2vsdOnwbbnxJwVM4wty6udA5w==}
@@ -6997,6 +6992,12 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
 
+  '@jsr/std__collections@1.3.0': {}
+
+  '@jsr/std__toml@1.0.11':
+    dependencies:
+      '@jsr/std__collections': 1.3.0
+
   '@kurkle/color@0.3.4': {}
 
   '@loaderkit/resolve@1.0.6':
@@ -8252,14 +8253,6 @@ snapshots:
       magic-string: 0.30.21
     optionalDependencies:
       vite: 7.3.5(@types/node@24.13.2)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0)
-
-  '@vitest/mocker@4.1.9(vite@7.3.5(@types/node@25.9.5)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0))':
-    dependencies:
-      '@vitest/spy': 4.1.9
-      estree-walker: 3.0.3
-      magic-string: 0.30.21
-    optionalDependencies:
-      vite: 7.3.5(@types/node@25.9.5)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0)
 
   '@vitest/pretty-format@4.1.9':
     dependencies:
@@ -10945,21 +10938,6 @@ snapshots:
       lightningcss: 1.32.0
       yaml: 2.9.0
 
-  vite@7.3.5(@types/node@25.9.5)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0):
-    dependencies:
-      esbuild: 0.27.7
-      fdir: 6.5.0(picomatch@4.0.5)
-      picomatch: 4.0.5
-      postcss: 8.5.19
-      rollup: 4.62.2
-      tinyglobby: 0.2.17
-    optionalDependencies:
-      '@types/node': 25.9.5
-      fsevents: 2.3.3
-      jiti: 2.7.0
-      lightningcss: 1.32.0
-      yaml: 2.9.0
-
   vitest@4.1.9(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/coverage-v8@4.1.9)(vite@7.3.5(@types/node@24.13.2)(jiti@2.6.1)(lightningcss@1.32.0)(yaml@2.9.0)):
     dependencies:
       '@vitest/expect': 4.1.9
@@ -11014,35 +10992,6 @@ snapshots:
     optionalDependencies:
       '@opentelemetry/api': 1.9.1
       '@types/node': 24.13.2
-      '@vitest/coverage-v8': 4.1.9(vitest@4.1.9)
-    transitivePeerDependencies:
-      - msw
-
-  vitest@4.1.9(@opentelemetry/api@1.9.1)(@types/node@25.9.5)(@vitest/coverage-v8@4.1.9)(vite@7.3.5(@types/node@25.9.5)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0)):
-    dependencies:
-      '@vitest/expect': 4.1.9
-      '@vitest/mocker': 4.1.9(vite@7.3.5(@types/node@25.9.5)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0))
-      '@vitest/pretty-format': 4.1.9
-      '@vitest/runner': 4.1.9
-      '@vitest/snapshot': 4.1.9
-      '@vitest/spy': 4.1.9
-      '@vitest/utils': 4.1.9
-      es-module-lexer: 2.1.0
-      expect-type: 1.3.0
-      magic-string: 0.30.21
-      obug: 2.1.4
-      pathe: 2.0.3
-      picomatch: 4.0.5
-      std-env: 4.2.0
-      tinybench: 2.9.0
-      tinyexec: 1.2.4
-      tinyglobby: 0.2.17
-      tinyrainbow: 3.1.0
-      vite: 7.3.5(@types/node@25.9.5)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0)
-      why-is-node-running: 2.3.0
-    optionalDependencies:
-      '@opentelemetry/api': 1.9.1
-      '@types/node': 25.9.5
       '@vitest/coverage-v8': 4.1.9(vitest@4.1.9)
     transitivePeerDependencies:
       - msw
