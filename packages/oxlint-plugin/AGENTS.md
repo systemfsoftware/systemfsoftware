@@ -25,11 +25,11 @@ export const rule = createRule<Options, MessageIds>({
     docs: { description: 'Rule description' },
     schema: [],
     messages: { errorKey: '{{name}} is forbidden. Expected: {{expected}}. Actual: {{actual}}. Fix: {{fix}}.' },
-    fixable: 'code',         // if auto-fixable
-    hasSuggestions: true,    // if providing suggestions
+    fixable: 'code', // if auto-fixable
+    hasSuggestions: true, // if providing suggestions
   },
   defaultOptions: [],
-  create(context) { /* AST selectors */ },
+  create(context) {/* AST selectors */},
 })
 ```
 

@@ -6,11 +6,11 @@
 
 `etc/effect-daemon-spec.api.md` IS the public API surface. Treat it as a committed snapshot.
 
-| Trigger | Required Action |
-|---------|-----------------|
+| Trigger                                 | Required Action                                        |
+| --------------------------------------- | ------------------------------------------------------ |
 | Change to anything exported by `mod.ts` | `pnpm build && pnpm api:update`, commit `etc/*.api.md` |
-| New `Warning: (ae-forgotten-export)` | Export the type from `mod.ts` OR inline it |
-| `*_base` warning on a NEW class | Refactor with named base const — never suppress |
+| New `Warning: (ae-forgotten-export)`    | Export the type from `mod.ts` OR inline it             |
+| `*_base` warning on a NEW class         | Refactor with named base const — never suppress        |
 
 `pnpm api:check` (no `--local`) compares live analysis to the committed report; non-zero exit if stale. Wired into root `pre-push` and CI.
 
