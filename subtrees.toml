@@ -1,6 +1,7 @@
 [[repos]]
 name = "oh-my-pi"
 url = "https://github.com/can1357/oh-my-pi"
+tag_prefix = "v"
 
 [[repos]]
 name = "constitution"
