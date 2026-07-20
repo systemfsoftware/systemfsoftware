@@ -22,7 +22,10 @@ const injectApiExtractorTypes = (exports: Record<string, ExportEntry>): Record<s
 }
 
 export default defineConfig({
-  entry: { index: './src/mod.ts', 'hex-schema': './src/hex-schema.mod.ts' },
+  entry: {
+    index: './src/mod.ts',
+    'hex-schema': './src/hex-schema/mod.ts',
+  },
   format: 'esm',
   dts: true,
   exports: {

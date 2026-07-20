@@ -2,9 +2,9 @@
   "$schema": "https://developer.microsoft.com/json-schemas/api-extractor/v7/api-extractor.schema.json",
   "projectFolder": ".",
   "mainEntryPointFilePath": "<projectFolder>/dist/index.d.ts",
-  "bundledPackages": [],
+  "bundledPackages": ["@systemfsoftware/hex-schema"],
   "compiler": {
-    "tsconfigFilePath": "<projectFolder>/tsconfig.build.json"
+    "tsconfigFilePath": "<projectFolder>/tsconfig.api.json"
   },
   "apiReport": {
     "enabled": true,

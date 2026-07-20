@@ -1,7 +1,7 @@
 {
-  "extends": "./tsconfig.build.json",
+  "extends": "./tsconfig.json",
   "compilerOptions": {
-    "customConditions": []
+    "customConditions": ["types"]
   },
   "include": ["dist/hex-schema.d.ts"]
 }

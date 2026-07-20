@@ -1,2 +1,1 @@
-export * from './hexstring.schema.js'
-export * from './prefixed-hex.schema.js'
+export * from '@systemfsoftware/hex-schema'

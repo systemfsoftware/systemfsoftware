@@ -30,7 +30,7 @@
       "default": "./dist/index.mjs"
     },
     "./hex-schema": {
-      "@systemfsoftware/source": "./src/hex-schema.mod.ts",
+      "@systemfsoftware/source": "./src/hex-schema/mod.ts",
       "types": "./dist/hex-schema.d.ts",
       "default": "./dist/hex-schema.mjs"
     },
