@@ -1,10 +1,9 @@
 {
   "name": "constitution",
-  "version": "1.0.0",
-  "description": "<div align=\"center\">",
+  "description": "The supreme design law of System F Software — stack-neutral, vendored into every consumer repo via git subtree + symlink.",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "python3 scripts/validate-constitution.py",
     "prepare": "husky"
   },
   "repository": {
@@ -13,7 +12,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "type": "commonjs",
   "bugs": {
     "url": "https://github.com/systemfsoftware/constitution/issues"
