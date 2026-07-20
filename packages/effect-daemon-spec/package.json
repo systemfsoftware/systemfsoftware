@@ -50,8 +50,8 @@
     "api:update": "api-extractor run --local"
   },
   "devDependencies": {
-    "@effect/vitest": "0.29.0",
-    "@microsoft/api-extractor": "^7.58.7",
+    "@effect/vitest": "0.30.0",
+    "@microsoft/api-extractor": "^7.58.11",
     "@systemfsoftware/stryker-js-core": "workspace:^",
     "@systemfsoftware/stryker-js-typescript-checker": "workspace:^",
     "@stryker-mutator/vitest-runner": "^9.6.1",

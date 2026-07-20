@@ -54,7 +54,7 @@
   },
   "devDependencies": {
     "@babel/types": "^7.29.0",
-    "@effect/vitest": "0.29.0",
+    "@effect/vitest": "0.30.0",
     "@stryker-mutator/api": "^9.6.1",
     "@stryker-mutator/vitest-runner": "^9.6.1",
     "@systemfsoftware/effect-schema-law": "workspace:^",
@@ -67,7 +67,7 @@
     "@vitest/coverage-v8": "^4",
     "rimraf": "^6.1.3",
     "tsdown": "^0.22.9",
-    "tstyche": "^7.1.0",
+    "tstyche": "^7.2.2",
     "typescript": "catalog:",
     "vitest": "^4"
   },
