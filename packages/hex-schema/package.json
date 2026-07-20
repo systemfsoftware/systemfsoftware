@@ -35,12 +35,13 @@
   ],
   "scripts": {
     "clean": "rimraf dist",
-    "build": "tsdown",
+    "build": "tsdown && api-extractor run --local",
     "typecheck": "tsc --noEmit --incremental",
     "test": "vitest run",
     "api:check": "api-extractor run",
     "api:update": "api-extractor run --local",
-    "lint": "oxlint . ${AGENT:+--format=unix --quiet}"
+    "lint": "oxlint . ${AGENT:+--format=unix --quiet}",
+    "attw": "attw --pack ."
   },
   "dependencies": {
     "effect": "catalog:"
@@ -57,7 +58,8 @@
     "fast-check": "catalog:",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "@systemfsoftware/arethetypeswrong-cli": "workspace:^"
   },
   "peerDependencies": {
     "effect": "*"

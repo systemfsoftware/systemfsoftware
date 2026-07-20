@@ -41,13 +41,14 @@
   ],
   "scripts": {
     "clean": "rimraf dist",
-    "build": "tsdown",
+    "build": "tsdown && api-extractor run --local && api-extractor run --local --config api-extractor.hex-schema.json",
     "typecheck": "tsc --noEmit --incremental",
     "test": "vitest run",
     "test:run": "vitest run",
-    "api:check": "api-extractor run",
-    "api:update": "api-extractor run --local",
-    "lint": "oxlint . ${AGENT:+--format=unix --quiet}"
+    "api:check": "api-extractor run && api-extractor run --config api-extractor.hex-schema.json",
+    "api:update": "api-extractor run --local && api-extractor run --local --config api-extractor.hex-schema.json",
+    "lint": "oxlint . ${AGENT:+--format=unix --quiet}",
+    "attw": "attw --pack ."
   },
   "dependencies": {
     "@systemfsoftware/hex-schema": "workspace:^",
@@ -66,7 +67,8 @@
     "fast-check": "catalog:",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "@systemfsoftware/arethetypeswrong-cli": "workspace:^"
   },
   "peerDependencies": {
     "effect": "*"

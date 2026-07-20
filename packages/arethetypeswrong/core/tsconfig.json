@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "@systemfsoftware/tsconfig/tsc/dom/library-monorepo",
+  "compilerOptions": {
+    "exactOptionalPropertyTypes": false,
+    "noUncheckedIndexedAccess": false,
+    "noImplicitReturns": false,
+    "customConditions": [
+      "@systemfsoftware/source"
+    ],
+    "types": ["ts-expose-internals"]
+  },
+  "include": [
+    "src"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ],
+  "references": [
+    {
+      "path": "./tsconfig.node.json"
+    }
+  ]
+}

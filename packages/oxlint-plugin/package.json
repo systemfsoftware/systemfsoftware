@@ -29,11 +29,14 @@
     "dist"
   ],
   "exports": {
-    ".": "./dist/index.mjs",
+    ".": {
+      "types": "./dist/oxlint-plugin.d.ts",
+      "default": "./dist/index.mjs"
+    },
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "tsdown",
+    "build": "tsdown && api-extractor run --local",
     "clean": "rimraf dist",
     "typecheck": "tsc --noEmit --incremental",
     "format": "dprint fmt",
@@ -41,7 +44,10 @@
     "test:run": "vitest run --coverage",
     "mutation": "stryker run --incremental",
     "mutation:full": "stryker run",
-    "lint": "oxlint . ${AGENT:+--format=unix --quiet}"
+    "lint": "oxlint . ${AGENT:+--format=unix --quiet}",
+    "attw": "attw --pack .",
+    "api:check": "api-extractor run",
+    "api:update": "api-extractor run --local"
   },
   "dependencies": {
     "@oxc-project/types": "^0.140.0",
@@ -60,7 +66,9 @@
     "rimraf": "catalog:",
     "tsdown": "catalog:",
     "typescript": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "@systemfsoftware/arethetypeswrong-cli": "workspace:^",
+    "@microsoft/api-extractor": "catalog:"
   },
   "peerDependencies": {
     "typescript": ">=5.0.0"

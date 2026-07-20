@@ -36,13 +36,14 @@
   ],
   "scripts": {
     "clean": "rimraf dist",
-    "build": "tsdown",
+    "build": "tsdown && api-extractor run --local",
     "typecheck": "tsc --noEmit --incremental",
     "test": "vitest run",
     "test:run": "vitest run",
     "api:check": "api-extractor run",
     "api:update": "api-extractor run --local",
-    "lint": "oxlint . ${AGENT:+--format=unix --quiet}"
+    "lint": "oxlint . ${AGENT:+--format=unix --quiet}",
+    "attw": "attw --pack ."
   },
   "dependencies": {
     "@oxc-project/types": "catalog:",
@@ -59,7 +60,8 @@
     "rimraf": "catalog:",
     "tsdown": "catalog:",
     "vite": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "@systemfsoftware/arethetypeswrong-cli": "workspace:^"
   },
   "peerDependencies": {
     "@systemfsoftware/effect-schema-law": "*",

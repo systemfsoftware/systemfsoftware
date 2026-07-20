@@ -13,13 +13,15 @@
     "format": "dprint fmt",
     "format:check": "dprint check",
     "precommit": "pnpm exec lint-staged --no-revert",
-    "pre-push": "concurrently --group \"pnpm lint\" \"pnpm typecheck\" \"pnpm api:check\" \"CI=true pnpm test\"",
-    "check": "pnpm install --frozen-lockfile && concurrently --group --no-bail \"pnpm lint\" \"pnpm typecheck\" \"pnpm test\" \"pnpm api:check\"",
-    "check:ci": "concurrently --group --no-bail \"pnpm lint:ci\" \"pnpm typecheck\" \"pnpm api:check\" \"CI=true pnpm test\"",
+    "pre-push": "concurrently --group \"pnpm lint\" \"pnpm typecheck\" \"pnpm attw\" \"pnpm check:exports\" \"pnpm api:check\" \"CI=true pnpm test\"",
+    "check": "pnpm install --frozen-lockfile && concurrently --group --no-bail \"pnpm lint\" \"pnpm typecheck\" \"pnpm attw\" \"pnpm check:exports\" \"pnpm test\" \"pnpm api:check\"",
+    "check:ci": "concurrently --group --no-bail \"pnpm lint:ci\" \"pnpm typecheck\" \"pnpm attw\" \"pnpm check:exports\" \"pnpm api:check\" \"CI=true pnpm test\"",
     "release": "node scripts/release.mjs",
     "prepare": "husky",
     "release:dry": "node scripts/release.mjs --dry-run",
-    "bump:minor": "node scripts/bump-all-minor.mjs"
+    "bump:minor": "node scripts/bump-all-minor.mjs",
+    "attw": "turbo --concurrency=${TURBO_CONCURRENCY:-50%} attw",
+    "check:exports": "node scripts/check-exports.mjs"
   },
   "devDependencies": {
     "@commitlint/cli": "^21.2.1",
