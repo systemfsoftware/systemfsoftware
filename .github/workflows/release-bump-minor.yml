@@ -14,18 +14,12 @@ jobs:
     name: build · bump · publish · push
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24
-          cache: pnpm
-          registry-url: "https://registry.npmjs.org"
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm build
-      - run: pnpm bump:minor
+      - uses: ./.github/actions/install-deps
+      - run: corepack pnpm build
+      - run: corepack pnpm bump:minor
       - name: Commit version bumps
         run: |
           git config user.name "github-actions[bot]"
@@ -35,9 +29,8 @@ jobs:
           git tag "bump-minor-$(date +%Y%m%d-%H%M%S)"
       - name: Publish all packages
         run: |
-          pnpm -r --filter='!@systemfsoftware/oxlint-config' --filter='!@systemfsoftware/vitest-config' publish --no-git-checks --access public
+          corepack pnpm -r --filter='!@systemfsoftware/oxlint-config' --filter='!@systemfsoftware/vitest-config' publish --no-git-checks --access public
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: "true"
       - name: Push commit and tag
         run: git push --follow-tags

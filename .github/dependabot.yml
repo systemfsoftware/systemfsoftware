@@ -1,56 +1,115 @@
-# Dependabot config — pnpm monorepo
-# https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
 version: 2
 updates:
   - package-ecosystem: "github-actions"
-    directories:
-      - "/"
+    directory: "/"
+    labels:
+      - "automerge"
     schedule:
-      interval: "weekly"
-      day: "monday"
+      interval: weekly
+      day: monday
     groups:
       github-actions:
         patterns:
           - "*"
 
-  - package-ecosystem: "npm"
-    directories:
-      - "/"
+  - package-ecosystem: npm
+    directory: "/"
     schedule:
-      interval: "weekly"
-      day: "monday"
+      interval: weekly
+      day: monday
     versioning-strategy: increase
     open-pull-requests-limit: 20
+    exclude-paths:
+      - "repos/**"
+
     groups:
       oxlint-minor-patch:
         patterns:
           - "oxlint"
           - "@oxlint/*"
-        update-types:
-          - "minor"
-          - "patch"
+        update-types: ["minor", "patch"]
+
       oxlint-major:
         patterns:
           - "oxlint"
           - "@oxlint/*"
-        update-types:
-          - "major"
-      production-minor-patch:
-        dependency-type: "production"
+        update-types: ["major"]
+
+      effect-minor-patch:
         patterns:
-          - "*"
-        update-types:
-          - "minor"
-          - "patch"
-      development-minor-patch:
-        dependency-type: "development"
+          - "@effect/*"
+          - "effect"
+        update-types: ["minor", "patch"]
+
+      effect-major:
         patterns:
-          - "*"
-        update-types:
-          - "minor"
-          - "patch"
+          - "@effect/*"
+          - "effect"
+        update-types: ["major"]
+
+      turborepo-minor-patch:
+        patterns:
+          - "turbo"
+        update-types: ["minor", "patch"]
+
+      testing-minor-patch:
+        patterns:
+          - "vitest"
+          - "@vitest/*"
+          - "@stryker-mutator/*"
+          - "stryker"
+          - "mocha"
+        update-types: ["minor", "patch"]
+
+      testing-major:
+        patterns:
+          - "vitest"
+          - "@vitest/*"
+          - "@stryker-mutator/*"
+          - "stryker"
+          - "mocha"
+        update-types: ["major"]
+
+      commitlint-minor-patch:
+        patterns:
+          - "@commitlint/*"
+        update-types: ["minor", "patch"]
+
+      typescript-minor-patch:
+        patterns:
+          - "typescript"
+        update-types: ["minor", "patch"]
+
+      other-minor-patch:
+        patterns: ["*"]
+        exclude-patterns:
+          - "oxlint"
+          - "@oxlint/*"
+          - "@effect/*"
+          - "effect"
+          - "turbo"
+          - "vitest"
+          - "@vitest/*"
+          - "@stryker-mutator/*"
+          - "stryker"
+          - "mocha"
+          - "@commitlint/*"
+          - "typescript"
+        update-types: ["minor", "patch"]
+
       major-updates:
-        patterns:
-          - "*"
-        update-types:
-          - "major"
+        patterns: ["*"]
+        exclude-patterns:
+          - "oxlint"
+          - "@oxlint/*"
+          - "@effect/*"
+          - "effect"
+          - "turbo"
+          - "vitest"
+          - "@vitest/*"
+          - "@stryker-mutator/*"
+          - "stryker"
+          - "mocha"
+          - "@commitlint/*"
+          - "typescript"
+        update-types: ["major"]

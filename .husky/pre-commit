@@ -1,2 +1,2 @@
-pnpm exec lint-staged
-pnpm format:check
+#!/usr/bin/env sh
+pnpm precommit

@@ -1,0 +1,25 @@
+#!/bin/sh
+# prepare-commit-msg — Strip AI co-author trailers
+# Preserves human pair attribution while removing AI credit lines.
+# Based on paritytech/identity-backend-community pattern.
+
+COMMIT_MSG_FILE=$1
+COMMIT_SOURCE=$2
+
+# Only process standard commits
+case "$COMMIT_SOURCE" in
+  merge|squash)
+    exit 0
+    ;;
+esac
+
+if [ -f "$COMMIT_MSG_FILE" ]; then
+  temp_file=$(mktemp)
+  grep -v -E -i "^Co-?-?[Aa]uthored-by:.*<.*(noreply@anthropic\.com|cursoragent@cursor\.com|noreply@aider\.dev|cascade@windsurf\.com|clio-agent@sisyphuslabs\.ai)>" "$COMMIT_MSG_FILE" > "$temp_file"
+  if [ -s "$temp_file" ]; then
+    mv "$temp_file" "$COMMIT_MSG_FILE"
+  else
+    rm "$temp_file"
+    exit 1
+  fi
+fi

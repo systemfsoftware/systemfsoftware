@@ -1,1 +1,2 @@
-pnpm lint && pnpm typecheck
+#!/usr/bin/env bash
+pnpm pre-push
