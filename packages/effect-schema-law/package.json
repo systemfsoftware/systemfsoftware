@@ -38,7 +38,7 @@
   ],
   "scripts": {
     "clean": "rimraf dist",
-    "build": "tsdown && api-extractor run --local",
+    "build": "tsdown",
     "typecheck": "tsc --noEmit --incremental",
     "test": "vitest run",
     "test:run": "vitest run",

@@ -41,7 +41,7 @@
   ],
   "scripts": {
     "clean": "rimraf dist",
-    "build": "tsdown && api-extractor run --local && api-extractor run --local --config api-extractor.hex-schema.json",
+    "build": "tsdown",
     "typecheck": "tsc --noEmit --incremental",
     "test": "vitest run",
     "test:run": "vitest run",
