@@ -1,6 +1,6 @@
 {
   "name": "@systemfsoftware/stryker-js-typescript-checker",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "TypeScript checker plugin for Stryker — TS7 native",
   "type": "module",
   "exports": {
