@@ -152,40 +152,6 @@ Never delete per-package Stryker incremental baselines.
   check: every edit preceded by a read; every done claim has current verification output
 ```
 
-## CI Debugging
-
-All workflows (`ci.yml`, `commitlint.yml`, `mutation.yml`, `release.yml`) run `install-deps` first. Most CI failures happen there.
-
-### What `install-deps` does
-
-1. `actions/setup-node@v7` installs Node 24 and sets up pnpm cache.
-2. `corepack enable` makes pnpm available.
-3. `corepack pnpm install --frozen-lockfile` installs dependencies.
-
-Order matters: `corepack enable` must run **before** `setup-node` so pnpm is on PATH when setup-node computes the cache key.
-
-### How to debug a failing CI run
-
-1. **Get job metadata** via the public API:
-   ```
-   GET https://api.github.com/repos/systemfsoftware/systemfsoftware/actions/runs/{run_id}/jobs
-   ```
-   Find the step with `"conclusion": "failure"`.
-
-2. **Get raw logs.** The log download API often returns 403 for public repos; use agent-browser fallback:
-   - Navigate to the run page.
-   - Extract `document.body.innerText` — it contains annotations and step statuses.
-
-3. **Known CI failures in this repo**
-
-   | Error                                                  | Root cause                                       | Fix                                                           |
-   | ------------------------------------------------------ | ------------------------------------------------ | ------------------------------------------------------------- |
-   | `Unable to locate executable file: pnpm`               | `corepack enable` runs after `setup-node`        | Swap order in `.github/actions/setup-node-runtime/action.yml` |
-   | `The process '/usr/bin/git' failed with exit code 128` | Secondary failure from a prior step              | Fix the primary failure first                                 |
-   | Dependabot Updates "Run Dependabot" fails              | `--frozen-lockfile` conflicts with version bumps | Read the full raw log; the real error is mid-output           |
-
-4. **Don't rely on act** to reproduce `setup-node@v7` or corepack issues — the act container's Node is too old for setup-node's bundled ESM. Debug CI-native issues on GitHub directly.
-
 ## Instruction Hierarchy
 
 This root file holds workspace-wide invariants only. Directories with distinct build, toolchain, ownership, or risk boundaries get their own leaf `AGENTS.md` delta.
