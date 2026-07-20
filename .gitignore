@@ -8,6 +8,3 @@ temp/
 *.tsbuildinfo
 .DS_Store
 __pycache__/
-.jj/
-.claude/settings.local.json
-jj-workflow-eval-workspace/

@@ -1,169 +1,152 @@
-# AGENTS.md — systemfsoftware monorepo
+# AGENTS.md — systemfsoftware
 
-Effect-TS libraries + the oxlint plugin enforcing the constitution (at `repos/constitution/`; amend upstream, never vendored copy). Root holds workspace invariants; leaf packages carry deltas.
+Effect-TS libraries + oxlint plugin. `pnpm --filter <pkg> <cmd>` from root; never `cd`. Don't hand-edit `package.json#exports` on tsdown packages — change `tsdown.config.ts`.
 
-## Startup Workflow
+## Safety
 
-Before writing code:
+```yaml
+- id: S1
+  title: NEVER enable isolatedDeclarations
+  do: keep isolatedDeclarations disabled
+  dont: enable it in any tsconfig
+  harm: 153 compile errors in idiomatic Effect
+  check: no tsconfig has isolatedDeclarations: true
 
-1. **Confirm working directory** with `pwd` — must be the monorepo root.
-2. **Read this file** completely.
-3. **Read the leaf** `AGENTS.md` along the path to your working directory — content accumulates downward.
-4. **Run baseline verification** (`pnpm check`) to confirm a healthy tree before adding scope.
-5. **Confirm the active task** with the user or via the task list.
-6. **Review recent commits** with `jj log --no-graph -5`.
+- id: S2
+  title: NEVER modify minimumReleaseAgeExclude
+  do: pin younger deps tighter (~0.22.9)
+  dont: modify minimumReleaseAgeExclude in pnpm-workspace.yaml
+  harm: supply-chain policy violation
+  check: pnpm-workspace.yaml minimumReleaseAgeExclude is unmodified
 
-If baseline verification fails, repair it first before adding new scope.
+- id: S3
+  title: Vendored repos are read-only
+  do: amend upstream
+  dont: edit repos/constitution/, repos/effect/, repos/typescript-go/
+  harm: vendored copies diverge from upstream
+  check: no file in repos/ is modified
+```
+
+## Startup
+
+```bash
+pnpm check  # install --frozen-lockfile → lint + typecheck + test
+```
+
+If it fails, repair before adding scope. Confirm working directory is monorepo root. Read leaf `AGENTS.md` along the path to the working directory.
 
 ## Working Rules
 
-- **One task at a time:** pick exactly one task; finish it before starting another.
-- **Verification required:** do not claim done without running the verification commands and recording evidence from this session.
-- **Record evidence via the runtime memory system and task list:** decisions, bugs, conventions → memory; active work → task list.
-- **Stay in scope:** do not modify files unrelated to the current task. Scope reduction requires explicit user approval.
-- **Leave clean state:** the next session must run verification immediately.
+```yaml
+- id: W1
+  title: One task at a time
+  do: finish current task before starting another
+  dont: context-switch
+  harm: partial completion across tasks = no verifiable deliverable
+  check: todo list has exactly one active task
 
-## Surface Classes
+- id: W2
+  title: Stay in scope
+  do: modify only files related to the current task
+  dont: add retries, validation, telemetry, or refactors unasked
+  harm: untested scope creep
+  check: changed files match task scope
 
-| Surface              | Examples                                                                                               | Rule                                                                 |
-| -------------------- | ------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------- |
-| **Locked**           | `AGENTS.md`, `repos/`, `.husky/_/`, `.github/workflows/`                                               | Read and propose changes, but do not edit to make verification pass. |
-| **Editable**         | `packages/*/`, `docs/solutions/`, `scripts/`, `tsdown.config.ts`, `dprint.json`, `pnpm-workspace.yaml` | Edit freely within the active task.                                  |
-| **Human-controlled** | Merge to `main`, publish, deploy, credentials, destructive ops (`rm -rf`, force-push)                  | Ask the user before acting.                                          |
-
-There are no append-only files in this repo.
-
-## Stack
-
-| Concern  | Tool                                   | Note                                                             |
-| -------- | -------------------------------------- | ---------------------------------------------------------------- |
-| Pkg mgr  | pnpm                                   | `pnpm --filter <pkg> <cmd>` from root; **never** `cd`. No `npx`. |
-| Types    | tsc                                    | `effect-daemon-spec` additionally runs api-extractor.            |
-| Build    | tsdown                                 | ESM (`.mjs` + tsc dts). Build output in `dist/` is gitignored.   |
-| Tests    | Vitest + `@effect/vitest` + fast-check | PBT on pure core; composition through I/O sandwich.              |
-| Mutation | Stryker (typescript-checker)           | Targets pure-core files.                                         |
-| Lint     | oxlint (self-hosted) + dprint          | Self-hosted: `@systemfsoftware/oxlint-plugin` lints itself.      |
-
-## Packages
-
-Published (`"private": false`): effect-gherkin-spec, effect-daemon-spec, oxlint-plugin, effect-schema-law, stryker-plugins, rx-effect, effect-schema-extensions — all as `@systemfsoftware/<name>`. Private: tsconfig, oxlint-config, vitest-config — no `publishConfig`.
-
-🛑 Don't hand-edit `package.json#exports` on tsdown packages — change `tsdown.config.ts`. Dev condition `@systemfsoftware/source`; `default` resolves `dist`. Keep both in sync.
-
-## Instruction Hierarchy
-
-This root file holds workspace-wide invariants only. Directories with distinct build, lifecycle, or risk boundaries get their own leaf `AGENTS.md` delta.
-
-- A leaf delta exists where a directory has different verification commands, a different toolchain, a different ownership (vendored, forked, generated), or a different risk class.
-- A rule lives in **exactly ONE file:** the highest level it applies to. Universal → root. Directory-only → leaf. Leaves carry only the delta and point back here; they never restate or contradict the root.
-- If a rule in this file applies to exactly one directory, move it to that directory's leaf.
-
-### Directory Map
-
-| Directory                                 | Leaf                                           | Why                                 |
-| ----------------------------------------- | ---------------------------------------------- | ----------------------------------- |
-| `packages/tsconfig/`                      | yes — 1-liner                                  | Config-only, no build/test.         |
-| `packages/vitest-config/`                 | yes — 1-liner                                  | Config-only, no build/test.         |
-| `packages/oxlint-config/`                 | yes — 1-liner                                  | Config-only, no build/test.         |
-| `packages/oxlint-plugin/`                 | yes — rule template + test fixture conventions | Distinct rule-authoring workflow.   |
-| `packages/stryker-js/`                    | no leaf needed — container                     | Leaves exist in subdirectories.     |
-| `packages/stryker-js/core/`               | yes — stryker-js-core                          | Forked, minimal-diff constraint.    |
-| `packages/stryker-js/typescript-checker/` | yes — ts-checker                               | Fork leaf at subpath.               |
-| `packages/effect-schema-law/`             | yes — property law                             | Distinct law-test pipeline.         |
-| `packages/rx-effect/`                     | yes — rx bridge                                | Distinct rx interop build.          |
-| `packages/effect-schema-extensions/`      | yes — extensions                               | Distinct extensions build.          |
-| `repos/constitution/`                     | yes — vendored read-only                       | Vendored; changes go upstream.      |
-| `repos/effect/`                           | yes — vendored reference                       | Vendored; consult only, never edit. |
-| `repos/typescript-go/`                    | no leaf — pure vendored lock content            | Read-only Microsoft repo; no agent instruction needed.   |
-| `docs/solutions/`                         | no leaf needed — content                       | Same build and boundaries as root.  |
-| `scripts/`                                | no leaf needed — tool scripts                  | Same build and boundaries as root.  |
+- id: W3
+  title: Record state to runtime memory
+  do: save decisions, bugs, conventions to memory; track active work in task list
+  dont: rely on file trackers
+  harm: next session loses context
+  check: memory and task list are current before yielding
+```
 
 ## Definition of Done
 
-A task is done only when ALL of the following are true:
-
-- [ ] Target behavior is implemented.
-- [ ] Required verification ran and passed in this session.
-- [ ] Evidence recorded via the runtime memory system and task list.
-- [ ] Repository remains restartable from the standard startup path (`pnpm install && pnpm check`).
-
-## Verification Commands
-
-### One-shot baseline
-
-```bash
-pnpm check  # install --frozen-lockfile → lint + typecheck + test (concurrent)
+```yaml
+- id: D1
+  title: What done means
+  do: implement target behavior; run full verification after last edit; record evidence; leave repo restartable
+  dont: claim done with failing checks, stale evidence, or uncommitted state
+  harm: undone work passes as done
+  check: pnpm check exits 0 from this session after the last edit
 ```
 
-Then `pnpm --filter <pkg> mutation` — **100%** on changed pure-core files. For `effect-daemon-spec`: `pnpm api:check`. Any failure blocks done. Never delete the per-package Stryker incremental baseline (each package writes its own reports/stryker-incremental.json).
+## Verification
 
-### Anti-Bypass Rules
+```bash
+pnpm check  # install --frozen-lockfile → lint + typecheck + test
+```
 
-- Run the **full one-shot command**, not individual tests or lint steps in isolation.
-- Evidence must be from the **current run** in this session, not a prior session or CI output.
-- **Any failure blocks done.** Do not claim done while any verification command is red, even if the failure seems unrelated.
-- Do not suppress, skip (`--grep`, `--skip`), or disable checks to make verification pass.
-- Do not cherry-pick passing tests to claim completion.
-- Do not bypass hooks with `--no-verify` — ever.
+Then `pnpm --filter <pkg> mutation` on changed pure-core files. For `effect-daemon-spec`: `pnpm api:check`. Never delete per-package Stryker incremental baselines.
 
-### Hallucination Prevention
+## Anti-Bypass
 
-- **Search before write:** before writing code that calls a library API (Effect-TS, tsdown, Stryker, oxlint), read the actual current source or type definitions. The vendored `repos/effect/` tree is authoritative for Effect APIs.
-- **Read before edit:** before editing a file, read it in this session. Do not edit from memory.
-- **Verify before claim:** before saying "done," the verification command must have run in this session and its output recorded.
-- **Cite, do not invent:** every factual claim about the codebase must come from a tool read in this session, not from training memory.
+```yaml
+- id: A1
+  title: Run the full command
+  do: run exactly pnpm check
+  dont: run individual steps, --skip, --grep, or --no-verify
+  harm: partial verification masks failures
+  check: no filter flags in command
+
+- id: A2
+  title: Current-run evidence only
+  do: use output from this session after last edit
+  dont: reference CI or prior session output
+  harm: stale evidence hides regressions
+  check: evidence timestamp is after last edit
+
+- id: A3
+  title: Any failure blocks done
+  do: resolve every failure before claiming done
+  dont: claim done with red checks even if "unrelated"
+  harm: unrelated failures become related after deploy
+  check: every verification command exits 0
+```
+
+## Hallucination Prevention
+
+```yaml
+- id: H1
+  title: Search before write, read before edit, verify before claim
+  do: read current source for any library API; read target file in this session before editing; run verification before claiming done
+  dont: write from training memory; edit from memory; claim without evidence
+  harm: stale or hallucinated code; unverified claims
+  check: every edit preceded by a read; every done claim has current verification output
+```
 
 ## Commits
 
-`pnpm exec commitlint`: `type(scope): subject ≤72 chars`. Types: feat/fix/chore/build/ci/deps/docs/perf/refactor/revert/style/test. Scope: package dir or `repo`/`deps`/`release`/`ci`. `feat`/`fix` MUST touch production source; configs/`.claude/` → `chore/build/ci/deps`. GPG-signed `Ryan Lee <drdgvhbh@gmail.com>`. No AI co-author trailers.
+`type(scope): subject ≤72 chars`. Types: feat/fix/chore/build/ci/deps/docs/perf/refactor/revert/style/test. Scope: package dir or `repo`/`deps`/`release`/`ci`. `feat`/`fix` MUST touch production source. No AI co-author trailers.
 
-🛑 **NEVER enable `isolatedDeclarations`** — incompatible with idiomatic Effect (verified 153 errors).
+## Human Approval
 
-🛑 **NEVER modify `minimumReleaseAgeExclude` in `pnpm-workspace.yaml`** — sealed by supply-chain policy. If a version is younger than the 24h cutoff, pin the dependency tighter (e.g. `~0.22.9`) or wait. No exceptions.
-
-## Version Control — jj
-
-jj colocated with git. Direct `git` blocked by hook; `jj …` and package-script git allowed.
-
-| git                      | jj                                                        |
-| ------------------------ | --------------------------------------------------------- |
-| status/diff/log          | `jj st` / `jj diff` / `jj log --no-graph`                 |
-| commit -m / --amend      | `jj commit -m` / `jj squash`                              |
-| rebase / branch / switch | `jj rebase` / `jj bookmark` / `jj edit\|jj new`           |
-| push / fetch / stash     | `jj git push` / `jj git fetch` / named change + `jj edit` |
-
-## Human Approval Boundaries
-
-The agent may propose, prepare, and run checks, but must ask the user before:
-
-- Merging to `main`, deploying, publishing a package.
-- Running destructive operations (`rm -rf`, dropping databases, force-push).
-- Using credentials, tokens, secrets, or destructive tooling.
-- Changing `minimumReleaseAgeExclude` or release workflow.
-
-## Multi-Agent Ownership
-
-When multiple agents work in the same repo simultaneously:
-
-- Each agent owns a disjoint file/module set.
-- An agent must claim a file before editing it (via hub or task assignment).
-- Agents may not recursively delegate to each other.
-- The root-level one-shot verification must pass before any agent claims done.
+```yaml
+- id: P1
+  title: Ask before controlled actions
+  do: request approval for merge to main, publish, deploy, destructive ops, credentials
+  dont: proceed without explicit approval
+  harm: automated destructive or credential-exposing actions
+  check: every controlled action preceded by user approval
+```
 
 ## Escalation
 
-If you encounter:
-
-- **Architecture decisions:** consult repository docs (`ARCHITECTURE.md`, `CONSTITUTION.md` if present), otherwise ask the user.
-- **Unclear requirements:** check project docs, otherwise ask the user.
-- **Repeated test failures:** record via the runtime memory system and task list, flag for human review, do not bypass checks to make verification pass.
-- **Scope ambiguity:** re-read this file and the Definition of Done.
-- **Vendored code changes:** `repos/constitution/`, `repos/effect/`, `repos/typescript-go/` are read-only. Amend upstream, never the vendored copy.
+```yaml
+- id: E1
+  title: When stuck
+  do: consult ARCHITECTURE.md/CONSTITUTION.md for architecture; check project docs for requirements; flag repeated failures for human review; re-read this file for scope ambiguity
+  dont: guess; bypass checks; edit vendored code
+  harm: wrong deliverable; masked failures; vendored drift
+```
 
 ## End of Session
 
-Before ending a session:
-
-1. Record current state, blockers, and next steps via the runtime memory system and task list.
-2. Commit with a descriptive message once work is in a safe state. Use `jj commit -m`.
-3. Leave the repo clean — `jj st` should show nothing unexpected.
+```yaml
+- id: X1
+  title: Save state before ending
+  do: record decisions, blockers, next steps to memory; commit safe state
+  dont: end with uncommitted work or unrecorded decisions
+  harm: next session loses context
+  check: working tree clean; memory and task list current
+```
