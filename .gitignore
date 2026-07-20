@@ -11,3 +11,4 @@ __pycache__/
 .npmrc
 # Vendored subtrees — their .gitignore files are inert
 repos/**/.gitignore
+repos/**/.codegraph/
