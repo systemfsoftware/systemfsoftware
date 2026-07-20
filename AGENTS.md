@@ -1,20 +1,20 @@
 # AGENTS.md — systemfsoftware
 
-Effect-TS libraries + oxlint plugin. `pnpm --filter <pkg> <cmd>` from root; never `cd`. Don't hand-edit `package.json#exports` on tsdown packages — change `tsdown.config.ts`.
+Effect-TS libraries + oxlint plugin. Work from the monorepo root; never `cd` into packages. Build via tsdown; tests via Vitest + `@effect/vitest`; mutation via Stryker; lint via oxlint (self-hosted plugin).
 
 ## Safety
 
 ```yaml
 - id: S1
   title: NEVER enable isolatedDeclarations
-  do: keep isolatedDeclarations disabled
-  dont: enable it in any tsconfig
+  do: keep isolatedDeclarations disabled in every tsconfig
+  dont: enable isolatedDeclarations anywhere
   harm: 153 compile errors in idiomatic Effect
   check: no tsconfig has isolatedDeclarations: true
 
 - id: S2
   title: NEVER modify minimumReleaseAgeExclude
-  do: pin younger deps tighter (~0.22.9)
+  do: pin younger deps tighter (e.g. ~0.22.9) or wait for the 24h cutoff
   dont: modify minimumReleaseAgeExclude in pnpm-workspace.yaml
   harm: supply-chain policy violation
   check: pnpm-workspace.yaml minimumReleaseAgeExclude is unmodified
@@ -25,16 +25,38 @@ Effect-TS libraries + oxlint plugin. `pnpm --filter <pkg> <cmd>` from root; neve
   dont: edit repos/constitution/, repos/effect/, repos/typescript-go/
   harm: vendored copies diverge from upstream
   check: no file in repos/ is modified
+
+- id: S4
+  title: Never hand-edit package.json#exports on tsdown packages
+  do: change tsdown.config.ts
+  dont: edit package.json#exports or publishConfig.exports directly
+  harm: exports drift from build output
+  check: exports changes come from tsdown.config.ts only
 ```
 
-## Startup
+## Surface Classes
 
-```bash
-pnpm check  # install --frozen-lockfile → lint + typecheck + test
-```
+| Surface              | Examples                                                                                               | Rule                                                                 |
+| -------------------- | ------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------- |
+| **Locked**           | `AGENTS.md`, `repos/`, `.github/workflows/`, evaluation scripts                                        | Read and propose changes, but do not edit to make verification pass. |
+| **Editable**         | `packages/*/`, `scripts/`, `docs/solutions/`, `tsdown.config.ts`, `dprint.json`, `pnpm-workspace.yaml` | Edit freely within the active task.                                  |
+| **Human-controlled** | Merge to `main`, publish, deploy, destructive ops, credentials                                         | Ask the user before acting.                                          |
 
-If it fails, repair before adding scope. Confirm working directory is monorepo root. Read leaf `AGENTS.md` along the path to the working directory.
-`docs/solutions/` — documented solutions to past problems (bugs, best practices, workflow patterns), organized by category with YAML frontmatter (`module`, `tags`, `problem_type`). Relevant when implementing or debugging in documented areas.
+## Startup Workflow
+
+Before writing code:
+
+1. **Confirm working directory** with `pwd` — must be the monorepo root.
+2. **Read this file** completely.
+3. **Confirm the leaf instruction hierarchy is loaded** — the runtime auto-loads root + every leaf `AGENTS.md` on the path down to `cwd`. Content accumulates downward; leaves only carry their directory's delta.
+4. **Run baseline verification:**
+   ```bash
+   pnpm check  # install --frozen-lockfile → lint + typecheck + test
+   ```
+5. **Confirm the active task** with the user or via the task list.
+6. **Review recent commits** with `git log --oneline -5`.
+
+If baseline verification fails, repair it first before adding new scope.
 
 ## Working Rules
 
@@ -65,22 +87,36 @@ If it fails, repair before adding scope. Confirm working directory is monorepo r
 
 ```yaml
 - id: D1
-  title: What done means
+  title: Done means
   do: implement target behavior; run full verification after last edit; record evidence; leave repo restartable
   dont: claim done with failing checks, stale evidence, or uncommitted state
   harm: undone work passes as done
   check: pnpm check exits 0 from this session after the last edit
 ```
 
-## Verification
+## Verification Commands
+
+Run in order before claiming done:
 
 ```bash
 pnpm check  # install --frozen-lockfile → lint + typecheck + test
 ```
 
-Then `pnpm --filter <pkg> mutation` on changed pure-core files. For `effect-daemon-spec`: `pnpm api:check`. Never delete per-package Stryker incremental baselines.
+Then, for changed pure-core files:
 
-## Anti-Bypass
+```bash
+pnpm --filter <pkg> mutation
+```
+
+For `effect-daemon-spec` changes:
+
+```bash
+pnpm --filter @systemfsoftware/effect-daemon-spec api:check
+```
+
+Never delete per-package Stryker incremental baselines.
+
+### Anti-Bypass
 
 ```yaml
 - id: A1
@@ -105,16 +141,50 @@ Then `pnpm --filter <pkg> mutation` on changed pure-core files. For `effect-daem
   check: every verification command exits 0
 ```
 
-## Hallucination Prevention
+### Hallucination Prevention
 
 ```yaml
 - id: H1
   title: Search before write, read before edit, verify before claim
-  do: read current source for any library API; read target file in this session before editing; run verification before claiming done
+  do: read current source for library APIs; read target file in this session before editing; run verification before claiming done
   dont: write from training memory; edit from memory; claim without evidence
   harm: stale or hallucinated code; unverified claims
   check: every edit preceded by a read; every done claim has current verification output
 ```
+
+## CI Debugging
+
+All workflows (`ci.yml`, `commitlint.yml`, `mutation.yml`, `release.yml`) run `install-deps` first. Most CI failures happen there.
+
+### What `install-deps` does
+
+1. `actions/setup-node@v7` installs Node 24 and sets up pnpm cache.
+2. `corepack enable` makes pnpm available.
+3. `corepack pnpm install --frozen-lockfile` installs dependencies.
+
+Order matters: `corepack enable` must run **before** `setup-node` so pnpm is on PATH when setup-node computes the cache key.
+
+### How to debug a failing CI run
+
+1. **Get job metadata** via the public API:
+   ```
+   GET https://api.github.com/repos/systemfsoftware/systemfsoftware/actions/runs/{run_id}/jobs
+   ```
+   Find the step with `"conclusion": "failure"`.
+
+2. **Get raw logs.** The log download API often returns 403 for public repos; use agent-browser fallback:
+   - Navigate to the run page.
+   - Extract `document.body.innerText` — it contains annotations and step statuses.
+
+3. **Known CI failures in this repo**
+
+   | Error                                                  | Root cause                                       | Fix                                                           |
+   | ------------------------------------------------------ | ------------------------------------------------ | ------------------------------------------------------------- |
+   | `Unable to locate executable file: pnpm`               | `corepack enable` runs after `setup-node`        | Swap order in `.github/actions/setup-node-runtime/action.yml` |
+   | `The process '/usr/bin/git' failed with exit code 128` | Secondary failure from a prior step              | Fix the primary failure first                                 |
+   | Dependabot Updates "Run Dependabot" fails              | `--frozen-lockfile` conflicts with version bumps | Read the full raw log; the real error is mid-output           |
+
+4. **Don't rely on act** to reproduce `setup-node@v7` or corepack issues — the act container's Node is too old for setup-node's bundled ESM. Debug CI-native issues on GitHub directly.
 
 ## Instruction Hierarchy
 
@@ -140,11 +210,32 @@ This root file holds workspace-wide invariants only. Directories with distinct b
 | `packages/stryker-js/typescript-checker/` | yes — ts-checker                               | Fork leaf at subpath                                  |
 | `repos/constitution/`                     | yes — vendored read-only                       | Vendored; changes go upstream                         |
 | `repos/effect/`                           | yes — vendored reference                       | Vendored; consult only, never edit                    |
-| `repos/typescript-go/`                    | no leaf needed — pure vendored lock content    | Read-only Microsoft repo; no agent instruction needed |
+| `repos/typescript-go/`                    | no leaf needed                                 | Read-only Microsoft repo; no agent instruction needed |
 
 ## Commits
 
-`type(scope): subject ≤72 chars`. Types: feat/fix/chore/build/ci/deps/docs/perf/refactor/revert/style/test. Scope: package dir or `repo`/`deps`/`release`/`ci`. `feat`/`fix` MUST touch production source. No AI co-author trailers.
+```yaml
+- id: C1
+  title: Commit format
+  do: use `type(scope): subject ≤72 chars`
+    dont: use wrong type or omit scope
+    harm: release tooling and changelog rely on conventional commits
+    check: commitlint passes
+
+- id: C2
+  title: Commit types
+  do: use feat/fix/chore/build/ci/deps/docs/perf/refactor/revert/style/test
+  dont: use feat/fix for config-only changes
+  harm: wrong version bumps and changelog categories
+  check: type matches diff shape
+
+- id: C3
+  title: No AI co-author trailers
+  do: sign commits as the human author
+  dont: add Co-authored-by or AI attribution
+  harm: attribution pollution
+  check: commit has no AI trailers
+```
 
 ## Human Approval
 
@@ -155,6 +246,24 @@ This root file holds workspace-wide invariants only. Directories with distinct b
   dont: proceed without explicit approval
   harm: automated destructive or credential-exposing actions
   check: every controlled action preceded by user approval
+```
+
+## Multi-Agent Ownership
+
+```yaml
+- id: M1
+  title: Disjoint ownership
+  do: each agent owns a disjoint file/module set
+  dont: edit files another agent owns without coordination
+  harm: merge conflicts and contradictory changes
+  check: claimed files are unique per agent
+
+- id: M2
+  title: Root verification gates done
+  do: ensure root-level `pnpm check` passes before any agent claims done
+  dont: claim done with a red tree
+  harm: subsystem failure becomes global failure
+  check: pnpm check exits 0
 ```
 
 ## Escalation
