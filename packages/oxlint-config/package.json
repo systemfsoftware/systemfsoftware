@@ -19,8 +19,7 @@
   },
   "dependencies": {
     "@systemfsoftware/oxlint-plugin": "workspace:^",
-    "oxlint": "catalog:oxlint",
-    "oxlint-tsgolint": "catalog:oxlint"
+    "oxlint": "catalog:oxlint"
   },
   "devDependencies": {
     "@systemfsoftware/tsconfig": "workspace:^",

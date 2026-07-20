@@ -160,9 +160,9 @@ importers:
       oxlint:
         specifier: catalog:oxlint
         version: 1.74.0(oxlint-tsgolint@0.24.0)
-      rimraf:
-        specifier: 'catalog:'
-        version: 6.1.3
+      oxlint-tsgolint:
+        specifier: catalog:oxlint
+        version: 0.24.0
       semantic-release:
         specifier: ^24.2.9
         version: 24.2.9(supports-color@8.1.1)(typescript@7.0.2)
@@ -361,9 +361,6 @@ importers:
       oxlint:
         specifier: catalog:oxlint
         version: 1.74.0(oxlint-tsgolint@0.24.0)
-      oxlint-tsgolint:
-        specifier: catalog:oxlint
-        version: 0.24.0
     devDependencies:
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
