@@ -1,6 +1,6 @@
 {
   "name": "@systemfsoftware/stryker-js-core",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "A source-code fork of @stryker-mutator/core",
   "type": "module",
   "publishConfig": {
@@ -69,7 +69,6 @@
     "typed-rest-client": "~2.3.0"
   },
   "devDependencies": {
-    "tsdown": "catalog:",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/diff-match-patch": "1.0.36",
@@ -79,6 +78,7 @@
     "@types/progress": "2.0.7",
     "@types/semver": "7.7.1",
     "glob": "13.0.6",
+    "tsdown": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },
