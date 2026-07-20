@@ -1,5 +1,0 @@
-// === goToDefinition ===
-// === /file.js ===
-// class Tex {
-//     type = (/** @type {/*GOTO DEF*/const} */'Text');
-// }

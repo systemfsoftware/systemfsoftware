@@ -1,8 +1,0 @@
-// === documentHighlights ===
-// === /documentHighlightsExportEqualsInMergedNamespace.ts ===
-// 
-// class C {}
-// namespace [|C|] {
-//     /*HIGHLIGHTS*/[|export|] = C;
-// }
-// 

@@ -1,7 +1,0 @@
-// === Document Symbols ===
-// === /navigationBarJsDocCommentWithNoTags.ts ===
-// /** Test */
-// export const <|[|{| name: Test, kind: Variable |}Test|] = {}|>
-
-// === Details ===
-(Variable) Test

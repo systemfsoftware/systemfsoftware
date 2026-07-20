@@ -1,8 +1,0 @@
-// === goToSourceDefinition ===
-// === /home/src/workspaces/project/node_modules/pkg/index.d.ts ===
-// <|declare const [|_default|]: { run(): void };|>
-// export default _default;
-
-// === /home/src/workspaces/project/index.ts ===
-// import pkg from "pkg";
-// pkg/*GOTO SOURCE DEF*/;

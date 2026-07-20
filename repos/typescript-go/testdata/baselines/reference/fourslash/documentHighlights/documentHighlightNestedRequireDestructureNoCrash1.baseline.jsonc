@@ -1,4 +1,0 @@
-// === documentHighlights ===
-// === /bar.js ===
-// const { a: { [|b|] } } = require('./foo');
-// /*HIGHLIGHTS*/[|b|];

@@ -1,4 +1,0 @@
-// === goToImplementation ===
-// === /goToImplementationLocal_00.ts ===
-// he/*GOTO IMPL*/llo();
-// <|function [|hello|]() {}|>

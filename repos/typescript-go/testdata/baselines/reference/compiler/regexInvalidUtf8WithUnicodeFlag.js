@@ -1,9 +1,0 @@
-//// [tests/cases/compiler/regexInvalidUtf8WithUnicodeFlag.ts] ////
-
-//// [regexInvalidUtf8WithUnicodeFlag.ts]
-/€/u
-
-
-//// [regexInvalidUtf8WithUnicodeFlag.js]
-"use strict";
-/€/u;

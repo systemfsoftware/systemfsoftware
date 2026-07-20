@@ -1,8 +1,0 @@
-// === goToDefinition ===
-// === /goToDefinitionObjectBindingPatternRest.ts ===
-// 
-// interface SomeType {
-//     targetProperty: number;
-// }
-// 
-// <|let { .../*GOTO DEF*/[|rest|] }: SomeType = { targetProperty: 42 };|>

@@ -1,5 +1,0 @@
-// === documentHighlights ===
-// === /scopeOfUnionProperties.ts ===
-// function f(s: string | number) {
-//     s.[|constr/*HIGHLIGHTS*/uctor|]
-// }

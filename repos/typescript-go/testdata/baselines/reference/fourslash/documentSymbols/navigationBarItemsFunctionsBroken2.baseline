@@ -1,9 +1,0 @@
-// === Document Symbols ===
-// === /navigationBarItemsFunctionsBroken2.ts ===
-// function;
-// <|function [|{| name: f, kind: Function |}f|]() {
-//     function;
-// }|>
-
-// === Details ===
-(Function) f

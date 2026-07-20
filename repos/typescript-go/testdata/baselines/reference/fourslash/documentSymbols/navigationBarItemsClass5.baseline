@@ -1,8 +1,0 @@
-// === Document Symbols ===
-// === /navigationBarItemsClass5.ts ===
-// <|class [|{| name: Foo, kind: Class |}Foo|] {}|>
-// let <|[|{| name: Foo, kind: Variable |}Foo|] = 1|>;
-
-// === Details ===
-(Class) Foo
-(Variable) Foo

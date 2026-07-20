@@ -1,9 +1,0 @@
-//// [tests/cases/compiler/usingDeclarationWithNewline.ts] ////
-
-=== usingDeclarationWithNewline.ts ===
-using
->using : any
-
-identifier;
->identifier : any
-

@@ -1,7 +1,0 @@
-// === goToSourceDefinition ===
-// === /home/src/workspaces/project/node_modules/pkg/impl.js ===
-// <|export function [|helper|]() {}|>
-
-// === /home/src/workspaces/project/index.ts ===
-// import { helper } from "pkg";
-// helper/*GOTO SOURCE DEF*/();

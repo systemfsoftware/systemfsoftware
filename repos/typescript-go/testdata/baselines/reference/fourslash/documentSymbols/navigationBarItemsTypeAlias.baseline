@@ -1,6 +1,0 @@
-// === Document Symbols ===
-// === /navigationBarItemsTypeAlias.ts ===
-// <|type [|{| name: T, kind: Class |}T|] = number | string;|>
-
-// === Details ===
-(Class) T

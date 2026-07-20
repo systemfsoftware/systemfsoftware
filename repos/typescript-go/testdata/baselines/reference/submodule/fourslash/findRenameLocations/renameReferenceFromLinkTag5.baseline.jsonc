@@ -1,6 +1,0 @@
-// === findRenameLocations ===
-// === /renameReferenceFromLinkTag5.ts ===
-// enum E {
-//     /** {@link E./*RENAME*/[|ARENAME|]} */
-//     [|ARENAME|]
-// }

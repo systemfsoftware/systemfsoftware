@@ -1,5 +1,0 @@
-//// [tests/cases/compiler/emitIncompleteDoStatement.ts] ////
-
-=== a.ts ===
-
-do

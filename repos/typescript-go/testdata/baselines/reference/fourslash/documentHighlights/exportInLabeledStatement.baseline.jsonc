@@ -1,7 +1,0 @@
-// === documentHighlights ===
-// filesToSearch:
-//   /a.ts
-
-// === /a.ts ===
-// subTitle:
-// /*HIGHLIGHTS*/export const title: string

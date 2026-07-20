@@ -1,7 +1,0 @@
-// === findRenameLocations ===
-// === /renameQuotedSingleCharacterPropertyName1.ts ===
-// 
-// const obj = {
-//   "[|'RENAME|]"/*RENAME*/: 1,
-// }
-// 

@@ -1,6 +1,0 @@
-// === Document Symbols ===
-// === /navbar_let.ts ===
-// let <|[|{| name: c, kind: Variable |}c|] = 0|>;
-
-// === Details ===
-(Variable) c

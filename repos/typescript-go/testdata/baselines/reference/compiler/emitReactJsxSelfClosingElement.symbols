@@ -1,6 +1,0 @@
-//// [tests/cases/compiler/emitReactJsxSelfClosingElement.tsx] ////
-
-=== a.tsx ===
-const app = <App />;
->app : Symbol(app, Decl(a.tsx, 0, 5))
-

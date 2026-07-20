@@ -1,7 +1,0 @@
-// === Syntax and Semantic Diagnostics ===
-
-
-==== /src/compiler/parser.ts (0 errors) ====
-    export {};
-==== /src/services/services.ts (0 errors) ====
-    import {} from "../compiler/parser.ts";

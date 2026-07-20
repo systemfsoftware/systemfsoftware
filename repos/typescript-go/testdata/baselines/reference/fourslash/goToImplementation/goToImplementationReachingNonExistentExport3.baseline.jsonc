@@ -1,8 +1,0 @@
-// === goToImplementation ===
-// === /gitGateway.js ===
-// import { transformRecordedData as transformGitHub } from './github';
-// 
-// const methods = { github: {
-//     transformData: /*GOTO IMPL*/transformGitHub,
-// }};
-// 
