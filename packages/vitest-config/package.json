@@ -23,6 +23,7 @@
   },
   "devDependencies": {
     "@systemfsoftware/tsconfig": "workspace:^",
+    "@types/node": "catalog:",
     "vitest": "catalog:"
   }
 }

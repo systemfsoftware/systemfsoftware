@@ -1,13 +1,4 @@
 {
-  "extends": "./tsconfig.json",
-  "compilerOptions": {
-    "composite": true,
-    "noEmit": false
-  },
-  "include": [
-    "vitest.config.ts",
-    "vitest-setup.ts",
-    "tsdown.config.ts",
-    "oxlint.config.ts"
-  ]
+  "extends": "@systemfsoftware/tsconfig/node",
+  "include": ["oxlint.config.ts", "tsdown.config.ts", "vitest.config.ts", "vitest-setup.ts"]
 }

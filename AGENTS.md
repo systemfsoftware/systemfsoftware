@@ -1,6 +1,6 @@
-# AGENTS.md — systemfsoftware
+# AGENTS.md — systemfsoftware monorepo
 
-Effect-TS libraries + oxlint plugin. Work from the monorepo root; never `cd` into packages. Build via tsdown; tests via Vitest + `@effect/vitest`; mutation via Stryker; lint via oxlint (self-hosted plugin).
+Effect-TS libraries + the oxlint plugin enforcing the constitution (at `repos/constitution/`; amend upstream, never vendored copy). Root holds workspace invariants; leaf packages carry deltas.
 
 ## Safety
 
@@ -34,6 +34,17 @@ Effect-TS libraries + oxlint plugin. Work from the monorepo root; never `cd` int
   check: exports changes come from tsdown.config.ts only
 ```
 
+## Stack
+
+| Concern  | Tool                                   | Note                                                              |
+| -------- | -------------------------------------- | ----------------------------------------------------------------- |
+| Pkg mgr  | pnpm                                   | `pnpm --filter <pkg> <cmd>` from root; **never** `cd`. No `npx`.  |
+| Types    | tsc + api-extractor                    | `pnpm api:check` runs for every package with `api-extractor.json` |
+| Build    | tsdown + turbo                         | ESM (`.mjs` + tsc dts). Build via `pnpm turbo build`.             |
+| Tests    | Vitest + `@effect/vitest` + fast-check | PBT on pure core; composition through I/O sandwich.               |
+| Mutation | Stryker (typescript-checker)           | Targets pure-core files.                                          |
+| Lint     | oxlint (self-hosted) + dprint          | Self-hosted: `@systemfsoftware/oxlint-plugin` lints itself.       |
+
 ## Surface Classes
 
 | Surface              | Examples                                                                                               | Rule                                                                 |
@@ -54,7 +65,7 @@ Before writing code:
    pnpm check  # install --frozen-lockfile → lint + typecheck + test
    ```
 5. **Confirm the active task** with the user or via the task list.
-6. **Review recent commits** with `git log --oneline -5`.
+6. **Review recent commits** with `jj log --no-graph -5`.
 
 If baseline verification fails, repair it first before adding new scope.
 
@@ -99,22 +110,10 @@ If baseline verification fails, repair it first before adding new scope.
 Run in order before claiming done:
 
 ```bash
-pnpm check  # install --frozen-lockfile → lint + typecheck + test
+pnpm check  # install --frozen-lockfile → lint + typecheck + test + api:check (concurrent, via turbo)
 ```
 
-Then, for changed pure-core files:
-
-```bash
-pnpm --filter <pkg> mutation
-```
-
-For `effect-daemon-spec` changes:
-
-```bash
-pnpm --filter @systemfsoftware/effect-daemon-spec api:check
-```
-
-Never delete per-package Stryker incremental baselines.
+Then `pnpm --filter <pkg> mutation` — **100%** on changed pure-core files. Any failure blocks done. Never delete the per-package Stryker incremental baseline (each package writes its own reports/stryker-incremental.json).
 
 ### Anti-Bypass
 
@@ -160,23 +159,7 @@ This root file holds workspace-wide invariants only. Directories with distinct b
 - A rule lives in **exactly ONE file:** the highest level it applies to. Leaves carry only the delta and point back here; they never restate the root.
 - If a rule in this file applies to exactly one directory, move it to that directory's leaf.
 
-| Directory                                 | Leaf                                           | Why                                                   |
-| ----------------------------------------- | ---------------------------------------------- | ----------------------------------------------------- |
-| `packages/oxlint-plugin/`                 | yes — rule template + test fixture conventions | Distinct rule-authoring workflow                      |
-| `packages/effect-daemon-spec/`            | yes — API extractor + exports lifecycle        | Distinct build surface                                |
-| `packages/effect-gherkin-spec/`           | yes — Gherkin BDD composing as Effects         | Distinct invariants                                   |
-| `packages/effect-schema-law/`             | yes — schema codec law testing                 | Distinct law-test pipeline                            |
-| `packages/effect-schema-extensions/`      | yes — branded hex codec invariants             | Distinct extensions build                             |
-| `packages/rx-effect/`                     | yes — Rx interop bridge                        | Distinct rx interop build                             |
-| `packages/stryker-plugins/`               | yes — mutation-testing plugin                  | Distinct plugin surface                               |
-| `packages/oxlint-config/`                 | yes — 1-liner                                  | Config-only, no build/test                            |
-| `packages/vitest-config/`                 | yes — 1-liner                                  | Config-only, no build/test                            |
-| `packages/tsconfig/`                      | yes — 1-liner                                  | Config-only, no build/test                            |
-| `packages/stryker-js/core/`               | yes — stryker-js-core                          | Forked, minimal-diff constraint                       |
-| `packages/stryker-js/typescript-checker/` | yes — ts-checker                               | Fork leaf at subpath                                  |
-| `repos/constitution/`                     | yes — vendored read-only                       | Vendored; changes go upstream                         |
-| `repos/effect/`                           | yes — vendored reference                       | Vendored; consult only, never edit                    |
-| `repos/typescript-go/`                    | no leaf needed                                 | Read-only Microsoft repo; no agent instruction needed |
+Leaf `AGENTS.md` lives wherever a directory has distinct checks or constraints. Discover via `glob packages/*/AGENTS.md` and `glob packages/stryker-js/*/AGENTS.md`. Vendored exception: `repos/constitution/` — read-only, changes go upstream.
 
 ## Commits
 

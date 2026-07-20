@@ -47,6 +47,7 @@
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
+    "@types/node": "catalog:",
     "@vitest/coverage-v8": "catalog:",
     "effect": "catalog:",
     "fast-check": "catalog:",

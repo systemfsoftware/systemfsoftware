@@ -10,7 +10,7 @@
   },
   "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/effect-schema-extensions#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "Extra Effect Schema codecs — hex-string and prefixed-hex schemas with branded types, decode/encode, and arbitraries.",
+  "description": "Extra Effect Schema codecs — hex-string, prefixed-hex, colon-hex, and byte-level schemas with branded types, decode/encode, and arbitraries.",
   "keywords": [
     "effect",
     "effect-ts",
@@ -26,7 +26,13 @@
   "exports": {
     ".": {
       "@systemfsoftware/source": "./src/mod.ts",
+      "types": "./dist/effect-schema-extensions.d.ts",
       "default": "./dist/index.mjs"
+    },
+    "./hex-schema": {
+      "@systemfsoftware/source": "./src/hex-schema.mod.ts",
+      "types": "./dist/hex-schema.d.ts",
+      "default": "./dist/hex-schema.mjs"
     },
     "./package.json": "./package.json"
   },
@@ -39,16 +45,24 @@
     "typecheck": "tsc --noEmit --incremental",
     "test": "vitest run",
     "test:run": "vitest run",
+    "api:check": "api-extractor run",
+    "api:update": "api-extractor run --local",
     "lint": "oxlint . ${AGENT:+--format=unix --quiet}"
+  },
+  "dependencies": {
+    "@systemfsoftware/hex-schema": "workspace:^",
+    "effect": "catalog:"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
+    "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/effect-schema-law": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
+    "@systemfsoftware/effect-schema-vite": "workspace:^",
+    "@types/node": "catalog:",
     "@vitest/coverage-v8": "catalog:",
-    "effect": "catalog:",
     "fast-check": "catalog:",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
@@ -59,7 +73,14 @@
   },
   "publishConfig": {
     "exports": {
-      ".": "./dist/index.mjs",
+      ".": {
+        "types": "./dist/effect-schema-extensions.d.ts",
+        "default": "./dist/index.mjs"
+      },
+      "./hex-schema": {
+        "types": "./dist/hex-schema.d.ts",
+        "default": "./dist/hex-schema.mjs"
+      },
       "./package.json": "./package.json"
     }
   }

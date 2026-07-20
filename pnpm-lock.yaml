@@ -9,6 +9,12 @@ catalogs:
     '@effect/vitest':
       specifier: 0.30.0
       version: 0.30.0
+    '@microsoft/api-extractor':
+      specifier: ^7.58.7
+      version: 7.58.9
+    '@oxc-project/types':
+      specifier: ^0.140.0
+      version: 0.140.0
     '@types/node':
       specifier: ^24
       version: 24.13.2
@@ -21,6 +27,9 @@ catalogs:
     fast-check:
       specifier: ^3
       version: 3.23.2
+    oxc-parser:
+      specifier: ^0.140.0
+      version: 0.140.0
     rimraf:
       specifier: ^6.1.3
       version: 6.1.3
@@ -282,13 +291,26 @@ importers:
         version: 4.1.9(@types/node@24.13.2)(@vitest/coverage-v8@4.1.9)(vite@7.3.5(@types/node@24.13.2)(jiti@2.6.1)(yaml@2.9.0))
 
   packages/effect-schema-extensions:
+    dependencies:
+      '@systemfsoftware/hex-schema':
+        specifier: workspace:^
+        version: link:../hex-schema
+      effect:
+        specifier: 'catalog:'
+        version: 3.22.0
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
         version: 0.30.0(effect@3.22.0)(vitest@4.1.9)
+      '@microsoft/api-extractor':
+        specifier: 'catalog:'
+        version: 7.58.9(@types/node@24.13.2)
       '@systemfsoftware/effect-schema-law':
         specifier: workspace:^
         version: link:../effect-schema-law
+      '@systemfsoftware/effect-schema-vite':
+        specifier: workspace:^
+        version: link:../effect-schema-vite
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
         version: link:../oxlint-config
@@ -298,12 +320,12 @@ importers:
       '@systemfsoftware/vitest-config':
         specifier: workspace:^
         version: link:../vitest-config
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.2
       '@vitest/coverage-v8':
         specifier: 'catalog:'
         version: 4.1.9(vitest@4.1.9)
-      effect:
-        specifier: 'catalog:'
-        version: 3.22.0
       fast-check:
         specifier: 'catalog:'
         version: 3.23.2
@@ -315,13 +337,16 @@ importers:
         version: 0.22.9(typescript@7.0.2)(unrun@0.2.39)
       vitest:
         specifier: 'catalog:'
-        version: 4.1.9(@types/node@25.9.5)(@vitest/coverage-v8@4.1.9)(vite@7.3.5(@types/node@25.9.5)(jiti@2.6.1)(yaml@2.9.0))
+        version: 4.1.9(@types/node@24.13.2)(@vitest/coverage-v8@4.1.9)(vite@7.3.5(@types/node@24.13.2)(jiti@2.6.1)(yaml@2.9.0))
 
   packages/effect-schema-law:
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
         version: 0.30.0(effect@3.22.0)(vitest@4.1.9)
+      '@microsoft/api-extractor':
+        specifier: 'catalog:'
+        version: 7.58.9(@types/node@24.13.2)
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
         version: link:../oxlint-config
@@ -349,6 +374,92 @@ importers:
       vite-tsconfig-paths:
         specifier: 'catalog:'
         version: 6.1.1(supports-color@8.1.1)(typescript@5.9.3)(vite@7.3.5(@types/node@24.13.2)(jiti@2.6.1)(yaml@2.9.0))
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.9(@types/node@24.13.2)(@vitest/coverage-v8@4.1.9)(vite@7.3.5(@types/node@24.13.2)(jiti@2.6.1)(yaml@2.9.0))
+
+  packages/effect-schema-vite:
+    dependencies:
+      '@oxc-project/types':
+        specifier: 'catalog:'
+        version: 0.140.0
+      oxc-parser:
+        specifier: 'catalog:'
+        version: 0.140.0
+    devDependencies:
+      '@microsoft/api-extractor':
+        specifier: 'catalog:'
+        version: 7.58.9(@types/node@24.13.2)
+      '@systemfsoftware/effect-schema-law':
+        specifier: workspace:^
+        version: link:../effect-schema-law
+      '@systemfsoftware/oxlint-config':
+        specifier: workspace:^
+        version: link:../oxlint-config
+      '@systemfsoftware/tsconfig':
+        specifier: workspace:^
+        version: link:../tsconfig
+      '@systemfsoftware/vitest-config':
+        specifier: workspace:^
+        version: link:../vitest-config
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.2
+      effect:
+        specifier: 'catalog:'
+        version: 3.22.0
+      rimraf:
+        specifier: 'catalog:'
+        version: 6.1.3
+      tsdown:
+        specifier: 'catalog:'
+        version: 0.22.9(typescript@7.0.2)(unrun@0.2.39)
+      vite:
+        specifier: ^7
+        version: 7.3.5(@types/node@24.13.2)(jiti@2.6.1)(yaml@2.9.0)
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.9(@types/node@24.13.2)(@vitest/coverage-v8@4.1.9)(vite@7.3.5(@types/node@24.13.2)(jiti@2.6.1)(yaml@2.9.0))
+
+  packages/hex-schema:
+    dependencies:
+      effect:
+        specifier: 'catalog:'
+        version: 3.22.0
+    devDependencies:
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 0.30.0(effect@3.22.0)(vitest@4.1.9)
+      '@microsoft/api-extractor':
+        specifier: 'catalog:'
+        version: 7.58.9(@types/node@24.13.2)
+      '@systemfsoftware/effect-schema-law':
+        specifier: workspace:^
+        version: link:../effect-schema-law
+      '@systemfsoftware/effect-schema-vite':
+        specifier: workspace:^
+        version: link:../effect-schema-vite
+      '@systemfsoftware/oxlint-config':
+        specifier: workspace:^
+        version: link:../oxlint-config
+      '@systemfsoftware/tsconfig':
+        specifier: workspace:^
+        version: link:../tsconfig
+      '@systemfsoftware/vitest-config':
+        specifier: workspace:^
+        version: link:../vitest-config
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.2
+      fast-check:
+        specifier: 'catalog:'
+        version: 3.23.2
+      rimraf:
+        specifier: 'catalog:'
+        version: 6.1.3
+      tsdown:
+        specifier: 'catalog:'
+        version: 0.22.9(typescript@7.0.2)(unrun@0.2.39)
       vitest:
         specifier: 'catalog:'
         version: 4.1.9(@types/node@24.13.2)(@vitest/coverage-v8@4.1.9)(vite@7.3.5(@types/node@24.13.2)(jiti@2.6.1)(yaml@2.9.0))
@@ -435,6 +546,9 @@ importers:
       '@systemfsoftware/vitest-config':
         specifier: workspace:^
         version: link:../vitest-config
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.2
       '@vitest/coverage-v8':
         specifier: 'catalog:'
         version: 4.1.9(vitest@4.1.9)
@@ -455,7 +569,7 @@ importers:
         version: 0.22.9(typescript@7.0.2)(unrun@0.2.39)
       vitest:
         specifier: 'catalog:'
-        version: 4.1.9(@types/node@25.9.5)(@vitest/coverage-v8@4.1.9)(vite@7.3.5(@types/node@25.9.5)(jiti@2.6.1)(yaml@2.9.0))
+        version: 4.1.9(@types/node@24.13.2)(@vitest/coverage-v8@4.1.9)(vite@7.3.5(@types/node@24.13.2)(jiti@2.6.1)(yaml@2.9.0))
 
   packages/stryker-js/core:
     dependencies:
@@ -680,9 +794,12 @@ importers:
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../tsconfig
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.2
       vitest:
         specifier: 'catalog:'
-        version: 4.1.9(@types/node@25.9.5)(@vitest/coverage-v8@4.1.9)(vite@7.3.5(@types/node@25.9.5)(jiti@2.6.1)(yaml@2.9.0))
+        version: 4.1.9(@types/node@24.13.2)(@vitest/coverage-v8@4.1.9)(vite@7.3.5(@types/node@24.13.2)(jiti@2.6.1)(yaml@2.9.0))
 
 packages:
 
@@ -1416,6 +1533,133 @@ packages:
 
   '@octokit/types@16.0.0':
     resolution: {integrity: sha512-sKq+9r1Mm4efXW1FCk7hFSeJo4QKreL/tTbR0rz/qx/r1Oa2VV83LTA/H/MuCOX7uCIJmQVRKBcbmWoySjAnSg==}
+
+  '@oxc-parser/binding-android-arm-eabi@0.140.0':
+    resolution: {integrity: sha512-ZfjDZ422mo7eo3b3VltqNsV9kmv1qt/sPEAMSl64iOSwhVfd0eIZ9LB79Mbs1xYXJnk7WSROwzBCKDIiVxPTvQ==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [arm]
+    os: [android]
+
+  '@oxc-parser/binding-android-arm64@0.140.0':
+    resolution: {integrity: sha512-Ia8jSvikUX6Sf+Ht+KOCUF/k1HpR0VlmqIYymubmWDebOEGtsyliHDR6JxsZ4IX3/c/GbrB1uh09aVGQv/LQmQ==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [arm64]
+    os: [android]
+
+  '@oxc-parser/binding-darwin-arm64@0.140.0':
+    resolution: {integrity: sha512-G6VK0nK61pH0d0mBjUqSZbVxGqqO5uzeginLDQj+gOO6ObfJjXRwgkD/ol0w1INcnFeAb6YGGO7qc3ueGHaycQ==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@oxc-parser/binding-darwin-x64@0.140.0':
+    resolution: {integrity: sha512-HazBOuZzd2pO1C2uMmp8Gv7mhzMHqKSKDS1OZfcLEvpIcgA+48J92HEtNanVHDIzRD9PRPCV6aS6fkZIWOVl8Q==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [x64]
+    os: [darwin]
+
+  '@oxc-parser/binding-freebsd-x64@0.140.0':
+    resolution: {integrity: sha512-9hSUU+HmTUyOe4JzMHxNGgLWNY7rrO+6ShicZwImNJacEAACDMIkuEQQkvXSL+WJN50jaNtLYJv8s4OcBdpyUQ==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [x64]
+    os: [freebsd]
+
+  '@oxc-parser/binding-linux-arm-gnueabihf@0.140.0':
+    resolution: {integrity: sha512-RAEuQsYtS0KcDFqN0ABTjyyNlokS91JeuDuoW9tEbG0JTbRNXnpQUdbYc/16JoA6Z/2ALbNrE3KmxtqDiuIjCQ==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [arm]
+    os: [linux]
+
+  '@oxc-parser/binding-linux-arm-musleabihf@0.140.0':
+    resolution: {integrity: sha512-c4CkHvPvqfojouredJ0w3e6+jiBq0SbFyhH61kr/zPb/7XsaYTNKQ54vmlSsopfdQbNDX40ZeK9Abs2Qet6wcw==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [arm]
+    os: [linux]
+
+  '@oxc-parser/binding-linux-arm64-gnu@0.140.0':
+    resolution: {integrity: sha512-yrjmLj8ixPB25yqvPGr28meGjb+keed7m1GqqY/0uqkhZIoT4t9zmfwUgFEtC33C7dtE+UQ7TU0IaVxf97SWJg==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [arm64]
+    os: [linux]
+    libc: [glibc]
+
+  '@oxc-parser/binding-linux-arm64-musl@0.140.0':
+    resolution: {integrity: sha512-ggGMQTN8Agwxp2WiLMpdY671dt0qTDJWiWlJeig3HnUwTnerRl0J2JdGVghWBeDcss2D9S2V2Js6dZHEiVabVA==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [arm64]
+    os: [linux]
+    libc: [musl]
+
+  '@oxc-parser/binding-linux-ppc64-gnu@0.140.0':
+    resolution: {integrity: sha512-IgTs8xYAFgAUGNmR65tIqjlJ8vKgrfXzC515e9goSdfMyKQV4aJpd2pUUudU4u51G64H0/DSEJEXKOraxm9ZCA==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [ppc64]
+    os: [linux]
+    libc: [glibc]
+
+  '@oxc-parser/binding-linux-riscv64-gnu@0.140.0':
+    resolution: {integrity: sha512-A1x+PMWZmSGaFVOx2YeNTFau8uD+QO14/vLP4GrcuvUPs3+nBkUOjy9Lus86ftHsDojjYMbvBelmKc3F7Rv08g==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [riscv64]
+    os: [linux]
+    libc: [glibc]
+
+  '@oxc-parser/binding-linux-riscv64-musl@0.140.0':
+    resolution: {integrity: sha512-zBqpfRo2myWPrPo5xUjeZqlnPXPXsX8BcWtWff66/eGRQdbPjhzPgXa/F+AtxT2afUViPxbuDlwscMKzQ5tg+g==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [riscv64]
+    os: [linux]
+    libc: [musl]
+
+  '@oxc-parser/binding-linux-s390x-gnu@0.140.0':
+    resolution: {integrity: sha512-2M1DPm/8w9I//YzFlFC9qXw+r2tJFh5CYwRlYTq2vUJQS7qoQftEDeCZ8EnN7KHtvSiXvYj8mZI5pR7DpXmcEw==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [s390x]
+    os: [linux]
+    libc: [glibc]
+
+  '@oxc-parser/binding-linux-x64-gnu@0.140.0':
+    resolution: {integrity: sha512-8aRDbZ/U/jO8N7go1MO72jtbpb4uswV8d7vOkMvt/BPgZiyEYvl1VIWK4ESxZZhnJ4tqwVldgX7dNiP/eB1Jdg==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [x64]
+    os: [linux]
+    libc: [glibc]
+
+  '@oxc-parser/binding-linux-x64-musl@0.140.0':
+    resolution: {integrity: sha512-xRqpeI8U2sQQS1W5BMWRyMTxtagkuLG2dEWruet5lFsWHTvBth11/TpSaJatHdqVVwHN0q3uuoS9zRsGinq8hg==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [x64]
+    os: [linux]
+    libc: [musl]
+
+  '@oxc-parser/binding-openharmony-arm64@0.140.0':
+    resolution: {integrity: sha512-GbGRe26MqAKciFRvXeHNQJ6VAHYs9R4miP89sEAncysM3n+f4lnyLWgsa9kklJNpfnxdq2yRoNYHFqwBckVimw==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [arm64]
+    os: [openharmony]
+
+  '@oxc-parser/binding-wasm32-wasi@0.140.0':
+    resolution: {integrity: sha512-vFiC1hqys+hkX1GnQkIoiTQJNiUm43Z0lO35ETKXTw0YtpW7+cN58YRRXFAQQ+TgpkIi3lrhcxdlnqz+Oi3ptQ==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [wasm32]
+
+  '@oxc-parser/binding-win32-arm64-msvc@0.140.0':
+    resolution: {integrity: sha512-fGSQldwEYKhM+H8uLt76Op8hh5+FYaR6lvvQ1Txw3Mhn86DyQXLcI0fi1EkFlTK7F+46OCk/j0AJMzZQm6g5Xg==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [arm64]
+    os: [win32]
+
+  '@oxc-parser/binding-win32-ia32-msvc@0.140.0':
+    resolution: {integrity: sha512-sDS2Bai+g3ZWYwfZqmosiSuFDBcVnZ3Ta6pszzsiJoLMqsJEWKcxXXbGa7b7yXr++W2lQNPb3ZRJ8czseqL7RA==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [ia32]
+    os: [win32]
+
+  '@oxc-parser/binding-win32-x64-msvc@0.140.0':
+    resolution: {integrity: sha512-kHbE1zWyb5OQgJA6/5P4WjiuB01sYdQwtZnSSyE58FQEXDAMnyeeq4vj7KgN75i5SlBzOs8A5MrtlD3gOlDKqQ==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [x64]
+    os: [win32]
 
   '@oxc-project/types@0.127.0':
     resolution: {integrity: sha512-aIYXQBo4lCbO4z0R3FHeucQHpF46l2LbMdxRvqvuRuW2OxdnSkcng5B8+K12spgLDj93rtN3+J2Vac/TIO+ciQ==}
@@ -3676,6 +3920,10 @@ packages:
     resolution: {integrity: sha512-1FlR+gjXK7X+AsAHso35MnyN5KqGwJRi/31ft6x0M194ht7S+rWAvd7PHss9xSKMzE0asv1pyIHaJYq+BbacAQ==}
     engines: {node: '>=12'}
 
+  oxc-parser@0.140.0:
+    resolution: {integrity: sha512-h6QFWd6lBMfjESqgQ27GjzrSDb0qbznp7VDQqp2zvgsrWut4vcchyMIzOVXvGQ2GMZgKw9RWrFNWv9WqGL0p7Q==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+
   oxlint-tsgolint@0.24.0:
     resolution: {integrity: sha512-giCk5sEvG02d5tzPmFMX3hem8ndzEEu1xvGYS5OwNfO2WGl6ZVxt5LjE0yiMDoz94INI7XkXwgFAQiydPvVHDw==}
     hasBin: true
@@ -5366,6 +5614,70 @@ snapshots:
     dependencies:
       '@octokit/openapi-types': 27.0.0
 
+  '@oxc-parser/binding-android-arm-eabi@0.140.0':
+    optional: true
+
+  '@oxc-parser/binding-android-arm64@0.140.0':
+    optional: true
+
+  '@oxc-parser/binding-darwin-arm64@0.140.0':
+    optional: true
+
+  '@oxc-parser/binding-darwin-x64@0.140.0':
+    optional: true
+
+  '@oxc-parser/binding-freebsd-x64@0.140.0':
+    optional: true
+
+  '@oxc-parser/binding-linux-arm-gnueabihf@0.140.0':
+    optional: true
+
+  '@oxc-parser/binding-linux-arm-musleabihf@0.140.0':
+    optional: true
+
+  '@oxc-parser/binding-linux-arm64-gnu@0.140.0':
+    optional: true
+
+  '@oxc-parser/binding-linux-arm64-musl@0.140.0':
+    optional: true
+
+  '@oxc-parser/binding-linux-ppc64-gnu@0.140.0':
+    optional: true
+
+  '@oxc-parser/binding-linux-riscv64-gnu@0.140.0':
+    optional: true
+
+  '@oxc-parser/binding-linux-riscv64-musl@0.140.0':
+    optional: true
+
+  '@oxc-parser/binding-linux-s390x-gnu@0.140.0':
+    optional: true
+
+  '@oxc-parser/binding-linux-x64-gnu@0.140.0':
+    optional: true
+
+  '@oxc-parser/binding-linux-x64-musl@0.140.0':
+    optional: true
+
+  '@oxc-parser/binding-openharmony-arm64@0.140.0':
+    optional: true
+
+  '@oxc-parser/binding-wasm32-wasi@0.140.0':
+    dependencies:
+      '@emnapi/core': 1.11.2
+      '@emnapi/runtime': 1.11.2
+      '@napi-rs/wasm-runtime': 1.1.6(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)
+    optional: true
+
+  '@oxc-parser/binding-win32-arm64-msvc@0.140.0':
+    optional: true
+
+  '@oxc-parser/binding-win32-ia32-msvc@0.140.0':
+    optional: true
+
+  '@oxc-parser/binding-win32-x64-msvc@0.140.0':
+    optional: true
+
   '@oxc-project/types@0.127.0':
     optional: true
 
@@ -6080,14 +6392,6 @@ snapshots:
       magic-string: 0.30.21
     optionalDependencies:
       vite: 7.3.5(@types/node@24.13.2)(jiti@2.6.1)(yaml@2.9.0)
-
-  '@vitest/mocker@4.1.9(vite@7.3.5(@types/node@25.9.5)(jiti@2.6.1)(yaml@2.9.0))':
-    dependencies:
-      '@vitest/spy': 4.1.9
-      estree-walker: 3.0.3
-      magic-string: 0.30.21
-    optionalDependencies:
-      vite: 7.3.5(@types/node@25.9.5)(jiti@2.6.1)(yaml@2.9.0)
 
   '@vitest/pretty-format@4.1.9':
     dependencies:
@@ -7267,6 +7571,31 @@ snapshots:
     dependencies:
       mimic-fn: 4.0.0
 
+  oxc-parser@0.140.0:
+    dependencies:
+      '@oxc-project/types': 0.140.0
+    optionalDependencies:
+      '@oxc-parser/binding-android-arm-eabi': 0.140.0
+      '@oxc-parser/binding-android-arm64': 0.140.0
+      '@oxc-parser/binding-darwin-arm64': 0.140.0
+      '@oxc-parser/binding-darwin-x64': 0.140.0
+      '@oxc-parser/binding-freebsd-x64': 0.140.0
+      '@oxc-parser/binding-linux-arm-gnueabihf': 0.140.0
+      '@oxc-parser/binding-linux-arm-musleabihf': 0.140.0
+      '@oxc-parser/binding-linux-arm64-gnu': 0.140.0
+      '@oxc-parser/binding-linux-arm64-musl': 0.140.0
+      '@oxc-parser/binding-linux-ppc64-gnu': 0.140.0
+      '@oxc-parser/binding-linux-riscv64-gnu': 0.140.0
+      '@oxc-parser/binding-linux-riscv64-musl': 0.140.0
+      '@oxc-parser/binding-linux-s390x-gnu': 0.140.0
+      '@oxc-parser/binding-linux-x64-gnu': 0.140.0
+      '@oxc-parser/binding-linux-x64-musl': 0.140.0
+      '@oxc-parser/binding-openharmony-arm64': 0.140.0
+      '@oxc-parser/binding-wasm32-wasi': 0.140.0
+      '@oxc-parser/binding-win32-arm64-msvc': 0.140.0
+      '@oxc-parser/binding-win32-ia32-msvc': 0.140.0
+      '@oxc-parser/binding-win32-x64-msvc': 0.140.0
+
   oxlint-tsgolint@0.24.0:
     optionalDependencies:
       '@oxlint-tsgolint/darwin-arm64': 0.24.0
@@ -8103,20 +8432,6 @@ snapshots:
       jiti: 2.6.1
       yaml: 2.9.0
 
-  vite@7.3.5(@types/node@25.9.5)(jiti@2.6.1)(yaml@2.9.0):
-    dependencies:
-      esbuild: 0.27.7
-      fdir: 6.5.0(picomatch@4.0.5)
-      picomatch: 4.0.5
-      postcss: 8.5.19
-      rollup: 4.62.2
-      tinyglobby: 0.2.17
-    optionalDependencies:
-      '@types/node': 25.9.5
-      fsevents: 2.3.3
-      jiti: 2.6.1
-      yaml: 2.9.0
-
   vitest@4.1.9(@types/node@24.13.2)(@vitest/coverage-v8@4.1.9)(vite@7.3.5(@types/node@24.13.2)(jiti@2.6.1)(yaml@2.9.0)):
     dependencies:
       '@vitest/expect': 4.1.9
@@ -8141,34 +8456,6 @@ snapshots:
       why-is-node-running: 2.3.0
     optionalDependencies:
       '@types/node': 24.13.2
-      '@vitest/coverage-v8': 4.1.9(vitest@4.1.9)
-    transitivePeerDependencies:
-      - msw
-
-  vitest@4.1.9(@types/node@25.9.5)(@vitest/coverage-v8@4.1.9)(vite@7.3.5(@types/node@25.9.5)(jiti@2.6.1)(yaml@2.9.0)):
-    dependencies:
-      '@vitest/expect': 4.1.9
-      '@vitest/mocker': 4.1.9(vite@7.3.5(@types/node@25.9.5)(jiti@2.6.1)(yaml@2.9.0))
-      '@vitest/pretty-format': 4.1.9
-      '@vitest/runner': 4.1.9
-      '@vitest/snapshot': 4.1.9
-      '@vitest/spy': 4.1.9
-      '@vitest/utils': 4.1.9
-      es-module-lexer: 2.1.0
-      expect-type: 1.3.0
-      magic-string: 0.30.21
-      obug: 2.1.3
-      pathe: 2.0.3
-      picomatch: 4.0.5
-      std-env: 4.1.0
-      tinybench: 2.9.0
-      tinyexec: 1.2.4
-      tinyglobby: 0.2.17
-      tinyrainbow: 3.1.0
-      vite: 7.3.5(@types/node@25.9.5)(jiti@2.6.1)(yaml@2.9.0)
-      why-is-node-running: 2.3.0
-    optionalDependencies:
-      '@types/node': 25.9.5
       '@vitest/coverage-v8': 4.1.9(vitest@4.1.9)
     transitivePeerDependencies:
       - msw

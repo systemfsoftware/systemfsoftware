@@ -1,16 +1,4 @@
 {
-  "compilerOptions": {
-    "composite": true,
-    "skipLibCheck": true,
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "allowSyntheticDefaultImports": true,
-    "types": ["node"]
-  },
-  "include": [
-    "vitest.config.ts",
-    "oxlint.config.ts",
-    "vitest.setup.ts",
-    "tsdown.config.ts"
-  ]
+  "extends": "@systemfsoftware/tsconfig/node",
+  "include": ["oxlint.config.ts", "tsdown.config.ts", "vitest.config.ts", "vitest.setup.ts"]
 }

@@ -28,6 +28,7 @@
   "exports": {
     ".": {
       "@systemfsoftware/source": "./src/mod.ts",
+      "types": "./dist/effect-schema-law.d.ts",
       "default": "./dist/index.mjs"
     },
     "./package.json": "./package.json"
@@ -41,10 +42,13 @@
     "typecheck": "tsc --noEmit --incremental",
     "test": "vitest run",
     "test:run": "vitest run",
+    "api:check": "api-extractor run",
+    "api:update": "api-extractor run --local",
     "lint": "oxlint . ${AGENT:+--format=unix --quiet}"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
+    "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
@@ -63,7 +67,10 @@
   },
   "publishConfig": {
     "exports": {
-      ".": "./dist/index.mjs",
+      ".": {
+        "types": "./dist/effect-schema-law.d.ts",
+        "default": "./dist/index.mjs"
+      },
       "./package.json": "./package.json"
     }
   }

@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "@systemfsoftware/tsconfig/tsc/dom/library-monorepo",
+  "compilerOptions": {
+    "customConditions": ["@systemfsoftware/source"],
+    "plugins": [{ "name": "@effect/language-service" }]
+  },
+  "include": ["src"],
+  "references": [{ "path": "./tsconfig.node.json" }]
+}
