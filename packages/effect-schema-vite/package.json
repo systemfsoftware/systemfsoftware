@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/effect-schema-vite",
   "license": "MIT",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -45,8 +45,8 @@
     "lint": "oxlint . ${AGENT:+--format=unix --quiet}"
   },
   "dependencies": {
-    "oxc-parser": "catalog:",
-    "@oxc-project/types": "catalog:"
+    "@oxc-project/types": "catalog:",
+    "oxc-parser": "catalog:"
   },
   "devDependencies": {
     "@microsoft/api-extractor": "catalog:",
