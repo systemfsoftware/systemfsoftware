@@ -34,6 +34,7 @@ pnpm check  # install --frozen-lockfile → lint + typecheck + test
 ```
 
 If it fails, repair before adding scope. Confirm working directory is monorepo root. Read leaf `AGENTS.md` along the path to the working directory.
+`docs/solutions/` — documented solutions to past problems (bugs, best practices, workflow patterns), organized by category with YAML frontmatter (`module`, `tags`, `problem_type`). Relevant when implementing or debugging in documented areas.
 
 ## Working Rules
 
@@ -114,6 +115,32 @@ Then `pnpm --filter <pkg> mutation` on changed pure-core files. For `effect-daem
   harm: stale or hallucinated code; unverified claims
   check: every edit preceded by a read; every done claim has current verification output
 ```
+
+## Instruction Hierarchy
+
+This root file holds workspace-wide invariants only. Directories with distinct build, toolchain, ownership, or risk boundaries get their own leaf `AGENTS.md` delta.
+
+- A leaf delta exists where a directory has different verification commands, a different toolchain, a different ownership (vendored, forked, generated), or a different risk class.
+- A rule lives in **exactly ONE file:** the highest level it applies to. Leaves carry only the delta and point back here; they never restate the root.
+- If a rule in this file applies to exactly one directory, move it to that directory's leaf.
+
+| Directory                                 | Leaf                                           | Why                                                   |
+| ----------------------------------------- | ---------------------------------------------- | ----------------------------------------------------- |
+| `packages/oxlint-plugin/`                 | yes — rule template + test fixture conventions | Distinct rule-authoring workflow                      |
+| `packages/effect-daemon-spec/`            | yes — API extractor + exports lifecycle        | Distinct build surface                                |
+| `packages/effect-gherkin-spec/`           | yes — Gherkin BDD composing as Effects         | Distinct invariants                                   |
+| `packages/effect-schema-law/`             | yes — schema codec law testing                 | Distinct law-test pipeline                            |
+| `packages/effect-schema-extensions/`      | yes — branded hex codec invariants             | Distinct extensions build                             |
+| `packages/rx-effect/`                     | yes — Rx interop bridge                        | Distinct rx interop build                             |
+| `packages/stryker-plugins/`               | yes — mutation-testing plugin                  | Distinct plugin surface                               |
+| `packages/oxlint-config/`                 | yes — 1-liner                                  | Config-only, no build/test                            |
+| `packages/vitest-config/`                 | yes — 1-liner                                  | Config-only, no build/test                            |
+| `packages/tsconfig/`                      | yes — 1-liner                                  | Config-only, no build/test                            |
+| `packages/stryker-js/core/`               | yes — stryker-js-core                          | Forked, minimal-diff constraint                       |
+| `packages/stryker-js/typescript-checker/` | yes — ts-checker                               | Fork leaf at subpath                                  |
+| `repos/constitution/`                     | yes — vendored read-only                       | Vendored; changes go upstream                         |
+| `repos/effect/`                           | yes — vendored reference                       | Vendored; consult only, never edit                    |
+| `repos/typescript-go/`                    | no leaf needed — pure vendored lock content    | Read-only Microsoft repo; no agent instruction needed |
 
 ## Commits
 

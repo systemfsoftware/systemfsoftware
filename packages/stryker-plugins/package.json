@@ -50,29 +50,28 @@
     "lint": "oxlint . ${AGENT:+--format=unix --quiet}"
   },
   "dependencies": {
-    "effect": "^3.21.2"
+    "effect": "catalog:"
   },
   "devDependencies": {
     "@babel/types": "^7.29.0",
-    "@effect/vitest": "0.29.0",
-    "@stryker-mutator/api": "^9.6.1",
-    "@stryker-mutator/vitest-runner": "^9.6.1",
+    "@effect/vitest": "catalog:",
+    "@stryker-mutator/api": "catalog:stryker",
+    "@stryker-mutator/vitest-runner": "catalog:stryker",
     "@systemfsoftware/effect-schema-law": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/stryker-js-core": "workspace:^",
     "@systemfsoftware/stryker-js-typescript-checker": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
-    "@types/node": "^24",
-    "@vitest/coverage-v8": "^4",
-    "rimraf": "^6.1.3",
-    "tsdown": "^0.22.9",
-    "tstyche": "^7.1.0",
-    "typescript": "catalog:",
-    "vitest": "^4"
+    "@types/node": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
+    "rimraf": "catalog:",
+    "tsdown": "catalog:",
+    "tstyche": "catalog:",
+    "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@stryker-mutator/api": "^9.6.1",
+    "@stryker-mutator/api": "catalog:stryker",
     "typescript": ">=5.0.0"
   },
   "publishConfig": {

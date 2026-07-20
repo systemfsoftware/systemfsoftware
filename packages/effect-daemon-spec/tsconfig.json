@@ -2,6 +2,7 @@
   "$schema": "https://json.schemastore.org/tsconfig",
   "extends": "@systemfsoftware/tsconfig/bundler/dom/library-monorepo",
   "compilerOptions": {
+    "types": ["node"],
     "customConditions": [
       "@systemfsoftware/source"
     ],

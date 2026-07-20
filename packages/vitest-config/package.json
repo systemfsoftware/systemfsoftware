@@ -23,6 +23,6 @@
   },
   "devDependencies": {
     "@systemfsoftware/tsconfig": "workspace:^",
-    "vitest": "^4"
+    "vitest": "catalog:"
   }
 }

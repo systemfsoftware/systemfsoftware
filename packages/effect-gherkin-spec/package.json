@@ -45,18 +45,18 @@
     "lint": "oxlint . ${AGENT:+--format=unix --quiet}"
   },
   "devDependencies": {
-    "@effect/vitest": "0.29.0",
+    "@effect/vitest": "catalog:",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
-    "@types/node": "^24",
-    "effect": "^3.21.2",
-    "fast-check": "^3",
-    "rimraf": "^6.1.3",
-    "tsdown": "^0.22.9",
-    "tstyche": "^7.1.0",
-    "vite-tsconfig-paths": "^6.1.1",
-    "vitest": "^4"
+    "@types/node": "catalog:",
+    "effect": "catalog:",
+    "fast-check": "catalog:",
+    "rimraf": "catalog:",
+    "tsdown": "catalog:",
+    "tstyche": "catalog:",
+    "vite-tsconfig-paths": "catalog:",
+    "vitest": "catalog:"
   },
   "peerDependencies": {
     "@effect/vitest": "*",
