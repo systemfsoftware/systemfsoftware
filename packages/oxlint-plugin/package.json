@@ -54,7 +54,7 @@
     "@stryker-mutator/vitest-runner": "^9.6.1",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
-    "@types/node": "^24",
+    "@types/node": "^26",
     "@vitest/coverage-v8": "^4",
     "oxlint": "catalog:oxlint",
     "rimraf": "^6.1.3",
