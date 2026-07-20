@@ -3,8 +3,15 @@
 ```
 $ attw ejs@3.1.9.tgz -f table-flipped
 
-error while checking file:
-ENOENT: no such file or directory, open '/mnt/projects/God/systemfsoftware/packages/core/test/fixtures/ejs@3.1.9.tgz'
+
+This package does not contain types.
+Details: {
+  "packageName": "ejs",
+  "packageVersion": "3.1.9",
+  "types": false
+}
+
+
 ```
 
-Exit code: 3
+Exit code: 0

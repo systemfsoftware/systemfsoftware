@@ -3,8 +3,19 @@
 ```
 $ attw @cerbos__core@0.18.1.tgz -f table-flipped
 
-error while checking file:
-ENOENT: no such file or directory, open '/mnt/projects/God/systemfsoftware/packages/core/test/fixtures/@cerbos__core@0.18.1.tgz'
+
+@cerbos/core v0.18.1
+
+ No problems found 🌟
+
+
+┌────────────────┬────────┬───────────────────┬───────────────────┬─────────┐
+│                │ node10 │ node16 (from CJS) │ node16 (from ESM) │ bundler │
+├────────────────┼────────┼───────────────────┼───────────────────┼─────────┤
+│ "@cerbos/core" │ 🟢     │ 🟢 (CJS)          │ 🟢 (CJS)          │ 🟢      │
+└────────────────┴────────┴───────────────────┴───────────────────┴─────────┘
+
+
 ```
 
-Exit code: 3
+Exit code: 0

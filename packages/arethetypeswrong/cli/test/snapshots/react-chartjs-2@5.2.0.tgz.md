@@ -3,8 +3,19 @@
 ```
 $ attw react-chartjs-2@5.2.0.tgz -f table-flipped
 
-error while checking file:
-ENOENT: no such file or directory, open '/mnt/projects/God/systemfsoftware/packages/core/test/fixtures/react-chartjs-2@5.2.0.tgz'
+
+react-chartjs-2 v5.2.0
+
+👺 Import resolved to an ESM type declaration file, but a CommonJS JavaScript file. https://github.com/arethetypeswrong/arethetypeswrong.github.io/blob/main/docs/problems/FalseESM.md
+
+
+┌───────────────────┬────────┬────────────────────────┬───────────────────┬─────────┐
+│                   │ node10 │ node16 (from CJS)      │ node16 (from ESM) │ bundler │
+├───────────────────┼────────┼────────────────────────┼───────────────────┼─────────┤
+│ "react-chartjs-2" │ 🟢     │ 👺 Masquerading as ESM │ 🟢 (ESM)          │ 🟢      │
+└───────────────────┴────────┴────────────────────────┴───────────────────┴─────────┘
+
+
 ```
 
-Exit code: 3
+Exit code: 1

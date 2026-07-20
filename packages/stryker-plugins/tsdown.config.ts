@@ -30,7 +30,7 @@ export default defineConfig({
   dts: true,
   tsconfig: './tsconfig.build.json',
   clean: false,
-  outExtensions: () => ({ js: ".mjs", dts: ".d.ts" }),
+  outExtensions: () => ({ js: '.mjs', dts: '.d.ts' }),
   exports: {
     devExports: '@systemfsoftware/source',
     customExports: injectApiExtractorTypes,

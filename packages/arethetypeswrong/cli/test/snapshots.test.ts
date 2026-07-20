@@ -40,11 +40,11 @@ const tests = [
 
   [
     'big.js@6.2.1.tgz',
-    `--definitely-typed ${resolveFileRelativePath('../../../core/test/fixtures/@types__big.js@6.2.0.tgz')}`,
+    `--definitely-typed ${resolveFileRelativePath('../../core/test/fixtures/@types__big.js@6.2.0.tgz')}`,
   ],
   [
     'react@18.2.0.tgz',
-    `--definitely-typed ${resolveFileRelativePath('../../../core/test/fixtures/@types__react@18.2.21.tgz')}`,
+    `--definitely-typed ${resolveFileRelativePath('../../core/test/fixtures/@types__react@18.2.21.tgz')}`,
   ],
 
   ['eslint-module-utils@2.8.1.tgz', '--entrypoints-legacy --ignore-rules=cjs-only-exports-default'],
@@ -85,7 +85,7 @@ describe('snapshots', async () => {
     }
 
     test(fixture, async () => {
-      const tarballPath = resolveFileRelativePath(`../../../core/test/fixtures/${tarball}`)
+      const tarballPath = resolveFileRelativePath(`../../core/test/fixtures/${tarball}`)
       let stdout
       let stderr = ''
       let exitCode = 0

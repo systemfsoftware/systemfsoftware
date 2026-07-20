@@ -109,6 +109,12 @@
     },
     "clean": {
       "cache": false
+    },
+    "attw": {
+      "outputLogs": "errors-only",
+      "dependsOn": [
+        "build"
+      ]
     }
   }
 }

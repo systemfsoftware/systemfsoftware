@@ -4,7 +4,9 @@
 $ attw Babel@0.0.1.tgz -f table-flipped
 
 error while checking file:
-ENOENT: no such file or directory, open '/mnt/projects/God/systemfsoftware/packages/core/test/fixtures/Babel@0.0.1.tgz'
+Expected double-quoted property name in JSON at position 450 (line 17 column 1)
+
+
 ```
 
 Exit code: 3

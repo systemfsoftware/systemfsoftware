@@ -19,7 +19,8 @@
     "**/etc/*.api.md",
     "vendor/**",
     "repos/**",
-    "packages/stryker-js/typescript-checker/testResources/errors/invalid-tsconfig/tsconfig.json"
+    "packages/stryker-js/typescript-checker/testResources/errors/invalid-tsconfig/tsconfig.json",
+    "**/snapshots/*.md"
   ],
   "plugins": [
     "https://plugins.dprint.dev/typescript-0.91.7.wasm",
