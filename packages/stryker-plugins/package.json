@@ -50,7 +50,7 @@
     "lint": "oxlint . ${AGENT:+--format=unix --quiet}"
   },
   "dependencies": {
-    "effect": "^3.21.2"
+    "effect": "^3.22.0"
   },
   "devDependencies": {
     "@babel/types": "^7.29.0",
