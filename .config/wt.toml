@@ -1,0 +1,30 @@
+# Worktree lifecycle hooks — modern split: pre-start (blocking, fast) + post-start (background).
+# pre-start: sequential blocks; keys within a block run concurrently.
+# post-start: all keys run in background — output goes to log files (wt config state logs).
+
+# --- Blocking: filesystem setup (must complete before the worktree is usable) ---
+[[pre-start]]
+setup = "{{ worktree_path }}/scripts/worktrunk/pre-start.sh '{{ worktree_path }}' '{{ primary_worktree_path }}'"
+
+# --- Background: build cache, deps, artifacts (agent can edit while these run) ---
+[post-start]
+# 1. Reflink build caches from primary worktree (CoW — ~20s vs 2m for cp -R)
+copy = "wt step copy-ignored"
+
+# 2. Install dependencies (auto-detects package manager)
+deps = "{{ worktree_path }}/scripts/worktrunk/install-deps.sh '{{ worktree_path }}'"
+
+# 3. Generate build artifacts so checks pass out of the box
+generate = "{{ worktree_path }}/scripts/worktrunk/generate-artifacts.sh '{{ worktree_path }}'"
+
+# --- Post-switch: runs every time you switch into this worktree ---
+[post-switch]
+gitkraken-compat = "{{ worktree_path }}/scripts/worktrunk/post-switch.sh '{{ worktree_path }}'"
+
+# --- Pre-merge: cleanup before merge ---
+[pre-merge]
+cleanup = "{{ worktree_path }}/scripts/worktrunk/pre-merge.sh '{{ worktree_path }}'"
+
+# --- Cleaner cleanup: auto-delete branch on worktree remove ---
+[remove]
+delete-branch = true
