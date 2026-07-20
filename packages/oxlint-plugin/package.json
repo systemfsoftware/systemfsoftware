@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/oxlint-plugin",
   "license": "MIT",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -55,7 +55,9 @@
     "effect": "catalog:"
   },
   "devDependencies": {
+    "@microsoft/api-extractor": "catalog:",
     "@stryker-mutator/vitest-runner": "catalog:stryker",
+    "@systemfsoftware/arethetypeswrong-cli": "workspace:^",
     "@systemfsoftware/stryker-js-core": "workspace:^",
     "@systemfsoftware/stryker-js-typescript-checker": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
@@ -66,9 +68,7 @@
     "rimraf": "catalog:",
     "tsdown": "catalog:",
     "typescript": "catalog:",
-    "vitest": "catalog:",
-    "@systemfsoftware/arethetypeswrong-cli": "workspace:^",
-    "@microsoft/api-extractor": "catalog:"
+    "vitest": "catalog:"
   },
   "peerDependencies": {
     "typescript": ">=5.0.0"
