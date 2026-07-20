@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/stryker-plugins",
   "license": "MIT",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -60,8 +60,10 @@
   "devDependencies": {
     "@babel/types": "^7.29.0",
     "@effect/vitest": "catalog:",
+    "@microsoft/api-extractor": "catalog:",
     "@stryker-mutator/api": "catalog:stryker",
     "@stryker-mutator/vitest-runner": "catalog:stryker",
+    "@systemfsoftware/arethetypeswrong-cli": "workspace:^",
     "@systemfsoftware/effect-schema-law": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/stryker-js-core": "workspace:^",
@@ -73,9 +75,7 @@
     "rimraf": "catalog:",
     "tsdown": "catalog:",
     "tstyche": "catalog:",
-    "vitest": "catalog:",
-    "@systemfsoftware/arethetypeswrong-cli": "workspace:^",
-    "@microsoft/api-extractor": "catalog:"
+    "vitest": "catalog:"
   },
   "peerDependencies": {
     "@stryker-mutator/api": "catalog:stryker",
