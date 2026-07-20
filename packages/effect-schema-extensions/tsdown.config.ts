@@ -2,13 +2,13 @@ import { defineConfig } from 'tsdown'
 
 type ExportEntry = string | Record<string, string | undefined>
 
-const apiExtractorRollups: Record<string, string> = {
+const typesMap: Record<string, string> = {
   '.': './dist/effect-schema-extensions.d.ts',
   './hex-schema': './dist/hex-schema.d.ts',
 }
 
-const injectApiExtractorTypes = (exports: Record<string, ExportEntry>): Record<string, ExportEntry> => {
-  for (const [subpath, types] of Object.entries(apiExtractorRollups)) {
+const injectTypes = (exports: Record<string, ExportEntry>): Record<string, ExportEntry> => {
+  for (const [subpath, types] of Object.entries(typesMap)) {
     const entry = exports[subpath]
     if (typeof entry === 'string') {
       exports[subpath] = { types, default: entry }
@@ -30,7 +30,7 @@ export default defineConfig({
   dts: true,
   exports: {
     devExports: '@systemfsoftware/source',
-    customExports: injectApiExtractorTypes,
+    customExports: injectTypes,
   },
   outExtensions: () => ({ js: '.mjs', dts: '.d.ts' }),
   deps: { onlyBundle: false },
