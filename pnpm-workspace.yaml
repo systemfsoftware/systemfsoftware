@@ -18,6 +18,7 @@ catalog:
   "@microsoft/api-extractor": ^7.58.7
   oxc-parser: ^0.140.0
   "@oxc-project/types": ^0.140.0
+  "@semantic-release/git": ^10.0.1
 catalogMode: prefer
 catalogs:
   oxlint:

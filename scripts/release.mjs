@@ -96,7 +96,7 @@ function discoverPackages(dir) {
 
 const publishablePackages = discoverPackages(packagesRoot)
 
-const pluginsFor = () => [
+const pluginsFor = (packagePath) => [
   [filterPlugin, {
     analyzer: { preset: 'conventionalcommits', releaseRules },
     notes: { preset: 'conventionalcommits', presetConfig },
@@ -104,6 +104,10 @@ const pluginsFor = () => [
   ['@semantic-release/exec', {
     prepareCmd: 'pnpm version ${nextRelease.version} --no-git-tag-version --allow-same-version',
     publishCmd: 'pnpm publish --no-git-checks --access public',
+  }],
+  ['@semantic-release/git', {
+    assets: [`packages/${packagePath}/package.json`],
+    message: 'chore(release): ${nextRelease.gitTag} [skip ci]\n\n${nextRelease.notes}',
   }],
   ['@semantic-release/github', { successComment: false, failComment: false }],
 ]
@@ -116,7 +120,7 @@ for (const { path: packagePath, name: packageName } of publishablePackages) {
       branches: ['main'],
       tagFormat: `${packageName}@v\${version}`,
       dryRun,
-      plugins: pluginsFor(),
+      plugins: pluginsFor(packagePath),
     }, { cwd })
     const line = result === false ? 'no release' : `${result.nextRelease.type} -> ${result.nextRelease.version}`
     console.log(`[${packageName}] ${line}`)
