@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/effect-schema-extensions",
   "license": "MIT",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -57,6 +57,7 @@
   "devDependencies": {
     "@effect/vitest": "catalog:",
     "@microsoft/api-extractor": "catalog:",
+    "@systemfsoftware/arethetypeswrong-cli": "workspace:^",
     "@systemfsoftware/effect-schema-law": "workspace:^",
     "@systemfsoftware/effect-schema-vite": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
@@ -67,8 +68,7 @@
     "fast-check": "catalog:",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
-    "vitest": "catalog:",
-    "@systemfsoftware/arethetypeswrong-cli": "workspace:^"
+    "vitest": "catalog:"
   },
   "peerDependencies": {
     "effect": "*"
