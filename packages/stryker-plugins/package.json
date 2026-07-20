@@ -53,7 +53,7 @@
     "effect": "catalog:"
   },
   "devDependencies": {
-    "@babel/types": "^7.29.0",
+    "@babel/types": "^8.0.4",
     "@effect/vitest": "catalog:",
     "@stryker-mutator/api": "catalog:stryker",
     "@stryker-mutator/vitest-runner": "catalog:stryker",
