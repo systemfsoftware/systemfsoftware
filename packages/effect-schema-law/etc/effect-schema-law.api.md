@@ -13,7 +13,7 @@ export const boundedUnion: <Base extends readonly [Schema.Schema.Any, ...Readonl
     readonly maxDepth?: number;
 }) => Schema.Schema<Schema.Schema.Type<Base[number] | Recur[number]>, Schema.Schema.Encoded<Base[number] | Recur[number]>, Schema.Schema.Context<Base[number] | Recur[number]>>;
 
-// @public (undocumented)
+// @public
 export const ruleOfSchemas: <A, I>(name: string, schema: Schema.Schema<A, I, never>) => void;
 
 // (No @packageDocumentation comment for this package)

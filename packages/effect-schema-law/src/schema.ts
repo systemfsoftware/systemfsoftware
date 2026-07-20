@@ -1,6 +1,15 @@
 import { it } from '@effect/vitest'
 import { Either, Schema, Schema as S } from 'effect'
 
+/**
+ * Property-test the round-trip and encode-stability laws of any Effect Schema.
+ *
+ * Registers two fast-check properties with `@effect/vitest`:
+ *   1. `∀x. enc(dec(enc(x))) === enc(x)` — encode stability across decode.
+ *   2. `∀x. dec(enc(x)) === x` — round-trip identity.
+ *
+ * Use inside a `describe` block to scope the generated tests.
+ */
 export const ruleOfSchemas = <A, I>(
   name: string,
   schema: S.Schema<A, I, never>,
