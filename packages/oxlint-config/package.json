@@ -19,7 +19,7 @@
   },
   "dependencies": {
     "@systemfsoftware/oxlint-plugin": "workspace:^",
-    "oxlint": "^1.60.0"
+    "oxlint": "catalog:oxlint"
   },
   "devDependencies": {
     "@systemfsoftware/tsconfig": "workspace:^",
@@ -27,6 +27,6 @@
     "rimraf": "^6.1.3"
   },
   "peerDependencies": {
-    "oxlint": "^1.60.0"
+    "oxlint": "catalog:oxlint"
   }
 }
