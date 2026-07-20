@@ -8,3 +8,4 @@ temp/
 *.tsbuildinfo
 .DS_Store
 __pycache__/
+.npmrc

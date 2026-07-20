@@ -44,7 +44,7 @@
     "lint": "oxlint . ${AGENT:+--format=unix --quiet}"
   },
   "dependencies": {
-    "@oxc-project/types": "^0.126.0",
+    "@oxc-project/types": "^0.140.0",
     "@oxlint/plugins": "catalog:oxlint",
     "effect": "^3.21.2"
   },
