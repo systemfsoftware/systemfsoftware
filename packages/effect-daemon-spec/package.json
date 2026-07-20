@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/effect-daemon-spec",
   "license": "MIT",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -53,12 +53,13 @@
   "devDependencies": {
     "@effect/vitest": "catalog:",
     "@microsoft/api-extractor": "^7.58.7",
+    "@stryker-mutator/vitest-runner": "catalog:stryker",
+    "@systemfsoftware/arethetypeswrong-cli": "workspace:^",
+    "@systemfsoftware/effect-gherkin-spec": "workspace:^",
+    "@systemfsoftware/effect-schema-law": "workspace:^",
+    "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/stryker-js-core": "workspace:^",
     "@systemfsoftware/stryker-js-typescript-checker": "workspace:^",
-    "@stryker-mutator/vitest-runner": "catalog:stryker",
-    "@systemfsoftware/effect-gherkin-spec": "workspace:^",
-    "@systemfsoftware/oxlint-config": "workspace:^",
-    "@systemfsoftware/effect-schema-law": "workspace:^",
     "@systemfsoftware/stryker-plugins": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
@@ -69,8 +70,7 @@
     "rimraf": "catalog:",
     "tsdown": "catalog:",
     "vite-tsconfig-paths": "catalog:",
-    "vitest": "catalog:",
-    "@systemfsoftware/arethetypeswrong-cli": "workspace:^"
+    "vitest": "catalog:"
   },
   "peerDependencies": {
     "effect": "*"
