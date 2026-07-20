@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/hex-schema",
   "license": "MIT",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -30,7 +30,9 @@
     },
     "./package.json": "./package.json"
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "clean": "rimraf dist",
     "build": "tsdown",
