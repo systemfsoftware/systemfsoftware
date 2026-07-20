@@ -1,7 +1,7 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "customConditions": []
+    "customConditions": ["types"]
   },
   "include": ["dist/index.d.ts"]
 }

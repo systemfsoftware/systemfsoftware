@@ -10,7 +10,7 @@
   },
   "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/effect-schema-extensions#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "Extra Effect Schema codecs — hex-string, prefixed-hex, colon-hex, and byte-level schemas with branded types, decode/encode, and arbitraries.",
+  "description": "Extra Effect Schema codecs \u2014 hex-string, prefixed-hex, colon-hex, and byte-level schemas with branded types, decode/encode, and arbitraries.",
   "keywords": [
     "effect",
     "effect-ts",
@@ -41,7 +41,7 @@
   ],
   "scripts": {
     "clean": "rimraf dist",
-    "build": "tsdown",
+    "build": "tsdown && api-extractor run --local && api-extractor run --local --config api-extractor.hex-schema.json",
     "typecheck": "tsc --noEmit --incremental",
     "test": "vitest run",
     "test:run": "vitest run",

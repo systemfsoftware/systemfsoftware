@@ -10,7 +10,7 @@
   },
   "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/effect-schema-law#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "Property-test the codec laws of any Effect Schema in one call — decode/encode round-trip identity and encode stability, generated with @effect/vitest and fast-check.",
+  "description": "Property-test the codec laws of any Effect Schema in one call \u2014 decode/encode round-trip identity and encode stability, generated with @effect/vitest and fast-check.",
   "keywords": [
     "effect",
     "effect-ts",
@@ -38,7 +38,7 @@
   ],
   "scripts": {
     "clean": "rimraf dist",
-    "build": "tsdown",
+    "build": "tsdown && api-extractor run --local",
     "typecheck": "tsc --noEmit --incremental",
     "test": "vitest run",
     "test:run": "vitest run",
