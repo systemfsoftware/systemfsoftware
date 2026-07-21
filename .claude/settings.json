@@ -1,0 +1,27 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$CLAUDE_PROJECT_DIR\" && pnpm format || true",
+            "async": true,
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|Update|MultiEdit|morph_mcp_edit-file|morph_edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "comment-checker"
+          }
+        ]
+      }
+    ]
+  }
+}
