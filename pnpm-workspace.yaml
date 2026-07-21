@@ -1,12 +1,16 @@
 allowBuilds:
+  "@parcel/watcher": false
   dprint: false
   esbuild: false
+  msgpackr-extract: false
   onnxruntime-node: false
   protobufjs: false
   sharp: false
   unrs-resolver: false
 catalog:
   typescript: ^7
+  "@effect/platform": ^0.97.0
+  "@effect/platform-node": ^0.97.0
   effect: ^3.22.0
   "@effect/vitest": 0.30.0
   fast-check: ^3
