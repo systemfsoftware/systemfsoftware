@@ -1,22 +1,13 @@
-/**
- * Integration tests for the hook dispatcher — real I/O, no mocks.
- *
- * Uses it.effect from the vitest adapter. All file operations go through
- * the platform FileSystem service — same interface as production. Each test
- * creates a scoped temp directory, writes real shell hook scripts (.sh,
- * portable — no bun), writes a real .claude/settings.json, and runs the
- * REAL executor with REAL NodeCommandExecutor + NodeFileSystem.
- */
 import { NodeCommandExecutor, NodeFileSystem } from '@effect/platform-node'
 import { FileSystem } from '@effect/platform/FileSystem'
-import { afterEach, describe, expect, it } from '@effect/vitest'
+import { describe, expect, it } from '@effect/vitest'
 import type { ExtensionContext, ToolCallEvent } from '@oh-my-pi/pi-coding-agent'
 import { Effect, Layer } from 'effect'
-import { clearSettingsCache, loadSettings, runPreToolUseHooks } from '../src/hook-dispatcher.executor.js'
+import { HookDispatcherExecutorDeps, loadSettings, runPreToolUseHooks } from '../src/hook-dispatcher.executor.js'
 
-const testLayer = NodeCommandExecutor.layer.pipe(Layer.provideMerge(NodeFileSystem.layer))
-
-afterEach(() => clearSettingsCache())
+const noTel = () => {}
+const telLayer = Layer.succeed(HookDispatcherExecutorDeps, { tel: noTel })
+const testLayer = NodeCommandExecutor.layer.pipe(Layer.provideMerge(NodeFileSystem.layer), Layer.provideMerge(telLayer))
 
 function makeCtx(cwd: string): ExtensionContext {
   return {

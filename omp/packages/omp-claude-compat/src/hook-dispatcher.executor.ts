@@ -1,10 +1,3 @@
-/**
- * I/O sandwich shell for the OMP hook dispatcher bridge.
- *
- * Owns the read → decide → write sequence. Every operation here is impure:
- * subprocess execution via CommandExecutor, file reading via FileSystem,
- * telemetry emission. Pure decisions live in hook-dispatcher.workflow.ts.
- */
 import { Command } from '@effect/platform'
 import { CommandExecutor } from '@effect/platform/CommandExecutor'
 import { FileSystem } from '@effect/platform/FileSystem'
@@ -23,58 +16,65 @@ import {
   sessionIds,
 } from '@systemfsoftware/omp-utils'
 import type { TelemetryEmitter } from '@systemfsoftware/omp-utils'
-import { Effect, Stream } from 'effect'
-import {
-  hookNameFromCommand,
-  interpretHookResult,
-  isBlockDecision,
-  isWarningDecision,
-  parseHookOutput,
-  parseSettings,
-  resolveCommandPath,
-} from './hook-dispatcher.workflow.js'
-import type { HookEntry, HookResult, HookSettings } from './hook-dispatcher.workflow.js'
+import { Context, Effect, Either, Match, Option, Stream } from 'effect'
+import { resolve } from 'node:path'
+import { Blocked, Continue, Warning } from './hook-dispatcher.schema.js'
+import type { HookOutcome, HookResult } from './hook-dispatcher.schema.js'
+import { parseHookOutput } from './hook-output.acl.js'
+import { parseSettings } from './hook-settings.acl.js'
+import type { HookEntry, HookSettings } from './hook-settings.acl.js'
+import { interpretHookResult } from './hook-verdict.workflow.js'
 
-/** Module-scoped telemetry emitter, initialized in the default export. */
-let tel: TelemetryEmitter = () => {}
+export class HookDispatcherExecutorDeps extends Context.Tag('HookDispatcherExecutorDeps')<
+  HookDispatcherExecutorDeps,
+  { readonly tel: TelemetryEmitter }
+>() {}
 
-export function setTelemetryEmitter(emitter: TelemetryEmitter): void {
-  tel = emitter
+interface ResolvedCommand {
+  readonly cmd: string
+  readonly args: readonly string[]
 }
 
-// ── Settings loading (read step) ──
+function resolveCommandPath(command: string, cwd: string): ResolvedCommand {
+  const expanded = command
+    .replace(/"\$OMP_PROJECT_DIR"|'\$OMP_PROJECT_DIR'/g, JSON.stringify(cwd))
+    .replace(/"\$\{OMP_PROJECT_DIR\}"|'\$\{OMP_PROJECT_DIR\}'/g, JSON.stringify(cwd))
+    .replace(/"\$CLAUDE_PROJECT_DIR"|'\$CLAUDE_PROJECT_DIR'/g, JSON.stringify(cwd))
+    .replace(/"\$\{CLAUDE_PROJECT_DIR\}"|'\$\{CLAUDE_PROJECT_DIR\}'/g, JSON.stringify(cwd))
+    .replace(/\$OMP_PROJECT_DIR|\$\{OMP_PROJECT_DIR\}/g, JSON.stringify(cwd))
+    .replace(/\$CLAUDE_PROJECT_DIR|\$\{CLAUDE_PROJECT_DIR\}/g, JSON.stringify(cwd))
+  const trimmed = expanded.trim()
+  const unquoted = trimmed.startsWith('"') && trimmed.endsWith('"') ? trimmed.slice(1, -1) : trimmed
 
-const settingsCache = new Map<string, HookSettings | null>()
+  const pathPart = unquoted.split(/\s+/)[0] ?? ''
+  if (pathPart.endsWith('.ts')) {
+    return { cmd: 'bun', args: [resolve(cwd, pathPart)] }
+  }
 
-export function clearSettingsCache(): void {
-  settingsCache.clear()
+  return { cmd: 'sh', args: ['-c', unquoted] }
+}
+
+function hookNameFromCommand(command: string): string {
+  return command.split(/[\\/]/).pop() ?? command
 }
 
 export const loadSettings = Effect.fn('loadSettings')(function*(cwd: string) {
-  const cached = settingsCache.get(cwd)
-  if (cached !== undefined) return cached
-
   const fs = yield* FileSystem
   const settingsPath = `${cwd}/.claude/settings.json`
   const content = yield* fs.readFileString(settingsPath).pipe(Effect.catchAll(() => Effect.succeed('')))
 
   if (content === '') return null
 
-  try {
-    const parsed = parseSettings(JSON.parse(content))
-    settingsCache.set(cwd, parsed)
-    return parsed
-  } catch {
-    return null
-  }
+  const json = yield* Effect.try({
+    try: () => JSON.parse(content) as unknown,
+    catch: () => null,
+  })
+  if (json === null) return null
+
+  const either = parseSettings(json)
+  return Either.isLeft(either) ? null : either.right
 })
 
-// ── Hook execution (impure subprocess) ──
-
-/**
- * Run a hook script as a subprocess via @effect/platform CommandExecutor.
- * The subprocess is a lazy Effect value, not an eager child_process.
- */
 export const runHookScript = Effect.fn('runHookScript')(function*(
   command: string,
   input: Record<string, unknown>,
@@ -128,6 +128,7 @@ export const runHooksForEvent = Effect.fn('runHooksForEvent')(function*(
   event: string,
 ) {
   const cwd = ctx.cwd
+  const { tel } = yield* HookDispatcherExecutorDeps
   let warning: string | undefined
   let inputModified = false
   let currentInput = input
@@ -175,24 +176,43 @@ export const runHooksForEvent = Effect.fn('runHooksForEvent')(function*(
         ),
       )
 
-      const decision = interpretHookResult(result, event)
+      const verdict = interpretHookResult(result, event)
+      const decision = Either.match(verdict, {
+        onLeft: (err) =>
+          Match.value(err).pipe(
+            Match.tag('HookVerdictError', (e) =>
+              new Warning({ message: `Hook exited 0 but produced invalid JSON: ${e.raw.slice(0, 200)}` })),
+            Match.exhaustive,
+          ),
+        onRight: (d) => d,
+      })
 
-      if (isBlockDecision(decision)) {
-        return { block: true, reason: decision.reason } satisfies HooksForEventResult
-      }
+      const outcome: HookOutcome = Match.value(decision).pipe(
+        Match.tag('Block', (d) => new Blocked({ reason: d.reason })),
+        Match.tag('Warning', (d) => new Continue({ warning: d.message })),
+        Match.tag('Allow', () => {
+          const either = parseHookOutput(result.stdout)
+          const updatedInput = Either.isRight(either) ? either.right.hookSpecificOutput?.updatedInput : undefined
+          return new Continue({ updatedInput })
+        }),
+        Match.exhaustive,
+      )
 
-      if (isWarningDecision(decision)) {
-        if (warning === undefined) warning = decision.message
-        continue
-      }
+      // Sequence the loop from the outcome; arms perform the effects.
+      const hookExit: Option.Option<HooksForEventResult> = Match.value(outcome).pipe(
+        Match.tag('Blocked', (b) => Option.some({ block: true as const, reason: b.reason })),
+        Match.tag('Continue', (c) => {
+          if (c.warning !== undefined && warning === undefined) warning = c.warning
+          if (c.updatedInput !== undefined) {
+            currentInput = { ...currentInput, ...c.updatedInput }
+            inputModified = true
+          }
+          return Option.none()
+        }),
+        Match.exhaustive,
+      )
 
-      // Allow: check for updatedInput in parsed output
-      const parsed = parseHookOutput(result.stdout)
-      const updatedInput = parsed?.hookSpecificOutput?.updatedInput
-      if (updatedInput) {
-        currentInput = { ...currentInput, ...updatedInput }
-        inputModified = true
-      }
+      if (Option.isSome(hookExit)) return hookExit.value
     }
   }
 
@@ -209,6 +229,7 @@ export const runPreToolUseHooks = Effect.fn('runPreToolUseHooks')(function*(
   event: ToolCallEvent,
   ctx: ExtensionContext,
 ) {
+  const { tel } = yield* HookDispatcherExecutorDeps
   const claudeToolName = normalizeToolName(event.toolName)
   const sessionData = sessionIds(() => ctx.sessionManager.getSessionId())
   const input: Record<string, unknown> = {
@@ -335,6 +356,7 @@ export const runSessionStartHooks = Effect.fn('runSessionStartHooks')(function*(
   reason: string,
   ctx: ExtensionContext,
 ) {
+  const { tel } = yield* HookDispatcherExecutorDeps
   const entries = settings.hooks.SessionStart
   if (entries.length === 0) return
 
@@ -391,7 +413,10 @@ export const runLifecycleHooks = Effect.fn('runLifecycleHooks')(function*(
 ) {
   if (entries.length === 0) return
 
+  const { tel } = yield* HookDispatcherExecutorDeps
+
   const cwd = ctx.cwd
+
   const input: Record<string, unknown> = {
     ...sessionIds(() => ctx.sessionManager.getSessionId()),
   }

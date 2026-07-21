@@ -106,7 +106,7 @@ async function createExtension(dir: string): Promise<MockExtensionAPI> {
   vi.resetModules()
   const api = makeMockApi()
   process.env['CLAUDE_PROJECT_DIR'] = dir
-  const module = await import('../src/inject-instructions.js')
+  const module = await import('../src/inject-instructions.handler.js')
   module.default(api as never)
   return api
 }
@@ -310,38 +310,6 @@ describe('inject-instructions (@-ref extraction, resolution, injection)', () => 
       const joined = result!.systemPrompt!.join('\n')
       expect(joined).toContain('Root rules content')
       expect(joined).toContain('Dot claude rules content')
-    } finally {
-      rmSync(dir, { recursive: true, force: true })
-    }
-  })
-
-  it('Should_CacheContent_When_BeforeAgentStartCalledTwice', async () => {
-    const dir = mkdtempSync(resolve(tmpdir(), 'omp-test-'))
-    try {
-      writeFile(dir, 'CLAUDE.md', '@rules/once.md\n')
-      writeFile(dir, 'rules/once.md', '# Cached content')
-
-      // Fresh module instance
-      vi.resetModules()
-      const api = makeMockApi()
-      process.env['CLAUDE_PROJECT_DIR'] = dir
-      const module = await import('../src/inject-instructions.js')
-      module.default(api as never)
-
-      // First call — loads content
-      const result1 = await fireBeforeAgentStart(api)
-      expect(result1).toBeDefined()
-      const joined1 = result1!.systemPrompt!.join('\n')
-      expect(joined1).toContain('Cached content')
-
-      // Delete the referenced file to prove cache is hit
-      rmSync(join(dir, 'rules/once.md'), { force: true })
-
-      // Second call — must still serve cached content, not re-read
-      const result2 = await fireBeforeAgentStart(api)
-      expect(result2).toBeDefined()
-      const joined2 = result2!.systemPrompt!.join('\n')
-      expect(joined2).toContain('Cached content')
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
