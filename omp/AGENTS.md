@@ -1,12 +1,15 @@
 # AGENTS.md — `omp/` workspace
 
-> **Location:** `omp/` — the OMP plugin workspace. Three packages: `omp-agent-discipline`, `omp-claude-compat`, `omp-utils`. Universal agent rules live in the root `AGENTS.md`; this file carries only `omp/`-specific deltas.
+> **Location:** `omp/` — the OMP workspace. Two directories:
+>
+> - `omp/plugins/` — OMP extension packages (have `omp.extensions`, register `pi.on` handlers): `omp-agent-discipline`, `omp-claude-compat`.
+> - `omp/packages/` — shared libraries consumed by plugins: `omp-utils`.
+>   Universal agent rules live in the root `AGENTS.md`; this file carries only `omp/`-specific deltas.
 
 ## Critical
 
-**MUST** invoke relevant skills before domain-specific work.
+- Touching `omp/plugins/<pkg>/src/<name>.workflow.ts` (or `omp/packages/<pkg>/src/` for shared libraries) or designing a new decision cell → **load `skill://architect-dmmf-application`** first; it routes to the right cell suffix and rejects category errors. The workflow cells in this workspace follow the DMMF (Decision-Module-Mechanism-Feature) composition pattern, not a bespoke architecture.
 
-- Touching `omp/packages/<pkg>/src/<name>.workflow.ts` or designing a new decision cell → **load `skill://architect-dmmf-application`** first; it routes to the right cell suffix and rejects category errors. The workflow cells in this workspace follow the DMMF (Decision-Module-Mechanism-Feature) composition pattern, not a bespoke architecture.
 - Authoring/modifying a plugin manifest, `pi.on` handler, link flow, or release pipeline → **load `skill://omp-plugin-development`** first.
 - Deciding what a single cell type (workflow, executor, schema, acl, handler, store, policy, state, shape, middleware) should look like → load the matching `skill://architect-*`.
 
@@ -23,7 +26,7 @@
 | `*.schema.ts`   | Shared tagged unions or branded primitives (≥2 consumers) | Pure   | `hook-dispatcher.schema.ts`                                      |
 | `index.ts`      | Package barrel — extension manifest wiring                | Impure | `omp-claude-compat/src/index.ts`                                 |
 
-**Decision tree for a new module under `omp/packages/*/src/`:**
+**Decision tree for a new module under `omp/plugins/*/src/` (or `omp/packages/*/src/` for shared libs):**
 
 1. Does it make a domain decision with ≥2 outcome variants across `Decision ∪ Error`? → `*.workflow.ts`.
 2. Does it do subprocess execution, file reads, or other impure I/O? → `*.executor.ts` (the workflow is the filling).
@@ -49,7 +52,7 @@ export class MalformedJson extends S.TaggedClass<MalformedJson>()('MalformedJson
 }) {}
 ```
 
-**Decision variants** (`Block`, `Allow`, `Warning`, `Blocked`, `Continue` in this workspace) are data and stay `S.TaggedClass`. The rule applies to the **error channel only**. Audit: `grep -n 'extends S.TaggedClass' omp/packages/*/src/*.workflow.ts` — every match must be a decision/command class. Compare the grep output against the workflow's error type: any `TaggedClass` declared with an `_tag` whose name appears in the `Either<..., Error>` channel is a violation.
+**Decision variants** (`Block`, `Allow`, `Warning`, `Blocked`, `Continue` in this workspace) are data and stay `S.TaggedClass`. The rule applies to the **error channel only**. Audit: `grep -n 'extends S.TaggedClass' omp/plugins/*/src/*.workflow.ts omp/packages/*/src/*.workflow.ts` — every match must be a decision/command class. Compare the grep output against the workflow's error type: any `TaggedClass` declared with an `_tag` whose name appears in the `Either<..., Error>` channel is a violation.
 
 ## Commands
 
@@ -64,8 +67,8 @@ pnpm --filter @systemfsoftware/omp-* exec vitest run
 pnpm --filter @systemfsoftware/omp-* exec tsc --noEmit
 
 # Plugin-specific (manifests, link, smoke) — see skill://omp-plugin-development
-node omp/scripts/smoke-plugin.mjs omp/packages/<name>/dist/index.js
-omp plugin link omp/packages/<name>
+node omp/scripts/smoke-plugin.mjs omp/plugins/<name>/dist/index.js
+omp plugin link omp/plugins/<name>
 ```
 
 ## Failure Modes (cell-specific)

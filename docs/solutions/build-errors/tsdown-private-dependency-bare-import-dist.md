@@ -23,7 +23,7 @@ A private workspace package (`@systemfsoftware/omp-utils`) listed in `dependenci
 
 ## Symptoms
 
-- `omp/packages/omp-agent-discipline/dist/index.js` contained a top-level static import:
+- `omp/plugins/omp-agent-discipline/dist/index.js` contained a top-level static import:
   ```js
   import { createTelemetry, loadToml } from '@systemfsoftware/omp-utils'
   ```
@@ -41,7 +41,7 @@ A private workspace package (`@systemfsoftware/omp-utils`) listed in `dependenci
 
 ## Solution
 
-Commit `0b4bab7ec0` (branch `feat/omp-plugin-practice`, unpushed as of writing) — move `@systemfsoftware/omp-utils` from `dependencies` to `devDependencies` in `omp/packages/omp-agent-discipline/package.json`, matching `omp-claude-compat`.
+Commit `0b4bab7ec0` (branch `feat/omp-plugin-practice`, unpushed as of writing) — move `@systemfsoftware/omp-utils` from `dependencies` to `devDependencies` in `omp/plugins/omp-agent-discipline/package.json`, matching `omp-claude-compat`.
 
 Before (broken — tsdown externalizes `dependencies`, bare import survives in dist):
 

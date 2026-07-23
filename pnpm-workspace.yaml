@@ -48,5 +48,5 @@ packages:
   - packages/*
   - packages/stryker-js/*
   - packages/arethetypeswrong/*
-  - omp/extensions/*
   - omp/packages/*
+  - omp/plugins/*

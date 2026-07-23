@@ -18,7 +18,7 @@ applies_when:
 
 ## Context
 
-`omp/packages/omp-claude-compat/src/hook-verdict.workflow.ts` was written as `Either<HookDecision, never>` — a "total" decision shape where every domain outcome lands in the `Right` channel.
+`omp/plugins/omp-claude-compat/src/hook-verdict.workflow.ts` was written as `Either<HookDecision, never>` — a "total" decision shape where every domain outcome lands in the `Right` channel.
 
 The original code also routed JSON parse errors through `Either.match(parseHookOutput(...), { onLeft: () => null, onRight: ... })` — collapsing a typed error into `null` and then dispatching as if no error existed. The mutator cannot kill what the type system refuses to name.
 
@@ -54,7 +54,7 @@ The 100% mutation gate is the other failure mode this prevents: a workflow that 
 
 ## When to Apply
 
-- Every `*.workflow.ts` file under `omp/packages/*/src/` and `packages/*/src/`
+- Every `*.workflow.ts` file under `omp/plugins/*/src/`, `omp/packages/*/src/`, and `packages/*/src/`
 - During code review: if the signature is `Either<X, never>`, push back — total workflows are `Allow | Block` with no other named variants, and most "total" workflows are actually hiding a failure mode
 - When a workflow dispatches on a primitive and reaches for `Match.exhaustive`: derive a closed tagged union first, then dispatch
 
@@ -130,8 +130,8 @@ const decision = Either.match(verdict, {
 
 ## Verification
 
-- `grep -n 'Either<.*, never>' omp/packages/*/src/*.workflow.ts packages/*/src/*.workflow.ts` returns only files where the workflow genuinely has zero failure modes (rare; `Allow | Block` total decisions).
-- `grep -n 'extends S.TaggedClass' omp/packages/*/src/*.workflow.ts packages/*/src/*.workflow.ts` returns only decision/command classes, never error classes. Error classes must use `S.TaggedError`.
+- `grep -n 'Either<.*, never>' omp/plugins/*/src/*.workflow.ts omp/packages/*/src/*.workflow.ts packages/*/src/*.workflow.ts` returns only files where the workflow genuinely has zero failure modes (rare; `Allow | Block` total decisions).
+- `grep -n 'extends S.TaggedClass' omp/plugins/*/src/*.workflow.ts omp/packages/*/src/*.workflow.ts packages/*/src/*.workflow.ts` returns only decision/command classes, never error classes. Error classes must use `S.TaggedError`.
 - Property tests (where they exist) assert the error channel: `Either.isLeft(...)` cases prove the failure variant is reachable, not just theoretically defined.
 
 ## See Also

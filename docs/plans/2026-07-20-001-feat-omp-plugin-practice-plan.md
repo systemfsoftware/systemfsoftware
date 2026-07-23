@@ -12,7 +12,7 @@ execution: code
 
 ## Goal Capsule
 
-- **Objective:** Turn the bootstrapped OMP plugin setup (omp-claude-compat, omp-agent-discipline, omp-utils in `omp/packages/`) into a documented, instrumented, verifiable development practice: canonical best-practices doc, agent skill, structured telemetry through OMP's existing OTel log sink, smoke-verification tooling, and hardening of both dogfooded plugins.
+- **Objective:** Turn the bootstrapped OMP plugin setup (omp-claude-compat, omp-agent-discipline in `omp/plugins/`, omp-utils in `omp/packages/`) into a documented, instrumented, verifiable development practice: canonical best-practices doc, agent skill, structured telemetry through OMP's existing OTel log sink, smoke-verification tooling, and hardening of both dogfooded plugins.
 - **Authority hierarchy:** The vendored OMP source (`repos/oh-my-pi/`, read-only per AGENTS.md S3) is the ground truth for runtime behavior; this repo's packages are the only writable code surface. Upstream changes ship as proposal docs, never edits.
 - **Stop conditions:** Both plugins instrumented and green under `pnpm check`; smoke tool proves both dists load and register; doc + skill exist and cross-reference; upstream proposal written; release dry-run still lists both plugins.
 - **Execution profile:** Standard depth, docs-plus-code. Vendored repos are never modified.
@@ -131,8 +131,7 @@ flowchart TB
 
 - **Goal:** Define the structured-logging event convention and emit it from both dogfooded plugins.
 - **Requirements:** R3, R4
-- **Dependencies:** U1 (convention section drafted there first, then implemented here)
-- **Files:** `omp/packages/omp-utils/src/` (shared event-shape helper + types), `omp/packages/omp-claude-compat/src/hook-dispatcher.ts`, `omp/packages/omp-agent-discipline/src/xd-retry-guard.ts`, tests in each package's `__tests__/`
+- **Files:** `omp/packages/omp-utils/src/` (shared event-shape helper + types), `omp/plugins/omp-claude-compat/src/hook-dispatcher.ts`, `omp/plugins/omp-agent-discipline/src/xd-retry-guard.ts`, tests in each package's `__tests__/`
 - **Approach:** Convention: event names `<plugin>.<noun>.<verb>` (e.g. `claude_compat.hook.executed`, `agent_discipline.guard.fired`); mandatory fields `plugin`, `event`, plus event-specific (`decision`, `duration_ms`, `hook`, `tool_name`). Helper in omp-utils builds the record and emits via the `pi.logger` injected at factory time (no global logger); existing test mocks in both packages omit `logger` and must gain a recording stub, or U2's first instrumentation crashes the suites (adversarial review P1). claude-compat: log `hook.executed` with duration + exit code per hook subprocess, and `tool_call.decision` with block/allow. agent-discipline: log `guard.fired` (ledger add), `guard.cleared` (retry executed), `guard.reminded` (context injection). First read `repos/oh-my-pi/packages/utils/src/logger.ts` LogSink to confirm structured fields survive to OTel; if not, JSON-encode into the message string (Assumption in Planning Contract).
 - **Patterns to follow:** existing `audit()` JSONL pattern in xd-retry-guard (replace/align with the convention); ExtensionRunner's own `logger.warn` structured-call style.
 - **Test scenarios:**
@@ -174,8 +173,7 @@ flowchart TB
 
 - **Goal:** Bring both plugins to the documented standard: peer-dep shape, dist verification, any residual conformance gaps.
 - **Requirements:** R7
-- **Dependencies:** U1 (standard to conform to), U2 (telemetry changes land first to avoid double-editing)
-- **Files:** `omp/packages/omp-claude-compat/package.json`, `omp/packages/omp-agent-discipline/package.json`, build/test wiring in both (e.g. `package.json` scripts, possibly a shared dist-check script under `omp/scripts/`)
+- **Files:** `omp/plugins/omp-claude-compat/package.json`, `omp/plugins/omp-agent-discipline/package.json`, build/test wiring in both (e.g. `package.json` scripts, possibly a shared dist-check script under `omp/scripts/`)
 - **Approach:** Move `@oh-my-pi/pi-coding-agent` to `peerDependencies` + keep in `devDependencies` via catalog for build-time types (KTD4) — verify the devExports/`@systemfsoftware/source` condition still resolves; re-run `pnpm install --no-frozen-lockfile` and both builds. Add a post-build dist-integrity check (KTD5): parse dist, assert node builtin imports present — wire as a test or a `build`-adjacent script; keep it cheap. Fix any other U1-documented gaps found while writing the doc (record each in the unit's execution notes as discovered).
 - **Patterns to follow:** sibling packages' dependency shapes in `packages/`; the repo's exports/attw conventions where applicable (attw may be skipped for plugin packages — record the decision in the doc).
 - **Test scenarios:**
@@ -200,7 +198,7 @@ flowchart TB
 - **Goal:** Ship the delegation guard in `omp-agent-discipline` and the `systemfsoftware.toml` config convention it reads from.
 - **Requirements:** R8, R9
 - **Dependencies:** none (independent of U1–U6; lands in the same package U2/U5 touch, so merge last)
-- **Files:** `omp/packages/omp-agent-discipline/src/no-skill-delegation.ts` (create from the provided extension source), `omp/packages/omp-agent-discipline/src/index.ts` (combined entry registering both guards, mirroring claude-compat's pattern), `omp/packages/omp-agent-discipline/tsdown.config.ts` (entry switches to index), `omp/packages/omp-utils/src/` (TOML loader + cache), `systemfsoftware.toml` (repo root, initial `no_delegate_skills` list), `omp/packages/omp-agent-discipline/__tests__/no-skill-delegation.test.ts` (create)
+- **Files:** `omp/plugins/omp-agent-discipline/src/no-skill-delegation.ts` (create from the provided extension source), `omp/plugins/omp-agent-discipline/src/index.ts` (combined entry registering both guards, mirroring claude-compat's pattern), `omp/plugins/omp-agent-discipline/tsdown.config.ts` (entry switches to index), `omp/packages/omp-utils/src/` (TOML loader + cache), `systemfsoftware.toml` (repo root, initial `no_delegate_skills` list), `omp/plugins/omp-agent-discipline/__tests__/no-skill-delegation.test.ts` (create)
 - **Approach:** Port the attachment source with two fixes: import `ToolCallEvent` from the main package (the `@oh-my-pi/pi-coding-agent/hooks` subpath is the pattern that broke type resolution before), and replace the `../config/no-delegate-skills.json` module-relative read with the omp-utils TOML loader resolved from `ctx.cwd` at event time (load-time module-relative reads fail for linked plugins; cwd resolution matches KTD6). Guard logic unchanged: `subagent_type`/`agent` exact match against the protected set blocks; prompt text must match a delegation-verb pattern AND no reference-verb pattern to block. Combined `index.ts` default export calls `xdRetryGuard(pi)` then `noSkillDelegation(pi)`. Initial TOML: `no_delegate_skills = ["lfg", "ce-brainstorm", "ce-plan", "ce-work", "ce-debug", "ce-commit", "ce-commit-push-pr", "ce-resolve-pr-feedback", "ce-babysit-pr", "ce-code-review", "ce-doc-review", "ce-compound", "ce-ideate", "ce-strategy", "ce-explain", "ce-optimize", "ce-pov", "ce-proof", "ce-worktree", "ce-test-browser", "ce-riffrec-feedback-analysis", "ce-compound-refresh", "ce-simplify-code"]` (the S0 family).
 - **Patterns to follow:** `omp-claude-compat/src/index.ts` combined-entry pattern; xd-retry-guard's event-choice lesson (act on `tool_call` where the input keys are raw — attachment already does this correctly).
 - **Test scenarios:**
@@ -220,7 +218,7 @@ flowchart TB
 | ------------------------------- | -------------------------------------------------------------------------------------------------------------------- | ----------- |
 | Lint + typecheck + tests (repo) | `pnpm check`                                                                                                         | Global (D1) |
 | Per-package tests               | `pnpm --filter @systemfsoftware/omp-claude-compat test` / `pnpm --filter @systemfsoftware/omp-agent-discipline test` | U2, U5      |
-| Smoke verification              | `node omp/scripts/smoke-plugin.mjs omp/packages/omp-claude-compat/dist/index.js` (and agent-discipline path)         | U2, U3, U5  |
+| Smoke verification              | `node omp/scripts/smoke-plugin.mjs omp/plugins/omp-claude-compat/dist/index.js` (and agent-discipline path)          | U2, U3, U5  |
 | Plugin health                   | `omp plugin doctor`                                                                                                  | U5          |
 | Delegation guard                | `pnpm --filter @systemfsoftware/omp-agent-discipline test` covers no-skill-delegation scenarios                      | U7          |
 | Release discovery               | `node scripts/release.mjs --dry-run` lists both plugins                                                              | U5          |
