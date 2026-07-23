@@ -1,6 +1,7 @@
 import { Command } from '@effect/platform'
 import { CommandExecutor } from '@effect/platform/CommandExecutor'
 import { FileSystem } from '@effect/platform/FileSystem'
+import * as PathModule from '@effect/platform/Path'
 import type {
   ExtensionContext,
   InputEvent,
@@ -17,9 +18,9 @@ import {
 } from '@systemfsoftware/omp-utils'
 import type { TelemetryEmitter } from '@systemfsoftware/omp-utils'
 import { Context, Effect, Either, Match, Option, Stream } from 'effect'
-import { resolve } from 'node:path'
 import { Blocked, Continue, Warning } from './hook-dispatcher.schema.js'
 import type { HookOutcome, HookResult } from './hook-dispatcher.schema.js'
+
 import { parseHookOutput } from './hook-output.acl.js'
 import { parseSettings } from './hook-settings.acl.js'
 import type { HookEntry, HookSettings } from './hook-settings.acl.js'
@@ -35,7 +36,7 @@ interface ResolvedCommand {
   readonly args: readonly string[]
 }
 
-function resolveCommandPath(command: string, cwd: string): ResolvedCommand {
+function resolveCommandPath(command: string, cwd: string, path: PathModule.Path): ResolvedCommand {
   const expanded = command
     .replace(/"\$OMP_PROJECT_DIR"|'\$OMP_PROJECT_DIR'/g, JSON.stringify(cwd))
     .replace(/"\$\{OMP_PROJECT_DIR\}"|'\$\{OMP_PROJECT_DIR\}'/g, JSON.stringify(cwd))
@@ -48,7 +49,7 @@ function resolveCommandPath(command: string, cwd: string): ResolvedCommand {
 
   const pathPart = unquoted.split(/\s+/)[0] ?? ''
   if (pathPart.endsWith('.ts')) {
-    return { cmd: 'bun', args: [resolve(cwd, pathPart)] }
+    return { cmd: 'bun', args: [path.resolve(cwd, pathPart)] }
   }
 
   return { cmd: 'sh', args: ['-c', unquoted] }
@@ -82,7 +83,8 @@ export const runHookScript = Effect.fn('runHookScript')(function*(
   timeoutMs: number,
 ) {
   const executor = yield* CommandExecutor
-  const { cmd, args } = resolveCommandPath(command, cwd)
+  const path = yield* PathModule.Path
+  const { cmd, args } = resolveCommandPath(command, cwd, path)
   const stdinText = JSON.stringify(input)
 
   const hookCommand = Command.make(cmd, ...args).pipe(

@@ -1,29 +1,8 @@
-/**
- * OMP Extension: block delegation of protected skills to subagent dispatches.
- *
- * Skill-agnostic. The set of protected skills is DATA — read at event time from
- * `systemfsoftware.toml` in the project root (via `ctx.cwd`), using the shared
- * omp-utils TOML loader. Adding or removing a skill is a config edit, never a
- * code edit.
- *
- * Acts on the raw OMP `tool_call` event, where `event.input` carries the exact
- * keys each tool emits (Task → `agent`/`task`, Agent → `subagent_type`/`prompt`),
- * so both dispatch shapes are covered.
- *
- * Two changes from the upstream-provided attachment:
- *  1. ToolCallEvent imported from main @oh-my-pi/pi-coding-agent package
- *     (NOT the /hooks subpath, which broke type resolution before).
- *  2. Config read at event time via ctx.cwd-resolved TOML loader, not at
- *     module load time from a module-relative path (which fails for linked
- *     plugins).
- */
 import type { ExtensionAPI, ExtensionContext, ToolCallEvent } from '@oh-my-pi/pi-coding-agent'
 import { createTelemetry, loadToml } from '@systemfsoftware/omp-utils'
-import type { TelemetryEmitter } from '@systemfsoftware/omp-utils'
-
-/* ------------------------------------------------------------------ */
-/*  Compiled guard config cache (per cwd)                              */
-/* ------------------------------------------------------------------ */
+import type { TelemetryEmitter, TomlConfig } from '@systemfsoftware/omp-utils'
+import { Effect } from 'effect'
+import type { AppRuntime } from './runtime.js'
 
 interface CompiledGuard {
   readonly protectedSkills: ReadonlySet<string>
@@ -32,9 +11,12 @@ interface CompiledGuard {
   readonly mentionPatterns: ReadonlyMap<string, RegExp>
 }
 
-/** Module-scoped telemetry emitter, initialized in the default export. */
 let tel: TelemetryEmitter = () => {}
 const compiledCache = new Map<string, CompiledGuard>()
+
+export function resetGuardCache(): void {
+  compiledCache.clear()
+}
 
 function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -59,13 +41,12 @@ function compileGuard(names: readonly string[]): CompiledGuard | null {
       new RegExp('\\b(?:run|execute|launch)\\s+(?:the\\s+)?[`/]?' + nameGroup + '\\b', 'i'),
       new RegExp('\\bskill:\\s*[`/]?' + nameGroup + '\\b', 'i'),
       new RegExp('\\bskill:\\/\\/' + nameGroup + '\\b', 'i'),
-      new RegExp('(?:^|\\W)[`/]' + nameGroup + '(?=$|\\b|\\W)', 'i'),
       new RegExp('(?:^|\\W)/' + nameGroup + '(?=$|\\b|\\W)', 'i'),
       new RegExp('\\buse\\s+(?:the\\s+)?[`/]?' + nameGroup + '\\b', 'i'),
       new RegExp('\\bload\\s+(?:the\\s+)?[`/]?' + nameGroup + '\\b', 'i'),
       new RegExp(
-        '\\bspawn\\s+(?:a\\s+)?(?:task|agent|subagent|worker)\\s+(?:with|using)\\s+(?:the\\s+)?[`/]?' + nameGroup +
-          '\\b',
+        '\\bspawn\\s+(?:a\\s+)?(?:task|agent|subagent|worker)\\s+(?:with|using)\\s+(?:the\\s+)?[`/]?' +
+          nameGroup + '\\b',
         'i',
       ),
       new RegExp('\\bcall\\s+(?:the\\s+)?[`/]?' + nameGroup + '\\b', 'i'),
@@ -91,22 +72,17 @@ function compileGuard(names: readonly string[]): CompiledGuard | null {
   }
 }
 
-function getCompiledGuard(cwd: string): CompiledGuard | null {
+export const loadGuard = Effect.fn('loadGuard')(function*(cwd: string) {
   const cached = compiledCache.get(cwd)
   if (cached !== undefined) return cached
-
-  const config = loadToml(cwd)
+  const config: TomlConfig = yield* loadToml(cwd)
   const names = config['no_delegate_skills'] ?? []
-  const compiled: CompiledGuard | null = compileGuard(names)
+  const compiled = compileGuard(names)
   if (compiled !== null) {
     compiledCache.set(cwd, compiled)
   }
   return compiled
-}
-
-/* ------------------------------------------------------------------ */
-/*  Helpers                                                             */
-/* ------------------------------------------------------------------ */
+})
 
 function readString(input: Record<string, unknown>, ...keys: readonly string[]): string {
   for (const key of keys) {
@@ -131,28 +107,32 @@ function denyMessage(skill: string, how: 'subagent_type' | 'prompt', excerpt: st
   ].join('\n')
 }
 
-/* ------------------------------------------------------------------ */
-/*  Extension default export                                           */
-export default function noSkillDelegationExtension(pi: ExtensionAPI): void {
+/** Decode tool_call input as a record. Returns empty record for non-objects. */
+function decodeRecord(input: unknown): Record<string, unknown> {
+  if (typeof input === 'object' && input !== null && !Array.isArray(input)) {
+    return input as Record<string, unknown>
+  }
+  return {}
+}
+
+export default function noSkillDelegationExtension(pi: ExtensionAPI, runtime: AppRuntime): void {
   tel = createTelemetry('agent_discipline', pi.logger)
 
   pi.on('tool_call', (event: ToolCallEvent, ctx: ExtensionContext) => {
-    const guard = getCompiledGuard(ctx.cwd)
+    const guard = runtime.runSync(loadGuard(ctx.cwd))
     if (guard === null) return undefined
 
     const toolName = event.toolName.toLowerCase()
     if (toolName !== 'task' && toolName !== 'agent') return undefined
 
-    const input = event.input as Record<string, unknown>
+    const input = decodeRecord(event.input)
 
-    // Check 1: subagent_type / agent field exact match
     const subagentType = readString(input, 'subagent_type', 'agent')
     if (subagentType !== '' && guard.protectedSkills.has(subagentType)) {
       tel('delegation.blocked', { skill: subagentType, how: 'subagent_type' })
       return { block: true, reason: denyMessage(subagentType, 'subagent_type', subagentType) }
     }
 
-    // Check 2: prompt text contains delegation verbs without reference verbs
     const prompt = readString(input, 'prompt', 'task', 'description')
     if (prompt !== '') {
       const mentioned = [...guard.mentionPatterns.entries()]

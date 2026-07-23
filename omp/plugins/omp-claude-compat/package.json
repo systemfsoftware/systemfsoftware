@@ -18,7 +18,7 @@
   "scripts": {
     "clean": "rimraf dist",
     "build": "rimraf dist && tsdown",
-    "verify-dist": "node ../../scripts/check-dist-builtins.mjs --dist dist/index.js --expect node:path",
+    "verify-dist": "node ../../scripts/check-dist-builtins.mjs --dist dist/index.js --expect",
     "postbuild": "pnpm verify-dist",
     "typecheck": "tsc --noEmit --incremental",
     "test": "vitest run",
@@ -36,6 +36,7 @@
     "@effect/vitest": "catalog:",
     "@oh-my-pi/pi-coding-agent": "catalog:",
     "@systemfsoftware/omp-utils": "workspace:^",
+    "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@types/node": "catalog:",

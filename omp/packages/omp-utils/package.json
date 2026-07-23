@@ -24,6 +24,8 @@
     "lint": "oxlint . ${AGENT:+--format=unix --quiet}"
   },
   "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "@systemfsoftware/effect-memfs": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@types/node": "catalog:",
@@ -39,6 +41,8 @@
     }
   },
   "dependencies": {
-    "@std/toml": "catalog:"
+    "@effect/platform": "catalog:",
+    "@std/toml": "catalog:",
+    "effect": "catalog:"
   }
 }

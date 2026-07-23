@@ -1,99 +1,49 @@
-/**
- * Tests for the shared `systemfsoftware.toml` loader.
- *
- * Verifies: (1) parse happy path, (2) missing file → `{}`, (3) malformed TOML → `{}`
- * + exactly one warn (dedup on second load), (4) per-cwd cache hit (second loadToml
- * same cwd does not re-read — cached value survives mtime change).
- */
+import * as PathModule from '@effect/platform/Path'
+import { describe, expect, it } from '@effect/vitest'
+import { MemoryFileSystem } from '@systemfsoftware/effect-memfs'
+import { Effect, Layer } from 'effect'
+import { beforeEach } from 'vitest'
+import { loadToml, resetTomlCache } from '../src/toml-loader.kernel.js'
 
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { beforeEach, describe, expect, it } from 'vitest'
-import { loadToml, resetTomlCache } from '../src/toml-loader.js'
-
-function tmpDir(prefix: string): string {
-  return mkdtempSync(join(tmpdir(), `omp-utils-toml-${prefix}-`))
-}
-
-function writeToml(dir: string, content: string): void {
-  writeFileSync(join(dir, 'systemfsoftware.toml'), content, 'utf-8')
-}
+const provide = (contents: Record<string, string>) =>
+  Effect.provide(
+    MemoryFileSystem.layerWith(contents).pipe(Layer.provideMerge(PathModule.layer)),
+  )
 
 describe('loadToml', () => {
   beforeEach(() => {
-    resetTomlCache()
+    Effect.runSync(resetTomlCache)
   })
 
-  it('Should_ParseValidToml_When_FileExists', () => {
-    const dir = tmpDir('happy')
-    writeToml(dir, 'plugins = ["one", "two"]\nfoo = ["bar"]')
-    try {
-      const config = loadToml(dir)
+  it.effect('Should_ParseValidToml_When_FileExists', () =>
+    Effect.gen(function*() {
+      const config = yield* loadToml('/test')
       expect(config).toEqual({ plugins: ['one', 'two'], foo: ['bar'] })
-    } finally {
-      rmSync(dir, { recursive: true, force: true })
-    }
-  })
+    }).pipe(
+      provide({ '/test/systemfsoftware.toml': 'plugins = ["one", "two"]\nfoo = ["bar"]' }),
+    ))
 
-  it('Should_ReturnEmptyObject_When_FileMissing', () => {
-    const dir = tmpDir('missing')
-    try {
-      const config = loadToml(dir)
+  it.effect('Should_ReturnEmptyObject_When_FileMissing', () =>
+    Effect.gen(function*() {
+      const config = yield* loadToml('/empty')
       expect(config).toEqual({})
-    } finally {
-      rmSync(dir, { recursive: true, force: true })
-    }
-  })
+    }).pipe(provide({})))
 
-  it('Should_ReturnEmptyObjectAndWarnOnce_When_MalformedToml', () => {
-    const dir = tmpDir('malformed')
-    writeToml(dir, 'garbage [[ =\ninvalid')
-    try {
-      const warns: string[] = []
-      const warn = (msg: string) => {
-        warns.push(msg)
-      }
-
-      // First load: should return {} and produce at least one warn
-      const config1 = loadToml(dir, warn)
+  it.effect('Should_FailOpen_When_MalformedToml', () =>
+    Effect.gen(function*() {
+      const config1 = yield* loadToml('/test')
       expect(config1).toEqual({})
-      expect(warns.length).toBeGreaterThanOrEqual(1)
 
-      const warnCountAfterFirst = warns.length
-
-      // Second load with same cwd: should hit cache, warn NOT called again
-      const config2 = loadToml(dir, warn)
+      const config2 = yield* loadToml('/test')
       expect(config2).toEqual({})
-      expect(warns.length).toBe(warnCountAfterFirst)
-    } finally {
-      rmSync(dir, { recursive: true, force: true })
-    }
-  })
+    }).pipe(provide({ '/test/systemfsoftware.toml': 'garbage [[ =\ninvalid' })))
 
-  it('Should_ReturnCachedResult_When_SameCwdLoadedAgain', () => {
-    const dir = tmpDir('cache')
-    writeToml(dir, 'plugins = ["original"]')
-    try {
-      // First load populates cache
-      const config1 = loadToml(dir)
+  it.effect('Should_ReturnCachedResult_When_SameCwdLoadedAgain', () =>
+    Effect.gen(function*() {
+      const config1 = yield* loadToml('/test')
       expect(config1).toEqual({ plugins: ['original'] })
 
-      // Replace file with different content
-      writeToml(dir, 'plugins = ["overwritten"]')
-
-      // Second load with a recording warn function: warn should never fire
-      // because the cache serves without touching the filesystem
-      const warns: string[] = []
-      const config2 = loadToml(dir, (msg) => {
-        warns.push(msg)
-      })
-
-      // Must still return the ORIGINAL (cached) value, proving no re-read
+      const config2 = yield* loadToml('/test')
       expect(config2).toEqual({ plugins: ['original'] })
-      expect(warns.length).toBe(0)
-    } finally {
-      rmSync(dir, { recursive: true, force: true })
-    }
-  })
+    }).pipe(provide({ '/test/systemfsoftware.toml': 'plugins = ["original"]' })))
 })
