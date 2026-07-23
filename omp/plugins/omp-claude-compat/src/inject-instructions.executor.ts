@@ -1,6 +1,6 @@
 import { FileSystem } from '@effect/platform/FileSystem'
+import * as PathModule from '@effect/platform/Path'
 import { Effect, Either } from 'effect'
-import { dirname, isAbsolute, resolve, sep } from 'node:path'
 
 interface Ref {
   readonly sourcePath: string
@@ -9,16 +9,17 @@ interface Ref {
 
 const extractRefs = Effect.fn('extractRefs')(function*(content: string, baseDir: string, projectDir: string) {
   const fs = yield* FileSystem
+  const path = yield* PathModule.Path
   const refs: Ref[] = []
   for (const rawLine of content.split('\n')) {
     const noMarker = rawLine.trim().replace(/^[-*+]\s+/, '')
     if (!noMarker.startsWith('@')) continue
     const ref = noMarker.slice(1).trim()
     if (!ref || ref.includes(' ')) continue
-    if (isAbsolute(ref)) continue
+    if (path.isAbsolute(ref)) continue
 
-    const baseResolved = resolve(baseDir, ref)
-    const confinedBase = baseResolved.startsWith(projectDir + sep) || baseResolved === projectDir
+    const baseResolved = path.resolve(baseDir, ref)
+    const confinedBase = baseResolved.startsWith(projectDir + '/') || baseResolved === projectDir
 
     if (confinedBase) {
       const baseExists = yield* Effect.either(fs.exists(baseResolved))
@@ -28,8 +29,8 @@ const extractRefs = Effect.fn('extractRefs')(function*(content: string, baseDir:
       }
     }
 
-    const rootResolved = resolve(projectDir, ref)
-    const confinedRoot = rootResolved.startsWith(projectDir + sep) || rootResolved === projectDir
+    const rootResolved = path.resolve(projectDir, ref)
+    const confinedRoot = rootResolved.startsWith(projectDir + '/') || rootResolved === projectDir
     if (confinedRoot && rootResolved !== baseResolved) {
       refs.push({ sourcePath: projectDir, resolvedPath: rootResolved })
     }
@@ -39,9 +40,10 @@ const extractRefs = Effect.fn('extractRefs')(function*(content: string, baseDir:
 
 export const loadReferencedContent = Effect.fn('loadReferencedContent')(function*(projectDir: string) {
   const fs = yield* FileSystem
+  const path = yield* PathModule.Path
   const claudeMdPaths = [
-    resolve(projectDir, 'CLAUDE.md'),
-    resolve(projectDir, '.claude', 'CLAUDE.md'),
+    path.resolve(projectDir, 'CLAUDE.md'),
+    path.resolve(projectDir, '.claude', 'CLAUDE.md'),
   ]
 
   const allRefs: Ref[] = []
@@ -50,7 +52,7 @@ export const loadReferencedContent = Effect.fn('loadReferencedContent')(function
       fs.readFileString(filePath, 'utf-8'),
     )
     if (Either.isRight(content)) {
-      const refs = yield* extractRefs(content.right, dirname(filePath), projectDir)
+      const refs = yield* extractRefs(content.right, path.dirname(filePath), projectDir)
       allRefs.push(...refs)
     }
   }
