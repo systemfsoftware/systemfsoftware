@@ -49,6 +49,7 @@
   },
   "devDependencies": {
     "@effect/platform": "catalog:",
+    "@effect/vitest": "catalog:",
     "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
@@ -57,7 +58,8 @@
     "effect": "catalog:",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   },
   "peerDependencies": {
     "@effect/platform": "catalog:",
