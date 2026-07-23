@@ -725,6 +725,9 @@ importers:
       '@systemfsoftware/oxlint-plugin':
         specifier: workspace:^
         version: link:../oxlint-plugin
+      '@systemfsoftware/oxlint-plugin-test-hygiene':
+        specifier: workspace:^
+        version: link:../oxlint-plugin-test-hygiene
       oxlint:
         specifier: catalog:oxlint
         version: 1.74.0(oxlint-tsgolint@0.24.0)
@@ -740,6 +743,61 @@ importers:
         version: 6.1.3
 
   packages/oxlint-plugin:
+    dependencies:
+      '@oxc-project/types':
+        specifier: ^0.140.0
+        version: 0.140.0
+      '@oxlint/plugins':
+        specifier: catalog:oxlint
+        version: 1.74.0
+      effect:
+        specifier: 'catalog:'
+        version: 3.22.0
+    devDependencies:
+      '@microsoft/api-extractor':
+        specifier: 'catalog:'
+        version: 7.58.9(@types/node@24.13.2)
+      '@stryker-mutator/vitest-runner':
+        specifier: catalog:stryker
+        version: 9.6.1(@stryker-mutator/core@9.6.1(@types/node@24.13.2))(vitest@4.1.9)
+      '@systemfsoftware/arethetypeswrong-cli':
+        specifier: workspace:^
+        version: link:../arethetypeswrong/cli
+      '@systemfsoftware/stryker-js-core':
+        specifier: workspace:^
+        version: link:../stryker-js/core
+      '@systemfsoftware/stryker-js-typescript-checker':
+        specifier: workspace:^
+        version: link:../stryker-js/typescript-checker
+      '@systemfsoftware/tsconfig':
+        specifier: workspace:^
+        version: link:../tsconfig
+      '@systemfsoftware/vitest-config':
+        specifier: workspace:^
+        version: link:../vitest-config
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.2
+      '@vitest/coverage-v8':
+        specifier: 'catalog:'
+        version: 4.1.9(vitest@4.1.9)
+      oxlint:
+        specifier: catalog:oxlint
+        version: 1.74.0(oxlint-tsgolint@0.24.0)
+      rimraf:
+        specifier: 'catalog:'
+        version: 6.1.3
+      tsdown:
+        specifier: 'catalog:'
+        version: 0.22.9(typescript@7.0.2)(unrun@0.2.39)
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/coverage-v8@4.1.9)(vite@7.3.5(@types/node@24.13.2)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0))
+
+  packages/oxlint-plugin-test-hygiene:
     dependencies:
       '@oxc-project/types':
         specifier: ^0.140.0

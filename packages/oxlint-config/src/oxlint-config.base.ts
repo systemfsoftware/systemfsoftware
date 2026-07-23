@@ -11,7 +11,7 @@ export default defineConfig({
 
   plugins: ['typescript', 'import', 'jsdoc', 'node', 'promise', 'vitest', 'unicorn'],
 
-  jsPlugins: ['@systemfsoftware/oxlint-plugin'],
+  jsPlugins: ['@systemfsoftware/oxlint-plugin', '@systemfsoftware/oxlint-plugin-test-hygiene'],
 
   rules: {
     'no-console': 'off',
@@ -37,8 +37,8 @@ export default defineConfig({
     '@systemfsoftware/oxlint-plugin/no-native-set-in-effect': 'error',
     '@systemfsoftware/oxlint-plugin/no-native-setinterval-in-effect': 'error',
     '@systemfsoftware/oxlint-plugin/no-native-settimeout-in-effect': 'error',
-    '@systemfsoftware/oxlint-plugin/damp-test-naming': 'error',
-    '@systemfsoftware/oxlint-plugin/pbt-naming': 'error',
+    '@systemfsoftware/oxlint-plugin-test-hygiene/damp-test-naming': 'error',
+    '@systemfsoftware/oxlint-plugin-test-hygiene/pbt-naming': 'error',
     '@systemfsoftware/oxlint-plugin/policy-no-domain-imports': 'error',
     '@systemfsoftware/oxlint-plugin/no-new-worker-with-wasm-import': 'error',
     '@systemfsoftware/oxlint-plugin/no-barrels': 'off',

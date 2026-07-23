@@ -9,7 +9,6 @@ import { banEffectSchemaImports } from './rules/ban-@-effect-schema-imports.js'
 import { banClasses } from './rules/ban-classes.js'
 import { banDataTaggedError } from './rules/ban-data-taggederror.js'
 import { banErrorString } from './rules/ban-error-string.js'
-import { dampTestNaming } from './rules/damp-test-naming.js'
 import { noBarrels } from './rules/no-barrels.js'
 import { noBodylessStatusAssertion } from './rules/no-bodyless-status-assertion.js'
 import { noContextGenericTag } from './rules/no-context-generic-tag.js'
@@ -26,7 +25,6 @@ import { noNativeSetIntervalInEffect } from './rules/no-native-setinterval-in-ef
 import { noNativeSetTimeoutInEffect } from './rules/no-native-settimeout-in-effect.js'
 import { noNewPromiseInEffect } from './rules/no-new-promise-in-effect.js'
 import { noNewWorkerWithWasmImport } from './rules/no-new-worker-with-wasm-import.js'
-import { pbtNaming } from './rules/pbt-naming.js'
 import { policyNoDomainImports } from './rules/policy-no-domain-imports.js'
 
 const PLUGIN_NAME = '@systemfsoftware/oxlint-plugin'
@@ -40,8 +38,6 @@ export default {
     'ban-data-taggederror': banDataTaggedError,
     'ban-effect-schema-imports': banEffectSchemaImports,
     'ban-error-string': banErrorString,
-    'damp-test-naming': dampTestNaming,
-    'pbt-naming': pbtNaming,
     'policy-no-domain-imports': policyNoDomainImports,
     'no-barrels': noBarrels,
     'no-bodyless-status-assertion': noBodylessStatusAssertion,

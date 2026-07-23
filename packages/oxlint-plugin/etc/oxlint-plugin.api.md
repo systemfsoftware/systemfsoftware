@@ -16,8 +16,6 @@ const _default: {
         'ban-data-taggederror': Rule;
         'ban-effect-schema-imports': Rule;
         'ban-error-string': Rule;
-        'damp-test-naming': Rule;
-        'pbt-naming': Rule;
         'policy-no-domain-imports': Rule;
         'no-barrels': Rule;
         'no-bodyless-status-assertion': Rule;
