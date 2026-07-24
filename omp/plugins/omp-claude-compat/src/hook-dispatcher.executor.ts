@@ -1,7 +1,6 @@
 import { Command } from '@effect/platform'
 import { CommandExecutor } from '@effect/platform/CommandExecutor'
 import { FileSystem } from '@effect/platform/FileSystem'
-import * as PathModule from '@effect/platform/Path'
 import type {
   ExtensionContext,
   InputEvent,
@@ -36,7 +35,7 @@ interface ResolvedCommand {
   readonly args: readonly string[]
 }
 
-function resolveCommandPath(command: string, cwd: string, path: PathModule.Path): ResolvedCommand {
+function resolveCommandPath(command: string, cwd: string): ResolvedCommand {
   const expanded = command
     .replace(/"\$OMP_PROJECT_DIR"|'\$OMP_PROJECT_DIR'/g, JSON.stringify(cwd))
     .replace(/"\$\{OMP_PROJECT_DIR\}"|'\$\{OMP_PROJECT_DIR\}'/g, JSON.stringify(cwd))
@@ -46,13 +45,6 @@ function resolveCommandPath(command: string, cwd: string, path: PathModule.Path)
     .replace(/\$CLAUDE_PROJECT_DIR|\$\{CLAUDE_PROJECT_DIR\}/g, JSON.stringify(cwd))
   const trimmed = expanded.trim()
   const unquoted = trimmed.startsWith('"') && trimmed.endsWith('"') ? trimmed.slice(1, -1) : trimmed
-
-  const pathPart = unquoted.split(/\s+/)[0] ?? ''
-  if (pathPart.endsWith('.ts')) {
-    const scriptPath = pathPart.replaceAll('"', '').replaceAll("'", '')
-    return { cmd: 'bun', args: [path.resolve(cwd, scriptPath)] }
-  }
-
   return { cmd: 'sh', args: ['-c', unquoted] }
 }
 
@@ -84,8 +76,7 @@ export const runHookScript = Effect.fn('runHookScript')(function*(
   timeoutMs: number,
 ) {
   const executor = yield* CommandExecutor
-  const path = yield* PathModule.Path
-  const { cmd, args } = resolveCommandPath(command, cwd, path)
+  const { cmd, args } = resolveCommandPath(command, cwd)
   const stdinText = JSON.stringify(input)
 
   const hookCommand = Command.make(cmd, ...args).pipe(

@@ -6,12 +6,7 @@ import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer } from 'effect'
 import { expect } from 'vitest'
-import {
-  HookDispatcherExecutorDeps,
-  loadSettings,
-  runHookScript,
-  runPreToolUseHooks,
-} from '../src/hook-dispatcher.executor.js'
+import { HookDispatcherExecutorDeps, loadSettings, runPreToolUseHooks } from '../src/hook-dispatcher.executor.js'
 
 const Feature = makeFeature({ it, layer })
 
@@ -238,56 +233,6 @@ Feature('Hook dispatcher — PreToolUse hook execution')
           Effect.sync(() => {
             expect(s.result).toBeDefined()
             expect(s.result?.block).toBe(true)
-          })
-        ),
-      ),
-    )
-  })
-
-Feature('Hook dispatcher — TypeScript hook path resolution')
-  .withLayer(testLayer)
-  .body(({ scenario }) => {
-    scenario(
-      'Should execute a TypeScript hook addressed with a double-quoted project-dir variable',
-      Gherkin.Do.pipe(
-        Given('a directory with a TypeScript marker hook')('dir', (_s) =>
-          Effect.gen(function*() {
-            const fs = yield* FileSystem
-            const dir = yield* fs.makeTempDirectoryScoped()
-            yield* fs.writeFileString(`${dir}/marker.ts`, `console.log('quoted-form-ok')\n`)
-            return dir
-          })),
-        When('runHookScript is called with a double-quoted variable command')(
-          'result',
-          (s) => runHookScript('"$CLAUDE_PROJECT_DIR"/marker.ts', {}, s.dir, 30_000),
-        ),
-        Then('the hook should run and print its marker')((s) =>
-          Effect.sync(() => {
-            expect(s.result.code).toBe(0)
-            expect(s.result.stdout.trim()).toBe('quoted-form-ok')
-          })
-        ),
-      ),
-    )
-
-    scenario(
-      'Should execute a TypeScript hook addressed with a single-quoted project-dir variable',
-      Gherkin.Do.pipe(
-        Given('a directory with a TypeScript marker hook')('dir', (_s) =>
-          Effect.gen(function*() {
-            const fs = yield* FileSystem
-            const dir = yield* fs.makeTempDirectoryScoped()
-            yield* fs.writeFileString(`${dir}/marker.ts`, `console.log('single-quoted-form-ok')\n`)
-            return dir
-          })),
-        When('runHookScript is called with a single-quoted variable command')(
-          'result',
-          (s) => runHookScript(`'$CLAUDE_PROJECT_DIR'/marker.ts`, {}, s.dir, 30_000),
-        ),
-        Then('the hook should run and print its marker')((s) =>
-          Effect.sync(() => {
-            expect(s.result.code).toBe(0)
-            expect(s.result.stdout.trim()).toBe('single-quoted-form-ok')
           })
         ),
       ),
