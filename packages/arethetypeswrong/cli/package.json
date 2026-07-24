@@ -1,6 +1,6 @@
 {
   "name": "@systemfsoftware/arethetypeswrong-cli",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "A CLI tool for arethetypeswrong.github.io — forked under systemfsoftware",
   "author": "Andrew Branch & ej-shafran (forked by systemfsoftware)",
   "license": "MIT",
