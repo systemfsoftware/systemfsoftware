@@ -36,10 +36,17 @@ export interface HookSettings {
     readonly PreToolUse: readonly HookEntry[]
     readonly PostToolUse: readonly HookEntry[]
   }
+  readonly disableAllHooks?: boolean
 }
 
-const SettingsWrapped = S.Struct({ hooks: HookGroups })
-const SettingsFlat = HookGroups
+const SettingsWrapped = S.Struct({
+  hooks: HookGroups,
+  disableAllHooks: S.optional(S.Boolean),
+})
+const SettingsFlat = S.Struct({
+  ...HookGroups.fields,
+  disableAllHooks: S.optional(S.Boolean),
+})
 const SettingsJSON = S.Union(SettingsWrapped, SettingsFlat)
 
 const decodeSettings = S.decodeUnknownEither(SettingsJSON)
@@ -47,6 +54,44 @@ const decodeSettings = S.decodeUnknownEither(SettingsJSON)
 export function parseSettings(json: unknown) {
   return Either.map(
     decodeSettings(json),
-    (s) => ('hooks' in s ? s : { hooks: s } as HookSettings),
+    (s): HookSettings => {
+      if ('hooks' in s) {
+        return s as HookSettings
+      }
+      // Flat case: move hook groups under hooks, preserve disableAllHooks at top
+      const { disableAllHooks: d, ...hookGroups } = s as typeof s & { disableAllHooks?: boolean }
+      return { hooks: hookGroups as HookSettings['hooks'], disableAllHooks: d } as unknown as HookSettings
+    },
   )
+}
+
+const ALL_HOOK_EVENTS = ['PreToolUse', 'PostToolUse', 'UserPromptSubmit', 'SessionStart', 'SessionEnd', 'Stop'] as const
+type HookEvent = typeof ALL_HOOK_EVENTS[number]
+
+export function mergeSettings(settings: readonly HookSettings[]): HookSettings {
+  const merged: { hooks: Partial<Record<HookEvent, HookEntry[]>>; disableAllHooks?: boolean } = {
+    hooks: {
+      PreToolUse: [],
+      PostToolUse: [],
+      UserPromptSubmit: [],
+      SessionStart: [],
+      SessionEnd: [],
+      Stop: [],
+    },
+  }
+
+  for (const s of settings) {
+    for (const event of ALL_HOOK_EVENTS) {
+      merged.hooks[event] = (merged.hooks[event] ?? []).concat(Array.from(s.hooks[event]))
+    }
+    if (s.disableAllHooks !== undefined) {
+      merged.disableAllHooks = s.disableAllHooks
+    }
+  }
+
+  return merged as unknown as HookSettings
+}
+
+export function isHooksDisabled(settings: HookSettings): boolean {
+  return settings.disableAllHooks === true
 }

@@ -1,0 +1,169 @@
+import { NodeCommandExecutor, NodeFileSystem } from '@effect/platform-node'
+import { FileSystem } from '@effect/platform/FileSystem'
+import * as PathModule from '@effect/platform/Path'
+import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Effect, Layer } from 'effect'
+import { expect } from 'vitest'
+import { HookDispatcherExecutorDeps, loadSettingsWithPaths } from '../src/hook-dispatcher.executor.js'
+
+const Feature = makeFeature({ it, layer })
+
+const noTel = () => {}
+const telLayer = Layer.succeed(HookDispatcherExecutorDeps, { tel: noTel })
+const testLayer = NodeCommandExecutor.layer.pipe(
+  Layer.provideMerge(NodeFileSystem.layer),
+  Layer.provideMerge(telLayer),
+  Layer.provideMerge(PathModule.layer),
+)
+
+function writeSettingsFile(
+  dir: string,
+  filename: string,
+  hooks: Record<string, unknown>,
+): Effect.Effect<void, never, FileSystem.FileSystem> {
+  return Effect.gen(function*() {
+    const fs = yield* FileSystem
+    yield* fs.makeDirectory(`${dir}/.claude`, { recursive: true })
+    yield* fs.writeFileString(`${dir}/.claude/${filename}`, JSON.stringify({ hooks }, null, 2))
+  })
+}
+
+Feature('Multi-level hook settings loading')
+  .withLayer(testLayer)
+  .body(({ scenario }) => {
+    scenario(
+      'Hooks from user and project scope concatenate',
+      Gherkin.Do.pipe(
+        Given('a base directory')('base', (_s) =>
+          Effect.gen(function*() {
+            const fs = yield* FileSystem
+            return yield* fs.makeTempDirectoryScoped()
+          })),
+        Given('settings exist in user scope and project scope')('paths', (s) =>
+          Effect.gen(function*() {
+            const fs = yield* FileSystem
+            const userDir = `${s.base}/user`
+            const projectDir = `${s.base}/project`
+            yield* fs.makeDirectory(userDir, { recursive: true })
+            yield* fs.makeDirectory(projectDir, { recursive: true })
+            yield* writeSettingsFile(userDir, 'settings.json', {
+              PreToolUse: [{ matcher: 'Read', hooks: [{ type: 'command', command: '/user-hook.sh' }] }],
+            })
+            yield* writeSettingsFile(projectDir, 'settings.json', {
+              PreToolUse: [{ matcher: 'Write', hooks: [{ type: 'command', command: '/project-hook.sh' }] }],
+            })
+            return [
+              `${userDir}/.claude/settings.json`,
+              `${projectDir}/.claude/settings.json`,
+            ]
+          })),
+        When('loadSettingsWithPaths is called with those paths')('result', (s) => loadSettingsWithPaths(s.paths)),
+        Then('the merged settings should contain two PreToolUse hooks')((s) =>
+          Effect.sync(() => {
+            expect(s.result).not.toBeNull()
+            expect(s.result!.hooks.PreToolUse).toHaveLength(2)
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'disableAllHooks from higher-priority scope takes precedence',
+      Gherkin.Do.pipe(
+        Given('a base directory')('base', (_s) =>
+          Effect.gen(function*() {
+            const fs = yield* FileSystem
+            return yield* fs.makeTempDirectoryScoped()
+          })),
+        Given('project scope has disableAllHooks false and local has true')('paths', (s) =>
+          Effect.gen(function*() {
+            const fs = yield* FileSystem
+            const projectDir = `${s.base}/project`
+            const localDir = `${s.base}/local`
+            yield* fs.makeDirectory(projectDir, { recursive: true })
+            yield* fs.makeDirectory(localDir, { recursive: true })
+            yield* writeSettingsFile(projectDir, 'settings.json', {
+              PreToolUse: [{ matcher: 'Write', hooks: [{ type: 'command', command: '/hook.sh' }] }],
+            })
+            yield* fs.makeDirectory(`${localDir}/.claude`, { recursive: true })
+            yield* fs.writeFileString(
+              `${localDir}/.claude/settings.local.json`,
+              JSON.stringify({ hooks: {}, disableAllHooks: true }),
+            )
+            return [
+              `${projectDir}/.claude/settings.json`,
+              `${localDir}/.claude/settings.local.json`,
+            ]
+          })),
+        When('loadSettingsWithPaths is called')('result', (s) => loadSettingsWithPaths(s.paths)),
+        Then('disableAllHooks should be true')((s) =>
+          Effect.sync(() => {
+            expect(s.result).not.toBeNull()
+            expect(s.result!.disableAllHooks).toBe(true)
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'Missing settings files are silently skipped',
+      Gherkin.Do.pipe(
+        Given('a directory with a settings file')('dir', (_s) =>
+          Effect.gen(function*() {
+            const fs = yield* FileSystem
+            const dir = yield* fs.makeTempDirectoryScoped()
+            yield* writeSettingsFile(dir, 'settings.json', {
+              PreToolUse: [{ matcher: 'Write', hooks: [{ type: 'command', command: '/hook.sh' }] }],
+            })
+            return dir
+          })),
+        When('loadSettingsWithPaths is called with an existing and a missing path')(
+          'result',
+          (s) =>
+            loadSettingsWithPaths([
+              `${s.dir}/.claude/settings.json`,
+              `${s.dir}/.claude/settings.local.json`,
+            ]),
+        ),
+        Then('the result should contain hooks from the existing file')((s) =>
+          Effect.sync(() => {
+            expect(s.result).not.toBeNull()
+            expect(s.result!.hooks.PreToolUse).toHaveLength(1)
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'Invalid JSON in one file does not prevent loading the other',
+      Gherkin.Do.pipe(
+        Given('a directory with two settings files, one invalid')('dir', (_s) =>
+          Effect.gen(function*() {
+            const fs = yield* FileSystem
+            const dir = yield* fs.makeTempDirectoryScoped()
+            yield* fs.makeDirectory(`${dir}/.claude`, { recursive: true })
+            yield* fs.writeFileString(`${dir}/.claude/bad.json`, 'not valid json')
+            yield* fs.writeFileString(
+              `${dir}/.claude/good.json`,
+              JSON.stringify({
+                hooks: {
+                  PreToolUse: [{ matcher: 'Write', hooks: [{ type: 'command', command: '/hook.sh' }] }],
+                },
+              }),
+            )
+            return dir
+          })),
+        When('loadSettingsWithPaths is called with both paths')(
+          'result',
+          (s) => loadSettingsWithPaths([`${s.dir}/.claude/bad.json`, `${s.dir}/.claude/good.json`]),
+        ),
+        Then('the result should have hooks from the valid file')((s) =>
+          Effect.sync(() => {
+            expect(s.result).not.toBeNull()
+            expect(s.result!.hooks.PreToolUse).toHaveLength(1)
+          })
+        ),
+      ),
+    )
+  })

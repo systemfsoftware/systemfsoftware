@@ -99,6 +99,7 @@ export const HookDispatcherTask = (pi: ExtensionAPI): Layer.Layer<never> =>
         runSafe(Effect.gen(function*() {
           const settings = yield* loadSettings(ctx.cwd)
           if (!settings) return undefined
+          if (settings.disableAllHooks) return undefined
           yield* runLifecycleHooks(settings.hooks.SessionEnd, ctx)
           return undefined
         })))
@@ -107,6 +108,7 @@ export const HookDispatcherTask = (pi: ExtensionAPI): Layer.Layer<never> =>
         runSafe(Effect.gen(function*() {
           const settings = yield* loadSettings(ctx.cwd)
           if (!settings) return undefined
+          if (settings.disableAllHooks) return undefined
           yield* runLifecycleHooks(settings.hooks.Stop, ctx)
           return undefined
         })))

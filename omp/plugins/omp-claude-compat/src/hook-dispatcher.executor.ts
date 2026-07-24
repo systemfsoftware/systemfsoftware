@@ -16,12 +16,13 @@ import {
   sessionIds,
 } from '@systemfsoftware/omp-utils'
 import type { TelemetryEmitter } from '@systemfsoftware/omp-utils'
-import { Context, Effect, Either, Match, Option, Stream } from 'effect'
+import { Context, Effect, Either, Match, Option, Schema as S, Stream } from 'effect'
+import { homedir } from 'node:os'
 import { Blocked, Continue, Warning } from './hook-dispatcher.schema.js'
 import type { HookOutcome, HookResult } from './hook-dispatcher.schema.js'
 
 import { parseHookOutput } from './hook-output.acl.js'
-import { parseSettings } from './hook-settings.acl.js'
+import { isHooksDisabled, mergeSettings, parseSettings } from './hook-settings.acl.js'
 import type { HookEntry, HookSettings } from './hook-settings.acl.js'
 import { interpretHookResult } from './hook-verdict.workflow.js'
 
@@ -52,21 +53,37 @@ function hookNameFromCommand(command: string): string {
   return command.split(/[\\/]/).pop() ?? command
 }
 
-export const loadSettings = Effect.fn('loadSettings')(function*(cwd: string) {
+const loadSettingsFile = Effect.fn('loadSettingsFile')(function*(path: string) {
   const fs = yield* FileSystem
-  const settingsPath = `${cwd}/.claude/settings.json`
-  const content = yield* fs.readFileString(settingsPath).pipe(Effect.catchAll(() => Effect.succeed('')))
-
+  const content = yield* fs.readFileString(path).pipe(Effect.catchAll(() => Effect.succeed('')))
   if (content === '') return null
-
-  const json = yield* Effect.try({
-    try: () => JSON.parse(content) as unknown,
-    catch: () => null,
-  })
-  if (json === null) return null
-
+  const jsonOrError = S.decodeUnknownEither(S.parseJson(S.Record({ key: S.String, value: S.Unknown })))(content)
+  if (Either.isLeft(jsonOrError)) return null
+  const json = jsonOrError.right
   const either = parseSettings(json)
   return Either.isLeft(either) ? null : either.right
+})
+
+export const loadSettings = Effect.fn('loadSettings')(function*(cwd: string) {
+  const paths = [
+    `${homedir()}/.claude/settings.json`,
+    `${cwd}/.claude/settings.json`,
+    `${cwd}/.claude/settings.local.json`,
+    '/etc/claude-code/managed-settings.json',
+  ] as const
+  return yield* loadSettingsWithPaths(paths)
+})
+
+export const loadSettingsWithPaths = Effect.fn('loadSettingsWithPaths')(function*(
+  paths: readonly string[],
+) {
+  const results: HookSettings[] = []
+  for (const p of paths) {
+    const s = yield* loadSettingsFile(p)
+    if (s !== null) results.push(s)
+  }
+  if (results.length === 0) return null
+  return mergeSettings(results)
 })
 
 export const runHookScript = Effect.fn('runHookScript')(function*(
@@ -224,6 +241,7 @@ export const runPreToolUseHooks = Effect.fn('runPreToolUseHooks')(function*(
   ctx: ExtensionContext,
 ) {
   const { tel } = yield* HookDispatcherExecutorDeps
+  if (isHooksDisabled(settings)) return undefined
   const claudeToolName = normalizeToolName(event.toolName)
   const sessionData = sessionIds(() => ctx.sessionManager.getSessionId())
   const input: Record<string, unknown> = {
@@ -294,6 +312,7 @@ export const runPostToolUseHooks = Effect.fn('runPostToolUseHooks')(function*(
   ctx: ExtensionContext,
 ) {
   const claudeToolName = normalizeToolName(event.toolName)
+  if (isHooksDisabled(settings)) return undefined
   const input: Record<string, unknown> = {
     ...sessionIds(() => ctx.sessionManager.getSessionId()),
     tool_name: claudeToolName,
@@ -312,6 +331,7 @@ export const runUserPromptSubmitHooks = Effect.fn('runUserPromptSubmitHooks')(fu
   ctx: ExtensionContext,
 ) {
   const entries = settings.hooks.UserPromptSubmit
+  if (isHooksDisabled(settings)) return undefined
   if (entries.length === 0) return undefined
 
   const cwd = ctx.cwd
@@ -351,6 +371,7 @@ export const runSessionStartHooks = Effect.fn('runSessionStartHooks')(function*(
   ctx: ExtensionContext,
 ) {
   const { tel } = yield* HookDispatcherExecutorDeps
+  if (isHooksDisabled(settings)) return
   const entries = settings.hooks.SessionStart
   if (entries.length === 0) return
 

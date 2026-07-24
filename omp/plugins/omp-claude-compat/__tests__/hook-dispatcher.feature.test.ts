@@ -6,7 +6,11 @@ import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer } from 'effect'
 import { expect } from 'vitest'
-import { HookDispatcherExecutorDeps, loadSettings, runPreToolUseHooks } from '../src/hook-dispatcher.executor.js'
+import {
+  HookDispatcherExecutorDeps,
+  loadSettingsWithPaths,
+  runPreToolUseHooks,
+} from '../src/hook-dispatcher.executor.js'
 
 const Feature = makeFeature({ it, layer })
 
@@ -75,7 +79,10 @@ Feature('Hook dispatcher — settings loading')
             const fs = yield* FileSystem
             return yield* fs.makeTempDirectoryScoped()
           })),
-        When('loadSettings is called')('result', (s) => loadSettings(s.dir)),
+        When('loadSettingsWithPaths is called with non-existent path')(
+          'result',
+          (s) => loadSettingsWithPaths([`${s.dir}/.claude/settings.json`]),
+        ),
         Then('the result should be null')((s) =>
           Effect.sync(() => {
             expect(s.result).toBeNull()
@@ -96,7 +103,10 @@ Feature('Hook dispatcher — settings loading')
             })
             return dir
           })),
-        When('loadSettings is called')('result', (s) => loadSettings(s.dir)),
+        When('loadSettingsWithPaths is called with settings path')(
+          'result',
+          (s) => loadSettingsWithPaths([`${s.dir}/.claude/settings.json`]),
+        ),
         Then('the settings should contain one PreToolUse hook')((s) =>
           Effect.sync(() => {
             expect(s.result).not.toBeNull()
@@ -125,7 +135,7 @@ Feature('Hook dispatcher — PreToolUse hook execution')
           })),
         When('runPreToolUseHooks is called for a Write tool call')('result', (s) =>
           Effect.gen(function*() {
-            const settings = yield* loadSettings(s.dir.dir)
+            const settings = yield* loadSettingsWithPaths([`${s.dir.dir}/.claude/settings.json`])
             expect(settings).not.toBeNull()
             return yield* runPreToolUseHooks(
               settings!,
@@ -156,7 +166,7 @@ Feature('Hook dispatcher — PreToolUse hook execution')
           })),
         When('runPreToolUseHooks is called for a Write tool call')('result', (s) =>
           Effect.gen(function*() {
-            const settings = yield* loadSettings(s.dir.dir)
+            const settings = yield* loadSettingsWithPaths([`${s.dir.dir}/.claude/settings.json`])
             expect(settings).not.toBeNull()
             return yield* runPreToolUseHooks(
               settings!,
@@ -190,7 +200,7 @@ Feature('Hook dispatcher — PreToolUse hook execution')
           })),
         When('runPreToolUseHooks is called for a Write tool call')('result', (s) =>
           Effect.gen(function*() {
-            const settings = yield* loadSettings(s.dir.dir)
+            const settings = yield* loadSettingsWithPaths([`${s.dir.dir}/.claude/settings.json`])
             expect(settings).not.toBeNull()
             return yield* runPreToolUseHooks(
               settings!,
@@ -221,7 +231,7 @@ Feature('Hook dispatcher — PreToolUse hook execution')
           })),
         When('runPreToolUseHooks is called for a Bash tool call')('result', (s) =>
           Effect.gen(function*() {
-            const settings = yield* loadSettings(s.dir.dir)
+            const settings = yield* loadSettingsWithPaths([`${s.dir.dir}/.claude/settings.json`])
             expect(settings).not.toBeNull()
             return yield* runPreToolUseHooks(
               settings!,
