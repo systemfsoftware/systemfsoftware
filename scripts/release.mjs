@@ -47,7 +47,7 @@ const presetConfig = {
   ],
 }
 
-const packagesRoots = [join(repoRoot, 'packages'), join(repoRoot, 'omp', 'packages')]
+const packagesRoots = [join(repoRoot, 'packages'), join(repoRoot, 'omp', 'packages'), join(repoRoot, 'omp', 'plugins')]
 
 /**
  * Recursively discover publishable packages under `root`.
