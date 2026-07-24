@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/omp-claude-compat",
   "license": "MIT",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "description": "OMP Claude Code compatibility: dispatch .claude/settings.json hooks + inject CLAUDE.md @-references",
   "type": "module",
@@ -34,9 +34,9 @@
   "devDependencies": {
     "@effect/vitest": "catalog:",
     "@oh-my-pi/pi-coding-agent": "catalog:",
-    "@systemfsoftware/omp-utils": "workspace:^",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/effect-memfs": "workspace:^",
+    "@systemfsoftware/omp-utils": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@types/node": "catalog:",
