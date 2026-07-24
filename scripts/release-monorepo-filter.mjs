@@ -16,12 +16,18 @@ const filesInCommit = (hash, root) =>
     .filter(Boolean)
     .filter((f) => !f.startsWith('repos/'))
 
+const repoScope = /^[a-z]+\(repo\):/i
+
 const commitsForPackage = (context) => {
   const root = repoRoot()
   const packagePath = `${relative(root, context.cwd)}/`
-  return context.commits.filter((commit) =>
-    filesInCommit(commit.hash, root).some((file) => file.startsWith(packagePath))
-  )
+  return context.commits.filter((commit) => {
+    // 1. Direct file match — current behavior
+    if (filesInCommit(commit.hash, root).some((file) => file.startsWith(packagePath))) return true
+    // 2. Repo-wide scope — release for all packages
+    if (repoScope.test(commit.subject)) return true
+    return false
+  })
 }
 
 export const analyzeCommits = (pluginConfig, context) =>
