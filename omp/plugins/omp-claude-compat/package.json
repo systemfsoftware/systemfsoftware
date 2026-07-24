@@ -37,6 +37,7 @@
     "@oh-my-pi/pi-coding-agent": "catalog:",
     "@systemfsoftware/omp-utils": "workspace:^",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
+    "@systemfsoftware/effect-memfs": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@types/node": "catalog:",

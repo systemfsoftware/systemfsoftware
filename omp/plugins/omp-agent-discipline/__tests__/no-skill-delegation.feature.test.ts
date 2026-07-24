@@ -2,16 +2,22 @@ import * as PathModule from '@effect/platform/Path'
 import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { MemoryFileSystem } from '@systemfsoftware/effect-memfs'
-import { resetTomlCache } from '@systemfsoftware/omp-utils'
+import { TomlLoaderLive } from '@systemfsoftware/omp-utils'
 import { Effect, Layer } from 'effect'
 import { expect } from 'vitest'
-import { loadGuard, resetGuardCache } from '../src/no-skill-delegation.handler.js'
+import { loadGuard } from '../src/no-skill-delegation.handler.js'
+import { GuardCacheLive } from '../src/runtime.js'
 
 const Feature = makeFeature({ it, layer })
 
 function seededLayer(contents: Record<string, string>) {
-  return MemoryFileSystem.layerWith(contents).pipe(
-    Layer.provideMerge(PathModule.layer),
+  return Layer.mergeAll(
+    PathModule.layer,
+    GuardCacheLive,
+    TomlLoaderLive.pipe(
+      Layer.provide(MemoryFileSystem.layerWith(contents)),
+      Layer.provide(PathModule.layer),
+    ),
   )
 }
 
@@ -19,11 +25,6 @@ function tomlConfig(skills: readonly string[]) {
   const list = skills.map((s) => `"${s}"`).join(', ')
   return { '/test/systemfsoftware.toml': `no_delegate_skills = [${list}]` }
 }
-
-const resetCaches = Effect.gen(function*() {
-  yield* resetTomlCache
-  resetGuardCache()
-})
 
 // ── Guard compilation ──
 
@@ -34,7 +35,7 @@ Feature('No-skill-delegation — guard compilation')
       { scenarioLayer: seededLayer(tomlConfig(['ce-work'])) },
       Gherkin.Do.pipe(
         Given('a toml config listing one protected skill')('cwd', () => Effect.succeed('/test')),
-        When('loadGuard is called')('guard', (s) => resetCaches.pipe(Effect.flatMap(() => loadGuard(s.cwd)))),
+        When('loadGuard is called')('guard', (s) => loadGuard(s.cwd)),
         Then('the guard should protect ce-work with 16 delegate and 4 reference verbs')((s) =>
           Effect.sync(() => {
             expect(s.guard).not.toBeNull()
@@ -51,7 +52,7 @@ Feature('No-skill-delegation — guard compilation')
       { scenarioLayer: seededLayer(tomlConfig(['ce-work', 'ce-plan', 'lfg'])) },
       Gherkin.Do.pipe(
         Given('a toml config listing multiple protected skills')('cwd', () => Effect.succeed('/test')),
-        When('loadGuard is called')('guard', (s) => resetCaches.pipe(Effect.flatMap(() => loadGuard(s.cwd)))),
+        When('loadGuard is called')('guard', (s) => loadGuard(s.cwd)),
         Then('the guard should protect all configured skills')((s) =>
           Effect.sync(() => {
             expect(s.guard).not.toBeNull()
@@ -66,7 +67,7 @@ Feature('No-skill-delegation — guard compilation')
       { scenarioLayer: seededLayer(tomlConfig([])) },
       Gherkin.Do.pipe(
         Given('a toml config with an empty skills list')('cwd', () => Effect.succeed('/test')),
-        When('loadGuard is called')('guard', (s) => resetCaches.pipe(Effect.flatMap(() => loadGuard(s.cwd)))),
+        When('loadGuard is called')('guard', (s) => loadGuard(s.cwd)),
         Then('the guard should be null')((s) =>
           Effect.sync(() => {
             expect(s.guard).toBeNull()
@@ -80,7 +81,7 @@ Feature('No-skill-delegation — guard compilation')
       { scenarioLayer: seededLayer({}) },
       Gherkin.Do.pipe(
         Given('no toml config file exists')('cwd', () => Effect.succeed('/test')),
-        When('loadGuard is called')('guard', (s) => resetCaches.pipe(Effect.flatMap(() => loadGuard(s.cwd)))),
+        When('loadGuard is called')('guard', (s) => loadGuard(s.cwd)),
         Then('the guard should be null')((s) =>
           Effect.sync(() => {
             expect(s.guard).toBeNull()
@@ -94,10 +95,10 @@ Feature('No-skill-delegation — guard compilation')
       { scenarioLayer: seededLayer(tomlConfig(['ce-work'])) },
       Gherkin.Do.pipe(
         Given('a toml config exists for /test')('cwd', () => Effect.succeed('/test')),
-        When('loadGuard is called twice for the same cwd')('guards', (s) =>
-          resetCaches.pipe(
-            Effect.flatMap(() => Effect.all([loadGuard(s.cwd), loadGuard(s.cwd)])),
-          )),
+        When('loadGuard is called twice for the same cwd')(
+          'guards',
+          (s) => Effect.all([loadGuard(s.cwd), loadGuard(s.cwd)]),
+        ),
         Then('both calls should return the same guard instance')((s) =>
           Effect.sync(() => {
             expect(s.guards[0]).toBe(s.guards[1])
@@ -117,8 +118,7 @@ Feature('No-skill-delegation — delegated verb matching')
       Gherkin.Do.pipe(
         Given('a guard protecting ce-work')('cwd', () => Effect.succeed('/test')),
         When('a prompt uses a delegation verb with ce-work')('matches', (s) =>
-          resetCaches.pipe(
-            Effect.flatMap(() => loadGuard(s.cwd)),
+          loadGuard(s.cwd).pipe(
             Effect.flatMap((guard) => {
               const prompt = 'spawn a task with ce-work to implement feature X'
               const mentioned = [...guard!.mentionPatterns.entries()]
@@ -149,8 +149,7 @@ Feature('No-skill-delegation — delegated verb matching')
       Gherkin.Do.pipe(
         Given('a guard protecting multiple skills')('cwd', () => Effect.succeed('/test')),
         When('a prompt uses a delegation verb with ce-plan')('matches', (s) =>
-          resetCaches.pipe(
-            Effect.flatMap(() => loadGuard(s.cwd)),
+          loadGuard(s.cwd).pipe(
             Effect.flatMap((guard) => {
               const prompt = 'create a task using ce-plan'
               const mentioned = [...guard!.mentionPatterns.entries()]
@@ -178,8 +177,7 @@ Feature('No-skill-delegation — delegated verb matching')
       Gherkin.Do.pipe(
         Given('a guard protecting ce-work')('cwd', () => Effect.succeed('/test')),
         When('a prompt uses only a reference verb with ce-work')('matches', (s) =>
-          resetCaches.pipe(
-            Effect.flatMap(() => loadGuard(s.cwd)),
+          loadGuard(s.cwd).pipe(
             Effect.flatMap((guard) => {
               const prompt = 'see the ce-work skill for details'
               const mentioned = [...guard!.mentionPatterns.entries()]
@@ -209,8 +207,7 @@ Feature('No-skill-delegation — delegated verb matching')
       Gherkin.Do.pipe(
         Given('a guard protecting ce-work')('cwd', () => Effect.succeed('/test')),
         When('various delegation verb forms are tested against the guard')('matches', (s) =>
-          resetCaches.pipe(
-            Effect.flatMap(() => loadGuard(s.cwd)),
+          loadGuard(s.cwd).pipe(
             Effect.map((guard) => {
               const prompts = [
                 '/ce-work will handle it',
@@ -245,8 +242,7 @@ Feature('No-skill-delegation — delegated verb matching')
       Gherkin.Do.pipe(
         Given('a guard with multiple protected skills')('cwd', () => Effect.succeed('/test')),
         When('a prompt mentions a skill without any delegation verb')('matches', (s) =>
-          resetCaches.pipe(
-            Effect.flatMap(() => loadGuard(s.cwd)),
+          loadGuard(s.cwd).pipe(
             Effect.map((guard) => {
               const prompt = 'I already used lfg, it worked fine'
               const mentioned = [...guard!.mentionPatterns.entries()]
@@ -271,8 +267,7 @@ Feature('No-skill-delegation — delegated verb matching')
       Gherkin.Do.pipe(
         Given('a guard protecting ce-work')('cwd', () => Effect.succeed('/test')),
         When('a prompt has a backtick-wrapped ce-work with a delegation verb')('matches', (s) =>
-          resetCaches.pipe(
-            Effect.flatMap(() => loadGuard(s.cwd)),
+          loadGuard(s.cwd).pipe(
             Effect.map((guard) => {
               const prompt = 'spawn a task with `ce-work`'
               return {
@@ -296,8 +291,7 @@ Feature('No-skill-delegation — delegated verb matching')
       Gherkin.Do.pipe(
         Given('a guard protecting ce-work')('cwd', () => Effect.succeed('/test')),
         When('a prompt has a backtick-wrapped ce-work with a reference verb')('matches', (s) =>
-          resetCaches.pipe(
-            Effect.flatMap(() => loadGuard(s.cwd)),
+          loadGuard(s.cwd).pipe(
             Effect.map((guard) => {
               const prompt = 'see the `ce-work` skill'
               return {
@@ -323,8 +317,7 @@ Feature('No-skill-delegation — delegated verb matching')
       Gherkin.Do.pipe(
         Given('a guard protecting multiple skills')('cwd', () => Effect.succeed('/test')),
         When('a prompt uses a reference verb for ce-plan')('matches', (s) =>
-          resetCaches.pipe(
-            Effect.flatMap(() => loadGuard(s.cwd)),
+          loadGuard(s.cwd).pipe(
             Effect.map((guard) => {
               const prompt = 'see the ce-plan skill'
               const mentioned = [...guard!.mentionPatterns.entries()]
@@ -356,7 +349,7 @@ Feature('No-skill-delegation — delegated verb matching')
       },
       Gherkin.Do.pipe(
         Given('a malformed toml file')('cwd', () => Effect.succeed('/test')),
-        When('loadGuard is called')('guard', (s) => resetCaches.pipe(Effect.flatMap(() => loadGuard(s.cwd)))),
+        When('loadGuard is called')('guard', (s) => loadGuard(s.cwd)),
         Then('the guard should be null (fail open)')((s) =>
           Effect.sync(() => {
             expect(s.guard).toBeNull()
@@ -377,7 +370,7 @@ Feature('No-skill-delegation — mentions across cwds')
         Given('a toml config at /test')('cwd', () => Effect.succeed('/unknown')),
         When('loadGuard is called for /unknown')(
           'guard',
-          (s) => resetCaches.pipe(Effect.flatMap(() => loadGuard(s.cwd))),
+          (s) => loadGuard(s.cwd),
         ),
         Then('it should return null')((s) =>
           Effect.sync(() => {
@@ -392,21 +385,24 @@ Feature('No-skill-delegation — mentions across cwds')
       Gherkin.Do.pipe(
         Given('a filesystem with toml at /project-a but not /project-b')('dirs', () =>
           Effect.succeed({
-            layer: MemoryFileSystem.layerWith({
-              '/project-a/systemfsoftware.toml': 'no_delegate_skills = ["ce-work"]',
-            }).pipe(Layer.provideMerge(PathModule.layer)),
+            layer: Layer.mergeAll(
+              PathModule.layer,
+              GuardCacheLive,
+              TomlLoaderLive.pipe(
+                Layer.provide(MemoryFileSystem.layerWith({
+                  '/project-a/systemfsoftware.toml': 'no_delegate_skills = ["ce-work"]',
+                })),
+                Layer.provide(PathModule.layer),
+              ),
+            ),
           })),
         When('loadGuard is called for both directories')('guards', (s) =>
-          resetCaches.pipe(
-            Effect.flatMap(() =>
-              loadGuard('/project-a').pipe(
+          loadGuard('/project-a').pipe(
+            Effect.provide(s.dirs.layer),
+            Effect.flatMap((a) =>
+              loadGuard('/project-b').pipe(
                 Effect.provide(s.dirs.layer),
-                Effect.flatMap((a) =>
-                  loadGuard('/project-b').pipe(
-                    Effect.provide(s.dirs.layer),
-                    Effect.map((b) => ({ a, b })),
-                  )
-                ),
+                Effect.map((b) => ({ a, b })),
               )
             ),
           )),

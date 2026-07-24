@@ -54,6 +54,52 @@ export class MalformedJson extends S.TaggedClass<MalformedJson>()('MalformedJson
 
 **Decision variants** (`Block`, `Allow`, `Warning`, `Blocked`, `Continue` in this workspace) are data and stay `S.TaggedClass`. The rule applies to the **error channel only**. Audit: `grep -n 'extends S.TaggedClass' omp/plugins/*/src/*.workflow.ts omp/packages/*/src/*.workflow.ts` — every match must be a decision/command class. Compare the grep output against the workflow's error type: any `TaggedClass` declared with an `_tag` whose name appears in the `Either<..., Error>` channel is a violation.
 
+## ACL Gates (Schema.transformOrFail rule)
+
+An `*.acl.ts` decodes foreign bytes (JSON, TOML, a wire DTO) into a branded domain type. Constitution II.5 — "Decode, never cast" — is enforceable here by making the transform a typed Schema, not a hand-written function. The mechanical rule:
+
+```yaml
+- id: ACL1
+  title: ACLs are Schema.transformOrFail with strict:true; no as casts
+  do: declare an ACL as `Schema.transformOrFail(<ForeignSchema>, <DomainSchema>, { strict: true, decode: ..., encode: ... })` where the inactive direction returns `ParseResult.Forbidden`; brand through `ParseResult.decode(DomainSchema)`
+        dont: write a plain function `{ return Effect.try({ try: () => parse(raw), catch: ... }).pipe(Effect.flatMap(Schema.decode(TomlConfig))) }` — the parse step is a foreign-side cast outside Schema's contract
+            harm: hand-written decode chains bypass Schema's strict identity, drift from the foreign shape on package upgrades, and re-introduce the cast pattern the type system is meant to forbid
+            check: every ACL file declares `Schema.transformOrFail` with `strict: true`; grep `grep -rL 'export.*transformOrFail' omp/packages/*/src/*.acl.ts omp/plugins/*/src/*.acl.ts` returns zero
+```
+
+**RIGHT — the canonical ACL shape** (this pattern was missing in the existing `.acl.ts` files; the new `toml-loader.acl.ts` resets the convention to canonical):
+
+```ts
+export const TomlConfigFromText = Schema.transformOrFail(
+  Schema.String,
+  Schema.typeSchema(TomlConfig),
+  {
+    strict: true,
+    decode: (raw) =>
+      ParseResult.try({
+        try: () => parse(raw),
+        catch: (e) => new ParseResult.Unexpected(`TOML parse error: ${e instanceof Error ? e.message : String(e)}`),
+      }).pipe(ParseResult.flatMap(ParseResult.decode(TomlConfig))),
+    encode: (_, _d, ast) => ParseResult.fail(new ParseResult.Forbidden(ast, _, 'TomlConfigFromText is decode-only')),
+  },
+)
+```
+
+**WRONG — hand-written decode outside Schema's contract** (this is what the existing `tool-input.acl.ts`, `tool-name.acl.ts`, and `context-mode.acl.ts` do; flagged as a follow-up to bring into ACL1 compliance):
+
+```ts
+export function normalizeToolName(name: string): string {
+  if (name.length === 0) return name
+  return name.charAt(0).toUpperCase() + name.slice(1)
+}
+// → VIOLATION: lowercase→capitalized is a foreign-shape→domain mapping re-implemented in code; the correct shape is a Schema.transformOrFail from `Schema.String` to a branded `NormalizedToolName` brand.
+```
+
+**Audit:**
+
+- `grep -rn 'export.*transformOrFail' omp/packages/*/src/*.acl.ts omp/plugins/*/src/*.acl.ts` — every ACL declares the transform.
+- `grep -rn 'as ' omp/packages/*/src/*.acl.ts omp/plugins/*/src/*.acl.ts` — zero `as` casts (type annotations like `as const` are fine).
+
 ## Commands
 
 ```bash

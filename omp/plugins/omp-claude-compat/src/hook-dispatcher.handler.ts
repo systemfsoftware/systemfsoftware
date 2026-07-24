@@ -19,94 +19,96 @@ import {
   runSessionStartHooks,
   runUserPromptSubmitHooks,
 } from './hook-dispatcher.executor.js'
-import type { AppRuntime } from './runtime.js'
+import { runtime } from './runtime.js'
 
-export const hookDispatcherTask = (pi: ExtensionAPI, runtime: AppRuntime): Effect.Effect<void> =>
-  Effect.sync(() => {
-    const tel = createTelemetry('claude_compat', pi.logger)
-    const telLayer = Layer.succeed(HookDispatcherExecutorDeps, { tel })
+export const HookDispatcherTask = (pi: ExtensionAPI): Layer.Layer<never> =>
+  Layer.effectDiscard(
+    Effect.sync(() => {
+      const tel = createTelemetry('claude_compat', pi.logger)
+      const telLayer = Layer.succeed(HookDispatcherExecutorDeps, { tel })
 
-    const runSafe = async <A, E>(
-      effect: Effect.Effect<A, E, CommandExecutor | FileSystem | HookDispatcherExecutorDeps | PathModule.Path>,
-    ) => {
-      const exit = await runtime.runPromise(
-        effect.pipe(Effect.provide(telLayer), Effect.exit),
-      )
-      if (Exit.isFailure(exit)) throw Cause.squash(exit.cause)
-      return exit.value
-    }
+      const runSafe = async <A, E>(
+        effect: Effect.Effect<A, E, CommandExecutor | FileSystem | HookDispatcherExecutorDeps | PathModule.Path>,
+      ) => {
+        const exit = await runtime.runPromise(
+          effect.pipe(Effect.provide(telLayer), Effect.exit),
+        )
+        if (Exit.isFailure(exit)) throw Cause.squash(exit.cause)
+        return exit.value
+      }
 
-    pi.on('tool_call', (event: ToolCallEvent, ctx: ExtensionContext) =>
-      runSafe(Effect.gen(function*() {
-        const settings = yield* loadSettings(ctx.cwd)
-        if (!settings) return undefined
-        return yield* runPreToolUseHooks(settings, event, ctx)
-      })))
+      pi.on('tool_call', (event: ToolCallEvent, ctx: ExtensionContext) =>
+        runSafe(Effect.gen(function*() {
+          const settings = yield* loadSettings(ctx.cwd)
+          if (!settings) return undefined
+          return yield* runPreToolUseHooks(settings, event, ctx)
+        })))
 
-    pi.on('tool_result', (event: ToolResultEvent, ctx: ExtensionContext) =>
-      runSafe(Effect.gen(function*() {
-        const settings = yield* loadSettings(ctx.cwd)
-        if (!settings) return undefined
-        const result = yield* runPostToolUseHooks(settings, event, ctx)
-        if (result?.block) {
-          return {
-            isError: true,
-            content: [{ type: 'text' as const, text: result.reason ?? 'Blocked by PostToolUse hook' }],
+      pi.on('tool_result', (event: ToolResultEvent, ctx: ExtensionContext) =>
+        runSafe(Effect.gen(function*() {
+          const settings = yield* loadSettings(ctx.cwd)
+          if (!settings) return undefined
+          const result = yield* runPostToolUseHooks(settings, event, ctx)
+          if (result?.block) {
+            return {
+              isError: true,
+              content: [{ type: 'text' as const, text: result.reason ?? 'Blocked by PostToolUse hook' }],
+            }
           }
-        }
-        if (result?.warning) {
-          return {
-            content: [...(event.content ?? []), { type: 'text' as const, text: result.warning }],
-            isError: event.isError,
+          if (result?.warning) {
+            return {
+              content: [...(event.content ?? []), { type: 'text' as const, text: result.warning }],
+              isError: event.isError,
+            }
           }
-        }
-        return undefined
-      })))
+          return undefined
+        })))
 
-    pi.on('input', (event: InputEvent, ctx: ExtensionContext) =>
-      runSafe(Effect.gen(function*() {
-        const settings = yield* loadSettings(ctx.cwd)
-        if (!settings) return undefined
-        return yield* runUserPromptSubmitHooks(settings, event, ctx)
-      })))
+      pi.on('input', (event: InputEvent, ctx: ExtensionContext) =>
+        runSafe(Effect.gen(function*() {
+          const settings = yield* loadSettings(ctx.cwd)
+          if (!settings) return undefined
+          return yield* runUserPromptSubmitHooks(settings, event, ctx)
+        })))
 
-    pi.on('session_start', (_event: { type: string }, ctx: ExtensionContext) =>
-      runSafe(Effect.gen(function*() {
-        const settings = yield* loadSettings(ctx.cwd)
-        if (!settings) return undefined
-        yield* runSessionStartHooks(settings, 'start', ctx)
-        return undefined
-      })))
+      pi.on('session_start', (_event: { type: string }, ctx: ExtensionContext) =>
+        runSafe(Effect.gen(function*() {
+          const settings = yield* loadSettings(ctx.cwd)
+          if (!settings) return undefined
+          yield* runSessionStartHooks(settings, 'start', ctx)
+          return undefined
+        })))
 
-    pi.on('session_compact', (_event: { type: string }, ctx: ExtensionContext) =>
-      runSafe(Effect.gen(function*() {
-        const settings = yield* loadSettings(ctx.cwd)
-        if (!settings) return undefined
-        yield* runSessionStartHooks(settings, 'compact', ctx)
-        return undefined
-      })))
+      pi.on('session_compact', (_event: { type: string }, ctx: ExtensionContext) =>
+        runSafe(Effect.gen(function*() {
+          const settings = yield* loadSettings(ctx.cwd)
+          if (!settings) return undefined
+          yield* runSessionStartHooks(settings, 'compact', ctx)
+          return undefined
+        })))
 
-    pi.on('agent_start', (_event: { type: string }, ctx: ExtensionContext) =>
-      runSafe(Effect.gen(function*() {
-        const settings = yield* loadSettings(ctx.cwd)
-        if (!settings) return undefined
-        yield* runSessionStartHooks(settings, 'resume', ctx)
-        return undefined
-      })))
+      pi.on('agent_start', (_event: { type: string }, ctx: ExtensionContext) =>
+        runSafe(Effect.gen(function*() {
+          const settings = yield* loadSettings(ctx.cwd)
+          if (!settings) return undefined
+          yield* runSessionStartHooks(settings, 'resume', ctx)
+          return undefined
+        })))
 
-    pi.on('session_shutdown', (_event: { type: string }, ctx: ExtensionContext) =>
-      runSafe(Effect.gen(function*() {
-        const settings = yield* loadSettings(ctx.cwd)
-        if (!settings) return undefined
-        yield* runLifecycleHooks(settings.hooks.SessionEnd, ctx)
-        return undefined
-      })))
+      pi.on('session_shutdown', (_event: { type: string }, ctx: ExtensionContext) =>
+        runSafe(Effect.gen(function*() {
+          const settings = yield* loadSettings(ctx.cwd)
+          if (!settings) return undefined
+          yield* runLifecycleHooks(settings.hooks.SessionEnd, ctx)
+          return undefined
+        })))
 
-    pi.on('session_stop', (_event: { type: string }, ctx: ExtensionContext) =>
-      runSafe(Effect.gen(function*() {
-        const settings = yield* loadSettings(ctx.cwd)
-        if (!settings) return undefined
-        yield* runLifecycleHooks(settings.hooks.Stop, ctx)
-        return undefined
-      })))
-  })
+      pi.on('session_stop', (_event: { type: string }, ctx: ExtensionContext) =>
+        runSafe(Effect.gen(function*() {
+          const settings = yield* loadSettings(ctx.cwd)
+          if (!settings) return undefined
+          yield* runLifecycleHooks(settings.hooks.Stop, ctx)
+          return undefined
+        })))
+    }),
+  )

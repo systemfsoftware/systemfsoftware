@@ -49,7 +49,8 @@ function resolveCommandPath(command: string, cwd: string, path: PathModule.Path)
 
   const pathPart = unquoted.split(/\s+/)[0] ?? ''
   if (pathPart.endsWith('.ts')) {
-    return { cmd: 'bun', args: [path.resolve(cwd, pathPart)] }
+    const scriptPath = pathPart.replaceAll('"', '').replaceAll("'", '')
+    return { cmd: 'bun', args: [path.resolve(cwd, scriptPath)] }
   }
 
   return { cmd: 'sh', args: ['-c', unquoted] }
