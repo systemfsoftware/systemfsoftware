@@ -1,6 +1,6 @@
 {
   "name": "@systemfsoftware/arethetypeswrong-core",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "The API behind arethetypeswrong.github.io — forked under systemfsoftware",
   "author": "Andrew Branch (forked by systemfsoftware)",
   "license": "MIT",
