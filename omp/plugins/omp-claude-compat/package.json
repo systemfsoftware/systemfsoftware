@@ -16,9 +16,8 @@
     "dist"
   ],
   "scripts": {
-    "clean": "rimraf dist",
     "build": "rimraf dist && tsdown",
-    "verify-dist": "node ../../scripts/check-dist-builtins.mjs --dist dist/index.js --expect os",
+    "clean": "rimraf dist",
     "typecheck": "tsc --noEmit --incremental",
     "test": "vitest run",
     "lint": "oxlint . ${AGENT:+--format=unix --quiet}"

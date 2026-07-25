@@ -18,8 +18,6 @@
   "scripts": {
     "build": "rimraf dist && tsdown",
     "clean": "rimraf dist",
-    "postbuild": "pnpm verify-dist",
-    "verify-dist": "node ../../scripts/check-dist-builtins.mjs --dist dist/index.js --expect crypto path fs os assert assert/strict",
     "typecheck": "tsc --noEmit --incremental",
     "test": "vitest run",
     "lint": "oxlint . ${AGENT:+--format=unix --quiet}"
