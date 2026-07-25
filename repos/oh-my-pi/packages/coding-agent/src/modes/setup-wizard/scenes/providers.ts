@@ -85,10 +85,11 @@ class ProvidersSceneController implements SetupSceneController {
 		}
 	}
 
-	render(width: number): readonly string[] {
+	render(width: number, maxLines?: number): readonly string[] {
 		const tabLines = this.#tabBar.render(width);
 		this.#tabRowCount = tabLines.length;
-		return [...tabLines, "", ...this.#activeTab().render(width)];
+		const tabBudget = maxLines === undefined ? undefined : Math.max(1, maxLines - tabLines.length - 1);
+		return [...tabLines, "", ...this.#activeTab().render(width, tabBudget)];
 	}
 
 	dispose(): void {

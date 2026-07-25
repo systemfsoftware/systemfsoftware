@@ -7,8 +7,9 @@
  * usage reports cache TTL is 5 minutes per credential, so durability across
  * runs isn't required.
  */
+import * as os from "node:os";
 import { scheduler } from "node:timers/promises";
-import { logger } from "@oh-my-pi/pi-utils";
+import { getInstallId, logger } from "@oh-my-pi/pi-utils";
 import {
 	type AuthCredential,
 	type AuthCredentialSnapshotEntry,
@@ -21,8 +22,8 @@ import {
 import * as AIError from "../error";
 import type { OAuthCredentials } from "../registry/oauth/types";
 import type { Provider } from "../types";
-import type { UsageReport } from "../usage";
-import { type AuthBrokerClient, AuthBrokerStreamUnsupportedError } from "./client";
+import type { ObservedUsageEntry, UsageReport } from "../usage";
+import { type AuthBrokerClient, AuthBrokerError, AuthBrokerStreamUnsupportedError } from "./client";
 import type {
 	CredentialBlockSnapshot,
 	RefresherSchedule,
@@ -30,6 +31,23 @@ import type {
 	SnapshotResponse,
 	SnapshotStreamEvent,
 } from "./types";
+
+/**
+ * Per-provider OAuth identities visible to this trusted broker client.
+ * Missing providers are unrestricted; an empty set excludes that provider's
+ * OAuth credentials. API keys are never filtered.
+ */
+export type AuthBrokerAccountPool = ReadonlyMap<string, ReadonlySet<string>>;
+
+function isCredentialInAccountPool(
+	entry: Pick<SnapshotEntry, "provider" | "credential" | "identityKey">,
+	accountPool: AuthBrokerAccountPool | undefined,
+): boolean {
+	if (entry.credential.type !== "oauth") return true;
+	const identities = accountPool?.get(entry.provider);
+	if (identities === undefined) return true;
+	return entry.identityKey !== null && identities.has(entry.identityKey);
+}
 
 /**
  * Client-side TTL for the aggregate `/v1/usage` response. The broker dedups
@@ -205,16 +223,25 @@ export interface RemoteAuthCredentialStoreOptions {
 	 */
 	streamSnapshots?: boolean;
 	/**
-	 * Called after broker-sourced full snapshots are applied. The constructor's
-	 * initial snapshot intentionally does not trigger this hook.
+	 * Called with each broker-sourced raw full snapshot after the filtered
+	 * public view is applied. The constructor's initial snapshot intentionally
+	 * does not trigger this hook.
 	 */
 	onSnapshot?: (snapshot: SnapshotResponse, generation: number) => void;
+	/**
+	 * OAuth identities visible through this store. This is a trusted-client
+	 * routing policy, not broker authorization.
+	 */
+	accountPool?: AuthBrokerAccountPool;
+	/** Flush cadence for batched observed-usage reports. Default 10s. */
+	observedUsageFlushMs?: number;
 }
 
 export class RemoteAuthCredentialStore implements AuthCredentialStore {
 	readonly #client: AuthBrokerClient;
 	readonly #streamSnapshots: boolean;
 	readonly #onSnapshot?: (snapshot: SnapshotResponse, generation: number) => void;
+	readonly #accountPool?: AuthBrokerAccountPool;
 	#snapshot: SnapshotResponse = emptySnapshot();
 	#snapshotReceivedAt = Date.now();
 	#generation = 0;
@@ -235,10 +262,20 @@ export class RemoteAuthCredentialStore implements AuthCredentialStore {
 	#streamingActive = false;
 	/** Latched once the broker has answered 404 — never try the stream again. */
 	#streamingUnsupported = false;
+	/** Pending observed usage keyed by `provider\u0000model`, merged until flush. */
+	#observedUsage = new Map<string, ObservedUsageEntry>();
+	#observedUsageTimer: Timer | undefined;
+	readonly #observedUsageFlushMs: number;
+	/** Latched once the broker answered 404 — old broker, never report again. */
+	#observedUsageUnsupported = false;
 
 	constructor(opts: RemoteAuthCredentialStoreOptions) {
 		this.#client = opts.client;
 		this.#streamSnapshots = opts.streamSnapshots ?? true;
+		this.#observedUsageFlushMs = opts.observedUsageFlushMs ?? 10_000;
+		this.#accountPool = opts.accountPool
+			? new Map([...opts.accountPool].map(([provider, identities]) => [provider, new Set(identities)]))
+			: undefined;
 		this.#applySnapshot(opts.initialSnapshot ?? emptySnapshot(), opts.initialSnapshot?.generation ?? 0);
 		this.#onSnapshot = opts.onSnapshot;
 		void this.#runBackground();
@@ -255,7 +292,9 @@ export class RemoteAuthCredentialStore implements AuthCredentialStore {
 	#applySnapshot(snapshot: SnapshotResponse, generation: number, protectNewBlocks = true): void {
 		const nowMs = Date.now();
 		const previousCredentials = this.#snapshot.credentials;
-		const credentials = snapshot.credentials.map(entry => this.#normalizeSnapshotEntryBlocks(entry, nowMs));
+		const credentials = snapshot.credentials
+			.filter(entry => isCredentialInAccountPool(entry, this.#accountPool))
+			.map(entry => this.#normalizeSnapshotEntryBlocks(entry, nowMs));
 		if (snapshotBlocksChanged(previousCredentials, credentials)) this.#invalidateUsageCache();
 		if (protectNewBlocks) this.#protectNewSnapshotBlocks(previousCredentials, credentials, nowMs);
 		this.#snapshot = { ...snapshot, credentials };
@@ -264,7 +303,7 @@ export class RemoteAuthCredentialStore implements AuthCredentialStore {
 		const onSnapshot = this.#onSnapshot;
 		if (!onSnapshot) return;
 		try {
-			onSnapshot(this.#snapshot, generation);
+			onSnapshot(snapshot, generation);
 		} catch (error) {
 			logger.debug("auth-broker snapshot callback failed", { error: String(error) });
 		}
@@ -383,6 +422,10 @@ export class RemoteAuthCredentialStore implements AuthCredentialStore {
 		generation: number,
 		serverNowMs: number,
 	): void {
+		if (!isCredentialInAccountPool(entry, this.#accountPool)) {
+			this.#removeStreamCredential(entry.id, refresher, generation, serverNowMs);
+			return;
+		}
 		const incoming = this.#normalizeSnapshotEntryBlocks(entry, Date.now());
 		const index = this.#snapshot.credentials.findIndex(candidate => candidate.id === incoming.id);
 		const previousBlocks = index === -1 ? undefined : this.#snapshot.credentials[index]?.blocks;
@@ -577,7 +620,11 @@ export class RemoteAuthCredentialStore implements AuthCredentialStore {
 		if (entry.credential.type !== "oauth") {
 			throw new AIError.AuthBrokerError(`Broker returned non-OAuth credential for id=${credentialId}`);
 		}
-		this.#applyCredentialEntry(entry);
+		if (!this.#applyCredentialEntry(entry)) {
+			throw new AIError.AuthBrokerError(
+				`Broker refreshed credential id=${credentialId} outside the configured account pool`,
+			);
+		}
 		this.#maybeRefreshSnapshot("suspect credential refresh");
 	}
 
@@ -677,20 +724,27 @@ export class RemoteAuthCredentialStore implements AuthCredentialStore {
 				.map(entry => [entry.id, entry.blocks] as const),
 		);
 		const others = this.#snapshot.credentials.filter(entry => entry.provider !== provider);
-		const incoming = entries.map(entry => credentialEntryWithBlocks(entry, existingBlocks.get(entry.id)));
+		const incoming = entries
+			.filter(entry => isCredentialInAccountPool(entry, this.#accountPool))
+			.map(entry => credentialEntryWithBlocks(entry, existingBlocks.get(entry.id)));
 		this.#snapshot = { ...this.#snapshot, credentials: [...others, ...incoming] };
 	}
-	#applyCredentialEntry(entry: AuthCredentialSnapshotEntry): void {
+	#applyCredentialEntry(entry: AuthCredentialSnapshotEntry): boolean {
+		if (!isCredentialInAccountPool(entry, this.#accountPool)) {
+			this.#removeCredentialById(entry.id);
+			return false;
+		}
 		const index = this.#snapshot.credentials.findIndex(candidate => candidate.id === entry.id);
 		const existingBlocks = index === -1 ? undefined : this.#snapshot.credentials[index]?.blocks;
 		const incoming = credentialEntryWithBlocks(entry, existingBlocks);
 		if (index === -1) {
 			this.#snapshot = { ...this.#snapshot, credentials: [...this.#snapshot.credentials, incoming] };
-			return;
+			return true;
 		}
 		const credentials = [...this.#snapshot.credentials];
 		credentials[index] = incoming;
 		this.#snapshot = { ...this.#snapshot, credentials };
+		return true;
 	}
 
 	#removeProviderEntries(provider: string): void {
@@ -837,13 +891,18 @@ export class RemoteAuthCredentialStore implements AuthCredentialStore {
 		signal?: AbortSignal,
 	): Promise<OAuthCredentials> {
 		const { entry } = await this.#client.refreshCredential(credentialId, signal);
+		if (entry.credential.type !== "oauth") {
+			throw new AIError.AuthBrokerError(`Broker returned non-OAuth credential for id=${credentialId}`);
+		}
+		if (!this.#applyCredentialEntry(entry)) {
+			throw new AIError.AuthBrokerError(
+				`Broker refreshed credential id=${credentialId} outside the configured account pool`,
+			);
+		}
 		if (!this.#streamingActive) {
 			await this.refreshSnapshot().catch(error => {
 				logger.debug("auth-broker snapshot refresh after credential refresh failed", { error: String(error) });
 			});
-		}
-		if (entry.credential.type !== "oauth") {
-			throw new AIError.AuthBrokerError(`Broker returned non-OAuth credential for id=${credentialId}`);
 		}
 		const refreshed = entry.credential;
 		return {
@@ -865,7 +924,8 @@ export class RemoteAuthCredentialStore implements AuthCredentialStore {
 	 */
 	async fetchUsageReports(signal?: AbortSignal): Promise<UsageReport[] | null> {
 		const reports = await this.#raceWithSignal(this.#loadUsageReports(), signal);
-		return reports ? this.#applyUsageOverlays(reports) : null;
+		if (!reports) return null;
+		return this.#filterUsageReports(this.#applyUsageOverlays(reports));
 	}
 
 	/**
@@ -883,10 +943,25 @@ export class RemoteAuthCredentialStore implements AuthCredentialStore {
 		signal?: AbortSignal,
 	): Promise<UsageReport | null> {
 		const reports = await this.#raceWithSignal(this.#loadUsageReports(), signal);
-		const matched = reports ? matchUsageReport(reports, provider, credential) : null;
+		const visibleReports = reports ? this.#filterUsageReports(reports) : null;
+		const matched = visibleReports ? matchUsageReport(visibleReports, provider, credential) : null;
 		const overlay = this.#getActiveUsageOverlay(provider, credential);
 		if (matched && overlay) return mergeUsageReports(matched, overlay);
 		return overlay ?? matched;
+	}
+
+	#filterUsageReports(reports: UsageReport[]): UsageReport[] {
+		const accountPool = this.#accountPool;
+		if (!accountPool) return reports;
+		return reports.filter(report => {
+			if (!accountPool.has(report.provider)) return true;
+			return this.#snapshot.credentials.some(
+				entry =>
+					entry.provider === report.provider &&
+					entry.credential.type === "oauth" &&
+					usageReportMatchesCredential(report, entry.credential),
+			);
+		});
 	}
 
 	ingestUsageReport(provider: Provider, credential: OAuthCredential, report: UsageReport): boolean {
@@ -984,10 +1059,73 @@ export class RemoteAuthCredentialStore implements AuthCredentialStore {
 		return inflight;
 	}
 
+	/**
+	 * Fold locally observed request usage into the pending report and schedule
+	 * a flush. One `POST /v1/usage/observed` at most per flush interval; on
+	 * failure the batch is retained and retried with the next flush. A 404
+	 * (pre-endpoint broker) disables reporting for the life of this store.
+	 */
+	recordObservedUsage(entries: ObservedUsageEntry[]): void {
+		if (this.#closed || this.#observedUsageUnsupported) return;
+		for (const entry of entries) {
+			const key = `${entry.provider}\u0000${entry.model}`;
+			const pending = this.#observedUsage.get(key);
+			if (pending) {
+				pending.at = Math.max(pending.at, entry.at);
+				pending.requests += entry.requests;
+				pending.inputTokens += entry.inputTokens;
+				pending.outputTokens += entry.outputTokens;
+				pending.cacheReadTokens += entry.cacheReadTokens;
+				pending.cacheWriteTokens += entry.cacheWriteTokens;
+				pending.costUsd += entry.costUsd;
+			} else {
+				this.#observedUsage.set(key, { ...entry });
+			}
+		}
+		if (this.#observedUsage.size > 0 && this.#observedUsageTimer === undefined) {
+			this.#observedUsageTimer = setTimeout(() => {
+				this.#observedUsageTimer = undefined;
+				void this.#flushObservedUsage();
+			}, this.#observedUsageFlushMs);
+			this.#observedUsageTimer.unref?.();
+		}
+	}
+
+	async #flushObservedUsage(): Promise<void> {
+		if (this.#observedUsage.size === 0 || this.#observedUsageUnsupported) return;
+		const batch = [...this.#observedUsage.values()];
+		this.#observedUsage.clear();
+		try {
+			await this.#client.reportClientUsage({
+				installId: getInstallId(),
+				hostname: os.hostname(),
+				entries: batch,
+			});
+		} catch (error) {
+			const status = error instanceof AuthBrokerError ? error.status : undefined;
+			if (status === 404 || status === 501) {
+				// Broker predates the endpoint (or store can't persist) — stop trying.
+				this.#observedUsageUnsupported = true;
+				logger.debug("auth-broker does not accept observed usage; reporting disabled", { status });
+				return;
+			}
+			logger.debug("auth-broker observed usage flush failed; retrying next flush", { error: String(error) });
+			// Merge the failed batch back under the (possibly refilled) buffer so
+			// nothing is lost; bounded because entries are keyed per (provider, model).
+			if (!this.#closed) this.recordObservedUsage(batch);
+		}
+	}
+
 	close(): void {
 		if (this.#closed) return;
 		this.#closed = true;
 		this.#backgroundAbort.abort();
+		if (this.#observedUsageTimer !== undefined) {
+			clearTimeout(this.#observedUsageTimer);
+			this.#observedUsageTimer = undefined;
+		}
+		// Best-effort final flush; failures are dropped (the process is exiting).
+		if (this.#observedUsage.size > 0) void this.#flushObservedUsage();
 		this.#cache.clear();
 		this.#usageOverlays.clear();
 	}
@@ -1057,6 +1195,21 @@ function matchUsageReport(reports: UsageReport[], provider: Provider, credential
 		if (reportMatchesIdentity(report, accountId, email, projectId)) return report;
 	}
 	return null;
+}
+
+function usageReportMatchesCredential(report: UsageReport, credential: OAuthCredential): boolean {
+	const metadata = (report.metadata ?? {}) as Record<string, unknown>;
+	const credentialOrg = credential.orgId?.trim().toLowerCase();
+	const reportOrg = readMetadataString(metadata, "orgId")?.toLowerCase();
+	if (credentialOrg !== reportOrg) return false;
+
+	const accountId = credential.accountId?.trim().toLowerCase();
+	const email = credential.email?.trim().toLowerCase();
+	const projectId = credential.projectId?.trim().toLowerCase();
+	if (accountId || email || projectId) {
+		return reportMatchesIdentity(report, accountId, email, projectId);
+	}
+	return credentialOrg !== undefined;
 }
 
 function findMatchingReportIndex(reports: UsageReport[], overlay: UsageReport): number {

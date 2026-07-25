@@ -235,6 +235,11 @@ export class AssistantMessageComponent extends Container {
 	 *  on a fresh block that has no live token throughput of its own. */
 	#thinkingRateLive = false;
 
+	#textColorTransform?: (text: string) => string;
+
+	setTextColorTransform(transform?: (text: string) => string): void {
+		this.#textColorTransform = transform;
+	}
 	constructor(
 		message?: AssistantMessage,
 		private hideThinkingBlock = false,
@@ -796,8 +801,8 @@ export class AssistantMessageComponent extends Container {
 			if (content.type === "text" && canonicalizeMessage(content.text)) {
 				// Set paddingY=0 to avoid extra spacing before tool executions
 				const trimmed = content.text.trim();
-				const md = new Markdown(trimmed, 1, 0, getMarkdownTheme());
-				md.transientRenderCache = this.#lastUpdateTransient;
+				const mdOptions = this.#textColorTransform ? { color: this.#textColorTransform } : undefined;
+				const md = new Markdown(trimmed, 1, 0, getMarkdownTheme(), mdOptions);
 				this.#contentContainer.addChild(md);
 				captureItems?.push({ md, contentIndex: i, blockType: "text", lastText: trimmed });
 				hasRenderedContent = true;

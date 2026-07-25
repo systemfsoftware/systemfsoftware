@@ -174,6 +174,123 @@ describe("auth-broker wire surface", () => {
 		await expect(client.refreshCredential(id)).rejects.toThrow();
 	});
 
+	test("GET /v1/usage/history serves recorded snapshots with sinceMs/provider filters and requires auth", async () => {
+		const hourMs = 60 * 60 * 1000;
+		const now = Date.now();
+		// Hours apart so the store's per-bucket dedupe keeps distinct rows.
+		store!.recordUsageSnapshots!([
+			{
+				recordedAt: now - 3 * hourMs,
+				provider: "anthropic",
+				accountKey: "acct-a",
+				email: "a@example.com",
+				limitId: "5h",
+				label: "Claude 5 Hour",
+				windowLabel: "5h",
+				usedFraction: 0.2,
+				status: "ok",
+			},
+			{
+				recordedAt: now - hourMs,
+				provider: "anthropic",
+				accountKey: "acct-a",
+				email: "a@example.com",
+				limitId: "5h",
+				label: "Claude 5 Hour",
+				windowLabel: "5h",
+				usedFraction: 0.9,
+				status: "warning",
+			},
+			{
+				recordedAt: now - hourMs,
+				provider: "openai-codex",
+				accountKey: "acct-b",
+				limitId: "weekly",
+				label: "Weekly",
+				usedFraction: 0.5,
+			},
+		]);
+
+		const unauthorized = await fetch(`${handle!.url}/v1/usage/history`);
+		expect(unauthorized.status).toBe(401);
+
+		const client = new AuthBrokerClient({ url: handle!.url, token });
+		const all = await client.fetchUsageHistory();
+		expect(all.entries).toHaveLength(3);
+		expect(all.entries[0].recordedAt).toBeLessThanOrEqual(all.entries[1].recordedAt);
+
+		const recent = await client.fetchUsageHistory({ sinceMs: now - 2 * hourMs });
+		expect(recent.entries.map(e => e.usedFraction).sort()).toEqual([0.5, 0.9]);
+
+		const anthropicOnly = await client.fetchUsageHistory({ provider: "anthropic" });
+		expect(anthropicOnly.entries).toHaveLength(2);
+		expect(anthropicOnly.entries.every(e => e.provider === "anthropic")).toBe(true);
+		expect(anthropicOnly.entries[1]).toMatchObject({
+			accountKey: "acct-a",
+			email: "a@example.com",
+			windowLabel: "5h",
+			usedFraction: 0.9,
+			status: "warning",
+		});
+	});
+
+	test("POST /v1/usage/observed persists per-client usage served by GET /v1/usage/clients", async () => {
+		const unauthorized = await fetch(`${handle!.url}/v1/usage/observed`, { method: "POST" });
+		expect(unauthorized.status).toBe(401);
+
+		const client = new AuthBrokerClient({ url: handle!.url, token });
+		const now = Date.now();
+		const entry = {
+			at: now,
+			provider: "anthropic",
+			model: "claude-x",
+			requests: 2,
+			inputTokens: 1000,
+			outputTokens: 400,
+			cacheReadTokens: 50,
+			cacheWriteTokens: 25,
+			costUsd: 3.25,
+		};
+		const ack = await client.reportClientUsage({ installId: "install-1", hostname: "mbp.local", entries: [entry] });
+		expect(ack.ok).toBe(true);
+		await client.reportClientUsage({
+			installId: "install-2",
+			entries: [{ ...entry, provider: "openai-codex", model: "gpt-y", requests: 1, costUsd: 0 }],
+		});
+
+		const summary = await client.fetchClientUsageSummary();
+		expect(summary.clients).toHaveLength(2);
+		const first = summary.clients.find(c => c.installId === "install-1");
+		expect(first).toMatchObject({ hostname: "mbp.local" });
+		expect(first?.lastSeen).toBeGreaterThan(0);
+		expect(first?.providers).toEqual([
+			{
+				provider: "anthropic",
+				requests: 2,
+				inputTokens: 1000,
+				outputTokens: 400,
+				cacheReadTokens: 50,
+				cacheWriteTokens: 25,
+				costUsd: 3.25,
+			},
+		]);
+		const second = summary.clients.find(c => c.installId === "install-2");
+		expect(second?.hostname).toBeUndefined();
+		expect(second?.providers[0]).toMatchObject({ provider: "openai-codex", requests: 1 });
+
+		// sinceMs beyond the recorded timestamps returns clients with no aggregates.
+		const future = await client.fetchClientUsageSummary({ sinceMs: now + 60_000 });
+		expect(future.clients.every(c => c.providers.length === 0)).toBe(true);
+
+		// Malformed body is rejected by schema validation.
+		const bad = await fetch(`${handle!.url}/v1/usage/observed`, {
+			method: "POST",
+			headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+			body: JSON.stringify({ installId: "x", entries: [{ at: "not-a-number" }] }),
+		});
+		expect(bad.status).toBe(400);
+	});
+
 	test("Unknown route returns 404", async () => {
 		const res = await fetch(`${handle!.url}/v1/nope`, {
 			headers: { Authorization: `Bearer ${token}` },

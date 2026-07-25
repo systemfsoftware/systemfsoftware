@@ -137,7 +137,7 @@ Implemented in `packages/coding-agent/src/eval/js/worker-core.ts`, `packages/cod
 - JS host/runtime helpers (`read`, `write`, `output`) are async and `await`able; `env` returns synchronously.
 - JS helper options may be passed either positionally in the Python order or as a trailing options object. `null` and `undefined` skip positional slots:
   - `await read(path, offset?, limit?)` or `await read(path, { offset?, limit? })`
-  - `await agent(prompt, agent?, model?, label?, schema?)` or `await agent(prompt, { agent?, model?, label?, schema?, handle? })`
+  - `await agent(prompt, agent?, label?, schema?)` or `await agent(prompt, { agent?, label?, schema?, handle? })`
   - `await parallel([() => agent("a"), () => agent("b")])`
   - `await pipeline(items, stage1, stage2)`
 - `display(value)` behavior:
@@ -191,10 +191,9 @@ Both runtimes expose `completion()` — a single stateless completion against a 
 Both runtimes expose `agent()` — a single subagent invocation routed through `packages/coding-agent/src/eval/agent-bridge.ts` into the same `runSubprocess(...)` path used by the `task` tool. It uses the current eval session's spawn policy and inherits the parent eval executor id, so parent and subagent code share JS/Python runtime state.
 
 - Signatures:
-  - JS: `await agent(prompt, agent?, model?, label?, schema?)` or `await agent(prompt, { agent?, model?, label?, schema?, handle? })`
-  - Python: `agent(prompt, *, agent="task", model=None, label=None, schema=None, handle=False)`
+  - JS: `await agent(prompt, agent?, label?, schema?)` or `await agent(prompt, { agent?, label?, schema?, handle? })`
+  - Python: `agent(prompt, *, agent="task", label=None, schema=None, handle=False)`
 - `agent` defaults to the bundled `task` agent and resolves through normal agent discovery, so project and user agents work.
-- `model` overrides the selected agent's model. Without it, normal per-agent settings and the agent frontmatter model apply.
 - Shared background is passed via files: write a `local://` file and reference it in the prompt. `label` controls the `agent://<id>` output label prefix.
 - `schema` passes a JSON Schema to the subagent structured-output path. When present, the helper parses the final JSON text and returns an object.
 - `handle` (default off) returns a DAG node dict — `{ text, output, handle: "agent://<id>", id, agent }`, plus a parsed `data` field when `schema` is set — instead of the bare output, so a downstream stage can reference the transcript by handle.

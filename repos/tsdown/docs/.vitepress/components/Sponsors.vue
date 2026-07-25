@@ -1,0 +1,58 @@
+<script setup lang="ts">
+import { useData } from 'vitepress'
+import SvgImage from './SvgImage.vue'
+
+const { lang } = useData()
+</script>
+
+<template>
+  <div flex="~ col" items-center justify-center>
+    <div mt20 flex="~ col" items-center gap8>
+      <h3 v-if="lang === 'en'" class="voidzero-title">Brought to you by</h3>
+      <a
+        class="voidzero"
+        href="https://voidzero.dev/"
+        target="_blank"
+        title="voidzero.dev"
+        alt="VoidZero"
+        block
+        h-75px
+        w-300px
+      />
+      <h3 v-if="lang === 'zh-CN'" class="voidzero-title">
+        由 VoidZero 隆重推出
+      </h3>
+    </div>
+
+    <div mt12>
+      <SvgImage
+        src="https://cdn.jsdelivr.net/gh/sxzz/sponsors/sponsors.wide.svg"
+        alt="Sponsors"
+      />
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.voidzero-title {
+  margin: 0;
+  padding: 0;
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.voidzero {
+  background: url(https://cdn.jsdelivr.net/gh/voidzero-dev/community-design-resources/brand-assets/voidzero/voidzero-logo-dark.svg)
+    no-repeat center;
+  background-size: contain;
+}
+
+.dark .voidzero {
+  background-image: url(https://cdn.jsdelivr.net/gh/voidzero-dev/community-design-resources/brand-assets/voidzero/voidzero-logo-light.svg);
+}
+
+:deep(svg) {
+  max-width: 100%;
+  height: auto;
+}
+</style>

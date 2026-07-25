@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test, vi } from "bun:test";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import type { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
+import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
 import { AgentDashboard } from "@oh-my-pi/pi-coding-agent/modes/components/agent-dashboard";
 import { initTheme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 import * as discovery from "@oh-my-pi/pi-coding-agent/task/discovery";
@@ -234,5 +234,21 @@ describe("AgentDashboard tab navigation", () => {
 		} finally {
 			geo.restore();
 		}
+	});
+});
+
+describe("AgentDashboard prewalk", () => {
+	test("shows the bundled task prewalk default when task.prewalk is enabled", async () => {
+		await initTheme(false);
+		vi.spyOn(discovery, "discoverAgents").mockResolvedValue({
+			projectAgentsDir: null,
+			agents: [{ name: "task", description: "Generic task agent", systemPrompt: "", source: "bundled" }],
+		});
+		const settings = Settings.isolated({ "task.prewalk": true });
+		const dashboard = await AgentDashboard.create(await makeTempCwd(), settings, 24, {});
+		const rendered = dashboard.render(100).join("\n").replace(ANSI_PATTERN, "");
+
+		expect(rendered).toContain("Prewalk: on");
+		expect(rendered).not.toContain("Prewalk: off");
 	});
 });

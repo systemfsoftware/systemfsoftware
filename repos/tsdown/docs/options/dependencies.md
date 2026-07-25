@@ -1,0 +1,229 @@
+# Dependencies
+
+When bundling with `tsdown`, dependencies are handled intelligently to ensure your library remains lightweight and easy to consume. Here's how `tsdown` processes different types of dependencies and how you can customize this behavior.
+
+## Default Behavior
+
+### `dependencies`, `peerDependencies`, and `optionalDependencies`
+
+By default, `tsdown` **does not bundle dependencies** listed in your `package.json` under `dependencies`, `peerDependencies`, and `optionalDependencies`:
+
+- **`dependencies`**: These are treated as external and will not be included in the bundle. Instead, they will be installed automatically by npm (or other package managers) when your library is installed.
+- **`peerDependencies`**: These are also treated as external. Users of your library are expected to install these dependencies manually, although some package managers may handle this automatically.
+- **`optionalDependencies`**: These are also treated as external. They may or may not be installed depending on the user's platform and configuration.
+
+### `devDependencies` and Phantom Dependencies
+
+- **`devDependencies`**: Dependencies listed under `devDependencies` in your `package.json` will **only be bundled if they are actually imported or required by your source code**.
+- **Phantom Dependencies**: Dependencies that exist in your `node_modules` folder but are not explicitly listed in your `package.json` will **only be bundled if they are actually used in your code**.
+
+In other words, only the `devDependencies` and phantom dependencies that are actually referenced in your project will be included in the bundle.
+
+## The `deps` Option
+
+All dependency-related options are configured under the `deps` field:
+
+```ts [tsdown.config.ts]
+import { defineConfig } from 'tsdown'
+
+export default defineConfig({
+  deps: {
+    neverBundle: ['lodash', /^@my-scope\//],
+    alwaysBundle: ['some-package'],
+    onlyBundle: ['cac', 'bumpp'],
+    onlyImport: ['cac'],
+    resolveDepSubpath: false,
+  },
+})
+```
+
+### `deps.skipNodeModulesBundle`
+
+::: warning Deprecated
+`skipNodeModulesBundle` is deprecated. Use [`deps.neverBundle: true`](#externalizing-all-dependencies) instead.
+:::
+
+### `deps.resolveDepSubpath`
+
+When an external dependency has no `exports` field, tsdown resolves subpath imports to their actual package-relative paths by default. For example, `my-dep/functions/lt` may become `my-dep/functions/lt.js`, and `my-dep/folder` may become `my-dep/folder/index.js`.
+
+Set `resolveDepSubpath` to `false` to preserve the original import specifier:
+
+```ts [tsdown.config.ts]
+import { defineConfig } from 'tsdown'
+
+export default defineConfig({
+  deps: {
+    resolveDepSubpath: false,
+  },
+})
+```
+
+The default value is `true`.
+
+### `deps.onlyBundle`
+
+The `onlyBundle` option acts as a whitelist for dependencies that are allowed to be bundled from `node_modules`. If any dependency not in the list is found in the bundle, tsdown will throw an error. This is useful for preventing unexpected dependencies from being silently inlined into your output, especially in large projects.
+
+```ts [tsdown.config.ts]
+import { defineConfig } from 'tsdown'
+
+export default defineConfig({
+  deps: {
+    onlyBundle: ['cac', 'bumpp'],
+  },
+})
+```
+
+In this example, only `cac` and `bumpp` are allowed to be bundled. If any other `node_modules` dependency is imported, tsdown will throw an error with a message indicating which dependency was unexpectedly bundled and which files imported it.
+
+#### Behavior
+
+- **`onlyBundle` is an array** (e.g., `['cac', /^my-/]`): Only dependencies matching the list are allowed to be bundled. An error is thrown for any others. Unused patterns in the list will also be reported.
+- **`onlyBundle` is `false`**: All warnings and checks about bundled dependencies are suppressed.
+- **`onlyBundle` is not set** (default): A warning is shown if any `node_modules` dependencies are bundled, suggesting you add the `onlyBundle` option or set it to `false` to suppress warnings.
+
+::: tip
+Make sure to include all required sub-dependencies in the `onlyBundle` list as well, not just the top-level packages you directly import.
+:::
+
+### `deps.onlyImport`
+
+While `onlyBundle` controls which dependencies are allowed to be **bundled**, the `onlyImport` option acts as a whitelist for dependencies that are allowed to be **imported** by your output at runtime. After each build, tsdown scans the emitted chunks and throws an error if any of them imports a package that is not in the list. This ensures your published code never depends on packages you haven't explicitly approved.
+
+```ts [tsdown.config.ts]
+import { defineConfig } from 'tsdown'
+
+export default defineConfig({
+  deps: {
+    onlyImport: ['cac'],
+  },
+})
+```
+
+In this example, the output is only allowed to import `cac`. If any chunk imports another package, tsdown will throw an error listing all offending imports, suggesting you either add them to `onlyImport` or bundle them via `alwaysBundle`.
+
+#### Behavior
+
+- Matching is based on the **package name**, so subpath imports like `cac/deno` are covered by listing `cac`.
+- Node.js built-in modules are always allowed when `platform` is `node`.
+- Imports between chunks emitted by code splitting are always allowed.
+- Type declaration output (`.d.ts`) is checked as well.
+
+::: warning
+ES imports and dynamic `import()` expressions are checked. CJS `require()` calls are not detected.
+:::
+
+### `deps.neverBundle`
+
+The `neverBundle` option allows you to explicitly mark certain dependencies as external, ensuring they are not bundled into your library. For example:
+
+```ts [tsdown.config.ts]
+import { defineConfig } from 'tsdown'
+
+export default defineConfig({
+  deps: {
+    neverBundle: ['lodash', /^@my-scope\//],
+  },
+})
+```
+
+In this example, `lodash` and all packages under the `@my-scope` namespace will be treated as external.
+
+#### Externalizing All Dependencies
+
+Set `neverBundle` to `true` to externalize **all** dependencies:
+
+```ts [tsdown.config.ts]
+import { defineConfig } from 'tsdown'
+
+export default defineConfig({
+  deps: {
+    neverBundle: true,
+  },
+})
+```
+
+When enabled, every import that follows npm package naming conventions (e.g. `lodash`, `@scope/pkg/utils`) is marked as external **as written, without being resolved**. This is faster than the deprecated `skipNodeModulesBundle` option and even works when dependencies are not installed. Note the following behaviors:
+
+- Package specifiers are preserved exactly as written; subpaths like `my-dep/utils` are not rewritten, and `resolveDepSubpath` has no effect.
+- Other non-relative imports — [subpath imports](https://nodejs.org/api/packages.html#subpath-imports) starting with `#` and path aliases like `~/utils` — are still resolved: if they resolve into `node_modules`, they are kept external with the original specifier; otherwise the resolved local file is bundled.
+
+Unlike the deprecated `skipNodeModulesBundle` option, `neverBundle: true` can be combined with `alwaysBundle` to bundle a few selected dependencies while externalizing everything else:
+
+```ts [tsdown.config.ts]
+import { defineConfig } from 'tsdown'
+
+export default defineConfig({
+  deps: {
+    neverBundle: true,
+    alwaysBundle: ['some-package'],
+  },
+})
+```
+
+### `deps.alwaysBundle`
+
+The `alwaysBundle` option allows you to force certain dependencies to be bundled, even if they are listed in `dependencies`, `peerDependencies`, or `optionalDependencies`. For example:
+
+```ts [tsdown.config.ts]
+import { defineConfig } from 'tsdown'
+
+export default defineConfig({
+  deps: {
+    alwaysBundle: ['some-package'],
+  },
+})
+```
+
+Here, `some-package` will be bundled into your library.
+
+## Handling Dependencies in Declaration Files
+
+The bundling logic for declaration files is consistent with JavaScript: dependencies are bundled or marked as external according to the same rules and options.
+
+### Resolver Option
+
+When bundling complex third-party types, you may encounter cases where the default resolver (Oxc) cannot handle certain scenarios. For example, the types for `@babel/generator` are located in the `@types/babel__generator` package, which may not be resolved correctly by Oxc.
+
+To address this, you can set the `resolver` option to `tsc` in your configuration. This uses the native TypeScript resolver, which is slower but much more compatible with complex type setups:
+
+```ts [tsdown.config.ts]
+import { defineConfig } from 'tsdown'
+
+export default defineConfig({
+  dts: {
+    resolver: 'tsc',
+  },
+})
+```
+
+## Migration from Deprecated Options
+
+The following top-level options are deprecated. Please migrate to the `deps` namespace:
+
+| Deprecated Option            | New Option               |
+| ---------------------------- | ------------------------ |
+| `external`                   | `deps.neverBundle`       |
+| `noExternal`                 | `deps.alwaysBundle`      |
+| `inlineOnly`                 | `deps.onlyBundle`        |
+| `deps.onlyAllowBundle`       | `deps.onlyBundle`        |
+| `skipNodeModulesBundle`      | `deps.neverBundle: true` |
+| `deps.skipNodeModulesBundle` | `deps.neverBundle: true` |
+
+## Summary
+
+- **Default Behavior**:
+  - `dependencies`, `peerDependencies`, and `optionalDependencies` are treated as external and not bundled.
+  - `devDependencies` and phantom dependencies are only bundled if they are actually used in your code.
+- **Customization**:
+  - Use `deps.onlyBundle` to whitelist dependencies allowed to be bundled, and throw an error for any others.
+  - Use `deps.onlyImport` to whitelist packages the output is allowed to import at runtime.
+  - Use `deps.neverBundle` to mark specific dependencies as external, or set it to `true` to externalize all dependencies.
+  - Use `deps.alwaysBundle` to force specific dependencies to be bundled.
+  - Set `deps.resolveDepSubpath` to `false` to preserve external dependency subpath imports as written.
+- **Declaration Files**:
+  - The bundling logic for declaration files is now the same as for JavaScript.
+  - Use `resolver: 'tsc'` for better compatibility with complex third-party types.
+
+By understanding and customizing dependency handling, you can ensure your library is optimized for both size and usability.

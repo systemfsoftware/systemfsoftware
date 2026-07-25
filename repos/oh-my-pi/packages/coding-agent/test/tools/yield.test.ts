@@ -1106,8 +1106,8 @@ describe("YieldTool", () => {
 		).rejects.toThrow("Output does not match schema");
 	});
 
-	it("rejects nested-array shape mismatches with a retry hint (explore-style JTD)", async () => {
-		// Regression for the GLM/explore failure mode: model invents per-file fields
+	it("rejects nested-array shape mismatches with a retry hint (scout-style JTD)", async () => {
+		// Regression for the GLM/scout failure mode: model invents per-file fields
 		// (`ref`, `surface`, …) instead of the schema's `path` + `description`. The
 		// in-tool validator MUST surface the mismatch with a retry directive so the
 		// subagent can fix its output before the parent runs its post-mortem check.
@@ -1138,13 +1138,13 @@ describe("YieldTool", () => {
 			],
 		};
 
-		await expect(tool.execute("call-explore-1", { result: { data: badPayload } } as never)).rejects.toThrow(
+		await expect(tool.execute("call-scout-1", { result: { data: badPayload } } as never)).rejects.toThrow(
 			/files\/0\/path: is required.*Call yield again with the corrected shape/,
 		);
 
 		// Third retry still throws with one attempt remaining advertised in the hint.
-		await tool.execute("call-explore-2", { result: { data: badPayload } } as never).catch(() => {});
-		await expect(tool.execute("call-explore-3", { result: { data: badPayload } } as never)).rejects.toThrow(
+		await tool.execute("call-scout-2", { result: { data: badPayload } } as never).catch(() => {});
+		await expect(tool.execute("call-scout-3", { result: { data: badPayload } } as never)).rejects.toThrow(
 			"this is the final retry before the schema constraint is dropped",
 		);
 	});
@@ -1180,7 +1180,7 @@ describe("YieldTool", () => {
 	it("rejects submissions without a result object", async () => {
 		const tool = new YieldTool(createSession());
 		await expect(tool.execute("call-3", {} as never)).rejects.toThrow(
-			"result must be an object containing either data or error",
+			'Submit success as {"result":{"data":<your output>}} or failure as {"result":{"error":"message"}}.',
 		);
 	});
 	it("sets lenientArgValidation so agent-loop bypasses validation errors", () => {

@@ -21,6 +21,7 @@ import {
 	parseEffort,
 	parseThinkingLevel,
 	resolveProvisionalAutoLevel,
+	resolveTaskEffortLevel,
 } from "@oh-my-pi/pi-coding-agent/thinking";
 import type { TinyMemoryLocalModelKey } from "@oh-my-pi/pi-coding-agent/tiny/models";
 import { tinyModelClient } from "@oh-my-pi/pi-coding-agent/tiny/title-client";
@@ -255,6 +256,54 @@ describe("auto thinking classifier helpers", () => {
 		expect(parseEffort("max")).toBe(Effort.Max);
 		expect(parseThinkingLevel("max")).toBe(ThinkingLevel.Max);
 		expect(parseConfiguredThinkingLevel("max")).toBe(ThinkingLevel.Max);
+	});
+
+	it("maps task effort selectors onto each model's supported thinking range", () => {
+		const xhighCeilingModel = buildModel({
+			id: "mock-xhigh-ceiling",
+			name: "Mock XHigh Ceiling",
+			api: "openai-completions",
+			provider: "mock",
+			baseUrl: "https://example.com",
+			reasoning: true,
+			thinking: { mode: "effort", efforts: [Effort.Low, Effort.Medium, Effort.High, Effort.XHigh] },
+			input: ["text"],
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+			contextWindow: 128_000,
+			maxTokens: 4096,
+		});
+
+		// hi = whatever the model tops out at; lo = its floor; med = middle of
+		// the supported range (lower-middle for an even-sized range).
+		expect(resolveTaskEffortLevel(xhighCeilingModel, "hi")).toBe(Effort.XHigh);
+		expect(resolveTaskEffortLevel(xhighCeilingModel, "lo")).toBe(Effort.Low);
+		expect(resolveTaskEffortLevel(xhighCeilingModel, "med")).toBe(Effort.Medium);
+
+		const sonnet = getBundledModel("anthropic", "claude-sonnet-4-6");
+		if (!sonnet) throw new Error("Expected bundled Claude Sonnet 4.6 model");
+		const sonnetEfforts = sonnet.thinking?.efforts ?? [];
+		expect(resolveTaskEffortLevel(sonnet, "hi")).toBe(sonnetEfforts[sonnetEfforts.length - 1]);
+		expect(resolveTaskEffortLevel(sonnet, "lo")).toBe(sonnetEfforts[0]);
+
+		// No controllable effort surface (devin-agent shape) → undefined, so the
+		// spawn falls back to its default selector instead of forcing an effort.
+		const devinModel = {
+			id: "glm-5-2",
+			name: "GLM-5.2",
+			api: "devin-agent",
+			provider: "devin",
+			baseUrl: "https://server.codeium.com",
+			reasoning: true,
+			input: ["text"],
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+			contextWindow: 128_000,
+			maxTokens: 4096,
+		} as Model;
+		expect(resolveTaskEffortLevel(devinModel, "hi")).toBeUndefined();
+
+		// No model at all → full canonical range.
+		expect(resolveTaskEffortLevel(undefined, "lo")).toBe(Effort.Minimal);
+		expect(resolveTaskEffortLevel(undefined, "hi")).toBe(Effort.Max);
 	});
 
 	it("rejects inherited object keys as thinking selectors", () => {

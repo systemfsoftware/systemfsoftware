@@ -14,6 +14,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { configureCredentialRedaction } from "@oh-my-pi/pi-ai/providers/transform-messages";
 import { configureProviderMaxInFlightRequests } from "@oh-my-pi/pi-ai/stream";
 import {
 	getAgentDbPath,
@@ -33,7 +34,9 @@ import type { ModelRole } from "../config/model-roles";
 import { loadCapability } from "../discovery";
 import { isLightTheme, setAutoThemeMapping, setColorBlindMode, setSymbolPreset } from "../modes/theme/theme";
 import { AgentStorage } from "../session/agent-storage";
+import { AUTO_IMAGE_PROVIDER_ORDER, isImageProviderId } from "../tools/image-providers";
 import { type EditMode, normalizeEditMode } from "../utils/edit-mode";
+import { isSearchProviderId, SEARCH_PROVIDER_ORDER } from "../web/search/types";
 import { withFileLock } from "./file-lock";
 import {
 	type BashInterceptorRule,
@@ -330,6 +333,8 @@ export class Settings {
 	#modified = new Set<string>();
 	/** Individual project model roles modified during this session */
 	#modifiedProjectModelRoles = new Set<string>();
+	/** Individual global model roles modified during this session (for partial save) */
+	#modifiedGlobalModelRoles = new Set<string>();
 	/**
 	 * Original process-wide model-role overrides captured before a project edit
 	 * temporarily replaced them via `#updateRuntimeModelRoleOverride`. Restored
@@ -359,6 +364,7 @@ export class Settings {
 		if (options.configFiles) configFiles.push(...options.configFiles);
 		this.#configFiles = configFiles.map(file => path.resolve(this.#cwd, expandTilde(file)));
 		this.#persist = !options.inMemory && options.readOnly !== true;
+		liveSettingsInstances.add(new WeakRef(this));
 
 		if (options.overrides) {
 			for (const [key, value] of Object.entries(options.overrides)) {
@@ -532,6 +538,23 @@ export class Settings {
 		}
 	}
 
+	/** Set once this instance is discarded; background saves become no-ops. */
+	#savesCancelled = false;
+
+	/**
+	 * Drop pending debounced saves and refuse any further background writes.
+	 * Used when an instance is being discarded (test teardown): an armed timer
+	 * or a chained in-flight save on a dropped instance would otherwise fire
+	 * later and race the successor's file locks.
+	 */
+	cancelPendingSaves(): void {
+		this.#savesCancelled = true;
+		clearTimeout(this.#saveTimer);
+		this.#saveTimer = undefined;
+		clearTimeout(this.#projectSaveTimer);
+		this.#projectSaveTimer = undefined;
+	}
+
 	/**
 	 * Flush any pending saves to disk.
 	 * Call before exit to ensure all changes are persisted.
@@ -551,7 +574,7 @@ export class Settings {
 		if (this.#projectSavePromise) {
 			await this.#projectSavePromise;
 		}
-		if (this.#modified.size > 0) {
+		if (this.#modified.size > 0 || this.#modifiedGlobalModelRoles.size > 0) {
 			await this.#saveNow();
 		}
 		if (this.#modifiedProjectModelRoles.size > 0) {
@@ -833,13 +856,22 @@ export class Settings {
 	 * stale skip in place.
 	 */
 	setModelRole(role: ModelRole | string, modelId: string | undefined): void {
+		const prev = this.get("modelRoles");
 		const current = this.#modelRolesFromLayer(this.#global);
 		if (modelId === undefined) {
 			delete current[role];
 		} else {
 			current[role] = modelId;
 		}
-		this.set("modelRoles", current);
+		// Persist per-role rather than marking the whole `modelRoles` path
+		// modified: #saveNow merges only the changed role into the re-read
+		// file, so a concurrent external edit to a sibling role is not
+		// clobbered by this process's stale in-memory snapshot.
+		setByPath(this.#global, ["modelRoles"], current);
+		this.#modifiedGlobalModelRoles.add(role);
+		this.#rebuildMerged();
+		this.#queueSave();
+		this.#fireEffectiveSettingChanged("modelRoles", this.get("modelRoles"), prev);
 		if (this.isProjectModelRoleRuntimeOverrideActive(role)) {
 			return;
 		}
@@ -1584,6 +1616,45 @@ export class Settings {
 		delete raw["mcp.discoveryMode"];
 		delete raw["mcp.discoveryDefaultServers"];
 
+		// providers.webSearch / providers.image (single preferred provider) →
+		// providers.webSearchOrder / providers.imageOrder (priority lists). A
+		// concrete legacy choice becomes the head of the new list with every
+		// remaining provider appended in its built-in order, so the old
+		// preference stays #1 and the fallback chain is written out explicitly.
+		// "auto" (or an unknown id) just drops the key — the default chain.
+		const providerPrefsObj = raw.providers as Record<string, unknown> | undefined;
+		const migrateProviderPreference = (
+			legacyKey: string,
+			orderKey: string,
+			expand: (value: string) => string[] | undefined,
+		): void => {
+			const flatLegacyKey = `providers.${legacyKey}`;
+			const legacy = providerPrefsObj?.[legacyKey] ?? raw[flatLegacyKey];
+			if (legacy === undefined) return;
+			const existingOrder = providerPrefsObj?.[orderKey] ?? raw[`providers.${orderKey}`];
+			const orderAlreadySet = Array.isArray(existingOrder) && existingOrder.length > 0;
+			if (!orderAlreadySet && typeof legacy === "string") {
+				const expanded = expand(legacy);
+				if (expanded) {
+					const root = providerPrefsObj ?? {};
+					root[orderKey] = expanded;
+					raw.providers = root;
+				}
+			}
+			if (providerPrefsObj) delete providerPrefsObj[legacyKey];
+			delete raw[flatLegacyKey];
+		};
+		migrateProviderPreference("webSearch", "webSearchOrder", value =>
+			value !== "auto" && isSearchProviderId(value)
+				? [value, ...SEARCH_PROVIDER_ORDER.filter(id => id !== value)]
+				: undefined,
+		);
+		migrateProviderPreference("image", "imageOrder", value =>
+			value !== "auto" && isImageProviderId(value)
+				? [value, ...AUTO_IMAGE_PROVIDER_ORDER.filter(id => id !== value)]
+				: undefined,
+		);
+
 		return raw;
 	}
 
@@ -1619,7 +1690,8 @@ export class Settings {
 		clearTimeout(this.#saveTimer);
 		this.#saveTimer = setTimeout(() => {
 			this.#saveTimer = undefined;
-			const savePromise = this.#saveNow();
+			const previousSave = this.#savePromise;
+			const savePromise = previousSave ? previousSave.then(() => this.#saveNow()) : this.#saveNow();
 			this.#savePromise = savePromise;
 			savePromise
 				.catch(err => {
@@ -1634,33 +1706,84 @@ export class Settings {
 	}
 
 	async #saveNow(): Promise<void> {
-		if (!this.#persist || !this.#configPath || this.#modified.size === 0) return;
+		if (this.#savesCancelled || !this.#persist || !this.#configPath) return;
+		if (this.#modified.size === 0 && this.#modifiedGlobalModelRoles.size === 0) return;
 
 		const configPath = this.#configPath;
 		const modifiedPaths = [...this.#modified];
+		const modifiedModelRoles = [...this.#modifiedGlobalModelRoles];
+		const globalRolesAtStart = this.#modelRolesFromLayer(this.#global);
 		this.#modified.clear();
+		this.#modifiedGlobalModelRoles.clear();
 
 		try {
 			await withFileLock(configPath, async () => {
 				// Re-read to preserve external changes
 				const current = await this.#loadYaml(configPath);
 
-				// Apply only our modified paths
+				// Apply only our modified whole-value paths
 				for (const modPath of modifiedPaths) {
 					const segments = modPath.split(".");
 					const value = getByPath(this.#global, segments);
 					setByPath(current, segments, value);
 				}
 
+				// Merge only the model roles captured by this save. Then retain
+				// any role changed while the async read/lock was pending before
+				// replacing #global, so the follow-up save still sees its value.
+				const latestGlobalRoles = this.#modelRolesFromLayer(this.#global);
+				const rolesToPreserve = new Set(this.#modifiedGlobalModelRoles);
+				for (const role in globalRolesAtStart) {
+					if (globalRolesAtStart[role] !== latestGlobalRoles[role]) {
+						rolesToPreserve.add(role);
+					}
+				}
+				for (const role in latestGlobalRoles) {
+					if (globalRolesAtStart[role] !== latestGlobalRoles[role]) {
+						rolesToPreserve.add(role);
+					}
+				}
+				if (modifiedModelRoles.length > 0 || rolesToPreserve.size > 0) {
+					const currentRoles = getByPath(current, ["modelRoles"]);
+					const mergedRoles: Record<string, unknown> = isRecord(currentRoles) ? { ...currentRoles } : {};
+					for (const role of modifiedModelRoles) {
+						if (Object.hasOwn(globalRolesAtStart, role)) {
+							mergedRoles[role] = globalRolesAtStart[role];
+						} else {
+							delete mergedRoles[role];
+						}
+					}
+					for (const role of rolesToPreserve) {
+						if (Object.hasOwn(latestGlobalRoles, role)) {
+							mergedRoles[role] = latestGlobalRoles[role];
+						} else {
+							delete mergedRoles[role];
+						}
+					}
+					setByPath(current, ["modelRoles"], mergedRoles);
+				}
+
 				// Update our global with any external changes we preserved
 				this.#global = current;
 				await Bun.write(configPath, YAML.stringify(this.#global, null, 2));
+				// These pending roles were included in this write. Remove each
+				// only if no newer local change arrived while Bun.write was in
+				// flight; a newer value still needs the queued follow-up save.
+				const globalRolesAfterWrite = this.#modelRolesFromLayer(this.#global);
+				for (const role of rolesToPreserve) {
+					if (latestGlobalRoles[role] === globalRolesAfterWrite[role]) {
+						this.#modifiedGlobalModelRoles.delete(role);
+					}
+				}
 			});
 		} catch (error) {
 			logger.warn("Settings: save failed", { error: String(error) });
 			// Re-add failed paths for retry
 			for (const p of modifiedPaths) {
 				this.#modified.add(p);
+			}
+			for (const role of modifiedModelRoles) {
+				this.#modifiedGlobalModelRoles.add(role);
 			}
 		}
 
@@ -1687,7 +1810,7 @@ export class Settings {
 	}
 
 	async #saveProjectNow(): Promise<void> {
-		if (!this.#persist || this.#modifiedProjectModelRoles.size === 0) return;
+		if (this.#savesCancelled || !this.#persist || this.#modifiedProjectModelRoles.size === 0) return;
 
 		const projectConfigPath = path.join(this.#cwd, ".omp", "config.yml");
 		const modifiedModelRoles = [...this.#modifiedProjectModelRoles];
@@ -1856,6 +1979,9 @@ const SETTING_HOOKS: Partial<Record<SettingPath, SettingHook<any>>> = {
 	"providers.maxInFlightRequests": value => {
 		configureProviderMaxInFlightRequests(validateProviderMaxInFlightRequests(value));
 	},
+	"secrets.enabled": value => {
+		configureCredentialRedaction(value === true);
+	},
 	"hindsight.bankId": () => hindsightScopeSignal.fire(),
 	"hindsight.bankIdPrefix": () => hindsightScopeSignal.fire(),
 	"hindsight.scoping": () => hindsightScopeSignal.fire(),
@@ -1915,6 +2041,13 @@ export const onHindsightScopeChanged = (cb: () => void) => hindsightScopeSignal.
 // Global Singleton
 // ═══════════════════════════════════════════════════════════════════════════
 
+/**
+ * Weak registry of every constructed instance so `resetSettingsForTest` can
+ * disarm stray background saves on isolated instances too. WeakRefs never
+ * retain instances; the set is cleared on every test reset.
+ */
+const liveSettingsInstances = new Set<WeakRef<Settings>>();
+
 let globalInstance: Settings | null = null;
 let globalInstancePromise: Promise<Settings> | null = null;
 let boundSettingsInstance: Settings | null = null;
@@ -1934,10 +2067,19 @@ export function isSettingsInitialized(): boolean {
  * @internal
  */
 export function resetSettingsForTest(): void {
+	// Disarm every constructed instance's debounced saves — including isolated
+	// (non-singleton) instances: an armed timer or chained in-flight save on a
+	// dropped instance fires mid-way through the NEXT test and races its file
+	// locks/spies (cross-file pollution).
+	for (const ref of liveSettingsInstances) {
+		ref.deref()?.cancelPendingSaves();
+	}
+	liveSettingsInstances.clear();
 	globalInstance = null;
 	globalInstancePromise = null;
 	clearBoundSettingsMethods();
 	configureProviderMaxInFlightRequests(undefined);
+	configureCredentialRedaction(false);
 }
 
 /**

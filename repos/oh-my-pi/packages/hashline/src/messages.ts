@@ -52,6 +52,14 @@ export const REPLACE_PAIR_COALESCED_WARNING = `Two hunks targeted the same range
 export const BARE_BODY_AUTO_PIPED_WARNING =
 	"Auto-prefixed bare body row(s) with `+`. Body rows must be `+TEXT` literal lines.";
 
+/**
+ * Bare `-` body rows accepted as literal Markdown bullets. Only emitted when
+ * the hunk is unambiguously a bullet list: every `-` row is bullet-shaped
+ * (`- item`) and the body has no unified-diff `+new` counterpart rows.
+ */
+export const MINUS_BULLET_AUTO_PIPED_WARNING =
+	"Auto-prefixed bare `- ` bullet row(s) as literal content. `-` rows never remove lines — the range does that; always prefix literal body rows with `+`: `+- item`.";
+
 /** Unified-diff-style `-` row in a hunk body. */
 export const MINUS_ROW_REJECTED =
 	"`-` rows are not valid; the range already names the lines being changed. For Markdown bullets or other literal `-` lines, prefix the literal row with `+`: `+- item`.";

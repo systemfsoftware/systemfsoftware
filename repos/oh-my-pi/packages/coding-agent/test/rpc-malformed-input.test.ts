@@ -26,10 +26,12 @@ describe("RPC mode malformed stdin", () => {
 		// crashed the generator before the second was ever read.
 		child.stdin.write("this is not json\n");
 		child.stdin.write(`${JSON.stringify({ type: "get_state", id: "probe" })}\n`);
+		child.stdin.write(`${JSON.stringify({ type: "get_messages_page", id: "page-probe", limit: 1 })}\n`);
 		await child.stdin.flush();
 
 		let parseError: Record<string, unknown> | undefined;
 		let stateResponse: Record<string, unknown> | undefined;
+		let pageResponse: Record<string, unknown> | undefined;
 
 		for await (const frame of readJsonl<unknown>(child.stdout as ReadableStream<Uint8Array>)) {
 			if (!isRecord(frame)) continue;
@@ -38,8 +40,9 @@ describe("RPC mode malformed stdin", () => {
 			}
 			if (frame.type === "response" && frame.id === "probe") {
 				stateResponse = frame;
-				break;
 			}
+			if (frame.type === "response" && frame.id === "page-probe") pageResponse = frame;
+			if (stateResponse && pageResponse) break;
 		}
 
 		child.stdin.end();
@@ -50,5 +53,9 @@ describe("RPC mode malformed stdin", () => {
 		expect(String(parseError?.error)).toContain("Failed to parse command");
 		expect(stateResponse).toBeDefined();
 		expect(stateResponse?.success).toBe(true);
+		expect(pageResponse).toMatchObject({
+			success: true,
+			data: { messages: [], totalMessages: 0 },
+		});
 	}, 30000);
 });

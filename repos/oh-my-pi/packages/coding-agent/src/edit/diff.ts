@@ -4,7 +4,7 @@
  * Provides diff string generation and the replace-mode edit logic
  * used when not in patch mode.
  */
-import * as Diff from "diff";
+import { diffLines, structuredPatchHunks } from "@oh-my-pi/pi-natives";
 import { resolveToCwd } from "../tools/path-utils";
 import { type BlockContextSource, findBlockContextLines } from "../utils/block-context";
 import { DEFAULT_FUZZY_THRESHOLD, EditMatchError, findMatch } from "./modes/replace";
@@ -235,7 +235,7 @@ export function generateDiffString(
 	contextLines = 2,
 	source: BlockContextSource = {},
 ): DiffResult {
-	const parts = Diff.diffLines(oldContent, newContent);
+	const parts = diffLines(oldContent, newContent);
 	const output: string[] = [];
 
 	let oldLineNum = 1;
@@ -373,10 +373,10 @@ export function generateUnifiedDiffString(
 	contextLines = 3,
 	source: BlockContextSource = {},
 ): DiffResult {
-	const patch = Diff.structuredPatch("", "", oldContent, newContent, "", "", { context: contextLines });
+	const hunks = structuredPatchHunks(oldContent, newContent, contextLines);
 	const output: string[] = [];
 	let firstChangedLine: number | undefined;
-	for (const hunk of patch.hunks) {
+	for (const hunk of hunks) {
 		output.push(`@@ -${hunk.oldStart},${hunk.oldLines} +${hunk.newStart},${hunk.newLines} @@`);
 		let oldLine = hunk.oldStart;
 		let newLine = hunk.newStart;

@@ -81,6 +81,21 @@ const askSchema = arkType({
 
 export type AskToolInput = typeof askSchema.infer;
 
+/**
+ * Recover a validated `questions` payload from a persisted `ask` toolCall's
+ * `arguments`. Used by `/tree` re-answer (issue #5642): selecting a past
+ * `ask` toolResult re-opens the picker with the *original* questions, so the
+ * new answer branches as a sibling instead of mutating the old one. Runs the
+ * same schema the live tool call validated against — legacy/corrupted
+ * persisted args fail closed (`undefined`) rather than feeding malformed
+ * data back into the picker.
+ */
+export function recoverAskQuestions(toolCallArguments: unknown): AskToolInput["questions"] | undefined {
+	const parsed = askSchema(toolCallArguments);
+	if (parsed instanceof arkType.errors) return undefined;
+	return parsed.questions;
+}
+
 /** Result for a single question */
 export interface QuestionResult {
 	id: string;

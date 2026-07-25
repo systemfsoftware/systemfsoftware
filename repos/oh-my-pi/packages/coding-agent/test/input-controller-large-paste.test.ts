@@ -126,28 +126,28 @@ describe("InputController.presentLargePasteMenu file attachment", () => {
 		dir = undefined;
 	});
 
-	it("saves the paste to local:// and inserts a clean local://attachment reference", async () => {
+	it("saves the paste to local:// and inserts a clean local://paste reference", async () => {
 		dir = await fs.mkdtemp(path.join(os.tmpdir(), "omp-paste-test-"));
 		const { controller, spies } = createContext({ choice: "Attach as local file", artifactsDir: dir });
 
 		await controller.presentLargePasteMenu("line one\nline two", 2);
 
-		expect(spies.insertText).toHaveBeenCalledWith("local://attachment-1 ");
+		expect(spies.insertText).toHaveBeenCalledWith("local://paste-1.md ");
 		expect(spies.insertPaste).not.toHaveBeenCalled();
 		// resolveLocalRoot maps an artifacts dir to "<dir>/local"; the reference resolves there.
-		const saved = await Bun.file(path.join(dir, "local", "attachment-1")).text();
+		const saved = await Bun.file(path.join(dir, "local", "paste-1.md")).text();
 		expect(saved).toBe("line one\nline two");
 	});
 
-	it("does not overwrite an existing attachment file", async () => {
+	it("does not overwrite an existing paste file", async () => {
 		dir = await fs.mkdtemp(path.join(os.tmpdir(), "omp-paste-test-"));
-		await Bun.write(path.join(dir, "local", "attachment-1"), "previous");
+		await Bun.write(path.join(dir, "local", "paste-1.md"), "previous");
 		const { controller, spies } = createContext({ choice: "Attach as local file", artifactsDir: dir });
 
 		await controller.presentLargePasteMenu("fresh", 1);
 
-		expect(spies.insertText).toHaveBeenCalledWith("local://attachment-2 ");
-		expect(await Bun.file(path.join(dir, "local", "attachment-1")).text()).toBe("previous");
-		expect(await Bun.file(path.join(dir, "local", "attachment-2")).text()).toBe("fresh");
+		expect(spies.insertText).toHaveBeenCalledWith("local://paste-2.md ");
+		expect(await Bun.file(path.join(dir, "local", "paste-1.md")).text()).toBe("previous");
+		expect(await Bun.file(path.join(dir, "local", "paste-2.md")).text()).toBe("fresh");
 	});
 });

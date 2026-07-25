@@ -227,6 +227,25 @@ export async function prepareNativeCorePackage(pkgDir: string, write: boolean): 
  * only on the OIDC path, so we never pass `--provenance` (it would hard-fail the
  * token fallback).
  */
+export interface PackedTarball {
+	name: string;
+	version: string;
+	path: string;
+}
+
+/** Read the package identity npm will publish from the packed archive. */
+export async function inspectPackedTarball(tarballPath: string): Promise<PackedTarball> {
+	const extracted = await $`tar -xOzf ${tarballPath} package/package.json`.quiet().nothrow();
+	if (extracted.exitCode !== 0) {
+		throw new Error(`Could not read packed manifest from ${tarballPath}: ${extracted.stderr.toString().trim()}`);
+	}
+	const manifest = JSON.parse(extracted.stdout.toString()) as PackageManifest;
+	if (typeof manifest.name !== "string" || typeof manifest.version !== "string") {
+		throw new Error(`Packed manifest is missing name/version: ${tarballPath}`);
+	}
+	return { name: manifest.name, version: manifest.version, path: tarballPath };
+}
+
 async function packAndPublish(dir: string, name: string): Promise<void> {
 	if (isDryRun) {
 		console.log(`DRY RUN bun pm pack && npm publish --access public (${path.relative(repoRoot, dir)})`);
@@ -243,15 +262,21 @@ async function packAndPublish(dir: string, name: string): Promise<void> {
 		}
 		const tarball = (await fs.readdir(packDir)).find(entry => entry.endsWith(".tgz"));
 		if (!tarball) throw new Error(`bun pm pack produced no tarball for ${name} (${path.relative(repoRoot, dir)})`);
-		const result = await $`npm publish ${path.join(packDir, tarball)} --access public`.quiet().nothrow();
+		const packedTarball = await inspectPackedTarball(path.join(packDir, tarball));
+		// Preflight the exact packed version so reruns skip deterministically.
+		// Fail open on lookup errors; only a confirmed published version may skip publishing.
+		const preflight = await $`npm view ${`${packedTarball.name}@${packedTarball.version}`} version`.quiet().nothrow();
+		if (preflight.exitCode === 0 && preflight.stdout.toString().trim()) {
+			console.log(`Skipping ${packedTarball.name} (version already published)`);
+			return;
+		}
+		const result = await $`npm publish ${packedTarball.path} --access public`.quiet().nothrow();
 		const output = `${result.stdout.toString()}${result.stderr.toString()}`.trim();
 		if (output) console.log(output);
 		if (result.exitCode !== 0) {
-			// Idempotent re-runs: tolerate this exact version already being on the
-			// registry (the `bun publish --tolerate-republish` equivalent), but
-			// surface every other failure.
+			// A concurrent publisher may win after the preflight.
 			if (isVersionAlreadyPublished(output)) {
-				console.log(`Skipping ${name} (version already published)`);
+				console.log(`Skipping ${packedTarball.name} (version already published)`);
 				return;
 			}
 			process.exit(result.exitCode ?? 1);
@@ -261,9 +286,15 @@ async function packAndPublish(dir: string, name: string): Promise<void> {
 	}
 }
 
-/** Match npm's rejection when this exact version already exists on the registry. */
-function isVersionAlreadyPublished(output: string): boolean {
-	return /cannot publish over the previously published version|EPUBLISHCONFLICT/i.test(output);
+/**
+ * npm's existing-version machine codes across supported CLI generations, plus
+ * npm 11's registry-precheck prose when it emits no machine code.
+ */
+export function isVersionAlreadyPublished(output: string): boolean {
+	return (
+		/npm (?:error|err!) code (E409|EPUBLISHCONFLICT)\b/i.test(output) ||
+		/you cannot publish over (?:the )?previously published versions?\b/i.test(output)
+	);
 }
 
 async function publishGeneratedLeafPackage(leaf: GeneratedLeafPackage): Promise<void> {

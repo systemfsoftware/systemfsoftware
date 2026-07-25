@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import json
 import os
 import shutil
 import signal
@@ -11,6 +13,7 @@ import time
 import unittest
 
 from omp_rpc import RpcClient, RpcCommandError, RpcConcurrencyError, RpcError, host_tool
+from omp_rpc.client import _RpcFrameDecoder
 
 
 FAKE_SERVER = textwrap.dedent(
@@ -86,7 +89,12 @@ FAKE_SERVER = textwrap.dedent(
             "dumpTools": [{"name": "read", "description": "Read files", "parameters": {"type": "object"}}] + registered_host_tools,
         }
 
-    def emit_prompt_turn(text: str, delay: float = 0.0, include_extra_events: bool = False):
+    def emit_prompt_turn(
+        text: str,
+        delay: float = 0.0,
+        include_extra_events: bool = False,
+        compact_terminal: bool = False,
+    ):
         global last_assistant_text, messages
         print(json.dumps({"type": "agent_start"}), flush=True)
         print(json.dumps({"type": "turn_start"}), flush=True)
@@ -198,9 +206,24 @@ FAKE_SERVER = textwrap.dedent(
         assistant = assistant_message(text)
         print(json.dumps({"type": "message_end", "message": assistant}), flush=True)
         print(json.dumps({"type": "turn_end", "message": assistant, "toolResults": []}), flush=True)
-        print(json.dumps({"type": "agent_end", "messages": [assistant]}), flush=True)
-        last_assistant_text = text
-        messages = [assistant]
+        if compact_terminal:
+            terminal = assistant_message("terminal")
+            print(
+                json.dumps(
+                    {
+                        "type": "agent_end",
+                        "messages": [terminal],
+                        "messageCount": 2,
+                    }
+                ),
+                flush=True,
+            )
+            last_assistant_text = "terminal"
+            messages = [assistant, terminal]
+        else:
+            print(json.dumps({"type": "agent_end", "messages": [assistant]}), flush=True)
+            last_assistant_text = text
+            messages = [assistant]
 
     def respond(request_id, command, data=None, success=True, error=None):
         payload = {"id": request_id, "type": "response", "command": command, "success": success}
@@ -384,7 +407,12 @@ FAKE_SERVER = textwrap.dedent(
             if message == "notifications":
                 print(json.dumps({"type": "extension_error", "extensionPath": "/tmp/ext.py", "event": "run", "error": "boom"}), flush=True)
                 print(json.dumps({"type": "unknown_future_event", "value": 1}), flush=True)
-            emit_prompt_turn("pong", delay=0.3 if message == "slow" else 0.0, include_extra_events=message == "all events")
+            emit_prompt_turn(
+                "pong",
+                delay=0.3 if message == "slow" else 0.0,
+                include_extra_events=message == "all events",
+                compact_terminal=message == "compacted turn",
+            )
         elif command_type == "host_tool_update":
             print(
                 json.dumps(
@@ -414,6 +442,157 @@ FAKE_SERVER = textwrap.dedent(
             print(json.dumps({"type": "agent_end", "messages": []}), flush=True)
         else:
             respond(request_id, command_type, success=False, error=f"unsupported: {command_type}")
+    """
+)
+
+
+V2_MESSAGES_SERVER = textwrap.dedent(
+    """
+    import base64
+    import json
+    import os
+    import sys
+
+    message = {
+        "role": "user",
+        "content": [{"type": "text", "text": "x" * (1024 * 1024)}],
+        "timestamp": 1,
+    }
+
+    def emit(payload):
+        encoded = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+        if len(encoded) <= 1024 * 1024:
+            print(encoded.decode("utf-8"), flush=True)
+            return
+        chunk_size = 256 * 1024
+        count = (len(encoded) + chunk_size - 1) // chunk_size
+        for index in range(count):
+            chunk = encoded[index * chunk_size : (index + 1) * chunk_size]
+            print(
+                json.dumps(
+                    {
+                        "type": "rpc_chunk",
+                        "chunkId": "test-page",
+                        "index": index,
+                        "count": count,
+                        "byteLength": len(encoded),
+                        "data": base64.b64encode(chunk).decode("ascii"),
+                    },
+                    separators=(",", ":"),
+                ),
+                flush=True,
+            )
+
+    print(
+        json.dumps(
+            {
+                "type": "ready",
+                "protocolVersion": 1,
+                "supportedProtocolVersions": [1, 2],
+                "maxFrameBytes": 1024 * 1024,
+                "maxReassembledFrameBytes": 64 * 1024 * 1024,
+            }
+        ),
+        flush=True,
+    )
+
+    for raw_line in sys.stdin:
+        command = json.loads(raw_line)
+        request_id = command["id"]
+        command_type = command["type"]
+        if command_type == "negotiate_protocol":
+            emit(
+                {
+                    "id": request_id,
+                    "type": "response",
+                    "command": command_type,
+                    "success": True,
+                    "data": {"protocolVersion": 2},
+                }
+            )
+        elif command_type == "get_messages_page":
+            if os.environ.get("V2_MESSAGES_BUSY") == "1":
+                emit(
+                    {
+                        "id": request_id,
+                        "type": "response",
+                        "command": command_type,
+                        "success": False,
+                        "error": "Cannot page messages while the session is changing",
+                        "code": "session_busy",
+                    }
+                )
+                continue
+            if os.environ.get("V2_MESSAGES_STALE") == "1":
+                if command.get("cursor") is not None:
+                    emit(
+                        {
+                            "id": request_id,
+                            "type": "response",
+                            "command": command_type,
+                            "success": False,
+                            "error": "RPC message cursor is stale",
+                            "code": "stale_cursor",
+                        }
+                    )
+                    continue
+                emit(
+                    {
+                        "id": request_id,
+                        "type": "response",
+                        "command": command_type,
+                        "success": True,
+                        "data": {
+                            "messages": [message],
+                            "totalMessages": 2,
+                            "nextCursor": "page-two",
+                        },
+                    }
+                )
+                continue
+            emit(
+                {
+                    "id": request_id,
+                    "type": "response",
+                    "command": command_type,
+                    "success": True,
+                    "data": {
+                        "messages": [message],
+                        "totalMessages": 1,
+                        "nextCursor": None,
+                    },
+                }
+            )
+        elif command_type == "get_messages":
+            emit(
+                {
+                    "id": request_id,
+                    "type": "response",
+                    "command": command_type,
+                    "success": True,
+                    "data": {
+                        "messages": [
+                            {
+                                "role": "assistant",
+                                "content": [
+                                    {"type": "text", "text": "streaming snapshot"}
+                                ],
+                                "timestamp": 3,
+                            }
+                        ]
+                    },
+                }
+            )
+        else:
+            emit(
+                {
+                    "id": request_id,
+                    "type": "response",
+                    "command": command_type,
+                    "success": False,
+                    "error": f"unexpected command: {command_type}",
+                }
+            )
     """
 )
 
@@ -587,6 +766,38 @@ class RpcClientTests(unittest.TestCase):
             **kwargs,
         )
 
+    def test_protocol_v2_decoder_accepts_exact_logical_boundary(self) -> None:
+        frame = {
+            "id": "request-boundary",
+            "type": "response",
+            "command": "get_state",
+            "success": True,
+            "data": {"payload": ""},
+        }
+        encoded_empty = json.dumps(frame, separators=(",", ":")).encode("utf-8")
+        frame["data"]["payload"] = "x" * (1024 * 1024 - len(encoded_empty))
+        encoded = json.dumps(frame, separators=(",", ":")).encode("utf-8")
+        self.assertEqual(len(encoded), 1024 * 1024)
+
+        decoder = _RpcFrameDecoder()
+        chunk_size = 256 * 1024
+        count = (len(encoded) + chunk_size - 1) // chunk_size
+        decoded = None
+        for index in range(count):
+            chunk = encoded[index * chunk_size : (index + 1) * chunk_size]
+            decoded = decoder.push(
+                {
+                    "type": "rpc_chunk",
+                    "chunkId": "exact-boundary",
+                    "index": index,
+                    "count": count,
+                    "byteLength": len(encoded),
+                    "data": base64.b64encode(chunk).decode("ascii"),
+                }
+            )
+
+        self.assertEqual(decoded, frame)
+
     def test_command_builder_supports_common_rpc_options(self) -> None:
         client = RpcClient(
             executable="omp",
@@ -644,6 +855,16 @@ class RpcClientTests(unittest.TestCase):
             turn = client.prompt_and_wait("say hello", timeout=2.0)
             self.assertEqual(turn.require_assistant_text(), "pong")
             self.assertGreaterEqual(len(turn.events), 3)
+
+    def test_prompt_and_wait_reconstructs_compacted_terminal_messages(self) -> None:
+        with self.make_client() as client:
+            turn = client.prompt_and_wait("compacted turn", timeout=2.0)
+
+        self.assertEqual(
+            [message["content"][0]["text"] for message in turn.messages],
+            ["pong", "terminal"],
+        )
+        self.assertEqual(turn.require_assistant_text(), "terminal")
 
     def test_custom_tools_are_registered_and_executed_via_rpc(self) -> None:
         def echo_host(args: dict[str, str], context) -> str:
@@ -822,6 +1043,37 @@ class RpcClientTests(unittest.TestCase):
             client.abort_and_prompt("say hello")
             client.wait_for_idle(timeout=2.0)
             self.assertEqual(client.get_last_assistant_text(), "pong")
+
+    def test_protocol_v2_reassembles_chunked_message_pages(self) -> None:
+        with self.make_client(server=V2_MESSAGES_SERVER) as client:
+            messages = client.get_messages()
+
+        self.assertEqual(len(messages), 1)
+        self.assertEqual(len(messages[0]["content"][0]["text"]), 1024 * 1024)
+
+    def test_protocol_v2_get_messages_falls_back_to_streaming_snapshot(self) -> None:
+        with self.make_client(
+            server=V2_MESSAGES_SERVER, env={"V2_MESSAGES_BUSY": "1"}
+        ) as client:
+            with self.assertRaisesRegex(
+                RpcCommandError, "Cannot page messages while the session is changing"
+            ):
+                client.get_messages_page()
+            messages = client.get_messages()
+
+        self.assertEqual(len(messages), 1)
+        self.assertEqual(messages[0]["content"][0]["text"], "streaming snapshot")
+
+    def test_protocol_v2_get_messages_discards_stale_page_walk(self) -> None:
+        with self.make_client(
+            server=V2_MESSAGES_SERVER, env={"V2_MESSAGES_STALE": "1"}
+        ) as client:
+            with self.assertRaisesRegex(RpcCommandError, "RPC message cursor is stale"):
+                client.get_messages_page(cursor="page-two")
+            messages = client.get_messages()
+
+        self.assertEqual(len(messages), 1)
+        self.assertEqual(messages[0]["content"][0]["text"], "streaming snapshot")
 
     def test_collect_events_returns_turn_events(self) -> None:
         with self.make_client() as client:

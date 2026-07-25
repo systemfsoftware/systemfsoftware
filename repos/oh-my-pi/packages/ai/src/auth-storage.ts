@@ -11,7 +11,8 @@ import { Database, type Statement } from "bun:sqlite";
 import { createHash } from "node:crypto";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import { getAgentDbPath, logger } from "@oh-my-pi/pi-utils";
+import { parseAlibabaTokenPlanCredential } from "@oh-my-pi/pi-catalog/wire/alibaba-token-plan";
+import { $env, getAgentDbPath, logger } from "@oh-my-pi/pi-utils";
 import type { ApiKeyResolver } from "./auth-retry";
 import * as AIError from "./error";
 import { isUsageLimitOutcome } from "./error/rate-limit";
@@ -27,8 +28,12 @@ import type {
 import { getEnvApiKey, getEnvApiKeyName } from "./stream";
 import type { Provider } from "./types";
 import type {
+	ClientProviderUsage,
+	ClientUsageReport,
+	ClientUsageSummary,
 	CredentialRankingContext,
 	CredentialRankingStrategy,
+	ObservedUsageEntry,
 	UsageCostHistoryEntry,
 	UsageCostHistoryQuery,
 	UsageCredential,
@@ -42,6 +47,7 @@ import type {
 	UsageReport,
 } from "./usage";
 import { resolveUsedFraction } from "./usage";
+import { alibabaTokenPlanRankingStrategy, alibabaTokenPlanUsageProvider } from "./usage/alibaba-token-plan";
 import { claudeRankingStrategy, claudeUsageProvider } from "./usage/claude";
 import { cursorUsageProvider } from "./usage/cursor";
 import { googleGeminiCliUsageProvider } from "./usage/gemini";
@@ -57,6 +63,8 @@ import {
 	listCodexResetCredits,
 } from "./usage/openai-codex-reset";
 import { opencodeGoUsageProvider } from "./usage/opencode-go";
+import { syntheticUsageProvider } from "./usage/synthetic";
+import { xaiOauthUsageProvider } from "./usage/xai-oauth";
 import { zaiRankingStrategy, zaiUsageProvider } from "./usage/zai";
 
 const USAGE_RANKING_METRIC_EPSILON = 1e-9;
@@ -186,7 +194,7 @@ export interface CredentialHealthResult {
 	email?: string;
 	/** OAuth account id if known. */
 	accountId?: string;
-	/** Organization/workspace the credential is scoped to (Anthropic multi-subscription). */
+	/** Organization/workspace the credential is scoped to (Anthropic/ChatGPT multi-subscription). */
 	orgId?: string;
 	orgName?: string;
 	/** `true` when the refresh token lives on a remote broker (sentinel was present). */
@@ -396,6 +404,16 @@ export interface AuthCredentialStore {
 	/** Read recorded usage-limit snapshots, oldest first. */
 	listUsageHistory?(query?: UsageHistoryQuery): UsageHistoryEntry[];
 	/**
+	 * Client hook: forward locally observed request usage. Remote broker stores
+	 * batch these to the broker so it can attribute token burn per install;
+	 * local stores omit it and observation is skipped.
+	 */
+	recordObservedUsage?(entries: ObservedUsageEntry[]): void;
+	/** Broker host: persist one client's observed-usage report. */
+	recordClientUsage?(report: ClientUsageReport): void;
+	/** Broker host: aggregate recorded per-client usage since a timestamp. */
+	getClientUsageSummary?(sinceMs: number): ClientUsageSummary;
+	/**
 	 * Optional store-supplied OAuth refresh. When present, `AuthStorage` uses
 	 * it before the per-provider local refresh path. `RemoteAuthCredentialStore`
 	 * implements this against the broker; SQLite stores leave it undefined.
@@ -585,6 +603,7 @@ async function defaultConfigValueResolver(config: string): Promise<string | unde
 // ─────────────────────────────────────────────────────────────────────────────
 
 const DEFAULT_USAGE_PROVIDERS: UsageProvider[] = [
+	alibabaTokenPlanUsageProvider,
 	openaiCodexUsageProvider,
 	kimiUsageProvider,
 	antigravityUsageProvider,
@@ -596,6 +615,8 @@ const DEFAULT_USAGE_PROVIDERS: UsageProvider[] = [
 	opencodeGoUsageProvider,
 	githubCopilotUsageProvider,
 	cursorUsageProvider,
+	syntheticUsageProvider,
+	xaiOauthUsageProvider,
 ];
 
 const DEFAULT_USAGE_PROVIDER_MAP = new Map<Provider, UsageProvider>(
@@ -618,6 +639,12 @@ const USAGE_LAST_GOOD_RETENTION_MS = 24 * 60 * 60_000;
  */
 const USAGE_HISTORY_BUCKET_MS = 60 * 60_000;
 /**
+ * Merge client observed-usage flushes into at most one row per 5 minutes per
+ * (install, provider, model): ~300 rows/day per active model per client
+ * instead of one row per 10s flush.
+ */
+const CLIENT_USAGE_BUCKET_MS = 5 * 60_000;
+/**
  * Per-credential cool-down after a usage fetch fails. While this window is
  * active we serve the last successful value to avoid dropping the credential
  * from the report; without a previous value we just return null and retry
@@ -631,10 +658,10 @@ const USAGE_REPORT_CACHE_KEY_VERSION_OVERRIDES: Partial<Record<Provider, number>
 	"google-antigravity": 2,
 	zai: 2,
 	// v2: cache identity gained an `org:` component so two subscriptions on one
-	// account email stop sharing a slot. The bump also retires pre-org entries —
-	// otherwise an org-less credential could replay another org's cached pool
-	// (incl. the 24h last-good fallback) via the old bare email/account key.
-	anthropic: 2,
+	// account email stop sharing a slot. v3 retires parsed reports created before
+	// Anthropic extra-usage rows existed; header ingestion can otherwise keep
+	// renewing those incomplete reports throughout the 24h last-good retention.
+	anthropic: 3,
 };
 const DEFAULT_OAUTH_REFRESH_TIMEOUT_MS = 10_000;
 /**
@@ -680,6 +707,31 @@ export { isDefinitiveOAuthFailure } from "./error/auth-classify";
 export interface UsageLimitMarkResult {
 	switched: boolean;
 	retryAtMs?: number;
+}
+
+export type ModelUsageHealthState = "healthy" | "reserve" | "depleted" | "unknown";
+
+export interface ModelUsageAccountHealth {
+	credentialId: number;
+	credentialType: AuthCredential["type"];
+	/** True when this credential is currently sticky for options.sessionId. */
+	selected?: true;
+	state: ModelUsageHealthState;
+	remainingFraction?: number;
+	resetsAt?: number;
+}
+
+export interface ModelUsageHealth {
+	state: ModelUsageHealthState;
+	accounts: ModelUsageAccountHealth[];
+}
+
+export interface ModelUsageHealthOptions {
+	modelId?: string;
+	sessionId?: string;
+	baseUrl?: string;
+	reserveFraction: number;
+	signal?: AbortSignal;
 }
 
 type UsageCacheEntry<T> = {
@@ -735,7 +787,7 @@ export interface OAuthAccess {
 	projectId?: string;
 	enterpriseUrl?: string;
 	apiEndpoint?: string;
-	/** Organization/workspace the credential is scoped to (Anthropic multi-subscription). */
+	/** Organization/workspace the credential is scoped to (Anthropic/ChatGPT multi-subscription). */
 	orgId?: string;
 	orgName?: string;
 }
@@ -760,7 +812,7 @@ export interface OAuthAccessFailure {
 	projectId?: string;
 	enterpriseUrl?: string;
 	apiEndpoint?: string;
-	/** Organization/workspace the credential is scoped to (Anthropic multi-subscription). */
+	/** Organization/workspace the credential is scoped to (Anthropic/ChatGPT multi-subscription). */
 	orgId?: string;
 	orgName?: string;
 	error: string;
@@ -776,7 +828,7 @@ export interface OAuthAccountIdentity {
 	accountId?: string;
 	email?: string;
 	projectId?: string;
-	/** Organization/workspace the credential is scoped to (Anthropic multi-subscription). */
+	/** Organization/workspace the credential is scoped to (Anthropic/ChatGPT multi-subscription). */
 	orgId?: string;
 	orgName?: string;
 }
@@ -795,9 +847,11 @@ export interface OAuthAccountSummary {
 	email?: string;
 	projectId?: string;
 	enterpriseUrl?: string;
-	/** Organization/workspace the credential is scoped to (Anthropic multi-subscription). */
+	/** Organization/workspace the credential is scoped to (Anthropic/ChatGPT multi-subscription). */
 	orgId?: string;
 	orgName?: string;
+	/** True when this account is the session-sticky OAuth credential requested by `listOAuthAccounts`. */
+	active: boolean;
 }
 export interface InvalidateCredentialMatchingOptions {
 	signal?: AbortSignal;
@@ -970,6 +1024,7 @@ function resolveDefaultUsageProvider(provider: Provider): UsageProvider | undefi
 }
 
 const DEFAULT_RANKING_STRATEGIES = new Map<Provider, CredentialRankingStrategy>([
+	["alibaba-token-plan", alibabaTokenPlanRankingStrategy],
 	["openai-codex", codexRankingStrategy],
 	["anthropic", claudeRankingStrategy],
 	["google-antigravity", antigravityRankingStrategy],
@@ -3008,11 +3063,13 @@ export class AuthStorage {
 				return report;
 			}
 			// Failure: apply a short jittered cool-down so the credential doesn't
-			// re-hit the endpoint on every poll. Serve the last good value when we
-			// have one (keeps the credential in the report); otherwise cache null
-			// so a cold or throttled credential stops re-bursting until the window
-			// expires and the next poll retries.
-			const lastGood = this.#usageCache.getStale<UsageReport | null>(cacheKey)?.value ?? null;
+			// re-hit the endpoint on every poll. Most providers serve the last good
+			// value through transient failures. Session-cookie providers can opt out
+			// so an expired login does not display stale quota indefinitely.
+			const retainLastGood = this.#usageProviderResolver?.(request.provider)?.retainLastGoodOnFailure !== false;
+			const lastGood = retainLastGood
+				? (this.#usageCache.getStale<UsageReport | null>(cacheKey)?.value ?? null)
+				: null;
 			const backoffJitter = USAGE_FAILURE_BACKOFF_MS * (Math.random() * 0.5 - 0.25);
 			const coolDown = Date.now() + USAGE_FAILURE_BACKOFF_MS + backoffJitter;
 			this.#usageCache.set(cacheKey, { value: lastGood, expiresAt: coolDown });
@@ -3105,6 +3162,56 @@ export class AuthStorage {
 		}
 	}
 
+	/**
+	 * Forward one completed request's usage to the store's observer hook.
+	 * Broker-backed stores batch these into per-install reports so the broker
+	 * can track actual token burn per client; local stores have no hook and
+	 * the call is a no-op.
+	 */
+	recordObservedUsage(entry: {
+		provider: Provider;
+		model: string;
+		usage: { input: number; output: number; cacheRead: number; cacheWrite: number };
+		costUsd?: number;
+		at?: number;
+	}): void {
+		const record = this.#store.recordObservedUsage;
+		if (!record) return;
+		try {
+			record.call(this.#store, [
+				{
+					at: entry.at ?? Date.now(),
+					provider: entry.provider,
+					model: entry.model,
+					requests: 1,
+					inputTokens: entry.usage.input,
+					outputTokens: entry.usage.output,
+					cacheReadTokens: entry.usage.cacheRead,
+					cacheWriteTokens: entry.usage.cacheWrite,
+					costUsd: Number.isFinite(entry.costUsd) ? (entry.costUsd ?? 0) : 0,
+				},
+			]);
+		} catch (error) {
+			this.#usageLogger?.debug("observed usage record failed", {
+				provider: entry.provider,
+				error: String(error),
+			});
+		}
+	}
+
+	/** Broker host: persist one client's observed-usage report (per-install token burn). */
+	recordClientUsage(report: ClientUsageReport): boolean {
+		const record = this.#store.recordClientUsage;
+		if (!record) return false;
+		record.call(this.#store, report);
+		return true;
+	}
+
+	/** Broker host: aggregate recorded per-client usage since `sinceMs`. */
+	getClientUsageSummary(sinceMs: number): ClientUsageSummary {
+		return this.#store.getClientUsageSummary?.(sinceMs) ?? { clients: [] };
+	}
+
 	#resolveObservedUsageCredential(provider: Provider, sessionId?: string): UsageCredential | undefined {
 		const entries = this.#getStoredCredentials(provider);
 		const sessionCredential = this.#getSessionCredential(provider, sessionId);
@@ -3146,8 +3253,9 @@ export class AuthStorage {
 		const parsedReport = parseHeaders(headers, now);
 		if (!parsedReport) return false;
 		// Throttled to one ingest per interval — except when a window reads
-		// exhausted: that snapshot must land immediately so the next getApiKey
-		// blocks the credential instead of burning a wire 429 on the wall.
+		// exhausted: persist that snapshot immediately. A full-backed cache can
+		// then block the next getApiKey; a cold header-only snapshot first probes
+		// the usage endpoint.
 		const exhausted = parsedReport.limits.some(limit => this.#isUsageLimitExhausted(limit));
 		const last = this.#usageHeaderIngestAt.get(cacheKey);
 		if (!exhausted && last !== undefined && now - last < USAGE_HEADER_INGEST_INTERVAL_MS) return false;
@@ -3167,7 +3275,8 @@ export class AuthStorage {
 		}
 
 		if (this.#fetchUsageReportsOverride || this.#store.fetchUsageReports) return false;
-		const prior = this.#usageCache.getStale<UsageReport | null>(cacheKey)?.value;
+		const priorEntry = this.#usageCache.getStale<UsageReport | null>(cacheKey);
+		const prior = priorEntry?.value;
 		let merged = report;
 		if (prior && Array.isArray(prior.limits)) {
 			const headerLimitsById = new Map(report.limits.map(limit => [limit.id, limit]));
@@ -3191,12 +3300,19 @@ export class AuthStorage {
 				metadata: {
 					...(report.metadata ?? {}),
 					...(prior.metadata ?? {}),
+					source: prior.metadata?.source,
 					headersUpdatedAt: now,
 				},
 			};
 		}
 
-		this.#usageCache.set(cacheKey, { value: merged, expiresAt: now + USAGE_REPORT_TTL_MS });
+		// Header ingestion merges values but never extends a cache entry's lifetime.
+		// Preserve the existing expiry (including active failure cooldowns) so full
+		// reports refetch on their original 5-minute schedule and full-payload-only
+		// rows such as extra usage stay current; headers only refresh window rows
+		// between fetches. A newly minted header-only report is durable but stale.
+		const expiresAt = Math.max(priorEntry?.expiresAt ?? now - 1, now - 1);
+		this.#usageCache.set(cacheKey, { value: merged, expiresAt });
 		this.#usageHeaderIngestAt.set(cacheKey, now);
 		return true;
 	}
@@ -3225,6 +3341,29 @@ export class AuthStorage {
 					this.#setStoredCredentials(providerId, dedupedEntries);
 				}
 				entries = dedupedEntries;
+			}
+
+			// SuperGrok billing only accepts OAuth bearers. Catalog envVars for
+			// xai-oauth are [XAI_OAUTH_TOKEN, XAI_API_KEY], so the generic path
+			// would (a) build api_key usage requests from stored keys / the paid
+			// API env var and (b) never fall through to XAI_OAUTH_TOKEN when a
+			// non-OAuth row is the only stored credential. Skip api_key material
+			// and only env-fallback to the dedicated OAuth bearer.
+			if (providerId === "xai-oauth") {
+				let hasUsableStoredOAuthCredential = false;
+				for (const entry of entries) {
+					if (entry.credential.type !== "oauth") continue;
+					const request = this.#buildUsageRequestForOauth(provider, entry.credential, baseUrl);
+					if (providerImpl.supports && !providerImpl.supports(request)) continue;
+					requests.push(request);
+					hasUsableStoredOAuthCredential = true;
+				}
+				const oauthToken = $env.XAI_OAUTH_TOKEN?.trim();
+				if (!hasUsableStoredOAuthCredential && oauthToken) {
+					const request = this.#buildUsageRequest(provider, { type: "oauth", accessToken: oauthToken }, baseUrl);
+					if (!providerImpl.supports || providerImpl.supports(request)) requests.push(request);
+				}
+				continue;
 			}
 
 			if (entries.length === 0) {
@@ -3283,15 +3422,14 @@ export class AuthStorage {
 		const identifiers: string[] = [];
 		const email = this.#getUsageReportMetadataValue(report, "email");
 		if (email) identifiers.push(`email:${email.toLowerCase()}`);
-		if (report.provider === "anthropic") {
-			// Anthropic: one account email can hold several organizations
-			// (Team seat + personal Max). Reports from different orgs must not
-			// merge — scope every identifier by org when the report carries one.
-			// When the email could not be recovered, fall back to the account
-			// (identical across orgs, hence the org qualifier is what keeps two
-			// subscriptions apart) so no-email reports still merge per org.
-			// Org-less reports (pre-upgrade caches) keep their bare identifiers
-			// and only merge among themselves.
+		if (report.provider === "anthropic" || report.provider === "openai-codex") {
+			// One account email can hold several org-scoped subscriptions
+			// (Anthropic organizations, ChatGPT workspaces). Reports from
+			// different orgs must not merge — scope every identifier by org
+			// when the report carries one; fall back to the account when the
+			// email could not be recovered so no-email reports still merge
+			// per org. Org-less reports (pre-upgrade caches) keep their bare
+			// identifiers and only merge among themselves.
 			if (identifiers.length === 0) {
 				const accountId =
 					this.#getUsageReportMetadataValue(report, "accountId") ?? this.#getUsageReportScopeAccountId(report);
@@ -3299,12 +3437,11 @@ export class AuthStorage {
 			}
 			const orgId = this.#getUsageReportMetadataValue(report, "orgId");
 			if (orgId) {
-				if (identifiers.length === 0) return [`anthropic:org:${orgId.toLowerCase()}`];
-				return identifiers.map(identifier => `anthropic:org:${orgId.toLowerCase()}|${identifier.toLowerCase()}`);
+				if (identifiers.length === 0) return [`${report.provider}:org:${orgId.toLowerCase()}`];
+				return identifiers.map(
+					identifier => `${report.provider}:org:${orgId.toLowerCase()}|${identifier.toLowerCase()}`,
+				);
 			}
-			return identifiers.map(identifier => `anthropic:${identifier.toLowerCase()}`);
-		}
-		if (report.provider === "openai-codex") {
 			return identifiers.map(identifier => `${report.provider}:${identifier.toLowerCase()}`);
 		}
 		const projectId =
@@ -3481,6 +3618,177 @@ export class AuthStorage {
 	 */
 	usageProviderFor(provider: Provider): UsageProvider | undefined {
 		return this.#usageProviderResolver?.(provider);
+	}
+
+	/**
+	 * Return model ids whose live reports map to a quantitative usage scope.
+	 * Provider strategies supply model/tier mapping when available; otherwise
+	 * only explicitly matching model ids and account-wide shared limits count.
+	 * Label-only or ambiguous tier limits are excluded rather than guessed.
+	 */
+	getUsageReportingModelIds(
+		provider: Provider,
+		modelIds: readonly string[],
+		reports: readonly UsageReport[],
+	): string[] {
+		const strategy = this.#rankingStrategyResolver?.(provider);
+		const providerReports = reports.filter(report => report.provider === provider);
+		if (providerReports.length === 0) return [];
+		const seen = new Set<string>();
+		const reporting: string[] = [];
+		for (const modelId of modelIds) {
+			if (seen.has(modelId)) continue;
+			seen.add(modelId);
+			const context: CredentialRankingContext = { modelId };
+			const hasUsage = providerReports.some(report => {
+				const limits = strategy
+					? this.#getScopedUsageLimits(strategy, report, context)
+					: report.limits.filter(limit => limit.scope.shared === true || limit.scope.modelId === modelId);
+				return limits.some(limit => this.#isUsageLimitExhausted(limit) || resolveUsedFraction(limit) !== undefined);
+			});
+			if (hasUsage) reporting.push(modelId);
+		}
+		return reporting;
+	}
+
+	/**
+	 * Inspect the credential pool that {@link getApiKey} would use for one model
+	 * without advancing round-robin state or changing session stickiness.
+	 *
+	 * Pool aggregation is deliberately conservative: one healthy sibling makes
+	 * the model healthy, while any unknown sibling prevents a depleted/reserve
+	 * conclusion. Static runtime/config/env credentials return unknown because
+	 * they bypass the managed account pool.
+	 */
+	async getModelUsageHealth(provider: Provider, options: ModelUsageHealthOptions): Promise<ModelUsageHealth> {
+		options.signal?.throwIfAborted();
+		const origin = this.getCredentialOrigin(provider);
+		const strategy = this.#rankingStrategyResolver?.(provider);
+		if (!origin || !strategy || (origin.kind !== "oauth" && origin.kind !== "api_key")) {
+			return { state: "unknown", accounts: [] };
+		}
+
+		const stored = this.#getStoredCredentials(provider).map((entry, index) => ({ entry, index }));
+		const oauthPool = stored.filter(({ entry }) => entry.credential.type === "oauth");
+		const apiKeyPool = stored.filter(({ entry }) => entry.credential.type === "api_key");
+		const loginApiKeyPool = apiKeyPool.filter(
+			({ entry }) => entry.credential.type === "api_key" && entry.credential.source === "login",
+		);
+		const pool = origin.kind === "oauth" ? oauthPool : loginApiKeyPool;
+		if (pool.length === 0) return { state: "unknown", accounts: [] };
+		const sessionCredential = this.#getSessionCredential(provider, options.sessionId);
+		const selectedCredentialId =
+			sessionCredential?.type === origin.kind
+				? this.#getStoredCredentials(provider)[sessionCredential.index]?.id
+				: undefined;
+
+		const rankingContext: CredentialRankingContext = { modelId: options.modelId };
+		const blockScope = strategy.blockScope?.(rankingContext);
+		const reserveFraction = Number.isFinite(options.reserveFraction)
+			? Math.max(0, Math.min(1, options.reserveFraction))
+			: 0;
+		const nowMs = Date.now();
+		const accounts = await Promise.all(
+			pool.map(async ({ entry, index }): Promise<ModelUsageAccountHealth> => {
+				const credentialType = entry.credential.type;
+				const providerKey = this.#getProviderTypeKey(provider, credentialType);
+				let blockedUntil = this.#getCredentialBlockedUntil(provider, providerKey, index, blockScope);
+				if (blockedUntil !== undefined && provider !== "openai-codex") {
+					return {
+						credentialId: entry.id,
+						credentialType,
+						state: "depleted",
+						resetsAt: blockedUntil,
+					};
+				}
+
+				let report: UsageReport | null;
+				try {
+					report = await raceUsageWithSignal(
+						this.#getUsageReport(provider, entry.credential, {
+							baseUrl: options.baseUrl,
+							timeoutMs: this.#usageRequestTimeoutMs,
+							signal: options.signal,
+						}),
+						options.signal,
+					);
+				} catch (error) {
+					if (options.signal?.aborted) throw error;
+					report = null;
+				}
+
+				if (provider === "openai-codex") {
+					blockedUntil = this.#getCredentialBlockedUntil(provider, providerKey, index, blockScope);
+				}
+				if (blockedUntil !== undefined) {
+					return {
+						credentialId: entry.id,
+						credentialType,
+						state: "depleted",
+						resetsAt: blockedUntil,
+					};
+				}
+				if (!report) return { credentialId: entry.id, credentialType, state: "unknown" };
+
+				const limits = this.#getScopedUsageLimits(strategy, report, rankingContext);
+				if (limits.length === 0) return { credentialId: entry.id, credentialType, state: "unknown" };
+
+				const currentLimits = limits.filter(limit => {
+					const resetsAt = limit.window?.resetsAt;
+					return resetsAt === undefined || resetsAt > nowMs || report.fetchedAt >= resetsAt;
+				});
+				if (currentLimits.length === 0) {
+					return { credentialId: entry.id, credentialType, state: "unknown" };
+				}
+				const activeExhausted = currentLimits.filter(limit => this.#isUsageLimitExhausted(limit));
+				if (activeExhausted.length > 0) {
+					const futureResets = activeExhausted
+						.map(limit => limit.window?.resetsAt)
+						.filter((resetsAt): resetsAt is number => resetsAt !== undefined && resetsAt > nowMs);
+					return {
+						credentialId: entry.id,
+						credentialType,
+						state: "depleted",
+						resetsAt: futureResets.length > 0 ? Math.min(...futureResets) : undefined,
+					};
+				}
+
+				const usedFractions = currentLimits
+					.map(resolveUsedFraction)
+					.filter((fraction): fraction is number => fraction !== undefined);
+				if (usedFractions.length === 0) {
+					return { credentialId: entry.id, credentialType, state: "unknown" };
+				}
+				const remainingFraction = Math.max(0, 1 - Math.max(...usedFractions));
+				return {
+					credentialId: entry.id,
+					credentialType,
+					state: remainingFraction <= reserveFraction ? "reserve" : "healthy",
+					remainingFraction,
+				};
+			}),
+		);
+		if (selectedCredentialId !== undefined) {
+			const selectedAccount = accounts.find(account => account.credentialId === selectedCredentialId);
+			if (selectedAccount) selectedAccount.selected = true;
+		}
+
+		if (accounts.some(account => account.state === "healthy")) return { state: "healthy", accounts };
+		if (accounts.some(account => account.state === "unknown")) return { state: "unknown", accounts };
+		if (accounts.some(account => account.state === "reserve")) return { state: "reserve", accounts };
+		return { state: "depleted", accounts };
+	}
+
+	/**
+	 * Release a session's sticky credential so its next {@link getApiKey} call
+	 * re-runs native pool ranking. This never blocks or penalizes the released
+	 * account; usage-aware routing uses it when another sibling has more
+	 * headroom, before considering a model/provider fallback.
+	 */
+	releaseSessionCredentialForReselection(provider: string, sessionId: string): boolean {
+		if (!this.#getSessionCredential(provider, sessionId)) return false;
+		this.#clearSessionCredential(provider, sessionId);
+		return true;
 	}
 
 	async fetchUsageReports(options?: {
@@ -4966,11 +5274,20 @@ export class AuthStorage {
 	 * order, WITHOUT refreshing any token. The array position (0-based) is the
 	 * selector accepted by {@link AuthStorage.getOAuthAccessAt}; a "pick the Nth
 	 * account" UI should render `position + 1`.
+	 *
+	 * When `sessionId` is supplied, the session-sticky OAuth credential is marked
+	 * `active`. No account is active before that session has resolved or pinned a
+	 * credential.
 	 */
-	listOAuthAccounts(provider: string): OAuthAccountSummary[] {
+	listOAuthAccounts(provider: string, sessionId?: string): OAuthAccountSummary[] {
 		if (this.#runtimeOverrides.has(provider) || this.#configOverrides.has(provider)) {
 			return [];
 		}
+		const sessionCredential = this.#getSessionCredential(provider, sessionId);
+		const activeCredentialId =
+			sessionCredential?.type === "oauth"
+				? this.#getStoredCredentials(provider)[sessionCredential.index]?.id
+				: undefined;
 		return this.#getStoredOAuthSelections(provider).map((selection, position) => ({
 			position,
 			credentialId: selection.credentialId,
@@ -4980,7 +5297,27 @@ export class AuthStorage {
 			enterpriseUrl: selection.credential.enterpriseUrl,
 			orgId: selection.credential.orgId,
 			orgName: selection.credential.orgName,
+			active: selection.credentialId === activeCredentialId,
 		}));
+	}
+
+	/**
+	 * Pin one stored OAuth account as this session's preferred credential.
+	 *
+	 * The durable credential id keeps the pin stable across credential refreshes,
+	 * storage reordering, and process restarts. Normal auth retry and usage-limit
+	 * handling may still route around an unavailable account.
+	 */
+	pinSessionOAuthAccount(provider: string, sessionId: string, credentialId: number): boolean {
+		if (!sessionId || this.#runtimeOverrides.has(provider) || this.#configOverrides.has(provider)) {
+			return false;
+		}
+		const stored = this.#getStoredCredentials(provider);
+		const index = stored.findIndex(entry => entry.id === credentialId);
+		const target = stored[index];
+		if (target?.credential.type !== "oauth") return false;
+		this.#recordSessionCredential(provider, sessionId, "oauth", index);
+		return true;
 	}
 
 	/**
@@ -5294,9 +5631,15 @@ export class AuthStorage {
 			if (credential.type !== "oauth") continue;
 			const credentialEmail = credential.email?.trim().toLowerCase();
 			const credentialAccountId = credential.accountId?.trim().toLowerCase();
-			if ((email && credentialEmail === email) || (accountId && credentialAccountId === accountId)) {
-				matches.push(entry.id);
-			}
+			// Every identity dimension present on BOTH sides must agree — the
+			// account id is shared workspace-wide and one email can span
+			// workspaces, so a single-dimension match can cross-link siblings.
+			const emailComparable = Boolean(email && credentialEmail);
+			const accountComparable = Boolean(accountId && credentialAccountId);
+			if (!emailComparable && !accountComparable) continue;
+			if (emailComparable && credentialEmail !== email) continue;
+			if (accountComparable && credentialAccountId !== accountId) continue;
+			matches.push(entry.id);
 		}
 		return matches;
 	}
@@ -5906,16 +6249,15 @@ function toStoredAuthCredential(row: AuthRow, credential: AuthCredential): Store
 
 function resolveProviderCredentialIdentityKey(provider: string, identifiers: string[]): string | null {
 	const emailIdentifier = identifiers.find(identifier => identifier.startsWith("email:"));
-	if (provider === "anthropic") {
-		// One Anthropic account email can hold several organizations (e.g. a
-		// Team seat plus a personal Max plan), each with its own org-scoped
-		// token and limit pools. Scope identity by org so both subscriptions
-		// can be stored side by side. The qualifier rides on whichever base
-		// identity is available — the account UUID is IDENTICAL across the
-		// orgs of one login account, so an unqualified account/project
-		// fallback would still collapse two subscriptions whenever the email
-		// could not be recovered. Org-less credentials (rows written before
-		// org capture existed) keep their bare key.
+	if (provider === "anthropic" || provider === "openai-codex") {
+		// One account email can hold several organizations/workspaces (e.g. a
+		// Team seat plus a personal plan), each with its own org-scoped token
+		// and limit pools. Scope identity by org so both subscriptions can be
+		// stored side by side. The qualifier rides on whichever base identity
+		// is available, so an unqualified account/project fallback would
+		// still collapse two subscriptions whenever the email could not be
+		// recovered. Org-less credentials (rows written before org capture
+		// existed) keep their bare key.
 		const base =
 			emailIdentifier ??
 			identifiers.find(identifier => identifier.startsWith("account:")) ??
@@ -5925,7 +6267,6 @@ function resolveProviderCredentialIdentityKey(provider: string, identifiers: str
 		// No base identity at all: the org alone still distinguishes the row.
 		return orgIdentifier ?? null;
 	}
-	if (provider === "openai-codex" && emailIdentifier) return emailIdentifier;
 	const accountIdentifier = identifiers.find(identifier => identifier.startsWith("account:"));
 	if (accountIdentifier) return accountIdentifier;
 	if (emailIdentifier) return emailIdentifier;
@@ -5954,7 +6295,12 @@ function matchesReplacementCredential(
 ): boolean {
 	if (!existing || existing.type !== incoming.type) return false;
 	if (incoming.type === "api_key") {
-		return existing.type === "api_key" && existing.key === incoming.key;
+		if (existing.type !== "api_key") return false;
+		if (existing.key === incoming.key) return true;
+		if (provider !== "alibaba-token-plan") return false;
+		const existingToken = parseAlibabaTokenPlanCredential(existing.key)?.token;
+		const incomingToken = parseAlibabaTokenPlanCredential(incoming.key)?.token;
+		return existingToken !== undefined && existingToken === incomingToken;
 	}
 	const incomingIdentifiers = extractOAuthCredentialIdentifiers(incoming);
 	const incomingIdentityKey = resolveProviderCredentialIdentityKey(provider, incomingIdentifiers);
@@ -5962,9 +6308,9 @@ function matchesReplacementCredential(
 	if (incomingIdentityKey === existingIdentityKey) return true;
 	if (existingIdentityKey === null) return false;
 	// One-way upgrade, applied only when the INCOMING identity key carries the
-	// org qualifier (only anthropic keys do, so other providers never reach the
-	// checks below). An org-scoped login `org:<o>` claims (and re-keys) any
-	// existing row that denotes the same subscription:
+	// org qualifier (only anthropic and openai-codex keys do, so other
+	// providers never reach the checks below). An org-scoped login `org:<o>`
+	// claims (and re-keys) any existing row that denotes the same subscription:
 	//   - `org:<o>` — org-only row stored when identity recovery failed, claimed
 	//     once a later same-org login recovers a base identity;
 	//   - `<b>` for any base identity `<b>` (email/account/project) the incoming
@@ -5988,10 +6334,16 @@ function matchesReplacementCredential(
 		existing.type === "oauth" && existingIdentityKey.endsWith(`|${orgIdentifier}`)
 			? extractOAuthCredentialIdentifiers(existing)
 			: null;
+	// A base identifier that merely repeats the org qualifier's id carries no
+	// per-user identity (openai-codex stores the ChatGPT workspace id as both
+	// accountId and orgId, shared by every member) — letting it act as a
+	// claimable base would re-key another member's same-org row.
+	const orgQualifierId = orgIdentifier.slice("org:".length);
 	for (const identifier of incomingIdentifiers) {
 		const isBase =
 			identifier.startsWith("email:") || identifier.startsWith("account:") || identifier.startsWith("project:");
 		if (!isBase) continue;
+		if (identifier.slice(identifier.indexOf(":") + 1) === orgQualifierId) continue;
 		if (existingIdentityKey === identifier) return true;
 		if (existingIdentityKey === `${identifier}|${orgIdentifier}`) return true;
 		if (existingIdentifiers?.includes(identifier)) return true;
@@ -6321,6 +6673,27 @@ export class SqliteAuthCredentialStore implements AuthCredentialStore {
 			);
 			CREATE INDEX IF NOT EXISTS idx_usage_cost_history_lookup ON usage_cost_history(provider, account_key, recorded_at);
 			CREATE INDEX IF NOT EXISTS idx_usage_history_recorded ON usage_history(recorded_at);
+			CREATE TABLE IF NOT EXISTS clients (
+				install_id TEXT PRIMARY KEY,
+				hostname TEXT,
+				first_seen INTEGER NOT NULL,
+				last_seen INTEGER NOT NULL
+			);
+			CREATE TABLE IF NOT EXISTS client_usage (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				recorded_at INTEGER NOT NULL,
+				install_id TEXT NOT NULL,
+				provider TEXT NOT NULL,
+				model TEXT NOT NULL,
+				requests INTEGER NOT NULL,
+				input_tokens INTEGER NOT NULL,
+				output_tokens INTEGER NOT NULL,
+				cache_read_tokens INTEGER NOT NULL,
+				cache_write_tokens INTEGER NOT NULL,
+				cost_usd REAL NOT NULL DEFAULT 0
+			);
+			CREATE INDEX IF NOT EXISTS idx_client_usage_series ON client_usage(install_id, provider, model, recorded_at);
+			CREATE INDEX IF NOT EXISTS idx_client_usage_recorded ON client_usage(recorded_at);
 		`);
 
 		if (!this.#authCredentialsTableExists()) {
@@ -7097,6 +7470,113 @@ export class SqliteAuthCredentialStore implements AuthCredentialStore {
 		} catch {
 			return [];
 		}
+	}
+
+	recordClientUsage(report: ClientUsageReport): void {
+		const now = Date.now();
+		this.#db
+			.query(
+				`INSERT INTO clients (install_id, hostname, first_seen, last_seen) VALUES (?, ?, ?, ?)
+				 ON CONFLICT(install_id) DO UPDATE SET hostname = COALESCE(excluded.hostname, hostname), last_seen = excluded.last_seen`,
+			)
+			.run(report.installId, report.hostname ?? null, now, now);
+		const findBucket = this.#db.query(
+			`SELECT id FROM client_usage
+			 WHERE install_id = ? AND provider = ? AND model = ? AND recorded_at >= ?
+			 ORDER BY recorded_at DESC LIMIT 1`,
+		);
+		const merge = this.#db.query(
+			`UPDATE client_usage SET recorded_at = ?, requests = requests + ?, input_tokens = input_tokens + ?,
+				output_tokens = output_tokens + ?, cache_read_tokens = cache_read_tokens + ?,
+				cache_write_tokens = cache_write_tokens + ?, cost_usd = cost_usd + ? WHERE id = ?`,
+		);
+		const insert = this.#db.query(
+			`INSERT INTO client_usage (recorded_at, install_id, provider, model, requests, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_usd)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		);
+		for (const entry of report.entries) {
+			// Merge into the newest row of the same (install, provider, model)
+			// bucket so 10s client flushes don't accrete one row apiece forever.
+			const bucketFloor = entry.at - CLIENT_USAGE_BUCKET_MS;
+			const existing = findBucket.get(report.installId, entry.provider, entry.model, bucketFloor) as {
+				id: number;
+			} | null;
+			if (existing) {
+				merge.run(
+					entry.at,
+					entry.requests,
+					entry.inputTokens,
+					entry.outputTokens,
+					entry.cacheReadTokens,
+					entry.cacheWriteTokens,
+					entry.costUsd,
+					existing.id,
+				);
+				continue;
+			}
+			insert.run(
+				entry.at,
+				report.installId,
+				entry.provider,
+				entry.model,
+				entry.requests,
+				entry.inputTokens,
+				entry.outputTokens,
+				entry.cacheReadTokens,
+				entry.cacheWriteTokens,
+				entry.costUsd,
+			);
+		}
+	}
+
+	getClientUsageSummary(sinceMs: number): ClientUsageSummary {
+		const clients = this.#db
+			.query("SELECT install_id, hostname, first_seen, last_seen FROM clients ORDER BY last_seen DESC")
+			.all() as Array<{ install_id: string; hostname: string | null; first_seen: number; last_seen: number }>;
+		const aggregates = this.#db
+			.query(
+				`SELECT install_id, provider, SUM(requests) requests, SUM(input_tokens) input_tokens,
+					SUM(output_tokens) output_tokens, SUM(cache_read_tokens) cache_read_tokens,
+					SUM(cache_write_tokens) cache_write_tokens, SUM(cost_usd) cost_usd
+				 FROM client_usage WHERE recorded_at >= ? GROUP BY install_id, provider
+				 ORDER BY install_id, SUM(input_tokens + output_tokens + cache_read_tokens + cache_write_tokens) DESC`,
+			)
+			.all(sinceMs) as Array<{
+			install_id: string;
+			provider: string;
+			requests: number;
+			input_tokens: number;
+			output_tokens: number;
+			cache_read_tokens: number;
+			cache_write_tokens: number;
+			cost_usd: number;
+		}>;
+		const providersByInstall = new Map<string, ClientProviderUsage[]>();
+		for (const row of aggregates) {
+			let list = providersByInstall.get(row.install_id);
+			if (!list) {
+				list = [];
+				providersByInstall.set(row.install_id, list);
+			}
+			list.push({
+				provider: row.provider,
+				requests: row.requests,
+				inputTokens: row.input_tokens,
+				outputTokens: row.output_tokens,
+				cacheReadTokens: row.cache_read_tokens,
+				cacheWriteTokens: row.cache_write_tokens,
+				costUsd: row.cost_usd,
+			});
+		}
+		return {
+			clients: clients.map(client => ({
+				installId: client.install_id,
+				hostname: client.hostname ?? undefined,
+				firstSeen: client.first_seen,
+				lastSeen: client.last_seen,
+				providers: providersByInstall.get(client.install_id) ?? [],
+			})),
+		};
 	}
 
 	// ─── Convenience methods for CLI ────────────────────────────────────────

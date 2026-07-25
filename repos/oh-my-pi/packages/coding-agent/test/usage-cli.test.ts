@@ -208,6 +208,23 @@ describe("formatUsageBreakdown", () => {
 		{ provider: "cerebras", type: "api_key" },
 	];
 
+	it("renders used-only USD spend without fabricating quota data", () => {
+		const spendReport = makeReport("anthropic", "spend@example.test", [
+			{
+				id: "anthropic:extra",
+				label: "Claude Extra Usage",
+				scope: { provider: "anthropic", windowId: "extra" },
+				amount: { used: 123.45, unit: "usd" },
+			},
+		]);
+
+		const text = stripVTControlCharacters(formatUsageBreakdown([spendReport], [], Date.now()));
+
+		expect(text).toContain("$123.45 used");
+		expect(text).not.toContain("no data");
+		expect(text).not.toContain("%");
+		expect(text).not.toContain("resets");
+	});
 	it("renders every account: reported ones with limits, credential-only ones as no-data rows", () => {
 		const text = stripVTControlCharacters(formatUsageBreakdown(reports, accounts, Date.now()));
 		expect(text).toContain("dummy.primary@example.test");

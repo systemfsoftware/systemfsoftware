@@ -98,6 +98,21 @@ describe("malformed session entries", () => {
 		expect(result.stats.map(s => s.entryId)).toEqual(["ok"]);
 	});
 
+	it("ignores malformed content blocks without aborting later entries", async () => {
+		const file = await writeSession([
+			assistantEntry("a1", {
+				content: [null, { type: "toolCall", id: "call-1", name: "bash", arguments: {} }],
+				usage: USAGE,
+				timestamp: 1752000000000,
+			}),
+			assistantEntry("a2", { content: [], usage: USAGE, timestamp: 1752000001000 }),
+		]);
+
+		const result = await parseSessionFile(file);
+		expect(result.stats.map(s => s.entryId)).toEqual(["a1", "a2"]);
+		expect(result.toolCalls.map(c => c.toolCallId)).toEqual(["call-1"]);
+	});
+
 	it("keeps tool_calls insertable when the turn lacks a message timestamp", async () => {
 		const file = await writeSession([
 			assistantEntry("a1", {

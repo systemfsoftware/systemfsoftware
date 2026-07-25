@@ -12,6 +12,7 @@ import { settings } from "../../config/settings";
 import type { RenderResultOptions } from "../../extensibility/custom-tools/types";
 import { shimmerEnabled, shimmerText } from "../../modes/theme/shimmer";
 import type { Theme } from "../../modes/theme/theme";
+import { USER_INTERRUPT_LABEL } from "../../session/messages";
 import { Ellipsis, Hasher, type RenderCache, renderStatusLine, renderTreeList, truncateToWidth } from "../../tui";
 import type { ToolSession } from "..";
 import {
@@ -304,26 +305,38 @@ export function nothingToWaitForResult(session: ToolSession): AgentToolResult<Co
 }
 
 /** `cancel`: kill the named jobs; returns immediately with outcomes + snapshots. */
-export function executeCancel(
+export async function executeCancel(
 	session: ToolSession,
 	manager: AsyncJobManager,
 	ownerId: string | undefined,
 	ids: string[],
-): AgentToolResult<CoordinationDetails> {
+): Promise<AgentToolResult<CoordinationDetails>> {
 	const ownerFilter = ownerId ? { ownerId } : undefined;
 	const cancelOutcomes: CancelOutcome[] = [];
 	for (const id of ids) {
 		const existing = manager.getJob(id);
 		if (!existing || (ownerId && existing.ownerId !== ownerId)) {
-			cancelOutcomes.push({ id, status: "not_found", message: `Background job not found: ${id}` });
+			// No job by this id (or it belongs to another agent): a budget-aborted
+			// keep-alive subagent lives on as a jobless registration long after its
+			// job row is reaped, so let cancel reach the agent registration too.
+			cancelOutcomes.push(await cancelAgentRegistration(session, ownerId, id));
 			continue;
 		}
 		if (existing.status !== "running") {
-			cancelOutcomes.push({
-				id,
-				status: "already_completed",
-				message: `Background job ${id} is already ${existing.status}.`,
-			});
+			// The job row settled but may still be inside the retention window.
+			// The agent registration behind it (job id == agent id for task
+			// spawns) can outlive the row as an idle/parked zombie — try the
+			// registration kill before reporting the row as already done.
+			const regOutcome = await cancelAgentRegistration(session, ownerId, id);
+			cancelOutcomes.push(
+				regOutcome.status === "cancelled"
+					? regOutcome
+					: {
+							id,
+							status: "already_completed",
+							message: `Background job ${id} is already ${existing.status}.`,
+						},
+			);
 			continue;
 		}
 		const cancelled = manager.cancel(id, ownerFilter);
@@ -334,6 +347,52 @@ export function executeCancel(
 		);
 	}
 	return buildJobResult(session, manager, "cancel", visibleJobs(manager, ids, ownerId), cancelOutcomes);
+}
+
+/**
+ * Kill a non-job-backed agent registration named by `id`: abort any in-flight
+ * turn, then release it from the lifecycle (dispose session + unregister). This
+ * is the only kill path for a keep-alive subagent that was budget-aborted, went
+ * `idle`/`parked`, and outlived its job row — otherwise it is unstoppable short
+ * of a broker restart (issue #6315). Scoped to the caller's own descendants so
+ * cross-agent kills stay impossible; a bare test/SDK caller (no owner id) may
+ * target any sub. Never touches Main, the caller, or advisor transcripts.
+ */
+async function cancelAgentRegistration(
+	session: ToolSession,
+	ownerId: string | undefined,
+	id: string,
+): Promise<CancelOutcome> {
+	const registry = session.agentRegistry;
+	const ref = registry?.get(id);
+	if (ref?.kind !== "sub") {
+		return { id, status: "not_found", message: `Background job not found: ${id}` };
+	}
+	if (id === ownerId) {
+		return { id, status: "not_found", message: `Cannot cancel yourself (${id}).` };
+	}
+	if (ownerId && ref.parentId !== ownerId) {
+		return { id, status: "not_found", message: `Agent ${id} was not spawned by you and cannot be cancelled.` };
+	}
+	const lifecycle = session.agentLifecycle?.();
+	try {
+		if (ref.status === "running" && ref.session) {
+			await ref.session.abort({ reason: USER_INTERRUPT_LABEL });
+		}
+		if (lifecycle) {
+			await lifecycle.release(id);
+		} else {
+			await ref.session?.dispose();
+			registry?.unregister(id);
+		}
+	} catch (error) {
+		return {
+			id,
+			status: "already_completed",
+			message: `Agent ${id} could not be fully cancelled: ${error instanceof Error ? error.message : String(error)}.`,
+		};
+	}
+	return { id, status: "cancelled", message: `Cancelled agent ${id} (killed session, dropped registration).` };
 }
 
 /** `jobs`: read-only snapshot of every job plus the jobless running-agent roster. */

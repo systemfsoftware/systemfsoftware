@@ -1,0 +1,510 @@
+import { readFile } from 'node:fs/promises'
+import path from 'node:path'
+import {
+  bundleWithLightningCSS,
+  transformWithLightningCSS,
+} from './lightningcss.ts'
+import { applyLocalsConvention, modulesToEsm } from './modules.ts'
+import {
+  resolveCssOptions,
+  type CSSModulesOptions,
+  type ResolvedCssOptions,
+} from './options.ts'
+import { CssPostPlugin, type CssStyles } from './post.ts'
+import { processWithPostCSS as runPostCSS } from './postcss.ts'
+import {
+  compilePreprocessor,
+  disposeSassCompiler,
+  getPreprocessorLangFromId,
+} from './preprocessors.ts'
+import {
+  CSS_LANGS_RE,
+  CSS_MODULE_RE,
+  getCleanId,
+  RE_CSS,
+  RE_CSS_INLINE,
+  RE_INLINE,
+  toCssFileName,
+} from './utils.ts'
+import type { CSSModulesConfig } from 'lightningcss'
+import type { Plugin } from 'rolldown'
+import type { ResolvedConfig } from 'tsdown'
+import type { Logger } from 'tsdown/internal'
+
+interface CssPluginConfig {
+  css: ResolvedCssOptions
+  cwd: string
+  target?: string[]
+  sourceMap: boolean
+}
+
+interface CssPluginResult {
+  /** Plugins that run BEFORE user plugins (CSS compilation) */
+  pre: Plugin[]
+  /** Plugins that run AFTER user plugins (CSS collection & emission) */
+  post: Plugin[]
+}
+
+function shouldSkipTransform(id: string, cleanId: string): boolean {
+  const isInline = RE_INLINE.test(id)
+  // Skip CSS files with non-inline queries (e.g. ?raw handled by other plugins),
+  // but allow through virtual CSS from other plugins (e.g. Vue SFC `lang.css`)
+  // where the clean path itself is not a CSS file.
+  return id !== cleanId && !isInline && CSS_LANGS_RE.test(cleanId)
+}
+
+export function CssPlugin(
+  config: ResolvedConfig,
+  { logger }: { logger: Logger },
+): CssPluginResult {
+  const cssConfig: CssPluginConfig = {
+    css: resolveCssOptions(config.css, config.target, config.unbundle),
+    cwd: config.cwd,
+    target: config.target,
+    sourceMap: Boolean(config.sourcemap),
+  }
+  const styles: CssStyles = new Map()
+  const modulesMap = new Map<string, Record<string, string>>()
+
+  // Pre-user plugin: compiles CSS (preprocessors, LightningCSS/PostCSS)
+  // but does NOT convert to JS — allows user plugins (e.g. Vue scoped CSS)
+  // to transform the compiled CSS before collection.
+  const cssCompilePlugin: Plugin = {
+    name: '@tsdown/css',
+
+    buildStart() {
+      styles.clear()
+      modulesMap.clear()
+    },
+
+    closeBundle() {
+      if (!this.meta.watchMode) {
+        return disposeSassCompiler()
+      }
+    },
+
+    closeWatcher() {
+      return disposeSassCompiler()
+    },
+
+    resolveId: {
+      filter: { id: RE_CSS_INLINE },
+      async handler(source, ...args) {
+        const cleanSource = getCleanId(source)
+        const resolved = await this.resolve(cleanSource, ...args)
+        if (resolved) {
+          return {
+            ...resolved,
+            id: `${resolved.id}?inline`,
+          }
+        }
+      },
+    },
+
+    load: {
+      filter: { id: RE_CSS_INLINE },
+      async handler(id) {
+        const cleanId = getCleanId(id)
+        // Only handle real files; virtual CSS modules are loaded by their own plugins
+        if (styles.has(id)) return
+
+        const code = await readFile(cleanId, 'utf8').catch(() => null)
+        if (code == null) return
+
+        this.addWatchFile(cleanId)
+
+        return {
+          code,
+          moduleType: 'js',
+        }
+      },
+    },
+
+    transform: {
+      filter: { id: CSS_LANGS_RE },
+      async handler(code, id) {
+        const cleanId = getCleanId(id)
+        if (shouldSkipTransform(id, cleanId)) return
+
+        const isInline = RE_INLINE.test(id)
+        const isModule =
+          !isInline && cssConfig.css.modules !== false && CSS_MODULE_RE.test(id)
+
+        const deps: string[] = []
+        let modules: Record<string, string> | undefined
+        let map: string | undefined
+
+        if (cssConfig.css.transformer === 'lightningcss') {
+          const result = await processWithLightningCSS(
+            code,
+            id,
+            cleanId,
+            deps,
+            cssConfig,
+            logger,
+            isModule,
+          )
+          code = result.code
+          modules = result.modules
+          map = result.map
+        } else {
+          const result = await processWithPostCSS(
+            code,
+            id,
+            cleanId,
+            deps,
+            cssConfig,
+            isModule,
+          )
+          code = result.code
+          modules = result.modules
+          map = result.map
+        }
+
+        for (const dep of deps) {
+          this.addWatchFile(dep)
+        }
+
+        if (code.length && !code.endsWith('\n')) {
+          code += '\n'
+        }
+
+        if (modules) {
+          const modulesConfig =
+            typeof cssConfig.css.modules === 'object'
+              ? cssConfig.css.modules
+              : undefined
+          if (modulesConfig?.localsConvention) {
+            modules = applyLocalsConvention(
+              modules,
+              modulesConfig.localsConvention,
+            )
+          }
+          modulesConfig?.getJSON?.(cleanId, modules, cleanId)
+          modulesMap.set(id, modules)
+        }
+
+        // Return compiled CSS without converting to JS.
+        // User plugins can still transform this CSS (e.g. Vue scoped styles).
+        // `map` is `null` when no real map is available (e.g. no transform ran),
+        // which tells Rolldown the transform has no sourcemap instead of warning.
+        return { code, map: map ?? null }
+      },
+    },
+  }
+
+  // Post-user plugin: collects final CSS (after user plugin transforms)
+  // and converts CSS modules to JS exports.
+  const cssCollectPlugin: Plugin = {
+    name: '@tsdown/css:collect',
+
+    transform: {
+      filter: { id: CSS_LANGS_RE },
+      handler(code, id) {
+        const cleanId = getCleanId(id)
+        if (shouldSkipTransform(id, cleanId)) return
+
+        const isInline = RE_INLINE.test(id)
+
+        // CSS is rewritten into a JS module here; there is no meaningful
+        // CSS-to-JS sourcemap, so return `map: null` to silence Rolldown's
+        // SOURCEMAP_BROKEN warning without claiming an incorrect map.
+        if (isInline) {
+          return {
+            code: `export default ${JSON.stringify(code)};`,
+            map: null,
+            moduleSideEffects: false,
+            moduleType: 'js',
+          }
+        }
+
+        if (code.length) {
+          styles.set(id, code)
+        }
+
+        const modules = modulesMap.get(id)
+        if (modules) {
+          return {
+            code: modulesToEsm(modules),
+            map: null,
+            moduleSideEffects: false,
+            moduleType: 'js',
+          }
+        }
+
+        return {
+          code: '',
+          map: null,
+          moduleSideEffects: 'no-treeshake',
+          moduleType: 'js',
+        }
+      },
+    },
+  }
+
+  const postPlugins: Plugin[] = [cssCollectPlugin]
+
+  if (cssConfig.css.inject) {
+    // Inject plugin runs BEFORE CssPostPlugin so it can see pure CSS chunks
+    // before they are removed, and rewrite their imports to CSS asset paths.
+    const injectPlugin: Plugin = {
+      name: '@tsdown/css:inject',
+
+      generateBundle(_outputOptions, bundle) {
+        const chunks = Object.values(bundle)
+        // Identify pure CSS chunks and empty CSS wrapper chunks
+        const pureCssChunks = new Set<string>()
+        for (const chunk of chunks) {
+          if (
+            chunk.type !== 'chunk' ||
+            chunk.exports.length ||
+            !chunk.moduleIds.length
+          )
+            continue
+          // Strict: all modules are CSS
+          if (chunk.moduleIds.every((id) => styles.has(id))) {
+            pureCssChunks.add(chunk.fileName)
+            continue
+          }
+          // Relaxed: non-entry chunk has CSS modules and code is trivially empty
+          // (e.g. a JS file whose only purpose is `import './foo.css'`)
+          if (
+            !chunk.isEntry &&
+            !chunk.isDynamicEntry &&
+            chunk.moduleIds.some((id) => styles.has(id)) &&
+            isEmptyChunkCode(chunk.code)
+          ) {
+            pureCssChunks.add(chunk.fileName)
+          }
+        }
+
+        for (const chunk of chunks) {
+          if (chunk.type !== 'chunk') continue
+          if (pureCssChunks.has(chunk.fileName)) continue
+
+          if (cssConfig.css.splitting) {
+            // Rewrite pure CSS chunk imports in-place: swap .mjs/.cjs/.js → .css
+            // This preserves import order and sourcemap line positions.
+            for (const imp of chunk.imports) {
+              if (!pureCssChunks.has(imp)) continue
+              const basename = path.basename(imp)
+              const escaped = basename.replaceAll(
+                /[.*+?^${}()|[\]\\]/g,
+                String.raw`\$&`,
+              )
+              const cssBasename = toCssFileName(basename)
+              const importRE = new RegExp(
+                String.raw`(\bimport\s*["'][^"']*)${escaped}(["'];)`,
+              )
+              chunk.code = chunk.code.replace(importRE, `$1${cssBasename}$2`)
+            }
+            // Direct CSS modules in this chunk need a prepended import
+            if (chunk.moduleIds.some((id) => styles.has(id))) {
+              const cssFile = toCssFileName(chunk.fileName)
+              const relativePath = path.posix.relative(
+                path.posix.dirname(chunk.fileName),
+                cssFile,
+              )
+              const importPath =
+                relativePath[0] === '.' ? relativePath : `./${relativePath}`
+              chunk.code = `import '${importPath}';\n${chunk.code}`
+              if (chunk.map) {
+                chunk.map.mappings = `;${chunk.map.mappings}`
+              }
+            }
+          } else {
+            const hasCss =
+              chunk.moduleIds.some((id) => styles.has(id)) ||
+              chunk.imports.some((imp) => pureCssChunks.has(imp))
+            if (hasCss) {
+              const cssFile = cssConfig.css.fileName
+              const relativePath = path.posix.relative(
+                path.posix.dirname(chunk.fileName),
+                cssFile,
+              )
+              const importPath =
+                relativePath[0] === '.' ? relativePath : `./${relativePath}`
+              chunk.code = `import '${importPath}';\n${chunk.code}`
+              if (chunk.map) {
+                chunk.map.mappings = `;${chunk.map.mappings}`
+              }
+            }
+          }
+        }
+      },
+    }
+    postPlugins.push(injectPlugin)
+  }
+
+  postPlugins.push(CssPostPlugin(cssConfig.css, styles))
+
+  return {
+    pre: [cssCompilePlugin],
+    post: postPlugins,
+  }
+}
+
+interface ProcessResult {
+  code: string
+  map?: string
+  modules?: Record<string, string>
+}
+
+function resolveCssModulesConfig(
+  modulesOptions: CSSModulesOptions | false | undefined,
+  isModule: boolean,
+  logger: Logger,
+): boolean | CSSModulesConfig | undefined {
+  if (!isModule) return undefined
+
+  const config = typeof modulesOptions === 'object' ? modulesOptions : undefined
+  if (!config) return true
+
+  const cssModulesConfig: CSSModulesConfig = {}
+  if (typeof config.generateScopedName === 'string') {
+    cssModulesConfig.pattern = config.generateScopedName
+  } else if (typeof config.generateScopedName === 'function') {
+    logger.warn(
+      '[@tsdown/css] `generateScopedName` as a function is not supported with `transformer: "lightningcss"`. Use a string pattern or switch to `transformer: "postcss"`.',
+    )
+  }
+  if (config.scopeBehaviour === 'global') {
+    cssModulesConfig.pattern = '[local]'
+  }
+
+  return Object.keys(cssModulesConfig).length > 0 ? cssModulesConfig : true
+}
+
+async function processWithLightningCSS(
+  code: string,
+  id: string,
+  cleanId: string,
+  deps: string[],
+  config: CssPluginConfig,
+  logger: Logger,
+  isModule: boolean,
+): Promise<ProcessResult> {
+  const lang = getPreprocessorLangFromId(id)
+  const cssModules = resolveCssModulesConfig(
+    config.css.modules,
+    isModule,
+    logger,
+  )
+
+  if (lang) {
+    const preResult = await compilePreprocessor(
+      lang,
+      code,
+      cleanId,
+      config.css.preprocessorOptions,
+    )
+    deps.push(...preResult.deps)
+
+    return transformWithLightningCSS(preResult.code, cleanId, {
+      target: config.css.target,
+      lightningcss: config.css.lightningcss,
+      minify: config.css.minify,
+      cssModules,
+      sourceMap: config.sourceMap,
+    })
+  }
+
+  // Virtual modules (with query strings) can't use file-based bundling;
+  // ?inline is excluded because the underlying file is real.
+  if (id !== cleanId && !RE_INLINE.test(id)) {
+    return transformWithLightningCSS(code, cleanId, {
+      target: config.css.target,
+      lightningcss: config.css.lightningcss,
+      minify: config.css.minify,
+      cssModules,
+      sourceMap: config.sourceMap,
+    })
+  }
+
+  if (RE_CSS.test(cleanId)) {
+    const bundleResult = await bundleWithLightningCSS(
+      cleanId,
+      {
+        target: config.css.target,
+        lightningcss: config.css.lightningcss,
+        minify: config.css.minify,
+        cssModules,
+        preprocessorOptions: config.css.preprocessorOptions,
+        sourceMap: config.sourceMap,
+        logger,
+      },
+      code,
+    )
+    deps.push(...bundleResult.deps)
+    return {
+      code: bundleResult.code,
+      map: bundleResult.map,
+      modules: bundleResult.modules,
+    }
+  }
+
+  return { code: '' }
+}
+
+async function processWithPostCSS(
+  code: string,
+  id: string,
+  cleanId: string,
+  deps: string[],
+  config: CssPluginConfig,
+  isModule: boolean,
+): Promise<ProcessResult> {
+  const lang = getPreprocessorLangFromId(id)
+
+  if (lang) {
+    const preResult = await compilePreprocessor(
+      lang,
+      code,
+      cleanId,
+      config.css.preprocessorOptions,
+    )
+    code = preResult.code
+    deps.push(...preResult.deps)
+  }
+
+  const modulesConfig =
+    typeof config.css.modules === 'object' ? config.css.modules : undefined
+
+  const needInlineImport = code.includes('@import')
+  const postcssResult = await runPostCSS(
+    code,
+    cleanId,
+    config.css.postcss,
+    config.cwd,
+    needInlineImport,
+    isModule ? { isModule: true, config: modulesConfig } : undefined,
+    config.sourceMap,
+  )
+  code = postcssResult.code
+  deps.push(...postcssResult.deps)
+
+  const transformResult = await transformWithLightningCSS(code, cleanId, {
+    target: config.css.target,
+    lightningcss: config.css.lightningcss,
+    minify: config.css.minify,
+    sourceMap: config.sourceMap,
+    inputSourceMap: postcssResult.map,
+  })
+
+  // When LightningCSS skips its transform (no targets/minify), it returns no
+  // map; fall back to the PostCSS map so the chain still has one.
+  return {
+    code: transformResult.code,
+    map: transformResult.map ?? postcssResult.map,
+    modules: postcssResult.modules,
+  }
+}
+
+function isEmptyChunkCode(code: string): boolean {
+  return !code
+    .replaceAll(/\/\*[\s\S]*?\*\//g, '')
+    .replaceAll(/\/\/[^\n]*/g, '')
+    .replaceAll(/\bexport\s*\{\s*\};?/g, '')
+    .replaceAll(/\bimport\s*["'][^"']*["'];?/g, '')
+    .trim()
+}

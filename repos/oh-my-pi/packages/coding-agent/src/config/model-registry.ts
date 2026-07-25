@@ -23,6 +23,7 @@ import { getBundledModels, getBundledProviders } from "@oh-my-pi/pi-catalog/mode
 import {
 	googleAntigravityModelManagerOptions,
 	googleGeminiCliModelManagerOptions,
+	type OpenAICodexAccount,
 	openaiCodexModelManagerOptions,
 	PROVIDER_DESCRIPTORS,
 } from "@oh-my-pi/pi-catalog/provider-models";
@@ -64,9 +65,15 @@ const BUILT_IN_DISCOVERY_NON_AUTHORITATIVE_RETRY_MS = 5 * 60 * 1000;
 import type { ApiKeyResolver, FetchImpl } from "@oh-my-pi/pi-ai";
 import { registerOAuthProvider, unregisterOAuthProviders } from "@oh-my-pi/pi-ai/oauth";
 import type { OAuthCredentials, OAuthLoginCallbacks } from "@oh-my-pi/pi-ai/oauth/types";
-import { getBundledModelReferenceIndex, resolveModelReference } from "@oh-my-pi/pi-catalog/identity";
+import { setCodexAttestationProvider } from "@oh-my-pi/pi-ai/providers/openai-codex-responses";
+import {
+	getBundledModelReferenceIndex,
+	inheritReferenceThinking,
+	resolveModelReference,
+} from "@oh-my-pi/pi-catalog/identity";
 import { isBunTestRuntime, isRecord, logger, wrapFetchForExtraCa } from "@oh-my-pi/pi-utils";
 import { parseModelString, resolveProviderModelReference } from "../config/model-resolver";
+import { generateCodexAttestation } from "../live/attestation";
 import type { AuthStorage, OAuthCredential } from "../session/auth-storage";
 import { type ApiKeyResolverModel, type ApiKeyResolverOptions, createApiKeyResolver } from "./api-key-resolver";
 import type { ConfigError, ConfigFile } from "./config-file";
@@ -84,6 +91,10 @@ import {
 import { ModelsConfigFile, type ProviderValidationModel, validateProviderConfiguration } from "./models-config";
 import type { ModelOverride, ModelsConfig, ProviderAuthMode } from "./models-config-schema";
 import { settings } from "./settings";
+
+// DeviceCheck attestation (`x-oai-attestation`) for ChatGPT-OAuth Codex
+// requests; the pi-ai provider resolves it just-in-time per request.
+setCodexAttestationProvider(generateCodexAttestation);
 
 export const kNoAuth = "N/A";
 
@@ -153,7 +164,7 @@ interface ProviderOverride {
 export function mergeDiscoveredModel<TApi extends Api>(
 	model: Model<TApi>,
 	existing: Model<Api> | undefined,
-	providerOverride?: Pick<ProviderOverride, "baseUrl" | "headers" | "remoteCompaction" | "transport">,
+	providerOverride?: Pick<ProviderOverride, "baseUrl" | "compat" | "headers" | "remoteCompaction" | "transport">,
 ): Model<TApi> {
 	if (existing) {
 		const supportsTools = model.supportsTools ?? existing.supportsTools;
@@ -167,7 +178,7 @@ export function mergeDiscoveredModel<TApi extends Api>(
 				providerOverride?.remoteCompaction,
 			),
 			...(supportsTools !== undefined ? { supportsTools } : {}),
-			compat: model.compatConfig,
+			compat: mergeCompat(model.compatConfig, providerOverride?.compat),
 		} as ModelSpec<TApi>);
 	}
 	if (providerOverride) {
@@ -180,7 +191,7 @@ export function mergeDiscoveredModel<TApi extends Api>(
 				model.remoteCompaction,
 				providerOverride.remoteCompaction,
 			),
-			compat: model.compatConfig,
+			compat: mergeCompat(model.compatConfig, providerOverride.compat),
 		} as ModelSpec<TApi>);
 	}
 	return model;
@@ -423,20 +434,35 @@ function getOAuthCredentialsForProvider(authStorage: AuthStorage, provider: stri
 	return entries.filter((entry): entry is OAuthCredential => entry.type === "oauth");
 }
 
-function resolveOAuthAccountIdForAccessToken(
+/**
+ * Resolve every configured Codex OAuth account for catalog discovery, refreshing
+ * each credential exactly once. Codex `/models` is account-scoped, so discovery
+ * must fetch per account and union the results; resolving a single access token
+ * (as before) hid models available only through a sibling account (#6265).
+ *
+ * Returns `null` when any stored account fails to resolve (e.g. a transient
+ * refresh failure): the Codex manager is authoritative, so unioning only the
+ * accounts that resolved would cache a partial catalog and hide the failed
+ * account's models for the cache TTL. Aborting keeps the previous/bundled
+ * catalog instead.
+ */
+async function resolveCodexDiscoveryAccounts(
 	authStorage: AuthStorage,
-	provider: string,
-	accessToken: string,
-): string | undefined {
-	const oauthCredentials = getOAuthCredentialsForProvider(authStorage, provider);
-	const matchingCredential = oauthCredentials.find(credential => credential.access === accessToken);
-	if (matchingCredential) {
-		return matchingCredential.accountId;
+	resolvedAccessToken: string,
+): Promise<OpenAICodexAccount[] | null> {
+	const accesses = await authStorage.getOAuthAccesses("openai-codex");
+	const accounts: OpenAICodexAccount[] = [];
+	for (const access of accesses) {
+		if (!access.ok) return null;
+		accounts.push({ accessToken: access.accessToken, accountId: access.accountId });
 	}
-	if (oauthCredentials.length === 1) {
-		return oauthCredentials[0].accountId;
+	if (!accounts.some(account => account.accessToken === resolvedAccessToken)) {
+		const matchingCredential = getOAuthCredentialsForProvider(authStorage, "openai-codex").find(
+			credential => credential.access === resolvedAccessToken,
+		);
+		accounts.push({ accessToken: resolvedAccessToken, accountId: matchingCredential?.accountId });
 	}
-	return undefined;
+	return accounts;
 }
 
 function mergeCompat<TBase extends object, TOverride extends object>(
@@ -667,7 +693,7 @@ function finalizeCustomModel(model: CustomModelOverlay, options: CustomModelBuil
 		provider: resolvedModel.provider,
 		baseUrl: resolvedModel.baseUrl,
 		reasoning: resolvedModel.reasoning ?? reference?.reasoning ?? (options.useDefaults ? false : undefined),
-		thinking: resolvedModel.thinking ?? reference?.thinking,
+		thinking: inheritReferenceThinking(resolvedModel.thinking, reference, resolvedModel.provider),
 		input: input as ("text" | "image")[],
 		...(supportsTools !== undefined ? { supportsTools } : {}),
 		cost,
@@ -847,6 +873,28 @@ export class ModelRegistry {
 				}
 			});
 		this.#backgroundRefresh = refreshPromise;
+	}
+
+	/**
+	 * Wait for any in-flight background model discovery to settle.
+	 *
+	 * Background discovery started by {@link refreshInBackground} is
+	 * fire-and-forget; RPC consumers (e.g. `get_available_models`,
+	 * `set_model`) and deferred `--model` resolution that read the registry
+	 * immediately after session creation can otherwise observe a partial
+	 * catalog before discovery-backed providers have populated `#models`.
+	 * Awaiting the tracked promise ensures the response reflects every
+	 * configured provider once the initial background refresh resolves.
+	 *
+	 * No-op when no refresh is in flight (`#backgroundRefresh` cleared in the
+	 * `finally` of `refreshInBackground` on completion). Resolves immediately
+	 * in that case so already-warm sessions are unaffected. Discovery errors
+	 * remain swallowed by `refreshInBackground`'s existing `.catch`.
+	 */
+	async awaitBackgroundRefresh(): Promise<void> {
+		if (this.#backgroundRefresh) {
+			await this.#backgroundRefresh;
+		}
 	}
 
 	async refreshProvider(providerId: string, strategy: ModelRefreshStrategy = "online"): Promise<void> {
@@ -1139,8 +1187,18 @@ export class ModelRegistry {
 					models.push(spec);
 					continue;
 				}
-				if (unrestorableHeaderIds.has(spec.id)) continue;
-				const bundledHeaders = bundledById?.get(spec.id)?.headers;
+				// Current unrestorable markers prove that neither same-id nor
+				// request-model bundled headers matched the live model. Only markers
+				// from the old id-only writer may recover through `requestModelId`.
+				const unrestorable = unrestorableHeaderIds.has(spec.id);
+				const bundledHeaders = (
+					unrestorable
+						? cache.legacyHeaderRestoreMarkers && spec.requestModelId
+							? bundledById?.get(spec.requestModelId)
+							: undefined
+						: (bundledById?.get(spec.id) ??
+							(spec.requestModelId ? bundledById?.get(spec.requestModelId) : undefined))
+				)?.headers;
 				if (!bundledHeaders) continue;
 				models.push({ ...spec, headers: bundledHeaders });
 			}
@@ -1719,14 +1777,11 @@ export class ModelRegistry {
 				providerId: "openai-codex",
 				authoritative: true,
 				resolveKey: value => value,
-				createOptions: accessToken => {
-					const accountId = resolveOAuthAccountIdForAccessToken(this.authStorage, "openai-codex", accessToken);
-					return openaiCodexModelManagerOptions({
-						accessToken,
-						accountId,
+				createOptions: accessToken =>
+					openaiCodexModelManagerOptions({
+						resolveAccounts: () => resolveCodexDiscoveryAccounts(this.authStorage, accessToken),
 						fetch: this.#fetch,
-					});
-				},
+					}),
 			},
 		];
 		const disabledProviders = getDisabledProviderIdsFromSettings();
@@ -2074,6 +2129,24 @@ export class ModelRegistry {
 			.map(provider => provider.provider);
 	}
 
+	/**
+	 * Whether `providerId` is known to the registry: it has at least one live
+	 * model, or it is configured for dynamic discovery (models.yml `discovery:`
+	 * or a runtime extension provider) and is not disabled. Discovery-only
+	 * providers can hold zero models at startup — cached rows never persist
+	 * live auth headers (#5780), so a provider whose discovered models all
+	 * carry config headers (`authHeader: true`) only materializes models after
+	 * the online refresh completes.
+	 */
+	hasProvider(providerId: string): boolean {
+		if (this.#models.some(model => model.provider === providerId)) return true;
+		if (getDisabledProviderIdsFromSettings().has(providerId)) return false;
+		return (
+			this.#discoverableProviders.some(provider => provider.provider === providerId) ||
+			this.#runtimeModelManagers.has(providerId)
+		);
+	}
+
 	getProviderDiscoveryState(provider: string): ProviderDiscoveryState | undefined {
 		return this.#providerDiscoveryStates.get(provider);
 	}
@@ -2104,13 +2177,21 @@ export class ModelRegistry {
 	/**
 	 * Get API key for a model.
 	 */
-	async getApiKey(model: Model<Api>, sessionId?: string): Promise<string | undefined> {
+	async getApiKey(
+		model: Model<Api>,
+		sessionId?: string,
+		options?: { signal?: AbortSignal },
+	): Promise<string | undefined> {
 		const commandKey = this.#resolveCommandBackedApiKey(model.provider);
 		if (commandKey.configured) return commandKey.value;
 		if (this.#keylessProviders.has(model.provider) && !this.authStorage.hasAuth(model.provider)) {
 			return kNoAuth;
 		}
-		return this.authStorage.getApiKey(model.provider, sessionId, { baseUrl: model.baseUrl, modelId: model.id });
+		return this.authStorage.getApiKey(model.provider, sessionId, {
+			baseUrl: model.baseUrl,
+			modelId: model.id,
+			signal: options?.signal,
+		});
 	}
 
 	/**

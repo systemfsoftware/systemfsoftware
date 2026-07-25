@@ -142,6 +142,27 @@ describe("auth-gateway openai-chat: parseRequest", () => {
 		expect(parsed.options.extra).toEqual({ includeStreamingUsage: true });
 	});
 
+	it("rejects raw explicit prompt-cache controls instead of silently dropping them", () => {
+		expect(() =>
+			parseRequest({
+				model: "gpt-5.6",
+				messages: [{ role: "user", content: "hi" }],
+				prompt_cache_options: { mode: "explicit", ttl: "30m" },
+			}),
+		).toThrow("prompt_cache_options and prompt_cache_breakpoint are unsupported");
+		expect(() =>
+			parseRequest({
+				model: "gpt-5.6",
+				messages: [
+					{
+						role: "user",
+						content: [{ type: "text", text: "hi", prompt_cache_breakpoint: { mode: "explicit" } }],
+					},
+				],
+			}),
+		).toThrow("prompt_cache_options and prompt_cache_breakpoint are unsupported");
+	});
+
 	it("rejects missing required fields", () => {
 		expect(() => parseRequest({ messages: [] })).toThrow(/model/);
 		expect(() => parseRequest({ model: "x" })).toThrow(/messages/);

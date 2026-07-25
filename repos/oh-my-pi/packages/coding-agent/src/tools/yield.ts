@@ -16,6 +16,9 @@ import { subprocessToolRegistry } from "../task/subprocess-tool-registry";
 import type { ToolSession } from ".";
 import { buildOutputValidator, formatAllValidationIssues } from "./output-schema-validator";
 
+const YIELD_RESULT_FORMAT_HINT =
+	'Submit success as {"result":{"data":<your output>}} or failure as {"result":{"error":"message"}}.';
+
 export interface YieldDetails {
 	/** Successful result payload, or omitted when `useLastTurn` requests last-turn extraction. */
 	data?: unknown;
@@ -314,7 +317,7 @@ export class YieldTool implements AgentTool<TSchema, YieldDetails> {
 		const raw = params as Record<string, unknown>;
 		const rawResult = raw.result;
 		if (!rawResult || typeof rawResult !== "object" || Array.isArray(rawResult)) {
-			throw new Error("result must be an object containing either data or error");
+			throw new Error(`result must be an object containing either data or error. ${YIELD_RESULT_FORMAT_HINT}`);
 		}
 		const resultRecord = rawResult as Record<string, unknown>;
 		const errorMessage = typeof resultRecord.error === "string" ? resultRecord.error : undefined;

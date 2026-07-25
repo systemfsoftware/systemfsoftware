@@ -27,6 +27,7 @@ describe("jj workspace detection", () => {
 		await fs.mkdir(path.join(dir, ".jj", "repo", "store"), { recursive: true });
 		await fs.mkdir(nested, { recursive: true });
 
+		expect(jj.repo.rootSync(nested)).toBe(dir);
 		expect(await jj.repo.root(nested)).toBe(dir);
 		expect(await jj.repo.is(nested)).toBe(true);
 	});
@@ -37,6 +38,7 @@ describe("jj workspace detection", () => {
 		await fs.mkdir(path.join(dir, ".jj", "repo", "store"), { recursive: true });
 		await fs.mkdir(nested, { recursive: true });
 
+		expect(jj.repo.rootSync(nested)).toBe(dir);
 		expect(await jj.repo.root(nested)).toBe(dir);
 		await removeWithRetries(path.join(dir, ".jj"));
 
@@ -48,6 +50,7 @@ describe("jj workspace detection", () => {
 		const dir = await createTempDir();
 		await fs.mkdir(path.join(dir, ".jj"), { recursive: true });
 
+		expect(jj.repo.rootSync(dir)).toBeNull();
 		expect(await jj.repo.root(dir)).toBeNull();
 		expect(await jj.repo.is(dir)).toBe(false);
 	});
@@ -62,6 +65,7 @@ describe("jj workspace detection", () => {
 		await fs.mkdir(path.join(secondary, ".jj", "working_copy"), { recursive: true });
 		await fs.writeFile(path.join(secondary, ".jj", "repo"), path.join("..", "..", ".jj", "repo"));
 
+		expect(jj.repo.rootSync(secondary)).toBe(secondary);
 		expect(await jj.repo.is(secondary)).toBe(true);
 		expect(await jj.repo.root(secondary)).toBe(secondary);
 	});
@@ -152,5 +156,31 @@ describe("isPureJjRepo", () => {
 		await fs.mkdir(inner, { recursive: true });
 		await initGit(inner);
 		expect(await jj.isPureJjRepo(inner)).toBe(false);
+	});
+});
+
+describe("jj working-copy label", () => {
+	it("uses the nearest bookmark, then falls back to the current change ID", () => {
+		expect(jj.workingCopy.parseLabel("kvisqosn|on-branch\nqlnsqysu|ancestor\n")).toBe("on-branch");
+		expect(jj.workingCopy.parseLabel("kvisqosn|\nqlnsqysu|ancestor\n")).toBe("ancestor");
+		expect(jj.workingCopy.parseLabel("kvisqosn|\n")).toBe("kvisqosn");
+	});
+
+	it("returns null for empty output", () => {
+		expect(jj.workingCopy.parseLabel("  \n\t ")).toBeNull();
+	});
+});
+
+describe("jj status", () => {
+	it("maps added files to untracked and all other changes to unstaged", () => {
+		expect(jj.status.parse("M a.ts\nA b.ts\nA c.ts\nD d.ts\nM e.ts\n")).toEqual({
+			staged: 0,
+			unstaged: 3,
+			untracked: 2,
+		});
+	});
+
+	it("reports a clean working copy as all zeros", () => {
+		expect(jj.status.parse("")).toEqual({ staged: 0, unstaged: 0, untracked: 0 });
 	});
 });

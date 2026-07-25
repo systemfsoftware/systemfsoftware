@@ -206,10 +206,17 @@ export interface MCPResourceContent {
 
 export type MCPContent = MCPTextContent | MCPImageContent | MCPResourceContent;
 
+/** Structured authentication challenge returned in a tool result. */
+export interface MCPAuthChallenge {
+	/** Values from `_meta["mcp/www_authenticate"]`. */
+	readonly wwwAuthenticate: readonly string[];
+}
+
 /** tools/call response */
 export interface MCPToolCallResult {
 	content: MCPContent[];
 	isError?: boolean;
+	_meta?: Record<string, unknown>;
 }
 
 // =============================================================================

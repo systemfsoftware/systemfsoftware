@@ -167,6 +167,34 @@ describe("hub launch rendering", () => {
 		expect(rendered.some(line => line.includes("spawn bun ENOENT"))).toBe(true);
 	});
 
+	it("surfaces a pre-ready exit in the interactive start result", async () => {
+		const uiTheme = await theme();
+		const rendered = lines(
+			hubToolRenderer.renderResult(
+				{
+					content: [{ type: "text", text: "Process exited before readiness was observed." }],
+					details: {
+						op: "start",
+						timedOut: false,
+						daemon: daemon({
+							state: "exited",
+							pid: undefined,
+							exitedAt: Date.now(),
+							exitCode: 0,
+							readyAt: undefined,
+						}),
+					} satisfies LaunchToolDetails,
+				},
+				{ expanded: false, isPartial: false },
+				uiTheme,
+				{ op: "start", name: "web", application: "bun", ready: { log: "LISTENING" } },
+			),
+		);
+		expect(rendered[0]).toContain("Launch start");
+		expect(rendered[0]).toContain("exited");
+		expect(rendered.some(line => line.includes("Process exited before readiness was observed."))).toBe(true);
+	});
+
 	it("names the unmet readiness condition instead of a contradictory Ready + timed-out pair", async () => {
 		const uiTheme = await theme();
 		const rendered = lines(

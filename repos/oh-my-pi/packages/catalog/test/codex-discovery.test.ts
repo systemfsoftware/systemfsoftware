@@ -141,7 +141,49 @@ describe("Codex model discovery", () => {
 		expect(legacy?.contextWindow).toBe(272_000);
 	});
 
-	it("uses the discovered account catalog as authoritative", async () => {
+	it("honors context_window when upstream actively reports it for GPT-5.6 SKUs", async () => {
+		const fetchFn: typeof fetch = Object.assign(
+			async () =>
+				new Response(
+					JSON.stringify({
+						models: [
+							{
+								slug: "gpt-5.6-sol",
+								display_name: "GPT-5.6-Sol",
+								context_window: 272_000,
+								default_reasoning_level: "medium",
+								supported_reasoning_levels: ["low", "medium", "high"],
+								input_modalities: ["text", "image"],
+								supported_in_api: true,
+							},
+							{
+								slug: "gpt-5.5",
+								display_name: "GPT-5.5",
+								context_window: 272_000,
+								default_reasoning_level: "high",
+								supported_reasoning_levels: ["low", "high"],
+								input_modalities: ["text"],
+								supported_in_api: true,
+							},
+						],
+					}),
+				),
+			{ preconnect() {} },
+		);
+		const result = await fetchCodexModels({
+			accessToken: "test-token",
+			baseUrl: "https://codex.example/backend-api",
+			clientVersion: "0.144.1",
+			fetchFn,
+		});
+
+		const sol = result?.models.find(model => model.id === "gpt-5.6-sol");
+		expect(sol?.contextWindow).toBe(272_000);
+		const legacy = result?.models.find(model => model.id === "gpt-5.5");
+		expect(legacy?.contextWindow).toBe(272_000);
+	});
+
+	it("keeps account-listed API-unsupported models while pruning hidden and absent models", async () => {
 		const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "pi-catalog-codex-authoritative-"));
 		const staticOnlyModel: ModelSpec<"openai-codex-responses"> = {
 			id: "unsupported-static",
@@ -155,23 +197,160 @@ describe("Codex model discovery", () => {
 			contextWindow: 272_000,
 			maxTokens: 128_000,
 		};
-		const discoveredModel: ModelSpec<"openai-codex-responses"> = {
+		const sparkModel: ModelSpec<"openai-codex-responses"> = {
 			...staticOnlyModel,
-			id: "account-supported",
-			name: "Account-supported model",
+			id: "gpt-5.3-codex-spark",
+			name: "GPT-5.3 Codex Spark",
+			contextWindow: 128_000,
 		};
+		const fetchFn: typeof fetch = Object.assign(
+			async () =>
+				new Response(
+					JSON.stringify({
+						models: [
+							{
+								slug: "gpt-5.3-codex-spark",
+								display_name: "GPT-5.3-Codex-Spark",
+								visibility: "list",
+								supported_in_api: false,
+								context_window: 128_000,
+								default_reasoning_level: "high",
+								input_modalities: ["text"],
+							},
+							{
+								slug: "hidden-model",
+								display_name: "Hidden model",
+								visibility: "hidden",
+								supported_in_api: true,
+							},
+							{
+								slug: "hide-model",
+								display_name: "Hide model",
+								visibility: "hide",
+								supported_in_api: true,
+							},
+						],
+					}),
+				),
+			{ preconnect() {} },
+		);
 		try {
 			const result = await resolveProviderModels(
 				{
-					...openaiCodexModelManagerOptions(),
-					staticModels: [staticOnlyModel],
+					...openaiCodexModelManagerOptions({
+						resolveAccounts: async () => [{ accessToken: "test-token" }],
+						fetch: fetchFn,
+					}),
+					staticModels: [staticOnlyModel, sparkModel],
 					cacheDbPath: path.join(tempDir, "models.db"),
-					fetchDynamicModels: async () => [discoveredModel],
 				},
 				"online",
 			);
 
-			expect(result.models.map(model => model.id)).toEqual(["account-supported"]);
+			expect(result.models.map(model => model.id)).toEqual(["gpt-5.3-codex-spark"]);
+			expect(result.models[0]).toMatchObject({
+				contextWindow: 128_000,
+				maxTokens: 128_000,
+			});
+		} finally {
+			await fs.rm(tempDir, { recursive: true, force: true });
+		}
+	});
+
+	it("unions models across every configured Codex OAuth account (#6265)", async () => {
+		const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "pi-catalog-codex-union-"));
+		// Codex `/models` is account-scoped: account 1 lacks gpt-5.6-sol, account 2
+		// exposes it. Keyed off the chatgpt-account-id header the discovery flow
+		// sends per account.
+		const catalogs: Record<string, readonly string[]> = {
+			"account-1": ["gpt-5.6-terra", "gpt-5.6-luna"],
+			"account-2": ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"],
+		};
+		const fetchFn: typeof fetch = Object.assign(
+			async (_input: string | URL | Request, init?: RequestInit) => {
+				const accountId = new Headers(init?.headers).get("chatgpt-account-id") ?? "";
+				const slugs = catalogs[accountId] ?? [];
+				return new Response(
+					JSON.stringify({
+						models: slugs.map(slug => ({
+							slug,
+							display_name: slug,
+							default_reasoning_level: "medium",
+							supported_reasoning_levels: ["low", "medium", "high"],
+							input_modalities: ["text", "image"],
+							supported_in_api: true,
+						})),
+					}),
+				);
+			},
+			{ preconnect() {} },
+		);
+		try {
+			const options = openaiCodexModelManagerOptions({
+				resolveAccounts: async () => [
+					{ accessToken: "token-1", accountId: "account-1" },
+					{ accessToken: "token-2", accountId: "account-2" },
+				],
+				fetch: fetchFn,
+			});
+			const result = await resolveProviderModels(
+				{ ...options, cacheDbPath: path.join(tempDir, "models.db") },
+				"online",
+			);
+
+			expect(result.models.map(model => model.id).sort()).toEqual(["gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.6-terra"]);
+		} finally {
+			await fs.rm(tempDir, { recursive: true, force: true });
+		}
+	});
+
+	it("keeps bundled Codex models when any account catalog fetch fails (#6265)", async () => {
+		const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "pi-catalog-codex-union-fail-"));
+		const bundled: ModelSpec<"openai-codex-responses"> = {
+			id: "gpt-5.6-terra",
+			name: "GPT-5.6 Terra",
+			api: "openai-codex-responses",
+			provider: "openai-codex",
+			baseUrl: "https://chatgpt.com/backend-api",
+			reasoning: true,
+			input: ["text"],
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+			contextWindow: 372_000,
+			maxTokens: 128_000,
+		};
+		const fetchFn: typeof fetch = Object.assign(
+			async (_input: string | URL | Request, init?: RequestInit) => {
+				const accountId = new Headers(init?.headers).get("chatgpt-account-id");
+				if (accountId === "account-1") {
+					return Response.json({
+						models: [
+							{
+								slug: "partial-account-model",
+								display_name: "Partial Account Model",
+								supported_in_api: true,
+								input_modalities: ["text"],
+							},
+						],
+					});
+				}
+				return new Response("nope", { status: 500 });
+			},
+			{ preconnect() {} },
+		);
+		try {
+			const options = openaiCodexModelManagerOptions({
+				resolveAccounts: async () => [
+					{ accessToken: "token-1", accountId: "account-1" },
+					{ accessToken: "token-2", accountId: "account-2" },
+				],
+				fetch: fetchFn,
+			});
+			const result = await resolveProviderModels(
+				{ ...options, staticModels: [bundled], cacheDbPath: path.join(tempDir, "models.db") },
+				"online",
+			);
+
+			expect(result.models.map(model => model.id)).toEqual(["gpt-5.6-terra"]);
 		} finally {
 			await fs.rm(tempDir, { recursive: true, force: true });
 		}

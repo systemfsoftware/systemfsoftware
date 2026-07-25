@@ -35,6 +35,8 @@ describe("print-mode error exit disposes the session before exit", () => {
 		const session = {
 			extensionRunner: undefined,
 			subscribe: () => {},
+			settings: { get: () => false },
+			sessionManager: { buildSessionContext: () => ({ messages: [] }), getEntries: () => [] },
 			state: { messages: [errorMsg] },
 			getLastAssistantMessage: () => errorMsg,
 			prepareForHeadlessAdvisorDrain: () => {},

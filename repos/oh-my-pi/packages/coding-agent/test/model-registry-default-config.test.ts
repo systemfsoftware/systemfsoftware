@@ -33,6 +33,22 @@ describe("ModelRegistry default custom models config", () => {
 		expect(model?.baseUrl).toBe("https://yaml-default.example.com/v1");
 	});
 
+	test("loads Bedrock cache capabilities from a model override", () => {
+		writeBedrockCacheOverride();
+
+		const model = loadDefaultRegistryModel({
+			provider: "amazon-bedrock",
+			modelId: "us.anthropic.claude-opus-4-8",
+		});
+
+		expect(model?.compat).toEqual({
+			promptCacheMode: "explicit",
+			supportsLongPromptCacheRetention: false,
+			promptCacheMinimumTokens: 1024,
+			promptCacheMaximumCheckpoints: 4,
+		});
+	});
+
 	test("prefers default models.yml over models.yaml when both exist", () => {
 		writeModelsYaml("models.yml", {
 			provider: "yaml-precedence",
@@ -105,6 +121,12 @@ interface ModelSnapshot {
 	id: string;
 	name: string;
 	baseUrl: string | undefined;
+	compat: {
+		promptCacheMode: string;
+		supportsLongPromptCacheRetention: boolean;
+		promptCacheMinimumTokens: number;
+		promptCacheMaximumCheckpoints: number;
+	};
 }
 
 function writeModelsYaml(file: "models.yml" | "models.yaml", fixture: ProviderFixture): void {
@@ -128,6 +150,24 @@ function writeModelsYaml(file: "models.yml" | "models.yaml", fixture: ProviderFi
 			"          cacheWrite: 0",
 			"        contextWindow: 100000",
 			"        maxTokens: 8000",
+			"",
+		].join("\n"),
+	);
+}
+
+function writeBedrockCacheOverride(): void {
+	fs.writeFileSync(
+		path.join(tempDir.path(), "models.yml"),
+		[
+			"providers:",
+			"  amazon-bedrock:",
+			"    modelOverrides:",
+			"      us.anthropic.claude-opus-4-8:",
+			"        compat:",
+			"          promptCacheMode: explicit",
+			"          supportsLongPromptCacheRetention: false",
+			"          promptCacheMinimumTokens: 1024",
+			"          promptCacheMaximumCheckpoints: 4",
 			"",
 		].join("\n"),
 	);
@@ -173,6 +213,7 @@ function loadDefaultRegistryModel(lookup: ModelLookup): ModelSnapshot | undefine
 				id: model.id,
 				name: model.name,
 				baseUrl: model.baseUrl,
+				compat: model.compat,
 			} : null));
 		} finally {
 			authStorage.close();

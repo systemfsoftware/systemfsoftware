@@ -297,6 +297,38 @@ describe("searchExa", () => {
 			contents: { summary: { query: "shape test" } },
 		});
 	});
+	it("maps site:/before: directives to native Exa params with an operator-free query", async () => {
+		await withLocalAuthStorage(authStorage =>
+			new ExaProvider().search({
+				query: "vector db benchmarks site:qdrant.tech before:2025-01-01",
+				systemPrompt: "",
+				authStorage,
+				fetch: mockFetch(makeMockExaResponse()),
+			}),
+		);
+		expect(capturedRequestBody!.query).toBe("vector db benchmarks");
+		expect(capturedRequestBody!.includeDomains).toEqual(["qdrant.tech"]);
+		expect(capturedRequestBody!.endPublishedDate).toBe("2025-01-01");
+		expect(capturedRequestBody!.startPublishedDate).toBeUndefined();
+		expect(capturedRequestBody!.excludeDomains).toBeUndefined();
+	});
+
+	it("sends directive-free queries byte-identical with no domain/date params", async () => {
+		await withLocalAuthStorage(authStorage =>
+			new ExaProvider().search({
+				query: "plain natural language question",
+				systemPrompt: "",
+				authStorage,
+				fetch: mockFetch(makeMockExaResponse()),
+			}),
+		);
+		expect(capturedRequestBody).toEqual({
+			query: "plain natural language question",
+			numResults: 10,
+			type: "auto",
+			contents: { summary: { query: "plain natural language question" } },
+		});
+	});
 
 	it("paces consecutive Exa API requests by the configured delay", async () => {
 		resetSettingsForTest();

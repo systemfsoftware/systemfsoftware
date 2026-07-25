@@ -12,6 +12,7 @@ import { findApiKey, isSearchResponse } from "../../../exa/mcp-client";
 import { parseSSE } from "../../../mcp/json-rpc";
 import type { SearchResponse, SearchSource } from "../../../web/search/types";
 import { SearchProviderError } from "../../../web/search/types";
+import { formatQuery, parseSearchQuery, type StructuredQuery } from "../query";
 import { dateToAgeSeconds } from "../utils";
 import type { SearchParams } from "./base";
 import { SearchProvider } from "./base";
@@ -472,8 +473,9 @@ export class ExaProvider extends SearchProvider {
 	}
 
 	search(params: SearchParams): Promise<SearchResponse> {
+		const parsed = params.parsedQuery ?? parseSearchQuery(params.query);
 		return searchExa({
-			query: params.query,
+			...directiveParams(parsed),
 			num_results: params.numSearchResults ?? params.limit,
 			signal: params.signal,
 			authStorage: params.authStorage,
@@ -481,4 +483,29 @@ export class ExaProvider extends SearchProvider {
 			fetch: params.fetch,
 		});
 	}
+}
+
+/**
+ * Map parsed query directives onto Exa's native request parameters:
+ * `site:` → includeDomains, `-site:` → excludeDomains (bare hosts; path parts
+ * are enforced by the central constraint filter), `after:`/`before:` →
+ * start/endPublishedDate (ISO 8601). Exa's neural search prefers natural
+ * language, so the query itself is re-emitted with quoted phrases only.
+ * Directive-free queries pass through byte-identical.
+ */
+function directiveParams(
+	parsed: StructuredQuery,
+): Pick<
+	ExaSearchParams,
+	"query" | "include_domains" | "exclude_domains" | "start_published_date" | "end_published_date"
+> {
+	if (!parsed.hasDirectives) return { query: parsed.raw };
+	const hosts = (sites: readonly string[]) => [...new Set(sites.map(site => site.split("/", 1)[0]))];
+	return {
+		query: formatQuery(parsed, { phrases: true }),
+		include_domains: parsed.sites.length ? hosts(parsed.sites) : undefined,
+		exclude_domains: parsed.excludedSites.length ? hosts(parsed.excludedSites) : undefined,
+		start_published_date: parsed.after,
+		end_published_date: parsed.before,
+	};
 }

@@ -217,10 +217,6 @@ function detailsNotice(cells: ResolvedEvalCell[]): string | undefined {
 	return notices.length > 0 ? notices.join(" ") : undefined;
 }
 
-function timeoutSecondsFromMs(timeoutMs: number): number {
-	return clampTimeout("eval", timeoutMs / 1000);
-}
-
 async function resolveBackend(session: ToolSession, language: EvalLanguage): Promise<ResolvedBackend> {
 	const backends = resolveEvalBackends(session);
 	const allowPy = backends.python;
@@ -538,7 +534,10 @@ export class EvalTool implements AgentTool<typeof evalSchema> {
 					// ordinary tool calls all count against the budget. The watchdog drives
 					// `combinedSignal`; we pass no wall-clock deadline downstream so the
 					// backends never arm a competing fixed timer.
-					const idleTimeoutMs = cell.timeoutMs === 0 ? undefined : timeoutSecondsFromMs(cell.timeoutMs) * 1000;
+					const idleTimeoutMs =
+						cell.timeoutMs === 0
+							? undefined
+							: clampTimeout("eval", cell.timeoutMs / 1000, session.settings.get("tools.maxTimeout")) * 1000;
 					const idle = idleTimeoutMs === undefined ? undefined : new IdleTimeout(idleTimeoutMs);
 					const combinedSignal =
 						signal && idle

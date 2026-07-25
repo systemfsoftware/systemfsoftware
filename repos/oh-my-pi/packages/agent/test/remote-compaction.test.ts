@@ -302,6 +302,163 @@ describe("buildOpenAiNativeHistory call-id tracking", () => {
 	});
 });
 
+describe("buildOpenAiNativeHistory computer calls", () => {
+	const computerModel = makeOpenAiModel({ supportsComputerUse: true });
+	const pendingSafetyChecks = [{ id: "safe_1", code: "confirm", message: "Confirm click" }];
+	const acknowledgedSafetyChecks = [{ id: "safe_1", code: "confirm", message: "Confirm click" }];
+
+	function computerAssistant(): AssistantMessage {
+		return {
+			role: "assistant",
+			content: [
+				{
+					type: "toolCall",
+					id: "call_computer_1|item_computer_1",
+					name: "computer",
+					arguments: { actions: [{ type: "click", button: "left", x: 12, y: 34 }] },
+					providerMetadata: {
+						type: "computer",
+						providerItemId: "item_computer_1",
+						actions: [{ type: "click", button: "left", x: 12, y: 34 }],
+						pendingSafetyChecks,
+					},
+				},
+			],
+			timestamp: Date.now(),
+			provider: "openai",
+			model: "gpt-5",
+			api: "openai-responses",
+			usage: ZERO_USAGE,
+			stopReason: "toolUse",
+		};
+	}
+
+	test("preserves provider item id, actions, safety checks, screenshot file_id, and acknowledgements", () => {
+		const result: ToolResultMessage = {
+			role: "toolResult",
+			toolCallId: "call_computer_1|item_computer_1",
+			toolName: "computer",
+			content: [],
+			isError: false,
+			timestamp: Date.now(),
+			providerMetadata: {
+				type: "computer",
+				screenshot: { type: "computer_screenshot", file_id: "file_screen_电脑/%2F" },
+				acknowledgedSafetyChecks,
+			},
+		};
+		const items = buildOpenAiNativeHistory([computerAssistant(), result], computerModel);
+		expect(items).toEqual([
+			{
+				type: "computer_call",
+				id: "item_computer_1",
+				call_id: "call_computer_1",
+				actions: [{ type: "click", button: "left", x: 12, y: 34 }],
+				pending_safety_checks: pendingSafetyChecks,
+				status: "completed",
+			},
+			{
+				type: "computer_call_output",
+				call_id: "call_computer_1",
+				output: { type: "computer_screenshot", file_id: "file_screen_电脑/%2F" },
+				acknowledged_safety_checks: acknowledgedSafetyChecks,
+			},
+		]);
+	});
+
+	test("registers native provider-payload computer calls for exact output pairing", () => {
+		const assistant = computerAssistant();
+		assistant.providerPayload = {
+			type: "openaiResponsesHistory",
+			provider: "openai",
+			dt: true,
+			items: [
+				{
+					type: "computer_call",
+					id: "item_raw_stable",
+					call_id: "call_computer_1",
+					actions: [{ type: "screenshot" }],
+					pending_safety_checks: [],
+					status: "completed",
+				},
+			],
+		};
+		const result: ToolResultMessage = {
+			role: "toolResult",
+			toolCallId: "call_computer_1|item_computer_1",
+			toolName: "computer",
+			content: [],
+			isError: false,
+			timestamp: Date.now(),
+			providerMetadata: {
+				type: "computer",
+				screenshot: { type: "computer_screenshot", image_url: "data:image/png;base64,AAEC" },
+				acknowledgedSafetyChecks: [],
+			},
+		};
+		const items = buildOpenAiNativeHistory([assistant, result], computerModel);
+		expect(items[0]?.id).toBe("item_raw_stable");
+		expect(items[1]).toEqual({
+			type: "computer_call_output",
+			call_id: "call_computer_1",
+			output: { type: "computer_screenshot", image_url: "data:image/png;base64,AAEC" },
+			acknowledged_safety_checks: [],
+		});
+	});
+
+	test("replaces a failed call without a screenshot with valid recovery history", () => {
+		const failed: ToolResultMessage = {
+			role: "toolResult",
+			toolCallId: "call_computer_1|item_computer_1",
+			toolName: "computer",
+			content: [{ type: "text", text: "capture failed" }],
+			isError: true,
+			timestamp: Date.now(),
+		};
+		const items = buildOpenAiNativeHistory([computerAssistant(), failed], computerModel);
+		expect(items).toHaveLength(1);
+		const recovery = items[0];
+		expect(recovery).toMatchObject({
+			type: "message",
+			role: "assistant",
+			status: "completed",
+		});
+		expect(String(recovery?.id)).toMatch(/^msg_[a-z0-9-]+$/);
+		expect(recovery?.content).toEqual([expect.objectContaining({ type: "output_text", annotations: [] })]);
+		expect(JSON.stringify(items)).toContain("failed before a screenshot was recorded");
+		expect(JSON.stringify(items)).toContain("capture failed");
+	});
+
+	test("downgrades unsupported native computer history to stable valid assistant message items", () => {
+		const unsupportedModel = makeOpenAiModel({ supportsComputerUse: false });
+		const result: ToolResultMessage = {
+			role: "toolResult",
+			toolCallId: "call_computer_1|item_computer_1",
+			toolName: "computer",
+			content: [],
+			isError: false,
+			timestamp: Date.now(),
+			providerMetadata: {
+				type: "computer",
+				screenshot: { type: "computer_screenshot", file_id: "file_downgraded_screen" },
+				acknowledgedSafetyChecks: [{ id: "safe_downgraded" }],
+			},
+		};
+		const first = buildOpenAiNativeHistory([computerAssistant(), result], unsupportedModel);
+		const second = buildOpenAiNativeHistory([computerAssistant(), result], unsupportedModel);
+		expect(first).toHaveLength(2);
+		for (const note of first) {
+			expect(note).toMatchObject({ type: "message", role: "assistant", status: "completed" });
+			expect(String(note.id)).toMatch(/^msg_[a-z0-9-]+$/);
+			expect(note.content).toEqual([expect.objectContaining({ type: "output_text", annotations: [] })]);
+		}
+		expect(first.map(item => item.id)).toEqual(second.map(item => item.id));
+		expect(first.every(item => String(item.id).length <= 64)).toBe(true);
+		expect(JSON.stringify(first)).toContain("file_downgraded_screen");
+		expect(JSON.stringify(first)).toContain("safe_downgraded");
+	});
+});
+
 describe("remote compaction input forwarding", () => {
 	test("sends the full native history without local trimming", async () => {
 		// Contract: the compact endpoint owns compression. Trimming locally dropped
@@ -1256,16 +1413,87 @@ describe("compact() remote compaction failure handling", () => {
 		const baseSettings = { ...DEFAULT_COMPACTION_SETTINGS, keepRecentTokens: 1 };
 
 		// Remote disabled → the V2 replay is unusable → re-expand the pre-V2 original.
-		const reexpanded = prepareCompaction(entries, { ...baseSettings, remoteEnabled: false }, [v2Model]);
+		const reexpanded = prepareCompaction(entries, { ...baseSettings, remoteEnabled: false }, v2Model);
 		expect(reexpanded).toBeDefined();
 		const reexpandedText = JSON.stringify(reexpanded?.messagesToSummarize ?? []);
 		expect(reexpandedText).toContain("ORIGINAL ALPHA port 4242");
 
 		// Remote + V2 still enabled, same provider → reuse the replay, don't re-summarize originals.
-		const reused = prepareCompaction(entries, { ...baseSettings, remoteStreamingV2Enabled: true }, [v2Model]);
+		const reused = prepareCompaction(entries, { ...baseSettings, remoteStreamingV2Enabled: true }, v2Model);
 		expect(reused).toBeDefined();
 		const reusedText = JSON.stringify(reused?.messagesToSummarize ?? []);
 		expect(reusedText).not.toContain("ORIGINAL ALPHA port 4242");
+	});
+
+	test("re-expands a stranded remote compaction when the active model cannot replay it (#6343)", () => {
+		const ts = (n: number) => new Date(n).toISOString();
+		const anthropicActive = buildModel({
+			id: "claude-sonnet-4-5",
+			name: "Claude Sonnet 4.5",
+			api: "anthropic-messages",
+			provider: "anthropic",
+			baseUrl: "https://api.anthropic.com",
+			reasoning: true,
+			input: ["text"],
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+			contextWindow: 200_000,
+			maxTokens: 64_000,
+		});
+		const openaiSmol = makeOpenAiModel({ id: "gpt-5-mini", name: "GPT-5 mini" });
+		// Prior OpenAI remote compaction: opaque placeholder summary, provider-native
+		// replay stored under preserveData tagged "openai".
+		const entries: SessionEntry[] = [
+			{
+				type: "message",
+				id: "m1",
+				parentId: null,
+				timestamp: ts(1),
+				message: { role: "user", content: "ORIGINAL ALPHA port 4242", timestamp: 1 },
+			},
+			{
+				type: "compaction",
+				id: "c1",
+				parentId: "m1",
+				timestamp: ts(2),
+				summary: "Remote compaction preserved provider-native history for this session.",
+				firstKeptEntryId: "m1",
+				tokensBefore: 100_000,
+				preserveData: {
+					openaiRemoteCompaction: {
+						provider: "openai",
+						replacementHistory: [{ type: "message", role: "user", content: "opaque native replay" }],
+						compactionItem: { type: "compaction", encrypted_content: "enc_v1" },
+					},
+				},
+			},
+			{
+				type: "message",
+				id: "m2",
+				parentId: "c1",
+				timestamp: ts(3),
+				message: { role: "user", content: "second turn", timestamp: 3 },
+			},
+			{
+				type: "message",
+				id: "m3",
+				parentId: "m2",
+				timestamp: ts(4),
+				message: { role: "user", content: "third turn", timestamp: 4 },
+			},
+		];
+		const settings = { ...DEFAULT_COMPACTION_SETTINGS, keepRecentTokens: 1 };
+		// Reuse is judged by the ACTIVE model, not the candidate set. The active
+		// anthropic model's encoder drops the OpenAI replay payload, so the stranded
+		// originals are re-expanded into a portable local summary — even though the
+		// OpenAI smol role could still replay the blob.
+		const foreignActive = prepareCompaction(entries, settings, anthropicActive);
+		expect(foreignActive).toBeDefined();
+		expect(JSON.stringify(foreignActive?.messagesToSummarize ?? [])).toContain("ORIGINAL ALPHA port 4242");
+		// The same-provider OpenAI model can replay the payload, so the boundary is
+		// kept and the originals are not re-summarized.
+		const sameProviderActive = prepareCompaction(entries, settings, openaiSmol);
+		expect(sameProviderActive).toBeDefined();
+		expect(JSON.stringify(sameProviderActive?.messagesToSummarize ?? [])).not.toContain("ORIGINAL ALPHA port 4242");
 	});
 
 	test("user abort during the remote compact request rejects without falling back to local summarization", async () => {

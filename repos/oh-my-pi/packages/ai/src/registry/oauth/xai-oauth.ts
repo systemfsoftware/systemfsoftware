@@ -15,8 +15,12 @@ import type { OAuthController, OAuthCredentials } from "./types";
 const XAI_OAUTH_ISSUER = "https://auth.x.ai";
 const XAI_OAUTH_DISCOVERY_URL = `${XAI_OAUTH_ISSUER}/.well-known/openid-configuration`;
 const XAI_OAUTH_DEVICE_CODE_URL = `${XAI_OAUTH_ISSUER}/oauth2/device/code`;
+const XAI_OAUTH_USERINFO_URL = `${XAI_OAUTH_ISSUER}/oauth2/userinfo`;
 const XAI_OAUTH_CLIENT_ID = "b1a00492-073a-47ea-816f-4c329264a828";
 const XAI_OAUTH_SCOPE = "openid profile email offline_access grok-cli:access api:access";
+const XAI_CLI_BILLING_BASE_URL = "https://cli-chat-proxy.grok.com";
+const XAI_CLI_BILLING_PATH = "/v1/billing";
+const XAI_CLI_BILLING_FORMAT = "credits";
 
 // Mirrors the 5-min skew used by anthropic.ts:160 — keeps every provider on the
 // same conservative client-side expiry window.
@@ -51,6 +55,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * @throws Error with message `Invalid xAI <field>: <url>` when the URL fails
  *         either scheme or host validation.
  */
+function isXaiAuthHostname(host: string): boolean {
+	return host === "x.ai" || host.endsWith(".x.ai");
+}
+
+/** SuperGrok CLI billing proxy host (`cli-chat-proxy.grok.com`), not the OIDC issuer. */
+function isXaiBillingHostname(host: string): boolean {
+	return host === "grok.com" || host.endsWith(".grok.com");
+}
+
 export function validateXAIEndpoint(url: string, field: string): string {
 	let parsed: URL;
 	try {
@@ -62,7 +75,28 @@ export function validateXAIEndpoint(url: string, field: string): string {
 		throw new AIError.OAuthError(`Invalid xAI ${field}: ${url}`, { kind: "validation", provider: "xai" });
 	}
 	const host = parsed.hostname.toLowerCase();
-	if (!host || (host !== "x.ai" && !host.endsWith(".x.ai"))) {
+	if (!host || !isXaiAuthHostname(host)) {
+		throw new AIError.OAuthError(`Invalid xAI ${field}: ${url}`, { kind: "validation", provider: "xai" });
+	}
+	return url;
+}
+
+/**
+ * Pin SuperGrok billing URLs to HTTPS `grok.com` / `*.grok.com`.
+ * The CLI billing proxy is intentionally not on `*.x.ai`.
+ */
+export function validateXAIBillingEndpoint(url: string, field: string = "billing_url"): string {
+	let parsed: URL;
+	try {
+		parsed = new URL(url);
+	} catch {
+		throw new AIError.OAuthError(`Invalid xAI ${field}: ${url}`, { kind: "validation", provider: "xai" });
+	}
+	if (parsed.protocol !== "https:") {
+		throw new AIError.OAuthError(`Invalid xAI ${field}: ${url}`, { kind: "validation", provider: "xai" });
+	}
+	const host = parsed.hostname.toLowerCase();
+	if (!host || !isXaiBillingHostname(host)) {
 		throw new AIError.OAuthError(`Invalid xAI ${field}: ${url}`, { kind: "validation", provider: "xai" });
 	}
 	return url;
@@ -124,6 +158,22 @@ async function xaiOAuthDiscovery(
 	return { token_endpoint: tokenEndpoint };
 }
 
+/** Decode an xAI access-token JWT payload without verifying its signature. */
+export function parseXAIAccessTokenPayload(jwt: string): Record<string, unknown> | null {
+	try {
+		if (typeof jwt !== "string" || !jwt.includes(".")) return null;
+		const parts = jwt.split(".");
+		if (parts.length < 2) return null;
+		const payloadPart = parts[1];
+		if (!payloadPart) return null;
+		const decoded = Buffer.from(payloadPart, "base64url").toString("utf8");
+		const payload = JSON.parse(decoded) as unknown;
+		return isRecord(payload) && !Array.isArray(payload) ? payload : null;
+	} catch {
+		return null;
+	}
+}
+
 /**
  * Check whether a JWT access token is at or past its `exp` claim (with an
  * optional refresh-skew margin).
@@ -132,23 +182,98 @@ async function xaiOAuthDiscovery(
  * not token validation.
  */
 export function isXAIAccessTokenExpiring(jwt: string, skewSeconds: number = 0): boolean {
+	const payload = parseXAIAccessTokenPayload(jwt);
+	if (!payload) return false;
+	const exp = payload.exp;
+	if (typeof exp !== "number" || !Number.isFinite(exp)) return false;
+	const now = Math.floor(Date.now() / 1000);
+	const skew = Math.max(0, Math.floor(skewSeconds));
+	return exp <= now + skew;
+}
+
+/** Extract the stable xAI subject UUID from an access token. */
+export function extractXAIAccessTokenSubject(jwt: string): string | undefined {
+	const sub = parseXAIAccessTokenPayload(jwt)?.sub;
+	return typeof sub === "string" && sub.trim() ? sub.trim() : undefined;
+}
+
+export interface XAIOAuthIdentity {
+	accountId?: string;
+	email?: string;
+	name?: string;
+}
+
+/** Fetch optional OIDC userinfo for a valid xAI access token. */
+export async function fetchXAIOAuthIdentity(
+	accessToken: string,
+	fetchOverride?: FetchImpl,
+	signal?: AbortSignal,
+): Promise<XAIOAuthIdentity | null> {
+	const token = accessToken.trim();
+	if (!token) return null;
+	const fetchImpl = fetchOverride ?? fetch;
 	try {
-		if (typeof jwt !== "string" || !jwt.includes(".")) return false;
-		const parts = jwt.split(".");
-		if (parts.length < 2) return false;
-		const payloadPart = parts[1];
-		if (!payloadPart) return false;
-		const decoded = Buffer.from(payloadPart, "base64url").toString("utf8");
-		const payload: unknown = JSON.parse(decoded);
-		if (!isRecord(payload)) return false;
-		const exp = payload.exp;
-		if (typeof exp !== "number" || !Number.isFinite(exp)) return false;
-		const now = Math.floor(Date.now() / 1000);
-		const skew = Math.max(0, Math.floor(skewSeconds));
-		return exp <= now + skew;
+		const response = await fetchImpl(XAI_OAUTH_USERINFO_URL, {
+			method: "GET",
+			headers: {
+				Authorization: `Bearer ${token}`,
+				Accept: "application/json",
+			},
+			redirect: "error",
+			signal: signal
+				? AbortSignal.any([signal, AbortSignal.timeout(DISCOVERY_TIMEOUT_MS)])
+				: AbortSignal.timeout(DISCOVERY_TIMEOUT_MS),
+		});
+		if (!response.ok) return null;
+		const payload = (await response.json()) as unknown;
+		if (!isRecord(payload) || Array.isArray(payload)) return null;
+		const sub = typeof payload.sub === "string" && payload.sub.trim() ? payload.sub.trim() : undefined;
+		const email = typeof payload.email === "string" && payload.email.trim() ? payload.email.trim() : undefined;
+		const name = typeof payload.name === "string" && payload.name.trim() ? payload.name.trim() : undefined;
+		if (!sub && !email && !name) return null;
+		return {
+			...(sub ? { accountId: sub } : {}),
+			...(email ? { email: email.toLowerCase() } : {}),
+			...(name ? { name } : {}),
+		};
 	} catch {
-		return false;
+		return null;
 	}
+}
+
+async function withXAIOAuthIdentity(
+	credentials: OAuthCredentials,
+	fetchOverride?: FetchImpl,
+	signal?: AbortSignal,
+): Promise<OAuthCredentials> {
+	const identity = await fetchXAIOAuthIdentity(credentials.access, fetchOverride, signal);
+	const accountId = identity?.accountId ?? credentials.accountId ?? extractXAIAccessTokenSubject(credentials.access);
+	const email = identity?.email ?? credentials.email;
+	return {
+		...credentials,
+		...(accountId ? { accountId } : {}),
+		...(email ? { email } : {}),
+	};
+}
+
+/** Build the SuperGrok CLI billing URL. Pass `""` to omit `format` (unified monthly payload). */
+export function buildXAICliBillingUrl(format: string = XAI_CLI_BILLING_FORMAT): string {
+	const url = new URL(XAI_CLI_BILLING_PATH, XAI_CLI_BILLING_BASE_URL);
+	if (format) url.searchParams.set("format", format);
+	return validateXAIBillingEndpoint(url.toString());
+}
+
+/**
+ * Headers for SuperGrok CLI billing (`cli-chat-proxy.grok.com`).
+ * Official Grok CLI also sends `X-XAI-Token-Auth: xai-grok-cli` on this host;
+ * include it so billing stays on the same product gate as chat inference.
+ */
+export function getXAICliBillingHeaders(options: { accessToken: string }): Record<string, string> {
+	return {
+		Authorization: `Bearer ${options.accessToken}`,
+		Accept: "application/json",
+		"X-XAI-Token-Auth": "xai-grok-cli",
+	};
 }
 
 function parseXAIDeviceAuthorization(payload: unknown): XAIDeviceAuthorization {
@@ -304,6 +429,7 @@ async function pollXAIDeviceToken(
 				client_id: XAI_OAUTH_CLIENT_ID,
 				device_code: deviceCode,
 			}),
+			redirect: "error",
 			signal: signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal,
 		});
 	} catch (error) {
@@ -364,12 +490,13 @@ export async function loginXAIOAuth(ctrl: OAuthController): Promise<OAuthCredent
 	});
 	ctrl.onProgress?.("Waiting for xAI device authorization...");
 
-	return pollOAuthDeviceCodeFlow({
+	const credentials = await pollOAuthDeviceCodeFlow({
 		poll: () => pollXAIDeviceToken(discovery.token_endpoint, device.deviceCode, fetchImpl, ctrl.signal),
 		intervalSeconds: device.intervalSeconds,
 		expiresInSeconds: device.expiresInSeconds,
 		signal: ctrl.signal,
 	});
+	return withXAIOAuthIdentity(credentials, fetchImpl, ctrl.signal);
 }
 
 /**
@@ -400,6 +527,7 @@ export async function refreshXAIOAuthToken(refreshToken: string, fetchOverride?:
 			Accept: "application/json",
 		},
 		body,
+		redirect: "error",
 		signal: AbortSignal.timeout(TOKEN_REQUEST_TIMEOUT_MS),
 	});
 
@@ -426,5 +554,6 @@ export async function refreshXAIOAuthToken(refreshToken: string, fetchOverride?:
 			{ kind: "validation", provider: "xai", cause: error },
 		);
 	}
-	return parseXAITokenResponse(payload, "xAI token refresh response", refreshToken);
+	const credentials = parseXAITokenResponse(payload, "xAI token refresh response", refreshToken);
+	return withXAIOAuthIdentity(credentials, fetchImpl);
 }

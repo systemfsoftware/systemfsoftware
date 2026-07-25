@@ -642,6 +642,104 @@ describe("openai-codex streaming", () => {
 		expect(textEndContents).toEqual(["First", "Second"]);
 	});
 
+	it("routes interleaved reasoning, text, and computer items by stable keys", async () => {
+		const computerItem = {
+			type: "computer_call",
+			id: "item_interleaved_computer",
+			call_id: "call_interleaved_computer",
+			actions: [{ type: "screenshot" }],
+			pending_safety_checks: [{ id: "safe_interleaved" }],
+			status: "completed",
+		};
+		const { result } = await runCodexSseEvents([
+			{
+				type: "response.output_item.added",
+				output_index: 0,
+				item: { type: "reasoning", id: "rs_interleaved", summary: [] },
+			},
+			{
+				type: "response.reasoning_summary_part.added",
+				output_index: 0,
+				item_id: "rs_interleaved",
+				summary_index: 0,
+				part: { type: "summary_text", text: "" },
+			},
+			{
+				type: "response.output_item.added",
+				output_index: 1,
+				item: { type: "message", id: "msg_interleaved", role: "assistant", status: "in_progress", content: [] },
+			},
+			{
+				type: "response.content_part.added",
+				output_index: 1,
+				item_id: "msg_interleaved",
+				part: { type: "output_text", text: "" },
+			},
+			{ type: "response.output_item.added", output_index: 2, item: computerItem },
+			{
+				type: "response.reasoning_summary_text.delta",
+				output_index: 0,
+				item_id: "rs_interleaved",
+				summary_index: 0,
+				delta: "think",
+			},
+			{ type: "response.output_text.delta", output_index: 1, item_id: "msg_interleaved", delta: "answer" },
+			{ type: "response.output_item.done", output_index: 2, item: computerItem },
+			{
+				type: "response.output_item.done",
+				output_index: 0,
+				item: { type: "reasoning", id: "rs_interleaved", summary: [] },
+			},
+			{
+				type: "response.output_item.done",
+				output_index: 1,
+				item: { type: "message", id: "msg_interleaved", role: "assistant", status: "completed", content: [] },
+			},
+			{
+				type: "response.completed",
+				response: {
+					id: "resp_interleaved",
+					status: "completed",
+					usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+				},
+			},
+		]);
+		expect(result.content.find(block => block.type === "thinking")?.thinking).toBe("think");
+		expect(result.content.find(block => block.type === "text")?.text).toBe("answer");
+		const call = result.content.find(block => block.type === "toolCall");
+		expect(call?.providerMetadata).toEqual({
+			type: "computer",
+			providerItemId: "item_interleaved_computer",
+			actions: [{ type: "screenshot" }],
+			pendingSafetyChecks: [{ id: "safe_interleaved" }],
+		});
+	});
+
+	it("promotes a completed computer call on max-output truncation to tool use", async () => {
+		const computerItem = {
+			type: "computer_call",
+			id: "item_incomplete_computer",
+			call_id: "call_incomplete_computer",
+			actions: [{ type: "screenshot" }],
+			pending_safety_checks: [],
+			status: "completed",
+		};
+		const { result } = await runCodexSseEvents([
+			{ type: "response.output_item.added", output_index: 0, item: computerItem },
+			{ type: "response.output_item.done", output_index: 0, item: computerItem },
+			{
+				type: "response.incomplete",
+				response: {
+					id: "resp_incomplete_computer",
+					status: "incomplete",
+					incomplete_details: { reason: "max_output_tokens" },
+					usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+				},
+			},
+		]);
+		expect(result.stopReason).toBe("toolUse");
+	});
+
 	it("preserves streamed reasoning when the done item has no summary text", async () => {
 		const token = createCodexTestToken();
 		const model = { ...createCodexTestModel("https://chatgpt.com/backend-api"), preferWebsockets: false };

@@ -32,6 +32,12 @@ export interface SessionHeader {
 	titleSource?: SessionTitleSource;
 	timestamp: string;
 	cwd: string;
+	/**
+	 * Additional workspace directories beyond `cwd` (multi-root workspace).
+	 * Absolute, normalized, deduplicated. Absent on legacy single-cwd sessions.
+	 * See {@link SessionWorkspace} in `./session-workspace`.
+	 */
+	additionalDirectories?: string[];
 	parentSession?: string;
 	/** Provider prompt-cache identity inherited by exact-route full forks. */
 	providerPromptCacheKey?: string;
@@ -43,6 +49,8 @@ export interface NewSessionOptions {
 	providerPromptCacheKey?: string;
 	/** Skip flushing the current session and delete it instead of saving. */
 	drop?: boolean;
+	/** Additional workspace directories to seed on the new session. */
+	additionalDirectories?: string[];
 }
 
 export interface SessionEntryBase {

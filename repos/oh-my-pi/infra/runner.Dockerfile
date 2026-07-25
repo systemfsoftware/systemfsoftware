@@ -9,7 +9,7 @@
 #     tool and release workflows expect it
 #   - C/build toolchain the native + canvas builds need
 #   - bun (system-wide, on PATH)
-#   - sccache + Zig + cargo-nextest/cargo-zigbuild/cargo-xwin for native builds
+#   - sccache + Zig + cmake/ninja + cargo-nextest/cargo-zigbuild/cargo-xwin for native builds
 #   - rust nightly (pinned) + clippy/rustfmt/rust-analyzer + linux-arm64/windows-msvc targets
 #
 # Rebuild + reimport (see /root/omp-kata-runner.md) after bumping the ARGs below
@@ -20,6 +20,8 @@ ARG RUST_NIGHTLY=nightly-2026-04-29
 ARG BUN_VERSION=1.3.14
 ARG SCCACHE_VERSION=0.15.0
 ARG ZIG_VERSION=0.16.0
+ARG CMAKE_VERSION=4.1.2
+ARG NINJA_VERSION=1.13.1
 
 USER root
 ENV DEBIAN_FRONTEND=noninteractive
@@ -55,6 +57,18 @@ RUN curl -fsSL "https://ziglang.org/download/${ZIG_VERSION}/zig-x86_64-linux-${Z
  && tar -xJf /tmp/zig.tar.xz -C /opt \
  && ln -sf "/opt/zig-x86_64-linux-${ZIG_VERSION}/zig" /usr/local/bin/zig \
  && rm -f /tmp/zig.tar.xz
+# cmake + ninja for native C deps (audiopus_sys builds bundled libopus via
+# CMake; MSVC cross builds generate with Ninja). Pinned to the same versions as
+# .github/actions/ensure-cmake, which no-ops when these are present.
+RUN curl -fsSL "https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/cmake-${CMAKE_VERSION}-linux-x86_64.tar.gz" -o /tmp/cmake.tar.gz \
+ && tar -xzf /tmp/cmake.tar.gz -C /opt \
+ && ln -sf "/opt/cmake-${CMAKE_VERSION}-linux-x86_64/bin/cmake" /usr/local/bin/cmake \
+ && ln -sf "/opt/cmake-${CMAKE_VERSION}-linux-x86_64/bin/ctest" /usr/local/bin/ctest \
+ && rm -f /tmp/cmake.tar.gz
+RUN curl -fsSL "https://github.com/ninja-build/ninja/releases/download/v${NINJA_VERSION}/ninja-linux.zip" -o /tmp/ninja.zip \
+ && unzip -o /tmp/ninja.zip -d /usr/local/bin \
+ && chmod +x /usr/local/bin/ninja \
+ && rm -f /tmp/ninja.zip
 
 # rust toolchain + cargo helpers for the runner user; rustup default == pinned
 # nightly so Rust setup becomes a no-op on the preloaded image.

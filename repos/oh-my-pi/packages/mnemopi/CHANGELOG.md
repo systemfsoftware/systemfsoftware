@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [17.0.8] - 2026-07-22
+
+### Changed
+
+- Optimized vector operations (exact vector-index search, SHMR similarity clustering, and default-similarity MMR rerank) by migrating hot loops to native batch kernels, resulting in significant performance improvements (up to 1.8x faster top-K search, 2.4x faster pairwise clustering, and 22-36x faster MMR reranking).
+
 ## [17.0.4] - 2026-07-18
 
 ### Fixed

@@ -108,7 +108,7 @@ const assistantSnapshotContext: Context = {
 const codexAssistantSnapshotContext: Context = {
 	messages: [
 		{ role: "user", content: "generic history that should be replaced", timestamp: Date.now() },
-		makeAssistantMessage(snapshotHistoryItems, false, "openai-codex", "gpt-5.2-codex"),
+		makeAssistantMessage(snapshotHistoryItems, false, "openai-codex", "gpt-5.5"),
 		{ role: "user", content: "follow-up user", timestamp: Date.now() },
 	],
 };
@@ -117,7 +117,7 @@ const codexToCopilotContext: Context = {
 	messages: [
 		{ role: "user", content: "generic user before switch", timestamp: Date.now() },
 		{
-			...makeAssistantMessage([], false, "openai-codex", "gpt-5.2-codex"),
+			...makeAssistantMessage([], false, "openai-codex", "gpt-5.5"),
 			content: [{ type: "text", text: "generic assistant that should be rebuilt" }],
 			providerPayload: createOpenAIResponsesHistoryPayload("openai-codex", [
 				{ type: "reasoning", encrypted_content: "enc_123" },
@@ -267,7 +267,7 @@ function makeAssistantMessage(
 	items: Record<string, unknown>[],
 	incremental = false,
 	provider: "openai" | "openai-codex" | "github-copilot" = "openai",
-	model = provider === "openai-codex" ? "gpt-5.2-codex" : provider === "github-copilot" ? "gpt-5.4" : "gpt-5-mini",
+	model = provider === "openai-codex" ? "gpt-5.5" : provider === "github-copilot" ? "gpt-5.4" : "gpt-5-mini",
 ) {
 	return {
 		role: "assistant" as const,
@@ -428,7 +428,7 @@ describe("OpenAI responses history payload", () => {
 		});
 		assertWireOrder(openaiItems);
 
-		const codexModel = getBundledModel<"openai-codex-responses">("openai-codex", "gpt-5.2-codex");
+		const codexModel = getBundledModel<"openai-codex-responses">("openai-codex", "gpt-5.5");
 		const codexItems = convertCodexResponsesMessages(codexModel, makeContext("openai-codex"));
 		assertWireOrder(codexItems);
 	});
@@ -810,7 +810,7 @@ describe("OpenAI responses history payload", () => {
 	});
 
 	it("prefers assistant native history snapshots for openai-codex-responses", async () => {
-		const model = getBundledModel("openai-codex", "gpt-5.2-codex") as Model<"openai-codex-responses">;
+		const model = getBundledModel("openai-codex", "gpt-5.5") as Model<"openai-codex-responses">;
 		const payload = (await captureCodexPayload(model, codexAssistantSnapshotContext)) as { input?: unknown[] };
 		expect(payload.input).toEqual([
 			...snapshotHistoryItems,
@@ -1279,7 +1279,7 @@ describe("OpenAI responses history payload", () => {
 					content: [{ type: "toolCall", id: callId, name: "read", arguments: { path: "README.md" } }],
 					api: "openai-codex-responses",
 					provider: "openai-codex",
-					model: "gpt-5.2-codex",
+					model: "gpt-5.5",
 					usage: {
 						input: 0,
 						output: 0,
@@ -1303,7 +1303,7 @@ describe("OpenAI responses history payload", () => {
 				{ role: "user", content: "Resume", timestamp: Date.now() },
 			],
 		};
-		const model = getBundledModel<"openai-codex-responses">("openai-codex", "gpt-5.2-codex");
+		const model = getBundledModel<"openai-codex-responses">("openai-codex", "gpt-5.5");
 		const payload = (await captureCodexPayload(model, context)) as { input?: unknown[] };
 		const functionCallItem = findResponsesInputItem(payload.input, "function_call");
 		const functionCallOutputItem = findResponsesInputItem(payload.input, "function_call_output");
@@ -1386,5 +1386,64 @@ describe("OpenAI responses history payload", () => {
 			);
 		}) as { content?: string } | undefined;
 		expect(note?.content).toContain(orphanOutput);
+	});
+
+	it("honors strict pairing overrides against opposite catalog defaults", async () => {
+		const orphanCallId = "call_override_orphan";
+		const orphanOutput = "orphan result";
+		const context: Context = {
+			messages: [
+				{
+					role: "assistant",
+					content: [{ type: "toolCall", id: orphanCallId, name: "read", arguments: { path: "README.md" } }],
+					api: "openai-responses",
+					provider: "openai",
+					model: "gpt-5-mini",
+					usage: issue5002ZeroUsage,
+					stopReason: "toolUse",
+					providerPayload: createOpenAIResponsesHistoryPayload(
+						"openai",
+						[{ type: "message", role: "assistant", content: [{ type: "output_text", text: "snapshot" }] }],
+						false,
+					),
+					timestamp: Date.now(),
+				},
+				{
+					role: "toolResult",
+					toolCallId: orphanCallId,
+					toolName: "read",
+					content: [{ type: "text", text: orphanOutput }],
+					isError: false,
+					timestamp: Date.now(),
+				},
+				{ role: "user", content: "Continue", timestamp: Date.now() },
+			],
+		};
+		const catalogNonStrictModel = getOpenAIReasoningModel("openai", "gpt-5-mini");
+		const catalogStrictModel: Model<"openai-responses"> = {
+			...catalogNonStrictModel,
+			compat: { ...catalogNonStrictModel.compat, strictResponsesPairing: true },
+		};
+		const strictOverridePayload = (await captureResponsesPayload(catalogNonStrictModel, context, undefined, {
+			strictResponsesPairing: true,
+		})) as { input?: unknown[] };
+		const nonStrictOverridePayload = (await captureResponsesPayload(catalogStrictModel, context, undefined, {
+			strictResponsesPairing: false,
+		})) as { input?: unknown[] };
+		const orphanNote = (input: unknown[] | undefined): { content?: string } | undefined =>
+			input?.find(item => {
+				if (!item || typeof item !== "object") return false;
+				const candidate = item as { type?: unknown; role?: unknown; content?: unknown };
+				return (
+					candidate.type === "message" &&
+					candidate.role === "assistant" &&
+					typeof candidate.content === "string" &&
+					candidate.content.includes(orphanCallId) &&
+					candidate.content.includes(orphanOutput)
+				);
+			}) as { content?: string } | undefined;
+
+		expect(orphanNote(strictOverridePayload.input)?.content).toContain("[Orphan read result;");
+		expect(orphanNote(nonStrictOverridePayload.input)?.content).toContain("[Orphan tool result;");
 	});
 });

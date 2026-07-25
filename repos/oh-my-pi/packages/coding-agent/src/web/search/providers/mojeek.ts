@@ -4,6 +4,7 @@ import { parseHTML } from "linkedom";
 import type { Page } from "puppeteer-core";
 import type { SearchResponse, SearchSource } from "../../../web/search/types";
 import { SearchProviderError } from "../../../web/search/types";
+import { formatScraperQuery, type QuerySyntax } from "../query";
 import { clampNumResults } from "../utils";
 import type { SearchParams } from "./base";
 import { SearchProvider } from "./base";
@@ -81,9 +82,21 @@ function parseHtmlResults(html: string): ParsedResult[] {
 	return results;
 }
 
+/**
+ * Syntax re-emitted to Mojeek for directive-carrying queries. Mojeek's
+ * support page (mojeek.com/support/search-operators.html) confirms `site:`,
+ * and the community docs confirm quoted phrases and `-` exclusions. Mojeek
+ * also parses `in*:` operators and its own date syntax (`since:`/`before:`
+ * with YYYYMMDD), but the latter differs from Google's `after:`/`before:`
+ * ISO form and `since` is already claimed by `recency`, so date bounds and
+ * `in*` constraints are conservatively left to the pipeline's lenient
+ * post-filter instead.
+ */
+const MOJEEK_QUERY_SYNTAX: QuerySyntax = { phrases: true, negation: true, site: true };
+
 function buildSearchUrl(params: SearchParams, numResults: number): string {
 	const url = new URL(MOJEEK_SEARCH_URL);
-	url.searchParams.set("q", params.query);
+	url.searchParams.set("q", formatScraperQuery(params.query, params.parsedQuery, MOJEEK_QUERY_SYNTAX));
 	url.searchParams.set("t", String(numResults));
 	url.searchParams.set("arc", "none");
 	url.searchParams.set("lang", "en");

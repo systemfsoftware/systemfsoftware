@@ -43,6 +43,25 @@ describe("error-id classification", () => {
 		expect(AIError.retriable(id)).toBe(true);
 	});
 
+	it("classifies provider connection failures as transient", () => {
+		const assistant = message({
+			errorMessage: "Unable to connect. Is the computer able to access the url?",
+		});
+		const id = AIError.classifyMessage(assistant);
+		expect(AIError.is(id, AIError.Flag.Transient)).toBe(true);
+		expect(AIError.retriable(id)).toBe(true);
+	});
+
+	it("keeps authenticated connection rejections non-retryable", () => {
+		const assistant = message({
+			errorMessage: "Unable to connect: 401 Unauthorized",
+		});
+		const id = AIError.classifyMessage(assistant);
+		expect(AIError.is(id, AIError.Flag.AuthFailed)).toBe(true);
+		expect(AIError.is(id, AIError.Flag.Transient)).toBe(false);
+		expect(AIError.retriable(id)).toBe(false);
+	});
+
 	it("keeps provider content filters non-retryable", () => {
 		const error = new AIError.ProviderResponseError("Provider returned error finish_reason: content_filter", {
 			provider: "openrouter",

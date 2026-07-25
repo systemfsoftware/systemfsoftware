@@ -65,6 +65,7 @@ function createFixture(opts: {
 		updateEditorTopBorder: vi.fn(),
 		streamingComponent,
 		streamingMessage: opts.streamingMessage,
+		transcriptMessageComponents: new WeakMap(),
 		pendingTools: new Map(),
 		noteDisplayableThinkingContent: vi.fn(() => false),
 	};

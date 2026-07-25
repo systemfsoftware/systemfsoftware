@@ -110,6 +110,34 @@ describe("estimate cache option split", () => {
 		expect(estimateTokens(msg as AgentMessage)).toBe(withBlob);
 		expect(estimateTokens(msg as AgentMessage, { excludeEncryptedReasoning: true })).toBe(floored);
 	});
+
+	test("counts native server-tool blocks by default and drops them from the compaction floor", () => {
+		const encrypted = "cipher".repeat(4000);
+		const msg: AssistantMessage = {
+			...settledAssistant("with search"),
+			content: [
+				{ type: "text", text: "answer" },
+				{
+					type: "anthropicServerTool",
+					block: {
+						type: "web_search_tool_result",
+						tool_use_id: "srvtoolu_1",
+						content: [{ type: "web_search_result", encrypted_content: encrypted }],
+					},
+				},
+			],
+		};
+		const textOnly = estimateTokens({
+			...settledAssistant("x"),
+			content: [{ type: "text", text: "answer" }],
+		} as AgentMessage);
+		const withServerTool = estimateTokens(msg as AgentMessage);
+		const floored = estimateTokens(msg as AgentMessage, { excludeEncryptedReasoning: true });
+		// Default estimate charges for the serialized server-tool payload…
+		expect(withServerTool).toBeGreaterThan(floored + 500);
+		// …while the compaction floor ignores the opaque encrypted blob entirely.
+		expect(floored).toBe(textOnly);
+	});
 });
 
 describe("estimate cache invalidation seams", () => {

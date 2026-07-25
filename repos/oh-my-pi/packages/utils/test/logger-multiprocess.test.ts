@@ -50,9 +50,12 @@ describe("multiprocess file logging", () => {
 
 		expect(await Promise.all(processes.map(proc => proc.exited))).toEqual([0, 0]);
 		const entries = await fs.readdir(logsDir);
-		const datedPrefix = `omp.${new Date().toISOString().slice(0, 10)}`;
+		// DailyRotateFile's %DATE% uses the LOCAL date; don't pin an exact day
+		// (toISOString is UTC and diverges around local midnight) — the invariant
+		// is one dated rotation file per pid.
 		for (const proc of processes) {
-			expect(entries).toContain(`${datedPrefix}.${proc.pid}.log`);
+			const perPid = new RegExp(`^omp\\.\\d{4}-\\d{2}-\\d{2}\\.${proc.pid}\\.log$`);
+			expect(entries.some(name => perPid.test(name))).toBe(true);
 		}
 		expect(entries.filter(name => name.endsWith("-audit.json"))).toHaveLength(2);
 	});

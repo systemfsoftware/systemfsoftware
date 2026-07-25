@@ -1,3 +1,4 @@
+import { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -6,7 +7,8 @@ import { Effort, type FetchImpl, type Model } from "@oh-my-pi/pi-ai";
 import type { OAuthCredentials } from "@oh-my-pi/pi-ai/oauth/types";
 import { buildModel } from "@oh-my-pi/pi-catalog/build";
 import { writeModelCache } from "@oh-my-pi/pi-catalog/model-cache";
-import type { OpenAICompat } from "@oh-my-pi/pi-catalog/types";
+import { getBundledModel } from "@oh-my-pi/pi-catalog/models";
+import type { ModelSpec, OpenAICompat } from "@oh-my-pi/pi-catalog/types";
 import { applyLlamaCppQwenThinking } from "@oh-my-pi/pi-coding-agent/config/model-discovery";
 import { kNoAuth, ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
 import { resetSettingsForTest } from "@oh-my-pi/pi-coding-agent/config/settings";
@@ -325,6 +327,71 @@ describe("ModelRegistry runtime discovery", () => {
 		expect(modelListCalls).toBe(1);
 		expect(registry.find("openai-codex", "gpt-5.6-terra")).toBeDefined();
 		expect(registry.find("openai-codex", "gpt-5.4-nano")).toBeUndefined();
+	});
+
+	test("Codex discovery falls back to a resolved non-OAuth token when no OAuth accounts exist", async () => {
+		authStorage.setRuntimeApiKey("openai-codex", "runtime-openai-codex");
+		let modelListCalls = 0;
+		const fetchMock: FetchImpl = async (input, init) => {
+			const url = String(input);
+			if (url.startsWith("https://chatgpt.com/backend-api") && url.includes("/models")) {
+				modelListCalls++;
+				expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer runtime-openai-codex");
+				return Response.json({
+					models: [
+						{
+							slug: "runtime-codex-model",
+							display_name: "Runtime Codex Model",
+							context_window: 128_000,
+							supported_in_api: true,
+							input_modalities: ["text"],
+						},
+					],
+				});
+			}
+			throw new Error(`Unexpected URL: ${url}`);
+		};
+		const registry = new ModelRegistry(authStorage, modelsJsonPath, { fetch: fetchMock });
+
+		await registry.refreshProvider("openai-codex", "online");
+
+		expect(modelListCalls).toBe(1);
+		expect(registry.find("openai-codex", "runtime-codex-model")).toBeDefined();
+	});
+
+	test("Codex discovery aborts (keeps bundled models) when any account credential fails to refresh", async () => {
+		// Two configured Codex accounts: the fresh one resolves, the expired one's
+		// refresh throws so getOAuthAccesses reports ok:false. A partial union would
+		// be cached as the authoritative catalog and hide the failed account's
+		// models, so discovery must abort and keep bundled models.
+		authStorage.close();
+		authStorage = await AuthStorage.create(":memory:", {
+			refreshOAuthCredential: async (_provider, _credentialId, credential): Promise<OAuthCredentials> => {
+				if (credential.access.includes("expired")) {
+					throw new Error("simulated transient refresh failure");
+				}
+				return { ...credential, expires: Date.now() + 3_600_000 };
+			},
+		});
+		await authStorage.set("openai-codex", [
+			{ type: "oauth", access: "fresh-codex", refresh: "refresh-fresh", expires: Date.now() + 3_600_000 },
+			{ type: "oauth", access: "expired-codex", refresh: "refresh-expired", expires: Date.now() - 60_000 },
+		]);
+		let modelListCalls = 0;
+		const fetchMock: FetchImpl = async input => {
+			const url = String(input);
+			if (url.startsWith("https://chatgpt.com/backend-api") && url.includes("/models")) {
+				modelListCalls++;
+				return Response.json({ models: [] });
+			}
+			throw new Error(`Unexpected URL: ${url}`);
+		};
+		const registry = new ModelRegistry(authStorage, modelsJsonPath, { fetch: fetchMock });
+
+		await registry.refreshProvider("openai-codex", "online");
+
+		expect(modelListCalls).toBe(0);
+		expect(getModelsForProvider(registry, "openai-codex").length).toBeGreaterThan(0);
 	});
 
 	test("configured discovery suppresses built-in special OAuth discovery", async () => {
@@ -2132,5 +2199,57 @@ describe("ModelRegistry runtime discovery", () => {
 
 		expect(registry.find("litellm-test", "team-gpt")?.contextWindow).toBe(200_000);
 		expect(registry.find("litellm-test", "deployment-id")).toBeUndefined();
+	});
+
+	test("startup restores a legacy stale-marked Copilot -1m variant via requestModelId", () => {
+		// Regression for #6037/#6284: a synthesized Copilot `-1m` long-context
+		// variant keeps the base model's transport headers via `requestModelId`.
+		// The v10 cache omits headers, and legacy rows written by the old id-only
+		// writer flag the variant unrestorable (its base is a different id). The
+		// startup loader must still recover the headers from the bundled base and
+		// keep the model selectable instead of dropping it.
+		const bundledBase = getBundledModel("github-copilot", "gpt-5.6-sol");
+		if (!bundledBase?.headers) {
+			throw new Error("Expected bundled Copilot base to carry transport headers");
+		}
+		const cachedVariant = buildModel({
+			...(bundledBase as ModelSpec<"openai-responses">),
+			id: "gpt-5.6-sol-1m",
+			name: "GPT-5.6 Sol (1M)",
+			requestModelId: "gpt-5.6-sol",
+			contextWindow: 1_050_000,
+		});
+		// Emulate a legacy write: the variant has no same-id static header source,
+		// so it is flagged unrestorable even though its base carries the headers.
+		writeModelCache("github-copilot", Date.now(), [cachedVariant], true, "", cacheDbPath);
+		const db = new Database(cacheDbPath);
+		db.run("UPDATE model_cache SET header_restore_version = 0 WHERE provider_id = ?", ["github-copilot"]);
+		db.close();
+
+		const registry = new ModelRegistry(authStorage, modelsJsonPath);
+
+		const restored = registry.find("github-copilot", "gpt-5.6-sol-1m");
+		expect(restored).toBeDefined();
+		expect(restored?.headers).toEqual(bundledBase.headers);
+	});
+
+	test("startup drops a current Copilot alias whose headers differ from its bundled base", () => {
+		const bundledBase = getBundledModel("github-copilot", "gpt-5.6-sol");
+		if (!bundledBase?.headers) {
+			throw new Error("Expected bundled Copilot base to carry transport headers");
+		}
+		const cachedAlias = buildModel({
+			...(bundledBase as ModelSpec<"openai-responses">),
+			id: "gpt-5.6-sol-custom",
+			name: "GPT-5.6 Sol Custom Route",
+			requestModelId: "gpt-5.6-sol",
+			headers: { "X-Tenant-Route": "tenant-a" },
+		});
+		writeModelCache("github-copilot", Date.now(), [cachedAlias], true, "", cacheDbPath, [bundledBase]);
+
+		const registry = new ModelRegistry(authStorage, modelsJsonPath);
+
+		expect(registry.find("github-copilot", cachedAlias.id)).toBeUndefined();
+		expect(registry.find("github-copilot", bundledBase.id)?.headers).toEqual(bundledBase.headers);
 	});
 });

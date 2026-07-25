@@ -316,7 +316,25 @@ function hasPlausibleCredentialEntropy(token: string): boolean {
 	return [/[a-z]/, /[A-Z]/, /\d/, /[_-]/].filter(pattern => pattern.test(secret)).length >= 2;
 }
 
+/**
+ * Whether outbound credential-pattern redaction is active. Off by default;
+ * hosts opt in explicitly (the coding agent wires this to the
+ * `secrets.enabled` setting).
+ */
+let credentialRedactionEnabled = false;
+
+/**
+ * Toggle outbound credential-pattern redaction. When disabled (the default),
+ * {@link redactSensitiveCredentials} and {@link redactSensitiveInObject} are
+ * pass-throughs and outbound messages/system prompts leave the process
+ * unmodified.
+ */
+export function configureCredentialRedaction(enabled: boolean): void {
+	credentialRedactionEnabled = enabled;
+}
+
 export function redactSensitiveCredentials(text: string): string {
+	if (!credentialRedactionEnabled) return text;
 	return text.replace(SENSITIVE_TOKEN_RE, match => {
 		if (!hasPlausibleCredentialEntropy(match)) return match;
 		const lower = match.toLowerCase();
@@ -337,6 +355,7 @@ export function redactSensitiveCredentials(text: string): string {
 }
 
 export function redactSensitiveInObject(val: unknown): { result: unknown; changed: boolean } {
+	if (!credentialRedactionEnabled) return { result: val, changed: false };
 	if (typeof val === "string") {
 		const redacted = redactSensitiveCredentials(val);
 		return { result: redacted, changed: redacted !== val };
@@ -364,6 +383,7 @@ export function redactSensitiveInObject(val: unknown): { result: unknown; change
 }
 
 function redactSensitiveCredentialsInMessages(messages: Message[]): Message[] {
+	if (!credentialRedactionEnabled) return messages;
 	return messages.map((msg): Message => {
 		if (msg.role === "user" || msg.role === "developer") {
 			const userMsg = msg as UserMessage | DeveloperMessage;
@@ -453,8 +473,9 @@ export function transformMessages<TApi extends Api>(
 	duplicateToolCallIdSuffixPrefix = "_dup",
 	targetCompat: Model<TApi>["compat"] = model.compat,
 ): Message[] {
-	// Redact sensitive credential-like patterns from all outbound messages
-	// to prevent security block errors from LLM providers (e.g. invalid_prompt).
+	// Redact sensitive credential-like patterns from all outbound messages when
+	// the host opted in via `configureCredentialRedaction` — prevents security
+	// block errors from LLM providers (e.g. invalid_prompt).
 	messages = redactSensitiveCredentialsInMessages(messages);
 
 	// Drop assistant `toolCall` blocks with empty/whitespace `id` or `name`
@@ -602,22 +623,34 @@ export function transformMessages<TApi extends Api>(
 							? { ...block, thinkingSignature: undefined }
 							: block;
 					if (isAnthropicReplay) {
+						// A signature is only replayable where its issuer can verify it.
+						// Same-provider replays (including cross-model-id switches within
+						// official Anthropic — pinned by the prefill suite) keep the
+						// latest turn byte-for-byte per Anthropic's rule for its own most
+						// recent response. A latest turn minted by a DIFFERENT provider
+						// is not "Anthropic's own response": its signature can never
+						// verify on a signing Anthropic target and wedges the session
+						// with `400 Invalid signature in thinking block` on every
+						// attempt until the poisoned turn ages out of the replay window
+						// (observed live: a kimi-code/k3 turn replayed to official
+						// Anthropic after a session-level model switch mid tool-loop).
+						const crossProviderSource = assistantMsg.provider !== model.provider;
 						// Latest abandoned turn: Anthropic's byte-for-byte rule forbids
-						// even stripping a signature on the latest message.
-						if (isLatestSurvivingAssistant && abandonedToolUse) return block;
-						// Cross-model prior turns crossing an official Anthropic endpoint
-						// must strip the source signature so the downstream encoder
-						// applies its `replayUnsignedThinking` policy (unsigned thinking
-						// is emitted natively on Anthropic-compatible reasoning endpoints
-						// and demoted to text on official Anthropic). 3p ↔ 3p replays
-						// keep the signature so the reasoning chain stays signed on
-						// continuation (#2265).
-						if (
-							!isLatestSurvivingAssistant &&
-							!isSameModel &&
-							signingAnthropicInvolved &&
-							sanitized.thinkingSignature
-						) {
+						// even stripping a signature on the latest message — but only
+						// for turns the target's own provider issued.
+						if (isLatestSurvivingAssistant && abandonedToolUse && !crossProviderSource) return block;
+						// Strip source signatures crossing an official Anthropic
+						// endpoint so the downstream encoder applies its
+						// `replayUnsignedThinking` policy (unsigned thinking is emitted
+						// natively on Anthropic-compatible reasoning endpoints and
+						// demoted to text on official Anthropic). Prior turns strip on
+						// any cross-model transition (#4297); the latest turn strips
+						// only on a cross-provider transition so same-provider
+						// continuations stay byte-for-byte. 3p ↔ 3p replays keep the
+						// signature so the reasoning chain stays signed on continuation
+						// (#2265).
+						const staleSignature = isLatestSurvivingAssistant ? crossProviderSource : !isSameModel;
+						if (staleSignature && signingAnthropicInvolved && sanitized.thinkingSignature) {
 							sanitized = { ...sanitized, thinkingSignature: undefined };
 						}
 						// Drop blocks with neither a signature anchor nor any text —
@@ -687,17 +720,33 @@ export function transformMessages<TApi extends Api>(
 
 				if (block.type === "redactedThinking") {
 					// Redacted thinking is native-only. Keep it for same-model
-					// signed replay, the latest byte-for-byte Anthropic turn, or
-					// compatible targets that will also emit sibling unsigned
-					// thinking natively. Drop it when the matching visible thinking
-					// was discarded, or when visible thinking was cross-model
-					// stripped and will be demoted to text.
+					// signed replay, for the latest byte-for-byte turn issued by the
+					// target's own provider, or for compatible targets that will
+					// also emit sibling unsigned thinking natively. Drop it when the
+					// matching visible thinking was discarded, or when visible
+					// thinking was stripped and will be demoted to text — a foreign
+					// redacted payload can no more verify on a signing target than a
+					// foreign visible signature can, even on the latest turn.
 					if (isAnthropicReplay) {
 						if (dropsAllSameModelVisibleThinking) return [];
-						if (isSameModel || isLatestSurvivingAssistant || replaysUnsignedAnthropicThinking) return block;
+						if (
+							isSameModel ||
+							(isLatestSurvivingAssistant && assistantMsg.provider === model.provider) ||
+							replaysUnsignedAnthropicThinking
+						) {
+							return block;
+						}
 						return [];
 					}
 					if (isSameModel) return block;
+					return [];
+				}
+
+				if (block.type === "anthropicServerTool") {
+					// Anthropic requires native server-tool calls and results to be
+					// replayed unchanged. They are meaningful only to the provider
+					// that produced them; every cross-provider target drops them.
+					if (isAnthropicReplay && assistantMsg.provider === model.provider) return block;
 					return [];
 				}
 

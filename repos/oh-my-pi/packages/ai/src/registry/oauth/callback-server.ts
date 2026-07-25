@@ -64,7 +64,7 @@ export abstract class OAuthCallbackFlow {
 	allowPortFallback: boolean;
 	#manualInputOnly: boolean;
 	#callbackResolve?: (result: CallbackResult) => void;
-	#callbackReject?: (error: string) => void;
+	#callbackReject?: (error: Error) => void;
 	/**
 	 * Authorization URL the `/launch` route currently redirects to. Set by
 	 * {@link login} after {@link generateAuthUrl} and before {@link OAuthController.onAuth}
@@ -280,9 +280,9 @@ export abstract class OAuthCallbackFlow {
 	 * Create HTTP server for OAuth callback.
 	 */
 	#createServer(port: number, expectedState: string): Bun.Server<unknown> {
-		const hostname = this.callbackHostname === DEFAULT_HOSTNAME ? undefined : this.callbackHostname;
+		const hostname = this.callbackHostname === DEFAULT_HOSTNAME ? "127.0.0.1" : this.callbackHostname;
 		return Bun.serve({
-			...(hostname === undefined ? {} : { hostname }),
+			hostname,
 			port,
 			reusePort: false,
 			fetch: req => this.#handleCallback(req, expectedState),
@@ -334,16 +334,23 @@ export abstract class OAuthCallbackFlow {
 			resultState = { ok: true, code, state };
 		}
 
-		// Signal to waitForCallback - capture refs before they could be cleared
-		const resolve = this.#callbackResolve;
-		const reject = this.#callbackReject;
-		queueMicrotask(() => {
-			if (resultState.ok) {
+		if (resultState.ok) {
+			const resolve = this.#callbackResolve;
+			queueMicrotask(() => {
 				resolve?.({ code: resultState.code, state: resultState.state });
-			} else {
-				reject?.(resultState.error ?? "Unknown error");
-			}
-		});
+			});
+		} else if (error && (!expectedState || state === expectedState)) {
+			// The redirect carries our state nonce, so it came from the genuine
+			// authorization flow (e.g. the user denied the consent screen).
+			// Surface the denial now instead of leaving the login waiting for
+			// the 5-minute timeout. Errors WITHOUT the expected state stay
+			// ignored — any local process can forge those (#4106).
+			const reject = this.#callbackReject;
+			const message = resultState.error ?? `Authorization failed: ${errorDescription}`;
+			queueMicrotask(() => {
+				reject?.(new AIError.OAuthError(message, { kind: "device-auth" }));
+			});
+		}
 
 		return new Response(
 			(templateHtml as unknown as string).replaceAll("__OAUTH_STATE__", JSON.stringify(resultState)),

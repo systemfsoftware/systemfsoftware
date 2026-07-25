@@ -76,26 +76,43 @@ function formatModelBadge(modelId: string, level: ThinkingLevel | undefined): st
 	return `${model} ${theme.getThinkingBorderColor(level)(display)}`;
 }
 
-/**
- * Active model + reasoning level for a hub row: live session state when the
- * agent is attached, else the executor-reported `resolvedModel` selector
- * (`provider/id`, optionally `:<level>`). Undefined when neither is known
- * (e.g. a parked historical agent restored from disk).
- */
-function modelBadge(ref: AgentRef, observed: ObservableSession | undefined): string | undefined {
-	const model = ref.session?.model;
-	if (model) {
-		const level = model.thinking ? ref.session?.thinkingLevel : undefined;
-		return formatModelBadge(model.id, level);
-	}
-	const resolved = observed?.progress?.resolvedModel;
-	if (!resolved) return undefined;
+/** Format a resolved selector, preserving provider identity when requested. */
+function formatResolvedModelBadge(resolved: string, preserveProvider = false): string {
 	// Model ids may themselves contain colons (`qwen3:14b`), so only treat the
 	// suffix as a thinking level when it parses as one.
 	const colon = resolved.lastIndexOf(":");
 	const level = colon >= 0 ? parseThinkingLevel(resolved.slice(colon + 1)) : undefined;
 	const selector = level !== undefined ? resolved.slice(0, colon) : resolved;
-	return formatModelBadge(selector.slice(selector.indexOf("/") + 1), level);
+	const label = preserveProvider ? selector : selector.slice(selector.indexOf("/") + 1);
+	return formatModelBadge(label, level);
+}
+
+/**
+ * Active model + reasoning level for a hub row: live session state when the
+ * agent is attached, else the executor-reported `resolvedModel` selector
+ * (`provider/id`, optionally `:<level>`). Active retry fallbacks retain their
+ * provider and carry an explicit marker. Undefined when no model is known
+ * (e.g. a parked historical agent restored from disk).
+ */
+function modelBadge(ref: AgentRef, observed: ObservableSession | undefined): string | undefined {
+	const progress = observed?.progress;
+	// Prefer the live session's own resolved fallback selector; else honor the
+	// executor-reported fallback flag. The latter covers observer-only rows (no
+	// live session) AND live rows whose fallback armed no session retry state —
+	// e.g. the Fireworks Fast → base degrade, which emits `retry_fallback_applied`
+	// without populating `#activeRetryFallback`, so `retryFallbackModel` is undefined.
+	const fallbackSelector =
+		ref.session?.retryFallbackModel ?? (progress?.resolvedModelIsFallback ? progress.resolvedModel : undefined);
+	if (fallbackSelector) {
+		return `${theme.fg("warning", "fallback →")} ${formatResolvedModelBadge(fallbackSelector, true)}`;
+	}
+	const model = ref.session?.model;
+	if (model) {
+		const level = model.thinking ? ref.session?.thinkingLevel : undefined;
+		return formatModelBadge(model.id, level);
+	}
+	const resolved = progress?.resolvedModel;
+	return resolved ? formatResolvedModelBadge(resolved) : undefined;
 }
 
 /** Result of one host-backed transcript read for the Agent Hub viewer. */
@@ -619,7 +636,7 @@ export class AgentHubOverlayComponent extends Container {
 				if (ref.status === "running" && ref.session) {
 					await ref.session.abort({ reason: USER_INTERRUPT_LABEL });
 				}
-				await this.#lifecycle().release(ref.id);
+				await this.#lifecycle().release(ref.id, ref);
 			} catch (error) {
 				logger.warn("Agent hub: kill failed", { id: ref.id, error: String(error) });
 				this.#notice = error instanceof Error ? error.message : String(error);

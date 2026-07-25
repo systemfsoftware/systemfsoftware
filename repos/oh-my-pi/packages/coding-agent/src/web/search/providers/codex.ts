@@ -31,6 +31,7 @@ import packageJson from "../../../../package.json" with { type: "json" };
 import type { ModelRegistry } from "../../../config/model-registry";
 import type { SearchResponse, SearchSource } from "../../../web/search/types";
 import { SearchProviderError } from "../../../web/search/types";
+import { formatQuery, GOOGLE_QUERY_SYNTAX, parseSearchQuery } from "../query";
 import type { SearchParams } from "./base";
 import { SearchProvider } from "./base";
 import { classifyProviderHttpError, withHardTimeout } from "./utils";
@@ -572,6 +573,7 @@ async function callCodexSearch(
 async function runCodexSearchCandidates(options: {
 	auth: { accessToken: string; accountId?: string };
 	params: SearchParams;
+	query: string;
 	modelCandidates: CodexModelCandidate[];
 	modelWasConfigured: boolean;
 	transport: CodexSearchTransport;
@@ -582,7 +584,7 @@ async function runCodexSearchCandidates(options: {
 		if (!candidate) continue;
 
 		try {
-			return await callCodexSearch(options.auth, options.params.query, {
+			return await callCodexSearch(options.auth, options.query, {
 				signal: options.params.signal,
 				systemPrompt: options.params.systemPrompt,
 				searchContextSize: "high",
@@ -622,6 +624,15 @@ export async function searchCodex(params: SearchParams): Promise<SearchResponse>
 		throw new SearchProviderError("codex", "No Codex web search model is configured.");
 	}
 	const transport = resolveCodexSearchTransport(params.modelRegistry, firstCandidate.modelId);
+	// The ChatGPT-backend Codex endpoint speaks the undocumented codex-rs
+	// request shape (responses-lite moves tools into an `additional_tools`
+	// developer item), so the documented `web_search.filters.allowed_domains`
+	// parameter cannot be assumed to survive it. Instead, re-emit directive
+	// queries with the full Google-style operator syntax — the backing index
+	// parses the classic operator set — and leave directive-free queries
+	// byte-identical.
+	const parsed = params.parsedQuery ?? parseSearchQuery(params.query);
+	const query = parsed.hasDirectives ? formatQuery(parsed, GOOGLE_QUERY_SYNTAX) : params.query;
 
 	let result: CodexSearchResult;
 	if (transport.customEndpoint) {
@@ -652,6 +663,7 @@ export async function searchCodex(params: SearchParams): Promise<SearchResponse>
 				runCodexSearchCandidates({
 					auth: { accessToken },
 					params,
+					query,
 					modelCandidates,
 					modelWasConfigured: configuredModel !== undefined,
 					transport,
@@ -682,6 +694,7 @@ export async function searchCodex(params: SearchParams): Promise<SearchResponse>
 				return runCodexSearchCandidates({
 					auth: { accessToken: access.accessToken, accountId },
 					params,
+					query,
 					modelCandidates,
 					modelWasConfigured: configuredModel !== undefined,
 					transport,

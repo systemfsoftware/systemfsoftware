@@ -21,9 +21,10 @@ function tool(
 	return { name, approval, formatApprovalDetails };
 }
 
-function createBashTool(): BashTool {
+function createBashTool(settingsOverrides: Record<string, unknown> = {}): BashTool {
 	const settings = {
 		get(key: string): unknown {
+			if (Object.hasOwn(settingsOverrides, key)) return settingsOverrides[key];
 			switch (key) {
 				case "async.enabled":
 				case "bash.autoBackground.enabled":
@@ -42,8 +43,8 @@ function createBashTool(): BashTool {
 	return new BashTool({ settings } as unknown as ConstructorParameters<typeof BashTool>[0]);
 }
 
-function bashApproval(command: string) {
-	const approval = createBashTool().approval;
+function bashApproval(command: string, settingsOverrides: Record<string, unknown> = {}) {
+	const approval = createBashTool(settingsOverrides).approval;
 	if (typeof approval !== "function") throw new Error("Bash approval must be dynamic");
 	return approval({ command });
 }
@@ -91,6 +92,22 @@ describe("resolveApproval override and user policy", () => {
 		expect(resolveApproval(dangerous, {}, "yolo", { bash: "deny" }).policy).toBe("deny");
 		expect(() => requiresApproval(dangerous, {}, "yolo", { bash: "deny" })).toThrow(
 			'Tool "bash" is blocked by user policy',
+		);
+	});
+
+	it("tool-owned deny policy blocks before mode and user allow policies", () => {
+		const blocked = tool("bash", {
+			tier: "exec",
+			override: true,
+			policy: "deny",
+			reason: "Blocked by bash pattern: rm -rf *",
+		});
+		expect(resolveApproval(blocked, {}, "yolo", { bash: "allow" })).toMatchObject({
+			policy: "deny",
+			source: "tool",
+		});
+		expect(() => requiresApproval(blocked, {}, "write", { bash: "allow" })).toThrow(
+			'Tool "bash" is blocked by tool policy',
 		);
 	});
 
@@ -176,6 +193,139 @@ describe("tool-owned dynamic approval declarations", () => {
 		]) {
 			expect(bashApproval(command)).toBe("exec");
 		}
+	});
+
+	it("classifies configured bash approval patterns", () => {
+		const settingsOverrides = {
+			"bash.patterns": [
+				{ match: "git *", approval: "allow" },
+				{ match: "rm -rf *", approval: "deny" },
+				{ match: "*", approval: "prompt" },
+			],
+		};
+
+		for (const command of ["git diff packages/coding-agent/src/tools/bash.ts", "git status", "git log --oneline"]) {
+			expect(bashApproval(command, settingsOverrides)).toEqual({ tier: "write", policy: "allow" });
+		}
+
+		expect(bashApproval("rm -rf build", settingsOverrides)).toEqual({
+			tier: "exec",
+			override: true,
+			policy: "deny",
+			reason: "Blocked by bash pattern: rm -rf *",
+		});
+		expect(
+			bashApproval("git diff packages/coding-agent/src/tools/bash.ts && rm file.txt", settingsOverrides),
+		).toEqual({
+			tier: "exec",
+			override: true,
+			policy: "prompt",
+			reason: "Prompt required by bash pattern: *",
+		});
+		expect(bashApproval("echo hello", settingsOverrides)).toEqual({
+			tier: "exec",
+			override: true,
+			policy: "prompt",
+			reason: "Prompt required by bash pattern: *",
+		});
+	});
+
+	it("keeps critical bash patterns prompt-gated unless explicitly denied", () => {
+		const settingsOverrides = {
+			"bash.patterns": [{ match: "*", approval: "allow" }],
+		};
+
+		expect(bashApproval("rm -rf /", settingsOverrides)).toEqual({
+			tier: "exec",
+			override: true,
+			reason: "Critical pattern detected",
+		});
+		expect(bashApproval("echo hello", settingsOverrides)).toEqual({
+			tier: "write",
+			policy: "allow",
+		});
+		expect(bashApproval("echo hello && rm file.txt", settingsOverrides)).toBe("exec");
+	});
+
+	it("applies the first matching bash approval pattern", () => {
+		const settingsOverrides = {
+			"bash.patterns": [
+				{ match: "*", approval: "allow" },
+				{ match: "git *", approval: "deny" },
+			],
+		};
+
+		expect(bashApproval("git status", settingsOverrides)).toEqual({
+			tier: "write",
+			policy: "allow",
+		});
+	});
+
+	it("allows a specific deny pattern to block a critical bash command", () => {
+		const settingsOverrides = {
+			"bash.patterns": [{ match: "rm -rf *", approval: "deny" }],
+		};
+
+		expect(bashApproval("rm -rf /", settingsOverrides)).toEqual({
+			tier: "exec",
+			override: true,
+			policy: "deny",
+			reason: "Blocked by bash pattern: rm -rf *",
+		});
+	});
+	it("never auto-approves a command that only prefixes an allow pattern", () => {
+		const settingsOverrides = {
+			"bash.patterns": [{ match: "git *", approval: "allow" }],
+		};
+
+		// Shell control syntax after (or around) the allowed prefix must not ride the allow rule.
+		for (const command of [
+			"git status; rm file.txt",
+			"git status && rm file.txt",
+			"git status | sh",
+			"git status\nrm file.txt",
+			"git status\r\nrm file.txt",
+			"git $(rm file.txt)",
+			"git `rm file.txt` status",
+			"git status > /etc/passwd",
+			"git status < seed",
+			// Different binary resolution than the pattern names.
+			"FOO=1 git status",
+			"/usr/bin/git status",
+			'"git" status',
+			"gitx status",
+			"git",
+			"",
+		]) {
+			const decision = bashApproval(command, settingsOverrides);
+			expect(typeof decision === "object" ? decision.policy : undefined).not.toBe("allow");
+		}
+
+		for (const command of ["git status", "git status --short", "git  status", "git\tstatus"]) {
+			expect(bashApproval(command, settingsOverrides)).toEqual({ tier: "write", policy: "allow" });
+		}
+	});
+
+	it("honors bash pattern rules in yolo mode", () => {
+		const tool = createBashTool({
+			"bash.patterns": [
+				{ match: "echo *", approval: "prompt" },
+				{ match: "git *", approval: "allow" },
+			],
+		});
+
+		expect(resolveApproval(tool, { command: "echo hello" }, "yolo", {})).toMatchObject({
+			policy: "prompt",
+			source: "tool",
+		});
+		expect(resolveApproval(tool, { command: "git status" }, "yolo", {})).toMatchObject({
+			policy: "allow",
+			source: "tool",
+		});
+		expect(resolveApproval(tool, { command: "true" }, "yolo", {})).toMatchObject({
+			policy: "allow",
+			source: "mode",
+		});
 	});
 
 	it("exports LSP and debug read-only action sets from their owning tools", () => {

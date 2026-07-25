@@ -2,7 +2,7 @@
  * Contracts: task.batch gating (batch spawning + shared context).
  *
  * 1. The wire schema is shape-swapped by `task.batch`: `{ context, tasks[] }`
- *    when on (per-spawn fields — including `isolated`, `outputSchema`, and
+ *    when on (per-spawn fields — including `model`, `isolated`, `outputSchema`, and
  *    `schemaMode` — live in the items), the flat form exposes those fields
  *    directly. The stale `schema` field is never accepted.
  * 2. Shape validation rejects stale `schema`, `tasks`/`context` while batch
@@ -81,9 +81,9 @@ function makeResult(id: string, overrides: Partial<SingleResult> = {}): SingleRe
 	};
 }
 
-function mockDiscovery(agent: AgentDefinition = taskAgent): void {
+function mockDiscovery(agent: AgentDefinition | AgentDefinition[] = taskAgent): void {
 	vi.spyOn(discoveryModule, "discoverAgents").mockResolvedValue({
-		agents: [agent],
+		agents: Array.isArray(agent) ? agent : [agent],
 		projectAgentsDir: null,
 	});
 }
@@ -125,7 +125,7 @@ describe("task.batch schema gating", () => {
 		expect(items?.properties?.schemaMode).toBeDefined();
 	});
 
-	it("places isolated per item in the batch shape when isolation is enabled", async () => {
+	it("keeps isolation boolean-only and describes the configured apply behavior", async () => {
 		mockDiscovery();
 
 		const tool = await TaskTool.create(
@@ -134,7 +134,24 @@ describe("task.batch schema gating", () => {
 		const properties = getSchemaProperties(tool);
 		expect(properties.isolated).toBeUndefined();
 		const items = (properties.tasks as { items?: { properties?: Record<string, unknown> } }).items;
-		expect(items?.properties?.isolated).toBeDefined();
+		const isolatedSchema = items?.properties?.isolated;
+		if (!isolatedSchema || typeof isolatedSchema !== "object" || !("type" in isolatedSchema)) {
+			throw new Error("Expected isolated to be a boolean schema");
+		}
+		expect(isolatedSchema.type).toBe("boolean");
+		expect(items?.properties?.apply).toBeUndefined();
+		expect(tool.description).toContain("automatically applied to the parent checkout");
+
+		const captureTool = await TaskTool.create(
+			createSession({
+				settings: {
+					"task.batch": true,
+					"task.isolation.mode": "auto",
+					"task.isolation.apply": false,
+				},
+			}),
+		);
+		expect(captureTool.description).toContain("without modifying the parent checkout");
 	});
 
 	it("hides isolation from the dynamic batch schema in plan mode", async () => {
@@ -224,6 +241,26 @@ describe("task.batch validation", () => {
 		);
 		expect(text).toContain("Duplicate task name");
 	});
+
+	it("marks lenientArgValidation so execute() surfaces the actionable shape error", async () => {
+		// Regression (#6039): the flat single-spawn wire schema carries
+		// `"+": "delete"`, so a batch `{ context, tasks[] }` payload is stripped
+		// by arktype and rejected as `task must be a string (was missing)` in the
+		// agent loop — preempting the tool's own actionable message. The lenient
+		// flag makes the loop forward the raw args to execute() on that failure.
+		mockDiscovery();
+		const tool = await TaskTool.create(createSession({ settings: { "task.batch": false } }));
+		expect(tool.lenientArgValidation).toBe(true);
+
+		// The raw batch payload the loop would forward reaches execute() and
+		// yields the actionable reason, never arktype's misleading missing-`task`.
+		const text = await executeText(
+			{ context: "Background.", tasks: [{ name: "Alpha", task: "Work." }] },
+			{ "task.batch": false },
+		);
+		expect(text).toContain("task.batch is disabled");
+		expect(text).not.toContain("was missing");
+	});
 });
 
 describe("task.batch spawning", () => {
@@ -249,7 +286,7 @@ describe("task.batch spawning", () => {
 		AgentRegistry.resetGlobalForTests();
 	});
 
-	it("spawns one background job per task item and forwards independent schemas with shared context", async () => {
+	it("spawns one background job per task item and forwards independent models and schemas with shared context", async () => {
 		mockDiscovery({
 			...taskAgent,
 			output: { type: "object", properties: { staleAgentOutput: { type: "boolean" } } },
@@ -259,6 +296,7 @@ describe("task.batch spawning", () => {
 			context?: string;
 			assignment?: string;
 			parentAgentId?: string;
+			modelOverride?: string | string[];
 			outputSchema?: unknown;
 			outputSchemaMode?: "permissive" | "strict";
 			outputSchemaSource?: "caller" | "agent" | "session" | "none";
@@ -270,6 +308,7 @@ describe("task.batch spawning", () => {
 				context: options.context,
 				assignment: options.assignment,
 				parentAgentId: options.parentAgentId,
+				modelOverride: options.modelOverride,
 				outputSchema: options.outputSchema,
 				outputSchemaMode: options.outputSchemaMode,
 				outputSchemaSource: options.outputSchemaSource,
@@ -287,8 +326,18 @@ describe("task.batch spawning", () => {
 		const result = await tool.execute("tc-batch", {
 			context: "# Goal\nShared background.",
 			tasks: [
-				{ name: "Alpha", task: "Do A.", outputSchema: alphaSchema, schemaMode: "strict" },
-				{ name: "Beta", task: "Do B.", outputSchema: betaSchema, schemaMode: "permissive" },
+				{
+					name: "Alpha",
+					task: "Do A.",
+					outputSchema: alphaSchema,
+					schemaMode: "strict",
+				},
+				{
+					name: "Beta",
+					task: "Do B.",
+					outputSchema: betaSchema,
+					schemaMode: "permissive",
+				},
 			],
 		} as TaskParams);
 
@@ -321,6 +370,87 @@ describe("task.batch spawning", () => {
 		for (const spawn of seen) expect(spawn.parentAgentId).toBe("ParentA");
 	});
 
+	it("routes each mixed-agent item through its selected definition while preserving caller overrides", async () => {
+		const scoutSchema = { type: "object", properties: { findings: { type: "array" } } };
+		const reviewerSchema = { type: "object", properties: { verdict: { type: "string" } } };
+		const callerSchema = { type: "object", properties: { approved: { type: "boolean" } } };
+		const scoutAgent: AgentDefinition = {
+			...taskAgent,
+			name: "scout",
+			description: "Read-only scout",
+			systemPrompt: "Investigate the assigned target.",
+			tools: ["read"],
+			model: ["anthropic/claude-haiku-4-5:low"],
+			output: scoutSchema,
+		};
+		const reviewerAgent: AgentDefinition = {
+			...taskAgent,
+			name: "reviewer",
+			description: "Code review specialist",
+			systemPrompt: "Review the assigned target.",
+			tools: ["read", "bash"],
+			model: ["anthropic/claude-sonnet-4-6:medium"],
+			output: reviewerSchema,
+		};
+		mockDiscovery([scoutAgent, reviewerAgent]);
+
+		const seen: Array<{
+			id?: string;
+			agent: AgentDefinition;
+			modelOverride?: string | string[];
+			outputSchema?: unknown;
+			outputSchemaSource?: "caller" | "agent" | "session" | "none";
+			outputSchemaOverridesAgent?: boolean;
+		}> = [];
+		vi.spyOn(executorModule, "runSubprocess").mockImplementation(async options => {
+			seen.push({
+				id: options.id,
+				agent: options.agent,
+				modelOverride: options.modelOverride,
+				outputSchema: options.outputSchema,
+				outputSchemaSource: options.outputSchemaSource,
+				outputSchemaOverridesAgent: options.outputSchemaOverridesAgent,
+			});
+			return makeResult(options.id ?? "?", { agent: options.agent.name });
+		});
+
+		const manager = createManager();
+		const tool = await TaskTool.create(
+			createSession({ manager, settings: { "async.enabled": true, "task.batch": true } }),
+		);
+		const result = await tool.execute("tc-mixed-agents", {
+			context: "Shared routing context.",
+			tasks: [
+				{ name: "Scout", agent: "scout", task: "Investigate." },
+				{
+					name: "Review",
+					agent: "reviewer",
+					task: "Review.",
+					outputSchema: callerSchema,
+				},
+			],
+		} as TaskParams);
+
+		expect(getFirstText(result)).toContain("Spawned 2 background agents");
+		await Promise.all([manager.getJob("Scout")!.promise, manager.getJob("Review")!.promise]);
+
+		const byId = new Map(seen.map(spawn => [spawn.id, spawn]));
+		const scoutSpawn = byId.get("Scout");
+		const reviewerSpawn = byId.get("Review");
+		expect(scoutSpawn?.agent).toBe(scoutAgent);
+		expect(scoutSpawn?.agent.tools).toEqual(["read"]);
+		expect(scoutSpawn?.modelOverride).toEqual(["anthropic/claude-haiku-4-5:low"]);
+		expect(scoutSpawn?.outputSchema).toBe(scoutSchema);
+		expect(scoutSpawn?.outputSchemaSource).toBe("agent");
+		expect(scoutSpawn?.outputSchemaOverridesAgent).toBe(false);
+		expect(reviewerSpawn?.agent).toBe(reviewerAgent);
+		expect(reviewerSpawn?.agent.tools).toEqual(["read", "bash"]);
+		expect(reviewerSpawn?.modelOverride).toEqual(["anthropic/claude-sonnet-4-6:medium"]);
+		expect(reviewerSpawn?.outputSchema).toBe(callerSchema);
+		expect(reviewerSpawn?.outputSchemaSource).toBe("caller");
+		expect(reviewerSpawn?.outputSchemaOverridesAgent).toBe(true);
+	});
+
 	it("treats a one-item batch as a single spawn and forwards context", async () => {
 		mockDiscovery();
 		let capturedContext: string | undefined;
@@ -349,9 +479,14 @@ describe("task.batch spawning", () => {
 	it("accepts the flat single-spawn form at runtime under batch mode", async () => {
 		// Internal callers (e.g. the commit flow) and stale transcripts use the
 		// flat shape directly; the wire schema is batch-only but runtime is not.
-		mockDiscovery({ ...taskAgent, output: { type: "object", properties: { agent: { type: "string" } } } });
+		mockDiscovery({
+			...taskAgent,
+			model: ["anthropic/claude-sonnet-4"],
+			output: { type: "object", properties: { agent: { type: "string" } } },
+		});
 		let captured:
 			| {
+					modelOverride?: string | string[];
 					outputSchema?: unknown;
 					outputSchemaMode?: "permissive" | "strict";
 					outputSchemaSource?: "caller" | "agent" | "session" | "none";
@@ -360,6 +495,7 @@ describe("task.batch spawning", () => {
 			| undefined;
 		vi.spyOn(executorModule, "runSubprocess").mockImplementation(async options => {
 			captured = {
+				modelOverride: options.modelOverride,
 				outputSchema: options.outputSchema,
 				outputSchemaMode: options.outputSchemaMode,
 				outputSchemaSource: options.outputSchemaSource,
@@ -370,7 +506,14 @@ describe("task.batch spawning", () => {
 
 		const manager = createManager();
 		const tool = await TaskTool.create(
-			createSession({ manager, settings: { "async.enabled": true, "task.batch": true } }),
+			createSession({
+				manager,
+				settings: {
+					"async.enabled": true,
+					"task.batch": true,
+					"task.agentModelOverrides": { task: "openai/gpt-4.1-mini" },
+				},
+			}),
 		);
 
 		const callerSchema = { type: "object", properties: { caller: { type: "number" } } };
@@ -386,6 +529,7 @@ describe("task.batch spawning", () => {
 		const job = manager.getJob(result.details!.async!.jobId)!;
 		await job.promise;
 		expect(job.status).toBe("completed");
+		expect(captured?.modelOverride).toEqual(["openai/gpt-4.1-mini"]);
 		expect(captured?.outputSchema).toEqual(callerSchema);
 		expect(captured?.outputSchemaMode).toBe("strict");
 		expect(captured?.outputSchemaSource).toBe("caller");

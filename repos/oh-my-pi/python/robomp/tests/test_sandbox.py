@@ -2313,3 +2313,78 @@ def test_remove_workspace_skips_prune_on_repeat_close_after_full_cleanup(
     mgr.remove_workspace(repo="o/r", number=43)
 
     assert calls == [], "repeat close ran a spurious git worktree prune on an already-clean workspace"
+
+
+def _seed_reclaimable_workspace(mgr: SandboxManager, repo: str, number: int) -> Path:
+    """Lay out a workspace with dep caches, session state, and source files."""
+    ws_root = mgr.workspace_root(repo, number)
+    for rel in (
+        "repo/node_modules/left-pad",
+        "repo/packages/tui/node_modules/dep",
+        "repo/src",
+        ".omp-session",
+        ".omp-xdg/cache/bun-install",
+        ".omp-xdg/state/omp",
+        ".omp-tmp",
+        "artifacts",
+    ):
+        (ws_root / rel).mkdir(parents=True)
+    (ws_root / "repo/node_modules/left-pad/index.js").write_text("x", encoding="utf-8")
+    (ws_root / "repo/packages/tui/node_modules/dep/index.js").write_text("x", encoding="utf-8")
+    (ws_root / "repo/src/keep.ts").write_text("keep", encoding="utf-8")
+    (ws_root / ".omp-session/session.jsonl").write_text("{}", encoding="utf-8")
+    (ws_root / ".omp-xdg/cache/bun-install/pkg.tgz").write_text("x", encoding="utf-8")
+    (ws_root / ".omp-xdg/state/omp/state.json").write_text("{}", encoding="utf-8")
+    (ws_root / ".omp-tmp/scratch").write_text("x", encoding="utf-8")
+    (ws_root / "artifacts/run.log").write_text("x", encoding="utf-8")
+    return ws_root
+
+
+def test_reclaim_workspace_caches_strips_dep_caches_and_preserves_state(tmp_path: Path) -> None:
+    # Contract: node_modules (root + nested) and the XDG cache/tmp go away;
+    # everything a `--continue` resume needs (session, source, artifacts,
+    # non-cache XDG state) survives; no `.trash-*` staging dirs are left.
+    mgr = SandboxManager(tmp_path / "workspaces")
+    ws_root = _seed_reclaimable_workspace(mgr, "octo/widget", 7)
+
+    assert mgr.reclaim_workspace_caches(repo="octo/widget", number=7) is True
+
+    assert not (ws_root / "repo/node_modules").exists()
+    assert not (ws_root / "repo/packages/tui/node_modules").exists()
+    assert not (ws_root / ".omp-xdg/cache").exists()
+    assert not (ws_root / ".omp-tmp").exists()
+    assert (ws_root / "repo/src/keep.ts").read_text(encoding="utf-8") == "keep"
+    assert (ws_root / ".omp-session/session.jsonl").exists()
+    assert (ws_root / ".omp-xdg/state/omp/state.json").exists()
+    assert (ws_root / "artifacts/run.log").exists()
+    assert not list(ws_root.glob(".trash-*"))
+
+    # Second pass: nothing left to reclaim.
+    assert mgr.reclaim_workspace_caches(repo="octo/widget", number=7) is False
+
+
+def test_reclaim_workspace_caches_missing_workspace_is_noop(tmp_path: Path) -> None:
+    mgr = SandboxManager(tmp_path / "workspaces")
+    assert mgr.reclaim_workspace_caches(repo="octo/widget", number=404) is False
+
+
+def test_reclaim_all_caches_sweeps_workspaces_not_pool(tmp_path: Path) -> None:
+    # Startup sweep: every workspace dir is stripped (including `.trash-*`
+    # leftovers from a reclaim that died mid-delete); the shared clone pool
+    # is never touched.
+    mgr = SandboxManager(tmp_path / "workspaces")
+    ws_a = _seed_reclaimable_workspace(mgr, "octo/widget", 1)
+    ws_b = _seed_reclaimable_workspace(mgr, "octo/gadget", 2)
+    (ws_b / ".trash-dead").mkdir()
+    (ws_b / ".trash-dead/junk").write_text("x", encoding="utf-8")
+    pool_marker = mgr.pool / "octo__widget" / "node_modules"
+    pool_marker.mkdir(parents=True)
+
+    assert mgr.reclaim_all_caches() == 2
+
+    for ws_root in (ws_a, ws_b):
+        assert not (ws_root / "repo/node_modules").exists()
+        assert (ws_root / ".omp-session/session.jsonl").exists()
+        assert not list(ws_root.glob(".trash-*"))
+    assert pool_marker.exists(), "sweep must never touch the shared clone pool"
+    assert mgr.reclaim_all_caches() == 0

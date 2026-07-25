@@ -13,4 +13,8 @@ No longer mounted (writes to these devices will fail):
 - xd://{{this.name}}
 {{/each}}
 {{/if}}
+{{#if docs}}
+Configured inline device docs:
+{{docs}}
+{{/if}}
 </system-notice>

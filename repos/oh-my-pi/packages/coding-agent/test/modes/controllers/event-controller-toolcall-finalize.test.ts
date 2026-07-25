@@ -58,6 +58,7 @@ function createFixture(streamingMessage: AssistantMessage) {
 		updateEditorTopBorder: vi.fn(),
 		streamingComponent,
 		streamingMessage,
+		transcriptMessageComponents: new WeakMap(),
 		pendingTools: new Map(),
 		noteDisplayableThinkingContent: vi.fn(() => false),
 		chatContainer: { addChild: vi.fn((child: { seal?(): void }) => mountedComponents.push(child)) },
@@ -119,5 +120,32 @@ describe("EventController finalizes assistant block when tool-call args stream",
 		]);
 		const finalized = await dispatchUpdate(message);
 		expect(finalized).toHaveBeenCalled();
+	});
+
+	it("emits the per-turn usage row with the turn's local timestamp at message_end", async () => {
+		await Settings.init({ inMemory: true, cwd: process.cwd() });
+		settings.set("display.showTokenUsage", true);
+		// Fixed local wall-clock time; single-digit fields exercise zero-padding.
+		const timestamp = new Date(2026, 0, 2, 3, 4, 5).getTime();
+		const message: AssistantMessage = {
+			...makeStreamingMessage([{ type: "text", text: "done" }]),
+			usage: {
+				input: 1234,
+				output: 7,
+				cacheRead: 0,
+				cacheWrite: 0,
+				totalTokens: 1241,
+				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+			},
+			timestamp,
+		};
+		const { controller } = createFixture(message);
+		await controller.handleEvent({ type: "message_end", message } as Extract<
+			AgentSessionEvent,
+			{ type: "message_end" }
+		>);
+		const row = mountedComponents.at(-1) as unknown as { render(width: number): string[] } | undefined;
+		expect(row).toBeDefined();
+		expect(row?.render(120).join("\n")).toContain("2026-01-02 03:04:05");
 	});
 });

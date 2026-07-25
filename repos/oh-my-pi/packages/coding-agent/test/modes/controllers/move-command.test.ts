@@ -12,14 +12,14 @@ function createMoveContext(sourceDir: string, settingsFlush?: () => Promise<void
 	const applyCwdChange = vi.fn(async (cwd: string) => {
 		expect(state.cwd).toBe(cwd);
 	});
+	const moveSession = vi.fn(async (cwd: string) => {
+		state.cwd = cwd;
+		state.movedTo = cwd;
+	});
 	const ctx = {
-		session: { isStreaming: false },
+		session: { isStreaming: false, moveSession },
 		sessionManager: {
 			getCwd: () => state.cwd,
-			moveTo: vi.fn(async (cwd: string) => {
-				state.cwd = cwd;
-				state.movedTo = cwd;
-			}),
 			dropSession: vi.fn(async () => {}),
 		},
 		settings: {
@@ -80,7 +80,7 @@ describe("CommandController /move", () => {
 			await controller.handleMoveCommand(targetDir);
 
 			expect(ctx.showError).toHaveBeenCalledWith(expect.stringContaining("disk full"));
-			expect(ctx.sessionManager.moveTo).not.toHaveBeenCalled();
+			expect(ctx.session.moveSession).not.toHaveBeenCalled();
 			expect(ctx.applyCwdChange).not.toHaveBeenCalled();
 			expect(state.movedTo).toBeUndefined();
 			expect(state.cwd).toBe(sourceDir);

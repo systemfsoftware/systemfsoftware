@@ -125,11 +125,17 @@ class ProtocolParsingTests(unittest.TestCase):
                         "timestamp": 1,
                     }
                 ],
+                "messageCount": 1,
             }
         )
 
         self.assertIsInstance(notification, AgentEndEvent)
         self.assertEqual(assistant_text(notification.messages[0]), "hello")
+        self.assertEqual(notification.message_count, 1)
+
+        legacy = AgentEndEvent(notification.messages, "agent_end")
+        self.assertEqual(legacy.type, "agent_end")
+        self.assertIsNone(legacy.message_count)
 
     def test_parse_extension_ui_request(self) -> None:
         notification = parse_notification(

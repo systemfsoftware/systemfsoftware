@@ -198,6 +198,32 @@ describe("Kagi search result parsing", () => {
 		expect(requestBody?.filters?.after).toBe(expected);
 	});
 
+	it("canonicalizes Google-style directives into the upstream query", async () => {
+		let requestBody: KagiSearchRequest | undefined;
+
+		const fetchMock: FetchImpl = async (input, init) => {
+			const urlStr = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+			if (urlStr === "https://kagi.com/api/v1/search") {
+				requestBody = JSON.parse(init?.body as string) as KagiSearchRequest;
+				return new Response(JSON.stringify({ meta: { trace: "req-directives" }, data: { search: [] } }), {
+					status: 200,
+					headers: { "Content-Type": "application/json" },
+				});
+			}
+			return new Response("not mocked", { status: 500 });
+		};
+
+		await searchKagi({
+			query: "x domain:kagi.com until:2025",
+			authStorage: fakeAuthStorage,
+			fetch: fetchMock,
+		});
+		expect(requestBody?.query).toBe("x site:kagi.com before:2025-01-01");
+
+		await searchKagi({ query: "plain kagi query", authStorage: fakeAuthStorage, fetch: fetchMock });
+		expect(requestBody?.query).toBe("plain kagi query");
+	});
+
 	it("uses a Bearer authorization header", async () => {
 		let capturedAuth: string | null = null;
 		const fetchMock: FetchImpl = async (input, init) => {

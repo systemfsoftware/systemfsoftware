@@ -117,6 +117,9 @@ export const STRING_SETTERS: Record<string, StringSetter> = {
 	"--config": (result, value) => {
 		result.config = [...(result.config ?? []), value];
 	},
+	"--add-dir": (result, value) => {
+		result.addDir = [...(result.addDir ?? []), value];
+	},
 	"--mode": (result, value) => {
 		if (value === "text" || value === "json" || value === "rpc" || value === "acp" || value === "rpc-ui") {
 			result.mode = value;

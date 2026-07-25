@@ -11,13 +11,20 @@ import {
 } from "../utils";
 
 /**
- * Text component - displays multi-line text with word wrapping
+ * Text component - displays multi-line text with word wrapping.
+ *
+ * Foreground colors may be supplied lazily via {@link setStyleFn} instead of
+ * baked into `text`: the styler runs at render time, so a caller that
+ * invalidates the component on a theme change (see the coding-agent's
+ * `onThemeChange` handler) re-resolves the color against the now-active theme
+ * rather than replaying the palette active when the component was constructed.
  */
 export class Text implements Component {
 	#text: string;
 	#paddingX: number; // Left/right padding
 	#paddingY: number; // Top/bottom padding
 	#customBgFn?: (text: string) => string;
+	#styleFn?: (text: string) => string;
 
 	#ignoreTight = false;
 
@@ -64,6 +71,21 @@ export class Text implements Component {
 		this.#cachedLines = undefined;
 	}
 
+	/**
+	 * Supply a foreground styler applied to the text at render time (e.g. a
+	 * theme color resolver). Unlike baking the color into `text`, the styler
+	 * re-runs on every render, so invalidating the component after a theme
+	 * change re-resolves the color against the active theme.
+	 */
+	setStyleFn(styleFn?: (text: string) => string): this {
+		this.#styleFn = styleFn;
+		this.#cachedText = undefined;
+		this.#cachedWidth = undefined;
+		this.#cachedWidthEpoch = undefined;
+		this.#cachedLines = undefined;
+		return this;
+	}
+
 	invalidate(): void {
 		this.#cachedText = undefined;
 		this.#cachedWidth = undefined;
@@ -93,7 +115,7 @@ export class Text implements Component {
 		}
 
 		// Replace tabs with 3 spaces
-		const normalizedText = replaceTabs(this.#text);
+		const normalizedText = replaceTabs(this.#styleFn ? this.#styleFn(this.#text) : this.#text);
 
 		// Calculate content width (subtract left/right margins)
 		const paddingX = this.#ignoreTight ? this.#paddingX : getPaddingX(this.#paddingX);

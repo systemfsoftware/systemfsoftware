@@ -75,4 +75,56 @@ describe("Anthropic search request body", () => {
 		expect(userId.account_uuid).toBe(accountUuid);
 		expect(userId.device_id).toMatch(/^[0-9a-f]{64}$/);
 	});
+
+	it("maps site: to allowed_domains and strips the directive from the query", async () => {
+		using tempDir = TempDir.createSync("@pi-anthropic-search-sites-");
+		const authStorage = await CodingAuthStorage.create(path.join(tempDir.path(), "auth.db"));
+		try {
+			authStorage.setRuntimeApiKey("anthropic", "test-key");
+
+			const cap = makeCaptureFetch();
+			await searchAnthropic({
+				query: "sdk docs site:docs.anthropic.com",
+				systemPrompt: "Use web search.",
+				sessionId: "session-2295",
+				authStorage,
+				fetch: cap.fetch,
+			});
+
+			const body = cap.body();
+			const tool = (body?.tools as Record<string, unknown>[] | undefined)?.[0];
+			expect(tool?.allowed_domains).toEqual(["docs.anthropic.com"]);
+			expect(tool).not.toHaveProperty("blocked_domains");
+			const messages = body?.messages as { content: string }[];
+			expect(messages[0]?.content).toBe("sdk docs");
+		} finally {
+			authStorage.close();
+		}
+	});
+
+	it("maps -site: to blocked_domains when there are no site includes", async () => {
+		using tempDir = TempDir.createSync("@pi-anthropic-search-blocked-");
+		const authStorage = await CodingAuthStorage.create(path.join(tempDir.path(), "auth.db"));
+		try {
+			authStorage.setRuntimeApiKey("anthropic", "test-key");
+
+			const cap = makeCaptureFetch();
+			await searchAnthropic({
+				query: "rust async runtime -site:reddit.com",
+				systemPrompt: "Use web search.",
+				sessionId: "session-2295",
+				authStorage,
+				fetch: cap.fetch,
+			});
+
+			const body = cap.body();
+			const tool = (body?.tools as Record<string, unknown>[] | undefined)?.[0];
+			expect(tool?.blocked_domains).toEqual(["reddit.com"]);
+			expect(tool).not.toHaveProperty("allowed_domains");
+			const messages = body?.messages as { content: string }[];
+			expect(messages[0]?.content).toBe("rust async runtime");
+		} finally {
+			authStorage.close();
+		}
+	});
 });

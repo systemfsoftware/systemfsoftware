@@ -140,6 +140,29 @@ describe("generated model policies", () => {
 		});
 	});
 
+	it("preserves QwenCloud's mandatory qwen3.8 effort ladder", () => {
+		const models: ModelSpec<Api>[] = [
+			createSpec({
+				id: "qwen3.8-max-preview",
+				api: "openai-completions",
+				provider: "alibaba-token-plan",
+				thinking: {
+					mode: "effort",
+					efforts: [Effort.Low, Effort.High, Effort.XHigh],
+					requiresEffort: true,
+				},
+			}),
+		];
+
+		applyGeneratedModelPolicies(models);
+
+		expect(models[0]?.thinking).toEqual({
+			mode: "effort",
+			efforts: [Effort.Low, Effort.High, Effort.XHigh],
+			requiresEffort: true,
+		});
+	});
+
 	it("pins zai glm-5.2 base id to 1M context", () => {
 		const models = [
 			createSpec({

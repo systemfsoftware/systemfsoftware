@@ -53,6 +53,7 @@ function createContext(options: { terminalProgress?: boolean } = {}) {
 		statusLine: { invalidate: vi.fn(), markActivityStart: vi.fn(), markActivityEnd: vi.fn() },
 		updateEditorTopBorder: vi.fn(),
 		flushPendingCommandOutput: vi.fn(),
+		transcriptMessageComponents: new WeakMap(),
 		pendingTools: new Map<string, unknown>(),
 		hideThinkingBlock: false,
 		setWorkingMessage: vi.fn(),
@@ -100,7 +101,7 @@ function createContext(options: { terminalProgress?: boolean } = {}) {
 }
 
 const AGENT_START = { type: "agent_start" } as unknown as AgentSessionEvent;
-const AGENT_END = { type: "agent_end" } as unknown as AgentSessionEvent;
+const AGENT_END = { type: "agent_end", messages: [] } as unknown as AgentSessionEvent;
 const COMPACTION_START = {
 	type: "auto_compaction_start",
 	reason: "overflow",

@@ -18,7 +18,7 @@ import { YAML } from "bun";
 import { AuthStorage } from "../auth-storage";
 import * as AIError from "../error";
 import { AuthBrokerClient } from "./client";
-import { RemoteAuthCredentialStore } from "./remote-store";
+import { type AuthBrokerAccountPool, RemoteAuthCredentialStore } from "./remote-store";
 import { readAuthBrokerSnapshotCache, writeAuthBrokerSnapshotCache } from "./snapshot-cache";
 import { DEFAULT_SNAPSHOT_CACHE_TTL_MS, type SnapshotResponse } from "./types";
 
@@ -37,6 +37,8 @@ export interface DiscoverAuthStorageOptions {
 	configValueResolver?: (config: string) => Promise<string | undefined>;
 	cachePath?: string;
 	sourceLabel?: string;
+	/** Programmatic pool for SDK hosts. Takes precedence over the environment file. */
+	accountPool?: AuthBrokerAccountPool;
 }
 
 /** Path to the local bearer token file. Created by `omp auth-broker token`. */
@@ -112,6 +114,57 @@ async function readConfigYaml(agentDir: string): Promise<ConfigSnapshot> {
 	return {};
 }
 
+export async function loadAuthBrokerAccountPool(): Promise<AuthBrokerAccountPool | undefined> {
+	const filePath = process.env.OMP_AUTH_BROKER_ACCOUNT_POOL_FILE?.trim();
+	if (!filePath) return undefined;
+
+	let parsed: unknown;
+	try {
+		parsed = await Bun.file(filePath).json();
+	} catch (error) {
+		throw new AIError.ConfigurationError(`Unable to read OMP_AUTH_BROKER_ACCOUNT_POOL_FILE at ${filePath}`, {
+			cause: error,
+		});
+	}
+	if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+		throw new AIError.ConfigurationError("OMP_AUTH_BROKER_ACCOUNT_POOL_FILE must contain a JSON object");
+	}
+
+	const accountPool = new Map<string, ReadonlySet<string>>();
+	for (const [provider, value] of Object.entries(parsed)) {
+		const normalizedProvider = provider.trim();
+		if (normalizedProvider.length === 0) {
+			throw new AIError.ConfigurationError("OMP_AUTH_BROKER_ACCOUNT_POOL_FILE contains an empty provider id");
+		}
+		if (provider !== normalizedProvider) {
+			throw new AIError.ConfigurationError(
+				"OMP_AUTH_BROKER_ACCOUNT_POOL_FILE contains a provider id with surrounding whitespace",
+			);
+		}
+		if (!Array.isArray(value)) {
+			throw new AIError.ConfigurationError(
+				`OMP_AUTH_BROKER_ACCOUNT_POOL_FILE entry for ${provider} must be an array of identity keys`,
+			);
+		}
+		const identities = new Set<string>();
+		for (const identity of value) {
+			if (typeof identity !== "string" || identity.length === 0) {
+				throw new AIError.ConfigurationError(
+					`OMP_AUTH_BROKER_ACCOUNT_POOL_FILE entry for ${provider} contains an invalid identity key`,
+				);
+			}
+			if (identity !== identity.trim()) {
+				throw new AIError.ConfigurationError(
+					`OMP_AUTH_BROKER_ACCOUNT_POOL_FILE entry for ${provider} contains an identity key with surrounding whitespace`,
+				);
+			}
+			identities.add(identity);
+		}
+		accountPool.set(provider, identities);
+	}
+	return accountPool;
+}
+
 function resolveSnapshotTtlMs(): number {
 	const raw = process.env.OMP_AUTH_BROKER_SNAPSHOT_TTL_MS;
 	if (raw === undefined) return DEFAULT_SNAPSHOT_CACHE_TTL_MS;
@@ -183,6 +236,7 @@ export async function discoverAuthStorage(options: DiscoverAuthStorageOptions = 
 	});
 
 	if (brokerConfig) {
+		const accountPool = options.accountPool ?? (await loadAuthBrokerAccountPool());
 		const client = new AuthBrokerClient({ url: brokerConfig.url, token: brokerConfig.token });
 		const cachePath = options.cachePath ?? getAuthBrokerSnapshotCachePath();
 		const ttlMs = resolveSnapshotTtlMs();
@@ -226,6 +280,7 @@ export async function discoverAuthStorage(options: DiscoverAuthStorageOptions = 
 			client,
 			initialSnapshot,
 			onSnapshot: persist,
+			accountPool,
 		});
 		const storage = new AuthStorage(store, {
 			configValueResolver: options.configValueResolver,

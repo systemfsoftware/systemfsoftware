@@ -1091,6 +1091,13 @@ export class TUI extends Container {
 	// resize frames so width changes truncate the transient viewport instead of
 	// pushing wrapped fragments into native scrollback.
 	#resizeAltActive = false;
+	// Latched once this terminal is observed re-reporting its size across an
+	// alternate-screen toggle (a pure height change between alt-buffer enter and
+	// exit). That is the Warp-class quirk {@link reportsSizeOnAltScreenToggle}
+	// hardcodes: without it, leaving a fullscreen overlay flashes a destructive
+	// ED3 full paint and the revert SIGWINCH flashes another (#6511). Once set,
+	// {@link #resizeRepaintsInPlace} routes resizes through the in-place path.
+	#altToggleResizesInPlace = false;
 	#stopped = false;
 	// Always-on event-loop lag probe. The high default threshold keeps it quiet;
 	// it only logs `ui.loop-blocked` (with the current loop phase) when a frame
@@ -1590,8 +1597,26 @@ export class TUI extends Container {
 				// window) into a single render once the pane is quiet —
 				// `#resizeEventPending` is set first so the eventual render still
 				// classifies as a resize.
+				// A SIGWINCH while a fullscreen overlay covers the transcript is
+				// either a genuine resize behind the overlay or the alt-toggle size
+				// echo (a terminal re-reporting its size whenever the alternate
+				// screen buffer toggles). The transcript is not visible either way,
+				// so arming the drag/settle would only queue a destructive ED3
+				// rebuild that fires as a flash when the overlay closes (#6511). A
+				// pure height change is the alt-toggle-echo signature — latch the
+				// in-place resize path — and just repaint the overlay at the new
+				// size. #resizeEventPending carries to the overlay-exit render so it
+				// still classifies as a resize.
+				if (this.#altActive) {
+					if (this.#altEnterWidth === this.terminal.columns && this.#altEnterHeight !== this.terminal.rows) {
+						this.#altToggleResizesInPlace = true;
+					}
+					this.#resizeEventPending = true;
+					this.requestRender();
+					return;
+				}
 				this.#resizeEventPending = true;
-				if (!resizeRepaintsInPlace()) {
+				if (!this.#resizeRepaintsInPlace()) {
 					// Enter the viewport fast path and (re)arm the settle timer, then
 					// request the cheap viewport-only paint. The authoritative full
 					// replay fires from the settle timer once the drag goes quiet.
@@ -1967,7 +1992,7 @@ export class TUI extends Container {
 		if (
 			this.#renderRequested ||
 			this.#postFullPaintSettleTimer !== undefined ||
-			this.#postFullPaintSettleUntilMs > 0
+			this.#postFullPaintSettleDelay() > 0
 		) {
 			this.requestComponentRender(component);
 			return;
@@ -2106,6 +2131,15 @@ export class TUI extends Container {
 		this.#commit(this.#composedFrame, previousWindow, width, height, cursorControl);
 	}
 
+	#postFullPaintSettleDelay(): number {
+		const until = this.#postFullPaintSettleUntilMs;
+		if (until <= 0) return 0;
+		const remaining = until - this.#renderScheduler.now();
+		if (remaining > 0) return remaining;
+		this.#postFullPaintSettleUntilMs = 0;
+		return 0;
+	}
+
 	/** Ordinary (non-forced) scheduling shared by full and component-scoped requests. */
 	#requestOrdinaryRender(): void {
 		// Coalesce non-forced renders inside the post-full-paint ConPTY settle
@@ -2114,20 +2148,17 @@ export class TUI extends Container {
 		// catching up with the previous big paint, and each follow-up viewport
 		// repaint nudges Windows Terminal's viewport tracker further off the
 		// last row (see #2095).
-		if (this.#postFullPaintSettleUntilMs > 0) {
-			const now = this.#renderScheduler.now();
-			if (now < this.#postFullPaintSettleUntilMs) {
-				if (this.#postFullPaintSettleTimer === undefined) {
-					this.#postFullPaintSettleTimer = this.#renderScheduler.scheduleRender(() => {
-						this.#postFullPaintSettleTimer = undefined;
-						this.#postFullPaintSettleUntilMs = 0;
-						if (this.#stopped) return;
-						this.#requestOrdinaryRender();
-					}, this.#postFullPaintSettleUntilMs - now);
-				}
-				return;
+		const settleDelayMs = this.#postFullPaintSettleDelay();
+		if (settleDelayMs > 0) {
+			if (this.#postFullPaintSettleTimer === undefined) {
+				this.#postFullPaintSettleTimer = this.#renderScheduler.scheduleRender(() => {
+					this.#postFullPaintSettleTimer = undefined;
+					this.#postFullPaintSettleUntilMs = 0;
+					if (this.#stopped) return;
+					this.#requestOrdinaryRender();
+				}, settleDelayMs);
 			}
-			this.#postFullPaintSettleUntilMs = 0;
+			return;
 		}
 		if (this.#renderRequested) return;
 		this.#renderRequested = true;
@@ -2809,9 +2840,15 @@ export class TUI extends Container {
 			this.#altPreviousLines = [];
 			// A resize while on the alt buffer reflowed the terminal's saved
 			// normal screen; it no longer matches our accounting, so force the
-			// geometry rebuild path instead of a stale diff.
+			// geometry rebuild path instead of a stale diff. A pure height change
+			// across the alt-buffer boundary (width unchanged) is the signature of
+			// a terminal that re-reports its size whenever the alternate screen
+			// toggles — the Warp-class quirk. Latch the in-place resize path so
+			// this exit and the revert SIGWINCH repaint without an ED3 scrollback
+			// rewrap instead of flashing a destructive full paint (#6511).
 			if (width !== this.#altEnterWidth || height !== this.#altEnterHeight) {
 				this.#resizeEventPending = true;
+				if (width === this.#altEnterWidth) this.#altToggleResizesInPlace = true;
 			}
 		} else if (wantMouseTracking !== this.#altMouseTrackingActive) {
 			this.terminal.write(wantMouseTracking ? MOUSE_TRACKING_ON : MOUSE_TRACKING_OFF);
@@ -2864,7 +2901,7 @@ export class TUI extends Container {
 		// count too: both enter the geometry rebuild path below.
 		const replayFullHistory =
 			this.#hasEverRendered &&
-			!resizeRepaintsInPlace() &&
+			!this.#resizeRepaintsInPlace() &&
 			(this.#clearScrollbackOnNextRender ||
 				this.#resizeEventPending ||
 				(this.#previousWidth > 0 && this.#previousWidth !== width) ||
@@ -3012,7 +3049,7 @@ export class TUI extends Container {
 		// feedback loop), so committed history keeps its old wrap.
 		const firstPaint = !this.#hasEverRendered;
 		const replaceRequested = this.#clearScrollbackOnNextRender;
-		const geometryRebuild = geometryChanged && !resizeRepaintsInPlace();
+		const geometryRebuild = geometryChanged && !this.#resizeRepaintsInPlace();
 		// Committed history no longer matches the frame: a finalized block
 		// replaced its scrolled-off live render, or the frame collapsed into
 		// recorded rows. Native scrollback is a render cache, not a court
@@ -3169,7 +3206,8 @@ export class TUI extends Container {
 			windowTop,
 			prevWindowTop,
 			prevHardwareCursorRow,
-			forceWindowRewrite: this.#forceViewportRepaintOnNextRender || (geometryChanged && resizeRepaintsInPlace()),
+			forceWindowRewrite:
+				this.#forceViewportRepaintOnNextRender || (geometryChanged && this.#resizeRepaintsInPlace()),
 			repaintVirtualScrollInPlace: hasVisibleOverlay,
 			cursorTrackingLineCount,
 		});
@@ -3804,6 +3842,21 @@ export class TUI extends Container {
 		setAltScreenActive(false);
 		this.#forgetHardwareCursorState();
 		return `${enhancementExit}${ALT_SCREEN_EXIT}`;
+	}
+
+	/**
+	 * Whether a resize repaints the visible window in place — no alternate-screen
+	 * borrow, no ED3 scrollback rewrap. Combines the static host detection
+	 * ({@link resizeRepaintsInPlace}) with the runtime {@link #altToggleResizesInPlace}
+	 * latch, so a terminal that re-reports its size on alt-screen toggles is
+	 * treated like Warp once observed, breaking the overlay-exit ED3 flash loop.
+	 * An explicit `PI_TUI_RESIZE_IN_PLACE=0|false` suppresses the runtime latch;
+	 * multiplexer handling remains authoritative through the static predicate.
+	 */
+	#resizeRepaintsInPlace(): boolean {
+		const override = Bun.env.PI_TUI_RESIZE_IN_PLACE;
+		const allowAutoDetection = override !== "0" && override !== "false";
+		return resizeRepaintsInPlace() || (allowAutoDetection && this.#altToggleResizesInPlace);
 	}
 
 	/**

@@ -8,6 +8,7 @@ import { type ApiKey, type AuthStorage, type FetchImpl, getEnvApiKey, withAuth }
 import { isRecord } from "@oh-my-pi/pi-utils";
 import type { SearchResponse, SearchSource } from "../../../web/search/types";
 import { SearchProviderError } from "../../../web/search/types";
+import { formatQuery, parseSearchQuery, type QuerySyntax } from "../query";
 import { dateToAgeSeconds } from "../utils";
 import type { SearchParams } from "./base";
 import { SearchProvider } from "./base";
@@ -16,6 +17,22 @@ import { classifyProviderHttpError, withHardTimeout } from "./utils";
 const ZAI_MCP_URL = "https://api.z.ai/api/mcp/web_search_prime/mcp";
 const ZAI_TOOL_NAME = "web_search_prime";
 const DEFAULT_NUM_RESULTS = 10;
+
+/**
+ * webSearchPrime exposes no native filter args (the Web Search API's
+ * `search_domain_filter`/`search_recency_filter` are scoped to the
+ * `search_pro_jina` engine, not `search-prime`), but its Bing-flavored
+ * backend parses the common inline operators. Dates and language are left
+ * to the central lenient post-filter.
+ */
+const ZAI_QUERY_SYNTAX: QuerySyntax = {
+	phrases: true,
+	negation: true,
+	site: true,
+	inTitle: true,
+	inUrl: true,
+	filetype: true,
+};
 
 export interface ZaiSearchParams {
 	query: string;
@@ -407,8 +424,9 @@ export class ZaiProvider extends SearchProvider {
 
 	search(params: SearchParams): Promise<SearchResponse> {
 		const { fetch: fetchOverride } = params as ZaiProviderSearchParams;
+		const parsed = params.parsedQuery ?? parseSearchQuery(params.query);
 		return searchZai({
-			query: params.query,
+			query: parsed.hasDirectives ? formatQuery(parsed, ZAI_QUERY_SYNTAX) : params.query,
 			num_results: params.numSearchResults ?? params.limit,
 			signal: params.signal,
 			authStorage: params.authStorage,

@@ -14,6 +14,18 @@ import type {
 /** Fixed display order for the agent-token-share breakdown. */
 const AGENT_TYPE_ORDER: AgentType[] = ["main", "subagent", "advisor"];
 
+export interface ConversationTokenStats {
+	totalInputTokens: number;
+	totalOutputTokens: number;
+	totalCacheReadTokens: number;
+	totalCacheWriteTokens: number;
+}
+
+/** Sum every conversation-token bucket shown by the overview. */
+export function sumConversationTokens(stats: ConversationTokenStats): number {
+	return stats.totalInputTokens + stats.totalOutputTokens + stats.totalCacheReadTokens + stats.totalCacheWriteTokens;
+}
+
 export interface AgentTokenSegment {
 	agentType: AgentType;
 	/** input + output + cache read + cache write — the displayed denominator. */
@@ -33,25 +45,21 @@ export interface AgentTokenShareView {
 /**
  * Build the "token usage by agent" breakdown: one segment per agent type that
  * appears in the data, ordered main -> subagents -> advisor, each carrying its
- * token total and share of the grand total. Token counts sum the same four
- * columns the overview renders (input + output + cache read + cache write) so a
- * segment's share never disagrees with the count beside it.
+ * token total and share of the grand total. Token counts use the same four
+ * conversation-token buckets as the overview total so the two views reconcile.
  */
 export function buildAgentTokenShare(stats: AgentTypeStats[]): AgentTokenShareView {
 	const byType = new Map<AgentType, AgentTypeStats>();
 	for (const stat of stats) byType.set(stat.agentType, stat);
 
-	const tokensOf = (stat: AgentTypeStats) =>
-		stat.totalInputTokens + stat.totalOutputTokens + stat.totalCacheReadTokens + stat.totalCacheWriteTokens;
-
 	const present = AGENT_TYPE_ORDER.map(type => byType.get(type)).filter(
 		(stat): stat is AgentTypeStats => stat !== undefined,
 	);
-	const totalTokens = present.reduce((sum, stat) => sum + tokensOf(stat), 0);
+	const totalTokens = present.reduce((sum, stat) => sum + sumConversationTokens(stat), 0);
 	const totalCost = present.reduce((sum, stat) => sum + stat.totalCost, 0);
 
 	const segments = present.map(stat => {
-		const tokens = tokensOf(stat);
+		const tokens = sumConversationTokens(stat);
 		return {
 			agentType: stat.agentType,
 			tokens,

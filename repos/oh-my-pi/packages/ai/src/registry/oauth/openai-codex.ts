@@ -31,6 +31,7 @@ const DEVICE_MAX_POLLS = 120;
 type JwtPayload = {
 	[JWT_CLAIM_PATH]?: {
 		chatgpt_account_id?: string;
+		chatgpt_plan_type?: string;
 	};
 	[JWT_PROFILE_CLAIM]?: {
 		email?: string;
@@ -50,14 +51,27 @@ export function decodeJwt<T = Record<string, unknown>>(token: string): T | null 
 	}
 }
 
-function getTokenProfile(accessToken: string): { accountId?: string; email?: string } {
+/**
+ * Identity slice decoded from the token claims. The ChatGPT workspace
+ * (`chatgpt_account_id`) is the subscription pool the token draws limits
+ * from — one account email can hold several (e.g. a personal Pro plan plus a
+ * Team seat). `chatgpt_plan_type` may only be present on the `id_token`.
+ */
+function getTokenProfile(
+	accessToken: string,
+	idToken?: string,
+): { accountId?: string; email?: string; planType?: string } {
 	const payload = decodeJwt<JwtPayload>(accessToken);
+	const idPayload = idToken ? decodeJwt<JwtPayload>(idToken) : null;
 	const auth = payload?.[JWT_CLAIM_PATH];
+	const idAuth = idPayload?.[JWT_CLAIM_PATH];
 	const accountId = auth?.chatgpt_account_id;
 	const email = payload?.[JWT_PROFILE_CLAIM]?.email?.trim().toLowerCase();
+	const planType = (auth?.chatgpt_plan_type ?? idAuth?.chatgpt_plan_type)?.trim().toLowerCase();
 	return {
 		accountId: typeof accountId === "string" && accountId.length > 0 ? accountId : undefined,
 		email: typeof email === "string" && email.length > 0 ? email : undefined,
+		planType: typeof planType === "string" && planType.length > 0 ? planType : undefined,
 	};
 }
 
@@ -185,6 +199,7 @@ async function exchangeCodeForToken(
 	const tokenData = (await tokenResponse.json()) as {
 		access_token?: string;
 		refresh_token?: string;
+		id_token?: string;
 		expires_in?: number;
 	};
 
@@ -192,7 +207,7 @@ async function exchangeCodeForToken(
 		throw new AIError.OAuthError("Token response missing required fields", { kind: "validation" });
 	}
 
-	const { accountId, email } = getTokenProfile(tokenData.access_token);
+	const { accountId, email, planType } = getTokenProfile(tokenData.access_token, tokenData.id_token);
 	if (!accountId) {
 		throw new AIError.OAuthError("Failed to extract accountId from token", { kind: "validation" });
 	}
@@ -203,6 +218,8 @@ async function exchangeCodeForToken(
 		expires: Date.now() + tokenData.expires_in * 1000,
 		accountId,
 		email,
+		orgId: accountId,
+		orgName: planType,
 	};
 }
 
@@ -354,6 +371,9 @@ export async function refreshOpenAICodexToken(refreshToken: string): Promise<OAu
 
 	const { accountId, email } = getTokenProfile(tokenData.access_token);
 
+	// Deliberately no org fields on the result: the workspace a credential is
+	// scoped to is fixed at login. Callers merge refresh results over the
+	// stored credential, so omitting org here preserves it verbatim.
 	return {
 		access: tokenData.access_token,
 		refresh: tokenData.refresh_token || refreshToken,

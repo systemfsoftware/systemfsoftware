@@ -220,6 +220,33 @@ export function clampAutoThinkingEffort(model: Model | undefined, effort: Effort
 	return chosen;
 }
 
+/** Coarse per-spawn effort selectors accepted by the task tool. */
+export const TASK_EFFORTS = ["lo", "med", "hi"] as const;
+
+/** Coarse task-spawn effort: the lowest, middle, or highest thinking level the target model supports. */
+export type TaskEffort = (typeof TASK_EFFORTS)[number];
+
+/**
+ * Maps a coarse task effort onto the model's supported thinking range:
+ * `lo` = lowest supported level, `hi` = highest (whatever the model tops out
+ * at — high, xhigh, or max), `med` = the middle (lower of the two middles for
+ * an even-sized range). Without a model, maps over the full canonical range.
+ * Returns `undefined` when the model has no controllable effort surface, so
+ * callers fall back to their default selector (e.g. `auto`).
+ */
+export function resolveTaskEffortLevel(model: Model | undefined, effort: TaskEffort): Effort | undefined {
+	const supported = model ? getSupportedEfforts(model) : THINKING_EFFORTS;
+	if (supported.length === 0) return undefined;
+	switch (effort) {
+		case "lo":
+			return supported[0];
+		case "med":
+			return supported[(supported.length - 1) >> 1];
+		case "hi":
+			return supported[supported.length - 1];
+	}
+}
+
 /**
  * The provisional concrete level shown while `auto` is configured but before a
  * turn has been classified. Prefers the model's `defaultLevel`, otherwise High,

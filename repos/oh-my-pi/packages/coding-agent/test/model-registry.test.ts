@@ -163,6 +163,11 @@ describe("ModelRegistry", () => {
 		return model?.compatConfig as OpenAICompat | undefined;
 	}
 
+	function getReplayUnsignedThinking(model: Model | undefined): boolean | undefined {
+		const compat = model?.compat;
+		return compat && "replayUnsignedThinking" in compat ? compat.replayUnsignedThinking : undefined;
+	}
+
 	/** Create a baseUrl-only override (no custom models) */
 	function overrideConfig(baseUrl: string, headers?: Record<string, string>) {
 		return { baseUrl, ...(headers && { headers }) };
@@ -674,6 +679,32 @@ describe("ModelRegistry", () => {
 				expect(getOpenAICompat(model)?.disableReasoningOnToolChoice).toBe(true);
 				expect(getOpenAICompat(model)?.allowsSyntheticReasoningContentForToolCalls).toBe(false);
 			}
+		});
+
+		test("provider-level Anthropic compat survives dynamic discovery refresh", async () => {
+			writeRawModelsJson({
+				anthropic: {
+					baseUrl: "https://proxy.example/v1",
+					apiKey: "TEST_KEY",
+					compat: { replayUnsignedThinking: false },
+				},
+			});
+			const fetchMock: FetchImpl = async input => {
+				const url = String(input);
+				if (url === "https://models.dev/api.json") return Response.json({});
+				if (url === "https://proxy.example/v1/models") {
+					return Response.json({
+						data: [{ id: "claude-sonnet-5", display_name: "Claude Sonnet 5" }],
+					});
+				}
+				throw new Error(`Unexpected URL: ${url}`);
+			};
+			const registry = new ModelRegistry(authStorage, modelsJsonPath, { fetch: fetchMock });
+			expect(getReplayUnsignedThinking(registry.find("anthropic", "claude-sonnet-5"))).toBe(false);
+
+			await registry.refreshProvider("anthropic", "online");
+
+			expect(getReplayUnsignedThinking(registry.find("anthropic", "claude-sonnet-5"))).toBe(false);
 		});
 
 		test("provider-level compat applies to custom models", () => {

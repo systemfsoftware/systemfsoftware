@@ -1,0 +1,31 @@
+name: Deploy
+
+permissions: {}
+
+on:
+  push:
+    branches: [release]
+    paths:
+      - docs/**
+      - src/**
+      - package.json
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+      - tsconfig.json
+      - .github/workflows/src/deploy.yml
+      - .github/workflows/deploy.yml
+
+jobs:
+  deploy-void:
+    name: Deploy to Void
+    if: github.repository == 'rolldown/tsdown'
+    runs-on: ubuntu-latest
+    environment: void
+    permissions:
+      id-token: write
+    steps:
+      - uses: sxzz/workflows/setup-js@main
+      - run: pnpm run docs:generate
+      - run: pnpm -C docs run void deploy
+        env:
+          VOID_PROJECT: tsdown

@@ -165,4 +165,85 @@ describe("Agent hub row ordering", () => {
 
 		hub.dispose();
 	});
+
+	it("flags a fallback badge for observer-only rows with no live session", () => {
+		geometry = stubStdoutGeometry(120);
+		const agents = new AgentRegistry();
+		// A collab guest / observer-only row carries no live AgentSession, so the
+		// badge must come from the executor-reported progress instead.
+		agents.register({ id: "GuestAgent", displayName: "Guest Agent", kind: "sub", session: null });
+
+		const observers = new SessionObserverRegistry();
+		vi.spyOn(observers, "getSessions").mockReturnValue([
+			{
+				id: "GuestAgent",
+				kind: "subagent",
+				label: "Subagent",
+				status: "active",
+				lastUpdate: Date.now(),
+				progress: {
+					resolvedModel: "openai/gpt-4o",
+					resolvedModelIsFallback: true,
+				} as never,
+			},
+		]);
+
+		const hub = new AgentHubOverlayComponent({
+			observers,
+			hubKeys: [],
+			onDone: () => {},
+			requestRender: () => {},
+			registry: agents,
+			irc: new IrcBus(agents),
+			focusAgent: async () => {},
+		});
+
+		try {
+			expect(Bun.stripANSI(hub.render(120).join("\n"))).toContain("fallback → openai/gpt-4o");
+		} finally {
+			hub.dispose();
+		}
+	});
+
+	it("flags a fallback badge for a live row whose fallback armed no session retry state", () => {
+		geometry = stubStdoutGeometry(120);
+		const agents = new AgentRegistry();
+		// Live session with a resolved model but no `retryFallbackModel` — the
+		// Fireworks Fast → base degrade emits `retry_fallback_applied` without
+		// arming `#activeRetryFallback`, so the badge must fall back to the
+		// executor-reported progress flag.
+		const session = { model: { id: "kimi-k2" }, retryFallbackModel: undefined } as unknown as AgentSession;
+		agents.register({ id: "FastAgent", displayName: "Fast Agent", kind: "sub", session });
+
+		const observers = new SessionObserverRegistry();
+		vi.spyOn(observers, "getSessions").mockReturnValue([
+			{
+				id: "FastAgent",
+				kind: "subagent",
+				label: "Subagent",
+				status: "active",
+				lastUpdate: Date.now(),
+				progress: {
+					resolvedModel: "fireworks/kimi-k2",
+					resolvedModelIsFallback: true,
+				} as never,
+			},
+		]);
+
+		const hub = new AgentHubOverlayComponent({
+			observers,
+			hubKeys: [],
+			onDone: () => {},
+			requestRender: () => {},
+			registry: agents,
+			irc: new IrcBus(agents),
+			focusAgent: async () => {},
+		});
+
+		try {
+			expect(Bun.stripANSI(hub.render(120).join("\n"))).toContain("fallback → fireworks/kimi-k2");
+		} finally {
+			hub.dispose();
+		}
+	});
 });

@@ -69,6 +69,25 @@ describe("legacy-pi @(scope)/pi-ai root `Type` remap (issue #1437)", () => {
 		expect(loaded.schema.safeParse({ name: "ok", extra: 1 }).success).toBe(false);
 	});
 
+	it("redirects the legacy pi-ai compat entrypoint through the root compatibility shim", async () => {
+		const entry = await writeFixtureExtension(
+			[
+				'import { StringEnum, complete, type Model } from "@earendil-works/pi-ai/compat";',
+				'export const schema = StringEnum(["red", "green"] as const);',
+				"export const completeType = typeof complete;",
+				"export type LegacyModel = Model;",
+			].join("\n"),
+		);
+
+		const loaded = (await loadLegacyPiModule(entry)) as {
+			schema: { safeParse: (input: unknown) => { success: boolean } };
+			completeType: string;
+		};
+		expect(loaded.schema.safeParse("red").success).toBe(true);
+		expect(loaded.schema.safeParse("blue").success).toBe(false);
+		expect(loaded.completeType).toBe("function");
+	});
+
 	it('redirects `import { Type } from "@oh-my-pi/pi-ai"` for plugins published against the canonical scope', async () => {
 		const entry = await writeFixtureExtension(
 			['import { Type } from "@oh-my-pi/pi-ai";', "export const probe = Type;"].join("\n"),
@@ -206,6 +225,30 @@ describe("legacy pi package root remaps (issue #1474)", () => {
 
 		const loaded = (await loadLegacyPiModule(entry)) as { loadedVersion: string };
 		expect(loaded.loadedVersion).toMatch(/^\d+\.\d+\.\d+/);
+	});
+
+	it("loads pi-vimmode's minified legacy imports", async () => {
+		const entry = await writeFixtureExtension(
+			[
+				'import{CustomEditor,copyToClipboard}from"@earendil-works/pi-coding-agent";',
+				'import{CURSOR_MARKER,decodeKittyPrintable,matchesKey,parseKey,truncateToWidth,visibleWidth}from"@earendil-works/pi-tui";',
+				"export const apiTypes=[typeof CustomEditor,typeof copyToClipboard,typeof CURSOR_MARKER,typeof decodeKittyPrintable,typeof matchesKey,typeof parseKey,typeof truncateToWidth,typeof visibleWidth];",
+				'export const printable=decodeKittyPrintable("\\x1b[97u");',
+			].join("\n"),
+		);
+
+		const loaded = (await loadLegacyPiModule(entry)) as { apiTypes: string[]; printable: string };
+		expect(loaded.apiTypes).toEqual([
+			"function",
+			"function",
+			"string",
+			"function",
+			"function",
+			"function",
+			"function",
+			"function",
+		]);
+		expect(loaded.printable).toBe("a");
 	});
 
 	it("preserves legacy defineTool root imports and usable coding tools", async () => {

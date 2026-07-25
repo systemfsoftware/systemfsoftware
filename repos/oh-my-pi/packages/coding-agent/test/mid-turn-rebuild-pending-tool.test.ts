@@ -57,6 +57,7 @@ function createFixture(opts: { isStreaming: boolean }) {
 		isInitialized: true,
 		init: vi.fn(async () => {}),
 		chatContainer,
+		transcriptMessageComponents: new WeakMap(),
 		pendingTools: new Map(),
 		ui: { requestRender: vi.fn() },
 		statusLine: { invalidate: vi.fn() },

@@ -9,6 +9,7 @@ Use ONLY for: single binary call or short pipeline that COMPUTES a fact (`wc -l`
 - `pty: true` only for real terminal needs (`sudo`, `ssh`); default `false`.
 - Multiple calls run concurrently; NEVER split order-dependent commands — chain with `&&` in one call (`;` only to continue past failure).
 - Internal URIs (`skill://`, `agent://`, …) auto-resolve to FS paths.
+{{#if hasShellBuiltins}}- aux utils available: mkdir, head, tail, wc, sort, ls, find, grep, rg, fd, cat, uniq, base64, cmp, md5sum, sha{1,224,256,384,512}sum, b2sum, basename, dirname, readlink, realpath, touch, stat, date, mktemp, seq, yes, printenv, truncate, tac, nproc, uname, whoami, hostname, which, diff, cut, tee, tr, paste, comm, sed, xargs, jq, rm, mv, ln, ts, sponge, ifne, isutf8, combine{{#unless isWindows}}, errno{{/unless}}{{/if}}
 {{#if asyncEnabled}}- `async: true` defers reporting for finite commands needing no later input.{{/if}}
 </instruction>
 
