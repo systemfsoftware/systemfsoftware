@@ -20,6 +20,7 @@
     "prepare": "husky",
     "release:dry": "node scripts/release.mjs --dry-run",
     "bump:minor": "node scripts/bump-all-minor.mjs",
+    "publish:check": "node scripts/validate-publish-config.mjs",
     "attw": "turbo --concurrency=${TURBO_CONCURRENCY:-50%} attw",
     "check:exports": "node scripts/check-exports.mjs"
   },
