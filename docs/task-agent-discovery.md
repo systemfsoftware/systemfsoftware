@@ -122,16 +122,23 @@ In spawn execution (`TaskTool.#executeSync` → `#runSpawn`):
 
 `TaskTool.create()` builds the tool description from discovery results at initialization time. `#executeSync` rediscovers agents, so the runtime set can differ from what was listed in the earlier tool description if agent files changed mid-session. The async entry path still uses the initialization-time list to decide whether an agent is marked `blocking` before scheduling.
 
-## Structured-output guardrails and schema precedence
+## Model and structured-output precedence
 
-Runtime output schema precedence in `TaskTool.#runSpawn`:
+Runtime model precedence is resolved by `resolveEffectiveSubagentPolicy()`:
 
-1. agent frontmatter `output`
-2. parent session `outputSchema`
+1. `task.agentModelOverrides[agentName]`
+2. agent frontmatter `model`
+3. the parent session model fallback
 
-(`effectiveOutputSchema = effectiveAgent.output ?? this.session.outputSchema` — the task call itself never carries a schema; ad-hoc structured workflows go through the eval bridge's `agent(prompt, schema)`.)
+Runtime output schema precedence is:
 
-The model-facing prompt (`src/prompts/tools/task.md`) no longer carries the old structured-output mismatch warning; it tags read-only agents and warns against offloading reasoning to `explore`/`sonic` instead.
+1. the task item's explicit `outputSchema`
+2. agent frontmatter `output`
+3. parent session `outputSchema`
+
+The task item's optional `schemaMode` overrides the parent session mode; the default is `permissive`.
+
+The model-facing prompt (`src/prompts/tools/task.md`) no longer carries the old structured-output mismatch warning; it tags read-only agents and warns against offloading reasoning to `scout`/`sonic` instead.
 
 ## Command discovery interaction
 

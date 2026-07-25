@@ -14,8 +14,10 @@ import type {
 	streamSimple,
 	TextContent,
 	Tool,
+	ToolCallProviderMetadata,
 	ToolChoice,
 	ToolResultMessage,
+	ToolResultProviderMetadata,
 	TSchema,
 } from "@oh-my-pi/pi-ai";
 import type { Dialect } from "@oh-my-pi/pi-ai/dialect";
@@ -274,6 +276,13 @@ export interface AgentLoopConfig extends SimpleStreamOptions {
 	 * Use for deobfuscating secrets or rewriting arguments.
 	 */
 	transformToolCallArguments?: (args: Record<string, unknown>, toolName: string) => Record<string, unknown>;
+	/**
+	 * Resolve a tool call whose name matched no advertised tool (including
+	 * `customWireName` aliases). Lets hosts route calls to tools they expose
+	 * through side transports (e.g. `xd://` device mounts) instead of failing
+	 * with "Tool not found". Returning `undefined` keeps the failure.
+	 */
+	resolveFallbackTool?: (name: string) => AgentTool<any> | undefined;
 
 	/**
 	 * Enable intent tracing for tool calls.
@@ -458,6 +467,17 @@ export interface ToolCallContext {
 	index: number;
 	total: number;
 	toolCalls: Array<{ id: string; name: string }>;
+	/** Provider-native metadata for the current call, when present. */
+	providerMetadata?: ToolCallProviderMetadata;
+	/**
+	 * Cooperative steering signal: aborted when a queued user/steering message
+	 * (or an interrupting peer IRC) is detected while this tool batch runs.
+	 * Unlike the hard abort signal it NEVER kills the tool — long-running
+	 * tools MAY observe it (via `ctx.toolCall.steeringSignal`) to finish early
+	 * or background themselves so the message injects promptly; ignoring it is
+	 * always safe (the message injects at the next batch boundary).
+	 */
+	steeringSignal?: AbortSignal;
 }
 
 /** A single tool-call content block emitted by an assistant message. */
@@ -488,6 +508,8 @@ export interface AfterToolCallResult {
 	content?: (TextContent | ImageContent)[];
 	/** If provided, replaces the tool result details payload in full. */
 	details?: unknown;
+	/** If provided, replaces the provider-native result metadata in full. */
+	providerMetadata?: ToolResultProviderMetadata;
 	/** If provided, replaces the error flag carried with the tool result. */
 	isError?: boolean;
 	/** If provided, replaces the contextually-useless flag carried with the tool result. */
@@ -574,6 +596,8 @@ export interface AgentToolResult<T = any, _TInput = unknown> {
 	// Marks a non-throwing failure (e.g. an aggregator catching per-entry errors).
 	// agent-loop honors this and surfaces it as a tool error on the wire.
 	isError?: boolean;
+	/** Provider-native metadata that must survive into history replay unchanged. */
+	providerMetadata?: ToolResultProviderMetadata;
 	/** Marks the result as contextually useless: safe for compaction to elide once consumed (e.g. zero matches, wait timeout). Ignored when isError is set. */
 	useless?: boolean;
 }
@@ -610,11 +634,14 @@ export type ToolLoadMode = "essential" | "discoverable";
  * - bare tier ("read" / "write" / "exec") — static classification.
  * - object form — adds a `reason` (shown in the prompt) and/or `override: true`
  *   (force-prompt even in modes that would otherwise auto-approve this tier).
+ *   `policy: "deny"` blocks the call at the approval gate.
  * - function — dynamic, given parsed args. Returns either form above.
  *
  * Omitted approvals are treated as "exec" by callers that enforce approvals.
  */
-export type ToolApprovalDecision = ToolTier | { tier: ToolTier; reason?: string; override?: boolean };
+export type ToolApprovalDecision =
+	| ToolTier
+	| { tier: ToolTier; reason?: string; override?: boolean; policy?: "allow" | "deny" | "prompt" };
 export type ToolApproval = ToolApprovalDecision | ((args: unknown) => ToolApprovalDecision);
 
 /**

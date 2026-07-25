@@ -24,7 +24,12 @@ import {
 	completeSimple,
 	type Model,
 } from "@oh-my-pi/pi-ai";
-import { AuthBrokerClient, RemoteAuthCredentialStore, type SnapshotResponse } from "@oh-my-pi/pi-ai/auth-broker";
+import {
+	AuthBrokerClient,
+	loadAuthBrokerAccountPool,
+	RemoteAuthCredentialStore,
+	type SnapshotResponse,
+} from "@oh-my-pi/pi-ai/auth-broker";
 import { DEFAULT_AUTH_GATEWAY_BIND, startAuthGateway } from "@oh-my-pi/pi-ai/auth-gateway";
 import { type GeneratedProvider, getBundledModels, getBundledProviders } from "@oh-my-pi/pi-catalog/models";
 import { getConfigRootDir, isEnoent, VERSION } from "@oh-my-pi/pi-utils";
@@ -147,9 +152,14 @@ async function runServe(flags: AuthGatewayCommandArgs["flags"]): Promise<void> {
 
 	// Build a broker-backed AuthStorage — same pattern as discoverAuthStorage()
 	// in sdk.ts. The gateway never touches local SQLite.
+	const accountPool = await loadAuthBrokerAccountPool();
 	const client = createBrokerClient(brokerConfig);
 	const initialSnapshot = await fetchBrokerSnapshot(client);
-	const store = new RemoteAuthCredentialStore({ client, initialSnapshot });
+	const store = new RemoteAuthCredentialStore({
+		client,
+		initialSnapshot,
+		accountPool,
+	});
 	// Refresh + usage both flow through the store's broker hooks automatically —
 	// `RemoteAuthCredentialStore.refreshOAuthCredential` and `.fetchUsageReports`.
 	// AuthStorage discovers them when no explicit option overrides them, so the
@@ -538,9 +548,14 @@ async function runCheck(flags: AuthGatewayCommandArgs["flags"]): Promise<void> {
 		);
 	}
 
+	const accountPool = await loadAuthBrokerAccountPool();
 	const client = createBrokerClient(brokerConfig);
 	const initialSnapshot = await fetchBrokerSnapshot(client);
-	const store = new RemoteAuthCredentialStore({ client, initialSnapshot });
+	const store = new RemoteAuthCredentialStore({
+		client,
+		initialSnapshot,
+		accountPool,
+	});
 	const storage = new AuthStorage(store, { sourceLabel: `broker ${brokerConfig.url}` });
 	try {
 		await storage.reload();

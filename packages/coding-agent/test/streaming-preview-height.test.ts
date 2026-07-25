@@ -457,7 +457,9 @@ describe("streaming tool call preview height (bounded across renderers)", () => 
 		const window = previewWindowRows();
 		const total = window + 5;
 		const hidden = total - window;
-		const longLines = Array.from({ length: total }, (_, i) => `line-${i}`);
+		// Underscore identifiers: the display formatter would space `line-1` as a
+		// subtraction, and this test asserts windowing, not operator layout.
+		const longLines = Array.from({ length: total }, (_, i) => `line_${i}`);
 		const { lines, text } = renderPending("eval", {
 			language: "js",
 			title: "big",
@@ -466,10 +468,10 @@ describe("streaming tool call preview height (bounded across renderers)", () => 
 
 		expect(lines.length, "eval code preview should stay bounded").toBeLessThan(window + 10);
 		const renderedLines = getRenderedLines(lines);
-		expect(renderedLines).toContain(`const line-${total - 1} = 1;`);
-		expect(renderedLines).toContain(`const line-${hidden} = 1;`);
-		expect(renderedLines).not.toContain("const line-0 = 1;");
-		expect(renderedLines).not.toContain(`const line-${hidden - 1} = 1;`);
+		expect(renderedLines).toContain(`const line_${total - 1} = 1;`);
+		expect(renderedLines).toContain(`const line_${hidden} = 1;`);
+		expect(renderedLines).not.toContain("const line_0 = 1;");
+		expect(renderedLines).not.toContain(`const line_${hidden - 1} = 1;`);
 		expect(text).toContain(`… ${hidden} earlier lines`);
 	}, 30_000);
 });

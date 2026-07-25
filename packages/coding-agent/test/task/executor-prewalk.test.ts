@@ -24,13 +24,16 @@ import type { AgentDefinition, SingleResult } from "@oh-my-pi/pi-coding-agent/ta
 import type { ToolSession } from "@oh-my-pi/pi-coding-agent/tools";
 import { EventBus } from "@oh-my-pi/pi-coding-agent/utils/event-bus";
 
-function yieldEmittingSession(initialTools: string[] = ["read", "yield"]): AgentSession {
+function yieldEmittingSession(
+	initialTools: string[] = ["read", "yield"],
+	modelSwitch?: { from: Model; to: Model },
+): AgentSession {
 	const listeners: Array<(event: AgentSessionEvent) => void> = [];
 	let activeTools = initialTools;
 	const session = {
 		state: { messages: [] },
 		agent: { state: { systemPrompt: ["test"] } },
-		model: undefined,
+		model: modelSwitch?.from,
 		extensionRunner: undefined,
 		sessionManager: { appendSessionInit: () => {} },
 		getActiveToolNames: () => activeTools,
@@ -47,6 +50,12 @@ function yieldEmittingSession(initialTools: string[] = ["read", "yield"]): Agent
 			};
 		},
 		prompt: async (_text: string, _options?: PromptOptions) => {
+			if (modelSwitch) {
+				session.model = modelSwitch.to;
+				for (const listener of listeners) {
+					listener({ type: "notice", level: "info", message: "Prewalk switched", source: "prewalk" });
+				}
+			}
 			for (const listener of listeners) {
 				listener({
 					type: "tool_execution_end",
@@ -138,6 +147,28 @@ describe("runSubprocess per-agent prewalk", () => {
 		const forwarded = spy.mock.calls[0]?.[0];
 		expect(forwarded?.prewalk?.target.id).toBe(target.id);
 		expect(forwarded?.prewalk?.target.provider).toBe(target.provider);
+	});
+
+	it("reports the prewalk target as the active model after handoff", async () => {
+		const progressModels: string[] = [];
+		vi.spyOn(sdkModule, "createAgentSession").mockResolvedValue(
+			createSessionResult(yieldEmittingSession(["read", "yield"], { from: primary, to: target })),
+		);
+
+		const result = await runSubprocess({
+			...baseOptions("subagent-prewalk-progress-model", Settings.isolated()),
+			agent: {
+				...baseAgent,
+				model: [`${primary.provider}/${primary.id}`],
+				prewalk: `${target.provider}/${target.id}`,
+			},
+			onProgress: progress => {
+				if (progress.resolvedModel) progressModels.push(progress.resolvedModel);
+			},
+		});
+
+		expect(result.exitCode).toBe(0);
+		expect(progressModels.at(-1)).toBe(`${target.provider}/${target.id}`);
 	});
 
 	it("resolves prewalk: true through the smol role default target", async () => {

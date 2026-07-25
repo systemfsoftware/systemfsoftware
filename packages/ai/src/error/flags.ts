@@ -90,7 +90,7 @@ const TRANSIENT_ENVELOPE_PATTERN = /anthropic stream envelope error:/i;
 const TRANSIENT_ENVELOPE_BEFORE_START_PATTERN = /before message_start/i;
 export const STREAM_READ_ERROR_PATTERN = /stream[_ -]?read[_ -]?error/i;
 export const TRANSIENT_TRANSPORT_PATTERN =
-	/overloaded|provider.?returned.?error|rate.?limit|too many requests|429|500|502|503|504|service.?unavailable|server.?error|internal.?error|retry your request|network.?error|connection.?error|connection.?refused|other side closed|fetch failed|upstream.?connect|upstream.?request.?failed|reset before headers|socket hang up|timed? out|timeout|terminated|retry delay|stream stall|no error details in response|HTTP2(?:StreamReset|RefusedStream|EnhanceYourCalm)|malformed.?function.?call/i;
+	/overloaded|provider.?returned.?error|rate.?limit|too many requests|429|500|502|503|504|service.?unavailable|server.?error|internal.?error|retry your request|network.?error|connection.?error|connection.?refused|unable.?to.?connect\.\s*is the computer able to access the url\?|other side closed|fetch failed|upstream.?connect|upstream.?request.?failed|reset before headers|socket hang up|timed? out|timeout|terminated|retry delay|stream stall|no error details in response|HTTP2(?:StreamReset|RefusedStream|EnhanceYourCalm)|malformed.?function.?call/i;
 const AUTH_FAILURE_PATTERN =
 	/\b(?:401|403|unauthorized|forbidden|authentication|auth[_ ]?unavailable|no auth available|(?:invalid|no)[_ ]?api[_ ]?key)\b/i;
 const MALFORMED_FUNCTION_CALL_PATTERN = /\bmalformed.?function.?call\b/i;
@@ -505,10 +505,19 @@ export function stringify(id: number | undefined): string {
 
 const STREAM_PARSE_TRUNCATION_PATTERN =
 	/unterminated string|unexpected end of json input|unexpected end of data|unexpected eof|end of file|eof while parsing|truncated/i;
+const STREAM_PARSE_DIAGNOSTIC_PATTERN =
+	/(?:json parse error:\s*(?:unterminated string|unexpected end of json input|unexpected end of data|unexpected eof|end of file|eof while parsing|truncated)|json\.parse:\s*(?:unterminated string|unexpected end of data)|unexpected end of json input|unexpected eof|eof while parsing)/i;
 const STREAM_EVENT_ORDER_PATTERN = /stream event order|before message_start/i;
 
-/** Transient stream corruption where the response was truncated mid-JSON. */
+/**
+ * Transient stream corruption where the response was truncated mid-JSON.
+ *
+ * Strings (persisted `stopDetails.explanation`/`errorMessage` diagnostics) are matched with the
+ * stricter {@link STREAM_PARSE_DIAGNOSTIC_PATTERN} — bare "truncated"/"end of file" text is too
+ * low-signal to trust once detached from a live transport `Error`, which keeps the broad pattern.
+ */
 export function isTransientStreamParseError(error: unknown): boolean {
+	if (typeof error === "string") return STREAM_PARSE_DIAGNOSTIC_PATTERN.test(error);
 	return error instanceof Error && STREAM_PARSE_TRUNCATION_PATTERN.test(error.message);
 }
 

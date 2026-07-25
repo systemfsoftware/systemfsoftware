@@ -9,6 +9,7 @@ import * as deepseekModule from "@oh-my-pi/pi-ai/registry/deepseek";
 import * as kagiModule from "@oh-my-pi/pi-ai/registry/kagi";
 import * as ollamaCloudModule from "@oh-my-pi/pi-ai/registry/ollama-cloud";
 import * as aiStream from "@oh-my-pi/pi-ai/stream";
+import { serializeAlibabaTokenPlanCredential } from "@oh-my-pi/pi-catalog/wire/alibaba-token-plan";
 import { removeWithRetries } from "../../utils/src/temp";
 
 function countCredentialRows(dbPath: string, provider: string): number {
@@ -124,6 +125,55 @@ describe("AuthStorage api-key login upsert", () => {
 		]);
 		const rotatedKeys = [await authStorage.getApiKey("kagi"), await authStorage.getApiKey("kagi")].sort();
 		expect(rotatedKeys).toEqual(["first-kagi-key", "second-kagi-key"]);
+	});
+
+	it("replaces Token Plan Cookies by API-token identity without collapsing different tokens", () => {
+		if (!store) throw new Error("test setup failed");
+		const firstToken = "sk-sp-first";
+		const secondToken = "sk-sp-second";
+
+		store.upsertAuthCredentialForProvider("alibaba-token-plan", {
+			type: "api_key",
+			key: serializeAlibabaTokenPlanCredential(firstToken, "session=old"),
+			source: "login",
+		});
+		store.upsertAuthCredentialForProvider("alibaba-token-plan", {
+			type: "api_key",
+			key: serializeAlibabaTokenPlanCredential(firstToken, "session=fresh"),
+			source: "login",
+		});
+		store.upsertAuthCredentialForProvider("alibaba-token-plan", {
+			type: "api_key",
+			key: serializeAlibabaTokenPlanCredential(secondToken, "session=second"),
+			source: "login",
+		});
+
+		expect(store.listAuthCredentials("alibaba-token-plan").map(entry => entry.credential)).toEqual([
+			{
+				type: "api_key",
+				key: serializeAlibabaTokenPlanCredential(firstToken, "session=fresh"),
+				source: "login",
+			},
+			{
+				type: "api_key",
+				key: serializeAlibabaTokenPlanCredential(secondToken, "session=second"),
+				source: "login",
+			},
+		]);
+
+		store.upsertAuthCredentialForProvider("alibaba-token-plan", {
+			type: "api_key",
+			key: firstToken,
+			source: "login",
+		});
+		expect(store.listAuthCredentials("alibaba-token-plan").map(entry => entry.credential)).toEqual([
+			{ type: "api_key", key: firstToken, source: "login" },
+			{
+				type: "api_key",
+				key: serializeAlibabaTokenPlanCredential(secondToken, "session=second"),
+				source: "login",
+			},
+		]);
 	});
 
 	it("hard-deletes superseded api-key rows when a different key replaces them", () => {

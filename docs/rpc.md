@@ -25,15 +25,48 @@ Behavior notes:
 - RPC mode disables automatic session title generation by default to avoid an extra model call.
 - RPC mode resets workflow-altering `todo.*`, `task.*`, `memory.backend`/`memories.enabled`, `advisor.*`, `async.*`, and `bash.autoBackground.*` settings to their built-in defaults instead of inheriting user overrides.
 - The process reads stdin as JSONL (`readJsonl(Bun.stdin.stream())`).
-- At startup it writes `{ "type": "ready" }` before processing commands.
+- At startup it writes a `ready` frame before processing commands. The frame advertises supported protocol versions and transport limits.
 - When stdin closes, pending host-tool calls and host-URI requests are rejected and the process exits with code `0`.
 - Responses/events are written as one JSON object per line.
 
 ## Transport and Framing
 
-Each frame is a single JSON object followed by `\n`.
+Protocol v1 frames are a single JSON object followed by `\n`. Every physical JSONL frame is limited to 1 MiB.
 
-There is no envelope beyond the object shape itself.
+The initial ready frame uses protocol v1 and advertises the opt-in lossless transport:
+
+```json
+{
+  "type": "ready",
+  "protocolVersion": 1,
+  "supportedProtocolVersions": [1, 2],
+  "maxFrameBytes": 1048576,
+  "maxReassembledFrameBytes": 67108864
+}
+```
+
+Clients that support protocol v2 SHOULD immediately send:
+
+```json
+{ "id": "protocol-1", "type": "negotiate_protocol", "protocolVersion": 2 }
+```
+
+After the success response, oversized stdout objects are emitted losslessly as an uninterrupted sequence of `rpc_chunk` frames. Each chunk carries a base64 segment of the original UTF-8 JSON object:
+
+```json
+{
+  "type": "rpc_chunk",
+  "chunkId": "rpc-1",
+  "index": 0,
+  "count": 7,
+  "byteLength": 1600042,
+  "data": "eyJ0eXBlIjoicmVzcG9uc2UiLC4uLn0="
+}
+```
+
+Clients MUST validate `chunkId`, `index`, `count`, and `byteLength`, reject interleaved or interrupted sequences, enforce the advertised reassembly limit, concatenate decoded bytes in index order, decode them as strict UTF-8, and parse the result as one JSON object. The exported TypeScript `RpcFrameDecoder` implements this validation. The bundled TypeScript and Python `RpcClient` implementations negotiate v2 automatically when the ready frame advertises it.
+
+Legacy clients may ignore the added ready fields and remain on v1. V1 retains its bounded fallback behavior for oversized output. Frames above the v2 reassembly ceiling still fail explicitly; large history APIs should use pagination rather than depending on arbitrarily large logical frames.
 
 ### Outbound frame categories (stdout)
 
@@ -83,6 +116,10 @@ Important edge behavior from runtime:
 - `{ id?, type: "abort" }`
 - `{ id?, type: "abort_and_prompt", message: string, images?: ImageContent[] }`
 - `{ id?, type: "new_session", parentSession?: string }`
+
+### Protocol
+
+- `{ id?, type: "negotiate_protocol", protocolVersion: 2 }`
 
 ### State
 
@@ -148,6 +185,11 @@ correlate it via `id`. Ordering across concurrent commands is not guaranteed
 ### Messages
 
 - `{ id?, type: "get_messages" }`
+- `{ id?, type: "get_messages_page", cursor?: string, limit?: number }`
+
+`get_messages_page` returns a stable chronological page with `messages`, `totalMessages`, and an opaque `nextCursor` when more messages remain. Cursors are bound to the session ID, durable leaf, and message count. The server rejects stale cursors if the session changes between requests, and refuses to start a paging walk while the session is streaming or compacting. Failed page requests carry a machine-readable `code` on the error response — `session_busy` (session is streaming or compacting) or `stale_cursor` (the snapshot behind the cursor changed, e.g. a background bash appended a message between pages) — so clients can react without matching error-message text. Pages contain at most 256 messages and normally stay below the v1 physical-frame ceiling. A v1 caller can page ordinary histories, but an individual message whose response exceeds that ceiling produces an overflow error; retrieving it losslessly requires negotiated v2 framing.
+
+The bundled TypeScript `RpcClient.getMessages()` and Python `RpcClient.get_messages()` drain this paged endpoint automatically after negotiating v2. They retain the legacy monolithic command when connected to a v1 server, and on either `session_busy` or `stale_cursor` they discard partial pages and fall back to the legacy best-effort snapshot. Direct `getMessagesPage()` and `get_messages_page()` calls remain strict so incremental hosts never mix snapshots silently.
 
 ### Login
 

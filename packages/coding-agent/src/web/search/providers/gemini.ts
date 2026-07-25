@@ -18,6 +18,7 @@ import { fetchWithRetry } from "@oh-my-pi/pi-utils";
 
 import type { SearchCitation, SearchResponse, SearchSource } from "../../../web/search/types";
 import { SearchProviderError } from "../../../web/search/types";
+import { formatQuery, GOOGLE_QUERY_SYNTAX, parseSearchQuery, type StructuredQuery } from "../query";
 import type { SearchParams } from "./base";
 import { SearchProvider } from "./base";
 import { classifyProviderHttpError, withHardTimeout } from "./utils";
@@ -51,6 +52,8 @@ interface GeminiToolParams {
 
 export interface GeminiSearchParams extends GeminiToolParams {
 	query: string;
+	/** Pre-parsed structured query; falls back to parsing `query` when omitted. */
+	parsedQuery?: StructuredQuery;
 	system_prompt?: string;
 	num_results?: number;
 	/** Maximum output tokens. */
@@ -508,6 +511,12 @@ async function callGeminiDeveloperSearch(
  */
 export async function searchGemini(params: GeminiSearchParams): Promise<SearchResponse> {
 	const selectedModel = resolveGeminiSearchModel(params.geminiModel);
+	// Gemini's googleSearch grounding forwards the query to Google Search, which
+	// understands the classic operator set natively. Normalize directive aliases
+	// (domain: → site:, since: → after:, …) to canonical Google forms; leave
+	// directive-free queries byte-identical.
+	const parsed = params.parsedQuery ?? parseSearchQuery(params.query);
+	const searchQuery = parsed.hasDirectives ? formatQuery(parsed, GOOGLE_QUERY_SYNTAX) : params.query;
 	const seed = await findGeminiAuth(params.authStorage, params.sessionId, params.signal);
 	let result: GeminiSearchResult;
 
@@ -528,7 +537,7 @@ export async function searchGemini(params: GeminiSearchParams): Promise<SearchRe
 						isAntigravity,
 					},
 					selectedModel,
-					params.query,
+					searchQuery,
 					params.system_prompt,
 					params.max_output_tokens,
 					params.temperature,
@@ -555,7 +564,7 @@ export async function searchGemini(params: GeminiSearchParams): Promise<SearchRe
 		result = await callGeminiDeveloperSearch(
 			apiKey,
 			selectedModel,
-			params.query,
+			searchQuery,
 			params.system_prompt,
 			params.max_output_tokens,
 			params.temperature,
@@ -601,6 +610,7 @@ export class GeminiProvider extends SearchProvider {
 	search(params: SearchParams): Promise<SearchResponse> {
 		return searchGemini({
 			query: params.query,
+			parsedQuery: params.parsedQuery,
 			system_prompt: params.systemPrompt,
 			num_results: params.numSearchResults ?? params.limit,
 			max_output_tokens: params.maxOutputTokens,

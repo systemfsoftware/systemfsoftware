@@ -557,6 +557,19 @@ async function pruneBunCacheAfterGlobalInstall(): Promise<BunInstallCachePruneRe
 }
 
 /**
+ * Detect a musl-libc Linux host (Alpine, Void-musl) so self-update replaces a
+ * musl binary with the musl release asset instead of the glibc build, which
+ * would fail to start on the next run. Mirrors the detection in
+ * scripts/install.sh.
+ */
+function isMuslLinux(): boolean {
+	if (process.platform !== "linux") return false;
+	if (fs.existsSync("/etc/alpine-release")) return true;
+	const loaderArch = process.arch === "arm64" ? "aarch64" : "x86_64";
+	return fs.existsSync(`/lib/ld-musl-${loaderArch}.so.1`);
+}
+
+/**
  * Get the appropriate binary name for this platform.
  */
 function getBinaryName(): string {
@@ -566,7 +579,7 @@ function getBinaryName(): string {
 	let os: string;
 	switch (platform) {
 		case "linux":
-			os = "linux";
+			os = isMuslLinux() ? "linux-musl" : "linux";
 			break;
 		case "darwin":
 			os = "darwin";

@@ -118,6 +118,22 @@ describe("Perplexity API-key request shape", () => {
 		expect(body?.num_search_results).toBe(5);
 	});
 
+	it("maps site:/-site:/after: directives onto native filters and strips them from the query", async () => {
+		let body: Record<string, unknown> | undefined;
+		const fetchMock = mockApi(b => (body = b), baseResponse());
+
+		await searchPerplexity({
+			query: "rust site:docs.rs -site:reddit.com after:2024-06-01",
+			authStorage: apiKeyAuthStorage,
+			fetch: fetchMock,
+		});
+
+		expect(body?.search_domain_filter).toEqual(["docs.rs", "-reddit.com"]);
+		expect(body?.search_after_date_filter).toBe("6/1/2024");
+		const messages = body?.messages as { role: string; content: string }[];
+		expect(messages.at(-1)?.content).toBe("rust");
+	});
+
 	it("parses related_questions into relatedQuestions, preserving order and dropping blanks", async () => {
 		const fetchMock = mockApi(
 			() => {},
@@ -379,6 +395,26 @@ describe("Perplexity OAuth request shape", () => {
 		expect(headers?.has("authorization")).toBe(false);
 		expect(response.authMode).toBe("oauth");
 		expect(response.answer).toBe("OAuth answer");
+	});
+
+	it("maps directives onto ask-endpoint native filters and rewrites query_str", async () => {
+		let body: Record<string, unknown> | undefined;
+		const fetchMock = mockOAuth(b => (body = b));
+
+		await searchPerplexity({
+			query: "rust site:docs.rs -site:reddit.com after:2024-06-01",
+			search_recency_filter: "month",
+			authStorage: oauthAuthStorage,
+			fetch: fetchMock,
+		});
+
+		expect(body!.query_str).toBe("rust");
+		const params = body!.params as Record<string, unknown>;
+		expect(params.query_str).toBe("rust");
+		expect(params.search_domain_filter).toEqual(["docs.rs", "-reddit.com"]);
+		expect(params.search_after_date_filter).toBe("6/1/2024");
+		// Absolute date bounds take precedence over recency.
+		expect(params.search_recency_filter).toBeNull();
 	});
 });
 

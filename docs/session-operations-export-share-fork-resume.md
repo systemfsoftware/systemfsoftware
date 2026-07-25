@@ -155,6 +155,31 @@ Cancellation/abort semantics in share:
 - The upload itself is not aborted mid-flight; cancellation is UI-level and
   checked after the upload returns.
 
+## Fresh
+
+Interactive `/fresh` resets the provider-facing stream state of the current
+session **without touching the local transcript, session file, or header**. Use
+it to recover from a wedged or corrupted provider stream (stale prompt cache,
+a mid-turn glitch, or a server-side conversation id that has drifted) while
+keeping the conversation you can see.
+
+`AgentSession.freshSession()`:
+
+- Is rejected while the agent is streaming — wait for the response to finish or
+  abort it first.
+- Closes every cached provider-session state entry (server-side conversation /
+  prompt-cache handles) and reports how many were pruned.
+- Mints a fresh provider session id and re-keys hindsight and mnemopi memory to
+  it, and invalidates the append-only context so the next turn re-sends the full
+  local transcript to the provider.
+- Leaves the local transcript, session file, and session identity unchanged, so
+  nothing you have said or received is lost.
+
+Because it keeps the current session file, `/fresh` differs from `/new` (start a
+brand-new empty session) and `/drop` (delete the current session and start a new
+one): only `/fresh` preserves the visible history while giving the provider a
+clean slate.
+
 ## Fork
 
 Interactive `/fork` creates a new session from the current one and switches the active session identity.

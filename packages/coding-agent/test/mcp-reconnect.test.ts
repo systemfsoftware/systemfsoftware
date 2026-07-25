@@ -271,6 +271,53 @@ describe("MCPTool.execute retry on connection error", () => {
 		expect(result.details?.provider).toBe("orig");
 		expect(result.details?.providerName).toBe("Original");
 	});
+	it("reconnects once when a tool result carries an OAuth challenge", async () => {
+		let oldCalls = 0;
+		let newCalls = 0;
+		let challenge: unknown;
+		const oldTransport = mockTransport(async () => {
+			oldCalls++;
+			return {
+				...toolCallResult("authorize me", true),
+				_meta: { "mcp/www_authenticate": ['Bearer resource_metadata="https://mcp.example/meta"'] },
+			};
+		});
+		const newTransport = mockTransport(async () => {
+			newCalls++;
+			return toolCallResult("authorized");
+		});
+		const newConn = makeConnection(newTransport, "test-server-authorized");
+		const reconnect: MCPReconnect = async options => {
+			challenge = options?.authChallenge;
+			return newConn;
+		};
+
+		const tool = new MCPTool(makeConnection(oldTransport), TOOL_DEF, reconnect);
+		const result = await tool.execute("call-1", {}, noop, noCtx);
+
+		expect(oldCalls).toBe(1);
+		expect(newCalls).toBe(1);
+		expect(challenge).toEqual({
+			wwwAuthenticate: ['Bearer resource_metadata="https://mcp.example/meta"'],
+		});
+		expect(result.details?.isError).toBeFalsy();
+		expect(result.content[0]).toEqual({ type: "text", text: "authorized" });
+	});
+
+	it("preserves the OAuth challenge metadata when no reconnect handler exists", async () => {
+		const result = await new MCPTool(
+			makeConnection(
+				mockTransport(async () => ({
+					...toolCallResult("authorize me", true),
+					_meta: { "mcp/www_authenticate": ["Bearer"] },
+				})),
+			),
+			TOOL_DEF,
+		).execute("call-1", {}, noop, noCtx);
+
+		expect(result.details?.isError).toBe(true);
+		expect(result.details?.mcpMeta).toEqual({ "mcp/www_authenticate": ["Bearer"] });
+	});
 });
 
 describe("reconnect abort propagation", () => {

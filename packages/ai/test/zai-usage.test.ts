@@ -27,6 +27,33 @@ function makeCtx(payload: unknown): UsageFetchContext {
 	return { fetch };
 }
 
+function makeOAuthCredential(): UsageFetchParams["credential"] {
+	return {
+		type: "oauth",
+		accessToken: "minted-id.minted-secret",
+		accountId: "acc-1",
+		email: "user@example.com",
+	};
+}
+
+function makeRecordingCtx(payload: unknown, sink: { authorization?: string }): UsageFetchContext {
+	const fetch: FetchImpl = async (input, init) => {
+		const url = String(input);
+		sink.authorization = new Headers(init?.headers).get("Authorization") ?? undefined;
+		if (url.includes("/api/monitor/usage/model-usage")) {
+			return new Response(JSON.stringify({ success: true, data: {} }), {
+				status: 200,
+				headers: { "content-type": "application/json" },
+			});
+		}
+		return new Response(JSON.stringify(payload), {
+			status: 200,
+			headers: { "content-type": "application/json" },
+		});
+	};
+	return { fetch };
+}
+
 describe("zai usage provider", () => {
 	it("preserves Z.AI token quota windows instead of treating them as separate accounts", async () => {
 		const report = await zaiUsageProvider.fetchUsage!(
@@ -59,22 +86,56 @@ describe("zai usage provider", () => {
 
 		expect(report).not.toBeNull();
 		expect(report!.limits.map(limit => limit.id)).toEqual([
-			"zai:features:web-search-reader-zread:1mo",
+			"zai:features:zread:1mo",
 			"zai:tokens:5h",
 			"zai:tokens:1w",
 		]);
 		expect(report!.limits.map(limit => limit.label)).toEqual([
-			"ZAI Web Search / Reader / Zread Quota",
+			"ZAI Zread Quota",
 			"ZAI 5 Hours Token Quota",
 			"ZAI Weekly Token Quota",
 		]);
 		expect(report!.limits.map(limit => limit.scope.windowId)).toEqual(["1mo", "5h", "1w"]);
 		expect(report!.limits.map(limit => limit.scope.shared)).toEqual([false, true, true]);
-		expect(report!.limits[0]?.scope.tier).toBe("web-search-reader-zread");
+		expect(report!.limits[0]?.scope.tier).toBe("zread");
 		expect(report!.limits.map(limit => limit.window?.durationMs)).toEqual([
 			30 * 24 * 60 * 60 * 1000,
 			5 * 60 * 60 * 1000,
 			7 * 24 * 60 * 60 * 1000,
 		]);
+	});
+
+	it("supports both api-key and oauth credentials, rejecting oauth rows with no access token", () => {
+		expect(zaiUsageProvider.supports!({ provider: "zai", credential: makeCredential(), signal: undefined })).toBe(
+			true,
+		);
+		expect(
+			zaiUsageProvider.supports!({ provider: "zai", credential: makeOAuthCredential(), signal: undefined }),
+		).toBe(true);
+		expect(zaiUsageProvider.supports!({ provider: "zai", credential: { type: "oauth" }, signal: undefined })).toBe(
+			false,
+		);
+	});
+
+	it("fetches quota for an oauth sign-in credential using the minted key as the auth header", async () => {
+		const sink: { authorization?: string } = {};
+		const report = await zaiUsageProvider.fetchUsage!(
+			{ provider: "zai", credential: makeOAuthCredential(), signal: undefined },
+			makeRecordingCtx(
+				{
+					success: true,
+					data: {
+						limits: [{ type: "TOKENS_LIMIT", percentage: 82, nextResetTime: 1782656863894, unit: 3, number: 5 }],
+					},
+				},
+				sink,
+			),
+		);
+
+		expect(report).not.toBeNull();
+		expect(report!.limits[0]?.id).toBe("zai:tokens:5h");
+		expect(report!.metadata?.accountId).toBe("acc-1");
+		// Minted id.secret key sent verbatim (no Bearer prefix), same as the paste path.
+		expect(sink.authorization).toBe("minted-id.minted-secret");
 	});
 });

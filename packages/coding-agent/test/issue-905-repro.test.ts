@@ -22,11 +22,15 @@ import { TempDir } from "@oh-my-pi/pi-utils";
 let tmp: TempDir;
 let extPath: string;
 let dbPath: string;
+let shutdownExtPath: string;
+let shutdownPath: string;
 
 beforeAll(async () => {
 	tmp = await TempDir.create("@issue-905-");
 	extPath = tmp.join("ext.ts");
 	dbPath = tmp.join("auth.db");
+	shutdownExtPath = tmp.join("shutdown-ext.ts");
+	shutdownPath = tmp.join("shutdown");
 	await fs.writeFile(
 		extPath,
 		`export default function (pi) {
@@ -43,6 +47,15 @@ beforeAll(async () => {
 			contextWindow: 128000,
 			maxTokens: 4096,
 		}],
+	});
+}
+`,
+	);
+	await fs.writeFile(
+		shutdownExtPath,
+		`export default function (pi) {
+	pi.on("session_shutdown", async () => {
+		await Bun.write(${JSON.stringify(shutdownPath)}, "shutdown");
 	});
 }
 `,
@@ -81,6 +94,25 @@ test("omp models surfaces extension-registered providers (issue #905)", async ()
 		const output = captured.join("");
 		expect(output).toContain("test-gw");
 		expect(output).toContain("test-model");
+	} finally {
+		authStorage.close();
+	}
+});
+
+test("omp models emits extension shutdown after listing (issue #6297)", async () => {
+	const authStorage = await AuthStorage.create(":memory:");
+	try {
+		const modelRegistry = new ModelRegistry(authStorage);
+		await runModelsListing({
+			modelRegistry,
+			cwd: tmp.path(),
+			action: "ls",
+			pattern: "issue-6297-no-models",
+			additionalExtensionPaths: [shutdownExtPath],
+			disableExtensionDiscovery: true,
+		});
+
+		expect(await Bun.file(shutdownPath).text()).toBe("shutdown");
 	} finally {
 		authStorage.close();
 	}

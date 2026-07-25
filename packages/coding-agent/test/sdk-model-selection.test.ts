@@ -352,6 +352,64 @@ describe("createAgentSession deferred model pattern resolution", () => {
 		}
 	});
 
+	test("uses a configured suffixed role fallback when its primary model is unavailable", async () => {
+		const settings = Settings.isolated({
+			"retry.fallbackChains": {
+				slow: ["missing-provider/missing-fallback", "runtime-provider/runtime-reasoning-model"],
+			},
+		});
+		settings.setModelRole("slow", "missing-provider/missing-model");
+		const authStorage = await AuthStorage.create(path.join(tempDir, "missing-role-auth.db"));
+		authStorage.setRuntimeApiKey("runtime-provider", "test-key");
+		authStoragesToClose.push(authStorage);
+		const modelRegistry = new ModelRegistry(authStorage, path.join(tempDir, "missing-role-models.yml"));
+		const parsed = parseArgs(["--model", "slow:low"]);
+		const exitSpy = vi.spyOn(process, "exit").mockImplementation((code?: number | string | null) => {
+			throw new Error(`buildSessionOptions unexpectedly exited with ${code}`);
+		});
+		try {
+			const cliOptions = await buildCliSessionOptions(
+				parsed,
+				[],
+				SessionManager.inMemory(),
+				modelRegistry,
+				settings,
+			);
+			expect(cliOptions.modelPattern).toBe("slow:low");
+
+			const { session, modelFallbackMessage } = await createAgentSession({
+				...cliOptions,
+				cwd: tempDir,
+				agentDir: tempDir,
+				authStorage,
+				modelRegistry,
+				settings,
+				disableExtensionDiscovery: true,
+				extensions: [providerExtension],
+				skills: [],
+				contextFiles: [],
+				promptTemplates: [],
+				slashCommands: [],
+				enableMCP: false,
+				enableLsp: false,
+				skipPythonPreflight: true,
+			});
+
+			try {
+				expect(session.model?.provider).toBe("runtime-provider");
+				expect(session.model?.id).toBe("runtime-reasoning-model");
+				// `low` differs from the fallback model's default (`high`), so this
+				// proves the suffix is inherited rather than the model default applied.
+				expect(session.thinkingLevel).toBe(Effort.Low);
+				expect(modelFallbackMessage).toBeUndefined();
+			} finally {
+				await session.dispose();
+			}
+		} finally {
+			exitSpy.mockRestore();
+		}
+	});
+
 	test("preserves deferred bare role fallback chains", async () => {
 		const settings = Settings.isolated();
 		settings.setModelRole("task", "runtime-provider/runtime-model,runtime-provider/runtime-reasoning-model");
@@ -373,6 +431,89 @@ describe("createAgentSession deferred model pattern resolution", () => {
 		} finally {
 			await session.dispose();
 		}
+	});
+
+	test("skips a depleted coding-plan model before creating a noninteractive subagent session", async () => {
+		const settings = Settings.isolated({
+			"retry.usageAwareFallback": true,
+			"retry.usageReservePolicy": "confirm",
+		});
+		settings.setModelRole("task", "runtime-provider/runtime-model,runtime-provider/runtime-reasoning-model");
+		const options = await buildSessionOptions("task");
+		vi.spyOn(options.authStorage, "getModelUsageHealth").mockImplementation(async (_provider, healthOptions) =>
+			healthOptions.modelId === "runtime-model"
+				? { state: "depleted", accounts: [{ credentialId: 1, credentialType: "oauth", state: "depleted" }] }
+				: { state: "healthy", accounts: [{ credentialId: 2, credentialType: "oauth", state: "healthy" }] },
+		);
+		const { session } = await createAgentSession({
+			...options,
+			modelPatternFallbackRole: "subagent:usage-aware",
+			settings,
+			hasUI: false,
+		});
+		try {
+			expect(session.model?.provider).toBe("runtime-provider");
+			expect(session.model?.id).toBe("runtime-reasoning-model");
+		} finally {
+			await session.dispose();
+		}
+	});
+
+	test("defers ACP reserve fallback until prompt-time capabilities are configured", async () => {
+		const settings = Settings.isolated({
+			"retry.usageAwareFallback": true,
+			"retry.usageReservePolicy": "confirm",
+		});
+		settings.setModelRole("task", "runtime-provider/runtime-model,runtime-provider/runtime-reasoning-model");
+		const options = await buildSessionOptions("task");
+		vi.spyOn(options.authStorage, "getModelUsageHealth").mockImplementation(async (_provider, healthOptions) =>
+			healthOptions.modelId === "runtime-model"
+				? {
+						state: "reserve",
+						accounts: [
+							{
+								credentialId: 1,
+								credentialType: "oauth",
+								state: "reserve",
+								remainingFraction: 0.05,
+							},
+						],
+					}
+				: { state: "healthy", accounts: [{ credentialId: 2, credentialType: "oauth", state: "healthy" }] },
+		);
+		const { session } = await createAgentSession({
+			...options,
+			modelPatternFallbackRole: "subagent:usage-aware-acp",
+			settings,
+			hasUI: false,
+			deferUsageReserveConfirmation: true,
+		});
+		try {
+			expect(session.model?.provider).toBe("runtime-provider");
+			expect(session.model?.id).toBe("runtime-model");
+		} finally {
+			await session.dispose();
+		}
+	});
+
+	test("enforces fail-closed reserve policy without requiring a fallback candidate", async () => {
+		const settings = Settings.isolated({
+			"retry.usageAwareFallback": true,
+			"retry.usageReservePolicy": "fail-closed",
+		});
+		const options = await buildSessionOptions("runtime-provider/runtime-model");
+		vi.spyOn(options.authStorage, "getModelUsageHealth").mockResolvedValue({
+			state: "reserve",
+			accounts: [{ credentialId: 1, credentialType: "oauth", state: "reserve", remainingFraction: 0.05 }],
+		});
+
+		await expect(
+			createAgentSession({
+				...options,
+				settings,
+				hasUI: false,
+			}),
+		).rejects.toThrow("reserve policy is fail-closed");
 	});
 
 	test("installs fallback chain for remaining deferred subagent modelPattern candidates", async () => {

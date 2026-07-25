@@ -7,7 +7,7 @@ import {
 	getImageGenTools,
 	getImageGenToolsWithRegistry,
 	imageGenTool,
-	setPreferredImageProvider,
+	setImageProviderOrder,
 } from "@oh-my-pi/pi-coding-agent/tools/image-gen";
 import { removeWithRetries } from "@oh-my-pi/pi-utils";
 
@@ -21,7 +21,7 @@ afterEach(async () => {
 	} else {
 		Bun.env.OPENROUTER_API_KEY = originalOpenRouterKey;
 	}
-	setPreferredImageProvider("auto");
+	setImageProviderOrder([]);
 });
 
 function createAntigravityXAIContext(model: Model | undefined, fetchMock: typeof fetch): CustomToolContext {
@@ -71,7 +71,7 @@ describe("imageGenTool", () => {
 	});
 
 	it("resolves image provider credentials on execution", async () => {
-		setPreferredImageProvider("antigravity");
+		setImageProviderOrder(["antigravity"]);
 		const ctx: CustomToolContext = {
 			fetch: async () => new Response(null),
 			sessionManager: {
@@ -165,7 +165,7 @@ describe("imageGenTool", () => {
 	});
 
 	it("routes OpenAI Images edits through the Responses image tool", async () => {
-		setPreferredImageProvider("openai");
+		setImageProviderOrder(["openai"]);
 		let requestUrl: string | undefined;
 		let requestBody: Record<string, unknown> | undefined;
 
@@ -236,7 +236,7 @@ describe("imageGenTool", () => {
 	});
 
 	it("routes image generation through a connected Codex (ChatGPT) subscription when the active model is not OpenAI", async () => {
-		setPreferredImageProvider("openai-codex");
+		setImageProviderOrder(["openai-codex"]);
 		let requestUrl: string | undefined;
 		let accountHeader: string | null | undefined;
 		let requestBody: Record<string, unknown> | undefined;
@@ -387,9 +387,9 @@ describe("imageGenTool", () => {
 		expect(result.details?.imageCount).toBe(1);
 	});
 
-	it("honors a per-request provider override over the providers.image setting", async () => {
+	it("honors a per-request provider override over the providers.imageOrder setting", async () => {
 		// Setting selects Codex and a Codex subscription IS connected...
-		setPreferredImageProvider("openai-codex");
+		setImageProviderOrder(["openai-codex"]);
 		let requestUrl: string | undefined;
 		const captured: { authorization: string | null } = { authorization: null };
 
@@ -569,7 +569,7 @@ describe("imageGenTool", () => {
 		expect(result.details?.imageCount).toBe(1);
 	});
 	it("routes xAI image generation with xAI-only aspect ratios", async () => {
-		setPreferredImageProvider("xai");
+		setImageProviderOrder(["xai"]);
 		let requestUrl: string | undefined;
 		let requestBody: Record<string, unknown> | undefined;
 		const captured: { authorization: string | null; userAgent: string | null } = {

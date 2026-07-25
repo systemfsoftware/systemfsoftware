@@ -41,7 +41,18 @@ export interface ContextBreakdown {
 	snapcompact?: SnapcompactSavingsEstimate;
 }
 
-const EMPTY_STRING_PARTS: readonly string[] = [];
+/** Stable inputs used to cache non-message token estimates. */
+export interface NonMessageTokenSource {
+	readonly systemPrompt?: string[];
+	readonly agent?: {
+		readonly state?: {
+			readonly tools?: ReadonlyArray<Pick<Tool, "name" | "description" | "parameters">>;
+		};
+	};
+	readonly skills?: readonly Skill[];
+}
+
+const EMPTY_STRING_PARTS: string[] = [];
 const EMPTY_TOOLS: ReadonlyArray<Pick<Tool, "name" | "description" | "parameters">> = [];
 const EMPTY_SKILLS: readonly Skill[] = [];
 
@@ -111,13 +122,18 @@ interface NonMessageTokenCache {
 		| undefined;
 }
 
-const nonMessageTokenCache = new WeakMap<AgentSession, NonMessageTokenCache>();
+const NON_MESSAGE_TOKEN_CACHE = Symbol("non-message-token-cache");
 
-function nonMessageTokenCacheEntry(session: AgentSession): NonMessageTokenCache {
+interface CachedNonMessageTokenSource extends NonMessageTokenSource {
+	[NON_MESSAGE_TOKEN_CACHE]?: NonMessageTokenCache;
+}
+
+function nonMessageTokenCacheEntry(session: NonMessageTokenSource): NonMessageTokenCache {
+	const cachedSession: CachedNonMessageTokenSource = session;
 	const systemPromptRef = session.systemPrompt ?? EMPTY_STRING_PARTS;
 	const toolsRef = session.agent?.state?.tools ?? EMPTY_TOOLS;
 	const skillsRef = session.skills ?? EMPTY_SKILLS;
-	let entry = nonMessageTokenCache.get(session);
+	let entry = cachedSession[NON_MESSAGE_TOKEN_CACHE];
 	if (
 		entry &&
 		entry.systemPromptRef === systemPromptRef &&
@@ -127,11 +143,11 @@ function nonMessageTokenCacheEntry(session: AgentSession): NonMessageTokenCache 
 		return entry;
 	}
 	entry = { systemPromptRef, toolsRef, skillsRef, tokens: undefined, breakdown: undefined };
-	nonMessageTokenCache.set(session, entry);
+	cachedSession[NON_MESSAGE_TOKEN_CACHE] = entry;
 	return entry;
 }
 
-export function computeNonMessageTokens(session: AgentSession): number {
+export function computeNonMessageTokens(session: NonMessageTokenSource): number {
 	const entry = nonMessageTokenCacheEntry(session);
 	if (entry.tokens !== undefined) return entry.tokens;
 	const systemPromptParts = session.systemPrompt ?? EMPTY_STRING_PARTS;
@@ -147,7 +163,7 @@ export function computeNonMessageTokens(session: AgentSession): number {
  * the status-line fast path intentionally uses the equivalent collapsed total
  * in `computeNonMessageTokens`.
  */
-export function computeNonMessageBreakdown(session: AgentSession): {
+export function computeNonMessageBreakdown(session: NonMessageTokenSource): {
 	skillsTokens: number;
 	toolsTokens: number;
 	systemContextTokens: number;

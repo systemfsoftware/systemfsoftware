@@ -71,6 +71,38 @@ has_bun() {
     command -v bun >/dev/null 2>&1
 }
 
+# Normalized host architecture (x64|arm64). On macOS this uses
+# `sysctl hw.optional.arm64` so it stays correct inside a Rosetta session,
+# where `uname -m` reports the translated x86_64.
+host_arch() {
+    if [ "$(uname -s)" = "Darwin" ]; then
+        if [ "$(sysctl -in hw.optional.arm64 2>/dev/null || /usr/sbin/sysctl -in hw.optional.arm64 2>/dev/null)" = "1" ]; then
+            echo "arm64"
+        else
+            echo "x64"
+        fi
+        return
+    fi
+    case "$(uname -m)" in
+        x86_64|amd64)  echo "x64" ;;
+        arm64|aarch64) echo "arm64" ;;
+        *)             uname -m ;;
+    esac
+}
+
+# Bun's own architecture (x64|arm64), or empty when it can't be determined.
+bun_arch() {
+    bun -e 'process.stdout.write(process.arch)' 2>/dev/null
+}
+
+# True when Bun's architecture matches the host. If Bun's arch can't be read,
+# assume a match rather than block the install.
+bun_arch_matches_host() {
+    ba="$(bun_arch)"
+    [ -z "$ba" ] && return 0
+    [ "$ba" = "$(host_arch)" ]
+}
+
 version_ge() {
     current="$1"
     minimum="$2"
@@ -187,7 +219,7 @@ install_via_bun() {
 install_binary() {
     # Detect platform
     OS="$(uname -s)"
-    ARCH="$(uname -m)"
+    ARCH="$(host_arch)"
 
     case "$OS" in
         Linux)  PLATFORM="linux" ;;
@@ -196,10 +228,15 @@ install_binary() {
     esac
 
     case "$ARCH" in
-        x86_64|amd64)  ARCH="x64" ;;
-        arm64|aarch64) ARCH="arm64" ;;
-        *)             echo "Unsupported architecture: $ARCH"; exit 1 ;;
+        x64|arm64) ;;
+        *)         echo "Unsupported architecture: $ARCH"; exit 1 ;;
     esac
+
+    if [ "$PLATFORM" = "linux" ]; then
+        if [ -f /etc/alpine-release ] || { command -v ldd >/dev/null 2>&1 && ldd --version 2>&1 | grep -qi musl; }; then
+            PLATFORM="linux-musl"
+        fi
+    fi
 
     BINARY="omp-${PLATFORM}-${ARCH}"
     # Get release tag
@@ -247,17 +284,28 @@ case "$MODE" in
             install_bun
         fi
         require_bun_version
+        if ! bun_arch_matches_host; then
+            echo "Error: bun reports architecture '$(bun_arch)' but this host is '$(host_arch)'."
+            echo "Installing from source with this bun would produce a mismatched binary"
+            echo "(e.g. x86_64 under Rosetta on Apple Silicon), causing slow startup and AVX warnings."
+            echo "Install a native bun for your architecture, or re-run without --source to fetch the prebuilt $(host_arch) binary."
+            exit 1
+        fi
         install_via_bun
         ;;
     binary)
         install_binary
         ;;
     *)
-        # Default: use bun if available, otherwise binary
-        if has_bun; then
+        # Default: use bun only when it matches the host architecture, otherwise
+        # fall back to the prebuilt binary so Rosetta bun can't force an x86_64 build.
+        if has_bun && bun_arch_matches_host; then
             require_bun_version
             install_via_bun
         else
+            if has_bun; then
+                echo "Detected bun with architecture '$(bun_arch)' on a '$(host_arch)' host; using the prebuilt binary instead."
+            fi
             install_binary
         fi
         ;;

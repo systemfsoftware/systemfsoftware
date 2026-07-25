@@ -65,6 +65,48 @@ function expectTinyFishParams(url: URL, expectedParams: readonly string[]): void
 }
 
 describe("TinyFish web search provider", () => {
+	it("rewrites directive queries with supported operators only", async () => {
+		const captured: URL[] = [];
+		const fetchMock: FetchImpl = async input => {
+			const url = input instanceof URL ? input : new URL(typeof input === "string" ? input : input.url);
+			captured.push(url);
+			return new Response(JSON.stringify(tinyFishPage(tinyFishResults("tinyfish", 3))), {
+				status: 200,
+				headers: { "Content-Type": "application/json" },
+			});
+		};
+
+		await searchTinyFish({
+			...makeParams(
+				'"error handling" rust site:github.com -site:gitlab.com filetype:pdf intitle:tokio after:2024-01-01',
+			),
+			fetch: fetchMock,
+		});
+
+		expect(captured).toHaveLength(1);
+		expect(captured[0].searchParams.get("query")).toBe(
+			'"error handling" rust site:github.com -site:gitlab.com filetype:pdf',
+		);
+		expectTinyFishParams(captured[0], ["query", "num_results", "page"]);
+	});
+
+	it("sends directive-free queries verbatim", async () => {
+		const captured: URL[] = [];
+		const fetchMock: FetchImpl = async input => {
+			const url = input instanceof URL ? input : new URL(typeof input === "string" ? input : input.url);
+			captured.push(url);
+			return new Response(JSON.stringify(tinyFishPage(tinyFishResults("tinyfish", 3))), {
+				status: 200,
+				headers: { "Content-Type": "application/json" },
+			});
+		};
+
+		await searchTinyFish({ ...makeParams("plain query with ordinary words"), fetch: fetchMock });
+
+		expect(captured).toHaveLength(1);
+		expect(captured[0].searchParams.get("query")).toBe("plain query with ordinary words");
+	});
+
 	it("passes TinyFish num_results and applies numSearchResults across pages", async () => {
 		const captured: { url: URL; init?: RequestInit }[] = [];
 		const pages = new Map([

@@ -7,13 +7,13 @@ import { type } from "arktype";
 
 // Contract: the single-spawn schema (`task.batch: false`; the exported
 // `taskSchema` instance) carries no batch fields while accepting a caller
-// `outputSchema` and its validation mode. The batch shape (`tasks[]` + shared
+// `model`, `outputSchema`, and its validation mode. The batch shape (`tasks[]` + shared
 // `context`) is gated by the `task.batch` setting (default on, covered by
 // test/task/task-batch.test.ts).
 
 describe("task schema (single-spawn)", () => {
 	it("accepts {agent, task}", () => {
-		const parsed = taskSchema({ agent: "explore", task: "Map the auth module." });
+		const parsed = taskSchema({ agent: "scout", task: "Map the auth module." });
 		expect(parsed instanceof type.errors).toBe(false);
 	});
 
@@ -26,14 +26,14 @@ describe("task schema (single-spawn)", () => {
 	});
 
 	it("requires task", () => {
-		const parsed = taskSchema({ agent: "explore" });
+		const parsed = taskSchema({ agent: "scout" });
 		expect(parsed instanceof type.errors).toBe(true);
 	});
 
 	it("retains caller outputSchema and schemaMode while stripping stale keys", () => {
 		const outputSchema = { type: "object", properties: { answer: { type: "string" } } };
 		const parsed = taskSchema({
-			agent: "explore",
+			agent: "scout",
 			task: "Map the auth module.",
 			outputSchema,
 			schemaMode: "strict",
@@ -82,7 +82,7 @@ describe("task spawn validation", () => {
 	});
 
 	it("rejects a missing task", async () => {
-		const text = await executeText({ agent: "explore" });
+		const text = await executeText({ agent: "scout" });
 		expect(text).toContain("Missing `task`");
 	});
 });

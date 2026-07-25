@@ -30,19 +30,27 @@ import { parseStreamingJson } from "@oh-my-pi/pi-utils";
 import type { RenderResultOptions } from "../extensibility/custom-tools/types";
 import { XD_URL_PREFIX } from "../internal-urls/xd-protocol";
 import type { Theme } from "../modes/theme/theme";
+import { renderDefaultToolExecution } from "./default-renderer";
 import type { Tool } from "./index";
 import { replaceTabs } from "./render-utils";
 import type { ToolRenderer } from "./renderers";
-import { ToolError } from "./tool-errors";
+import { renderError, ToolAbortError, ToolError } from "./tool-errors";
 
 /**
  * Discoverable built-ins that must stay top-level even when xdev mounting is
  * active: `todo` feeds the todo prelude/prewalk machinery, `ask` is the
- * model's user-interaction affordance, and `grep` is the redirect target of
- * the bash interceptor rules — each loses its harness integration if hidden
- * behind dispatch.
+ * model's user-interaction affordance, `grep` is the redirect target of the
+ * bash interceptor rules, and `web_search` is invoked directly by most models
+ * (which have no notion of the `xd://` protocol) so hiding it behind dispatch
+ * makes it unreachable in practice (issue #5973) — each loses its harness
+ * integration or usability if hidden behind dispatch.
  */
-export const XDEV_KEEP_TOP_LEVEL: Record<string, true> = { todo: true, ask: true, grep: true };
+export const XDEV_KEEP_TOP_LEVEL: Record<string, true> = {
+	todo: true,
+	ask: true,
+	grep: true,
+	web_search: true,
+};
 
 /**
  * Tools that carry the `xd://` transport itself and therefore can never be
@@ -52,6 +60,9 @@ export const XDEV_KEEP_TOP_LEVEL: Record<string, true> = { todo: true, ask: true
  * declared `loadMode`.
  */
 export const XDEV_TRANSPORT_TOOLS: Record<string, true> = { read: true, write: true };
+
+/** Controls which mounted-device docs are inlined into the system prompt. */
+export type XdevDocsMode = "inline" | "builtins" | "catalog";
 
 /**
  * Whether an enabled tool is presented under `xd://` (rather than top-level)
@@ -163,6 +174,28 @@ function toolSummary(inst: Tool): string {
 	return firstLine?.trim() ?? inst.label ?? inst.name;
 }
 
+function promptCatalogSummary(inst: Tool, maxLength?: number): string {
+	const summary =
+		toolSummary(inst)
+			.split("\n")
+			.find(line => line.trim().length > 0)
+			?.trim() ?? inst.name;
+	if (maxLength === undefined || summary.length <= maxLength) return summary;
+	return `${summary.slice(0, maxLength).trimEnd()}…`;
+}
+
+/** Compile the `tools.xdevInlineDevices` allowlist once per render, dropping
+ *  non-string entries so malformed user config cannot break prompt builds. */
+function compileInlineGlobs(patterns: readonly string[]): Bun.Glob[] {
+	if (!Array.isArray(patterns)) return [];
+	const globs: Bun.Glob[] = [];
+	for (const pattern of patterns) {
+		if (typeof pattern !== "string" || pattern.length === 0) continue;
+		globs.push(new Bun.Glob(pattern));
+	}
+	return globs;
+}
+
 /** Decode the (possibly partially streamed) inner args JSON string into display args. */
 function decodeInnerArgs(raw: unknown): Record<string, unknown> {
 	if (typeof raw !== "string" || raw.length === 0) return {};
@@ -223,7 +256,13 @@ export class XdevRegistry {
 
 	/** `{name, summary}` pairs for prompt templates and /tools display. */
 	entries(): Array<{ name: string; summary: string }> {
-		return this.list().map(tool => ({ name: tool.name, summary: toolSummary(tool) }));
+		return this.list().map(tool => ({
+			name: tool.name,
+			summary: promptCatalogSummary(
+				tool,
+				this.#dynamic.has(tool.name) ? XdevRegistry.EXTERNAL_DESCRIPTION_CAP : undefined,
+			),
+		}));
 	}
 
 	/** `read xd://` listing with one device per line. */
@@ -266,11 +305,16 @@ export class XdevRegistry {
 	 * Dynamic mounts embed at most {@link EXTERNAL_DESCRIPTION_CAP} description
 	 * chars (schema always intact); `read xd://<tool>` returns the full text.
 	 */
-	docsAll(): string {
+	docsAll(mode: XdevDocsMode = "inline", inlinePatterns: readonly string[] = []): string {
 		const sections: string[] = [];
 		const overflow: Tool[] = [];
+		const inlineGlobs = compileInlineGlobs(inlinePatterns);
 		let used = 0;
 		for (const tool of this.list()) {
+			if (!this.#shouldInline(tool, mode, inlineGlobs)) {
+				overflow.push(tool);
+				continue;
+			}
 			const descriptionCap = this.#dynamic.has(tool.name) ? XdevRegistry.EXTERNAL_DESCRIPTION_CAP : undefined;
 			const docs = renderDocs(tool, "##", descriptionCap);
 			if (docs.length > XdevRegistry.DOCS_PER_DEVICE_CAP || used + docs.length > XdevRegistry.DOCS_TOTAL_BUDGET) {
@@ -284,13 +328,41 @@ export class XdevRegistry {
 			sections.push(
 				[
 					"## Additional devices (docs on demand)",
-					...overflow.map(tool => `- ${XD_URL_PREFIX}${tool.name} — ${toolSummary(tool)}`),
+					...overflow.map(tool => {
+						const maxLength = this.#dynamic.has(tool.name) ? XdevRegistry.EXTERNAL_DESCRIPTION_CAP : undefined;
+						return `- ${XD_URL_PREFIX}${tool.name} — ${promptCatalogSummary(tool, maxLength)}`;
+					}),
 					"",
 					`Read ${XD_URL_PREFIX}<tool> for full docs + JSON schema before first use.`,
 				].join("\n"),
 			);
 		}
 		return sections.join("\n\n");
+	}
+
+	/** Docs for selected mounted devices under the configured prompt-doc policy. */
+	docsFor(names: Iterable<string>, mode: XdevDocsMode, inlinePatterns: readonly string[] = []): string {
+		const sections: string[] = [];
+		const inlineGlobs = compileInlineGlobs(inlinePatterns);
+		let used = 0;
+		for (const name of names) {
+			const tool = this.get(name);
+			if (!tool || !this.#shouldInline(tool, mode, inlineGlobs)) continue;
+			const descriptionCap = this.#dynamic.has(tool.name) ? XdevRegistry.EXTERNAL_DESCRIPTION_CAP : undefined;
+			const docs = renderDocs(tool, "##", descriptionCap);
+			if (docs.length > XdevRegistry.DOCS_PER_DEVICE_CAP || used + docs.length > XdevRegistry.DOCS_TOTAL_BUDGET)
+				continue;
+			used += docs.length;
+			sections.push(docs);
+		}
+		return sections.join("\n\n");
+	}
+
+	#shouldInline(tool: Tool, mode: XdevDocsMode, inlineGlobs: readonly Bun.Glob[]): boolean {
+		return (
+			mode !== "catalog" &&
+			(mode === "inline" || this.#builtins.has(tool.name) || inlineGlobs.some(glob => glob.match(tool.name)))
+		);
 	}
 
 	#resolve(name: string): Tool {
@@ -318,28 +390,45 @@ export class XdevRegistry {
 		onUpdate?: AgentToolUpdateCallback,
 		context?: AgentToolContext,
 	): Promise<{ result: AgentToolResult<unknown>; xdev: XdevDispatch }> {
-		const inst = this.#resolve(name);
+		let xdev: XdevDispatch = { tool: name, mode: "execute" };
+		try {
+			const inst = this.#resolve(name);
 
-		if (HELP_CONTENT_RE.test(content)) {
+			if (HELP_CONTENT_RE.test(content)) {
+				return {
+					result: { content: [{ type: "text", text: renderDocs(inst) }] },
+					xdev: { tool: name, mode: "help" },
+				};
+			}
+
+			const validated = parseDeviceArgs(inst as AiTool, content, toolCallId, () => renderDocs(inst));
+			xdev = { ...xdev, args: validated };
+			const innerOnUpdate: AgentToolUpdateCallback | undefined = onUpdate
+				? partial =>
+						onUpdate({
+							content: partial.content,
+							details: { xdev: { ...xdev, inner: partial.details } },
+							isError: partial.isError,
+						})
+				: undefined;
+			const result = await inst.execute(toolCallId, validated as never, signal, innerOnUpdate, context);
+			return { result, xdev: { ...xdev, inner: result.details } };
+		} catch (error) {
+			if (
+				error instanceof ToolAbortError ||
+				signal?.aborted ||
+				(error instanceof Error && error.name === "AbortError")
+			) {
+				throw error;
+			}
 			return {
-				result: { content: [{ type: "text", text: renderDocs(inst) }] },
-				xdev: { tool: name, mode: "help" },
+				result: {
+					content: [{ type: "text", text: renderError(error) }],
+					isError: true,
+				},
+				xdev,
 			};
 		}
-
-		const validated = parseDeviceArgs(inst as AiTool, content, toolCallId, () => renderDocs(inst));
-
-		const xdevBase: XdevDispatch = { tool: name, mode: "execute", args: validated };
-		const innerOnUpdate: AgentToolUpdateCallback | undefined = onUpdate
-			? partial =>
-					onUpdate({
-						content: partial.content,
-						details: { xdev: { ...xdevBase, inner: partial.details } },
-						isError: partial.isError,
-					})
-			: undefined;
-		const result = await inst.execute(toolCallId, validated as never, signal, innerOnUpdate, context);
-		return { result, xdev: { ...xdevBase, inner: result.details } };
 	}
 }
 
@@ -352,9 +441,8 @@ export class XdevRegistry {
  *  map keyed by name. */
 function resolveDeviceRenderer(
 	name: string,
-	resolveMounted: ((name: string) => Tool | undefined) | undefined,
+	mounted: Tool | undefined,
 ): Pick<ToolRenderer, "renderCall" | "renderResult" | "mergeCallAndResult"> | undefined {
-	const mounted = resolveMounted?.(name);
 	if (mounted && (mounted.renderCall || mounted.renderResult)) {
 		// A mounted AgentTool exposes the same renderCall/renderResult/mergeCallAndResult
 		// surface as a static ToolRenderer; only the parameter generics differ, so unify
@@ -376,11 +464,13 @@ export function renderXdevCall(
 	theme: Theme,
 	resolveMounted?: (name: string) => Tool | undefined,
 ): Component | undefined {
-	const renderer = resolveDeviceRenderer(name, resolveMounted);
+	const mounted = resolveMounted?.(name);
+	const renderer = resolveDeviceRenderer(name, mounted);
+	const args = decodeInnerArgs(content);
 	if (renderer?.renderCall) {
-		return renderer.renderCall(decodeInnerArgs(content), options, theme);
+		return renderer.renderCall(args, options, theme);
 	}
-	return new Text(theme.fg("toolTitle", theme.bold(`${XD_URL_PREFIX}${name}`)), 0, 0);
+	return renderDefaultToolExecution({ label: mounted?.label ?? name, args, options }, theme);
 }
 
 /** Forward an `xd://` dispatch result to the mounted tool's renderer. */
@@ -398,7 +488,8 @@ export function renderXdevResult(
 	if (dispatch.mode === "help") {
 		return text ? new Text(theme.fg("toolOutput", replaceTabs(text)), 0, 0) : undefined;
 	}
-	const renderer = resolveDeviceRenderer(dispatch.tool, resolveMounted);
+	const mounted = resolveMounted?.(dispatch.tool);
+	const renderer = resolveDeviceRenderer(dispatch.tool, mounted);
 	const innerResult = { content: result.content, details: dispatch.inner, isError: result.isError };
 	if (renderer?.renderResult) {
 		const parts: Component[] = [];
@@ -417,5 +508,13 @@ export function renderXdevResult(
 			return box;
 		}
 	}
-	return text ? new Text(theme.fg("toolOutput", replaceTabs(text)), 0, 0) : undefined;
+	return renderDefaultToolExecution(
+		{
+			label: mounted?.label ?? dispatch.tool,
+			args: dispatch.args ?? {},
+			result: { output: text, isError: result.isError },
+			options,
+		},
+		theme,
+	);
 }

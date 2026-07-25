@@ -1,17 +1,37 @@
 import { once } from "@oh-my-pi/pi-utils";
-import { fetchCodexModels } from "../discovery/codex";
+import { type CodexModelDiscoveryResult, fetchCodexModels } from "../discovery/codex";
 import type { DevinModelDiscoveryOptions } from "../discovery/devin";
 import { buildGitLabDuoWorkflowFallbackModel, fetchGitLabDuoWorkflowModels } from "../discovery/gitlab-duo-workflow";
 import type { ModelManagerOptions } from "../model-manager";
-import type { FetchImpl } from "../types";
+import type { FetchImpl, ModelSpec } from "../types";
 
 // ---------------------------------------------------------------------------
 // OpenAI Codex
 // ---------------------------------------------------------------------------
 
-export interface OpenAICodexModelManagerConfig {
-	accessToken?: string;
+/** One Codex OAuth account to fetch a catalog for. */
+export interface OpenAICodexAccount {
+	/** OAuth access token used for `Authorization: Bearer ...`. */
+	accessToken: string;
+	/** ChatGPT account id sent as the `chatgpt-account-id` header. */
 	accountId?: string;
+}
+
+export interface OpenAICodexModelManagerConfig {
+	/**
+	 * Resolves every configured Codex OAuth account at discovery time. Codex
+	 * discovery is account-scoped — a model can be available to one account and
+	 * absent from another — so each account's `/models` endpoint is fetched
+	 * independently and the results unioned by id. Without this, discovery would
+	 * surface only the account it happened to resolve and, being authoritative,
+	 * prune every model the other accounts expose (#6265).
+	 *
+	 * Returns `null` to abort discovery entirely (e.g. an account's credential
+	 * failed to refresh): a partial account set would be cached as the complete
+	 * authoritative catalog and hide the missing account's models, so the caller
+	 * keeps the previous/bundled catalog instead.
+	 */
+	resolveAccounts?: () => Promise<readonly OpenAICodexAccount[] | null>;
 	clientVersion?: string;
 	fetch?: FetchImpl;
 }
@@ -19,19 +39,49 @@ export interface OpenAICodexModelManagerConfig {
 export function openaiCodexModelManagerOptions(
 	config: OpenAICodexModelManagerConfig = {},
 ): ModelManagerOptions<"openai-codex-responses"> {
-	const { accessToken, accountId, clientVersion, fetch } = config;
+	const { resolveAccounts, clientVersion, fetch } = config;
 	return {
 		providerId: "openai-codex",
 		dynamicModelsAuthoritative: true,
-		...(accessToken
+		...(resolveAccounts
 			? {
 					fetchDynamicModels: async () => {
-						const result = await fetchCodexModels({ accessToken, accountId, clientVersion, fetchFn: fetch });
-						return result?.models ?? null;
+						const accounts = await resolveAccounts();
+						if (!accounts || accounts.length === 0) return null;
+						const results = await Promise.all(
+							accounts.map(account =>
+								fetchCodexModels({
+									accessToken: account.accessToken,
+									accountId: account.accountId,
+									clientVersion,
+									fetchFn: fetch,
+								}),
+							),
+						);
+						return unionCodexModels(results);
 					},
 				}
 			: undefined),
 	};
+}
+
+/**
+ * Merge complete per-account Codex catalogs into one authoritative list,
+ * deduped by model id (first account to expose an id wins). Returns `null` when
+ * any account's fetch failed, so a partial list cannot replace the previous or
+ * bundled authoritative catalog.
+ */
+function unionCodexModels(
+	results: readonly (CodexModelDiscoveryResult | null)[],
+): ModelSpec<"openai-codex-responses">[] | null {
+	const byId = new Map<string, ModelSpec<"openai-codex-responses">>();
+	for (const result of results) {
+		if (!result) return null;
+		for (const model of result.models) {
+			if (!byId.has(model.id)) byId.set(model.id, model);
+		}
+	}
+	return [...byId.values()];
 }
 
 // ---------------------------------------------------------------------------

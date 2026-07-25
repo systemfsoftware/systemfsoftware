@@ -614,10 +614,11 @@ export class CollabHost {
 			case "kill": {
 				const kill = async () => {
 					const ref = AgentRegistry.global().get(agentId);
-					if (ref && ref.status === "running" && ref.session) {
+					if (!ref) return;
+					if (ref.status === "running" && ref.session) {
 						await ref.session.abort({ reason: USER_INTERRUPT_LABEL });
 					}
-					await AgentLifecycleManager.global().release(agentId);
+					await AgentLifecycleManager.global().release(agentId, ref);
 				};
 				kill().catch(fail);
 				break;

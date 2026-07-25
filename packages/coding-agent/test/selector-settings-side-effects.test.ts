@@ -66,6 +66,17 @@ describe("selector setting side effects", () => {
 		expect(invalidate).toHaveBeenCalledTimes(1);
 		expect(requestRender).toHaveBeenCalledTimes(1);
 	});
+	it("applies memory backend changes to the live session", () => {
+		const applyMemoryBackend = vi.fn(async () => {});
+		const controller = new SelectorController({
+			session: { applyMemoryBackend },
+			showError: vi.fn(),
+		} as unknown as InteractiveModeContext);
+
+		controller.handleSettingChange("memory.backend", "mnemopi");
+
+		expect(applyMemoryBackend).toHaveBeenCalledTimes(1);
+	});
 
 	for (const id of ["terminal.showImages", "showImages"]) {
 		for (const visible of [false, true]) {

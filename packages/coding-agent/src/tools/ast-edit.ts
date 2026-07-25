@@ -32,7 +32,7 @@ import {
 	formatParseErrorsCountLabel,
 	PREVIEW_LIMITS,
 } from "./render-utils";
-import { queueResolveHandler } from "./resolve";
+import { PREVIEW_PENDING_NOTICE, queueResolveHandler } from "./resolve";
 import { ToolError } from "./tool-errors";
 import { toolResult } from "./tool-result";
 
@@ -520,6 +520,9 @@ export class AstEditTool implements AgentTool<typeof astEditSchema, AstEditToolD
 						return toolResult(appliedDetails).text(text).done();
 					},
 				});
+				// The renderer's ⟨proposed⟩ badge is TUI-only; this line is the model's
+				// in-result signal that the diff above is staged, not applied.
+				outputLines.unshift(PREVIEW_PENDING_NOTICE, "");
 			}
 
 			const details: AstEditToolDetails = {

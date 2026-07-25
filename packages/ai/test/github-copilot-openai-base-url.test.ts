@@ -30,6 +30,13 @@ function getRequestHeader(
 	return new Headers(init?.headers).get(headerName);
 }
 
+async function getRequestBody(input: string | URL | Request, init?: RequestInit): Promise<Record<string, unknown>> {
+	if (input instanceof Request) {
+		return (await input.clone().json()) as Record<string, unknown>;
+	}
+	return JSON.parse(String(init?.body)) as Record<string, unknown>;
+}
+
 function createUnauthorizedResponse(): Response {
 	return new Response(JSON.stringify({ error: { message: "Unauthorized" } }), {
 		status: 401,
@@ -77,6 +84,29 @@ describe("GitHub Copilot OpenAI transport base URL", () => {
 
 		expect(result.stopReason).toBe("error");
 		expect(requestedUrls[0]).toBe("https://api.githubcopilot.com/responses");
+	});
+
+	it("omits OpenAI priority service tier while native OpenAI keeps it", async () => {
+		const requestedBodies: Record<string, unknown>[] = [];
+		const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+			requestedBodies.push(await getRequestBody(input, init));
+			return createUnauthorizedResponse();
+		});
+		const requestOptions = {
+			apiKey: testToken,
+			fetch: fetchMock as unknown as typeof fetch,
+			serviceTier: "priority" as const,
+		};
+
+		const copilotModel = getBundledModel("github-copilot", "gpt-5.4") as Model<"openai-responses">;
+		await streamOpenAIResponses(copilotModel, testContext, requestOptions).result();
+
+		const openAIModel = getBundledModel("openai", "gpt-5-mini") as Model<"openai-responses">;
+		await streamOpenAIResponses(openAIModel, testContext, requestOptions).result();
+
+		expect(requestedBodies).toHaveLength(2);
+		expect(requestedBodies[0]?.service_tier).toBeUndefined();
+		expect(requestedBodies[1]?.service_tier).toBe("priority");
 	});
 
 	it("routes structured enterprise credentials to the enterprise chat completions host", async () => {

@@ -54,6 +54,25 @@ approval: { tier: "exec", override: true, reason: "Critical pattern detected" }
 
 `bash` uses this for critical destructive patterns such as `rm -rf /`, fork bombs, remote-fetch-then-execute, writes to `/etc/passwd`, and host shutdown commands. These surface as `reason` in the approval prompt, but in `yolo` mode they are auto-approved unless a user policy for the tool is set to `prompt` or `deny`.
 
+### Native computer safety checks
+
+The disabled-by-default [`computer` tool](./computer-use.md) chooses its tier from the complete ordered batch:
+
+- batches containing only `screenshot` and `wait` use `read`;
+- any pointer or keyboard action uses `exec`;
+- missing or malformed actions conservatively use `exec`.
+
+Provider safety checks use a stronger gate than ordinary tool approval. Resolution order:
+
+1. `tools.approval.computer: deny` blocks the call immediately.
+2. Otherwise, any OpenAI `pending_safety_checks` force an interactive Approve/Deny prompt.
+3. `yolo`, `--auto-approve`, per-tool `allow`, and prior xdev approval never acknowledge a provider check.
+4. A headless session or unavailable UI fails closed.
+5. Explicit approval is recorded only for that call; the result returns the same checks as `acknowledged_safety_checks`.
+6. The executor checks the approval marker again before native input.
+
+Provider approval does not authorize the underlying real-world action. On-screen text is untrusted and cannot override direct user instructions. Consequential actions still require point-of-risk confirmation of the exact target, scope, and values unless the user's direct message already authorized them.
+
 ## Per-tool prompt details
 
 Tools can add approval-prompt body lines with `formatApprovalDetails(args)`. The standard prompt includes:

@@ -638,3 +638,180 @@ describe("Anthropic prior-turn thinking preservation (#2257, #2265)", () => {
 		expect(wireBlobs).not.toContain("sig_sonnet");
 	});
 });
+
+describe("Latest-turn foreign thinking signatures (model switch mid tool-loop)", () => {
+	// Production forensics: a session ran on kimi-code/k3 (an Anthropic-
+	// compatible endpoint that signs thinking blocks with its own scheme —
+	// per-turn signatures Anthropic can never verify), the user switched back
+	// to official Anthropic while the kimi turn was still the LATEST assistant
+	// message of an in-flight tool loop, and every request 400'd with
+	// `messages.N.content.M: Invalid \`signature\` in \`thinking\` block`,
+	// wedging the session onto its fallback model. The signature strip used to
+	// be gated on `!isLatestSurvivingAssistant`; the latest turn replayed the
+	// foreign signature verbatim. The latest-turn strip keys on the ISSUER
+	// (source provider ≠ target provider): same-provider cross-model-id
+	// switches keep the byte-for-byte latest turn pinned by the prefill suite.
+	const officialFable = () =>
+		makeAnthropicModel({
+			provider: "anthropic",
+			id: "claude-fable-5",
+			name: "Claude Fable 5",
+			baseUrl: "https://api.anthropic.com",
+		});
+	const KIMI_SIG = "kimi-issued-foreign-signature";
+
+	it("strips a foreign signature from the latest in-flight tool-use turn for official Anthropic", () => {
+		const reasoning = "The PR body is final and verified. One formatting nit remains.";
+		const target = officialFable();
+		const messages: Message[] = [
+			makeUser("Fix the PR body"),
+			makeAssistant(
+				[
+					{ type: "thinking", thinking: reasoning, thinkingSignature: KIMI_SIG },
+					{ type: "text", text: "한 군데 렌더링 닛: 빈 줄 하나 추가." },
+					{ type: "toolCall", id: "toolu_send", name: "send", arguments: { text: "patch" } },
+				],
+				{ provider: "kimi-code", model: "k3" },
+			),
+			toolResult("toolu_send", "sent"),
+			makeUser("<user_interjection>switch happened here</user_interjection>"),
+		];
+
+		const params = convertAnthropicMessages(messages, target, false);
+		const assistants = params.filter(p => p.role === "assistant");
+		expect(assistants).toHaveLength(1);
+		const blocks = assistants[0].content as WireBlock[];
+		// No native thinking block may survive: the foreign signature cannot
+		// verify, and official Anthropic never replays unsigned thinking.
+		expect(blocks.find(b => b.type === "thinking")).toBeUndefined();
+		expect(JSON.stringify(blocks)).not.toContain(KIMI_SIG);
+		// The reasoning survives as demoted text ahead of the visible text.
+		const texts = blocks.filter(b => b.type === "text") as WireTextBlock[];
+		expect(texts[0]?.text).toBe(renderDemotedThinking(target.id, reasoning));
+		expect(texts.some(t => t.text.includes("렌더링"))).toBe(true);
+		// The pending tool loop stays intact.
+		const toolUse = blocks.find(b => b.type === "tool_use") as WireToolUseBlock | undefined;
+		expect(toolUse?.id).toBe("toolu_send");
+	});
+
+	it("keeps the latest same-model official Anthropic turn byte-for-byte", () => {
+		const target = officialFable();
+		const messages: Message[] = [
+			makeUser("Fix the PR body"),
+			makeAssistant(
+				[
+					{ type: "thinking", thinking: "own reasoning", thinkingSignature: "sig_fable" },
+					{ type: "toolCall", id: "toolu_send", name: "send", arguments: {} },
+				],
+				{ provider: "anthropic", model: "claude-fable-5" },
+			),
+			toolResult("toolu_send", "sent"),
+		];
+
+		const params = convertAnthropicMessages(messages, target, false);
+		const assistants = params.filter(p => p.role === "assistant");
+		const blocks = assistants[0].content as WireBlock[];
+		const thinking = blocks.find(b => b.type === "thinking") as WireThinkingBlock | undefined;
+		expect(thinking?.thinking).toBe("own reasoning");
+		expect(thinking?.signature).toBe("sig_fable");
+	});
+
+	it("strips a foreign signature from the latest ABANDONED tool-use turn for official Anthropic", () => {
+		// stopReason !== "toolUse" with toolCall blocks = abandoned turn. The
+		// byte-for-byte exemption only covers Anthropic's own latest response,
+		// not a foreign one.
+		const reasoning = "kimi reasoning on an abandoned turn";
+		const target = officialFable();
+		const messages: Message[] = [
+			makeUser("Do the thing"),
+			makeAssistant(
+				[
+					{ type: "thinking", thinking: reasoning, thinkingSignature: KIMI_SIG },
+					{ type: "toolCall", id: "toolu_left", name: "read", arguments: { path: "a" } },
+				],
+				{ provider: "kimi-code", model: "k3", stopReason: "stop" },
+			),
+			toolResult("toolu_left", "placeholder"),
+			makeUser("continue"),
+		];
+
+		const params = convertAnthropicMessages(messages, target, false);
+		const assistants = params.filter(p => p.role === "assistant");
+		const blocks = assistants[0].content as WireBlock[];
+		expect(blocks.find(b => b.type === "thinking")).toBeUndefined();
+		expect(JSON.stringify(blocks)).not.toContain(KIMI_SIG);
+		const text = blocks.find(b => b.type === "text") as WireTextBlock | undefined;
+		expect(text?.text).toBe(renderDemotedThinking(target.id, reasoning));
+	});
+
+	it("keeps the latest ABANDONED same-model turn untouched (byte-for-byte rule)", () => {
+		const target = officialFable();
+		const messages: Message[] = [
+			makeUser("Do the thing"),
+			makeAssistant(
+				[
+					{ type: "thinking", thinking: "fable reasoning", thinkingSignature: "sig_fable" },
+					{ type: "toolCall", id: "toolu_left", name: "read", arguments: { path: "a" } },
+				],
+				{ provider: "anthropic", model: "claude-fable-5", stopReason: "stop" },
+			),
+			toolResult("toolu_left", "placeholder"),
+			makeUser("continue"),
+		];
+
+		const params = convertAnthropicMessages(messages, target, false);
+		const assistants = params.filter(p => p.role === "assistant");
+		const blocks = assistants[0].content as WireBlock[];
+		const thinking = blocks.find(b => b.type === "thinking") as WireThinkingBlock | undefined;
+		expect(thinking?.thinking).toBe("fable reasoning");
+		expect(thinking?.signature).toBe("sig_fable");
+	});
+
+	it("drops a foreign redacted_thinking sibling on the latest turn for signing targets", () => {
+		const target = officialFable();
+		const messages: Message[] = [
+			makeUser("Fix it"),
+			makeAssistant(
+				[
+					{ type: "thinking", thinking: "visible", thinkingSignature: KIMI_SIG },
+					{ type: "redactedThinking", data: "foreign-blob" },
+					{ type: "toolCall", id: "toolu_x", name: "read", arguments: {} },
+				],
+				{ provider: "kimi-code", model: "k3" },
+			),
+			toolResult("toolu_x", "ok"),
+		];
+
+		const params = convertAnthropicMessages(messages, target, false);
+		const assistants = params.filter(p => p.role === "assistant");
+		const blocks = assistants[0].content as WireBlock[];
+		expect(blocks.find(b => b.type === "redacted_thinking")).toBeUndefined();
+		expect(blocks.find(b => b.type === "thinking")).toBeUndefined();
+	});
+
+	it("strips the latest official Anthropic signature when replaying to an unsigned-replay 3p target", () => {
+		// Reverse direction: official → 3p. The signature is bound to
+		// Anthropic's key+session+model; the 3p target replays the thinking
+		// natively but unsigned.
+		const target = makeAnthropicModel();
+		const messages: Message[] = [
+			makeUser("Fix it"),
+			makeAssistant(
+				[
+					{ type: "thinking", thinking: "fable reasoning", thinkingSignature: "sig_fable" },
+					{ type: "toolCall", id: "toolu_y", name: "read", arguments: {} },
+				],
+				{ provider: "anthropic", model: "claude-fable-5" },
+			),
+			toolResult("toolu_y", "ok"),
+		];
+
+		const params = convertAnthropicMessages(messages, target, false);
+		const assistants = params.filter(p => p.role === "assistant");
+		const blocks = assistants[0].content as WireBlock[];
+		const thinking = blocks.find(b => b.type === "thinking") as WireThinkingBlock | undefined;
+		expect(thinking?.thinking).toBe("fable reasoning");
+		expect(thinking?.signature ?? "").toBe("");
+		expect(JSON.stringify(blocks)).not.toContain("sig_fable");
+	});
+});

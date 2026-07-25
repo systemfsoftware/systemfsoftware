@@ -1,7 +1,28 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { ADVISOR_TRANSCRIPT_FILENAME, isAdvisorTranscriptName } from "../advisor/transcript-recorder";
+import { SessionManager } from "../session/session-manager";
+import { persistedVibeChildIds } from "../vibe/runtime";
 import { type AgentRegistry, MAIN_AGENT_ID } from "./agent-registry";
+
+/**
+ * Child ids owned by the Vibe roster persisted in this session file. Vibe
+ * workers are revived through the Vibe registry's own journal, so the generic
+ * persisted-subagent scan must not register them as plain `sub` refs.
+ */
+async function readPersistedVibeChildIds(sessionFile: string): Promise<Set<string>> {
+	let sessionManager: SessionManager;
+	try {
+		sessionManager = await SessionManager.open(sessionFile, undefined, undefined, { suppressBreadcrumb: true });
+	} catch {
+		return new Set();
+	}
+	try {
+		return persistedVibeChildIds(sessionManager.getEntries());
+	} finally {
+		await sessionManager.close();
+	}
+}
 
 /** Register persisted subagent and advisor transcripts as parked registry refs. */
 export async function registerPersistedSubagents(
@@ -9,14 +30,16 @@ export async function registerPersistedSubagents(
 	sessionFile: string | null | undefined,
 ): Promise<void> {
 	if (!sessionFile?.endsWith(".jsonl")) return;
+	const vibeOwnedIds = await readPersistedVibeChildIds(sessionFile);
 	const root = sessionFile.slice(0, -6);
-	await registerPersistedSubagentsFromDir(registry, root, undefined);
+	await registerPersistedSubagentsFromDir(registry, root, undefined, vibeOwnedIds);
 }
 
 async function registerPersistedSubagentsFromDir(
 	registry: AgentRegistry,
 	dir: string,
 	parentId: string | undefined,
+	vibeOwnedIds: ReadonlySet<string>,
 ): Promise<void> {
 	let entries: fs.Dirent[];
 	try {
@@ -58,6 +81,7 @@ async function registerPersistedSubagentsFromDir(
 			continue;
 		}
 		const id = entry.name.slice(0, -6);
+		if (vibeOwnedIds.has(id) && registry.get(id)?.sessionFile !== sessionFile) continue;
 		if (!registry.get(id)) {
 			registry.register({
 				id,
@@ -69,6 +93,6 @@ async function registerPersistedSubagentsFromDir(
 				status: "parked",
 			});
 		}
-		await registerPersistedSubagentsFromDir(registry, path.join(dir, id), id);
+		await registerPersistedSubagentsFromDir(registry, path.join(dir, id), id, vibeOwnedIds);
 	}
 }

@@ -65,6 +65,7 @@ function fakeRegistry(opts: FakeRegistryOptions): BenchModelRegistry {
 	const authed = new Set(opts.authedProviders);
 	return {
 		getAll: () => opts.models,
+		getAvailable: () => opts.models.filter(model => authed.has(model.provider)),
 		hasConfiguredAuth: model => authed.has(model.provider),
 		getApiKey: async model => (authed.has(model.provider) ? "sk-test" : undefined),
 		resolver: () => (() => Promise.resolve("sk-test")) as unknown as ApiKeyResolver,

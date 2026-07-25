@@ -146,28 +146,54 @@ export function computeDefaultSessionDir(
  * Write a breadcrumb linking the current terminal to a session file.
  * The breadcrumb contains the cwd and session path so --continue can
  * find "this terminal's last session" even when running concurrent instances.
+ *
+ * `fresh` marks a `/new` (or freshly-minted) session boundary whose JSONL is
+ * not yet materialized (new-session persistence is lazy until assistant output
+ * exists). A fresh breadcrumb is honored by {@link readTerminalBreadcrumbEntry}
+ * even when its target file is still absent, so relaunch/auto-resume reopens the
+ * post-`/new` session instead of falling back to the pre-`/new` transcript. Once
+ * the session materializes the caller rewrites the breadcrumb with `fresh:false`
+ * so a later external delete is still treated as a genuinely stale crumb.
  */
-export function writeTerminalBreadcrumb(cwd: string, sessionFile: string): void {
+export function writeTerminalBreadcrumb(cwd: string, sessionFile: string, fresh = false): void {
 	const terminalId = getTerminalId();
 	if (!terminalId) return;
 
 	const breadcrumbDir = getTerminalSessionsDir();
 	const breadcrumbFile = path.join(breadcrumbDir, terminalId);
-	const content = `${cwd}\n${sessionFile}\n`;
-	// Best-effort — don't break session creation if breadcrumb fails
-	Bun.write(breadcrumbFile, content).catch(() => {});
+	const content = fresh ? `${cwd}\n${sessionFile}\nfresh\n` : `${cwd}\n${sessionFile}\n`;
+	// Synchronous + best-effort. Infrequent (session create/switch/reset, never
+	// per-append), and writing in order matters: a lazy `/new` fresh crumb is
+	// re-stamped non-fresh the instant the session materializes, so an async
+	// fire-and-forget could land the two writes out of order and leave a
+	// materialized session marked fresh.
+	try {
+		fs.mkdirSync(breadcrumbDir, { recursive: true });
+		fs.writeFileSync(breadcrumbFile, content);
+	} catch (err) {
+		if (!isEnoent(err)) logger.debug("Terminal breadcrumb write failed", { err });
+	}
 }
 
 export interface TerminalBreadcrumb {
 	cwd: string;
 	sessionFile: string;
+	/** The recorded session file exists on disk right now. */
+	exists: boolean;
+	/** Recorded as a `/new` fresh-session boundary whose JSONL may not exist yet. */
+	fresh: boolean;
 }
 
 /**
  * Read the raw terminal breadcrumb for the current terminal.
- * Returns the recorded cwd + session file (verified to exist) regardless of
- * whether the recorded cwd still matches the current one. Callers decide how
- * to interpret a cwd mismatch (e.g. a moved/renamed worktree).
+ * Returns the recorded cwd + session file regardless of whether the recorded
+ * cwd still matches the current one. Callers decide how to interpret a cwd
+ * mismatch (e.g. a moved/renamed worktree).
+ *
+ * A missing target file yields `null` UNLESS the breadcrumb is a `fresh`
+ * boundary — a lazy `/new` session whose JSONL was never written — in which case
+ * the entry is returned with `exists:false` so the caller can distinguish it
+ * from a genuinely stale/deleted breadcrumb.
  */
 export async function readTerminalBreadcrumbEntry(): Promise<TerminalBreadcrumb | null> {
 	const terminalId = getTerminalId();
@@ -181,10 +207,13 @@ export async function readTerminalBreadcrumbEntry(): Promise<TerminalBreadcrumb 
 
 		const breadcrumbCwd = lines[0];
 		const sessionFile = lines[1];
+		const fresh = lines[2] === "fresh";
 
-		// Verify the session file still exists
 		const stat = fs.statSync(sessionFile, { throwIfNoEntry: false });
-		if (stat?.isFile()) return { cwd: breadcrumbCwd, sessionFile };
+		const exists = stat?.isFile() === true;
+		// A materialized target resumes normally; a missing target is honored only
+		// for a fresh `/new` boundary (never-written lazy session).
+		if (exists || fresh) return { cwd: breadcrumbCwd, sessionFile, exists, fresh };
 	} catch (err) {
 		if (!isEnoent(err)) logger.debug("Terminal breadcrumb read failed", { err });
 		// Breadcrumb doesn't exist or is corrupt — fall through

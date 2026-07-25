@@ -16,6 +16,16 @@ function getCellItalic(terminal: VirtualTerminal, row: number, col: number): boo
 }
 
 describe("renderInlineMarkdown", () => {
+	it("preserves ST-terminated OSC 8 links before inline lexing", () => {
+		const st = "\x1b\\";
+		const input = `\x1b]8;;file:///tmp/example.ts${st}\`example.ts\`\x1b]8;;${st}`;
+		const rendered = renderInlineMarkdown(input, defaultMarkdownTheme);
+		const plain = stripVTControlCharacters(rendered.replace(/\x1b\]8;[^\x07\x1b]*(?:\x07|\x1b\\)/g, ""));
+
+		expect(rendered.includes("\x1b]8;;file:///tmp/example.ts\x07")).toBeTruthy();
+		expect(plain).toBe("example.ts");
+	});
+
 	it("preserves ordered list items as visible inline text", () => {
 		const rendered = renderInlineMarkdown("1. Review against a base branch (PR Style)", defaultMarkdownTheme);
 		const plain = stripVTControlCharacters(rendered);
@@ -164,6 +174,31 @@ describe("Markdown component", () => {
 	});
 
 	describe("Tables", () => {
+		it("preserves ST-terminated OSC 8 links inside table cells", () => {
+			const st = "\x1b\\";
+			const fileLink = `\x1b]8;;file:///tmp/DisplayTypeEnum.java${st}\`DisplayTypeEnum.java\`\x1b]8;;${st}`;
+			const markdown = new Markdown(
+				`| Module | Local file | Change |
+| --- | --- | --- |
+| common | ${fileLink} | Added display type |`,
+				0,
+				0,
+				defaultMarkdownTheme,
+			);
+
+			const width = 80;
+			const lines = markdown.render(width);
+			const output = lines.join("\n");
+			const plainOutput = stripVTControlCharacters(output.replace(/\x1b\]8;[^\x07\x1b]*(?:\x07|\x1b\\)/g, ""));
+
+			expect(output.includes("\x1b]8;;file:///tmp/DisplayTypeEnum.java\x07")).toBeTruthy();
+			expect(plainOutput.includes("DisplayTypeEnum.java")).toBeTruthy();
+			expect(plainOutput.includes("`DisplayTypeEnum.java`")).toBeFalsy();
+			for (const line of lines) {
+				expect(visibleWidth(line), `Line exceeds width ${width}`).toBeLessThanOrEqual(width);
+			}
+		});
+
 		it("should render simple table", () => {
 			const markdown = new Markdown(
 				`| Name | Age |

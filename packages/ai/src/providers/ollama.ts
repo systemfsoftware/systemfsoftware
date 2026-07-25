@@ -141,6 +141,7 @@ function mapToolChoice(toolChoice: ToolChoice | undefined): "auto" | "none" | "r
 	if (toolChoice === "required" || toolChoice === "any") {
 		return "required";
 	}
+	if (typeof toolChoice === "object" && toolChoice.type === "computer") return undefined;
 	if (typeof toolChoice === "object") {
 		return "required";
 	}
@@ -151,6 +152,7 @@ function getNamedToolChoiceName(toolChoice: ToolChoice | undefined): string | un
 	if (!toolChoice || typeof toolChoice === "string") {
 		return undefined;
 	}
+	if (toolChoice.type === "computer") return undefined;
 	if ("function" in toolChoice) {
 		return toolChoice.function.name;
 	}

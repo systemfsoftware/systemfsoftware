@@ -116,8 +116,9 @@ describe("executeCompaction UI lifecycle", () => {
 		expect(outcome).toBe("ok");
 		// Status container is empty once compaction resolves.
 		expect(statusContainer.children).toHaveLength(0);
-		// Proof the success branch ran (rebuild happens only on the ok path).
-		expect(rebuildChatFromMessages).toHaveBeenCalledTimes(1);
+		// Post-compaction rebuilds preserve settled components so their warmed
+		// Markdown/layout caches survive the transcript reset.
+		expect(rebuildChatFromMessages).toHaveBeenCalledWith({ reuseSettledComponents: true });
 		// The loader was drained BEFORE the transcript rebuild, not only by the
 		// finally that runs afterward: the status container was already empty at
 		// the instant rebuildChatFromMessages ran (1 leaked loader without the fix).

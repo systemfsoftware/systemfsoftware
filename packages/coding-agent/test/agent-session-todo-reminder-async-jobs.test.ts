@@ -58,6 +58,7 @@ describe("AgentSession todo reminder async-job deferral", () => {
 	let gates: Array<PromiseWithResolvers<string>>;
 	let reminderAttempts: number[];
 	let firstReminderPromise: Promise<void>;
+	let agentEndTerminalStates: Array<boolean | undefined>;
 	let resolveFirstReminder: () => void;
 
 	function textOnlyAssistantMessage(): AssistantMessage {
@@ -113,7 +114,7 @@ describe("AgentSession todo reminder async-job deferral", () => {
 		authStorage.setRuntimeApiKey("anthropic", "test-key");
 		modelRegistry = new ModelRegistry(authStorage);
 		sessionManager = SessionManager.create(tempDir.path(), tempDir.path());
-		manager = new AsyncJobManager({ onJobComplete: async () => {} });
+		manager = new AsyncJobManager({});
 		gates = [];
 		extensionRunner = {
 			emit: vi.fn().mockResolvedValue(undefined),
@@ -148,13 +149,22 @@ describe("AgentSession todo reminder async-job deferral", () => {
 			asyncJobManager: manager,
 			extensionRunner,
 		});
+		// Override the session's self-registered sink with a no-op: these tests
+		// exercise the async-wake deferral gates, not result injection.
+		manager.registerDeliverySink("Main", () => {});
 
 		reminderAttempts = [];
+		agentEndTerminalStates = [];
 		({ promise: firstReminderPromise, resolve: resolveFirstReminder } = Promise.withResolvers<void>());
 		session.subscribe((event: AgentSessionEvent) => {
 			if (event.type === "todo_reminder") {
 				reminderAttempts.push(event.attempt);
 				if (reminderAttempts.length === 1) resolveFirstReminder();
+			}
+			if (event.type === "agent_end") {
+				agentEndTerminalStates.push(
+					(event as Extract<AgentSessionEvent, { type: "agent_end" }> & { isTerminal?: boolean }).isTerminal,
+				);
 			}
 		});
 	});
@@ -182,6 +192,7 @@ describe("AgentSession todo reminder async-job deferral", () => {
 
 		expect(reminderAttempts).toEqual([]);
 		expect(continueSpy).not.toHaveBeenCalled();
+		expect(agentEndTerminalStates).toEqual([false]);
 	});
 
 	it("does not defer for a running job owned by a different agent", async () => {

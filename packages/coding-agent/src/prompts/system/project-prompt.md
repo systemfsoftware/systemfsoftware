@@ -40,7 +40,14 @@ Working directory layout (sorted by mtime, recent first; depth ≤ 3):
 </workspace-tree>
 {{/if}}
 {{/if}}
-
+{{#if additionalWorkspaceRoots.length}}
+<workspace-roots>
+This session also spans the additional directories below. This list is the CURRENT workspace state and supersedes any workspace change mentioned earlier in the conversation. Use absolute paths under these roots to `read`/`grep`/`glob`/`edit` them. Manage the set with `/add-dir` and `/remove-dir`; `/dirs` lists them.
+{{#each additionalWorkspaceRoots}}
+- {{this}}
+{{/each}}
+</workspace-roots>
+{{/if}}
 Today is {{date}}, and the current working directory is '{{cwd}}'.
 
 <critical>

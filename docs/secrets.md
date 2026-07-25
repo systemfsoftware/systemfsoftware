@@ -17,16 +17,16 @@ secrets:
    - **Environment variables** whose names match common secret patterns (`KEY`, `SECRET`, `TOKEN`, `PASSWORD`, `PASS`, `AUTH`, `CREDENTIAL`, `PRIVATE`, `OAUTH`) with values >= 8 characters
    - **`secrets.yml` files** (see below)
 
-2. Outbound text messages to the LLM have secret values replaced with deterministic placeholders like `#AB12#`.
+2. Outbound text messages to the LLM have secret values replaced with deterministic placeholders like `#AB12#`, `#AB12:L#`, or `#GITHUBTOKEN_AB12:L#`.
 
 3. Session context is deep-walked and obfuscation placeholders are restored when building display/resume context. Replace-mode substitutions are one-way and are not restored.
 
 Two modes control what happens to each secret:
 
-| Mode                  | Behavior                                                | Reversible                                   |
-| --------------------- | ------------------------------------------------------- | -------------------------------------------- |
-| `obfuscate` (default) | Replaced with deterministic placeholder `#[A-Z0-9]{4}#` | Yes (deobfuscated in display/resume context) |
-| `replace`             | Replaced with deterministic same-length string          | No (one-way)                                 |
+| Mode                  | Behavior                                                                                      | Reversible                                   |
+| --------------------- | --------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| `obfuscate` (default) | Replaced with deterministic placeholder `#[A-Z0-9]+(?::[ULCM])?#`, optionally name-prefixed | Yes (deobfuscated in display/resume context) |
+| `replace`             | Replaced with deterministic same-length string                                                | No (one-way)                                 |
 
 ## secrets.yml
 
@@ -43,13 +43,14 @@ Project entries override global entries with matching `content`.
 
 Each entry in the array has these fields:
 
-| Field         | Type                         | Required | Description                                       |
-| ------------- | ---------------------------- | -------- | ------------------------------------------------- |
-| `type`        | `"plain"` or `"regex"`       | Yes      | Match strategy                                    |
-| `content`     | string                       | Yes      | The secret value (plain) or regex pattern (regex) |
-| `mode`        | `"obfuscate"` or `"replace"` | No       | Default: `"obfuscate"`                            |
-| `replacement` | string                       | No       | Custom replacement (replace mode only)            |
-| `flags`       | string                       | No       | Regex flags (regex type only)                     |
+| Field          | Type                         | Required | Description                                                   |
+| -------------- | ---------------------------- | -------- | ------------------------------------------------------------- |
+| `type`         | `"plain"` or `"regex"`       | Yes      | Match strategy                                                |
+| `content`      | string                       | Yes      | The secret value (plain) or regex pattern (regex)             |
+| `mode`         | `"obfuscate"` or `"replace"` | No       | Default: `"obfuscate"`                                        |
+| `replacement`  | string                       | No       | Custom replacement (replace mode only)                        |
+| `flags`        | string                       | No       | Regex flags (regex type only)                                 |
+| `friendlyName` | string                       | No       | Sanitized model-visible label for obfuscate-mode placeholders |
 
 ### Examples
 
@@ -66,6 +67,29 @@ Each entry in the array has these fields:
   mode: replace
   replacement: "********"
 ```
+
+#### Friendly names
+
+`friendlyName` adds semantic context to reversible obfuscation placeholders without exposing the secret value:
+
+```yaml
+- type: plain
+  content: github_pat_abc123def456
+  friendlyName: GitHub Token
+```
+
+This produces placeholders shaped like `#GITHUBTOKEN_AB12:L#`. The friendly name is sanitized to uppercase letters and digits, capped at 32 characters, and omitted if it sanitizes to an empty value. Invalid optional `friendlyName` metadata does not disable the secret entry; the secret still obfuscates with an unlabeled placeholder.
+
+The hash base is an HMAC of the secret under a private per-install key (stored at `~/.omp/agent/secret-placeholder.key`, never sent to a model), so a transcript reader cannot dictionary the placeholder back to the secret. The base is keyed on the exact secret value, so two secrets that differ only by case get independent bases and a provider that sees one placeholder cannot synthesize another secret's token by swapping the hint. A case hint suffix labels the casing of the redacted value for the model:
+
+| Hint | Meaning                                      |
+| ---- | -------------------------------------------- |
+| `:U` | all cased ASCII letters are uppercase         |
+| `:L` | all cased ASCII letters are lowercase         |
+| `:C` | first cased ASCII letter uppercase, rest lower |
+| `:M` | mixed ASCII casing                            |
+
+`friendlyName` on regex entries labels the configured regex entry, not the matched value. Keep regex labels broad enough to be true for every match.
 
 #### Regex secrets
 

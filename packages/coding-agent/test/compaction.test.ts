@@ -1239,7 +1239,9 @@ describe("buildSessionContext", () => {
 		const entries: SessionEntry[] = [u1, a1, compact1, u2, compact2, u3];
 
 		const transcript = buildSessionContext(entries, undefined, undefined, { transcript: true });
-		// Nothing erased: every message survives, compactions sit where they fired.
+		// Nothing dropped positionally: every message survives, compactions sit
+		// where they fired. Superseded compaction summaries are elided in the
+		// forward transcript; only the active (latest) compaction keeps its text.
 		expect(transcript.messages.map(m => m.role)).toEqual([
 			"user",
 			"assistant",
@@ -1250,7 +1252,8 @@ describe("buildSessionContext", () => {
 		]);
 		const first = transcript.messages[2] as { summary: string };
 		const second = transcript.messages[4] as { summary: string; images?: unknown };
-		expect(first.summary).toContain("First summary");
+		expect(first.summary).toContain("Superseded compaction summary elided");
+		expect(first.summary).not.toContain("First summary");
 		expect(second.summary).toContain("Second summary");
 		// Snapcompact frames ride along in the transcript too.
 		expect(second.images).toEqual([{ type: "image", data: "ZmFrZQ==", mimeType: "image/png" }]);

@@ -5,10 +5,10 @@ import { gunzipSync, gzipSync } from "node:zlib";
 import { getAgentDir, getBlobsDir, getHistoryDbPath, getModelDbPath, getSessionsDir } from "@oh-my-pi/pi-utils";
 import { Settings } from "../config/settings";
 import { getDefault } from "../config/settings-schema";
+import { BLOB_HASH_RE } from "../session/blob-store";
 import { listSessionsReadOnly, type SessionInfo, type SessionStatus } from "../session/session-listing";
 import { FileSessionStorage } from "../session/session-storage";
 
-const HASH_RE = /^[a-f0-9]{64}$/;
 const BLOB_FILE_RE = /^([a-f0-9]{64})(?:\.[A-Za-z0-9][A-Za-z0-9._-]{0,31})?$/;
 const BLOB_REF_RE = /\bblob:sha256:([a-f0-9]{64})\b/gi;
 const JSONL_GLOB = new Bun.Glob("**/*.jsonl");
@@ -268,7 +268,7 @@ async function collectReferencedBlobHashes(sessionRoots: string[]): Promise<Set<
 			const text = await readTextIfPresent(file);
 			for (const match of text.matchAll(BLOB_REF_RE)) {
 				const hash = match[1]?.toLowerCase();
-				if (hash && HASH_RE.test(hash)) hashes.add(hash);
+				if (hash && BLOB_HASH_RE.test(hash)) hashes.add(hash);
 			}
 		}
 	}

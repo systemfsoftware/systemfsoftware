@@ -16,6 +16,7 @@ import { loadOverallPlanReference } from "../plan-mode/plan-handoff";
 import planModeSubagentPrompt from "../prompts/system/plan-mode-subagent.md" with { type: "text" };
 import subagentUserPromptTemplate from "../prompts/system/subagent-user-prompt.md" with { type: "text" };
 import { MAIN_AGENT_ID } from "../registry/agent-registry";
+import type { TaskEffort } from "../thinking";
 import type { ToolSession } from "../tools";
 import { isIrcEnabled } from "../tools/hub";
 import { buildOutputValidator } from "../tools/output-schema-validator";
@@ -87,6 +88,8 @@ export interface StructuredSubagentRequest {
 	/** Presence, rather than truthiness, makes this the highest-priority schema. */
 	outputSchema?: unknown;
 	schemaMode?: StructuredSubagentSchemaMode;
+	/** Per-spawn thinking effort mapped onto the resolved model's supported range; overrides the agent's default selector. */
+	effort?: TaskEffort;
 	identity?: StructuredSubagentIdentity;
 	index?: number;
 	parentToolCallId?: string;
@@ -300,7 +303,9 @@ export async function resolveEffectiveSubagentPolicy(
 		planMode,
 		isIsolated,
 		mergeMode: request.isolation?.merge ?? request.session.settings.get("task.isolation.merge"),
-		applyChanges: request.isolation?.apply !== false,
+		applyChanges:
+			request.isolation?.apply ??
+			(request.invocationKind === "task" ? request.session.settings.get("task.isolation.apply") : true),
 		enableLsp:
 			!planMode &&
 			(request.enableLsp ?? ((request.session.enableLsp ?? true) && request.session.settings.get("task.enableLsp"))),
@@ -371,6 +376,7 @@ function buildExecutorOptions(
 	const enableMCP = !policy.planMode && (session.enableMCP ?? true);
 	return {
 		cwd: session.cwd,
+		additionalDirectories: session.additionalDirectories,
 		agent: policy.effectiveAgent,
 		task: renderSubagentPrompt(request.assignment),
 		assignment: request.assignment.trim(),
@@ -387,6 +393,7 @@ function buildExecutorOptions(
 		modelOverride: policy.modelOverride,
 		parentActiveModelPattern: policy.parentActiveModelPattern,
 		thinkingLevel: policy.effectiveAgent.thinkingLevel,
+		effort: request.effort,
 		...(policy.schema.source === "none"
 			? {}
 			: {

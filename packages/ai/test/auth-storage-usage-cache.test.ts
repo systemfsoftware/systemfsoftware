@@ -19,7 +19,9 @@ import {
 	type StoredAuthCredential,
 } from "@oh-my-pi/pi-ai/auth-storage";
 import type { UsageLimit, UsageReport } from "@oh-my-pi/pi-ai/usage";
+import { alibabaTokenPlanUsageProvider } from "@oh-my-pi/pi-ai/usage/alibaba-token-plan";
 import * as claudeUsage from "@oh-my-pi/pi-ai/usage/claude";
+import { serializeAlibabaTokenPlanCredential } from "@oh-my-pi/pi-catalog/wire/alibaba-token-plan";
 
 function anthropicReports(reports: UsageReport[] | null): UsageReport[] {
 	return (reports ?? []).filter(r => r.provider === "anthropic");
@@ -229,6 +231,22 @@ describe("AuthStorage usage cache: last-good failure fallback", () => {
 		expect(calls).toBe(1);
 	});
 
+	it("cold-fetches instead of replaying a report stored under the previous Anthropic cache version", async () => {
+		const previousVersionKey = "usage_cache:report:2:anthropic:default:oauth|account:account-1|email:a@example.com";
+		store.cache.set(previousVersionKey, {
+			value: JSON.stringify({ value: makeReport("a@example.com"), expiresAt: Date.now() + 60_000 }),
+			expiresAtSec: Math.floor((Date.now() + 24 * 60 * 60_000) / 1000),
+		});
+		const base = makeReport("a@example.com");
+		const freshReport = { ...base, metadata: { ...base.metadata, source: "fresh-v3-fetch" } };
+		const fetchSpy = vi.spyOn(claudeUsage.claudeUsageProvider, "fetchUsage").mockResolvedValue(freshReport);
+
+		const reports = anthropicReports(await storage.fetchUsageReports());
+
+		expect(fetchSpy).toHaveBeenCalledTimes(1);
+		expect(reports[0]?.metadata?.source).toBe("fresh-v3-fetch");
+	});
+
 	it("caches null on a cold failure for the backoff window, then retries after it expires", async () => {
 		let calls = 0;
 		vi.spyOn(claudeUsage.claudeUsageProvider, "fetchUsage").mockImplementation(async () => {
@@ -309,6 +327,67 @@ describe("AuthStorage usage cache: last-good failure fallback", () => {
 		expect(calls).toBe(3);
 	});
 });
+describe("AuthStorage usage cache: provider failure policy", () => {
+	it("drops stale QwenCloud quota after the optional console session expires", async () => {
+		const store = makeStore([
+			{
+				id: 1,
+				provider: "alibaba-token-plan",
+				credential: {
+					type: "api_key",
+					key: serializeAlibabaTokenPlanCredential("sk-sp-test", "session_id=test"),
+				},
+				disabledCause: null,
+			},
+		]);
+		let usageCalls = 0;
+		const usageFetch = Object.assign(
+			(input: string | URL | Request) => {
+				if (String(input).endsWith("/tool/user/info.json")) {
+					return Promise.resolve(Response.json({ code: "200", data: { secToken: "sec-token" } }));
+				}
+				usageCalls++;
+				return Promise.resolve(
+					usageCalls === 1
+						? Response.json({
+								code: "200",
+								successResponse: true,
+								data: {
+									per5HourPercentage: 0.25,
+									per5HourResetTime: 1_800_000_000_000,
+									per1WeekPercentage: 0.5,
+									per1WeekResetTime: 1_800_100_000_000,
+								},
+							})
+						: Response.json({
+								code: "ConsoleNeedLogin",
+								message: "You need to log in.",
+								successResponse: false,
+							}),
+				);
+			},
+			{ preconnect: fetch.preconnect },
+		);
+		const storage = new AuthStorage(store, {
+			usageFetch,
+			usageProviderResolver: provider =>
+				provider === "alibaba-token-plan" ? alibabaTokenPlanUsageProvider : undefined,
+		});
+		await storage.reload();
+		try {
+			const first = (await storage.fetchUsageReports()) ?? [];
+			expect(first.filter(report => report.provider === "alibaba-token-plan")).toHaveLength(1);
+			expect(usageCalls).toBe(1);
+
+			expireCachePayloads(store);
+			const second = (await storage.fetchUsageReports()) ?? [];
+			expect(second.filter(report => report.provider === "alibaba-token-plan")).toHaveLength(0);
+			expect(usageCalls).toBe(2);
+		} finally {
+			storage.close();
+		}
+	});
+});
 
 describe("AuthStorage usage cache: jitter", () => {
 	it("writes per-credential cache TTLs with ±25% jitter so refreshes decorrelate", async () => {
@@ -366,28 +445,48 @@ describe("AuthStorage usage cache: header ingestion", () => {
 		vi.restoreAllMocks();
 	});
 
-	it("writes the same per-credential cache key that fetchUsageReports reads", async () => {
+	it("does not let repeated cold header ingestion suppress the first full fetch", async () => {
+		const start = Date.now();
+		const now = vi.spyOn(Date, "now").mockReturnValue(start);
+		const baseReport = makeTieredReport("a@example.com");
+		const fullReport: UsageReport = {
+			...baseReport,
+			limits: [
+				...baseReport.limits,
+				{
+					id: "anthropic:extra",
+					label: "Claude Extra Usage",
+					scope: { provider: "anthropic", windowId: "extra" },
+					amount: { used: 12.34, limit: 100, usedFraction: 0.1234, unit: "usd" },
+					status: "ok",
+				},
+			],
+			raw: { extra_usage: { used: 1_234, limit: 10_000 } },
+		};
 		let calls = 0;
 		vi.spyOn(claudeUsage.claudeUsageProvider, "fetchUsage").mockImplementation(async () => {
 			calls += 1;
-			throw new Error("usage endpoint should not be probed after header ingestion");
+			return fullReport;
 		});
 
 		expect(await storage.getApiKey("anthropic", "s")).toBe("oat-1");
 		expect(storage.ingestUsageHeaders("anthropic", usageHeaders("0.02", "0.3"), { sessionId: "s" })).toBe(true);
+		now.mockReturnValue(start + 60_001);
+		expect(storage.ingestUsageHeaders("anthropic", usageHeaders("0.05", "0.6"), { sessionId: "s" })).toBe(true);
 
 		const report = requireAnthropicReport(await storage.fetchUsageReports());
-		expect(calls).toBe(0);
-		expect(report.metadata?.source).toBe("ratelimit-headers");
+		expect(calls).toBe(1);
+		expect(report.metadata?.source).toBeUndefined();
 		expect(report.metadata?.email).toBe("a@example.com");
-		expect(report.metadata?.accountId).toBe("account-1");
-		expect(requireLimit(report, "anthropic:5h").amount.used).toBe(2);
-		expect(requireLimit(report, "anthropic:7d").amount.used).toBe(30);
+		expect(report.metadata?.accountId).toBe("account-a@example.com");
+		expect(requireLimit(report, "anthropic:7d:opus").amount.used).toBe(12);
+		expect(requireLimit(report, "anthropic:extra").amount.used).toBe(12.34);
 	});
 
 	it("merges active credential metadata into existing header cache entries", async () => {
 		const start = Date.now();
 		const now = vi.spyOn(Date, "now").mockReturnValue(start);
+		const fetchSpy = vi.spyOn(claudeUsage.claudeUsageProvider, "fetchUsage").mockResolvedValue(null);
 		expect(await storage.getApiKey("anthropic", "legacy-session")).toBe("oat-1");
 		expect(
 			storage.ingestUsageHeaders("anthropic", usageHeaders("0.02", "0.3"), { sessionId: "legacy-session" }),
@@ -409,6 +508,9 @@ describe("AuthStorage usage cache: header ingestion", () => {
 		).toBe(true);
 
 		const report = requireAnthropicReport(await storage.fetchUsageReports());
+		const cachedReport = requireAnthropicReport(await storage.fetchUsageReports());
+		expect(fetchSpy).toHaveBeenCalledTimes(1);
+		expect(requireLimit(cachedReport, "anthropic:5h").amount.used).toBe(5);
 		expect(report.metadata?.source).toBe("ratelimit-headers");
 		expect(report.metadata?.email).toBe("a@example.com");
 		expect(report.metadata?.accountId).toBe("account-1");
@@ -419,6 +521,106 @@ describe("AuthStorage usage cache: header ingestion", () => {
 		expect(await storage.getApiKey("anthropic", "s")).toBe("oat-1");
 		expect(storage.ingestUsageHeaders("anthropic", usageHeaders("0.02", "0.3"), { sessionId: "s" })).toBe(true);
 		expect(storage.ingestUsageHeaders("anthropic", usageHeaders("0.05", "0.6"), { sessionId: "s" })).toBe(false);
+	});
+
+	it("preserves a failed fetch cooldown across exhausted header ingestion, then retries after expiry", async () => {
+		const start = Date.now();
+		const now = vi.spyOn(Date, "now").mockReturnValue(start);
+		let calls = 0;
+		vi.spyOn(claudeUsage.claudeUsageProvider, "fetchUsage").mockImplementation(async () => {
+			calls += 1;
+			return null;
+		});
+
+		expect(await storage.getApiKey("anthropic", "cooldown-session")).toBe("oat-1");
+		expect(
+			storage.ingestUsageHeaders("anthropic", usageHeaders("0.02", "0.3"), {
+				sessionId: "cooldown-session",
+			}),
+		).toBe(true);
+		expect(await storage.fetchUsageReports()).toHaveLength(1);
+		expect(calls).toBe(1);
+
+		now.mockReturnValue(start + 1_000);
+		expect(
+			storage.ingestUsageHeaders("anthropic", usageHeaders("1", "0.3"), {
+				sessionId: "cooldown-session",
+			}),
+		).toBe(true);
+		expect(await storage.fetchUsageReports()).toHaveLength(1);
+		expect(calls).toBe(1);
+
+		now.mockReturnValue(start + 12_501);
+		expect(await storage.fetchUsageReports()).toHaveLength(1);
+		expect(calls).toBe(2);
+	});
+
+	it("does not let header ingestion slide the full-report refresh deadline", async () => {
+		const start = Date.now();
+		const now = vi.spyOn(Date, "now").mockReturnValue(start);
+		vi.spyOn(Math, "random").mockReturnValue(0.5);
+		const makeFullReport = (extraUsed: number): UsageReport => {
+			const baseReport = makeTieredReport("a@example.com");
+			return {
+				...baseReport,
+				limits: [
+					...baseReport.limits,
+					{
+						id: "anthropic:extra",
+						label: "Claude Extra Usage",
+						scope: { provider: "anthropic", windowId: "extra" },
+						amount: {
+							used: extraUsed,
+							limit: 100,
+							usedFraction: extraUsed / 100,
+							unit: "usd",
+						},
+						status: "ok",
+					},
+				],
+				raw: { extra_usage: { used: extraUsed * 100, limit: 10_000 } },
+			};
+		};
+		const firstFullReport = makeFullReport(12.34);
+		const secondFullReport = makeFullReport(56.78);
+		const fetchSpy = vi
+			.spyOn(claudeUsage.claudeUsageProvider, "fetchUsage")
+			.mockResolvedValueOnce(firstFullReport)
+			.mockResolvedValue(secondFullReport);
+
+		const initialReport = requireAnthropicReport(await storage.fetchUsageReports());
+		expect(fetchSpy).toHaveBeenCalledTimes(1);
+		expect(requireLimit(initialReport, "anthropic:extra").amount.used).toBe(12.34);
+		expect(await storage.getApiKey("anthropic", "sliding-session")).toBe("oat-1");
+
+		now.mockReturnValue(start + 60_000);
+		expect(
+			storage.ingestUsageHeaders("anthropic", usageHeaders("0.05", "0.6"), {
+				sessionId: "sliding-session",
+			}),
+		).toBe(true);
+		now.mockReturnValue(start + 120_000);
+		expect(
+			storage.ingestUsageHeaders("anthropic", usageHeaders("0.06", "0.61"), {
+				sessionId: "sliding-session",
+			}),
+		).toBe(true);
+		now.mockReturnValue(start + 240_000);
+		expect(
+			storage.ingestUsageHeaders("anthropic", usageHeaders("0.07", "0.62"), {
+				sessionId: "sliding-session",
+			}),
+		).toBe(true);
+
+		now.mockReturnValue(start + 299_999);
+		const beforeDeadline = requireAnthropicReport(await storage.fetchUsageReports());
+		expect(fetchSpy).toHaveBeenCalledTimes(1);
+		expect(requireLimit(beforeDeadline, "anthropic:extra").amount.used).toBe(12.34);
+
+		now.mockReturnValue(start + 376_000);
+		const refreshed = requireAnthropicReport(await storage.fetchUsageReports());
+		expect(fetchSpy).toHaveBeenCalledTimes(2);
+		expect(requireLimit(refreshed, "anthropic:extra").amount.used).toBe(56.78);
 	});
 
 	it("merges header umbrella windows onto the last real report and preserves tier limits", async () => {
@@ -445,6 +647,7 @@ describe("AuthStorage usage cache: header ingestion", () => {
 		expect(mergedReport.metadata?.email).toBe("a@example.com");
 		expect(mergedReport.metadata?.accountId).toBe("account-a@example.com");
 		expect(mergedReport.metadata?.headersUpdatedAt).toBeGreaterThanOrEqual(beforeIngest);
+		expect(mergedReport.metadata?.source).toBeUndefined();
 		expect(requireLimit(mergedReport, "anthropic:5h").amount.used).toBe(5);
 		expect(requireLimit(mergedReport, "anthropic:7d").amount.used).toBe(90);
 		expect(requireLimit(mergedReport, "anthropic:7d:opus").amount.used).toBe(12);
@@ -596,7 +799,7 @@ describe("AuthStorage usage cache: terminal refresh failure", () => {
 		if (row.credential.type !== "oauth") throw new Error("expected OAuth test credential");
 		row.credential.expires = Date.now() - 1000;
 		const store = makeStore([row]);
-		const cacheKey = "usage_cache:report:2:anthropic:default:oauth|account:account-3|email:expired@example.com";
+		const cacheKey = "usage_cache:report:3:anthropic:default:oauth|account:account-3|email:expired@example.com";
 		store.cache.set(cacheKey, {
 			value: JSON.stringify({ value: makeReport("expired@example.com"), expiresAt: 1 }),
 			expiresAtSec: Math.floor((Date.now() + 24 * 60 * 60_000) / 1000),
@@ -654,7 +857,7 @@ describe("AuthStorage usage cache: terminal refresh failure", () => {
 		};
 
 		const lastGood = makeReport("b@example.com");
-		const cacheKey = "usage_cache:report:2:anthropic:default:oauth|account:account-2|email:b@example.com";
+		const cacheKey = "usage_cache:report:3:anthropic:default:oauth|account:account-2|email:b@example.com";
 		cache.set(cacheKey, {
 			value: JSON.stringify({ value: lastGood, expiresAt: 1 }),
 			expiresAtSec: Math.floor((Date.now() + 24 * 60 * 60_000) / 1000),

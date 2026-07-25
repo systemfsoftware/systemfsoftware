@@ -142,9 +142,12 @@ export function startMemoryStartupTask(options: {
 		return;
 	}
 
-	void runMemoryStartup({ session, settings, modelRegistry, agentDir, config: cfg }).catch(error => {
-		logger.warn("Memory startup failed", { error: String(error) });
-	});
+	const signal = session.beginLocalMemoryStartup?.() ?? new AbortController().signal;
+	void runMemoryStartup({ session, settings, modelRegistry, agentDir, config: cfg, signal })
+		.catch(error => {
+			if (!signal.aborted) logger.warn("Memory startup failed", { error: String(error) });
+		})
+		.finally(() => session.endLocalMemoryStartup?.(signal));
 }
 
 interface MemoryInstructionSession {
@@ -315,26 +318,32 @@ export function enqueueMemoryConsolidation(agentDir: string, cwd: string, source
 	}
 }
 
-async function runMemoryStartup(options: {
+interface MemoryStartupOptions {
 	session: AgentSession;
 	settings: Settings;
 	modelRegistry: ModelRegistry;
 	agentDir: string;
 	config: MemoryRuntimeConfig;
-}): Promise<void> {
+	signal: AbortSignal;
+}
+
+function isMemoryStartupActive(options: MemoryStartupOptions): boolean {
+	return !options.signal.aborted && !options.session.isDisposed && options.settings.get("memory.backend") === "local";
+}
+
+async function runMemoryStartup(options: MemoryStartupOptions): Promise<void> {
+	if (!isMemoryStartupActive(options)) return;
 	await runPhase1(options);
+	if (!isMemoryStartupActive(options)) return;
 	await runPhase2(options);
+	if (!isMemoryStartupActive(options)) return;
 	await refreshMemoryToolDeveloperInstructionsCacheAfterStartup(options.session, options.agentDir, options.settings);
+	if (!isMemoryStartupActive(options)) return;
 	await options.session.refreshBaseSystemPrompt?.();
 }
 
-async function runPhase1(options: {
-	session: AgentSession;
-	settings: Settings;
-	modelRegistry: ModelRegistry;
-	agentDir: string;
-	config: MemoryRuntimeConfig;
-}): Promise<void> {
+async function runPhase1(options: MemoryStartupOptions): Promise<void> {
+	if (!isMemoryStartupActive(options)) return;
 	const { session, modelRegistry, agentDir, config } = options;
 	const db = openMemoryDb(getAgentDbPath(agentDir));
 	const nowSec = unixNow();
@@ -344,6 +353,7 @@ async function runPhase1(options: {
 
 	try {
 		const threads = await collectThreads(session, currentThreadId);
+		if (!isMemoryStartupActive(options)) return;
 		upsertThreads(db, threads);
 
 		const phase1Model = await resolveMemoryModel({
@@ -364,6 +374,7 @@ async function runPhase1(options: {
 			return;
 		}
 
+		if (!isMemoryStartupActive(options)) return;
 		const claims = claimStage1Jobs(db, {
 			nowSec,
 			threadScanLimit: config.threadScanLimit,
@@ -387,6 +398,7 @@ async function runPhase1(options: {
 		};
 
 		await runWithConcurrency(claims, config.stage1Concurrency, async claim => {
+			if (!isMemoryStartupActive(options)) return;
 			const result = await runStage1Job({
 				claim,
 				model: phase1Model,
@@ -395,6 +407,7 @@ async function runPhase1(options: {
 				config,
 				metadata: session.agent?.metadataForProvider(phase1Model.provider),
 			});
+			if (!isMemoryStartupActive(options)) return;
 
 			if (result.kind === "failed") {
 				logger.error("Memory phase1 stage1 job failed", {
@@ -460,13 +473,8 @@ async function runPhase1(options: {
 	}
 }
 
-async function runPhase2(options: {
-	session: AgentSession;
-	settings: Settings;
-	modelRegistry: ModelRegistry;
-	agentDir: string;
-	config: MemoryRuntimeConfig;
-}): Promise<void> {
+async function runPhase2(options: MemoryStartupOptions): Promise<void> {
+	if (!isMemoryStartupActive(options)) return;
 	const { session, modelRegistry, agentDir, config } = options;
 	const cwd = session.sessionManager.getCwd();
 	const db = openMemoryDb(getAgentDbPath(agentDir));
@@ -488,8 +496,10 @@ async function runPhase2(options: {
 		const newWatermark = computeCompletionWatermark(claim.inputWatermark, outputs);
 
 		await syncPhase2Artifacts(memoryRoot, outputs);
+		if (!isMemoryStartupActive(options)) return;
 		if (outputs.length === 0) {
 			await cleanupConsolidatedArtifacts(memoryRoot);
+			if (!isMemoryStartupActive(options)) return;
 			const marked = markGlobalPhase2Succeeded(db, {
 				ownershipToken: claim.ownershipToken,
 				newWatermark,
@@ -502,6 +512,7 @@ async function runPhase2(options: {
 			return;
 		}
 
+		if (!isMemoryStartupActive(options)) return;
 		const phase2Model = await resolveMemoryModel({
 			modelRegistry,
 			session,
@@ -529,8 +540,13 @@ async function runPhase2(options: {
 			return;
 		}
 
+		if (!isMemoryStartupActive(options)) return;
 		let heartbeatLostOwnership = false;
 		const heartbeat = setInterval(() => {
+			if (!isMemoryStartupActive(options)) {
+				clearInterval(heartbeat);
+				return;
+			}
 			const ok = heartbeatGlobalJob(db, {
 				ownershipToken: claim.ownershipToken,
 				leaseSeconds: config.phase2LeaseSeconds,
@@ -544,13 +560,16 @@ async function runPhase2(options: {
 		}, config.phase2HeartbeatSeconds * 1000);
 
 		try {
+			if (!isMemoryStartupActive(options)) return;
 			const consolidated = await runConsolidationModel({
 				memoryRoot,
 				model: phase2Model,
 				apiKey: modelRegistry.resolver(phase2Model, session.sessionId),
 				metadata: session.agent?.metadataForProvider(phase2Model.provider),
 			});
+			if (!isMemoryStartupActive(options)) return;
 			await applyConsolidation(memoryRoot, consolidated);
+			if (!isMemoryStartupActive(options)) return;
 			if (heartbeatLostOwnership) {
 				throw new Error("Phase2 lease ownership lost before completion");
 			}
@@ -564,6 +583,7 @@ async function runPhase2(options: {
 				throw new Error("Phase2 could not mark success: ownership lost");
 			}
 		} catch (error) {
+			if (!isMemoryStartupActive(options)) return;
 			markPhase2FailureWithFallback(db, {
 				claim,
 				retryDelaySeconds: config.phase2RetryDelaySeconds,
@@ -1227,7 +1247,7 @@ async function resolveMemoryModel(options: {
 
 function loadMemoryConfig(settings: Settings): MemoryRuntimeConfig {
 	return {
-		enabled: settings.get("memory.backend") === "local" || settings.get("memories.enabled") === true,
+		enabled: settings.get("memory.backend") === "local",
 		maxRolloutsPerStartup: settings.get("memories.maxRolloutsPerStartup") ?? DEFAULTS.maxRolloutsPerStartup,
 		maxRolloutAgeDays: settings.get("memories.maxRolloutAgeDays") ?? DEFAULTS.maxRolloutAgeDays,
 		minRolloutIdleHours: settings.get("memories.minRolloutIdleHours") ?? DEFAULTS.minRolloutIdleHours,

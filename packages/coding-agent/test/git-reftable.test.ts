@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test, vi } from "bun:test";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -101,6 +101,26 @@ describe.skipIf(!supportsReftable)("git reftable support", () => {
 		const nonexistentExists = await git.ref.exists(sharedRepoDir, "refs/heads/nonexistent");
 		expect(mainExists).toBe(true);
 		expect(nonexistentExists).toBe(false);
+	});
+
+	// #6169: the sync reftable ref readers spawn `git symbolic-ref`/`rev-parse`.
+	// When git is absent from PATH the spawn throws ENOENT synchronously; the
+	// readers must degrade (HEAD resolves as detached with no commit) instead of
+	// letting the raw ENOENT escape during a TUI render.
+	test("head.resolveSync degrades when the git binary is missing", () => {
+		const err = new Error('Executable not found in $PATH: "git"');
+		(err as NodeJS.ErrnoException).code = "ENOENT";
+		vi.spyOn(Bun, "spawnSync").mockImplementation(() => {
+			throw err;
+		});
+		try {
+			const headStateSync = git.head.resolveSync(sharedRepoDir);
+			expect(headStateSync).not.toBeNull();
+			expect(headStateSync?.kind).toBe("detached");
+			expect(headStateSync?.commit).toBeNull();
+		} finally {
+			vi.restoreAllMocks();
+		}
 	});
 
 	test("handles git config trailing comments correctly", async () => {

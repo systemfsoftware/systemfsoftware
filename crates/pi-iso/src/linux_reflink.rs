@@ -80,7 +80,9 @@ mod imp {
 
 	use crate::{IsoError, IsoResult};
 
-	const FICLONE: libc::c_ulong = 0x4004_9409;
+	// `libc::Ioctl` is `c_int` on musl and `c_ulong` on glibc; the constant fits
+	// both.
+	const FICLONE: libc::Ioctl = 0x4004_9409;
 
 	pub fn start(lower: &Path, merged: &Path) -> IsoResult<()> {
 		let lower = canonical_existing_dir(lower)?;

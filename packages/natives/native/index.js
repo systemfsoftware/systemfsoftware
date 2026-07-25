@@ -16,6 +16,10 @@ import { loadNative } from "./loader-state.js";
 const nativeBindings = loadNative();
 // --- generated native exports (do not edit) ---
 // classes
+export const AudioCapture = nativeBindings.AudioCapture;
+export const AudioPlayback = nativeBindings.AudioPlayback;
+export const DesktopSession = nativeBindings.DesktopSession;
+export const LiveWebRtcPeer = nativeBindings.LiveWebRtcPeer;
 export const MacAppearanceObserver = nativeBindings.MacAppearanceObserver;
 export const MacOSPowerAssertion = nativeBindings.MacOSPowerAssertion;
 export const Process = nativeBindings.Process;
@@ -24,14 +28,19 @@ export const Shell = nativeBindings.Shell;
 
 // functions
 export const __ompInstallTokioRuntime = nativeBindings.__ompInstallTokioRuntime;
-export const __piNativesV17_0_5 = nativeBindings.__piNativesV17_0_5;
+export const __piNativesV17_1_3 = nativeBindings.__piNativesV17_1_3;
 export const astEdit = nativeBindings.astEdit;
 export const astGrep = nativeBindings.astGrep;
 export const astMatch = nativeBindings.astMatch;
 export const blockRangeAt = nativeBindings.blockRangeAt;
 export const copyToClipboard = nativeBindings.copyToClipboard;
+export const cosineSimilarityPairs = nativeBindings.cosineSimilarityPairs;
 export const countTokens = nativeBindings.countTokens;
 export const detectMacOSAppearance = nativeBindings.detectMacOSAppearance;
+export const deviceCheckGenerateToken = nativeBindings.deviceCheckGenerateToken;
+export const diffLineRuns = nativeBindings.diffLineRuns;
+export const diffLines = nativeBindings.diffLines;
+export const diffWords = nativeBindings.diffWords;
 export const enclosingBlockBoundaries = nativeBindings.enclosingBlockBoundaries;
 export const encodeSixel = nativeBindings.encodeSixel;
 export const executeShell = nativeBindings.executeShell;
@@ -56,6 +65,7 @@ export const listWorkspace = nativeBindings.listWorkspace;
 export const matchesKey = nativeBindings.matchesKey;
 export const matchesKittySequence = nativeBindings.matchesKittySequence;
 export const matchesLegacySequence = nativeBindings.matchesLegacySequence;
+export const mmrRerankIndices = nativeBindings.mmrRerankIndices;
 export const parseKey = nativeBindings.parseKey;
 export const parseKittySequence = nativeBindings.parseKittySequence;
 export const readImageFromClipboard = nativeBindings.readImageFromClipboard;
@@ -64,9 +74,11 @@ export const search = nativeBindings.search;
 export const setHangulCompatJamoWidthOverride = nativeBindings.setHangulCompatJamoWidthOverride;
 export const sliceWithWidth = nativeBindings.sliceWithWidth;
 export const snapcompactSupportedChars = nativeBindings.snapcompactSupportedChars;
+export const structuredPatchHunks = nativeBindings.structuredPatchHunks;
 export const summarizeCode = nativeBindings.summarizeCode;
 export const supportsLanguage = nativeBindings.supportsLanguage;
 export const truncateToWidth = nativeBindings.truncateToWidth;
+export const vectorIndexTopK = nativeBindings.vectorIndexTopK;
 export const visibleWidth = nativeBindings.visibleWidth;
 export const wrapTextWithAnsi = nativeBindings.wrapTextWithAnsi;
 

@@ -90,3 +90,43 @@ export async function sessionFilesFromDisk(): Promise<Map<string, string>> {
 	for (const dir of artifactsDirsFromRegistry()) await scan(dir, 0);
 	return found;
 }
+
+/**
+ * Availability half of the `history://` resolution semantics: true when a
+ * transcript for `agentId` can be served from a registered ref's live session
+ * or retained session file, or from an on-disk `.jsonl` under a known
+ * artifacts dir. Hint surfaces use this so they only advertise
+ * `history://<agentId>` links that `HistoryProtocolHandler` can actually
+ * resolve. A retained sessionFile path is verified on disk before it counts,
+ * and probing never throws: a stale path or unreadable artifacts subtree
+ * reads as unavailable instead of disturbing the caller's delivery path.
+ */
+export async function hasResolvableTranscript(agentId: string): Promise<boolean> {
+	try {
+		const registry = AgentRegistry.global();
+		const lower = agentId.toLowerCase();
+		let ref = registry.get(agentId);
+		if (ref?.kind === "advisor") ref = undefined;
+		ref ??= registry.list().find(candidate => candidate.kind !== "advisor" && candidate.id.toLowerCase() === lower);
+		if (ref?.session) return true;
+		if (ref?.sessionFile && (await isReadableFile(ref.sessionFile))) return true;
+		const files = await sessionFilesFromDisk();
+		for (const id of files.keys()) {
+			if (id.toLowerCase() === lower) return true;
+		}
+	} catch {
+		// Availability probing is advisory; any filesystem failure means the
+		// transcript cannot be promised, never that delivery should fail.
+	}
+	return false;
+}
+
+/** True when `file` exists and is a regular file; never throws. */
+async function isReadableFile(file: string): Promise<boolean> {
+	try {
+		const stat = await fs.stat(file);
+		return stat.isFile();
+	} catch {
+		return false;
+	}
+}

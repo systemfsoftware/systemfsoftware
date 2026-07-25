@@ -33,6 +33,11 @@ declare module "*.sh" {
 	export default content;
 }
 
+declare module "*.applescript" {
+	const content: string;
+	export default content;
+}
+
 declare module "*.bdf" {
 	const content: string;
 	export default content;

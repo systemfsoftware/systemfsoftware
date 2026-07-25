@@ -135,4 +135,18 @@ describe("aierr flag helpers", () => {
 		expect(AIError.retriable(AIError.create(AIError.Flag.Transient))).toBe(true);
 		expect(AIError.retriable(AIError.create(AIError.Flag.UsageLimit))).toBe(true);
 	});
+
+	it("recognizes explicit transient stream parse diagnostics without broad text false positives", () => {
+		const message = "JSON Parse error: Unterminated string";
+		expect(AIError.isTransientStreamParseError(new Error(message))).toBe(true);
+		expect(AIError.isTransientStreamParseError(new Error("response truncated"))).toBe(true);
+		expect(AIError.isTransientStreamParseError(message)).toBe(true);
+		expect(AIError.isTransientStreamParseError("Unexpected end of JSON input")).toBe(true);
+		expect(AIError.isTransientStreamParseError("JSON.parse: unexpected end of data at line 1 column 8")).toBe(true);
+		expect(AIError.isTransientStreamParseError("Unexpected EOF")).toBe(true);
+		expect(AIError.isTransientStreamParseError("EOF while parsing")).toBe(true);
+		expect(AIError.isTransientStreamParseError("truncated")).toBe(false);
+		expect(AIError.isTransientStreamParseError("end of file")).toBe(false);
+		expect(AIError.isTransientStreamParseError("Unexpected token in JSON")).toBe(false);
+	});
 });

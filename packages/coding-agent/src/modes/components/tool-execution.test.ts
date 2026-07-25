@@ -1,7 +1,9 @@
-import { beforeAll, describe, expect, it } from "bun:test";
+import { afterEach, beforeAll, describe, expect, it } from "bun:test";
 import type { AgentTool } from "@oh-my-pi/pi-agent-core";
 import { type Component, Text } from "@oh-my-pi/pi-tui";
-import { Settings } from "../../config/settings";
+import { Settings, settings } from "../../config/settings";
+import { renderMCPResult } from "../../mcp/render";
+import type { MCPToolDetails } from "../../mcp/tool-bridge";
 import { getThemeByName, setThemeInstance, theme } from "../theme/theme";
 import { ToolExecutionComponent, type ToolExecutionUi } from "./tool-execution";
 
@@ -24,6 +26,10 @@ describe("ToolExecutionComponent custom renderer failures", () => {
 		const loaded = await getThemeByName("dark");
 		if (!loaded) throw new Error("theme unavailable");
 		setThemeInstance(loaded);
+	});
+
+	afterEach(() => {
+		settings.set("mcp.renderMarkdownResults", true);
 	});
 
 	it("falls back to the custom tool label when a renderCall child component throws during render", () => {
@@ -97,5 +103,60 @@ describe("ToolExecutionComponent custom renderer failures", () => {
 			text = visibleText(component.render(80));
 		}).not.toThrow();
 		expect(text).toContain(rawResultText);
+	});
+});
+
+describe("MCP result Markdown rendering", () => {
+	const details: MCPToolDetails = {
+		serverName: "context-mode",
+		mcpToolName: "ctx_search",
+	};
+
+	beforeAll(async () => {
+		await Settings.init({ inMemory: true });
+		const loaded = await getThemeByName("dark");
+		if (!loaded) throw new Error("theme unavailable");
+		setThemeInstance(loaded);
+	});
+
+	afterEach(() => {
+		settings.set("mcp.renderMarkdownResults", true);
+	});
+
+	it("renders inline Markdown by default", () => {
+		const component = renderMCPResult(
+			{ content: [{ type: "text", text: "**bold result** and `code`" }], details },
+			{ expanded: true, isPartial: false },
+			theme,
+		);
+		const rendered = visibleText(component.render(80));
+
+		expect(rendered).toContain("bold result and code");
+		expect(rendered).not.toContain("**bold result**");
+		expect(rendered).not.toContain("`code`");
+	});
+
+	it("keeps Markdown syntax literal when the setting is disabled", () => {
+		settings.set("mcp.renderMarkdownResults", false);
+		const component = renderMCPResult(
+			{ content: [{ type: "text", text: "**bold result**" }], details },
+			{ expanded: true, isPartial: false },
+			theme,
+		);
+
+		expect(visibleText(component.render(80))).toContain("**bold result**");
+	});
+
+	it("preserves structured JSON rendering when Markdown is enabled", () => {
+		settings.set("mcp.renderMarkdownResults", true);
+		const component = renderMCPResult(
+			{ content: [{ type: "text", text: '{"status":"**ok**"}' }], details },
+			{ expanded: true, isPartial: false },
+			theme,
+		);
+		const rendered = visibleText(component.render(80));
+
+		expect(rendered).toContain("status");
+		expect(rendered).toContain("**ok**");
 	});
 });

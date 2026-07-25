@@ -540,7 +540,10 @@ describe("mcp oauth flow", () => {
 		// Here `clientId` is unset, so `MCPOAuthFlow.#tryRegisterClient` will
 		// register the actual fallback URI with the provider and the
 		// authorization request will use that fresh client_id.
-		const blocker = Bun.serve({ port: 0, fetch: () => new Response("blocker") });
+		// Occupy 127.0.0.1 explicitly — the interface callback flows bind for
+		// `localhost` — because macOS lets a specific-address bind coexist with a
+		// wildcard one, which would let the flow bind the "blocked" port.
+		const blocker = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response("blocker") });
 		const blockerPort = blocker.port;
 		if (typeof blockerPort !== "number") {
 			blocker.stop(true);

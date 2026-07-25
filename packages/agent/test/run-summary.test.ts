@@ -558,7 +558,10 @@ describe("skipped tools without spans", () => {
 			description: "slow",
 			parameters: z.object({ value: z.string().optional() }),
 			intent: "omit",
-			// concurrency: shared (default) — both run in parallel; we abort via steering.
+			// concurrency: shared (default) — both run in parallel. Interruptible:
+			// queued steering hard-aborts only interruptible waits; non-interruptible
+			// tools now run to completion and the steer injects at the boundary.
+			interruptible: true,
 			execute: async (_id, _args, signal) => {
 				await new Promise<void>((resolve, reject) => {
 					if (!signal) {

@@ -3,6 +3,7 @@ import * as path from "node:path";
 import { $which, isEnoent } from "@oh-my-pi/pi-utils";
 import { isSettingsInitialized, settings } from "../config/settings";
 import { getDefault } from "../config/settings-schema";
+import { isMarkdownPath } from "../utils/lang-from-path";
 import { parseInternalUrl } from "./parse";
 import { validateRelativePath } from "./skill-protocol";
 import type { InternalResource, InternalUrl, ProtocolHandler, ResolveContext, WriteContext } from "./types";
@@ -114,8 +115,8 @@ function toVaultValidationError(error: unknown): Error {
 }
 
 function getContentType(filePath: string): ContentType {
+	if (isMarkdownPath(filePath)) return "text/markdown";
 	const ext = path.extname(filePath).toLowerCase();
-	if (ext === ".md") return "text/markdown";
 	if (ext === ".json") return "application/json";
 	return "text/plain";
 }

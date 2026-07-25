@@ -7,6 +7,7 @@ import type {
 	FetchImpl,
 	Model,
 	ModelSpec,
+	ProviderResponseMetadata,
 } from "@oh-my-pi/pi-ai/types";
 import { buildModel } from "@oh-my-pi/pi-catalog/build";
 
@@ -184,9 +185,16 @@ describe("streamPiNative request shape", () => {
 		// it twice would let a logged request leak the gateway bearer. The other
 		// fields are non-serializable function/runtime handles.
 		const captured: { init?: RequestInit } = {};
+		let responseMetadata: ProviderResponseMetadata | undefined;
 		const fetchImpl: FetchImpl = (async (_input, init) => {
 			captured.init = init;
-			return fakeResponse([{ type: "done", reason: "stop", message: baseAssistant() }]);
+			return fakeResponse([{ type: "done", reason: "stop", message: baseAssistant() }], {
+				headers: {
+					"Content-Type": "text/event-stream",
+					"X-Request-Id": "gateway-request-id",
+					"CF-AIG-Cache-Status": "HIT",
+				},
+			});
 		}) as FetchImpl;
 
 		const controller = new AbortController();
@@ -194,8 +202,12 @@ describe("streamPiNative request shape", () => {
 			apiKey: "gw-bearer",
 			fetch: fetchImpl,
 			signal: controller.signal,
-			onPayload: () => undefined,
-			onResponse: () => undefined,
+			onPayload: () => {
+				throw new Error("the gateway payload is unavailable to the client");
+			},
+			onResponse: response => {
+				responseMetadata = response;
+			},
 			onSseEvent: () => undefined,
 			providerSessionState: new Map(),
 			maxTokens: 1024,
@@ -212,6 +224,14 @@ describe("streamPiNative request shape", () => {
 		expect("providerSessionState" in body.options).toBe(false);
 		// And the legitimate options survive
 		expect(body.options.maxTokens).toBe(1024);
+		expect(responseMetadata).toMatchObject({
+			status: 200,
+			requestId: "gateway-request-id",
+			headers: {
+				"x-request-id": "gateway-request-id",
+				"cf-aig-cache-status": "HIT",
+			},
+		});
 	});
 
 	it("normalizes trailing slashes on `baseUrl` so the endpoint never double-slashes", async () => {

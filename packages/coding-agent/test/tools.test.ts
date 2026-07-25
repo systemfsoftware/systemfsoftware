@@ -1468,6 +1468,59 @@ function b() {
 			await asyncJobManager.dispose();
 		});
 
+		it("backgrounds a running command when the steering signal fires mid-wait", async () => {
+			const asyncJobManager = new AsyncJobManager({});
+			const autoBackgroundBashTool = wrapToolWithMetaNotice(
+				new BashTool(
+					createTestToolSession(
+						testDir,
+						Settings.isolated({
+							"bash.autoBackground.enabled": true,
+							// High threshold: only the steering signal can background this.
+							"bash.autoBackground.thresholdMs": 60_000,
+						}),
+						{
+							getSessionId: () => "test-session",
+							asyncJobManager,
+						},
+					),
+				),
+			);
+
+			const steering = new AbortController();
+			steering.abort();
+			const result = await autoBackgroundBashTool.execute(
+				"test-call-steer-background",
+				{ command: "printf 'start\\n'; sleep 0.05; printf 'done\\n'" },
+				undefined,
+				undefined,
+				{
+					...createTestToolContext([]),
+					toolCall: {
+						batchId: "batch-1",
+						index: 0,
+						total: 1,
+						toolCalls: [{ id: "test-call-steer-background", name: "bash" }],
+						steeringSignal: steering.signal,
+					},
+				},
+			);
+
+			// The steer backgrounds the command instead of killing it: the call
+			// returns a running job and the command finishes on its own.
+			expect(result.details?.async?.state).toBe("running");
+			expect(getTextOutput(result)).toContain("Backgrounded early to handle an incoming message");
+			const jobId = result.details?.async?.jobId;
+			if (!jobId) {
+				throw new Error("expected a steer-backgrounded job id");
+			}
+			const job = asyncJobManager.getJob(jobId);
+			expect(job?.status).toBe("running");
+			await job?.promise;
+			expect(asyncJobManager.getJob(jobId)?.status).toBe("completed");
+			await asyncJobManager.dispose();
+		});
+
 		it("should background instead of timing out when auto-background wait exceeds the effective timeout", async () => {
 			const deliveries: Array<{ jobId: string; text: string }> = [];
 			const asyncJobManager = new AsyncJobManager({

@@ -21,6 +21,7 @@ import {
 	type KernelDisplayOutput,
 	type KernelExecuteOptions,
 	type KernelExecuteResult,
+	type KernelShutdownResult,
 	PythonKernel,
 } from "./kernel";
 import { resolveExplicitPythonRuntime } from "./runtime";
@@ -136,11 +137,19 @@ export interface PythonResult {
 // the same tuple; the kernel stays alive until the last owner detaches.
 // ---------------------------------------------------------------------------
 
+interface SessionKernelReplacement {
+	generation: number;
+	deadlineMs?: number;
+	promise: Promise<PythonKernel>;
+}
+
 interface PythonSession {
 	sessionKey: string;
 	sessionId: string;
 	cwd: string;
 	kernel: PythonKernel;
+	generation: number;
+	replacement?: SessionKernelReplacement;
 	ownerIds: Set<string>;
 	hasFallbackOwner: boolean;
 }
@@ -254,6 +263,7 @@ async function acquireSession(
 			sessionId,
 			cwd,
 			kernel,
+			generation: 0,
 			ownerIds: new Set(),
 			hasFallbackOwner: false,
 		};
@@ -272,31 +282,99 @@ async function acquireSession(
 
 async function replaceSessionKernel(
 	session: PythonSession,
+	kernel: PythonKernel,
+	generation: number,
 	cwd: string,
 	options: PythonExecutorOptions,
-): Promise<void> {
-	const old = session.kernel;
-	const remaining = getRemainingTimeoutMs(options.deadlineMs);
-	await old
-		.shutdown(remaining !== undefined ? { timeoutMs: Math.max(0, remaining) } : undefined)
-		.catch(() => undefined);
-	if (sessions.get(session.sessionKey) !== session) {
+): Promise<PythonKernel> {
+	const inFlight = session.replacement;
+	if (inFlight?.generation === generation) {
+		if (
+			inFlight.deadlineMs !== undefined &&
+			(options.deadlineMs === undefined || options.deadlineMs > inFlight.deadlineMs)
+		) {
+			inFlight.deadlineMs = options.deadlineMs;
+		}
+		return await waitForPromiseWithCancellation(inFlight.promise, options, PythonExecutionCancelledError);
+	}
+	if (sessions.get(session.sessionKey) !== session || session.generation !== generation || session.kernel !== kernel) {
 		throw new PythonExecutionCancelledError(false);
 	}
-	requireRemainingTimeoutMs(options.deadlineMs);
-	const next = await startKernel(cwd, options);
-	if (sessions.get(session.sessionKey) !== session) {
-		await next.shutdown().catch(() => undefined);
-		throw new PythonExecutionCancelledError(false);
+
+	const deferred = Promise.withResolvers<PythonKernel>();
+	const replacement: SessionKernelReplacement = {
+		generation,
+		deadlineMs: options.deadlineMs,
+		promise: deferred.promise,
+	};
+	session.replacement = replacement;
+	void (async () => {
+		try {
+			const remaining = getRemainingTimeoutMs(options.deadlineMs);
+			await kernel
+				.shutdown(remaining !== undefined ? { timeoutMs: Math.max(0, remaining) } : undefined)
+				.catch(() => undefined);
+			if (replacement.deadlineMs !== undefined && replacement.deadlineMs <= Date.now()) {
+				throw new PythonExecutionCancelledError(true);
+			}
+			if (
+				sessions.get(session.sessionKey) !== session ||
+				session.generation !== generation ||
+				session.kernel !== kernel
+			) {
+				throw new PythonExecutionCancelledError(false);
+			}
+			const next = await startKernel(cwd, {
+				...options,
+				signal: undefined,
+				deadlineMs: undefined,
+			});
+			if (
+				sessions.get(session.sessionKey) !== session ||
+				session.generation !== generation ||
+				session.kernel !== kernel
+			) {
+				await next.shutdown().catch(() => undefined);
+				throw new PythonExecutionCancelledError(false);
+			}
+			session.kernel = next;
+			session.generation += 1;
+			deferred.resolve(next);
+		} catch (err) {
+			deferred.reject(err);
+		} finally {
+			if (session.replacement === replacement) session.replacement = undefined;
+		}
+	})();
+	return await waitForPromiseWithCancellation(deferred.promise, options, PythonExecutionCancelledError);
+}
+
+async function shutdownInvalidatedSession(session: PythonSession): Promise<KernelShutdownResult> {
+	const replacement = session.replacement;
+	if (replacement) await replacement.promise.catch(() => undefined);
+	return await session.kernel.shutdown();
+}
+
+async function acquireLiveSessionKernel(
+	session: PythonSession,
+	cwd: string,
+	options: PythonExecutorOptions,
+): Promise<PythonKernel> {
+	while (sessions.get(session.sessionKey) === session) {
+		const kernel = session.kernel;
+		const generation = session.generation;
+		if (kernel.isAlive()) return kernel;
+		await replaceSessionKernel(session, kernel, generation, cwd, options);
 	}
-	session.kernel = next;
+	throw new PythonExecutionCancelledError(false);
 }
 
 async function resetSession(sessionKey: string): Promise<void> {
 	const existing = sessions.get(sessionKey) ?? (await startingSessions.get(sessionKey)?.catch(() => undefined));
 	if (!existing) return;
+	existing.generation += 1;
 	sessions.delete(sessionKey);
-	await existing.kernel.shutdown().catch(() => undefined);
+	await shutdownInvalidatedSession(existing).catch(() => undefined);
 }
 
 // ---------------------------------------------------------------------------
@@ -315,9 +393,10 @@ export async function disposeAllKernelSessions(): Promise<void> {
 		}
 	}
 	for (const [id, session] of all) {
+		session.generation += 1;
 		if (sessions.get(id) === session) sessions.delete(id);
 	}
-	const results = await Promise.allSettled(all.map(([, session]) => session.kernel.shutdown()));
+	const results = await Promise.allSettled(all.map(([, session]) => shutdownInvalidatedSession(session)));
 	for (let i = 0; i < all.length; i += 1) {
 		const [id, session] = all[i];
 		const result = results[i];
@@ -344,9 +423,10 @@ export async function disposeKernelSessionsByOwner(ownerId: string): Promise<voi
 		session.ownerIds.delete(ownerId);
 	}
 	for (const session of toShutdown) {
+		session.generation += 1;
 		if (sessions.get(session.sessionKey) === session) sessions.delete(session.sessionKey);
 	}
-	const results = await Promise.allSettled(toShutdown.map(session => session.kernel.shutdown()));
+	const results = await Promise.allSettled(toShutdown.map(session => shutdownInvalidatedSession(session)));
 	for (let i = 0; i < toShutdown.length; i += 1) {
 		const session = toShutdown[i];
 		const result = results[i];
@@ -458,31 +538,21 @@ async function executeOnSession(code: string, cwd: string, options: PythonExecut
 			isTimedOutCancellation(options.signal.reason, PythonExecutionCancelledError, options.signal),
 		);
 	}
-	if (sessions.get(session.sessionKey) !== session) {
+	const kernel = await acquireLiveSessionKernel(session, cwd, options);
+	if (sessions.get(session.sessionKey) !== session || session.kernel !== kernel) {
 		throw new PythonExecutionCancelledError(false);
-	}
-	if (!session.kernel.isAlive()) {
-		await replaceSessionKernel(session, cwd, options);
-		if (sessions.get(session.sessionKey) !== session) {
-			throw new PythonExecutionCancelledError(false);
-		}
 	}
 	const runOptions = { ...options, cwd };
 	try {
-		return await executeWithKernel(session.kernel, code, runOptions);
+		return await executeWithKernel(kernel, code, runOptions);
 	} catch (err) {
 		if (isCancellationError(err, PythonExecutionCancelledError) || options.signal?.aborted) throw err;
-		if (session.kernel.isAlive()) throw err;
-		if (sessions.get(session.sessionKey) !== session) {
+		if (kernel.isAlive()) throw err;
+		const retryKernel = await acquireLiveSessionKernel(session, cwd, options);
+		if (sessions.get(session.sessionKey) !== session || session.kernel !== retryKernel) {
 			throw new PythonExecutionCancelledError(false);
 		}
-		// Shared kernels are keyed by cwd, so a dead kernel can be recreated in place
-		// without risking cross-directory state bleed.
-		await replaceSessionKernel(session, cwd, options);
-		if (sessions.get(session.sessionKey) !== session) {
-			throw new PythonExecutionCancelledError(false);
-		}
-		return await executeWithKernel(session.kernel, code, runOptions);
+		return await executeWithKernel(retryKernel, code, runOptions);
 	}
 }
 

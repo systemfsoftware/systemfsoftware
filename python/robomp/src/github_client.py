@@ -230,7 +230,16 @@ class GitHubClient:
         return resp.json()
 
     _TRANSIENT_RETRY_DELAYS = (1.0, 3.0, 10.0)
-    """Backoff schedule for transient connection/timeout errors."""
+    """Backoff schedule for transient connection/timeout/5xx errors."""
+
+    _TRANSIENT_STATUSES = frozenset({500, 502, 503, 504})
+    """Upstream statuses treated as transient — retried for idempotent methods only."""
+
+    _IDEMPOTENT_METHODS = frozenset({"GET", "HEAD"})
+    """Methods safe to replay: a lost response cannot have caused a visible write."""
+
+    def _transient_5xx(self, method: str, exc: GitHubError) -> bool:
+        return method.upper() in self._IDEMPOTENT_METHODS and exc.status in self._TRANSIENT_STATUSES
 
     def request_sync(
         self, method: str, path: str, *, json: Mapping[str, Any] | None = None, params: Mapping[str, Any] | None = None
@@ -248,6 +257,15 @@ class GitHubClient:
                 log.warning(
                     "transient error, retrying",
                     extra={"method": method, "path": path, "attempt": attempt + 1, "delay": delay, "error": str(exc)},
+                )
+                time.sleep(delay)
+            except GitHubError as exc:
+                if delay is None or not self._transient_5xx(method, exc):
+                    raise
+                last_exc = exc
+                log.warning(
+                    "transient github 5xx, retrying",
+                    extra={"method": method, "path": path, "attempt": attempt + 1, "delay": delay, "status": exc.status},
                 )
                 time.sleep(delay)
         raise last_exc  # type: ignore[misc]
@@ -268,6 +286,15 @@ class GitHubClient:
                 log.warning(
                     "transient error, retrying",
                     extra={"method": method, "path": path, "attempt": attempt + 1, "delay": delay, "error": str(exc)},
+                )
+                await asyncio.sleep(delay)
+            except GitHubError as exc:
+                if delay is None or not self._transient_5xx(method, exc):
+                    raise
+                last_exc = exc
+                log.warning(
+                    "transient github 5xx, retrying",
+                    extra={"method": method, "path": path, "attempt": attempt + 1, "delay": delay, "status": exc.status},
                 )
                 await asyncio.sleep(delay)
         raise last_exc  # type: ignore[misc]

@@ -7,9 +7,24 @@ import type { ToolSession } from "../sdk";
 import { enforceInlineByteCap } from "../session/streaming-output";
 import { truncateForPrompt } from "./approval";
 import { resolveCmuxKind } from "./browser/cmux/rpc";
-import { acquireBrowser, type BrowserHandle, type BrowserKind, type BrowserKindTag } from "./browser/registry";
+import {
+	acquireBrowser,
+	type BrowserHandle,
+	type BrowserKind,
+	type BrowserKindTag,
+	holdBrowser,
+	releaseBrowser,
+} from "./browser/registry";
 import type { Observation, ScreenshotResult } from "./browser/tab-protocol";
-import { acquireTab, dropHeadlessTabs, getTab, releaseAllTabs, releaseTab, runInTab } from "./browser/tab-supervisor";
+import {
+	type AcquireTabResult,
+	acquireTab,
+	dropHeadlessTabs,
+	getTab,
+	releaseAllTabs,
+	releaseTab,
+	runInTab,
+} from "./browser/tab-supervisor";
 import type { OutputMeta } from "./output-meta";
 import { resolveToCwd } from "./path-utils";
 import { ToolAbortError, ToolError, throwIfAborted } from "./tool-errors";
@@ -190,7 +205,7 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 	): Promise<AgentToolResult<BrowserToolDetails>> {
 		try {
 			throwIfAborted(signal);
-			const timeoutSeconds = clampTimeout("browser", params.timeout);
+			const timeoutSeconds = clampTimeout("browser", params.timeout, this.session.settings.get("tools.maxTimeout"));
 			const timeoutMs = timeoutSeconds * 1000;
 			const name = params.name ?? DEFAULT_TAB_NAME;
 			const details: BrowserToolDetails = { action: params.action, name };
@@ -232,52 +247,84 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 			);
 		}
 
-		const browser = await untilAborted(signal, () =>
-			acquireBrowser(kind, {
-				cwd: this.session.cwd,
-				viewport: params.viewport
-					? {
-							width: params.viewport.width,
-							height: params.viewport.height,
-							deviceScaleFactor: params.viewport.scale,
-						}
-					: undefined,
-				appArgs: params.app?.args,
-				signal,
-			}),
-		);
+		// The requested timeout must cover the *entire* open — browser
+		// acquisition (CDP discovery/connect), queued tab acquisition, worker
+		// creation, and navigation — not only `acquireTab`. Compose one deadline
+		// from the caller signal and `params.timeout` and thread it through both
+		// stages so a stalled acquisition rejects at the requested boundary.
+		const timeoutSignal = AbortSignal.timeout(timeoutMs);
+		const openSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
+		try {
+			const browser = await untilAborted(openSignal, () =>
+				acquireBrowser(kind, {
+					cwd: this.session.cwd,
+					viewport: params.viewport
+						? {
+								width: params.viewport.width,
+								height: params.viewport.height,
+								deviceScaleFactor: params.viewport.scale,
+							}
+						: undefined,
+					appArgs: params.app?.args,
+					signal: openSignal,
+				}),
+			);
 
-		const result = await untilAborted(signal, () =>
-			acquireTab(name, browser, {
-				url: params.url,
-				waitUntil: params.wait_until,
-				viewport: params.viewport
-					? {
-							width: params.viewport.width,
-							height: params.viewport.height,
-							deviceScaleFactor: params.viewport.scale,
-						}
-					: undefined,
-				target: params.app?.target,
-				timeoutMs,
-				dialogs: params.dialogs,
-				signal,
-				ownerSessionId: this.session.getSessionId?.() ?? undefined,
-			}),
-		);
-		const tab = result.tab;
-		const url = tab.info.url;
-		const title = tab.info.title ?? "";
-		details.url = url;
-		details.viewport = tab.info.viewport;
-		const verb = result.created ? "Opened" : "Reused";
-		const lines = [
-			`${verb} tab ${JSON.stringify(name)} on ${describeBrowser(browser)}`,
-			`URL: ${url}`,
-			title ? `Title: ${title}` : null,
-		].filter((l): l is string => typeof l === "string");
-		details.result = lines.join("\n");
-		return toolResult(details).text(lines.join("\n")).done();
+			// Hold one open-acquisition lease across the whole tab acquisition.
+			// A freshly-created browser sits in the registry at refCount 0 until a
+			// tab takes a hold; without this lease an abort/timeout mid-acquisition
+			// (or a sibling open of a different tab name on the same browser that
+			// fails) could dispose it out from under this operation. The lease is
+			// released exactly once — the success and failure paths are mutually
+			// exclusive — transferring ownership to the published tab on success or
+			// rolling the fresh browser back on failure.
+			holdBrowser(browser);
+			let result: AcquireTabResult;
+			try {
+				result = await untilAborted(openSignal, () =>
+					acquireTab(name, browser, {
+						url: params.url,
+						waitUntil: params.wait_until,
+						viewport: params.viewport
+							? {
+									width: params.viewport.width,
+									height: params.viewport.height,
+									deviceScaleFactor: params.viewport.scale,
+								}
+							: undefined,
+						target: params.app?.target,
+						timeoutMs,
+						dialogs: params.dialogs,
+						signal: openSignal,
+						ownerSessionId: this.session.getSessionId?.() ?? undefined,
+					}),
+				);
+			} catch (error) {
+				await releaseBrowser(browser, { kill: false });
+				throw error;
+			}
+			await releaseBrowser(browser, { kill: false });
+
+			const tab = result.tab;
+			const url = tab.info.url;
+			const title = tab.info.title ?? "";
+			details.url = url;
+			details.viewport = tab.info.viewport;
+			const verb = result.created ? "Opened" : "Reused";
+			const lines = [
+				`${verb} tab ${JSON.stringify(name)} on ${describeBrowser(browser)}`,
+				`URL: ${url}`,
+				title ? `Title: ${title}` : null,
+			].filter((l): l is string => typeof l === "string");
+			details.result = lines.join("\n");
+			return toolResult(details).text(lines.join("\n")).done();
+		} catch (error) {
+			// Caller cancellation stays a ToolAbortError; the requested timeout
+			// becomes a timeout ToolError; anything else passes through unchanged.
+			if (signal?.aborted) throw error instanceof ToolAbortError ? error : new ToolAbortError();
+			if (timeoutSignal.aborted) throw new ToolError(`Browser open timed out after ${timeoutMs}ms`);
+			throw error;
+		}
 	}
 
 	async #close(

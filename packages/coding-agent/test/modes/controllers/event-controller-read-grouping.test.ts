@@ -80,6 +80,7 @@ function createFixture() {
 		updateEditorTopBorder: vi.fn(),
 		ui: { requestRender: vi.fn(), imageBudget: undefined },
 		chatContainer,
+		transcriptMessageComponents: new WeakMap(),
 		pendingTools: new Map(),
 		noteDisplayableThinkingContent: vi.fn(() => false),
 		settings: { get: () => false },

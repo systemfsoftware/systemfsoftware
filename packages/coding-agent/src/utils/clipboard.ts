@@ -1,6 +1,7 @@
 import type { ClipboardImage } from "@oh-my-pi/pi-natives";
 import * as native from "@oh-my-pi/pi-natives";
 import { logger } from "@oh-my-pi/pi-utils";
+import MAC_FILE_URL_SCRIPT from "./mac-file-urls.applescript" with { type: "text" };
 
 /**
  * Run a subprocess and capture its stdout without blocking the event loop.
@@ -51,36 +52,6 @@ function hasDisplay(): boolean {
 function isWsl(): boolean {
 	return process.platform === "linux" && Boolean(process.env.WSL_DISTRO_NAME || process.env.WSL_INTEROP);
 }
-
-// AppleScript that returns the POSIX paths of every file URL currently on the
-// macOS pasteboard, one path per line. `pbpaste(1)` only surfaces plain text,
-// EPS, or RTF, so a Finder `Cmd+C` (which puts only a `public.file-url`
-// representation on the pasteboard) makes `pbpaste` empty. AppleScript's
-// `«class furl»` coercion reaches the file-URL representation directly and
-// works for both single-file and multi-file selections. The `try` blocks
-// suppress the `-1700` "can't make … into type" error AppleScript raises when
-// the clipboard holds no file URLs, so the script's exit status only reflects
-// `osascript` itself.
-const MAC_FILE_URL_SCRIPT = [
-	"on run",
-	'\tset output to ""',
-	"\ttry",
-	"\t\tset theClip to the clipboard as «class furl»",
-	"\t\tif class of theClip is list then",
-	"\t\t\trepeat with anItem in theClip",
-	"\t\t\t\ttry",
-	"\t\t\t\t\tset output to output & POSIX path of anItem & linefeed",
-	"\t\t\t\tend try",
-	"\t\t\tend repeat",
-	"\t\telse",
-	"\t\t\ttry",
-	"\t\t\t\tset output to POSIX path of theClip & linefeed",
-	"\t\t\tend try",
-	"\t\tend if",
-	"\tend try",
-	"\treturn output",
-	"end run",
-].join("\n");
 
 /**
  * Read file paths from the macOS pasteboard's `public.file-url` representation.

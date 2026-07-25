@@ -78,4 +78,22 @@ describe("azure catalog provider", () => {
 		expect(model.thinking?.mode).toBe("effort");
 		expect(model.thinking?.efforts).toContain(Effort.XHigh);
 	});
+	test("derives GA computer capability for GPT-5.4+ Azure Responses models and honors overrides", () => {
+		const base: ModelSpec<"azure-openai-responses"> = {
+			id: "gpt-5.4",
+			name: "GPT-5.4",
+			api: "azure-openai-responses",
+			provider: "azure",
+			baseUrl: "",
+			reasoning: true,
+			input: ["text", "image"],
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+			contextWindow: 400_000,
+			maxTokens: 128_000,
+		};
+		expect(buildModel(base).supportsComputerUse).toBe(true);
+		expect(buildModel({ ...base, id: "gpt-5.3", name: "GPT-5.3" }).supportsComputerUse).toBe(false);
+		expect(buildModel({ ...base, supportsComputerUse: false }).supportsComputerUse).toBe(false);
+		expect(buildModel({ ...base, id: "deployment-alias", requestModelId: "gpt-5.4" }).supportsComputerUse).toBe(true);
+	});
 });

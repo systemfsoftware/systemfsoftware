@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import type { FetchImpl } from "@oh-my-pi/pi-ai/types";
 import {
 	analyzeAuthError,
 	discoverOAuthEndpoints,
@@ -639,5 +640,34 @@ describe("RFC 8414 §3.3 issuer validation", () => {
 			authorizationUrl: "https://auth.example.com/oauth",
 			tokenUrl: "https://auth.example.com/token",
 		});
+	});
+});
+
+describe("bounded discovery fetches", () => {
+	// A fetch that never resolves on its own; it settles only when its
+	// AbortSignal fires. Pre-fix, discovery passed no signal, so this hung forever.
+	const hangingFetch: FetchImpl = (_input, init) => {
+		const { promise, reject } = Promise.withResolvers<Response>();
+		const signal = init?.signal;
+		const abort = () => reject(new DOMException("aborted", "AbortError"));
+		if (signal?.aborted) abort();
+		else signal?.addEventListener("abort", abort, { once: true });
+		return promise;
+	};
+
+	it("aborts hanging well-known discovery fetches instead of stalling", async () => {
+		const oauth = await discoverOAuthEndpoints("https://mcp.example.test/mcp", undefined, undefined, {
+			fetch: hangingFetch,
+			signal: AbortSignal.timeout(50),
+		});
+		expect(oauth).toBeNull();
+	});
+
+	it("aborts a hanging resource_metadata fetch and returns undefined", async () => {
+		const scopes = await fetchResourceMetadataScopes(
+			"https://mcp.example.test/.well-known/oauth-protected-resource",
+			{ fetch: hangingFetch, signal: AbortSignal.timeout(50) },
+		);
+		expect(scopes).toBeUndefined();
 	});
 });

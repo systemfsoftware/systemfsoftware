@@ -342,6 +342,138 @@ describe("runSubprocess yield reminders", () => {
 		expect(result.output).toContain('"ok": true');
 	});
 
+	it("fails instead of waiting forever when yield submit errors repeat", async () => {
+		const promptReleased = Promise.withResolvers<void>();
+		let yieldAttempts = 0;
+		let abortCalls = 0;
+		const session = createMockSession(async ({ emit, state }) => {
+			for (let attempt = 1; attempt <= 6; attempt++) {
+				const assistant = createAssistantStopMessage(`malformed yield attempt ${attempt}`);
+				state.messages.push(assistant);
+				emit({ type: "message_end", message: assistant });
+				emit({
+					type: "tool_execution_end",
+					toolCallId: `tool-malformed-${attempt}`,
+					toolName: "yield",
+					result: {
+						content: [{ type: "text", text: "result must be an object containing either data or error" }],
+						details: { status: "error", error: "result must be an object containing either data or error" },
+					},
+					isError: true,
+				});
+				yieldAttempts = attempt;
+			}
+			await promptReleased.promise;
+		});
+		const abortableSession = session as unknown as { abort: () => Promise<void> };
+		abortableSession.abort = async () => {
+			abortCalls += 1;
+			promptReleased.resolve();
+		};
+
+		mockCreateAgentSession(session);
+
+		const result = await runSubprocess({ ...baseOptions, id: "subagent-repeated-malformed-yield" });
+		expect(result.exitCode).toBe(1);
+		expect(result.aborted).toBe(false);
+		expect(result.stderr).toContain("Subagent submitted invalid yield results 6 times");
+		expect(result.stderr).toContain("stopping to avoid an infinite submit loop");
+		expect(result.stderr).toContain("result must be an object containing either data or error");
+		expect(result.error).toBe(result.stderr);
+		expect(yieldAttempts).toBe(6);
+		expect(abortCalls).toBe(1);
+	});
+
+	it("ignores malformed yield siblings after a valid yield", async () => {
+		const promptReleased = Promise.withResolvers<void>();
+		let abortCalls = 0;
+		const session = createMockSession(async ({ emit }) => {
+			emit({
+				type: "tool_execution_end",
+				toolCallId: "tool-valid",
+				toolName: "yield",
+				result: {
+					content: [{ type: "text", text: "Result submitted." }],
+					details: { status: "success", data: { ok: true } },
+				},
+				isError: false,
+			});
+			for (let attempt = 1; attempt <= 6; attempt++) {
+				emit({
+					type: "tool_execution_end",
+					toolCallId: `tool-malformed-sibling-${attempt}`,
+					toolName: "yield",
+					result: {
+						content: [{ type: "text", text: "result must be an object containing either data or error" }],
+						details: { status: "error", error: "result must be an object containing either data or error" },
+					},
+					isError: true,
+				});
+			}
+			await promptReleased.promise;
+		});
+		const abortableSession = session as unknown as { abort: () => Promise<void> };
+		abortableSession.abort = async () => {
+			abortCalls += 1;
+			promptReleased.resolve();
+		};
+
+		mockCreateAgentSession(session);
+
+		const result = await runSubprocess({ ...baseOptions, id: "subagent-valid-yield-with-bad-siblings" });
+		expect(result.exitCode).toBe(0);
+		expect(result.aborted).toBe(false);
+		expect(result.output).toContain('"ok": true');
+		expect(result.stderr).toBe("");
+		expect(result.error).toBeUndefined();
+		expect(abortCalls).toBe(1);
+	});
+
+	it("fails when malformed yields repeat after an incremental yield section", async () => {
+		const promptReleased = Promise.withResolvers<void>();
+		let abortCalls = 0;
+		const session = createMockSession(async ({ emit, state }) => {
+			emit({
+				type: "tool_execution_end",
+				toolCallId: "tool-incremental",
+				toolName: "yield",
+				result: {
+					content: [{ type: "text", text: "Section recorded." }],
+					details: { status: "success", data: { note: "partial" }, type: ["section"] },
+				},
+				isError: false,
+			});
+			for (let attempt = 1; attempt <= 6; attempt++) {
+				const assistant = createAssistantStopMessage(`malformed terminal yield attempt ${attempt}`);
+				state.messages.push(assistant);
+				emit({ type: "message_end", message: assistant });
+				emit({
+					type: "tool_execution_end",
+					toolCallId: `tool-malformed-after-incremental-${attempt}`,
+					toolName: "yield",
+					result: {
+						content: [{ type: "text", text: "result must be an object containing either data or error" }],
+						details: { status: "error", error: "result must be an object containing either data or error" },
+					},
+					isError: true,
+				});
+			}
+			await promptReleased.promise;
+		});
+		const abortableSession = session as unknown as { abort: () => Promise<void> };
+		abortableSession.abort = async () => {
+			abortCalls += 1;
+			promptReleased.resolve();
+		};
+
+		mockCreateAgentSession(session);
+
+		const result = await runSubprocess({ ...baseOptions, id: "subagent-incremental-then-malformed-yield" });
+		expect(result.exitCode).toBe(1);
+		expect(result.aborted).toBe(false);
+		expect(result.stderr).toContain("Subagent submitted invalid yield results 6 times");
+		expect(abortCalls).toBe(1);
+	});
 	it("waits for yield-triggered abort cleanup before resolving the subagent", async () => {
 		const promptCleanup = Promise.withResolvers<void>();
 		const abortCleanup = Promise.withResolvers<void>();

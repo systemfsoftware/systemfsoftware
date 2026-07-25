@@ -275,9 +275,14 @@ function resolveSystemChromium(): string | undefined {
 	return undefined;
 }
 
+/** Options shared by headless Chromium consumers. */
 export interface LaunchHeadlessOptions {
 	headless: boolean;
 	viewport?: { width: number; height: number; deviceScaleFactor?: number };
+	/** Additional Chromium arguments merged with the centralized launch defaults. */
+	args?: readonly string[];
+	/** Additional exact Puppeteer default arguments to suppress. */
+	ignoreDefaultArgs?: readonly string[];
 }
 
 export async function launchHeadlessBrowser(opts: LaunchHeadlessOptions): Promise<Browser> {
@@ -308,13 +313,16 @@ export async function launchHeadlessBrowser(opts: LaunchHeadlessOptions): Promis
 	if (ignoreCert === "true" || ignoreCert === "1" || ignoreCert === "yes" || ignoreCert === "on") {
 		launchArgs.push("--ignore-certificate-errors");
 	}
+	for (const arg of opts.args ?? []) {
+		if (!launchArgs.includes(arg)) launchArgs.push(arg);
+	}
 	const executablePath = await ensureChromiumExecutable();
 	return await puppeteer.launch({
 		headless: opts.headless,
 		defaultViewport: opts.headless ? initialViewport : null,
 		executablePath,
 		args: launchArgs,
-		ignoreDefaultArgs: stealthIgnoreDefaultArgs(executablePath),
+		ignoreDefaultArgs: [...new Set([...stealthIgnoreDefaultArgs(executablePath), ...(opts.ignoreDefaultArgs ?? [])])],
 		protocolTimeout: BROWSER_PROTOCOL_TIMEOUT_MS,
 	});
 }

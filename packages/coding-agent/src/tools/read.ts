@@ -11,12 +11,14 @@ import type {
 	ToolTier,
 } from "@oh-my-pi/pi-agent-core";
 import type { ImageContent, TextContent } from "@oh-my-pi/pi-ai";
-import { glob, type SummaryResult, summarizeCode } from "@oh-my-pi/pi-natives";
+import { type SummaryResult, summarizeCode } from "@oh-my-pi/pi-natives";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Text } from "@oh-my-pi/pi-tui";
 import {
 	getRemoteDir,
 	type ImageMetadata,
+	isEexist,
+	isEnotempty,
 	isProbablyBinary,
 	logger,
 	prompt,
@@ -40,7 +42,7 @@ import { InternalUrlRouter, resolveLocalUrlToFile, resolveLocalUrlToPath } from 
 import { type ResolvedArtifactFile, resolveArtifactFile } from "../internal-urls/artifact-protocol";
 import { parseInternalUrl } from "../internal-urls/parse";
 import type { InternalUrl } from "../internal-urls/types";
-import { getLanguageFromPath, type Theme } from "../modes/theme/theme";
+import { getLanguageFromPath, isMarkdownPath, type Theme } from "../modes/theme/theme";
 import readDescription from "../prompts/tools/read.md" with { type: "text" };
 import type { ToolSession } from "../sdk";
 import {
@@ -94,6 +96,7 @@ import {
 } from "./output-meta";
 import {
 	expandPath,
+	findUniqueWorkspaceSuffix,
 	formatPathRelativeToCwd,
 	isReadableUrlPath,
 	type LineRange,
@@ -155,12 +158,13 @@ const MAX_SUMMARY_BYTES = 2 * 1024 * 1024;
 const MAX_SUMMARY_LINES = 20_000;
 const MAX_ARTIFACT_RAW_INLINE_BYTES = DEFAULT_MAX_BYTES;
 /**
- * Per-line column cap for file reads. Lines wider than the value of
- * `tools.outputMaxColumns` are ellipsis-truncated at display time; the file
- * on disk is unchanged. Shared with the streaming sink path so one setting
- * covers `bash`/`ssh`/`python`/`js eval` and `read` uniformly.
+ * Prose files (Markdown flavors and plain text) skip code-block summarization
+ * unless `read.summarize.prose` opts them in.
  */
-const PROSE_SUMMARY_EXTENSIONS = new Set([".md", ".txt"]);
+function isProseSummaryPath(filePath: string): boolean {
+	return isMarkdownPath(filePath) || path.extname(filePath).toLowerCase() === ".txt";
+}
+
 // Remote mount path prefix (sshfs mounts) - skip fuzzy matching to avoid hangs
 const REMOTE_MOUNT_PREFIX = getRemoteDir() + path.sep;
 
@@ -639,67 +643,11 @@ async function streamLinesFromFile(
 
 // Maximum image file size (20MB) - larger images will be rejected to prevent OOM during serialization
 const MAX_IMAGE_SIZE = MAX_IMAGE_INPUT_BYTES;
-const GLOB_TIMEOUT_MS = 5000;
 
 function isNotFoundError(error: unknown): boolean {
 	if (!error || typeof error !== "object") return false;
 	const code = (error as { code?: string }).code;
 	return code === "ENOENT" || code === "ENOTDIR";
-}
-
-/**
- * Escape glob metacharacters so a literal path (e.g. `foo[1].ts`) interpolated
- * into a suffix-glob pattern matches itself. Each metachar is wrapped in a
- * character class (the native glob engine rewrites `\` to `/`, so backslash
- * escaping is unavailable). `]`/`}` need no escaping once their openers are
- * neutralized — unmatched closers are literal.
- */
-function escapeGlobMetachars(value: string): string {
-	return value.replace(/[*?[{]/g, "[$&]");
-}
-
-/**
- * Attempt to resolve a non-existent path by finding a unique suffix match within the workspace.
- * Uses a glob suffix pattern so the native engine handles matching directly.
- * Returns null when 0 or >1 candidates match (ambiguous = no auto-resolution).
- */
-async function findUniqueSuffixMatch(
-	rawPath: string,
-	cwd: string,
-	signal?: AbortSignal,
-): Promise<{ absolutePath: string; displayPath: string } | null> {
-	const normalized = rawPath.replace(/\\/g, "/").replace(/^\.\//, "").replace(/\/+$/, "");
-	if (!normalized) return null;
-	const pattern = `**/${escapeGlobMetachars(normalized)}`;
-
-	const timeoutSignal = AbortSignal.timeout(GLOB_TIMEOUT_MS);
-	const combinedSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
-
-	let matches: string[];
-	try {
-		const result = await untilAborted(combinedSignal, () =>
-			glob({
-				pattern,
-				path: cwd,
-				// No fileType filter: matches both files and directories
-				hidden: true,
-			}),
-		);
-		matches = result.matches.map(m => m.path);
-	} catch (error) {
-		if (error instanceof Error && error.name === "AbortError") {
-			if (!signal?.aborted) return null; // timeout — give up silently
-			throw new ToolAbortError();
-		}
-		return null;
-	}
-
-	if (matches.length !== 1) return null;
-
-	return {
-		absolutePath: path.resolve(cwd, matches[0]),
-		displayPath: matches[0],
-	};
 }
 
 function decodeUtf8Text(bytes: Uint8Array): string | null {
@@ -721,6 +669,22 @@ function prependSuffixResolutionNotice(text: string, suffixResolution?: { from: 
 const PDF_IMAGE_PLACEHOLDER_RE = /<!--\s*image:\s*([^\s<>]+)(.*?)-->/g;
 const PDF_IMAGE_MEMBER_RE = /^(.*\.pdf):(.*)$/i;
 const PDF_IMAGE_MEMBER_EXTENSION_RE = /\.png$/i;
+const PDF_IMAGE_CACHE_BASENAME_MAX_LENGTH = 96;
+
+interface PdfImageSnapshot {
+	directory: string;
+	filePath: string;
+	digest: string;
+}
+
+interface PdfImageExtraction {
+	controller: AbortController;
+	promise: Promise<string>;
+	settled: boolean;
+	waiters: number;
+}
+
+const pdfImageExtractions = new Map<string, PdfImageExtraction>();
 
 function pdfImageMemberPath(pdfPath: string, imageId: string): string {
 	const member = PDF_IMAGE_MEMBER_EXTENSION_RE.test(imageId) ? imageId : `${imageId}.png`;
@@ -779,7 +743,6 @@ export interface ReadToolDetails {
 	/** Paths recovered from a delimited read argument; used only by the TUI to render one call as multiple read rows. */
 	displayReadTargets?: string[];
 }
-
 type ReadParams = ReadToolInput;
 
 /** Parsed representation of a path-embedded selector. */
@@ -991,7 +954,7 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 	}
 
 	/**
-	 * Memoized {@link findUniqueSuffixMatch} for a single read call. A missing
+	 * Memoized {@link findUniqueWorkspaceSuffix} for a single read call. A missing
 	 * path with archive/sqlite extensions probes the workspace once per stage
 	 * (archive candidates, sqlite candidates, plain path) — each glob carries a
 	 * 5s timeout, so repeated lookups of the same string stack into a long
@@ -1004,7 +967,7 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 	): Promise<{ absolutePath: string; displayPath: string } | null> {
 		const hit = cache.get(rawPath);
 		if (hit !== undefined) return hit;
-		const result = await findUniqueSuffixMatch(rawPath, this.session.cwd, signal);
+		const result = await findUniqueWorkspaceSuffix(rawPath, this.session.cwd, signal);
 		cache.set(rawPath, result);
 		return result;
 	}
@@ -1106,7 +1069,7 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 		return null;
 	}
 
-	#pdfImageCacheDir(absolutePdfPath: string): string {
+	#pdfImageCacheDir(absolutePdfPath: string, contentDigest: string): string {
 		const artifactsDir = this.session.getArtifactsDir?.();
 		let root = artifactsDir ?? undefined;
 		if (root === undefined) {
@@ -1115,8 +1078,28 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 				? sessionFile.slice(0, -6)
 				: path.join(os.tmpdir(), "omp-read-pdf-images");
 		}
-		const basename = path.basename(absolutePdfPath).replace(/[^A-Za-z0-9._-]/g, "_");
-		return path.join(root, "read-pdf-images", `${basename}-${Bun.hash(absolutePdfPath).toString(36)}`);
+		const basename = path
+			.basename(absolutePdfPath)
+			.replace(/[^A-Za-z0-9._-]/g, "_")
+			.slice(0, PDF_IMAGE_CACHE_BASENAME_MAX_LENGTH);
+		const pathDigest = Bun.hash(absolutePdfPath).toString(36);
+		return path.join(root, "read-pdf-images", `${basename}-${pathDigest}-${contentDigest}`);
+	}
+
+	async #snapshotPdfSource(absolutePdfPath: string, signal?: AbortSignal): Promise<PdfImageSnapshot> {
+		const directory = await fs.mkdtemp(path.join(os.tmpdir(), "omp-read-pdf-"));
+		try {
+			const bytes = await untilAborted(signal, () => Bun.file(absolutePdfPath).bytes());
+			signal?.throwIfAborted();
+			const digest = new Bun.CryptoHasher("sha256").update(bytes).digest("hex");
+			const filePath = path.join(directory, "source.pdf");
+			await Bun.write(filePath, bytes);
+			signal?.throwIfAborted();
+			return { directory, filePath, digest };
+		} catch (error) {
+			await fs.rm(directory, { recursive: true, force: true });
+			throw error;
+		}
 	}
 
 	async #listPdfImageMembers(imageDir: string): Promise<string[]> {
@@ -1133,8 +1116,7 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 		}
 	}
 
-	async #ensurePdfImageCache(absolutePdfPath: string, signal?: AbortSignal): Promise<string> {
-		const imageDir = this.#pdfImageCacheDir(absolutePdfPath);
+	async #extractPdfImages(snapshot: PdfImageSnapshot, imageDir: string, signal: AbortSignal): Promise<string> {
 		const markerPath = path.join(imageDir, ".extracted");
 		try {
 			await fs.stat(markerPath);
@@ -1143,15 +1125,74 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 			if (!isNotFoundError(error)) throw error;
 		}
 
-		await fs.rm(imageDir, { recursive: true, force: true });
-		await fs.mkdir(imageDir, { recursive: true });
-		const result = await convertFileWithMarkit(absolutePdfPath, signal, { imageDir });
-		if (!result.ok) {
-			await fs.rm(imageDir, { recursive: true, force: true });
-			throw new ToolError(`Cannot extract images from PDF: ${result.error ?? "conversion failed"}`);
+		await fs.mkdir(path.dirname(imageDir), { recursive: true });
+		const stagingDir = await fs.mkdtemp(`${imageDir}.tmp-`);
+		let published = false;
+		try {
+			const result = await convertFileWithMarkit(snapshot.filePath, signal, { imageDir: stagingDir });
+			if (!result.ok) {
+				throw new ToolError(`Cannot extract images from PDF: ${result.error ?? "conversion failed"}`);
+			}
+			await Bun.write(path.join(stagingDir, ".extracted"), "ok");
+			try {
+				await fs.rename(stagingDir, imageDir);
+				published = true;
+			} catch (error) {
+				if (!isEexist(error) && !isEnotempty(error)) throw error;
+				try {
+					await fs.stat(markerPath);
+				} catch (markerError) {
+					if (isNotFoundError(markerError)) throw error;
+					throw markerError;
+				}
+			}
+			return imageDir;
+		} finally {
+			if (!published) await fs.rm(stagingDir, { recursive: true, force: true });
 		}
-		await Bun.write(markerPath, "ok");
-		return imageDir;
+	}
+
+	#createPdfImageExtraction(snapshot: PdfImageSnapshot, imageDir: string): PdfImageExtraction {
+		const controller = new AbortController();
+		const promise = this.#extractPdfImages(snapshot, imageDir, controller.signal).finally(() =>
+			fs.rm(snapshot.directory, { recursive: true, force: true }),
+		);
+		const extraction: PdfImageExtraction = { controller, promise, settled: false, waiters: 0 };
+		const settle = () => {
+			extraction.settled = true;
+			if (pdfImageExtractions.get(imageDir) === extraction) pdfImageExtractions.delete(imageDir);
+		};
+		void promise.then(settle, settle);
+		return extraction;
+	}
+
+	async #waitForPdfImageExtraction(extraction: PdfImageExtraction, signal: AbortSignal | undefined): Promise<string> {
+		extraction.waiters++;
+		try {
+			return await untilAborted(signal, extraction.promise);
+		} finally {
+			extraction.waiters--;
+			if (extraction.waiters === 0 && !extraction.settled) {
+				extraction.controller.abort();
+				try {
+					await extraction.promise;
+				} catch {}
+			}
+		}
+	}
+
+	async #ensurePdfImageCache(absolutePdfPath: string, signal?: AbortSignal): Promise<string> {
+		const snapshot = await this.#snapshotPdfSource(absolutePdfPath, signal);
+		const imageDir = this.#pdfImageCacheDir(absolutePdfPath, snapshot.digest);
+		const existing = pdfImageExtractions.get(imageDir);
+		if (existing && !existing.settled && !existing.controller.signal.aborted) {
+			await fs.rm(snapshot.directory, { recursive: true, force: true });
+			return this.#waitForPdfImageExtraction(existing, signal);
+		}
+
+		const extraction = this.#createPdfImageExtraction(snapshot, imageDir);
+		pdfImageExtractions.set(imageDir, extraction);
+		return this.#waitForPdfImageExtraction(extraction, signal);
 	}
 
 	async #readPdfImageMember(
@@ -1598,7 +1639,7 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 			try {
 				const bridgeText = await bridgePromise;
 				const bridgeResult = this.#buildInMemoryMultiRangeResult(bridgeText, ranges, {
-					details: { resolvedPath: absolutePath, suffixResolution },
+					details: this.#markMarkdownContentType({ resolvedPath: absolutePath, suffixResolution }, absolutePath),
 					sourcePath: absolutePath,
 					entityLabel: "file",
 					raw: rawSelector,
@@ -1781,10 +1822,13 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 		const archive = await openArchive(resolvedArchivePath.absolutePath);
 		throwIfAborted(signal);
 
-		const details: ReadToolDetails = {
-			resolvedPath: resolvedArchivePath.absolutePath,
-			suffixResolution: resolvedArchivePath.suffixResolution,
-		};
+		const details: ReadToolDetails = this.#markMarkdownContentType(
+			{
+				resolvedPath: resolvedArchivePath.absolutePath,
+				suffixResolution: resolvedArchivePath.suffixResolution,
+			},
+			resolvedArchivePath.archiveSubPath,
+		);
 
 		let archiveSubPath = resolvedArchivePath.archiveSubPath;
 		let sel = parsedSel;
@@ -1993,6 +2037,20 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 		const bridge = this.session.getClientBridge?.();
 		if (!bridge?.capabilities.readTextFile || !bridge.readTextFile) return undefined;
 		return bridge.readTextFile({ path: absolutePath, ...options });
+	}
+
+	/**
+	 * Tag Markdown reads for the TUI's formatted preview, gated on the opt-in
+	 * `read.renderMarkdown` setting. Off by default; when disabled, no local
+	 * read is tagged `text/markdown`, so the renderer output is identical to
+	 * the pre-setting behavior. Internal-URL reads keep their protocol-supplied
+	 * `contentType` and render as Markdown regardless of the setting.
+	 */
+	#markMarkdownContentType(details: ReadToolDetails, filePath: string): ReadToolDetails {
+		if (!details.contentType && this.session.settings.get("read.renderMarkdown") && isMarkdownPath(filePath)) {
+			details.contentType = "text/markdown";
+		}
+		return details;
 	}
 
 	async #trySummarize(absolutePath: string, fileSize: number, signal?: AbortSignal): Promise<SummaryResult | null> {
@@ -2419,14 +2477,20 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 				// because only `truncateHead` was being applied.
 				if (isMultiRange(parsed) && parsed.kind === "lines") {
 					return this.#buildInMemoryMultiRangeResult(renderedContent, parsed.ranges, {
-						details: { resolvedPath: absolutePath },
+						details: {
+							resolvedPath: absolutePath,
+							contentType: this.session.settings.get("read.renderMarkdown") ? "text/markdown" : undefined,
+						},
 						sourcePath: absolutePath,
 						entityLabel: "document",
 					});
 				}
 				const { offset, limit } = selToOffsetLimit(parsed);
 				return this.#buildInMemoryTextResult(renderedContent, offset, limit, {
-					details: { resolvedPath: absolutePath },
+					details: {
+						resolvedPath: absolutePath,
+						contentType: this.session.settings.get("read.renderMarkdown") ? "text/markdown" : undefined,
+					},
 					sourcePath: absolutePath,
 					entityLabel: "document",
 					raw: isRawSelector(parsed),
@@ -2459,7 +2523,7 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 			if (
 				parsed.kind === "none" &&
 				this.session.settings.get("read.summarize.enabled") &&
-				(this.session.settings.get("read.summarize.prose") || !PROSE_SUMMARY_EXTENSIONS.has(ext))
+				(this.session.settings.get("read.summarize.prose") || !isProseSummaryPath(absolutePath))
 			) {
 				const summary = await this.#trySummarize(absolutePath, fileSize, signal);
 				if (summary?.parsed && summary.elided) {
@@ -2519,7 +2583,10 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 						try {
 							const bridgeText = await bridgePromise;
 							const bridgeResult = this.#buildInMemoryTextResult(bridgeText, offset, limit, {
-								details: { resolvedPath: absolutePath, suffixResolution },
+								details: this.#markMarkdownContentType(
+									{ resolvedPath: absolutePath, suffixResolution },
+									absolutePath,
+								),
 								sourcePath: absolutePath,
 								entityLabel: "file",
 								raw: isRawSelector(parsed),
@@ -2818,6 +2885,7 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 			}
 		}
 
+		this.#markMarkdownContentType(details, absolutePath);
 		if (suffixResolution) {
 			details.suffixResolution = suffixResolution;
 			// Inline resolution notice into first text block so the model sees the actual path

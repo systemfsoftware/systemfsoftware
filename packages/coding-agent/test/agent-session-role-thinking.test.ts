@@ -300,6 +300,21 @@ describe("AgentSession role model thinking behavior", () => {
 		expect(session.configuredThinkingLevel()).toBe(AUTO_THINKING);
 		expect(session.thinkingLevel).toBe(resolveProvisionalAutoLevel(model));
 		expect(agent.state.disableReasoning).toBe(false);
+		const autoReceipt = session.sessionManager
+			.getEntries()
+			.filter(entry => entry.type === "thinking_level_change")
+			.at(-1);
+		expect(autoReceipt).toMatchObject({
+			thinkingLevel: resolveProvisionalAutoLevel(model),
+			configured: AUTO_THINKING,
+		});
+		const autoReceiptCount = session.sessionManager
+			.getEntries()
+			.filter(entry => entry.type === "thinking_level_change").length;
+		session.setThinkingLevel(AUTO_THINKING);
+		expect(session.sessionManager.getEntries().filter(entry => entry.type === "thinking_level_change")).toHaveLength(
+			autoReceiptCount,
+		);
 		expect(session.cycleThinkingLevel()).toBe(Effort.Minimal);
 		expect(session.thinkingLevel).toBe(Effort.Minimal);
 	});
@@ -521,6 +536,9 @@ describe("AgentSession role model thinking behavior", () => {
 		expect(session.thinkingLevel).toBe(fallback);
 		expect(session.autoResolvedThinkingLevel()).toBe(fallback);
 		expect(session.agent.state.thinkingLevel).toBe(fallback);
+		expect(session.sessionManager.getEntries().filter(entry => entry.type === "thinking_level_change")).toHaveLength(
+			1,
+		);
 	});
 
 	it("skips classification for synthetic turns", async () => {

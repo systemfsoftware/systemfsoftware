@@ -464,7 +464,7 @@ describe("AgentSession model persistence", () => {
 		if (!sessionFile) throw new Error("Expected interrupted session file");
 
 		const result = await createStartupResumeSession(sessionFile);
-		const messages = result.session.sessionManager.buildSessionContext().messages;
+		const messages = result.session.sessionManager.buildSessionContext({ transcript: true }).messages;
 		expect(messages.at(-1)).toMatchObject({
 			role: "assistant",
 			content: [],
@@ -567,7 +567,7 @@ describe("AgentSession model persistence", () => {
 
 		await expect(created.session.switchSession(targetFile)).resolves.toBe(true);
 
-		expect(created.session.sessionManager.buildSessionContext().messages.at(-1)).toMatchObject({
+		expect(created.session.sessionManager.buildSessionContext({ transcript: true }).messages.at(-1)).toMatchObject({
 			role: "assistant",
 			api: defaultModel.api,
 			provider: defaultModel.provider,

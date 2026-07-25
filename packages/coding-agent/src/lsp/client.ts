@@ -364,7 +364,15 @@ async function startMessageReader(client: LspClient): Promise<void> {
 						if (pending) {
 							client.pendingRequests.delete(message.id);
 							if ("error" in message && message.error) {
-								pending.reject(new Error(`LSP error: ${message.error.message}`));
+								// Include the JSON-RPC error code: `isMethodNotFoundError` matches
+								// `-32601` by substring, so method-not-found is recognized even when
+								// the server's message text is nonstandard (e.g. "Unknown request").
+								const code = message.error.code;
+								pending.reject(
+									new Error(
+										`LSP error${typeof code === "number" ? ` ${code}` : ""}: ${message.error.message}`,
+									),
+								);
 							} else {
 								pending.resolve(message.result);
 							}
@@ -846,6 +854,29 @@ export async function getOrCreateClient(
 	return clientPromise;
 }
 
+/** Return an active or already-starting client without starting a language server. */
+export async function getActiveOrPendingClient(
+	config: ServerConfig,
+	cwd: string,
+	signal?: AbortSignal,
+): Promise<LspClient | undefined> {
+	throwIfAborted(signal);
+	const client = clients.get(`${config.command}:${cwd}`);
+	if (client) {
+		client.lastActivity = Date.now();
+		return client;
+	}
+
+	const pending = clientLocks.get(`${config.command}:${cwd}`);
+	if (!pending) return undefined;
+	try {
+		return await untilAborted(signal, pending);
+	} catch {
+		throwIfAborted(signal);
+		return undefined;
+	}
+}
+
 /**
  * Ensure a file is opened in the LSP client.
  * Sends didOpen notification if the file is not already tracked.
@@ -1158,9 +1189,19 @@ async function waitForExit(client: LspClient, timeoutMs: number): Promise<boolea
 }
 
 /**
- * Shutdown a specific client instance using the LSP shutdown/exit handshake.
+ * Tear down a specific client instance using the LSP shutdown/exit handshake.
+ *
+ * Removes the client from the registry by identity first (never evicting a
+ * newer client already republished under the same key), then performs a bounded
+ * graceful shutdown, force-killing and awaiting confirmed process exit.
+ *
+ * @returns `true` once the process is confirmed exited, `false` if it outlived
+ * the shutdown budget — callers reporting a restart must treat `false` as a
+ * failed teardown, not a completed restart.
  */
-async function shutdownClientInstance(client: LspClient): Promise<void> {
+export async function shutdownClientInstance(client: LspClient): Promise<boolean> {
+	if (clients.get(client.name) === client) clients.delete(client.name);
+
 	const err = new Error("LSP client shutdown");
 	for (const pending of Array.from(client.pendingRequests.values())) {
 		pending.reject(err);
@@ -1173,21 +1214,23 @@ async function shutdownClientInstance(client: LspClient): Promise<void> {
 	);
 	if (shutdownCompleted) {
 		await sendNotification(client, "exit", undefined).catch(() => {});
-		if (await waitForExit(client, EXIT_TIMEOUT_MS)) return;
+		if (await waitForExit(client, EXIT_TIMEOUT_MS)) return true;
 	}
 
 	client.proc.kill();
-	await waitForExit(client, EXIT_TIMEOUT_MS);
+	return await waitForExit(client, EXIT_TIMEOUT_MS);
 }
 
 /**
  * Shutdown a specific client by key.
+ *
+ * @returns `true` when the client is gone (already absent or confirmed exited),
+ * `false` if a live process outlived the shutdown budget.
  */
-export async function shutdownClient(key: string): Promise<void> {
+export async function shutdownClient(key: string): Promise<boolean> {
 	const client = clients.get(key);
-	if (!client) return;
-	clients.delete(key);
-	await shutdownClientInstance(client);
+	if (!client) return true;
+	return await shutdownClientInstance(client);
 }
 
 // =============================================================================

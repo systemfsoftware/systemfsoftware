@@ -275,6 +275,39 @@ describe("searchCodex model selection", () => {
 		expect(result.sources).toEqual([{ title: "Example Article", url: "https://example.com/article" }]);
 	});
 
+	function sentUserText(): string | undefined {
+		const input = capturedRequest?.body?.input as Array<Record<string, unknown>> | undefined;
+		const userItem = input?.find(item => item.role === "user");
+		const content = userItem?.content as Array<Record<string, unknown>> | undefined;
+		return content?.[0]?.text as string | undefined;
+	}
+
+	it("re-emits directive queries with normalized Google-style operators", async () => {
+		delete process.env.PI_CODEX_WEB_SEARCH_MODEL;
+		await searchCodex(
+			makeSearchParams(
+				'bun runtime site:bun.sh -site:reddit.com after:2024-01-01 "exact phrase"',
+				mockCodexFetch("gpt-5.6-luna"),
+			),
+		);
+
+		expect(capturedRequest).not.toBeNull();
+		expect(sentUserText()).toBe('bun runtime "exact phrase" site:bun.sh -site:reddit.com after:2024-01-01');
+		// Tool config stays untouched: the ChatGPT backend's filter support is
+		// unverified, so no `filters` field is added to the web_search tool.
+		const input = capturedRequest?.body?.input as Array<Record<string, unknown>>;
+		const additionalTools = input.find(item => item.type === "additional_tools");
+		expect(additionalTools?.tools).toEqual([{ type: "web_search", search_context_size: "high" }]);
+	});
+
+	it("sends directive-free queries byte-identical", async () => {
+		delete process.env.PI_CODEX_WEB_SEARCH_MODEL;
+		const query = "how does the bun runtime schedule timers?";
+		await searchCodex(makeSearchParams(query, mockCodexFetch("gpt-5.6-luna")));
+
+		expect(sentUserText()).toBe(query);
+	});
+
 	it("uses configured Codex endpoint, API key, and headers without OAuth", async () => {
 		process.env.PI_CODEX_WEB_SEARCH_MODEL = "gpt-5.4";
 		const result = await searchCodex({

@@ -6,6 +6,10 @@
  */
 import * as AIError from "@oh-my-pi/pi-ai/error";
 import type { FetchImpl } from "@oh-my-pi/pi-ai/types";
+import { withTimeoutSignal } from "../utils/fetch-timeout";
+
+/** Per-request abort deadline for each OAuth discovery metadata fetch. */
+const DISCOVERY_FETCH_TIMEOUT_MS = 10_000;
 
 export interface OAuthEndpoints {
 	authorizationUrl: string;
@@ -346,7 +350,7 @@ function readMetadataScopes(metadata: Record<string, unknown>): string | undefin
  */
 export async function fetchResourceMetadataScopes(
 	resourceMetadataUrl: string,
-	opts?: { fetch?: FetchImpl },
+	opts?: { fetch?: FetchImpl; signal?: AbortSignal },
 ): Promise<string | undefined> {
 	const fetchImpl: FetchImpl = opts?.fetch ?? fetch;
 	try {
@@ -354,6 +358,7 @@ export async function fetchResourceMetadataScopes(
 			method: "GET",
 			headers: { Accept: "application/json" },
 			redirect: "follow",
+			signal: withTimeoutSignal(DISCOVERY_FETCH_TIMEOUT_MS, opts?.signal),
 		});
 		if (!resp.ok) return undefined;
 		const meta = (await resp.json()) as Record<string, unknown>;
@@ -371,7 +376,7 @@ export async function discoverOAuthEndpoints(
 	serverUrl: string,
 	authServerUrl?: string,
 	resourceMetadataUrl?: string,
-	opts?: { fetch?: FetchImpl; protectedResource?: string; protectedScopes?: string },
+	opts?: { fetch?: FetchImpl; protectedResource?: string; protectedScopes?: string; signal?: AbortSignal },
 ): Promise<OAuthEndpoints | null> {
 	const fetchImpl: FetchImpl = opts?.fetch ?? fetch;
 	const wellKnownPaths = [
@@ -402,6 +407,7 @@ export async function discoverOAuthEndpoints(
 				method: "GET",
 				headers: { Accept: "application/json" },
 				redirect: "follow",
+				signal: withTimeoutSignal(DISCOVERY_FETCH_TIMEOUT_MS, opts?.signal),
 			});
 			if (metaResp.ok) {
 				const meta = (await metaResp.json()) as Record<string, unknown>;
@@ -486,6 +492,7 @@ export async function discoverOAuthEndpoints(
 						method: "GET",
 						headers: { Accept: "application/json" },
 						redirect: "follow",
+						signal: withTimeoutSignal(DISCOVERY_FETCH_TIMEOUT_MS, opts?.signal),
 					});
 
 					if (response.ok) {
@@ -521,6 +528,7 @@ export async function discoverOAuthEndpoints(
 									fetch: fetchImpl,
 									protectedResource: discoveredProtectedResource,
 									protectedScopes: readMetadataScopes(metadata) ?? protectedScopes,
+									signal: opts?.signal,
 								});
 								if (discovered) return discovered;
 							}

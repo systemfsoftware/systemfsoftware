@@ -13,9 +13,12 @@ import {
 	getModelPerformanceSeries,
 	getModelTimeSeries,
 	getOverallStats,
+	getProviderHourlyBurn,
+	getProviderTimeSeries,
 	getStatsByAgentType,
 	getStatsByFolder,
 	getStatsByModel,
+	getStatsByProvider,
 	getTimeSeries,
 	getToolStats,
 	getToolStatsByModel,
@@ -24,6 +27,7 @@ import {
 	insertMessageStats,
 	insertToolCalls,
 	insertUserMessageStats,
+	markSessionBackfillsComplete,
 	setFileOffset,
 	updateToolResults,
 	updateUserMessageLinks,
@@ -34,7 +38,15 @@ import type { SyncWorkerRequest, SyncWorkerResponse } from "./sync-worker";
 // hidden argv mode, so the compiled binary and npm bundle only need one
 // JavaScript entry. Standalone source `omp-stats` keeps using this package's
 // own sync-worker source file.
-import type { BehaviorDashboardStats, DashboardStats, MessageStats, RequestDetails, ToolDashboardStats } from "./types";
+import type {
+	BehaviorDashboardStats,
+	DashboardStats,
+	MessageStats,
+	ProviderDashboardStats,
+	RequestDetails,
+	ToolDashboardStats,
+} from "./types";
+import { computeUsageWindowStats, fetchUsageSnapshots } from "./usage-windows";
 
 /**
  * Apply a freshly parsed result to the database. Runs entirely on the
@@ -209,12 +221,15 @@ export async function syncAllSessions(opts?: SyncOptions): Promise<{ processed: 
 	await initDb();
 
 	const files = await listAllSessionFiles();
-	if (files.length === 0) return { processed: 0, files: 0 };
-
 	let totalProcessed = 0;
 	let filesProcessed = 0;
 	let completed = 0;
 	let cursor = 0;
+	const finish = () => {
+		markSessionBackfillsComplete();
+		return { processed: totalProcessed, files: filesProcessed };
+	};
+	if (files.length === 0) return finish();
 
 	const report = (sessionFile: string) => {
 		completed++;
@@ -259,7 +274,7 @@ export async function syncAllSessions(opts?: SyncOptions): Promise<{ processed: 
 		for (const sessionFile of files) {
 			await processFile(sessionFile, parseSessionFile);
 		}
-		return { processed: totalProcessed, files: filesProcessed };
+		return finish();
 	}
 
 	const poolSize = Math.min(files.length, requestedWorkers);
@@ -282,7 +297,7 @@ export async function syncAllSessions(opts?: SyncOptions): Promise<{ processed: 
 		for (const handle of handles) handle.worker.terminate();
 	}
 
-	return { processed: totalProcessed, files: filesProcessed };
+	return finish();
 }
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -498,5 +513,26 @@ export async function getToolDashboardStats(range?: string | null): Promise<Tool
 		byTool: getToolStats(cutoff ?? undefined),
 		byToolModel: getToolStatsByModel(cutoff ?? undefined),
 		series: getToolTimeSeries(modelSeriesDays, cutoff, modelSeriesBucketMs),
+	};
+}
+
+/**
+ * Get the providers dashboard payload: per-provider totals, peak-burn-hours
+ * histogram, provider token time series, and subscription-window analytics
+ * (utilization series + insights) derived from recorded usage-limit snapshots.
+ */
+export async function getProviderDashboardStats(range?: string | null): Promise<ProviderDashboardStats> {
+	await initDb();
+	const { modelSeriesDays, modelSeriesBucketMs, cutoff } = getTimeRangeConfig(range);
+	const providers = getStatsByProvider(cutoff ?? undefined);
+	const tokensByProvider = new Map(providers.map(p => [p.provider, p.totalTokens]));
+	const snapshots = await fetchUsageSnapshots(cutoff ?? 0);
+	const { usageSeries, windowInsights } = computeUsageWindowStats(snapshots, tokensByProvider);
+	return {
+		providers,
+		hourly: getProviderHourlyBurn(cutoff ?? undefined),
+		series: getProviderTimeSeries(modelSeriesDays, cutoff, modelSeriesBucketMs),
+		usageSeries,
+		windowInsights,
 	};
 }

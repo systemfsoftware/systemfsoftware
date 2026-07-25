@@ -3,13 +3,19 @@ import { $env } from "@oh-my-pi/pi-utils";
 import { resolveXAIHttpTransport, type XAIHttpProvider, type XAIHttpTransport } from "../../../lib/xai-http";
 import type { SearchCitation, SearchResponse, SearchSource, SearchUsage } from "../../../web/search/types";
 import { SearchProviderError } from "../../../web/search/types";
+import { formatQuery, parseSearchQuery, type QuerySyntax } from "../query";
 import { clampNumResults } from "../utils";
 import type { SearchParams } from "./base";
 import { SearchProvider } from "./base";
 import { classifyProviderHttpError, withHardTimeout } from "./utils";
 
 const XAI_DEFAULT_BASE_URL = "https://api.x.ai/v1";
-const XAI_WEB_SEARCH_MODEL = "grok-4.3";
+const XAI_WEB_SEARCH_MODEL = "grok-4.5";
+// grok-4.5 defaults reasoning.effort to "high"; xAI documents "low" for
+// latency-sensitive agentic use and simple tool calling
+// (docs.x.ai/developers/model-capabilities/text/reasoning). Web search is
+// exactly that and runs under a 60s hard timeout, so pin the search calls low.
+const XAI_WEB_SEARCH_REASONING_EFFORT = "low";
 const DEFAULT_NUM_RESULTS = 10;
 const MAX_NUM_RESULTS = 30;
 
@@ -52,14 +58,61 @@ interface XAIResponsesResponse {
 	usage?: XAIResponsesUsage | null;
 }
 
+/**
+ * Query syntax re-emitted for the Grok search agent. `site:`/`-site:` are
+ * stripped because hosts map natively onto the web_search domain filters;
+ * `before:`/`after:` stay in the query text — the Responses web_search tool
+ * has no date parameters (`from_date`/`to_date` exist only on `x_search` and
+ * the deprecated Live Search `search_parameters`, which now returns 410) and
+ * the agent honors the tokens as natural-language hints.
+ */
+const XAI_QUERY_SYNTAX: QuerySyntax = {
+	phrases: true,
+	negation: true,
+	or: true,
+	inUrl: true,
+	inTitle: true,
+	filetype: true,
+	dateRange: true,
+};
+
+/** xAI web_search accepts at most 5 allowed or excluded domains per request. */
+const MAX_DOMAIN_FILTERS = 5;
+
+/** Bare hosts of `site:` values (`github.com/anthropics` → `github.com`), deduped, capped at 5; path parts are enforced by the central constraint filter. */
+function domainFilterList(sites: readonly string[]): string[] {
+	const hosts = new Set<string>();
+	for (const site of sites) {
+		const slash = site.indexOf("/");
+		hosts.add(slash === -1 ? site : site.slice(0, slash));
+		if (hosts.size === MAX_DOMAIN_FILTERS) break;
+	}
+	return [...hosts];
+}
+
 function buildRequestBody(params: SearchParams): Record<string, unknown> {
+	const parsed = params.parsedQuery ?? parseSearchQuery(params.query);
+	const webSearchTool: Record<string, unknown> = { type: "web_search" };
+	let query = params.query;
+	if (parsed.hasDirectives) {
+		query = formatQuery(parsed, XAI_QUERY_SYNTAX);
+		// allowed_domains and excluded_domains are mutually exclusive per
+		// request; prefer the allow list, the central filter enforces exclusions.
+		if (parsed.sites.length > 0) {
+			webSearchTool.filters = { allowed_domains: domainFilterList(parsed.sites) };
+		} else if (parsed.excludedSites.length > 0) {
+			webSearchTool.filters = { excluded_domains: domainFilterList(parsed.excludedSites) };
+		}
+	}
+
 	const body: Record<string, unknown> = {
 		model: XAI_WEB_SEARCH_MODEL,
 		input: [
 			{ role: "system", content: params.systemPrompt },
-			{ role: "user", content: params.query },
+			{ role: "user", content: query },
 		],
-		tools: [{ type: "web_search" }],
+		tools: [webSearchTool],
+		reasoning: { effort: XAI_WEB_SEARCH_REASONING_EFFORT },
 	};
 
 	if (params.maxOutputTokens !== undefined) {

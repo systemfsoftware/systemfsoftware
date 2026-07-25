@@ -136,21 +136,31 @@ class ThemeSceneController implements SetupSceneController {
 		routeSelectListMouse(this.#selectList, event, listLine);
 	}
 
-	render(width: number): readonly string[] {
+	render(width: number, maxLines?: number): readonly string[] {
+		const budget = maxLines ?? Number.POSITIVE_INFINITY;
 		const lines = [
 			theme.fg("muted", "Theme changes preview live. Nothing is saved until you press Enter."),
 			this.#mode === "all"
 				? theme.fg("dim", "Browsing all themes · Esc returns to curated choices")
 				: theme.fg("dim", "Esc skips this step"),
 			"",
-			...renderThemePreview(width),
-			"",
 		];
+		// The mock status-line/editor block is decorative — the wizard itself
+		// re-renders in the highlighted theme — so it yields to the list when
+		// it would squeeze the window below the six curated rows (+1 for the
+		// list's own search-status row).
+		const preview = renderThemePreview(width);
+		if (budget - lines.length - (preview.length + 1) - 1 >= CURATED_ITEMS.length) {
+			lines.push(...preview, "");
+		}
 		if (this.#loadingAllThemes) {
 			this.#listRowStart = -1;
 			lines.push(theme.fg("dim", "Loading themes…"));
 		} else {
 			this.#listRowStart = lines.length;
+			if (maxLines !== undefined) {
+				this.#selectList.setMaxVisible(Math.max(1, Math.min(10, budget - lines.length - 1)));
+			}
 			lines.push(...this.#selectList.render(width));
 		}
 		if (this.#message) {

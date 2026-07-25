@@ -72,6 +72,9 @@ function refreshToolChoiceForActiveTools(
 	if (!toolChoice || typeof toolChoice === "string") {
 		return toolChoice;
 	}
+	if (toolChoice.type === "computer") {
+		return tools.some(tool => tool.native?.type === "computer") ? toolChoice : undefined;
+	}
 
 	const toolName =
 		toolChoice.type === "tool"
@@ -238,6 +241,13 @@ export interface AgentOptions {
 	 */
 	transformToolCallArguments?: (args: Record<string, unknown>, toolName: string) => Record<string, unknown>;
 
+	/**
+	 * Resolve a tool call whose name matched no advertised tool. Lets hosts
+	 * route calls to tools exposed through side transports (e.g. `xd://`
+	 * device mounts) instead of failing with "Tool not found".
+	 */
+	resolveFallbackTool?: (name: string) => AgentTool<any> | undefined;
+
 	/** Enable intent tracing schema injection/stripping in the harness. */
 	intentTracing?: boolean;
 	/**
@@ -375,6 +385,7 @@ export class Agent {
 	#kimiApiFormat?: "openai" | "anthropic";
 	#preferWebsockets?: boolean;
 	#transformToolCallArguments?: (args: Record<string, unknown>, toolName: string) => Record<string, unknown>;
+	#resolveFallbackTool?: (name: string) => AgentTool<any> | undefined;
 	#intentTracing: boolean;
 	#pruneToolDescriptions: boolean;
 	#dialect?: Dialect;
@@ -455,6 +466,7 @@ export class Agent {
 		this.#kimiApiFormat = opts.kimiApiFormat;
 		this.#preferWebsockets = opts.preferWebsockets;
 		this.#transformToolCallArguments = opts.transformToolCallArguments;
+		this.#resolveFallbackTool = opts.resolveFallbackTool;
 		this.#intentTracing = opts.intentTracing === true;
 		this.#pruneToolDescriptions = opts.pruneToolDescriptions === true;
 		this.#dialect = opts.dialect;
@@ -1047,6 +1059,22 @@ export class Agent {
 
 		const messages = this.#state.messages;
 		if (messages.length === 0) {
+			// An empty transcript has nothing to resume, but a queued steer/follow-up
+			// must still be delivered as the opening turn — mirroring the assistant-tail
+			// branch below. Throwing here leaves the message undeliverable, and idle-drain
+			// callers (AgentSession#scheduleQueuedMessageDrain) re-arm continue() on every
+			// microtask because hasQueuedMessages() never clears, spinning an unbounded
+			// allocation loop until OOM (issue #6344).
+			const queuedSteering = this.#dequeueSteeringMessages();
+			if (queuedSteering.length > 0) {
+				await this.#runLoop(queuedSteering, { skipInitialSteeringPoll: true });
+				return;
+			}
+			const queuedFollowUp = this.#dequeueFollowUpMessages();
+			if (queuedFollowUp.length > 0) {
+				await this.#runLoop(queuedFollowUp);
+				return;
+			}
 			throw new Error("No messages to continue from");
 		}
 		if (messages[messages.length - 1].role === "assistant") {
@@ -1174,6 +1202,7 @@ export class Agent {
 			cwd: this.#cwd,
 			getCwd: this.#cwdResolver,
 			transformToolCallArguments: this.#transformToolCallArguments,
+			resolveFallbackTool: this.#resolveFallbackTool,
 			intentTracing: this.#intentTracing,
 			pruneToolDescriptions: this.#pruneToolDescriptions,
 			dialect: this.#dialect,

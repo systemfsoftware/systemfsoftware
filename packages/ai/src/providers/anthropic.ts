@@ -21,6 +21,7 @@ import * as AIError from "../error";
 import { getEnvApiKey, OUTPUT_FALLBACK_BUFFER } from "../stream";
 import type {
 	AnthropicFallbackContent,
+	AnthropicServerToolContent,
 	Api,
 	AssistantMessage,
 	CacheRetention,
@@ -71,16 +72,17 @@ import {
 	calculateAnthropicRetryDelayMs,
 	retryDelayFromHeaders,
 } from "./anthropic-client";
-import type {
-	ToolInputSchema as AnthropicToolInputSchema,
-	Tool as AnthropicWireTool,
-	Usage as AnthropicWireUsage,
-	ContentBlockParam,
-	FallbackParam,
-	MessageCreateParamsStreaming,
-	MessageParam,
-	RawMessageStreamEvent,
-	TextBlockParam,
+import {
+	type ToolInputSchema as AnthropicToolInputSchema,
+	type Tool as AnthropicWireTool,
+	type Usage as AnthropicWireUsage,
+	type ContentBlockParam,
+	type FallbackParam,
+	isAnthropicWebSearchHistoryBlock,
+	type MessageCreateParamsStreaming,
+	type MessageParam,
+	type RawMessageStreamEvent,
+	type TextBlockParam,
 } from "./anthropic-wire";
 import {
 	buildCopilotDynamicHeaders,
@@ -1870,15 +1872,17 @@ const streamAnthropicOnce = (
 				// `context_management.clear_thinking_20251015` requires this beta. OAuth
 				// requests carry it in `claudeCodeAgentBetaDefaults`; API-key requests
 				// need it added explicitly so the field is honored instead of rejected
-				// (#3288). Skip transports where this package cannot deliver the beta
-				// in the form their adapter accepts: Copilot strips Anthropic betas,
-				// and Vertex rawPredict needs betas in the body (`anthropic_beta`),
-				// not as an `anthropic-beta` HTTP header.
+				// (#3288). Skip transports where this package cannot deliver or the
+				// provider cannot accept the beta: Copilot strips Anthropic betas;
+				// Vertex rawPredict needs betas in the body (`anthropic_beta`), not as
+				// an `anthropic-beta` HTTP header; and OpenCode Zen rejects the related
+				// `context_management` field (#6510).
 				if (
 					model.reasoning &&
 					options?.thinkingEnabled &&
 					model.provider !== "github-copilot" &&
 					model.provider !== "google-vertex" &&
+					model.provider !== "opencode-zen" &&
 					!extraBetas.includes(contextManagementBeta)
 				) {
 					extraBetas.push(contextManagementBeta);
@@ -1977,6 +1981,7 @@ const streamAnthropicOnce = (
 				| RedactedThinkingContent
 				| TextContent
 				| AnthropicFallbackContent
+				| (AnthropicServerToolContent & { [kStreamingPartialJson]?: string })
 				| (ToolCall & { [kStreamingPartialJson]: string; [kStreamingLastParseLen]?: number })
 			) & { [kStreamingBlockIndex]: number };
 			const idleTimeoutMs = options?.streamIdleTimeoutMs ?? getStreamIdleTimeoutMs();
@@ -1994,6 +1999,23 @@ const streamAnthropicOnce = (
 						block.thinkingSignature = undefined;
 					}
 					stream.push({ type: "thinking_end", contentIndex, content: block.thinking, partial: output });
+				} else if (block.type === "anthropicServerTool" && block.block.type === "server_tool_use") {
+					const partialJson = block[kStreamingPartialJson];
+					if (partialJson) {
+						try {
+							const input = parseJsonWithRepair(partialJson);
+							if (isRecord(input)) {
+								block.block.input = input;
+							} else {
+								reportAnthropicEnvelopeAnomaly("server_tool_use input is not a JSON object");
+							}
+						} catch (parseError) {
+							reportAnthropicEnvelopeAnomaly(
+								`server_tool_use ${block.block.id} input is not valid JSON: ${parseError instanceof Error ? parseError.message : String(parseError)}`,
+							);
+						}
+					}
+					clearStreamingPartialJson(block);
 				} else if (block.type === "toolCall") {
 					const finalJson =
 						block[kStreamingPartialJson].length > 0
@@ -2094,7 +2116,14 @@ const streamAnthropicOnce = (
 						number,
 						{
 							contentIndex: number;
-							kind: "text" | "thinking" | "redactedThinking" | "fallback" | "toolCall" | "ignored";
+							kind:
+								| "text"
+								| "thinking"
+								| "redactedThinking"
+								| "fallback"
+								| "anthropicServerTool"
+								| "toolCall"
+								| "ignored";
 						}
 					>();
 
@@ -2276,6 +2305,22 @@ const streamAnthropicOnce = (
 									contentIndex: output.content.length - 1,
 									kind: "redactedThinking",
 								});
+							} else if (
+								isAnthropicWebSearchHistoryBlock(event.content_block) &&
+								umansGatewayWebSearchHeader === undefined
+							) {
+								streamedReplayUnsafeContent = true;
+								const block: Block = {
+									type: "anthropicServerTool",
+									block: { ...event.content_block },
+									[kStreamingPartialJson]: "",
+									[kStreamingBlockIndex]: event.index,
+								};
+								output.content.push(block);
+								openBlocks.set(event.index, {
+									contentIndex: output.content.length - 1,
+									kind: "anthropicServerTool",
+								});
 							} else if (event.content_block.type === "tool_use") {
 								streamedReplayUnsafeContent = true;
 								const block: Block = {
@@ -2346,6 +2391,15 @@ const streamAnthropicOnce = (
 									partial: output,
 								});
 							} else if (event.delta.type === "input_json_delta") {
+								if (
+									openBlock.kind === "anthropicServerTool" &&
+									block?.type === "anthropicServerTool" &&
+									block.block.type === "server_tool_use"
+								) {
+									block[kStreamingPartialJson] =
+										(block[kStreamingPartialJson] ?? "") + event.delta.partial_json;
+									continue;
+								}
 								if (openBlock.kind !== "toolCall" || block?.type !== "toolCall") {
 									reportAnthropicEnvelopeAnomaly(`received input_json_delta for ${openBlock.kind} block`);
 									continue;
@@ -2857,27 +2911,15 @@ export function buildAnthropicClientOptions(args: AnthropicClientOptionsArgs): A
 		};
 	}
 
-	// OpenCode Go and Umans validate Anthropic-compatible API-key auth through
-	// `X-Api-Key`; bearer-only requests reach the endpoint but fail auth.
-	if (model.provider === "opencode-go" || model.provider === "umans") {
+	// OpenCode Go/Zen and Umans validate Anthropic-compatible API-key auth
+	// through `X-Api-Key`; bearer-only requests reach the endpoint but fail auth
+	// with `401 Missing API key` (#6510). Drop the auto-built `Authorization`
+	// header and keep `apiKey` so the client emits `X-Api-Key`.
+	if (model.provider === "opencode-go" || model.provider === "opencode-zen" || model.provider === "umans") {
 		delete defaultHeaders.Authorization;
 		return {
 			isOAuthToken: false,
 			apiKey,
-			authToken: null,
-			baseURL: baseUrl,
-			maxRetries: 5,
-			defaultHeaders,
-			fetch: cchFetch,
-			fetchOptions,
-		};
-	}
-	// OpenCode Zen's Anthropic-compatible gateway accepts bearer auth only;
-	// leaving apiKey set lets the client add X-Api-Key, which upstream Alibaba rejects.
-	if (model.provider === "opencode-zen") {
-		return {
-			isOAuthToken: false,
-			apiKey: null,
 			authToken: null,
 			baseURL: baseUrl,
 			maxRetries: 5,
@@ -3341,11 +3383,15 @@ function buildParams(
 	// blocks to text upstream, so `keep: "all"` is a no-op that risks proxy
 	// rejection of an unrecognized field. Skip Vertex rawPredict because that
 	// adapter requires betas in the JSON body (`anthropic_beta`) instead of the
-	// Anthropic HTTP beta header this code can add.
+	// Anthropic HTTP beta header this code can add. Skip OpenCode Zen because
+	// its Anthropic proxy rejects the unrecognized `context_management` field
+	// with `400 Extra inputs are not permitted` on several Claude families
+	// (#6510) — same rationale as Copilot.
 	const shouldKeepThinkingContext =
 		!options?.client &&
 		model.provider !== "github-copilot" &&
 		model.provider !== "google-vertex" &&
+		model.provider !== "opencode-zen" &&
 		(thinking?.type === "adaptive" || thinking?.type === "enabled");
 	const contextManagement = shouldKeepThinkingContext
 		? { edits: [{ type: "clear_thinking_20251015" as const, keep: "all" as const }] }
@@ -3637,6 +3683,8 @@ export function convertAnthropicMessages(
 						type: "redacted_thinking",
 						data: block.data,
 					});
+				} else if (block.type === "anthropicServerTool") {
+					blocks.push(block.block);
 				} else if (block.type === "fallback") {
 					// Replay ONLY when both sides are aligned: the current
 					// request opted into the beta chain, and the target is

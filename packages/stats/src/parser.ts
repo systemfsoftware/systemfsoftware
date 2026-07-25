@@ -240,7 +240,11 @@ function extractToolCalls(
 
 	const blocks = msg.content.filter(
 		(block): block is ToolCall =>
-			block.type === "toolCall" && typeof block.id === "string" && typeof block.name === "string",
+			block !== null &&
+			typeof block === "object" &&
+			block.type === "toolCall" &&
+			typeof block.id === "string" &&
+			typeof block.name === "string",
 	);
 	if (blocks.length === 0) return [];
 
@@ -277,7 +281,9 @@ function extractToolResultLink(sessionFile: string, entry: SessionMessageEntry):
 	let resultChars = 0;
 	if (Array.isArray(msg.content)) {
 		for (const block of msg.content) {
-			if (block.type === "text" && typeof block.text === "string") resultChars += block.text.length;
+			if (block && typeof block === "object" && block.type === "text" && typeof block.text === "string") {
+				resultChars += block.text.length;
+			}
 		}
 	}
 	return {

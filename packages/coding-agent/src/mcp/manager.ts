@@ -38,6 +38,7 @@ import type { MCPToolDetails } from "./tool-bridge";
 import { DeferredMCPTool, MCPTool } from "./tool-bridge";
 import type { MCPToolCache } from "./tool-cache";
 import type {
+	MCPAuthChallenge,
 	MCPGetPromptResult,
 	MCPPrompt,
 	MCPRequestOptions,
@@ -160,6 +161,9 @@ export interface MCPDiscoverOptions {
 	onStatus?: (event: McpConnectionStatusEvent) => void;
 }
 
+/** Handles an MCP `WWW-Authenticate` challenge and returns refreshed config. */
+export type MCPAuthHandler = (serverName: string, challenge: MCPAuthChallenge) => Promise<MCPServerConfig | undefined>;
+
 /**
  * MCP Server Manager.
  *
@@ -189,6 +193,7 @@ export class MCPManager {
 	#pendingToolLoads = new Map<string, Promise<ToolLoadResult>>();
 	#sources = new Map<string, SourceMeta>();
 	#authStorage: AuthStorage | null = null;
+	#authHandler?: MCPAuthHandler;
 	#onNotification?: (serverName: string, method: string, params: unknown) => void;
 	#onToolsChanged?: (tools: CustomTool<TSchema, MCPToolDetails>[]) => void;
 	#onResourcesChanged?: (serverName: string, uri: string) => void;
@@ -201,7 +206,7 @@ export class MCPManager {
 	/** Preserved configs for reconnection after connection loss. */
 	#serverConfigs = new Map<string, MCPServerConfig>();
 	/**
-	 * Timestamps of recent `reconnectServer` invocations per server, used by the
+	 * Timestamps of recent reconnectServer invocations per server, used by the
 	 * crash-storm circuit breaker (see {@link RECONNECT_BURST_LIMIT}).
 	 */
 	#reconnectHistory = new Map<string, number[]>();
@@ -310,6 +315,11 @@ export class MCPManager {
 	 */
 	setAuthStorage(authStorage: AuthStorage): void {
 		this.#authStorage = authStorage;
+	}
+
+	/** Set the callback used to complete OAuth after a tool-level auth challenge. */
+	setAuthHandler(handler: MCPAuthHandler | undefined): void {
+		this.#authHandler = handler;
 	}
 
 	/**
@@ -474,7 +484,8 @@ export class MCPManager {
 				.then(async ({ connection, serverTools }) => {
 					if (this.#pendingToolLoads.get(name) !== toolsPromise) return;
 					this.#pendingToolLoads.delete(name);
-					const reconnect = () => this.reconnectServer(name);
+					const reconnect = (options?: { authChallenge?: MCPAuthChallenge }) =>
+						this.reconnectServer(name, options);
 					const customTools = MCPTool.fromTools(connection, serverTools, reconnect);
 					this.#replaceServerTools(name, customTools);
 					this.#onToolsChanged?.(this.#tools);
@@ -810,13 +821,15 @@ export class MCPManager {
 	 * the same server share one reconnection attempt. Returns the new
 	 * connection, or `null` if reconnection failed or the per-server crash
 	 * burst limit (see {@link RECONNECT_BURST_LIMIT}) is exceeded.
-	 *
 	 * @param options.manual - When `true`, resets the crash-burst window so a
 	 *   user-driven retry (e.g. `/mcp reconnect`) is never blocked by an
 	 *   earlier storm. Defaults to `false`; the transport `onClose` callback
 	 *   and the per-tool-call retry path in `tool-bridge` MUST NOT set it.
 	 */
-	async reconnectServer(name: string, options?: { manual?: boolean }): Promise<MCPServerConnection | null> {
+	async reconnectServer(
+		name: string,
+		options?: { manual?: boolean; authChallenge?: MCPAuthChallenge },
+	): Promise<MCPServerConnection | null> {
 		if (options?.manual) {
 			this.#reconnectHistory.delete(name);
 		}
@@ -828,7 +841,7 @@ export class MCPManager {
 			return null;
 		}
 
-		const attempt = this.#doReconnect(name);
+		const attempt = this.#doReconnect(name, options?.authChallenge);
 		this.#pendingReconnections.set(name, attempt);
 		return attempt.finally(() => this.#pendingReconnections.delete(name));
 	}
@@ -873,11 +886,29 @@ export class MCPManager {
 		return false;
 	}
 
-	async #doReconnect(name: string): Promise<MCPServerConnection | null> {
+	async #doReconnect(name: string, authChallenge?: MCPAuthChallenge): Promise<MCPServerConnection | null> {
 		const oldConnection = this.#connections.get(name);
-		const config = oldConnection?.config ?? this.#serverConfigs.get(name);
+		let config = oldConnection?.config ?? this.#serverConfigs.get(name);
 		const source = this.#sources.get(name) ?? oldConnection?._source;
 		if (!config) return null;
+
+		if (authChallenge) {
+			if (!this.#authHandler) {
+				logger.error("MCP auth challenge cannot be handled; no auth handler is configured", {
+					path: `mcp:${name}`,
+				});
+				return null;
+			}
+			try {
+				const refreshedConfig = await this.#authHandler(name, authChallenge);
+				if (!refreshedConfig) return null;
+				config = refreshedConfig;
+				this.#serverConfigs.set(name, config);
+			} catch (error) {
+				logger.error("MCP auth challenge handling failed", { path: `mcp:${name}`, error });
+				return null;
+			}
+		}
 
 		logger.debug("MCP reconnecting", { path: `mcp:${name}` });
 
@@ -987,7 +1018,7 @@ export class MCPManager {
 		};
 		try {
 			const serverTools = await listTools(connection);
-			const reconnect = () => this.reconnectServer(name);
+			const reconnect = (options?: { authChallenge?: MCPAuthChallenge }) => this.reconnectServer(name, options);
 			const customTools = MCPTool.fromTools(connection, serverTools, reconnect);
 			void this.toolCache?.set(name, config, serverTools);
 			this.#replaceServerTools(name, customTools);

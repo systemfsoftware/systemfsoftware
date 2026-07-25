@@ -601,6 +601,41 @@ describe("AgentSession refreshMCPTools rebuild skipping", () => {
 		expect(allNotices[1]).not.toContain("became available");
 	});
 
+	it("caps dynamic xd:// mount-notice summaries", async () => {
+		const { session, contexts } = newSession(async toolNames => `tools:${toolNames.join(",")}`, {
+			xdevRegistry: new XdevRegistry([]),
+			responses: [{ content: ["ok"] }],
+		});
+		const description = `Search ${"x".repeat(XdevRegistry.EXTERNAL_DESCRIPTION_CAP * 3)} TAIL`;
+		const search = createMcpCustomTool("mcp__nucleus_search", "nucleus", "search", description);
+
+		await session.refreshMCPTools([search]);
+		await session.prompt("hello");
+
+		const notices = mountNoticesIn(contexts[0]);
+		expect(notices).toHaveLength(1);
+		expect(notices[0]).toContain("xd://mcp__nucleus_search");
+		expect(notices[0]).not.toContain("TAIL");
+	});
+
+	it("inlines configured late xd:// device docs in mount notices", async () => {
+		const { session, contexts } = newSession(async toolNames => `tools:${toolNames.join(",")}`, {
+			xdevRegistry: new XdevRegistry([]),
+			responses: [{ content: ["ok"] }],
+		});
+		session.settings.set("tools.xdevDocs", "builtins");
+		session.settings.set("tools.xdevInlineDevices", ["mcp__nucleus_*"]);
+		const search = createMcpCustomTool("mcp__nucleus_search", "nucleus", "search", "Search nucleus");
+
+		await session.refreshMCPTools([search]);
+		await session.prompt("hello");
+
+		const notices = mountNoticesIn(contexts[0]);
+		expect(notices).toHaveLength(1);
+		expect(notices[0]).toContain("## mcp__nucleus_search");
+		expect(notices[0]).toContain("## Schema");
+	});
+
 	it("drops a mount delta that cancels out before the next prompt", async () => {
 		const { session, contexts } = newSession(async toolNames => `tools:${toolNames.join(",")}`, {
 			xdevRegistry: new XdevRegistry([]),

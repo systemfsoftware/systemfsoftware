@@ -70,6 +70,7 @@ function createContext(
 		loadingAnimation: undefined,
 		streamingComponent: undefined,
 		streamingMessage: undefined,
+		transcriptMessageComponents: new WeakMap(),
 		pendingTools: new Map<string, unknown>(),
 		flushPendingModelSwitch: async () => {},
 		flushPendingCommandOutput: () => {},

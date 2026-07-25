@@ -22,10 +22,17 @@ import { normalizeLocalScheme } from "../tools/path-utils";
 import { ToolAbortError, throwIfAborted } from "../tools/tool-errors";
 import { callTool } from "./client";
 import { renderMCPCall, renderMCPResult } from "./render";
-import type { MCPContent, MCPServerConnection, MCPToolCallParams, MCPToolCallResult, MCPToolDefinition } from "./types";
+import type {
+	MCPAuthChallenge,
+	MCPContent,
+	MCPServerConnection,
+	MCPToolCallParams,
+	MCPToolCallResult,
+	MCPToolDefinition,
+} from "./types";
 
-/** Reconnect callback: tears down stale connection, returns new one or null. */
-export type MCPReconnect = () => Promise<MCPServerConnection | null>;
+/** Reconnect callback: tears down a stale connection, optionally authorizing first. */
+export type MCPReconnect = (options?: { authChallenge?: MCPAuthChallenge }) => Promise<MCPServerConnection | null>;
 
 /**
  * Network-level and stale-session errors that warrant a reconnect + single retry.
@@ -174,6 +181,8 @@ export interface MCPToolDetails {
 	isError?: boolean;
 	/** Raw content from MCP response */
 	rawContent?: MCPContent[];
+	/** Structured metadata from the MCP response */
+	mcpMeta?: Record<string, unknown>;
 	/** Provider ID (e.g., "claude", "mcp-json") */
 	provider?: string;
 	/** Provider display name (e.g., "Claude Code", "MCP Config") */
@@ -222,6 +231,7 @@ function buildResult(
 		mcpToolName,
 		isError: result.isError,
 		rawContent: result.content,
+		mcpMeta: result._meta,
 		provider,
 		providerName,
 	};
@@ -249,6 +259,51 @@ function buildErrorResult(
 	};
 }
 
+type MCPToolCallAttempt = {
+	connection: MCPServerConnection;
+	result?: MCPToolCallResult;
+	error?: unknown;
+};
+
+function getMcpAuthChallenge(result: MCPToolCallResult): MCPAuthChallenge | undefined {
+	if (!result.isError) return undefined;
+	const values = result._meta?.["mcp/www_authenticate"];
+	if (!Array.isArray(values)) return undefined;
+	const wwwAuthenticate = values.filter((value): value is string => typeof value === "string" && value.trim() !== "");
+	return wwwAuthenticate.length > 0 ? { wwwAuthenticate } : undefined;
+}
+
+async function callToolWithAuthRetry(
+	connection: MCPServerConnection,
+	toolName: string,
+	args: MCPToolArgs,
+	reconnect: MCPReconnect | undefined,
+	signal?: AbortSignal,
+): Promise<MCPToolCallAttempt> {
+	const result = await callTool(connection, toolName, args, { signal });
+	const authChallenge = getMcpAuthChallenge(result);
+	if (!authChallenge || !reconnect) return { connection, result };
+
+	let newConnection: MCPServerConnection | null;
+	try {
+		newConnection = await reconnectWithAbort(reconnect, signal, { authChallenge });
+	} catch (error) {
+		rethrowIfAborted(error, signal);
+		return { connection, error };
+	}
+	if (!newConnection) return { connection, result };
+
+	try {
+		return {
+			connection: newConnection,
+			result: await callTool(newConnection, toolName, args, { signal }),
+		};
+	} catch (error) {
+		rethrowIfAborted(error, signal);
+		return { connection: newConnection, error };
+	}
+}
+
 /** Re-throw abort-related errors so they bypass error-result handling. */
 function rethrowIfAborted(error: unknown, signal?: AbortSignal): void {
 	if (error instanceof ToolAbortError) throw error;
@@ -256,9 +311,13 @@ function rethrowIfAborted(error: unknown, signal?: AbortSignal): void {
 	if (signal?.aborted) throw new ToolAbortError();
 }
 
-async function reconnectWithAbort(reconnect: MCPReconnect, signal?: AbortSignal): Promise<MCPServerConnection | null> {
+async function reconnectWithAbort(
+	reconnect: MCPReconnect,
+	signal?: AbortSignal,
+	options?: { authChallenge?: MCPAuthChallenge },
+): Promise<MCPServerConnection | null> {
 	try {
-		return await untilAborted(signal, reconnect);
+		return await untilAborted(signal, () => reconnect(options));
 	} catch (error) {
 		rethrowIfAborted(error, signal);
 		return null;
@@ -332,6 +391,13 @@ export class MCPTool implements CustomTool<TSchema, MCPToolDetails> {
 	readonly approval = "write" as const;
 	/** Render completed MCP calls with the result header replacing the pending call header. */
 	readonly mergeCallAndResult = true;
+	/**
+	 * MCP-backed tools opt out of strict structured-output grammar. The server
+	 * owns validation, and strict mode makes OpenAI-family models over-fill
+	 * mutually exclusive optional fields (#4336/#4340). Serializers preserve an
+	 * explicit `false`; an omitted flag would leave nothing to preserve.
+	 */
+	readonly strict = false as const;
 
 	/** Create MCPTool instances for all tools from an MCP server connection */
 	static fromTools(connection: MCPServerConnection, tools: MCPToolDefinition[], reconnect?: MCPReconnect): MCPTool[] {
@@ -372,8 +438,27 @@ export class MCPTool implements CustomTool<TSchema, MCPToolDetails> {
 		const providerName = this.connection._source?.providerName;
 
 		try {
-			const result = await callTool(this.connection, this.tool.name, args, { signal });
-			return buildResult(result, this.connection.name, this.tool.name, provider, providerName);
+			const attempt = await callToolWithAuthRetry(this.connection, this.tool.name, args, this.reconnect, signal);
+			if (attempt.error !== undefined) {
+				return buildErrorResult(attempt.error, this.connection.name, this.tool.name, provider, providerName);
+			}
+			if (!attempt.result) {
+				return buildErrorResult(
+					new Error("MCP tool call returned no result"),
+					this.connection.name,
+					this.tool.name,
+					provider,
+					providerName,
+				);
+			}
+			this.connection = attempt.connection;
+			return buildResult(
+				attempt.result,
+				attempt.connection.name,
+				this.tool.name,
+				attempt.connection._source?.provider ?? provider,
+				attempt.connection._source?.providerName ?? providerName,
+			);
 		} catch (error) {
 			rethrowIfAborted(error, signal);
 			if (this.reconnect && isRetriableConnectionError(error)) {
@@ -418,6 +503,8 @@ export class DeferredMCPTool implements CustomTool<TSchema, MCPToolDetails> {
 	readonly approval = "write" as const;
 	/** Render completed MCP calls with the result header replacing the pending call header. */
 	readonly mergeCallAndResult = true;
+	/** See {@link MCPTool.strict}: MCP servers own validation, so stay non-strict. */
+	readonly strict = false as const;
 
 	readonly #fallbackProvider: string | undefined;
 	readonly #fallbackProviderName: string | undefined;
@@ -474,13 +561,31 @@ export class DeferredMCPTool implements CustomTool<TSchema, MCPToolDetails> {
 			const connection = await untilAborted(signal, () => this.getConnection());
 			throwIfAborted(signal);
 			try {
-				const result = await callTool(connection, this.tool.name, args, { signal });
+				const attempt = await callToolWithAuthRetry(connection, this.tool.name, args, this.reconnect, signal);
+				if (attempt.error !== undefined) {
+					return buildErrorResult(
+						attempt.error,
+						this.serverName,
+						this.tool.name,
+						attempt.connection._source?.provider ?? provider,
+						attempt.connection._source?.providerName ?? providerName,
+					);
+				}
+				if (!attempt.result) {
+					return buildErrorResult(
+						new Error("MCP tool call returned no result"),
+						this.serverName,
+						this.tool.name,
+						provider,
+						providerName,
+					);
+				}
 				return buildResult(
-					result,
+					attempt.result,
 					this.serverName,
 					this.tool.name,
-					connection._source?.provider ?? provider,
-					connection._source?.providerName ?? providerName,
+					attempt.connection._source?.provider ?? provider,
+					attempt.connection._source?.providerName ?? providerName,
 				);
 			} catch (callError) {
 				rethrowIfAborted(callError, signal);

@@ -1,7 +1,9 @@
 pub mod cancel;
+mod cmp;
 mod coreutils;
 mod fd;
 pub mod minimizer;
+mod moreutils;
 pub mod process;
 pub mod shell;
 mod which;

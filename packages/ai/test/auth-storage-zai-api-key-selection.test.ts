@@ -167,9 +167,9 @@ describe("AuthStorage Z.AI API-key usage ranking", () => {
 			fetchedAt: Date.now(),
 			limits: [
 				{
-					id: "zai:features:web-search-reader-zread:5h",
-					label: "ZAI Web Search / Reader / Zread Quota",
-					scope: { provider: "zai", windowId: "5h", tier: "web-search-reader-zread", shared: false },
+					id: "zai:features:zread:5h",
+					label: "ZAI Zread Quota",
+					scope: { provider: "zai", windowId: "5h", tier: "zread", shared: false },
 					window: { id: "5h", label: "5 Hour", durationMs: 5 * HOUR_MS, resetsAt: Date.now() + HOUR_MS },
 					amount: {
 						unit: "requests",

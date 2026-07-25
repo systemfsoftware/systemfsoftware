@@ -211,6 +211,7 @@ async function makeHarness(opts?: { readOnly?: boolean }): Promise<GuestUiHarnes
 		compactionQueuedMessages: [],
 		streamingComponent: undefined,
 		streamingMessage: undefined,
+		transcriptMessageComponents: new WeakMap(),
 		pendingTools: new Map(),
 		loadingAnimation: undefined,
 		statusLine: {

@@ -41,7 +41,10 @@ export const KNOWN_HOSTS = {
 	zai: { providers: ["zai"], urlMarkers: ["api.z.ai"] },
 	zhipu: { providers: ["zhipu-coding-plan"], urlMarkers: ["open.bigmodel.cn"] },
 	kilo: { providers: ["kilo"], urlMarkers: ["api.kilo.ai"] },
-	alibabaDashscope: { providers: ["alibaba-coding-plan"], urlMarkers: ["dashscope"] },
+	alibabaDashscope: {
+		providers: ["alibaba-coding-plan", "alibaba-token-plan"],
+		urlMarkers: ["dashscope", "token-plan."],
+	},
 	umans: { providers: ["umans"], urlMarkers: ["api.code.umans.ai"] },
 	xiaomi: { providers: ["xiaomi"], providerPrefixes: ["xiaomi-token-plan-"], urlMarkers: ["xiaomimimo.com"] },
 	xai: { providers: ["xai"], urlMarkers: ["api.x.ai"] },

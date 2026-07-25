@@ -1,6 +1,7 @@
 import { Effort } from "@oh-my-pi/pi-catalog/effort";
 import { supportsAllTurnsReasoningContext, supportsCodexReasoningSummary } from "@oh-my-pi/pi-catalog/identity";
 import { requireSupportedEffort } from "@oh-my-pi/pi-catalog/model-thinking";
+import { $env } from "@oh-my-pi/pi-utils";
 import type { Model } from "../../types";
 import { mapOpenAIReasoningEffort } from "../openai-shared";
 
@@ -54,6 +55,10 @@ export interface InputItem {
 	name?: string;
 	output?: unknown;
 	arguments?: unknown;
+	action?: unknown;
+	actions?: unknown;
+	pending_safety_checks?: unknown;
+	acknowledged_safety_checks?: unknown;
 	/** `additional_tools` developer item payload (Responses Lite). */
 	tools?: unknown;
 }
@@ -88,14 +93,20 @@ export interface RequestBody {
 
 /**
  * Resolve whether a Codex request uses the Responses Lite transport: an
- * explicit option wins, otherwise the model's catalog flag (codex-rs
- * `model_info.use_responses_lite`) decides.
+ * explicit option wins, then the `PI_CODEX_RESPONSES_LITE` env override
+ * (`1`/`true` forces Lite, `0`/`false` forces the full Responses body),
+ * otherwise the model's catalog flag (codex-rs `model_info.use_responses_lite`)
+ * decides.
  */
 export function resolveCodexResponsesLite(
 	model: Model<"openai-codex-responses">,
 	requested: boolean | undefined,
 ): boolean {
-	return requested ?? model.useResponsesLite === true;
+	if (requested !== undefined) return requested;
+	const env = $env.PI_CODEX_RESPONSES_LITE?.trim().toLowerCase();
+	if (env === "1" || env === "true") return true;
+	if (env === "0" || env === "false") return false;
+	return model.useResponsesLite === true;
 }
 
 /**
@@ -151,6 +162,7 @@ function filterInput(input: InputItem[] | undefined): InputItem[] | undefined {
 	return input
 		.filter(item => item.type !== "item_reference")
 		.map(item => {
+			if (item.type === "computer_call") return item;
 			if (item.id != null) {
 				const { id: _id, ...rest } = item;
 				return rest as InputItem;
@@ -184,6 +196,22 @@ function orphanFunctionOutputToMessage(item: InputItem, callId: string): InputIt
 	} as InputItem;
 }
 
+type ToolCallKind = "function" | "custom" | "computer";
+
+function toolCallKind(type: unknown): ToolCallKind | undefined {
+	if (type === "function_call") return "function";
+	if (type === "custom_tool_call") return "custom";
+	if (type === "computer_call") return "computer";
+	return undefined;
+}
+
+function toolOutputKind(type: unknown): ToolCallKind | undefined {
+	if (type === "function_call_output") return "function";
+	if (type === "custom_tool_call_output") return "custom";
+	if (type === "computer_call_output") return "computer";
+	return undefined;
+}
+
 /**
  * Repair both halves of unpaired tool exchanges so the Responses input grammar
  * stays valid — the API rejects either orphan with a 400:
@@ -199,43 +227,44 @@ function orphanFunctionOutputToMessage(item: InputItem, callId: string): InputIt
  *   is aborted/crashes after the call streamed but before its result persisted.
  */
 function repairToolCallPairs(input: InputItem[]): InputItem[] {
-	const callIds = new Set<string>();
-	const outputCallIds = new Set<string>();
+	const callKinds = new Map<string, ToolCallKind>();
+	const outputKinds = new Map<string, ToolCallKind>();
 	for (const item of input) {
 		const callId = typeof item.call_id === "string" ? item.call_id : undefined;
 		if (callId === undefined) continue;
-		if (item.type === "function_call" || item.type === "custom_tool_call") callIds.add(callId);
-		else if (item.type === "function_call_output" || item.type === "custom_tool_call_output") {
-			outputCallIds.add(callId);
-		}
+		const callKind = toolCallKind(item.type);
+		const outputKind = toolOutputKind(item.type);
+		if (callKind) callKinds.set(callId, callKind);
+		if (outputKind) outputKinds.set(callId, outputKind);
 	}
 
 	const repaired: InputItem[] = [];
 	for (const item of input) {
 		const callId = typeof item.call_id === "string" ? item.call_id : undefined;
+		const callKind = toolCallKind(item.type);
+		const outputKind = toolOutputKind(item.type);
 
-		if (
-			(item.type === "function_call_output" || item.type === "custom_tool_call_output") &&
-			callId !== undefined &&
-			!callIds.has(callId)
-		) {
+		if (outputKind && callId !== undefined && callKinds.get(callId) !== outputKind) {
 			repaired.push(orphanFunctionOutputToMessage(item, callId));
 			continue;
 		}
-
-		repaired.push(item);
-
-		if (
-			(item.type === "function_call" || item.type === "custom_tool_call") &&
-			callId !== undefined &&
-			!outputCallIds.has(callId)
-		) {
-			repaired.push({
-				type: item.type === "custom_tool_call" ? "custom_tool_call_output" : "function_call_output",
+		if (callKind && callId !== undefined && outputKinds.get(callId) !== callKind) {
+			if (callKind === "computer") {
+				repaired.push({
+					type: "message",
+					role: "assistant",
+					content: `[Computer call interrupted before a screenshot was recorded; call_id=${callId}]`,
+				});
+				continue;
+			}
+			repaired.push(item, {
+				type: callKind === "custom" ? "custom_tool_call_output" : "function_call_output",
 				call_id: callId,
 				output: CODEX_INTERRUPTED_TOOL_OUTPUT,
-			} as InputItem);
+			});
+			continue;
 		}
+		repaired.push(item);
 	}
 	return repaired;
 }

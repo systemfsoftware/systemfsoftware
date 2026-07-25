@@ -56,6 +56,7 @@ The canonical grammar is strict, but the hand parser accepts a few non-dangerous
 - Missing trailing colon on `SWAP` or `INS` — accepted.
 - `SWAP N-M:`, `SWAP N…M:`, `SWAP N M:`, and legacy `SWAP N..M:` — accepted as `SWAP N.=M:`.
 - Bare body rows with no `+` prefix are auto-prepended with `+` and a `BARE_BODY_AUTO_PIPED_WARNING` is appended.
+- Bare `-` body rows are judged once the whole hunk body is known: when every `-` row is Markdown-bullet-shaped (`- item`) and the body is either fully bare or contains an explicit `+- item` sibling, the rows are kept as literal content and `MINUS_BULLET_AUTO_PIPED_WARNING` is appended; otherwise they are rejected as unified-diff contamination (see Errors).
 - `*** Begin Patch` / `*** End Patch` envelopes are silently consumed. `*** Abort` terminates parsing silently — ops parsed before the marker still apply, no warning surfaced.
 - Some malformed bracketed headers are recovered after stripping apply-patch path noise such as `Update File:` / `Add File:` and extra `***`, but the recovered header still needs a valid four-hex tag for the patcher to apply it.
 - `*** Update File:` / `*** Add File:` / `*** Delete File:` / `*** Move to:` apply_patch sentinels inside the diff body throw an `apply_patch sentinel … is not valid in hashline` error.
@@ -63,7 +64,7 @@ The canonical grammar is strict, but the hand parser accepts a few non-dangerous
 - Bare `N` and bare `N M` / `N.=M` headers are rejected with guidance to write `SWAP` or `DEL`.
 - `DEL N.=M:` and any body rows under `DEL` / `DEL.BLK` are rejected.
 - Empty `INS` / `SWAP.BLK` hunks are rejected; an empty `SWAP N.=M:` (no body rows) is treated as `DEL N.=M`.
-- `-` body rows are rejected with `MINUS_ROW_REJECTED`.
+- `-` body rows are rejected with `MINUS_ROW_REJECTED` unless the hunk is unambiguously a Markdown bullet list (see Tolerated input shapes).
 - `SWAP.BLK N:` / `DEL.BLK N` / `INS.BLK.POST N:` require a wired tree-sitter resolver; `SWAP.BLK` and `INS.BLK.POST` additionally need at least one `+TEXT` body row, while `DEL.BLK` takes none. An unresolvable block (unsupported language, blank/closing-delimiter line, no node beginning on N, or a syntax error in the resolved block) rejects a `SWAP.BLK` / `DEL.BLK` on the apply/final-preview path (the streaming preview silently drops it instead). `INS.BLK.POST N:` is never rejected this way — it is lowered to plain `INS.POST N:` with a warning: a closing-delimiter-anchor warning when line N is a pure closer (inserting after that end is exactly what the plain form does), a generic unresolved-anchor warning otherwise.
 
 ## Outputs
@@ -164,7 +165,7 @@ DEL 20
   - `Missing hashline snapshot tag for <path>; use \`[<path>#tag]\` from your latest read/search output. To create a new file, use the write tool.`
 - Stray payload line:
   - `line N: payload line has no preceding hunk header. Use \`SWAP N.=M:\`, \`DEL N.=M\`, or \`INS.PRE|POST|HEAD|TAIL:\` above the body. Got "...".`
-- Minus row:
+- Minus row (unless auto-piped as an unambiguous Markdown bullet — see Tolerated input shapes):
   - ``line N: `-` rows are not valid; the range already names the lines being changed. For Markdown bullets or other literal `-` lines, prefix the literal row with `+`: `+- item`.``
 - Empty body-bearing hunk:
   - `line N: \`INS\` needs at least one \`+TEXT\` body row.`
@@ -195,4 +196,5 @@ DEL 20
 
 ## Warnings
 - `Auto-prefixed bare body row(s) with +. Body rows must be +TEXT literal lines …` (`BARE_BODY_AUTO_PIPED_WARNING`)
+- `Auto-prefixed bare `- ` bullet row(s) as literal content …` (`MINUS_BULLET_AUTO_PIPED_WARNING`)
 - Recovery banners: `RECOVERY_EXTERNAL_WARNING`, `RECOVERY_SESSION_CHAIN_WARNING`, `RECOVERY_SESSION_REPLAY_WARNING` (`packages/hashline/src/messages.ts`).

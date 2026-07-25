@@ -15,6 +15,7 @@ import type { AuthStorage, StoredCredentialBlock } from "../auth-storage";
 import { parseBind } from "../utils/parse-bind";
 import { AuthBrokerRefresher, type AuthBrokerRefresherSchedule } from "./refresher";
 import type {
+	ClientUsageReportRequest,
 	CredentialBlockResponse,
 	CredentialBlockSnapshot,
 	CredentialBlocksDeleteResponse,
@@ -37,6 +38,7 @@ import {
 	DEFAULT_STREAM_KEEPALIVE_MS,
 } from "./types";
 import {
+	clientUsageReportRequestSchema,
 	credentialBlockRequestSchema,
 	credentialDisableRequestSchema,
 	credentialUploadRequestSchema,
@@ -607,6 +609,44 @@ export function startAuthBroker(opts: AuthBrokerServerOptions): AuthBrokerServer
 						logger.warn("auth-broker usage fetch failed", { peer, error: message });
 						return json(502, { error: message });
 					}
+				}
+				if (req.method === "GET" && pathname === "/v1/usage/history") {
+					const sinceMsRaw = url.searchParams.get("sinceMs");
+					const sinceMsParsed = sinceMsRaw === null ? undefined : Number.parseInt(sinceMsRaw, 10);
+					const sinceMs =
+						sinceMsParsed !== undefined && Number.isFinite(sinceMsParsed) ? sinceMsParsed : undefined;
+					const provider = url.searchParams.get("provider") ?? undefined;
+					const entries = opts.storage.listUsageHistory({ sinceMs, provider });
+					logger.info("auth-broker usage history served", { peer, entries: entries.length, sinceMs, provider });
+					return json(200, { generatedAt: Date.now(), entries });
+				}
+				if (req.method === "POST" && pathname === "/v1/usage/observed") {
+					const parsed = await parseBody(req, clientUsageReportRequestSchema);
+					if (!parsed.ok) return parsed.response;
+					// Arktype's inferred union collides the `entries` field with
+					// Array.prototype.entries; the schema already validated the shape.
+					const report = parsed.data as ClientUsageReportRequest;
+					try {
+						const recorded = opts.storage.recordClientUsage(report);
+						if (!recorded) return json(501, { error: "broker store does not persist client usage" });
+						logger.debug("auth-broker client usage recorded", {
+							peer,
+							installId: report.installId,
+							hostname: report.hostname,
+							entries: report.entries.length,
+						});
+						return json(200, { ok: true });
+					} catch (error) {
+						const message = error instanceof Error ? error.message : String(error);
+						logger.warn("auth-broker client usage record failed", { peer, error: message });
+						return json(500, { error: message });
+					}
+				}
+				if (req.method === "GET" && pathname === "/v1/usage/clients") {
+					const sinceMsRaw = url.searchParams.get("sinceMs");
+					const sinceMsParsed = sinceMsRaw === null ? Number.NaN : Number.parseInt(sinceMsRaw, 10);
+					const summary = opts.storage.getClientUsageSummary(Number.isFinite(sinceMsParsed) ? sinceMsParsed : 0);
+					return json(200, { generatedAt: Date.now(), clients: summary.clients });
 				}
 				if (req.method === "POST" && pathname === "/v1/usage/stale") {
 					try {

@@ -99,6 +99,50 @@ afterEach(() => {
 	vi.restoreAllMocks();
 });
 
+describe("OpenAI/Anthropic compatibility shim cache affinity", () => {
+	it("forwards an explicit cache key through its OpenAI-compatible transport", async () => {
+		const cacheKey = "shared-shim-cache-key";
+		const cacheModel = buildModel({
+			id: "shim-cache-model",
+			name: "Shim Cache Model",
+			api: "openai-completions",
+			provider: "synthetic",
+			baseUrl: "https://shim-cache.example/v1",
+			reasoning: false,
+			input: ["text"],
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+			contextWindow: 128_000,
+			maxTokens: 1024,
+			compat: { promptCacheSessionHeader: "x-grok-conv-id" },
+		} satisfies ModelSpec<"openai-completions">);
+		let requestHeaders: Headers | undefined;
+		const stream = streamOpenAIAnthropicShim(
+			cacheModel,
+			TITLE_CONTEXT,
+			{
+				apiKey: "test-key",
+				format: "openai",
+				promptCacheKey: cacheKey,
+				fetch: async (_input, init) => {
+					requestHeaders = new Headers(init?.headers);
+					return new Response(JSON.stringify({ error: { message: "stop after header capture" } }), {
+						status: 400,
+						headers: { "content-type": "application/json" },
+					});
+				},
+			},
+			{
+				anthropicBaseUrl: "https://shim-cache.example",
+				defaultFormat: "openai",
+			},
+		);
+
+		await stream.result();
+
+		expect(requestHeaders?.get("x-grok-conv-id")).toBe(cacheKey);
+	});
+});
+
 describe("Kimi K3 thinking transport", () => {
 	it("sends every live named effort through Kimi's native thinking object by default", async () => {
 		vi.spyOn(kimiOauth, "getKimiCommonHeaders").mockReturnValue(KIMI_HEADERS);
@@ -161,7 +205,7 @@ describe("Kimi K3 thinking transport", () => {
 	it("downgrades named tool choice to required for K3 thinking", async () => {
 		vi.spyOn(kimiOauth, "getKimiCommonHeaders").mockReturnValue(KIMI_HEADERS);
 		const bundledModel = getBundledModel<"openai-completions">("kimi-code", "k3");
-		expect(bundledModel.compat.thinkingFormat).toBe("zai");
+		expect(bundledModel.compat.thinkingFormat).toBe("kimi");
 		let payload: unknown;
 		const capturePayload = async (
 			model: Model<"openai-completions">,

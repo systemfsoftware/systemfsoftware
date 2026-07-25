@@ -9,6 +9,7 @@
  */
 import { isFireworksFastModelId } from "../fireworks-model-id";
 import { hostMatchesUrl, modelMatchesHost } from "../hosts";
+import { bareModelId, parseOpenAIModel, semverGte } from "../identity/classify";
 import {
 	isAnthropicNamespacedModelId,
 	isClaudeModelId,
@@ -131,6 +132,17 @@ function isOfficialOpenAIEndpoint(provider: string, baseUrl: string): boolean {
 	} catch {
 		return false;
 	}
+}
+
+/**
+ * Explicit prompt-cache breakpoints are a GPT-5.6+ first-party contract. Keep
+ * this intentionally narrow: compatible gateways and older OpenAI models
+ * reject the new request fields unless their catalog compat opts in.
+ */
+function supportsOfficialOpenAIPromptCacheBreakpoints(provider: string, modelId: string, baseUrl: string): boolean {
+	if (!isOfficialOpenAIEndpoint(provider, baseUrl)) return false;
+	const model = parseOpenAIModel(bareModelId(modelId));
+	return model !== null && semverGte(model.version, "5.6");
 }
 
 /**
@@ -341,6 +353,7 @@ export function buildOpenAICompat(spec: ModelSpec<"openai-completions">): Resolv
 		hostMatchesUrl(baseUrl, "fireworks") ||
 		isDirectDeepseekApi;
 
+	const supportsPromptCacheBreakpoints = supportsOfficialOpenAIPromptCacheBreakpoints(provider, spec.id, baseUrl);
 	// Hosts whose chat-completions endpoints are known to accept multiple
 	// leading `system`/`developer` messages (preferred for KV-cache reuse).
 	// Anything outside this allowlist defaults to coalescing because
@@ -546,6 +559,8 @@ export function buildOpenAICompat(spec: ModelSpec<"openai-completions">): Resolv
 			(thinkingFormat === "qwen" || thinkingFormat === "qwen-chat-template") && isLocalOpenAICompatBackend,
 		requiresAssistantContentForToolCalls: isKimiModel || isDirectDeepseekReasoning,
 		cacheControlFormat: isOpenRouter && spec.id.startsWith("anthropic/") ? "anthropic" : undefined,
+		supportsPromptCacheBreakpoints,
+		promptCacheBreakpointTtl: supportsPromptCacheBreakpoints ? "30m" : undefined,
 		openRouterRouting: undefined,
 		vercelGatewayRouting: undefined,
 		isOpenRouterHost: isOpenRouter,
@@ -559,6 +574,7 @@ export function buildOpenAICompat(spec: ModelSpec<"openai-completions">): Resolv
 		// to Moonshot verbatim, which 400s on non-MFJS constructs.
 		toolSchemaFlavor:
 			isMoonshotNative || isKimiModel ? "moonshot-mfjs" : isLocalOpenAICompatBackend ? "grammar" : undefined,
+		streamFirstEventTimeoutMs: isLocalServingBackend ? 0 : undefined,
 		streamIdleTimeoutMs,
 		stripDeepseekSpecialTokens:
 			isDeepseekModelIdOrName(spec.id) && (provider === "nvidia" || provider === "deepseek"),
@@ -623,7 +639,9 @@ export function buildOpenAIResponsesCompat(spec: OpenAIResponsesSpecLike): Resol
 	const isAzure = modelMatchesHost({ provider: spec.provider, baseUrl }, "azureOpenAI");
 	const isOpenRouter = modelMatchesHost({ provider: spec.provider, baseUrl }, "openrouter");
 	const isOpenAIUrl = hostMatchesUrl(baseUrl, "openai");
+	const isVercelGateway = modelMatchesHost({ provider: spec.provider, baseUrl }, "vercelAIGateway");
 	const id = spec.id ?? "";
+	const supportsPromptCacheBreakpoints = supportsOfficialOpenAIPromptCacheBreakpoints(spec.provider, id, baseUrl);
 	const thinkingFormat: ResolvedOpenAISharedCompat["thinkingFormat"] = isOpenRouter ? "openrouter" : "openai";
 	const isKimiModel = id ? isKimiModelId(id) : false;
 	const isAnthropicModel = id ? isClaudeModelId(id) || isAnthropicNamespacedModelId(id) : false;
@@ -642,6 +660,8 @@ export function buildOpenAIResponsesCompat(spec: OpenAIResponsesSpecLike): Resol
 		supportsStrictMode: isAzure || detectStrictModeSupport(spec.provider, baseUrl),
 		supportsReasoningEffort: spec.provider !== "xai-oauth" || isGrokReasoningEffortCapable(id),
 		supportsLongPromptCacheRetention: isOpenAIUrl,
+		supportsPromptCacheBreakpoints,
+		promptCacheBreakpointTtl: supportsPromptCacheBreakpoints ? "30m" : undefined,
 		// Azure OpenAI and GitHub Copilot Responses paths require tool results
 		// to strictly match prior tool calls when building Responses inputs.
 		strictResponsesPairing: isAzure || spec.provider === "github-copilot",
@@ -686,7 +706,9 @@ export function buildOpenAIResponsesCompat(spec: OpenAIResponsesSpecLike): Resol
 		requiresAssistantAfterToolResult: false,
 		requiresAssistantContentForToolCalls: isKimiModel,
 		openRouterRouting: undefined,
+		vercelGatewayRouting: undefined,
 		isOpenRouterHost: isOpenRouter,
+		isVercelGatewayHost: isVercelGateway,
 		wireModelIdMode: isOpenRouter ? "openrouter" : "raw",
 		// Mirrors buildOpenAICompat: Kimi behind a Responses-capable proxy still
 		// lands on Moonshot's MFJS validator.
@@ -702,6 +724,7 @@ export function buildOpenAIResponsesCompat(spec: OpenAIResponsesSpecLike): Resol
 		emptyLengthFinishIsContextError: spec.provider === "ollama",
 		usesOpenAIToolCallIdLimit: spec.provider === "openai",
 		promptCacheSessionHeader: spec.provider === "xai-oauth" ? "x-grok-conv-id" : undefined,
+		streamFirstEventTimeoutMs: isLocalServingBackend ? 0 : spec.compat?.streamFirstEventTimeoutMs,
 		streamIdleTimeoutMs: isLocalServingBackend
 			? LOCAL_OPENAI_COMPAT_STREAM_IDLE_TIMEOUT_MS
 			: spec.compat?.streamIdleTimeoutMs,
@@ -724,6 +747,7 @@ function pickResponsesOnly(compat: ResolvedOpenAIResponsesCompat): ResponsesOnly
 		strictResponsesPairing: compat.strictResponsesPairing,
 		supportsImageDetailOriginal: compat.supportsImageDetailOriginal,
 		supportsObfuscationOptOut: compat.supportsObfuscationOptOut,
+		isVercelGatewayHost: compat.isVercelGatewayHost,
 	} satisfies ResponsesOnlyCompat;
 }
 

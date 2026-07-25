@@ -1,7 +1,8 @@
 import { expect, test, vi } from "bun:test";
-import type { CustomTool, CustomToolContext } from "../src/extensibility/custom-tools/types";
+import type { CustomToolContext } from "../src/extensibility/custom-tools/types";
 import { MCPManager } from "../src/mcp/manager";
-import type { MCPRequestOptions, MCPServerConnection, MCPTransport } from "../src/mcp/types";
+import { MCPTool } from "../src/mcp/tool-bridge";
+import type { MCPRequestOptions, MCPServerConnection, MCPToolDefinition, MCPTransport } from "../src/mcp/types";
 import { createMCPProxyTools } from "../src/task/executor";
 import { ToolAbortError } from "../src/tools/tool-errors";
 
@@ -45,25 +46,21 @@ function createFakeConnection() {
 	};
 }
 
+const TOOL_DEFINITION: MCPToolDefinition = {
+	name: "test_tool",
+	description: "A test tool",
+	inputSchema: { type: "object", properties: {} },
+};
+
+/** Register a real MCPTool bound to `connection` as the sole source tool. */
+function mockSourceTool(manager: MCPManager, connection: MCPServerConnection): void {
+	vi.spyOn(manager, "getTools").mockReturnValue([new MCPTool(connection, TOOL_DEFINITION)]);
+}
+
 test("MCP proxy tool aborts underlying operation on caller abort", async () => {
 	const fake = createFakeConnection();
 	const manager = new MCPManager(process.cwd());
-
-	const toolsData: CustomTool[] = [
-		{
-			name: "test_tool",
-			label: "Test Tool",
-			description: "A test tool",
-			strict: false,
-			mcpToolName: "test_tool",
-			mcpServerName: "test-server",
-			parameters: { type: "object", properties: {} },
-			execute: async () => ({ content: [] }),
-		} as CustomTool,
-	];
-
-	vi.spyOn(manager, "getTools").mockReturnValue(toolsData);
-	vi.spyOn(manager, "waitForConnection").mockResolvedValue(fake.connection);
+	mockSourceTool(manager, fake.connection);
 
 	const tools = createMCPProxyTools(manager);
 	const proxyTool = tools[0];
@@ -90,7 +87,7 @@ test("MCP proxy tool aborts underlying operation on caller abort", async () => {
 
 	try {
 		await executePromise;
-		expect.unreachable("executePromise should throw ToolAbortError");
+		expect.unreachable("Expected ToolAbortError");
 	} catch (e: unknown) {
 		expect(e instanceof ToolAbortError).toBe(true);
 	}
@@ -103,22 +100,7 @@ test("MCP proxy tool aborts underlying operation on timeout", async () => {
 	try {
 		const fake = createFakeConnection();
 		const manager = new MCPManager(process.cwd());
-
-		const toolsData: CustomTool[] = [
-			{
-				name: "test_tool",
-				label: "Test Tool",
-				description: "A test tool",
-				strict: false,
-				mcpToolName: "test_tool",
-				mcpServerName: "test-server",
-				parameters: { type: "object", properties: {} },
-				execute: async () => ({ content: [] }),
-			} as CustomTool,
-		];
-
-		vi.spyOn(manager, "getTools").mockReturnValue(toolsData);
-		vi.spyOn(manager, "waitForConnection").mockResolvedValue(fake.connection);
+		mockSourceTool(manager, fake.connection);
 
 		const tools = createMCPProxyTools(manager);
 		const proxyTool = tools[0];

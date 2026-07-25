@@ -46,7 +46,12 @@ async function expectRpcModeOwnsStdin(mode: "rpc" | "rpc-ui"): Promise<void> {
 	}
 
 	const stderr = await stderrPromise;
-	expect(stderr).not.toContain("ReadableStream is locked");
+	// The adversarial fixture is EXPECTED to fail loading — RPC claimed stdin
+	// first — and its surfaced load notice (#4954) mentions the locked stream.
+	// Any OTHER "ReadableStream is locked" line means RPC lost stdin ownership.
+	for (const line of stderr.split("\n").filter(l => l.includes("ReadableStream is locked"))) {
+		expect(line).toContain("Failed to load extension");
+	}
 	expect(stateResponse?.success).toBe(true);
 }
 

@@ -111,6 +111,34 @@ describe("searchGemini tools serialization", () => {
 		});
 	});
 
+	it("normalizes query directive aliases to canonical Google forms in the grounding request", async () => {
+		const fetchMock = mockGeminiFetch();
+		await searchGemini({
+			...makeParams("k8s domain:kubernetes.io since:2024"),
+			fetch: fetchMock,
+		});
+
+		expect(capturedRequest).not.toBeNull();
+		const request = capturedRequest?.body?.request as Record<string, unknown>;
+		expect(request).toMatchObject({
+			contents: [{ role: "user", parts: [{ text: "k8s site:kubernetes.io after:2024-01-01" }] }],
+		});
+	});
+
+	it("leaves directive-free queries untouched in the developer API request", async () => {
+		const fetchMock = mockGeminiFetch(DEVELOPER_SSE_RESPONSE);
+		await searchGemini({
+			...makeParams("plain query with no operators"),
+			authStorage: apiKeyAuthStorage,
+			fetch: fetchMock,
+		});
+
+		expect(capturedRequest).not.toBeNull();
+		expect(capturedRequest?.body).toMatchObject({
+			contents: [{ role: "user", parts: [{ text: "plain query with no operators" }] }],
+		});
+	});
+
 	it("uses configured developer API model and reports it when modelVersion is absent", async () => {
 		const fetchMock = mockGeminiFetch(DEVELOPER_SSE_RESPONSE_WITHOUT_MODEL);
 		const response = await searchGemini({

@@ -61,6 +61,7 @@ function createContext(options: {
 		locallySubmittedUserSignatures: new Set<string>(options.locallySubmittedSignatures ?? []),
 		clearOptimisticUserMessage,
 		replaceOptimisticUserMessage,
+		transcriptMessageComponents: new WeakMap(),
 		pendingTools: new Map(),
 		viewSession: { isStreaming: false },
 	} as unknown as InteractiveModeContext;

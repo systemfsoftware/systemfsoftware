@@ -171,6 +171,25 @@ describe("hashline body contracts", () => {
 			/Markdown bullets or other literal `-` lines.*`\+- item`/,
 		);
 	});
+	it("auto-pipes a fully bare Markdown bullet body with a warning", () => {
+		const result = parsePatch("SWAP 2.=2:\n- item\n  - nested");
+		expect(applyEdits(FILE, result.edits).text).toBe("a\n- item\n  - nested\nc\nd\ne");
+		expect(result.warnings.some(w => /bullet row/.test(w))).toBe(true);
+	});
+
+	it("auto-pipes a bare bullet row next to explicit `+- item` siblings", () => {
+		const result = parsePatch("SWAP 2.=2:\n+### Fixed\n+- one\n- two");
+		expect(applyEdits(FILE, result.edits).text).toBe("a\n### Fixed\n- one\n- two\nc\nd\ne");
+		expect(result.warnings.some(w => /bullet row/.test(w))).toBe(true);
+	});
+
+	it("still rejects non-bullet bare `-` rows even in a fully bare body", () => {
+		expect(() => parsePatch("SWAP 2.=2:\n-old()")).toThrow(/`-` rows are not valid/);
+	});
+
+	it("still rejects bullet-shaped `-` rows beside a plain `+new` row (diff paste)", () => {
+		expect(() => parsePatch("SWAP 2.=2:\n- x\n+new()")).toThrow(/`-` rows are not valid/);
+	});
 
 	it("allows literal Markdown bullets and plus-prefixed text when prefixed with `+`", () => {
 		expect(applyPatch(FILE, "SWAP 2.=2:\n+- item\n+  - nested\n++plus")).toBe(

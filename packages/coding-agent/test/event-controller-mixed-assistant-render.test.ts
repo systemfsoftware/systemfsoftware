@@ -69,6 +69,7 @@ function createFixture() {
 		ui,
 		settings,
 		chatContainer,
+		transcriptMessageComponents: new WeakMap(),
 		pendingTools,
 		toolOutputExpanded: false,
 		effectiveHideThinkingBlock: false,

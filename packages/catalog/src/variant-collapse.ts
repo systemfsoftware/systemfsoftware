@@ -227,13 +227,12 @@ const GEMINI_3_PRO_FAMILY_BUDGETS: Readonly<Partial<Record<Effort, number>>> = {
 };
 
 /**
- * The two Cloud Code Assist providers share the same Antigravity discovery list
- * but disagree on the thinking transport: `google-antigravity` (daily-cloudcode-pa)
- * sends an explicit `thinkingBudget` (verified against captured requests), while
- * `google-gemini-cli` (cloudcode-pa) follows the official Gemini CLI and uses
- * `thinkingLevel`. The Gemini 3.x families therefore differ only in thinking
- * transport (and, for Flash, the per-tier wire-id routing); everything else is
- * shared verbatim.
+ * Cloud Code Assist's legacy Gemini 3.5 Flash and 3.1 Pro families use
+ * different thinking transports: `google-antigravity` (daily-cloudcode-pa)
+ * sends captured `thinkingBudget` values, while `google-gemini-cli`
+ * (cloudcode-pa) follows the official Gemini CLI and uses `thinkingLevel`.
+ * Gemini 3.6 exposes one wire id per level and uses `thinkingLevel` on both
+ * endpoints.
  */
 function geminiFlashFamily(mode: "budget" | "google-level"): EffortVariantFamily {
 	const budget = mode === "budget";
@@ -265,6 +264,23 @@ function geminiFlashFamily(mode: "budget" | "google-level"): EffortVariantFamily
 		extraAliases: ["gemini-3-flash"],
 	};
 }
+
+const GEMINI_36_FLASH_FAMILY: EffortVariantFamily = {
+	id: "gemini-3.6-flash",
+	name: "Gemini 3.6 Flash",
+	members: ["gemini-3.6-flash-low", "gemini-3.6-flash-medium", "gemini-3.6-flash-high", "gemini-3.6-flash-tiered"],
+	routing: {
+		[Effort.Minimal]: "gemini-3.6-flash-low",
+		[Effort.Low]: "gemini-3.6-flash-low",
+		[Effort.Medium]: "gemini-3.6-flash-medium",
+		[Effort.High]: "gemini-3.6-flash-high",
+	},
+	thinking: {
+		mode: "google-level",
+		efforts: GEMINI_3_FLASH_FAMILY_EFFORTS,
+		requiresEffort: true,
+	},
+};
 
 function geminiProFamily(mode: "budget" | "google-level"): EffortVariantFamily {
 	const budget = mode === "budget";
@@ -346,14 +362,19 @@ const SHARED_CCA_FAMILIES: readonly EffortVariantFamily[] = [
 	thinkingPair("gemini-2.5-flash", "Gemini 2.5 Flash"),
 ];
 
-/** `google-antigravity` (daily-cloudcode-pa): Gemini 3.x on the budget transport. */
+/** `google-antigravity` Gemini families, using each generation's native transport. */
 export const ANTIGRAVITY_VARIANT_COLLAPSE_TABLE: VariantCollapseTable = {
-	families: [geminiFlashFamily("budget"), geminiProFamily("budget"), ...SHARED_CCA_FAMILIES],
+	families: [GEMINI_36_FLASH_FAMILY, geminiFlashFamily("budget"), geminiProFamily("budget"), ...SHARED_CCA_FAMILIES],
 };
 
-/** `google-gemini-cli` (cloudcode-pa): Gemini 3.x on the level transport (official CLI parity). */
+/** `google-gemini-cli` Gemini families on the official CLI's level transport. */
 export const GEMINI_CLI_VARIANT_COLLAPSE_TABLE: VariantCollapseTable = {
-	families: [geminiFlashFamily("google-level"), geminiProFamily("google-level"), ...SHARED_CCA_FAMILIES],
+	families: [
+		GEMINI_36_FLASH_FAMILY,
+		geminiFlashFamily("google-level"),
+		geminiProFamily("google-level"),
+		...SHARED_CCA_FAMILIES,
+	],
 };
 export const DEVIN_VARIANT_COLLAPSE_TABLE: VariantCollapseTable = {
 	families: [
@@ -531,6 +552,39 @@ export const DEVIN_VARIANT_COLLAPSE_TABLE: VariantCollapseTable = {
 				high: "MODEL_GOOGLE_GEMINI_3_0_FLASH_HIGH",
 			},
 			[Effort.Minimal, Effort.Low, Effort.Medium, Effort.High],
+		),
+		// GLM-5.2 200K — only the base wire UID `glm-5-2` is free on Devin's
+		// Coding Plan (verified via streamDevin: `glm-5-2-none` and `glm-5-2-max`
+		// both return "weekly usage quota exhausted" while `glm-5-2` streams
+		// successfully).  Route every effort to `glm-5-2` so the collapsed entry
+		// is always free; include the paid 200K variants as members so they are
+		// hidden from the model list.  The 1M-context variants stay as separate
+		// paid entries (collapsed below).
+		{
+			id: "glm-5-2",
+			name: "GLM-5.2",
+			members: ["glm-5-2", "glm-5-2-none", "glm-5-2-max"],
+			routing: {
+				[Effort.High]: "glm-5-2",
+				[Effort.XHigh]: "glm-5-2",
+			},
+			thinking: {
+				mode: "effort",
+				efforts: [Effort.High, Effort.XHigh],
+				requiresEffort: true,
+			},
+		},
+		// GLM-5.2 1M — paid variants that consume weekly quota.  Collapse the
+		// three 1M-context variants into one entry with proper effort routing.
+		devinTierFamily(
+			"glm-5-2-1m",
+			"GLM-5.2 1M",
+			{
+				off: "glm-5-2-none-1m",
+				high: "glm-5-2-1m",
+				xhigh: "glm-5-2-max-1m",
+			},
+			[Effort.High, Effort.XHigh],
 		),
 	],
 };

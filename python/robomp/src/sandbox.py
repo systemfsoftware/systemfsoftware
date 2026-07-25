@@ -48,6 +48,7 @@ import signal
 import stat
 import subprocess
 import threading
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
@@ -668,6 +669,83 @@ def _chown_workspace(ws_root: Path, slot_uid: int | None) -> None:
     )
 
 
+# ---------- workspace cache reclamation ----------
+
+
+_TRASH_PREFIX = ".trash-"
+# ws/repo/node_modules is depth 2 from ws_root's repo dir; nested workspace
+# installs (packages/x/node_modules, python/x/web/node_modules) sit at 3-4.
+_NODE_MODULES_SCAN_DEPTH = 4
+
+
+def _find_node_modules(repo_dir: Path, *, max_depth: int = _NODE_MODULES_SCAN_DEPTH) -> list[Path]:
+    """Locate `node_modules` dirs in a checkout without descending into them.
+
+    Depth-limited (bun's hoisted linker keeps everything at the root; nested
+    workspace installs sit a couple of levels down) and prunes `.git` plus the
+    matches themselves, so the walk stays cheap on a large tree.
+    """
+    found: list[Path] = []
+    if not repo_dir.is_dir():
+        return found
+    base_depth = len(repo_dir.parts)
+    for current, dirnames, _files in os.walk(repo_dir):
+        current_path = Path(current)
+        if "node_modules" in dirnames:
+            found.append(current_path / "node_modules")
+        if len(current_path.parts) - base_depth + 1 >= max_depth:
+            dirnames[:] = []
+        else:
+            dirnames[:] = [d for d in dirnames if d not in (".git", "node_modules")]
+    return found
+
+
+def _stage_workspace_trash(ws_root: Path) -> tuple[Path, ...]:
+    """Rename reclaimable cache dirs into `.trash-*` staging dirs.
+
+    Rename is atomic and near-free on the same filesystem, so a caller can
+    hold a lock across this and defer the slow ``rmtree`` to after the lock
+    is dropped. Targets: every ``node_modules`` in the checkout, the
+    workspace-private XDG cache (bun install cache lives there) and the
+    tmpdir — all re-created by ``ensure_workspace`` +
+    ``ensure_workspace_dependencies`` on the next run. Session transcripts,
+    context, artifacts and the git worktree are never touched.
+
+    Returns every staged trash dir, including leftovers from a previous
+    interrupted reclaim.
+    """
+    if not ws_root.is_dir():
+        return ()
+    staged = [p for p in ws_root.iterdir() if p.name.startswith(_TRASH_PREFIX)]
+    candidates = [
+        ws_root / ".omp-xdg" / "cache",
+        ws_root / ".omp-tmp",
+        *_find_node_modules(ws_root / "repo"),
+    ]
+    trash_root: Path | None = None
+    for index, victim in enumerate(candidates):
+        try:
+            st = victim.lstat()
+        except FileNotFoundError:
+            continue
+        if not (stat.S_ISDIR(st.st_mode) or stat.S_ISLNK(st.st_mode)):
+            continue
+        if trash_root is None:
+            trash_root = ws_root / f"{_TRASH_PREFIX}{secrets.token_hex(4)}"
+            trash_root.mkdir(mode=0o700)
+            staged.append(trash_root)
+        try:
+            victim.rename(trash_root / f"{index}-{victim.name}")
+        except OSError as exc:
+            log.warning("cache reclaim rename failed", extra={"path": str(victim), "err": str(exc)})
+    return tuple(staged)
+
+
+def _purge_trash(staged: Iterable[Path]) -> None:
+    for path in staged:
+        shutil.rmtree(path, ignore_errors=True)
+
+
 # ---------- SandboxManager ----------
 
 
@@ -1022,6 +1100,46 @@ class SandboxManager:
                         )
             if ws_root.exists():
                 shutil.rmtree(ws_root, ignore_errors=True)
+
+    def reclaim_workspace_caches(self, *, repo: str, number: int) -> bool:
+        """Strip re-creatable dependency caches from an idle workspace.
+
+        Every task run reinstalls ``node_modules`` (see
+        ``host_tools.ensure_workspace_dependencies``), so between runs the
+        checkout's ``node_modules`` and the workspace-private bun install
+        cache are dead weight — multiple GB per issue that would otherwise
+        persist until the issue closes, which is exactly how the host runs
+        out of disk. ``--continue`` resumes are unaffected: session
+        transcripts, context, artifacts and the worktree survive.
+
+        The rename pass runs under the per-repo lock (serialized against
+        ``ensure_workspace``); the slow deletes happen after the lock is
+        dropped. Returns True when anything was reclaimed.
+        """
+        with self._repo_lock(repo):
+            staged = _stage_workspace_trash(self.workspace_root(repo, number))
+        _purge_trash(staged)
+        return bool(staged)
+
+    def reclaim_all_caches(self) -> int:
+        """Sweep dependency caches from every workspace under ``root``.
+
+        Crash-leftover recovery: called from ``WorkerPool.start()`` before
+        the dispatch loop comes online, so no task can be touching a
+        workspace and the per-repo locks are deliberately skipped. Returns
+        the number of workspaces that had something to reclaim.
+        """
+        if not self.root.is_dir():
+            return 0
+        count = 0
+        for entry in sorted(self.root.iterdir()):
+            if entry.name == "_pool" or entry.name.startswith(".") or not entry.is_dir():
+                continue
+            staged = _stage_workspace_trash(entry)
+            if staged:
+                _purge_trash(staged)
+                count += 1
+        return count
 
 
 __all__ = [

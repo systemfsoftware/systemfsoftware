@@ -276,7 +276,7 @@ Example `.omp/dap.json`:
 - Raw SSE buffer caps in `packages/coding-agent/src/debug/raw-sse-buffer.ts`:
   - `MAX_RAW_SSE_EVENTS = 1_000`
   - `MAX_RAW_SSE_CHARS = 512_000`
-  - `MAX_RAW_SSE_EVENT_CHARS = 64_000` per event, with `: omp-debug-truncated ...` marker appended on trim
+  - `MAX_RAW_SSE_EVENT_CHARS = 64_000` per event; over-budget events first get `tools` schemas compacted (name kept, schema/description elided), then a head+tail trim that keeps the first and last portions with a `: omp-debug-elided chars=...` comment in the middle and a final `: omp-debug-truncated originalChars=...` marker
 - Log viewer window in `packages/coding-agent/src/debug/log-viewer.ts`:
   - `INITIAL_LOG_CHUNK = 50`
   - `LOAD_OLDER_CHUNK = 50`

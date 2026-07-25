@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -27,6 +27,7 @@ import {
 	streamGitLabDuoWorkflow,
 	traceGitLabDuoWorkflow,
 } from "@oh-my-pi/pi-ai/providers/gitlab-duo-workflow";
+import { configureCredentialRedaction } from "@oh-my-pi/pi-ai/providers/transform-messages";
 import type {
 	AssistantMessage,
 	Context,
@@ -41,6 +42,9 @@ import { AssistantMessageEventStream } from "@oh-my-pi/pi-ai/utils/event-stream"
 import { buildModel } from "@oh-my-pi/pi-catalog/build";
 import { extractHttpStatusFromError } from "@oh-my-pi/pi-utils";
 import { z } from "zod/v4";
+
+beforeAll(() => configureCredentialRedaction(true));
+afterAll(() => configureCredentialRedaction(false));
 
 const model: Model<"gitlab-duo-agent"> = buildModel({
 	id: "claude_sonnet_4_6_vertex",

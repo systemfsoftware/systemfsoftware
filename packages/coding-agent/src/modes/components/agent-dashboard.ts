@@ -49,6 +49,7 @@ import agentCreationArchitectPrompt from "../../prompts/system/agent-creation-ar
 import agentCreationUserPrompt from "../../prompts/system/agent-creation-user.md" with { type: "text" };
 import { createAgentSession } from "../../sdk";
 import { discoverAgents } from "../../task/discovery";
+import { resolveAgentPrewalkDefault } from "../../task/prewalk";
 import type { AgentDefinition, AgentSource } from "../../task/types";
 import { shortenPath } from "../../tools/render-utils";
 import { getEditorTheme, theme } from "../theme/theme";
@@ -602,7 +603,7 @@ export class AgentDashboard extends Container {
 		this.#persistPrewalkOverrides();
 		const pattern = resolveAgentPrewalkPattern({
 			settingsOverride: selected.prewalkOverride,
-			agentPrewalk: selected.prewalk,
+			agentPrewalk: resolveAgentPrewalkDefault(selected, this.#settingsManager?.get("task.prewalk") ?? false),
 		});
 		const state = selected.prewalkOverride ?? "agent default";
 		this.#notice = `Prewalk for ${selected.name}: ${state}${pattern ? ` (into ${pattern})` : ""}`;
@@ -1081,7 +1082,10 @@ export class AgentDashboard extends Container {
 			const prewalkPattern = selected
 				? resolveAgentPrewalkPattern({
 						settingsOverride: selected.prewalkOverride,
-						agentPrewalk: selected.prewalk,
+						agentPrewalk: resolveAgentPrewalkDefault(
+							selected,
+							this.#settingsManager?.get("task.prewalk") ?? false,
+						),
 					})
 				: undefined;
 			const prewalkResolution = prewalkPattern ? this.#resolvePatterns([prewalkPattern]) : undefined;

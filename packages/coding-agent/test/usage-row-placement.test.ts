@@ -6,19 +6,25 @@
  * row above the read group, diverging from the live path. The fix defers the row and
  * flushes it after the turn's tools are placed.
  */
-import { beforeAll, describe, expect, it, vi } from "bun:test";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "bun:test";
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
+import { resetSettingsForTest, Settings, settings } from "@oh-my-pi/pi-coding-agent/config/settings";
+import { ChatTranscriptBuilder } from "@oh-my-pi/pi-coding-agent/modes/components/chat-transcript-builder";
 import { ReadToolGroupComponent } from "@oh-my-pi/pi-coding-agent/modes/components/read-tool-group";
 import { initTheme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 import type { InteractiveModeContext } from "@oh-my-pi/pi-coding-agent/modes/types";
 import { UiHelpers } from "@oh-my-pi/pi-coding-agent/modes/utils/ui-helpers";
 import type { SessionContext } from "@oh-my-pi/pi-coding-agent/session/session-context";
-import { Container } from "@oh-my-pi/pi-tui";
+import { Container, type TUI } from "@oh-my-pi/pi-tui";
 import { formatNumber } from "@oh-my-pi/pi-utils";
 
 // 4242 → "4.2K": distinctive enough not to collide with a read group's render.
 const USAGE_INPUT = 4242;
 const USAGE_LABEL = formatNumber(USAGE_INPUT);
+// Fixed local wall-clock time so the rendered stamp is deterministic across time zones.
+// Single-digit month/day/hour/minute/second exercise the formatter's zero-padding.
+const USAGE_TS = new Date(2026, 0, 2, 3, 4, 5).getTime();
+const USAGE_TS_LABEL = "2026-01-02 03:04:05";
 
 function readTurn(): AgentMessage[] {
 	const assistant = {
@@ -36,7 +42,7 @@ function readTurn(): AgentMessage[] {
 			totalTokens: USAGE_INPUT + 7,
 			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
 		},
-		timestamp: Date.now(),
+		timestamp: USAGE_TS,
 	} as unknown as AgentMessage;
 	const toolResult = {
 		role: "toolResult",
@@ -52,6 +58,7 @@ function makeHarness(showTokenUsage: boolean): { ctx: InteractiveModeContext; he
 	let helpers: UiHelpers;
 	const ctx = {
 		chatContainer: new Container(),
+		transcriptMessageComponents: new WeakMap(),
 		pendingTools: new Map(),
 		ui: { requestRender: vi.fn() },
 		statusLine: { invalidate: vi.fn() },
@@ -90,6 +97,8 @@ describe("UiHelpers.renderSessionContext token-usage row placement", () => {
 		// The usage row is the trailing block and renders the turn's input tokens.
 		const last = children[children.length - 1]!;
 		expect(last.render(120).join("\n")).toContain(USAGE_LABEL);
+		// The row also carries the message's local timestamp down to the second.
+		expect(last.render(120).join("\n")).toContain(USAGE_TS_LABEL);
 		// And it sits strictly below the read group (the bug placed it above).
 		expect(children.length - 1).toBeGreaterThan(readIdx);
 		// Exactly one usage row — no duplication.
@@ -104,5 +113,46 @@ describe("UiHelpers.renderSessionContext token-usage row placement", () => {
 		expect(children.some(c => c.render(120).join("\n").includes(USAGE_LABEL))).toBe(false);
 		// Last block is the read group, not a usage row.
 		expect(children[children.length - 1]).toBeInstanceOf(ReadToolGroupComponent);
+	});
+});
+
+describe("ChatTranscriptBuilder token-usage row timestamp", () => {
+	beforeEach(async () => {
+		await Settings.init({ inMemory: true, cwd: process.cwd() });
+		settings.set("display.showTokenUsage", true);
+	});
+	afterEach(() => {
+		resetSettingsForTest();
+	});
+
+	it("renders the turn's local timestamp on the rebuilt usage row", () => {
+		const builder = new ChatTranscriptBuilder({
+			ui: { requestRender: () => {}, requestComponentRender: () => {} } as unknown as TUI,
+			cwd: process.cwd(),
+			requestRender: () => {},
+		});
+		const message = {
+			role: "assistant",
+			content: [{ type: "text", text: "done" }],
+			api: "anthropic-messages",
+			provider: "anthropic",
+			model: "claude-sonnet-4-5",
+			stopReason: "stop",
+			usage: {
+				input: USAGE_INPUT,
+				output: 7,
+				cacheRead: 0,
+				cacheWrite: 0,
+				totalTokens: USAGE_INPUT + 7,
+				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+			},
+			timestamp: USAGE_TS,
+		} as unknown as AgentMessage;
+		builder.rebuild([{ type: "message", id: "m1", parentId: null, timestamp: new Date(0).toISOString(), message }]);
+		const children = builder.container.children;
+		const last = children[children.length - 1]!;
+		const rendered = last.render(120).join("\n");
+		expect(rendered).toContain(USAGE_TS_LABEL);
+		expect(rendered).toContain(USAGE_LABEL);
 	});
 });

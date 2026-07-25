@@ -129,6 +129,8 @@ describe("AgentSession eager todo enforcement", () => {
 			getSessionFile: () => sessionManager.getSessionFile() ?? null,
 			getSessionSpawns: () => "*",
 			settings,
+			// Mirrors sdk.ts wiring: TodoTool commits phases during execute (#6148 removed the message_end replay).
+			setTodoPhases: phases => session?.setTodoPhases(phases),
 		};
 		const todoTool = new TodoTool(toolSession);
 		const mockBashTool: AgentTool = {
