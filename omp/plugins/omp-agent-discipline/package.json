@@ -62,8 +62,7 @@
     "@effect/platform-node-shared": "0.50.1",
     "@jsr/std__collections": "1.3.0",
     "@jsr/std__toml": "1.0.11",
-    "effect": "3.22.0",
-    "@systemfsoftware/omp-utils": "workspace:^"
+    "effect": "3.22.0"
   },
   "repository": {
     "type": "git",
