@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/tsconfig",
   "license": "MIT",
-  "version": "1.2.4",
+  "version": "1.2.5",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "description": "Shared TypeScript base configs for the System F Software monorepo — 2026-tuned (es2024, esnext, full strict set) compiler-option presets every package extends.",
   "type": "module",
