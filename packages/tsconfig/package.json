@@ -30,5 +30,10 @@
     "./bundler/no-dom/app": "./bundler/no-dom.json",
     "./bundler/no-dom/library": "./bundler/no-dom.json",
     "./bundler/no-dom/library-monorepo": "./bundler/no-dom.json"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
+    "directory": "packages/tsconfig"
   }
 }

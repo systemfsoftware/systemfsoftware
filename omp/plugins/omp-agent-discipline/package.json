@@ -62,5 +62,10 @@
     "@jsr/std__collections": "1.3.0",
     "@jsr/std__toml": "1.0.11",
     "effect": "3.22.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
+    "directory": "omp/plugins/omp-agent-discipline"
   }
 }
