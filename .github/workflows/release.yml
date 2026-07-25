@@ -37,3 +37,12 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: corepack pnpm release
+      - name: Capture dirty tree diff on failure
+        if: failure()
+        run: git diff --patch --stat HEAD > /tmp/dirty-tree.patch
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: dirty-tree-diff-${{ github.run_id }}
+          path: /tmp/dirty-tree.patch
+          retention-days: 7
