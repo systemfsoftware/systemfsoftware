@@ -92,6 +92,7 @@
         "default": "./dist/effect-schema-ignorer.mjs"
       },
       "./package.json": "./package.json"
-    }
+    },
+    "provenance": true
   }
 }

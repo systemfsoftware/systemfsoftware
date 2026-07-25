@@ -76,6 +76,7 @@
         "default": "./dist/index.mjs"
       },
       "./package.json": "./package.json"
-    }
+    },
+    "provenance": true
   }
 }

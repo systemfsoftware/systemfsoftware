@@ -35,5 +35,8 @@
     "type": "git",
     "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
     "directory": "packages/tsconfig"
+  },
+  "publishConfig": {
+    "provenance": true
   }
 }
