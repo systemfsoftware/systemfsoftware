@@ -2,6 +2,7 @@ import type { AuthStorage } from "@oh-my-pi/pi-ai";
 import { parseHTML } from "linkedom";
 import type { SearchResponse, SearchSource } from "../../../web/search/types";
 import { SearchProviderError } from "../../../web/search/types";
+import { formatScraperQuery } from "../query";
 import { clampNumResults } from "../utils";
 import type { SearchParams } from "./base";
 import { SearchProvider } from "./base";
@@ -100,7 +101,10 @@ function isBlockedPage(page: LoadedHtmlPage): boolean {
 async function callEcosiaHtml(params: SearchParams): Promise<string> {
 	const signal = withHardTimeout(params.signal);
 	const url = new URL(ECOSIA_SEARCH_URL);
-	url.searchParams.set("q", params.query);
+	// Ecosia serves Google-backed results, so classic operators pass through
+	// inline; canonicalize aliases (domain: -> site:, since: -> after:) and
+	// demote scraper-hostile operators via the shared scraper formatter.
+	url.searchParams.set("q", formatScraperQuery(params.query, params.parsedQuery));
 
 	let page: LoadedHtmlPage;
 	try {

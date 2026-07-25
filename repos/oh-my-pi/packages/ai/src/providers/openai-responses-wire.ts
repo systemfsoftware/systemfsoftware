@@ -2884,6 +2884,8 @@ export interface ResponseInputFile {
 	 * The name of the file to be sent to the model.
 	 */
 	filename?: string;
+	/** Explicit OpenAI prompt-cache breakpoint. */
+	prompt_cache_breakpoint?: { mode: "explicit" };
 }
 /**
  * A file input to the model.
@@ -2939,6 +2941,8 @@ export interface ResponseInputImage {
 	 * encoded image in a data URL.
 	 */
 	image_url?: string | null;
+	/** Explicit OpenAI prompt-cache breakpoint. */
+	prompt_cache_breakpoint?: { mode: "explicit" };
 }
 /**
  * An image input to the model. Learn about
@@ -3642,6 +3646,8 @@ export interface ResponseInputText {
 	 * The type of the input item. Always `input_text`.
 	 */
 	type: "input_text";
+	/** Explicit OpenAI prompt-cache breakpoint. */
+	prompt_cache_breakpoint?: { mode: "explicit" };
 }
 /**
  * A text input to the model.
@@ -5922,6 +5928,8 @@ export interface ResponseCreateParamsBase {
 	 *   `prompt_cache_retention` is not specified.
 	 */
 	prompt_cache_retention?: "in_memory" | "24h" | null;
+	/** Explicit prompt-cache mode and minimum lifetime for GPT-5.6+ models. */
+	prompt_cache_options?: { mode: "implicit" | "explicit"; ttl?: "30m" } | null;
 	/**
 	 * **gpt-5 and o-series models only**
 	 *

@@ -8,10 +8,11 @@ import type {
 	AgentToolUpdateCallback,
 	ToolLoadMode,
 } from "@oh-my-pi/pi-agent-core";
-import type { ImageContent, Static, TextContent, TSchema } from "@oh-my-pi/pi-ai";
+import type { ComputerSafetyCheck, ImageContent, Static, TextContent, TSchema } from "@oh-my-pi/pi-ai";
+import { sanitizeText } from "@oh-my-pi/pi-utils";
 import type { Settings } from "../../config/settings";
 import type { Theme } from "../../modes/theme/theme";
-import { type ApprovalMode, formatApprovalPrompt, resolveApproval } from "../../tools/approval";
+import { type ApprovalMode, formatApprovalPrompt, resolveApproval, truncateForPrompt } from "../../tools/approval";
 import { defaultLoadModeForToolName } from "../../tools/essential-tools";
 import { normalizeToolEventInput, resolveToolEventInput } from "../tool-event-input";
 import { applyToolProxy } from "../tool-proxy";
@@ -83,6 +84,42 @@ export function wrapRegisteredTools(registeredTools: RegisteredTool[], runner: E
 	return registeredTools.map(rt => wrapRegisteredTool(rt, runner));
 }
 
+function computerSafetyChecks(context: AgentToolContext | undefined): ComputerSafetyCheck[] {
+	const metadata = context?.toolCall?.providerMetadata;
+	return metadata?.type === "computer" ? metadata.pendingSafetyChecks : [];
+}
+
+function approvalArgs(params: unknown, context: AgentToolContext | undefined): unknown {
+	const metadata = context?.toolCall?.providerMetadata;
+	return metadata?.type === "computer" ? { actions: metadata.actions } : params;
+}
+
+function toolEventArgs(params: unknown, context: AgentToolContext | undefined): Record<string, unknown> {
+	const metadata = context?.toolCall?.providerMetadata;
+	if (metadata?.type === "computer") {
+		return {
+			actions: metadata.actions,
+			pendingSafetyChecks: metadata.pendingSafetyChecks,
+		};
+	}
+	return params as Record<string, unknown>;
+}
+
+function approvalData(value: string): string {
+	const sanitized = sanitizeText(value)
+		.replace(/[\r\n\t]+/g, " ")
+		.trim();
+	const truncated = truncateForPrompt(sanitized, 500);
+	return truncated.replace(/([\\`*_{}[\]()<>#+\-.!|])/g, "\\$1");
+}
+
+function safetyCheckLines(checks: readonly ComputerSafetyCheck[]): string[] {
+	return checks.map((check, index) => {
+		const value = check.message || check.code || check.id;
+		return `${index + 1}. ${approvalData(value)}`;
+	});
+}
+
 /**
  * Wraps a tool with extension callbacks for interception.
  * - Emits tool_call event before execution (can block)
@@ -128,19 +165,25 @@ export class ExtensionToolWrapper<TParameters extends TSchema = TSchema, TDetail
 		const configuredMode = (settings?.get("tools.approvalMode") ?? "yolo") as ApprovalMode;
 		const approvalMode: ApprovalMode = cliAutoApprove ? "yolo" : configuredMode;
 		const userPolicies = (settings?.get("tools.approval") ?? {}) as Record<string, unknown>;
-		const resolved = resolveApproval(this.tool, params, approvalMode, userPolicies);
+		const resolvedArgs = approvalArgs(params, context);
+		const resolved = resolveApproval(this.tool, resolvedArgs, approvalMode, userPolicies);
 		if (resolved.policy === "deny") {
 			throw new Error(
 				`Tool "${this.tool.name}" is blocked by user policy.\n` +
 					`To allow: remove "tools.approval.${this.tool.name}: deny" from config.`,
 			);
 		}
+		const pendingSafetyChecks = computerSafetyChecks(context);
 		// An xd:// device dispatch already cleared the write tool's outer gate at
 		// this tool's tier — re-prompting would double-ask for one action. Explicit
 		// per-tool "prompt" policies and tool-demanded overrides still prompt.
+		// Provider safety checks are stronger: yolo, per-tool allow, and xdev approval
+		// never acknowledge them on the user's behalf.
 		const explicitPrompt = resolved.override || Object.hasOwn(userPolicies, this.tool.name);
 		const approvalCheck = {
-			required: resolved.policy === "prompt" && (explicitPrompt || context?.xdevApproved !== true),
+			required:
+				pendingSafetyChecks.length > 0 ||
+				(resolved.policy === "prompt" && (explicitPrompt || context?.xdevApproved !== true)),
 			reason: resolved.reason,
 		};
 
@@ -171,10 +214,16 @@ export class ExtensionToolWrapper<TParameters extends TSchema = TSchema, TDetail
 				});
 			};
 
-			// Check if UI is available
+			// Provider safety checks fail closed without an interactive prompt. Unlike
+			// ordinary tier approval, no setting or yolo mode may bypass this gate.
 			if (!this.runner.hasUI()) {
 				const reason = "no interactive UI available";
 				await resolveApproval(false, reason);
+				if (pendingSafetyChecks.length > 0) {
+					throw new Error(
+						`Tool "${this.tool.name}" has pending provider safety checks but no interactive UI is available.`,
+					);
+				}
 				throw new Error(
 					`Tool "${this.tool.name}" requires approval but no interactive UI available.\n` +
 						`Options:\n` +
@@ -185,12 +234,14 @@ export class ExtensionToolWrapper<TParameters extends TSchema = TSchema, TDetail
 			}
 
 			const uiContext = this.runner.getUIContext();
+			const basePrompt = formatApprovalPrompt(this.tool, resolvedArgs, approvalCheck.reason);
+			const safetyPrompt =
+				pendingSafetyChecks.length > 0
+					? `${basePrompt}\nProvider safety checks:\n${safetyCheckLines(pendingSafetyChecks).join("\n")}`
+					: basePrompt;
 			let choice: string | undefined;
 			try {
-				choice = await uiContext.select(formatApprovalPrompt(this.tool, params, approvalCheck.reason), [
-					"Approve",
-					"Deny",
-				]);
+				choice = await uiContext.select(safetyPrompt, ["Approve", "Deny"]);
 			} catch (err) {
 				await resolveApproval(false, err instanceof Error ? err.message : "approval aborted");
 				throw err;
@@ -199,6 +250,10 @@ export class ExtensionToolWrapper<TParameters extends TSchema = TSchema, TDetail
 			await resolveApproval(approved, approved ? undefined : "denied by user");
 			if (!approved) {
 				throw new Error(`Tool call denied by user: ${this.tool.name}`);
+			}
+			if (pendingSafetyChecks.length > 0) {
+				if (!context) throw new Error("Provider safety approval context is unavailable");
+				context.providerSafetyApproved = true;
 			}
 		}
 
@@ -211,7 +266,7 @@ export class ExtensionToolWrapper<TParameters extends TSchema = TSchema, TDetail
 					toolCallId,
 					input: normalizeToolEventInput(
 						this.tool.name,
-						resolveToolEventInput(this.tool, params as Record<string, unknown>),
+						resolveToolEventInput(this.tool, toolEventArgs(params, context)),
 					),
 				})) as ToolCallEventResult | undefined;
 
@@ -228,7 +283,7 @@ export class ExtensionToolWrapper<TParameters extends TSchema = TSchema, TDetail
 		}
 
 		// Execute the actual tool
-		let result: { content: any; details?: TDetails };
+		let result: AgentToolResult<TDetails, TParameters>;
 		let executionError: Error | undefined;
 
 		try {
@@ -249,7 +304,7 @@ export class ExtensionToolWrapper<TParameters extends TSchema = TSchema, TDetail
 				toolCallId,
 				input: normalizeToolEventInput(
 					this.tool.name,
-					resolveToolEventInput(this.tool, params as Record<string, unknown>),
+					resolveToolEventInput(this.tool, toolEventArgs(params, context)),
 				),
 				content: result.content,
 				details: result.details,
@@ -275,6 +330,7 @@ export class ExtensionToolWrapper<TParameters extends TSchema = TSchema, TDetail
 				return {
 					content: modifiedContent,
 					details: modifiedDetails,
+					providerMetadata: result.providerMetadata,
 					...(effectiveError ? { isError: true } : {}),
 				};
 			}

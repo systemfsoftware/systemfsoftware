@@ -37,7 +37,11 @@ export const SEARCH_PROVIDER_OPTIONS = [
 	{ value: "jina", label: "Jina", description: "Requires JINA_API_KEY" },
 	{ value: "kagi", label: "Kagi", description: "Requires KAGI_API_KEY and Kagi Search API beta access" },
 	{ value: "tavily", label: "Tavily", description: "Requires TAVILY_API_KEY" },
-	{ value: "firecrawl", label: "Firecrawl", description: "Requires FIRECRAWL_API_KEY" },
+	{
+		value: "firecrawl",
+		label: "Firecrawl",
+		description: "Uses Firecrawl API when FIRECRAWL_API_KEY is set; falls back to keyless mode",
+	},
 	{ value: "brave", label: "Brave", description: "Requires BRAVE_API_KEY" },
 	{
 		value: "kimi",
@@ -91,6 +95,9 @@ export type SearchProviderId = Exclude<(typeof SEARCH_PROVIDER_OPTIONS)[number][
 export const SEARCH_PROVIDER_ORDER: readonly SearchProviderId[] = SEARCH_PROVIDER_OPTIONS.flatMap(option =>
 	option.value === "auto" ? [] : [option.value],
 );
+
+/** Concrete provider choices (no `auto` sentinel) — for list-valued settings like order/exclude. */
+export const SEARCH_PROVIDER_CHOICES = SEARCH_PROVIDER_OPTIONS.filter(option => option.value !== "auto");
 
 export const SEARCH_PROVIDER_PREFERENCES = ["auto", ...SEARCH_PROVIDER_ORDER] as const;
 

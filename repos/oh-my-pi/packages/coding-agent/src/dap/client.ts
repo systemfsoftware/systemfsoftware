@@ -75,6 +75,10 @@ export class DapClient {
 	#reverseRequestHandlers = new Map<string, DapReverseRequestHandler>();
 	#adapterExited = false;
 	#pendingWriteExitRejectors = new Set<() => void>();
+	/** Rejectors for in-flight {@link waitForEvent} calls, woken when the
+	 *  transport closes so an event that can never arrive fails fast instead of
+	 *  waiting out its own timeout. */
+	#eventWaiterRejectors = new Set<(error: Error) => void>();
 
 	constructor(
 		adapter: DapResolvedAdapter,
@@ -188,12 +192,17 @@ export class DapClient {
 		});
 
 		try {
-			const { readable, writeSink, socket } = await waitForTcpTransport(
-				host,
-				port,
-				socketReadyTimeoutMs ?? SOCKET_READY_TIMEOUT_MS,
-				proc,
-			);
+			// Wait for the adapter to announce it is listening on `port` before
+			// connecting. Without this gate the first connect can land in the
+			// window where a just-released reservation port still accepts
+			// connections (WSL2 mirrored networking, issue #6055): the transport
+			// then binds to a ghost of the reservation listener instead of the
+			// adapter. Draining stdout here also avoids a pipe-buffer deadlock —
+			// in tcp mode the DAP protocol flows over the socket, so nothing else
+			// consumes the adapter's stdout.
+			const readyTimeoutMs = socketReadyTimeoutMs ?? SOCKET_READY_TIMEOUT_MS;
+			await waitForTcpServerListening(proc, port, readyTimeoutMs);
+			const { readable, writeSink, socket } = await waitForTcpTransport(host, port, readyTimeoutMs, proc);
 			const client = new DapClient(adapter, cwd, proc, { readable, writeSink, socket, port });
 			proc.exited.then(() => client.#handleProcessExit());
 			void client.#startMessageReader();
@@ -251,7 +260,7 @@ export class DapClient {
 		// socket connect fails, we must not leak the detached adapter process.
 		try {
 			await waitForCondition(() => isUnixSocketReady(socketPath), timeoutMs, proc);
-			const { readable, writeSink, socket } = await connectSocket({ unix: socketPath });
+			const { readable, writeSink, socket } = await connectSocket({ unix: socketPath }, timeoutMs);
 			const client = new DapClient(adapter, cwd, proc, { readable, writeSink, socket });
 			proc.exited.then(() => client.#handleProcessExit());
 			void client.#startMessageReader();
@@ -389,6 +398,7 @@ export class DapClient {
 		let timeout: NodeJS.Timeout | undefined;
 		const cleanup = () => {
 			unsubscribe();
+			this.#eventWaiterRejectors.delete(closeHandler);
 			if (timeout) clearTimeout(timeout);
 			if (signal) {
 				signal.removeEventListener("abort", abortHandler);
@@ -398,6 +408,10 @@ export class DapClient {
 			cleanup();
 			reject(signal?.reason instanceof Error ? signal.reason : new ToolAbortError());
 		};
+		const closeHandler = (error: Error) => {
+			cleanup();
+			reject(error);
+		};
 		const unsubscribe = this.onEvent(event, body => {
 			const typedBody = body as TBody;
 			if (predicate && !predicate(typedBody)) {
@@ -406,6 +420,7 @@ export class DapClient {
 			cleanup();
 			resolve(typedBody);
 		});
+		this.#eventWaiterRejectors.add(closeHandler);
 		if (signal) {
 			signal.addEventListener("abort", abortHandler, { once: true });
 		}
@@ -580,6 +595,7 @@ export class DapClient {
 
 		const framer = new MessageFramer(this.#messageBuffer);
 
+		let closeError: Error | undefined;
 		try {
 			while (true) {
 				const { done, value } = await reader.read();
@@ -619,13 +635,19 @@ export class DapClient {
 				}
 			}
 		} catch (error) {
-			this.#rejectPendingRequests(new Error(`DAP connection closed: ${toErrorMessage(error)}`));
+			closeError = new Error(`DAP connection closed: ${toErrorMessage(error)}`);
 		} finally {
 			// Persist any unparsed remainder so a restarted reader resumes mid-message.
 			this.#messageBuffer = framer.remainder();
 			reader.releaseLock();
 			this.#isReading = false;
 		}
+		// The transport is gone once the reader loop exits — on a thrown error
+		// or a clean stream end (a socket the peer dropped after we wrote, e.g.
+		// the WSL2-mirrored ghost-accept race in issue #6055). Fail every
+		// in-flight request and event waiter so callers see an immediate error
+		// instead of waiting out their own timeout.
+		this.#failConnection(closeError ?? new Error(`DAP connection closed: ${this.adapter.name} transport ended`));
 	}
 
 	#handleResponse(message: DapResponseMessage): void {
@@ -712,7 +734,19 @@ export class DapClient {
 				? `DAP adapter exited (code ${exitCode}): ${stderr}`
 				: `DAP adapter exited unexpectedly (code ${exitCode})`,
 		);
+		this.#failConnection(error);
+	}
+
+	/** Reject every in-flight request and wake every event waiter with `error`.
+	 *  Called when the transport dies (reader end, socket close, adapter exit)
+	 *  so nothing sits pending until its own timeout. */
+	#failConnection(error: Error): void {
 		this.#rejectPendingRequests(error);
+		const waiters = Array.from(this.#eventWaiterRejectors);
+		this.#eventWaiterRejectors.clear();
+		for (const reject of waiters) {
+			reject(error);
+		}
 	}
 
 	#rejectPendingRequests(error: Error): void {
@@ -826,6 +860,51 @@ async function waitForTcpTransport(
 	throw new Error(`TCP port ${host}:${port} was not ready after ${timeoutMs}ms`);
 }
 
+/**
+ * Give the adapter a chance to announce it is listening on `port` before the
+ * first connect. vscode-js-debug prints `Debug server listening at HOST:PORT`
+ * to stdout from inside its `listen()` callback; waiting for the port to appear
+ * there means we only connect once the child genuinely owns the reserved port,
+ * which closes the WSL2-mirrored ghost-accept window (issue #6055) at its root.
+ *
+ * Best-effort: resolves on the banner, on process exit, or on timeout — the
+ * subsequent connect loop and `proc.exitCode` checks surface real failures, so
+ * an adapter that never prints a banner still proceeds (just without the gate).
+ * Also drains stdout for the wait's duration: in tcp mode the DAP protocol
+ * flows over the socket, so nothing else consumes the adapter's stdout.
+ *
+ * Exported so tests can drive the gate deterministically with a synthetic stdout.
+ */
+export async function waitForTcpServerListening(
+	proc: { stdout: ReadableStream<Uint8Array>; exitCode: number | null },
+	port: number,
+	timeoutMs: number,
+): Promise<void> {
+	const ready = Promise.withResolvers<void>();
+	const portText = String(port);
+	void (async () => {
+		try {
+			const decoder = new TextDecoder();
+			let buffered = "";
+			for await (const chunk of proc.stdout) {
+				buffered += decoder.decode(chunk, { stream: true });
+				if (buffered.includes(portText)) {
+					ready.resolve();
+				}
+				// Keep only the tail relevant for banner matching so a chatty
+				// adapter cannot grow this buffer without bound.
+				if (buffered.length > 4096) {
+					buffered = buffered.slice(-1024);
+				}
+			}
+		} catch {
+			/* stdout errored — the connect loop surfaces the real failure */
+		}
+		ready.resolve();
+	})();
+	await Promise.race([ready.promise, Bun.sleep(timeoutMs)]);
+}
+
 interface SocketTransport {
 	readable: ReadableStream<Uint8Array>;
 	writeSink: DapWriteSink;
@@ -845,10 +924,20 @@ function socketToSink(socket: Bun.Socket<undefined>): DapWriteSink {
 	};
 }
 
-/** Connect to a unix domain socket and return DAP transport streams. */
-async function connectSocket(options: { unix: string }): Promise<SocketTransport> {
-	const { promise, resolve } = Promise.withResolvers<SocketTransport>();
+/**
+ * Connect to a unix domain socket and return DAP transport streams.
+ *
+ * Rejects (rather than hanging) when the connect fails — a stat-ready but dead
+ * socket returns ECONNREFUSED, a socket removed between the readiness stat and
+ * the connect returns ENOENT, a permission mismatch returns EACCES — and when
+ * neither `open` nor an error arrives within `timeoutMs` (e.g. a TOCTOU stall).
+ * `#spawnSocketUnix`'s catch then kills the detached adapter instead of leaking
+ * it. Exported so tests can drive the reject path deterministically.
+ */
+export async function connectSocket(options: { unix: string }, timeoutMs: number): Promise<SocketTransport> {
+	const { promise, resolve, reject } = Promise.withResolvers<SocketTransport>();
 	let streamController: ReadableStreamDefaultController<Uint8Array>;
+	let opened = false;
 
 	const readable = new ReadableStream<Uint8Array>({
 		start(controller) {
@@ -856,10 +945,21 @@ async function connectSocket(options: { unix: string }): Promise<SocketTransport
 		},
 	});
 
+	const timer = setTimeout(() => {
+		reject(new Error(`Timed out connecting to unix socket ${options.unix} after ${timeoutMs}ms`));
+	}, timeoutMs);
+	// A late socket callback after settle is a no-op; clearing the timer just
+	// stops it from keeping the event loop alive past the connect.
+	void promise.then(
+		() => clearTimeout(timer),
+		() => clearTimeout(timer),
+	);
+
 	Bun.connect({
 		unix: options.unix,
 		socket: {
 			open(socket) {
+				opened = true;
 				resolve({
 					readable,
 					writeSink: socketToSink(socket),
@@ -870,6 +970,9 @@ async function connectSocket(options: { unix: string }): Promise<SocketTransport
 				streamController.enqueue(new Uint8Array(data));
 			},
 			close() {
+				if (!opened) {
+					reject(new Error(`Unix socket ${options.unix} closed before opening`));
+				}
 				try {
 					streamController.close();
 				} catch {
@@ -877,6 +980,9 @@ async function connectSocket(options: { unix: string }): Promise<SocketTransport
 				}
 			},
 			error(_socket, err) {
+				if (!opened) {
+					reject(err);
+				}
 				try {
 					streamController.error(err);
 				} catch {
@@ -884,6 +990,12 @@ async function connectSocket(options: { unix: string }): Promise<SocketTransport
 				}
 			},
 		},
+	}).catch(err => {
+		// Bun.connect rejects the returned promise on synchronous connect
+		// failures (e.g. ENOENT) without always firing the `error` handler.
+		if (!opened) {
+			reject(err);
+		}
 	});
 
 	return promise;

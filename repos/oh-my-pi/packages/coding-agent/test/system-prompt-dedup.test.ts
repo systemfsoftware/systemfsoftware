@@ -39,6 +39,34 @@ describe("SYSTEM.md prompt assembly", () => {
 
 	afterEach(cleanupTempHome(() => ({ tempDir, tempHomeDir, originalHome })));
 
+	it("renders an absolute cwd beneath the user's home directory", async () => {
+		const projectDir = path.join(os.homedir(), "project");
+		const { systemPrompt } = await buildSystemPrompt({
+			cwd: projectDir,
+			contextFiles: [],
+			skills: [],
+			rules: [],
+			toolNames: [],
+			activeRepoContext: null,
+			workspaceTree: {
+				rootPath: projectDir,
+				rendered: "",
+				truncated: false,
+				totalLines: 0,
+				agentsMdFiles: [],
+			},
+		});
+
+		const promptText = systemPrompt.join("\n\n");
+		const normalizedProjectDir = projectDir.replace(/\\/g, "/");
+		expect(promptText).toMatch(
+			new RegExp(
+				`^Today is [^,\\n]+, and the current working directory is '${escapeRegExp(normalizedProjectDir)}'\\.$`,
+				"m",
+			),
+		);
+	});
+
 	it("renders SYSTEM.md exactly once when it is used as the custom base prompt", async () => {
 		const projectDir = path.join(tempDir, "project");
 		const systemDir = path.join(projectDir, ".omp");

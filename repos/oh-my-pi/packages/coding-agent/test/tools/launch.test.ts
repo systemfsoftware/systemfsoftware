@@ -478,4 +478,160 @@ esac
 			await shutdown(client);
 		}
 	}, 20_000);
+
+	// Regression: a process that flips starting→ready→exited within one 50ms poll
+	// interval used to hang `start` for the full readiness timeout, because
+	// #waitUntil sampled the live (already "exited") state instead of the sticky
+	// readyAt marker #markReady durably recorded.
+	it("returns promptly when the process becomes ready then exits within a poll", async () => {
+		const projectDir = await tempDir("omp-daemon-fast-project-");
+		const runtimeDir = await tempDir("omp-daemon-fast-runtime-");
+		const scriptPath = path.join(projectDir, "fast.ts");
+		await Bun.write(scriptPath, `process.stdout.write("done\\n");\n`);
+		const client = await createDaemonBrokerClient(projectDir, { runtimeDir, idleGraceMs: 5_000 });
+		try {
+			const spec: DaemonSpec = {
+				name: "fast",
+				application: process.execPath,
+				args: [scriptPath],
+				env: {},
+				cwd: projectDir,
+				pty: false,
+				ready: { log: ".+", timeoutMs: 60_000 },
+				restart: "no",
+				persist: false,
+				detached: false,
+			};
+			const t0 = Date.now();
+			const started = await client.request({ op: "start", spec });
+			const elapsed = Date.now() - t0;
+			expect(started.op).toBe("start");
+			if (started.op !== "start") throw new Error("unexpected start result");
+			// Woke on readyAt/terminal, not the full 60s timeout.
+			expect(elapsed).toBeLessThan(10_000);
+			expect(started.readyTimedOut).toBeFalse();
+			expect(started.daemon.readyAt).toBeDefined();
+
+			// A for:"ready" wait on the settled daemon reports success via the sticky
+			// readyAt marker even though the process has already exited.
+			const waited = await client.request({
+				op: "wait",
+				name: "fast",
+				for: "ready",
+				timeoutMs: 60_000,
+			});
+			expect(waited.op).toBe("wait");
+			if (waited.op !== "wait") throw new Error("unexpected wait result");
+			expect(waited.timedOut).toBeFalse();
+			expect(waited.daemon.readyAt).toBeDefined();
+		} finally {
+			await shutdown(client);
+		}
+	}, 20_000);
+
+	// Regression: a process that exits before ever becoming ready used to block the
+	// caller for the full timeout, and a for:"ready" wait on the settled daemon did
+	// the same. Terminal states now wake both waits immediately.
+	it('wakes start and for:"ready" waits when the process exits before readiness', async () => {
+		const projectDir = await tempDir("omp-daemon-preexit-project-");
+		const runtimeDir = await tempDir("omp-daemon-preexit-runtime-");
+		const scriptPath = path.join(projectDir, "preexit.ts");
+		// Exits without ever printing the ready pattern.
+		await Bun.write(scriptPath, `process.stdout.write("nope\\n"); process.exit(0);\n`);
+		const client = await createDaemonBrokerClient(projectDir, { runtimeDir, idleGraceMs: 5_000 });
+		try {
+			const spec: DaemonSpec = {
+				name: "preexit",
+				application: process.execPath,
+				args: [scriptPath],
+				env: {},
+				cwd: projectDir,
+				pty: false,
+				ready: { log: "LISTENING", timeoutMs: 60_000 },
+				restart: "no",
+				persist: false,
+				detached: false,
+			};
+			const t0 = Date.now();
+			const started = await client.request({ op: "start", spec });
+			const startElapsed = Date.now() - t0;
+			expect(started.op).toBe("start");
+			if (started.op !== "start") throw new Error("unexpected start result");
+			expect(startElapsed).toBeLessThan(10_000);
+			// Woke on the terminal exit rather than timing out; the readyAt marker is
+			// absent because the ready pattern never matched.
+			expect(started.readyTimedOut).toBeFalse();
+			expect(started.daemon.readyAt).toBeUndefined();
+			expect(["exited", "failed"]).toContain(started.daemon.state);
+
+			// A for:"ready" wait on the already-settled daemon must wake immediately,
+			// but a process that never became ready is surfaced as not ready
+			// (timedOut) so callers don't chain work against a dead process.
+			const t1 = Date.now();
+			const waited = await client.request({
+				op: "wait",
+				name: "preexit",
+				for: "ready",
+				timeoutMs: 60_000,
+			});
+			const waitElapsed = Date.now() - t1;
+			expect(waited.op).toBe("wait");
+			if (waited.op !== "wait") throw new Error("unexpected wait result");
+			expect(waitElapsed).toBeLessThan(10_000);
+			expect(waited.timedOut).toBeTrue();
+			expect(waited.daemon.readyAt).toBeUndefined();
+		} finally {
+			await shutdown(client);
+		}
+	}, 20_000);
+
+	// Regression (PR #6305 review): readyAt belongs to the exited generation, so a
+	// daemon in the restart backoff window must not report readiness. #settle now
+	// clears readyAt/readyMatch when entering "restarting"; without that, start and
+	// for:"ready" waits race a dead service during the backoff.
+	it("clears stale readiness while a daemon is restarting", async () => {
+		const projectDir = await tempDir("omp-daemon-restart-project-");
+		const runtimeDir = await tempDir("omp-daemon-restart-runtime-");
+		const scriptPath = path.join(projectDir, "flap.ts");
+		// Becomes ready (prints the pattern), then crashes shortly after.
+		await Bun.write(scriptPath, `process.stdout.write("READY\\n"); setTimeout(() => process.exit(1), 50);\n`);
+		const client = await createDaemonBrokerClient(projectDir, { runtimeDir, idleGraceMs: 5_000 });
+		try {
+			const spec: DaemonSpec = {
+				name: "flap",
+				application: process.execPath,
+				args: [scriptPath],
+				env: {},
+				cwd: projectDir,
+				pty: false,
+				ready: { log: "READY", timeoutMs: 60_000 },
+				restart: "on-failure",
+				persist: false,
+				detached: false,
+			};
+			const started = await client.request({ op: "start", spec });
+			expect(started.op).toBe("start");
+			if (started.op !== "start") throw new Error("unexpected start result");
+			expect(started.daemon.readyAt).toBeDefined();
+
+			// Catch the backoff window: once restarting, readiness must be cleared.
+			const restarting = await waitUntil(async () => {
+				const listed = await client.request({ op: "list" });
+				if (listed.op !== "list") return false;
+				const daemon = listed.daemons.find(d => d.name === "flap");
+				return daemon?.state === "restarting";
+			}, 15_000);
+			expect(restarting).toBeTrue();
+			const listed = await client.request({ op: "list" });
+			if (listed.op !== "list") throw new Error("unexpected list result");
+			const daemon = listed.daemons.find(d => d.name === "flap");
+			expect(daemon?.state).toBe("restarting");
+			expect(daemon?.readyAt).toBeUndefined();
+			expect(daemon?.readyMatch).toBeUndefined();
+
+			await client.request({ op: "stop", name: "flap", timeoutMs: 2_000 });
+		} finally {
+			await shutdown(client);
+		}
+	}, 30_000);
 });

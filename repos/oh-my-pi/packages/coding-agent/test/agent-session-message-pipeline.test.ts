@@ -137,6 +137,9 @@ describe("AgentSession message pipeline", () => {
 			modelRegistry: {} as never,
 		});
 		sessions.push(session);
+		// #queueUserMessage schedules an idle-queue drain that would agent.continue()
+		// and pop the steer before we can inspect it; stub it out to observe the queue.
+		vi.spyOn(session.agent, "continue").mockResolvedValue(undefined);
 
 		await session.sendUserMessage("raw <steer> &", { deliverAs: "steer" });
 

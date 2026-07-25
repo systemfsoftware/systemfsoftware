@@ -20,7 +20,7 @@ import { defaultThemes } from "./defaults";
 import lightThemeJson from "./light.json" with { type: "json" };
 import { resolveMermaidAscii } from "./mermaid-cache";
 
-export { getLanguageFromPath } from "../../utils/lang-from-path";
+export { getLanguageFromPath, isMarkdownPath } from "../../utils/lang-from-path";
 
 // ============================================================================
 // Symbol Presets

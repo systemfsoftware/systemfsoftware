@@ -270,8 +270,15 @@ export class IndexedSessionStorage implements SessionStorage {
 				{ trackDrain: false },
 			);
 		} catch (err) {
-			this.#restoreIndex(path, previous);
-			throw toError(err);
+			const error = toError(err);
+			try {
+				if ((await this.#backend.readFull(path)) === content) return;
+			} catch {
+				// Preserve the original write failure; verification was unavailable.
+			}
+			const current = this.#index.get(path);
+			if (current?.mtimeMs === mtimeMs) this.#restoreIndex(path, previous);
+			throw error;
 		}
 	}
 

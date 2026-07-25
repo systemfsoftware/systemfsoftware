@@ -8,6 +8,11 @@ import { generateEnumExports } from "./gen-enums";
 // must not retain host Homebrew paths such as /opt/homebrew/opt/pcre2/*.dylib.
 process.env.PCRE2_SYS_STATIC ??= "1";
 
+// audiopus_sys builds its bundled opus via CMake; that opus tree declares a
+// cmake_minimum_required below 3.5, which CMake 4.x refuses without this
+// policy override.
+process.env.CMAKE_POLICY_VERSION_MINIMUM ??= "3.5";
+
 const repoRoot = path.join(import.meta.dir, "../../..");
 const rustDir = path.join(repoRoot, "crates/pi-natives");
 const nativeDir = path.join(import.meta.dir, "../native");
@@ -44,14 +49,15 @@ const effectiveVariant = resolveEffectiveVariant();
 const variantSuffix = effectiveVariant ? `-${effectiveVariant}` : "";
 
 // Pin Rust target-cpu so x64 baseline/modern variants get a reproducible ISA floor
-// instead of inheriting the host CPU when RUSTFLAGS is unset.
+// instead of inheriting the host CPU when RUSTFLAGS is unset. Non-x64 builds keep
+// the target's default CPU features: `-C target-cpu=native` would bake the build
+// host's CPU features into shipped artifacts and trips ring 0.17's aarch64-apple
+// const assertion (CAPS_STATIC == MIN_STATIC_FEATURES).
 if (!isCrossCompile && !Bun.env.RUSTFLAGS) {
 	if (effectiveVariant === "modern") {
 		Bun.env.RUSTFLAGS = "-C target-cpu=x86-64-v3";
 	} else if (effectiveVariant === "baseline") {
 		Bun.env.RUSTFLAGS = "-C target-cpu=x86-64-v2";
-	} else {
-		Bun.env.RUSTFLAGS = "-C target-cpu=native";
 	}
 }
 
@@ -365,6 +371,20 @@ if (crossTarget) {
 		const envKey = `CFLAGS_${bareTriple.replace(/-/g, "_")}`;
 		const existing = process.env[envKey] ?? "";
 		process.env[envKey] = existing ? `${existing} -UNDEBUG` : "-UNDEBUG";
+	}
+	// MSVC cross builds compile C deps with clang-cl, which — unlike real MSVC —
+	// enforces per-function target features: opus' silk/x86 SSE4.1 units fail to
+	// build without the feature enabled globally. The win32 x64 addon floor is
+	// x86-64-v2 (SSE4.2 inclusive), so enabling it for all C deps is safe.
+	// cargo-xwin overwrites `CFLAGS_<target>` on the cargo it spawns but appends
+	// the plain `CFLAGS`/`CXXFLAGS` values into it, so those are the only knobs
+	// that survive.
+	if (crossTarget.endsWith("-msvc") && targetArch === "x64") {
+		for (const envKey of ["CFLAGS", "CXXFLAGS"]) {
+			const existing = process.env[envKey] ?? "";
+			const sseFlags = "-msse4.1 -msse4.2";
+			process.env[envKey] = existing ? `${existing} ${sseFlags}` : sseFlags;
+		}
 	}
 	// napi 3.7.0 resolves the built artifact from the FULL `--target` directory,
 	// but cargo-zigbuild writes under the bare triple; bridge the two so napi's

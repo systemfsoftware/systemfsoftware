@@ -108,15 +108,21 @@ interface CachedHeaderRestoreResult<TApi extends Api> {
 /**
  * Restore cache-omitted headers from the current static source.
  *
- * Dynamic-only header-bearing models cannot be reconstructed safely without
- * persisting arbitrary credential values; callers must refetch them online or
- * omit them from an offline result rather than return a broken model.
+ * A same-id static match is trusted only when the row did not flag the model
+ * unrestorable (its live headers matched static when cached). Request-model
+ * fallback also honors that marker for current rows. Only legacy rows written
+ * before request-model header matching may bypass it: their id-only writer
+ * necessarily marked every synthesized variant unrestorable (#6037, #6284).
+ * Header-bearing models without a trusted source cannot be reconstructed
+ * safely without persisting arbitrary credential values; callers must refetch
+ * them online or omit them rather than return a broken model.
  */
 function restoreCachedModelHeaders<TApi extends Api>(
 	cachedModels: readonly ModelSpec<TApi>[],
 	staticModels: readonly Model<TApi>[],
 	headerOmittedModelIds: readonly string[],
 	unrestorableHeaderModelIds: readonly string[],
+	legacyHeaderRestoreMarkers: boolean,
 ): CachedHeaderRestoreResult<TApi> {
 	const models = passModelList<TApi>(cachedModels);
 	if (headerOmittedModelIds.length === 0) {
@@ -128,11 +134,15 @@ function restoreCachedModelHeaders<TApi extends Api>(
 	const unresolvedModelIds = new Set<string>();
 	const restored = models.map(model => {
 		if (!omittedIds.has(model.id)) return model;
-		if (unrestorableIds.has(model.id)) {
-			unresolvedModelIds.add(model.id);
-			return model;
-		}
-		const staticModel = staticById.get(model.id);
+		const unrestorable = unrestorableIds.has(model.id);
+		// Current unrestorable markers prove that neither same-id nor request-model
+		// static headers matched the live model. Only the old id-only writer's
+		// markers may recover a synthesized variant through `requestModelId`.
+		const staticModel = unrestorable
+			? legacyHeaderRestoreMarkers && model.requestModelId
+				? staticById.get(model.requestModelId)
+				: undefined
+			: (staticById.get(model.id) ?? (model.requestModelId ? staticById.get(model.requestModelId) : undefined));
 		if (!staticModel?.headers) {
 			unresolvedModelIds.add(model.id);
 			return model;
@@ -165,6 +175,7 @@ export async function resolveProviderModels<TApi extends Api = Api, TModelsDevPa
 		staticModels,
 		cache?.headerOmittedModelIds ?? [],
 		cache?.unrestorableHeaderModelIds ?? [],
+		cache?.legacyHeaderRestoreMarkers ?? false,
 	);
 	const usableCachedModels = restoredCache.models.filter(model => !restoredCache.unresolvedModelIds.has(model.id));
 	const cacheHasUnresolvedHeaders = restoredCache.unresolvedModelIds.size > 0;
@@ -245,6 +256,7 @@ export async function resolveProviderModels<TApi extends Api = Api, TModelsDevPa
 				staticModels,
 				latestCache?.headerOmittedModelIds ?? cache?.headerOmittedModelIds ?? [],
 				latestCache?.unrestorableHeaderModelIds ?? cache?.unrestorableHeaderModelIds ?? [],
+				latestCache?.legacyHeaderRestoreMarkers ?? cache?.legacyHeaderRestoreMarkers ?? false,
 			);
 			const latestUsableCacheModels = latestRestoredCache.models.filter(
 				model => !latestRestoredCache.unresolvedModelIds.has(model.id),

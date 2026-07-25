@@ -70,7 +70,7 @@ describe("jtdToJsonSchema", () => {
 		});
 	});
 	it("does not misinterpret user-named properties that collide with JTD keywords (#1345)", () => {
-		// Mirrors the `files[]` shape declared by the built-in explore agent:
+		// Mirrors the `files[]` shape declared by the built-in scout agent:
 		// a JTD elements form whose item properties include one literally named `ref`.
 		const converted = jtdToJsonSchema({
 			properties: {

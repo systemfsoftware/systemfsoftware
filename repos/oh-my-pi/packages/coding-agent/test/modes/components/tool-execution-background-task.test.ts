@@ -10,7 +10,7 @@ function progressEntry(description: string): AgentProgress {
 	return {
 		index: 0,
 		id: "Anna",
-		agent: "explore",
+		agent: "scout",
 		agentSource: "bundled",
 		status: "running",
 		task: "investigate the auth flow",
@@ -49,7 +49,7 @@ function finalSnapshot(output: string): {
 	const result: SingleResult = {
 		index: 0,
 		id: "Anna",
-		agent: "explore",
+		agent: "scout",
 		agentSource: "bundled",
 		task: "investigate the auth flow",
 		exitCode: 0,
@@ -92,7 +92,7 @@ describe("ToolExecutionComponent detached task freeze", () => {
 		const ui = { requestRender, requestComponentRender } as unknown as TUI;
 		const component = new ToolExecutionComponent(
 			"task",
-			{ agent: "explore", id: "Anna", description: "scout auth", assignment: "investigate the auth flow" },
+			{ agent: "scout", id: "Anna", description: "scout auth", assignment: "investigate the auth flow" },
 			{ liveRegion: { isBlockInLiveRegion: () => live() } },
 			undefined,
 			ui,

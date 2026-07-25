@@ -196,6 +196,28 @@ export class TinyTitleClient {
 		return () => this.#progressListeners.delete(listener);
 	}
 
+	/**
+	 * Spawn the tiny-model worker ahead of first use without loading any model.
+	 * Called from idle TUI startup so the first {@link generate} reuses a live,
+	 * unref'd subprocess instead of paying subprocess-spawn latency on the submit
+	 * hot path (issue #6462). No-ops for online / non-local keys and for models
+	 * already marked failed. A no-op `ping` round-trips the transport to fault in
+	 * the worker's module graph; no pending request is registered, so
+	 * {@link #syncWorkerRef} leaves the worker unref'd and idle sessions still exit.
+	 */
+	prewarm(modelKey: string): void {
+		if (!isTinyTitleLocalModelKey(modelKey) || this.#failedModels.has(modelKey)) return;
+		try {
+			const worker = this.#ensureWorker();
+			worker.send({ type: "ping", id: String(++this.#nextRequestId) });
+		} catch (error) {
+			logger.debug("tiny-title: prewarm failed", {
+				modelKey,
+				error: error instanceof Error ? error.message : String(error),
+			});
+		}
+	}
+
 	async generate(modelKey: string, message: string, signal?: AbortSignal): Promise<string | null>;
 	async generate(modelKey: string, message: string, options?: TinyTitleGenerateOptions): Promise<string | null>;
 	async generate(

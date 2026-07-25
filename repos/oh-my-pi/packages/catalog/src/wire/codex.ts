@@ -25,6 +25,8 @@ export const OPENAI_HEADERS = {
 	SUBAGENT: "x-openai-subagent",
 	/** Responses Lite transport marker (codex-rs `add_responses_lite_header`); value is always `"true"`. */
 	RESPONSES_LITE: "x-openai-internal-codex-responses-lite",
+	/** DeviceCheck attestation envelope (codex-rs `X_OAI_ATTESTATION_HEADER`); sent on ChatGPT-OAuth requests. */
+	ATTESTATION: "x-oai-attestation",
 } as const;
 
 export const OPENAI_HEADER_VALUES = {

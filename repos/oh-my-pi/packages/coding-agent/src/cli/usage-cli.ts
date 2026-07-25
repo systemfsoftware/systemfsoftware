@@ -208,14 +208,23 @@ function describeAmount(limit: UsageLimit): string {
 	const amount = limit.amount;
 	const parts: string[] = [];
 	const absoluteUnit = amount.unit !== "percent" && amount.unit !== "unknown";
+	const fraction = resolveUsedFraction(limit);
 	if (absoluteUnit && amount.used !== undefined && amount.limit !== undefined) {
 		parts.push(
 			`${formatUnitValue(amount.used, amount.unit)} / ${formatUnitValue(amount.limit, amount.unit)}${UNIT_SUFFIX[amount.unit]}`,
 		);
 	} else if (absoluteUnit && amount.remaining !== undefined) {
 		parts.push(`${formatUnitValue(amount.remaining, amount.unit)}${UNIT_SUFFIX[amount.unit]} left`);
+	} else if (
+		absoluteUnit &&
+		amount.used !== undefined &&
+		Number.isFinite(amount.used) &&
+		amount.limit === undefined &&
+		amount.remaining === undefined &&
+		fraction === undefined
+	) {
+		parts.push(`${formatUnitValue(amount.used, amount.unit)}${UNIT_SUFFIX[amount.unit]} used`);
 	}
-	const fraction = resolveUsedFraction(limit);
 	if (fraction !== undefined) {
 		parts.push(`${(fraction * 100).toFixed(1)}% used`);
 	} else if (amount.remainingFraction !== undefined) {
@@ -409,7 +418,7 @@ function formatLimitLine(limit: UsageLimit, labelWidth: number, nowMs: number): 
 	const details: string[] = [describeAmount(limit)];
 	const resetsAt = limit.window?.resetsAt;
 	if (resetsAt !== undefined && resetsAt > nowMs) {
-		details.push(`resets in ${formatDuration(resetsAt - nowMs)}`);
+		details.push(`${limit.window?.resetLabel ?? "resets"} in ${formatDuration(resetsAt - nowMs)}`);
 	}
 	const lines = [
 		`      ${STATUS_COLOR[status]("●")} ${padded}  ${renderBar(limit)}  ${chalk.dim(details.join(" · "))}`,

@@ -65,6 +65,43 @@ export type ToolResultBlockParam = {
 	cache_control?: CacheControlEphemeral | null;
 };
 
+/** Anthropic-executed server tool call replayed inside an assistant turn. */
+export type ServerToolUseBlockParam = {
+	type: "server_tool_use";
+	id: string;
+	name: string;
+	input?: Record<string, unknown> | null;
+	[key: string]: unknown;
+};
+
+/** Web-search server-tool call whose matching result is replayable by omp. */
+export type WebSearchServerToolUseBlockParam = ServerToolUseBlockParam & { name: "web_search" };
+
+/** Native web-search result replayed inside an assistant turn. */
+export type WebSearchToolResultBlockParam = {
+	type: "web_search_tool_result";
+	tool_use_id: string;
+	content: unknown;
+	[key: string]: unknown;
+};
+
+/** True for the complete native web-search history variants omp can replay. */
+export function isAnthropicWebSearchHistoryBlock(block: {
+	type: string;
+	name?: unknown;
+	id?: unknown;
+	tool_use_id?: unknown;
+	content?: unknown;
+}): block is WebSearchServerToolUseBlockParam | WebSearchToolResultBlockParam {
+	if (block.type === "server_tool_use") {
+		return block.name === "web_search" && typeof block.id === "string" && block.id.length > 0;
+	}
+	if (block.type === "web_search_tool_result") {
+		return typeof block.tool_use_id === "string" && block.tool_use_id.length > 0 && Object.hasOwn(block, "content");
+	}
+	return false;
+}
+
 export type ThinkingBlockParam = {
 	type: "thinking";
 	thinking: string;
@@ -93,6 +130,8 @@ export type ContentBlockParam =
 	| ImageBlockParam
 	| ToolUseBlockParam
 	| ToolResultBlockParam
+	| ServerToolUseBlockParam
+	| WebSearchToolResultBlockParam
 	| ThinkingBlockParam
 	| RedactedThinkingBlockParam
 	| FallbackBlockParam;
@@ -278,6 +317,8 @@ export type ResponseContentBlock =
 	| { type: "thinking"; thinking: string; signature?: string }
 	| { type: "redacted_thinking"; data: string }
 	| { type: "tool_use"; id: string; name: string; input?: Record<string, unknown> | null }
+	| ServerToolUseBlockParam
+	| WebSearchToolResultBlockParam
 	| { type: "fallback"; from: { model: string }; to: { model: string } };
 
 export type ContentBlockDelta =

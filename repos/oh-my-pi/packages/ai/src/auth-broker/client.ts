@@ -9,6 +9,9 @@ import { readSseEvents } from "@oh-my-pi/pi-utils";
 import { type } from "arktype";
 import type { AuthCredential } from "../auth-storage";
 import type {
+	ClientUsageReportRequest,
+	ClientUsageReportResponse,
+	ClientUsageSummaryResponse,
 	CredentialBlockRequest,
 	CredentialBlockResponse,
 	CredentialBlocksDeleteResponse,
@@ -20,10 +23,13 @@ import type {
 	HealthzResponse,
 	SnapshotResponse,
 	SnapshotStreamEvent,
+	UsageHistoryResponse,
 	UsageResponse,
 	UsageStaleResponse,
 } from "./types";
 import {
+	clientUsageReportResponseSchema,
+	clientUsageSummaryResponseSchema,
 	credentialBlockResponseSchema,
 	credentialBlocksDeleteResponseSchema,
 	credentialDisableResponseSchema,
@@ -32,6 +38,7 @@ import {
 	healthzResponseSchema,
 	snapshotResponseSchema,
 	snapshotStreamEventSchema,
+	usageHistoryResponseSchema,
 	usageResponseSchema,
 	usageStaleResponseSchema,
 } from "./wire-schemas";
@@ -242,6 +249,38 @@ export class AuthBrokerClient {
 		// the broker can ship new shapes ahead of the client. `raw` is accepted
 		// but normally stripped by the broker before send.
 		return this.#request<UsageResponse>("GET", "/v1/usage", { schema: usageResponseSchema, signal });
+	}
+
+	/** Recorded usage-limit snapshots from the broker host, oldest first. */
+	fetchUsageHistory(
+		query?: { sinceMs?: number; provider?: string },
+		signal?: AbortSignal,
+	): Promise<UsageHistoryResponse> {
+		const params = new URLSearchParams();
+		if (query?.sinceMs !== undefined) params.set("sinceMs", String(query.sinceMs));
+		if (query?.provider) params.set("provider", query.provider);
+		const path = `/v1/usage/history${params.size > 0 ? `?${params.toString()}` : ""}`;
+		return this.#request<UsageHistoryResponse>("GET", path, { schema: usageHistoryResponseSchema, signal });
+	}
+
+	/** Report this client's batched observed request usage for per-install burn tracking. */
+	reportClientUsage(report: ClientUsageReportRequest, signal?: AbortSignal): Promise<ClientUsageReportResponse> {
+		return this.#request<ClientUsageReportResponse>("POST", "/v1/usage/observed", {
+			body: report,
+			schema: clientUsageReportResponseSchema,
+			signal,
+		});
+	}
+
+	/** Per-client token burn aggregates recorded by the broker host. */
+	fetchClientUsageSummary(query?: { sinceMs?: number }, signal?: AbortSignal): Promise<ClientUsageSummaryResponse> {
+		const params = new URLSearchParams();
+		if (query?.sinceMs !== undefined) params.set("sinceMs", String(query.sinceMs));
+		const path = `/v1/usage/clients${params.size > 0 ? `?${params.toString()}` : ""}`;
+		return this.#request<ClientUsageSummaryResponse>("GET", path, {
+			schema: clientUsageSummaryResponseSchema,
+			signal,
+		});
 	}
 
 	notifyUsageStale(signal?: AbortSignal): Promise<UsageStaleResponse> {

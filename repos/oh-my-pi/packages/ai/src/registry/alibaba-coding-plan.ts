@@ -71,13 +71,22 @@ export async function loginAlibabaCodingPlan(options: OAuthController): Promise<
 	}
 
 	options.onProgress?.("Validating API key...");
-	await apiKeyValidation.validateOpenAICompatibleApiKey({
-		provider: "Alibaba Coding Plan",
-		apiKey: trimmed,
-		baseUrl,
-		model: VALIDATION_MODEL,
-		signal: options.signal,
-	});
+	if (choice === "3") {
+		await apiKeyValidation.validateApiKeyAgainstModelsEndpoint({
+			provider: "Alibaba Coding Plan",
+			apiKey: trimmed,
+			modelsUrl: `${baseUrl}/models`,
+			signal: options.signal,
+		});
+	} else {
+		await apiKeyValidation.validateOpenAICompatibleApiKey({
+			provider: "Alibaba Coding Plan",
+			apiKey: trimmed,
+			baseUrl,
+			model: VALIDATION_MODEL,
+			signal: options.signal,
+		});
+	}
 
 	return {
 		access: trimmed,

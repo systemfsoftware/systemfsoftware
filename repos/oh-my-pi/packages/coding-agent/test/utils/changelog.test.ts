@@ -17,6 +17,7 @@ import * as path from "node:path";
 import { removeWithRetries, VERSION } from "@oh-my-pi/pi-utils";
 import {
 	type ChangelogEntry,
+	parseChangelog,
 	RECENT_CHANGELOG_ENTRY_LIMIT,
 	readLastChangelogVersion,
 	renderChangelogEntries,
@@ -148,6 +149,16 @@ describe("selectStartupChangelog", () => {
 		expect(selection.markdown).toContain(STARTUP_CHANGELOG_FULL_HINT);
 		expect(selection.markdown).not.toContain("TAIL-THREE");
 		expect(Buffer.byteLength(selection.markdown ?? "")).toBeLessThanOrEqual(STARTUP_CHANGELOG_MAX_BYTES);
+	});
+});
+
+describe("parseChangelog", () => {
+	test("reads the embedded release history when no package path is available", async () => {
+		const entries = await parseChangelog(undefined);
+		const latest = entries[0];
+
+		expect(`${latest?.major}.${latest?.minor}.${latest?.patch}`).toBe(VERSION);
+		expect(latest?.content).toContain(`## [${VERSION}]`);
 	});
 });
 

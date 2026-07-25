@@ -836,6 +836,16 @@ describe("trySyncSlashCompletion", () => {
 		expect(result!.items.map(i => i.value)).toEqual(["setup", "usage"]);
 	});
 
+	it("does not list an alias separately when the primary name also matches", async () => {
+		const provider = new CombinedAutocompleteProvider(
+			[{ name: "model", aliases: ["models"], description: "Switch model" }],
+			"/tmp",
+		);
+		const result = await provider.getSuggestions(["/mod"], 0, 4);
+		expect(result).not.toBeNull();
+		expect(result!.items.map(i => i.value)).toEqual(["model"]);
+	});
+
 	it("keeps registry order for same-prefix commands so /set still applies settings", () => {
 		const provider = new CombinedAutocompleteProvider(
 			[

@@ -4,7 +4,9 @@ import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
 import { initTheme, theme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 import type { ToolSession } from "@oh-my-pi/pi-coding-agent/tools";
 import {
+	markdownToPhases,
 	nextActionableTask,
+	phasesToMarkdown,
 	resolveTodoMarkdownPath,
 	selectCollapsedTodos,
 	TODO_STRIKE_HOLD_FRAMES,
@@ -195,6 +197,145 @@ describe("TodoTool operations", () => {
 		]);
 	});
 
+	it("blocks a task (excluded from remaining, counted distinctly) and unblocks it", async () => {
+		const tool = new TodoTool(createSession());
+		await tool.execute("call-1", { op: "init", list: [{ phase: "Work", items: ["a", "b"] }] });
+
+		const blocked = await tool.execute("call-2", { op: "block", task: "b", reason: "waiting on sign-off" });
+		const bTask = blocked.details?.phases[0]?.tasks.find(task => task.content === "b");
+		expect(bTask?.status).toBe("blocked");
+		expect(bTask?.blocker).toBe("waiting on sign-off");
+		const summary = blocked.content.find(part => part.type === "text");
+		if (summary?.type !== "text") throw new Error("Expected text summary from todo");
+		// `a` stays the only open item; `b` leaves the remaining/open set but is surfaced as blocked.
+		expect(summary.text).toContain("Remaining items (1):");
+		expect(summary.text).toContain("1 blocked");
+
+		const unblocked = await tool.execute("call-3", { op: "unblock", task: "b" });
+		const bAfter = unblocked.details?.phases[0]?.tasks.find(task => task.content === "b");
+		expect(bAfter?.status).toBe("pending");
+		expect(bAfter?.blocker).toBeUndefined();
+	});
+
+	it("does not auto-promote a blocked task to in_progress", async () => {
+		const tool = new TodoTool(createSession());
+		await tool.execute("call-1", { op: "init", list: [{ phase: "Work", items: ["only"] }] });
+
+		const result = await tool.execute("call-2", { op: "block", task: "only" });
+
+		// `only` was in_progress; blocking it leaves no pending/in_progress, so normalization must not revive it.
+		expect(result.details?.phases[0]?.tasks[0]?.status).toBe("blocked");
+	});
+
+	it("blocking a phase leaves completed/abandoned tasks closed", async () => {
+		const tool = new TodoTool(createSession());
+		await tool.execute("call-1", { op: "init", list: [{ phase: "Work", items: ["a", "b", "c"] }] });
+		await tool.execute("call-2", { op: "done", task: "a" });
+		await tool.execute("call-3", { op: "drop", task: "c" });
+
+		const result = await tool.execute("call-4", { op: "block", phase: "Work", reason: "waiting on infra" });
+		const tasks = result.details?.phases[0]?.tasks ?? [];
+		const byContent = (content: string) => tasks.find(task => task.content === content);
+		// Completed/abandoned work is untouched; only the open task becomes blocked.
+		expect(byContent("a")?.status).toBe("completed");
+		expect(byContent("c")?.status).toBe("abandoned");
+		expect(byContent("b")?.status).toBe("blocked");
+		expect(byContent("b")?.blocker).toBe("waiting on infra");
+		// A completed task must never carry a blocker note.
+		expect(byContent("a")?.blocker).toBeUndefined();
+	});
+
+	it("re-blocking an already-blocked task refines its blocker note", async () => {
+		const tool = new TodoTool(createSession());
+		await tool.execute("call-1", { op: "init", list: [{ phase: "Work", items: ["a", "b"] }] });
+		// First block with no reason, then block again to add one — the agent often
+		// learns what it's waiting on only after the initial block.
+		await tool.execute("call-2", { op: "block", task: "b" });
+		const first = await tool.execute("call-3", { op: "block", task: "b" });
+		expect(first.details?.phases[0]?.tasks.find(task => task.content === "b")?.blocker).toBeUndefined();
+
+		const refined = await tool.execute("call-4", { op: "block", task: "b", reason: "waiting on user" });
+		const bTask = refined.details?.phases[0]?.tasks.find(task => task.content === "b");
+		expect(bTask?.status).toBe("blocked");
+		expect(bTask?.blocker).toBe("waiting on user");
+	});
+
+	it("rejects a block with neither task nor phase target", async () => {
+		const tool = new TodoTool(createSession());
+		await tool.execute("call-1", { op: "init", list: [{ phase: "Work", items: ["a", "b"] }] });
+
+		const result = await tool.execute("call-2", { op: "block", reason: "oops" });
+		expect(result.isError).toBe(true);
+		const summary = result.content.find(part => part.type === "text");
+		if (summary?.type !== "text") throw new Error("Expected text summary from todo");
+		expect(summary.text).toContain("block requires a task or phase target");
+		// Nothing was blocked — state is unchanged.
+		const tasks = result.details?.phases[0]?.tasks ?? [];
+		expect(tasks.every(task => task.status !== "blocked")).toBe(true);
+	});
+
+	it("rejects an unblock with neither task nor phase target", async () => {
+		const tool = new TodoTool(createSession());
+		await tool.execute("call-1", { op: "init", list: [{ phase: "Work", items: ["a"] }] });
+		await tool.execute("call-2", { op: "block", task: "a", reason: "x" });
+
+		const result = await tool.execute("call-3", { op: "unblock" });
+		expect(result.isError).toBe(true);
+		const summary = result.content.find(part => part.type === "text");
+		if (summary?.type !== "text") throw new Error("Expected text summary from todo");
+		expect(summary.text).toContain("unblock requires a task or phase target");
+		// The blocked task stays blocked — the targetless unblock was rejected.
+		expect(result.details?.phases[0]?.tasks[0]?.status).toBe("blocked");
+	});
+
+	it("preserves blocked status across the markdown round-trip", () => {
+		const phases: TodoPhase[] = [
+			{
+				name: "Work",
+				tasks: [
+					{ content: "a", status: "blocked", blocker: "x" },
+					{ content: "b", status: "completed" },
+				],
+			},
+		];
+		const md = phasesToMarkdown(phases);
+		expect(md).toContain("- [!] a");
+
+		const { phases: parsed, errors } = markdownToPhases(md);
+		expect(errors).toEqual([]);
+		const parsedA = parsed[0]?.tasks.find(task => task.content === "a");
+		expect(parsedA?.status).toBe("blocked");
+		// The blocker reason must survive the round-trip, not just the status.
+		expect(parsedA?.blocker).toBe("x");
+	});
+
+	it("normalizes a multi-line blocker reason so the markdown round-trip survives", async () => {
+		const tool = new TodoTool(createSession());
+		await tool.execute("call-1", { op: "init", list: [{ phase: "Work", items: ["a"] }] });
+		// A blocker reason lifted from a multi-line external error or user question.
+		const blocked = await tool.execute("call-2", {
+			op: "block",
+			task: "a",
+			reason: "waiting on user:\nline two\n\tindented three",
+		});
+		const phases = blocked.details?.phases ?? [];
+		const stored = phases[0]?.tasks.find(task => task.content === "a");
+		// Normalized at the source: whitespace runs (incl. newlines) collapse to
+		// single spaces, so every one-line consumer stays intact.
+		expect(stored?.blocker).toBe("waiting on user: line two indented three");
+
+		// Without normalization the embedded newline splits the HTML comment across
+		// two markdown lines: line one is an unclosed `<!-- blocker: …` and line two
+		// parses as unrecognized syntax, losing the reason and adding an error.
+		const md = phasesToMarkdown(phases);
+		expect(md.split("\n").filter(line => line.includes("- [!]"))).toHaveLength(1);
+		const { phases: parsed, errors } = markdownToPhases(md);
+		expect(errors).toEqual([]);
+		const parsedA = parsed[0]?.tasks.find(task => task.content === "a");
+		expect(parsedA?.status).toBe("blocked");
+		expect(parsedA?.blocker).toBe("waiting on user: line two indented three");
+	});
+
 	it("creates a phase when append targets a missing phase", async () => {
 		const tool = new TodoTool(createSession());
 		await tool.execute("call-1", { op: "init", list: [{ phase: "Work", items: ["First"] }] });
@@ -315,6 +456,69 @@ describe("TodoTool lenient init shapes", () => {
 		const summary = result.content.find(part => part.type === "text");
 		if (summary?.type !== "text") throw new Error("Expected text summary");
 		expect(summary.text).toContain("Missing list for init operation");
+	});
+});
+describe("TodoTool lenient op recovery", () => {
+	// Regression: models occasionally drop `op` while sending an otherwise
+	// valid payload (e.g. `{list:[...]}`). The schema keeps `op` required, but
+	// `lenientArgValidation` routes the raw args to execute(), which infers
+	// the op for unambiguous shapes instead of failing the call.
+	it("keeps op required at the schema boundary but lenient at execute", () => {
+		const tool = new TodoTool(createSession());
+		expect(tool.parameters({ list: [{ phase: "Fixes", items: ["One"] }] }) instanceof type.errors).toBe(true);
+		expect(tool.lenientArgValidation).toBe(true);
+	});
+
+	it("infers init from a bare list payload", async () => {
+		const tool = new TodoTool(createSession());
+		const result = await tool.execute("call-1", {
+			list: [{ phase: "Fixes", items: ["Bytecompiler ordering", "Posix path fd handling"] }],
+		} as never);
+
+		expect(result.isError).toBeUndefined();
+		expect(result.details?.op).toBe("init");
+		expect(result.details?.phases.map(phase => phase.name)).toEqual(["Fixes"]);
+		expect(result.details?.phases[0]?.tasks.map(task => task.content)).toEqual([
+			"Bytecompiler ordering",
+			"Posix path fd handling",
+		]);
+	});
+
+	it("infers append from phase plus items", async () => {
+		const tool = new TodoTool(createSession());
+		await tool.execute("call-1", { op: "init", list: [{ phase: "Work", items: ["First"] }] });
+
+		const result = await tool.execute("call-2", { phase: "Work", items: ["Second"] } as never);
+
+		expect(result.isError).toBeUndefined();
+		expect(result.details?.op).toBe("append");
+		expect(result.details?.phases[0]?.tasks.map(task => task.content)).toEqual(["First", "Second"]);
+	});
+
+	it("infers init from bare items only when no todos exist", async () => {
+		const fresh = new TodoTool(createSession());
+		const initialized = await fresh.execute("call-1", { items: ["Only task"] } as never);
+		expect(initialized.isError).toBeUndefined();
+		expect(initialized.details?.op).toBe("init");
+
+		// With existing todos the same shape is ambiguous (flat init would wipe
+		// the list; append lacks a phase) and must error instead of guessing.
+		const populated = new TodoTool(
+			createSession([{ name: "Work", tasks: [{ content: "First", status: "pending" }] }]),
+		);
+		const ambiguous = await populated.execute("call-2", { items: ["Second"] } as never);
+		expect(ambiguous.isError).toBe(true);
+	});
+
+	it("surfaces the schema error when op is missing and not inferable", async () => {
+		const tool = new TodoTool(createSession());
+		const result = await tool.execute("call-1", { task: "Something" } as never);
+
+		expect(result.isError).toBe(true);
+		const summary = result.content.find(part => part.type === "text");
+		if (summary?.type !== "text") throw new Error("Expected text summary");
+		expect(summary.text).toContain("Invalid todo arguments");
+		expect(summary.text).toContain("op");
 	});
 });
 

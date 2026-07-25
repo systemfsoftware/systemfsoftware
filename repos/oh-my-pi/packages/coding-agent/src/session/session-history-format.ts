@@ -85,6 +85,10 @@ function oneLine(text: string, max = PRIMARY_ARG_MAX): string {
 	return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
 }
 
+export function formatExecutionSourcePreview(source: string): string {
+	return oneLine(source);
+}
+
 /** Join the text blocks of a string-or-blocks content field. Images become `[image]`. */
 function contentToText(content: string | readonly (TextContent | ImageContent)[]): string {
 	if (typeof content === "string") return content;
@@ -110,7 +114,7 @@ function primaryArgValue(value: unknown): string {
 }
 
 /** Pick the most informative scalar argument of a tool call. */
-function primaryArg(name: string, args: Record<string, unknown> | undefined): string {
+export function formatToolCallPrimaryArg(name: string, args: Record<string, unknown> | undefined): string {
 	if (!args || typeof args !== "object") return "";
 	// Advisor note is the most informative summary; preserve severity too.
 	if (name === "advise") {
@@ -158,6 +162,15 @@ function primaryArg(name: string, args: Record<string, unknown> | undefined): st
 	}
 }
 
+export function formatToolCallIntentPreview(args: Record<string, unknown> | undefined): string | undefined {
+	const intent = args?.[INTENT_FIELD];
+	return typeof intent === "string" && intent.trim() ? oneLine(intent, 80) : undefined;
+}
+
+export function formatToolResultErrorPreview(content: string | readonly (TextContent | ImageContent)[]): string {
+	return oneLine(contentToText(content).split("\n", 1)[0] ?? "");
+}
+
 /**
  * Wrap a diff body in a backtick fence sized to outlast the longest backtick
  * run inside it, so a diff that touches markdown (triple backticks) can't break
@@ -177,7 +190,7 @@ function toolCallLine(
 	includeToolIntent?: boolean,
 	expandEditDiffs?: boolean,
 ): string {
-	const head = `→ ${name}(${primaryArg(name, args)})`;
+	const head = `→ ${name}(${formatToolCallPrimaryArg(name, args)})`;
 	let base: string;
 	if (!result) {
 		base = `${head} ⇒ pending`;
@@ -186,7 +199,7 @@ function toolCallLine(
 		const lines = lineCount(text);
 		const count = `${lines} ${lines === 1 ? "line" : "lines"}`;
 		if (result.isError) {
-			const firstLine = oneLine(text.split("\n", 1)[0] ?? "");
+			const firstLine = formatToolResultErrorPreview(result.content);
 			base = firstLine ? `${head} ⇒ error · ${count} — ${firstLine}` : `${head} ⇒ error · ${count}`;
 		} else {
 			base = `${head} ⇒ ok · ${count}`;
@@ -200,11 +213,8 @@ function toolCallLine(
 		}
 	}
 
-	const intent = includeToolIntent ? args?.[INTENT_FIELD] : undefined;
-	if (typeof intent === "string" && intent.trim()) {
-		const formattedIntent = oneLine(intent, 80);
-		return `// ${formattedIntent}\n${base}`;
-	}
+	const formattedIntent = includeToolIntent ? formatToolCallIntentPreview(args) : undefined;
+	if (formattedIntent) return `// ${formattedIntent}\n${base}`;
 	return base;
 }
 
@@ -220,7 +230,8 @@ function executionLine(
 			? `error · exit ${msg.exitCode}`
 			: "ok";
 	const lines = lineCount(msg.output);
-	return `→ ${kind}! ${oneLine(source)} ⇒ ${status} · ${lines} ${lines === 1 ? "line" : "lines"}`;
+	const sourcePreview = formatExecutionSourcePreview(source);
+	return `→ ${kind}! ${sourcePreview} ⇒ ${status} · ${lines} ${lines === 1 ? "line" : "lines"}`;
 }
 
 /**

@@ -1092,4 +1092,186 @@ describe("RemoteAuthCredentialStore + AuthStorage integration", () => {
 		expect(serverInvalidateSpy).toHaveBeenCalled();
 		clientStorage.close();
 	});
+
+	test("account pool exposes only qualified usage reports for visible OAuth identities", async () => {
+		const brokerClient = new AuthBrokerClient({ url: "http://127.0.0.1:9", token: "unused" });
+		const now = Date.now();
+		const makeCredential = (orgId: string) => ({
+			type: "oauth" as const,
+			access: `access-${orgId}`,
+			refresh: REMOTE_REFRESH_SENTINEL,
+			expires: now + 120_000,
+			accountId: "account-shared",
+			email: "shared@example.com",
+			orgId,
+		});
+		const reports: UsageReport[] = [
+			{
+				provider: "anthropic",
+				fetchedAt: now,
+				limits: [],
+				metadata: { accountId: "account-shared", email: "shared@example.com", orgId: "org-team" },
+			},
+			{
+				provider: "anthropic",
+				fetchedAt: now,
+				limits: [],
+				metadata: { accountId: "account-shared", email: "shared@example.com", orgId: "org-max" },
+			},
+			{ provider: "anthropic", fetchedAt: now, limits: [] },
+		];
+		vi.spyOn(brokerClient, "fetchUsage").mockResolvedValue({ generatedAt: now, reports });
+		const teamIdentity = "email:shared@example.com|org:org-team";
+		const remoteStore = new RemoteAuthCredentialStore({
+			client: brokerClient,
+			streamSnapshots: false,
+			accountPool: new Map([["anthropic", new Set([teamIdentity])]]),
+			initialSnapshot: {
+				generation: 1,
+				generatedAt: now,
+				serverNowMs: now,
+				refresher: { enabled: false, intervalMs: 0, skewMs: 0, nextSweepInMs: Number.MAX_SAFE_INTEGER },
+				credentials: [
+					{
+						id: 1,
+						provider: "anthropic",
+						credential: makeCredential("org-team"),
+						identityKey: teamIdentity,
+						rotatesInMs: null,
+					},
+					{
+						id: 2,
+						provider: "anthropic",
+						credential: makeCredential("org-max"),
+						identityKey: "email:shared@example.com|org:org-max",
+						rotatesInMs: null,
+					},
+				],
+			},
+		});
+		try {
+			expect(remoteStore.snapshot.credentials.map(entry => entry.identityKey)).toEqual([teamIdentity]);
+			const visibleReports = await remoteStore.fetchUsageReports();
+			expect(visibleReports?.map(report => report.metadata?.orgId)).toEqual(["org-team"]);
+			expect(await remoteStore.getUsageReport("anthropic", makeCredential("org-max"))).toBeNull();
+		} finally {
+			remoteStore.close();
+		}
+	});
+
+	test("account pool hides unattributable usage even with a visible API key", async () => {
+		const brokerClient = new AuthBrokerClient({ url: "http://127.0.0.1:9", token: "unused" });
+		const now = Date.now();
+		const oauthCredential = {
+			type: "oauth" as const,
+			access: "oauth-access",
+			refresh: REMOTE_REFRESH_SENTINEL,
+			expires: now + 120_000,
+			accountId: "oauth-account",
+			email: "oauth@example.com",
+		};
+		const reports: UsageReport[] = [
+			{
+				provider: "anthropic",
+				fetchedAt: now,
+				limits: [],
+				metadata: { accountId: "oauth-account", email: "oauth@example.com" },
+			},
+			{
+				provider: "anthropic",
+				fetchedAt: now,
+				limits: [],
+				metadata: { accountId: "api-key-account" },
+			},
+		];
+		vi.spyOn(brokerClient, "fetchUsage").mockResolvedValue({ generatedAt: now, reports });
+		const oauthIdentity = "email:oauth@example.com";
+		const remoteStore = new RemoteAuthCredentialStore({
+			client: brokerClient,
+			streamSnapshots: false,
+			accountPool: new Map([["anthropic", new Set([oauthIdentity])]]),
+			initialSnapshot: {
+				generation: 1,
+				generatedAt: now,
+				serverNowMs: now,
+				refresher: { enabled: false, intervalMs: 0, skewMs: 0, nextSweepInMs: Number.MAX_SAFE_INTEGER },
+				credentials: [
+					{
+						id: 1,
+						provider: "anthropic",
+						credential: oauthCredential,
+						identityKey: oauthIdentity,
+						rotatesInMs: null,
+					},
+					{
+						id: 2,
+						provider: "anthropic",
+						credential: { type: "api_key", key: "visible-api-key" },
+						identityKey: null,
+						rotatesInMs: null,
+					},
+				],
+			},
+		});
+		try {
+			expect(await remoteStore.fetchUsageReports()).toEqual([reports[0]]);
+		} finally {
+			remoteStore.close();
+		}
+	});
+
+	test("rejects a refreshed credential whose identity leaves the account pool", async () => {
+		const brokerClient = new AuthBrokerClient({ url: "http://127.0.0.1:9", token: "unused" });
+		const now = Date.now();
+		const allowedCredential = {
+			type: "oauth" as const,
+			access: "allowed-access",
+			refresh: REMOTE_REFRESH_SENTINEL,
+			expires: now + 120_000,
+			accountId: "account-allowed",
+			email: "allowed@example.com",
+		};
+		const allowedIdentity = "email:allowed@example.com";
+		vi.spyOn(brokerClient, "refreshCredential").mockResolvedValue({
+			entry: {
+				id: 1,
+				provider: "anthropic",
+				credential: {
+					...allowedCredential,
+					access: "excluded-access",
+					accountId: "account-excluded",
+					email: "excluded@example.com",
+				},
+				identityKey: "email:excluded@example.com",
+			},
+		});
+		const remoteStore = new RemoteAuthCredentialStore({
+			client: brokerClient,
+			streamSnapshots: false,
+			accountPool: new Map([["anthropic", new Set([allowedIdentity])]]),
+			initialSnapshot: {
+				generation: 1,
+				generatedAt: now,
+				serverNowMs: now,
+				refresher: { enabled: false, intervalMs: 0, skewMs: 0, nextSweepInMs: Number.MAX_SAFE_INTEGER },
+				credentials: [
+					{
+						id: 1,
+						provider: "anthropic",
+						credential: allowedCredential,
+						identityKey: allowedIdentity,
+						rotatesInMs: null,
+					},
+				],
+			},
+		});
+		try {
+			await expect(remoteStore.refreshOAuthCredential("anthropic", 1, allowedCredential)).rejects.toThrow(
+				"outside the configured account pool",
+			);
+			expect(remoteStore.snapshot.credentials).toEqual([]);
+		} finally {
+			remoteStore.close();
+		}
+	});
 });

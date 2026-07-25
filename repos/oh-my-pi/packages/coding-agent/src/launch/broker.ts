@@ -33,6 +33,12 @@ const MAX_LOG_BYTES = 25 * 1024 * 1024;
 const LOG_READ_BYTES = 2 * 1024 * 1024;
 const READINESS_BUFFER_CHARS = 64 * 1024;
 const RESTART_MAX_DELAY_MS = 30_000;
+/**
+ * Cap on terminal (exited/failed) daemons surfaced by `list`. Active daemons
+ * are always shown in full; older history is truncated so the response stays
+ * bounded over a long-lived project (issue #6517).
+ */
+const MAX_TERMINAL_DAEMONS_LISTED = 10;
 const TOKEN_FILE = "broker.token";
 const PID_FILE = "broker.pid";
 const META_FILE = "meta.json";
@@ -93,6 +99,41 @@ function quoteShellArg(value: string): string {
 
 function terminalState(state: DaemonSnapshot["state"]): boolean {
 	return state === "exited" || state === "failed";
+}
+
+/**
+ * Order daemons for the `list` response: non-terminal (active) daemons first,
+ * oldest to newest, so the process the user is acting on is immediately visible
+ * instead of buried behind exited history; then the most recently exited/failed
+ * ones, capped at {@link MAX_TERMINAL_DAEMONS_LISTED} to keep the response from
+ * growing without bound. Truncated terminal records stay addressable by name
+ * via `describe`/`logs`/`restart`.
+ */
+function orderDaemonsForListing(snapshots: DaemonSnapshot[]): DaemonSnapshot[] {
+	const active: DaemonSnapshot[] = [];
+	const terminal: DaemonSnapshot[] = [];
+	for (const snapshot of snapshots) {
+		(terminalState(snapshot.state) ? terminal : active).push(snapshot);
+	}
+	active.sort((left, right) => left.createdAt - right.createdAt);
+	terminal.sort((left, right) => (right.exitedAt ?? right.createdAt) - (left.exitedAt ?? left.createdAt));
+	return [...active, ...terminal.slice(0, MAX_TERMINAL_DAEMONS_LISTED)];
+}
+
+/**
+ * Reap a recovered non-detached daemon snapshot in place. Already-terminal
+ * records are left untouched so `list` keeps their real {@link DaemonSnapshot.exitedAt}
+ * for recency ranking; records that were still alive when the previous broker
+ * exited are marked `exited` at `now`, since their process died with that broker
+ * (issue #6517). Returns whether the record was reaped.
+ */
+function reapRecoveredSnapshot(snapshot: DaemonSnapshot, now: number): boolean {
+	if (terminalState(snapshot.state)) return false;
+	snapshot.pid = undefined;
+	snapshot.state = "exited";
+	snapshot.exitedAt = now;
+	snapshot.exitReason = "previous broker exited";
+	return true;
 }
 
 /** Mirror per-condition readiness progress into the snapshot so clients can see which condition is unmet. */
@@ -402,9 +443,7 @@ class DaemonBroker {
 				await Promise.all([...this.#records.values()].map(record => this.#refreshDetached(record)));
 				return {
 					op: "list",
-					daemons: [...this.#records.values()]
-						.sort((left, right) => left.snapshot.createdAt - right.snapshot.createdAt)
-						.map(record => record.snapshot),
+					daemons: orderDaemonsForListing([...this.#records.values()].map(record => record.snapshot)),
 				};
 			}
 			case "logs":
@@ -491,8 +530,17 @@ class DaemonBroker {
 		await this.#launch(record);
 		let readyTimedOut = false;
 		if (spec.ready && !terminalState(record.snapshot.state)) {
-			const ready = await this.#waitUntil(record, () => record.snapshot.state === "ready", spec.ready.timeoutMs);
-			readyTimedOut = !ready && !terminalState(record.snapshot.state);
+			// Wake on the sticky readyAt marker or any terminal state, not the live
+			// state: a fast process flips starting→ready→exited within one poll
+			// interval, so sampling `state === "ready"` never observes readiness even
+			// though #markReady durably recorded readyAt. A pre-ready exit must also
+			// wake the wait rather than block for the full timeout.
+			const ready = await this.#waitUntil(
+				record,
+				() => record.snapshot.readyAt !== undefined || terminalState(record.snapshot.state),
+				spec.ready.timeoutMs,
+			);
+			readyTimedOut = !ready;
 		}
 		await record.persistQueue;
 		return { op: "start", daemon: record.snapshot, readyTimedOut };
@@ -748,6 +796,11 @@ class DaemonBroker {
 			const uptime = Date.now() - record.snapshot.startedAt;
 			record.consecutiveFailures = uptime >= 30_000 ? 0 : record.consecutiveFailures + 1;
 			record.snapshot.restartCount++;
+			// Readiness belongs to the exited generation; clear it before the backoff
+			// so start / for:"ready" waits don't treat a dead service as ready during
+			// the restart window (readyAt is re-set by #launch once the child is up).
+			record.snapshot.readyAt = undefined;
+			record.snapshot.readyMatch = undefined;
 			record.snapshot.state = "restarting";
 			const delay = Math.min(1_000 * 2 ** Math.min(record.consecutiveFailures, 5), RESTART_MAX_DELAY_MS);
 			record.log?.append(
@@ -812,6 +865,12 @@ class DaemonBroker {
 				throw new Error(`Invalid wait regex: ${error instanceof Error ? error.message : String(error)}`);
 			}
 		}
+		// Readiness was actually observed: the sticky readyAt survives a fast
+		// ready→exit, a live "ready" state, or a "running" daemon with no ready spec.
+		const readyObserved = (): boolean =>
+			record.snapshot.readyAt !== undefined ||
+			record.snapshot.state === "ready" ||
+			(record.snapshot.state === "running" && !record.spec.ready);
 		const condition = (): boolean => {
 			if (pattern) {
 				const match = pattern.exec(record.readinessBuffer);
@@ -820,10 +879,16 @@ class DaemonBroker {
 				return true;
 			}
 			if (operation.for === "exit") return terminalState(record.snapshot.state);
-			return record.snapshot.state === "ready" || (record.snapshot.state === "running" && !record.spec.ready);
+			// Wake on observed readiness or any terminal state so the wait never
+			// blocks for the full timeout; success is judged by readyObserved below.
+			return readyObserved() || terminalState(record.snapshot.state);
 		};
-		const reached = condition() || (await this.#waitUntil(record, condition, operation.timeoutMs));
-		return { op: "wait", daemon: record.snapshot, matched, timedOut: !reached };
+		const woke = condition() || (await this.#waitUntil(record, condition, operation.timeoutMs));
+		// A for:"ready" wait that woke on a terminal exit without ever observing
+		// readiness is still "not ready" — surface it as timed out so callers and the
+		// renderer don't chain work against a dead process.
+		const timedOut = operation.for === "ready" && !pattern ? !readyObserved() : !woke;
+		return { op: "wait", daemon: record.snapshot, matched, timedOut };
 	}
 
 	async #send(operation: Extract<DaemonOperation, { op: "send" }>): Promise<DaemonRpcResult> {
@@ -947,11 +1012,13 @@ class DaemonBroker {
 					snapshot.state !== "stopping" &&
 					processRef?.status() === "running";
 				if (!detached) {
-					if (processRef) await processRef.terminate({ group: true, gracefulMs: 500, timeoutMs: 2_000 });
-					snapshot.pid = undefined;
-					snapshot.state = "exited";
-					snapshot.exitedAt = Date.now();
-					snapshot.exitReason = "previous broker exited";
+					// Reap only records that were still alive when the previous broker
+					// exited; already-terminal records keep their real exit time so
+					// `list` ranks exited history by true recency (issue #6517).
+					if (!terminalState(snapshot.state) && processRef) {
+						await processRef.terminate({ group: true, gracefulMs: 500, timeoutMs: 2_000 });
+					}
+					reapRecoveredSnapshot(snapshot, Date.now());
 				} else if (snapshot.state === "restarting") {
 					snapshot.state = spec.ready ? "starting" : "running";
 				}

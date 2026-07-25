@@ -2590,15 +2590,29 @@ class StressDriver {
 		}
 		// Audit and shrink re-anchoring are mirrored at render time (they can
 		// fire on zero-byte frames); the write hook only applies commits.
-		const windowTop = Math.max(this.#shadowCommitted, length - height, 0);
-		this.#shadowWindowTop = windowTop;
+		const tail = Math.max(0, length - height);
 		// Overlays and multiplexer geometry frames freeze commits; a geometry
 		// frame also re-bases the raw prefix at the new width (accepted wrap
 		// drift, mirrored from the engine).
 		if (this.#shadowFrameGeometryChanged) {
+			if (tail < this.#shadowCommitted) {
+				// Pane growth pulls committed rows back out of multiplexer
+				// scrollback into the grid (tmux screen_resize_y takes lines
+				// from pane history when the screen grows; the emulated
+				// terminal does the same). The engine mirrors that by rebasing
+				// its commit seam to the exposed frame tail and force-rewriting
+				// the whole window (tui.ts geometry-growth branch) — un-commit
+				// the resurrected rows here so the ledger agrees.
+				const pulled = this.#shadowCommitted - tail;
+				this.#shadowTape.length = Math.max(0, this.#shadowTape.length - pulled);
+				this.#shadowCommitted = tail;
+			}
+			this.#shadowWindowTop = Math.max(this.#shadowCommitted, tail);
 			this.#shadowRawPrefix = raw.slice(0, this.#shadowCommitted);
 			return;
 		}
+		const windowTop = Math.max(this.#shadowCommitted, tail);
+		this.#shadowWindowTop = windowTop;
 		if (this.#shadowFrameOverlay) return;
 		const chunkTo = Math.max(this.#shadowCommitted, Math.min(length, windowTop));
 		for (let i = this.#shadowCommitted; i < chunkTo; i++) {

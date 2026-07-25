@@ -30,6 +30,7 @@ import type {
 	SearchSource,
 } from "../../../web/search/types";
 import { SearchProviderError } from "../../../web/search/types";
+import { formatQuery, parseSearchQuery, type QuerySyntax, type StructuredQuery } from "../query";
 import { dateToAgeSeconds } from "../utils";
 import type { SearchParams } from "./base";
 import { SearchProvider } from "./base";
@@ -45,6 +46,71 @@ const OAUTH_API_VERSION = "2.18";
 const OAUTH_USER_AGENT = "Perplexity/641 CFNetwork/1568 Darwin/25.2.0";
 const ANONYMOUS_USER_AGENT =
 	"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36";
+
+/**
+ * Query-string operators Perplexity's search backend tolerates as text signal.
+ * `site:`/date/`lang:` directives are excluded: they map onto native request
+ * fields (`search_domain_filter`, `search_*_date_filter`,
+ * `search_language_filter`) and must be stripped from the query so the engine
+ * is not double-constrained.
+ */
+const PERPLEXITY_QUERY_SYNTAX: QuerySyntax = {
+	phrases: true,
+	negation: true,
+	or: true,
+	inUrl: true,
+	inTitle: true,
+	filetype: true,
+};
+
+/** Native Perplexity search filters derived from parsed query directives. */
+interface PerplexityNativeFilters {
+	/** Query rebuilt without natively-mapped directives. */
+	query: string;
+	/** `search_domain_filter`: allow entries as bare hosts, deny entries as `-host`. */
+	domainFilter?: string[];
+	/** `search_after_date_filter`, `%m/%d/%Y`. */
+	afterDate?: string;
+	/** `search_before_date_filter`, `%m/%d/%Y`. */
+	beforeDate?: string;
+	/** `search_language_filter`: ISO 639-1 two-letter codes. */
+	languageFilter?: string[];
+}
+
+/**
+ * Bare host of a `site:` value (`github.com/anthropics` → `github.com`);
+ * Perplexity's domain filter takes hosts only, the path part is enforced by
+ * the central lenient post-filter.
+ */
+function siteHost(site: string): string {
+	const slash = site.indexOf("/");
+	return slash === -1 ? site : site.slice(0, slash);
+}
+
+/** ISO `YYYY-MM-DD` → Perplexity's documented `%m/%d/%Y` date-filter format (e.g. `3/1/2025`). */
+function toPerplexityDate(iso: string): string {
+	const [year, month, day] = iso.split("-");
+	return `${Number(month)}/${Number(day)}/${year}`;
+}
+
+/** Map parsed query directives onto native Perplexity search filters. */
+function buildNativeFilters(parsed: StructuredQuery, rawQuery: string): PerplexityNativeFilters {
+	if (!parsed.hasDirectives) return { query: rawQuery };
+	// Allow + deny share one array; the API caps it at 20 entries.
+	const domains = [
+		...new Set([...parsed.sites.map(siteHost), ...parsed.excludedSites.map(site => `-${siteHost(site)}`)]),
+	].slice(0, 20);
+	// search_language_filter takes ISO 639-1 two-letter codes; pass `en-us` as
+	// `en`, and leave anything else to the central post-filter.
+	const langCode = parsed.lang ? /^([a-z]{2})(?:[-_]|$)/.exec(parsed.lang)?.[1] : undefined;
+	return {
+		query: formatQuery(parsed, PERPLEXITY_QUERY_SYNTAX),
+		domainFilter: domains.length > 0 ? domains : undefined,
+		afterDate: parsed.after ? toPerplexityDate(parsed.after) : undefined,
+		beforeDate: parsed.before ? toPerplexityDate(parsed.before) : undefined,
+		languageFilter: langCode ? [langCode] : undefined,
+	};
+}
 
 interface PerplexityOAuthStreamMarkdownBlock {
 	answer?: string;
@@ -258,6 +324,8 @@ export interface PerplexitySearchParams {
 	signal?: AbortSignal;
 	query: string;
 	system_prompt?: string;
+	/** Pre-parsed view of `query` from the search pipeline; parsed locally when absent. */
+	parsedQuery?: StructuredQuery;
 	search_recency_filter?: "hour" | "day" | "week" | "month" | "year";
 	num_results?: number;
 	/** Maximum output tokens. Defaults to 8192. */
@@ -352,6 +420,10 @@ function buildPerplexityExtraBody(request: PerplexityRequest): Record<string, un
 		language_preference: request.language_preference,
 		return_related_questions: request.return_related_questions,
 		search_recency_filter: request.search_recency_filter,
+		search_domain_filter: request.search_domain_filter,
+		search_after_date_filter: request.search_after_date_filter,
+		search_before_date_filter: request.search_before_date_filter,
+		search_language_filter: request.search_language_filter,
 	};
 }
 
@@ -531,6 +603,7 @@ function buildOAuthAnswer(event: PerplexityOAuthStreamEvent): string {
 async function callPerplexityAsk(
 	auth: { type: "oauth"; token: string } | { type: "cookies"; cookies: string } | { type: "anonymous" },
 	params: PerplexitySearchParams,
+	filters: PerplexityNativeFilters,
 ): Promise<{ answer: string; sources: SearchSource[]; model?: string; requestId?: string }> {
 	const requestId = crypto.randomUUID();
 	// The consumer `perplexity_ask` endpoint is itself a research assistant and
@@ -539,7 +612,7 @@ async function callPerplexityAsk(
 	// "I don't have access to web-search tools in this turn", so ask-endpoint
 	// searches send the bare query. (The API-key path still uses system_prompt
 	// as a proper `system` message.)
-	const effectiveQuery = params.query;
+	const effectiveQuery = filters.query;
 
 	const headers: Record<string, string> = {
 		"Content-Type": "application/json",
@@ -578,7 +651,9 @@ async function callPerplexityAsk(
 		version: OAUTH_API_VERSION,
 		language: "en-US",
 		timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-		search_recency_filter: params.search_recency_filter ?? null,
+		// Recency cannot be combined with absolute date filters; explicit
+		// before:/after: bounds take precedence.
+		search_recency_filter: filters.afterDate || filters.beforeDate ? null : (params.search_recency_filter ?? null),
 		is_incognito: true,
 		use_schematized_api: true,
 		// `true` (the native app's default) lets the backend classifier skip
@@ -603,6 +678,10 @@ async function callPerplexityAsk(
 	if (auth.type === "anonymous") {
 		requestParams.send_back_text_in_streaming_api = true;
 	}
+	if (filters.domainFilter) requestParams.search_domain_filter = filters.domainFilter;
+	if (filters.afterDate) requestParams.search_after_date_filter = filters.afterDate;
+	if (filters.beforeDate) requestParams.search_before_date_filter = filters.beforeDate;
+	if (filters.languageFilter) requestParams.search_language_filter = filters.languageFilter;
 
 	const requestInit = {
 		method: "POST",
@@ -781,12 +860,14 @@ function applySourceLimit(result: SearchResponse, limit?: number): SearchRespons
 
 /** Execute Perplexity web search */
 export async function searchPerplexity(params: PerplexitySearchParams): Promise<SearchResponse> {
+	const parsed = params.parsedQuery ?? parseSearchQuery(params.query);
+	const filters = buildNativeFilters(parsed, params.query);
 	const systemPrompt = params.system_prompt;
 	const messages: PerplexityRequest["messages"] = [];
 	if (systemPrompt) {
 		messages.push({ role: "system", content: systemPrompt });
 	}
-	messages.push({ role: "user", content: params.query });
+	messages.push({ role: "user", content: filters.query });
 
 	const request: PerplexityRequest = {
 		model: "sonar-pro",
@@ -805,7 +886,13 @@ export async function searchPerplexity(params: PerplexitySearchParams): Promise<
 		return_related_questions: true,
 	};
 
-	if (params.search_recency_filter) {
+	if (filters.domainFilter) request.search_domain_filter = filters.domainFilter;
+	if (filters.afterDate) request.search_after_date_filter = filters.afterDate;
+	if (filters.beforeDate) request.search_before_date_filter = filters.beforeDate;
+	if (filters.languageFilter) request.search_language_filter = filters.languageFilter;
+	// The API rejects search_recency_filter combined with absolute date
+	// filters; explicit before:/after: bounds take precedence.
+	if (params.search_recency_filter && !filters.afterDate && !filters.beforeDate) {
 		request.search_recency_filter = params.search_recency_filter;
 	}
 
@@ -830,10 +917,10 @@ export async function searchPerplexity(params: PerplexitySearchParams): Promise<
 						? await withOAuthAccess(
 								params.authStorage,
 								"perplexity",
-								access => callPerplexityAsk({ type: "oauth", token: access.accessToken }, params),
+								access => callPerplexityAsk({ type: "oauth", token: access.accessToken }, params, filters),
 								{ sessionId: params.sessionId, signal: params.signal, seed: auth.access },
 							)
-						: await callPerplexityAsk(auth, params);
+						: await callPerplexityAsk(auth, params, filters);
 				return applySourceLimit(
 					{
 						provider: "perplexity",
@@ -892,6 +979,7 @@ export class PerplexityProvider extends SearchProvider {
 		return searchPerplexity({
 			signal: params.signal,
 			query: params.query,
+			parsedQuery: params.parsedQuery,
 			temperature: params.temperature,
 			max_tokens: params.maxOutputTokens,
 			num_search_results: params.numSearchResults,

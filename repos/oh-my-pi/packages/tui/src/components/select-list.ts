@@ -84,6 +84,7 @@ type SelectItemLayout =
 	  };
 
 export class SelectList implements Component, MouseRoutable {
+	#maxVisible: number;
 	#filteredItems: ReadonlyArray<SelectItem>;
 	#filterQuery = "";
 	#selectedIndex: number = 0;
@@ -97,11 +98,17 @@ export class SelectList implements Component, MouseRoutable {
 
 	constructor(
 		private readonly items: ReadonlyArray<SelectItem>,
-		private readonly maxVisible: number,
+		maxVisible: number,
 		private readonly theme: SelectListTheme,
 		private readonly layout: SelectListLayoutOptions = {},
 	) {
+		this.#maxVisible = Math.max(1, Math.trunc(maxVisible));
 		this.#filteredItems = items;
+	}
+
+	/** Refit the visible row budget (hosts clamp the list to available height). */
+	setMaxVisible(rows: number): void {
+		this.#maxVisible = Math.max(1, Math.trunc(rows));
 	}
 
 	setFilter(filter: string): void {
@@ -168,7 +175,7 @@ export class SelectList implements Component, MouseRoutable {
 		const wrapEnabled = this.layout.wrapDescription === true;
 		// `maxVisible` is the picker's visual row budget. For non-wrap layouts
 		// every item is one row, so the budget matches the original item count.
-		const visualBudget = this.maxVisible;
+		const visualBudget = this.#maxVisible;
 
 		// Compute per-item visual row counts at the conservative width (i.e.
 		// assume the scrollbar column might be reserved). For non-wrap layouts
@@ -256,12 +263,12 @@ export class SelectList implements Component, MouseRoutable {
 		}
 		// PageUp - jump up by one visible page
 		else if (kb.matches(keyData, "tui.select.pageUp")) {
-			this.#selectedIndex = Math.max(0, this.#selectedIndex - this.maxVisible);
+			this.#selectedIndex = Math.max(0, this.#selectedIndex - this.#maxVisible);
 			this.#notifySelectionChange();
 		}
 		// PageDown - jump down by one visible page
 		else if (kb.matches(keyData, "tui.select.pageDown")) {
-			this.#selectedIndex = Math.min(this.#filteredItems.length - 1, this.#selectedIndex + this.maxVisible);
+			this.#selectedIndex = Math.min(this.#filteredItems.length - 1, this.#selectedIndex + this.#maxVisible);
 			this.#notifySelectionChange();
 		}
 		// Enter
@@ -459,12 +466,12 @@ export class SelectList implements Component, MouseRoutable {
 
 	#shouldRenderSearchStatus(): boolean {
 		return (
-			this.layout.overflowSearch !== false && (this.items.length > this.maxVisible || this.#filterQuery.length > 0)
+			this.layout.overflowSearch !== false && (this.items.length > this.#maxVisible || this.#filterQuery.length > 0)
 		);
 	}
 
 	#canEditSearch(): boolean {
-		return this.layout.overflowSearch !== false && this.items.length > this.maxVisible;
+		return this.layout.overflowSearch !== false && this.items.length > this.#maxVisible;
 	}
 
 	#handleSearchInput(keyData: string): boolean {

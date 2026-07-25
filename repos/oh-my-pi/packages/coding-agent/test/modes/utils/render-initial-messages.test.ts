@@ -147,6 +147,7 @@ function makeRenderCtx(
 		pendingMessagesContainer: new Container(),
 		pendingBashComponents: [],
 		pendingPythonComponents: [],
+		transcriptMessageComponents: new WeakMap(),
 		pendingTools: new Map(),
 		statusLine: { invalidate: vi.fn() },
 		updateEditorBorderColor: vi.fn(),
@@ -192,7 +193,8 @@ function makeRenderCtx(
 }
 
 describe("UiHelpers.renderInitialMessages — transcript source", () => {
-	it("renders the collapsed live display transcript, never the LLM context", () => {
+	it("renders the collapsed live display transcript, never the LLM context", async () => {
+		await Settings.init({ inMemory: true });
 		const { ctx, transcriptSpy, llmContextSpy, renderSessionContextSpy } = makeCtx();
 		const transcript = makeEmptyContext();
 		transcriptSpy.mockReturnValue(transcript);
@@ -209,13 +211,15 @@ describe("UiHelpers.renderInitialMessages — transcript source", () => {
 });
 
 describe("UiHelpers.renderInitialMessages — clearTerminalHistory", () => {
-	it("requests a scrollback-clearing repaint when clearTerminalHistory is set", () => {
+	it("requests a scrollback-clearing repaint when clearTerminalHistory is set", async () => {
+		await Settings.init({ inMemory: true });
 		const { ctx } = makeCtx();
 		new UiHelpers(ctx).renderInitialMessages({ clearTerminalHistory: true });
 		expect(ctx.ui.requestRender).toHaveBeenCalledWith(true, { clearScrollback: true });
 	});
 
-	it("never clears scrollback when clearTerminalHistory is unset", () => {
+	it("never clears scrollback when clearTerminalHistory is unset", async () => {
+		await Settings.init({ inMemory: true });
 		const { ctx } = makeCtx();
 		new UiHelpers(ctx).renderInitialMessages();
 		const clearedCall = (ctx.ui.requestRender as Mock<(...a: unknown[]) => void>).mock.calls.find(

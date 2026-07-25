@@ -6,7 +6,7 @@
  * Recovery fails closed when the target changed or became ambiguous. The
  * patcher then returns a mismatch with fresh context instead of guessing.
  */
-import * as Diff from "diff";
+import { diffLineRuns } from "@oh-my-pi/pi-natives";
 import { applyEdits } from "./apply";
 import { RECOVERY_EXTERNAL_WARNING, RECOVERY_LINE_REMAP_WARNING, RECOVERY_SESSION_CHAIN_WARNING } from "./messages";
 import type { SnapshotStore } from "./snapshots";
@@ -45,15 +45,13 @@ function getEditAnchors(edit: Edit): Anchor[] {
 }
 
 function buildLineMap(previousText: string, currentText: string): Map<number, number> {
-	const previousLines = previousText.split("\n");
-	const currentLines = currentText.split("\n");
-	const changes = Diff.diffArrays(previousLines, currentLines);
+	const changes = diffLineRuns(previousText, currentText);
 	const map = new Map<number, number>();
 	let previousLine = 1;
 	let currentLine = 1;
 
 	for (const change of changes) {
-		const count = change.value.length;
+		const count = change.count;
 		if (change.added) {
 			currentLine += count;
 			continue;

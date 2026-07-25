@@ -203,8 +203,10 @@ function sanitizeOpenAIResponsesHistoryItemForReplay(
 	if (item.type === "image_generation_call") return sanitizeOpenAIResponsesImageGenerationCallForReplay(item);
 	if (item.type === "reasoning") return sanitizeOpenAIResponsesReasoningItemForReplay(item);
 
-	// providerPayload stores raw output items; replay strips item ids and keeps only normalized call_id.
+	// Provider payload stores raw output items. Computer calls retain their stable
+	// provider item ID; other replay items strip IDs and normalize call_id.
 	const { id: _id, ...sanitizedItem } = item;
+	if (item.type === "computer_call" && typeof item.id === "string") sanitizedItem.id = item.id;
 	if (typeof item.call_id === "string") {
 		sanitizedItem.call_id = normalizeReplayedResponsesHistoryCallId(item.call_id, normalizedCallIds);
 	}
@@ -271,10 +273,8 @@ export function getOpenAIResponsesHistoryPayload(
 	if (providerPayload?.type !== "openaiResponsesHistory" || !Array.isArray(providerPayload.items)) {
 		return undefined;
 	}
-	const payloadProvider = providerPayload.provider ?? fallbackProvider;
-	if (!payloadProvider || payloadProvider !== currentProvider) {
-		return undefined;
-	}
+	const payloadProvider = providerPayload.provider ?? fallbackProvider ?? currentProvider;
+	if (payloadProvider !== currentProvider) return undefined;
 	return { ...providerPayload, provider: payloadProvider };
 }
 

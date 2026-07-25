@@ -171,6 +171,11 @@ type Block = (TextContent | ThinkingContent | ToolCall) & {
 interface CachePoint {
 	cachePoint: { type: "default"; ttl?: "5m" | "1h" };
 }
+
+interface BedrockPromptCachePolicy {
+	remainingCheckpoints: number;
+	ttl?: "1h";
+}
 interface TextBlockWire {
 	text: string;
 }
@@ -310,7 +315,8 @@ export const streamBedrock: StreamFunction<"bedrock-converse-stream"> = (
 
 		try {
 			const cacheRetention = resolveCacheRetention(options.cacheRetention);
-			const convertedMessages = convertMessages(context, model, cacheRetention);
+			const promptCachePolicy = resolvePromptCachePolicy(model, cacheRetention);
+			const convertedMessages = convertMessages(context, model, promptCachePolicy);
 			const toolPlan = planToolConfig(context.tools, options.toolChoice, convertedMessages);
 			const toolConfig = toolPlan.toolConfig;
 			const sentinelInjected = toolPlan.sentinelInjected;
@@ -325,7 +331,7 @@ export const streamBedrock: StreamFunction<"bedrock-converse-stream"> = (
 
 			const commandInput: ConverseStreamRequest = {
 				messages: convertedMessages,
-				system: buildSystemPrompt(context.systemPrompt, model, cacheRetention),
+				system: buildSystemPrompt(context.systemPrompt, promptCachePolicy),
 				inferenceConfig: {
 					maxTokens: options.maxTokens,
 					temperature: options.temperature,
@@ -693,29 +699,45 @@ function handleContentBlockStop(
 }
 
 /**
- * Check if the model supports prompt caching.
- * Supported: Claude 3.5 Haiku, Claude 3.7 Sonnet, Claude 4.x+ models, Haiku 4.5+
+ * Resolve Bedrock's explicit-cache request policy from the catalog's
+ * materialized provider contract. Bedrock enforces each model's minimum
+ * prefix-token requirement, so this boundary intentionally does not locally
+ * count tokens. The emitter prioritizes the final user boundary, then the
+ * system boundary, without exceeding the configured checkpoint maximum.
  *
- * For base models and system-defined inference profiles the model ID / ARN
- * contains the model name, so we can decide locally.
- *
- * For application inference profiles (whose ARNs don't contain the model name),
- * set AWS_BEDROCK_FORCE_CACHE=1 to enable cache points.  Amazon Nova models
- * have automatic caching and don't need explicit cache points.
+ * `AWS_BEDROCK_FORCE_CACHE` remains an escape hatch for opaque application
+ * inference profiles, defaulting those otherwise-unknown models to the
+ * existing two-checkpoint layout without inventing 1h retention.
  */
-function supportsPromptCaching(model: Model<"bedrock-converse-stream">): boolean {
-	if (model.cost.cacheRead || model.cost.cacheWrite) return true;
-	const id = model.id.toLowerCase();
-	// Claude 4.x models (opus-4, sonnet-4, haiku-4)
-	if (id.includes("claude") && (id.includes("-4-") || id.includes("-4."))) return true;
-	// Claude 3.5 Haiku, Claude 3.7 Sonnet (legacy naming)
-	if (id.includes("claude-3-7-sonnet") || id.includes("claude-3-5-haiku")) return true;
-	// Claude Haiku 4.5+ (new naming)
-	if (id.includes("claude-haiku")) return true;
-	// Application inference profiles don't contain the model name in the ARN.
-	// Allow users to force cache points via environment variable.
-	if (typeof process !== "undefined" && $flag("AWS_BEDROCK_FORCE_CACHE")) return true;
-	return false;
+function resolvePromptCachePolicy(
+	model: Model<"bedrock-converse-stream">,
+	cacheRetention: CacheRetention,
+): BedrockPromptCachePolicy {
+	if (cacheRetention === "none" || model.compat.promptCacheMode === "automatic") {
+		return { remainingCheckpoints: 0 };
+	}
+
+	const forced = $flag("AWS_BEDROCK_FORCE_CACHE");
+	const explicit = model.compat.promptCacheMode === "explicit";
+	if (!explicit && !forced) {
+		return { remainingCheckpoints: 0 };
+	}
+
+	const configuredMaximum = explicit ? model.compat.promptCacheMaximumCheckpoints : 2;
+	if (configuredMaximum <= 0) {
+		return { remainingCheckpoints: 0 };
+	}
+
+	return {
+		remainingCheckpoints: Math.min(configuredMaximum, 2),
+		...(cacheRetention === "long" && model.compat.supportsLongPromptCacheRetention ? { ttl: "1h" } : {}),
+	};
+}
+
+function takeCachePoint(policy: BedrockPromptCachePolicy): CachePoint | undefined {
+	if (policy.remainingCheckpoints <= 0) return undefined;
+	policy.remainingCheckpoints--;
+	return { cachePoint: { type: "default", ...(policy.ttl ? { ttl: policy.ttl } : {}) } };
 }
 
 /**
@@ -731,20 +753,15 @@ function supportsThinkingSignature(model: Model<"bedrock-converse-stream">): boo
 
 function buildSystemPrompt(
 	systemPrompt: readonly string[] | undefined,
-	model: Model<"bedrock-converse-stream">,
-	cacheRetention: CacheRetention,
+	promptCachePolicy: BedrockPromptCachePolicy,
 ): SystemContent[] | undefined {
 	const prompts = systemPrompt?.map(prompt => prompt.toWellFormed()).filter(prompt => prompt.length > 0) ?? [];
 	if (prompts.length === 0) return undefined;
 
 	const blocks: SystemContent[] = prompts.map(prompt => ({ text: prompt }));
 
-	// Add cache point for supported Claude models
-	if (cacheRetention !== "none" && supportsPromptCaching(model)) {
-		blocks.push({
-			cachePoint: { type: "default", ...(cacheRetention === "long" ? { ttl: "1h" } : {}) },
-		});
-	}
+	const cachePoint = takeCachePoint(promptCachePolicy);
+	if (cachePoint) blocks.push(cachePoint);
 
 	return blocks;
 }
@@ -752,7 +769,7 @@ function buildSystemPrompt(
 function convertMessages(
 	context: Context,
 	model: Model<"bedrock-converse-stream">,
-	cacheRetention: CacheRetention,
+	promptCachePolicy: BedrockPromptCachePolicy,
 ): WireMessage[] {
 	const result: WireMessage[] = [];
 	const transformedMessages = transformMessages(context.messages, model, normalizeToolCallId);
@@ -883,13 +900,13 @@ function convertMessages(
 		}
 	}
 
-	// Add cache point to the last user message for supported Claude models
-	if (cacheRetention !== "none" && supportsPromptCaching(model) && result.length > 0) {
+	// Prioritize the final user checkpoint; buildSystemPrompt consumes any
+	// remaining configured capacity afterward.
+	if (result.length > 0) {
 		const lastMessage = result[result.length - 1];
 		if (lastMessage.role === "user" && lastMessage.content) {
-			(lastMessage.content as UserContent[]).push({
-				cachePoint: { type: "default", ...(cacheRetention === "long" ? { ttl: "1h" } : {}) },
-			});
+			const cachePoint = takeCachePoint(promptCachePolicy);
+			if (cachePoint) (lastMessage.content as UserContent[]).push(cachePoint);
 		}
 	}
 

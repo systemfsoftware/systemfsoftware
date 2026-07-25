@@ -2,6 +2,82 @@
 
 ## [Unreleased]
 
+## [17.1.3] - 2026-07-24
+
+### Fixed
+
+- Disabled the first-event watchdog for local OpenAI-compatible backends while retaining the 300-second inter-event watchdog, so long llama.cpp prompt prefill is not canceled and retried ([#6524](https://github.com/can1357/oh-my-pi/issues/6524)).
+
+## [17.1.1] - 2026-07-24
+
+### Added
+
+- Added catalog metadata for models that support native computer-use requests.
+- Added resolved Bedrock Converse prompt-cache compatibility limits, including explicit 5-minute checkpoint support for bundled Nova Lite, Micro, Pro, Premier, and Nova 2 Lite models plus their documented in-region, regional, and global IDs, and model-specific 1-hour Claude retention.
+- Added resolved Bedrock Converse prompt-cache compatibility limits, including explicit 5-minute checkpoint support for bundled Nova Lite, Micro, Pro, and Premier models plus Nova Premier's documented in-region model ID, and model-specific 1-hour Claude retention.
+- Added the native Meta Model API provider and Muse Spark 1.1 with Responses API reasoning replay, image input, and the full supported reasoning-effort ladder ([#4941](https://github.com/can1357/oh-my-pi/issues/4941)).
+- Added an opt-in Vercel AI Gateway automatic prompt-cache compatibility option alongside provider routing preferences.
+- Added Vercel AI Gateway Responses cache-anchor and cache-lifetime compatibility controls.
+- Added resolved OpenAI GPT-5.6 prompt-cache breakpoint capability metadata, keeping older models and compatible endpoints opt-in only.
+- Added the native `alibaba-token-plan` provider with QwenCloud Token Plan Individual discovery and a curated chat-model fallback catalog ([#6151](https://github.com/can1357/oh-my-pi/issues/6151)).
+
+## [17.1.0] - 2026-07-24
+
+### Added
+
+- Added Bedrock Converse prompt-cache compatibility limits, including 5-minute checkpoint support for Nova models (Lite, Micro, Pro, Premier, Nova 2 Lite) and 1-hour Claude retention.
+- Added native Meta Model API provider and Muse Spark 1.1 support, featuring Responses API reasoning replay, image input, and reasoning-effort controls.
+- Added Vercel AI Gateway integration features, including opt-in automatic prompt-cache compatibility, provider routing preferences, and Responses cache-anchor and cache-lifetime controls.
+- Added prompt-cache breakpoint capability metadata for OpenAI GPT-5.6, with opt-in support for older models and compatible endpoints.
+- Added native alibaba-token-plan provider with QwenCloud Token Plan Individual discovery and a curated chat-model fallback catalog.
+
+## [17.0.9] - 2026-07-23
+
+### Changed
+
+- Renamed `codex-auto-review` model to `GPT-5.3 Codex Spark` with updated pricing and capabilities
+- Removed image input support from GPT-5.3 Codex Spark (text-only)
+- Reduced GPT-5.3 Codex Spark context window from 272K to 128K tokens
+- Changed GPT-5.3 Codex Spark thinking efforts from `["minimal", "low", "medium", "high", "xhigh"]` to `["low", "medium", "high", "xhigh"]`
+- Updated pricing for multiple AI models across providers (costs adjusted in models.json)
+- Reduced max output tokens for an unspecified model from 16384 to 8192
+- Added image input support to Venice AI text model
+
+## [17.0.8] - 2026-07-22
+
+### Added
+
+- Added support for several new models across multiple providers, including MiniMax M3, Gemini 3.5 Flash Lite, Gemini 3.6 Flash (with thinking support), Hy3, Doubao-Seed-Character, LongCat 2.0, Laguna S 2.1 (free and paid tiers), Qwen 3.6 35B A3B, SWE-1.6 Slow (devin agent catalog), and XiaomiMiMo/MiMo-V2.5.
+
+### Changed
+
+- Updated Grok 4.5 API type to "openai-responses" and updated "o3-mini" to support thinking capabilities with the "kimi" thinking format.
+- Renamed OpenRouter-specific models and routers to include "OpenRouter" in their names (e.g., "OpenRouter Auto Router (Beta)", "OpenRouter Body Builder (beta)", and "OpenRouter Pareto Code Router").
+- Updated context window sizes, costs, and token limits for numerous models.
+
+### Fixed
+
+- Fixed an issue where GPT-5.6 Codex SKUs lost usable context window capacity due to dynamic discovery values overwriting bundled limits.
+- Fixed OpenAI Codex discovery dropping account-listed ChatGPT-only models (such as GPT-5.3 Codex Spark) when they are unavailable through the public API.
+- Fixed Codex catalog discovery hiding models when multiple OAuth accounts are configured by independently fetching and merging catalogs from all accounts.
+- Fixed cached models reusing a bundled request model (such as GitHub Copilot long-context variants) being incorrectly flagged as unrestorable and dropped after a restart.
+- Fixed LM Studio discovery reporting a model's theoretical maximum context length instead of the actual loaded context window size of the running instance.
+
+### Removed
+
+- Removed several deprecated model families from the devin catalog, including Claude Fable 5, Claude Opus 4.6/4.7, Claude Sonnet 4.6/5, DeepSeek V4 Pro, Gemini 3.1 Pro, Gemini 3.5 Flash, GLM-5.2, SWE-1.6, and Nemotron 3 Ultra.
+- Removed GPT-5 through GPT-5.3 Codex variants and GPT-5.4 nano from the openai-codex catalog.
+
+## [17.0.6] - 2026-07-20
+
+### Added
+
+- Added static fallback seed for Devin's `swe-1-7` model so it is bundled even when catalog generation runs without a Devin session token.
+
+### Fixed
+
+- Collapsed Devin's six GLM-5.2 variants into two logical entries (`glm-5-2` for 200K free, `glm-5-2-1m` for 1M paid). The 200K entry routes every thinking effort to the free `glm-5-2` wire UID — never to the quota-gated `glm-5-2-max` or `glm-5-2-none` — so GLM-5.2 works even when the weekly usage quota is exhausted.
+
 ## [17.0.5] - 2026-07-18
 
 ### Added

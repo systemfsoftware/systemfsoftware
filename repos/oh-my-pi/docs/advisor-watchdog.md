@@ -53,9 +53,9 @@ Slash commands:
 
 | Command | Effect |
 |---|---|
-| `/advisor` | Toggle the persisted `advisor.enabled` setting. |
-| `/advisor on` | Enable the setting and start the runtime when an advisor model is assigned. |
-| `/advisor off` | Disable the setting and stop the runtime. |
+| `/advisor` | Toggle the advisor for this session (session-scoped override; does not change the persisted `advisor.enabled` setting). |
+| `/advisor on` | Enable the advisor for this session and start the runtime when an advisor model is assigned. Session-scoped; not persisted to config. |
+| `/advisor off` | Disable the advisor for this session and stop the runtime. Session-scoped; not persisted to config. |
 | `/advisor status` | Show active model, context usage, token usage, and cost. |
 | `/advisor dump` | Copy the advisor's compact transcript to the clipboard. |
 | `/advisor dump raw` | Copy the advisor's full dump (system prompt, tools, thinking, and calls) to the clipboard. |

@@ -1,6 +1,7 @@
 import { getOAuthProviders } from "@oh-my-pi/pi-ai/oauth";
-import { Container, getKeybindings, Input, Spacer, Text, type TUI } from "@oh-my-pi/pi-tui";
+import { Container, getKeybindings, Input, Spacer, Text, type TUI, wrapTextWithAnsi } from "@oh-my-pi/pi-tui";
 import { theme } from "../../modes/theme/theme";
+import { urlHyperlinkAlways, WidthAwareText } from "../../tui";
 import { openPath } from "../../utils/open";
 import { DynamicBorder } from "./dynamic-border";
 
@@ -75,13 +76,22 @@ export class LoginDialogComponent extends Container {
 	 * is offered as an additional local shortcut so narrow local terminals still
 	 * have a truncation-safe copy target (viewport clipping on a long authorize
 	 * URL silently drops trailing OAuth query parameters — e.g.
-	 * `code_challenge_method=S256`). The OSC 8 hyperlink carries the full URL
-	 * for terminals that support click-through.
+	 * `code_challenge_method=S256`). Every physical URL row carries its own OSC 8
+	 * link to the full URL, so clicking any wrapped fragment opens the same target.
 	 */
 	showAuth(url: string, instructions?: string, launchUrl?: string): void {
 		this.#contentContainer.clear();
 		this.#contentContainer.addChild(new Spacer(1));
-		this.#contentContainer.addChild(new Text(theme.fg("accent", url), 1, 0));
+		this.#contentContainer.addChild(
+			new WidthAwareText(
+				contentWidth =>
+					wrapTextWithAnsi(url, contentWidth)
+						.map(row => theme.fg("accent", urlHyperlinkAlways(url, row)))
+						.join("\n"),
+				1,
+				0,
+			),
+		);
 
 		const clickHint = process.platform === "darwin" ? "Cmd+click to open" : "Ctrl+click to open";
 		const hyperlink = `\x1b]8;;${url}\x07${clickHint}\x1b]8;;\x07`;

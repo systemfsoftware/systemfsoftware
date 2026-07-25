@@ -49,6 +49,35 @@ function isServiceTier(value: unknown): value is ServiceTier {
 	return value === "auto" || value === "default" || value === "flex" || value === "scale" || value === "priority";
 }
 
+const UNSUPPORTED_EXPLICIT_PROMPT_CACHE_MESSAGE =
+	"openai-chat: prompt_cache_options and prompt_cache_breakpoint are unsupported by this auth-gateway route; use /v1/pi/stream with options.promptCache instead";
+
+function hasUnsupportedExplicitPromptCacheFields(body: unknown): boolean {
+	if (typeof body !== "object" || body === null || Array.isArray(body)) return false;
+	const request = body as Record<string, unknown>;
+	if ("prompt_cache_options" in request || "prompt_cache_breakpoint" in request) return true;
+	if (!Array.isArray(request.messages)) return false;
+
+	return request.messages.some(message => {
+		if (typeof message !== "object" || message === null || Array.isArray(message)) return false;
+		const wireMessage = message as Record<string, unknown>;
+		if ("prompt_cache_breakpoint" in wireMessage) return true;
+		return (
+			Array.isArray(wireMessage.content) &&
+			wireMessage.content.some(
+				part =>
+					typeof part === "object" && part !== null && !Array.isArray(part) && "prompt_cache_breakpoint" in part,
+			)
+		);
+	});
+}
+
+function rejectUnsupportedExplicitPromptCacheFields(body: unknown): void {
+	if (hasUnsupportedExplicitPromptCacheFields(body)) {
+		throw new AIError.ValidationError(UNSUPPORTED_EXPLICIT_PROMPT_CACHE_MESSAGE);
+	}
+}
+
 // ---------------------------------------------------------------------------
 // parseRequest
 // ---------------------------------------------------------------------------
@@ -59,6 +88,7 @@ export function parseRequest(body: unknown, headers?: Headers): ParsedRequest {
 	// land on `options.headers` automatically). We consult `headers` here too
 	// for `resolvePromptCacheKey` to pull a cache identity out of inbound
 	// vendor-neutral headers when the body doesn't carry one.
+	rejectUnsupportedExplicitPromptCacheFields(body);
 	const parsed = openaiChatRequestSchema(body);
 	if (parsed instanceof type.errors) {
 		throw new AIError.ValidationError(`openai-chat: ${parsed.summary}`);

@@ -2,6 +2,7 @@ import type { AuthStorage } from "@oh-my-pi/pi-ai";
 import { parseHTML } from "linkedom";
 import type { SearchResponse, SearchSource } from "../../../web/search/types";
 import { SearchProviderError } from "../../../web/search/types";
+import { formatScraperQuery } from "../query";
 import { clampNumResults } from "../utils";
 import type { SearchParams } from "./base";
 import { SearchProvider } from "./base";
@@ -91,7 +92,7 @@ function parseHtmlResults(html: string): ParsedResult[] {
 
 function buildSearchUrl(params: SearchParams, numResults: number): string {
 	const url = new URL(GOOGLE_SEARCH_URL);
-	url.searchParams.set("q", params.query);
+	url.searchParams.set("q", formatScraperQuery(params.query, params.parsedQuery));
 	url.searchParams.set("num", String(numResults));
 	url.searchParams.set("hl", "en");
 	url.searchParams.set("gl", "us");

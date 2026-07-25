@@ -34,6 +34,10 @@ inputs:
          cross-arch linux build, or set alone for a host-arch (x64) linux build.
       required: false
       default: ""
+   libc:
+      description: Optional Linux libc artifact qualifier (for example, musl)
+      required: false
+      default: ""
    rust_checks:
       description: Run clippy/rustfmt checks (only one matrix entry should set this)
       required: false
@@ -121,6 +125,10 @@ runs:
         run: |
            sudo apt-get update
            sudo apt-get install -y build-essential
+      # audiopus_sys builds bundled libopus via CMake (Ninja generator for MSVC
+      # cross); baked into the omp-kata image and GitHub-hosted images, so this
+      # only self-heals runners that predate the bake.
+      - uses: ./.github/actions/ensure-cmake
       - name: Prepend rustup toolchain bin to PATH (GitHub-hosted)
         if: steps.detect.outputs.on_infra == 'false'
         shell: bash
@@ -135,7 +143,7 @@ runs:
 
       # --- Rust flags (shared) ------------------------------------------------
       - name: Configure native Rust flags
-        if: inputs.target == ''
+        if: inputs.target == '' || inputs.arch == 'x64'
         shell: bash
         env:
            TARGET_ARCH: ${{ inputs.arch }}
@@ -157,7 +165,13 @@ runs:
                  echo "Using caller-provided RUSTFLAGS=$RUSTFLAGS"
                  exit 0
                fi
-               rustflags="-C target-cpu=native"
+               # Non-x64 native builds (darwin arm64) keep the target's default
+               # CPU features. `-C target-cpu=native` both baked the CI host's
+               # CPU features into shipped artifacts and trips ring 0.17's
+               # aarch64-apple const assertion (CAPS_STATIC == MIN_STATIC_FEATURES)
+               # once extra static features are enabled.
+               echo "Using default target CPU features (no RUSTFLAGS)"
+               exit 0
                ;;
            esac
 
@@ -178,7 +192,7 @@ runs:
         if: steps.detect.outputs.on_infra == 'false'
         uses: Swatinem/rust-cache@v2
         with:
-           shared-key: native-${{ inputs.platform }}-${{ inputs.arch }}-${{ inputs.variant || 'default' }}-h${{ inputs.hash }}
+           shared-key: native-${{ inputs.platform }}-${{ inputs.libc || 'default' }}-${{ inputs.arch }}-${{ inputs.variant || 'default' }}-h${{ inputs.hash }}
            cache-on-failure: true
            save-if: ${{ inputs.save_cache == 'true' }}
            cache-workspace-crates: true
@@ -305,7 +319,7 @@ runs:
       - name: Upload native addon(s)
         uses: actions/upload-artifact@v4
         with:
-           name: pi-natives-${{ inputs.platform }}-${{ inputs.arch }}${{ inputs.variant && format('-{0}', inputs.variant) || '' }}-h${{ inputs.hash }}
+           name: pi-natives-${{ inputs.platform }}-${{ inputs.libc && format('{0}-', inputs.libc) || '' }}${{ inputs.arch }}${{ inputs.variant && format('-{0}', inputs.variant) || '' }}-h${{ inputs.hash }}
            path: packages/natives/native/pi_natives.${{ inputs.platform }}-${{ inputs.arch }}*.node
            if-no-files-found: error
            # Explicit so the native_artifact_lookup canary keeps working even if

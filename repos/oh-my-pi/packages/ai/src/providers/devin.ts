@@ -43,9 +43,11 @@ import type {
 	Tool,
 	ToolCall,
 } from "../types";
+import { isDemotedThinking } from "../utils/block-symbols";
 import { deterministicUuid } from "../utils/deterministic-id";
 import { AssistantMessageEventStream } from "../utils/event-stream";
 import { toolWireSchema } from "../utils/schema/wire";
+import { transformMessages } from "./transform-messages";
 
 /** Base host for Codeium/Windsurf's Cascade chat API (Connect protocol over HTTP/1.1). */
 export const DEVIN_API_URL = "https://server.codeium.com";
@@ -78,6 +80,13 @@ const CONNECT_END_STREAM_FLAG = 0x02;
  * fails fast instead of consuming memory.
  */
 const MAX_CONNECT_FRAME_PAYLOAD = 16 * 1024 * 1024;
+/**
+ * Recovery heuristic for opaque Devin `invalid_argument` trailers. This is not
+ * asserted to be the backend's hard limit: small requests can hit the same
+ * intermittent error, while compactable message history this large is likely
+ * to benefit from the existing context-overflow maintenance path.
+ */
+const LARGE_HISTORY_RECOVERY_BYTES = 512 * 1024;
 
 export const streamDevin: StreamFunction<"devin-agent"> = (
 	model: Model<"devin-agent">,
@@ -157,10 +166,14 @@ export const streamDevin: StreamFunction<"devin-agent"> = (
 			const auth = await fetchDevinAuthMetadata(apiKey, baseUrl, fetchImpl, options?.signal);
 			const chatBaseUrl = auth.baseUrl ?? baseUrl;
 			const request = buildDevinChatRequest(model, context, options, apiKey, auth.userJwt);
-			logger.debug("devin: sending chat request", { model: model.id, tools: context.tools?.length ?? 0 });
-
 			const reqBytes = toBinary(GetChatMessageRequestSchema, request);
 			const gz = gzipSync(reqBytes);
+			logger.debug("devin: sending chat request", {
+				model: model.id,
+				tools: context.tools?.length ?? 0,
+				requestBytes: reqBytes.byteLength,
+				compressedBytes: gz.byteLength,
+			});
 			const frame = Buffer.alloc(5 + gz.length);
 			frame[0] = CONNECT_COMPRESSED_FLAG;
 			frame.writeUInt32BE(gz.length, 1);
@@ -223,7 +236,53 @@ export const streamDevin: StreamFunction<"devin-agent"> = (
 					if (flag & CONNECT_END_STREAM_FLAG) {
 						const trailerBytes = flag & CONNECT_COMPRESSED_FLAG ? gunzipSync(payload) : payload;
 						const trailerError = readConnectTrailerError(trailerBytes.toString("utf8").trim());
-						if (trailerError) throw new AIError.ValidationError(trailerError);
+						if (trailerError) {
+							const error = new AIError.ValidationError(trailerError.formatted);
+							if (
+								firstTokenTime === undefined &&
+								trailerError.code.toLowerCase() === "invalid_argument" &&
+								/\binternal error\b/i.test(trailerError.message)
+							) {
+								// The full protobuf also contains the system prompt and tool
+								// schemas, which history maintenance cannot shrink. Re-encode
+								// only the repeated history field before choosing recovery.
+								let activeTailCount = 0;
+								const lastRole = context.messages.at(-1)?.role;
+								if (lastRole === "user" || lastRole === "developer") {
+									activeTailCount = 1;
+									// A trailing developer message can accompany the current user
+									// prompt. Earlier user-role records may instead be flushed
+									// execution history and must remain eligible for compaction.
+									if (lastRole === "developer") {
+										for (let i = context.messages.length - 2; i >= 0; i--) {
+											const role = context.messages[i].role;
+											if (role !== "user" && role !== "developer") break;
+											activeTailCount++;
+										}
+									}
+								}
+								const shrinkablePrompts =
+									activeTailCount > 0
+										? request.chatMessagePrompts.slice(0, -activeTailCount)
+										: request.chatMessagePrompts;
+								const historyBytes = toBinary(
+									GetChatMessageRequestSchema,
+									create(GetChatMessageRequestSchema, {
+										chatMessagePrompts: shrinkablePrompts,
+									}),
+								).byteLength;
+								if (historyBytes >= LARGE_HISTORY_RECOVERY_BYTES) {
+									AIError.attach(error, AIError.create(AIError.Flag.ContextOverflow));
+									logger.warn("devin: treating large-history invalid_argument as context overflow", {
+										model: model.id,
+										historyBytes,
+										requestBytes: reqBytes.byteLength,
+										compressedBytes: gz.byteLength,
+									});
+								}
+							}
+							throw error;
+						}
 						continue;
 					}
 
@@ -322,7 +381,8 @@ export const streamDevin: StreamFunction<"devin-agent"> = (
 						output.usage.output = Number(msg.usage.outputTokens);
 						output.usage.cacheRead = Number(msg.usage.cacheReadTokens);
 						output.usage.cacheWrite = Number(msg.usage.cacheWriteTokens);
-						output.usage.totalTokens = output.usage.input + output.usage.output;
+						output.usage.totalTokens =
+							output.usage.input + output.usage.output + output.usage.cacheRead + output.usage.cacheWrite;
 					}
 				}
 
@@ -442,6 +502,7 @@ function buildDevinChatRequest(
 		options?.stopSequences && options.stopSequences.length > 0
 			? [...DEVIN_DEFAULT_STOP_PATTERNS, ...options.stopSequences]
 			: DEVIN_DEFAULT_STOP_PATTERNS;
+	const messages = transformMessages(context.messages, model);
 	return create(GetChatMessageRequestSchema, {
 		metadata: create(MetadataSchema, {
 			apiKey,
@@ -453,7 +514,7 @@ function buildDevinChatRequest(
 			locale: "en",
 		}),
 		prompt: (context.systemPrompt ?? []).join("\n\n"),
-		chatMessagePrompts: buildChatMessagePrompts(context.messages, cascadeId),
+		chatMessagePrompts: buildChatMessagePrompts(messages, cascadeId, model),
 		chatModelUid: options?.chatModelUid ?? model.requestModelId ?? model.id,
 		requestType: ChatMessageRequestType.CASCADE,
 		plannerMode: ConversationalPlannerMode.DEFAULT,
@@ -485,7 +546,11 @@ function buildDevinChatRequest(
 }
 
 /** Map omp `Message` history onto Cascade `ChatMessagePrompt`s (USER / SYSTEM / TOOL channels). */
-function buildChatMessagePrompts(messages: Message[], cascadeId: string): ChatMessagePrompt[] {
+function buildChatMessagePrompts(
+	messages: Message[],
+	cascadeId: string,
+	model: Model<"devin-agent">,
+): ChatMessagePrompt[] {
 	const prompts: ChatMessagePrompt[] = [];
 	// messageId seeds are `cascadeId\0index\0role[...]` — prompt text is excluded
 	// so ids stay stable across content edits / history rebuilds.
@@ -513,16 +578,18 @@ function buildChatMessagePrompts(messages: Message[], cascadeId: string): ChatMe
 				}),
 			);
 		} else if (msg.role === "assistant") {
+			const isNativeDevinMessage =
+				msg.api === model.api && msg.provider === model.provider && msg.model === model.id;
 			let promptText = "";
 			let thinkingText = "";
 			let signature = "";
 			const toolCalls: ChatToolCall[] = [];
 			for (const part of msg.content) {
 				if (part.type === "text") {
-					promptText += part.text;
+					promptText += `${part.text}${isDemotedThinking(part) ? "\n" : ""}`;
 				} else if (part.type === "thinking") {
 					thinkingText += part.thinking;
-					if (!signature && part.thinkingSignature) signature = part.thinkingSignature;
+					if (isNativeDevinMessage && !signature && part.thinkingSignature) signature = part.thinkingSignature;
 				} else if (part.type === "toolCall") {
 					toolCalls.push(
 						create(ChatToolCallSchema, {
@@ -533,9 +600,13 @@ function buildChatMessagePrompts(messages: Message[], cascadeId: string): ChatMe
 					);
 				}
 			}
+			if (!promptText && !thinkingText && !signature && toolCalls.length === 0) continue;
 			prompts.push(
 				create(ChatMessagePromptSchema, {
-					messageId: msg.responseId ?? `bot-${deterministicUuid(`${cascadeId}\0${index}\0assistant`)}`,
+					messageId:
+						isNativeDevinMessage && msg.responseId
+							? msg.responseId
+							: `bot-${deterministicUuid(`${cascadeId}\0${index}\0assistant`)}`,
 					source: ChatMessageSource.SYSTEM,
 					prompt: promptText,
 					thinking: thinkingText,
@@ -569,12 +640,18 @@ function buildChatMessagePrompts(messages: Message[], cascadeId: string): ChatMe
 	return prompts;
 }
 
+interface ConnectTrailerError {
+	code: string;
+	message: string;
+	formatted: string;
+}
+
 /**
- * Parse a Connect end-of-stream JSON trailer and return a human-readable error
- * string when it carries `{ error: { code, message } }`, else `null`. The trailer
- * is untrusted server output, so the shape is checked with guards rather than asserted.
+ * Parse a Connect end-of-stream JSON trailer and return its structured error
+ * when it carries `{ error: { code, message } }`, else `null`. The trailer is
+ * untrusted server output, so the shape is checked with guards rather than asserted.
  */
-function readConnectTrailerError(text: string): string | null {
+function readConnectTrailerError(text: string): ConnectTrailerError | null {
 	if (text.length === 0) return null;
 	let parsed: unknown;
 	try {
@@ -588,5 +665,9 @@ function readConnectTrailerError(text: string): string | null {
 	const code = "code" in err && typeof err.code === "string" ? err.code : "";
 	const message = "message" in err && typeof err.message === "string" ? err.message : "";
 	if (!code && !message) return null;
-	return `Devin stream error${code ? ` ${code}` : ""}: ${message}`;
+	return {
+		code,
+		message,
+		formatted: `Devin stream error${code ? ` ${code}` : ""}: ${message}`,
+	};
 }

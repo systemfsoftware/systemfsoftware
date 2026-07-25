@@ -31,7 +31,13 @@ const AGENT: AgentDefinition = {
 };
 
 function session(
-	options: { planMode?: boolean; outputSchema?: unknown; maxDepth?: number; isolationMode?: "none" | "worktree" } = {},
+	options: {
+		planMode?: boolean;
+		outputSchema?: unknown;
+		maxDepth?: number;
+		isolationMode?: "none" | "worktree";
+		isolationApply?: boolean;
+	} = {},
 ): ToolSession {
 	return {
 		cwd: "/tmp",
@@ -41,6 +47,7 @@ function session(
 			"task.maxRecursionDepth": options.maxDepth ?? 2,
 			"task.isolation.mode": options.isolationMode ?? "none",
 			"task.enableLsp": true,
+			...(options.isolationApply !== undefined ? { "task.isolation.apply": options.isolationApply } : {}),
 		}),
 		getSessionFile: () => null,
 		getSessionSpawns: () => "*",
@@ -393,6 +400,56 @@ describe("structured subagent primitive", () => {
 			request({ session: session({ isolationMode: "worktree" }), isolation: { requested: true } }),
 		);
 
+		expect(artifactsDirsFromRegistry()).toContain(settled.artifactsDir);
+		expect(await fs.stat(artifactsDir ?? "")).toBeDefined();
+		await fs.rm(settled.artifactsDir, { recursive: true, force: true });
+	});
+
+	it("defaults task isolation to auto-apply and lets config retain artifacts", async () => {
+		mockDiscovery();
+		const defaultPolicy = await resolveEffectiveSubagentPolicy(
+			request({ session: session({ isolationMode: "worktree" }), isolation: { requested: true } }),
+		);
+		expect(defaultPolicy.applyChanges).toBe(true);
+
+		const capturePolicy = await resolveEffectiveSubagentPolicy(
+			request({
+				session: session({ isolationMode: "worktree", isolationApply: false }),
+				isolation: { requested: true },
+			}),
+		);
+		expect(capturePolicy.applyChanges).toBe(false);
+
+		const evalPolicy = await resolveEffectiveSubagentPolicy(
+			request({
+				invocationKind: "eval",
+				session: session({ isolationMode: "worktree", isolationApply: false }),
+				isolation: { requested: true },
+			}),
+		);
+		expect(evalPolicy.applyChanges).toBe(true);
+	});
+
+	it("retains successful isolated task artifacts when auto-apply is disabled", async () => {
+		mockDiscovery();
+		let artifactsDir: string | undefined;
+		vi.spyOn(isolationRunner, "prepareIsolationContext").mockResolvedValue({ repoRoot: "/tmp" } as never);
+		vi.spyOn(isolationRunner, "runIsolatedSubprocess").mockImplementation(async ({ baseOptions }) => {
+			artifactsDir = baseOptions.artifactsDir;
+			return { ...result(), patchPath: "/recovery/Worker.patch" };
+		});
+		const merge = vi.spyOn(isolationRunner, "mergeIsolatedChanges");
+
+		const settled = await runStructuredSubagent(
+			request({
+				session: session({ isolationMode: "worktree", isolationApply: false }),
+				isolation: { requested: true },
+			}),
+		);
+
+		expect(merge).not.toHaveBeenCalled();
+		expect(settled.changesApplied).toBeNull();
+		expect(settled.mergeSummary).toContain("/recovery/Worker.patch");
 		expect(artifactsDirsFromRegistry()).toContain(settled.artifactsDir);
 		expect(await fs.stat(artifactsDir ?? "")).toBeDefined();
 		await fs.rm(settled.artifactsDir, { recursive: true, force: true });

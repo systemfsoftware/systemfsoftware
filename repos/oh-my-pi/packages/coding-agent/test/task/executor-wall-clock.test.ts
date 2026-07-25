@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it, vi } from "bun:test";
 import type { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
 import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
 import type { LoadExtensionsResult } from "@oh-my-pi/pi-coding-agent/extensibility/extensions/types";
-import type { CreateAgentSessionResult } from "@oh-my-pi/pi-coding-agent/sdk";
+import { AgentRegistry } from "@oh-my-pi/pi-coding-agent/registry/agent-registry";
+import type { CreateAgentSessionOptions, CreateAgentSessionResult } from "@oh-my-pi/pi-coding-agent/sdk";
 import * as sdkModule from "@oh-my-pi/pi-coding-agent/sdk";
 import type { AgentSession, AgentSessionEvent, PromptOptions } from "@oh-my-pi/pi-coding-agent/session/agent-session";
 import { runSubprocess } from "@oh-my-pi/pi-coding-agent/task/executor";
@@ -72,6 +73,7 @@ function mockCreateAgentSession(session: AgentSession) {
 describe("runSubprocess wall clock (task.maxRuntimeMs)", () => {
 	afterEach(() => {
 		vi.restoreAllMocks();
+		AgentRegistry.resetGlobalForTests();
 	});
 
 	const baseAgent: AgentDefinition = {
@@ -197,6 +199,67 @@ describe("runSubprocess wall clock (task.maxRuntimeMs)", () => {
 		// The whole point: we never reached session.prompt(), because the abort
 		// was observed before issuing the model call.
 		expect(promptCalls).toBe(0);
+	});
+
+	it("a cancelled late initializer cannot replace a newer same-id worker", async () => {
+		AgentRegistry.resetGlobalForTests();
+		const registry = AgentRegistry.global();
+		const creationGate = Promise.withResolvers<void>();
+		const creationStarted = Promise.withResolvers<CreateAgentSessionOptions>();
+		const lateDisposed = Promise.withResolvers<void>();
+		const lateSession = {
+			dispose: async () => lateDisposed.resolve(),
+		} as unknown as AgentSession;
+		let lateInstall = registry.get("late-generation");
+		vi.spyOn(sdkModule, "createAgentSession").mockImplementation(async (options = {}) => {
+			creationStarted.resolve(options);
+			await creationGate.promise;
+			lateInstall = registry.registerIfAvailable(
+				{
+					id: "late-generation",
+					displayName: "late A",
+					kind: "sub",
+					parentId: "Main",
+					session: null,
+					status: "running",
+				},
+				options.expectedAgentRef ?? null,
+			);
+			return {
+				session: lateSession,
+				extensionsResult: {} as unknown as LoadExtensionsResult,
+				setToolUIContext: () => {},
+				eventBus: new EventBus(),
+			} satisfies CreateAgentSessionResult;
+		});
+		const abortController = new AbortController();
+		const run = runSubprocess({
+			...baseOptions,
+			id: "late-generation",
+			settings: Settings.isolated({ "task.maxRuntimeMs": 0 }),
+			signal: abortController.signal,
+		});
+		const creationOptions = await creationStarted.promise;
+		expect(creationOptions.expectedAgentRef).toBeNull();
+		abortController.abort();
+		const cancelled = await run;
+		expect(cancelled.aborted).toBe(true);
+
+		const replacementSession = { dispose: async () => {} } as unknown as AgentSession;
+		const replacement = registry.register({
+			id: "late-generation",
+			displayName: "replacement B",
+			kind: "sub",
+			parentId: "Main",
+			session: replacementSession,
+			status: "idle",
+		});
+		creationGate.resolve();
+		await lateDisposed.promise;
+
+		expect(lateInstall).toBeUndefined();
+		expect(registry.get("late-generation")).toBe(replacement);
+		expect(replacement).toMatchObject({ status: "idle", session: replacementSession });
 	});
 
 	it("a late successful yield does not flip a timed-out run to success", async () => {

@@ -17,7 +17,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import type { AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import { type AuthCredential, SqliteAuthCredentialStore, type TSchema } from "@oh-my-pi/pi-ai";
-import { Text } from "@oh-my-pi/pi-tui";
+import { getKeybindings, type Keybinding, Text } from "@oh-my-pi/pi-tui";
 import {
 	getAgentDbPath,
 	getAgentDir,
@@ -26,6 +26,7 @@ import {
 	parseFrontmatter as parseOmpFrontmatter,
 } from "@oh-my-pi/pi-utils";
 import { getPackageDir as getOmpPackageDir } from "../config";
+import { formatKeyHints } from "../config/keybindings";
 import type { PromptTemplate } from "../config/prompt-templates";
 import { type SettingPath, Settings } from "../config/settings";
 import { EditTool } from "../edit";
@@ -371,6 +372,11 @@ async function executeLegacyBashOperations(
 		}
 		throw err;
 	}
+}
+
+/** Format the active shortcut for legacy extensions that render keybinding hints. */
+export function keyText(action: Keybinding): string {
+	return formatKeyHints(getKeybindings().getKeys(action));
 }
 
 /** Parse frontmatter using the historical Pi package-root helper. */
@@ -1362,4 +1368,5 @@ export function getPackageDir(): string {
 
 export * from "../index";
 export { formatBytes as formatSize } from "../tools/render-utils";
+export { copyToClipboard } from "../utils/clipboard";
 export { Type } from "./typebox";

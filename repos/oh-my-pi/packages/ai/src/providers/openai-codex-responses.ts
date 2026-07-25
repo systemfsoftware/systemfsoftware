@@ -41,6 +41,7 @@ import type {
 	Tool,
 	ToolCall,
 	ToolChoice,
+	ToolResultMessage,
 	Usage,
 } from "../types";
 import {
@@ -75,6 +76,7 @@ import {
 } from "./openai-codex/request-transformer";
 import { CodexApiError } from "./openai-codex/response-handler";
 import type {
+	ResponseComputerToolCall,
 	ResponseCustomToolCall,
 	ResponseFunctionToolCall,
 	ResponseInput,
@@ -95,6 +97,7 @@ import {
 	applyOpenAIServiceTier,
 	applyReasoningSummaryDone,
 	buildResponsesDeltaInput,
+	computerCallMetadata,
 	convertResponsesAssistantMessage,
 	convertResponsesInputContent,
 	createSequentialCutoffSummaryState,
@@ -105,6 +108,7 @@ import {
 	finalizePendingResponsesToolCalls,
 	finalizeReasoningThinking,
 	finalizeToolCallArgumentsDone,
+	hasExecutableIncompleteResponsesToolCalls,
 	isOpenAIResponsesProgressEvent,
 	mapOpenAIResponsesStopReason,
 	normalizeOpenAIPromptCacheKey,
@@ -120,7 +124,6 @@ export interface OpenAICodexResponsesOptions extends StreamOptions {
 	/** `reasoning.context` replay scope; defaults to `all_turns` when unset. The `all_turns` value is gated to gpt-5.4+ Codex models — older ids reject it, so it is suppressed and `context` omitted. */
 	reasoningContext?: CodexReasoningContext;
 	textVerbosity?: "low" | "medium" | "high";
-	include?: string[];
 	codexMode?: boolean;
 	toolChoice?: ToolChoice;
 	preferWebsockets?: boolean;
@@ -238,6 +241,42 @@ const CODEX_RETRYABLE_EVENT_CODES = new Set(["model_error", "server_error", "int
 const CODEX_RETRYABLE_EVENT_MESSAGE =
 	/processing your request|retry your request|temporar(?:y|ily)|overloaded|service.?unavailable|internal error|server error/i;
 const CODEX_PROVIDER_SESSION_STATE_KEY = "openai-codex-responses";
+
+/**
+ * Host integration boundary for just-in-time `x-oai-attestation` header
+ * values (codex-rs `AttestationProvider`). Resolves to the full header value
+ * — an `{"v":1,"s":0,"t":"v1.…"}` envelope — or `undefined` when no
+ * attestation should be sent.
+ */
+export type CodexAttestationProvider = () => Promise<string | undefined>;
+
+let codexAttestationProvider: CodexAttestationProvider | undefined;
+
+/**
+ * Install the process-wide attestation hook consulted for upstream Codex
+ * requests (codex-rs stores its provider on `ModelClient` construction). The
+ * hook is only consulted for ChatGPT-OAuth credentials and runs just-in-time
+ * per request; WebSocket handshakes resolve once per connection because the
+ * header is connection-scoped there.
+ */
+export function setCodexAttestationProvider(provider: CodexAttestationProvider | undefined): void {
+	codexAttestationProvider = provider;
+}
+
+/**
+ * Resolve the `x-oai-attestation` header value for one upstream request.
+ * Gated on ChatGPT-OAuth credentials (a Codex JWT carries `chatgpt_account_id`;
+ * codex-rs gates on `auth.is_chatgpt_auth()`). A throwing hook degrades to no
+ * header rather than failing the request.
+ */
+export async function getCodexAttestationHeader(accountId: string | undefined): Promise<string | undefined> {
+	if (!accountId || !codexAttestationProvider) return undefined;
+	try {
+		return await codexAttestationProvider();
+	} catch {
+		return undefined;
+	}
+}
 const X_CODEX_TURN_STATE_HEADER = "x-codex-turn-state";
 const X_MODELS_ETAG_HEADER = "x-models-etag";
 /** WebSocket frames cannot carry per-request HTTP headers; codex-rs mirrors the lite marker into `client_metadata` under this key. */
@@ -295,7 +334,12 @@ function createCodexWebSocketTimeoutMessage(reason: string, details: CodexWebSoc
 }
 
 type CodexTransport = "sse" | "websocket";
-type CodexEventItem = ResponseReasoningItem | ResponseOutputMessage | ResponseFunctionToolCall | ResponseCustomToolCall;
+type CodexEventItem =
+	| ResponseReasoningItem
+	| ResponseOutputMessage
+	| ResponseFunctionToolCall
+	| ResponseCustomToolCall
+	| ResponseComputerToolCall;
 type CodexOutputBlock =
 	| ThinkingContent
 	| TextContent
@@ -1100,6 +1144,10 @@ export function normalizeCodexToolChoice(
 			? { type: "custom", name: customTool.customWireName ?? customTool.name }
 			: { type: "function", name: offeredTool.name };
 	};
+	if (choice.type === "computer") {
+		const computer = tools.find(tool => tool.native?.type === "computer");
+		return computer ? { type: "function", name: computer.name } : undefined;
+	}
 	if (choice.type === "function") {
 		if ("function" in choice && choice.function?.name) {
 			return mapName(choice.function.name);
@@ -1112,6 +1160,74 @@ export function normalizeCodexToolChoice(
 		return mapName(choice.name);
 	}
 	return undefined;
+}
+function unrollCodexComputerItems(items: ResponseInput, supportsImageDetailOriginal: boolean): ResponseInput {
+	const unrolled: ResponseInput = [];
+	for (const item of items) {
+		if (item.type === "computer_call") {
+			const actions = item.actions ?? (item.action ? [item.action] : []);
+			unrolled.push({
+				type: "function_call",
+				call_id: item.call_id,
+				name: "computer",
+				arguments: JSON.stringify({ actions }),
+				status: item.status,
+			});
+			continue;
+		}
+		if (item.type === "computer_call_output") {
+			const image =
+				typeof item.output.image_url === "string" && item.output.image_url.length > 0
+					? ({
+							type: "input_image",
+							detail: supportsImageDetailOriginal ? "original" : "auto",
+							image_url: item.output.image_url,
+						} satisfies ResponseInputContent)
+					: typeof item.output.file_id === "string" && item.output.file_id.length > 0
+						? ({
+								type: "input_image",
+								detail: supportsImageDetailOriginal ? "original" : "auto",
+								file_id: item.output.file_id,
+							} satisfies ResponseInputContent)
+						: undefined;
+			unrolled.push({
+				type: "function_call_output",
+				call_id: item.call_id,
+				output: image ? "(see attached image)" : "",
+			});
+			if (image) {
+				unrolled.push({
+					role: "user",
+					content: [{ type: "input_text", text: "Attached image from computer tool result:" }, image],
+				});
+			}
+			continue;
+		}
+		unrolled.push(item);
+	}
+	return unrolled;
+}
+
+function unrollCodexComputerAssistantMessage(message: AssistantMessage): AssistantMessage {
+	let changed = false;
+	const content = message.content.map(block => {
+		if (block.type !== "toolCall" || block.providerMetadata?.type !== "computer") return block;
+		changed = true;
+		const call: ToolCall = {
+			...block,
+			arguments: { actions: structuredCloneJSON(block.providerMetadata.actions) },
+		};
+		delete call.providerMetadata;
+		return call;
+	});
+	return changed ? { ...message, content } : message;
+}
+
+function unrollCodexComputerToolResult(message: ToolResultMessage): ToolResultMessage {
+	if (message.providerMetadata?.type !== "computer") return message;
+	const result: ToolResultMessage = { ...message };
+	delete result.providerMetadata;
+	return result;
 }
 
 function getCodexServiceTierCostMultiplier(
@@ -1455,6 +1571,7 @@ async function openCodexWebSocketTransport(
 		websocketState,
 		requestContext.responsesLite,
 		requestContext.requestMetadata,
+		await getCodexAttestationHeader(requestContext.accountId),
 	);
 	const requestBodyForState = structuredCloneJSON(requestContext.transformedBody);
 	// `onPayload` may rewrite the outgoing frame (e.g. drop `stream_options`);
@@ -1595,6 +1712,16 @@ function createOutputBlockForItem(item: CodexEventItem): CodexOutputBlock | null
 			name: item.name,
 			arguments: {},
 			[kStreamingPartialJson]: item.arguments || "",
+		};
+	}
+	if (item.type === "computer_call") {
+		return {
+			type: "toolCall",
+			id: encodeResponsesToolCallId(item.call_id, item.id),
+			name: "computer",
+			arguments: {},
+			providerMetadata: computerCallMetadata(item),
+			[kStreamingPartialJson]: "",
 		};
 	}
 	if (item.type === "custom_tool_call") {
@@ -1782,9 +1909,10 @@ class CodexStreamProcessor {
 
 		if (eventType === "response.reasoning_summary_part.added") {
 			if (this.#sequentialCutoffSummaries) return firstTokenTime;
-			if (this.runtime.currentItem?.type === "reasoning") {
+			const entry = this.runtime.openItemForEvent(rawEvent);
+			if (entry?.item.type === "reasoning") {
 				appendReasoningSummaryPart(
-					this.runtime.currentItem,
+					entry.item,
 					(rawEvent as { part: ResponseReasoningItem["summary"][number] }).part,
 				);
 			}
@@ -1859,9 +1987,10 @@ class CodexStreamProcessor {
 		}
 
 		if (eventType === "response.content_part.added") {
-			if (this.runtime.currentItem?.type === "message") {
+			const entry = this.runtime.openItemForEvent(rawEvent);
+			if (entry?.item.type === "message") {
 				appendMessageContentPart(
-					this.runtime.currentItem,
+					entry.item,
 					(rawEvent as { part?: ResponseOutputMessage["content"][number] }).part,
 				);
 			}
@@ -1869,14 +1998,15 @@ class CodexStreamProcessor {
 		}
 
 		if (eventType === "response.output_text.delta" || eventType === "response.refusal.delta") {
-			if (this.runtime.currentItem?.type === "message" && this.runtime.currentBlock?.type === "text") {
+			const entry = this.runtime.openItemForEvent(rawEvent);
+			if (entry?.item.type === "message" && entry.block?.type === "text") {
 				appendMessageTextDelta(
-					this.runtime.currentItem,
-					this.runtime.currentBlock,
+					entry.item,
+					entry.block,
 					(rawEvent as { delta?: string }).delta || "",
 					stream,
 					output,
-					output.content.length - 1,
+					entry.contentIndex,
 					eventType === "response.refusal.delta" ? "refusal" : "output_text",
 				);
 			}
@@ -2030,6 +2160,29 @@ class CodexStreamProcessor {
 			return;
 		}
 
+		if (item.type === "computer_call") {
+			const toolCall: ToolCall = {
+				type: "toolCall",
+				id: encodeResponsesToolCallId(item.call_id, item.id),
+				name: "computer",
+				arguments: {},
+				providerMetadata: computerCallMetadata(item),
+			};
+			let resolvedContentIndex = contentIndex;
+			if (block?.type === "toolCall") {
+				block.id = toolCall.id;
+				block.providerMetadata = toolCall.providerMetadata;
+				clearStreamingPartialJson(block);
+			} else {
+				output.content.push(toolCall);
+				resolvedContentIndex = output.content.length - 1;
+			}
+			runtime.closeOpenItem(entry);
+			runtime.canSafelyReplayWebsocketOverSse = false;
+			stream.push({ type: "toolcall_end", contentIndex: resolvedContentIndex, toolCall, partial: output });
+			return;
+		}
+
 		if (item.type === "custom_tool_call") {
 			const partial = block?.type === "toolCall" ? block[kStreamingPartialJson] : undefined;
 			const rawInput = partial && partial.length > 0 ? partial : (item.input ?? "");
@@ -2089,12 +2242,29 @@ class CodexStreamProcessor {
 			}
 		}
 
+		const incompleteDetails =
+			response &&
+			"incomplete_details" in response &&
+			response.incomplete_details &&
+			typeof response.incomplete_details === "object"
+				? response.incomplete_details
+				: undefined;
+		const shouldPromoteIncompleteToolUse =
+			status === "incomplete" &&
+			incompleteDetails !== undefined &&
+			"reason" in incompleteDetails &&
+			incompleteDetails.reason === "max_output_tokens" &&
+			hasExecutableIncompleteResponsesToolCalls(output);
 		finalizePendingResponsesToolCalls(output);
 
 		calculateCost(model, output.usage);
 		applyCodexServiceTierPricing(model, output.usage, serviceTier, runtime.requestBodyForState.service_tier);
 		output.stopReason = mapOpenAIResponsesStopReason(status);
-		promoteResponsesToolUseStopReason(output, endTurn === true ? true : endTurn === false ? false : undefined);
+		promoteResponsesToolUseStopReason(
+			output,
+			endTurn === true ? true : endTurn === false ? false : undefined,
+			shouldPromoteIncompleteToolUse,
+		);
 	}
 
 	async #recoverStreamError(error: unknown): Promise<boolean> {
@@ -2597,6 +2767,7 @@ export async function prewarmOpenAICodexResponses(
 	);
 	const codexClientVersion = CODEX_CLIENT_VERSION;
 	const requestIdentity = createCodexCompatibilityIdentity(metadataSession);
+	const attestation = await getCodexAttestationHeader(accountId);
 	const headers = logger.time(
 		"prewarmCodex:createHeaders",
 		createCodexHeaders,
@@ -2609,6 +2780,7 @@ export async function prewarmOpenAICodexResponses(
 		state,
 		responsesLite,
 		requestIdentity,
+		attestation,
 	);
 	await logger.time(
 		"prewarmCodex:establishWs",
@@ -3755,6 +3927,7 @@ async function openCodexSseEventStream(
 		state,
 		responsesLite,
 		requestMetadata,
+		await getCodexAttestationHeader(accountId),
 	);
 	CODEX_DEBUG &&
 		logger.debug("[codex] codex request", {
@@ -3828,11 +4001,17 @@ function createCodexHeaders(
 	state?: CodexWebSocketSessionState,
 	responsesLite = false,
 	requestMetadata?: CodexCompatibilityIdentity,
+	attestation?: string,
 ): Headers {
 	const headers = new Headers(initHeaders ?? {});
 	headers.delete("x-api-key");
 	headers.set("Authorization", `Bearer ${accessToken}`);
 	if (accountId) headers.set(OPENAI_HEADERS.ACCOUNT_ID, accountId);
+	if (attestation) {
+		headers.set(OPENAI_HEADERS.ATTESTATION, attestation);
+	} else {
+		headers.delete(OPENAI_HEADERS.ATTESTATION);
+	}
 	const betaHeader =
 		transport === "websocket"
 			? OPENAI_HEADER_VALUES.BETA_RESPONSES_WEBSOCKETS_V2
@@ -3956,13 +4135,19 @@ function convertMessages(model: Model<"openai-codex-responses">, context: Contex
 				| undefined;
 			if (historyItems) {
 				const redactedHistoryItems = redactSensitiveInObject(historyItems).result as Array<ResponseInput[number]>;
-				for (const item of redactedHistoryItems) {
-					const maybe = item as { type?: string; call_id?: string };
-					if (maybe.type === "custom_tool_call" && typeof maybe.call_id === "string") {
-						customCallIds.add(maybe.call_id);
+				const replayItems = unrollCodexComputerItems(
+					redactedHistoryItems,
+					model.compat.supportsImageDetailOriginal,
+				);
+				for (const item of replayItems) {
+					if (item.type === "custom_tool_call") {
+						customCallIds.add(item.call_id);
+					}
+					if ((item.type === "function_call" || item.type === "custom_tool_call") && item.call_id) {
+						knownCallIds.add(item.call_id);
 					}
 				}
-				messages.push(...redactedHistoryItems);
+				messages.push(...replayItems);
 				msgIndex += 1;
 				continue;
 			}
@@ -3988,16 +4173,22 @@ function convertMessages(model: Model<"openai-codex-responses">, context: Contex
 			if (historyItems) {
 				const sanitizedHistoryItems = sanitizeOpenAIResponsesAssistantHistoryItemsForReplay(historyItems);
 				if (sanitizedHistoryItems) {
-					for (const item of sanitizedHistoryItems) {
-						const maybe = item as { type?: string; call_id?: string };
-						if (maybe.type === "custom_tool_call" && typeof maybe.call_id === "string") {
-							customCallIds.add(maybe.call_id);
+					const replayItems = unrollCodexComputerItems(
+						sanitizedHistoryItems,
+						model.compat.supportsImageDetailOriginal,
+					);
+					for (const item of replayItems) {
+						if (item.type === "custom_tool_call") {
+							customCallIds.add(item.call_id);
+						}
+						if ((item.type === "function_call" || item.type === "custom_tool_call") && item.call_id) {
+							knownCallIds.add(item.call_id);
 						}
 					}
 					if (providerPayload?.dt) {
-						messages.push(...sanitizedHistoryItems);
+						messages.push(...replayItems);
 					} else {
-						messages.splice(0, messages.length, ...sanitizedHistoryItems);
+						messages.splice(0, messages.length, ...replayItems);
 						// Keep customCallIds from the pre-splice state since historyItems may re-introduce them.
 					}
 					msgIndex += 1;
@@ -4007,12 +4198,14 @@ function convertMessages(model: Model<"openai-codex-responses">, context: Contex
 			}
 
 			const convertedOutputItems = convertResponsesAssistantMessage(
-				msg as AssistantMessage,
+				unrollCodexComputerAssistantMessage(msg as AssistantMessage),
 				model,
 				msgIndex,
 				knownCallIds,
 				!suppressHiddenEmptyFallback,
 				customCallIds,
+				false,
+				true,
 			);
 			const outputItems = suppressHiddenEmptyFallback
 				? sanitizeOpenAIResponsesAssistantFallbackItemsForReplay(convertedOutputItems)
@@ -4027,12 +4220,13 @@ function convertMessages(model: Model<"openai-codex-responses">, context: Contex
 		if (msg.role === "toolResult") {
 			appendResponsesToolResultMessages(
 				messages,
-				msg,
+				unrollCodexComputerToolResult(msg),
 				model,
 				false,
 				model.compat.supportsImageDetailOriginal,
 				knownCallIds,
 				customCallIds,
+				true,
 			);
 		}
 
@@ -4081,9 +4275,12 @@ export function convertOpenAICodexResponsesTools(
 	model: Model<"openai-codex-responses">,
 ): CodexToolPayload[] {
 	const allowFreeform = model.applyPatchToolType === "freeform";
-	return tools.map((tool): CodexToolPayload => {
+	const payloads: CodexToolPayload[] = [];
+	for (const tool of tools) {
+		// The ChatGPT Codex endpoints reject the native `{ type: "computer" }`
+		// shape, so both standard and Lite transports expose it as a function.
 		if (allowFreeform && tool.customFormat) {
-			return {
+			payloads.push({
 				type: "custom",
 				name: tool.customWireName ?? tool.name,
 				description: tool.description || "",
@@ -4092,24 +4289,21 @@ export function convertOpenAICodexResponsesTools(
 					syntax: tool.customFormat.syntax,
 					definition: compactGrammarDefinition(tool.customFormat.syntax, tool.customFormat.definition),
 				},
-			};
+			});
+			continue;
 		}
 		const strict = !!(!NO_STRICT && tool.strict);
 		const baseParameters = sanitizeSchemaForOpenAIResponses(toolWireSchema(tool));
 		const { schema: parameters, strict: effectiveStrict } = adaptSchemaForStrict(baseParameters, strict);
-		return {
+		payloads.push({
 			type: "function",
 			name: tool.name,
 			description: tool.description || "",
 			parameters,
-			// See openai-responses.ts::convertTools — explicit `strict: false` is
-			// preserved on the wire because some backends distinguish it from
-			// omitted (#4336). `strict: true` still requires enforcement success,
-			// and the `PI_NO_STRICT` global bypass MUST suppress the flag entirely
-			// so Codex proxies that reject the `strict` key stay silent.
 			...(effectiveStrict ? { strict: true } : !NO_STRICT && tool.strict === false ? { strict: false } : {}),
-		};
-	});
+		});
+	}
+	return payloads;
 }
 
 export class CodexWebSocketTransportError extends Error {

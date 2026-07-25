@@ -20,6 +20,12 @@ export interface UsageWindow {
 	durationMs?: number;
 	/** Absolute reset timestamp in milliseconds since epoch. */
 	resetsAt?: number;
+	/**
+	 * Verb rendered before the {@link resetsAt} countdown (e.g. "tick", "regen").
+	 * Defaults to "resets" — override for rolling windows where the timestamp is
+	 * an incremental regeneration step rather than a full window reset.
+	 */
+	resetLabel?: string;
 }
 
 /** Quantitative usage data. */
@@ -179,6 +185,61 @@ export interface UsageCostHistoryQuery {
 	sinceMs?: number;
 }
 
+/**
+ * Aggregated request usage a client observed for one (provider, model) pair.
+ * Clients fold every completed request into per-pair buckets and flush them to
+ * the auth broker on a short cadence, so the broker can attribute token burn
+ * to the install that produced it.
+ */
+export interface ObservedUsageEntry {
+	/** Epoch ms of the newest request folded into this bucket. */
+	at: number;
+	provider: Provider;
+	model: string;
+	/** Completed requests folded into this bucket. */
+	requests: number;
+	inputTokens: number;
+	outputTokens: number;
+	cacheReadTokens: number;
+	cacheWriteTokens: number;
+	/** Estimated USD cost of the folded requests (0 when unknown). */
+	costUsd: number;
+}
+
+/** One client's observed-usage report, keyed by its stable install id. */
+export interface ClientUsageReport {
+	/** Stable per-machine install id — the client primary key. */
+	installId: string;
+	/** Human-readable machine name for display surfaces. */
+	hostname?: string;
+	entries: ObservedUsageEntry[];
+}
+
+/** Per-provider aggregate of one client's recorded usage. */
+export interface ClientProviderUsage {
+	provider: string;
+	requests: number;
+	inputTokens: number;
+	outputTokens: number;
+	cacheReadTokens: number;
+	cacheWriteTokens: number;
+	costUsd: number;
+}
+
+/** One known client with its usage aggregates over the queried window. */
+export interface ClientUsageClientSummary {
+	installId: string;
+	hostname?: string;
+	firstSeen: number;
+	lastSeen: number;
+	providers: ClientProviderUsage[];
+}
+
+/** Aggregated per-client usage recorded by the broker host. */
+export interface ClientUsageSummary {
+	clients: ClientUsageClientSummary[];
+}
+
 // ─── Zod schemas (wire-shape validation for the broker `/v1/usage` endpoint) ─
 
 export const usageUnitSchema = type("'percent' | 'tokens' | 'requests' | 'usd' | 'minutes' | 'bytes' | 'unknown'");
@@ -189,6 +250,7 @@ export const usageWindowSchema = type({
 	label: "string",
 	"durationMs?": "number",
 	"resetsAt?": "number",
+	"resetLabel?": "string",
 });
 
 export const usageAmountSchema = type({
@@ -297,6 +359,8 @@ export interface UsageProvider {
 	supports?(params: UsageFetchParams): boolean;
 	/** True when fetchUsage contacts upstream and can authenticate the credential for health checks. */
 	validatesCredentials?: boolean;
+	/** Whether a failed refresh may serve the previous successful report. Defaults to true. */
+	retainLastGoodOnFailure?: boolean;
 }
 
 /** Request context used when ranking usage for a specific model. */

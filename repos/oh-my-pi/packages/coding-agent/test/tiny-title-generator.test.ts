@@ -6,6 +6,7 @@ import { isSubcommand } from "@oh-my-pi/pi-coding-agent/cli-commands";
 import { getDefault, getEnumValues, getUi } from "@oh-my-pi/pi-coding-agent/config/settings-schema";
 import { TinyTitleDownloadProgressComponent } from "@oh-my-pi/pi-coding-agent/modes/components/tiny-title-download-progress";
 import { initTheme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
+import type { RefCountedWorkerHandle } from "@oh-my-pi/pi-coding-agent/subprocess/worker-client";
 import {
 	TINY_MODEL_DEVICE_DEFAULT,
 	TINY_MODEL_DEVICE_SETTING_OPTIONS,
@@ -21,7 +22,12 @@ import {
 	TINY_TITLE_MODEL_OPTIONS,
 	TINY_TITLE_MODEL_VALUES,
 } from "@oh-my-pi/pi-coding-agent/tiny/models";
-import { createTinyTitleSubprocess, tinyTitleClient } from "@oh-my-pi/pi-coding-agent/tiny/title-client";
+import {
+	createTinyTitleSubprocess,
+	TinyTitleClient,
+	tinyTitleClient,
+} from "@oh-my-pi/pi-coding-agent/tiny/title-client";
+import type { TinyTitleWorkerInbound, TinyTitleWorkerOutbound } from "@oh-my-pi/pi-coding-agent/tiny/title-protocol";
 import { generateSessionTitle } from "@oh-my-pi/pi-coding-agent/utils/title-generator";
 import type { Subprocess } from "bun";
 
@@ -196,6 +202,92 @@ describe("tiny title generator routing", () => {
 		expect(title).toBeNull();
 		expect(local).not.toHaveBeenCalled();
 		expect(online).not.toHaveBeenCalled();
+	});
+});
+
+interface FakeTinyWorker {
+	handle: RefCountedWorkerHandle<TinyTitleWorkerInbound, TinyTitleWorkerOutbound>;
+	sent: TinyTitleWorkerInbound[];
+	refCount: number;
+	emit(message: TinyTitleWorkerOutbound): void;
+}
+
+function createFakeTinyWorker(): FakeTinyWorker {
+	const sent: TinyTitleWorkerInbound[] = [];
+	let onMessage: ((message: TinyTitleWorkerOutbound) => void) | undefined;
+	const worker: FakeTinyWorker = {
+		sent,
+		refCount: 0,
+		emit(message) {
+			onMessage?.(message);
+		},
+		handle: {
+			send(message) {
+				sent.push(message);
+			},
+			onMessage(handler) {
+				onMessage = handler;
+				return () => {
+					onMessage = undefined;
+				};
+			},
+			onError() {
+				return () => {};
+			},
+			async terminate() {},
+			ref() {
+				worker.refCount++;
+			},
+			unref() {
+				worker.refCount--;
+			},
+		},
+	};
+	return worker;
+}
+
+describe("tiny title prewarm", () => {
+	it("spawns one idle worker that the first generate reuses (issue #6462)", async () => {
+		const workers: FakeTinyWorker[] = [];
+		let spawnCount = 0;
+		const client = new TinyTitleClient(() => {
+			spawnCount++;
+			const worker = createFakeTinyWorker();
+			workers.push(worker);
+			return worker.handle;
+		});
+
+		client.prewarm("lfm2-350m");
+
+		expect(spawnCount).toBe(1);
+		// No pending request registered, so the prewarmed worker is never
+		// referenced and never blocks process exit.
+		expect(workers[0]?.refCount).toBe(0);
+		// A no-op ping warms the transport without loading a model.
+		expect(workers[0]?.sent).toEqual([{ type: "ping", id: expect.any(String) }]);
+
+		const generated = client.generate("lfm2-350m", "Investigate routing");
+		// The first submit reuses the prewarmed worker — no second spawn.
+		expect(spawnCount).toBe(1);
+
+		const request = workers[0]?.sent.find(message => message.type === "generate");
+		expect(request?.type).toBe("generate");
+		workers[0]?.emit({ type: "title", id: request?.id ?? "", title: "Routing" });
+
+		expect(await generated).toBe("Routing");
+		await client.terminate();
+	});
+
+	it("does not spawn a worker for the online default", () => {
+		let spawnCount = 0;
+		const client = new TinyTitleClient(() => {
+			spawnCount++;
+			return createFakeTinyWorker().handle;
+		});
+
+		client.prewarm("online");
+
+		expect(spawnCount).toBe(0);
 	});
 });
 

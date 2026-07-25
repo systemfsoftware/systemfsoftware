@@ -71,7 +71,7 @@ export function createPersistedSubagentReviverFactory(
 			taskDepth++;
 			parentId = registry.get(parentId)?.parentId;
 		}
-		return async () => {
+		return async expectedRef => {
 			// Re-open fresh on every revive: park closes the writer, so this takes
 			// the single-writer lock cleanly and restores the full message history.
 			const reopened = await SessionManager.open(sessionFile, undefined, undefined, {
@@ -97,6 +97,7 @@ export function createPersistedSubagentReviverFactory(
 				agentDisplayName: ref.displayName,
 				parentTaskPrefix: ref.id,
 				parentAgentId: ref.parentId,
+				expectedAgentRef: expectedRef,
 				taskDepth,
 				toolNames: init.tools,
 				outputSchema: init.outputSchema,
@@ -131,8 +132,8 @@ export function createPersistedSubagentReviverFactory(
 			// Without it the idle-TTL timer never clears on a turn and the lifecycle
 			// could park the agent mid-run.
 			session.subscribe(event => {
-				if (event.type === "agent_start") registry.setStatus(ref.id, "running");
-				else if (event.type === "agent_end") registry.setStatus(ref.id, "idle");
+				if (event.type === "agent_start") registry.setStatus(ref.id, "running", session);
+				else if (event.type === "agent_end") registry.setStatus(ref.id, "idle", session);
 			});
 			return session;
 		};

@@ -65,6 +65,7 @@ describe("EventController async update finalization", () => {
 			statusLine: { invalidate: vi.fn() },
 			updateEditorTopBorder: vi.fn(),
 			toolOutputExpanded: false,
+			transcriptMessageComponents: new WeakMap(),
 			pendingTools,
 			chatContainer,
 			session: { getToolByName: () => undefined, isStreaming: true },

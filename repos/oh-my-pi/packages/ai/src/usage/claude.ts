@@ -63,6 +63,31 @@ interface ParsedUsageBucket {
 	utilization?: number;
 	resetsAt?: number;
 }
+
+interface ClaudeExtraUsage {
+	is_enabled?: boolean;
+	monthly_limit?: number | null;
+	used_credits?: number;
+	decimal_places?: number;
+	currency?: string;
+}
+
+interface ClaudeMoneyAmount {
+	amount_minor?: number;
+	currency?: string;
+	exponent?: number;
+}
+
+interface ClaudeSpend {
+	used?: ClaudeMoneyAmount | null;
+	limit?: ClaudeMoneyAmount | null;
+	enabled?: boolean;
+}
+
+interface ParsedClaudeExtraUsage {
+	used: number;
+	limit?: number;
+}
 type ClaudeUnifiedWindow = "5h" | "7d" | "7d_oi";
 type ClaudeModelKind = "opus" | "sonnet" | "fable" | "mythos";
 
@@ -72,6 +97,8 @@ interface ClaudeUsageResponse {
 	seven_day_opus?: ClaudeUsageBucket | null;
 	seven_day_sonnet?: ClaudeUsageBucket | null;
 	limits?: unknown;
+	extra_usage?: ClaudeExtraUsage | null;
+	spend?: ClaudeSpend | null;
 }
 
 interface ClaudeApiLimitModelScope {
@@ -199,7 +226,8 @@ function hasUsageData(payload: ClaudeUsageResponse): boolean {
 		parseBucket(payload.seven_day)?.utilization !== undefined ||
 		parseBucket(payload.seven_day_opus)?.utilization !== undefined ||
 		parseBucket(payload.seven_day_sonnet)?.utilization !== undefined ||
-		parseApiLimitEntries(payload.limits).some(entry => entry.bucket.utilization !== undefined)
+		parseApiLimitEntries(payload.limits).some(entry => entry.bucket.utilization !== undefined) ||
+		buildClaudeExtraUsageLimit(payload) !== null
 	);
 }
 
@@ -362,6 +390,101 @@ function buildUsageStatus(usedFraction: number | undefined): UsageStatus | undef
 	if (usedFraction >= 1) return "exhausted";
 	if (usedFraction >= 0.9) return "warning";
 	return "ok";
+}
+
+function parseDollarAmount(
+	amountMinor: unknown,
+	exponent: unknown,
+	currency: unknown,
+	currencyRequired: boolean,
+): number | undefined {
+	if (
+		typeof amountMinor !== "number" ||
+		!Number.isSafeInteger(amountMinor) ||
+		amountMinor < 0 ||
+		typeof exponent !== "number" ||
+		!Number.isSafeInteger(exponent) ||
+		exponent < 0
+	) {
+		return undefined;
+	}
+	if (currency === undefined) {
+		if (currencyRequired) return undefined;
+	} else if (typeof currency !== "string" || currency.toUpperCase() !== "USD") {
+		return undefined;
+	}
+	const divisor = 10 ** exponent;
+	if (!Number.isFinite(divisor)) return undefined;
+	const dollars = amountMinor / divisor;
+	return Number.isFinite(dollars) ? dollars : undefined;
+}
+
+function parseSpendExtraUsage(value: unknown): ParsedClaudeExtraUsage | null {
+	if (!isRecord(value) || value.enabled !== true || !Object.hasOwn(value, "limit") || !isRecord(value.used)) {
+		return null;
+	}
+	const used = parseDollarAmount(value.used.amount_minor, value.used.exponent, value.used.currency, true);
+	if (used === undefined) return null;
+	if (value.limit === null) return { used };
+	if (!isRecord(value.limit)) return null;
+	const limit = parseDollarAmount(value.limit.amount_minor, value.limit.exponent, value.limit.currency, true);
+	// Reject non-positive caps rather than normalizing them into contradictory zero fractions.
+	return limit === undefined || limit <= 0 ? null : { used, limit };
+}
+
+function parseLegacyExtraUsage(value: unknown): ParsedClaudeExtraUsage | null {
+	if (!isRecord(value) || value.is_enabled !== true || !Object.hasOwn(value, "monthly_limit")) return null;
+	const decimalPlaces = value.decimal_places === undefined ? 2 : value.decimal_places;
+	const used = parseDollarAmount(value.used_credits, decimalPlaces, value.currency, false);
+	if (used === undefined) return null;
+	if (value.monthly_limit === null || value.monthly_limit === undefined) return { used };
+	const limit = parseDollarAmount(value.monthly_limit, decimalPlaces, value.currency, false);
+	return limit === undefined || limit <= 0 ? null : { used, limit };
+}
+
+function buildExtraUsageAmount(used: number, limit: number | undefined): UsageAmount | undefined {
+	if (limit === undefined) return { used, unit: "usd" };
+	const remaining = Math.max(0, limit - used);
+	const usedFraction = used / limit;
+	const remainingFraction = remaining / limit;
+	if (!Number.isFinite(remaining) || !Number.isFinite(usedFraction) || !Number.isFinite(remainingFraction)) {
+		return undefined;
+	}
+	return {
+		used,
+		unit: "usd",
+		limit,
+		remaining,
+		usedFraction,
+		remainingFraction,
+	};
+}
+
+function buildClaudeExtraUsageLimit(payload: ClaudeUsageResponse): UsageLimit | null {
+	const parsed =
+		payload.spend === null || payload.spend === undefined
+			? parseLegacyExtraUsage(payload.extra_usage)
+			: parseSpendExtraUsage(payload.spend);
+	if (!parsed) return null;
+
+	const amount = buildExtraUsageAmount(parsed.used, parsed.limit);
+	if (!amount) return null;
+	const status =
+		parsed.limit === undefined
+			? undefined
+			: parsed.used >= parsed.limit
+				? "exhausted"
+				: (buildUsageStatus(amount.usedFraction) ?? "ok");
+	return {
+		id: "anthropic:extra",
+		label: "Claude Extra Usage",
+		scope: {
+			provider: "anthropic",
+			windowId: "extra",
+		},
+		amount,
+		...(status !== undefined ? { status } : {}),
+	};
 }
 
 function buildUsageLimit(args: {
@@ -546,6 +669,7 @@ async function fetchClaudeUsage(params: UsageFetchParams, ctx: UsageFetchContext
 			tier: "sonnet",
 		}),
 		...buildScopedWeeklyUsageLimits(apiLimitEntries),
+		buildClaudeExtraUsageLimit(payload),
 	].filter((limit): limit is UsageLimit => limit !== null);
 
 	if (limits.length === 0) return null;

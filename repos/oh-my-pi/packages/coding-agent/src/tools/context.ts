@@ -13,6 +13,8 @@ declare module "@oh-my-pi/pi-agent-core" {
 		 *  wrapper must not re-prompt for the same action (explicit per-tool
 		 *  policies and overrides still apply). */
 		xdevApproved?: boolean;
+		/** Set only after an interactive prompt approves provider computer safety checks. */
+		providerSafetyApproved?: boolean;
 	}
 }
 

@@ -57,17 +57,32 @@ describe("legacy-pi TypeBox remap", () => {
 			[
 				'import { Type } from "typebox";',
 				"export const probe = Type;",
-				"export const enumSchema = Type.Enum(['upstream', 'downstream']);",
+				"export const unsafeSchema = Type.Unsafe({ type: 'object', properties: { path: { type: 'string' } }, required: ['path'] });",
 			].join("\n"),
 		);
 
 		const loaded = (await loadLegacyPiModule(entry)) as {
 			probe: typeof TypeBoxShimType;
-			enumSchema: { safeParse: (input: unknown) => { success: boolean } };
+			unsafeSchema: Record<string, unknown>;
 		};
 
 		expect(loaded.probe).toBe(TypeBoxShimType);
-		expect(loaded.enumSchema.safeParse("upstream").success).toBe(true);
-		expect(loaded.enumSchema.safeParse("sideways").success).toBe(false);
+		expect({ ...loaded.unsafeSchema }).toEqual({
+			type: "object",
+			properties: { path: { type: "string" } },
+			required: ["path"],
+		});
+	});
+
+	it("redirects minified bare typebox imports without whitespace around from", async () => {
+		const entry = await writeFixtureExtension(
+			'import{Type}from"typebox";export const schema=Type.Object({name:Type.String()});',
+		);
+
+		const loaded = (await loadLegacyPiModule(entry)) as {
+			schema: { safeParse: (input: unknown) => { success: boolean } };
+		};
+		expect(loaded.schema.safeParse({ name: "ok" }).success).toBe(true);
+		expect(loaded.schema.safeParse({}).success).toBe(false);
 	});
 });

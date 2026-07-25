@@ -217,6 +217,12 @@ export const GIT_NETWORK_TIMEOUT_MS = 30 * 60 * 1000;
 export const GIT_COMMAND_OUTPUT_LIMIT_BYTES = 8 * 1024 * 1024;
 
 const GIT_COMMAND_TIMEOUT_EXIT_CODE = 124;
+// Exit code returned when the `git` binary cannot be launched at all (spawn
+// ENOENT). Mirrors the POSIX "command not found" code so read-only callers that
+// degrade on any non-zero exit treat a missing git the same as a failed
+// invocation instead of letting the raw spawn ENOENT escape as an unhandled
+// rejection.
+const GIT_SPAWN_ENOENT_EXIT_CODE = 127;
 const GIT_OUTPUT_TRUNCATED_MARKER = "\n[git subprocess output truncated after 8 MiB]\n";
 const GIT_COMMAND_TERMINATE_GRACE_MS = 5_000;
 
@@ -388,6 +394,29 @@ function ensureAvailable(): void {
 	}
 }
 
+/**
+ * Launch a `git` plumbing command synchronously and decode stdout. Returns the
+ * exit code plus trimmed stdout; a missing `git` binary (spawn ENOENT) is
+ * reported as {@link GIT_SPAWN_ENOENT_EXIT_CODE} so sync read-only callers
+ * degrade to `null` instead of throwing an uncaught error during rendering.
+ */
+function gitSpawnSyncText(cwd: string, args: readonly string[]): { exitCode: number; stdout: string } {
+	const commandArgs = withShortLivedGitConfig(withNoOptionalLocks(args));
+	try {
+		const result = Bun.spawnSync(["git", ...commandArgs], {
+			cwd,
+			env: buildGitEnv(),
+			stdout: "pipe",
+			stderr: "pipe",
+			windowsHide: true,
+		});
+		return { exitCode: result.exitCode ?? 0, stdout: new TextDecoder().decode(result.stdout).trim() };
+	} catch (err) {
+		if (isEnoent(err)) return { exitCode: GIT_SPAWN_ENOENT_EXIT_CODE, stdout: "" };
+		throw err;
+	}
+}
+
 function formatCommandFailure(
 	args: readonly string[],
 	result: Pick<GitCommandResult, "exitCode" | "stdout" | "stderr">,
@@ -401,15 +430,26 @@ function formatCommandFailure(
 
 async function git(cwd: string, args: readonly string[], options: CommandOptions = {}): Promise<GitCommandResult> {
 	const commandArgs = withShortLivedGitConfig(options.readOnly ? withNoOptionalLocks(args) : [...args]);
-	const child = Bun.spawn(["git", ...commandArgs], {
-		cwd,
-		env: buildGitEnv(options.env),
-		signal: options.signal,
-		stdin: normalizeStdin(options.stdin),
-		stdout: "pipe",
-		stderr: "pipe",
-		windowsHide: true,
-	});
+	let child: Subprocess;
+	try {
+		child = Bun.spawn(["git", ...commandArgs], {
+			cwd,
+			env: buildGitEnv(options.env),
+			signal: options.signal,
+			stdin: normalizeStdin(options.stdin),
+			stdout: "pipe",
+			stderr: "pipe",
+			windowsHide: true,
+		});
+	} catch (err) {
+		if (isEnoent(err)) {
+			// A deleted/nonexistent cwd also surfaces as a spawn ENOENT; only blame
+			// the binary when the working directory actually exists.
+			const stderr = fs.existsSync(cwd) ? "git is not installed." : `working directory does not exist: ${cwd}`;
+			return { exitCode: GIT_SPAWN_ENOENT_EXIT_CODE, stdout: "", stderr };
+		}
+		throw err;
+	}
 
 	return await collectSubprocessResult("git", commandArgs, child, options);
 }
@@ -890,28 +930,12 @@ async function resolveHeadStateReftable(repository: GitRepository, signal?: Abor
 }
 
 function resolveHeadStateReftableSync(repository: GitRepository): GitHeadState | null {
-	ensureAvailable();
-	const symArgs = withShortLivedGitConfig(withNoOptionalLocks(["symbolic-ref", "HEAD"]));
-	const symResult = Bun.spawnSync(["git", ...symArgs], {
-		cwd: repository.repoRoot,
-		env: buildGitEnv(),
-		stdout: "pipe",
-		stderr: "pipe",
-		windowsHide: true,
-	});
-
-	const revArgs = withShortLivedGitConfig(withNoOptionalLocks(["rev-parse", "--verify", "HEAD"]));
-	const revResult = Bun.spawnSync(["git", ...revArgs], {
-		cwd: repository.repoRoot,
-		env: buildGitEnv(),
-		stdout: "pipe",
-		stderr: "pipe",
-		windowsHide: true,
-	});
-	const commit = revResult.exitCode === 0 ? new TextDecoder().decode(revResult.stdout).trim() || null : null;
+	const symResult = gitSpawnSyncText(repository.repoRoot, ["symbolic-ref", "HEAD"]);
+	const revResult = gitSpawnSyncText(repository.repoRoot, ["rev-parse", "--verify", "HEAD"]);
+	const commit = revResult.exitCode === 0 ? revResult.stdout || null : null;
 
 	if (symResult.exitCode === 0) {
-		const ref = new TextDecoder().decode(symResult.stdout).trim();
+		const ref = symResult.stdout;
 		const branchName = ref.startsWith(LOCAL_BRANCH_PREFIX) ? ref.slice(LOCAL_BRANCH_PREFIX.length) : null;
 		return {
 			...repository,
@@ -933,29 +957,13 @@ function resolveHeadStateReftableSync(repository: GitRepository): GitHeadState |
 
 function readRefSync(repository: GitRepository, targetRef: string): string | null {
 	if (isReftableRepoSync(repository)) {
-		ensureAvailable();
-		const symArgs = withShortLivedGitConfig(withNoOptionalLocks(["symbolic-ref", targetRef]));
-		const symResult = Bun.spawnSync(["git", ...symArgs], {
-			cwd: repository.repoRoot,
-			env: buildGitEnv(),
-			stdout: "pipe",
-			stderr: "pipe",
-			windowsHide: true,
-		});
+		const symResult = gitSpawnSyncText(repository.repoRoot, ["symbolic-ref", targetRef]);
 		if (symResult.exitCode === 0) {
-			const stdoutText = new TextDecoder().decode(symResult.stdout).trim();
-			return `${HEAD_REF_PREFIX} ${stdoutText}`;
+			return `${HEAD_REF_PREFIX} ${symResult.stdout}`;
 		}
-		const revArgs = withShortLivedGitConfig(withNoOptionalLocks(["rev-parse", "--verify", targetRef]));
-		const revResult = Bun.spawnSync(["git", ...revArgs], {
-			cwd: repository.repoRoot,
-			env: buildGitEnv(),
-			stdout: "pipe",
-			stderr: "pipe",
-			windowsHide: true,
-		});
+		const revResult = gitSpawnSyncText(repository.repoRoot, ["rev-parse", "--verify", targetRef]);
 		if (revResult.exitCode === 0) {
-			return new TextDecoder().decode(revResult.stdout).trim() || null;
+			return revResult.stdout || null;
 		}
 		return null;
 	}

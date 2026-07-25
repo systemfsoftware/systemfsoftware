@@ -114,9 +114,10 @@ describe("persisted subagent revival", () => {
 			return { session: createRevivedSession(activeToolNames) } as CreateAgentSessionResult;
 		});
 
-		const reviver = await createFactory(cwd)(createRef(sessionFile));
+		const ref = createRef(sessionFile);
+		const reviver = await createFactory(cwd)(ref);
 		if (!reviver) throw new Error("Expected a persisted reviver");
-		await reviver();
+		await reviver(ref);
 
 		expect(capturedOptions?.restrictToolNames).toBe(true);
 		expect(capturedOptions?.enableMCP).toBe(false);
@@ -144,9 +145,10 @@ describe("persisted subagent revival", () => {
 			return { session: createRevivedSession([]) } as CreateAgentSessionResult;
 		});
 
-		const reviver = await createFactory(cwd)(createRef(sessionFile));
+		const ref = createRef(sessionFile);
+		const reviver = await createFactory(cwd)(ref);
 		if (!reviver) throw new Error("Expected a persisted reviver");
-		await reviver();
+		await reviver(ref);
 
 		expect(capturedOptions?.restrictToolNames).toBeUndefined();
 		expect(capturedOptions?.enableLsp).toBe(true);

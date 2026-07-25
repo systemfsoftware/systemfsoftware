@@ -286,13 +286,16 @@ async function acquireTabImpl(
 		}
 	}
 
-	// If the caller aborted while we were spawning/initializing the worker,
-	// tear the freshly-built worker down before publishing the tab so the
-	// browser refCount (which `holdBrowser` below would take) never grows for
-	// a tab nobody is waiting for.
+	// If the caller aborted while we were spawning/initializing the worker, tear
+	// the freshly-built worker down before publishing the tab so the browser
+	// refCount (which `holdBrowser` below would take) never grows for a tab
+	// nobody is waiting for. Mirror the error paths' `refCount === 0` release so
+	// a fresh browser held by nothing but this aborted open is not orphaned in
+	// the registry; a browser still leased/held elsewhere (refCount > 0) is left
+	// for its owner to release.
 	if (opts.signal?.aborted) {
 		await worker.terminate().catch(() => undefined);
-		if (tempHold) await releaseBrowser(browser, { kill: false }).catch(() => undefined);
+		if (tempHold || browser.refCount === 0) await releaseBrowser(browser, { kill: false }).catch(() => undefined);
 		throw new ToolAbortError("Browser tab open aborted");
 	}
 

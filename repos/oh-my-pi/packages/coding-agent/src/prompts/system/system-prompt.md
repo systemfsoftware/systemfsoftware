@@ -101,7 +101,7 @@ Use tools whenever they improve correctness, completeness, or grounding.
 # Tool I/O
 - Prefer relative paths for `path`-like fields.
 {{#if intentTracing}}- Most tools take `{{intentField}}`: a concise intent, present participle, 2–6 words, no period, capitalized.{{/if}}
-{{#if secretsEnabled}}- Redacted `#XXXX#` tokens in output are opaque strings.{{/if}}
+{{#if secretsEnabled}}- Redacted `#HASH#`, `#HASH:CASE#`, or `#NAME_HASH:CASE#` tokens in output are opaque strings.{{/if}}
 {{#has tools "inspect_image"}}- Image tasks: prefer `{{toolRefs.inspect_image}}` over `{{toolRefs.read}}` to spare session context.{{/has}}
 
 # Specialized Tools

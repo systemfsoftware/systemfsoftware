@@ -24,9 +24,19 @@
 
 pub mod appearance;
 pub mod ast;
+pub mod audio;
 pub mod block;
 pub mod clipboard;
 pub mod crash_handler;
+pub mod desktop;
+/// Pure-Rust X11 backend for `desktop`.
+///
+/// Compiled on Linux for real use and under `cfg(test)` everywhere so its
+/// pure conversion helpers stay unit-testable without a live X server.
+#[cfg(any(target_os = "linux", test))]
+pub mod desktop_x11;
+pub mod devicecheck;
+pub mod diff;
 pub mod fd;
 pub mod glob;
 pub mod glob_util;
@@ -35,6 +45,7 @@ pub mod highlight;
 pub mod html;
 pub mod iofs;
 pub mod keys;
+pub mod live;
 pub mod sixel;
 pub mod snapcompact;
 pub use pi_ast::language;
@@ -53,6 +64,7 @@ pub(crate) mod testing;
 pub mod text;
 pub mod tokens;
 pub(crate) mod utils;
+pub mod vectors;
 pub mod workspace;
 
 #[cfg(target_os = "windows")]
@@ -248,7 +260,7 @@ fn create_windows_napi_tokio_runtime() -> Option<tokio::runtime::Runtime> {
 /// MUST stay in sync with `VERSION_SENTINEL_EXPORT` in
 /// `packages/natives/native/index.js` (which derives the name from
 /// `package.json#version`).
-#[napi(js_name = "__piNativesV17_0_5")]
+#[napi(js_name = "__piNativesV17_1_3")]
 pub const fn pi_natives_version_sentinel() {}
 
 /// Native module entry point: install crash diagnostics before any tool can

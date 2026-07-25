@@ -234,6 +234,54 @@ describe("AgentSession prewalk", () => {
 		expect(session.model?.id).toBe(target.id);
 	});
 
+	it("keeps the todo gate closed after a failed todo call", async () => {
+		const primary = modelOrThrow("claude-sonnet-4-5");
+		const target = modelOrThrow("claude-sonnet-4-6");
+		const modelRegistry = new ModelRegistry(authStorage, path.join(tempDir.path(), "models.yml"));
+		const failingTodoTool: AgentTool<typeof todoToolSchema, undefined> = {
+			...todoTool,
+			async execute() {
+				return {
+					content: [{ type: "text", text: "todo update failed" }],
+					details: undefined,
+					isError: true,
+				};
+			},
+		};
+		const mock = createMockModel({
+			responses: [toolCall("t1", "record"), toolCall("t2", "todo"), toolCall("t3", "write"), { content: ["done"] }],
+		});
+		const calls: string[] = [];
+		const agent = new Agent({
+			getApiKey: () => "test-key",
+			initialState: {
+				model: primary,
+				systemPrompt: ["Test"],
+				tools: [recordTool as AgentTool, writeTool as AgentTool, failingTodoTool],
+				messages: [],
+				thinkingLevel: Effort.Medium,
+			},
+			convertToLlm,
+			streamFn: (model, context, options) => {
+				calls.push(`${model.provider}/${model.id}`);
+				return mock.stream(model, context, options);
+			},
+		});
+		session = new AgentSession({
+			agent,
+			sessionManager: SessionManager.inMemory(),
+			settings: Settings.isolated({ "compaction.enabled": false }),
+			modelRegistry,
+			toolRegistry: new Map([...toolRegistry, ["todo", failingTodoTool as AgentTool]]),
+			prewalk: { target },
+		});
+
+		await session.prompt("do the task");
+
+		expect(calls).toEqual(Array(5).fill(`${primary.provider}/${primary.id}`));
+		expect(session.model?.id).toBe(primary.id);
+	});
+
 	it("forces a continuation when the plan nudge gets a text-only reply, instead of silently ending the run", async () => {
 		// Regression: the agent loop treats a turn with zero tool calls as a
 		// natural stop boundary and ends the session with no further prompting.

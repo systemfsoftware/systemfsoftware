@@ -211,6 +211,66 @@ describe("AgentSession retry delay cap", () => {
 		expect(last.content).toContainEqual({ type: "text", text: "recovered after stream read retry" });
 	});
 
+	it("auto-retries Unable to connect transport failures instead of stopping the conversation", async () => {
+		const model = getBundledModel("openai", "gpt-5");
+		if (!model) {
+			throw new Error("Expected bundled OpenAI test model to exist");
+		}
+		authStorage.setRuntimeApiKey("openai", "openai-test-key");
+
+		const mock = createMockModel({
+			responses: [
+				{ throw: "Unable to connect. Is the computer able to access the url?" },
+				{ content: ["recovered after connection retry"], stopReason: "stop" },
+			],
+		});
+		const agent = new Agent({
+			getApiKey: requestedModel => `${requestedModel.provider}-test-key`,
+			initialState: {
+				model,
+				systemPrompt: ["Test"],
+				tools: [],
+				messages: [],
+			},
+			streamFn: (requestedModel, context, options) => mock.stream(requestedModel, context, options),
+		});
+
+		const settings = Settings.isolated({
+			"compaction.enabled": false,
+			"retry.baseDelayMs": 5,
+			"retry.maxDelayMs": 5_000,
+			"retry.maxRetries": 1,
+			"retry.modelFallback": false,
+		});
+		settings.setModelRole("default", `${model.provider}/${model.id}`);
+
+		session = new AgentSession({
+			agent,
+			sessionManager: SessionManager.inMemory(),
+			settings,
+			modelRegistry,
+		});
+
+		vi.spyOn(scheduler, "wait").mockResolvedValue(undefined);
+		const retryStartEvents: AutoRetryStartEvent[] = [];
+		const retryEndEvents: AutoRetryEndEvent[] = [];
+		session.subscribe(event => {
+			if (event.type === "auto_retry_start") retryStartEvents.push(event);
+			if (event.type === "auto_retry_end") retryEndEvents.push(event);
+		});
+
+		await session.prompt("Trigger unable to connect retry");
+		await session.waitForIdle();
+
+		expect(mock.calls).toHaveLength(2);
+		expect(retryStartEvents).toHaveLength(1);
+		expect(retryEndEvents).toHaveLength(1);
+		expect(retryEndEvents[0]).toMatchObject({ success: true });
+		const last = lastAssistant(session);
+		expect(last.stopReason).toBe("stop");
+		expect(last.content).toContainEqual({ type: "text", text: "recovered after connection retry" });
+	});
+
 	it("marks extension agent_end willContinue when auto-retry schedules a continue", async () => {
 		const model = getBundledModel("openai", "gpt-5");
 		if (!model) {
@@ -684,9 +744,11 @@ describe("AgentSession retry delay cap", () => {
 
 		const retryStartEvents: AutoRetryStartEvent[] = [];
 		const retryEndEvents: AutoRetryEndEvent[] = [];
+		const agentEndEvents: Array<Extract<AgentSessionEvent, { type: "agent_end" }>> = [];
 		session.subscribe(event => {
 			if (event.type === "auto_retry_start") retryStartEvents.push(event);
 			if (event.type === "auto_retry_end") retryEndEvents.push(event);
+			if (event.type === "agent_end") agentEndEvents.push(event);
 		});
 
 		await session.prompt("Write a large report");
@@ -696,11 +758,128 @@ describe("AgentSession retry delay cap", () => {
 		expect(retryStartEvents).toHaveLength(0);
 		expect(retryEndEvents).toHaveLength(0);
 		expect(session.agent.state.messages.at(-1)?.role).toBe("toolResult");
-		const lastError = [...session.agent.state.messages]
+		expect(agentEndEvents).toHaveLength(1);
+		expect(agentEndEvents[0].isTerminal).toBe(true);
+		const terminalError = [...agentEndEvents[0].messages]
 			.reverse()
 			.find((message): message is AssistantMessage => message.role === "assistant");
-		expect(lastError?.stopReason).toBe("error");
-		expect(lastError?.errorMessage).toBe("The operation timed out.");
+		expect(terminalError?.stopReason).toBe("error");
+		expect(terminalError?.errorMessage).toBe("The operation timed out.");
+	});
+
+	it("resumes an OpenAI-completions stall after a synthetic unexecuted tool result", async () => {
+		const stallMessage = "OpenAI completions stream stalled while waiting for the next event";
+		const model = createMockModel({
+			id: "grok-4",
+			provider: "openrouter",
+		});
+		authStorage.setRuntimeApiKey("openrouter", "openrouter-test-key");
+		const toolCall: ToolCall = {
+			type: "toolCall",
+			id: "grok-write-1",
+			name: "write",
+			arguments: { path: "review.md", content: "partial review" },
+		};
+		let streamCalls = 0;
+		let resumedWithSyntheticResult = false;
+		const agent = new Agent({
+			getApiKey: requestedModel => `${requestedModel.provider}-test-key`,
+			initialState: {
+				model,
+				systemPrompt: ["Test"],
+				tools: [],
+				messages: [],
+			},
+			streamFn: (_requestedModel, context, options) => {
+				streamCalls += 1;
+				if (streamCalls > 1) {
+					const matchingResult = context.messages.find(
+						message => message.role === "toolResult" && message.toolCallId === toolCall.id,
+					);
+					resumedWithSyntheticResult =
+						matchingResult?.role === "toolResult" &&
+						typeof matchingResult.details === "object" &&
+						matchingResult.details !== null &&
+						"executed" in matchingResult.details &&
+						matchingResult.details.executed === false;
+					model.push({ content: ["Recovered after Grok stall"] });
+					return model.stream(model, context, options);
+				}
+
+				const stream = new AssistantMessageEventStream();
+				queueMicrotask(() => {
+					const partial: AssistantMessage = {
+						role: "assistant",
+						content: [toolCall],
+						api: model.api,
+						provider: model.provider,
+						model: model.id,
+						usage: {
+							input: 0,
+							output: 0,
+							cacheRead: 0,
+							cacheWrite: 0,
+							totalTokens: 0,
+							cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+						},
+						stopReason: "stop",
+						timestamp: Date.now(),
+					};
+					stream.push({ type: "start", partial });
+					stream.push({ type: "toolcall_start", contentIndex: 0, partial });
+					stream.push({
+						type: "toolcall_delta",
+						contentIndex: 0,
+						delta: JSON.stringify(toolCall.arguments),
+						partial,
+					});
+					stream.push({ type: "toolcall_end", contentIndex: 0, toolCall, partial });
+					stream.push({
+						type: "error",
+						reason: "error",
+						error: {
+							...partial,
+							stopReason: "error",
+							errorMessage: stallMessage,
+						},
+					});
+				});
+				return stream;
+			},
+		});
+
+		const settings = Settings.isolated({
+			"compaction.enabled": false,
+			"retry.baseDelayMs": 5,
+			"retry.maxRetries": 1,
+		});
+		settings.setModelRole("default", `${model.provider}/${model.id}`);
+		session = new AgentSession({
+			agent,
+			sessionManager: SessionManager.inMemory(),
+			settings,
+			modelRegistry,
+		});
+		const retryStartEvents: AutoRetryStartEvent[] = [];
+		const retryEndEvents: AutoRetryEndEvent[] = [];
+		session.subscribe(event => {
+			if (event.type === "auto_retry_start") retryStartEvents.push(event);
+			if (event.type === "auto_retry_end") retryEndEvents.push(event);
+		});
+
+		await session.prompt("Write a review");
+		await session.waitForIdle();
+
+		expect(streamCalls).toBe(2);
+		expect(resumedWithSyntheticResult).toBe(true);
+		expect(
+			session.agent.state.messages.filter(
+				message => message.role === "toolResult" && message.toolCallId === toolCall.id,
+			),
+		).toHaveLength(1);
+		expect(retryStartEvents).toHaveLength(1);
+		expect(retryEndEvents).toContainEqual(expect.objectContaining({ success: true, attempt: 1 }));
+		expect(lastAssistant(session).content).toContainEqual({ type: "text", text: "Recovered after Grok stall" });
 	});
 
 	it("resumes a stalled Cursor stream after its exec tool result", async () => {
@@ -1240,6 +1419,74 @@ describe("AgentSession retry delay cap", () => {
 		expect(mock.calls).toHaveLength(1);
 		const last = lastAssistant(session);
 		expect(last.stopReason).toBe("aborted");
+	});
+
+	it("caps repeated OpenRouter stream closes after streamed thinking at one retry", async () => {
+		const model = getBundledModel("openrouter", "~google/gemini-flash-latest");
+		if (!model) {
+			throw new Error("Expected bundled OpenRouter Gemini test model to exist");
+		}
+		authStorage.setRuntimeApiKey("openrouter", "openrouter-test-key");
+
+		const mock = createMockModel({
+			provider: "openrouter",
+			responses: [
+				{
+					content: [{ type: "thinking", thinking: "reasoning attempt 1" }],
+					stopReason: "error",
+					errorMessage: "server_error: stream closed with reason: error",
+				},
+				{
+					content: [{ type: "thinking", thinking: "reasoning attempt 2" }],
+					stopReason: "error",
+					errorMessage: "server_error: stream closed with reason: error",
+				},
+				{ content: ["must remain unused"] },
+			],
+		});
+		const agent = new Agent({
+			getApiKey: requestedModel => `${requestedModel.provider}-test-key`,
+			initialState: {
+				model,
+				systemPrompt: ["Test"],
+				tools: [],
+				messages: [],
+			},
+			streamFn: (requestedModel, context, options) => mock.stream(requestedModel, context, options),
+		});
+
+		const settings = Settings.isolated({
+			"compaction.enabled": false,
+			"retry.baseDelayMs": 5,
+			"retry.maxRetries": 10,
+			"retry.modelFallback": false,
+		});
+		settings.setModelRole("default", `${model.provider}/${model.id}`);
+		session = new AgentSession({
+			agent,
+			sessionManager: SessionManager.inMemory(),
+			settings,
+			modelRegistry,
+		});
+
+		vi.spyOn(scheduler, "wait").mockResolvedValue(undefined);
+		const retryStartEvents: AutoRetryStartEvent[] = [];
+		const retryEndEvents: AutoRetryEndEvent[] = [];
+		session.subscribe(event => {
+			if (event.type === "auto_retry_start") retryStartEvents.push(event);
+			if (event.type === "auto_retry_end") retryEndEvents.push(event);
+		});
+
+		await session.prompt("Trigger OpenRouter reasoning transition failure");
+		await session.waitForIdle();
+
+		expect(mock.calls).toHaveLength(2);
+		expect(retryStartEvents).toHaveLength(1);
+		expect(retryStartEvents[0]).toMatchObject({ attempt: 1, maxAttempts: 1 });
+		expect(retryEndEvents).toHaveLength(1);
+		expect(retryEndEvents[0]).toMatchObject({ success: false, attempt: 1 });
+		expect(lastAssistant(session).errorMessage).toBe("server_error: stream closed with reason: error");
+		expect(session.isRetrying).toBe(false);
 	});
 
 	it("defaults 502 auto-retry to ten capped backoff attempts", async () => {

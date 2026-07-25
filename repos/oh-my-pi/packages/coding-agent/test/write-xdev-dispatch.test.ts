@@ -2,13 +2,17 @@ import { describe, expect, it } from "bun:test";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
+import type { AgentTool } from "@oh-my-pi/pi-agent-core";
 import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
 import * as themeModule from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 import { ToolChoiceQueue } from "@oh-my-pi/pi-coding-agent/session/tool-choice-queue";
 import { createTools, type ToolSession } from "@oh-my-pi/pi-coding-agent/tools";
-import { writeToolRenderer } from "@oh-my-pi/pi-coding-agent/tools/write";
+import { githubToolRenderer } from "@oh-my-pi/pi-coding-agent/tools/gh-renderer";
+import { ToolError } from "@oh-my-pi/pi-coding-agent/tools/tool-errors";
+import { WriteTool, writeToolRenderer } from "@oh-my-pi/pi-coding-agent/tools/write";
 import { XdevRegistry } from "@oh-my-pi/pi-coding-agent/tools/xdev";
 import { removeWithRetries } from "@oh-my-pi/pi-utils";
+import { type } from "arktype";
 
 // xdev mounting is default-on: discoverable tools like ast_edit unmount into
 // xd://, and a plain `write xd://ast_edit` dispatches them. These guard the
@@ -86,6 +90,38 @@ describe("read and write route xd:// device URLs", () => {
 		}
 	});
 
+	it("rejects near-miss xd addresses before filesystem fallback", async () => {
+		const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "write-xdev-near-miss-"));
+		try {
+			const tools = await createTools(xdevSession(tempDir));
+			const write = tools.find(entry => entry.name === "write");
+			expect(write).toBeDefined();
+
+			for (const target of ["xdt://web_search", "xd:/web_search", "xd/web_search"]) {
+				await expect(write!.execute(`write-${target}`, { path: target, content: "{}" })).rejects.toThrow(
+					"Did you mean 'xd://web_search'?",
+				);
+			}
+			expect(await Bun.file(path.join(tempDir, "xdt:/web_search")).exists()).toBe(false);
+			expect(await Bun.file(path.join(tempDir, "xd/web_search")).exists()).toBe(false);
+
+			const escaped = await write!.execute("write-explicit-path", {
+				path: "./xd/web_search",
+				content: "intentional file",
+			});
+			expect(escaped.isError).toBeUndefined();
+			expect(await Bun.file(path.join(tempDir, "xd/web_search")).text()).toBe("intentional file");
+
+			// conflict:// has no router handler but is a documented write scheme —
+			// the guard must let it reach the conflict resolver, not reject it.
+			await expect(write!.execute("write-conflict", { path: "conflict://1", content: "x" })).rejects.toThrow(
+				"Conflict #1 not found",
+			);
+		} finally {
+			await removeWithRetries(tempDir);
+		}
+	});
+
 	it("resolves function-valued device approvals per payload and fails closed on bad content", async () => {
 		const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "write-xdev-approval-"));
 		try {
@@ -150,10 +186,98 @@ describe("read and write route xd:// device URLs", () => {
 		expect(rendered).toBeDefined();
 	});
 
+	it("renders device execution errors as the mounted tool instead of write", async () => {
+		await themeModule.initTheme();
+		const uiTheme = (await themeModule.getThemeByName("dark")) ?? (await themeModule.getThemeByName("light"));
+		if (!uiTheme) throw new Error("expected an initialized theme");
+
+		const githubDevice = {
+			name: "github",
+			label: "GitHub",
+			description: "fixture",
+			parameters: type({ op: "string" }),
+			...githubToolRenderer,
+			async execute() {
+				throw new ToolError("gh: Not Found (HTTP 404)");
+			},
+		};
+		const registry = new XdevRegistry([githubDevice]);
+		const write = new WriteTool(xdevSession(process.cwd(), { xdevRegistry: registry }));
+		const content = JSON.stringify({ op: "repo_view" });
+
+		const result = await write.execute("write-xdev-error", { path: "xd://github", content });
+		expect(result.isError).toBe(true);
+		expect(result.details?.xdev).toMatchObject({
+			tool: "github",
+			mode: "execute",
+			args: { op: "repo_view" },
+		});
+
+		const component = writeToolRenderer.renderResult(
+			result,
+			{
+				expanded: false,
+				isPartial: false,
+				renderContext: { resolveXdevMounted: name => registry.get(name) },
+			},
+			uiTheme,
+			{ path: "xd://github", content },
+		);
+		const rendered = Bun.stripANSI(component.render(80).join("\n"));
+		expect(rendered).toContain("GitHub Repo");
+		expect(rendered).toContain("gh: Not Found (HTTP 404)");
+		expect(rendered).not.toContain("Write");
+	});
+
+	it("keeps the generic custom-tool card when a mounted device has no renderer", async () => {
+		await themeModule.initTheme();
+		const uiTheme = (await themeModule.getThemeByName("dark")) ?? (await themeModule.getThemeByName("light"));
+		if (!uiTheme) throw new Error("expected an initialized theme");
+
+		const weatherDevice: AgentTool = {
+			name: "weather",
+			label: "Weather",
+			description: "Gets the weather",
+			parameters: type({ query: "string" }),
+			async execute() {
+				return { content: [{ type: "text", text: "Tokyo: 22°C" }] };
+			},
+		};
+		const registry = new XdevRegistry([weatherDevice]);
+		const write = new WriteTool(xdevSession(process.cwd(), { xdevRegistry: registry }));
+		const content = JSON.stringify({ query: "Tokyo" });
+		const result = await write.execute("write-xdev-default-renderer", {
+			path: "xd://weather",
+			content,
+		});
+
+		const component = writeToolRenderer.renderResult(
+			result,
+			{
+				expanded: false,
+				isPartial: false,
+				renderContext: { resolveXdevMounted: name => registry.get(name) },
+			},
+			uiTheme,
+			{ path: "xd://weather", content },
+		);
+		const lines = component.render(80);
+		const rendered = Bun.stripANSI(lines.join("\n"));
+		const backgroundProbe = uiTheme.bg("toolSuccessBg", "|");
+		const backgroundPrefix = backgroundProbe.slice(0, backgroundProbe.indexOf("|"));
+
+		expect(rendered).toContain("Weather");
+		expect(rendered).toContain('query="Tokyo"');
+		expect(rendered).toContain("Tokyo: 22°C");
+		expect(backgroundPrefix).not.toBe("");
+		expect(lines.some(line => line.includes(backgroundPrefix))).toBe(true);
+	});
+
 	it("docsAll inlines small device docs and falls back to a listing past the caps", async () => {
 		const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "write-xdev-docs-"));
 		try {
 			const session = xdevSession(tempDir);
+			expect(session.settings.get("tools.xdevDocs")).toBe("builtins");
 			await createTools(session);
 			const mounted = session.xdevRegistry?.list() ?? [];
 			expect(mounted.length).toBeGreaterThan(0);
@@ -176,10 +300,11 @@ describe("read and write route xd:// device URLs", () => {
 		}
 	});
 
-	it("docsAll truncates external (dynamic-mount) descriptions to the cap; built-ins and read xd:// stay full", async () => {
+	it("docsAll supports inline, builtins, and catalog prompt modes", async () => {
 		const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "write-xdev-external-"));
 		try {
 			const session = xdevSession(tempDir);
+			expect(session.settings.get("tools.xdevDocs")).toBe("builtins");
 			await createTools(session);
 			const registry = session.xdevRegistry;
 			if (!registry) throw new Error("expected xdev registry");
@@ -189,18 +314,68 @@ describe("read and write route xd:// device URLs", () => {
 			const external = Object.create(mounted[0]!) as (typeof mounted)[number];
 			Object.defineProperty(external, "name", { value: "mcp_external_tool" });
 			Object.defineProperty(external, "description", { value: longDescription });
+			Object.defineProperty(external, "summary", {
+				value: `SUMMARY ${"z".repeat(XdevRegistry.EXTERNAL_DESCRIPTION_CAP * 3)} TAIL`,
+			});
 			registry.reconcile([external]);
 
-			const docs = registry.docsAll();
-			// External device: schema section present, description cut at the cap.
-			expect(docs).toContain("## mcp_external_tool");
-			expect(docs).toContain("LEDE ");
-			expect(docs).not.toContain("TAIL");
-			expect(docs).toContain("… (full docs: read xd://mcp_external_tool)");
-			// Built-in devices keep their full curated description.
-			expect(docs).toContain(mounted[0]!.description ?? "");
-			// On-demand docs return the untruncated text.
+			const inlineDocs = registry.docsAll("inline");
+			expect(inlineDocs).toContain("## mcp_external_tool");
+			expect(inlineDocs).toContain("LEDE ");
+			expect(inlineDocs).not.toContain("TAIL");
+			expect(inlineDocs).toContain("… (full docs: read xd://mcp_external_tool)");
+
+			const builtinsDocs = registry.docsAll("builtins");
+			expect(builtinsDocs).toContain("## ");
+			expect(builtinsDocs).not.toContain("## mcp_external_tool");
+			expect(builtinsDocs).toContain("- xd://mcp_external_tool —");
+			expect(builtinsDocs).not.toContain("TAIL");
+			const catalogDocs = registry.docsAll("catalog");
+			expect(catalogDocs).not.toContain(`## ${mounted[0]!.name}`);
+			expect(catalogDocs).toContain("- xd://");
+			expect(catalogDocs).toContain("- xd://mcp_external_tool —");
 			expect(registry.docs("mcp_external_tool")).toContain("TAIL");
+
+			const contextMode = Object.create(mounted[0]!) as (typeof mounted)[number];
+			Object.defineProperty(contextMode, "name", { value: "mcp__context_mode_ctx_execute" });
+			const unrelatedMcp = Object.create(mounted[0]!) as (typeof mounted)[number];
+			Object.defineProperty(unrelatedMcp, "name", { value: "mcp__other_server_execute" });
+			registry.reconcile([contextMode, unrelatedMcp]);
+
+			const allowlistedDocs = registry.docsAll("builtins", ["mcp__context_mode_*"]);
+			expect(allowlistedDocs).toContain("## mcp__context_mode_ctx_execute");
+			expect(allowlistedDocs).not.toContain("## mcp__other_server_execute");
+			expect(allowlistedDocs).toContain("- xd://mcp__other_server_execute —");
+
+			const catalogWithAllowlistDocs = registry.docsAll("catalog", ["mcp__context_mode_*"]);
+			expect(catalogWithAllowlistDocs).not.toContain("## mcp__context_mode_ctx_execute");
+
+			// Malformed user config (scalar or non-string entries reach the
+			// registry unvalidated) degrades to the catalog listing instead of
+			// throwing while the system prompt is built.
+			const scalarAllowlistDocs = registry.docsAll("builtins", "mcp__context_mode_*" as never);
+			expect(scalarAllowlistDocs).toContain("- xd://mcp__context_mode_ctx_execute —");
+			const nonStringAllowlistDocs = registry.docsAll("builtins", [123] as never);
+			expect(nonStringAllowlistDocs).toContain("- xd://mcp__context_mode_ctx_execute —");
+		} finally {
+			await removeWithRetries(tempDir);
+		}
+	});
+});
+
+describe("web_search stays top-level under xdev", () => {
+	it("keeps web_search a direct tool and off the xd:// registry with default config", async () => {
+		const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "write-xdev-websearch-"));
+		try {
+			const session = xdevSession(tempDir);
+			// Default config: tools.xdev is on.
+			expect(session.settings.get("tools.xdev")).toBe(true);
+			const tools = await createTools(session);
+			// Regression for #5973: models call web_search directly, so it must
+			// remain a top-level function and never mount behind the xd:// device.
+			expect(tools.some(entry => entry.name === "web_search")).toBe(true);
+			const mounted = session.xdevRegistry ? [...session.xdevRegistry.list()].map(t => t.name) : [];
+			expect(mounted).not.toContain("web_search");
 		} finally {
 			await removeWithRetries(tempDir);
 		}

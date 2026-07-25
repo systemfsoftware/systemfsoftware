@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "bun:test";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
+import { withOAuthAccess } from "@oh-my-pi/pi-ai/auth-retry";
 import { type AuthCredentialStore, AuthStorage, SqliteAuthCredentialStore } from "@oh-my-pi/pi-ai/auth-storage";
 import * as oauthUtils from "@oh-my-pi/pi-ai/registry/oauth";
 
@@ -53,6 +54,43 @@ describe("AuthStorage OAuth account selection", () => {
 		expect(accounts.map(a => a.email)).toEqual(["a@example.com", "b@example.com", "c@example.com"]);
 		// Read-only: listing must not refresh any token.
 		expect(refreshSpy).not.toHaveBeenCalled();
+	});
+
+	test("pinSessionOAuthAccount selects and restores the exact stored account", async () => {
+		const storage = authStorage;
+		const credentialStore = store;
+		if (!storage || !credentialStore) throw new Error("test setup failed");
+		vi.spyOn(oauthUtils, "getOAuthApiKey").mockImplementation(async (provider, credentials) => {
+			const credential = credentials[provider];
+			return credential ? { newCredentials: credential, apiKey: credential.access } : null;
+		});
+		await storage.set(PROVIDER, [oauthCredential("a"), oauthCredential("b"), oauthCredential("c")]);
+		const accounts = storage.listOAuthAccounts(PROVIDER, "session-pin");
+		const target = accounts[1];
+		if (!target) throw new Error("expected second OAuth account");
+
+		expect(accounts.some(account => account.active)).toBe(false);
+		expect(storage.pinSessionOAuthAccount(PROVIDER, "session-pin", -1)).toBe(false);
+		expect(storage.pinSessionOAuthAccount(PROVIDER, "session-pin", target.credentialId)).toBe(true);
+		expect(storage.getOAuthAccountIdentity(PROVIDER, "session-pin")?.email).toBe("b@example.com");
+		expect(
+			storage
+				.listOAuthAccounts(PROVIDER, "session-pin")
+				.filter(account => account.active)
+				.map(account => account.email),
+		).toEqual(["b@example.com"]);
+		expect(
+			await withOAuthAccess(storage, PROVIDER, access => Promise.resolve(access.email), {
+				sessionId: "session-pin",
+			}),
+		).toBe("b@example.com");
+
+		const restored = new AuthStorage(credentialStore);
+		await restored.reload();
+		expect(restored.getOAuthAccountIdentity(PROVIDER, "session-pin")?.email).toBe("b@example.com");
+		expect(restored.listOAuthAccounts(PROVIDER, "session-pin").find(account => account.active)?.credentialId).toBe(
+			target.credentialId,
+		);
 	});
 
 	test("getOAuthAccessAt resolves the credential at the requested position and touches only that one", async () => {

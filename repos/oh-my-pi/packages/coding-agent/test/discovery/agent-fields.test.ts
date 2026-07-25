@@ -141,26 +141,24 @@ describe("parseAgentFields", () => {
 	});
 
 	test("parses readSummarize from boolean frontmatter", () => {
-		expect(parseAgentFields({ name: "explore", description: "desc", readSummarize: false })?.readSummarize).toBe(
-			false,
-		);
-		expect(parseAgentFields({ name: "explore", description: "desc", readSummarize: true })?.readSummarize).toBe(true);
+		expect(parseAgentFields({ name: "scout", description: "desc", readSummarize: false })?.readSummarize).toBe(false);
+		expect(parseAgentFields({ name: "scout", description: "desc", readSummarize: true })?.readSummarize).toBe(true);
 	});
 
 	test("parses readSummarize from string frontmatter", () => {
-		expect(parseAgentFields({ name: "explore", description: "desc", readSummarize: "false" })?.readSummarize).toBe(
+		expect(parseAgentFields({ name: "scout", description: "desc", readSummarize: "false" })?.readSummarize).toBe(
 			false,
 		);
 	});
 
 	test("ignores invalid readSummarize values", () => {
 		expect(
-			parseAgentFields({ name: "explore", description: "desc", readSummarize: "nope" })?.readSummarize,
+			parseAgentFields({ name: "scout", description: "desc", readSummarize: "nope" })?.readSummarize,
 		).toBeUndefined();
 	});
 
 	test("returns undefined readSummarize when field absent", () => {
-		expect(parseAgentFields({ name: "explore", description: "desc" })?.readSummarize).toBeUndefined();
+		expect(parseAgentFields({ name: "scout", description: "desc" })?.readSummarize).toBeUndefined();
 	});
 	test("parses prewalk from boolean frontmatter", () => {
 		expect(parseAgentFields({ name: "worker", description: "desc", prewalk: true })?.prewalk).toBe(true);

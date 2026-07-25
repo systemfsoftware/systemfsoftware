@@ -7,6 +7,7 @@
 import { type ApiKey, type AuthStorage, type FetchImpl, getEnvApiKey, withAuth } from "@oh-my-pi/pi-ai";
 import type { SearchResponse, SearchSource } from "../../../web/search/types";
 import { SearchProviderError } from "../../../web/search/types";
+import { formatQuery, parseSearchQuery, type QuerySyntax } from "../query";
 import { clampNumResults } from "../utils";
 import type { SearchParams } from "./base";
 import { SearchProvider } from "./base";
@@ -16,6 +17,9 @@ const TINYFISH_SEARCH_URL = "https://api.search.tinyfish.ai";
 const DEFAULT_NUM_RESULTS = 10;
 const MAX_NUM_RESULTS = 20;
 const MAX_PAGE = 10;
+
+/** TinyFish is SERP-backed: common Google-style operators pass through. */
+const TINYFISH_QUERY_SYNTAX: QuerySyntax = { phrases: true, negation: true, site: true, filetype: true };
 
 const RECENCY_MINUTES: Record<NonNullable<SearchParams["recency"]>, number> = {
 	day: 1440,
@@ -107,8 +111,9 @@ function appendTinyFishSources(sources: SearchSource[], results: readonly TinyFi
 export async function searchTinyFish(params: SearchParams): Promise<SearchResponse> {
 	const numResults = clampNumResults(params.numSearchResults ?? params.limit, DEFAULT_NUM_RESULTS, MAX_NUM_RESULTS);
 	const pageSize = Math.min(numResults, DEFAULT_NUM_RESULTS);
+	const parsed = params.parsedQuery ?? parseSearchQuery(params.query);
 	const tinyFishParams: TinyFishSearchParams = {
-		query: params.query,
+		query: parsed.hasDirectives ? formatQuery(parsed, TINYFISH_QUERY_SYNTAX) : params.query,
 		num_results: pageSize,
 		recency: params.recency,
 		signal: params.signal,

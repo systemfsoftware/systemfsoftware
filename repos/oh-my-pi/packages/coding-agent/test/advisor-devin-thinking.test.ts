@@ -34,16 +34,37 @@ describe("AgentSession advisor descriptor thinking level", () => {
 		sharedDir = TempDir.createSync("@pi-advisor-devin-thinking-shared-");
 		authStorage = await AuthStorage.create(path.join(sharedDir.path(), "testauth.db"));
 		authStorage.setRuntimeApiKey("anthropic", "test-key");
-		// Seeding a runtime API key exposes the bundled Devin catalog for
-		// `resolveAdvisorRoleSelection` / `getAvailable()` without any live
-		// network discovery.
-		authStorage.setRuntimeApiKey("devin", "test-key");
 		modelRegistry = new ModelRegistry(authStorage);
 		const anthropic = getBundledModel("anthropic", "claude-sonnet-4-5");
-		const devin = getBundledModel("devin", "glm-5-2");
 		if (!anthropic) throw new Error("Expected bundled anthropic/claude-sonnet-4-5 to exist");
-		if (!devin) throw new Error("Expected bundled devin/glm-5-2 to exist");
 		anthropicModel = anthropic;
+
+		// Register a synthetic `devin-agent` provider with a reasoning model
+		// that has NO `thinking` metadata. This is the exact catalog shape that
+		// triggered #4579: `reasoning: true` with no controllable effort surface.
+		// Using a synthetic model avoids brittleness from upstream catalog drift
+		// (e.g. variant-collapse adding `thinking.effortRouting` to bundled Devin
+		// models).
+		modelRegistry.registerProvider("devin-advisor-test", {
+			api: "devin-agent",
+			apiKey: "test-key",
+			baseUrl: "https://test.example.com",
+			models: [
+				{
+					id: "no-thinking",
+					name: "Test No-Thinking",
+					api: "devin-agent",
+					reasoning: true,
+					input: ["text"],
+					supportsTools: true,
+					cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+					contextWindow: 200_000,
+					maxTokens: 64_000,
+				},
+			],
+		});
+		const devin = modelRegistry.find("devin-advisor-test", "no-thinking");
+		if (!devin) throw new Error("Expected synthetic devin-advisor-test/no-thinking to register");
 		devinModel = devin;
 	});
 
@@ -88,8 +109,8 @@ describe("AgentSession advisor descriptor thinking level", () => {
 
 	it("Devin advisor with no configured thinking suffix boots without an unsupported-effort throw", () => {
 		// Confirm the catalog shape that triggered the bug: `reasoning: true` with
-		// no controllable `thinking.efforts`. If this drifts upstream the
-		// regression's assumptions no longer hold.
+		// no controllable `thinking.efforts`. The synthetic model in `beforeAll`
+		// guarantees this shape regardless of upstream catalog drift.
 		expect(devinModel.reasoning).toBe(true);
 		expect(devinModel.thinking).toBeUndefined();
 

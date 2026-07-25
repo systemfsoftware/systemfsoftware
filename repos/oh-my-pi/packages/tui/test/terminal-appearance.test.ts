@@ -19,6 +19,7 @@ const originalWslDistroName = Bun.env.WSL_DISTRO_NAME;
 const originalWslInterop = Bun.env.WSL_INTEROP;
 const originalWtSession = Bun.env.WT_SESSION;
 const originalTermProgram = Bun.env.TERM_PROGRAM;
+const originalTmux = Bun.env.TMUX;
 
 // These suites drive the real ProcessTerminal start()/probe pipeline, so they
 // opt out of the test-default headless suppression and restore it per case.
@@ -60,6 +61,7 @@ describe("ProcessTerminal OSC 11 appearance detection", () => {
 		restoreEnv("WSL_DISTRO_NAME", originalWslDistroName);
 		restoreEnv("WT_SESSION", originalWtSession);
 		restoreEnv("TERM_PROGRAM", originalTermProgram);
+		restoreEnv("TMUX", originalTmux);
 	});
 
 	function setupTerminal() {
@@ -278,6 +280,22 @@ describe("ProcessTerminal OSC 11 appearance detection", () => {
 		process.stdin.emit("data", "\x1b[?1;2c");
 		terminal.refreshAppearance?.();
 		expect(queryCount()).toBe(afterInitial + 2);
+
+		terminal.stop();
+	});
+
+	it("passes an explicit appearance refresh through tmux without changing the startup probe", () => {
+		Bun.env.TMUX = "/tmp/tmux-1000/default,1234,0";
+		const { terminal, writes } = setupTerminal();
+
+		expect(writes).toContain("\x1b]11;?\x07");
+		expect(writes).toContain("\x1b[c");
+
+		process.stdin.emit("data", "\x1b]11;rgb:ffff/ffff/ffff\x07");
+		for (let i = 0; i < 7; i++) process.stdin.emit("data", "\x1b[?1;2c");
+		terminal.refreshAppearance?.();
+
+		expect(writes).toContain("\x1bPtmux;\x1b\x1b]11;?\x07\x1b\x1b[c\x1b\\");
 
 		terminal.stop();
 	});

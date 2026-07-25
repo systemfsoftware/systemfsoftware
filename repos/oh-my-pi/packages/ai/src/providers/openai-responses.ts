@@ -64,6 +64,7 @@ import type {
 	Tool as OpenAITool,
 	ResponseCreateParamsStreaming,
 	ResponseInput,
+	ResponseInputContent,
 	ResponseStreamEvent,
 } from "./openai-responses-wire";
 import {
@@ -71,6 +72,7 @@ import {
 	applyOpenAIExtraBody,
 	applyOpenAIGatewayRouting,
 	applyResponsesCompatPolicy,
+	applyVercelResponsesCacheControls,
 	applyWireModelIdTransform,
 	buildResponsesDeltaInput,
 	buildResponsesInput,
@@ -86,12 +88,14 @@ import {
 	isOpenAIResponsesProgressEvent,
 	isOpenRouterAnthropicModel,
 	isStrictToolsDisabledForScope,
+	type OpenAIPromptCacheOptions,
 	type OpenAIStrictToolsScope,
 	type OpenAIStrictToolsState,
 	processResponsesStream,
 	resolveOpenAICompatPolicy,
 	resolveOpenAIOutputTokenParam,
 	resolveOpenAIRequestSetup,
+	resolveOpenAIResponsesOutputClamp,
 	shouldRetryWithoutStrictTools,
 } from "./openai-shared";
 
@@ -149,6 +153,8 @@ export interface OpenAIResponsesOptions extends StreamOptions {
 	 * prompt_cache_key for prompt-cache routing).
 	 */
 	extraBody?: Record<string, unknown>;
+	/** Opt-in GPT-5.6+ prompt-cache policy. Unsupported explicit mode fails locally. */
+	promptCache?: OpenAIPromptCacheOptions;
 }
 
 const OPENAI_RESPONSES_PROVIDER_SESSION_STATE_PREFIX = "openai-responses:";
@@ -199,6 +205,7 @@ interface OpenAIResponsesChainState {
 	 * `previous_response_id`.
 	 */
 	lastParams?: OpenAIResponsesSamplingParams;
+	lastPromptCacheBreakpointPolicy?: "latest-stable-message" | "none";
 	lastResponseId?: string;
 	/** Output items of the last response, in replay-sanitized form (matches next-turn input). */
 	lastResponseItems?: ResponseInput;
@@ -272,6 +279,7 @@ function resetOpenAIResponsesChainState(state: OpenAIResponsesChainState): void 
 	state.lastParams = undefined;
 	state.lastResponseId = undefined;
 	state.lastResponseItems = undefined;
+	state.lastPromptCacheBreakpointPolicy = undefined;
 }
 
 interface OpenAIResponsesChainedParams {
@@ -358,6 +366,9 @@ type OpenAIResponsesSamplingParams = ResponseCreateParamsStreaming & {
 	provider?: OpenAICompat["openRouterRouting"];
 	reasoning?: { effort?: string } | { enabled: false };
 	cache_control?: OpenRouterAnthropicCacheControl;
+	caching?: "auto";
+	cache_anchor_items?: number;
+	cache_ttl?: "5m" | "1h";
 };
 
 function maybeAddOpenRouterAnthropicCacheControl(
@@ -432,7 +443,25 @@ const streamOpenAIResponsesOnce = (
 			const premiumRequestsTotal = copilotPremiumRequests;
 			const providerSessionState = getOpenAIResponsesProviderSessionState(model, options?.providerSessionState);
 			const strictToolsScope = getOpenAIStrictToolsScope(model, baseUrl);
-			const builtParams = buildParams(model, context, options, providerSessionState, strictToolsScope);
+			const promptCacheBreakpointPolicy =
+				resolveCacheRetention(options?.cacheRetention) !== "none" && options?.promptCache?.mode === "explicit"
+					? (options.promptCache.breakpoint ?? "latest-stable-message")
+					: undefined;
+			if (isOpenAIResponsesStatefulEnabled(options, baseUrl) && routingSessionId && providerSessionState) {
+				chainState = getOpenAIResponsesChainState(providerSessionState, model, baseUrl, routingSessionId);
+				if (chainState.canAppend && chainState.lastPromptCacheBreakpointPolicy !== promptCacheBreakpointPolicy) {
+					resetOpenAIResponsesChainState(chainState);
+				}
+			}
+			const builtParams = buildParams(
+				model,
+				context,
+				options,
+				providerSessionState,
+				strictToolsScope,
+				false,
+				chainState?.canAppend ? chainState.lastParams?.input : undefined,
+			);
 			const params = builtParams.params;
 			let activeParams = params;
 			const resolvedBaseUrl = (baseUrl ?? "https://api.openai.com/v1").replace(/\/+$/, "");
@@ -455,12 +484,9 @@ const streamOpenAIResponsesOnce = (
 				}
 				return fallbackKey;
 			};
-			if (isOpenAIResponsesStatefulEnabled(options, baseUrl) && routingSessionId && providerSessionState) {
-				chainState = getOpenAIResponsesChainState(providerSessionState, model, baseUrl, routingSessionId);
-				if (!chainState.disabled) {
-					// Platform `previous_response_id` chaining only resolves stored responses.
-					params.store = true;
-				}
+			if (chainState && !chainState.disabled) {
+				// Platform `previous_response_id` chaining only resolves stored responses.
+				params.store = true;
 			}
 			applyReasoningEffortFallbackForRequest(params);
 			let chained: OpenAIResponsesChainedParams =
@@ -469,7 +495,8 @@ const streamOpenAIResponsesOnce = (
 			const idleTimeoutMs =
 				options?.streamIdleTimeoutMs ?? getOpenAIStreamIdleTimeoutMs(model.compat.streamIdleTimeoutMs);
 			const firstEventTimeoutMs =
-				options?.streamFirstEventTimeoutMs ?? getOpenAIStreamFirstEventTimeoutMs(idleTimeoutMs);
+				options?.streamFirstEventTimeoutMs ??
+				getOpenAIStreamFirstEventTimeoutMs(idleTimeoutMs, model.compat.streamFirstEventTimeoutMs);
 			const requestTimeoutMs =
 				firstEventTimeoutMs !== undefined && firstEventTimeoutMs > 0 ? firstEventTimeoutMs : undefined;
 			const requestUrl = `${resolvedBaseUrl}/responses`;
@@ -600,6 +627,7 @@ const streamOpenAIResponsesOnce = (
 								providerSessionState,
 								strictToolsScope,
 								true,
+								chainState?.canAppend ? chainState.lastParams?.input : undefined,
 							);
 							const fallbackParams = fallbackBuilt.params;
 							if (chainState && !chainState.disabled) fallbackParams.store = true;
@@ -798,6 +826,7 @@ const streamOpenAIResponsesOnce = (
 				if (providerSessionState) providerSessionState.nativeHistoryReplayWarmed = true;
 				if (chainState) {
 					chainState.lastParams = structuredCloneJSON(activeParams);
+					chainState.lastPromptCacheBreakpointPolicy = promptCacheBreakpointPolicy;
 					if (output.responseId) {
 						chainState.lastResponseId = output.responseId;
 						chainState.lastResponseItems = replayableResponseItems;
@@ -816,6 +845,7 @@ const streamOpenAIResponsesOnce = (
 				// without re-enabling `previous_response_id` chaining.
 				chainState.canAppend = false;
 				chainState.lastParams = structuredCloneJSON(activeParams);
+				chainState.lastPromptCacheBreakpointPolicy = promptCacheBreakpointPolicy;
 				chainState.lastResponseId = undefined;
 				chainState.lastResponseItems = undefined;
 			}
@@ -870,6 +900,189 @@ function isOfficialOpenAIResponsesEndpoint(model: Model<"openai-responses">): bo
 	}
 }
 
+function isResponsesPromptCacheableContentBlock(block: unknown): block is ResponseInputContent {
+	if (typeof block !== "object" || block === null || !("type" in block)) return false;
+	return block.type === "input_text" || block.type === "input_image" || block.type === "input_file";
+}
+
+type ResponsesPromptCacheableMessage = {
+	role: "assistant" | "developer" | "system" | "user";
+	content: ResponseInputContent[];
+};
+
+function isResponsesPromptCacheableMessage(item: unknown): item is ResponsesPromptCacheableMessage {
+	if (typeof item !== "object" || item === null || !("role" in item) || !("content" in item)) return false;
+	if (item.role !== "assistant" && item.role !== "developer" && item.role !== "system" && item.role !== "user")
+		return false;
+	return Array.isArray(item.content) && item.content.every(isResponsesPromptCacheableContentBlock);
+}
+
+type ResponsesStringInstruction = {
+	role: "developer" | "system";
+	content: string;
+};
+
+function isStableStringResponsesInstruction(item: unknown): item is ResponsesStringInstruction {
+	if (typeof item !== "object" || item === null || !("role" in item) || !("content" in item)) return false;
+	return (
+		(item.role === "developer" || item.role === "system") &&
+		typeof item.content === "string" &&
+		item.content.length > 0
+	);
+}
+
+function matchesResponsesCacheBaseline(
+	baseline: ResponsesPromptCacheableMessage,
+	current: ResponsesPromptCacheableMessage,
+): boolean {
+	if (baseline.role !== current.role || baseline.content.length !== current.content.length) return false;
+	for (let index = 0; index < baseline.content.length; index++) {
+		const baselineBlock = baseline.content[index];
+		const currentBlock = current.content[index];
+		if (!baselineBlock || !currentBlock) return false;
+		const breakpoint = baselineBlock.prompt_cache_breakpoint;
+		if (breakpoint) {
+			if (!Bun.deepEquals(baselineBlock, { ...currentBlock, prompt_cache_breakpoint: breakpoint })) return false;
+		} else if (!Bun.deepEquals(baselineBlock, currentBlock)) {
+			return false;
+		}
+	}
+	return true;
+}
+
+function restoreResponsesCacheBreakpointsFromBaseline(
+	input: ResponseInput | undefined,
+	baseline: ResponseInput | undefined,
+): boolean {
+	if (!input || !baseline) return false;
+	let restored = false;
+	for (let i = 0; i < baseline.length && i < input.length; i++) {
+		const baselineMessage = baseline[i];
+		const message = input[i];
+		if (!isResponsesPromptCacheableMessage(baselineMessage)) continue;
+
+		if (isStableStringResponsesInstruction(message)) {
+			const [baselineBlock] = baselineMessage.content;
+			if (
+				baselineMessage.role === message.role &&
+				baselineBlock?.type === "input_text" &&
+				baselineBlock.text === message.content &&
+				baselineBlock.prompt_cache_breakpoint
+			) {
+				Object.assign(message, {
+					content: [
+						{
+							type: "input_text",
+							text: message.content,
+							prompt_cache_breakpoint: baselineBlock.prompt_cache_breakpoint,
+						},
+					],
+				});
+				restored = true;
+			}
+			continue;
+		}
+
+		if (!isResponsesPromptCacheableMessage(message) || !matchesResponsesCacheBaseline(baselineMessage, message))
+			continue;
+		for (let j = 0; j < baselineMessage.content.length; j++) {
+			const baselineBlock = baselineMessage.content[j];
+			const block = message.content[j];
+			if (!baselineBlock?.prompt_cache_breakpoint || !block) continue;
+			Object.assign(block, { prompt_cache_breakpoint: baselineBlock.prompt_cache_breakpoint });
+			restored = true;
+		}
+	}
+	return restored;
+}
+
+function hasResponsesCacheBreakpoint(input: ResponseInput | undefined): boolean {
+	return (
+		input?.some(
+			message =>
+				isResponsesPromptCacheableMessage(message) &&
+				message.content.some(block => block.prompt_cache_breakpoint !== undefined),
+		) ?? false
+	);
+}
+
+function markLatestStableResponsesCacheBreakpoint(
+	input: ResponseInput | undefined,
+	statefulBaseline?: ResponseInput,
+): boolean {
+	if (!input) return false;
+	// Stateful appends use a strict wire-prefix comparison. Retain the exact
+	// marker from that prefix rather than recomputing a newer boundary.
+	if (statefulBaseline) {
+		if (restoreResponsesCacheBreakpointsFromBaseline(input, statefulBaseline)) return true;
+		// A prior marker whose content no longer matches means chaining will
+		// reset to a full replay. Recompute a fresh boundary for that replay.
+		// Markerless baselines stay markerless so appends do not mutate them.
+		if (!hasResponsesCacheBreakpoint(statefulBaseline)) return false;
+	}
+
+	let latestInputMessage = -1;
+	for (let i = input.length - 1; i >= 0; i--) {
+		const message = input[i];
+		if (!("role" in message)) continue;
+		if (message.role === "user" || message.role === "developer") {
+			latestInputMessage = i;
+			break;
+		}
+	}
+	if (latestInputMessage <= 0) return false;
+
+	for (let i = latestInputMessage - 1; i >= 0; i--) {
+		const message = input[i];
+		if (isStableStringResponsesInstruction(message)) {
+			const text = message.content;
+			Object.assign(message, {
+				content: [
+					{
+						type: "input_text",
+						text,
+						prompt_cache_breakpoint: { mode: "explicit" },
+					},
+				],
+			});
+			return true;
+		}
+		if (!isResponsesPromptCacheableMessage(message)) continue;
+		for (let j = message.content.length - 1; j >= 0; j--) {
+			const block = message.content[j];
+			if (!isResponsesPromptCacheableContentBlock(block)) continue;
+			Object.assign(block, { prompt_cache_breakpoint: { mode: "explicit" } });
+			return true;
+		}
+	}
+	return false;
+}
+
+function applyOpenAIResponsesPromptCachePolicy(
+	params: OpenAIResponsesSamplingParams,
+	model: Model<"openai-responses">,
+	options: OpenAIResponsesOptions | undefined,
+	statefulCacheBaseline?: ResponseInput,
+): void {
+	const promptCache = options?.promptCache;
+	if (!promptCache || resolveCacheRetention(options?.cacheRetention) === "none") return;
+	if (!model.compat.supportsPromptCacheBreakpoints) {
+		if (promptCache.mode === "explicit") {
+			throw new AIError.ConfigurationError(
+				`OpenAI explicit prompt caching is unsupported for ${model.provider}/${model.id}; enable compat.supportsPromptCacheBreakpoints only for a compatible endpoint.`,
+			);
+		}
+		return;
+	}
+
+	params.prompt_cache_options = {
+		mode: promptCache.mode,
+		ttl: promptCache.ttl ?? model.compat.promptCacheBreakpointTtl,
+	};
+	if (promptCache.mode === "explicit" && promptCache.breakpoint !== "none")
+		markLatestStableResponsesCacheBreakpoint(params.input, statefulCacheBaseline);
+}
+
 export function buildParams(
 	model: Model<"openai-responses">,
 	context: Context,
@@ -877,6 +1090,7 @@ export function buildParams(
 	providerSessionState: OpenAIResponsesProviderSessionState | undefined,
 	strictToolsScope?: OpenAIStrictToolsScope,
 	disableStrictToolsOverride = false,
+	statefulCacheBaseline?: ResponseInput,
 ): { params: OpenAIResponsesSamplingParams; strictToolsApplied: boolean } {
 	const policy = resolveOpenAICompatPolicy(model, {
 		endpoint: "responses",
@@ -945,6 +1159,7 @@ export function buildParams(
 		store: false,
 		stream_options: model.compat.supportsObfuscationOptOut ? { include_obfuscation: false } : undefined,
 	};
+	if (options?.include?.length) params.include = Array.from(new Set(options.include));
 	maybeAddOpenRouterAnthropicCacheControl(params, model, cacheRetention);
 	const outputToken = resolveOpenAIOutputTokenParam({
 		field: "max_output_tokens",
@@ -954,6 +1169,7 @@ export function buildParams(
 		omitMaxOutputTokens: model.omitMaxOutputTokens ?? false,
 		isOpenRouterHost: model.compat.isOpenRouterHost,
 		alwaysSendMaxTokens: model.compat.alwaysSendMaxTokens,
+		providerOutputClamp: resolveOpenAIResponsesOutputClamp(model),
 	});
 
 	applyCommonResponsesSamplingParams(params, { ...options, maxTokens: outputToken?.value }, model);
@@ -1022,9 +1238,14 @@ export function buildParams(
 		params.reasoning = { ...params.reasoning, mode: model.reasoningMode };
 	}
 
-	applyOpenAIGatewayRouting(params, model.compat);
+	if (model.compat.isVercelGatewayHost) {
+		applyVercelResponsesCacheControls(params, model.compat, cacheRetention);
+	} else {
+		applyOpenAIGatewayRouting(params, model.compat);
+	}
 
 	applyOpenAIExtraBody(params, options?.extraBody);
+	applyOpenAIResponsesPromptCachePolicy(params, model, options, statefulCacheBaseline);
 
 	return { params, strictToolsApplied };
 }
@@ -1049,6 +1270,13 @@ export function mapOpenAIResponsesToolChoiceForTools(
 	model: Model<"openai-responses">,
 ): OpenAIResponsesToolChoice {
 	if (!model.compat.supportsToolChoice) return undefined;
+	if (
+		typeof choice !== "string" &&
+		choice?.type === "computer" &&
+		(model.supportsComputerUse !== true || !tools.some(tool => tool.native?.type === "computer"))
+	) {
+		return undefined;
+	}
 	if (isForcedToolChoice(choice) && !model.compat.supportsForcedToolChoice) {
 		return "auto";
 	}
@@ -1081,6 +1309,13 @@ export function convertTools(
 	const allowFreeform = supportsFreeformApplyPatch(model);
 	const out: OpenAITool[] = [];
 	for (const tool of tools) {
+		if (tool.native?.type === "computer" && model.supportsComputerUse === true) {
+			out.push({ type: "computer" });
+			continue;
+		}
+		// Models without native computer support fall through and receive the
+		// tool as a plain function tool (name/description/schema below), so
+		// function-calling models can still drive the desktop.
 		if (allowFreeform && tool.customFormat) {
 			out.push({
 				type: "custom",

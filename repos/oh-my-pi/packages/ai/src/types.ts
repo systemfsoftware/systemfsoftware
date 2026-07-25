@@ -93,6 +93,8 @@ export interface TokenTaskBudget {
 
 export type MessageAttribution = "user" | "agent";
 
+export type NativeToolMarker = { type: "computer" };
+
 export type ToolChoice =
 	| "auto"
 	| "none"
@@ -100,7 +102,8 @@ export type ToolChoice =
 	| "required"
 	| { type: "function"; name: string }
 	| { type: "function"; function: { name: string } }
-	| { type: "tool"; name: string };
+	| { type: "tool"; name: string }
+	| { type: "computer" };
 
 // Base options all providers share
 export type CacheRetention = "none" | "short" | "long";
@@ -141,13 +144,17 @@ function isOpenAIServiceTierApi(api: Api | undefined): boolean {
 	return api === "openai-completions" || api === "openai-responses" || api === "openai-codex-responses";
 }
 
-function hasDedicatedServiceTierControl(provider: Provider | undefined): boolean {
-	return provider === "fireworks";
+function excludesInferredOpenAIServiceTier(provider: Provider | undefined): boolean {
+	// Fireworks has its own priority-only control. GitHub Copilot proxies OpenAI
+	// models but rejects OpenAI's `service_tier` request field.
+	return provider === "fireworks" || provider === "github-copilot";
 }
 
 function isOpenAIServiceTierModel(model: ServiceTierModel): boolean {
 	return (
-		!hasDedicatedServiceTierControl(model.provider) && isOpenAIServiceTierApi(model.api) && isOpenAIModelId(model.id)
+		!excludesInferredOpenAIServiceTier(model.provider) &&
+		isOpenAIServiceTierApi(model.api) &&
+		isOpenAIModelId(model.id)
 	);
 }
 
@@ -159,7 +166,8 @@ function isOpenAIServiceTierModel(model: ServiceTierModel): boolean {
  * `openai/`); Claude on Bedrock/Vertex (api `anthropic-messages`) is the
  * anthropic family even though its provider is `amazon-bedrock`/`google-vertex`.
  * Custom OpenAI-compatible relays that serve OpenAI model ids are OpenAI family
- * too unless that provider owns a separate tier control such as Fireworks.
+ * too unless the provider owns a separate tier control (Fireworks) or rejects
+ * OpenAI's service-tier field (GitHub Copilot).
  */
 export function serviceTierFamily(model: ServiceTierModel): ServiceTierFamily | undefined {
 	const provider = model.provider;
@@ -347,6 +355,25 @@ export interface CodexCompactionRequestContext extends CodexCompactionMetadata {
 	operationId: string;
 }
 
+/** OpenAI's GPT-5.6+ explicit prompt-cache controls. */
+export interface OpenAIPromptCacheOptions {
+	/** `explicit` disables OpenAI's automatic latest-message breakpoint. */
+	mode: "implicit" | "explicit";
+	/** The only currently supported minimum breakpoint lifetime. */
+	ttl?: "30m";
+	/** By default, mark one existing block from stable history; `none` suppresses that marker. */
+	breakpoint?: "latest-stable-message" | "none";
+}
+export type OpenAIResponseInclude =
+	| "file_search_call.results"
+	| "web_search_call.results"
+	| "web_search_call.action.sources"
+	| "message.input_image.image_url"
+	| "computer_call_output.output.image_url"
+	| "code_interpreter_call.outputs"
+	| "reasoning.encrypted_content"
+	| "message.output_text.logprobs";
+
 export interface StreamOptions {
 	temperature?: number;
 	topP?: number;
@@ -393,6 +420,8 @@ export interface StreamOptions {
 	 * For example, Anthropic uses `user_id` for abuse tracking and rate limiting.
 	 */
 	metadata?: Record<string, unknown>;
+	/** OpenAI Responses/Codex response fields to include verbatim. */
+	include?: OpenAIResponseInclude[];
 	/**
 	 * Config options for the thinking/response loop guard.
 	 */
@@ -417,6 +446,18 @@ export interface StreamOptions {
 	 * `x-grok-conv-id`; when omitted, they fall back to `sessionId`.
 	 */
 	promptCacheKey?: string;
+	/**
+	 * OpenAI GPT-5.6+ prompt-cache policy. Ignored by providers that do not
+	 * support explicit OpenAI cache breakpoints; explicit mode fails locally on
+	 * incompatible OpenAI-compatible endpoints.
+	 */
+	promptCache?: OpenAIPromptCacheOptions;
+	/**
+	 * Disable OpenAI Responses server-side turn chaining for this request.
+	 * Diagnostic callers that compare independent requests can set this to
+	 * `false` so `previous_response_id` cannot explain a result.
+	 */
+	statefulResponses?: boolean;
 	/**
 	 * Provider-scoped mutable state store for this agent session.
 	 * Providers can use this to persist transport/session state between turns.
@@ -555,6 +596,12 @@ export interface SimpleStreamOptions extends Omit<StreamOptions, "apiKey"> {
 	 * or the catalog entry already names the variant).
 	 */
 	openrouterVariant?: string;
+	/**
+	 * Caller-owned Google context-cache resource name. Forwarded only to the
+	 * direct Gemini GenerateContent and Vertex GenerateContent APIs; all other
+	 * providers ignore it. Callers own the cache lifecycle and compatibility.
+	 */
+	cachedContent?: string;
 	/** Antigravity endpoint routing mode: "auto" (default with failover), "production", "sandbox". */
 	antigravityEndpointMode?: "auto" | "production" | "sandbox";
 	/**
@@ -611,6 +658,28 @@ export interface AnthropicFallbackContent {
 	to: { model: string };
 }
 
+/**
+ * Verbatim Anthropic web-search call/result retained for same-provider
+ * history replay. Other providers discard it in `transformMessages`.
+ */
+export interface AnthropicServerToolContent {
+	type: "anthropicServerTool";
+	block:
+		| {
+				type: "server_tool_use";
+				id: string;
+				name: "web_search";
+				input?: Record<string, unknown> | null;
+				[key: string]: unknown;
+		  }
+		| {
+				type: "web_search_tool_result";
+				tool_use_id: string;
+				content: unknown;
+				[key: string]: unknown;
+		  };
+}
+
 export interface ImageContent {
 	type: "image";
 	data: string; // base64 encoded image data
@@ -622,6 +691,50 @@ export interface ImageContent {
 	 */
 	detail?: "auto" | "low" | "high" | "original";
 }
+
+export type ComputerAction =
+	| {
+			type: "click";
+			button: "left" | "right" | "wheel" | "back" | "forward";
+			x: number;
+			y: number;
+			keys?: string[] | null;
+	  }
+	| { type: "double_click"; x: number; y: number; keys: string[] | null }
+	| { type: "drag"; path: Array<{ x: number; y: number }>; keys?: string[] | null }
+	| { type: "keypress"; keys: string[] }
+	| { type: "move"; x: number; y: number; keys?: string[] | null }
+	| { type: "screenshot" }
+	| { type: "scroll"; x: number; y: number; scroll_x: number; scroll_y: number; keys?: string[] | null }
+	| { type: "type"; text: string }
+	| { type: "wait" };
+
+export interface ComputerSafetyCheck {
+	id: string;
+	code?: string | null;
+	message?: string | null;
+}
+
+export interface ComputerToolCallMetadata {
+	type: "computer";
+	providerItemId: string;
+	actions: ComputerAction[];
+	pendingSafetyChecks: ComputerSafetyCheck[];
+}
+
+export type ToolCallProviderMetadata = ComputerToolCallMetadata;
+
+export type ComputerScreenshotRef =
+	| { type: "computer_screenshot"; image_url: string; file_id?: never }
+	| { type: "computer_screenshot"; file_id: string; image_url?: never };
+
+export interface ComputerToolResultMetadata {
+	type: "computer";
+	screenshot: ComputerScreenshotRef;
+	acknowledgedSafetyChecks: ComputerSafetyCheck[];
+}
+
+export type ToolResultProviderMetadata = ComputerToolResultMetadata;
 
 export interface ToolCall {
 	type: "toolCall";
@@ -644,6 +757,8 @@ export interface ToolCall {
 	 * JSON function tools.
 	 */
 	customWireName?: string;
+	/** Provider-native metadata required to execute and faithfully replay this call. */
+	providerMetadata?: ToolCallProviderMetadata;
 }
 
 export type StopReason = "stop" | "length" | "toolUse" | "error" | "aborted";
@@ -711,6 +826,7 @@ export interface AssistantMessage {
 		| ThinkingContent
 		| RedactedThinkingContent
 		| AnthropicFallbackContent
+		| AnthropicServerToolContent
 		| ImageContent
 		| ToolCall
 	)[];
@@ -764,6 +880,8 @@ export interface ToolResultMessage<TDetails = unknown> {
 	attribution?: MessageAttribution;
 	/** Timestamp when output was pruned (ms since epoch). Undefined if unpruned. */
 	prunedAt?: number;
+	/** Provider-native metadata required to faithfully replay this result. */
+	providerMetadata?: ToolResultProviderMetadata;
 	/**
 	 * Tool-declared: this result carried no information worth retaining once
 	 * consumed (zero matches, elapsed wait). Compaction passes may elide it.
@@ -875,6 +993,8 @@ export interface Tool<TParameters extends TSchema = TSchema> {
 	 * calls route correctly. Absent for regular JSON function tools.
 	 */
 	customWireName?: string;
+	/** Selects a provider-native hosted tool instead of a JSON-schema function tool. */
+	native?: NativeToolMarker;
 	/**
 	 * Illustrative calls/notes; the AI layer renders them into an `<examples>`
 	 * block in the model's native tool-call syntax and appends to the wire

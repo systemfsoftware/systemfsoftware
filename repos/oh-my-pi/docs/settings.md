@@ -147,6 +147,28 @@ tools:
     read: allow
 ```
 
+### Bash command approval patterns
+
+`tools.approval` sets default policy by tool name. For bash, you can add ordered command rules with `bash.patterns`; the first matching rule wins. Patterns support literal text plus `*` as a wildcard.
+
+```yaml
+tools:
+  approvalMode: write
+  approval:
+    bash: allow
+
+bash:
+  patterns:
+    - match: "git *"
+      approval: allow
+    - match: "rm -rf *"
+      approval: deny
+    - match: "*"
+      approval: allow
+```
+
+Valid rule approvals are `allow`, `prompt`, and `deny`. Critical bash commands still require confirmation unless a matching rule explicitly denies them; broad allow rules such as `match: "*"` do not bypass the critical-command guard.
+
 ### Worked example: global vs. project
 
 ```yaml
@@ -454,7 +476,30 @@ tools:
 | `tools.artifactTailBytes` | number | `20` | KB of tail kept inline on spill. |
 | `tools.artifactTailLines` | number | `500` | Max tail lines kept inline on spill. |
 
-Individual built-in tools are toggled by their own keys, e.g. `bash.enabled`, `launch.enabled`, `eval.py`, `eval.js`, `glob.enabled`, `grep.enabled`, `fetch.enabled`, `browser.enabled`, `astEdit.enabled`, `astGrep.enabled`, `web_search.enabled`, `inspect_image.enabled`.
+Individual built-in tools are toggled by their own keys, e.g. `bash.enabled`, `launch.enabled`, `eval.py`, `eval.js`, `glob.enabled`, `grep.enabled`, `fetch.enabled`, `browser.enabled`, `computer.enabled`, `astEdit.enabled`, `astGrep.enabled`, `web_search.enabled`, and `inspect_image.enabled`.
+
+### Native computer use
+
+The disabled-by-default `computer` essential tool captures and controls the real host desktop through native OS APIs. It is separate from `browser`: `computer` can drive IDEs, terminals, native applications, browser windows, and system dialogs, while `browser` manages Chromium/CDP tabs and structured page automation.
+
+```yaml
+computer:
+  enabled: true
+  backend: auto
+  display: all
+  maxWidth: 1920
+  maxHeight: 1200
+```
+
+| Key | Type | Default | Notes |
+|---|---|---|---|
+| `computer.enabled` | boolean | `false` | Enable the native computer tool. Natively capable OpenAI GA models use the `{ "type": "computer" }` wire form; every other function-calling model gets `computer` as a regular function tool. The `/computer` slash command toggles this for the current session only. |
+| `computer.backend` | enum | `auto` | `auto` or `native`; both require native capture/input and never fall back to browser automation. |
+| `computer.display` | string | `all` | Composite all active displays, or use a numeric display ID reported by a successful computer result. |
+| `computer.maxWidth` | number | `1920` | Maximum composite screenshot width in pixels; must be greater than zero. |
+| `computer.maxHeight` | number | `1200` | Maximum composite screenshot height in pixels; must be greater than zero. |
+
+Computer settings are captured when the session tool is constructed; start a new session after changing them. Before enabling input, configure `tools.approvalMode` or `tools.approval.computer` and grant platform permissions. See [Native computer use](./computer-use.md) for supported providers, actions, coordinate mapping, displays, platform setup, safety, Files behavior, troubleshooting, and verified limitations.
 
 ### Shell, eval, and LSP
 
@@ -625,8 +670,8 @@ For a custom status line, set `statusLine.preset: custom` and configure `statusL
 
 ```yaml
 providers:
-  webSearch: auto
-  image: auto
+  webSearchOrder: [perplexity, exa, gemini]
+  imageOrder: [openai, xai]
   fetch: auto
   webSearchGeminiModel: gemini-2.5-flash
   tinyModel: online
@@ -652,9 +697,9 @@ searxng:
 
 | Key | Type | Default | Values / notes |
 |---|---|---|---|
-| `providers.webSearch` | enum | `auto` | `auto` plus the configured search providers (`perplexity`, `gemini`, `anthropic`, `codex`, `zai`, `exa`, `jina`, `kagi`, `tavily`, `brave`, `kimi`, `parallel`, `synthetic`, `searxng`). |
+| `providers.webSearchOrder` | array | `[]` | Provider IDs in priority order for `web_search` (`perplexity`, `gemini`, `anthropic`, `codex`, `zai`, `exa`, `jina`, `kagi`, `tavily`, `brave`, `kimi`, `parallel`, `synthetic`, `searxng`, …). Duplicates and unknown IDs are ignored; unlisted providers retain their built-in relative order afterward. Empty = built-in order. Replaces the removed `providers.webSearch` enum (a legacy value migrates to the head of this list). |
 | `providers.webSearchGeminiModel` | string | _(unset)_ | Gemini model ID for Google Search grounding when `web_search` uses Gemini; defaults to `gemini-2.5-flash`, overridden by `GEMINI_SEARCH_MODEL`. |
-| `providers.image` | enum | `auto` | `auto`, `openai`, `antigravity`, `xai`, `gemini`, `openrouter`. |
+| `providers.imageOrder` | array | `[]` | Image-generation provider IDs in priority order (`openai`, `openai-codex`, `antigravity`, `xai`, `gemini`, `openrouter`). Unlisted providers follow the active session provider and the built-in order. Replaces the removed `providers.image` enum (a legacy value migrates to the head of this list). |
 | `providers.fetch` | enum | `auto` | `auto`, `native`, `trafilatura`, `lynx`, `parallel`, `jina`. |
 | `providers.tinyModel` | enum | `online` | `online` or a local model (`lfm2-350m`, `qwen3-0.6b`, `gemma-270m`, `qwen2.5-0.5b`, `lfm2-700m`). |
 | `providers.tinyModelDevice` | enum | `default` | ONNX execution provider for local tiny models. Overridden by `PI_TINY_DEVICE`. |

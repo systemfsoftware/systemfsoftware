@@ -2,10 +2,11 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import * as url from "node:url";
-import { isEnoent, isEnotdir, stripWindowsExtendedLengthPathPrefix } from "@oh-my-pi/pi-utils";
+import { glob } from "@oh-my-pi/pi-natives";
+import { isEnoent, isEnotdir, stripWindowsExtendedLengthPathPrefix, untilAborted } from "@oh-my-pi/pi-utils";
 import type { Skill } from "../extensibility/skills";
 import { InternalUrlRouter, type LocalProtocolOptions } from "../internal-urls";
-import { ToolError } from "./tool-errors";
+import { ToolAbortError, ToolError } from "./tool-errors";
 
 const UNICODE_SPACES = /[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g;
 // A single line-range chunk: `N`, `N-M`, `N+K`, or open-ended `N-`. `..` is
@@ -1130,6 +1131,52 @@ export function resolveReadPath(filePath: string, cwd: string): string {
 	}
 
 	return resolved;
+}
+
+const WORKSPACE_SUFFIX_TIMEOUT_MS = 5000;
+
+function escapeGlobMetachars(value: string): string {
+	return value.replace(/[*?[{]/g, "[$&]");
+}
+
+/**
+ * Find a unique workspace entry whose trailing path matches a missing authored path.
+ * Returns `null` for no match, ambiguity, timeout, or scan failure.
+ */
+export async function findUniqueWorkspaceSuffix(
+	rawPath: string,
+	cwd: string,
+	signal?: AbortSignal,
+): Promise<{ absolutePath: string; displayPath: string } | null> {
+	const normalized = rawPath.replace(/\\/g, "/").replace(/^\.\//, "").replace(/\/+$/, "");
+	if (!normalized) return null;
+
+	const timeoutSignal = AbortSignal.timeout(WORKSPACE_SUFFIX_TIMEOUT_MS);
+	const combinedSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
+
+	let matches: string[];
+	try {
+		const result = await untilAborted(combinedSignal, () =>
+			glob({
+				pattern: `**/${escapeGlobMetachars(normalized)}`,
+				path: cwd,
+				hidden: true,
+			}),
+		);
+		matches = result.matches.map(match => match.path);
+	} catch (error) {
+		if (error instanceof Error && error.name === "AbortError") {
+			if (!signal?.aborted) return null;
+			throw new ToolAbortError();
+		}
+		return null;
+	}
+
+	if (matches.length !== 1) return null;
+	return {
+		absolutePath: path.resolve(cwd, matches[0]),
+		displayPath: matches[0],
+	};
 }
 
 // =============================================================================

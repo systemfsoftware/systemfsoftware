@@ -47,7 +47,7 @@ function buildJsonl(): string {
 			id: "u0",
 			parentId: null,
 			timestamp: TS,
-			message: { role: "user", synthetic: true, attribution: "agent", content: "PROMPTMARKER", timestamp: 0 },
+			message: { role: "user", synthetic: true, attribution: "agent", content: "### PROMPTMARKER", timestamp: 0 },
 		}),
 	);
 	for (let i = 0; i < 40; i++) {
@@ -133,7 +133,7 @@ function messageLine(id: string, content: string): string {
 		id,
 		parentId: null,
 		timestamp: TS,
-		message: { role: "user", synthetic: true, attribution: "agent", content, timestamp: 0 },
+		message: { role: "user", synthetic: true, attribution: "agent", content: `### ${content}`, timestamp: 0 },
 	});
 }
 
@@ -210,6 +210,74 @@ describe("AgentTranscriptViewer", () => {
 			// The body must not sit one column right of the title.
 			expect(gutter(bodyLine!)).toBe(gutter(titleLine!));
 		});
+	});
+
+	it("collapses synthetic advisor inputs on cold open and expands their body on ctrl+o", () => {
+		const dir = fs.mkdtempSync(path.join(os.tmpdir(), "adv-view-collapse-"));
+		const file = path.join(dir, "__advisor.jsonl");
+		// A synthetic `Session update` whose body carries a distinctive marker
+		// far larger than the viewport. Cold open must NOT lay it out; the reader
+		// only sees a compact summary until ctrl+o.
+		const bodyLines = ["### Session update", ""];
+		for (let i = 0; i < 500; i++) bodyLines.push(`- SYNTHBODYMARKER line ${i}`);
+		const body = bodyLines.join("\n");
+		const jsonl = [
+			JSON.stringify({ type: "session", version: CURRENT_SESSION_VERSION, id: "adv", timestamp: TS, cwd: "/tmp" }),
+			JSON.stringify({
+				type: "message",
+				id: "u0",
+				parentId: null,
+				timestamp: TS,
+				message: { role: "user", synthetic: true, attribution: "agent", content: body, timestamp: 0 },
+			}),
+			JSON.stringify({
+				type: "message",
+				id: "a0",
+				parentId: null,
+				timestamp: TS,
+				message: {
+					role: "assistant",
+					content: [{ type: "text", text: "Advice." }],
+					api: "anthropic-messages",
+					provider: "anthropic",
+					model: "gpt-5.5",
+					usage: {
+						input: 1,
+						output: 1,
+						cacheRead: 0,
+						cacheWrite: 0,
+						totalTokens: 2,
+						cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+					},
+					stopReason: "stop",
+					timestamp: 0,
+				},
+			}),
+		].join("\n");
+		fs.writeFileSync(file, `${jsonl}\n`);
+		const viewer = makeViewer(file);
+		try {
+			viewer.render(80);
+			viewer.handleInput("g"); // scroll to top
+			const collapsed = viewer.render(80).map(l => Bun.stripANSI(l));
+			const collapsedBody = collapsed.join("\n");
+			// The synthetic body is not laid out; only the summary row shows.
+			expect(collapsedBody).not.toContain("SYNTHBODYMARKER");
+			expect(collapsed.some(l => /Session update .* line/.test(l))).toBe(true);
+
+			// ctrl+o reveals the full body; scroll back to the top to see it.
+			viewer.handleInput("\x0f");
+			viewer.render(80);
+			viewer.handleInput("g");
+			const expandedBody = viewer
+				.render(80)
+				.map(l => Bun.stripANSI(l))
+				.join("\n");
+			expect(expandedBody).toContain("SYNTHBODYMARKER");
+		} finally {
+			viewer.dispose();
+			removeSyncWithRetries(dir);
+		}
 	});
 
 	it("scrolls the visible window with j/k and g/G", () => {

@@ -1,6 +1,8 @@
 import type { AuthStorage } from "@oh-my-pi/pi-ai";
 import type { SearchResponse, SearchSource } from "../../../web/search/types";
 import { SearchProviderError } from "../../../web/search/types";
+import type { QuerySyntax } from "../query";
+import { formatScraperQuery } from "../query";
 import { clampNumResults } from "../utils";
 import type { SearchParams } from "./base";
 import { SearchProvider } from "./base";
@@ -118,8 +120,28 @@ function isAnomalyResponse(html: string): boolean {
 	return html.includes("anomaly-modal") || html.includes("anomaly.js");
 }
 
+/**
+ * Query syntax the DDG HTML frontend parses: quotes, `-`, OR, site:,
+ * filetype:, intitle:, inurl:, intext:. Date bounds (`before:`/`after:`) are
+ * deliberately off — DDG does not parse them, so they are stripped from the
+ * query and enforced by the pipeline's lenient post-filter instead.
+ */
+const DDG_QUERY_SYNTAX: QuerySyntax = {
+	phrases: true,
+	negation: true,
+	or: true,
+	site: true,
+	inUrl: true,
+	inTitle: true,
+	inText: true,
+	filetype: true,
+};
+
 async function callDuckDuckGoHtml(params: SearchParams): Promise<string> {
-	const form = new URLSearchParams({ q: params.query, kl: "us-en" });
+	const form = new URLSearchParams({
+		q: formatScraperQuery(params.query, params.parsedQuery, DDG_QUERY_SYNTAX),
+		kl: "us-en",
+	});
 	const df = params.recency ? RECENCY_TO_DDG_DF[params.recency] : undefined;
 	if (df) form.set("df", df);
 	// Add b: "" parameter as specified in the browser fetch template to match real browser form submission

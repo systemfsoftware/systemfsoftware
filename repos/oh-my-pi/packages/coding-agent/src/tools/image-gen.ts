@@ -27,6 +27,7 @@ import { settings } from "../config/settings";
 import type { CustomTool } from "../extensibility/custom-tools/types";
 import { ohMyPiXAIUserAgent, resolveXAIHttpCredentials } from "../lib/xai-http";
 import imageGenDescription from "../prompts/tools/image-gen.md" with { type: "text" };
+import { AUTO_IMAGE_PROVIDER_ORDER, type ImageProvider, isImageProviderId } from "./image-providers";
 import { resolveReadPath } from "./path-utils";
 
 const DEFAULT_MODEL = "gemini-3-pro-image-preview";
@@ -44,7 +45,7 @@ const DEFAULT_ANTIGRAVITY_ENDPOINT_SANDBOX = "https://daily-cloudcode-pa.sandbox
 const IMAGE_SYSTEM_INSTRUCTION =
 	"You are an AI image generator. Generate images based on user descriptions. Focus on creating high-quality, visually appealing images that match the user's request.";
 
-export type ImageProvider = "antigravity" | "gemini" | "openai" | "openai-codex" | "openrouter" | "xai";
+export type { ImageProvider } from "./image-providers";
 export type ImageProviderPreference = ImageProvider | "auto";
 
 interface ImageApiKey {
@@ -57,17 +58,8 @@ interface ImageApiKey {
 const COMMON_IMAGE_ASPECT_RATIOS = ["1:1", "3:4", "4:3", "9:16", "16:9"] as const;
 const XAI_IMAGE_ASPECT_RATIOS = [...COMMON_IMAGE_ASPECT_RATIOS, "3:2", "2:3"] as const;
 const COMMON_IMAGE_ASPECT_RATIO_SET = new Set<string>(COMMON_IMAGE_ASPECT_RATIOS);
-const IMAGE_PROVIDER_CHOICES = [
-	"auto",
-	"antigravity",
-	"gemini",
-	"openai",
-	"openai-codex",
-	"openrouter",
-	"xai",
-] as const;
-const IMAGE_PROVIDER_PREFERENCES = new Set<string>(IMAGE_PROVIDER_CHOICES);
-const AUTO_IMAGE_PROVIDER_ORDER = ["openai", "openai-codex", "antigravity", "xai", "openrouter", "gemini"] as const;
+const IMAGE_PROVIDER_REQUEST_CHOICES = ["auto", ...AUTO_IMAGE_PROVIDER_ORDER] as const;
+const IMAGE_PROVIDER_PREFERENCES = new Set<string>(IMAGE_PROVIDER_REQUEST_CHOICES);
 
 const responseModalitySchema = type('"IMAGE" | "TEXT"');
 
@@ -81,8 +73,8 @@ const inputImageSchema = type({
 });
 
 const imageProviderSchema = type
-	.enumerated(...IMAGE_PROVIDER_CHOICES)
-	.describe("image provider for this request; overrides the providers.image setting (default: use the setting)");
+	.enumerated(...IMAGE_PROVIDER_REQUEST_CHOICES)
+	.describe("image provider for this request; overrides the providers.imageOrder setting (default: use the setting)");
 
 export const imageGenSchema = type({
 	subject: type("string").describe("main subject"),
@@ -447,16 +439,16 @@ function extractOpenRouterImageUrls(message: OpenRouterMessage | undefined): str
 	return urls;
 }
 
-/** Preferred provider set via settings (default: auto) */
-let preferredImageProvider: ImageProviderPreference = "auto";
+/** Configured provider priority set via `providers.imageOrder` (default: none). */
+let configuredImageProviderOrder: readonly ImageProvider[] = [];
 
 export function isImageProviderPreference(value: unknown): value is ImageProviderPreference {
 	return typeof value === "string" && IMAGE_PROVIDER_PREFERENCES.has(value);
 }
 
-/** Set the preferred image provider from settings */
-export function setPreferredImageProvider(provider: ImageProviderPreference): void {
-	preferredImageProvider = provider;
+/** Set the configured image-provider priority from settings; invalid IDs are dropped. */
+export function setImageProviderOrder(providers: readonly string[]): void {
+	configuredImageProviderOrder = providers.filter(isImageProviderId);
 }
 function assertImageAspectRatioSupported(provider: ImageProvider, aspectRatio: ImageGenParams["aspect_ratio"]): void {
 	if (!aspectRatio || provider === "xai" || COMMON_IMAGE_ASPECT_RATIO_SET.has(aspectRatio)) {
@@ -624,19 +616,19 @@ function activeImageProvider(model: Model | undefined): Exclude<ImageProviderPre
 	}
 }
 
-function imageProviderOrder(
-	activeModel: Model | undefined,
-	preference: ImageProviderPreference = preferredImageProvider,
-): Array<Exclude<ImageProviderPreference, "auto">> {
-	const providers: Array<Exclude<ImageProviderPreference, "auto">> = [];
-	const added = new Set<Exclude<ImageProviderPreference, "auto">>();
-	const add = (provider: Exclude<ImageProviderPreference, "auto"> | null): void => {
+function imageProviderOrder(activeModel: Model | undefined, requested?: ImageProviderPreference): ImageProvider[] {
+	const providers: ImageProvider[] = [];
+	const added = new Set<ImageProvider>();
+	const add = (provider: ImageProvider | null): void => {
 		if (!provider || added.has(provider)) return;
 		added.add(provider);
 		providers.push(provider);
 	};
 
-	if (preference !== "auto") add(preference);
+	// Per-request provider wins, then the configured priority list, then the
+	// active session's provider, then the built-in auto order.
+	if (requested !== undefined && requested !== "auto") add(requested);
+	for (const provider of configuredImageProviderOrder) add(provider);
 	add(activeImageProvider(activeModel));
 	for (const provider of AUTO_IMAGE_PROVIDER_ORDER) add(provider);
 	return providers;
@@ -1109,7 +1101,7 @@ export const imageGenTool: CustomTool<typeof imageGenSchema, ImageGenToolDetails
 	async execute(_toolCallId, params, _onUpdate, ctx, signal) {
 		return untilAborted(signal, async () => {
 			const sessionId = ctx.sessionManager.getSessionId();
-			const providerOrder = imageProviderOrder(ctx.model, params.provider ?? preferredImageProvider);
+			const providerOrder = imageProviderOrder(ctx.model, params.provider);
 			const cwd = ctx.sessionManager.getCwd();
 			const requestSignal = ptree.combineSignals(signal, IMAGE_TIMEOUT);
 			const fetchImpl = ctx.fetch ?? fetch;

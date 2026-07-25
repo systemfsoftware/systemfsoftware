@@ -307,7 +307,7 @@ function buildSlashCommandCompletions(commands: CommandEntry[], lowerPrefix: str
 				}
 				return fullDescMemo;
 			};
-			const candidates: Array<AutocompleteItem & { score: number }> = [];
+			let best: (AutocompleteItem & { score: number }) | undefined;
 
 			const isSkillCommand = name.startsWith("skill:");
 			const nameScore =
@@ -318,30 +318,30 @@ function buildSlashCommandCompletions(commands: CommandEntry[], lowerPrefix: str
 			const primaryScore = Math.max(nameScore, descScore);
 			if (primaryScore > 0) {
 				const fullDesc = resolveFullDesc();
-				candidates.push({
+				best = {
 					value: name,
 					label: "name" in cmd ? cmd.name : cmd.label,
 					score: primaryScore,
 					...(fullDesc && { description: fullDesc }),
-				});
+				};
 			}
 
 			if (lowerPrefix.length > 0) {
 				for (const alias of getCommandAliases(cmd)) {
 					if (alias === name) continue;
 					const aliasScore = scoreCommandTextMatch(lowerPrefix, alias.toLowerCase());
-					if (aliasScore === 0) continue;
+					if (aliasScore === 0 || (best && aliasScore <= best.score)) continue;
 					const fullDesc = resolveFullDesc();
-					candidates.push({
+					best = {
 						value: alias,
 						label: alias,
 						score: aliasScore,
 						...(fullDesc && { description: fullDesc }),
-					});
+					};
 				}
 			}
 
-			return candidates;
+			return best ? [best] : [];
 		})
 		.sort((a, b) => b.score - a.score)
 		.map(({ score: _, ...rest }) => rest);

@@ -56,6 +56,27 @@ describe("AgentLifecycleManager", () => {
 		return registry.register({ id, displayName: "task", kind: "sub", session, sessionFile, status: "idle" });
 	}
 
+	it("registerIfAvailable never replaces a collision and reuses only the exact expected ref", () => {
+		const parked = registerIdleSub("generation-Sub", null);
+		registry.setStatus("generation-Sub", "parked", parked);
+		const next = {
+			id: "generation-Sub",
+			displayName: "replacement",
+			kind: "sub" as const,
+			session: null,
+			status: "running" as const,
+		};
+
+		expect(registry.registerIfAvailable(next, null)).toBeUndefined();
+		expect(registry.get("generation-Sub")).toBe(parked);
+		expect(registry.registerIfAvailable(next, parked)).toBe(parked);
+		expect(registry.get("generation-Sub")).toBe(parked);
+
+		registry.unregister("generation-Sub", parked);
+		expect(registry.registerIfAvailable(next, parked)).toBeUndefined();
+		expect(registry.get("generation-Sub")).toBeUndefined();
+	});
+
 	it("adopt arms the TTL: an idle agent is parked — session disposed, ref + sessionFile retained", async () => {
 		vi.useFakeTimers();
 		const stub = makeSessionStub();
@@ -248,6 +269,32 @@ describe("AgentLifecycleManager", () => {
 		await flushAsync();
 		expect(stub.disposeCalls()).toBe(1);
 		expect(registry.get("6-Sub")).toBeUndefined();
+	});
+
+	it("a delayed release cannot remove or mutate a replacement ref with the same id", async () => {
+		const gate = deferred();
+		const oldSession = makeSessionStub(() => gate.promise);
+		const oldRef = registerIdleSub("cas-Sub", oldSession.session);
+		lifecycle.adopt("cas-Sub", { idleTtlMs: 0 }, oldRef);
+		const releasing = lifecycle.release("cas-Sub", oldRef);
+		await flushAsync();
+		expect(oldSession.disposeCalls()).toBe(1);
+
+		const replacementSession = makeSessionStub();
+		const replacement = registerIdleSub("cas-Sub", replacementSession.session, "/tmp/replacement.jsonl");
+		lifecycle.adopt("cas-Sub", { idleTtlMs: 0 }, replacement);
+		expect(registry.setStatus("cas-Sub", "aborted", oldRef)).toBe(false);
+		expect(registry.detachSession("cas-Sub", oldRef)).toBe(false);
+		expect(registry.unregister("cas-Sub", oldRef)).toBe(false);
+
+		gate.resolve();
+		await releasing;
+
+		expect(registry.get("cas-Sub")).toBe(replacement);
+		expect(replacement.status).toBe("idle");
+		expect(replacement.session).toBe(replacementSession.session);
+		expect(replacementSession.disposeCalls()).toBe(0);
+		expect(lifecycle.has("cas-Sub", replacement)).toBe(true);
 	});
 
 	it("adopt(Main) is a no-op: Main is never adopted or parked", async () => {

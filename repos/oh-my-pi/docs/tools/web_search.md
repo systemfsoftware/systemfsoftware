@@ -85,7 +85,7 @@ Streaming: none. `WebSearchTool.execute()` forwards its `AbortSignal` into `exec
 2. `executeSearch()` computes ordered provider candidates without loading their modules:
    - if `params.provider` is set and not `"auto"`, it loads that provider only to check `isExplicitlyAvailable()`; if false, it uses the auto candidates.
    - otherwise it uses the module-global preferred provider from `packages/coding-agent/src/web/search/provider.ts`.
-3. `resolveProviderCandidates()` puts an included preferred provider first (gated by `isExplicitlyAvailable()`), then `SEARCH_PROVIDER_ORDER` excluding it. Excluded providers are skipped entirely, including as the preferred candidate. As `executeSearch()` walks those candidates, it loads a module and checks availability only when the candidate is reached.
+3. `resolveProviderCandidates()` puts an included preferred provider first (gated by `isExplicitlyAvailable()`), then the effective provider order excluding it. `providers.webSearchOrder` prioritizes listed providers and appends unlisted providers in `SEARCH_PROVIDER_ORDER`; an empty list preserves the built-in order. Excluded providers are skipped entirely, including as the preferred candidate. As `executeSearch()` walks those candidates, it loads a module and checks availability only when the candidate is reached.
 4. If no providers are available (for example, after excluding DuckDuckGo and lacking configured keyed/OAuth providers), `executeSearch()` returns `Error: No web search provider configured.` with `details.response.provider = "none"`.
 5. For each provider in order, `executeSearch()` calls `provider.search()` with:
    - `query`,
@@ -101,10 +101,10 @@ Streaming: none. `WebSearchTool.execute()` forwards its `AbortSignal` into `exec
 
 ## Modes / Variants
 - **Provider selection**
-  - **Forced provider**: internal callers may pass `provider`; unavailable forced providers fall back to the auto chain instead of hard-failing (`packages/coding-agent/src/web/search/index.ts`). This field is not in the model-facing schema.
-  - **Preferred provider**: `setPreferredSearchProvider()` sets a module-global default used by `resolveProviderCandidates()`. `packages/coding-agent/src/sdk.ts` and `packages/coding-agent/src/modes/controllers/selector-controller.ts` wire this from settings.
-  - **Excluded providers**: `setExcludedSearchProviders()` records providers `resolveProviderCandidates()` must skip, including as fallbacks. Wired from the `providers.webSearchExclude` setting (`providers.webSearch` drives the preferred provider) in `packages/coding-agent/src/sdk.ts`, `packages/coding-agent/src/modes/interactive-mode.ts`, and `packages/coding-agent/src/modes/controllers/selector-controller.ts`.
-  - **Auto chain order** (25 providers): `perplexity`, `gemini`, `anthropic`, `codex`, `xai`, `zai`, `exa`, `tinyfish`, `jina`, `kagi`, `tavily`, `firecrawl`, `brave`, `kimi`, `parallel`, `synthetic`, `searxng`, `duckduckgo`, `bing`, `yahoo`, `startpage`, `google`, `ecosia`, `mojeek`, `public` (`SEARCH_PROVIDER_ORDER` in `packages/coding-agent/src/web/search/types.ts`). `public` is explicit-only: its `isAvailable()` returns `false` so the auto chain never fans out implicitly.
+  - **Forced provider**: internal callers may pass `provider`; a non-`auto` value is the only attempted provider, while `auto` (or omitting it) walks the configured chain. This field is not in the model-facing schema.
+  - **Configured order**: `setSearchProviderOrder()` prioritizes the valid, first-occurrence provider IDs in `providers.webSearchOrder`; providers omitted from the setting follow in their built-in relative order. Listed providers are explicit selections — they resolve through `isExplicitlyAvailable()`, so e.g. a hand-listed Perplexity may fall back to anonymous search. Wired from settings in `packages/coding-agent/src/config/provider-globals.ts` (SDK startup, cwd reloads, live settings changes).
+  - **Excluded providers**: `setExcludedSearchProviders()` records providers `resolveProviderCandidates()` must skip, including as fallbacks. Wired from the `providers.webSearchExclude` setting via the same `provider-globals.ts` paths.
+  - **Default auto chain order** (25 providers): `perplexity`, `gemini`, `anthropic`, `codex`, `xai`, `zai`, `exa`, `tinyfish`, `jina`, `kagi`, `tavily`, `firecrawl`, `brave`, `kimi`, `parallel`, `synthetic`, `searxng`, `duckduckgo`, `bing`, `yahoo`, `startpage`, `google`, `ecosia`, `mojeek`, `public` (`SEARCH_PROVIDER_ORDER` in `packages/coding-agent/src/web/search/types.ts`). `public` is explicit-only: its `isAvailable()` returns `false` so the auto chain never fans out implicitly.
 - **Provider adapters**
   - **Perplexity** — `packages/coding-agent/src/web/search/providers/perplexity.ts`
     - Availability: auth precedence is `PERPLEXITY_COOKIES` -> OAuth token in `agent.db` -> `PERPLEXITY_API_KEY` / `PPLX_API_KEY` -> anonymous ask-endpoint fallback. `isAvailable()` gates the auto chain on credentials, but `isExplicitlyAvailable()` is always true, so explicit selection works unauthenticated.
@@ -147,7 +147,7 @@ Streaming: none. `WebSearchTool.execute()` forwards its `AbortSignal` into `exec
     - `limit` and `num_search_results` are collapsed together before dispatch.
     - Output may include parsed free-text `answer`, `sources`, `requestId`.
   - **Exa** — `packages/coding-agent/src/web/search/providers/exa.ts`
-    - Availability: env or `agent.db` credential for `exa` admits Exa to the auto chain; settings must not explicitly disable `exa.enabled` or `exa.enableSearch`. Explicit selection (`providers.webSearch: exa`) reaches Exa even without a credential and falls back to public MCP.
+    - Availability: env or `agent.db` credential for `exa` admits Exa to the auto chain; settings must not explicitly disable `exa.enabled` or `exa.enableSearch`. Explicit selection (listing `exa` in `providers.webSearchOrder`, or a forced `provider: exa`) reaches Exa even without a credential and falls back to public MCP.
     - Querying: POST `https://api.exa.ai/search` with the resolved Exa API key, otherwise JSON-RPC `tools/call` against `https://mcp.exa.ai/mcp` for remote MCP tool `web_search_exa`.
     - `limit` and `num_search_results` are collapsed together before dispatch.
     - Output: synthesized `answer` from up to 3 result summaries, `sources`, `requestId`.

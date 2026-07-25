@@ -2,6 +2,7 @@ import type { AuthStorage, FetchImpl } from "@oh-my-pi/pi-ai";
 import { parseHTML } from "linkedom";
 import type { SearchResponse, SearchSource } from "../../../web/search/types";
 import { SearchProviderError } from "../../../web/search/types";
+import { formatScraperQuery } from "../query";
 import { clampNumResults } from "../utils";
 import type { SearchParams } from "./base";
 import { SearchProvider } from "./base";
@@ -136,12 +137,17 @@ async function callStartpageHtml(params: SearchParams): Promise<string> {
 	const fetchImpl = params.fetch ?? fetch;
 	const signal = withHardTimeout(params.signal);
 	const withDate = params.recency ? RECENCY_TO_STARTPAGE_WITH_DATE[params.recency] : undefined;
+	// Startpage proxies Google, so the operator set works inline; rebuild via
+	// the shared scraper formatter to canonicalize aliases (domain: → site:,
+	// since: → after:, …) and demote scraper-hostile operators. Directive-free
+	// queries pass through byte-identical.
+	const query = formatScraperQuery(params.query, params.parsedQuery);
 
 	const formInputs = await fetchFormInputs(fetchImpl, signal);
 	let page: LoadedHtmlPage;
 	if (formInputs) {
 		const form = new URLSearchParams(formInputs);
-		form.set("query", params.query);
+		form.set("query", query);
 		if (withDate) form.set("with_date", withDate);
 		page = await browserFetch(STARTPAGE_SEARCH_URL, {
 			fetch: fetchImpl,
@@ -152,7 +158,7 @@ async function callStartpageHtml(params: SearchParams): Promise<string> {
 		});
 	} else {
 		const url = new URL(STARTPAGE_SEARCH_URL);
-		url.searchParams.set("query", params.query);
+		url.searchParams.set("query", query);
 		if (withDate) url.searchParams.set("with_date", withDate);
 		page = await browserFetch(url.href, {
 			fetch: fetchImpl,

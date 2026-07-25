@@ -23,7 +23,6 @@ import vibeListDescription from "../prompts/tools/vibe-list.md" with { type: "te
 import vibeSendDescription from "../prompts/tools/vibe-send.md" with { type: "text" };
 import vibeSpawnDescription from "../prompts/tools/vibe-spawn.md" with { type: "text" };
 import vibeWaitDescription from "../prompts/tools/vibe-wait.md" with { type: "text" };
-import { MAIN_AGENT_ID } from "../registry/agent-registry";
 import { oneLineLabel } from "../task/types";
 import { renderStatusLine } from "../tui";
 import {
@@ -93,7 +92,7 @@ export interface VibeToolDetails {
 }
 
 function screensOf(session: ToolSession, ids?: string[]): VibeScreenSnapshot[] {
-	return VibeSessionRegistry.global().screens(session.getAgentId?.() ?? MAIN_AGENT_ID, ids);
+	return VibeSessionRegistry.global().screens(session, ids);
 }
 
 function textResult(text: string, details: VibeToolDetails): AgentToolResult<VibeToolDetails> {
