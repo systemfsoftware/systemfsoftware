@@ -1,0 +1,188 @@
+import path from 'node:path'
+import picomatch from 'picomatch'
+import { glob, isDynamicPattern } from 'tinyglobby'
+import { fsExists, lowestCommonAncestor, stripExtname } from '../utils/fs.ts'
+import { slash, toArray } from '../utils/general.ts'
+import type { TsdownInputOption, UserConfig } from '../config/types.ts'
+import type { Logger } from '../utils/logger.ts'
+import type { Arrayable } from '../utils/types.ts'
+import type { Ansis } from 'ansis'
+
+export async function resolveEntry(
+  logger: Logger,
+  entry: UserConfig['entry'],
+  cwd: string,
+  color: Ansis,
+  nameLabel?: string,
+  root?: string,
+): Promise<[entry: Record<string, string>, root: string]> {
+  if (!entry || Object.keys(entry).length === 0) {
+    const defaultEntry = path.resolve(cwd, 'src/index.ts')
+
+    if (await fsExists(defaultEntry)) {
+      entry = { index: defaultEntry }
+    } else {
+      throw new Error(
+        `${nameLabel} No input files, try "tsdown <your-file>" or create src/index.ts`,
+      )
+    }
+  }
+
+  const [entryMap, computedRoot] = await toObjectEntry(entry, cwd, root)
+  const entries = Object.values(entryMap)
+  if (entries.length === 0) {
+    throw new Error(`${nameLabel} Cannot find entry: ${JSON.stringify(entry)}`)
+  }
+  logger.info(
+    nameLabel,
+    `entry: ${color(entries.map((entry) => (path.isAbsolute(entry) ? path.relative(cwd, entry) : entry)).join(', '))}`,
+  )
+  return [entryMap, computedRoot]
+}
+
+export function toObjectEntry(
+  entry: TsdownInputOption,
+  cwd: string,
+  root?: string,
+): Promise<[entry: Record<string, string>, root: string]> {
+  if (typeof entry === 'string') {
+    entry = [entry]
+  }
+
+  if (!Array.isArray(entry)) {
+    return resolveObjectEntry(entry, cwd)
+  }
+  return resolveArrayEntry(entry, cwd, root)
+}
+
+export function isGlobEntry(entry: TsdownInputOption | undefined): boolean {
+  if (!entry) return false
+  if (typeof entry === 'string') return isDynamicPattern(entry)
+  if (Array.isArray(entry)) {
+    return entry.some((e) =>
+      typeof e === 'string' ? isDynamicPattern(e) : isGlobEntry(e),
+    )
+  }
+  return Object.keys(entry).some((key) => key.includes('*'))
+}
+
+async function resolveObjectEntry(
+  entries: Record<string, string | string[]>,
+  cwd: string,
+): Promise<[entry: Record<string, string>, root: string]> {
+  const entry = Object.fromEntries(
+    (
+      await Promise.all(
+        Object.entries(entries).map(
+          async ([key, value]): Promise<[string, string][]> => {
+            if (!key.includes('*')) {
+              if (Array.isArray(value)) {
+                throw new TypeError(
+                  `Object entry "${key}" cannot have an array value when the key is not a glob pattern.`,
+                )
+              }
+
+              return [[key, value]]
+            }
+
+            const patterns = toArray(value)
+            const files = await glob(patterns, {
+              cwd,
+              expandDirectories: false,
+            })
+            if (!files.length) {
+              throw new Error(
+                `Cannot find files for entry key "${key}" with patterns: ${JSON.stringify(
+                  patterns,
+                )}`,
+              )
+            }
+
+            let valueGlobBase: string | undefined
+            for (const pattern of patterns) {
+              if (pattern.startsWith('!')) continue
+              const base = picomatch.scan(pattern).base
+              if (valueGlobBase === undefined) {
+                valueGlobBase = base
+              } else if (valueGlobBase !== base) {
+                throw new Error(
+                  `When using object entry with glob pattern key "${key}", all value glob patterns must have the same base directory.`,
+                )
+              }
+            }
+            if (valueGlobBase === undefined) {
+              throw new Error(
+                `Cannot determine base directory for value glob patterns of key "${key}".`,
+              )
+            }
+
+            return files.map((file) => [
+              slash(
+                key.replaceAll(
+                  '*',
+                  stripExtname(path.relative(valueGlobBase, file)),
+                ),
+              ),
+              path.resolve(cwd, file),
+            ])
+          },
+        ),
+      )
+    ).flat(),
+  )
+  const root = lowestCommonAncestor(...Object.values(entry))
+  return [entry, root]
+}
+
+async function resolveArrayEntry(
+  entries: (string | Record<string, Arrayable<string>>)[],
+  cwd: string,
+  root?: string,
+): Promise<[entry: Record<string, string>, root: string]> {
+  const stringEntries: string[] = []
+  const objectEntries: Record<string, Arrayable<string>>[] = []
+  for (const e of entries) {
+    if (typeof e === 'string') {
+      stringEntries.push(e)
+    } else {
+      objectEntries.push(e)
+    }
+  }
+
+  const isGlob = stringEntries.some((e) => isDynamicPattern(e))
+  let resolvedEntries: string[]
+  if (isGlob) {
+    resolvedEntries = (
+      await glob(stringEntries, {
+        cwd,
+        expandDirectories: false,
+        absolute: true,
+      })
+    ).map((file) => path.resolve(file))
+  } else {
+    resolvedEntries = stringEntries
+  }
+
+  const computedRoot = root || lowestCommonAncestor(...resolvedEntries)
+  // For entry name computation, base must match the path style of entries:
+  // glob entries are absolute, non-glob entries stay relative (may be virtual files)
+  const base = root && !isGlob ? path.relative(cwd, root) || '.' : computedRoot
+  const arrayEntryMap = Object.fromEntries(
+    resolvedEntries.map((file) => {
+      const relative = path.relative(base, file)
+      return [slash(stripExtname(relative)), file]
+    }),
+  )
+
+  const resolvedObjectEntries = await Promise.all(
+    objectEntries.map(async (entry) => {
+      const [entryMap] = await resolveObjectEntry(entry, cwd)
+      return entryMap
+    }),
+  )
+
+  return [
+    Object.assign({}, arrayEntryMap, ...resolvedObjectEntries),
+    computedRoot,
+  ]
+}
