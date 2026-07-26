@@ -2,70 +2,74 @@
 
 > **Location:** `packages/oxlint-plugins/` — the oxlint plugin family: `core/` (general rule set), `test-hygiene/` (test naming), `effect-workflow/` (workflow constitution). Universal agent rules live in the root `AGENTS.md`; this file carries the shared rule-authoring conventions for every plugin in this folder. Package leaves carry only their package's delta.
 
-## 1. Rule File Structure
+## Critical
 
-Two API styles exist. Use the one the package already uses; do not mix styles inside a package.
+```yaml
+rules:
+  - id: MG1
+    title: 100% mutation score is the gate
+    do: kill every mutant with a distinguishing test or eliminate it with a restructure
+    dont: ignore a killable mutant, lower the threshold, or narrow the mutate glob
+    harm: an ignored killable mutant is `// Stryker disable all` with extra steps — the score certifies tests that notice nothing
+    check: pnpm --filter <pkg> mutation exits 0 and reports/mutation-report.json shows zero Ignored, Survived, and NoCoverage
 
-**New packages (`test-hygiene`, `effect-workflow`):** `defineRule` from `@oxlint/plugins`.
+  - id: MG2
+    title: Ignores are declaration data only
+    do: register exactly `effect-schema-declarations` in stryker.config.json#ignorers for III.4 declaration data — Symbol.for descriptions, TaggedClass/TaggedError _tag and fields, optionalWith defaults
+    dont: author new ignore plugins, add ignore rules for logic mutants, or use `// Stryker disable` comments
+    harm: ignore rules pattern-match text, not proofs — they silently suppress mutants that tests would have killed
+    check: stryker.config.json#ignorers contains only effect-schema-declarations; grep finds no `Stryker disable` in src/
 
-```typescript
-import { defineRule } from '@oxlint/plugins'
-import type { Context, ESTree } from '@oxlint/plugins'
+  - id: CS1
+    title: Static config lives in *.config.ts
+    do: place meta, messages, schema, Options, constants, regexes, and message templates in `src/rules/<rule>.config.ts`; keep guards, predicates, selectors, and `create()` in the rule file; pass the imported config `meta` to `defineRule` directly without spread
+    dont: declare static config inside the rule file
+    harm: static data inflates the mutation surface with equivalent mutants no test can kill; behavior and declaration stop being distinguishable (III.4)
+    check: the mutate glob in stryker.config.json excludes `*.config.ts`; rule files import `meta` from `./<rule>.config.js`
 
-export const rule = defineRule({
-  meta: { ...meta, schema: [JSONSchema.make(Options)] },
-  create(context: Context) {/* AST selectors */},
-})
+  - id: EF1
+    title: AI-native error message format
+    do: "write every message as `'{{name}} is forbidden. Expected: {{expected}}. Actual: {{actual}}. Fix: {{fix}}.'`"
+    dont: write freeform prose messages
+    harm: agents and users cannot extract the violation, the expected shape, and the concrete fix from prose
+    check: every `messages` entry in every config file carries all four placeholders
+
+  - id: GD1
+    title: Decode guards at the boundary
+    do: decode path segments with `S.Tuple([S.String, S.String], S.String)` or `S.NonEmptyArray` and take elements via destructuring, `A.lastNonEmpty`, or `A.last` + `Option`; strip suffixes with `slice(0, -SUFFIX.length)` behind a load-bearing guard; delete dead ESTree-spec checks (`spec.local.type === 'Identifier'`, `decl.type === 'VariableDeclarator'`, `typeof importSource !== 'string'`)
+    dont: "write manual `!== undefined` guards on runtime-shaped data, `length > 0 ? arr[len-1] : null` ternaries, or `endsWith` + regex-replace pairs"
+    harm: guards the runtime contract already satisfies are unreachable code — their mutants are equivalent and unverifiable, and redundant check pairs make each other's mutants undetectable
+    check: grep finds no `!== undefined` path guards or `length > 0 ?` ternaries in rule files; suffix handling is a single slice or a single regex
+
+  - id: TS1
+    title: Tests are RuleTester + DAMP + expect
+    do: drive `oxlint/plugins-dev` RuleTester with vitest bindings; name tests `Should_[Behavior]_When_[Condition]` in strict PascalCase; assert with `expect()` including report `data` fields; cover every conditional with distinguishing cases per side — operator direction, computed access, aliasing, near-misses (`Object.for`, `X.TaggedClass`)
+    dont: return booleans from plain `it()`; assert messageId only; assert on path prefixes
+    harm: boolean returns are vacuous passes; messageId-only assertions let data-field mutants survive; the RuleTester resolves filenames to absolute paths inside node_modules so path-shape assertions never fire
+    check: pnpm --filter <pkg> test exits 0 and the self-hosted `@systemfsoftware/test-hygiene(damp-test-naming)` lint passes
 ```
 
-**Legacy (`core`):** `ESLintUtils.RuleCreator` from `@typescript-eslint/utils` (kept for jsPlugins compatibility; see `core/AGENTS.md` for the template and the ESLint migration notes). New rules in `core/` follow the existing style until a dedicated migration.
+## Rule APIs
 
-## 2. Config Split (MANDATORY)
+Two styles exist. Use the one the package already uses; never mix styles inside a package.
 
-Static config lives in `src/rules/<rule>.config.ts`; the rule file holds logic only. The mutation `mutate` glob excludes `*.config.ts`.
-
-- `meta` (type, docs, schema, messages), `Options` schema, constants, regexes, message templates → config file.
-- Guards, predicates, selectors, `create()` → rule file.
-- `defineRule({ meta, create })` — pass the imported config `meta` directly, no spread.
-
-Rationale (CONSTITUTION §III.4): behavior lives where the mutator sees it; declarations carry no behavior, so they live outside the mutation surface.
-
-## 3. Error Message Format (MANDATORY)
-
-ALL error messages use the AI-native format:
-
+```yaml
+apis:
+  - id: A1
+    title: New packages use defineRule
+    do: write rules with `defineRule` from `@oxlint/plugins` in `test-hygiene/` and `effect-workflow/`
+    dont: import ESLintUtils in these packages
+    harm: two rule APIs in one package doubles the reader's mental model
+    check: "`import { defineRule } from '@oxlint/plugins'` is the only rule constructor in the package"
+  - id: A2
+    title: core/ keeps ESLintUtils until a dedicated migration
+    do: follow the `ESLintUtils.RuleCreator` template in `core/AGENTS.md` when editing `core/`
+    dont: rewrite core rules to defineRule inside an unrelated task
+    harm: an opportunistic API migration mixes refactor with behavior change and nothing stays reviewable
+    check: every rule in `core/src/rules/` uses `createRule`
 ```
-'{{name}} is forbidden. Expected: {{expected}}. Actual: {{actual}}. Fix: {{fix}}.'
-```
 
-Each placeholder carries: violating element, correct alternative, detected element, concrete fix.
-
-## 4. Guard Construction (MANDATORY)
-
-Decode at the boundary; never write manual `undefined` guards on data the runtime contract already shapes.
-
-- Path segments: `S.decodeUnknownSync(S.Tuple([S.String, S.String], S.String))` (≥2 segments, rejects short arrays); destructure from a reversed split for typed `basename`/`parentDir`.
-- Last element: `A.lastNonEmpty` on a decoded `S.NonEmptyArray`, or `A.last(...)` + `Option` combinators — never `length > 0 ? arr[len-1] : null` ternaries.
-- Suffix-strip: `slice(0, -SUFFIX.length)` after a load-bearing guard — never a redundant `endsWith` + regex-replace pair (the pair makes anchor mutants equivalent and unverifiable).
-- Dead ESTree-spec checks are deleted, not kept: `spec.local.type === 'Identifier'` (always Identifier), `decl.type === 'VariableDeclarator'`, `typeof importSource !== 'string'`.
-
-## 5. Testing Requirements
-
-- **Runner:** `oxlint/plugins-dev` `RuleTester` with `vitest` bindings (`RuleTester.it = vitest.it` etc.). Structure: `valid: [...]` / `invalid: [...]`.
-- **Naming:** self-hosted `@systemfsoftware/test-hygiene(damp-test-naming)` — `Should_[Behavior]_When_[Condition]`, strict PascalCase conditions (no consecutive capitals, no single-letter words).
-- **Assertions:** `expect()` on every outcome — plain `it()` boolean returns are vacuous. Assert `data` fields on reports, not just `messageId`.
-- **Branches:** every conditional gets a distinguishing case per side — operator direction (`===`/`!==`), computed access (`foo['it']()`, `S['TaggedClass']`), aliasing, non-matching near-misses (`Object.for`, `X.TaggedClass`).
-- **Filenames:** the RuleTester resolves `filename` to an absolute path inside node_modules — never assert on path prefixes; guards on path _shape_ are unreachable and must be decodable (§4).
-
-## 6. Mutation Gate (MANDATORY)
-
-`pnpm --filter <pkg> mutation` — **100%** on rule files. Every mutant is killed by a test or eliminated by a restructure. Ignoring a killable mutant is `// Stryker disable all` with extra steps and is forbidden.
-
-Legitimate ignores are exactly one class: §III.4 declaration data (Effect Schema `Symbol.for` descriptions, `TaggedClass`/`TaggedError` `_tag` and fields, `optionalWith` defaults) via the `effect-schema-declarations` ignorer registered in `stryker.config.json#ignorers`. No other ignore plugin, no disable comments.
-
-Type-error mutants (stripped `!`, invalid rewrites) are excluded by the typescript checker as `CompileError` — that is the checker working, not suppression.
-
-## 7. Integration
+## Integration
 
 `oxlint-config/src/oxlint-config.base.ts` registers plugins by package name:
 
@@ -76,7 +80,7 @@ rules: { '@systemfsoftware/oxlint-plugin/rule-name': 'error' },
 
 Rule export format (`src/index.ts`): `export default { meta: { name }, rules: { 'rule-name': rule } }`.
 
-## 8. Package Deltas
+## Package Deltas
 
 | Package            | Leaf delta                                                    |
 | ------------------ | ------------------------------------------------------------- |
@@ -84,11 +88,12 @@ Rule export format (`src/index.ts`): `export default { meta: { name }, rules: { 
 | `test-hygiene/`    | —                                                             |
 | `effect-workflow/` | —                                                             |
 
-## 9. Commands
+## Verification
+
+Run in order before claiming done on any rule change:
 
 ```bash
-pnpm --filter @systemfsoftware/oxlint-plugin test              # core
-pnpm --filter @systemfsoftware/oxlint-plugin-test-hygiene test
-pnpm --filter @systemfsoftware/oxlint-plugin-effect-workflow test
-pnpm --filter <pkg> mutation                                    # 100% required, see §6
+pnpm --filter <pkg> test        # RuleTester suites
+pnpm --filter <pkg> mutation    # 100% required — see MG1
+pnpm check                      # root gate, exits 0
 ```
