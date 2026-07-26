@@ -9,7 +9,7 @@
   "apiReport": {
     "enabled": true,
     "reportFolder": "<projectFolder>/etc/",
-    "reportTempFolder": "<projectFolder>/temp/",
+    "reportTempFolder": "<projectFolder>/temp/effect-schema-ignorer/",
     "reportFileName": "effect-schema-ignorer.api.md"
   },
   "docModel": { "enabled": false },
