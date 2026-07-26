@@ -51,8 +51,7 @@
   },
   "dependencies": {
     "@oxc-project/types": "^0.140.0",
-    "@oxlint/plugins": "catalog:oxlint",
-    "effect": "catalog:"
+    "@oxlint/plugins": "catalog:oxlint"
   },
   "devDependencies": {
     "@microsoft/api-extractor": "catalog:",
@@ -64,6 +63,7 @@
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
     "@vitest/coverage-v8": "catalog:",
+    "effect": "catalog:",
     "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
@@ -71,6 +71,7 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
+    "effect": "catalog:",
     "typescript": ">=5.0.0"
   },
   "publishConfig": {

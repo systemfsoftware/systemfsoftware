@@ -614,9 +614,6 @@ importers:
 
   packages/effect-schema-extensions:
     dependencies:
-      '@effect/platform':
-        specifier: 'catalog:'
-        version: 0.97.0(effect@3.22.0)
       '@systemfsoftware/hex-schema':
         specifier: workspace:^
         version: link:../hex-schema
@@ -885,9 +882,6 @@ importers:
       '@oxlint/plugins':
         specifier: catalog:oxlint
         version: 1.74.0
-      effect:
-        specifier: 'catalog:'
-        version: 3.22.0
     devDependencies:
       '@microsoft/api-extractor':
         specifier: 'catalog:'
@@ -916,6 +910,9 @@ importers:
       '@vitest/coverage-v8':
         specifier: 'catalog:'
         version: 4.1.9(vitest@4.1.9)
+      effect:
+        specifier: 'catalog:'
+        version: 3.22.0
       oxlint:
         specifier: catalog:oxlint
         version: 1.74.0(oxlint-tsgolint@0.24.0)
