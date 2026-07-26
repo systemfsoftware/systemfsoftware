@@ -16,7 +16,7 @@ export const InjectInstructionsTask = (pi: ExtensionAPI): void => {
         const projectDir = yield* Config.string('CLAUDE_PROJECT_DIR').pipe(
           Config.withDefault(process.cwd()),
         )
-        return yield* loadReferencedContent(projectDir, event.systemPrompt)
+        return yield* loadReferencedContent(projectDir)
       }).pipe(Effect.exit),
     )
     if (Exit.isFailure(exit)) throw Cause.squash(exit.cause)

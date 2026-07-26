@@ -26,3 +26,12 @@ no_delegate_skills = [
   "ce-work",
   "ce-worktree",
 ]
+
+# @-ref target file names the omp host already renders as context files, so the
+# claude-compat plugin must not inject a second copy. Absent, it defaults to
+# ["AGENTS.md"]; set it to [] to disable suppression entirely.
+#
+# WARNING: every value in this file must be an array of strings. A scalar such
+# as no_inject_refs = "AGENTS.md" fails the whole-file decode and silently
+# voids no_delegate_skills above along with it.
+# no_inject_refs = ["AGENTS.md"]

@@ -2,6 +2,7 @@ import * as PathModule from '@effect/platform/Path'
 import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { MemoryFileSystem } from '@systemfsoftware/effect-memfs'
+import { TomlLoaderLive } from '@systemfsoftware/omp-utils'
 import { Effect, Layer } from 'effect'
 import { expect } from 'vitest'
 import { loadReferencedContent } from '../src/inject-instructions.executor.js'
@@ -9,8 +10,12 @@ import { loadReferencedContent } from '../src/inject-instructions.executor.js'
 const Feature = makeFeature({ it, layer })
 
 function makeFsLayer(contents: Record<string, string>) {
-  return MemoryFileSystem.layerWith(contents).pipe(
-    Layer.provideMerge(PathModule.layer),
+  return TomlLoaderLive.pipe(
+    Layer.provideMerge(
+      MemoryFileSystem.layerWith(contents).pipe(
+        Layer.provideMerge(PathModule.layer),
+      ),
+    ),
   )
 }
 
@@ -274,25 +279,24 @@ Feature('@-ref extraction, resolution, and injection')
       ),
     )
 
-    // ── Rule: a ref the host already rendered is not injected again ──
+    // ── Rule: a ref the host discovers on its own is not injected again ──
 
     scenario(
-      'Should suppress a ref whose content the host already rendered',
+      'Should suppress a skip-listed ref whatever its content',
       {
         scenarioLayer: makeFsLayer({
           '/test/CLAUDE.md': '@AGENTS.md\n',
-          '/test/AGENTS.md': '# Project Rules\n\nUse pnpm only.',
+          '/test/AGENTS.md': '| Concern | Tool |\n| ------- | ---- |\n| Pkg     | pnpm |',
         }),
       },
       Gherkin.Do.pipe(
-        Given('a CLAUDE.md whose only ref is AGENTS.md')('dir', () => Effect.succeed('/test')),
-        Given('the host has already rendered AGENTS.md into repo-rules')('rendered', () =>
-          Effect.succeed([
-            '<repo-rules>\n<file path="/test/AGENTS.md">\n# Project Rules\n\nUse pnpm only.\n</file>\n</repo-rules>',
-          ])),
-        When('loadReferencedContent reads that rendered prompt')(
+        Given('an AGENTS.md the host would render with different table spacing')(
+          'dir',
+          () => Effect.succeed('/test'),
+        ),
+        When('loadReferencedContent runs with no project config')(
           'result',
-          (s) => loadReferencedContent(s.dir, s.rendered),
+          (s) => loadReferencedContent(s.dir),
         ),
         Then('nothing should be injected')((s) =>
           Effect.sync(() => {
@@ -303,7 +307,7 @@ Feature('@-ref extraction, resolution, and injection')
     )
 
     scenario(
-      'Should still inject a ref the host never rendered',
+      'Should still inject a ref outside the skip list',
       {
         scenarioLayer: makeFsLayer({
           '/test/CLAUDE.md': '@docs/style.md\n',
@@ -312,14 +316,7 @@ Feature('@-ref extraction, resolution, and injection')
       },
       Gherkin.Do.pipe(
         Given('a CLAUDE.md referencing docs/style.md')('dir', () => Effect.succeed('/test')),
-        Given('the host rendered only AGENTS.md')(
-          'rendered',
-          () => Effect.succeed(['<repo-rules>\n# Project Rules\n</repo-rules>']),
-        ),
-        When('loadReferencedContent reads a prompt without that ref')(
-          'result',
-          (s) => loadReferencedContent(s.dir, s.rendered),
-        ),
+        When('loadReferencedContent runs')('result', (s) => loadReferencedContent(s.dir)),
         Then('the style guidance should be injected')((s) =>
           Effect.sync(() => {
             expect(s.result).toContain('Tabs, not spaces.')
@@ -329,7 +326,7 @@ Feature('@-ref extraction, resolution, and injection')
     )
 
     scenario(
-      'Should inject only the refs missing from the rendered prompt',
+      'Should inject only the refs outside the skip list',
       {
         scenarioLayer: makeFsLayer({
           '/test/CLAUDE.md': '@AGENTS.md\n@docs/style.md\n',
@@ -338,15 +335,11 @@ Feature('@-ref extraction, resolution, and injection')
         }),
       },
       Gherkin.Do.pipe(
-        Given('a CLAUDE.md referencing both AGENTS.md and docs/style.md')('dir', () => Effect.succeed('/test')),
-        Given('the host rendered AGENTS.md but not the style guide')(
-          'rendered',
-          () => Effect.succeed(['<repo-rules>\n# Project Rules\n\nUse pnpm only.\n</repo-rules>']),
+        Given('a CLAUDE.md referencing both AGENTS.md and docs/style.md')(
+          'dir',
+          () => Effect.succeed('/test'),
         ),
-        When('loadReferencedContent reads a prompt holding one of the two')(
-          'result',
-          (s) => loadReferencedContent(s.dir, s.rendered),
-        ),
+        When('loadReferencedContent runs')('result', (s) => loadReferencedContent(s.dir)),
         Then('only the style guide should be injected')((s) =>
           Effect.sync(() => {
             expect(s.result).toContain('Tabs, not spaces.')
@@ -357,7 +350,78 @@ Feature('@-ref extraction, resolution, and injection')
     )
 
     scenario(
-      'Should inject an empty ref rather than let it match everything',
+      'Should replace the default skip list with a configured one',
+      {
+        scenarioLayer: makeFsLayer({
+          '/test/systemfsoftware.toml': 'no_inject_refs = ["CUSTOM.md"]\n',
+          '/test/CLAUDE.md': '@CUSTOM.md\n@AGENTS.md\n',
+          '/test/CUSTOM.md': 'Custom rules.',
+          '/test/AGENTS.md': '# Project Rules\n\nUse pnpm only.',
+        }),
+      },
+      Gherkin.Do.pipe(
+        Given('a project config naming CUSTOM.md instead of AGENTS.md')(
+          'dir',
+          () => Effect.succeed('/test'),
+        ),
+        When('loadReferencedContent runs')('result', (s) => loadReferencedContent(s.dir)),
+        Then('the configured name is suppressed and AGENTS.md injected')((s) =>
+          Effect.sync(() => {
+            expect(s.result).not.toContain('Custom rules.')
+            expect(s.result).toContain('Use pnpm only.')
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'Should disable suppression entirely on an empty skip list',
+      {
+        scenarioLayer: makeFsLayer({
+          '/test/systemfsoftware.toml': 'no_inject_refs = []\n',
+          '/test/CLAUDE.md': '@AGENTS.md\n',
+          '/test/AGENTS.md': '# Project Rules\n\nUse pnpm only.',
+        }),
+      },
+      Gherkin.Do.pipe(
+        Given('a project config with an empty no_inject_refs')(
+          'dir',
+          () => Effect.succeed('/test'),
+        ),
+        When('loadReferencedContent runs')('result', (s) => loadReferencedContent(s.dir)),
+        Then('AGENTS.md should be injected')((s) =>
+          Effect.sync(() => {
+            expect(s.result).toContain('Use pnpm only.')
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'Should fall back to the default skip list on a malformed config',
+      {
+        scenarioLayer: makeFsLayer({
+          '/test/systemfsoftware.toml': 'no_inject_refs = "AGENTS.md"\n',
+          '/test/CLAUDE.md': '@AGENTS.md\n',
+          '/test/AGENTS.md': '# Project Rules\n\nUse pnpm only.',
+        }),
+      },
+      Gherkin.Do.pipe(
+        Given('a config whose no_inject_refs is a scalar, not an array')(
+          'dir',
+          () => Effect.succeed('/test'),
+        ),
+        When('loadReferencedContent runs')('result', (s) => loadReferencedContent(s.dir)),
+        Then('the default skip list should still suppress AGENTS.md')((s) =>
+          Effect.sync(() => {
+            expect(s.result).toBe('')
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'Should list an empty ref file that is not suppressed',
       {
         scenarioLayer: makeFsLayer({
           '/test/CLAUDE.md': '@placeholder.md\n',
@@ -365,15 +429,11 @@ Feature('@-ref extraction, resolution, and injection')
         }),
       },
       Gherkin.Do.pipe(
-        Given('a CLAUDE.md referencing an empty placeholder')('dir', () => Effect.succeed('/test')),
-        Given('the host rendered unrelated repo rules')(
-          'rendered',
-          () => Effect.succeed(['<repo-rules>\n# Project Rules\n</repo-rules>']),
+        Given('a CLAUDE.md referencing an empty placeholder')(
+          'dir',
+          () => Effect.succeed('/test'),
         ),
-        When('loadReferencedContent reads a prompt sharing no content')(
-          'result',
-          (s) => loadReferencedContent(s.dir, s.rendered),
-        ),
+        When('loadReferencedContent runs')('result', (s) => loadReferencedContent(s.dir)),
         Then('the placeholder should still be listed')((s) =>
           Effect.sync(() => {
             expect(s.result).toContain('## placeholder.md')

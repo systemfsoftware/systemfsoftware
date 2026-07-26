@@ -1,6 +1,8 @@
 import { FileSystem } from '@effect/platform/FileSystem'
 import * as PathModule from '@effect/platform/Path'
-import { Effect, Either } from 'effect'
+import { TomlLoader } from '@systemfsoftware/omp-utils'
+import { Effect, Either, Match, Option } from 'effect'
+import { decideRefInjection, DEFAULT_NO_INJECT_REFS } from './inject-instructions.workflow.js'
 
 interface Ref {
   readonly sourcePath: string
@@ -39,22 +41,14 @@ const extractRefs = Effect.fn('extractRefs')(function*(content: string, baseDir:
 })
 
 /**
- * Collect the content of every `@`-ref in CLAUDE.md that the host has not
- * already delivered.
- *
- * `alreadyRendered` is the system prompt as built so far. The host discovers
- * context files (AGENTS.md and the like) on its own and renders them into
- * `<repo-rules>`, so a `CLAUDE.md` consisting of `@AGENTS.md` would otherwise
- * inject a byte-identical second copy. Refs the host does not load — a
- * `@docs/style.md`, say — are still injected; that is this compat shim's
- * whole job.
+ * Collect the content of every `@`-ref in CLAUDE.md that the host does not
+ * already deliver, deciding each ref through `decideRefInjection`.
  */
-export const loadReferencedContent = Effect.fn('loadReferencedContent')(function*(
-  projectDir: string,
-  alreadyRendered: readonly string[] = [],
-) {
+export const loadReferencedContent = Effect.fn('loadReferencedContent')(function*(projectDir: string) {
   const fs = yield* FileSystem
   const path = yield* PathModule.Path
+  const tomlLoader = yield* TomlLoader
+
   const claudeMdPaths = [
     path.resolve(projectDir, 'CLAUDE.md'),
     path.resolve(projectDir, '.claude', 'CLAUDE.md'),
@@ -80,28 +74,33 @@ export const loadReferencedContent = Effect.fn('loadReferencedContent')(function
     }
   }
 
-  const rendered = alreadyRendered.join('\n')
+  const config = yield* tomlLoader.load(projectDir).pipe(
+    Effect.catchAll(() => Effect.succeed(undefined)),
+  )
+  const skipList = config?.['no_inject_refs'] ?? DEFAULT_NO_INJECT_REFS
 
   const sections: string[] = []
   for (const ref of uniqueRefs) {
-    const exists = yield* Effect.either(fs.exists(ref.resolvedPath))
-    if (!(Either.isRight(exists) && exists.right)) continue
-
     const relativePath = ref.resolvedPath.slice(projectDir.length + 1)
-    const refContent = yield* Effect.either(
-      fs.readFileString(ref.resolvedPath, 'utf-8'),
+    const suppressed = Match.value(
+      decideRefInjection({ resolvedPath: ref.resolvedPath, skipList }),
+    ).pipe(
+      Match.tag('Skip', (skip) => Option.some(skip.matched)),
+      Match.tag('Inject', () => Option.none<string>()),
+      Match.exhaustive,
     )
-    if (Either.isLeft(refContent)) {
-      sections.push(`## ${relativePath}\n[error reading ${relativePath}]\n`)
+
+    if (Option.isSome(suppressed)) {
+      yield* Effect.logDebug(
+        `[omp-claude-compat] skipped @-ref ${relativePath}: host already provides ${suppressed.value}`,
+      )
       continue
     }
 
-    // Content identity is the host's own dedupe key for context files
-    // (`dedupeExactContextFiles` in system-prompt.ts), so match on it here
-    // rather than guessing at the host's discovery rules. An empty file
-    // trivially matches everything, so it never suppresses.
-    const body = refContent.right.trim()
-    if (body.length > 0 && rendered.includes(body)) continue
+    const refContent = yield* Effect.either(
+      fs.readFileString(ref.resolvedPath, 'utf-8'),
+    )
+    if (Either.isLeft(refContent)) continue
 
     sections.push(`## ${relativePath}\n${refContent.right}\n`)
   }
