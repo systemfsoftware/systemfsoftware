@@ -1,5 +1,5 @@
-import { readdirSync, readFileSync } from 'node:fs'
-import { dirname, join, relative } from 'node:path'
+import { execSync } from 'node:child_process'
+import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import semanticRelease from 'semantic-release'
 
@@ -47,53 +47,27 @@ const presetConfig = {
   ],
 }
 
-const packagesRoots = [join(repoRoot, 'packages'), join(repoRoot, 'omp', 'packages'), join(repoRoot, 'omp', 'plugins')]
-
 /**
- * Recursively discover publishable packages under `root`.
- * Returns the root-relative path and the unscoped package name for each.
+ * Discover publishable workspace packages via pnpm, respecting pnpm-workspace.yaml.
+ * Filters out private packages — the root package.json is private and excluded naturally.
  */
-function discoverPackages(root, dir = root) {
-  const entries = readdirSync(dir, { withFileTypes: true })
-  const packages = []
-
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue
-    const packagePath = join(dir, entry.name)
-
-    const manifestExists = (() => {
-      try {
-        return readdirSync(packagePath).includes('package.json')
-      } catch {
-        return false
-      }
-    })()
-
-    if (!manifestExists) {
-      // No package.json here — keep descending.
-      packages.push(...discoverPackages(root, packagePath))
-      continue
-    }
-
-    const manifest = JSON.parse(readFileSync(join(packagePath, 'package.json'), 'utf8'))
-    if (manifest.private === true) continue
-    if (typeof manifest.name !== 'string' || manifest.name.length === 0) {
-      throw new Error(
-        `Publishable package at ${relative(root, packagePath)} is missing a valid "name" field`,
-      )
-    }
-
-    packages.push({
-      path: relative(root, packagePath),
-      // Strip npm scope so tags and commitlint scopes stay consistent
-      name: manifest.name.replace(/^@[^/]+\//, ''),
-    })
-  }
-
+function discoverPackagesFromPnpm() {
+  const output = execSync('pnpm ls -r --json --depth=-1', {
+    cwd: repoRoot,
+    encoding: 'utf8',
+    maxBuffer: 10 * 1024 * 1024,
+  })
+  const packages = JSON.parse(output)
   return packages
+    .filter((pkg) => !pkg.private)
+    .map((pkg) => ({
+      // Strip npm scope so tags and commitlint scopes stay consistent
+      name: pkg.name.replace(/^@[^/]+\//, ''),
+      cwd: pkg.path,
+    }))
 }
 
-const publishablePackages = packagesRoots.flatMap((root) => discoverPackages(root).map((pkg) => ({ ...pkg, root })))
+const publishablePackages = discoverPackagesFromPnpm()
 
 const pluginsFor = () => [
   [filterPlugin, {
@@ -112,20 +86,19 @@ const pluginsFor = () => [
 ]
 
 let failed = 0
-for (const { path: packagePath, name: packageName, root } of publishablePackages) {
-  const cwd = join(root, packagePath)
+for (const { name, cwd } of publishablePackages) {
   try {
     const result = await semanticRelease({
       branches: ['main'],
-      tagFormat: `${packageName}@v\${version}`,
+      tagFormat: `${name}@v\${version}`,
       dryRun,
       plugins: pluginsFor(),
     }, { cwd })
     const line = result === false ? 'no release' : `${result.nextRelease.type} -> ${result.nextRelease.version}`
-    console.log(`[${packageName}] ${line}`)
+    console.log(`[${name}] ${line}`)
   } catch (error) {
     failed += 1
-    console.error(`[${packageName}] failed:`, error?.message ?? error)
+    console.error(`[${name}] failed:`, error?.message ?? error)
   }
 }
 
