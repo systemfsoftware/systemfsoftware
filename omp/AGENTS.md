@@ -87,13 +87,27 @@ export const TomlConfigFromText = Schema.transformOrFail(
 
 **WRONG — hand-written decode outside Schema's contract** (this is what the existing `tool-input.acl.ts`, `tool-name.acl.ts`, and `context-mode.acl.ts` do; flagged as a follow-up to bring into ACL1 compliance):
 
-```ts
+````ts
 export function normalizeToolName(name: string): string {
   if (name.length === 0) return name
   return name.charAt(0).toUpperCase() + name.slice(1)
 }
 // → VIOLATION: lowercase→capitalized is a foreign-shape→domain mapping re-implemented in code; the correct shape is a Schema.transformOrFail from `Schema.String` to a branded `NormalizedToolName` brand.
-```
+
+## Extension Registration Contract
+
+**All `pi.on(...)` registrations MUST complete synchronously before the `default export function(pi)` returns.** The OMP ExtensionAPI requires this — handlers are collected during the function call, not after. A dynamic import inside the factory defers the callbacks, violating the contract.
+
+Consequence for the lazy-init pattern: `*.handler.ts` files are statically imported from `src/index.ts` so their module-level `pi.on(...)` calls execute synchronously during the factory. The runtime (`.runtime.ts`) is backed by `await import('./runtime.js')` inside each callback, so its construction is deferred to first handler fire — but the handler registration itself is synchronous.
+
+```yaml
+- id: EXT1
+  title: OMP handlers register synchronously in the factory
+  do: statically import handler modules and call pi.on(...) in the default export function before it returns
+  dont: register pi.on(...) handlers inside a module-scope Effect or inside a then/callback of a dynamic import
+  harm: handlers are never collected and the extension silently does nothing
+  check: grep -rn 'pi.on(' omp/plugins/*/src/index.ts — pi.on is called directly in the factory body, not inside a then() or Effect.runSync
+````
 
 **Audit:**
 

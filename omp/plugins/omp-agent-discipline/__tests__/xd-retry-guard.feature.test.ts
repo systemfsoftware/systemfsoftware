@@ -1,6 +1,6 @@
 import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Effect, Layer } from 'effect'
+import { Effect } from 'effect'
 import { expect, vi } from 'vitest'
 
 const Feature = makeFeature({ it, layer })
@@ -83,7 +83,7 @@ Feature('xd:// retry guard')
             vi.resetModules()
             const g = createMockGuard()
             const mod = await import('../src/xd-retry-guard.handler.ts')
-            Effect.runSync(Effect.scoped(Layer.build(mod.XdRetryGuardExtension(g.api as never))))
+            mod.XdRetryGuardExtension(g.api as never)
             return g
           })),
         When('a tool returns not found and context is requested')('ctx', (s) =>
@@ -111,7 +111,7 @@ Feature('xd:// retry guard')
             vi.resetModules()
             const g = createMockGuard()
             const mod = await import('../src/xd-retry-guard.handler.ts')
-            Effect.runSync(Effect.scoped(Layer.build(mod.XdRetryGuardExtension(g.api as never))))
+            mod.XdRetryGuardExtension(g.api as never)
             return g
           })),
         When('context is requested without any preceding failure')(
@@ -134,7 +134,7 @@ Feature('xd:// retry guard')
             vi.resetModules()
             const g = createMockGuard()
             const mod = await import('../src/xd-retry-guard.handler.ts')
-            Effect.runSync(Effect.scoped(Layer.build(mod.XdRetryGuardExtension(g.api as never))))
+            mod.XdRetryGuardExtension(g.api as never)
             g.fire('tool_execution_end', notFoundResult('recall'))
             return g
           })),
@@ -164,7 +164,7 @@ Feature('xd:// retry guard')
             vi.resetModules()
             const g = createMockGuard()
             const mod = await import('../src/xd-retry-guard.handler.ts')
-            Effect.runSync(Effect.scoped(Layer.build(mod.XdRetryGuardExtension(g.api as never))))
+            mod.XdRetryGuardExtension(g.api as never)
             g.fire('tool_execution_end', notFoundResult('web_search'))
             return g
           })),
@@ -195,7 +195,7 @@ Feature('xd:// retry guard')
             vi.resetModules()
             const g = createMockGuard()
             const mod = await import('../src/xd-retry-guard.handler.ts')
-            Effect.runSync(Effect.scoped(Layer.build(mod.XdRetryGuardExtension(g.api as never))))
+            mod.XdRetryGuardExtension(g.api as never)
             return g
           })),
         When('an unrelated bash error fires')('ctx', (s) =>
@@ -218,167 +218,6 @@ Feature('xd:// retry guard')
     )
 
     scenario(
-      'Should emit guard.fired telemetry on first not found failure',
-      Gherkin.Do.pipe(
-        Given('a guard with telemetry')('guard', () =>
-          Effect.promise(async () => {
-            vi.resetModules()
-            const g = createMockGuard()
-            const mod = await import('../src/xd-retry-guard.handler.ts')
-            Effect.runSync(Effect.scoped(Layer.build(mod.XdRetryGuardExtension(g.api as never))))
-            return g
-          })),
-        When('a tool not found error fires')('telemetry', (s) =>
-          Effect.sync(() => {
-            s.guard.fire('tool_execution_end', notFoundResult('retain'))
-            return s.guard.recordedLogs.filter(
-              (r) => r.level === 'info' && (r.context as Record<string, unknown>)?.event === 'guard.fired',
-            )
-          })),
-        Then('the guard should emit guard.fired with the tool name and count')((s) =>
-          Effect.sync(() => {
-            expect(s.telemetry.length).toBe(1)
-            const ctx = s.telemetry[0]?.context as Record<string, unknown> | undefined
-            expect(ctx?.plugin).toBe('agent_discipline')
-            expect(ctx?.tool).toBe('retain')
-            expect(ctx?.count).toBe(1)
-          })
-        ),
-      ),
-    )
-
-    scenario(
-      'Should emit guard.cleared when retry executes',
-      Gherkin.Do.pipe(
-        Given('a guard with a retain failure recorded')('guard', () =>
-          Effect.promise(async () => {
-            vi.resetModules()
-            const g = createMockGuard()
-            const mod = await import('../src/xd-retry-guard.handler.ts')
-            Effect.runSync(Effect.scoped(Layer.build(mod.XdRetryGuardExtension(g.api as never))))
-            g.fire('tool_execution_end', notFoundResult('retain'))
-            return g
-          })),
-        When('a write to xd://retain executes')('telemetry', (s) =>
-          Effect.sync(() => {
-            s.guard.fire('tool_execution_start', {
-              type: 'tool_execution_start',
-              toolName: 'write',
-              toolCallId: 'tc-2',
-              args: { path: 'xd://retain', content: '{"query":"x"}' },
-            })
-            return s.guard.recordedLogs.filter(
-              (r) => r.level === 'info' && (r.context as Record<string, unknown>)?.event === 'guard.cleared',
-            )
-          })),
-        Then('the guard should emit guard.cleared with count 0')((s) =>
-          Effect.sync(() => {
-            expect(s.telemetry.length).toBe(1)
-            const ctx = s.telemetry[0]?.context as Record<string, unknown> | undefined
-            expect(ctx?.plugin).toBe('agent_discipline')
-            expect(ctx?.tool).toBe('retain')
-            expect(ctx?.count).toBe(0)
-          })
-        ),
-      ),
-    )
-
-    scenario(
-      'Should emit guard.reminded when ledger non-empty on context',
-      Gherkin.Do.pipe(
-        Given('a guard with a recall failure')('guard', () =>
-          Effect.promise(async () => {
-            vi.resetModules()
-            const g = createMockGuard()
-            const mod = await import('../src/xd-retry-guard.handler.ts')
-            Effect.runSync(Effect.scoped(Layer.build(mod.XdRetryGuardExtension(g.api as never))))
-            g.fire('tool_execution_end', notFoundResult('recall'))
-            return g
-          })),
-        When('context is requested')('telemetry', (s) =>
-          Effect.sync(() => {
-            s.guard.fireContext()
-            return s.guard.recordedLogs.filter(
-              (r) => r.level === 'info' && (r.context as Record<string, unknown>)?.event === 'guard.reminded',
-            )
-          })),
-        Then('the guard should emit guard.reminded with count 1')((s) =>
-          Effect.sync(() => {
-            expect(s.telemetry.length).toBe(1)
-            const ctx = s.telemetry[0]?.context as Record<string, unknown> | undefined
-            expect(ctx?.plugin).toBe('agent_discipline')
-            expect(ctx?.count).toBe(1)
-          })
-        ),
-      ),
-    )
-
-    scenario(
-      'Should not throw when logger throws',
-      Gherkin.Do.pipe(
-        Given('a guard with a throwing logger')('guard', () =>
-          Effect.promise(async () => {
-            vi.resetModules()
-            const throwingLogger = {
-              info() {
-                throw new Error('logger failure')
-              },
-              warn() {},
-              error() {},
-              debug() {},
-            }
-            const handlers = new Map<string, Array<(event: unknown, ctx: unknown) => unknown>>()
-            const mockCtx = { cwd: '/tmp', sessionManager: { getSessionId: () => 'test-session' } } as unknown
-            const api = {
-              on(event: string, handler: (event: unknown, ctx: unknown) => unknown) {
-                const list = handlers.get(event) ?? []
-                list.push(handler)
-                handlers.set(event, list)
-              },
-              logger: throwingLogger,
-            }
-            const mod = await import('../src/xd-retry-guard.handler.ts')
-            Effect.runSync(Effect.scoped(Layer.build(mod.XdRetryGuardExtension(api as never))))
-
-            const fire = (event: string, payload: Record<string, unknown>): unknown => {
-              let result: unknown
-              for (const handler of handlers.get(event) ?? []) {
-                result = handler(payload as never, mockCtx)
-              }
-              return result
-            }
-            const fireContext = () =>
-              fire('context', { type: 'context', messages: [] }) as { messages: readonly AgentMessage[] } | undefined
-
-            return {
-              api,
-              fire,
-              fireContext,
-              recordedLogs: [] as Array<{ level: string; message: unknown; context?: unknown }>,
-              handlers,
-            }
-          })),
-        When('a tool fails and gets retried')('ctx', (s) =>
-          Effect.sync(() => {
-            s.guard.fire('tool_execution_end', notFoundResult('retain'))
-            s.guard.fire('tool_execution_start', {
-              type: 'tool_execution_start',
-              toolName: 'write',
-              toolCallId: 'tc-5',
-              args: { path: 'xd://retain', content: '{"query":"x"}' },
-            })
-            const ctxResult = s.guard.fireContext()
-            return ctxResult
-          })),
-        Then('the guard should still function despite logger errors')((s) =>
-          Effect.sync(() => {
-            expect(s.ctx).toBeUndefined()
-          })
-        ),
-      ),
-    )
-
-    scenario(
       'Should detect not found when error text is lower case',
       Gherkin.Do.pipe(
         Given('a guard loaded')('guard', () =>
@@ -386,7 +225,7 @@ Feature('xd:// retry guard')
             vi.resetModules()
             const g = createMockGuard()
             const mod = await import('../src/xd-retry-guard.handler.ts')
-            Effect.runSync(Effect.scoped(Layer.build(mod.XdRetryGuardExtension(g.api as never))))
+            mod.XdRetryGuardExtension(g.api as never)
             return g
           })),
         When('a lower-case not found error fires')('ctx', (s) =>
@@ -417,7 +256,7 @@ Feature('xd:// retry guard')
             vi.resetModules()
             const g = createMockGuard()
             const mod = await import('../src/xd-retry-guard.handler.ts')
-            Effect.runSync(Effect.scoped(Layer.build(mod.XdRetryGuardExtension(g.api as never))))
+            mod.XdRetryGuardExtension(g.api as never)
             return g
           })),
         When('a not found error fires for ctx_execute')('ctx', (s) =>
@@ -448,7 +287,7 @@ Feature('xd:// retry guard')
             vi.resetModules()
             const g = createMockGuard()
             const mod = await import('../src/xd-retry-guard.handler.ts')
-            Effect.runSync(Effect.scoped(Layer.build(mod.XdRetryGuardExtension(g.api as never))))
+            mod.XdRetryGuardExtension(g.api as never)
             return g
           })),
         When('a not found error fires for mcp__ctx_query')('ctx', (s) =>
@@ -479,7 +318,7 @@ Feature('xd:// retry guard')
             vi.resetModules()
             const g = createMockGuard()
             const mod = await import('../src/xd-retry-guard.handler.ts')
-            Effect.runSync(Effect.scoped(Layer.build(mod.XdRetryGuardExtension(g.api as never))))
+            mod.XdRetryGuardExtension(g.api as never)
             for (let i = 0; i < 50; i++) {
               g.fire('tool_execution_end', {
                 type: 'tool_execution_end',
@@ -522,7 +361,7 @@ Feature('xd:// retry guard')
             vi.resetModules()
             const g = createMockGuard()
             const mod = await import('../src/xd-retry-guard.handler.ts')
-            Effect.runSync(Effect.scoped(Layer.build(mod.XdRetryGuardExtension(g.api as never))))
+            mod.XdRetryGuardExtension(g.api as never)
             g.fire('tool_execution_end', notFoundResult('retain'))
             g.fireContext()
             return g
@@ -547,7 +386,7 @@ Feature('xd:// retry guard')
             vi.resetModules()
             const g = createMockGuard()
             const mod = await import('../src/xd-retry-guard.handler.ts')
-            Effect.runSync(Effect.scoped(Layer.build(mod.XdRetryGuardExtension(g.api as never))))
+            mod.XdRetryGuardExtension(g.api as never)
             g.fire('tool_execution_end', notFoundResult('retain'))
             g.fireContext()
             return g
@@ -574,7 +413,7 @@ Feature('xd:// retry guard')
             vi.resetModules()
             const g = createMockGuard()
             const mod = await import('../src/xd-retry-guard.handler.ts')
-            Effect.runSync(Effect.scoped(Layer.build(mod.XdRetryGuardExtension(g.api as never))))
+            mod.XdRetryGuardExtension(g.api as never)
             g.fire('tool_execution_end', notFoundResult('retain'))
             g.fireContext()
             g.fire('tool_execution_end', notFoundResult('web_search'))

@@ -1,87 +1,5 @@
-import type { ExtensionAPI, ExtensionContext, ToolCallEvent } from '@oh-my-pi/pi-coding-agent'
-import { createTelemetry, TomlLoader } from '@systemfsoftware/omp-utils'
-import type { TelemetryEmitter, TomlConfig } from '@systemfsoftware/omp-utils'
-import { Effect, Layer, MutableHashMap, Option, Ref } from 'effect'
-import { GuardCache, runtime } from './runtime.js'
-
-interface CompiledGuard {
-  readonly protectedSkills: ReadonlySet<string>
-  readonly delegationVerbs: readonly RegExp[]
-  readonly referenceVerbs: readonly RegExp[]
-  readonly mentionPatterns: ReadonlyMap<string, RegExp>
-}
-
-let tel: TelemetryEmitter = () => {}
-
-function escapeRegex(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-}
-
-function compileGuard(names: readonly string[]): CompiledGuard | null {
-  if (names.length === 0) return null
-
-  const nameGroup = '(?:' + names.map(escapeRegex).join('|') + ')'
-
-  return {
-    protectedSkills: new Set(names),
-    delegationVerbs: [
-      new RegExp('\\binvoke\\s+(?:the\\s+)?[`/]?' + nameGroup + '\\b', 'i'),
-      new RegExp('\\bdispatch\\s+(?:to\\s+)?(?:the\\s+)?[`/]?' + nameGroup + '\\b', 'i'),
-      new RegExp('\\bwrap\\s+(?:the\\s+)?[`/]?' + nameGroup + '\\s+in\\s+(?:a\\s+)?(?:task|agent|subagent)\\b', 'i'),
-      new RegExp('\\bdelegate\\s+(?:the\\s+)?[`/]?' + nameGroup + '\\b', 'i'),
-      new RegExp(
-        '\\brun\\s+(?:the\\s+)?[`/]?' + nameGroup + '\\s+(?:via|in)\\s+(?:a\\s+)?(?:subagent|task|agent)\\b',
-        'i',
-      ),
-      new RegExp('\\b(?:run|execute|launch)\\s+(?:the\\s+)?[`/]?' + nameGroup + '\\b', 'i'),
-      new RegExp('\\bskill:\\s*[`/]?' + nameGroup + '\\b', 'i'),
-      new RegExp('\\bskill:\\/\\/' + nameGroup + '\\b', 'i'),
-      new RegExp('(?:^|\\W)/' + nameGroup + '(?=$|\\b|\\W)', 'i'),
-      new RegExp('\\buse\\s+(?:the\\s+)?[`/]?' + nameGroup + '\\b', 'i'),
-      new RegExp('\\bload\\s+(?:the\\s+)?[`/]?' + nameGroup + '\\b', 'i'),
-      new RegExp(
-        '\\bspawn\\s+(?:a\\s+)?(?:task|agent|subagent|worker)\\s+(?:with|using)\\s+(?:the\\s+)?[`/]?' +
-          nameGroup + '\\b',
-        'i',
-      ),
-      new RegExp('\\bcall\\s+(?:the\\s+)?[`/]?' + nameGroup + '\\b', 'i'),
-      new RegExp('\\bsend\\s+(?:the\\s+)?[`/]?' + nameGroup + '\\b', 'i'),
-      new RegExp(
-        '\\bcreate\\s+(?:a\\s+)?(?:task|agent|subagent)\\s+(?:with|using)\\s+(?:the\\s+)?[`/]?' + nameGroup + '\\b',
-        'i',
-      ),
-      new RegExp('\\bstart\\s+(?:the\\s+)?[`/]?' + nameGroup + '\\b', 'i'),
-    ],
-    referenceVerbs: [
-      new RegExp('\\bsee\\s+(?:the\\s+)?[`/]?' + nameGroup + '\\b', 'i'),
-      new RegExp('\\bper\\s+(?:the\\s+)?[`/]?' + nameGroup + '\\b', 'i'),
-      new RegExp('\\bread\\s+(?:the\\s+)?[`/]?' + nameGroup + '\\b', 'i'),
-      new RegExp('\\baccording\\s+to\\s+(?:the\\s+)?[`/]?' + nameGroup + '\\b', 'i'),
-    ],
-    mentionPatterns: new Map(
-      names.map((name) => [
-        name,
-        new RegExp('(?:^|[\\s/.`"])' + escapeRegex(name) + '(?=$|[\\s/.`"]|\\b)', 'i'),
-      ]),
-    ),
-  }
-}
-
-export const loadGuard = Effect.fn('loadGuard')(function*(cwd: string) {
-  const { cache } = yield* GuardCache
-  const cached = yield* Ref.get(cache)
-  const existing = MutableHashMap.get(cached, cwd)
-  if (Option.isSome(existing)) return existing.value as CompiledGuard
-
-  const loader = yield* TomlLoader
-  const config: TomlConfig = yield* loader.load(cwd)
-  const names = config['no_delegate_skills'] ?? []
-  const compiled = compileGuard(names)
-  if (compiled !== null) {
-    yield* Ref.update(cache, (m) => (MutableHashMap.set(m, cwd, compiled), m))
-  }
-  return compiled
-})
+import type { ExtensionAPI } from '@oh-my-pi/pi-coding-agent'
+import { Effect } from 'effect'
 
 function readString(input: Record<string, unknown>, ...keys: readonly string[]): string {
   for (const key of keys) {
@@ -91,21 +9,6 @@ function readString(input: Record<string, unknown>, ...keys: readonly string[]):
   return ''
 }
 
-function denyMessage(skill: string, how: 'subagent_type' | 'prompt', excerpt: string): string {
-  return [
-    `\u26D4 BLOCKED: "${skill}" must not be delegated to a subagent.`,
-    `Detected in ${how}: ${excerpt}`,
-    '',
-    `REQUIRED: invoke ${skill} directly in THIS session via the host Skill / Tool call,`,
-    'then pass its return envelope to the next step. Do NOT wrap it in a task / Agent dispatch.',
-    '',
-    'WHY: a subagent reproduces the shape but loses the skill protocol — plan-path gate,',
-    'headless review contract, and pipeline-vs-chat mode. The contract does not survive the hop.',
-    '',
-    'RULE: root AGENTS.md \u00A7"Skill invocations" (SK1/SK2).',
-  ].join('\n')
-}
-
 function decodeRecord(input: unknown): Record<string, unknown> {
   if (typeof input === 'object' && input !== null && !Array.isArray(input)) {
     return input as Record<string, unknown>
@@ -113,47 +16,19 @@ function decodeRecord(input: unknown): Record<string, unknown> {
   return {}
 }
 
-export const NoSkillDelegationExtension = (pi: ExtensionAPI): Layer.Layer<never> =>
-  Layer.effectDiscard(
-    Effect.sync(() => {
-      tel = createTelemetry('agent_discipline', pi.logger)
+export const NoSkillDelegationExtension = (pi: ExtensionAPI): void => {
+  pi.on('tool_call', async (event, ctx) => {
+    const { runSafe } = await import('./helpers.js')
+    const { runNoSkillDelegation } = await import('./no-skill-delegation.executor.js')
 
-      pi.on('tool_call', async (event: ToolCallEvent, ctx: ExtensionContext) => {
-        const guard = await runtime.runPromise(loadGuard(ctx.cwd))
-        if (guard === null) return undefined
-
-        const toolName = event.toolName.toLowerCase()
-        if (toolName !== 'task' && toolName !== 'agent') return undefined
-
+    return runSafe(
+      Effect.gen(function*() {
         const input = decodeRecord(event.input)
-
         const subagentType = readString(input, 'subagent_type', 'agent')
-        if (subagentType !== '' && guard.protectedSkills.has(subagentType)) {
-          tel('delegation.blocked', { skill: subagentType, how: 'subagent_type' })
-          return { block: true, reason: denyMessage(subagentType, 'subagent_type', subagentType) }
-        }
-
         const prompt = readString(input, 'prompt', 'task', 'description')
-        if (prompt !== '') {
-          const mentioned = [...guard.mentionPatterns.entries()]
-            .filter(([, pattern]) => pattern.test(prompt))
-            .map(([name]) => name)
-          if (
-            mentioned.length > 0 &&
-            guard.referenceVerbs.every((re) => !re.test(prompt)) &&
-            guard.delegationVerbs.some((re) => re.test(prompt))
-          ) {
-            const skill = mentioned[0]!
-            const matched = guard.delegationVerbs
-              .map((re) => re.exec(prompt))
-              .find((m): m is RegExpExecArray => m !== null)
-            const excerpt = matched !== undefined ? matched[0] : prompt.slice(0, 120)
-            tel('delegation.blocked', { skill, how: 'prompt' })
-            return { block: true, reason: denyMessage(skill, 'prompt', excerpt) }
-          }
-        }
-
-        return undefined
-      })
-    }),
-  )
+        const result = yield* runNoSkillDelegation(ctx.cwd, event.toolName, subagentType, prompt)
+        return result
+      }),
+    )
+  })
+}

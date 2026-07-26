@@ -1,7 +1,6 @@
 export { extractShellCommand, isContextModeShellTool } from './context-mode.acl.js'
 export { matchesMatcher } from './matcher.acl.js'
 export { type SessionIds, sessionIds } from './session.acl.js'
-export { createTelemetry, type TelemetryEmitter } from './telemetry.js'
 export { TomlConfigFromText } from './toml-loader.acl.js'
 export { TomlLoader, TomlLoaderLive } from './toml-loader.executor.js'
 export { type TomlConfig } from './toml-loader.schema.js'
