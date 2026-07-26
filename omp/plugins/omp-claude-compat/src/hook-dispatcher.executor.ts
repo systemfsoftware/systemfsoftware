@@ -15,8 +15,7 @@ import {
   normalizeToolName,
   sessionIds,
 } from '@systemfsoftware/omp-utils'
-import type { TelemetryEmitter } from '@systemfsoftware/omp-utils'
-import { Context, Effect, Either, Match, Option, Schema as S, Stream } from 'effect'
+import { Effect, Either, Match, Option, Schema as S, Stream } from 'effect'
 import { homedir } from 'node:os'
 import { Blocked, Continue, Warning } from './hook-dispatcher.schema.js'
 import type { HookOutcome, HookResult } from './hook-dispatcher.schema.js'
@@ -25,11 +24,6 @@ import { parseHookOutput } from './hook-output.acl.js'
 import { isHooksDisabled, mergeSettings, parseSettings } from './hook-settings.acl.js'
 import type { HookEntry, HookSettings } from './hook-settings.acl.js'
 import { interpretHookResult } from './hook-verdict.workflow.js'
-
-export class HookDispatcherExecutorDeps extends Context.Tag('HookDispatcherExecutorDeps')<
-  HookDispatcherExecutorDeps,
-  { readonly tel: TelemetryEmitter }
->() {}
 
 interface ResolvedCommand {
   readonly cmd: string
@@ -47,10 +41,6 @@ function resolveCommandPath(command: string, cwd: string): ResolvedCommand {
   const trimmed = expanded.trim()
   const unquoted = trimmed.startsWith('"') && trimmed.endsWith('"') ? trimmed.slice(1, -1) : trimmed
   return { cmd: 'sh', args: ['-c', unquoted] }
-}
-
-function hookNameFromCommand(command: string): string {
-  return command.split(/[\\/]/).pop() ?? command
 }
 
 const loadSettingsFile = Effect.fn('loadSettingsFile')(function*(path: string) {
@@ -139,7 +129,6 @@ export const runHooksForEvent = Effect.fn('runHooksForEvent')(function*(
   event: string,
 ) {
   const cwd = ctx.cwd
-  const { tel } = yield* HookDispatcherExecutorDeps
   let warning: string | undefined
   let inputModified = false
   let currentInput = input
@@ -148,44 +137,16 @@ export const runHooksForEvent = Effect.fn('runHooksForEvent')(function*(
     if (!matchesMatcher(matchValue, entry.matcher)) continue
 
     for (const hook of entry.hooks) {
-      const hookName = hookNameFromCommand(hook.command)
-      const hookStart = performance.now()
       const timeoutMs = (hook.timeout ?? 10) * 1000
 
       if (hook.async) {
         yield* Effect.forkDaemon(
-          runHookScript(hook.command, currentInput, cwd, timeoutMs).pipe(
-            Effect.tap((result) =>
-              Effect.sync(() => {
-                const durationMs = Math.round(performance.now() - hookStart)
-                tel('hook.executed', { hook: hookName, duration_ms: durationMs, exit_code: result.code })
-              })
-            ),
-            Effect.catchAll(() =>
-              Effect.sync(() => {
-                const durationMs = Math.round(performance.now() - hookStart)
-                tel('hook.executed', { hook: hookName, duration_ms: durationMs, exit_code: null })
-              })
-            ),
-          ),
+          runHookScript(hook.command, currentInput, cwd, timeoutMs),
         )
         continue
       }
 
-      const result = yield* runHookScript(hook.command, currentInput, cwd, timeoutMs).pipe(
-        Effect.tap((r) =>
-          Effect.sync(() => {
-            const durationMs = Math.round(performance.now() - hookStart)
-            tel('hook.executed', { hook: hookName, duration_ms: durationMs, exit_code: r.code })
-          })
-        ),
-        Effect.tapError(() =>
-          Effect.sync(() => {
-            const durationMs = Math.round(performance.now() - hookStart)
-            tel('hook.executed', { hook: hookName, duration_ms: durationMs, exit_code: null })
-          })
-        ),
-      )
+      const result = yield* runHookScript(hook.command, currentInput, cwd, timeoutMs)
 
       const verdict = interpretHookResult(result, event)
       const decision = Either.match(verdict, {
@@ -240,7 +201,6 @@ export const runPreToolUseHooks = Effect.fn('runPreToolUseHooks')(function*(
   event: ToolCallEvent,
   ctx: ExtensionContext,
 ) {
-  const { tel } = yield* HookDispatcherExecutorDeps
   if (isHooksDisabled(settings)) return undefined
   const claudeToolName = normalizeToolName(event.toolName)
   const sessionData = sessionIds(() => ctx.sessionManager.getSessionId())
@@ -261,11 +221,6 @@ export const runPreToolUseHooks = Effect.fn('runPreToolUseHooks')(function*(
     }
     const bashResult = yield* runHooksForEvent(settings.hooks.PreToolUse, 'Bash', bashInput, ctx, 'PreToolUse')
     if (bashResult.block) {
-      tel('tool_call.decision', {
-        tool_name: claudeToolName,
-        decision: 'block',
-        reason: bashResult.reason ?? `Bash blocked for ${shellCommand}`,
-      })
       return bashResult.reason === undefined
         ? { block: true }
         : { block: true, reason: bashResult.reason }
@@ -275,11 +230,6 @@ export const runPreToolUseHooks = Effect.fn('runPreToolUseHooks')(function*(
   const result = yield* runHooksForEvent(settings.hooks.PreToolUse, claudeToolName, input, ctx, 'PreToolUse')
 
   if (result.block) {
-    tel('tool_call.decision', {
-      tool_name: claudeToolName,
-      decision: 'block',
-      reason: result.reason ?? undefined,
-    })
     return result.reason === undefined
       ? { block: true }
       : { block: true, reason: result.reason }
@@ -299,10 +249,6 @@ export const runPreToolUseHooks = Effect.fn('runPreToolUseHooks')(function*(
     }
   }
 
-  tel('tool_call.decision', {
-    tool_name: claudeToolName,
-    decision: 'allow',
-  })
   return undefined
 })
 
@@ -370,7 +316,6 @@ export const runSessionStartHooks = Effect.fn('runSessionStartHooks')(function*(
   reason: string,
   ctx: ExtensionContext,
 ) {
-  const { tel } = yield* HookDispatcherExecutorDeps
   if (isHooksDisabled(settings)) return
   const entries = settings.hooks.SessionStart
   if (entries.length === 0) return
@@ -385,39 +330,16 @@ export const runSessionStartHooks = Effect.fn('runSessionStartHooks')(function*(
     if (entry.matcher && !matchesMatcher(reason, entry.matcher)) continue
 
     for (const hook of entry.hooks) {
-      const hookName = hookNameFromCommand(hook.command)
       const timeoutMs = (hook.timeout ?? 10) * 1000
 
       if (hook.async) {
         yield* Effect.forkDaemon(
-          runHookScript(hook.command, input, cwd, timeoutMs).pipe(
-            Effect.tap((result) =>
-              Effect.sync(() => {
-                tel('hook.executed', { hook: hookName, exit_code: result.code })
-              })
-            ),
-            Effect.catchAll(() =>
-              Effect.sync(() => {
-                tel('hook.executed', { hook: hookName, exit_code: null })
-              })
-            ),
-          ),
+          runHookScript(hook.command, input, cwd, timeoutMs),
         )
         continue
       }
 
-      yield* runHookScript(hook.command, input, cwd, timeoutMs).pipe(
-        Effect.tap((result) =>
-          Effect.sync(() => {
-            tel('hook.executed', { hook: hookName, exit_code: result.code })
-          })
-        ),
-        Effect.catchAll(() =>
-          Effect.sync(() => {
-            tel('hook.executed', { hook: hookName, exit_code: null })
-          })
-        ),
-      )
+      yield* runHookScript(hook.command, input, cwd, timeoutMs)
     }
   }
 })
@@ -428,8 +350,6 @@ export const runLifecycleHooks = Effect.fn('runLifecycleHooks')(function*(
 ) {
   if (entries.length === 0) return
 
-  const { tel } = yield* HookDispatcherExecutorDeps
-
   const cwd = ctx.cwd
 
   const input: Record<string, unknown> = {
@@ -438,37 +358,14 @@ export const runLifecycleHooks = Effect.fn('runLifecycleHooks')(function*(
 
   for (const entry of entries) {
     for (const hook of entry.hooks) {
-      const hookName = hookNameFromCommand(hook.command)
       const timeoutMs = (hook.timeout ?? 10) * 1000
 
       if (hook.async) {
         yield* Effect.forkDaemon(
-          runHookScript(hook.command, input, cwd, timeoutMs).pipe(
-            Effect.tap((result) =>
-              Effect.sync(() => {
-                tel('hook.executed', { hook: hookName, exit_code: result.code })
-              })
-            ),
-            Effect.catchAll(() =>
-              Effect.sync(() => {
-                tel('hook.executed', { hook: hookName, exit_code: null })
-              })
-            ),
-          ),
+          runHookScript(hook.command, input, cwd, timeoutMs),
         )
       } else {
-        yield* runHookScript(hook.command, input, cwd, timeoutMs).pipe(
-          Effect.tap((result) =>
-            Effect.sync(() => {
-              tel('hook.executed', { hook: hookName, exit_code: result.code })
-            })
-          ),
-          Effect.catchAll(() =>
-            Effect.sync(() => {
-              tel('hook.executed', { hook: hookName, exit_code: null })
-            })
-          ),
-        )
+        yield* runHookScript(hook.command, input, cwd, timeoutMs)
       }
     }
   }

@@ -6,6 +6,7 @@ export default defineConfig({
   dts: false,
   exports: { devExports: '@systemfsoftware/source' },
   tsconfig: './tsconfig.build.json',
+  minify: true,
   clean: false,
   outExtensions: () => ({ js: '.js', dts: '.d.ts' }),
   deps: { onlyBundle: false },
