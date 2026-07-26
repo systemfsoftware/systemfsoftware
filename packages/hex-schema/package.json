@@ -44,11 +44,9 @@
     "lint": "oxlint . ${AGENT:+--format=unix --quiet}",
     "attw": "attw --pack ."
   },
-  "dependencies": {
-    "effect": "catalog:"
-  },
   "devDependencies": {
     "@effect/vitest": "catalog:",
+    "effect": "catalog:",
     "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "workspace:^",
     "@systemfsoftware/effect-schema-law": "workspace:^",
@@ -63,7 +61,7 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "effect": "*"
+    "effect": "catalog:"
   },
   "publishConfig": {
     "exports": {
