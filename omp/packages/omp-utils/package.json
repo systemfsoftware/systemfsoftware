@@ -24,7 +24,9 @@
     "lint": "oxlint . ${AGENT:+--format=unix --quiet}"
   },
   "devDependencies": {
+    "@effect/platform": "catalog:",
     "@effect/vitest": "catalog:",
+    "effect": "catalog:",
     "@systemfsoftware/effect-memfs": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
@@ -34,6 +36,10 @@
     "typescript": "catalog:",
     "vitest": "catalog:"
   },
+  "peerDependencies": {
+    "@effect/platform": "catalog:",
+    "effect": "catalog:"
+  },
   "publishConfig": {
     "exports": {
       ".": "./dist/index.js",
@@ -41,8 +47,6 @@
     }
   },
   "dependencies": {
-    "@effect/platform": "catalog:",
-    "@std/toml": "catalog:",
-    "effect": "catalog:"
+    "@std/toml": "catalog:"
   }
 }

@@ -63,8 +63,8 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@effect/vitest": "*",
-    "effect": "*",
+    "@effect/vitest": "catalog:",
+    "effect": "catalog:",
     "vitest": "*"
   },
   "publishConfig": {

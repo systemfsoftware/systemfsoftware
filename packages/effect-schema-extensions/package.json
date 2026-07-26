@@ -51,10 +51,10 @@
     "attw": "attw --pack ."
   },
   "dependencies": {
-    "@systemfsoftware/hex-schema": "workspace:^",
-    "effect": "catalog:"
+    "@systemfsoftware/hex-schema": "workspace:^"
   },
   "devDependencies": {
+    "effect": "catalog:",
     "@effect/vitest": "catalog:",
     "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "workspace:^",
@@ -71,7 +71,7 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "effect": "*"
+    "effect": "catalog:"
   },
   "publishConfig": {
     "exports": {
