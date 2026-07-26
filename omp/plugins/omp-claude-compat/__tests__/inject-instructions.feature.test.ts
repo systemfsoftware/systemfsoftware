@@ -273,4 +273,107 @@ Feature('@-ref extraction, resolution, and injection')
         ),
       ),
     )
+
+    // ── Rule: a ref the host already rendered is not injected again ──
+
+    scenario(
+      'Should suppress a ref whose content the host already rendered',
+      {
+        scenarioLayer: makeFsLayer({
+          '/test/CLAUDE.md': '@AGENTS.md\n',
+          '/test/AGENTS.md': '# Project Rules\n\nUse pnpm only.',
+        }),
+      },
+      Gherkin.Do.pipe(
+        Given('a CLAUDE.md whose only ref is AGENTS.md')('dir', () => Effect.succeed('/test')),
+        Given('the host has already rendered AGENTS.md into repo-rules')('rendered', () =>
+          Effect.succeed([
+            '<repo-rules>\n<file path="/test/AGENTS.md">\n# Project Rules\n\nUse pnpm only.\n</file>\n</repo-rules>',
+          ])),
+        When('loadReferencedContent reads that rendered prompt')(
+          'result',
+          (s) => loadReferencedContent(s.dir, s.rendered),
+        ),
+        Then('nothing should be injected')((s) =>
+          Effect.sync(() => {
+            expect(s.result).toBe('')
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'Should still inject a ref the host never rendered',
+      {
+        scenarioLayer: makeFsLayer({
+          '/test/CLAUDE.md': '@docs/style.md\n',
+          '/test/docs/style.md': 'Tabs, not spaces.',
+        }),
+      },
+      Gherkin.Do.pipe(
+        Given('a CLAUDE.md referencing docs/style.md')('dir', () => Effect.succeed('/test')),
+        Given('the host rendered only AGENTS.md')('rendered', () =>
+          Effect.succeed(['<repo-rules>\n# Project Rules\n</repo-rules>'])),
+        When('loadReferencedContent reads a prompt without that ref')(
+          'result',
+          (s) => loadReferencedContent(s.dir, s.rendered),
+        ),
+        Then('the style guidance should be injected')((s) =>
+          Effect.sync(() => {
+            expect(s.result).toContain('Tabs, not spaces.')
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'Should inject only the refs missing from the rendered prompt',
+      {
+        scenarioLayer: makeFsLayer({
+          '/test/CLAUDE.md': '@AGENTS.md\n@docs/style.md\n',
+          '/test/AGENTS.md': '# Project Rules\n\nUse pnpm only.',
+          '/test/docs/style.md': 'Tabs, not spaces.',
+        }),
+      },
+      Gherkin.Do.pipe(
+        Given('a CLAUDE.md referencing both AGENTS.md and docs/style.md')('dir', () =>
+          Effect.succeed('/test')),
+        Given('the host rendered AGENTS.md but not the style guide')('rendered', () =>
+          Effect.succeed(['<repo-rules>\n# Project Rules\n\nUse pnpm only.\n</repo-rules>'])),
+        When('loadReferencedContent reads a prompt holding one of the two')(
+          'result',
+          (s) => loadReferencedContent(s.dir, s.rendered),
+        ),
+        Then('only the style guide should be injected')((s) =>
+          Effect.sync(() => {
+            expect(s.result).toContain('Tabs, not spaces.')
+            expect(s.result).not.toContain('Use pnpm only.')
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'Should inject an empty ref rather than let it match everything',
+      {
+        scenarioLayer: makeFsLayer({
+          '/test/CLAUDE.md': '@placeholder.md\n',
+          '/test/placeholder.md': '',
+        }),
+      },
+      Gherkin.Do.pipe(
+        Given('a CLAUDE.md referencing an empty placeholder')('dir', () => Effect.succeed('/test')),
+        Given('the host rendered unrelated repo rules')('rendered', () =>
+          Effect.succeed(['<repo-rules>\n# Project Rules\n</repo-rules>'])),
+        When('loadReferencedContent reads a prompt sharing no content')(
+          'result',
+          (s) => loadReferencedContent(s.dir, s.rendered),
+        ),
+        Then('the placeholder should still be listed')((s) =>
+          Effect.sync(() => {
+            expect(s.result).toContain('## placeholder.md')
+          })
+        ),
+      ),
+    )
   })

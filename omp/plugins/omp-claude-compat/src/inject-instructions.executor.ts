@@ -38,7 +38,21 @@ const extractRefs = Effect.fn('extractRefs')(function*(content: string, baseDir:
   return refs
 })
 
-export const loadReferencedContent = Effect.fn('loadReferencedContent')(function*(projectDir: string) {
+/**
+ * Collect the content of every `@`-ref in CLAUDE.md that the host has not
+ * already delivered.
+ *
+ * `alreadyRendered` is the system prompt as built so far. The host discovers
+ * context files (AGENTS.md and the like) on its own and renders them into
+ * `<repo-rules>`, so a `CLAUDE.md` consisting of `@AGENTS.md` would otherwise
+ * inject a byte-identical second copy. Refs the host does not load — a
+ * `@docs/style.md`, say — are still injected; that is this compat shim's
+ * whole job.
+ */
+export const loadReferencedContent = Effect.fn('loadReferencedContent')(function*(
+  projectDir: string,
+  alreadyRendered: readonly string[] = [],
+) {
   const fs = yield* FileSystem
   const path = yield* PathModule.Path
   const claudeMdPaths = [
@@ -66,33 +80,38 @@ export const loadReferencedContent = Effect.fn('loadReferencedContent')(function
     }
   }
 
-  const validRefs: Ref[] = []
+  const rendered = alreadyRendered.join('\n')
+
+  const sections: string[] = []
   for (const ref of uniqueRefs) {
     const exists = yield* Effect.either(fs.exists(ref.resolvedPath))
-    if (Either.isRight(exists) && exists.right) {
-      validRefs.push(ref)
-    }
-  }
+    if (!(Either.isRight(exists) && exists.right)) continue
 
-  if (validRefs.length === 0) return ''
-
-  const parts: string[] = ['# Injected @-references from CLAUDE.md']
-  parts.push('The following files were @-imported by CLAUDE.md and contain project rules.')
-  parts.push('')
-
-  for (const ref of validRefs) {
     const relativePath = ref.resolvedPath.slice(projectDir.length + 1)
-    parts.push(`## ${relativePath}`)
     const refContent = yield* Effect.either(
       fs.readFileString(ref.resolvedPath, 'utf-8'),
     )
-    if (Either.isRight(refContent)) {
-      parts.push(refContent.right)
-    } else {
-      parts.push(`[error reading ${relativePath}]`)
+    if (Either.isLeft(refContent)) {
+      sections.push(`## ${relativePath}\n[error reading ${relativePath}]\n`)
+      continue
     }
-    parts.push('')
+
+    // Content identity is the host's own dedupe key for context files
+    // (`dedupeExactContextFiles` in system-prompt.ts), so match on it here
+    // rather than guessing at the host's discovery rules. An empty file
+    // trivially matches everything, so it never suppresses.
+    const body = refContent.right.trim()
+    if (body.length > 0 && rendered.includes(body)) continue
+
+    sections.push(`## ${relativePath}\n${refContent.right}\n`)
   }
 
-  return parts.join('\n')
+  if (sections.length === 0) return ''
+
+  return [
+    '# Injected @-references from CLAUDE.md',
+    'The following files were @-imported by CLAUDE.md and contain project rules.',
+    '',
+    ...sections,
+  ].join('\n')
 })
