@@ -13,13 +13,13 @@ import { Match, Option, Schema as S } from 'effect'
 
 export const DEFAULT_NO_INJECT_REFS: ReadonlyArray<string> = ['AGENTS.md']
 
-export class Inject extends S.TaggedClass<Inject>()('Inject', {}) {}
+class Inject extends S.TaggedClass<Inject>()('Inject', {}) {}
 
-export class Skip extends S.TaggedClass<Skip>()('Skip', {
+class Skip extends S.TaggedClass<Skip>()('Skip', {
   matched: S.String,
 }) {}
 
-export type RefVerdict = Inject | Skip
+type RefVerdict = Inject | Skip
 
 export const CheckRefInjection = S.Struct({
   resolvedPath: S.String,
