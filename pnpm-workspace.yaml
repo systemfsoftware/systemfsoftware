@@ -46,6 +46,7 @@ overrides:
   vite: ^7
 packages:
   - packages/*
+  - packages/oxlint-plugins/*
   - packages/stryker-js/*
   - packages/arethetypeswrong/*
   - omp/packages/*

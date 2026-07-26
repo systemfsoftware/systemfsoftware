@@ -6,9 +6,9 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
-    "directory": "packages/oxlint-plugin-test-hygiene"
+    "directory": "packages/oxlint-plugins/test-hygiene"
   },
-  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/oxlint-plugin-test-hygiene#readme",
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/oxlint-plugins/test-hygiene#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
   "description": "Oxlint rules for test hygiene: DAMP test naming and property-based test naming conventions.",
   "keywords": [

@@ -1,14 +1,10 @@
-# AGENTS.md — `@systemfsoftware/oxlint-plugin`
+# AGENTS.md — `@systemfsoftware/oxlint-plugin` (`core/`)
 
-> **Location:** `packages/oxlint-plugin/` — the oxlint rule package for System F Software. Universal agent rules live in the root `AGENTS.md`; this file carries only `oxlint-plugin/`-specific deltas.
+> **Location:** `packages/oxlint-plugins/core/` — the general oxlint rule package for System F Software. Shared rule-authoring conventions (config split, error format, guards, testing, mutation gate) live in `packages/oxlint-plugins/AGENTS.md`; this file carries only `core/`-specific deltas.
 
-## Critical
+## 1. Rule Template (ESLintUtils Style)
 
-**MUST** invoke relevant skills before domain-specific work.
-
-## 1. Rule File Structure
-
-Rules use ESLint-compatible API via `@typescript-eslint/utils` for compatibility with oxlint's `jsPlugins` feature. Standard template:
+Rules use the ESLint-compatible API via `@typescript-eslint/utils` for compatibility with oxlint's `jsPlugins` feature. Standard template:
 
 ```typescript
 import { ESLintUtils, TSESTree } from '@typescript-eslint/utils'
@@ -33,15 +29,7 @@ export const rule = createRule<Options, MessageIds>({
 })
 ```
 
-### Error Message Format (MANDATORY)
-
-`ALL` error messages MUST use the AI-native format `'{{name}} is forbidden. Expected: {{expected}}. Actual: {{actual}}. Fix: {{fix}}.'`. Each placeholder carries: violating element, correct alternative, detected element, concrete fix.
-
-## 2. Testing Requirements
-
-- **REQUIRED:** `oxlint/plugins-dev` `RuleTester` (per Issue #2092). Structure: `valid: [...]` and `invalid: [...]`. Run: `pnpm --filter @systemfsoftware/oxlint-plugin test`.
-
-Test file template:
+## 2. Test File Template
 
 ```typescript
 import { RuleTester } from 'oxlint/plugins-dev'
@@ -66,35 +54,9 @@ ruleTester.run('rule-name', rule, {
 })
 ```
 
-### Coverage
+Coverage: 100% statements/branches/functions/lines — thresholds in `vitest.config.ts`.
 
-100% statements/branches/functions/lines — thresholds in `vitest.config.ts`.
-
-## 3. Oxlint JS Plugin Integration
-
-How oxlint loads this plugin (`oxlint-config/src/oxlint-config.base.ts`):
-
-```typescript
-import { defineConfig } from 'oxlint'
-
-export default defineConfig({
-  jsPlugins: ['@systemfsoftware/oxlint-plugin'],
-  rules: { '@systemfsoftware/oxlint-plugin/rule-name': 'error' },
-})
-```
-
-Rule export format (`src/index.ts`):
-
-```typescript
-import { rule as myRule } from './rules/my-rule.js'
-
-export default {
-  meta: { name: '@systemfsoftware/oxlint-plugin' },
-  rules: { 'my-rule': myRule },
-}
-```
-
-## 4. Migration from ESLint Plugin
+## 3. Migration from ESLint Plugin
 
 1. Copy rule file to `src/rules/{name}.ts`.
 2. Keep all rule logic, AST selectors, message formats.
@@ -103,7 +65,7 @@ export default {
 5. Update import paths (`.js` extension for ESM).
 6. Add rule export to `src/index.ts`.
 
-## 5. Commands
+## 4. Commands
 
 ```bash
 pnpm --filter @systemfsoftware/oxlint-plugin typecheck

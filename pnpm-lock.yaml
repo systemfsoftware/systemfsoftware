@@ -804,10 +804,10 @@ importers:
     dependencies:
       '@systemfsoftware/oxlint-plugin':
         specifier: workspace:^
-        version: link:../oxlint-plugin
+        version: link:../oxlint-plugins/core
       '@systemfsoftware/oxlint-plugin-test-hygiene':
         specifier: workspace:^
-        version: link:../oxlint-plugin-test-hygiene
+        version: link:../oxlint-plugins/test-hygiene
       oxlint:
         specifier: catalog:oxlint
         version: 1.74.0(oxlint-tsgolint@0.24.0)
@@ -822,7 +822,7 @@ importers:
         specifier: 'catalog:'
         version: 6.1.3
 
-  packages/oxlint-plugin:
+  packages/oxlint-plugins/core:
     dependencies:
       '@oxc-project/types':
         specifier: ^0.140.0
@@ -839,19 +839,19 @@ importers:
         version: 9.6.1(@stryker-mutator/core@9.6.1(@types/node@24.13.2))(vitest@4.1.9)
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: workspace:^
-        version: link:../arethetypeswrong/cli
+        version: link:../../arethetypeswrong/cli
       '@systemfsoftware/stryker-js-core':
         specifier: workspace:^
-        version: link:../stryker-js/core
+        version: link:../../stryker-js/core
       '@systemfsoftware/stryker-js-typescript-checker':
         specifier: workspace:^
-        version: link:../stryker-js/typescript-checker
+        version: link:../../stryker-js/typescript-checker
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
-        version: link:../tsconfig
+        version: link:../../tsconfig
       '@systemfsoftware/vitest-config':
         specifier: workspace:^
-        version: link:../vitest-config
+        version: link:../../vitest-config
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.2
@@ -877,7 +877,7 @@ importers:
         specifier: 'catalog:'
         version: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/coverage-v8@4.1.9)(vite@7.3.5(@types/node@24.13.2)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0))
 
-  packages/oxlint-plugin-effect-workflow:
+  packages/oxlint-plugins/effect-workflow:
     dependencies:
       '@oxc-project/types':
         specifier: ^0.140.0
@@ -897,19 +897,19 @@ importers:
         version: 9.6.1(@stryker-mutator/core@9.6.1(@types/node@24.13.2))(vitest@4.1.9)
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: workspace:^
-        version: link:../arethetypeswrong/cli
+        version: link:../../arethetypeswrong/cli
       '@systemfsoftware/stryker-js-core':
         specifier: workspace:^
-        version: link:../stryker-js/core
+        version: link:../../stryker-js/core
       '@systemfsoftware/stryker-js-typescript-checker':
         specifier: workspace:^
-        version: link:../stryker-js/typescript-checker
+        version: link:../../stryker-js/typescript-checker
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
-        version: link:../tsconfig
+        version: link:../../tsconfig
       '@systemfsoftware/vitest-config':
         specifier: workspace:^
-        version: link:../vitest-config
+        version: link:../../vitest-config
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.2
@@ -932,7 +932,7 @@ importers:
         specifier: 'catalog:'
         version: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/coverage-v8@4.1.9)(vite@7.3.5(@types/node@24.13.2)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0))
 
-  packages/oxlint-plugin-test-hygiene:
+  packages/oxlint-plugins/test-hygiene:
     dependencies:
       '@oxc-project/types':
         specifier: ^0.140.0
@@ -949,19 +949,19 @@ importers:
         version: 9.6.1(@stryker-mutator/core@9.6.1(@types/node@24.13.2))(vitest@4.1.9)
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: workspace:^
-        version: link:../arethetypeswrong/cli
+        version: link:../../arethetypeswrong/cli
       '@systemfsoftware/stryker-js-core':
         specifier: workspace:^
-        version: link:../stryker-js/core
+        version: link:../../stryker-js/core
       '@systemfsoftware/stryker-js-typescript-checker':
         specifier: workspace:^
-        version: link:../stryker-js/typescript-checker
+        version: link:../../stryker-js/typescript-checker
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
-        version: link:../tsconfig
+        version: link:../../tsconfig
       '@systemfsoftware/vitest-config':
         specifier: workspace:^
-        version: link:../vitest-config
+        version: link:../../vitest-config
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.2
