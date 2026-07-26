@@ -63,7 +63,7 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "effect": "*",
+    "effect": "catalog:",
     "rxjs": "^7"
   },
   "publishConfig": {

@@ -54,12 +54,10 @@
     "api:check": "api-extractor run && api-extractor run --config api-extractor.effect-schema-ignorer.json",
     "api:update": "api-extractor run --local && api-extractor run --local --config api-extractor.effect-schema-ignorer.json"
   },
-  "dependencies": {
-    "effect": "catalog:"
-  },
   "devDependencies": {
     "@babel/types": "^7.29.0",
     "@effect/vitest": "catalog:",
+    "effect": "catalog:",
     "@microsoft/api-extractor": "catalog:",
     "@stryker-mutator/api": "catalog:stryker",
     "@stryker-mutator/vitest-runner": "catalog:stryker",
@@ -79,6 +77,7 @@
   },
   "peerDependencies": {
     "@stryker-mutator/api": "catalog:stryker",
+    "effect": "catalog:",
     "typescript": ">=5.0.0"
   },
   "publishConfig": {

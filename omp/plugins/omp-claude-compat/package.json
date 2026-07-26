@@ -22,16 +22,17 @@
     "test": "vitest run",
     "lint": "oxlint . ${AGENT:+--format=unix --quiet}"
   },
-  "dependencies": {
+  "peerDependencies": {
     "@effect/platform": "catalog:",
     "@effect/platform-node": "catalog:",
-    "effect": "catalog:"
-  },
-  "peerDependencies": {
+    "effect": "catalog:",
     "@oh-my-pi/pi-coding-agent": "catalog:"
   },
   "devDependencies": {
+    "@effect/platform": "catalog:",
+    "@effect/platform-node": "catalog:",
     "@effect/vitest": "catalog:",
+    "effect": "catalog:",
     "@oh-my-pi/pi-coding-agent": "catalog:",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/effect-memfs": "workspace:^",
