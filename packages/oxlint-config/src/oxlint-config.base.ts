@@ -11,7 +11,10 @@ export default defineConfig({
 
   plugins: ['typescript', 'import', 'jsdoc', 'node', 'promise', 'vitest', 'unicorn'],
 
-  jsPlugins: ['@systemfsoftware/oxlint-plugin', '@systemfsoftware/oxlint-plugin-test-hygiene'],
+  jsPlugins: [
+    import.meta.resolve('@systemfsoftware/oxlint-plugin'),
+    import.meta.resolve('@systemfsoftware/oxlint-plugin-test-hygiene'),
+  ],
 
   rules: {
     'no-console': 'off',
