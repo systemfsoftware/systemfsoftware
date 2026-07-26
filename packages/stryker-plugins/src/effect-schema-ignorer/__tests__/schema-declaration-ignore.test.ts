@@ -1,5 +1,6 @@
 import { describe, it } from '@effect/vitest'
 import { FastCheck as fc, Schema as S } from 'effect'
+import { expect } from 'vitest'
 import {
   type AstNode,
   type CallExpression,
@@ -10,6 +11,7 @@ import {
 } from '../ast-node.schema.js'
 import {
   decideSchemaDeclarationIgnore,
+  OPTIONAL_DEFAULT_IGNORED,
   SYMBOL_DESCRIPTION_IGNORED,
   TAGGED_FIELDS_IGNORED,
   TAGGED_TAG_IGNORED,
@@ -86,7 +88,40 @@ describe('decideSchemaDeclarationIgnore — only the exact discriminant matches'
     const fields: ObjectExpression = { type: 'ObjectExpression' }
     const tagResult = decideSchemaDeclarationIgnore(tag, bareFactoryCall('TaggedClass', tag, fields))
     const fieldsResult = decideSchemaDeclarationIgnore(fields, bareFactoryCall('TaggedClass', tag, fields))
-    return tagResult === undefined && fieldsResult === undefined
+    expect(tagResult).toBeUndefined()
+    expect(fieldsResult).toBeUndefined()
+  })
+
+  it('Should_NotIgnore_When_ObjectIsNamedSymbolButPropertyIsNotFor', () => {
+    const description: StringLiteral = { type: 'StringLiteral', value: 'desc' }
+    expect(decideSchemaDeclarationIgnore(description, callOf(memberOf('Symbol', 'keyFor'), [description])))
+      .toBeUndefined()
+  })
+
+  it('Should_NotIgnore_When_ObjectIsNotSymbolButPropertyIsFor', () => {
+    const description: StringLiteral = { type: 'StringLiteral', value: 'desc' }
+    expect(decideSchemaDeclarationIgnore(description, callOf(memberOf('Object', 'for'), [description]))).toBeUndefined()
+  })
+
+  it('Should_IgnoreOptionalWithDefault_When_ArgIsArrowFunction', () => {
+    const defaultFn = { type: 'ArrowFunctionExpression' } as const
+    const schemaArg = memberOf('S', 'String')
+    const call = callOf(memberOf('S', 'optionalWith'), [schemaArg, defaultFn])
+    expect(decideSchemaDeclarationIgnore(defaultFn, call)).toBe(OPTIONAL_DEFAULT_IGNORED)
+  })
+
+  it('Should_NotIgnoreOptionalWithDefault_When_ArgIsNotArrowFunction', () => {
+    const notFn: StringLiteral = { type: 'StringLiteral', value: 'x' }
+    const schemaArg = memberOf('S', 'String')
+    const call = callOf(memberOf('S', 'optionalWith'), [schemaArg, notFn])
+    expect(decideSchemaDeclarationIgnore(notFn, call)).toBeUndefined()
+  })
+
+  it('Should_NotIgnoreOptionalWithDefault_When_CalleeIsNotOptionalWith', () => {
+    const defaultFn = { type: 'ArrowFunctionExpression' } as const
+    const schemaArg = memberOf('S', 'String')
+    const call = callOf(memberOf('S', 'optional'), [schemaArg, defaultFn])
+    expect(decideSchemaDeclarationIgnore(defaultFn, call)).toBeUndefined()
   })
 })
 

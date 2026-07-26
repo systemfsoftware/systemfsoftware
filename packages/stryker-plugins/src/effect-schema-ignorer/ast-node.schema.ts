@@ -17,6 +17,11 @@ export const ObjectExpression = S.Struct({
 })
 export type ObjectExpression = S.Schema.Type<typeof ObjectExpression>
 
+export const ArrowFunctionExpression = S.Struct({
+  type: S.Literal('ArrowFunctionExpression'),
+})
+export type ArrowFunctionExpression = S.Schema.Type<typeof ArrowFunctionExpression>
+
 export const UnknownNode = S.Struct({ type: S.String })
 export type UnknownNode = S.Schema.Type<typeof UnknownNode>
 
@@ -32,7 +37,14 @@ export interface CallExpression {
   readonly arguments: ReadonlyArray<AstNode>
 }
 
-export type AstNode = Identifier | StringLiteral | ObjectExpression | MemberExpression | CallExpression | UnknownNode
+export type AstNode =
+  | Identifier
+  | StringLiteral
+  | ObjectExpression
+  | ArrowFunctionExpression
+  | MemberExpression
+  | CallExpression
+  | UnknownNode
 
 export const MemberExpression: S.Schema<MemberExpression> = S.suspend(
   (): S.Schema<MemberExpression> =>
@@ -54,5 +66,13 @@ export const CallExpression: S.Schema<CallExpression> = S.suspend(
 
 export const AstNode: S.Schema<AstNode> = S.suspend(
   (): S.Schema<AstNode> =>
-    S.Union(Identifier, StringLiteral, ObjectExpression, MemberExpression, CallExpression, UnknownNode),
+    S.Union(
+      Identifier,
+      StringLiteral,
+      ObjectExpression,
+      ArrowFunctionExpression,
+      MemberExpression,
+      CallExpression,
+      UnknownNode,
+    ),
 )
