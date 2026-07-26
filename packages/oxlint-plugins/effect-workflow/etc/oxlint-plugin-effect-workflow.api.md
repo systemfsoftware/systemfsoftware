@@ -15,6 +15,9 @@ const _default: {
         'workflow-inline-schemas': Rule;
         'workflow-no-effect-import': Rule;
         'workflow-no-ambient-impurity': Rule;
+        'workflow-no-async': Rule;
+        'workflow-no-unconstructed-variant': Rule;
+        'workflow-no-panic-vocabulary': Rule;
         'workflow-property-test-shape': Rule;
         'workflow-typeid-required': Rule;
         'workflow-single-function-export': Rule;
