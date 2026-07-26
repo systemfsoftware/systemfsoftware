@@ -1,16 +1,16 @@
 {
-  "name": "@systemfsoftware/oxlint-plugin",
+  "name": "@systemfsoftware/oxlint-plugin-effect-workflow",
   "license": "MIT",
-  "version": "0.3.6",
+  "version": "0.1.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
-    "directory": "packages/oxlint-plugin"
+    "directory": "packages/oxlint-plugins/effect-workflow"
   },
-  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/oxlint-plugin#readme",
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/oxlint-plugins/effect-workflow#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "Oxlint rules for Effect-TS — enforce a pure functional core and imperative shell: ban classes and string errors, forbid native Date/Promise/timers in Effect, require pipeable composition.",
+  "description": "Oxlint rules enforcing the *.workflow.ts cell — TypeId pattern, inline schemas, Match.exhaustive, purity gate, step extraction, single export.",
   "keywords": [
     "oxlint",
     "oxlint-plugin",
@@ -20,8 +20,8 @@
     "lint-rules",
     "effect",
     "effect-ts",
-    "functional-programming",
-    "static-analysis",
+    "workflow",
+    "domain-decision",
     "typescript"
   ],
   "type": "module",
@@ -30,7 +30,7 @@
   ],
   "exports": {
     ".": {
-      "types": "./dist/oxlint-plugin.d.ts",
+      "types": "./dist/oxlint-plugin-effect-workflow.d.ts",
       "default": "./dist/index.mjs"
     },
     "./package.json": "./package.json"
@@ -54,7 +54,6 @@
     "@oxlint/plugins": "catalog:oxlint"
   },
   "devDependencies": {
-    "effect": "catalog:",
     "@microsoft/api-extractor": "catalog:",
     "@stryker-mutator/vitest-runner": "catalog:stryker",
     "@systemfsoftware/arethetypeswrong-cli": "workspace:^",
@@ -64,6 +63,7 @@
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
     "@vitest/coverage-v8": "catalog:",
+    "effect": "catalog:",
     "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
     "tsdown": "catalog:",

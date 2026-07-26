@@ -1,16 +1,16 @@
 {
-  "name": "@systemfsoftware/oxlint-plugin-test-hygiene",
+  "name": "@systemfsoftware/oxlint-plugin",
   "license": "MIT",
-  "version": "1.0.5",
+  "version": "0.3.6",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
-    "directory": "packages/oxlint-plugin-test-hygiene"
+    "directory": "packages/oxlint-plugins/core"
   },
-  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/oxlint-plugin-test-hygiene#readme",
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/oxlint-plugins/core#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "Oxlint rules for test hygiene: DAMP test naming and property-based test naming conventions.",
+  "description": "Oxlint rules for Effect-TS — enforce a pure functional core and imperative shell: ban classes and string errors, forbid native Date/Promise/timers in Effect, require pipeable composition.",
   "keywords": [
     "oxlint",
     "oxlint-plugin",
@@ -18,9 +18,11 @@
     "lint",
     "linter",
     "lint-rules",
-    "testing",
-    "test",
-    "hygiene"
+    "effect",
+    "effect-ts",
+    "functional-programming",
+    "static-analysis",
+    "typescript"
   ],
   "type": "module",
   "files": [
@@ -28,7 +30,7 @@
   ],
   "exports": {
     ".": {
-      "types": "./dist/oxlint-plugin-test-hygiene.d.ts",
+      "types": "./dist/oxlint-plugin.d.ts",
       "default": "./dist/index.mjs"
     },
     "./package.json": "./package.json"
