@@ -312,8 +312,10 @@ Feature('@-ref extraction, resolution, and injection')
       },
       Gherkin.Do.pipe(
         Given('a CLAUDE.md referencing docs/style.md')('dir', () => Effect.succeed('/test')),
-        Given('the host rendered only AGENTS.md')('rendered', () =>
-          Effect.succeed(['<repo-rules>\n# Project Rules\n</repo-rules>'])),
+        Given('the host rendered only AGENTS.md')(
+          'rendered',
+          () => Effect.succeed(['<repo-rules>\n# Project Rules\n</repo-rules>']),
+        ),
         When('loadReferencedContent reads a prompt without that ref')(
           'result',
           (s) => loadReferencedContent(s.dir, s.rendered),
@@ -336,10 +338,11 @@ Feature('@-ref extraction, resolution, and injection')
         }),
       },
       Gherkin.Do.pipe(
-        Given('a CLAUDE.md referencing both AGENTS.md and docs/style.md')('dir', () =>
-          Effect.succeed('/test')),
-        Given('the host rendered AGENTS.md but not the style guide')('rendered', () =>
-          Effect.succeed(['<repo-rules>\n# Project Rules\n\nUse pnpm only.\n</repo-rules>'])),
+        Given('a CLAUDE.md referencing both AGENTS.md and docs/style.md')('dir', () => Effect.succeed('/test')),
+        Given('the host rendered AGENTS.md but not the style guide')(
+          'rendered',
+          () => Effect.succeed(['<repo-rules>\n# Project Rules\n\nUse pnpm only.\n</repo-rules>']),
+        ),
         When('loadReferencedContent reads a prompt holding one of the two')(
           'result',
           (s) => loadReferencedContent(s.dir, s.rendered),
@@ -363,8 +366,10 @@ Feature('@-ref extraction, resolution, and injection')
       },
       Gherkin.Do.pipe(
         Given('a CLAUDE.md referencing an empty placeholder')('dir', () => Effect.succeed('/test')),
-        Given('the host rendered unrelated repo rules')('rendered', () =>
-          Effect.succeed(['<repo-rules>\n# Project Rules\n</repo-rules>'])),
+        Given('the host rendered unrelated repo rules')(
+          'rendered',
+          () => Effect.succeed(['<repo-rules>\n# Project Rules\n</repo-rules>']),
+        ),
         When('loadReferencedContent reads a prompt sharing no content')(
           'result',
           (s) => loadReferencedContent(s.dir, s.rendered),
