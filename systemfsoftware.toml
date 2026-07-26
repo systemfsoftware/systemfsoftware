@@ -1,4 +1,9 @@
 # OMP plugin practice configuration
+#
+# WARNING: every value in this file must be an array of strings. One malformed
+# value fails the whole-file decode and voids EVERY key below, across plugins —
+# a typo in no_inject_refs silently disables no_delegate_skills too.
+#
 # Skills that MUST NOT be delegated to subagent dispatches (task / Agent).
 # Adding or removing a skill is a config edit, never a code edit.
 no_delegate_skills = [
@@ -31,7 +36,4 @@ no_delegate_skills = [
 # claude-compat plugin must not inject a second copy. Absent, it defaults to
 # ["AGENTS.md"]; set it to [] to disable suppression entirely.
 #
-# WARNING: every value in this file must be an array of strings. A scalar such
-# as no_inject_refs = "AGENTS.md" fails the whole-file decode and silently
-# voids no_delegate_skills above along with it.
 # no_inject_refs = ["AGENTS.md"]

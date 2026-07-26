@@ -2,7 +2,7 @@ import * as PathModule from '@effect/platform/Path'
 import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { MemoryFileSystem } from '@systemfsoftware/effect-memfs'
-import { TomlLoaderLive } from '@systemfsoftware/omp-utils'
+import { TomlLoader, TomlLoaderLive } from '@systemfsoftware/omp-utils'
 import { Effect, Layer } from 'effect'
 import { expect } from 'vitest'
 import { loadReferencedContent } from '../src/inject-instructions.executor.js'
@@ -437,6 +437,107 @@ Feature('@-ref extraction, resolution, and injection')
         Then('the placeholder should still be listed')((s) =>
           Effect.sync(() => {
             expect(s.result).toContain('## placeholder.md')
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'Should suppress a skip-listed ref reached through a subdirectory',
+      {
+        scenarioLayer: makeFsLayer({
+          '/test/CLAUDE.md': '@docs/AGENTS.md\n',
+          '/test/docs/AGENTS.md': '# Nested rules\n\nUse pnpm only.',
+        }),
+      },
+      Gherkin.Do.pipe(
+        Given('a CLAUDE.md referencing AGENTS.md below the project root')(
+          'dir',
+          () => Effect.succeed('/test'),
+        ),
+        When('loadReferencedContent runs')('result', (s) => loadReferencedContent(s.dir)),
+        Then('the base name alone should decide, ignoring the directory')((s) =>
+          Effect.sync(() => {
+            expect(s.result).toBe('')
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'Should skip an unreadable ref target without leaking an error into the prompt',
+      {
+        scenarioLayer: makeFsLayer({
+          '/test/CLAUDE.md': '@refdir\n@docs/style.md\n',
+          '/test/refdir/inner.md': 'unreachable through a directory read',
+          '/test/docs/style.md': 'Tabs, not spaces.',
+        }),
+      },
+      Gherkin.Do.pipe(
+        Given('a ref resolving to a directory rather than a readable file')(
+          'dir',
+          () => Effect.succeed('/test'),
+        ),
+        When('loadReferencedContent runs')('result', (s) => loadReferencedContent(s.dir)),
+        Then('no error placeholder appears and the readable ref still injects')((s) =>
+          Effect.sync(() => {
+            expect(s.result).not.toContain('[error reading')
+            expect(s.result).not.toContain('## refdir')
+            expect(s.result).toContain('Tabs, not spaces.')
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'Should read no_inject_refs alongside an unrelated config key',
+      {
+        scenarioLayer: makeFsLayer({
+          '/test/systemfsoftware.toml': 'no_delegate_skills = ["lfg"]\nno_inject_refs = ["CUSTOM.md"]\n',
+          '/test/CLAUDE.md': '@CUSTOM.md\n@AGENTS.md\n',
+          '/test/CUSTOM.md': 'Custom rules.',
+          '/test/AGENTS.md': '# Project Rules\n\nUse pnpm only.',
+        }),
+      },
+      Gherkin.Do.pipe(
+        Given('a config carrying both no_delegate_skills and no_inject_refs')(
+          'dir',
+          () => Effect.succeed('/test'),
+        ),
+        When('loadReferencedContent runs')('result', (s) => loadReferencedContent(s.dir)),
+        Then('both keys decode and the configured name is suppressed')((s) =>
+          Effect.sync(() => {
+            expect(s.result).not.toContain('Custom rules.')
+            expect(s.result).toContain('Use pnpm only.')
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'Should void every config key when one value is malformed',
+      {
+        scenarioLayer: makeFsLayer({
+          '/test/systemfsoftware.toml': 'no_delegate_skills = ["lfg"]\nno_inject_refs = "AGENTS.md"\n',
+        }),
+      },
+      Gherkin.Do.pipe(
+        Given('a config whose no_inject_refs is a scalar, not an array')(
+          'dir',
+          () => Effect.succeed('/test'),
+        ),
+        When('the shared loader reads that config')(
+          'config',
+          (s) =>
+            Effect.gen(function*() {
+              const loader = yield* TomlLoader
+              return yield* loader.load(s.dir)
+            }),
+        ),
+        Then('the unrelated no_delegate_skills key is voided along with it')((s) =>
+          Effect.sync(() => {
+            expect(s.config['no_inject_refs']).toBeUndefined()
+            expect(s.config['no_delegate_skills']).toBeUndefined()
           })
         ),
       ),

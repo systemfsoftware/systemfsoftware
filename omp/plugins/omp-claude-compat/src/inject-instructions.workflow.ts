@@ -4,10 +4,10 @@
  *
  * Keys on the target's base name, never its content: the host reformats
  * markdown before rendering, so byte comparison misses reformatted duplicates
- * and drops short files whose text appears elsewhere. Directory is ignored, so
- * a downward `@packages/foo/AGENTS.md` is suppressed even though the host's
- * up-only walk never loaded it — accepted, because the only escape is dropping
- * `AGENTS.md` from the skip list, which restores root duplication.
+ * and drops short files whose text appears elsewhere. The caller extracts the
+ * base name, so a downward `@packages/foo/AGENTS.md` is suppressed even though
+ * the host's up-only walk never loaded it — accepted, because the only escape
+ * is dropping `AGENTS.md` from the skip list, which restores root duplication.
  */
 import { Match, Option, Schema as S } from 'effect'
 
@@ -22,19 +22,14 @@ class Skip extends S.TaggedClass<Skip>()('Skip', {
 type RefVerdict = Inject | Skip
 
 export const CheckRefInjection = S.Struct({
-  resolvedPath: S.String,
+  baseName: S.String,
   skipList: S.Array(S.String),
 })
 
 export type CheckRefInjection = typeof CheckRefInjection.Type
 
-const baseNameOf = (resolvedPath: string): string => resolvedPath.slice(resolvedPath.lastIndexOf('/') + 1)
-
-const matchedEntry = (cmd: CheckRefInjection): Option.Option<string> => {
-  const base = baseNameOf(cmd.resolvedPath)
-
-  return Option.fromNullable(cmd.skipList.find((entry) => entry === base))
-}
+const matchedEntry = (cmd: CheckRefInjection): Option.Option<string> =>
+  Option.fromNullable(cmd.skipList.find((entry) => entry === cmd.baseName))
 
 export const decideRefInjection = (cmd: CheckRefInjection): RefVerdict =>
   Match.value(matchedEntry(cmd)).pipe(
