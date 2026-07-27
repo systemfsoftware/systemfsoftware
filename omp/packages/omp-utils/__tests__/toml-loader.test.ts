@@ -2,7 +2,7 @@ import * as PathModule from '@effect/platform/Path'
 import { describe, expect, it } from '@effect/vitest'
 import { MemoryFileSystem } from '@systemfsoftware/effect-memfs'
 import { Effect, Layer } from 'effect'
-import { TomlLoader, TomlLoaderLive } from '../src/toml-loader.executor.js'
+import { TomlLoader, TomlLoaderLive } from '../src/toml-loader.adapter.js'
 
 const layer = (contents: Record<string, string>) =>
   TomlLoaderLive.pipe(
