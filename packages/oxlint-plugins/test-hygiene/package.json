@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/oxlint-plugin-test-hygiene",
   "license": "MIT",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -52,7 +52,6 @@
     "@oxlint/plugins": "catalog:oxlint"
   },
   "devDependencies": {
-    "effect": "catalog:",
     "@microsoft/api-extractor": "catalog:",
     "@stryker-mutator/vitest-runner": "catalog:stryker",
     "@systemfsoftware/arethetypeswrong-cli": "workspace:^",
@@ -62,6 +61,7 @@
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
     "@vitest/coverage-v8": "catalog:",
+    "effect": "catalog:",
     "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
