@@ -192,23 +192,7 @@ When replacing the last element of a JSON object using bulk edit tools, trailing
 
 Fix with: `content.replace(/,(\s*[}\]])/g, '$1')` across all affected files.
 
-### Resolving @types/mocha conflict with vitest's describe global
-
-Root `package.json` declares `"@types/mocha": "^10"` as a devDependency. This type package augments the global namespace with `describe`, `it`, `beforeAll` — the same names vitest declares. When `effect-daemon-spec`'s TypeScript typechecks code that uses vitest's globals, the mocha `describe` overload (2-arg) conflicts with vitest's `describe` (3-arg overloads).
-
-The fix is to restrict type inference in `effect-daemon-spec`'s tsconfig (`packages/effect-daemon-spec/tsconfig.json`):
-
-```json
-"compilerOptions": {
-  "types": ["node"],
-  ...
-}
-```
-
-This prevents `@types/mocha`'s global augmentations from leaking into this package's type context. Other packages are unaffected — each `tsconfig.json` controls its own `types` array independently.
-
 ## Related
 
 - [pnpm Catalogs documentation](https://pnpm.io/catalogs)
 - Root `pnpm-workspace.yaml` for the canonical catalog declarations
-- `packages/effect-daemon-spec/tsconfig.json` — the `"types": ["node"]` fix

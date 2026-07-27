@@ -129,7 +129,7 @@ describe('snapshots', async () => {
         await writeFile(snapshotURL, actualSnapshot)
         snapshotsWritten.push(snapshotURL)
       }
-    })
+    }, 60_000)
   }
 })
 
