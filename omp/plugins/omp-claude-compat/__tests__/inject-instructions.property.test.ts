@@ -1,4 +1,4 @@
-import { describe, expect, it } from '@effect/vitest'
+import { describe, it } from '@effect/vitest'
 import { FastCheck as fc } from 'effect'
 import { CheckRefInjection, decideRefInjection, DEFAULT_NO_INJECT_REFS } from '../src/inject-instructions.workflow.js'
 
@@ -20,9 +20,7 @@ describe('decideRefInjection (PBT)', () => {
     '∀name_SkipListContains_→Skip',
     [fileName, fc.array(fileName, { maxLength: 5 })],
     ([name, others]) => {
-      const verdict = decideRefInjection(check(name, [...others, name]))
-
-      expect(verdict._tag).toBe('Skip')
+      return decideRefInjection(check(name, [...others, name]))._tag === 'Skip'
     },
   )
 
@@ -30,11 +28,7 @@ describe('decideRefInjection (PBT)', () => {
     '∀name_SkipListOmits_→Inject',
     [fileName, fc.array(fileName, { maxLength: 5 })],
     ([name, others]) => {
-      const verdict = decideRefInjection(
-        check(name, others.filter((other) => other !== name)),
-      )
-
-      expect(verdict._tag).toBe('Inject')
+      return decideRefInjection(check(name, others.filter((other) => other !== name)))._tag === 'Inject'
     },
   )
 
@@ -42,9 +36,7 @@ describe('decideRefInjection (PBT)', () => {
     '∀name_EmptySkipList_→Inject',
     [fileName],
     ([name]) => {
-      const verdict = decideRefInjection(check(name, []))
-
-      expect(verdict._tag).toBe('Inject')
+      return decideRefInjection(check(name, []))._tag === 'Inject'
     },
   )
 
@@ -52,11 +44,7 @@ describe('decideRefInjection (PBT)', () => {
     '∀name_DefaultSkipList_→SkipAgentsMd',
     [fc.array(fileName, { maxLength: 4 })],
     ([others]) => {
-      const verdict = decideRefInjection(
-        check('AGENTS.md', [...others, ...DEFAULT_NO_INJECT_REFS]),
-      )
-
-      expect(verdict._tag).toBe('Skip')
+      return decideRefInjection(check('AGENTS.md', [...others, ...DEFAULT_NO_INJECT_REFS]))._tag === 'Skip'
     },
   )
 
@@ -65,8 +53,7 @@ describe('decideRefInjection (PBT)', () => {
     [fileName],
     ([name]) => {
       const verdict = decideRefInjection(check(name, [name]))
-
-      expect(verdict).toMatchObject({ _tag: 'Skip', matched: name })
+      return verdict._tag === 'Skip' && verdict.matched === name
     },
   )
 
@@ -74,9 +61,7 @@ describe('decideRefInjection (PBT)', () => {
     '∀path_SlashedName_→NoPathParsing',
     [fileName, dirPrefix],
     ([name, prefix]) => {
-      const verdict = decideRefInjection(check(`${prefix}/${name}`, [name]))
-
-      expect(verdict._tag).toBe('Inject')
+      return decideRefInjection(check(`${prefix}/${name}`, [name]))._tag === 'Inject'
     },
   )
 })

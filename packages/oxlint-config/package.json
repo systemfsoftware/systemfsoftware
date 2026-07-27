@@ -20,6 +20,7 @@
   "dependencies": {
     "@systemfsoftware/oxlint-plugin": "workspace:^",
     "@systemfsoftware/oxlint-plugin-test-hygiene": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-property-testing": "workspace:^",
     "oxlint": "catalog:oxlint"
   },
   "devDependencies": {

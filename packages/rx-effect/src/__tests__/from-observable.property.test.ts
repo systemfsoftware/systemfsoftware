@@ -1,7 +1,10 @@
-import { describe, expect, it, vi } from '@effect/vitest'
+import { describe, it, vi } from '@effect/vitest'
 import { Effect, Either, FastCheck as fc, Stream } from 'effect'
 import { Observable } from 'rxjs'
 import { fromObservable } from '../from-observable.js'
+
+const eqValues = (a: ReadonlyArray<number>, b: ReadonlyArray<number>): boolean =>
+  a.length === b.length && a.every((v, i) => v === b[i])
 
 describe('fromObservable (PBT)', () => {
   it.effect.prop(
@@ -20,7 +23,7 @@ describe('fromObservable (PBT)', () => {
           fromObservable(() => new Error('unexpected'))(observable),
         ).pipe(Effect.map((chunk) => Array.from(chunk)))
 
-        expect(streamResult).toEqual(values)
+        return eqValues(streamResult, values)
       }),
   )
 
@@ -37,7 +40,7 @@ describe('fromObservable (PBT)', () => {
           fromObservable((e) => String(e instanceof Error ? e.message : e))(observable),
         ).pipe(Effect.map((chunk) => Array.from(chunk)), Effect.either)
 
-        expect(result).toEqual(Either.left(message))
+        return Either.isLeft(result) && result.left === message
       }),
   )
 
@@ -60,8 +63,7 @@ describe('fromObservable (PBT)', () => {
           fromObservable(() => new Error('unexpected'))(observable).pipe(Stream.take(takeN)),
         ).pipe(Effect.map((chunk) => Array.from(chunk)))
 
-        expect(streamResult).toEqual(values.slice(0, takeN))
-        expect(unsubscribe).toHaveBeenCalledOnce()
+        return eqValues(streamResult, values.slice(0, takeN)) && unsubscribe.mock.calls.length === 1
       }),
   )
 })

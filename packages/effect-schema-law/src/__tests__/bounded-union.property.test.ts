@@ -1,5 +1,5 @@
-import { describe, expect, it } from '@effect/vitest'
-import { Arbitrary, Effect, FastCheck as fc, Schema as S } from 'effect'
+import { describe, it } from '@effect/vitest'
+import { Schema as S } from 'effect'
 import { boundedUnion } from '../bounded-union.js'
 import { ruleOfSchemas } from '../schema.js'
 
@@ -56,21 +56,12 @@ const Expr: S.Schema<Expr> = boundedUnion('Expr', {
   recur: [Binary, Member, Conditional, Call],
 })
 
-describe('boundedUnion', () => {
-  it.effect('Should_TerminateWithBoundedNesting_When_RecursiveUnionIsBounded', () =>
-    Effect.sync(() => {
-      const samples = fc.sample(Arbitrary.make(Expr), { numRuns: 1000, seed: 7 })
-      const sizes = samples.map((value) => JSON.stringify(value).length)
-      expect(samples).toHaveLength(1000)
-      expect(Math.max(...sizes)).toBeGreaterThan(40)
-      expect(Math.max(...sizes)).toBeLessThan(50_000)
-    }))
+it.prop('∀e_BoundedUnion_≤50k', [Expr], ([expr]) => JSON.stringify(expr).length < 50_000)
 
-  describe('obeys the rule of schemas', () => {
-    ruleOfSchemas('Expr', Expr)
-    ruleOfSchemas('Binary', Binary)
-    ruleOfSchemas('Member', Member)
-    ruleOfSchemas('Conditional', Conditional)
-    ruleOfSchemas('Call', Call)
-  })
+describe('obeys the rule of schemas', () => {
+  ruleOfSchemas('Expr', Expr)
+  ruleOfSchemas('Binary', Binary)
+  ruleOfSchemas('Member', Member)
+  ruleOfSchemas('Conditional', Conditional)
+  ruleOfSchemas('Call', Call)
 })

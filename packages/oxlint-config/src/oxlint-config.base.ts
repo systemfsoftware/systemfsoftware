@@ -14,6 +14,7 @@ export default defineConfig({
   jsPlugins: [
     import.meta.resolve('@systemfsoftware/oxlint-plugin'),
     import.meta.resolve('@systemfsoftware/oxlint-plugin-test-hygiene'),
+    import.meta.resolve('@systemfsoftware/oxlint-plugin-property-testing'),
   ],
 
   rules: {
@@ -42,6 +43,10 @@ export default defineConfig({
     '@systemfsoftware/oxlint-plugin/no-native-settimeout-in-effect': 'error',
     '@systemfsoftware/oxlint-plugin-test-hygiene/damp-test-naming': 'error',
     '@systemfsoftware/oxlint-plugin-test-hygiene/pbt-naming': 'error',
+    '@systemfsoftware/oxlint-plugin-property-testing/no-silent-return': 'error',
+    '@systemfsoftware/oxlint-plugin-property-testing/no-assert-in-property': 'error',
+    '@systemfsoftware/oxlint-plugin-property-testing/property-file-purity': 'error',
+    '@systemfsoftware/oxlint-plugin-property-testing/require-effect-fastcheck': 'error',
     '@systemfsoftware/oxlint-plugin/policy-no-domain-imports': 'error',
     '@systemfsoftware/oxlint-plugin/no-new-worker-with-wasm-import': 'error',
     '@systemfsoftware/oxlint-plugin/no-barrels': 'off',

@@ -82,11 +82,12 @@ Rule export format (`src/index.ts`): `export default { meta: { name }, rules: { 
 
 ## Package Deltas
 
-| Package            | Leaf delta                                                    |
-| ------------------ | ------------------------------------------------------------- |
-| `core/`            | ESLintUtils template, ESLint migration notes, legacy commands |
-| `test-hygiene/`    | —                                                             |
-| `effect-workflow/` | —                                                             |
+| Package             | Leaf delta                                                    |
+| ------------------- | ------------------------------------------------------------- |
+| `core/`             | ESLintUtils template, ESLint migration notes, legacy commands |
+| `test-hygiene/`     | —                                                             |
+| `effect-workflow/`  | —                                                             |
+| `property-testing/` | —                                                             |
 
 ## Verification
 

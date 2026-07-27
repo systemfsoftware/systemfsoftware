@@ -1,5 +1,5 @@
 import { Match } from 'effect'
-import { configureGlobal } from 'fast-check'
+import { FastCheck as fc } from 'effect'
 
 const mode = Match.value({
   strykerWorker: Boolean(process.env.STRYKER_MUTATOR_WORKER),
@@ -12,4 +12,4 @@ const mode = Match.value({
 
 const numRuns = { stryker: 30, local: 100, ci: 1000 }[mode]
 
-configureGlobal({ numRuns })
+fc.configureGlobal({ numRuns })

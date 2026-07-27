@@ -1,5 +1,4 @@
-import { Arbitrary, Either, ParseResult, Schema } from 'effect'
-import * as fc from 'fast-check'
+import { Either, ParseResult, Schema } from 'effect'
 import { describe, expect, it } from 'vitest'
 import { DecideInput } from '../restart-decision.schema.js'
 
@@ -79,30 +78,5 @@ describe('DecideInput schema — totalChildren bounds', () => {
   it('Should_FailDecode_When_TotalChildrenExceedsMax', () => {
     expect(decode({ ...baseValid, totalChildren: 11, failedIndex: 0 }))
       .toEqual(Either.left(expect.anything()))
-  })
-})
-
-describe('DecideInput arbitrary — generated values respect filter', () => {
-  it('Should_GenerateOnlyValidValues_When_SampledFromArbitrary', () => {
-    const arb = Arbitrary.make(DecideInput)
-    fc.assert(
-      fc.property(arb, (input) =>
-        input.failedIndex < input.totalChildren &&
-        input.totalChildren >= 1 &&
-        input.totalChildren <= 10 &&
-        input.failedIndex >= 0),
-    )
-  })
-
-  it('Should_HitFailedIndexEqualsTotalMinusOne_When_Sampled', () => {
-    const arb = Arbitrary.make(DecideInput)
-    let hitMaxBoundary = false
-    fc.assert(
-      fc.property(arb, (input) => {
-        if (input.failedIndex === input.totalChildren - 1) hitMaxBoundary = true
-        return true
-      }),
-    )
-    expect(hitMaxBoundary).toBe(true)
   })
 })

@@ -1,0 +1,81 @@
+{
+  "name": "@systemfsoftware/oxlint-plugin-property-testing",
+  "license": "MIT",
+  "version": "1.0.0",
+  "author": "Ryan Lee <drdgvhbh@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
+    "directory": "packages/oxlint-plugins/property-testing"
+  },
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/oxlint-plugins/property-testing#readme",
+  "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
+  "description": "Oxlint rules enforcing the property-testing contract: it.prop / it.effect.prop predicates return a boolean on every path, never assert/expect, and never run through raw fc.assert.",
+  "keywords": [
+    "oxlint",
+    "oxlint-plugin",
+    "oxc",
+    "lint",
+    "linter",
+    "lint-rules",
+    "effect",
+    "effect-ts",
+    "fast-check",
+    "property-based-testing",
+    "vitest",
+    "typescript"
+  ],
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/oxlint-plugin-property-testing.d.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "clean": "rimraf dist",
+    "typecheck": "tsc --noEmit --incremental",
+    "format": "dprint fmt",
+    "test": "vitest run",
+    "test:run": "vitest run --coverage",
+    "mutation": "stryker run --incremental",
+    "mutation:full": "stryker run",
+    "lint": "oxlint . ${AGENT:+--format=unix --quiet}",
+    "attw": "attw --pack .",
+    "api:check": "api-extractor run",
+    "api:update": "api-extractor run --local"
+  },
+  "dependencies": {
+    "@oxc-project/types": "^0.140.0",
+    "@oxlint/plugins": "catalog:oxlint"
+  },
+  "devDependencies": {
+    "@microsoft/api-extractor": "catalog:",
+    "@stryker-mutator/vitest-runner": "catalog:stryker",
+    "@systemfsoftware/arethetypeswrong-cli": "workspace:^",
+    "@systemfsoftware/stryker-js-core": "workspace:^",
+    "@systemfsoftware/stryker-js-typescript-checker": "workspace:^",
+    "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
+    "@types/node": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
+    "effect": "catalog:",
+    "oxlint": "catalog:oxlint",
+    "rimraf": "catalog:",
+    "tsdown": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "effect": "catalog:",
+    "typescript": ">=5.0.0"
+  },
+  "publishConfig": {
+    "provenance": true
+  }
+}

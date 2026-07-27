@@ -4,6 +4,15 @@
 
 Exports `inlineSchemaTests` — a Vite plugin that walks the consumer's `src/`, finds every exported Effect `Schema`, and generates inline `ruleOfSchemas` tests.
 
+```yaml
+- id: V1
+  title: Hand-written codec-law properties are forbidden in consumers
+  do: rely on the injected law tests for round-trip identity and encode stability of every exported schema; reserve hand-written property tests for domain invariants
+  dont: hand-write it.prop cases re-asserting decode∘encode identity or S.equivalence roundtrips for a schema the plugin already covers
+  harm: a hand-written law test duplicates the injected one and drifts — two sources of truth for the same law
+  check: grep finds no hand-written S.equivalence roundtrip it.prop in a consumer's *.test.ts
+```
+
 | Check | Command                                                       |
 | ----- | ------------------------------------------------------------- |
 | Types | `pnpm --filter @systemfsoftware/effect-schema-vite typecheck` |
