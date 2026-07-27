@@ -6,7 +6,7 @@ export default defineConfig({
   plugins: [inlineSchemaTests()],
   test: {
     ...sharedConfig.test,
-    include: ['src/**/*.test.ts', 'virtual:@systemfsoftware/inline-schema-tests'],
+    include: ['src/**/*.test.ts'],
     setupFiles: ['./vitest-setup.ts'],
   },
 })

@@ -1,4 +1,4 @@
-// @ts-nocheck — oxc-parser AST types use index signatures extensively
+import type { Expression, MemberExpression, TSType } from '@oxc-project/types'
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { extname, join, relative, resolve } from 'node:path'
 import { parseSync } from 'oxc-parser'
@@ -65,7 +65,20 @@ function findExportedSchemaNames(source: string): string[] {
     for (const node of result.program.body) {
       if (node.type !== 'ExportNamedDeclaration') continue
       const decl = node.declaration
-      if (!decl || decl.type !== 'VariableDeclaration') continue
+      if (!decl) continue
+
+      if (decl.type === 'ClassDeclaration') {
+        const className = decl.id?.name
+        if (
+          typeof className === 'string' && !className.startsWith('_') &&
+          extendsSchemaClass(decl.superClass)
+        ) {
+          names.push(className)
+        }
+        continue
+      }
+
+      if (decl.type !== 'VariableDeclaration') continue
 
       for (const declarator of decl.declarations) {
         const id = declarator.id
@@ -95,85 +108,82 @@ function findExportedSchemaNames(source: string): string[] {
   }
 }
 
-function typeRefContainsSchema(t: unknown): boolean {
-  if (!t || typeof t !== 'object') return false
-  const node = t as Record<string, unknown>
+function typeRefContainsSchema(t: TSType | null | undefined): boolean {
+  if (!t) return false
 
-  if (node.type === 'TSTypeReference' && node.typeName) {
-    const tn = node.typeName as Record<string, unknown>
-    if (tn.type === 'Identifier' && typeof tn.name === 'string' && tn.name.includes('Schema')) {
-      return true
-    }
-    if (tn.type === 'TSQualifiedName' && typeof tn.name === 'string' && tn.name.includes('Schema')) {
-      return true
-    }
+  if (t.type === 'TSTypeReference' && t.typeName.type === 'Identifier') {
+    return t.typeName.name.includes('Schema')
   }
 
-  if (node.typeParameters) {
-    const params = node.typeParameters as Record<string, unknown>
-    if (Array.isArray(params.params)) {
-      for (const p of params.params) {
-        if (typeRefContainsSchema(p)) return true
-      }
-    }
-  }
-
-  if (node.types && Array.isArray(node.types)) {
-    for (const m of node.types) {
-      if (typeRefContainsSchema(m)) return true
-    }
+  if (t.type === 'TSUnionType' || t.type === 'TSIntersectionType') {
+    return t.types.some((member) => typeRefContainsSchema(member))
   }
 
   return false
 }
 
-function initRefersToSchema(expr: unknown): boolean {
-  if (!expr || typeof expr !== 'object') return false
-  const node = expr as Record<string, unknown>
+function initRefersToSchema(expr: Expression | null | undefined): boolean {
+  if (!expr) return false
 
-  if (node.type === 'CallExpression' && node.callee) {
-    const callee = node.callee as Record<string, unknown>
+  if (expr.type === 'CallExpression') {
+    const callee = expr.callee
 
     if (callee.type === 'Identifier' && callee.name === 'pipe') {
-      const args = node.arguments
-      if (Array.isArray(args)) {
-        for (const arg of args) {
-          if (initRefersToSchema(arg)) return true
-        }
-      }
-      return false
+      return expr.arguments.some((arg) => arg.type !== 'SpreadElement' && initRefersToSchema(arg))
     }
 
-    if (callee.type === 'MemberExpression') {
-      return memberChainStartsWithS(callee)
-    }
+    if (callee.type === 'MemberExpression') return memberChainStartsWithS(callee)
+    if (callee.type === 'Identifier') return callee.name.includes('Schema')
 
-    if (callee.type === 'Identifier' && (callee.name as string).includes('Schema')) {
-      return true
-    }
+    return false
   }
 
-  if (node.type === 'MemberExpression') {
-    return memberChainStartsWithS(node)
+  if (expr.type === 'MemberExpression') return memberChainStartsWithS(expr)
+
+  return false
+}
+
+function memberChainStartsWithS(node: MemberExpression): boolean {
+  const obj = node.object
+
+  if (obj.type === 'Identifier') return obj.name === 'S' || obj.name.includes('Schema')
+  if (obj.type === 'MemberExpression') return memberChainStartsWithS(obj)
+
+  // `Schema.Struct({...}).pipe(...)` — the chain root is a call, not a member
+  if (obj.type === 'CallExpression') {
+    const callee = obj.callee
+    if (callee.type === 'MemberExpression') return memberChainStartsWithS(callee)
+    if (callee.type === 'Identifier') return callee.name === 'S' || callee.name.includes('Schema')
   }
 
   return false
 }
 
-function memberChainStartsWithS(node: Record<string, unknown>): boolean {
-  const obj = node.object as Record<string, unknown> | undefined
-  if (!obj) return false
+/**
+ * True when a class extends `Schema.Class(...)` or `Schema.TaggedClass(...)`.
+ * The constructor is curried — `Schema.Class<Foo>()({...})` is two nested
+ * CallExpressions wrapping one MemberExpression — so unwrap the call chain
+ * before inspecting the member.
+ *
+ * `Schema.TaggedError` is deliberately excluded: an error is a failure value,
+ * not a codec, so it is not subject to the round-trip laws (and its `cause`
+ * field is routinely `S.Unknown`, which does not round-trip).
+ */
+function extendsSchemaClass(superClass: Expression | null | undefined): boolean {
+  if (!superClass) return false
 
-  if (obj.type === 'Identifier' && obj.name === 'S') return true
-  if (obj.type === 'Identifier' && typeof obj.name === 'string' && (obj.name as string).includes('Schema')) {
-    return true
+  let callee: Expression = superClass
+  while (callee.type === 'CallExpression') {
+    callee = callee.callee
   }
 
-  if (obj.type === 'MemberExpression') {
-    return memberChainStartsWithS(obj)
-  }
+  if (callee.type !== 'MemberExpression') return false
+  if (callee.property.type !== 'Identifier') return false
 
-  return false
+  const propName = callee.property.name
+  if (propName !== 'Class' && propName !== 'TaggedClass') return false
+
+  return memberChainStartsWithS(callee)
 }
 
 /**
@@ -203,9 +213,9 @@ export const inlineSchemaTests = (options?: InlineSchemaTestsOptions): Plugin =>
     },
 
     resolveId(id) {
-      if (id === 'virtual:@systemfsoftware/inline-schema-tests') {
-        return '\0virtual:@systemfsoftware/inline-schema-tests'
-      }
+      return id === 'virtual:@systemfsoftware/inline-schema-tests'
+        ? '\0virtual:@systemfsoftware/inline-schema-tests'
+        : undefined
     },
 
     load(id) {

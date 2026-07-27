@@ -484,6 +484,9 @@ importers:
       '@systemfsoftware/effect-schema-law':
         specifier: workspace:^
         version: link:../effect-schema-law
+      '@systemfsoftware/effect-schema-vite':
+        specifier: workspace:^
+        version: link:../effect-schema-vite
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
         version: link:../oxlint-config
@@ -627,12 +630,6 @@ importers:
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: workspace:^
         version: link:../arethetypeswrong/cli
-      '@systemfsoftware/effect-schema-law':
-        specifier: workspace:^
-        version: link:../effect-schema-law
-      '@systemfsoftware/effect-schema-vite':
-        specifier: workspace:^
-        version: link:../effect-schema-vite
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
         version: link:../oxlint-config
@@ -1272,6 +1269,9 @@ importers:
       '@systemfsoftware/effect-schema-law':
         specifier: workspace:^
         version: link:../effect-schema-law
+      '@systemfsoftware/effect-schema-vite':
+        specifier: workspace:^
+        version: link:../effect-schema-vite
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
         version: link:../oxlint-config

@@ -57,6 +57,7 @@
     "@systemfsoftware/arethetypeswrong-cli": "workspace:^",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/effect-schema-law": "workspace:^",
+    "@systemfsoftware/effect-schema-vite": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/stryker-js-core": "workspace:^",
     "@systemfsoftware/stryker-js-typescript-checker": "workspace:^",

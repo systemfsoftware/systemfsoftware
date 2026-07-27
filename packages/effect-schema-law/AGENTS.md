@@ -25,6 +25,18 @@ rules:
     harm: encoded output from the codec differs from input the caller provided;
       persisted data shifts format on every read-write cycle
     check: "ruleOfSchemas('Schema', MySchema) passes"
+
+  - id: L3
+    title: Errors are exempt — a failure value is not a codec
+    do: law-test schemas that model data — structs, unions, branded values, and
+      `Schema.Class` / `Schema.TaggedClass` declarations
+    dont: call ruleOfSchemas on a `Schema.TaggedError`
+    harm: an error is a failure value, not a two-way codec; its `cause` field is
+      routinely `S.Unknown`, which carries no round-trip guarantee, so the law
+      fails against a schema that was never meant to satisfy it
+    check: auto-discovery excludes TaggedError (enforced by tests in
+      `@systemfsoftware/effect-schema-vite`); no hand-written ruleOfSchemas call
+      names an error schema
 ```
 
 ## When Laws Fail
