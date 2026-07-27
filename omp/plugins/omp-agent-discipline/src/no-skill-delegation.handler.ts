@@ -1,5 +1,4 @@
 import type { ExtensionAPI } from '@oh-my-pi/pi-coding-agent'
-import { Effect } from 'effect'
 
 function readString(input: Record<string, unknown>, ...keys: readonly string[]): string {
   for (const key of keys) {
@@ -20,6 +19,7 @@ export const NoSkillDelegationExtension = (pi: ExtensionAPI): void => {
   pi.on('tool_call', async (event, ctx) => {
     const { runSafe } = await import('./helpers.js')
     const { runNoSkillDelegation } = await import('./no-skill-delegation.executor.js')
+    const { Effect } = await import('effect')
 
     return runSafe(
       Effect.gen(function*() {

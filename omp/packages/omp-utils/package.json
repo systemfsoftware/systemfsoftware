@@ -11,6 +11,10 @@
       "@systemfsoftware/source": "./src/mod.ts",
       "default": "./dist/index.js"
     },
+    "./runtime-lifecycle": {
+      "@systemfsoftware/source": "./src/runtime-lifecycle.handler.ts",
+      "default": "./dist/runtime-lifecycle.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -43,6 +47,7 @@
   "publishConfig": {
     "exports": {
       ".": "./dist/index.js",
+      "./runtime-lifecycle": "./dist/runtime-lifecycle.js",
       "./package.json": "./package.json"
     }
   },

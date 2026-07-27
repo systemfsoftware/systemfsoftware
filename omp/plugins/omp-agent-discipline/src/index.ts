@@ -1,17 +1,13 @@
 import type { ExtensionAPI } from '@oh-my-pi/pi-coding-agent'
+import { installRuntimeLifecycle } from '@systemfsoftware/omp-utils/runtime-lifecycle'
 import { NoSkillDelegationExtension } from './no-skill-delegation.handler.js'
 import { XdRetryGuardExtension } from './xd-retry-guard.handler.js'
 
 export default function agentDisciplineHandler(pi: ExtensionAPI): void {
-  void import('./runtime.js')
-
   NoSkillDelegationExtension(pi)
   XdRetryGuardExtension(pi)
-
-  process.on('SIGINT', () => {
-    void import('./runtime.js').then(({ default: runtime }) => runtime.dispose())
-  })
-  process.on('SIGTERM', () => {
-    void import('./runtime.js').then(({ default: runtime }) => runtime.dispose())
-  })
+  installRuntimeLifecycle(
+    (warm) => pi.on('session_start', (_event, ctx) => warm(ctx)),
+    () => import('./runtime.js'),
+  )
 }

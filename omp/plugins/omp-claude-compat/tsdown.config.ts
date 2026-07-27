@@ -1,4 +1,5 @@
 import { defineConfig } from 'tsdown'
+import { eagerEntryBudget } from '../../../scripts/rolldown-eager-entry-budget.mjs'
 
 export default defineConfig({
   entry: { index: './src/index.ts' },
@@ -9,6 +10,7 @@ export default defineConfig({
   minify: true,
   clean: false,
   outExtensions: () => ({ js: '.js', dts: '.d.ts' }),
-  deps: { onlyBundle: false },
+  deps: { onlyBundle: false, alwaysBundle: [/^effect$/, /^effect\//, /^@effect\//] },
+  plugins: [eagerEntryBudget()],
   define: { 'import.meta.vitest': 'undefined' },
 })
