@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/omp-agent-discipline",
   "license": "MIT",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "description": "OMP agent discipline: mechanical enforcement of rules prose can't hold (xd:// retry guard, ...)",
   "type": "module",
@@ -25,8 +25,8 @@
   "peerDependencies": {
     "@effect/platform": "catalog:",
     "@effect/platform-node": "catalog:",
-    "effect": "catalog:",
-    "@oh-my-pi/pi-coding-agent": "catalog:"
+    "@oh-my-pi/pi-coding-agent": "catalog:",
+    "effect": "catalog:"
   },
   "devDependencies": {
     "@effect/platform": "catalog:",
