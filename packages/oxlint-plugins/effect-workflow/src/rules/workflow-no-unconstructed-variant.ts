@@ -1,6 +1,6 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
-import { meta, Options } from './workflow-no-unconstructed-variant.config.js'
+import { COMMAND_SUFFIX, meta, Options } from './workflow-no-unconstructed-variant.config.js'
 
 export type MessageIds = 'unconstructedVariant'
 
@@ -63,11 +63,17 @@ export const workflowNoUnconstructedVariant = defineRule({
       },
       'Program:exit'() {
         for (const cls of declared) {
-          if (cls.id && !constructed.has(cls.id.name)) {
+          if (cls.id && !cls.id.name.endsWith(COMMAND_SUFFIX) && !constructed.has(cls.id.name)) {
             context.report({
               node: cls,
               messageId: 'unconstructedVariant',
-              data: { name: cls.id.name },
+              data: {
+                name: cls.id.name,
+                expected: 'every declared variant is constructed somewhere in the file',
+                actual: `${cls.id.name} is declared but never constructed`,
+                fix:
+                  'construct it in a step or decision arm, or delete the variant — a union member nothing produces makes the union lie',
+              },
             })
           }
         }

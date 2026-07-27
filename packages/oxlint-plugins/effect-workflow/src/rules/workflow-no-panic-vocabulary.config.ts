@@ -23,8 +23,7 @@ export const GENERIC_SUFFIXES = [
   'ViolationError',
 ] as const
 
-export const PANIC_MESSAGE =
-  '{{name}} is forbidden. Expected: error variants named for expected domain failures a consumer can handle. Actual: {{name}} is pure panic vocabulary ({{token}}) — panics are defects at the shell edge, not typed errors in a workflow. Fix: rename it for the domain failure, or delete it and let the invariant surface as a defect.' as const
+export const PANIC_MESSAGE = '{{name}} is forbidden. Expected: {{expected}}. Actual: {{actual}}. Fix: {{fix}}.' as const
 
 export const meta = {
   type: 'suggestion',

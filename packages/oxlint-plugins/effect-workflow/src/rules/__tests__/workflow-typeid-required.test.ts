@@ -31,6 +31,14 @@ class MyErr extends S.TaggedError<MyErr>()('MyErr', {}) {
 }
 `
 
+const missingTypeIdData = (name: string) => ({
+  name,
+  expected: 'every S.TaggedClass/S.TaggedError in *.workflow.ts to carry its union TypeId',
+  actual: `class ${name} is missing its TypeId`,
+  fix:
+    "add: const XxxTypeId: unique symbol = Symbol('@systemfsoftware/<pkg>/Xxx') and readonly [XxxTypeId] = XxxTypeId",
+})
+
 ruleTester.run('workflow-typeid-required', workflowTypeidRequired, {
   valid: [
     {
@@ -86,7 +94,7 @@ ruleTester.run('workflow-typeid-required', workflowTypeidRequired, {
       filename: 'process-claim.workflow.ts',
     },
     {
-      code: `class My extends S['TaggedClass']()('My', {}) {}`,
+      code: `class My extends S['TaggedClass']<My>()('My', {}) {}`,
       filename: 'process-claim.workflow.ts',
     },
     {
@@ -102,37 +110,40 @@ ruleTester.run('workflow-typeid-required', workflowTypeidRequired, {
     {
       code: `class My extends S.TaggedClass<My>()('My', {}) {}`,
       filename: 'process-claim.workflow.ts',
-      errors: [{ messageId: 'missingTypeId' }],
+      errors: [{ messageId: 'missingTypeId', data: missingTypeIdData('My') }],
     },
     {
       code: `class MyErr extends S.TaggedError<MyErr>()('MyErr', {}) {}`,
       filename: 'process-claim.workflow.ts',
-      errors: [{ messageId: 'missingTypeId' }],
+      errors: [{ messageId: 'missingTypeId', data: missingTypeIdData('MyErr') }],
     },
     {
       code: `class A extends S.TaggedClass<A>()('A', {}) {} class B extends S.TaggedClass<B>()('B', {}) {}`,
       filename: 'process-claim.workflow.ts',
-      errors: [{ messageId: 'missingTypeId' }, { messageId: 'missingTypeId' }],
+      errors: [
+        { messageId: 'missingTypeId', data: missingTypeIdData('A') },
+        { messageId: 'missingTypeId', data: missingTypeIdData('B') },
+      ],
     },
     {
       code: `class My extends S.TaggedClass<My>()('My', {}) { readonly foo = 1 }`,
       filename: 'process-claim.workflow.ts',
-      errors: [{ messageId: 'missingTypeId' }],
+      errors: [{ messageId: 'missingTypeId', data: missingTypeIdData('My') }],
     },
     {
       code: `class My extends S.TaggedClass<My>()('My', {}) { readonly [123] = 1 }`,
       filename: 'process-claim.workflow.ts',
-      errors: [{ messageId: 'missingTypeId' }],
+      errors: [{ messageId: 'missingTypeId', data: missingTypeIdData('My') }],
     },
     {
       code: `class My extends S.TaggedError('MyErr', {}) {}`,
       filename: 'process-claim.workflow.ts',
-      errors: [{ messageId: 'missingTypeId' }],
+      errors: [{ messageId: 'missingTypeId', data: missingTypeIdData('My') }],
     },
     {
       code: `class My extends S.TaggedClass('My', {}) {}`,
       filename: 'process-claim.workflow.ts',
-      errors: [{ messageId: 'missingTypeId' }],
+      errors: [{ messageId: 'missingTypeId', data: missingTypeIdData('My') }],
     },
   ],
 })

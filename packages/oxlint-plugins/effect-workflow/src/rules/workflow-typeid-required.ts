@@ -52,7 +52,13 @@ export const workflowTypeidRequired = defineRule({
           context.report({
             node,
             messageId: 'missingTypeId',
-            data: { name: getClassName(node) },
+            data: {
+              name: getClassName(node),
+              expected: 'every S.TaggedClass/S.TaggedError in *.workflow.ts to carry its union TypeId',
+              actual: `class ${getClassName(node)} is missing its TypeId`,
+              fix:
+                "add: const XxxTypeId: unique symbol = Symbol('@systemfsoftware/<pkg>/Xxx') and readonly [XxxTypeId] = XxxTypeId",
+            },
           })
         }
       },

@@ -33,8 +33,10 @@ export const workflowInlineSchemas = defineRule({
           node,
           messageId: 'singleConsumerSchema',
           data: {
-            source,
-            file: filename.split('/').pop()!,
+            name: source,
+            expected: 'types consumed by exactly one workflow to be declared in the workflow file',
+            actual: `importing ${source} from ${filename.split('/').pop()!}`,
+            fix: 'move the declarations inline or rename the schema file if it is shared',
           },
         })
       },

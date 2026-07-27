@@ -21,6 +21,14 @@ const TypeId: unique symbol = Symbol.for('@systemfsoftware/pkg/X')
 type TypeId = typeof TypeId
 `
 
+const unconstructedData = (name: string) => ({
+  name,
+  expected: 'every declared variant is constructed somewhere in the file',
+  actual: `${name} is declared but never constructed`,
+  fix:
+    'construct it in a step or decision arm, or delete the variant — a union member nothing produces makes the union lie',
+})
+
 ruleTester.run('workflow-no-unconstructed-variant', workflowNoUnconstructedVariant, {
   valid: [
     {
@@ -49,6 +57,27 @@ class Money extends S.TaggedClass<Money>()('Money', { amount: S.Number }) {
 }
 const price = Money.make({ amount: 1 })`,
       filename: 'price-order.workflow.ts',
+    },
+    {
+      name: 'Should_Pass_When_CommandIsDeclaredButNeverConstructed',
+      code: `${PRELUDE}
+class CancelOrderCommand extends S.TaggedClass<CancelOrderCommand>()('CancelOrderCommand', {}) {
+  readonly [TypeId] = TypeId
+}
+class CancelledNoRefund extends S.TaggedClass<CancelledNoRefund>()('CancelledNoRefund', {}) {
+  readonly [TypeId] = TypeId
+}
+const decide = () => new CancelledNoRefund({})`,
+      filename: 'cancel-order.workflow.ts',
+    },
+    {
+      name: 'Should_Pass_When_CommandIsDeclaredAndAlsoConstructed',
+      code: `${PRELUDE}
+class CancelOrderCommand extends S.TaggedClass<CancelOrderCommand>()('CancelOrderCommand', {}) {
+  readonly [TypeId] = TypeId
+}
+const echo = () => new CancelOrderCommand({})`,
+      filename: 'cancel-order.workflow.ts',
     },
     {
       name: 'allows untagged class declarations',
@@ -139,31 +168,40 @@ class CancelledNoRefund extends S.TaggedClass<CancelledNoRefund>()('CancelledNoR
 const e = new Error('x')
 const d = new Date()`,
       filename: 'cancel-order.workflow.ts',
-      errors: [{ messageId: 'unconstructedVariant', data: { name: 'CancelledNoRefund' } }],
+      errors: [{ messageId: 'unconstructedVariant', data: unconstructedData('CancelledNoRefund') }],
+    },
+    {
+      name: 'Should_Report_When_NameContainsCommandButDoesNotEndWithIt',
+      code: `${PRELUDE}
+class CommandCenter extends S.TaggedClass<CommandCenter>()('CommandCenter', {}) {
+  readonly [TypeId] = TypeId
+}`,
+      filename: 'cancel-order.workflow.ts',
+      errors: [{ messageId: 'unconstructedVariant', data: unconstructedData('CommandCenter') }],
     },
     {
       name: 'flags direct-call tagged class never constructed',
       code: `class Foo extends S.TaggedClass('Foo', {}) {}`,
       filename: 'process-claim.workflow.ts',
-      errors: [{ messageId: 'unconstructedVariant', data: { name: 'Foo' } }],
+      errors: [{ messageId: 'unconstructedVariant', data: unconstructedData('Foo') }],
     },
     {
       name: 'flags direct-call tagged error never constructed',
       code: `class Foo extends S.TaggedError('Foo', {}) {}`,
       filename: 'process-claim.workflow.ts',
-      errors: [{ messageId: 'unconstructedVariant' }],
+      errors: [{ messageId: 'unconstructedVariant', data: unconstructedData('Foo') }],
     },
     {
       name: 'flags variant when only unrelated method calls exist',
       code: `class Foo extends S.TaggedClass('Foo', {}) {}\nFoo.bar()`,
       filename: 'process-claim.workflow.ts',
-      errors: [{ messageId: 'unconstructedVariant' }],
+      errors: [{ messageId: 'unconstructedVariant', data: unconstructedData('Foo') }],
     },
     {
       name: 'flags variant when only computed make calls exist',
       code: `class Foo extends S.TaggedClass('Foo', {}) {}\nFoo['make']({})`,
       filename: 'process-claim.workflow.ts',
-      errors: [{ messageId: 'unconstructedVariant' }],
+      errors: [{ messageId: 'unconstructedVariant', data: unconstructedData('Foo') }],
     },
     {
       name: 'flags variant when only qualified constructions exist',
@@ -173,7 +211,7 @@ class CancelledNoRefund extends S.TaggedClass<CancelledNoRefund>()('CancelledNoR
 }
 const x = new ns.CancelledNoRefund({})`,
       filename: 'cancel-order.workflow.ts',
-      errors: [{ messageId: 'unconstructedVariant', data: { name: 'CancelledNoRefund' } }],
+      errors: [{ messageId: 'unconstructedVariant', data: unconstructedData('CancelledNoRefund') }],
     },
     {
       name: 'flags variant when only qualified make calls exist',
@@ -183,7 +221,7 @@ class CancelledNoRefund extends S.TaggedClass<CancelledNoRefund>()('CancelledNoR
 }
 const x = ns.CancelledNoRefund.make({})`,
       filename: 'cancel-order.workflow.ts',
-      errors: [{ messageId: 'unconstructedVariant' }],
+      errors: [{ messageId: 'unconstructedVariant', data: unconstructedData('CancelledNoRefund') }],
     },
     {
       name: 'flags decision variant never constructed',
@@ -196,7 +234,7 @@ class CancelledNoRefund extends S.TaggedClass<CancelledNoRefund>()('CancelledNoR
 }
 const decide = () => new CancelledNoRefund({})`,
       filename: 'cancel-order.workflow.ts',
-      errors: [{ messageId: 'unconstructedVariant', data: { name: 'CancelledWithRefund' } }],
+      errors: [{ messageId: 'unconstructedVariant', data: unconstructedData('CancelledWithRefund') }],
     },
     {
       name: 'flags error variant never constructed',
@@ -206,7 +244,7 @@ class PolicyExpiredError extends S.TaggedError<PolicyExpiredError>()('PolicyExpi
 }
 const check = () => Either.right(void 0)`,
       filename: 'process-claim.workflow.ts',
-      errors: [{ messageId: 'unconstructedVariant' }],
+      errors: [{ messageId: 'unconstructedVariant', data: unconstructedData('PolicyExpiredError') }],
     },
     {
       name: 'flags each unconstructed variant separately',
@@ -214,7 +252,10 @@ const check = () => Either.right(void 0)`,
 class A extends S.TaggedClass<A>()('A', {}) { readonly [TypeId] = TypeId }
 class B extends S.TaggedClass<B>()('B', {}) { readonly [TypeId] = TypeId }`,
       filename: 'decide-access.workflow.ts',
-      errors: [{ messageId: 'unconstructedVariant' }, { messageId: 'unconstructedVariant' }],
+      errors: [
+        { messageId: 'unconstructedVariant', data: unconstructedData('A') },
+        { messageId: 'unconstructedVariant', data: unconstructedData('B') },
+      ],
     },
   ],
 })

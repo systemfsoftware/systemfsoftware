@@ -43,7 +43,13 @@ export const workflowNoPanicVocabulary = defineRule({
           context.report({
             node,
             messageId: 'panicVocabulary',
-            data: { name: node.id.name, token },
+            data: {
+              name: node.id.name,
+              expected: 'error variants named for expected domain failures a consumer can handle',
+              actual:
+                `${node.id.name} is pure panic vocabulary (${token}) — panics are defects at the shell edge, not typed errors in a workflow`,
+              fix: 'rename it for the domain failure, or delete it and let the invariant surface as a defect',
+            },
           })
         }
       },

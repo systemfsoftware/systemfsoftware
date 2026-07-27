@@ -15,6 +15,13 @@ const ruleTester = new RuleTester({
   },
 })
 
+const singleConsumerData = (source: string, file: string) => ({
+  name: source,
+  expected: 'types consumed by exactly one workflow to be declared in the workflow file',
+  actual: `importing ${source} from ${file}`,
+  fix: 'move the declarations inline or rename the schema file if it is shared',
+})
+
 ruleTester.run('workflow-inline-schemas', workflowInlineSchemas, {
   valid: [
     {
@@ -76,33 +83,48 @@ ruleTester.run('workflow-inline-schemas', workflowInlineSchemas, {
       filename: 'process-claim.workflow.ts',
       errors: [{
         messageId: 'singleConsumerSchema',
-        data: { file: 'process-claim.workflow.ts', source: './process-claim.schema.ts' },
+        data: singleConsumerData('./process-claim.schema.ts', 'process-claim.workflow.ts'),
       }],
     },
     {
       code: `import { X } from './other-name.schema.ts'`,
       filename: 'other-name.workflow.ts',
-      errors: [{ messageId: 'singleConsumerSchema' }],
+      errors: [{
+        messageId: 'singleConsumerSchema',
+        data: singleConsumerData('./other-name.schema.ts', 'other-name.workflow.ts'),
+      }],
     },
     {
       code: `import { SomethingElse } from './process-claim.schema.ts'`,
       filename: 'process-claim.workflow.ts',
-      errors: [{ messageId: 'singleConsumerSchema' }],
+      errors: [{
+        messageId: 'singleConsumerSchema',
+        data: singleConsumerData('./process-claim.schema.ts', 'process-claim.workflow.ts'),
+      }],
     },
     {
       code: `import { ProcessClaimCommand } from './process-claim.schema.ts'`,
       filename: 'process-claim.workflow.ts',
-      errors: [{ messageId: 'singleConsumerSchema' }],
+      errors: [{
+        messageId: 'singleConsumerSchema',
+        data: singleConsumerData('./process-claim.schema.ts', 'process-claim.workflow.ts'),
+      }],
     },
     {
       code: `import { CancelOrderCommand } from './cancel-order.schema.js'`,
       filename: 'cancel-order.workflow.ts',
-      errors: [{ messageId: 'singleConsumerSchema' }],
+      errors: [{
+        messageId: 'singleConsumerSchema',
+        data: singleConsumerData('./cancel-order.schema.js', 'cancel-order.workflow.ts'),
+      }],
     },
     {
       code: `import { ProcessClaimCommand, ClaimDecision } from './process-claim.schema.ts'`,
       filename: 'process-claim.workflow.ts',
-      errors: [{ messageId: 'singleConsumerSchema' }],
+      errors: [{
+        messageId: 'singleConsumerSchema',
+        data: singleConsumerData('./process-claim.schema.ts', 'process-claim.workflow.ts'),
+      }],
     },
   ],
 })

@@ -12,29 +12,25 @@ const _default: {
         name: string;
     };
     rules: {
+        'workflow-schema-required': Rule;
         'workflow-inline-schemas': Rule;
-        'workflow-no-effect-import': Rule;
-        'workflow-no-ambient-impurity': Rule;
-        'workflow-no-async': Rule;
+        'workflow-typeid-required': Rule;
         'workflow-no-unconstructed-variant': Rule;
         'workflow-no-panic-vocabulary': Rule;
-        'workflow-property-test-shape': Rule;
-        'workflow-typeid-required': Rule;
+        'workflow-match-exhaustive': Rule;
+        'workflow-single-path': Rule;
+        'workflow-no-throw': Rule;
+        'workflow-no-async': Rule;
+        'workflow-no-ambient-impurity': Rule;
+        'workflow-no-effect-import': Rule;
+        'workflow-no-shell-imports': Rule;
         'workflow-single-function-export': Rule;
+        'workflow-property-test-shape': Rule;
     };
     configs: {
         recommended: {
-            plugins: string[];
             rules: {
-                readonly '@systemfsoftware/oxlint-plugin-effect-workflow/workflow-inline-schemas': 'error';
-                readonly '@systemfsoftware/oxlint-plugin-effect-workflow/workflow-no-effect-import': 'error';
-                readonly '@systemfsoftware/oxlint-plugin-effect-workflow/workflow-no-ambient-impurity': 'error';
-                readonly '@systemfsoftware/oxlint-plugin-effect-workflow/workflow-no-async': 'error';
-                readonly '@systemfsoftware/oxlint-plugin-effect-workflow/workflow-no-unconstructed-variant': 'error';
-                readonly '@systemfsoftware/oxlint-plugin-effect-workflow/workflow-no-panic-vocabulary': 'error';
-                readonly '@systemfsoftware/oxlint-plugin-effect-workflow/workflow-property-test-shape': 'error';
-                readonly '@systemfsoftware/oxlint-plugin-effect-workflow/workflow-typeid-required': 'error';
-                readonly '@systemfsoftware/oxlint-plugin-effect-workflow/workflow-single-function-export': 'error';
+                readonly [x: string]: "error";
             };
         };
     };
