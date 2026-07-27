@@ -78,7 +78,7 @@ jsPlugins: ['@systemfsoftware/oxlint-plugin', '@systemfsoftware/oxlint-plugin-te
 rules: { '@systemfsoftware/oxlint-plugin/rule-name': 'error' },
 ```
 
-Rule export format (`src/index.ts`): `export default { meta: { name }, rules: { 'rule-name': rule } }`.
+Rule export format (`src/index.ts`): `export default { meta: { name }, rules: { 'rule-name': rule }, configs: { recommended: { plugins: [name], rules: { ... } } } }`.
 
 ## Package Deltas
 

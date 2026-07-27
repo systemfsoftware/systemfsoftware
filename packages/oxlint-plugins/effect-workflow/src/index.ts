@@ -9,6 +9,17 @@ import { workflowSingleFunctionExport } from './rules/workflow-single-function-e
 import { workflowTypeidRequired } from './rules/workflow-typeid-required.js'
 
 const PLUGIN_NAME = '@systemfsoftware/oxlint-plugin-effect-workflow'
+const recommendedRules = {
+  '@systemfsoftware/oxlint-plugin-effect-workflow/workflow-inline-schemas': 'error',
+  '@systemfsoftware/oxlint-plugin-effect-workflow/workflow-no-effect-import': 'error',
+  '@systemfsoftware/oxlint-plugin-effect-workflow/workflow-no-ambient-impurity': 'error',
+  '@systemfsoftware/oxlint-plugin-effect-workflow/workflow-no-async': 'error',
+  '@systemfsoftware/oxlint-plugin-effect-workflow/workflow-no-unconstructed-variant': 'error',
+  '@systemfsoftware/oxlint-plugin-effect-workflow/workflow-no-panic-vocabulary': 'error',
+  '@systemfsoftware/oxlint-plugin-effect-workflow/workflow-property-test-shape': 'error',
+  '@systemfsoftware/oxlint-plugin-effect-workflow/workflow-typeid-required': 'error',
+  '@systemfsoftware/oxlint-plugin-effect-workflow/workflow-single-function-export': 'error',
+} as const
 
 export default {
   meta: {
@@ -24,5 +35,11 @@ export default {
     'workflow-property-test-shape': workflowPropertyTestShape,
     'workflow-typeid-required': workflowTypeidRequired,
     'workflow-single-function-export': workflowSingleFunctionExport,
+  },
+  configs: {
+    recommended: {
+      plugins: [PLUGIN_NAME],
+      rules: recommendedRules,
+    },
   },
 }

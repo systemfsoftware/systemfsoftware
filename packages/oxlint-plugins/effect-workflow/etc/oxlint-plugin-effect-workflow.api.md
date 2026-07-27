@@ -22,6 +22,22 @@ const _default: {
         'workflow-typeid-required': Rule;
         'workflow-single-function-export': Rule;
     };
+    configs: {
+        recommended: {
+            plugins: string[];
+            rules: {
+                readonly '@systemfsoftware/oxlint-plugin-effect-workflow/workflow-inline-schemas': 'error';
+                readonly '@systemfsoftware/oxlint-plugin-effect-workflow/workflow-no-effect-import': 'error';
+                readonly '@systemfsoftware/oxlint-plugin-effect-workflow/workflow-no-ambient-impurity': 'error';
+                readonly '@systemfsoftware/oxlint-plugin-effect-workflow/workflow-no-async': 'error';
+                readonly '@systemfsoftware/oxlint-plugin-effect-workflow/workflow-no-unconstructed-variant': 'error';
+                readonly '@systemfsoftware/oxlint-plugin-effect-workflow/workflow-no-panic-vocabulary': 'error';
+                readonly '@systemfsoftware/oxlint-plugin-effect-workflow/workflow-property-test-shape': 'error';
+                readonly '@systemfsoftware/oxlint-plugin-effect-workflow/workflow-typeid-required': 'error';
+                readonly '@systemfsoftware/oxlint-plugin-effect-workflow/workflow-single-function-export': 'error';
+            };
+        };
+    };
 };
 export default _default;
 
