@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/effect-schema-extensions",
   "license": "MIT",
-  "version": "0.4.7",
+  "version": "0.4.8",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -54,7 +54,6 @@
     "@systemfsoftware/hex-schema": "workspace:^"
   },
   "devDependencies": {
-    "effect": "catalog:",
     "@effect/vitest": "catalog:",
     "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "workspace:^",
@@ -65,6 +64,7 @@
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
     "@vitest/coverage-v8": "catalog:",
+    "effect": "catalog:",
     "fast-check": "catalog:",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
