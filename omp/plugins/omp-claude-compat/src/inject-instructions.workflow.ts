@@ -2,12 +2,11 @@
  * Decides whether an `@`-ref from `CLAUDE.md` is injected or already carried by
  * the host.
  *
- * Keys on the target's base name, never its content: the host reformats
- * markdown before rendering, so byte comparison misses reformatted duplicates
- * and drops short files whose text appears elsewhere. The caller extracts the
- * base name, so a downward `@packages/foo/AGENTS.md` is suppressed even though
- * the host's up-only walk never loaded it — accepted, because the only escape
- * is dropping `AGENTS.md` from the skip list, which restores root duplication.
+ * Keys on the target's project-relative path, never its content: the host
+ * reformats markdown before rendering, so byte comparison misses reformatted
+ * duplicates and drops short files whose text appears elsewhere. Path keying
+ * suppresses exactly the root `AGENTS.md` the host already delivers, while a
+ * downward `@packages/foo/AGENTS.md` still injects.
  */
 import { Match, Option, Schema as S } from 'effect'
 
@@ -22,14 +21,14 @@ class Skip extends S.TaggedClass<Skip>()('Skip', {
 type RefVerdict = Inject | Skip
 
 export const CheckRefInjection = S.Struct({
-  baseName: S.String,
+  relativePath: S.String,
   skipList: S.Array(S.String),
 })
 
 export type CheckRefInjection = typeof CheckRefInjection.Type
 
 const matchedEntry = (cmd: CheckRefInjection): Option.Option<string> =>
-  Option.fromNullable(cmd.skipList.find((entry) => entry === cmd.baseName))
+  Option.fromNullable(cmd.skipList.find((entry) => entry === cmd.relativePath))
 
 export const decideRefInjection = (cmd: CheckRefInjection): RefVerdict =>
   Match.value(matchedEntry(cmd)).pipe(

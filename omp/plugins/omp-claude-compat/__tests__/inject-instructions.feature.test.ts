@@ -443,22 +443,25 @@ Feature('@-ref extraction, resolution, and injection')
     )
 
     scenario(
-      'Should suppress a skip-listed ref reached through a subdirectory',
+      'Should inject a nested AGENTS.md while the root stays deduplicated',
       {
         scenarioLayer: makeFsLayer({
-          '/test/CLAUDE.md': '@docs/AGENTS.md\n',
+          '/test/CLAUDE.md': '@AGENTS.md\n@docs/AGENTS.md\n',
+          '/test/AGENTS.md': '# Root rules\n\nRoot text.',
           '/test/docs/AGENTS.md': '# Nested rules\n\nUse pnpm only.',
         }),
       },
       Gherkin.Do.pipe(
-        Given('a CLAUDE.md referencing AGENTS.md below the project root')(
+        Given('a CLAUDE.md referencing both the root and a nested AGENTS.md')(
           'dir',
           () => Effect.succeed('/test'),
         ),
         When('loadReferencedContent runs')('result', (s) => loadReferencedContent(s.dir)),
-        Then('the base name alone should decide, ignoring the directory')((s) =>
+        Then('only the root path is suppressed, the nested one injects')((s) =>
           Effect.sync(() => {
-            expect(s.result).toBe('')
+            expect(s.result).not.toContain('Root text.')
+            expect(s.result).toContain('## docs/AGENTS.md')
+            expect(s.result).toContain('Use pnpm only.')
           })
         ),
       ),

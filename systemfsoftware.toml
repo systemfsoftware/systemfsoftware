@@ -32,8 +32,10 @@ no_delegate_skills = [
   "ce-worktree",
 ]
 
-# @-ref target file names the omp host already renders as context files, so the
-# claude-compat plugin must not inject a second copy. Absent, it defaults to
-# ["AGENTS.md"]; set it to [] to disable suppression entirely.
+# @-ref targets, as project-relative paths, that the omp host already renders as
+# context files, so the claude-compat plugin must not inject a second copy.
+# Matching is exact: "AGENTS.md" suppresses only the root file, never a nested
+# "packages/foo/AGENTS.md". Absent, it defaults to ["AGENTS.md"]; set it to []
+# to disable suppression entirely.
 #
 # no_inject_refs = ["AGENTS.md"]

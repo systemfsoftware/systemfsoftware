@@ -10,8 +10,8 @@ const dirPrefix = fc
   .array(fc.constantFrom('docs', 'packages', 'src', 'a', 'b'), { minLength: 1, maxLength: 3 })
   .map((parts) => parts.join('/'))
 
-const check = (baseName: string, skipList: ReadonlyArray<string>): CheckRefInjection => ({
-  baseName,
+const check = (relativePath: string, skipList: ReadonlyArray<string>): CheckRefInjection => ({
+  relativePath,
   skipList,
 })
 
@@ -58,10 +58,26 @@ describe('decideRefInjection (PBT)', () => {
   )
 
   it.prop(
-    '∀path_SlashedName_→NoPathParsing',
+    '∀path_SkipListHasBaseNameOnly_→Inject',
     [fileName, dirPrefix],
     ([name, prefix]) => {
       return decideRefInjection(check(`${prefix}/${name}`, [name]))._tag === 'Inject'
+    },
+  )
+
+  it.prop(
+    '∀prefix_NestedAgentsMdDefaultSkipList_→Inject',
+    [dirPrefix],
+    ([prefix]) => {
+      return decideRefInjection(check(`${prefix}/AGENTS.md`, DEFAULT_NO_INJECT_REFS))._tag === 'Inject'
+    },
+  )
+
+  it.prop(
+    '∀path_SkipListHasFullPath_→Skip',
+    [fileName, dirPrefix],
+    ([name, prefix]) => {
+      return decideRefInjection(check(`${prefix}/${name}`, [`${prefix}/${name}`]))._tag === 'Skip'
     },
   )
 })

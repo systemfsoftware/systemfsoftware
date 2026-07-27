@@ -83,7 +83,7 @@ export const loadReferencedContent = Effect.fn('loadReferencedContent')(function
   for (const ref of uniqueRefs) {
     const relativePath = ref.resolvedPath.slice(projectDir.length + 1)
     const suppressed = Match.value(
-      decideRefInjection({ baseName: path.basename(ref.resolvedPath), skipList }),
+      decideRefInjection({ relativePath, skipList }),
     ).pipe(
       Match.tag('Skip', (skip) => Option.some(skip.matched)),
       Match.tag('Inject', () => Option.none<string>()),
