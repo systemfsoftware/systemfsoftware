@@ -38,12 +38,6 @@ export const TomlLoaderLive: Layer.Layer<TomlLoader, never, FileSystem | Path> =
 
         const result = yield* fs.readFileString(configPath).pipe(
           Effect.flatMap(Schema.decodeUnknown(TomlConfigFromText)),
-          Effect.tapError((error) =>
-            Effect.logError(
-              `[toml-loader] malformed ${CONFIG_FILE} at ${configPath} — failing open, which voids EVERY key in the file, not just the malformed one`,
-              error,
-            )
-          ),
           Effect.catchAll(() => Effect.succeed(EMPTY_CONFIG)),
         )
 
