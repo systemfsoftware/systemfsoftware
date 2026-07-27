@@ -1,6 +1,8 @@
 import { FileSystem } from '@effect/platform/FileSystem'
 import * as PathModule from '@effect/platform/Path'
-import { Effect, Either } from 'effect'
+import { TomlLoader } from '@systemfsoftware/omp-utils'
+import { Effect, Either, Match, Option } from 'effect'
+import { decideRefInjection, DEFAULT_NO_INJECT_REFS } from './inject-instructions.workflow.js'
 
 interface Ref {
   readonly sourcePath: string
@@ -38,9 +40,15 @@ const extractRefs = Effect.fn('extractRefs')(function*(content: string, baseDir:
   return refs
 })
 
+/**
+ * Collect the content of every `@`-ref in CLAUDE.md that the host does not
+ * already deliver, deciding each ref through `decideRefInjection`.
+ */
 export const loadReferencedContent = Effect.fn('loadReferencedContent')(function*(projectDir: string) {
   const fs = yield* FileSystem
   const path = yield* PathModule.Path
+  const tomlLoader = yield* TomlLoader
+
   const claudeMdPaths = [
     path.resolve(projectDir, 'CLAUDE.md'),
     path.resolve(projectDir, '.claude', 'CLAUDE.md'),
@@ -66,33 +74,54 @@ export const loadReferencedContent = Effect.fn('loadReferencedContent')(function
     }
   }
 
-  const validRefs: Ref[] = []
+  const config = yield* tomlLoader.load(projectDir).pipe(
+    Effect.tapError((error) =>
+      Effect.logWarning(
+        `[omp-claude-compat] could not read systemfsoftware.toml in ${projectDir}; using the default skip list`,
+        error,
+      )
+    ),
+    Effect.catchAll(() => Effect.succeed(undefined)),
+  )
+  const skipList = config?.['no_inject_refs'] ?? DEFAULT_NO_INJECT_REFS
+
+  const sections: string[] = []
   for (const ref of uniqueRefs) {
-    const exists = yield* Effect.either(fs.exists(ref.resolvedPath))
-    if (Either.isRight(exists) && exists.right) {
-      validRefs.push(ref)
-    }
-  }
-
-  if (validRefs.length === 0) return ''
-
-  const parts: string[] = ['# Injected @-references from CLAUDE.md']
-  parts.push('The following files were @-imported by CLAUDE.md and contain project rules.')
-  parts.push('')
-
-  for (const ref of validRefs) {
     const relativePath = ref.resolvedPath.slice(projectDir.length + 1)
-    parts.push(`## ${relativePath}`)
+    const suppressed = Match.value(
+      decideRefInjection({ baseName: path.basename(ref.resolvedPath), skipList }),
+    ).pipe(
+      Match.tag('Skip', (skip) => Option.some(skip.matched)),
+      Match.tag('Inject', () => Option.none<string>()),
+      Match.exhaustive,
+    )
+
+    if (Option.isSome(suppressed)) {
+      yield* Effect.logInfo(
+        `[omp-claude-compat] skipped @-ref ${relativePath}: host already provides ${suppressed.value}`,
+      )
+      continue
+    }
+
     const refContent = yield* Effect.either(
       fs.readFileString(ref.resolvedPath, 'utf-8'),
     )
-    if (Either.isRight(refContent)) {
-      parts.push(refContent.right)
-    } else {
-      parts.push(`[error reading ${relativePath}]`)
+    if (Either.isLeft(refContent)) {
+      yield* Effect.logWarning(
+        `[omp-claude-compat] could not read @-ref ${relativePath}; skipping it`,
+      )
+      continue
     }
-    parts.push('')
+
+    sections.push(`## ${relativePath}\n${refContent.right}\n`)
   }
 
-  return parts.join('\n')
+  if (sections.length === 0) return ''
+
+  return [
+    '# Injected @-references from CLAUDE.md',
+    'The following files were @-imported by CLAUDE.md and contain project rules.',
+    '',
+    ...sections,
+  ].join('\n')
 })
