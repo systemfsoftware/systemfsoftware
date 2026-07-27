@@ -33,6 +33,7 @@
   "incrementalFile": "reports/stryker-incremental.json",
   "mutate": [
     "src/**/*.ts",
+    "!src/**/*.fixtures.ts",
     "!src/**/*.test.ts",
     "!src/**/*.tst.ts",
     "!src/**/*.schema.ts",
