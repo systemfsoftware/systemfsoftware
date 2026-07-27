@@ -9,7 +9,10 @@
         "tsconfig.build.json",
         "tsconfig.*.json",
         "package.json",
-        "tsdown.config.*"
+        "tsdown.config.*",
+        "api-extractor.json",
+        "api-extractor.*.json",
+        "etc/*.api.md"
       ],
       "outputs": [
         "dist/**"
