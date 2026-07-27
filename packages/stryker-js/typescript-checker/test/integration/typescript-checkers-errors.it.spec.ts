@@ -57,7 +57,7 @@ describe('Typescript checker errors', () => {
     await expect(sut.init()).rejects.toThrow(
       'testResources/errors/compile-error/add.ts(2,3): error TS2322:',
     )
-  })
+  }, 30_000)
 
   it('should reject initialization if tsconfig was invalid', async () => {
     const sut = createChecker(

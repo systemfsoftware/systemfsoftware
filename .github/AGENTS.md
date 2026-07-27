@@ -63,7 +63,6 @@ pnpm api:check
 
 **Known pre-existing issues:**
 
-- `sinon-chai@3.7.0` wants `chai@^4.0.0` but we have `chai@5.3.3` — incompatible dep in sinon-chai, non-blocking
 - `@effect/vitest@0.30.0` wants `vitest@^3.2.0` but we have `vitest@4.1.9` — effect/vitest lags vitest 4, non-blocking
 
 These don't block CI.
