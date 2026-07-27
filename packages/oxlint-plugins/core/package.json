@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/oxlint-plugin",
   "license": "MIT",
-  "version": "0.3.6",
+  "version": "0.3.7",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -54,7 +54,6 @@
     "@oxlint/plugins": "catalog:oxlint"
   },
   "devDependencies": {
-    "effect": "catalog:",
     "@microsoft/api-extractor": "catalog:",
     "@stryker-mutator/vitest-runner": "catalog:stryker",
     "@systemfsoftware/arethetypeswrong-cli": "workspace:^",
@@ -64,6 +63,7 @@
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
     "@vitest/coverage-v8": "catalog:",
+    "effect": "catalog:",
     "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
