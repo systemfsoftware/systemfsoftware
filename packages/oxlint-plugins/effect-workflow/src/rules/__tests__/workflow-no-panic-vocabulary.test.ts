@@ -102,7 +102,16 @@ class UnexpectedStateError extends S.TaggedError<UnexpectedStateError>()('Unexpe
   readonly [TypeId] = TypeId
 }`,
       filename: 'process-claim.workflow.ts',
-      errors: [{ messageId: 'panicVocabulary', data: { name: 'UnexpectedStateError', token: 'Unexpected' } }],
+      errors: [{
+        messageId: 'panicVocabulary',
+        data: {
+          name: 'UnexpectedStateError',
+          expected: 'error variants named for expected domain failures a consumer can handle',
+          actual:
+            'UnexpectedStateError is pure panic vocabulary (Unexpected) — panics are defects at the shell edge, not typed errors in a workflow',
+          fix: 'rename it for the domain failure, or delete it and let the invariant surface as a defect',
+        },
+      }],
     },
     {
       name: 'flags bare UnexpectedError',
@@ -111,7 +120,16 @@ class UnexpectedError extends S.TaggedError<UnexpectedError>()('UnexpectedError'
   readonly [TypeId] = TypeId
 }`,
       filename: 'process-claim.workflow.ts',
-      errors: [{ messageId: 'panicVocabulary' }],
+      errors: [{
+        messageId: 'panicVocabulary',
+        data: {
+          name: 'UnexpectedError',
+          expected: 'error variants named for expected domain failures a consumer can handle',
+          actual:
+            'UnexpectedError is pure panic vocabulary (Unexpected) — panics are defects at the shell edge, not typed errors in a workflow',
+          fix: 'rename it for the domain failure, or delete it and let the invariant surface as a defect',
+        },
+      }],
     },
     {
       name: 'flags InvariantViolationError',
@@ -120,7 +138,16 @@ class InvariantViolationError extends S.TaggedError<InvariantViolationError>()('
   readonly [TypeId] = TypeId
 }`,
       filename: 'process-claim.workflow.ts',
-      errors: [{ messageId: 'panicVocabulary', data: { name: 'InvariantViolationError', token: 'Invariant' } }],
+      errors: [{
+        messageId: 'panicVocabulary',
+        data: {
+          name: 'InvariantViolationError',
+          expected: 'error variants named for expected domain failures a consumer can handle',
+          actual:
+            'InvariantViolationError is pure panic vocabulary (Invariant) — panics are defects at the shell edge, not typed errors in a workflow',
+          fix: 'rename it for the domain failure, or delete it and let the invariant surface as a defect',
+        },
+      }],
     },
     {
       name: 'flags ImpossibleCaseError',
@@ -129,7 +156,16 @@ class ImpossibleCaseError extends S.TaggedError<ImpossibleCaseError>()('Impossib
   readonly [TypeId] = TypeId
 }`,
       filename: 'decide-access.workflow.ts',
-      errors: [{ messageId: 'panicVocabulary' }],
+      errors: [{
+        messageId: 'panicVocabulary',
+        data: {
+          name: 'ImpossibleCaseError',
+          expected: 'error variants named for expected domain failures a consumer can handle',
+          actual:
+            'ImpossibleCaseError is pure panic vocabulary (Impossible) — panics are defects at the shell edge, not typed errors in a workflow',
+          fix: 'rename it for the domain failure, or delete it and let the invariant surface as a defect',
+        },
+      }],
     },
     {
       name: 'flags UnreachableError',
@@ -138,7 +174,16 @@ class UnreachableError extends S.TaggedError<UnreachableError>()('UnreachableErr
   readonly [TypeId] = TypeId
 }`,
       filename: 'decide-access.workflow.ts',
-      errors: [{ messageId: 'panicVocabulary' }],
+      errors: [{
+        messageId: 'panicVocabulary',
+        data: {
+          name: 'UnreachableError',
+          expected: 'error variants named for expected domain failures a consumer can handle',
+          actual:
+            'UnreachableError is pure panic vocabulary (Unreachable) — panics are defects at the shell edge, not typed errors in a workflow',
+          fix: 'rename it for the domain failure, or delete it and let the invariant surface as a defect',
+        },
+      }],
     },
   ],
 })

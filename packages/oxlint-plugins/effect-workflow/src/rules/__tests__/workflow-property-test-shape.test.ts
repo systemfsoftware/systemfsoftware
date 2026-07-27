@@ -24,6 +24,34 @@ it.prop('refund never exceeds capture', [Arbitrary.make(ProcessClaimCommand)], (
 })
 `
 
+const wrongSuffixData = (file: string) => ({
+  name: file,
+  expected: '*.property.test.ts suffix for workflow tests',
+  actual: `test file ${file} does not use the *.property.test.ts suffix`,
+  fix: 'rename the file to *.property.test.ts',
+})
+
+const plainItData = {
+  name: 'it()',
+  expected: 'it.prop() from @effect/vitest for workflow property tests',
+  actual: 'plain it() is used',
+  fix: 'replace it() with it.prop() from @effect/vitest',
+}
+
+const rawFcAssertData = {
+  name: 'fc.assert()',
+  expected: 'it.prop() from @effect/vitest',
+  actual: 'raw fc.assert() is used',
+  fix: 'replace raw fc.assert() with it.prop() from @effect/vitest',
+}
+
+const effectPropData = {
+  name: 'it.effect.prop()',
+  expected: 'it.prop() from @effect/vitest',
+  actual: 'it.effect.prop() is used',
+  fix: 'replace it.effect.prop() with it.prop() from @effect/vitest',
+}
+
 ruleTester.run('workflow-property-test-shape', workflowPropertyTestShape, {
   valid: [
     {
@@ -106,53 +134,53 @@ ruleTester.run('workflow-property-test-shape', workflowPropertyTestShape, {
     {
       code: `import { it } from 'vitest'; it('should work', () => {})`,
       filename: 'src/workflows/__tests__/process-claim.property.test.ts',
-      errors: [{ messageId: 'plainIt' }],
+      errors: [{ messageId: 'plainIt', data: plainItData }],
     },
     {
       code: `import fc from 'fast-check'; fc.assert(fc.property(arb, (x) => true))`,
       filename: 'src/workflows/__tests__/process-claim.property.test.ts',
-      errors: [{ messageId: 'rawFcAssert' }],
+      errors: [{ messageId: 'rawFcAssert', data: rawFcAssertData }],
     },
     {
       code:
         `import { it } from '@effect/vitest'; it.effect.prop('test', [Arbitrary.make(Schema)], ([x]) => Effect.gen(function*() { yield* true }))`,
       filename: 'src/workflows/__tests__/process-claim.property.test.ts',
-      errors: [{ messageId: 'effectProp' }],
+      errors: [{ messageId: 'effectProp', data: effectPropData }],
     },
     {
       code: `import { it } from 'vitest'`,
       filename: 'src/workflows/process-claim.test.ts',
-      errors: [{ messageId: 'wrongSuffix', data: { file: 'process-claim.test.ts' } }],
+      errors: [{ messageId: 'wrongSuffix', data: wrongSuffixData('process-claim.test.ts') }],
     },
     {
       code: `import { it } from 'vitest'`,
       filename: 'src/workflows/process-claim.spec.ts',
-      errors: [{ messageId: 'wrongSuffix', data: { file: 'process-claim.spec.ts' } }],
+      errors: [{ messageId: 'wrongSuffix', data: wrongSuffixData('process-claim.spec.ts') }],
     },
     {
       code: `const x = 1`,
       filename: 'process-claim.property.test.ts',
-      errors: [{ messageId: 'wrongSuffix' }],
+      errors: [{ messageId: 'wrongSuffix', data: wrongSuffixData('process-claim.property.test.ts') }],
     },
     {
       code: `import { it } from '@effect/vitest'; it.prop('test', [Arbitrary.make(Schema)], ([x]) => true)`,
       filename: 'src/workflows/__tests__/other.test.ts',
-      errors: [{ messageId: 'wrongSuffix' }],
+      errors: [{ messageId: 'wrongSuffix', data: wrongSuffixData('other.test.ts') }],
     },
     {
       code: `import { it } from 'vitest'; it('test', () => {})`,
       filename: 'src/workflows/__tests__/process-claim.property.test.ts',
-      errors: [{ messageId: 'plainIt' }],
+      errors: [{ messageId: 'plainIt', data: plainItData }],
     },
     {
       code: `import { it } from 'vitest'; it('test', () => {})`,
       filename: 'src/workflows/process-claim.property.test.ts',
-      errors: [{ messageId: 'wrongSuffix' }],
+      errors: [{ messageId: 'wrongSuffix', data: wrongSuffixData('process-claim.property.test.ts') }],
     },
     {
       code: `import { it } from 'vitest'; it('test', () => {})`,
       filename: 'src/workflows/custom-tests/process-claim.property.test.ts',
-      errors: [{ messageId: 'wrongSuffix' }],
+      errors: [{ messageId: 'wrongSuffix', data: wrongSuffixData('process-claim.property.test.ts') }],
       options: [{ testDir: '__tests__' }],
     },
   ],

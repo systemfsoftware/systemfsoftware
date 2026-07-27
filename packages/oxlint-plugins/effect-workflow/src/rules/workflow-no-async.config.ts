@@ -3,7 +3,7 @@ import { Schema as S } from 'effect'
 export const Options = S.Struct({})
 
 export const NO_ASYNC_MESSAGE =
-  '{{name}} is forbidden in *.workflow.ts. Expected: a synchronous pure decision returning Either. Actual: {{actual}}. Fix: move the async work to the shell and pass its result as command data.' as const
+  '{{name}} is forbidden. Expected: {{expected}}. Actual: {{actual}}. Fix: {{fix}}.' as const
 
 export const meta = {
   type: 'problem',

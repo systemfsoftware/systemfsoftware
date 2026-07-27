@@ -19,7 +19,12 @@ export const workflowNoAsync = defineRule({
         context.report({
           node,
           messageId: 'asyncFunction',
-          data: { name: 'async', actual: 'an async function' },
+          data: {
+            name: 'async',
+            expected: 'a synchronous pure decision returning Either',
+            actual: 'an async function',
+            fix: 'move the async work to the shell and pass its result as command data',
+          },
         })
       }
     }
@@ -32,7 +37,12 @@ export const workflowNoAsync = defineRule({
         context.report({
           node,
           messageId: 'awaitExpression',
-          data: { name: 'await', actual: 'an await expression' },
+          data: {
+            name: 'await',
+            expected: 'a synchronous pure decision returning Either',
+            actual: 'an await expression',
+            fix: 'move the async work to the shell and pass its result as command data',
+          },
         })
       },
       TSTypeReference(node: ESTree.TSTypeReference) {
@@ -40,7 +50,12 @@ export const workflowNoAsync = defineRule({
           context.report({
             node,
             messageId: 'promiseType',
-            data: { name: 'Promise', actual: 'a Promise type reference' },
+            data: {
+              name: 'Promise',
+              expected: 'a synchronous pure decision returning Either',
+              actual: 'a Promise type reference',
+              fix: 'move the async work to the shell and pass its result as command data',
+            },
           })
         }
       },

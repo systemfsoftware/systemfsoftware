@@ -30,9 +30,9 @@ rules:
   - id: EF1
     title: AI-native error message format
     do: "write every message as `'{{name}} is forbidden. Expected: {{expected}}. Actual: {{actual}}. Fix: {{fix}}.'`"
-    dont: write freeform prose messages
-    harm: agents and users cannot extract the violation, the expected shape, and the concrete fix from prose
-    check: every `messages` entry in every config file carries all four placeholders
+    dont: write freeform prose messages, or inline the four values as prose instead of as placeholders
+    harm: agents and users cannot extract the violation, the expected shape, and the concrete fix from prose; inlined values cannot be asserted field-by-field in tests
+    check: "review — no executable gate exists. Measured 2026-07-27: `effect-workflow/` 0 of 30 messages non-compliant, `core/` 31 of 38 across 14 rules, `test-hygiene/` 14 of 14. EF1 binds new and edited messages; the two backlogs are known, not sanctioned."
 
   - id: GD1
     title: Decode guards at the boundary
@@ -78,16 +78,42 @@ jsPlugins: ['@systemfsoftware/oxlint-plugin', '@systemfsoftware/oxlint-plugin-te
 rules: { '@systemfsoftware/oxlint-plugin/rule-name': 'error' },
 ```
 
-Rule export format (`src/index.ts`): `export default { meta: { name }, rules: { 'rule-name': rule }, configs: { recommended: { plugins: [name], rules: { ... } } } }`.
+Rule export format (`src/index.ts`):
+
+```typescript
+export default {
+  meta: { name: PLUGIN_NAME },
+  rules: { 'rule-name': rule },
+  configs: { recommended: { rules: { '<PLUGIN_NAME>/rule-name': 'error' } } },
+}
+```
+
+```yaml
+- id: IN1
+  title: configs.recommended is a rules bag and nothing else
+  do: put only `rules` inside `configs.recommended`, keyed `<PLUGIN_NAME>/<rule-name>`
+  dont: add a `plugins` key (or any other key) to `configs.recommended`
+  harm: "oxlint's `Plugin` interface is `{ meta?, rules }` and never reads `configs`; its top-level `plugins` field accepts only built-in namespaces, so a JS plugin name there fails config parsing outright with `Unknown plugin: '<name>'` for every consumer who spreads the preset whole"
+  check: "review — `Object.keys(configs.recommended)` is exactly `['rules']`. A violation is not silent: every consumer spreading the preset fails config parsing at startup."
+```
+
+Consumers register the plugin via `jsPlugins` and spread the preset's rules:
+
+```typescript
+defineConfig({
+  jsPlugins: ['@systemfsoftware/oxlint-plugin-effect-workflow'],
+  rules: { ...plugin.configs.recommended.rules },
+})
+```
 
 ## Package Deltas
 
-| Package             | Leaf delta                                                    |
-| ------------------- | ------------------------------------------------------------- |
-| `core/`             | ESLintUtils template, ESLint migration notes, legacy commands |
-| `test-hygiene/`     | —                                                             |
-| `effect-workflow/`  | —                                                             |
-| `property-testing/` | —                                                             |
+| Package             | Leaf delta                                                                             |
+| ------------------- | -------------------------------------------------------------------------------------- |
+| `core/`             | ESLintUtils template, ESLint migration notes, legacy commands                          |
+| `test-hygiene/`     | —                                                                                      |
+| `effect-workflow/`  | Spec of record (`architect-workflow` cell), deliberate non-gates, RuleTester-only rule |
+| `property-testing/` | —                                                                                      |
 
 ## Verification
 

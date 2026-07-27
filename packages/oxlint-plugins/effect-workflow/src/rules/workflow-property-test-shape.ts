@@ -35,10 +35,16 @@ export const workflowPropertyTestShape = defineRule({
     if (!isPropertyTestFile(filename, testDir)) {
       return {
         Program(node: ESTree.Program) {
+          const base = filename.split('/').pop()!
           context.report({
             node,
             messageId: 'wrongSuffix',
-            data: { file: filename.split('/').pop()! },
+            data: {
+              name: base,
+              expected: '*.property.test.ts suffix for workflow tests',
+              actual: `test file ${base} does not use the *.property.test.ts suffix`,
+              fix: 'rename the file to *.property.test.ts',
+            },
           })
         },
       }
@@ -47,12 +53,30 @@ export const workflowPropertyTestShape = defineRule({
     return {
       CallExpression(node: ESTree.CallExpression) {
         if (isCallTo(node, 'it') && node.callee.type === 'Identifier') {
-          context.report({ node, messageId: 'plainIt' })
+          context.report({
+            node,
+            messageId: 'plainIt',
+            data: {
+              name: 'it()',
+              expected: 'it.prop() from @effect/vitest for workflow property tests',
+              actual: 'plain it() is used',
+              fix: 'replace it() with it.prop() from @effect/vitest',
+            },
+          })
         }
         if (isCallTo(node, 'assert') && node.callee.type === 'MemberExpression') {
           const callee = node.callee
           if (callee.object.type === 'Identifier' && callee.object.name === 'fc') {
-            context.report({ node, messageId: 'rawFcAssert' })
+            context.report({
+              node,
+              messageId: 'rawFcAssert',
+              data: {
+                name: 'fc.assert()',
+                expected: 'it.prop() from @effect/vitest',
+                actual: 'raw fc.assert() is used',
+                fix: 'replace raw fc.assert() with it.prop() from @effect/vitest',
+              },
+            })
           }
         }
         {
@@ -65,7 +89,16 @@ export const workflowPropertyTestShape = defineRule({
             callee.object.property.type === 'Identifier' &&
             callee.object.property.name === 'effect'
           ) {
-            context.report({ node, messageId: 'effectProp' })
+            context.report({
+              node,
+              messageId: 'effectProp',
+              data: {
+                name: 'it.effect.prop()',
+                expected: 'it.prop() from @effect/vitest',
+                actual: 'it.effect.prop() is used',
+                fix: 'replace it.effect.prop() with it.prop() from @effect/vitest',
+              },
+            })
           }
         }
       },

@@ -53,37 +53,93 @@ ruleTester.run('workflow-no-async', workflowNoAsync, {
       name: 'flags async arrow function',
       code: `export const submitOrder = async (cmd: C) => Either.right(d)`,
       filename: 'submit-order.workflow.ts',
-      errors: [{ messageId: 'asyncFunction', data: { name: 'async', actual: 'an async function' } }],
+      errors: [{
+        messageId: 'asyncFunction',
+        data: {
+          name: 'async',
+          expected: 'a synchronous pure decision returning Either',
+          actual: 'an async function',
+          fix: 'move the async work to the shell and pass its result as command data',
+        },
+      }],
     },
     {
       name: 'flags async function declaration',
       code: `export async function processClaim(cmd: C) { return Either.right(d) }`,
       filename: 'process-claim.workflow.ts',
-      errors: [{ messageId: 'asyncFunction' }],
+      errors: [{
+        messageId: 'asyncFunction',
+        data: {
+          name: 'async',
+          expected: 'a synchronous pure decision returning Either',
+          actual: 'an async function',
+          fix: 'move the async work to the shell and pass its result as command data',
+        },
+      }],
     },
     {
       name: 'flags async function expression',
       code: `const f = async function() { return 1 }`,
       filename: 'process-claim.workflow.ts',
-      errors: [{ messageId: 'asyncFunction' }],
+      errors: [{
+        messageId: 'asyncFunction',
+        data: {
+          name: 'async',
+          expected: 'a synchronous pure decision returning Either',
+          actual: 'an async function',
+          fix: 'move the async work to the shell and pass its result as command data',
+        },
+      }],
     },
     {
       name: 'flags top-level await expression',
       code: `const body = await fetch(url)`,
       filename: 'submit-order.workflow.ts',
-      errors: [{ messageId: 'awaitExpression', data: { name: 'await', actual: 'an await expression' } }],
+      errors: [{
+        messageId: 'awaitExpression',
+        data: {
+          name: 'await',
+          expected: 'a synchronous pure decision returning Either',
+          actual: 'an await expression',
+          fix: 'move the async work to the shell and pass its result as command data',
+        },
+      }],
     },
     {
       name: 'flags Promise type reference',
       code: `export const f = (cmd: C): Promise<Decision> => Either.right(d) as never`,
       filename: 'process-claim.workflow.ts',
-      errors: [{ messageId: 'promiseType', data: { name: 'Promise', actual: 'a Promise type reference' } }],
+      errors: [{
+        messageId: 'promiseType',
+        data: {
+          name: 'Promise',
+          expected: 'a synchronous pure decision returning Either',
+          actual: 'a Promise type reference',
+          fix: 'move the async work to the shell and pass its result as command data',
+        },
+      }],
     },
     {
       name: 'flags async and await separately',
       code: `export const f = async (cmd: C) => { await g(cmd); return Either.right(d) }`,
       filename: 'process-claim.workflow.ts',
-      errors: [{ messageId: 'asyncFunction' }, { messageId: 'awaitExpression' }],
+      errors: [{
+        messageId: 'asyncFunction',
+        data: {
+          name: 'async',
+          expected: 'a synchronous pure decision returning Either',
+          actual: 'an async function',
+          fix: 'move the async work to the shell and pass its result as command data',
+        },
+      }, {
+        messageId: 'awaitExpression',
+        data: {
+          name: 'await',
+          expected: 'a synchronous pure decision returning Either',
+          actual: 'an await expression',
+          fix: 'move the async work to the shell and pass its result as command data',
+        },
+      }],
     },
   ],
 })

@@ -9,15 +9,16 @@ export const Options = S.Struct({
 
 export type OptionsType = S.Schema.Type<typeof Options>
 
-export const WRONG_SUFFIX_MESSAGE = 'Test file {{file}} must use *.property.test.ts suffix for workflow tests.' as const
+export const WRONG_SUFFIX_MESSAGE =
+  '{{name}} is forbidden. Expected: {{expected}}. Actual: {{actual}}. Fix: {{fix}}.' as const
 export const PLAIN_IT_MESSAGE =
-  'Use it.prop() from @effect/vitest instead of plain it() for workflow property tests.' as const
+  '{{name}} is forbidden. Expected: {{expected}}. Actual: {{actual}}. Fix: {{fix}}.' as const
 export const RAW_FC_ASSERT_MESSAGE =
-  'Use it.prop() from @effect/vitest instead of raw fc.assert(). Property tests need Effect context.' as const
+  '{{name}} is forbidden. Expected: {{expected}}. Actual: {{actual}}. Fix: {{fix}}.' as const
 export const WRONG_LOCATION_MESSAGE =
-  'Property test files must be in a {{testDir}}/ directory adjacent to the workflow file.' as const
+  '{{name}} is forbidden. Expected: {{expected}}. Actual: {{actual}}. Fix: {{fix}}.' as const
 export const EFFECT_PROP_MESSAGE =
-  'Use it.prop() from @effect/vitest instead of it.effect.prop() — workflows are pure, no Effect context needed.' as const
+  '{{name}} is forbidden. Expected: {{expected}}. Actual: {{actual}}. Fix: {{fix}}.' as const
 
 export const meta = {
   type: 'problem',

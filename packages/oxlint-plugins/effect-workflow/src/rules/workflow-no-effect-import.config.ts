@@ -2,21 +2,32 @@ import { Schema as S } from 'effect'
 
 export const Options = S.Struct({})
 
+export const ALLOWED_EFFECT_SUBMODULES = [
+  'effect/Either',
+  'effect/Match',
+  'effect/Schema',
+  'effect/Option',
+] as const
+
 export const TOP_LEVEL_EFFECT_MESSAGE =
-  "Top-level effect import is forbidden in *.workflow.ts. Use submodule imports: import * as Either from 'effect/Either', import * as Match from 'effect/Match', import * as S from 'effect/Schema'." as const
+  '{{name}} is forbidden. Expected: {{expected}}. Actual: {{actual}}. Fix: {{fix}}.' as const
 
 export const EFFECT_RUNTIME_MESSAGE =
-  'Effect runtime import is forbidden in *.workflow.ts. Workflows must be pure — no I/O.' as const
+  '{{name}} is forbidden. Expected: {{expected}}. Actual: {{actual}}. Fix: {{fix}}.' as const
+
+export const NON_ALLOWLISTED_SUBMODULE_MESSAGE =
+  '{{name}} is forbidden. Expected: {{expected}}. Actual: {{actual}}. Fix: {{fix}}.' as const
 
 export const meta = {
   type: 'problem',
   docs: {
     description:
-      'Ban top-level effect imports in *.workflow.ts files. Only submodule imports like effect/Match, effect/Either, effect/Schema are allowed. Effect runtime import is always forbidden.',
+      'Ban non-allowlisted effect imports in *.workflow.ts files. Only effect/Either, effect/Match, effect/Schema, and effect/Option are allowed.',
   },
   schema: [Options],
   messages: {
     topLevelEffectImport: TOP_LEVEL_EFFECT_MESSAGE,
     effectRuntimeImport: EFFECT_RUNTIME_MESSAGE,
+    nonAllowlistedSubmodule: NON_ALLOWLISTED_SUBMODULE_MESSAGE,
   },
 } as const
