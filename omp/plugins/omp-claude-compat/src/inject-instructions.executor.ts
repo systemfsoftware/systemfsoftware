@@ -75,12 +75,6 @@ export const loadReferencedContent = Effect.fn('loadReferencedContent')(function
   }
 
   const config = yield* tomlLoader.load(projectDir).pipe(
-    Effect.tapError((error) =>
-      Effect.logWarning(
-        `[omp-claude-compat] could not read systemfsoftware.toml in ${projectDir}; using the default skip list`,
-        error,
-      )
-    ),
     Effect.catchAll(() => Effect.succeed(undefined)),
   )
   const skipList = config?.['no_inject_refs'] ?? DEFAULT_NO_INJECT_REFS
@@ -95,11 +89,7 @@ export const loadReferencedContent = Effect.fn('loadReferencedContent')(function
       Match.tag('Inject', () => Option.none<string>()),
       Match.exhaustive,
     )
-
     if (Option.isSome(suppressed)) {
-      yield* Effect.logInfo(
-        `[omp-claude-compat] skipped @-ref ${relativePath}: host already provides ${suppressed.value}`,
-      )
       continue
     }
 
@@ -107,9 +97,6 @@ export const loadReferencedContent = Effect.fn('loadReferencedContent')(function
       fs.readFileString(ref.resolvedPath, 'utf-8'),
     )
     if (Either.isLeft(refContent)) {
-      yield* Effect.logWarning(
-        `[omp-claude-compat] could not read @-ref ${relativePath}; skipping it`,
-      )
       continue
     }
 
