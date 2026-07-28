@@ -38,13 +38,13 @@ export const HookDispatcherTask = (pi: ExtensionAPI): void => {
   })
 
   pi.on('tool_result', async (event: ToolResultEvent, ctx: ExtensionContext) => {
-    const { loadSettings, runPostToolUseHooks } = await import('./hook-dispatcher.executor.js')
+    const { loadSettings, runToolResultHooks } = await import('./hook-dispatcher.executor.js')
     const { Effect } = await import('effect')
     return runSafe(
       Effect.gen(function*() {
         const settings = yield* loadSettings(ctx.cwd)
         if (!settings) return undefined
-        const result = yield* runPostToolUseHooks(settings, event, ctx)
+        const result = yield* runToolResultHooks(settings, event, ctx)
         if (result.block === true) {
           return {
             isError: true,
@@ -75,16 +75,17 @@ export const HookDispatcherTask = (pi: ExtensionAPI): void => {
   })
 
   pi.on('session_start', async (_event: { type: string }, ctx: ExtensionContext) => {
-    const { collectSettingsGaps, loadSettings, runSessionStartHooks } = await import(
+    const { collectSettingsGaps, coverageReportLines, loadSettings, runSessionStartHooks } = await import(
       './hook-dispatcher.executor.js'
     )
     const { Effect } = await import('effect')
     return runSafe(
       Effect.gen(function*() {
         const gaps = yield* collectSettingsGaps(ctx.cwd)
-        if (gaps.unknownEvents.length > 0) {
+        const coverageLines = coverageReportLines(gaps.coverage)
+        if (coverageLines.length > 0) {
           ctx.ui.notify(
-            `Ignoring unsupported hook event(s) in settings.json: ${gaps.unknownEvents.join(', ')}`,
+            `Hook coverage — configured hooks this bridge will not run:\n${coverageLines.join('\n')}`,
             'warning',
           )
         }
@@ -102,33 +103,57 @@ export const HookDispatcherTask = (pi: ExtensionAPI): void => {
         }
         const settings = yield* loadSettings(ctx.cwd)
         if (!settings) return undefined
-        yield* runSessionStartHooks(settings, 'start', ctx)
+        yield* runSessionStartHooks(settings, 'startup', ctx)
         return undefined
       }),
     )
   })
 
   pi.on('session_compact', async (_event: { type: string }, ctx: ExtensionContext) => {
-    const { loadSettings, runSessionStartHooks } = await import('./hook-dispatcher.executor.js')
+    const { loadSettings, runLifecycleHooks, runSessionStartHooks } = await import(
+      './hook-dispatcher.executor.js'
+    )
     const { Effect } = await import('effect')
     return runSafe(
       Effect.gen(function*() {
         const settings = yield* loadSettings(ctx.cwd)
         if (!settings) return undefined
         yield* runSessionStartHooks(settings, 'compact', ctx)
+        yield* runLifecycleHooks(settings.hooks.PostCompact, ctx, 'PostCompact')
         return undefined
       }),
     )
   })
 
-  pi.on('agent_start', async (_event: { type: string }, ctx: ExtensionContext) => {
-    const { loadSettings, runSessionStartHooks } = await import('./hook-dispatcher.executor.js')
+  pi.on('session_before_compact', async (_event: { type: string }, ctx: ExtensionContext) => {
+    const { loadSettings, runPreCompactHooks } = await import('./hook-dispatcher.executor.js')
     const { Effect } = await import('effect')
     return runSafe(
       Effect.gen(function*() {
         const settings = yield* loadSettings(ctx.cwd)
         if (!settings) return undefined
-        yield* runSessionStartHooks(settings, 'resume', ctx)
+        const result = yield* runPreCompactHooks(settings, ctx)
+        if (result.block !== true) return undefined
+        // Cancelling a compaction the context limit triggered leaves the session
+        // over its limit and fails the request. Claude Code has the same hazard;
+        // say which hook did it rather than letting it fail unexplained.
+        ctx.ui.notify(
+          `Compaction cancelled by a PreCompact hook: ${result.reason ?? 'no reason given'}`,
+          'warning',
+        )
+        return { cancel: true }
+      }),
+    )
+  })
+
+  pi.on('session_switch', async (event: { type: string; reason: string }, ctx: ExtensionContext) => {
+    const { loadSettings, runSessionSwitchHooks } = await import('./hook-dispatcher.executor.js')
+    const { Effect } = await import('effect')
+    return runSafe(
+      Effect.gen(function*() {
+        const settings = yield* loadSettings(ctx.cwd)
+        if (!settings) return undefined
+        yield* runSessionSwitchHooks(settings, event.reason, ctx)
         return undefined
       }),
     )

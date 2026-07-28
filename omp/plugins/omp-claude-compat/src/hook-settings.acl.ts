@@ -1,4 +1,14 @@
-import { Option, ParseResult, Schema as S } from 'effect'
+import { Match, Option, ParseResult, Schema as S } from 'effect'
+import type { BridgedEvent } from './hook-catalog.schema.js'
+import {
+  ALL_CLAUDE_CODE_EVENTS,
+  BRIDGED_EVENTS,
+  MATCHER_REACH,
+  NON_EVALUABLE_MATCHERS,
+  UNBRIDGED_REASONS,
+  UNRECOGNIZED_KEY_REASON,
+} from './hook-catalog.schema.js'
+import type { MatcherReach } from './hook-catalog.schema.js'
 
 const CommandHook = S.Struct({
   type: S.Literal('command'),
@@ -41,10 +51,13 @@ export type HookEntry = S.Schema.Type<typeof HookEntry>
 const HookGroups = S.Struct({
   PreToolUse: S.optionalWith(S.Array(HookEntry), { exact: true, default: () => [] }),
   PostToolUse: S.optionalWith(S.Array(HookEntry), { exact: true, default: () => [] }),
+  PostToolUseFailure: S.optionalWith(S.Array(HookEntry), { exact: true, default: () => [] }),
   UserPromptSubmit: S.optionalWith(S.Array(HookEntry), { exact: true, default: () => [] }),
   Stop: S.optionalWith(S.Array(HookEntry), { exact: true, default: () => [] }),
   SessionStart: S.optionalWith(S.Array(HookEntry), { exact: true, default: () => [] }),
   SessionEnd: S.optionalWith(S.Array(HookEntry), { exact: true, default: () => [] }),
+  PreCompact: S.optionalWith(S.Array(HookEntry), { exact: true, default: () => [] }),
+  PostCompact: S.optionalWith(S.Array(HookEntry), { exact: true, default: () => [] }),
 })
 
 const SettingsWrapped = S.Struct({
@@ -78,21 +91,23 @@ const SettingsJSON = S.Union(SettingsWrapped, LiftFlatSettingsACL)
 
 export const parseSettings = S.decodeUnknownEither(SettingsJSON)
 
-export const ALL_HOOK_EVENTS = [
-  'PreToolUse',
-  'PostToolUse',
-  'UserPromptSubmit',
-  'SessionStart',
-  'SessionEnd',
-  'Stop',
-] as const
-type HookEvent = typeof ALL_HOOK_EVENTS[number]
+/** The events this bridge runs. Recognizing an event is a separate question, answered by the catalog. */
+export const ALL_HOOK_EVENTS = BRIDGED_EVENTS
+type HookEvent = BridgedEvent
 
 const asRecord = S.decodeUnknownOption(S.Record({ key: S.String, value: S.Unknown }))
+
+interface HookRow {
+  readonly matcher?: string | undefined
+  readonly hooks: readonly { readonly type?: string | undefined }[]
+}
+
+const NO_ROWS: readonly HookRow[] = []
 
 const asHookRows = S.decodeUnknownOption(
   S.Array(
     S.Struct({
+      matcher: S.optional(S.String),
       hooks: S.optionalWith(S.Array(S.Struct({ type: S.optional(S.String) })), {
         exact: true,
         default: () => [],
@@ -117,13 +132,92 @@ function settingsNamespace(json: unknown): Option.Option<{
     }))
 }
 
-/** Hook-group keys the bridge does not implement, in input order. */
-export function unknownHookEvents(json: unknown): readonly string[] {
+export interface HookCoverageRow {
+  readonly event: string
+  readonly reason: string
+}
+
+export interface HookCoverage {
+  readonly unrecognized: readonly HookCoverageRow[]
+  readonly notCarried: readonly HookCoverageRow[]
+  readonly matcherNotEvaluable: readonly HookCoverageRow[]
+  readonly matcherOutOfReach: readonly HookCoverageRow[]
+}
+
+const EMPTY_COVERAGE: HookCoverage = {
+  unrecognized: [],
+  notCarried: [],
+  matcherNotEvaluable: [],
+  matcherOutOfReach: [],
+}
+
+const CATALOG_EVENTS: readonly string[] = ALL_CLAUDE_CODE_EVENTS
+const UNBRIDGED_LOOKUP: Readonly<Record<string, string>> = UNBRIDGED_REASONS
+const NON_EVALUABLE_LOOKUP: Readonly<Record<string, string>> = NON_EVALUABLE_MATCHERS
+const REACH_LOOKUP: Readonly<Record<string, Readonly<Record<string, MatcherReach>>>> = MATCHER_REACH
+
+const declaredMatchers = (value: unknown): readonly string[] =>
+  Option.getOrElse(asHookRows(value), () => NO_ROWS)
+    .flatMap((row) => row.matcher === undefined ? [] : [row.matcher])
+
+const declaresMatcher = (value: unknown): boolean => declaredMatchers(value).length > 0
+
+const reachGap = (reach: MatcherReach): Option.Option<string> =>
+  Match.value(reach).pipe(
+    Match.tag('Reachable', () => Option.none<string>()),
+    Match.tag('Partial', (out) => Option.some(out.reason)),
+    Match.tag('Unreachable', (out) => Option.some(out.reason)),
+    Match.exhaustive,
+  )
+
+/**
+ * Why a configured key will not run, in input order. The classes are distinct
+ * answers a user needs told apart: a key this catalog never heard of, a real
+ * event this bridge does not carry, a hook whose matcher this bridge cannot
+ * read, and a matcher that names a moment OMP cannot reach. Collapsing them is
+ * what made the old report call a correct settings file wrong.
+ */
+export function hookCoverage(json: unknown): HookCoverage {
   return Option.match(settingsNamespace(json), {
-    onNone: () => [],
+    onNone: () => EMPTY_COVERAGE,
     onSome: ({ isWrapped, namespace }) => {
-      const known: readonly string[] = isWrapped ? ALL_HOOK_EVENTS : [...ALL_HOOK_EVENTS, 'disableAllHooks']
-      return Object.keys(namespace).filter((key) => !known.includes(key))
+      const unrecognized: HookCoverageRow[] = []
+      const notCarried: HookCoverageRow[] = []
+      const matcherNotEvaluable: HookCoverageRow[] = []
+      const matcherOutOfReach: HookCoverageRow[] = []
+
+      for (const event of Object.keys(namespace)) {
+        if (!isWrapped && event === 'disableAllHooks') continue
+
+        const unbridged = UNBRIDGED_LOOKUP[event]
+        if (unbridged !== undefined) {
+          notCarried.push({ event, reason: unbridged })
+          continue
+        }
+        if (!CATALOG_EVENTS.includes(event)) {
+          unrecognized.push({ event, reason: UNRECOGNIZED_KEY_REASON })
+          continue
+        }
+        const unreadable = NON_EVALUABLE_LOOKUP[event]
+        if (unreadable !== undefined) {
+          if (declaresMatcher(namespace[event])) matcherNotEvaluable.push({ event, reason: unreadable })
+          continue
+        }
+        const reach = REACH_LOOKUP[event]
+        if (reach === undefined) continue
+        matcherOutOfReach.push(
+          ...declaredMatchers(namespace[event]).flatMap((matcher): readonly HookCoverageRow[] => {
+            const value = reach[matcher]
+            if (value === undefined) return []
+            return Option.match(reachGap(value), {
+              onNone: (): readonly HookCoverageRow[] => [],
+              onSome: (reason) => [{ event: `${event} (matcher "${matcher}")`, reason }],
+            })
+          }),
+        )
+      }
+
+      return { unrecognized, notCarried, matcherNotEvaluable, matcherOutOfReach }
     },
   })
 }
@@ -135,10 +229,7 @@ export function unsupportedHookTypes(json: unknown): readonly string[] {
     onSome: ({ namespace }) => {
       const found = new Set<string>()
       for (const event of ALL_HOOK_EVENTS) {
-        const rows = Option.getOrElse(
-          asHookRows(namespace[event]),
-          (): readonly { hooks: readonly { type?: string }[] }[] => [],
-        )
+        const rows = Option.getOrElse(asHookRows(namespace[event]), () => NO_ROWS)
         for (const row of rows) {
           for (const hook of row.hooks) {
             if (hook.type !== undefined && hook.type !== 'command') found.add(hook.type)
@@ -163,14 +254,23 @@ export interface SettingsSource {
  * downstream has to re-check it.
  */
 export function mergeSettings(sources: readonly SettingsSource[]): HookSettings {
+  /**
+   * Annotation and `satisfies` guard opposite directions: a bridged event with
+   * no `HookGroups` field fails the annotation, a `HookGroups` field no longer
+   * bridged fails the `satisfies`. Either way the mismatch is a type error
+   * rather than an event whose hooks silently stop being merged.
+   */
   const hooks: Record<HookEvent, HookEntry[]> = {
     PreToolUse: [],
     PostToolUse: [],
+    PostToolUseFailure: [],
     UserPromptSubmit: [],
     SessionStart: [],
     SessionEnd: [],
     Stop: [],
-  }
+    PreCompact: [],
+    PostCompact: [],
+  } satisfies Record<keyof HookSettings['hooks'], HookEntry[]>
   if (sources.some((s) => s.managed && s.settings.disableAllHooks === true)) return { hooks }
   const disabledDownstream = sources.some((s) => !s.managed && s.settings.disableAllHooks === true)
 

@@ -160,6 +160,11 @@ if (fireEvent) {
     const mockCtx = {
       cwd: fireCwd ?? process.cwd(),
       sessionManager: { getSessionId: () => 'smoke' },
+      ui: {
+        notify: (message, level = 'info') => {
+          console.log(`  [ui.${level}] ${message}`)
+        },
+      },
     }
 
     console.log(`\nFiring: ${fireEvent}`)

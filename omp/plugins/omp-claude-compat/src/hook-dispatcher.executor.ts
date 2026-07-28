@@ -15,11 +15,15 @@ import {
 import { Cause, Effect, Either, Match, Option, Schema as S, Stream } from 'effect'
 import { homedir } from 'node:os'
 import { drainAsyncHookOutput, recordAsyncHookOutput } from './async-hook-output.state.js'
+import { NON_EVALUABLE_MATCHERS } from './hook-catalog.schema.js'
 import { Blocked, Continue, Warning } from './hook-dispatcher.schema.js'
 import type { HookOutcome, HookResult } from './hook-dispatcher.schema.js'
-import { mergeSettings, parseSettings, unknownHookEvents, unsupportedHookTypes } from './hook-settings.acl.js'
+import type { HookCoverage, HookCoverageRow } from './hook-settings.acl.js'
+import { hookCoverage, mergeSettings, parseSettings, unsupportedHookTypes } from './hook-settings.acl.js'
 import type { CommandHook, HookEntry, HookSettings, SettingsSource } from './hook-settings.acl.js'
 import { interpretHookResult } from './hook-verdict.workflow.js'
+
+const UNREADABLE_MATCHER: Readonly<Record<string, string>> = NON_EVALUABLE_MATCHERS
 
 const loadSettingsFile = Effect.fn('loadSettingsFile')(function*(path: string) {
   const fs = yield* FileSystem
@@ -59,11 +63,24 @@ export const loadSettingsWithPaths = Effect.fn('loadSettingsWithPaths')(function
   return mergeSettings(sources)
 })
 
+const dedupeByEvent = (rows: readonly HookCoverageRow[]): readonly HookCoverageRow[] =>
+  rows.filter((row, index) => rows.findIndex((other) => other.event === row.event) === index)
+
+export const coverageReportLines = (coverage: HookCoverage): readonly string[] => [
+  ...coverage.unrecognized.map((row) => `  ${row.event}: ${row.reason}`),
+  ...coverage.notCarried.map((row) => `  ${row.event}: not carried by this bridge — ${row.reason}`),
+  ...coverage.matcherNotEvaluable.map((row) => `  ${row.event}: hook skipped, matcher not evaluable — ${row.reason}`),
+  ...coverage.matcherOutOfReach.map((row) => `  ${row.event}: ${row.reason}`),
+]
+
 export const collectSettingsGapsWithPaths = Effect.fn('collectSettingsGapsWithPaths')(function*(
   paths: readonly string[],
 ) {
   const fs = yield* FileSystem
-  const events: string[] = []
+  const unrecognized: HookCoverageRow[] = []
+  const notCarried: HookCoverageRow[] = []
+  const matcherNotEvaluable: HookCoverageRow[] = []
+  const matcherOutOfReach: HookCoverageRow[] = []
   const hookTypes: string[] = []
   const malformed: string[] = []
   for (const path of paths) {
@@ -74,14 +91,23 @@ export const collectSettingsGapsWithPaths = Effect.fn('collectSettingsGapsWithPa
       malformed.push(path)
       continue
     }
-    events.push(...unknownHookEvents(parsed.right))
+    const coverage = hookCoverage(parsed.right)
+    unrecognized.push(...coverage.unrecognized)
+    notCarried.push(...coverage.notCarried)
+    matcherNotEvaluable.push(...coverage.matcherNotEvaluable)
+    matcherOutOfReach.push(...coverage.matcherOutOfReach)
     hookTypes.push(...unsupportedHookTypes(parsed.right))
     // The loader skips a file it cannot decode, contributing no hooks at all.
     // Name it rather than starting the session unguarded with no sign of it.
     if (Either.isLeft(parseSettings(parsed.right))) malformed.push(path)
   }
   return {
-    unknownEvents: Array.from(new Set(events)),
+    coverage: {
+      unrecognized: dedupeByEvent(unrecognized),
+      notCarried: dedupeByEvent(notCarried),
+      matcherNotEvaluable: dedupeByEvent(matcherNotEvaluable),
+      matcherOutOfReach: dedupeByEvent(matcherOutOfReach),
+    },
     unsupportedHookTypes: Array.from(new Set(hookTypes)),
     malformedFiles: Array.from(new Set(malformed)),
   }
@@ -224,8 +250,12 @@ export const runHooksForEvent = Effect.fn('runHooksForEvent')(function*(
   const ruleInput = Option.getOrElse(asToolInput(input['tool_input']), () => EMPTY_TOOL_INPUT)
   let warning: string | undefined
   let currentInput = input
+  // A matcher this event cannot evaluate must not behave as a match. U3 already
+  // named the hook at session start, so this is a silent skip, not a report.
+  const matcherUnreadable = UNREADABLE_MATCHER[event] !== undefined
 
   for (const entry of entries) {
+    if (matcherUnreadable && entry.matcher !== undefined) continue
     if (!matchesMatcher(matchValue, entry.matcher)) continue
 
     for (const hook of entry.hooks) {
@@ -382,6 +412,78 @@ export const runPostToolUseHooks = Effect.fn('runPostToolUseHooks')(function*(
   return firstWarning === undefined ? lastResult : { ...lastResult, warning: firstWarning }
 })
 
+const asTextBlocks = S.decodeUnknownOption(S.Array(S.Struct({ text: S.optional(S.String) })))
+const asPlainText = S.decodeUnknownOption(S.String)
+
+/** Claude Code documents `error` as a string; OMP carries content blocks. */
+const errorText = (content: unknown): string =>
+  Option.match(asTextBlocks(content), {
+    onSome: (blocks) => blocks.flatMap((block) => block.text === undefined ? [] : [block.text]).join('\n'),
+    onNone: () => Option.getOrElse(asPlainText(content), () => ''),
+  })
+
+export const runPostToolUseFailureHooks = Effect.fn('runPostToolUseFailureHooks')(function*(
+  settings: HookSettings,
+  event: HookToolResult,
+  ctx: HookSession,
+) {
+  const claudeToolName = normalizeToolName(event.toolName)
+  const toolInput = normalizeToolInput(
+    claudeToolName,
+    Option.getOrElse(asToolInput(event.input), () => EMPTY_TOOL_INPUT),
+  )
+  // No per-target fan-out: a tool that failed edited nothing.
+  const input: Record<string, unknown> = {
+    ...sessionIds(() => ctx.sessionManager.getSessionId()),
+    tool_name: claudeToolName,
+    tool_input: toolInput,
+    tool_use_id: event.toolCallId,
+    error: errorText(event.content),
+  }
+
+  const result = yield* runHooksForEvent(
+    settings.hooks.PostToolUseFailure,
+    claudeToolName,
+    input,
+    ctx,
+    'PostToolUseFailure',
+  )
+  // Claude Code documents this event as non-blocking: the tool already failed,
+  // so an exit-2 verdict reaches the model as feedback rather than a block.
+  const degraded: HooksForEventResult = result.block !== true
+    ? result
+    : result.reason === undefined
+    ? {}
+    : { warning: result.reason }
+  return degraded
+})
+
+export const runToolResultHooks = Effect.fn('runToolResultHooks')(function*(
+  settings: HookSettings,
+  event: HookToolResult,
+  ctx: HookSession,
+) {
+  return event.isError === true
+    ? yield* runPostToolUseFailureHooks(settings, event, ctx)
+    : yield* runPostToolUseHooks(settings, event, ctx)
+})
+
+/**
+ * The matcher this event documents is `trigger` (manual vs auto), which OMP's
+ * payload does not carry — U4's gate skips any hook that declares one, so only
+ * unscoped hooks reach here and `matchValue` is never consulted.
+ */
+export const runPreCompactHooks = Effect.fn('runPreCompactHooks')(function*(
+  settings: HookSettings,
+  ctx: HookSession,
+) {
+  const input: Record<string, unknown> = {
+    ...sessionIds(() => ctx.sessionManager.getSessionId()),
+  }
+
+  return yield* runHooksForEvent(settings.hooks.PreCompact, '', input, ctx, 'PreCompact')
+})
+
 export const runUserPromptSubmitHooks = Effect.fn('runUserPromptSubmitHooks')(function*(
   settings: HookSettings,
   event: HookPrompt,
@@ -467,6 +569,20 @@ export const runSessionStartHooks = Effect.fn('runSessionStartHooks')(function*(
       yield* runHookScript(hook, input, cwd, 'SessionStart')
     }
   }
+})
+
+/**
+ * Of the four reasons `session_switch` carries, only `resume` and `fork` name a
+ * `SessionStart` matcher Claude Code documents. `new` and `handoff` are not
+ * session-start moments, so nothing runs for them.
+ */
+export const runSessionSwitchHooks = Effect.fn('runSessionSwitchHooks')(function*(
+  settings: HookSettings,
+  reason: string,
+  ctx: HookSession,
+) {
+  if (reason !== 'resume' && reason !== 'fork') return
+  yield* runSessionStartHooks(settings, reason, ctx)
 })
 
 export const runLifecycleHooks = Effect.fn('runLifecycleHooks')(function*(
