@@ -82,7 +82,7 @@ Feature('xd:// retry guard')
           Effect.promise(async () => {
             vi.resetModules()
             const g = createMockGuard()
-            const mod = await import('../src/xd-retry-guard.handler.ts')
+            const mod = await import('../src/xd-retry-guard.handler.js')
             mod.XdRetryGuardExtension(g.api as never)
             return g
           })),
@@ -110,7 +110,7 @@ Feature('xd:// retry guard')
           Effect.promise(async () => {
             vi.resetModules()
             const g = createMockGuard()
-            const mod = await import('../src/xd-retry-guard.handler.ts')
+            const mod = await import('../src/xd-retry-guard.handler.js')
             mod.XdRetryGuardExtension(g.api as never)
             return g
           })),
@@ -133,7 +133,7 @@ Feature('xd:// retry guard')
           Effect.promise(async () => {
             vi.resetModules()
             const g = createMockGuard()
-            const mod = await import('../src/xd-retry-guard.handler.ts')
+            const mod = await import('../src/xd-retry-guard.handler.js')
             mod.XdRetryGuardExtension(g.api as never)
             g.fire('tool_execution_end', notFoundResult('recall'))
             return g
@@ -163,7 +163,7 @@ Feature('xd:// retry guard')
           Effect.promise(async () => {
             vi.resetModules()
             const g = createMockGuard()
-            const mod = await import('../src/xd-retry-guard.handler.ts')
+            const mod = await import('../src/xd-retry-guard.handler.js')
             mod.XdRetryGuardExtension(g.api as never)
             g.fire('tool_execution_end', notFoundResult('web_search'))
             return g
@@ -194,7 +194,7 @@ Feature('xd:// retry guard')
           Effect.promise(async () => {
             vi.resetModules()
             const g = createMockGuard()
-            const mod = await import('../src/xd-retry-guard.handler.ts')
+            const mod = await import('../src/xd-retry-guard.handler.js')
             mod.XdRetryGuardExtension(g.api as never)
             return g
           })),
@@ -224,7 +224,7 @@ Feature('xd:// retry guard')
           Effect.promise(async () => {
             vi.resetModules()
             const g = createMockGuard()
-            const mod = await import('../src/xd-retry-guard.handler.ts')
+            const mod = await import('../src/xd-retry-guard.handler.js')
             mod.XdRetryGuardExtension(g.api as never)
             return g
           })),
@@ -255,7 +255,7 @@ Feature('xd:// retry guard')
           Effect.promise(async () => {
             vi.resetModules()
             const g = createMockGuard()
-            const mod = await import('../src/xd-retry-guard.handler.ts')
+            const mod = await import('../src/xd-retry-guard.handler.js')
             mod.XdRetryGuardExtension(g.api as never)
             return g
           })),
@@ -286,7 +286,7 @@ Feature('xd:// retry guard')
           Effect.promise(async () => {
             vi.resetModules()
             const g = createMockGuard()
-            const mod = await import('../src/xd-retry-guard.handler.ts')
+            const mod = await import('../src/xd-retry-guard.handler.js')
             mod.XdRetryGuardExtension(g.api as never)
             return g
           })),
@@ -317,7 +317,7 @@ Feature('xd:// retry guard')
           Effect.promise(async () => {
             vi.resetModules()
             const g = createMockGuard()
-            const mod = await import('../src/xd-retry-guard.handler.ts')
+            const mod = await import('../src/xd-retry-guard.handler.js')
             mod.XdRetryGuardExtension(g.api as never)
             for (let i = 0; i < 50; i++) {
               g.fire('tool_execution_end', {
@@ -360,7 +360,7 @@ Feature('xd:// retry guard')
           Effect.promise(async () => {
             vi.resetModules()
             const g = createMockGuard()
-            const mod = await import('../src/xd-retry-guard.handler.ts')
+            const mod = await import('../src/xd-retry-guard.handler.js')
             mod.XdRetryGuardExtension(g.api as never)
             g.fire('tool_execution_end', notFoundResult('retain'))
             g.fireContext()
@@ -385,7 +385,7 @@ Feature('xd:// retry guard')
           Effect.promise(async () => {
             vi.resetModules()
             const g = createMockGuard()
-            const mod = await import('../src/xd-retry-guard.handler.ts')
+            const mod = await import('../src/xd-retry-guard.handler.js')
             mod.XdRetryGuardExtension(g.api as never)
             g.fire('tool_execution_end', notFoundResult('retain'))
             g.fireContext()
@@ -412,7 +412,7 @@ Feature('xd:// retry guard')
           Effect.promise(async () => {
             vi.resetModules()
             const g = createMockGuard()
-            const mod = await import('../src/xd-retry-guard.handler.ts')
+            const mod = await import('../src/xd-retry-guard.handler.js')
             mod.XdRetryGuardExtension(g.api as never)
             g.fire('tool_execution_end', notFoundResult('retain'))
             g.fireContext()

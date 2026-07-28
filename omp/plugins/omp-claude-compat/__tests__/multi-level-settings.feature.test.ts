@@ -1,4 +1,5 @@
 import { NodeCommandExecutor, NodeFileSystem } from '@effect/platform-node'
+import type { PlatformError } from '@effect/platform/Error'
 import { FileSystem } from '@effect/platform/FileSystem'
 import * as PathModule from '@effect/platform/Path'
 import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
@@ -18,7 +19,7 @@ function writeSettingsFile(
   dir: string,
   filename: string,
   hooks: Record<string, unknown>,
-): Effect.Effect<void, never, FileSystem.FileSystem> {
+): Effect.Effect<void, PlatformError, FileSystem> {
   return Effect.gen(function*() {
     const fs = yield* FileSystem
     yield* fs.makeDirectory(`${dir}/.claude`, { recursive: true })
