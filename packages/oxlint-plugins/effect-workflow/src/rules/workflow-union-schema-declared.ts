@@ -1,7 +1,7 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
 import { getClassName, isTaggedClassOrError } from './tagged-class.js'
-import { meta, Options } from './workflow-union-schema-declared.config.js'
+import { meta } from './workflow-union-schema-declared.config.js'
 
 export type MessageIds = 'bareUnionAlias'
 
