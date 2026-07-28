@@ -1,13 +1,7 @@
 import { Command } from '@effect/platform'
 import { CommandExecutor } from '@effect/platform/CommandExecutor'
 import { FileSystem } from '@effect/platform/FileSystem'
-import type {
-  ExtensionContext,
-  InputEvent,
-  InputEventResult,
-  ToolCallEvent,
-  ToolResultEvent,
-} from '@oh-my-pi/pi-coding-agent'
+import type { InputEvent, InputEventResult } from '@oh-my-pi/pi-coding-agent'
 import {
   denormalizeToolInput,
   editTargetPaths,
@@ -18,7 +12,7 @@ import {
   normalizeToolName,
   sessionIds,
 } from '@systemfsoftware/omp-utils'
-import { Effect, Either, Match, Option, Schema as S, Stream } from 'effect'
+import { Cause, Effect, Either, Match, Option, Schema as S, Stream } from 'effect'
 import { homedir } from 'node:os'
 import { drainAsyncHookOutput, recordAsyncHookOutput } from './async-hook-output.state.js'
 import { Blocked, Continue, Warning } from './hook-dispatcher.schema.js'
@@ -116,7 +110,7 @@ export const runHookScript = Effect.fn('runHookScript')(function*(
 ) {
   const executor = yield* CommandExecutor
   const timeoutMs = (hook.timeout ?? DEFAULT_TIMEOUT_SECONDS[event] ?? 600) * 1000
-  const stdinText = JSON.stringify(input)
+  const stdinText = encodeHookPayload(input)
 
   // `args` selects the exec form: spawn the binary directly so no shell ever
   // interprets the command or its arguments. Otherwise the hook picks its own
@@ -157,10 +151,60 @@ export const runHookScript = Effect.fn('runHookScript')(function*(
 })
 const EMPTY_TOOL_INPUT: Record<string, unknown> = {}
 
-const asToolInput = S.decodeUnknownOption(S.Record({ key: S.String, value: S.Unknown }))
+const ToolInputRecord = S.Record({ key: S.String, value: S.Unknown })
 
-const keepOutput = <E, R>(hook: Effect.Effect<HookResult, E, R>): Effect.Effect<void, E, R> =>
-  hook.pipe(Effect.andThen((result) => Effect.sync(() => recordAsyncHookOutput(result.stdout))))
+const asToolInput = S.decodeUnknownOption(ToolInputRecord)
+
+/** The hook payload's wire contract, declared once and used in both directions. */
+const encodeHookPayload = S.encodeSync(S.parseJson(ToolInputRecord))
+
+/**
+ * The slice of the harness these operations actually depend on. Narrowing here
+ * keeps the executor off the full `ExtensionContext` union surface and lets a
+ * caller — production or test — supply exactly what is used, with no cast.
+ */
+export interface HookSession {
+  readonly cwd: string
+  readonly sessionManager: { readonly getSessionId: () => string }
+  readonly ui: { readonly notify: (message: string, type?: 'info' | 'warning' | 'error') => void }
+}
+
+export interface HookToolCall {
+  readonly toolName: string
+  readonly toolCallId: string
+  /** The harness types this per tool, so it is decoded rather than asserted. */
+  readonly input: object
+}
+
+export interface HookToolResult extends HookToolCall {
+  readonly content: unknown
+  readonly isError?: boolean | undefined
+}
+
+export interface HookPrompt {
+  readonly text: string
+  readonly source: InputEvent['source']
+  readonly images?: InputEvent['images']
+}
+
+/**
+ * Nothing awaits a forked hook, so an unhandled failure here reaches no one:
+ * a mistyped exec-form command would fail to spawn in total silence.
+ */
+const superviseFork = <E, R>(
+  hook: Effect.Effect<HookResult, E, R>,
+  ctx: HookSession,
+  command: string,
+): Effect.Effect<void, never, R> =>
+  hook.pipe(
+    Effect.matchCause({
+      onSuccess: (result) => recordAsyncHookOutput(result.stdout),
+      onFailure: (cause) => {
+        if (Cause.isInterruptedOnly(cause)) return
+        ctx.ui.notify(`Background hook failed: ${command}: ${Cause.pretty(cause).split('\n')[0]}`, 'error')
+      },
+    }),
+  )
 
 interface HooksForEventResult {
   readonly block?: boolean
@@ -173,7 +217,7 @@ export const runHooksForEvent = Effect.fn('runHooksForEvent')(function*(
   entries: readonly HookEntry[],
   matchValue: string,
   input: Record<string, unknown>,
-  ctx: ExtensionContext,
+  ctx: HookSession,
   event: string,
 ) {
   const cwd = ctx.cwd
@@ -190,7 +234,7 @@ export const runHooksForEvent = Effect.fn('runHooksForEvent')(function*(
       if (hook.if !== undefined && !matchesPermissionRule(hook.if, matchValue, ruleInput, cwd)) continue
       if (hook.async || hook.asyncRewake) {
         yield* Effect.forkDaemon(
-          keepOutput(runHookScript(hook, currentInput, cwd, event)),
+          superviseFork(runHookScript(hook, currentInput, cwd, event), ctx, hook.command),
         )
         continue
       }
@@ -243,12 +287,12 @@ export const runHooksForEvent = Effect.fn('runHooksForEvent')(function*(
 
 export const runPreToolUseHooks = Effect.fn('runPreToolUseHooks')(function*(
   settings: HookSettings,
-  event: ToolCallEvent,
-  ctx: ExtensionContext,
+  event: HookToolCall,
+  ctx: HookSession,
 ) {
   const claudeToolName = normalizeToolName(event.toolName)
   const sessionData = sessionIds(() => ctx.sessionManager.getSessionId())
-  const rawInput = event.input as Record<string, unknown>
+  const rawInput = Option.getOrElse(asToolInput(event.input), () => EMPTY_TOOL_INPUT)
   const toolInput = normalizeToolInput(claudeToolName, rawInput)
 
   const shellCommand = extractShellCommand(event.toolName, rawInput)
@@ -297,21 +341,23 @@ export const runPreToolUseHooks = Effect.fn('runPreToolUseHooks')(function*(
   // Only a single-target call has an unambiguous rewrite target, and the delta
   // must go back under the key names OMP reads — the forward pass renamed them.
   const updated = payloads.length === 1 ? lastResult.updatedInput?.['tool_input'] : undefined
-  for (const [key, value] of Object.entries(denormalizeToolInput(rawInput, updated))) {
-    rawInput[key] = value
-  }
+  // Merged in place: OMP reads the rewrite back off the very object it passed.
+  Object.assign(event.input, denormalizeToolInput(rawInput, updated))
 
   return undefined
 })
 
 export const runPostToolUseHooks = Effect.fn('runPostToolUseHooks')(function*(
   settings: HookSettings,
-  event: ToolResultEvent,
-  ctx: ExtensionContext,
+  event: HookToolResult,
+  ctx: HookSession,
 ) {
   const claudeToolName = normalizeToolName(event.toolName)
   const sessionData = sessionIds(() => ctx.sessionManager.getSessionId())
-  const toolInput = normalizeToolInput(claudeToolName, event.input)
+  const toolInput = normalizeToolInput(
+    claudeToolName,
+    Option.getOrElse(asToolInput(event.input), () => EMPTY_TOOL_INPUT),
+  )
   const targets = editTargetPaths(claudeToolName, toolInput)
   const payloads = targets.length === 0
     ? [toolInput]
@@ -340,8 +386,8 @@ export const runPostToolUseHooks = Effect.fn('runPostToolUseHooks')(function*(
 
 export const runUserPromptSubmitHooks = Effect.fn('runUserPromptSubmitHooks')(function*(
   settings: HookSettings,
-  event: InputEvent,
-  ctx: ExtensionContext,
+  event: HookPrompt,
+  ctx: HookSession,
 ) {
   const entries = settings.hooks.UserPromptSubmit
   const cwd = ctx.cwd
@@ -396,7 +442,7 @@ export const runUserPromptSubmitHooks = Effect.fn('runUserPromptSubmitHooks')(fu
 export const runSessionStartHooks = Effect.fn('runSessionStartHooks')(function*(
   settings: HookSettings,
   reason: string,
-  ctx: ExtensionContext,
+  ctx: HookSession,
 ) {
   const entries = settings.hooks.SessionStart
   if (entries.length === 0) return
@@ -415,7 +461,7 @@ export const runSessionStartHooks = Effect.fn('runSessionStartHooks')(function*(
       if (hook.if !== undefined) continue
       if (hook.async || hook.asyncRewake) {
         yield* Effect.forkDaemon(
-          keepOutput(runHookScript(hook, input, cwd, 'SessionStart')),
+          superviseFork(runHookScript(hook, input, cwd, 'SessionStart'), ctx, hook.command),
         )
         continue
       }
@@ -427,7 +473,7 @@ export const runSessionStartHooks = Effect.fn('runSessionStartHooks')(function*(
 
 export const runLifecycleHooks = Effect.fn('runLifecycleHooks')(function*(
   entries: readonly HookEntry[],
-  ctx: ExtensionContext,
+  ctx: HookSession,
   event: string,
 ) {
   if (entries.length === 0) return
@@ -444,7 +490,7 @@ export const runLifecycleHooks = Effect.fn('runLifecycleHooks')(function*(
       if (hook.if !== undefined) continue
       if (hook.async || hook.asyncRewake) {
         yield* Effect.forkDaemon(
-          keepOutput(runHookScript(hook, input, cwd, event)),
+          superviseFork(runHookScript(hook, input, cwd, event), ctx, hook.command),
         )
       } else {
         yield* runHookScript(hook, input, cwd, event)

@@ -2,11 +2,11 @@ import { NodeCommandExecutor, NodeFileSystem } from '@effect/platform-node'
 import type { PlatformError } from '@effect/platform/Error'
 import { FileSystem } from '@effect/platform/FileSystem'
 import * as PathModule from '@effect/platform/Path'
-import type { ExtensionContext, InputEvent, ToolCallEvent, ToolResultEvent } from '@oh-my-pi/pi-coding-agent'
 import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer } from 'effect'
 import { expect } from 'vitest'
+import type { HookPrompt, HookSession, HookToolCall, HookToolResult } from '../src/hook-dispatcher.executor.js'
 import {
   collectSettingsGapsWithPaths,
   loadSettingsWithPaths,
@@ -69,12 +69,12 @@ function writePathGuardHook(
   })
 }
 
-function makeCtx(cwd: string): ExtensionContext {
+function makeCtx(cwd: string): HookSession {
   return {
     cwd,
     sessionManager: { getSessionId: () => 'test-session' },
     ui: { notify: () => {} },
-  } as unknown as ExtensionContext
+  }
 }
 
 function writeSettings(
@@ -91,18 +91,12 @@ function writeSettings(
   })
 }
 
-function makeToolCall(toolName: string, input: Record<string, unknown>): ToolCallEvent {
-  return { type: 'tool_call', toolName, toolCallId: 'tc-test', input }
+function makeToolCall(toolName: string, input: Record<string, unknown>): HookToolCall {
+  return { toolName, toolCallId: 'tc-test', input }
 }
 
-function makeToolResult(toolName: string, input: Record<string, unknown>): ToolResultEvent {
-  return {
-    type: 'tool_result',
-    toolName,
-    toolCallId: 'tc-test',
-    input,
-    content: 'ok',
-  } as unknown as ToolResultEvent
+function makeToolResult(toolName: string, input: Record<string, unknown>): HookToolResult {
+  return { toolName, toolCallId: 'tc-test', input, content: 'ok' }
 }
 
 Feature('Hook dispatcher — settings loading')
@@ -587,7 +581,7 @@ Feature('Hook dispatcher — edit target fan-out')
 Feature('Hook dispatcher — UserPromptSubmit verdict')
   .withLayer(testLayer)
   .body(({ scenario }) => {
-    const promptEvent = { type: 'input', text: 'hello', source: 'user' } as unknown as InputEvent
+    const promptEvent: HookPrompt = { text: 'hello', source: 'interactive' }
 
     scenario(
       'Should block the prompt when a hook exits 2',
@@ -1207,7 +1201,7 @@ Feature('Hook dispatcher - if condition')
             const settings = yield* loadSettingsWithPaths([`${s.dir}/.claude/settings.json`])
             return yield* runUserPromptSubmitHooks(
               settings!,
-              { type: 'input', text: 'hello', source: 'user' } as unknown as InputEvent,
+              { text: 'hello', source: 'interactive' },
               makeCtx(s.dir),
             )
           })),

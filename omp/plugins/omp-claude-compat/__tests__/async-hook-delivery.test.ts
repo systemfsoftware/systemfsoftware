@@ -1,10 +1,11 @@
 import { NodeCommandExecutor, NodeFileSystem } from '@effect/platform-node'
 import { FileSystem } from '@effect/platform/FileSystem'
 import * as PathModule from '@effect/platform/Path'
-import type { ExtensionContext, InputEvent, InputEventResult, ToolCallEvent } from '@oh-my-pi/pi-coding-agent'
+import type { InputEventResult } from '@oh-my-pi/pi-coding-agent'
 import { Effect, Layer } from 'effect'
 import { expect, it } from 'vitest'
 import { recordAsyncHookOutput } from '../src/async-hook-output.state.js'
+import type { HookPrompt, HookSession, HookToolCall } from '../src/hook-dispatcher.executor.js'
 import { loadSettingsWithPaths, runPreToolUseHooks, runUserPromptSubmitHooks } from '../src/hook-dispatcher.executor.js'
 
 const testLayer = NodeCommandExecutor.layer.pipe(
@@ -12,21 +13,15 @@ const testLayer = NodeCommandExecutor.layer.pipe(
   Layer.provideMerge(PathModule.layer),
 )
 
-const makeCtx = (cwd: string): ExtensionContext =>
-  ({
-    cwd,
-    sessionManager: { getSessionId: () => 'test-session' },
-    ui: { notify: () => {} },
-  }) as unknown as ExtensionContext
+const makeCtx = (cwd: string): HookSession => ({
+  cwd,
+  sessionManager: { getSessionId: () => 'test-session' },
+  ui: { notify: () => {} },
+})
 
-const promptEvent = { type: 'input', text: 'what changed?', source: 'user' } as unknown as InputEvent
+const promptEvent: HookPrompt = { text: 'what changed?', source: 'interactive' }
 
-const toolCall = {
-  type: 'tool_call',
-  toolName: 'write',
-  toolCallId: 'tc-1',
-  input: { file_path: '/t.txt' },
-} as unknown as ToolCallEvent
+const toolCall: HookToolCall = { toolName: 'write', toolCallId: 'tc-1', input: { file_path: '/t.txt' } }
 
 const emptySettings = (dir: string) =>
   Effect.gen(function*() {
@@ -121,3 +116,42 @@ it('Should_DropTheOldestNotes_When_RunawayHookOverfillsBuffer', async () => {
   expect(delivered?.text).not.toContain('note-5\n')
   expect(delivered?.text?.startsWith('note-6\n')).toBe(true)
 })
+
+const makeRecordingCtx = (cwd: string, notices: string[]): HookSession => ({
+  cwd,
+  sessionManager: { getSessionId: () => 'test-session' },
+  ui: {
+    notify: (message, type) => {
+      notices.push(`${type ?? 'info'}: ${message}`)
+    },
+  },
+})
+
+it('Should_ReportTheFailure_When_ForkedHookCannotSpawn', async () => {
+  const notices: string[] = []
+
+  await Effect.gen(function*() {
+    const fs = yield* FileSystem
+    const dir = yield* fs.makeTempDirectoryScoped()
+    yield* fs.makeDirectory(`${dir}/.claude`, { recursive: true })
+    yield* fs.writeFileString(
+      `${dir}/.claude/settings.json`,
+      JSON.stringify({
+        hooks: {
+          PreToolUse: [{
+            hooks: [{ type: 'command', command: `${dir}/missing-binary`, args: ['x'], async: true }],
+          }],
+        },
+      }),
+    )
+
+    const settings = yield* loadSettingsWithPaths([`${dir}/.claude/settings.json`])
+    yield* runPreToolUseHooks(settings!, toolCall, makeRecordingCtx(dir, notices))
+
+    for (let attempt = 0; attempt < 200 && notices.length === 0; attempt++) {
+      yield* Effect.promise(tick)
+    }
+  }).pipe(Effect.scoped, Effect.provide(testLayer), Effect.runPromise)
+
+  expect(notices.join('\n')).toContain('Background hook failed')
+}, 25_000)
