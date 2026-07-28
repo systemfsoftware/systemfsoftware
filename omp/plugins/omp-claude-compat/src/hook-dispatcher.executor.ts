@@ -13,6 +13,7 @@ import {
   editTargetPaths,
   extractShellCommand,
   matchesMatcher,
+  matchesPermissionRule,
   normalizeToolInput,
   normalizeToolName,
   sessionIds,
@@ -153,6 +154,10 @@ export const runHookScript = Effect.fn('runHookScript')(function*(
     ),
   )
 })
+const EMPTY_TOOL_INPUT: Record<string, unknown> = {}
+
+const asToolInput = S.decodeUnknownOption(S.Record({ key: S.String, value: S.Unknown }))
+
 interface HooksForEventResult {
   readonly block?: boolean
   readonly reason?: string
@@ -168,6 +173,7 @@ export const runHooksForEvent = Effect.fn('runHooksForEvent')(function*(
   event: string,
 ) {
   const cwd = ctx.cwd
+  const ruleInput = Option.getOrElse(asToolInput(input['tool_input']), () => EMPTY_TOOL_INPUT)
   let warning: string | undefined
   let inputModified = false
   let currentInput = input
@@ -177,6 +183,7 @@ export const runHooksForEvent = Effect.fn('runHooksForEvent')(function*(
 
     for (const hook of entry.hooks) {
       if (hook.type !== 'command') continue
+      if (hook.if !== undefined && !matchesPermissionRule(hook.if, matchValue, ruleInput, cwd)) continue
       if (hook.async || hook.asyncRewake) {
         yield* Effect.forkDaemon(
           runHookScript(hook, currentInput, cwd, event),
@@ -346,6 +353,7 @@ export const runUserPromptSubmitHooks = Effect.fn('runUserPromptSubmitHooks')(fu
   for (const entry of entries) {
     for (const hook of entry.hooks) {
       if (hook.type !== 'command') continue
+      if (hook.if !== undefined) continue
       const result = yield* runHookScript(hook, input, cwd, 'UserPromptSubmit')
 
       // Claude Code rejects the prompt on exit 2 or `decision: "block"`, feeding
@@ -402,6 +410,7 @@ export const runSessionStartHooks = Effect.fn('runSessionStartHooks')(function*(
 
     for (const hook of entry.hooks) {
       if (hook.type !== 'command') continue
+      if (hook.if !== undefined) continue
       if (hook.async || hook.asyncRewake) {
         yield* Effect.forkDaemon(
           runHookScript(hook, input, cwd, 'SessionStart'),
@@ -430,6 +439,7 @@ export const runLifecycleHooks = Effect.fn('runLifecycleHooks')(function*(
   for (const entry of entries) {
     for (const hook of entry.hooks) {
       if (hook.type !== 'command') continue
+      if (hook.if !== undefined) continue
       if (hook.async || hook.asyncRewake) {
         yield* Effect.forkDaemon(
           runHookScript(hook, input, cwd, event),

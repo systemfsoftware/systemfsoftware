@@ -1,6 +1,7 @@
 export { extractShellCommand, isContextModeShellTool } from './context-mode.acl.js'
 export { editTargetPaths } from './edit-target.acl.js'
 export { matchesMatcher } from './matcher.acl.js'
+export { matchesPermissionRule } from './permission-rule.acl.js'
 export { type SessionIds, sessionIds } from './session.acl.js'
 export { TomlConfigFromText } from './toml-loader.acl.js'
 export { TomlLoader, TomlLoaderLive } from './toml-loader.adapter.js'
