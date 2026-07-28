@@ -1001,6 +1001,44 @@ Feature('Hook dispatcher - command execution contract')
         ),
       ),
     )
+
+    scenario(
+      'Should run the hook under the shell it declares',
+      Gherkin.Do.pipe(
+        Given('a bash hook recording its interpreter')('dir', (_s) =>
+          Effect.gen(function*() {
+            const fs = yield* FileSystem
+            const dir = yield* fs.makeTempDirectoryScoped()
+            yield* writeSettings(dir, {
+              PreToolUse: [{
+                matcher: 'Write',
+                hooks: [{
+                  type: 'command',
+                  command: `printf '%s' "$0" > "${dir}/shell.txt"`,
+                  shell: 'bash',
+                }],
+              }],
+            })
+            return dir
+          })),
+        When('a Write tool call fires the hook')('shell', (s) =>
+          Effect.gen(function*() {
+            const settings = yield* loadFrom(s.dir)
+            yield* runPreToolUseHooks(
+              settings!,
+              makeToolCall('Write', { file_path: `${s.dir}/t.txt` }),
+              makeCtx(s.dir),
+            )
+            const fs = yield* FileSystem
+            return yield* fs.readFileString(`${s.dir}/shell.txt`)
+          })),
+        Then('bash ran it, not sh')((s) =>
+          Effect.sync(() => {
+            expect(s.shell).toBe('bash')
+          })
+        ),
+      ),
+    )
   })
 
 Feature('Hook dispatcher - undecodable settings')

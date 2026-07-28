@@ -100,6 +100,12 @@ const DEFAULT_TIMEOUT_SECONDS: Record<string, number> = {
   UserPromptSubmit: 30,
 }
 
+const SHELL_INVOCATION = {
+  sh: ['sh', '-c'],
+  bash: ['bash', '-c'],
+  powershell: ['powershell', '-Command'],
+} as const satisfies Record<string, readonly [string, string]>
+
 export const runHookScript = Effect.fn('runHookScript')(function*(
   hook: CommandHook,
   input: Record<string, unknown>,
@@ -111,9 +117,12 @@ export const runHookScript = Effect.fn('runHookScript')(function*(
   const stdinText = JSON.stringify(input)
 
   // `args` selects the exec form: spawn the binary directly so no shell ever
-  // interprets the command or its arguments.
+  // interprets the command or its arguments. Otherwise the hook picks its own
+  // interpreter, and running a bash hook under `sh` silently changes its
+  // meaning wherever /bin/sh is not bash.
+  const [shell, evalFlag] = SHELL_INVOCATION[hook.shell ?? 'sh']
   const base = hook.args === undefined
-    ? Command.make('sh', '-c', hook.command)
+    ? Command.make(shell, evalFlag, hook.command)
     : Command.make(hook.command, ...hook.args)
 
   const hookCommand = base.pipe(
