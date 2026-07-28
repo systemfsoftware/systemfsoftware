@@ -1,4 +1,4 @@
-import { Either, Schema as S } from 'effect'
+import { ParseResult, Schema as S } from 'effect'
 
 export const HookCommand = S.Struct({
   type: S.Literal('command'),
@@ -25,45 +25,32 @@ const HookGroups = S.Struct({
   SessionEnd: S.optionalWith(S.Array(HookEntry), { exact: true, default: () => [] }),
 })
 
-type HookGroups = S.Schema.Type<typeof HookGroups>
-
-export interface HookSettings {
-  readonly hooks: {
-    readonly Stop: readonly HookEntry[]
-    readonly SessionStart: readonly HookEntry[]
-    readonly SessionEnd: readonly HookEntry[]
-    readonly UserPromptSubmit: readonly HookEntry[]
-    readonly PreToolUse: readonly HookEntry[]
-    readonly PostToolUse: readonly HookEntry[]
-  }
-  readonly disableAllHooks?: boolean
-}
-
 const SettingsWrapped = S.Struct({
   hooks: HookGroups,
   disableAllHooks: S.optional(S.Boolean),
 })
+
+export type HookSettings = S.Schema.Type<typeof SettingsWrapped>
+
 const SettingsFlat = S.Struct({
   ...HookGroups.fields,
   disableAllHooks: S.optional(S.Boolean),
 })
-const SettingsJSON = S.Union(SettingsWrapped, SettingsFlat)
 
-const decodeSettings = S.decodeUnknownEither(SettingsJSON)
+/**
+ * Lift the flat settings shape under `hooks`. Decode-only: the bridge reads
+ * settings.json and never writes it back, so encoding has no meaning here.
+ */
+const LiftFlatSettingsACL = S.transformOrFail(SettingsFlat, SettingsWrapped, {
+  strict: true,
+  decode: ({ disableAllHooks, ...hooks }) =>
+    ParseResult.succeed(disableAllHooks === undefined ? { hooks } : { hooks, disableAllHooks }),
+  encode: (wrapped, _options, ast) => ParseResult.fail(new ParseResult.Forbidden(ast, wrapped, 'Decode-only')),
+})
 
-export function parseSettings(json: unknown) {
-  return Either.map(
-    decodeSettings(json),
-    (s): HookSettings => {
-      if ('hooks' in s) {
-        return s as HookSettings
-      }
-      // Flat case: move hook groups under hooks, preserve disableAllHooks at top
-      const { disableAllHooks: d, ...hookGroups } = s as typeof s & { disableAllHooks?: boolean }
-      return { hooks: hookGroups as HookSettings['hooks'], disableAllHooks: d } as unknown as HookSettings
-    },
-  )
-}
+const SettingsJSON = S.Union(SettingsWrapped, LiftFlatSettingsACL)
+
+export const parseSettings = S.decodeUnknownEither(SettingsJSON)
 
 export const ALL_HOOK_EVENTS = [
   'PreToolUse',
@@ -94,27 +81,26 @@ export function unknownHookEvents(json: unknown): readonly string[] {
 }
 
 export function mergeSettings(settings: readonly HookSettings[]): HookSettings {
-  const merged: { hooks: Partial<Record<HookEvent, HookEntry[]>>; disableAllHooks?: boolean } = {
-    hooks: {
-      PreToolUse: [],
-      PostToolUse: [],
-      UserPromptSubmit: [],
-      SessionStart: [],
-      SessionEnd: [],
-      Stop: [],
-    },
+  const hooks: Record<HookEvent, HookEntry[]> = {
+    PreToolUse: [],
+    PostToolUse: [],
+    UserPromptSubmit: [],
+    SessionStart: [],
+    SessionEnd: [],
+    Stop: [],
   }
+  let disableAllHooks: boolean | undefined
 
   for (const s of settings) {
     for (const event of ALL_HOOK_EVENTS) {
-      merged.hooks[event] = (merged.hooks[event] ?? []).concat(Array.from(s.hooks[event]))
+      hooks[event] = hooks[event].concat(Array.from(s.hooks[event]))
     }
     if (s.disableAllHooks !== undefined) {
-      merged.disableAllHooks = s.disableAllHooks
+      disableAllHooks = s.disableAllHooks
     }
   }
 
-  return merged as unknown as HookSettings
+  return disableAllHooks === undefined ? { hooks } : { hooks, disableAllHooks }
 }
 
 export function isHooksDisabled(settings: HookSettings): boolean {
