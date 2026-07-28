@@ -11,7 +11,9 @@ export class Block extends S.TaggedClass<Block>()('Block', {
   reason: S.String,
 }) {}
 
-export class Allow extends S.TaggedClass<Allow>()('Allow', {}) {}
+export class Allow extends S.TaggedClass<Allow>()('Allow', {
+  updatedInput: S.optional(S.Record({ key: S.String, value: S.Unknown })),
+}) {}
 
 export class Warning extends S.TaggedClass<Warning>()('Warning', {
   message: S.String,

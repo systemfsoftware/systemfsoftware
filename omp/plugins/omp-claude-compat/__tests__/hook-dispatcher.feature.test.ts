@@ -1,4 +1,5 @@
 import { NodeCommandExecutor, NodeFileSystem } from '@effect/platform-node'
+import type { PlatformError } from '@effect/platform/Error'
 import { FileSystem } from '@effect/platform/FileSystem'
 import * as PathModule from '@effect/platform/Path'
 import type { ExtensionContext, ToolCallEvent, ToolResultEvent } from '@oh-my-pi/pi-coding-agent'
@@ -21,7 +22,7 @@ function writeShellHook(
   exitCode: number,
   stderr?: string,
   stdout?: string,
-): Effect.Effect<string, never, FileSystem.FileSystem> {
+): Effect.Effect<string, PlatformError, FileSystem> {
   return Effect.gen(function*() {
     const fs = yield* FileSystem
     const content = [
@@ -46,7 +47,7 @@ function makeCtx(cwd: string): ExtensionContext {
 function writeSettings(
   dir: string,
   hooks: Record<string, unknown>,
-): Effect.Effect<void, never, FileSystem.FileSystem> {
+): Effect.Effect<void, PlatformError, FileSystem> {
   return Effect.gen(function*() {
     const fs = yield* FileSystem
     yield* fs.makeDirectory(`${dir}/.claude`, { recursive: true })
@@ -246,6 +247,39 @@ Feature('Hook dispatcher — PreToolUse hook execution')
           Effect.sync(() => {
             expect(s.result).toBeDefined()
             expect(s.result?.block).toBe(true)
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'Should rewrite tool input when a hook returns updatedInput',
+      Gherkin.Do.pipe(
+        Given('a directory with a hook returning updatedInput')('dir', (_s) =>
+          Effect.gen(function*() {
+            const fs = yield* FileSystem
+            const dir = yield* fs.makeTempDirectoryScoped()
+            const rewriteJson = JSON.stringify({
+              hookSpecificOutput: { updatedInput: { tool_input: { content: 'rewritten by hook' } } },
+            })
+            const hook = yield* writeShellHook(dir, 'rewrite', 0, undefined, rewriteJson)
+            yield* writeSettings(dir, {
+              PreToolUse: [{ matcher: 'Write', hooks: [{ type: 'command', command: hook }] }],
+            })
+            return { dir, hook }
+          })),
+        When('runPreToolUseHooks is called for a Write tool call')('event', (s) =>
+          Effect.gen(function*() {
+            const settings = yield* loadSettingsWithPaths([`${s.dir.dir}/.claude/settings.json`])
+            expect(settings).not.toBeNull()
+            const event = makeToolCall('write', { path: '/test.txt', content: 'original' })
+            const result = yield* runPreToolUseHooks(settings!, event, makeCtx(s.dir.dir))
+            expect(result).toBeUndefined()
+            return event
+          })),
+        Then("the tool call's input should carry the hook's replacement")((s) =>
+          Effect.sync(() => {
+            expect(s.event.input).toEqual({ path: '/test.txt', content: 'rewritten by hook' })
           })
         ),
       ),

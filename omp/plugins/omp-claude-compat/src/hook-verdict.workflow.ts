@@ -53,7 +53,7 @@ const decideFromParsed = (parsed: ParsedHookOutput, event: string): HookDecision
       new Block({
         reason: parsed.reason ?? `Blocked by ${event} hook`,
       })),
-    Match.orElse(() => new Allow({})),
+    Match.orElse(() => new Allow({ updatedInput: parsed.hookSpecificOutput?.updatedInput })),
   )
 
 const decideFromNonStandardExit = (stderr: string): HookDecision =>

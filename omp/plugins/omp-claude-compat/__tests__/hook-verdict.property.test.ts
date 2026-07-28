@@ -101,4 +101,38 @@ describe('interpretHookResult (PBT)', () => {
       return Either.isRight(verdict) && verdict.right._tag === 'Allow'
     },
   )
+
+  it.prop(
+    '∀value_Exit0AndUpdatedInput_→AllowCarriesUpdatedInput',
+    [stderrText, event],
+    ([value, ev]) => {
+      const stdout = JSON.stringify({ hookSpecificOutput: { updatedInput: { tool_input: { content: value } } } })
+      const verdict = interpretHookResult({ code: 0, stdout, stderr: '' }, ev)
+      return Either.isRight(verdict) &&
+        verdict.right._tag === 'Allow' &&
+        JSON.stringify(verdict.right.updatedInput) === JSON.stringify({ tool_input: { content: value } })
+    },
+  )
+
+  it.prop(
+    '∀code_NonStandardExitIgnoresStdoutJson_→AllowWithoutUpdatedInput',
+    [nonStandardExit, stderrText, event],
+    ([code, value, ev]) => {
+      const stdout = JSON.stringify({ hookSpecificOutput: { updatedInput: { tool_input: { content: value } } } })
+      const verdict = interpretHookResult({ code, stdout, stderr: '' }, ev)
+      return Either.isRight(verdict) && verdict.right._tag === 'Allow' && verdict.right.updatedInput === undefined
+    },
+  )
+
+  it.prop(
+    '∀value_Exit0DenyWithUpdatedInput_→BlockNotAllow',
+    [stderrText, event],
+    ([value, ev]) => {
+      const stdout = JSON.stringify({
+        hookSpecificOutput: { permissionDecision: 'deny', permissionDecisionReason: value, updatedInput: { a: '1' } },
+      })
+      const verdict = interpretHookResult({ code: 0, stdout, stderr: '' }, ev)
+      return Either.isRight(verdict) && verdict.right._tag === 'Block'
+    },
+  )
 })

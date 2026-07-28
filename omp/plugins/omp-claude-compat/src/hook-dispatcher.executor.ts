@@ -19,8 +19,6 @@ import { Effect, Either, Match, Option, Schema as S, Stream } from 'effect'
 import { homedir } from 'node:os'
 import { Blocked, Continue, Warning } from './hook-dispatcher.schema.js'
 import type { HookOutcome, HookResult } from './hook-dispatcher.schema.js'
-
-import { parseHookOutput } from './hook-output.acl.js'
 import { isHooksDisabled, mergeSettings, parseSettings } from './hook-settings.acl.js'
 import type { HookEntry, HookSettings } from './hook-settings.acl.js'
 import { interpretHookResult } from './hook-verdict.workflow.js'
@@ -162,11 +160,7 @@ export const runHooksForEvent = Effect.fn('runHooksForEvent')(function*(
       const outcome: HookOutcome = Match.value(decision).pipe(
         Match.tag('Block', (d) => new Blocked({ reason: d.reason })),
         Match.tag('Warning', (d) => new Continue({ warning: d.message })),
-        Match.tag('Allow', () => {
-          const either = parseHookOutput(result.stdout)
-          const updatedInput = Either.isRight(either) ? either.right.hookSpecificOutput?.updatedInput : undefined
-          return new Continue({ updatedInput })
-        }),
+        Match.tag('Allow', (d) => new Continue({ updatedInput: d.updatedInput })),
         Match.exhaustive,
       )
 
