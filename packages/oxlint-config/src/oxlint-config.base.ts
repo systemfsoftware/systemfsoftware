@@ -1,3 +1,6 @@
+import effectExecutor from '@systemfsoftware/oxlint-plugin-effect-executor'
+import effectWorkflow from '@systemfsoftware/oxlint-plugin-effect-workflow'
+import propertyTesting from '@systemfsoftware/oxlint-plugin-property-testing'
 import { defineConfig } from 'oxlint'
 
 export default defineConfig({
@@ -16,6 +19,7 @@ export default defineConfig({
     import.meta.resolve('@systemfsoftware/oxlint-plugin-test-hygiene'),
     import.meta.resolve('@systemfsoftware/oxlint-plugin-property-testing'),
     import.meta.resolve('@systemfsoftware/oxlint-plugin-effect-executor'),
+    import.meta.resolve('@systemfsoftware/oxlint-plugin-effect-workflow'),
   ],
 
   rules: {
@@ -44,18 +48,9 @@ export default defineConfig({
     '@systemfsoftware/oxlint-plugin/no-native-settimeout-in-effect': 'error',
     '@systemfsoftware/oxlint-plugin-test-hygiene/damp-test-naming': 'error',
     '@systemfsoftware/oxlint-plugin-test-hygiene/pbt-naming': 'error',
-    '@systemfsoftware/oxlint-plugin-property-testing/no-silent-return': 'error',
-    '@systemfsoftware/oxlint-plugin-property-testing/no-assert-in-property': 'error',
-    '@systemfsoftware/oxlint-plugin-property-testing/property-file-purity': 'error',
-    '@systemfsoftware/oxlint-plugin-property-testing/require-effect-fastcheck': 'error',
-    '@systemfsoftware/oxlint-plugin-effect-executor/executor-owns-context-tag': 'error',
-    '@systemfsoftware/oxlint-plugin-effect-executor/executor-deps-tag-name': 'error',
-    '@systemfsoftware/oxlint-plugin-effect-executor/executor-deps-borrowed-types': 'error',
-    '@systemfsoftware/oxlint-plugin-effect-executor/executor-import-boundary': 'error',
-    '@systemfsoftware/oxlint-plugin-effect-executor/executor-no-domain-branch': 'error',
-    '@systemfsoftware/oxlint-plugin-effect-executor/executor-no-io-in-filling': 'error',
-    '@systemfsoftware/oxlint-plugin-effect-executor/executor-no-escaping-state': 'error',
-    '@systemfsoftware/oxlint-plugin-effect-executor/executor-no-layer-binding': 'error',
+    ...propertyTesting.configs.recommended.rules,
+    ...effectExecutor.configs.recommended.rules,
+    ...effectWorkflow.configs.recommended.rules,
     '@systemfsoftware/oxlint-plugin/policy-no-domain-imports': 'error',
     '@systemfsoftware/oxlint-plugin/no-new-worker-with-wasm-import': 'error',
     '@systemfsoftware/oxlint-plugin/no-barrels': 'off',

@@ -1,4 +1,6 @@
-import { Either, Match, Schema as S } from 'effect'
+import * as Either from 'effect/Either'
+import * as Match from 'effect/Match'
+import * as S from 'effect/Schema'
 import { Allow, Block, Warning } from './hook-dispatcher.schema.js'
 import type { HookDecision, HookResult } from './hook-dispatcher.schema.js'
 import { parseHookOutput } from './hook-output.acl.js'
@@ -6,16 +8,31 @@ import type { ParsedHookOutput } from './hook-output.acl.js'
 
 // Error channel — hook exited 0 and its stdout opened with `{`, claiming to
 // be a decision object, but the object did not parse.
+const HookVerdictErrorTypeId: unique symbol = Symbol('@systemfsoftware/omp-claude-compat/HookVerdictError')
 export class HookVerdictError extends S.TaggedError<HookVerdictError>()('HookVerdictError', {
   raw: S.String,
-}) {}
+}) {
+  readonly [HookVerdictErrorTypeId] = HookVerdictErrorTypeId
+}
 
 // Internal closed union over the exit-code categories (primitive
 // dispatch needs a closed shape for Match.exhaustive to bite).
-class ExitBlock extends S.TaggedClass<ExitBlock>()('ExitBlock', {}) {}
-class ExitDecisionJson extends S.TaggedClass<ExitDecisionJson>()('ExitDecisionJson', {}) {}
-class ExitNoDecision extends S.TaggedClass<ExitNoDecision>()('ExitNoDecision', {}) {}
-class ExitOther extends S.TaggedClass<ExitOther>()('ExitOther', {}) {}
+const ExitBlockTypeId: unique symbol = Symbol('@systemfsoftware/omp-claude-compat/ExitBlock')
+const ExitDecisionJsonTypeId: unique symbol = Symbol('@systemfsoftware/omp-claude-compat/ExitDecisionJson')
+const ExitNoDecisionTypeId: unique symbol = Symbol('@systemfsoftware/omp-claude-compat/ExitNoDecision')
+const ExitOtherTypeId: unique symbol = Symbol('@systemfsoftware/omp-claude-compat/ExitOther')
+class ExitBlock extends S.TaggedClass<ExitBlock>()('ExitBlock', {}) {
+  readonly [ExitBlockTypeId] = ExitBlockTypeId
+}
+class ExitDecisionJson extends S.TaggedClass<ExitDecisionJson>()('ExitDecisionJson', {}) {
+  readonly [ExitDecisionJsonTypeId] = ExitDecisionJsonTypeId
+}
+class ExitNoDecision extends S.TaggedClass<ExitNoDecision>()('ExitNoDecision', {}) {
+  readonly [ExitNoDecisionTypeId] = ExitNoDecisionTypeId
+}
+class ExitOther extends S.TaggedClass<ExitOther>()('ExitOther', {}) {
+  readonly [ExitOtherTypeId] = ExitOtherTypeId
+}
 
 const ExitKind = S.Union(ExitBlock, ExitDecisionJson, ExitNoDecision, ExitOther)
 type ExitKind = S.Schema.Type<typeof ExitKind>

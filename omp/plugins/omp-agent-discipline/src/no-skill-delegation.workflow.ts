@@ -1,14 +1,21 @@
-import { Match, Schema as S } from 'effect'
+import * as Match from 'effect/Match'
+import * as S from 'effect/Schema'
 
 const How = S.Literal('subagent_type', 'prompt')
 
-export class Allow extends S.TaggedClass<Allow>()('Allow', {}) {}
+const AllowTypeId: unique symbol = Symbol('@systemfsoftware/omp-agent-discipline/Allow')
+export class Allow extends S.TaggedClass<Allow>()('Allow', {}) {
+  readonly [AllowTypeId] = AllowTypeId
+}
 
+const BlockTypeId: unique symbol = Symbol('@systemfsoftware/omp-agent-discipline/Block')
 export class Block extends S.TaggedClass<Block>()('Block', {
   reason: S.String,
   how: How,
   skill: S.String,
-}) {}
+}) {
+  readonly [BlockTypeId] = BlockTypeId
+}
 
 export type DelegationVerdict = Allow | Block
 
@@ -54,25 +61,49 @@ export const CheckDelegation = S.Struct({
 
 export type CheckDelegation = typeof CheckDelegation.Type
 
-class NoGuard extends S.TaggedClass<NoGuard>()('NoGuard', {}) {}
-class NonDelegatedTool extends S.TaggedClass<NonDelegatedTool>()('NonDelegatedTool', {}) {}
+const NoGuardTypeId: unique symbol = Symbol('@systemfsoftware/omp-agent-discipline/NoGuard')
+class NoGuard extends S.TaggedClass<NoGuard>()('NoGuard', {}) {
+  readonly [NoGuardTypeId] = NoGuardTypeId
+}
+const NonDelegatedToolTypeId: unique symbol = Symbol('@systemfsoftware/omp-agent-discipline/NonDelegatedTool')
+class NonDelegatedTool extends S.TaggedClass<NonDelegatedTool>()('NonDelegatedTool', {}) {
+  readonly [NonDelegatedToolTypeId] = NonDelegatedToolTypeId
+}
+const ProtectedSubagentTypeId: unique symbol = Symbol('@systemfsoftware/omp-agent-discipline/ProtectedSubagent')
 class ProtectedSubagent extends S.TaggedClass<ProtectedSubagent>()('ProtectedSubagent', {
   skill: S.String,
-}) {}
-class EmptyPrompt extends S.TaggedClass<EmptyPrompt>()('EmptyPrompt', {}) {}
+}) {
+  readonly [ProtectedSubagentTypeId] = ProtectedSubagentTypeId
+}
+const EmptyPromptTypeId: unique symbol = Symbol('@systemfsoftware/omp-agent-discipline/EmptyPrompt')
+class EmptyPrompt extends S.TaggedClass<EmptyPrompt>()('EmptyPrompt', {}) {
+  readonly [EmptyPromptTypeId] = EmptyPromptTypeId
+}
+const PromptedTypeId: unique symbol = Symbol('@systemfsoftware/omp-agent-discipline/Prompted')
 class Prompted extends S.TaggedClass<Prompted>()('Prompted', {
   guard: CompiledGuard,
   prompt: S.String,
-}) {}
+}) {
+  readonly [PromptedTypeId] = PromptedTypeId
+}
 
 type ClassifiedInput = NoGuard | NonDelegatedTool | ProtectedSubagent | EmptyPrompt | Prompted
 
+const DelegatedTypeId: unique symbol = Symbol('@systemfsoftware/omp-agent-discipline/Delegated')
 class Delegated extends S.TaggedClass<Delegated>()('Delegated', {
   skill: S.String,
   excerpt: S.String,
-}) {}
-class Referenced extends S.TaggedClass<Referenced>()('Referenced', {}) {}
-class NoDelegation extends S.TaggedClass<NoDelegation>()('NoDelegation', {}) {}
+}) {
+  readonly [DelegatedTypeId] = DelegatedTypeId
+}
+const ReferencedTypeId: unique symbol = Symbol('@systemfsoftware/omp-agent-discipline/Referenced')
+class Referenced extends S.TaggedClass<Referenced>()('Referenced', {}) {
+  readonly [ReferencedTypeId] = ReferencedTypeId
+}
+const NoDelegationTypeId: unique symbol = Symbol('@systemfsoftware/omp-agent-discipline/NoDelegation')
+class NoDelegation extends S.TaggedClass<NoDelegation>()('NoDelegation', {}) {
+  readonly [NoDelegationTypeId] = NoDelegationTypeId
+}
 
 type PromptAnalysis = Delegated | Referenced | NoDelegation
 

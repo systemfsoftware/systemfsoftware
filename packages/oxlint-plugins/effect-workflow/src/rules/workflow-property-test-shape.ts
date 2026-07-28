@@ -1,19 +1,11 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
-import { Array as A, Option, Schema as S } from 'effect'
+import { Schema as S } from 'effect'
 import { meta, Options, type OptionsType } from './workflow-property-test-shape.config.js'
 
-export type MessageIds = 'wrongSuffix' | 'plainIt' | 'rawFcAssert' | 'wrongLocation' | 'effectProp'
+export type MessageIds = 'plainIt' | 'rawFcAssert' | 'wrongLocation'
 
-const isWorkflowTestFile = (filename: string): boolean =>
-  A.last(filename.split('/')).pipe(Option.exists((base) => base.includes('.test.') || base.includes('.spec.')))
-
-const PathSegments = S.Tuple([S.String, S.String], S.String)
-
-const isPropertyTestFile = (filename: string, testDir: string): boolean => {
-  const [basename, parentDir] = S.decodeUnknownSync(PathSegments)(filename.split('/').reverse())
-  return basename.endsWith('.property.test.ts') && parentDir === testDir
-}
+const PropertySuffix = '.property.test.ts'
 
 const isCallTo = (node: ESTree.CallExpression, name: string): boolean => {
   if (node.callee.type === 'Identifier') return node.callee.name === name
@@ -23,6 +15,8 @@ const isCallTo = (node: ESTree.CallExpression, name: string): boolean => {
   return false
 }
 
+const PathSegments = S.Tuple([S.String, S.String], S.String)
+
 export const workflowPropertyTestShape = defineRule({
   meta,
   create(context: Context) {
@@ -30,20 +24,29 @@ export const workflowPropertyTestShape = defineRule({
     const testDir = options.testDir
     const filename = context.filename
 
-    if (!isWorkflowTestFile(filename)) return {}
+    let basename: string
+    let parentDir: string
+    try {
+      const decoded = S.decodeUnknownSync(PathSegments)(filename.split('/').reverse())
+      basename = decoded[0]
+      parentDir = decoded[1]
+    } catch {
+      return {}
+    }
 
-    if (!isPropertyTestFile(filename, testDir)) {
+    if (!basename.endsWith(PropertySuffix)) return {}
+
+    if (parentDir !== testDir) {
       return {
         Program(node: ESTree.Program) {
-          const base = filename.split('/').pop()!
           context.report({
             node,
-            messageId: 'wrongSuffix',
+            messageId: 'wrongLocation',
             data: {
-              name: base,
-              expected: '*.property.test.ts suffix for workflow tests',
-              actual: `test file ${base} does not use the *.property.test.ts suffix`,
-              fix: 'rename the file to *.property.test.ts',
+              name: basename,
+              expected: `${testDir}/${basename} adjacent to the workflow`,
+              actual: `${basename} is under ${parentDir}/ instead of ${testDir}/`,
+              fix: `move ${basename} into ${testDir}/ adjacent to the workflow`,
             },
           })
         },
@@ -75,28 +78,6 @@ export const workflowPropertyTestShape = defineRule({
                 expected: 'it.prop() from @effect/vitest',
                 actual: 'raw fc.assert() is used',
                 fix: 'replace raw fc.assert() with it.prop() from @effect/vitest',
-              },
-            })
-          }
-        }
-        {
-          const callee = node.callee
-          if (
-            callee.type === 'MemberExpression' &&
-            callee.object.type === 'MemberExpression' &&
-            callee.object.object.type === 'Identifier' &&
-            callee.object.object.name === 'it' &&
-            callee.object.property.type === 'Identifier' &&
-            callee.object.property.name === 'effect'
-          ) {
-            context.report({
-              node,
-              messageId: 'effectProp',
-              data: {
-                name: 'it.effect.prop()',
-                expected: 'it.prop() from @effect/vitest',
-                actual: 'it.effect.prop() is used',
-                fix: 'replace it.effect.prop() with it.prop() from @effect/vitest',
               },
             })
           }

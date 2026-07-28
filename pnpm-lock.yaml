@@ -757,6 +757,9 @@ importers:
       '@systemfsoftware/oxlint-plugin-effect-executor':
         specifier: workspace:^
         version: link:../oxlint-plugins/effect-executor
+      '@systemfsoftware/oxlint-plugin-effect-workflow':
+        specifier: workspace:^
+        version: link:../oxlint-plugins/effect-workflow
       '@systemfsoftware/oxlint-plugin-property-testing':
         specifier: workspace:^
         version: link:../oxlint-plugins/property-testing

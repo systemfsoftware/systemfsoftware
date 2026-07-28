@@ -8,15 +8,23 @@
  * suppresses exactly the root `AGENTS.md` the host already delivers, while a
  * downward `@packages/foo/AGENTS.md` still injects.
  */
-import { Match, Option, Schema as S } from 'effect'
+import * as Match from 'effect/Match'
+import * as Option from 'effect/Option'
+import * as S from 'effect/Schema'
 
 export const DEFAULT_NO_INJECT_REFS: ReadonlyArray<string> = ['AGENTS.md']
 
-class Inject extends S.TaggedClass<Inject>()('Inject', {}) {}
+const InjectTypeId: unique symbol = Symbol('@systemfsoftware/omp-claude-compat/Inject')
+const SkipTypeId: unique symbol = Symbol('@systemfsoftware/omp-claude-compat/Skip')
+class Inject extends S.TaggedClass<Inject>()('Inject', {}) {
+  readonly [InjectTypeId] = InjectTypeId
+}
 
 class Skip extends S.TaggedClass<Skip>()('Skip', {
   matched: S.String,
-}) {}
+}) {
+  readonly [SkipTypeId] = SkipTypeId
+}
 
 type RefVerdict = Inject | Skip
 
