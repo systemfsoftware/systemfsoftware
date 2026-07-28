@@ -13,6 +13,7 @@ import { workflowSingleFunctionExport } from './rules/workflow-single-function-e
 import { workflowSinglePath } from './rules/workflow-single-path.js'
 import { workflowTypeidRequired } from './rules/workflow-typeid-required.js'
 import { workflowTypeidSharedPerUnion } from './rules/workflow-typeid-shared-per-union.js'
+import { workflowUnionSchemaDeclared } from './rules/workflow-union-schema-declared.js'
 
 const PLUGIN_NAME = '@systemfsoftware/oxlint-plugin-effect-workflow'
 
@@ -22,6 +23,7 @@ const recommendedRules = {
   [rule('workflow-schema-required')]: 'error',
   [rule('workflow-typeid-required')]: 'error',
   [rule('workflow-typeid-shared-per-union')]: 'error',
+  [rule('workflow-union-schema-declared')]: 'error',
   [rule('workflow-no-unconstructed-variant')]: 'error',
   [rule('workflow-no-panic-vocabulary')]: 'error',
   [rule('workflow-match-exhaustive')]: 'error',
@@ -44,6 +46,7 @@ export default {
     'workflow-inline-schemas': workflowInlineSchemas,
     'workflow-typeid-required': workflowTypeidRequired,
     'workflow-typeid-shared-per-union': workflowTypeidSharedPerUnion,
+    'workflow-union-schema-declared': workflowUnionSchemaDeclared,
     'workflow-no-unconstructed-variant': workflowNoUnconstructedVariant,
     'workflow-no-panic-vocabulary': workflowNoPanicVocabulary,
     'workflow-match-exhaustive': workflowMatchExhaustive,
