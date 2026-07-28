@@ -12,6 +12,7 @@ const _default: {
         name: string;
     };
     rules: {
+        'workflow-command-object': Rule;
         'workflow-schema-required': Rule;
         'workflow-inline-schemas': Rule;
         'workflow-typeid-required': Rule;

@@ -1,6 +1,6 @@
 import { describe, it } from '@effect/vitest'
 import { Either, FastCheck as fc } from 'effect'
-import { interpretHookResult } from '../src/hook-verdict.workflow.js'
+import { InterpretHookCommand, interpretHookResult } from '../src/hook-verdict.workflow.js'
 
 const event = fc.constantFrom('PreToolUse', 'PostToolUse', 'SessionStart', 'UserPromptSubmit', 'SessionEnd')
 
@@ -34,7 +34,9 @@ describe('interpretHookResult (PBT)', () => {
     '∀stdout_Exit0AndBlankStdout_→Allow',
     [blankStdout, event],
     ([stdout, ev]) => {
-      const verdict = interpretHookResult({ code: 0, stdout, stderr: '' }, ev)
+      const verdict = interpretHookResult(
+        new InterpretHookCommand({ result: { code: 0, stdout, stderr: '' }, event: ev }),
+      )
       return Either.isRight(verdict) && verdict.right._tag === 'Allow'
     },
   )
@@ -43,7 +45,9 @@ describe('interpretHookResult (PBT)', () => {
     '∀stdout_Exit0AndPlainTextStdout_→Allow',
     [plainStdout, event],
     ([stdout, ev]) => {
-      const verdict = interpretHookResult({ code: 0, stdout, stderr: '' }, ev)
+      const verdict = interpretHookResult(
+        new InterpretHookCommand({ result: { code: 0, stdout, stderr: '' }, event: ev }),
+      )
       return Either.isRight(verdict) && verdict.right._tag === 'Allow'
     },
   )
@@ -52,7 +56,9 @@ describe('interpretHookResult (PBT)', () => {
     '∀stdout_Exit0AndMalformedDecisionJson_→VerdictError',
     [malformedJson, event],
     ([stdout, ev]) => {
-      const verdict = interpretHookResult({ code: 0, stdout, stderr: '' }, ev)
+      const verdict = interpretHookResult(
+        new InterpretHookCommand({ result: { code: 0, stdout, stderr: '' }, event: ev }),
+      )
       return Either.isLeft(verdict) && verdict.left.raw === stdout
     },
   )
@@ -61,7 +67,9 @@ describe('interpretHookResult (PBT)', () => {
     '∀stderr_Exit2_→BlockCarryingStderr',
     [stderrText, event],
     ([stderr, ev]) => {
-      const verdict = interpretHookResult({ code: 2, stdout: '', stderr }, ev)
+      const verdict = interpretHookResult(
+        new InterpretHookCommand({ result: { code: 2, stdout: '', stderr }, event: ev }),
+      )
       return Either.isRight(verdict) && verdict.right._tag === 'Block' && verdict.right.reason === stderr.trim()
     },
   )
@@ -70,7 +78,9 @@ describe('interpretHookResult (PBT)', () => {
     '∀stdout_Exit2IgnoresStdout_→Block',
     [fc.oneof(blankStdout, plainStdout, malformedJson), event],
     ([stdout, ev]) => {
-      const verdict = interpretHookResult({ code: 2, stdout, stderr: 'denied' }, ev)
+      const verdict = interpretHookResult(
+        new InterpretHookCommand({ result: { code: 2, stdout, stderr: 'denied' }, event: ev }),
+      )
       return Either.isRight(verdict) && verdict.right._tag === 'Block' && verdict.right.reason === 'denied'
     },
   )
@@ -82,7 +92,9 @@ describe('interpretHookResult (PBT)', () => {
       const stdout = JSON.stringify({
         hookSpecificOutput: { permissionDecision: 'deny', permissionDecisionReason: reason },
       })
-      const verdict = interpretHookResult({ code: 0, stdout, stderr: '' }, ev)
+      const verdict = interpretHookResult(
+        new InterpretHookCommand({ result: { code: 0, stdout, stderr: '' }, event: ev }),
+      )
       return Either.isRight(verdict) && verdict.right._tag === 'Block' && verdict.right.reason === reason
     },
   )
@@ -91,7 +103,7 @@ describe('interpretHookResult (PBT)', () => {
     '∀code_NonStandardExitWithStderr_→Warning',
     [nonStandardExit, stderrText, event],
     ([code, stderr, ev]) => {
-      const verdict = interpretHookResult({ code, stdout: '', stderr }, ev)
+      const verdict = interpretHookResult(new InterpretHookCommand({ result: { code, stdout: '', stderr }, event: ev }))
       return Either.isRight(verdict) && verdict.right._tag === 'Warning' && verdict.right.message === stderr.trim()
     },
   )
@@ -100,7 +112,7 @@ describe('interpretHookResult (PBT)', () => {
     '∀code_NonStandardExitWithoutStderr_→Allow',
     [nonStandardExit, blankStdout, event],
     ([code, stderr, ev]) => {
-      const verdict = interpretHookResult({ code, stdout: '', stderr }, ev)
+      const verdict = interpretHookResult(new InterpretHookCommand({ result: { code, stdout: '', stderr }, event: ev }))
       return Either.isRight(verdict) && verdict.right._tag === 'Allow'
     },
   )
@@ -110,7 +122,9 @@ describe('interpretHookResult (PBT)', () => {
     [stderrText, event],
     ([value, ev]) => {
       const stdout = JSON.stringify({ hookSpecificOutput: { updatedInput: { tool_input: { content: value } } } })
-      const verdict = interpretHookResult({ code: 0, stdout, stderr: '' }, ev)
+      const verdict = interpretHookResult(
+        new InterpretHookCommand({ result: { code: 0, stdout, stderr: '' }, event: ev }),
+      )
       return Either.isRight(verdict) &&
         verdict.right._tag === 'Allow' &&
         JSON.stringify(verdict.right.updatedInput) === JSON.stringify({ tool_input: { content: value } })
@@ -122,7 +136,7 @@ describe('interpretHookResult (PBT)', () => {
     [nonStandardExit, stderrText, event],
     ([code, value, ev]) => {
       const stdout = JSON.stringify({ hookSpecificOutput: { updatedInput: { tool_input: { content: value } } } })
-      const verdict = interpretHookResult({ code, stdout, stderr: '' }, ev)
+      const verdict = interpretHookResult(new InterpretHookCommand({ result: { code, stdout, stderr: '' }, event: ev }))
       return Either.isRight(verdict) && verdict.right._tag === 'Allow' && verdict.right.updatedInput === undefined
     },
   )
@@ -134,7 +148,9 @@ describe('interpretHookResult (PBT)', () => {
       const stdout = JSON.stringify({
         hookSpecificOutput: { permissionDecision: 'deny', permissionDecisionReason: value, updatedInput: { a: '1' } },
       })
-      const verdict = interpretHookResult({ code: 0, stdout, stderr: '' }, ev)
+      const verdict = interpretHookResult(
+        new InterpretHookCommand({ result: { code: 0, stdout, stderr: '' }, event: ev }),
+      )
       return Either.isRight(verdict) && verdict.right._tag === 'Block'
     },
   )
@@ -146,7 +162,9 @@ describe('interpretHookResult (PBT)', () => {
       const stdout = prefix + JSON.stringify({
         hookSpecificOutput: { permissionDecision: 'deny', permissionDecisionReason: reason },
       })
-      const verdict = interpretHookResult({ code: 0, stdout, stderr: '' }, ev)
+      const verdict = interpretHookResult(
+        new InterpretHookCommand({ result: { code: 0, stdout, stderr: '' }, event: ev }),
+      )
       return Either.isRight(verdict) && verdict.right._tag === 'Block' && verdict.right.reason === reason
     },
   )
@@ -156,8 +174,10 @@ describe('interpretHookResult (PBT)', () => {
     [stderrText, event],
     ([reason, ev]) => {
       const verdict = interpretHookResult(
-        { code: 0, stdout: JSON.stringify({ decision: 'block', reason }), stderr: '' },
-        ev,
+        new InterpretHookCommand({
+          result: { code: 0, stdout: JSON.stringify({ decision: 'block', reason }), stderr: '' },
+          event: ev,
+        }),
       )
       return Either.isRight(verdict) && verdict.right._tag === 'Block' && verdict.right.reason === reason
     },
@@ -168,8 +188,14 @@ describe('interpretHookResult (PBT)', () => {
     [event],
     ([ev]) => {
       const verdict = interpretHookResult(
-        { code: 0, stdout: JSON.stringify({ hookSpecificOutput: { permissionDecision: 'deny' } }), stderr: '' },
-        ev,
+        new InterpretHookCommand({
+          result: {
+            code: 0,
+            stdout: JSON.stringify({ hookSpecificOutput: { permissionDecision: 'deny' } }),
+            stderr: '',
+          },
+          event: ev,
+        }),
       )
       return Either.isRight(verdict) &&
         verdict.right._tag === 'Block' &&
@@ -182,8 +208,10 @@ describe('interpretHookResult (PBT)', () => {
     [event],
     ([ev]) => {
       const verdict = interpretHookResult(
-        { code: 0, stdout: JSON.stringify({ decision: 'block' }), stderr: '' },
-        ev,
+        new InterpretHookCommand({
+          result: { code: 0, stdout: JSON.stringify({ decision: 'block' }), stderr: '' },
+          event: ev,
+        }),
       )
       return Either.isRight(verdict) &&
         verdict.right._tag === 'Block' &&

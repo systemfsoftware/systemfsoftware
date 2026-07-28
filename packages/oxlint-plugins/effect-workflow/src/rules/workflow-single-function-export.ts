@@ -1,34 +1,11 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
+import { functionVariableDeclaratorName, getExportedWorkflowFunction } from './exported-workflow-fn.js'
 import { meta, Options } from './workflow-single-function-export.config.js'
 
 export type MessageIds = 'tooManyFunctionExports'
 
 const isWorkflowFile = (filename: string): boolean => filename.endsWith('.workflow.ts')
-
-const functionVariableDeclaratorName = (decl: ESTree.VariableDeclarator): string | null => {
-  if (
-    decl.id.type === 'Identifier' &&
-    decl.init !== null &&
-    (decl.init.type === 'ArrowFunctionExpression' || decl.init.type === 'FunctionExpression')
-  ) {
-    return decl.id.name
-  }
-  return null
-}
-
-const isFunctionExportDeclaration = (node: ESTree.ExportNamedDeclaration): boolean => {
-  if (!node.declaration) return false
-  if (node.declaration.type === 'FunctionDeclaration') return true
-  if (node.declaration.type === 'VariableDeclaration') {
-    for (const decl of node.declaration.declarations) {
-      if (functionVariableDeclaratorName(decl) !== null) {
-        return true
-      }
-    }
-  }
-  return false
-}
 
 const collectLocalFunctionNames = (program: ESTree.Program): Set<string> => {
   const names = new Set<string>()
@@ -79,7 +56,7 @@ export const workflowSingleFunctionExport = defineRule({
 
     return {
       ExportNamedDeclaration(node: ESTree.ExportNamedDeclaration) {
-        if (isFunctionExportDeclaration(node)) {
+        if (getExportedWorkflowFunction(node) !== undefined) {
           functionExportCount += 1
           lastFunctionExportNode = node
         } else {

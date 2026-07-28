@@ -27,7 +27,7 @@ import {
   unsupportedHookTypes,
 } from './hook-settings.acl.js'
 import type { CommandHook, HookEntry, HookSettings, SettingsSource } from './hook-settings.acl.js'
-import { interpretHookResult } from './hook-verdict.workflow.js'
+import { InterpretHookCommand, interpretHookResult } from './hook-verdict.workflow.js'
 
 const UNREADABLE_MATCHER: Readonly<Record<string, string>> = NON_EVALUABLE_MATCHERS
 const IF_EVALUATING_EVENTS: readonly string[] = TOOL_EVENTS
@@ -291,7 +291,7 @@ export const runHooksForEvent = Effect.fn('runHooksForEvent')(function*(
 
       const result = yield* runHookScript(hook, currentInput, cwd, event)
 
-      const verdict = interpretHookResult(result, event)
+      const verdict = interpretHookResult(new InterpretHookCommand({ result, event }))
       const decision = Either.match(verdict, {
         onLeft: (err) =>
           Match.value(err).pipe(
@@ -527,14 +527,17 @@ export const runUserPromptSubmitHooks = Effect.fn('runUserPromptSubmitHooks')(fu
 
       // Claude Code rejects the prompt on exit 2 or `decision: "block"`, feeding
       // the reason back rather than injecting stdout as context.
-      const blockReason = Either.match(interpretHookResult(result, 'UserPromptSubmit'), {
-        onLeft: () => undefined,
-        onRight: (decision) =>
-          Match.value(decision).pipe(
-            Match.tag('Block', (b) => b.reason),
-            Match.orElse(() => undefined),
-          ),
-      })
+      const blockReason = Either.match(
+        interpretHookResult(new InterpretHookCommand({ result, event: 'UserPromptSubmit' })),
+        {
+          onLeft: () => undefined,
+          onRight: (decision) =>
+            Match.value(decision).pipe(
+              Match.tag('Block', (b) => b.reason),
+              Match.orElse(() => undefined),
+            ),
+        },
+      )
       if (blockReason !== undefined) {
         ctx.ui.notify(`Prompt blocked by UserPromptSubmit hook: ${blockReason}`, 'error')
         return { handled: true } satisfies InputEventResult

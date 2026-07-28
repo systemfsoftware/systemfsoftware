@@ -1,13 +1,19 @@
 import * as Either from 'effect/Either'
 import * as Match from 'effect/Match'
 import * as S from 'effect/Schema'
-import { Allow, Block, Warning } from './hook-dispatcher.schema.js'
-import type { HookDecision, HookResult } from './hook-dispatcher.schema.js'
+import { Allow, Block, HookResult, Warning } from './hook-dispatcher.schema.js'
+import type { HookDecision } from './hook-dispatcher.schema.js'
 import { parseHookOutput } from './hook-output.acl.js'
 import type { ParsedHookOutput } from './hook-output.acl.js'
 
-// Error channel — hook exited 0 and its stdout opened with `{`, claiming to
-// be a decision object, but the object did not parse.
+const InterpretHookCommandTypeId: unique symbol = Symbol.for('@systemfsoftware/omp-claude-compat/InterpretHookCommand')
+export class InterpretHookCommand extends S.TaggedClass<InterpretHookCommand>()('InterpretHookCommand', {
+  result: HookResult,
+  event: S.String,
+}) {
+  readonly [InterpretHookCommandTypeId] = InterpretHookCommandTypeId
+}
+
 const HookVerdictErrorTypeId: unique symbol = Symbol.for('@systemfsoftware/omp-claude-compat/HookVerdictError')
 export class HookVerdictError extends S.TaggedError<HookVerdictError>()('HookVerdictError', {
   raw: S.String,
@@ -77,17 +83,16 @@ const decideFromNonStandardExit = (stderr: string): HookDecision =>
   )
 
 export const interpretHookResult = (
-  result: HookResult,
-  event: string,
+  cmd: InterpretHookCommand,
 ): Either.Either<HookDecision, HookVerdictError> =>
-  Match.value(classifyResult(result)).pipe(
-    Match.tag('ExitBlock', () => Either.right(new Block({ reason: blockReason(result.stderr, event) }))),
+  Match.value(classifyResult(cmd.result)).pipe(
+    Match.tag('ExitBlock', () => Either.right(new Block({ reason: blockReason(cmd.result.stderr, cmd.event) }))),
     Match.tag('ExitNoDecision', () => Either.right(new Allow({}))),
     Match.tag('ExitDecisionJson', () =>
-      Either.match(parseHookOutput(result.stdout), {
-        onLeft: () => Either.left(new HookVerdictError({ raw: result.stdout })),
-        onRight: (parsed) => Either.right(decideFromParsed(parsed, event)),
+      Either.match(parseHookOutput(cmd.result.stdout), {
+        onLeft: () => Either.left(new HookVerdictError({ raw: cmd.result.stdout })),
+        onRight: (parsed) => Either.right(decideFromParsed(parsed, cmd.event)),
       })),
-    Match.tag('ExitOther', () => Either.right(decideFromNonStandardExit(result.stderr))),
+    Match.tag('ExitOther', () => Either.right(decideFromNonStandardExit(cmd.result.stderr))),
     Match.exhaustive,
   )
