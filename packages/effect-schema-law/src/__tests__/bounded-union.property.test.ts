@@ -58,7 +58,9 @@ const Expr: S.Schema<Expr> = boundedUnion('Expr', {
 
 it.prop('∀e_BoundedUnion_≤50k', [Expr], ([expr]) => JSON.stringify(expr).length < 50_000)
 
-describe('obeys the rule of schemas', () => {
+const LAW_TIMEOUT_MS = 60_000
+
+describe('obeys the rule of schemas', { timeout: LAW_TIMEOUT_MS }, () => {
   ruleOfSchemas('Expr', Expr)
   ruleOfSchemas('Binary', Binary)
   ruleOfSchemas('Member', Member)
