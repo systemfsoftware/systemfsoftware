@@ -84,7 +84,6 @@ export const coverageReportLines = (coverage: HookCoverage): readonly string[] =
 
 export const collectSettingsGapsWithPaths = Effect.fn('collectSettingsGapsWithPaths')(function*(
   paths: readonly string[],
-  managedPath: string = MANAGED_SETTINGS_PATH,
 ) {
   const fs = yield* FileSystem
   const unrecognized: HookCoverageRow[] = []
@@ -114,7 +113,7 @@ export const collectSettingsGapsWithPaths = Effect.fn('collectSettingsGapsWithPa
     // Name it rather than starting the session unguarded with no sign of it.
     const settings = parseSettings(parsed.right)
     if (Either.isLeft(settings)) malformed.push(path)
-    else sources.push({ settings: settings.right, managed: path === managedPath, label: path })
+    else sources.push({ settings: settings.right, managed: path === MANAGED_SETTINGS_PATH, label: path })
   }
   return {
     coverage: {
