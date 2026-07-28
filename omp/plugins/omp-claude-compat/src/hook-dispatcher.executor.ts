@@ -9,6 +9,8 @@ import type {
   ToolResultEvent,
 } from '@oh-my-pi/pi-coding-agent'
 import {
+  denormalizeToolInput,
+  editTargetPaths,
   extractShellCommand,
   matchesMatcher,
   normalizeToolInput,
@@ -19,27 +21,9 @@ import { Effect, Either, Match, Option, Schema as S, Stream } from 'effect'
 import { homedir } from 'node:os'
 import { Blocked, Continue, Warning } from './hook-dispatcher.schema.js'
 import type { HookOutcome, HookResult } from './hook-dispatcher.schema.js'
-import { isHooksDisabled, mergeSettings, parseSettings } from './hook-settings.acl.js'
+import { isHooksDisabled, mergeSettings, parseSettings, unknownHookEvents } from './hook-settings.acl.js'
 import type { HookEntry, HookSettings } from './hook-settings.acl.js'
 import { interpretHookResult } from './hook-verdict.workflow.js'
-
-interface ResolvedCommand {
-  readonly cmd: string
-  readonly args: readonly string[]
-}
-
-function resolveCommandPath(command: string, cwd: string): ResolvedCommand {
-  const expanded = command
-    .replace(/"\$OMP_PROJECT_DIR"|'\$OMP_PROJECT_DIR'/g, JSON.stringify(cwd))
-    .replace(/"\$\{OMP_PROJECT_DIR\}"|'\$\{OMP_PROJECT_DIR\}'/g, JSON.stringify(cwd))
-    .replace(/"\$CLAUDE_PROJECT_DIR"|'\$CLAUDE_PROJECT_DIR'/g, JSON.stringify(cwd))
-    .replace(/"\$\{CLAUDE_PROJECT_DIR\}"|'\$\{CLAUDE_PROJECT_DIR\}'/g, JSON.stringify(cwd))
-    .replace(/\$OMP_PROJECT_DIR|\$\{OMP_PROJECT_DIR\}/g, JSON.stringify(cwd))
-    .replace(/\$CLAUDE_PROJECT_DIR|\$\{CLAUDE_PROJECT_DIR\}/g, JSON.stringify(cwd))
-  const trimmed = expanded.trim()
-  const unquoted = trimmed.startsWith('"') && trimmed.endsWith('"') ? trimmed.slice(1, -1) : trimmed
-  return { cmd: 'sh', args: ['-c', unquoted] }
-}
 
 const loadSettingsFile = Effect.fn('loadSettingsFile')(function*(path: string) {
   const fs = yield* FileSystem
@@ -52,14 +36,15 @@ const loadSettingsFile = Effect.fn('loadSettingsFile')(function*(path: string) {
   return Either.isLeft(either) ? null : either.right
 })
 
+const settingsPaths = (cwd: string): readonly string[] => [
+  `${homedir()}/.claude/settings.json`,
+  `${cwd}/.claude/settings.json`,
+  `${cwd}/.claude/settings.local.json`,
+  '/etc/claude-code/managed-settings.json',
+]
+
 export const loadSettings = Effect.fn('loadSettings')(function*(cwd: string) {
-  const paths = [
-    `${homedir()}/.claude/settings.json`,
-    `${cwd}/.claude/settings.json`,
-    `${cwd}/.claude/settings.local.json`,
-    '/etc/claude-code/managed-settings.json',
-  ] as const
-  return yield* loadSettingsWithPaths(paths)
+  return yield* loadSettingsWithPaths(settingsPaths(cwd))
 })
 
 export const loadSettingsWithPaths = Effect.fn('loadSettingsWithPaths')(function*(
@@ -74,6 +59,25 @@ export const loadSettingsWithPaths = Effect.fn('loadSettingsWithPaths')(function
   return mergeSettings(results)
 })
 
+export const collectUnknownHookEventsWithPaths = Effect.fn('collectUnknownHookEventsWithPaths')(function*(
+  paths: readonly string[],
+) {
+  const fs = yield* FileSystem
+  const found: string[] = []
+  for (const path of paths) {
+    const content = yield* fs.readFileString(path).pipe(Effect.catchAll(() => Effect.succeed('')))
+    if (content === '') continue
+    const parsed = S.decodeUnknownEither(S.parseJson(S.Record({ key: S.String, value: S.Unknown })))(content)
+    if (Either.isLeft(parsed)) continue
+    found.push(...unknownHookEvents(parsed.right))
+  }
+  return Array.from(new Set(found))
+})
+
+export const collectUnknownHookEvents = Effect.fn('collectUnknownHookEvents')(function*(cwd: string) {
+  return yield* collectUnknownHookEventsWithPaths(settingsPaths(cwd))
+})
+
 export const runHookScript = Effect.fn('runHookScript')(function*(
   command: string,
   input: Record<string, unknown>,
@@ -81,10 +85,9 @@ export const runHookScript = Effect.fn('runHookScript')(function*(
   timeoutMs: number,
 ) {
   const executor = yield* CommandExecutor
-  const { cmd, args } = resolveCommandPath(command, cwd)
   const stdinText = JSON.stringify(input)
 
-  const hookCommand = Command.make(cmd, ...args).pipe(
+  const hookCommand = Command.make('sh', '-c', command).pipe(
     Command.workingDirectory(cwd),
     Command.env({ OMP_PROJECT_DIR: cwd, CLAUDE_PROJECT_DIR: cwd }),
     Command.feed(stdinText),
@@ -198,14 +201,10 @@ export const runPreToolUseHooks = Effect.fn('runPreToolUseHooks')(function*(
   if (isHooksDisabled(settings)) return undefined
   const claudeToolName = normalizeToolName(event.toolName)
   const sessionData = sessionIds(() => ctx.sessionManager.getSessionId())
-  const input: Record<string, unknown> = {
-    ...sessionData,
-    tool_name: claudeToolName,
-    tool_input: normalizeToolInput(claudeToolName, event.input as Record<string, unknown>),
-    tool_call_id: event.toolCallId,
-  }
+  const rawInput = event.input as Record<string, unknown>
+  const toolInput = normalizeToolInput(claudeToolName, rawInput)
 
-  const shellCommand = extractShellCommand(event.toolName, event.input as Record<string, unknown>)
+  const shellCommand = extractShellCommand(event.toolName, rawInput)
   if (shellCommand !== undefined && shellCommand.length > 0) {
     const bashInput: Record<string, unknown> = {
       ...sessionData,
@@ -221,26 +220,38 @@ export const runPreToolUseHooks = Effect.fn('runPreToolUseHooks')(function*(
     }
   }
 
-  const result = yield* runHooksForEvent(settings.hooks.PreToolUse, claudeToolName, input, ctx, 'PreToolUse')
+  // One OMP `edit` can name many files; Claude Code's `Edit` names exactly one.
+  // Dispatch the chain once per target so a guard sees every path: populating
+  // only the first lets an innocent leading section screen a forbidden one.
+  const targets = editTargetPaths(claudeToolName, toolInput)
+  const payloads = targets.length === 0
+    ? [toolInput]
+    : targets.map((file_path) => ({ ...toolInput, file_path }))
 
-  if (result.block) {
-    return result.reason === undefined
-      ? { block: true }
-      : { block: true, reason: result.reason }
+  let lastResult: HooksForEventResult = {}
+  for (const payload of payloads) {
+    const input: Record<string, unknown> = {
+      ...sessionData,
+      tool_name: claudeToolName,
+      tool_input: payload,
+      tool_call_id: event.toolCallId,
+    }
+
+    const result = yield* runHooksForEvent(settings.hooks.PreToolUse, claudeToolName, input, ctx, 'PreToolUse')
+
+    if (result.block) {
+      return result.reason === undefined
+        ? { block: true }
+        : { block: true, reason: result.reason }
+    }
+    lastResult = result
   }
 
-  // OMP's tool_call event only supports blocking; it cannot rewrite the tool input.
-  if (
-    result.updatedInput &&
-    typeof result.updatedInput === 'object' &&
-    'tool_input' in result.updatedInput &&
-    result.updatedInput['tool_input'] &&
-    typeof result.updatedInput['tool_input'] === 'object'
-  ) {
-    const updated = result.updatedInput['tool_input']
-    for (const [key, value] of Object.entries(updated)) {
-      ;(event.input as Record<string, unknown>)[key] = value
-    }
+  // Only a single-target call has an unambiguous rewrite target, and the delta
+  // must go back under the key names OMP reads — the forward pass renamed them.
+  const updated = payloads.length === 1 ? lastResult.updatedInput?.['tool_input'] : undefined
+  for (const [key, value] of Object.entries(denormalizeToolInput(rawInput, updated))) {
+    rawInput[key] = value
   }
 
   return undefined
@@ -253,16 +264,32 @@ export const runPostToolUseHooks = Effect.fn('runPostToolUseHooks')(function*(
 ) {
   const claudeToolName = normalizeToolName(event.toolName)
   if (isHooksDisabled(settings)) return undefined
-  const input: Record<string, unknown> = {
-    ...sessionIds(() => ctx.sessionManager.getSessionId()),
-    tool_name: claudeToolName,
-    tool_input: normalizeToolInput(claudeToolName, event.input),
-    tool_call_id: event.toolCallId,
-    output: event.content,
-    is_error: event.isError ?? false,
+  const sessionData = sessionIds(() => ctx.sessionManager.getSessionId())
+  const toolInput = normalizeToolInput(claudeToolName, event.input)
+  const targets = editTargetPaths(claudeToolName, toolInput)
+  const payloads = targets.length === 0
+    ? [toolInput]
+    : targets.map((file_path) => ({ ...toolInput, file_path }))
+
+  let firstWarning: string | undefined
+  let lastResult: HooksForEventResult = {}
+  for (const payload of payloads) {
+    const input: Record<string, unknown> = {
+      ...sessionData,
+      tool_name: claudeToolName,
+      tool_input: payload,
+      tool_call_id: event.toolCallId,
+      output: event.content,
+      is_error: event.isError ?? false,
+    }
+
+    const result = yield* runHooksForEvent(settings.hooks.PostToolUse, claudeToolName, input, ctx, 'PostToolUse')
+    if (result.block) return result
+    if (firstWarning === undefined) firstWarning = result.warning
+    lastResult = result
   }
 
-  return yield* runHooksForEvent(settings.hooks.PostToolUse, claudeToolName, input, ctx, 'PostToolUse')
+  return firstWarning === undefined ? lastResult : { ...lastResult, warning: firstWarning }
 })
 
 export const runUserPromptSubmitHooks = Effect.fn('runUserPromptSubmitHooks')(function*(
@@ -285,6 +312,22 @@ export const runUserPromptSubmitHooks = Effect.fn('runUserPromptSubmitHooks')(fu
   for (const entry of entries) {
     for (const hook of entry.hooks) {
       const result = yield* runHookScript(hook.command, input, cwd, (hook.timeout ?? 10) * 1000)
+
+      // Claude Code rejects the prompt on exit 2 or `decision: "block"`, feeding
+      // the reason back rather than injecting stdout as context.
+      const blockReason = Either.match(interpretHookResult(result, 'UserPromptSubmit'), {
+        onLeft: () => undefined,
+        onRight: (decision) =>
+          Match.value(decision).pipe(
+            Match.tag('Block', (b) => b.reason),
+            Match.orElse(() => undefined),
+          ),
+      })
+      if (blockReason !== undefined) {
+        ctx.ui.notify(`Prompt blocked by UserPromptSubmit hook: ${blockReason}`, 'error')
+        return { handled: true } satisfies InputEventResult
+      }
+
       if (result.code !== 0) continue
 
       const stdout = result.stdout.trim()

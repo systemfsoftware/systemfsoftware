@@ -65,8 +65,33 @@ export function parseSettings(json: unknown) {
   )
 }
 
-const ALL_HOOK_EVENTS = ['PreToolUse', 'PostToolUse', 'UserPromptSubmit', 'SessionStart', 'SessionEnd', 'Stop'] as const
+export const ALL_HOOK_EVENTS = [
+  'PreToolUse',
+  'PostToolUse',
+  'UserPromptSubmit',
+  'SessionStart',
+  'SessionEnd',
+  'Stop',
+] as const
 type HookEvent = typeof ALL_HOOK_EVENTS[number]
+
+/**
+ * Hook-group keys the bridge does not implement, in input order.
+ *
+ * Settings come in two shapes: wrapped (`{ hooks: { ... } }`) puts the group
+ * namespace under `hooks`, flat puts it at the top level beside a legitimate
+ * `disableAllHooks`. The known-set differs per shape for exactly that reason.
+ */
+export function unknownHookEvents(json: unknown): readonly string[] {
+  if (json === null || typeof json !== 'object' || Array.isArray(json)) return []
+
+  const wrapped = 'hooks' in json ? json['hooks'] : undefined
+  const isWrapped = typeof wrapped === 'object' && wrapped !== null && !Array.isArray(wrapped)
+  const namespace = isWrapped ? wrapped : json
+  const known: readonly string[] = isWrapped ? ALL_HOOK_EVENTS : [...ALL_HOOK_EVENTS, 'disableAllHooks']
+
+  return Object.keys(namespace).filter((key) => !known.includes(key))
+}
 
 export function mergeSettings(settings: readonly HookSettings[]): HookSettings {
   const merged: { hooks: Partial<Record<HookEvent, HookEntry[]>>; disableAllHooks?: boolean } = {

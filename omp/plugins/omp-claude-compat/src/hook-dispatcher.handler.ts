@@ -75,10 +75,19 @@ export const HookDispatcherTask = (pi: ExtensionAPI): void => {
   })
 
   pi.on('session_start', async (_event: { type: string }, ctx: ExtensionContext) => {
-    const { loadSettings, runSessionStartHooks } = await import('./hook-dispatcher.executor.js')
+    const { collectUnknownHookEvents, loadSettings, runSessionStartHooks } = await import(
+      './hook-dispatcher.executor.js'
+    )
     const { Effect } = await import('effect')
     return runSafe(
       Effect.gen(function*() {
+        const unknown = yield* collectUnknownHookEvents(ctx.cwd)
+        if (unknown.length > 0) {
+          ctx.ui.notify(
+            `Ignoring unsupported hook event(s) in settings.json: ${unknown.join(', ')}`,
+            'warning',
+          )
+        }
         const settings = yield* loadSettings(ctx.cwd)
         if (!settings) return undefined
         yield* runSessionStartHooks(settings, 'start', ctx)
