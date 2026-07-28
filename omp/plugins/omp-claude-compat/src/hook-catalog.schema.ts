@@ -101,10 +101,38 @@ export const UNBRIDGED_REASONS = {
   ElicitationResult: 'MCP elicitation is not surfaced to OMP extensions.',
 } as const satisfies Record<UnbridgedEvent, string>
 
+/**
+ * Events whose hooks receive a tool call, so a handler's `if` permission rule
+ * has something to match. On every other event a hook that sets `if` never
+ * runs.
+ */
+export const TOOL_EVENTS = [
+  'PreToolUse',
+  'PostToolUse',
+  'PostToolUseFailure',
+  'PermissionRequest',
+  'PermissionDenied',
+] as const satisfies readonly ClaudeCodeEvent[]
+
+/**
+ * Matchers this bridge must refuse rather than guess at: the event reaches OMP,
+ * but the signal OMP carries cannot answer what the matcher asks.
+ */
 export const NON_EVALUABLE_MATCHERS = {
   PreCompact:
     'OMP `session_before_compact` does not say whether the compaction was manual or automatic, so a `trigger` matcher cannot be evaluated.',
+  PostCompact:
+    'OMP `session_compact` reports only whether an extension requested the compaction, not whether it was manual or automatic, so a `trigger` matcher cannot be evaluated.',
+  SessionEnd:
+    'OMP `session_shutdown` fires on process exit and carries no reason, so a `reason` matcher cannot be evaluated.',
 } as const satisfies Partial<Record<BridgedEvent, string>>
+
+/** A hook group the wrapper shape hides. */
+export const WRAPPED_SHADOW_REASON =
+  'ignored: this file wraps its hooks under `hooks`, so a group repeated at the top level is never read'
+
+/** Hooks a settings file switches off rather than this bridge failing to carry. */
+export const DISABLED_ALL_REASON = 'switched off by `disableAllHooks` in'
 
 export type MatcherReach =
   | { readonly _tag: 'Reachable' }

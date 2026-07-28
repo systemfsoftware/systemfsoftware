@@ -22,7 +22,7 @@ import {
   runToolResultHooks,
   runUserPromptSubmitHooks,
 } from '../src/hook-dispatcher.executor.js'
-import type { HookEntry } from '../src/hook-settings.acl.js'
+import type { CommandHook, HookEntry } from '../src/hook-settings.acl.js'
 import { loaded } from './loaded.observer.js'
 
 const Feature = makeFeature({ it, layer })
@@ -109,7 +109,7 @@ function makeToolResult(toolName: string, input: Record<string, unknown>): HookT
   return { toolName, toolCallId: 'tc-test', input, content: 'ok' }
 }
 
-const recorder = (dir: string, name: string): Effect.Effect<HookEntry['hooks'][number], never, FileSystem> =>
+const recorder = (dir: string, name: string): Effect.Effect<CommandHook, never, FileSystem> =>
   Effect.gen(function*() {
     const fs = yield* FileSystem
     const hookPath = `${dir}/${name}.sh`
@@ -935,6 +935,97 @@ Feature('Hook coverage reported at session start')
         ),
       ),
     )
+
+    scenario(
+      'Should name a hook that another settings file switched off',
+      Gherkin.Do.pipe(
+        Given('a user file guarding PreToolUse and a project file setting disableAllHooks')(
+          'dirs',
+          (_s) =>
+            Effect.gen(function*() {
+              const fs = yield* FileSystem
+              const user = yield* fs.makeTempDirectoryScoped()
+              const project = yield* fs.makeTempDirectoryScoped()
+              yield* writeSettings(user, {
+                PreToolUse: [{ hooks: [{ type: 'command', command: 'true' }] }],
+              })
+              yield* fs.makeDirectory(`${project}/.claude`, { recursive: true })
+              yield* fs.writeFileString(
+                `${project}/.claude/settings.json`,
+                JSON.stringify({ hooks: {}, disableAllHooks: true }),
+              )
+              return { project, user }
+            }),
+        ),
+        When('the session starts')('report', (s) =>
+          Effect.map(
+            collectSettingsGapsWithPaths([
+              `${s.dirs.user}/.claude/settings.json`,
+              `${s.dirs.project}/.claude/settings.json`,
+            ]),
+            (gaps) => coverageReportLines(gaps.coverage).join('\n'),
+          )),
+        Then('the report names PreToolUse and the file that switched it off')((s) =>
+          Effect.sync(() => {
+            expect(s.report).toContain('PreToolUse: switched off by `disableAllHooks`')
+            expect(s.report).toContain(`${s.dirs.project}/.claude/settings.json`)
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'Should name a hook group the wrapper shape hides',
+      Gherkin.Do.pipe(
+        Given('a settings file wrapping PreToolUse and repeating PostToolUse at the top level')(
+          'dir',
+          (_s) =>
+            Effect.gen(function*() {
+              const fs = yield* FileSystem
+              const dir = yield* fs.makeTempDirectoryScoped()
+              yield* fs.makeDirectory(`${dir}/.claude`, { recursive: true })
+              yield* fs.writeFileString(
+                `${dir}/.claude/settings.json`,
+                JSON.stringify({
+                  hooks: { PreToolUse: [{ hooks: [{ type: 'command', command: 'true' }] }] },
+                  PostToolUse: [{ hooks: [{ type: 'command', command: 'true' }] }],
+                }),
+              )
+              return dir
+            }),
+        ),
+        When('the session starts')('report', (s) => reportFor(s.dir)),
+        Then('the report names PostToolUse as never read')((s) =>
+          Effect.sync(() => {
+            expect(s.report).toContain('PostToolUse: ignored: this file wraps its hooks')
+            expect(s.report).not.toContain('PreToolUse')
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'Should strip an escape sequence a settings key smuggles into the report',
+      Gherkin.Do.pipe(
+        Given('a settings file whose event key carries an escape and a newline')('dir', (_s) =>
+          Effect.gen(function*() {
+            const fs = yield* FileSystem
+            const dir = yield* fs.makeTempDirectoryScoped()
+            yield* writeSettings(dir, {
+              PreToolUse: [],
+              '\u001B[2J\nAudit: PASSED': [{ hooks: [{ type: 'command', command: 'true' }] }],
+            })
+            return dir
+          })),
+        When('the session starts')('report', (s) => reportFor(s.dir)),
+        Then('the report is one line carrying no control character')((s) =>
+          Effect.sync(() => {
+            expect(s.report.split('\n')).toHaveLength(1)
+            expect(s.report).not.toContain('\u001B')
+          })
+        ),
+      ),
+    )
   })
 
 Feature('Hooks whose matcher this bridge cannot read')
@@ -1034,6 +1125,73 @@ Feature('Hooks whose matcher this bridge cannot read')
           Effect.sync(() => {
             expect(s.ran).toEqual(['bash-only'])
           })
+        ),
+      ),
+    )
+
+    scenario(
+      'Should skip a PostCompact hook that declares a matcher',
+      Gherkin.Do.pipe(
+        Given('a PostCompact hook scoped to matcher auto')('setup', (_s) =>
+          Effect.gen(function*() {
+            const fs = yield* FileSystem
+            const dir = yield* fs.makeTempDirectoryScoped()
+            const scoped = yield* recorder(dir, 'scoped')
+            const bare = yield* recorder(dir, 'bare')
+            return {
+              dir,
+              entries: [{ matcher: 'auto', hooks: [scoped] }, { hooks: [bare] }] satisfies HookEntry[],
+            }
+          })),
+        When('a compaction finishes')('ran', (s) =>
+          Effect.gen(function*() {
+            yield* runLifecycleHooks(s.setup.entries, makeCtx(s.setup.dir), 'PostCompact')
+            return yield* whatRan(s.setup.dir)
+          })),
+        Then('only the unscoped hook runs')((s) => Effect.sync(() => expect(s.ran).toEqual(['bare']))),
+      ),
+    )
+
+    scenario(
+      'Should skip a SessionEnd hook that declares a matcher',
+      Gherkin.Do.pipe(
+        Given('a SessionEnd hook scoped to matcher logout')('setup', (_s) =>
+          Effect.gen(function*() {
+            const fs = yield* FileSystem
+            const dir = yield* fs.makeTempDirectoryScoped()
+            const scoped = yield* recorder(dir, 'scoped')
+            return { dir, entries: [{ matcher: 'logout', hooks: [scoped] }] satisfies HookEntry[] }
+          })),
+        When('the session ends')('ran', (s) =>
+          Effect.gen(function*() {
+            yield* runLifecycleHooks(s.setup.entries, makeCtx(s.setup.dir), 'SessionEnd')
+            return yield* whatRan(s.setup.dir)
+          })),
+        Then('nothing runs, because the bridge cannot tell a logout from any other exit')((s) =>
+          Effect.sync(() => expect(s.ran).toEqual([]))
+        ),
+      ),
+    )
+
+    scenario(
+      'Should skip a PreCompact hook whose if condition no tool call can be judged against',
+      Gherkin.Do.pipe(
+        Given('a PreCompact hook whose if condition names two tools, which is not a rule')(
+          'setup',
+          (_s) =>
+            Effect.gen(function*() {
+              const fs = yield* FileSystem
+              const dir = yield* fs.makeTempDirectoryScoped()
+              const hook = yield* recorder(dir, 'conditioned')
+              return { dir, entries: [{ hooks: [{ ...hook, if: 'Read Write' }] }] satisfies HookEntry[] }
+            }),
+        ),
+        When('a compaction is about to run')(
+          'ran',
+          (s) => dispatch(s.setup.dir, s.setup.entries, 'PreCompact', ''),
+        ),
+        Then('nothing runs, even though an unjudgeable rule elsewhere runs the hook')((s) =>
+          Effect.sync(() => expect(s.ran).toEqual([]))
         ),
       ),
     )

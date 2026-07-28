@@ -15,15 +15,22 @@ import {
 import { Cause, Effect, Either, Match, Option, Schema as S, Stream } from 'effect'
 import { homedir } from 'node:os'
 import { drainAsyncHookOutput, recordAsyncHookOutput } from './async-hook-output.state.js'
-import { NON_EVALUABLE_MATCHERS } from './hook-catalog.schema.js'
+import { NON_EVALUABLE_MATCHERS, TOOL_EVENTS } from './hook-catalog.schema.js'
 import { Blocked, Continue, Warning } from './hook-dispatcher.schema.js'
 import type { HookOutcome, HookResult } from './hook-dispatcher.schema.js'
-import type { HookCoverage, HookCoverageRow } from './hook-settings.acl.js'
-import { hookCoverage, mergeSettings, parseSettings, unsupportedHookTypes } from './hook-settings.acl.js'
+import type { DisableSource, HookCoverage, HookCoverageRow } from './hook-settings.acl.js'
+import {
+  disabledCoverage,
+  hookCoverage,
+  mergeSettings,
+  parseSettings,
+  unsupportedHookTypes,
+} from './hook-settings.acl.js'
 import type { CommandHook, HookEntry, HookSettings, SettingsSource } from './hook-settings.acl.js'
 import { interpretHookResult } from './hook-verdict.workflow.js'
 
 const UNREADABLE_MATCHER: Readonly<Record<string, string>> = NON_EVALUABLE_MATCHERS
+const IF_EVALUATING_EVENTS: readonly string[] = TOOL_EVENTS
 
 const loadSettingsFile = Effect.fn('loadSettingsFile')(function*(path: string) {
   const fs = yield* FileSystem
@@ -71,6 +78,8 @@ export const coverageReportLines = (coverage: HookCoverage): readonly string[] =
   ...coverage.notCarried.map((row) => `  ${row.event}: not carried by this bridge — ${row.reason}`),
   ...coverage.matcherNotEvaluable.map((row) => `  ${row.event}: hook skipped, matcher not evaluable — ${row.reason}`),
   ...coverage.matcherOutOfReach.map((row) => `  ${row.event}: ${row.reason}`),
+  ...coverage.shadowed.map((row) => `  ${row.event}: ${row.reason}`),
+  ...coverage.disabled.map((row) => `  ${row.event}: ${row.reason}`),
 ]
 
 export const collectSettingsGapsWithPaths = Effect.fn('collectSettingsGapsWithPaths')(function*(
@@ -81,6 +90,8 @@ export const collectSettingsGapsWithPaths = Effect.fn('collectSettingsGapsWithPa
   const notCarried: HookCoverageRow[] = []
   const matcherNotEvaluable: HookCoverageRow[] = []
   const matcherOutOfReach: HookCoverageRow[] = []
+  const shadowed: HookCoverageRow[] = []
+  const sources: DisableSource[] = []
   const hookTypes: string[] = []
   const malformed: string[] = []
   for (const path of paths) {
@@ -96,10 +107,13 @@ export const collectSettingsGapsWithPaths = Effect.fn('collectSettingsGapsWithPa
     notCarried.push(...coverage.notCarried)
     matcherNotEvaluable.push(...coverage.matcherNotEvaluable)
     matcherOutOfReach.push(...coverage.matcherOutOfReach)
+    shadowed.push(...coverage.shadowed)
     hookTypes.push(...unsupportedHookTypes(parsed.right))
     // The loader skips a file it cannot decode, contributing no hooks at all.
     // Name it rather than starting the session unguarded with no sign of it.
-    if (Either.isLeft(parseSettings(parsed.right))) malformed.push(path)
+    const settings = parseSettings(parsed.right)
+    if (Either.isLeft(settings)) malformed.push(path)
+    else sources.push({ settings: settings.right, managed: path === MANAGED_SETTINGS_PATH, label: path })
   }
   return {
     coverage: {
@@ -107,6 +121,8 @@ export const collectSettingsGapsWithPaths = Effect.fn('collectSettingsGapsWithPa
       notCarried: dedupeByEvent(notCarried),
       matcherNotEvaluable: dedupeByEvent(matcherNotEvaluable),
       matcherOutOfReach: dedupeByEvent(matcherOutOfReach),
+      shadowed: dedupeByEvent(shadowed),
+      disabled: dedupeByEvent(disabledCoverage(sources)),
     },
     unsupportedHookTypes: Array.from(new Set(hookTypes)),
     malformedFiles: Array.from(new Set(malformed)),
@@ -260,7 +276,12 @@ export const runHooksForEvent = Effect.fn('runHooksForEvent')(function*(
 
     for (const hook of entry.hooks) {
       if (hook.type !== 'command') continue
-      if (hook.if !== undefined && !matchesPermissionRule(hook.if, matchValue, ruleInput, cwd)) continue
+      if (hook.if !== undefined) {
+        // `if` is a permission rule over a tool call, so only a tool event can
+        // satisfy one. Elsewhere a hook that sets `if` never runs.
+        if (!IF_EVALUATING_EVENTS.includes(event)) continue
+        if (!matchesPermissionRule(hook.if, matchValue, ruleInput, cwd)) continue
+      }
       if (hook.async === true || hook.asyncRewake === true) {
         yield* Effect.forkDaemon(
           superviseFork(runHookScript(hook, currentInput, cwd, event), ctx, hook.command),
@@ -598,7 +619,13 @@ export const runLifecycleHooks = Effect.fn('runLifecycleHooks')(function*(
     ...sessionIds(() => ctx.sessionManager.getSessionId()),
   }
 
+  // The matcher axis is the same refusal `runHooksForEvent` makes: an event
+  // whose matcher this bridge cannot read must not run a matcher'd hook as
+  // though the matcher had matched.
+  const matcherUnreadable = UNREADABLE_MATCHER[event] !== undefined
+
   for (const entry of entries) {
+    if (matcherUnreadable && entry.matcher !== undefined) continue
     for (const hook of entry.hooks) {
       if (hook.type !== 'command') continue
       if (hook.if !== undefined) continue

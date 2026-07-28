@@ -3,10 +3,12 @@ import type { BridgedEvent } from './hook-catalog.schema.js'
 import {
   ALL_CLAUDE_CODE_EVENTS,
   BRIDGED_EVENTS,
+  DISABLED_ALL_REASON,
   MATCHER_REACH,
   NON_EVALUABLE_MATCHERS,
   UNBRIDGED_REASONS,
   UNRECOGNIZED_KEY_REASON,
+  WRAPPED_SHADOW_REASON,
 } from './hook-catalog.schema.js'
 import type { MatcherReach } from './hook-catalog.schema.js'
 
@@ -123,14 +125,22 @@ const asHookRows = S.decodeUnknownOption(
  */
 function settingsNamespace(json: unknown): Option.Option<{
   namespace: Record<string, unknown>
+  outer: Record<string, unknown>
   isWrapped: boolean
 }> {
   return Option.map(asRecord(json), (record) =>
     Option.match(asRecord(record['hooks']), {
-      onNone: () => ({ namespace: record, isWrapped: false }),
-      onSome: (namespace) => ({ namespace, isWrapped: true }),
+      onNone: () => ({ namespace: record, outer: record, isWrapped: false }),
+      onSome: (namespace) => ({ namespace, outer: record, isWrapped: true }),
     }))
 }
+
+/**
+ * Settings keys and matcher values are authored by whoever wrote the file, and
+ * the report prints them to a terminal. A control or format character in one
+ * must not move the cursor, clear the screen, or forge a line of its own.
+ */
+const displayable = (value: string): string => value.replaceAll(/[\p{Cc}\p{Cf}]/gu, '\uFFFD')
 
 export interface HookCoverageRow {
   readonly event: string
@@ -142,6 +152,8 @@ export interface HookCoverage {
   readonly notCarried: readonly HookCoverageRow[]
   readonly matcherNotEvaluable: readonly HookCoverageRow[]
   readonly matcherOutOfReach: readonly HookCoverageRow[]
+  readonly shadowed: readonly HookCoverageRow[]
+  readonly disabled: readonly HookCoverageRow[]
 }
 
 const EMPTY_COVERAGE: HookCoverage = {
@@ -149,6 +161,8 @@ const EMPTY_COVERAGE: HookCoverage = {
   notCarried: [],
   matcherNotEvaluable: [],
   matcherOutOfReach: [],
+  shadowed: [],
+  disabled: [],
 }
 
 const CATALOG_EVENTS: readonly string[] = ALL_CLAUDE_CODE_EVENTS
@@ -180,28 +194,28 @@ const reachGap = (reach: MatcherReach): Option.Option<string> =>
 export function hookCoverage(json: unknown): HookCoverage {
   return Option.match(settingsNamespace(json), {
     onNone: () => EMPTY_COVERAGE,
-    onSome: ({ isWrapped, namespace }) => {
+    onSome: ({ isWrapped, namespace, outer }) => {
       const unrecognized: HookCoverageRow[] = []
       const notCarried: HookCoverageRow[] = []
       const matcherNotEvaluable: HookCoverageRow[] = []
       const matcherOutOfReach: HookCoverageRow[] = []
+      const shadowed: HookCoverageRow[] = []
 
       for (const event of Object.keys(namespace)) {
         if (!isWrapped && event === 'disableAllHooks') continue
 
         const unbridged = UNBRIDGED_LOOKUP[event]
         if (unbridged !== undefined) {
-          notCarried.push({ event, reason: unbridged })
+          notCarried.push({ event: displayable(event), reason: unbridged })
           continue
         }
         if (!CATALOG_EVENTS.includes(event)) {
-          unrecognized.push({ event, reason: UNRECOGNIZED_KEY_REASON })
+          unrecognized.push({ event: displayable(event), reason: UNRECOGNIZED_KEY_REASON })
           continue
         }
         const unreadable = NON_EVALUABLE_LOOKUP[event]
-        if (unreadable !== undefined) {
-          if (declaresMatcher(namespace[event])) matcherNotEvaluable.push({ event, reason: unreadable })
-          continue
+        if (unreadable !== undefined && declaresMatcher(namespace[event])) {
+          matcherNotEvaluable.push({ event: displayable(event), reason: unreadable })
         }
         const reach = REACH_LOOKUP[event]
         if (reach === undefined) continue
@@ -211,15 +225,48 @@ export function hookCoverage(json: unknown): HookCoverage {
             if (value === undefined) return []
             return Option.match(reachGap(value), {
               onNone: (): readonly HookCoverageRow[] => [],
-              onSome: (reason) => [{ event: `${event} (matcher "${matcher}")`, reason }],
+              onSome: (reason) => [
+                { event: `${displayable(event)} (matcher "${displayable(matcher)}")`, reason },
+              ],
             })
           }),
         )
       }
 
-      return { unrecognized, notCarried, matcherNotEvaluable, matcherOutOfReach }
+      // A wrapped file still parses if a hook group sits at the top level too,
+      // and both the loader and the loop above read only the wrapped namespace.
+      if (isWrapped) {
+        for (const event of Object.keys(outer)) {
+          if (event === 'hooks' || !CATALOG_EVENTS.includes(event)) continue
+          shadowed.push({ event: displayable(event), reason: WRAPPED_SHADOW_REASON })
+        }
+      }
+
+      return { unrecognized, notCarried, matcherNotEvaluable, matcherOutOfReach, shadowed, disabled: [] }
     },
   })
+}
+
+export interface DisableSource {
+  readonly settings: HookSettings
+  readonly managed: boolean
+  readonly label: string
+}
+
+/**
+ * Hooks a settings file switches off, which the per-file scan above cannot see:
+ * `disableAllHooks` in any non-managed file drops the hooks of every other
+ * non-managed file, so a hook can vanish because of a file its author never
+ * opened. The merge is the only place that decision exists.
+ */
+export function disabledCoverage(sources: readonly DisableSource[]): readonly HookCoverageRow[] {
+  const disabler = sources.find((s) => !s.managed && s.settings.disableAllHooks === true)
+  if (disabler === undefined) return []
+  const reason = `${DISABLED_ALL_REASON} ${displayable(disabler.label)}`
+  return sources.filter((source) => !source.managed).flatMap((source) =>
+    ALL_HOOK_EVENTS.filter((event) => source.settings.hooks[event].length > 0)
+      .map((event) => ({ event, reason }))
+  )
 }
 
 /** Hook transports present in the settings that the dispatcher will skip. */
@@ -232,7 +279,7 @@ export function unsupportedHookTypes(json: unknown): readonly string[] {
         const rows = Option.getOrElse(asHookRows(namespace[event]), () => NO_ROWS)
         for (const row of rows) {
           for (const hook of row.hooks) {
-            if (hook.type !== undefined && hook.type !== 'command') found.add(hook.type)
+            if (hook.type !== undefined && hook.type !== 'command') found.add(displayable(hook.type))
           }
         }
       }
