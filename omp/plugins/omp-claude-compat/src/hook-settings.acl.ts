@@ -237,7 +237,7 @@ export function hookCoverage(json: unknown): HookCoverage {
       // and both the loader and the loop above read only the wrapped namespace.
       if (isWrapped) {
         for (const event of Object.keys(outer)) {
-          if (event === 'hooks' || !CATALOG_EVENTS.includes(event)) continue
+          if (!CATALOG_EVENTS.includes(event)) continue
           shadowed.push({ event: displayable(event), reason: WRAPPED_SHADOW_REASON })
         }
       }

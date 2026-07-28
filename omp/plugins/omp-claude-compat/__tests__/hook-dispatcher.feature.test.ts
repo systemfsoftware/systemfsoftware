@@ -937,38 +937,46 @@ Feature('Hook coverage reported at session start')
     )
 
     scenario(
-      'Should name a hook that another settings file switched off',
+      'Should name only the hooks another settings file switched off',
       Gherkin.Do.pipe(
-        Given('a user file guarding PreToolUse and a project file setting disableAllHooks')(
+        Given('a user file, a managed file, and a project file setting disableAllHooks')(
           'dirs',
           (_s) =>
             Effect.gen(function*() {
               const fs = yield* FileSystem
               const user = yield* fs.makeTempDirectoryScoped()
+              const managed = yield* fs.makeTempDirectoryScoped()
               const project = yield* fs.makeTempDirectoryScoped()
               yield* writeSettings(user, {
                 PreToolUse: [{ hooks: [{ type: 'command', command: 'true' }] }],
+                SessionEnd: [],
+              })
+              yield* writeSettings(managed, {
+                Stop: [{ hooks: [{ type: 'command', command: 'true' }] }],
               })
               yield* fs.makeDirectory(`${project}/.claude`, { recursive: true })
               yield* fs.writeFileString(
                 `${project}/.claude/settings.json`,
                 JSON.stringify({ hooks: {}, disableAllHooks: true }),
               )
-              return { project, user }
+              return { managed, project, user }
             }),
         ),
         When('the session starts')('report', (s) =>
           Effect.map(
             collectSettingsGapsWithPaths([
               `${s.dirs.user}/.claude/settings.json`,
+              `${s.dirs.managed}/.claude/settings.json`,
               `${s.dirs.project}/.claude/settings.json`,
-            ]),
+            ], `${s.dirs.managed}/.claude/settings.json`),
             (gaps) => coverageReportLines(gaps.coverage).join('\n'),
           )),
-        Then('the report names PreToolUse and the file that switched it off')((s) =>
+        Then('PreToolUse is named with the disabling file, and Stop and SessionEnd are not')((s) =>
           Effect.sync(() => {
             expect(s.report).toContain('PreToolUse: switched off by `disableAllHooks`')
             expect(s.report).toContain(`${s.dirs.project}/.claude/settings.json`)
+            expect(s.report).not.toContain('Stop:')
+            expect(s.report).not.toContain('SessionEnd:')
           })
         ),
       ),
@@ -1018,10 +1026,36 @@ Feature('Hook coverage reported at session start')
             return dir
           })),
         When('the session starts')('report', (s) => reportFor(s.dir)),
-        Then('the report is one line carrying no control character')((s) =>
+        Then('the report is one line whose every control character became a replacement mark')((s) =>
           Effect.sync(() => {
             expect(s.report.split('\n')).toHaveLength(1)
-            expect(s.report).not.toContain('\u001B')
+            expect(s.report).toContain('\uFFFD[2J\uFFFDAudit: PASSED:')
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'Should name a hook a flat settings file switched off',
+      Gherkin.Do.pipe(
+        Given('a flat settings file carrying hooks beside disableAllHooks')('dir', (_s) =>
+          Effect.gen(function*() {
+            const fs = yield* FileSystem
+            const dir = yield* fs.makeTempDirectoryScoped()
+            yield* fs.makeDirectory(`${dir}/.claude`, { recursive: true })
+            yield* fs.writeFileString(
+              `${dir}/.claude/settings.json`,
+              JSON.stringify({
+                PreToolUse: [{ hooks: [{ type: 'command', command: 'true' }] }],
+                disableAllHooks: true,
+              }),
+            )
+            return dir
+          })),
+        When('the session starts')('report', (s) => reportFor(s.dir)),
+        Then('the report names PreToolUse as switched off by that same file')((s) =>
+          Effect.sync(() => {
+            expect(s.report).toContain('PreToolUse: switched off by `disableAllHooks`')
           })
         ),
       ),

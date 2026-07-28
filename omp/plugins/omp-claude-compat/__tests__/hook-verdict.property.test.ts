@@ -6,6 +6,9 @@ const event = fc.constantFrom('PreToolUse', 'PostToolUse', 'SessionStart', 'User
 
 const blankStdout = fc.array(fc.constantFrom(' ', '\n', '\t', '\r'), { maxLength: 6 }).map((cs) => cs.join(''))
 
+const leadingBlank = fc.array(fc.constantFrom(' ', '\n', '\t', '\r'), { minLength: 1, maxLength: 6 })
+  .map((cs) => cs.join(''))
+
 const plainTextChar = fc.constantFrom('a', 'z', 'A', 'Z', '0', '9', '-', '_', ' ', '.', ':', '[', '"')
 
 const plainStdout = fc
@@ -133,6 +136,58 @@ describe('interpretHookResult (PBT)', () => {
       })
       const verdict = interpretHookResult({ code: 0, stdout, stderr: '' }, ev)
       return Either.isRight(verdict) && verdict.right._tag === 'Block'
+    },
+  )
+
+  it.prop(
+    '∀prefix_Exit0AndDecisionJsonBehindBlankSpace_→Block',
+    [leadingBlank, stderrText, event],
+    ([prefix, reason, ev]) => {
+      const stdout = prefix + JSON.stringify({
+        hookSpecificOutput: { permissionDecision: 'deny', permissionDecisionReason: reason },
+      })
+      const verdict = interpretHookResult({ code: 0, stdout, stderr: '' }, ev)
+      return Either.isRight(verdict) && verdict.right._tag === 'Block' && verdict.right.reason === reason
+    },
+  )
+
+  it.prop(
+    '∀reason_Exit0AndTopLevelBlockDecision_→Block',
+    [stderrText, event],
+    ([reason, ev]) => {
+      const verdict = interpretHookResult(
+        { code: 0, stdout: JSON.stringify({ decision: 'block', reason }), stderr: '' },
+        ev,
+      )
+      return Either.isRight(verdict) && verdict.right._tag === 'Block' && verdict.right.reason === reason
+    },
+  )
+
+  it.prop(
+    '∀event_Exit0AndDenyWithoutReason_→BlockNamingTheEvent',
+    [event],
+    ([ev]) => {
+      const verdict = interpretHookResult(
+        { code: 0, stdout: JSON.stringify({ hookSpecificOutput: { permissionDecision: 'deny' } }), stderr: '' },
+        ev,
+      )
+      return Either.isRight(verdict) &&
+        verdict.right._tag === 'Block' &&
+        verdict.right.reason === `Blocked by ${ev} hook`
+    },
+  )
+
+  it.prop(
+    '∀event_Exit0AndTopLevelBlockWithoutReason_→BlockNamingTheEvent',
+    [event],
+    ([ev]) => {
+      const verdict = interpretHookResult(
+        { code: 0, stdout: JSON.stringify({ decision: 'block' }), stderr: '' },
+        ev,
+      )
+      return Either.isRight(verdict) &&
+        verdict.right._tag === 'Block' &&
+        verdict.right.reason === `Blocked by ${ev} hook`
     },
   )
 })

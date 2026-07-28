@@ -266,6 +266,9 @@ importers:
       '@oh-my-pi/pi-coding-agent':
         specifier: 'catalog:'
         version: 17.0.5
+      '@stryker-mutator/vitest-runner':
+        specifier: catalog:stryker
+        version: 9.6.1(@stryker-mutator/core@9.6.1(@types/node@24.13.2))(vitest@4.1.9)
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:^
         version: link:../../../packages/effect-gherkin-spec
@@ -278,12 +281,24 @@ importers:
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
         version: link:../../../packages/oxlint-config
+      '@systemfsoftware/stryker-js-core':
+        specifier: workspace:^
+        version: link:../../../packages/stryker-js/core
+      '@systemfsoftware/stryker-js-typescript-checker':
+        specifier: workspace:^
+        version: link:../../../packages/stryker-js/typescript-checker
+      '@systemfsoftware/stryker-plugins':
+        specifier: workspace:^
+        version: link:../../../packages/stryker-plugins
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../../packages/tsconfig
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.2
+      '@vitest/coverage-v8':
+        specifier: 'catalog:'
+        version: 4.1.9(vitest@4.1.9)
       effect:
         specifier: 'catalog:'
         version: 3.22.0
