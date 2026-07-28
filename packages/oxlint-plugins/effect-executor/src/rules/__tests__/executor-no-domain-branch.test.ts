@@ -105,13 +105,6 @@ if (order.status === 'shipped') { fail() }`,
       filename: 'confirm-order.executor.ts',
     },
     {
-      name: 'Should_Allow_ComputedTagAccess_When_ValueIsDecoded',
-      code: `${ACL_IMPORT}
-const order = decodeOrder(row)
-if (order['_tag'] === 'Shipped') { fail() }`,
-      filename: 'confirm-order.executor.ts',
-    },
-    {
       name: 'Should_Allow_TagBranch_When_ValueIsNotDecoded',
       code: `${ACL_IMPORT}
 if (result._tag === 'Left') { fail() }`,
@@ -262,6 +255,14 @@ const out = Match.value(state)`,
       code: `${ACL_IMPORT}
 const order = decodeOrder(row)
 if (order._tag === 'Shipped') { fail() }`,
+      filename: 'confirm-order.executor.ts',
+      errors: [branchError('an if branching on a decoded input tag')],
+    },
+    {
+      name: 'Should_Report_IfBranch_When_TagReadIsComputedStringLiteral',
+      code: `${ACL_IMPORT}
+const order = decodeOrder(row)
+if (order['_tag'] === 'Shipped') { fail() }`,
       filename: 'confirm-order.executor.ts',
       errors: [branchError('an if branching on a decoded input tag')],
     },

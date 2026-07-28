@@ -47,10 +47,10 @@ const referencesAny = (value: unknown, names: ReadonlySet<string>): boolean => {
 const readsTagProperty = (value: unknown): boolean => {
   let found = false
   walk(value, (node) => {
-    if (node['computed'] !== false) return
     const property = node['property']
     if (!isWalkable(property)) return
-    if (String(property['name']) === TAG_PROPERTY) found = true
+    const name = node['computed'] === false ? property['name'] : property['value']
+    if (String(name) === TAG_PROPERTY) found = true
   })
   return found
 }
