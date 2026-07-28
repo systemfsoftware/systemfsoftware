@@ -1,9 +1,9 @@
 import type { PlatformError } from '@effect/platform/Error'
 import { TomlLoader } from '@systemfsoftware/omp-utils'
 import type { TomlConfig } from '@systemfsoftware/omp-utils'
-import { Effect, Match, Schema as S } from 'effect'
+import { Effect, Match } from 'effect'
 import {
-  CheckDelegation,
+  CheckDelegationCommand,
   type CompiledGuard,
   decideNoSkillDelegation,
   type DelegationVerdict,
@@ -59,15 +59,6 @@ function compileGuard(names: readonly string[]): CompiledGuard | null {
   }
 }
 
-function decodeCheckDelegation(
-  toolName: string,
-  subagentType: string,
-  prompt: string,
-  guard: CompiledGuard | null,
-): CheckDelegation {
-  return S.decodeSync(CheckDelegation)({ toolName, subagentType, prompt, guard })
-}
-
 function blockResult(verdict: DelegationVerdict): BlockResult | undefined {
   return Match.value(verdict).pipe(
     Match.tag('Block', (v) => ({ block: true as const, reason: v.reason, how: v.how, skill: v.skill })),
@@ -93,7 +84,7 @@ export function runNoSkillDelegation(
 ): Effect.Effect<NoSkillDelegationResult, PlatformError, TomlLoader> {
   return Effect.gen(function*() {
     const guard = yield* loadGuard(cwd)
-    const cmd = decodeCheckDelegation(toolName, subagentType, prompt, guard)
+    const cmd = new CheckDelegationCommand({ toolName, subagentType, prompt, guard })
     const verdict = decideNoSkillDelegation(cmd)
     return blockResult(verdict)
   })

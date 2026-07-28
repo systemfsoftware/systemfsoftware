@@ -3,7 +3,7 @@ import type { Context, ESTree } from '@oxlint/plugins'
 import { getExportedWorkflowFunction } from './exported-workflow-fn.js'
 import { COMMAND_TYPE_NODE, meta } from './workflow-command-object.config.js'
 
-export type MessageIds = 'commandArity' | 'untypedCommand' | 'notCommandObject'
+export type MessageIds = 'commandArity' | 'untypedCommand' | 'notCommandObject' | 'commandNotTaggedClass'
 
 const isWorkflowFile = (filename: string): boolean => filename.endsWith('.workflow.ts')
 
@@ -26,7 +26,7 @@ const getParams = (node: ESTree.Node): ESTree.Node[] | undefined => {
   return undefined
 }
 
-const commandAnnotationKind = (param: ESTree.Node): string | undefined => {
+const commandAnnotation = (param: ESTree.Node): ESTree.Node | undefined => {
   const target = param.type === 'AssignmentPattern' ? param.left : param
   if (!('typeAnnotation' in target)) return undefined
   const annotation = target.typeAnnotation
@@ -34,7 +34,14 @@ const commandAnnotationKind = (param: ESTree.Node): string | undefined => {
   if (!('typeAnnotation' in annotation)) return undefined
   const inner = annotation.typeAnnotation
   if (inner == null) return undefined
-  return inner.type
+  return inner
+}
+
+const referencedTypeName = (annotation: ESTree.Node): string | undefined => {
+  if (!('typeName' in annotation)) return undefined
+  const named = annotation.typeName
+  if (!('name' in named)) return undefined
+  return named.name
 }
 
 export const workflowCommandObject = defineRule({
@@ -43,11 +50,19 @@ export const workflowCommandObject = defineRule({
     if (!isWorkflowFile(context.filename)) return {}
 
     const exportedFunctions: ESTree.Node[] = []
+    const localAliasNames = new Set<string>()
 
     return {
       ExportNamedDeclaration(node: ESTree.ExportNamedDeclaration) {
         const exported = getExportedWorkflowFunction(node)
         if (exported !== undefined) exportedFunctions.push(exported)
+      },
+      VariableDeclarator(node: ESTree.VariableDeclarator) {
+        if (node.id.type !== 'Identifier') return
+        localAliasNames.add(node.id.name)
+      },
+      TSTypeAliasDeclaration(node: ESTree.TSTypeAliasDeclaration) {
+        localAliasNames.add(node.id.name)
       },
       'Program:exit'() {
         const exported = exportedFunctions[0]
@@ -73,9 +88,9 @@ export const workflowCommandObject = defineRule({
 
         const command = params[0]
         if (command === undefined) return
-        const kind = commandAnnotationKind(command)
+        const annotation = commandAnnotation(command)
 
-        if (kind === undefined) {
+        if (annotation === undefined) {
           context.report({
             node: command,
             messageId: 'untypedCommand',
@@ -89,18 +104,34 @@ export const workflowCommandObject = defineRule({
           return
         }
 
-        if (kind !== COMMAND_TYPE_NODE) {
+        if (annotation.type !== COMMAND_TYPE_NODE) {
           context.report({
             node: command,
             messageId: 'notCommandObject',
             data: {
               name: 'workflow command parameter',
               expected: `a named command object type (${COMMAND_TYPE_NODE})`,
-              actual: kind,
+              actual: annotation.type,
               fix: 'declare an inline S.TaggedClass command carrying its TypeId and annotate the parameter with it',
             },
           })
+          return
         }
+
+        const referenced = referencedTypeName(annotation)
+        if (referenced === undefined) return
+        if (!localAliasNames.has(referenced)) return
+
+        context.report({
+          node: command,
+          messageId: 'commandNotTaggedClass',
+          data: {
+            name: referenced,
+            expected: 'the command declared as a class extending S.TaggedClass',
+            actual: `${referenced} is declared locally as a schema value or type alias`,
+            fix: 'replace the S.Struct declaration with a class extending S.TaggedClass that carries its TypeId',
+          },
+        })
       },
     }
   },

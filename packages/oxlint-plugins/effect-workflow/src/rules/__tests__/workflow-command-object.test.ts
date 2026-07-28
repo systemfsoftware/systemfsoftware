@@ -38,6 +38,13 @@ const notCommandObjectData = (actual: string) => ({
   fix: 'declare an inline S.TaggedClass command carrying its TypeId and annotate the parameter with it',
 })
 
+const commandNotTaggedClassData = (name: string) => ({
+  name,
+  expected: 'the command declared as a class extending S.TaggedClass',
+  actual: `${name} is declared locally as a schema value or type alias`,
+  fix: 'replace the S.Struct declaration with a class extending S.TaggedClass that carries its TypeId',
+})
+
 ruleTester.run('workflow-command-object', workflowCommandObject, {
   valid: [
     {
@@ -59,6 +66,23 @@ ruleTester.run('workflow-command-object', workflowCommandObject, {
       name: 'Should_Allow_InvalidCommandShape_When_NotWorkflowFile',
       code: `export const processClaim = (claimId, actorId) => claimId`,
       filename: 'process-claim.executor.ts',
+    },
+    {
+      name: 'Should_Allow_Command_When_AnnotationNamesLocalTaggedClass',
+      code: `class ProcessClaimCommand extends S.TaggedClass<ProcessClaimCommand>()('ProcessClaimCommand', {}) {}
+export const processClaim = (command: ProcessClaimCommand) => command`,
+      filename: WORKFLOW,
+    },
+    {
+      name: 'Should_Allow_Command_When_AnnotationNamesLocalTaggedError',
+      code: `class ProcessClaimCommand extends S.TaggedError<ProcessClaimCommand>()('ProcessClaimCommand', {}) {}
+export const processClaim = (command: ProcessClaimCommand) => command`,
+      filename: WORKFLOW,
+    },
+    {
+      name: 'Should_Allow_Command_When_AnnotationIsGenericTypeReference',
+      code: `export const processClaim = (command: Command<Claim>) => command`,
+      filename: WORKFLOW,
     },
   ],
   invalid: [
@@ -121,6 +145,28 @@ ruleTester.run('workflow-command-object', workflowCommandObject, {
       code: `export const processClaim = (command: boolean = fallback) => command`,
       filename: WORKFLOW,
       errors: [{ messageId: 'notCommandObject', data: notCommandObjectData('TSBooleanKeyword') }],
+    },
+    {
+      name: 'Should_Report_CommandNotTaggedClass_When_LocalStructConst',
+      code: `const ProcessClaim = S.Struct({ claimId: S.String })
+export const processClaim = (command: ProcessClaim) => command`,
+      filename: WORKFLOW,
+      errors: [{ messageId: 'commandNotTaggedClass', data: commandNotTaggedClassData('ProcessClaim') }],
+    },
+    {
+      name: 'Should_Report_CommandNotTaggedClass_When_LocalTypeAlias',
+      code: `type ProcessClaim = { claimId: string }
+export const processClaim = (command: ProcessClaim) => command`,
+      filename: WORKFLOW,
+      errors: [{ messageId: 'commandNotTaggedClass', data: commandNotTaggedClassData('ProcessClaim') }],
+    },
+    {
+      name: 'Should_Report_CommandNotTaggedClass_When_LocalStructBesideAnotherTaggedClass',
+      code: `const ProcessClaim = S.Struct({ claimId: S.String })
+class Other extends S.TaggedClass<Other>()('Other', {}) {}
+export const processClaim = (command: ProcessClaim) => command`,
+      filename: WORKFLOW,
+      errors: [{ messageId: 'commandNotTaggedClass', data: commandNotTaggedClassData('ProcessClaim') }],
     },
   ],
 })

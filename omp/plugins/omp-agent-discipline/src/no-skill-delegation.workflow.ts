@@ -52,14 +52,17 @@ export type CompiledGuard = typeof CompiledGuard.Type
 
 const MaybeCompiledGuard = S.Union(CompiledGuard, S.Literal(null))
 
-export const CheckDelegation = S.Struct({
+const CheckDelegationCommandTypeId: unique symbol = Symbol.for(
+  '@systemfsoftware/omp-agent-discipline/CheckDelegationCommand',
+)
+export class CheckDelegationCommand extends S.TaggedClass<CheckDelegationCommand>()('CheckDelegationCommand', {
   toolName: S.String,
   subagentType: S.String,
   prompt: S.String,
   guard: MaybeCompiledGuard,
-})
-
-export type CheckDelegation = typeof CheckDelegation.Type
+}) {
+  readonly [CheckDelegationCommandTypeId] = CheckDelegationCommandTypeId
+}
 
 const ClassifiedInputTypeId: unique symbol = Symbol.for('@systemfsoftware/omp-agent-discipline/ClassifiedInput')
 class NoGuard extends S.TaggedClass<NoGuard>()('NoGuard', {}) {
@@ -128,7 +131,7 @@ function firstMatch(patterns: ReadonlyArray<string>, prompt: string): RegExpExec
     .find((match): match is RegExpExecArray => match !== null) ?? null
 }
 
-const classifySubagent = (cmd: CheckDelegation, guard: CompiledGuard): ClassifiedInput => {
+const classifySubagent = (cmd: CheckDelegationCommand, guard: CompiledGuard): ClassifiedInput => {
   return Match.value(cmd.subagentType).pipe(
     Match.when(
       (sub): sub is string => sub !== '' && guard.protectedSkills.includes(sub),
@@ -143,7 +146,7 @@ const classifySubagent = (cmd: CheckDelegation, guard: CompiledGuard): Classifie
   )
 }
 
-const classifyInput = (cmd: CheckDelegation): ClassifiedInput => {
+const classifyInput = (cmd: CheckDelegationCommand): ClassifiedInput => {
   return Match.value(cmd.guard).pipe(
     Match.when(null, () => new NoGuard()),
     Match.orElse((guard) =>
@@ -182,7 +185,7 @@ const analyzePrompt = (guard: CompiledGuard, prompt: string): PromptAnalysis => 
   )
 }
 
-export const decideNoSkillDelegation = (cmd: CheckDelegation): DelegationVerdict => {
+export const decideNoSkillDelegation = (cmd: CheckDelegationCommand): DelegationVerdict => {
   return Match.value(classifyInput(cmd)).pipe(
     Match.tag('NoGuard', () => new Allow()),
     Match.tag('NonDelegatedTool', () => new Allow()),

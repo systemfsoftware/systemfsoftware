@@ -28,17 +28,20 @@ class Skip extends S.TaggedClass<Skip>()('Skip', {
 const RefVerdict = S.Union(Inject, Skip)
 type RefVerdict = S.Schema.Type<typeof RefVerdict>
 
-export const CheckRefInjection = S.Struct({
+const CheckRefInjectionCommandTypeId: unique symbol = Symbol.for(
+  '@systemfsoftware/omp-claude-compat/CheckRefInjectionCommand',
+)
+export class CheckRefInjectionCommand extends S.TaggedClass<CheckRefInjectionCommand>()('CheckRefInjectionCommand', {
   relativePath: S.String,
   skipList: S.Array(S.String),
-})
+}) {
+  readonly [CheckRefInjectionCommandTypeId] = CheckRefInjectionCommandTypeId
+}
 
-export type CheckRefInjection = typeof CheckRefInjection.Type
-
-const matchedEntry = (cmd: CheckRefInjection): Option.Option<string> =>
+const matchedEntry = (cmd: CheckRefInjectionCommand): Option.Option<string> =>
   Option.fromNullable(cmd.skipList.find((entry) => entry === cmd.relativePath))
 
-export const decideRefInjection = (cmd: CheckRefInjection): RefVerdict =>
+export const decideRefInjection = (cmd: CheckRefInjectionCommand): RefVerdict =>
   Match.value(matchedEntry(cmd)).pipe(
     Match.tag('None', () => new Inject()),
     Match.tag('Some', (some) => new Skip({ matched: some.value })),

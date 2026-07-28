@@ -2,7 +2,7 @@ import { FileSystem } from '@effect/platform/FileSystem'
 import * as PathModule from '@effect/platform/Path'
 import { TomlLoader } from '@systemfsoftware/omp-utils'
 import { Effect, Either, Match, Option } from 'effect'
-import { decideRefInjection, DEFAULT_NO_INJECT_REFS } from './inject-instructions.workflow.js'
+import { CheckRefInjectionCommand, decideRefInjection, DEFAULT_NO_INJECT_REFS } from './inject-instructions.workflow.js'
 
 interface Ref {
   readonly sourcePath: string
@@ -83,7 +83,7 @@ export const loadReferencedContent = Effect.fn('loadReferencedContent')(function
   for (const ref of uniqueRefs) {
     const relativePath = ref.resolvedPath.slice(projectDir.length + 1)
     const suppressed = Match.value(
-      decideRefInjection({ relativePath, skipList }),
+      decideRefInjection(new CheckRefInjectionCommand({ relativePath, skipList })),
     ).pipe(
       Match.tag('Skip', (skip) => Option.some(skip.matched)),
       Match.tag('Inject', () => Option.none<string>()),

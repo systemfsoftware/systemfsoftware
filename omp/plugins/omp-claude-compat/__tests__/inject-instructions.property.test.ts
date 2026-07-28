@@ -1,6 +1,10 @@
 import { describe, it } from '@effect/vitest'
 import { FastCheck as fc } from 'effect'
-import { CheckRefInjection, decideRefInjection, DEFAULT_NO_INJECT_REFS } from '../src/inject-instructions.workflow.js'
+import {
+  CheckRefInjectionCommand,
+  decideRefInjection,
+  DEFAULT_NO_INJECT_REFS,
+} from '../src/inject-instructions.workflow.js'
 
 const nameChar = fc.constantFrom('a', 'b', 'c', 'd', 'e', 'A', 'B', 'C', '0', '1', '-', '_')
 
@@ -10,10 +14,8 @@ const dirPrefix = fc
   .array(fc.constantFrom('docs', 'packages', 'src', 'a', 'b'), { minLength: 1, maxLength: 3 })
   .map((parts) => parts.join('/'))
 
-const check = (relativePath: string, skipList: ReadonlyArray<string>): CheckRefInjection => ({
-  relativePath,
-  skipList,
-})
+const check = (relativePath: string, skipList: ReadonlyArray<string>): CheckRefInjectionCommand =>
+  new CheckRefInjectionCommand({ relativePath, skipList })
 
 describe('decideRefInjection (PBT)', () => {
   it.prop(
