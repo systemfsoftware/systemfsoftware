@@ -223,7 +223,6 @@ export const runHooksForEvent = Effect.fn('runHooksForEvent')(function*(
   const cwd = ctx.cwd
   const ruleInput = Option.getOrElse(asToolInput(input['tool_input']), () => EMPTY_TOOL_INPUT)
   let warning: string | undefined
-  let inputModified = false
   let currentInput = input
 
   for (const entry of entries) {
@@ -232,7 +231,7 @@ export const runHooksForEvent = Effect.fn('runHooksForEvent')(function*(
     for (const hook of entry.hooks) {
       if (hook.type !== 'command') continue
       if (hook.if !== undefined && !matchesPermissionRule(hook.if, matchValue, ruleInput, cwd)) continue
-      if (hook.async || hook.asyncRewake) {
+      if (hook.async === true || hook.asyncRewake === true) {
         yield* Effect.forkDaemon(
           superviseFork(runHookScript(hook, currentInput, cwd, event), ctx, hook.command),
         )
@@ -266,7 +265,6 @@ export const runHooksForEvent = Effect.fn('runHooksForEvent')(function*(
           if (c.warning !== undefined && warning === undefined) warning = c.warning
           if (c.updatedInput !== undefined) {
             currentInput = { ...currentInput, ...c.updatedInput }
-            inputModified = true
           }
           return Option.none()
         }),
@@ -278,7 +276,7 @@ export const runHooksForEvent = Effect.fn('runHooksForEvent')(function*(
   }
 
   return {
-    ...(inputModified ? { updatedInput: currentInput } : {}),
+    ...(currentInput === input ? {} : { updatedInput: currentInput }),
     ...(warning !== undefined ? { warning } : {}),
   } satisfies HooksForEventResult
 })
@@ -304,7 +302,7 @@ export const runPreToolUseHooks = Effect.fn('runPreToolUseHooks')(function*(
       tool_call_id: event.toolCallId,
     }
     const bashResult = yield* runHooksForEvent(settings.hooks.PreToolUse, 'Bash', bashInput, ctx, 'PreToolUse')
-    if (bashResult.block) {
+    if (bashResult.block === true) {
       return bashResult.reason === undefined
         ? { block: true }
         : { block: true, reason: bashResult.reason }
@@ -330,7 +328,7 @@ export const runPreToolUseHooks = Effect.fn('runPreToolUseHooks')(function*(
 
     const result = yield* runHooksForEvent(settings.hooks.PreToolUse, claudeToolName, input, ctx, 'PreToolUse')
 
-    if (result.block) {
+    if (result.block === true) {
       return result.reason === undefined
         ? { block: true }
         : { block: true, reason: result.reason }
@@ -376,7 +374,7 @@ export const runPostToolUseHooks = Effect.fn('runPostToolUseHooks')(function*(
     }
 
     const result = yield* runHooksForEvent(settings.hooks.PostToolUse, claudeToolName, input, ctx, 'PostToolUse')
-    if (result.block) return result
+    if (result.block === true) return result
     if (firstWarning === undefined) firstWarning = result.warning
     lastResult = result
   }
@@ -454,12 +452,12 @@ export const runSessionStartHooks = Effect.fn('runSessionStartHooks')(function*(
   }
 
   for (const entry of entries) {
-    if (entry.matcher && !matchesMatcher(reason, entry.matcher)) continue
+    if (entry.matcher !== undefined && !matchesMatcher(reason, entry.matcher)) continue
 
     for (const hook of entry.hooks) {
       if (hook.type !== 'command') continue
       if (hook.if !== undefined) continue
-      if (hook.async || hook.asyncRewake) {
+      if (hook.async === true || hook.asyncRewake === true) {
         yield* Effect.forkDaemon(
           superviseFork(runHookScript(hook, input, cwd, 'SessionStart'), ctx, hook.command),
         )
@@ -488,7 +486,7 @@ export const runLifecycleHooks = Effect.fn('runLifecycleHooks')(function*(
     for (const hook of entry.hooks) {
       if (hook.type !== 'command') continue
       if (hook.if !== undefined) continue
-      if (hook.async || hook.asyncRewake) {
+      if (hook.async === true || hook.asyncRewake === true) {
         yield* Effect.forkDaemon(
           superviseFork(runHookScript(hook, input, cwd, event), ctx, hook.command),
         )

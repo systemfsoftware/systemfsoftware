@@ -50,7 +50,7 @@ describe('interpretHookResult (PBT)', () => {
     [malformedJson, event],
     ([stdout, ev]) => {
       const verdict = interpretHookResult({ code: 0, stdout, stderr: '' }, ev)
-      return Either.isLeft(verdict) && verdict.left._tag === 'HookVerdictError' && verdict.left.raw === stdout
+      return Either.isLeft(verdict) && verdict.left.raw === stdout
     },
   )
 

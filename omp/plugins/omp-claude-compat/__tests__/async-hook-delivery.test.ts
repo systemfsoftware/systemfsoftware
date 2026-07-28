@@ -7,6 +7,7 @@ import { expect, it } from 'vitest'
 import { recordAsyncHookOutput } from '../src/async-hook-output.state.js'
 import type { HookPrompt, HookSession, HookToolCall } from '../src/hook-dispatcher.executor.js'
 import { loadSettingsWithPaths, runPreToolUseHooks, runUserPromptSubmitHooks } from '../src/hook-dispatcher.executor.js'
+import { loaded } from './loaded.observer.js'
 
 const testLayer = NodeCommandExecutor.layer.pipe(
   Layer.provideMerge(NodeFileSystem.layer),
@@ -38,7 +39,7 @@ it('Should_CarryBufferedOutput_When_TheNextPromptArrivesWithNoPromptHooks', asyn
     const settings = yield* emptySettings(dir)
     recordAsyncHookOutput('background scan finished')
 
-    return yield* runUserPromptSubmitHooks(settings!, promptEvent, makeCtx(dir))
+    return yield* runUserPromptSubmitHooks(loaded(settings), promptEvent, makeCtx(dir))
   }).pipe(Effect.scoped, Effect.provide(testLayer), Effect.runPromise)
 
   expect(delivered?.text).toBe('background scan finished\n\nwhat changed?')
@@ -74,12 +75,12 @@ it('Should_DeliverAsyncHookOutput_When_TheHookFinishesInTheBackground', async ()
 
     const settings = yield* loadSettingsWithPaths([`${dir}/.claude/settings.json`])
     const ctx = makeCtx(dir)
-    yield* runPreToolUseHooks(settings!, toolCall, ctx)
+    yield* runPreToolUseHooks(loaded(settings), toolCall, ctx)
 
     let result: InputEventResult | undefined
     for (let attempt = 0; attempt < 200 && result === undefined; attempt++) {
       yield* Effect.promise(tick)
-      result = yield* runUserPromptSubmitHooks(settings!, promptEvent, ctx)
+      result = yield* runUserPromptSubmitHooks(loaded(settings), promptEvent, ctx)
     }
     return result
   }).pipe(Effect.scoped, Effect.provide(testLayer), Effect.runPromise)
@@ -96,7 +97,7 @@ it('Should_ContributeNothing_When_SilentHookPrecedesSpeakingHook', async () => {
     recordAsyncHookOutput('   \n  ')
     recordAsyncHookOutput('the other hook spoke')
 
-    return yield* runUserPromptSubmitHooks(settings!, promptEvent, makeCtx(dir))
+    return yield* runUserPromptSubmitHooks(loaded(settings), promptEvent, makeCtx(dir))
   }).pipe(Effect.scoped, Effect.provide(testLayer), Effect.runPromise)
 
   expect(delivered?.text).toBe('the other hook spoke\n\nwhat changed?')
@@ -109,7 +110,7 @@ it('Should_DropTheOldestNotes_When_RunawayHookOverfillsBuffer', async () => {
     const settings = yield* emptySettings(dir)
     for (let note = 0; note < 70; note++) recordAsyncHookOutput(`note-${note}`)
 
-    return yield* runUserPromptSubmitHooks(settings!, promptEvent, makeCtx(dir))
+    return yield* runUserPromptSubmitHooks(loaded(settings), promptEvent, makeCtx(dir))
   }).pipe(Effect.scoped, Effect.provide(testLayer), Effect.runPromise)
 
   expect(delivered?.text).toContain('note-69')
@@ -146,7 +147,7 @@ it('Should_ReportTheFailure_When_ForkedHookCannotSpawn', async () => {
     )
 
     const settings = yield* loadSettingsWithPaths([`${dir}/.claude/settings.json`])
-    yield* runPreToolUseHooks(settings!, toolCall, makeRecordingCtx(dir, notices))
+    yield* runPreToolUseHooks(loaded(settings), toolCall, makeRecordingCtx(dir, notices))
 
     for (let attempt = 0; attempt < 200 && notices.length === 0; attempt++) {
       yield* Effect.promise(tick)

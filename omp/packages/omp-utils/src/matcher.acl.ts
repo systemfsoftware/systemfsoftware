@@ -27,7 +27,7 @@ const REGEX_CACHE_CAP = 256
 const regexCache = new Map<string, RegExp | true>()
 
 export function matchesMatcher(toolName: string, matcher: string | undefined): boolean {
-  if (!matcher || matcher.length === 0) return true
+  if (matcher === undefined || matcher.length === 0) return true
   const pattern = matcher
     .split('|')
     .map((part) => part.trim())

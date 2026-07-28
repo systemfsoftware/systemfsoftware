@@ -45,15 +45,15 @@ export const HookDispatcherTask = (pi: ExtensionAPI): void => {
         const settings = yield* loadSettings(ctx.cwd)
         if (!settings) return undefined
         const result = yield* runPostToolUseHooks(settings, event, ctx)
-        if (result?.block) {
+        if (result.block === true) {
           return {
             isError: true,
             content: [{ type: 'text' as const, text: result.reason ?? 'Blocked by PostToolUse hook' }],
           }
         }
-        if (result?.warning) {
+        if (result.warning !== undefined) {
           return {
-            content: [...(event.content ?? []), { type: 'text' as const, text: result.warning }],
+            content: [...event.content, { type: 'text' as const, text: result.warning }],
             isError: event.isError,
           }
         }

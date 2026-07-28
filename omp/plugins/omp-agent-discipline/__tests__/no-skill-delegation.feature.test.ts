@@ -7,6 +7,11 @@ import { Effect, Layer } from 'effect'
 import { expect } from 'vitest'
 import { loadGuard, runNoSkillDelegation } from '../src/no-skill-delegation.executor.js'
 
+function present<A>(value: A | null | undefined): A {
+  if (value === null || value === undefined) throw new Error('expected a value, got none')
+  return value
+}
+
 const Feature = makeFeature({ it, layer })
 
 function seededLayer(contents: Record<string, string>) {
@@ -46,7 +51,7 @@ Feature('No-skill-delegation — executor integration')
         Then('the guard should protect ce-work')((s) =>
           Effect.sync(() => {
             expect(s.guard).not.toBeNull()
-            expect(s.guard!.protectedSkills).toEqual(['ce-work'])
+            expect(present(s.guard).protectedSkills).toEqual(['ce-work'])
           })
         ),
       ),
@@ -86,9 +91,9 @@ Feature('No-skill-delegation — executor integration')
         Then('it should return a block result')((s) =>
           Effect.sync(() => {
             expect(s.result).not.toBeUndefined()
-            expect(s.result!.block).toBe(true)
-            expect(s.result!.skill).toBe('ce-work')
-            expect(s.result!.how).toBe('prompt')
+            expect(present(s.result).block).toBe(true)
+            expect(present(s.result).skill).toBe('ce-work')
+            expect(present(s.result).how).toBe('prompt')
           })
         ),
       ),
@@ -139,7 +144,7 @@ Feature('No-skill-delegation — executor integration')
         Then('project-a should have a guard and project-b should not')((s) =>
           Effect.sync(() => {
             expect(s.guards.a).not.toBeNull()
-            expect(s.guards.a!.protectedSkills).toEqual(['ce-work'])
+            expect(present(s.guards.a).protectedSkills).toEqual(['ce-work'])
             expect(s.guards.b).toBeNull()
           })
         ),

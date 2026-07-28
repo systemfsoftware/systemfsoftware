@@ -14,6 +14,7 @@ import {
   runPreToolUseHooks,
   runUserPromptSubmitHooks,
 } from '../src/hook-dispatcher.executor.js'
+import { loaded } from './loaded.observer.js'
 
 const Feature = makeFeature({ it, layer })
 
@@ -33,8 +34,8 @@ function writeShellHook(
     const fs = yield* FileSystem
     const content = [
       '#!/usr/bin/env bash',
-      ...(stderr ? [`echo '${stderr}' >&2`] : []),
-      ...(stdout ? [`echo '${stdout}'`] : []),
+      ...(stderr !== undefined && stderr.length > 0 ? [`echo '${stderr}' >&2`] : []),
+      ...(stdout !== undefined && stdout.length > 0 ? [`echo '${stdout}'`] : []),
       `exit ${exitCode}`,
     ].join('\n')
     const hookPath = `${dir}/${name}.sh`
@@ -141,7 +142,7 @@ Feature('Hook dispatcher — settings loading')
         Then('the settings should contain one PreToolUse hook')((s) =>
           Effect.sync(() => {
             expect(s.result).not.toBeNull()
-            expect(s.result!.hooks.PreToolUse).toHaveLength(1)
+            expect(loaded(s.result).hooks.PreToolUse).toHaveLength(1)
           })
         ),
       ),
@@ -169,7 +170,7 @@ Feature('Hook dispatcher — PreToolUse hook execution')
             const settings = yield* loadSettingsWithPaths([`${s.dir.dir}/.claude/settings.json`])
             expect(settings).not.toBeNull()
             return yield* runPreToolUseHooks(
-              settings!,
+              loaded(settings),
               makeToolCall('write', { path: '/test.txt', content: 'x' }),
               makeCtx(s.dir.dir),
             )
@@ -200,7 +201,7 @@ Feature('Hook dispatcher — PreToolUse hook execution')
             const settings = yield* loadSettingsWithPaths([`${s.dir.dir}/.claude/settings.json`])
             expect(settings).not.toBeNull()
             return yield* runPreToolUseHooks(
-              settings!,
+              loaded(settings),
               makeToolCall('write', { path: '/test.txt', content: 'x' }),
               makeCtx(s.dir.dir),
             )
@@ -234,7 +235,7 @@ Feature('Hook dispatcher — PreToolUse hook execution')
             const settings = yield* loadSettingsWithPaths([`${s.dir.dir}/.claude/settings.json`])
             expect(settings).not.toBeNull()
             return yield* runPreToolUseHooks(
-              settings!,
+              loaded(settings),
               makeToolCall('write', { path: '/test.txt', content: 'x' }),
               makeCtx(s.dir.dir),
             )
@@ -265,7 +266,7 @@ Feature('Hook dispatcher — PreToolUse hook execution')
             const settings = yield* loadSettingsWithPaths([`${s.dir.dir}/.claude/settings.json`])
             expect(settings).not.toBeNull()
             return yield* runPreToolUseHooks(
-              settings!,
+              loaded(settings),
               makeToolCall('bash', { command: 'npx eslint .' }),
               makeCtx(s.dir.dir),
             )
@@ -300,7 +301,7 @@ Feature('Hook dispatcher — PreToolUse hook execution')
             const settings = yield* loadSettingsWithPaths([`${s.dir.dir}/.claude/settings.json`])
             expect(settings).not.toBeNull()
             const event = makeToolCall('write', { path: '/test.txt', content: 'original' })
-            const result = yield* runPreToolUseHooks(settings!, event, makeCtx(s.dir.dir))
+            const result = yield* runPreToolUseHooks(loaded(settings), event, makeCtx(s.dir.dir))
             expect(result).toBeUndefined()
             return event
           })),
@@ -334,7 +335,7 @@ Feature('Hook dispatcher — PostToolUse warning slot')
             const settings = yield* loadSettingsWithPaths([`${s.dir.dir}/.claude/settings.json`])
             expect(settings).not.toBeNull()
             return yield* runPostToolUseHooks(
-              settings!,
+              loaded(settings),
               makeToolResult('write', { path: '/test.txt', content: 'x' }),
               makeCtx(s.dir.dir),
             )
@@ -365,7 +366,7 @@ Feature('Hook dispatcher — PostToolUse warning slot')
             const settings = yield* loadSettingsWithPaths([`${s.dir.dir}/.claude/settings.json`])
             expect(settings).not.toBeNull()
             return yield* runPostToolUseHooks(
-              settings!,
+              loaded(settings),
               makeToolResult('write', { path: '/test.txt', content: 'x' }),
               makeCtx(s.dir.dir),
             )
@@ -403,7 +404,7 @@ Feature('Hook dispatcher — PostToolUse warning slot')
             const settings = yield* loadSettingsWithPaths([`${s.dir.dir}/.claude/settings.json`])
             expect(settings).not.toBeNull()
             return yield* runPostToolUseHooks(
-              settings!,
+              loaded(settings),
               makeToolResult('write', { path: '/test.txt', content: 'x' }),
               makeCtx(s.dir.dir),
             )
@@ -434,14 +435,14 @@ Feature('Hook dispatcher — PostToolUse warning slot')
             const settings = yield* loadSettingsWithPaths([`${s.dir.dir}/.claude/settings.json`])
             expect(settings).not.toBeNull()
             return yield* runPostToolUseHooks(
-              settings!,
+              loaded(settings),
               makeToolResult('write', { path: '/test.txt', content: 'x' }),
               makeCtx(s.dir.dir),
             )
           })),
         Then('the dispatcher should report a verdict-error warning')((s) =>
           Effect.sync(() => {
-            expect(s.result?.warning).toContain('produced invalid JSON')
+            expect(s.result.warning).toContain('produced invalid JSON')
           })
         ),
       ),
@@ -463,7 +464,7 @@ const dispatchEdit = (dir: string, patch: string) =>
   Effect.gen(function*() {
     const settings = yield* loadSettingsWithPaths([`${dir}/.claude/settings.json`])
     expect(settings).not.toBeNull()
-    return yield* runPreToolUseHooks(settings!, makeToolCall('edit', { i: 'x', input: patch }), makeCtx(dir))
+    return yield* runPreToolUseHooks(loaded(settings), makeToolCall('edit', { i: 'x', input: patch }), makeCtx(dir))
   })
 
 Feature('Hook dispatcher — edit target fan-out')
@@ -566,7 +567,7 @@ Feature('Hook dispatcher — edit target fan-out')
             const settings = yield* loadSettingsWithPaths([`${s.dir.dir}/.claude/settings.json`])
             expect(settings).not.toBeNull()
             const event = makeToolCall('write', { path: '/test.txt', content: 'x' })
-            yield* runPreToolUseHooks(settings!, event, makeCtx(s.dir.dir))
+            yield* runPreToolUseHooks(loaded(settings), event, makeCtx(s.dir.dir))
             return event
           })),
         Then('the rewrite should land on path, not a stray file_path')((s) =>
@@ -600,7 +601,7 @@ Feature('Hook dispatcher — UserPromptSubmit verdict')
           Effect.gen(function*() {
             const settings = yield* loadSettingsWithPaths([`${s.dir.dir}/.claude/settings.json`])
             expect(settings).not.toBeNull()
-            return yield* runUserPromptSubmitHooks(settings!, promptEvent, makeCtx(s.dir.dir))
+            return yield* runUserPromptSubmitHooks(loaded(settings), promptEvent, makeCtx(s.dir.dir))
           })),
         Then('the prompt should be marked handled rather than injected')((s) =>
           Effect.sync(() => {
@@ -628,7 +629,7 @@ Feature('Hook dispatcher — UserPromptSubmit verdict')
           Effect.gen(function*() {
             const settings = yield* loadSettingsWithPaths([`${s.dir.dir}/.claude/settings.json`])
             expect(settings).not.toBeNull()
-            return yield* runUserPromptSubmitHooks(settings!, promptEvent, makeCtx(s.dir.dir))
+            return yield* runUserPromptSubmitHooks(loaded(settings), promptEvent, makeCtx(s.dir.dir))
           })),
         Then('the prompt should carry the injected context')((s) =>
           Effect.sync(() => {
@@ -948,7 +949,7 @@ Feature('Hook dispatcher - command execution contract')
           Effect.gen(function*() {
             const settings = yield* loadFrom(s.dir)
             yield* runPreToolUseHooks(
-              settings!,
+              loaded(settings),
               makeToolCall('Write', { file_path: `${s.dir}/t.txt` }),
               makeCtx(s.dir),
             )
@@ -983,7 +984,7 @@ Feature('Hook dispatcher - command execution contract')
           Effect.gen(function*() {
             const settings = yield* loadFrom(s.dir)
             return yield* runPreToolUseHooks(
-              settings!,
+              loaded(settings),
               makeToolCall('Write', { file_path: `${s.dir}/t.txt` }),
               makeCtx(s.dir),
             )
@@ -1019,7 +1020,7 @@ Feature('Hook dispatcher - command execution contract')
           Effect.gen(function*() {
             const settings = yield* loadFrom(s.dir)
             yield* runPreToolUseHooks(
-              settings!,
+              loaded(settings),
               makeToolCall('Write', { file_path: `${s.dir}/t.txt` }),
               makeCtx(s.dir),
             )
@@ -1127,7 +1128,7 @@ Feature('Hook dispatcher - if condition')
     const refused = (dir: string, toolName: string, input: Record<string, unknown>) =>
       Effect.gen(function*() {
         const settings = yield* loadSettingsWithPaths([`${dir}/.claude/settings.json`])
-        const result = yield* runPreToolUseHooks(settings!, makeToolCall(toolName, input), makeCtx(dir))
+        const result = yield* runPreToolUseHooks(loaded(settings), makeToolCall(toolName, input), makeCtx(dir))
         return result?.block === true
       })
 
@@ -1200,7 +1201,7 @@ Feature('Hook dispatcher - if condition')
           Effect.gen(function*() {
             const settings = yield* loadSettingsWithPaths([`${s.dir}/.claude/settings.json`])
             return yield* runUserPromptSubmitHooks(
-              settings!,
+              loaded(settings),
               { text: 'hello', source: 'interactive' },
               makeCtx(s.dir),
             )
