@@ -16,7 +16,7 @@ Rules here gate the `architect-executor` cell spec (`*.executor.ts` — the impu
   title: A rule ships only when it has no legitimate counterexample
   do: run a candidate rule against the repo's real `*.executor.ts` files before wiring it; if it fires on code the theory sanctions, find the subset that does not and ship that instead
   dont: ship a rule that needs an allowlist, an override, or a `// eslint-disable` to let correct code through
-  harm: "measured 2026-07-27: three ORDERING subsets (one-workflow-call, no-workflow-in-loop, no-IO-between-decode-and-workflow) fired on legitimate code — B15 sanctions a composite executor calling two workflows, and L3 sanctions keeping a sequence openly in the shell. They were deleted, not suppressed. The subset that survived the same test is `executor-no-io-in-filling`: a suspended effect or a store/adapter call inside the workflow call's own ARGUMENTS is I/O in the pure filling, and has no legitimate instance"
+  harm: a rule that fires on code the architecture sanctions trains the team to disable it, and a disabled rule enforces nothing
   check: `pnpm -r lint` is clean across every real executor in the repo with the rule enabled
 
 - id: EE3
