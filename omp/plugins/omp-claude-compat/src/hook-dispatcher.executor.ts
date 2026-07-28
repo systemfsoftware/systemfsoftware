@@ -20,6 +20,7 @@ import {
 } from '@systemfsoftware/omp-utils'
 import { Effect, Either, Match, Option, Schema as S, Stream } from 'effect'
 import { homedir } from 'node:os'
+import { drainAsyncHookOutput, recordAsyncHookOutput } from './async-hook-output.state.js'
 import { Blocked, Continue, Warning } from './hook-dispatcher.schema.js'
 import type { HookOutcome, HookResult } from './hook-dispatcher.schema.js'
 import { mergeSettings, parseSettings, unknownHookEvents, unsupportedHookTypes } from './hook-settings.acl.js'
@@ -158,6 +159,9 @@ const EMPTY_TOOL_INPUT: Record<string, unknown> = {}
 
 const asToolInput = S.decodeUnknownOption(S.Record({ key: S.String, value: S.Unknown }))
 
+const keepOutput = <E, R>(hook: Effect.Effect<HookResult, E, R>): Effect.Effect<void, E, R> =>
+  hook.pipe(Effect.andThen((result) => Effect.sync(() => recordAsyncHookOutput(result.stdout))))
+
 interface HooksForEventResult {
   readonly block?: boolean
   readonly reason?: string
@@ -186,7 +190,7 @@ export const runHooksForEvent = Effect.fn('runHooksForEvent')(function*(
       if (hook.if !== undefined && !matchesPermissionRule(hook.if, matchValue, ruleInput, cwd)) continue
       if (hook.async || hook.asyncRewake) {
         yield* Effect.forkDaemon(
-          runHookScript(hook, currentInput, cwd, event),
+          keepOutput(runHookScript(hook, currentInput, cwd, event)),
         )
         continue
       }
@@ -340,10 +344,8 @@ export const runUserPromptSubmitHooks = Effect.fn('runUserPromptSubmitHooks')(fu
   ctx: ExtensionContext,
 ) {
   const entries = settings.hooks.UserPromptSubmit
-  if (entries.length === 0) return undefined
-
   const cwd = ctx.cwd
-  let injected = ''
+  let injected = drainAsyncHookOutput().join('\n\n')
   const input: Record<string, unknown> = {
     ...sessionIds(() => ctx.sessionManager.getSessionId()),
     prompt: event.text,
@@ -413,7 +415,7 @@ export const runSessionStartHooks = Effect.fn('runSessionStartHooks')(function*(
       if (hook.if !== undefined) continue
       if (hook.async || hook.asyncRewake) {
         yield* Effect.forkDaemon(
-          runHookScript(hook, input, cwd, 'SessionStart'),
+          keepOutput(runHookScript(hook, input, cwd, 'SessionStart')),
         )
         continue
       }
@@ -442,7 +444,7 @@ export const runLifecycleHooks = Effect.fn('runLifecycleHooks')(function*(
       if (hook.if !== undefined) continue
       if (hook.async || hook.asyncRewake) {
         yield* Effect.forkDaemon(
-          runHookScript(hook, input, cwd, event),
+          keepOutput(runHookScript(hook, input, cwd, event)),
         )
       } else {
         yield* runHookScript(hook, input, cwd, event)
