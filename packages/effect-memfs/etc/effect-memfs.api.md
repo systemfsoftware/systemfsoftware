@@ -4,15 +4,21 @@
 
 ```ts
 
+import * as FileSystem_2 from '@effect/platform/FileSystem';
+import { Layer } from 'effect';
 import * as memfs from 'memfs';
 
 // @public (undocumented)
 export type Contents = memfs.DirectoryJSON;
 
 // @public (undocumented)
-export namespace MemoryFileSystem {
-    export { layer, layerWith, make };
-}
+export const MemoryFileSystem: {
+    readonly layer: Layer.Layer<FileSystem_2.FileSystem>;
+    readonly layerWith: (contents: Contents) => Layer.Layer<FileSystem_2.FileSystem>;
+    readonly make: (contents?: Contents, opts?: {
+        cwd: string;
+    }) => FileSystem_2.FileSystem;
+};
 
 // (No @packageDocumentation comment for this package)
 
