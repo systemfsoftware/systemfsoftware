@@ -15,6 +15,7 @@ const _default: {
         'workflow-schema-required': Rule;
         'workflow-inline-schemas': Rule;
         'workflow-typeid-required': Rule;
+        'workflow-typeid-shared-per-union': Rule;
         'workflow-no-unconstructed-variant': Rule;
         'workflow-no-panic-vocabulary': Rule;
         'workflow-match-exhaustive': Rule;

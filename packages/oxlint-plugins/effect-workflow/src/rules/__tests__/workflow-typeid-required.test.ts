@@ -16,7 +16,7 @@ const ruleTester = new RuleTester({
 })
 
 const withTypeId = `
-const MyTypeId: unique symbol = Symbol('@systemfsoftware/pkg/My')
+const MyTypeId: unique symbol = Symbol.for('@systemfsoftware/pkg/My')
 type MyTypeId = typeof MyTypeId
 class My extends S.TaggedClass<My>()('My', {}) {
   readonly [MyTypeId] = MyTypeId
@@ -24,7 +24,7 @@ class My extends S.TaggedClass<My>()('My', {}) {
 `
 
 const withTypeIdErr = `
-const MyErrTypeId: unique symbol = Symbol('@systemfsoftware/pkg/MyErr')
+const MyErrTypeId: unique symbol = Symbol.for('@systemfsoftware/pkg/MyErr')
 type MyErrTypeId = typeof MyErrTypeId
 class MyErr extends S.TaggedError<MyErr>()('MyErr', {}) {
   readonly [MyErrTypeId] = MyErrTypeId
@@ -36,7 +36,7 @@ const missingTypeIdData = (name: string) => ({
   expected: 'every S.TaggedClass/S.TaggedError in *.workflow.ts to carry its union TypeId',
   actual: `class ${name} is missing its TypeId`,
   fix:
-    "add: const XxxTypeId: unique symbol = Symbol('@systemfsoftware/<pkg>/Xxx') and readonly [XxxTypeId] = XxxTypeId",
+    "add the UNION's shared TypeId to this variant: const <Union>TypeId: unique symbol = Symbol.for('@systemfsoftware/<pkg>/<Union>') declared once, then readonly [<Union>TypeId] = <Union>TypeId on every variant",
 })
 
 ruleTester.run('workflow-typeid-required', workflowTypeidRequired, {
@@ -51,6 +51,11 @@ ruleTester.run('workflow-typeid-required', workflowTypeidRequired, {
     },
     {
       code: `class Plain {}`,
+      filename: 'process-claim.workflow.ts',
+    },
+    {
+      name: 'Should_Allow_AnonymousDefaultClass_When_NoNameToReport',
+      code: `export default class extends S.TaggedClass<My>()('My', {}) {}`,
       filename: 'process-claim.workflow.ts',
     },
     {

@@ -12,6 +12,7 @@ import { workflowSchemaRequired } from './rules/workflow-schema-required.js'
 import { workflowSingleFunctionExport } from './rules/workflow-single-function-export.js'
 import { workflowSinglePath } from './rules/workflow-single-path.js'
 import { workflowTypeidRequired } from './rules/workflow-typeid-required.js'
+import { workflowTypeidSharedPerUnion } from './rules/workflow-typeid-shared-per-union.js'
 
 const PLUGIN_NAME = '@systemfsoftware/oxlint-plugin-effect-workflow'
 
@@ -19,8 +20,8 @@ const rule = (name: string): string => `${PLUGIN_NAME}/${name}`
 
 const recommendedRules = {
   [rule('workflow-schema-required')]: 'error',
-  [rule('workflow-inline-schemas')]: 'error',
   [rule('workflow-typeid-required')]: 'error',
+  [rule('workflow-typeid-shared-per-union')]: 'error',
   [rule('workflow-no-unconstructed-variant')]: 'error',
   [rule('workflow-no-panic-vocabulary')]: 'error',
   [rule('workflow-match-exhaustive')]: 'error',
@@ -42,6 +43,7 @@ export default {
     'workflow-schema-required': workflowSchemaRequired,
     'workflow-inline-schemas': workflowInlineSchemas,
     'workflow-typeid-required': workflowTypeidRequired,
+    'workflow-typeid-shared-per-union': workflowTypeidSharedPerUnion,
     'workflow-no-unconstructed-variant': workflowNoUnconstructedVariant,
     'workflow-no-panic-vocabulary': workflowNoPanicVocabulary,
     'workflow-match-exhaustive': workflowMatchExhaustive,

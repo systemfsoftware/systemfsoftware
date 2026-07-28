@@ -3,21 +3,21 @@ import * as S from 'effect/Schema'
 
 const How = S.Literal('subagent_type', 'prompt')
 
-const AllowTypeId: unique symbol = Symbol('@systemfsoftware/omp-agent-discipline/Allow')
+const DelegationVerdictTypeId: unique symbol = Symbol.for('@systemfsoftware/omp-agent-discipline/DelegationVerdict')
 export class Allow extends S.TaggedClass<Allow>()('Allow', {}) {
-  readonly [AllowTypeId] = AllowTypeId
+  readonly [DelegationVerdictTypeId] = DelegationVerdictTypeId
 }
 
-const BlockTypeId: unique symbol = Symbol('@systemfsoftware/omp-agent-discipline/Block')
 export class Block extends S.TaggedClass<Block>()('Block', {
   reason: S.String,
   how: How,
   skill: S.String,
 }) {
-  readonly [BlockTypeId] = BlockTypeId
+  readonly [DelegationVerdictTypeId] = DelegationVerdictTypeId
 }
 
-export type DelegationVerdict = Allow | Block
+const DelegationVerdict = S.Union(Allow, Block)
+export type DelegationVerdict = S.Schema.Type<typeof DelegationVerdict>
 
 const CompiledGuard = S.Struct({
   protectedSkills: S.Array(S.String),
@@ -61,51 +61,47 @@ export const CheckDelegation = S.Struct({
 
 export type CheckDelegation = typeof CheckDelegation.Type
 
-const NoGuardTypeId: unique symbol = Symbol('@systemfsoftware/omp-agent-discipline/NoGuard')
+const ClassifiedInputTypeId: unique symbol = Symbol.for('@systemfsoftware/omp-agent-discipline/ClassifiedInput')
 class NoGuard extends S.TaggedClass<NoGuard>()('NoGuard', {}) {
-  readonly [NoGuardTypeId] = NoGuardTypeId
+  readonly [ClassifiedInputTypeId] = ClassifiedInputTypeId
 }
-const NonDelegatedToolTypeId: unique symbol = Symbol('@systemfsoftware/omp-agent-discipline/NonDelegatedTool')
 class NonDelegatedTool extends S.TaggedClass<NonDelegatedTool>()('NonDelegatedTool', {}) {
-  readonly [NonDelegatedToolTypeId] = NonDelegatedToolTypeId
+  readonly [ClassifiedInputTypeId] = ClassifiedInputTypeId
 }
-const ProtectedSubagentTypeId: unique symbol = Symbol('@systemfsoftware/omp-agent-discipline/ProtectedSubagent')
 class ProtectedSubagent extends S.TaggedClass<ProtectedSubagent>()('ProtectedSubagent', {
   skill: S.String,
 }) {
-  readonly [ProtectedSubagentTypeId] = ProtectedSubagentTypeId
+  readonly [ClassifiedInputTypeId] = ClassifiedInputTypeId
 }
-const EmptyPromptTypeId: unique symbol = Symbol('@systemfsoftware/omp-agent-discipline/EmptyPrompt')
 class EmptyPrompt extends S.TaggedClass<EmptyPrompt>()('EmptyPrompt', {}) {
-  readonly [EmptyPromptTypeId] = EmptyPromptTypeId
+  readonly [ClassifiedInputTypeId] = ClassifiedInputTypeId
 }
-const PromptedTypeId: unique symbol = Symbol('@systemfsoftware/omp-agent-discipline/Prompted')
 class Prompted extends S.TaggedClass<Prompted>()('Prompted', {
   guard: CompiledGuard,
   prompt: S.String,
 }) {
-  readonly [PromptedTypeId] = PromptedTypeId
+  readonly [ClassifiedInputTypeId] = ClassifiedInputTypeId
 }
 
-type ClassifiedInput = NoGuard | NonDelegatedTool | ProtectedSubagent | EmptyPrompt | Prompted
+const ClassifiedInput = S.Union(NoGuard, NonDelegatedTool, ProtectedSubagent, EmptyPrompt, Prompted)
+type ClassifiedInput = S.Schema.Type<typeof ClassifiedInput>
 
-const DelegatedTypeId: unique symbol = Symbol('@systemfsoftware/omp-agent-discipline/Delegated')
+const PromptAnalysisTypeId: unique symbol = Symbol.for('@systemfsoftware/omp-agent-discipline/PromptAnalysis')
 class Delegated extends S.TaggedClass<Delegated>()('Delegated', {
   skill: S.String,
   excerpt: S.String,
 }) {
-  readonly [DelegatedTypeId] = DelegatedTypeId
+  readonly [PromptAnalysisTypeId] = PromptAnalysisTypeId
 }
-const ReferencedTypeId: unique symbol = Symbol('@systemfsoftware/omp-agent-discipline/Referenced')
 class Referenced extends S.TaggedClass<Referenced>()('Referenced', {}) {
-  readonly [ReferencedTypeId] = ReferencedTypeId
+  readonly [PromptAnalysisTypeId] = PromptAnalysisTypeId
 }
-const NoDelegationTypeId: unique symbol = Symbol('@systemfsoftware/omp-agent-discipline/NoDelegation')
 class NoDelegation extends S.TaggedClass<NoDelegation>()('NoDelegation', {}) {
-  readonly [NoDelegationTypeId] = NoDelegationTypeId
+  readonly [PromptAnalysisTypeId] = PromptAnalysisTypeId
 }
 
-type PromptAnalysis = Delegated | Referenced | NoDelegation
+const PromptAnalysis = S.Union(Delegated, Referenced, NoDelegation)
+type PromptAnalysis = S.Schema.Type<typeof PromptAnalysis>
 
 function denyMessage(skill: string, how: 'subagent_type' | 'prompt', excerpt: string): string {
   return [

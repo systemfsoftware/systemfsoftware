@@ -14,19 +14,19 @@ import * as S from 'effect/Schema'
 
 export const DEFAULT_NO_INJECT_REFS: ReadonlyArray<string> = ['AGENTS.md']
 
-const InjectTypeId: unique symbol = Symbol('@systemfsoftware/omp-claude-compat/Inject')
-const SkipTypeId: unique symbol = Symbol('@systemfsoftware/omp-claude-compat/Skip')
+const RefVerdictTypeId: unique symbol = Symbol.for('@systemfsoftware/omp-claude-compat/RefVerdict')
 class Inject extends S.TaggedClass<Inject>()('Inject', {}) {
-  readonly [InjectTypeId] = InjectTypeId
+  readonly [RefVerdictTypeId] = RefVerdictTypeId
 }
 
 class Skip extends S.TaggedClass<Skip>()('Skip', {
   matched: S.String,
 }) {
-  readonly [SkipTypeId] = SkipTypeId
+  readonly [RefVerdictTypeId] = RefVerdictTypeId
 }
 
-type RefVerdict = Inject | Skip
+const RefVerdict = S.Union(Inject, Skip)
+type RefVerdict = S.Schema.Type<typeof RefVerdict>
 
 export const CheckRefInjection = S.Struct({
   relativePath: S.String,

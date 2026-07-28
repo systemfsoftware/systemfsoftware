@@ -8,7 +8,7 @@ import type { ParsedHookOutput } from './hook-output.acl.js'
 
 // Error channel — hook exited 0 and its stdout opened with `{`, claiming to
 // be a decision object, but the object did not parse.
-const HookVerdictErrorTypeId: unique symbol = Symbol('@systemfsoftware/omp-claude-compat/HookVerdictError')
+const HookVerdictErrorTypeId: unique symbol = Symbol.for('@systemfsoftware/omp-claude-compat/HookVerdictError')
 export class HookVerdictError extends S.TaggedError<HookVerdictError>()('HookVerdictError', {
   raw: S.String,
 }) {
@@ -17,21 +17,18 @@ export class HookVerdictError extends S.TaggedError<HookVerdictError>()('HookVer
 
 // Internal closed union over the exit-code categories (primitive
 // dispatch needs a closed shape for Match.exhaustive to bite).
-const ExitBlockTypeId: unique symbol = Symbol('@systemfsoftware/omp-claude-compat/ExitBlock')
-const ExitDecisionJsonTypeId: unique symbol = Symbol('@systemfsoftware/omp-claude-compat/ExitDecisionJson')
-const ExitNoDecisionTypeId: unique symbol = Symbol('@systemfsoftware/omp-claude-compat/ExitNoDecision')
-const ExitOtherTypeId: unique symbol = Symbol('@systemfsoftware/omp-claude-compat/ExitOther')
+const ExitKindTypeId: unique symbol = Symbol.for('@systemfsoftware/omp-claude-compat/ExitKind')
 class ExitBlock extends S.TaggedClass<ExitBlock>()('ExitBlock', {}) {
-  readonly [ExitBlockTypeId] = ExitBlockTypeId
+  readonly [ExitKindTypeId] = ExitKindTypeId
 }
 class ExitDecisionJson extends S.TaggedClass<ExitDecisionJson>()('ExitDecisionJson', {}) {
-  readonly [ExitDecisionJsonTypeId] = ExitDecisionJsonTypeId
+  readonly [ExitKindTypeId] = ExitKindTypeId
 }
 class ExitNoDecision extends S.TaggedClass<ExitNoDecision>()('ExitNoDecision', {}) {
-  readonly [ExitNoDecisionTypeId] = ExitNoDecisionTypeId
+  readonly [ExitKindTypeId] = ExitKindTypeId
 }
 class ExitOther extends S.TaggedClass<ExitOther>()('ExitOther', {}) {
-  readonly [ExitOtherTypeId] = ExitOtherTypeId
+  readonly [ExitKindTypeId] = ExitKindTypeId
 }
 
 const ExitKind = S.Union(ExitBlock, ExitDecisionJson, ExitNoDecision, ExitOther)
