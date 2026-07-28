@@ -1,24 +1,17 @@
 import { NodeCommandExecutor, NodeFileSystem } from '@effect/platform-node'
 import { FileSystem } from '@effect/platform/FileSystem'
 import * as PathModule from '@effect/platform/Path'
-import type { ExtensionContext, ToolCallEvent } from '@oh-my-pi/pi-coding-agent'
+import type { ExtensionContext, ToolCallEvent, ToolResultEvent } from '@oh-my-pi/pi-coding-agent'
 import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer } from 'effect'
 import { expect } from 'vitest'
-import {
-  HookDispatcherExecutorDeps,
-  loadSettingsWithPaths,
-  runPreToolUseHooks,
-} from '../src/hook-dispatcher.executor.js'
+import { loadSettingsWithPaths, runPostToolUseHooks, runPreToolUseHooks } from '../src/hook-dispatcher.executor.js'
 
 const Feature = makeFeature({ it, layer })
 
-const noTel = () => {}
-const telLayer = Layer.succeed(HookDispatcherExecutorDeps, { tel: noTel })
 const testLayer = NodeCommandExecutor.layer.pipe(
   Layer.provideMerge(NodeFileSystem.layer),
-  Layer.provideMerge(telLayer),
   Layer.provideMerge(PathModule.layer),
 )
 
@@ -66,6 +59,16 @@ function writeSettings(
 
 function makeToolCall(toolName: string, input: Record<string, unknown>): ToolCallEvent {
   return { type: 'tool_call', toolName, toolCallId: 'tc-test', input }
+}
+
+function makeToolResult(toolName: string, input: Record<string, unknown>): ToolResultEvent {
+  return {
+    type: 'tool_result',
+    toolName,
+    toolCallId: 'tc-test',
+    input,
+    content: 'ok',
+  } as unknown as ToolResultEvent
 }
 
 Feature('Hook dispatcher — settings loading')
@@ -243,6 +246,141 @@ Feature('Hook dispatcher — PreToolUse hook execution')
           Effect.sync(() => {
             expect(s.result).toBeDefined()
             expect(s.result?.block).toBe(true)
+          })
+        ),
+      ),
+    )
+  })
+
+Feature('Hook dispatcher — PostToolUse warning slot')
+  .withLayer(testLayer)
+  .body(({ scenario }) => {
+    scenario(
+      'Should not warn when a hook exits 0 without writing to stdout',
+      Gherkin.Do.pipe(
+        Given('a directory with a silent exit-0 hook')('dir', (_s) =>
+          Effect.gen(function*() {
+            const fs = yield* FileSystem
+            const dir = yield* fs.makeTempDirectoryScoped()
+            const hook = yield* writeShellHook(dir, 'silent', 0)
+            yield* writeSettings(dir, {
+              PostToolUse: [{ matcher: 'Write', hooks: [{ type: 'command', command: hook }] }],
+            })
+            return { dir, hook }
+          })),
+        When('runPostToolUseHooks is called for a Write tool result')('result', (s) =>
+          Effect.gen(function*() {
+            const settings = yield* loadSettingsWithPaths([`${s.dir.dir}/.claude/settings.json`])
+            expect(settings).not.toBeNull()
+            return yield* runPostToolUseHooks(
+              settings!,
+              makeToolResult('write', { path: '/test.txt', content: 'x' }),
+              makeCtx(s.dir.dir),
+            )
+          })),
+        Then('the dispatcher should report no warning')((s) =>
+          Effect.sync(() => {
+            expect(s.result).toEqual({})
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'Should not warn when a hook exits 0 writing plain non-JSON text',
+      Gherkin.Do.pipe(
+        Given('a directory with a status-printing exit-0 hook')('dir', (_s) =>
+          Effect.gen(function*() {
+            const fs = yield* FileSystem
+            const dir = yield* fs.makeTempDirectoryScoped()
+            const hook = yield* writeShellHook(dir, 'chatty', 0, undefined, 'hook-ran')
+            yield* writeSettings(dir, {
+              PostToolUse: [{ matcher: 'Write', hooks: [{ type: 'command', command: hook }] }],
+            })
+            return { dir, hook }
+          })),
+        When('runPostToolUseHooks is called for a Write tool result')('result', (s) =>
+          Effect.gen(function*() {
+            const settings = yield* loadSettingsWithPaths([`${s.dir.dir}/.claude/settings.json`])
+            expect(settings).not.toBeNull()
+            return yield* runPostToolUseHooks(
+              settings!,
+              makeToolResult('write', { path: '/test.txt', content: 'x' }),
+              makeCtx(s.dir.dir),
+            )
+          })),
+        Then('the dispatcher should report no warning')((s) =>
+          Effect.sync(() => {
+            expect(s.result).toEqual({})
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'Should surface a later hook warning past a silently-allowing hook',
+      Gherkin.Do.pipe(
+        Given('a directory with a silent hook ahead of a warning hook')('dir', (_s) =>
+          Effect.gen(function*() {
+            const fs = yield* FileSystem
+            const dir = yield* fs.makeTempDirectoryScoped()
+            const silent = yield* writeShellHook(dir, 'silent-first', 0)
+            const warner = yield* writeShellHook(dir, 'warn-second', 1, 'real warning from hook B')
+            yield* writeSettings(dir, {
+              PostToolUse: [{
+                matcher: 'Write',
+                hooks: [
+                  { type: 'command', command: silent },
+                  { type: 'command', command: warner },
+                ],
+              }],
+            })
+            return { dir, silent, warner }
+          })),
+        When('runPostToolUseHooks is called for a Write tool result')('result', (s) =>
+          Effect.gen(function*() {
+            const settings = yield* loadSettingsWithPaths([`${s.dir.dir}/.claude/settings.json`])
+            expect(settings).not.toBeNull()
+            return yield* runPostToolUseHooks(
+              settings!,
+              makeToolResult('write', { path: '/test.txt', content: 'x' }),
+              makeCtx(s.dir.dir),
+            )
+          })),
+        Then("the warning should be the second hook's, not a parse complaint")((s) =>
+          Effect.sync(() => {
+            expect(s.result).toEqual({ warning: 'real warning from hook B' })
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'Should still warn when a hook exits 0 writing malformed decision JSON',
+      Gherkin.Do.pipe(
+        Given('a directory with a hook printing a truncated decision object')('dir', (_s) =>
+          Effect.gen(function*() {
+            const fs = yield* FileSystem
+            const dir = yield* fs.makeTempDirectoryScoped()
+            const hook = yield* writeShellHook(dir, 'malformed', 0, undefined, '{"decision":')
+            yield* writeSettings(dir, {
+              PostToolUse: [{ matcher: 'Write', hooks: [{ type: 'command', command: hook }] }],
+            })
+            return { dir, hook }
+          })),
+        When('runPostToolUseHooks is called for a Write tool result')('result', (s) =>
+          Effect.gen(function*() {
+            const settings = yield* loadSettingsWithPaths([`${s.dir.dir}/.claude/settings.json`])
+            expect(settings).not.toBeNull()
+            return yield* runPostToolUseHooks(
+              settings!,
+              makeToolResult('write', { path: '/test.txt', content: 'x' }),
+              makeCtx(s.dir.dir),
+            )
+          })),
+        Then('the dispatcher should report a verdict-error warning')((s) =>
+          Effect.sync(() => {
+            expect(s.result?.warning).toContain('produced invalid JSON')
           })
         ),
       ),
