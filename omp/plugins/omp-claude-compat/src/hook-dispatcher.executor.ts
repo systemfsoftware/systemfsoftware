@@ -21,7 +21,13 @@ import { Effect, Either, Match, Option, Schema as S, Stream } from 'effect'
 import { homedir } from 'node:os'
 import { Blocked, Continue, Warning } from './hook-dispatcher.schema.js'
 import type { HookOutcome, HookResult } from './hook-dispatcher.schema.js'
-import { isHooksDisabled, mergeSettings, parseSettings, unknownHookEvents } from './hook-settings.acl.js'
+import {
+  isHooksDisabled,
+  mergeSettings,
+  parseSettings,
+  unknownHookEvents,
+  unsupportedHookTypes,
+} from './hook-settings.acl.js'
 import type { HookEntry, HookSettings } from './hook-settings.acl.js'
 import { interpretHookResult } from './hook-verdict.workflow.js'
 
@@ -59,23 +65,28 @@ export const loadSettingsWithPaths = Effect.fn('loadSettingsWithPaths')(function
   return mergeSettings(results)
 })
 
-export const collectUnknownHookEventsWithPaths = Effect.fn('collectUnknownHookEventsWithPaths')(function*(
+export const collectSettingsGapsWithPaths = Effect.fn('collectSettingsGapsWithPaths')(function*(
   paths: readonly string[],
 ) {
   const fs = yield* FileSystem
-  const found: string[] = []
+  const events: string[] = []
+  const hookTypes: string[] = []
   for (const path of paths) {
     const content = yield* fs.readFileString(path).pipe(Effect.catchAll(() => Effect.succeed('')))
     if (content === '') continue
     const parsed = S.decodeUnknownEither(S.parseJson(S.Record({ key: S.String, value: S.Unknown })))(content)
     if (Either.isLeft(parsed)) continue
-    found.push(...unknownHookEvents(parsed.right))
+    events.push(...unknownHookEvents(parsed.right))
+    hookTypes.push(...unsupportedHookTypes(parsed.right))
   }
-  return Array.from(new Set(found))
+  return {
+    unknownEvents: Array.from(new Set(events)),
+    unsupportedHookTypes: Array.from(new Set(hookTypes)),
+  }
 })
 
-export const collectUnknownHookEvents = Effect.fn('collectUnknownHookEvents')(function*(cwd: string) {
-  return yield* collectUnknownHookEventsWithPaths(settingsPaths(cwd))
+export const collectSettingsGaps = Effect.fn('collectSettingsGaps')(function*(cwd: string) {
+  return yield* collectSettingsGapsWithPaths(settingsPaths(cwd))
 })
 
 export const runHookScript = Effect.fn('runHookScript')(function*(
@@ -138,6 +149,7 @@ export const runHooksForEvent = Effect.fn('runHooksForEvent')(function*(
     if (!matchesMatcher(matchValue, entry.matcher)) continue
 
     for (const hook of entry.hooks) {
+      if (hook.type !== 'command') continue
       const timeoutMs = (hook.timeout ?? 10) * 1000
 
       if (hook.async) {
@@ -311,6 +323,7 @@ export const runUserPromptSubmitHooks = Effect.fn('runUserPromptSubmitHooks')(fu
 
   for (const entry of entries) {
     for (const hook of entry.hooks) {
+      if (hook.type !== 'command') continue
       const result = yield* runHookScript(hook.command, input, cwd, (hook.timeout ?? 10) * 1000)
 
       // Claude Code rejects the prompt on exit 2 or `decision: "block"`, feeding
@@ -367,6 +380,7 @@ export const runSessionStartHooks = Effect.fn('runSessionStartHooks')(function*(
     if (entry.matcher && !matchesMatcher(reason, entry.matcher)) continue
 
     for (const hook of entry.hooks) {
+      if (hook.type !== 'command') continue
       const timeoutMs = (hook.timeout ?? 10) * 1000
 
       if (hook.async) {
@@ -395,6 +409,7 @@ export const runLifecycleHooks = Effect.fn('runLifecycleHooks')(function*(
 
   for (const entry of entries) {
     for (const hook of entry.hooks) {
+      if (hook.type !== 'command') continue
       const timeoutMs = (hook.timeout ?? 10) * 1000
 
       if (hook.async) {

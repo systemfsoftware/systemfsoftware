@@ -75,16 +75,22 @@ export const HookDispatcherTask = (pi: ExtensionAPI): void => {
   })
 
   pi.on('session_start', async (_event: { type: string }, ctx: ExtensionContext) => {
-    const { collectUnknownHookEvents, loadSettings, runSessionStartHooks } = await import(
+    const { collectSettingsGaps, loadSettings, runSessionStartHooks } = await import(
       './hook-dispatcher.executor.js'
     )
     const { Effect } = await import('effect')
     return runSafe(
       Effect.gen(function*() {
-        const unknown = yield* collectUnknownHookEvents(ctx.cwd)
-        if (unknown.length > 0) {
+        const gaps = yield* collectSettingsGaps(ctx.cwd)
+        if (gaps.unknownEvents.length > 0) {
           ctx.ui.notify(
-            `Ignoring unsupported hook event(s) in settings.json: ${unknown.join(', ')}`,
+            `Ignoring unsupported hook event(s) in settings.json: ${gaps.unknownEvents.join(', ')}`,
+            'warning',
+          )
+        }
+        if (gaps.unsupportedHookTypes.length > 0) {
+          ctx.ui.notify(
+            `Skipping hook(s) this bridge cannot run yet: type ${gaps.unsupportedHookTypes.join(', ')}`,
             'warning',
           )
         }

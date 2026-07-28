@@ -1,3 +1,5 @@
+import { Option, Schema as S } from 'effect'
+
 /**
  * ACL: translate OMP tool input shapes to Claude Code hook input shapes.
  *
@@ -14,13 +16,13 @@ const FILE_TOOLS: Record<string, true> = {
 }
 const EDIT_TOOLS: Record<string, true> = { Edit: true, MultiEdit: true, Update: true }
 
-function isOmpEditArray(value: unknown): value is readonly Record<string, unknown>[] {
-  return (
-    Array.isArray(value) &&
-    value.length > 0 &&
-    value.every((entry) => typeof entry === 'object' && entry !== null && ('new_text' in entry || 'old_text' in entry))
-  )
-}
+const OmpEdits = S.Array(
+  S.Struct({ old_text: S.optional(S.Unknown), new_text: S.optional(S.Unknown) }).pipe(
+    S.filter((entry) => 'old_text' in entry || 'new_text' in entry),
+  ),
+).pipe(S.minItems(1))
+
+const isOmpEditArray = S.is(OmpEdits)
 
 export function normalizeToolInput(toolName: string, input: Record<string, unknown>): Record<string, unknown> {
   let out = input
@@ -45,14 +47,15 @@ export function normalizeToolInput(toolName: string, input: Record<string, unkno
   return out
 }
 
-function isClaudeEditArray(value: unknown): value is readonly Record<string, unknown>[] {
-  return (
-    Array.isArray(value) &&
-    value.every((entry) =>
-      typeof entry === 'object' && entry !== null && ('new_string' in entry || 'old_string' in entry)
-    )
-  )
-}
+const ClaudeEdits = S.Array(
+  S.Struct({ old_string: S.optional(S.Unknown), new_string: S.optional(S.Unknown) }).pipe(
+    S.filter((entry) => 'old_string' in entry || 'new_string' in entry),
+  ),
+)
+
+const isClaudeEditArray = S.is(ClaudeEdits)
+
+const asRecord = S.decodeUnknownOption(S.Record({ key: S.String, value: S.Unknown }))
 
 /**
  * Re-key a hook's `updatedInput` back to the names the payload arrived with.
@@ -65,11 +68,12 @@ export function denormalizeToolInput(
   original: Record<string, unknown>,
   updated: unknown,
 ): Record<string, unknown> {
-  if (typeof updated !== 'object' || updated === null || Array.isArray(updated)) return {}
+  const fields = Option.getOrNull(asRecord(updated))
+  if (fields === null) return {}
   const pathKey = 'file_path' in original || !('path' in original) ? 'file_path' : 'path'
   const out: Record<string, unknown> = {}
 
-  for (const [key, value] of Object.entries(updated)) {
+  for (const [key, value] of Object.entries(fields)) {
     if (key === 'file_path') {
       out[pathKey] = value
       continue

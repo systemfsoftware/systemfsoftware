@@ -8,7 +8,7 @@ import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect
 import { Effect, Layer } from 'effect'
 import { expect } from 'vitest'
 import {
-  collectUnknownHookEventsWithPaths,
+  collectSettingsGapsWithPaths,
   loadSettingsWithPaths,
   runPostToolUseHooks,
   runPreToolUseHooks,
@@ -755,11 +755,11 @@ Feature('Hook dispatcher — unsupported hook events')
           })),
         When('the settings are scanned for unsupported events')(
           'found',
-          (s) => collectUnknownHookEventsWithPaths([`${s.dir.dir}/.claude/settings.json`]),
+          (s) => collectSettingsGapsWithPaths([`${s.dir.dir}/.claude/settings.json`]),
         ),
         Then('the unsupported group should be named')((s) =>
           Effect.sync(() => {
-            expect(s.found).toEqual(['UserPromptExpansion'])
+            expect(s.found.unknownEvents).toEqual(['UserPromptExpansion'])
           })
         ),
       ),
@@ -777,11 +777,11 @@ Feature('Hook dispatcher — unsupported hook events')
           })),
         When('the settings are scanned for unsupported events')(
           'found',
-          (s) => collectUnknownHookEventsWithPaths([`${s.dir.dir}/.claude/settings.json`]),
+          (s) => collectSettingsGapsWithPaths([`${s.dir.dir}/.claude/settings.json`]),
         ),
         Then('no group should be reported')((s) =>
           Effect.sync(() => {
-            expect(s.found).toEqual([])
+            expect(s.found.unknownEvents).toEqual([])
           })
         ),
       ),
@@ -811,11 +811,11 @@ Feature('Hook dispatcher — unsupported events in flat settings')
           })),
         When('the settings are scanned for unsupported events')(
           'found',
-          (s) => collectUnknownHookEventsWithPaths([`${s.dir.dir}/.claude/settings.json`]),
+          (s) => collectSettingsGapsWithPaths([`${s.dir.dir}/.claude/settings.json`]),
         ),
         Then('only the unsupported group should be named')((s) =>
           Effect.sync(() => {
-            expect(s.found).toEqual(['UserPromptExpansion'])
+            expect(s.found.unknownEvents).toEqual(['UserPromptExpansion'])
           })
         ),
       ),
@@ -852,6 +852,72 @@ Feature('Hook dispatcher — repeated targets')
         Then('the hook should have been invoked exactly once')((s) =>
           Effect.sync(() => {
             expect(s.log.trim().split('\n')).toHaveLength(1)
+          })
+        ),
+      ),
+    )
+  })
+
+Feature('Hook dispatcher — hook transports this bridge cannot run')
+  .withLayer(testLayer)
+  .body(({ scenario }) => {
+    const withHttpBeside = (dir: string, guard: string) => ({
+      PreToolUse: [
+        { matcher: 'Edit|Write', hooks: [{ type: 'http', url: 'https://example.invalid/hook' }] },
+        { matcher: 'Edit|Write', hooks: [{ type: 'command', command: guard }] },
+      ],
+    })
+
+    scenario(
+      'Should still run command hooks when an http hook sits beside them',
+      Gherkin.Do.pipe(
+        Given('settings mixing an http hook with a command guard')('dir', (_s) =>
+          Effect.gen(function*() {
+            const fs = yield* FileSystem
+            const dir = yield* fs.makeTempDirectoryScoped()
+            const guard = yield* writePathGuardHook(dir, 'guard', 'repos/vendored')
+            yield* writeSettings(dir, withHttpBeside(dir, guard))
+            return { dir }
+          })),
+        When('an edit targets the protected tree')(
+          'result',
+          (s) => dispatchEdit(s.dir.dir, '[repos/vendored/x.rs#A1B2]\nDEL 1\n'),
+        ),
+        Then('the command guard should still have blocked it')((s) =>
+          Effect.sync(() => {
+            expect(s.result?.block).toBe(true)
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'Should name the transports it skipped',
+      Gherkin.Do.pipe(
+        Given('settings carrying every non-command transport')('dir', (_s) =>
+          Effect.gen(function*() {
+            const fs = yield* FileSystem
+            const dir = yield* fs.makeTempDirectoryScoped()
+            yield* writeSettings(dir, {
+              PreToolUse: [{
+                hooks: [
+                  { type: 'command', command: 'true' },
+                  { type: 'http', url: 'https://example.invalid' },
+                  { type: 'prompt', prompt: 'ok?' },
+                ],
+              }],
+              PostToolUse: [{ hooks: [{ type: 'mcp_tool', server: 's', tool: 't' }] }],
+            })
+            return { dir }
+          })),
+        When('the settings are scanned')(
+          'found',
+          (s) => collectSettingsGapsWithPaths([`${s.dir.dir}/.claude/settings.json`]),
+        ),
+        Then('every skipped transport should be reported once')((s) =>
+          Effect.sync(() => {
+            expect([...s.found.unsupportedHookTypes].sort()).toEqual(['http', 'mcp_tool', 'prompt'])
+            expect(s.found.unknownEvents).toEqual([])
           })
         ),
       ),
