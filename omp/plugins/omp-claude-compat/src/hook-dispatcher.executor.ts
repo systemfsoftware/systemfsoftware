@@ -21,14 +21,8 @@ import { Effect, Either, Match, Option, Schema as S, Stream } from 'effect'
 import { homedir } from 'node:os'
 import { Blocked, Continue, Warning } from './hook-dispatcher.schema.js'
 import type { HookOutcome, HookResult } from './hook-dispatcher.schema.js'
-import {
-  isHooksDisabled,
-  mergeSettings,
-  parseSettings,
-  unknownHookEvents,
-  unsupportedHookTypes,
-} from './hook-settings.acl.js'
-import type { HookEntry, HookSettings } from './hook-settings.acl.js'
+import { mergeSettings, parseSettings, unknownHookEvents, unsupportedHookTypes } from './hook-settings.acl.js'
+import type { CommandHook, HookEntry, HookSettings, SettingsSource } from './hook-settings.acl.js'
 import { interpretHookResult } from './hook-verdict.workflow.js'
 
 const loadSettingsFile = Effect.fn('loadSettingsFile')(function*(path: string) {
@@ -42,11 +36,14 @@ const loadSettingsFile = Effect.fn('loadSettingsFile')(function*(path: string) {
   return Either.isLeft(either) ? null : either.right
 })
 
+/** Enterprise policy. Hooks from here survive a `disableAllHooks` set anywhere else. */
+const MANAGED_SETTINGS_PATH = '/etc/claude-code/managed-settings.json'
+
 const settingsPaths = (cwd: string): readonly string[] => [
   `${homedir()}/.claude/settings.json`,
   `${cwd}/.claude/settings.json`,
   `${cwd}/.claude/settings.local.json`,
-  '/etc/claude-code/managed-settings.json',
+  MANAGED_SETTINGS_PATH,
 ]
 
 export const loadSettings = Effect.fn('loadSettings')(function*(cwd: string) {
@@ -55,14 +52,15 @@ export const loadSettings = Effect.fn('loadSettings')(function*(cwd: string) {
 
 export const loadSettingsWithPaths = Effect.fn('loadSettingsWithPaths')(function*(
   paths: readonly string[],
+  managedPath: string = MANAGED_SETTINGS_PATH,
 ) {
-  const results: HookSettings[] = []
+  const sources: SettingsSource[] = []
   for (const p of paths) {
     const s = yield* loadSettingsFile(p)
-    if (s !== null) results.push(s)
+    if (s !== null) sources.push({ settings: s, managed: p === managedPath })
   }
-  if (results.length === 0) return null
-  return mergeSettings(results)
+  if (sources.length === 0) return null
+  return mergeSettings(sources)
 })
 
 export const collectSettingsGapsWithPaths = Effect.fn('collectSettingsGapsWithPaths')(function*(
@@ -71,17 +69,25 @@ export const collectSettingsGapsWithPaths = Effect.fn('collectSettingsGapsWithPa
   const fs = yield* FileSystem
   const events: string[] = []
   const hookTypes: string[] = []
+  const malformed: string[] = []
   for (const path of paths) {
     const content = yield* fs.readFileString(path).pipe(Effect.catchAll(() => Effect.succeed('')))
     if (content === '') continue
     const parsed = S.decodeUnknownEither(S.parseJson(S.Record({ key: S.String, value: S.Unknown })))(content)
-    if (Either.isLeft(parsed)) continue
+    if (Either.isLeft(parsed)) {
+      malformed.push(path)
+      continue
+    }
     events.push(...unknownHookEvents(parsed.right))
     hookTypes.push(...unsupportedHookTypes(parsed.right))
+    // The loader skips a file it cannot decode, contributing no hooks at all.
+    // Name it rather than starting the session unguarded with no sign of it.
+    if (Either.isLeft(parseSettings(parsed.right))) malformed.push(path)
   }
   return {
     unknownEvents: Array.from(new Set(events)),
     unsupportedHookTypes: Array.from(new Set(hookTypes)),
+    malformedFiles: Array.from(new Set(malformed)),
   }
 })
 
@@ -89,16 +95,28 @@ export const collectSettingsGaps = Effect.fn('collectSettingsGaps')(function*(cw
   return yield* collectSettingsGapsWithPaths(settingsPaths(cwd))
 })
 
+/** Claude Code's documented per-event default; 600s for every other event. */
+const DEFAULT_TIMEOUT_SECONDS: Record<string, number> = {
+  UserPromptSubmit: 30,
+}
+
 export const runHookScript = Effect.fn('runHookScript')(function*(
-  command: string,
+  hook: CommandHook,
   input: Record<string, unknown>,
   cwd: string,
-  timeoutMs: number,
+  event: string,
 ) {
   const executor = yield* CommandExecutor
+  const timeoutMs = (hook.timeout ?? DEFAULT_TIMEOUT_SECONDS[event] ?? 600) * 1000
   const stdinText = JSON.stringify(input)
 
-  const hookCommand = Command.make('sh', '-c', command).pipe(
+  // `args` selects the exec form: spawn the binary directly so no shell ever
+  // interprets the command or its arguments.
+  const base = hook.args === undefined
+    ? Command.make('sh', '-c', hook.command)
+    : Command.make(hook.command, ...hook.args)
+
+  const hookCommand = base.pipe(
     Command.workingDirectory(cwd),
     Command.env({ OMP_PROJECT_DIR: cwd, CLAUDE_PROJECT_DIR: cwd }),
     Command.feed(stdinText),
@@ -150,16 +168,14 @@ export const runHooksForEvent = Effect.fn('runHooksForEvent')(function*(
 
     for (const hook of entry.hooks) {
       if (hook.type !== 'command') continue
-      const timeoutMs = (hook.timeout ?? 10) * 1000
-
-      if (hook.async) {
+      if (hook.async || hook.asyncRewake) {
         yield* Effect.forkDaemon(
-          runHookScript(hook.command, currentInput, cwd, timeoutMs),
+          runHookScript(hook, currentInput, cwd, event),
         )
         continue
       }
 
-      const result = yield* runHookScript(hook.command, currentInput, cwd, timeoutMs)
+      const result = yield* runHookScript(hook, currentInput, cwd, event)
 
       const verdict = interpretHookResult(result, event)
       const decision = Either.match(verdict, {
@@ -210,7 +226,6 @@ export const runPreToolUseHooks = Effect.fn('runPreToolUseHooks')(function*(
   event: ToolCallEvent,
   ctx: ExtensionContext,
 ) {
-  if (isHooksDisabled(settings)) return undefined
   const claudeToolName = normalizeToolName(event.toolName)
   const sessionData = sessionIds(() => ctx.sessionManager.getSessionId())
   const rawInput = event.input as Record<string, unknown>
@@ -275,7 +290,6 @@ export const runPostToolUseHooks = Effect.fn('runPostToolUseHooks')(function*(
   ctx: ExtensionContext,
 ) {
   const claudeToolName = normalizeToolName(event.toolName)
-  if (isHooksDisabled(settings)) return undefined
   const sessionData = sessionIds(() => ctx.sessionManager.getSessionId())
   const toolInput = normalizeToolInput(claudeToolName, event.input)
   const targets = editTargetPaths(claudeToolName, toolInput)
@@ -310,7 +324,6 @@ export const runUserPromptSubmitHooks = Effect.fn('runUserPromptSubmitHooks')(fu
   ctx: ExtensionContext,
 ) {
   const entries = settings.hooks.UserPromptSubmit
-  if (isHooksDisabled(settings)) return undefined
   if (entries.length === 0) return undefined
 
   const cwd = ctx.cwd
@@ -324,7 +337,7 @@ export const runUserPromptSubmitHooks = Effect.fn('runUserPromptSubmitHooks')(fu
   for (const entry of entries) {
     for (const hook of entry.hooks) {
       if (hook.type !== 'command') continue
-      const result = yield* runHookScript(hook.command, input, cwd, (hook.timeout ?? 10) * 1000)
+      const result = yield* runHookScript(hook, input, cwd, 'UserPromptSubmit')
 
       // Claude Code rejects the prompt on exit 2 or `decision: "block"`, feeding
       // the reason back rather than injecting stdout as context.
@@ -366,7 +379,6 @@ export const runSessionStartHooks = Effect.fn('runSessionStartHooks')(function*(
   reason: string,
   ctx: ExtensionContext,
 ) {
-  if (isHooksDisabled(settings)) return
   const entries = settings.hooks.SessionStart
   if (entries.length === 0) return
 
@@ -381,16 +393,14 @@ export const runSessionStartHooks = Effect.fn('runSessionStartHooks')(function*(
 
     for (const hook of entry.hooks) {
       if (hook.type !== 'command') continue
-      const timeoutMs = (hook.timeout ?? 10) * 1000
-
-      if (hook.async) {
+      if (hook.async || hook.asyncRewake) {
         yield* Effect.forkDaemon(
-          runHookScript(hook.command, input, cwd, timeoutMs),
+          runHookScript(hook, input, cwd, 'SessionStart'),
         )
         continue
       }
 
-      yield* runHookScript(hook.command, input, cwd, timeoutMs)
+      yield* runHookScript(hook, input, cwd, 'SessionStart')
     }
   }
 })
@@ -398,6 +408,7 @@ export const runSessionStartHooks = Effect.fn('runSessionStartHooks')(function*(
 export const runLifecycleHooks = Effect.fn('runLifecycleHooks')(function*(
   entries: readonly HookEntry[],
   ctx: ExtensionContext,
+  event: string,
 ) {
   if (entries.length === 0) return
 
@@ -410,14 +421,12 @@ export const runLifecycleHooks = Effect.fn('runLifecycleHooks')(function*(
   for (const entry of entries) {
     for (const hook of entry.hooks) {
       if (hook.type !== 'command') continue
-      const timeoutMs = (hook.timeout ?? 10) * 1000
-
-      if (hook.async) {
+      if (hook.async || hook.asyncRewake) {
         yield* Effect.forkDaemon(
-          runHookScript(hook.command, input, cwd, timeoutMs),
+          runHookScript(hook, input, cwd, event),
         )
       } else {
-        yield* runHookScript(hook.command, input, cwd, timeoutMs)
+        yield* runHookScript(hook, input, cwd, event)
       }
     }
   }

@@ -67,14 +67,14 @@ Feature('Multi-level hook settings loading')
     )
 
     scenario(
-      'disableAllHooks from higher-priority scope takes precedence',
+      'disableAllHooks drops the hooks it is allowed to disable',
       Gherkin.Do.pipe(
         Given('a base directory')('base', (_s) =>
           Effect.gen(function*() {
             const fs = yield* FileSystem
             return yield* fs.makeTempDirectoryScoped()
           })),
-        Given('project scope has disableAllHooks false and local has true')('paths', (s) =>
+        Given('project scope defines a hook and local scope disables all')('paths', (s) =>
           Effect.gen(function*() {
             const fs = yield* FileSystem
             const projectDir = `${s.base}/project`
@@ -95,10 +95,93 @@ Feature('Multi-level hook settings loading')
             ]
           })),
         When('loadSettingsWithPaths is called')('result', (s) => loadSettingsWithPaths(s.paths)),
-        Then('disableAllHooks should be true')((s) =>
+        Then('no hook survives')((s) =>
           Effect.sync(() => {
             expect(s.result).not.toBeNull()
-            expect(s.result!.disableAllHooks).toBe(true)
+            expect(s.result!.hooks.PreToolUse).toEqual([])
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'A managed hook survives disableAllHooks set outside managed settings',
+      Gherkin.Do.pipe(
+        Given('a base directory')('base', (_s) =>
+          Effect.gen(function*() {
+            const fs = yield* FileSystem
+            return yield* fs.makeTempDirectoryScoped()
+          })),
+        Given('managed policy defines a hook and the user disables all')('paths', (s) =>
+          Effect.gen(function*() {
+            const fs = yield* FileSystem
+            const userDir = `${s.base}/user`
+            yield* fs.makeDirectory(`${userDir}/.claude`, { recursive: true })
+            yield* fs.writeFileString(
+              `${userDir}/.claude/settings.json`,
+              JSON.stringify({
+                hooks: { PreToolUse: [{ hooks: [{ type: 'command', command: '/user.sh' }] }] },
+                disableAllHooks: true,
+              }),
+            )
+            yield* fs.writeFileString(
+              `${s.base}/managed-settings.json`,
+              JSON.stringify({
+                hooks: { PreToolUse: [{ hooks: [{ type: 'command', command: '/policy.sh' }] }] },
+              }),
+            )
+            return [`${userDir}/.claude/settings.json`, `${s.base}/managed-settings.json`]
+          })),
+        When('loadSettingsWithPaths is called')(
+          'result',
+          (s) => loadSettingsWithPaths(s.paths, s.paths[1]),
+        ),
+        Then('only the managed hook runs')((s) =>
+          Effect.sync(() => {
+            expect(s.result).not.toBeNull()
+            const commands = s.result!.hooks.PreToolUse
+              .flatMap((e) => e.hooks)
+              .filter((h) => h.type === 'command')
+              .map((h) => h.command)
+            expect(commands).toEqual(['/policy.sh'])
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'disableAllHooks in managed settings turns everything off',
+      Gherkin.Do.pipe(
+        Given('a base directory')('base', (_s) =>
+          Effect.gen(function*() {
+            const fs = yield* FileSystem
+            return yield* fs.makeTempDirectoryScoped()
+          })),
+        Given('managed policy disables all hooks')('paths', (s) =>
+          Effect.gen(function*() {
+            const fs = yield* FileSystem
+            const userDir = `${s.base}/user`
+            yield* fs.makeDirectory(`${userDir}/.claude`, { recursive: true })
+            yield* fs.writeFileString(
+              `${userDir}/.claude/settings.json`,
+              JSON.stringify({
+                hooks: { PreToolUse: [{ hooks: [{ type: 'command', command: '/user.sh' }] }] },
+              }),
+            )
+            yield* fs.writeFileString(
+              `${s.base}/managed-settings.json`,
+              JSON.stringify({ hooks: {}, disableAllHooks: true }),
+            )
+            return [`${userDir}/.claude/settings.json`, `${s.base}/managed-settings.json`]
+          })),
+        When('loadSettingsWithPaths is called')(
+          'result',
+          (s) => loadSettingsWithPaths(s.paths, s.paths[1]),
+        ),
+        Then('no hook survives')((s) =>
+          Effect.sync(() => {
+            expect(s.result).not.toBeNull()
+            expect(s.result!.hooks.PreToolUse).toEqual([])
           })
         ),
       ),

@@ -94,6 +94,12 @@ export const HookDispatcherTask = (pi: ExtensionAPI): void => {
             'warning',
           )
         }
+        if (gaps.malformedFiles.length > 0) {
+          ctx.ui.notify(
+            `Hooks are NOT running from malformed settings file(s): ${gaps.malformedFiles.join(', ')}`,
+            'error',
+          )
+        }
         const settings = yield* loadSettings(ctx.cwd)
         if (!settings) return undefined
         yield* runSessionStartHooks(settings, 'start', ctx)
@@ -135,8 +141,7 @@ export const HookDispatcherTask = (pi: ExtensionAPI): void => {
       Effect.gen(function*() {
         const settings = yield* loadSettings(ctx.cwd)
         if (!settings) return undefined
-        if (settings.disableAllHooks) return undefined
-        yield* runLifecycleHooks(settings.hooks.SessionEnd, ctx)
+        yield* runLifecycleHooks(settings.hooks.SessionEnd, ctx, 'SessionEnd')
         return undefined
       }),
     )
@@ -149,8 +154,7 @@ export const HookDispatcherTask = (pi: ExtensionAPI): void => {
       Effect.gen(function*() {
         const settings = yield* loadSettings(ctx.cwd)
         if (!settings) return undefined
-        if (settings.disableAllHooks) return undefined
-        yield* runLifecycleHooks(settings.hooks.Stop, ctx)
+        yield* runLifecycleHooks(settings.hooks.Stop, ctx, 'Stop')
         return undefined
       }),
     )

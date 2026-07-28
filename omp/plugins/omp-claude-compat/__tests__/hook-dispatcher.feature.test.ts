@@ -923,3 +923,157 @@ Feature('Hook dispatcher — hook transports this bridge cannot run')
       ),
     )
   })
+
+Feature('Hook dispatcher - command execution contract')
+  .withLayer(testLayer)
+  .body(({ scenario }) => {
+    const loadFrom = (dir: string) => loadSettingsWithPaths([`${dir}/.claude/settings.json`])
+
+    scenario(
+      'Should hand args to the binary with no shell interpreting them',
+      Gherkin.Do.pipe(
+        Given('a hook recording its first argument')('dir', (_s) =>
+          Effect.gen(function*() {
+            const fs = yield* FileSystem
+            const dir = yield* fs.makeTempDirectoryScoped()
+            const hookPath = `${dir}/record.sh`
+            yield* fs.writeFileString(
+              hookPath,
+              `#!/usr/bin/env bash\nprintf '%s' "$1" > "${dir}/arg.txt"\n`,
+            )
+            yield* fs.chmod(hookPath, 0o755)
+            yield* writeSettings(dir, {
+              PreToolUse: [{
+                matcher: 'Write',
+                hooks: [{ type: 'command', command: hookPath, args: ['$(id -u)'] }],
+              }],
+            })
+            return dir
+          })),
+        When('a Write tool call fires the hook')('arg', (s) =>
+          Effect.gen(function*() {
+            const settings = yield* loadFrom(s.dir)
+            yield* runPreToolUseHooks(
+              settings!,
+              makeToolCall('Write', { file_path: `${s.dir}/t.txt` }),
+              makeCtx(s.dir),
+            )
+            const fs = yield* FileSystem
+            return yield* fs.readFileString(`${s.dir}/arg.txt`)
+          })),
+        Then('the argument arrives verbatim, unexpanded')((s) =>
+          Effect.sync(() => {
+            expect(s.arg).toBe('$(id -u)')
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'Should not let an asyncRewake hook block the tool call',
+      Gherkin.Do.pipe(
+        Given('a blocking hook marked asyncRewake')('dir', (_s) =>
+          Effect.gen(function*() {
+            const fs = yield* FileSystem
+            const dir = yield* fs.makeTempDirectoryScoped()
+            const hook = yield* writeShellHook(dir, 'rewake', 2, 'would block')
+            yield* writeSettings(dir, {
+              PreToolUse: [{
+                matcher: 'Write',
+                hooks: [{ type: 'command', command: hook, asyncRewake: true }],
+              }],
+            })
+            return dir
+          })),
+        When('a Write tool call fires')('result', (s) =>
+          Effect.gen(function*() {
+            const settings = yield* loadFrom(s.dir)
+            return yield* runPreToolUseHooks(
+              settings!,
+              makeToolCall('Write', { file_path: `${s.dir}/t.txt` }),
+              makeCtx(s.dir),
+            )
+          })),
+        Then('the call proceeds because a backgrounded hook cannot decide')((s) =>
+          Effect.sync(() => {
+            expect(s.result).toBeUndefined()
+          })
+        ),
+      ),
+    )
+  })
+
+Feature('Hook dispatcher - undecodable settings')
+  .withLayer(testLayer)
+  .body(({ scenario }) => {
+    scenario(
+      'Should name a settings file whose hooks cannot be decoded',
+      Gherkin.Do.pipe(
+        Given('a settings file with a command hook missing its command')('dir', (_s) =>
+          Effect.gen(function*() {
+            const fs = yield* FileSystem
+            const dir = yield* fs.makeTempDirectoryScoped()
+            yield* writeSettings(dir, {
+              PreToolUse: [{ matcher: 'Write', hooks: [{ type: 'command' }] }],
+            })
+            return dir
+          })),
+        When('the settings are scanned')(
+          'found',
+          (s) => collectSettingsGapsWithPaths([`${s.dir}/.claude/settings.json`]),
+        ),
+        Then('the file is named rather than silently skipped')((s) =>
+          Effect.sync(() => {
+            expect(s.found.malformedFiles).toHaveLength(1)
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'Should not let a broken file decode to an empty hook set',
+      Gherkin.Do.pipe(
+        Given('a settings file with a command hook missing its command')('dir', (_s) =>
+          Effect.gen(function*() {
+            const fs = yield* FileSystem
+            const dir = yield* fs.makeTempDirectoryScoped()
+            yield* writeSettings(dir, {
+              PreToolUse: [{ matcher: 'Write', hooks: [{ type: 'command' }] }],
+            })
+            return dir
+          })),
+        When('the settings are loaded')(
+          'result',
+          (s) => loadSettingsWithPaths([`${s.dir}/.claude/settings.json`]),
+        ),
+        Then('the loader refuses it instead of returning empty settings')((s) =>
+          Effect.sync(() => {
+            expect(s.result).toBeNull()
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'Should name a settings file that is not valid JSON',
+      Gherkin.Do.pipe(
+        Given('a settings file containing a trailing comma')('dir', (_s) =>
+          Effect.gen(function*() {
+            const fs = yield* FileSystem
+            const dir = yield* fs.makeTempDirectoryScoped()
+            yield* fs.makeDirectory(`${dir}/.claude`, { recursive: true })
+            yield* fs.writeFileString(`${dir}/.claude/settings.json`, '{ "hooks": {}, }')
+            return dir
+          })),
+        When('the settings are scanned')(
+          'found',
+          (s) => collectSettingsGapsWithPaths([`${s.dir}/.claude/settings.json`]),
+        ),
+        Then('the file is named')((s) =>
+          Effect.sync(() => {
+            expect(s.found.malformedFiles).toHaveLength(1)
+          })
+        ),
+      ),
+    )
+  })

@@ -25,6 +25,8 @@ const UnsupportedHook = S.Struct({
   type: S.Literal('http', 'mcp_tool', 'prompt', 'agent'),
 })
 
+export type CommandHook = S.Schema.Type<typeof CommandHook>
+
 export const HookCommand = S.Union(CommandHook, UnsupportedHook)
 
 export type HookCommand = S.Schema.Type<typeof HookCommand>
@@ -55,6 +57,10 @@ export type HookSettings = S.Schema.Type<typeof SettingsWrapped>
 const SettingsFlat = S.Struct({
   ...HookGroups.fields,
   disableAllHooks: S.optional(S.Boolean),
+  // A wrapped file that failed to decode must NOT land here. Without this the
+  // union falls through, `hooks` is ignored as an excess key, and a malformed
+  // settings file decodes to an empty one — silently disabling every hook.
+  hooks: S.optional(S.Never),
 })
 
 /**
@@ -144,7 +150,19 @@ export function unsupportedHookTypes(json: unknown): readonly string[] {
   })
 }
 
-export function mergeSettings(settings: readonly HookSettings[]): HookSettings {
+export interface SettingsSource {
+  readonly settings: HookSettings
+  /** Read from the managed-settings path, which downstream files may not disable. */
+  readonly managed: boolean
+}
+
+/**
+ * Resolve one effective hook set. Claude Code protects managed hooks: a
+ * `disableAllHooks` outside managed settings must not switch them off, and only
+ * a managed one turns everything off. Disabling is settled here, so no caller
+ * downstream has to re-check it.
+ */
+export function mergeSettings(sources: readonly SettingsSource[]): HookSettings {
   const hooks: Record<HookEvent, HookEntry[]> = {
     PreToolUse: [],
     PostToolUse: [],
@@ -153,20 +171,15 @@ export function mergeSettings(settings: readonly HookSettings[]): HookSettings {
     SessionEnd: [],
     Stop: [],
   }
-  let disableAllHooks: boolean | undefined
+  if (sources.some((s) => s.managed && s.settings.disableAllHooks === true)) return { hooks }
+  const disabledDownstream = sources.some((s) => !s.managed && s.settings.disableAllHooks === true)
 
-  for (const s of settings) {
+  for (const source of sources) {
+    if (disabledDownstream && !source.managed) continue
     for (const event of ALL_HOOK_EVENTS) {
-      hooks[event] = hooks[event].concat(Array.from(s.hooks[event]))
-    }
-    if (s.disableAllHooks !== undefined) {
-      disableAllHooks = s.disableAllHooks
+      hooks[event] = hooks[event].concat(Array.from(source.settings.hooks[event]))
     }
   }
 
-  return disableAllHooks === undefined ? { hooks } : { hooks, disableAllHooks }
-}
-
-export function isHooksDisabled(settings: HookSettings): boolean {
-  return settings.disableAllHooks === true
+  return { hooks }
 }
