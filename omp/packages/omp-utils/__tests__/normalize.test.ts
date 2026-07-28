@@ -21,6 +21,30 @@ describe('normalizeToolName', () => {
   it('Should_LeaveUnknownNamesAsIs_When_NameHasNoAlias', () => {
     expect(normalizeToolName('github')).toBe('Github')
   })
+
+  it('Should_MapWebSearch_When_InputIsWebSearch', () => {
+    expect(normalizeToolName('web_search')).toBe('WebSearch')
+  })
+
+  it('Should_MapTodo_When_InputIsTodo', () => {
+    expect(normalizeToolName('todo')).toBe('TodoWrite')
+  })
+
+  it('Should_MapAsk_When_InputIsAsk', () => {
+    expect(normalizeToolName('ask')).toBe('AskUserQuestion')
+  })
+
+  it('Should_LeaveMcpNamesVerbatim_When_NameStartsWithMcpPrefix', () => {
+    expect(normalizeToolName('mcp__foo_bar')).toBe('mcp__foo_bar')
+  })
+
+  it('Should_ApplyFallbackCapitalization_When_NameHasNoClaudeEquivalent', () => {
+    expect(normalizeToolName('eval')).toBe('Eval')
+  })
+
+  it('Should_ReturnEmptyString_When_InputIsEmpty', () => {
+    expect(normalizeToolName('')).toBe('')
+  })
 })
 
 describe('normalizeToolInput', () => {
@@ -80,6 +104,22 @@ describe('matchesMatcher', () => {
     expect(matchesMatcher('Write', 'Write|Edit|Create')).toBe(true)
     expect(matchesMatcher('Edit', 'Write|Edit|Create')).toBe(true)
     expect(matchesMatcher('Bash', 'Write|Edit|Create')).toBe(false)
+  })
+
+  it('Should_ReturnTrueWithoutThrowing_When_MatcherPatternIsMalformed', () => {
+    expect(() => matchesMatcher('Write', 'Write(')).not.toThrow()
+    expect(matchesMatcher('Write', 'Write(')).toBe(true)
+  })
+
+  it('Should_StillMatchExactNames_When_MatcherIsValid', () => {
+    expect(matchesMatcher('Write', 'Write')).toBe(true)
+    expect(matchesMatcher('Bash', 'Write')).toBe(false)
+  })
+
+  it('Should_ReturnTrueFromCache_When_MalformedMatcherIsRepeated', () => {
+    expect(matchesMatcher('Write', 'Write(')).toBe(true)
+    expect(matchesMatcher('Edit', 'Write(')).toBe(true)
+    expect(matchesMatcher('Bash', 'Write(')).toBe(true)
   })
 })
 

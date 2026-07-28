@@ -44,3 +44,48 @@ export function normalizeToolInput(toolName: string, input: Record<string, unkno
 
   return out
 }
+
+function isClaudeEditArray(value: unknown): value is readonly Record<string, unknown>[] {
+  return (
+    Array.isArray(value) &&
+    value.every((entry) =>
+      typeof entry === 'object' && entry !== null && ('new_string' in entry || 'old_string' in entry)
+    )
+  )
+}
+
+/**
+ * Re-key a hook's `updatedInput` back to the names the payload arrived with.
+ *
+ * `normalizeToolInput` renames `path` to `file_path` and rewrites `edits`, so a
+ * rewrite echoed back under Claude Code names would land beside the original
+ * keys that OMP actually reads, and be silently discarded.
+ */
+export function denormalizeToolInput(
+  original: Record<string, unknown>,
+  updated: unknown,
+): Record<string, unknown> {
+  if (typeof updated !== 'object' || updated === null || Array.isArray(updated)) return {}
+  const pathKey = 'file_path' in original || !('path' in original) ? 'file_path' : 'path'
+  const out: Record<string, unknown> = {}
+
+  for (const [key, value] of Object.entries(updated)) {
+    if (key === 'file_path') {
+      out[pathKey] = value
+      continue
+    }
+    // Derived by the forward pass from `edits`; echoing them back would add
+    // keys the OMP payload never had.
+    if ((key === 'old_string' || key === 'new_string') && !(key in original)) continue
+    if (key === 'edits' && isClaudeEditArray(value) && isOmpEditArray(original['edits'])) {
+      out['edits'] = value.map((entry) => ({
+        old_text: typeof entry['old_string'] === 'string' ? entry['old_string'] : '',
+        new_text: typeof entry['new_string'] === 'string' ? entry['new_string'] : '',
+      }))
+      continue
+    }
+    out[key] = value
+  }
+
+  return out
+}
