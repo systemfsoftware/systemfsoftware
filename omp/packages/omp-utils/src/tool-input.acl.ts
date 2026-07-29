@@ -5,6 +5,14 @@ import { Option, Schema as S } from 'effect'
  *
  * OMP sends `edits: [{ old_text, new_text }]` and `path`;
  * Claude Code hooks expect `old_string`/`new_string` and `file_path`.
+ *
+ * OMP's `hashline` and `apply-patch` edit modes send neither: the whole change
+ * arrives as one `input` string. A hook that scans the text being written —
+ * comment, secret, and lint guards all do — then reads no content at all and
+ * silently passes, while the same hook fires correctly on `Write`. Both
+ * grammars mark an added line with a leading `+` and a removed line with `-`,
+ * which is all the content recovery needs; path recovery from the same string
+ * is `editTargetPaths` in `edit-target.acl.ts`.
  */
 const FILE_TOOLS: Record<string, true> = {
   Write: true,
@@ -24,6 +32,11 @@ const OmpEdits = S.Array(
 
 const isOmpEditArray = S.is(OmpEdits)
 
+const patchLines = (input: string, sigil: string): string | undefined => {
+  const marked = input.split('\n').filter((line) => line.startsWith(sigil))
+  return marked.length === 0 ? undefined : marked.map((line) => line.slice(sigil.length)).join('\n')
+}
+
 export function normalizeToolInput(toolName: string, input: Record<string, unknown>): Record<string, unknown> {
   let out = input
   if (FILE_TOOLS[toolName] === true && 'path' in out && !('file_path' in out)) {
@@ -41,6 +54,16 @@ export function normalizeToolInput(toolName: string, input: Record<string, unkno
       edits: claudeEdits,
       old_string: claudeEdits.map((entry) => entry['old_string']).join('\n'),
       new_string: claudeEdits.map((entry) => entry['new_string']).join('\n'),
+    }
+  }
+
+  if (EDIT_TOOLS[toolName] === true && typeof out['input'] === 'string' && !('new_string' in out)) {
+    const added = patchLines(out['input'], '+')
+    const removed = patchLines(out['input'], '-')
+    out = {
+      ...out,
+      ...(added === undefined ? {} : { new_string: added }),
+      ...(removed === undefined ? {} : { old_string: removed }),
     }
   }
 

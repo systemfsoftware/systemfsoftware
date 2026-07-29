@@ -87,6 +87,43 @@ describe('normalizeToolInput', () => {
     const input = { file_path: 'src/foo.ts', old_string: 'a', new_string: 'b // c' }
     expect(normalizeToolInput('Edit', input)).toEqual(input)
   })
+
+  it('Should_RecoverAddedLines_When_HashlineEditSendsPatchInput', () => {
+    const input = {
+      path: 'src/foo.ts',
+      input: '[src/foo.ts#A1B2]\nSWAP 1.=1:\n+// a comment\n+const x = 1',
+    }
+    const out = normalizeToolInput('Edit', input)
+    expect(out['new_string']).toBe('// a comment\nconst x = 1')
+    expect(out['old_string']).toBeUndefined()
+  })
+
+  it('Should_SplitAddedFromRemoved_When_ApplyPatchInputCarriesBothSigils', () => {
+    const input = {
+      path: 'src/foo.ts',
+      input: '*** Begin Patch\n*** Update File: src/foo.ts\n-const x = 1\n+const x = 2\n*** End Patch',
+    }
+    const out = normalizeToolInput('Edit', input)
+    expect(out['new_string']).toBe('const x = 2')
+    expect(out['old_string']).toBe('const x = 1')
+  })
+
+  it('Should_KeepOneSigil_When_AddedLineItselfStartsWithASigil', () => {
+    const input = { path: 'doc.md', input: '[doc.md#A1B2]\nINS.TAIL:\n++ nested bullet\n+' }
+    expect(normalizeToolInput('Edit', input)['new_string']).toBe('+ nested bullet\n')
+  })
+
+  it('Should_AddNoContentFields_When_PatchInputHasNoMarkedLines', () => {
+    const input = { path: 'src/foo.ts', input: '[src/foo.ts#A1B2]\nDEL 3' }
+    const out = normalizeToolInput('Edit', input)
+    expect(out['new_string']).toBeUndefined()
+    expect(out['old_string']).toBeUndefined()
+  })
+
+  it('Should_NotTouchPatchInput_When_ToolIsNotAnEditTool', () => {
+    const input = { path: 'src/foo.ts', input: '+const x = 1' }
+    expect(normalizeToolInput('Write', input)).toEqual({ file_path: 'src/foo.ts', input: '+const x = 1' })
+  })
 })
 
 describe('matchesMatcher', () => {
