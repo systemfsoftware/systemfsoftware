@@ -8,7 +8,6 @@
  * suppresses exactly the root `AGENTS.md` the host already delivers, while a
  * downward `@packages/foo/AGENTS.md` still injects.
  */
-import * as Either from 'effect/Either'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as S from 'effect/Schema'
@@ -20,11 +19,14 @@ class Inject extends S.TaggedClass<Inject>()('Inject', {}) {
   readonly [RefVerdictTypeId] = RefVerdictTypeId
 }
 
-class Skip extends S.TaggedError<Skip>()('Skip', {
+class Skip extends S.TaggedClass<Skip>()('Skip', {
   matched: S.String,
 }) {
   readonly [RefVerdictTypeId] = RefVerdictTypeId
 }
+
+const RefVerdict = S.Union(Inject, Skip)
+type RefVerdict = S.Schema.Type<typeof RefVerdict>
 
 const CheckRefInjectionCommandTypeId: unique symbol = Symbol.for(
   '@systemfsoftware/omp-claude-compat/CheckRefInjectionCommand',
@@ -39,9 +41,9 @@ export class CheckRefInjectionCommand extends S.TaggedClass<CheckRefInjectionCom
 const matchedEntry = (cmd: CheckRefInjectionCommand): Option.Option<string> =>
   Option.fromNullable(cmd.skipList.find((entry) => entry === cmd.relativePath))
 
-export const decideRefInjection = (cmd: CheckRefInjectionCommand): Either.Either<Inject, Skip> =>
+export const decideRefInjection = (cmd: CheckRefInjectionCommand): RefVerdict =>
   Match.value(matchedEntry(cmd)).pipe(
-    Match.tag('None', () => Either.right(new Inject())),
-    Match.tag('Some', (some) => Either.left(new Skip({ matched: some.value }))),
+    Match.tag('None', () => new Inject()),
+    Match.tag('Some', (some) => new Skip({ matched: some.value })),
     Match.exhaustive,
   )

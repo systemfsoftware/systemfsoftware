@@ -1,4 +1,3 @@
-import * as Either from 'effect/Either'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as S from 'effect/Schema'
@@ -10,13 +9,16 @@ export class Allow extends S.TaggedClass<Allow>()('Allow', {}) {
   readonly [DelegationVerdictTypeId] = DelegationVerdictTypeId
 }
 
-export class Block extends S.TaggedError<Block>()('Block', {
+export class Block extends S.TaggedClass<Block>()('Block', {
   reason: S.String,
   how: How,
   skill: S.String,
 }) {
   readonly [DelegationVerdictTypeId] = DelegationVerdictTypeId
 }
+
+const DelegationVerdict = S.Union(Allow, Block)
+export type DelegationVerdict = S.Schema.Type<typeof DelegationVerdict>
 
 const CompiledGuard = S.Struct({
   protectedSkills: S.Array(S.String),
@@ -199,28 +201,23 @@ const analyzePrompt = (guard: CompiledGuard, prompt: string): PromptAnalysis =>
     Match.exhaustive,
   )
 
-export const decideNoSkillDelegation = (cmd: CheckDelegationCommand): Either.Either<Allow, Block> => {
-  return Match.value(classifyInput(cmd)).pipe(
-    Match.tag('NoGuard', () => Either.right(new Allow())),
-    Match.tag('NonDelegatedTool', () => Either.right(new Allow())),
+export const decideNoSkillDelegation = (cmd: CheckDelegationCommand): DelegationVerdict =>
+  Match.value(classifyInput(cmd)).pipe(
+    Match.tag('NoGuard', () => new Allow()),
+    Match.tag('NonDelegatedTool', () => new Allow()),
     Match.tag(
       'ProtectedSubagent',
-      ({ skill }) =>
-        Either.left(
-          new Block({ reason: denyMessage(skill, 'subagent_type', skill), how: 'subagent_type', skill }),
-        ),
+      ({ skill }) => new Block({ reason: denyMessage(skill, 'subagent_type', skill), how: 'subagent_type', skill }),
     ),
-    Match.tag('EmptyPrompt', () => Either.right(new Allow())),
+    Match.tag('EmptyPrompt', () => new Allow()),
     Match.tag('Prompted', ({ guard, prompt }) =>
       Match.value(analyzePrompt(guard, prompt)).pipe(
         Match.tag('Delegated', ({ skill, excerpt }) =>
-          Either.left(new Block({ reason: denyMessage(skill, 'prompt', excerpt), how: 'prompt', skill }))),
+          new Block({ reason: denyMessage(skill, 'prompt', excerpt), how: 'prompt', skill })),
         Match.tag('Referenced', () =>
-          Either.right(new Allow())),
-        Match.tag('NoDelegation', () =>
-          Either.right(new Allow())),
+          new Allow()),
+        Match.tag('NoDelegation', () => new Allow()),
         Match.exhaustive,
       )),
     Match.exhaustive,
   )
-}

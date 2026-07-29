@@ -1,5 +1,5 @@
 import { workflowCommandObject } from './rules/workflow-command-object.js'
-import { workflowErrorChannelRequired } from './rules/workflow-error-channel-required.js'
+import { workflowEitherInhabited } from './rules/workflow-either-inhabited.js'
 import { workflowInlineSchemas } from './rules/workflow-inline-schemas.js'
 import { workflowMatchExhaustive } from './rules/workflow-match-exhaustive.js'
 import { workflowNoAmbientImpurity } from './rules/workflow-no-ambient-impurity.js'
@@ -24,7 +24,7 @@ const rule = (name: string): string => `${PLUGIN_NAME}/${name}`
 const recommendedRules = {
   [rule('workflow-command-object')]: 'error',
   [rule('workflow-schema-required')]: 'error',
-  [rule('workflow-error-channel-required')]: 'error',
+  [rule('workflow-either-inhabited')]: 'error',
   [rule('workflow-typeid-required')]: 'error',
   [rule('workflow-typeid-shared-per-union')]: 'error',
   [rule('workflow-union-schema-declared')]: 'error',
@@ -48,7 +48,7 @@ export default {
   rules: {
     'workflow-command-object': workflowCommandObject,
     'workflow-schema-required': workflowSchemaRequired,
-    'workflow-error-channel-required': workflowErrorChannelRequired,
+    'workflow-either-inhabited': workflowEitherInhabited,
     'workflow-inline-schemas': workflowInlineSchemas,
     'workflow-typeid-required': workflowTypeidRequired,
     'workflow-typeid-shared-per-union': workflowTypeidSharedPerUnion,

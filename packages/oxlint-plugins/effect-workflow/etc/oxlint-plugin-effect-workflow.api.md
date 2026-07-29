@@ -14,7 +14,7 @@ const _default: {
     rules: {
         'workflow-command-object': Rule;
         'workflow-schema-required': Rule;
-        'workflow-error-channel-required': Rule;
+        'workflow-either-inhabited': Rule;
         'workflow-inline-schemas': Rule;
         'workflow-typeid-required': Rule;
         'workflow-typeid-shared-per-union': Rule;
