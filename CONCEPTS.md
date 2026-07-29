@@ -75,3 +75,15 @@ Anything that rewrites a submitted prompt must classify it first and leave a hos
 The output of a hook that finished after the dispatch that started it, held until the next model-bound prompt can carry it. One-shot by nature: nothing re-runs the hook that produced it, so it must survive a host-bound prompt instead of being spent on one. The buffer is bounded and drops the oldest entry when full.
 
 Distinct from the output of a hook that runs on every prompt submission, which is recoverable by definition — the same hook produces it again on the next prompt, so holding a copy would only duplicate it.
+
+## Hook bridge
+
+### Hook verdict
+
+The decision a hook's exit status and output are interpreted into before the harness acts on it — allow, block with a reason, or allow with a warning. The hook itself never states the verdict directly; the bridge derives it, which is why a hook's exit conventions and the bridge's interpretation of them have to be read as one contract. A hook that exits successfully having produced no decision must be read as an allow, not as a malformed decision — conflating the two turns every quiet success into a spurious warning.
+
+### Patch-mode edit
+
+An edit whose entire change arrives as a single patch string, with the target files named inside the patch text, rather than as a path plus discrete before/after pairs. The distinction matters at any boundary that expects the discrete shape: the file being edited and the text being written both have to be recovered by parsing the patch, and a boundary that recovers only one of them yields a payload that looks well-formed to consumers reading the recovered half and empty to consumers reading the other.
+
+A consumer that inspects the text of a change must be given that text explicitly — being handed only the path is not equivalent, because it re-reads nothing.
