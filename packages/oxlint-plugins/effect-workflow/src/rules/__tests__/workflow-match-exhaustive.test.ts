@@ -129,7 +129,7 @@ ruleTester.run('workflow-match-exhaustive', workflowMatchExhaustive, {
       name: 'Should_Pass_When_TagReferenceIsNotATagArm',
       code: `const result = Match.value(input).pipe(
         Match.tag,
-        Match.orElse(() => fallback)
+        Match.exhaustive
       )`,
       filename: 'cancel-order.workflow.ts',
     },
@@ -137,13 +137,29 @@ ruleTester.run('workflow-match-exhaustive', workflowMatchExhaustive, {
       name: 'Should_Pass_When_NonMatchTagCall',
       code: `const result = Match.value(input).pipe(
         Other.Match.tag('A', () => a),
-        Match.orElse(() => fallback)
+        Match.exhaustive
+      )`,
+      filename: 'cancel-order.workflow.ts',
+    },
+    {
+      name: 'Should_Pass_When_RecordArmSurvivorPrecedesPredicateArm',
+      code: `const result = Match.value({ hasReference, hasDelegation }).pipe(
+        Match.when({ hasReference: true }, () => referenced),
+        Match.when({ hasDelegation: false }, () => none),
+        Match.orElse(() => delegated)
       )`,
       filename: 'cancel-order.workflow.ts',
     },
     {
       name: 'Should_Pass_When_PipeHasNoArguments',
       code: `const result = Match.value(input).pipe()`,
+      filename: 'cancel-order.workflow.ts',
+    },
+    {
+      name: 'Should_Pass_When_OrElseNamespaceIsNotMatch',
+      code: `const result = Match.value(input).pipe(
+        Other.orElse(() => fallback)
+      )`,
       filename: 'cancel-order.workflow.ts',
     },
   ],
@@ -260,6 +276,146 @@ ruleTester.run('workflow-match-exhaustive', workflowMatchExhaustive, {
             expected: 'a Match.exhaustive terminator',
             actual: 'a tag dispatch with no exhaustiveness terminator',
             fix: 'end the pipe with Match.exhaustive',
+          },
+        },
+      ],
+    },
+    {
+      name: 'Should_ReportOpenDispatch_When_PredicateArmEndsWithOrElse',
+      code: `const result = Match.value(cmd.text).pipe(
+        Match.when(opensWithSigil, () => host),
+        Match.orElse(() => model)
+      )`,
+      filename: 'prompt-destination.workflow.ts',
+      errors: [
+        {
+          messageId: 'orElseOnOpenDispatch',
+          data: {
+            name: 'Match.orElse',
+            expected: 'Match.tag arms closed by Match.exhaustive',
+            actual: 'Match.orElse as the fallback of a predicate or literal dispatch over an open type',
+            fix:
+              'derive a closed variant first with a total constructor (Option.fromNullable, a tagged union), then dispatch with Match.tag and Match.exhaustive',
+          },
+        },
+      ],
+    },
+    {
+      name: 'Should_ReportOpenDispatch_When_LiteralArmsEndWithOrElse',
+      code: `const result = Match.value(result.code).pipe(
+        Match.when(2, () => block),
+        Match.when(0, () => zero),
+        Match.orElse(() => other)
+      )`,
+      filename: 'hook-verdict.workflow.ts',
+      errors: [
+        {
+          messageId: 'orElseOnOpenDispatch',
+          data: {
+            name: 'Match.orElse',
+            expected: 'Match.tag arms closed by Match.exhaustive',
+            actual: 'Match.orElse as the fallback of a predicate or literal dispatch over an open type',
+            fix:
+              'derive a closed variant first with a total constructor (Option.fromNullable, a tagged union), then dispatch with Match.tag and Match.exhaustive',
+          },
+        },
+      ],
+    },
+    {
+      name: 'Should_ReportOpenDispatch_When_OrElseIsTheOnlyArm',
+      code: `const result = Match.value(input).pipe(
+        Match.orElse(() => fallback)
+      )`,
+      filename: 'cancel-order.workflow.ts',
+      errors: [
+        {
+          messageId: 'orElseOnOpenDispatch',
+          data: {
+            name: 'Match.orElse',
+            expected: 'Match.tag arms closed by Match.exhaustive',
+            actual: 'Match.orElse as the fallback of a predicate or literal dispatch over an open type',
+            fix:
+              'derive a closed variant first with a total constructor (Option.fromNullable, a tagged union), then dispatch with Match.tag and Match.exhaustive',
+          },
+        },
+      ],
+    },
+    {
+      name: 'Should_ReportOpenDispatch_When_BareTagReferencePrecedesOrElse',
+      code: `const result = Match.value(input).pipe(
+        Match.tag,
+        Match.orElse(() => fallback)
+      )`,
+      filename: 'cancel-order.workflow.ts',
+      errors: [
+        {
+          messageId: 'orElseOnOpenDispatch',
+          data: {
+            name: 'Match.orElse',
+            expected: 'Match.tag arms closed by Match.exhaustive',
+            actual: 'Match.orElse as the fallback of a predicate or literal dispatch over an open type',
+            fix:
+              'derive a closed variant first with a total constructor (Option.fromNullable, a tagged union), then dispatch with Match.tag and Match.exhaustive',
+          },
+        },
+      ],
+    },
+    {
+      name: 'Should_ReportOpenDispatch_When_ArmCalleeIsNotAMemberExpression',
+      code: `const result = Match.value(input).pipe(
+        someFn({ active: true }),
+        Match.orElse(() => fallback)
+      )`,
+      filename: 'cancel-order.workflow.ts',
+      errors: [
+        {
+          messageId: 'orElseOnOpenDispatch',
+          data: {
+            name: 'Match.orElse',
+            expected: 'Match.tag arms closed by Match.exhaustive',
+            actual: 'Match.orElse as the fallback of a predicate or literal dispatch over an open type',
+            fix:
+              'derive a closed variant first with a total constructor (Option.fromNullable, a tagged union), then dispatch with Match.tag and Match.exhaustive',
+          },
+        },
+      ],
+    },
+    {
+      name: 'Should_ReportOpenDispatch_When_RecordArmNamespaceIsNotMatch',
+      code: `const result = Match.value(input).pipe(
+        Other.when({ active: true }, () => active),
+        Match.orElse(() => fallback)
+      )`,
+      filename: 'cancel-order.workflow.ts',
+      errors: [
+        {
+          messageId: 'orElseOnOpenDispatch',
+          data: {
+            name: 'Match.orElse',
+            expected: 'Match.tag arms closed by Match.exhaustive',
+            actual: 'Match.orElse as the fallback of a predicate or literal dispatch over an open type',
+            fix:
+              'derive a closed variant first with a total constructor (Option.fromNullable, a tagged union), then dispatch with Match.tag and Match.exhaustive',
+          },
+        },
+      ],
+    },
+    {
+      name: 'Should_ReportOpenDispatch_When_RecordArmMethodIsNotWhen',
+      code: `const result = Match.value(input).pipe(
+        Match.notWhen({ active: true }, () => active),
+        Match.orElse(() => fallback)
+      )`,
+      filename: 'cancel-order.workflow.ts',
+      errors: [
+        {
+          messageId: 'orElseOnOpenDispatch',
+          data: {
+            name: 'Match.orElse',
+            expected: 'Match.tag arms closed by Match.exhaustive',
+            actual: 'Match.orElse as the fallback of a predicate or literal dispatch over an open type',
+            fix:
+              'derive a closed variant first with a total constructor (Option.fromNullable, a tagged union), then dispatch with Match.tag and Match.exhaustive',
           },
         },
       ],

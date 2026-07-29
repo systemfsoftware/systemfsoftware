@@ -1,5 +1,6 @@
 import * as Either from 'effect/Either'
 import * as Match from 'effect/Match'
+import * as Option from 'effect/Option'
 import * as S from 'effect/Schema'
 import { Allow, Block, HookResult, Warning } from './hook-dispatcher.schema.js'
 import type { HookDecision } from './hook-dispatcher.schema.js'
@@ -44,42 +45,59 @@ type ExitKind = S.Schema.Type<typeof ExitKind>
 // otherwise treats the output as non-decision text (blank, a status line,
 // a debug echo). Only output that opens with `{` claims to be a decision,
 // so only that shape can be malformed.
+const decisionJsonStdout = (stdout: string): Option.Option<string> =>
+  Option.liftPredicate((trimmed: string): trimmed is string => trimmed.startsWith('{'))(stdout.trim())
+
 const classifyExitZero = (stdout: string): ExitKind =>
-  Match.value(stdout.trim()).pipe(
-    Match.when((trimmed: string) => trimmed.startsWith('{'), () => new ExitDecisionJson({})),
-    Match.orElse(() => new ExitNoDecision({})),
+  Match.value(decisionJsonStdout(stdout)).pipe(
+    Match.tag('Some', () => new ExitDecisionJson({})),
+    Match.tag('None', () => new ExitNoDecision({})),
+    Match.exhaustive,
   )
+
+const EXIT_CODE_KINDS: Readonly<Record<number, (result: HookResult) => ExitKind>> = {
+  0: (result) => classifyExitZero(result.stdout),
+  2: () => new ExitBlock({}),
+}
 
 const classifyResult = (result: HookResult): ExitKind =>
-  Match.value(result.code).pipe(
-    Match.when(2, () => new ExitBlock({})),
-    Match.when(0, () => classifyExitZero(result.stdout)),
-    Match.orElse(() => new ExitOther({})),
+  Match.value(Option.fromNullable(EXIT_CODE_KINDS[result.code])).pipe(
+    Match.tag('Some', (some) => some.value(result)),
+    Match.tag('None', () => new ExitOther({})),
+    Match.exhaustive,
   )
+
+const spokenStderr = (stderr: string): Option.Option<string> =>
+  Option.liftPredicate((trimmed: string): trimmed is string => trimmed !== '')(stderr.trim())
 
 const blockReason = (stderr: string, event: string): string =>
-  Match.value(stderr.trim()).pipe(
-    Match.when('', () => `Blocked by ${event} hook`),
-    Match.orElse((trimmed) => trimmed),
+  Match.value(spokenStderr(stderr)).pipe(
+    Match.tag('Some', (some) => some.value),
+    Match.tag('None', () => `Blocked by ${event} hook`),
+    Match.exhaustive,
   )
 
+const BLOCK_REASON_READERS: Readonly<Record<string, (parsed: ParsedHookOutput, event: string) => string>> = {
+  deny: (parsed, event) => parsed.hookSpecificOutput?.permissionDecisionReason ?? `Blocked by ${event} hook`,
+  block: (parsed, event) => parsed.reason ?? `Blocked by ${event} hook`,
+}
+
 const decideFromParsed = (parsed: ParsedHookOutput, event: string): HookDecision =>
-  Match.value(parsed.hookSpecificOutput?.permissionDecision ?? parsed.decision).pipe(
-    Match.when('deny', () =>
-      new Block({
-        reason: parsed.hookSpecificOutput?.permissionDecisionReason ?? `Blocked by ${event} hook`,
-      })),
-    Match.when('block', () =>
-      new Block({
-        reason: parsed.reason ?? `Blocked by ${event} hook`,
-      })),
-    Match.orElse(() => new Allow({ updatedInput: parsed.hookSpecificOutput?.updatedInput })),
+  Match.value(
+    Option.fromNullable(parsed.hookSpecificOutput?.permissionDecision ?? parsed.decision).pipe(
+      Option.flatMapNullable((key) => BLOCK_REASON_READERS[key]),
+    ),
+  ).pipe(
+    Match.tag('Some', (some) => new Block({ reason: some.value(parsed, event) })),
+    Match.tag('None', () => new Allow({ updatedInput: parsed.hookSpecificOutput?.updatedInput })),
+    Match.exhaustive,
   )
 
 const decideFromNonStandardExit = (stderr: string): HookDecision =>
-  Match.value(stderr.trim()).pipe(
-    Match.when('', () => new Allow({})),
-    Match.orElse((message) => new Warning({ message })),
+  Match.value(spokenStderr(stderr)).pipe(
+    Match.tag('Some', (some) => new Warning({ message: some.value })),
+    Match.tag('None', () => new Allow({})),
+    Match.exhaustive,
   )
 
 export const interpretHookResult = (

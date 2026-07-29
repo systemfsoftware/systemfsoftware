@@ -1,4 +1,6 @@
+import * as Either from 'effect/Either'
 import * as Match from 'effect/Match'
+import * as Option from 'effect/Option'
 import * as S from 'effect/Schema'
 
 const How = S.Literal('subagent_type', 'prompt')
@@ -8,16 +10,13 @@ export class Allow extends S.TaggedClass<Allow>()('Allow', {}) {
   readonly [DelegationVerdictTypeId] = DelegationVerdictTypeId
 }
 
-export class Block extends S.TaggedClass<Block>()('Block', {
+export class Block extends S.TaggedError<Block>()('Block', {
   reason: S.String,
   how: How,
   skill: S.String,
 }) {
   readonly [DelegationVerdictTypeId] = DelegationVerdictTypeId
 }
-
-const DelegationVerdict = S.Union(Allow, Block)
-export type DelegationVerdict = S.Schema.Type<typeof DelegationVerdict>
 
 const CompiledGuard = S.Struct({
   protectedSkills: S.Array(S.String),
@@ -131,76 +130,95 @@ function firstMatch(patterns: ReadonlyArray<string>, prompt: string): RegExpExec
     .find((match): match is RegExpExecArray => match !== null) ?? null
 }
 
-const classifySubagent = (cmd: CheckDelegationCommand, guard: CompiledGuard): ClassifiedInput => {
-  return Match.value(cmd.subagentType).pipe(
-    Match.when(
-      (sub): sub is string => sub !== '' && guard.protectedSkills.includes(sub),
-      (skill) => new ProtectedSubagent({ skill }),
-    ),
-    Match.orElse(() =>
-      Match.value(cmd.prompt).pipe(
-        Match.when('', () => new EmptyPrompt()),
-        Match.orElse((prompt) => new Prompted({ guard, prompt })),
-      )
-    ),
-  )
-}
+const matchedNonEmptyPrompt = (prompt: string): Option.Option<string> =>
+  Option.liftPredicate((p: string): p is string => p !== '')(prompt)
 
-const classifyInput = (cmd: CheckDelegationCommand): ClassifiedInput => {
-  return Match.value(cmd.guard).pipe(
-    Match.when(null, () => new NoGuard()),
-    Match.orElse((guard) =>
-      Match.value(cmd.toolName.toLowerCase()).pipe(
-        Match.when('task', () => classifySubagent(cmd, guard)),
-        Match.when('agent', () => classifySubagent(cmd, guard)),
-        Match.orElse(() => new NonDelegatedTool()),
-      )
-    ),
+const classifyByPrompt = (cmd: CheckDelegationCommand, guard: CompiledGuard): ClassifiedInput =>
+  Match.value(matchedNonEmptyPrompt(cmd.prompt)).pipe(
+    Match.tag('Some', ({ value: prompt }) => new Prompted({ guard, prompt })),
+    Match.tag('None', () => new EmptyPrompt()),
+    Match.exhaustive,
   )
-}
 
-const analyzePrompt = (guard: CompiledGuard, prompt: string): PromptAnalysis => {
+const matchedProtectedSkill = (cmd: CheckDelegationCommand, guard: CompiledGuard): Option.Option<string> =>
+  Option.liftPredicate(
+    (sub: string): sub is string => sub !== '' && guard.protectedSkills.includes(sub),
+  )(cmd.subagentType)
+
+const classifySubagent = (cmd: CheckDelegationCommand, guard: CompiledGuard): ClassifiedInput =>
+  Match.value(matchedProtectedSkill(cmd, guard)).pipe(
+    Match.tag('Some', ({ value: skill }) => new ProtectedSubagent({ skill })),
+    Match.tag('None', () => classifyByPrompt(cmd, guard)),
+    Match.exhaustive,
+  )
+
+const matchedGuard = (cmd: CheckDelegationCommand): Option.Option<CompiledGuard> => Option.fromNullable(cmd.guard)
+
+const matchedDelegatorTool = (cmd: CheckDelegationCommand, guard: CompiledGuard): Option.Option<ClassifiedInput> =>
+  Option.liftPredicate(
+    (name: string): name is 'task' | 'agent' => name === 'task' || name === 'agent',
+  )(cmd.toolName.toLowerCase()).pipe(Option.map(() => classifySubagent(cmd, guard)))
+
+const classifyInput = (cmd: CheckDelegationCommand): ClassifiedInput =>
+  Match.value(matchedGuard(cmd)).pipe(
+    Match.tag('None', () => new NoGuard()),
+    Match.tag('Some', ({ value: guard }) =>
+      Match.value(matchedDelegatorTool(cmd, guard)).pipe(
+        Match.tag('None', () => new NonDelegatedTool()),
+        Match.tag('Some', ({ value }) => value),
+        Match.exhaustive,
+      )),
+    Match.exhaustive,
+  )
+
+const matchedMentionedSkills = (guard: CompiledGuard, prompt: string): Option.Option<[string, ...string[]]> => {
   const mentioned = Object.entries(guard.mentionPatterns)
     .filter(([, pattern]) => matchesPattern(pattern, prompt))
     .map(([name]) => name)
-
-  return Match.value(mentioned).pipe(
-    Match.when(
-      (xs): xs is [string, ...string[]] => xs.length > 0,
-      ([skill]) => {
-        const hasReference = guard.referenceVerbs.some((pattern) => matchesPattern(pattern, prompt))
-        const hasDelegation = guard.delegationVerbs.some((pattern) => matchesPattern(pattern, prompt))
-        return Match.value({ hasReference, hasDelegation }).pipe(
-          Match.when({ hasReference: true }, () => new Referenced()),
-          Match.when({ hasDelegation: false }, () => new NoDelegation()),
-          Match.orElse(() => {
-            const match = firstMatch(guard.delegationVerbs, prompt)
-            const excerpt = match !== null ? match[0] : prompt.slice(0, 120)
-            return new Delegated({ skill, excerpt })
-          }),
-        )
-      },
-    ),
-    Match.orElse(() => new NoDelegation()),
-  )
+  return Option.liftPredicate(
+    (xs: ReadonlyArray<string>): xs is [string, ...string[]] => xs.length > 0,
+  )(mentioned)
 }
+const analyzePrompt = (guard: CompiledGuard, prompt: string): PromptAnalysis =>
+  Match.value(matchedMentionedSkills(guard, prompt)).pipe(
+    Match.tag('None', () => new NoDelegation()),
+    Match.tag('Some', ({ value: mentioned }) => {
+      const skill = mentioned[0]
+      const hasReference = guard.referenceVerbs.some((pattern) => matchesPattern(pattern, prompt))
+      const hasDelegation = guard.delegationVerbs.some((pattern) => matchesPattern(pattern, prompt))
+      return Match.value({ hasReference, hasDelegation }).pipe(
+        Match.when({ hasReference: true }, () => new Referenced()),
+        Match.when({ hasDelegation: false }, () => new NoDelegation()),
+        Match.orElse(() => {
+          const match = firstMatch(guard.delegationVerbs, prompt)
+          const excerpt = match !== null ? match[0] : prompt.slice(0, 120)
+          return new Delegated({ skill, excerpt })
+        }),
+      )
+    }),
+    Match.exhaustive,
+  )
 
-export const decideNoSkillDelegation = (cmd: CheckDelegationCommand): DelegationVerdict => {
+export const decideNoSkillDelegation = (cmd: CheckDelegationCommand): Either.Either<Allow, Block> => {
   return Match.value(classifyInput(cmd)).pipe(
-    Match.tag('NoGuard', () => new Allow()),
-    Match.tag('NonDelegatedTool', () => new Allow()),
+    Match.tag('NoGuard', () => Either.right(new Allow())),
+    Match.tag('NonDelegatedTool', () => Either.right(new Allow())),
     Match.tag(
       'ProtectedSubagent',
-      ({ skill }) => new Block({ reason: denyMessage(skill, 'subagent_type', skill), how: 'subagent_type', skill }),
+      ({ skill }) =>
+        Either.left(
+          new Block({ reason: denyMessage(skill, 'subagent_type', skill), how: 'subagent_type', skill }),
+        ),
     ),
-    Match.tag('EmptyPrompt', () => new Allow()),
+    Match.tag('EmptyPrompt', () => Either.right(new Allow())),
     Match.tag('Prompted', ({ guard, prompt }) =>
       Match.value(analyzePrompt(guard, prompt)).pipe(
         Match.tag('Delegated', ({ skill, excerpt }) =>
-          new Block({ reason: denyMessage(skill, 'prompt', excerpt), how: 'prompt', skill })),
+          Either.left(new Block({ reason: denyMessage(skill, 'prompt', excerpt), how: 'prompt', skill }))),
         Match.tag('Referenced', () =>
-          new Allow()),
-        Match.tag('NoDelegation', () => new Allow()),
+          Either.right(new Allow())),
+        Match.tag('NoDelegation', () =>
+          Either.right(new Allow())),
         Match.exhaustive,
       )),
     Match.exhaustive,

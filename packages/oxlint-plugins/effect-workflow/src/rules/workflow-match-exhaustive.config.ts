@@ -8,6 +8,9 @@ export const Options = S.Struct({})
 export const OR_ELSE_ON_CLOSED_UNION_MESSAGE =
   '{{name}} is forbidden. Expected: {{expected}}. Actual: {{actual}}. Fix: {{fix}}.' as const
 
+export const OR_ELSE_ON_OPEN_DISPATCH_MESSAGE =
+  '{{name}} is forbidden. Expected: {{expected}}. Actual: {{actual}}. Fix: {{fix}}.' as const
+
 export const MISSING_EXHAUSTIVE_MESSAGE =
   '{{name}} is forbidden. Expected: {{expected}}. Actual: {{actual}}. Fix: {{fix}}.' as const
 
@@ -26,11 +29,13 @@ export const MATCH_ARM_KINDS: Readonly<Record<string, 'tag' | 'orElse' | 'exhaus
 export const meta = {
   type: 'problem',
   docs: {
-    description: 'Match.tag chains in *.workflow.ts must terminate with Match.exhaustive, never Match.orElse.',
+    description:
+      'Match dispatch in *.workflow.ts must terminate with Match.exhaustive. Match.orElse is legal only over a small open record of booleans.',
   },
   schema: [Options],
   messages: {
     orElseOnClosedUnion: OR_ELSE_ON_CLOSED_UNION_MESSAGE,
+    orElseOnOpenDispatch: OR_ELSE_ON_OPEN_DISPATCH_MESSAGE,
     missingExhaustive: MISSING_EXHAUSTIVE_MESSAGE,
   },
 } as const

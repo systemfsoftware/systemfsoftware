@@ -22,6 +22,7 @@ const _default: {
         'executor-no-layer-binding': Rule;
         'workflow-command-object': Rule;
         'workflow-schema-required': Rule;
+        'workflow-error-channel-required': Rule;
         'workflow-inline-schemas': Rule;
         'workflow-typeid-required': Rule;
         'workflow-typeid-shared-per-union': Rule;

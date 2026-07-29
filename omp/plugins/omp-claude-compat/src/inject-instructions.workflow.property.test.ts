@@ -1,5 +1,5 @@
 import { describe, it } from '@effect/vitest'
-import { FastCheck as fc } from 'effect'
+import { Either, FastCheck as fc } from 'effect'
 import { CheckRefInjectionCommand, decideRefInjection, DEFAULT_NO_INJECT_REFS } from './inject-instructions.workflow.js'
 
 const nameChar = fc.constantFrom('a', 'b', 'c', 'd', 'e', 'A', 'B', 'C', '0', '1', '-', '_')
@@ -18,7 +18,7 @@ describe('decideRefInjection (PBT)', () => {
     '∀name_SkipListContains_→Skip',
     [fileName, fc.array(fileName, { maxLength: 5 })],
     ([name, others]) => {
-      return decideRefInjection(check(name, [...others, name]))._tag === 'Skip'
+      return Either.isLeft(decideRefInjection(check(name, [...others, name])))
     },
   )
 
@@ -26,7 +26,9 @@ describe('decideRefInjection (PBT)', () => {
     '∀name_SkipListOmits_→Inject',
     [fileName, fc.array(fileName, { maxLength: 5 })],
     ([name, others]) => {
-      return decideRefInjection(check(name, others.filter((other) => other !== name)))._tag === 'Inject'
+      return Either.isRight(
+        decideRefInjection(check(name, others.filter((other) => other !== name))),
+      )
     },
   )
 
@@ -34,7 +36,7 @@ describe('decideRefInjection (PBT)', () => {
     '∀name_EmptySkipList_→Inject',
     [fileName],
     ([name]) => {
-      return decideRefInjection(check(name, []))._tag === 'Inject'
+      return Either.isRight(decideRefInjection(check(name, [])))
     },
   )
 
@@ -42,7 +44,9 @@ describe('decideRefInjection (PBT)', () => {
     '∀name_DefaultSkipList_→SkipAgentsMd',
     [fc.array(fileName, { maxLength: 4 })],
     ([others]) => {
-      return decideRefInjection(check('AGENTS.md', [...others, ...DEFAULT_NO_INJECT_REFS]))._tag === 'Skip'
+      return Either.isLeft(
+        decideRefInjection(check('AGENTS.md', [...others, ...DEFAULT_NO_INJECT_REFS])),
+      )
     },
   )
 
@@ -50,8 +54,8 @@ describe('decideRefInjection (PBT)', () => {
     '∀name_SkipVerdict_→CarriesMatched',
     [fileName],
     ([name]) => {
-      const verdict = decideRefInjection(check(name, [name]))
-      return verdict._tag === 'Skip' && verdict.matched === name
+      const result = decideRefInjection(check(name, [name]))
+      return Either.isLeft(result) && result.left.matched === name
     },
   )
 
@@ -59,7 +63,7 @@ describe('decideRefInjection (PBT)', () => {
     '∀path_SkipListHasBaseNameOnly_→Inject',
     [fileName, dirPrefix],
     ([name, prefix]) => {
-      return decideRefInjection(check(`${prefix}/${name}`, [name]))._tag === 'Inject'
+      return Either.isRight(decideRefInjection(check(`${prefix}/${name}`, [name])))
     },
   )
 
@@ -67,7 +71,9 @@ describe('decideRefInjection (PBT)', () => {
     '∀prefix_NestedAgentsMdDefaultSkipList_→Inject',
     [dirPrefix],
     ([prefix]) => {
-      return decideRefInjection(check(`${prefix}/AGENTS.md`, DEFAULT_NO_INJECT_REFS))._tag === 'Inject'
+      return Either.isRight(
+        decideRefInjection(check(`${prefix}/AGENTS.md`, DEFAULT_NO_INJECT_REFS)),
+      )
     },
   )
 
@@ -75,7 +81,9 @@ describe('decideRefInjection (PBT)', () => {
     '∀path_SkipListHasFullPath_→Skip',
     [fileName, dirPrefix],
     ([name, prefix]) => {
-      return decideRefInjection(check(`${prefix}/${name}`, [`${prefix}/${name}`]))._tag === 'Skip'
+      return Either.isLeft(
+        decideRefInjection(check(`${prefix}/${name}`, [`${prefix}/${name}`])),
+      )
     },
   )
 })

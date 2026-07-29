@@ -1,12 +1,13 @@
 import type { PlatformError } from '@effect/platform/Error'
 import { TomlLoader } from '@systemfsoftware/omp-utils'
 import type { TomlConfig } from '@systemfsoftware/omp-utils'
-import { Effect, Match } from 'effect'
+import { Effect, Either } from 'effect'
 import {
+  Allow,
+  Block,
   CheckDelegationCommand,
   type CompiledGuard,
   decideNoSkillDelegation,
-  type DelegationVerdict,
 } from './no-skill-delegation.workflow.js'
 
 export type BlockResult = {
@@ -59,12 +60,11 @@ function compileGuard(names: readonly string[]): CompiledGuard | null {
   }
 }
 
-function blockResult(verdict: DelegationVerdict): BlockResult | undefined {
-  return Match.value(verdict).pipe(
-    Match.tag('Block', (v) => ({ block: true as const, reason: v.reason, how: v.how, skill: v.skill })),
-    Match.tag('Allow', () => undefined),
-    Match.exhaustive,
-  )
+function blockResult(verdict: Either.Either<Allow, Block>): BlockResult | undefined {
+  return Either.match(verdict, {
+    onLeft: (v) => ({ block: true as const, reason: v.reason, how: v.how, skill: v.skill }),
+    onRight: () => undefined,
+  })
 }
 
 export function loadGuard(cwd: string): Effect.Effect<CompiledGuard | null, PlatformError, TomlLoader> {
