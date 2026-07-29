@@ -1,10 +1,6 @@
 import { describe, it } from '@effect/vitest'
 import { FastCheck as fc } from 'effect'
-import {
-  CheckRefInjectionCommand,
-  decideRefInjection,
-  DEFAULT_NO_INJECT_REFS,
-} from '../src/inject-instructions.workflow.js'
+import { CheckRefInjectionCommand, decideRefInjection, DEFAULT_NO_INJECT_REFS } from './inject-instructions.workflow.js'
 
 const nameChar = fc.constantFrom('a', 'b', 'c', 'd', 'e', 'A', 'B', 'C', '0', '1', '-', '_')
 

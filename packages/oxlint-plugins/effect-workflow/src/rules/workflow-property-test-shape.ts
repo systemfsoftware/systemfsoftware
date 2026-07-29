@@ -1,9 +1,8 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
-import { Schema as S } from 'effect'
-import { meta, Options, type OptionsType } from './workflow-property-test-shape.config.js'
+import { meta } from './workflow-property-test-shape.config.js'
 
-export type MessageIds = 'plainIt' | 'rawFcAssert' | 'wrongLocation'
+export type MessageIds = 'plainIt' | 'rawFcAssert'
 
 const PropertySuffix = '.property.test.ts'
 
@@ -15,43 +14,10 @@ const isCallTo = (node: ESTree.CallExpression, name: string): boolean => {
   return false
 }
 
-const PathSegments = S.Tuple([S.String, S.String], S.String)
-
 export const workflowPropertyTestShape = defineRule({
   meta,
   create(context: Context) {
-    const options: OptionsType = S.decodeUnknownSync(Options)(context.options[0] ?? {})
-    const testDir = options.testDir
-    const filename = context.filename
-
-    let basename: string
-    let parentDir: string
-    try {
-      const decoded = S.decodeUnknownSync(PathSegments)(filename.split('/').reverse())
-      basename = decoded[0]
-      parentDir = decoded[1]
-    } catch {
-      return {}
-    }
-
-    if (!basename.endsWith(PropertySuffix)) return {}
-
-    if (parentDir !== testDir) {
-      return {
-        Program(node: ESTree.Program) {
-          context.report({
-            node,
-            messageId: 'wrongLocation',
-            data: {
-              name: basename,
-              expected: `${testDir}/${basename} adjacent to the workflow`,
-              actual: `${basename} is under ${parentDir}/ instead of ${testDir}/`,
-              fix: `move ${basename} into ${testDir}/ adjacent to the workflow`,
-            },
-          })
-        },
-      }
-    }
+    if (!context.filename.endsWith(PropertySuffix)) return {}
 
     return {
       CallExpression(node: ESTree.CallExpression) {

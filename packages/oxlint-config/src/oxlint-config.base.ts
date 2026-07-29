@@ -20,6 +20,7 @@ export default defineConfig({
     import.meta.resolve('@systemfsoftware/oxlint-plugin-property-testing'),
     import.meta.resolve('@systemfsoftware/oxlint-plugin-effect-executor'),
     import.meta.resolve('@systemfsoftware/oxlint-plugin-effect-workflow'),
+    import.meta.resolve('@systemfsoftware/oxlint-plugin-test-placement'),
   ],
 
   rules: {

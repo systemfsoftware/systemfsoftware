@@ -1,6 +1,6 @@
 # AGENTS.md — `packages/oxlint-plugins/`
 
-> **Location:** `packages/oxlint-plugins/` — the oxlint plugin family: `core/` (general rule set), `test-hygiene/` (test naming), `property-testing/` (property-test contract), `effect-executor/` (executor cell), `effect-workflow/` (workflow constitution), `effect-dmmf/` (combines property-testing + effect-executor + effect-workflow under one entrypoint). Universal agent rules live in the root `AGENTS.md`; this file carries the shared rule-authoring conventions for every plugin in this folder. Package leaves carry only their package's delta.
+> **Location:** `packages/oxlint-plugins/` — the oxlint plugin family: `core/` (general rule set), `test-hygiene/` (test naming), `property-testing/` (property-test contract), `effect-executor/` (executor cell), `effect-workflow/` (workflow constitution), `effect-dmmf/` (combines property-testing + effect-executor + effect-workflow under one entrypoint), `test-placement/` (test location and suffix). Universal agent rules live in the root `AGENTS.md`; this file carries the shared rule-authoring conventions for every plugin in this folder. Package leaves carry only their package's delta.
 
 ## Critical
 
@@ -116,6 +116,7 @@ defineConfig({
 | `effect-executor/`  | Spec of record (`architect-executor` cell)                                                             |
 | `property-testing/` | —                                                                                                      |
 | `effect-dmmf/`      | No rules of its own, pure re-export — exempt from MG1, gate + rationale in its own leaf (`ED1`, `ED2`) |
+| `test-placement/`   | Not enrolled in its own rules (`TP1`), sole owner of test placement (`TP2`)                            |
 
 ## Verification
 

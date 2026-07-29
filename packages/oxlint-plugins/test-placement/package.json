@@ -1,16 +1,16 @@
 {
-  "name": "@systemfsoftware/oxlint-plugin-effect-workflow",
+  "name": "@systemfsoftware/oxlint-plugin-test-placement",
   "license": "MIT",
-  "version": "1.4.0",
+  "version": "1.0.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
-    "directory": "packages/oxlint-plugins/effect-workflow"
+    "directory": "packages/oxlint-plugins/test-placement"
   },
-  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/oxlint-plugins/effect-workflow#readme",
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/oxlint-plugins/test-placement#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "Oxlint rules enforcing the *.workflow.ts cell — TypeId pattern, inline schemas, Match.exhaustive, purity gate, step extraction, single export.",
+  "description": "Oxlint rules enforcing test placement: property tests colocated in src, integration and feature tests in a tests directory, feature tests driven by effect-gherkin-spec.",
   "keywords": [
     "oxlint",
     "oxlint-plugin",
@@ -18,10 +18,12 @@
     "lint",
     "linter",
     "lint-rules",
-    "effect",
-    "effect-ts",
-    "workflow",
-    "domain-decision",
+    "test-placement",
+    "testing-trophy",
+    "property-testing",
+    "integration-testing",
+    "gherkin",
+    "bdd",
     "typescript"
   ],
   "type": "module",
@@ -30,7 +32,7 @@
   ],
   "exports": {
     ".": {
-      "types": "./dist/oxlint-plugin-effect-workflow.d.ts",
+      "types": "./dist/oxlint-plugin-test-placement.d.ts",
       "default": "./dist/index.mjs"
     },
     "./package.json": "./package.json"
