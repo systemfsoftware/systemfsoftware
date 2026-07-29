@@ -16,6 +16,11 @@ ruleTester.run('no-test-file-in-src', noTestFileInSrc, {
       filename: '/repo/pkg/src/confirm-order.workflow.property.test.ts',
     },
     {
+      name: 'Should_Allow_SchemaTestInSrc_When_BesidesSchemaCell',
+      code: '',
+      filename: '/repo/pkg/src/money.schema.test.ts',
+    },
+    {
       name: 'Should_Allow_NonTestFileInSrc_When_WorkflowSource',
       code: '',
       filename: '/repo/pkg/src/confirm-order.workflow.ts',

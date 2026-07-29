@@ -16,9 +16,9 @@ ruleTester.run('src-property-test-cell', srcPropertyTestCell, {
       filename: '/repo/pkg/src/confirm-order.workflow.property.test.ts',
     },
     {
-      name: 'Should_Allow_SchemaPropertyTest_When_ColocatedInSrc',
+      name: 'Should_Allow_SchemaCellTest_When_NotAPropertyTest',
       code: '',
-      filename: '/repo/pkg/src/money.schema.property.test.ts',
+      filename: '/repo/pkg/src/money.schema.test.ts',
     },
     {
       name: 'Should_Allow_PolicyPropertyTest_When_ColocatedInSrc',
@@ -59,6 +59,20 @@ ruleTester.run('src-property-test-cell', srcPropertyTestCell, {
         messageId: 'unsanctionedCell',
         data: {
           name: 'order.acl.property.test.ts',
+          expected: UNSANCTIONED_CELL_EXPECTED,
+          actual: UNSANCTIONED_CELL_ACTUAL,
+          fix: UNSANCTIONED_CELL_FIX,
+        },
+      }],
+    },
+    {
+      name: 'Should_Report_SchemaPropertyTest_When_SchemaLawsBelongInSchemaTest',
+      code: '',
+      filename: '/repo/pkg/src/money.schema.property.test.ts',
+      errors: [{
+        messageId: 'unsanctionedCell',
+        data: {
+          name: 'money.schema.property.test.ts',
           expected: UNSANCTIONED_CELL_EXPECTED,
           actual: UNSANCTIONED_CELL_ACTUAL,
           fix: UNSANCTIONED_CELL_FIX,

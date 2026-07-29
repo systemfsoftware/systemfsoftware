@@ -6,7 +6,7 @@ import {
   TEST_FILE_IN_SRC_EXPECTED,
   TEST_FILE_IN_SRC_FIX,
 } from './no-test-file-in-src.config.js'
-import { PROPERTY_SUFFIX } from './path.config.js'
+import { PROPERTY_SUFFIX, SCHEMA_SUFFIX } from './path.config.js'
 import { basenameOf, isTestFile, isUnderSrc } from './path.js'
 
 export type MessageIds = 'testFileInSrc'
@@ -18,6 +18,7 @@ export const noTestFileInSrc = defineRule({
     if (!isUnderSrc(context.filename)) return {}
     if (!isTestFile(basename)) return {}
     if (basename.endsWith(PROPERTY_SUFFIX)) return {}
+    if (basename.endsWith(SCHEMA_SUFFIX)) return {}
     return {
       Program(node: ESTree.Program) {
         context.report({
