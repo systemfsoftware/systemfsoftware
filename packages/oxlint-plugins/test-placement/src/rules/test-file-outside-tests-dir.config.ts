@@ -1,6 +1,5 @@
 import { MESSAGE } from './path.config.js'
 
-export const STRAY_TEST_FILE_NAME = '<basename>' as const
 export const STRAY_TEST_FILE_EXPECTED = 'test files outside src/ under a tests/ or __tests__/ directory' as const
 export const STRAY_TEST_FILE_ACTUAL = 'a test file outside src/ and outside any tests directory' as const
 export const STRAY_TEST_FILE_FIX = 'move it into the package tests/ or __tests__/ directory' as const

@@ -15,7 +15,7 @@ Oxlint rules enforcing test placement and sanctioned suffixes, derived from the 
 
 ## Enrollment
 
-The rules are opt-in per package, via `@systemfsoftware/oxlint-config/test-placement`. The base config registers the plugin but does not enable its rules. Enroll a package by extending the test-placement preset.
+The rules are turned on by `@systemfsoftware/oxlint-config/strict`. The base config registers the plugin in `jsPlugins` but enables none of its rules, so a package that extends only `base` is unaffected.
 
 ## Testing
 

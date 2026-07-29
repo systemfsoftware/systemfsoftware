@@ -6,7 +6,6 @@ import {
   STRAY_TEST_FILE_ACTUAL,
   STRAY_TEST_FILE_EXPECTED,
   STRAY_TEST_FILE_FIX,
-  STRAY_TEST_FILE_NAME,
 } from './test-file-outside-tests-dir.config.js'
 
 export type MessageIds = 'strayTestFile'

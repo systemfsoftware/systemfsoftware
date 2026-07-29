@@ -1,6 +1,6 @@
-import testPlacement from '@systemfsoftware/oxlint-config/test-placement'
+import strict from '@systemfsoftware/oxlint-config/strict'
 import { defineConfig } from 'oxlint'
 
 export default defineConfig({
-  extends: [testPlacement],
+  extends: [strict],
 })

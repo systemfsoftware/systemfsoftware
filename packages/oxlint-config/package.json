@@ -8,8 +8,7 @@
   "exports": {
     "./package.json": "./package.json",
     "./base": "./src/oxlint-config.base.ts",
-    "./strict": "./src/oxlint-config.strict.ts",
-    "./test-placement": "./src/oxlint-config.test-placement.ts"
+    "./strict": "./src/oxlint-config.strict.ts"
   },
   "files": [
     "src"

@@ -1,6 +1,5 @@
 import { MESSAGE } from './path.config.js'
 
-export const TEST_FILE_IN_SRC_NAME = '<basename>' as const
 export const TEST_FILE_IN_SRC_EXPECTED = 'only *.property.test.ts test files under src/' as const
 export const TEST_FILE_IN_SRC_ACTUAL = 'a test file under src/ that is not a property test' as const
 export const TEST_FILE_IN_SRC_FIX =

@@ -1,6 +1,5 @@
 import { MESSAGE } from './path.config.js'
 
-export const UNSANCTIONED_CELL_NAME = '<basename>' as const
 export const UNSANCTIONED_CELL_EXPECTED =
   'a property test colocated with a .workflow, .schema, or .policy cell' as const
 export const UNSANCTIONED_CELL_ACTUAL = 'a property test whose stem names no cell that may carry properties' as const

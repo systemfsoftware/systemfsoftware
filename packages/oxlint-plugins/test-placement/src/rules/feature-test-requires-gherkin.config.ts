@@ -1,6 +1,5 @@
 import { MESSAGE } from './path.config.js'
 
-export const FOREIGN_RUNNER_NAME = '<specifier>' as const
 export const FOREIGN_RUNNER_EXPECTED = 'it and layer imported from @systemfsoftware/effect-gherkin-spec' as const
 export const FOREIGN_RUNNER_ACTUAL =
   'a test runner imported directly from vitest or @effect/vitest in a feature file' as const
