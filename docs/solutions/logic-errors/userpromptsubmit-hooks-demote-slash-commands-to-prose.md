@@ -56,7 +56,7 @@ The host dispatches on `event.text` positionally at six sites — `parseQueueSho
 
 The shipped fix introduces a pure classification cell that picks a destination for the prompt, and routes the executor around it.
 
-`omp/plugins/omp-claude-compat/src/prompt-destination.workflow.ts:22-35` declares the sigil list that mirrors the host's dispatch:
+`omp/plugins/omp-claude-compat/src/prompt-destination.kernel.ts:19-32` declares the sigil list that mirrors the host's dispatch:
 
 ```ts
 const HOST_COMMAND_PREFIXES: ReadonlyArray<string> = [
@@ -75,51 +75,43 @@ const HOST_COMMAND_PREFIXES: ReadonlyArray<string> = [
 ]
 ```
 
-Each sigil is suffixed with a sentinel space (`' '`, `'\t'`, `'\n'`, `'\r'`), and the matcher at `prompt-destination.workflow.ts:61-62` tests against a sentinel-suffixed copy of the trimmed input:
+Each sigil is suffixed with a sentinel space (`' '`, `'\t'`, `'\n'`, `'\r'`), and the predicate at `prompt-destination.kernel.ts:34-35` tests against a sentinel-suffixed copy of the trimmed input:
 
 ```ts
-const opensWithSigil = (text: string): boolean =>
+export const isHostBound = (text: string): boolean =>
   HOST_COMMAND_PREFIXES.some((prefix) => `${text.trimStart()} `.startsWith(prefix))
 ```
 
 The sentinel-space trick is what makes `$` and `$$` match as prefixes without also catching `$HOME` or `${expr}`. Bare `$` reaches the matcher as `"$ "` after the suffix; `$HOME` reaches it as `"$HOME "`, which doesn't startsWith `"$ "`. The host treats `$HOME` as prose (`input-controller.ts:765-766`'s comment spells this out: `Shell-style variables such as $HOME are normal prose unless a space follows the sigil`), so the sentinel matches the host's own gating exactly.
 
-`prompt-destination.workflow.ts:64-68` returns a tagged union:
+The executor branches on that predicate directly. It deliberately does **not** live in a `*.workflow.ts`: the prompt's opening characters already carry the host-versus-model distinction, so the function preserves an outcome the input held rather than originating one. Per the general theory's origin-versus-pass-through discriminator that is a translation, and a pure domain-blind predicate at those coordinates is a `.kernel.ts` cell — wearing `.workflow.ts` would be a lying name.
+
+`omp/plugins/omp-claude-compat/src/hook-dispatcher.executor.ts:509-585` then branches on the predicate. The `pending` (async-hook note) is read for a model-bound prompt and left undrained for a host-bound one (`:516-523`):
 
 ```ts
-export const classifyPromptDestination = (cmd: ClassifyPromptCommand): PromptDestination =>
-  Match.value(cmd.text).pipe(
-    Match.when(opensWithSigil, () => new Host({})),
-    Match.orElse(() => new Model({})),
-  )
-```
-
-`omp/plugins/omp-claude-compat/src/hook-dispatcher.executor.ts:509-585` then dispatches on the verdict. The `pending` (async-hook note) is read on `Model` and left undrained on `Host` (`:516-523`):
-
-```ts
-const destination = classifyPromptDestination(new ClassifyPromptCommand({ text: event.text }))
+const hostBound = isHostBound(event.text)
 // Left undrained for a host-bound prompt: an async note is one-shot, so it
 // has to survive this command and reach the next model-bound prompt.
-const pending = Match.value(destination).pipe(
-  Match.tag('Host', (): ReadonlyArray<string> => []),
-  Match.tag('Model', () => drainAsyncHookOutput()),
+const pending = Match.value(hostBound).pipe(
+  Match.when(true, (): ReadonlyArray<string> => []),
+  Match.when(false, () => drainAsyncHookOutput()),
   Match.exhaustive,
 )
 ```
 
 The hooks still run. A blocking result (exit 2 or `decision: "block"`, parsed at `:539-553` via `interpretHookResult`) short-circuits with `{ handled: true }` regardless of destination, so a blocking hook still blocks a slash command.
 
-The deliver step (`:564-584`) only prefixes on `Model`; on `Host` the executor returns `undefined` so `emitInput` keeps the original prompt text untouched (`runner.ts:925-928` chains whatever the handler returns — `undefined` means no rewrite):
+The deliver step (`:564-584`) only prefixes a model-bound prompt; for a host-bound one the executor returns `undefined` so `emitInput` keeps the original prompt text untouched (`runner.ts:925-928` chains whatever the handler returns — `undefined` means no rewrite):
 
 ```ts
-return Match.value(destination).pipe(
-  Match.tag('Host', () => undefined),
-  Match.tag('Model', deliver),
+return Match.value(hostBound).pipe(
+  Match.when(true, () => undefined),
+  Match.when(false, deliver),
   Match.exhaustive,
 )
 ```
 
-`Match.tag` (not `._tag === 'Host'`) is enforced by `@systemfsoftware/oxlint-plugin/no-direct-tag-access` (`packages/oxlint-config/src/oxlint-config.base.ts:41`), and `Match.exhaustive` is what makes the union closed.
+`Match.exhaustive` is what closes the dispatch; a `Match.orElse` fallback here would defeat it.
 
 ## Why This Works
 
@@ -139,11 +131,11 @@ That asymmetry is why the list is widened on doubt rather than narrowed, and it 
 Concrete and checkable guards:
 
 - **General rule for any bridge faking a missing channel by rewriting a payload.** Before the rewrite, ask whether the consumer parses the payload positionally. `InputEventResult.text` is consumed by `emitInput`'s chain (`runner.ts:925-928`) and then dispatched on its first characters (`input-controller.ts:676, :688, :708, :713, :735, :747, :766`); appending is not a safe alternative (see (a) above). A bridge that fakes a missing field by rewriting must classify the payload's destination before rewriting — and on the wrong destination, return `undefined` so the chain leaves the original alone.
-- **Keep `HOST_COMMAND_PREFIXES` in sync with the vendored host's dispatch order.** Any new command form added to `input-controller.ts`'s dispatch sequence (`676, 688, 708, 713, 735, 747, 766`) must be added to the sigil list in `prompt-destination.workflow.ts:22-35` in the same change. The vendored tree is in `repos/` and read-only, so the bridge is the only side that moves.
+- **Keep `HOST_COMMAND_PREFIXES` in sync with the vendored host's dispatch order.** Any new command form added to `input-controller.ts`'s dispatch sequence (`676, 688, 708, 713, 735, 747, 766`) must be added to the sigil list in `prompt-destination.kernel.ts:19-32` in the same change. The vendored tree is in `repos/` and read-only, so the bridge is the only side that moves.
 - **Two repo lint rules shaped the fix.**
   - `@systemfsoftware/oxlint-plugin/no-direct-tag-access` (`packages/oxlint-config/src/oxlint-config.base.ts:41`) forces `Match.tag` over `._tag === 'Host'` — the executor's `Match.value(destination).pipe(Match.tag('Host', ...), Match.tag('Model', ...), Match.exhaustive)` pattern (`hook-dispatcher.executor.ts:519-523, :580-584`) is a direct consequence.
-  - `@systemfsoftware/oxlint-plugin-test-hygiene/pbt-naming` (`packages/oxlint-config/src/oxlint-config.base.ts:51`) rejects property names carrying scenario language — the names in `prompt-destination.workflow.property.test.ts:23-50` are spelled `'∀sigil_OpensPrompt_→Host'`-style invariants, not "After a slash command is prefixed …" narratives.
-- **Stryker 100% gate on `src/*.workflow.ts`.** The decision lives in `omp/plugins/omp-claude-compat/src/prompt-destination.workflow.ts` — a tagged-union over a pure `opensWithSigil` predicate — rather than as an `if (text.startsWith('/'))` branch in `runUserPromptSubmitHooks`. The mutation gate forces the decision into a mutation-covered pure cell: an `if` in the executor sits below the workflow gate and would never be mutation-covered at 100%. The eight fast-check properties at `prompt-destination.workflow.property.test.ts:23-50` exercise the classifier across leading whitespace, bare sigils, shell-style expansions, and braced expansions, and the Gherkin scenarios pin the executor-level behavior end to end.
+- **A pure classifier is not automatically a workflow.** The first version of this cell was a `*.workflow.ts` returning a `Host | Model` tagged union whose variants both carried zero fields, which made the union isomorphic to a boolean and the "decision" a predicate in costume. The general theory's two-cell split rules that pure behavior carrying no domain decision wearing `.workflow.ts` is a **lying name**, correctable to `.kernel.ts` (vocabulary-free, domain-blind) or `.observer.ts` (operational vocabulary). Note the error channel is _not_ the discriminator — the theory states `Error` MAY be `never` and total decisions like `Allow | Block` are first-class; what disqualified this file was origin, not failability.
+- **`Match.orElse` is not a substitute for a closed union.** The first version of this cell dispatched with `Match.when(opensWithSigil, …)` + `Match.orElse(…)` over the raw prompt string — a ternary in `Match` costume, with no exhaustiveness guarantee. `@systemfsoftware/oxlint-plugin-effect-workflow/workflow-match-exhaustive` did not catch it, because both of its report branches were gated on a `Match.tag` arm being present and a predicate dispatch has none. The rule now flags `Match.orElse` as the fallback of any predicate or literal dispatch over an open type; the sole survivor is an `orElse` preceded by an object-literal record arm. Cross from an open type into a closed one with a total constructor (`Option.fromNullable`, `Option.liftPredicate`), then `Match.tag` + `Match.exhaustive`.
 
 Merge state as of this run: pending. The fix is uncommitted; no SHAs are recorded here.
 

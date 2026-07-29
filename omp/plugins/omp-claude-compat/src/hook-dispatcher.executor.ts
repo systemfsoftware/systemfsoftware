@@ -28,7 +28,7 @@ import {
 } from './hook-settings.acl.js'
 import type { CommandHook, HookEntry, HookSettings, SettingsSource } from './hook-settings.acl.js'
 import { InterpretHookCommand, interpretHookResult } from './hook-verdict.workflow.js'
-import { ClassifyPromptCommand, classifyPromptDestination } from './prompt-destination.workflow.js'
+import { isHostBound } from './prompt-destination.kernel.js'
 
 const UNREADABLE_MATCHER: Readonly<Record<string, string>> = NON_EVALUABLE_MATCHERS
 const IF_EVALUATING_EVENTS: readonly string[] = TOOL_EVENTS
@@ -513,12 +513,12 @@ export const runUserPromptSubmitHooks = Effect.fn('runUserPromptSubmitHooks')(fu
 ) {
   const entries = settings.hooks.UserPromptSubmit
   const cwd = ctx.cwd
-  const destination = classifyPromptDestination(new ClassifyPromptCommand({ text: event.text }))
+  const hostBound = isHostBound(event.text)
   // Left undrained for a host-bound prompt: an async note is one-shot, so it
   // has to survive this command and reach the next model-bound prompt.
-  const pending = Match.value(destination).pipe(
-    Match.tag('Host', (): ReadonlyArray<string> => []),
-    Match.tag('Model', () => drainAsyncHookOutput()),
+  const pending = Match.value(hostBound).pipe(
+    Match.when(true, (): ReadonlyArray<string> => []),
+    Match.when(false, () => drainAsyncHookOutput()),
     Match.exhaustive,
   )
   const stdouts: string[] = []
@@ -577,9 +577,9 @@ export const runUserPromptSubmitHooks = Effect.fn('runUserPromptSubmitHooks')(fu
   // The hooks still ran, so a block still blocks; only the context is dropped.
   // Re-holding this run's stdout would duplicate it — unlike an async note,
   // these hooks re-run on the next prompt and produce it fresh.
-  return Match.value(destination).pipe(
-    Match.tag('Host', () => undefined),
-    Match.tag('Model', deliver),
+  return Match.value(hostBound).pipe(
+    Match.when(true, () => undefined),
+    Match.when(false, deliver),
     Match.exhaustive,
   )
 })

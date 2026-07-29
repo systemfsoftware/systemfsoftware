@@ -16,9 +16,6 @@
  * host-bound takes its context one turn late, while one wrongly called
  * model-bound loses the command outright. Widen the list on doubt.
  */
-import * as Match from 'effect/Match'
-import * as S from 'effect/Schema'
-
 const HOST_COMMAND_PREFIXES: ReadonlyArray<string> = [
   '/',
   '!',
@@ -34,35 +31,5 @@ const HOST_COMMAND_PREFIXES: ReadonlyArray<string> = [
   '$$\r',
 ]
 
-const PromptDestinationTypeId: unique symbol = Symbol.for(
-  '@systemfsoftware/omp-claude-compat/PromptDestination',
-)
-
-export class Model extends S.TaggedClass<Model>()('Model', {}) {
-  readonly [PromptDestinationTypeId] = PromptDestinationTypeId
-}
-
-export class Host extends S.TaggedClass<Host>()('Host', {}) {
-  readonly [PromptDestinationTypeId] = PromptDestinationTypeId
-}
-
-const PromptDestination = S.Union(Model, Host)
-export type PromptDestination = S.Schema.Type<typeof PromptDestination>
-
-const ClassifyPromptCommandTypeId: unique symbol = Symbol.for(
-  '@systemfsoftware/omp-claude-compat/ClassifyPromptCommand',
-)
-export class ClassifyPromptCommand extends S.TaggedClass<ClassifyPromptCommand>()('ClassifyPromptCommand', {
-  text: S.String,
-}) {
-  readonly [ClassifyPromptCommandTypeId] = ClassifyPromptCommandTypeId
-}
-
-const opensWithSigil = (text: string): boolean =>
+export const isHostBound = (text: string): boolean =>
   HOST_COMMAND_PREFIXES.some((prefix) => `${text.trimStart()} `.startsWith(prefix))
-
-export const classifyPromptDestination = (cmd: ClassifyPromptCommand): PromptDestination =>
-  Match.value(cmd.text).pipe(
-    Match.when(opensWithSigil, () => new Host({})),
-    Match.orElse(() => new Model({})),
-  )
