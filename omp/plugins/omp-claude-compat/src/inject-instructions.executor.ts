@@ -1,8 +1,18 @@
 import { FileSystem } from '@effect/platform/FileSystem'
 import * as PathModule from '@effect/platform/Path'
 import { TomlLoader } from '@systemfsoftware/omp-utils'
-import { Effect, Either, Match, Option } from 'effect'
-import { CheckRefInjectionCommand, decideRefInjection, DEFAULT_NO_INJECT_REFS } from './inject-instructions.workflow.js'
+import { Effect, Either } from 'effect'
+
+/**
+ * Refs the host already delivers, keyed by project-relative path.
+ *
+ * Path keying, never content: the host reformats markdown before rendering,
+ * so byte comparison misses reformatted duplicates and drops short files
+ * whose text appears elsewhere. Keying the path suppresses exactly the root
+ * `AGENTS.md` the host already delivers, while a downward
+ * `@packages/foo/AGENTS.md` still injects.
+ */
+const DEFAULT_NO_INJECT_REFS: ReadonlyArray<string> = ['AGENTS.md']
 
 interface Ref {
   readonly sourcePath: string
@@ -42,7 +52,7 @@ const extractRefs = Effect.fn('extractRefs')(function*(content: string, baseDir:
 
 /**
  * Collect the content of every `@`-ref in CLAUDE.md that the host does not
- * already deliver, deciding each ref through `decideRefInjection`.
+ * already deliver, skipping any ref the project's no_inject_refs list names.
  */
 export const loadReferencedContent = Effect.fn('loadReferencedContent')(function*(projectDir: string) {
   const fs = yield* FileSystem
@@ -82,16 +92,7 @@ export const loadReferencedContent = Effect.fn('loadReferencedContent')(function
   const sections: string[] = []
   for (const ref of uniqueRefs) {
     const relativePath = ref.resolvedPath.slice(projectDir.length + 1)
-    const suppressed = Match.value(
-      decideRefInjection(new CheckRefInjectionCommand({ relativePath, skipList })),
-    ).pipe(
-      Match.tag('Skip', (skip) => Option.some(skip.matched)),
-      Match.tag('Inject', () => Option.none<string>()),
-      Match.exhaustive,
-    )
-    if (Option.isSome(suppressed)) {
-      continue
-    }
+    if (skipList.includes(relativePath)) continue
 
     const refContent = yield* Effect.either(
       fs.readFileString(ref.resolvedPath, 'utf-8'),
