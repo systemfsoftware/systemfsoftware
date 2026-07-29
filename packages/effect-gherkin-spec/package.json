@@ -28,6 +28,7 @@
   "exports": {
     ".": {
       "@systemfsoftware/source": "./src/mod.ts",
+      "types": "./dist/index.d.ts",
       "default": "./dist/index.mjs"
     },
     "./package.json": "./package.json"
@@ -67,7 +68,10 @@
   },
   "publishConfig": {
     "exports": {
-      ".": "./dist/index.mjs",
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.mjs"
+      },
       "./package.json": "./package.json"
     },
     "provenance": true
