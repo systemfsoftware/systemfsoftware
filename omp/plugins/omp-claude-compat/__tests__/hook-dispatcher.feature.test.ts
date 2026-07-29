@@ -3,9 +3,10 @@ import type { PlatformError } from '@effect/platform/Error'
 import { FileSystem } from '@effect/platform/FileSystem'
 import * as PathModule from '@effect/platform/Path'
 import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
-import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer } from 'effect'
 import { expect } from 'vitest'
+import { drainAsyncHookOutput, recordAsyncHookOutput } from '../src/async-hook-output.state.js'
 import { CLAUDE_CODE_DOC_VERSION, NON_EVALUABLE_MATCHERS, UNBRIDGED_REASONS } from '../src/hook-catalog.schema.js'
 import type { HookPrompt, HookSession, HookToolCall, HookToolResult } from '../src/hook-dispatcher.executor.js'
 import {
@@ -665,6 +666,85 @@ Feature('Hook dispatcher — UserPromptSubmit verdict')
           Effect.sync(() => {
             expect(s.result?.handled).toBeUndefined()
             expect(s.result?.text).toBe('extra context\n\nhello')
+          })
+        ),
+      ),
+    )
+  })
+
+Feature('Prompt context delivery — a host command reaches the host unchanged')
+  .withLayer(testLayer)
+  .body(({ scenario }) => {
+    scenario(
+      'Pat compacts the session while a hook has context to offer',
+      Gherkin.Do.pipe(
+        Given('a UserPromptSubmit hook printing "repo is mid-rebase"')('dir', (_s) =>
+          Effect.gen(function*() {
+            const fs = yield* FileSystem
+            const dir = yield* fs.makeTempDirectoryScoped()
+            const hook = yield* writeShellHook(dir, 'rebase-note', 0, undefined, 'repo is mid-rebase')
+            yield* writeSettings(dir, {
+              UserPromptSubmit: [{ hooks: [{ type: 'command', command: hook }] }],
+            })
+            return dir
+          })),
+        When('Pat submits the slash command "/compact"')('result', (s) =>
+          Effect.gen(function*() {
+            const settings = yield* loadSettingsWithPaths([`${s.dir}/.claude/settings.json`])
+            return yield* runUserPromptSubmitHooks(
+              loaded(settings),
+              { text: '/compact', source: 'interactive' },
+              makeCtx(s.dir),
+            )
+          })),
+        Then('the host receives "/compact" with nothing prefixed')((s) =>
+          Effect.sync(() => {
+            expect(s.result?.handled).toBeUndefined()
+            expect(s.result?.text).toBeUndefined()
+          })
+        ),
+      ),
+    )
+  })
+
+Feature('Prompt context delivery — output with no second chance outlives the command')
+  .withLayer(testLayer)
+  .body(({ scenario }) => {
+    scenario(
+      'Pat lists files between a background scan and a question',
+      Gherkin.Do.pipe(
+        Given('a background hook has left "background scan finished" waiting')('dir', (_s) =>
+          Effect.gen(function*() {
+            const fs = yield* FileSystem
+            const dir = yield* fs.makeTempDirectoryScoped()
+            yield* writeSettings(dir, {})
+            drainAsyncHookOutput()
+            recordAsyncHookOutput('background scan finished')
+            return dir
+          })),
+        And('Pat has already submitted the bash command "!ls"')((s) =>
+          Effect.gen(function*() {
+            const settings = yield* loadSettingsWithPaths([`${s.dir}/.claude/settings.json`])
+            const result = yield* runUserPromptSubmitHooks(
+              loaded(settings),
+              { text: '!ls', source: 'interactive' },
+              makeCtx(s.dir),
+            )
+            expect(result?.text).toBeUndefined()
+          })
+        ),
+        When('Pat asks "what changed?"')('result', (s) =>
+          Effect.gen(function*() {
+            const settings = yield* loadSettingsWithPaths([`${s.dir}/.claude/settings.json`])
+            return yield* runUserPromptSubmitHooks(
+              loaded(settings),
+              { text: 'what changed?', source: 'interactive' },
+              makeCtx(s.dir),
+            )
+          })),
+        Then('the question carries "background scan finished" once, ahead of her words')((s) =>
+          Effect.sync(() => {
+            expect(s.result?.text).toBe('background scan finished\n\nwhat changed?')
           })
         ),
       ),

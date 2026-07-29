@@ -28,6 +28,7 @@ import {
 } from './hook-settings.acl.js'
 import type { CommandHook, HookEntry, HookSettings, SettingsSource } from './hook-settings.acl.js'
 import { InterpretHookCommand, interpretHookResult } from './hook-verdict.workflow.js'
+import { ClassifyPromptCommand, classifyPromptDestination } from './prompt-destination.workflow.js'
 
 const UNREADABLE_MATCHER: Readonly<Record<string, string>> = NON_EVALUABLE_MATCHERS
 const IF_EVALUATING_EVENTS: readonly string[] = TOOL_EVENTS
@@ -512,7 +513,15 @@ export const runUserPromptSubmitHooks = Effect.fn('runUserPromptSubmitHooks')(fu
 ) {
   const entries = settings.hooks.UserPromptSubmit
   const cwd = ctx.cwd
-  let injected = drainAsyncHookOutput().join('\n\n')
+  const destination = classifyPromptDestination(new ClassifyPromptCommand({ text: event.text }))
+  // Left undrained for a host-bound prompt: an async note is one-shot, so it
+  // has to survive this command and reach the next model-bound prompt.
+  const pending = Match.value(destination).pipe(
+    Match.tag('Host', (): ReadonlyArray<string> => []),
+    Match.tag('Model', () => drainAsyncHookOutput()),
+    Match.exhaustive,
+  )
+  const stdouts: string[] = []
   const input: Record<string, unknown> = {
     ...sessionIds(() => ctx.sessionManager.getSessionId()),
     prompt: event.text,
@@ -547,20 +556,32 @@ export const runUserPromptSubmitHooks = Effect.fn('runUserPromptSubmitHooks')(fu
 
       const stdout = result.stdout.trim()
       if (stdout.length > 0) {
-        injected += (injected.length > 0 ? '\n\n' : '') + stdout
+        stdouts.push(stdout)
       }
     }
   }
 
-  if (injected.length === 0) return undefined
+  const deliver = (): InputEventResult | undefined => {
+    const injected = [...pending, ...stdouts].join('\n\n')
+    if (injected.length === 0) return undefined
 
-  const result: InputEventResult = {
-    text: `${injected}\n\n${event.text}`,
+    const delivered: InputEventResult = {
+      text: `${injected}\n\n${event.text}`,
+    }
+    if (event.images !== undefined) {
+      delivered.images = event.images
+    }
+    return delivered
   }
-  if (event.images !== undefined) {
-    result.images = event.images
-  }
-  return result
+
+  // The hooks still ran, so a block still blocks; only the context is dropped.
+  // Re-holding this run's stdout would duplicate it — unlike an async note,
+  // these hooks re-run on the next prompt and produce it fresh.
+  return Match.value(destination).pipe(
+    Match.tag('Host', () => undefined),
+    Match.tag('Model', deliver),
+    Match.exhaustive,
+  )
 })
 
 export const runSessionStartHooks = Effect.fn('runSessionStartHooks')(function*(
