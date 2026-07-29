@@ -4,7 +4,7 @@ import * as PathModule from '@effect/platform/Path'
 import type { InputEventResult } from '@oh-my-pi/pi-coding-agent'
 import { Effect, Layer } from 'effect'
 import { expect, it } from 'vitest'
-import { recordAsyncHookOutput } from '../src/async-hook-output.state.js'
+import { recordAsyncHookContext } from '../src/async-hook-output.state.js'
 import type { HookPrompt, HookSession, HookToolCall } from '../src/hook-dispatcher.executor.js'
 import { loadSettingsWithPaths, runPreToolUseHooks, runUserPromptSubmitHooks } from '../src/hook-dispatcher.executor.js'
 import { loaded } from './loaded.observer.js'
@@ -37,7 +37,7 @@ it('Should_CarryBufferedOutput_When_TheNextPromptArrivesWithNoPromptHooks', asyn
     const fs = yield* FileSystem
     const dir = yield* fs.makeTempDirectoryScoped()
     const settings = yield* emptySettings(dir)
-    recordAsyncHookOutput('background scan finished')
+    recordAsyncHookContext('background scan finished')
 
     return yield* runUserPromptSubmitHooks(loaded(settings), promptEvent, makeCtx(dir))
   }).pipe(Effect.scoped, Effect.provide(testLayer), Effect.runPromise)
@@ -63,7 +63,10 @@ it('Should_DeliverAsyncHookOutput_When_TheHookFinishesInTheBackground', async ()
     const fs = yield* FileSystem
     const dir = yield* fs.makeTempDirectoryScoped()
     const hookPath = `${dir}/announce.sh`
-    yield* fs.writeFileString(hookPath, '#!/usr/bin/env bash\nprintf "async hook spoke"\n')
+    yield* fs.writeFileString(
+      hookPath,
+      `#!/usr/bin/env bash\nprintf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"async hook spoke"}}'\n`,
+    )
     yield* fs.chmod(hookPath, 0o755)
     yield* fs.makeDirectory(`${dir}/.claude`, { recursive: true })
     yield* fs.writeFileString(
@@ -89,13 +92,51 @@ it('Should_DeliverAsyncHookOutput_When_TheHookFinishesInTheBackground', async ()
   expect(delivered?.text).toContain('what changed?')
 }, 25_000)
 
+it('Should_DropRawStdout_When_AsyncHookEmitsNonJson', async () => {
+  const outcome = await Effect.gen(function*() {
+    const fs = yield* FileSystem
+    const dir = yield* fs.makeTempDirectoryScoped()
+    const hookPath = `${dir}/chatty.sh`
+    const sentinel = `${dir}/ran`
+    yield* fs.writeFileString(
+      hookPath,
+      `#!/usr/bin/env bash\nprintf 'Done in 2s using pnpm v11.9.0'\ntouch ${sentinel}\n`,
+    )
+    yield* fs.chmod(hookPath, 0o755)
+    yield* fs.makeDirectory(`${dir}/.claude`, { recursive: true })
+    yield* fs.writeFileString(
+      `${dir}/.claude/settings.json`,
+      JSON.stringify({
+        hooks: { PreToolUse: [{ matcher: 'Write', hooks: [{ type: 'command', command: hookPath, async: true }] }] },
+      }),
+    )
+
+    const settings = yield* loadSettingsWithPaths([`${dir}/.claude/settings.json`])
+    const ctx = makeCtx(dir)
+    yield* runPreToolUseHooks(loaded(settings), toolCall, ctx)
+
+    let ran = false
+    for (let attempt = 0; attempt < 200 && !ran; attempt++) {
+      yield* Effect.promise(tick)
+      ran = yield* fs.exists(sentinel)
+    }
+    for (let settle = 0; settle < 10; settle++) yield* Effect.promise(tick)
+
+    const delivered = yield* runUserPromptSubmitHooks(loaded(settings), promptEvent, ctx)
+    return { ran, text: delivered?.text }
+  }).pipe(Effect.scoped, Effect.provide(testLayer), Effect.runPromise)
+
+  expect(outcome.ran).toBe(true)
+  expect(outcome.text ?? promptEvent.text).toBe(promptEvent.text)
+}, 25_000)
+
 it('Should_ContributeNothing_When_SilentHookPrecedesSpeakingHook', async () => {
   const delivered = await Effect.gen(function*() {
     const fs = yield* FileSystem
     const dir = yield* fs.makeTempDirectoryScoped()
     const settings = yield* emptySettings(dir)
-    recordAsyncHookOutput('   \n  ')
-    recordAsyncHookOutput('the other hook spoke')
+    recordAsyncHookContext('   \n  ')
+    recordAsyncHookContext('the other hook spoke')
 
     return yield* runUserPromptSubmitHooks(loaded(settings), promptEvent, makeCtx(dir))
   }).pipe(Effect.scoped, Effect.provide(testLayer), Effect.runPromise)
@@ -108,7 +149,7 @@ it('Should_DropTheOldestNotes_When_RunawayHookOverfillsBuffer', async () => {
     const fs = yield* FileSystem
     const dir = yield* fs.makeTempDirectoryScoped()
     const settings = yield* emptySettings(dir)
-    for (let note = 0; note < 70; note++) recordAsyncHookOutput(`note-${note}`)
+    for (let note = 0; note < 70; note++) recordAsyncHookContext(`note-${note}`)
 
     return yield* runUserPromptSubmitHooks(loaded(settings), promptEvent, makeCtx(dir))
   }).pipe(Effect.scoped, Effect.provide(testLayer), Effect.runPromise)

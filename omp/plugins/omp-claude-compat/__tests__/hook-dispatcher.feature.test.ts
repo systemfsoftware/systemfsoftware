@@ -6,7 +6,7 @@ import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer } from 'effect'
 import { expect } from 'vitest'
-import { drainAsyncHookOutput, recordAsyncHookOutput } from '../src/async-hook-output.state.js'
+import { drainAsyncHookContext, recordAsyncHookContext } from '../src/async-hook-output.state.js'
 import { CLAUDE_CODE_DOC_VERSION, NON_EVALUABLE_MATCHERS, UNBRIDGED_REASONS } from '../src/hook-catalog.schema.js'
 import type { HookPrompt, HookSession, HookToolCall, HookToolResult } from '../src/hook-dispatcher.executor.js'
 import {
@@ -718,8 +718,8 @@ Feature('Prompt context delivery — output with no second chance outlives the c
             const fs = yield* FileSystem
             const dir = yield* fs.makeTempDirectoryScoped()
             yield* writeSettings(dir, {})
-            drainAsyncHookOutput()
-            recordAsyncHookOutput('background scan finished')
+            drainAsyncHookContext()
+            recordAsyncHookContext('background scan finished')
             return dir
           })),
         And('Pat has already submitted the bash command "!ls"')((s) =>

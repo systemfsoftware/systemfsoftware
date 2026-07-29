@@ -14,10 +14,11 @@ import {
 } from '@systemfsoftware/omp-utils'
 import { Cause, Effect, Either, Match, Option, Schema as S, Stream } from 'effect'
 import { homedir } from 'node:os'
-import { drainAsyncHookOutput, recordAsyncHookOutput } from './async-hook-output.state.js'
+import { drainAsyncHookContext, recordAsyncHookContext } from './async-hook-output.state.js'
 import { NON_EVALUABLE_MATCHERS, TOOL_EVENTS } from './hook-catalog.schema.js'
 import { Blocked, Continue, Warning } from './hook-dispatcher.schema.js'
 import type { HookOutcome, HookResult } from './hook-dispatcher.schema.js'
+import { asyncHookContext } from './hook-output.acl.js'
 import type { DisableSource, HookCoverage, HookCoverageRow } from './hook-settings.acl.js'
 import {
   disabledCoverage,
@@ -241,7 +242,11 @@ const superviseFork = <E, R>(
 ): Effect.Effect<void, never, R> =>
   hook.pipe(
     Effect.matchCause({
-      onSuccess: (result) => recordAsyncHookOutput(result.stdout),
+      onSuccess: (result) =>
+        Option.match(asyncHookContext(result.stdout), {
+          onNone: () => undefined,
+          onSome: recordAsyncHookContext,
+        }),
       onFailure: (cause) => {
         if (Cause.isInterruptedOnly(cause)) return
         ctx.ui.notify(`Background hook failed: ${command}: ${Cause.pretty(cause).split('\n')[0]}`, 'error')
@@ -518,7 +523,7 @@ export const runUserPromptSubmitHooks = Effect.fn('runUserPromptSubmitHooks')(fu
   // has to survive this command and reach the next model-bound prompt.
   const pending = Match.value(hostBound).pipe(
     Match.when(true, (): ReadonlyArray<string> => []),
-    Match.when(false, () => drainAsyncHookOutput()),
+    Match.when(false, () => drainAsyncHookContext()),
     Match.exhaustive,
   )
   const stdouts: string[] = []
