@@ -54,10 +54,24 @@ The pure-decision cell type, named `*.workflow.ts`. One business decision as a p
 
 ### Context file
 
-An instruction file the omp host discovers on its own and renders into the system prompt — `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `copilot-instructions.md` and the like, located by the providers under `repos/oh-my-pi/packages/coding-agent/src/discovery/`. The host expands `@`-imports inside each one, dedupes the set by byte-identical content, and reformats the markdown before rendering. Root `<cwd>/CLAUDE.md` is _not_ a context file: the Claude provider resolves only `<cwd>/.claude/CLAUDE.md` and the user-level copy.
+An instruction file the omp host discovers on its own and renders into the system prompt — `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `copilot-instructions.md` and the like. The host expands `@`-imports inside each one, dedupes the set by byte-identical content, and reformats the markdown before rendering. Root `<cwd>/CLAUDE.md` is _not_ a context file: the Claude provider resolves only `<cwd>/.claude/CLAUDE.md` and the user-level copy.
 
 _Avoid:_ using this for anything `omp-claude-compat` injects — that is an injected ref, and conflating the two is what caused `AGENTS.md` to reach the prompt twice.
 
 ### Injected ref
 
 The target of an `@`-reference inside a `CLAUDE.md` that the host does not discover, materialized into the system prompt by `omp-claude-compat`. Injected refs exist only to cover the host's discovery gap, so a ref pointing at a file that is already a context file is redundant by construction and must be suppressed. Suppression keys on the target's file name, never on its content: the host reformats markdown, so the same file is not byte-identical across the two paths.
+
+## Prompt routing
+
+### Host-bound prompt
+
+A submitted prompt the omp host consumes itself — a slash command, a skill invocation, a shell or python escape, a yield-queue entry — rather than sending it to the model. The host decides by the prompt's opening characters, so the classification is positional: prefixing anything onto the text silently demotes the prompt to a model-bound one, and the command is lost rather than reported. Contrast a model-bound prompt, which reaches the model and may carry hook context ahead of the user's words.
+
+Anything that rewrites a submitted prompt must classify it first and leave a host-bound one byte-identical. Classifying too broadly is the safe error — a model-bound prompt misread as host-bound only delays its hook context by one turn, while the reverse destroys a command.
+
+### Pending hook output
+
+The output of a hook that finished after the dispatch that started it, held until the next model-bound prompt can carry it. One-shot by nature: nothing re-runs the hook that produced it, so it must survive a host-bound prompt instead of being spent on one. The buffer is bounded and drops the oldest entry when full.
+
+Distinct from the output of a hook that runs on every prompt submission, which is recoverable by definition — the same hook produces it again on the next prompt, so holding a copy would only duplicate it.
