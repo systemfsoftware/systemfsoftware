@@ -16,9 +16,9 @@ ruleTester.run('src-property-test-cell', srcPropertyTestCell, {
       filename: '/repo/pkg/src/confirm-order.workflow.property.test.ts',
     },
     {
-      name: 'Should_Allow_SchemaCellTest_When_NotAPropertyTest',
+      name: 'Should_Allow_SchemaLawsEntryPoint_When_NotAPropertyTest',
       code: '',
-      filename: '/repo/pkg/src/money.schema.test.ts',
+      filename: '/repo/pkg/src/schema-laws.test.ts',
     },
     {
       name: 'Should_Allow_PolicyPropertyTest_When_ColocatedInSrc',
@@ -66,7 +66,7 @@ ruleTester.run('src-property-test-cell', srcPropertyTestCell, {
       }],
     },
     {
-      name: 'Should_Report_SchemaPropertyTest_When_SchemaLawsBelongInSchemaTest',
+      name: 'Should_Report_SchemaPropertyTest_When_SchemaLawsAreGenerated',
       code: '',
       filename: '/repo/pkg/src/money.schema.property.test.ts',
       errors: [{

@@ -25,4 +25,11 @@ This package ships six rules enforcing where tests may live and which test suffi
   dont: re-add a location branch to effect-workflow's workflow-property-test-shape or any other plugin
   harm: two rules claiming placement produced a live contradiction (workflow-property-test-shape required parentDir === '__tests__'; this package requires property tests in src) that made enrolled packages unlintable
   check: grep finds no 'wrongLocation' messageId outside this package
+
+- id: TP4
+  title: `*.schema.test.ts` is forbidden, `schema-laws.test.ts` is the one whitelisted name
+  do: leave a package's schema coverage to `src/schema-laws.test.ts`, the single file importing `virtual:@systemfsoftware/schema-laws`
+  dont: re-admit a `*.schema.test.ts` branch to no-test-file-in-src, or add a second name-whitelisted test file
+  harm: the generated `ruleOfSchemas` pair already covers every exported schema, so an authored schema test is duplicate coverage that drifts — and the suffix is what agents reach for when they want to look thorough
+  check: SCHEMA_SUFFIX is only ever read to report `schemaTestInSrc`; SCHEMA_LAWS_BASENAME is the only exact-basename allowance in the taxonomy
 ```
