@@ -35,7 +35,7 @@ if (import.meta.vitest !== void 0) {
   // so this branch is statically dead in the build and the runner never enters
   // the published module graph. A static import would ship it.
   const { it } = await import('@effect/vitest')
-  const { FastCheck: fc } = await import('effect')
+  const { Either, FastCheck: fc } = await import('effect')
 
   /**
    * `HexString`'s `encode` is identity, so every value the generated laws feed
@@ -51,5 +51,24 @@ if (import.meta.vitest !== void 0) {
     '∀b_ToStrictHex_=LowerOfBody',
     [fc.stringMatching(/^[0-9a-fA-F]*[A-F][0-9a-fA-F]*$/)],
     ([body]) => toStrictHex(`0x${body}`) === body.toLowerCase(),
+  )
+
+  /**
+   * Rejection is unreachable from the generated laws: they draw from
+   * `HexString`'s own arbitrary, so every input already satisfies the pattern
+   * under test. Widening the character class therefore survives.
+   *
+   * The generator is derived from the contract ("hex digits, optionally 0x
+   * prefixed"), never from the pattern literal: it splices one character from
+   * outside the hex alphabet — and never `x`, which would form a legal prefix
+   * — so the result must be refused however the regex is rewritten.
+   */
+  const decodeHexString = S.decodeUnknownEither(HexString)
+  const hexPart = fc.stringMatching(/^[0-9a-fA-F]*$/)
+
+  it.prop(
+    '∀s_HexStringAlphabet_⊥',
+    [fc.tuple(hexPart, fc.constantFrom('g', 'z', '!', ' ', '-'), hexPart)],
+    ([[head, outsider, tail]]) => Either.isLeft(decodeHexString(`${head}${outsider}${tail}`)),
   )
 }
