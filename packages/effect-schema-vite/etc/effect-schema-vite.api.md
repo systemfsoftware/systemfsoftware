@@ -7,12 +7,18 @@
 import { Plugin as Plugin_2 } from 'vite';
 
 // @public
+export const generateSchemaLaws: (lawFilePath: string, srcDir: string) => string;
+
+// @public
 export const inlineSchemaTests: (options?: InlineSchemaTestsOptions) => Plugin_2;
 
 // @public
 export interface InlineSchemaTestsOptions {
     dir?: string;
 }
+
+// @public
+export const LAW_FILE_BASENAME: 'schema-laws.test.ts';
 
 // (No @packageDocumentation comment for this package)
 

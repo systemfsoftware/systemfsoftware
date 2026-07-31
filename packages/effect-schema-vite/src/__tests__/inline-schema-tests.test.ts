@@ -1,11 +1,8 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { createServer, type ViteDevServer } from 'vite'
+import { dirname, join, resolve } from 'node:path'
 import { afterAll, beforeAll, expect, it } from 'vitest'
-import { inlineSchemaTests } from '../mod.js'
-
-const VIRTUAL_ID = 'virtual:@systemfsoftware/schema-laws'
+import { generateSchemaLaws, LAW_FILE_BASENAME } from '../mod.js'
 
 const FIXTURE = [
   `export const StructConst = Schema.Struct({ x: Schema.String })`,
@@ -19,57 +16,60 @@ const FIXTURE = [
 ].join('\n')
 
 let root: string | undefined
-let server: ViteDevServer | undefined
 
-beforeAll(async () => {
-  root = mkdtempSync(join(tmpdir(), 'inline-schema-tests-'))
-  mkdirSync(join(root, 'src'))
-  writeFileSync(join(root, 'src', 'schemas.ts'), FIXTURE)
-
-  server = await createServer({
-    configFile: false,
-    root,
-    logLevel: 'error',
-    plugins: [inlineSchemaTests()],
-  })
+beforeAll(() => {
+  root = mkdtempSync(join(tmpdir(), 'schema-laws-'))
+  mkdirSync(join(root, 'src', 'nested'), { recursive: true })
+  writeFileSync(join(root, 'src', 'nested', 'schemas.ts'), FIXTURE)
 })
 
-afterAll(async () => {
-  await server?.close()
+afterAll(() => {
   if (root) rmSync(root, { recursive: true, force: true })
 })
 
-const lawTestedSchemas = async (): Promise<Record<string, string>> => {
-  if (!server || !root) throw new Error('vite server was not started')
+const generated = (): string => {
+  if (!root) throw new Error('fixture root was not created')
+  return generateSchemaLaws(join(root, 'src', LAW_FILE_BASENAME), join(root, 'src'))
+}
 
-  const resolved = await server.pluginContainer.resolveId(VIRTUAL_ID)
-  if (!resolved) return {}
-
-  const loaded = await server.pluginContainer.load(resolved.id)
-  const code = typeof loaded === 'string' ? loaded : loaded?.code ?? ''
+const eachSpecifierExistsOnDisk = (): Record<string, string> => {
+  const code = generated()
+  const lawFileDir = dirname(join(root ?? '', 'src', LAW_FILE_BASENAME))
 
   const importPaths = new Map(
     [...code.matchAll(/import \{ (\w+) \} from '([^']+)'/g)].map(([, name, path]) => [name, path]),
   )
 
-  const importer = join(root, 'laws.test.ts')
   const outcomes: Record<string, string> = {}
-
   for (const [, name] of code.matchAll(/ruleOfSchemas\('([^']+)'/g)) {
     const path = importPaths.get(name ?? '')
-    const target = path === undefined ? undefined : await server.pluginContainer.resolveId(path, importer)
-    outcomes[name ?? ''] = target ? 'imports resolve' : 'imports broken'
+    const onDisk = path === undefined ? undefined : `${resolve(lawFileDir, path)}.ts`
+    outcomes[name ?? ''] = onDisk !== undefined && existsSync(onDisk) ? 'imports resolve' : 'imports broken'
   }
-
   return outcomes
 }
 
-it('Should_ImportAndLawTestEveryDataSchemaAndNoTaggedError_When_ResolvedThroughVite', async () => {
-  await expect(lawTestedSchemas()).resolves.toEqual({
+it('Should_LawTestEveryDataSchemaAndNoTaggedError_When_Generated', () => {
+  expect(eachSpecifierExistsOnDisk()).toEqual({
     StructConst: 'imports resolve',
     PipedFromMember: 'imports resolve',
     PipedFromCall: 'imports resolve',
     DataClass: 'imports resolve',
     TaggedData: 'imports resolve',
   })
+})
+
+it('Should_EmitSpecifiersRelativeToTheLawFile_When_SchemasAreNested', () => {
+  expect(generated()).toContain(`from './nested/schemas'`)
+})
+
+it('Should_EmitAnEmptyModule_When_NoSchemasAreExported', () => {
+  const empty = mkdtempSync(join(tmpdir(), 'schema-laws-empty-'))
+  mkdirSync(join(empty, 'src'))
+  try {
+    expect(generateSchemaLaws(join(empty, 'src', LAW_FILE_BASENAME), join(empty, 'src')))
+      .toBe('// no schemas found\nexport {}\n')
+  } finally {
+    rmSync(empty, { recursive: true, force: true })
+  }
 })

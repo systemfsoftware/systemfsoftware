@@ -1,6 +1,6 @@
 import type { Expression, MemberExpression, TSType } from '@oxc-project/types'
 import { readdirSync, readFileSync, statSync } from 'node:fs'
-import { extname, join, relative, resolve } from 'node:path'
+import { dirname, extname, join, relative, resolve } from 'node:path'
 import { parseSync } from 'oxc-parser'
 import type { Plugin, ResolvedConfig } from 'vite'
 
@@ -10,16 +10,25 @@ export interface InlineSchemaTestsOptions {
   dir?: string
 }
 
+/**
+ * The one test filename the placement taxonomy whitelists by name. The plugin
+ * rewrites this file in the consumer's `src/`; nothing else is touched.
+ *
+ * @since 1.4.0
+ */
+export const LAW_FILE_BASENAME = 'schema-laws.test.ts' as const
+
 interface FoundSchema {
   name: string
-  importPath: string
+  /** Absolute path of the file declaring the schema. */
+  filePath: string
 }
 
 /**
  * Walk a directory and return every exported const whose type annotation
  * or initialiser references Effect Schema APIs.
  */
-function findExportedSchemas(root: string, dir: string): FoundSchema[] {
+function findExportedSchemas(dir: string): FoundSchema[] {
   const schemas: FoundSchema[] = []
 
   function walk(current: string): void {
@@ -46,7 +55,7 @@ function findExportedSchemas(root: string, dir: string): FoundSchema[] {
         const source = readFileSync(full, 'utf-8')
         const names = findExportedSchemaNames(source)
         for (const name of names) {
-          schemas.push({ name, importPath: `./${relative(root, full).replace(/\.ts$/, '')}` })
+          schemas.push({ name, filePath: full })
         }
       }
     }
@@ -187,13 +196,43 @@ function extendsSchemaClass(superClass: Expression | null | undefined): boolean 
 }
 
 /**
+ * Build the law-suite body injected into a consumer's `schema-laws.test.ts`.
+ *
+ * Import specifiers are relative to `lawFilePath`, never to the Vite root: the
+ * file being rewritten lives in `src/`, so a root-relative specifier resolves
+ * to `src/src/…` and yields a suite that silently imports nothing.
+ *
+ * @since 1.4.0
+ */
+export const generateSchemaLaws = (lawFilePath: string, srcDir: string): string => {
+  const schemas = findExportedSchemas(srcDir)
+  if (schemas.length === 0) return '// no schemas found\nexport {}\n'
+
+  const specifierOf = (filePath: string): string => {
+    const rel = relative(dirname(lawFilePath), filePath).replace(/\.ts$/, '')
+    return rel.startsWith('.') ? rel : `./${rel}`
+  }
+
+  return [
+    `import { ruleOfSchemas } from '@systemfsoftware/effect-schema-law'`,
+    schemas.map((s) => `import { ${s.name} } from '${specifierOf(s.filePath)}'`).join('\n'),
+    '',
+    schemas.map((s) => `ruleOfSchemas('${s.name}', ${s.name})`).join('\n'),
+  ].join('\n')
+}
+
+/**
  * Vite plugin that walks the consumer's `src/` directory, finds every
  * exported Effect `Schema`, and auto-injects `ruleOfSchemas` round-trip
  * property tests for each one.
  *
- * The generated module is served at `virtual:@systemfsoftware/schema-laws`.
- * A consumer imports it from exactly one file, `src/schema-laws.test.ts` —
- * the only test filename the placement taxonomy whitelists by name.
+ * The laws are injected by rewriting the consumer's own
+ * `src/schema-laws.test.ts` — the one test filename the placement taxonomy
+ * whitelists by name. It is deliberately NOT a virtual module: the generated
+ * body carries real `import` edges to each schema file, so vitest's
+ * related-file walk reaches them. A virtual module breaks that walk (its id
+ * has no path on disk), which silently drops every generated law from
+ * `stryker --related` runs and reports the survivors as coverage gaps.
  *
  * @example
  * ```ts
@@ -216,36 +255,10 @@ export const inlineSchemaTests = (options?: InlineSchemaTestsOptions): Plugin =>
       config = c
     },
 
-    resolveId(id) {
-      return id === 'virtual:@systemfsoftware/schema-laws'
-        ? '\0virtual:@systemfsoftware/schema-laws'
-        : undefined
-    },
-
-    load(id) {
-      if (id !== '\0virtual:@systemfsoftware/schema-laws') return
-
-      const srcDir = resolve(config.root, options?.dir ?? 'src')
-      const schemas = findExportedSchemas(config.root, srcDir)
-
-      if (schemas.length === 0) {
-        return '// no schemas found'
-      }
-
-      const imports = schemas
-        .map((s) => `import { ${s.name} } from '${s.importPath}'`)
-        .join('\n')
-
-      const calls = schemas
-        .map((s) => `ruleOfSchemas('${s.name}', ${s.name})`)
-        .join('\n')
-
-      return [
-        `import { ruleOfSchemas } from '@systemfsoftware/effect-schema-law'`,
-        imports,
-        '',
-        calls,
-      ].join('\n')
+    transform(_code, id) {
+      const lawFile = id.split('?')[0]
+      if (lawFile === undefined || !lawFile.endsWith(`/${LAW_FILE_BASENAME}`)) return
+      return generateSchemaLaws(lawFile, resolve(config.root, options?.dir ?? 'src'))
     },
   }
 }
