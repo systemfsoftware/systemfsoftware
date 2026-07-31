@@ -26,6 +26,11 @@ ruleTester.run('src-property-test-cell', srcPropertyTestCell, {
       filename: '/repo/pkg/src/retry.policy.property.test.ts',
     },
     {
+      name: 'Should_Allow_SchemaPropertyTest_When_StatingRefusals',
+      code: '',
+      filename: '/repo/pkg/src/money.schema.property.test.ts',
+    },
+    {
       name: 'Should_Allow_PropertyTestOutsideSrc_When_InTestsDir',
       code: '',
       filename: '/repo/pkg/tests/legacy.property.test.ts',
@@ -59,20 +64,6 @@ ruleTester.run('src-property-test-cell', srcPropertyTestCell, {
         messageId: 'unsanctionedCell',
         data: {
           name: 'order.acl.property.test.ts',
-          expected: UNSANCTIONED_CELL_EXPECTED,
-          actual: UNSANCTIONED_CELL_ACTUAL,
-          fix: UNSANCTIONED_CELL_FIX,
-        },
-      }],
-    },
-    {
-      name: 'Should_Report_SchemaPropertyTest_When_SchemaLawsAreGenerated',
-      code: '',
-      filename: '/repo/pkg/src/money.schema.property.test.ts',
-      errors: [{
-        messageId: 'unsanctionedCell',
-        data: {
-          name: 'money.schema.property.test.ts',
           expected: UNSANCTIONED_CELL_EXPECTED,
           actual: UNSANCTIONED_CELL_ACTUAL,
           fix: UNSANCTIONED_CELL_FIX,

@@ -13,8 +13,6 @@ const _default: {
     };
     rules: {
         'ban-classes': Rule;
-        'ban-data-taggederror': Rule;
-        'ban-effect-schema-imports': Rule;
         'ban-error-string': Rule;
         'policy-no-domain-imports': Rule;
         'no-barrels': Rule;
@@ -26,7 +24,6 @@ const _default: {
         'no-logging-in-catch': Rule;
         'no-new-promise-in-effect': Rule;
         'no-new-worker-with-wasm-import': Rule;
-        'no-manual-tag-property': Rule;
         'no-direct-tag-access': Rule;
         'no-either-tag-assertions': Rule;
         'no-native-map-in-effect': Rule;

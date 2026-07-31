@@ -1,4 +1,5 @@
 import effectExecutor from '@systemfsoftware/oxlint-plugin-effect-executor'
+import effectSchema from '@systemfsoftware/oxlint-plugin-effect-schema'
 import effectWorkflow from '@systemfsoftware/oxlint-plugin-effect-workflow'
 import propertyTesting from '@systemfsoftware/oxlint-plugin-property-testing'
 import { defineConfig } from 'oxlint'
@@ -20,6 +21,7 @@ export default defineConfig({
     import.meta.resolve('@systemfsoftware/oxlint-plugin-property-testing'),
     import.meta.resolve('@systemfsoftware/oxlint-plugin-effect-executor'),
     import.meta.resolve('@systemfsoftware/oxlint-plugin-effect-workflow'),
+    import.meta.resolve('@systemfsoftware/oxlint-plugin-effect-schema'),
     import.meta.resolve('@systemfsoftware/oxlint-plugin-test-placement'),
   ],
 
@@ -32,10 +34,8 @@ export default defineConfig({
     'jest/valid-expect': 'off',
 
     '@systemfsoftware/oxlint-plugin/ban-classes': ['error', { whitelist: ['WsCtor'] }],
-    '@systemfsoftware/oxlint-plugin/ban-data-taggederror': 'error',
-    '@systemfsoftware/oxlint-plugin/ban-effect-schema-imports': 'error',
+    ...effectSchema.configs.recommended.rules,
     '@systemfsoftware/oxlint-plugin/ban-error-string': 'error',
-    '@systemfsoftware/oxlint-plugin/no-manual-tag-property': 'error',
     '@systemfsoftware/oxlint-plugin/no-context-generic-tag': 'error',
     '@systemfsoftware/oxlint-plugin/no-date-now-in-effect': 'error',
     '@systemfsoftware/oxlint-plugin/no-direct-tag-access': 'error',

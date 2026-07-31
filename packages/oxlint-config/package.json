@@ -21,10 +21,11 @@
   "dependencies": {
     "@systemfsoftware/oxlint-plugin": "workspace:^",
     "@systemfsoftware/oxlint-plugin-effect-executor": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-effect-schema": "workspace:^",
     "@systemfsoftware/oxlint-plugin-effect-workflow": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-property-testing": "workspace:^",
     "@systemfsoftware/oxlint-plugin-test-hygiene": "workspace:^",
     "@systemfsoftware/oxlint-plugin-test-placement": "workspace:^",
-    "@systemfsoftware/oxlint-plugin-property-testing": "workspace:^",
     "oxlint": "catalog:oxlint"
   },
   "devDependencies": {
