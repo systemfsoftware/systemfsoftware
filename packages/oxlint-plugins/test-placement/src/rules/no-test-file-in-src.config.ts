@@ -8,10 +8,10 @@ export const TEST_FILE_IN_SRC_FIX =
   'name it <cell>.property.test.ts beside a workflow or policy; otherwise move it to tests/ as *.integration.test.ts or *.feature.test.ts, or inline it as an `if (import.meta.vitest)` block exercising a private binding' as const
 
 export const SCHEMA_TEST_EXPECTED =
-  'no authored schema test at all — schema-laws.test.ts imports virtual:@systemfsoftware/schema-laws, which generates the ruleOfSchemas pair for every exported schema' as const
+  'no authored test under this name — the generated schema-laws.test.ts carries the ruleOfSchemas pair for every exported schema' as const
 export const SCHEMA_TEST_ACTUAL = 'an authored *.schema.test.ts restating generated coverage' as const
 export const SCHEMA_TEST_FIX =
-  'delete it; a refinement that still needs an example belongs in the property test of the workflow or policy that consumes the schema' as const
+  'delete it. The generated laws already state round-trip identity and encode stability. What they cannot state is rejection — every input they draw comes from the arbitrary the schema itself supplies — so a refusal belongs in <name>.schema.property.test.ts, never here' as const
 
 export const meta = {
   type: 'problem',

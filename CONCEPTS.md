@@ -46,6 +46,18 @@ The script at `scripts/check-exports.mjs` that compares each package's `package.
 
 ## Architecture cells (constitution §I–V)
 
+### Cell
+
+The unit this codebase is organized in: one source file doing one job, with a suffix that names that job. The suffix is not decoration — rules key on it, so the name is what grants and denies a file its powers. Which imports it may take, whether it may perform I/O, whether the mutator covers it, and what kind of test it may carry are all decided by the suffix rather than by the file's contents or its directory.
+
+A file whose suffix does not match the job it performs is therefore not a naming problem but a permissions problem: it is being governed as something it is not.
+
+### Property cell
+
+A cell type the taxonomy grants an authored property test, sitting beside the cell under a matching name. Most cells carry no authored test of their own — they are covered at composition altitude instead — so the grant is deliberately narrow and each cell type on the list has a specific reason to be there.
+
+A cell earns a slot only when something about it cannot be reached from above: a decision whose invariants are universals over generated input, or a declaration whose refusals no generated law can express. Being important, or merely being hard to test through its callers, is not a qualification.
+
 ### workflow
 
 The pure-decision cell type, named `*.workflow.ts`. One business decision as a pure function: typed command in, `Either<Decision, Error>` out, no I/O. Decision variants are `S.TaggedClass`; error variants are `S.TaggedError`. Dispatch over closed unions uses `Match.value` + `Match.tag` + `Match.exhaustive`; primitives use terminal `Match.orElse`. The `never` error channel is forbidden except for total decisions (`Allow | Block` with no other outcomes). Imported only from sibling workflows and the pure Effect data modules (`Either`, `Match`, `Schema`, `Option`, `ParseResult`) — never the Effect runtime. See `skill://architect-workflow` for the nine non-negotiable gates.

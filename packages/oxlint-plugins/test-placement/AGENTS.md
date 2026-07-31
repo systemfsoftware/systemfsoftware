@@ -27,9 +27,9 @@ This package ships six rules enforcing where tests may live and which test suffi
   check: grep finds no 'wrongLocation' messageId outside this package
 
 - id: TP4
-  title: `*.schema.test.ts` is forbidden, `schema-laws.test.ts` is the one whitelisted name
-  do: leave a package's schema coverage to `src/schema-laws.test.ts`, the single file importing `virtual:@systemfsoftware/schema-laws`
+  title: `*.schema.test.ts` is forbidden; generated laws and authored refusals are the two sanctioned forms
+  do: leave a schema's round-trip coverage to the generated `src/schema-laws.test.ts`, and put any refusal it needs in `<name>.schema.property.test.ts`
   dont: re-admit a `*.schema.test.ts` branch to no-test-file-in-src, or add a second name-whitelisted test file
-  harm: the generated `ruleOfSchemas` pair already covers every exported schema, so an authored schema test is duplicate coverage that drifts — and the suffix is what agents reach for when they want to look thorough
+  harm: the generated `ruleOfSchemas` pair draws every input from the arbitrary the schema itself supplies, so it covers everything the schema accepts and nothing it rejects — an authored `*.schema.test.ts` restates the covered half and drifts, while the uncovered half needs the property-cell suffix rather than this one
   check: SCHEMA_SUFFIX is only ever read to report `schemaTestInSrc`; SCHEMA_LAWS_BASENAME is the only exact-basename allowance in the taxonomy
 ```
