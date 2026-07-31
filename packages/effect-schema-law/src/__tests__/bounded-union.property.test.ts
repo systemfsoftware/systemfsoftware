@@ -58,7 +58,16 @@ const Expr: S.Schema<Expr> = boundedUnion('Expr', {
 
 it.prop('∀e_BoundedUnion_≤50k', [Expr], ([expr]) => JSON.stringify(expr).length < 50_000)
 
-const LAW_TIMEOUT_MS = 60_000
+/**
+ * Sized for contention, not for an idle machine. Run alone the slowest law
+ * here takes ~11s, but these never run alone: `pnpm check` drives six turbo
+ * pipelines at `--concurrency=50%`, each with its own fork pool, and a
+ * recursive `boundedUnion` law is CPU-bound the whole way. Under that
+ * oversubscription the same law crosses 60s and the suite fails only on a
+ * loaded machine — a flake that reproduces in CI and never at your desk.
+ * Re-measure this in isolation and you will shrink it straight back.
+ */
+const LAW_TIMEOUT_MS = 180_000
 
 describe('obeys the rule of schemas', { timeout: LAW_TIMEOUT_MS }, () => {
   ruleOfSchemas('Expr', Expr)
