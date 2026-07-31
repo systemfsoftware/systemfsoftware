@@ -7,3 +7,8 @@ tag_prefix = "v"
 name = "constitution"
 url = "https://github.com/systemfsoftware/constitution"
 branch = "main"
+
+[[repos]]
+name = "tsdown"
+url = "https://github.com/rolldown/tsdown"
+tag_prefix = "v"
