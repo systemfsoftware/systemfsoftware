@@ -113,7 +113,7 @@ Run in order before claiming done:
 pnpm check  # install --frozen-lockfile → lint + typecheck + test + api:check (concurrent, via turbo)
 ```
 
-Then `pnpm --filter <pkg> mutation` — **100%** on changed pure-core files. Any failure blocks done. Never delete the per-package Stryker incremental baseline (each package writes its own reports/stryker-incremental.json).
+Then `pnpm --filter <pkg> mutation` — **100%** on changed pure-core files. Any failure blocks done. Delete the package's `reports/stryker-incremental.json` before any run you will cite as evidence. It is a regenerable cache keyed on source hashes, never a baseline: it reuses prior verdicts for files it considers unchanged, and has been measured reporting mutants as `Killed` that a clean run shows `Survived` — `hex-schema` on 2026-07-31 scored 78.13% cached against 46.88% clean on the same tree. A cached score is not current-run evidence (§A.3), and a gate that can report a stale pass is not a gate.
 
 ### Anti-Bypass
 
