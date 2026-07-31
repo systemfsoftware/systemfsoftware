@@ -184,6 +184,7 @@ export const overrides = [
 ] as const
 
 const universalRules = {
+  'no-ternary': 'error',
   'typescript/no-explicit-any': 'error',
   'typescript/consistent-type-assertions': ['error', { assertionStyle: 'never' }],
   'typescript/no-unsafe-argument': 'error',

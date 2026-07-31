@@ -39,7 +39,9 @@ applied. Spread both, or the preset quietly enforces less than it claims.
 
 ## What "honest" means here
 
-Three tests. A rule ships only if it passes all three.
+Three tests. A rule ships only if it passes all three, and the one rule that
+does not — `no-ternary` — is labelled where it appears rather than quietly
+counted as derived (V.6: no silent bypass).
 
 1. **It names an invariant.** Not a preference — a clause of the constitution
    or a law of the general theory, cited in the tier tables below. "The team
@@ -62,6 +64,7 @@ each one a lesson that the linter is wrong.
 | Rule                                                                                      | Invariant               | Why it cannot fire on correct code                                                                                    |
 | ----------------------------------------------------------------------------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------- |
 | `typescript/no-explicit-any`, `no-unsafe-{argument,assignment,call,member-access,return}` | II.5 decode, never cast | `any` flowing into typed positions is the laundering path the decode rule exists to close                             |
+| `no-ternary`                                                                              | one branching form      | operator ruling, not a derivation — see below. A branch belongs in an `if`, where review and coverage can see it      |
 | `typescript/consistent-type-assertions` (`assertionStyle: never`)                         | II.5 + G1 hardening     | an assertion changes the compiler's belief, never the value; brands widen back through `as`. `as const` is unaffected |
 | `typescript/no-non-null-assertion`                                                        | I.5                     | `!` asserts away precisely the null the type is warning about                                                         |
 | `typescript/ban-ts-comment`, `unicorn/no-abusive-eslint-disable`                          | L1 anti-gaming          | suppression is the one edit that removes an observer; `ts-expect-error` survives only with a description              |
@@ -93,12 +96,21 @@ saying nothing.
 | `*.handler.ts`                                                            | no import of workflow or store                                                                                                                          | atlas — the terminus calls exactly one executor; reaching past it splits the sandwich               |
 | `*.test.ts`, `tests/**`, `__tests__/**`                                   | `vitest/expect-expect`, `valid-expect`, `no-standalone-expect`, `no-conditional-in-test`, `no-focused-tests`, `no-disabled-tests`, `no-identical-title` | X5 — a test that asserts nothing passes; `.only` and `.skip` delete observers                       |
 
-There is deliberately **no** complexity or ternary rule for `*.workflow.ts`
-here. Cyclomatic complexity 1 in the decision cell permits exactly one
-converging ternary — the transient CC=2 edge (B4) — and no stock rule can
-express "one guard, first statement, converging". `complexity: max 1` would
-fire on that sanctioned ternary, and `max 2` would wave through an `if`.
-Stock rules cannot gate the core regime honestly, so they do not pretend to;
+`no-ternary` is on everywhere, and it is the one rule here that ships as an
+**operator ruling rather than a derivation**. Admission test 2 is not met: a
+correct shell ternary now reports, and the fix is to write the `if`. The
+theory's own G2 hardening bans ternaries in core cells; extending that
+repo-wide is a project decision about having exactly one branching form, and
+it is recorded as such rather than dressed up as an invariant.
+
+Its consequence in the decision cell is real: `workflow-single-path` permits
+one converging ternary — the transient CC=2 edge (B4) — and this rule removes
+it. Since `if` is already banned there, `*.workflow.ts` becomes `Match`-only.
+That is tighter than the theory requires, and coherent.
+
+There is still **no** complexity rule for `*.workflow.ts`. No stock rule can
+express "one guard, first statement, converging": `complexity: max 1` would
+fire on a sanctioned guard and `max 2` would wave through an `if`.
 `effect-workflow`'s `workflow-single-path` is where that gate lives.
 
 The purity row does cover `*.workflow.ts`, which overlaps
@@ -115,7 +127,7 @@ without this list is a preference wearing a rule's clothes.
 
 | Refused                                                                                  | Why                                                                                                                                     |
 | ---------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `no-ternary`, `no-nested-ternary`                                                        | contradicts the shell's imperative regime and the sanctioned converging ternary in the core (B4)                                        |
+| `no-nested-ternary`                                                                      | redundant under `no-ternary`, which is enabled above                                                                                    |
 | `complexity`, `max-depth`, `max-lines`, `max-statements`                                 | the shell sequences I/O and is allowed to; the decision cell's complexity is gated by its own rule                                      |
 | `style`, `restriction`, `pedantic` categories wholesale                                  | ~1750 findings on correct code in this repo; rules that fire on correct code train the disable habit and cost the real gates (L1)       |
 | `typescript/explicit-function-return-type`                                               | demands annotations on private functions, where the type is inferred and checked either way; the boundary variant carries the invariant |

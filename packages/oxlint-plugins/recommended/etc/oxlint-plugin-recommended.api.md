@@ -13,6 +13,7 @@ const _default: {
     configs: {
         recommended: {
             rules: {
+                readonly 'no-ternary': 'error';
                 readonly 'typescript/no-explicit-any': 'error';
                 readonly 'typescript/consistent-type-assertions': readonly ['error', {
                     readonly assertionStyle: 'never';
