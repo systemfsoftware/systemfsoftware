@@ -61,10 +61,10 @@ An `*.acl.ts` decodes foreign bytes (JSON, TOML, a wire DTO) into a branded doma
 ```yaml
 - id: ACL1
   title: ACLs are Schema.transformOrFail with strict:true; no as casts
-  do: declare an ACL as `Schema.transformOrFail(<ForeignSchema>, <DomainSchema>, { strict: true, decode: ..., encode: ... })` where the inactive direction returns `ParseResult.Forbidden`; brand through `ParseResult.decode(DomainSchema)`
-        dont: write a plain function `{ return Effect.try({ try: () => parse(raw), catch: ... }).pipe(Effect.flatMap(Schema.decode(TomlConfig))) }` — the parse step is a foreign-side cast outside Schema's contract
-            harm: hand-written decode chains bypass Schema's strict identity, drift from the foreign shape on package upgrades, and re-introduce the cast pattern the type system is meant to forbid
-            check: every ACL file declares `Schema.transformOrFail` with `strict: true`; grep `grep -rL 'export.*transformOrFail' omp/packages/*/src/*.acl.ts omp/plugins/*/src/*.acl.ts` returns zero
+  do: "declare an ACL as `Schema.transformOrFail(<ForeignSchema>, <DomainSchema>, { strict: true, decode: ..., encode: ... })` where the inactive direction returns `ParseResult.Forbidden`; brand through `ParseResult.decode(DomainSchema)`"
+  dont: "write a plain function `{ return Effect.try({ try: () => parse(raw), catch: ... }).pipe(Effect.flatMap(Schema.decode(TomlConfig))) }` — the parse step is a foreign-side cast outside Schema's contract"
+  harm: hand-written decode chains bypass Schema's strict identity, drift from the foreign shape on package upgrades, and re-introduce the cast pattern the type system is meant to forbid
+  check: "every ACL file declares `Schema.transformOrFail` with `strict: true`; grep `grep -rL 'export.*transformOrFail' omp/packages/*/src/*.acl.ts omp/plugins/*/src/*.acl.ts` returns zero"
 ```
 
 **RIGHT — the canonical ACL shape** (this pattern was missing in the existing `.acl.ts` files; the new `toml-loader.acl.ts` resets the convention to canonical):

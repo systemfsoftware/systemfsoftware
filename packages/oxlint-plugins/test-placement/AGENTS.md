@@ -27,7 +27,7 @@ This package ships six rules enforcing where tests may live and which test suffi
   check: grep finds no 'wrongLocation' messageId outside this package
 
 - id: TP4
-  title: `*.schema.test.ts` is forbidden; generated laws and authored refusals are the two sanctioned forms
+  title: "`*.schema.test.ts` is forbidden; generated laws and authored refusals are the two sanctioned forms"
   do: leave a schema's round-trip coverage to the generated `src/schema-laws.test.ts`, and put any refusal it needs in `<name>.schema.property.test.ts`
   dont: re-admit a `*.schema.test.ts` branch to no-test-file-in-src, or add a second name-whitelisted test file
   harm: the generated `ruleOfSchemas` pair draws every input from the arbitrary the schema itself supplies, so it covers everything the schema accepts and nothing it rejects — an authored `*.schema.test.ts` restates the covered half and drifts, while the uncovered half needs the property-cell suffix rather than this one

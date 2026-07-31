@@ -17,14 +17,14 @@ Rules here gate the `architect-executor` cell spec (`*.executor.ts` — the impu
   do: run a candidate rule against the repo's real `*.executor.ts` files before wiring it; if it fires on code the theory sanctions, find the subset that does not and ship that instead
   dont: ship a rule that needs an allowlist, an override, or a `// eslint-disable` to let correct code through
   harm: a rule that fires on code the architecture sanctions trains the team to disable it, and a disabled rule enforces nothing
-  check: `pnpm -r lint` is clean across every real executor in the repo with the rule enabled
+  check: "`pnpm -r lint` is clean across every real executor in the repo with the rule enabled"
 
 - id: EE3
   title: Translation is not decision
   do: let the executor dispatch over the decision a workflow RETURNED; flag only dispatch over a value that came out of an ACL or store call
   dont: ban `Match` outright in `*.executor.ts`
   harm: the executor's sanctioned job is to translate the decision, which requires dispatching on it — a blanket ban flags the correct implementation
-  check: `executor-no-domain-branch` has a valid case dispatching over a workflow result and an invalid case dispatching over a decoded value
+  check: "`executor-no-domain-branch` has a valid case dispatching over a workflow result and an invalid case dispatching over a decoded value"
 
 - id: EE4
   title: RuleTester is the only test mechanism

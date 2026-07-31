@@ -10,7 +10,7 @@ Effect-TS libraries + the oxlint plugin enforcing the constitution (at `repos/co
   do: keep isolatedDeclarations disabled in every tsconfig
   dont: enable isolatedDeclarations anywhere
   harm: 153 compile errors in idiomatic Effect
-  check: no tsconfig has isolatedDeclarations: true
+  check: "no tsconfig has isolatedDeclarations: true"
 
 - id: S2
   title: NEVER modify minimumReleaseAgeExclude
@@ -166,10 +166,10 @@ Leaf `AGENTS.md` lives wherever a directory has distinct checks or constraints. 
 ```yaml
 - id: C1
   title: Commit format
-  do: use `type(scope): subject ≤72 chars`
-    dont: use wrong type or omit scope
-    harm: release tooling and changelog rely on conventional commits
-    check: commitlint passes
+  do: "use `type(scope): subject ≤72 chars`"
+  dont: use wrong type or omit scope
+  harm: release tooling and changelog rely on conventional commits
+  check: commitlint passes
 
 - id: C2
   title: Commit types
@@ -220,9 +220,10 @@ Leaf `AGENTS.md` lives wherever a directory has distinct checks or constraints. 
 ```yaml
 - id: E1
   title: When stuck
-  do: consult ARCHITECTURE.md/CONSTITUTION.md for architecture; check project docs for requirements; flag repeated failures for human review; re-read this file for scope ambiguity
+  do: consult CONCEPTS.md for domain vocabulary; consult ARCHITECTURE.md/CONSTITUTION.md for architecture; check project docs for requirements; flag repeated failures for human review; re-read this file for scope ambiguity
   dont: guess; bypass checks; edit vendored code
   harm: wrong deliverable; masked failures; vendored drift
+  check: the change names the doc or rule it was grounded in
 ```
 
 ## End of Session
