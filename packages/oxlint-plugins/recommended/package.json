@@ -1,0 +1,66 @@
+{
+  "name": "@systemfsoftware/oxlint-plugin-recommended",
+  "license": "MIT",
+  "version": "1.0.0",
+  "author": "Ryan Lee <drdgvhbh@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
+    "directory": "packages/oxlint-plugins/recommended"
+  },
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/oxlint-plugins/recommended#readme",
+  "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
+  "description": "The recommended stock oxlint settings for the cell architecture: a universal defect tier and cell-scoped overrides built entirely from built-in rules, no custom rules and no plugin dependencies. Every enabled rule names the invariant it defends; rules that fire on correct code are refused by name.",
+  "keywords": [
+    "oxlint",
+    "oxlint-plugin",
+    "oxlint-config",
+    "oxc",
+    "lint",
+    "linter",
+    "lint-rules",
+    "preset",
+    "recommended",
+    "effect",
+    "effect-ts",
+    "architecture",
+    "typescript"
+  ],
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/oxlint-plugin-recommended.d.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "tsdown && pnpm api:check",
+    "clean": "rimraf dist",
+    "typecheck": "tsc --noEmit --incremental",
+    "format": "dprint fmt",
+    "lint": "node scripts/guard-no-behavior.mjs && oxlint . ${AGENT:+--format=unix --quiet}",
+    "attw": "attw --pack .",
+    "api:check": "api-extractor run",
+    "api:update": "api-extractor run --local"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@microsoft/api-extractor": "catalog:",
+    "@systemfsoftware/arethetypeswrong-cli": "workspace:^",
+    "@systemfsoftware/tsconfig": "workspace:^",
+    "oxlint": "catalog:oxlint",
+    "rimraf": "catalog:",
+    "tsdown": "catalog:",
+    "typescript": "catalog:"
+  },
+  "peerDependencies": {
+    "oxlint": "catalog:oxlint"
+  },
+  "publishConfig": {
+    "provenance": true
+  }
+}
