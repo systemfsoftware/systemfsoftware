@@ -50,6 +50,20 @@ The script at `scripts/check-exports.mjs` that compares each package's `package.
 
 The pure-decision cell type, named `*.workflow.ts`. One business decision as a pure function: typed command in, `Either<Decision, Error>` out, no I/O. Decision variants are `S.TaggedClass`; error variants are `S.TaggedError`. Dispatch over closed unions uses `Match.value` + `Match.tag` + `Match.exhaustive`; primitives use terminal `Match.orElse`. The `never` error channel is forbidden except for total decisions (`Allow | Block` with no other outcomes). Imported only from sibling workflows and the pure Effect data modules (`Either`, `Match`, `Schema`, `Option`, `ParseResult`) — never the Effect runtime. See `skill://architect-workflow` for the nine non-negotiable gates.
 
+## Schema verification
+
+### Generated schema law
+
+One of the pair of properties — round-trip identity and encode stability — registered automatically for every exported Effect `Schema` in a package, rather than hand-written. Both draw their inputs from the schema's **own** arbitrary, which is itself derived from the refinement under test, so a generated law can only ever assert that values built to satisfy a refinement satisfy it. It therefore covers everything a schema **accepts** and nothing it **rejects**: widening a refinement leaves every generated law green. Treating the pair as full coverage is the mistake it invites.
+
+_Aliases:_ `ruleOfSchemas` pair, the round-trip laws
+
+### Rejection property
+
+A hand-authored property asserting that a schema **refuses** an input — the half of a schema's contract no generated law can reach. Its generator must be derived from the domain contract (what the type promises about its values) and never read back off the refinement literal, because a generator built from the literal reproduces the same circularity that makes generated laws blind.
+
+By design, refusal is the only thing such a test is meant to assert. The mechanical gate is narrower than the rule: it rejects the generated laws' own machinery — round-trip identity, equivalence, encoded-schema stability — rather than proving every remaining assertion is a refusal. The gap between the rule and its gate is held by review.
+
 ## Agent context injection
 
 ### Context file
