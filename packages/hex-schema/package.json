@@ -42,15 +42,21 @@
     "api:check": "api-extractor run",
     "api:update": "api-extractor run --local",
     "lint": "oxlint . ${AGENT:+--format=unix --quiet}",
-    "attw": "attw --pack ."
+    "attw": "attw --pack .",
+    "mutation": "stryker run --incremental",
+    "mutation:full": "stryker run"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
     "@microsoft/api-extractor": "catalog:",
+    "@stryker-mutator/vitest-runner": "catalog:stryker",
     "@systemfsoftware/arethetypeswrong-cli": "workspace:^",
     "@systemfsoftware/effect-schema-law": "workspace:^",
     "@systemfsoftware/effect-schema-vite": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
+    "@systemfsoftware/stryker-js-core": "workspace:^",
+    "@systemfsoftware/stryker-js-typescript-checker": "workspace:^",
+    "@systemfsoftware/stryker-plugins": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",

@@ -34,25 +34,22 @@ if (import.meta.vitest !== void 0) {
   // Dynamic by necessity: tsdown defines `import.meta.vitest` as `undefined`,
   // so this branch is statically dead in the build and the runner never enters
   // the published module graph. A static import would ship it.
-  const { describe, expect, it } = await import('@effect/vitest')
+  const { it } = await import('@effect/vitest')
+  const { FastCheck: fc } = await import('effect')
 
   /**
-   * Unreachable from the generated `ruleOfSchemas` pair: it draws from
-   * `HexString`'s type side and `encode` is identity, so every value that
-   * reaches `decode` is already unprefixed lowercase. Neither the strip nor
-   * the lowercasing is exercised there.
+   * `HexString`'s `encode` is identity, so every value the generated laws feed
+   * to `decode` is already unprefixed lowercase — over 300 law inputs, zero
+   * start with `0x` and zero carry uppercase. Dropping the strip or mis-sizing
+   * the `slice` survives both laws; prefixing is where the function earns its
+   * keep, and this states its left inverse.
+   *
+   * The generator forces at least one uppercase digit so the lowercase clause
+   * is decidable on every draw.
    */
-  describe('toStrictHex', () => {
-    it('Should_StripPrefixAndLowercase_When_InputIsPrefixedUppercase', () => {
-      expect(toStrictHex('0xABCD')).toBe('abcd')
-    })
-
-    it('Should_Lowercase_When_InputIsUnprefixed', () => {
-      expect(toStrictHex('AbCd')).toBe('abcd')
-    })
-
-    it('Should_ReturnInputUnchanged_When_InputIsAlreadyStrict', () => {
-      expect(toStrictHex('abcd')).toBe('abcd')
-    })
-  })
+  it.prop(
+    '∀b_ToStrictHex_=LowerOfBody',
+    [fc.stringMatching(/^[0-9a-fA-F]*[A-F][0-9a-fA-F]*$/)],
+    ([body]) => toStrictHex(`0x${body}`) === body.toLowerCase(),
+  )
 }
