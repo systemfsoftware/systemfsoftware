@@ -1,4 +1,5 @@
 import type { Rule } from '@oxlint/plugins'
+import cellTaxonomy from '@systemfsoftware/oxlint-plugin-cell-taxonomy'
 import effectExecutor from '@systemfsoftware/oxlint-plugin-effect-executor'
 import effectWorkflow from '@systemfsoftware/oxlint-plugin-effect-workflow'
 import propertyTesting from '@systemfsoftware/oxlint-plugin-property-testing'
@@ -29,6 +30,7 @@ export default {
     ...propertyTesting.rules,
     ...effectExecutor.rules,
     ...effectWorkflow.rules,
+    ...cellTaxonomy.rules,
   },
   configs: {
     recommended: {
@@ -36,6 +38,7 @@ export default {
         ...recommendedFrom(propertyTesting),
         ...recommendedFrom(effectExecutor),
         ...recommendedFrom(effectWorkflow),
+        ...recommendedFrom(cellTaxonomy),
       },
     },
   },

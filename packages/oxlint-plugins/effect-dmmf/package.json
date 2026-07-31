@@ -10,7 +10,7 @@
   },
   "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/oxlint-plugins/effect-dmmf#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "Combined oxlint plugin bundling the DMMF operation trio under one entrypoint: pure decisions (effect-workflow), the operation shell (effect-executor), and their property-test verification altitude (property-testing).",
+  "description": "Combined oxlint plugin bundling the DMMF cell quartet under one entrypoint: pure decisions (effect-workflow), the operation shell (effect-executor), their property-test verification altitude (property-testing), and the filename taxonomy every cell is named by (cell-taxonomy).",
   "keywords": [
     "oxlint",
     "oxlint-plugin",
@@ -24,6 +24,7 @@
     "workflow",
     "executor",
     "property-testing",
+    "naming-convention",
     "typescript"
   ],
   "type": "module",
@@ -49,6 +50,7 @@
   },
   "dependencies": {
     "@oxlint/plugins": "catalog:oxlint",
+    "@systemfsoftware/oxlint-plugin-cell-taxonomy": "workspace:^",
     "@systemfsoftware/oxlint-plugin-effect-executor": "workspace:^",
     "@systemfsoftware/oxlint-plugin-effect-workflow": "workspace:^",
     "@systemfsoftware/oxlint-plugin-property-testing": "workspace:^"

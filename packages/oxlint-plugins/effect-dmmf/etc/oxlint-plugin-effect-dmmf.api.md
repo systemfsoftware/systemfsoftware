@@ -12,6 +12,7 @@ const _default: {
         name: string;
     };
     rules: {
+        'cell-suffix-required': Rule;
         'executor-owns-context-tag': Rule;
         'executor-deps-tag-name': Rule;
         'executor-deps-borrowed-types': Rule;
