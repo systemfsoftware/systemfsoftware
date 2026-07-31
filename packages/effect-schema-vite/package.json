@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/effect-schema-vite",
   "license": "MIT",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
