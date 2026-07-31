@@ -5,7 +5,7 @@ import { createServer, type ViteDevServer } from 'vite'
 import { afterAll, beforeAll, expect, it } from 'vitest'
 import { inlineSchemaTests } from '../mod.js'
 
-const VIRTUAL_ID = 'virtual:@systemfsoftware/inline-schema-tests'
+const VIRTUAL_ID = 'virtual:@systemfsoftware/schema-laws'
 
 const FIXTURE = [
   `export const StructConst = Schema.Struct({ x: Schema.String })`,

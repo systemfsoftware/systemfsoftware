@@ -191,6 +191,10 @@ function extendsSchemaClass(superClass: Expression | null | undefined): boolean 
  * exported Effect `Schema`, and auto-injects `ruleOfSchemas` round-trip
  * property tests for each one.
  *
+ * The generated module is served at `virtual:@systemfsoftware/schema-laws`.
+ * A consumer imports it from exactly one file, `src/schema-laws.test.ts` —
+ * the only test filename the placement taxonomy whitelists by name.
+ *
  * @example
  * ```ts
  * // vitest.config.ts
@@ -205,7 +209,7 @@ export const inlineSchemaTests = (options?: InlineSchemaTestsOptions): Plugin =>
   let config: ResolvedConfig
 
   return {
-    name: '@systemfsoftware/inline-schema-tests',
+    name: '@systemfsoftware/schema-laws',
     enforce: 'pre',
 
     configResolved(c) {
@@ -213,13 +217,13 @@ export const inlineSchemaTests = (options?: InlineSchemaTestsOptions): Plugin =>
     },
 
     resolveId(id) {
-      return id === 'virtual:@systemfsoftware/inline-schema-tests'
-        ? '\0virtual:@systemfsoftware/inline-schema-tests'
+      return id === 'virtual:@systemfsoftware/schema-laws'
+        ? '\0virtual:@systemfsoftware/schema-laws'
         : undefined
     },
 
     load(id) {
-      if (id !== '\0virtual:@systemfsoftware/inline-schema-tests') return
+      if (id !== '\0virtual:@systemfsoftware/schema-laws') return
 
       const srcDir = resolve(config.root, options?.dir ?? 'src')
       const schemas = findExportedSchemas(config.root, srcDir)

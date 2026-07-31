@@ -2,7 +2,7 @@
 
 > **Location:** `packages/effect-schema-vite/` — Vite plugin that auto-discovers Effect Schema exports and injects `ruleOfSchemas` property tests. Root `AGENTS.md` governs; this file carries only `effect-schema-vite/`-specific deltas.
 
-Exports `inlineSchemaTests` — a Vite plugin that walks the consumer's `src/`, finds every exported Effect `Schema`, and generates inline `ruleOfSchemas` tests.
+Exports `inlineSchemaTests` — a Vite plugin that walks the consumer's `src/`, finds every exported Effect `Schema`, and generates inline `ruleOfSchemas` tests. It serves them at `virtual:@systemfsoftware/schema-laws`; a consumer imports that module from exactly one file, `src/schema-laws.test.ts` — the only test filename `@systemfsoftware/oxlint-plugin-test-placement` whitelists by name.
 
 ```yaml
 - id: V1
