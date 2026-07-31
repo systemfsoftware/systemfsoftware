@@ -9,7 +9,9 @@ interface IgnorerPath {
 export const strykerPlugins = [
   declareValuePlugin(PluginKind.Ignore, 'effect-schema-declarations', {
     shouldIgnore(path: IgnorerPath): string | undefined {
-      return decideSchemaDeclarationIgnore(path.node, path.parentPath?.node)
+      const parent = path.parentPath
+      const grandparent = parent?.parentPath
+      return decideSchemaDeclarationIgnore(path.node, parent?.node, grandparent?.node, grandparent?.parentPath?.node)
     },
   }),
 ]

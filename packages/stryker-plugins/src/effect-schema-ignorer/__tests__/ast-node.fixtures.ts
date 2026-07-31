@@ -32,3 +32,38 @@ export const nonSymbolForMember = fc.oneof(
   fc.tuple(fc.constantFrom('Reflect', 'Object', 'globalThis'), fc.constant('for')),
   fc.tuple(fc.constantFrom('Reflect', 'Match', 'Effect'), fc.constantFrom('tag', 'gen', 'sync')),
 )
+
+export interface PropertyNode {
+  readonly type: 'ObjectProperty'
+  readonly computed: boolean
+  readonly key: AstNode
+  readonly value: AstNode
+}
+
+export interface ObjectNode {
+  readonly type: 'ObjectExpression'
+  readonly properties: ReadonlyArray<PropertyNode>
+}
+
+export const propertyOf = (key: AstNode, value: AstNode, computed = false): PropertyNode => ({
+  type: 'ObjectProperty',
+  computed,
+  key,
+  value,
+})
+
+export const namedProperty = (key: string, value: AstNode): PropertyNode => propertyOf(identifier(key), value)
+
+export const objectOf = (properties: ReadonlyArray<PropertyNode>): ObjectNode => ({
+  type: 'ObjectExpression',
+  properties,
+})
+
+export const annotationsCall = (argument: AstNode): CallExpression => callOf(memberOf('S', 'annotations'), [argument])
+
+export const documentationKey = fc.constantFrom('identifier', 'description', 'title', 'documentation', 'examples')
+
+/** Every one of these changes what the schema does, so none may be ignored. */
+export const behaviourKey = fc.constantFrom('arbitrary', 'pretty', 'equivalence', 'message', 'jsonSchema')
+
+export const nonAnnotationsMethod = fc.constantFrom('filter', 'transform', 'pipe', 'brand', 'annotate')
