@@ -38,6 +38,16 @@ ruleTester.run('workflow-no-effect-import', workflowNoEffectImport, {
       filename: 'process-claim.workflow.ts',
     },
     {
+      name: 'Should_Pass_When_ImportingPureNonRuntimeSubmodule',
+      code: `import * as Order from 'effect/Order'`,
+      filename: 'process-claim.workflow.ts',
+    },
+    {
+      name: 'Should_Pass_When_ImportingAnotherPureSubmodule',
+      code: `import { Predicate } from 'effect/Predicate'`,
+      filename: 'process-claim.workflow.ts',
+    },
+    {
       name: 'Should_Pass_When_ExecutorImportsEffectRuntime',
       code: `import { Effect } from 'effect'`,
       filename: 'process-claim.executor.ts',
@@ -77,7 +87,7 @@ ruleTester.run('workflow-no-effect-import', workflowNoEffectImport, {
         messageId: 'effectRuntimeImport',
         data: {
           name: 'effect/Effect',
-          expected: 'one of effect/Either, effect/Match, effect/Schema, effect/Option',
+          expected: 'no effect runtime import',
           actual: 'an import of effect',
           fix:
             'a workflow is a pure decision — move the runtime concern to the executor and pass its result as command data',
@@ -92,7 +102,7 @@ ruleTester.run('workflow-no-effect-import', workflowNoEffectImport, {
         messageId: 'effectRuntimeImport',
         data: {
           name: 'effect/Effect',
-          expected: 'one of effect/Either, effect/Match, effect/Schema, effect/Option',
+          expected: 'no effect runtime import',
           actual: 'an import of effect',
           fix:
             'a workflow is a pure decision — move the runtime concern to the executor and pass its result as command data',
@@ -107,7 +117,7 @@ ruleTester.run('workflow-no-effect-import', workflowNoEffectImport, {
         messageId: 'effectRuntimeImport',
         data: {
           name: 'effect/Effect',
-          expected: 'one of effect/Either, effect/Match, effect/Schema, effect/Option',
+          expected: 'no effect runtime import',
           actual: 'an import of effect',
           fix:
             'a workflow is a pure decision — move the runtime concern to the executor and pass its result as command data',
@@ -122,7 +132,7 @@ ruleTester.run('workflow-no-effect-import', workflowNoEffectImport, {
         messageId: 'effectRuntimeImport',
         data: {
           name: 'effect/Effect',
-          expected: 'one of effect/Either, effect/Match, effect/Schema, effect/Option',
+          expected: 'no effect runtime import',
           actual: 'an import of effect/Effect',
           fix:
             'a workflow is a pure decision — move the runtime concern to the executor and pass its result as command data',
@@ -137,7 +147,7 @@ ruleTester.run('workflow-no-effect-import', workflowNoEffectImport, {
         messageId: 'effectRuntimeImport',
         data: {
           name: 'effect/Effect',
-          expected: 'one of effect/Either, effect/Match, effect/Schema, effect/Option',
+          expected: 'no effect runtime import',
           actual: 'an import of effect/Effect',
           fix:
             'a workflow is a pure decision — move the runtime concern to the executor and pass its result as command data',
@@ -152,9 +162,9 @@ ruleTester.run('workflow-no-effect-import', workflowNoEffectImport, {
         messageId: 'topLevelEffectImport',
         data: {
           name: 'effect',
-          expected: 'one of effect/Either, effect/Match, effect/Schema, effect/Option',
+          expected: 'a specific effect submodule (e.g. effect/Schema), not the effect barrel',
           actual: 'an import of effect',
-          fix: 'import from the allowlisted submodule instead',
+          fix: 'import from the specific effect submodule you need instead of the barrel',
         },
       }],
     },
@@ -166,9 +176,9 @@ ruleTester.run('workflow-no-effect-import', workflowNoEffectImport, {
         messageId: 'topLevelEffectImport',
         data: {
           name: 'effect',
-          expected: 'one of effect/Either, effect/Match, effect/Schema, effect/Option',
+          expected: 'a specific effect submodule (e.g. effect/Schema), not the effect barrel',
           actual: 'an import of effect',
-          fix: 'import from the allowlisted submodule instead',
+          fix: 'import from the specific effect submodule you need instead of the barrel',
         },
       }],
     },
@@ -180,9 +190,9 @@ ruleTester.run('workflow-no-effect-import', workflowNoEffectImport, {
         messageId: 'topLevelEffectImport',
         data: {
           name: 'effect',
-          expected: 'one of effect/Either, effect/Match, effect/Schema, effect/Option',
+          expected: 'a specific effect submodule (e.g. effect/Schema), not the effect barrel',
           actual: 'an import of effect',
-          fix: 'import from the allowlisted submodule instead',
+          fix: 'import from the specific effect submodule you need instead of the barrel',
         },
       }],
     },
@@ -194,9 +204,9 @@ ruleTester.run('workflow-no-effect-import', workflowNoEffectImport, {
         messageId: 'topLevelEffectImport',
         data: {
           name: 'effect',
-          expected: 'one of effect/Either, effect/Match, effect/Schema, effect/Option',
+          expected: 'a specific effect submodule (e.g. effect/Schema), not the effect barrel',
           actual: 'an import of effect',
-          fix: 'import from the allowlisted submodule instead',
+          fix: 'import from the specific effect submodule you need instead of the barrel',
         },
       }],
     },
@@ -208,9 +218,9 @@ ruleTester.run('workflow-no-effect-import', workflowNoEffectImport, {
         messageId: 'topLevelEffectImport',
         data: {
           name: 'effect',
-          expected: 'one of effect/Either, effect/Match, effect/Schema, effect/Option',
+          expected: 'a specific effect submodule (e.g. effect/Schema), not the effect barrel',
           actual: 'an import of effect',
-          fix: 'import from the allowlisted submodule instead',
+          fix: 'import from the specific effect submodule you need instead of the barrel',
         },
       }],
     },
@@ -222,9 +232,9 @@ ruleTester.run('workflow-no-effect-import', workflowNoEffectImport, {
         messageId: 'topLevelEffectImport',
         data: {
           name: 'effect',
-          expected: 'one of effect/Either, effect/Match, effect/Schema, effect/Option',
+          expected: 'a specific effect submodule (e.g. effect/Schema), not the effect barrel',
           actual: 'an import of effect',
-          fix: 'import from the allowlisted submodule instead',
+          fix: 'import from the specific effect submodule you need instead of the barrel',
         },
       }],
     },
@@ -236,9 +246,9 @@ ruleTester.run('workflow-no-effect-import', workflowNoEffectImport, {
         messageId: 'topLevelEffectImport',
         data: {
           name: 'effect',
-          expected: 'one of effect/Either, effect/Match, effect/Schema, effect/Option',
+          expected: 'a specific effect submodule (e.g. effect/Schema), not the effect barrel',
           actual: 'an import of effect',
-          fix: 'import from the allowlisted submodule instead',
+          fix: 'import from the specific effect submodule you need instead of the barrel',
         },
       }],
     },
@@ -250,7 +260,7 @@ ruleTester.run('workflow-no-effect-import', workflowNoEffectImport, {
         messageId: 'effectRuntimeImport',
         data: {
           name: 'effect/Effect',
-          expected: 'one of effect/Either, effect/Match, effect/Schema, effect/Option',
+          expected: 'no effect runtime import',
           actual: 'an import of effect',
           fix:
             'a workflow is a pure decision — move the runtime concern to the executor and pass its result as command data',
@@ -265,39 +275,9 @@ ruleTester.run('workflow-no-effect-import', workflowNoEffectImport, {
         messageId: 'topLevelEffectImport',
         data: {
           name: 'effect',
-          expected: 'one of effect/Either, effect/Match, effect/Schema, effect/Option',
+          expected: 'a specific effect submodule (e.g. effect/Schema), not the effect barrel',
           actual: 'an import of effect',
-          fix: 'import from the allowlisted submodule instead',
-        },
-      }],
-    },
-    {
-      name: 'Should_ReportNonAllowlisted_When_ImportingLayerSubmodule',
-      code: `import * as Layer from 'effect/Layer'`,
-      filename: 'process-claim.workflow.ts',
-      errors: [{
-        messageId: 'nonAllowlistedSubmodule',
-        data: {
-          name: 'effect/Layer',
-          expected: 'one of effect/Either, effect/Match, effect/Schema, effect/Option',
-          actual: 'an import of effect/Layer',
-          fix:
-            'a workflow is a pure decision — move the runtime concern to the executor and pass its result as command data',
-        },
-      }],
-    },
-    {
-      name: 'Should_ReportNonAllowlisted_When_ImportingClockSubmodule',
-      code: `import * as Clock from 'effect/Clock'`,
-      filename: 'process-claim.workflow.ts',
-      errors: [{
-        messageId: 'nonAllowlistedSubmodule',
-        data: {
-          name: 'effect/Clock',
-          expected: 'one of effect/Either, effect/Match, effect/Schema, effect/Option',
-          actual: 'an import of effect/Clock',
-          fix:
-            'a workflow is a pure decision — move the runtime concern to the executor and pass its result as command data',
+          fix: 'import from the specific effect submodule you need instead of the barrel',
         },
       }],
     },
