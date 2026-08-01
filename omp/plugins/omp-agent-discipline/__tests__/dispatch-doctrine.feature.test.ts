@@ -635,7 +635,6 @@ const seededLayer = (contents: Record<string, string>): EffectLayer.Layer<TomlLo
 }
 
 const hasEvent = (logs: readonly RecordedLog[], event: string): boolean => logs.some((l) => l.message === event)
-const SESSION_LABEL_LOGS = { 'agent_discipline': 'agent_discipline' }
 
 const createProjectDir = (files: Record<string, string>): string => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'omp-dispatch-'))
@@ -1284,7 +1283,8 @@ FeatureU3('Dispatch-doctrine — drift guard')
               fs.readFileSync(s.path, 'utf8')
               return { thrown: false, message: '' }
             } catch (e) {
-              return { thrown: true, message: e instanceof Error ? e.message : String(e) }
+              if (!(e instanceof Error)) throw e
+              return { thrown: true, message: e.message }
             }
           })),
         Then('the failure names the absent path')((s) =>
