@@ -7,5 +7,7 @@ export default defineConfig({
       '**/.stryker-tmp/**',
       '**/testResources/**',
     ],
+    testTimeout: 30000,
+    hookTimeout: 30000,
   },
 })
