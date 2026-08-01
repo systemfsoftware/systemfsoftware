@@ -22,7 +22,7 @@ export const HexString: Schema.brand<Schema.transform<Schema.refine<string, type
 export type HexString = Schema.Schema.Type<typeof HexString>;
 
 // @public (undocumented)
-export const PrefixedHex: Schema.brand<Schema.transform<Schema.refine<string, typeof Schema.String>, Schema.refine<string, typeof Schema.String>>, "PrefixedHex">;
+export const PrefixedHex: Schema.brand<Schema.transform<Schema.refine<`0x${string}`, Schema.TemplateLiteral<`0x${string}`>>, Schema.refine<string, typeof Schema.String>>, "PrefixedHex">;
 
 // @public (undocumented)
 export type PrefixedHex = Schema.Schema.Type<typeof PrefixedHex>;
@@ -31,7 +31,7 @@ export type PrefixedHex = Schema.Schema.Type<typeof PrefixedHex>;
 export const StrictHex: Schema.refine<string, typeof Schema.String>;
 
 // @public (undocumented)
-export const Uint8ArrayFromPrefixedHex: Schema.transform<Schema.refine<string, typeof Schema.String>, Schema.Schema<Uint8Array<ArrayBufferLike>, string, never>>;
+export const Uint8ArrayFromPrefixedHex: Schema.transform<Schema.refine<`0x${string}`, Schema.TemplateLiteral<`0x${string}`>>, Schema.Schema<Uint8Array<ArrayBufferLike>, string, never>>;
 
 // @public (undocumented)
 export type Uint8ArrayFromPrefixedHex = Schema.Schema.Type<typeof Uint8ArrayFromPrefixedHex>;

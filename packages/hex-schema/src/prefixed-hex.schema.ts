@@ -3,15 +3,15 @@ import { StrictHex } from './strict-hex.schema.js'
 
 export const PrefixedHex = pipe(
   S.transform(
-    S.String.pipe(
+    S.TemplateLiteral('0x', S.String).pipe(
       S.pattern(/^0x[0-9a-f]*$/),
-      S.annotations({ arbitrary: () => (fc) => fc.hexaString().map((hex) => `0x${hex}`) }),
+      S.annotations({ arbitrary: () => (fc) => fc.hexaString().map((hex): `0x${string}` => `0x${hex}`) }),
     ),
     StrictHex,
     {
       strict: true,
       decode: (fromA) => fromA.slice(2),
-      encode: (toI) => `0x${toI}`,
+      encode: (toI): `0x${string}` => `0x${toI}`,
     },
   ),
   S.annotations({

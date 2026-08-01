@@ -5,7 +5,7 @@ import { Schema as S } from 'effect'
  * this to produce a `Uint8Array` from that format:
  *
  * ```ts
- * S.compose(PrefixedHex, HexBytes)  // Schema<Uint8Array, string>
+ * S.compose(PrefixedHex, HexBytes)  // Schema<Uint8Array, `0x${string}`>
  * S.compose(ColonHex, HexBytes)     // Schema<Uint8Array, string>
  * ```
  */

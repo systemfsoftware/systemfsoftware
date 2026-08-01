@@ -3,15 +3,17 @@ import { HexBytes } from './hex-bytes.schema.js'
 
 export const Uint8ArrayFromPrefixedHex = pipe(
   S.transform(
-    S.String.pipe(
+    S.TemplateLiteral('0x', S.String).pipe(
       S.pattern(/^0x(?:[0-9a-f]{2})*$/),
-      S.annotations({ arbitrary: () => (fc) => fc.uint8Array().map((bytes) => `0x${Encoding.encodeHex(bytes)}`) }),
+      S.annotations({
+        arbitrary: () => (fc) => fc.uint8Array().map((bytes): `0x${string}` => `0x${Encoding.encodeHex(bytes)}`),
+      }),
     ),
     HexBytes,
     {
       strict: true,
       decode: (prefixed) => prefixed.slice(2),
-      encode: (hex) => `0x${hex}`,
+      encode: (hex): `0x${string}` => `0x${hex}`,
     },
   ),
   S.annotations({
