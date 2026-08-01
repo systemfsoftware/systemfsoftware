@@ -12,6 +12,13 @@ export const StringLiteral = S.Struct({
 })
 export type StringLiteral = S.Schema.Type<typeof StringLiteral>
 
+export const RegExpLiteral = S.Struct({
+  type: S.Literal('RegExpLiteral'),
+  pattern: S.String,
+  flags: S.String,
+})
+export type RegExpLiteral = S.Schema.Type<typeof RegExpLiteral>
+
 export const ObjectExpression = S.Struct({
   type: S.Literal('ObjectExpression'),
 })
@@ -40,6 +47,7 @@ export interface CallExpression {
 export type AstNode =
   | Identifier
   | StringLiteral
+  | RegExpLiteral
   | ObjectExpression
   | ArrowFunctionExpression
   | MemberExpression
@@ -69,6 +77,7 @@ export const AstNode: S.Schema<AstNode> = S.suspend(
     S.Union(
       Identifier,
       StringLiteral,
+      RegExpLiteral,
       ObjectExpression,
       ArrowFunctionExpression,
       MemberExpression,

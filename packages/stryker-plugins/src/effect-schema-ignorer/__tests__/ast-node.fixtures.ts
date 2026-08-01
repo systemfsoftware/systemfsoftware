@@ -1,5 +1,11 @@
 import { FastCheck as fc } from 'effect'
-import { type AstNode, type CallExpression, type Identifier, type MemberExpression } from '../ast-node.schema.js'
+import {
+  type AstNode,
+  type CallExpression,
+  type Identifier,
+  type MemberExpression,
+  type RegExpLiteral,
+} from '../ast-node.schema.js'
 
 export const identifier = (name: string): Identifier => ({ type: 'Identifier', name })
 
@@ -67,3 +73,19 @@ export const documentationKey = fc.constantFrom('identifier', 'description', 'ti
 export const behaviourKey = fc.constantFrom('arbitrary', 'pretty', 'equivalence', 'message', 'jsonSchema')
 
 export const nonAnnotationsMethod = fc.constantFrom('filter', 'transform', 'pipe', 'brand', 'annotate')
+
+export const stringLiteral = (value: string): AstNode => ({ type: 'StringLiteral', value })
+
+export const regExpLiteral = (pattern: string, flags = ''): RegExpLiteral => ({
+  type: 'RegExpLiteral',
+  pattern,
+  flags,
+})
+
+export const patternCall = (regex: AstNode): CallExpression => callOf(memberOf('S', 'pattern'), [regex])
+
+export const memberOfNode = (object: AstNode, property: string): MemberExpression => ({
+  type: 'MemberExpression',
+  object,
+  property: identifier(property),
+})

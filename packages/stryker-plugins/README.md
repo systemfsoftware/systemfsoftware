@@ -1,32 +1,13 @@
 # @systemfsoftware/stryker-plugins
 
-[Stryker](https://stryker-mutator.io) mutation-testing plugins for [Effect](https://effect.website).
+![version](https://img.shields.io/npm/v/@systemfsoftware/stryker-plugins)
+![license](https://img.shields.io/npm/l/@systemfsoftware/stryker-plugins)
 
-## `effect-schema-ignorer`
+> Stop Effect `Schema` declarations from dragging your Stryker score below 100%.
 
-A Stryker **Ignore** plugin (`effect-schema-declarations`) that skips the _equivalent_ mutants on Effect `Schema` declarations — mutations that change source without changing behaviour, so no test can ever kill them. It recognizes and ignores:
+A brand description, a `_tag`, a `title` — mutate any of them and the source changes but the behaviour does not, so no test can ever kill the mutant. Those unkillable mutants sit in your report forever, indistinguishable from real coverage gaps. This [Stryker](https://stryker-mutator.io) Ignore plugin removes them, so the score that remains is behaviour.
 
-- brand descriptions in `Symbol.for('…')`,
-- `Schema.TaggedClass` / `Schema.TaggedError` `_tag` identifiers,
-- the field schemas of those declarations,
-- `optionalWith` default values,
-- the documentation entries of an `annotations({…})` call — `identifier`, `description`, `title`, `documentation`, `examples`,
-- an `annotations({…})` object whose entries are _all_ documentation.
-
-The last two are deliberately asymmetric. Replacing a `title` cannot change what a
-schema does, so it is ignored wherever it appears. Emptying the whole object can —
-`annotations({ arbitrary })` holds the generator the property tests draw from, and
-dropping it silently changes what gets generated. So an object is ignored only when
-every entry in it documents; one behaviour-bearing sibling keeps the object mutated
-while its documentation entries stay ignored.
-
-`arbitrary`, `pretty`, `equivalence`, `message`, `jsonSchema` and `parseIssueTitle`
-are absent from the documentation set by design: each alters observable behaviour, so
-a surviving mutant of one is a test gap to close, never an equivalent mutant to hide.
-
-Schema declarations are **data, not behaviour** (Constitution Article III §4) — mutating them produces unkillable equivalent mutants that drag a mutation score below 100% for no real coverage gap. This plugin removes that noise so the score reflects logic.
-
-## Usage
+## Install
 
 ```bash
 pnpm add -D @systemfsoftware/stryker-plugins
@@ -45,5 +26,35 @@ In `stryker.config.json`:
 }
 ```
 
+Mutants it recognizes are reported as `Ignored`, each carrying the reason it was safe to skip.
+
 > [!NOTE]
 > `@stryker-mutator/api` is a peer dependency — your Stryker install provides it. `effect` is a direct dependency (the plugin decodes AST nodes with `Schema`).
+
+## What it ignores
+
+| Declaration                                               | Example                                                             |
+| --------------------------------------------------------- | ------------------------------------------------------------------- |
+| Brand descriptions                                        | `Symbol.for('UserId')`                                              |
+| `TaggedClass` / `TaggedError` tags                        | `S.TaggedClass<A>()('Placed', {…})`                                 |
+| The field schemas of those declarations                   | the `{…}` above                                                     |
+| `optionalWith` defaults                                   | `S.optionalWith(S.Number, { default: () => 0 })`                    |
+| Documentation annotations                                 | `identifier`, `description`, `title`, `documentation`, `examples`   |
+| An `annotations({…})` object that is _only_ documentation | `S.annotations({ title: 'Amount' })`                                |
+| A `TemplateLiteral` head a piped `pattern` already forces | `S.TemplateLiteral('usr', S.String).pipe(S.pattern(/^usr[a-z]*$/))` |
+
+## Where the line is
+
+Every ignore is proven redundant, never merely assumed — anything a test could observe keeps its mutants.
+
+`arbitrary`, `pretty`, `equivalence`, `message`, `jsonSchema` and `parseIssueTitle` are **not** documentation: each changes what the schema does, so a survivor there is a test gap to close. That is why the two `annotations` rules differ — a `title` is ignored wherever it appears, but the enclosing object is ignored only when every entry documents, since emptying an object holding an `arbitrary` would silently change what your property tests generate.
+
+The `TemplateLiteral` head is ignored only where the piped pattern makes it unobservable: the head must be the first span with no regex metacharacters, and the pattern must be an unflagged regex literal opening `^` + that head, with no quantifier making its final character optional. A head with no pattern keeps its mutants, and so do `/^usr?…/`, `/^usr…/i`, `/^usr…/m`, and every span past the first.
+
+## Contributing
+
+Development setup and workflow: [AGENTS.md](AGENTS.md).
+
+## License
+
+[MIT](LICENSE)

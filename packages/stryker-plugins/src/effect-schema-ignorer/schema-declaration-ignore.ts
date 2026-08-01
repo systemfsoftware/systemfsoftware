@@ -5,6 +5,7 @@ import {
   Identifier,
   MemberExpression,
   ObjectExpression,
+  RegExpLiteral,
   StringLiteral,
 } from './ast-node.schema.js'
 
@@ -15,6 +16,8 @@ export const OPTIONAL_DEFAULT_IGNORED = 'optionalWith default value is config, n
 export const ANNOTATION_OBJECT_IGNORED =
   'annotations object holding only documentation is a declaration, not behaviour' as const
 export const ANNOTATION_TEXT_IGNORED = 'annotation documentation value is declaration data, not behaviour' as const
+export const TEMPLATE_HEAD_IGNORED =
+  'TemplateLiteral head re-stated by an anchored pattern filter is a declaration of the encoded type, not behaviour' as const
 
 /**
  * The Effect `Schema` annotations that describe a schema without changing what
@@ -55,6 +58,7 @@ const isMemberExpression = S.is(MemberExpression)
 const isCallExpression = S.is(CallExpression)
 const isDocumentationProperty = S.is(DocumentationProperty)
 const isDocumentationObject = S.is(DocumentationObject)
+const isRegExpLiteral = S.is(RegExpLiteral)
 
 const isNamedMember = (node: unknown, object: string, property: string): boolean =>
   isMemberExpression(node) &&
@@ -91,6 +95,61 @@ const isOptionalWithCallee = (callee: unknown): boolean => isNamedMember(callee,
 const isAnnotationsCallee = (callee: unknown): boolean =>
   isMemberExpression(callee) && isIdentifier(callee.property) && callee.property.name === 'annotations'
 
+/**
+ * A head whose every character stands for itself inside a regex. `a.b` is
+ * excluded because `^a.b` would also admit `axb`, which the head refuses.
+ */
+const REGEX_INERT_HEAD = /^[A-Za-z0-9_]+$/
+
+/** `?`, `*` and `{` make the character before them optional, so `^usr?` never forces the `r`. */
+const OPTIONAL_QUANTIFIERS: ReadonlyArray<string> = ['?', '*', '{']
+
+const isNamedMethodCallee = (callee: unknown, method: string): boolean =>
+  isMemberExpression(callee) && isIdentifier(callee.property) && callee.property.name === method
+
+/**
+ * Whether an unflagged, `^`-anchored regex admits only strings opening with
+ * `head`. Flags are refused outright: `i` would admit another casing and `m`
+ * would let `^` match a line start, and the head rejects both — so it decides.
+ */
+const forcesPrefix = (regex: unknown, head: string): boolean =>
+  isRegExpLiteral(regex) &&
+  regex.flags === '' &&
+  regex.pattern.startsWith(`^${head}`) &&
+  !OPTIONAL_QUANTIFIERS.includes(regex.pattern.charAt(head.length + 1))
+
+const patternForcesPrefix = (argument: unknown, head: string): boolean =>
+  isCallExpression(argument) &&
+  isNamedMethodCallee(argument.callee, 'pattern') &&
+  argument.arguments.some((regex) => forcesPrefix(regex, head))
+
+/**
+ * The head of a `TemplateLiteral` piped straight into a `pattern` that already
+ * forces that same prefix. Effect rejects refinements as spans, so a prefixed
+ * wire format can only earn its `` `${head}${string}` `` type this way, and the
+ * prefix ends up stated twice by construction. Emptying the head then changes
+ * nothing observable: the filter still refuses every input the head would have
+ * refused, and Effect derives the arbitrary from the filter's regex rather than
+ * the head. Only the encoded *type* moves, which no test can see.
+ *
+ * Restricted to argument 0: a trailing span sits past the anchor, so an
+ * anchored prefix proves nothing about it and its mutants stay.
+ */
+const templateHeadRule: IgnoreRule = {
+  matches: (node, parent, grandparent, ancestor) =>
+    isStringLiteral(node) &&
+    REGEX_INERT_HEAD.test(node.value) &&
+    isArgumentOf(node, parent, 0, (callee) => isNamedMethodCallee(callee, 'TemplateLiteral')) &&
+    isMemberExpression(grandparent) &&
+    grandparent.object === parent &&
+    isIdentifier(grandparent.property) &&
+    grandparent.property.name === 'pipe' &&
+    isCallExpression(ancestor) &&
+    ancestor.callee === grandparent &&
+    ancestor.arguments.some((argument) => patternForcesPrefix(argument, node.value)),
+  reason: TEMPLATE_HEAD_IGNORED,
+}
+
 const argumentRule = (
   is: (node: unknown) => boolean,
   argumentIndex: number,
@@ -123,6 +182,7 @@ const RULES: ReadonlyArray<IgnoreRule> = [
   argumentRule(isArrowFunctionExpression, 1, isOptionalWithCallee, OPTIONAL_DEFAULT_IGNORED),
   argumentRule(isDocumentationObject, 0, isAnnotationsCallee, ANNOTATION_OBJECT_IGNORED),
   documentationValueRule,
+  templateHeadRule,
 ]
 
 export const decideSchemaDeclarationIgnore = (
