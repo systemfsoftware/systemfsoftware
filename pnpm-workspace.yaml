@@ -10,7 +10,7 @@ allowBuilds:
 catalog:
   typescript: ^7
   "@effect/platform": ^0.97.0
-  "@effect/platform-node": ^0.97.0
+  "@effect/platform-node": ^0.108.0
   effect: ^3.22.0
   "@effect/vitest": 0.30.0
   fast-check: ^3
