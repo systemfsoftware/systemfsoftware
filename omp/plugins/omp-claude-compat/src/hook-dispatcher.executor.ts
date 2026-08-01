@@ -15,6 +15,12 @@ import {
 import { Cause, Effect, Either, Match, Option, Schema as S, Stream } from 'effect'
 import { homedir } from 'node:os'
 import { drainAsyncHookContext, recordAsyncHookContext } from './async-hook-output.state.js'
+import {
+  AGGREGATE_CEILING_MS,
+  KILL_GRACE_MS,
+  resolveHookBudget,
+  ResolveHookBudgetCommand,
+} from './hook-budget.workflow.js'
 import { NON_EVALUABLE_MATCHERS, TOOL_EVENTS } from './hook-catalog.schema.js'
 import { Blocked, Continue, Warning } from './hook-dispatcher.schema.js'
 import type { HookOutcome, HookResult } from './hook-dispatcher.schema.js'
@@ -135,11 +141,6 @@ export const collectSettingsGaps = Effect.fn('collectSettingsGaps')(function*(cw
   return yield* collectSettingsGapsWithPaths(settingsPaths(cwd))
 })
 
-/** Claude Code's documented per-event default; 600s for every other event. */
-const DEFAULT_TIMEOUT_SECONDS: Record<string, number> = {
-  UserPromptSubmit: 30,
-}
-
 const SHELL_INVOCATION = {
   sh: ['sh', '-c'],
   bash: ['bash', '-c'],
@@ -151,9 +152,18 @@ export const runHookScript = Effect.fn('runHookScript')(function*(
   input: Record<string, unknown>,
   cwd: string,
   event: string,
+  callerIsWaiting = true,
 ) {
   const executor = yield* CommandExecutor
-  const timeoutMs = (hook.timeout ?? DEFAULT_TIMEOUT_SECONDS[event] ?? 600) * 1000
+  const budget = resolveHookBudget(
+    new ResolveHookBudgetCommand({ configuredSeconds: hook.timeout, event, callerIsWaiting }),
+  )
+  const timeoutMs = budget.timeoutMs
+  const capNote = Match.value(budget).pipe(
+    Match.tag('BudgetHonoured', () => ''),
+    Match.tag('BudgetCapped', (b) => ` (capped from ${b.requestedMs}ms by the extension handler budget)`),
+    Match.exhaustive,
+  )
   const stdinText = encodeHookPayload(input)
 
   // `args` selects the exec form: spawn the binary directly so no shell ever
@@ -174,22 +184,39 @@ export const runHookScript = Effect.fn('runHookScript')(function*(
   )
 
   return yield* Effect.scoped(
-    Effect.gen(function*() {
-      const process = yield* executor.start(hookCommand)
+    Effect.uninterruptibleMask((restore) =>
+      Effect.gen(function*() {
+        const process = yield* executor.start(hookCommand)
 
-      // Collect stdout/stderr — streams complete when the process closes its pipes
-      const stdout = yield* process.stdout.pipe(Stream.decodeText(), Stream.mkString)
-      const stderr = yield* process.stderr.pipe(Stream.decodeText(), Stream.mkString)
-      const exitCode = yield* process.exitCode
+        yield* Effect.addFinalizer(() =>
+          Effect.interruptible(process.kill('SIGKILL')).pipe(
+            Effect.timeout(KILL_GRACE_MS),
+            Effect.ignore,
+          )
+        )
 
-      const code = typeof exitCode === 'number' ? exitCode : Number(exitCode)
-      return { code, stdout, stderr } satisfies HookResult
-    }),
+        const [stdout, stderr, code] = yield* restore(
+          Effect.all(
+            [
+              process.stdout.pipe(Stream.decodeText(), Stream.mkString),
+              process.stderr.pipe(Stream.decodeText(), Stream.mkString),
+              process.exitCode.pipe(Effect.map(Number), Effect.catchAll(() => Effect.succeed(-1))),
+            ],
+            { concurrency: 'unbounded' },
+          ),
+        )
+
+        return { code, stdout, stderr } satisfies HookResult
+      })
+    ),
   ).pipe(
     Effect.timeout(timeoutMs),
     Effect.catchTag(
       'TimeoutException',
-      () => Effect.succeed({ code: -1, stdout: '', stderr: `timeout after ${timeoutMs}ms` } satisfies HookResult),
+      () =>
+        Effect.succeed(
+          { code: -1, stdout: '', stderr: `timeout after ${timeoutMs}ms${capNote}` } satisfies HookResult,
+        ),
     ),
   )
 })
@@ -261,7 +288,7 @@ interface HooksForEventResult {
   readonly updatedInput?: Record<string, unknown>
 }
 
-export const runHooksForEvent = Effect.fn('runHooksForEvent')(function*(
+const runHooksForEventUnbounded = Effect.fn('runHooksForEventUnbounded')(function*(
   entries: readonly HookEntry[],
   matchValue: string,
   input: Record<string, unknown>,
@@ -290,7 +317,7 @@ export const runHooksForEvent = Effect.fn('runHooksForEvent')(function*(
       }
       if (hook.async === true || hook.asyncRewake === true) {
         yield* Effect.forkDaemon(
-          superviseFork(runHookScript(hook, currentInput, cwd, event), ctx, hook.command),
+          superviseFork(runHookScript(hook, currentInput, cwd, event, false), ctx, hook.command),
         )
         continue
       }
@@ -336,6 +363,19 @@ export const runHooksForEvent = Effect.fn('runHooksForEvent')(function*(
     ...(currentInput === input ? {} : { updatedInput: currentInput }),
     ...(warning !== undefined ? { warning } : {}),
   } satisfies HooksForEventResult
+})
+
+export const runHooksForEvent = Effect.fn('runHooksForEvent')(function*(
+  entries: readonly HookEntry[],
+  matchValue: string,
+  input: Record<string, unknown>,
+  ctx: HookSession,
+  event: string,
+) {
+  return yield* runHooksForEventUnbounded(entries, matchValue, input, ctx, event).pipe(
+    Effect.timeout(AGGREGATE_CEILING_MS),
+    Effect.catchTag('TimeoutException', (): Effect.Effect<HooksForEventResult> => Effect.succeed({})),
+  )
 })
 
 // ── Event runners ──
@@ -611,7 +651,7 @@ export const runSessionStartHooks = Effect.fn('runSessionStartHooks')(function*(
       if (hook.if !== undefined) continue
       if (hook.async === true || hook.asyncRewake === true) {
         yield* Effect.forkDaemon(
-          superviseFork(runHookScript(hook, input, cwd, 'SessionStart'), ctx, hook.command),
+          superviseFork(runHookScript(hook, input, cwd, 'SessionStart', false), ctx, hook.command),
         )
         continue
       }
@@ -660,7 +700,7 @@ export const runLifecycleHooks = Effect.fn('runLifecycleHooks')(function*(
       if (hook.if !== undefined) continue
       if (hook.async === true || hook.asyncRewake === true) {
         yield* Effect.forkDaemon(
-          superviseFork(runHookScript(hook, input, cwd, event), ctx, hook.command),
+          superviseFork(runHookScript(hook, input, cwd, event, false), ctx, hook.command),
         )
       } else {
         yield* runHookScript(hook, input, cwd, event)

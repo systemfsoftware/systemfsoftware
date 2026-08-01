@@ -13,16 +13,20 @@ import type { Effect } from 'effect'
 export const HookDispatcherTask = (pi: ExtensionAPI): void => {
   const runSafe = async <A, E>(
     effect: Effect.Effect<A, E, CommandExecutor | FileSystem | PathModule.Path>,
-  ): Promise<A> => {
-    const [runtime, effectMod] = await Promise.all([
+  ): Promise<A | undefined> => {
+    const [runtime, effectMod, budget] = await Promise.all([
       import('./runtime.js').then(mod => mod.default),
       import('effect'),
+      import('./hook-budget.workflow.js'),
     ])
-    const { Cause, Effect: EffectInner, Exit } = effectMod
-    const exited = effect.pipe(EffectInner.exit)
+    const { Cause, Effect: EffectInner, Exit, Option } = effectMod
+    const exited = effect.pipe(
+      EffectInner.timeoutOption(budget.HANDLER_CEILING_MS),
+      EffectInner.exit,
+    )
     const exit = await runtime.runPromise(exited)
     if (Exit.isFailure(exit)) throw Cause.squash(exit.cause)
-    return exit.value
+    return Option.getOrUndefined(exit.value)
   }
 
   pi.on('tool_call', async (event: ToolCallEvent, ctx: ExtensionContext) => {

@@ -11,7 +11,9 @@
  * Options:
  *   --fire <event>    Fire a synthetic event matching the named handler(s)
  *   --tool <name>     Tool name to set on the synthetic event (toolName)
- *   --input <json>    Event body fields merged into the synthetic event
+ *   --input <json>    For tool_call/tool_result, the tool input object placed
+ *                     at event.input; for every other event, body fields
+ *                     merged into the synthetic event
  *
  * Exit codes:
  *   0  Plugin loaded and registered at least one handler
@@ -152,9 +154,15 @@ if (fireEvent) {
   if (!eventHandlers || eventHandlers.length === 0) {
     console.log(`\nNo handlers registered for event: ${fireEvent}`)
   } else {
-    // Build synthetic event: merge --input body fields
+    // tool_call/tool_result carry the tool arguments under `input` and are
+    // always accompanied by a toolCallId. Spreading them at top level instead
+    // hands handlers an event with no `input`, so any handler that reads it
+    // dies on a harness artifact rather than a real defect.
     const body = fireInput ?? {}
-    const syntheticEvent = { type: fireEvent, ...body }
+    const isToolEvent = fireEvent === 'tool_call' || fireEvent === 'tool_result'
+    const syntheticEvent = isToolEvent
+      ? { type: fireEvent, toolCallId: 'smoke-tool-call', input: body }
+      : { type: fireEvent, ...body }
     if (fireTool) syntheticEvent.toolName = fireTool
 
     const mockCtx = {

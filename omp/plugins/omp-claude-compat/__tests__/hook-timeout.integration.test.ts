@@ -68,3 +68,53 @@ it('Should_LeaveCompactionRunning_When_ThePreCompactHookTimesOut', async () => {
   expect(outcome).toBeDefined()
   expect(outcome?.block).toBeUndefined()
 })
+
+const runNoisyHook = (stderrBytes: number, timeoutSeconds: number) =>
+  Effect.gen(function*() {
+    const fs = yield* FileSystem
+    const dir = yield* fs.makeTempDirectoryScoped()
+    const hookPath = `${dir}/noisy.sh`
+    yield* fs.writeFileString(
+      hookPath,
+      `#!/usr/bin/env bash\nhead -c ${stderrBytes} /dev/zero | tr '\\0' 'E' >&2\necho done\nexit 0\n`,
+    )
+    yield* fs.chmod(hookPath, 0o755)
+    return yield* runHookScript(
+      { type: 'command', command: hookPath, timeout: timeoutSeconds },
+      {},
+      dir,
+      'PreToolUse',
+    )
+  }).pipe(Effect.scoped, Effect.provide(testLayer), Effect.runPromise)
+
+it('Should_DrainBothPipesConcurrently_When_StderrOutgrowsThePipeBuffer', async () => {
+  const result = await runNoisyHook(1_000_000, 8)
+
+  expect(result.code).toBe(0)
+  expect(result.stdout.trim()).toBe('done')
+  expect(result.stderr.length).toBe(1_000_000)
+}, 30_000)
+
+const runTermIgnoringHook = (timeoutSeconds: number) =>
+  Effect.gen(function*() {
+    const fs = yield* FileSystem
+    const dir = yield* fs.makeTempDirectoryScoped()
+    const hookPath = `${dir}/deaf.sh`
+    yield* fs.writeFileString(hookPath, "#!/usr/bin/env bash\ntrap '' TERM\nsleep 30\n")
+    yield* fs.chmod(hookPath, 0o755)
+    return yield* runHookScript(
+      { type: 'command', command: hookPath, timeout: timeoutSeconds },
+      {},
+      dir,
+      'PreToolUse',
+    )
+  }).pipe(Effect.scoped, Effect.provide(testLayer), Effect.runPromise)
+
+it('Should_EscalateToSigkill_When_TheHookIgnoresSigtermAndOutlivesItsTimeout', async () => {
+  const started = Date.now()
+  const result = await runTermIgnoringHook(1)
+  const elapsedMs = Date.now() - started
+
+  expect(result.code).toBe(-1)
+  expect(elapsedMs).toBeLessThan(15_000)
+}, 45_000)
