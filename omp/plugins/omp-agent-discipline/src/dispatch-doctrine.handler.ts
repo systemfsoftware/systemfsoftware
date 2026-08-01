@@ -32,11 +32,8 @@
  */
 
 import type { ExtensionAPI, ExtensionContext } from '@oh-my-pi/pi-coding-agent'
-import * as Match from 'effect/Match'
 
 import { extractSpecShape, matchesDoctrineSkillPath } from './dispatch-doctrine.kernel.js'
-import { CheckDispatchCommand, decideDispatchDoctrine } from './dispatch-doctrine.workflow.js'
-import type { DispatchDoctrineVerdict } from './dispatch-doctrine.workflow.js'
 
 const FLAG_MAP_MAX = 50
 const PENDING_READS_MAX = 200
@@ -143,35 +140,22 @@ const tasksArrayOf = (input: Record<string, unknown>): readonly unknown[] | null
 export const DispatchDoctrineExtension = (pi: ExtensionAPI): void => {
   pi.on('tool_call', async (event, ctx) => {
     const { runSafe } = await import('./helpers.js')
-    const { runDispatchDoctrineConfig } = await import('./dispatch-doctrine.executor.js')
-    const { Effect } = await import('effect')
+    const { runDispatchDoctrineConfig, runDispatchDoctrineGate } = await import(
+      './dispatch-doctrine.executor.js'
+    )
 
     const sessionId = readSessionId(ctx)
     const input = decodeRecord(event.input)
     const doctrineLoaded = sessionId === '' ? false : (flagStore.get(sessionId) ?? false)
 
-    const verdict: DispatchDoctrineVerdict = await runSafe(
-      Effect.gen(function*() {
-        const skills = yield* runDispatchDoctrineConfig(ctx.cwd)
-        skillsCache.set(ctx.cwd, skills)
-        const cmd = new CheckDispatchCommand({
-          toolName: event.toolName,
-          doctrineLoaded,
-          gateEnabled: skills.length > 0,
-        })
-        return decideDispatchDoctrine(cmd)
-      }),
-    )
-
-    const kernelReason = Match.value(verdict).pipe(
-      Match.tag('DeliverDoctrine', (v) => v.reason),
-      Match.orElse(() => null),
-    )
+    const skills: readonly string[] = await runSafe(runDispatchDoctrineConfig(ctx.cwd))
+    skillsCache.set(ctx.cwd, skills)
+    const gate = await runSafe(runDispatchDoctrineGate(ctx.cwd, event.toolName, doctrineLoaded))
 
     const size = batchSize(tasksArrayOf(input))
     const shape = extractSpecShape(dispatchSpecText(input))
 
-    if (kernelReason !== null) {
+    if (gate !== undefined) {
       flipLoaded(sessionId, sessionId)
       safeLog(pi.logger, 'agent_discipline.dispatch.blocked', {
         plugin: 'agent_discipline',
@@ -183,7 +167,7 @@ export const DispatchDoctrineExtension = (pi: ExtensionAPI): void => {
         has_write_scope: shape.hasWriteScope,
         has_verify_commands: shape.hasVerifyCommands,
       })
-      return { block: true as const, reason: kernelReason }
+      return { block: true as const, reason: gate.reason }
     }
 
     safeLog(pi.logger, 'agent_discipline.dispatch.observed', {

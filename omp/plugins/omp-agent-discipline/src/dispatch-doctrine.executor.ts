@@ -15,7 +15,10 @@
 import type { PlatformError } from '@effect/platform/Error'
 import { TomlLoader } from '@systemfsoftware/omp-utils'
 import type { TomlConfig } from '@systemfsoftware/omp-utils'
-import { Effect } from 'effect'
+import { Effect, Match } from 'effect'
+
+import { CheckDispatchCommand, decideDispatchDoctrine } from './dispatch-doctrine.workflow.js'
+import type { DispatchDoctrineVerdict } from './dispatch-doctrine.workflow.js'
 
 export function runDispatchDoctrineConfig(
   cwd: string,
@@ -24,5 +27,30 @@ export function runDispatchDoctrineConfig(
     const loader = yield* TomlLoader
     const config: TomlConfig = yield* loader.load(cwd)
     return config['dispatch_doctrine_skills'] ?? []
+  })
+}
+
+export type DispatchGateResult = { readonly block: true; readonly reason: string } | undefined
+
+const gateResult = (verdict: DispatchDoctrineVerdict): DispatchGateResult =>
+  Match.value(verdict).pipe(
+    Match.tag('DeliverDoctrine', (v) => ({ block: true as const, reason: v.reason })),
+    Match.tag('Allow', () => undefined),
+    Match.exhaustive,
+  )
+
+export function runDispatchDoctrineGate(
+  cwd: string,
+  toolName: string,
+  doctrineLoaded: boolean,
+): Effect.Effect<DispatchGateResult, PlatformError, TomlLoader> {
+  return Effect.gen(function*() {
+    const skills = yield* runDispatchDoctrineConfig(cwd)
+    const cmd = new CheckDispatchCommand({
+      toolName,
+      doctrineLoaded,
+      gateEnabled: skills.length > 0,
+    })
+    return gateResult(decideDispatchDoctrine(cmd))
   })
 }
