@@ -371,6 +371,112 @@ Feature('Dispatch-doctrine — matchesDoctrineSkillPath matcher')
     )
 
     scenario(
+      'bare skill:// scheme with no name is rejected',
+      Gherkin.Do.pipe(
+        Given('a path "skill://" with no skill name')(
+          'args',
+          () => Effect.succeed({ path: 'skill://', skills: TASK_SKILLS }),
+        ),
+        When('matchesDoctrineSkillPath is called')(
+          'match',
+          (s) => Effect.sync(() => matchesDoctrineSkillPath(s.args.path, s.args.skills)),
+        ),
+        Then('it returns false')((s) => Effect.sync(() => expect(s.match).toBe(false))),
+      ),
+    )
+
+    scenario(
+      'dot-slash alone normalizes to empty and is rejected',
+      Gherkin.Do.pipe(
+        Given('a path "./" that strips to an empty normalized form')(
+          'args',
+          () => Effect.succeed({ path: './', skills: TASK_SKILLS }),
+        ),
+        When('matchesDoctrineSkillPath is called')(
+          'match',
+          (s) => Effect.sync(() => matchesDoctrineSkillPath(s.args.path, s.args.skills)),
+        ),
+        Then('it returns false')((s) => Effect.sync(() => expect(s.match).toBe(false))),
+      ),
+    )
+
+    scenario(
+      'dot-slash relative form — ./repo/skills/<name>/SKILL.md matches after normalization',
+      Gherkin.Do.pipe(
+        Given('a ./-prefixed relative path ending in the skills tail')(
+          'args',
+          () =>
+            Effect.succeed({
+              path: './repo/skills/task-decomposition/SKILL.md',
+              skills: TASK_SKILLS,
+            }),
+        ),
+        When('matchesDoctrineSkillPath is called')(
+          'match',
+          (s) => Effect.sync(() => matchesDoctrineSkillPath(s.args.path, s.args.skills)),
+        ),
+        Then('it returns true')((s) => Effect.sync(() => expect(s.match).toBe(true))),
+      ),
+    )
+
+    scenario(
+      'no /skills/ segment — bare <name>/SKILL.md tail must NOT match',
+      Gherkin.Do.pipe(
+        Given('a path ending in the skill file but outside any skills directory')(
+          'args',
+          () =>
+            Effect.succeed({
+              path: '/repo/docs/task-decomposition/SKILL.md',
+              skills: TASK_SKILLS,
+            }),
+        ),
+        When('matchesDoctrineSkillPath is called')(
+          'match',
+          (s) => Effect.sync(() => matchesDoctrineSkillPath(s.args.path, s.args.skills)),
+        ),
+        Then('it returns false')((s) => Effect.sync(() => expect(s.match).toBe(false))),
+      ),
+    )
+
+    scenario(
+      'empty skill entry in the list is skipped, valid entry still matches',
+      Gherkin.Do.pipe(
+        Given('skills ["", "task-decomposition"] and a doctrine path')(
+          'args',
+          () =>
+            Effect.succeed({
+              path: '~/.claude/skills/task-decomposition/SKILL.md',
+              skills: ['', 'task-decomposition'] as readonly string[],
+            }),
+        ),
+        When('matchesDoctrineSkillPath is called')(
+          'match',
+          (s) => Effect.sync(() => matchesDoctrineSkillPath(s.args.path, s.args.skills)),
+        ),
+        Then('it returns true')((s) => Effect.sync(() => expect(s.match).toBe(true))),
+      ),
+    )
+
+    scenario(
+      'empty skill entry alone never matches',
+      Gherkin.Do.pipe(
+        Given('skills [""] and a doctrine path')(
+          'args',
+          () =>
+            Effect.succeed({
+              path: '~/.claude/skills/task-decomposition/SKILL.md',
+              skills: [''] as readonly string[],
+            }),
+        ),
+        When('matchesDoctrineSkillPath is called')(
+          'match',
+          (s) => Effect.sync(() => matchesDoctrineSkillPath(s.args.path, s.args.skills)),
+        ),
+        Then('it returns false')((s) => Effect.sync(() => expect(s.match).toBe(false))),
+      ),
+    )
+
+    scenario(
       'prefix-trap: skill://task-decomposition-extra must NOT match',
       Gherkin.Do.pipe(
         Given('a path with a longer prefix that shares the start of the doctrine name')(

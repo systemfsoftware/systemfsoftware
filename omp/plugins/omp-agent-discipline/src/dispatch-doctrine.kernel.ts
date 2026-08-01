@@ -27,18 +27,15 @@ const skillUriName = (path: string): string | null => {
 
 /**
  * Path-normalization sufficient for tail-matching without realpath: backslash
- * to forward slash, strip a leading `./`. `~` is preserved so
- * `~/.claude/skills/<name>/SKILL.md` matches as-is.
+ * to forward slash. `~` and `./` are preserved — tail-matching is
+ * prefix-insensitive, so `./skills/<name>/SKILL.md` and
+ * `~/.claude/skills/<name>/SKILL.md` both match as-is.
  */
-const normalizeFilesystemPath = (path: string): string => {
-  let p = path.replace(/\\/g, '/')
-  if (p.startsWith('./')) p = p.slice(2)
-  return p
-}
+const normalizeFilesystemPath = (path: string): string => path.split('\\').join('/')
 
 const matchesSkillTail = (normalizedPath: string, skill: string): boolean => {
   const tail = SKILLS_DIR + skill + SKILL_FILE
-  return normalizedPath === tail || normalizedPath.endsWith(tail)
+  return normalizedPath.endsWith(tail)
 }
 
 /**
@@ -68,20 +65,10 @@ export const matchesDoctrineSkillPath = (
   }
 
   const normalized = normalizeFilesystemPath(path)
-  if (normalized.length === 0) return false
   for (const skill of skills) {
-    if (skill.length === 0) continue
     if (matchesSkillTail(normalized, skill)) return true
   }
   return false
-}
-
-const REGEX_ESCAPE_RE = /[.*+?^${}()|[\]\\]/g
-
-const matchesWord = (text: string, needle: string): boolean => {
-  if (text.length === 0) return false
-  const escaped = needle.replace(REGEX_ESCAPE_RE, '\\$&')
-  return new RegExp('\\b' + escaped + '\\b', 'i').test(text)
 }
 
 /**
@@ -92,17 +79,19 @@ const matchesWord = (text: string, needle: string): boolean => {
  * doctrine and explicitly named the unit-spec fields. The check is purely
  * textual (case-insensitive, word-boundary) and reports three booleans
  * matching the kernel's SPEC rule field names.
- *
- * The helper is pure: no I/O, no allocations beyond the record, no throws.
- * Empty / non-string inputs collapse to `false` flags rather than throwing —
- * a malformed dispatch must not crash the telemetry path.
  */
+const SPEC_FIELD_PATTERNS = {
+  hasObjective: /\bobjective\b/i,
+  hasWriteScope: /\bwrite_scope\b/i,
+  hasVerifyCommands: /\bverify_commands\b/i,
+} as const
+
 export const extractSpecShape = (text: string): {
   readonly hasObjective: boolean
   readonly hasWriteScope: boolean
   readonly hasVerifyCommands: boolean
 } => ({
-  hasObjective: matchesWord(text, 'objective'),
-  hasWriteScope: matchesWord(text, 'write_scope'),
-  hasVerifyCommands: matchesWord(text, 'verify_commands'),
+  hasObjective: SPEC_FIELD_PATTERNS.hasObjective.test(text),
+  hasWriteScope: SPEC_FIELD_PATTERNS.hasWriteScope.test(text),
+  hasVerifyCommands: SPEC_FIELD_PATTERNS.hasVerifyCommands.test(text),
 })
