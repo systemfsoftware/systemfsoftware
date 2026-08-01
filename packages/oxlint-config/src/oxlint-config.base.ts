@@ -48,6 +48,7 @@ export default defineConfig({
     '@systemfsoftware/oxlint-plugin/no-native-setinterval-in-effect': 'error',
     '@systemfsoftware/oxlint-plugin/no-native-settimeout-in-effect': 'error',
     '@systemfsoftware/oxlint-plugin-test-hygiene/damp-test-naming': 'error',
+    '@systemfsoftware/oxlint-plugin-test-hygiene/no-behaviourless-assertion': 'error',
     '@systemfsoftware/oxlint-plugin-test-hygiene/pbt-naming': 'error',
     ...propertyTesting.configs.recommended.rules,
     ...effectExecutor.configs.recommended.rules,

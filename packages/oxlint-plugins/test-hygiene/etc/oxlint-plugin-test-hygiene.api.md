@@ -13,6 +13,7 @@ const _default: {
     };
     rules: {
         'damp-test-naming': Rule;
+        'no-behaviourless-assertion': Rule;
         'pbt-naming': Rule;
     };
 };
