@@ -9,7 +9,7 @@ import { TomlConfig } from './toml-loader.schema.js'
 
 const PROJECT_CONFIG_FILE = 'systemfsoftware.toml'
 const LOCAL_CONFIG_FILE = 'systemfsoftware.local.toml'
-const USER_CONFIG_DIR = '.omp'
+const USER_CONFIG_DIR = '.config/systemfsoftware'
 
 const EMPTY_CONFIG: TomlConfig = Schema.decodeSync(TomlConfig)({})
 
@@ -39,7 +39,8 @@ export class TomlLoader extends Context.Tag('TomlLoader')<
 /**
  * Build a `TomlLoader` layer with an explicit user home. Tests pass an
  * isolated directory; production code goes through `TomlLoaderLive`,
- * which calls `os.homedir()` at module load.
+ * which anchors at `OMP_USER_CONFIG_HOME` when set, else `os.homedir()`,
+ * at module load.
  */
 export const makeTomlLoaderLive = (
   home: string,
@@ -77,5 +78,10 @@ export const makeTomlLoaderLive = (
     }),
   )
 
+const userHomeAnchor = (): string => {
+  const override = process.env['OMP_USER_CONFIG_HOME']
+  return typeof override === 'string' && override.length > 0 ? override : os.homedir()
+}
+
 export const TomlLoaderLive: Layer.Layer<TomlLoader, never, FileSystem.FileSystem | PathModule.Path> =
-  makeTomlLoaderLive(os.homedir())
+  makeTomlLoaderLive(userHomeAnchor())

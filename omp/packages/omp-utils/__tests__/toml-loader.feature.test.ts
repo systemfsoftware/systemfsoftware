@@ -141,7 +141,7 @@ Feature('TomlLoader — three-layer config with per-key override')
       'Should merge user and project when keys are disjoint',
       {
         scenarioLayer: buildLayer({
-          [`${HOME}/.omp/systemfsoftware.toml`]: 'no_delegate_skills = ["user-skill"]',
+          [`${HOME}/.config/systemfsoftware/systemfsoftware.toml`]: 'no_delegate_skills = ["user-skill"]',
           '/proj/systemfsoftware.toml': 'dispatch_doctrine_skills = ["project-skill"]',
         }),
       },
@@ -167,7 +167,7 @@ Feature('TomlLoader — three-layer config with per-key override')
       'Should let project win when user and project set the same key',
       {
         scenarioLayer: buildLayer({
-          [`${HOME}/.omp/systemfsoftware.toml`]: 'no_delegate_skills = ["user"]',
+          [`${HOME}/.config/systemfsoftware/systemfsoftware.toml`]: 'no_delegate_skills = ["user"]',
           '/proj/systemfsoftware.toml': 'no_delegate_skills = ["project"]',
         }),
       },
@@ -213,7 +213,7 @@ Feature('TomlLoader — three-layer config with per-key override')
       'Should let local win when user and local set the same key',
       {
         scenarioLayer: buildLayer({
-          [`${HOME}/.omp/systemfsoftware.toml`]: 'no_delegate_skills = ["user"]',
+          [`${HOME}/.config/systemfsoftware/systemfsoftware.toml`]: 'no_delegate_skills = ["user"]',
           '/proj/systemfsoftware.local.toml': 'no_delegate_skills = ["local"]',
         }),
       },
@@ -254,7 +254,7 @@ Feature('TomlLoader — three-layer config with per-key override')
       'Should return user only when only the user layer is present',
       {
         scenarioLayer: buildLayer({
-          [`${HOME}/.omp/systemfsoftware.toml`]: 'no_delegate_skills = ["only-user"]',
+          [`${HOME}/.config/systemfsoftware/systemfsoftware.toml`]: 'no_delegate_skills = ["only-user"]',
         }),
       },
       Gherkin.Do.pipe(
@@ -276,7 +276,7 @@ Feature('TomlLoader — three-layer config with per-key override')
       'Should replace array whole when a later layer overrides the array',
       {
         scenarioLayer: buildLayer({
-          [`${HOME}/.omp/systemfsoftware.toml`]: 'plugins = ["a", "b", "c"]',
+          [`${HOME}/.config/systemfsoftware/systemfsoftware.toml`]: 'plugins = ["a", "b", "c"]',
           '/proj/systemfsoftware.toml': 'plugins = ["only-this-one"]',
         }),
       },
@@ -299,7 +299,7 @@ Feature('TomlLoader — three-layer config with per-key override')
       'Should keep user keys when the project TOML is malformed',
       {
         scenarioLayer: buildLayer({
-          [`${HOME}/.omp/systemfsoftware.toml`]: 'no_delegate_skills = ["user"]',
+          [`${HOME}/.config/systemfsoftware/systemfsoftware.toml`]: 'no_delegate_skills = ["user"]',
           '/proj/systemfsoftware.toml': 'garbage [[ =\ninvalid',
         }),
       },
@@ -322,7 +322,7 @@ Feature('TomlLoader — three-layer config with per-key override')
       'Should keep project keys when the user TOML is malformed',
       {
         scenarioLayer: buildLayer({
-          [`${HOME}/.omp/systemfsoftware.toml`]: 'garbage [[ =\ninvalid',
+          [`${HOME}/.config/systemfsoftware/systemfsoftware.toml`]: 'garbage [[ =\ninvalid',
           '/proj/systemfsoftware.toml': 'no_delegate_skills = ["project"]',
         }),
       },
@@ -368,7 +368,7 @@ Feature('TomlLoader — three-layer config with per-key override')
       'Should return the same merged object on repeat loads (cache)',
       {
         scenarioLayer: buildLayer({
-          [`${HOME}/.omp/systemfsoftware.toml`]: 'no_delegate_skills = ["user"]',
+          [`${HOME}/.config/systemfsoftware/systemfsoftware.toml`]: 'no_delegate_skills = ["user"]',
           '/proj/systemfsoftware.toml':
             'no_delegate_skills = ["project"]\ndispatch_doctrine_skills = ["project-doctrine"]',
         }),

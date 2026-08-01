@@ -937,6 +937,9 @@ FeatureU3('Dispatch-doctrine — handler tool_call gate')
           () =>
             Effect.promise(async () => {
               const projectDir = createProjectDir({})
+              // Isolate the user layer: without this, the operator's real
+              // user-level config would arm the gate and void 'config absent'.
+              process.env['OMP_USER_CONFIG_HOME'] = projectDir
               vi.resetModules()
               const mod = await import('../src/dispatch-doctrine.handler.js')
               const session = buildSession({ sessionId: SESSION_A, cwd: projectDir })
@@ -953,6 +956,7 @@ FeatureU3('Dispatch-doctrine — handler tool_call gate')
                 input: { task: 'write a small unit' },
               })) as { readonly block?: boolean } | undefined
             } finally {
+              delete process.env['OMP_USER_CONFIG_HOME']
               cleanupProjectDir(s.setup.projectDir)
             }
           })),
