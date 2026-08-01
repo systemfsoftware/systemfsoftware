@@ -7,7 +7,7 @@
 import { Schema } from 'effect';
 
 // @public (undocumented)
-export const ColonHex: Schema.brand<Schema.transform<Schema.transform<Schema.refine<string, typeof Schema.String>, Schema.SchemaClass<string, string, never>>, Schema.brand<Schema.transform<Schema.refine<string, typeof Schema.String>, Schema.refine<string, typeof Schema.String>>, "HexString">>, "ColonHex">;
+export const ColonHex: Schema.brand<Schema.transform<Schema.transform<Schema.filter<typeof Schema.String>, Schema.SchemaClass<string, string, never>>, Schema.brand<Schema.transform<Schema.SchemaClass<string, string, never>, Schema.refine<string, typeof Schema.String>>, "HexString">>, "ColonHex">;
 
 // @public (undocumented)
 export type ColonHex = Schema.Schema.Type<typeof ColonHex>;
@@ -16,13 +16,13 @@ export type ColonHex = Schema.Schema.Type<typeof ColonHex>;
 export const HexBytes: Schema.Schema<Uint8Array<ArrayBufferLike>, string, never>;
 
 // @public (undocumented)
-export const HexString: Schema.brand<Schema.transform<Schema.refine<string, typeof Schema.String>, Schema.refine<string, typeof Schema.String>>, "HexString">;
+export const HexString: Schema.brand<Schema.transform<Schema.SchemaClass<string, string, never>, Schema.refine<string, typeof Schema.String>>, "HexString">;
 
 // @public (undocumented)
 export type HexString = Schema.Schema.Type<typeof HexString>;
 
 // @public (undocumented)
-export const PrefixedHex: Schema.brand<Schema.transform<Schema.refine<`0x${string}`, Schema.TemplateLiteral<`0x${string}`>>, Schema.refine<string, typeof Schema.String>>, "PrefixedHex">;
+export const PrefixedHex: Schema.brand<Schema.transform<Schema.TemplateLiteral<`0x${string}`>, Schema.refine<string, typeof Schema.String>>, "PrefixedHex">;
 
 // @public (undocumented)
 export type PrefixedHex = Schema.Schema.Type<typeof PrefixedHex>;
@@ -31,7 +31,7 @@ export type PrefixedHex = Schema.Schema.Type<typeof PrefixedHex>;
 export const StrictHex: Schema.refine<string, typeof Schema.String>;
 
 // @public (undocumented)
-export const Uint8ArrayFromPrefixedHex: Schema.transform<Schema.refine<`0x${string}`, Schema.TemplateLiteral<`0x${string}`>>, Schema.Schema<Uint8Array<ArrayBufferLike>, string, never>>;
+export const Uint8ArrayFromPrefixedHex: Schema.transform<Schema.brand<Schema.transform<Schema.TemplateLiteral<`0x${string}`>, Schema.refine<string, typeof Schema.String>>, "PrefixedHex">, Schema.Schema<Uint8Array<ArrayBufferLike>, string, never>>;
 
 // @public (undocumented)
 export type Uint8ArrayFromPrefixedHex = Schema.Schema.Type<typeof Uint8ArrayFromPrefixedHex>;

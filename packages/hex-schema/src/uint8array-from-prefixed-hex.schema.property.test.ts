@@ -1,5 +1,6 @@
 import { it } from '@effect/vitest'
 import { Either, FastCheck as fc, Schema as S } from 'effect'
+import { expectTypeOf } from 'vitest'
 import { Uint8ArrayFromPrefixedHex } from './uint8array-from-prefixed-hex.schema.js'
 
 const decode = S.decodeUnknownEither(Uint8ArrayFromPrefixedHex)
@@ -24,3 +25,5 @@ it.prop(
   [fc.stringMatching(/^(?:[A-F]{2})+$/)],
   ([upper]) => Either.isLeft(decode(`0x${upper}`)),
 )
+
+expectTypeOf<S.Schema.Encoded<typeof Uint8ArrayFromPrefixedHex>>().toEqualTypeOf<`0x${string}`>()

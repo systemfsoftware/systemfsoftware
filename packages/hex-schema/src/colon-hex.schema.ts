@@ -1,5 +1,5 @@
 /// <reference types="vitest/import-meta" />
-import { pipe, Schema as S } from 'effect'
+import { type Brand, pipe, Schema as S } from 'effect'
 import { HexString } from './hex-string.schema.js'
 
 const hexToColon = (hex: string): string => (hex.match(/.{1,2}/g) ?? []).map((byte) => byte.toUpperCase()).join(':')
@@ -7,14 +7,9 @@ const hexToColon = (hex: string): string => (hex.match(/.{1,2}/g) ?? []).map((by
 export const ColonHex = pipe(
   S.compose(
     S.transform(
-      S.String.pipe(
-        S.pattern(/^([0-9A-Fa-f]{1,2}(:[0-9A-Fa-f]{1,2})*)?$/),
-        S.annotations({
-          arbitrary: () => (fc) => fc.hexaString().map(hexToColon),
-        }),
-      ),
+      S.String.pipe(S.pattern(/^([0-9A-Fa-f]{1,2}(:[0-9A-Fa-f]{1,2})*)?$/)),
       S.encodedSchema(HexString),
-      { strict: true, decode: (colon) => colon.replaceAll(':', ''), encode: hexToColon },
+      { decode: (colon) => colon.replaceAll(':', ''), encode: hexToColon },
     ),
     HexString,
   ),
@@ -34,18 +29,19 @@ if (import.meta.vitest !== void 0) {
   // the published module graph. A static import would ship it.
   const { it } = await import('@effect/vitest')
   const { Either, FastCheck: fc } = await import('effect')
+  const { expectTypeOf } = await import('vitest')
 
   /**
-   * The one law the generated `ruleOfSchemas` pair cannot state. `ColonHex`'s
-   * arbitrary is `fc.hexaString().map(hexToColon)` and its `encode` is
-   * `hexToColon`, so the function sits on both sides of the round-trip and any
-   * bug in it cancels out — deleting `.toUpperCase()` leaves both generated
-   * laws green at 500/500 while the schema emits lowercase against its own
+   * The one law the generated `ruleOfSchemas` pair cannot state: `hexToColon`
+   * is the encoder, so it also produces every colon-side value the laws feed
+   * back to `decode`. It sits on both sides of the round-trip and any bug in
+   * it cancels out — deleting `.toUpperCase()` leaves both generated laws
+   * green at 500/500 while the schema emits lowercase against its own
    * "uppercase hex bytes" contract.
    *
-   * Grouping and the empty-string guard are not stated here; the laws kill
-   * every mutant of those. The generator forces at least one letter, so the
-   * uppercase clause is decidable on every draw rather than merely likely.
+   * The generator forces at least one letter, so the uppercase clause is
+   * decidable on every draw rather than merely likely. Grouping is blind to
+   * the laws for the same reason and is stated separately below.
    */
   it.prop(
     '∀h_HexToColon_=UpperOfInput',
@@ -70,4 +66,25 @@ if (import.meta.vitest !== void 0) {
     [fc.stringMatching(/^[0-9A-Fa-f]{3}$/)],
     ([group]) => Either.isLeft(decodeColonHex(group)),
   )
+
+  /**
+   * The law above strips the colons before comparing, so it cannot see where
+   * they fall — chunking one nibble at a time survives it. Bytes rather than
+   * nibbles is the whole contract of the format, so it is stated directly.
+   */
+  it.prop(
+    '∀h_HexToColonGrouping_=PairsOfInput',
+    [fc.stringMatching(/^(?:[0-9a-f]{2})+$/)],
+    ([hex]) => {
+      const groups = hexToColon(hex).split(':')
+      return groups.length === hex.length / 2 && groups.every((group) => group.length === 2)
+    },
+  )
+
+  /**
+   * The brand exists only in the type, so only a type can state it. `tsc`
+   * rejects a false `expectTypeOf`, which is the channel the mutation gate
+   * reads — renaming the brand fails the build instead of passing silently.
+   */
+  expectTypeOf<ColonHex>().toEqualTypeOf<string & Brand.Brand<'HexString'> & Brand.Brand<'ColonHex'>>()
 }

@@ -1,21 +1,9 @@
-import { Encoding, pipe, Schema as S } from 'effect'
+import { pipe, Schema as S } from 'effect'
 import { HexBytes } from './hex-bytes.schema.js'
+import { PrefixedHex } from './prefixed-hex.schema.js'
 
 export const Uint8ArrayFromPrefixedHex = pipe(
-  S.transform(
-    S.TemplateLiteral('0x', S.String).pipe(
-      S.pattern(/^0x(?:[0-9a-f]{2})*$/),
-      S.annotations({
-        arbitrary: () => (fc) => fc.uint8Array().map((bytes): `0x${string}` => `0x${Encoding.encodeHex(bytes)}`),
-      }),
-    ),
-    HexBytes,
-    {
-      strict: true,
-      decode: (prefixed) => prefixed.slice(2),
-      encode: (hex): `0x${string}` => `0x${hex}`,
-    },
-  ),
+  S.compose(PrefixedHex, HexBytes),
   S.annotations({
     identifier: 'Uint8ArrayFromPrefixedHex',
     description: 'Uint8Array encoded as a 0x-prefixed hex string',

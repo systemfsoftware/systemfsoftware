@@ -1,5 +1,5 @@
 /// <reference types="vitest/import-meta" />
-import { pipe, Schema as S } from 'effect'
+import { type Brand, pipe, Schema as S } from 'effect'
 import { StrictHex } from './strict-hex.schema.js'
 
 const toStrictHex = (hex: string): string => (hex.startsWith('0x') ? hex.slice(2) : hex).toLowerCase()
@@ -7,9 +7,7 @@ const toStrictHex = (hex: string): string => (hex.startsWith('0x') ? hex.slice(2
 export const HexString = pipe(
   S.transform(
     S.String.pipe(
-      S.pattern(/^(0x)?[0-9a-fA-F]*$/),
       S.annotations({
-        arbitrary: () => (fc) => fc.stringMatching(/^(0x)?[0-9a-fA-F]*$/),
         identifier: 'HexStringInput',
         description: 'A hex string, optionally prefixed with 0x (empty string allowed)',
       }),
@@ -36,6 +34,7 @@ if (import.meta.vitest !== void 0) {
   // the published module graph. A static import would ship it.
   const { it } = await import('@effect/vitest')
   const { Either, FastCheck: fc } = await import('effect')
+  const { expectTypeOf } = await import('vitest')
 
   /**
    * `HexString`'s `encode` is identity, so every value the generated laws feed
@@ -54,21 +53,30 @@ if (import.meta.vitest !== void 0) {
   )
 
   /**
-   * Rejection is unreachable from the generated laws: they draw from
-   * `HexString`'s own arbitrary, so every input already satisfies the pattern
-   * under test. Widening the character class therefore survives.
+   * The wire side states no pattern: `toStrictHex` strips and lowercases, then
+   * `StrictHex` decides, and a second pattern would only restate what it
+   * already refuses. This is the statement that the alphabet survives the
+   * transform.
    *
-   * The generator is derived from the contract ("hex digits, optionally 0x
-   * prefixed"), never from the pattern literal: it splices one character from
-   * outside the hex alphabet — and never `x`, which would form a legal prefix
-   * — so the result must be refused however the regex is rewritten.
+   * The outsider is the complement of the format's vocabulary. Both exclusions
+   * are domain facts: `x` would complete a legal `0x` prefix, and an uppercase
+   * hex digit survives `toStrictHex` — this schema is case-insensitive where
+   * `StrictHex` is not.
    */
   const decodeHexString = S.decodeUnknownEither(HexString)
   const hexPart = fc.stringMatching(/^[0-9a-fA-F]*$/)
+  const outsider = fc.stringMatching(/^[^0-9a-fA-Fx]$/)
 
   it.prop(
     '∀s_HexStringAlphabet_⊥',
-    [fc.tuple(hexPart, fc.constantFrom('g', 'z', '!', ' ', '-'), hexPart)],
-    ([[head, outsider, tail]]) => Either.isLeft(decodeHexString(`${head}${outsider}${tail}`)),
+    [fc.tuple(hexPart, outsider, hexPart)],
+    ([[head, out, tail]]) => Either.isLeft(decodeHexString(`${head}${out}${tail}`)),
   )
+
+  /**
+   * The brand exists only in the type, so only a type can state it. `tsc`
+   * rejects a false `expectTypeOf`, which is the channel the mutation gate
+   * reads — renaming the brand fails the build instead of passing silently.
+   */
+  expectTypeOf<HexString>().toEqualTypeOf<string & Brand.Brand<'HexString'>>()
 }
