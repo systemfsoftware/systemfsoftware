@@ -18,7 +18,6 @@ const SKILL_FILE = '/SKILL.md'
  * the base skill.
  */
 const skillUriName = (path: string): string | null => {
-  if (!path.startsWith(SKILL_SCHEME)) return null
   const body = path.slice(SKILL_SCHEME.length)
   if (body.length === 0) return null
   const nameEnd = body.search(/[:/]/)
@@ -55,9 +54,6 @@ export const matchesDoctrineSkillPath = (
   path: string,
   skills: readonly string[],
 ): boolean => {
-  if (path.length === 0) return false
-  if (skills.length === 0) return false
-
   if (path.startsWith(SKILL_SCHEME)) {
     const name = skillUriName(path)
     if (name === null) return false

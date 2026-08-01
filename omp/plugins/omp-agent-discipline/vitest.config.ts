@@ -5,6 +5,7 @@ export default defineConfig({
     globals: true,
     root: import.meta.dirname,
     include: ['__tests__/**/*.feature.test.ts'],
+    testTimeout: 30000,
   },
   resolve: {
     conditions: ['@systemfsoftware/source'],

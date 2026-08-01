@@ -386,6 +386,21 @@ Feature('Dispatch-doctrine — matchesDoctrineSkillPath matcher')
     )
 
     scenario(
+      'bare skill:// scheme is rejected even when the skills list holds an empty entry',
+      Gherkin.Do.pipe(
+        Given('a path "skill://" with an empty string in skills')(
+          'args',
+          () => Effect.succeed({ path: 'skill://', skills: [''] as readonly string[] }),
+        ),
+        When('matchesDoctrineSkillPath is called')(
+          'match',
+          (s) => Effect.sync(() => matchesDoctrineSkillPath(s.args.path, s.args.skills)),
+        ),
+        Then('it returns false')((s) => Effect.sync(() => expect(s.match).toBe(false))),
+      ),
+    )
+
+    scenario(
       'dot-slash alone normalizes to empty and is rejected',
       Gherkin.Do.pipe(
         Given('a path "./" that strips to an empty normalized form')(
@@ -1077,14 +1092,13 @@ FeatureU3('Dispatch-doctrine — handler tool_call gate')
         When('a read of the doctrine skill starts and ends successfully')('result', (s) =>
           Effect.promise(async () => {
             try {
-              s.setup.session.fire('tool_execution_start', {
+              await s.setup.session.fireAsync('tool_execution_start', {
                 type: 'tool_execution_start',
                 toolName: 'read',
                 toolCallId: 'tc-1',
                 args: { path: 'skill://task-decomposition' },
               })
-              await new Promise((r) => setTimeout(r, 60))
-              s.setup.session.fire('tool_execution_end', {
+              await s.setup.session.fireAsync('tool_execution_end', {
                 type: 'tool_execution_end',
                 toolName: 'read',
                 toolCallId: 'tc-1',
@@ -1130,14 +1144,13 @@ FeatureU3('Dispatch-doctrine — handler tool_call gate')
         When('a failed read of the doctrine skill ends')('result', (s) =>
           Effect.promise(async () => {
             try {
-              s.setup.session.fire('tool_execution_start', {
+              await s.setup.session.fireAsync('tool_execution_start', {
                 type: 'tool_execution_start',
                 toolName: 'read',
                 toolCallId: 'tc-err-1',
                 args: { path: 'skill://task-decomposition' },
               })
-              await new Promise((r) => setTimeout(r, 60))
-              s.setup.session.fire('tool_execution_end', {
+              await s.setup.session.fireAsync('tool_execution_end', {
                 type: 'tool_execution_end',
                 toolName: 'read',
                 toolCallId: 'tc-err-1',
@@ -1186,14 +1199,13 @@ FeatureU3('Dispatch-doctrine — handler tool_call gate')
           (s) =>
             Effect.promise(async () => {
               try {
-                s.setup.session.fire('tool_execution_start', {
+                await s.setup.session.fireAsync('tool_execution_start', {
                   type: 'tool_execution_start',
                   toolName: 'read',
                   toolCallId: 'tc-fs-1',
                   args: { path: '/workspace/skills/task-decomposition/SKILL.md' },
                 })
-                await new Promise((r) => setTimeout(r, 60))
-                s.setup.session.fire('tool_execution_end', {
+                await s.setup.session.fireAsync('tool_execution_end', {
                   type: 'tool_execution_end',
                   toolName: 'read',
                   toolCallId: 'tc-fs-1',

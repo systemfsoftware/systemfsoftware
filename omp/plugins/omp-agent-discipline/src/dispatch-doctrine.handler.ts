@@ -20,8 +20,9 @@
  * Per the EXT1 contract and the existing `no-skill-delegation.handler.ts`
  * pattern, runtime imports are lazy inside the handler bodies so the
  * module-level `pi.on` registration runs in the required synchronous
- * window. The `pi.on('tool_execution_start'/'end')` handlers remain
- * sync to mirror `xd-retry-guard.handler.ts`.
+ * window. The `tool_execution_start` handler stays sync (fire-and-forget
+ * warm); the `tool_execution_end` handler awaits the in-flight warm so a
+ * read that ends before the skills list lands still flips the flag.
  *
  * The failure posture is "fail-closed throw → caught-and-allow": a
  * thrown handler body used to block dispatch via the runner's 30s
@@ -41,6 +42,7 @@ const PENDING_READS_MAX = 200
 const flagStore = new Map<string, boolean>()
 const pendingReads = new Map<string, string>()
 const skillsCache = new Map<string, readonly string[]>()
+const warmPending = new Map<string, Promise<void>>()
 
 const readSessionId = (ctx: ExtensionContext): string => {
   const id = ctx.sessionManager.getSessionId()
@@ -89,8 +91,8 @@ const rememberPendingRead = (toolCallId: string, path: string): void => {
   pendingReads.set(toolCallId, path)
 }
 
-const warmSkills = (cwd: string): Promise<void> =>
-  Promise.all([import('./helpers.js'), import('./dispatch-doctrine.executor.js')])
+const warmSkills = (cwd: string): Promise<void> => {
+  const pending = Promise.all([import('./helpers.js'), import('./dispatch-doctrine.executor.js')])
     .then(([{ runSafe }, { runDispatchDoctrineConfig }]) => runSafe(runDispatchDoctrineConfig(cwd)))
     .then((skills) => {
       skillsCache.set(cwd, skills)
@@ -98,6 +100,12 @@ const warmSkills = (cwd: string): Promise<void> =>
     .catch(() => {
       skillsCache.set(cwd, [])
     })
+    .finally(() => {
+      if (warmPending.get(cwd) === pending) warmPending.delete(cwd)
+    })
+  warmPending.set(cwd, pending)
+  return pending
+}
 
 const safeLog = (
   logger: ExtensionAPI['logger'] | undefined,
@@ -193,7 +201,7 @@ export const DispatchDoctrineExtension = (pi: ExtensionAPI): void => {
     if (!skillsCache.has(ctx.cwd)) void warmSkills(ctx.cwd)
   })
 
-  pi.on('tool_execution_end', (event, ctx) => {
+  pi.on('tool_execution_end', async (event, ctx) => {
     if (event.toolName !== 'read') return
     const toolCallId = event.toolCallId
     if (typeof toolCallId !== 'string' || toolCallId.length === 0) return
@@ -202,6 +210,8 @@ export const DispatchDoctrineExtension = (pi: ExtensionAPI): void => {
     if (path === undefined) return
     if (event.isError) return
 
+    const inFlight = warmPending.get(ctx.cwd)
+    if (inFlight !== undefined) await inFlight
     const skills = skillsCache.get(ctx.cwd)
     if (skills === undefined) return
     if (!matchesDoctrineSkillPath(path, skills)) return
