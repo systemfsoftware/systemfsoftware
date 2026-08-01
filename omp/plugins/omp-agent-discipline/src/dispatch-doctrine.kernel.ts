@@ -75,3 +75,34 @@ export const matchesDoctrineSkillPath = (
   }
   return false
 }
+
+const REGEX_ESCAPE_RE = /[.*+?^${}()|[\]\\]/g
+
+const matchesWord = (text: string, needle: string): boolean => {
+  if (text.length === 0) return false
+  const escaped = needle.replace(REGEX_ESCAPE_RE, '\\$&')
+  return new RegExp('\\b' + escaped + '\\b', 'i').test(text)
+}
+
+/**
+ * Structured spec-shape extraction for the dispatch telemetry.
+ *
+ * `agent_discipline.dispatch.observed` carries a deterministic shape check
+ * so the dogfood adoption query can spot dispatches that already read the
+ * doctrine and explicitly named the unit-spec fields. The check is purely
+ * textual (case-insensitive, word-boundary) and reports three booleans
+ * matching the kernel's SPEC rule field names.
+ *
+ * The helper is pure: no I/O, no allocations beyond the record, no throws.
+ * Empty / non-string inputs collapse to `false` flags rather than throwing —
+ * a malformed dispatch must not crash the telemetry path.
+ */
+export const extractSpecShape = (text: string): {
+  readonly hasObjective: boolean
+  readonly hasWriteScope: boolean
+  readonly hasVerifyCommands: boolean
+} => ({
+  hasObjective: matchesWord(text, 'objective'),
+  hasWriteScope: matchesWord(text, 'write_scope'),
+  hasVerifyCommands: matchesWord(text, 'verify_commands'),
+})
