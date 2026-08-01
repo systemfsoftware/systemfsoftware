@@ -7,7 +7,8 @@
   "type": "module",
   "files": [
     "tsc",
-    "bundler"
+    "bundler",
+    "node.json"
   ],
   "exports": {
     "./package.json": "./package.json",
