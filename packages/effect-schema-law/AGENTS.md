@@ -10,7 +10,7 @@ inputs from the schema itself; no hand-written arbitraries needed.
 
 ```yaml
 rules:
-  - id: L1
+  - id: LAW-L1
     title: Round-trip identity — decode(encode(x)) === x
     do: for every Type-side value, encoding then decoding recovers the original
     dont: ship a codec that loses information in either direction
@@ -18,7 +18,7 @@ rules:
       code acts on a value that never existed in the input
     check: "ruleOfSchemas('Schema', MySchema) passes"
 
-  - id: L2
+  - id: LAW-L2
     title: Encode stability — encode(decode(encoded)) matches the original encoded form
     do: canonical encoded values survive a decode→encode roundtrip unchanged
     dont: claim wire-format stability for a subtractive transform without verifying
@@ -26,7 +26,7 @@ rules:
       persisted data shifts format on every read-write cycle
     check: "ruleOfSchemas('Schema', MySchema) passes"
 
-  - id: L3
+  - id: LAW-L3
     title: Errors are exempt — a failure value is not a codec
     do: law-test schemas that model data — structs, unions, branded values, and
       `Schema.Class` / `Schema.TaggedClass` declarations
@@ -46,7 +46,7 @@ the schema is wrong. Diagnose in this order:
 
 ```yaml
 rules:
-  - id: T1
+  - id: LAW-T1
     title: Check callback types first — the intermediate-encoded footgun
     do: verify S.transform callbacks exchange `to.Encoded`, not `to.Type`; inspect
       the to-schema's own transform chain to confirm the intermediate type
@@ -57,7 +57,7 @@ rules:
       write a one-line encodeEither(schema)(oneValidValue) and confirm it
       returns Right before running the law
 
-  - id: T2
+  - id: LAW-T2
     title: Check encoded-domain parity — pattern vs arbitrary
     do: verify the encoded-side pattern and the arbitrary annotation accept exactly
       the same set of values; run 10,000 random encode→decode samples
@@ -66,7 +66,7 @@ rules:
       schema rejects — the bug ships because tests never exercise that path
     check: generate 10,000 values from the arbitrary, encode each, count rejections
 
-  - id: T3
+  - id: LAW-T3
     title: Check composition alignment — Type must match Encoded
     do: for every S.compose(A, B), assert A.Type is structurally assignable to
       B.Encoded; draw the intermediate type chain before writing code
@@ -76,7 +76,7 @@ rules:
       misaligned intermediate
     check: decode and encode one Type-side value through the composed schema
 
-  - id: T4
+  - id: LAW-T4
     title: Byte-serializing transforms need byte-pair hex patterns
     do: prefer (?:[0-9a-f]{2})* for byte-pair hex in the encoded-side pattern of a
       Uint8Array codec and fc.uint8Array().map(bytes => prefix + encodeHex(bytes))
@@ -90,7 +90,7 @@ rules:
 ## API
 
 ```yaml
-- id: A1
+- id: LAW-A1
   title: ruleOfSchemas — the only public function
   do: call ruleOfSchemas('ShortName', schema) at the top level of a Vitest test
     file — it registers two it.prop cases
@@ -98,7 +98,7 @@ rules:
   harm: top-level registration ensures discovery by the test runner
   check: the test file imports ruleOfSchemas and calls it per exported schema
 
-- id: A2
+- id: LAW-A2
   title: boundedUnion — for recursive tagged unions
   do: use `boundedUnion(identifier, { base, recur, maxDepth? })` when a mutually-
     recursive type overflows the generator's call stack; split into base (leaf)

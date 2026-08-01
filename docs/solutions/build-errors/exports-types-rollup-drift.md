@@ -103,4 +103,4 @@ The "what didn't work" attempts each addressed one part of the chain but missed 
 - **Found by:** running `attw --pack` on `effect-schema-extensions@0.4.0` (npm-published). The user's install reported missing types.
 - **Same bug across multiple packages:** `effect-schema-extensions`, `effect-schema-law`, and `hex-schema` all had `exports.types` pointing at files their `build` script never produced. Fixed in the same PR series.
 - **Discovery script:** `scripts/check-exports.mjs` has the right checks but wasn't wired into `pnpm check` as a blocking step.
-- **AGENTS.md safety rule S4** ("never hand-edit `package.json#exports` on tsdown packages") covers how exports get generated but not how they stay in sync with what `build` produces. Worth extending.
+- **AGENTS.md safety rule REPO-S4** ("never hand-edit `package.json#exports` on tsdown packages") covers how exports get generated but not how they stay in sync with what `build` produces. Worth extending.

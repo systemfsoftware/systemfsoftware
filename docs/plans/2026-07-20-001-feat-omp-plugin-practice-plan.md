@@ -13,7 +13,7 @@ execution: code
 ## Goal Capsule
 
 - **Objective:** Turn the bootstrapped OMP plugin setup (omp-claude-compat, omp-agent-discipline in `omp/plugins/`, omp-utils in `omp/packages/`) into a documented, instrumented, verifiable development practice: canonical best-practices doc, agent skill, structured telemetry through OMP's existing OTel log sink, smoke-verification tooling, and hardening of both dogfooded plugins.
-- **Authority hierarchy:** The vendored OMP source (`repos/oh-my-pi/`, read-only per AGENTS.md S3) is the ground truth for runtime behavior; this repo's packages are the only writable code surface. Upstream changes ship as proposal docs, never edits.
+- **Authority hierarchy:** The vendored OMP source (`repos/oh-my-pi/`, read-only per AGENTS.md REPO-S3) is the ground truth for runtime behavior; this repo's packages are the only writable code surface. Upstream changes ship as proposal docs, never edits.
 - **Stop conditions:** Both plugins instrumented and green under `pnpm check`; smoke tool proves both dists load and register; doc + skill exist and cross-reference; upstream proposal written; release dry-run still lists both plugins.
 - **Execution profile:** Standard depth, docs-plus-code. Vendored repos are never modified.
 - **Tail ownership:** Implementer owns verification (`pnpm check`, per-package tests, smoke runs); human owns any commit/publish decision.
@@ -226,7 +226,7 @@ flowchart TB
 
 ## Definition of Done
 
-- `pnpm check` exits 0 from this session after the last edit (AGENTS.md D1).
+- `pnpm check` exits 0 from this session after the last edit (AGENTS.md REPO-D1).
 - `docs/omp-plugin-development.md` written; claims traceable to vendored source or repo code.
 - Both plugins emit the conventional telemetry events; new tests green; behavior unchanged under smoke tool.
 - Smoke tool exits 0 on both dists and non-zero on a broken dist.

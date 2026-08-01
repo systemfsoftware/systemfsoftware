@@ -102,7 +102,7 @@ Content identity was the wrong join key. The host's rendering is the least stabl
 - Importing the host's `expandAtImports`. It is reachable only through a blanket `"./discovery/*"` wildcard export, so it substitutes one internal coupling for another, and its in-place expansion would change the shape of injected output for transitive-ref support nobody has requested.
 - Widening `TomlConfig` to accept TOML tables. Separate change with blast radius across both plugins that consume the loader.
 - Verifying that an `AGENTS.md` ref target sits on the host's walk-up path before suppressing it. No such ref exists in this tree; R3's log is the cheap mitigation if one ever appears.
-- Changes to `repos/oh-my-pi/`. Vendored and read-only under AGENTS.md S3, and upstream is unavailable for this work.
+- Changes to `repos/oh-my-pi/`. Vendored and read-only under AGENTS.md REPO-S3, and upstream is unavailable for this work.
 - Fixing the whole-file fail-open in the TOML loader. Recorded below as a hazard, not addressed here.
 - Adding a Stryker mutation harness to this package. See Open Questions.
 

@@ -168,7 +168,7 @@ The `load(cwd)` sandwich, all impure steps at the edges: READ cache (hit → ret
 | Types         | `pnpm --filter @systemfsoftware/omp-* exec tsc --noEmit`                                                                                        | U1–U4      |
 | Lint          | `pnpm --filter @systemfsoftware/omp-utils lint` and `pnpm --filter @systemfsoftware/omp-agent-discipline lint`                                  | U1–U4      |
 | Build + smoke | `pnpm --filter @systemfsoftware/omp-* build`, then `node omp/scripts/smoke-plugin.mjs <dist>` for both plugins (loader surface is dist-inlined) | U3         |
-| Root gate     | `pnpm check` exits 0 from the session after the last edit (AGENTS.md D1/M2)                                                                     | all        |
+| Root gate     | `pnpm check` exits 0 from the session after the last edit (AGENTS.md REPO-D1/M2)                                                                | all        |
 
 ---
 
