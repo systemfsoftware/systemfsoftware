@@ -42,6 +42,7 @@
   },
   "dependencies": {
     "@inquirer/prompts": "^8.0.0",
+    "@std/jsonc": "catalog:",
     "@stryker-mutator/api": "catalog:stryker",
     "@stryker-mutator/instrumenter": "catalog:stryker",
     "@stryker-mutator/util": "catalog:stryker",

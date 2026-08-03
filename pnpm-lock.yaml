@@ -27,6 +27,9 @@ catalogs:
     '@semantic-release/git':
       specifier: ^10.0.1
       version: 10.0.1
+    '@std/jsonc':
+      specifier: jsr:^1.0.2
+      version: 1.0.2
     '@std/toml':
       specifier: jsr:^1.0.11
       version: 1.0.11
@@ -2144,6 +2147,9 @@ importers:
       '@inquirer/prompts':
         specifier: ^8.0.0
         version: 8.5.2(@types/node@24.13.2)
+      '@std/jsonc':
+        specifier: 'catalog:'
+        version: '@jsr/std__jsonc@1.0.2'
       '@stryker-mutator/api':
         specifier: catalog:stryker
         version: 9.6.1
@@ -2259,6 +2265,9 @@ importers:
 
   packages/stryker-js/typescript-checker:
     dependencies:
+      '@std/jsonc':
+        specifier: 'catalog:'
+        version: '@jsr/std__jsonc@1.0.2'
       '@stryker-mutator/api':
         specifier: catalog:stryker
         version: 9.6.1
@@ -3443,8 +3452,20 @@ packages:
     peerDependencies:
       tslib: '2'
 
+  '@jsr/std__bytes@1.0.6':
+    resolution: {integrity: sha512-St6yKggjFGhxS52IFLJWvkchRFbAKg2Xh8UxA4S1EGz7GJ2Ui+ssDDldj/w2c8vCxvl6qgR0HaYbKeFJNqujmA==, tarball: https://npm.jsr.io/~/11/@jsr/std__bytes/1.0.6.tgz}
+
   '@jsr/std__collections@1.3.0':
     resolution: {integrity: sha512-oJ5V5ZvsWyO5VLdGk3TaRHaVibfVKHvDC8KJdgmxIucHN2QzAXlMt36ApyTUBncfrhXdN/5Q3yMNvloAKym8RA==, tarball: https://npm.jsr.io/~/11/@jsr/std__collections/1.3.0.tgz}
+
+  '@jsr/std__json@1.1.0':
+    resolution: {integrity: sha512-a9Eylh7ox33tFn5RxhESnvI4akpefQP5Qn+ePz3Ih4IJ/EPA8p0SKq0aztRfN1sGDhfyWMPWwlUcwNxONt+Ncg==, tarball: https://npm.jsr.io/~/11/@jsr/std__json/1.1.0.tgz}
+
+  '@jsr/std__jsonc@1.0.2':
+    resolution: {integrity: sha512-Lva9lY0UPvvgmS8INUHU8Tqijq2SPfdlnSAvofOYUBiB6ALPxo0rTMznRlY5Wt30nMW+rhMTha1x5RGpMBKUoQ==, tarball: https://npm.jsr.io/~/11/@jsr/std__jsonc/1.0.2.tgz}
+
+  '@jsr/std__streams@1.1.2':
+    resolution: {integrity: sha512-TNg+Mr/vE2Wg+JDdZpVj9umEyzcmSAOtcp0ildlyVCjHy0/fJ2BJZgO8PQXA/SwJOchvKLaMafZzfFkm9PO13A==, tarball: https://npm.jsr.io/~/11/@jsr/std__streams/1.1.2.tgz}
 
   '@jsr/std__toml@1.0.11':
     resolution: {integrity: sha512-+LZAizoPAPwMDmRZr86/xPrbO8E0Oq0BJ70mr1fNMobJ/6X6v15Jk16ZClFGukWgzBMd8ggiMWnzp24+N3VNZg==, tarball: https://npm.jsr.io/~/11/@jsr/std__toml/1.0.11.tgz}
@@ -8658,7 +8679,21 @@ snapshots:
       '@jsonjoy.com/codegen': 17.67.0(tslib@2.8.1)
       tslib: 2.8.1
 
+  '@jsr/std__bytes@1.0.6': {}
+
   '@jsr/std__collections@1.3.0': {}
+
+  '@jsr/std__json@1.1.0':
+    dependencies:
+      '@jsr/std__streams': 1.1.2
+
+  '@jsr/std__jsonc@1.0.2':
+    dependencies:
+      '@jsr/std__json': 1.1.0
+
+  '@jsr/std__streams@1.1.2':
+    dependencies:
+      '@jsr/std__bytes': 1.0.6
 
   '@jsr/std__toml@1.0.11':
     dependencies:
