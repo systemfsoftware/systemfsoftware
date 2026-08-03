@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/effect-schema-extensions",
   "license": "MIT",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
