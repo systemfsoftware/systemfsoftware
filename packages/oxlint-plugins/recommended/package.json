@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/oxlint-plugin-recommended",
   "license": "MIT",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -47,7 +47,6 @@
     "api:check": "api-extractor run",
     "api:update": "api-extractor run --local"
   },
-  "dependencies": {},
   "devDependencies": {
     "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "workspace:^",
