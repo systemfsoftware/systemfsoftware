@@ -59,6 +59,7 @@
     "@microsoft/api-extractor": "catalog:",
     "@stryker-mutator/api": "catalog:stryker",
     "@stryker-mutator/vitest-runner": "catalog:stryker",
+    "@systemfsoftware/arethetypeswrong-cli": "workspace:^",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/effect-schema-law": "workspace:^",
     "@systemfsoftware/effect-schema-vite": "workspace:^",
