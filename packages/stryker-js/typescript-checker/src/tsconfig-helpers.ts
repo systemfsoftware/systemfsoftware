@@ -2,6 +2,7 @@ import { readFileSync } from 'fs'
 import { createRequire } from 'module'
 import path from 'path'
 
+import { parse } from '@std/jsonc'
 import semver from 'semver'
 
 // Override some compiler options that have to do with code quality. When mutating, we're not interested in the resulting code quality
@@ -58,16 +59,9 @@ export interface ParsedConfig {
   error?: Error
 }
 
-function stripJsonComments(json: string): string {
-  return json
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/\/\/.*$/gm, '')
-}
-
 export function parseConfigFileTextToJson(fileName: string, jsonText: string): ParsedConfig {
   try {
-    const stripped = stripJsonComments(jsonText)
-    return { config: JSON.parse(stripped) }
+    return { config: parse(jsonText.replace(/^\uFEFF/, '')) }
   } catch (error) {
     return { error: error as Error }
   }
@@ -89,9 +83,18 @@ export function determineBuildModeEnabled(tsconfigFileName: string): boolean {
  * @param useBuildMode whether or not `--build` mode is used
  */
 export function overrideOptions(parsedConfig: ParsedConfig, useBuildMode: boolean): string {
-  const config = (parsedConfig.config ?? {}) as { compilerOptions?: Record<string, unknown> }
+  const config = typeof parsedConfig.config === 'object' &&
+      parsedConfig.config !== null &&
+      !Array.isArray(parsedConfig.config)
+    ? parsedConfig.config
+    : {}
   const compilerOptions: Record<string, unknown> = {
-    ...config.compilerOptions,
+    ...('compilerOptions' in config &&
+        typeof config.compilerOptions === 'object' &&
+        config.compilerOptions !== null &&
+        !Array.isArray(config.compilerOptions)
+      ? config.compilerOptions
+      : {}),
     ...COMPILER_OPTIONS_OVERRIDES,
     ...(useBuildMode ? LOW_EMIT_OPTIONS_FOR_PROJECT_REFERENCES : NO_EMIT_OPTIONS_FOR_SINGLE_PROJECT),
     // TypeScript 7 removed some legacy defaults that the upstream fixtures still use.
