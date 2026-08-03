@@ -60,14 +60,20 @@ export const executorDepsTagName = defineRule({
           })
         }
 
+        // `deterministicKeys` (@effect/tsgo) requires the identifier to be the package-and-path
+        // qualified key, which ends in the class name. Both spellings name this class; a bare
+        // identifier that is neither does not.
         const literal = tagLiteralValue(node.superClass.callee)
-        if (literal !== null && literal.literal !== className) {
+        if (
+          literal !== null && literal.literal !== className && !literal.literal.endsWith(`/${className}`)
+        ) {
           context.report({
             node,
             messageId: 'tagIdentifierMismatch',
             data: {
               name: literal.literal,
-              expected: `the identifier to equal the class name ${className}`,
+              expected:
+                `the identifier to equal the class name ${className}, or a deterministic key ending in /${className}`,
               actual: `identifier '${literal.literal}' on class ${className}`,
               fix: TAG_IDENTIFIER_MISMATCH_FIX,
             },

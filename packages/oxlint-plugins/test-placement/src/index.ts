@@ -1,5 +1,4 @@
 import { behaviourExercisesUseCase } from './rules/behaviour-exercises-use-case.js'
-import { behaviourNoPureCellImport } from './rules/behaviour-no-pure-cell-import.js'
 import { behaviourOneFeaturePerFile } from './rules/behaviour-one-feature-per-file.js'
 import { behaviourTestRequiresGherkin } from './rules/behaviour-test-requires-gherkin.js'
 import { inSourceTestTargetsPrivate } from './rules/in-source-test-targets-private.js'
@@ -21,7 +20,6 @@ const recommendedRules = {
   [rule('test-suffix-outside-src')]: 'error',
   [rule('snapshot-test-requires-snapshot')]: 'error',
   [rule('behaviour-test-requires-gherkin')]: 'error',
-  [rule('behaviour-no-pure-cell-import')]: 'error',
   [rule('behaviour-exercises-use-case')]: 'error',
   [rule('behaviour-one-feature-per-file')]: 'error',
 } as const
@@ -38,7 +36,6 @@ export default {
     'test-suffix-outside-src': testSuffixOutsideSrc,
     'snapshot-test-requires-snapshot': snapshotTestRequiresSnapshot,
     'behaviour-test-requires-gherkin': behaviourTestRequiresGherkin,
-    'behaviour-no-pure-cell-import': behaviourNoPureCellImport,
     'behaviour-exercises-use-case': behaviourExercisesUseCase,
     'behaviour-one-feature-per-file': behaviourOneFeaturePerFile,
   },

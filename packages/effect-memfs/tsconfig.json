@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/tsconfig",
-  "extends": "@systemfsoftware/tsconfig/bundler/dom/library-monorepo",
+  "extends": ["@systemfsoftware/tsconfig/bundler/dom/library-monorepo", "@systemfsoftware/tsconfig/effect"],
   "compilerOptions": {
     "types": [
       "node"
@@ -8,12 +8,7 @@
     "customConditions": [
       "@systemfsoftware/source"
     ],
-    "isolatedModules": true,
-    "plugins": [
-      {
-        "name": "@effect/language-service"
-      }
-    ]
+    "isolatedModules": true
   },
   "include": [
     "src"

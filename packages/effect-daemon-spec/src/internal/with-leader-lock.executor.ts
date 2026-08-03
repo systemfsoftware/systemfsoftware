@@ -9,7 +9,7 @@ export interface LeaderLockOptions {
 }
 
 export class WithLeaderLockExecutorDeps extends Context.Tag(
-  'WithLeaderLockExecutorDeps',
+  '@systemfsoftware/effect-daemon-spec/internal/with-leader-lock.executor/WithLeaderLockExecutorDeps',
 )<WithLeaderLockExecutorDeps, { readonly withLock: LeaderLock['Type']['withLock'] }>() {}
 
 export function withLeaderLock<A, E, R>(

@@ -9,8 +9,8 @@ export type LockConfig =
 
 export interface CommonOpts<L extends LockConfig> {
   readonly name: string
-  readonly child?: typeof ChildPolicyConfig.Type
-  readonly tick: typeof TickPolicyConfig.Type
+  readonly child?: ChildPolicyConfig
+  readonly tick: TickPolicyConfig
   readonly tickHooks?: TickPolicyHooks
   readonly lock: L
 }
@@ -59,8 +59,8 @@ export interface Worker<E, R, L extends LockConfig = LockConfig> {
   readonly [WorkerTypeId]: WorkerTypeId
   readonly name: string
   readonly loop: LoopShape<E, R>
-  readonly child: typeof ChildPolicyConfig.Type
-  readonly tick: typeof TickPolicyConfig.Type
+  readonly child: ChildPolicyConfig
+  readonly tick: TickPolicyConfig
   readonly tickHooks: TickPolicyHooks
   readonly lock: L
 }

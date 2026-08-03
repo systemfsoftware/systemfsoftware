@@ -55,6 +55,7 @@
     "@microsoft/api-extractor": "^7.58.7",
     "@stryker-mutator/vitest-runner": "catalog:stryker",
     "@systemfsoftware/arethetypeswrong-cli": "workspace:^",
+    "@systemfsoftware/effect-cell-types": "workspace:^",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/effect-schema-law": "workspace:^",
     "@systemfsoftware/effect-schema-vite": "workspace:^",

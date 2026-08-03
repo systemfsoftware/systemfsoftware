@@ -4,9 +4,10 @@ import * as PathModule from '@effect/platform/Path'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer } from 'effect'
 import { expect } from 'vitest'
-import { loadSettingsWithPaths, runPreToolUseHooks } from '../src/hook-dispatcher.executor.js'
-import type { HookSession, HookToolCall } from '../src/hook-dispatcher.executor.js'
 import { HookScopeLive } from '../src/hook-runtime.state.js'
+import type { HookSession, HookToolCall } from '../src/hook-session.shape.js'
+import { loadSettingsWithPaths } from '../src/internal/load-settings.executor.js'
+import { runPreToolUseHooks } from '../src/internal/run-pre-tool-use-hooks.executor.js'
 import {
   makeGuardedSettingsJson,
   makePathGuardScript,

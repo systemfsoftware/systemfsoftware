@@ -1,3 +1,4 @@
+import type { Workflow } from '@systemfsoftware/effect-cell-types'
 import { type Either, left, right } from 'effect/Either'
 import * as Match from 'effect/Match'
 import * as S from 'effect/Schema'
@@ -49,9 +50,14 @@ const restartIndicesFor = (
     Match.exhaustive,
   )
 
-export const decideRestart = (
-  input: DecideInput,
-): Either<RestartDecisionContinue | RestartDecisionRestart, RestartDecisionExhausted> =>
+export const decideRestart: Workflow<
+  DecideInput,
+  RestartDecisionContinue | RestartDecisionRestart,
+  RestartDecisionExhausted
+> = (input: DecideInput): Either<
+  RestartDecisionContinue | RestartDecisionRestart,
+  RestartDecisionExhausted
+> =>
   Match.value(input).pipe(
     Match.when({ exitSuccess: true }, () => right(new RestartDecisionContinue())),
     Match.when(

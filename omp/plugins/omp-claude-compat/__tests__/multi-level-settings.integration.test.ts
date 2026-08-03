@@ -6,7 +6,7 @@ import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer } from 'effect'
 import { expect } from 'vitest'
-import { loadSettingsWithPaths } from '../src/hook-dispatcher.executor.js'
+import { loadSettingsWithPaths } from '../src/internal/load-settings.executor.js'
 import { expectLoaded } from './loaded.observer.js'
 
 const Feature = makeFeature({ it, layer })

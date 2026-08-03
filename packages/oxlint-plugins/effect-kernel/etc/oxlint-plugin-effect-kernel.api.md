@@ -15,7 +15,6 @@ const _default: {
         'kernel-no-throw': Rule;
         'kernel-no-ambient-impurity': Rule;
         'kernel-no-effect-runtime': Rule;
-        'kernel-no-domain-imports': Rule;
         'kernel-no-junk-drawer-name': Rule;
     };
     configs: {

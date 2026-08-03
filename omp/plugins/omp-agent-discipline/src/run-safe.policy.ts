@@ -7,11 +7,9 @@
  */
 
 import type { Effect } from 'effect'
-import type runtime from './runtime.kernel.js'
+import type { RunSafe, RuntimeContext } from './run-safe.kernel.js'
 
-type R = Effect.Effect.Context<Parameters<typeof runtime.runPromise>[0]>
-
-export const runSafe = async <A, E>(effect: Effect.Effect<A, E, R>): Promise<A> => {
+export const runSafe: RunSafe = async <A, E>(effect: Effect.Effect<A, E, RuntimeContext>): Promise<A> => {
   const [runtime, Cause, Effect, Exit] = await Promise.all(
     [
       import('./runtime.kernel.js').then((mod) => mod.default),

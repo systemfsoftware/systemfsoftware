@@ -74,20 +74,20 @@ interface Call {
 type Expr = Lit | Id | Binary | Member | Conditional | Call
 type Tag = Expr['_tag']
 
-const Lit = S.Struct({ _tag: S.Literal('Lit'), value: S.JsonNumber })
-const Id = S.Struct({ _tag: S.Literal('Id'), name: S.String })
+const Lit = S.TaggedStruct('Lit', { value: S.JsonNumber })
+const Id = S.TaggedStruct('Id', { name: S.String })
 
 const Binary: S.Schema<Binary> = S.suspend((): S.Schema<Binary> =>
-  S.Struct({ _tag: S.Literal('Binary'), op: S.String, left: Expr, right: Expr })
+  S.TaggedStruct('Binary', { op: S.String, left: Expr, right: Expr })
 )
 const Member: S.Schema<Member> = S.suspend((): S.Schema<Member> =>
-  S.Struct({ _tag: S.Literal('Member'), object: Expr, property: Expr })
+  S.TaggedStruct('Member', { object: Expr, property: Expr })
 )
 const Conditional: S.Schema<Conditional> = S.suspend((): S.Schema<Conditional> =>
-  S.Struct({ _tag: S.Literal('Conditional'), test: Expr, consequent: Expr, alternate: Expr })
+  S.TaggedStruct('Conditional', { test: Expr, consequent: Expr, alternate: Expr })
 )
 const Call: S.Schema<Call> = S.suspend((): S.Schema<Call> =>
-  S.Struct({ _tag: S.Literal('Call'), callee: Expr, args: S.Array(Expr) })
+  S.TaggedStruct('Call', { callee: Expr, args: S.Array(Expr) })
 )
 
 const Expr: S.Schema<Expr> = boundedUnion('Expr', {

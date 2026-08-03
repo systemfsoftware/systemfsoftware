@@ -3,6 +3,7 @@ import * as FileSystem from '@effect/platform/FileSystem'
 import { Layer } from 'effect'
 import * as Effect from 'effect/Effect'
 import * as Option from 'effect/Option'
+import * as Random from 'effect/Random'
 import * as Stream from 'effect/Stream'
 import * as memfs from 'memfs'
 import { layer } from './memory-file-system.adapter.js'
@@ -115,29 +116,33 @@ const makeFile = (handle: FileHandle): FileSystem.File => {
     },
     readAlloc(size: FileSystem.SizeInput) {
       const sizeNumber = Number(size)
-      return Effect.tryPromise({
-        try: async () => {
-          const buf = Buffer.allocUnsafeSlow(sizeNumber)
-          const { bytesRead } = await handle.read(buf, 0, sizeNumber, Number(position))
-          position = position + BigInt(bytesRead)
-          if (bytesRead === 0) return Option.none<Buffer>()
-          if (bytesRead === sizeNumber) return Option.some(buf)
-          const dst = Buffer.allocUnsafeSlow(bytesRead)
-          buf.copy(dst, 0, 0, bytesRead)
-          return Option.some(dst)
-        },
-        catch: toPlatformError('readAlloc'),
+      return Effect.suspend(() => {
+        const buf = Buffer.allocUnsafeSlow(sizeNumber)
+        return Effect.tryPromise({
+          try: () => handle.read(buf, 0, sizeNumber, Number(position)),
+          catch: toPlatformError('readAlloc'),
+        }).pipe(
+          Effect.map(({ bytesRead }) => {
+            position = position + BigInt(bytesRead)
+            if (bytesRead === 0) return Option.none<Buffer>()
+            if (bytesRead === sizeNumber) return Option.some(buf)
+            const dst = Buffer.allocUnsafeSlow(bytesRead)
+            buf.copy(dst, 0, 0, bytesRead)
+            return Option.some(dst)
+          }),
+        )
       })
     },
     truncate(length?: FileSystem.SizeInput) {
+      const len = Number(length ?? 0)
       return Effect.tryPromise({
-        try: async () => {
-          const len = Number(length ?? 0)
-          await handle.truncate(len)
-          if (position > BigInt(len)) position = BigInt(len)
-        },
+        try: () => handle.truncate(len),
         catch: toPlatformError('truncate'),
-      })
+      }).pipe(
+        Effect.map(() => {
+          if (position > BigInt(len)) position = BigInt(len)
+        }),
+      )
     },
     write(buffer: Uint8Array) {
       return Effect.tryPromise({
@@ -151,8 +156,8 @@ const makeFile = (handle: FileHandle): FileSystem.File => {
       )
     },
     writeAll(buffer: Uint8Array) {
-      const writeAllChunk = (buf: Uint8Array): Effect.Effect<void, Error.PlatformError> => {
-        return Effect.tryPromise({
+      const writeAllChunk = (buf: Uint8Array): Effect.Effect<void, Error.PlatformError> =>
+        Effect.tryPromise({
           try: () => handle.write(buf, Number(position), buf.length),
           catch: toPlatformError('writeAll'),
         }).pipe(
@@ -173,7 +178,7 @@ const makeFile = (handle: FileHandle): FileSystem.File => {
               : Effect.void
           }),
         )
-      }
+
       return writeAllChunk(buffer)
     },
   }
@@ -355,8 +360,8 @@ export function make(contents?: Contents, opts?: { cwd: string }): FileSystem.Fi
     path: string,
     data: Uint8Array,
     options?: FileSystem.WriteFileOptions,
-  ): Effect.Effect<void, Error.PlatformError> => {
-    return Effect.tryPromise({
+  ): Effect.Effect<void, Error.PlatformError> =>
+    Effect.tryPromise({
       try: () =>
         nfs.promises.writeFile(path, data, {
           ...(options?.mode === undefined ? {} : { mode: options.mode }),
@@ -364,15 +369,15 @@ export function make(contents?: Contents, opts?: { cwd: string }): FileSystem.Fi
         }),
       catch: toPlatformError('writeFile'),
     })
-  }
 
   const makeTempFile = (options?: FileSystem.MakeTempFileOptions): Effect.Effect<string, Error.PlatformError> =>
-    Effect.suspend(() => {
+    Effect.gen(function*() {
+      const entropy = yield* Random.next
       const prefix = options?.prefix ?? ''
       const dir = (options?.directory ?? '/tmp') + '/.'
-      const name = prefix + Math.random().toString(36).slice(2, 10)
+      const name = prefix + entropy.toString(36).slice(2, 10)
       const filePath = dir + name
-      return Effect.tryPromise({
+      return yield* Effect.tryPromise({
         try: () => nfs.promises.writeFile(filePath, '').then(() => filePath),
         catch: toPlatformError('makeTempFile'),
       })

@@ -16,7 +16,6 @@ const _default: {
         'executor-deps-tag-name': Rule;
         'executor-requires-deps-tag': Rule;
         'executor-deps-borrowed-types': Rule;
-        'executor-import-boundary': Rule;
         'executor-no-domain-branch': Rule;
         'executor-no-io-in-filling': Rule;
         'executor-no-escaping-state': Rule;

@@ -6,6 +6,14 @@ export const EXECUTOR_FILE_KIND = '*.executor.ts'
 
 export const DUAL_CALLEE_NAME = 'dual' as const
 
+export const EFFECT_NAMESPACE_NAME = 'Effect' as const
+
+export const EFFECT_FN_NAMES: Record<string, true> = {
+  fn: true,
+  fnUntraced: true,
+  fnUntracedEager: true,
+}
+
 export const SINGLE_OPERATION_EXPECTED =
   'exactly one operation function export — the use case itself, with optional <Executor>Deps Tag and Layer that binds it' as const
 

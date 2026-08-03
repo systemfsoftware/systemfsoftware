@@ -66,62 +66,60 @@ const extractRefs = Effect.fn('extractRefs')(function*(content: string, baseDir:
  * Collect the content of every `@`-ref in CLAUDE.md that the host does not
  * already deliver, skipping any ref the project's no_inject_refs list names.
  */
-export function loadReferencedContent(projectDir: string) {
-  return Effect.fn('loadReferencedContent')(function*(projectDir: string) {
-    const { fileSystem: fs, path, tomlLoader } = yield* InjectInstructionsExecutorDeps
+export const loadReferencedContent = Effect.fn('loadReferencedContent')(function*(projectDir: string) {
+  const { fileSystem: fs, path, tomlLoader } = yield* InjectInstructionsExecutorDeps
 
-    const claudeMdPaths = [
-      path.resolve(projectDir, 'CLAUDE.md'),
-      path.resolve(projectDir, '.claude', 'CLAUDE.md'),
-    ]
+  const claudeMdPaths = [
+    path.resolve(projectDir, 'CLAUDE.md'),
+    path.resolve(projectDir, '.claude', 'CLAUDE.md'),
+  ]
 
-    const allRefs: Ref[] = []
-    for (const filePath of claudeMdPaths) {
-      const content = yield* Effect.either(
-        fs.readFileString(filePath, 'utf-8'),
-      )
-      if (Either.isRight(content)) {
-        const refs = yield* extractRefs(content.right, path.dirname(filePath), projectDir)
-        allRefs.push(...refs)
-      }
-    }
-
-    const seen = new Set<string>()
-    const uniqueRefs: Ref[] = []
-    for (const ref of allRefs) {
-      if (!seen.has(ref.resolvedPath)) {
-        seen.add(ref.resolvedPath)
-        uniqueRefs.push(ref)
-      }
-    }
-
-    const config = yield* tomlLoader.load(projectDir).pipe(
-      Effect.catchAll(() => Effect.succeed(undefined)),
+  const allRefs: Ref[] = []
+  for (const filePath of claudeMdPaths) {
+    const content = yield* Effect.either(
+      fs.readFileString(filePath, 'utf-8'),
     )
-    const skipList = config?.['no_inject_refs'] ?? DEFAULT_NO_INJECT_REFS
+    if (Either.isRight(content)) {
+      const refs = yield* extractRefs(content.right, path.dirname(filePath), projectDir)
+      allRefs.push(...refs)
+    }
+  }
 
-    const sections: string[] = []
-    for (const ref of uniqueRefs) {
-      const relativePath = ref.resolvedPath.slice(projectDir.length + 1)
-      if (skipList.includes(relativePath)) continue
+  const seen = new Set<string>()
+  const uniqueRefs: Ref[] = []
+  for (const ref of allRefs) {
+    if (!seen.has(ref.resolvedPath)) {
+      seen.add(ref.resolvedPath)
+      uniqueRefs.push(ref)
+    }
+  }
 
-      const refContent = yield* Effect.either(
-        fs.readFileString(ref.resolvedPath, 'utf-8'),
-      )
-      if (Either.isLeft(refContent)) {
-        continue
-      }
+  const config = yield* tomlLoader.load(projectDir).pipe(
+    Effect.orElseSucceed(() => undefined),
+  )
+  const skipList = config?.['no_inject_refs'] ?? DEFAULT_NO_INJECT_REFS
 
-      sections.push(`## ${relativePath}\n${refContent.right}\n`)
+  const sections: string[] = []
+  for (const ref of uniqueRefs) {
+    const relativePath = ref.resolvedPath.slice(projectDir.length + 1)
+    if (skipList.includes(relativePath)) continue
+
+    const refContent = yield* Effect.either(
+      fs.readFileString(ref.resolvedPath, 'utf-8'),
+    )
+    if (Either.isLeft(refContent)) {
+      continue
     }
 
-    if (sections.length === 0) return ''
+    sections.push(`## ${relativePath}\n${refContent.right}\n`)
+  }
 
-    return [
-      '# Injected @-references from CLAUDE.md',
-      'The following files were @-imported by CLAUDE.md and contain project rules.',
-      '',
-      ...sections,
-    ].join('\n')
-  })(projectDir)
-}
+  if (sections.length === 0) return ''
+
+  return [
+    '# Injected @-references from CLAUDE.md',
+    'The following files were @-imported by CLAUDE.md and contain project rules.',
+    '',
+    ...sections,
+  ].join('\n')
+})

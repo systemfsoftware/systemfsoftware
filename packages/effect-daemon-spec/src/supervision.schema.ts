@@ -9,7 +9,7 @@ export interface BootedChild<R> {
   readonly name: string
   readonly health: DaemonHealth | SupervisorHealth
   readonly run: Effect.Effect<void, never, R>
-  readonly childPolicy: typeof ChildPolicyConfig.Type
+  readonly childPolicy: ChildPolicyConfig
 }
 
 export interface SupervisionContext<R> {

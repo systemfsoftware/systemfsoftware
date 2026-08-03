@@ -1,6 +1,5 @@
 import { executorDepsBorrowedTypes } from './rules/executor-deps-borrowed-types.js'
 import { executorDepsTagName } from './rules/executor-deps-tag-name.js'
-import { executorImportBoundary } from './rules/executor-import-boundary.js'
 import { executorNoDomainBranch } from './rules/executor-no-domain-branch.js'
 import { executorNoEscapingState } from './rules/executor-no-escaping-state.js'
 import { executorNoIoInFilling } from './rules/executor-no-io-in-filling.js'
@@ -18,7 +17,6 @@ const recommendedRules = {
   [rule('executor-deps-tag-name')]: 'error',
   [rule('executor-requires-deps-tag')]: 'error',
   [rule('executor-deps-borrowed-types')]: 'error',
-  [rule('executor-import-boundary')]: 'error',
   [rule('executor-no-domain-branch')]: 'error',
   [rule('executor-no-io-in-filling')]: 'error',
   [rule('executor-no-escaping-state')]: 'error',
@@ -35,7 +33,6 @@ export default {
     'executor-deps-tag-name': executorDepsTagName,
     'executor-requires-deps-tag': executorRequiresDepsTag,
     'executor-deps-borrowed-types': executorDepsBorrowedTypes,
-    'executor-import-boundary': executorImportBoundary,
     'executor-no-domain-branch': executorNoDomainBranch,
     'executor-no-io-in-filling': executorNoIoInFilling,
     'executor-no-escaping-state': executorNoEscapingState,

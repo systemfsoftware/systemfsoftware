@@ -29,7 +29,7 @@ export interface BuildDynamicExecutorDepsService {
 }
 
 export class BuildDynamicExecutorDeps extends Context.Tag(
-  'BuildDynamicExecutorDeps',
+  '@systemfsoftware/effect-daemon-spec/internal/build-dynamic.executor/BuildDynamicExecutorDeps',
 )<BuildDynamicExecutorDeps, BuildDynamicExecutorDepsService>() {}
 
 const buildDynamic = <E, R, Args>(

@@ -36,8 +36,9 @@ Feature('Dispatch-doctrine — handler tool_call gate')
               const projectDir = createProjectDir({ 'systemfsoftware.toml': DISPATCH_DUTY_TOML })
               vi.resetModules()
               const mod = await import('../src/dispatch-doctrine.handler.js')
+              const { runSafe } = await import('../src/run-safe.policy.js')
               const session = buildSession({ sessionId: SESSION_A, cwd: projectDir })
-              mod.DispatchDoctrineExtension(session.api as never)
+              mod.DispatchDoctrineExtension(session.api as never, runSafe)
               return { projectDir, session }
             }),
         ),
@@ -77,8 +78,9 @@ Feature('Dispatch-doctrine — handler tool_call gate')
               const projectDir = createProjectDir({ 'systemfsoftware.toml': DISPATCH_DUTY_TOML })
               vi.resetModules()
               const mod = await import('../src/dispatch-doctrine.handler.js')
+              const { runSafe } = await import('../src/run-safe.policy.js')
               const session = buildSession({ sessionId: SESSION_A, cwd: projectDir })
-              mod.DispatchDoctrineExtension(session.api as never)
+              mod.DispatchDoctrineExtension(session.api as never, runSafe)
               await session.fireAsync('tool_call', {
                 type: 'tool_call',
                 toolName: 'task',
@@ -125,8 +127,9 @@ Feature('Dispatch-doctrine — handler tool_call gate')
               process.env['OMP_USER_CONFIG_HOME'] = projectDir
               vi.resetModules()
               const mod = await import('../src/dispatch-doctrine.handler.js')
+              const { runSafe } = await import('../src/run-safe.policy.js')
               const session = buildSession({ sessionId: SESSION_A, cwd: projectDir })
-              mod.DispatchDoctrineExtension(session.api as never)
+              mod.DispatchDoctrineExtension(session.api as never, runSafe)
               return { projectDir, session }
             }),
         ),
@@ -166,8 +169,9 @@ Feature('Dispatch-doctrine — handler tool_call gate')
               const projectDir = createProjectDir({ 'systemfsoftware.toml': DISPATCH_DUTY_TOML })
               vi.resetModules()
               const mod = await import('../src/dispatch-doctrine.handler.js')
+              const { runSafe } = await import('../src/run-safe.policy.js')
               const session = buildSession({ sessionId: SESSION_A, cwd: projectDir })
-              mod.DispatchDoctrineExtension(session.api as never)
+              mod.DispatchDoctrineExtension(session.api as never, runSafe)
               await session.fireAsync('tool_call', {
                 type: 'tool_call',
                 toolName: 'task',
@@ -221,10 +225,11 @@ Feature('Dispatch-doctrine — handler tool_call gate')
               const projectDir = createProjectDir({ 'systemfsoftware.toml': DISPATCH_DUTY_TOML })
               vi.resetModules()
               const mod = await import('../src/dispatch-doctrine.handler.js')
+              const { runSafe } = await import('../src/run-safe.policy.js')
               const a = buildSession({ sessionId: SESSION_A, cwd: projectDir })
               const b = buildSession({ sessionId: SESSION_B, cwd: projectDir })
-              mod.DispatchDoctrineExtension(a.api as never)
-              mod.DispatchDoctrineExtension(b.api as never)
+              mod.DispatchDoctrineExtension(a.api as never, runSafe)
+              mod.DispatchDoctrineExtension(b.api as never, runSafe)
               return { projectDir, a, b }
             }),
         ),
@@ -271,8 +276,9 @@ Feature('Dispatch-doctrine — handler tool_call gate')
               const projectDir = createProjectDir({ 'systemfsoftware.toml': DISPATCH_DUTY_TOML })
               vi.resetModules()
               const mod = await import('../src/dispatch-doctrine.handler.js')
+              const { runSafe } = await import('../src/run-safe.policy.js')
               const session = buildSession({ sessionId: SESSION_A, cwd: projectDir })
-              mod.DispatchDoctrineExtension(session.api as never)
+              mod.DispatchDoctrineExtension(session.api as never, runSafe)
               return { projectDir, session }
             }),
         ),
@@ -323,8 +329,9 @@ Feature('Dispatch-doctrine — handler tool_call gate')
               const projectDir = createProjectDir({ 'systemfsoftware.toml': DISPATCH_DUTY_TOML })
               vi.resetModules()
               const mod = await import('../src/dispatch-doctrine.handler.js')
+              const { runSafe } = await import('../src/run-safe.policy.js')
               const session = buildSession({ sessionId: SESSION_A, cwd: projectDir })
-              mod.DispatchDoctrineExtension(session.api as never)
+              mod.DispatchDoctrineExtension(session.api as never, runSafe)
               return { projectDir, session }
             }),
         ),
@@ -376,8 +383,9 @@ Feature('Dispatch-doctrine — handler tool_call gate')
               const projectDir = createProjectDir({ 'systemfsoftware.toml': DISPATCH_DUTY_TOML })
               vi.resetModules()
               const mod = await import('../src/dispatch-doctrine.handler.js')
+              const { runSafe } = await import('../src/run-safe.policy.js')
               const session = buildSession({ sessionId: SESSION_A, cwd: projectDir })
-              mod.DispatchDoctrineExtension(session.api as never)
+              mod.DispatchDoctrineExtension(session.api as never, runSafe)
               return { projectDir, session }
             }),
         ),
@@ -431,8 +439,9 @@ Feature('Dispatch-doctrine — handler tool_call gate')
               const projectDir = createProjectDir({ 'systemfsoftware.toml': BOTH_GUARDS_TOML })
               vi.resetModules()
               const mod = await import('../src/dispatch-doctrine.handler.js')
+              const { runSafe } = await import('../src/run-safe.policy.js')
               const session = buildSession({ sessionId: SESSION_A, cwd: projectDir })
-              mod.DispatchDoctrineExtension(session.api as never)
+              mod.DispatchDoctrineExtension(session.api as never, runSafe)
               return { projectDir, session }
             }),
         ),
@@ -473,8 +482,9 @@ Feature('Dispatch-doctrine — handler tool_call gate')
               const projectDir = createProjectDir({ 'systemfsoftware.toml': DISPATCH_DUTY_TOML })
               vi.resetModules()
               const mod = await import('../src/dispatch-doctrine.handler.js')
+              const { runSafe } = await import('../src/run-safe.policy.js')
               const session = buildSession({ sessionId: SESSION_A, cwd: projectDir })
-              mod.DispatchDoctrineExtension(session.api as never)
+              mod.DispatchDoctrineExtension(session.api as never, runSafe)
               return { projectDir, session }
             }),
         ),
@@ -487,7 +497,8 @@ Feature('Dispatch-doctrine — handler tool_call gate')
                 for (let i = 0; i < 50; i++) {
                   const flood = buildSession({ sessionId: 'flood-' + i, cwd: s.setup.projectDir })
                   const mod = await import('../src/dispatch-doctrine.handler.js')
-                  mod.DispatchDoctrineExtension(flood.api as never)
+                  const { runSafe } = await import('../src/run-safe.policy.js')
+                  mod.DispatchDoctrineExtension(flood.api as never, runSafe)
                   await flood.fireAsync('tool_call', {
                     type: 'tool_call',
                     toolName: 'task',

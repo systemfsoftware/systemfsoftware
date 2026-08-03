@@ -31,7 +31,6 @@ export default defineConfig({
 | `executor-owns-context-tag`    | `Context.Tag` / `Context.GenericTag` / `Effect.Tag` declared in a `*.workflow.ts`, `*.handler.ts`, `*.store.ts`, or `*.acl.ts`                 |
 | `executor-deps-tag-name`       | A Tag not named `<PascalFilename>ExecutorDeps`, a Tag identifier string that differs from its class name, or more than one Tag in one executor |
 | `executor-deps-borrowed-types` | A hand-written method signature in the Deps shape instead of `Provider['Type']['method']`                                                      |
-| `executor-import-boundary`     | An adapter imported as a value, a `*.shape.ts` imported at all, or another `*.executor.ts` imported                                            |
 | `executor-no-domain-branch`    | `Match.value` over a value derived from an ACL or store call, or an `if`/ternary/`switch` reading `_tag` on one                                |
 | `executor-no-io-in-filling`    | A suspended effect (`yield*`, `await`) or a store/adapter call inside the workflow call's arguments                                            |
 | `executor-no-escaping-state`   | A module-level `let`/`var`, or a module-level `Map`/`Set`/`WeakMap`/`WeakSet`                                                                  |

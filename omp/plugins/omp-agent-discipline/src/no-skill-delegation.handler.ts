@@ -2,6 +2,7 @@ import type { ExtensionAPI } from '@oh-my-pi/pi-coding-agent'
 import { TomlLoader } from '@systemfsoftware/omp-utils'
 import { Effect, Either } from 'effect'
 import { NoSkillDelegationExecutorDeps, runNoSkillDelegation } from './no-skill-delegation.executor.js'
+import type { RunSafe } from './run-safe.kernel.js'
 
 const provideNoSkillDelegationDeps = Effect.provideServiceEffect(
   NoSkillDelegationExecutorDeps,
@@ -24,11 +25,8 @@ function readString(input: Record<string, unknown>, ...keys: readonly string[]):
   return ''
 }
 
-export const NoSkillDelegationExtension = (pi: ExtensionAPI): void => {
+export const NoSkillDelegationExtension = (pi: ExtensionAPI, runSafe: RunSafe): void => {
   pi.on('tool_call', async (event, ctx) => {
-    // handler-no-shell-imports bans .policy imports in handlers; the lazy
-    // chain also keeps the platform-node runtime out of plugin registration.
-    const { runSafe } = await import('./run-safe.policy.js')
     const input = decodeRecord(event.input)
     const subagentType = readString(input, 'subagent_type', 'agent')
     const prompt = readString(input, 'prompt', 'task', 'description')

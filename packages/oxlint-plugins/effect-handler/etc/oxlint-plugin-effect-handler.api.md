@@ -14,7 +14,6 @@ const _default: {
     rules: {
         'handler-single-executor': Rule;
         'handler-single-handler-export': Rule;
-        'handler-no-shell-imports': Rule;
         'handler-no-casts': Rule;
         'handler-no-switch': Rule;
         'handler-match-tag-or-else': Rule;

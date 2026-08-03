@@ -17,7 +17,7 @@ export interface DaemonWorkerExecutorDepsService {
 }
 
 export class DaemonWorkerExecutorDeps extends Context.Tag(
-  'DaemonWorkerExecutorDeps',
+  '@systemfsoftware/effect-daemon-spec/daemon-worker.executor/DaemonWorkerExecutorDeps',
 )<DaemonWorkerExecutorDeps, DaemonWorkerExecutorDepsService>() {}
 
 export const worker: {

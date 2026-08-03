@@ -5,9 +5,10 @@ import { And, Gherkin, Given, it, layer, makeFeature, Then, When } from '@system
 import { Effect, Layer } from 'effect'
 import { expect } from 'vitest'
 import { drainAsyncHookContext, recordAsyncHookContext } from '../src/async-hook-output.state.js'
-import { loadSettingsWithPaths, runUserPromptSubmitHooks } from '../src/hook-dispatcher.executor.js'
-import type { HookSession } from '../src/hook-dispatcher.executor.js'
 import { HookScopeLive } from '../src/hook-runtime.state.js'
+import type { HookSession } from '../src/hook-session.shape.js'
+import { loadSettingsWithPaths } from '../src/internal/load-settings.executor.js'
+import { runUserPromptSubmitHooks } from '../src/internal/run-user-prompt-submit-hooks.executor.js'
 import { makeSettingsJson } from './hook-dispatcher-fixture.observer.js'
 import { expectLoaded } from './loaded.observer.js'
 

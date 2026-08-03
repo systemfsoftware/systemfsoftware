@@ -6,15 +6,15 @@
 > An oxlint plugin for Effect-TS teams who want observer machinery that stays on the test side of the frame.
 
 ```
-x @systemfsoftware/effect-observer(observer-no-domain-imports): step-harness.observer.ts is forbidden.
-  Expected: imports of operational modules only — effect/*, sibling *.observer modules, and vocabulary-free *.kernel helpers.
-  Actual: an import of a domain cell (schema, workflow, executor, store, acl, adapter, handler, middleware, policy, state, or shape).
-  Fix: reason in operational vocabulary — pass domain values in as fixture data, or extract the shared logic into a *.kernel.ts module.
+x @systemfsoftware/effect-observer(observer-operational-exports): step-harness.observer.ts is forbidden.
+  Expected: an exported name in operational vocabulary (Step, Effect, Span, Fixture, Harness, run*, make*, …) or an UPPER_SNAKE constant.
+  Actual: an exported name 'anOrder'.
+  Fix: rename it verb- or token-led (e.g. makeHarness, runSteps); a domain-shaped name does not belong in observer machinery.
 
-x @systemfsoftware/effect-observer(observer-no-production-import): order.service.ts is forbidden.
-  Expected: observer machinery imported only by test files, other observer modules, and tooling entrypoints.
-  Actual: an import of the observer cell from a production file.
-  Fix: move the harness call into a test or tooling entrypoint, or extract the shared behavior into a production cell so the gate stays independent.
+x @systemfsoftware/effect-observer(observer-no-escaping-state): step-harness.observer.ts is forbidden.
+  Expected: state built fresh per operation.
+  Actual: a module-level const holding a mutable Map.
+  Fix: build it inside the operation, or wrap it in Object.freeze if it is genuinely static data.
 
 Found 0 warnings and 2 errors.
 ```
@@ -25,9 +25,9 @@ pnpm add -D @systemfsoftware/oxlint-plugin-effect-observer
 
 ## The Problem
 
-A `*.observer.ts` file is the machinery observers run on — step harnesses, fixture builders, span recorders, test tooling. It reasons in operational vocabulary (Step, Effect, Span, Layer, Fixture), never domain nouns. Add a domain import, a module-level registry, or a production caller and it still compiles, still passes a standard lint config, and still passes its tests. The violation is only wrong relative to a convention no tool knows about, and it surfaces months later as a test suite that is order-dependent, or a "test helper" a production path silently depends on.
+A `*.observer.ts` file is the machinery observers run on — step harnesses, fixture builders, span recorders, test tooling. It reasons in operational vocabulary (Step, Effect, Span, Layer, Fixture), never domain nouns. Add a module-level registry or a non-operational export name and it still compiles, still passes a standard lint config, and still passes its tests. The violation is only wrong relative to a convention no tool knows about, and it surfaces months later as a test suite that is order-dependent.
 
-These four rules make that convention executable. Rules 1–3 are inert on any file not named `*.observer.ts`; the fourth is the importer gate and runs everywhere, because production importing observer machinery is the one violation an observer-only rule could never see.
+These two rules make that convention executable. Both are inert on any file not named `*.observer.ts`.
 
 ## Quick Start
 
@@ -52,12 +52,10 @@ To adopt gradually, drop the spread and name rules individually as `'@systemfsof
 
 ## Rules
 
-| Rule                            | Reports                                                                                                                                                                                                                                                                                     |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `observer-no-domain-imports`    | Any import, type import, or re-export whose path ends in a domain cell suffix (`.schema`, `.workflow`, `.executor`, `.store`, `.acl`, `.adapter`, `.handler`, `.middleware`, `.policy`, `.state`, `.shape`). Sibling `*.observer` modules, `*.kernel` helpers, and `effect/*` are permitted |
-| `observer-operational-exports`  | An exported value, type, interface, or specifier whose name is not operational-shaped: verb- or token-led (`runSteps`, `makeHarness`, `StepHarness`) or an UPPER_SNAKE constant. `anOrder`, `OrderService`, `config` are reported                                                           |
-| `observer-no-escaping-state`    | A module-level `let`/`var` binding, or a module-level `const` holding a mutable container (`new Map/Set/WeakMap/WeakSet`, an array literal, or an object literal). `Object.freeze(...)` and per-operation state pass                                                                        |
-| `observer-no-production-import` | Any file that is not a test file, not an observer module, and not a tooling entrypoint importing a `*.observer.*` module — including `import type` and re-exports. Runs on every file, not just observer files                                                                              |
+| Rule                           | Reports                                                                                                                                                                                                                           |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `observer-operational-exports` | An exported value, type, interface, or specifier whose name is not operational-shaped: verb- or token-led (`runSteps`, `makeHarness`, `StepHarness`) or an UPPER_SNAKE constant. `anOrder`, `OrderService`, `config` are reported |
+| `observer-no-escaping-state`   | A module-level `let`/`var` binding, or a module-level `const` holding a mutable container (`new Map/Set/WeakMap/WeakSet`, an array literal, or an object literal). `Object.freeze(...)` and per-operation state pass              |
 
 ## FAQ
 
@@ -65,7 +63,7 @@ To adopt gradually, drop the spread and name rules individually as `'@systemfsof
 A: The name was placed in oxlint's `plugins` field, which takes built-in namespaces only. JavaScript plugins load through `jsPlugins`; their rules go in `rules`.
 
 **Q: Installed, but nothing is reported.**
-A: Three rules are filename-gated: only `*.observer.ts` files are examined. The fourth only fires when a production file imports observer machinery — if nothing does, it stays quiet.
+A: Both rules are filename-gated: only `*.observer.ts` files are examined. If a file breaks neither gate, it stays quiet.
 
 **Q: Diagnostics say `@systemfsoftware/effect-observer(...)`, but my config key is the full package name.**
 A: Expected — oxlint shortens the namespace when printing. Both spellings work as config keys.

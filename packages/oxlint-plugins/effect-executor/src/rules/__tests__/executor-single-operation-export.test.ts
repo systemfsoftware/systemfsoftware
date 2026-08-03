@@ -42,6 +42,36 @@ ruleTester.run('executor-single-operation-export', executorSingleOperationExport
       filename: 'confirm-order.executor.ts',
     },
     {
+      name: 'Should_Pass_When_SingleEffectFnExport_InExecutor',
+      code: `export const confirmOrder = Effect.fn(function* (cmd) { return cmd })`,
+      filename: 'confirm-order.executor.ts',
+    },
+    {
+      name: 'Should_Pass_When_SingleNamedEffectFnExport_InExecutor',
+      code: `export const confirmOrder = Effect.fn('confirmOrder')(function* (cmd) { return cmd })`,
+      filename: 'confirm-order.executor.ts',
+    },
+    {
+      name: 'Should_Pass_When_SingleEffectFnUntracedExport_InExecutor',
+      code: `export const confirmOrder = Effect.fnUntraced(function* (cmd) { return cmd })`,
+      filename: 'confirm-order.executor.ts',
+    },
+    {
+      name: 'Should_Pass_When_EffectFnOperationWithDepsTagAndLayer',
+      code:
+        `export class ConfirmOrderExecutorDeps extends Context.Tag('ConfirmOrderExecutorDeps')<ConfirmOrderExecutorDeps, {}>() {}\n` +
+        `const live = Layer.succeed(ConfirmOrderExecutorDeps, {})\n` +
+        `export { live as ConfirmOrderLive }\n` +
+        `export const confirmOrder = Effect.fn('confirmOrder')(function* () { return yield* ConfirmOrderExecutorDeps })`,
+      filename: 'confirm-order.executor.ts',
+    },
+    {
+      name: 'Should_Pass_When_EffectFnHelperIsLocalBesideTheOperation',
+      code: `const extractRefs = Effect.fn('extractRefs')(function* () { return [] })\n` +
+        `export const confirmOrder = Effect.fn('confirmOrder')(function* () { return yield* extractRefs() })`,
+      filename: 'confirm-order.executor.ts',
+    },
+    {
       name: 'Should_Pass_When_SingleDefaultArrowExport_InExecutor',
       code: `export default () => {}`,
       filename: 'confirm-order.executor.ts',
@@ -160,6 +190,31 @@ ruleTester.run('executor-single-operation-export', executorSingleOperationExport
     },
   ],
   invalid: [
+    {
+      name: 'Should_Report_TwoEffectFnExports',
+      code: `export const confirmOrder = Effect.fn('confirmOrder')(function* () {})\n` +
+        `export const helper = Effect.fn('helper')(function* () {})`,
+      filename: 'confirm-order.executor.ts',
+      errors: [{ messageId: 'tooManyFunctionExports', data: { ...data, actual: '2 function exports' } }],
+    },
+    {
+      name: 'Should_Report_ZeroFunctionExports_When_EffectFnIsAliased',
+      code: `export const confirmOrder = E.fn('confirmOrder')(function* () {})`,
+      filename: 'confirm-order.executor.ts',
+      errors: [{ messageId: 'tooManyFunctionExports', data: { ...data, actual: '0 function exports' } }],
+    },
+    {
+      name: 'Should_Report_ZeroFunctionExports_When_EffectFnIsComputed',
+      code: `export const confirmOrder = Effect['fn']('confirmOrder')(function* () {})`,
+      filename: 'confirm-order.executor.ts',
+      errors: [{ messageId: 'tooManyFunctionExports', data: { ...data, actual: '0 function exports' } }],
+    },
+    {
+      name: 'Should_Report_ZeroFunctionExports_When_NonFnEffectCombinatorIsExported',
+      code: `export const confirmOrder = Effect.succeed(1)`,
+      filename: 'confirm-order.executor.ts',
+      errors: [{ messageId: 'tooManyFunctionExports', data: { ...data, actual: '0 function exports' } }],
+    },
     {
       name: 'Should_Report_TwoArrowExports',
       code: `export const confirmOrder = (cmd) => Effect.succeed(result); export const helper = () => {}`,

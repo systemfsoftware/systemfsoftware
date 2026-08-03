@@ -32,9 +32,8 @@ export const banEffectSchemaImports = defineRule({
       })
     }
 
-    const isBannedSource = (source: string): boolean => {
-      return source === BANNED_SOURCE || source.startsWith(`${BANNED_SOURCE}/`)
-    }
+    const isBannedSource = (source: string): boolean =>
+      source === BANNED_SOURCE || source.startsWith(`${BANNED_SOURCE}/`)
 
     return {
       ImportDeclaration(node: ESTree.ImportDeclaration) {

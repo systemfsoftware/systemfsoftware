@@ -4,7 +4,11 @@
   "compilerOptions": {
     "noEmit": true,
     "types": ["node"],
-    "customConditions": ["@systemfsoftware/source"]
+    "customConditions": ["@systemfsoftware/source"],
+    // Host-adapter terminus: `pi.on` hands this plugin a Promise-returning callback API, so the
+    // Effect-native tier (asyncFunction above all) cannot bind here. Same exemption class as the
+    // vendored forks — the plugin runs at the Effect Language Service defaults, correctness tier only.
+    "plugins": [{ "name": "@effect/language-service" }]
   },
   "include": ["src", "__tests__"]
 }

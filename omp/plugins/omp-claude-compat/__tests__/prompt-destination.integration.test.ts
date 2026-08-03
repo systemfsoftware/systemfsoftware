@@ -22,8 +22,10 @@ import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoft
 import { Effect, Layer } from 'effect'
 import { expect } from 'vitest'
 
-import { type HookSession, loadSettingsWithPaths, runUserPromptSubmitHooks } from '../src/hook-dispatcher.executor.js'
 import { HookScopeLive } from '../src/hook-runtime.state.js'
+import { type HookSession } from '../src/hook-session.shape.js'
+import { loadSettingsWithPaths } from '../src/internal/load-settings.executor.js'
+import { runUserPromptSubmitHooks } from '../src/internal/run-user-prompt-submit-hooks.executor.js'
 import { makeSettingsJson, makeShellHookScript } from './hook-dispatcher-fixture.observer.js'
 import { expectLoaded } from './loaded.observer.js'
 

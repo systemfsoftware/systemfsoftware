@@ -8,11 +8,13 @@
   "files": [
     "tsc",
     "bundler",
-    "node.json"
+    "node.json",
+    "effect.json"
   ],
   "exports": {
     "./package.json": "./package.json",
     "./node": "./node.json",
+    "./effect": "./effect.json",
     "./tsc": "./tsc/dom/app.json",
     "./tsc/dom": "./tsc/dom/app.json",
     "./tsc/dom/app": "./tsc/dom/app.json",

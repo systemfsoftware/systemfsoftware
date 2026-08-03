@@ -41,6 +41,7 @@ import {
   dispatchDoctrinePure,
   runDispatchDoctrineCheck,
 } from './dispatch-doctrine.executor.js'
+import type { RunSafe } from './run-safe.kernel.js'
 
 const provideDispatchDoctrineDeps = Effect.provideServiceEffect(
   DispatchDoctrineExecutorDeps,
@@ -103,11 +104,8 @@ const rememberPendingRead = (toolCallId: string, path: string): void => {
   pendingReads.set(toolCallId, path)
 }
 
-const warmSkills = (cwd: string): Promise<void> => {
-  // handler-no-shell-imports bans .policy imports in handlers; the lazy
-  // chain also keeps the platform-node runtime out of plugin registration.
-  const pending = import('./run-safe.policy.js')
-    .then(({ runSafe }) => runSafe(runDispatchDoctrineCheck(cwd, 'read', false).pipe(provideDispatchDoctrineDeps)))
+const warmSkills = (runSafe: RunSafe, cwd: string): Promise<void> => {
+  const pending = runSafe(runDispatchDoctrineCheck(cwd, 'read', false).pipe(provideDispatchDoctrineDeps))
     .then(({ skills }) => {
       skillsCache.set(cwd, skills)
     })
@@ -159,11 +157,8 @@ const tasksArrayOf = (input: Record<string, unknown>): readonly unknown[] | null
   return Array.isArray(tasksRaw) ? tasksRaw : null
 }
 
-export const DispatchDoctrineExtension = (pi: ExtensionAPI): void => {
+export const DispatchDoctrineExtension = (pi: ExtensionAPI, runSafe: RunSafe): void => {
   pi.on('tool_call', async (event, ctx) => {
-    // handler-no-shell-imports bans .policy imports in handlers; the lazy
-    // chain also keeps the platform-node runtime out of plugin registration.
-    const { runSafe } = await import('./run-safe.policy.js')
     const sessionId = readSessionId(ctx)
     const input = decodeRecord(event.input)
     const doctrineLoaded = sessionId === '' ? false : (flagStore.get(sessionId) ?? false)
@@ -215,7 +210,7 @@ export const DispatchDoctrineExtension = (pi: ExtensionAPI): void => {
     const path = args['path']
     if (typeof path !== 'string') return
     rememberPendingRead(toolCallId, path)
-    if (!skillsCache.has(ctx.cwd)) void warmSkills(ctx.cwd)
+    if (!skillsCache.has(ctx.cwd)) void warmSkills(runSafe, ctx.cwd)
   })
 
   pi.on('tool_execution_end', async (event, ctx) => {
@@ -244,6 +239,6 @@ export const DispatchDoctrineExtension = (pi: ExtensionAPI): void => {
   })
 
   pi.on('session_start', (_event, ctx) => {
-    void warmSkills(ctx.cwd)
+    void warmSkills(runSafe, ctx.cwd)
   })
 }

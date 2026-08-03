@@ -4,14 +4,12 @@ import * as PathModule from '@effect/platform/Path'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer } from 'effect'
 import { expect } from 'vitest'
-import {
-  collectSettingsGapsWithPaths,
-  loadSettingsWithPaths,
-  runSessionStartHooks,
-  runSessionSwitchHooks,
-} from '../src/hook-dispatcher.executor.js'
-import type { HookSession } from '../src/hook-dispatcher.executor.js'
 import { HookScopeLive } from '../src/hook-runtime.state.js'
+import type { HookSession } from '../src/hook-session.shape.js'
+import { collectSettingsGapsWithPaths } from '../src/internal/collect-settings-gaps.executor.js'
+import { loadSettingsWithPaths } from '../src/internal/load-settings.executor.js'
+import { runSessionStartHooks } from '../src/internal/run-session-start-hooks.executor.js'
+import { runSessionSwitchHooks } from '../src/internal/run-session-switch-hooks.executor.js'
 import { makeRecorder, makeSettingsJson, runInvocations } from './hook-dispatcher-fixture.observer.js'
 
 const Feature = makeFeature({ it, layer })

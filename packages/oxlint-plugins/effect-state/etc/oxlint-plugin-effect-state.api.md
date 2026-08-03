@@ -15,7 +15,6 @@ const _default: {
         'state-quarantine-holds-state': Rule;
         'state-no-raw-primitive-exports': Rule;
         'state-single-tag-export': Rule;
-        'state-no-adapter-imports': Rule;
     };
     configs: {
         recommended: {

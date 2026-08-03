@@ -23,12 +23,6 @@ Rules here gate the `architect-adapter` cell — read `skill://architect-adapter
   dont: exempt `as unknown as` or `as any` — they erase the most information
   harm: a cast skips the boundary decode, so the type system is lied to and the decode failure never becomes typed
   check: every adapter-no-cast test asserts the report data fields
-- id: EA4
-  title: The whitelist is the template's import surface
-  do: allow relative imports of the port (executor), the domain error type (schema), and the foreign shape; forbid every other cell suffix
-  dont: add `.workflow` or `.state` to the allowlist
-  harm: an import outside the template is an active choice that needs review, not a silent default
-  check: adapter-no-domain-cell-imports has an invalid case per forbidden suffix
 - id: EA5
   title: The adapter delivers a Layer
   do: keep adapter-layer-required — the obligation rule — matching only the `Layer` namespace with `effect`/`succeed`

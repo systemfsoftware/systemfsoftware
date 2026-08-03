@@ -10,7 +10,7 @@ Rules here gate the `architect-store` cell spec (`*.store.ts` — the persistenc
   do: derive rules only from single-file AST evidence the skill names — STO2 anti-patterns (driver imports, new Pool/Client/Database, process.env reads), the STO3 ACL import obligation, the STO4 _tag-branch subset, the module shape (Effect.fn exports), the stateless-leaf validity item (module-level mutable bindings/collections)
   dont: attempt STO1 (transaction monopoly — cross-file), the STO3 cast ban or error-mapping validity item (need type information), or STO4b's allowlist residual (needs domain judgment)
   harm: a rule needing cross-file or type knowledge cannot meet the mutation gate and misfires on sanctioned code
-  check: every rule keys on the `.store.ts` suffix and no-ops elsewhere; the six rules are store-acl-required, store-effect-fn-required, store-import-boundary, store-no-domain-branch, store-no-driver-construction, store-no-escaping-state
+  check: every rule keys on the `.store.ts` suffix and no-ops elsewhere; the five rules are store-acl-required, store-effect-fn-required, store-no-domain-branch, store-no-driver-construction, store-no-escaping-state
 - id: ES2
   title: No _tag branch is sanctioned in a store
   do: flag if/ternary/switch reading `_tag` on any operand; flag `Match.value` only over ACL-derived values

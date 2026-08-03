@@ -11,12 +11,7 @@ x @systemfsoftware/effect-kernel(kernel-no-ambient-impurity): fold.kernel.ts is 
   Actual: Date.now().
   Fix: inject the value as a function argument or perform the side effect in an executor/adapter.
 
-x @systemfsoftware/effect-kernel(kernel-no-domain-imports): fold.kernel.ts is forbidden.
-  Expected: imports of other kernel modules and language/library primitives only.
-  Actual: an import of the .workflow domain cell.
-  Fix: a kernel is domain-blind — pass the domain value in as a function argument or keep the import in the domain cell that owns it.
-
-Found 0 warnings and 2 errors.
+Found 0 warnings and 1 error.
 ```
 
 ```bash
@@ -27,7 +22,7 @@ pnpm add -D @systemfsoftware/oxlint-plugin-effect-kernel
 
 A `*.kernel.ts` is meant to be pure, domain-blind behavior: DSL combinators and generic utilities that any capability can reuse. Add a `Date.now()`, a `throw`, an `Effect.runSync`, an import of a `.workflow` file, or a junk-drawer name like `utils.kernel.ts` and it still compiles and still passes a standard lint config. The impurity only breaks the convention — until a consumer discovers the "generic" helper reads the clock.
 
-These five rules make that convention executable. Every rule is inert on any file not named `*.kernel.ts`.
+These four rules make that convention executable. Every rule is inert on any file not named `*.kernel.ts`.
 
 ## Quick Start
 
@@ -55,7 +50,6 @@ To adopt gradually, drop the spread and name rules individually as `'@systemfsof
 | `kernel-no-throw`            | Any `throw` — a kernel is total; failures must be returned as data                                                                                                                                                                                                                                                                     |
 | `kernel-no-ambient-impurity` | `Date.now`, `new Date`, `Date.parse`, `Date.UTC`, `performance.now`, `Math.random`, `crypto.randomUUID` at any depth, those members destructured, plus `process.env`, `console.*`, `fetch`                                                                                                                                             |
 | `kernel-no-effect-runtime`   | A call that RUNS an Effect: `Effect.runSync`, `Effect.runPromise`, `Effect.runFork`, `Effect.runCallback`, `Effect.runSyncExit`, `Effect.runPromiseExit`, `Run.run`, `Run.runSync`, `Runtime.runSync`, `Runtime.runPromise`, `Runtime.runFork`. Constructing a description (`Effect.gen`, `Effect.sync`, `pipe`) stays pure and passes |
-| `kernel-no-domain-imports`   | An import of any sibling domain cell (`.schema`, `.shape`, `.state`, `.workflow`, `.executor`, `.acl`, `.handler`, `.middleware`, `.adapter`, `.policy`, `.observer`, `.store`), or of a Node runtime module (`node:*`, `fs`, `path`, `crypto`, `http`, `https`, `os`, `child_process`)                                                |
 | `kernel-no-junk-drawer-name` | A `*.kernel.ts` file whose base name or any path segment is `util`, `utils`, `helper`, `common`, `shared`, `lib`, `core`, or `shell`                                                                                                                                                                                                   |
 
 ## FAQ

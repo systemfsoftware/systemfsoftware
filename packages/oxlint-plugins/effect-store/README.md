@@ -52,14 +52,13 @@ To adopt gradually, drop the spread and name rules individually as `'@systemfsof
 
 ## Rules
 
-| Rule                           | Reports                                                                                                                                                                         |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `store-acl-required`           | No value import from the aggregate's `*.acl.ts` — every row↔domain crossing must go through the ACL, never a cast                                                               |
-| `store-effect-fn-required`     | An exported function not wrapped in `Effect.fn`, or an exported Effect value built with `Effect.gen`/`Effect.sync` instead of `Effect.fn`                                       |
-| `store-import-boundary`        | An import or re-export of another `.store`, or of the `.executor`, `.handler`, `.middleware`, or `.adapter` cells — the store persists through its ACL and the injected DB port |
-| `store-no-domain-branch`       | `Match.value` over an ACL-derived value, and `if`/ternary/`switch` branching on a domain-typed `_tag` — existence checks on branded optionals stay allowed                      |
-| `store-no-driver-construction` | An import of a driver package (`drizzle-orm`, `pg`, `better-sqlite3`, …), a `new Pool`/`Client`/`Database`, or a `process.env` read — the driver comes from the port            |
-| `store-no-escaping-state`      | A module-level `let`/`var` binding or a module-level `Map`/`Set`/`WeakMap`/`WeakSet` — a store is a stateless leaf                                                              |
+| Rule                           | Reports                                                                                                                                                              |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `store-acl-required`           | No value import from the aggregate's `*.acl.ts` — every row↔domain crossing must go through the ACL, never a cast                                                    |
+| `store-effect-fn-required`     | An exported function not wrapped in `Effect.fn`, or an exported Effect value built with `Effect.gen`/`Effect.sync` instead of `Effect.fn`                            |
+| `store-no-domain-branch`       | `Match.value` over an ACL-derived value, and `if`/ternary/`switch` branching on a domain-typed `_tag` — existence checks on branded optionals stay allowed           |
+| `store-no-driver-construction` | An import of a driver package (`drizzle-orm`, `pg`, `better-sqlite3`, …), a `new Pool`/`Client`/`Database`, or a `process.env` read — the driver comes from the port |
+| `store-no-escaping-state`      | A module-level `let`/`var` binding or a module-level `Map`/`Set`/`WeakMap`/`WeakSet` — a store is a stateless leaf                                                   |
 
 ## FAQ
 

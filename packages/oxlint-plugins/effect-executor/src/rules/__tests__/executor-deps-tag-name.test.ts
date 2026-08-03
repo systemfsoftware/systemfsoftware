@@ -29,6 +29,30 @@ export class ConfirmOrderExecutorDeps extends Context.Tag('ConfirmOrderExecutorD
       filename: 'confirm-order.executor.ts',
     },
     {
+      name: 'Should_Allow_DeterministicKeyIdentifier_When_ExecutorFile',
+      code: `import { Context } from 'effect'
+
+export class ConfirmOrderExecutorDeps extends Context.Tag(
+  '@acme/orders/confirm-order.executor/ConfirmOrderExecutorDeps',
+)<
+  ConfirmOrderExecutorDeps,
+  { readonly capture: () => Effect.Effect<void> }
+>() {}`,
+      filename: 'confirm-order.executor.ts',
+    },
+    {
+      name: 'Should_Allow_DeterministicKeyIdentifier_When_InternalExecutorFile',
+      code: `import { Context } from 'effect'
+
+export class ConfirmOrderExecutorDeps extends Context.Tag(
+  '@acme/orders/internal/confirm-order.executor/ConfirmOrderExecutorDeps',
+)<
+  ConfirmOrderExecutorDeps,
+  { readonly capture: () => Effect.Effect<void> }
+>() {}`,
+      filename: 'confirm-order.executor.ts',
+    },
+    {
       name: 'Should_Allow_RefundPaymentDepsTag_When_ExecutorFile',
       code: `import { Context } from 'effect'
 
@@ -206,9 +230,10 @@ export class ConfirmOrderExecutorDeps extends Context.Tag('confirm-order')<
           messageId: 'tagIdentifierMismatch',
           data: {
             name: 'confirm-order',
-            expected: 'the identifier to equal the class name ConfirmOrderExecutorDeps',
+            expected:
+              'the identifier to equal the class name ConfirmOrderExecutorDeps, or a deterministic key ending in /ConfirmOrderExecutorDeps',
             actual: "identifier 'confirm-order' on class ConfirmOrderExecutorDeps",
-            fix: 'make the Context.Tag identifier string equal the class name',
+            fix: 'make the Context.Tag identifier string the class name, or the deterministic key that ends in it',
           },
         },
       ],
@@ -236,9 +261,10 @@ export class PaymentGateway extends Context.Tag('confirm-order')<
           messageId: 'tagIdentifierMismatch',
           data: {
             name: 'confirm-order',
-            expected: 'the identifier to equal the class name PaymentGateway',
+            expected:
+              'the identifier to equal the class name PaymentGateway, or a deterministic key ending in /PaymentGateway',
             actual: "identifier 'confirm-order' on class PaymentGateway",
-            fix: 'make the Context.Tag identifier string equal the class name',
+            fix: 'make the Context.Tag identifier string the class name, or the deterministic key that ends in it',
           },
         },
       ],

@@ -21,24 +21,15 @@ export const noContextGenericTag = defineRule({
       })
     }
 
-    const isContextGenericTagCall = (
-      node: ESTree.CallExpression,
-    ): boolean => {
-      return (
-        node.callee.type === 'MemberExpression' &&
-        node.callee.object.type === 'Identifier' &&
-        trackedImports.has(node.callee.object.name) &&
-        node.callee.property.type === 'Identifier' &&
-        node.callee.property.name === GENERIC_TAG
-      )
-    }
+    const isContextGenericTagCall = (node: ESTree.CallExpression): boolean =>
+      node.callee.type === 'MemberExpression' &&
+      node.callee.object.type === 'Identifier' &&
+      trackedImports.has(node.callee.object.name) &&
+      node.callee.property.type === 'Identifier' &&
+      node.callee.property.name === GENERIC_TAG
 
-    const isDirectGenericTagCall = (node: ESTree.CallExpression): boolean => {
-      return (
-        node.callee.type === 'Identifier' &&
-        node.callee.name === GENERIC_TAG
-      )
-    }
+    const isDirectGenericTagCall = (node: ESTree.CallExpression): boolean =>
+      node.callee.type === 'Identifier' && node.callee.name === GENERIC_TAG
 
     return {
       ImportDeclaration(node: ESTree.ImportDeclaration) {

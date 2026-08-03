@@ -9,9 +9,7 @@ const RAW_PRIMITIVE_EXPORT_MESSAGE_ID: MessageIds = 'rawPrimitiveExport'
 
 const isStateFile = (filename: string): boolean => filename.endsWith('.state.ts')
 
-const moduleExportName = (name: ESTree.ModuleExportName): string => {
-  return 'name' in name ? name.name : name.value
-}
+const moduleExportName = (name: ESTree.ModuleExportName): string => 'name' in name ? name.name : name.value
 
 const reportRawExport = (
   context: Context,

@@ -14,6 +14,9 @@
       "node",
       "ts-expose-internals"
     ],
+    // Fork of arethetypeswrong.github.io: the constitution policy in
+    // @systemfsoftware/tsconfig/effect is deliberately NOT extended here, so the upstream diff stays
+    // mergeable. The Effect Language Service runs at its own defaults — correctness tier only.
     "plugins": [
       {
         "name": "@effect/language-service"

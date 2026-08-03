@@ -20,9 +20,8 @@ const SNAPSHOT_METHODS: ReadonlySet<string> = new Set([
   'toThrowErrorMatchingSnapshot',
 ])
 
-const isSnapshotMethodName = (property: ESTree.Node | null): boolean => {
-  return property !== null && property.type === 'Identifier' && SNAPSHOT_METHODS.has(property.name)
-}
+const isSnapshotMethodName = (property: ESTree.Node | null): boolean =>
+  property !== null && property.type === 'Identifier' && SNAPSHOT_METHODS.has(property.name)
 
 const collectCallExpressions = (program: ESTree.Program): ESTree.CallExpression[] => {
   const out: ESTree.CallExpression[] = []

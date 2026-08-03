@@ -52,13 +52,12 @@ To adopt gradually, drop the spread and name rules individually as `'@systemfsof
 
 ## Rules
 
-| Rule                        | Reports                                                                                                                                                                                                                                                     |
-| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `handler-single-executor`   | No sibling `*.executor` import, or more than one; no `Effect.either(Executor(cmd))` delegation call, or more than one — the handler owns no I/O and no orchestration                                                                                        |
-| `handler-no-shell-imports`  | An import of a `.store`, `.adapter`, `.workflow`, `.acl`, `.state`, `.middleware`, `.policy`, `.shape`, `.observer`, `.kernel`, or `.handler` sibling, or of a Node runtime module — only the transport, schema codecs, and the one executor are importable |
-| `handler-no-casts`          | An `as` type assertion (except `as const`) or an angle-bracket `<T>` assertion — the request must be decoded through a Schema codec, never cast                                                                                                             |
-| `handler-no-switch`         | Any `switch` — error-to-status mapping goes through `Match.tag` closed by `Match.orElse(() => 500)`, and a switch on `_tag` is easy to leave incomplete when a new variant is added                                                                         |
-| `handler-match-tag-or-else` | A `Match.tag` dispatch that lacks a `Match.orElse` arm, or that terminates in `Match.exhaustive` — a new error variant must degrade to a 500 at runtime, not fail the build                                                                                 |
+| Rule                        | Reports                                                                                                                                                                             |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `handler-single-executor`   | No sibling `*.executor` import, or more than one; no `Effect.either(Executor(cmd))` delegation call, or more than one — the handler owns no I/O and no orchestration                |
+| `handler-no-casts`          | An `as` type assertion (except `as const`) or an angle-bracket `<T>` assertion — the request must be decoded through a Schema codec, never cast                                     |
+| `handler-no-switch`         | Any `switch` — error-to-status mapping goes through `Match.tag` closed by `Match.orElse(() => 500)`, and a switch on `_tag` is easy to leave incomplete when a new variant is added |
+| `handler-match-tag-or-else` | A `Match.tag` dispatch that lacks a `Match.orElse` arm, or that terminates in `Match.exhaustive` — a new error variant must degrade to a 500 at runtime, not fail the build         |
 
 ## FAQ
 

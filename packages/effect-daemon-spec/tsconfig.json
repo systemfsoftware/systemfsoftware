@@ -1,98 +1,12 @@
 {
   "$schema": "https://json.schemastore.org/tsconfig",
-  "extends": "@systemfsoftware/tsconfig/bundler/dom/library-monorepo",
+  "extends": ["@systemfsoftware/tsconfig/bundler/dom/library-monorepo", "@systemfsoftware/tsconfig/effect"],
   "compilerOptions": {
     "types": ["node"],
     "customConditions": [
       "@systemfsoftware/source"
     ],
-    "isolatedModules": true,
-    "plugins": [
-      {
-        "name": "@effect/language-service",
-        "diagnosticsName": true,
-        "includeSuggestionsInTsc": true,
-        "ignoreEffectSuggestionsInTscExitCode": true,
-        "keyPatterns": [
-          {
-            "target": "service",
-            "pattern": "default",
-            "skipLeadingPath": [
-              "src/"
-            ]
-          },
-          {
-            "target": "error",
-            "pattern": "default",
-            "skipLeadingPath": [
-              "src/"
-            ]
-          }
-        ],
-        "overrides": [
-          {
-            "include": ["src/**/*.executor.ts"],
-            "options": {
-              "diagnosticSeverity": {
-                "deterministicKeys": "off"
-              }
-            }
-          }
-        ],
-        "diagnosticSeverity": {
-          "globalErrorInEffectFailure": "error",
-          "anyUnknownInErrorContext": "off",
-          "nonObjectEffectServiceType": "error",
-          "strictEffectProvide": "off",
-          "strictBooleanExpressions": "error",
-          "catchUnfailableEffect": "error",
-          "leakingRequirements": "error",
-          "returnEffectInGen": "error",
-          "runEffectInsideEffect": "error",
-          "schemaSyncInEffect": "error",
-          "tryCatchInEffectGen": "error",
-          "asyncFunction": "error",
-          "cryptoRandomUUID": "error",
-          "cryptoRandomUUIDInEffect": "error",
-          "extendsNativeError": "error",
-          "globalConsole": "error",
-          "globalConsoleInEffect": "error",
-          "globalDate": "error",
-          "globalDateInEffect": "error",
-          "globalFetch": "error",
-          "globalFetchInEffect": "error",
-          "globalRandom": "error",
-          "globalRandomInEffect": "error",
-          "globalTimers": "error",
-          "globalTimersInEffect": "error",
-          "instanceOfSchema": "error",
-          "newPromise": "error",
-          "nodeBuiltinImport": "error",
-          "preferSchemaOverJson": "error",
-          "processEnv": "error",
-          "processEnvInEffect": "error",
-          "deterministicKeys": "error",
-          "effectDoNotation": "error",
-          "effectFnOpportunity": "error",
-          "effectMapFlatten": "error",
-          "effectMapVoid": "error",
-          "effectSucceedWithVoid": "error",
-          "importFromBarrel": "error",
-          "missedPipeableOpportunity": "error",
-          "missingEffectServiceDependency": "error",
-          "nestedEffectGenYield": "error",
-          "redundantSchemaTagIdentifier": "error",
-          "schemaStructWithTag": "error",
-          "schemaUnionOfLiterals": "error",
-          "serviceNotAsClass": "error",
-          "unnecessaryArrowBlock": "error",
-          "unnecessaryEffectGen": "error",
-          "unnecessaryFailYieldableError": "error",
-          "unnecessaryPipe": "error",
-          "unnecessaryPipeChain": "error"
-        }
-      }
-    ]
+    "isolatedModules": true
   },
   "include": [
     "src",

@@ -14,7 +14,6 @@ const _default: {
     rules: {
         'store-acl-required': Rule;
         'store-effect-fn-required': Rule;
-        'store-import-boundary': Rule;
         'store-no-domain-branch': Rule;
         'store-no-driver-construction': Rule;
         'store-no-escaping-state': Rule;

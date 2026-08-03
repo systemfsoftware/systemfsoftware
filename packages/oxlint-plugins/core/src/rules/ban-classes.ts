@@ -25,9 +25,7 @@ export const banClasses = defineRule({
       node.property.type === 'Identifier' &&
       node.property.name === 'make'
 
-    const hasTypeArguments = (node: ESTree.Node): boolean => {
-      return 'typeArguments' in node && node.typeArguments != null
-    }
+    const hasTypeArguments = (node: ESTree.Node): boolean => 'typeArguments' in node && node.typeArguments != null
 
     const parsed = S.decodeUnknownSync(S.Array(Options))(context.options)
     const first = parsed[0]

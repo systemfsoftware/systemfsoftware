@@ -14,7 +14,6 @@ const _default: {
     rules: {
         'adapter-single-external-system': Rule;
         'adapter-no-cast': Rule;
-        'adapter-no-domain-cell-imports': Rule;
         'adapter-layer-required': Rule;
         'adapter-single-layer-export': Rule;
     };

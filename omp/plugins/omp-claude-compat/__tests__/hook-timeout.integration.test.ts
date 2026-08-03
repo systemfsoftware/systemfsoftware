@@ -5,8 +5,10 @@ import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer } from 'effect'
 import { expect } from 'vitest'
-import { loadSettingsWithPaths, runHookScript, runPreCompactHooks } from '../src/hook-dispatcher.executor.js'
 import { HookScopeLive } from '../src/hook-runtime.state.js'
+import { loadSettingsWithPaths } from '../src/internal/load-settings.executor.js'
+import { runHookScript } from '../src/internal/run-hook-script.executor.js'
+import { runPreCompactHooks } from '../src/internal/run-pre-compact-hooks.executor.js'
 
 const Feature = makeFeature({ it, layer })
 

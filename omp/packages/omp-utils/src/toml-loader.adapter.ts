@@ -16,7 +16,7 @@ const EMPTY_CONFIG: TomlConfig = Schema.decodeSync(TomlConfig)({})
  * Port: the layered TOML config provider. The adapter implements it and the
  * composition root wires `TomlLoaderLive`.
  */
-export class TomlLoader extends Context.Tag('TomlLoader')<
+export class TomlLoader extends Context.Tag('@systemfsoftware/omp-utils/toml-loader.adapter/TomlLoader')<
   TomlLoader,
   {
     readonly load: (cwd: string) => Effect.Effect<TomlConfig, PlatformError, never>
@@ -65,7 +65,7 @@ const readLayer = (
       exists
         ? fs.readFileString(filePath).pipe(
           Effect.flatMap(parseTomlText),
-          Effect.catchAll(() => Effect.succeed(EMPTY_CONFIG)),
+          Effect.orElseSucceed(() => EMPTY_CONFIG),
         )
         : Effect.succeed(EMPTY_CONFIG)
     ),
@@ -102,9 +102,9 @@ const makeTomlLoader = (home: string) =>
         const projectLayer = yield* readLayer(fs, pathService, projectPath)
         const localLayer = yield* readLayer(fs, pathService, localPath)
 
-        const merged = Schema.decodeSync(TomlConfig)(
+        const merged = yield* Schema.decode(TomlConfig)(
           mergeLayers([userLayer, projectLayer, localLayer]),
-        )
+        ).pipe(Effect.orDie)
 
         yield* Ref.update(cache, (m) => (MutableHashMap.set(m, cwd, merged), m))
         return merged

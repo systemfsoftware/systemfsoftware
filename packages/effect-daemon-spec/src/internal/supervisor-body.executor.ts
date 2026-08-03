@@ -28,7 +28,7 @@ import {
 import { withLeaderLock, WithLeaderLockExecutorDeps } from './with-leader-lock.executor.js'
 
 export class SupervisorBodyExecutorDeps extends Context.Tag(
-  'SupervisorBodyExecutorDeps',
+  '@systemfsoftware/effect-daemon-spec/internal/supervisor-body.executor/SupervisorBodyExecutorDeps',
 )<
   SupervisorBodyExecutorDeps,
   {

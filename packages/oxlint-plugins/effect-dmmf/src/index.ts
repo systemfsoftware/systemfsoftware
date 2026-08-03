@@ -1,4 +1,5 @@
 import type { Rule } from '@oxlint/plugins'
+import cellImports from '@systemfsoftware/oxlint-plugin-cell-imports'
 import cellTaxonomy from '@systemfsoftware/oxlint-plugin-cell-taxonomy'
 import effectAcl from '@systemfsoftware/oxlint-plugin-effect-acl'
 import effectAdapter from '@systemfsoftware/oxlint-plugin-effect-adapter'
@@ -43,6 +44,7 @@ export default {
   meta: { name: PLUGIN_NAME },
   rules: {
     ...propertyTesting.rules,
+    ...cellImports.rules,
     ...effectExecutor.rules,
     ...effectWorkflow.rules,
     ...cellTaxonomy.rules,
@@ -64,6 +66,7 @@ export default {
     recommended: {
       rules: {
         ...recommendedFrom(propertyTesting),
+        ...recommendedFrom(cellImports),
         ...recommendedFrom(effectExecutor),
         ...recommendedFrom(effectWorkflow),
         ...recommendedFrom(cellTaxonomy),

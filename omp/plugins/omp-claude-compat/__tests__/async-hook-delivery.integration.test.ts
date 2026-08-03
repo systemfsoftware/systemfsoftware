@@ -6,9 +6,11 @@ import { Gherkin, makeFeature, Then, When } from '@systemfsoftware/effect-gherki
 import { Effect, Layer } from 'effect'
 import { expect } from 'vitest'
 import { recordAsyncHookContext } from '../src/async-hook-output.state.js'
-import type { HookPrompt, HookSession, HookToolCall } from '../src/hook-dispatcher.executor.js'
-import { loadSettingsWithPaths, runPreToolUseHooks, runUserPromptSubmitHooks } from '../src/hook-dispatcher.executor.js'
 import { HookScopeLive } from '../src/hook-runtime.state.js'
+import type { HookPrompt, HookSession, HookToolCall } from '../src/hook-session.shape.js'
+import { loadSettingsWithPaths } from '../src/internal/load-settings.executor.js'
+import { runPreToolUseHooks } from '../src/internal/run-pre-tool-use-hooks.executor.js'
+import { runUserPromptSubmitHooks } from '../src/internal/run-user-prompt-submit-hooks.executor.js'
 import { expectLoaded } from './loaded.observer.js'
 
 const Feature = makeFeature({ it, layer })

@@ -52,12 +52,11 @@ To adopt gradually, drop the spread and name rules individually as `'@systemfsof
 
 ## Rules
 
-| Rule                             | Reports                                                                                                                                                                                                                                         |
-| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `adapter-single-external-system` | A second distinct foreign package import — two technologies in one file. `effect/*`, `node:*`, and relative imports are not foreign systems; subpath imports of the same package (`stripe/checkout`) are fine                                   |
-| `adapter-no-cast`                | Any `as` type assertion or angle-bracket `<T>` assertion. The single exemption is `as const`, which narrows a literal and asserts nothing about untrusted data                                                                                  |
-| `adapter-no-domain-cell-imports` | An import of a sibling domain cell (`.workflow`, `.state`, `.kernel`, `.handler`, `.policy`, `.store`, `.acl`, `.observer`, `.adapter`, `.middleware`). The port (executor), domain error (schema), and foreign shape (shape) remain importable |
-| `adapter-layer-required`         | An adapter with no exported `Layer` construction — the composition root wires `Layer.effect(Port, make)` (live) or `Layer.succeed(Port, impl)` (default/declined/stub), so without it the port has no implementation to select                  |
+| Rule                             | Reports                                                                                                                                                                                                                        |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `adapter-single-external-system` | A second distinct foreign package import — two technologies in one file. `effect/*`, `node:*`, and relative imports are not foreign systems; subpath imports of the same package (`stripe/checkout`) are fine                  |
+| `adapter-no-cast`                | Any `as` type assertion or angle-bracket `<T>` assertion. The single exemption is `as const`, which narrows a literal and asserts nothing about untrusted data                                                                 |
+| `adapter-layer-required`         | An adapter with no exported `Layer` construction — the composition root wires `Layer.effect(Port, make)` (live) or `Layer.succeed(Port, impl)` (default/declined/stub), so without it the port has no implementation to select |
 
 ## FAQ
 

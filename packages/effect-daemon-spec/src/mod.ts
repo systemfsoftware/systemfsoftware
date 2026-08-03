@@ -94,8 +94,8 @@ import { worker } from './daemon-worker.executor.js'
 import { dynamic as dynamicRuntime } from './internal/build-dynamic.executor.js'
 import { supervisor } from './internal/supervisor-body.executor.js'
 export { supervisor, worker }
-export { withLeaderLock } from './leader-lock.kernel.js'
-export type { LeaderLockOptions } from './leader-lock.kernel.js'
+export { withLeaderLock } from './internal/with-leader-lock.executor.js'
+export type { LeaderLockOptions } from './internal/with-leader-lock.executor.js'
 export const run = {
   worker,
   supervisor,

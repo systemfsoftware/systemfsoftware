@@ -27,7 +27,6 @@ const _default: {
         'workflow-no-async': Rule;
         'workflow-no-ambient-impurity': Rule;
         'workflow-no-effect-import': Rule;
-        'workflow-no-shell-imports': Rule;
         'workflow-single-function-export': Rule;
         'workflow-property-test-shape': Rule;
     };

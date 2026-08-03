@@ -7,7 +7,7 @@ Rules here gate the `architect-middleware` cell spec — read `skill://architect
 ```yaml
 - id: MM1
   title: Middleware may use the Effect runtime
-  do: keep middleware-no-operation-imports scoped to the operation trio — .executor/.workflow/.store modules and *Executor/*Workflow/*Store bindings
+  do: keep middleware-no-operation-imports scoped to the operation trio's bindings — *Executor/*Workflow/*Store import bindings only; the .middleware.ts → .executor/.workflow/.store module edge lives in cell-import-boundary (@systemfsoftware/oxlint-plugin-cell-imports)
   dont: extend it to effect submodules or the effect barrel
   harm: middleware is impure transport behavior; banning effect/Effect forbids the whole job the cell exists to do
   check: a valid case imports effect/Effect and passes

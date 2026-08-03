@@ -1,5 +1,6 @@
 import type { ExtensionAPI } from '@oh-my-pi/pi-coding-agent'
 import { installRuntimeLifecycle } from '@systemfsoftware/omp-utils/runtime-lifecycle'
+import { runSafe } from './run-safe.policy.js'
 
 export default async function agentDisciplineHandler(pi: ExtensionAPI): Promise<void> {
   // Handlers are deferred behind dynamic imports so the entry's static
@@ -11,9 +12,9 @@ export default async function agentDisciplineHandler(pi: ExtensionAPI): Promise<
   // no-skill-delegation block when both would fire on the same dispatch
   // (KTD1, R7).
   const { DispatchDoctrineExtension } = await import('./dispatch-doctrine.handler.js')
-  DispatchDoctrineExtension(pi)
+  DispatchDoctrineExtension(pi, runSafe)
   const { NoSkillDelegationExtension } = await import('./no-skill-delegation.handler.js')
-  NoSkillDelegationExtension(pi)
+  NoSkillDelegationExtension(pi, runSafe)
   const { XdRetryGuardExtension } = await import('./xd-retry-guard.middleware.js')
   XdRetryGuardExtension(pi)
   installRuntimeLifecycle(

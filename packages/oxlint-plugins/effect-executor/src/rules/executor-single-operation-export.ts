@@ -3,6 +3,8 @@ import type { Context, ESTree } from '@oxlint/plugins'
 import { isExecutorFile } from './cell.js'
 import {
   DUAL_CALLEE_NAME,
+  EFFECT_FN_NAMES,
+  EFFECT_NAMESPACE_NAME,
   EXECUTOR_FILE_KIND,
   meta,
   SINGLE_OPERATION_EXPECTED,
@@ -32,10 +34,33 @@ const isDualCall = (init: ESTree.Expression | null | undefined): boolean => {
   )
 }
 
+// `Effect.fn` builds the traced operation form this repo writes executors in, so an
+// `Effect.fn` initialiser IS the single operation export — not a bare value beside it.
+// Two call shapes reach the same API: `Effect.fn(impl)` and the named
+// `Effect.fn('span')(impl)`, whose callee is itself the `Effect.fn(...)` call.
+// Detection is pinned to the canonical `Effect` namespace (EW4, as in
+// store-effect-fn-required), so `E.fn`, `Effect['fn']`, and any other alias stay
+// documented near-misses rather than silently counting as an operation.
+const isEffectFnMember = (callee: ESTree.Expression): boolean =>
+  callee.type === 'MemberExpression' &&
+  !callee.computed &&
+  callee.object.type === 'Identifier' &&
+  callee.object.name === EFFECT_NAMESPACE_NAME &&
+  callee.property.type === 'Identifier' &&
+  EFFECT_FN_NAMES[callee.property.name] === true
+
+const isEffectFnCall = (init: ESTree.Expression | null | undefined): boolean => {
+  if (init?.type !== 'CallExpression') return false
+  const callee = init.callee
+  if (isEffectFnMember(callee)) return true
+  return callee.type === 'CallExpression' && isEffectFnMember(callee.callee)
+}
+
 const isOperationInitialiser = (init: ESTree.Expression | null | undefined): boolean =>
   init?.type === 'ArrowFunctionExpression' ||
   init?.type === 'FunctionExpression' ||
-  isDualCall(init)
+  isDualCall(init) ||
+  isEffectFnCall(init)
 
 // Classes are deliberately absent: an exported class is never an operation, so a
 // missing entry resolves identically to a non-function entry on every path below.

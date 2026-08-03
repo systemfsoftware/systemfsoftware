@@ -5,18 +5,6 @@
 Rules here gate the `architect-observer` cell spec. Read the cell skill for what observer machinery must be — restating it here would create a second copy that drifts.
 
 ```yaml
-- id: OB-P1
-  title: The importer gate is the point of the cell
-  do: keep observer-no-production-import running on every file
-  dont: gate it to *.observer.ts files
-  harm: production importing observer machinery inverts the frame; an observer-only rule can never catch that
-  check: observer-no-production-import is registered and enabled in configs.recommended
-- id: OB-P2
-  title: Observer files may import observers and kernels, never domain cells
-  do: keep .observer and .kernel OUT of the observer-no-domain-imports suffix list
-  dont: align the list with sibling plugins (effect-shape bans observer and kernel imports; this cell does not)
-  harm: an observer harness legitimately composes sibling observer modules and vocabulary-free kernel helpers
-  check: both an effect/* import and a sibling *.observer import pass observer-no-domain-imports
 - id: OB-P3
   title: Export names use a whitelist, not a blacklist
   do: keep the prefix stems in observer-operational-exports.config.ts — case-insensitive prefix matching, UPPER_SNAKE exempt
@@ -34,5 +22,5 @@ Rules here gate the `architect-observer` cell spec. Read the cell skill for what
   do: leave OB1 (serves the observer frame, review-gated) and OB6 (banned file names) to the reviewer and to cell-taxonomy
   dont: invent a rule that approximates either
   harm: a shaky approximation duplicates another capability's gate with worse signal
-  check: the rule set is exactly the four rules in src/index.ts
+  check: the rule set is exactly the two rules in src/index.ts
 ```

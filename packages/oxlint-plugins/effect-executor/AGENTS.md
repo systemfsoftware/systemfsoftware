@@ -32,11 +32,4 @@ Rules here gate the `architect-executor` cell spec (`*.executor.ts` — the impu
   dont: add a rule for them here
   harm: ordering needs a READ/WRITE distinction the AST cannot supply — the writing methods arrive through Context.Tag destructuring, so no import edge names their cell; read completeness and the allowlist need cross-module type resolution or a domain judgment; EX5 is family-wide and belongs to a naming rule in the shared plugin, not to twelve per-cell copies
   check: no rule in `src/rules/` claims to enforce statement order, read completeness, or filename bans
-
-- id: EE6
-  title: Private executor composition is internal
-  do: allow an executor to import another executor only when the module specifier contains an `internal` path segment
-  dont: allow public-to-public executor imports or treat `internal` inside a filename or package name as a path segment
-  harm: banning private helpers drives effectful composition into the entrypoint, while allowing public executor composition couples use cases sideways
-  check: `executor-import-boundary` covers static and dynamic imports for internal segments, public siblings, and substring near-misses
 ```

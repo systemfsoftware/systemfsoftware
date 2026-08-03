@@ -1,7 +1,7 @@
 import type { ExtensionAPI, InputEvent, ToolCallEvent, ToolResultEvent } from '@oh-my-pi/pi-coding-agent'
 import type { InputEventResult, ToolCallEventResult, ToolResultEventResult } from '@oh-my-pi/pi-coding-agent'
-import { Cause, Effect, Either, Exit, Option } from 'effect'
-import { dispatchHookEvent } from './hook-dispatcher.executor.js'
+import { Effect, Either, Option } from 'effect'
+import { dispatchHookEvent, type HookDispatchContext } from './hook-dispatcher.executor.js'
 import type {
   HookEventCommand,
   HookPreCompactCommand,
@@ -14,10 +14,11 @@ import type {
   HookToolCallCommand,
   HookToolResultCommand,
 } from './hook-dispatcher.executor.js'
+import type { HookRunner } from './hook-runner.kernel.js'
 
 const HANDLER_CEILING_MS = 28_000
 
-export const HookDispatcherTask = (pi: ExtensionAPI): void => {
+export const HookDispatcherTask = (pi: ExtensionAPI, runner: HookRunner<HookDispatchContext>): void => {
   async function dispatch(cmd: HookToolCallCommand): Promise<ToolCallEventResult | undefined>
   async function dispatch(cmd: HookToolResultCommand): Promise<ToolResultEventResult | undefined>
   async function dispatch(cmd: HookPromptCommand): Promise<InputEventResult | undefined>
@@ -28,15 +29,12 @@ export const HookDispatcherTask = (pi: ExtensionAPI): void => {
   async function dispatch(cmd: HookSessionShutdownCommand): Promise<undefined>
   async function dispatch(cmd: HookSessionStopCommand): Promise<undefined>
   async function dispatch(cmd: HookEventCommand): Promise<unknown> {
-    const runtime = await import('./hook-runtime.state.js').then((mod) => mod.default)
-    const exited = Effect.gen(function*() {
+    const timed = Effect.gen(function*() {
       const outcome = yield* Effect.either(dispatchHookEvent(cmd))
       if (Either.isLeft(outcome)) throw outcome.left
       return outcome.right
-    }).pipe(Effect.timeoutOption(HANDLER_CEILING_MS), Effect.exit)
-    const exit = await runtime.runPromise(exited)
-    if (Exit.isFailure(exit)) throw Cause.squash(exit.cause)
-    return Option.getOrUndefined(exit.value)
+    }).pipe(Effect.timeoutOption(HANDLER_CEILING_MS))
+    return Option.getOrUndefined(await runner.runSafe(timed))
   }
 
   pi.on('tool_call', (event: ToolCallEvent, ctx) => dispatch({ _tag: 'ToolCall', event, ctx }))
@@ -47,11 +45,10 @@ export const HookDispatcherTask = (pi: ExtensionAPI): void => {
   pi.on('session_before_compact', (_event, ctx) => dispatch({ _tag: 'PreCompact', ctx }))
   pi.on('session_switch', (event, ctx) => dispatch({ _tag: 'SessionSwitch', reason: event.reason, ctx }))
   pi.on('session_shutdown', async (_event, ctx) => {
-    const runtime = await import('./hook-runtime.state.js').then((mod) => mod.default)
     try {
       return await dispatch({ _tag: 'SessionShutdown', ctx })
     } finally {
-      await runtime.dispose()
+      await runner.dispose()
     }
   })
   pi.on('session_stop', (_event, ctx) => dispatch({ _tag: 'SessionStop', ctx }))

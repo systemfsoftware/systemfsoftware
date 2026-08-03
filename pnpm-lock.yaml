@@ -437,6 +437,42 @@ importers:
         specifier: 'catalog:'
         version: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/coverage-v8@4.1.9)(vite@7.3.5(@types/node@24.13.2)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0))
 
+  packages/effect-cell-types:
+    devDependencies:
+      '@microsoft/api-extractor':
+        specifier: 'catalog:'
+        version: 7.58.9(@types/node@24.13.2)
+      '@systemfsoftware/arethetypeswrong-cli':
+        specifier: workspace:^
+        version: link:../arethetypeswrong/cli
+      '@systemfsoftware/oxlint-config':
+        specifier: workspace:^
+        version: link:../oxlint-config
+      '@systemfsoftware/tsconfig':
+        specifier: workspace:^
+        version: link:../tsconfig
+      '@systemfsoftware/vitest-config':
+        specifier: workspace:^
+        version: link:../vitest-config
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.2
+      effect:
+        specifier: 'catalog:'
+        version: 3.22.0
+      rimraf:
+        specifier: 'catalog:'
+        version: 6.1.3
+      tsdown:
+        specifier: 'catalog:'
+        version: 0.22.9(typescript@5.9.3)(unrun@0.2.39)
+      vite-tsconfig-paths:
+        specifier: 'catalog:'
+        version: 6.1.1(supports-color@8.1.1)(typescript@5.9.3)(vite@7.3.5(@types/node@24.13.2)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0))
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/coverage-v8@4.1.9)(vite@7.3.5(@types/node@24.13.2)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0))
+
   packages/effect-daemon-spec:
     devDependencies:
       '@effect/vitest':
@@ -451,6 +487,9 @@ importers:
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: workspace:^
         version: link:../arethetypeswrong/cli
+      '@systemfsoftware/effect-cell-types':
+        specifier: workspace:^
+        version: link:../effect-cell-types
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:^
         version: link:../effect-gherkin-spec
@@ -834,6 +873,61 @@ importers:
         specifier: 'catalog:'
         version: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/coverage-v8@4.1.9)(vite@7.3.5(@types/node@24.13.2)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0))
 
+  packages/oxlint-plugins/cell-imports:
+    dependencies:
+      '@oxc-project/types':
+        specifier: ^0.140.0
+        version: 0.140.0
+      '@oxlint/plugins':
+        specifier: catalog:oxlint
+        version: 1.74.0
+    devDependencies:
+      '@microsoft/api-extractor':
+        specifier: 'catalog:'
+        version: 7.58.9(@types/node@24.13.2)
+      '@stryker-mutator/vitest-runner':
+        specifier: catalog:stryker
+        version: 9.6.1(@stryker-mutator/core@9.6.1(@types/node@24.13.2))(vitest@4.1.9)
+      '@systemfsoftware/arethetypeswrong-cli':
+        specifier: workspace:^
+        version: link:../../arethetypeswrong/cli
+      '@systemfsoftware/stryker-js-core':
+        specifier: workspace:^
+        version: link:../../stryker-js/core
+      '@systemfsoftware/stryker-js-typescript-checker':
+        specifier: workspace:^
+        version: link:../../stryker-js/typescript-checker
+      '@systemfsoftware/tsconfig':
+        specifier: workspace:^
+        version: link:../../tsconfig
+      '@systemfsoftware/vitest-config':
+        specifier: workspace:^
+        version: link:../../vitest-config
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.2
+      '@vitest/coverage-v8':
+        specifier: 'catalog:'
+        version: 4.1.9(vitest@4.1.9)
+      effect:
+        specifier: 'catalog:'
+        version: 3.22.0
+      oxlint:
+        specifier: catalog:oxlint
+        version: 1.74.0(oxlint-tsgolint@0.24.0)
+      rimraf:
+        specifier: 'catalog:'
+        version: 6.1.3
+      tsdown:
+        specifier: 'catalog:'
+        version: 0.22.9(typescript@7.0.2)(unrun@0.2.39)
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/coverage-v8@4.1.9)(vite@7.3.5(@types/node@24.13.2)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0))
+
   packages/oxlint-plugins/cell-taxonomy:
     dependencies:
       '@oxc-project/types':
@@ -1059,6 +1153,9 @@ importers:
       '@oxlint/plugins':
         specifier: catalog:oxlint
         version: 1.74.0
+      '@systemfsoftware/oxlint-plugin-cell-imports':
+        specifier: workspace:^
+        version: link:../cell-imports
       '@systemfsoftware/oxlint-plugin-cell-taxonomy':
         specifier: workspace:^
         version: link:../cell-taxonomy

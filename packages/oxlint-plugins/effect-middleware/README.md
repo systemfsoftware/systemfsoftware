@@ -6,10 +6,10 @@
 > An oxlint plugin for Effect-TS teams who want middleware files that stay at the transport edge.
 
 ```
-x @systemfsoftware/effect-middleware(middleware-no-operation-imports): ./order.store is forbidden.
+x @systemfsoftware/effect-middleware(middleware-no-operation-imports): OrderExecutor is forbidden.
   Expected: imports of adapters, ports, schemas, and ACLs only — never the operation.
-  Actual: an import of the .store cell.
-  Fix: a middleware is the transport front-half — let the handler wire the executor and import only the port the middleware calls.
+  Actual: an import binding named OrderExecutor.
+  Fix: a middleware that imports the operation is a mislabeled handler — import the port instead and let the handler wire the executor.
 
 x @systemfsoftware/effect-middleware(middleware-gate-fails-on-decode-failure): Effect.succeed(null) is forbidden.
   Expected: a decode-failure branch that produces Effect.fail — the gate short-circuits at the edge.
@@ -25,7 +25,7 @@ pnpm add -D @systemfsoftware/oxlint-plugin-effect-middleware
 
 ## The Problem
 
-A `*.middleware.ts` is the shared transport front-half: it decodes a credential, cursor, or header into a branded fact and attaches it, or gates at the edge with a 401/403/400. Two failure modes compile, pass a standard lint config, and still pass their tests: the middleware quietly imports the operation (an executor, workflow, or store), turning itself into a mislabeled handler; and a decode-failure branch succeeds with `Effect.succeed(Option | nullable)` instead of failing, forcing every downstream handler to re-check the invalid state.
+A `*.middleware.ts` is the shared transport front-half: it decodes a credential, cursor, or header into a branded fact and attaches it, or gates at the edge with a 401/403/400. Two failure modes compile, pass a standard lint config, and still pass their tests: the middleware quietly imports the operation (a binding named `*Executor`/`*Workflow`/`*Store`), turning itself into a mislabeled handler; and a decode-failure branch succeeds with `Effect.succeed(Option | nullable)` instead of failing, forcing every downstream handler to re-check the invalid state.
 
 These two rules make that convention executable. Every rule is inert on any file not named `*.middleware.ts`.
 
@@ -52,10 +52,10 @@ To adopt gradually, drop the spread and name rules individually as `'@systemfsof
 
 ## Rules
 
-| Rule                                      | Reports                                                                                                                                                                                                                         |
-| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `middleware-no-operation-imports`         | An import of a `.executor`, `.workflow`, or `.store` sibling, or an import binding named `*Executor`/`*Workflow`/`*Store` — the middleware is the front-half and must never reach into the operation (architect-middleware MW2) |
-| `middleware-gate-fails-on-decode-failure` | A decode-failure branch (an `if` on `!x`, `x == null`, `x === undefined`, `typeof x === 'undefined'`, or `Option.isNone(x)`) that produces `Effect.succeed(null                                                                 |
+| Rule                                      | Reports                                                                                                                                                                                                                                                                          |
+| ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `middleware-no-operation-imports`         | An import binding named `*Executor`/`*Workflow`/`*Store` — the middleware is the front-half and must never reach into the operation (architect-middleware MW2). Sibling-cell module edges are covered by `cell-import-boundary` in `@systemfsoftware/oxlint-plugin-cell-imports` |
+| `middleware-gate-fails-on-decode-failure` | A decode-failure branch (an `if` on `!x`, `x == null`, `x === undefined`, `typeof x === 'undefined'`, or `Option.isNone(x)`) that produces `Effect.succeed(null                                                                                                                  |
 
 ## FAQ
 
@@ -66,7 +66,7 @@ A: The name was placed in oxlint's `plugins` field, which takes built-in namespa
 A: Every rule is filename-gated. Only `*.middleware.ts` files are examined.
 
 **Q: I import `effect/Effect` in my middleware and it passes. Is that right?**
-A: Yes — middleware is impure transport behavior and may run effects at the edge. The operation-import ban covers sibling cell modules and operation bindings, not the Effect runtime.
+A: Yes — middleware is impure transport behavior and may run effects at the edge. The operation-import ban covers operation bindings only, not the Effect runtime; sibling-cell module edges are handled by `cell-import-boundary` in `@systemfsoftware/oxlint-plugin-cell-imports`.
 
 **Q: Why does `Effect.succeed(Option.some(x))` in a failure branch fire?**
 A: The success channel is still `Option<T>`, so every handler behind the gate must re-check for `None` — the exact deferred-gate harm MW3 exists to close.

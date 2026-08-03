@@ -12,10 +12,8 @@ const _default: {
         name: string;
     };
     rules: {
-        'observer-no-domain-imports': Rule;
         'observer-operational-exports': Rule;
         'observer-no-escaping-state': Rule;
-        'observer-no-production-import': Rule;
     };
     configs: {
         recommended: {

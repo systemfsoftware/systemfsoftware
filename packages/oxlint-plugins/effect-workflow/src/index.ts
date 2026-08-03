@@ -6,7 +6,6 @@ import { workflowNoAmbientImpurity } from './rules/workflow-no-ambient-impurity.
 import { workflowNoAsync } from './rules/workflow-no-async.js'
 import { workflowNoEffectImport } from './rules/workflow-no-effect-import.js'
 import { workflowNoPanicVocabulary } from './rules/workflow-no-panic-vocabulary.js'
-import { workflowNoShellImports } from './rules/workflow-no-shell-imports.js'
 import { workflowNoThrow } from './rules/workflow-no-throw.js'
 import { workflowNoUnconstructedVariant } from './rules/workflow-no-unconstructed-variant.js'
 import { workflowPropertyTestShape } from './rules/workflow-property-test-shape.js'
@@ -36,7 +35,6 @@ const recommendedRules = {
   [rule('workflow-no-async')]: 'error',
   [rule('workflow-no-ambient-impurity')]: 'error',
   [rule('workflow-no-effect-import')]: 'error',
-  [rule('workflow-no-shell-imports')]: 'error',
   [rule('workflow-single-function-export')]: 'error',
   [rule('workflow-property-test-shape')]: 'error',
 } as const
@@ -61,7 +59,6 @@ export default {
     'workflow-no-async': workflowNoAsync,
     'workflow-no-ambient-impurity': workflowNoAmbientImpurity,
     'workflow-no-effect-import': workflowNoEffectImport,
-    'workflow-no-shell-imports': workflowNoShellImports,
     'workflow-single-function-export': workflowSingleFunctionExport,
     'workflow-property-test-shape': workflowPropertyTestShape,
   },

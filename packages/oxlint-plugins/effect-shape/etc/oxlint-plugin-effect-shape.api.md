@@ -13,7 +13,6 @@ const _default: {
     };
     rules: {
         'shape-no-anti-pattern-path': Rule;
-        'shape-no-domain-import': Rule;
         'shape-no-behaviour': Rule;
         'shape-one-foreign-system': Rule;
     };

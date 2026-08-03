@@ -19,7 +19,6 @@ const _default: {
         'test-suffix-outside-src': Rule;
         'snapshot-test-requires-snapshot': Rule;
         'behaviour-test-requires-gherkin': Rule;
-        'behaviour-no-pure-cell-import': Rule;
         'behaviour-exercises-use-case': Rule;
         'behaviour-one-feature-per-file': Rule;
     };

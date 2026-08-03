@@ -48,13 +48,13 @@ export type ChildRef = {
 // @public (undocumented)
 export interface CommonOpts<L extends LockConfig> {
     // (undocumented)
-    readonly child?: typeof ChildPolicyConfig.Type;
+    readonly child?: ChildPolicyConfig;
     // (undocumented)
     readonly lock: L;
     // (undocumented)
     readonly name: string;
     // (undocumented)
-    readonly tick: typeof TickPolicyConfig.Type;
+    readonly tick: TickPolicyConfig;
     // (undocumented)
     readonly tickHooks?: TickPolicyHooks;
 }
@@ -472,7 +472,7 @@ interface Worker_2<E, R, L extends LockConfig = LockConfig> {
     // (undocumented)
     readonly [WorkerTypeId]: WorkerTypeId;
     // (undocumented)
-    readonly child: typeof ChildPolicyConfig.Type;
+    readonly child: ChildPolicyConfig;
     // (undocumented)
     readonly lock: L;
     // (undocumented)
@@ -480,7 +480,7 @@ interface Worker_2<E, R, L extends LockConfig = LockConfig> {
     // (undocumented)
     readonly name: string;
     // (undocumented)
-    readonly tick: typeof TickPolicyConfig.Type;
+    readonly tick: TickPolicyConfig;
     // (undocumented)
     readonly tickHooks: TickPolicyHooks;
 }

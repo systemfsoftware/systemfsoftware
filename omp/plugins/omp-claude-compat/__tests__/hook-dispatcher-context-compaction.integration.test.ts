@@ -4,14 +4,12 @@ import * as PathModule from '@effect/platform/Path'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer } from 'effect'
 import { expect } from 'vitest'
-import {
-  loadSettingsWithPaths,
-  runLifecycleHooks,
-  runPreCompactHooks,
-  runSessionStartHooks,
-} from '../src/hook-dispatcher.executor.js'
-import type { HookSession } from '../src/hook-dispatcher.executor.js'
 import { HookScopeLive } from '../src/hook-runtime.state.js'
+import type { HookSession } from '../src/hook-session.shape.js'
+import { loadSettingsWithPaths } from '../src/internal/load-settings.executor.js'
+import { runLifecycleHooks } from '../src/internal/run-lifecycle-hooks.executor.js'
+import { runPreCompactHooks } from '../src/internal/run-pre-compact-hooks.executor.js'
+import { runSessionStartHooks } from '../src/internal/run-session-start-hooks.executor.js'
 import {
   makeRecorder,
   makeSettingsJson,

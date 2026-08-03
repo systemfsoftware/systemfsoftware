@@ -13,7 +13,6 @@ const _default: {
     };
     rules: {
         'policy-combinator-export': Rule;
-        'policy-no-domain-imports': Rule;
         'policy-no-error-rewriting': Rule;
         'policy-no-junk-drawer-path': Rule;
     };
