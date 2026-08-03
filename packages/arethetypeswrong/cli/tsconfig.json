@@ -10,7 +10,15 @@
     "customConditions": [
       "@systemfsoftware/source"
     ],
-    "types": ["node", "ts-expose-internals"]
+    "types": [
+      "node",
+      "ts-expose-internals"
+    ],
+    "plugins": [
+      {
+        "name": "@effect/language-service"
+      }
+    ]
   },
   "include": [
     "src"

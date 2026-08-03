@@ -8,7 +8,6 @@ import { Cause } from 'effect';
 import { Context } from 'effect';
 import { Duration } from 'effect';
 import { Duration as Duration_2 } from 'effect/Duration';
-import { DurationInput } from 'effect/Duration';
 import { Effect } from 'effect';
 import { Layer } from 'effect';
 import { Metric } from 'effect';
@@ -18,7 +17,6 @@ import { Schema } from 'effect';
 import { Scope } from 'effect';
 import { Scope as Scope_2 } from 'effect/Scope';
 import { Stream } from 'effect';
-import { Stream as Stream_2 } from 'effect/Stream';
 
 // Warning: (ae-forgotten-export) The symbol "BoundedIntensity_base" needs to be exported by the entry point index.d.ts
 //
@@ -65,7 +63,7 @@ export interface CommonOpts<L extends LockConfig> {
 export const Daemon: {
     readonly poll: <A, E, R, L extends LockConfig>(opts: PollOpts<A, E, R, L>) => Worker_2<E, R, L>;
     readonly stream: <A, E, R, L extends LockConfig>(opts: CommonOpts<L> & {
-        readonly stream: Stream_2<A, E, R>;
+        readonly stream: Stream.Stream<A, E, R>;
     }) => Worker_2<E, R, L>;
     readonly subscription: <A, E, R, L extends LockConfig>(opts: CommonOpts<L> & {
         readonly acquire: Effect.Effect<A, E, R>;
@@ -157,6 +155,9 @@ export const IntensityConfig: Schema.Struct<{
 // @public (undocumented)
 export type IntensityConfig = typeof IntensityConfig.Type;
 
+// @public (undocumented)
+export const leader: (cap: Duration.DurationInput) => Effect.Effect<SupervisionPolicy>;
+
 // Warning: (ae-forgotten-export) The symbol "LeaderConfig_base" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
@@ -188,6 +189,8 @@ export class LeaderLockNotAcquired extends LeaderLockNotAcquired_base {}
 
 // @public (undocumented)
 export interface LeaderLockOptions {
+    // (undocumented)
+    readonly acquireRetryBackoff?: Schedule.Schedule<Duration.Duration>;
     // (undocumented)
     readonly key: string;
     // (undocumented)
@@ -282,15 +285,10 @@ export const run: {
     readonly worker: {
         <E, R>(w: Worker_2<E, R, {
             mode: "none";
-        }>): Effect.Effect<DaemonHealth, never, R | SupervisorBodyExecutorDeps | Scope_2>;
-        <E, R>(w: Worker_2<E, R, LockConfig>): Effect.Effect<DaemonHealth, never, R | WithLeaderLockExecutorDeps | SupervisorBodyExecutorDeps | Scope_2>;
+        }>): Effect.Effect<DaemonHealth, never, R | Scope_2>;
+        <E, R>(w: Worker_2<E, R, LockConfig>): Effect.Effect<DaemonHealth, never, R | WithLeaderLockExecutorDeps | Scope_2>;
     };
-    readonly supervisor: {
-        <E, R>(s: Supervisor<E, R, {
-            mode: "none";
-        }>): Effect.Effect<SupervisorHealth, never, R | SupervisorBodyExecutorDeps | Scope_2>;
-        <E, R>(s: Supervisor<E, R, LockConfig>): Effect.Effect<SupervisorHealth, never, R | WithLeaderLockExecutorDeps | SupervisorBodyExecutorDeps | Scope_2>;
-    };
+    readonly supervisor: <E, R>(s: Supervisor<E, R, LockConfig>) => Effect.Effect<SupervisorHealth, never, R | SupervisorBodyExecutorDeps | WithLeaderLockExecutorDeps | Scope_2>;
     readonly dynamic: <E, R, Args>(spec: DynamicSpec<E, R, Args>) => Effect.Effect<DynamicHandle<Args, R | WithLeaderLockExecutorDeps | SupervisorBodyExecutorDeps | Scope_2>, never, R | WithLeaderLockExecutorDeps | SupervisorBodyExecutorDeps | Scope_2>;
 };
 
@@ -318,11 +316,14 @@ export type SubscriptionLoop<E, R> = {
 
 // @public (undocumented)
 export const Supervision: {
-    readonly leader: (cap: DurationInput) => Effect.Effect<SupervisionPolicy>;
-    readonly worker: (cap: DurationInput) => Effect.Effect<SupervisionPolicy>;
-    readonly task: (budget: DurationInput) => Effect.Effect<SupervisionPolicy>;
-    readonly custom: (policy: SupervisionPolicy) => Effect.Effect<SupervisionPolicy>;
+    readonly leader: (cap: Duration.DurationInput) => Effect.Effect<SupervisionPolicy>;
+    readonly worker: (cap: Duration.DurationInput) => Effect.Effect<SupervisionPolicy>;
+    readonly task: (budget: Duration.DurationInput) => Effect.Effect<SupervisionPolicy>;
+    readonly custom: <P>(policy: P) => Effect.Effect<P>;
 };
+
+// @public (undocumented)
+export const supervision: (cap: Duration.DurationInput) => Effect.Effect<SupervisionPolicy>;
 
 // @public (undocumented)
 export interface SupervisionConfig {
@@ -363,12 +364,7 @@ export interface Supervisor<E, R, L extends LockConfig = LockConfig> {
 }
 
 // @public (undocumented)
-export const supervisor: {
-    <E, R>(s: Supervisor<E, R, {
-        mode: 'none';
-    }>): Effect.Effect<SupervisorHealth, never, R | SupervisorBodyExecutorDeps | Scope.Scope>;
-    <E, R>(s: Supervisor<E, R, LockConfig>): Effect.Effect<SupervisorHealth, never, R | WithLeaderLockExecutorDeps | SupervisorBodyExecutorDeps | Scope.Scope>;
-};
+export const supervisor: <E, R>(s: Supervisor<E, R, LockConfig>) => Effect.Effect<SupervisorHealth, never, R | SupervisorBodyExecutorDeps | WithLeaderLockExecutorDeps | Scope.Scope>;
 
 // Warning: (ae-forgotten-export) The symbol "SupervisorBodyExecutorDeps_base" needs to be exported by the entry point index.d.ts
 //
@@ -421,6 +417,9 @@ export const SupervisorTypeId: unique symbol;
 // @public (undocumented)
 export type SupervisorTypeId = typeof SupervisorTypeId;
 
+// @public (undocumented)
+export const task: (budget: Duration.DurationInput) => Effect.Effect<SupervisionPolicy>;
+
 // Warning: (ae-forgotten-export) The symbol "TaskConfig_base" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
@@ -464,8 +463,8 @@ export const WithLeaderLockExecutorLive: Layer.Layer<WithLeaderLockExecutorDeps,
 export const worker: {
     <E, R>(w: Worker_2<E, R, {
         mode: 'none';
-    }>): Effect.Effect<DaemonHealth, never, R | SupervisorBodyExecutorDeps | Scope.Scope>;
-    <E, R>(w: Worker_2<E, R, LockConfig>): Effect.Effect<DaemonHealth, never, R | WithLeaderLockExecutorDeps | SupervisorBodyExecutorDeps | Scope.Scope>;
+    }>): Effect.Effect<DaemonHealth, never, R | Scope.Scope>;
+    <E, R>(w: Worker_2<E, R, LockConfig>): Effect.Effect<DaemonHealth, never, R | WithLeaderLockExecutorDeps | Scope.Scope>;
 };
 
 // @public (undocumented)

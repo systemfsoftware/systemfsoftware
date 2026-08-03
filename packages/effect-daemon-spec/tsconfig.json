@@ -29,6 +29,16 @@
             ]
           }
         ],
+        "overrides": [
+          {
+            "include": ["src/**/*.executor.ts"],
+            "options": {
+              "diagnosticSeverity": {
+                "deterministicKeys": "off"
+              }
+            }
+          }
+        ],
         "diagnosticSeverity": {
           "globalErrorInEffectFailure": "error",
           "anyUnknownInErrorContext": "off",

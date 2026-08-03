@@ -6,7 +6,7 @@ export interface DaemonReporterService {
 }
 
 export class DaemonReporter extends Context.Tag(
-  '@systemfsoftware/effect-daemon-spec/daemon-reporter/DaemonReporter',
+  '@systemfsoftware/effect-daemon-spec/daemon-reporter.adapter/DaemonReporter',
 )<DaemonReporter, DaemonReporterService>() {}
 
 export const Noop: Layer.Layer<DaemonReporter> = Layer.succeed(

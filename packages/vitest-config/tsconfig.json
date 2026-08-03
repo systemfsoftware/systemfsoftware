@@ -4,7 +4,14 @@
   "compilerOptions": {
     "noEmit": true,
     "allowJs": true,
-    "checkJs": true
+    "checkJs": true,
+    "plugins": [
+      {
+        "name": "@effect/language-service"
+      }
+    ]
   },
-  "include": ["lib"]
+  "include": [
+    "lib"
+  ]
 }

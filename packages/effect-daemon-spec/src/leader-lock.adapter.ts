@@ -10,7 +10,7 @@ export interface LeaderLockService {
 }
 
 export class LeaderLock extends Context.Tag(
-  '@systemfsoftware/effect-daemon-spec/leader-lock/LeaderLock',
+  '@systemfsoftware/effect-daemon-spec/leader-lock.adapter/LeaderLock',
 )<LeaderLock, LeaderLockService>() {
   static readonly Noop: Layer.Layer<LeaderLock> = Layer.succeed(
     LeaderLock,
@@ -26,7 +26,7 @@ export interface LockPrimitiveService {
   ) => Effect.Effect<boolean, LockPrimitiveError, Scope.Scope>
 }
 
-export class LockPrimitive extends Context.Tag('@systemfsoftware/effect-daemon-spec/lock-primitive/LockPrimitive')<
+export class LockPrimitive extends Context.Tag('@systemfsoftware/effect-daemon-spec/leader-lock.adapter/LockPrimitive')<
   LockPrimitive,
   LockPrimitiveService
 >() {}

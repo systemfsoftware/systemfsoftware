@@ -8,7 +8,14 @@
     "customConditions": [
       "@systemfsoftware/source"
     ],
-    "types": ["ts-expose-internals"]
+    "types": [
+      "ts-expose-internals"
+    ],
+    "plugins": [
+      {
+        "name": "@effect/language-service"
+      }
+    ]
   },
   "include": [
     "src"

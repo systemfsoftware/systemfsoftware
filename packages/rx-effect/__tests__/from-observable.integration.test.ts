@@ -17,6 +17,7 @@
 import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Either, Stream } from 'effect'
+import { UnknownException } from 'effect/Cause'
 import { expect } from 'vitest'
 
 import { Observable, ReplaySubject } from 'rxjs'
@@ -43,7 +44,7 @@ Feature('fromObservable — RxJS-to-Effect stream bridge').body(({ scenario }) =
         })),
       When('the stream is collected')('values', (s) =>
         collectValues(
-          fromObservable(() => new Error('unexpected'))(s.subject),
+          fromObservable(() => new UnknownException(new Error('unexpected')))(s.subject),
         )),
       Then('the stream yields exactly the emitted values in order')((s) => {
         expect(s.values).toEqual([10, 20, 30])
@@ -65,7 +66,7 @@ Feature('fromObservable — RxJS-to-Effect stream bridge').body(({ scenario }) =
       ),
       When('the stream is collected')('values', (s) =>
         collectValues(
-          fromObservable(() => new Error('unexpected'))(s.observable),
+          fromObservable(() => new UnknownException(new Error('unexpected')))(s.observable),
         )),
       Then('the stream is empty')((s) => {
         expect(s.values).toEqual([])
@@ -90,7 +91,7 @@ Feature('fromObservable — RxJS-to-Effect stream bridge').body(({ scenario }) =
       ),
       When('the stream is collected')('values', (s) =>
         collectValues(
-          fromObservable(() => new Error('unexpected'))(s.observable),
+          fromObservable(() => new UnknownException(new Error('unexpected')))(s.observable),
         )),
       Then('the stream yields exactly 0..99 in order')((s) => {
         expect(s.values).toEqual(Array.from({ length: 100 }, (_, i) => i))
@@ -162,7 +163,9 @@ Feature('fromObservable — RxJS-to-Effect stream bridge').body(({ scenario }) =
         })),
       When('the consumer takes one element and the stream is collected')('values', (s) =>
         collectValues(
-          fromObservable(() => new Error('unexpected'))(s.subject.observable).pipe(Stream.take(1)),
+          fromObservable(() => new UnknownException(new Error('unexpected')))(s.subject.observable).pipe(
+            Stream.take(1),
+          ),
         )),
       Then('the stream yields exactly one element and the underlying subscription is unsubscribed once')((s) => {
         expect(s.values).toEqual([0])
@@ -191,7 +194,9 @@ Feature('fromObservable — RxJS-to-Effect stream bridge').body(({ scenario }) =
         })),
       When('the consumer takes three elements and the stream is collected')('values', (s) =>
         collectValues(
-          fromObservable(() => new Error('unexpected'))(s.subject.observable).pipe(Stream.take(3)),
+          fromObservable(() => new UnknownException(new Error('unexpected')))(s.subject.observable).pipe(
+            Stream.take(3),
+          ),
         )),
       Then('the stream yields the first three elements and unsubscribes once')((s) => {
         expect(s.values).toEqual([0, 1, 2])

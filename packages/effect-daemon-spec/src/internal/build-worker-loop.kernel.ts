@@ -54,13 +54,11 @@ const applyTrackDuration = (hooks: TickPolicyHooksShape) => {
   }
 }
 
-const applyTimeout = (timeout: Duration.DurationInput) => {
-  return <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-    Effect.timeoutFail(effect, {
-      duration: timeout,
-      onTimeout: () => new Cause.TimeoutException(),
-    })
-}
+const applyTimeout = (timeout: Duration.DurationInput) => <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  Effect.timeoutFail(effect, {
+    duration: timeout,
+    onTimeout: () => new Cause.TimeoutException(),
+  })
 
 const applyInnerRetry = (hooks: TickPolicyHooksShape) => {
   const { innerRetry } = hooks
@@ -86,7 +84,9 @@ const buildPollTick = <E, R, W extends WorkerShape<unknown, E, R>>(
   const withInnerRetry = applyInnerRetry(worker.tickHooks)
 
   const runWork = (work: Effect.Effect<void, E, R>): Effect.Effect<void, E, R> =>
-    work.pipe(withSpanAttrs, withDuration).pipe(
+    work.pipe(
+      withSpanAttrs,
+      withDuration,
       Effect.withSpan(spanName, { root: true, attributes: { 'daemon.name': worker.name } }),
       Effect.withLogSpan(spanName),
     )
