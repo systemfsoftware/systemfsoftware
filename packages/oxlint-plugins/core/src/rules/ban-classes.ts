@@ -1,33 +1,12 @@
-// Stryker disable all
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
-import { JSONSchema, Schema as S } from 'effect'
+import { Schema as S } from 'effect'
 
-const Options = S.Struct({
-  whitelist: S.optionalWith(
-    S.Array(S.String),
-    { default: () => [] },
-  ),
-})
-
-const TagVariants = new Set(['TaggedError', 'Error', 'Service', 'Class', 'TaggedClass'])
-const ImportVariants = new Set(['S', 'Schema', 'Data', 'Effect'])
-const ContextVariants = new Set(['Tag', 'Reference'])
+import { ContextVariants, ImportVariants, meta, Options, TagVariants } from './ban-classes.config.js'
 
 export const banClasses = defineRule({
-  meta: {
-    type: 'suggestion',
-    docs: {
-      description:
-        'Ban class declarations in favor of functional patterns with Effect.gen, Layer.merge, and S.TaggedError',
-    },
-    schema: [JSONSchema.make(Options)],
-    messages: {
-      noClasses: "'{{name}}' is forbidden. Expected: {{expected}}. Actual: {{actual}}. Fix: {{fix}}.",
-    },
-  },
+  meta,
   create(context: Context) {
-    // Stryker restore all
     const isTaggedErrorPattern = (node: ESTree.MemberExpression): boolean =>
       node.object.type === 'Identifier' &&
       node.property.type === 'Identifier' &&

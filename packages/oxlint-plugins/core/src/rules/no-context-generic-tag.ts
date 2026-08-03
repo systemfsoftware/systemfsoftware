@@ -1,24 +1,11 @@
-// Stryker disable all
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
 
-const EFFECT_CONTEXT_MODULE = 'effect'
-const CONTEXT_NAMESPACE = 'Context'
-const GENERIC_TAG = 'GenericTag'
+import { CONTEXT_NAMESPACE, EFFECT_CONTEXT_MODULE, GENERIC_TAG, meta } from './no-context-generic-tag.config.js'
 
 export const noContextGenericTag = defineRule({
-  meta: {
-    type: 'suggestion',
-    docs: {
-      description: 'Ban Context.GenericTag from Effect - use Context.Tag instead',
-    },
-    schema: [],
-    messages: {
-      banned: "'{{name}}' is forbidden. Expected: {{expected}}. Actual: {{actual}}. Fix: {{fix}}.",
-    },
-  },
+  meta,
   create(context: Context) {
-    // Stryker restore all
     const trackedImports = new Set<string>()
 
     const reportViolation = (node: ESTree.Node) => {

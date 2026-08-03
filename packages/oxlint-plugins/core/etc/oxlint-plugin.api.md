@@ -14,7 +14,6 @@ const _default: {
     rules: {
         'ban-classes': Rule;
         'ban-error-string': Rule;
-        'policy-no-domain-imports': Rule;
         'no-barrels': Rule;
         'no-bodyless-status-assertion': Rule;
         'no-context-generic-tag': Rule;

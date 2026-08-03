@@ -47,7 +47,7 @@ ruleTester.run('workflow-single-function-export', workflowSingleFunctionExport, 
     {
       name: 'Should_Pass_When_SchemaClassTypeAndObjectSpecifierAccompanySingleWorkflow',
       code:
-        `export class Foo extends S.TaggedClass<Foo>()('Foo', {}) {} export type Bar = string; const SomeSchema = {}; export { SomeSchema }; export const processClaim = () => {}`,
+        `export class Foo extends S.TaggedClass<Foo>()('Foo', {}) {} export type Bar = string; const SomeSchema = S.Union(A, B); export { SomeSchema }; export const processClaim = () => {}`,
       filename: 'process-claim.workflow.ts',
     },
     {
@@ -62,8 +62,9 @@ ruleTester.run('workflow-single-function-export', workflowSingleFunctionExport, 
       filename: 'process-claim.workflow.ts',
     },
     {
-      name: 'Should_Pass_When_NonFunctionSpecifierAccompaniesSingleWorkflow',
-      code: `const foo = 1; export { foo }; export const processClaim = () => {}`,
+      name: 'Should_Pass_When_SchemaUnionAndTypeIdAccompanySingleWorkflow',
+      code:
+        `export const Decision = S.Union(A, B); const XTypeId = Symbol.for('x'); export { XTypeId }; export const processClaim = () => {}`,
       filename: 'process-claim.workflow.ts',
     },
     {
@@ -139,7 +140,7 @@ ruleTester.run('workflow-single-function-export', workflowSingleFunctionExport, 
     {
       name: 'Should_Report_ZeroFunctionExports_When_OnlySchemasTypesAndObjects',
       code:
-        `export class Foo extends S.TaggedClass<Foo>()('Foo', {}) {} export type Bar = string; const SomeSchema = {}; export { SomeSchema }`,
+        `export class Foo extends S.TaggedClass<Foo>()('Foo', {}) {} export type Bar = string; const SomeSchema = S.Union(A, B); export { SomeSchema }`,
       filename: 'process-claim.workflow.ts',
       errors: [{ messageId: 'tooManyFunctionExports', data: { ...data, actual: '0 function exports' } }],
     },
@@ -147,7 +148,18 @@ ruleTester.run('workflow-single-function-export', workflowSingleFunctionExport, 
       name: 'Should_Report_ZeroFunctionExports_When_UndeclaredExport',
       code: `export let x`,
       filename: 'process-claim.workflow.ts',
-      errors: [{ messageId: 'tooManyFunctionExports', data: { ...data, actual: '0 function exports' } }],
+      errors: [
+        { messageId: 'tooManyFunctionExports', data: { ...data, actual: '0 function exports' } },
+        {
+          messageId: 'disallowedExport',
+          data: {
+            name: 'x',
+            expected: 'only the workflow function, schema classes, S.Union, TypeId symbols, and types',
+            actual: 'exported value',
+            fix: 'move constants, helpers, and steps out of the workflow file',
+          },
+        },
+      ],
     },
     {
       name: 'Should_Report_ThreeExports_When_NamedFunctionDeclarationAndSpecifierAndArrow',
@@ -162,10 +174,63 @@ ruleTester.run('workflow-single-function-export', workflowSingleFunctionExport, 
       errors: [{ messageId: 'tooManyFunctionExports', data: { ...data, actual: '2 function exports' } }],
     },
     {
+      name: 'Should_Report_ExportedConstantDeclaration',
+      code: `export const FOO = 1; export const processClaim = () => {}`,
+      filename: 'process-claim.workflow.ts',
+      errors: [{
+        messageId: 'disallowedExport',
+        data: {
+          name: 'FOO',
+          expected: 'only the workflow function, schema classes, S.Union, TypeId symbols, and types',
+          actual: 'exported value',
+          fix: 'move constants, helpers, and steps out of the workflow file',
+        },
+      }],
+    },
+    {
+      name: 'Should_Report_ExportedConstantSpecifier',
+      code: `const foo = 1; export { foo }; export const processClaim = () => {}`,
+      filename: 'process-claim.workflow.ts',
+      errors: [{
+        messageId: 'disallowedExport',
+        data: {
+          name: 'foo',
+          expected: 'only the workflow function, schema classes, S.Union, TypeId symbols, and types',
+          actual: 'exported value',
+          fix: 'move constants, helpers, and steps out of the workflow file',
+        },
+      }],
+    },
+    {
+      name: 'Should_Report_ExportedLetDeclaration',
+      code: `export let x = 1; export const processClaim = () => {}`,
+      filename: 'process-claim.workflow.ts',
+      errors: [{
+        messageId: 'disallowedExport',
+        data: {
+          name: 'x',
+          expected: 'only the workflow function, schema classes, S.Union, TypeId symbols, and types',
+          actual: 'exported value',
+          fix: 'move constants, helpers, and steps out of the workflow file',
+        },
+      }],
+    },
+    {
       name: 'Should_Report_ZeroExports_When_DefaultNonFunctionIdentifier',
       code: `const x = 1; export default x`,
       filename: 'process-claim.workflow.ts',
-      errors: [{ messageId: 'tooManyFunctionExports', data: { ...data, actual: '0 function exports' } }],
+      errors: [
+        { messageId: 'tooManyFunctionExports', data: { ...data, actual: '0 function exports' } },
+        {
+          messageId: 'disallowedExport',
+          data: {
+            name: 'default',
+            expected: 'only the workflow function, schema classes, S.Union, TypeId symbols, and types',
+            actual: 'exported value',
+            fix: 'move constants, helpers, and steps out of the workflow file',
+          },
+        },
+      ],
     },
     {
       name: 'Should_Report_ZeroExports_When_DestructuredArrowInitializer',

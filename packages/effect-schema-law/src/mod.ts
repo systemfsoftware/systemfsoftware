@@ -1,2 +1,2 @@
-export * from './bounded-union.js'
-export * from './schema.js'
+export * from './bounded-union.kernel.js'
+export * from './rule-of-schemas.kernel.js'

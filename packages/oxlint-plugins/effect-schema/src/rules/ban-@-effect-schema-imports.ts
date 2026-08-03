@@ -1,31 +1,20 @@
-// Stryker disable all
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
+import {
+  BANNED_SOURCE,
+  CORRECT_SOURCE,
+  meta,
+  REPORT_EXPECTED_PREFIX,
+  REPORT_FIX_PREFIX,
+  SCHEMA_ALIAS,
+} from './ban-@-effect-schema-imports.config.js'
 
 export type Options = []
 export type MessageIds = 'bannedImport'
 
 export const banEffectSchemaImports = defineRule({
-  meta: {
-    type: 'suggestion',
-    docs: {
-      description: 'Ban imports from deprecated @effect/schema package - use Schema from effect instead',
-    },
-    fixable: 'code',
-    schema: [],
-    messages: {
-      bannedImport: 'Import from {{actual}} is forbidden. ' +
-        'Expected: {{expected}}. ' +
-        'Actual: {{actual}}. ' +
-        'Fix: {{fix}}.',
-    },
-  },
+  meta,
   create(context: Context) {
-    // Stryker restore all
-    const BANNED_SOURCE = '@effect/schema'
-    const CORRECT_SOURCE = 'effect'
-    const SCHEMA_ALIAS = 'Schema as S'
-
     const reportViolation = (
       node: ESTree.Node,
       actual: string,
@@ -35,9 +24,9 @@ export const banEffectSchemaImports = defineRule({
         node,
         messageId: 'bannedImport',
         data: {
-          expected: `'${CORRECT_SOURCE}' with ${SCHEMA_ALIAS}`,
+          expected: REPORT_EXPECTED_PREFIX,
           actual: `'${actual}'`,
-          fix: `Replace import source with '${CORRECT_SOURCE}' and add 'as S' alias`,
+          fix: REPORT_FIX_PREFIX,
         },
         fix,
       })

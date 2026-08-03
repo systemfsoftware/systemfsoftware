@@ -1,61 +1,14 @@
-// Stryker disable all
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
-import { JSONSchema, Schema as S } from 'effect'
+import { Schema as S } from 'effect'
 
-const Options = S.Struct({
-  severity: S.optionalWith(
-    S.Literal('error', 'warn', 'off'),
-    { default: () => 'error' },
-  ),
-  excludeRoot: S.optionalWith(
-    S.Boolean,
-    { default: () => true },
-  ),
-})
+import { BARREL_BASENAMES, BARREL_LAST_PARTS, meta, Options } from './no-barrels.config.js'
 
-export type MessageIds =
-  | 'barrelFile'
-  | 'reExportAll'
-  | 'reExportNamed'
-  | 'barrelImport'
-
-const BARREL_BASENAMES = new Set(['index.ts', 'index.tsx', 'mod.ts', 'mod.tsx'])
-
-const BARREL_LAST_PARTS = new Set([
-  'index',
-  'index.js',
-  'index.jsx',
-  'index.ts',
-  'index.tsx',
-  'mod',
-  'mod.js',
-  'mod.jsx',
-  'mod.ts',
-  'mod.tsx',
-])
+export type MessageIds = 'barrelFile' | 'reExportAll' | 'reExportNamed' | 'barrelImport'
 
 export const noBarrels = defineRule({
-  meta: {
-    type: 'suggestion',
-    docs: {
-      description: 'Detect barrel files (index.ts/mod.ts with re-exports) and barrel imports',
-    },
-    hasSuggestions: false,
-    schema: [JSONSchema.make(Options)],
-    messages: {
-      barrelFile:
-        'Barrel file detected. Expected: Direct imports from specific modules. Actual: Re-exporting from multiple modules. Fix: Import directly from specific modules.',
-      reExportAll:
-        '{{source}} is forbidden. Expected: Direct import from specific module. Actual: `export * from "{{source}}"`. Fix: Import directly from specific modules.',
-      reExportNamed:
-        '{{source}} is forbidden. Expected: Direct import from specific module. Actual: `export {{specifiers}} from "{{source}}"`. Fix: Import directly from specific modules.',
-      barrelImport:
-        '{{path}} is forbidden. Expected: Direct module path. Actual: Barrel import from "{{path}}". Fix: Import directly from the specific module.',
-    },
-  },
+  meta,
   create(context: Context) {
-    // Stryker restore all
     const parsed = S.decodeUnknownSync(S.Array(Options))(context.options)
     const options = parsed[0] ?? S.decodeUnknownSync(Options)({})
     const severity = options.severity

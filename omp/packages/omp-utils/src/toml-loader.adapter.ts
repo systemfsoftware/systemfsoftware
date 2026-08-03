@@ -1,10 +1,9 @@
 import type { PlatformError } from '@effect/platform/Error'
 import * as FileSystem from '@effect/platform/FileSystem'
 import * as PathModule from '@effect/platform/Path'
-import { Context, Effect, Layer, MutableHashMap, Option, Ref, Schema } from 'effect'
+import { parse } from '@std/toml'
+import { Context, Effect, Layer, MutableHashMap, Option, ParseResult, Ref, Schema } from 'effect'
 import os from 'node:os'
-import { mergeByOverride } from './toml-loader-merge.kernel.js'
-import { TomlConfigFromText } from './toml-loader.acl.js'
 import { TomlConfig } from './toml-loader.schema.js'
 
 const PROJECT_CONFIG_FILE = 'systemfsoftware.toml'
@@ -12,6 +11,49 @@ const LOCAL_CONFIG_FILE = 'systemfsoftware.local.toml'
 const USER_CONFIG_DIR = '.config/systemfsoftware'
 
 const EMPTY_CONFIG: TomlConfig = Schema.decodeSync(TomlConfig)({})
+
+/**
+ * Port: the layered TOML config provider. The adapter implements it and the
+ * composition root wires `TomlLoaderLive`.
+ */
+export class TomlLoader extends Context.Tag('TomlLoader')<
+  TomlLoader,
+  {
+    readonly load: (cwd: string) => Effect.Effect<TomlConfig, PlatformError, never>
+  }
+>() {}
+
+/**
+ * Private per-key merge for the layered config.
+ *
+ * Precedence (gitconfig model): a later layer replaces a key's whole value;
+ * arrays are NEVER concatenated. Folded left-to-right so `user → project →
+ * local` gives `local` the final word. The reusable generic form lives in
+ * `toml-loader-merge.kernel.ts`; the adapter owns this copy because the
+ * adapter cell may not import the kernel cell.
+ */
+const mergeLayers = <V>(
+  layers: ReadonlyArray<Readonly<Record<string, readonly V[]>>>,
+): Record<string, readonly V[]> => {
+  const out: Record<string, readonly V[]> = {}
+  for (const layer of layers) {
+    for (const [key, value] of Object.entries(layer)) {
+      out[key] = value
+    }
+  }
+  return out
+}
+
+/**
+ * TOML text → `TomlConfig`. The foreign parse is owned here — the adapter
+ * wraps the TOML config-file system. The reusable public crossing lives in
+ * `toml-loader.acl.ts`; the adapter cell may not import the ACL cell.
+ */
+const parseTomlText = (text: string) =>
+  ParseResult.try({
+    try: () => parse(text),
+    catch: (e) => new ParseResult.Unexpected(e, 'TOML parse error'),
+  }).pipe(ParseResult.flatMap((parsed) => ParseResult.decodeUnknown(TomlConfig)(parsed)))
 
 const readLayer = (
   fs: FileSystem.FileSystem,
@@ -22,60 +64,11 @@ const readLayer = (
     Effect.flatMap((exists) =>
       exists
         ? fs.readFileString(filePath).pipe(
-          Effect.flatMap(Schema.decodeUnknown(TomlConfigFromText)),
+          Effect.flatMap(parseTomlText),
           Effect.catchAll(() => Effect.succeed(EMPTY_CONFIG)),
         )
         : Effect.succeed(EMPTY_CONFIG)
     ),
-  )
-
-export class TomlLoader extends Context.Tag('TomlLoader')<
-  TomlLoader,
-  {
-    readonly load: (cwd: string) => Effect.Effect<TomlConfig, PlatformError, never>
-  }
->() {}
-
-/**
- * Build a `TomlLoader` layer with an explicit user home. Tests pass an
- * isolated directory; production code goes through `TomlLoaderLive`,
- * which anchors at `OMP_USER_CONFIG_HOME` when set, else `os.homedir()`,
- * at module load.
- */
-export const makeTomlLoaderLive = (
-  home: string,
-): Layer.Layer<TomlLoader, never, FileSystem.FileSystem | PathModule.Path> =>
-  Layer.effect(
-    TomlLoader,
-    Effect.gen(function*() {
-      const cache = yield* Ref.make(MutableHashMap.empty<string, TomlConfig>())
-      const fs = yield* FileSystem.FileSystem
-      const pathService = yield* PathModule.Path
-
-      const userPath = pathService.join(home, USER_CONFIG_DIR, PROJECT_CONFIG_FILE)
-
-      return TomlLoader.of({
-        load: Effect.fn('TomlLoader.load')(function*(cwd: string) {
-          const cached = yield* Ref.get(cache)
-          const existing = MutableHashMap.get(cached, cwd)
-          if (Option.isSome(existing)) return existing.value
-
-          const projectPath = pathService.join(cwd, PROJECT_CONFIG_FILE)
-          const localPath = pathService.join(cwd, LOCAL_CONFIG_FILE)
-
-          const userLayer = yield* readLayer(fs, pathService, userPath)
-          const projectLayer = yield* readLayer(fs, pathService, projectPath)
-          const localLayer = yield* readLayer(fs, pathService, localPath)
-
-          const merged = Schema.decodeSync(TomlConfig)(
-            mergeByOverride([userLayer, projectLayer, localLayer]),
-          )
-
-          yield* Ref.update(cache, (m) => (MutableHashMap.set(m, cwd, merged), m))
-          return merged
-        }),
-      })
-    }),
   )
 
 const userHomeAnchor = (): string => {
@@ -83,5 +76,47 @@ const userHomeAnchor = (): string => {
   return typeof override === 'string' && override.length > 0 ? override : os.homedir()
 }
 
-export const TomlLoaderLive: Layer.Layer<TomlLoader, never, FileSystem.FileSystem | PathModule.Path> =
-  makeTomlLoaderLive(userHomeAnchor())
+/**
+ * Build the loader for an explicit home. `TomlLoaderLive` resolves the anchor
+ * when the layer is built, so tests can point it at an isolated directory via
+ * `OMP_USER_CONFIG_HOME` before building.
+ */
+const makeTomlLoader = (home: string) =>
+  Effect.gen(function*() {
+    const cache = yield* Ref.make(MutableHashMap.empty<string, TomlConfig>())
+    const fs = yield* FileSystem.FileSystem
+    const pathService = yield* PathModule.Path
+
+    const userPath = pathService.join(home, USER_CONFIG_DIR, PROJECT_CONFIG_FILE)
+
+    return TomlLoader.of({
+      load: Effect.fn('TomlLoader.load')(function*(cwd: string) {
+        const cached = yield* Ref.get(cache)
+        const existing = MutableHashMap.get(cached, cwd)
+        if (Option.isSome(existing)) return existing.value
+
+        const projectPath = pathService.join(cwd, PROJECT_CONFIG_FILE)
+        const localPath = pathService.join(cwd, LOCAL_CONFIG_FILE)
+
+        const userLayer = yield* readLayer(fs, pathService, userPath)
+        const projectLayer = yield* readLayer(fs, pathService, projectPath)
+        const localLayer = yield* readLayer(fs, pathService, localPath)
+
+        const merged = Schema.decodeSync(TomlConfig)(
+          mergeLayers([userLayer, projectLayer, localLayer]),
+        )
+
+        yield* Ref.update(cache, (m) => (MutableHashMap.set(m, cwd, merged), m))
+        return merged
+      }),
+    })
+  })
+
+/**
+ * Live `TomlLoader` layer anchored at `OMP_USER_CONFIG_HOME` when set, else
+ * `os.homedir()`, resolved at layer-build time.
+ */
+export const TomlLoaderLive: Layer.Layer<TomlLoader, never, FileSystem.FileSystem | PathModule.Path> = Layer.effect(
+  TomlLoader,
+  Effect.flatMap(Effect.sync(userHomeAnchor), makeTomlLoader),
+)

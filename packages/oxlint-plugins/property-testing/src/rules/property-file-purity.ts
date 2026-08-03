@@ -2,7 +2,7 @@ import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
 import { Array as A, Option } from 'effect'
 import { isPropCallee, PROP_MODIFIERS } from './prop-call.js'
-import { meta, PROPERTY_TEST_SUFFIX } from './property-file-purity.config.js'
+import { meta, PROPERTY_TEST_SUFFIX, SNAPSHOT_TEST_SUFFIX } from './property-file-purity.config.js'
 
 export type MessageIds = 'plainIt' | 'plainEffectIt' | 'rawFastCheck' | 'fastCheckImport' | 'propCall'
 
@@ -70,6 +70,33 @@ const createPropertyFileVisitors = (context: Context) => ({
   },
 })
 
+const reportPropCallInNonProperty = (context: Context, node: ESTree.CallExpression): void => {
+  context.report({
+    node,
+    messageId: 'propCall',
+    data: {
+      name: 'property test in a non-property test file',
+      expected: `it.prop / it.effect.prop calls live in ${PROPERTY_TEST_SUFFIX} files`,
+      actual: 'a property test mixed into a test file that is not a property file',
+      fix: 'move this test to a *.property.test.ts file — property and non-property tests never mix',
+    },
+  })
+}
+
+/**
+ * A `*.snapshot.test.ts` deterministically samples a fixed-seed arbitrary
+ * under `fc.sample(arb, { seed, numRuns })` and asserts the resulting bytes
+ * against a stored fixture. FastCheck is therefore the tool the snapshot
+ * uses, not a forbidden import — but `it.prop` / `it.effect.prop` never
+ * appear here, so the prop-call ban is preserved.
+ */
+const createSnapshotFileVisitors = (context: Context) => ({
+  CallExpression(node: ESTree.CallExpression) {
+    if (!isPropCallee(node.callee)) return
+    reportPropCallInNonProperty(context, node)
+  },
+})
+
 const createScenarioFileVisitors = (context: Context) => ({
   ImportDeclaration(node: ESTree.ImportDeclaration) {
     for (const specifier of node.specifiers) {
@@ -92,16 +119,7 @@ const createScenarioFileVisitors = (context: Context) => ({
   },
   CallExpression(node: ESTree.CallExpression) {
     if (!isPropCallee(node.callee)) return
-    context.report({
-      node,
-      messageId: 'propCall',
-      data: {
-        name: 'property test in a scenario test file',
-        expected: `it.prop / it.effect.prop calls live in ${PROPERTY_TEST_SUFFIX} files`,
-        actual: 'a property test mixed into a scenario test file',
-        fix: 'move this test to a *.property.test.ts file — property and scenario tests never mix',
-      },
-    })
+    reportPropCallInNonProperty(context, node)
   },
 })
 
@@ -113,6 +131,7 @@ export const propertyFilePurity = defineRule({
     )
     if (!isTestFile) return {}
     if (context.filename.endsWith(PROPERTY_TEST_SUFFIX)) return createPropertyFileVisitors(context)
+    if (context.filename.endsWith(SNAPSHOT_TEST_SUFFIX)) return createSnapshotFileVisitors(context)
     return createScenarioFileVisitors(context)
   },
 })

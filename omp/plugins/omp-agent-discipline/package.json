@@ -21,9 +21,7 @@
     "clean": "rimraf dist",
     "typecheck": "tsc --noEmit --incremental",
     "test": "vitest run",
-    "lint": "oxlint . ${AGENT:+--format=unix --quiet}",
-    "mutation": "stryker run --incremental",
-    "mutation:full": "stryker run"
+    "lint": "oxlint . ${AGENT:+--format=unix --quiet}"
   },
   "peerDependencies": {
     "@effect/platform": "catalog:",
@@ -36,14 +34,10 @@
     "@effect/platform-node": "catalog:",
     "@effect/vitest": "catalog:",
     "@oh-my-pi/pi-coding-agent": "catalog:",
-    "@stryker-mutator/vitest-runner": "catalog:stryker",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/effect-memfs": "workspace:^",
     "@systemfsoftware/omp-utils": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
-    "@systemfsoftware/stryker-js-core": "workspace:^",
-    "@systemfsoftware/stryker-js-typescript-checker": "workspace:^",
-    "@systemfsoftware/stryker-plugins": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@types/node": "catalog:",
     "effect": "catalog:",

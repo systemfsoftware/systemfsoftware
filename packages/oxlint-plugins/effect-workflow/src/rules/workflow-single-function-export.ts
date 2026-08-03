@@ -3,9 +3,67 @@ import type { Context, ESTree } from '@oxlint/plugins'
 import { functionVariableDeclaratorName, getExportedWorkflowFunction } from './exported-workflow-fn.js'
 import { meta, Options } from './workflow-single-function-export.config.js'
 
-export type MessageIds = 'tooManyFunctionExports'
+export type MessageIds = 'tooManyFunctionExports' | 'disallowedExport'
 
 const isWorkflowFile = (filename: string): boolean => filename.endsWith('.workflow.ts')
+
+const isTaggedClassOrErrorCall = (node: ESTree.CallExpression): boolean => {
+  const callee = node.callee.type === 'CallExpression' ? node.callee.callee : node.callee
+  if (callee.type !== 'MemberExpression') return false
+  if (callee.object.type !== 'Identifier' || callee.object.name !== 'S') return false
+  if (callee.property.type !== 'Identifier') return false
+  return callee.property.name === 'TaggedClass' || callee.property.name === 'TaggedError'
+}
+
+const isSchemaClassDeclaration = (node: ESTree.Node | null): boolean => {
+  if (node?.type !== 'ClassDeclaration') return false
+  if (!node.superClass) return false
+  return node.superClass.type === 'CallExpression' && isTaggedClassOrErrorCall(node.superClass)
+}
+
+const isAllowedValueDeclaration = (decl: ESTree.VariableDeclarator): boolean => {
+  if (!decl.init) return false
+  const init = decl.init
+  if (init.type !== 'CallExpression') return false
+  if (init.callee.type === 'MemberExpression') {
+    const obj = init.callee.object
+    const prop = init.callee.property
+    if (
+      obj.type === 'Identifier' && obj.name === 'S' &&
+      prop.type === 'Identifier' && prop.name === 'Union'
+    ) {
+      return true
+    }
+    if (
+      init.callee.object.type === 'Identifier' && init.callee.object.name === 'Symbol' &&
+      init.callee.property.type === 'Identifier' && init.callee.property.name === 'for'
+    ) {
+      return true
+    }
+  }
+  if (init.callee.type === 'Identifier' && init.callee.name === 'Symbol') {
+    return true
+  }
+  return false
+}
+
+const collectTopLevelDeclarations = (program: ESTree.Program): Map<string, ESTree.Node> => {
+  const map = new Map<string, ESTree.Node>()
+  for (const stmt of program.body) {
+    if (stmt.type === 'FunctionDeclaration' && stmt.id) {
+      map.set(stmt.id.name, stmt)
+    } else if (stmt.type === 'ClassDeclaration' && stmt.id) {
+      map.set(stmt.id.name, stmt)
+    } else if (stmt.type === 'VariableDeclaration') {
+      for (const decl of stmt.declarations) {
+        if (decl.id.type === 'Identifier') {
+          map.set(decl.id.name, decl)
+        }
+      }
+    }
+  }
+  return map
+}
 
 const collectLocalFunctionNames = (program: ESTree.Program): Set<string> => {
   const names = new Set<string>()
@@ -50,18 +108,52 @@ export const workflowSingleFunctionExport = defineRule({
 
     const program = context.sourceCode.ast
     const localFunctionNames = collectLocalFunctionNames(program)
+    const topLevelDeclarations = collectTopLevelDeclarations(program)
     const pendingSpecifierExports: ESTree.ExportNamedDeclaration[] = []
     let functionExportCount = 0
     let lastFunctionExportNode: ESTree.Node | null = null
+    const disallowedExports: Array<{ node: ESTree.Node; name: string }> = []
+
+    const reportDisallowed = (node: ESTree.Node, name: string) => {
+      disallowedExports.push({ node, name })
+    }
 
     return {
       ExportNamedDeclaration(node: ESTree.ExportNamedDeclaration) {
-        if (getExportedWorkflowFunction(node) !== undefined) {
+        if (node.exportKind === 'type') return
+
+        const workflowFn = getExportedWorkflowFunction(node)
+        if (workflowFn !== undefined) {
           functionExportCount += 1
           lastFunctionExportNode = node
-        } else {
-          pendingSpecifierExports.push(node)
+          return
         }
+
+        const declaration = node.declaration
+        if (declaration) {
+          if (declaration.type === 'ClassDeclaration') {
+            if (!isSchemaClassDeclaration(declaration)) {
+              reportDisallowed(declaration, declaration.id?.name ?? 'class')
+            }
+            return
+          }
+          if (declaration.type === 'VariableDeclaration') {
+            for (const decl of declaration.declarations) {
+              if (decl.id.type !== 'Identifier') continue
+              if (!isAllowedValueDeclaration(decl)) {
+                reportDisallowed(decl, decl.id.name)
+              }
+            }
+            return
+          }
+          if (declaration.type === 'TSInterfaceDeclaration' || declaration.type === 'TSTypeAliasDeclaration') {
+            return
+          }
+          reportDisallowed(declaration, 'export')
+          return
+        }
+
+        pendingSpecifierExports.push(node)
       },
       ExportDefaultDeclaration(node: ESTree.ExportDefaultDeclaration) {
         const decl = node.declaration
@@ -72,16 +164,44 @@ export const workflowSingleFunctionExport = defineRule({
         ) {
           functionExportCount += 1
           lastFunctionExportNode = node
+        } else {
+          reportDisallowed(node, 'default')
         }
       },
       'Program:exit'() {
         for (const node of pendingSpecifierExports) {
           for (const spec of node.specifiers) {
-            if (spec.local.type === 'Identifier' && localFunctionNames.has(spec.local.name)) {
+            if (spec.type !== 'ExportSpecifier') continue
+            if (node.exportKind === 'type' || spec.exportKind === 'type') continue
+            if (spec.local.type !== 'Identifier') continue
+            const localName = spec.local.name
+            if (localFunctionNames.has(localName)) {
               functionExportCount += 1
               lastFunctionExportNode = node
+              continue
             }
+            const localDecl = topLevelDeclarations.get(localName)
+            if (localDecl?.type === 'ClassDeclaration') {
+              if (isSchemaClassDeclaration(localDecl)) continue
+            }
+            if (localDecl?.type === 'VariableDeclarator') {
+              if (isAllowedValueDeclaration(localDecl)) continue
+            }
+            reportDisallowed(spec, localName)
           }
+        }
+
+        for (const { node, name } of disallowedExports) {
+          context.report({
+            node,
+            messageId: 'disallowedExport',
+            data: {
+              name,
+              expected: 'only the workflow function, schema classes, S.Union, TypeId symbols, and types',
+              actual: 'exported value',
+              fix: 'move constants, helpers, and steps out of the workflow file',
+            },
+          })
         }
 
         if (functionExportCount !== 1) {

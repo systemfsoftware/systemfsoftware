@@ -33,7 +33,8 @@
   "incrementalFile": "reports/stryker-incremental.json",
   "mutate": [
     "src/rules/**/*.ts",
-    "!src/rules/__tests__/**"
+    "!src/rules/__tests__/**",
+    "!src/rules/**/*.config.ts"
   ],
   "ignorePatterns": [
     "reports",

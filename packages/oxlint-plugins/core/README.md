@@ -7,7 +7,7 @@
 
 Effect enforces a discipline — no classes, no `Date.now()`, no `Set` or `Map`, no barrel exports, no string errors. But the compiler doesn't catch these. And code review catches them too late, one PR at a time, after someone already wrote the wrong thing.
 
-This plugin turns those rules into instant feedback. Wire it into your `oxlint.config.ts`, and every `pnpm lint` run checks every file before commit. Twenty-two rules cover the constitution's pure-core and boundary articles — from `no-classes` and `ban-error-string` to `policy-no-domain-imports` and `no-logging-in-catch`.
+This plugin turns those rules into instant feedback. Wire it into your `oxlint.config.ts`, and every `pnpm lint` run checks every file before commit. Seventeen rules cover the constitution's pure-core and boundary articles — from `ban-classes` and `ban-error-string` to `no-io-boundary-tests` and `no-logging-in-catch`.
 
 ## Quick start
 

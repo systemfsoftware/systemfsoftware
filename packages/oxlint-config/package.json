@@ -16,10 +16,13 @@
   "scripts": {
     "clean": "rimraf dist",
     "typecheck": "tsc --noEmit --incremental",
-    "lint": "oxlint . ${AGENT:+--format=unix --quiet}"
+    "lint": "oxlint . ${AGENT:+--format=unix --quiet}",
+    "test": "vitest run"
   },
   "dependencies": {
     "@systemfsoftware/oxlint-plugin": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-cell-taxonomy": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-effect-dmmf": "workspace:^",
     "@systemfsoftware/oxlint-plugin-effect-executor": "workspace:^",
     "@systemfsoftware/oxlint-plugin-effect-schema": "workspace:^",
     "@systemfsoftware/oxlint-plugin-effect-workflow": "workspace:^",
@@ -31,7 +34,8 @@
   "devDependencies": {
     "@systemfsoftware/tsconfig": "workspace:^",
     "@types/node": "catalog:",
-    "rimraf": "catalog:"
+    "rimraf": "catalog:",
+    "vitest": "catalog:"
   },
   "peerDependencies": {
     "oxlint": "catalog:oxlint"

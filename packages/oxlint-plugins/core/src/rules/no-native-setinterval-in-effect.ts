@@ -1,19 +1,19 @@
-// Stryker disable all
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
 
+import {
+  CLEAR_INTERVAL,
+  DEFAULT_EXPECTED_CLEARINTERVAL,
+  DEFAULT_EXPECTED_SETINTERVAL,
+  EFFECT_MODULE,
+  EFFECT_SCOPED_PREFIX,
+  EFFECT_SOURCE_PREFIX,
+  GLOBAL_OBJECTS,
+  meta,
+  SET_INTERVAL,
+} from './no-native-setinterval-in-effect.config.js'
+
 export type MessageIds = 'forbiddenSetInterval' | 'forbiddenClearInterval'
-
-const DEFAULT_EXPECTED_SETINTERVAL = 'Effect.repeat with Schedule'
-const DEFAULT_EXPECTED_CLEARINTERVAL = 'Effect.fiberId + Fiber.interrupt'
-
-const EFFECT_MODULE = 'effect'
-const EFFECT_SOURCE_PREFIX = 'effect/'
-const EFFECT_SCOPED_PREFIX = '@effect/'
-const SET_INTERVAL = 'setInterval'
-const CLEAR_INTERVAL = 'clearInterval'
-
-const GLOBAL_OBJECTS: ReadonlySet<string> = new Set(['globalThis', 'window', 'self'])
 
 const isEffectImport = (sourceValue: string): boolean =>
   sourceValue === EFFECT_MODULE ||
@@ -31,7 +31,6 @@ const isIntervalMember = (
   !node.computed &&
   node.object.type === 'Identifier' &&
   GLOBAL_OBJECTS.has(node.object.name) &&
-  node.property.type === 'Identifier' &&
   node.property.name === methodName
 
 const isIntervalBracket = (
@@ -56,22 +55,8 @@ const isIntervalAlias = (node: ESTree.Node, aliases: Set<string>): boolean => {
 }
 
 export const noNativeSetIntervalInEffect = defineRule({
-  meta: {
-    type: 'problem',
-    docs: {
-      description:
-        'When Effect is imported, ban native setInterval/clearInterval. Use Effect.repeat with Schedule instead.',
-    },
-    schema: [],
-    messages: {
-      forbiddenSetInterval:
-        'setInterval is forbidden when Effect is imported. Expected: {{expected}}. Actual: setInterval.',
-      forbiddenClearInterval:
-        'clearInterval is forbidden when Effect is imported. Expected: {{expected}}. Actual: clearInterval.',
-    },
-  },
+  meta,
   create(context: Context) {
-    // Stryker restore all
     let hasEffectImport = false
     const setIntervalAliases = new Set<string>()
     const clearIntervalAliases = new Set<string>()

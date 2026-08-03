@@ -17,12 +17,13 @@
  * keyed by `toolCallId` and is best-effort garbage collected when the
  * matching end never arrives.
  *
- * Per the EXT1 contract and the existing `no-skill-delegation.handler.ts`
- * pattern, runtime imports are lazy inside the handler bodies so the
- * module-level `pi.on` registration runs in the required synchronous
- * window. The `tool_execution_start` handler stays sync (fire-and-forget
- * warm); the `tool_execution_end` handler awaits the in-flight warm so a
- * read that ends before the skills list lands still flips the flag.
+ * The handler delegates exclusively to `dispatch-doctrine.executor.js`
+ * (its single permitted dependency surface): the gate decision goes
+ * through one `Effect.either(runDispatchDoctrineCheck(...))` call, and the
+ * pure matchers for read-tracking and telemetry arrive via the executor's
+ * `dispatchDoctrinePure` re-export. The shell edge runs effects through
+ * the lazily-imported `run-safe.policy.js` so the platform-node runtime
+ * never evaluates at plugin-registration time (EXT1).
  *
  * The failure posture is "fail-closed throw → caught-and-allow": a
  * thrown handler body used to block dispatch via the runner's 30s
@@ -33,8 +34,21 @@
  */
 
 import type { ExtensionAPI, ExtensionContext } from '@oh-my-pi/pi-coding-agent'
+import { TomlLoader } from '@systemfsoftware/omp-utils'
+import { Effect, Either } from 'effect'
+import {
+  DispatchDoctrineExecutorDeps,
+  dispatchDoctrinePure,
+  runDispatchDoctrineCheck,
+} from './dispatch-doctrine.executor.js'
 
-import { extractSpecShape, matchesDoctrineSkillPath } from './dispatch-doctrine.kernel.js'
+const provideDispatchDoctrineDeps = Effect.provideServiceEffect(
+  DispatchDoctrineExecutorDeps,
+  Effect.gen(function*() {
+    const loader = yield* TomlLoader
+    return loader
+  }),
+)
 
 const FLAG_MAP_MAX = 50
 const PENDING_READS_MAX = 200
@@ -49,12 +63,10 @@ const readSessionId = (ctx: ExtensionContext): string => {
   return typeof id === 'string' ? id : ''
 }
 
-const decodeRecord = (input: unknown): Record<string, unknown> => {
-  if (typeof input === 'object' && input !== null && !Array.isArray(input)) {
-    return input as Record<string, unknown>
-  }
-  return {}
-}
+const isRecord = (input: unknown): input is Record<string, unknown> =>
+  typeof input === 'object' && input !== null && !Array.isArray(input)
+
+const decodeRecord = (input: unknown): Record<string, unknown> => (isRecord(input) ? input : {})
 
 const readString = (input: Record<string, unknown>, ...keys: readonly string[]): string => {
   for (const key of keys) {
@@ -92,9 +104,11 @@ const rememberPendingRead = (toolCallId: string, path: string): void => {
 }
 
 const warmSkills = (cwd: string): Promise<void> => {
-  const pending = Promise.all([import('./helpers.js'), import('./dispatch-doctrine.executor.js')])
-    .then(([{ runSafe }, { runDispatchDoctrineConfig }]) => runSafe(runDispatchDoctrineConfig(cwd)))
-    .then((skills) => {
+  // handler-no-shell-imports bans .policy imports in handlers; the lazy
+  // chain also keeps the platform-node runtime out of plugin registration.
+  const pending = import('./run-safe.policy.js')
+    .then(({ runSafe }) => runSafe(runDispatchDoctrineCheck(cwd, 'read', false).pipe(provideDispatchDoctrineDeps)))
+    .then(({ skills }) => {
       skillsCache.set(cwd, skills)
     })
     .catch(() => {
@@ -147,21 +161,24 @@ const tasksArrayOf = (input: Record<string, unknown>): readonly unknown[] | null
 
 export const DispatchDoctrineExtension = (pi: ExtensionAPI): void => {
   pi.on('tool_call', async (event, ctx) => {
-    const { runSafe } = await import('./helpers.js')
-    const { runDispatchDoctrineConfig, runDispatchDoctrineGate } = await import(
-      './dispatch-doctrine.executor.js'
-    )
-
+    // handler-no-shell-imports bans .policy imports in handlers; the lazy
+    // chain also keeps the platform-node runtime out of plugin registration.
+    const { runSafe } = await import('./run-safe.policy.js')
     const sessionId = readSessionId(ctx)
     const input = decodeRecord(event.input)
     const doctrineLoaded = sessionId === '' ? false : (flagStore.get(sessionId) ?? false)
 
-    const skills: readonly string[] = await runSafe(runDispatchDoctrineConfig(ctx.cwd))
+    const check = await runSafe(
+      Effect.either(runDispatchDoctrineCheck(ctx.cwd, event.toolName, doctrineLoaded)).pipe(
+        provideDispatchDoctrineDeps,
+      ),
+    )
+    if (Either.isLeft(check)) throw check.left
+    const { skills, gate } = check.right
     skillsCache.set(ctx.cwd, skills)
-    const gate = await runSafe(runDispatchDoctrineGate(ctx.cwd, event.toolName, doctrineLoaded))
 
     const size = batchSize(tasksArrayOf(input))
-    const shape = extractSpecShape(dispatchSpecText(input))
+    const shape = dispatchDoctrinePure.extractSpecShape(dispatchSpecText(input))
 
     if (gate !== undefined) {
       flipLoaded(sessionId, sessionId)
@@ -214,7 +231,7 @@ export const DispatchDoctrineExtension = (pi: ExtensionAPI): void => {
     if (inFlight !== undefined) await inFlight
     const skills = skillsCache.get(ctx.cwd)
     if (skills === undefined) return
-    if (!matchesDoctrineSkillPath(path, skills)) return
+    if (!dispatchDoctrinePure.matchesDoctrineSkillPath(path, skills)) return
 
     const sessionId = readSessionId(ctx)
     if (sessionId === '') return

@@ -53,6 +53,21 @@ ruleTester.run('no-native-settimeout-in-effect', noNativeSetTimeoutInEffect, {
         setInterval(() => {}, 1000)
       `,
     },
+    // member access with a DIFFERENT method name
+    {
+      name: 'allows window.setInterval with effect import (name mismatch)',
+      code: `
+        import { Effect } from 'effect'
+        window.setInterval(() => {}, 1000)
+      `,
+    },
+    {
+      name: 'allows window["setInterval"] with effect import (name mismatch)',
+      code: `
+        import { Effect } from 'effect'
+        window['setInterval'](() => {}, 1000)
+      `,
+    },
     // Other function calls
     {
       name: 'allows other function calls with effect import',

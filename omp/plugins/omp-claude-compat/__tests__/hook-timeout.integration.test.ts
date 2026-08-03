@@ -1,21 +1,31 @@
 import { NodeCommandExecutor, NodeFileSystem } from '@effect/platform-node'
 import { FileSystem } from '@effect/platform/FileSystem'
 import * as PathModule from '@effect/platform/Path'
+import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer } from 'effect'
-import { expect, it } from 'vitest'
+import { expect } from 'vitest'
 import { loadSettingsWithPaths, runHookScript, runPreCompactHooks } from '../src/hook-dispatcher.executor.js'
+import { HookScopeLive } from '../src/hook-runtime.state.js'
 
-/**
- * Plain vitest rather than the Gherkin harness on purpose: harness scenarios
- * run on @effect/vitest's TestClock, where `Effect.timeout` never elapses, so
- * a hook timeout can only be exercised on the real runtime.
- */
-const testLayer = NodeCommandExecutor.layer.pipe(
-  Layer.provideMerge(NodeFileSystem.layer),
-  Layer.provideMerge(PathModule.layer),
+const Feature = makeFeature({ it, layer })
+
+const testLayer = HookScopeLive.pipe(
+  Layer.provideMerge(
+    NodeCommandExecutor.layer.pipe(
+      Layer.provideMerge(NodeFileSystem.layer),
+      Layer.provideMerge(PathModule.layer),
+    ),
+  ),
 )
 
-const runSlowHook = (timeout: number | undefined, sleepSeconds = 1) =>
+const runWithRealClock = <A, E, R>(effect: Effect.Effect<A, E, R>): Promise<A> =>
+  Effect.runPromise(
+    Effect.tryPromise(() =>
+      Effect.runPromise(effect.pipe(Effect.scoped, Effect.provide(testLayer)) as Effect.Effect<A, never, never>)
+    ),
+  )
+const runSlowHook = (timeout: number | undefined, sleepSeconds: number) =>
   Effect.gen(function*() {
     const fs = yield* FileSystem
     const dir = yield* fs.makeTempDirectoryScoped()
@@ -23,51 +33,7 @@ const runSlowHook = (timeout: number | undefined, sleepSeconds = 1) =>
     yield* fs.writeFileString(hookPath, `#!/usr/bin/env bash\nsleep ${sleepSeconds}\nexit 2\n`)
     yield* fs.chmod(hookPath, 0o755)
     return yield* runHookScript({ type: 'command', command: hookPath, timeout }, {}, dir, 'PreToolUse')
-  }).pipe(Effect.scoped, Effect.provide(testLayer), Effect.runPromise)
-
-it('Should_KillTheHook_When_ItOutlivesItsTimeout', async () => {
-  const result = await runSlowHook(0.3)
-
-  expect(result.code).toBe(-1)
-  expect(result.stderr).toContain('300ms')
-})
-
-it('Should_ReadTimeoutAsSeconds_When_TheHookFitsInsideIt', async () => {
-  // 5 as milliseconds would kill a one-second hook; as seconds it survives.
-  const result = await runSlowHook(5)
-
-  expect(result.code).toBe(2)
-})
-
-it('Should_LetAHookOutliveTenSeconds_When_ItSetsNoTimeout', async () => {
-  const result = await runSlowHook(undefined, 10.5)
-
-  expect(result.code).toBe(2)
-}, 25_000)
-
-it('Should_LeaveCompactionRunning_When_ThePreCompactHookTimesOut', async () => {
-  const outcome = await Effect.gen(function*() {
-    const fs = yield* FileSystem
-    const dir = yield* fs.makeTempDirectoryScoped()
-    const hookPath = `${dir}/stall.sh`
-    yield* fs.writeFileString(hookPath, '#!/usr/bin/env bash\nsleep 5\nexit 2\n')
-    yield* fs.chmod(hookPath, 0o755)
-    yield* fs.makeDirectory(`${dir}/.claude`, { recursive: true })
-    yield* fs.writeFileString(
-      `${dir}/.claude/settings.json`,
-      JSON.stringify({ hooks: { PreCompact: [{ hooks: [{ type: 'command', command: hookPath, timeout: 0.3 }] }] } }),
-    )
-    const settings = yield* loadSettingsWithPaths([`${dir}/.claude/settings.json`])
-    return settings === null ? undefined : yield* runPreCompactHooks(settings, {
-      cwd: dir,
-      sessionManager: { getSessionId: () => 'test-session' },
-      ui: { notify: () => {} },
-    })
-  }).pipe(Effect.scoped, Effect.provide(testLayer), Effect.runPromise)
-
-  expect(outcome).toBeDefined()
-  expect(outcome?.block).toBeUndefined()
-})
+  }).pipe(Effect.scoped, Effect.provide(testLayer))
 
 const runNoisyHook = (stderrBytes: number, timeoutSeconds: number) =>
   Effect.gen(function*() {
@@ -85,15 +51,7 @@ const runNoisyHook = (stderrBytes: number, timeoutSeconds: number) =>
       dir,
       'PreToolUse',
     )
-  }).pipe(Effect.scoped, Effect.provide(testLayer), Effect.runPromise)
-
-it('Should_DrainBothPipesConcurrently_When_StderrOutgrowsThePipeBuffer', async () => {
-  const result = await runNoisyHook(1_000_000, 8)
-
-  expect(result.code).toBe(0)
-  expect(result.stdout.trim()).toBe('done')
-  expect(result.stderr.length).toBe(1_000_000)
-}, 30_000)
+  }).pipe(Effect.scoped, Effect.provide(testLayer))
 
 const runTermIgnoringHook = (timeoutSeconds: number) =>
   Effect.gen(function*() {
@@ -108,13 +66,129 @@ const runTermIgnoringHook = (timeoutSeconds: number) =>
       dir,
       'PreToolUse',
     )
-  }).pipe(Effect.scoped, Effect.provide(testLayer), Effect.runPromise)
+  }).pipe(Effect.scoped, Effect.provide(testLayer))
 
-it('Should_EscalateToSigkill_When_TheHookIgnoresSigtermAndOutlivesItsTimeout', async () => {
-  const started = Date.now()
-  const result = await runTermIgnoringHook(1)
-  const elapsedMs = Date.now() - started
+const runPreCompact = (timeoutSeconds: number) =>
+  Effect.gen(function*() {
+    const fs = yield* FileSystem
+    const dir = yield* fs.makeTempDirectoryScoped()
+    const hookPath = `${dir}/stall.sh`
+    yield* fs.writeFileString(hookPath, '#!/usr/bin/env bash\nsleep 5\nexit 2\n')
+    yield* fs.chmod(hookPath, 0o755)
+    yield* fs.makeDirectory(`${dir}/.claude`, { recursive: true })
+    yield* fs.writeFileString(
+      `${dir}/.claude/settings.json`,
+      JSON.stringify({
+        hooks: { PreCompact: [{ hooks: [{ type: 'command', command: hookPath, timeout: timeoutSeconds }] }] },
+      }),
+    )
+    const settings = yield* loadSettingsWithPaths([`${dir}/.claude/settings.json`])
+    if (settings === null) return undefined
+    return yield* runPreCompactHooks(settings, {
+      cwd: dir,
+      sessionManager: { getSessionId: () => 'test-session' },
+      ui: { notify: () => {} },
+    })
+  }).pipe(Effect.scoped, Effect.provide(testLayer))
 
-  expect(result.code).toBe(-1)
-  expect(elapsedMs).toBeLessThan(15_000)
-}, 45_000)
+Feature('Hook dispatcher — timeout enforcement on detached processes', { timeout: 30_000 })
+  .withLayer(testLayer)
+  .liveClock()
+  .body(({ scenario }) => {
+    scenario(
+      'A hook outliving its timeout is interrupted',
+      Gherkin.Do.pipe(
+        Given('a sleeping hook with a 300 ms timeout')(
+          'result',
+          () => Effect.tryPromise(() => runWithRealClock(runSlowHook(0.3, 1))),
+        ),
+        Then('the run reports it was killed by the timeout')((s) =>
+          Effect.sync(() => {
+            expect(s.result.code).toBe(-1)
+            expect(s.result.stderr).toContain('300ms')
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'A hook that fits inside its timeout exits on its own',
+      Gherkin.Do.pipe(
+        Given('a sleeping hook with a five-second timeout')(
+          'result',
+          () => Effect.tryPromise(() => runWithRealClock(runSlowHook(5, 1))),
+        ),
+        Then("the run returns the hook's own exit code")((s) =>
+          Effect.sync(() => {
+            expect(s.result.code).toBe(2)
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'A hook with no configured timeout is allowed to run to completion',
+      Gherkin.Do.pipe(
+        Given('an eleven-second hook with no timeout')(
+          'result',
+          () => Effect.tryPromise(() => runWithRealClock(runSlowHook(undefined, 10.5))),
+        ),
+        Then("the run returns the hook's own exit code")((s) =>
+          Effect.sync(() => {
+            expect(s.result.code).toBe(2)
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'A PreCompact hook that times out does not block compaction',
+      Gherkin.Do.pipe(
+        Given('a stalling PreCompact hook with a 300 ms timeout')(
+          'outcome',
+          () => Effect.tryPromise(() => runWithRealClock(runPreCompact(0.3))),
+        ),
+        Then('compaction is allowed to continue without a block')((s) =>
+          Effect.sync(() => {
+            expect(s.outcome).toBeDefined()
+            expect(s.outcome?.block).toBeUndefined()
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'A hook that writes past the pipe buffer is fully drained',
+      Gherkin.Do.pipe(
+        Given('a hook writing a million bytes of stderr under an eight-second timeout')(
+          'result',
+          () => Effect.tryPromise(() => runWithRealClock(runNoisyHook(1_000_000, 8))),
+        ),
+        Then('both pipes are drained and stdout arrives intact')((s) =>
+          Effect.sync(() => {
+            expect(s.result.code).toBe(0)
+            expect(s.result.stdout.trim()).toBe('done')
+            expect(s.result.stderr.length).toBe(1_000_000)
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'A hook that ignores SIGTERM is killed when the scope closes',
+      Gherkin.Do.pipe(
+        Given('the wall clock is read before the call')('started', () => Effect.sync(() => Date.now())),
+        When('a deaf hook is run under a one-second timeout')(
+          'result',
+          () => Effect.tryPromise(() => runWithRealClock(runTermIgnoringHook(1))),
+        ),
+        Then('the run reports it was killed and the wall-clock wait stays under fifteen seconds')((s) =>
+          Effect.sync(() => {
+            const elapsedMs = Date.now() - s.started
+            expect(s.result.code).toBe(-1)
+            expect(elapsedMs).toBeLessThan(15_000)
+          })
+        ),
+      ),
+    )
+  })

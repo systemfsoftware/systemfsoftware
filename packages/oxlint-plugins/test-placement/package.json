@@ -44,7 +44,7 @@
     "format": "dprint fmt",
     "test": "vitest run",
     "test:run": "vitest run --coverage",
-    "mutation": "stryker run --incremental",
+    "mutation": "stryker run",
     "mutation:full": "stryker run",
     "lint": "oxlint . ${AGENT:+--format=unix --quiet}",
     "attw": "attw --pack .",

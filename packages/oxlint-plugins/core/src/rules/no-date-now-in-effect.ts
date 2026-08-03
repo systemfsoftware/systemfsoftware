@@ -1,15 +1,18 @@
-// Stryker disable all
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
 
-export type MessageIds = 'forbiddenDateNow'
+import {
+  DATE_NAME,
+  DEFAULT_EXPECTED,
+  EFFECT_MODULE,
+  EFFECT_SCOPED_PREFIX,
+  EFFECT_SOURCE_PREFIX,
+  meta,
+  NOW_NAME,
+  TEST_FILE_SUFFIX,
+} from './no-date-now-in-effect.config.js'
 
-const DEFAULT_EXPECTED = 'yield* Clock.currentTimeMillis (Clock from effect)'
-const EFFECT_MODULE = 'effect'
-const EFFECT_SOURCE_PREFIX = 'effect/'
-const EFFECT_SCOPED_PREFIX = '@effect/'
-const DATE_NAME = 'Date'
-const NOW_NAME = 'now'
+export type MessageIds = 'forbiddenDateNow'
 
 const isEffectImport = (sourceValue: string): boolean =>
   sourceValue === EFFECT_MODULE ||
@@ -20,30 +23,18 @@ const isTestPath = (filename: string): boolean =>
   filename.includes('/__tests__/') ||
   filename.includes('/test/') ||
   filename.includes('/tests/') ||
-  /\.(test|spec)\.[cm]?tsx?$/.test(filename)
+  TEST_FILE_SUFFIX.test(filename)
 
 const isDateNowCallee = (callee: ESTree.Node): boolean =>
   callee.type === 'MemberExpression' &&
   callee.object.type === 'Identifier' &&
   callee.object.name === DATE_NAME &&
-  ((!callee.computed && callee.property.type === 'Identifier' && callee.property.name === NOW_NAME) ||
+  ((!callee.computed && callee.property.name === NOW_NAME) ||
     (callee.computed && callee.property.type === 'Literal' && callee.property.value === NOW_NAME))
 
 export const noDateNowInEffect = defineRule({
-  meta: {
-    type: 'problem',
-    docs: {
-      description:
-        'When Effect is imported, ban Date.now() (including inside Effect.sync). A clock read is an effect — use Clock.currentTimeMillis so it is controllable under TestClock.',
-    },
-    schema: [],
-    messages: {
-      forbiddenDateNow:
-        'Date.now() is forbidden when Effect is imported. Expected: {{expected}}. Wrapping it as Effect.sync(() => Date.now()) is not an escape hatch — take the clock from the runtime.',
-    },
-  },
+  meta,
   create(context: Context) {
-    // Stryker restore all
     if (isTestPath(context.filename)) {
       return {}
     }

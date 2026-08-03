@@ -12,7 +12,7 @@
       "default": "./dist/index.js"
     },
     "./runtime-lifecycle": {
-      "@systemfsoftware/source": "./src/runtime-lifecycle.handler.ts",
+      "@systemfsoftware/source": "./src/runtime-lifecycle.middleware.ts",
       "default": "./dist/runtime-lifecycle.js"
     },
     "./package.json": "./package.json"
@@ -25,20 +25,14 @@
     "build": "rimraf dist && tsdown",
     "typecheck": "tsc --noEmit --incremental",
     "test": "vitest run",
-    "lint": "oxlint . ${AGENT:+--format=unix --quiet}",
-    "mutation": "stryker run --incremental",
-    "mutation:full": "stryker run"
+    "lint": "oxlint . ${AGENT:+--format=unix --quiet}"
   },
   "devDependencies": {
     "@effect/platform": "catalog:",
     "@effect/vitest": "catalog:",
-    "@stryker-mutator/vitest-runner": "catalog:stryker",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/effect-memfs": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
-    "@systemfsoftware/stryker-js-core": "workspace:^",
-    "@systemfsoftware/stryker-js-typescript-checker": "workspace:^",
-    "@systemfsoftware/stryker-plugins": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@types/node": "catalog:",
     "effect": "catalog:",

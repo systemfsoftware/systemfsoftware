@@ -1,16 +1,16 @@
 import { Match, Option, ParseResult, Schema as S } from 'effect'
-import type { BridgedEvent } from './hook-catalog.schema.js'
+import type { BridgedEvent, MatcherReach } from './hook-catalog.shape.js'
 import {
   ALL_CLAUDE_CODE_EVENTS,
   BRIDGED_EVENTS,
   DISABLED_ALL_REASON,
   MATCHER_REACH,
   NON_EVALUABLE_MATCHERS,
+  TOOL_EVENTS,
   UNBRIDGED_REASONS,
   UNRECOGNIZED_KEY_REASON,
   WRAPPED_SHADOW_REASON,
-} from './hook-catalog.schema.js'
-import type { MatcherReach } from './hook-catalog.schema.js'
+} from './hook-catalog.shape.js'
 
 const CommandHook = S.Struct({
   type: S.Literal('command'),
@@ -62,12 +62,23 @@ const HookGroups = S.Struct({
   PostCompact: S.optionalWith(S.Array(HookEntry), { exact: true, default: () => [] }),
 })
 
-const SettingsWrapped = S.Struct({
+export const SettingsWrapped = S.Struct({
   hooks: HookGroups,
   disableAllHooks: S.optional(S.Boolean),
 })
 
 export type HookSettings = S.Schema.Type<typeof SettingsWrapped>
+
+export const HookCoverageRowSchema = S.Struct({ event: S.String, reason: S.String })
+
+export const HookCoverageSchema = S.Struct({
+  unrecognized: S.Array(HookCoverageRowSchema),
+  notCarried: S.Array(HookCoverageRowSchema),
+  matcherNotEvaluable: S.Array(HookCoverageRowSchema),
+  matcherOutOfReach: S.Array(HookCoverageRowSchema),
+  shadowed: S.Array(HookCoverageRowSchema),
+  disabled: S.Array(HookCoverageRowSchema),
+})
 
 const SettingsFlat = S.Struct({
   ...HookGroups.fields,
@@ -93,8 +104,35 @@ const SettingsJSON = S.Union(SettingsWrapped, LiftFlatSettingsACL)
 
 export const parseSettings = S.decodeUnknownEither(SettingsJSON)
 
-/** The events this bridge runs. Recognizing an event is a separate question, answered by the catalog. */
-export const ALL_HOOK_EVENTS = BRIDGED_EVENTS
+// ── Settings analysis ──
+
+export interface HookCoverageRow {
+  readonly event: string
+  readonly reason: string
+}
+
+export interface HookCoverage {
+  readonly unrecognized: readonly HookCoverageRow[]
+  readonly notCarried: readonly HookCoverageRow[]
+  readonly matcherNotEvaluable: readonly HookCoverageRow[]
+  readonly matcherOutOfReach: readonly HookCoverageRow[]
+  readonly shadowed: readonly HookCoverageRow[]
+  readonly disabled: readonly HookCoverageRow[]
+}
+
+export interface DisableSource {
+  readonly settings: HookSettings
+  readonly managed: boolean
+  readonly label: string
+}
+
+export interface SettingsSource {
+  readonly settings: HookSettings
+  /** Read from the managed-settings path, which downstream files may not disable. */
+  readonly managed: boolean
+}
+
+const ALL_HOOK_EVENTS: readonly BridgedEvent[] = BRIDGED_EVENTS
 type HookEvent = BridgedEvent
 
 const asRecord = S.decodeUnknownOption(S.Record({ key: S.String, value: S.Unknown }))
@@ -142,20 +180,6 @@ function settingsNamespace(json: unknown): Option.Option<{
  */
 const displayable = (value: string): string => value.replaceAll(/[\p{Cc}\p{Cf}]/gu, '\uFFFD')
 
-export interface HookCoverageRow {
-  readonly event: string
-  readonly reason: string
-}
-
-export interface HookCoverage {
-  readonly unrecognized: readonly HookCoverageRow[]
-  readonly notCarried: readonly HookCoverageRow[]
-  readonly matcherNotEvaluable: readonly HookCoverageRow[]
-  readonly matcherOutOfReach: readonly HookCoverageRow[]
-  readonly shadowed: readonly HookCoverageRow[]
-  readonly disabled: readonly HookCoverageRow[]
-}
-
 const EMPTY_COVERAGE: HookCoverage = {
   unrecognized: [],
   notCarried: [],
@@ -168,6 +192,7 @@ const EMPTY_COVERAGE: HookCoverage = {
 const CATALOG_EVENTS: readonly string[] = ALL_CLAUDE_CODE_EVENTS
 const UNBRIDGED_LOOKUP: Readonly<Record<string, string>> = UNBRIDGED_REASONS
 const NON_EVALUABLE_LOOKUP: Readonly<Record<string, string>> = NON_EVALUABLE_MATCHERS
+const IF_EVALUATING_EVENTS: readonly string[] = TOOL_EVENTS
 const REACH_LOOKUP: Readonly<Record<string, Readonly<Record<string, MatcherReach>>>> = MATCHER_REACH
 
 const declaredMatchers = (value: unknown): readonly string[] =>
@@ -191,7 +216,7 @@ const reachGap = (reach: MatcherReach): Option.Option<string> =>
  * read, and a matcher that names a moment OMP cannot reach. Collapsing them is
  * what made the old report call a correct settings file wrong.
  */
-export function hookCoverage(json: unknown): HookCoverage {
+function hookCoverage(json: unknown): HookCoverage {
   return Option.match(settingsNamespace(json), {
     onNone: () => EMPTY_COVERAGE,
     onSome: ({ isWrapped, namespace, outer }) => {
@@ -247,19 +272,13 @@ export function hookCoverage(json: unknown): HookCoverage {
   })
 }
 
-export interface DisableSource {
-  readonly settings: HookSettings
-  readonly managed: boolean
-  readonly label: string
-}
-
 /**
  * Hooks a settings file switches off, which the per-file scan above cannot see:
  * `disableAllHooks` in any non-managed file drops the hooks of every other
  * non-managed file, so a hook can vanish because of a file its author never
  * opened. The merge is the only place that decision exists.
  */
-export function disabledCoverage(sources: readonly DisableSource[]): readonly HookCoverageRow[] {
+function disabledCoverage(sources: readonly DisableSource[]): readonly HookCoverageRow[] {
   const disabler = sources.find((s) => !s.managed && s.settings.disableAllHooks === true)
   if (disabler === undefined) return []
   const reason = `${DISABLED_ALL_REASON} ${displayable(disabler.label)}`
@@ -270,7 +289,7 @@ export function disabledCoverage(sources: readonly DisableSource[]): readonly Ho
 }
 
 /** Hook transports present in the settings that the dispatcher will skip. */
-export function unsupportedHookTypes(json: unknown): readonly string[] {
+function unsupportedHookTypes(json: unknown): readonly string[] {
   return Option.match(settingsNamespace(json), {
     onNone: () => [],
     onSome: ({ namespace }) => {
@@ -288,19 +307,13 @@ export function unsupportedHookTypes(json: unknown): readonly string[] {
   })
 }
 
-export interface SettingsSource {
-  readonly settings: HookSettings
-  /** Read from the managed-settings path, which downstream files may not disable. */
-  readonly managed: boolean
-}
-
 /**
  * Resolve one effective hook set. Claude Code protects managed hooks: a
  * `disableAllHooks` outside managed settings must not switch them off, and only
  * a managed one turns everything off. Disabling is settled here, so no caller
  * downstream has to re-check it.
  */
-export function mergeSettings(sources: readonly SettingsSource[]): HookSettings {
+function mergeSettings(sources: readonly SettingsSource[]): HookSettings {
   /**
    * Annotation and `satisfies` guard opposite directions: a bridged event with
    * no `HookGroups` field fails the annotation, a `HookGroups` field no longer
@@ -329,4 +342,42 @@ export function mergeSettings(sources: readonly SettingsSource[]): HookSettings 
   }
 
   return { hooks }
+}
+
+export type SettingsAnalysisCommand =
+  | { readonly _tag: 'Merge'; readonly sources: readonly SettingsSource[] }
+  | { readonly _tag: 'Coverage'; readonly json: unknown }
+  | { readonly _tag: 'DisabledCoverage'; readonly sources: readonly DisableSource[] }
+  | { readonly _tag: 'UnsupportedHookTypes'; readonly json: unknown }
+  | { readonly _tag: 'MatcherUnreadable'; readonly event: string }
+  | { readonly _tag: 'IfEvaluatingEvent'; readonly event: string }
+
+type SettingsAnalysisValue =
+  | HookSettings
+  | HookCoverage
+  | readonly HookCoverageRow[]
+  | readonly string[]
+  | boolean
+
+function analyzeSettingsCommand(cmd: SettingsAnalysisCommand): SettingsAnalysisValue {
+  return Match.value(cmd).pipe(
+    Match.tag('Merge', ({ sources }) => mergeSettings(sources)),
+    Match.tag('Coverage', ({ json }) => hookCoverage(json)),
+    Match.tag('DisabledCoverage', ({ sources }) => disabledCoverage(sources)),
+    Match.tag('UnsupportedHookTypes', ({ json }) => unsupportedHookTypes(json)),
+    Match.tag('MatcherUnreadable', ({ event }) => NON_EVALUABLE_LOOKUP[event] !== undefined),
+    Match.tag('IfEvaluatingEvent', ({ event }) => IF_EVALUATING_EVENTS.includes(event)),
+    Match.exhaustive,
+  )
+}
+
+/**
+ * Run one settings-analysis operation. The caller names the result schema so
+ * the command's result type is checked against the value it actually returns.
+ */
+export function analyzeSettings<A, I>(
+  cmd: SettingsAnalysisCommand,
+  resultSchema: S.Schema<A, I, never>,
+): A {
+  return S.decodeUnknownSync(resultSchema)(analyzeSettingsCommand(cmd))
 }

@@ -32,26 +32,33 @@ Effect-TS libraries + the oxlint plugin enforcing the constitution (at `repos/co
   dont: edit package.json#exports or publishConfig.exports directly
   harm: exports drift from build output
   check: exports changes come from tsdown.config.ts only
+
+- id: REPO-S5
+  title: NEVER put a non-workflow cell in a mutation surface
+  do: mutate `*.workflow.ts` — the one cell whose observer is the mutator; `*.schema.ts` is permitted, never required (generated schema laws already cover it)
+  dont: add `*.executor.ts`, `*.kernel.ts`, `*.acl.ts`, `*.store.ts`, `*.handler.ts`, `*.middleware.ts`, `*.state.ts`, `*.adapter.ts`, `*.policy.ts`, `*.shape.ts`, or `*.observer.ts` to any `mutate` glob; never leave `mutate` unset (the Stryker default sweeps every source file and auto-enrolls each new cell); never keep a mutation config in a package with no workflow
+  harm: wrong observer. The mutator asks "do the tests notice a changed decision?" — a shell cell decides nothing, so every mutant is equivalent or is killed by a composition test that was proving something else; the score certifies nothing and the package pays hours of runtime for it
+  check: node scripts/guard-mutate-scope.mjs exits 0 (wired into pnpm check); shell cells stay gated by lint provenance + composition tests, kernels by colocated K-law property tests
 ```
 
 ## Stack
 
-| Concern  | Tool                                   | Note                                                              |
-| -------- | -------------------------------------- | ----------------------------------------------------------------- |
-| Pkg mgr  | pnpm                                   | `pnpm --filter <pkg> <cmd>` from root; **never** `cd`. No `npx`.  |
-| Types    | tsc + api-extractor                    | `pnpm api:check` runs for every package with `api-extractor.json` |
-| Build    | tsdown + turbo                         | ESM (`.mjs` + tsc dts). Build via `pnpm turbo build`.             |
-| Tests    | Vitest + `@effect/vitest` + fast-check | PBT on pure core; composition through I/O sandwich.               |
-| Mutation | Stryker (typescript-checker)           | Targets pure-core files.                                          |
-| Lint     | oxlint (self-hosted) + dprint          | Self-hosted: `@systemfsoftware/oxlint-plugin` lints itself.       |
+| Concern  | Tool                                   | Note                                                                                                                                                                                                                                                                   |
+| -------- | -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Pkg mgr  | pnpm                                   | `pnpm --filter <pkg> <cmd>` from root; **never** `cd`. No `npx`.                                                                                                                                                                                                       |
+| Types    | tsc + api-extractor                    | `pnpm api:check` runs for every package with `api-extractor.json`                                                                                                                                                                                                      |
+| Build    | tsdown + turbo                         | ESM (`.mjs` + tsc dts). Build via `pnpm turbo build`.                                                                                                                                                                                                                  |
+| Tests    | Vitest + `@effect/vitest` + fast-check | PBT on pure core; composition through I/O sandwich.                                                                                                                                                                                                                    |
+| Mutation | Stryker (typescript-checker)           | `*.workflow.ts` only; `*.schema.ts` optional. Gate: `pnpm check:mutate-scope` (REPO-S5).                                                                                                                                                                               |
+| Lint     | oxlint + dprint                        | Per-package `oxlint.config.ts` extending `@systemfsoftware/oxlint-config`. Registration is NOT delivery: a rule reaches only packages that opt in. Gate: `pnpm check:lint-coverage`, which also DEFINES production vs tooling — never re-derive that boundary by hand. |
 
 ## Surface Classes
 
-| Surface              | Examples                                                                                               | Rule                                                                                                                                                                                                                                                                                      |
-| -------------------- | ------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Locked**           | `AGENTS.md`, `repos/`, `.github/workflows/`, evaluation scripts (`scripts/test-contribution.mjs`)      | Read and propose changes, but do not edit to make verification pass.                                                                                                                                                                                                                      |
-| **Editable**         | `packages/*/`, `scripts/`, `docs/solutions/`, `tsdown.config.ts`, `dprint.json`, `pnpm-workspace.yaml` | Edit freely within the active task. `docs/solutions/` holds documented solutions to past problems (bugs, best practices, workflow patterns), organized by category with YAML frontmatter (`module`, `tags`, `problem_type`); relevant when implementing or debugging in documented areas. |
-| **Human-controlled** | Merge to `main`, publish, deploy, destructive ops, credentials                                         | Ask the user before acting.                                                                                                                                                                                                                                                               |
+| Surface              | Examples                                                                                                                                                               | Rule                                                                                                                                                                                                                                                                                      |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Locked**           | `AGENTS.md`, `repos/`, `.github/workflows/`, evaluation scripts (`scripts/test-contribution.mjs`, `scripts/guard-mutate-scope.mjs`, `scripts/check-lint-coverage.mjs`) | Read and propose changes, but do not edit to make verification pass.                                                                                                                                                                                                                      |
+| **Editable**         | `packages/*/`, `scripts/` (EXCEPT the evaluation scripts named Locked above), `docs/solutions/`, `tsdown.config.ts`, `dprint.json`, `pnpm-workspace.yaml`              | Edit freely within the active task. `docs/solutions/` holds documented solutions to past problems (bugs, best practices, workflow patterns), organized by category with YAML frontmatter (`module`, `tags`, `problem_type`); relevant when implementing or debugging in documented areas. |
+| **Human-controlled** | Merge to `main`, publish, deploy, destructive ops, credentials                                                                                                         | Ask the user before acting.                                                                                                                                                                                                                                                               |
 
 ## Startup Workflow
 
@@ -162,6 +169,25 @@ This root file holds workspace-wide invariants only. Directories with distinct b
 - If a rule in this file applies to exactly one directory, move it to that directory's leaf.
 
 Leaf `AGENTS.md` lives wherever a directory has distinct checks or constraints. Discover via `glob packages/*/AGENTS.md` and `glob packages/stryker-js/*/AGENTS.md`. Vendored exception: `repos/constitution/` — read-only, changes go upstream.
+
+## Release Policy
+
+```yaml
+- id: REPO-R1
+  title: Everything is ALPHA; breaking changes are mandatory
+  do:
+    - treat every package as pre-1.0 ALPHA — API stability is never a design constraint
+    - when a change is cleaner as a break, make the break; the better API wins over compatibility
+    - accept and implement proposed breaking changes without resistance
+    - record each break with the `api!` marker or `BREAKING CHANGE:` footer (commitlint already accepts both)
+  dont:
+    - preserve backwards compatibility at the cost of design
+    - push back on, delay, or soften a proposed breaking change
+    - wait for a "major release" to make a break
+    - mark any package stable or 1.0 while this rule stands
+  harm: APIs calcify around designs nobody believes in; 0.x compatibility debt accumulates until a forced, painful rewrite
+  check: review — a compatibility objection to a break is rejected unless it names a concrete in-repo consumer migration; breaks still pass REPO-D1 and REPO-A3
+```
 
 ## Commits
 

@@ -1,5 +1,4 @@
 import base from '@systemfsoftware/oxlint-config/base'
-import testPlacement from '@systemfsoftware/oxlint-plugin-test-placement'
 import { defineConfig } from 'oxlint'
 
 /**
@@ -16,8 +15,6 @@ export default defineConfig({
   extends: [base],
 
   rules: {
-    ...testPlacement.configs.recommended.rules,
-
     // A condition that cannot change the outcome is a dead branch: the mutation
     // gate reports it as a survivor that no test can kill.
     'typescript/no-unnecessary-condition': 'error',

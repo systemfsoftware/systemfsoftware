@@ -1,4 +1,4 @@
-import { Either, Option, Schema as S } from 'effect'
+import { Effect, ParseResult, Schema as S } from 'effect'
 
 const ParsedHookOutputSchema = S.Struct({
   decision: S.optional(S.String),
@@ -15,18 +15,19 @@ const ParsedHookOutputSchema = S.Struct({
 
 type ParsedHookOutput = S.Schema.Type<typeof ParsedHookOutputSchema>
 
-export const parseHookOutput = S.decodeUnknownEither(S.parseJson(ParsedHookOutputSchema))
-
 /**
- * Claude Code hooks reference, "How async hooks execute": only
- * `hookSpecificOutput.additionalContext` reaches the model. Plain stdout is
- * debug-log only. Relay it anyway and a formatter's banner lands in the next
- * prompt as if the user typed it.
+ * The crossing at the hook boundary: the child process's stdout (foreign wire
+ * text) into the domain's parsed hook output. Decode-only — the bridge never
+ * writes hook output back to a string, so encoding is Forbidden.
  */
-export const asyncHookContext = (stdout: string): Option.Option<string> =>
-  Either.match(parseHookOutput(stdout), {
-    onLeft: () => Option.none(),
-    onRight: (parsed) => Option.fromNullable(parsed.hookSpecificOutput?.additionalContext),
-  })
+const HookOutputFromStdout = S.transformOrFail(S.String, ParsedHookOutputSchema, {
+  strict: true,
+  decode: (stdout) =>
+    Effect.mapError(S.decodeUnknown(S.parseJson(ParsedHookOutputSchema))(stdout), (error) => error.issue),
+  encode: (parsed, _options, ast) =>
+    ParseResult.fail(new ParseResult.Forbidden(ast, parsed, 'Decode-only: hook stdout is never encoded')),
+})
+
+export const parseHookOutput = S.decodeUnknownEither(HookOutputFromStdout)
 
 export type { ParsedHookOutput }

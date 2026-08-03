@@ -71,12 +71,21 @@ ruleTester.run('no-inline-destructured-type', noInlineDestructuredType, {
       options: [{ allowUtilityTypes: true }],
     },
     {
+      name: 'Should_Pass_When_PrimitiveTypeAnnotation_With_AllowUtilityTypes_False',
+      code: `function fn(x: string) {}`,
+      options: [{ allowUtilityTypes: false }],
+    },
+    {
       name: 'Should_Pass_When_ConstructorParameterProperty',
       code: `class Foo { constructor(public name: string) {} }`,
     },
     {
       name: 'Should_Pass_When_DefaultParamWithNamedType',
       code: `function fn({ id }: User = { id: '1' }) {}`,
+    },
+    {
+      name: 'Should_Pass_When_PrimitiveTypeAnnotation',
+      code: `function fn(id: string) {}`,
     },
     {
       name: 'Should_Pass_When_DefaultParamWithoutTypeAnnotation',

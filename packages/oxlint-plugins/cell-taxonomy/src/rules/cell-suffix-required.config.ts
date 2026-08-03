@@ -23,6 +23,9 @@ export const SRC_DIR = 'src' as const
 
 export const DECLARATION_SEGMENT = 'd' as const
 
+/** A generated artifact cannot be renamed to name a cell, so the suffix rule must exempt it. */
+export const GENERATED_SEGMENT = 'generated' as const
+
 /** Test filenames belong to the test-placement plugin, which is their sole owner. */
 export const TEST_SEGMENTS: ReadonlySet<string> = new Set(['test', 'spec'])
 

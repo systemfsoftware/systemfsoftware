@@ -1,7 +1,4 @@
-import effectExecutor from '@systemfsoftware/oxlint-plugin-effect-executor'
-import effectSchema from '@systemfsoftware/oxlint-plugin-effect-schema'
-import effectWorkflow from '@systemfsoftware/oxlint-plugin-effect-workflow'
-import propertyTesting from '@systemfsoftware/oxlint-plugin-property-testing'
+import effectDmmf from '@systemfsoftware/oxlint-plugin-effect-dmmf'
 import { defineConfig } from 'oxlint'
 
 export default defineConfig({
@@ -17,12 +14,7 @@ export default defineConfig({
 
   jsPlugins: [
     import.meta.resolve('@systemfsoftware/oxlint-plugin'),
-    import.meta.resolve('@systemfsoftware/oxlint-plugin-test-hygiene'),
-    import.meta.resolve('@systemfsoftware/oxlint-plugin-property-testing'),
-    import.meta.resolve('@systemfsoftware/oxlint-plugin-effect-executor'),
-    import.meta.resolve('@systemfsoftware/oxlint-plugin-effect-workflow'),
-    import.meta.resolve('@systemfsoftware/oxlint-plugin-effect-schema'),
-    import.meta.resolve('@systemfsoftware/oxlint-plugin-test-placement'),
+    import.meta.resolve('@systemfsoftware/oxlint-plugin-effect-dmmf'),
   ],
 
   rules: {
@@ -34,7 +26,6 @@ export default defineConfig({
     'jest/valid-expect': 'off',
 
     '@systemfsoftware/oxlint-plugin/ban-classes': ['error', { whitelist: ['WsCtor'] }],
-    ...effectSchema.configs.recommended.rules,
     '@systemfsoftware/oxlint-plugin/ban-error-string': 'error',
     '@systemfsoftware/oxlint-plugin/no-context-generic-tag': 'error',
     '@systemfsoftware/oxlint-plugin/no-date-now-in-effect': 'error',
@@ -47,13 +38,7 @@ export default defineConfig({
     '@systemfsoftware/oxlint-plugin/no-native-set-in-effect': 'error',
     '@systemfsoftware/oxlint-plugin/no-native-setinterval-in-effect': 'error',
     '@systemfsoftware/oxlint-plugin/no-native-settimeout-in-effect': 'error',
-    '@systemfsoftware/oxlint-plugin-test-hygiene/damp-test-naming': 'error',
-    '@systemfsoftware/oxlint-plugin-test-hygiene/no-behaviourless-assertion': 'error',
-    '@systemfsoftware/oxlint-plugin-test-hygiene/pbt-naming': 'error',
-    ...propertyTesting.configs.recommended.rules,
-    ...effectExecutor.configs.recommended.rules,
-    ...effectWorkflow.configs.recommended.rules,
-    '@systemfsoftware/oxlint-plugin/policy-no-domain-imports': 'error',
+    ...effectDmmf.configs.recommended.rules,
     '@systemfsoftware/oxlint-plugin/no-new-worker-with-wasm-import': 'error',
     '@systemfsoftware/oxlint-plugin/no-barrels': 'off',
     '@systemfsoftware/oxlint-plugin/no-inline-destructured-type': 'off',

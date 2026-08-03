@@ -88,6 +88,20 @@ ruleTester.run('no-new-worker-with-wasm-import', noNewWorkerWithWasmImport, {
         init()
       `,
     },
+    {
+      name: 'allows non-Worker constructor with function argument (callee guard)',
+      code: `
+        import { fn } from '${SYNTHETIC_WASM_PKG}'
+        new WeakMap(function() {})
+      `,
+    },
+    {
+      name: 'allows new Worker() with no arguments despite WASM import',
+      code: `
+        import { fn } from '${SYNTHETIC_WASM_PKG}'
+        const w = new Worker()
+      `,
+    },
   ],
   invalid: [
     // Scoped synthetic WASM import + new Worker — fires
@@ -169,6 +183,17 @@ ruleTester.run('no-new-worker-with-wasm-import', noNewWorkerWithWasmImport, {
       `,
       options: [
         { wasmImportPatterns: ['my-custom-package'] },
+      ],
+      errors: [newWorkerError],
+    },
+    {
+      name: 'fires when import matches only one of multiple patterns (some, not every)',
+      code: `
+        import { something } from 'alpha-pkg'
+        const w = new Worker('./worker.js')
+      `,
+      options: [
+        { wasmImportPatterns: ['alpha-pkg', 'zzz-nomatch'] },
       ],
       errors: [newWorkerError],
     },

@@ -7,7 +7,7 @@ export default defineConfig({
   plugins: [tsconfigPaths({ ignoreConfigErrors: true }), inlineSchemaTests()],
   test: {
     ...sharedConfig.test,
-    include: ['src/**/*.test.ts'],
+    include: ['src/**/*.test.ts', '__tests__/**/*.test.ts'],
     setupFiles: ['./vitest.setup.ts'],
     testTimeout: 120_000,
   },

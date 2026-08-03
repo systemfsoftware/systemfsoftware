@@ -58,6 +58,59 @@ ruleTester.run('no-date-now-in-effect', noDateNowInEffect, {
       `),
     },
     {
+      name: 'allows Date.time() with effect import (member name mismatch)',
+      ...prod(`
+        import { Effect } from 'effect'
+        const t = Date.time()
+      `),
+    },
+    {
+      name: 'allows Date["time"]() with effect import (computed literal mismatch)',
+      ...prod(`
+        import { Effect } from 'effect'
+        const t = Date['time']()
+      `),
+    },
+    {
+      name: 'allows Date[now]() with effect import (computed identifier property)',
+      ...prod(`
+        import { Effect } from 'effect'
+        const now = 'now'
+        const t = Date[now]()
+      `),
+    },
+    {
+      name: 'allows Date.now() in a file that imports a non-effect module',
+      ...prod(`
+        import 'react'
+        const now = Date.now()
+      `),
+    },
+    {
+      name: 'allows Date.now() in a *.test.ts file — regex branch of isTestPath',
+      code: `
+        import { Effect } from 'effect'
+        const x = Date.now()
+      `,
+      filename: 'src/feature.test.ts',
+    },
+    {
+      name: 'allows Date.now() in a *.spec.tsx file — regex branch of isTestPath',
+      code: `
+        import { Effect } from 'effect'
+        const x = Date.now()
+      `,
+      filename: 'src/feature.spec.tsx',
+    },
+    {
+      name: 'allows Date.now() in a *.spec.mts file — regex branch of isTestPath',
+      code: `
+        import { Effect } from 'effect'
+        const x = Date.now()
+      `,
+      filename: 'src/feature.spec.mts',
+    },
+    {
       name: 'skips test scaffolding files where clock-as-salt is legitimate',
       code: `
         import { Effect } from 'effect'
@@ -153,6 +206,26 @@ ruleTester.run('no-date-now-in-effect', noDateNowInEffect, {
         const t = Date.now()
       `),
       errors: [dateNowError],
+    },
+    {
+      name: 'detects Date["now"]() bracket access — same callee via computed form',
+      ...prod(`
+        import { Effect } from 'effect'
+        const makeProgram = Effect.gen(function*() {
+          const t = Date['now']()
+          return t
+        })
+      `),
+      errors: [dateNowError],
+    },
+    {
+      name: 'detects Date.now() AND skipped bracket — both arms must agree',
+      ...prod(`
+        import { Effect } from 'effect'
+        const a = Date.now()
+        const b = Date['now']()
+      `),
+      errors: [dateNowError, dateNowError],
     },
   ],
 })

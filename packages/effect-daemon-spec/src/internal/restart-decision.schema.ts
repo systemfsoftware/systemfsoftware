@@ -1,27 +1,5 @@
 import { Schema } from 'effect'
 
-export const RestartDecisionTypeId: unique symbol = Symbol.for(
-  '@systemfsoftware/effect-daemon/RestartDecision',
-)
-export type RestartDecisionTypeId = typeof RestartDecisionTypeId
-
-export class Continue extends Schema.TaggedClass<Continue>()('Continue', {}) {
-  readonly [RestartDecisionTypeId] = RestartDecisionTypeId
-}
-
-export class Restart extends Schema.TaggedClass<Restart>()('Restart', {
-  indices: Schema.NonEmptyArray(Schema.Int),
-}) {
-  readonly [RestartDecisionTypeId] = RestartDecisionTypeId
-}
-
-export class Exhausted extends Schema.TaggedClass<Exhausted>()('Exhausted', {}) {
-  readonly [RestartDecisionTypeId] = RestartDecisionTypeId
-}
-
-export const RestartDecision = Schema.Union(Continue, Restart, Exhausted)
-export type RestartDecision = typeof RestartDecision.Type
-
 export const RestartStrategy = Schema.Literal('one_for_one', 'one_for_all', 'rest_for_one')
 export type RestartStrategy = typeof RestartStrategy.Type
 

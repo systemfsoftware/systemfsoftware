@@ -88,6 +88,30 @@ ruleTester.run('no-direct-tag-access', noDirectTagAccess, {
       name: 'allows _tag in array map',
       code: `const tags = items.map(e => e._tag)`,
     },
+    // non-strict-comparison BinaryExpression parents — `operator !== '===' && operator !== '!=='`
+    {
+      name: 'allows _tag inside non-strict-comparison BinaryExpression (> operator)',
+      code: `const ok = result._tag > 0`,
+    },
+    {
+      name: 'allows non-_tag literal property in comparison',
+      code: `if (result["type"] === 'Success') {}`,
+    },
+    {
+      name: 'allows _tag access inside switch body when discriminant is not the _tag member',
+      code: `
+        switch (result.type) {
+          case 'Success': {
+            const x = result._tag
+            break
+          }
+        }
+      `,
+    },
+    {
+      name: 'allows _tag as call argument (no comparison or switch parent)',
+      code: `log(result._tag)`,
+    },
   ],
   invalid: [
     // === comparison

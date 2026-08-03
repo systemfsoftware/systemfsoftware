@@ -6,7 +6,7 @@ export const IntensityConfig = Schema.Struct({
 })
 export type IntensityConfig = typeof IntensityConfig.Type
 
-export const IntensityTypeId: unique symbol = Symbol.for('@systemfsoftware/effect-daemon-spec/Intensity')
+const IntensityTypeId: unique symbol = Symbol.for('@systemfsoftware/effect-daemon-spec/Intensity')
 export type IntensityTypeId = typeof IntensityTypeId
 
 export class BoundedIntensity extends Schema.TaggedClass<BoundedIntensity>()('Bounded', IntensityConfig.fields) {

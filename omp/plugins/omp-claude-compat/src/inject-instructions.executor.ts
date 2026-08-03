@@ -1,7 +1,20 @@
 import { FileSystem } from '@effect/platform/FileSystem'
 import * as PathModule from '@effect/platform/Path'
 import { TomlLoader } from '@systemfsoftware/omp-utils'
-import { Effect, Either } from 'effect'
+import { Context, Effect, Either } from 'effect'
+
+// ═══════════════════════════════════════════════════════════
+// 0. DEPENDENCIES — consumer-owned tag
+// ═══════════════════════════════════════════════════════════
+
+export class InjectInstructionsExecutorDeps extends Context.Tag('InjectInstructionsExecutorDeps')<
+  InjectInstructionsExecutorDeps,
+  {
+    readonly fileSystem: FileSystem
+    readonly path: PathModule.Path
+    readonly tomlLoader: Context.Tag.Service<TomlLoader>
+  }
+>() {}
 
 /**
  * Refs the host already delivers, keyed by project-relative path.
@@ -20,8 +33,7 @@ interface Ref {
 }
 
 const extractRefs = Effect.fn('extractRefs')(function*(content: string, baseDir: string, projectDir: string) {
-  const fs = yield* FileSystem
-  const path = yield* PathModule.Path
+  const { fileSystem: fs, path } = yield* InjectInstructionsExecutorDeps
   const refs: Ref[] = []
   for (const rawLine of content.split('\n')) {
     const noMarker = rawLine.trim().replace(/^[-*+]\s+/, '')
@@ -54,62 +66,62 @@ const extractRefs = Effect.fn('extractRefs')(function*(content: string, baseDir:
  * Collect the content of every `@`-ref in CLAUDE.md that the host does not
  * already deliver, skipping any ref the project's no_inject_refs list names.
  */
-export const loadReferencedContent = Effect.fn('loadReferencedContent')(function*(projectDir: string) {
-  const fs = yield* FileSystem
-  const path = yield* PathModule.Path
-  const tomlLoader = yield* TomlLoader
+export function loadReferencedContent(projectDir: string) {
+  return Effect.fn('loadReferencedContent')(function*(projectDir: string) {
+    const { fileSystem: fs, path, tomlLoader } = yield* InjectInstructionsExecutorDeps
 
-  const claudeMdPaths = [
-    path.resolve(projectDir, 'CLAUDE.md'),
-    path.resolve(projectDir, '.claude', 'CLAUDE.md'),
-  ]
+    const claudeMdPaths = [
+      path.resolve(projectDir, 'CLAUDE.md'),
+      path.resolve(projectDir, '.claude', 'CLAUDE.md'),
+    ]
 
-  const allRefs: Ref[] = []
-  for (const filePath of claudeMdPaths) {
-    const content = yield* Effect.either(
-      fs.readFileString(filePath, 'utf-8'),
+    const allRefs: Ref[] = []
+    for (const filePath of claudeMdPaths) {
+      const content = yield* Effect.either(
+        fs.readFileString(filePath, 'utf-8'),
+      )
+      if (Either.isRight(content)) {
+        const refs = yield* extractRefs(content.right, path.dirname(filePath), projectDir)
+        allRefs.push(...refs)
+      }
+    }
+
+    const seen = new Set<string>()
+    const uniqueRefs: Ref[] = []
+    for (const ref of allRefs) {
+      if (!seen.has(ref.resolvedPath)) {
+        seen.add(ref.resolvedPath)
+        uniqueRefs.push(ref)
+      }
+    }
+
+    const config = yield* tomlLoader.load(projectDir).pipe(
+      Effect.catchAll(() => Effect.succeed(undefined)),
     )
-    if (Either.isRight(content)) {
-      const refs = yield* extractRefs(content.right, path.dirname(filePath), projectDir)
-      allRefs.push(...refs)
-    }
-  }
+    const skipList = config?.['no_inject_refs'] ?? DEFAULT_NO_INJECT_REFS
 
-  const seen = new Set<string>()
-  const uniqueRefs: Ref[] = []
-  for (const ref of allRefs) {
-    if (!seen.has(ref.resolvedPath)) {
-      seen.add(ref.resolvedPath)
-      uniqueRefs.push(ref)
-    }
-  }
+    const sections: string[] = []
+    for (const ref of uniqueRefs) {
+      const relativePath = ref.resolvedPath.slice(projectDir.length + 1)
+      if (skipList.includes(relativePath)) continue
 
-  const config = yield* tomlLoader.load(projectDir).pipe(
-    Effect.catchAll(() => Effect.succeed(undefined)),
-  )
-  const skipList = config?.['no_inject_refs'] ?? DEFAULT_NO_INJECT_REFS
+      const refContent = yield* Effect.either(
+        fs.readFileString(ref.resolvedPath, 'utf-8'),
+      )
+      if (Either.isLeft(refContent)) {
+        continue
+      }
 
-  const sections: string[] = []
-  for (const ref of uniqueRefs) {
-    const relativePath = ref.resolvedPath.slice(projectDir.length + 1)
-    if (skipList.includes(relativePath)) continue
-
-    const refContent = yield* Effect.either(
-      fs.readFileString(ref.resolvedPath, 'utf-8'),
-    )
-    if (Either.isLeft(refContent)) {
-      continue
+      sections.push(`## ${relativePath}\n${refContent.right}\n`)
     }
 
-    sections.push(`## ${relativePath}\n${refContent.right}\n`)
-  }
+    if (sections.length === 0) return ''
 
-  if (sections.length === 0) return ''
-
-  return [
-    '# Injected @-references from CLAUDE.md',
-    'The following files were @-imported by CLAUDE.md and contain project rules.',
-    '',
-    ...sections,
-  ].join('\n')
-})
+    return [
+      '# Injected @-references from CLAUDE.md',
+      'The following files were @-imported by CLAUDE.md and contain project rules.',
+      '',
+      ...sections,
+    ].join('\n')
+  })(projectDir)
+}

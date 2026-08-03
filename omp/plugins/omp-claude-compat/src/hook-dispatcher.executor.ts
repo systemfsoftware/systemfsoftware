@@ -1,7 +1,14 @@
 import { Command } from '@effect/platform'
 import { CommandExecutor } from '@effect/platform/CommandExecutor'
+import type { PlatformError } from '@effect/platform/Error'
 import { FileSystem } from '@effect/platform/FileSystem'
-import type { InputEvent, InputEventResult } from '@oh-my-pi/pi-coding-agent'
+import type {
+  InputEvent,
+  InputEventResult,
+  ToolCallEventResult,
+  ToolResultEvent,
+  ToolResultEventResult,
+} from '@oh-my-pi/pi-coding-agent'
 import {
   denormalizeToolInput,
   editTargetPaths,
@@ -12,33 +19,65 @@ import {
   normalizeToolName,
   sessionIds,
 } from '@systemfsoftware/omp-utils'
-import { Cause, Effect, Either, Match, Option, Schema as S, Stream } from 'effect'
+import { Cause, Context, Effect, Either, Match, Option, Schema as S, Scope, Stream } from 'effect'
 import { homedir } from 'node:os'
 import { drainAsyncHookContext, recordAsyncHookContext } from './async-hook-output.state.js'
-import {
-  AGGREGATE_CEILING_MS,
-  KILL_GRACE_MS,
-  resolveHookBudget,
-  ResolveHookBudgetCommand,
-} from './hook-budget.workflow.js'
-import { NON_EVALUABLE_MATCHERS, TOOL_EVENTS } from './hook-catalog.schema.js'
+import { detachIn } from './deadline.policy.js'
 import { Blocked, Continue, Warning } from './hook-dispatcher.schema.js'
 import type { HookOutcome, HookResult } from './hook-dispatcher.schema.js'
-import { asyncHookContext } from './hook-output.acl.js'
-import type { DisableSource, HookCoverage, HookCoverageRow } from './hook-settings.acl.js'
-import {
-  disabledCoverage,
-  hookCoverage,
-  mergeSettings,
-  parseSettings,
-  unsupportedHookTypes,
+import { parseHookOutput } from './hook-output.acl.js'
+import { analyzeSettings, parseSettings, SettingsWrapped } from './hook-settings.acl.js'
+import { HookCoverageRowSchema, HookCoverageSchema } from './hook-settings.acl.js'
+import type {
+  CommandHook,
+  DisableSource,
+  HookCoverage,
+  HookCoverageRow,
+  HookEntry,
+  HookSettings,
+  SettingsSource,
 } from './hook-settings.acl.js'
-import type { CommandHook, HookEntry, HookSettings, SettingsSource } from './hook-settings.acl.js'
 import { InterpretHookCommand, interpretHookResult } from './hook-verdict.workflow.js'
 import { isHostBound } from './prompt-destination.kernel.js'
 
-const UNREADABLE_MATCHER: Readonly<Record<string, string>> = NON_EVALUABLE_MATCHERS
-const IF_EVALUATING_EVENTS: readonly string[] = TOOL_EVENTS
+/**
+ * The scope every detached hook fibre is forked into.
+ *
+ * A hook must outlive its deadline but not the session. `forkDaemon` gets only
+ * the first: daemon fibres attach to the global fibre scope, which no runtime
+ * disposal closes, so a slow hook's child is never reaped. Forking into a layer
+ * scope gets both - the fibre survives the caller, and closing this scope
+ * interrupts it, running the SIGKILL finaliser.
+ */
+export class HookDispatcherExecutorDeps extends Context.Tag('HookDispatcherExecutorDeps')<
+  HookDispatcherExecutorDeps,
+  Scope.Scope
+>() {}
+
+const CLAUDE_EVENT_DEFAULT_SECONDS: Readonly<Record<string, number>> = {
+  UserPromptSubmit: 30,
+}
+
+const CLAUDE_FALLBACK_SECONDS = 600
+
+const requestedMs = (configuredSeconds: number | undefined, event: string): number =>
+  (configuredSeconds ?? CLAUDE_EVENT_DEFAULT_SECONDS[event] ?? CLAUDE_FALLBACK_SECONDS) * 1000
+
+const AGGREGATE_CEILING_MS = 26_000
+const HOOK_CEILING_MS = 24_000
+const KILL_GRACE_MS = 2_000
+
+const resolveHookBudget = (
+  configuredSeconds: number | undefined,
+  event: string,
+  callerIsWaiting: boolean,
+): { timeoutMs: number; capNote: string } => {
+  const raw = requestedMs(configuredSeconds, event)
+  if (!callerIsWaiting || raw <= HOOK_CEILING_MS) {
+    return { timeoutMs: raw, capNote: '' }
+  }
+  return { timeoutMs: HOOK_CEILING_MS, capNote: ` (capped from ${raw}ms by the extension handler budget)` }
+}
 
 const loadSettingsFile = Effect.fn('loadSettingsFile')(function*(path: string) {
   const fs = yield* FileSystem
@@ -75,13 +114,13 @@ export const loadSettingsWithPaths = Effect.fn('loadSettingsWithPaths')(function
     if (s !== null) sources.push({ settings: s, managed: p === managedPath })
   }
   if (sources.length === 0) return null
-  return mergeSettings(sources)
+  return analyzeSettings({ _tag: 'Merge', sources }, SettingsWrapped)
 })
 
 const dedupeByEvent = (rows: readonly HookCoverageRow[]): readonly HookCoverageRow[] =>
   rows.filter((row, index) => rows.findIndex((other) => other.event === row.event) === index)
 
-export const coverageReportLines = (coverage: HookCoverage): readonly string[] => [
+const coverageReportLines = (coverage: HookCoverage): readonly string[] => [
   ...coverage.unrecognized.map((row) => `  ${row.event}: ${row.reason}`),
   ...coverage.notCarried.map((row) => `  ${row.event}: not carried by this bridge — ${row.reason}`),
   ...coverage.matcherNotEvaluable.map((row) => `  ${row.event}: hook skipped, matcher not evaluable — ${row.reason}`),
@@ -110,13 +149,15 @@ export const collectSettingsGapsWithPaths = Effect.fn('collectSettingsGapsWithPa
       malformed.push(path)
       continue
     }
-    const coverage = hookCoverage(parsed.right)
+    const coverage = analyzeSettings({ _tag: 'Coverage', json: parsed.right }, HookCoverageSchema)
     unrecognized.push(...coverage.unrecognized)
     notCarried.push(...coverage.notCarried)
     matcherNotEvaluable.push(...coverage.matcherNotEvaluable)
     matcherOutOfReach.push(...coverage.matcherOutOfReach)
     shadowed.push(...coverage.shadowed)
-    hookTypes.push(...unsupportedHookTypes(parsed.right))
+    hookTypes.push(
+      ...analyzeSettings({ _tag: 'UnsupportedHookTypes', json: parsed.right }, S.Array(S.String)),
+    )
     // The loader skips a file it cannot decode, contributing no hooks at all.
     // Name it rather than starting the session unguarded with no sign of it.
     const settings = parseSettings(parsed.right)
@@ -130,7 +171,9 @@ export const collectSettingsGapsWithPaths = Effect.fn('collectSettingsGapsWithPa
       matcherNotEvaluable: dedupeByEvent(matcherNotEvaluable),
       matcherOutOfReach: dedupeByEvent(matcherOutOfReach),
       shadowed: dedupeByEvent(shadowed),
-      disabled: dedupeByEvent(disabledCoverage(sources)),
+      disabled: dedupeByEvent(
+        analyzeSettings({ _tag: 'DisabledCoverage', sources }, S.Array(HookCoverageRowSchema)),
+      ),
     },
     unsupportedHookTypes: Array.from(new Set(hookTypes)),
     malformedFiles: Array.from(new Set(malformed)),
@@ -155,15 +198,7 @@ export const runHookScript = Effect.fn('runHookScript')(function*(
   callerIsWaiting = true,
 ) {
   const executor = yield* CommandExecutor
-  const budget = resolveHookBudget(
-    new ResolveHookBudgetCommand({ configuredSeconds: hook.timeout, event, callerIsWaiting }),
-  )
-  const timeoutMs = budget.timeoutMs
-  const capNote = Match.value(budget).pipe(
-    Match.tag('BudgetHonoured', () => ''),
-    Match.tag('BudgetCapped', (b) => ` (capped from ${b.requestedMs}ms by the extension handler budget)`),
-    Match.exhaustive,
-  )
+  const { timeoutMs, capNote } = resolveHookBudget(hook.timeout, event, callerIsWaiting)
   const stdinText = encodeHookPayload(input)
 
   // `args` selects the exec form: spawn the binary directly so no shell ever
@@ -183,7 +218,10 @@ export const runHookScript = Effect.fn('runHookScript')(function*(
     Command.stderr('pipe'),
   )
 
-  return yield* Effect.scoped(
+  // Detached whole: the stdout/stderr drain travels with the child, so
+  // abandoning the wait never leaves it writing into a pipe nobody reads.
+  const hookScope = yield* HookDispatcherExecutorDeps
+  const run = Effect.scoped(
     Effect.uninterruptibleMask((restore) =>
       Effect.gen(function*() {
         const process = yield* executor.start(hookCommand)
@@ -210,15 +248,14 @@ export const runHookScript = Effect.fn('runHookScript')(function*(
       })
     ),
   ).pipe(
-    Effect.timeout(timeoutMs),
-    Effect.catchTag(
-      'TimeoutException',
-      () =>
-        Effect.succeed(
-          { code: -1, stdout: '', stderr: `timeout after ${timeoutMs}ms${capNote}` } satisfies HookResult,
-        ),
-    ),
+    // Past the deadline no joiner is left to surface a failure.
+    Effect.tapErrorCause((cause) => Effect.logWarning(`hook ${hook.command} failed`, cause)),
   )
+
+  return yield* detachIn(run, hookScope, {
+    deadline: timeoutMs,
+    onDeadline: () => ({ code: -1, stdout: '', stderr: `timeout after ${timeoutMs}ms${capNote}` }),
+  })
 })
 const EMPTY_TOOL_INPUT: Record<string, unknown> = {}
 
@@ -269,11 +306,13 @@ const superviseFork = <E, R>(
 ): Effect.Effect<void, never, R> =>
   hook.pipe(
     Effect.matchCause({
-      onSuccess: (result) =>
-        Option.match(asyncHookContext(result.stdout), {
-          onNone: () => undefined,
-          onSome: recordAsyncHookContext,
-        }),
+      onSuccess: (result) => {
+        const decoded = parseHookOutput(result.stdout)
+        if (Either.isRight(decoded)) {
+          const ctxText = decoded.right.hookSpecificOutput?.additionalContext
+          if (ctxText !== undefined) recordAsyncHookContext(ctxText)
+        }
+      },
       onFailure: (cause) => {
         if (Cause.isInterruptedOnly(cause)) return
         ctx.ui.notify(`Background hook failed: ${command}: ${Cause.pretty(cause).split('\n')[0]}`, 'error')
@@ -301,7 +340,7 @@ const runHooksForEventUnbounded = Effect.fn('runHooksForEventUnbounded')(functio
   let currentInput = input
   // A matcher this event cannot evaluate must not behave as a match. U3 already
   // named the hook at session start, so this is a silent skip, not a report.
-  const matcherUnreadable = UNREADABLE_MATCHER[event] !== undefined
+  const matcherUnreadable = analyzeSettings({ _tag: 'MatcherUnreadable', event }, S.Boolean)
 
   for (const entry of entries) {
     if (matcherUnreadable && entry.matcher !== undefined) continue
@@ -312,7 +351,7 @@ const runHooksForEventUnbounded = Effect.fn('runHooksForEventUnbounded')(functio
       if (hook.if !== undefined) {
         // `if` is a permission rule over a tool call, so only a tool event can
         // satisfy one. Elsewhere a hook that sets `if` never runs.
-        if (!IF_EVALUATING_EVENTS.includes(event)) continue
+        if (!analyzeSettings({ _tag: 'IfEvaluatingEvent', event }, S.Boolean)) continue
         if (!matchesPermissionRule(hook.if, matchValue, ruleInput, cwd)) continue
       }
       if (hook.async === true || hook.asyncRewake === true) {
@@ -691,7 +730,7 @@ export const runLifecycleHooks = Effect.fn('runLifecycleHooks')(function*(
   // The matcher axis is the same refusal `runHooksForEvent` makes: an event
   // whose matcher this bridge cannot read must not run a matcher'd hook as
   // though the matcher had matched.
-  const matcherUnreadable = UNREADABLE_MATCHER[event] !== undefined
+  const matcherUnreadable = analyzeSettings({ _tag: 'MatcherUnreadable', event }, S.Boolean)
 
   for (const entry of entries) {
     if (matcherUnreadable && entry.matcher !== undefined) continue
@@ -708,3 +747,182 @@ export const runLifecycleHooks = Effect.fn('runLifecycleHooks')(function*(
     }
   }
 })
+
+// ── Transport dispatch ──
+
+export interface HookToolCallCommand {
+  readonly _tag: 'ToolCall'
+  readonly event: HookToolCall
+  readonly ctx: HookSession
+}
+
+export interface HookToolResultCommand {
+  readonly _tag: 'ToolResult'
+  readonly event: ToolResultEvent
+  readonly ctx: HookSession
+}
+
+export interface HookPromptCommand {
+  readonly _tag: 'Prompt'
+  readonly event: HookPrompt
+  readonly ctx: HookSession
+}
+
+export interface HookSessionStartCommand {
+  readonly _tag: 'SessionStart'
+  readonly reason: string
+  readonly ctx: HookSession
+}
+
+export interface HookSessionCompactCommand {
+  readonly _tag: 'SessionCompact'
+  readonly ctx: HookSession
+}
+
+export interface HookPreCompactCommand {
+  readonly _tag: 'PreCompact'
+  readonly ctx: HookSession
+}
+
+export interface HookSessionSwitchCommand {
+  readonly _tag: 'SessionSwitch'
+  readonly reason: string
+  readonly ctx: HookSession
+}
+
+export interface HookSessionShutdownCommand {
+  readonly _tag: 'SessionShutdown'
+  readonly ctx: HookSession
+}
+
+export interface HookSessionStopCommand {
+  readonly _tag: 'SessionStop'
+  readonly ctx: HookSession
+}
+
+export type HookEventCommand =
+  | HookToolCallCommand
+  | HookToolResultCommand
+  | HookPromptCommand
+  | HookSessionStartCommand
+  | HookSessionCompactCommand
+  | HookPreCompactCommand
+  | HookSessionSwitchCommand
+  | HookSessionShutdownCommand
+  | HookSessionStopCommand
+
+export type HookDispatchResult =
+  | ToolCallEventResult
+  | ToolResultEventResult
+  | InputEventResult
+  | { readonly cancel: boolean }
+  | undefined
+
+export const dispatchHookEvent = (
+  cmd: HookEventCommand,
+): Effect.Effect<HookDispatchResult, PlatformError, FileSystem | CommandExecutor | HookDispatcherExecutorDeps> =>
+  Effect.gen(function*() {
+    const matched = Match.value(cmd).pipe(
+      Match.tag('ToolCall', ({ event, ctx }) =>
+        Effect.gen(function*() {
+          const settings = yield* loadSettings(ctx.cwd)
+          if (!settings) return undefined as HookDispatchResult
+          return (yield* runPreToolUseHooks(settings, event, ctx)) as HookDispatchResult
+        })),
+      Match.tag('ToolResult', ({ event, ctx }) =>
+        Effect.gen(function*() {
+          const settings = yield* loadSettings(ctx.cwd)
+          if (!settings) return undefined as HookDispatchResult
+          const result = yield* runToolResultHooks(settings, event, ctx)
+          if (result.block === true) {
+            return {
+              isError: true,
+              content: [{ type: 'text' as const, text: result.reason ?? 'Blocked by PostToolUse hook' }],
+            } as HookDispatchResult
+          }
+          if (result.warning !== undefined) {
+            return {
+              content: [...event.content, { type: 'text' as const, text: result.warning }],
+              isError: event.isError,
+            } as HookDispatchResult
+          }
+          return undefined as HookDispatchResult
+        })),
+      Match.tag('Prompt', ({ event, ctx }) =>
+        Effect.gen(function*() {
+          const settings = yield* loadSettings(ctx.cwd)
+          if (!settings) return undefined as HookDispatchResult
+          return (yield* runUserPromptSubmitHooks(settings, event, ctx)) as HookDispatchResult
+        })),
+      Match.tag('SessionStart', ({ reason, ctx }) =>
+        Effect.gen(function*() {
+          const gaps = yield* collectSettingsGaps(ctx.cwd)
+          const coverageLines = coverageReportLines(gaps.coverage)
+          if (coverageLines.length > 0) {
+            ctx.ui.notify(
+              `Hook coverage — configured hooks this bridge will not run:\n${coverageLines.join('\n')}`,
+              'warning',
+            )
+          }
+          if (gaps.unsupportedHookTypes.length > 0) {
+            ctx.ui.notify(
+              `Skipping hook(s) this bridge cannot run yet: type ${gaps.unsupportedHookTypes.join(', ')}`,
+              'warning',
+            )
+          }
+          if (gaps.malformedFiles.length > 0) {
+            ctx.ui.notify(
+              `Hooks are NOT running from malformed settings file(s): ${gaps.malformedFiles.join(', ')}`,
+              'error',
+            )
+          }
+          const settings = yield* loadSettings(ctx.cwd)
+          if (!settings) return undefined as HookDispatchResult
+          yield* runSessionStartHooks(settings, reason, ctx)
+          return undefined
+        })),
+      Match.tag('SessionCompact', ({ ctx }) =>
+        Effect.gen(function*() {
+          const settings = yield* loadSettings(ctx.cwd)
+          if (!settings) return undefined as HookDispatchResult
+          yield* runSessionStartHooks(settings, 'compact', ctx)
+          yield* runLifecycleHooks(settings.hooks.PostCompact, ctx, 'PostCompact')
+          return undefined
+        })),
+      Match.tag('PreCompact', ({ ctx }) =>
+        Effect.gen(function*() {
+          const settings = yield* loadSettings(ctx.cwd)
+          if (!settings) return undefined as HookDispatchResult
+          const result = yield* runPreCompactHooks(settings, ctx)
+          if (result.block !== true) return undefined
+          ctx.ui.notify(
+            `Compaction cancelled by a PreCompact hook: ${result.reason ?? 'no reason given'}`,
+            'warning',
+          )
+          return { cancel: true } as HookDispatchResult
+        })),
+      Match.tag('SessionSwitch', ({ reason, ctx }) =>
+        Effect.gen(function*() {
+          const settings = yield* loadSettings(ctx.cwd)
+          if (!settings) return undefined as HookDispatchResult
+          yield* runSessionSwitchHooks(settings, reason, ctx)
+          return undefined
+        })),
+      Match.tag('SessionShutdown', ({ ctx }) =>
+        Effect.gen(function*() {
+          const settings = yield* loadSettings(ctx.cwd)
+          if (!settings) return undefined as HookDispatchResult
+          yield* runLifecycleHooks(settings.hooks.SessionEnd, ctx, 'SessionEnd')
+          return undefined
+        })),
+      Match.tag('SessionStop', ({ ctx }) =>
+        Effect.gen(function*() {
+          const settings = yield* loadSettings(ctx.cwd)
+          if (!settings) return undefined as HookDispatchResult
+          yield* runLifecycleHooks(settings.hooks.Stop, ctx, 'Stop')
+          return undefined
+        })),
+      Match.exhaustive,
+    )
+    return (yield* matched) as HookDispatchResult
+  })

@@ -29,6 +29,7 @@ class DirectError extends S.TaggedError<DirectError>('DirectError', {}) {}
 const nearMissesValid = `
 class ValidDecisionA extends S.TaggedClass<ValidDecisionA>()('ValidDecisionA', {}) {}
 class ValidDecisionB extends S.TaggedClass<ValidDecisionB>()('ValidDecisionB', {}) {}
+class ValidError extends S.TaggedError<ValidError>()('ValidError', {}) {}
 class SchemaCurried extends Schema.TaggedClass<SchemaCurried>()('SchemaCurried', {}) {}
 class SchemaDirect extends Schema.TaggedClass<SchemaDirect>('SchemaDirect', {}) {}
 class OtherCurried extends Other.TaggedClass<OtherCurried>()('OtherCurried', {}) {}
@@ -77,6 +78,40 @@ class ComputedDirect extends S['TaggedClass']('ComputedDirect', {}) {}
 class PlainCall extends SomeCall() {}
 `
 
+const commandTwoDecisionsNoError = `
+import * as Either from 'effect/Either'
+export class InviteUserCommand extends S.TaggedClass<InviteUserCommand>()('InviteUserCommand', {}) {}
+export class UserInvited extends S.TaggedClass<UserInvited>()('UserInvited', {}) {}
+export class UserAlreadyInvited extends S.TaggedClass<UserAlreadyInvited>()('UserAlreadyInvited', {}) {}
+export const decideInvite = (cmd: InviteUserCommand): InviteVerdict => new UserInvited({})
+`
+
+const commandDecisionAndError = `
+import * as Either from 'effect/Either'
+export class ProcessInviteCommand extends S.TaggedClass<ProcessInviteCommand>()('ProcessInviteCommand', {}) {}
+export class InviteAccepted extends S.TaggedClass<InviteAccepted>()('InviteAccepted', {}) {}
+export class InviteFailed extends S.TaggedError<InviteFailed>()('InviteFailed', {}) {}
+export const decideInvite = (cmd: ProcessInviteCommand): Either.Either<InviteAccepted, InviteFailed> =>
+  Either.right(new InviteAccepted({}))
+`
+
+const decorativeErrorBareUnionReturn = `
+export class DecoyError extends S.TaggedError<DecoyError>()('DecoyError', {}) {}
+export class Allow extends S.TaggedClass<Allow>()('Allow', {}) {}
+export class Block extends S.TaggedClass<Block>()('Block', {}) {}
+export type DelegationVerdict = Allow | Block
+export const decideNoSkillDelegation = (cmd: CheckDelegationCommand): DelegationVerdict => new Allow()
+`
+
+const eitherWithUndeclaredErrorType = `
+import * as Either from 'effect/Either'
+export class RealHookError extends S.TaggedError<RealHookError>()('RealHookError', {}) {}
+export class HookDecisionA extends S.TaggedClass<HookDecisionA>()('HookDecisionA', {}) {}
+export class HookDecisionB extends S.TaggedClass<HookDecisionB>()('HookDecisionB', {}) {}
+export const interpretHookResult = (cmd: InterpretHookCommand): Either.Either<HookDecisionA | HookDecisionB, Error> =>
+  Either.right(new HookDecisionA({}))
+`
+
 const onlyNearMisses = `
 class SchemaCurried extends Schema.TaggedClass<SchemaCurried>()('SchemaCurried', {}) {}
 class SchemaDirect extends Schema.TaggedClass<SchemaDirect>('SchemaDirect', {}) {}
@@ -112,12 +147,18 @@ ruleTester.run('workflow-schema-required', workflowSchemaRequired, {
       filename: 'near-miss.workflow.ts',
     },
     {
-      name: 'Should_Pass_When_Exactly_Two_Non_Command_Variants_And_No_Command',
+      name: 'Should_Pass_When_Two_Decisions_And_An_Error_With_No_Command',
       code: `
         class DecisionA extends S.TaggedClass<DecisionA>()('DecisionA', {}) {}
         class DecisionB extends S.TaggedClass<DecisionB>()('DecisionB', {}) {}
+        class DecisionError extends S.TaggedError<DecisionError>()('DecisionError', {}) {}
       `,
       filename: 'two-decisions.workflow.ts',
+    },
+    {
+      name: 'Should_Pass_When_Command_Decision_And_Error_Return_An_Either',
+      code: commandDecisionAndError,
+      filename: 'process-invite.workflow.ts',
     },
   ],
   invalid: [
@@ -139,10 +180,21 @@ ruleTester.run('workflow-schema-required', workflowSchemaRequired, {
       ],
     },
     {
-      name: 'Should_Report_TooFewDecisionVariants_When_Only_One_Non_Command_Variant_Exists',
+      name: 'Should_Report_MissingErrorChannel_And_TooFewDecisionVariants_When_Only_One_Non_Command_Variant_Exists',
       code: oneCommandAndOneDecision,
       filename: 'cancel-order.workflow.ts',
       errors: [
+        {
+          messageId: 'missingErrorChannel',
+          data: {
+            name: 'cancel-order.workflow.ts',
+            expected:
+              'an exported function returning Either.Either<Decision, Error> with a declared S.TaggedError error type',
+            actual: 'no S.TaggedError declaration',
+            fix:
+              'if the decision is total, relocate the file out of *.workflow.ts — a bare union is not a workflow; do not invent an S.TaggedError to satisfy this rule',
+          },
+        },
         {
           messageId: 'tooFewDecisionVariants',
           data: {
@@ -156,10 +208,21 @@ ruleTester.run('workflow-schema-required', workflowSchemaRequired, {
       ],
     },
     {
-      name: 'Should_Report_TooFewDecisionVariants_When_Only_One_Variant_Exists_And_No_Command',
+      name: 'Should_Report_MissingErrorChannel_And_TooFewDecisionVariants_When_Only_One_Variant_Exists_And_No_Command',
       code: oneDecisionOnly,
       filename: 'one-outcome.workflow.ts',
       errors: [
+        {
+          messageId: 'missingErrorChannel',
+          data: {
+            name: 'one-outcome.workflow.ts',
+            expected:
+              'an exported function returning Either.Either<Decision, Error> with a declared S.TaggedError error type',
+            actual: 'no S.TaggedError declaration',
+            fix:
+              'if the decision is total, relocate the file out of *.workflow.ts — a bare union is not a workflow; do not invent an S.TaggedError to satisfy this rule',
+          },
+        },
         {
           messageId: 'tooFewDecisionVariants',
           data: {
@@ -173,10 +236,21 @@ ruleTester.run('workflow-schema-required', workflowSchemaRequired, {
       ],
     },
     {
-      name: 'Should_Report_TooFewDecisionVariants_When_Only_A_Command_Exists',
+      name: 'Should_Report_MissingErrorChannel_And_TooFewDecisionVariants_When_Only_A_Command_Exists',
       code: onlyCommand,
       filename: 'only-command.workflow.ts',
       errors: [
+        {
+          messageId: 'missingErrorChannel',
+          data: {
+            name: 'only-command.workflow.ts',
+            expected:
+              'an exported function returning Either.Either<Decision, Error> with a declared S.TaggedError error type',
+            actual: 'no S.TaggedError declaration',
+            fix:
+              'if the decision is total, relocate the file out of *.workflow.ts — a bare union is not a workflow; do not invent an S.TaggedError to satisfy this rule',
+          },
+        },
         {
           messageId: 'tooFewDecisionVariants',
           data: {
@@ -190,10 +264,22 @@ ruleTester.run('workflow-schema-required', workflowSchemaRequired, {
       ],
     },
     {
-      name: 'Should_Report_TooFewDecisionVariants_When_Schema_Namespace_Near_Miss_Is_Not_Counted',
+      name:
+        'Should_Report_MissingErrorChannel_And_TooFewDecisionVariants_When_Schema_Namespace_Near_Miss_Is_Not_Counted',
       code: nearMissSchemaNotCounted,
       filename: 'schema-near-miss.workflow.ts',
       errors: [
+        {
+          messageId: 'missingErrorChannel',
+          data: {
+            name: 'schema-near-miss.workflow.ts',
+            expected:
+              'an exported function returning Either.Either<Decision, Error> with a declared S.TaggedError error type',
+            actual: 'no S.TaggedError declaration',
+            fix:
+              'if the decision is total, relocate the file out of *.workflow.ts — a bare union is not a workflow; do not invent an S.TaggedError to satisfy this rule',
+          },
+        },
         {
           messageId: 'tooFewDecisionVariants',
           data: {
@@ -207,10 +293,22 @@ ruleTester.run('workflow-schema-required', workflowSchemaRequired, {
       ],
     },
     {
-      name: 'Should_Report_TooFewDecisionVariants_When_Other_Namespace_Near_Miss_Is_Not_Counted',
+      name:
+        'Should_Report_MissingErrorChannel_And_TooFewDecisionVariants_When_Other_Namespace_Near_Miss_Is_Not_Counted',
       code: nearMissOtherNotCounted,
       filename: 'other-near-miss.workflow.ts',
       errors: [
+        {
+          messageId: 'missingErrorChannel',
+          data: {
+            name: 'other-near-miss.workflow.ts',
+            expected:
+              'an exported function returning Either.Either<Decision, Error> with a declared S.TaggedError error type',
+            actual: 'no S.TaggedError declaration',
+            fix:
+              'if the decision is total, relocate the file out of *.workflow.ts — a bare union is not a workflow; do not invent an S.TaggedError to satisfy this rule',
+          },
+        },
         {
           messageId: 'tooFewDecisionVariants',
           data: {
@@ -224,10 +322,21 @@ ruleTester.run('workflow-schema-required', workflowSchemaRequired, {
       ],
     },
     {
-      name: 'Should_Report_TooFewDecisionVariants_When_Direct_Near_Misses_Leave_Only_One_Valid',
+      name: 'Should_Report_MissingErrorChannel_And_TooFewDecisionVariants_When_Direct_Near_Misses_Leave_Only_One_Valid',
       code: directNearMissesLeaveOne,
       filename: 'direct-near-misses.workflow.ts',
       errors: [
+        {
+          messageId: 'missingErrorChannel',
+          data: {
+            name: 'direct-near-misses.workflow.ts',
+            expected:
+              'an exported function returning Either.Either<Decision, Error> with a declared S.TaggedError error type',
+            actual: 'no S.TaggedError declaration',
+            fix:
+              'if the decision is total, relocate the file out of *.workflow.ts — a bare union is not a workflow; do not invent an S.TaggedError to satisfy this rule',
+          },
+        },
         {
           messageId: 'tooFewDecisionVariants',
           data: {
@@ -270,6 +379,60 @@ ruleTester.run('workflow-schema-required', workflowSchemaRequired, {
             actual: 'no S.TaggedClass or S.TaggedError declaration',
             fix:
               'declare the command, decision variants, and any error as S.TaggedClass/S.TaggedError with their TypeId, or rename the file if it is not a workflow',
+          },
+        },
+      ],
+    },
+    {
+      name: 'Should_Report_MissingErrorChannel_When_Command_And_Two_Decisions_Return_A_Bare_Union',
+      code: commandTwoDecisionsNoError,
+      filename: 'invite-user.workflow.ts',
+      errors: [
+        {
+          messageId: 'missingErrorChannel',
+          data: {
+            name: 'invite-user.workflow.ts',
+            expected:
+              'an exported function returning Either.Either<Decision, Error> with a declared S.TaggedError error type',
+            actual: 'the exported function returns InviteVerdict instead of an Either',
+            fix:
+              'if the decision is total, relocate the file out of *.workflow.ts — a bare union is not a workflow; do not invent an S.TaggedError to satisfy this rule',
+          },
+        },
+      ],
+    },
+    {
+      name: 'Should_Report_MissingErrorChannel_When_TaggedError_Declared_But_Function_Returns_A_Bare_Union',
+      code: decorativeErrorBareUnionReturn,
+      filename: 'delegation-verdict.workflow.ts',
+      errors: [
+        {
+          messageId: 'missingErrorChannel',
+          data: {
+            name: 'delegation-verdict.workflow.ts',
+            expected:
+              'an exported function returning Either.Either<Decision, Error> with a declared S.TaggedError error type',
+            actual: 'the exported function returns DelegationVerdict instead of an Either',
+            fix:
+              'if the decision is total, relocate the file out of *.workflow.ts — a bare union is not a workflow; do not invent an S.TaggedError to satisfy this rule',
+          },
+        },
+      ],
+    },
+    {
+      name: 'Should_Report_MissingErrorChannel_When_Either_Error_Type_Is_Not_A_Declared_TaggedError',
+      code: eitherWithUndeclaredErrorType,
+      filename: 'hook-verdict.workflow.ts',
+      errors: [
+        {
+          messageId: 'missingErrorChannel',
+          data: {
+            name: 'hook-verdict.workflow.ts',
+            expected:
+              'an exported function returning Either.Either<Decision, Error> with a declared S.TaggedError error type',
+            actual: 'an Either whose error type references no declared S.TaggedError',
+            fix:
+              'if the decision is total, relocate the file out of *.workflow.ts — a bare union is not a workflow; do not invent an S.TaggedError to satisfy this rule',
           },
         },
       ],

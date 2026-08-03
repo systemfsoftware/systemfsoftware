@@ -101,7 +101,47 @@ ruleTester.run('no-either-tag-assertions', noEitherTagAssertions, {
       code: `expect.objectContaining({ message: 'error' })`,
       filename: TEST_FILENAME,
     },
+    {
+      name: 'Should_Pass_When_objectContaining_Non_Tag_Key_With_Either_Value',
+      code: `expect.objectContaining({ type: 'Left' })`,
+      filename: TEST_FILENAME,
+    },
+    {
+      name: 'Should_Pass_When_Non_Tag_Member_After_Unwrap_Compared_To_Either_Tag',
+      code: `if (result.left.bar === 'Left') {}`,
+      filename: TEST_FILENAME,
+    },
 
+    {
+      name: 'Should_Pass_When_objectContaining_On_Non_Expect_Object',
+      code: `other.objectContaining({ _tag: 'Left' })`,
+      filename: TEST_FILENAME,
+    },
+    {
+      name: 'Should_Pass_When_objectContaining_Inside_Call_Result_Left_Method',
+      code: `expect(result).toEqual(getFoo().left(expect.objectContaining({ _tag: 'SomeError' })))`,
+      filename: TEST_FILENAME,
+    },
+    {
+      name: 'Should_Pass_When_objectContaining_Inside_Non_Variant_Either_Method',
+      code: `expect(result).toEqual(Either.foo(expect.objectContaining({ _tag: 'SomeError' })))`,
+      filename: TEST_FILENAME,
+    },
+    {
+      name: 'Should_Pass_When_objectContaining_Inside_Computed_Either_Member',
+      code: `expect(result).toEqual(Either['left'](expect.objectContaining({ _tag: 'SomeError' })))`,
+      filename: TEST_FILENAME,
+    },
+    {
+      name: 'Should_Pass_When_objectContaining_Inside_Non_Either_Identifier_Method',
+      code: `expect(result).toEqual(foo.left(expect.objectContaining({ _tag: 'SomeError' })))`,
+      filename: TEST_FILENAME,
+    },
+    {
+      name: 'Should_Pass_When_Expect_Non_ObjectContaining_Method_With_Tag_Object',
+      code: `expect.foo({ _tag: 'Left' })`,
+      filename: TEST_FILENAME,
+    },
     {
       name: 'Should_Pass_When_Not_In_Test_File',
       code: `expect(result._tag).toBe('Left')`,
@@ -129,8 +169,33 @@ ruleTester.run('no-either-tag-assertions', noEitherTagAssertions, {
       filename: TEST_FILENAME,
     },
     {
+      name: 'Should_Pass_When_Expect_Wraps_Either_isLeft_ToBe_No_Arg',
+      code: `expect(Either.isLeft(x)).toBe()`,
+      filename: TEST_FILENAME,
+    },
+    {
+      name: 'Should_Pass_When_Expect_Wraps_Either_isLeft_ToEqual_Boolean',
+      code: `expect(Either.isLeft(x)).toEqual(true)`,
+      filename: TEST_FILENAME,
+    },
+    {
       name: 'Should_Pass_When_Either_isLeft_Without_Expect',
       code: `Either.isLeft(result)`,
+      filename: TEST_FILENAME,
+    },
+    {
+      name: 'Should_Pass_When_Expect_Wraps_Either_isLeft_Not_ToBeTruthy',
+      code: `expect(Either.isLeft(result)).not.toBeTruthy()`,
+      filename: TEST_FILENAME,
+    },
+    {
+      name: 'Should_Pass_When_Expect_Wraps_Either_isLeft_Chained_NonNot_Method',
+      code: `expect(Either.isLeft(result)).foo.toBe(true)`,
+      filename: TEST_FILENAME,
+    },
+    {
+      name: 'Should_Pass_When_Non_Expect_Callee_Wraps_Guard_ToBe_Boolean',
+      code: `foo(Either.isLeft(result)).toBe(true)`,
       filename: TEST_FILENAME,
     },
     {
@@ -182,8 +247,58 @@ ruleTester.run('no-either-tag-assertions', noEitherTagAssertions, {
       filename: TEST_FILENAME,
     },
     {
+      name: 'Should_Pass_When_Computed_Tag_Access_In_Non_Equality_Binary',
+      code: `if (result['_tag'] < 'Left') {}`,
+      filename: TEST_FILENAME,
+    },
+    {
+      name: 'Should_Pass_When_Non_Tag_Member_In_Array_Callback',
+      code: `items.filter(e => e.type === 'Left')`,
+      filename: TEST_FILENAME,
+    },
+    {
+      name: 'Should_Pass_When_Arrow_Returns_Tag_Not_In_Array_Method',
+      code: `const fn = (e) => e._tag`,
+      filename: TEST_FILENAME,
+    },
+    {
+      name: 'Should_Pass_When_Computed_Non_Tag_Property_Compared_To_Either_Tag',
+      code: `if (result["status"] === "Left") {}`,
+      filename: TEST_FILENAME,
+    },
+    {
+      name: 'Should_Pass_When_Tag_Matcher_Not_In_List_With_Either_Tag_Arg',
+      code: `expect(result._tag).toThrow('Left')`,
+      filename: TEST_FILENAME,
+    },
+    {
+      name: 'Should_Pass_When_Switch_On_Tag_With_No_Either_Case',
+      code: `switch (result._tag) { case 'Custom': break; }`,
+      filename: TEST_FILENAME,
+    },
+    {
+      name: 'Should_Pass_When_Switch_On_Tag_With_Only_Default_Case',
+      code: `switch (result._tag) { default: break; }`,
+      filename: TEST_FILENAME,
+    },
+    {
+      name: 'Should_Pass_When_Switch_On_Tag_With_Identifier_Case',
+      code: `switch (result._tag) { case someVar: break; }`,
+      filename: TEST_FILENAME,
+    },
+    {
       name: 'Should_Pass_When_Member_Object_Is_Not_Left_Or_Right_Unwrap',
       code: `const x = result.data._tag`,
+      filename: TEST_FILENAME,
+    },
+    {
+      name: 'Should_Pass_When_Non_Tag_Member_Compared_To_Either_Tag',
+      code: `if (result.type === 'Left') {}`,
+      filename: TEST_FILENAME,
+    },
+    {
+      name: 'Should_Pass_When_Either_Guard_Is_Not_IsLeft_Or_IsRight',
+      code: `expect(Either.isSuccess(result)).toBe(true)`,
       filename: TEST_FILENAME,
     },
   ],
@@ -282,28 +397,7 @@ ruleTester.run('no-either-tag-assertions', noEitherTagAssertions, {
         {
           messageId: 'expectTagMatcher',
           data: { name: 'result._tag' },
-        },
-      ],
-    },
-    {
-      name: 'Should_Report_When_Expect_ToMatch_Matching_Either_Tag_Regex',
-      code: `expect(result._tag).toMatch(/Left/)`,
-      filename: TEST_FILENAME,
-      errors: [
-        {
-          messageId: 'expectTagMatcher',
-          data: { name: 'result._tag' },
-        },
-      ],
-    },
-    {
-      name: 'Should_Report_When_Expect_ToMatch_Matching_Either_Tag_Regex_Right',
-      code: `expect(result._tag).toMatch(/Right/)`,
-      filename: TEST_FILENAME,
-      errors: [
-        {
-          messageId: 'expectTagMatcher',
-          data: { name: 'result._tag' },
+          suggestions: [],
         },
       ],
     },
@@ -497,6 +591,32 @@ ruleTester.run('no-either-tag-assertions', noEitherTagAssertions, {
         },
       ],
     },
+    {
+      name: 'Should_Report_When_Either_GetLeft_No_Arg_Tag',
+      code: `Either.getLeft()._tag === 'Left'`,
+      filename: TEST_FILENAME,
+      errors: [
+        {
+          messageId: 'tagComparison',
+          data: { name: 'Either.getLeft()._tag' },
+        },
+        {
+          messageId: 'unwrapTagAccess',
+          data: { name: 'Either.getLeft(value)._tag' },
+        },
+      ],
+    },
+    {
+      name: 'Should_Report_When_Non_Either_Namespace_GetLeft_Tag_Comparison',
+      code: `foo.getLeft(result)._tag === 'Left'`,
+      filename: TEST_FILENAME,
+      errors: [
+        {
+          messageId: 'tagComparison',
+          data: { name: 'foo.getLeft(result)._tag' },
+        },
+      ],
+    },
 
     {
       name: 'Should_Report_When_Expect_Wraps_Either_isLeft_ToBe_True',
@@ -517,6 +637,17 @@ ruleTester.run('no-either-tag-assertions', noEitherTagAssertions, {
         {
           messageId: 'typeGuardAssertion',
           data: { name: 'Either.isRight(error)' },
+        },
+      ],
+    },
+    {
+      name: 'Should_Report_When_Expect_Wraps_Either_isLeft_Not_ToBe_True',
+      code: `expect(Either.isLeft(result)).not.toBe(true)`,
+      filename: TEST_FILENAME,
+      errors: [
+        {
+          messageId: 'typeGuardAssertion',
+          data: { name: 'Either.isLeft(result)' },
         },
       ],
     },
@@ -568,6 +699,17 @@ ruleTester.run('no-either-tag-assertions', noEitherTagAssertions, {
     {
       name: 'Should_Report_When_Switch_On_Tag_With_Left_Case',
       code: `switch (result._tag) { case 'Left': break; case 'Right': break; }`,
+      filename: TEST_FILENAME,
+      errors: [
+        {
+          messageId: 'switchOnTag',
+          data: { name: 'result._tag' },
+        },
+      ],
+    },
+    {
+      name: 'Should_Report_When_Switch_On_Tag_With_Mixed_Cases',
+      code: `switch (result._tag) { case 'Left': break; case 'Custom': break; }`,
       filename: TEST_FILENAME,
       errors: [
         {

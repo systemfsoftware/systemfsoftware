@@ -12,6 +12,14 @@ import * as memfs from 'memfs';
 export type Contents = memfs.DirectoryJSON;
 
 // @public (undocumented)
+export const layerWith: (contents: Contents) => Layer.Layer<FileSystem_2.FileSystem>;
+
+// @public (undocumented)
+export function make(contents?: Contents, opts?: {
+    cwd: string;
+}): FileSystem_2.FileSystem;
+
+// @public (undocumented)
 export const MemoryFileSystem: {
     readonly layer: Layer.Layer<FileSystem_2.FileSystem>;
     readonly layerWith: (contents: Contents) => Layer.Layer<FileSystem_2.FileSystem>;

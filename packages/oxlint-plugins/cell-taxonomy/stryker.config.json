@@ -5,8 +5,7 @@
   "checkers": ["typescript"],
   "plugins": [
     "@stryker-mutator/vitest-runner",
-    "@systemfsoftware/stryker-js-typescript-checker",
-    "@systemfsoftware/stryker-plugins/effect-schema-ignorer"
+    "@systemfsoftware/stryker-js-typescript-checker"
   ],
   "reporters": ["progress", "html", "json"],
   "htmlReporter": {
@@ -32,7 +31,6 @@
     "!src/rules/*.config.ts"
   ],
   "ignorePatterns": ["reports", "coverage"],
-  "ignorers": ["effect-schema-declarations"],
   "thresholds": {
     "high": 100,
     "low": 80,

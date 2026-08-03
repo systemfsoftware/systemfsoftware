@@ -79,6 +79,16 @@ ruleTester.run('cell-suffix-required', cellSuffixRequired, {
       filename: '/repo/pkg/src/globals.d.ts',
     },
     {
+      name: 'Should_Allow_GeneratedFile_When_GeneratedSuffix',
+      code: '',
+      filename: '/repo/pkg/src/foo.generated.ts',
+    },
+    {
+      name: 'Should_Allow_GeneratedFile_When_GeneratedSuffixAfterCell',
+      code: '',
+      filename: '/repo/pkg/src/order.schema.generated.ts',
+    },
+    {
       name: 'Should_Allow_TestFile_When_TestSuffix',
       code: '',
       filename: '/repo/pkg/src/money.test.ts',
@@ -166,6 +176,18 @@ ruleTester.run('cell-suffix-required', cellSuffixRequired, {
       code: '',
       filename: '/repo/pkg/src/money.cts',
       errors: unsanctioned('money.cts'),
+    },
+    {
+      name: 'Should_Report_GeneratedName_When_MarkerIsWholeBasename',
+      code: '',
+      filename: '/repo/pkg/src/generated.ts',
+      errors: unsanctioned('generated.ts'),
+    },
+    {
+      name: 'Should_Report_GeneratedMarker_When_NotImmediatelyBeforeExtension',
+      code: '',
+      filename: '/repo/pkg/src/foo.generated.helper.ts',
+      errors: unsanctioned('foo.generated.helper.ts'),
     },
   ],
 })

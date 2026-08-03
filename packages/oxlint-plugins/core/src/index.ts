@@ -22,7 +22,6 @@ import { noNativeSetIntervalInEffect } from './rules/no-native-setinterval-in-ef
 import { noNativeSetTimeoutInEffect } from './rules/no-native-settimeout-in-effect.js'
 import { noNewPromiseInEffect } from './rules/no-new-promise-in-effect.js'
 import { noNewWorkerWithWasmImport } from './rules/no-new-worker-with-wasm-import.js'
-import { policyNoDomainImports } from './rules/policy-no-domain-imports.js'
 
 const PLUGIN_NAME = '@systemfsoftware/oxlint-plugin'
 
@@ -33,7 +32,6 @@ export default {
   rules: {
     'ban-classes': banClasses,
     'ban-error-string': banErrorString,
-    'policy-no-domain-imports': policyNoDomainImports,
     'no-barrels': noBarrels,
     'no-bodyless-status-assertion': noBodylessStatusAssertion,
     'no-context-generic-tag': noContextGenericTag,

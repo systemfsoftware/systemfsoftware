@@ -8,6 +8,7 @@ import { Cause } from 'effect';
 import { Context } from 'effect';
 import { Duration } from 'effect';
 import { Duration as Duration_2 } from 'effect/Duration';
+import { DurationInput } from 'effect/Duration';
 import { Effect } from 'effect';
 import { Layer } from 'effect';
 import { Metric } from 'effect';
@@ -15,12 +16,16 @@ import { Option as Option_2 } from 'effect';
 import { Schedule } from 'effect';
 import { Schema } from 'effect';
 import { Scope } from 'effect';
+import { Scope as Scope_2 } from 'effect/Scope';
 import { Stream } from 'effect';
+import { Stream as Stream_2 } from 'effect/Stream';
 
 // Warning: (ae-forgotten-export) The symbol "BoundedIntensity_base" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
 export class BoundedIntensity extends BoundedIntensity_base {
+    // Warning: (ae-forgotten-export) The symbol "IntensityTypeId" needs to be exported by the entry point index.d.ts
+    //
     // (undocumented)
     readonly [IntensityTypeId]: symbol;
 }
@@ -60,7 +65,7 @@ export interface CommonOpts<L extends LockConfig> {
 export const Daemon: {
     readonly poll: <A, E, R, L extends LockConfig>(opts: PollOpts<A, E, R, L>) => Worker_2<E, R, L>;
     readonly stream: <A, E, R, L extends LockConfig>(opts: CommonOpts<L> & {
-        readonly stream: Stream.Stream<A, E, R>;
+        readonly stream: Stream_2<A, E, R>;
     }) => Worker_2<E, R, L>;
     readonly subscription: <A, E, R, L extends LockConfig>(opts: CommonOpts<L> & {
         readonly acquire: Effect.Effect<A, E, R>;
@@ -82,10 +87,7 @@ export interface DaemonHealth {
 // Warning: (ae-forgotten-export) The symbol "DaemonReporter_base" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export class DaemonReporter extends DaemonReporter_base {
-    // (undocumented)
-    static readonly Noop: Layer.Layer<DaemonReporter>;
-}
+export class DaemonReporter extends DaemonReporter_base {}
 
 // @public (undocumented)
 export interface DaemonReporterService {
@@ -154,18 +156,6 @@ export const IntensityConfig: Schema.Struct<{
 
 // @public (undocumented)
 export type IntensityConfig = typeof IntensityConfig.Type;
-
-// @public (undocumented)
-export const IntensityTypeId: unique symbol;
-
-// @public (undocumented)
-export type IntensityTypeId = typeof IntensityTypeId;
-
-// @public (undocumented)
-export const isSupervisor: <E, R>(x: Child<E, R>) => x is Supervisor<E, R>;
-
-// @public (undocumented)
-export const isWorker: <E, R>(x: Child<E, R>) => x is Worker_2<E, R>;
 
 // Warning: (ae-forgotten-export) The symbol "LeaderConfig_base" needs to be exported by the entry point index.d.ts
 //
@@ -247,6 +237,9 @@ export interface LockPrimitiveService {
 export type LoopShape<E, R> = PollLoop<E, R> | StreamLoop<E, R> | SubscriptionLoop<E, R>;
 
 // @public (undocumented)
+export const Noop: Layer.Layer<DaemonReporter>;
+
+// @public (undocumented)
 export const oneForAll: <E, R, L extends LockConfig = LockConfig>(opts: SupervisorOpts<E, R, L>) => Supervisor<E, R, L>;
 
 // @public (undocumented)
@@ -286,9 +279,19 @@ export const restForOne: <E, R, L extends LockConfig = LockConfig>(opts: Supervi
 
 // @public (undocumented)
 export const run: {
-    readonly worker: typeof worker;
-    readonly supervisor: typeof supervisor;
-    readonly dynamic: <E, R, Args>(spec: DynamicSpec<E, R, Args>) => Effect.Effect<DynamicHandle<Args, R | LeaderLock | DaemonReporter | Scope.Scope>, never, R | LeaderLock | DaemonReporter | Scope.Scope>;
+    readonly worker: {
+        <E, R>(w: Worker_2<E, R, {
+            mode: "none";
+        }>): Effect.Effect<DaemonHealth, never, R | SupervisorBodyExecutorDeps | Scope_2>;
+        <E, R>(w: Worker_2<E, R, LockConfig>): Effect.Effect<DaemonHealth, never, R | WithLeaderLockExecutorDeps | SupervisorBodyExecutorDeps | Scope_2>;
+    };
+    readonly supervisor: {
+        <E, R>(s: Supervisor<E, R, {
+            mode: "none";
+        }>): Effect.Effect<SupervisorHealth, never, R | SupervisorBodyExecutorDeps | Scope_2>;
+        <E, R>(s: Supervisor<E, R, LockConfig>): Effect.Effect<SupervisorHealth, never, R | WithLeaderLockExecutorDeps | SupervisorBodyExecutorDeps | Scope_2>;
+    };
+    readonly dynamic: <E, R, Args>(spec: DynamicSpec<E, R, Args>) => Effect.Effect<DynamicHandle<Args, R | WithLeaderLockExecutorDeps | SupervisorBodyExecutorDeps | Scope_2>, never, R | WithLeaderLockExecutorDeps | SupervisorBodyExecutorDeps | Scope_2>;
 };
 
 // @public (undocumented)
@@ -315,9 +318,9 @@ export type SubscriptionLoop<E, R> = {
 
 // @public (undocumented)
 export const Supervision: {
-    readonly leader: (cap: Duration.DurationInput) => Effect.Effect<SupervisionPolicy>;
-    readonly worker: (cap: Duration.DurationInput) => Effect.Effect<SupervisionPolicy>;
-    readonly task: (budget: Duration.DurationInput) => Effect.Effect<SupervisionPolicy>;
+    readonly leader: (cap: DurationInput) => Effect.Effect<SupervisionPolicy>;
+    readonly worker: (cap: DurationInput) => Effect.Effect<SupervisionPolicy>;
+    readonly task: (budget: DurationInput) => Effect.Effect<SupervisionPolicy>;
     readonly custom: (policy: SupervisionPolicy) => Effect.Effect<SupervisionPolicy>;
 };
 
@@ -360,12 +363,20 @@ export interface Supervisor<E, R, L extends LockConfig = LockConfig> {
 }
 
 // @public (undocumented)
-export function supervisor<E, R>(s: Supervisor<E, R, {
-    mode: 'none';
-}>): Effect.Effect<SupervisorHealth, never, R | DaemonReporter | Scope.Scope>;
+export const supervisor: {
+    <E, R>(s: Supervisor<E, R, {
+        mode: 'none';
+    }>): Effect.Effect<SupervisorHealth, never, R | SupervisorBodyExecutorDeps | Scope.Scope>;
+    <E, R>(s: Supervisor<E, R, LockConfig>): Effect.Effect<SupervisorHealth, never, R | WithLeaderLockExecutorDeps | SupervisorBodyExecutorDeps | Scope.Scope>;
+};
+
+// Warning: (ae-forgotten-export) The symbol "SupervisorBodyExecutorDeps_base" needs to be exported by the entry point index.d.ts
+//
+// @public (undocumented)
+export class SupervisorBodyExecutorDeps extends SupervisorBodyExecutorDeps_base {}
 
 // @public (undocumented)
-export function supervisor<E, R>(s: Supervisor<E, R, LockConfig>): Effect.Effect<SupervisorHealth, never, R | LeaderLock | DaemonReporter | Scope.Scope>;
+export const SupervisorBodyExecutorLive: Layer.Layer<SupervisorBodyExecutorDeps, never, DaemonReporter>;
 
 // @public (undocumented)
 export const supervisorChildrenGauge: Metric.Metric.Gauge<number>;
@@ -439,18 +450,23 @@ export class UnboundedIntensity extends UnboundedIntensity_base {
 }
 
 // @public (undocumented)
-export const withLeaderLock: {
-    (options: LeaderLockOptions): <A, E, R>(self: Effect.Effect<A, E, R>) => Effect.Effect<A | void, E | LeaderLockAcquireError, R | LeaderLock>;
-    <A, E, R>(self: Effect.Effect<A, E, R>, options: LeaderLockOptions): Effect.Effect<A | void, E | LeaderLockAcquireError, R | LeaderLock>;
+export function withLeaderLock<A, E, R>(self: Effect.Effect<A, E, R>, options: LeaderLockOptions): Effect.Effect<A | void, E | LeaderLockAcquireError, R | WithLeaderLockExecutorDeps>;
+
+// Warning: (ae-forgotten-export) The symbol "WithLeaderLockExecutorDeps_base" needs to be exported by the entry point index.d.ts
+//
+// @public (undocumented)
+export class WithLeaderLockExecutorDeps extends WithLeaderLockExecutorDeps_base {}
+
+// @public (undocumented)
+export const WithLeaderLockExecutorLive: Layer.Layer<WithLeaderLockExecutorDeps, never, LeaderLock>;
+
+// @public (undocumented)
+export const worker: {
+    <E, R>(w: Worker_2<E, R, {
+        mode: 'none';
+    }>): Effect.Effect<DaemonHealth, never, R | SupervisorBodyExecutorDeps | Scope.Scope>;
+    <E, R>(w: Worker_2<E, R, LockConfig>): Effect.Effect<DaemonHealth, never, R | WithLeaderLockExecutorDeps | SupervisorBodyExecutorDeps | Scope.Scope>;
 };
-
-// @public (undocumented)
-export function worker<E, R>(w: Worker_2<E, R, {
-    mode: 'none';
-}>): Effect.Effect<DaemonHealth, never, R | DaemonReporter | Scope.Scope>;
-
-// @public (undocumented)
-export function worker<E, R>(w: Worker_2<E, R, LockConfig>): Effect.Effect<DaemonHealth, never, R | LeaderLock | DaemonReporter | Scope.Scope>;
 
 // @public (undocumented)
 interface Worker_2<E, R, L extends LockConfig = LockConfig> {

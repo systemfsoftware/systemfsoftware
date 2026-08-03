@@ -82,6 +82,21 @@ ruleTester.run('no-native-setinterval-in-effect', noNativeSetIntervalInEffect, {
         doStuff()
       `,
     },
+    // member access on global object with a DIFFERENT method name
+    {
+      name: 'allows window.setTimeout with effect import (name mismatch)',
+      code: `
+        import { Effect } from 'effect'
+        window.setTimeout(() => {}, 1000)
+      `,
+    },
+    {
+      name: 'allows globalThis.setTimeout with effect import (name mismatch)',
+      code: `
+        import { Effect } from 'effect'
+        globalThis.setTimeout(() => {}, 1000)
+      `,
+    },
   ],
   invalid: [
     // Direct setInterval

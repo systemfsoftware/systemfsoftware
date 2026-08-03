@@ -16,9 +16,9 @@ ruleTester.run('test-file-outside-tests-dir', testFileOutsideTestsDir, {
       filename: '/repo/pkg/tests/a.integration.test.ts',
     },
     {
-      name: 'Should_Allow_FeatureTest_When_InUnderscoreTestsDir',
+      name: 'Should_Allow_IntegrationTest_When_InUnderscoreTestsDir',
       code: '',
-      filename: '/repo/pkg/__tests__/a.feature.test.ts',
+      filename: '/repo/pkg/__tests__/a.integration.test.ts',
     },
     {
       name: 'Should_Allow_SrcPropertyTest_When_UnderSrc',
@@ -33,7 +33,7 @@ ruleTester.run('test-file-outside-tests-dir', testFileOutsideTestsDir, {
   ],
   invalid: [
     {
-      name: 'Should_Report_StrayIntegrationTest_When_OutsideTestsDir',
+      name: 'Should_Report_StrayIntegrationTest_When_AtRepoRoot',
       code: '',
       filename: '/repo/pkg/a.integration.test.ts',
       errors: [{
@@ -47,13 +47,13 @@ ruleTester.run('test-file-outside-tests-dir', testFileOutsideTestsDir, {
       }],
     },
     {
-      name: 'Should_Report_StrayFeatureTest_When_InUnrelatedLibDir',
+      name: 'Should_Report_StrayIntegrationTest_When_InUnrelatedLibDir',
       code: '',
-      filename: '/repo/pkg/lib/a.feature.test.ts',
+      filename: '/repo/pkg/lib/a.integration.test.ts',
       errors: [{
         messageId: 'strayTestFile',
         data: {
-          name: 'a.feature.test.ts',
+          name: 'a.integration.test.ts',
           expected: STRAY_TEST_FILE_EXPECTED,
           actual: STRAY_TEST_FILE_ACTUAL,
           fix: STRAY_TEST_FILE_FIX,

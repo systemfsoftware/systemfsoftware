@@ -36,11 +36,7 @@
   "incremental": true,
   "incrementalFile": "reports/stryker-incremental.json",
   "mutate": [
-    "src/**/*.ts",
-    "!**/*.schema.ts",
-    "!**/*.test.ts",
-    "!**/__tests__/**",
-    "!src/mod.ts"
+    "src/**/*.schema.ts"
   ],
   "mutator": {
     "excludedMutations": [

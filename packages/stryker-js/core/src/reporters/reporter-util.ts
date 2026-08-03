@@ -1,4 +1,4 @@
-import { createReadStream, createWriteStream, promises as fs } from 'fs'
+import { createReadStream, createWriteStream, promises as fs, rmSync } from 'fs'
 import path from 'path'
 
 export const reporterUtil = {
@@ -16,5 +16,9 @@ export const reporterUtil = {
   async writeFile(fileName: string, content: string): Promise<void> {
     await fs.mkdir(path.dirname(fileName), { recursive: true })
     await fs.writeFile(fileName, content, 'utf8')
+  },
+
+  removeFileSync(fileName: string): void {
+    rmSync(fileName, { force: true })
   },
 }

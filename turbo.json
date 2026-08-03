@@ -110,6 +110,13 @@
         "build"
       ]
     },
+    "//#format:check": {
+      "inputs": [
+        "$TURBO_ROOT$/**/*.{ts,mts,cts,js,mjs,cjs,json,jsonc,md}"
+      ],
+      "outputs": [],
+      "cache": false
+    },
     "clean": {
       "cache": false
     },

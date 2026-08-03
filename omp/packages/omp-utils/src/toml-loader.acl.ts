@@ -11,13 +11,13 @@
  * source, not the destination. Constitutes ACL1 (see `omp/AGENTS.md`).
  */
 import { parse } from '@std/toml'
-import { ParseResult, Schema } from 'effect'
+import { ParseResult, Schema as S } from 'effect'
 import { TomlConfig } from './toml-loader.schema.js'
 
-export const TomlConfigFromText: Schema.transform<Schema.Schema<string>, Schema.SchemaClass<TomlConfig>> = Schema
+export const TomlConfigFromText: S.transform<S.Schema<string>, S.SchemaClass<TomlConfig>> = S
   .transformOrFail(
-    Schema.String,
-    Schema.typeSchema(TomlConfig),
+    S.String,
+    S.typeSchema(TomlConfig),
     {
       strict: true,
       decode: (raw) =>

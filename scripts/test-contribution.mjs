@@ -41,6 +41,7 @@ import { relative, resolve } from 'node:path'
 
 const PROPERTY_SUFFIX = '.property.test.ts'
 const REPORT = 'reports/mutation-report.json'
+const TYPE_ASSERTION = /\b(?:expectTypeOf|assertType)\s*[<(]/
 
 const parseArgs = (argv) => {
   const flag = (name) => argv.find((a) => a.startsWith(`--${name}=`))?.slice(name.length + 3)
@@ -88,13 +89,29 @@ const changedTestFiles = ({ packageDir, since, all }) => {
 }
 
 const runMutation = (packageDir) => {
+  const reportPath = resolve(packageDir, REPORT)
+  /**
+   * Stryker exits non-zero both when the score falls under `break` — the signal a probe is
+   * meant to produce — and when it dies before mutating anything, so the exit code alone
+   * cannot separate them. The report settles it: `JsonReporter` clears its target when the
+   * run starts, so a file on disk means the run reached the end and its absence means it
+   * did not. Measured 2026-08-01 on omp-claude-compat, before that fix: three consecutive
+   * checker-init failures left a stale report and accused two files, one of which defends
+   * two mutants.
+   */
   try {
     execFileSync('pnpm', ['exec', 'stryker', 'run'], { cwd: packageDir, stdio: ['ignore', 'ignore', 'inherit'] })
   } catch {
     // A probe that lets mutants survive drops the score under `break` and exits non-zero.
     // That is the signal, not a failure; the report is written either way and decides.
   }
-  const report = JSON.parse(readFileSync(resolve(packageDir, REPORT), 'utf8'))
+  if (!existsSync(reportPath)) {
+    throw new Error(
+      `stryker wrote no ${REPORT} — the run failed before mutating anything (see its output above). ` +
+        `A contribution verdict cannot be read from a run that did not happen.`,
+    )
+  }
+  const report = JSON.parse(readFileSync(reportPath, 'utf8'))
   const killed = new Set()
   for (const [file, { mutants }] of Object.entries(report.files)) {
     for (const m of mutants) {
@@ -165,14 +182,36 @@ const main = () => {
     rmSync(baselineCopy)
   }
 
-  if (freeloaders.length > 0) {
-    console.error(`[contribution] ${freeloaders.length} property test file(s) defend nothing:`)
-    for (const f of freeloaders) console.error(`  ${f} — every mutant of ${sourceOf(f)} still dies without it`)
+  /**
+   * Contribution here is mutant contribution, and a type-level assertion produces no
+   * mutant — removing one never resurrects a mutant, so a file whose payload is
+   * `expectTypeOf`/`assertType` scores zero however load-bearing it is. Measured
+   * 2026-08-01 on hex-schema: prefixed-hex.schema.property.test.ts scored zero against
+   * every baseline, yet falsifying its encoded-type assertion is a TS2344. Telling that
+   * file to delete itself is the one instruction this script must never give, so the two
+   * verdicts are separated. Both still fail: zero mutant contribution is a real finding,
+   * and a type assertion is not a licence to skip the mutation question.
+   */
+  const typed = freeloaders.filter((f) => TYPE_ASSERTION.test(readFileSync(resolve(packageDir, f), 'utf8')))
+  const untyped = freeloaders.filter((f) => !typed.includes(f))
+
+  if (untyped.length > 0) {
+    console.error(`[contribution] ${untyped.length} property test file(s) defend nothing:`)
+    for (const f of untyped) console.error(`  ${f} — every mutant of ${sourceOf(f)} still dies without it`)
     console.error(
       `\nSharpen these until removing one lets a mutant survive, or delete them.\nA passing mutation score is not evidence that a test earns its place.`,
     )
-    process.exit(1)
   }
+
+  if (typed.length > 0) {
+    console.error(`\n[contribution] ${typed.length} file(s) kill no mutant but carry type-level assertions:`)
+    for (const f of typed) console.error(`  ${f} — mutation cannot judge these; do not delete on this verdict`)
+    console.error(
+      `\nProve each type assertion instead: falsify it and confirm the package typecheck fails.\nIf it holds, give the file a property that kills a mutant too, or move the assertions to a .tst.ts.`,
+    )
+  }
+
+  if (freeloaders.length > 0) process.exit(1)
   console.log('[contribution] ok — removing any changed property test lets a mutant survive')
 }
 

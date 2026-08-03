@@ -84,6 +84,13 @@ ruleTester.run('no-new-promise-in-effect', noNewPromiseInEffect, {
         new Error('oops')
       `,
     },
+    {
+      name: 'allows non-Promise constructor with function argument (callee guard)',
+      code: `
+        import { Effect } from 'effect'
+        new WeakMap(function() {})
+      `,
+    },
   ],
   invalid: [
     // Arrow function executor

@@ -25,15 +25,15 @@
     "dir": ".",
     "related": true
   },
+  "disableBail": true,
   "typescriptChecker": {
     "prioritizePerformanceOverAccuracy": false
   },
-  "coverageAnalysis": "perTest",
-  "incremental": true,
-  "incrementalFile": "reports/stryker-incremental.json",
+  "coverageAnalysis": "all",
   "mutate": [
     "src/**/*.ts",
     "!src/**/*.test.ts",
+    "!src/**/*.config.ts",
     "!src/index.ts"
   ],
   "ignorePatterns": [
@@ -43,6 +43,6 @@
   "thresholds": {
     "high": 100,
     "low": 80,
-    "break": 0
+    "break": 100
   }
 }

@@ -115,12 +115,12 @@ ruleTester.run('damp-test-naming', dampTestNaming, {
       `,
     },
     {
-      name: 'Should_Ignore_When_ItProp_EvenWithDAMPName',
-      code: `it.prop('Should_Throw_When_Invalid', [Schema.String], ([s]) => s.length > 0)`,
+      name: 'Should_Ignore_When_ItProp_EvenWithInvalidName',
+      code: `it.prop('foo', [Schema.String], ([s]) => s.length > 0)`,
     },
     {
-      name: 'Should_Ignore_When_ItEffectProp_EvenWithDAMPName',
-      code: `it.effect.prop('Should_Reject_When_ExceedsWindow', [Schema.Number], ([n]) => n > 0)`,
+      name: 'Should_Ignore_When_ItEffectProp_EvenWithInvalidName',
+      code: `it.effect.prop('bar', [Schema.Number], ([n]) => n > 0)`,
     },
     {
       name: 'Should_Ignore_When_ItPropOnly_Called',
@@ -129,6 +129,22 @@ ruleTester.run('damp-test-naming', dampTestNaming, {
     {
       name: 'Should_Ignore_When_ItEffectPropOnly_Called',
       code: `it.effect.prop.only('Should_Reject_When_ExceedsWindow', [Schema.Number], ([n]) => n > 0)`,
+    },
+    {
+      // Reaches the `if (node.callee.property.type !== 'Identifier')` guard
+      // (computed member with a non-Identifier property, e.g. StringLiteral).
+      // DAMP-invalid name: under the `return true` mutant the rule would
+      // report `missingShouldPrefix` on `'foo'`, killing the survivor.
+      name: 'Should_Ignore_When_ItComputedKey_HasInvalidName',
+      code: `it['each']('foo', () => {})`,
+    },
+    {
+      // Reaches the trailing `return false` for non-Identifier,
+      // non-MemberExpression callees (CallExpression / ConditionalExpression).
+      // DAMP-invalid name: under the `return true` mutant the rule would
+      // report `missingShouldPrefix` on `'bar'`, killing the survivor.
+      name: 'Should_Ignore_When_CalleeIsCallExpression_HasInvalidName',
+      code: `(makeIt())('bar', () => {})`,
     },
   ],
   invalid: [

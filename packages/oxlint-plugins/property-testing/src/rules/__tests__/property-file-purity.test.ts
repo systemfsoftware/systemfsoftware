@@ -17,6 +17,7 @@ const ruleTester = new RuleTester({
 
 const PROPERTY_FILE = 'src/sort.property.test.ts'
 const SCENARIO_FILE = 'src/sort.test.ts'
+const SNAPSHOT_FILE = 'tests/bounded-union.snapshot.test.ts'
 
 ruleTester.run('property-file-purity', propertyFilePurity, {
   valid: [
@@ -95,6 +96,18 @@ ruleTester.run('property-file-purity', propertyFilePurity, {
       name: 'Should_Pass_When_DefaultEffectImport_InScenarioFile',
       code: `import Schema from 'effect'\nit('t', () => { expect(1).toBe(1) })`,
       filename: SCENARIO_FILE,
+    },
+    {
+      name: 'Should_Pass_When_FastCheckImport_InSnapshotFile',
+      code:
+        `import { FastCheck as fc } from 'effect'\nit('snapshot', () => { fc.sample(arb, { seed: 1, numRuns: 10 }) })`,
+      filename: SNAPSHOT_FILE,
+    },
+    {
+      name: 'Should_Pass_When_FcSampleCall_WithDifferentSeed_InSnapshotFile',
+      code:
+        `import { FastCheck as fc } from 'effect'\nit('snapshot', () => { fc.sample(arb, { seed: 2, numRuns: 5 }) })`,
+      filename: SNAPSHOT_FILE,
     },
   ],
   invalid: [
@@ -231,10 +244,10 @@ ruleTester.run('property-file-purity', propertyFilePurity, {
         {
           messageId: 'propCall',
           data: {
-            name: 'property test in a scenario test file',
+            name: 'property test in a non-property test file',
             expected: 'it.prop / it.effect.prop calls live in .property.test.ts files',
-            actual: 'a property test mixed into a scenario test file',
-            fix: 'move this test to a *.property.test.ts file — property and scenario tests never mix',
+            actual: 'a property test mixed into a test file that is not a property file',
+            fix: 'move this test to a *.property.test.ts file — property and non-property tests never mix',
           },
         },
       ],
@@ -249,6 +262,18 @@ ruleTester.run('property-file-purity', propertyFilePurity, {
       name: 'Should_Report_When_ItPropOnly_InSpecFile',
       code: `it.prop.only('∀n_X_=x', [fc.integer()], ([n]) => n === n)`,
       filename: 'src/sort.spec.ts',
+      errors: [{ messageId: 'propCall' }],
+    },
+    {
+      name: 'Should_Report_When_ItProp_InSnapshotFile',
+      code: `it.prop('∀n_X_=x', [fc.integer()], ([n]) => n === n)`,
+      filename: SNAPSHOT_FILE,
+      errors: [{ messageId: 'propCall' }],
+    },
+    {
+      name: 'Should_Report_When_ItEffectProp_InSnapshotFile',
+      code: `it.effect.prop('∀x_X_=x', [arb], ([x]) => Effect.gen(function*() { return x === x }))`,
+      filename: SNAPSHOT_FILE,
       errors: [{ messageId: 'propCall' }],
     },
   ],

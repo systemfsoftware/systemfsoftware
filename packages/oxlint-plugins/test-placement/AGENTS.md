@@ -2,7 +2,7 @@
 
 > Delta only. Shared rule-authoring conventions: `packages/oxlint-plugins/AGENTS.md`. Universal rules: root `AGENTS.md`.
 
-This package ships six rules enforcing where tests may live and which test suffixes are sanctioned. They are turned on by `@systemfsoftware/oxlint-config/strict`; packages that extend only `base` load the plugin but enable none of its rules.
+This package ships ten rules enforcing where tests may live and which test suffixes are sanctioned. They are turned on by `@systemfsoftware/oxlint-config/strict`; packages that extend only `base` load the plugin but enable none of its rules.
 
 ```yaml
 - id: TP1
@@ -32,4 +32,11 @@ This package ships six rules enforcing where tests may live and which test suffi
   dont: re-admit a `*.schema.test.ts` branch to no-test-file-in-src, or add a second name-whitelisted test file
   harm: the generated `ruleOfSchemas` pair draws every input from the arbitrary the schema itself supplies, so it covers everything the schema accepts and nothing it rejects — an authored `*.schema.test.ts` restates the covered half and drifts, while the uncovered half needs the property-cell suffix rather than this one
   check: SCHEMA_SUFFIX is only ever read to report `schemaTestInSrc`; SCHEMA_LAWS_BASENAME is the only exact-basename allowance in the taxonomy
+
+- id: TP5
+  title: One behaviour suffix — the double policy is a judgement, not a filename
+  do: name every behaviour test `*.integration.test.ts` whether or not it doubles at a port; reach for delete before naming it at all when the assertion restates a pure-cell literal
+  dont: re-introduce `*.composition.test.ts` or any second behaviour suffix; keep a `*.feature.test.ts` suffix or a rename of it that still names "feature" rather than the layer; treat a suffix choice as a destination rather than a decision the assertion must earn
+  harm: the retired `.feature.test.ts` suffix let an AI produce 41 gherkin scenarios asserting pure-function results — a unit test in gherkin costume; the composition/integration split that replaced it asked authors to encode a doubles policy in a filename, which produced the same misfiling one layer up. The remaining rules must keep behaviour tests reaching a real use case AND make deletion reachable from every `Fix:` they emit
+  check: grep finds no `.composition.test.ts` and no `.feature.test.ts` outside test-suffix-outside-src fixtures asserting they are rejected; BEHAVIOUR_SUFFIXES has exactly one member; the four behaviour rules' `Fix:` strings make "delete it" a first-class outcome
 ```

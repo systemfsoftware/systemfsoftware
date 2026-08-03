@@ -26,17 +26,17 @@ Rules here gate the `architect-executor` cell spec (`*.executor.ts` — the impu
   harm: the executor's sanctioned job is to translate the decision, which requires dispatching on it — a blanket ban flags the correct implementation
   check: "`executor-no-domain-branch` has a valid case dispatching over a workflow result and an invalid case dispatching over a decoded value"
 
-- id: EE4
-  title: RuleTester is the only test mechanism
-  do: test through the colocated `src/rules/__tests__/<rule>.test.ts` suite
-  dont: spawn oxlint as a subprocess, import `dist/`, or assert on `configs`/`meta` shape
-  harm: a lint run inside the lint suite costs seconds and asserts what one unit assertion already covers
-  check: every `src/**/*.test.ts` constructs a RuleTester
-
 - id: EE5
   title: Deliberate non-gates
   do: leave sandwich ORDERING (EX3c), read completeness (EX3b), the data-integrity allowlist (EX4b), and anti-pattern FILE NAMES (EX5) to review
   dont: add a rule for them here
   harm: ordering needs a READ/WRITE distinction the AST cannot supply — the writing methods arrive through Context.Tag destructuring, so no import edge names their cell; read completeness and the allowlist need cross-module type resolution or a domain judgment; EX5 is family-wide and belongs to a naming rule in the shared plugin, not to twelve per-cell copies
   check: no rule in `src/rules/` claims to enforce statement order, read completeness, or filename bans
+
+- id: EE6
+  title: Private executor composition is internal
+  do: allow an executor to import another executor only when the module specifier contains an `internal` path segment
+  dont: allow public-to-public executor imports or treat `internal` inside a filename or package name as a path segment
+  harm: banning private helpers drives effectful composition into the entrypoint, while allowing public executor composition couples use cases sideways
+  check: `executor-import-boundary` covers static and dynamic imports for internal segments, public siblings, and substring near-misses
 ```

@@ -9,7 +9,7 @@ export const NO_PRIVATE_TARGET_NAME = 'an `import.meta.vitest` block touching no
 export const NO_PRIVATE_TARGET_EXPECTED = 'an in-source test exercising a non-exported module-level binding' as const
 export const NO_PRIVATE_TARGET_ACTUAL = 'an in-source block referencing only exported or imported names' as const
 export const NO_PRIVATE_TARGET_FIX =
-  'test the public surface from tests/ as *.integration.test.ts; in-source blocks exist for private helpers only' as const
+  'test the public surface from tests/ as *.integration.test.ts; in-source blocks exist for private helpers only — if the public behaviour you meant to cover is a pure function, delete the assertion: the type system already proves it' as const
 
 export const meta = {
   type: 'problem',

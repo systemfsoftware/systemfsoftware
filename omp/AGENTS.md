@@ -15,7 +15,7 @@
 
 ## Cell Architecture (DMMF in this workspace)
 
-`omp-claude-compat/src/` is the canonical example. The pattern:
+`plugins/omp-claude-compat/src/` is the canonical example. The pattern:
 
 | Suffix          | Role                                                      | Purity | Example in this workspace                                        |
 | --------------- | --------------------------------------------------------- | ------ | ---------------------------------------------------------------- |
@@ -24,7 +24,7 @@
 | `*.acl.ts`      | Foreign-shape → domain decode (never cast)                | Pure   | `hook-output.acl.ts`, `hook-settings.acl.ts`, `tool-name.acl.ts` |
 | `*.handler.ts`  | Transport terminus — registers `pi.on(...)` handlers      | Impure | `hook-dispatcher.handler.ts`, `inject-instructions.handler.ts`   |
 | `*.schema.ts`   | Shared tagged unions or branded primitives (≥2 consumers) | Pure   | `hook-dispatcher.schema.ts`                                      |
-| `index.ts`      | Package barrel — extension manifest wiring                | Impure | `omp-claude-compat/src/index.ts`                                 |
+| `index.ts`      | Package barrel — extension manifest wiring                | Impure | `plugins/omp-claude-compat/src/index.ts`                         |
 
 **Decision tree for a new module under `omp/plugins/*/src/` (or `omp/packages/*/src/` for shared libs):**
 
@@ -38,7 +38,7 @@
 
 Errors in this workspace MUST extend `S.TaggedError`, not `S.TaggedClass`. A `TaggedClass` is data; a `TaggedError` is an error. The convention exists because errors flow through Effect's `catchTag` / `catchTags` machinery and need the discriminator plus the metadata that `TaggedError` provides. Reference usage: `packages/effect-daemon-spec/src/leader-lock.schema.ts`.
 
-**Pattern in this workspace** — `omp-claude-compat/src/hook-verdict.workflow.ts` after the 2026-07-20 fix:
+**Pattern in this workspace** — `plugins/omp-claude-compat/src/hook-verdict.workflow.ts` after the 2026-07-20 fix:
 
 ```ts
 // RIGHT

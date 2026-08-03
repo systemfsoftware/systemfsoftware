@@ -85,7 +85,8 @@
     ]
   },
   "include": [
-    "src"
+    "src",
+    "__tests__"
   ],
   "references": [
     {

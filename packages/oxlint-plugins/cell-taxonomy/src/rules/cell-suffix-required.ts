@@ -3,6 +3,7 @@ import type { Context, ESTree } from '@oxlint/plugins'
 import { Array as A, Schema as S } from 'effect'
 import {
   DECLARATION_SEGMENT,
+  GENERATED_SEGMENT,
   meta,
   SANCTIONED_TEST_DIRS,
   SRC_DIR,
@@ -47,6 +48,7 @@ export const cellSuffixRequired = defineRule({
     const trailing = A.lastNonEmpty(stem)
 
     if (trailing === DECLARATION_SEGMENT) return {}
+    if (stem.length > 1 && trailing === GENERATED_SEGMENT) return {}
     if (TEST_SEGMENTS.has(trailing)) return {}
 
     const { cells, exempt } = decodeOptions(context.options[0])

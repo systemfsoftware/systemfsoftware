@@ -13,5 +13,6 @@ export const meta = {
   schema: [Options],
   messages: {
     tooManyFunctionExports: MESSAGE,
+    disallowedExport: MESSAGE,
   },
 } as const

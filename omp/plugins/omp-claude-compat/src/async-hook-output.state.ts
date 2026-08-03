@@ -1,3 +1,5 @@
+import { Context, Effect, Ref } from 'effect'
+
 /**
  * Shared-state quarantine: an async hook outlives the dispatch that started
  * it, so its context has nowhere to return to. Claude Code delivers that
@@ -10,15 +12,20 @@
  */
 const PENDING_CAP = 64
 
-const pending: string[] = []
+const pending: Ref.Ref<string[]> = Ref.unsafeMake<string[]>([])
+
+export class AsyncHookContextState extends Context.Tag(
+  '@systemfsoftware/omp-claude-compat/AsyncHookContextState',
+)<AsyncHookContextState, AsyncHookContextState>() {}
 
 export function recordAsyncHookContext(context: string): void {
   const text = context.trim()
   if (text.length === 0) return
-  if (pending.length >= PENDING_CAP) pending.shift()
-  pending.push(text)
+  Effect.runSync(
+    Ref.update(pending, (items) => items.length >= PENDING_CAP ? [...items.slice(1), text] : [...items, text]),
+  )
 }
 
 export function drainAsyncHookContext(): readonly string[] {
-  return pending.splice(0, pending.length)
+  return Effect.runSync(Ref.getAndSet(pending, []))
 }

@@ -1,49 +1,17 @@
-// Stryker disable all
 import { defineRule } from '@oxlint/plugins'
 import type { ESTree } from '@oxlint/plugins'
 
-const EFFECT_MODULE = 'effect'
-const CATCH_METHODS: ReadonlySet<string> = new Set([
-  'catchAll',
-  'catchTag',
-  'catchAllCause',
-  'catchSome',
-  'catchSomeCause',
-  'catchIf',
-  'orElse',
-  'orElseFail',
-  'orElseSucceed',
-])
-const EFFECT_LOG_METHODS: ReadonlySet<string> = new Set([
-  'log',
-  'logDebug',
-  'logError',
-  'logWarning',
-  'logInfo',
-  'logTrace',
-])
-const CONSOLE_LOG_METHODS: ReadonlySet<string> = new Set([
-  'log',
-  'error',
-  'warn',
-  'info',
-  'debug',
-])
+import {
+  CATCH_METHODS,
+  CONSOLE_LOG_METHODS,
+  EFFECT_LOG_METHODS,
+  EFFECT_MODULE,
+  meta,
+} from './no-logging-in-catch.config.js'
 
 export const noLoggingInCatch = defineRule({
-  meta: {
-    type: 'suggestion',
-    docs: {
-      description: 'Prevents logging inside Effect catch blocks. Use Effect.tapError or logging outside catch instead.',
-    },
-    schema: [],
-    messages: {
-      noLoggingInCatch:
-        '{{name}} is forbidden inside {{catchMethod}}. Expected: {{expected}}. Actual: {{actual}}. Fix: {{fix}}.',
-    },
-  },
+  meta,
   create(context) {
-    // Stryker restore all
     const trackedEffectImports = new Set<string>()
     const catchMethodStack: string[] = []
     const activeCatchCallbacks = new WeakSet<ESTree.Node>()

@@ -5,7 +5,7 @@ export const TEST_FILE_IN_SRC_EXPECTED =
 export const TEST_FILE_IN_SRC_ACTUAL =
   'a test file under src/ that is neither the schema-laws entry point nor a property test' as const
 export const TEST_FILE_IN_SRC_FIX =
-  'name it <cell>.property.test.ts beside a workflow or policy; otherwise move it to tests/ as *.integration.test.ts or *.feature.test.ts, or inline it as an `if (import.meta.vitest)` block exercising a private binding' as const
+  'name it <cell>.property.test.ts beside a workflow or policy; otherwise move it to tests/ as *.integration.test.ts, or inline it as an `if (import.meta.vitest)` block exercising a private binding — and if neither survives the test of "what bug does this catch", delete it' as const
 
 export const SCHEMA_TEST_EXPECTED =
   'no authored test under this name — the generated schema-laws.test.ts carries the ruleOfSchemas pair for every exported schema' as const

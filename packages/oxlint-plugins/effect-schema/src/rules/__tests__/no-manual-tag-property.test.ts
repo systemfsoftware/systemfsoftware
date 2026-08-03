@@ -107,6 +107,42 @@ ruleTester.run('no-manual-tag-property', noManualTagProperty, {
         }
       `,
     },
+    // Literal property key that is NOT _tag (kills ConditionalExpression survivor on the Literal branch of isTagPropertyKey)
+    {
+      name: 'allows class with non-_tag string-literal property key',
+      code: `
+        class Foo {
+          'name' = 'foo'
+        }
+      `,
+    },
+    // Constructor parameter property whose param name is NOT _tag (kills ConditionalExpression survivors in isTagParameter, the || in the constructor loop, and isTagAssignmentPattern's first conjunct)
+    {
+      name: 'allows class with non-_tag constructor parameter property',
+      code: `
+        class Foo {
+          constructor(public name: string) {}
+        }
+      `,
+    },
+    // Constructor parameter property whose left name is NOT _tag (kills ConditionalExpression survivor on param.left.name === TAG_NAME)
+    {
+      name: 'allows class with non-_tag constructor parameter property default',
+      code: `
+        class Foo {
+          constructor(public name = 'x') {}
+        }
+      `,
+    },
+    // PrivateIdentifier property key — the predicate's `return false` fallthrough is genuinely reachable for non-Identifier, non-Literal keys; mutant on that branch converting it to return true would over-report (kills BooleanLiteral survivor on line 19)
+    {
+      name: 'allows class with private-identifier key',
+      code: `
+        class Foo {
+          #_tag = 'x'
+        }
+      `,
+    },
   ],
   invalid: [
     // PropertyDefinition with _tag identifier

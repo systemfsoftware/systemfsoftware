@@ -16,6 +16,7 @@ const _default: {
         'ban-data-taggederror': Rule;
         'no-manual-tag-property': Rule;
         'no-schema-law-duplicate': Rule;
+        'schema-exports-only-schemas': Rule;
     };
     configs: {
         recommended: {

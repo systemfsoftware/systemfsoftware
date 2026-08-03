@@ -5,8 +5,7 @@ export default defineConfig({
   test: {
     ...sharedConfig.test,
     testTimeout: process.env.CI ? 60_000 : 30_000,
-    include: ['src/**/*.test.ts'],
-    setupFiles: ['./vitest-setup.ts'],
+    include: ['src/**/*.test.ts', '__tests__/**/*.test.ts'],
     coverage: {
       provider: 'v8',
       include: ['src/**/*.ts'],

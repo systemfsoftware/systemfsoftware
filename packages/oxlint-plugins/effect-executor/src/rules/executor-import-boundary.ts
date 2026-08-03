@@ -22,6 +22,20 @@ export const isAdapterValueImport = (node: ESTree.ImportDeclaration): boolean =>
   return !node.specifiers.every((specifier) => specifier.type === 'ImportSpecifier' && specifier.importKind === 'type')
 }
 
+export const targetsInternalModule = (source: string, filename: string): boolean => {
+  if (!source.startsWith('.')) return source.split('/').includes('internal')
+  const segments = filename.split('/').slice(0, -1)
+  for (const step of source.split('/')) {
+    if (step === '.' || step === '') continue
+    if (step === '..') {
+      segments.pop()
+      continue
+    }
+    segments.push(step)
+  }
+  return segments.slice(0, -1).includes('internal')
+}
+
 export const executorImportBoundary = defineRule({
   meta,
   create(context: Context) {
@@ -60,7 +74,7 @@ export const executorImportBoundary = defineRule({
           return
         }
 
-        if (cell === 'executor') {
+        if (cell === 'executor' && !targetsInternalModule(source, context.filename)) {
           context.report({
             node,
             messageId: 'executorImport',
@@ -104,7 +118,7 @@ export const executorImportBoundary = defineRule({
           })
           return
         }
-        if (cell === 'executor') {
+        if (cell === 'executor' && !targetsInternalModule(sourceNode.value, context.filename)) {
           context.report({
             node,
             messageId: 'executorImport',

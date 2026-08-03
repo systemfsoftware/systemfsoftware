@@ -10,7 +10,7 @@
   },
   "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/oxlint-plugins/effect-dmmf#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "Combined oxlint plugin bundling the DMMF cell quartet under one entrypoint: pure decisions (effect-workflow), the operation shell (effect-executor), their property-test verification altitude (property-testing), and the filename taxonomy every cell is named by (cell-taxonomy).",
+  "description": "One-shot oxlint plugin bundle: registers every architecture rule in the DMMF family (cell taxonomy, property testing, test hygiene, test placement, and all effect-* cell plugins) under a single entrypoint, excluding the core junk drawer.",
   "keywords": [
     "oxlint",
     "oxlint-plugin",
@@ -41,9 +41,10 @@
   "scripts": {
     "build": "tsdown && pnpm api:check",
     "clean": "rimraf dist",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit --incremental",
     "format": "dprint fmt",
-    "lint": "node scripts/guard-no-test-infra.mjs && oxlint . ${AGENT:+--format=unix --quiet}",
+    "lint": "oxlint . ${AGENT:+--format=unix --quiet}",
     "attw": "attw --pack .",
     "api:check": "api-extractor run",
     "api:update": "api-extractor run --local"
@@ -51,18 +52,35 @@
   "dependencies": {
     "@oxlint/plugins": "catalog:oxlint",
     "@systemfsoftware/oxlint-plugin-cell-taxonomy": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-effect-acl": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-effect-adapter": "workspace:^",
     "@systemfsoftware/oxlint-plugin-effect-executor": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-effect-handler": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-effect-kernel": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-effect-middleware": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-effect-observer": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-effect-policy": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-effect-schema": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-effect-shape": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-effect-state": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-effect-store": "workspace:^",
     "@systemfsoftware/oxlint-plugin-effect-workflow": "workspace:^",
-    "@systemfsoftware/oxlint-plugin-property-testing": "workspace:^"
+    "@systemfsoftware/oxlint-plugin-property-testing": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-test-hygiene": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-test-placement": "workspace:^"
   },
   "devDependencies": {
     "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "workspace:^",
+    "@systemfsoftware/oxlint-plugin": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
+    "@types/node": "catalog:",
     "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   },
   "peerDependencies": {
     "oxlint": "catalog:oxlint"

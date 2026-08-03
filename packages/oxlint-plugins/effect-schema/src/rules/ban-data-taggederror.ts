@@ -1,24 +1,14 @@
-// Stryker disable all
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
+import { EXPECTED, FIX, meta } from './ban-data-taggederror.config.js'
 
 export type Options = []
 
 export type MessageIds = 'noDataTaggedError'
 
 export const banDataTaggedError = defineRule({
-  meta: {
-    type: 'suggestion',
-    docs: {
-      description: 'Ban Data.TaggedError in favor of S.TaggedError or Schema.TaggedError',
-    },
-    schema: [],
-    messages: {
-      noDataTaggedError: "'{{name}}' is forbidden. Expected: {{expected}}. Actual: {{actual}}. Fix: {{fix}}.",
-    },
-  },
+  meta,
   create(context: Context) {
-    // Stryker restore all
     let dataImportSource: string | null = null
     let dataLocalName: string | null = null
     let hasLocalDataVariable = false
@@ -29,9 +19,9 @@ export const banDataTaggedError = defineRule({
         messageId: 'noDataTaggedError',
         data: {
           name,
-          expected: "S.TaggedError or Schema.TaggedError from 'effect' package",
+          expected: EXPECTED,
           actual: name,
-          fix: "import { Schema as S } from 'effect' and use S.TaggedError('TagName')<{}>",
+          fix: FIX,
         },
       })
     }

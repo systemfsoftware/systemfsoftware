@@ -59,9 +59,9 @@ ruleTester.run('no-test-file-in-src', noTestFileInSrc, {
       filename: '/repo/pkg/tests/confirm-order.integration.test.ts',
     },
     {
-      name: 'Should_Allow_FeatureTestOutsideSrc_When_InTestsDir',
+      name: 'Should_Allow_IntegrationTestOutsideSrc_When_InDoubleUnderscoreTestsDir',
       code: '',
-      filename: '/repo/pkg/__tests__/confirm-order.feature.test.ts',
+      filename: '/repo/pkg/__tests__/confirm-order.integration.test.ts',
     },
   ],
   invalid: [

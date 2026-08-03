@@ -134,6 +134,35 @@ ruleTester.run('no-native-map-in-effect', noNativeMapInEffect, {
         })
       `,
     },
+    {
+      name: 'allows new Map() inside a non-gen member method call',
+      code: `
+        import { Effect } from 'effect'
+        const runner = { run: (f: any) => f() }
+        runner.run(function*() {
+          const m = new Map()
+        })
+      `,
+    },
+    {
+      name: 'allows new window.Set() inside Effect.gen (member name mismatch)',
+      code: `
+        import { Effect } from 'effect'
+        Effect.gen(function*() {
+          const s = new window.Set()
+        })
+      `,
+    },
+    {
+      name: 'allows new with parenthesized expression callee inside Effect.gen',
+      code: `
+        import { Effect } from 'effect'
+        const factory = () => Map
+        Effect.gen(function*() {
+          const m = new (factory())()
+        })
+      `,
+    },
   ],
   invalid: [
     // Basic: new Map() inside Effect.gen

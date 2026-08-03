@@ -25,6 +25,13 @@ This package mechanizes the positive half of Constitution IV.2 — a source file
   dont: read the AST, imports, or exports to decide whether a name is sanctioned
   harm: content rules co-vary with the stack they inspect; this package co-varies only with the taxonomy, and mixing the two axes is what made core a junk drawer
   check: the rule's only visitor is Program, used solely to carry the report node
+
+- id: CT4
+  title: Generated files are exempt from the suffix
+  do: exempt any src/ file whose segment immediately before the extension is `generated` - foo.generated.ts and order.schema.generated.ts
+  dont: exempt a bare generated.ts - there the marker is the whole basename, not a suffix marker - or a generated segment anywhere but directly before the extension
+  harm: a generated artifact cannot be renamed to name a cell, so a rule demanding the rename is unsatisfiable and every build ships an unfixable violation
+  check: the RuleTester suite pairs valid *.generated.ts cases with invalid near-misses (generated.ts, foo.generated.helper.ts)
 ```
 
 | Check    | Command                                                                |

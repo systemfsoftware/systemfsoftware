@@ -2,20 +2,27 @@
 
 > Delta only. Shared rule-authoring conventions: `packages/oxlint-plugins/AGENTS.md`. Universal rules: root `AGENTS.md`.
 
-This package inline-merges three already-tested plugins (`property-testing`, `effect-executor`, `effect-workflow`) with a plain object spread in `src/index.ts`. It has no rule logic, no AST visitor, and no decision surface of its own — see `README.md#development`.
+This package is the ONE-SHOT bundle: a consumer installs `@systemfsoftware/oxlint-plugin-effect-dmmf`, registers it as the single `jsPlugin`, and gets every architecture rule in the family — cell-taxonomy, property-testing, test-hygiene, test-placement, and all thirteen effect-{workflow,executor,schema,shape,acl,store,state,handler,middleware,adapter,policy,kernel,observer} plugins — under one entrypoint. `src/index.ts` is a plain object spread over the seventeen sources with a `recommendedFrom` helper that re-exports all of a source's `rules` but recommends only the entries that source's own `configs.recommended.rules` carries. It has no rule logic and no AST visitor of its own — see `README.md#development`.
 
 ```yaml
 - id: ED1
-  title: No stryker, no vitest, no test files
-  do: verify a change by building this package and running the built plugin against real oxlint (README.md#development)
-  dont: add stryker.config.json, vitest.config.ts, tsconfig.node.json, any src/*.test.ts, or the vitest/stryker devDependencies back to this package
-  harm: this package was built once WITH a dedicated behavior module, a mutation gate, and 12 synthetic-fixture tests covering scenarios that can never occur against three real, fixed, already-gated imports (arbitrary source counts, fake duplicate rule names) — that was MG1 (packages/oxlint-plugins/AGENTS.md) cargo-culted onto code with no real decision surface, and it was deleted; reintroducing it repeats the exact rework
-  check: node scripts/guard-no-test-infra.mjs — wired into this package's own `lint` script, so it runs on every `pnpm check`; fails loud, names every violation found
+  title: Aggregation is tested, not trusted
+  do: keep the colocated suite at src/__tests__/ green — it imports the real source plugins and asserts (a) no two sources share a rule name, (b) core is absent, (c) every source-recommended rule is enabled under this bundle's own plugin name and workflow-inline-schemas stays registered-but-unrecommended
+  dont: delete the suite, reintroduce fixture plugins, or special-case a source's rule names — the collision guard exists because a plain object spread silently drops duplicates
+  harm: seventeen real sources aggregated by hand WILL collide eventually; a dropped duplicate either fails the bundle (missing rule) or, worse, silently overrides an identically-named rule from a sibling source — the suite is the only thing that names the colliding rule and both owners
+  check: pnpm --filter @systemfsoftware/oxlint-plugin-effect-dmmf test exits 0 under vitest (the test stack mirrors packages/oxlint-plugins/effect-adapter; no node:test loader, no test-infra guard — both were scaffolding for the previous "pure re-export, no test surface" assumption that ended once src/index.ts gained recommendedFrom)
 
 - id: ED2
-  title: ED1 holds only while this package stays a pure re-export
-  do: re-derive from packages/oxlint-plugins/AGENTS.md#MG1 the moment src/index.ts gains a rule file, a filter/validation branch, or any logic a mutation could get wrong
-  dont: read ED1 as a permanent "no tests ever" — it is scoped to the current shape, not the package forever
-  harm: treating ED1 as permanent would exempt real future behavior from the family's actual gate
-  check: review — a PR adding logic beyond spreads/lookups to src/index.ts restores mutation coverage; guard-no-test-infra.mjs cannot make this call, it only enforces the current shape
+  title: Core is excluded by contract
+  do: keep @systemfsoftware/oxlint-plugin (core) out of the src/index.ts imports, the dependencies map, and the bundle's rules — its rule names must appear in NONE of the exported rule keys
+  dont: add core to the aggregation because "it's just a few more rules" — core is a junk drawer of general-purpose rules, its package name is banned by CONSTITUTION.md IV.2, and the one-shot bundle's whole point is a curated architecture surface
+  harm: bundling a junk drawer into the DMMF family muddies the curated surface, invites rule-name collisions with the real cell plugins, and violates the naming constitution
+  check: the test suite imports core in the TEST ONLY (purely to read its rule list) and asserts zero overlap with the bundle's exported rule keys
+
+- id: ED3
+  title: Aggregation rules read configs.recommended generically
+  do: when adding or removing a source plugin, wire it through recommendedFrom exactly like the others — re-export all of its rules, recommend only what its own configs.recommended.rules names
+  dont: hardcode any source's rule names into src/index.ts, or assume every source ships a configs.recommended block (test-hygiene did not until 2026-08-01)
+  harm: hardcoding bypasses the generic read and silently skips future sources that register rules without recommending them, or invents recommendations a source never made
+  check: review — every source appears exactly once in both the rules spread and the configs.recommended spread
 ```

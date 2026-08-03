@@ -1,6 +1,6 @@
 /**
  * Kernel cell — pure, domain-blind matchers for the dispatch-doctrine gate.
- * The workflow cell imports these as predicates; no kernel file does I/O.
+ * The executor cell imports these as predicates; no kernel file does I/O.
  */
 
 const DELEGATOR_TOOLS: Record<string, true> = { task: true, agent: true }

@@ -1,7 +1,7 @@
 import { RuleTester } from 'oxlint/plugins-dev'
 import * as vitest from 'vitest'
 
-import { executorImportBoundary } from '../executor-import-boundary.js'
+import { executorImportBoundary, targetsInternalModule } from '../executor-import-boundary.js'
 
 RuleTester.it = vitest.it
 RuleTester.itOnly = vitest.it.only
@@ -13,6 +13,31 @@ const ruleTester = new RuleTester({
       lang: 'ts',
     },
   },
+})
+
+vitest.it('Should_Reject_Target_When_OnlyImportedFilenameSegmentIsInternal', () => {
+  vitest.expect(targetsInternalModule('./internal', '/r/pkg/src/boot.executor.ts')).toBe(false)
+})
+
+vitest.it.each(
+  [
+    [
+      'Should_Accept_BareTarget_When_InternalIsFinalPathSegment',
+      '@scope/internal',
+      '/r/pkg/src/boot.executor.ts',
+      true,
+    ],
+    [
+      'Should_Reject_BareTarget_When_InternalIsOnlySubstring',
+      '@scope/my-internal/worker.executor.js',
+      '/r/pkg/src/boot.executor.ts',
+      false,
+    ],
+    ['Should_Reject_Target_When_FinalStepIsCurrentDirectory', './internal/.', '/r/pkg/src/boot.executor.ts', false],
+    ['Should_Reject_Target_When_FinalStepIsEmpty', './internal/', '/r/pkg/src/boot.executor.ts', false],
+  ] as const,
+)('%s', (_name, source, filename, expected) => {
+  vitest.expect(targetsInternalModule(source, filename)).toBe(expected)
 })
 
 ruleTester.run('executor-import-boundary', executorImportBoundary, {
@@ -82,8 +107,84 @@ ruleTester.run('executor-import-boundary', executorImportBoundary, {
       code: `const name = 'order.store'\nconst m = yield* Effect.promise(() => import(name))\n`,
       filename: 'confirm-order.executor.ts',
     },
+    {
+      name: 'Should_Allow_SiblingExecutor_When_ResolvedTargetIsInsideInternal',
+      code: `import { intensity } from './intensity.executor.js'\n`,
+      filename: '/r/pkg/src/internal/supervise-tree.executor.ts',
+    },
+    {
+      name: 'Should_Allow_PublicExecutorImport_When_ResolvedTargetIsInsideInternal',
+      code: `import { intensity } from './internal/intensity.executor.js'\n`,
+      filename: '/r/pkg/src/boot.executor.ts',
+    },
+    {
+      name: 'Should_Allow_InternalExecutorImport_When_DirectInternalPath',
+      code: `import { boot } from './internal/boot.executor.js'\n`,
+      filename: 'confirm-order.executor.ts',
+    },
+    {
+      name: 'Should_Allow_InternalExecutorImport_When_ParentInternalPath',
+      code: `import { boot } from '../internal/boot.executor.js'\n`,
+      filename: 'confirm-order.executor.ts',
+    },
+    {
+      name: 'Should_Allow_DynamicInternalExecutorImport_When_InternalPath',
+      code: `const m = yield* Effect.promise(() => import('./internal/boot.executor.js'))\n`,
+      filename: 'confirm-order.executor.ts',
+    },
   ],
   invalid: [
+    {
+      name: 'Should_Report_ExecutorImport_When_PathEscapesInternalDirectory',
+      code: `import { worker } from '../worker.executor.js'\n`,
+      filename: '/r/pkg/src/internal/supervise-tree.executor.ts',
+      errors: [
+        {
+          messageId: 'executorImport',
+          data: {
+            name: '../worker.executor.js',
+            expected: 'private executor composition resolving inside an internal/ directory',
+            actual: 'an import that resolves to a public .executor cell',
+            fix:
+              'if the imported executor is genuinely private to this one, move its file under internal/ alongside its importer; if both are public operations, compose them at the composition root instead; if this only reuses a helper, move that helper to a kernel or workflow',
+          },
+        },
+      ],
+    },
+    {
+      name: 'Should_Report_PublicExecutorImport_When_ResolvedTargetIsPublic',
+      code: `import { worker } from './worker.executor.js'\n`,
+      filename: '/r/pkg/src/boot.executor.ts',
+      errors: [
+        {
+          messageId: 'executorImport',
+          data: {
+            name: './worker.executor.js',
+            expected: 'private executor composition resolving inside an internal/ directory',
+            actual: 'an import that resolves to a public .executor cell',
+            fix:
+              'if the imported executor is genuinely private to this one, move its file under internal/ alongside its importer; if both are public operations, compose them at the composition root instead; if this only reuses a helper, move that helper to a kernel or workflow',
+          },
+        },
+      ],
+    },
+    {
+      name: 'Should_Report_ExecutorImport_When_OnlyImportedFilenameIsInternal',
+      code: `import { internal } from './internal.executor.js'\n`,
+      filename: '/r/pkg/src/boot.executor.ts',
+      errors: [
+        {
+          messageId: 'executorImport',
+          data: {
+            name: './internal.executor.js',
+            expected: 'private executor composition resolving inside an internal/ directory',
+            actual: 'an import that resolves to a public .executor cell',
+            fix:
+              'if the imported executor is genuinely private to this one, move its file under internal/ alongside its importer; if both are public operations, compose them at the composition root instead; if this only reuses a helper, move that helper to a kernel or workflow',
+          },
+        },
+      ],
+    },
     {
       name: 'Should_Report_AdapterValueImport_When_ExecutorFile',
       code: `import { makePaymentAdapter } from './payment-gateway.adapter.js'\n`,
@@ -219,17 +320,35 @@ ruleTester.run('executor-import-boundary', executorImportBoundary, {
       ],
     },
     {
-      name: 'Should_Report_ExecutorValueImport_When_ExecutorFile',
-      code: `import { RefundExecutor } from './refund.executor.js'\n`,
+      name: 'Should_Report_PublicSiblingExecutorImport_When_ExecutorFile',
+      code: `import { sibling } from './sibling.executor.js'\n`,
       filename: 'confirm-order.executor.ts',
       errors: [
         {
           messageId: 'executorImport',
           data: {
-            name: './refund.executor.js',
-            expected: 'one operation per executor',
-            actual: 'an import of the .executor cell',
-            fix: 'give the composite operation its own executor whose sandwich reads what both decisions need',
+            name: './sibling.executor.js',
+            expected: 'private executor composition resolving inside an internal/ directory',
+            actual: 'an import that resolves to a public .executor cell',
+            fix:
+              'if the imported executor is genuinely private to this one, move its file under internal/ alongside its importer; if both are public operations, compose them at the composition root instead; if this only reuses a helper, move that helper to a kernel or workflow',
+          },
+        },
+      ],
+    },
+    {
+      name: 'Should_Report_InternalSubstringExecutorImport_When_NotPathSegment',
+      code: `import { helper } from './my-internal-helper.executor.js'\n`,
+      filename: 'confirm-order.executor.ts',
+      errors: [
+        {
+          messageId: 'executorImport',
+          data: {
+            name: './my-internal-helper.executor.js',
+            expected: 'private executor composition resolving inside an internal/ directory',
+            actual: 'an import that resolves to a public .executor cell',
+            fix:
+              'if the imported executor is genuinely private to this one, move its file under internal/ alongside its importer; if both are public operations, compose them at the composition root instead; if this only reuses a helper, move that helper to a kernel or workflow',
           },
         },
       ],
@@ -243,9 +362,10 @@ ruleTester.run('executor-import-boundary', executorImportBoundary, {
           messageId: 'executorImport',
           data: {
             name: './refund.executor.js',
-            expected: 'one operation per executor',
-            actual: 'an import of the .executor cell',
-            fix: 'give the composite operation its own executor whose sandwich reads what both decisions need',
+            expected: 'private executor composition resolving inside an internal/ directory',
+            actual: 'an import that resolves to a public .executor cell',
+            fix:
+              'if the imported executor is genuinely private to this one, move its file under internal/ alongside its importer; if both are public operations, compose them at the composition root instead; if this only reuses a helper, move that helper to a kernel or workflow',
           },
         },
       ],
@@ -284,17 +404,18 @@ ruleTester.run('executor-import-boundary', executorImportBoundary, {
       ],
     },
     {
-      name: 'Should_Report_DynamicExecutorImport_When_ExecutorFile',
-      code: `const m = yield* Effect.promise(() => import('./refund.executor.js'))\n`,
+      name: 'Should_Report_DynamicPublicSiblingExecutorImport_When_ExecutorFile',
+      code: `const m = yield* Effect.promise(() => import('./sibling.executor.js'))\n`,
       filename: 'confirm-order.executor.ts',
       errors: [
         {
           messageId: 'executorImport',
           data: {
-            name: './refund.executor.js',
-            expected: 'one operation per executor',
-            actual: 'an import of the .executor cell',
-            fix: 'give the composite operation its own executor whose sandwich reads what both decisions need',
+            name: './sibling.executor.js',
+            expected: 'private executor composition resolving inside an internal/ directory',
+            actual: 'an import that resolves to a public .executor cell',
+            fix:
+              'if the imported executor is genuinely private to this one, move its file under internal/ alongside its importer; if both are public operations, compose them at the composition root instead; if this only reuses a helper, move that helper to a kernel or workflow',
           },
         },
       ],

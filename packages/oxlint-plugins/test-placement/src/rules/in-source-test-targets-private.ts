@@ -76,12 +76,12 @@ const isInsideConsequent = (
   identifier: ESTree.IdentifierReference,
   consequent: ESTree.Node,
 ): boolean => {
-  let current: ESTree.Node | null = identifier.parent
-  while (current !== null) {
+  const walk = (current: ESTree.Node | null): boolean => {
+    if (current === null) return false
     if (current === consequent) return true
-    current = current.parent
+    return walk(current.parent)
   }
-  return false
+  return walk(identifier.parent)
 }
 
 export const inSourceTestTargetsPrivate = defineRule({

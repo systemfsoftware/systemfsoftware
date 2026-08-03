@@ -16,9 +16,9 @@ ruleTester.run('test-suffix-outside-src', testSuffixOutsideSrc, {
       filename: '/repo/pkg/tests/a.integration.test.ts',
     },
     {
-      name: 'Should_Allow_FeatureTest_When_OutsideSrc',
+      name: 'Should_Allow_SnapshotTest_When_OutsideSrc',
       code: '',
-      filename: '/repo/pkg/tests/a.feature.test.ts',
+      filename: '/repo/pkg/__tests__/bounded-union.snapshot.test.ts',
     },
     {
       name: 'Should_Allow_NonTestFile_When_OutsideSrc',
@@ -37,6 +37,20 @@ ruleTester.run('test-suffix-outside-src', testSuffixOutsideSrc, {
     },
   ],
   invalid: [
+    {
+      name: 'Should_Report_FeatureTest_When_RetiredSuffixIsStillUsed',
+      code: '',
+      filename: '/repo/pkg/tests/a.feature.test.ts',
+      errors: [{
+        messageId: 'unsanctionedSuffix',
+        data: {
+          name: 'a.feature.test.ts',
+          expected: UNSANCTIONED_SUFFIX_EXPECTED,
+          actual: UNSANCTIONED_SUFFIX_ACTUAL,
+          fix: UNSANCTIONED_SUFFIX_FIX,
+        },
+      }],
+    },
     {
       name: 'Should_Report_BareTest_When_OutsideSrc',
       code: '',
@@ -80,13 +94,13 @@ ruleTester.run('test-suffix-outside-src', testSuffixOutsideSrc, {
       }],
     },
     {
-      name: 'Should_Report_FeatureTestTsx_When_NotTsExtension',
+      name: 'Should_Report_IntegrationTestTsx_When_NotTsExtension',
       code: '',
-      filename: '/repo/pkg/tests/a.feature.test.tsx',
+      filename: '/repo/pkg/tests/a.integration.test.tsx',
       errors: [{
         messageId: 'unsanctionedSuffix',
         data: {
-          name: 'a.feature.test.tsx',
+          name: 'a.integration.test.tsx',
           expected: UNSANCTIONED_SUFFIX_EXPECTED,
           actual: UNSANCTIONED_SUFFIX_ACTUAL,
           fix: UNSANCTIONED_SUFFIX_FIX,
