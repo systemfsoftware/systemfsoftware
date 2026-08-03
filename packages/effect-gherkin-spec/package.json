@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/effect-gherkin-spec",
   "license": "MIT",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
