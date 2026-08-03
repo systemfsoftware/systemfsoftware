@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/oxlint-plugin-cell-imports",
   "license": "MIT",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -25,7 +25,9 @@
     "typescript"
   ],
   "type": "module",
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "exports": {
     ".": {
       "types": "./dist/oxlint-plugin-cell-imports.d.ts",
@@ -72,5 +74,7 @@
     "effect": "catalog:",
     "typescript": ">=5.0.0"
   },
-  "publishConfig": { "provenance": true }
+  "publishConfig": {
+    "provenance": true
+  }
 }
