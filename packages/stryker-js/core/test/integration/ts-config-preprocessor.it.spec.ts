@@ -21,7 +21,7 @@ import { resolve } from 'path'
 import { fileURLToPath } from 'url'
 import { describe, expect, it } from 'vitest'
 
-import { parseConfigFileTextToJson, stripJsonComments } from '../../src/sandbox/parse-config-helper.js'
+import { parseConfigFileTextToJson } from '../../src/sandbox/parse-config-helper.js'
 import { resolveProjectReferencePath } from '../../src/sandbox/resolve-reference-helper.js'
 
 // Resolve the single-project fixture from the sibling typescript-checker package
@@ -87,26 +87,41 @@ describe('TSConfigPreprocessor – parseConfigFileTextToJson (upstream replaceme
     expect((config.compilerOptions as Record<string, unknown>).strict).toBe(true)
   })
 
-  it('parses a config with files, include, and exclude arrays (with ** globs preserved)', () => {
-    const input = JSON.stringify({
-      files: ['src/index.ts', 'src/utils.ts'],
-      include: ['src/**/*.ts'],
-      exclude: ['node_modules', 'dist'],
-    })
+  it('parses a commented tsconfig with ** globs and a //-bearing $schema value', () => {
+    // Literal commented input (not JSON.stringify): this is the shape that corrupted
+    // the sibling checker's regex stripper (`src/**/*.ts` lost its `**/`, and the `//`
+    // inside the $schema URL ate the rest of the string). Core passes it today, so it
+    // is a convergence guard — the case pinning core's own defect is the `C:\\x`
+    // escape, see parse-config-helper.spec.ts.
+    const input = [
+      '{',
+      '  // base tsconfig',
+      '  "$schema": "https://json.schemastore.org/tsconfig",',
+      '  "files": ["src/index.ts", "src/utils.ts"],',
+      '  "include": ["src/**/*.ts"],',
+      '  "exclude": ["node_modules", "dist"],',
+      '}',
+    ].join('\n')
     const result = parseConfigFileTextToJson('tsconfig.json', input)
 
     expect(result.error).toBeUndefined()
     const config = result.config as Record<string, unknown>
     expect(config.files).toEqual(['src/index.ts', 'src/utils.ts'])
-    // stripJsonComments preserves `**/` globs correctly with the string-aware parser
+    // The `**/` glob survives comment stripping intact (string-aware parse)
     expect(config.include).toEqual(['src/**/*.ts'])
     expect(config.exclude).toEqual(['node_modules', 'dist'])
+    // The `//` inside the URL is string content, not a comment
+    expect(config.$schema).toBe('https://json.schemastore.org/tsconfig')
   })
 
-  it('surfaces a SyntaxError for invalid JSON content', () => {
+  it('accepts trailing commas like tsc does', () => {
+    // Inverted from a former SyntaxError assertion: `tsc` accepts trailing commas
+    // and so does `@std/jsonc`. The old assertion encoded the bug the regex/char
+    // parsers shared, not a requirement — this is the one intentionally
+    // behavior-breaking spot in this change.
     const result = parseConfigFileTextToJson('tsconfig.json', '{ "compilerOptions": { "strict": true, } }')
-    expect(result.config).toBeUndefined()
-    expect(result.error).toBeInstanceOf(SyntaxError)
+    expect(result.error).toBeUndefined()
+    expect(result.config).toEqual({ compilerOptions: { strict: true } })
   })
 
   it('surfaces an error for empty input', () => {
@@ -123,25 +138,28 @@ describe('TSConfigPreprocessor – parseConfigFileTextToJson (upstream replaceme
 })
 
 // ---------------
-// 2. stripJsonComments — used by parseConfigFileTextToJson
+// 2. parseConfigFileTextToJson over the commented fixture — comment stripping
 // ---------------
 
-describe('TSConfigPreprocessor – stripJsonComments', () => {
-  it('strips block comments from the fixture', () => {
+describe('TSConfigPreprocessor – parseConfigFileTextToJson (commented fixture)', () => {
+  it('parses the commented fixture with its values intact', () => {
     const raw = readFileSync(fixtureTsconfig, 'utf-8')
-    const stripped = stripJsonComments(raw)
+    const result = parseConfigFileTextToJson(fixtureTsconfig, raw)
 
     // Fixture has:
     //   // These settings should be overridden by the typescript checker
     //   "noUnusedLocals": true,
-    expect(stripped).not.toContain('should be overridden')
-    expect(stripped).toContain('"noUnusedLocals": true')
+    expect(result.error).toBeUndefined()
+    const co = (result.config as Record<string, unknown>).compilerOptions as Record<string, unknown>
+    expect(co.noUnusedLocals).toBe(true)
   })
 
-  it('produces valid JSON after stripping comments', () => {
+  it('parses the commented fixture to a config object', () => {
     const raw = readFileSync(fixtureTsconfig, 'utf-8')
-    const stripped = stripJsonComments(raw)
-    expect(() => JSON.parse(stripped)).not.toThrow()
+    const result = parseConfigFileTextToJson(fixtureTsconfig, raw)
+
+    expect(result.error).toBeUndefined()
+    expect(result.config).toBeTypeOf('object')
   })
 })
 

@@ -1,71 +1,11 @@
 /**
  * Inline replacement for `ts.parseConfigFileTextToJson()` removed in TypeScript 7.
- * Also exports `stripJsonComments` which the removed API implicitly called.
  *
- * No imports from `typescript` — pure regex + `JSON.parse`.
+ * No imports from `typescript` — delegates to `@std/jsonc`, which handles comments,
+ * trailing commas, and string-aware escaping the way `tsc` does.
  */
 
-/**
- * Strips block (slash-star) and line (slash-slash) comments from a JSON string.
- */
-export function stripJsonComments(json: string): string {
-  let result = ''
-  let inString = false
-  let stringChar: string | null = null
-  let i = 0
-  while (i < json.length) {
-    const ch = json[i]
-    const next = json[i + 1]
-
-    // Track string boundaries
-    if (inString) {
-      result += ch
-      if (ch === '\\' && stringChar) {
-        i += 2 // skip escaped char
-        continue
-      }
-      if (ch === stringChar) {
-        inString = false
-        stringChar = null
-      }
-      i++
-      continue
-    }
-
-    if (ch === '"' || ch === "'") {
-      inString = true
-      stringChar = ch
-      result += ch
-      i++
-      continue
-    }
-
-    // Line comment
-    if (ch === '/' && next === '/') {
-      while (i < json.length && json[i] !== '\n') {
-        i++
-      }
-      continue
-    }
-
-    // Block comment
-    if (ch === '/' && next === '*') {
-      i += 2
-      while (i < json.length) {
-        if (json[i] === '*' && json[i + 1] === '/') {
-          i += 2
-          break
-        }
-        i++
-      }
-      continue
-    }
-
-    result += ch
-    i++
-  }
-  return result
-}
+import { parse } from '@std/jsonc'
 
 export interface ParsedConfig {
   config?: unknown
@@ -81,8 +21,10 @@ export interface ParsedConfig {
  */
 export function parseConfigFileTextToJson(fileName: string, jsonText: string): ParsedConfig {
   try {
-    const stripped = stripJsonComments(jsonText)
-    return { config: JSON.parse(stripped) }
+    // `@std/jsonc` rejects a leading BOM (its whitespace set is ` \t\r\n`) but
+    // `tsc` accepts one, so strip it before parsing.
+    const withoutBom = jsonText.replace(/^\uFEFF/, '')
+    return { config: parse(withoutBom) }
   } catch (error) {
     return { error: error as Error }
   }
