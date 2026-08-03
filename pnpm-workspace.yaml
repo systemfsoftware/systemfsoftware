@@ -9,9 +9,9 @@ allowBuilds:
   unrs-resolver: false
 catalog:
   typescript: ^7
-  "@effect/platform": ^0.97.0
-  "@effect/platform-node": ^0.97.0
-  effect: ^3.22.0
+  "@effect/platform": ^0.97.1
+  "@effect/platform-node": ^0.108.1
+  effect: ^3.22.1
   "@effect/vitest": 0.30.0
   fast-check: ^3
   vitest: ^4
