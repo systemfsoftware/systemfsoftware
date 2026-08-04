@@ -22,6 +22,12 @@ const data = {
   fix: 'make steps and helpers private; schema classes and types may stay exported',
 }
 
+const disallowed = {
+  expected: 'only the workflow function, schema classes, S.Union, TypeId symbols, and types',
+  actual: 'exported value',
+  fix: 'move constants, helpers, and steps out of the workflow file',
+}
+
 ruleTester.run('workflow-single-function-export', workflowSingleFunctionExport, {
   valid: [
     {
@@ -96,6 +102,37 @@ ruleTester.run('workflow-single-function-export', workflowSingleFunctionExport, 
     {
       name: 'Should_Pass_When_LocalFunctionExpressionSpecifier_InWorkflow',
       code: `const helper = function() {}; export { helper }`,
+      filename: 'process-claim.workflow.ts',
+    },
+    {
+      name: 'Should_Pass_When_SchemaClassSpecifierAccompanySingleWorkflow',
+      code:
+        `class Foo extends S.TaggedClass<Foo>()('Foo', {}) {}; export { Foo }; export const processClaim = () => {}`,
+      filename: 'process-claim.workflow.ts',
+    },
+    {
+      name: 'Should_Pass_When_TypeAliasSpecifierAccompanySingleWorkflow',
+      code: `type Foo = string; export { type Foo }; export const processClaim = () => {}`,
+      filename: 'process-claim.workflow.ts',
+    },
+    {
+      name: 'Should_Pass_When_TypeOnlySpecifierAccompanySingleWorkflow',
+      code: `type Foo = string; export type { Foo }; export const processClaim = () => {}`,
+      filename: 'process-claim.workflow.ts',
+    },
+    {
+      name: 'Should_Pass_When_BareSymbolCallTypeIdAccompanySingleWorkflow',
+      code: `export const XTypeId = Symbol('x'); export const processClaim = () => {}`,
+      filename: 'process-claim.workflow.ts',
+    },
+    {
+      name: 'Should_Pass_When_InterfaceDeclarationAccompanySingleWorkflow',
+      code: `export interface Foo {}; export const processClaim = () => {}`,
+      filename: 'process-claim.workflow.ts',
+    },
+    {
+      name: 'Should_Pass_When_TypeAliasDeclarationAccompanySingleWorkflow',
+      code: `export type Foo = string; export const processClaim = () => {}`,
       filename: 'process-claim.workflow.ts',
     },
   ],
@@ -237,6 +274,96 @@ ruleTester.run('workflow-single-function-export', workflowSingleFunctionExport, 
       code: `export const [f] = () => {}`,
       filename: 'process-claim.workflow.ts',
       errors: [{ messageId: 'tooManyFunctionExports', data: { ...data, actual: '0 function exports' } }],
+    },
+    {
+      name: 'Should_Report_ExportedPlainClassDeclaration',
+      code: `export class Plain {}; export const processClaim = () => {}`,
+      filename: 'process-claim.workflow.ts',
+      errors: [{ messageId: 'disallowedExport', data: { name: 'Plain', ...disallowed } }],
+    },
+    {
+      name: 'Should_Report_ExportedClassWithIdentifierSuper',
+      code: `export class Foo extends SomeValue {}; export const processClaim = () => {}`,
+      filename: 'process-claim.workflow.ts',
+      errors: [{ messageId: 'disallowedExport', data: { name: 'Foo', ...disallowed } }],
+    },
+    {
+      name: 'Should_Report_ExportedClassWithForeignTaggedCall',
+      code: `export class Foo extends Other.TaggedClass()() {}; export const processClaim = () => {}`,
+      filename: 'process-claim.workflow.ts',
+      errors: [{ messageId: 'disallowedExport', data: { name: 'Foo', ...disallowed } }],
+    },
+    {
+      name: 'Should_Report_ExportedClassWithPlainCallSuper',
+      code: `export class Foo extends someFn() {}; export const processClaim = () => {}`,
+      filename: 'process-claim.workflow.ts',
+      errors: [{ messageId: 'disallowedExport', data: { name: 'Foo', ...disallowed } }],
+    },
+    {
+      name: 'Should_Report_ExportedClassWithComputedTaggedCall',
+      code: `export class Foo extends S['TaggedClass']()() {}; export const processClaim = () => {}`,
+      filename: 'process-claim.workflow.ts',
+      errors: [{ messageId: 'disallowedExport', data: { name: 'Foo', ...disallowed } }],
+    },
+    {
+      name: 'Should_Report_ExportedClassWithNonSchemaCall',
+      code: `export class Foo extends S.Struct({}) {}; export const processClaim = () => {}`,
+      filename: 'process-claim.workflow.ts',
+      errors: [{ messageId: 'disallowedExport', data: { name: 'Foo', ...disallowed } }],
+    },
+    {
+      name: 'Should_Report_ExportedPlainClassSpecifier',
+      code: `class Plain {}; export { Plain }; export const processClaim = () => {}`,
+      filename: 'process-claim.workflow.ts',
+      errors: [{ messageId: 'disallowedExport', data: { name: 'Plain', ...disallowed } }],
+    },
+    {
+      name: 'Should_Report_ExportedEnumDeclaration',
+      code: `export enum Color { Red }; export const processClaim = () => {}`,
+      filename: 'process-claim.workflow.ts',
+      errors: [{ messageId: 'disallowedExport', data: { name: 'export', ...disallowed } }],
+    },
+    {
+      name: 'Should_Report_ExportedNearMissSymbolMemberCall',
+      code: `export const XTypeId = Symbol.foo('x'); export const processClaim = () => {}`,
+      filename: 'process-claim.workflow.ts',
+      errors: [{ messageId: 'disallowedExport', data: { name: 'XTypeId', ...disallowed } }],
+    },
+    {
+      name: 'Should_Report_ExportedNearMissForeignObjectCall',
+      code: `export const XTypeId = Other.for('x'); export const processClaim = () => {}`,
+      filename: 'process-claim.workflow.ts',
+      errors: [{ messageId: 'disallowedExport', data: { name: 'XTypeId', ...disallowed } }],
+    },
+    {
+      name: 'Should_Report_ExportedComputedSymbolCall',
+      code: `export const XTypeId = Symbol['for']('x'); export const processClaim = () => {}`,
+      filename: 'process-claim.workflow.ts',
+      errors: [{ messageId: 'disallowedExport', data: { name: 'XTypeId', ...disallowed } }],
+    },
+    {
+      name: 'Should_Report_ExportedPlainCallExpression',
+      code: `export const X = someCall(); export const processClaim = () => {}`,
+      filename: 'process-claim.workflow.ts',
+      errors: [{ messageId: 'disallowedExport', data: { name: 'X', ...disallowed } }],
+    },
+    {
+      name: 'Should_Report_ExportedNearMissUnionObject',
+      code: `export const Decision = Other.Union(A, B); export const processClaim = () => {}`,
+      filename: 'process-claim.workflow.ts',
+      errors: [{ messageId: 'disallowedExport', data: { name: 'Decision', ...disallowed } }],
+    },
+    {
+      name: 'Should_Report_ExportedNearMissUnionProperty',
+      code: `export const Decision = S.Other(A, B); export const processClaim = () => {}`,
+      filename: 'process-claim.workflow.ts',
+      errors: [{ messageId: 'disallowedExport', data: { name: 'Decision', ...disallowed } }],
+    },
+    {
+      name: 'Should_Report_ExportedComputedUnionProperty',
+      code: `export const Decision = S['Union'](A, B); export const processClaim = () => {}`,
+      filename: 'process-claim.workflow.ts',
+      errors: [{ messageId: 'disallowedExport', data: { name: 'Decision', ...disallowed } }],
     },
   ],
 })

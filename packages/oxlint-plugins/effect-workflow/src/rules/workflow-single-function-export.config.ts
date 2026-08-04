@@ -2,6 +2,8 @@ import { Schema as S } from 'effect'
 
 export const Options = S.Struct({})
 
+export const CLASS_NAME_FALLBACK = 'class' as const
+
 export const MESSAGE = '{{name}} is forbidden. Expected: {{expected}}. Actual: {{actual}}. Fix: {{fix}}.' as const
 
 export const meta = {

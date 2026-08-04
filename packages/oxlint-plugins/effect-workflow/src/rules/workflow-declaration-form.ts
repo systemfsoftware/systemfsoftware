@@ -4,6 +4,7 @@ import {
   FUNCTION_DECLARATION_ACTUAL,
   FUNCTION_DECLARATION_EXPECTED,
   FUNCTION_DECLARATION_FIX,
+  FUNCTION_DECLARATION_NAME_FALLBACK,
   meta,
   MISSING_ANNOTATION_ACTUAL,
   MISSING_ANNOTATION_EXPECTED,
@@ -51,7 +52,7 @@ export const workflowDeclarationForm = defineRule({
             node: declaration,
             messageId: 'functionDeclaration',
             data: {
-              name: declaration.id?.name ?? 'the exported function',
+              name: declaration.id?.name ?? FUNCTION_DECLARATION_NAME_FALLBACK,
               expected: FUNCTION_DECLARATION_EXPECTED,
               actual: FUNCTION_DECLARATION_ACTUAL,
               fix: FUNCTION_DECLARATION_FIX,

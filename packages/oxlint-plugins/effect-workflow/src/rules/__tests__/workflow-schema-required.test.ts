@@ -160,6 +160,79 @@ ruleTester.run('workflow-schema-required', workflowSchemaRequired, {
       code: commandDecisionAndError,
       filename: 'process-invite.workflow.ts',
     },
+    {
+      name: 'Should_Pass_When_Either_Error_Type_Is_Qualified_Reference',
+      code: `
+import * as Either from 'effect/Either'
+export class InviteUserCommand extends S.TaggedClass<InviteUserCommand>()('InviteUserCommand', {}) {}
+export class UserInvited extends S.TaggedClass<UserInvited>()('UserInvited', {}) {}
+export class InviteFailed extends S.TaggedError<InviteFailed>()('InviteFailed', {}) {}
+export const decideInvite = (cmd: InviteUserCommand): Either.Either<UserInvited, Namespace.InviteFailed> =>
+  Either.right(new UserInvited({}))
+`,
+      filename: 'invite-user.workflow.ts',
+    },
+    {
+      name: 'Should_Pass_When_Either_Error_Type_Is_Mixed_Union',
+      code: `
+import * as Either from 'effect/Either'
+export class HookDecisionA extends S.TaggedClass<HookDecisionA>()('HookDecisionA', {}) {}
+export class HookDecisionB extends S.TaggedClass<HookDecisionB>()('HookDecisionB', {}) {}
+export class HookError extends S.TaggedError<HookError>()('HookError', {}) {}
+export const interpretHookResult = (cmd: InterpretHookCommand): Either.Either<HookDecisionA | HookDecisionB, HookError | UndeclaredProblem> =>
+  Either.right(new HookDecisionA({}))
+`,
+      filename: 'hook-verdict.workflow.ts',
+    },
+    {
+      name: 'Should_Pass_When_Either_Error_Type_Is_Parenthesized',
+      code: `
+import * as Either from 'effect/Either'
+export class InviteUserCommand extends S.TaggedClass<InviteUserCommand>()('InviteUserCommand', {}) {}
+export class UserInvited extends S.TaggedClass<UserInvited>()('UserInvited', {}) {}
+export class InviteFailed extends S.TaggedError<InviteFailed>()('InviteFailed', {}) {}
+export const decideInvite = (cmd: InviteUserCommand): Either.Either<UserInvited, (InviteFailed)> =>
+  Either.right(new UserInvited({}))
+`,
+      filename: 'invite-user.workflow.ts',
+    },
+    {
+      name: 'Should_Pass_When_ExportedFunctionDeclaration_Returns_Backed_Either',
+      code: `
+import * as Either from 'effect/Either'
+export class InviteUserCommand extends S.TaggedClass<InviteUserCommand>()('InviteUserCommand', {}) {}
+export class UserInvited extends S.TaggedClass<UserInvited>()('UserInvited', {}) {}
+export class InviteFailed extends S.TaggedError<InviteFailed>()('InviteFailed', {}) {}
+export function decideInvite(cmd: InviteUserCommand): Either.Either<UserInvited, InviteFailed> {
+  return Either.right(new UserInvited({}))
+}
+`,
+      filename: 'invite-user.workflow.ts',
+    },
+    {
+      name: 'Should_Pass_When_ExportedFunctionExpression_Returns_Backed_Either',
+      code: `
+import * as Either from 'effect/Either'
+export class InviteUserCommand extends S.TaggedClass<InviteUserCommand>()('InviteUserCommand', {}) {}
+export class UserInvited extends S.TaggedClass<UserInvited>()('UserInvited', {}) {}
+export class InviteFailed extends S.TaggedError<InviteFailed>()('InviteFailed', {}) {}
+export const decideInvite = function (cmd: InviteUserCommand): Either.Either<UserInvited, InviteFailed> {
+  return Either.right(new UserInvited({}))
+}
+`,
+      filename: 'invite-user.workflow.ts',
+    },
+    {
+      name: 'Should_Pass_When_Plain_Class_And_NonCallSuper_Are_Not_Counted',
+      code: `
+class Plain {}
+class Derived extends SomeValue {}
+class DecisionA extends S.TaggedClass<DecisionA>()('DecisionA', {}) {}
+class DecisionB extends S.TaggedClass<DecisionB>()('DecisionB', {}) {}
+class DecisionError extends S.TaggedError<DecisionError>()('DecisionError', {}) {}
+`,
+      filename: 'plain-classes.workflow.ts',
+    },
   ],
   invalid: [
     {
@@ -420,6 +493,31 @@ ruleTester.run('workflow-schema-required', workflowSchemaRequired, {
       ],
     },
     {
+      name: 'Should_Report_MissingErrorChannel_When_Union_Error_Type_Has_No_Declared_Member',
+      code: `
+import * as Either from 'effect/Either'
+export class InviteUserCommand extends S.TaggedClass<InviteUserCommand>()('InviteUserCommand', {}) {}
+export class UserInvited extends S.TaggedClass<UserInvited>()('UserInvited', {}) {}
+export class InviteFailed extends S.TaggedError<InviteFailed>()('InviteFailed', {}) {}
+export const decideInvite = (cmd: InviteUserCommand): Either.Either<UserInvited, UnrelatedA | UnrelatedB> =>
+  Either.right(new UserInvited({}))
+`,
+      filename: 'invite-user.workflow.ts',
+      errors: [
+        {
+          messageId: 'missingErrorChannel',
+          data: {
+            name: 'invite-user.workflow.ts',
+            expected:
+              'an exported function returning Either.Either<Decision, Error> with a declared S.TaggedError error type',
+            actual: 'an Either whose error type references no declared S.TaggedError',
+            fix:
+              'if the decision is total, relocate the file out of *.workflow.ts — a bare union is not a workflow; do not invent an S.TaggedError to satisfy this rule',
+          },
+        },
+      ],
+    },
+    {
       name: 'Should_Report_MissingErrorChannel_When_Either_Error_Type_Is_Not_A_Declared_TaggedError',
       code: eitherWithUndeclaredErrorType,
       filename: 'hook-verdict.workflow.ts',
@@ -428,6 +526,191 @@ ruleTester.run('workflow-schema-required', workflowSchemaRequired, {
           messageId: 'missingErrorChannel',
           data: {
             name: 'hook-verdict.workflow.ts',
+            expected:
+              'an exported function returning Either.Either<Decision, Error> with a declared S.TaggedError error type',
+            actual: 'an Either whose error type references no declared S.TaggedError',
+            fix:
+              'if the decision is total, relocate the file out of *.workflow.ts — a bare union is not a workflow; do not invent an S.TaggedError to satisfy this rule',
+          },
+        },
+      ],
+    },
+    {
+      name: 'Should_Report_NoSchemaVariants_When_Only_Anonymous_Default_Class_Extends_TaggedClass',
+      code: `export default class extends S.TaggedClass()() {}`,
+      filename: 'anonymous-default.workflow.ts',
+      errors: [
+        {
+          messageId: 'noSchemaVariants',
+          data: {
+            name: 'anonymous-default.workflow.ts',
+            expected: 'Command, Decision, and Error declared as S.TaggedClass / S.TaggedError',
+            actual: 'no S.TaggedClass or S.TaggedError declaration',
+            fix:
+              'declare the command, decision variants, and any error as S.TaggedClass/S.TaggedError with their TypeId, or rename the file if it is not a workflow',
+          },
+        },
+      ],
+    },
+    {
+      name: 'Should_Report_MissingErrorChannel_When_Either_Has_Single_Type_Argument',
+      code: `
+import * as Either from 'effect/Either'
+export class InviteUserCommand extends S.TaggedClass<InviteUserCommand>()('InviteUserCommand', {}) {}
+export class UserInvited extends S.TaggedClass<UserInvited>()('UserInvited', {}) {}
+export class InviteFailed extends S.TaggedError<InviteFailed>()('InviteFailed', {}) {}
+export const decideInvite = (cmd: InviteUserCommand): Either.Either<UserInvited> =>
+  Either.right(new UserInvited({}))
+`,
+      filename: 'invite-user.workflow.ts',
+      errors: [
+        {
+          messageId: 'missingErrorChannel',
+          data: {
+            name: 'invite-user.workflow.ts',
+            expected:
+              'an exported function returning Either.Either<Decision, Error> with a declared S.TaggedError error type',
+            actual: 'an Either whose error type references no declared S.TaggedError',
+            fix:
+              'if the decision is total, relocate the file out of *.workflow.ts — a bare union is not a workflow; do not invent an S.TaggedError to satisfy this rule',
+          },
+        },
+      ],
+    },
+    {
+      name: 'Should_Report_MissingErrorChannel_When_ExportedFunction_Has_No_Return_Type',
+      code: `
+import * as Either from 'effect/Either'
+export class InviteUserCommand extends S.TaggedClass<InviteUserCommand>()('InviteUserCommand', {}) {}
+export class UserInvited extends S.TaggedClass<UserInvited>()('UserInvited', {}) {}
+export class InviteFailed extends S.TaggedError<InviteFailed>()('InviteFailed', {}) {}
+export const decideInvite = (cmd: InviteUserCommand) => Either.right(new UserInvited({}))
+`,
+      filename: 'invite-user.workflow.ts',
+      errors: [
+        {
+          messageId: 'missingErrorChannel',
+          data: {
+            name: 'invite-user.workflow.ts',
+            expected:
+              'an exported function returning Either.Either<Decision, Error> with a declared S.TaggedError error type',
+            actual: 'the exported function returns no declared return type instead of an Either',
+            fix:
+              'if the decision is total, relocate the file out of *.workflow.ts — a bare union is not a workflow; do not invent an S.TaggedError to satisfy this rule',
+          },
+        },
+      ],
+    },
+    {
+      name: 'Should_Report_MissingErrorChannel_When_Return_Type_Is_Qualified_Non_Either',
+      code: `
+export class InviteUserCommand extends S.TaggedClass<InviteUserCommand>()('InviteUserCommand', {}) {}
+export class UserInvited extends S.TaggedClass<UserInvited>()('UserInvited', {}) {}
+export class InviteFailed extends S.TaggedError<InviteFailed>()('InviteFailed', {}) {}
+export const decideInvite = (cmd: InviteUserCommand): Verdicts.InviteVerdict => new UserInvited({})
+`,
+      filename: 'invite-user.workflow.ts',
+      errors: [
+        {
+          messageId: 'missingErrorChannel',
+          data: {
+            name: 'invite-user.workflow.ts',
+            expected:
+              'an exported function returning Either.Either<Decision, Error> with a declared S.TaggedError error type',
+            actual: 'the exported function returns InviteVerdict instead of an Either',
+            fix:
+              'if the decision is total, relocate the file out of *.workflow.ts — a bare union is not a workflow; do not invent an S.TaggedError to satisfy this rule',
+          },
+        },
+      ],
+    },
+    {
+      name: 'Should_Report_MissingErrorChannel_When_Return_Type_Is_Primitive',
+      code: `
+export class InviteUserCommand extends S.TaggedClass<InviteUserCommand>()('InviteUserCommand', {}) {}
+export class UserInvited extends S.TaggedClass<UserInvited>()('UserInvited', {}) {}
+export class InviteFailed extends S.TaggedError<InviteFailed>()('InviteFailed', {}) {}
+export const decideInvite = (cmd: InviteUserCommand): string => 'invited'
+`,
+      filename: 'invite-user.workflow.ts',
+      errors: [
+        {
+          messageId: 'missingErrorChannel',
+          data: {
+            name: 'invite-user.workflow.ts',
+            expected:
+              'an exported function returning Either.Either<Decision, Error> with a declared S.TaggedError error type',
+            actual: 'the exported function returns TSStringKeyword instead of an Either',
+            fix:
+              'if the decision is total, relocate the file out of *.workflow.ts — a bare union is not a workflow; do not invent an S.TaggedError to satisfy this rule',
+          },
+        },
+      ],
+    },
+    {
+      name: 'Should_Report_MissingErrorChannel_When_Return_Type_Is_Bare_Union',
+      code: `
+export class InviteUserCommand extends S.TaggedClass<InviteUserCommand>()('InviteUserCommand', {}) {}
+export class UserInvited extends S.TaggedClass<UserInvited>()('UserInvited', {}) {}
+export class InviteFailed extends S.TaggedError<InviteFailed>()('InviteFailed', {}) {}
+export const decideInvite = (cmd: InviteUserCommand): UserInvited | InviteFailed => new UserInvited({})
+`,
+      filename: 'invite-user.workflow.ts',
+      errors: [
+        {
+          messageId: 'missingErrorChannel',
+          data: {
+            name: 'invite-user.workflow.ts',
+            expected:
+              'an exported function returning Either.Either<Decision, Error> with a declared S.TaggedError error type',
+            actual: 'the exported function returns a bare union instead of an Either',
+            fix:
+              'if the decision is total, relocate the file out of *.workflow.ts — a bare union is not a workflow; do not invent an S.TaggedError to satisfy this rule',
+          },
+        },
+      ],
+    },
+    {
+      name: 'Should_Report_MissingErrorChannel_When_Error_Type_Is_This_Reference',
+      code: `
+import * as Either from 'effect/Either'
+export class InviteUserCommand extends S.TaggedClass<InviteUserCommand>()('InviteUserCommand', {}) {}
+export class UserInvited extends S.TaggedClass<UserInvited>()('UserInvited', {}) {}
+export class InviteFailed extends S.TaggedError<InviteFailed>()('InviteFailed', {}) {}
+export const decideInvite = (cmd: InviteUserCommand): Either.Either<UserInvited, this> =>
+  Either.right(new UserInvited({}))
+`,
+      filename: 'invite-user.workflow.ts',
+      errors: [
+        {
+          messageId: 'missingErrorChannel',
+          data: {
+            name: 'invite-user.workflow.ts',
+            expected:
+              'an exported function returning Either.Either<Decision, Error> with a declared S.TaggedError error type',
+            actual: 'an Either whose error type references no declared S.TaggedError',
+            fix:
+              'if the decision is total, relocate the file out of *.workflow.ts — a bare union is not a workflow; do not invent an S.TaggedError to satisfy this rule',
+          },
+        },
+      ],
+    },
+    {
+      name: 'Should_Report_MissingErrorChannel_When_Error_Type_Is_Primitive',
+      code: `
+import * as Either from 'effect/Either'
+export class InviteUserCommand extends S.TaggedClass<InviteUserCommand>()('InviteUserCommand', {}) {}
+export class UserInvited extends S.TaggedClass<UserInvited>()('UserInvited', {}) {}
+export class InviteFailed extends S.TaggedError<InviteFailed>()('InviteFailed', {}) {}
+export const decideInvite = (cmd: InviteUserCommand): Either.Either<UserInvited, string> =>
+  Either.right(new UserInvited({}))
+`,
+      filename: 'invite-user.workflow.ts',
+      errors: [
+        {
+          messageId: 'missingErrorChannel',
+          data: {
+            name: 'invite-user.workflow.ts',
             expected:
               'an exported function returning Either.Either<Decision, Error> with a declared S.TaggedError error type',
             actual: 'an Either whose error type references no declared S.TaggedError',
