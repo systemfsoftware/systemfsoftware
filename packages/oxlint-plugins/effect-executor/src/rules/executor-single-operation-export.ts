@@ -46,7 +46,6 @@ const isEffectFnMember = (callee: ESTree.Expression): boolean =>
   !callee.computed &&
   callee.object.type === 'Identifier' &&
   callee.object.name === EFFECT_NAMESPACE_NAME &&
-  callee.property.type === 'Identifier' &&
   EFFECT_FN_NAMES[callee.property.name] === true
 
 const isEffectFnCall = (init: ESTree.Expression | null | undefined): boolean => {

@@ -7,7 +7,7 @@ const apiExtractorRollups: Record<string, string> = {
   './effect-schema-ignorer': './dist/effect-schema-ignorer.d.ts',
 }
 
-const injectApiExtractorTypes = (exports: Record<string, ExportEntry>): Record<string, ExportEntry> => {
+const shapeExports = (exports: Record<string, ExportEntry>): Record<string, ExportEntry> => {
   for (const [subpath, types] of Object.entries(apiExtractorRollups)) {
     const entry = exports[subpath]
     if (typeof entry === 'string') {
@@ -33,7 +33,7 @@ export default defineConfig({
   outExtensions: () => ({ js: '.mjs', dts: '.d.ts' }),
   exports: {
     devExports: '@systemfsoftware/source',
-    customExports: injectApiExtractorTypes,
+    customExports: shapeExports,
   },
   deps: {
     onlyBundle: false,

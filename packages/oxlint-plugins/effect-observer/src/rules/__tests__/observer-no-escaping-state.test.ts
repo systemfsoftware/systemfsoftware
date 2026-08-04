@@ -181,5 +181,17 @@ ruleTester.run('observer-no-escaping-state', observerNoEscapingState, {
       filename: 'step-harness.observer.ts',
       errors: [constError('registry', 'Map')],
     },
+    {
+      name: 'Should_Report_When_ModuleConstHoldsBareMapCall',
+      code: `const registry = Map()`,
+      filename: 'step-harness.observer.ts',
+      errors: [constError('registry', 'Map')],
+    },
+    {
+      name: 'Should_Report_When_ModuleConstHoldsBareSetCall',
+      code: `const seen = Set()`,
+      filename: 'step-harness.observer.ts',
+      errors: [constError('seen', 'Set')],
+    },
   ],
 })

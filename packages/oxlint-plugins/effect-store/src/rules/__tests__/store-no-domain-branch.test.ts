@@ -109,6 +109,24 @@ export const touch = Effect.fn(function* () { return yield* Effect.void })\n`,
       code: `if (decision._tag === 'Cancelled') { return 1 }\n`,
       filename: 'confirm-order.workflow.ts',
     },
+    {
+      name: 'Should_Pass_When_NonMatch_Callee_Operates_On_An_Acl_Value',
+      code: `import { decodeOrder } from './order.acl.js'
+const out = result.value(decodeOrder(row))\n`,
+      filename: 'order.store.ts',
+    },
+    {
+      name: 'Should_Pass_When_NonValue_Match_Method_Operates_On_An_Acl_Value',
+      code: `import { decodeOrder } from './order.acl.js'
+const out = Match.tag(decodeOrder(row), 'Some', () => 1)\n`,
+      filename: 'order.store.ts',
+    },
+    {
+      name: 'Should_Pass_When_Match_Operand_Is_Derived_From_A_Non_Acl_Import',
+      code: `import { order } from './order.shape.js'
+const out = Match.value(order)\n`,
+      filename: 'order.store.ts',
+    },
   ],
   invalid: [
     {

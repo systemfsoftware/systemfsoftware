@@ -1,7 +1,7 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
 import { functionVariableDeclaratorName, getExportedWorkflowFunction } from './exported-workflow-fn.js'
-import { meta, Options } from './workflow-single-function-export.config.js'
+import { CLASS_NAME_FALLBACK, meta, Options } from './workflow-single-function-export.config.js'
 
 export type MessageIds = 'tooManyFunctionExports' | 'disallowedExport'
 
@@ -15,9 +15,8 @@ const isTaggedClassOrErrorCall = (node: ESTree.CallExpression): boolean => {
   return callee.property.name === 'TaggedClass' || callee.property.name === 'TaggedError'
 }
 
-const isSchemaClassDeclaration = (node: ESTree.Node | null): boolean => {
-  if (node?.type !== 'ClassDeclaration') return false
-  if (!node.superClass) return false
+const isSchemaClassDeclaration = (node: ESTree.Class | null): boolean => {
+  if (!node?.superClass) return false
   return node.superClass.type === 'CallExpression' && isTaggedClassOrErrorCall(node.superClass)
 }
 
@@ -50,9 +49,7 @@ const isAllowedValueDeclaration = (decl: ESTree.VariableDeclarator): boolean => 
 const collectTopLevelDeclarations = (program: ESTree.Program): Map<string, ESTree.Node> => {
   const map = new Map<string, ESTree.Node>()
   for (const stmt of program.body) {
-    if (stmt.type === 'FunctionDeclaration' && stmt.id) {
-      map.set(stmt.id.name, stmt)
-    } else if (stmt.type === 'ClassDeclaration' && stmt.id) {
+    if (stmt.type === 'ClassDeclaration' && stmt.id) {
       map.set(stmt.id.name, stmt)
     } else if (stmt.type === 'VariableDeclaration') {
       for (const decl of stmt.declarations) {
@@ -120,8 +117,6 @@ export const workflowSingleFunctionExport = defineRule({
 
     return {
       ExportNamedDeclaration(node: ESTree.ExportNamedDeclaration) {
-        if (node.exportKind === 'type') return
-
         const workflowFn = getExportedWorkflowFunction(node)
         if (workflowFn !== undefined) {
           functionExportCount += 1
@@ -133,7 +128,7 @@ export const workflowSingleFunctionExport = defineRule({
         if (declaration) {
           if (declaration.type === 'ClassDeclaration') {
             if (!isSchemaClassDeclaration(declaration)) {
-              reportDisallowed(declaration, declaration.id?.name ?? 'class')
+              reportDisallowed(declaration, declaration.id?.name ?? CLASS_NAME_FALLBACK)
             }
             return
           }
@@ -171,7 +166,6 @@ export const workflowSingleFunctionExport = defineRule({
       'Program:exit'() {
         for (const node of pendingSpecifierExports) {
           for (const spec of node.specifiers) {
-            if (spec.type !== 'ExportSpecifier') continue
             if (node.exportKind === 'type' || spec.exportKind === 'type') continue
             if (spec.local.type !== 'Identifier') continue
             const localName = spec.local.name

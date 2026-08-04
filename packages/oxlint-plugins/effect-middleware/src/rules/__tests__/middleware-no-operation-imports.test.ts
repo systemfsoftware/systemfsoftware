@@ -70,6 +70,11 @@ ruleTester.run('middleware-no-operation-imports', middlewareNoOperationImports, 
       code: `import verifyApiKey from './key-port'`,
       filename: 'attach-session.middleware.ts',
     },
+    {
+      name: 'Should_Pass_When_OperationImport_When_NonMiddlewareFile',
+      code: `import { CreateOrderExecutor } from './operations'`,
+      filename: 'create-order.executor.ts',
+    },
   ],
   invalid: [
     {

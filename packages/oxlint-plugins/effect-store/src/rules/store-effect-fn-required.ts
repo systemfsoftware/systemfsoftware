@@ -17,8 +17,8 @@ const effectFnCall = (init: ESTree.CallExpression): boolean => {
   const callee = init.callee
   if (callee.type !== 'MemberExpression') return false
   if (callee.computed === true) return false
-  if (callee.object.type !== 'Identifier' || callee.object.name !== 'Effect') return false
-  return callee.property.type === 'Identifier' && callee.property.name === 'fn'
+  if (callee.object.type !== 'Identifier') return false
+  return callee.property.name === 'fn'
 }
 
 const exportKind = (init: ESTree.Node | null): 'function' | 'effectValue' | 'pass' => {
@@ -53,7 +53,7 @@ export const storeEffectFnRequired = defineRule({
         const declaration = node.declaration
         if (declaration === null) return
         if (declaration.type === 'FunctionDeclaration') {
-          reportExport(declaration, declaration.id?.name ?? '<default>', 'function')
+          reportExport(declaration, String(declaration.id?.name), 'function')
           return
         }
         if (declaration.type !== 'VariableDeclaration') return

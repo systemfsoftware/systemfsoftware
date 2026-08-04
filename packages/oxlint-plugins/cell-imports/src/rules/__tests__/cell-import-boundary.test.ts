@@ -187,6 +187,84 @@ export const x = effect`,
 export const x = pkg`,
       filename: 'src/x.kernel.ts',
     },
+    {
+      name: 'Should_Pass_When_ExecutorImportsExecutorViaBareInternalSegment',
+      code: `import { run } from 'internal/y.executor.js'
+
+export const compose = run`,
+      filename: 'src/x.executor.ts',
+    },
+    {
+      name: 'Should_Pass_When_ExecutorInsideInternalDirectoryImportsRelativeExecutor',
+      code: `import { run } from './y.executor.js'
+
+export const compose = run`,
+      filename: 'src/internal/x.executor.ts',
+    },
+    {
+      name: 'Should_Pass_When_ExecutorImportsExecutorViaParentInternalSegment',
+      code: `import { run } from '../internal/y.executor.js'
+
+export const compose = run`,
+      filename: 'src/x.executor.ts',
+    },
+    {
+      name: 'Should_Pass_When_ExecutorImportsExecutorViaGrandparentInternalSegment',
+      code: `import { run } from '../../internal/y.executor.js'
+
+export const compose = run`,
+      filename: 'src/deep/x.executor.ts',
+    },
+    {
+      name: 'Should_Pass_When_ExecutorImportsExecutorBeyondRootInternalSegment',
+      code: `import { run } from '../../../internal/y.executor.js'
+
+export const compose = run`,
+      filename: 'src/x.executor.ts',
+    },
+    {
+      name: 'Should_Pass_When_ExecutorImportsExecutorViaEmptySegments',
+      code: `import { run } from './internal//y.executor.js'
+
+export const compose = run`,
+      filename: 'src/x.executor.ts',
+    },
+    {
+      name: 'Should_Pass_When_ExecutorImportsExecutorViaInternalSegmentWithTrailingSlash',
+      code: `import { run } from './internal/y.executor.js/'
+
+export const compose = run`,
+      filename: 'src/x.executor.ts',
+    },
+    {
+      name: 'Should_Pass_When_WorkflowImportsDotStoreCell',
+      code: `import { x } from './.store.js'
+
+export const w = x`,
+      filename: 'src/x.workflow.ts',
+    },
+    {
+      name: 'Should_Pass_When_StateImportsAdapterWithInlineTypeSpecifier',
+      code: `import { type Adapter } from './x.adapter.js'
+
+export const state = (a: Adapter): null => null`,
+      filename: 'src/x.state.ts',
+    },
+    {
+      name: 'Should_Pass_When_StateReExportsAdapterCellAsNamedType',
+      code: `export type { Adapter } from './x.adapter.js'`,
+      filename: 'src/x.state.ts',
+    },
+    {
+      name: 'Should_Pass_When_StateReExportsAdapterCellAsType',
+      code: `export type * from './x.adapter.js'`,
+      filename: 'src/x.state.ts',
+    },
+    {
+      name: 'Should_Pass_When_ExecutorDynamicallyImportsWorkflowCell',
+      code: `export const load = () => import('./order.workflow.js')`,
+      filename: 'src/x.executor.ts',
+    },
   ],
   invalid: [
     {
@@ -544,6 +622,172 @@ export const run = probe`,
           expected: CELL_EXPECTED,
           actual: 'an import of the .store cell',
           fix: CELL_FIX,
+        },
+      }],
+    },
+    {
+      name: 'Should_Report_When_ExecutorInsideInternalDirectoryImportsBareExecutor',
+      code: `import { run } from 'y.executor.js'
+
+export const compose = run`,
+      filename: 'src/internal/x.executor.ts',
+      errors: [{
+        messageId: 'forbiddenCellImport',
+        data: {
+          name: 'y.executor.js',
+          expected: CELL_EXPECTED,
+          actual: 'an import of the .executor cell',
+          fix: CELL_FIX,
+        },
+      }],
+    },
+    {
+      name: 'Should_Report_When_ExecutorInsideInternalDirectoryImportsParentExecutor',
+      code: `import { run } from '../y.executor.js'
+
+export const compose = run`,
+      filename: 'src/internal/x.executor.ts',
+      errors: [{
+        messageId: 'forbiddenCellImport',
+        data: {
+          name: '../y.executor.js',
+          expected: CELL_EXPECTED,
+          actual: 'an import of the .executor cell',
+          fix: CELL_FIX,
+        },
+      }],
+    },
+    {
+      name: 'Should_Report_When_ExecutorImportsExecutorViaCancelledInternalSegment',
+      code: `import { run } from './internal/../y.executor.js'
+
+export const compose = run`,
+      filename: 'src/x.executor.ts',
+      errors: [{
+        messageId: 'forbiddenCellImport',
+        data: {
+          name: './internal/../y.executor.js',
+          expected: CELL_EXPECTED,
+          actual: 'an import of the .executor cell',
+          fix: CELL_FIX,
+        },
+      }],
+    },
+    {
+      name: 'Should_Report_When_WorkflowImportsStoreCellWithTrailingSlash',
+      code: `import { find } from './x.store.js/'
+
+export const w = find`,
+      filename: 'src/x.workflow.ts',
+      errors: [{
+        messageId: 'forbiddenCellImport',
+        data: {
+          name: './x.store.js/',
+          expected: CELL_EXPECTED,
+          actual: 'an import of the .store cell',
+          fix: CELL_FIX,
+        },
+      }],
+    },
+    {
+      name: 'Should_Report_When_StateSideEffectImportsAdapterCell',
+      code: `import './x.adapter.js'`,
+      filename: 'src/x.state.ts',
+      errors: [{
+        messageId: 'forbiddenValueImport',
+        data: {
+          name: './x.adapter.js',
+          expected: VALUE_EXPECTED,
+          actual: 'a value import of the .adapter cell',
+          fix: VALUE_FIX,
+        },
+      }],
+    },
+    {
+      name: 'Should_Report_When_StateImportsAdapterWithMixedBindings',
+      code: `import { build, type Shape } from './x.adapter.js'
+
+export const s = build`,
+      filename: 'src/x.state.ts',
+      errors: [{
+        messageId: 'forbiddenValueImport',
+        data: {
+          name: './x.adapter.js',
+          expected: VALUE_EXPECTED,
+          actual: 'a value import of the .adapter cell',
+          fix: VALUE_FIX,
+        },
+      }],
+    },
+    {
+      name: 'Should_Report_When_StateReExportsAdapterCellNamed',
+      code: `export { build } from './x.adapter.js'`,
+      filename: 'src/x.state.ts',
+      errors: [{
+        messageId: 'forbiddenValueImport',
+        data: {
+          name: './x.adapter.js',
+          expected: VALUE_EXPECTED,
+          actual: 'a value import of the .adapter cell',
+          fix: VALUE_FIX,
+        },
+      }],
+    },
+    {
+      name: 'Should_Report_When_StateReExportsAdapterCell',
+      code: `export * from './x.adapter.js'`,
+      filename: 'src/x.state.ts',
+      errors: [{
+        messageId: 'forbiddenValueImport',
+        data: {
+          name: './x.adapter.js',
+          expected: VALUE_EXPECTED,
+          actual: 'a value import of the .adapter cell',
+          fix: VALUE_FIX,
+        },
+      }],
+    },
+    {
+      name: 'Should_Report_When_WorkflowDynamicallyImportsStoreCell',
+      code: `export const load = () => import('./x.store.js')`,
+      filename: 'src/x.workflow.ts',
+      errors: [{
+        messageId: 'forbiddenCellImport',
+        data: {
+          name: './x.store.js',
+          expected: CELL_EXPECTED,
+          actual: 'an import of the .store cell',
+          fix: CELL_FIX,
+        },
+      }],
+    },
+    {
+      name: 'Should_Report_When_StateDynamicallyImportsAdapterCell',
+      code: `export const load = () => import('./x.adapter.js')`,
+      filename: 'src/x.state.ts',
+      errors: [{
+        messageId: 'forbiddenValueImport',
+        data: {
+          name: './x.adapter.js',
+          expected: VALUE_EXPECTED,
+          actual: 'a value import of the .adapter cell',
+          fix: VALUE_FIX,
+        },
+      }],
+    },
+    {
+      name: 'Should_Report_When_PlainProductionFileImportsObserverModule',
+      code: `import { probe } from './probe.observer.js'
+
+export const run = probe`,
+      filename: 'src/plain.ts',
+      errors: [{
+        messageId: 'forbiddenObserverImport',
+        data: {
+          name: './probe.observer.js',
+          expected: OBSERVER_EXPECTED,
+          actual: 'a production module reaching into the observer frame',
+          fix: OBSERVER_FIX,
         },
       }],
     },

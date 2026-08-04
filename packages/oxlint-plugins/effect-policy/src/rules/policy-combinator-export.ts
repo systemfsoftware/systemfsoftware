@@ -11,14 +11,12 @@ type FunctionLike = ESTree.Function | ESTree.ArrowFunctionExpression
 const isEffectTypeReference = (node: ESTree.Node | undefined): boolean => {
   if (node?.type !== 'TSTypeReference') return false
   if (node.typeName.type === 'Identifier') return node.typeName.name === 'Effect'
-  if (node.typeName.type === 'TSQualifiedName') return node.typeName.right.name === 'Effect'
-  return false
+  return node.typeName.type === 'TSQualifiedName' && node.typeName.right.name === 'Effect'
 }
 
 const isPolicyTypeName = (typeName: ESTree.TSTypeReference['typeName']): boolean => {
   if (typeName.type === 'Identifier') return typeName.name.endsWith('Policy')
-  if (typeName.type === 'TSQualifiedName') return typeName.right.name.endsWith('Policy')
-  return false
+  return typeName.type === 'TSQualifiedName' && typeName.right.name.endsWith('Policy')
 }
 
 const hasEffectTypedFirstParam = (fn: FunctionLike): boolean => {
@@ -34,7 +32,6 @@ const isGenericEffectFunction = (fn: FunctionLike): boolean => {
 }
 
 const isPolicyAnnotated = (decl: ESTree.VariableDeclarator): boolean => {
-  if (decl.id.type !== 'Identifier') return false
   const annotation = decl.id.typeAnnotation?.typeAnnotation
   if (annotation?.type !== 'TSTypeReference') return false
   return isPolicyTypeName(annotation.typeName)
@@ -67,9 +64,8 @@ const collectTopLevelBindings = (program: ESTree.Program): Map<string, TopLevelB
 }
 
 const isCombinatorBinding = (binding: TopLevelBinding): boolean => {
-  if (binding.type === 'FunctionDeclaration') return isGenericEffectFunction(binding)
   if (binding.type === 'VariableDeclarator') return isCombinatorDeclarator(binding)
-  return false
+  return isGenericEffectFunction(binding)
 }
 
 export const policyCombinatorExport = defineRule({
@@ -80,28 +76,26 @@ export const policyCombinatorExport = defineRule({
     const program = context.sourceCode.ast
     const topLevelBindings = collectTopLevelBindings(program)
     const pendingSpecifierExports: ESTree.ExportNamedDeclaration[] = []
-    let combinatorCount = 0
+    let hasCombinator = false
 
-    const countCombinator = (binding: TopLevelBinding | undefined): void => {
+    const markCombinator = (binding: TopLevelBinding | undefined): void => {
       if (binding && isCombinatorBinding(binding)) {
-        combinatorCount += 1
+        hasCombinator = true
       }
     }
 
     return {
       ExportNamedDeclaration(node: ESTree.ExportNamedDeclaration) {
-        if (node.exportKind === 'type') return
-
         const declaration = node.declaration
         if (declaration) {
           if (declaration.type === 'FunctionDeclaration') {
-            if (isGenericEffectFunction(declaration)) combinatorCount += 1
+            if (isGenericEffectFunction(declaration)) hasCombinator = true
             return
           }
           if (declaration.type === 'VariableDeclaration') {
             for (const decl of declaration.declarations) {
               if (decl.id.type === 'Identifier' && isCombinatorDeclarator(decl)) {
-                combinatorCount += 1
+                hasCombinator = true
               }
             }
           }
@@ -117,24 +111,24 @@ export const policyCombinatorExport = defineRule({
           declaration.type === 'ArrowFunctionExpression' ||
           declaration.type === 'FunctionExpression'
         ) {
-          if (isGenericEffectFunction(declaration)) combinatorCount += 1
+          if (isGenericEffectFunction(declaration)) hasCombinator = true
           return
         }
         if (declaration.type === 'Identifier') {
-          countCombinator(topLevelBindings.get(declaration.name))
+          markCombinator(topLevelBindings.get(declaration.name))
         }
       },
       'Program:exit'() {
         for (const node of pendingSpecifierExports) {
           for (const spec of node.specifiers) {
-            if (spec.type !== 'ExportSpecifier') continue
-            if (node.exportKind === 'type' || spec.exportKind === 'type') continue
+            if (node.exportKind === 'type') continue
+            if (spec.exportKind === 'type') continue
             if (spec.local.type !== 'Identifier') continue
-            countCombinator(topLevelBindings.get(spec.local.name))
+            markCombinator(topLevelBindings.get(spec.local.name))
           }
         }
 
-        if (combinatorCount === 0) {
+        if (!hasCombinator) {
           const reportNode = program.body[0] ?? program
           context.report({
             node: reportNode,

@@ -98,7 +98,8 @@ export const storeNoDomainBranch = defineRule({
     return {
       ImportDeclaration(node: ESTree.ImportDeclaration) {
         const cell = cellOf(node.source.value)
-        if (!INPUT_CELLS.some((input) => input === cell)) return
+        if (cell === null) return
+        if (!INPUT_CELLS.includes(cell)) return
         for (const specifier of node.specifiers) inputNames.add(specifier.local.name)
       },
       VariableDeclarator(node: ESTree.VariableDeclarator) {

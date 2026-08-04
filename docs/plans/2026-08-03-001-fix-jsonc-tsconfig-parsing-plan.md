@@ -415,7 +415,7 @@ Run in order. Any failure blocks done (REPO-A3, USER-V2).
 2. `pnpm check` — install → format:check + lint + typecheck + test + attw + api:check, then `check:exports`, `check:mutate-scope`, `check:lint-coverage`, and the new `check:no-hand-rolled-jsonc`. **Exit 0 required.**
 3. **Gate-fires check (U6).** Plant a **scanner-shaped** violation inside `packages/stryker-js/core/src/`, observe a non-zero exit naming it, remove it. Then delete the S2 branch, observe `--selftest` go red, restore it. Record all exit codes.
 4. **Regression check (U4).** Temporarily restore the regex stripper in `tsconfig-helpers.ts`, confirm the new fixture test fails with TS18003, restore the fix. This proves the test defends the behavior rather than merely passing beside it (USER-V5).
-5. `node scripts/test-contribution.mjs <pkg>` — applies only if a `*.property.test.ts` changed. This plan adds none; run it only if that changes.
+5. The contribution gate — applies only if a `*.property.test.ts` changed. This plan adds none; run it only if that changes. (Since superseded: the gate now ships as `packages/stryker-plugins/dist/test-contribution-gate.mjs <pkg-dir>`, built via `pnpm --filter @systemfsoftware/stryker-plugins build`; `scripts/test-contribution.mjs` no longer exists.)
 
 No `pnpm --filter <pkg> mutation` run applies: neither `stryker-js` package has a mutation config, and KTD-6 removed the `oxlint-plugins` change that would have brought OX-MG1 into scope.
 

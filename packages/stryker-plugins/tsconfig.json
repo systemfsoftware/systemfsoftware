@@ -4,6 +4,9 @@
   "compilerOptions": {
     "customConditions": [
       "@systemfsoftware/source"
+    ],
+    "types": [
+      "node"
     ]
   },
   "include": [

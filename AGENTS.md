@@ -34,9 +34,9 @@ Effect-TS libraries + the oxlint plugin enforcing the constitution (at `repos/co
   check: exports changes come from tsdown.config.ts only
 
 - id: REPO-S5
-  title: NEVER put a non-workflow cell in a mutation surface
-  do: mutate `*.workflow.ts` — the one cell whose observer is the mutator; `*.schema.ts` is permitted, never required (generated schema laws already cover it)
-  dont: add `*.executor.ts`, `*.kernel.ts`, `*.acl.ts`, `*.store.ts`, `*.handler.ts`, `*.middleware.ts`, `*.state.ts`, `*.adapter.ts`, `*.policy.ts`, `*.shape.ts`, or `*.observer.ts` to any `mutate` glob; never leave `mutate` unset (the Stryker default sweeps every source file and auto-enrolls each new cell); never keep a mutation config in a package with no workflow
+  title: NEVER put a shell cell in a mutation surface
+  do: mutate only pure decisions — `*.workflow.ts` in a cell package, the rule file in a lint plugin, `*.schema.ts` where generated laws do not already cover it
+  dont: add `*.executor.ts`, `*.kernel.ts`, `*.acl.ts`, `*.store.ts`, `*.handler.ts`, `*.middleware.ts`, `*.state.ts`, `*.adapter.ts`, `*.policy.ts`, `*.shape.ts`, or `*.observer.ts` to any `mutate` glob; leave `mutate` unset (the Stryker default sweeps every source file and auto-enrolls each new cell)
   harm: wrong observer. The mutator asks "do the tests notice a changed decision?" — a shell cell decides nothing, so every mutant is equivalent or is killed by a composition test that was proving something else; the score certifies nothing and the package pays hours of runtime for it
   check: node scripts/guard-mutate-scope.mjs exits 0 (wired into pnpm check); shell cells stay gated by lint provenance + composition tests, kernels by colocated K-law property tests
 ```
@@ -49,16 +49,16 @@ Effect-TS libraries + the oxlint plugin enforcing the constitution (at `repos/co
 | Types    | tsc + api-extractor                    | `pnpm api:check` runs for every package with `api-extractor.json`                                                                                                                                                                                                      |
 | Build    | tsdown + turbo                         | ESM (`.mjs` + tsc dts). Build via `pnpm turbo build`.                                                                                                                                                                                                                  |
 | Tests    | Vitest + `@effect/vitest` + fast-check | PBT on pure core; composition through I/O sandwich.                                                                                                                                                                                                                    |
-| Mutation | Stryker (typescript-checker)           | `*.workflow.ts` only; `*.schema.ts` optional. Gate: `pnpm check:mutate-scope` (REPO-S5).                                                                                                                                                                               |
+| Mutation | Stryker (typescript-checker)           | Pure decisions only — scope is REPO-S5. Gate: `pnpm check:mutate-scope`.                                                                                                                                                                                               |
 | Lint     | oxlint + dprint                        | Per-package `oxlint.config.ts` extending `@systemfsoftware/oxlint-config`. Registration is NOT delivery: a rule reaches only packages that opt in. Gate: `pnpm check:lint-coverage`, which also DEFINES production vs tooling — never re-derive that boundary by hand. |
 
 ## Surface Classes
 
-| Surface              | Examples                                                                                                                                                               | Rule                                                                                                                                                                                                                                                                                      |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Locked**           | `AGENTS.md`, `repos/`, `.github/workflows/`, evaluation scripts (`scripts/test-contribution.mjs`, `scripts/guard-mutate-scope.mjs`, `scripts/check-lint-coverage.mjs`) | Read and propose changes, but do not edit to make verification pass.                                                                                                                                                                                                                      |
-| **Editable**         | `packages/*/`, `scripts/` (EXCEPT the evaluation scripts named Locked above), `docs/solutions/`, `tsdown.config.ts`, `dprint.json`, `pnpm-workspace.yaml`              | Edit freely within the active task. `docs/solutions/` holds documented solutions to past problems (bugs, best practices, workflow patterns), organized by category with YAML frontmatter (`module`, `tags`, `problem_type`); relevant when implementing or debugging in documented areas. |
-| **Human-controlled** | Merge to `main`, publish, deploy, destructive ops, credentials                                                                                                         | Ask the user before acting.                                                                                                                                                                                                                                                               |
+| Surface              | Examples                                                                                                                                                                                                  | Rule                                                                                                                                                                                                                                                                                      |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Locked**           | `AGENTS.md`, `repos/`, `.github/workflows/`, evaluation gates (`packages/stryker-js/core/src/reporters/test-contribution.ts`, `scripts/guard-mutate-scope.mjs`, `scripts/check-lint-coverage.mjs`)        | Read and propose changes, but do not edit to make verification pass.                                                                                                                                                                                                                      |
+| **Editable**         | `packages/*/` (EXCEPT the evaluation gate named Locked above), `scripts/` (EXCEPT the evaluation scripts named Locked above), `docs/solutions/`, `tsdown.config.ts`, `dprint.json`, `pnpm-workspace.yaml` | Edit freely within the active task. `docs/solutions/` holds documented solutions to past problems (bugs, best practices, workflow patterns), organized by category with YAML frontmatter (`module`, `tags`, `problem_type`); relevant when implementing or debugging in documented areas. |
+| **Human-controlled** | Merge to `main`, publish, deploy, destructive ops, credentials                                                                                                                                            | Ask the user before acting.                                                                                                                                                                                                                                                               |
 
 ## Startup Workflow
 
@@ -66,7 +66,7 @@ Before writing code:
 
 1. **Confirm working directory** with `pwd` — must be the monorepo root.
 2. **Read this file** completely.
-3. **Confirm the leaf instruction hierarchy is loaded** — the runtime auto-loads root + every leaf `AGENTS.md` on the path down to `cwd`. Content accumulates downward; leaves only carry their directory's delta.
+3. **Read the leaf for every directory you will touch.** Nothing below this file auto-loads: `cwd` stays at the root (step 1) and work reaches packages through `--filter`, never `cd`, so no leaf is ever on the path. A leaf `AGENTS.md` reaches you only when you read it. Before your first edit under a package, read that package's `AGENTS.md` if it has one — it carries the deltas this file deliberately omits.
 4. **Run baseline verification:**
    ```bash
    pnpm check  # the full gate — see Verification Commands for the chain it runs
@@ -124,7 +124,9 @@ The last link, `pnpm check:publish-config`, is part of that chain and is never r
 
 Then `pnpm --filter <pkg> mutation` — **100%** on changed pure-core files. Any failure blocks done.
 
-Then `node scripts/test-contribution.mjs <pkg>` — a changed `*.property.test.ts` must, when deleted, let at least one mutant survive. A passing mutation score is not evidence a test earns its place: it measures the mutant set, not the test set. Any failure blocks done.
+That run also judges test contribution, and can fail for a second reason: every `*.property.test.ts` in the package must kill a mutant nothing else kills. If deleting a file would leave every mutant just as dead, the run exits non-zero however high the score, because a score measures the mutant set, not the test set. There is no separate command and nothing to build — the check is part of our Stryker (`packages/stryker-js/core/src/reporters/test-contribution.ts`), defaulted on for `.property.test.ts` by `requireTestContribution`, and reads the report already in memory. It never runs off a stale file on disk. Under bail only files that killed nothing at all are accused, since a second killer can go unrecorded; `disableBail: true` buys the exact measure, which also accuses redundant killers. A run that credits no kill to any test file is reported as an unmeasurable run rather than a package full of toothless tests. Set `requireTestContribution` to `null` in a package's `stryker.config.json` to opt out — visibly, in the config, not by deleting a test.
+
+It judges the test files the run actually executed. Under `"vitest": { "related": true }` a property test that imports nothing in the mutated set never runs, so it is never judged — the one toothless shape this check cannot see.
 
 ### Anti-Bypass
 
@@ -166,11 +168,11 @@ Then `node scripts/test-contribution.mjs <pkg>` — a changed `*.property.test.t
 
 This root file holds workspace-wide invariants only. Directories with distinct build, toolchain, ownership, or risk boundaries get their own leaf `AGENTS.md` delta.
 
-- A leaf delta exists where a directory has different verification commands, a different toolchain, a different ownership (vendored, forked, generated), or a different risk class.
+- A leaf delta exists where a directory has different verification commands, a different toolchain, a different ownership (vendored, generated), or a different risk class.
 - A rule lives in **exactly ONE file:** the highest level it applies to. Leaves carry only the delta and point back here; they never restate the root.
 - If a rule in this file applies to exactly one directory, move it to that directory's leaf.
 
-An `AGENTS.md` under `repos/` is a vendored root, not a leaf.
+`repos/` is the only vendored tree, and an `AGENTS.md` there is a vendored root, not a leaf. A fork under `packages/` is **ours**: we publish it, we change it, and "upstream" names where it came from — never a reason to leave it ungated or to preserve a diff nobody will merge.
 
 ## Release Policy
 

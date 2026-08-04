@@ -43,6 +43,16 @@ ruleTester.run('policy-no-junk-drawer-path', policyNoJunkDrawerPath, {
       filename: 'packages/foo/src/policies/rate-limit.policy.ts',
     },
     {
+      name: 'Should_Pass_When_NoSrcSegmentWithBannedSegment_When_PolicyFile',
+      code: `export const rateLimit = <A, E, R>(self: Effect<A, E, R>) => self`,
+      filename: 'core/x.policy.ts',
+    },
+    {
+      name: 'Should_Pass_When_BannedSegmentPrecedesSrc_When_PolicyFile',
+      code: `export const rateLimit = <A, E, R>(self: Effect<A, E, R>) => self`,
+      filename: 'migrations/src/policies/checkout.policy.ts',
+    },
+    {
       name: 'Should_Ignore_CoreSegment_When_NonPolicyFile',
       code: `export const run = () => {}`,
       filename: 'src/core/order.executor.ts',

@@ -8,6 +8,8 @@ export const DECLARATION_FORM_MESSAGE =
 
 export const WORKFLOW_TYPE_NAME = 'Workflow' as const
 
+export const FUNCTION_DECLARATION_NAME_FALLBACK = 'the exported function' as const
+
 export const FUNCTION_DECLARATION_EXPECTED =
   'export const <name>: Workflow<Command, Decision, Error> = (command) => ...' as const
 export const FUNCTION_DECLARATION_ACTUAL = 'an export function declaration' as const

@@ -42,16 +42,19 @@ const returnTypeOf = (fn: ESTree.Node): ESTree.TSTypeAnnotation | null | undefin
   return init.returnType
 }
 
-const referencedTypeNames = (type: ESTree.TSType): string[] => {
+const errorArgumentBackedByDeclaredError = (type: ESTree.TSType, errorVariantNames: string[]): boolean => {
   if (type.type === 'TSTypeReference') {
     const typeName = type.typeName
-    if (typeName.type === 'Identifier') return [typeName.name]
-    if (typeName.type === 'TSQualifiedName') return [typeName.right.name]
-    return []
+    if (typeName.type === 'Identifier') return errorVariantNames.includes(typeName.name)
+    if (typeName.type === 'TSQualifiedName') return errorVariantNames.includes(typeName.right.name)
   }
-  if (type.type === 'TSUnionType') return type.types.flatMap(referencedTypeNames)
-  if (type.type === 'TSParenthesizedType') return referencedTypeNames(type.typeAnnotation)
-  return []
+  if (type.type === 'TSUnionType') {
+    return type.types.some((t) => errorArgumentBackedByDeclaredError(t, errorVariantNames))
+  }
+  if (type.type === 'TSParenthesizedType') {
+    return errorArgumentBackedByDeclaredError(type.typeAnnotation, errorVariantNames)
+  }
+  return false
 }
 
 const returnTypeLabel = (annotation: ESTree.TSTypeAnnotation | null | undefined): string => {
@@ -61,7 +64,6 @@ const returnTypeLabel = (annotation: ESTree.TSTypeAnnotation | null | undefined)
     const typeName = declared.typeName
     if (typeName.type === 'Identifier') return typeName.name
     if (typeName.type === 'TSQualifiedName') return typeName.right.name
-    return 'a type reference'
   }
   if (declared.type === 'TSUnionType') return 'a bare union'
   return declared.type
@@ -81,7 +83,7 @@ const missingErrorChannelActual = (
     if (errorArgument === undefined) {
       return 'an Either whose error type references no declared S.TaggedError'
     }
-    const backed = referencedTypeNames(errorArgument).some((name) => errorVariantNames.includes(name))
+    const backed = errorArgumentBackedByDeclaredError(errorArgument, errorVariantNames)
     if (!backed) {
       return 'an Either whose error type references no declared S.TaggedError'
     }

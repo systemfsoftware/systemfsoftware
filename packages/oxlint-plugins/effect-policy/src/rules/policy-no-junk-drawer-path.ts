@@ -9,14 +9,14 @@ const isPolicyFile = (filename: string): boolean => filename.endsWith('.policy.t
 
 const PathSegments = S.NonEmptyArray(S.String)
 
-const segmentsUnderSrc = (filename: string): ReadonlyArray<string> => {
+const findBannedSegment = (filename: string): string | null => {
   const segments = S.decodeUnknownSync(PathSegments)(filename.split('/'))
-  let lastSrcIndex = -1
-  for (let index = 0; index < segments.length; index++) {
-    if (segments[index] === SRC_DIR) lastSrcIndex = index
+  const lastSrcIndex = segments.lastIndexOf(SRC_DIR)
+  if (lastSrcIndex === -1) return null
+  for (const segment of segments.slice(lastSrcIndex + 1)) {
+    if (BANNED_PATH_SEGMENTS.has(segment)) return segment
   }
-  if (lastSrcIndex === -1) return []
-  return segments.slice(lastSrcIndex + 1)
+  return null
 }
 
 export const policyNoJunkDrawerPath = defineRule({
@@ -24,9 +24,7 @@ export const policyNoJunkDrawerPath = defineRule({
   create(context: Context) {
     if (!isPolicyFile(context.filename)) return {}
 
-    const banned = segmentsUnderSrc(context.filename).find(
-      (segment) => BANNED_PATH_SEGMENTS.has(segment),
-    ) ?? null
+    const banned = findBannedSegment(context.filename)
     if (banned === null) return {}
 
     return {

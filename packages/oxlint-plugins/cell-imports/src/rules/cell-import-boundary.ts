@@ -1,5 +1,6 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
+import { dirname, join, normalize } from '@std/path/posix'
 import type { CellEdge } from '../cell-import-table.config.js'
 import {
   CELL_IMPORT_TABLE,
@@ -36,15 +37,10 @@ const cellOf = (specifier: string): string | null => {
 }
 
 const edgeFor = (filename: string): CellEdge | null => {
-  let matched: CellEdge | null = null
-  let matchedLength = 0
   for (const [suffix, edge] of Object.entries(CELL_IMPORT_TABLE)) {
-    if (!filename.endsWith(suffix)) continue
-    if (suffix.length <= matchedLength) continue
-    matched = edge
-    matchedLength = suffix.length
+    if (filename.endsWith(suffix)) return edge
   }
-  return matched
+  return null
 }
 
 const isProductionCaller = (filename: string): boolean =>
@@ -60,16 +56,8 @@ const hasValueBinding = (node: ESTree.ImportDeclaration): boolean => {
 
 const traversesSegment = (filename: string, specifier: string, segment: string): boolean => {
   if (!specifier.startsWith('.')) return specifier.split('/').includes(segment)
-  const resolved = filename.split('/').slice(0, -1)
-  for (const part of specifier.split('/')) {
-    if (part === '' || part === '.') continue
-    if (part === '..') {
-      resolved.pop()
-      continue
-    }
-    resolved.push(part)
-  }
-  return resolved.slice(0, -1).includes(segment)
+  const resolved = normalize(join(dirname(filename), specifier)).split('/')
+  return resolved.includes(segment)
 }
 
 const isExempt = (edge: CellEdge, filename: string, specifier: string, cell: string): boolean => {
@@ -85,7 +73,6 @@ export const cellImportBoundary = defineRule({
     const filename = context.filename
     const edge = edgeFor(filename)
     const guardsObserver = isProductionCaller(filename)
-    if (edge === null && !guardsObserver) return {}
 
     const inspect = (node: ESTree.Node, specifier: string, valueBinding: boolean): void => {
       if (guardsObserver && OBSERVER_MODULE.test(specifier)) {
@@ -154,7 +141,7 @@ export const cellImportBoundary = defineRule({
         inspect(node, node.source.value, hasValueBinding(node))
       },
       ExportNamedDeclaration(node: ESTree.ExportNamedDeclaration) {
-        if (node.source === null || node.source === undefined) return
+        if (node.source === null) return
         inspect(node, node.source.value, node.exportKind !== 'type')
       },
       ExportAllDeclaration(node: ESTree.ExportAllDeclaration) {

@@ -45,7 +45,9 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "build": "tsdown"
+    "build": "tsdown",
+    "lint": "oxlint",
+    "mutation": "node ./bin/stryker.js run"
   },
   "dependencies": {
     "@inquirer/prompts": "^8.0.0",
@@ -78,6 +80,7 @@
   },
   "devDependencies": {
     "@std/jsonc": "catalog:",
+    "@stryker-mutator/vitest-runner": "catalog:stryker",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/diff-match-patch": "1.0.36",
