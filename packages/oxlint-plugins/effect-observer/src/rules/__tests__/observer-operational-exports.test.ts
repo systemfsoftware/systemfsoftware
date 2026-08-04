@@ -160,5 +160,11 @@ ruleTester.run('observer-operational-exports', observerOperationalExports, {
       filename: 'step-harness.observer.ts',
       errors: [errorFor('anOrder')],
     },
+    {
+      name: 'Should_Report_When_ExportingNamedDefaultClass',
+      code: `export default class OrderService {}`,
+      filename: 'step-harness.observer.ts',
+      errors: [errorFor('OrderService')],
+    },
   ],
 })
