@@ -8,7 +8,7 @@ permissions:
 
 jobs:
   check:
-    name: build · typecheck · test · lint
+    name: build · typecheck · test · lint · guards
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -19,7 +19,7 @@ jobs:
           fetch-depth: 2
       - uses: ./.github/actions/install-deps
       - name: Validate publish config
-        run: node scripts/validate-publish-config.mjs
+        run: corepack pnpm check:publish-config
       - run: corepack pnpm build
       - run: corepack pnpm typecheck
       - run: corepack pnpm test
@@ -27,3 +27,13 @@ jobs:
           CI: "true"
       - run: corepack pnpm lint:ci
       - run: corepack pnpm api:check
+      - name: Guard exports
+        run: corepack pnpm check:exports
+      - name: Guard mutation scope
+        run: corepack pnpm check:mutate-scope
+      - name: Guard lint coverage
+        run: corepack pnpm check:lint-coverage
+      - name: Guard hand-rolled JSONC
+        run: corepack pnpm check:no-hand-rolled-jsonc
+      - name: Guard referenced projects
+        run: corepack pnpm check:project-references
