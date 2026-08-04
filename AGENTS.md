@@ -69,7 +69,7 @@ Before writing code:
 3. **Confirm the leaf instruction hierarchy is loaded** — the runtime auto-loads root + every leaf `AGENTS.md` on the path down to `cwd`. Content accumulates downward; leaves only carry their directory's delta.
 4. **Run baseline verification:**
    ```bash
-   pnpm check  # install --frozen-lockfile → lint + typecheck + test
+   pnpm check  # the full gate — see Verification Commands for the chain it runs
    ```
 5. **Confirm the active task** with the user or via the task list.
 6. **Review recent commits** with `git log --oneline -5`.
@@ -106,7 +106,7 @@ If baseline verification fails, repair it first before adding new scope.
 ```yaml
 - id: REPO-D1
   title: Done means
-  do: implement target behavior; run full verification after last edit; record evidence; leave repo restartable
+  do: implement target behavior; run full verification after last edit; record evidence; leave repo restartable; validate publish metadata (repository.url, repository.directory) on publishable package.json changes
   dont: claim done with failing checks, stale evidence, or uncommitted state
   harm: undone work passes as done
   check: pnpm check exits 0 from this session after the last edit
@@ -117,8 +117,10 @@ If baseline verification fails, repair it first before adding new scope.
 Run in order before claiming done:
 
 ```bash
-pnpm check  # install --frozen-lockfile → lint + typecheck + test + api:check (concurrent, via turbo)
+pnpm check  # pnpm install --frozen-lockfile → turbo (format:check, lint, typecheck, test, attw, api:check) → check:exports → check:mutate-scope → check:lint-coverage → check:no-hand-rolled-jsonc → check:publish-config
 ```
+
+The last link, `pnpm check:publish-config`, is part of that chain and is never run on its own (REPO-A1). Every publishable package must carry `repository.url` exactly `git+https://github.com/systemfsoftware/systemfsoftware.git` and a `repository.directory` matching its real path; npm validates both against the sigstore provenance attestation and rejects the upload with **422** otherwise. It earns a gate because the version bump, changelog, commit, and git tag all land _before_ the publish is attempted — a rejection leaves git claiming a release npm never received, which is exactly how `stryker-js-core` and `stryker-js-typescript-checker` sat at `0.1.0` on npm while git advanced to `v1.2.1`.
 
 Then `pnpm --filter <pkg> mutation` — **100%** on changed pure-core files. Any failure blocks done. Delete the package's `reports/stryker-incremental.json` before any run you will cite as evidence. It is a regenerable cache keyed on source hashes, never a baseline: it reuses prior verdicts for files it considers unchanged, and has been measured reporting mutants as `Killed` that a clean run shows `Survived` — `hex-schema` on 2026-07-31 scored 78.13% cached against 46.88% clean on the same tree. A cached score is not current-run evidence (§A.3), and a gate that can report a stale pass is not a gate.
 

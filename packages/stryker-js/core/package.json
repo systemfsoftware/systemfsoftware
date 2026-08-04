@@ -1,6 +1,13 @@
 {
   "name": "@systemfsoftware/stryker-js-core",
   "version": "1.2.1",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
+    "directory": "packages/stryker-js/core"
+  },
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/stryker-js/core#readme",
+  "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
   "description": "A source-code fork of @stryker-mutator/core",
   "type": "module",
   "publishConfig": {

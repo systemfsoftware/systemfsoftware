@@ -1,6 +1,13 @@
 {
   "name": "@systemfsoftware/stryker-js-typescript-checker",
   "version": "1.2.1",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
+    "directory": "packages/stryker-js/typescript-checker"
+  },
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/stryker-js/typescript-checker#readme",
+  "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
   "description": "TypeScript checker plugin for Stryker — TS7 native",
   "type": "module",
   "exports": {
