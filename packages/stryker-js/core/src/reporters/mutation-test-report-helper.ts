@@ -15,6 +15,8 @@ import { TestCoverage } from '../mutants/index.js'
 import { strykerVersion } from '../stryker-package.js'
 import { objectUtils } from '../utils/object-utils.js'
 
+import { judgeTestContribution } from './test-contribution.js'
+
 const STRYKER_FRAMEWORK: Readonly<
   Pick<schema.FrameworkInformation, 'branding' | 'name' | 'version'>
 > = Object.freeze({
@@ -146,6 +148,30 @@ export class MutationTestReportHelper {
       )
     }
     this.determineExitCode(metrics)
+    this.determineTestContribution(report)
+  }
+
+  private determineTestContribution(report: schema.MutationTestResult) {
+    const verdict = judgeTestContribution(
+      report,
+      this.options.requireTestContribution,
+      this.options.disableBail,
+    )
+    if (verdict === undefined) {
+      this.log.debug(
+        "No test contribution required. Won't fail the build for a test file that kills nothing another test file does not also kill. Set `requireTestContribution` to change this behavior.",
+      )
+      return
+    }
+    if (!verdict.failed) {
+      this.log.info(verdict.message)
+      return
+    }
+    this.log.error(`${verdict.message}\nSetting exit code to 1 (failure).`)
+    this.log.info(
+      '(sharpen or delete them, or set `requireTestContribution = null` to prevent this error in the future)',
+    )
+    objectUtils.setExitCode(1)
   }
 
   private determineExitCode(metrics: MutationTestMetricsResult) {

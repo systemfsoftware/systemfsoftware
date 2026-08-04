@@ -56,7 +56,7 @@ Effect-TS libraries + the oxlint plugin enforcing the constitution (at `repos/co
 
 | Surface              | Examples                                                                                                                                                                                                  | Rule                                                                                                                                                                                                                                                                                      |
 | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Locked**           | `AGENTS.md`, `repos/`, `.github/workflows/`, evaluation gates (`packages/stryker-plugins/src/test-contribution/`, `scripts/guard-mutate-scope.mjs`, `scripts/check-lint-coverage.mjs`)                    | Read and propose changes, but do not edit to make verification pass.                                                                                                                                                                                                                      |
+| **Locked**           | `AGENTS.md`, `repos/`, `.github/workflows/`, evaluation gates (`packages/stryker-js/core/src/reporters/test-contribution.ts`, `scripts/guard-mutate-scope.mjs`, `scripts/check-lint-coverage.mjs`)        | Read and propose changes, but do not edit to make verification pass.                                                                                                                                                                                                                      |
 | **Editable**         | `packages/*/` (EXCEPT the evaluation gate named Locked above), `scripts/` (EXCEPT the evaluation scripts named Locked above), `docs/solutions/`, `tsdown.config.ts`, `dprint.json`, `pnpm-workspace.yaml` | Edit freely within the active task. `docs/solutions/` holds documented solutions to past problems (bugs, best practices, workflow patterns), organized by category with YAML frontmatter (`module`, `tags`, `problem_type`); relevant when implementing or debugging in documented areas. |
 | **Human-controlled** | Merge to `main`, publish, deploy, destructive ops, credentials                                                                                                                                            | Ask the user before acting.                                                                                                                                                                                                                                                               |
 
@@ -66,7 +66,7 @@ Before writing code:
 
 1. **Confirm working directory** with `pwd` — must be the monorepo root.
 2. **Read this file** completely.
-3. **Confirm the leaf instruction hierarchy is loaded** — the runtime auto-loads root + every leaf `AGENTS.md` on the path down to `cwd`. Content accumulates downward; leaves only carry their directory's delta.
+3. **Read the leaf for every directory you will touch.** Nothing below this file auto-loads: `cwd` stays at the root (step 1) and work reaches packages through `--filter`, never `cd`, so no leaf is ever on the path. A leaf `AGENTS.md` reaches you only when you read it. Before your first edit under a package, read that package's `AGENTS.md` if it has one — it carries the deltas this file deliberately omits.
 4. **Run baseline verification:**
    ```bash
    pnpm check  # the full gate — see Verification Commands for the chain it runs
@@ -124,7 +124,9 @@ The last link, `pnpm check:publish-config`, is part of that chain and is never r
 
 Then `pnpm --filter <pkg> mutation` — **100%** on changed pure-core files. Any failure blocks done.
 
-Then run the contribution gate for the package: `pnpm --filter @systemfsoftware/stryker-plugins build` once, then `node packages/stryker-plugins/dist/test-contribution-gate.mjs <pkg-dir>`. The gate ships as a build artifact, so a fresh clone or a bare `pnpm check` has not produced it yet — build it first or the command is an ENOENT, not a pass. Every `*.property.test.ts` in the package must kill a mutant nothing else kills; if deleting it would leave every mutant just as dead, the gate fails. A passing mutation score is not evidence a test earns its place: it measures the mutant set, not the test set. The gate reads the `reports/mutation-report.json` the run above just wrote, so it needs no second Stryker run, and it judges every property test on disk — a file the report never mentions covered nothing and is reported, not skipped. It refuses rather than passing when the report cannot be trusted to describe this tree: when any source file is newer than the report, when the report credits a test file that no longer exists, when `projectRoot` names another package, when no kill is attributed to any test, or when a `--suffix` you asked for matches nothing. A package with no property test at all is not a failure — the gate says it measured nothing and exits 0. Precision comes from the run that produced the report, not the current config: with `disableBail: true` the answer is exact; otherwise Stryker records one killer per mutant and the gate only accuses files that killed nothing at all, which is sound but misses redundant killers. Any failure blocks done.
+That run also judges test contribution, and can fail for a second reason: every `*.property.test.ts` in the package must kill a mutant nothing else kills. If deleting a file would leave every mutant just as dead, the run exits non-zero however high the score, because a score measures the mutant set, not the test set. There is no separate command and nothing to build — the check is part of our Stryker (`packages/stryker-js/core/src/reporters/test-contribution.ts`), defaulted on for `.property.test.ts` by `requireTestContribution`, and reads the report already in memory. It never runs off a stale file on disk. Under bail only files that killed nothing at all are accused, since a second killer can go unrecorded; `disableBail: true` buys the exact measure, which also accuses redundant killers. A run that credits no kill to any test file is reported as an unmeasurable run rather than a package full of toothless tests. Set `requireTestContribution` to `null` in a package's `stryker.config.json` to opt out — visibly, in the config, not by deleting a test.
+
+It judges the test files the run actually executed. Under `"vitest": { "related": true }` a property test that imports nothing in the mutated set never runs, so it is never judged — the one toothless shape this check cannot see.
 
 ### Anti-Bypass
 
@@ -166,11 +168,11 @@ Then run the contribution gate for the package: `pnpm --filter @systemfsoftware/
 
 This root file holds workspace-wide invariants only. Directories with distinct build, toolchain, ownership, or risk boundaries get their own leaf `AGENTS.md` delta.
 
-- A leaf delta exists where a directory has different verification commands, a different toolchain, a different ownership (vendored, forked, generated), or a different risk class.
+- A leaf delta exists where a directory has different verification commands, a different toolchain, a different ownership (vendored, generated), or a different risk class.
 - A rule lives in **exactly ONE file:** the highest level it applies to. Leaves carry only the delta and point back here; they never restate the root.
 - If a rule in this file applies to exactly one directory, move it to that directory's leaf.
 
-An `AGENTS.md` under `repos/` is a vendored root, not a leaf.
+`repos/` is the only vendored tree, and an `AGENTS.md` there is a vendored root, not a leaf. A fork under `packages/` is **ours**: we publish it, we change it, and "upstream" names where it came from — never a reason to leave it ungated or to preserve a diff nobody will merge.
 
 ## Release Policy
 

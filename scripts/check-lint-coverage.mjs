@@ -19,7 +19,10 @@ const root = process.cwd()
 const TOOLING = [
   ['packages/oxlint-plugins/', 'lint rules themselves; declaring oxlint-config closes a CO4 dependency cycle'],
   ['packages/oxlint-config/', 'the config package; cannot extend itself'],
-  ['packages/stryker-js/', 'vendored fork of stryker-js'],
+  [
+    'packages/stryker-js/',
+    'our Stryker fork: not Effect cell code, so cell rules are the wrong observer; carries its own oxlint baseline and mutation gate',
+  ],
   ['packages/stryker-plugins/', 'mutation tooling, not shipped product code'],
   ['packages/arethetypeswrong/', 'port of arethetypeswrong, tooling'],
   ['packages/tsconfig/', 'shared tsconfig, no runtime source'],

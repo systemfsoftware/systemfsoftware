@@ -1,8 +1,9 @@
-import { PartialStrykerOptions, strykerCoreSchema, StrykerOptions } from '@stryker-mutator/api/core'
+import { PartialStrykerOptions, StrykerOptions } from '@stryker-mutator/api/core'
 import { BaseContext, commonTokens, Injector, tokens } from '@stryker-mutator/api/plugin'
 import { frameworkPluginsFileUrl } from '@stryker-mutator/instrumenter'
 import { deepFreeze } from '@stryker-mutator/util'
 import { execaCommand } from 'execa'
+import { forkCoreSchema } from '../config/fork-schema.js'
 
 import { ConfigReader } from '../config/config-reader.js'
 import { MetaSchemaBuilder, OptionsValidator } from '../config/index.js'
@@ -53,7 +54,7 @@ export class PrepareExecutor {
 
     // Read the config file
     const configReaderInjector = this.injector
-      .provideValue(coreTokens.validationSchema, strykerCoreSchema)
+      .provideValue(coreTokens.validationSchema, forkCoreSchema)
       .provideClass(coreTokens.optionsValidator, OptionsValidator)
     const configReader = configReaderInjector.injectClass(ConfigReader)
     const options: StrykerOptions = await configReader.readConfig(cliOptions)

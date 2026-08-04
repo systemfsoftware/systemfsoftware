@@ -27,9 +27,6 @@
   "files": [
     "dist"
   ],
-  "bin": {
-    "stryker-plugins": "./src/test-contribution/main.ts"
-  },
   "exports": {
     ".": {
       "@systemfsoftware/source": "./src/mod.ts",
@@ -96,9 +93,6 @@
       },
       "./package.json": "./package.json"
     },
-    "provenance": true,
-    "bin": {
-      "stryker-plugins": "./dist/test-contribution-gate.mjs"
-    }
+    "provenance": true
   }
 }

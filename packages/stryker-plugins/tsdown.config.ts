@@ -7,12 +7,7 @@ const apiExtractorRollups: Record<string, string> = {
   './effect-schema-ignorer': './dist/effect-schema-ignorer.d.ts',
 }
 
-const BIN_SUBPATH = './test-contribution-gate'
-
 const shapeExports = (exports: Record<string, ExportEntry>): Record<string, ExportEntry> => {
-  // The gate is an executable, not an importable module: it exports nothing, so a subpath
-  // for it would advertise a type surface that cannot exist. It ships via `bin` instead.
-  delete exports[BIN_SUBPATH]
   for (const [subpath, types] of Object.entries(apiExtractorRollups)) {
     const entry = exports[subpath]
     if (typeof entry === 'string') {
@@ -30,7 +25,6 @@ export default defineConfig({
   entry: {
     index: './src/mod.ts',
     'effect-schema-ignorer': './src/effect-schema-ignorer/index.ts',
-    'test-contribution-gate': './src/test-contribution/main.ts',
   },
   format: 'esm',
   dts: true,

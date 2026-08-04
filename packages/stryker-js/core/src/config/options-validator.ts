@@ -1,7 +1,7 @@
 import os from 'os'
 import path from 'path'
 
-import { strykerCoreSchema, StrykerOptions } from '@stryker-mutator/api/core'
+import { StrykerOptions } from '@stryker-mutator/api/core'
 import { Logger } from '@stryker-mutator/api/logging'
 import { commonTokens, tokens } from '@stryker-mutator/api/plugin'
 import { deepFreeze, findUnserializables, Immutable, noopLogger } from '@stryker-mutator/util'
@@ -15,6 +15,7 @@ import { IGNORE_PATTERN_CHARACTER, MUTATION_RANGE_REGEX } from '../fs/index.js'
 import { CommandTestRunner } from '../test-runner/command-test-runner.js'
 import { objectUtils, optionsPath } from '../utils/index.js'
 
+import { forkCoreSchema } from './fork-schema.js'
 import { describeErrors } from './validation-errors.js'
 
 const Ajv = ajvModule.default
@@ -309,7 +310,7 @@ export class OptionsValidator {
 export function createDefaultOptions(): StrykerOptions {
   const options: Record<string, unknown> = {}
   const validator: OptionsValidator = new OptionsValidator(
-    strykerCoreSchema,
+    forkCoreSchema,
     noopLogger,
   )
   validator.validate(options)

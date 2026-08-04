@@ -2238,6 +2238,9 @@ importers:
       '@std/jsonc':
         specifier: 'catalog:'
         version: '@jsr/std__jsonc@1.0.2'
+      '@stryker-mutator/vitest-runner':
+        specifier: catalog:stryker
+        version: 9.6.1(@stryker-mutator/core@9.6.1(@types/node@24.13.2))(vitest@4.1.9)
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../tsconfig
