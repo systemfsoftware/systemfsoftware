@@ -1,8 +1,12 @@
 # Residual findings — fix/referenced-project-typecheck
 
 Source: repairing the TS6307 defect in sixteen `tsconfig.node.json` files
-(`276191ff21`) and gating it (`d45a8920d8`). Each item below is out of that
-change's scope, or lands on a Locked surface I may not edit.
+(`276191ff21`) and gating it (`d45a8920d8`).
+
+Finding 1 remains open — it is a scope decision, not a defect I can close
+unilaterally. Findings 2 and 3 landed on `.github/workflows/`, a Locked
+surface; the user approved editing it, and both are now resolved. They are kept
+here rather than deleted so the record shows what the fix exposed.
 
 ## 1. Nine packages fail the mutation gate — 243 unkilled mutants (High)
 
@@ -38,30 +42,33 @@ test reaches. A smaller set is `Timeout`, which is a different problem again
 Closing this is writing tests for nine lint-rule packages. It needs its own
 scope and your call on ordering; it is not a tail on a config fix.
 
-## 2. Five of six root guards never run in CI (Medium — Locked surface)
+## 2. Five of six root guards never ran in CI (Medium — RESOLVED)
 
-`.github/workflows/reusable-checks.yml` runs `build`, `typecheck`, `test`,
+`.github/workflows/reusable-checks.yml` ran `build`, `typecheck`, `test`,
 `lint:ci`, `api:check`, and — directly, not via its npm script —
-`node scripts/validate-publish-config.mjs`. It does not run `pnpm check` or
+`node scripts/validate-publish-config.mjs`. It did not run `pnpm check` or
 `pnpm check:ci`, so `check:exports`, `check:mutate-scope`,
 `check:lint-coverage`, `check:no-hand-rolled-jsonc`, and the new
-`check:project-references` fire only in local `pnpm check` and the `pre-push`
+`check:project-references` fired only in local `pnpm check` and the `pre-push`
 hook.
 
-Consequence, stated plainly: the gate added in `d45a8920d8` does not protect
-`main` against a contributor who pushes without the hook. Grep confirming the
-absence: no match for `check:ci|check:exports|check:no-hand-rolled|check:mutate-scope|check:lint-coverage|pnpm check`
-anywhere under `.github/workflows/`.
+Consequence: the gate added in `d45a8920d8` did not protect `main` against a
+contributor who pushes without the hook.
 
-Proposed: add `- run: corepack pnpm check:ci` to the `check` job, or add the
-five guards as explicit steps beside the publish-config one that is already
-there. I did not make this edit — `.github/workflows/` is Locked.
+Resolved with the user's approval — the Locked-surface restriction was lifted
+for this edit. The five guards are now explicit steps at the end of the `check`
+job, placed after `api:check` because the referenced projects' tooling files
+import `@systemfsoftware/vitest-config`, a workspace package. The existing
+publish-config step also now calls `corepack pnpm check:publish-config` so its
+selftest runs, which CI was skipping. Verified: `actionlint` exits 0, and all
+six step commands run green in 18s against this tree.
 
-## 3. CI mutation restores a stryker-incremental cache the repo's own rules reject (Medium — Locked surface)
+## 3. CI mutation restored a stryker-incremental cache the repo's own rules reject (Medium — RESOLVED)
 
-`.github/workflows/mutation.yml:52-57` restores
+`.github/workflows/mutation.yml:52-57` restored
 `<package>/reports/stryker-incremental.json` from cache before each run and
-saves it after runs on `main`.
+saved it after runs on `main`. Its `restore-keys` fallback accepted any prior
+cache for the package regardless of tree state.
 
 `AGENTS.md` says of that file: "Delete the package's
 `reports/stryker-incremental.json` before any run you will cite as evidence. It
@@ -70,10 +77,13 @@ reporting mutants as `Killed` that a clean run shows `Survived` — `hex-schema`
 on 2026-07-31 scored 78.13% cached against 46.88% clean on the same tree. A
 gate that can report a stale pass is not a gate."
 
-The CI mutation job is exactly such a gate. Every local run cited in this
-session deleted the file first; CI does the opposite. Given finding 1, this
+The CI mutation job was exactly such a gate. Every local run cited in this
+session deleted the file first; CI did the opposite. Given finding 1, this
 matters more than it did yesterday: nine packages are about to start reporting
 real survivors, and a restored cache can mask them.
 
-Proposed: drop the cache steps, or key them so a changed source tree cannot
-restore a prior verdict. Locked surface — not edited.
+Resolved with the user's approval: both the restore and save steps are deleted,
+so every mutation run is clean. No `actions/cache` reference remains anywhere
+under `.github/workflows/`. Keying the cache differently was rejected — the
+measured 78.13%-vs-46.88% divergence happened despite Stryker keying the file
+on source hashes internally, so the staleness is Stryker's, not the cache key's.
