@@ -98,16 +98,36 @@ export class TSConfigPreprocessor implements FilePreprocessor {
   ): Promise<void> {
     const extend = config.extends
     if (typeof extend === 'string') {
-      const rewritten = this.tryRewriteReference(extend, tsconfigFileName)
-      if (rewritten) {
-        config.extends = rewritten
-      } else {
-        await this.rewriteTSConfigFile(
-          project,
-          path.resolve(path.dirname(tsconfigFileName), extend),
+      config.extends = await this.rewriteExtendsEntry(
+        project,
+        extend,
+        tsconfigFileName,
+      )
+    } else if (Array.isArray(extend)) {
+      const rewritten: string[] = []
+      for (const entry of extend) {
+        rewritten.push(
+          await this.rewriteExtendsEntry(project, entry, tsconfigFileName),
         )
       }
+      config.extends = rewritten
     }
+  }
+
+  private async rewriteExtendsEntry(
+    project: Project,
+    extend: string,
+    tsconfigFileName: string,
+  ): Promise<string> {
+    const rewritten = this.tryRewriteReference(extend, tsconfigFileName)
+    if (rewritten) {
+      return rewritten
+    }
+    await this.rewriteTSConfigFile(
+      project,
+      path.resolve(path.dirname(tsconfigFileName), extend),
+    )
+    return extend
   }
 
   private rewriteFileArrayProperty(

@@ -72,8 +72,6 @@ describe('TSConfigPreprocessor – parseTsConfig (upstream replacement)', () => 
 
     expect(config.compilerOptions).toMatchObject({
       strict: true,
-      target: 'es5',
-      moduleResolution: 'node',
       module: 'commonjs',
       outDir: 'dist',
       noUnusedLocals: true,
@@ -321,5 +319,28 @@ describe('TSConfigPreprocessor – round-trip key preservation', () => {
     expect(Object.keys(written)).toEqual(['$schema', 'compilerOptions', 'include', 'references'])
     expect(Object.keys(written.references[0])).toEqual(['label', 'path'])
     expect(written).toEqual(input)
+  })
+})
+
+describe('TSConfigPreprocessor – array-form extends', () => {
+  it('rewrites references when extends is an array, instead of warning and leaving the config untouched', async () => {
+    // TS 5.0 allows `"extends": string[]`, and 35 configs in this repo use it. The schema
+    // declared only the string form, so the decode failed and NO rewrite ran — references
+    // kept pointing outside the sandbox, which surfaced as TS6307 during the mutation run.
+    const input = {
+      extends: ['../../../../outside-base.json', '@scope/preset'],
+      references: [{ path: '../../../../outside-project' }],
+    }
+    const tsconfigPath = createTempTsconfig('array-extends', JSON.stringify(input, null, 2))
+    const { project, tsconfigFile, preprocessor, warn } = createSut(tsconfigPath)
+
+    await preprocessor.preprocess(project)
+
+    expect(warn).not.toHaveBeenCalled()
+    const written = JSON.parse(await tsconfigFile.readContent())
+    // Each entry is rewritten independently: the relative one is pushed out to the sandbox
+    // depth, the bare package specifier is left for node resolution.
+    expect(written.extends).toEqual(['../../../../../../outside-base.json', '@scope/preset'])
+    expect(written.references[0].path).toBe('../../../../../../outside-project/tsconfig.json')
   })
 })

@@ -26,14 +26,14 @@ const JsonRecord = S.Record({ key: S.String, value: S.Unknown })
  *
  * The index signature keeps every key the schema does not declare — including
  * `compilerOptions` and `$schema` — so unknown keys survive the write-back untouched.
- * `S.mutable` keeps the parsed object (and its arrays) genuinely mutable, as
- * `TSConfigPreprocessor` rewrites `extends`, `references[].path`, and the file-array
- * properties in place before `JSON.stringify` writes the config back.
+ * `S.mutable` keeps the parsed object itself mutable so `TSConfigPreprocessor` can
+ * assign rewritten values back onto it, and keeps `references[]` elements mutable
+ * because `references[].path` is the one field it rewrites in place.
  */
 const TsConfigSchema = S.mutable(
   S.Struct(
     {
-      extends: S.optional(S.String),
+      extends: S.optional(S.Union(S.String, S.Array(S.String))),
       references: S.optional(
         S.mutable(S.Array(S.mutable(S.Struct({ path: S.String }, JsonRecord)))),
       ),
