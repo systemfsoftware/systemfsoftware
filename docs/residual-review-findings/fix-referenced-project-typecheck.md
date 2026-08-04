@@ -4,9 +4,10 @@ Source: repairing the TS6307 defect in sixteen `tsconfig.node.json` files
 (`276191ff21`) and gating it (`d45a8920d8`).
 
 Finding 1 remains open — it is a scope decision, not a defect I can close
-unilaterally. Findings 2 and 3 landed on `.github/workflows/`, a Locked
-surface; the user approved editing it, and both are now resolved. They are kept
-here rather than deleted so the record shows what the fix exposed.
+unilaterally. Finding 2 was real and is fixed. Finding 3 was wrong: I proposed
+it on an unverified number, the user challenged it, and the investigation
+cleared the thing I had accused. It is kept here in full rather than deleted,
+because a withdrawn finding is the one most worth writing down.
 
 ## 1. Nine packages fail the mutation gate — 243 unkilled mutants (High)
 
@@ -63,27 +64,52 @@ publish-config step also now calls `corepack pnpm check:publish-config` so its
 selftest runs, which CI was skipping. Verified: `actionlint` exits 0, and all
 six step commands run green in 18s against this tree.
 
-## 3. CI mutation restored a stryker-incremental cache the repo's own rules reject (Medium — RESOLVED)
+## 3. The stryker-incremental cache is sound — my deletion of it was wrong (WITHDRAWN)
 
-`.github/workflows/mutation.yml:52-57` restored
-`<package>/reports/stryker-incremental.json` from cache before each run and
-saved it after runs on `main`. Its `restore-keys` fallback accepted any prior
-cache for the package regardless of tree state.
+I removed both `actions/cache` steps from `.github/workflows/mutation.yml`,
+citing this line in `AGENTS.md`: "measured reporting mutants as `Killed` that a
+clean run shows `Survived` — `hex-schema` on 2026-07-31 scored 78.13% cached
+against 46.88% clean on the same tree. A gate that can report a stale pass is
+not a gate."
 
-`AGENTS.md` says of that file: "Delete the package's
-`reports/stryker-incremental.json` before any run you will cite as evidence. It
-is a regenerable cache keyed on source hashes, never a baseline... measured
-reporting mutants as `Killed` that a clean run shows `Survived` — `hex-schema`
-on 2026-07-31 scored 78.13% cached against 46.88% clean on the same tree. A
-gate that can report a stale pass is not a gate."
+I never verified that number. Challenged on it, I tried to, and it does not
+reproduce. Four experiments on `packages/hex-schema`, each comparing a cached
+run against a clean run of the same tree:
 
-The CI mutation job was exactly such a gate. Every local run cited in this
-session deleted the file first; CI did the opposite. Given finding 1, this
-matters more than it did yesterday: nine packages are about to start reporting
-real survivors, and a restored cache can mask them.
+| experiment                                             | cached    | clean     |
+| ------------------------------------------------------ | --------- | --------- |
+| cache matching the tree                                | 100.00    | 100.00    |
+| cache + a deleted property test                        | 100.00    | 100.00    |
+| cache + `ruleOfSchemas` encode law made vacuous        | 100.00    | 100.00    |
+| cache + law generator emitting nothing (25 tests → 13) | **58.33** | **58.33** |
 
-Resolved with the user's approval: both the restore and save steps are deleted,
-so every mutation run is clean. No `actions/cache` reference remains anywhere
-under `.github/workflows/`. Keying the cache differently was rejected — the
-measured 78.13%-vs-46.88% divergence happened despite Stryker keying the file
-on source hashes internally, so the staleness is Stryker's, not the cache key's.
+The last one is the decisive one. It breaks the hardest case for the differ:
+twelve tests vanish while every file the differ can read stays byte-identical
+(the regression is in `@systemfsoftware/effect-schema-vite`, not in
+`packages/hex-schema/`). The cached run caught it and scored identically to the
+clean run. `incremental-differ.ts` in our fork is unmodified upstream code —
+two commits, the fork import and a formatting pass.
+
+So the cache steps are restored, byte-identical to what they were. Both `main`
+and pull requests get a full first run per package; the cache only ever skips
+work whose inputs the differ has proven unchanged.
+
+One structural hazard is real but did not produce a wrong score. The differ
+decides a test file's tests are unchanged by diffing that file's on-disk source.
+`src/schema-laws.test.ts` breaks that premise: the incremental report attributes
+12 tests to it while its recorded source is the 321-byte generated stub, because
+the plugin injects the law bodies through Vite's `transform` hook and never
+writes them to disk. Experiment 3 targeted exactly this and still came out
+correct — the laws are redundant enough that removing one killer leaves another.
+If a future change makes a law the only killer of some mutant, this is where a
+stale verdict would hide. The fix, if it is ever needed, is in our plugin: write
+the generated body to disk so the differ can diff it.
+
+Only three packages set `incremental: true` — `hex-schema`, `effect-daemon-spec`
+and `oxlint-plugins/effect-schema`. For the other twenty the cache path never
+existed and the steps were a no-op.
+
+Follow-up on a Locked surface: the `AGENTS.md` sentence quoted above states a
+measurement I cannot reproduce, and it is load-bearing — it is what persuaded me
+to delete a working cache. It should be corrected or dated, otherwise it will
+persuade the next reader too.
