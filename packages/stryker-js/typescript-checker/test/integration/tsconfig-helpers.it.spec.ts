@@ -142,9 +142,28 @@ describe('overrideOptions', () => {
     expect(parsed.compilerOptions).toMatchObject({
       allowUnreachableCode: true,
       noEmit: true,
-      target: 'es2022',
-      moduleResolution: 'bundler',
     })
+  })
+
+  it('should not inject a moduleResolution that contradicts the consumer module', () => {
+    const config = expectRight(
+      parseTsConfig('tsconfig.json', '{"compilerOptions":{"module":"NodeNext"}}'),
+    )
+    const output = JSON.parse(overrideOptions(config, false))
+    expect(output.compilerOptions.module).toBe('NodeNext')
+    expect(output.compilerOptions.moduleResolution).toBeUndefined()
+  })
+
+  it('should preserve the consumer target and moduleResolution verbatim', () => {
+    const config = expectRight(
+      parseTsConfig(
+        'tsconfig.json',
+        '{"compilerOptions":{"target":"es2024","moduleResolution":"NodeNext"}}',
+      ),
+    )
+    const output = JSON.parse(overrideOptions(config, false))
+    expect(output.compilerOptions.target).toBe('es2024')
+    expect(output.compilerOptions.moduleResolution).toBe('NodeNext')
   })
 
   it('should preserve unknown top-level keys and unknown compilerOptions through to the output', () => {

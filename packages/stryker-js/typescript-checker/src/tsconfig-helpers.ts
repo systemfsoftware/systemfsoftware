@@ -117,13 +117,13 @@ export function determineBuildModeEnabled(tsconfigFileName: string): boolean {
  * @param useBuildMode whether or not `--build` mode is used
  */
 export function overrideOptions(config: TsConfig, useBuildMode: boolean): string {
+  // `target` and `moduleResolution` are deliberately absent: both belong to the consumer.
+  // Forcing `moduleResolution` contradicts `module: NodeNext`/`Node16` (TS5095 + TS5109),
+  // and forcing `target` hides lib features the consumer's own target allows (TS2550).
   const compilerOptions: Record<string, unknown> = {
     ...config.compilerOptions,
     ...COMPILER_OPTIONS_OVERRIDES,
     ...(useBuildMode ? LOW_EMIT_OPTIONS_FOR_PROJECT_REFERENCES : NO_EMIT_OPTIONS_FOR_SINGLE_PROJECT),
-    // TypeScript 7 removed some legacy defaults that the upstream fixtures still use.
-    target: 'es2022',
-    moduleResolution: 'bundler',
   }
 
   if (

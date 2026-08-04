@@ -2,8 +2,6 @@
   "$schema": "https://json.schemastore.org/tsconfig",
   "compilerOptions": {
     "strict": true,
-    "target": "es5",
-    "moduleResolution": "node",
     "module": "commonjs",
     "outDir": "dist",
 
