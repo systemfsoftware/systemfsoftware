@@ -42,7 +42,9 @@ const diffMatchPatch = new DiffMatchPatch()
  * - If mutant was killed:
  *   - The culprit test wasn't changed
  * - If the mutant survived:
- *   - No test was added
+ *   - No test was added, and the mutant is not static. Static mutants are
+ *     attributed to no test, so no test change can ever invalidate one; reusing
+ *     a non-killed verdict for one would freeze it permanently.
  *
  * It uses google's "diff-match-patch" project to calculate the new locations for tests and mutants, see link.
  * @link https://github.com/google/diff-match-patch
@@ -404,6 +406,22 @@ export class IncrementalDiffer {
       }
       if (oldMutant.status === 'Ignored') {
         // Was previously ignored, but not anymore, we need to run it now
+        return false
+      }
+
+      if (
+        coveringTests === undefined &&
+        testCoverage.hasStaticCoverage(mutant.id) &&
+        (oldMutant.status === 'Survived' || oldMutant.status === 'NoCoverage')
+      ) {
+        // Deliberate divergence from upstream (stryker-mutator/stryker-js#6119).
+        // A static mutant runs at module load for every test, so the runner
+        // attributes it to no test and its covering set is empty by construction.
+        // Every action `diffTestCoverage` can emit is derived from that empty
+        // set, so a non-killed verdict for one is unreachable by invalidation:
+        // neither a changed nor an added test can ever mark it stale. Reuse is
+        // therefore unsound at any age, and this repo gates at 100%, which a
+        // permanently frozen `Survived` silently defeats.
         return false
       }
 

@@ -34,7 +34,7 @@
     "prioritizePerformanceOverAccuracy": false
   },
   "coverageAnalysis": "perTest",
-  "incremental": false,
+  "incremental": true,
   "incrementalFile": "reports/stryker-incremental.json",
   "mutate": [
     "src/**/*.ts",
