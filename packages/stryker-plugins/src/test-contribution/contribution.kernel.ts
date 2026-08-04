@@ -68,12 +68,12 @@ interface Killers {
 }
 
 const killingFilesOf = (
-  mutant: MutantView,
+  killedBy: ReadonlyArray<string>,
   fileById: ReadonlyMap<string, string>,
 ): Killers => {
   const files = new Set<string>()
   let hasUnknown = false
-  for (const testId of mutant.killedBy ?? []) {
+  for (const testId of killedBy) {
     const fileName = fileById.get(testId)
     if (fileName === undefined) hasUnknown = true
     else files.add(fileName)
@@ -96,7 +96,12 @@ export const contributionByTestFile = (report: MutationReportView): Contribution
   for (const file of Object.values(report.files)) {
     for (const mutant of file.mutants) {
       if (mutant.status === undefined || !KILLING_STATUSES.has(mutant.status)) continue
-      const { files: killers, hasUnknown } = killingFilesOf(mutant, fileById)
+      const killedBy = mutant.killedBy
+      if (killedBy === undefined) {
+        unattributableKills += 1
+        continue
+      }
+      const { files: killers, hasUnknown } = killingFilesOf(killedBy, fileById)
       if (killers.size === 0) {
         unattributableKills += 1
         continue

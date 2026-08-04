@@ -90,6 +90,7 @@ Feature('Failing a build when a test file defends nothing')
         Then('it passes and confirms the file measured clean')((s) =>
           Effect.sync(() => {
             expect(s.decision.ok).toBe(true)
+            expect(s.decision.message).toContain('every killing test was recorded')
             expect(s.verdict?.byTestFile['test/alpha.property.test.ts']).toEqual({ soleKills: 1, totalKills: 1 })
           })
         ),
@@ -342,6 +343,332 @@ Feature('Failing a build when a test file defends nothing')
         Then('only the absent file is named, and a file the report never mentioned is not')((s) =>
           Effect.sync(() => {
             expect(s.checked).toEqual(['test/gone.property.test.ts'])
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'Should_Reject_When_TheReportIsNotARecord',
+      Gherkin.Do.pipe(
+        Given('documents that are not record objects at all')(
+          'rejected',
+          () =>
+            Effect.sync(() => [
+              parseMutationReport('a string'),
+              parseMutationReport(null),
+              parseMutationReport([]),
+              parseMutationReport(42),
+              parseMutationReport(true),
+            ]),
+        ),
+        When('each is parsed as a mutation report')('views', (s) => Effect.sync(() => s.rejected)),
+        Then('every one is rejected rather than half-trusted')((s) =>
+          Effect.sync(() => {
+            expect(s.views).toEqual([undefined, undefined, undefined, undefined, undefined])
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'Should_Reject_When_ASourceFileListsAMixedMutantArray',
+      Gherkin.Do.pipe(
+        Given('a files entry whose mutants array mixes a record and a non-record')(
+          'parsed',
+          () => Effect.sync(() => parseMutationReport({ files: { 'a.ts': { mutants: [1, {}] } } })),
+        ),
+        When('the report is parsed')('view', (s) => Effect.sync(() => s.parsed)),
+        Then('the mixed list is rejected rather than half-trusted')((s) =>
+          Effect.sync(() => {
+            expect(s.view).toBeUndefined()
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'Should_Reject_When_ATestFileListsAMixedTestArray',
+      Gherkin.Do.pipe(
+        Given('a testFiles entry whose tests array mixes a non-string id and a string id')(
+          'parsed',
+          () =>
+            Effect.sync(() =>
+              parseMutationReport({
+                files: {},
+                testFiles: { 'a.test.ts': { tests: [{ id: 1 }, { id: 'ok' }] } },
+              })
+            ),
+        ),
+        When('the report is parsed')('view', (s) => Effect.sync(() => s.parsed)),
+        Then('the mixed list is rejected rather than half-trusted')((s) =>
+          Effect.sync(() => {
+            expect(s.view).toBeUndefined()
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'Should_Reject_When_AFilesMapMixesValidAndInvalidEntries',
+      Gherkin.Do.pipe(
+        Given('a files map with one valid source file and one entry that is not a source file')(
+          'parsed',
+          () => Effect.sync(() => parseMutationReport({ files: { 'a.ts': { mutants: [] }, 'b.ts': 'nope' } })),
+        ),
+        When('the report is parsed')('view', (s) => Effect.sync(() => s.parsed)),
+        Then('the mixed map is rejected rather than half-trusted')((s) =>
+          Effect.sync(() => {
+            expect(s.view).toBeUndefined()
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'Should_Reject_When_ATestFilesMapMixesValidAndInvalidEntries',
+      Gherkin.Do.pipe(
+        Given('a testFiles map with one valid test file and one entry that is not a test file')(
+          'parsed',
+          () =>
+            Effect.sync(() =>
+              parseMutationReport({
+                files: {},
+                testFiles: { 'a.test.ts': { tests: [] }, 'b.test.ts': 'nope' },
+              })
+            ),
+        ),
+        When('the report is parsed')('view', (s) => Effect.sync(() => s.parsed)),
+        Then('the mixed map is rejected rather than half-trusted')((s) =>
+          Effect.sync(() => {
+            expect(s.view).toBeUndefined()
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'Should_Reject_When_TheRunConfigIsNotARecord',
+      Gherkin.Do.pipe(
+        Given('a report whose config is a plain string')(
+          'parsed',
+          () => Effect.sync(() => parseMutationReport({ files: {}, config: 'nope' })),
+        ),
+        When('the report is parsed')('view', (s) => Effect.sync(() => s.parsed)),
+        Then('the report is rejected rather than half-trusted')((s) =>
+          Effect.sync(() => {
+            expect(s.view).toBeUndefined()
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'Should_Parse_When_TheReportOmitsConfig',
+      Gherkin.Do.pipe(
+        Given('a report that carries no config key at all')(
+          'view',
+          () => Effect.sync(() => parseMutationReport({ files: {}, testFiles: {} })),
+        ),
+        When('the report is parsed')('parsed', (s) => Effect.sync(() => s.view)),
+        Then('it is accepted with no config attached')((s) =>
+          Effect.sync(() => {
+            expect(s.parsed).toEqual({ files: {}, testFiles: {} })
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'Should_CarryTheProjectRoot_When_TheReportNamesOne',
+      Gherkin.Do.pipe(
+        Given('a report that names a project root')(
+          'view',
+          () => Effect.sync(() => parseMutationReport({ files: {}, testFiles: {}, projectRoot: '/some/root' })),
+        ),
+        When('the report is parsed')('parsed', (s) => Effect.sync(() => s.view)),
+        Then('the parsed view keeps that exact root')((s) =>
+          Effect.sync(() => {
+            expect(s.parsed?.projectRoot).toBe('/some/root')
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'Should_Reject_When_TheProjectRootIsNotAString',
+      Gherkin.Do.pipe(
+        Given('a report whose project root is a number')(
+          'parsed',
+          () => Effect.sync(() => parseMutationReport({ files: {}, projectRoot: 42 })),
+        ),
+        When('the report is parsed')('view', (s) => Effect.sync(() => s.parsed)),
+        Then('the report is rejected rather than half-trusted')((s) =>
+          Effect.sync(() => {
+            expect(s.view).toBeUndefined()
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'Should_CarryDisableBail_When_TheConfigSetsItTrue',
+      Gherkin.Do.pipe(
+        Given('a report whose config disables bail')(
+          'view',
+          () => Effect.sync(() => parseMutationReport({ files: {}, config: { disableBail: true } })),
+        ),
+        When('the report is parsed')('parsed', (s) => Effect.sync(() => s.view)),
+        Then('the parsed view keeps disable bail set')((s) =>
+          Effect.sync(() => {
+            expect(s.parsed?.config?.disableBail).toBe(true)
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'Should_CarryDisableBail_When_TheConfigSetsItFalse',
+      Gherkin.Do.pipe(
+        Given('a report whose config leaves bail enabled')(
+          'view',
+          () => Effect.sync(() => parseMutationReport({ files: {}, config: { disableBail: false } })),
+        ),
+        When('the report is parsed')('parsed', (s) => Effect.sync(() => s.view)),
+        Then('the parsed view keeps bail enabled')((s) =>
+          Effect.sync(() => {
+            expect(s.parsed?.config?.disableBail).toBe(false)
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'Should_Reject_When_DisableBailIsNotABoolean',
+      Gherkin.Do.pipe(
+        Given('a report whose config disables bail with a non-boolean')(
+          'parsed',
+          () => Effect.sync(() => parseMutationReport({ files: {}, config: { disableBail: 'yes' } })),
+        ),
+        When('the report is parsed')('view', (s) => Effect.sync(() => s.parsed)),
+        Then('the report is rejected rather than half-trusted')((s) =>
+          Effect.sync(() => {
+            expect(s.view).toBeUndefined()
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'Should_SortMissingFiles_When_ComparingTheReportToDisk',
+      Gherkin.Do.pipe(
+        Given('a report naming two missing files in reverse alphabetical order')(
+          'missing',
+          () =>
+            Effect.sync(() =>
+              filesMissingFromDisk(
+                ['test/zed.property.test.ts', 'test/alpha.property.test.ts'],
+                ['test/here.property.test.ts'],
+              )
+            ),
+        ),
+        When('the comparison is read')('checked', (s) => Effect.sync(() => s.missing)),
+        Then('the absent files are named in ascending order')((s) =>
+          Effect.sync(() => {
+            expect(s.checked).toEqual(['test/alpha.property.test.ts', 'test/zed.property.test.ts'])
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'Should_ListEachStaleFileOnItsOwnLine_When_ManyAreStale',
+      Gherkin.Do.pipe(
+        Given('a clean verdict and two source files modified after the run')(
+          'decision',
+          () =>
+            Effect.sync(() =>
+              decideGate({
+                verdict: measure(
+                  reportOf([mutantOf('m1', 'Killed', ['t1'])], {
+                    'test/alpha.property.test.ts': ['t1'],
+                  }),
+                ),
+                reportFile: REPORT_FILE,
+                staleFiles: ['src/zed.ts', 'src/alpha.ts'],
+              })
+            ),
+        ),
+        When('the gate is consulted')('checked', (s) => Effect.sync(() => s.decision)),
+        Then('it refuses and lists every stale file on its own line')((s) =>
+          Effect.sync(() => {
+            expect(s.checked.ok).toBe(false)
+            expect(s.checked.message).toContain('  - src/zed.ts\n  - src/alpha.ts')
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'Should_ListEachVanishedFileOnItsOwnLine_When_ManyAreGone',
+      Gherkin.Do.pipe(
+        Given('a clean verdict and two credited test files that no longer exist')(
+          'decision',
+          () =>
+            Effect.sync(() =>
+              decideGate({
+                verdict: measure(
+                  reportOf([mutantOf('m1', 'Killed', ['t1'])], {
+                    'test/alpha.property.test.ts': ['t1'],
+                  }),
+                ),
+                reportFile: REPORT_FILE,
+                vanishedFiles: ['test/gone-zeta.property.test.ts', 'test/gone-alpha.property.test.ts'],
+              })
+            ),
+        ),
+        When('the gate is consulted')('checked', (s) => Effect.sync(() => s.decision)),
+        Then('it refuses and lists every vanished file on its own line')((s) =>
+          Effect.sync(() => {
+            expect(s.checked.ok).toBe(false)
+            expect(s.checked.message).toContain(
+              '  - test/gone-zeta.property.test.ts\n  - test/gone-alpha.property.test.ts',
+            )
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'Should_ListEachToothlessFileOnItsOwnLine_When_ManyDefendNothing',
+      Gherkin.Do.pipe(
+        Given('a report where two in-scope test files never land a kill')(
+          'verdict',
+          () =>
+            Effect.sync(() =>
+              measure(
+                reportOf(
+                  [mutantOf('m1', 'Killed', ['t1']), mutantOf('m2', 'Killed', ['t2'])],
+                  {
+                    'test/alpha.property.test.ts': ['t1'],
+                    'test/beta.property.test.ts': ['t2'],
+                    'test/gamma.property.test.ts': ['t3'],
+                    'test/delta.property.test.ts': ['t4'],
+                  },
+                ),
+              )
+            ),
+        ),
+        When('the gate is consulted')(
+          'decision',
+          (s) => Effect.sync(() => decideGate({ verdict: s.verdict, reportFile: REPORT_FILE })),
+        ),
+        Then('it refuses and lists every toothless file on its own line')((s) =>
+          Effect.sync(() => {
+            expect(s.decision.ok).toBe(false)
+            expect(s.decision.message).toContain(
+              '  - test/delta.property.test.ts\n  - test/gamma.property.test.ts',
+            )
           })
         ),
       ),
