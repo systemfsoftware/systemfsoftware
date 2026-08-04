@@ -103,6 +103,21 @@ ruleTester.run('policy-combinator-export', policyCombinatorExport, {
       code: `const x = 1`,
       filename: 'order.handler.ts',
     },
+    {
+      name: 'Should_Pass_When_QualifiedPolicySuffixName_When_PolicyFile',
+      code: `export const limiter: Resilience.RetryPolicy<never> = (self) => self`,
+      filename: 'rate-limit.policy.ts',
+    },
+    {
+      name: 'Should_Pass_When_FunctionExpressionCombinator_When_PolicyFile',
+      code: `export const f = function<A, E, R>(self: Effect<A, E, R>): Effect<A, E, R> { return self }`,
+      filename: 'rate-limit.policy.ts',
+    },
+    {
+      name: 'Should_Pass_When_DefaultFunctionExpressionCombinator_When_PolicyFile',
+      code: `export default (function<A, E, R>(self: Effect<A, E, R>): Effect<A, E, R> { return self })`,
+      filename: 'rate-limit.policy.ts',
+    },
   ],
   invalid: [
     {
@@ -162,6 +177,78 @@ ruleTester.run('policy-combinator-export', policyCombinatorExport, {
     {
       name: 'Should_Report_NoCombinator_When_SpecifierOfUntypedConst',
       code: `const f = (self) => self; export { f }`,
+      filename: 'rate-limit.policy.ts',
+      errors: [{ messageId: 'noCombinator', data }],
+    },
+    {
+      name: 'Should_Report_NoCombinator_When_SpecifierOfNonGenericFunction',
+      code: `function f() { return 1 }; export { f }`,
+      filename: 'rate-limit.policy.ts',
+      errors: [{ messageId: 'noCombinator', data }],
+    },
+    {
+      name: 'Should_Report_NoCombinator_When_IdentifierNonEffectAnnotation',
+      code: `export const f = <A, E, R>(self: Foo) => self`,
+      filename: 'rate-limit.policy.ts',
+      errors: [{ messageId: 'noCombinator', data }],
+    },
+    {
+      name: 'Should_Report_NoCombinator_When_QualifiedNonEffectAnnotation',
+      code: `export const f = <A, E, R>(self: Effect.Foo) => self`,
+      filename: 'rate-limit.policy.ts',
+      errors: [{ messageId: 'noCombinator', data }],
+    },
+    {
+      name: 'Should_Report_NoCombinator_When_QualifiedNonPolicyAnnotation',
+      code: `export const limiter: Resilience.Foo<never> = (self) => self`,
+      filename: 'rate-limit.policy.ts',
+      errors: [{ messageId: 'noCombinator', data }],
+    },
+    {
+      name: 'Should_Report_NoCombinator_When_GenericFunctionNoParams',
+      code: `export const f = <A, E, R>() => self`,
+      filename: 'rate-limit.policy.ts',
+      errors: [{ messageId: 'noCombinator', data }],
+    },
+    {
+      name: 'Should_Report_NoCombinator_When_DestructuredFirstParam',
+      code: `export const f = <A, E, R>({ a }: Effect<A, E, R>) => self`,
+      filename: 'rate-limit.policy.ts',
+      errors: [{ messageId: 'noCombinator', data }],
+    },
+    {
+      name: 'Should_Report_NoCombinator_When_DestructuredGenericArrowDecl',
+      code: `export const { a } = <A, E, R>(self: Effect<A, E, R>) => self`,
+      filename: 'rate-limit.policy.ts',
+      errors: [{ messageId: 'noCombinator', data }],
+    },
+    {
+      name: 'Should_Report_NoCombinator_When_DestructuredPolicyAnnotatedDecl',
+      code: `export const { a }: Policy<never> = obj`,
+      filename: 'rate-limit.policy.ts',
+      errors: [{ messageId: 'noCombinator', data }],
+    },
+    {
+      name: 'Should_Report_NoCombinator_When_ExportedNonGenericFunction',
+      code: `export function f() { return 1 }`,
+      filename: 'rate-limit.policy.ts',
+      errors: [{ messageId: 'noCombinator', data }],
+    },
+    {
+      name: 'Should_Report_NoCombinator_When_DefaultNonGenericFunction',
+      code: `export default function() { return 1 }`,
+      filename: 'rate-limit.policy.ts',
+      errors: [{ messageId: 'noCombinator', data }],
+    },
+    {
+      name: 'Should_Report_NoCombinator_When_TypeOnlySpecifierExport_When_PolicyFile',
+      code: `function rateLimit<A, E, R>(self: Effect<A, E, R>) { return self }; export type { rateLimit }`,
+      filename: 'rate-limit.policy.ts',
+      errors: [{ messageId: 'noCombinator', data }],
+    },
+    {
+      name: 'Should_Report_NoCombinator_When_InlineTypeSpecifierExport_When_PolicyFile',
+      code: `function rateLimit<A, E, R>(self: Effect<A, E, R>) { return self }; export { type rateLimit }`,
       filename: 'rate-limit.policy.ts',
       errors: [{ messageId: 'noCombinator', data }],
     },
