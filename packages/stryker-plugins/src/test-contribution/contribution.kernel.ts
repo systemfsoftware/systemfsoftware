@@ -15,9 +15,15 @@ export interface TestFileView {
   readonly tests: ReadonlyArray<TestDefinitionView>
 }
 
+export interface RunConfigView {
+  readonly disableBail?: boolean
+}
+
 export interface MutationReportView {
   readonly files: Readonly<Record<string, SourceFileView>>
   readonly testFiles?: Readonly<Record<string, TestFileView>>
+  readonly projectRoot?: string
+  readonly config?: RunConfigView
 }
 
 export interface TestFileContribution {
@@ -35,6 +41,7 @@ export interface TestContributionVerdict {
   readonly disableBail: boolean
   readonly attributedKills: number
   readonly unattributableKills: number
+  readonly inScopeCount: number
   readonly toothless: ReadonlyArray<string>
   readonly byTestFile: Readonly<Record<string, TestFileContribution>>
 }
@@ -55,16 +62,23 @@ const testFileById = (
   return byId
 }
 
+interface Killers {
+  readonly files: ReadonlySet<string>
+  readonly hasUnknown: boolean
+}
+
 const killingFilesOf = (
   mutant: MutantView,
   fileById: ReadonlyMap<string, string>,
-): ReadonlySet<string> => {
+): Killers => {
   const files = new Set<string>()
+  let hasUnknown = false
   for (const testId of mutant.killedBy ?? []) {
     const fileName = fileById.get(testId)
-    if (fileName !== undefined) files.add(fileName)
+    if (fileName === undefined) hasUnknown = true
+    else files.add(fileName)
   }
-  return files
+  return { files, hasUnknown }
 }
 
 export const contributionByTestFile = (report: MutationReportView): ContributionReport => {
@@ -82,15 +96,19 @@ export const contributionByTestFile = (report: MutationReportView): Contribution
   for (const file of Object.values(report.files)) {
     for (const mutant of file.mutants) {
       if (mutant.status === undefined || !KILLING_STATUSES.has(mutant.status)) continue
-      const killers = killingFilesOf(mutant, fileById)
+      const { files: killers, hasUnknown } = killingFilesOf(mutant, fileById)
       if (killers.size === 0) {
         unattributableKills += 1
         continue
       }
       attributedKills += 1
+      // A killer we cannot place in a file may well be a second killer, so the one file
+      // we did place cannot claim the mutant alone - crediting a sole kill here would
+      // clear a file that another test also defends.
+      const soleKill = killers.size === 1 && !hasUnknown
       for (const fileName of killers) {
         totalKills.set(fileName, (totalKills.get(fileName) ?? 0) + 1)
-        if (killers.size === 1) {
+        if (soleKill) {
           soleKills.set(fileName, (soleKills.get(fileName) ?? 0) + 1)
         }
       }
@@ -133,16 +151,24 @@ const withDiscovered = (
 
 export const verdictOf = (
   report: MutationReportView,
-  disableBail: boolean,
   suffixes: ReadonlyArray<string>,
   discoveredTestFiles: ReadonlyArray<string> = [],
 ): TestContributionVerdict => {
+  // Precision belongs to the run that produced this report, not to the config file as it
+  // stands today: reading the live config lets a later toggle relabel old data, and the
+  // flag decides whether a file is judged on sole kills or on any kill at all.
+  const disableBail = report.config?.disableBail === true
   const contribution = withDiscovered(contributionByTestFile(report), discoveredTestFiles)
   const inScope = (fileName: string): boolean => suffixes.some((suffix) => fileName.endsWith(suffix))
+  let inScopeCount = 0
+  for (const fileName of contribution.byTestFile.keys()) {
+    if (inScope(fileName)) inScopeCount += 1
+  }
   return {
     disableBail,
     attributedKills: contribution.attributedKills,
     unattributableKills: contribution.unattributableKills,
+    inScopeCount,
     toothless: toothlessTestFiles(contribution, inScope, disableBail),
     byTestFile: Object.fromEntries(contribution.byTestFile),
   }

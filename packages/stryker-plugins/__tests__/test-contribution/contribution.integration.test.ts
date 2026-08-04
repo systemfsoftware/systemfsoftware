@@ -27,7 +27,7 @@ Feature('Measuring what a test file would take with it if deleted')
         ),
         When('contribution is measured')(
           'verdict',
-          (s) => Effect.sync(() => verdictOf(s.report, true, PROPERTY_SUFFIXES)),
+          (s) => Effect.sync(() => verdictOf(s.report, PROPERTY_SUFFIXES)),
         ),
         Then('that file is credited with a sole kill and the other is toothless')((s) =>
           Effect.sync(() => {
@@ -53,7 +53,7 @@ Feature('Measuring what a test file would take with it if deleted')
         ),
         When('contribution is measured')(
           'verdict',
-          (s) => Effect.sync(() => verdictOf(s.report, true, PROPERTY_SUFFIXES)),
+          (s) => Effect.sync(() => verdictOf(s.report, PROPERTY_SUFFIXES)),
         ),
         Then('neither file can claim the kill alone')((s) =>
           Effect.sync(() => {
@@ -82,7 +82,7 @@ Feature('Measuring what a test file would take with it if deleted')
         ),
         When('contribution is measured')(
           'verdict',
-          (s) => Effect.sync(() => verdictOf(s.report, true, PROPERTY_SUFFIXES)),
+          (s) => Effect.sync(() => verdictOf(s.report, PROPERTY_SUFFIXES)),
         ),
         Then('both kills are reported as unattributable rather than credited')((s) =>
           Effect.sync(() => {
@@ -103,7 +103,7 @@ Feature('Measuring what a test file would take with it if deleted')
         ),
         When('contribution is measured')(
           'verdict',
-          (s) => Effect.sync(() => verdictOf(s.report, true, PROPERTY_SUFFIXES)),
+          (s) => Effect.sync(() => verdictOf(s.report, PROPERTY_SUFFIXES)),
         ),
         Then('the timeout counts as a kill for that file')((s) =>
           Effect.sync(() => {
@@ -126,7 +126,7 @@ Feature('Measuring what a test file would take with it if deleted')
         ),
         When('contribution is measured')(
           'verdict',
-          (s) => Effect.sync(() => verdictOf(s.report, true, PROPERTY_SUFFIXES)),
+          (s) => Effect.sync(() => verdictOf(s.report, PROPERTY_SUFFIXES)),
         ),
         Then('the file earns nothing from a mutant it failed to kill')((s) =>
           Effect.sync(() => {
@@ -152,7 +152,7 @@ Feature('Measuring what a test file would take with it if deleted')
         ),
         When('contribution is measured for property tests only')(
           'verdict',
-          (s) => Effect.sync(() => verdictOf(s.report, true, PROPERTY_SUFFIXES)),
+          (s) => Effect.sync(() => verdictOf(s.report, PROPERTY_SUFFIXES)),
         ),
         Then('only the in-scope suffix is held to the standard')((s) =>
           Effect.sync(() => {
@@ -173,12 +173,12 @@ Feature('Measuring what a test file would take with it if deleted')
               reportOf([mutantOf('m1', 'Killed', ['t1'])], {
                 'test/alpha.property.test.ts': ['t1'],
                 'test/beta.property.test.ts': ['t2'],
-              })
+              }, { disableBail: false })
             ),
         ),
         When('contribution is measured for that run')(
           'verdict',
-          (s) => Effect.sync(() => verdictOf(s.report, false, PROPERTY_SUFFIXES)),
+          (s) => Effect.sync(() => verdictOf(s.report, PROPERTY_SUFFIXES)),
         ),
         Then('the file that might be a redundant killer is spared and only the idle file is accused')((s) =>
           Effect.sync(() => {
@@ -201,7 +201,7 @@ Feature('Measuring what a test file would take with it if deleted')
           'verdict',
           (s) =>
             Effect.sync(() =>
-              verdictOf(s.report, true, PROPERTY_SUFFIXES, [
+              verdictOf(s.report, PROPERTY_SUFFIXES, [
                 'test/alpha.property.test.ts',
                 'test/ghost.property.test.ts',
               ])
@@ -211,6 +211,30 @@ Feature('Measuring what a test file would take with it if deleted')
           Effect.sync(() => {
             expect(s.verdict.toothless).toEqual(['test/ghost.property.test.ts'])
             expect(s.verdict.byTestFile['test/ghost.property.test.ts']).toEqual({ soleKills: 0, totalKills: 0 })
+          })
+        ),
+      ),
+    )
+    scenario(
+      'Should_WithholdSoleCredit_When_AKillerCannotBePlacedInAFile',
+      Gherkin.Do.pipe(
+        Given('a mutant killed by one known test and one the report never declares')(
+          'report',
+          () =>
+            Effect.sync(() =>
+              reportOf([mutantOf('m1', 'Killed', ['t1', 'ghost'])], {
+                'test/alpha.property.test.ts': ['t1'],
+              })
+            ),
+        ),
+        When('contribution is measured')(
+          'verdict',
+          (s) => Effect.sync(() => verdictOf(s.report, PROPERTY_SUFFIXES)),
+        ),
+        Then('the placeable file is not cleared on a kill it may not own alone')((s) =>
+          Effect.sync(() => {
+            expect(s.verdict.byTestFile['test/alpha.property.test.ts']).toEqual({ soleKills: 0, totalKills: 1 })
+            expect(s.verdict.toothless).toEqual(['test/alpha.property.test.ts'])
           })
         ),
       ),
