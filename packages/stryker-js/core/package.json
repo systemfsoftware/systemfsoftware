@@ -1,6 +1,6 @@
 {
   "name": "@systemfsoftware/stryker-js-core",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "A source-code fork of @stryker-mutator/core",
   "type": "module",
   "publishConfig": {
