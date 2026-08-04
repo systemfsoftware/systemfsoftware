@@ -114,6 +114,12 @@ export default runtime`,
 export { runtime }`,
       filename: 'hook-runtime.state.ts',
     },
+    {
+      name: 'Should_Pass_When_ClassExtendsNonPrimitiveMember_When_NotPrimitive',
+      code: `class Worker extends Other.Reference {}
+export { Worker }`,
+      filename: 'worker.state.ts',
+    },
   ],
   invalid: [
     {
@@ -211,6 +217,14 @@ export default new Set<string>()`,
 export const inFlight = new Map<string, string>()`,
       filename: 'hook-runtime.state.ts',
       errors: [{ messageId: 'rawPrimitiveExport', data: rawPrimitiveExportData('inFlight', 'Map') }],
+    },
+    {
+      name: 'Should_Report_ClassSuperExport_When_ClassExtendsContextReference',
+      code:
+        `class WorkerConfig extends Context.Reference<WorkerConfig>()('WorkerConfig', { defaultValue: () => defaults }) {}
+export { WorkerConfig }`,
+      filename: 'worker-config.state.ts',
+      errors: [{ messageId: 'rawPrimitiveExport', data: rawPrimitiveExportData('WorkerConfig', 'Context.Reference') }],
     },
   ],
 })

@@ -93,7 +93,7 @@ export const moduleScopeStatePrimitives = (program: ESTree.Program): ModuleScope
     }
   }
   for (const declaration of classDeclarationsOf(program)) {
-    if (declaration.id === null || declaration.id === undefined) continue
+    if (declaration.id === null) continue
     const kind = classSuperPrimitiveKind(declaration.superClass)
     if (kind === null) continue
     found.push({ name: declaration.id.name, kind, node: declaration })
