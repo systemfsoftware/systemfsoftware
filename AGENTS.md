@@ -34,9 +34,9 @@ Effect-TS libraries + the oxlint plugin enforcing the constitution (at `repos/co
   check: exports changes come from tsdown.config.ts only
 
 - id: REPO-S5
-  title: NEVER put a non-workflow cell in a mutation surface
-  do: mutate `*.workflow.ts` — the one cell whose observer is the mutator; `*.schema.ts` is permitted, never required (generated schema laws already cover it)
-  dont: add `*.executor.ts`, `*.kernel.ts`, `*.acl.ts`, `*.store.ts`, `*.handler.ts`, `*.middleware.ts`, `*.state.ts`, `*.adapter.ts`, `*.policy.ts`, `*.shape.ts`, or `*.observer.ts` to any `mutate` glob; never leave `mutate` unset (the Stryker default sweeps every source file and auto-enrolls each new cell); never keep a mutation config in a package with no workflow
+  title: NEVER put a shell cell in a mutation surface
+  do: mutate only pure decisions — `*.workflow.ts` in a cell package, the rule file in a lint plugin, `*.schema.ts` where generated laws do not already cover it
+  dont: add `*.executor.ts`, `*.kernel.ts`, `*.acl.ts`, `*.store.ts`, `*.handler.ts`, `*.middleware.ts`, `*.state.ts`, `*.adapter.ts`, `*.policy.ts`, `*.shape.ts`, or `*.observer.ts` to any `mutate` glob; leave `mutate` unset (the Stryker default sweeps every source file and auto-enrolls each new cell)
   harm: wrong observer. The mutator asks "do the tests notice a changed decision?" — a shell cell decides nothing, so every mutant is equivalent or is killed by a composition test that was proving something else; the score certifies nothing and the package pays hours of runtime for it
   check: node scripts/guard-mutate-scope.mjs exits 0 (wired into pnpm check); shell cells stay gated by lint provenance + composition tests, kernels by colocated K-law property tests
 ```
@@ -49,7 +49,7 @@ Effect-TS libraries + the oxlint plugin enforcing the constitution (at `repos/co
 | Types    | tsc + api-extractor                    | `pnpm api:check` runs for every package with `api-extractor.json`                                                                                                                                                                                                      |
 | Build    | tsdown + turbo                         | ESM (`.mjs` + tsc dts). Build via `pnpm turbo build`.                                                                                                                                                                                                                  |
 | Tests    | Vitest + `@effect/vitest` + fast-check | PBT on pure core; composition through I/O sandwich.                                                                                                                                                                                                                    |
-| Mutation | Stryker (typescript-checker)           | `*.workflow.ts` only; `*.schema.ts` optional. Gate: `pnpm check:mutate-scope` (REPO-S5).                                                                                                                                                                               |
+| Mutation | Stryker (typescript-checker)           | Pure decisions only — scope is REPO-S5. Gate: `pnpm check:mutate-scope`.                                                                                                                                                                                               |
 | Lint     | oxlint + dprint                        | Per-package `oxlint.config.ts` extending `@systemfsoftware/oxlint-config`. Registration is NOT delivery: a rule reaches only packages that opt in. Gate: `pnpm check:lint-coverage`, which also DEFINES production vs tooling — never re-derive that boundary by hand. |
 
 ## Surface Classes
