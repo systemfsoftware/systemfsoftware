@@ -29,6 +29,7 @@ catalog:
   "@oh-my-pi/pi-coding-agent": ^17.0.5
   "@std/toml": jsr:^1.0.11
   "@std/jsonc": jsr:^1.0.2
+  "@std/path": jsr:^1.0.0
 catalogMode: prefer
 catalogs:
   oxlint:
