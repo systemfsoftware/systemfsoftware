@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/hex-schema",
   "license": "MIT",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
