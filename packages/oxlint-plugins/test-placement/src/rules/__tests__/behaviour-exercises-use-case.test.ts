@@ -116,6 +116,14 @@ import { get } from 'lodash'
 Feature('x', () => {})
 `,
     },
+    {
+      name: 'Should_Allow_UnitTest_When_NotABehaviourTest',
+      code: `
+import { it } from 'vitest'
+it('plain', () => {})
+`,
+      filename: '/repo/pkg/tests/foo.test.ts',
+    },
   ],
   invalid: [
     {

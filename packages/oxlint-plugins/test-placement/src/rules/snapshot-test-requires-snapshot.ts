@@ -26,7 +26,6 @@ const isSnapshotMethodName = (property: ESTree.Node | null): boolean =>
 const collectCallExpressions = (program: ESTree.Program): ESTree.CallExpression[] => {
   const out: ESTree.CallExpression[] = []
   const walk = (value: unknown): void => {
-    if (value === null || typeof value !== 'object') return
     const items = Array.isArray(value) ? value : [value]
     for (const item of items) {
       if (item === null || typeof item !== 'object') continue
@@ -57,12 +56,9 @@ export const snapshotTestRequiresSnapshot = defineRule({
   create(context: Context) {
     const basename = basenameOf(context.filename)
     if (!basename.endsWith(SNAPSHOT_SUFFIX)) return {}
-    let reported = false
     return {
       'Program:exit'(node: ESTree.Program) {
-        if (reported) return
         if (hasSnapshotAssertion(node)) return
-        reported = true
         const firstImport = A.findFirst(
           node.body,
           (statement): statement is ESTree.ImportDeclaration => statement.type === 'ImportDeclaration',

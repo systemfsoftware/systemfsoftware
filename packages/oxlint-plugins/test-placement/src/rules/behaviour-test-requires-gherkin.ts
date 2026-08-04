@@ -11,7 +11,7 @@ import {
   MISSING_MAKE_FEATURE_FIX,
   MISSING_MAKE_FEATURE_NAME,
 } from './behaviour-test-requires-gherkin.config.js'
-import { BEHAVIOUR_SUFFIXES, FOREIGN_RUNNERS, GHERKIN_PACKAGE, RUNNER_NAMES } from './path.config.js'
+import { FOREIGN_RUNNERS, GHERKIN_PACKAGE, INTEGRATION_SUFFIX, RUNNER_NAMES } from './path.config.js'
 import { basenameOf } from './path.js'
 
 export type MessageIds = 'foreignRunner' | 'missingMakeFeature'
@@ -34,7 +34,7 @@ const foreignRunnerNameOf = (specifier: ESTree.ImportSpecifier): string | null =
   return RUNNER_NAMES.has(name) ? name : null
 }
 
-const isBehaviourTest = (basename: string): boolean => BEHAVIOUR_SUFFIXES.some((suffix) => basename.endsWith(suffix))
+const isBehaviourTest = (basename: string): boolean => basename.endsWith(INTEGRATION_SUFFIX)
 
 export const behaviourTestRequiresGherkin = defineRule({
   meta,

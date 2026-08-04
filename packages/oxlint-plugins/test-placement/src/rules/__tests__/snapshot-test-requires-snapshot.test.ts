@@ -108,5 +108,24 @@ import { describe, it } from 'vitest'
         },
       }],
     },
+    {
+      name: 'Should_Report_SnapshotFile_AtFirstImport_When_ItIsNotTheFirstStatement',
+      code: `
+const setup = 1
+import { expect, it } from 'vitest'
+it('pin', () => { expect('x').toEqual('x') })
+`,
+      filename: '/repo/pkg/__tests__/bounded-union.snapshot.test.ts',
+      errors: [{
+        messageId: 'missingSnapshot',
+        line: 3,
+        data: {
+          name: MISSING_SNAPSHOT_NAME,
+          expected: MISSING_SNAPSHOT_EXPECTED,
+          actual: MISSING_SNAPSHOT_ACTUAL,
+          fix: MISSING_SNAPSHOT_FIX,
+        },
+      }],
+    },
   ],
 })
