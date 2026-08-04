@@ -207,6 +207,11 @@ export class TypescriptCompiler implements ITypescriptCompiler, IFileRelationCre
       const content = readFileSync(current, 'utf-8')
       const parsed = parseConfigFileTextToJson(current, content)
       if (parsed.error) {
+        this.log.warn(
+          `Could not parse tsconfig file "%s": %s. Compiler-option overrides and project-reference walking were skipped for this file, so mutants may be misreported as compile errors.`,
+          current,
+          parsed.error.message,
+        )
         tsConfigOverrides.set(current, content)
         continue
       }

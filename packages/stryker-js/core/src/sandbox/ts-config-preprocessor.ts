@@ -68,7 +68,7 @@ export class TSConfigPreprocessor implements FilePreprocessor {
       const tsconfigFile = project.files.get(tsconfigFileName)
       if (tsconfigFile) {
         this.log.debug('Rewriting file %s', tsconfigFile)
-        const { config } = parseConfigFileTextToJson(
+        const { config, error } = parseConfigFileTextToJson(
           tsconfigFileName,
           await tsconfigFile.readContent(),
         )
@@ -83,6 +83,12 @@ export class TSConfigPreprocessor implements FilePreprocessor {
           this.rewriteFileArrayProperty(config, tsconfigFileName, 'exclude')
           this.rewriteFileArrayProperty(config, tsconfigFileName, 'files')
           tsconfigFile.setContent(JSON.stringify(config, null, 2))
+        } else {
+          this.log.warn(
+            `Could not use tsconfig file "%s": %s. Its extends, project references, and file array properties were not rewritten for the sandbox, so this file still points at paths outside it.`,
+            tsconfigFileName,
+            error ? error.message : `parsed to ${JSON.stringify(config)}, which is not an object`,
+          )
         }
       }
     }
