@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/rx-effect",
   "license": "MIT",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
