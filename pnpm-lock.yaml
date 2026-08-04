@@ -2147,9 +2147,6 @@ importers:
       '@inquirer/prompts':
         specifier: ^8.0.0
         version: 8.5.2(@types/node@24.13.2)
-      '@std/jsonc':
-        specifier: 'catalog:'
-        version: '@jsr/std__jsonc@1.0.2'
       '@stryker-mutator/api':
         specifier: catalog:stryker
         version: 9.6.1
@@ -2171,6 +2168,9 @@ importers:
       diff-match-patch:
         specifier: 1.0.5
         version: 1.0.5
+      effect:
+        specifier: 'catalog:'
+        version: 3.22.0
       emoji-regex:
         specifier: ~10.6.0
         version: 10.6.0
@@ -2226,6 +2226,9 @@ importers:
         specifier: ~2.3.0
         version: 2.3.1
     devDependencies:
+      '@std/jsonc':
+        specifier: 'catalog:'
+        version: '@jsr/std__jsonc@1.0.2'
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../tsconfig
@@ -2265,15 +2268,15 @@ importers:
 
   packages/stryker-js/typescript-checker:
     dependencies:
-      '@std/jsonc':
-        specifier: 'catalog:'
-        version: '@jsr/std__jsonc@1.0.2'
       '@stryker-mutator/api':
         specifier: catalog:stryker
         version: 9.6.1
       '@stryker-mutator/util':
         specifier: catalog:stryker
         version: 9.6.1
+      effect:
+        specifier: 'catalog:'
+        version: 3.22.0
       semver:
         specifier: catalog:stryker
         version: 7.8.5
@@ -2284,6 +2287,9 @@ importers:
         specifier: 'catalog:'
         version: 7.0.2
     devDependencies:
+      '@std/jsonc':
+        specifier: 'catalog:'
+        version: '@jsr/std__jsonc@1.0.2'
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../tsconfig

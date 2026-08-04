@@ -10,5 +10,7 @@ export default defineConfig({
   format: 'esm',
   dts: true,
   exports: { devExports: '@systemfsoftware/source' },
+  // Inlined, not externalized: see the note in ../typescript-checker/tsdown.config.ts.
+  noExternal: ['@std/jsonc'],
   clean: false,
 })

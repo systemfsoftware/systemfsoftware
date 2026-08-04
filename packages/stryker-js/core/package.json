@@ -42,7 +42,6 @@
   },
   "dependencies": {
     "@inquirer/prompts": "^8.0.0",
-    "@std/jsonc": "catalog:",
     "@stryker-mutator/api": "catalog:stryker",
     "@stryker-mutator/instrumenter": "catalog:stryker",
     "@stryker-mutator/util": "catalog:stryker",
@@ -50,6 +49,7 @@
     "chalk": "~5.6.0",
     "commander": "~14.0.0",
     "diff-match-patch": "1.0.5",
+    "effect": "catalog:",
     "emoji-regex": "~10.6.0",
     "execa": "~9.6.0",
     "json-rpc-2.0": "^1.7.0",
@@ -70,6 +70,7 @@
     "typed-rest-client": "~2.3.0"
   },
   "devDependencies": {
+    "@std/jsonc": "catalog:",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/diff-match-patch": "1.0.36",
@@ -86,5 +87,8 @@
   "engines": {
     "node": ">=20.0.0"
   },
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "inlinedDependencies": {
+    "@jsr/std__jsonc": "1.0.2"
+  }
 }

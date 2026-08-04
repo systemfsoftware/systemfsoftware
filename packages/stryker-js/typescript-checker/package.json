@@ -19,14 +19,15 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@std/jsonc": "catalog:",
     "@stryker-mutator/api": "catalog:stryker",
     "@stryker-mutator/util": "catalog:stryker",
+    "effect": "catalog:",
     "semver": "catalog:stryker",
     "tslib": "catalog:stryker",
     "typescript": "catalog:"
   },
   "devDependencies": {
+    "@std/jsonc": "catalog:",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
@@ -34,5 +35,14 @@
     "rimraf": "catalog:",
     "tsdown": "catalog:",
     "vitest": "catalog:"
+  },
+  "inlinedDependencies": {
+    "@jsr/std__jsonc": "1.0.2"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": "./dist/index.mjs",
+      "./package.json": "./package.json"
+    }
   }
 }
