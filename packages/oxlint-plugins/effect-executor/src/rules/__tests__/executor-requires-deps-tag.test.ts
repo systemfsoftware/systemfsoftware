@@ -81,6 +81,23 @@ export const confirmOrder = Effect.fn('confirmOrder')(function* () {
       errors: [{ messageId: 'missingDepsTag' }],
     },
     {
+      name: 'Should_Report_WithExpectedTagName_InErrorData',
+      code: `export class Result {}`,
+      filename,
+      errors: [
+        {
+          messageId: 'missingDepsTag',
+          data: {
+            name: 'An executor that declares no dependency Tag',
+            expected: 'exactly one consumer-owned Tag ConfirmOrderExecutorDeps',
+            actual: 'an executor acquiring services it does not own',
+            fix:
+              'declare the consumer-owned Tag and acquire every service through it, or rename the file to the cell it actually is',
+          },
+        },
+      ],
+    },
+    {
       name: 'Should_Report_When_ClassExtendsPlainIdentifier',
       code: `import { Base } from './base.js'
 
@@ -93,6 +110,29 @@ export class ConfirmOrderExecutorDeps extends Base {}`,
       code: `import { Context } from 'effect'
 
 export class ConfirmOrderExecutorDeps extends Context['Tag']('ConfirmOrderExecutorDeps')() {}`,
+      filename,
+      errors: [{ messageId: 'missingDepsTag' }],
+    },
+    {
+      name: 'Should_Report_When_ComputedTagAccessUsesIdentifierProperty',
+      code: `import { Context } from 'effect'
+
+const Tag = 'Tag'
+
+export class ConfirmOrderExecutorDeps extends Context[Tag]('ConfirmOrderExecutorDeps')() {}`,
+      filename,
+      errors: [{ messageId: 'missingDepsTag' }],
+    },
+    {
+      name: 'Should_Report_When_PrivateMemberAccessIsNotATagConstructor',
+      code: `class Context {
+  static #Tag = 1
+
+  static make() {
+    const dep = Context.#Tag
+    return dep
+  }
+}`,
       filename,
       errors: [{ messageId: 'missingDepsTag' }],
     },

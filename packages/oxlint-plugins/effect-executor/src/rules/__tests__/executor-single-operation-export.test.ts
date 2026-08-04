@@ -57,6 +57,16 @@ ruleTester.run('executor-single-operation-export', executorSingleOperationExport
       filename: 'confirm-order.executor.ts',
     },
     {
+      name: 'Should_Pass_When_SingleDualCallExport_InExecutor',
+      code: `export const confirmOrder = dual(2, (a, b) => a + b)`,
+      filename: 'confirm-order.executor.ts',
+    },
+    {
+      name: 'Should_Pass_When_SingleMemberDualCallExport_InExecutor',
+      code: `export const confirmOrder = F.dual(2, (a, b) => a + b)`,
+      filename: 'confirm-order.executor.ts',
+    },
+    {
       name: 'Should_Pass_When_EffectFnOperationWithDepsTagAndLayer',
       code:
         `export class ConfirmOrderExecutorDeps extends Context.Tag('ConfirmOrderExecutorDeps')<ConfirmOrderExecutorDeps, {}>() {}\n` +
@@ -206,6 +216,25 @@ ruleTester.run('executor-single-operation-export', executorSingleOperationExport
     {
       name: 'Should_Report_ZeroFunctionExports_When_EffectFnIsComputed',
       code: `export const confirmOrder = Effect['fn']('confirmOrder')(function* () {})`,
+      filename: 'confirm-order.executor.ts',
+      errors: [{ messageId: 'tooManyFunctionExports', data: { ...data, actual: '0 function exports' } }],
+    },
+    {
+      name: 'Should_Report_ZeroFunctionExports_When_IdentifierCalleeIsNotDual',
+      code: `export const confirmOrder = buildOperation(2, (a, b) => a + b)`,
+      filename: 'confirm-order.executor.ts',
+      errors: [{ messageId: 'tooManyFunctionExports', data: { ...data, actual: '0 function exports' } }],
+    },
+    {
+      name: 'Should_Report_ZeroFunctionExports_When_PrivateMemberAccessIsNotAnOperation',
+      code: `class Effect {
+  static #fn = 1
+
+  static make() {
+    const value = Effect.#fn
+    return value
+  }
+}`,
       filename: 'confirm-order.executor.ts',
       errors: [{ messageId: 'tooManyFunctionExports', data: { ...data, actual: '0 function exports' } }],
     },
