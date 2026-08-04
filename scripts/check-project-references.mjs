@@ -25,9 +25,15 @@
 // convention. A referenced project under a different name is not scanned and
 // not caught. The selftest pins the reach into packages/oxlint-plugins/, where
 // the defect lived, so narrowing discovery fails loudly rather than silently.
+//
+// Second gate on the same filename: every tsconfig.node.json under packages/
+// must extend `@systemfsoftware/tsconfig/node`. One rule -- the exact extends
+// string, not include contents, not compilerOptions, not key order -- so the
+// preset stays the single source of the options it supplies.
 
+import { parse } from '@std/jsonc'
 import { execFile, execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -39,6 +45,8 @@ const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
 const TSC = join(repoRoot, 'node_modules', '.bin', 'tsc')
 
 const PROJECT_FILENAME = 'tsconfig.node.json'
+
+const PRESET_EXTENDS = '@systemfsoftware/tsconfig/node'
 
 // ── discovery ────────────────────────────────────────────────────────────────
 // `git ls-files` rather than a directory walk: tracked-only excludes stryker
@@ -70,6 +78,30 @@ const checkProject = async (dir) => {
 const checkAll = async (dirs) => {
   const results = await Promise.all(dirs.map(async (dir) => [dir, await checkProject(dir)]))
   return results.filter(([, codes]) => codes.length > 0)
+}
+
+// The preset-extends rule: every file named tsconfig.node.json under packages/
+// must have a top-level "extends" whose value is exactly PRESET_EXTENDS. The
+// rule enforces nothing else -- not include contents, not compilerOptions, not
+// key order -- so a file that restates the preset's options beside it fails
+// this check and nothing more. Returns the offending extends value as a
+// display string, or null when the file complies. Takes raw file text so the
+// selftest drives the full read-decode-check path over in-memory strings.
+const checkNodeConfig = (source) => {
+  let config
+  try {
+    // `@std/jsonc` rejects a leading BOM (its whitespace set is ` \t\r\n`) but
+    // tsc accepts one -- the same decode-boundary strip the two consumers use.
+    config = parse(source.replace(/^\uFEFF/, ''))
+  } catch (error) {
+    return `(unparseable: ${error.message})`
+  }
+  if (config === null || typeof config !== 'object') {
+    return '(not an object)'
+  }
+  const { extends: extendsValue } = config
+  if (extendsValue === PRESET_EXTENDS) return null
+  return extendsValue === undefined ? '(missing)' : JSON.stringify(extendsValue)
 }
 
 // ── selftest ─────────────────────────────────────────────────────────────────
@@ -137,6 +169,57 @@ const selftest = async () => {
     rmSync(root, { force: true, recursive: true })
   }
 
+  // Preset-extends fixtures are in-memory strings: the rule is a static shape
+  // check, so unlike the compile fixtures it needs no temp directory, and
+  // driving checkNodeConfig over raw text pins the parse path (including the
+  // @std/jsonc resolution) as well as the verdict. The accepted side is the
+  // canonical file; the rejected sides are the two ways the convention has
+  // actually been violated here -- extending the sibling tsconfig.json and
+  // hand-rolling compilerOptions, and omitting extends entirely.
+  const NODE_CONFIG_FIXTURES = [
+    {
+      label: 'extends the shared preset',
+      source: `{
+  "extends": "@systemfsoftware/tsconfig/node",
+  "include": [
+    "tsdown.config.ts",
+    "vitest.config.ts"
+  ]
+}
+`,
+      expected: null,
+    },
+    {
+      label: 'extends "./tsconfig.json" with hand-rolled compilerOptions',
+      source: `{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": ["tsdown.config.ts", "vitest.config.ts"]
+}
+`,
+      expected: '"./tsconfig.json"',
+    },
+    {
+      label: 'no extends key at all',
+      source: `{
+  "include": ["tsdown.config.ts"]
+}
+`,
+      expected: '(missing)',
+    },
+  ]
+  for (const { label, source, expected } of NODE_CONFIG_FIXTURES) {
+    const actual = checkNodeConfig(source)
+    if (actual !== expected) {
+      failures.push(
+        `  preset-extends fixture (${label}):\n` +
+          `    expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`,
+      )
+    }
+  }
+
   // Reach, pinned as a prefix rather than a count: the defect lived under
   // packages/oxlint-plugins/, and a discovery change that stops reaching it
   // leaves every fixture green while guarding nothing.
@@ -155,13 +238,41 @@ const selftest = async () => {
     process.exit(1)
   }
   console.log(
-    `check-project-references: selftest ok (2 fixtures; discovery reaches ${guarded.length} project(s) under packages/oxlint-plugins/)`,
+    `check-project-references: selftest ok (5 fixtures: 2 compile + 3 preset-extends; discovery reaches ${guarded.length} project(s) under packages/oxlint-plugins/)`,
   )
 }
 
 // ── scan ─────────────────────────────────────────────────────────────────────
 const scan = async () => {
   const projects = discoverProjects()
+
+  // Preset-extends gate, before the compile pass: a config that hand-rolls the
+  // preset's options is a convention violation first, and its tsc result would
+  // be noise while it is being repaired. Scoped to packages/ -- the only place
+  // these files exist -- by filtering the tracked set discovery already
+  // returns, so no vendored-tree special cases are needed.
+  const configViolations = projects
+    .filter((dir) => dir.startsWith('packages/'))
+    .map((dir) => join(dir, PROJECT_FILENAME))
+    .map((file) => [file, checkNodeConfig(readFileSync(file, 'utf8'))])
+    .filter(([, violation]) => violation !== null)
+
+  if (configViolations.length > 0) {
+    console.error(
+      `check-project-references: ${configViolations.length} tsconfig.node.json file(s) under packages/ do not extend the shared preset\n`,
+    )
+    for (const [file, violation] of configViolations) {
+      console.error(`  ${file}: extends ${violation}`)
+    }
+    console.error(
+      `\nEvery tsconfig.node.json must extend "@systemfsoftware/tsconfig/node", which supplies\n` +
+        `types: ["node"], composite, module, moduleResolution, allowSyntheticDefaultImports, and skipLibCheck.\n` +
+        `A hand-rolled compilerOptions block beside the preset is a second convention; delete it and keep\n` +
+        `only the file's own include.`,
+    )
+    process.exit(1)
+  }
+
   const failing = await checkAll(projects)
 
   if (failing.length > 0) {
@@ -190,4 +301,4 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   else await scan()
 }
 
-export { checkAll, checkProject, discoverProjects }
+export { checkAll, checkNodeConfig, checkProject, discoverProjects }

@@ -133,6 +133,9 @@ importers:
       '@semantic-release/release-notes-generator':
         specifier: ^14.0.3
         version: 14.1.1(semantic-release@24.2.9(supports-color@8.1.1)(typescript@7.0.2))
+      '@std/jsonc':
+        specifier: 'catalog:'
+        version: '@jsr/std__jsonc@1.0.2'
       concurrently:
         specifier: ^9.2.1
         version: 9.2.3

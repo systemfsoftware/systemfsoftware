@@ -39,6 +39,7 @@
     "@semantic-release/git": "catalog:",
     "@semantic-release/github": "^11.0.6",
     "@semantic-release/release-notes-generator": "^14.0.3",
+    "@std/jsonc": "catalog:",
     "concurrently": "^9.2.1",
     "conventional-changelog-conventionalcommits": "^9.1.0",
     "dprint": "^0.54.0",
