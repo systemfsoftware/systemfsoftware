@@ -6,10 +6,11 @@ import { CheckStatus } from '@stryker-mutator/api/check'
 import type { FailedCheckResult } from '@stryker-mutator/api/check'
 import type { Location, Mutant, StrykerOptions } from '@stryker-mutator/api/core'
 import type { Logger } from '@stryker-mutator/api/logging'
+import { Either } from 'effect'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { HybridFileSystem } from '../../src/fs/hybrid-file-system.js'
-import { overrideOptions, parseConfigFileTextToJson } from '../../src/tsconfig-helpers.js'
+import { overrideOptions, parseTsConfig } from '../../src/tsconfig-helpers.js'
 import { TypescriptChecker } from '../../src/typescript-checker.js'
 import { TypescriptCompiler } from '../../src/typescript-compiler.js'
 
@@ -230,9 +231,11 @@ describe('Typescript checker on a single project', () => {
     // TypeScript, so this asserts both survive byte-for-byte into that config.
     const tsconfigFile = resolveTestResource('tsconfig.json')
     const content = fs.readFileSync(tsconfigFile, 'utf8')
-    const parsed = parseConfigFileTextToJson(tsconfigFile, content)
-    expect(parsed.error).toBeUndefined()
-    const config = overrideOptions(parsed, false)
+    const parsed = parseTsConfig(tsconfigFile, content)
+    if (Either.isLeft(parsed)) {
+      throw new Error(`Expected fixture tsconfig to parse, got: ${parsed.left.reason}`)
+    }
+    const config = overrideOptions(parsed.right, false)
     expect(config).toContain('"$schema":"https://json.schemastore.org/tsconfig"')
     expect(config).toContain('"include":["src/**/*.ts"]')
   })

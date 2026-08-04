@@ -2,105 +2,143 @@ import { mkdtempSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import path from 'path'
 
+import { Either } from 'effect'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { determineBuildModeEnabled, overrideOptions, parseConfigFileTextToJson } from '../../src/tsconfig-helpers.js'
+import {
+  determineBuildModeEnabled,
+  overrideOptions,
+  parseTsConfig,
+  TsConfigParseError,
+} from '../../src/tsconfig-helpers.js'
 
-describe('parseConfigFileTextToJson', () => {
+function expectRight<A, E>(either: Either.Either<A, E>): A {
+  if (Either.isLeft(either)) {
+    throw new Error(`Expected a Right result, got a Left: ${String(either.left)}`)
+  }
+  return either.right
+}
+
+describe('parseTsConfig', () => {
   it('should preserve a glob pattern in include exactly', () => {
-    const result = parseConfigFileTextToJson(
-      'tsconfig.json',
-      '{"include":["src/**/*.workflow.ts"]}',
+    const config = expectRight(
+      parseTsConfig('tsconfig.json', '{"include":["src/**/*.workflow.ts"]}'),
     )
-    expect(result.error).toBeUndefined()
-    expect(result.config).toEqual({ include: ['src/**/*.workflow.ts'] })
+    expect(config).toEqual({ include: ['src/**/*.workflow.ts'] })
   })
 
   it('should round-trip a $schema URL unchanged', () => {
-    const result = parseConfigFileTextToJson(
-      'tsconfig.json',
-      '{"$schema":"https://json.schemastore.org/tsconfig"}',
+    const config = expectRight(
+      parseTsConfig('tsconfig.json', '{"$schema":"https://json.schemastore.org/tsconfig"}'),
     )
-    expect(result.error).toBeUndefined()
-    expect(result.config).toEqual({
+    expect(config).toEqual({
       $schema: 'https://json.schemastore.org/tsconfig',
     })
   })
 
   it('should round-trip a Windows path and an escaped quote unchanged', () => {
-    const result = parseConfigFileTextToJson(
-      'tsconfig.json',
-      '{"paths":{"a":["C:\\\\x//y"]},"description":"he said \\"hi\\""}',
+    const config = expectRight(
+      parseTsConfig(
+        'tsconfig.json',
+        '{"paths":{"a":["C:\\\\x//y"]},"description":"he said \\"hi\\""}',
+      ),
     )
-    expect(result.error).toBeUndefined()
-    expect(result.config).toEqual({
+    expect(config).toEqual({
       paths: { a: ['C:\\x//y'] },
       description: 'he said "hi"',
     })
   })
 
   it('should accept trailing commas in nested objects and arrays', () => {
-    const result = parseConfigFileTextToJson(
-      'tsconfig.json',
-      '{"compilerOptions":{"strict":true,},"include":["a.ts","b.ts",]}',
+    const config = expectRight(
+      parseTsConfig(
+        'tsconfig.json',
+        '{"compilerOptions":{"strict":true,},"include":["a.ts","b.ts",]}',
+      ),
     )
-    expect(result.error).toBeUndefined()
-    expect(result.config).toEqual({
+    expect(config).toEqual({
       compilerOptions: { strict: true },
       include: ['a.ts', 'b.ts'],
     })
   })
 
   it('should accept content prefixed with a BOM', () => {
-    const withoutBom = parseConfigFileTextToJson(
-      'tsconfig.json',
-      '{"compilerOptions":{"strict":true}}',
+    const withoutBom = expectRight(
+      parseTsConfig('tsconfig.json', '{"compilerOptions":{"strict":true}}'),
     )
-    const withBom = parseConfigFileTextToJson(
-      'tsconfig.json',
-      '\uFEFF{"compilerOptions":{"strict":true}}',
+    const withBom = expectRight(
+      parseTsConfig('tsconfig.json', '\uFEFF{"compilerOptions":{"strict":true}}'),
     )
-    expect(withBom.error).toBeUndefined()
-    expect(withBom.config).toEqual(withoutBom.config)
+    expect(withBom).toEqual(withoutBom)
   })
 
   it('should strip line and block comments', () => {
-    const result = parseConfigFileTextToJson(
-      'tsconfig.json',
-      '{\n// a line comment\n"a": 1,\n/* a block comment */\n"b": 2\n}',
+    const config = expectRight(
+      parseTsConfig(
+        'tsconfig.json',
+        '{\n// a line comment\n"a": 1,\n/* a block comment */\n"b": 2\n}',
+      ),
     )
-    expect(result.error).toBeUndefined()
-    expect(result.config).toEqual({ a: 1, b: 2 })
+    expect(config).toEqual({ a: 1, b: 2 })
   })
 
-  it('should return an error for a malformed document', () => {
-    const result = parseConfigFileTextToJson('tsconfig.json', '{ "a": }')
-    expect(result.error).toBeInstanceOf(Error)
-    expect(result.config).toBeUndefined()
+  it('should preserve unknown nested keys inside compilerOptions', () => {
+    const config = expectRight(
+      parseTsConfig(
+        'tsconfig.json',
+        '{"compilerOptions":{"strict":true,"experimentalDecorators":true}}',
+      ),
+    )
+    expect(config.compilerOptions).toEqual({
+      strict: true,
+      experimentalDecorators: true,
+    })
   })
 
-  it('should return an error for truncated input', () => {
-    for (const truncated of ['{', '{"a":']) {
-      const result = parseConfigFileTextToJson('tsconfig.json', truncated)
-      expect(result.error).toBeInstanceOf(Error)
-      expect(result.config).toBeUndefined()
+  it('should return a Left for a malformed document', () => {
+    const result = parseTsConfig('tsconfig.json', '{ "a": }')
+    expect(Either.isLeft(result)).toBe(true)
+    if (Either.isLeft(result)) {
+      expect(result.left).toBeInstanceOf(TsConfigParseError)
+      expect(result.left.file).toBe('tsconfig.json')
+      expect(result.left.reason.length).toBeGreaterThan(0)
     }
   })
 
-  it('should return an error for an unterminated block comment', () => {
-    const result = parseConfigFileTextToJson(
-      'tsconfig.json',
-      '{"a":1,/* never closed',
-    )
-    expect(result.error).toBeInstanceOf(Error)
-    expect(result.config).toBeUndefined()
+  it('should return a Left for truncated input', () => {
+    for (const truncated of ['{', '{"a":']) {
+      expect(Either.isLeft(parseTsConfig('tsconfig.json', truncated))).toBe(true)
+    }
+  })
+
+  it('should return a Left for an unterminated block comment', () => {
+    const result = parseTsConfig('tsconfig.json', '{"a":1,/* never closed')
+    expect(Either.isLeft(result)).toBe(true)
+  })
+
+  it('should return a Left for a bare string root (not a config object)', () => {
+    const result = parseTsConfig('tsconfig.json', '"just a string"')
+    expect(Either.isLeft(result)).toBe(true)
+    if (Either.isLeft(result)) {
+      expect(result.left).toBeInstanceOf(TsConfigParseError)
+      expect(result.left.file).toBe('tsconfig.json')
+      expect(result.left.reason.length).toBeGreaterThan(0)
+    }
+  })
+
+  it('should return a Left when references is not an array', () => {
+    const result = parseTsConfig('tsconfig.json', '{"references":"nope"}')
+    expect(Either.isLeft(result)).toBe(true)
+    if (Either.isLeft(result)) {
+      expect(result.left).toBeInstanceOf(TsConfigParseError)
+      expect(result.left.reason.length).toBeGreaterThan(0)
+    }
   })
 })
 
 describe('overrideOptions', () => {
-  it('should ignore a string config instead of spreading it to character indices', () => {
-    const parsed = JSON.parse(overrideOptions({ config: 'abc' }, false))
-    expect(Object.keys(parsed)).toEqual(['compilerOptions'])
+  it('should apply the compiler-option overrides to an empty config', () => {
+    const parsed = JSON.parse(overrideOptions({}, false))
     expect(parsed.compilerOptions).toMatchObject({
       allowUnreachableCode: true,
       noEmit: true,
@@ -109,15 +147,17 @@ describe('overrideOptions', () => {
     })
   })
 
-  it('should ignore an array config instead of spreading it to indices', () => {
-    const parsed = JSON.parse(overrideOptions({ config: ['a', 'b'] }, false))
-    expect(Object.keys(parsed)).toEqual(['compilerOptions'])
-    expect(parsed.compilerOptions).toMatchObject({
-      allowUnreachableCode: true,
-      noEmit: true,
-      target: 'es2022',
-      moduleResolution: 'bundler',
-    })
+  it('should preserve unknown top-level keys and unknown compilerOptions through to the output', () => {
+    const config = expectRight(
+      parseTsConfig(
+        'tsconfig.json',
+        '{"include":["src/**/*.ts"],"compilerOptions":{"strict":true,"experimentalDecorators":true}}',
+      ),
+    )
+    const output = JSON.parse(overrideOptions(config, false))
+    expect(output.include).toEqual(['src/**/*.ts'])
+    expect(output.compilerOptions.strict).toBe(true)
+    expect(output.compilerOptions.experimentalDecorators).toBe(true)
   })
 })
 
@@ -144,6 +184,16 @@ describe('determineBuildModeEnabled', () => {
 
   it('should return false when the config has no references', () => {
     const tsconfigPath = createTsconfig('{"compilerOptions":{"strict":true}}')
+    expect(determineBuildModeEnabled(tsconfigPath)).toBe(false)
+  })
+
+  it('should return false when the config is a bare string instead of throwing a TypeError', () => {
+    const tsconfigPath = createTsconfig('"just a string"')
+    expect(determineBuildModeEnabled(tsconfigPath)).toBe(false)
+  })
+
+  it('should return false when references is not an array', () => {
+    const tsconfigPath = createTsconfig('{"references":"nope"}')
     expect(determineBuildModeEnabled(tsconfigPath)).toBe(false)
   })
 })
