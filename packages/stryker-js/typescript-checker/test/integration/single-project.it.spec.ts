@@ -6,9 +6,11 @@ import { CheckStatus } from '@stryker-mutator/api/check'
 import type { FailedCheckResult } from '@stryker-mutator/api/check'
 import type { Location, Mutant, StrykerOptions } from '@stryker-mutator/api/core'
 import type { Logger } from '@stryker-mutator/api/logging'
+import { Either } from 'effect'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { HybridFileSystem } from '../../src/fs/hybrid-file-system.js'
+import { overrideOptions, parseTsConfig } from '../../src/tsconfig-helpers.js'
 import { TypescriptChecker } from '../../src/typescript-checker.js'
 import { TypescriptCompiler } from '../../src/typescript-compiler.js'
 
@@ -203,6 +205,39 @@ describe('Typescript checker on a single project', () => {
     expect((actual['mutId2'] as FailedCheckResult).reason).toContain(
       'errorInFileAbove2Mutants/todo-counter.ts(7,7): error TS2322',
     )
+  })
+
+  it('should compile the fixture source files discovered via the ** include glob', async () => {
+    // The fixture tsconfig selects its inputs via `include: ["src/**/*.ts"]`. If a comment
+    // stripper corrupted the glob (the `/**/` inside it looks like an empty block comment),
+    // TypeScript would find no input files and abort init with TS18003, so this assertion
+    // pins the end-to-end regression against the real checker path.
+    const mutant = createMutant(
+      'errorInFileAbove2Mutants/todo.ts',
+      'TodoList.allTodos.push(newItem)',
+      '"This should not be a string 🙄"',
+      'glob-pin',
+    )
+    const actual = await sut.check([mutant])
+    expect(actual['glob-pin']?.status).toBe(CheckStatus.CompileError)
+    expect((actual['glob-pin'] as FailedCheckResult).reason).toContain(
+      'todo.ts(15,9): error TS2322',
+    )
+  })
+
+  it('should preserve the fixture $schema URL and ** glob in the config produced by overrideOptions', () => {
+    // `$schema` holds a `//`-bearing string and `include` holds a `**` glob: the two shapes a
+    // naive comment stripper mangles. The compiler feeds the output of `overrideOptions` to
+    // TypeScript, so this asserts both survive byte-for-byte into that config.
+    const tsconfigFile = resolveTestResource('tsconfig.json')
+    const content = fs.readFileSync(tsconfigFile, 'utf8')
+    const parsed = parseTsConfig(tsconfigFile, content)
+    if (Either.isLeft(parsed)) {
+      throw new Error(`Expected fixture tsconfig to parse, got: ${parsed.left.reason}`)
+    }
+    const config = overrideOptions(parsed.right, false)
+    expect(config).toContain('"$schema":"https://json.schemastore.org/tsconfig"')
+    expect(config).toContain('"include":["src/**/*.ts"]')
   })
 })
 

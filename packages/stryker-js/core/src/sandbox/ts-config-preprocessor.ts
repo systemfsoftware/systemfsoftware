@@ -3,21 +3,16 @@ import path from 'path'
 import { StrykerOptions } from '@stryker-mutator/api/core'
 import { Logger } from '@stryker-mutator/api/logging'
 import { commonTokens, tokens } from '@stryker-mutator/api/plugin'
+import { Either } from 'effect'
 
 import { Project } from '../fs/project.js'
 
 import { FilePreprocessor } from './file-preprocessor.js'
-import { parseConfigFileTextToJson } from './parse-config-helper.js'
+import { parseTsConfig } from './parse-config-helper.js'
+import type { TSConfig } from './parse-config-helper.js'
 import { resolveProjectReferencePath } from './resolve-reference-helper.js'
 
-export interface TSConfig {
-  references?: Array<{ path: string }>
-  extends?: string
-  files?: string[]
-  exclude?: string[]
-  include?: string[]
-  compilerOptions?: Record<string, unknown>
-}
+export type { TSConfig } from './parse-config-helper.js'
 /**
  * A helper class that rewrites `references` and `extends` file paths if they end up falling outside of the sandbox.
  * @example
@@ -68,11 +63,12 @@ export class TSConfigPreprocessor implements FilePreprocessor {
       const tsconfigFile = project.files.get(tsconfigFileName)
       if (tsconfigFile) {
         this.log.debug('Rewriting file %s', tsconfigFile)
-        const { config } = parseConfigFileTextToJson(
+        const parsed = parseTsConfig(
           tsconfigFileName,
           await tsconfigFile.readContent(),
         )
-        if (config) {
+        if (Either.isRight(parsed)) {
+          const config = parsed.right
           await this.rewriteExtends(project, config, tsconfigFileName)
           await this.rewriteProjectReferences(
             project,
@@ -83,6 +79,13 @@ export class TSConfigPreprocessor implements FilePreprocessor {
           this.rewriteFileArrayProperty(config, tsconfigFileName, 'exclude')
           this.rewriteFileArrayProperty(config, tsconfigFileName, 'files')
           tsconfigFile.setContent(JSON.stringify(config, null, 2))
+        } else {
+          const error = parsed.left
+          this.log.warn(
+            `Could not rewrite tsconfig file "%s": %s. Its extends, project references, and file array properties were not rewritten for the sandbox, so this file still points at paths outside it.`,
+            tsconfigFileName,
+            error.reason,
+          )
         }
       }
     }

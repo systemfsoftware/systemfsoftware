@@ -3,7 +3,7 @@ import { fileURLToPath } from 'url'
 
 import type { StrykerOptions } from '@stryker-mutator/api/core'
 import type { Logger } from '@stryker-mutator/api/logging'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { HybridFileSystem } from '../../src/fs/hybrid-file-system.js'
 import { TypescriptChecker } from '../../src/typescript-checker.js'
@@ -18,7 +18,7 @@ const resolveTestResource = path.resolve.bind(
   'errors',
 ) as unknown as typeof path.resolve
 
-function createLogger(): Logger {
+function createLogger(warn: Logger['warn'] = () => {}): Logger {
   return {
     isTraceEnabled: () => false,
     isDebugEnabled: () => false,
@@ -29,18 +29,20 @@ function createLogger(): Logger {
     trace: () => {},
     debug: () => {},
     info: () => {},
-    warn: () => {},
+    warn,
     error: () => {},
     fatal: () => {},
   }
 }
 
-function createChecker(tsconfigFile: string): TypescriptChecker {
+function createChecker(
+  tsconfigFile: string,
+  logger: Logger = createLogger(),
+): TypescriptChecker {
   const options = {
     tsconfigFile,
     typescriptChecker: { prioritizePerformanceOverAccuracy: true },
   } as unknown as StrykerOptions
-  const logger = createLogger()
   const fileSystem = new HybridFileSystem()
   const compiler = new TypescriptCompiler(logger, options, fileSystem)
   return new TypescriptChecker(logger, options, compiler)
@@ -68,6 +70,29 @@ describe('Typescript checker errors', () => {
     )
     await expect(sut.init()).rejects.toThrow(
       'testResources/errors/invalid-tsconfig/tsconfig.json(1,1): error TS1005:',
+    )
+  })
+
+  it('should log a warning naming the tsconfig path and the skipped-overrides consequence when parsing falls back', async () => {
+    const warn = vi.fn()
+    const sut = createChecker(
+      resolveTestResource('invalid-tsconfig', 'tsconfig.json'),
+      createLogger(warn),
+    )
+
+    await expect(sut.init()).rejects.toThrow(
+      'testResources/errors/invalid-tsconfig/tsconfig.json(1,1): error TS1005:',
+    )
+
+    expect(warn).toHaveBeenCalled()
+    const warnings = warn.mock.calls
+      .map((call) => call.join(' '))
+      .join('\n')
+    expect(warnings).toContain(
+      'testResources/errors/invalid-tsconfig/tsconfig.json',
+    )
+    expect(warnings.toLowerCase()).toContain(
+      'compiler-option overrides and project-reference walking were skipped',
     )
   })
 

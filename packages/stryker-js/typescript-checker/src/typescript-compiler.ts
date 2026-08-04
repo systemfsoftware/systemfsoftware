@@ -4,6 +4,7 @@ import path from 'path'
 import type { Mutant, StrykerOptions } from '@stryker-mutator/api/core'
 import type { Logger } from '@stryker-mutator/api/logging'
 import { commonTokens, tokens } from '@stryker-mutator/api/plugin'
+import { Either } from 'effect'
 import { type SourceFile, SyntaxKind } from 'typescript/unstable/ast'
 import type { FileSystem } from 'typescript/unstable/fs'
 import { API, type Diagnostic, type DocumentIdentifier, type Program, type Snapshot } from 'typescript/unstable/sync'
@@ -16,7 +17,7 @@ import {
   getSourceMappingURL,
   guardTSVersion,
   overrideOptions,
-  parseConfigFileTextToJson,
+  parseTsConfig,
   retrieveReferencedProjects,
   toPosixFileName,
 } from './tsconfig-helpers.js'
@@ -205,16 +206,21 @@ export class TypescriptCompiler implements ITypescriptCompiler, IFileRelationCre
       processed.add(current)
 
       const content = readFileSync(current, 'utf-8')
-      const parsed = parseConfigFileTextToJson(current, content)
-      if (parsed.error) {
+      const parsed = parseTsConfig(current, content)
+      if (Either.isLeft(parsed)) {
+        this.log.warn(
+          `Could not parse tsconfig file "%s": %s. Compiler-option overrides and project-reference walking were skipped for this file, so mutants may be misreported as compile errors.`,
+          current,
+          parsed.left.reason,
+        )
         tsConfigOverrides.set(current, content)
         continue
       }
-      tsConfigOverrides.set(current, overrideOptions(parsed, buildModeEnabled))
+      tsConfigOverrides.set(current, overrideOptions(parsed.right, buildModeEnabled))
 
       for (
         const referenced of retrieveReferencedProjects(
-          parsed,
+          parsed.right,
           path.dirname(current),
         )
       ) {

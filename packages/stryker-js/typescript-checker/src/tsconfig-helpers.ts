@@ -2,6 +2,8 @@ import { readFileSync } from 'fs'
 import { createRequire } from 'module'
 import path from 'path'
 
+import { parse } from '@std/jsonc'
+import { Data, Either, Schema as S } from 'effect'
 import semver from 'semver'
 
 // Override some compiler options that have to do with code quality. When mutating, we're not interested in the resulting code quality
@@ -50,46 +52,71 @@ export function guardTSVersion(version = getTSVersion()): void {
 }
 
 /**
+ * Error returned when a tsconfig file fails to parse or does not match the shape this package consumes.
+ */
+export class TsConfigParseError extends Data.TaggedError('TsConfigParseError')<{
+  readonly file: string
+  readonly reason: string
+}> {}
+
+const JsonRecord = S.Record({ key: S.String, value: S.Unknown })
+const TsConfigSchema = S.Struct(
+  {
+    references: S.optional(S.Array(S.Struct({ path: S.String }, JsonRecord))),
+    compilerOptions: S.optional(JsonRecord),
+  },
+  JsonRecord,
+)
+type TsConfig = S.Schema.Type<typeof TsConfigSchema>
+
+/**
+ * Parses the raw text of a tsconfig file into a typed config, rejecting shapes this package cannot consume.
+ * @param fileName The tsconfig file name, used for error reporting
+ * @param jsonText The raw tsconfig content
+ */
+export function parseTsConfig(fileName: string, jsonText: string): Either.Either<TsConfig, TsConfigParseError> {
+  // `@std/jsonc`'s whitespace set excludes U+FEFF, so it rejects a leading BOM, while `tsc` tolerates one.
+  try {
+    const value = parse(jsonText.replace(/^\uFEFF/, ''))
+    // Rebuilds the object, reordering keys (declared fields hoist). Safe here: this
+    // package only reads the config, and `overrideOptions` builds a fresh object anyway.
+    // The core sibling (`packages/stryker-js/core/src/sandbox/parse-config-helper.ts`)
+    // deliberately uses an `S.is` guard instead — it mutates the parsed config and writes
+    // it back with `JSON.stringify`, so a rebuild there would reorder the user's tsconfig
+    // on disk. Independent boundaries by KTD-2; this note keeps the divergence deliberate.
+    return Either.mapLeft(
+      S.decodeUnknownEither(TsConfigSchema)(value),
+      (issue) => new TsConfigParseError({ file: fileName, reason: issue.message }),
+    )
+  } catch (error) {
+    return Either.left(
+      new TsConfigParseError({
+        file: fileName,
+        reason: error instanceof Error ? error.message : String(error),
+      }),
+    )
+  }
+}
+
+/**
  * Determines whether or not to use `--build` mode based on "references" being there in the config file
  * @param tsconfigFileName The tsconfig file to parse
  */
-export interface ParsedConfig {
-  config?: unknown
-  error?: Error
-}
-
-function stripJsonComments(json: string): string {
-  return json
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/\/\/.*$/gm, '')
-}
-
-export function parseConfigFileTextToJson(fileName: string, jsonText: string): ParsedConfig {
-  try {
-    const stripped = stripJsonComments(jsonText)
-    return { config: JSON.parse(stripped) }
-  } catch (error) {
-    return { error: error as Error }
-  }
-}
-
 export function determineBuildModeEnabled(tsconfigFileName: string): boolean {
   const tsconfigFile = readFileSync(tsconfigFileName, 'utf-8')
-  const parsed = parseConfigFileTextToJson(tsconfigFileName, tsconfigFile)
-  if (parsed.error) {
-    return false
-  }
-  const useProjectReferences = 'references' in (parsed.config as { references?: unknown[] })
-  return useProjectReferences
+  const parsed = parseTsConfig(tsconfigFileName, tsconfigFile)
+  return Either.match(parsed, {
+    onLeft: () => false,
+    onRight: (config) => config.references !== undefined,
+  })
 }
 
 /**
  * Overrides some options to speed up compilation and disable some code quality checks we don't want during mutation testing
- * @param parsedConfig The parsed config file
+ * @param config The parsed config file
  * @param useBuildMode whether or not `--build` mode is used
  */
-export function overrideOptions(parsedConfig: ParsedConfig, useBuildMode: boolean): string {
-  const config = (parsedConfig.config ?? {}) as { compilerOptions?: Record<string, unknown> }
+export function overrideOptions(config: TsConfig, useBuildMode: boolean): string {
   const compilerOptions: Record<string, unknown> = {
     ...config.compilerOptions,
     ...COMPILER_OPTIONS_OVERRIDES,
@@ -124,27 +151,19 @@ export function overrideOptions(parsedConfig: ParsedConfig, useBuildMode: boolea
   })
 }
 
-interface ProjectReference {
-  path: string
-}
-
 /**
  * Retrieves the referenced config files based on parsed configuration
- * @param parsedConfig The parsed config file
+ * @param config The parsed config file
  * @param fromDirName The directory where to resolve from
  */
-export function retrieveReferencedProjects(parsedConfig: ParsedConfig, fromDirName: string): string[] {
-  const config = parsedConfig.config as { references?: ProjectReference[] } | undefined
-  if (Array.isArray(config?.references)) {
-    return config!.references.map((reference) => {
-      let resolved = path.resolve(fromDirName, reference.path)
-      if (!path.basename(resolved).endsWith('.json')) {
-        resolved = path.join(resolved, 'tsconfig.json')
-      }
-      return toPosixFileName(resolved)
-    })
-  }
-  return []
+export function retrieveReferencedProjects(config: TsConfig, fromDirName: string): string[] {
+  return (config.references ?? []).map((reference) => {
+    let resolved = path.resolve(fromDirName, reference.path)
+    if (!path.basename(resolved).endsWith('.json')) {
+      resolved = path.join(resolved, 'tsconfig.json')
+    }
+    return toPosixFileName(resolved)
+  })
 }
 
 /**
