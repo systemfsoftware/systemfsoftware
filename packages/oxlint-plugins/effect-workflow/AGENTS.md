@@ -16,6 +16,6 @@ Rules here gate the `architect-workflow` cell spec and `CONSTITUTION.md` Article
   title: Schema detection matches the S namespace only
   do: match the identifier S in both the curried and direct TaggedClass/TaggedError forms
   dont: also accept Schema. or an alias
-  harm: every rule here hardcodes S; widening one makes its near-miss tests meaningless and puts it out of step with its siblings
+  harm: the near-miss valid cases exist to prove `Schema.TaggedClass` does NOT fire a schema-detecting rule; widen the match and they stop separating the curried form from the direct one, which is the whole distinction EW4 guards
   check: each schema-detecting rule has a valid case proving Schema.TaggedClass does not fire
 ```

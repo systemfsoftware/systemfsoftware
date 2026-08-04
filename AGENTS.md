@@ -22,7 +22,7 @@ Effect-TS libraries + the oxlint plugin enforcing the constitution (at `repos/co
 - id: REPO-S3
   title: Vendored repos are read-only
   do: amend upstream
-  dont: edit repos/constitution/, repos/effect/, repos/typescript-go/
+  dont: edit any tree under repos/
   harm: vendored copies diverge from upstream
   check: no file in repos/ is modified
 
@@ -122,7 +122,7 @@ pnpm check  # pnpm install --frozen-lockfile → turbo (format:check, lint, type
 
 The last link, `pnpm check:publish-config`, is part of that chain and is never run on its own (REPO-A1). Every publishable package must carry `repository.url` exactly `git+https://github.com/systemfsoftware/systemfsoftware.git` and a `repository.directory` matching its real path; npm validates both against the sigstore provenance attestation and rejects the upload with **422** otherwise. It earns a gate because the version bump, changelog, commit, and git tag all land _before_ the publish is attempted — a rejection leaves git claiming a release npm never received, which is exactly how `stryker-js-core` and `stryker-js-typescript-checker` sat at `0.1.0` on npm while git advanced to `v1.2.1`.
 
-Then `pnpm --filter <pkg> mutation` — **100%** on changed pure-core files. Any failure blocks done. Delete the package's `reports/stryker-incremental.json` before any run you will cite as evidence. It is a regenerable cache keyed on source hashes, never a baseline: it reuses prior verdicts for files it considers unchanged, and has been measured reporting mutants as `Killed` that a clean run shows `Survived` — `hex-schema` on 2026-07-31 scored 78.13% cached against 46.88% clean on the same tree. A cached score is not current-run evidence (§A.3), and a gate that can report a stale pass is not a gate.
+Then `pnpm --filter <pkg> mutation` — **100%** on changed pure-core files. Any failure blocks done.
 
 Then `node scripts/test-contribution.mjs <pkg>` — a changed `*.property.test.ts` must, when deleted, let at least one mutant survive. A passing mutation score is not evidence a test earns its place: it measures the mutant set, not the test set. Any failure blocks done.
 
@@ -170,7 +170,7 @@ This root file holds workspace-wide invariants only. Directories with distinct b
 - A rule lives in **exactly ONE file:** the highest level it applies to. Leaves carry only the delta and point back here; they never restate the root.
 - If a rule in this file applies to exactly one directory, move it to that directory's leaf.
 
-Leaf `AGENTS.md` lives wherever a directory has distinct checks or constraints. Discover via `glob packages/*/AGENTS.md` and `glob packages/stryker-js/*/AGENTS.md`. Vendored exception: `repos/constitution/` — read-only, changes go upstream.
+An `AGENTS.md` under `repos/` is a vendored root, not a leaf.
 
 ## Release Policy
 

@@ -16,7 +16,7 @@ Rules here gate the `architect-acl` cell spec. Read the cell skill for what an A
   title: transformOrFail detection matches the S namespace only
   do: match the S identifier and the transformOrFail member property
   dont: also accept Schema., an alias, or a computed member
-  harm: every rule here hardcodes S; widening one makes its near-miss tests meaningless and puts it out of step with its siblings
+  harm: the near-miss valid cases exist to prove `Schema.transformOrFail` does NOT satisfy a transform-detecting rule; widen the match and every one of them passes vacuously, so the suite stops distinguishing the two forms it was written to separate
   check: each transform-detecting rule has a valid case proving Schema.transformOrFail does not satisfy it
 
 - id: EA3

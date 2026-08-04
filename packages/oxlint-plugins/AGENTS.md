@@ -118,15 +118,6 @@ export default {
   check: "review — `Object.keys(configs.recommended)` is exactly `['rules']`. A violation is not silent: every consumer spreading the preset fails config parsing at startup."
 ```
 
-Consumers register the plugin via `jsPlugins` and spread the preset's rules:
-
-```typescript
-defineConfig({
-  jsPlugins: ['@systemfsoftware/oxlint-plugin-effect-workflow'],
-  rules: { ...plugin.configs.recommended.rules },
-})
-```
-
 ## Package Deltas
 
 Every `effect-<cell>/` package's spec of record is its `architect-<cell>` skill — that is the
