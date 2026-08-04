@@ -33,7 +33,6 @@ const envPropertyName = (node: ESTree.MemberExpression): string | null => {
     if (node.property.type !== 'Literal') return null
     return typeof node.property.value === 'string' ? node.property.value : null
   }
-  if (node.property.type !== 'Identifier') return null
   return node.property.name
 }
 
@@ -42,7 +41,7 @@ const isProcessEnvRead = (node: ESTree.MemberExpression): string | null => {
   if (object.type !== 'MemberExpression') return null
   if (object.computed === true) return null
   if (object.object.type !== 'Identifier' || object.object.name !== CONFIG_ENV_OBJECT) return null
-  if (object.property.type !== 'Identifier' || object.property.name !== CONFIG_ENV_PROPERTY) return null
+  if (object.property.name !== CONFIG_ENV_PROPERTY) return null
   return envPropertyName(node)
 }
 

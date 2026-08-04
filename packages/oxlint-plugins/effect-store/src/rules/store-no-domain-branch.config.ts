@@ -8,7 +8,7 @@ export const MATCH_ENTRY_METHOD = 'value' as const
 
 export const TAG_PROPERTY = '_tag' as const
 
-export const INPUT_CELLS = ['acl'] as const
+export const INPUT_CELLS: readonly string[] = ['acl'] as const
 
 export const SKIPPED_WALK_KEYS = ['parent', 'range', 'loc', 'start', 'end'] as const
 

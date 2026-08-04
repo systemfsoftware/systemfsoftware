@@ -88,6 +88,11 @@ const Options = S.Struct({})\n`,
       filename: 'order.store.ts',
     },
     {
+      name: 'Should_Pass_When_Module_Level_Const_Is_A_Non_Escaping_NewExpression',
+      code: `const now = new Date()\n`,
+      filename: 'order.store.ts',
+    },
+    {
       name: 'Should_Ignore_Module_State_When_File_Is_Not_A_Store',
       code: `let counter = 0
 const cache = new Map()\n`,

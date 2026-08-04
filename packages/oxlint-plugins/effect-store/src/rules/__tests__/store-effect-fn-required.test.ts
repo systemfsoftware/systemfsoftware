@@ -169,5 +169,23 @@ export const findOrder = E.fn(function* (id: OrderId) { return id })\n`,
       filename: 'order.store.ts',
       errors: [nonFnError('<default>', 'an exported Effect value not built with Effect.fn')],
     },
+    {
+      name: 'Should_Report_NonFnExport_When_Callee_Is_A_Bare_Effect_Identifier',
+      code: `export const findOrder = Effect(function* (id: OrderId) { return id })\n`,
+      filename: 'order.store.ts',
+      errors: [nonFnError('findOrder', 'an exported Effect value not built with Effect.fn')],
+    },
+    {
+      name: 'Should_Report_NonFnExport_When_Computed_Identifier_Property_Is_EffectFn',
+      code: `export const findOrder = Effect[fn](function* (id: OrderId) { return id })\n`,
+      filename: 'order.store.ts',
+      errors: [nonFnError('findOrder', 'an exported Effect value not built with Effect.fn')],
+    },
+    {
+      name: 'Should_Report_NonFnExport_When_Chained_Member_Callee_Is_EffectFn',
+      code: `export const findOrder = Effect.sync.fn(function* (id: OrderId) { return id })\n`,
+      filename: 'order.store.ts',
+      errors: [nonFnError('findOrder', 'an exported Effect value not built with Effect.fn')],
+    },
   ],
 })

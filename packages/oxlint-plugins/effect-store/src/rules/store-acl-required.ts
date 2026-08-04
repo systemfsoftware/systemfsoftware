@@ -22,7 +22,6 @@ export const storeAclRequired = defineRule({
 
     return {
       ImportDeclaration(node: ESTree.ImportDeclaration) {
-        if (importsAcl) return
         if (cellOf(node.source.value) !== 'acl') return
         if (!isValueImport(node)) return
         importsAcl = true

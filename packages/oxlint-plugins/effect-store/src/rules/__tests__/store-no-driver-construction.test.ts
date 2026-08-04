@@ -110,6 +110,26 @@ import { orders } from './order.shape.js'\n`,
       code: `const pool = new Pool()\n`,
       filename: 'confirm-order.executor.ts',
     },
+    {
+      name: 'Should_Pass_When_Env_Object_Is_A_Computed_Identifier',
+      code: `const url = process[env].DATABASE_URL\n`,
+      filename: 'order.store.ts',
+    },
+    {
+      name: 'Should_Pass_When_Env_Object_Is_A_Config_Namespace',
+      code: `const url = config.env.DATABASE_URL\n`,
+      filename: 'order.store.ts',
+    },
+    {
+      name: 'Should_Pass_When_Env_Property_Is_A_Non_Env_Name',
+      code: `const url = process.config.DATABASE_URL\n`,
+      filename: 'order.store.ts',
+    },
+    {
+      name: 'Should_Pass_When_Dynamic_Import_Is_Not_A_Driver',
+      code: `const m = yield* Effect.promise(() => import('./order.shape.js'))\n`,
+      filename: 'order.store.ts',
+    },
   ],
   invalid: [
     {
