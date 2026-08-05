@@ -64,4 +64,15 @@ export type HookRuntimeContext = Layer.Layer.Success<typeof appLayer>
 
 const runtime = ManagedRuntime.make(appLayer)
 
+/**
+ * Disposal is terminal and this chunk is cached once per process while the
+ * host re-imports the extension entry per session, so the handlers belong
+ * here: registering them per session load would leak a listener per subagent.
+ */
+const disposeOnSignal = () => {
+  void runtime.dispose()
+}
+process.once('SIGINT', disposeOnSignal)
+process.once('SIGTERM', disposeOnSignal)
+
 export default runtime

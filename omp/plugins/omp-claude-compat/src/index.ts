@@ -1,5 +1,5 @@
 import type { ExtensionAPI } from '@oh-my-pi/pi-coding-agent'
-import { installRuntimeLifecycle } from '@systemfsoftware/omp-utils/runtime-lifecycle'
+import { warmRuntimeAfterStart } from '@systemfsoftware/omp-utils/runtime-lifecycle'
 
 import type { HookRunner } from './hook-runner.kernel.js'
 import type { HookRuntimeContext } from './hook-runtime.state.js'
@@ -20,10 +20,6 @@ const runner: HookRunner<HookRuntimeContext> = {
     if (Exit.isFailure(exit)) throw Cause.squash(exit.cause)
     return exit.value
   },
-  dispose: async () => {
-    const runtime = await loadRuntime()
-    await runtime.dispose()
-  },
 }
 
 export default async function claudeCompatExtension(pi: ExtensionAPI): Promise<void> {
@@ -33,8 +29,5 @@ export default async function claudeCompatExtension(pi: ExtensionAPI): Promise<v
   ])
   HookDispatcherTask(pi, runner)
   InjectInstructionsTask(pi, runner)
-  installRuntimeLifecycle(
-    (warm) => pi.on('session_start', (_event, ctx) => warm(ctx)),
-    () => import('./hook-runtime.state.js'),
-  )
+  warmRuntimeAfterStart((warm) => pi.on('session_start', (_event, ctx) => warm(ctx)), loadRuntime)
 }

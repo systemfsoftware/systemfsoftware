@@ -1,5 +1,5 @@
 import type { ExtensionAPI } from '@oh-my-pi/pi-coding-agent'
-import { installRuntimeLifecycle } from '@systemfsoftware/omp-utils/runtime-lifecycle'
+import { warmRuntimeAfterStart } from '@systemfsoftware/omp-utils/runtime-lifecycle'
 import { runSafe } from './run-safe.policy.js'
 
 export default async function agentDisciplineHandler(pi: ExtensionAPI): Promise<void> {
@@ -17,7 +17,7 @@ export default async function agentDisciplineHandler(pi: ExtensionAPI): Promise<
   NoSkillDelegationExtension(pi, runSafe)
   const { XdRetryGuardExtension } = await import('./xd-retry-guard.middleware.js')
   XdRetryGuardExtension(pi)
-  installRuntimeLifecycle(
+  warmRuntimeAfterStart(
     (warm) => pi.on('session_start', (_event, ctx) => warm(ctx)),
     () => import('./runtime.kernel.js'),
   )

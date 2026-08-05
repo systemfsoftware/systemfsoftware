@@ -44,12 +44,6 @@ export const HookDispatcherTask = (pi: ExtensionAPI, runner: HookRunner<HookDisp
   pi.on('session_compact', (_event, ctx) => dispatch({ _tag: 'SessionCompact', ctx }))
   pi.on('session_before_compact', (_event, ctx) => dispatch({ _tag: 'PreCompact', ctx }))
   pi.on('session_switch', (event, ctx) => dispatch({ _tag: 'SessionSwitch', reason: event.reason, ctx }))
-  pi.on('session_shutdown', async (_event, ctx) => {
-    try {
-      return await dispatch({ _tag: 'SessionShutdown', ctx })
-    } finally {
-      await runner.dispose()
-    }
-  })
+  pi.on('session_shutdown', (_event, ctx) => dispatch({ _tag: 'SessionShutdown', ctx }))
   pi.on('session_stop', (_event, ctx) => dispatch({ _tag: 'SessionStop', ctx }))
 }
