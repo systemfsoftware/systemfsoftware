@@ -25,8 +25,10 @@
  * only under `pnpm test`.
  */
 
+import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import { createRequire } from 'node:module'
+import os from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
@@ -296,16 +298,29 @@ const selftest = () => {
   const cases = []
   const scenario = (name, fn) => {
     const report = makeReport()
-    fn(report)
+    // A scenario that throws is a failing scenario, not a crashed selftest --
+    // deleting a guard under test often turns a clean failure into an exception.
+    try {
+      fn(report)
+    } catch (err) {
+      report.error(`threw: ${err?.message ?? err}`)
+    }
     cases.push({ name, errors: report.errors })
   }
 
-  // -- check 1: fail closed on zero
-  scenario('zero configs fails, and says so', (r) => {
-    if (discoverConfigs(root).length === 0) r.error('unreachable')
-    const empty = makeReport()
-    empty.error('discovered 0 stryker.config.json files — refusing to pass vacuously on an empty set')
-    if (!/vacuous/.test(empty.errors[0])) r.error('empty-set message does not say the gate refused to pass vacuously')
+  // -- check 1: fail closed on zero, exercised end to end against a real empty tree
+  scenario('zero configs fails, and says the gate refused to pass vacuously', (r) => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'stryker-config-gate-'))
+    try {
+      execFileSync('git', ['init', '-q'], { cwd: tmp })
+      const { report, count } = checkAll(tmp)
+      if (count !== 0) r.error(`fixture tree was meant to hold zero configs, found ${count}`)
+      if (report.errors.length === 0) {
+        r.error('gate PASSED on an empty config set — this is the vacuous-pass hole R8 exists to close')
+      } else if (!/vacuous/.test(report.errors[0])) r.error(`message does not name the refusal: ${report.errors[0]}`)
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true })
+    }
   })
 
   // -- check 3: plugin subpaths
