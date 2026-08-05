@@ -1,26 +1,15 @@
 {
+  "extends": "@systemfsoftware/stryker-js-core/config/base",
+  "mutate": [
+    "src/reporters/test-contribution.ts"
+  ],
   "$schema": "./schema/stryker-schema.json",
-  "packageManager": "pnpm",
-  "testRunner": "vitest",
   "plugins": [
     "@stryker-mutator/vitest-runner"
   ],
   "reporters": [
     "progress",
     "json"
-  ],
-  "jsonReporter": {
-    "fileName": "reports/mutation-report.json"
-  },
-  "vitest": {
-    "configFile": "vitest.config.ts",
-    "dir": ".",
-    "related": true
-  },
-  "coverageAnalysis": "perTest",
-  "incremental": false,
-  "mutate": [
-    "src/reporters/test-contribution.ts"
   ],
   "ignorePatterns": [
     "reports",
@@ -31,5 +20,10 @@
     "high": 100,
     "low": 100,
     "break": 100
-  }
+  },
+  "checkers": null,
+  "htmlReporter": null,
+  "typescriptChecker": null,
+  "incrementalFile": null,
+  "ignorers": null
 }

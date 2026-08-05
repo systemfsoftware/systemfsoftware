@@ -17,6 +17,7 @@
       "./checker-worker": "./dist/checker-worker.mjs",
       "./child-process-proxy-worker": "./dist/child-process-proxy-worker.mjs",
       "./child-process-test-runner-worker": "./dist/child-process-test-runner-worker.mjs",
+      "./config/base": "./dist/config/base.mjs",
       "./package.json": "./package.json"
     }
   },
@@ -36,6 +37,10 @@
     "./child-process-test-runner-worker": {
       "@systemfsoftware/source": "./src/test-runner/child-process-test-runner-worker.ts",
       "default": "./dist/child-process-test-runner-worker.mjs"
+    },
+    "./config/base": {
+      "@systemfsoftware/source": "./src/config/base-preset.ts",
+      "default": "./dist/config/base.mjs"
     },
     "./package.json": "./package.json"
   },
