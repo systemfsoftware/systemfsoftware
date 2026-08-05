@@ -51,7 +51,7 @@
     "api:update": "api-extractor run --local"
   },
   "dependencies": {
-    "@oxc-project/types": "^0.140.0",
+    "@oxc-project/types": "^0.142.0",
     "@oxlint/plugins": "catalog:oxlint"
   },
   "devDependencies": {
