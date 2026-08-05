@@ -140,7 +140,11 @@ export const overrides = {
         '@systemfsoftware/stryker-plugins',
       ],
       incremental: true,
-      mutate: ['src/**/*.schema.ts'],
+      // REPO-S5 names `*.workflow.ts` the primary sanctioned mutation surface, and
+      // `restart-decision.workflow.ts` is this package's one pure decision cell. Excluding it
+      // left `restart-decision.workflow.property.test.ts` with nothing it could kill, which the
+      // contribution gate correctly reported as a file that kills nothing at all.
+      mutate: ['src/**/*.workflow.ts', 'src/**/*.schema.ts'],
       mutator: { excludedMutations: ['StringLiteral', 'Regex', 'ObjectLiteral', 'UpdateOperator'] },
       ignorePatterns: ABSENT,
       ignorers: ['effect-schema-declarations'],

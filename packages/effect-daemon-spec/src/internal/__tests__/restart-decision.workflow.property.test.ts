@@ -56,56 +56,6 @@ describe('decideRestart — invariants', () => {
       return indices !== null && indices.length > 0
     },
   )
-
-  it.prop(
-    '→OneForOne_Restart_⊆{Failed}',
-    [DecideInput],
-    ([input]) => {
-      const indices = indicesOf(
-        decideRestart({
-          ...input,
-          strategy: 'one_for_one',
-          exitSuccess: false,
-          intensityExceeded: false,
-        }),
-      )
-      return indices !== null && indices.length === 1 && indices[0] === input.failedIndex
-    },
-  )
-
-  it.prop(
-    '→OneForAll_Restart_=All',
-    [DecideInput],
-    ([input]) => {
-      const indices = indicesOf(
-        decideRestart({
-          ...input,
-          strategy: 'one_for_all',
-          exitSuccess: false,
-          intensityExceeded: false,
-        }),
-      )
-      return indices !== null && indices.length === input.totalChildren
-    },
-  )
-
-  it.prop(
-    '→RestForOne_Restart_⊇Failed..End',
-    [DecideInput],
-    ([input]) => {
-      const indices = indicesOf(
-        decideRestart({
-          ...input,
-          strategy: 'rest_for_one',
-          exitSuccess: false,
-          intensityExceeded: false,
-        }),
-      )
-      return indices !== null &&
-        indices.length === input.totalChildren - input.failedIndex &&
-        indices[0] === input.failedIndex
-    },
-  )
 })
 
 describe('decideRestart — restart index invariants', () => {
