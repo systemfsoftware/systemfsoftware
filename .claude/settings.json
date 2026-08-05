@@ -12,6 +12,17 @@
         ]
       }
     ],
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|Update|MultiEdit|morph_mcp_edit-file|morph_edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if command -v deno >/dev/null 2>&1; then deno run --allow-read --allow-run --allow-env --no-lock \"$CLAUDE_PROJECT_DIR/claude-plugins/oxlint-guard/hooks/scripts/oxlint-config-off-guard.ts\"; else echo 'oxlint-config-off-guard: deno not found on PATH; install Deno (https://deno.land) so the guard can run.' >&2; exit 1; fi"
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "Write|Edit|Update|MultiEdit|morph_mcp_edit-file|morph_edit",
@@ -19,6 +30,10 @@
           {
             "type": "command",
             "command": "comment-checker"
+          },
+          {
+            "type": "command",
+            "command": "if command -v deno >/dev/null 2>&1; then deno run --allow-read --allow-run --allow-env --no-lock \"$CLAUDE_PROJECT_DIR/claude-plugins/oxlint-guard/hooks/scripts/oxlint-guard.ts\"; else echo 'oxlint-guard: deno not found on PATH; install Deno (https://deno.land) so the guard can run.' >&2; exit 1; fi"
           }
         ]
       }
