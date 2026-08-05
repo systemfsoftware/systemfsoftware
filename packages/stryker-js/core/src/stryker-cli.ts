@@ -2,6 +2,8 @@ import semver from 'semver'
 
 guardMinimalNodeVersion()
 
+import { writeSync } from 'node:fs'
+
 import * as Args from '@effect/cli/Args'
 import * as CliConfig from '@effect/cli/CliConfig'
 import * as Command from '@effect/cli/Command'
@@ -21,9 +23,11 @@ import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 
 import { defaultOptions } from './config/index.js'
+import { ConfigError } from './errors.js'
+import { humanConsoleLayer, machineConsoleLayer, readCapturedConsole, resolveMode } from './output-mode.js'
 import { strykerEngines, strykerVersion } from './stryker-package.js'
 import { Stryker } from './stryker.js'
-import { getPendingExitClasses, resolveExitCode } from './utils/object-utils.js'
+import { ExitClass, getPendingExitClasses, resolveExitCode } from './utils/object-utils.js'
 
 /**
  * The mutation-testing entry the CLI calls once options are parsed. Injectable
@@ -512,6 +516,142 @@ const SIGNAL_NUMBERS: Readonly<Partial<Record<NodeJS.Signals, number>>> = Object
   SIGTERM: 15,
 })
 
+// =============================================================================
+// U6 — the error envelope on stderr (R7)
+//
+// A machine-mode failure must be exactly one parseable JSON object on stderr,
+// never the framework's ANSI-rendered help/error document. The framework
+// writes that document through the `Console` service (KTD3), so machine mode
+// swaps in the capturing layer from output-mode.ts: nothing reaches the real
+// stderr during the run, and the teardown below emits the captured content as
+// the envelope. The envelope's `code` is the same code the process exits
+// with; the remediation is picked from the cause's shape.
+// =============================================================================
+
+export interface ErrorEnvelope {
+  readonly schemaVersion: '1.0'
+  readonly code: number
+  readonly error: string
+  readonly remediation: string
+}
+
+/**
+ * The structured document a successful machine-mode `--help`/`--version` run
+ * emits on stdout instead of the framework's ANSI rendering.
+ */
+export interface HelpEnvelope {
+  readonly schemaVersion: '1.0'
+  readonly code: 0
+  readonly help: string
+}
+
+const ISSUE_TRACKER_URL = 'https://github.com/systemfsoftware/systemfsoftware/issues'
+
+/**
+ * The contextual remediation for a failure, picked from the cause's shape:
+ * usage/parse errors point at `--help`, config errors name the offending file
+ * (ConfigError messages carry it), runtime errors point at the report file
+ * and the verdict envelope, and internal defects ask for a bug report.
+ * Signal terminations (POSIX `128 + n`) are called out as interruptions.
+ */
+export function remediationFor(exit: Exit.Exit<unknown, unknown>, code: number): string {
+  if (code > 128) {
+    return 'the run was interrupted by a signal; re-run it to continue'
+  }
+  const value = failureValue(exit)
+  if (value !== undefined) {
+    if (ValidationError.isValidationError(value)) {
+      return 're-run with --help to see the full usage'
+    }
+    if (value instanceof ConfigError) {
+      return `check the config file: ${value.message}`
+    }
+  }
+  switch (code) {
+    case ExitClass.InternalError:
+      return `this is a bug; please file it at ${ISSUE_TRACKER_URL}`
+    default:
+      return 'see --reportFile or the verdict envelope on stdout'
+  }
+}
+
+/**
+ * The failure's own text, used when the capture buffer is empty — a failure
+ * stryker reported through its own logger rather than the framework's
+ * `Console`. Falls back to a rendered cause.
+ */
+export function describeFailure(exit: Exit.Exit<unknown, unknown>): string {
+  if (Exit.isFailure(exit)) {
+    const value = failureValue(exit)
+    if (value !== undefined) {
+      if (value instanceof Error) {
+        return value.message
+      }
+      return String(value)
+    }
+    return Cause.pretty(exit.cause)
+  }
+  return ''
+}
+
+/**
+ * The first typed error in the exit's cause. The framework fails with
+ * `Cause.fail` (usage errors); the run handler is `Effect.promise`, whose
+ * rejected promises surface as *defects* (`Cause.die`) rather than failures —
+ * so stryker's own ConfigError/StrykerError values arrive there and must be
+ * read from `Cause.defects`.
+ */
+function failureValue(exit: Exit.Exit<unknown, unknown>): unknown | undefined {
+  if (!Exit.isFailure(exit)) {
+    return undefined
+  }
+  const failure = Cause.failureOption(exit.cause)
+  if (Option.isSome(failure)) {
+    return failure.value
+  }
+  return Array.from(Cause.defects(exit.cause))[0]
+}
+
+export function buildErrorEnvelope(
+  exit: Exit.Exit<unknown, unknown>,
+  code: number,
+  captured: string,
+): ErrorEnvelope {
+  return {
+    schemaVersion: '1.0',
+    code,
+    error: captured.length > 0 ? captured : describeFailure(exit),
+    remediation: remediationFor(exit, code),
+  }
+}
+
+function writeLine(fd: number, line: string): void {
+  // Synchronous write: the envelope is emitted immediately before
+  // `process.exit`, and an async `process.stderr.write` can be dropped by the
+  // exit before the pipe flushes.
+  writeSync(fd, line)
+}
+
+/**
+ * Emits the machine-mode output at teardown: the error envelope on stderr for
+ * a failed run, or — for a successful run whose only console output was the
+ * framework's help/version rendering — the captured document as one
+ * structured JSON line on stdout, so `--help` in machine mode never leaks an
+ * ANSI document. A successful run with an empty buffer (the normal verdict
+ * path) emits nothing extra.
+ */
+function emitMachineModeOutput(exit: Exit.Exit<unknown, unknown>, code: number): void {
+  const captured = readCapturedConsole()
+  if (Exit.isFailure(exit)) {
+    writeLine(process.stderr.fd, `${JSON.stringify(buildErrorEnvelope(exit, code, captured))}\n`)
+    return
+  }
+  if (captured.length > 0) {
+    const document: HelpEnvelope = { schemaVersion: '1.0', code: 0, help: captured }
+    writeLine(process.stdout.fd, `${JSON.stringify(document)}\n`)
+  }
+}
+
 /**
  * Runs the CLI through an Effect runtime main — the equivalent of
  * `NodeRuntime.runMain` (same `Runtime.makeRunMain` seam). SIGINT/SIGTERM
@@ -521,11 +661,34 @@ const SIGNAL_NUMBERS: Readonly<Partial<Record<NodeJS.Signals, number>>> = Object
  * usage-vs-other classification, and a successful run lets the pending
  * verdict classes decide. `process.exit` is called at most once, only when a
  * signal was received or the code is non-zero, so a clean run flushes stdout.
+ *
+ * Machine mode (U6) provides the capturing `Console` layer before the run and
+ * emits the captured content as the JSON error envelope on stderr at
+ * teardown (or a structured help document on stdout for `--help`). The
+ * framework's automatic error reporting is disabled in machine mode — it
+ * renders the failure cause through the effect logger *outside* the provided
+ * layer's scope, which would leak prose into a stderr that must carry exactly
+ * one JSON object.
  */
 export function runStrykerCli(
   argv: string[] = process.argv,
   runMutationTest: StrykerRun = defaultRunMutationTest,
 ): void {
+  // One resolved mode decides the Console layer, from the same detection
+  // inputs the reporters use (U3) — never a second probe.
+  const resolvedMode = resolveMode({
+    stdoutIsTTY: process.stdout.isTTY === true,
+    envMode: process.env['STRYKER_MODE'],
+    agent: process.env['AGENT'],
+    toolVars: {
+      CLAUDECODE: process.env['CLAUDECODE'],
+      CODEX_SANDBOX: process.env['CODEX_SANDBOX'],
+    },
+  })
+  const consoleLayer = resolvedMode.mode === 'machine'
+    ? machineConsoleLayer()
+    : humanConsoleLayer()
+  const program = strykerCliEffect(argv, runMutationTest).pipe(Effect.provide(consoleLayer))
   const lastSignal: { current: number | null } = { current: null }
   Runtime.makeRunMain(({ fiber, teardown }) => {
     const keepAlive = setInterval(() => {}, 2 ** 31 - 1)
@@ -544,6 +707,9 @@ export function runStrykerCli(
         process.removeListener('SIGTERM', onSignal)
       }
       teardown(exit, (code) => {
+        if (resolvedMode.mode === 'machine') {
+          emitMachineModeOutput(exit, code)
+        }
         if (lastSignal.current !== null || code !== 0) {
           process.exit(code)
         } else {
@@ -551,7 +717,8 @@ export function runStrykerCli(
         }
       })
     })
-  })(strykerCliEffect(argv, runMutationTest), {
+  })(program, {
+    disableErrorReporting: resolvedMode.mode === 'machine',
     teardown: (exit, onExit) => {
       const signal = lastSignal.current
       if (signal !== null) {
