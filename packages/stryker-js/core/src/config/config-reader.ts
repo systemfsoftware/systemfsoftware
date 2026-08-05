@@ -13,6 +13,7 @@ import { fileUtils } from '../utils/file-utils.js'
 
 import { SUPPORTED_CONFIG_FILE_NAMES } from './config-file-formats.js'
 import { OptionsValidator } from './options-validator.js'
+import { resolveExtendsChain } from './resolve-extends.js'
 
 export const CONFIG_SYNTAX_HELP = `
 Example of how a config file should look:
@@ -70,11 +71,13 @@ export class ConfigReader {
     }
     this.log.debug(`Loading config from ${configFile}`)
 
-    if (path.extname(configFile).toLocaleLowerCase() === '.json') {
-      return this.readJsonConfig(configFile)
-    } else {
-      return this.importJSConfig(configFile)
+    const child = path.extname(configFile).toLocaleLowerCase() === '.json'
+      ? await this.readJsonConfig(configFile)
+      : await this.importJSConfig(configFile)
+    if (!('extends' in (child as Record<string, unknown>))) {
+      return child
     }
+    return resolveExtendsChain(configFile)
   }
 
   private async findConfigFile(
