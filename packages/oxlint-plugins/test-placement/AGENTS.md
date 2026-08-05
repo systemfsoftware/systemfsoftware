@@ -2,7 +2,7 @@
 
 > Delta only. Shared rule-authoring conventions: `packages/oxlint-plugins/AGENTS.md`. Universal rules: root `AGENTS.md`.
 
-This package ships ten rules enforcing where tests may live and which test suffixes are sanctioned. They are turned on by `@systemfsoftware/oxlint-config/strict`; packages that extend only `base` load the plugin but enable none of its rules.
+This package ships eight rules enforcing where tests may live and which test suffixes are sanctioned. All eight reach a package through `@systemfsoftware/oxlint-config/base`, which spreads `@systemfsoftware/oxlint-plugin-effect-dmmf`'s recommended set and re-exports them under the `@systemfsoftware/effect-dmmf/` namespace; `strict` adds nothing from this plugin, and neither preset loads it standalone.
 
 ```yaml
 - id: TP1
@@ -38,5 +38,5 @@ This package ships ten rules enforcing where tests may live and which test suffi
   do: name every behaviour test `*.integration.test.ts` whether or not it doubles at a port; reach for delete before naming it at all when the assertion restates a pure-cell literal
   dont: re-introduce `*.composition.test.ts` or any second behaviour suffix; keep a `*.feature.test.ts` suffix or a rename of it that still names "feature" rather than the layer; treat a suffix choice as a destination rather than a decision the assertion must earn
   harm: the retired `.feature.test.ts` suffix let an AI produce 41 gherkin scenarios asserting pure-function results — a unit test in gherkin costume; the composition/integration split that replaced it asked authors to encode a doubles policy in a filename, which produced the same misfiling one layer up. The remaining rules must keep behaviour tests reaching a real use case AND make deletion reachable from every `Fix:` they emit
-  check: grep finds no `.composition.test.ts` and no `.feature.test.ts` outside test-suffix-outside-src fixtures asserting they are rejected; BEHAVIOUR_SUFFIXES has exactly one member; the four behaviour rules' `Fix:` strings make "delete it" a first-class outcome
+  check: grep finds no `.composition.test.ts` and no `.feature.test.ts` outside test-suffix-outside-src fixtures asserting they are rejected; test-suffix-outside-src admits exactly INTEGRATION_SUFFIX; the four behaviour rules' `Fix:` strings make "delete it" a first-class outcome
 ```

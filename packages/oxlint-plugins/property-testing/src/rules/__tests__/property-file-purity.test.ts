@@ -97,18 +97,6 @@ ruleTester.run('property-file-purity', propertyFilePurity, {
       code: `import Schema from 'effect'\nit('t', () => { expect(1).toBe(1) })`,
       filename: SCENARIO_FILE,
     },
-    {
-      name: 'Should_Pass_When_FastCheckImport_InSnapshotFile',
-      code:
-        `import { FastCheck as fc } from 'effect'\nit('snapshot', () => { fc.sample(arb, { seed: 1, numRuns: 10 }) })`,
-      filename: SNAPSHOT_FILE,
-    },
-    {
-      name: 'Should_Pass_When_FcSampleCall_WithDifferentSeed_InSnapshotFile',
-      code:
-        `import { FastCheck as fc } from 'effect'\nit('snapshot', () => { fc.sample(arb, { seed: 2, numRuns: 5 }) })`,
-      filename: SNAPSHOT_FILE,
-    },
   ],
   invalid: [
     {
@@ -265,10 +253,37 @@ ruleTester.run('property-file-purity', propertyFilePurity, {
       errors: [{ messageId: 'propCall' }],
     },
     {
+      name: 'Should_Report_When_FastCheckImport_InSnapshotFile',
+      code:
+        `import { FastCheck as fc } from 'effect'\nit('snapshot', () => { fc.sample(arb, { seed: 1, numRuns: 10 }) })`,
+      filename: SNAPSHOT_FILE,
+      errors: [
+        {
+          messageId: 'fastCheckImport',
+          data: {
+            name: 'FastCheck import in a scenario test file',
+            expected: 'property tests (and every FastCheck usage) live in .property.test.ts files',
+            actual: 'FastCheck imported by a file that is not .property.test.ts',
+            fix: 'move the property test to a *.property.test.ts file; this file keeps plain it() scenario tests only',
+          },
+        },
+      ],
+    },
+    {
       name: 'Should_Report_When_ItProp_InSnapshotFile',
       code: `it.prop('∀n_X_=x', [fc.integer()], ([n]) => n === n)`,
       filename: SNAPSHOT_FILE,
-      errors: [{ messageId: 'propCall' }],
+      errors: [
+        {
+          messageId: 'propCall',
+          data: {
+            name: 'property test in a non-property test file',
+            expected: 'it.prop / it.effect.prop calls live in .property.test.ts files',
+            actual: 'a property test mixed into a test file that is not a property file',
+            fix: 'move this test to a *.property.test.ts file — property and non-property tests never mix',
+          },
+        },
+      ],
     },
     {
       name: 'Should_Report_When_ItEffectProp_InSnapshotFile',

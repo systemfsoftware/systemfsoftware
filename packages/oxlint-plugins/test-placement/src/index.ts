@@ -3,7 +3,6 @@ import { behaviourOneFeaturePerFile } from './rules/behaviour-one-feature-per-fi
 import { behaviourTestRequiresGherkin } from './rules/behaviour-test-requires-gherkin.js'
 import { inSourceTestTargetsPrivate } from './rules/in-source-test-targets-private.js'
 import { noTestFileInSrc } from './rules/no-test-file-in-src.js'
-import { snapshotTestRequiresSnapshot } from './rules/snapshot-test-requires-snapshot.js'
 import { srcPropertyTestCell } from './rules/src-property-test-cell.js'
 import { testFileOutsideTestsDir } from './rules/test-file-outside-tests-dir.js'
 import { testSuffixOutsideSrc } from './rules/test-suffix-outside-src.js'
@@ -18,7 +17,6 @@ const recommendedRules = {
   [rule('in-source-test-targets-private')]: 'error',
   [rule('test-file-outside-tests-dir')]: 'error',
   [rule('test-suffix-outside-src')]: 'error',
-  [rule('snapshot-test-requires-snapshot')]: 'error',
   [rule('behaviour-test-requires-gherkin')]: 'error',
   [rule('behaviour-exercises-use-case')]: 'error',
   [rule('behaviour-one-feature-per-file')]: 'error',
@@ -34,7 +32,6 @@ export default {
     'in-source-test-targets-private': inSourceTestTargetsPrivate,
     'test-file-outside-tests-dir': testFileOutsideTestsDir,
     'test-suffix-outside-src': testSuffixOutsideSrc,
-    'snapshot-test-requires-snapshot': snapshotTestRequiresSnapshot,
     'behaviour-test-requires-gherkin': behaviourTestRequiresGherkin,
     'behaviour-exercises-use-case': behaviourExercisesUseCase,
     'behaviour-one-feature-per-file': behaviourOneFeaturePerFile,
