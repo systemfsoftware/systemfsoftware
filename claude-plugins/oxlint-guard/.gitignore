@@ -1,0 +1,7 @@
+# Deno build/test artifacts
+.deno/
+deno.lock
+
+# Editor
+.vscode/
+.idea/
