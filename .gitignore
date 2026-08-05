@@ -3,6 +3,8 @@ dist/
 .turbo/
 coverage/
 reports/
+# Test fixtures ship a prior mutation report as tracked input data
+!**/test/**/fixtures/**/reports/
 .stryker-tmp/
 temp/
 *.tsbuildinfo

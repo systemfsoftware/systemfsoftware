@@ -12,7 +12,7 @@ import { coreTokens, PluginCreator } from '../di/index.js'
 import { FileSystem, Project } from '../fs/index.js'
 import { createPreprocessor } from '../sandbox/index.js'
 import { Sandbox } from '../sandbox/sandbox.js'
-import { UnexpectedExitHandler } from '../unexpected-exit-handler.js'
+import { UnexpectedExitHandler } from '../utils/exit-handler.js'
 import { TemporaryDirectory } from '../utils/temporary-directory.js'
 import { Timer } from '../utils/timer.js'
 

@@ -9,7 +9,6 @@
     "@systemfsoftware/stryker-js-typescript-checker",
     "@systemfsoftware/stryker-plugins"
   ],
-  "incremental": true,
   "ignorers": [
     "effect-schema-declarations",
     "in-source-vitest-block"

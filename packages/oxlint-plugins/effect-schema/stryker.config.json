@@ -9,7 +9,6 @@
     "@stryker-mutator/vitest-runner",
     "@systemfsoftware/stryker-js-typescript-checker"
   ],
-  "incremental": true,
   "thresholds": {
     "high": 100,
     "low": 100,

@@ -1,0 +1,350 @@
+import { MutantResult, schema } from '@stryker-mutator/api/core'
+import { Reporter } from '@stryker-mutator/api/report'
+import { noopLogger } from '@stryker-mutator/util'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+
+import { createDefaultOptions } from '../../src/config/index.js'
+import { FileSystem, Project } from '../../src/fs/index.js'
+import { TestCoverage } from '../../src/mutants/index.js'
+import { MutationTestReportHelper } from '../../src/reporters/mutation-test-report-helper.js'
+import {
+  buildVerdictEnvelope,
+  emitVerdictEnvelope,
+  generateRunId,
+  VERDICT_ENVELOPE_SCHEMA_VERSION,
+} from '../../src/reporters/verdict-envelope.js'
+import type { VerdictEnvelope } from '../../src/reporters/verdict-envelope.js'
+
+const RUN_ID = '01HZJ4QW2TB6N7P8K9M3X5Y7ZA'
+
+const mutantOf = (
+  id: string,
+  status: schema.MutantStatus,
+  location: schema.Location,
+  overrides: Partial<Pick<schema.MutantResult, 'replacement' | 'killedBy'>> = {},
+): schema.MutantResult => ({
+  id,
+  status,
+  mutatorName: 'BinaryOperator',
+  location,
+  ...overrides,
+})
+
+const reportOf = (
+  mutants: schema.MutantResult[],
+  config: Record<string, unknown> | undefined = {
+    jsonReporter: { fileName: 'reports/mutation/mutation.json' },
+    requireTestContribution: null,
+    disableBail: false,
+  },
+) => ({
+  schemaVersion: '1.0',
+  files: {
+    'src/subject.ts': {
+      language: 'typescript',
+      source: 'export const a = 1\n',
+      mutants,
+    },
+  },
+  testFiles: {},
+  thresholds: { high: 80, low: 60, break: 80 },
+  config,
+})
+
+const LOCATION_A = { start: { line: 1, column: 0 }, end: { line: 1, column: 4 } }
+const LOCATION_B = { start: { line: 2, column: 0 }, end: { line: 2, column: 5 } }
+const LOCATION_C = { start: { line: 3, column: 0 }, end: { line: 3, column: 6 } }
+
+describe('generateRunId', () => {
+  it('is exactly 26 Crockford base32 characters', () => {
+    expect(generateRunId()).toMatch(
+      /^[0123456789ABCDEFGHJKMNPQRSTVWXYZ]{26}$/,
+    )
+  })
+
+  it('differs between calls', () => {
+    expect(generateRunId()).not.toBe(generateRunId())
+  })
+})
+
+describe('buildVerdictEnvelope', () => {
+  it('carries every named field', () => {
+    const envelope = buildVerdictEnvelope(
+      reportOf([
+        mutantOf('1', 'Survived', LOCATION_A, { replacement: '-' }),
+        mutantOf('2', 'Killed', LOCATION_B, { replacement: '+' }),
+        mutantOf('3', 'NoCoverage', LOCATION_C, { replacement: '*' }),
+        mutantOf('4', 'Killed', LOCATION_A, { replacement: '-' }),
+      ]),
+      'machine',
+      'tty',
+      RUN_ID,
+    )
+
+    expect(envelope.schemaVersion).toBe(VERDICT_ENVELOPE_SCHEMA_VERSION)
+    expect(envelope.runId).toBe(RUN_ID)
+    expect(envelope.mode).toBe('machine')
+    expect(envelope.signal).toBe('tty')
+    expect(envelope.score).toBe(50)
+    expect(envelope.thresholds).toEqual({ high: 80, low: 60, break: 80 })
+    expect(envelope.counts).toEqual({
+      killed: 2,
+      timeout: 0,
+      survived: 1,
+      noCoverage: 1,
+      runtimeErrors: 0,
+      compileErrors: 0,
+      ignored: 0,
+      pending: 0,
+    })
+    expect(envelope.testContribution).toBeNull()
+    expect(envelope.reportFile).toBe('reports/mutation/mutation.json')
+    expect(envelope.mutants).toHaveLength(4)
+  })
+
+  it('carries the full survivor re-run key for survivor, killed and no-coverage mutants', () => {
+    const envelope = buildVerdictEnvelope(
+      reportOf([
+        mutantOf('1', 'Survived', LOCATION_A, { replacement: '-' }),
+        mutantOf('2', 'Killed', LOCATION_B, { replacement: '+' }),
+        mutantOf('3', 'NoCoverage', LOCATION_C, { replacement: '*' }),
+      ]),
+      'machine',
+      'agent',
+      RUN_ID,
+    )
+
+    expect(envelope.mutants).toEqual([
+      {
+        id: '1',
+        file: 'src/subject.ts',
+        location: LOCATION_A,
+        mutator: 'BinaryOperator',
+        replacement: '-',
+        status: 'Survived',
+      },
+      {
+        id: '2',
+        file: 'src/subject.ts',
+        location: LOCATION_B,
+        mutator: 'BinaryOperator',
+        replacement: '+',
+        status: 'Killed',
+      },
+      {
+        id: '3',
+        file: 'src/subject.ts',
+        location: LOCATION_C,
+        mutator: 'BinaryOperator',
+        replacement: '*',
+        status: 'NoCoverage',
+      },
+    ])
+  })
+
+  it('uses the report file name from the embedded config', () => {
+    const envelope = buildVerdictEnvelope(
+      reportOf([mutantOf('1', 'Killed', LOCATION_A)], {
+        jsonReporter: { fileName: 'custom/report.json' },
+      }),
+      'machine',
+      'flag',
+      RUN_ID,
+    )
+    expect(envelope.reportFile).toBe('custom/report.json')
+  })
+
+  it('reports a null score and null report file for a run with zero mutants', () => {
+    const envelope = buildVerdictEnvelope(
+      reportOf([]),
+      'machine',
+      'tty',
+      RUN_ID,
+    )
+    expect(envelope.score).toBeNull()
+    expect(envelope.reportFile).toBeNull()
+    expect(envelope.mutants).toEqual([])
+    expect(envelope.counts.killed).toBe(0)
+    expect(envelope.counts.survived).toBe(0)
+  })
+
+  it('reports a null score when no valid mutant exists to score', () => {
+    const envelope = buildVerdictEnvelope(
+      reportOf([mutantOf('1', 'CompileError', LOCATION_A)]),
+      'machine',
+      'tty',
+      RUN_ID,
+    )
+    expect(envelope.score).toBeNull()
+    expect(envelope.counts.compileErrors).toBe(1)
+  })
+
+  it('carries the test-contribution verdict when the check is configured', () => {
+    const report = {
+      ...reportOf([mutantOf('1', 'Killed', LOCATION_A, { killedBy: ['t1'] })]),
+      testFiles: {
+        'src/subject.spec.ts': {
+          tests: [{ id: 't1', name: 'kills the mutant' }],
+        },
+      },
+      config: {
+        jsonReporter: { fileName: 'reports/mutation/mutation.json' },
+        requireTestContribution: ['.spec.ts'],
+        disableBail: true,
+      },
+    }
+    const envelope = buildVerdictEnvelope(report, 'machine', 'env', RUN_ID)
+    expect(envelope.testContribution).toEqual({
+      failed: false,
+      message: 'Every test file matching .spec.ts kills a mutant nothing else kills (every killing test was recorded).',
+    })
+  })
+
+  it('carries a null test-contribution verdict when the check is off', () => {
+    const envelope = buildVerdictEnvelope(
+      reportOf([mutantOf('1', 'Survived', LOCATION_A)], {
+        jsonReporter: { fileName: 'reports/mutation/mutation.json' },
+        requireTestContribution: null,
+        disableBail: false,
+      }),
+      'machine',
+      'tty',
+      RUN_ID,
+    )
+    expect(envelope.testContribution).toBeNull()
+  })
+})
+
+describe('emitVerdictEnvelope', () => {
+  it('returns exactly one JSON document that parses back to the envelope', () => {
+    const report = reportOf([mutantOf('1', 'Survived', LOCATION_A)])
+    const json = emitVerdictEnvelope(report, 'machine', 'tty', RUN_ID)
+    expect(JSON.parse(json)).toEqual(
+      buildVerdictEnvelope(report, 'machine', 'tty', RUN_ID),
+    )
+  })
+})
+
+describe('MutationTestReportHelper', () => {
+  let originalMode: string | undefined
+
+  afterEach(() => {
+    if (originalMode === undefined) {
+      delete process.env.STRYKER_MODE
+    } else {
+      process.env.STRYKER_MODE = originalMode
+    }
+  })
+
+  const createHelper = (emitEnvelope: (envelope: VerdictEnvelope) => void) => {
+    const options = createDefaultOptions()
+    options.incremental = false
+    options.thresholds = { high: 80, low: 60, break: null }
+    options.jsonReporter = { fileName: 'reports/mutation/mutation.json' }
+    options.requireTestContribution = null
+    options.reporters = []
+    const reporter: Required<Reporter> = {
+      onDryRunCompleted: vi.fn(),
+      onMutationTestingPlanReady: vi.fn(),
+      onMutantTested: vi.fn(),
+      onMutationTestReportReady: vi.fn(),
+      wrapUp: vi.fn(),
+    }
+    const fs = new FileSystem()
+    const project = new Project(fs, {})
+    const testCoverage = new TestCoverage(new Map(), new Map(), undefined, new Map())
+    const requireFromCwd = () => {
+      throw new Error('package not installed')
+    }
+    return {
+      helper: new MutationTestReportHelper(
+        reporter,
+        options,
+        project,
+        noopLogger,
+        testCoverage,
+        fs,
+        requireFromCwd,
+        emitEnvelope,
+      ),
+      reporter,
+    }
+  }
+
+  const runResult = (
+    id: string,
+    status: schema.MutantStatus,
+  ): MutantResult => ({
+    id,
+    fileName: 'src/subject.ts',
+    location: LOCATION_A,
+    mutatorName: 'BinaryOperator',
+    replacement: '-',
+    status,
+    coveredBy: [],
+    killedBy: [],
+    static: false,
+    statusReason: undefined,
+    testsCompleted: undefined,
+  })
+
+  it('emits one envelope in machine mode carrying the survivor key', async () => {
+    originalMode = process.env.STRYKER_MODE
+    process.env.STRYKER_MODE = 'machine'
+    const emitEnvelope = vi.fn()
+    const { helper } = createHelper(emitEnvelope)
+
+    await helper.reportAll([
+      runResult('1', 'Survived'),
+      runResult('2', 'Killed'),
+      runResult('3', 'NoCoverage'),
+    ])
+
+    expect(emitEnvelope).toHaveBeenCalledTimes(1)
+    const envelope = emitEnvelope.mock.calls[0][0]
+    expect(envelope.mode).toBe('machine')
+    expect(envelope.signal).toBe('env')
+    expect(envelope.runId).toMatch(
+      /^[0123456789ABCDEFGHJKMNPQRSTVWXYZ]{26}$/,
+    )
+    expect(envelope.score).toBeCloseTo(100 / 3, 5)
+    expect(envelope.reportFile).toBe('reports/mutation/mutation.json')
+    expect(envelope.mutants).toEqual([
+      {
+        id: '1',
+        file: 'src/subject.ts',
+        location: LOCATION_A,
+        mutator: 'BinaryOperator',
+        replacement: '-',
+        status: 'Survived',
+      },
+      {
+        id: '2',
+        file: 'src/subject.ts',
+        location: LOCATION_A,
+        mutator: 'BinaryOperator',
+        replacement: '-',
+        status: 'Killed',
+      },
+      {
+        id: '3',
+        file: 'src/subject.ts',
+        location: LOCATION_A,
+        mutator: 'BinaryOperator',
+        replacement: '-',
+        status: 'NoCoverage',
+      },
+    ])
+  })
+
+  it('skips the envelope entirely in human mode', async () => {
+    originalMode = process.env.STRYKER_MODE
+    process.env.STRYKER_MODE = 'human'
+    const emitEnvelope = vi.fn()
+    const { helper } = createHelper(emitEnvelope)
+
+    await helper.reportAll([runResult('1', 'Survived')])
+
+    expect(emitEnvelope).not.toHaveBeenCalled()
+  })
+})

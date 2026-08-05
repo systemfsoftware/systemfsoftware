@@ -16,6 +16,7 @@ import { CommandTestRunner } from '../test-runner/command-test-runner.js'
 import { objectUtils, optionsPath } from '../utils/index.js'
 
 import { forkCoreSchema } from './fork-schema.js'
+import { REMOVED_OPTIONS } from './removed-surface.js'
 import { describeErrors } from './validation-errors.js'
 
 const Ajv = ajvModule.default
@@ -55,11 +56,44 @@ export class OptionsValidator {
     mark = false,
   ): asserts options is StrykerOptions {
     this.removeDeprecatedOptions(options)
+    this.validateRemovedSurface(options)
     this.schemaValidate(options)
     this.customValidation(options)
     if (mark) {
       this.markOptions(options)
     }
+  }
+
+  /**
+   * Hard-fails on config names the rebuild removed (U2-U9): a removed
+   * top-level key (`dashboard`, `eventReporter`) or a removed reporter name
+   * inside `reporters` (`dots`, `event-recorder`, `progress-append-only`,
+   * `dashboard`). Runs ahead of `schemaValidate` because a removed key is
+   * absent from the AJV schema, so schema validation can never see it, and
+   * the warning path (`markExcessOptions`) only fires when `mark` is set and
+   * the `unknownOptions` warning is enabled — a removed key could otherwise
+   * be silently accepted. Only the known-removed names are checked; an
+   * unknown-but-not-removed key keeps its warning-only behaviour.
+   */
+  private validateRemovedSurface(rawOptions: Record<string, unknown>) {
+    const errors: string[] = []
+    for (const key of Object.keys(rawOptions)) {
+      if (Object.hasOwn(REMOVED_OPTIONS, key)) {
+        errors.push(`Config option "${key}" is no longer supported. ${REMOVED_OPTIONS[key]}`)
+      }
+    }
+    const reporters = rawOptions.reporters
+    if (Array.isArray(reporters)) {
+      for (const name of reporters) {
+        if (typeof name === 'string' && Object.hasOwn(REMOVED_OPTIONS, name)) {
+          errors.push(
+            `Config option "reporters" contains removed reporter name "${name}". ${REMOVED_OPTIONS[name]}`,
+          )
+        }
+      }
+    }
+    errors.forEach((error) => this.log.error(error))
+    this.throwErrorIfNeeded(errors)
   }
 
   private removeDeprecatedOptions(rawOptions: Record<string, unknown>) {
@@ -244,11 +278,10 @@ export class OptionsValidator {
 
   private throwErrorIfNeeded(errors: string[]) {
     if (errors.length > 0) {
-      throw new ConfigError(
-        errors.length === 1
-          ? 'Please correct this configuration error and try again.'
-          : 'Please correct these configuration errors and try again.',
-      )
+      const headline = errors.length === 1
+        ? 'Please correct this configuration error and try again.'
+        : 'Please correct these configuration errors and try again.'
+      throw new ConfigError(`${headline} ${errors.join(' ')}`)
     }
   }
 

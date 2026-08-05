@@ -12,10 +12,12 @@ import { calculateMutationTestMetrics, MutationTestMetricsResult } from 'mutatio
 import { coreTokens } from '../di/index.js'
 import { FileSystem, Project } from '../fs/index.js'
 import { TestCoverage } from '../mutants/index.js'
+import { type ResolvedMode, resolveMode } from '../output-mode.js'
 import { strykerVersion } from '../stryker-package.js'
-import { objectUtils } from '../utils/object-utils.js'
+import { ExitClass, objectUtils, setPendingExitClass } from '../utils/object-utils.js'
 
 import { judgeTestContribution } from './test-contribution.js'
+import { buildVerdictEnvelope, generateRunId, type VerdictEnvelope } from './verdict-envelope.js'
 
 const STRYKER_FRAMEWORK: Readonly<
   Pick<schema.FrameworkInformation, 'branding' | 'name' | 'version'>
@@ -43,6 +45,8 @@ export class MutationTestReportHelper {
     coreTokens.requireFromCwd,
   )
 
+  private readonly resolvedMode: ResolvedMode
+
   constructor(
     private readonly reporter: Required<Reporter>,
     private readonly options: StrykerOptions,
@@ -51,7 +55,24 @@ export class MutationTestReportHelper {
     private readonly testCoverage: I<TestCoverage>,
     private readonly fs: I<FileSystem>,
     private readonly requireFromCwd: typeof requireResolve,
-  ) {}
+    /**
+     * The cli layer (U6) supplies the printer that writes the verdict
+     * envelope to stdout in machine mode; until then the default is a no-op.
+     */
+    private readonly emitEnvelope: (envelope: VerdictEnvelope) => void = () => {},
+  ) {
+    // Resolved once here from the same detection inputs the broadcast
+    // reporter uses (U3) — never a second probe at the print site.
+    this.resolvedMode = resolveMode({
+      stdoutIsTTY: process.stdout.isTTY === true,
+      envMode: process.env['STRYKER_MODE'],
+      agent: process.env['AGENT'],
+      toolVars: {
+        CLAUDECODE: process.env['CLAUDECODE'],
+        CODEX_SANDBOX: process.env['CODEX_SANDBOX'],
+      },
+    })
+  }
 
   public reportCheckFailed(
     mutant: MutantTestCoverage,
@@ -149,6 +170,26 @@ export class MutationTestReportHelper {
     }
     this.determineExitCode(metrics)
     this.determineTestContribution(report)
+    this.emitVerdict(report)
+  }
+
+  /**
+   * Emits the verdict envelope at the end of a machine-mode run (U4). Human
+   * mode skips the emit entirely; the cli layer (U6) supplies the
+   * `emitEnvelope` callback that writes the document to stdout.
+   */
+  private emitVerdict(report: schema.MutationTestResult): void {
+    if (this.resolvedMode.mode !== 'machine') {
+      return
+    }
+    this.emitEnvelope(
+      buildVerdictEnvelope(
+        report,
+        this.resolvedMode.mode,
+        this.resolvedMode.signal,
+        generateRunId(),
+      ),
+    )
   }
 
   private determineTestContribution(report: schema.MutationTestResult) {
@@ -171,7 +212,7 @@ export class MutationTestReportHelper {
     this.log.info(
       '(sharpen or delete them, or set `requireTestContribution = null` to prevent this error in the future)',
     )
-    objectUtils.setExitCode(1)
+    setPendingExitClass(ExitClass.VerdictFail)
   }
 
   private determineExitCode(metrics: MutationTestMetricsResult) {
@@ -186,7 +227,7 @@ export class MutationTestReportHelper {
         this.log.info(
           '(improve mutation score or set `thresholds.break = null` to prevent this error in the future)',
         )
-        objectUtils.setExitCode(1)
+        setPendingExitClass(ExitClass.VerdictFail)
       } else {
         this.log.info(
           `Final mutation score of ${formattedScore} is greater than or equal to break threshold ${breaking}`,

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-import { StrykerCli } from '../dist/index.mjs'
+import { runStrykerCli } from '../dist/index.mjs'
 
 process.title = 'stryker'
-// Run the Stryker CLI
-new StrykerCli(process.argv).run()
+// Run the Stryker CLI through the Effect bootstrap (NodeRuntime.runMain equivalent)
+runStrykerCli(process.argv)

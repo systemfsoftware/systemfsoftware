@@ -7,6 +7,11 @@
   "plugins": [
     "@stryker-mutator/vitest-runner"
   ],
+  "vitest": {
+    "configFile": "vitest.stryker.config.ts",
+    "dir": ".",
+    "related": true
+  },
   "reporters": [
     "progress",
     "json"

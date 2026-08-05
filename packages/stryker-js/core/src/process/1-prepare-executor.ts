@@ -12,7 +12,7 @@ import { PluginLoader } from '../di/plugin-loader.js'
 import { ConfigError } from '../errors.js'
 import { BroadcastReporter } from '../reporters/broadcast-reporter.js'
 import { reporterPluginsFileUrl } from '../reporters/index.js'
-import { UnexpectedExitHandler } from '../unexpected-exit-handler.js'
+import { UnexpectedExitHandler } from '../utils/exit-handler.js'
 import { TemporaryDirectory } from '../utils/temporary-directory.js'
 import { Timer } from '../utils/timer.js'
 

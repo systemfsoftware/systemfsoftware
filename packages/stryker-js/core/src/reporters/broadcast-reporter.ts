@@ -6,6 +6,7 @@ import { MutationTestMetricsResult } from 'mutation-testing-metrics'
 import { tokens } from 'typed-inject'
 
 import { coreTokens, PluginCreator } from '../di/index.js'
+import { isProgressEnabled, resolveMode } from '../output-mode.js'
 
 import { StrictReporter } from './strict-reporter.js'
 
@@ -18,12 +19,32 @@ export class BroadcastReporter implements StrictReporter {
   )
 
   public readonly reporters: Record<string, Reporter>
+
+  /**
+   * The progress bar's gate. Human mode on a non-TTY stdout suppresses the
+   * bar so its control sequences never reach a pipe (U3). Resolved once here,
+   * at construction, from the same detection inputs that decide the run's
+   * mode — never a second `process.stdout.isTTY` probe at each print site.
+   */
+  private readonly progressEnabled: boolean
+
   constructor(
     private readonly options: StrykerOptions,
     private readonly pluginCreator: PluginCreator,
     private readonly log: Logger,
     private readonly reporterOverride: Reporter | undefined,
   ) {
+    this.progressEnabled = isProgressEnabled(
+      resolveMode({
+        stdoutIsTTY: process.stdout.isTTY === true,
+        envMode: process.env['STRYKER_MODE'],
+        agent: process.env['AGENT'],
+        toolVars: {
+          CLAUDECODE: process.env['CLAUDECODE'],
+          CODEX_SANDBOX: process.env['CODEX_SANDBOX'],
+        },
+      }),
+    )
     this.reporters = {}
     if (this.reporterOverride) {
       this.reporters['in-memory'] = this.reporterOverride
@@ -34,12 +55,10 @@ export class BroadcastReporter implements StrictReporter {
   }
 
   private createReporter(reporterName: string): void {
-    if (reporterName === 'progress' && !process.stdout.isTTY) {
-      this.log.info(
-        'Detected that current console does not support the "progress" reporter, downgrading to "progress-append-only" reporter',
-      )
-      reporterName = 'progress-append-only'
-    }
+    // The former non-TTY downgrade of 'progress' to 'progress-append-only'
+    // (U3) is gone: the run's resolved mode decides instead, and the
+    // broadcast call site passes `progressEnabled` down to the dispatch, so
+    // the bar is suppressed rather than renamed.
     this.reporters[reporterName] = this.pluginCreator.create(
       PluginKind.Reporter,
       reporterName,
@@ -67,6 +86,9 @@ export class BroadcastReporter implements StrictReporter {
   ): Promise<void[]> {
     return Promise.all(
       Object.entries(this.reporters).map(async ([reporterName, reporter]) => {
+        if (reporterName === 'progress' && !this.progressEnabled) {
+          return
+        }
         if (reporter[methodName]) {
           try {
             await (
