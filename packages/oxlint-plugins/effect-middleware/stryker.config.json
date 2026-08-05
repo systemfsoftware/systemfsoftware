@@ -7,8 +7,7 @@
   ],
   "plugins": [
     "@stryker-mutator/vitest-runner",
-    "@systemfsoftware/stryker-js-typescript-checker",
-    "@systemfsoftware/stryker-plugins/effect-schema-ignorer"
+    "@systemfsoftware/stryker-js-typescript-checker"
   ],
   "reporters": [
     "progress",
@@ -40,9 +39,6 @@
   "ignorePatterns": [
     "reports",
     "coverage"
-  ],
-  "ignorers": [
-    "effect-schema-declarations"
   ],
   "thresholds": {
     "high": 100,
