@@ -26,7 +26,7 @@ import * as Option from 'effect/Option'
 
 import { forkCoreSchema } from './config/fork-schema.js'
 import { ConfigReader, defaultOptions, OptionsValidator } from './config/index.js'
-import { ConfigError } from './errors.js'
+import { ConfigError, retrieveCause } from './errors.js'
 import { emitLLMSManifest } from './llms-manifest.js'
 import { toRelativeNormalizedFileName } from './mutants/incremental-differ.js'
 import {
@@ -714,10 +714,25 @@ const cliLayer = Layer.mergeAll(
 )
 
 /**
+ * A rejected config reaches the teardown as a typed failure or as a defect
+ * depending on where the validator threw, and typed-inject may have wrapped
+ * it, so both channels are searched and each candidate is unwrapped.
+ */
+function carriesConfigError(cause: Cause.Cause<unknown>): boolean {
+  for (const candidate of [...Cause.failures(cause), ...Cause.defects(cause)]) {
+    if (candidate instanceof ConfigError || retrieveCause(candidate) instanceof ConfigError) {
+      return true
+    }
+  }
+  return false
+}
+
+/**
  * Classifies a failed run for the teardown: usage/parse failures
- * (`ValidationError`) and rejected survivors runs (`SurvivorsRejection`) exit
- * 2, all other failures exit 1 (the framework's default). A successful run
- * exits 0; the verdict gates (U5) then resolve the final classed code.
+ * (`ValidationError`), rejected survivors runs (`SurvivorsRejection`) and a
+ * rejected config (`ConfigError`) all exit 2, all other failures exit 1 (the
+ * framework's default). A successful run exits 0; the verdict gates (U5) then
+ * resolve the final classed code.
  */
 export function resolveCliExitCode(exit: Exit.Exit<unknown, unknown>): number {
   if (Exit.isSuccess(exit)) {
@@ -734,6 +749,9 @@ export function resolveCliExitCode(exit: Exit.Exit<unknown, unknown>): number {
     if (failure.value instanceof SurvivorsRejection) {
       return SURVIVORS_REJECT_EXIT_CLASS
     }
+  }
+  if (carriesConfigError(exit.cause)) {
+    return ExitClass.ConfigError
   }
   return 1
 }

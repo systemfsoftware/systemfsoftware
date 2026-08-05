@@ -16,6 +16,7 @@ import { PluginCreator } from '../../src/di/plugin-creator.js'
 import { ConfigError } from '../../src/errors.js'
 import { resolveCliExitCode, runStrykerCli, strykerCliEffect } from '../../src/stryker-cli.js'
 import type { StrykerRun } from '../../src/stryker-cli.js'
+import { ExitClass } from '../../src/utils/object-utils.js'
 
 // The terminating bootstrap writes the envelope with `fs.writeSync` (a
 // synchronous fd write, so `process.exit` cannot drop it); the integration
@@ -220,7 +221,11 @@ describe('machine-mode envelope for a removed config key', () => {
         error: string
         remediation: string
       }
-      expect(envelope.code).toBe(exitCode)
+      // Pin the value, not just envelope/exit agreement: both were 1 while
+      // this only compared them to each other, so a config error was
+      // indistinguishable from a failed verdict.
+      expect(exitCode).toBe(ExitClass.ConfigError)
+      expect(envelope.code).toBe(ExitClass.ConfigError)
       expect(envelope.error).toContain('"dashboard"')
       expect(envelope.error).toContain('the "dashboard" reporter')
       expect(envelope.remediation).toContain('"dashboard"')

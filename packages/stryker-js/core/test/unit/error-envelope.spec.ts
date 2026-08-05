@@ -9,6 +9,7 @@ import type { MockInstance } from 'vitest'
 import { ConfigError } from '../../src/errors.js'
 import { buildErrorEnvelope, describeFailure, remediationFor, runStrykerCli } from '../../src/stryker-cli.js'
 import type { StrykerRun } from '../../src/stryker-cli.js'
+import { ExitClass } from '../../src/utils/object-utils.js'
 
 // The terminating bootstrap writes the envelope with `fs.writeSync` (a
 // synchronous fd write, so `process.exit` cannot drop it); the integration
@@ -170,11 +171,11 @@ describe('machine-mode error envelope', () => {
     runStrykerCli(['node', 'stryker', 'run'], runMutationTest)
     await flush()
 
-    expect(exitMock).toHaveBeenCalledWith(1)
+    expect(exitMock).toHaveBeenCalledWith(ExitClass.ConfigError)
     const stderrLines = writtenLines(2)
     expect(stderrLines).toHaveLength(1)
     const envelope = JSON.parse(stderrLines[0] as string) as { code: number; error: string; remediation: string }
-    expect(envelope.code).toBe(1)
+    expect(envelope.code).toBe(ExitClass.ConfigError)
     expect(envelope.error).toContain('Invalid config file "stryker.config.json"')
     expect(envelope.remediation).toContain('stryker.config.json')
   })
