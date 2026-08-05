@@ -98,8 +98,10 @@
       "inputs": [
         "src/**",
         "api-extractor.json",
-        "etc/*.api.md",
-        "tsconfig.build.json"
+        "api-extractor.*.json",
+        "tsconfig.build.json",
+        "tsconfig.*.json",
+        "etc/*.api.md"
       ],
       "outputs": [
         "dist/*.d.ts",
