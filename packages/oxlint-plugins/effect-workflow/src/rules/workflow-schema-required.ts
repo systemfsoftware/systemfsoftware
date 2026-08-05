@@ -51,9 +51,6 @@ const errorArgumentBackedByDeclaredError = (type: ESTree.TSType, errorVariantNam
   if (type.type === 'TSUnionType') {
     return type.types.some((t) => errorArgumentBackedByDeclaredError(t, errorVariantNames))
   }
-  if (type.type === 'TSParenthesizedType') {
-    return errorArgumentBackedByDeclaredError(type.typeAnnotation, errorVariantNames)
-  }
   return false
 }
 
