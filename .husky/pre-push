@@ -1,2 +1,7 @@
 #!/usr/bin/env bash
+# git exports GIT_DIR when invoking a hook; in a worktree it names
+# .git/worktrees/<name>, which turbo's SCM layer opens as a file and dies on
+# ("I/O error: Is a directory"). Let every tool do its own discovery instead.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_PREFIX
+
 pnpm pre-push
