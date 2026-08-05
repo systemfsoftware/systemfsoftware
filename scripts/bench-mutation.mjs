@@ -59,7 +59,8 @@ const parseArgs = (argv) => {
 }
 
 const pkgDirOf = (pkgName) => {
-  for (const cfg of fs.globSync('packages/**/package.json', { cwd: ROOT })) {
+  // Both roots: publishable libraries live in packages/, the omp plugin in omp/.
+  for (const cfg of fs.globSync(['packages/**/package.json', 'omp/**/package.json'], { cwd: ROOT })) {
     if (cfg.includes('node_modules') || cfg.includes('.stryker-tmp')) continue
     try {
       if (JSON.parse(fs.readFileSync(path.join(ROOT, cfg), 'utf8')).name === pkgName) return path.dirname(cfg)
@@ -102,6 +103,14 @@ const measureOnce = async (pkg, opts) => {
   const dir = pkgDirOf(pkg)
   const report = reportPathOf(dir)
   const { code, log, startedAt, wallMs } = await run(pkg, opts)
+
+  // Archive before any early return: a failed run's log is when you most need it, and the next
+  // run overwrites the package's report in place.
+  const archiveDir = path.join(ROOT, '.context/compound-engineering/ce-optimize/stryker-throughput/runs')
+  const stem = `${opts.label}--${pkg.replace(/[@/]/g, '_')}`
+  fs.mkdirSync(archiveDir, { recursive: true })
+  fs.writeFileSync(path.join(archiveDir, `${stem}.log`), log)
+  if (fs.existsSync(report)) fs.copyFileSync(report, path.join(archiveDir, `${stem}.report.json`))
 
   // A stale report is the single most likely source of a fake result: if the run crashed early,
   // the previous run's report is still sitting on disk and parses perfectly.
