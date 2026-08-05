@@ -12,7 +12,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
-import { overrides, resolveConfig } from './stryker-config.source.mjs'
+import { ABSENT, defaults, KEY_ORDER, overrides, resolveConfig } from './stryker-config.source.mjs'
 
 const CONFIG_NAME = 'stryker.config.json'
 
@@ -86,7 +86,83 @@ const canonical = (text) => {
   return JSON.stringify(sort(JSON.parse(text)))
 }
 
+// -- selftest ---------------------------------------------------------------
+//
+// The zero-diff acceptance proves the table matches the tree TODAY. It cannot
+// reach shapes the tree does not currently contain: no package has an empty
+// overrides entry, and every package on disk is listed. These scenarios cover
+// the merge behaviour that a snapshot of the tree structurally cannot.
+
+/** Defaults reduced to emitted keys, computed WITHOUT resolveConfig so the
+ *  expectation is an independent oracle rather than the code under test. */
+const expectedDefaults = () => {
+  const out = {}
+  for (const key of KEY_ORDER) {
+    const value = defaults[key]
+    if (value === ABSENT || value === undefined) continue
+    out[key] = value
+  }
+  return out
+}
+
+const selftest = () => {
+  const failures = []
+  const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b)
+  const scenario = (name, fn) => {
+    try {
+      const why = fn()
+      if (why) failures.push(`${name}: ${why}`)
+    } catch (error) {
+      failures.push(`${name}: threw ${error.message}`)
+    }
+  }
+
+  scenario('an empty overrides entry generates exactly the defaults', () => {
+    const got = resolveConfig('p/q', { 'p/q': { reason: 'empty', config: {} } })
+    return eq(got, expectedDefaults()) ? null : `got ${JSON.stringify(got)}`
+  })
+
+  scenario('an override setting thresholds.break leaves other keys at defaults', () => {
+    const got = resolveConfig('p/q', {
+      'p/q': { reason: 'debt', config: { thresholds: { high: 100, low: 80, break: 0 } } },
+    })
+    if (got.thresholds?.break !== 0) return `break not applied: ${JSON.stringify(got.thresholds)}`
+    const rest = { ...got, thresholds: undefined }
+    const want = { ...expectedDefaults(), thresholds: undefined }
+    return eq(rest, want) ? null : 'a non-threshold key moved'
+  })
+
+  scenario('a package absent from the overrides table generates from defaults', () => {
+    const got = resolveConfig('package/nobody/listed', {})
+    return eq(got, expectedDefaults()) ? null : `got ${JSON.stringify(got)}`
+  })
+
+  scenario('generating twice produces byte-identical output', () => {
+    const root = repoRoot()
+    const files = discoverConfigs(root)
+    const a = generateAll(root, files)
+    const b = generateAll(root, files)
+    if (a.size !== b.size) return `size ${a.size} vs ${b.size}`
+    for (const [file, content] of a) if (b.get(file) !== content) return `differs on ${file}`
+    return null
+  })
+
+  scenario('the generated set is exactly the discovered set, including the omp config', () => {
+    const root = repoRoot()
+    const files = discoverConfigs(root)
+    const generated = [...generateAll(root, files).keys()].sort()
+    if (!eq(generated, [...files].sort())) return 'generated paths differ from discovered paths'
+    const omp = files.filter((f) => f.startsWith('omp/'))
+    return omp.length > 0 ? null : 'no omp/ config discovered -- scope regressed to packages/**'
+  })
+
+  for (const f of failures) console.error(`  FAIL ${f}`)
+  console.log(`generate-stryker-configs --selftest: 5 scenario(s), ${failures.length} failed`)
+  if (failures.length > 0) process.exit(1)
+}
+
 const main = () => {
+  if (process.argv.includes('--selftest')) return selftest()
   const check = process.argv.includes('--check')
   const root = repoRoot()
   const files = discoverConfigs(root)

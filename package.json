@@ -27,7 +27,7 @@
     "check:lint-coverage": "node scripts/check-lint-coverage.mjs",
     "check:no-hand-rolled-jsonc": "node scripts/guard-no-hand-rolled-jsonc.mjs --selftest && node scripts/guard-no-hand-rolled-jsonc.mjs",
     "check:project-references": "node scripts/check-project-references.mjs --selftest && node scripts/check-project-references.mjs",
-    "check:stryker-config": "node scripts/check-stryker-config.mjs --selftest && node scripts/check-stryker-config.mjs",
+    "check:stryker-config": "node scripts/generate-stryker-configs.mjs --selftest && node scripts/check-stryker-config.mjs --selftest && node scripts/check-stryker-config.mjs",
     "generate:stryker-config": "node scripts/generate-stryker-configs.mjs"
   },
   "devDependencies": {

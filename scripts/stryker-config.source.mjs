@@ -278,9 +278,13 @@ export const isRelaxation = (config) => {
  * Merge one package's config. Objects merge one level deep; arrays replace
  * wholesale, because concatenating a mutate glob or a plugin list silently
  * produces a config nobody wrote.
+ *
+ * `table` is a parameter so the merge can be exercised against shapes the tree
+ * does not currently contain -- an empty entry, an unlisted package -- without
+ * inventing a package on disk to observe them.
  */
-export const resolveConfig = (packageDir) => {
-  const patch = overrides[packageDir]?.config ?? {}
+export const resolveConfig = (packageDir, table = overrides) => {
+  const patch = table[packageDir]?.config ?? {}
   const merged = {}
   for (const key of KEY_ORDER) {
     const value = key in patch ? patch[key] : defaults[key]
