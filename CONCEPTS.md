@@ -38,7 +38,7 @@ The npm publish orchestrator triggered by push to `main`. Runs `pnpm build` per 
 
 ### check-exports
 
-The script at `scripts/check-exports.mjs` that compares each package's `package.json#exports` paths against the actual `dist/` directory. Catches drift where `exports.types` references a file the `build` script never produces. Wired into root `pnpm check:exports` but not currently in `pnpm check`'s blocking pipeline.
+The script at `scripts/check-exports.mjs` that compares each package's `package.json#exports` paths against the actual `dist/` directory. Catches drift where `exports.types` references a file the `build` script never produces. Runs as `pnpm check:exports`, blocking inside `pnpm check`.
 
 ### attw
 
@@ -113,3 +113,39 @@ The decision a hook's exit status and output are interpreted into before the har
 An edit whose entire change arrives as a single patch string, with the target files named inside the patch text, rather than as a path plus discrete before/after pairs. The distinction matters at any boundary that expects the discrete shape: the file being edited and the text being written both have to be recovered by parsing the patch, and a boundary that recovers only one of them yields a payload that looks well-formed to consumers reading the recovered half and empty to consumers reading the other.
 
 A consumer that inspects the text of a change must be given that text explicitly — being handed only the path is not equivalent, because it re-reads nothing.
+
+## Stryker CLI (agent-first rebuild)
+
+### machine mode (stryker CLI)
+
+The CLI state where output is structured for a machine consumer instead of a human. Activates when stdout is not a TTY, or the `AGENT` environment variable is set to any non-empty value, or a known agent tool variable (`CLAUDECODE`, `CODEX_SANDBOX`, …) is present. Precedence runs explicit `--format`/`--json` first, then the `STRYKER_MODE=human|machine` override, then detection. Machine mode means "non-interactive but everything actionable": full verbosity, structured errors, no prompts, no color — the opposite of CI's minimal-output convention.
+
+### verdict envelope
+
+The JSON object the stryker CLI prints to stdout in machine mode: mutation score, thresholds, per-status mutant counts, test-contribution verdict, per-mutant status, the report file path, a run identifier, and the resolved mode with the signal that decided it. Per-mutant entries are keyed on file, location, mutator, and replacement — the same key a survivor re-run matches on, so the envelope alone is enough to address individual survivors. The full mutation report still goes to a file; the envelope is the small, schema-stable contract agents parse instead of scraping human output.
+
+### progress stream
+
+The newline-delimited JSON the stryker CLI writes to stderr in machine mode, one object per completed mutant plus a plan event naming the total. It replaces the deleted `progress-append-only` reporter as the non-TTY progress path, so an agent sees a many-minute run advancing rather than silence followed by a verdict. Human mode keeps the interactive progress bar on stdout instead.
+
+### survivor re-run
+
+An explicit, opt-in stryker run that re-tests only mutants that survived a previous run, reading prior per-mutant status as input. Distinct from incremental mode: incremental silently reuses verdicts (and stays off repo-wide so gates run full-fidelity), while a survivor re-run re-tests the named set and reports fresh results.
+
+## Mutation attribution
+
+### test-contribution gate
+
+The check that grades the mutation run's **test set** rather than its mutant set, asking of each authored property test whether the suite would be any weaker without it. It runs as part of the mutation command off the report already in memory, and can fail a run whose score is perfect — a high score says the mutants died, never that every test helped kill one. A package opts out visibly in its config rather than by deleting the test the gate names.
+
+### sole kill
+
+A mutant a given test file is the **only** file credited with killing. Distinct from a plain kill, which several files may share: a file with many shared kills and no sole kill defends nothing the rest of the suite does not already defend. Whether sole kills can be measured at all depends on the run recording every killer rather than stopping at each mutant's first one, so the gate falls back to the weaker "killed nothing at all" question when it cannot.
+
+### toothless test file
+
+A test file whose deletion would leave every mutant just as dead. The claim is counterfactual and therefore only as sound as the run's attribution — a file can look toothless because it genuinely defends nothing, or because the run failed to record what it killed. The two are not interchangeable, and only the first is grounds for deleting anything.
+
+### unattributed kill
+
+A mutant that died with no test credited for killing it. It arises when a mutant's death is not observed per-test — a run that hangs is killed wholesale, so no individual test is named — leaving a kill that counts toward the score while belonging to nobody. Any file covering one is **unmeasurable** rather than toothless: it is a live candidate for being the killer, so the counterfactual behind the accusation cannot be evaluated for it.

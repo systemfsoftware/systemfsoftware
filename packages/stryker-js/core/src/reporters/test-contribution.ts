@@ -3,6 +3,15 @@ import { schema } from '@stryker-mutator/api/core'
 export interface TestFileContribution {
   readonly soleKills: number
   readonly totalKills: number
+  /**
+   * Whether this file covers a killing mutant that no test file was credited with.
+   *
+   * A `Timeout` counts as a kill but arrives with `killedBy: []` — the runner cannot say
+   * which test hung, so the kill is real and attributable to nobody. Deleting a file that
+   * covers one could resurrect it, which is precisely the claim this check makes, so such
+   * a file is unmeasurable rather than toothless.
+   */
+  readonly coversUnattributedKill: boolean
 }
 
 export interface TestContributionInput {
@@ -48,13 +57,21 @@ export const contributionByTestFile = (
   const fileById = testFileById(testFiles)
   const soleKills = new Map<string, number>()
   const totalKills = new Map<string, number>()
+  const unattributed = new Set<string>()
 
   for (const file of Object.values(report.files)) {
     for (const mutant of file.mutants) {
       if (!KILLING_STATUSES.has(mutant.status)) continue
-      const killedBy = mutant.killedBy
-      if (killedBy === undefined) continue
-      const killers = killersOf(killedBy, fileById)
+      const killers = killersOf(mutant.killedBy ?? [], fileById)
+      // A kill nobody is credited with is still a kill. Whoever covered it may be the one
+      // causing it, so they cannot be told that deleting them changes nothing.
+      if (killers.size === 0) {
+        const covered = mutant.coveredBy
+        // `killersOf` places every id, falling back to the id itself, so an id that names no
+        // test file lands in the set inert — no real file is ever spared on its account.
+        if (covered !== undefined) { for (const fileName of killersOf(covered, fileById)) unattributed.add(fileName) }
+        continue
+      }
       const soleKill = killers.size === 1
       for (const fileName of killers) {
         totalKills.set(fileName, (totalKills.get(fileName) ?? 0) + 1)
@@ -68,6 +85,7 @@ export const contributionByTestFile = (
     byTestFile.set(fileName, {
       soleKills: soleKills.get(fileName) ?? 0,
       totalKills: totalKills.get(fileName) ?? 0,
+      coversUnattributedKill: unattributed.has(fileName),
     })
   }
   return byTestFile
@@ -78,10 +96,12 @@ export const toothlessTestFiles = (
   { suffixes, everyKillerRecorded }: TestContributionInput,
 ): ReadonlyArray<string> => {
   const toothless: string[] = []
-  for (const [fileName, { soleKills, totalKills }] of contribution) {
+  for (const [fileName, { soleKills, totalKills, coversUnattributedKill }] of contribution) {
     const defends = everyKillerRecorded ? soleKills > 0 : totalKills > 0
     const inScope = suffixes.some((suffix) => fileName.endsWith(suffix))
-    if (!defends && inScope) toothless.push(fileName)
+    // Covering a kill credited to nobody makes this file unmeasurable, not toothless: the
+    // accusation is that deleting it changes nothing, and that cannot be shown here.
+    if (!defends && inScope && !coversUnattributedKill) toothless.push(fileName)
   }
   return toothless.sort()
 }

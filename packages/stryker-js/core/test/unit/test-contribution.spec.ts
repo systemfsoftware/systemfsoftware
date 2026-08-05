@@ -14,12 +14,14 @@ const mutantOf = (
   id: string,
   status: schema.MutantStatus,
   killedBy?: string[],
+  coveredBy?: string[],
 ): schema.MutantResult => ({
   id,
   status,
   mutatorName: 'BooleanLiteral',
   location: LOCATION,
   ...(killedBy === undefined ? {} : { killedBy }),
+  ...(coveredBy === undefined ? {} : { coveredBy }),
 })
 
 const reportOf = (
@@ -48,8 +50,8 @@ describe('contributionByTestFile', () => {
       'b.property.test.ts': ['t2'],
     })
     expect(Object.fromEntries(contributionByTestFile(report))).toEqual({
-      'a.property.test.ts': { soleKills: 1, totalKills: 1 },
-      'b.property.test.ts': { soleKills: 0, totalKills: 0 },
+      'a.property.test.ts': { soleKills: 1, totalKills: 1, coversUnattributedKill: false },
+      'b.property.test.ts': { soleKills: 0, totalKills: 0, coversUnattributedKill: false },
     })
   })
 
@@ -59,8 +61,8 @@ describe('contributionByTestFile', () => {
       'b.property.test.ts': ['t2'],
     })
     expect(Object.fromEntries(contributionByTestFile(report))).toEqual({
-      'a.property.test.ts': { soleKills: 0, totalKills: 1 },
-      'b.property.test.ts': { soleKills: 0, totalKills: 1 },
+      'a.property.test.ts': { soleKills: 0, totalKills: 1, coversUnattributedKill: false },
+      'b.property.test.ts': { soleKills: 0, totalKills: 1, coversUnattributedKill: false },
     })
   })
 
@@ -69,28 +71,28 @@ describe('contributionByTestFile', () => {
       'a.property.test.ts': ['t1'],
     })
     expect(Object.fromEntries(contributionByTestFile(report))).toEqual({
-      'a.property.test.ts': { soleKills: 0, totalKills: 1 },
+      'a.property.test.ts': { soleKills: 0, totalKills: 1, coversUnattributedKill: false },
     })
   })
 
   it('counts a Timeout as a kill', () => {
     const report = reportOf([mutantOf('m1', 'Timeout', ['t1'])], { 'a.property.test.ts': ['t1'] })
     expect(Object.fromEntries(contributionByTestFile(report))).toEqual({
-      'a.property.test.ts': { soleKills: 1, totalKills: 1 },
+      'a.property.test.ts': { soleKills: 1, totalKills: 1, coversUnattributedKill: false },
     })
   })
 
   it('credits nobody for a mutant that survived', () => {
     const report = reportOf([mutantOf('m1', 'Survived', ['t1'])], { 'a.property.test.ts': ['t1'] })
     expect(Object.fromEntries(contributionByTestFile(report))).toEqual({
-      'a.property.test.ts': { soleKills: 0, totalKills: 0 },
+      'a.property.test.ts': { soleKills: 0, totalKills: 0, coversUnattributedKill: false },
     })
   })
 
   it('credits nobody for a kill that recorded no killing test', () => {
     const report = reportOf([mutantOf('m1', 'Killed')], { 'a.property.test.ts': ['t1'] })
     expect(Object.fromEntries(contributionByTestFile(report))).toEqual({
-      'a.property.test.ts': { soleKills: 0, totalKills: 0 },
+      'a.property.test.ts': { soleKills: 0, totalKills: 0, coversUnattributedKill: false },
     })
   })
 })
@@ -118,6 +120,35 @@ describe('toothlessTestFiles', () => {
       'idle.property.test.ts': ['t2'],
     })
     expect(toothlessTestFiles(contributionByTestFile(report), BAILED)).toEqual(['idle.property.test.ts'])
+  })
+
+  it('spares a file covering a kill credited to nobody, because deleting it may resurrect that kill', () => {
+    // A Timeout is a kill the runner cannot attribute: it arrives with `killedBy: []`, so the
+    // test that hung is never named. The coverer may be the one causing it.
+    const report = reportOf([mutantOf('m1', 'Killed', ['t1']), mutantOf('m2', 'Timeout', [], ['t2'])], {
+      'earns.property.test.ts': ['t1'],
+      'hangs.property.test.ts': ['t2'],
+    })
+    expect(toothlessTestFiles(contributionByTestFile(report), EXACT)).toEqual([])
+  })
+
+  it('still accuses a file that covers no unattributed kill when a sibling does', () => {
+    const report = reportOf([mutantOf('m1', 'Killed', ['t1']), mutantOf('m2', 'Timeout', [], ['t2'])], {
+      'earns.property.test.ts': ['t1'],
+      'hangs.property.test.ts': ['t2'],
+      'idle.property.test.ts': ['t3'],
+    })
+    expect(toothlessTestFiles(contributionByTestFile(report), EXACT)).toEqual(['idle.property.test.ts'])
+  })
+
+  it('treats an absent killedBy like an empty one, sparing the file that covers the kill', () => {
+    // The report may omit `killedBy` entirely rather than send an empty array. Both say the
+    // same thing — no killer was recorded — so both must leave the coverer unmeasurable.
+    const report = reportOf([mutantOf('m1', 'Killed', ['t1']), mutantOf('m2', 'Timeout', undefined, ['t2'])], {
+      'earns.property.test.ts': ['t1'],
+      'hangs.property.test.ts': ['t2'],
+    })
+    expect(toothlessTestFiles(contributionByTestFile(report), EXACT)).toEqual([])
   })
 
   it('never accuses a file outside the configured suffixes', () => {
@@ -213,7 +244,7 @@ describe('judgeTestContribution', () => {
       'busy.property.test.ts': ['t1'],
     })
     expect(Object.fromEntries(contributionByTestFile(twice))).toEqual({
-      'busy.property.test.ts': { soleKills: 2, totalKills: 2 },
+      'busy.property.test.ts': { soleKills: 2, totalKills: 2, coversUnattributedKill: false },
     })
   })
 
