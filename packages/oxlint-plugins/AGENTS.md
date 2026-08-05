@@ -7,10 +7,10 @@
 ```yaml
 rules:
   - id: OX-MG1
-    title: 100% mutation score is the gate
+    title: Zero Ignored mutants — stricter than the root score gate
     do: kill every mutant with a distinguishing test or eliminate it with a restructure
-    dont: ignore a killable mutant, lower the threshold, or narrow the mutate glob
-    harm: an ignored killable mutant is `// Stryker disable all` with extra steps — the score certifies tests that notice nothing
+    dont: reach the number by ignoring a killable mutant
+    harm: the score excludes Ignored from its denominator, so a package can report a passing score while an ignorer absorbs mutants no test kills
     check: pnpm --filter <pkg> mutation exits 0 and reports/mutation-report.json shows zero Ignored, Survived, and NoCoverage
 
   - id: OX-MG2
@@ -18,7 +18,7 @@ rules:
     do: register exactly `effect-schema-declarations` in stryker.config.json#ignorers for III.4 declaration data — Symbol.for descriptions, TaggedClass/TaggedError _tag and fields, optionalWith defaults
     dont: author new ignore plugins, add ignore rules for logic mutants, or use `// Stryker disable` comments
     harm: ignore rules pattern-match text, not proofs — they silently suppress mutants that tests would have killed
-    check: stryker.config.json#ignorers contains only effect-schema-declarations; grep finds no `Stryker disable` in src/
+    check: `pnpm check:stryker-config` passes — it regenerates every config from `scripts/stryker-config.source.mjs`, so an ignorer or plugin added by hand fails as drift; grep finds no `Stryker disable` in src/
 
   - id: OX-CS1
     title: Static config lives in *.config.ts
@@ -140,6 +140,6 @@ Run in order before claiming done on any rule change:
 
 ```bash
 pnpm --filter <pkg> test        # RuleTester suites
-pnpm --filter <pkg> mutation    # 100% required — see OX-MG1
+pnpm --filter <pkg> mutation    # root gate, plus zero Ignored — see OX-MG1
 pnpm check                      # root gate, exits 0
 ```
