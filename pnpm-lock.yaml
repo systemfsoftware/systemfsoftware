@@ -2174,9 +2174,6 @@ importers:
       '@effect/printer-ansi':
         specifier: 'catalog:'
         version: 0.51.0(@effect/typeclass@0.41.0(effect@3.22.1))(effect@3.22.1)
-      '@inquirer/prompts':
-        specifier: ^8.0.0
-        version: 8.5.2(@types/node@24.13.2)
       '@stryker-mutator/api':
         specifier: catalog:stryker
         version: 9.6.1
@@ -2192,9 +2189,6 @@ importers:
       chalk:
         specifier: ~5.6.0
         version: 5.6.2
-      commander:
-        specifier: ~14.0.0
-        version: 14.0.3
       diff-match-patch:
         specifier: 1.0.5
         version: 1.0.5
@@ -2207,18 +2201,12 @@ importers:
       execa:
         specifier: ~9.6.0
         version: 9.6.1
-      json-rpc-2.0:
-        specifier: ^1.7.0
-        version: 1.7.1
       lodash.groupby:
         specifier: ~4.6.0
         version: 4.6.0
       minimatch:
         specifier: ~10.2.4
         version: 10.2.5
-      mutation-server-protocol:
-        specifier: ~0.4.0
-        version: 0.4.1
       mutation-testing-elements:
         specifier: 3.7.3
         version: 3.7.3
@@ -2252,9 +2240,6 @@ importers:
       typed-inject:
         specifier: ~5.0.0
         version: 5.0.0
-      typed-rest-client:
-        specifier: ~2.3.0
-        version: 2.3.1
     devDependencies:
       '@std/jsonc':
         specifier: 'catalog:'
