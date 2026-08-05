@@ -23,6 +23,7 @@ import * as Option from 'effect/Option'
 import { defaultOptions } from './config/index.js'
 import { strykerEngines, strykerVersion } from './stryker-package.js'
 import { Stryker } from './stryker.js'
+import { getPendingExitClasses, resolveExitCode } from './utils/object-utils.js'
 
 /**
  * The mutation-testing entry the CLI calls once options are parsed. Injectable
@@ -506,23 +507,66 @@ export function strykerCliEffect(
   )
 }
 
+const SIGNAL_NUMBERS: Readonly<Partial<Record<NodeJS.Signals, number>>> = Object.freeze({
+  SIGINT: 2,
+  SIGTERM: 15,
+})
+
 /**
  * Runs the CLI through an Effect runtime main — the equivalent of
- * `NodeRuntime.runMain` (same `Runtime.makeRunMain` seam, so U5 can wire its
- * custom teardown here). The resolved exit code becomes `process.exitCode`.
+ * `NodeRuntime.runMain` (same `Runtime.makeRunMain` seam). SIGINT/SIGTERM
+ * interrupt the main fiber (so finalizers run) instead of exiting
+ * synchronously; the teardown resolves the classed exit code exactly once
+ * (R6): a tracked signal maps to `128 + n`, a failed run keeps the
+ * usage-vs-other classification, and a successful run lets the pending
+ * verdict classes decide. `process.exit` is called at most once, only when a
+ * signal was received or the code is non-zero, so a clean run flushes stdout.
  */
 export function runStrykerCli(
   argv: string[] = process.argv,
   runMutationTest: StrykerRun = defaultRunMutationTest,
 ): void {
+  const lastSignal: { current: number | null } = { current: null }
   Runtime.makeRunMain(({ fiber, teardown }) => {
+    const keepAlive = setInterval(() => {}, 2 ** 31 - 1)
+    const onSignal = (signal: NodeJS.Signals): void => {
+      lastSignal.current = SIGNAL_NUMBERS[signal] ?? null
+      process.removeListener('SIGINT', onSignal)
+      process.removeListener('SIGTERM', onSignal)
+      fiber.unsafeInterruptAsFork(fiber.id())
+    }
+    process.on('SIGINT', onSignal)
+    process.on('SIGTERM', onSignal)
     fiber.addObserver((exit) => {
+      clearInterval(keepAlive)
+      if (lastSignal.current === null) {
+        process.removeListener('SIGINT', onSignal)
+        process.removeListener('SIGTERM', onSignal)
+      }
       teardown(exit, (code) => {
-        process.exitCode = code
+        if (lastSignal.current !== null || code !== 0) {
+          process.exit(code)
+        } else {
+          process.exitCode = code
+        }
       })
     })
   })(strykerCliEffect(argv, runMutationTest), {
-    teardown: (exit, onExit) => onExit(resolveCliExitCode(exit)),
+    teardown: (exit, onExit) => {
+      const signal = lastSignal.current
+      if (signal !== null) {
+        onExit(128 + signal)
+        return
+      }
+      if (Exit.isFailure(exit)) {
+        // A failure no verdict gate classified: keep U2's usage-vs-other
+        // classification (U6 refines it with the error envelope). A failed
+        // run must never exit 0.
+        onExit(resolveCliExitCode(exit))
+        return
+      }
+      onExit(resolveExitCode(getPendingExitClasses(), null))
+    },
   })
 }
 

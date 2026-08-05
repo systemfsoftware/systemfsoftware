@@ -1,24 +1,24 @@
 import { Disposable } from '@stryker-mutator/api/plugin'
 
-import { coreTokens } from './di/index.js'
+import { coreTokens } from '../di/index.js'
 
 export type ExitHandler = () => void
 
-const signals = Object.freeze(['SIGABRT', 'SIGINT', 'SIGHUP', 'SIGTERM'])
+/**
+ * Runs registered cleanup handlers when the process exits. Signal handling
+ * was deliberately removed: SIGINT/SIGTERM are owned by the runMain bootstrap
+ * (fiber interruption + `128 + n` at teardown), and a synchronous
+ * `process.exit` in a signal handler raced the runtime and killed finalizers.
+ * The `exit` event still fires for both `process.exit` and a drained loop.
+ */
 export class UnexpectedExitHandler implements Disposable {
   private readonly unexpectedExitHandlers: ExitHandler[] = []
 
   public static readonly inject = [coreTokens.process] as const
   constructor(
-    private readonly process: Pick<NodeJS.Process, 'exit' | 'off' | 'on'>,
+    private readonly process: Pick<NodeJS.Process, 'off' | 'on'>,
   ) {
     process.on('exit', this.handleExit)
-    signals.forEach((signal) => process.on(signal, this.processSignal))
-  }
-  private readonly processSignal = (_signal: string, signalNumber: number) => {
-    // Just call 'exit' with correct exitCode.
-    // See https://nodejs.org/api/process.html#process_signal_events, we should exit with 128 + signal number
-    this.process.exit(128 + signalNumber)
   }
 
   private readonly handleExit = () => {
@@ -31,6 +31,5 @@ export class UnexpectedExitHandler implements Disposable {
 
   public dispose(): void {
     this.process.off('exit', this.handleExit)
-    signals.forEach((signal) => this.process.off(signal, this.processSignal))
   }
 }

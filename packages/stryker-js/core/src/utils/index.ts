@@ -1,3 +1,4 @@
+export * from './exit-handler.js'
 export * from './file-utils.js'
 export * from './object-utils.js'
 export * from './string-builder.js'
