@@ -9,6 +9,8 @@ temp/
 .DS_Store
 __pycache__/
 .npmrc
+# Agent scratch — ce-optimize sweeps, audit reports, run logs
+.context/
 # Vendored subtrees — their .gitignore files are inert
 repos/**/.gitignore
 repos/**/.codegraph/
