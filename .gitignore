@@ -17,3 +17,4 @@ __pycache__/
 repos/**/.gitignore
 repos/**/.codegraph/
 .repos
+.issues
