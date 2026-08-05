@@ -6,6 +6,7 @@ export default defineConfig({
     'child-process-proxy-worker': './src/child-proxy/child-process-proxy-worker.ts',
     'checker-worker': './src/checker/checker-worker.ts',
     'child-process-test-runner-worker': './src/test-runner/child-process-test-runner-worker.ts',
+    'config/base': './src/config/base-preset.ts',
   },
   format: 'esm',
   dts: true,
