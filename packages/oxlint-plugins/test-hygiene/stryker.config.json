@@ -12,7 +12,5 @@
   ],
   "coverageAnalysis": "all",
   "disableBail": true,
-  "incremental": null,
-  "incrementalFile": null,
   "ignorers": null
 }

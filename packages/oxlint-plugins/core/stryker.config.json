@@ -10,7 +10,5 @@
     "@stryker-mutator/vitest-runner",
     "@systemfsoftware/stryker-js-typescript-checker"
   ],
-  "incremental": null,
-  "incrementalFile": null,
   "ignorers": null
 }

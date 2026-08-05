@@ -22,7 +22,7 @@ const basePreset: PartialStrykerOptions = {
   vitest: { configFile: 'vitest.config.ts', dir: '.', related: true },
   typescriptChecker: { prioritizePerformanceOverAccuracy: true },
   coverageAnalysis: 'perTest',
-  incremental: false,
+  incremental: true,
   incrementalFile: 'reports/stryker-incremental.json',
   ignorePatterns: ['reports', 'coverage'],
   ignorers: ['effect-schema-declarations'],

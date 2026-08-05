@@ -376,4 +376,14 @@ describe('the shipped base preset', () => {
     expect(out['testRunner']).toBe('vitest')
     expect(out['thresholds']).toEqual({ high: 100, low: 80, break: 100 })
   })
+
+  it('turns incremental on for every package that does not opt out', async () => {
+    const child = await writeJson('stryker.config.json', {
+      extends: '@systemfsoftware/stryker-js-core/config/base',
+      mutate: ['src/only-this.ts'],
+    })
+    const out = await resolveExtendsChain(child) as Record<string, unknown>
+    expect(out['incremental']).toBe(true)
+    expect(out['incrementalFile']).toBe('reports/stryker-incremental.json')
+  })
 })

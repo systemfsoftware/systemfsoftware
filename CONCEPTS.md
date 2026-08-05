@@ -130,7 +130,7 @@ The newline-delimited JSON the stryker CLI writes to stderr in machine mode, one
 
 ### survivor re-run
 
-An explicit, opt-in stryker run that re-tests only mutants that survived a previous run, reading prior per-mutant status as input. Distinct from incremental mode: incremental silently reuses verdicts (and stays off repo-wide so gates run full-fidelity), while a survivor re-run re-tests the named set and reports fresh results.
+An explicit, opt-in stryker run that re-tests only mutants that survived a previous run, reading prior per-mutant status as input. Distinct from incremental mode: incremental is on by default and silently reuses verdicts whose inputs the differ proves unchanged, while a survivor re-run re-tests the named set and reports fresh results.
 
 ## Mutation attribution
 
