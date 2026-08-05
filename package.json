@@ -51,7 +51,7 @@
     "oxlint": "catalog:oxlint",
     "oxlint-tsgolint": "catalog:oxlint",
     "semantic-release": "^24.2.9",
-    "turbo": "^2.10.5",
+    "turbo": "^2.10.8",
     "typescript": "catalog:"
   },
   "packageManager": "pnpm@11.9.0"
