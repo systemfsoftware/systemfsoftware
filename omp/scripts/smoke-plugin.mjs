@@ -126,7 +126,10 @@ if (typeof factory !== 'function') {
 /* ---- Initialize plugin ------------------------------------------------- */
 
 try {
-  factory(api)
+  // The host awaits the factory (loader.ts:328), so async entries that
+  // register handlers after a dynamic import are legal. Not awaiting here
+  // counts handlers before the first microtask and reports a false zero.
+  await factory(api)
 } catch (err) {
   console.error(`Error: Plugin factory threw: ${err.message}`)
   process.exit(1)
