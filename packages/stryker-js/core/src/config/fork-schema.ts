@@ -28,8 +28,6 @@ const baseProperties = strykerCoreSchema.properties
 export const forkCoreSchema: Record<string, unknown> = {
   ...strykerCoreSchema,
   properties: isRecord(baseProperties)
-    ? { ...baseProperties, requireTestContribution, survivorsPriorReport }
-    : { requireTestContribution, survivorsPriorReport },
-    ? { ...baseProperties, requireTestContribution, extends: extendsProperty }
-    : { requireTestContribution, extends: extendsProperty },
+    ? { ...baseProperties, requireTestContribution, survivorsPriorReport, extends: extendsProperty }
+    : { requireTestContribution, survivorsPriorReport, extends: extendsProperty },
 }
