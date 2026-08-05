@@ -12,3 +12,4 @@ __pycache__/
 # Vendored subtrees — their .gitignore files are inert
 repos/**/.gitignore
 repos/**/.codegraph/
+.repos
