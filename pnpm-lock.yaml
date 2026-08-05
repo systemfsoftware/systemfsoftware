@@ -45,9 +45,6 @@ catalogs:
     effect:
       specifier: ^3.22.0
       version: 3.22.0
-    fast-check:
-      specifier: ^3
-      version: 3.23.2
     oxc-parser:
       specifier: ^0.140.0
       version: 0.140.0
@@ -100,6 +97,7 @@ catalogs:
       version: 2.8.1
 
 overrides:
+  fast-check: ^4
   vite: ^7
 
 importers:
@@ -315,8 +313,8 @@ importers:
         specifier: 'catalog:'
         version: 3.22.0
       fast-check:
-        specifier: 'catalog:'
-        version: 3.23.2
+        specifier: ^4
+        version: 4.9.0
       rimraf:
         specifier: 'catalog:'
         version: 6.1.3
@@ -536,8 +534,8 @@ importers:
         specifier: 'catalog:'
         version: 3.22.0
       fast-check:
-        specifier: 'catalog:'
-        version: 3.23.2
+        specifier: ^4
+        version: 4.9.0
       rimraf:
         specifier: 'catalog:'
         version: 6.1.3
@@ -575,8 +573,8 @@ importers:
         specifier: 'catalog:'
         version: 3.22.0
       fast-check:
-        specifier: 'catalog:'
-        version: 3.23.2
+        specifier: ^4
+        version: 4.9.0
       rimraf:
         specifier: 'catalog:'
         version: 6.1.3
@@ -673,8 +671,8 @@ importers:
         specifier: 'catalog:'
         version: 3.22.0
       fast-check:
-        specifier: 'catalog:'
-        version: 3.23.2
+        specifier: ^4
+        version: 4.9.0
       rimraf:
         specifier: 'catalog:'
         version: 6.1.3
@@ -715,8 +713,8 @@ importers:
         specifier: 'catalog:'
         version: 3.22.0
       fast-check:
-        specifier: 'catalog:'
-        version: 3.23.2
+        specifier: ^4
+        version: 4.9.0
       rimraf:
         specifier: 'catalog:'
         version: 6.1.3
@@ -824,8 +822,8 @@ importers:
         specifier: 'catalog:'
         version: 3.22.0
       fast-check:
-        specifier: 'catalog:'
-        version: 3.23.2
+        specifier: ^4
+        version: 4.9.0
       rimraf:
         specifier: 'catalog:'
         version: 6.1.3
@@ -2136,8 +2134,8 @@ importers:
         specifier: 'catalog:'
         version: 3.22.0
       fast-check:
-        specifier: 'catalog:'
-        version: 3.23.2
+        specifier: ^4
+        version: 4.9.0
       rimraf:
         specifier: 'catalog:'
         version: 6.1.3
@@ -5697,9 +5695,9 @@ packages:
     resolution: {integrity: sha512-knvyeauYhqjOYvQ66MznSMs83wmHrCycNEN6Ao+2AeYEfxUIkuiVxdEa1qlGEPK+We3n0THiDciYSsCcgW/DoA==}
     engines: {node: '>=12.0.0'}
 
-  fast-check@3.23.2:
-    resolution: {integrity: sha512-h5+1OzzfCC3Ef7VbtKdcv7zsstUQwUDlYpUTvjeUsJAssPgLn7QzbboPtL5ro04Mq0rPOsMzl7q5hIbRs2wD1A==}
-    engines: {node: '>=8.0.0'}
+  fast-check@4.9.0:
+    resolution: {integrity: sha512-7ms6T7SybUev/PQITciI0yLM2pOSFy5zpG8Ty7tQofcVaQUvrMXp6CBwqF6fThLCLOrfBtuHAtwq6Yu4XPCllg==}
+    engines: {node: '>=12.17.0'}
 
   fast-deep-equal@3.1.3:
     resolution: {integrity: sha512-f3qQ9oQy9j2AhBe/H9VC91wLmKBCCU/gDOnKNAYG5hswO7BLKj09Hc5HYNz9cGI++xlpDCIgDaitVs03ATR84Q==}
@@ -6817,8 +6815,8 @@ packages:
     resolution: {integrity: sha512-fm+wpUr2oigH1PXZvwgATrM2tYWHMDG8ASzTEe9uukCye4X5Ldx1K5BTHPFKITrIWvQQAQ256d1NpbEveBcKjA==}
     engines: {node: '>=22.12.0'}
 
-  pure-rand@6.1.0:
-    resolution: {integrity: sha512-bVWawvoZoBYpp6yIoQtQXHZjmz35RSVHnUOTefl8Vcjr8snTPY1wnpSPMWekcFwbxI6gtmT7rSYPFvz71ldiOA==}
+  pure-rand@8.4.2:
+    resolution: {integrity: sha512-vvuOGgcuPJAirlHvuQw1TrOiw7ptaIXXmIbNuiNOY6lNGJJH49PQ1Kj4nd783nPdQhQdicgOjVI2yI/9BD6/Ng==}
 
   qs@6.15.1:
     resolution: {integrity: sha512-6YHEFRL9mfgcAvql/XhwTvf5jKcOiiupt2FiJxHkiX1z4j7WL8J/jRHYLluORvc1XxB5rV20KoeK00gVJamspg==}
@@ -10634,7 +10632,7 @@ snapshots:
   effect@3.22.0:
     dependencies:
       '@standard-schema/spec': 1.1.0
-      fast-check: 3.23.2
+      fast-check: 4.9.0
 
   electron-to-chromium@1.5.376: {}
 
@@ -10770,9 +10768,9 @@ snapshots:
 
   expect-type@1.3.0: {}
 
-  fast-check@3.23.2:
+  fast-check@4.9.0:
     dependencies:
-      pure-rand: 6.1.0
+      pure-rand: 8.4.2
 
   fast-deep-equal@3.1.3: {}
 
@@ -11785,7 +11783,7 @@ snapshots:
       - utf-8-validate
       - yauzl
 
-  pure-rand@6.1.0: {}
+  pure-rand@8.4.2: {}
 
   qs@6.15.1:
     dependencies:
