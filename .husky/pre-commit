@@ -1,4 +1,10 @@
 #!/usr/bin/env sh
+# Skip during a merge: the staged set is the merge result, not authored work,
+# and lint-staged's stash/restore corrupts in-progress merge state.
+if [ -e "$(git rev-parse --git-path MERGE_HEAD)" ]; then
+  exit 0
+fi
+
 # Skip lint-staged for pure repos/ subtree commits (vendored content; the
 # pnpm bootstrap cannot run against the subtree's workspace state).
 if git diff --cached --name-only | grep -qv '^repos/'; then
