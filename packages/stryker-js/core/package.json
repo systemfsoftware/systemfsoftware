@@ -53,7 +53,8 @@
     "build": "tsdown",
     "lint": "oxlint",
     "attw": "attw --pack .",
-    "mutation": "node ./bin/stryker.js run"
+    "mutation": "node ./bin/stryker.js run",
+    "mutation:full": "node ./bin/stryker.js run --force"
   },
   "dependencies": {
     "@effect/cli": "catalog:",

@@ -41,6 +41,7 @@
     "test": "vitest run",
     "test:run": "vitest run --coverage",
     "mutation": "stryker run",
+    "mutation:full": "stryker run --force",
     "lint": "oxlint . ${AGENT:+--format=unix --quiet}",
     "attw": "attw --pack .",
     "api:check": "api-extractor run",

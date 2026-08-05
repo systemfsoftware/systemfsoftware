@@ -43,7 +43,8 @@
     "api:update": "api-extractor run --local",
     "lint": "oxlint . ${AGENT:+--format=unix --quiet}",
     "attw": "attw --pack .",
-    "mutation": "stryker run"
+    "mutation": "stryker run",
+    "mutation:full": "stryker run --force"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
