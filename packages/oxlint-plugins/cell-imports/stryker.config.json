@@ -6,8 +6,7 @@
   "plugins": [
     "@stryker-mutator/vitest-runner",
     "@systemfsoftware/stryker-js-typescript-checker",
-    "@systemfsoftware/stryker-plugins/effect-schema-ignorer",
-    "@systemfsoftware/stryker-plugins/lint-rule-helper-ignorer"
+    "@systemfsoftware/stryker-plugins/effect-schema-ignorer"
   ],
   "reporters": ["progress", "html", "json"],
   "htmlReporter": { "fileName": "reports/mutation-report.html" },
