@@ -8,6 +8,7 @@ import { HtmlReporter } from './html-reporter.js'
 import { JsonReporter } from './json-reporter.js'
 import { ProgressAppendOnlyReporter } from './progress-append-only-reporter.js'
 import { ProgressBarReporter } from './progress-reporter.js'
+import { ProgressStreamReporter } from './progress-stream-reporter.js'
 
 export { BroadcastReporter } from './broadcast-reporter.js'
 export type { StrictReporter } from './strict-reporter.js'
@@ -28,6 +29,10 @@ export const strykerPlugins = [
   ),
   declareClassPlugin(PluginKind.Reporter, 'html', HtmlReporter),
   declareClassPlugin(PluginKind.Reporter, 'json', JsonReporter),
+  // U7 — the fifth surviving reporter. U9 prunes the registry to exactly
+  // `clear-text`, `progress`, `html`, `json`, and `progress-stream`, so
+  // this entry must NOT be pruned with the removed reporters (R13, R17).
+  declareClassPlugin(PluginKind.Reporter, 'progress-stream', ProgressStreamReporter),
   declareFactoryPlugin(
     PluginKind.Reporter,
     'dashboard',
