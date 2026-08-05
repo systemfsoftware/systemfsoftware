@@ -1,7 +1,12 @@
 import { describe, expect, it } from "bun:test";
 import { Effort } from "@oh-my-pi/pi-catalog/effort";
 import type { Api, ModelSpec, Provider } from "@oh-my-pi/pi-catalog/types";
-import { applyGeneratedModelPolicies, linkOpenAIPromotionTargets } from "../scripts/generated-policies";
+import {
+	applyAntigravityPricingFallback,
+	applyGeneratedModelPolicies,
+	applyOllamaCloudOutputCap,
+	linkOpenAIPromotionTargets,
+} from "../scripts/generated-policies";
 
 function createSpec<TApi extends Api>(overrides: {
 	id: string;
@@ -406,5 +411,164 @@ describe("generated model policies", () => {
 		expect(models[1]?.applyPatchToolType).toBe("freeform");
 		expect(models[2]?.applyPatchToolType).toBeUndefined();
 		expect(models[3]?.applyPatchToolType).toBeUndefined();
+	});
+});
+
+describe("applyOllamaCloudOutputCap", () => {
+	it("pins DeepSeek V4 Pro/Flash (and their tag variants) to the enforced ceiling (#7266)", () => {
+		const models: ModelSpec<Api>[] = [
+			createSpec({
+				id: "deepseek-v4-flash",
+				api: "ollama-chat",
+				provider: "ollama-cloud",
+				contextWindow: 1048576,
+				maxTokens: 1048576,
+			}),
+			createSpec({
+				id: "deepseek-v4-flash:0731",
+				api: "ollama-chat",
+				provider: "ollama-cloud",
+				contextWindow: 1048576,
+				maxTokens: 8192,
+			}),
+			createSpec({
+				id: "deepseek-v4-pro",
+				api: "ollama-chat",
+				provider: "ollama-cloud",
+				contextWindow: 1048576,
+				maxTokens: 1048576,
+			}),
+		];
+
+		applyOllamaCloudOutputCap(models);
+
+		expect(models[0]?.maxTokens).toBe(65536);
+		expect(models[1]?.maxTokens).toBe(65536);
+		expect(models[2]?.maxTokens).toBe(65536);
+	});
+
+	it("leaves other Ollama Cloud models' discovered limits untouched", () => {
+		const models: ModelSpec<Api>[] = [
+			createSpec({
+				id: "kimi-k2.5",
+				api: "ollama-chat",
+				provider: "ollama-cloud",
+				contextWindow: 262144,
+				maxTokens: 262144,
+			}),
+			createSpec({
+				id: "deepseek-v3.1:671b",
+				api: "ollama-chat",
+				provider: "ollama-cloud",
+				contextWindow: 163840,
+				maxTokens: 163840,
+			}),
+		];
+
+		applyOllamaCloudOutputCap(models);
+
+		expect(models[0]?.maxTokens).toBe(262144);
+		expect(models[1]?.maxTokens).toBe(163840);
+	});
+
+	it("caps by the context window when a capped model's window is below the ceiling", () => {
+		const models: ModelSpec<Api>[] = [
+			createSpec({
+				id: "deepseek-v4-flash",
+				api: "ollama-chat",
+				provider: "ollama-cloud",
+				contextWindow: 32768,
+				maxTokens: 32768,
+			}),
+		];
+
+		applyOllamaCloudOutputCap(models);
+
+		expect(models[0]?.maxTokens).toBe(32768);
+	});
+
+	it("does not touch other providers", () => {
+		const models: ModelSpec<Api>[] = [
+			createSpec({
+				id: "deepseek-v4-flash",
+				api: "openai-completions",
+				provider: "deepseek",
+				contextWindow: 1048576,
+				maxTokens: 1048576,
+			}),
+		];
+
+		applyOllamaCloudOutputCap(models);
+
+		expect(models[0]?.maxTokens).toBe(1048576);
+	});
+});
+
+describe("applyAntigravityPricingFallback", () => {
+	it("prices Gemini ids at Google API peers and Claude ids at Vertex, falling back to Anthropic", () => {
+		const googleCost = { input: 1.5, output: 9, cacheRead: 0.15, cacheWrite: 0 };
+		const previewCost = { input: 2, output: 12, cacheRead: 0.2, cacheWrite: 0 };
+		const vertexCost = { input: 6, output: 30, cacheRead: 0.6, cacheWrite: 7.5 };
+		const anthropicCost = { input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25 };
+		const models: ModelSpec<Api>[] = [
+			createSpec({ id: "gemini-3.5-flash", api: "google-generative-ai", provider: "google", cost: googleCost }),
+			createSpec({
+				id: "gemini-3.1-pro-preview",
+				api: "google-generative-ai",
+				provider: "google",
+				cost: previewCost,
+			}),
+			createSpec({
+				id: "claude-opus-4-6@default",
+				api: "anthropic-messages",
+				provider: "google-vertex",
+				cost: vertexCost,
+			}),
+			createSpec({ id: "claude-opus-4-6", api: "anthropic-messages", provider: "anthropic", cost: anthropicCost }),
+			createSpec({ id: "claude-sonnet-4-6", api: "anthropic-messages", provider: "anthropic", cost: anthropicCost }),
+			createSpec({ id: "gemini-3.5-flash", api: "google-gemini-cli", provider: "google-antigravity" }),
+			createSpec({ id: "gemini-3.1-pro", api: "google-gemini-cli", provider: "google-antigravity" }),
+			createSpec({ id: "claude-opus-4-6", api: "google-gemini-cli", provider: "google-antigravity" }),
+			createSpec({ id: "claude-sonnet-4-6", api: "google-gemini-cli", provider: "google-antigravity" }),
+		];
+
+		const result = applyAntigravityPricingFallback(models);
+
+		expect(result[5]?.cost).toEqual(googleCost);
+		expect(result[6]?.cost).toEqual(previewCost);
+		// Vertex list price wins over Anthropic for aliased Claude ids.
+		expect(result[7]?.cost).toEqual(vertexCost);
+		// Dangling Vertex alias (no google-vertex row) falls back to Anthropic.
+		expect(result[8]?.cost).toEqual(anthropicCost);
+	});
+
+	it("keeps zero cost for ids without a priced peer and never overwrites billable antigravity cost", () => {
+		const zeroCost = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
+		const pricedCost = { input: 0.5, output: 3, cacheRead: 0.05, cacheWrite: 0 };
+		const models: ModelSpec<Api>[] = [
+			createSpec({ id: "gemini-3-flash-preview", api: "google-generative-ai", provider: "google", cost: zeroCost }),
+			createSpec({ id: "tab_flash_lite_preview", api: "google-gemini-cli", provider: "google-antigravity" }),
+			createSpec({ id: "gemini-3-flash", api: "google-gemini-cli", provider: "google-antigravity" }),
+			createSpec({
+				id: "gemini-3.6-flash",
+				api: "google-gemini-cli",
+				provider: "google-antigravity",
+				cost: pricedCost,
+			}),
+			createSpec({
+				id: "gemini-3.6-flash",
+				api: "google-generative-ai",
+				provider: "google",
+				cost: { input: 9, output: 9, cacheRead: 9, cacheWrite: 9 },
+			}),
+		];
+
+		const result = applyAntigravityPricingFallback(models);
+
+		// No billable google peer (zero-cost peer is not a pricing source).
+		expect(result[1]?.cost).toEqual(zeroCost);
+		expect(result[2]?.cost).toEqual(zeroCost);
+		// Already-billable antigravity rows keep their own pricing.
+		expect(result[3]?.cost).toEqual(pricedCost);
 	});
 });

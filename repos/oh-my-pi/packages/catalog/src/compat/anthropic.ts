@@ -4,10 +4,11 @@
  * defaults come from provider ids, strict host checks, and model-id
  * classification, with explicit spec overrides assigned on top.
  */
-import { modelMatchesHost } from "../hosts";
+import { hostMatchesUrl, modelMatchesHost } from "../hosts";
 import {
 	hasOpus47ApiRestrictions,
 	isAnthropicFableOrMythosModel,
+	isKimiK3ModelId,
 	supportsMidConversationSystemMessages,
 } from "../identity/family";
 import type { ModelSpec, ResolvedAnthropicCompat } from "../types";
@@ -28,12 +29,25 @@ export function isOfficialAnthropicApiUrl(baseUrl?: string): boolean {
 	return lower === OFFICIAL_ANTHROPIC_URL || lower.startsWith(`${OFFICIAL_ANTHROPIC_URL}/`);
 }
 
-/** Mirrors `compat/openai.ts`; native-only host gating is the caller's responsibility. */
+/**
+ * Kimi models whose native endpoints (api.kimi.com, api.moonshot.ai) keep
+ * thinking enabled server-side no matter what the request carries: they
+ * reject disabled thinking (#3852) AND reject forced tool_choice
+ * (`tool_choice 'specified' is incompatible with thinking enabled`), so compat
+ * must keep thinking on and downgrade forced choices to `auto`. Covers the
+ * K2.7 Code family — public id, its Highspeed variant, and the kimi-code
+ * `kimi-for-coding[-highspeed]` aliases — plus K3 (`kimi-k3`, bare `k3` on
+ * kimi-code). Broader than the `compat/openai.ts` mirror: the OpenAI surface
+ * has its own per-dialect policies (K3 forced-choice guard, explicit disable
+ * shapes), while this surface has no working way to force a tool.
+ * Native-only host gating is the caller's responsibility.
+ */
 const KIMI_K27_CODE_MODEL_PATTERN = /(?:^|\/)kimi[-._]?k2(?:[._-]?|p)7[-._]?code(?:[-._]?highspeed)?$/i;
 
-function matchesKimiK27CodeFamily(spec: ModelSpec<"anthropic-messages">): boolean {
+function matchesKimiMandatoryThinkingModel(spec: ModelSpec<"anthropic-messages">): boolean {
 	if (KIMI_K27_CODE_MODEL_PATTERN.test(spec.id)) return true;
-	return spec.id === "kimi-for-coding" && /k2\.?7 code/i.test(spec.name ?? "");
+	if (spec.id === "kimi-for-coding" || spec.id === "kimi-for-coding-highspeed") return true;
+	return isKimiK3ModelId(spec.id) || spec.id === "k3";
 }
 
 const CLOUDFLARE_ANTHROPIC_GATEWAY_URL_MARKER = /gateway\.ai\.cloudflare\.com\/.+\/anthropic(?:\/|$)/i;
@@ -82,6 +96,23 @@ function isAzureAnthropicRoute(baseUrl?: string): boolean {
 	return baseUrl !== undefined && AZURE_ANTHROPIC_URL_MARKER.test(baseUrl);
 }
 
+/**
+ * Known non-official URLs that enforce Anthropic thinking signatures on replay.
+ *
+ * Runtime routing calls this with the effective URL because a model's resolved
+ * compat can be stale after Foundry or a provider base-URL override reroutes it.
+ */
+export function isAnthropicSigningProxyUrl(baseUrl?: string): boolean {
+	return (
+		hostMatchesUrl(baseUrl, "githubCopilot") ||
+		hostMatchesUrl(baseUrl, "zenmux") ||
+		isCloudflareAnthropicGateway(baseUrl) ||
+		isVertexAnthropicRoute(baseUrl) ||
+		isBedrockAnthropicRoute(baseUrl) ||
+		isAzureAnthropicRoute(baseUrl)
+	);
+}
+
 /** Build the resolved anthropic-messages compat record for a model spec. */
 export function buildAnthropicCompat(spec: ModelSpec<"anthropic-messages">): ResolvedAnthropicCompat {
 	const baseUrl = spec.baseUrl;
@@ -98,12 +129,9 @@ export function buildAnthropicCompat(spec: ModelSpec<"anthropic-messages">): Res
 	// signature-enforcing Anthropic — same failure class as GitHub Copilot #2851
 	// (issue #4192).
 	const isZenmux = modelMatchesHost(spec, "zenmux");
-	const requiresThinkingEnabled = modelMatchesHost(spec, "moonshotNative") && matchesKimiK27CodeFamily(spec);
-	const isVertex = isVertexAnthropicRoute(baseUrl);
-	const isBedrock = isBedrockAnthropicRoute(baseUrl);
+	const requiresThinkingEnabled = modelMatchesHost(spec, "moonshotNative") && matchesKimiMandatoryThinkingModel(spec);
 	const isAzure = isAzureAnthropicRoute(baseUrl);
-	const signingEndpoint =
-		official || isCopilot || isZenmux || isCloudflareAnthropicGateway(baseUrl) || isVertex || isBedrock || isAzure;
+	const signingEndpoint = official || isCopilot || isZenmux || isAnthropicSigningProxyUrl(baseUrl);
 	const compat: ResolvedAnthropicCompat = {
 		officialEndpoint: official,
 		signingEndpoint,
@@ -144,6 +172,7 @@ export function buildAnthropicCompat(spec: ModelSpec<"anthropic-messages">): Res
 		// id or baseUrl marker.
 		replayUnsignedThinking: !signingEndpoint && (Boolean(spec.reasoning) || modelMatchesHost(spec, "deepseekFamily")),
 		escapeBuiltinToolNames: modelMatchesHost(spec, "umans"),
+		streamIdleTimeoutMs: spec.compat?.streamIdleTimeoutMs,
 	};
 	applyCompatOverrides(compat, spec.compat);
 	return compat;

@@ -2515,6 +2515,14 @@ export interface ResponseFunctionToolCall {
 	 */
 	namespace?: string;
 	/**
+	 * Plaintext-argument marker for collaboration tool calls (codex-rs
+	 * `encrypted_function_args`, #35845): an empty array marks the arguments as
+	 * plaintext agent-message payloads rather than encrypted blobs. Preserved
+	 * verbatim across history replay so the backend keeps treating them as
+	 * plaintext; omitted entirely for ordinary function calls.
+	 */
+	encrypted_function_args?: string[];
+	/**
 	 * The status of the item. One of `in_progress`, `completed`, or `incomplete`.
 	 * Populated when items are returned via API.
 	 */

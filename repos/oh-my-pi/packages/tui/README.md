@@ -528,8 +528,8 @@ interface Terminal {
 	get columns(): number;
 	get rows(): number;
 	moveBy(lines: number): void;
-	hideCursor(): void;
-	showCursor(): void;
+	hideCursor(force?: boolean): void;
+	showCursor(force?: boolean): void;
 	clearLine(): void;
 	clearFromCursor(): void;
 	clearScreen(): void;

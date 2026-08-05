@@ -17,11 +17,13 @@ function migrateSessionDirPath(oldPath: string, newPath: string): void {
 		for (const file of fs.readdirSync(oldPath)) {
 			const src = path.join(oldPath, file);
 			const dst = path.join(newPath, file);
-			if (!fs.existsSync(dst)) {
-				fs.renameSync(src, dst);
+			if (fs.existsSync(dst)) {
+				logger.warn("Session directory migration collision; preserving legacy entry", { src, dst });
+				continue;
 			}
+			fs.renameSync(src, dst);
 		}
-		fs.rmSync(oldPath, { recursive: true, force: true });
+		fs.rmdirSync(oldPath);
 		return;
 	}
 	if (existing) {
@@ -94,8 +96,12 @@ function migrateHomeSessionDirs(sessionsRoot: string): void {
 
 		try {
 			migrateSessionDirPath(oldPath, newPath);
-		} catch {
-			// Best effort
+		} catch (error) {
+			logger.warn("Failed to migrate legacy home session directory", {
+				oldPath,
+				newPath,
+				error: String(error),
+			});
 		}
 	}
 }
@@ -106,8 +112,12 @@ function migrateLegacyAbsoluteSessionDir(cwd: string, sessionDir: string, sessio
 
 	try {
 		migrateSessionDirPath(legacyDir, sessionDir);
-	} catch {
-		// Best effort
+	} catch (error) {
+		logger.warn("Failed to migrate legacy session directory", {
+			oldPath: legacyDir,
+			newPath: sessionDir,
+			error: String(error),
+		});
 	}
 }
 

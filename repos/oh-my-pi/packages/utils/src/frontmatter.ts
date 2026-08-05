@@ -71,7 +71,7 @@ export class FrontmatterError extends Error {
 		this.name = "FrontmatterError";
 	}
 
-	toString(): string {
+	override toString(): string {
 		// Format the error with stack and detail, including the error message, stack, and source if present
 		const details: string[] = [this.message];
 		if (this.source !== undefined) {

@@ -141,6 +141,39 @@ function xdevDispatchDevice(toolName: string, args: unknown): string | undefined
 	return parseXdUrl(path)?.name ?? undefined;
 }
 
+/** Whether a Hub call carries peer-to-peer coordination rather than process control. */
+function isInternalHubMessageTool(toolName: string, args: unknown): boolean {
+	let hubArgs = args;
+	if (toolName !== "hub") {
+		if (xdevDispatchDevice(toolName, args) !== "hub" || typeof args !== "object" || args === null) {
+			return false;
+		}
+		const content = Reflect.get(args, "content");
+		if (typeof content !== "string") return false;
+		try {
+			hubArgs = JSON.parse(content);
+		} catch {
+			return false;
+		}
+	}
+	if (typeof hubArgs !== "object" || hubArgs === null) return false;
+	const op = Reflect.get(hubArgs, "op");
+	switch (op) {
+		case "list":
+		case "inbox":
+			return true;
+		case "send":
+			return typeof Reflect.get(hubArgs, "to") === "string";
+		case "wait":
+			// A bare wait or an `ids` wait settles on background-job delivery,
+			// whose snapshot IS the job result (hub.md) — keep those visible.
+			// Only a peer-scoped wait (`from`, no jobs) is internal messaging.
+			return typeof Reflect.get(hubArgs, "from") === "string" && Reflect.get(hubArgs, "ids") === undefined;
+		default:
+			return false;
+	}
+}
+
 export function mapToolKind(toolName: string, args?: unknown): ToolKind {
 	// An xd:// device write executes the mounted tool — "edit" would make ACP
 	// clients render it as a file modification to a nonexistent path (and
@@ -186,6 +219,7 @@ export function mapAgentSessionEventToAcpSessionUpdates(
 		case "message_end":
 			return mapAssistantMessageEnd(event, sessionId, options);
 		case "tool_execution_start": {
+			if (isInternalHubMessageTool(event.toolName, event.args)) return [];
 			const update = buildToolCallStartUpdate({
 				toolCallId: event.toolCallId,
 				toolName: event.toolName,
@@ -196,6 +230,7 @@ export function mapAgentSessionEventToAcpSessionUpdates(
 			return [toSessionNotification(sessionId, update)];
 		}
 		case "tool_execution_update": {
+			if (isInternalHubMessageTool(event.toolName, event.args)) return [];
 			const content = mergeToolUpdateContent(
 				buildToolStartContent(event.toolName, event.args),
 				extractToolCallContent(event.partialResult, options),
@@ -216,14 +251,13 @@ export function mapAgentSessionEventToAcpSessionUpdates(
 			return [toSessionNotification(sessionId, update)];
 		}
 		case "tool_execution_end": {
+			const args = getToolExecutionEndArgs(event, options);
+			if (isInternalHubMessageTool(event.toolName, args)) return [];
 			const resultContent = [
 				...extractDiffToolCallContent(event.result),
 				...extractToolCallContent(event.result, options),
 			];
-			const content = mergeToolUpdateContent(
-				buildToolStartContent(event.toolName, getToolExecutionEndArgs(event, options)),
-				resultContent,
-			);
+			const content = mergeToolUpdateContent(buildToolStartContent(event.toolName, args), resultContent);
 			const update: SessionUpdate = {
 				sessionUpdate: "tool_call_update",
 				toolCallId: event.toolCallId,

@@ -120,6 +120,41 @@ describe("streamSimple resolver auth retry", () => {
 		expect((contexts[1]!.error as { status?: number }).status).toBe(401);
 	});
 
+	it("surfaces a 403 concurrency cap for transient backoff without rotating credentials", async () => {
+		const keys: unknown[] = [];
+		const contexts: ApiKeyResolveContext[] = [];
+		const concurrencyCap = Object.assign(new Error("concurrent requests limit reached"), { status: 403 });
+		registerCustomApi(
+			API,
+			(_model: Model<Api>, _context: Context, options?: SimpleStreamOptions) => {
+				pushKey(keys, options);
+				const stream = new AssistantMessageEventStream();
+				queueMicrotask(() => stream.fail(concurrencyCap));
+				return stream;
+			},
+			SOURCE_ID,
+		);
+
+		const stream = streamSimple(model(), context, {
+			apiKey: async ctx => {
+				contexts.push(ctx);
+				return ctx.error === undefined ? "old-key" : ctx.lastChance ? "sibling-key" : "refresh-key";
+			},
+		});
+		await expect(
+			(async () => {
+				for await (const _event of stream) {
+					// drain
+				}
+			})(),
+		).rejects.toBe(concurrencyCap);
+
+		expect(keys).toEqual(["old-key"]);
+		expect(contexts.map(ctx => ({ lastChance: ctx.lastChance, hasError: ctx.error !== undefined }))).toEqual([
+			{ lastChance: false, hasError: false },
+		]);
+	});
+
 	it("buffers the start event and retries on a 401 error event before content", async () => {
 		const keys: unknown[] = [];
 		const eventTypes: string[] = [];

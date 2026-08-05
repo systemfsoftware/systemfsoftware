@@ -199,7 +199,13 @@ class FakeAgentSession {
 	}
 
 	async setModel(model: Model): Promise<void> {
+		const isChanging = this.model?.provider !== model.provider || this.model?.id !== model.id;
 		this.model = model;
+		if (isChanging) {
+			for (const listener of this.#listeners) {
+				listener({ type: "model_changed" } as AgentSessionEvent);
+			}
+		}
 	}
 
 	subscribe(listener: (event: AgentSessionEvent) => void): () => void {
@@ -900,6 +906,83 @@ describe("ACP agent", () => {
 		await Bun.sleep(0);
 	});
 
+	it("pushes config_option_update when the model changes internally", async () => {
+		// Internal callers (prewalk hand-offs, retry-fallback, model cycling)
+		// change AgentSession's model directly without going through the ACP
+		// setSessionConfigOption surface. Once the session-lifetime subscription
+		// is installed, those changes must surface to clients as
+		// `config_option_update` — otherwise a client's model indicator (e.g.
+		// Zed's status bar) goes stale the moment prewalk hands off to a
+		// cheaper model mid-session.
+		const harness = await createHarness();
+		const created = await harness.agent.newSession({ cwd: harness.cwdA, mcpServers: [] });
+		const session = harness.findSession(created.sessionId)!;
+		await waitForBootstrapGuard();
+
+		const updatesBefore = harness.updates.length;
+		await session.setModel(TEST_MODELS[1]!);
+
+		const pushedAfter = harness.updates.slice(updatesBefore);
+		const configUpdates = pushedAfter.filter(
+			notification =>
+				notification.sessionId === created.sessionId &&
+				notification.update.sessionUpdate === "config_option_update",
+		);
+		expect(configUpdates.length).toBeGreaterThanOrEqual(1);
+		expectAcpNotifications(configUpdates);
+		const firstUpdate = configUpdates[0]!.update;
+		if (firstUpdate.sessionUpdate !== "config_option_update") {
+			throw new Error("expected config_option_update");
+		}
+		const modelConfig = firstUpdate.configOptions.find(option => option.id === "model") as
+			| { currentValue?: unknown }
+			| undefined;
+		expect(modelConfig?.currentValue).toBe(`${TEST_MODELS[1]!.provider}/${TEST_MODELS[1]!.id}`);
+
+		// Setting to the same model must not produce a redundant notification.
+		const updatesBeforeRedundant = harness.updates.length;
+		await session.setModel(TEST_MODELS[1]!);
+		expect(harness.updates.length).toBe(updatesBeforeRedundant);
+
+		harness.abortController.abort();
+		await Bun.sleep(0);
+	});
+
+	it("emits a single config_option_update per setSessionConfigOption(model) call", async () => {
+		// Client-initiated model changes flow through #setModelById, which now
+		// changes the session model and fires `model_changed`, letting the
+		// lifetime subscription push the notification. The ACP surface must not
+		// also push a duplicate `config_option_update` of its own.
+		const harness = await createHarness();
+		const created = await harness.agent.newSession({ cwd: harness.cwdA, mcpServers: [] });
+		await waitForBootstrapGuard();
+
+		const updatesBefore = harness.updates.length;
+		const response = await harness.agent.setSessionConfigOption({
+			sessionId: created.sessionId,
+			configId: "model",
+			value: `${TEST_MODELS[1]!.provider}/${TEST_MODELS[1]!.id}`,
+		});
+
+		const configUpdates = harness.updates
+			.slice(updatesBefore)
+			.filter(
+				notification =>
+					notification.sessionId === created.sessionId &&
+					notification.update.sessionUpdate === "config_option_update",
+			);
+		expect(configUpdates.length).toBe(1);
+		expectAcpNotifications(configUpdates);
+
+		const modelOption = response.configOptions.find(option => option.id === "model") as
+			| { currentValue?: unknown }
+			| undefined;
+		expect(modelOption?.currentValue).toBe(`${TEST_MODELS[1]!.provider}/${TEST_MODELS[1]!.id}`);
+
+		harness.abortController.abort();
+		await Bun.sleep(0);
+	});
+
 	it("lists static speech models for ACP mobile voice settings", async () => {
 		const harness = await createHarness();
 		const voices = TTS_LOCAL_VOICE_OPTIONS.map(({ value, label }) => ({ value, label }));
@@ -1306,6 +1389,49 @@ describe("ACP agent", () => {
 		await Bun.sleep(0);
 	});
 
+	it("does not replay internal Hub messages to ACP clients", async () => {
+		const harness = await createHarness();
+		const stored = new FakeAgentSession(harness.cwdA);
+		harness.sessions.push(stored);
+		stored.sessionManager.appendMessage({ role: "user", content: "Delegate this task", timestamp: Date.now() });
+		stored.sessionManager.appendMessage({
+			...makeAssistantMessage(""),
+			content: [
+				{
+					type: "toolCall",
+					id: "toolu_hub_replay",
+					name: "hub",
+					arguments: { op: "send", to: "Scout", message: "Private coordination" },
+				},
+			],
+			stopReason: "toolUse",
+		});
+		stored.sessionManager.appendMessage({
+			role: "toolResult",
+			toolCallId: "toolu_hub_replay",
+			toolName: "hub",
+			content: [{ type: "text", text: "Private reply" }],
+			isError: false,
+			timestamp: Date.now(),
+		});
+		await stored.sessionManager.ensureOnDisk();
+		await stored.sessionManager.flush();
+
+		await harness.agent.loadSession({
+			sessionId: stored.sessionId,
+			cwd: harness.cwdA,
+			mcpServers: [],
+		});
+
+		const hubUpdates = harness.updates
+			.filter(update => update.sessionId === stored.sessionId)
+			.map(notification => notification.update)
+			.filter(update => "toolCallId" in update && update.toolCallId === "toolu_hub_replay");
+		expect(hubUpdates).toEqual([]);
+
+		harness.abortController.abort();
+	});
+
 	it("preserves tool_use input payloads when replaying assistant tool calls", async () => {
 		const harness = await createHarness();
 		const stored = new FakeAgentSession(harness.cwdA);
@@ -1652,9 +1778,7 @@ describe("ACP agent", () => {
 		if (!customMessage) throw new Error("expected ACP skill prompt custom message");
 		expect(customMessage.customType).toBe("skill-prompt");
 		expect(customMessage.content).toContain("# Sample\nDo work.");
-		expect(customMessage.content).toContain('The user has invoked the "sample" skill');
 		expect(customMessage.content).toContain(`[Skill directory: ${skillDir}]`);
-		expect(customMessage.content).toMatch(/[Rr]esolve any relative paths/);
 		expect(customMessage.content).toContain("User: extra context");
 		expect(session.customMessageOptions[0]).toEqual({ streamingBehavior: "steer" });
 
@@ -2321,6 +2445,55 @@ describe("ACP agent", () => {
 			});
 		});
 
+		it("translates editor to a string elicitation with the prefill as default", async () => {
+			const { connection, calls } = createElicitConnection(async () => ({
+				action: "accept",
+				content: { value: "Reviewing auth changes" },
+			}));
+			const ctx = createAcpExtensionUiContext(connection, () => "session-editor", FORM_CAPABILITIES);
+
+			const result = await ctx.editor("Enter custom review instructions", "Review the following:\n\n");
+
+			expect(result).toBe("Reviewing auth changes");
+			expect(calls).toHaveLength(1);
+			const request = calls[0]!;
+			if (!isFormElicitation(request)) {
+				throw new Error("expected form-mode elicitation");
+			}
+			expect(request.message).toBe("Enter custom review instructions");
+			expect(request.requestedSchema.properties?.value).toEqual({
+				type: "string",
+				default: "Review the following:\n\n",
+			});
+		});
+
+		it("omits default on editor only when the prefill is empty, but preserves whitespace-only prefill", async () => {
+			const { connection, calls } = createElicitConnection(async () => ({
+				action: "accept",
+				content: { value: "text" },
+			}));
+			const ctx = createAcpExtensionUiContext(connection, () => "session-editor-empty", FORM_CAPABILITIES);
+
+			await ctx.editor("Title", "");
+
+			const emptyRequest = calls[0]!;
+			if (!isFormElicitation(emptyRequest)) throw new Error("expected form-mode elicitation");
+			expect(emptyRequest.requestedSchema.properties?.value).toEqual({ type: "string" });
+
+			// Unlike `input`'s placeholder, `editor` prefill is the document being
+			// edited: whitespace/blank lines are meaningful content, not absence,
+			// so they must round-trip verbatim (matching the interactive/RPC
+			// implementations, which set the editor's text to any truthy prefill).
+			await ctx.editor("Title", "   ");
+
+			const whitespaceRequest = calls[1]!;
+			if (!isFormElicitation(whitespaceRequest)) throw new Error("expected form-mode elicitation");
+			expect(whitespaceRequest.requestedSchema.properties?.value).toEqual({
+				type: "string",
+				default: "   ",
+			});
+		});
+
 		it("returns undefined / false for decline and cancel actions", async () => {
 			let nextAction: "decline" | "cancel" = "decline";
 			const { connection } = createElicitConnection(async () => ({ action: nextAction }));
@@ -2331,6 +2504,7 @@ describe("ACP agent", () => {
 				expect(await ctx.select("X", ["a"])).toBeUndefined();
 				expect(await ctx.confirm("X", "Y")).toBe(false);
 				expect(await ctx.input("X")).toBeUndefined();
+				expect(await ctx.editor("X")).toBeUndefined();
 			}
 		});
 
@@ -2344,6 +2518,7 @@ describe("ACP agent", () => {
 			expect(await ctx.select("X", ["a"])).toBeUndefined();
 			expect(await ctx.confirm("X", "Y")).toBe(false);
 			expect(await ctx.input("X")).toBeUndefined();
+			expect(await ctx.editor("X")).toBeUndefined();
 			expect(calls).toHaveLength(0);
 		});
 

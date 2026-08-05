@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
 import { postmortem } from "@oh-my-pi/pi-utils";
 import { JsRuntime, type RuntimeHooks } from "../../src/eval/js/shared/runtime";
-import { bindBrowserRunFacade, markHandled, waitForBrowserRun } from "../../src/tools/browser/run-cancellation";
+import { bindRunFacade, markHandled, waitForRun } from "../../src/tools/run-scope";
 import { ToolAbortError } from "../../src/tools/tool-errors";
 
 async function collectUnhandledRejections(action: () => void | Promise<void>): Promise<unknown[]> {
@@ -42,7 +42,7 @@ describe("browser run cancellation", () => {
 	it("resolves run-scoped wait when the run is not aborted", async () => {
 		const controller = new AbortController();
 
-		const wait = waitForBrowserRun(25, controller.signal);
+		const wait = waitForRun(25, controller.signal);
 		vi.advanceTimersByTime(25);
 
 		await expect(wait).resolves.toBeUndefined();
@@ -50,7 +50,7 @@ describe("browser run cancellation", () => {
 
 	it("rejects run-scoped wait when the run aborts mid-sleep", async () => {
 		const controller = new AbortController();
-		const wait = waitForBrowserRun(1000, controller.signal);
+		const wait = waitForRun(1000, controller.signal);
 
 		controller.abort(new Error("browser run ended"));
 
@@ -62,7 +62,7 @@ describe("browser run cancellation", () => {
 		const controller = new AbortController();
 		let calls = 0;
 
-		const wait = waitForBrowserRun(() => (++calls >= 3 ? "ready" : null), controller.signal, { interval: 10 });
+		const wait = waitForRun(() => (++calls >= 3 ? "ready" : null), controller.signal, { interval: 10 });
 
 		await expect(wait).resolves.toBe("ready");
 		expect(calls).toBe(3);
@@ -72,7 +72,7 @@ describe("browser run cancellation", () => {
 		vi.useRealTimers();
 		const controller = new AbortController();
 
-		const wait = waitForBrowserRun(() => false, controller.signal, { timeout: 50, interval: 10 });
+		const wait = waitForRun(() => false, controller.signal, { timeout: 50, interval: 10 });
 
 		await expect(wait).rejects.toThrow("wait(predicate) timed out after 50ms");
 	});
@@ -81,7 +81,7 @@ describe("browser run cancellation", () => {
 		vi.useRealTimers();
 		const controller = new AbortController();
 
-		const wait = waitForBrowserRun(() => false, controller.signal, { timeout: 5000 });
+		const wait = waitForRun(() => false, controller.signal, { timeout: 5000 });
 		controller.abort(new Error("browser run ended"));
 
 		await expect(wait).rejects.toThrow("browser run ended");
@@ -90,7 +90,7 @@ describe("browser run cancellation", () => {
 	it("rejects wait() input that is neither milliseconds nor a predicate", async () => {
 		const controller = new AbortController();
 
-		await expect(waitForBrowserRun("soon" as never, controller.signal)).rejects.toThrow(
+		await expect(waitForRun("soon" as never, controller.signal)).rejects.toThrow(
 			"wait(...) expects milliseconds (number) or a predicate function to poll",
 		);
 	});
@@ -99,7 +99,7 @@ describe("browser run cancellation", () => {
 		const controller = new AbortController();
 
 		const reasons = await collectUnhandledRejections(async () => {
-			void waitForBrowserRun(1000, controller.signal);
+			void waitForRun(1000, controller.signal);
 			controller.abort(postmortem.markExpectedCleanupError(new Error("browser run ended")));
 		});
 
@@ -109,7 +109,7 @@ describe("browser run cancellation", () => {
 	it("does not emit unhandledRejection when an unawaited facade method settles after abort", async () => {
 		const controller = new AbortController();
 		const deferred = Promise.withResolvers<string>();
-		const facade = bindBrowserRunFacade(
+		const facade = bindRunFacade(
 			{
 				readTitle(): Promise<string> {
 					return deferred.promise;
@@ -130,7 +130,7 @@ describe("browser run cancellation", () => {
 	it("rejects awaited facade method calls that settle after abort", async () => {
 		const controller = new AbortController();
 		const deferred = Promise.withResolvers<string>();
-		const facade = bindBrowserRunFacade(
+		const facade = bindRunFacade(
 			{
 				readTitle(): Promise<string> {
 					return deferred.promise;
@@ -162,8 +162,8 @@ describe("browser run cancellation", () => {
 			once: true,
 		});
 		runtime.setRunScope({
-			wait: (ms: number): Promise<unknown> => waitForBrowserRun(ms, signal),
-			tab: bindBrowserRunFacade(
+			wait: (ms: number): Promise<unknown> => waitForRun(ms, signal),
+			tab: bindRunFacade(
 				{
 					goto: async (url: string): Promise<void> => {
 						state.lateNavigation = url;

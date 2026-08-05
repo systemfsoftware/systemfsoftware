@@ -1,11 +1,6 @@
 import { afterEach, describe, expect, test, vi } from "bun:test";
 import type { AgentMessage, AgentTool } from "@oh-my-pi/pi-agent-core";
-import {
-	AUTO_HANDOFF_THRESHOLD_FOCUS,
-	generateHandoff,
-	generateHandoffFromContext,
-	renderHandoffPrompt,
-} from "@oh-my-pi/pi-agent-core/compaction";
+import { generateHandoff, generateHandoffFromContext, renderHandoffPrompt } from "@oh-my-pi/pi-agent-core/compaction";
 import { ThinkingLevel } from "@oh-my-pi/pi-agent-core/thinking";
 import type { AssistantMessage, Model, ToolCall } from "@oh-my-pi/pi-ai";
 import * as ai from "@oh-my-pi/pi-ai";
@@ -70,12 +65,6 @@ describe("handoff helpers", () => {
 	test("renders custom focus into the handoff prompt", () => {
 		const rendered = renderHandoffPrompt("preserve failing test name");
 		expect(rendered).toContain("preserve failing test name");
-	});
-
-	test("exports the threshold focus text used by auto-handoff", () => {
-		expect(AUTO_HANDOFF_THRESHOLD_FOCUS).toBe(
-			"Threshold-triggered maintenance: preserve critical implementation state and immediate next actions.",
-		);
 	});
 
 	test("generates handoff with the live cache prefix and tool use disabled", async () => {

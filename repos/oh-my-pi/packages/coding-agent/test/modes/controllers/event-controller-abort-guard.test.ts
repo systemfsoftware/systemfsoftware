@@ -23,6 +23,7 @@ import { EventController } from "@oh-my-pi/pi-coding-agent/modes/controllers/eve
 import { initTheme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 import type { InteractiveModeContext } from "@oh-my-pi/pi-coding-agent/modes/types";
 import type { AgentSessionEvent } from "@oh-my-pi/pi-coding-agent/session/agent-session";
+import * as titleGenerator from "@oh-my-pi/pi-coding-agent/utils/title-generator";
 import { TERMINAL } from "@oh-my-pi/pi-tui";
 
 const originalWarpProtocolVersion = process.env.WARP_CLI_AGENT_PROTOCOL_VERSION;
@@ -401,5 +402,34 @@ describe("EventController — error toast gated while auto-retry is pending", ()
 		await controller.handleEvent(makeAgentEndEvent([makeAssistantMessage("error")]));
 		expect(spy).toHaveBeenCalledTimes(1);
 		expect(spy).toHaveBeenCalledWith(expect.objectContaining({ body: "Stopped with error", type: "error" }));
+	});
+});
+
+describe("EventController — terminal title across a non-terminal agent_end", () => {
+	it("keeps the working title and skips loader teardown but still flushes a deferred model switch during a pending async-wake pause (isTerminal:false)", async () => {
+		const stateSpy = vi.spyOn(titleGenerator, "setTerminalTitleState").mockImplementation(() => {});
+		const ctx = makeTurnEndContext();
+		const markActivityEnd = vi.spyOn(ctx.statusLine, "markActivityEnd");
+		const flushPendingModelSwitch = vi.spyOn(ctx, "flushPendingModelSwitch");
+		const controller = new EventController(ctx);
+		await controller.handleEvent({
+			...makeAgentEndEvent([makeAssistantMessage("stop")]),
+			isTerminal: false,
+		} as Extract<AgentSessionEvent, { type: "agent_end" }> & { isTerminal: false });
+		// The async job still runs: never drop to `idle`, never run #finishAgentEnd teardown.
+		expect(stateSpy).not.toHaveBeenCalledWith("idle");
+		expect(markActivityEnd).not.toHaveBeenCalled();
+		// The automatic continuation must still pick up a queued plan-mode model switch.
+		expect(flushPendingModelSwitch).toHaveBeenCalledTimes(1);
+	});
+
+	it("transitions to idle and tears down on the terminal agent_end", async () => {
+		const stateSpy = vi.spyOn(titleGenerator, "setTerminalTitleState").mockImplementation(() => {});
+		const ctx = makeTurnEndContext();
+		const markActivityEnd = vi.spyOn(ctx.statusLine, "markActivityEnd");
+		const controller = new EventController(ctx);
+		await controller.handleEvent(makeAgentEndEvent([makeAssistantMessage("stop")]));
+		expect(stateSpy).toHaveBeenCalledWith("idle");
+		expect(markActivityEnd).toHaveBeenCalledTimes(1);
 	});
 });

@@ -6,6 +6,7 @@
  * behavior they have in the TUI.
  */
 import { afterEach, beforeEach, expect, it, spyOn } from "bun:test";
+import { type } from "@oh-my-pi/omptype";
 import { Agent, type AgentTool } from "@oh-my-pi/pi-agent-core";
 import { createMockModel, type MockModelOptions } from "@oh-my-pi/pi-ai/providers/mock";
 import { AssistantMessageEventStream } from "@oh-my-pi/pi-ai/utils/event-stream";
@@ -21,9 +22,8 @@ import type {
 import { convertToLlm } from "@oh-my-pi/pi-coding-agent/session/messages";
 import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
 import type { ToolSession } from "@oh-my-pi/pi-coding-agent/tools";
-import { XdevRegistry } from "@oh-my-pi/pi-coding-agent/tools/xdev";
+import { dispatchXdevTool, resolveMountedXdevExecutable, type XdevState } from "@oh-my-pi/pi-coding-agent/tools/xdev";
 import { TempDir } from "@oh-my-pi/pi-utils";
-import { type } from "arktype";
 
 // ---------------------------------------------------------------------------
 // Shared setup
@@ -84,9 +84,8 @@ async function createSession(
 	bridge?: ClientBridge,
 	settingsOverrides: Partial<Record<SettingPath, unknown>> = {},
 	options?: {
-		xdevRegistry?: XdevRegistry;
+		xdev?: XdevState;
 		builtInToolNames?: string[];
-		initialMountedXdevToolNames?: string[];
 		persist?: boolean;
 	},
 ): Promise<AgentSession> {
@@ -110,15 +109,16 @@ async function createSession(
 		streamFn: () => new AssistantMessageEventStream(),
 	});
 
+	const toolRegistry = options?.xdev?.tools ?? new Map<string, AgentTool>();
+	for (const tool of tools) toolRegistry.set(tool.name, tool);
 	const sess = new AgentSession({
 		agent,
 		sessionManager,
 		settings,
 		modelRegistry: {} as never,
-		toolRegistry: new Map(tools.map(t => [t.name, t])),
-		xdevRegistry: options?.xdevRegistry,
+		toolRegistry,
+		xdev: options?.xdev,
 		builtInToolNames: options?.builtInToolNames,
-		initialMountedXdevToolNames: options?.initialMountedXdevToolNames,
 	});
 
 	if (bridge) sess.setClientBridge(bridge);
@@ -270,29 +270,28 @@ it("delete and move tools request ACP permission before executing", async () => 
 	expect(moveTool.executeCalls).toBe(1);
 });
 
-it("mounted destructive tools retain the ACP permission gate", async () => {
+it("top-level fallback preserves ACP permission for mounted destructive tools", async () => {
 	const readTool = makeFakeTool("read");
 	const writeTool = makeFakeTool("write");
 	const deleteTool = makeFakeTool("delete");
 	deleteTool.loadMode = "discoverable";
 	const bridge = makeBridge({ outcome: "selected", optionId: "allow_once", kind: "allow_once" });
 	const permissionSpy = spyOn(bridge, "requestPermission");
-	const xdevRegistry = new XdevRegistry([]);
-	session = await createSession(
-		[readTool, writeTool],
-		bridge,
-		{},
-		{
-			xdevRegistry,
-			builtInToolNames: ["read", "write"],
-		},
-	);
+	const tools = new Map([readTool, writeTool].map(tool => [tool.name, tool]));
+	const xdev: XdevState = {
+		tools,
+		mountedNames: new Set(),
+		builtInNames: new Set(["read", "write"]),
+		isActive: name => name === "read" || name === "write",
+	};
+	session = await createSession([readTool, writeTool], bridge, {}, { xdev, builtInToolNames: ["read", "write"] });
 
 	await session.refreshRpcHostTools([deleteTool]);
-	const mountedDelete = xdevRegistry.get("delete");
-	expect(mountedDelete).toBeDefined();
+	expect(xdev.mountedNames.has("delete")).toBe(true);
 	expect(session.getActiveToolNames()).not.toContain("delete");
-	await mountedDelete!.execute(
+	const fallbackTool = resolveMountedXdevExecutable(xdev, "delete");
+	expect(fallbackTool).toBeDefined();
+	await fallbackTool!.execute(
 		"call-mounted-delete",
 		{ path: "/tmp/gone.ts" },
 		undefined,
@@ -311,28 +310,27 @@ it("startup-mounted destructive tools gain the ACP permission gate when the brid
 	deleteTool.loadMode = "discoverable";
 	const bridge = makeBridge({ outcome: "selected", optionId: "allow_once", kind: "allow_once" });
 	const permissionSpy = spyOn(bridge, "requestPermission");
-	const xdevRegistry = new XdevRegistry([]);
-	xdevRegistry.reconcile([deleteTool]);
+	const tools = new Map([readTool, writeTool, deleteTool].map(tool => [tool.name, tool]));
+	const xdev: XdevState = {
+		tools,
+		mountedNames: new Set(["delete"]),
+		builtInNames: new Set(["read", "write"]),
+		isActive: name => name === "read" || name === "write",
+	};
 	session = await createSession(
 		[readTool, writeTool, deleteTool],
 		bridge,
 		{},
-		{
-			xdevRegistry,
-			builtInToolNames: ["read", "write"],
-			initialMountedXdevToolNames: ["delete"],
-		},
+		{ xdev, builtInToolNames: ["read", "write"] },
 	);
 
-	const mountedDelete = xdevRegistry.get("delete");
-	expect(mountedDelete).toBeDefined();
-	await mountedDelete!.execute(
+	const dispatched = await dispatchXdevTool(
+		xdev,
+		"delete",
+		JSON.stringify({ path: "/tmp/gone.ts" }),
 		"call-startup-delete",
-		{ path: "/tmp/gone.ts" },
-		undefined,
-		undefined as never,
-		undefined as never,
 	);
+	expect(dispatched.result.isError).toBeUndefined();
 
 	expect(permissionSpy).toHaveBeenCalledTimes(1);
 	expect(deleteTool.executeCalls).toBe(1);

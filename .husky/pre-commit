@@ -1,2 +1,6 @@
 #!/usr/bin/env sh
-pnpm precommit
+# Skip lint-staged for pure repos/ subtree commits (vendored content; the
+# pnpm bootstrap cannot run against the subtree's workspace state).
+if git diff --cached --name-only | grep -qv '^repos/'; then
+  pnpm precommit
+fi

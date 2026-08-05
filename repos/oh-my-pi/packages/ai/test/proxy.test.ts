@@ -5,6 +5,7 @@ import type { FetchImpl } from "@oh-my-pi/pi-ai/types";
 import {
 	connectProxiedSocket,
 	getProxyForProvider,
+	getProxyForUrl,
 	isLocalOrMetadataHost,
 	shouldBypassProxy,
 	wrapFetchForProxy,
@@ -23,6 +24,8 @@ async function createSilentProxyServer(): Promise<SilentProxyServer> {
 	const accepted = Promise.withResolvers<net.Socket>();
 	const server = net.createServer(socket => {
 		sockets.add(socket);
+		socket.resume();
+		socket.on("end", () => socket.destroy());
 		socket.once("close", () => sockets.delete(socket));
 		accepted.resolve(socket);
 	});
@@ -60,13 +63,29 @@ async function waitForSocketClose(socket: net.Socket): Promise<void> {
 	socket.once("close", () => closed.resolve());
 	await closed.promise;
 }
+const isProxyEnvKey = (k: string): boolean =>
+	k.startsWith("PI_PROXY") ||
+	k === "HTTP_PROXY" ||
+	k === "http_proxy" ||
+	k === "HTTPS_PROXY" ||
+	k === "https_proxy" ||
+	k === "ALL_PROXY" ||
+	k === "all_proxy" ||
+	k === "NO_PROXY" ||
+	k === "no_proxy";
 
-const isProxyEnvKey = (k: string): boolean => k.startsWith("PI_PROXY") || k === "NO_PROXY" || k === "no_proxy";
-
-// NO_PROXY/no_proxy set at runtime are readable but hidden from Bun.env
-// enumeration (Bun's fetch proxy layer intercepts them), so the sweep must
-// name them explicitly instead of relying on for..in.
-const HIDDEN_PROXY_KEYS = ["NO_PROXY", "no_proxy"];
+// Standard proxy variables set at runtime can be readable but hidden from Bun.env
+// enumeration, so the sweep must name them explicitly instead of relying on for..in.
+const HIDDEN_PROXY_KEYS = [
+	"HTTP_PROXY",
+	"http_proxy",
+	"HTTPS_PROXY",
+	"https_proxy",
+	"ALL_PROXY",
+	"all_proxy",
+	"NO_PROXY",
+	"no_proxy",
+];
 
 function proxyEnvKeys(): Set<string> {
 	const keys = new Set(HIDDEN_PROXY_KEYS);
@@ -121,6 +140,33 @@ describe("getProxyForProvider", () => {
 
 	it("returns undefined when neither var is set", () => {
 		expect(getProxyForProvider("none-prov")).toBeUndefined();
+	});
+});
+
+describe("getProxyForUrl", () => {
+	it("uses protocol-specific standard proxy variables", () => {
+		Bun.env.HTTPS_PROXY = "http://secure-proxy:8080";
+		Bun.env.HTTP_PROXY = "http://plain-proxy:8080";
+
+		expect(getProxyForUrl("standard-secure-proxy", new URL("wss://api.openai.com/v1/live"))).toBe(
+			"http://secure-proxy:8080",
+		);
+		expect(getProxyForUrl("standard-plain-proxy", new URL("ws://api.openai.com/v1/live"))).toBe(
+			"http://plain-proxy:8080",
+		);
+	});
+
+	it("falls back to ALL_PROXY", () => {
+		Bun.env.ALL_PROXY = PROXY;
+
+		expect(getProxyForUrl("standard-all-proxy", new URL("wss://api.openai.com/v1/live"))).toBe(PROXY);
+	});
+
+	it("bypasses configured proxies for NO_PROXY targets", () => {
+		Bun.env.PI_PROXY_NO_PROXY_TEST = PROXY;
+		Bun.env.NO_PROXY = "api.openai.com";
+
+		expect(getProxyForUrl("no-proxy-test", new URL("wss://api.openai.com/v1/live"))).toBeUndefined();
 	});
 });
 

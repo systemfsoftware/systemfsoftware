@@ -1361,12 +1361,31 @@ async function appendLearnedLine(filePath: string, line: string): Promise<void> 
 	} catch (err) {
 		if (!isEnoent(err)) throw err;
 	}
-	const prior = existing
-		.split("\n")
-		.map(l => l.trim())
-		.filter(l => l.startsWith("- ") && l !== line);
-	const lessons = [line, ...prior].slice(0, MAX_LEARNED_LESSONS);
-	await Bun.write(filePath, `${lessons.join("\n")}\n`);
+	// Treat the file as an ordered line list so headings, prose, and blank
+	// lines keep their positions relative to the bullets they scope. Managed
+	// operations touch only bullet lines: dedupe removes an existing copy of
+	// the incoming lesson in place, the new lesson enters at the head of the
+	// first bullet run (newest-first, matching the read path and cap docs),
+	// and the cap drops the oldest (bottom-most) bullets. Hand-edited content
+	// outside the list region survives every write byte-for-byte.
+	const lines = existing.split("\n");
+	// A well-formed file ends with "\n"; drop the terminal split artifact so
+	// repeated saves stay idempotent instead of growing a blank line each time.
+	if (lines.at(-1) === "") lines.pop();
+	const isLesson = (l: string) => l.trimStart().startsWith("- ");
+	const out = lines.filter(l => !(isLesson(l) && l.trim() === line));
+	const firstBullet = out.findIndex(isLesson);
+	if (firstBullet === -1) out.push(line);
+	else out.splice(firstBullet, 0, line);
+	let lessonCount = 0;
+	for (const l of out) if (isLesson(l)) lessonCount++;
+	for (let i = out.length - 1; i >= 0 && lessonCount > MAX_LEARNED_LESSONS; i--) {
+		if (isLesson(out[i])) {
+			out.splice(i, 1);
+			lessonCount--;
+		}
+	}
+	await Bun.write(filePath, `${out.join("\n")}\n`);
 }
 
 /**

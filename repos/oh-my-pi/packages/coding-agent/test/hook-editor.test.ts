@@ -587,4 +587,20 @@ describe("ExtensionUiController dialog serialization", () => {
 		expect(ctx.hookSelector).toBeUndefined();
 		expect(editorContainer.children).toEqual([editor]);
 	});
+	it("dismisses a confirmation and restores the editor when its signal aborts", async () => {
+		const { ctx, editor, editorContainer } = createControllerContext();
+		const controller = new ExtensionUiController(ctx);
+		const abortController = new AbortController();
+
+		const result = controller.showHookConfirm("High-risk command", "Allow this command?", {
+			signal: abortController.signal,
+		});
+		expect(ctx.hookSelector).toBeDefined();
+
+		abortController.abort();
+
+		expect(await result).toBe(false);
+		expect(ctx.hookSelector).toBeUndefined();
+		expect(editorContainer.children).toEqual([editor]);
+	});
 });

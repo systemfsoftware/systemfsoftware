@@ -1,5 +1,5 @@
 import { LRUCache } from "lru-cache/raw";
-import { Marked, type Token, Tokenizer, type TokenizerAndRendererExtension, type Tokens } from "marked";
+import { Lexer, Marked, type Token, Tokenizer, type TokenizerAndRendererExtension, type Tokens } from "marked";
 import { latexToBlock } from "../latex-block";
 import { inlineMathSpanEnd, isBareMathEnvironment, latexToUnicode } from "../latex-to-unicode";
 import type { SymbolTheme } from "../symbols";
@@ -492,12 +492,25 @@ const customHrExtension: TokenizerAndRendererExtension = {
 	},
 };
 
+// Leftmost-match scan replacing /\$|\\\(|\\\[/ in mathExtension.start —
+// marked calls start() on the remaining source at every inline position, so
+// the regex alternation showed up in CPU profiles (part of a ~4.3% start()
+// tail). Three indexOf scans yield the identical leftmost index.
+/** @internal exported for tests — must stay index-identical to the old regex scan. */
+export function mathStartIndex(src: string): number | undefined {
+	let best = src.indexOf("$");
+	const paren = src.indexOf("\\(");
+	if (paren !== -1 && (best === -1 || paren < best)) best = paren;
+	const bracket = src.indexOf("\\[");
+	if (bracket !== -1 && (best === -1 || bracket < best)) best = bracket;
+	return best === -1 ? undefined : best;
+}
+
 const mathExtension: TokenizerAndRendererExtension = {
 	name: "math",
 	level: "inline",
 	start(src) {
-		const m = /\$|\\\(|\\\[/.exec(src);
-		return m ? m.index : undefined;
+		return mathStartIndex(src);
 	},
 	tokenizer(src) {
 		if (src.startsWith("$$")) {
@@ -614,14 +627,63 @@ const mathEnvBlockExtension: TokenizerAndRendererExtension = {
 // tokenizer at a valid start. Candidates at a legal boundary fall through
 // (return undefined) to marked's own autolink handling unchanged.
 const AUTOLINK_SCHEME_REGEX = /^(?:www\.|https?:\/\/|ftp:\/\/)/i;
-const AUTOLINK_SCHEME_SCAN = /www\.|https?:\/\/|ftp:\/\//i;
+// Case-insensitive scheme scan replacing /www\.|https?:\/\/|ftp:\/\//i in
+// boundedAutolinkExtension.start — like mathStartIndex above, this runs on the
+// remaining source at every inline position (part of a ~4.3% CPU start() scan
+// tail in profiles). charCode-only: no allocation, no toLowerCase copies.
+// `| 32` lower-cases ASCII letters; `.`/`:`/`/` are compared exactly, matching
+// the regex's ASCII-only `i` semantics. charCodeAt past the end returns NaN,
+// which fails every comparison, so no explicit bounds checks are needed.
+function isAutolinkSchemeAt(src: string, i: number): boolean {
+	const c = src.charCodeAt(i) | 32;
+	if (c === 119 /* w */) {
+		// www.
+		return (
+			(src.charCodeAt(i + 1) | 32) === 119 &&
+			(src.charCodeAt(i + 2) | 32) === 119 &&
+			src.charCodeAt(i + 3) === 46 /* . */
+		);
+	}
+	if (c === 104 /* h */) {
+		// http:// | https://
+		if (
+			(src.charCodeAt(i + 1) | 32) !== 116 /* t */ ||
+			(src.charCodeAt(i + 2) | 32) !== 116 /* t */ ||
+			(src.charCodeAt(i + 3) | 32) !== 112 /* p */
+		) {
+			return false;
+		}
+		let j = i + 4;
+		if ((src.charCodeAt(j) | 32) === 115 /* s */) j++;
+		return src.charCodeAt(j) === 58 /* : */ && src.charCodeAt(j + 1) === 47 /* / */ && src.charCodeAt(j + 2) === 47;
+	}
+	if (c === 102 /* f */) {
+		// ftp://
+		return (
+			(src.charCodeAt(i + 1) | 32) === 116 /* t */ &&
+			(src.charCodeAt(i + 2) | 32) === 112 /* p */ &&
+			src.charCodeAt(i + 3) === 58 /* : */ &&
+			src.charCodeAt(i + 4) === 47 /* / */ &&
+			src.charCodeAt(i + 5) === 47 /* / */
+		);
+	}
+	return false;
+}
+
+/** @internal exported for tests — must stay index-identical to the old regex scan. */
+export function autolinkSchemeScanIndex(src: string): number | undefined {
+	for (let i = 0; i < src.length; i++) {
+		const c = src.charCodeAt(i) | 32;
+		if ((c === 119 || c === 104 || c === 102) && isAutolinkSchemeAt(src, i)) return i;
+	}
+	return undefined;
+}
 const VALID_AUTOLINK_LEFT_BOUNDARY = /[\s*_~(]/;
 const boundedAutolinkExtension: TokenizerAndRendererExtension = {
 	name: "boundedAutolink",
 	level: "inline",
 	start(src) {
-		const m = AUTOLINK_SCHEME_SCAN.exec(src);
-		return m ? m.index : undefined;
+		return autolinkSchemeScanIndex(src);
 	},
 	tokenizer(src, tokens) {
 		const match = AUTOLINK_SCHEME_REGEX.exec(src);
@@ -640,6 +702,128 @@ markdownParser.use({
 });
 
 // ---------------------------------------------------------------------------
+// GFM `url` tokenizer gate
+// ---------------------------------------------------------------------------
+// marked tries the bundled GFM `url` tokenizer at every inline tokenization
+// step, and its regex is expensive to FAIL: the email alternative
+// `^[A-Za-z0-9._+-]+(@)…` linearly consumes an identifier run, then backtracks
+// it one character at a time when no `@` follows. A 71414-sample / 1ms CPU
+// profile of the TUI put 73.3% of total CPU (74.9s of a 102s capture) inside
+// this single regex. The override below runs an O(bounded) charCode gate first
+// and only falls through to the built-in tokenizer — by returning `false`,
+// marked's tokenizer-override fallback contract — when a match is possible.
+//
+// Conservativeness argument. The built-in rule (no flags) is
+//   /^((?:[hH][tT][tT][pP][sS]?|[fF][tT][pP]):\/\/|www\.)(?:[a-zA-Z0-9\-]+\.?)+[^\s<]*
+//    |^[A-Za-z0-9._+-]+(@)[a-zA-Z0-9-_]+(?:\.[a-zA-Z0-9-_]*[a-zA-Z0-9])+(?![-_])/
+// Both alternatives are anchored, so any match constrains the head of src:
+//  • Branch 1 requires src to start with `http://`, `https://`, `ftp://`
+//    (scheme letters in any case) or lowercase `www.`. The gate accepts all of
+//    these via isAutolinkSchemeAt(src, 0); it also over-accepts `WWW.`, a
+//    harmless false positive (the built-in regex simply fails to match).
+//  • Branch 2 requires src to start with one-or-more chars from
+//    `[A-Za-z0-9._+-]` immediately followed by `@`. The gate scans that exact
+//    class: if the run ends within URL_GATE_EMAIL_SCAN_LIMIT chars it accepts
+//    iff the terminator is `@`; a run reaching the limit is accepted
+//    unconditionally. Every src branch 2 can match is therefore accepted —
+//    the gate never rejects a src the built-in regex would match.
+const URL_GATE_EMAIL_SCAN_LIMIT = 320;
+
+/** @internal exported for tests — must never return false for a src the built-in url regex matches. */
+export function urlTokenPossible(src: string): boolean {
+	if (isAutolinkSchemeAt(src, 0)) return true;
+	let i = 0;
+	while (i < URL_GATE_EMAIL_SCAN_LIMIT) {
+		const c = src.charCodeAt(i);
+		const isLocalChar =
+			(c >= 97 && c <= 122) /* a-z */ ||
+			(c >= 65 && c <= 90) /* A-Z */ ||
+			(c >= 48 && c <= 57) /* 0-9 */ ||
+			c === 46 /* . */ ||
+			c === 95 /* _ */ ||
+			c === 43 /* + */ ||
+			c === 45; /* - */
+		if (!isLocalChar) break;
+		i++;
+	}
+	if (i === 0) return false;
+	if (i >= URL_GATE_EMAIL_SCAN_LIMIT) return true; // over-long run: give up conservatively
+	return src.charCodeAt(i) === 64 /* @ */;
+}
+
+// Setext-underline pre-gate for marked's `lheading` rule. The rule's lazy body
+// `((?:.|\n(?!<block-start>))+?)` re-runs its block-start lookahead while
+// expanding character by character, so even a FAILING attempt at offset 0
+// costs O(len × lookahead) — ~26µs per 200-char list-item body, and marked's
+// list tokenizer block-tokenizes every item's content (47.8% of a streaming
+// bench profile). A match REQUIRES the setext underline `\n {0,3}(=+|-+)`
+// somewhere in src, so this O(n) charCode scan never rejects a src the
+// built-in rule would match; single-line srcs (every tight list item) reject
+// on the first indexOf.
+function lheadingPossible(src: string): boolean {
+	let i = src.indexOf("\n");
+	while (i !== -1) {
+		let j = i + 1;
+		const limit = j + 3; // underline allows up to 3 leading spaces
+		while (j < limit && src.charCodeAt(j) === 0x20 /* space */) j++;
+		const c = src.charCodeAt(j); // NaN past the end fails both comparisons
+		if (c === 0x3d /* = */ || c === 0x2d /* - */) return true;
+		i = src.indexOf("\n", j);
+	}
+	return false;
+}
+
+markdownParser.use({
+	tokenizer: {
+		// `false` → marked falls back to the built-in tokenizer;
+		// `undefined` → no token here, built-in never runs.
+		url(src: string): Tokens.Link | undefined | false {
+			return urlTokenPossible(src) ? false : undefined;
+		},
+		lheading(src: string): Tokens.Heading | undefined | false {
+			return lheadingPossible(src) ? false : undefined;
+		},
+	},
+});
+
+// ---------------------------------------------------------------------------
+// Sticky clones of marked's pathological block rules
+// ---------------------------------------------------------------------------
+// Bun's (JSC) regex engine skips the start-anchor fast-fail for several of
+// marked's `^`-anchored block rules — `hr`, `lheading`, `table` and `html` are
+// anchored alternations of quantified branches, and a failing `exec`/`test`
+// rescans the entire remaining source instead of stopping after offset 0.
+// marked's list tokenizer runs `hr.test` and `lheading` per list line against
+// the remaining source, so lexing a long list is quadratic (66% of a streaming
+// bench profile sat in these two regexes). A sticky (`y`) clone with
+// `lastIndex` pinned to 0 attempts the match at offset 0 only.
+//
+// Equivalence: for a flagless rule whose source is `^`-anchored, a sticky
+// clone at `lastIndex = 0` matches exactly when the original matches (same
+// match object, same captures) — `^` already restricted matches to offset 0
+// (no `m` flag), and stickiness only removes the futile later attempts. The
+// flags/anchor guard below skips any rule a future marked version changes.
+class AnchoredAtZero extends RegExp {
+	override exec(str: string): RegExpExecArray | null {
+		this.lastIndex = 0; // sticky matches set lastIndex; rules are shared
+		return super.exec(str);
+	}
+	override test(str: string): boolean {
+		this.lastIndex = 0;
+		return super.test(str);
+	}
+}
+
+for (const table of [Lexer.rules.block.normal, Lexer.rules.block.gfm]) {
+	for (const name of ["hr", "lheading", "table", "html"] as const) {
+		const rule = table[name];
+		if (rule.flags === "" && rule.source.startsWith("^")) {
+			table[name] = new AnchoredAtZero(rule.source, "y");
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
 // Module-level LRU render cache
 // ---------------------------------------------------------------------------
 // Each session-tree navigation discards and recreates Markdown component
@@ -649,9 +833,22 @@ markdownParser.use({
 // (Rust FFI) work for content/layout combinations already seen this session.
 
 const RENDER_CACHE_MAX = 256; // sane cap: ~256 distinct message × width combos
-const RENDER_CACHE_MAX_SIZE = 512 * 1024;
-const RENDER_CACHE_MAX_ENTRY_SIZE = 32 * 1024;
+const RENDER_CACHE_MAX_SIZE = 4 * 1024 * 1024;
+const RENDER_CACHE_MAX_ENTRY_SIZE = 256 * 1024;
 const EMPTY_RENDER_LINES: readonly string[] = [];
+
+interface RenderedLine {
+	text: string;
+	literalCode?: true;
+}
+
+interface RenderedListItemLine extends RenderedLine {
+	nested: boolean;
+}
+
+function renderedLine(text: string, literalCode?: boolean): RenderedLine {
+	return literalCode ? { text, literalCode: true } : { text };
+}
 
 interface RenderCacheEntry {
 	lines: readonly string[];
@@ -683,6 +880,179 @@ function renderCacheEntrySize(entry: RenderCacheEntry): number {
 // backslash-escaped characters (`[a\]b]: x`), so escapes are matched explicitly;
 // over-matching is safe (it only costs the fast path), under-matching is not.
 const HAS_REF_DEF = /^ {0,3}\[(?:\\.|[^\]\\])+\]:/m;
+
+// marked's list tokenizer (Tokenizer.list, marked v18) continues a list across
+// blank lines only when the remaining source matches
+// `listItemRegex(marker)` = `^( {0,3}${marker})((?:[\t ][^\n]*)?(?:\n|$))`,
+// where `marker` is the exact bullet char for unordered lists (`\${char}`) or
+// 1-9 digits plus the exact delimiter for ordered lists (`\d{1,9}\${delim}`).
+// The marker is derived from the list's FIRST item (`n = t[1].trim()`), which
+// sits at the start of a top-level list token's raw:
+const LIST_MARKER_RE = /^ {0,3}(?:([*+-])|\d{1,9}([.)]))/;
+
+// Streaming-freeze equivalence invariant: lex(prefix) ++ lex(tail) must equal
+// lex(full text) — for the CURRENT text and for every append-only extension of
+// it, because a frozen prefix is sticky (it keeps being reused while the text
+// grows). At a blank-line (`\n\n`) cut directly after a top-level `list`
+// token, the only construct that can straddle the cut is a continuation item
+// of that list: marked consumed the blank line into the last item's raw and
+// re-ran `listItemRegex` at exactly `tailStart`, merging a same-marker item
+// into one renumbered loose list. The cut is safe only when that regex can
+// NEVER match at `tailStart`, no matter what is appended later.
+//
+// Append-only growth means existing characters are immutable while new ones
+// may appear after them, so "closed" may only be concluded from a present
+// character that contradicts every possible continuation (e.g. tail "1x" can
+// never grow into an ordered item, but tail "1" can become "1. c"). Running
+// out of text mid-marker therefore answers "may continue".
+//
+// Returns true when the tail could still continue the list (or the list's
+// marker is unrecognizable) — the conservative "don't freeze" answer. marked
+// may break the list anyway when the matching line is also an hr (`- - -`);
+// treating that as "may continue" merely skips a freeze, never corrupts one.
+function listMayContinueAt(text: string, tailStart: number, listRaw: string): boolean {
+	const marker = LIST_MARKER_RE.exec(listRaw);
+	if (marker === null) return true; // unrecognized list shape — stay conservative
+	const n = text.length;
+	let i = tailStart;
+	// `listItemRegex` allows up to 3 leading spaces (the caller's next-char
+	// guard rejects whitespace at the final cut, but mirror the rule exactly).
+	while (i < n && i - tailStart < 3 && text.charCodeAt(i) === 0x20 /* space */) i++;
+	if (i >= n) return true;
+	const bullet = marker[1];
+	if (bullet !== undefined) {
+		if (text[i] !== bullet) return false; // wrong marker char — closed forever
+		i++;
+	} else {
+		// Ordered: 1-9 digits, then the same `.`/`)` delimiter.
+		let digits = 0;
+		while (i < n && digits < 10) {
+			const c = text.charCodeAt(i);
+			if (c < 0x30 /* 0 */ || c > 0x39 /* 9 */) break;
+			digits++;
+			i++;
+		}
+		if (digits === 0 || digits > 9) return false; // no digit run / too long — closed forever
+		if (i >= n) return true; // delimiter (or more digits) may still arrive
+		if (text[i] !== marker[2]) return false; // wrong delimiter — closed forever
+		i++;
+	}
+	// After the marker: `(?:[\t ][^\n]*)?(?:\n|$)` — tab/space + anything, a
+	// bare newline, or end-of-input (which appends can still extend).
+	if (i >= n) return true;
+	const after = text.charCodeAt(i);
+	return after === 0x20 /* space */ || after === 0x09 /* tab */ || after === 0x0a /* \n */;
+}
+
+const NO_BLOCK_BOUNDARY = { end: 0, count: 0 } as const;
+
+/**
+ * Offset just past the last token in `tokens` that closes a block on a hard
+ * `"\n\n"` break, together with the number of tokens up to and including it.
+ * `count === 0` means the run holds no usable boundary.
+ *
+ * `base` is where `tokens[0]` starts inside `text`. A boundary qualifies only
+ * when splitting there is invisible to the lexer, i.e. `lex(head) ++ lex(tail)
+ * === lex(text)`:
+ *  - The break must sit inside `text`. At end-of-text the next character is
+ *    unknown (and, while streaming, may still arrive), so the cut is deferred.
+ *  - The next character must start real block content. Whitespace means the
+ *    block separator straddles the cut — e.g. a fence followed by
+ *    `"\n\n\n- list"` — and the two lexes desync.
+ *  - A preceding `list` must be provably closed: CommonMark lets a same-marker
+ *    item continue the list across the blank line, and marked merges both into
+ *    one renumbered loose list (`listMayContinueAt`).
+ */
+function stableBlockBoundary(text: string, base: number, tokens: Token[]): { end: number; count: number } {
+	let pos = base;
+	let end = 0;
+	let count = 0;
+	for (let i = 0; i < tokens.length; i++) {
+		const raw = tokens[i].raw;
+		const tokenEnd = pos + raw.length;
+		if (raw.endsWith("\n\n")) {
+			const prev = i > 0 ? tokens[i - 1] : undefined;
+			if (prev === undefined || prev.type !== "list" || !listMayContinueAt(text, tokenEnd, prev.raw)) {
+				end = tokenEnd;
+				count = i + 1;
+			}
+		}
+		pos = tokenEnd;
+	}
+	if (count === 0 || end >= text.length) return NO_BLOCK_BOUNDARY;
+	const next = text.charCodeAt(end);
+	if (next === 0x20 /* space */ || next === 0x0a /* \n */) return NO_BLOCK_BOUNDARY;
+	return { end, count };
+}
+
+// Bun's regex engine skips the start-anchor optimization for several of marked's
+// block rules — `hr`, `lheading`, `table` and `html` are `^`-anchored
+// alternations of quantified branches — so each failing `exec` rescans the whole
+// remaining source instead of stopping at offset 0. Lexing is then quadratic in
+// document length: an 800 KB message costs ~41 s under Bun where Node/V8 needs
+// ~60 ms, and it runs on the render path, freezing the UI. Bounded windows keep
+// every scan short and restore linear behavior (~0.7 s for that same message).
+const LEX_WINDOW_BYTES = 2 * 1024;
+// Under this size a single pass beats probing for window boundaries; the
+// crossover measured on pathological Markdown sits around 16 KB.
+const WINDOWED_LEX_MIN_BYTES = 16 * 1024;
+
+/**
+ * Lex `text` in bounded windows, producing the exact token stream
+ * `markdownParser.lexer(text)` would.
+ *
+ * Window cuts come from marked itself: a throwaway BLOCK-ONLY probe lex of the
+ * window reports its last stable block boundary ({@link stableBlockBoundary})
+ * and only that confirmed segment is handed to the real lexer; a window
+ * holding no boundary doubles until it finds one or reaches the end. Probes
+ * never run inline tokenization (their inlineQueue is discarded) — a boundary
+ * is a property of block structure alone, and probe inline passes were the
+ * dominant cost of an earlier revision. Block tokenization runs per window
+ * while inline tokenization is deferred to the end — mirroring `Lexer.lex` —
+ * so a `[label]: dest` definition anywhere in the document still resolves for
+ * every inline span.
+ *
+ * A boundary requires some top-level token whose raw ends in `"\n\n"`, so a
+ * window that contains no blank line cannot cut: each round starts at the next
+ * `"\n\n"` (skipping straight to the end when there is none — e.g. a tail
+ * that is one long tight list) instead of probing sizes that cannot succeed.
+ */
+function lexWindowed(text: string): Token[] {
+	const lexer = new Lexer(markdownParser.defaults);
+	let offset = 0;
+	while (offset < text.length) {
+		let segment = "";
+		const nextBlank = text.indexOf("\n\n", offset);
+		if (nextBlank === -1) {
+			segment = text.slice(offset);
+		} else {
+			const minSize = Math.max(LEX_WINDOW_BYTES, nextBlank + 2 - offset);
+			for (let size = minSize; segment.length === 0; size *= 2) {
+				if (offset + size >= text.length) {
+					segment = text.slice(offset);
+					break;
+				}
+				const probe = new Lexer(markdownParser.defaults);
+				probe.blockTokens(text.slice(offset, offset + size), probe.tokens);
+				const boundary = stableBlockBoundary(text, offset, probe.tokens);
+				if (boundary.count > 0) segment = text.slice(offset, boundary.end);
+			}
+		}
+		lexer.blockTokens(segment, lexer.tokens);
+		offset += segment.length;
+	}
+	for (const queued of lexer.inlineQueue) lexer.inlineTokens(queued.src, queued.tokens);
+	lexer.inlineQueue = [];
+	return lexer.tokens;
+}
+
+/** Lex a whole document, windowing anything large enough for the quadratic scan to bite. */
+function lexDocument(text: string): Token[] {
+	// A CR shifts every `raw` span (marked normalizes CRLF before tokenizing), so
+	// window offsets would address the wrong characters — lex those in one pass.
+	if (text.length < WINDOWED_LEX_MIN_BYTES || text.includes("\r")) return markdownParser.lexer(text);
+	return lexWindowed(text);
+}
 
 /** Drop all L2 cache entries. Call on theme change to prevent stale styled output. */
 export function clearRenderCache(): void {
@@ -927,11 +1297,12 @@ function collapseInlineHtml(tokens: Token[]): Token[] {
 const DEFAULT_COLOR_SWATCH_GLYPH = "■";
 
 // `#` + 3-8 hex digits, not glued to a surrounding word/`#`/`&` (avoids HTML
-// entities like &#9731; and paths like foo#fff) and not trailed by more hex
-// (so over-long runs never produce a misleading swatch). Length/letter rules
-// are enforced in classifyHexColor since the alternation can't express "exactly
-// 3, 6, or 8".
-const HEX_COLOR_REGEX = /(?<![\w#&])#([0-9a-fA-F]{3,8})(?![0-9a-fA-F])/g;
+// entities like &#9731; and paths like foo#fff), not the start of a canonical
+// UUID, and not trailed by more hex (so over-long runs never produce a
+// misleading swatch). Length/letter rules are enforced in classifyHexColor
+// since the alternation can't express "exactly 3, 6, or 8".
+const HEX_COLOR_REGEX =
+	/(?<![\w#&])#(?![0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12})([0-9a-fA-F]{3,8})(?![0-9a-fA-F])/g;
 const HEX_COLOR_EXACT_REGEX = /^#([0-9a-fA-F]{3,8})$/;
 
 /**
@@ -1219,12 +1590,12 @@ export class Markdown implements Component, NativeScrollbackCommittedRows, Nativ
 			text.length > prefix.length &&
 			text.startsWith(prefix)
 		) {
-			const tailTokens = markdownParser.lexer(text.slice(prefix.length));
+			const tailTokens = lexDocument(text.slice(prefix.length));
 			const tokens = [...prefixTokens, ...tailTokens];
 			this.#freezeStablePrefix(text, tokens, { preserveExisting: true });
 			return tokens;
 		}
-		const tokens = markdownParser.lexer(text);
+		const tokens = lexDocument(text);
 		if (canStream) {
 			this.#freezeStablePrefix(text, tokens, { preserveExisting: false });
 		} else {
@@ -1241,36 +1612,11 @@ export class Markdown implements Component, NativeScrollbackCommittedRows, Nativ
 	// reference definitions, so each token's `raw` is a verbatim slice of `text`
 	// and the summed offsets address `text` exactly.
 	#freezeStablePrefix(text: string, tokens: Token[], opts: { preserveExisting: boolean }): void {
-		let pos = 0;
-		let frozenEnd = 0;
-		let frozenCount = 0;
-		for (let i = 0; i < tokens.length; i++) {
-			const raw = tokens[i].raw;
-			const end = pos + raw.length;
-			// A `space` token ending in "\n\n" closes the preceding block, but a
-			// `list` before it can still be extended by a following same-marker
-			// item across the blank line (CommonMark loose-list continuation),
-			// which marked merges into one renumbered loose list. Freezing across
-			// such a cut would keep the lists separate. Never freeze right after a
-			// list — it stays in the re-lexed tail.
-			if (raw.endsWith("\n\n") && tokens[i - 1]?.type !== "list") {
-				frozenEnd = end;
-				frozenCount = i + 1;
-			}
-			pos = end;
-		}
-		// Freeze only when the tail begins with real block content. If the next
-		// char is whitespace (an extra blank line, or an indented continuation),
-		// the block separator straddles the cut and lex(prefix)++lex(tail) would
-		// desync from a full lex — e.g. a fence followed by "\n\n\n- list". When
-		// frozenEnd is at end-of-text the next char is unknown, so defer.
-		if (frozenCount > 0 && frozenEnd < text.length) {
-			const next = text.charCodeAt(frozenEnd);
-			if (next !== 0x20 /* space */ && next !== 0x0a /* \n */) {
-				this.#streamPrefixText = text.slice(0, frozenEnd);
-				this.#streamPrefixTokens = tokens.slice(0, frozenCount);
-				return;
-			}
+		const frozen = stableBlockBoundary(text, 0, tokens);
+		if (frozen.count > 0) {
+			this.#streamPrefixText = text.slice(0, frozen.end);
+			this.#streamPrefixTokens = tokens.slice(0, frozen.count);
+			return;
 		}
 
 		if (!opts.preserveExisting) {
@@ -1525,7 +1871,7 @@ export class Markdown implements Component, NativeScrollbackCommittedRows, Nativ
 		rowOffset: number,
 		startingSourceOffset: number,
 	): string[] {
-		const wrappedLines: string[] = [];
+		const wrappedLines: RenderedLine[] = [];
 		let sourceOffset = startingSourceOffset;
 		for (let i = start; i < end; i++) {
 			const token = tokens[i];
@@ -1541,13 +1887,21 @@ export class Markdown implements Component, NativeScrollbackCommittedRows, Nativ
 				`offset:${sourceOffset}`,
 			);
 			const tokenLineOffsets = [0];
-			for (const line of renderedTokenLines) {
-				// Skip wrapping for image protocol lines and OSC 66 sized headings
-				// (would corrupt escape sequences / split the indivisible sized span).
-				if (TERMINAL.isImageLine(line) || isOsc66Line(line)) {
-					wrappedLines.push(line);
+			for (const renderedRow of renderedTokenLines) {
+				// Lists wrap while their structural prefixes are still available, so
+				// continuation rows retain the correct hanging indent. Re-wrapping the
+				// flattened rows here would discard that structure.
+				if (token.type === "list" || TERMINAL.isImageLine(renderedRow.text) || isOsc66Line(renderedRow.text)) {
+					wrappedLines.push(renderedRow);
 				} else {
-					wrappedLines.push(...wrapTextWithAnsi(line, contentWidth));
+					const wrappedRows = wrapTextWithAnsi(renderedRow.text, contentWidth);
+					if (wrappedRows.length === 1 && wrappedRows[0] === renderedRow.text) {
+						wrappedLines.push(renderedRow);
+					} else {
+						for (const wrappedLine of wrappedRows) {
+							wrappedLines.push(renderedLine(wrappedLine, renderedRow.literalCode));
+						}
+					}
 				}
 				tokenLineOffsets.push(wrappedLines.length - tokenWrappedRowStart);
 			}
@@ -1580,8 +1934,9 @@ export class Markdown implements Component, NativeScrollbackCommittedRows, Nativ
 		const bgFn = this.#defaultTextStyle?.bgColor;
 		const contentLines: string[] = [];
 		let previousLineWasOsc66 = false;
-
-		for (const line of wrappedLines) {
+		for (const renderedLine of wrappedLines) {
+			const literalCodeRow = renderedLine.literalCode === true;
+			const line = renderedLine.text;
 			// The first empty row after a scale>1 OSC 66 heading is structural:
 			// it reserves the lower cells occupied by the multicell glyphs. Do
 			// not pad or background-fill it, because real spaces on that row can
@@ -1601,6 +1956,10 @@ export class Markdown implements Component, NativeScrollbackCommittedRows, Nativ
 			}
 
 			previousLineWasOsc66 = false;
+			if (literalCodeRow) {
+				contentLines.push(line);
+				continue;
+			}
 			const lineWithMargins = leftMargin + line + rightMargin;
 
 			if (bgFn) {
@@ -1631,8 +1990,9 @@ export class Markdown implements Component, NativeScrollbackCommittedRows, Nativ
 		return layouts;
 	}
 
-	#renderCodeBodyLines(token: Token, codeIndent: string): string[] {
-		const bodyLines: string[] = [];
+	#renderCodeBodyLines(token: Token, codeIndent: string): RenderedLine[] {
+		const literalCode = this.#codeBlockIndent === 0;
+		const bodyLines: RenderedLine[] = [];
 		const tokenText = "text" in token && typeof token.text === "string" ? token.text : "";
 		const lang = "lang" in token && typeof token.lang === "string" ? token.lang : undefined;
 		const normalizedLang = lang?.toLowerCase();
@@ -1641,11 +2001,14 @@ export class Markdown implements Component, NativeScrollbackCommittedRows, Nativ
 			!this.#renderingFrozenPrefix &&
 			this.#theme.highlightCode &&
 			(normalizedLang === "diff" || normalizedLang === "patch" || normalizedLang === "udiff");
+		const addBodyLine = (line: string): void => {
+			bodyLines.push(renderedLine(literalCode ? line : codeIndent + line, literalCode));
+		};
 
 		if (this.#theme.highlightCode && (!this.transientRenderCache || this.#renderingFrozenPrefix)) {
 			const highlightedLines = this.#theme.highlightCode(tokenText, lang);
 			for (const hlLine of highlightedLines) {
-				bodyLines.push(`${codeIndent}${hlLine}`);
+				addBodyLine(hlLine);
 			}
 			return bodyLines;
 		}
@@ -1656,11 +2019,11 @@ export class Markdown implements Component, NativeScrollbackCommittedRows, Nativ
 			if (closedFence || lineEnd >= 0) {
 				const completedText = closedFence ? tokenText : tokenText.slice(0, lineEnd);
 				for (const hlLine of this.#highlightStreamingDiffLines(completedText, lang)) {
-					bodyLines.push(`${codeIndent}${hlLine}`);
+					addBodyLine(hlLine);
 				}
 				if (!closedFence) {
 					for (const codeLine of tokenText.slice(lineEnd + 1).split("\n")) {
-						bodyLines.push(`${codeIndent}${this.#theme.codeBlock(codeLine)}`);
+						addBodyLine(this.#theme.codeBlock(codeLine));
 					}
 				}
 				return bodyLines;
@@ -1668,7 +2031,7 @@ export class Markdown implements Component, NativeScrollbackCommittedRows, Nativ
 		}
 
 		for (const codeLine of tokenText.split("\n")) {
-			bodyLines.push(`${codeIndent}${this.#theme.codeBlock(codeLine)}`);
+			addBodyLine(this.#theme.codeBlock(codeLine));
 		}
 		return bodyLines;
 	}
@@ -1847,14 +2210,14 @@ export class Markdown implements Component, NativeScrollbackCommittedRows, Nativ
 		nextTokenType?: string,
 		styleContext?: InlineStyleContext,
 		tokenKey = "root",
-	): string[] {
-		const lines: string[] = [];
+	): RenderedLine[] {
+		const lines: RenderedLine[] = [];
 
 		// Display math block (own-line `$$…$$` / `\[…\]`): stack `\frac` vertically
 		// and keep `\\` row breaks, so fractions and matrices span multiple lines.
 		if (isMathToken(token)) {
-			for (const mathLine of latexToBlock(token.text)) lines.push(this.#applyDefaultStyle(mathLine));
-			if (nextTokenType && nextTokenType !== "space") lines.push("");
+			for (const mathLine of latexToBlock(token.text)) lines.push(renderedLine(this.#applyDefaultStyle(mathLine)));
+			if (nextTokenType && nextTokenType !== "space") lines.push(renderedLine(""));
 			return lines;
 		}
 
@@ -1869,10 +2232,10 @@ export class Markdown implements Component, NativeScrollbackCommittedRows, Nativ
 					const plainWidth = visibleWidth(headingPlainText);
 					if (plainWidth > 0 && 2 * plainWidth <= width) {
 						const sizedHeading = encodeTextSizedHeading(headingPlainText, 2);
-						lines.push(this.#theme.heading(this.#theme.bold(this.#theme.underline(sizedHeading))));
-						lines.push(""); // reserve the heading's second visual row
+						lines.push(renderedLine(this.#theme.heading(this.#theme.bold(this.#theme.underline(sizedHeading)))));
+						lines.push(renderedLine("")); // reserve the heading's second visual row
 						if (nextTokenType && nextTokenType !== "space") {
-							lines.push(""); // Add spacing after headings (unless space token follows)
+							lines.push(renderedLine("")); // Add spacing after headings (unless space token follows)
 						}
 						break;
 					}
@@ -1884,9 +2247,9 @@ export class Markdown implements Component, NativeScrollbackCommittedRows, Nativ
 				} else {
 					styledHeading = this.#theme.heading(this.#theme.bold(headingPrefix + headingText));
 				}
-				lines.push(styledHeading);
+				lines.push(renderedLine(styledHeading));
 				if (nextTokenType && nextTokenType !== "space") {
-					lines.push(""); // Add spacing after headings (unless space token follows)
+					lines.push(renderedLine("")); // Add spacing after headings (unless space token follows)
 				}
 				break;
 			}
@@ -1894,15 +2257,18 @@ export class Markdown implements Component, NativeScrollbackCommittedRows, Nativ
 			case "paragraph": {
 				const displayMath = soleDisplayMath(token.tokens);
 				if (displayMath) {
-					for (const mathLine of latexToBlock(displayMath.text)) lines.push(this.#applyDefaultStyle(mathLine));
-					if (nextTokenType && nextTokenType !== "list" && nextTokenType !== "space") lines.push("");
+					for (const mathLine of latexToBlock(displayMath.text))
+						lines.push(renderedLine(this.#applyDefaultStyle(mathLine)));
+					if (nextTokenType && nextTokenType !== "list" && nextTokenType !== "space") lines.push(renderedLine(""));
 					break;
 				}
 				const paragraphText = this.#renderInlineTokens(token.tokens || [], styleContext);
-				lines.push(...(hangWrapTreeGuideLines(paragraphText, width) ?? [paragraphText]));
+				for (const paragraphLine of hangWrapTreeGuideLines(paragraphText, width) ?? [paragraphText]) {
+					lines.push(renderedLine(paragraphLine));
+				}
 				// Don't add spacing if next token is space or list
 				if (nextTokenType && nextTokenType !== "list" && nextTokenType !== "space") {
-					lines.push("");
+					lines.push(renderedLine(""));
 				}
 				break;
 			}
@@ -1918,30 +2284,34 @@ export class Markdown implements Component, NativeScrollbackCommittedRows, Nativ
 					if (ascii) {
 						for (const asciiLine of ascii.split("\n")) {
 							lines.push(
-								visibleWidth(asciiLine) > width ? truncateToWidth(asciiLine, width, Ellipsis.Omit) : asciiLine,
+								renderedLine(
+									visibleWidth(asciiLine) > width
+										? truncateToWidth(asciiLine, width, Ellipsis.Omit)
+										: asciiLine,
+								),
 							);
 						}
 						if (nextTokenType && nextTokenType !== "space") {
-							lines.push("");
+							lines.push(renderedLine(""));
 						}
 						break;
 					}
 				}
 
 				const codeIndent = padding(this.#codeBlockIndent);
-				lines.push(this.#theme.codeBlockBorder(`\`\`\`${token.lang || ""}`));
+				lines.push(renderedLine(this.#theme.codeBlockBorder(`\`\`\`${token.lang || ""}`)));
 				for (const bodyLine of this.#renderCodeBodyLines(token, codeIndent)) {
 					lines.push(bodyLine);
 				}
-				lines.push(this.#theme.codeBlockBorder("```"));
+				lines.push(renderedLine(this.#theme.codeBlockBorder("```")));
 				if (nextTokenType && nextTokenType !== "space") {
-					lines.push(""); // Add spacing after code blocks (unless space token follows)
+					lines.push(renderedLine("")); // Add spacing after code blocks (unless space token follows)
 				}
 				break;
 			}
 
 			case "list": {
-				const listLines = this.#renderList(token as ListToken, 0, styleContext);
+				const listLines = this.#renderList(token as ListToken, 0, width, styleContext);
 				lines.push(...listLines);
 				// Don't add spacing after lists if a space token follows
 				// (the space token will handle it)
@@ -1950,7 +2320,7 @@ export class Markdown implements Component, NativeScrollbackCommittedRows, Nativ
 
 			case "table": {
 				const tableLines = this.#renderTable(token as TableToken, width, nextTokenType, styleContext, tokenKey);
-				lines.push(...tableLines);
+				for (const tableLine of tableLines) lines.push(renderedLine(tableLine));
 				break;
 			}
 
@@ -1961,7 +2331,7 @@ export class Markdown implements Component, NativeScrollbackCommittedRows, Nativ
 				};
 				const quoteContentWidth = Math.max(1, width - 2);
 				const quoteTokens = token.tokens || [];
-				const renderedQuoteLines: string[] = [];
+				const renderedQuoteLines: RenderedLine[] = [];
 				const blockquoteSpecStart = this.#activeTableRenderSpecs?.length ?? 0;
 
 				for (let i = 0; i < quoteTokens.length; i++) {
@@ -1997,7 +2367,7 @@ export class Markdown implements Component, NativeScrollbackCommittedRows, Nativ
 					}
 				}
 
-				while (renderedQuoteLines.length > 0 && renderedQuoteLines[renderedQuoteLines.length - 1] === "") {
+				while (renderedQuoteLines.length > 0 && renderedQuoteLines[renderedQuoteLines.length - 1]!.text === "") {
 					renderedQuoteLines.pop();
 				}
 
@@ -2016,16 +2386,16 @@ export class Markdown implements Component, NativeScrollbackCommittedRows, Nativ
 				}
 				lines.push(...borderedQuoteLines);
 				if (nextTokenType && nextTokenType !== "space") {
-					lines.push(""); // Add spacing after blockquotes (unless space token follows)
+					lines.push(renderedLine("")); // Add spacing after blockquotes (unless space token follows)
 				}
 				break;
 			}
 
 			case "hr": {
 				const raw = "raw" in token && typeof token.raw === "string" ? token.raw.trim() : "";
-				lines.push(this.#renderHrLine(width, raw[0] || ""));
+				lines.push(renderedLine(this.#renderHrLine(width, raw[0] || "")));
 				if (nextTokenType && nextTokenType !== "space") {
-					lines.push(""); // Add spacing after horizontal rules (unless space token follows)
+					lines.push(renderedLine("")); // Add spacing after horizontal rules (unless space token follows)
 				}
 				break;
 			}
@@ -2038,13 +2408,13 @@ export class Markdown implements Component, NativeScrollbackCommittedRows, Nativ
 
 			case "space":
 				// Space tokens represent blank lines in markdown
-				lines.push("");
+				lines.push(renderedLine(""));
 				break;
 
 			default:
 				// Handle any other token types as plain text
 				if ("text" in token && typeof token.text === "string") {
-					lines.push(token.text);
+					lines.push(renderedLine(token.text));
 				}
 		}
 
@@ -2061,7 +2431,7 @@ export class Markdown implements Component, NativeScrollbackCommittedRows, Nativ
 	 * Wrap already-rendered lines in the blockquote border and quote styling.
 	 * `width` is the full content width; the border reserves two cells.
 	 */
-	#applyQuoteBorder(renderedLines: string[], width: number, sourceRowOffsets?: number[]): string[] {
+	#applyQuoteBorder(renderedLines: RenderedLine[], width: number, sourceRowOffsets?: number[]): RenderedLine[] {
 		const quoteStyle = (text: string) => this.#theme.quote(this.#theme.italic(text));
 		const quoteStylePrefix = this.#getStylePrefix(quoteStyle);
 		const applyQuoteStyle = (line: string): string => {
@@ -2072,12 +2442,23 @@ export class Markdown implements Component, NativeScrollbackCommittedRows, Nativ
 			return quoteStyle(lineWithReappliedStyle);
 		};
 		const quoteContentWidth = Math.max(1, width - 2);
-		const lines: string[] = [];
+		const lines: RenderedLine[] = [];
 		sourceRowOffsets?.push(0);
 		for (const quoteLine of renderedLines) {
-			const styledLine = applyQuoteStyle(quoteLine);
-			for (const wrappedLine of wrapTextWithAnsi(styledLine, quoteContentWidth)) {
-				lines.push(this.#theme.quoteBorder(`${this.#theme.symbols.quoteBorder} `) + wrappedLine);
+			if (quoteLine.literalCode) {
+				const wrappedLiteralRows = wrapTextWithAnsi(quoteLine.text, quoteContentWidth);
+				if (wrappedLiteralRows.length === 0) {
+					lines.push(renderedLine("", true));
+				} else {
+					for (const wrappedLine of wrappedLiteralRows) {
+						lines.push(renderedLine(wrappedLine, true));
+					}
+				}
+			} else {
+				const styledLine = applyQuoteStyle(quoteLine.text);
+				for (const wrappedLine of wrapTextWithAnsi(styledLine, quoteContentWidth)) {
+					lines.push(renderedLine(this.#theme.quoteBorder(`${this.#theme.symbols.quoteBorder} `) + wrappedLine));
+				}
 			}
 			sourceRowOffsets?.push(lines.length);
 		}
@@ -2090,8 +2471,8 @@ export class Markdown implements Component, NativeScrollbackCommittedRows, Nativ
 	 * quote styling; the remaining markup is normalized to terminal text (entities
 	 * decoded, `<code>` themed, lists/`<br>`/`<p>` laid out).
 	 */
-	#renderHtmlBlock(raw: string, width: number): string[] {
-		const lines: string[] = [];
+	#renderHtmlBlock(raw: string, width: number): RenderedLine[] {
+		const lines: RenderedLine[] = [];
 		const state = createHtmlNormalizationState();
 		const codeHook = (text: string): string => this.#theme.code(text) + this.#getDefaultStylePrefix();
 		const flushText = (chunk: string): void => {
@@ -2099,7 +2480,7 @@ export class Markdown implements Component, NativeScrollbackCommittedRows, Nativ
 			if (cleaned.trim() === "") return;
 			for (const line of splitTerminalLines(cleaned)) {
 				const trimmed = line.trimEnd();
-				lines.push(trimmed.trim() === "" ? "" : this.#applyDefaultStyle(trimmed));
+				lines.push(renderedLine(trimmed.trim() === "" ? "" : this.#applyDefaultStyle(trimmed)));
 			}
 		};
 		let lastIndex = 0;
@@ -2110,7 +2491,7 @@ export class Markdown implements Component, NativeScrollbackCommittedRows, Nativ
 			if (match[1] !== undefined) {
 				lines.push(...this.#renderHtmlBlockquote(match[1], width));
 			} else {
-				lines.push(this.#renderHrLine(width));
+				lines.push(renderedLine(this.#renderHrLine(width)));
 			}
 		}
 		flushText(raw.slice(lastIndex));
@@ -2118,10 +2499,10 @@ export class Markdown implements Component, NativeScrollbackCommittedRows, Nativ
 	}
 
 	/** Render the inner content of an HTML `<blockquote>` with quote styling. */
-	#renderHtmlBlockquote(inner: string, width: number): string[] {
+	#renderHtmlBlockquote(inner: string, width: number): RenderedLine[] {
 		const cleaned = normalizeHtmlForTerminal(inner, createHtmlNormalizationState(), text => this.#theme.code(text));
-		const innerLines = splitTerminalLines(cleaned).map(line => line.trimEnd());
-		while (innerLines.length > 0 && innerLines[innerLines.length - 1] === "") innerLines.pop();
+		const innerLines = splitTerminalLines(cleaned).map(line => renderedLine(line.trimEnd()));
+		while (innerLines.length > 0 && innerLines[innerLines.length - 1].text === "") innerLines.pop();
 		return this.#applyQuoteBorder(innerLines, width);
 	}
 
@@ -2257,46 +2638,74 @@ export class Markdown implements Component, NativeScrollbackCommittedRows, Nativ
 	/**
 	 * Render a list with proper nesting support
 	 */
-	#renderList(token: ListToken, depth: number, styleContext?: InlineStyleContext): string[] {
-		const lines: string[] = [];
+	#renderList(token: ListToken, depth: number, width: number, styleContext?: InlineStyleContext): RenderedLine[] {
+		const lines: RenderedLine[] = [];
 		const indent = "  ".repeat(depth);
 		// Use the list's start property (defaults to 1 for ordered lists)
 		const startNumber = token.start ?? 1;
+		const pushWrapped = (line: RenderedLine, firstPrefix: string, continuationPrefix: string): void => {
+			if (line.literalCode) {
+				const wrappedLiteralRows = wrapTextWithAnsi(line.text, Math.max(1, width));
+				if (wrappedLiteralRows.length === 0) {
+					lines.push(renderedLine("", true));
+				} else {
+					for (const wrappedLine of wrappedLiteralRows) {
+						lines.push(renderedLine(wrappedLine, true));
+					}
+				}
+				return;
+			}
+
+			const prefixWidth = visibleWidth(firstPrefix);
+			if (prefixWidth >= width) {
+				lines.push(renderedLine(truncateToWidth(firstPrefix, width, Ellipsis.Omit)));
+				for (const wrappedLine of wrapTextWithAnsi(line.text, Math.max(1, width))) {
+					lines.push(renderedLine(wrappedLine));
+				}
+				return;
+			}
+			const bodyWidth = width - prefixWidth;
+			const wrapped = wrapTextWithAnsi(line.text, bodyWidth);
+			if (wrapped.length === 0) {
+				lines.push(renderedLine(firstPrefix));
+				return;
+			}
+			lines.push(renderedLine(firstPrefix + wrapped[0]));
+			for (let lineIndex = 1; lineIndex < wrapped.length; lineIndex++) {
+				lines.push(renderedLine(continuationPrefix + wrapped[lineIndex]));
+			}
+		};
 
 		for (let i = 0; i < token.items.length; i++) {
 			const item = token.items[i];
 			const bullet = token.ordered ? `${startNumber + i}. ` : "- ";
+			const firstPrefix = indent + this.#theme.listBullet(bullet);
 			// Continuation rows align under the item text, so the hang matches the
 			// actual bullet width (`10. ` is 4 cells, not 2).
-			const continuationIndent = indent + padding(bullet.length);
+			const continuationIndent = indent + padding(visibleWidth(bullet));
 
 			// Process item tokens; nested-list lines arrive structurally tagged and
 			// already carry their own full indent.
-			const itemLines = this.#renderListItem(item.tokens || [], depth, styleContext);
+			const itemLines = this.#renderListItem(item.tokens || [], depth, width, styleContext);
 
 			if (itemLines.length > 0) {
 				const firstLine = itemLines[0]!;
 				if (firstLine.nested) {
-					// Nested list first - keep as-is (already has full indent)
-					lines.push(firstLine.text);
+					lines.push(firstLine);
 				} else {
-					// Regular text content - add indent and bullet
-					lines.push(indent + this.#theme.listBullet(bullet) + firstLine.text);
+					pushWrapped(firstLine, firstPrefix, continuationIndent);
 				}
 
-				// Rest of the lines
 				for (let j = 1; j < itemLines.length; j++) {
 					const line = itemLines[j]!;
 					if (line.nested) {
-						// Nested list line - already has full indent
-						lines.push(line.text);
+						lines.push(line);
 					} else {
-						// Regular content - hang under the item text
-						lines.push(continuationIndent + line.text);
+						pushWrapped(line, continuationIndent, continuationIndent);
 					}
 				}
 			} else {
-				lines.push(indent + this.#theme.listBullet(bullet));
+				lines.push(renderedLine(firstPrefix));
 			}
 		}
 
@@ -2312,17 +2721,18 @@ export class Markdown implements Component, NativeScrollbackCommittedRows, Nativ
 	#renderListItem(
 		tokens: Token[],
 		parentDepth: number,
+		width: number,
 		styleContext?: InlineStyleContext,
-	): Array<{ text: string; nested: boolean }> {
-		const lines: Array<{ text: string; nested: boolean }> = [];
+	): RenderedListItemLine[] {
+		const lines: RenderedListItemLine[] = [];
 
 		for (const token of tokens) {
 			if (token.type === "list") {
 				// Nested list - render with one additional indent level
 				// These lines carry their own indent, so tag them for pass-through
-				const nestedLines = this.#renderList(token as ListToken, parentDepth + 1, styleContext);
+				const nestedLines = this.#renderList(token as ListToken, parentDepth + 1, width, styleContext);
 				for (const nestedLine of nestedLines) {
-					lines.push({ text: nestedLine, nested: true });
+					lines.push({ ...nestedLine, nested: true });
 				}
 			} else if (token.type === "text") {
 				// Text content (may have inline tokens, or a sole display-math token)
@@ -2353,7 +2763,7 @@ export class Markdown implements Component, NativeScrollbackCommittedRows, Nativ
 				const codeIndent = padding(this.#codeBlockIndent);
 				lines.push({ text: this.#theme.codeBlockBorder(`\`\`\`${token.lang || ""}`), nested: false });
 				for (const bodyLine of this.#renderCodeBodyLines(token, codeIndent)) {
-					lines.push({ text: bodyLine, nested: false });
+					lines.push({ ...bodyLine, nested: false });
 				}
 				lines.push({ text: this.#theme.codeBlockBorder("```"), nested: false });
 			} else if (isMathToken(token)) {
@@ -2406,7 +2816,13 @@ export class Markdown implements Component, NativeScrollbackCommittedRows, Nativ
 		while (wrapped.length > 1 && wrapped[wrapped.length - 1] === "") {
 			wrapped.pop();
 		}
-		return wrapped;
+		// The native wrap deliberately leaves fg color and bold/italic open at
+		// line ends so continuation lines can re-open them. Table rows splice
+		// every cell line between unstyled border glyphs, so an open style
+		// (e.g. mdCode) would bleed into the "│" and the following cells.
+		// Terminate each line at default fg, clearing bold/italic but keeping
+		// any ambient background (message-bg rendering) intact.
+		return wrapped.map(line => `${line}\x1b[22m\x1b[23m\x1b[39m`);
 	}
 
 	/**

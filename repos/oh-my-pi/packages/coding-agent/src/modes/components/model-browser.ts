@@ -314,10 +314,10 @@ function padLeftVisible(text: string, width: number): string {
 export interface ModelBrowserOptions {
 	/** Render the dim `provider/` prefix before model ids. Default true. */
 	showProvider?: boolean;
-	/** Session token count used to disable models whose context window is exceeded. */
+	/** Session token count used to flag models whose context window is exceeded. */
 	currentContextTokens?: number;
-	/** When true, rows over the current context are unselectable (session-switch mode). */
-	disableOverContext?: boolean;
+	/** When true, over-context rows render grayed; picking one compacts first (session-switch mode). */
+	markOverContext?: boolean;
 	/** Host-provided empty-state text (e.g. provider discovery status). */
 	emptyText?: () => string | undefined;
 }
@@ -351,7 +351,7 @@ export class ModelBrowser implements Component {
 	#maxVisible = 10;
 	#showProvider: boolean;
 	#currentContextTokens: number;
-	#disableOverContext: boolean;
+	#markOverContext: boolean;
 	#emptyText?: () => string | undefined;
 	/** Keep role-like virtual rows in their host-defined order during search. */
 	#preserveQueryOrder = false;
@@ -375,7 +375,7 @@ export class ModelBrowser implements Component {
 		this.#showProvider = options.showProvider ?? true;
 		const tokens = options.currentContextTokens ?? 0;
 		this.#currentContextTokens = Number.isFinite(tokens) && tokens > 0 ? Math.floor(tokens) : 0;
-		this.#disableOverContext = options.disableOverContext ?? false;
+		this.#markOverContext = options.markOverContext ?? false;
 		this.#emptyText = options.emptyText;
 	}
 
@@ -420,9 +420,9 @@ export class ModelBrowser implements Component {
 	setPreserveQueryOrder(preserve: boolean): void {
 		this.#preserveQueryOrder = preserve;
 	}
-	/** Allow hosts to toggle context-window eligibility between browser modes. */
-	setDisableOverContext(disable: boolean): void {
-		this.#disableOverContext = disable;
+	/** Allow hosts to toggle context-window flagging between browser modes. */
+	setMarkOverContext(mark: boolean): void {
+		this.#markOverContext = mark;
 	}
 	/** Focused: accent cursor + selected-row background band. Unfocused: dim cursor, no band. */
 	setFocused(focused: boolean): void {
@@ -461,8 +461,13 @@ export class ModelBrowser implements Component {
 	}
 
 	#isDisabled(item: ModelBrowserItem): boolean {
-		if (item.id === "separator") return true;
-		if (!this.#disableOverContext || this.#currentContextTokens <= 0) return false;
+		return item.id === "separator";
+	}
+
+	/** True when `item`'s context window is smaller than the live session token count (grayed row; hosts compact before switching). */
+	isOverContext(item: ModelBrowserItem): boolean {
+		if (item.id === "separator") return false;
+		if (!this.#markOverContext || this.#currentContextTokens <= 0) return false;
 		const contextWindow = item.model.contextWindow ?? 0;
 		return contextWindow > 0 && this.#currentContextTokens > contextWindow;
 	}
@@ -718,7 +723,7 @@ export class ModelBrowser implements Component {
 			const line = theme.fg("muted", "─".repeat(dashCount));
 			return `  ${line}  `;
 		}
-		const disabled = this.#isDisabled(item);
+		const overContext = this.isOverContext(item);
 		const prefix = selected && this.#focused ? `${theme.fg("accent", theme.nav.cursor)} ` : "  ";
 		const providerPrefix = this.#showProvider ? theme.fg("dim", `${item.provider}/`) : "";
 		const name = item.labelColor
@@ -728,7 +733,7 @@ export class ModelBrowser implements Component {
 				: item.id;
 		const currentMark =
 			item.selector === this.#currentSelector ? ` ${theme.fg("success", theme.status.enabled)}` : "";
-		const overLimit = disabled
+		const overLimit = overContext
 			? ` ${theme.status.disabled} context>${formatNumber(item.model.contextWindow ?? 0).toLowerCase()}`
 			: "";
 		let left = `${prefix}${providerPrefix}${name}${currentMark}${overLimit}`;
@@ -743,12 +748,15 @@ export class ModelBrowser implements Component {
 		const gap = Math.max(0, available - visibleWidth(left));
 
 		let line = `${left}${" ".repeat(gap)} ${meta}`;
-		if (disabled) {
-			line = theme.fg("dim", Bun.stripANSI(line));
+		if (overContext) {
+			// Gray the whole row but keep the selection cursor visible: over-context
+			// models stay selectable (the host compacts before switching).
+			const plainPrefix = Bun.stripANSI(prefix);
+			line = `${prefix}${theme.fg("dim", Bun.stripANSI(line).slice(plainPrefix.length))}`;
 		}
 		// The bg band is reserved for the mouse: it marks hover, nothing else.
 		// Keyboard selection is the cursor glyph + accent name.
-		if (hovered && !disabled) {
+		if (hovered) {
 			line = theme.bg("selectedBg", line);
 		}
 		return line;
@@ -772,8 +780,8 @@ export class ModelBrowser implements Component {
 		}
 		const line1 = truncateToWidth(theme.fg("muted", `  ${facts.join(" · ")}`), width);
 
-		if (this.#isDisabled(selected)) {
-			const warning = `  ${theme.status.disabled} current context ${formatNumber(this.#currentContextTokens).toLowerCase()} exceeds ${formatNumber(model.contextWindow ?? 0).toLowerCase()} limit`;
+		if (this.isOverContext(selected)) {
+			const warning = `  ${theme.status.disabled} context ${formatNumber(this.#currentContextTokens).toLowerCase()} exceeds ${formatNumber(model.contextWindow ?? 0).toLowerCase()} limit · compacts with current model, then switches`;
 			return [line1, truncateToWidth(theme.fg("warning", warning), width)];
 		}
 

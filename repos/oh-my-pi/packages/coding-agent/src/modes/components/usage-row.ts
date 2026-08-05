@@ -15,10 +15,8 @@ function formatUsageTimestamp(ms: number): string {
 	return `${date} ${time}`;
 }
 
-// `timestamp` is optional and trails the throughput args to preserve the existing
-// (usage, durationMs, ttftMs) call contract — this function is part of the package's
-// public export surface (./modes/components/*).
-export function createUsageRowBlock(usage: Usage, durationMs?: number, ttftMs?: number, timestamp?: number): Container {
+/** Format the metrics shared by standalone usage blocks and compact tool groups. */
+export function formatUsageRow(usage: Usage, durationMs?: number, ttftMs?: number, timestamp?: number): string {
 	const totalInput = usage.input + usage.cacheWrite;
 	const parts: string[] = [];
 	// Lead with the turn's local wall-clock time (down to the second), log-line style.
@@ -40,8 +38,15 @@ export function createUsageRowBlock(usage: Usage, durationMs?: number, ttftMs?: 
 		const tokPerSec = (usage.output / durationMs) * 1000;
 		parts.push(`${theme.icon.throughput} ${tokPerSec.toFixed(1)}/s`);
 	}
+	return parts.join("  ");
+}
+
+// `timestamp` is optional and trails the throughput args to preserve the existing
+// (usage, durationMs, ttftMs) call contract — this function is part of the package's
+// public export surface (./modes/components/*).
+export function createUsageRowBlock(usage: Usage, durationMs?: number, ttftMs?: number, timestamp?: number): Container {
 	const block = new Container();
 	block.addChild(new Spacer(1));
-	block.addChild(new Text(theme.fg("dim", parts.join("  ")), 1, 0));
+	block.addChild(new Text(theme.fg("dim", formatUsageRow(usage, durationMs, ttftMs, timestamp)), 1, 0));
 	return block;
 }

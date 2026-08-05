@@ -89,6 +89,13 @@ describe("CopySelectorComponent", () => {
 		expect(out).toMatch(/[├└]/);
 	});
 
+	it("renders human-readable keybinding hints in the footer", () => {
+		const out = render(new CopySelectorComponent(makeRoots(), { onPick: vi.fn(), onCancel: vi.fn() }));
+
+		expect(out).toContain("Enter copy");
+		expect(out).toContain("Ctrl+G quit");
+	});
+
 	it("copies the message node itself on Enter", () => {
 		const onPick = vi.fn();
 		const component = new CopySelectorComponent(makeRoots(), { onPick, onCancel: vi.fn() });

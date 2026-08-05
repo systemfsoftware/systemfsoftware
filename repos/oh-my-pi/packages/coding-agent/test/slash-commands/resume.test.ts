@@ -79,6 +79,23 @@ describe("/resume slash command", () => {
 		expect(harness.handleResumeSession).not.toHaveBeenCalled();
 	});
 
+	it("opens foreign session selectors for @claude and @codex", async () => {
+		const sources: Array<{ argument: string; source: "claude" | "codex" }> = [
+			{ argument: "@claude", source: "claude" },
+			{ argument: "@codex", source: "codex" },
+		];
+		for (const { argument, source } of sources) {
+			const harness = createRuntime();
+
+			const handled = await executeBuiltinSlashCommand(`/resume ${argument}`, harness.runtime);
+
+			expect(handled).toBe(true);
+			expect(harness.showSessionSelector).toHaveBeenCalledWith(source);
+			expect(harness.handleResumeSession).not.toHaveBeenCalled();
+			expect(harness.showError).not.toHaveBeenCalled();
+		}
+	});
+
 	it("resumes a matching session id prefix", async () => {
 		const sessionPath = await writeSession("019ed676-02fb-7000-8dac-396e2f84d484");
 		const harness = createRuntime();

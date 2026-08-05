@@ -28,7 +28,13 @@ import { type Skill, skillCapability } from "../capability/skill";
 import { type SlashCommand, slashCommandCapability } from "../capability/slash-command";
 import { type CustomTool, toolCapability } from "../capability/tool";
 import type { LoadContext, LoadResult } from "../capability/types";
-import { buildRuleFromMarkdown, createSourceMeta, loadFilesFromDir, scanSkillsFromDir } from "./helpers";
+import {
+	buildRuleFromMarkdown,
+	createSourceMeta,
+	loadFilesFromDir,
+	parseRequestIdFormat,
+	scanSkillsFromDir,
+} from "./helpers";
 import { listOmpExtensionRoots, type OmpExtensionRoot } from "./omp-extension-roots";
 import { resolvePluginStdioPaths } from "./substitute-plugin-root";
 
@@ -257,6 +263,7 @@ const MCP_FILENAMES = [".mcp.json", "mcp.json"] as const;
 interface RawMcpServer {
 	enabled?: boolean;
 	timeout?: number;
+	requestIdFormat?: unknown;
 	command?: string;
 	args?: string[];
 	env?: Record<string, string>;
@@ -305,10 +312,12 @@ async function loadMCPServers(ctx: LoadContext): Promise<LoadResult<MCPServer>> 
 			// Root relative command/cwd at the plugin's config directory, not the
 			// session cwd (MCP stdio spawning resolves relative values there).
 			const rooted = resolvePluginStdioPaths({ command: cfg.command, cwd: cfg.cwd }, root.path);
+			const requestIdFormat = parseRequestIdFormat(cfg.requestIdFormat);
 			items.push({
 				name: serverName,
 				...(cfg.enabled !== undefined && { enabled: cfg.enabled }),
 				...(cfg.timeout !== undefined && { timeout: cfg.timeout }),
+				...(requestIdFormat !== undefined && { requestIdFormat }),
 				...(rooted.command !== undefined && { command: rooted.command }),
 				...(cfg.args !== undefined && { args: cfg.args }),
 				...(cfg.env !== undefined && { env: cfg.env }),

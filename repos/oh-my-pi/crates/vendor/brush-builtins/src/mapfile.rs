@@ -158,7 +158,7 @@ impl MapFileCommand {
 			let array_index = self.origin.unwrap_or(0) + i64::try_from(entry_count)?;
 
 			if let Some(callback) = &self.callback
-				&& (entry_count + 1) % callback_group_size == 0
+				&& (entry_count + 1).is_multiple_of(callback_group_size)
 			{
 				let result = run_callback(callback, array_index, &line_str, context).await?;
 				if !result.is_normal_flow() {

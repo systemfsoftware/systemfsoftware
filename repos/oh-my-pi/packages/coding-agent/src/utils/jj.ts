@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { $which } from "@oh-my-pi/pi-utils";
 import { LRUCache } from "lru-cache/raw";
+import { withTimeoutSignal } from "./fetch-timeout";
 import * as git from "./git";
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -27,18 +28,23 @@ export interface JjRepository {
 }
 
 /** Options for `jj diff` invocations. */
-export interface DiffOptions {
+export interface DiffOptions extends JjCommandOptions {
 	/** Optional file paths to restrict the diff with `-- <files>`. */
 	readonly files?: readonly string[];
 	/** Return only changed file names instead of Git-format diff text. */
 	readonly nameOnly?: boolean;
-	/** Optional abort signal passed to the spawned `jj` process. */
-	readonly signal?: AbortSignal;
 }
 
-interface CommandOptions {
+/** Options for a bounded `jj` subprocess query. */
+export interface JjCommandOptions {
+	/** Optional cancellation signal for the subprocess. */
 	readonly signal?: AbortSignal;
+	/** Deadline in milliseconds. Defaults to {@link JJ_COMMAND_TIMEOUT_MS}. */
+	readonly timeoutMs?: number;
 }
+
+/** Default finite deadline for local jj subprocesses. */
+export const JJ_COMMAND_TIMEOUT_MS = 5_000;
 
 // ════════════════════════════════════════════════════════════════════════════
 // Error
@@ -83,10 +89,10 @@ function formatCommandFailure(
 	return `jj ${args.join(" ")} failed with exit code ${result.exitCode}`;
 }
 
-async function jj(cwd: string, args: readonly string[], options: CommandOptions = {}): Promise<JjCommandResult> {
+async function jj(cwd: string, args: readonly string[], options: JjCommandOptions = {}): Promise<JjCommandResult> {
 	const child = Bun.spawn(["jj", "--no-pager", "--color=never", ...args], {
 		cwd,
-		signal: options.signal,
+		signal: withTimeoutSignal(options.timeoutMs ?? JJ_COMMAND_TIMEOUT_MS, options.signal),
 		stdin: "ignore",
 		stdout: "pipe",
 		stderr: "pipe",
@@ -109,7 +115,7 @@ async function jj(cwd: string, args: readonly string[], options: CommandOptions 
 async function runChecked(
 	cwd: string,
 	args: readonly string[],
-	options: CommandOptions = {},
+	options: JjCommandOptions = {},
 ): Promise<JjCommandResult> {
 	ensureAvailable();
 	const result = await jj(cwd, args, options);
@@ -119,14 +125,14 @@ async function runChecked(
 	return result;
 }
 
-async function runText(cwd: string, args: readonly string[], options: CommandOptions = {}): Promise<string> {
+async function runText(cwd: string, args: readonly string[], options: JjCommandOptions = {}): Promise<string> {
 	return (await runChecked(cwd, args, options)).stdout;
 }
 
 async function runOptionalText(
 	cwd: string,
 	args: readonly string[],
-	options: CommandOptions = {},
+	options: JjCommandOptions = {},
 ): Promise<string | null> {
 	try {
 		const result = await jj(cwd, args, options);
@@ -294,7 +300,7 @@ export const workingCopy = {
 	 * Label `@` with its nearest bookmark, falling back to its short change ID.
 	 * Returns `null` when `jj` is unavailable or the query fails.
 	 */
-	async label(cwd: string, signal?: AbortSignal): Promise<string | null> {
+	async label(cwd: string, options?: JjCommandOptions): Promise<string | null> {
 		const raw = await runOptionalText(
 			cwd,
 			[
@@ -306,7 +312,7 @@ export const workingCopy = {
 				"-T",
 				WORKING_COPY_LABEL_TEMPLATE,
 			],
-			{ signal },
+			options,
 		);
 		return raw === null ? null : parseWorkingCopyLabel(raw);
 	},
@@ -325,8 +331,8 @@ export const status = {
 	 * Count changes in `@` relative to its parent using the Git status shape.
 	 * Jujutsu has no index, so `staged` is always zero.
 	 */
-	async summary(cwd: string, signal?: AbortSignal): Promise<git.GitStatusSummary | null> {
-		const raw = await runOptionalText(cwd, ["diff", "-r", "@", "--summary", "--ignore-working-copy"], { signal });
+	async summary(cwd: string, options?: JjCommandOptions): Promise<git.GitStatusSummary | null> {
+		const raw = await runOptionalText(cwd, ["diff", "-r", "@", "--summary", "--ignore-working-copy"], options);
 		return raw === null ? null : parseStatusSummary(raw);
 	},
 

@@ -66,15 +66,16 @@ pub trait ExternalCommandOutputMarker: Send + Sync {
 	) -> Option<ExternalCommandOutputMarkers>;
 }
 
-/// Optional hook invoked after each external command is spawned, reporting the
-/// OS identity of the child. Embedders use it to scope process-tree teardown
-/// (cancellation cleanup) to exactly the processes a given run launched, rather
-/// than diffing the whole host process tree — which cannot distinguish the
-/// children of concurrent runs sharing one host process.
+/// Optional hook invoked after each external command is spawned.
 ///
-/// Not called for reparented launches (`detach_reparent`): those deliberately
-/// escape the shell's descendant tree (e.g. `nohup cmd &`) and must survive
-/// teardown, so they are intentionally left unowned.
+/// It reports the OS identity of the child so embedders can scope
+/// process-tree teardown (cancellation cleanup) to exactly the processes a
+/// given run launched, rather than diffing the whole host process tree. That
+/// cannot distinguish children of concurrent runs sharing one host process.
+///
+/// It is not called for reparented launches (`detach_reparent`): those
+/// deliberately escape the shell's descendant tree (e.g. `nohup cmd &`) and
+/// must survive teardown, so they are intentionally left unowned.
 pub trait SpawnObserver: Send + Sync {
 	/// Reports a freshly spawned external child. `pgid` is the child's process
 	/// group id when known (always its own pid under `NewProcessGroup`).
@@ -133,7 +134,7 @@ impl ExecutionParameters {
 	}
 
 	/// Disables external-command output marking for this execution branch.
-	pub fn disable_command_output_marking(&mut self) {
+	pub const fn disable_command_output_marking(&mut self) {
 		self.command_output_disabled = true;
 	}
 
@@ -534,7 +535,7 @@ fn unwrap_transparent_background_wrapper(pipeline: &ast::Pipeline) -> Option<ast
 async fn try_spawn_pipeline_as_job<SE: extensions::ShellExtensions>(
 	pipeline: &ast::Pipeline,
 	command_line: String,
-	shell: &mut Shell<SE>,
+	shell: &Shell<SE>,
 	params: &ExecutionParameters,
 ) -> Result<Option<jobs::Job>, error::Error> {
 	let mut subshell = shell.clone();
@@ -558,7 +559,7 @@ async fn try_spawn_pipeline_as_job<SE: extensions::ShellExtensions>(
 
 fn spawn_async_ao_list_in_task<SE: extensions::ShellExtensions>(
 	ao_list: &ast::AndOrList,
-	shell: &mut Shell<SE>,
+	shell: &Shell<SE>,
 	params: &ExecutionParameters,
 ) -> jobs::Job {
 	// Clone the inputs.
@@ -1181,7 +1182,7 @@ impl Execute for ast::CaseClauseCommand {
 		// switched on, but that's not it.
 		if shell.options().print_commands_and_arguments {
 			shell
-				.trace_command(params, std::format!("case {} in", &self.value))
+				.trace_command(params, std::format!("case {} in", self.value))
 				.await;
 		}
 

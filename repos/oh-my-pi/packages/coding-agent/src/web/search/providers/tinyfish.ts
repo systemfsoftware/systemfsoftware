@@ -34,6 +34,7 @@ export interface TinyFishSearchParams {
 	recency?: SearchParams["recency"];
 	page?: number;
 	signal?: AbortSignal;
+	timeoutMs?: number;
 	fetch?: FetchImpl;
 }
 
@@ -78,7 +79,7 @@ async function callTinyFishSearch(apiKey: string, params: TinyFishSearchParams):
 			Accept: "application/json",
 			"X-API-Key": apiKey,
 		},
-		signal: withHardTimeout(params.signal),
+		signal: withHardTimeout(params.signal, params.timeoutMs),
 	});
 
 	if (!response.ok) {
@@ -117,6 +118,7 @@ export async function searchTinyFish(params: SearchParams): Promise<SearchRespon
 		num_results: pageSize,
 		recency: params.recency,
 		signal: params.signal,
+		timeoutMs: params.timeoutMs,
 		fetch: params.fetch,
 	};
 	const keyOrResolver: ApiKey = params.authStorage.resolver("tinyfish", {

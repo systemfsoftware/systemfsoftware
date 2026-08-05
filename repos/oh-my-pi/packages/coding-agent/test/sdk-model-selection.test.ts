@@ -8,6 +8,7 @@ import { writeModelCache } from "@oh-my-pi/pi-catalog/model-cache";
 import { getBundledModel } from "@oh-my-pi/pi-catalog/models";
 import { parseArgs } from "@oh-my-pi/pi-coding-agent/cli/args";
 import { ModelRegistry, type ProviderConfigInput } from "@oh-my-pi/pi-coding-agent/config/model-registry";
+import { getModelMatchPreferences, resolveModelScope } from "@oh-my-pi/pi-coding-agent/config/model-resolver";
 import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
 import { buildSessionOptions as buildCliSessionOptions } from "@oh-my-pi/pi-coding-agent/main";
 import { createAgentSession, type ExtensionFactory } from "@oh-my-pi/pi-coding-agent/sdk";
@@ -352,6 +353,58 @@ describe("createAgentSession deferred model pattern resolution", () => {
 		}
 	});
 
+	test("prefers authenticated providers for deferred bare role candidates", async () => {
+		const settings = Settings.isolated({
+			modelProviderOrder: ["aimlapi", "openai"],
+		});
+		settings.setModelRole("task", "missing-provider/missing-model,gpt-4o-mini");
+		const authStorage = await AuthStorage.create(path.join(tempDir, "ambiguous-role-auth.db"));
+		authStorage.setRuntimeApiKey("openai", "test-key");
+		authStoragesToClose.push(authStorage);
+		const modelRegistry = new ModelRegistry(authStorage, path.join(tempDir, "ambiguous-role-models.yml"));
+		const parsed = parseArgs(["--model", "task"]);
+		const exitSpy = vi.spyOn(process, "exit").mockImplementation((code?: number | string | null) => {
+			throw new Error(`buildSessionOptions unexpectedly exited with ${code}`);
+		});
+		try {
+			const cliOptions = await buildCliSessionOptions(
+				parsed,
+				[],
+				SessionManager.inMemory(),
+				modelRegistry,
+				settings,
+			);
+			expect(cliOptions.model).toBeUndefined();
+			expect(cliOptions.modelPattern).toBe("task");
+
+			const { session } = await createAgentSession({
+				...cliOptions,
+				cwd: tempDir,
+				agentDir: tempDir,
+				authStorage,
+				modelRegistry,
+				settings,
+				disableExtensionDiscovery: true,
+				skills: [],
+				contextFiles: [],
+				promptTemplates: [],
+				slashCommands: [],
+				enableMCP: false,
+				enableLsp: false,
+				skipPythonPreflight: true,
+			});
+
+			try {
+				expect(session.model?.provider).toBe("openai");
+				expect(session.model?.id).toBe("gpt-4o-mini");
+			} finally {
+				await session.dispose();
+			}
+		} finally {
+			exitSpy.mockRestore();
+		}
+	});
+
 	test("uses a configured suffixed role fallback when its primary model is unavailable", async () => {
 		const settings = Settings.isolated({
 			"retry.fallbackChains": {
@@ -454,6 +507,33 @@ describe("createAgentSession deferred model pattern resolution", () => {
 		try {
 			expect(session.model?.provider).toBe("runtime-provider");
 			expect(session.model?.id).toBe("runtime-reasoning-model");
+		} finally {
+			await session.dispose();
+		}
+	});
+
+	test("rejects a depleted terminal fallback after startup skips the primary", async () => {
+		const settings = Settings.isolated({
+			"retry.usageAwareFallback": true,
+			"retry.usageReservePolicy": "confirm",
+		});
+		settings.setModelRole("task", "runtime-provider/runtime-model,runtime-provider/runtime-reasoning-model");
+		const options = await buildSessionOptions("task");
+		const usageHealth = vi.spyOn(options.authStorage, "getModelUsageHealth").mockResolvedValue({
+			state: "depleted",
+			accounts: [{ credentialId: 1, credentialType: "oauth", state: "depleted" }],
+		});
+
+		const { session, modelFallbackMessage } = await createAgentSession({
+			...options,
+			modelPatternFallbackRole: "subagent:usage-aware-terminal",
+			settings,
+			hasUI: false,
+		});
+		try {
+			expect(usageHealth).toHaveBeenCalledTimes(2);
+			expect(session.model).toBeUndefined();
+			expect(modelFallbackMessage).toContain("not found");
 		} finally {
 			await session.dispose();
 		}
@@ -1017,5 +1097,119 @@ describe("createAgentSession deferred model pattern resolution", () => {
 			await session.dispose();
 			authStorage.close();
 		}
+	});
+
+	test("resolves the default role to an extension model in enabledModels instead of silently substituting an in-scope provider (issue #6694)", async () => {
+		const configuredModel = getBundledModel("anthropic", "claude-sonnet-4-5");
+		if (!configuredModel) {
+			throw new Error("Expected bundled anthropic configured model");
+		}
+		const authStorage = await AuthStorage.create(path.join(tempDir, "scope-6694-auth.db"));
+		authStoragesToClose.push(authStorage);
+		// The extension provider carries an inline apiKey; the "normally
+		// configured" provider needs credentials so it lands in the startup scope.
+		authStorage.setRuntimeApiKey(configuredModel.provider, "test-key");
+		const modelRegistry = new ModelRegistry(authStorage, path.join(tempDir, "scope-6694-models.yml"));
+
+		const enabledModels = ["runtime-provider/runtime-model", `${configuredModel.provider}/${configuredModel.id}`];
+		const settings = Settings.isolated({ enabledModels });
+		settings.setModelRole("default", "runtime-provider/runtime-model");
+
+		// main.ts resolves the model scope BEFORE extensions register providers,
+		// so the extension-registered model is dropped and only the configured
+		// provider survives into the startup scope.
+		const scopedModels = await resolveModelScope(
+			enabledModels,
+			modelRegistry,
+			getModelMatchPreferences(settings),
+			settings,
+		);
+		expect(scopedModels.map(scoped => `${scoped.model.provider}/${scoped.model.id}`)).toEqual([
+			`${configuredModel.provider}/${configuredModel.id}`,
+		]);
+
+		const exitSpy = vi.spyOn(process, "exit").mockImplementation((code?: number | string | null) => {
+			throw new Error(`buildSessionOptions unexpectedly exited with ${code}`);
+		});
+		try {
+			const cliOptions = await buildCliSessionOptions(
+				parseArgs([]),
+				scopedModels,
+				SessionManager.inMemory(),
+				modelRegistry,
+				settings,
+			);
+
+			const { session } = await createAgentSession({
+				...cliOptions,
+				cwd: tempDir,
+				agentDir: tempDir,
+				authStorage,
+				modelRegistry,
+				settings,
+				disableExtensionDiscovery: true,
+				extensions: [providerExtension],
+				skills: [],
+				contextFiles: [],
+				promptTemplates: [],
+				slashCommands: [],
+				enableMCP: false,
+				enableLsp: false,
+				skipPythonPreflight: true,
+			});
+
+			try {
+				// The configured default role names the extension model, which is
+				// itself listed in enabledModels. Once extensions register their
+				// providers it must win — not be silently replaced by the other
+				// in-scope provider's model.
+				expect(session.model?.provider).toBe("runtime-provider");
+				expect(session.model?.id).toBe("runtime-model");
+			} finally {
+				await session.dispose();
+			}
+		} finally {
+			exitSpy.mockRestore();
+		}
+	});
+	test("pins the first CLI --models scoped model even when the saved default role is out of scope", async () => {
+		const scopedTarget = getBundledModel("openai", "gpt-4o-mini");
+		const savedDefault = getBundledModel("anthropic", "claude-sonnet-4-5");
+		if (!scopedTarget || !savedDefault) {
+			throw new Error("Expected bundled openai and anthropic models");
+		}
+		const authStorage = await AuthStorage.create(path.join(tempDir, "cli-scope-auth.db"));
+		authStoragesToClose.push(authStorage);
+		authStorage.setRuntimeApiKey(scopedTarget.provider, "test-key");
+		authStorage.setRuntimeApiKey(savedDefault.provider, "test-key");
+		const modelRegistry = new ModelRegistry(authStorage, path.join(tempDir, "cli-scope-models.yml"));
+		const settings = Settings.isolated({});
+		settings.setModelRole("default", `${savedDefault.provider}/${savedDefault.id}`);
+
+		const parsed = parseArgs(["--models", `${scopedTarget.provider}/${scopedTarget.id}`]);
+		const scopedModels = await resolveModelScope(
+			parsed.models ?? [],
+			modelRegistry,
+			getModelMatchPreferences(settings),
+			settings,
+		);
+		expect(scopedModels.map(scoped => `${scoped.model.provider}/${scoped.model.id}`)).toEqual([
+			`${scopedTarget.provider}/${scopedTarget.id}`,
+		]);
+
+		const cliOptions = await buildCliSessionOptions(
+			parsed,
+			scopedModels,
+			SessionManager.inMemory(),
+			modelRegistry,
+			settings,
+		);
+		// The issue #6694 deferral must NOT apply to an explicit CLI scope:
+		// createAgentSession re-resolves the default role against
+		// `settings.enabledModels` only and never sees `--models`, so leaving
+		// `options.model` unset would let the saved out-of-scope default
+		// silently escape the scope the user just asked for.
+		expect(cliOptions.model?.provider).toBe(scopedTarget.provider);
+		expect(cliOptions.model?.id).toBe(scopedTarget.id);
 	});
 });

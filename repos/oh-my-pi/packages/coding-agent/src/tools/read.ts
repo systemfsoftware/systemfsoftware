@@ -3,6 +3,7 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { formatHashlineHeader, formatNumberedLine, formatNumberedLines } from "@oh-my-pi/hashline";
+import { type } from "@oh-my-pi/omptype";
 import type {
 	AgentTool,
 	AgentToolContext,
@@ -25,7 +26,6 @@ import {
 	readImageMetadata,
 	untilAborted,
 } from "@oh-my-pi/pi-utils";
-import { type } from "arktype";
 import { LRUCache } from "lru-cache/raw";
 import {
 	canonicalSnapshotKey,
@@ -57,6 +57,7 @@ import {
 import { fileHyperlink, renderCodeCell, renderMarkdownCell, renderStatusLine, tryResolveInternalUrlSync } from "../tui";
 import { CachedOutputBlock, markFramedBlockComponent } from "../tui/output-block";
 import { buildLineEntriesWithBlockContext, type LineEntry, lineEntriesToPlainText } from "../utils/block-context";
+import { isCpuProfilePath, renderCpuProfile } from "../utils/cpuprofile";
 import { resolveFileDisplayMode } from "../utils/file-display-mode";
 import {
 	ImageInputTooLargeError,
@@ -64,7 +65,9 @@ import {
 	MAX_IMAGE_INPUT_BYTES,
 	webpExclusionForModel,
 } from "../utils/image-loading";
+import { isInspectImageToolActive } from "../utils/inspect-image-mode";
 import { CONVERTIBLE_EXTENSIONS, convertFileWithMarkit } from "../utils/markit";
+import { isSampleProfilePath, renderSampleProfile } from "../utils/sample-profile";
 import { type ArchiveReader, formatArchiveEntryLines, openArchive, parseArchivePathCandidates } from "../utils/zip";
 import { buildDirectoryTree, type DirectoryTree } from "../workspace-tree";
 import {
@@ -131,6 +134,7 @@ import {
 } from "./sqlite-reader";
 import { ToolAbortError, ToolError, throwIfAborted } from "./tool-errors";
 import { toolResult } from "./tool-result";
+import { xdevDocs, xdevListing } from "./xdev";
 
 // Per-session memo for tree-sitter summaries. `summarizeCode` is a pure function
 // of (code, path, fold settings) but costs ~12-18ms for a ~1500-line file, and a
@@ -155,6 +159,8 @@ function getSummaryParseCache(session: object): LRUCache<string, SummaryResult |
 }
 
 const MAX_SUMMARY_BYTES = 2 * 1024 * 1024;
+/** Largest profile (`*.sample.txt`, `*.cpuprofile`) converted to a bottleneck summary; bigger files read as plain text. */
+const MAX_PROFILE_SUMMARY_BYTES = 32 * 1024 * 1024;
 const MAX_SUMMARY_LINES = 20_000;
 const MAX_ARTIFACT_RAW_INLINE_BYTES = DEFAULT_MAX_BYTES;
 /**
@@ -729,6 +735,10 @@ export interface ReadToolDetails {
 	method?: string;
 	notes?: string[];
 	meta?: OutputMeta;
+	/** Full on-disk byte size recorded before applying a file range. */
+	fileSize?: number;
+	/** Full source line count when the read reached EOF and the count is exact. */
+	totalLines?: number;
 	/** Raw text + start line for user-visible TUI rendering, set when content is text-like.
 	 * Mirrors the same lines the model receives but without hashline/line-number prefixes,
 	 * so the TUI can render the file content with its own gutter without re-parsing the formatted text. */
@@ -855,29 +865,72 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 		pathTargetsSsh(String((args as { path?: unknown }).path ?? "")) ? "exec" : "read";
 	readonly label = "Read";
 	readonly loadMode = "essential";
-	readonly description: string;
+	description: string;
 	readonly parameters = readSchema;
 	readonly strict = true;
 
 	readonly #autoResizeImages: boolean;
 	readonly #defaultLimit: number;
-	readonly #inspectImageEnabled: boolean;
+	#inspectImageActive: boolean;
 
 	constructor(private readonly session: ToolSession) {
-		const displayMode = resolveFileDisplayMode(session);
 		this.#autoResizeImages = session.settings.get("images.autoResize");
 		this.#defaultLimit = Math.max(
 			1,
 			Math.min(session.settings.get("read.defaultLimit") ?? DEFAULT_MAX_LINES, DEFAULT_MAX_LINES),
 		);
-		this.#inspectImageEnabled = session.settings.get("inspect_image.enabled");
-		this.description = prompt.render(readDescription, {
+		this.#inspectImageActive = this.#resolveInspectImageAvailability();
+		this.description = this.#renderDescription();
+	}
+
+	/**
+	 * Re-render the tool description for the current display mode and the
+	 * effective inspect_image state (mode setting, `/vision` override, and
+	 * active-model image capability all feed it, so it can change at runtime).
+	 */
+	#renderDescription(): string {
+		const displayMode = resolveFileDisplayMode(this.session);
+		return prompt.render(readDescription, {
 			DEFAULT_LIMIT: String(this.#defaultLimit),
 			DEFAULT_MAX_LINES: String(DEFAULT_MAX_LINES),
 			IS_HL_MODE: displayMode.hashLines,
 			IS_LINE_NUMBER_MODE: !displayMode.hashLines && displayMode.lineNumbers,
-			INSPECT_IMAGE_ENABLED: this.#inspectImageEnabled,
+			INSPECT_IMAGE_ENABLED: this.#inspectImageActive,
 		});
+	}
+
+	/**
+	 * Whether the agent can actually reach `inspect_image` right now: exposed
+	 * top-level, or mounted as an `xd://` device while the effective mode wants
+	 * it (mounted devices stay executable via `write xd://inspect_image`, so a
+	 * metadata-only read remains actionable). Sessions with neither
+	 * availability signal (tests, embedded use) fall back to the mode
+	 * computation alone. Restricted slates (subagents without the tool and
+	 * without xdev) resolve to unavailable, so those sessions get inline image
+	 * blocks instead of guidance pointing at an absent tool.
+	 */
+	#resolveInspectImageAvailability(): boolean {
+		const topLevel = this.session.isToolActive?.("inspect_image");
+		const xdev = this.session.xdev;
+		if (topLevel === undefined && xdev === undefined) return isInspectImageToolActive(this.session);
+		if (topLevel === true) return true;
+		return xdev?.mountedNames.has("inspect_image") === true && isInspectImageToolActive(this.session);
+	}
+
+	/**
+	 * Re-evaluate the effective inspect_image state; it can flip when the model
+	 * or the `/vision` override changes after this tool was constructed. Keeps
+	 * the behavior branch and the advertised description in lockstep. Called
+	 * per image read and by tool reconciliation before prompt rebuilds (which
+	 * passes the post-change availability as `availableOverride`).
+	 */
+	syncInspectImageState(availableOverride?: boolean): boolean {
+		const active = availableOverride ?? this.#resolveInspectImageAvailability();
+		if (active !== this.#inspectImageActive) {
+			this.#inspectImageActive = active;
+			this.description = this.#renderDescription();
+		}
+		return active;
 	}
 
 	/**
@@ -1256,10 +1309,10 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 
 	/**
 	 * Build content blocks for an on-disk image file: an `inspect_image`
-	 * metadata note when inspection is enabled, otherwise the decoded image
+	 * metadata note when inspection is active, otherwise the decoded image
 	 * block. Shared by the plain-file read path and the `local://` image fast
-	 * path so both honor `inspect_image.enabled`, the size cap, and auto-resize
-	 * identically. Too-large / unsupported images surface as {@link ToolError}.
+	 * path so both honor the effective inspect_image state, the size cap, and
+	 * auto-resize identically. Too-large / unsupported images surface as {@link ToolError}.
 	 */
 	async #loadImageContent(options: {
 		readPath: string;
@@ -1269,7 +1322,7 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 		fileSize: number;
 	}): Promise<{ content: Array<TextContent | ImageContent>; details: ReadToolDetails; sourcePath: string }> {
 		const { readPath, absolutePath, mimeType, imageMetadata, fileSize } = options;
-		if (this.#inspectImageEnabled) {
+		if (this.syncInspectImageState()) {
 			const outputMime = imageMetadata?.mimeType ?? mimeType;
 			const metadataLines = [
 				"Image metadata:",
@@ -1346,6 +1399,7 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 		const details = options.details ?? {};
 		const allLines = text.split("\n");
 		const totalLines = allLines.length;
+		details.totalLines = totalLines;
 		// User-requested 0-indexed range start. Lines BEFORE this are leading
 		// context (added below if offset is explicit).
 		const requestedStart = offset ? Math.max(0, offset - 1) : 0;
@@ -1541,6 +1595,7 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 		const details = options.details ?? {};
 		const allLines = text.split("\n");
 		const totalLines = allLines.length;
+		details.totalLines = totalLines;
 		const shouldAddHashLines = displayMode.hashLines;
 		const shouldAddLineNumbers = shouldAddHashLines ? false : displayMode.lineNumbers;
 		const hashContext =
@@ -2250,12 +2305,12 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 			return executeReadUrl(this.session, { path: parsedUrlTarget.path, raw: urlRaw }, signal);
 		}
 
-		// Handle internal URLs (agent://, artifact://, memory://, skill://, rule://, local://, mcp://, omp://, issue://, pr://).
+		// Handle native OMP URLs and custom-scheme resources advertised by MCP servers.
 		// Use the internal-URL-aware splitter so malformed selectors are peeled
 		// off the URL and surfaced via parseSel rather than confusing handlers.
 		const internalRouter = InternalUrlRouter.instance();
 		let promotedSelector: string | undefined;
-		if (internalRouter.canHandle(readPath)) {
+		if (internalRouter.canResolve(readPath)) {
 			const internalTarget = splitInternalUrlSel(readPath);
 			const parsed = parseSel(internalTarget.sel);
 			if (internalTarget.sel !== undefined && parsed.kind === "none") {
@@ -2432,6 +2487,31 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 		const mimeType = imageMetadata?.mimeType;
 		const ext = path.extname(absolutePath).toLowerCase();
 		const shouldConvertWithMarkit = CONVERTIBLE_EXTENSIONS.has(ext);
+
+		// Profiler reports (macOS `sample` call trees, V8 `.cpuprofile` JSON):
+		// replace the raw dump with a bottleneck summary (hot paths, top self
+		// time/samples). `:raw` reads the original bytes; text that merely wears
+		// the extension falls through to the plain-text path.
+		if (!mimeType && !isRawSelector(parsed) && fileSize <= MAX_PROFILE_SUMMARY_BYTES) {
+			let rendered: string | null = null;
+			if (isSampleProfilePath(absolutePath)) rendered = renderSampleProfile(await Bun.file(absolutePath).text());
+			else if (isCpuProfilePath(absolutePath)) rendered = renderCpuProfile(await Bun.file(absolutePath).text());
+			if (rendered) {
+				if (isMultiRange(parsed) && parsed.kind === "lines") {
+					return this.#buildInMemoryMultiRangeResult(rendered, parsed.ranges, {
+						details: { resolvedPath: absolutePath },
+						sourcePath: absolutePath,
+						entityLabel: "profile summary",
+					});
+				}
+				const { offset, limit } = selToOffsetLimit(parsed);
+				return this.#buildInMemoryTextResult(rendered, offset, limit, {
+					details: { resolvedPath: absolutePath },
+					sourcePath: absolutePath,
+					entityLabel: "profile summary",
+				});
+			}
+		}
 		// Read the file based on type
 		let content: Array<TextContent | ImageContent> | undefined;
 		let details: ReadToolDetails = {};
@@ -2832,6 +2912,7 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 						details = {};
 						sourcePath = absolutePath;
 					}
+					if (reachedEof) details.totalLines = totalFileLines;
 
 					if (hashContext?.tag) {
 						recordSeenLinesFromBody(this.session, absolutePath, hashContext.tag, outputText);
@@ -2885,6 +2966,7 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 			}
 		}
 
+		details.fileSize = fileSize;
 		this.#markMarkdownContentType(details, absolutePath);
 		if (suffixResolution) {
 			details.suffixResolution = suffixResolution;
@@ -3162,6 +3244,7 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 		if (!rawSelector && artifact.size > MAX_ARTIFACT_RAW_INLINE_BYTES) {
 			outputText += `\n\n[${this.#formatArtifactWorkflowNotice(artifact, artifactUrl)}]`;
 		}
+		if (reachedEof) details.totalLines = totalFileLines;
 		if (displayContent) details.displayContent = displayContent;
 		if (truncationInfo) details.truncation = truncationInfo.result;
 		const resultBuilder = toolResult<ReadToolDetails>(details)
@@ -3230,9 +3313,9 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 				read: async name => {
 					if (name === REPORT_ISSUE_DEVICE_NAME) return reportIssueDeviceUsage();
 					if (name && isResolutionDeviceName(name)) return resolutionDeviceUsage(name);
-					const registry = this.session.xdevRegistry;
-					if (!registry || registry.size === 0) throw new ToolError("xd:// is not mounted in this session.");
-					return name === null ? registry.listing() : registry.docs(name);
+					const xdev = this.session.xdev;
+					if (!xdev) throw new ToolError("xd:// is not mounted in this session.");
+					return name === null ? xdevListing(xdev) : xdevDocs(xdev, name);
 				},
 			},
 		});

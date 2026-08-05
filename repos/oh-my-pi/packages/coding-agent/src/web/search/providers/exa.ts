@@ -115,6 +115,7 @@ export interface ExaSearchParams {
 	start_published_date?: string;
 	end_published_date?: string;
 	signal?: AbortSignal;
+	timeoutMs?: number;
 	fetch?: FetchImpl;
 	/**
 	 * Credential source. Resolved before falling back to `EXA_API_KEY` so
@@ -315,7 +316,7 @@ async function callExaSearch(apiKey: string, params: ExaSearchParams): Promise<E
 			"x-api-key": apiKey,
 		},
 		body: JSON.stringify(body),
-		signal: withHardTimeout(params.signal),
+		signal: withHardTimeout(params.signal, params.timeoutMs),
 	});
 
 	if (!response.ok) {
@@ -360,7 +361,7 @@ async function callExaMcpSearch(params: ExaSearchParams): Promise<ExaSearchRespo
 				arguments: buildExaMcpArgs(params),
 			},
 		}),
-		signal: withHardTimeout(params.signal),
+		signal: withHardTimeout(params.signal, params.timeoutMs),
 	});
 	if (!response.ok) {
 		throw new Error(`MCP request failed: ${response.status} ${response.statusText}`);
@@ -457,7 +458,7 @@ export class ExaProvider extends SearchProvider {
 	 * still uses {@link isAvailable} so an unrelated configured provider
 	 * keeps priority over the public fallback.
 	 */
-	isExplicitlyAvailable(_authStorage: AuthStorage): boolean {
+	override isExplicitlyAvailable(_authStorage: AuthStorage): boolean {
 		return this.#settingsAllowSearch();
 	}
 
@@ -478,6 +479,7 @@ export class ExaProvider extends SearchProvider {
 			...directiveParams(parsed),
 			num_results: params.numSearchResults ?? params.limit,
 			signal: params.signal,
+			timeoutMs: params.timeoutMs,
 			authStorage: params.authStorage,
 			sessionId: params.sessionId,
 			fetch: params.fetch,

@@ -2,6 +2,54 @@
 
 ## [Unreleased]
 
+## [17.2.2] - 2026-07-31
+
+### Breaking Changes
+
+- Replaced legacy SWAP, INS, and PASTE syntax with unified PUT and CUT hunks
+
+### Added
+
+- Added named register support (@reg) and span paste capabilities to clipboard operations
+- Added conservative recovery for uniformly omitted replacement indents near brace openers, preserving intentional indentation-only edits
+
+### Changed
+
+- Made .= the canonical inclusive range separator while retaining legacy separator variants as lenient input
+- Unified replacement, insertion, register paste, block, head/tail, move, and removal headers under a composable PUT, CUT, MV, and REM grammar
+
+### Fixed
+
+- Improved resilience against common model output formatting errors, including numbered read rows, summarized ranges, diff-style old/new rows, empty PUT deletes, harmless CUT colons, and single-line span shorthand
+
+## [17.2.0] - 2026-07-30
+
+### Breaking Changes
+
+- Removed `DEL`, `DEL.BLK`, `COPY`, and `COPY.BLK` from the patch language. Use `CUT` / `CUT.BLK` for deletion; a cut does not require a following `PASTE` and leaves the removed content available to later pastes.
+
+### Added
+
+- Added clipboard ops: `CUT N.=M` captures lines into a register (and deletes them), `CUT.BLK N` captures tree-sitter blocks, and `PASTE.PRE|POST N` / `PASTE.HEAD|TAIL` / `PASTE.BLK.POST N` insert the captured lines without retyping. The register flows top-to-bottom across sections, so content moves between files in one patch; `PASTE` does not consume it and the last capture wins.
+- Added `PatcherOptions.clipboard` for a host-owned register that persists across `Patcher.apply` batches. Batches work on a fork (`forkClipboard`) published per landed section (`commitClipboard`), so failed batches never poison the register and a mid-batch write failure still preserves content already cut from disk.
+- Added clipboard safety guards: a `PASTE` with an empty register, a capture overwriting un-pasted `CUT` content, and clipboard ops in same-path sections interleaved across another file's section are all rejected with targeted diagnostics. `CUT` ranges participate in overlap validation, the seen-lines guard, and drift recovery (every captured line must remap).
+
+### Changed
+
+- Simplified `grammar.lark` around shared target and position shapes, collapsing the concrete and block `CUT` forms plus the `INS` / `PASTE` position variants into their common grammar rules.
+
+### Fixed
+
+- Prevented CPU and memory exhaustion in streaming previews by rejecting line anchors above Number.MAX_SAFE_INTEGER and ranges spanning more than 100,000 lines.
+- Fixed an issue where recorded snapshot tags desynced from disk when the filesystem transformed content on write (e.g., auto-formatting on save), which previously caused subsequent edits to incorrectly reformat unrelated parts of the file. `Patcher.commit` now correctly keys the returned file hash and snapshot on the actual content written to disk and issues a warning when a drift is detected.
+
+## [17.1.5] - 2026-07-27
+
+### Changed
+
+- Improved reversed-range and invalid block-anchor diagnostics with absolute endpoint corrections plus nearby syntactic opener suggestions, without auto-applying the suggested edit ([#6671](https://github.com/can1357/oh-my-pi/issues/6671)).
+- Accepted a single dot between integer range endpoints, such as `DEL 235.258`, as an unambiguous range separator ([#6671](https://github.com/can1357/oh-my-pi/issues/6671)).
+
 ## [17.1.2] - 2026-07-24
 
 ### Changed

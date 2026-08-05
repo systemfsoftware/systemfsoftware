@@ -4,7 +4,7 @@ import type { FetchImpl } from "@oh-my-pi/pi-catalog/types";
 import * as logger from "@oh-my-pi/pi-utils/logger";
 
 const ORIGINAL_LITELLM_BASE_URL = Bun.env.LITELLM_BASE_URL;
-const MODELS_DEV_URL = "https://models.dev/api.json";
+const MODELS_DEV_URL = "https://catalog.stencil.so/models.json.zstd";
 function makeLiteLLMSentinelPlaceholder(modelGroup: string) {
 	return {
 		model_group: modelGroup,
@@ -156,7 +156,7 @@ describe("LiteLLM provider discovery", () => {
 		expect(models?.[0]?.baseUrl).toBe("http://litellm-config.example:4200/v1");
 	});
 
-	test("keeps LiteLLM transport when models.dev has a colliding provider model id", async () => {
+	test("keeps LiteLLM transport when stencil.so has a colliding provider model id", async () => {
 		const fetchMock = makeCollisionFetchMock();
 
 		const options = litellmModelManagerOptions({
@@ -306,7 +306,7 @@ describe("LiteLLM provider discovery", () => {
 		expect(warnSpy).not.toHaveBeenCalled();
 	});
 
-	test("maps LiteLLM per-token cost onto cost.input/output for models missing from models.dev", async () => {
+	test("maps LiteLLM per-token cost onto cost.input/output for models missing from stencil.so", async () => {
 		const fetchMock = vi.fn(async (input: string | URL | Request) => {
 			const url = inputUrl(input);
 			if (url === MODELS_DEV_URL) {
@@ -349,7 +349,7 @@ describe("LiteLLM provider discovery", () => {
 		});
 	});
 
-	test("enriches LiteLLM rich models missing from models.dev with bundled reasoning metadata", async () => {
+	test("enriches LiteLLM rich models missing from stencil.so with bundled reasoning metadata", async () => {
 		const fetchMock = vi.fn(async (input: string | URL | Request) => {
 			const url = inputUrl(input);
 			if (url === MODELS_DEV_URL) {
@@ -778,7 +778,7 @@ describe("LiteLLM provider discovery", () => {
 		});
 	});
 
-	test("enriches LiteLLM /v1/models fallback entries missing from models.dev with bundled reasoning metadata", async () => {
+	test("enriches LiteLLM /v1/models fallback entries missing from stencil.so with bundled reasoning metadata", async () => {
 		const calls: string[] = [];
 		const fetchMock = vi.fn(async (input: string | URL | Request) => {
 			const url = inputUrl(input);

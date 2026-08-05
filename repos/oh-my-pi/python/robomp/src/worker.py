@@ -500,14 +500,21 @@ def _run_rpc_blocking(
 
     def _on_tool_end(event: ToolExecutionEndEvent) -> None:
         tool_name = event.tool_name
-        if event.result is not None:
+        # `tool_name` is transport-normalized by omp_rpc: an xd:// device
+        # dispatch (`write xd://submit_pr_review`) reports the host tool that
+        # ran, so terminal-action detection can match on host-tool names. A
+        # failed execution (`is_error`) does not count as reaching the
+        # terminal action — a rejected submit must still trigger the
+        # completion reminder.
+        ok = event.result is not None and not event.is_error
+        if ok:
             tools_called.add(tool_name)
         log.info(
             "tool_end",
             extra={
                 "issue": bindings.issue_key,
                 "tool": tool_name,
-                "ok": event.result is not None,
+                "ok": ok,
             },
         )
 
@@ -645,6 +652,7 @@ def _run_rpc_blocking(
                                         "status": t.status,
                                         "notes": t.notes,
                                         "details": t.details,
+                                        "blocker": t.blocker,
                                     }
                                     for t in p.tasks
                                 ],

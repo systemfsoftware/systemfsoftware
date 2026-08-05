@@ -69,7 +69,7 @@ function buildToolResult(toolCallId: string, timestamp: number): ToolResultMessa
 		toolName: "read",
 		content: [
 			{ type: "text", text: "Read image file [image/png]" },
-			{ type: "image", data: "ZmFrZQ==", mimeType: "image/png" },
+			{ type: "image", data: "ZmFrZQ==", mimeType: "image/png", detail: "original" },
 		],
 		isError: false,
 		timestamp,
@@ -119,7 +119,7 @@ describe("openai-completions convertMessages", () => {
 		]);
 	});
 
-	it("batches tool-result images after consecutive tool results", () => {
+	it("batches tool-result images without unsupported original-detail metadata", () => {
 		const baseModel = getBundledModel("openai", "gpt-4o-mini") as Model<"openai-completions">;
 		const model: Model<"openai-completions"> = {
 			...baseModel,
@@ -159,8 +159,13 @@ describe("openai-completions convertMessages", () => {
 		expect(imageMessage.role).toBe("user");
 		expect(Array.isArray(imageMessage.content)).toBe(true);
 
-		const imageParts = (imageMessage.content as Array<{ type?: string }>).filter(part => part?.type === "image_url");
-		expect(imageParts.length).toBe(2);
+		const imageParts = (
+			imageMessage.content as Array<{ type?: string; image_url?: { url: string; detail?: string } }>
+		).filter(part => part?.type === "image_url");
+		expect(imageParts).toEqual([
+			{ type: "image_url", image_url: { url: "data:image/png;base64,ZmFrZQ==" } },
+			{ type: "image_url", image_url: { url: "data:image/png;base64,ZmFrZQ==" } },
+		]);
 	});
 	it("serializes assistant tool-call turns with string content for strict OpenAI-compatible backends", () => {
 		const baseModel = getBundledModel("openai", "gpt-4o-mini") as Model<"openai-completions">;

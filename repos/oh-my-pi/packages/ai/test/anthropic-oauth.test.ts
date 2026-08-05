@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "bun:test";
-import { claudeCodeVersion } from "@oh-my-pi/pi-ai/providers/anthropic";
+import { claudeCodeVersion } from "@oh-my-pi/pi-ai/providers/claude-code-fingerprint";
 import { AnthropicOAuthFlow, refreshAnthropicToken } from "@oh-my-pi/pi-ai/registry/oauth/anthropic";
 import {
 	buildAnthropicAuthConfig,

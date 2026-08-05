@@ -110,6 +110,7 @@ function createFixture(streamingMessage?: AssistantMessage) {
 		streamingMessage,
 		chatContainer,
 		proseOnlyThinking: true,
+		toolOutputExpanded: false,
 		transcriptMessageComponents: new WeakMap(),
 		pendingTools: new Map(),
 		flushCompactionQueue: vi.fn(async () => {}),
@@ -234,6 +235,33 @@ describe("EventController error banner", () => {
 		await controller.handleEvent({ type: "agent_start" } as Extract<AgentSessionEvent, { type: "agent_start" }>);
 
 		expect(clearPinnedError).toHaveBeenCalledTimes(1);
+	});
+
+	it("initializes a new provider error from the active expanded mode", async () => {
+		const initial = makeAssistantMessage({ content: [] });
+		const errorMessage = Array.from({ length: 30 }, (_, i) => `provider error detail line ${i}`).join("\n");
+		const { controller, ctx } = createFixture();
+		ctx.toolOutputExpanded = true;
+
+		await controller.handleEvent({
+			type: "message_start",
+			message: initial,
+		} as Extract<AgentSessionEvent, { type: "message_start" }>);
+		const component = ctx.streamingComponent;
+		if (!(component instanceof AssistantMessageComponent)) {
+			throw new Error("Expected streaming assistant component");
+		}
+
+		component.updateContent(
+			makeAssistantMessage({
+				content: [],
+				stopReason: "error",
+				errorMessage,
+			}),
+		);
+		const rendered = Bun.stripANSI(component.render(120).join("\n"));
+		expect(rendered).toContain("provider error detail line 29");
+		expect(rendered).not.toContain("more lines");
 	});
 });
 

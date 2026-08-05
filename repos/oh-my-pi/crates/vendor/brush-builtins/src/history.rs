@@ -200,15 +200,12 @@ fn expand_history_args(
 	let mut result = ExecutionResult::success();
 
 	for arg in args {
-		match expand_history_arg(history, arg) {
-			Ok(expanded) => {
-				writeln!(stdout, "{expanded}")?;
-			},
-			Err(()) => {
-				writeln!(stderr, "history: {arg}: history expansion failed")?;
-				result = ExecutionResult::general_error();
-			},
-		}
+		if let Ok(expanded) = expand_history_arg(history, arg) {
+  				writeln!(stdout, "{expanded}")?;
+  			} else {
+  				writeln!(stderr, "history: {arg}: history expansion failed")?;
+  				result = ExecutionResult::general_error();
+  			}
 	}
 
 	Ok(result)

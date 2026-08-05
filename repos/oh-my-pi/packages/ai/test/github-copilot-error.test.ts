@@ -33,14 +33,16 @@ describe("rewriteCopilotError", () => {
 		expect(result).not.toContain("/login github-copilot");
 	});
 
-	it("rewrites 400 model_not_supported with rollout-gap guidance", () => {
-		const err = new Error("400 The requested model is not supported.");
-		(err as unknown as { status: number; code: string }).status = 400;
-		(err as unknown as { status: number; code: string }).code = "model_not_supported";
-		const result = rewriteCopilotError("original", err, "github-copilot");
-		expect(result).toContain("HTTP 400 model_not_supported");
-		expect(result).toContain("rollout gap");
-		expect(result).not.toContain("authentication failed");
+	it("rewrites 400 model-unavailable codes with fleet-skew guidance", () => {
+		for (const code of ["model_not_supported", "model_not_available_for_integrator"]) {
+			const err = new Error("400 The requested model is not available.");
+			(err as unknown as { status: number; code: string }).status = 400;
+			(err as unknown as { status: number; code: string }).code = code;
+			const result = rewriteCopilotError("original", err, "github-copilot");
+			expect(result).toContain("HTTP 400");
+			expect(result).toContain("only part of its fleet");
+			expect(result).not.toContain("authentication failed");
+		}
 	});
 
 	it("leaves non-copilot 400 model_not_supported untouched", () => {

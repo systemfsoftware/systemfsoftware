@@ -84,7 +84,6 @@ export class SessionProviderBoundary {
 				keepDanglingToolCalls: options?.keepDanglingToolCalls,
 			}),
 			this.#host.obfuscator,
-			true,
 		);
 	}
 

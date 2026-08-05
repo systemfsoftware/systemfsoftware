@@ -1169,6 +1169,14 @@ export class SettingsSelectorComponent implements Component {
 	}
 
 	#createMultiSelect(def: SettingDef & { type: "multiselect" }, done: (value?: string) => void): Container {
+		let options = def.options;
+		if (def.path === "providers.webSearchOrder") {
+			const excluded: unknown = settings.get("providers.webSearchExclude");
+			if (Array.isArray(excluded)) {
+				options = options.filter(option => !excluded.includes(option.value));
+			}
+		}
+
 		const current: unknown = settings.get(def.path);
 		const initial = Array.isArray(current)
 			? current.filter((entry): entry is string => typeof entry === "string")
@@ -1176,7 +1184,7 @@ export class SettingsSelectorComponent implements Component {
 		return new MultiSelectSubmenu(
 			def.label,
 			def.description,
-			def.options,
+			options,
 			initial,
 			def.ordered,
 			value => {

@@ -208,7 +208,7 @@ describe("azure openai responses streaming", () => {
 		expect(Array.isArray(tools[0].parameters.properties.item.anyOf)).toBe(true);
 	});
 
-	it("serializes computer as a function tool on unsupported models and gates the native forced choice", async () => {
+	it("serializes computer and its forced choice as a function on unsupported models", async () => {
 		const computer: Tool = {
 			name: "computer",
 			description: "Control the desktop",
@@ -233,7 +233,7 @@ describe("azure openai responses streaming", () => {
 			expect.objectContaining({ type: "function", name: "read_file" }),
 		]);
 		expect(JSON.stringify(payload.tools)).not.toContain('{"type":"computer"}');
-		expect(payload.tool_choice).toBeUndefined();
+		expect(payload.tool_choice).toEqual({ type: "function", name: "computer" });
 	});
 
 	it("serializes native GA computer and forced choice for a supported GPT-5.4 Azure model", async () => {
@@ -278,7 +278,7 @@ describe("azure openai responses streaming", () => {
 			},
 			supportedModel,
 			{
-				toolChoice: { type: "computer" },
+				toolChoice: { type: "function", name: "computer" },
 				include: ["computer_call_output.output.image_url", "reasoning.encrypted_content"],
 			},
 		);
@@ -289,6 +289,28 @@ describe("azure openai responses streaming", () => {
 		expect(payload.include).toEqual(["computer_call_output.output.image_url", "reasoning.encrypted_content"]);
 		expect(JSON.stringify(payload)).not.toContain("display_width");
 		expect(JSON.stringify(payload)).not.toContain("display_height");
+
+		const gatewayPayload = await captureAzurePayload(
+			{
+				messages: [{ role: "user", content: "Inspect", timestamp: Date.now() }],
+				tools: [computer],
+			},
+			supportedModel,
+			{
+				azureBaseUrl: "https://gateway.example/openai/v1",
+				toolChoice: { type: "function", name: "computer" },
+			},
+		);
+		expect(gatewayPayload.tools).toMatchObject([
+			{
+				type: "function",
+				name: "computer",
+				description: "Control the desktop",
+				parameters: { type: "object", properties: {} },
+				strict: false,
+			},
+		]);
+		expect(gatewayPayload.tool_choice).toEqual({ type: "function", name: "computer" });
 	});
 
 	it("surfaces nested response.failed provider errors", async () => {

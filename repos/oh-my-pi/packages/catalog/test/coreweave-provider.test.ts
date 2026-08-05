@@ -89,7 +89,7 @@ describe("CoreWeave Serverless Inference provider support", () => {
 		});
 	});
 
-	test("maps models.dev wandb metadata into OpenAI chat completions models", () => {
+	test("maps stencil.so wandb metadata into OpenAI chat completions models", () => {
 		const mapped = mapModelsDevToModels(
 			{
 				wandb: {

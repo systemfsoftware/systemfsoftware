@@ -7,6 +7,45 @@ function apply(text: string, diff: string): { text: string; warnings: string[] }
 }
 
 describe("boundary-balance repair", () => {
+	it("restores a uniformly omitted base indent from unchanged structural rows", () => {
+		const file = [
+			"    if (value > 90) {",
+			"      result = error;",
+			"    } else if (value > 70) {",
+			"      result = plain;",
+			"    } else {",
+			"      result = warning;",
+			"    }",
+		].join("\n");
+		const diff = [
+			"PUT 2.=6:",
+			"+  result = error;",
+			"+} else if (value > 70) {",
+			"+  result = warning;",
+			"+} else {",
+			"+  result = plain;",
+		].join("\n");
+		const { text, warnings } = apply(file, diff);
+		expect(text).toBe(
+			[
+				"    if (value > 90) {",
+				"      result = error;",
+				"    } else if (value > 70) {",
+				"      result = warning;",
+				"    } else {",
+				"      result = plain;",
+				"    }",
+			].join("\n"),
+		);
+		expect(warnings.some(w => /Auto-indented a replacement body/.test(w))).toBe(true);
+	});
+	it("preserves intentional indentation-only replacements", () => {
+		const file = ["    first();", "    second();"].join("\n");
+		const { text, warnings } = apply(file, "PUT 1.=2:\n+first();\n+second();");
+		expect(text).toBe("first();\nsecond();");
+		expect(warnings.some(w => /Auto-indented a replacement body/.test(w))).toBe(false);
+	});
+
 	// The canonical incident: a range-replace whose payload restates the
 	// fragment + paren close that still live just below the range, doubling
 	// `</>` and `);`. `replace 11.=31:` covers `const …` through the second `/>`.
@@ -35,7 +74,7 @@ describe("boundary-balance repair", () => {
 		// Range 7..16 = `const …` through the first `/>`; payload restates the
 		// `</>` + `);` that survive at lines 17-18.
 		const diff = [
-			"SWAP 7.=16:",
+			"PUT 7-16:",
 			"+\treturn (",
 			"+\t\t<>",
 			"+\t\t\t<Composition",
@@ -62,7 +101,7 @@ describe("boundary-balance repair", () => {
 		const file = ["it('a', () => {", "\tsetup();", "\trun();", "});", "after();"].join("\n");
 		// `replace 2.=3:` replaces the two body lines but the payload also restates the
 		// `});` at line 4, which survives — a duplicate close.
-		const diff = ["SWAP 2.=3:", "+\tsetup2();", "+\trun2();", "+});"].join("\n");
+		const diff = ["PUT 2-3:", "+\tsetup2();", "+\trun2();", "+});"].join("\n");
 		const { text, warnings } = apply(file, diff);
 		expect(text).toBe(["it('a', () => {", "\tsetup2();", "\trun2();", "});", "after();"].join("\n"));
 		expect(warnings.some(w => /delimiter-balance/.test(w))).toBe(true);
@@ -86,7 +125,7 @@ describe("boundary-balance repair", () => {
 		// `replace 4.=6:` covers the params + return-type line, but the payload also
 		// restates the `planRender(` at line 3, which survives — a duplicate open.
 		const diff = [
-			"SWAP 4.=6:",
+			"PUT 4-6:",
 			"+\tplanRender(",
 			"+\t\ta: string[],",
 			"+\t\tb: boolean,",
@@ -117,7 +156,7 @@ describe("boundary-balance repair", () => {
 		const file = ["if (a) {", "\tfoo();", "}", "bar();"].join("\n");
 		// Payload duplicates `if (a) {` but is net +2 braces; dropping the one
 		// opener cannot zero the delta, so nothing is repaired.
-		const diff = ["SWAP 2.=2:", "+if (a) {", "+\tif (b) {", "+\t\tfoo();"].join("\n");
+		const diff = ["PUT 2-2:", "+if (a) {", "+\tif (b) {", "+\t\tfoo();"].join("\n");
 		const { text, warnings } = apply(file, diff);
 		expect(text).toBe(["if (a) {", "if (a) {", "\tif (b) {", "\t\tfoo();", "}", "bar();"].join("\n"));
 		expect(warnings).toHaveLength(0);
@@ -128,7 +167,7 @@ describe("boundary-balance repair", () => {
 		const file = ["const handlers = {", "\ta() {", "\t\treturn 1;", "\t},", "};"].join("\n");
 		// `replace 5.=5:` is the final `};`. Model inserts a new method but forgets to
 		// restate `};`; sparing it keeps the object literal balanced.
-		const diff = ["SWAP 5.=5:", "+\tb() {", "+\t\treturn 2;", "+\t},"].join("\n");
+		const diff = ["PUT 5-5:", "+\tb() {", "+\t\treturn 2;", "+\t},"].join("\n");
 		const { text, warnings } = apply(file, diff);
 		expect(text).toBe(
 			["const handlers = {", "\ta() {", "\t\treturn 1;", "\t},", "\tb() {", "\t\treturn 2;", "\t},", "};"].join(
@@ -143,7 +182,7 @@ describe("boundary-balance repair", () => {
 	// keeping the deleted suffix would duplicate the closer outside the payload.
 	it("does not spare a deleted closing line that the payload already restates", () => {
 		const file = ["class Foo {", "\tok();", "\t}", "}"].join("\n");
-		const diff = ["SWAP 1.=4:", "+class Foo {", "+\tok();", "+}"].join("\n");
+		const diff = ["PUT 1-4:", "+class Foo {", "+\tok();", "+}"].join("\n");
 		const { text, warnings } = apply(file, diff);
 
 		expect(text).toBe(["class Foo {", "\tok();", "}"].join("\n"));
@@ -159,7 +198,7 @@ describe("boundary-balance repair", () => {
 			"\tprint_status()",
 		].join("\n");
 		const diff = [
-			"SWAP 2.=3:",
+			"PUT 2-3:",
 			"+func _cmd_travel_homeworld():",
 			"+\tvar destination = find_homeworld()",
 			"+\ttravel_to(destination)",
@@ -183,7 +222,7 @@ describe("boundary-balance repair", () => {
 
 	it("preserves payloads where multi-line boundary echoes cover every line", () => {
 		const file = ["A", "B", "old", "C", "D"].join("\n");
-		const diff = ["SWAP 3.=3:", "+A", "+B", "+C", "+D"].join("\n");
+		const diff = ["PUT 3-3:", "+A", "+B", "+C", "+D"].join("\n");
 
 		const { text, warnings } = apply(file, diff);
 
@@ -193,7 +232,7 @@ describe("boundary-balance repair", () => {
 
 	it("preserves payloads made only of lines matching both replacement neighbors", () => {
 		const file = ["a", "old", "c"].join("\n");
-		const diff = ["SWAP 2.=2:", "+a", "+c"].join("\n");
+		const diff = ["PUT 2-2:", "+a", "+c"].join("\n");
 
 		const { text, warnings } = apply(file, diff);
 
@@ -209,7 +248,7 @@ describe("boundary-balance repair", () => {
 		// Payload deliberately opens with the same bare `}` that sits above the
 		// range and closes with the same `}` that sits below it; the payload is
 		// internally balanced (delta 0) while the dropped edges sum to -2 braces.
-		const diff = ["SWAP 2.=2:", "+}", "+if (a) {", "+if (b) {", "+x();", "+}"].join("\n");
+		const diff = ["PUT 2-2:", "+}", "+if (a) {", "+if (b) {", "+x();", "+}"].join("\n");
 
 		const { text, warnings } = apply(file, diff);
 
@@ -221,7 +260,7 @@ describe("boundary-balance repair", () => {
 	// (opener + closer) that duplicate the surviving neighbors are dropped.
 	it("still drops a balance-neutral wrapper echo", () => {
 		const file = ["function f() {", "old();", "}"].join("\n");
-		const diff = ["SWAP 2.=2:", "+function f() {", "+fresh();", "+}"].join("\n");
+		const diff = ["PUT 2-2:", "+function f() {", "+fresh();", "+}"].join("\n");
 
 		const { text, warnings } = apply(file, diff);
 
@@ -235,7 +274,7 @@ describe("boundary-balance repair", () => {
 		const file = ["foo();", "bar();", "bar();", "baz();"].join("\n");
 		// Replace line 2 with two balanced statements; the tail `bar();` equals
 		// the surviving line 3 but the payload is balanced — must NOT be dropped.
-		const diff = ["SWAP 2.=2:", "+qux();", "+bar();"].join("\n");
+		const diff = ["PUT 2-2:", "+qux();", "+bar();"].join("\n");
 		const { text, warnings } = apply(file, diff);
 		expect(text).toBe(["foo();", "qux();", "bar();", "bar();", "baz();"].join("\n"));
 		expect(warnings).toHaveLength(0);
@@ -245,7 +284,7 @@ describe("boundary-balance repair", () => {
 	// could discard intended content, and it does not break syntax.
 	it("does not drop a balance-neutral duplicated statement", () => {
 		const file = ["a = 1;", "b = 2;", "c = 3;"].join("\n");
-		const diff = ["SWAP 1.=1:", "+a = 1;", "+b = 2;"].join("\n");
+		const diff = ["PUT 1-1:", "+a = 1;", "+b = 2;"].join("\n");
 		const { text, warnings } = apply(file, diff);
 		expect(text).toBe(["a = 1;", "b = 2;", "b = 2;", "c = 3;"].join("\n"));
 		expect(warnings).toHaveLength(0);
@@ -254,7 +293,7 @@ describe("boundary-balance repair", () => {
 	// Brackets inside strings must not trigger a spurious balance mismatch.
 	it("ignores brackets inside string literals", () => {
 		const file = ['const a = "}";', 'const b = "x";', 'const c = "y";'].join("\n");
-		const diff = ["SWAP 2.=2:", '+const b = "}}}";'].join("\n");
+		const diff = ["PUT 2-2:", '+const b = "}}}";'].join("\n");
 		const { text, warnings } = apply(file, diff);
 		expect(text).toBe(['const a = "}";', 'const b = "}}}";', 'const c = "y";'].join("\n"));
 		expect(warnings).toHaveLength(0);
@@ -265,7 +304,7 @@ describe("boundary-balance repair", () => {
 	// the range was one line short of the `const changedFiles` it retyped.
 	it("drops a one-sided trailing keeper echo in a multi-line rewrite", () => {
 		const file = ["function f() {", "  a();", "  b();", "  const out = [];", "  return out;", "}"].join("\n");
-		const diff = ["SWAP 2.=3:", "+  a2();", "+  b2();", "+  const out = [];"].join("\n");
+		const diff = ["PUT 2-3:", "+  a2();", "+  b2();", "+  const out = [];"].join("\n");
 		const { text, warnings } = apply(file, diff);
 		expect(text).toBe(["function f() {", "  a2();", "  b2();", "  const out = [];", "  return out;", "}"].join("\n"));
 		expect(warnings.some(warning => /boundary echo/.test(warning))).toBe(true);
@@ -273,7 +312,7 @@ describe("boundary-balance repair", () => {
 
 	it("drops a one-sided JSX closer echo in a single-line expansion", () => {
 		const file = ["const view = (", "  <section>", "    <Old />", "  </section>", ");"].join("\n");
-		const diff = ["SWAP 3.=3:", "+    <New />", "+  </section>"].join("\n");
+		const diff = ["PUT 3-3:", "+    <New />", "+  </section>"].join("\n");
 		const { text, warnings } = apply(file, diff);
 
 		expect(text).toBe(["const view = (", "  <section>", "    <New />", "  </section>", ");"].join("\n"));
@@ -283,7 +322,7 @@ describe("boundary-balance repair", () => {
 
 	it("drops a JSX closer echo after a self-closing tag with a greater-than prop expression", () => {
 		const file = ["const view = (", "<Foo>", "old text", "</Foo>", ");"].join("\n");
-		const diff = ["SWAP 3.=3:", "+<Foo value={a > b} />", "+</Foo>"].join("\n");
+		const diff = ["PUT 3-3:", "+<Foo value={a > b} />", "+</Foo>"].join("\n");
 		const { text, warnings } = apply(file, diff);
 
 		expect(text).toBe(["const view = (", "<Foo>", "<Foo value={a > b} />", "</Foo>", ");"].join("\n"));
@@ -293,7 +332,7 @@ describe("boundary-balance repair", () => {
 
 	it("preserves a nested JSX closer that matches the surviving parent closer", () => {
 		const file = ["const view = (", '<section className="outer">', "old text", "</section>", ");"].join("\n");
-		const diff = ["SWAP 3.=3:", "+<section>", "+new text", "+</section>"].join("\n");
+		const diff = ["PUT 3-3:", "+<section>", "+new text", "+</section>"].join("\n");
 		const { text, warnings } = apply(file, diff);
 
 		expect(text).toBe(
@@ -313,7 +352,7 @@ describe("boundary-balance repair", () => {
 
 	it("preserves a nested JSX closer when the opener spans payload lines", () => {
 		const file = ["const view = (", '<section className="outer">', "old text", "</section>", ");"].join("\n");
-		const diff = ["SWAP 3.=3:", "+<section", '+  className="inner"', "+>", "+new text", "+</section>"].join("\n");
+		const diff = ["PUT 3-3:", "+<section", '+  className="inner"', "+>", "+new text", "+</section>"].join("\n");
 		const { text, warnings } = apply(file, diff);
 
 		expect(text).toBe(
@@ -337,7 +376,7 @@ describe("boundary-balance repair", () => {
 	// the multi-line range (range one line low instead of one short).
 	it("drops a one-sided leading keeper echo in a multi-line rewrite", () => {
 		const file = ["setup();", "a();", "b();", "c();"].join("\n");
-		const diff = ["SWAP 3.=4:", "+a();", "+B();", "+C();"].join("\n");
+		const diff = ["PUT 3-4:", "+a();", "+B();", "+C();"].join("\n");
 		const { text, warnings } = apply(file, diff);
 		expect(text).toBe(["setup();", "a();", "B();", "C();"].join("\n"));
 		expect(warnings.some(warning => /boundary echo/.test(warning))).toBe(true);
@@ -356,7 +395,7 @@ describe("boundary-balance repair", () => {
 			"}",
 		].join("\n");
 		const diff = [
-			"SWAP 3.=4:",
+			"PUT 3-4:",
 			"+    auto* handle = payloadFor<PyThreadHandle>(self);",
 			"+    if (!handle || !handle->isStarted())",
 		].join("\n");
@@ -368,7 +407,7 @@ describe("boundary-balance repair", () => {
 	// mentions it.
 	it("rejects a trailing keeper echo when the payload cannot fill the widened range", () => {
 		const file = ["a();", "b();", "c();", "keep();"].join("\n");
-		const diff = ["SWAP 2.=3:", "+B();", "+keep();"].join("\n");
+		const diff = ["PUT 2-3:", "+B();", "+keep();"].join("\n");
 		expect(() => apply(file, diff)).toThrow(/rejected: the body ends by restating/);
 	});
 
@@ -384,7 +423,7 @@ describe("boundary-balance repair", () => {
 			"        }",
 			"        handle->setIdent(currentIdent());",
 		].join("\n");
-		const diff = ["SWAP 4.=4:", "+        after();"].join("\n");
+		const diff = ["PUT 4-4:", "+        after();"].join("\n");
 		expect(() => apply(file, diff)).toThrow(/before or after the closer is ambiguous/);
 	});
 
@@ -392,7 +431,7 @@ describe("boundary-balance repair", () => {
 	// spared closer claims the inside of the block, so the spare still fires.
 	it("still spares a closer when the payload indentation claims the block interior", () => {
 		const file = ["if (!global) {", "    setDone();", "    return;", "}", "after();"].join("\n");
-		const diff = ["SWAP 4.=4:", "+    setIdent();"].join("\n");
+		const diff = ["PUT 4-4:", "+    setIdent();"].join("\n");
 		const { text, warnings } = apply(file, diff);
 		expect(text).toBe(
 			["if (!global) {", "    setDone();", "    return;", "    setIdent();", "}", "after();"].join("\n"),
@@ -400,11 +439,11 @@ describe("boundary-balance repair", () => {
 		expect(warnings.filter(warning => /structural closing line/.test(warning))).toHaveLength(1);
 	});
 	// #3142: the range's deleted `}` is matched by an opener another hunk deletes
-	// (`DEL 1`). The patch nets to balanced, so the closer must stay deleted —
+	// (`CUT 1`). The patch nets to balanced, so the closer must stay deleted —
 	// the per-group repair wrongly kept it, leaving a stray `}`.
 	it("does not keep a deleted closer when another hunk removes its opener (#3142)", () => {
 		const file = ["if enabled {", '\tText("Old")', "}", '\tText("Tail")'].join("\n");
-		const diff = ["DEL 1", "SWAP 2.=3:", '+Text("New")'].join("\n");
+		const diff = ["CUT 1", "PUT 2-3:", '+Text("New")'].join("\n");
 		const { text, warnings } = apply(file, diff);
 		expect(text).toBe(['Text("New")', '\tText("Tail")'].join("\n"));
 		expect(warnings.filter(warning => /structural closing line/.test(warning))).toHaveLength(0);
@@ -414,7 +453,7 @@ describe("boundary-balance repair", () => {
 	// residual must be spent on the genuine hunk, not the wrapper-removed one.
 	it("spends the missing-closer residual on the genuine hunk, not an earlier wrapper removal", () => {
 		const file = ["if enabled {", '\tText("Old")', "}", "const config = {", "\ta: 1,", "};"].join("\n");
-		const diff = ["DEL 1", "SWAP 2.=3:", '+Text("New")', "SWAP 6.=6:", "+\tb: 2,"].join("\n");
+		const diff = ["CUT 1", "PUT 2-3:", '+Text("New")', "PUT 6-6:", "+\tb: 2,"].join("\n");
 		const { text, warnings } = apply(file, diff);
 		expect(text).toBe(['Text("New")', "const config = {", "\ta: 1,", "\tb: 2,", "};"].join("\n"));
 		expect(warnings.filter(warning => /structural closing line/.test(warning))).toHaveLength(1);
@@ -424,7 +463,7 @@ describe("boundary-balance repair", () => {
 	// the net deleted-prefix balance is zero, so the closer is correctly kept.
 	it("keeps the closer when the matching opener is replaced rather than removed", () => {
 		const file = ["if (a) {", "\told();", "}"].join("\n");
-		const diff = ["SWAP 1.=1:", "+if (b) {", "SWAP 2.=3:", "+\tnew();"].join("\n");
+		const diff = ["PUT 1-1:", "+if (b) {", "PUT 2-3:", "+\tnew();"].join("\n");
 		const { text, warnings } = apply(file, diff);
 		expect(text).toBe(["if (b) {", "\tnew();", "}"].join("\n"));
 		expect(warnings.filter(warning => /structural closing line/.test(warning))).toHaveLength(1);
@@ -440,7 +479,7 @@ describe("boundary-balance repair", () => {
 			"}",
 		].join("\n");
 		const diff = [
-			"SWAP 3.=6:",
+			"PUT 3-6:",
 			"+function supportsDevinThinking(config: ClientModelConfig): boolean {",
 			"+\tif (NO_REASONING_LABEL_PATTERN.test(config.label)) return false;",
 			"+\treturn config.supportsThinking === true;",
@@ -462,7 +501,7 @@ describe("boundary-balance repair", () => {
 
 	it("keeps only the non-restated outer closer for a nested deleted suffix", () => {
 		const file = ["class C {", "\told();", "\t}", "}"].join("\n");
-		const diff = ["SWAP 2.=4:", "+\tnewMethod() {", "+\t\treturn 1;", "+\t}"].join("\n");
+		const diff = ["PUT 2-4:", "+\tnewMethod() {", "+\t\treturn 1;", "+\t}"].join("\n");
 		const { text, warnings } = apply(file, diff);
 		expect(text).toBe(["class C {", "\tnewMethod() {", "\t\treturn 1;", "\t}", "}"].join("\n"));
 		expect(warnings.filter(warning => /structural closing line/.test(warning))).toHaveLength(1);
@@ -470,7 +509,7 @@ describe("boundary-balance repair", () => {
 
 	it("ignores non-contiguously deleted openers when choosing which closer to keep", () => {
 		const file = ["if (a) {", "\told();", "\tmore();", "}", "const obj = {", "\ta: 1,", "};"].join("\n");
-		const diff = ["DEL 1", "SWAP 3.=4:", "+\tnew();", "SWAP 7.=7:", "+\tb: 2,"].join("\n");
+		const diff = ["CUT 1", "PUT 3-4:", "+\tnew();", "PUT 7-7:", "+\tb: 2,"].join("\n");
 		const { text, warnings } = apply(file, diff);
 		expect(text).toBe(["\told();", "\tnew();", "const obj = {", "\ta: 1,", "\tb: 2,", "};"].join("\n"));
 		expect(warnings.filter(warning => /structural closing line/.test(warning))).toHaveLength(1);
@@ -486,9 +525,9 @@ describe("boundary-balance repair", () => {
 			"\t}",
 		].join("\n");
 		const diff = [
-			"SWAP 2.=3:",
+			"PUT 2-3:",
 			"+\tnew();",
-			"SWAP 4.=6:",
+			"PUT 4-6:",
 			"+function supportsDevinThinking(config: ClientModelConfig): boolean {",
 			"+\treturn config.supportsThinking === true;",
 			"+}",
@@ -509,7 +548,7 @@ describe("boundary-balance repair", () => {
 
 	it("does not let an earlier kept closer cover a later orphan closer", () => {
 		const file = ["if (a) {", "\told();", "}", "}"].join("\n");
-		const diff = ["SWAP 2.=3:", "+\tnew();", "SWAP 4.=4:", "+after();"].join("\n");
+		const diff = ["PUT 2-3:", "+\tnew();", "PUT 4-4:", "+after();"].join("\n");
 		const { text, warnings } = apply(file, diff);
 		expect(text).toBe(["if (a) {", "\tnew();", "}", "after();"].join("\n"));
 		expect(warnings.filter(warning => /structural closing line/.test(warning))).toHaveLength(1);
@@ -517,7 +556,7 @@ describe("boundary-balance repair", () => {
 
 	it("does not keep a deleted outer closer when one survives below the range", () => {
 		const file = ["class C {", "\tmethod() {", "\t\told();", "\t}", "}", "}"].join("\n");
-		const diff = ["SWAP 2.=5:", "+\tmethod() {", "+\t\tnew();", "+\t}"].join("\n");
+		const diff = ["PUT 2-5:", "+\tmethod() {", "+\t\tnew();", "+\t}"].join("\n");
 		const { text, warnings } = apply(file, diff);
 		expect(text).toBe(["class C {", "\tmethod() {", "\t\tnew();", "\t}", "}"].join("\n"));
 		expect(warnings.filter(warning => /structural closing line/.test(warning))).toHaveLength(0);
@@ -525,23 +564,23 @@ describe("boundary-balance repair", () => {
 
 	it("keeps an omitted inner closer when the outer closer survives below", () => {
 		const file = ["class C {", "\tmethod() {", "\t\told();", "\t}", "}", "}"].join("\n");
-		const diff = ["SWAP 2.=5:", "+\tmethod() {", "+\t\tnew();"].join("\n");
+		const diff = ["PUT 2-5:", "+\tmethod() {", "+\t\tnew();"].join("\n");
 		const { text, warnings } = apply(file, diff);
 		expect(text).toBe(["class C {", "\tmethod() {", "\t\tnew();", "\t}", "}"].join("\n"));
 		expect(warnings.filter(warning => /structural closing line/.test(warning))).toHaveLength(1);
 	});
 
-	it("counts same-line inserted prefixes before replacement payload", () => {
+	it("counts head insertions before replacement payloads in original coordinates", () => {
 		const file = ["\told();", "}"].join("\n");
-		const diff = ["INS.PRE 1:", "+if (a) {", "SWAP 1.=2:", "+\tnew();"].join("\n");
+		const diff = ["PUT <1:", "+if (a) {", "PUT 1-2:", "+\tnew();"].join("\n");
 		const { text, warnings } = apply(file, diff);
 		expect(text).toBe(["if (a) {", "\tnew();", "}"].join("\n"));
-		expect(warnings.filter(warning => /structural closing line/.test(warning))).toHaveLength(1);
+		expect(warnings.some(warning => /kept 1 structural closing line/.test(warning))).toBe(true);
 	});
 
 	it("counts a separately inserted closer immediately below the range", () => {
 		const file = ["class C {", "\told();", "}", "after();", "const obj = {", "\ta: 1,", "};"].join("\n");
-		const diff = ["SWAP 2.=3:", "+\tnew();", "INS.PRE 4:", "+}", "SWAP 7.=7:", "+\tb: 2,"].join("\n");
+		const diff = ["PUT 2-3:", "+\tnew();", "PUT <4:", "+}", "PUT 7-7:", "+\tb: 2,"].join("\n");
 		const { text, warnings } = apply(file, diff);
 		expect(text).toBe(
 			["class C {", "\tnew();", "}", "after();", "const obj = {", "\ta: 1,", "\tb: 2,", "};"].join("\n"),
@@ -551,7 +590,7 @@ describe("boundary-balance repair", () => {
 
 	it("keeps an omitted outer closer even when the payload restates an inner closer", () => {
 		const file = ["if (a) {", "\tif (b) {", "\t\told();", "\t}", "}", "after();"].join("\n");
-		const diff = ["SWAP 1.=5:", "+if (a) {", "+\tif (c) {", "+\t\tnew();", "+\t}"].join("\n");
+		const diff = ["PUT 1-5:", "+if (a) {", "+\tif (c) {", "+\t\tnew();", "+\t}"].join("\n");
 		const { text, warnings } = apply(file, diff);
 		expect(text).toBe(["if (a) {", "\tif (c) {", "\t\tnew();", "\t}", "}", "after();"].join("\n"));
 		expect(warnings.filter(warning => /structural closing line/.test(warning))).toHaveLength(1);
@@ -570,7 +609,7 @@ describe("boundary-balance repair", () => {
 			"\ta: 1,",
 			"};",
 		].join("\n");
-		const diff = ["SWAP 2.=3:", "+\tsetup();", "+\tfoo();", "+\tbar();", "+});", "SWAP 8.=8:", "+\tb: 2,"].join("\n");
+		const diff = ["PUT 2-3:", "+\tsetup();", "+\tfoo();", "+\tbar();", "+});", "PUT 8-8:", "+\tb: 2,"].join("\n");
 		const { text, warnings } = apply(file, diff);
 		expect(text).toBe(
 			[
@@ -594,7 +633,7 @@ describe("boundary-balance repair", () => {
 	// bleed across into another hunk's delimiter count and mask its missing closer.
 	it("does not let an unterminated template in one hunk mask a missing closer in another", () => {
 		const file = ["const log = makeLog(`", "prefix", "`);", "const obj = {", "\ta: 1", "};"].join("\n");
-		const diff = ["SWAP 1.=1:", "+const log = createLog(`", "SWAP 5.=6:", "+\ta: 2"].join("\n");
+		const diff = ["PUT 1-1:", "+const log = createLog(`", "PUT 5-6:", "+\ta: 2"].join("\n");
 		const { text, warnings } = apply(file, diff);
 		expect(text).toBe(["const log = createLog(`", "prefix", "`);", "const obj = {", "\ta: 2", "};"].join("\n"));
 		expect(warnings.filter(warning => /structural closing line/.test(warning))).toHaveLength(1);
@@ -636,7 +675,7 @@ describe("boundary-balance repair through stale-snapshot recovery", () => {
 
 		// `replace 4.=5:` replaces the body lines but the payload also restates the `});`
 		// that survives at line 6 — the duplicate-closer mistake.
-		const { edits } = parsePatch(["SWAP 4.=5:", "+\tsetup2();", "+\trun2();", "+});"].join("\n"));
+		const { edits } = parsePatch(["PUT 4-5:", "+\tsetup2();", "+\trun2();", "+});"].join("\n"));
 		const recovered = new Recovery(store).tryRecover({ path: PATH, currentText, fileHash, edits });
 
 		expect(recovered).not.toBeNull();

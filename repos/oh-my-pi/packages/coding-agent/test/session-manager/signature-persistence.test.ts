@@ -277,4 +277,55 @@ describe("SessionManager signature persistence", () => {
 		expect(items[0]?.encrypted_content).toBe(encrypted);
 		await reloaded.close();
 	}, 15_000);
+
+	it("preserves oversized Anthropic web-search results byte-for-byte across reload", async () => {
+		using tempDir = TempDir.createSync("@pi-session-anthropic-server-tool-persistence-");
+		const session = SessionManager.create(tempDir.path(), tempDir.path());
+		const encryptedContent = `ENCRYPTED_WEB_SEARCH_RESULT_${"W".repeat(600_000)}`;
+		const serverToolContent: AssistantMessage["content"] = [
+			{
+				type: "anthropicServerTool",
+				block: {
+					type: "server_tool_use",
+					id: "srvtoolu_search",
+					name: "web_search",
+					input: { query: "current UTC date" },
+				},
+			},
+			{
+				type: "anthropicServerTool",
+				block: {
+					type: "web_search_tool_result",
+					tool_use_id: "srvtoolu_search",
+					content: [{ type: "web_search_result", encrypted_content: encryptedContent }],
+				},
+			},
+		];
+
+		session.appendMessage({
+			role: "assistant",
+			content: serverToolContent,
+			api: "anthropic-messages",
+			provider: "anthropic",
+			model: "claude-opus",
+			usage: {
+				input: 1,
+				output: 1,
+				cacheRead: 0,
+				cacheWrite: 0,
+				totalTokens: 2,
+				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+			},
+			stopReason: "stop",
+			timestamp: 1,
+		});
+		await session.flush();
+		const sessionFile = session.getSessionFile();
+		if (!sessionFile) throw new Error("Expected persisted session file");
+		await session.close();
+
+		const reloaded = await SessionManager.open(sessionFile);
+		expect(getAssistantMessage(reloaded).content).toEqual(serverToolContent);
+		await reloaded.close();
+	}, 15_000);
 });

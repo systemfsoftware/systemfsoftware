@@ -61,6 +61,8 @@ export const PREVIEW_LIMITS = {
 	OUTPUT_COLLAPSED: 3,
 	/** Output preview lines in expanded view */
 	OUTPUT_EXPANDED: 10,
+	/** Computer script lines shown in collapsed view */
+	COMPUTER_CODE_COLLAPSED: 10,
 	/** Max hunks shown when collapsed (edit tool) */
 	DIFF_COLLAPSED_HUNKS: 8,
 	/** Max diff lines shown when collapsed (edit tool) */

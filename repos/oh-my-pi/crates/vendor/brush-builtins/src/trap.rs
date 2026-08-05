@@ -78,7 +78,7 @@ impl TrapCommand {
 		signal_type: TrapSignal,
 	) -> Result<(), brush_core::Error> {
 		if let Some(handler) = context.shell.traps().get_handler(signal_type) {
-			writeln!(context.stdout(), "trap -- '{}' {signal_type}", &handler.command)?;
+			writeln!(context.stdout(), "trap -- '{}' {signal_type}", handler.command)?;
 		}
 		Ok(())
 	}

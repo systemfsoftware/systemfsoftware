@@ -180,7 +180,7 @@ export class InMemorySnapshotStore extends SnapshotStore {
 		return history?.find(version => version.text === fullText) ?? null;
 	}
 
-	findByHash(hash: string): Snapshot[] {
+	override findByHash(hash: string): Snapshot[] {
 		const matches: Snapshot[] = [];
 		for (const history of this.#versions.values()) {
 			for (const version of history) {

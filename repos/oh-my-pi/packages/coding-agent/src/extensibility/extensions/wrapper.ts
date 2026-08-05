@@ -64,9 +64,26 @@ export class RegisteredToolAdapter implements AgentTool<any, any, any> {
 		params: any,
 		signal?: AbortSignal,
 		onUpdate?: AgentToolUpdateCallback<any>,
-		_context?: AgentToolContext,
+		context?: AgentToolContext,
 	) {
-		return this.registeredTool.definition.execute(toolCallId, params, signal, onUpdate, this.runner.createContext());
+		// Bind the extension context to this tool's own name so `ctx.invokeTool` delegates to the
+		// native built-in of the same name (present only when this tool re-registers a built-in). The
+		// wrapper's own context, abort signal, and progress callback are inherited by the delegated
+		// call, so a bare `ctx.invokeTool(params)` keeps the caller's `toolCall`/provider metadata
+		// (write/edit LSP batching, computer safety acknowledgement), stops when the outer call is
+		// aborted, and still streams native progress.
+		return this.registeredTool.definition.execute(
+			toolCallId,
+			params,
+			signal,
+			onUpdate,
+			this.runner.createContext(undefined, {
+				toolName: this.registeredTool.definition.name,
+				context,
+				signal,
+				onUpdate,
+			}),
+		);
 	}
 }
 
@@ -157,16 +174,72 @@ export class ExtensionToolWrapper<TParameters extends TSchema = TSchema, TDetail
 		onUpdate?: AgentToolUpdateCallback<TDetails, TParameters>,
 		context?: AgentToolContext,
 	): Promise<AgentToolResult<TDetails, TParameters>> {
-		// 1. Check approval policy (before extension handlers).
-		// CLI `--auto-approve` / `--yolo` sets approval mode to yolo.
-		// User `tools.approval.<tool>` policies are still applied in all modes.
+		// The agent loop emits `tool_call` at arg-prep time (session
+		// `beforeToolCall` wiring) so a handler revision lands before concurrency
+		// scheduling and `tool_execution_start`. Consume the marker
+		// unconditionally so it cannot go stale; emit here only for dispatches
+		// the loop never saw — nested xd:// device dispatches and direct
+		// (non-loop) execution such as Cursor exec handlers.
+		const loopEmittedToolCall = this.runner.consumeToolCallEmitted(toolCallId, this.tool.name);
+		// Resolve approval settings up front. A `deny` on the original input short-circuits before the
+		// runner is touched — an already-denied tool never emits `tool_call` — while the full gate below
+		// re-resolves against the (possibly revised) input so a handler cannot rewrite into a denied or
+		// newly prompt-gated command and have it run unapproved.
 		const cliAutoApprove = context?.autoApprove === true;
 		const settings: Settings | undefined = context?.settings;
 		const configuredMode = (settings?.get("tools.approvalMode") ?? "yolo") as ApprovalMode;
 		const approvalMode: ApprovalMode = cliAutoApprove ? "yolo" : configuredMode;
 		const userPolicies = (settings?.get("tools.approval") ?? {}) as Record<string, unknown>;
-		const resolvedArgs = approvalArgs(params, context);
+		if (resolveApproval(this.tool, approvalArgs(params, context), approvalMode, userPolicies).policy === "deny") {
+			throw new Error(
+				`Tool "${this.tool.name}" is blocked by user policy.\n` +
+					`To allow: remove "tools.approval.${this.tool.name}: deny" from config.`,
+			);
+		}
+
+		// 1. Emit tool_call event first - extensions can block execution or revise the input the tool
+		// runs with. Doing this BEFORE the approval gate means approval (below) resolves against the
+		// input that actually executes, closing the "approve one thing, run another" gap: the prompt
+		// text, policy resolution, and provider safety checks all see `effectiveParams`.
+		let effectiveParams = params;
+		if (!loopEmittedToolCall && this.runner.hasHandlers("tool_call")) {
+			try {
+				const callResult = (await this.runner.emitToolCall({
+					type: "tool_call",
+					toolName: this.tool.name,
+					toolCallId,
+					input: normalizeToolEventInput(
+						this.tool.name,
+						resolveToolEventInput(this.tool, toolEventArgs(params, context)),
+					),
+				})) as ToolCallEventResult | undefined;
+
+				if (callResult?.block) {
+					const reason = callResult.reason || "Tool execution was blocked by an extension";
+					throw new Error(reason);
+				}
+				// A non-blocking handler may replace the execution input. The returned object is the raw
+				// input passed to `execute` (handler-owned; not re-normalized). Skipped for `computer`
+				// tool calls, whose event input is a synthetic {actions,pendingSafetyChecks} view
+				// (see toolEventArgs) rather than the real execution params.
+				if (callResult?.input !== undefined && context?.toolCall?.providerMetadata?.type !== "computer") {
+					effectiveParams = callResult.input as typeof params;
+				}
+			} catch (err) {
+				if (err instanceof Error) {
+					throw err;
+				}
+				throw new Error(`Extension failed, blocking execution: ${String(err)}`);
+			}
+		}
+
+		// 2. Full approval gate against the (possibly revised) input that will actually run — resolves
+		// policy and prompts on `effectiveParams`, so the user approves exactly what executes. A revised
+		// input that newly resolves to `deny` is caught here even though the original passed the
+		// short-circuit above.
+		const resolvedArgs = approvalArgs(effectiveParams, context);
 		const resolved = resolveApproval(this.tool, resolvedArgs, approvalMode, userPolicies);
+		context?.xdevTierResolved?.(resolved.tier);
 		if (resolved.policy === "deny") {
 			throw new Error(
 				`Tool "${this.tool.name}" is blocked by user policy.\n` +
@@ -175,15 +248,17 @@ export class ExtensionToolWrapper<TParameters extends TSchema = TSchema, TDetail
 		}
 		const pendingSafetyChecks = computerSafetyChecks(context);
 		// An xd:// device dispatch already cleared the write tool's outer gate at
-		// this tool's tier — re-prompting would double-ask for one action. Explicit
-		// per-tool "prompt" policies and tool-demanded overrides still prompt.
-		// Provider safety checks are stronger: yolo, per-tool allow, and xdev approval
-		// never acknowledge them on the user's behalf.
+		// this tool's tier — re-prompting would double-ask for one action. The
+		// bypass only holds while the input is exactly what that outer gate
+		// approved: a handler revision here may have raised the tier, so revised
+		// input always faces the full gate. Explicit per-tool "prompt" policies
+		// and tool-demanded overrides still prompt. Provider safety checks are
+		// stronger: yolo, per-tool allow, and xdev approval never acknowledge
+		// them on the user's behalf.
 		const explicitPrompt = resolved.override || Object.hasOwn(userPolicies, this.tool.name);
+		const xdevBypass = context?.xdevApproved === true && effectiveParams === params;
 		const approvalCheck = {
-			required:
-				pendingSafetyChecks.length > 0 ||
-				(resolved.policy === "prompt" && (explicitPrompt || context?.xdevApproved !== true)),
+			required: pendingSafetyChecks.length > 0 || (resolved.policy === "prompt" && (explicitPrompt || !xdevBypass)),
 			reason: resolved.reason,
 		};
 
@@ -202,7 +277,7 @@ export class ExtensionToolWrapper<TParameters extends TSchema = TSchema, TDetail
 				});
 			}
 
-			const resolveApproval = async (approved: boolean, reason?: string) => {
+			const emitApprovalResolved = async (approved: boolean, reason?: string) => {
 				if (!hasApprovalHandlers) return;
 				await this.runner.emit({
 					type: "tool_approval_resolved",
@@ -218,7 +293,7 @@ export class ExtensionToolWrapper<TParameters extends TSchema = TSchema, TDetail
 			// ordinary tier approval, no setting or yolo mode may bypass this gate.
 			if (!this.runner.hasUI()) {
 				const reason = "no interactive UI available";
-				await resolveApproval(false, reason);
+				await emitApprovalResolved(false, reason);
 				if (pendingSafetyChecks.length > 0) {
 					throw new Error(
 						`Tool "${this.tool.name}" has pending provider safety checks but no interactive UI is available.`,
@@ -243,11 +318,11 @@ export class ExtensionToolWrapper<TParameters extends TSchema = TSchema, TDetail
 			try {
 				choice = await uiContext.select(safetyPrompt, ["Approve", "Deny"]);
 			} catch (err) {
-				await resolveApproval(false, err instanceof Error ? err.message : "approval aborted");
+				await emitApprovalResolved(false, err instanceof Error ? err.message : "approval aborted");
 				throw err;
 			}
 			const approved = choice === "Approve";
-			await resolveApproval(approved, approved ? undefined : "denied by user");
+			await emitApprovalResolved(approved, approved ? undefined : "denied by user");
 			if (!approved) {
 				throw new Error(`Tool call denied by user: ${this.tool.name}`);
 			}
@@ -257,37 +332,12 @@ export class ExtensionToolWrapper<TParameters extends TSchema = TSchema, TDetail
 			}
 		}
 
-		// 2. Emit tool_call event - extensions can block execution
-		if (this.runner.hasHandlers("tool_call")) {
-			try {
-				const callResult = (await this.runner.emitToolCall({
-					type: "tool_call",
-					toolName: this.tool.name,
-					toolCallId,
-					input: normalizeToolEventInput(
-						this.tool.name,
-						resolveToolEventInput(this.tool, toolEventArgs(params, context)),
-					),
-				})) as ToolCallEventResult | undefined;
-
-				if (callResult?.block) {
-					const reason = callResult.reason || "Tool execution was blocked by an extension";
-					throw new Error(reason);
-				}
-			} catch (err) {
-				if (err instanceof Error) {
-					throw err;
-				}
-				throw new Error(`Extension failed, blocking execution: ${String(err)}`);
-			}
-		}
-
 		// Execute the actual tool
 		let result: AgentToolResult<TDetails, TParameters>;
 		let executionError: Error | undefined;
 
 		try {
-			result = await this.tool.execute(toolCallId, params, signal, onUpdate, context);
+			result = await this.tool.execute(toolCallId, effectiveParams, signal, onUpdate, context);
 		} catch (err) {
 			executionError = err instanceof Error ? err : new Error(String(err));
 			result = {
@@ -304,7 +354,7 @@ export class ExtensionToolWrapper<TParameters extends TSchema = TSchema, TDetail
 				toolCallId,
 				input: normalizeToolEventInput(
 					this.tool.name,
-					resolveToolEventInput(this.tool, toolEventArgs(params, context)),
+					resolveToolEventInput(this.tool, toolEventArgs(effectiveParams, context)),
 				),
 				content: result.content,
 				details: result.details,

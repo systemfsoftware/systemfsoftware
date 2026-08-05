@@ -744,8 +744,10 @@ describe("AgentSession handoff", () => {
 			details: {},
 			preserveData: { resultState: "keep-result" },
 		});
+		const promptCacheKey = "inherited-parent-cache";
 		const localAgent = new Agent({
 			initialState: { model, systemPrompt: ["Test"], tools: [], messages: [] },
+			promptCacheKey,
 		});
 		const localSession = new AgentSession({
 			agent: localAgent,
@@ -762,6 +764,7 @@ describe("AgentSession handoff", () => {
 		try {
 			await localSession.runIdleCompaction();
 			expect(compactSpy).toHaveBeenCalledTimes(1);
+			expect(compactSpy.mock.calls[0]?.[5]?.promptCacheKey).toBe(promptCacheKey);
 			const compactionEntry = localSessionManager.getEntries().find(entry => entry.type === "compaction");
 			if (compactionEntry?.type !== "compaction") throw new Error("Expected persisted compaction entry");
 			expect(compactionEntry.preserveData).toEqual({
@@ -846,6 +849,7 @@ describe("AgentSession handoff", () => {
 		expect(fallbackCandidateKey).toBeDefined();
 		expect(promptSpy).toHaveBeenCalledTimes(1);
 	});
+
 	it("keeps pre-prompt context-full checks aligned with provider-anchored usage", async () => {
 		await session.dispose();
 		authStorage.setRuntimeApiKey("openai", "test-key");

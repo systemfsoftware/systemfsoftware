@@ -52,6 +52,7 @@ export interface BraveSearchParams {
 	recency?: "day" | "week" | "month" | "year";
 	parsedQuery?: StructuredQuery;
 	signal?: AbortSignal;
+	timeoutMs?: number;
 	fetch?: FetchImpl;
 }
 
@@ -113,7 +114,7 @@ async function callBraveSearch(
 			Accept: "application/json",
 			"X-Subscription-Token": apiKey,
 		},
-		signal: withHardTimeout(params.signal),
+		signal: withHardTimeout(params.signal, params.timeoutMs),
 	});
 
 	if (!response.ok) {
@@ -173,6 +174,7 @@ export class BraveProvider extends SearchProvider {
 			recency: params.recency,
 			parsedQuery: params.parsedQuery,
 			signal: params.signal,
+			timeoutMs: params.timeoutMs,
 			fetch: params.fetch,
 		});
 	}

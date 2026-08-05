@@ -62,8 +62,8 @@ const GEMINI_3_FLASH_EFFORTS: readonly Effort[] = [Effort.Minimal, Effort.Low, E
 const GPT_5_2_PLUS_EFFORTS: readonly Effort[] = [Effort.Low, Effort.Medium, Effort.High, Effort.XHigh];
 const GPT_5_1_CODEX_MINI_EFFORTS: readonly Effort[] = [Effort.Medium, Effort.High];
 const LOW_MEDIUM_HIGH_REASONING_EFFORTS: readonly Effort[] = [Effort.Low, Effort.Medium, Effort.High];
-/** Kimi K3's wire-exact mandatory reasoning scale. */
-const KIMI_K3_REASONING_EFFORTS: readonly Effort[] = [Effort.Low, Effort.High, Effort.Max];
+/** Wire-exact `low`/`high`/`max` scale used by Kimi K3 and OpenRouter DeepSeek V4 Flash 0731. */
+const LOW_HIGH_MAX_REASONING_EFFORTS: readonly Effort[] = [Effort.Low, Effort.High, Effort.Max];
 /** Wire-exact two-tier scale (`high`/`max`): GLM-5.2 on Z.ai/Umans/Ollama Cloud/Baseten, Sakana Fugu, DeepSeek. */
 const HIGH_MAX_REASONING_EFFORTS: readonly Effort[] = [Effort.High, Effort.Max];
 /** OpenRouter's DeepSeek route accepts only `high`. */
@@ -339,7 +339,7 @@ function getModelDefinedEfforts<TApi extends Api>(
 		}
 	}
 	if (isKimiK3ModelId(spec.id)) {
-		return KIMI_K3_REASONING_EFFORTS;
+		return LOW_HIGH_MAX_REASONING_EFFORTS;
 	}
 	if (isSakanaFuguReasoningModel(spec)) {
 		return HIGH_MAX_REASONING_EFFORTS;
@@ -366,9 +366,14 @@ function getModelDefinedEfforts<TApi extends Api>(
 		return OLLAMA_REASONING_EFFORTS;
 	}
 	if (isOpenAICompatReasoningApi(spec.api) && isDeepseekReasoningModel(spec)) {
-		// DeepSeek's reasoning_effort accepts only high/max; OpenRouter's
-		// DeepSeek route tops out at high.
-		return isOpenRouterThinkingFormat(compat) ? HIGH_ONLY_REASONING_EFFORTS : HIGH_MAX_REASONING_EFFORTS;
+		// OpenRouter generally exposes only high for DeepSeek, but V4 Flash 0731
+		// advertises and accepts the wire-exact low/high/max ladder.
+		if (isOpenRouterThinkingFormat(compat)) {
+			return bareModelId(spec.id) === "deepseek-v4-flash-0731"
+				? LOW_HIGH_MAX_REASONING_EFFORTS
+				: HIGH_ONLY_REASONING_EFFORTS;
+		}
+		return HIGH_MAX_REASONING_EFFORTS;
 	}
 	if (spec.provider === "baseten" && isOpenAIGptOssModelId(spec.id)) {
 		// Baseten's gpt-oss router mirrors its GLM route: high/max only.

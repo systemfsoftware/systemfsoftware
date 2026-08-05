@@ -2,6 +2,80 @@
 
 ## [Unreleased]
 
+## [17.2.9] - 2026-08-05
+
+### Added
+
+- Added a public `compareVersions` utility (`@oh-my-pi/pi-utils`) that compares two version strings with SemVer-2.0 prerelease ordering, build-metadata stripping, and numeric segment comparison without float overflow; never throws.
+
+### Fixed
+
+- Honor the current process `PATH` when caching executable lookups, preventing stale tool paths after environment reloads.
+- Parsed account-cap reset windows such as “Your limit will reset in 13 minutes” so credential backoff honors the provider's full reset duration.
+
+## [17.2.6] - 2026-08-03
+
+### Added
+
+- Added a shared `file-lock` utility backed by process-owned native OS locks with automatic crash release and bounded asynchronous retry.
+
+## [17.2.5] - 2026-08-03
+
+### Added
+
+- Added utility functions `parseFlag()`, `getBrowserRelayDir()`, and `getGlobalDaemonRuntimeDir()` to support browser relay mode and global daemon runtime directory resolution.
+
+### Changed
+
+- Updated the lightweight CLI runner to support static command metadata, allowing root help to render without importing full command implementations.
+
+## [17.2.4] - 2026-08-01
+
+### Added
+
+- Added `getSecretPlaceholderKeyPath()`, `getDaemonRuntimeDir()`, `getProviderInFlightRoot()`, and `getMarketplacesRegistryPath()` to resolve secret key, daemon runtime, provider in-flight, and marketplace registry paths under their respective XDG categories (state, data) instead of the config root.
+- Existing installs enabling XDG keep their data: a legacy `~/.omp/agent/secret-placeholder.key` or `~/.omp/marketplaces.json` is copied to its XDG location on first resolution, so persisted transcripts still deobfuscate and added marketplaces survive the move.
+
+### Changed
+
+- Headless hosts (print/RPC/ACP/eval/SDK) now use a 1s SQLite `busy_timeout` for the session-critical databases (agent.db, history.db, stats.db) via `getDbBusyTimeoutMs()`, so lock contention no longer freezes the protocol loop for the full interactive 5s timeout; interactive hosts keep the 5s timeout.
+
+### Fixed
+
+- Fixed Bun test-runtime detection treating application-owned `NODE_ENV=test` and `BUN_ENV=test` values as test-runner signals ([#7261](https://github.com/can1357/oh-my-pi/issues/7261)).
+
+## [17.2.1] - 2026-07-30
+
+### Added
+
+- Added a `postmortem.quit` configuration option to safely handle shutdown paths when the terminal output has already disconnected.
+- Added project-keyed OMP security-state directory helpers under the user state root.
+
+## [17.1.8] - 2026-07-28
+
+### Added
+
+- Added `setProcessName` utility to set the OS-visible process name on Linux via `bun:ffi`, bypassing Bun's `process.title` limitations.
+
+### Fixed
+
+- Fixed child shell environment filtering to drop launch-directory `.env` values in addition to Bun-autoloaded `.env.local` values.
+
+## [17.1.5] - 2026-07-27
+
+### Fixed
+
+- `getShellConfig` no longer throws `No bash shell found` on Windows hosts without a discoverable bash. `resolveWindowsShell` searches Git for Windows install roots (machine, per-user, `GIT_INSTALL_ROOT`, scoop app dirs — scoop shims `sh.exe`/`git.exe` but never `bash.exe`), then `bash.exe`/`sh.exe` on PATH, and finally falls back to `cmd.exe` from ComSpec with `/c` args, so shell resolution always succeeds.
+
+## [17.1.4] - 2026-07-26
+
+### Fixed
+
+- Fixed postmortem signal and fatal shutdown exits being intercepted by temporary `process.exit` guards during extension startup ([#6488](https://github.com/can1357/oh-my-pi/issues/6488)).
+- Corrected Windows shell resolution errors to identify the active global, project, overlay, or runtime source for `shellPath` instead of directing every user to the retired `settings.json` file ([#6579](https://github.com/can1357/oh-my-pi/issues/6579)).
+- Contained timed-out child lifecycle rejections so `ptree` callers cannot leak an unhandled `TimeoutError` after settling ([#6635](https://github.com/can1357/oh-my-pi/issues/6635)).
+- Fixed an invalid configured `shellPath` being silently masked whenever an earlier caller had already resolved a shell in the same process; the guidance error now surfaces regardless of cache state.
+
 ## [17.0.9] - 2026-07-23
 
 ### Breaking Changes

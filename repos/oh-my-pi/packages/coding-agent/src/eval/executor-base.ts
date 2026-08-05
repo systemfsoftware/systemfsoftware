@@ -158,6 +158,15 @@ export async function waitForPromiseWithCancellation<T>(
 	return await resultPromise;
 }
 
+/**
+ * Derived abort signal for the kernel, holding back an external abort while a
+ * bridge call marked `deferExternalAbort` is in flight.
+ *
+ * Scope is deliberately narrow: only `kernel.execute` consumes
+ * {@link BridgeAbortShield.signal}. Work dispatched through the tool bridge
+ * keeps the caller's real signal so a turn cancel reaches spawned subagents
+ * immediately — deferral protects the runtime, never the delegated work.
+ */
 interface BridgeAbortShield {
 	signal: AbortSignal | undefined;
 	abortRequested: boolean;
@@ -313,6 +322,45 @@ export function attachSessionOwner(
 	}
 }
 
+/** Owner registry shared by every language's live/starting session records. */
+export interface SessionOwners {
+	ownerIds: Set<string>;
+	hasFallbackOwner: boolean;
+}
+
+/**
+ * Resolve the session key an owner's eval cell runs on, forking `reset` away
+ * from shared kernels.
+ *
+ * Eval sessions are shared across agents by design (subagents inherit the
+ * parent's eval session id), so honoring `reset` on a co-owned kernel would
+ * destroy every other agent's state — including cells executing at that
+ * moment. When the requester does not exclusively own the live base session,
+ * its reset resolves to a deterministic per-owner fork key: the requester
+ * starts a fresh private kernel while co-owners keep the shared one. Once
+ * forked, the owner keeps resolving to its fork, and per-owner dispose reaps
+ * the fork since the requester is its only registered owner.
+ */
+export function resolveOwnerScopedSessionKey(options: {
+	baseKey: string;
+	ownerId: string | undefined;
+	reset: boolean;
+	/** True when a live or starting session exists under `key`. */
+	hasSession: (key: string) => boolean;
+	/** Owner registry for the session under `key`, when inspectable. */
+	getOwners: (key: string) => SessionOwners | undefined;
+}): string {
+	const { baseKey, ownerId } = options;
+	if (ownerId === undefined) return baseKey;
+	const forkKey = `${baseKey}\0fork\0${ownerId}`;
+	if (options.hasSession(forkKey)) return forkKey;
+	if (!options.reset) return baseKey;
+	const base = options.getOwners(baseKey);
+	if (!base) return baseKey;
+	const exclusive = !base.hasFallbackOwner && base.ownerIds.size === 1 && base.ownerIds.has(ownerId);
+	return exclusive ? baseKey : forkKey;
+}
+
 // ---------------------------------------------------------------------------
 // Base executor implementation
 // ---------------------------------------------------------------------------
@@ -389,11 +437,21 @@ export async function executeWithKernelBase<
 	const emitStatus: (event: JsStatusEvent) => void =
 		options?.emitStatus ?? (event => collectDisplay({ type: "status", event }));
 	const runId = `${runIdPrefix}-${crypto.randomUUID()}`;
+	// Two aborts cross the bridge, and conflating them is what let a cancelled
+	// turn keep working. Delegated work (above all the subagents `agent()`
+	// spawns) gets the caller's real signal so it dies with the turn — shielding
+	// it here made Python/Ruby/Julia fan-outs outlive a cancel indefinitely,
+	// while JS cells, which never route through this shield, stopped fine. The
+	// shielded signal only governs how long the host waits on a call, holding
+	// the cell open across a critical phase (isolation worktree setup,
+	// merge/cherry-pick) so a cancel can't settle it on top of a half-applied
+	// git operation.
 	const unregisterBridge =
 		options?.toolSession && options?.bridgeSessionId
 			? registerPyToolBridge(options.bridgeSessionId, runId, {
 					toolSession: options.toolSession,
-					signal: abortShield.signal,
+					signal: options.signal,
+					shieldedSignal: abortShield.signal,
 					emitStatus,
 					abortRequested: () => {
 						return abortShield.abortRequested;

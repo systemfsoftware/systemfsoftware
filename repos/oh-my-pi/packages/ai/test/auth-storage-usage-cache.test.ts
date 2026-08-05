@@ -350,13 +350,17 @@ describe("AuthStorage usage cache: provider failure policy", () => {
 				return Promise.resolve(
 					usageCalls === 1
 						? Response.json({
-								code: "200",
-								successResponse: true,
 								data: {
-									per5HourPercentage: 0.25,
-									per5HourResetTime: 1_800_000_000_000,
-									per1WeekPercentage: 0.5,
-									per1WeekResetTime: 1_800_100_000_000,
+									DataV2: {
+										data: {
+											data: {
+												per5HourPercentage: 0.25,
+												per5HourResetTime: 1_800_000_000_000,
+												per1WeekPercentage: 0.5,
+												per1WeekResetTime: 1_800_100_000_000,
+											},
+										},
+									},
 								},
 							})
 						: Response.json({

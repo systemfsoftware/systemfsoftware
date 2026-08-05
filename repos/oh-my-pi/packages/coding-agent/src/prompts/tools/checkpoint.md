@@ -5,7 +5,7 @@ Use this when you need to investigate with many intermediate tool calls (read/gr
 Rules:
 - You MUST call `rewind` before yielding after starting a checkpoint.
 - You NEVER call `checkpoint` while another checkpoint is active.
-- Not available in subagents.
+- Disabled by default in subagents. To enable, list `checkpoint` or `rewind` in the agent definition's `tools:` frontmatter (the sister tool is auto-included; requires `checkpoint.enabled` setting).
 
 Typical flow:
 1. `checkpoint(goal: …)`

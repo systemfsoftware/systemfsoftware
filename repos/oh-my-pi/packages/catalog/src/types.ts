@@ -103,6 +103,8 @@ export interface Usage {
 	cacheWrite: number;
 	/** Sum of input + output + cacheRead + cacheWrite plus provider-side orchestration tokens when reported. */
 	totalTokens: number;
+	/** Provider-reported occupied context tokens when the value is authoritative but not a billable input/output bucket. */
+	contextTokens?: number;
 	/** Provider-side orchestration tokens, billed but not part of the conversation prompt/cache buckets. */
 	orchestration?: {
 		/** Non-cached orchestration input tokens. */
@@ -400,6 +402,15 @@ export interface OpenAICompat {
  */
 export interface AnthropicCompat {
 	/**
+	 * Stream-watchdog idle-timeout fallback in ms for slow reasoning hosts.
+	 * Set to 0 to disable the inter-event idle watchdog entirely, matching
+	 * `OpenAICompat.streamIdleTimeoutMs`.
+	 *
+	 * When unset, direct Anthropic streams use `PI_STREAM_IDLE_TIMEOUT_MS`,
+	 * then the legacy `PI_OPENAI_STREAM_IDLE_TIMEOUT_MS` alias, then 300s.
+	 */
+	streamIdleTimeoutMs?: number;
+	/**
 	 * Drop the top-level `strict: true` field on tool definitions. Vertex AI's
 	 * Anthropic-compatible endpoint rejects unknown tool fields with
 	 * `tools.<n>.custom.strict: Extra inputs are not permitted`.
@@ -471,6 +482,20 @@ export interface AnthropicCompat {
 	 * blocks instead of normal `tool_use` calls.
 	 */
 	escapeBuiltinToolNames?: boolean;
+	/**
+	 * The configured endpoint enforces Anthropic's signature protocol on
+	 * replayed thinking blocks — either the official API itself or a proxy
+	 * that forwards to it (GitHub Copilot, ZenMux, Cloudflare AI Gateway's
+	 * `/anthropic` route, Google Vertex's `publishers/anthropic/…`).
+	 * Downstream transforms strip stale cross-model thinking signatures on
+	 * these endpoints so the signing proxy doesn't 400 with
+	 * `Invalid signature in thinking block` (#4297), and adaptive-thinking
+	 * models keep the interleaved-thinking beta on them (#6717). Known hosts
+	 * are auto-detected from provider id and baseUrl; set this to mark an
+	 * opaque signing proxy the URL list can't recognize. Superset of
+	 * {@link ResolvedAnthropicCompat.officialEndpoint}.
+	 */
+	signingEndpoint?: boolean;
 }
 
 /**
@@ -696,7 +721,13 @@ export interface ResolvedOpenAIResponsesCompat extends ResolvedOpenAISharedCompa
 export type ResolvedOpenRouterCompat = ResolvedOpenAICompat & ResolvedOpenAIResponsesCompat;
 
 /** Fully-resolved anthropic-messages compat view (same contract as `ResolvedOpenAICompat`). */
-export type ResolvedAnthropicCompat = Required<AnthropicCompat> & {
+export type ResolvedAnthropicCompat = Required<Omit<AnthropicCompat, "streamIdleTimeoutMs">> & {
+	/**
+	 * Stream-watchdog idle-timeout fallback in ms for slow reasoning hosts; 0 disables the idle watchdog.
+	 * Undefined defers to `PI_STREAM_IDLE_TIMEOUT_MS`, then the legacy
+	 * `PI_OPENAI_STREAM_IDLE_TIMEOUT_MS` alias, then 300s.
+	 */
+	streamIdleTimeoutMs?: number;
 	/**
 	 * The configured endpoint is the official first-party Anthropic API
 	 * (https + exact `api.anthropic.com` host; a missing baseUrl counts as
@@ -704,17 +735,6 @@ export type ResolvedAnthropicCompat = Required<AnthropicCompat> & {
 	 * env headers, and cache-TTL shaping without per-request URL parsing.
 	 */
 	officialEndpoint: boolean;
-	/**
-	 * The configured endpoint enforces Anthropic's signature protocol on
-	 * replayed thinking blocks — either the official API itself or a proxy
-	 * that forwards to it (GitHub Copilot, ZenMux, Cloudflare AI Gateway's
-	 * `/anthropic` route, Google Vertex's `publishers/anthropic/…`).
-	 * Downstream transforms strip stale cross-model thinking signatures on
-	 * these endpoints so the signing proxy doesn't 400 with
-	 * `Invalid signature in thinking block` (#4297). Superset of
-	 * {@link officialEndpoint}.
-	 */
-	signingEndpoint: boolean;
 };
 
 /**
@@ -825,6 +845,8 @@ export interface Model<TApi extends Api = Api> {
 	supportsTools?: boolean;
 	/** Whether this model accepts the GA OpenAI Responses `{ type: "computer" }` native tool. */
 	supportsComputerUse?: boolean;
+	/** Verbatim explicit computer-use support from the spec; undefined when `buildModel` inferred the runtime value. */
+	supportsComputerUseConfig?: boolean;
 	/** GitLab Duo Workflow root namespace selected during catalog discovery. */
 	gitlabDuoWorkflowRootNamespaceId?: string;
 	/** Cursor `max_mode` request flag returned by `GetUsableModels` for premium models that require max mode. */
@@ -910,7 +932,8 @@ export interface Model<TApi extends Api = Api> {
  * vocabulary of `buildModel`. Identical to `Model` except `compat` carries the
  * sparse override shape and nothing is resolved yet.
  */
-export interface ModelSpec<TApi extends Api = Api> extends Omit<Model<TApi>, "compat" | "compatConfig"> {
+export interface ModelSpec<TApi extends Api = Api>
+	extends Omit<Model<TApi>, "compat" | "compatConfig" | "supportsComputerUseConfig"> {
 	/** Sparse compatibility overrides; resolved into `Model.compat` by `buildModel`. */
 	compat?: CompatConfigOf<TApi>;
 }

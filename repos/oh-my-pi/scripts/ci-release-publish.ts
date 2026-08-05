@@ -14,9 +14,14 @@
  *      that points at `./src/*.ts(x)` is repointed to `./dist/types/*.d.ts`,
  *      `dist/types` (plus `dist/client` for `stats`) is added to `files`,
  *      and packages with a `publishBin` override get their `bin` swapped to
- *      the prepack bundle (coding-agent: `src/cli.ts` → `dist/cli.js`). The
- *      on-repo manifest keeps pointing at source so local dev and source
- *      installs (`bun link`, `install.sh --source`) work without a build.
+ *      the prepack bundle (coding-agent: `src/cli.ts` → `dist/cli.js`).
+ *      Packages flagged `publishJs` (omptype) additionally emit transpiled
+ *      per-module JS into `dist/js/` and get their runtime entries (`main`,
+ *      `exports[*]` import paths) repointed there, with a `bun` condition
+ *      keeping TS-source resolution for Bun consumers — so the published
+ *      package runs on plain Node. The on-repo manifest keeps pointing at
+ *      source so local dev and source installs (`bun link`,
+ *      `install.sh --source`) work without a build.
  *   3. Pack with `bun pm pack` (resolves the `catalog:`/`workspace:`
  *      protocols npm cannot, and runs each package's `prepack` lifecycle),
  *      then publish the resolved tarball with `npm publish` — see
@@ -35,7 +40,7 @@ import {
 	generateNpmPackages,
 	LEAF_TARGETS,
 } from "../packages/natives/scripts/gen-npm-packages.ts";
-import { fixDtsExtensions } from "./fix-dts-extensions.ts";
+import { fixEmitExtensions } from "./fix-emit-extensions.ts";
 
 export interface PublishPackage {
 	dir: string;
@@ -46,6 +51,12 @@ export interface PublishPackage {
 	extraFiles?: readonly string[];
 	/** Extra tsgo invocations beyond `tsconfig.publish.json`. */
 	extraTypeConfigs?: readonly string[];
+	/**
+	 * Also emit transpiled JS to `dist/js` (via `tsconfig.publish.js.json`)
+	 * and repoint the published runtime entries there so the package runs on
+	 * plain Node. Requires the package to be dependency-free of Bun APIs.
+	 */
+	publishJs?: boolean;
 	/**
 	 * `bin` map for the published manifest. The on-repo manifest points `bin`
 	 * at TS source so source installs (`bun link`, `install.sh --source`) work
@@ -87,6 +98,7 @@ const nativeLeafTag = nativeLeafTagFromArgs(process.argv.slice(2));
 export const packages: PublishPackage[] = [
 	{ dir: "packages/utils", kind: "typescript" },
 	{ dir: "packages/wire", kind: "typescript" },
+	{ dir: "packages/omptype", kind: "typescript", publishJs: true },
 	{ dir: "packages/catalog", kind: "typescript" },
 	{ dir: "packages/ai", kind: "typescript" },
 	{ dir: "packages/natives", kind: "native" },
@@ -105,18 +117,30 @@ export const packages: PublishPackage[] = [
 	{ dir: "packages/coding-agent", kind: "typescript", publishBin: { omp: "dist/cli.js" } },
 ];
 
-function rewriteSrcPath(value: string): string {
+function rewriteSrcToTypes(value: string): string {
 	if (!value.startsWith("./src/")) return value;
 	const rel = value.slice("./src/".length).replace(/\.tsx?$/, "");
 	return `./dist/types/${rel}.d.ts`;
 }
 
-function rewriteExports(exports: JsonValue): JsonValue {
+function rewriteSrcToJs(value: string): string {
+	if (!value.startsWith("./src/")) return value;
+	const rel = value.slice("./src/".length).replace(/\.tsx?$/, "");
+	return `./dist/js/${rel}.js`;
+}
+
+function rewriteExports(exports: JsonValue, publishJs: boolean): JsonValue {
 	if (exports === null || typeof exports !== "object" || Array.isArray(exports)) return exports;
 	const src = exports as JsonObject;
 	const out: JsonObject = {};
 	for (const key in src) {
 		const val = src[key];
+		if (publishJs && typeof val === "string" && val.startsWith("./src/")) {
+			// String-form subpath (e.g. `"./*.js": "./src/*.ts"`): declarations
+			// for TS, TS source for Bun, transpiled JS for everything else.
+			out[key] = { types: rewriteSrcToTypes(val), bun: val, default: rewriteSrcToJs(val) };
+			continue;
+		}
 		if (
 			val !== null &&
 			typeof val === "object" &&
@@ -124,9 +148,16 @@ function rewriteExports(exports: JsonValue): JsonValue {
 			typeof (val as JsonObject).types === "string" &&
 			((val as JsonObject).types as string).startsWith("./src/")
 		) {
-			const next: JsonObject = { ...(val as JsonObject) };
-			next.types = rewriteSrcPath(next.types as string);
-			out[key] = next;
+			const srcTypes = (val as JsonObject).types as string;
+			if (publishJs) {
+				// Condition order matters: `types` is TS-only, `bun` must win
+				// over `default` for Bun consumers.
+				out[key] = { types: rewriteSrcToTypes(srcTypes), bun: srcTypes, default: rewriteSrcToJs(srcTypes) };
+			} else {
+				const next: JsonObject = { ...(val as JsonObject) };
+				next.types = rewriteSrcToTypes(srcTypes);
+				out[key] = next;
+			}
 		} else {
 			out[key] = val;
 		}
@@ -134,17 +165,22 @@ function rewriteExports(exports: JsonValue): JsonValue {
 	return out;
 }
 
-async function rewriteManifest(pkg: PublishPackage, write: boolean): Promise<PackageManifest> {
+/** Compute (and optionally write) the published manifest for a package. */
+export async function rewriteManifest(pkg: PublishPackage, write: boolean): Promise<PackageManifest> {
 	const manifestPath = path.join(repoRoot, pkg.dir, "package.json");
 	const manifest = (await Bun.file(manifestPath).json()) as PackageManifest;
 	if (pkg.publishBin) manifest.bin = { ...pkg.publishBin };
 	if (typeof manifest.types === "string" && manifest.types.startsWith("./src/")) {
-		manifest.types = rewriteSrcPath(manifest.types);
+		manifest.types = rewriteSrcToTypes(manifest.types);
 	}
-	if (manifest.exports !== undefined) manifest.exports = rewriteExports(manifest.exports);
+	if (pkg.publishJs && typeof manifest.main === "string") {
+		manifest.main = rewriteSrcToJs(manifest.main);
+	}
+	if (manifest.exports !== undefined) manifest.exports = rewriteExports(manifest.exports, pkg.publishJs === true);
 	const files = Array.isArray(manifest.files) ? [...manifest.files] : [];
 	const hasDist = files.includes("dist");
 	if (!hasDist && !files.includes("dist/types")) files.push("dist/types");
+	if (pkg.publishJs && !hasDist && !files.includes("dist/js")) files.push("dist/js");
 	for (const extra of pkg.extraFiles ?? []) {
 		if (!hasDist && !files.includes(extra)) files.push(extra);
 	}
@@ -162,10 +198,16 @@ async function preparePackage(pkg: PublishPackage): Promise<PackageManifest> {
 	for (const cfg of pkg.extraTypeConfigs ?? []) {
 		await $`bun x tsgo -p ${cfg}`.cwd(pkgDir);
 	}
-	// The declaration emit runs under `moduleResolution: "Bundler"`, so relative
-	// specifiers land extensionless — unresolvable for a `nodenext` consumer.
-	// Rewrite them to explicit `.js` so the published types resolve everywhere.
-	await fixDtsExtensions(path.join(pkgDir, "dist/types"));
+	if (pkg.publishJs) {
+		await $`bun x tsgo -p tsconfig.publish.js.json`.cwd(pkgDir);
+	}
+	// Both emits run under `moduleResolution: "Bundler"`, so relative
+	// specifiers land extensionless — unresolvable for a `nodenext` consumer
+	// (types) and for Node ESM at runtime (js). Rewrite them to explicit `.js`.
+	await fixEmitExtensions(path.join(pkgDir, "dist/types"), ".d.ts");
+	if (pkg.publishJs) {
+		await fixEmitExtensions(path.join(pkgDir, "dist/js"), ".js");
+	}
 	return rewriteManifest(pkg, !isDryRun);
 }
 
@@ -201,6 +243,10 @@ export async function prepareNativeCorePackage(pkgDir: string, write: boolean): 
 	manifest.files = [
 		"native/index.js",
 		"native/index.d.ts",
+		"native/clipboard.js",
+		"native/clipboard.d.ts",
+		"native/desktop.js",
+		"native/desktop.d.ts",
 		"native/loader-state.js",
 		"native/loader-state.d.ts",
 		"native/embedded-addon.js",

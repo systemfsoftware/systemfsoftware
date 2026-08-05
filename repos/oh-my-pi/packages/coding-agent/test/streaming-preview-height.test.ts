@@ -144,7 +144,7 @@ describe("streaming edit preview height (stable, full tail window)", () => {
 		const tool = { mode: "replace" } as unknown as AgentTool;
 		const component = new ToolExecutionComponent(
 			"edit",
-			{ path: file, edits: [{ old_text: oldBlock, new_text: fullNew.slice(0, 1) }] },
+			{ path: file, old_string: oldBlock, new_string: fullNew.slice(0, 1) },
 			{},
 			tool,
 			tui,
@@ -199,7 +199,7 @@ describe("streaming edit preview height (stable, full tail window)", () => {
 		const tool = { mode: "replace" } as unknown as AgentTool;
 		const component = new ToolExecutionComponent(
 			"edit",
-			{ path: bigFile, edits: [{ old_text: bigOld, new_text: bigNew.slice(0, 1) }] },
+			{ path: bigFile, old_string: bigOld, new_string: bigNew.slice(0, 1) },
 			{},
 			tool,
 			uiStub,
@@ -225,7 +225,7 @@ describe("streaming edit preview height (stable, full tail window)", () => {
 		const heights: number[] = [];
 		let maxTrailingBlank = 0;
 		for (const newText of bigPartials) {
-			component.updateArgs({ path: bigFile, edits: [{ old_text: bigOld, new_text: newText }] });
+			component.updateArgs({ path: bigFile, old_string: bigOld, new_string: newText });
 			await component.whenPreviewSettled();
 			const rows = component.render(RENDER_WIDTH_WIDE);
 			heights.push(rows.length);
@@ -284,7 +284,7 @@ describe("streaming edit preview height (stable, full tail window)", () => {
 			const streamingStepCount = streamedReplacements.length;
 			const lifecycleSteps = [
 				...streamedReplacements.map((newText, i) => () => {
-					component.updateArgs({ path: file, edits: [{ old_text: oldBlock, new_text: newText }] });
+					component.updateArgs({ path: file, old_string: oldBlock, new_string: newText });
 					if (i % 4 === 1) {
 						component.setExpanded(true);
 					} else if (i % 4 === 3) {
@@ -367,7 +367,7 @@ describe("streaming edit preview height (stable, full tail window)", () => {
 		const rawLineCounts: number[] = [];
 		for (const newText of partials) {
 			const previews = await EDIT_MODE_STRATEGIES.replace.computeDiffPreview(
-				{ path: file, edits: [{ old_text: oldBlock, new_text: newText }] },
+				{ path: file, old_string: oldBlock, new_string: newText },
 				ctx,
 			);
 			const first = previews?.[0];

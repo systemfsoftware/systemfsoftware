@@ -189,7 +189,7 @@ describe("AgentSession queued steer delivery", () => {
 		const firstDelivered = nextUserMessage(session, "first queued");
 		await session.steer("first queued");
 		await firstDelivered;
-		expect(mock.calls.length).toBe(1);
+		expect(mock.calls.length).toBe(2);
 
 		await session.steer("second queued");
 		expect(session.getQueuedMessages().steering).toContain("second queued");

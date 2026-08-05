@@ -16,7 +16,7 @@ use std::{
 
 use flume::{Receiver, Sender};
 use itertools::Itertools;
-use uucore::error::{UResult, strip_errno};
+use uucore::error::{UResult, USimpleError, strip_errno};
 
 use crate::{
 	GlobalSettings, Line, Output,
@@ -46,7 +46,7 @@ pub fn ext_sort(
 ) -> UResult<()> {
 	let (sorted_sender, sorted_receiver) = flume::bounded(1);
 	let (recycled_sender, recycled_receiver) = flume::bounded(1);
-	thread::spawn({
+	let sorter_handle = thread::spawn({
 		let settings = settings.clone();
 		move || sorter(&recycled_receiver, &sorted_sender, &settings)
 	});
@@ -77,7 +77,7 @@ pub fn ext_sort(
 		}
 	}
 
-	if effective_settings.compress_prog.is_some() {
+	let result = if effective_settings.compress_prog.is_some() {
 		reader_writer::<_, WriteableCompressedTmpFile>(
 			files,
 			&effective_settings,
@@ -95,6 +95,22 @@ pub fn ext_sort(
 			output,
 			tmp_dir,
 		)
+	};
+
+	// Drop our end of the sorted-chunk channel so a still-running sorter (e.g.
+	// after `reader_writer` bailed on an I/O error) unblocks its pending send and
+	// exits, instead of deadlocking the join below.
+	drop(sorted_receiver);
+
+	// Surface a sorter-thread panic (e.g. a comparator or Rayon panic inside
+	// `sort_by`) as an error. `chunks::read` now reports the sorter's
+	// disconnection as end-of-input (issue #6736), so without joining here a
+	// discarded panic would masquerade as a successful short read and let `sort`
+	// exit 0 with truncated or empty output.
+	match sorter_handle.join() {
+		Ok(()) => result,
+		Err(_) => result
+			.and(Err(USimpleError::new(2, "sort: sorter thread terminated unexpectedly".to_string()))),
 	}
 }
 
@@ -293,5 +309,39 @@ fn write_lines<T: Write>(lines: &[Line], writer: &mut T, separator: u8) {
 	for s in lines {
 		writer.write_all(s.line).unwrap();
 		writer.write_all(&[separator]).unwrap();
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use std::io::{Cursor, Read};
+
+	use super::*;
+
+	/// External (multi-chunk) sort must run to completion and emit fully sorted
+	/// output. Regression guard for #6760: `ext_sort` now joins the sorter
+	/// thread after `read_write_loop`. A tiny explicit buffer forces spilling
+	/// to temporary files, so the join runs on the `WroteChunksToFile` path —
+	/// it must surface sorted output rather than deadlock or truncate.
+	#[test]
+	fn ext_sort_spills_to_files_and_sorts() {
+		let input: String = (0..200u32).rev().map(|i| format!("{i:04}\n")).collect();
+
+		let settings =
+			GlobalSettings { buffer_size: 64, buffer_size_is_explicit: true, ..Default::default() };
+
+		let out_dir = tempfile::tempdir().expect("temp dir");
+		let out_path = out_dir.path().join("sorted.txt");
+
+		let mut files =
+			std::iter::once(Ok(Box::new(Cursor::new(input.into_bytes())) as Box<dyn Read + Send>));
+		let output = Output::new(Some(out_path.as_os_str())).expect("open output");
+		let mut tmp_dir = TmpDirWrapper::new(std::env::temp_dir());
+
+		ext_sort(&mut files, &settings, output, &mut tmp_dir).expect("ext_sort succeeds");
+
+		let sorted = std::fs::read_to_string(&out_path).expect("read output");
+		let expected: String = (0..200u32).map(|i| format!("{i:04}\n")).collect();
+		assert_eq!(sorted, expected);
 	}
 }

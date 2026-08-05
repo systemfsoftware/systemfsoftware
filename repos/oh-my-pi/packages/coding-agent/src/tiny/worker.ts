@@ -94,7 +94,7 @@ function createStopOnTextCriteria(
 			this.#text = text;
 		}
 
-		_call(inputIds: number[][]): boolean[] {
+		override _call(inputIds: number[][]): boolean[] {
 			return inputIds.map(ids => {
 				const tail = ids.slice(-STOP_DECODE_WINDOW_TOKENS);
 				const decoded = this.#tokenizer.decode(tail, {

@@ -444,18 +444,18 @@ describe("Tool Results with Images", () => {
 
 	describe("OpenAI Codex Provider", () => {
 		it.skipIf(!openaiCodexToken)(
-			"gpt-5.2-codex - should handle tool result with only image",
+			"gpt-5.5 - should handle tool result with only image",
 			async () => {
-				const llm = getBundledModel("openai-codex", "gpt-5.2-codex");
+				const llm = getBundledModel("openai-codex", "gpt-5.5");
 				await handleToolWithImageResult(llm, { apiKey: openaiCodexToken });
 			},
 			{ retry: 3, timeout: 30000 },
 		);
 
 		it.skipIf(!openaiCodexToken)(
-			"gpt-5.2-codex - should handle tool result with text and image",
+			"gpt-5.5 - should handle tool result with text and image",
 			async () => {
-				const llm = getBundledModel("openai-codex", "gpt-5.2-codex");
+				const llm = getBundledModel("openai-codex", "gpt-5.5");
 				await handleToolWithTextAndImageResult(llm, { apiKey: openaiCodexToken });
 			},
 			{ retry: 3, timeout: 30000 },

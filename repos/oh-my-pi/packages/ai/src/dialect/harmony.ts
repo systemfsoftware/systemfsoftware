@@ -273,8 +273,7 @@ function parseRecipient(header: string): string {
 	return match?.[1] ?? "";
 }
 
-function renderToolCall(call: ToolCall, options: DialectRenderOptions = {}): string {
-	if (options.example) return stringifyJson(call.arguments);
+function renderToolCall(call: ToolCall, _options: DialectRenderOptions = {}): string {
 	return `${START}assistant${CHANNEL}commentary to=${harmonyRecipient(call.name)}${MESSAGE}${stringifyJson(call.arguments)}${CALL}`;
 }
 

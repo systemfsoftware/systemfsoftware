@@ -864,7 +864,7 @@ fn build_pcre_matcher(patterns: &[String], cli: &RgCli) -> Result<PcreMatcher, S
 		.crlf(cli.crlf && !cli.no_crlf && !cli.null_data)
 		.utf(unicode)
 		.ucp(unicode)
-		.jit_if_available(true);
+		.jit_if_available(*crate::PCRE2_JIT_ENABLED);
 	builder
 		.build_many(patterns)
 		.map_err(|error| error.to_string())
@@ -1867,6 +1867,15 @@ mod tests {
 		let (code, stdout, stderr) = run_rg(&["--pcre2", "(?<=foo)bar"], "foobar\nbar\n");
 		assert_eq!(code, 0, "{stderr}");
 		assert_eq!(stdout, "foobar\n");
+	}
+
+	#[test]
+	fn pcre2_compiles_the_multiline_native_grep_crash_pattern() {
+		let pattern = r"^(\s+)- (not_null|unique|accepted_values|relationships|expression_is_true|[a-z_]+):\s*$\n(?!\1    (arguments|config|description|name):)";
+		let (code, stdout, stderr) =
+			run_rg(&["--pcre2", "--multiline", pattern], "  - not_null:\n      severity: warn\n");
+		assert_eq!(code, 0, "{stderr}");
+		assert_eq!(stdout, "  - not_null:\n");
 	}
 
 	#[test]

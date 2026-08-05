@@ -56,6 +56,23 @@ describe("OPTIONAL_VALUE_FLAGS table is honored by args.ts parseArgs", () => {
 	}
 });
 
+describe("--session-dir", () => {
+	it("uses PI_CODING_AGENT_SESSION_DIR unless the CLI flag overrides it", () => {
+		const previous = Bun.env.PI_CODING_AGENT_SESSION_DIR;
+		Bun.env.PI_CODING_AGENT_SESSION_DIR = "/env/sessions";
+		try {
+			expect(parseArgs([]).sessionDir).toBe("/env/sessions");
+			expect(parseArgs(["--session-dir", "/cli/sessions"]).sessionDir).toBe("/cli/sessions");
+		} finally {
+			if (previous === undefined) {
+				delete Bun.env.PI_CODING_AGENT_SESSION_DIR;
+			} else {
+				Bun.env.PI_CODING_AGENT_SESSION_DIR = previous;
+			}
+		}
+	});
+});
+
 describe("--tools legacy aliases", () => {
 	it("maps search and find to grep and glob", () => {
 		const result = parseArgs(["--tools", "search,find,grep"]);
@@ -128,5 +145,19 @@ describe("parseArgs @file parsing with quotes", () => {
 	it("parses single-quoted @'file' arguments", () => {
 		const result = parseArgs(["@'foo bar.png'"]);
 		expect(result.fileArgs).toEqual(["foo bar.png"]);
+	});
+});
+
+describe("foreign session import flags", () => {
+	it("parses each source flag without consuming the initial message", () => {
+		const claude = parseArgs(["--from-claude", "continue this session"]);
+		const codex = parseArgs(["--from-codex", "continue this session"]);
+
+		expect(claude.fromClaude).toBe(true);
+		expect(claude.messages).toEqual(["continue this session"]);
+		expect(claude.unrecognizedFlags).toEqual([]);
+		expect(codex.fromCodex).toBe(true);
+		expect(codex.messages).toEqual(["continue this session"]);
+		expect(codex.unrecognizedFlags).toEqual([]);
 	});
 });

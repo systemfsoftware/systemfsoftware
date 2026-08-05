@@ -4,6 +4,10 @@
  * Custom tools are TypeScript modules that define additional tools for the agent.
  * They can provide custom rendering for tool calls and results in the TUI.
  */
+
+import type { type as ArkType } from "@oh-my-pi/omptype";
+import type * as TypeBox from "@oh-my-pi/omptype/typebox";
+import type * as zod from "@oh-my-pi/omptype/zod";
 import type {
 	AgentToolResult,
 	AgentToolUpdateCallback,
@@ -16,8 +20,6 @@ import type { CompactionResult } from "@oh-my-pi/pi-agent-core/compaction";
 import type { FetchImpl, Model, Static, TSchema } from "@oh-my-pi/pi-ai";
 import type { Component } from "@oh-my-pi/pi-tui";
 import type { logger as PiLogger } from "@oh-my-pi/pi-utils";
-import type { type as ArkType } from "arktype";
-import type * as zod from "zod/v4";
 import type { Rule } from "../../capability/rule";
 import type { ModelRegistry } from "../../config/model-registry";
 import type { Settings } from "../../config/settings";
@@ -29,7 +31,6 @@ import type { Theme } from "../../modes/theme/theme";
 import type { ReadonlySessionManager } from "../../session/session-manager";
 import type { TodoItem } from "../../tools/todo";
 import type { RecoveredRetryError } from "../shared-events";
-import type * as TypeBox from "../typebox";
 
 /** Alias for clarity */
 export type CustomToolUIContext = HookUIContext;
@@ -69,7 +70,7 @@ export interface CustomToolAPI {
 	typebox: typeof TypeBox;
 	/** Injected arktype module for arktype-authored custom tools. */
 	arktype: typeof ArkType;
-	/** Injected zod/v4 module for canonical parameter schemas. */
+	/** Injected omptype-backed zod facade for parameter schemas. */
 	zod: typeof zod;
 	/** Injected pi-coding-agent exports */
 	pi: typeof PiCodingAgent;

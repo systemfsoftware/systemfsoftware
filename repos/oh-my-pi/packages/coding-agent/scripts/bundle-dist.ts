@@ -9,6 +9,7 @@ const packageDir = path.join(import.meta.dir, "..");
 const outDir = path.join(packageDir, "dist");
 const cliPath = path.join(outDir, "cli.js");
 const shebang = "#!/usr/bin/env bun\n";
+const legacyHtmlExportAssetPattern = /^(?:template-[^.]+\.(?:css|html|js)|tool-views\.generated-[^.]+\.js)$/;
 
 // Native / optional / platform-specific deps are loaded from installed files.
 // `omp-legacy-pi-modules` exists only in compiled binaries via the build plugin;
@@ -64,8 +65,8 @@ function formatBytes(bytes: number): string {
 }
 
 async function cleanBundleOutputs(): Promise<void> {
-	// dist/ is shared with the dev binary (dist/omp); only remove this
-	// script's own outputs (entry bundle + copied native assets).
+	// dist/ is shared with the dev binary (dist/omp); only remove assets
+	// emitted by this script.
 	let entries: string[];
 	try {
 		entries = await fs.readdir(outDir);
@@ -75,7 +76,14 @@ async function cleanBundleOutputs(): Promise<void> {
 	}
 	await Promise.all(
 		entries
-			.filter(entry => entry === "cli.js" || entry.endsWith(".node") || entry.endsWith(".js.map"))
+			.filter(
+				entry =>
+					entry === "cli.js" ||
+					entry.endsWith(".node") ||
+					entry.endsWith(".js.map") ||
+					(entry.startsWith("CHANGELOG-") && entry.endsWith(".md")) ||
+					legacyHtmlExportAssetPattern.test(entry),
+			)
 			.map(entry => fs.rm(path.join(outDir, entry), { force: true })),
 	);
 }

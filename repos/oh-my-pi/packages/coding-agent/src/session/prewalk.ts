@@ -1,7 +1,6 @@
 import type { Agent, AgentMessage, AgentToolResult, AgentTurnEndContext } from "@oh-my-pi/pi-agent-core";
 import { invalidateMessageCache } from "@oh-my-pi/pi-agent-core/compaction";
-import type { Model } from "@oh-my-pi/pi-ai";
-import { modelsAreEqual } from "@oh-my-pi/pi-catalog/models";
+import type { Model, ToolResultMessage } from "@oh-my-pi/pi-ai";
 import { prompt } from "@oh-my-pi/pi-utils";
 import type { LocalProtocolOptions } from "../internal-urls";
 import { resolveApprovedPlan } from "../plan-mode/approved-plan";
@@ -11,7 +10,7 @@ import planYoloHandoffPrompt from "../prompts/system/plan-yolo-handoff.md" with 
 import prewalkChecklistPrompt from "../prompts/system/prewalk-checklist.md" with { type: "text" };
 import prewalkContinuePrompt from "../prompts/system/prewalk-continue.md" with { type: "text" };
 import prewalkPlanPrompt from "../prompts/system/prewalk-plan.md" with { type: "text" };
-import type { ConfiguredThinkingLevel } from "../thinking";
+import { type ConfiguredThinkingLevel, prewalkWouldBeNoop } from "../thinking";
 import type { PlanProposalHandler } from "../tools/resolve";
 import { ToolError } from "../tools/tool-errors";
 import type { PlanYolo, Prewalk } from "./agent-session-types";
@@ -26,11 +25,34 @@ const PREWALK_ACTION_TOOLS: Record<string, true> = {
 };
 const PLAN_YOLO_HANDOFF_MESSAGE_TYPE = "plan-yolo-handoff";
 
+/**
+ * Whether a completed tool result is the first workspace-mutating action that
+ * arms the prewalk hand-off. A direct `edit`/`write` call always counts; a
+ * `write` that dispatched an `xd://` device (e.g. `lsp`, `ast_edit`, `debug`)
+ * counts only when the wrapped tool resolved to a `write`/`exec` approval tier.
+ * Read-only device calls — LSP navigation, `debug` inspection, `ast_edit` on
+ * internal URLs, help lookups — leave the tier `read` (or absent) and must not
+ * switch the model mid-investigation (issue #7312).
+ */
+function isPrewalkImplementationAction(result: ToolResultMessage): boolean {
+	if (!PREWALK_ACTION_TOOLS[result.toolName]) return false;
+	const details = result.details;
+	// A direct filesystem edit/write carries no `xd://` dispatch metadata.
+	if (!details || typeof details !== "object" || !("xdev" in details) || !details.xdev) return true;
+	const xdev = details.xdev;
+	// Device dispatch: switch only on a genuine mutation tier. An absent tier
+	// (help lookup, unresolved approval) declines the switch, matching the
+	// reporter's "stay on the large model a couple turns longer" preference.
+	if (typeof xdev !== "object" || !("tier" in xdev)) return false;
+	return xdev.tier === "write" || xdev.tier === "exec";
+}
+
 /** Capabilities the prewalk coordinator borrows from its owning session. */
 export interface PrewalkCoordinatorHost {
 	agent: Agent;
 	sessionManager: SessionManager;
 	model(): Model | undefined;
+	configuredThinkingLevel(): ConfiguredThinkingLevel | undefined;
 	emitNotice(level: "info" | "warning" | "error", message: string, source?: string): void;
 	setModelTemporary(
 		model: Model,
@@ -100,7 +122,7 @@ export class PrewalkCoordinator {
 
 		const todoGateOpen = this.#todoSeen || !this.#host.getActiveToolNames().includes("todo");
 		const action = todoGateOpen
-			? context.toolResults.find(result => PREWALK_ACTION_TOOLS[result.toolName])
+			? context.toolResults.find(result => isPrewalkImplementationAction(result))
 			: undefined;
 		if (!action) {
 			if (!this.#planInjected) {
@@ -126,8 +148,13 @@ export class PrewalkCoordinator {
 		this.#scrubPlanNudge(liveMessages);
 		const target = prewalk.target;
 		const currentModel = this.#host.model();
-		if (currentModel && modelsAreEqual(currentModel, target)) {
+		if (prewalkWouldBeNoop(currentModel, this.#host.configuredThinkingLevel(), target, prewalk.thinkingLevel)) {
 			this.#prewalk = undefined;
+			this.#host.emitNotice(
+				"info",
+				`Prewalk: target ${target.provider}/${target.id} already matches the active model and thinking level; nothing to switch.`,
+				"prewalk",
+			);
 			return;
 		}
 		await this.#host.setModelTemporary(target, prewalk.thinkingLevel, { ephemeral: true });

@@ -309,6 +309,7 @@ export class ChildProcess<In extends InMask = InMask> {
 
 	attachTimeout(ms: number): void {
 		if (ms <= 0 || this.proc.killed) return;
+		this.#exited.catch(() => {});
 		Promise.race([
 			Bun.sleep(ms).then(() => true),
 			this.proc.exited.then(

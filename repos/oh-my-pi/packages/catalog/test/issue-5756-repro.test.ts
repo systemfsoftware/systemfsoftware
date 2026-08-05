@@ -2,7 +2,7 @@
  * Issue #5756 — `moonshot/kimi-k3 is incorrectly shown as free`
  *
  * The native Moonshot `kimi-k3` entry is dynamically discovered but has no
- * bundled/models.dev reference, so `mapWithBundledReference` produced the
+ * bundled/stencil.so reference, so `mapWithBundledReference` produced the
  * generic dynamic defaults: zero token cost, null limits, text-only input,
  * and `reasoning: false`. `/models` then labeled the paid model "Free".
  *

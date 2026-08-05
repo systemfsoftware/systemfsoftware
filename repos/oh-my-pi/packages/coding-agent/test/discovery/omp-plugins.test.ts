@@ -31,7 +31,10 @@ import "@oh-my-pi/pi-coding-agent/discovery";
 import {
 	clearOmpExtensionCliRoots,
 	injectOmpExtensionCliRoots,
+	listOmpExtensionRoots,
+	withOmpExtensionRootScope,
 } from "@oh-my-pi/pi-coding-agent/discovery/omp-extension-roots";
+import { discoverExtensionPaths } from "@oh-my-pi/pi-coding-agent/extensibility/extensions/loader";
 import { getConfigRootDir, removeSyncWithRetries, setAgentDir } from "@oh-my-pi/pi-utils";
 
 const PROVIDER_ID = "omp-plugins";
@@ -62,21 +65,22 @@ async function loadFromPlugin<T>(capabilityId: string, ctx: LoadContext): Promis
 	return result.items as T[];
 }
 
-function buildExtensionPackage(packageDir: string): void {
+function buildExtensionPackage(packageDir: string, skillName = "my-skill"): void {
 	writeFile(
 		path.join(packageDir, "package.json"),
 		JSON.stringify({ name: path.basename(packageDir), omp: { extensions: ["./src/main.ts"] } }),
 	);
 	writeFile(path.join(packageDir, "src", "main.ts"), "export default function (_pi) {}\n");
 	writeFile(
-		path.join(packageDir, "skills", "my-skill", "SKILL.md"),
-		"---\nname: my-skill\ndescription: Hello from extension skill\n---\nbody\n",
+		path.join(packageDir, "skills", skillName, "SKILL.md"),
+		`---\nname: ${skillName}\ndescription: Hello from extension skill\n---\nbody\n`,
 	);
 	writeFile(path.join(packageDir, "commands", "greet.md"), "---\ndescription: greet user\n---\nHello {{name}}\n");
 	writeFile(path.join(packageDir, "rules", "style.md"), "---\ndescription: style rule\n---\nUse tabs.\n");
 	writeFile(path.join(packageDir, "prompts", "review.md"), "Review this code.\n");
 	writeFile(path.join(packageDir, "hooks", "pre", "bash.sh"), "#!/bin/sh\necho pre\n");
 	writeFile(path.join(packageDir, "hooks", "post", "edit.sh"), "#!/bin/sh\necho post\n");
+	writeFile(path.join(packageDir, "hooks", "pre", "extension.ts"), "export default function (_pi) {}\n");
 	writeFile(path.join(packageDir, "tools", "wcount.sh"), "#!/bin/sh\nwc -w\n");
 	writeFile(path.join(packageDir, "tools", "deep-tool", "index.ts"), "export default { name: 'deep-tool' };\n");
 	writeFile(
@@ -153,6 +157,100 @@ test("`--extension` CLI injection is wired through the same provider", async () 
 	const tools = await loadFromPlugin<{ name: string }>(toolCapability.id, ctx());
 	expect(skills.map(s => s.name)).toContain("my-skill");
 	expect(tools.map(t => t.name)).toEqual(expect.arrayContaining(["wcount", "deep-tool"]));
+});
+
+test("relative CLI roots rebind when resume switches projects", async () => {
+	const relativeRoot = "relative-extension";
+	const launchRoot = path.join(project, relativeRoot);
+	const destination = path.join(tempDir, "destination");
+	const destinationRoot = path.join(destination, relativeRoot);
+	buildExtensionPackage(launchRoot, "launch-skill");
+	buildExtensionPackage(destinationRoot, "destination-skill");
+
+	injectOmpExtensionCliRoots([`./${relativeRoot}`], home, project);
+
+	const destinationContext = { cwd: destination, home, repoRoot: destination };
+	const roots = await listOmpExtensionRoots(destinationContext);
+	const skills = await loadFromPlugin<{ name: string }>(skillCapability.id, destinationContext);
+	expect(roots.map(root => root.path)).toEqual([destinationRoot]);
+	expect(skills.map(skill => skill.name)).toContain("destination-skill");
+	expect(skills.map(skill => skill.name)).not.toContain("launch-skill");
+});
+
+test("explicit-only CLI roots replace stale state and exclude every ambient package source", async () => {
+	const stale = path.join(tempDir, "stale-extension");
+	const projectExt = path.join(tempDir, "project-extension");
+	const userExt = path.join(tempDir, "user-extension");
+	const installed = path.join(home, ".omp", "plugins", "node_modules", "installed-extension");
+	buildExtensionPackage(stale, "stale-skill");
+	buildExtensionPackage(projectExt, "project-skill");
+	buildExtensionPackage(userExt, "user-skill");
+	buildExtensionPackage(installed, "installed-skill");
+	writeFile(path.join(project, ".omp", "settings.json"), JSON.stringify({ extensions: [projectExt] }));
+	writeFile(path.join(home, ".omp", "agent", "settings.json"), JSON.stringify({ extensions: [userExt] }));
+	writeFile(
+		path.join(home, ".omp", "plugins", "package.json"),
+		JSON.stringify({ name: "omp-plugins", dependencies: { "installed-extension": "1.0.0" } }),
+	);
+
+	injectOmpExtensionCliRoots([stale], home, project);
+	injectOmpExtensionCliRoots([ext], home, project, { mode: "explicit-only", replace: true });
+
+	const roots = await listOmpExtensionRoots(ctx());
+	const skills = await loadFromPlugin<{ name: string }>(skillCapability.id, ctx());
+	const extensionPaths = await discoverExtensionPaths([ext], project, undefined, { ambient: false });
+
+	expect(roots).toHaveLength(1);
+	expect(path.basename(roots[0].path)).toBe("my-extension");
+	expect(skills.map(skill => skill.name)).toContain("my-skill");
+	expect(skills.map(skill => skill.name)).not.toEqual(
+		expect.arrayContaining(["stale-skill", "project-skill", "user-skill", "installed-skill"]),
+	);
+	expect(extensionPaths).toContain(path.join(ext, "hooks", "pre", "extension.ts"));
+	expect(
+		extensionPaths.some(candidate =>
+			[stale, projectExt, userExt, installed].some(ambientRoot => candidate.startsWith(ambientRoot)),
+		),
+	).toBe(false);
+});
+
+test("invocation scopes isolate concurrent SDK roots and merge ambient roots only when requested", async () => {
+	const otherExplicit = path.join(tempDir, "other-explicit-extension");
+	const projectExt = path.join(tempDir, "project-extension");
+	const installed = path.join(home, ".omp", "plugins", "node_modules", "installed-extension");
+	const staleCli = path.join(tempDir, "stale-cli-extension");
+	buildExtensionPackage(otherExplicit, "other-explicit-skill");
+	buildExtensionPackage(projectExt, "project-skill");
+	buildExtensionPackage(installed, "installed-skill");
+	buildExtensionPackage(staleCli, "stale-cli-skill");
+	writeFile(path.join(project, ".omp", "settings.json"), JSON.stringify({ extensions: [projectExt] }));
+	writeFile(
+		path.join(home, ".omp", "plugins", "package.json"),
+		JSON.stringify({ name: "omp-plugins", dependencies: { "installed-extension": "1.0.0" } }),
+	);
+	injectOmpExtensionCliRoots([staleCli], home, project);
+
+	const firstEntered = Promise.withResolvers<void>();
+	const secondEntered = Promise.withResolvers<void>();
+	const [firstRoots, secondRoots] = await Promise.all([
+		withOmpExtensionRootScope([ext], "explicit-only", async () => {
+			firstEntered.resolve();
+			await secondEntered.promise;
+			return listOmpExtensionRoots(ctx());
+		}),
+		withOmpExtensionRootScope([otherExplicit], "explicit-only", async () => {
+			secondEntered.resolve();
+			await firstEntered.promise;
+			return listOmpExtensionRoots(ctx());
+		}),
+	]);
+
+	expect(firstRoots.map(root => root.path)).toEqual([ext]);
+	expect(secondRoots.map(root => root.path)).toEqual([otherExplicit]);
+
+	const mergedRoots = await withOmpExtensionRootScope([ext], "merge", () => listOmpExtensionRoots(ctx()));
+	expect(mergedRoots.map(root => root.path)).toEqual(expect.arrayContaining([ext, projectExt, installed]));
+	expect(mergedRoots.map(root => root.path)).not.toContain(staleCli);
 });
 
 test("file-extension entrypoints contribute zero sub-surface (the file has no siblings to scan)", async () => {

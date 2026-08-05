@@ -164,7 +164,7 @@ export class StreamingEditGuard {
 		const toolCall = messageContent[contentIndex] as ToolCall;
 		if (toolCall.name !== "edit") return undefined;
 		const args = toolCall.arguments;
-		if (!args || typeof args !== "object" || Array.isArray(args) || "old_text" in args || "new_text" in args) {
+		if (!args || typeof args !== "object" || Array.isArray(args) || "old_string" in args || "new_string" in args) {
 			return undefined;
 		}
 		const filePath = typeof args.path === "string" ? args.path : undefined;

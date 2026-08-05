@@ -322,6 +322,7 @@ function sourcesFromTextPayload(text: string | undefined): SearchSource[] {
 }
 export interface PerplexitySearchParams {
 	signal?: AbortSignal;
+	timeoutMs?: number;
 	query: string;
 	system_prompt?: string;
 	/** Pre-parsed view of `query` from the search pipeline; parsed locally when absent. */
@@ -498,10 +499,11 @@ async function callPerplexityApi(
 	request: PerplexityRequest,
 	fetchImpl: FetchImpl | undefined,
 	signal?: AbortSignal,
+	timeoutMs?: number,
 ): Promise<SearchResponse> {
 	const metadata: PerplexityApiStreamMetadata = {};
 	const context = buildPerplexityContext(request);
-	const requestSignal = withHardTimeout(signal);
+	const requestSignal = withHardTimeout(signal, timeoutMs);
 	const onSseEvent = (event: { data: string }): void => {
 		collectPerplexityMetadata(metadata, event.data);
 	};
@@ -690,7 +692,7 @@ async function callPerplexityAsk(
 			query_str: effectiveQuery,
 			params: requestParams,
 		}),
-		signal: withHardTimeout(params.signal),
+		signal: withHardTimeout(params.signal, params.timeoutMs),
 	};
 
 	// The consumer ask endpoint intermittently drops the socket before sending an
@@ -902,7 +904,7 @@ export async function searchPerplexity(params: PerplexitySearchParams): Promise<
 	for (const auth of authMethods) {
 		if (auth.type === "api_key") {
 			try {
-				const result = await callPerplexityApi(auth, request, params.fetch, params.signal);
+				const result = await callPerplexityApi(auth, request, params.fetch, params.signal, params.timeoutMs);
 				result.authMode = "api_key";
 				return applySourceLimit(result, params.num_results);
 			} catch (error) {
@@ -971,13 +973,14 @@ export class PerplexityProvider extends SearchProvider {
 	 * configured provider keeps priority over the anonymous/OpenRouter
 	 * fallbacks.
 	 */
-	isExplicitlyAvailable(_authStorage: AuthStorage): boolean {
+	override isExplicitlyAvailable(_authStorage: AuthStorage): boolean {
 		return true;
 	}
 
 	search(params: SearchParams): Promise<SearchResponse> {
 		return searchPerplexity({
 			signal: params.signal,
+			timeoutMs: params.timeoutMs,
 			query: params.query,
 			parsedQuery: params.parsedQuery,
 			temperature: params.temperature,

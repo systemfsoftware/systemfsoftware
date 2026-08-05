@@ -29,6 +29,14 @@ export interface AsyncResultEntry {
 	result: string;
 	job: AsyncJob | undefined;
 	durationMs: number | undefined;
+	/**
+	 * Owning session's async-delivery generation at enqueue time. A session
+	 * transition (`/new`, switch, handoff) bumps the generation, so an entry
+	 * whose generation no longer matches belongs to a replaced transcript and
+	 * is dropped at flush — even after its job id has been reused, which clears
+	 * the manager's per-id suppression marker.
+	 */
+	epoch: number;
 }
 
 type AsyncResultJobDetails = {

@@ -302,6 +302,17 @@ export async function loadSkills(options: LoadSkillsOptions = {}): Promise<LoadS
 
 		const existing = skillMap.get(skill.name);
 		if (existing) {
+			// A skill name claimed by a DEFAULT-path provider (e.g.
+			// ~/.claude/skills/<name>) yields to the explicitly configured
+			// skills.customDirectories entry — the user's custom dir is the
+			// higher-priority source (issue #7190). Only same-source custom
+			// duplicates keep first-wins.
+			const isCustomExisting = existing.source.startsWith("custom:");
+			if (!isCustomExisting) {
+				skillMap.set(skill.name, skill);
+				realPathSet.add(resolvedPath);
+				continue;
+			}
 			collisionWarnings.push({
 				skillPath: skill.filePath,
 				message: `name collision: "${skill.name}" already loaded from ${existing.filePath}, skipping this one`,

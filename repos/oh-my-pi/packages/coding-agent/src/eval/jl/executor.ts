@@ -1,7 +1,12 @@
 import * as path from "node:path";
 import { getProjectDir, logger } from "@oh-my-pi/pi-utils";
 import type { ToolSession } from "../../tools";
-import { attachSessionOwner, createCancelledKernelResult, executeWithKernelBase } from "../executor-base";
+import {
+	attachSessionOwner,
+	createCancelledKernelResult,
+	executeWithKernelBase,
+	resolveOwnerScopedSessionKey,
+} from "../executor-base";
 import { ensurePyToolBridge, type PyToolBridgeInfo } from "../py/tool-bridge";
 import type { EvalDisplayOutput, EvalStatusEvent } from "../types";
 import {
@@ -451,7 +456,13 @@ async function ensureToolBridge(options: JuliaExecutorOptions): Promise<void> {
 
 async function executeOnSession(code: string, cwd: string, options: JuliaExecutorOptions): Promise<JuliaResult> {
 	const sessionId = options.sessionId ?? `session:${cwd}`;
-	const sessionKey = buildSessionKey(sessionId, cwd, options.interpreter);
+	const sessionKey = resolveOwnerScopedSessionKey({
+		baseKey: buildSessionKey(sessionId, cwd, options.interpreter),
+		ownerId: options.kernelOwnerId,
+		reset: options.reset === true,
+		hasSession: key => sessions.has(key) || startingSessions.has(key),
+		getOwners: key => sessions.get(key) ?? startingSessions.get(key),
+	});
 	if (options.bridge && !options.bridgeSessionId) {
 		options.bridgeSessionId = sessionId;
 	}

@@ -38,6 +38,7 @@ export interface ZaiSearchParams {
 	query: string;
 	num_results?: number;
 	signal?: AbortSignal;
+	timeoutMs?: number;
 	fetch?: FetchImpl;
 	authStorage: AuthStorage;
 	sessionId?: string;
@@ -121,6 +122,7 @@ async function postZaiMcp(
 	signal: AbortSignal | undefined,
 	fetchImpl: FetchImpl,
 	expectResponse: boolean,
+	timeoutMs?: number,
 ): Promise<ZaiMcpPostResult> {
 	const headers: Record<string, string> = {
 		Authorization: `Bearer ${apiKey}`,
@@ -144,7 +146,7 @@ async function postZaiMcp(
 		method: "POST",
 		headers,
 		body: JSON.stringify(body),
-		signal: withHardTimeout(signal),
+		signal: withHardTimeout(signal, timeoutMs),
 	});
 
 	if (!response.ok) {
@@ -211,6 +213,7 @@ async function callZaiTool(
 	args: Record<string, unknown>,
 	signal: AbortSignal | undefined,
 	fetchImpl: FetchImpl,
+	timeoutMs?: number,
 ): Promise<unknown> {
 	const initialized = await postZaiMcp(
 		apiKey,
@@ -224,12 +227,22 @@ async function callZaiTool(
 		signal,
 		fetchImpl,
 		true,
+		timeoutMs,
 	);
 	if (initialized.parsed !== undefined) {
 		readJsonRpcPayload(initialized.parsed);
 	}
 
-	await postZaiMcp(apiKey, "notifications/initialized", {}, initialized.sessionId, signal, fetchImpl, false);
+	await postZaiMcp(
+		apiKey,
+		"notifications/initialized",
+		{},
+		initialized.sessionId,
+		signal,
+		fetchImpl,
+		false,
+		timeoutMs,
+	);
 
 	const toolCall = await postZaiMcp(
 		apiKey,
@@ -242,6 +255,7 @@ async function callZaiTool(
 		signal,
 		fetchImpl,
 		true,
+		timeoutMs,
 	);
 	const payload = readJsonRpcPayload(toolCall.parsed);
 	const resultRecord = isRecord(payload.result) ? payload.result : null;
@@ -279,7 +293,7 @@ async function callZaiSearch(apiKey: string, params: ZaiSearchParams): Promise<u
 	let lastError: unknown;
 	for (let i = 0; i < attempts.length; i++) {
 		try {
-			return await callZaiTool(apiKey, attempts[i], params.signal, fetchImpl);
+			return await callZaiTool(apiKey, attempts[i], params.signal, fetchImpl, params.timeoutMs);
 		} catch (error) {
 			lastError = error;
 			const isLastAttempt = i === attempts.length - 1;
@@ -429,6 +443,7 @@ export class ZaiProvider extends SearchProvider {
 			query: parsed.hasDirectives ? formatQuery(parsed, ZAI_QUERY_SYNTAX) : params.query,
 			num_results: params.numSearchResults ?? params.limit,
 			signal: params.signal,
+			timeoutMs: params.timeoutMs,
 			authStorage: params.authStorage,
 			sessionId: params.sessionId,
 			fetch: fetchOverride,

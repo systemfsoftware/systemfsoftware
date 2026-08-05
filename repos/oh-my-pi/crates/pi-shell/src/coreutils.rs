@@ -7,9 +7,11 @@
 //! thread-local context isolated across concurrent pipeline stages and avoids
 //! blocking the async runtime on synchronous utility I/O.
 
+#[cfg(unix)]
+use std::ffi::OsStr;
 use std::{
 	collections::HashMap,
-	ffi::{OsStr, OsString},
+	ffi::OsString,
 	io::{self, Read, Write},
 	panic::catch_unwind,
 	sync::{
@@ -106,6 +108,7 @@ async fn run_uutil<SE: ShellExtensions>(
 
 	// brush passes the command name as the first `CommandArg`, which is exactly
 	// the argv[0] uutils' argument parsing expects.
+	#[cfg_attr(not(unix), allow(unused_mut))]
 	let mut argv: Vec<OsString> = args
 		.iter()
 		.map(|arg| OsString::from(arg.to_string()))

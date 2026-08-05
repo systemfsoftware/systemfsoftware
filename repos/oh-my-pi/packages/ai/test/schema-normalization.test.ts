@@ -203,7 +203,58 @@ describe("upgradeJsonSchemaTo202012", () => {
 // ---------------------------------------------------------------------------
 
 describe("normalizeSchemaForGoogle", () => {
-	it("sets object type when converting an object const to an enum entry", () => {
+	it("preserves string enums and removes enums Google cannot represent", () => {
+		const sanitized = normalizeSchemaForGoogle({
+			type: "object",
+			properties: {
+				valid: { type: "string", enum: ["draft", "published"] },
+				numeric: { type: "number", enum: [1, 2] },
+				mixed: { enum: ["draft", 1] },
+			},
+		}) as { properties: Record<string, unknown> };
+
+		expect(sanitized.properties).toEqual({
+			valid: { type: "string", enum: ["draft", "published"] },
+			numeric: { type: "number" },
+			mixed: {},
+		});
+	});
+
+	it("preserves enum keys inside object-valued defaults", () => {
+		expect(
+			normalizeSchemaForGoogle({
+				type: "object",
+				default: { enum: [1], value: 2 },
+			}),
+		).toEqual({
+			type: "object",
+			default: { enum: [1], value: 2 },
+			properties: {},
+		});
+	});
+
+	it("keeps CCA incompatibility passes out of literal defaults", () => {
+		const literal = {
+			nullable: true,
+			allOf: [{ type: "object" }],
+			oneOf: [{ type: "string" }, { type: "number" }],
+		};
+		expect(
+			normalizeSchemaForCCA({
+				type: "object",
+				properties: {
+					value: { oneOf: [{ type: "string" }, { type: "string" }] },
+				},
+				default: literal,
+			}),
+		).toEqual({
+			type: "object",
+			properties: { value: { type: "string" } },
+			default: literal,
+		});
+	});
+
+	it("sets object type while removing an object-valued enum converted from const", () => {
 		const sanitized = normalizeSchemaForGoogle({
 			const: { a: 1 },
 		});
@@ -211,11 +262,10 @@ describe("normalizeSchemaForGoogle", () => {
 		expect(sanitized).toEqual({
 			type: "object",
 			properties: {},
-			enum: [{ a: 1 }],
 		});
 	});
 
-	it("deduplicates a deep-equal object const against an existing enum entry", () => {
+	it("removes an object-valued enum after deduplicating a deep-equal const", () => {
 		const sanitized = normalizeSchemaForGoogle({
 			type: "object",
 			enum: [{ a: 1 }],
@@ -225,11 +275,10 @@ describe("normalizeSchemaForGoogle", () => {
 		expect(sanitized).toEqual({
 			type: "object",
 			properties: {},
-			enum: [{ a: 1 }],
 		});
 	});
 
-	it("does not stamp a wrong scalar type when const variants span multiple primitive types", () => {
+	it("removes an enum when const variants span multiple primitive types", () => {
 		const sanitized = normalizeSchemaForGoogle({
 			anyOf: [
 				{ const: "A", type: "string" },
@@ -238,18 +287,18 @@ describe("normalizeSchemaForGoogle", () => {
 			],
 		}) as Record<string, unknown>;
 
-		expect(sanitized.enum).toEqual(["A", 1, true]);
+		expect(sanitized.enum).toBeUndefined();
 		expect(sanitized.type).toBeUndefined();
 	});
 
-	it("collapses inferred null type to nullable when const is null", () => {
+	it("collapses inferred null type to nullable while removing its enum", () => {
 		// After python-genai parity (handle_null_fields), bare `type: 'null'` is
 		// folded into `nullable: true` so the schema is OpenAPI-compatible.
 		const sanitized = normalizeSchemaForGoogle({ const: null }) as Record<string, unknown>;
 
 		expect(sanitized.type).toBeUndefined();
 		expect(sanitized.nullable).toBe(true);
-		expect(sanitized.enum).toEqual([null]);
+		expect(sanitized.enum).toBeUndefined();
 	});
 
 	it("coerces a boolean subschema literally named additionalProperties inside properties", () => {
@@ -1275,6 +1324,21 @@ describe("normalizeSchemaForMoonshot", () => {
 		expect(props.extra.additionalProperties).toBe(true);
 		expect(props.skip.anyOf).toEqual([{ type: "number" }, { type: "null" }]);
 		expect(props.limit).toEqual({ type: "integer", default: 10 });
+	});
+
+	it("normalizes schema-valued additionalProperties without walking literal payload objects", () => {
+		const literal = { oneOf: [{ const: "literal-a" }, { const: "literal-b" }] };
+		const normalized = normalizeSchemaForMoonshot({
+			type: "object",
+			additionalProperties: { oneOf: [{ const: 1 }, { const: 2 }] },
+			default: literal,
+		});
+
+		expect(normalized).toEqual({
+			type: "object",
+			additionalProperties: { type: "number", enum: [1, 2] },
+			default: literal,
+		});
 	});
 
 	it("coerces boolean subschemas to MFJS object forms without changing boolean keywords", () => {

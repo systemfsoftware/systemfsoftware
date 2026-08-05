@@ -179,7 +179,7 @@ mod tests {
 	use super::*;
 
 	fn parse(mode: &str, current_umask: u32) -> u32 {
-		parse_symbolic_umask(mode, current_umask).unwrap() as u32
+		u32::from(parse_symbolic_umask(mode, current_umask).unwrap())
 	}
 
 	#[test]

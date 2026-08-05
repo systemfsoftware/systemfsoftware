@@ -14,6 +14,7 @@ import {
 	type AuthCredential,
 	type AuthCredentialSnapshotEntry,
 	type AuthCredentialStore,
+	type DisabledCredentialSummary,
 	type OAuthCredential,
 	REMOTE_REFRESH_SENTINEL,
 	type StoredAuthCredential,
@@ -252,6 +253,10 @@ export class RemoteAuthCredentialStore implements AuthCredentialStore {
 	#usageInflight?: Promise<UsageReport[] | null>;
 	#credentialBlockReconcileAfter: Map<string, number> = new Map();
 	#usageCacheEpoch = 0;
+	/** Per-snapshot lookup of oauth credentials by provider; rebuilt when `#snapshot` is replaced. */
+	#usageFilterLookup?: { snapshot: SnapshotResponse; byProvider: Map<Provider, OAuthCredential[]> };
+	/** Memoized `#filterUsageReports` output, keyed on (input identity, lookup identity). */
+	#usageFilterResult?: { input: UsageReport[]; byProvider: Map<Provider, OAuthCredential[]>; output: UsageReport[] };
 	#closed = false;
 	/**
 	 * `true` once the SSE consumer received its first frame and hasn't dropped
@@ -471,6 +476,11 @@ export class RemoteAuthCredentialStore implements AuthCredentialStore {
 		return out;
 	}
 
+	/** Broker-backed disabled tombstones; empty against brokers predating the endpoint. */
+	listDisabledCredentials(provider?: string, signal?: AbortSignal): Promise<DisabledCredentialSummary[]> {
+		return this.#client.listDisabledCredentials(provider, signal);
+	}
+
 	getCredentialBlock(credentialId: number, providerKey: string, blockScope: string): number | undefined {
 		const nowMs = Date.now();
 		this.cleanExpiredCredentialBlocks(nowMs);
@@ -531,6 +541,12 @@ export class RemoteAuthCredentialStore implements AuthCredentialStore {
 					error: String(error),
 				});
 			});
+	}
+
+	deleteCredentialBlock(_credentialId: number, _providerKey: string, _blockScope: string): void {
+		// The broker protocol only supports deleting every block for a credential.
+		// Keep scoped blocks until expiry rather than risk deleting unrelated or
+		// newer broker state through that broader operation.
 	}
 
 	deleteCredentialBlocks(credentialId: number): void {
@@ -950,18 +966,39 @@ export class RemoteAuthCredentialStore implements AuthCredentialStore {
 		return overlay ?? matched;
 	}
 
+	/**
+	 * Hot path — called per `getUsageReport()`/`fetchUsageReports()` (status-line
+	 * refresh cadence). The oauth-credential lookup is memoized on `#snapshot`
+	 * identity (every update site replaces the reference), and the filtered
+	 * output on (reports identity, lookup identity) — `#loadUsageReports`
+	 * serves the same array for 15s, so steady-state calls are O(1).
+	 */
 	#filterUsageReports(reports: UsageReport[]): UsageReport[] {
 		const accountPool = this.#accountPool;
 		if (!accountPool) return reports;
-		return reports.filter(report => {
+		let lookup = this.#usageFilterLookup;
+		if (!lookup || lookup.snapshot !== this.#snapshot) {
+			const byProvider = new Map<Provider, OAuthCredential[]>();
+			for (const entry of this.#snapshot.credentials) {
+				if (entry.credential.type !== "oauth") continue;
+				const list = byProvider.get(entry.provider);
+				if (list) list.push(entry.credential);
+				else byProvider.set(entry.provider, [entry.credential]);
+			}
+			lookup = { snapshot: this.#snapshot, byProvider };
+			this.#usageFilterLookup = lookup;
+		}
+		const memo = this.#usageFilterResult;
+		if (memo && memo.input === reports && memo.byProvider === lookup.byProvider) return memo.output;
+		const byProvider = lookup.byProvider;
+		const output = reports.filter(report => {
 			if (!accountPool.has(report.provider)) return true;
-			return this.#snapshot.credentials.some(
-				entry =>
-					entry.provider === report.provider &&
-					entry.credential.type === "oauth" &&
-					usageReportMatchesCredential(report, entry.credential),
-			);
+			const credentials = byProvider.get(report.provider);
+			if (!credentials) return false;
+			return credentials.some(credential => usageReportMatchesCredential(report, credential));
 		});
+		this.#usageFilterResult = { input: reports, byProvider, output };
+		return output;
 	}
 
 	ingestUsageReport(provider: Provider, credential: OAuthCredential, report: UsageReport): boolean {

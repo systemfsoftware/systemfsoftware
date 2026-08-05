@@ -3,7 +3,7 @@
  */
 
 import * as AIError from "../../error";
-import { claudeCodeVersion } from "../../providers/anthropic";
+import { claudeCodeVersion } from "../../providers/claude-code-fingerprint";
 import type { FetchImpl } from "../../types";
 import { OAuthCallbackFlow } from "./callback-server";
 import { generatePKCE } from "./pkce";
@@ -23,6 +23,8 @@ const CALLBACK_PATH = "/callback";
 // grant user:inference — the claude.ai endpoint is required for direct inference access.
 const SCOPES =
 	"org:create_api_key user:profile user:inference user:sessions:claude_code user:mcp_servers user:file_upload";
+
+export { ANTHROPIC_OAUTH_GRANT_TTL_MS } from "./anthropic-constants";
 
 function formatErrorDetails(error: unknown): string {
 	if (error instanceof Error) {

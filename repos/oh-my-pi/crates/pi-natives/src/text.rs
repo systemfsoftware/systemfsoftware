@@ -405,7 +405,7 @@ fn ansi_seq_len_u16(data: &[u16], pos: usize) -> Option<usize> {
 }
 
 #[inline]
-fn is_sgr_u16(seq: &[u16]) -> bool {
+const fn is_sgr_u16(seq: &[u16]) -> bool {
 	seq.len() >= 3 && seq[1] == b'[' as u16 && *seq.last().unwrap() == b'm' as u16
 }
 

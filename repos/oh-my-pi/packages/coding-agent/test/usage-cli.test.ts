@@ -191,6 +191,36 @@ describe("collectUnreportedAccounts", () => {
 		// stays covered by any same-org report.
 		expect(collectUnreportedAccounts([aliceReport], [alice, bob, orgOnly])).toEqual([bob]);
 	});
+
+	it("keeps an org-less account covered by its own org-less report when org-scoped siblings exist", () => {
+		// Live incident shape: legacy org-less rows (pre-org-capture logins)
+		// beside fresh org-scoped logins. Every account fetched successfully —
+		// nobody may be duplicated into a "no usage data" row.
+		const legacy: UsageAccountIdentity = {
+			provider: "anthropic",
+			type: "oauth",
+			email: "legacy@example.test",
+			accountId: "account-legacy",
+		};
+		const fresh: UsageAccountIdentity = {
+			provider: "anthropic",
+			type: "oauth",
+			email: "fresh@example.test",
+			accountId: "account-fresh",
+			orgId: "org-fresh",
+		};
+		const legacyReport = {
+			...makeReport("anthropic", legacy.email!, []),
+			metadata: { email: legacy.email, accountId: legacy.accountId },
+		};
+		const freshReport = {
+			...makeReport("anthropic", fresh.email!, []),
+			metadata: { email: fresh.email, accountId: fresh.accountId, orgId: "org-fresh" },
+		};
+		expect(collectUnreportedAccounts([legacyReport, freshReport], [legacy, fresh])).toEqual([]);
+		// The org-attributed sibling alone still does NOT cover the legacy row.
+		expect(collectUnreportedAccounts([freshReport], [legacy, fresh])).toEqual([legacy]);
+	});
 });
 
 describe("formatUsageBreakdown", () => {
@@ -288,6 +318,107 @@ describe("formatUsageBreakdown", () => {
 		expect(text).not.toContain("dummy.primary@example.test");
 		expect(text).not.toContain("dummy.secondary@example.test");
 		for (const mask of redaction.values()) expect(text).toContain(mask);
+	});
+
+	it("renders auto-disabled tombstones with the upstream error_description and hides lifecycle noise", () => {
+		const now = Date.now();
+		const disabled = [
+			{
+				id: 26,
+				provider: "anthropic",
+				type: "oauth" as const,
+				email: "dead@example.test",
+				cause: 'oauth refresh failed: OAuthError: refresh request failed; body={"error": "invalid_grant", "error_description": "Refresh token expired"}',
+				disabledAtMs: now - 4 * HOUR,
+			},
+			{
+				id: 27,
+				provider: "anthropic",
+				type: "oauth" as const,
+				email: "rotated@example.test",
+				cause: "replaced by newer credential",
+			},
+			{
+				id: 28,
+				provider: "fireworks",
+				type: "api_key" as const,
+				cause: "oauth refresh failed: whatever",
+			},
+		];
+		const text = stripVTControlCharacters(formatUsageBreakdown(reports, accounts, now, undefined, disabled));
+		// Auto-disabled OAuth row: identity, age, shortened upstream cause, and the fix.
+		expect(text).toContain("✗ dead@example.test — disabled 4h ago: Refresh token expired (re-login to restore)");
+		// User-driven replacement and api_key tombstones are lifecycle noise, not lost capacity.
+		expect(text).not.toContain("rotated@example.test");
+		expect(text).not.toContain("Fireworks");
+	});
+	it("suppresses auto-disabled tombstones when an active account exists with the same identity", () => {
+		const now = Date.now();
+		const activeAccounts: UsageAccountIdentity[] = [
+			{
+				provider: "anthropic",
+				type: "oauth",
+				email: "active@example.test",
+			},
+		];
+		const disabled = [
+			{
+				id: 30,
+				provider: "anthropic",
+				type: "oauth" as const,
+				email: "active@example.test",
+				cause: "oauth refresh failed: Refresh token expired",
+			},
+			{
+				id: 31,
+				provider: "anthropic",
+				type: "oauth" as const,
+				email: "truly-dead@example.test",
+				cause: "oauth refresh failed: Refresh token expired",
+			},
+		];
+		const text = stripVTControlCharacters(formatUsageBreakdown([], activeAccounts, now, undefined, disabled));
+		expect(text).not.toContain("active@example.test — disabled");
+		expect(text).toContain("✗ truly-dead@example.test — disabled");
+	});
+
+	it("renders a tombstone-only provider section even when no active credential remains", () => {
+		const disabled = [
+			{
+				id: 50,
+				provider: "anthropic",
+				type: "oauth" as const,
+				email: "last@example.test",
+				cause: "oauth refresh failed: token endpoint said no",
+			},
+		];
+		const text = stripVTControlCharacters(formatUsageBreakdown([], [], Date.now(), undefined, disabled));
+		expect(text).toContain("Anthropic");
+		expect(text).toContain("✗ last@example.test — disabled: token endpoint said no (re-login to restore)");
+	});
+
+	it("warns about Anthropic's ~30d grant lifetime only inside the final week", () => {
+		const now = Date.now();
+		const DAY = 24 * HOUR;
+		const withAge = (email: string, ageDays: number): UsageAccountIdentity => ({
+			provider: "anthropic",
+			type: "oauth",
+			email,
+			authorizedAt: now - ageDays * DAY,
+		});
+		const text = stripVTControlCharacters(
+			formatUsageBreakdown(
+				[],
+				[withAge("fresh@example.test", 10), withAge("closing@example.test", 27), withAge("dead@example.test", 31)],
+				now,
+			),
+		);
+		// 10d-old grant: no countdown noise.
+		expect(text).not.toContain("fresh@example.test — re-login");
+		// 27d-old grant: 3 days left.
+		expect(text).toContain("⚠ closing@example.test — re-login within 3d");
+		// Past the lifetime: hard warning.
+		expect(text).toContain("⚠ dead@example.test — grant is past Anthropic's ~30d lifetime; re-login now");
 	});
 
 	it("renders provider-level notes once per provider, not duplicated per account or limit", () => {

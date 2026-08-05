@@ -218,7 +218,10 @@ function toolCallLine(
 	return base;
 }
 
-/** One line for a user-initiated `!`/`$` execution. */
+/** One line for a user-initiated `!`/`$` execution. Always attributed to the
+ *  user: these roles never carry agent-run commands (the model's bash goes
+ *  through `toolCall`), so the `user-` prefix makes provenance explicit for the
+ *  advisor and history readers regardless of render mode. */
 function executionLine(
 	kind: "bash" | "python",
 	source: string,
@@ -231,7 +234,7 @@ function executionLine(
 			: "ok";
 	const lines = lineCount(msg.output);
 	const sourcePreview = formatExecutionSourcePreview(source);
-	return `→ ${kind}! ${sourcePreview} ⇒ ${status} · ${lines} ${lines === 1 ? "line" : "lines"}`;
+	return `→ user-${kind}! ${sourcePreview} ⇒ ${status} · ${lines} ${lines === 1 ? "line" : "lines"}`;
 }
 
 /**
@@ -311,6 +314,18 @@ export function formatSessionHistoryMarkdown(messages: unknown[], opts?: History
 	// every call repeats `**agent**:`). Cleared whenever a
 	// non-role-labeled line is emitted so the next turn re-labels.
 	let lastWatchedLabel: string | undefined;
+	// Emit a watched-mode role label, collapsing consecutive same-role turns
+	// under one label (matching the user/assistant paths). Used for the
+	// user-attributed `!`/`$` execution lines so the advisor never reads them
+	// as agent actions.
+	const pushWatchedRole = (label: string, body: string): void => {
+		if (lastWatchedLabel === label) {
+			lines.push(body, "");
+		} else {
+			lines.push(label, body, "");
+			lastWatchedLabel = label;
+		}
+	};
 
 	for (const msg of typed) {
 		switch (msg.role) {
@@ -372,15 +387,25 @@ export function formatSessionHistoryMarkdown(messages: unknown[], opts?: History
 			case "bashExecution": {
 				const bashMsg = msg as BashExecutionMessage;
 				if (bashMsg.excludeFromContext) break;
-				lines.push(executionLine("bash", bashMsg.command, bashMsg), "");
-				lastWatchedLabel = undefined;
+				const bashLine = executionLine("bash", bashMsg.command, bashMsg);
+				if (opts?.watchedRoles) {
+					pushWatchedRole("**user**:", bashLine);
+				} else {
+					lines.push(bashLine, "");
+					lastWatchedLabel = undefined;
+				}
 				break;
 			}
 			case "pythonExecution": {
 				const pythonMsg = msg as PythonExecutionMessage;
 				if (pythonMsg.excludeFromContext) break;
-				lines.push(executionLine("python", pythonMsg.code, pythonMsg), "");
-				lastWatchedLabel = undefined;
+				const pythonLine = executionLine("python", pythonMsg.code, pythonMsg);
+				if (opts?.watchedRoles) {
+					pushWatchedRole("**user**:", pythonLine);
+				} else {
+					lines.push(pythonLine, "");
+					lastWatchedLabel = undefined;
+				}
 				break;
 			}
 			case "custom":

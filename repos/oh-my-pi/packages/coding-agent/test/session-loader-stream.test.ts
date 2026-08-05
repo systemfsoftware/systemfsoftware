@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import type { FileEntry } from "@oh-my-pi/pi-coding-agent/session/session-entries";
-import { loadEntriesFromFileStream, parseSessionContent } from "@oh-my-pi/pi-coding-agent/session/session-loader";
+import * as sessionLoader from "@oh-my-pi/pi-coding-agent/session/session-loader";
 import { serializeTitleSlot } from "@oh-my-pi/pi-coding-agent/session/session-title-slot";
 
 // Parity contract for the ≥8MiB streaming loader (now Bun.JSONL-based): it must
@@ -75,6 +75,48 @@ function messageTexts(entries: FileEntry[]): string[] {
 }
 
 describe("loadEntriesFromFileStream (Bun.JSONL parity)", () => {
+	it("visits entries incrementally while skipping malformed lines", async () => {
+		const slotLine = serializeTitleSlot({ title: "Visitor", source: "user", updatedAt: ISO });
+		const content = [
+			slotLine,
+			JSON.stringify(HEADER),
+			JSON.stringify(msg("m1", "s1", "first")),
+			"{ this is not valid json",
+			JSON.stringify(msg("m2", "m1", "second")),
+		].join("\n");
+		const file = await writeTemp(content);
+		const visited: FileEntry[] = [];
+		const titleSlot = await sessionLoader.visitEntriesFromFileStream(file, entry => visited.push(entry));
+
+		expect(titleSlot?.title).toBe("Visitor");
+		expect(entryIds(visited)).toEqual(["s1", "m1", "m2"]);
+	});
+	it("does not revisit entries before a malformed line spanning stream chunks", async () => {
+		const content = [
+			JSON.stringify(HEADER),
+			JSON.stringify(msg("m1", "s1", "first")),
+			`{ this is not valid json ${"x".repeat(256 * 1024)}`,
+			JSON.stringify(msg("m2", "m1", "second")),
+		].join("\n");
+		const file = await writeTemp(content);
+		const visited: FileEntry[] = [];
+
+		await sessionLoader.visitEntriesFromFileStream(file, entry => visited.push(entry));
+
+		expect(entryIds(visited)).toEqual(["s1", "m1", "m2"]);
+	});
+
+	it("propagates ENOENT errors thrown by the visitor", async () => {
+		const file = await writeTemp(`${JSON.stringify(HEADER)}\n`);
+		const failure = Object.assign(new Error("visitor failed"), { code: "ENOENT" });
+
+		await expect(
+			sessionLoader.visitEntriesFromFileStream(file, () => {
+				throw failure;
+			}),
+		).rejects.toBe(failure);
+	});
+
 	it("matches parseSessionContent on title slot + valid + malformed + blank lines", async () => {
 		const slotLine = serializeTitleSlot({ title: "Hello world", source: "user", updatedAt: ISO });
 		// title slot | header | valid | blank | malformed | valid | malformed-no-newline-at-EOF
@@ -89,8 +131,8 @@ describe("loadEntriesFromFileStream (Bun.JSONL parity)", () => {
 		const content = lines.join("\n"); // no trailing newline on the last line
 		const file = await writeTemp(content);
 
-		const stream = await loadEntriesFromFileStream(file);
-		const reference = parseSessionContent(content);
+		const stream = await sessionLoader.loadEntriesFromFileStream(file);
+		const reference = sessionLoader.parseSessionContent(content);
 
 		// Parity: the stream path must agree with the common path exactly.
 		expect(stream).toEqual(reference);
@@ -111,8 +153,8 @@ describe("loadEntriesFromFileStream (Bun.JSONL parity)", () => {
 		const content = lines.join("\n");
 		const file = await writeTemp(content);
 
-		const stream = await loadEntriesFromFileStream(file);
-		const reference = parseSessionContent(content);
+		const stream = await sessionLoader.loadEntriesFromFileStream(file);
+		const reference = sessionLoader.parseSessionContent(content);
 
 		expect(stream).toEqual(reference);
 		expect(stream.titleSlot).toBeUndefined();
@@ -132,8 +174,8 @@ describe("loadEntriesFromFileStream (Bun.JSONL parity)", () => {
 		const content = lines.join("\n");
 		const file = await writeTemp(content);
 
-		const stream = await loadEntriesFromFileStream(file);
-		const reference = parseSessionContent(content);
+		const stream = await sessionLoader.loadEntriesFromFileStream(file);
+		const reference = sessionLoader.parseSessionContent(content);
 
 		// Parity (a corrupted multibyte sequence would diverge here) ...
 		expect(stream).toEqual(reference);
@@ -146,7 +188,7 @@ describe("loadEntriesFromFileStream (Bun.JSONL parity)", () => {
 
 	it("returns empty for a missing file (ENOENT)", async () => {
 		const missing = path.join(os.tmpdir(), `does-not-exist-${Date.now()}.jsonl`);
-		const stream = await loadEntriesFromFileStream(missing);
+		const stream = await sessionLoader.loadEntriesFromFileStream(missing);
 		expect(stream.entries).toEqual([]);
 		expect(stream.titleSlot).toBeUndefined();
 	});

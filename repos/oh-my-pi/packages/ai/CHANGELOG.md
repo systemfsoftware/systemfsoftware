@@ -2,6 +2,238 @@
 
 ## [Unreleased]
 
+## [17.2.9] - 2026-08-05
+
+### Fixed
+
+- Fixed GitHub Copilot requests failing with a raw `HTTP 400 model_not_available_for_integrator` on roughly half of all turns for recently rolled-out models. Copilot's fleet is not uniform — part of it rejects models that `/models` advertises on the same host — and the transient classifier matched only the older `model_not_supported` code at a fixed envelope depth, so these rejections surfaced as terminal errors instead of entering the existing retry path. Model-availability 400s are now recognized at any envelope depth and rerolled on a flat delay with a dedicated 8-attempt budget on the OpenAI transports; every other retryable failure keeps its previous backoff and attempt count.
+- Fixed Cursor reads with inline OMP range selectors reporting the returned slice length as the source file's `totalLines`, which made sequential reads of an unchanged file appear inconsistent ([#7590](https://github.com/can1357/oh-my-pi/issues/7590)).
+- Made model-scoped usage health ignore Codex accounts that cannot use the requested plan-gated model while retaining conservative unknown-state handling and independent usage-window resets.
+- Fixed OpenAI Codex usage telemetry blocking explicitly allowed ChatGPT Team credentials when a weekly `used_percent` rounded to 100, which could route multi-account sessions to an actually exhausted sibling instead ([#7617](https://github.com/can1357/oh-my-pi/issues/7617)).
+- Fixed OpenAI Codex GPT-5.x requests sending optional `reasoning.summary`, `reasoning.context`, and `text.verbosity` controls by default, reducing Codex `server_error` disconnects from unsupported request shapes. ([#4949](https://github.com/can1357/oh-my-pi/issues/4949))
+- Classified concurrent-request caps separately from quota exhaustion so they use a short retry backoff without burning a credential, and rotate credentials for account-scoped 403 caps such as Devin's overall message limit.
+
+## [17.2.7] - 2026-08-03
+
+### Changed
+
+- Replaced `arktype` with `@oh-my-pi/omptype` for schema validation, delivering up to 100x faster schema construction and 60-100x faster validation while maintaining full compatibility with existing `type`/`Type` exports and the `isArkSchema` contract.
+
+### Fixed
+
+- Fixed OpenAI-Codex (ChatGPT OAuth) requests failing with an `Unsupported service_tier: auto` error on default or legacy sessions by omitting the implicit `auto` service tier on the wire.
+- Fixed an issue where Cursor `kimi-k3` sessions would break permanently when a same-model assistant turn was persisted without thinking blocks, replacing hard errors with graceful warnings.
+
+## [17.2.6] - 2026-08-03
+
+### Added
+
+- Added profile-aware Bedrock Mantle region selection, authenticated model discovery, bearer-token or SigV4 authentication, and credential refresh handling for OpenAI Responses models.
+
+### Fixed
+
+- Fixed an issue where Ollama requests without a user-role message would fail to generate output or silently fail with a misleading error.
+
+## [17.2.5] - 2026-08-03
+
+### Changed
+
+- Standardized tool-call examples in `renderToolExamples` and `renderToolInventory` to use Python keyword-argument syntax (`name(key="value")`) across all models, removing the model-specific dialect parameter and the `DialectRenderOptions.example` flag.
+- Updated `renderToolInventory` to render the tool catalog as a unified OpenAI-Harmony-style `## functions` block using TypeScript type declarations and comments, replacing the previous per-tool Markdown sections.
+- Added a `style: "harmony"` option to `jsonSchemaToTypeScript` for generating compact, comma-delimited TypeScript definitions.
+
+### Fixed
+
+- Fixed a session-blocking issue where unescaped Harmony control tokens in replayed assistant responses and tool inputs caused subsequent requests to be rejected with `invalid_prompt` errors.
+- Fixed an issue where Codex Responses dropped native image-generation results from assistant content and replays due to stale `generating` statuses.
+- Fixed Anthropic stream truncation handling where unexpected connection closures were incorrectly treated as clean stops, causing the agent loop to halt silently mid-sentence.
+- Optimized Anthropic prompt caching to prevent unnecessary cache invalidation of the entire system prefix when volatile project footer details (such as current working directory, date, or workspace tree) change.
+
+## [17.2.4] - 2026-08-01
+
+### Fixed
+
+- Fixed Codex WebSocket tool-result turns replaying full history when the preceding tool-call ID required Responses API normalization ([#7279](https://github.com/can1357/oh-my-pi/issues/7279)).
+- Fixed direct Anthropic provider streams ignoring `model.compat.streamIdleTimeoutMs`. Requests dispatched through `streamAnthropic` can now widen the inter-event idle watchdog or set it to `0` to disable that watchdog; caller options and environment overrides retain precedence. Setting the compat value to `0` disables only the inter-event watchdog and leaves the first-event watchdog enabled; wider idle values continue to floor the first-event budget under the existing timeout contract.
+- Fixed OpenRouter DeepSeek models failing structured subagents when the upstream returns an opaque HTTP 400 for a strict yield schema, retrying once without strict tools and remembering the fallback for the provider session ([#7264](https://github.com/can1357/oh-my-pi/issues/7264)).
+- Fixed provider-native Codex compaction streams bypassing WebSocket-first transport selection and SSE transport fallback ([#7198](https://github.com/can1357/oh-my-pi/issues/7198)).
+- Fixed `SqliteAuthCredentialStore.open()` running the `auth_credential_refresh_leases` DDL (`CREATE TABLE`/`CREATE INDEX`) with Bun's default `busy_timeout=0`, before the constructor's `#initializeSchema()` installed the busy handler. Under a concurrent write lock (e.g. WAL recovery on parallel omp startups) the lock-taking DDL failed immediately and, since the error wasn't BUSY-classified, bypassed `open()`'s bounded retry loop. The busy handler is now installed on the connection immediately after it opens, before any lock-taking statement, honoring the issue-#2421 invariant on every entry path. ([#7298](https://github.com/can1357/oh-my-pi/issues/7298))
+- Fixed a corrupt credential store (`agent.db`) silently disabling every persisted rate-limit block. `AuthStorage` caught unrecoverable SQLite errors (`SQLITE_CORRUPT` family / `SQLITE_NOTADB`) from the persisted block read/write paths at `debug` level with no latch, so the broken store was re-queried on every credential evaluation while blocks quietly stopped applying. The first unrecoverable error is now reported once at `error` level with the store location and repair guidance, and every later persisted-block read/write short-circuits for the process lifetime; in-memory backoff still preserves availability ([#7296](https://github.com/can1357/oh-my-pi/issues/7296)).
+
+## [17.2.3] - 2026-08-01
+
+### Added
+
+- Added the ai& (`aiand`) provider registry entry with API-key paste login validated against `https://api.aiand.com/v1/models`.
+
+### Fixed
+
+- Fixed Anthropic OAuth (Claude Pro/Max subscription) requests hard-429ing (`Usage credits are required for long context requests`) on every beta-gated 1M model — e.g. `claude-sonnet-4-6`, which the default `task`/`smol`/`scout` subagent roles resolve to — regardless of prompt size, breaking all subagents. The 17.2.1 cowork request profile reintroduced the `context-1m-2025-08-07` beta for any model with a 1M catalog window, but subscription credentials have no long-context credit balance so Anthropic rejects the request outright. The beta is no longer advertised on OAuth requests; subscription accounts transparently get the standard 200k window. ([#7238](https://github.com/can1357/oh-my-pi/issues/7238))
+- Fixed OpenAI Codex Responses ignoring disabled cache retention when deriving `prompt_cache_key`, while preserving transport session identity ([#7219](https://github.com/can1357/oh-my-pi/issues/7219)).
+
+## [17.2.2] - 2026-07-31
+
+### Added
+
+- Added support for the `gmi-cloud` provider registry, including API-key paste login validation and integration with `@oh-my-pi/pi-catalog`.
+
+### Changed
+
+- Updated `AuthStorage.redeemResetCredit` to prioritize spending the soonest-expiring available saved reset credit, and improved error handling to distinguish between transport failures (`credit_list_failed`) and a genuine lack of credits.
+- Exported `SENSITIVE_TOKEN_RE` from `providers/transform-messages` to allow hosts to route credential shapes through reversible obfuscation instead of irreversible redaction.
+
+### Fixed
+
+- Fixed an issue where Cursor conversation checkpoints were incorrectly recorded as billable output tokens, ensuring accurate usage totals.
+- Fixed an issue in `AuthStorage.refreshStoredOAuthCredential` where expired OAuth credentials were returned without being refreshed when a credential mismatch occurred, which previously resulted in misleading "No API key found" errors.
+- Fixed Cursor history replay issues by preserving structured message order for assistant tool calls/results, retaining Kimi K3 thinking blocks, and preventing unsafe mid-session switches to K3.
+
+## [17.2.1] - 2026-07-30
+
+### Added
+
+- Added exact OAuth credential-row resolution by durable credential id. The targeted path refreshes only that row and never ranks, rotates, or falls back to sibling accounts.
+
+### Changed
+
+- Anthropic OAuth requests now reproduce Cowork's current `claude-desktop` request profile, including client/runtime metadata, beta selection, system and billing attestation, the 64K output cap, and stable HTTP/1.1 header ordering.
+
+## [17.2.0] - 2026-07-30
+
+### Added
+
+- Added first-class parentTurnId support for nested Codex requests, allowing stream options and metadata helpers to accept and safely propagate the initiating turn's ID.
+- Added preservation of the Codex `encrypted_function_args` plaintext-collaboration marker on replayed function calls, keeping server-marked plaintext tool arguments from being reinterpreted as encrypted on subsequent turns.
+- Added interactive Exa API-key login through `/login exa`, opening the official API-key dashboard and saving pasted keys to the credential store ([#1798](https://github.com/can1357/oh-my-pi/issues/1798)).
+- Cursor's modern exec wire protocol is now handled end to end. `agent.proto` models the frames current Cursor CLI builds emit — the seven Pi tools (`ExecServerMessage` 45-51), hooks, subagents, allowlist prechecks, MCP state, smart-mode classification, canvas diagnostics, conversation search, agent-store conflicts and git diff — and every one of them gets a typed answer. The Pi frames run their local equivalents (`read`/`bash`/`edit`/`write`/`grep`/`glob`); the rest answer with the error, not-found or empty-but-valid variant that is actually true of this client. Frames this build cannot name at all now raise `ExecClientControlMessage.throw` with `unknown_exec_variant`, and recognised frames with no truthful answer (`git_diff_request`, whose `GetDiffResponse` has no error variant) raise `exec_variant_unsupported`, instead of a silent ack that leaves the server waiting.
+- `lsp` is advertised in the MCP tool catalog again. It was filtered out as a Cursor-native tool, but the native `diagnostics` frame covers one of roughly ten LSP actions, so the other nine were unreachable.
+- Added `pinSessionOAuthAccount` support for backdating the sticky's last-use timestamp (`options.lastUsedAtMs`), so pins restored from persisted sessions keep the provider's warm-window semantics: resumes inside the prompt-cache TTL reuse the account, stale resumes still re-rank.
+
+### Changed
+
+- Codex turn metadata now reserves the codex-rs `code_mode_tool_names` key, preventing caller-supplied client metadata extras from colliding with the core-owned field.
+- Codex SSE requests to the official endpoint now use zstd-compressed bodies by default to match the official client, which can be disabled with PI_CODEX_ZSTD=0.
+- API-key validation now preserves provider HTTP status and retry headers, allowing authentication, rate-limit, and server failures to retain their original error classifications.
+- The Cursor Pi arg translation (`piReadPath`, `piJoinPath`, `piLsPath`, `piEscapeRegexLiteral`, `piLimit`) moved to `providers/cursor-pi-args`, re-exported from `providers/cursor/exec-modern` so existing imports are unaffected. The legacy pi shim shares these helpers and is compiled into the bundled virtual module registry, where a nested `providers/<dir>/<mod>` specifier is unresolvable under bunfs — and importing them from the exec module would drag the whole protobuf graph in for two string functions.
+
+### Fixed
+
+- Fixed Novita login rejecting valid API keys belonging to Developer and Basic team members by validating against the chat completions endpoint instead of the billing balance endpoint.
+- Fixed Cursor resource_exhausted errors being incorrectly classified as QUOTA_EXHAUSTED (which caused 30-minute credential blocks), mapping them to MODEL_CAPACITY_EXHAUSTED with a shorter backoff instead.
+- Fixed a crash in Amazon Bedrock and Devin providers when Context.systemPrompt is passed as a bare string.
+- Fixed aborted usage-limit recovery incorrectly blocking credentials or waiting on local usage fetches after the session had already changed.
+- Fixed Codex WebSocket sessions echoing stale or missing turn states by capturing x-codex-turn-state refreshes from response metadata event headers.
+- Fixed Harmony-dialect models (e.g., gpt-5.x, openai-codex) failing with invalid_prompt or "Request blocked" errors by escaping reserved control tokens in untrusted user and tool-result text.
+- Fixed named forced tool_choice not being enforced on string-only OpenAI-compatible hosts (such as llama.cpp and LM Studio) by narrowing the advertised tools to the forced tool.
+- Fixed direct Anthropic Claude Opus requests failing with HTTP 400 when the endpoint rejects strict tool fields.
+- Fixed usage-based credential ranking for Anthropic accounts where a missing long-window (7-day) metric was incorrectly treated as a short-window metric.
+- Fixed legacy Codex usage blocks continuing to gate all models after per-meter backoff was introduced, splitting the old shared scope into independent chat and spark blocks while maintaining backward compatibility with older clients and database schemas.
+- Fixed Anthropic retry loops ignoring `maxRetryDelayMs` for long server `retry-after` hints, so over-budget delays surface immediately without losing response details or abort cleanup ([#7003](https://github.com/can1357/oh-my-pi/issues/7003)).
+- Added interactive xAI API-key login with key validation through the xAI models endpoint.
+- Fixed Google Gemini and Vertex tool declarations carrying numeric, boolean, object-valued, or mixed `enum` arrays that the Google Schema wire type cannot represent. Unsupported enums are omitted while valid string enums remain constrained.
+- Umans usage provider: fetches `GET /v1/usage` and surfaces the rolling 5h request window + concurrency limits in `/usage`, `omp usage`, and the TUI status bar.
+- Fixed ranged legacy Cursor reads reporting the returned window byte length as the full file size.
+- Updated the Cursor client build advertisement to activate the modern exec-frame protocol handled by this provider.
+- Fixed a windowed Cursor `read` reporting the window's line count as the file's. `total_lines` and `file_size` were derived from the payload, which is the whole file only for an unranged read — a 20-line page of a 100-line file answered `total_lines: 20`, which a paginating server reads as the end of the file. The count now comes from the read's own record of the file (`details.meta.truncation.totalLines`), falling back to counting the payload when the read returned the file whole.
+- Fixed a `pi_grep` that hit the native backend's internal match ceiling answering as an unqualified success. `GrepTool` folds that cap into the flat `details.truncated` alone, setting neither `details.truncation` nor `perFileLimitReached` — the two fields the Pi result was built from — so the one truncation a caller can neither detect nor page around was the one it was never told about. The flat flag is now translated into a `PiTruncation`, and only when no specific cap already reported itself.
+- Fixed a `pi_grep` frame's `context` and `limit` vanishing from the transcript. The bridge honors both by building a scoped `grep`, but neither is expressible in the model-facing schema, so the synthesized block recorded a plain pattern/path search — replaying a context-widened or capped search as an ordinary grep sitting beside output no ordinary grep produces. Both are now recorded on the block.
+- Fixed a Cursor MCP resource listing shrinking to a count in the transcript. The full URI/name/mime catalog goes out on the wire, but the paired local result recorded `Listed N MCP resource(s)` — and rebuilt history is serialized from that result, so one reload later the model knew it had seen N resources and could name none of them. The paired result now lists what the answer carried.
+- Fixed the `pi_read` range translation padding the slice it asks for. `piReadPath` composed a plain `:N+K` selector, which the local `read` tool expands by one leading and three trailing context line — so a frame naming offset 5/limit 20 received lines 4-27. Ranged Pi reads now compose `:raw:N+K`; the wire result is an opaque output string, so the line-number gutter `raw` also drops carries nothing the contract needs.
+- Fixed four Cursor exec frames answering with a result whose oneof was never set. In proto3 that is not an empty result — the server reads it as "the tool ran and produced nothing", indistinguishable from real success. `listMcpResourcesExecResult`, `readMcpResourceExecResult`, `recordScreenResult` and `computerUseResult` now send `ListMcpResourcesSuccess{resources: []}`, `ReadMcpResourceNotFound{uri}`, `RecordScreenFailure` and `ComputerUseError` respectively.
+- The MCP resource frames now answer from the host instead of a fixed verdict. `CursorExecHandlers` gained `listMcpResources`/`readMcpResource`, so a host holding live MCP connections advertises them; the empty catalog and `not_found` above remain the answer when no handler is supplied. A handler that throws surfaces as `ListMcpResourcesError`/`ReadMcpResourceError` rather than collapsing into "none exist", which the model cannot retry. A read carrying `download_path` forwards it and answers with `ReadMcpResourceSuccess.download_path` and no content, which is what that mode means.
+- Fixed Cursor `connect_scm` calls losing their repository and settling on a fabricated verdict. The target rides in the `ConnectScmArgs.target` oneof, so reading a flat `github` property always saw `undefined`; and the authoritative `success`/`error`/`rejected` result only arrives on the completion frame, so answering at the announcement persisted a fixed failure for every call — including the ones the server went on to accept. The block now opens on the start frame and settles from the completion's decoded result.
+- Fixed interleaved Cursor tool calls corrupting each other. The stream decoder tracked a single "current" block and settled it on any `toolCallCompleted`, ignoring the envelope's `call_id`: a completion for one call closed whichever block happened to be open and paired it with the wrong result, and `start A, start B` orphaned A entirely so its own completion settled B while A was never paired — which strips the whole interaction from every rebuilt transcript. Open blocks are now retained per envelope `call_id`, and end-of-stream closes all of them rather than only the last.
+- Fixed a Cursor `search_conversations` call leaving no transcript block. The frame is answered from a fixed verdict, so nothing downstream pairs a result for it, and an unpaired call takes its whole interaction out of every rebuilt transcript.
+- Fixed a Cursor `read_mcp_resource` call leaving no transcript block. The frame runs locally — and in download mode writes a workspace file — but synthesized no tool call and paired no result, so the read was invisible in the UI and absent from every rebuilt history; a resource download could mutate the workspace with nothing on record. The frame now synthesizes a `read_mcp_resource` block (not `read`: it is a remote MCP operation, and the name drives rendering and prune semantics) and pairs a result on success, not-found and error alike. Frames answered without a handler still synthesize nothing, since nothing ran.
+- Fixed a Cursor `list_mcp_resources` call leaving no transcript block. The model consumed the catalog, but the frame synthesized no tool call and paired no result — its streamed `ListMcpResourcesToolCall` announcement was equally unrecognized — so the listing was invisible in the UI and absent from every rebuilt history. Frames a handler answered now synthesize a `list_mcp_resources` block and pair a result derived from the same answer that went on the wire; frames answered from the fixed no-handler catalog still synthesize nothing, since nothing ran.
+- Fixed an unavailable `pi_edit`/`pi_write` answering with the error variant. Both results model refusal and failure as separate oneof cases, and a denial reported as `error` reads as "the tool ran and broke" — inviting a retry of an operation that was never permitted. A frame whose tool is not granted, or whose handler produced nothing, now answers with `PiEditExecRejected`/`PiWriteExecRejected`; execution failures keep the error variant.
+- Fixed a Cursor MCP approval probe actually running the tool. A modern `mcpArgs` frame carrying `smart_mode_approval_only` asks only whether a call would be permitted, not for the call itself. The decoder dropped the flag, so the frame ran a side-effecting MCP tool the user had not been asked about, then ran it again when the real call followed. The flag is now carried through and the probe is answered from the host's policy without executing: approved only for a definite allow, refused for a deny, for a mode that demands a prompt the frame cannot raise, and for a tool the session does not have. No transcript block is synthesized either, since nothing ran.
+- Fixed the Cursor stream's end-of-transport cleanup erasing the arguments of every block still open. Blocks whose args arrive whole (todo, connect-SCM, MCP) never feed the streamed partial-JSON buffer, and reparsing an absent buffer yields `{}`, so a truncated or disconnected turn rebuilt those calls with no arguments at all. Only blocks that actually streamed their args are reparsed now.
+- Fixed a Cursor stream dying mid-turn stranding the call it left open. `connect_scm` and native todo blocks are stamped resolved the moment they open, so the agent loop synthesizes no placeholder and only their completion frame pairs a result — a transport that closed first left the card animating and the call unpaired, which takes the whole interaction out of every rebuilt transcript. The terminal-error path now closes open blocks and pairs those server-owned calls with an interrupted result; the flush ran only on clean completion before, which is not the path a dying stream takes. Exec-settled MCP blocks are left alone, since the dispatch that ran them owns their result.
+- Fixed the Pi exec frames displaying a different operation than the one they run. The provider synthesized its transcript block from a second, hand-rolled translation of the frame args, so `pi_read`'s `offset`/`limit` were shown as a whole-file read, `pi_grep`'s `literal` pattern as an unescaped regex, and `pi_find`'s path/glob join differed from the executed one. Both sides now share a single translation.
+- Fixed the streamed `pi_*_tool_call` announcements that modern builds send alongside each exec frame being unrecognized. The exec channel already synthesizes those blocks when it runs the tool; the duplicate was avoided only because the decoder recognized none of the variants, which would have started double-rendering as soon as any one was added.
+- Fixed `pi_bash` results reaching Cursor clipped with no truncation notice. Two truncation records exist locally: `read`/`grep` set `details.truncation`, which carries an explicit `truncated` flag, while `bash` sets `details.meta.truncation`, whose record has no such flag — its presence is the signal. `piTruncation` read only the first shape and required the flag, so every real Bash truncation was dropped and the server was told the clipped output was complete. Both shapes now translate, and an explicit `truncated: false` still suppresses the field.
+
+## [17.1.8] - 2026-07-28
+
+### Fixed
+
+- Fixed an HTTP 400 error when resuming or replaying OpenAI history after an interrupted native Computer Use turn.
+- Fixed connection 404 errors when using Google Vertex AI in multi-region locations (eu and us) by correctly resolving regional endpoint (REP) hosts.
+- Fixed a resource leak in SqliteAuthCredentialStore.close() where unclosed prepared statements kept the SQLite connection alive, preventing database file cleanup (especially on Windows where files remained locked).
+
+## [17.1.7] - 2026-07-27
+
+### Changed
+
+- Upstream `403 Forbidden` responses (e.g. Anthropic `permission_error` plan/model denials, Copilot model-policy rejections) now rotate through sibling credentials like usage limits do, instead of failing the session on the first denied account. The denied credential is soft-blocked for 60s and re-validated — never removed — and the original 403 surfaces only once every sibling has been tried.
+- Usage report filtering in the auth-broker remote store is memoized per (reports, snapshot) with a precomputed per-provider OAuth credential map, replacing an O(reports × credentials) scan on every credential-selection and status refresh
+- Cursor and Devin Connect-frame readers no longer copy every stream chunk through `Buffer.concat` when the pending buffer is empty
+
+## [17.1.6] - 2026-07-27
+
+### Added
+
+- Added `getProxyForUrl()` for transports that need provider-specific and standard proxy environment resolution with `NO_PROXY` support ([#6770](https://github.com/can1357/oh-my-pi/issues/6770)).
+- Added SiliconFlow and SiliconFlow (China) to the built-in API-key login provider catalog so `omp login siliconflow` / `omp login siliconflow-cn` stores a reusable credential validated against each region's `/v1/models` endpoint.
+
+## [17.1.5] - 2026-07-27
+
+### Fixed
+
+- Fixed OpenAI Responses replay treating a tool output as paired with a matching call that appeared later in the input, or a tool call as paired with an earlier output. Pair repair now respects wire order before preserving or synthesizing each side.
+- Fixed adaptive-thinking Anthropic models omitting the interleaved-thinking beta on signature-enforcing proxies, which caused persisted interleaved assistant turns to fail on replay ([#6717](https://github.com/can1357/oh-my-pi/issues/6717)).
+- Kimi Code now sends its session-stable prompt cache key on both supported transports: `prompt_cache_key` for OpenAI-compatible requests and `metadata.user_id` for Anthropic-compatible requests. Explicit keys survive side-channel session IDs, while `cacheRetention: "none"` still disables automatic affinity ([#6049](https://github.com/can1357/oh-my-pi/issues/6049)).
+- Fresh encrypted auth-broker snapshot caches are revalidated within a short startup budget, so one-shot clients see newly imported or revoked credentials immediately when the broker is reachable while retaining cache fallback for transport and server failures.
+- Fixed custom `anthropic-messages` endpoints dropping native web-search call/result blocks in the leaked-thinking wrapper, preserving signed continuation history in source order without carrying a preceding text signature onto later unsigned blocks ([#6703](https://github.com/can1357/oh-my-pi/issues/6703)).
+
+## [17.1.4] - 2026-07-26
+
+### Added
+
+- MiniMax Token Plan accounts now report quota in `omp usage`. `GET /v1/token_plan/remains` returns one bucket per plan quota, each carrying a rolling interval window and a weekly window, so `minimax-code` surfaces real remaining percentages instead of an empty report. A model the plan does not include comes back looking like an untouched quota; those buckets are dropped from the report and named in its metadata. The mainland id `minimax-code-cn` is untouched.
+- OAuth logins now stamp `authorizedAt` (epoch ms of the interactive login) on the stored credential, and every refresh-persist path preserves it. Anthropic expires the whole OAuth grant family ~30 days after authorization regardless of refresh-token rotation (observed as `invalid_grant: "Refresh token expired"` on the latest rotated token, exactly 30 days after login, across four production accounts), so the login anchor is what makes re-login deadlines computable. Exported `ANTHROPIC_OAUTH_GRANT_TTL_MS` alongside the anthropic OAuth flow.
+- Added `GET /v1/credentials/disabled` to the auth broker and `AuthBrokerClient.listDisabledCredentials`: disabled-credential tombstones (`DisabledCredentialSummary` — identity, verbatim disable cause, disable timestamp; never token material) so auto-disabled accounts stay visible to clients instead of silently vanishing from the snapshot. `AuthStorage.listDisabledCredentials` serves the same data locally from SQLite; clients of brokers predating the endpoint get an empty list (404 mapped, no error).
+- Added `AuthStorage.revalidateCredentials()` and the optional `AuthCredentialStore.refreshSnapshot` hook: remote broker stores re-fetch `GET /v1/snapshot` on demand so callers pairing live per-credential data with stored identities (`omp usage`) never render against the up-to-an-hour-stale disk-cached snapshot; local SQLite stores are always current and only reload.
+- Added an optional per-request `codexSseMaxAttempts` stream option to bound Codex SSE pre-response retries while preserving the six-attempt default when omitted.
+- Fixed Cursor requests failing with `Connect error internal: Unable to parse image: ...` whenever the session history contained an image: `rootPromptMessagesJson` image parts now embed a `data:<mime>;base64,` URI instead of bare base64, matching the convention used by the OpenAI-completions provider ([#6564](https://github.com/can1357/oh-my-pi/pull/6564)).
+
+### Fixed
+
+- Fixed OpenAI Responses native history replay sending output-only `status` fields back as input, preventing `input[N].status` failures in long-running sessions. ([#6513](https://github.com/can1357/oh-my-pi/pull/6513) by [@Ant39140](https://github.com/Ant39140))
+- Cursor no longer discards a local tool result when the transport fails mid-execution. The provider waits for in-flight exec dispatches before pushing `done`, but the error path skipped that wait, so a handler decoded from the last chunk landed its result after the Agent had already finalized the call from the terminal error and cleared its buffer — losing the real outcome of a tool that may already have run side effects. Both exits now drain the same barrier.
+- Cursor exec handlers returning the bare-result form no longer record a failed call as successful. When an SDK handler returns only a protocol result (no paired `toolResult`), the synthesized transcript entry was always `"Tool produced no transcript result"` with `isError: false`, even for a `rejected` or `error` result — so Cursor saw a failure while the rebuilt transcript showed success. The synthesized entry now derives its state and message from the result's own oneof variant — including MCP, where an application-level tool failure rides inside the `success` variant as `is_error` rather than as a separate variant.
+- Fixed Cursor models silently failing to maintain the todo list. Cursor resolves its native `update_todos`/`read_todos` tools server-side, but the bridge looked for them under flattened `updateTodosToolCall`/`readTodosToolCall` properties, which a decoded `agent.v1.ToolCall` never has — the variant only arrives through the `tool` oneof — so no native todo call was ever recognized. The synthesized `todo` tool call was also emitted as locally runnable with a `{todos}` payload the local tool's schema rejects, so any update that did surface ended as a validation error and local todo state never followed Cursor's. Todo calls are now read from the oneof, both native todo blocks are marked as already-resolved, and local state is mirrored from the server's confirmed success snapshot (leaving state untouched on `UpdateTodosError`). `TODO_STATUS_CANCELLED` now maps to `abandoned` instead of reverting the task to `pending`.
+- Hardened Cursor todo mirroring against partial `read_todos` responses: a read narrowed by `status_filter`/`id_filter`, or one returning fewer rows than the server's own `total_count`, is a subset rather than the list, and is no longer treated as authoritative. Previously such a response would have deleted every task it omitted.
+- Fixed an empty `update_todos` response whose `total_count` is nonzero being mirrored as an authoritative clear, deleting every local task at once. The count-mismatch guard skipped empty responses entirely; only a matching zero count is a genuine clear now. An empty `read_todos` stays refused outright, since proto3 decodes an unset `total_count` as `0` and it cannot be told apart from a filtered read that matched nothing.
+- Fixed a Cursor todo call being left unpaired when the completion frame carried no `tool_call` at all. `ToolCallCompletedUpdate.tool_call` is optional, but the block was already marked as server-resolved by the started frame, so nothing emitted a placeholder for it and every transcript rebuild stripped the interaction. It now settles as "nothing to mirror", the same as a refused snapshot.
+- Fixed local Cursor exec calls (`read`/`write`/`grep`/`delete`/`bash`/`lsp`/MCP) vanishing from rebuilt transcripts when the tool produced no result. The assistant block is synthesized and marked server-resolved before the handler runs, so the three result-less paths — no handler installed, a handler returning nothing, and a thrown handler — left the call unpaired. Each now pairs a result carrying the same text the server receives.
+- Fixed Cursor MCP tool calls being unrecognized on the wire. `ToolCall.tool` is a protobuf oneof, so a decoded message exposes the variant as `{ case, value }` and never as a flat `mcpToolCall` property — the same trap that made native todo calls invisible while hand-shaped fixtures kept passing. Both the streamed start and the completion arg merge now go through a shared selector.
+- Fixed a streamed Cursor MCP block being named from `name` while its paired result used `toolName`, so the two disagreed whenever the server sent different values. Both now prefer `toolName`.
+- Fixed the Cursor stream emitting `done` while a tool handler decoded from the final chunk was still running. Server messages are dispatched fire-and-forget so the socket keeps draining, but nothing waited for them: when an exec request, `turnEnded` and the stream close arrived in one chunk, the turn finished before the handler produced its result, and the result missed the buffer drain that pairs it with its call. In-flight dispatches are now awaited after the transport completes.
+- Fixed a server-resolved Cursor todo call leaving its transcript block stuck pending: the synthetic completion was emitted under a freshly generated id instead of the streamed call id the interactive transcript filed the block under, so the card animated indefinitely. The settled call id is now handed to the sync handler.
+- Fixed server-resolved Cursor todo blocks disappearing from rebuilt transcripts: nothing produced a `toolResult` for them, and `buildSessionContext` strips any `toolCall` left unpaired, so the interaction vanished on reload, branch switch, or transcript rebuild. The result the host builds is now persisted verbatim — it carries the `details.phases` the todo renderer rebuilds the list from, which a summary-only result would have replayed as `0 tasks`.
+- Fixed a refused or failed Cursor todo call leaving its card animating forever. Only a successful snapshot settled the block, so a `read_todos` narrowed by a filter and a server `UpdateTodosError` both went unanswered — no `tool_execution_end`, and no `toolResult` to keep the block from being stripped on rebuild. Every completed native todo call now settles. A server error is carried through as a failed result rather than collapsed into the benign "nothing to mirror" case, which would have replayed the failure as a success.
+- Hardened Cursor todo mirroring against snapshots whose rows collide on content. Cursor's wire model identifies todos by `id` and can represent two rows sharing the same text; the local list is keyed by content alone and the `todo` tool rejects a duplicate outright, so importing such a pair would leave every task-targeted `done`/`drop`/`rm` resolving to the first row and the second unreachable. The snapshot is now refused like any other that cannot be represented locally — local state is left untouched and the call still settles as a no-op.
+- Hardened Cursor todo mirroring against ambiguous empty `read_todos` responses. `total_count` is a proto3 scalar, so an unset field decodes as `0` and is indistinguishable from a genuinely empty list; accepting `todos=[]` + `total_count=0` would clear every local task. Empty and mismatched reads are now refused — `update_todos` remains the authoritative clear path.
+- Fixed refused Cursor todo results claiming `"No todo changes"`. A server-accepted `update_todos` can still be declined locally (content collision, etc.), so the persisted fallback now reads `"Todo snapshot not mirrored"` instead of implying the remote call changed nothing.
+- Hardened Cursor todo mirroring against snapshots carrying unresolved `TodoItem.dependencies`. The wire model blocks a row behind other rows by `id`; the local list has no ids and no edges, so an imported dependent row files as plain `pending` and `nextActionableTask` then offers work the server considers blocked. Snapshots with an edge pointing at a row that is not yet `completed`/`abandoned` are now refused like any other that cannot be represented locally. Edges whose blockers already finished constrain nothing and still mirror.
+- Extended the Cursor todo `total_count` mismatch guard to `update_todos`. A partial or size-limited merge response is as incomplete as a filtered read, but the check only applied to reads, so an update returning fewer rows than its own count was mirrored as the full list and deleted every task it omitted. An empty update still syncs — it remains the authoritative clear path, unlike an ambiguous empty read.
+- Hardened Cursor todo mirroring against rows with empty `content`. `content` is a proto3 string, so a missing or default value arrives as `""`; the local list is keyed by content and rejects a falsy one before lookup, leaving the imported row unreachable to every task-targeted `done`/`drop`/`rm`. Such snapshots are now refused like any other that cannot be represented locally.
+- Fixed a deterministic circular-import TDZ that crashed `packages/catalog`'s test process with `ReferenceError: Cannot access 'claudeCodeVersion' before initialization`: `registry/oauth/anthropic.ts` imported `claudeCodeVersion` from `providers/anthropic.ts`, which transitively pulls the registry back in (`providers/anthropic` → `stream` → `registry` → `registry/oauth/anthropic`), so the module-level `claude-code/${claudeCodeVersion}` bootstrap user-agent const read the binding while `providers/anthropic.ts` was still mid-initialization. `claudeCodeVersion` now lives in a zero-import leaf module (`providers/claude-code-fingerprint.ts`) that `providers/anthropic.ts`, `registry/oauth/anthropic.ts`, and `usage/claude.ts` all import from, removing the cycle at the source rather than deferring the read.
+- Fixed a circular initialization between the Anthropic provider and OAuth registry that could throw before `claudeCodeVersion` was initialized when package tests or consumers loaded modules in parallel ([#6628](https://github.com/can1357/oh-my-pi/pull/6628) by [@anatoli-tsinovoy](https://github.com/anatoli-tsinovoy)).
+- Stopped the account-level Codex `rate_limit.limit_reached` flag from being applied to individual chat windows. Codex reports one shared flag for the whole account, so a window with real headroom was marked `exhausted` because a different window (or a separate metered feature) was at its limit, which over-blocked sibling accounts during credential selection. Each window's status now reflects only its own usage
+- Scoped Codex reactive backoff per meter: a `usage_limit_reached` from a Spark request no longer persists a block that ordinary chat requests honour, and the reverse. Blocks written before scoping used a shared scope meaning "block everything", so requests still honour it and reconciliation still heals it
+- Implemented `scopeLimits` for the Codex ranking strategy so a request gates only on the windows it actually consumes: `-spark` models spend the Spark meter and every other model spends the 5h/weekly chat windows, instead of OR-ing every window and meter into one provider-wide block
+- Fixed native Anthropic adaptive-only models (Opus 4.6+, Sonnet 4.6+, Fable/Mythos 5) keeping thinking ON when reasoning was meant to be off. `mapOptionsForApi` never consulted `disableReasoning` on the Anthropic branch, so a caller-side disable left adaptive thinking at full effort; and `disableThinkingIfToolChoiceForced` deleted `output_config.effort` alongside `thinking`, which for adaptive-only models silently re-enabled adaptive thinking (a bare omission defaults to adaptive-ON). Both paths now omit `thinking` and pin the lowest adaptive effort, so `disableReasoning` and forced `tool_choice` turns (e.g. the delivery reviewer's `report_delivery`) actually suppress reasoning instead of returning a thinking block with `end_turn` ([#6589](https://github.com/can1357/oh-my-pi/issues/6589)).
+- Fixed Bedrock Converse dropping captured Claude thinking signatures when replaying application-inference-profile ARN models, restoring adaptive-thinking multi-turn conversations ([#6610](https://github.com/can1357/oh-my-pi/issues/6610)).
+- Fixed the `alibaba-token-plan` login only supporting the international Singapore endpoint, which rejected China (Beijing) Token Plan `sk-sp-` keys with `401 invalid_api_key`. Login now selects a region (International / China (Beijing) / Custom), validates the key against that region's `/models` endpoint, and stores the chosen base URL in the credential so inference and discovery both target it ([#6682](https://github.com/can1357/oh-my-pi/issues/6682)).
+- Fixed statusless provider capacity errors such as `no_capacity` and high-demand responses being treated as terminal instead of retryable. ([#6503](https://github.com/can1357/oh-my-pi/issues/6503))
+- Fixed QwenCloud Token Plan quota reporting to call the current console usage RPC and document how to capture its optional Cookie during login.
+- Fixed Cursor exec-channel MCP calls such as `web_search` omitting `toolCall` blocks when no interaction block arrives, which rendered their tool cards below the final assistant answer or dropped them on transcript replay. ([#6501](https://github.com/can1357/oh-my-pi/issues/6501))
+- Fixed Claude scoped weekly limits (e.g. `Claude 7 Day (Fable)`) with `is_active: false` being dropped by the `/usage` parser, rendering as `not reported` in `omp usage` despite carrying real utilization. Live payloads mark only the currently binding limit active — an account pinned at a 100% Fable cap reports its 77% shared weekly row as inactive too — so `is_active` signals severity ranking, not bucket existence, and is now ignored. Exhaustion gating is unchanged: tier rows still hard-block only at confirmed 100% with a future reset.
+- Fixed a TDZ crash (`Cannot access 'claudeCodeVersion' before initialization`) when `providers/anthropic` was the first module loaded: `providers/anthropic` → `stream` → `registry` → `registry/oauth/anthropic` circled back into the still-initializing provider module. The Claude Code fingerprint constants now live in the leaf module `providers/claude-code-fingerprint` (star re-exported from `providers/anthropic`, so import paths are unchanged).
+
 ## [17.1.3] - 2026-07-24
 
 ### Fixed

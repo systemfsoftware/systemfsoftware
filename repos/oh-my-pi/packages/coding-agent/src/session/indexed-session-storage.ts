@@ -511,6 +511,15 @@ class IndexedSessionStorageWriter implements SessionStorageWriter {
 		return next;
 	}
 
+	appendSync(line: string): void {
+		if (this.#closed) throw new Error("Writer closed");
+		if (this.#error) throw this.#error;
+		// Local index is updated immediately; remote publish stays ordered on the
+		// path queue. Callers that need remote durability still await append()/flush().
+		const mtimeMs = this.#storage._appendForWriter(this.#path, line);
+		void this.#trackPromise(this.#storage._queueAppend(this.#path, line, mtimeMs, () => this.#error));
+	}
+
 	async append(line: string): Promise<void> {
 		if (this.#closed) throw new Error("Writer closed");
 		if (this.#error) throw this.#error;

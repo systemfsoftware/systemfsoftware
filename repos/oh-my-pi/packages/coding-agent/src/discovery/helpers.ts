@@ -16,6 +16,7 @@ import { invalidate as invalidateFsCache, readDirEntries, readFile } from "../ca
 import { parseRuleConditionAndScope, type Rule, type RuleFrontmatter } from "../capability/rule";
 import type { Skill, SkillFrontmatter } from "../capability/skill";
 import type { LoadContext, LoadResult, SourceMeta } from "../capability/types";
+import type { MCPRequestIdFormat } from "../mcp/types";
 import { type ConfiguredThinkingLevel, parseConfiguredThinkingLevel } from "../thinking";
 import { normalizeToolNames } from "../tools/builtin-names";
 
@@ -137,6 +138,15 @@ export function parseBoolean(value: unknown): boolean | undefined {
 		if (normalized === "true") return true;
 		if (normalized === "false") return false;
 	}
+	return undefined;
+}
+
+/**
+ * Parse an MCP `requestIdFormat` value. Unrecognized values are dropped so a typo
+ * degrades to the default integer ids rather than reaching a transport.
+ */
+export function parseRequestIdFormat(value: unknown): MCPRequestIdFormat | undefined {
+	if (value === "string" || value === "number") return value;
 	return undefined;
 }
 

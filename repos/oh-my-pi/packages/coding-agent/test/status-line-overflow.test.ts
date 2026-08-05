@@ -162,6 +162,28 @@ describe("status line session accent", () => {
 	});
 });
 
+describe("status line focused-agent dimming", () => {
+	it("keeps powerline end caps at full intensity while text stays dimmed", () => {
+		const component = new StatusLineComponent(createStatusLineSession("Focused session"));
+		component.updateSettings({
+			preset: "custom",
+			leftSegments: ["pi"],
+			rightSegments: ["session_name"],
+			separator: "powerline-thin",
+			sessionAccent: false,
+		});
+		component.setSession(createStatusLineSession("Focused session"), "agent-1");
+
+		const border = component.getTopBorder(80).content;
+
+		expect(border).toStartWith("\x1b[2m");
+		expect(border).toContain(`\x1b[22m${theme.sep.powerlineLeft}\x1b[0m\x1b[2m`);
+		expect(border).toContain(`\x1b[22m${theme.sep.powerlineRight}\x1b[0m\x1b[2m`);
+		expect(border).toContain("\x1b[0m\x1b[2m");
+		expect(border).toEndWith("\x1b[22m");
+	});
+});
+
 describe("path segment truncation at varying maxLength", () => {
 	let tmpDir: string;
 

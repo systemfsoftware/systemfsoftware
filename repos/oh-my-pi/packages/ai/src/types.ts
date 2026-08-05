@@ -1,6 +1,7 @@
 export * from "@oh-my-pi/pi-catalog/effort";
 export * from "@oh-my-pi/pi-catalog/types";
 
+import type { Type } from "@oh-my-pi/omptype";
 import type {
 	DeleteArgs,
 	DeleteResult,
@@ -11,6 +12,20 @@ import type {
 	LsArgs,
 	LsResult,
 	McpResult,
+	PiBashExecArgs,
+	PiBashExecResult,
+	PiEditExecArgs,
+	PiEditExecResult,
+	PiFindExecArgs,
+	PiFindExecResult,
+	PiGrepExecArgs,
+	PiGrepExecResult,
+	PiLsExecArgs,
+	PiLsExecResult,
+	PiReadExecArgs,
+	PiReadExecResult,
+	PiWriteExecArgs,
+	PiWriteExecResult,
 	ReadArgs,
 	ReadResult,
 	ShellArgs,
@@ -21,7 +36,6 @@ import type {
 import type { Effort } from "@oh-my-pi/pi-catalog/effort";
 import { isOpenAIModelId } from "@oh-my-pi/pi-catalog/identity/family";
 import type { Api, FetchImpl, KnownApi, Model, Provider, ThinkingBudgets, Usage } from "@oh-my-pi/pi-catalog/types";
-import type { Type } from "arktype";
 import type { ZodType, z } from "zod/v4";
 import type { ApiKey } from "./auth-retry";
 import type { BedrockOptions } from "./providers/amazon-bedrock";
@@ -200,23 +214,25 @@ export function resolveModelServiceTier(
 
 /**
  * True when the tier should be sent on the wire as the provider's service-tier
- * request field. OpenAI / OpenAI-Codex accept `flex`/`scale`/`priority`; Google
- * (Gemini API + Vertex) and OpenRouter accept `flex`/`priority`; Fireworks
- * Serverless realizes only its Priority serving path. Anthropic is absent — it
- * realizes `priority` via `speed: "fast"`, not a service-tier field.
+ * request field. `auto` is never forwarded — it is OpenAI's implicit default, so
+ * omitting `service_tier` is identical to requesting `auto`, and the Codex
+ * (ChatGPT OAuth) endpoint rejects an explicit `auto` outright. OpenAI /
+ * OpenAI-Codex accept every other {@link ServiceTier}; Google (Gemini API +
+ * Vertex) and OpenRouter accept `flex`/`priority`; Fireworks Serverless
+ * realizes only its Priority serving path. Anthropic is absent because it
+ * realizes `priority` via `speed: "fast"`.
  */
 export function shouldSendServiceTier(
 	serviceTier: ServiceTier | null | undefined,
 	target: Provider | ServiceTierModel | undefined,
 ): boolean {
-	if (!serviceTier) return false;
+	if (!serviceTier || serviceTier === "auto") return false;
 	const provider = typeof target === "string" ? target : target?.provider;
-	if (provider === "openai" || provider === "openai-codex" || provider === "openrouter") {
+	if (provider === "openai" || provider === "openai-codex") return true;
+	if (provider === "openrouter") {
 		return serviceTier === "flex" || serviceTier === "scale" || serviceTier === "priority";
 	}
-	if (typeof target !== "string" && target && isOpenAIServiceTierModel(target)) {
-		return serviceTier === "flex" || serviceTier === "scale" || serviceTier === "priority";
-	}
+	if (typeof target !== "string" && target && isOpenAIServiceTierModel(target)) return true;
 	if (provider === "google") {
 		return serviceTier === "flex" || serviceTier === "priority";
 	}
@@ -420,6 +436,11 @@ export interface StreamOptions {
 	 * For example, Anthropic uses `user_id` for abuse tracking and rate limiting.
 	 */
 	metadata?: Record<string, unknown>;
+	/**
+	 * Provider-owned request configuration. Provider hooks interpret this bag;
+	 * generic API transports do not forward its fields onto the wire.
+	 */
+	providerOptions?: Readonly<Record<string, unknown>>;
 	/** OpenAI Responses/Codex response fields to include verbatim. */
 	include?: OpenAIResponseInclude[];
 	/**
@@ -522,6 +543,13 @@ export interface StreamOptions {
 	 */
 	streamIdleTimeoutMs?: number;
 	/**
+	 * Optional cap on Codex SSE pre-response attempts, including the initial
+	 * request. WebSocket retries and outer agent retries have separate budgets.
+	 * Finite values below `1` and non-finite values are clamped to one request;
+	 * omission preserves the provider default.
+	 */
+	codexSseMaxAttempts?: number;
+	/**
 	 * Optional retry delay hook for tests and transports that need custom scheduling.
 	 */
 	providerRetryWait?: (delayMs: number, signal?: AbortSignal) => Promise<void>;
@@ -574,7 +602,14 @@ export interface SimpleStreamOptions extends Omit<StreamOptions, "apiKey"> {
 	thinkingBudgets?: ThinkingBudgets;
 	/** Cursor exec handlers for local tool execution */
 	cursorExecHandlers?: CursorExecHandlers;
-	/** Hook to handle tool results from Cursor exec */
+	/**
+	 * Optional rewrite of Cursor exec-channel tool results. May return a Promise.
+	 *
+	 * The Agent reserves the original result in its buffer before awaiting this
+	 * hook, and the `message_end` drain waits for a still-pending rewrite, so an
+	 * async transformer is honored even when the turn closes in the same chunk.
+	 * A rejecting transformer is swallowed and the reserved payload stands in.
+	 */
 	cursorOnToolResult?: CursorToolResultHandler;
 	/** Optional tool choice override for compatible providers */
 	toolChoice?: ToolChoice;
@@ -816,6 +851,8 @@ export interface AssistantRetryRecovery {
 export interface ContextSnapshot {
 	promptTokens: number; // authoritative provider prompt/input tokens
 	nonMessageTokens: number; // estimated non-message total at send time
+	/** Estimated prompt tokens removed by local history rewrites after this provider snapshot was recorded. */
+	historyRewriteTokensRemoved?: number;
 	lastMessageTimestamp?: number;
 }
 
@@ -895,9 +932,27 @@ export type Message = UserMessage | DeveloperMessage | AssistantMessage | ToolRe
 
 export type CursorExecHandlerResult<T> = { result: T; toolResult?: ToolResultMessage } | T | ToolResultMessage;
 
+/**
+ * Optional rewrite of a Cursor exec-channel tool result.
+ * May return a Promise. Returning `undefined` keeps the original result.
+ *
+ * The Agent reserves the original result in its buffer before awaiting this
+ * hook, and the `message_end` drain waits for a still-pending rewrite, so an
+ * async transformer is honored even when the turn closes in the same chunk.
+ * A rejecting transformer is swallowed and the reserved payload stands in.
+ */
 export type CursorToolResultHandler = (
 	result: ToolResultMessage,
 ) => ToolResultMessage | undefined | Promise<ToolResultMessage | undefined>;
+
+/**
+ * Identifies the synthesized assistant block a Cursor exec call was filed
+ * under, so paths that produce no handler `toolResult` can still pair one.
+ */
+export interface CursorExecPairing {
+	toolCallId: string;
+	toolName: string;
+}
 
 export interface CursorMcpCall {
 	name: string;
@@ -906,11 +961,111 @@ export interface CursorMcpCall {
 	toolCallId: string;
 	args: Record<string, unknown>;
 	rawArgs: Record<string, Uint8Array>;
+	/**
+	 * The frame asks only whether this call would be permitted — it must not
+	 * run. The server sends it to resolve a smart-mode approval decision ahead
+	 * of the real invocation, and answers with the dedicated `approved`
+	 * variant, so executing here would fire a side-effecting tool the user has
+	 * not yet been asked about (and fire it twice once the real call arrives).
+	 */
+	approvalOnly?: boolean;
 }
+
+export interface CursorTodoSnapshotItem {
+	content: string;
+	status: "pending" | "in_progress" | "completed" | "abandoned";
+}
+
+/**
+ * Authoritative todo list state settled by Cursor's server-side
+ * `update_todos` / `read_todos` tools.
+ */
+export interface CursorTodoSnapshot {
+	todos: CursorTodoSnapshotItem[];
+	/** True when the server reported the update as a merge. Presentation only. */
+	merged: boolean;
+}
+
+/**
+ * Settles a native todo call in the host.
+ *
+ * Called for every completed native todo call, not just successful ones: the
+ * interactive todo card only resolves on a matching `tool_execution_end`, so a
+ * refused or failed call that stayed silent would animate forever.
+ *
+ * `snapshot` is the server-confirmed list, or `null` when there is nothing to
+ * mirror — a server error (`error` set), or a benign refusal with `error` null:
+ * a filtered, truncated, or empty read, or a snapshot the local model cannot
+ * represent (two rows sharing content). Local state MUST be left untouched
+ * unless a snapshot is supplied.
+ *
+ * `toolCallId` is the id of the streamed native call, which is also the key the
+ * interactive transcript filed the visible block under. The host MUST reuse it
+ * when emitting the synthetic completion, or that block never resolves.
+ *
+ * Returns the result to persist for that block — always, since every settle
+ * needs a paired result or `buildSessionContext` strips the block as dangling.
+ * Only the host knows the phase grouping the todo renderer replays from, so the
+ * provider persists this value verbatim. When no handler is registered at all,
+ * the provider falls back to its own summary-only result.
+ */
+export type CursorTodoSyncHandler = (
+	snapshot: CursorTodoSnapshot | null,
+	toolCallId: string,
+	error: string | null,
+) => ToolResultMessage;
 
 export interface CursorShellStreamCallbacks {
 	onStdout(data: string): void;
 	onStderr(data: string): void;
+}
+
+/**
+ * A modern Pi exec frame plus the call id the dispatcher minted for it.
+ *
+ * Unlike the legacy exec args (`ReadArgs`, `ShellArgs`, ...), the Pi frames
+ * carry no `tool_call_id` field: on modern builds the id rides the streamed
+ * `ToolCall` envelope (`ToolCall.tool_call_id = 57`) instead of each variant's
+ * args. The exec channel has no access to that envelope, so the dispatcher
+ * mints an id and hands it to the handler, keeping the synthesized transcript
+ * block and its paired `toolResult` on the same key.
+ */
+export interface CursorPiCall<TArgs> {
+	args: TArgs;
+	toolCallId: string;
+}
+
+/** One resource a host's MCP servers advertise. */
+export interface CursorMcpResource {
+	uri: string;
+	name?: string;
+	description?: string;
+	mimeType?: string;
+	/** The server advertising it; Cursor addresses reads by this name. */
+	server: string;
+}
+
+/**
+ * The content of one resource read.
+ *
+ * `text` and `blob` are the wire's content oneof: exactly one is sent, with
+ * `text` winning when a host supplies both. A download instead sets
+ * `downloadPath` and no content at all — the model is told where the file
+ * landed rather than being handed its bytes.
+ */
+export interface CursorMcpResourceContent {
+	uri: string;
+	name?: string;
+	description?: string;
+	mimeType?: string;
+	text?: string;
+	blob?: Uint8Array;
+	/**
+	 * Where the host wrote the resource, workspace-relative, when the frame
+	 * asked for a download. Set this INSTEAD of `text`/`blob`: the wire
+	 * contract is that a download returns no content to the model.
+	 */
+	downloadPath?: string;
 }
 
 export interface CursorExecHandlers {
@@ -926,6 +1081,53 @@ export interface CursorExecHandlers {
 	) => Promise<CursorExecHandlerResult<ShellResult>>;
 	diagnostics?: (args: DiagnosticsArgs) => Promise<CursorExecHandlerResult<DiagnosticsResult>>;
 	mcp?: (call: CursorMcpCall) => Promise<CursorExecHandlerResult<McpResult>>;
+	/**
+	 * Answers "would this MCP call be permitted", without running it.
+	 *
+	 * A modern `mcpArgs` frame carrying `smart_mode_approval_only` asks for the
+	 * permission decision alone, ahead of the real invocation. Executing the
+	 * tool to answer it would fire a side effect the user never approved — and
+	 * fire it twice once the real call arrives.
+	 *
+	 * `true` only when the host's policy resolves to a definite allow. A pending
+	 * prompt is `false`: it can only be answered interactively at execution
+	 * time, and there is no "ask me later" reply in this frame's result. When no
+	 * handler is registered the provider refuses, since it cannot decide.
+	 */
+	mcpApprovalPreflight?: (call: CursorMcpCall) => Promise<boolean>;
+	/**
+	 * Modern Cursor CLI Pi tool frames (`ExecServerMessage` 45-51). They are a
+	 * distinct frame family from the legacy `readArgs`/`shellArgs`/... set, not
+	 * an alias: different args, different result oneofs, and no `tool_call_id`.
+	 */
+	piRead?: (call: CursorPiCall<PiReadExecArgs>) => Promise<CursorExecHandlerResult<PiReadExecResult>>;
+	piBash?: (call: CursorPiCall<PiBashExecArgs>) => Promise<CursorExecHandlerResult<PiBashExecResult>>;
+	piEdit?: (call: CursorPiCall<PiEditExecArgs>) => Promise<CursorExecHandlerResult<PiEditExecResult>>;
+	piWrite?: (call: CursorPiCall<PiWriteExecArgs>) => Promise<CursorExecHandlerResult<PiWriteExecResult>>;
+	piGrep?: (call: CursorPiCall<PiGrepExecArgs>) => Promise<CursorExecHandlerResult<PiGrepExecResult>>;
+	piFind?: (call: CursorPiCall<PiFindExecArgs>) => Promise<CursorExecHandlerResult<PiFindExecResult>>;
+	piLs?: (call: CursorPiCall<PiLsExecArgs>) => Promise<CursorExecHandlerResult<PiLsExecResult>>;
+	/**
+	 * The resources the host's MCP servers advertise, optionally filtered to one
+	 * server. Without a handler the provider answers an empty catalog, which
+	 * hides resources a host is in fact holding live connections to.
+	 */
+	listMcpResources?: (args: { server?: string }) => Promise<CursorMcpResource[]>;
+	/**
+	 * Read one resource. `null` means the server or uri is genuinely unknown,
+	 * which the provider answers as `not_found`; throwing surfaces as `error`.
+	 */
+	readMcpResource?: (args: {
+		server: string;
+		uri: string;
+		/**
+		 * When set, write the resource here (workspace-relative) and return
+		 * `downloadPath` instead of content.
+		 */
+		downloadPath?: string;
+	}) => Promise<CursorMcpResourceContent | null>;
+	/** Mirror Cursor's server-owned todo list into local session state. */
+	todoSync?: CursorTodoSyncHandler;
 	onToolResult?: CursorToolResultHandler;
 }
 

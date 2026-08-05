@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, it, vi } from "bun:test";
 import { stripVTControlCharacters } from "node:util";
+import { type } from "@oh-my-pi/omptype";
 import type { AgentToolContext } from "@oh-my-pi/pi-agent-core";
 import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
 import type {
@@ -11,7 +12,6 @@ import { getThemeByName, initTheme } from "@oh-my-pi/pi-coding-agent/modes/theme
 import type { ToolSession } from "@oh-my-pi/pi-coding-agent/tools";
 import { AskTool, askToolRenderer } from "@oh-my-pi/pi-coding-agent/tools/ask";
 import { ToolAbortError } from "@oh-my-pi/pi-coding-agent/tools/tool-errors";
-import { type } from "arktype";
 
 function createSession(overrides: Partial<ToolSession> = {}): ToolSession {
 	return {

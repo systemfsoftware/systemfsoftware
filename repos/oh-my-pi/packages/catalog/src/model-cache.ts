@@ -9,9 +9,11 @@ import type { Api, Model, ModelSpec } from "./types";
 // Rows persist ModelSpec JSON (sparse `compat`, never the resolved record);
 // the model manager rebuilds via `buildModel` on load. Request headers are
 // intentionally omitted: arbitrary provider-defined header names can carry
-// credentials. v10 deletes rows that may contain persisted headers and records
-// which model ids lost headers and which cannot be rebuilt from static inputs,
-// so the manager can restore the safe subset or refetch dynamic-only headers;
+// credentials. v12 invalidates Kimi Code rows carrying the blanket
+// maxTokens: 32000 that predate per-family output caps (k3/k3-256k -> 131072,
+// kimi-for-coding[-highspeed] -> 32768, #6711); v11 invalidates rows that may
+// persist derived computer-use
+// headers and records which model ids lost headers or cannot be rebuilt.
 // v9 invalidated Kimi Code rows predating live effort and protocol metadata;
 // v8 invalidated Codex discovery rows predating provider-native V2 compaction
 // metadata; v7 invalidated rows predating the Antigravity Gemini budget-mode
@@ -20,7 +22,7 @@ import type { Api, Model, ModelSpec } from "./types";
 // retired unknown-limit sentinels (222222/8888); v5 invalidated rows predating
 // effort-tier variant collapsing (raw `-low`/`-high`/`-thinking` member ids);
 // v4 dropped the pre-efforts ThinkingConfig shape.
-const CACHE_SCHEMA_VERSION = 10;
+const CACHE_SCHEMA_VERSION = 12;
 const HEADER_RESTORE_VERSION = 1;
 
 interface CacheRow {
@@ -204,8 +206,8 @@ function hasModelHeaders(model: Model<Api>): boolean {
  * headers and reject/refetch dynamic-only cached models that need live headers.
  */
 function toCachedModelSpec<TApi extends Api>(model: Model<TApi>): ModelSpec<TApi> {
-	const { headers: _headers, compatConfig, ...rest } = model;
-	return { ...rest, compat: compatConfig };
+	const { headers: _headers, compatConfig, supportsComputerUseConfig, ...rest } = model;
+	return { ...rest, supportsComputerUse: supportsComputerUseConfig, compat: compatConfig };
 }
 
 /** Whether two in-memory header records are byte-for-byte equivalent. */
@@ -228,6 +230,7 @@ export function writeModelCache<TApi extends Api>(
 	staticFingerprint: string,
 	dbPath?: string,
 	staticHeaderSources: readonly Model<TApi>[] = [],
+	restorableHeaderFallback?: Record<string, string>,
 ): void {
 	try {
 		withModelCacheDb(dbPath, db => {
@@ -244,7 +247,14 @@ export function writeModelCache<TApi extends Api>(
 					// unrestorable and dropped on the next offline read (#6037, #6284).
 					const staticHeaderSource =
 						staticById.get(model.id) ?? (model.requestModelId ? staticById.get(model.requestModelId) : undefined);
-					if (!headersEqual(model.headers, staticHeaderSource?.headers)) {
+					// A model with no static source is still restorable when its live
+					// headers equal the provider's trusted constant (a compile-time,
+					// non-credential value the reader can reattach by value). This keeps
+					// reference-less Copilot models (e.g. claude-opus-5) alive offline.
+					const matchesStatic = staticHeaderSource
+						? headersEqual(model.headers, staticHeaderSource.headers)
+						: headersEqual(model.headers, restorableHeaderFallback);
+					if (!matchesStatic) {
 						unrestorableHeaderModelIds.push(model.id);
 					}
 				}

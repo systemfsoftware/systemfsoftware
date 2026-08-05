@@ -12,6 +12,7 @@ use nix::unistd::Group;
 use super::{ComparableValue, Matcher, MatcherIO, WalkEntry};
 
 pub struct GroupMatcher {
+	#[cfg_attr(not(unix), allow(dead_code))]
 	gid: ComparableValue,
 }
 

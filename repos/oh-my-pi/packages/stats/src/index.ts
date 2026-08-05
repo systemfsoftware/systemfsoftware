@@ -171,8 +171,8 @@ Examples:
 
 		// Start server
 		const port = parseInt(values.port || "3847", 10);
-		const { port: actualPort } = await startServer(port);
-		console.log(`Dashboard available at: http://localhost:${actualPort}`);
+		const { hostname, port: actualPort } = await startServer(port);
+		console.log(`Dashboard available at: http://${hostname}:${actualPort}`);
 		console.log("Press Ctrl+C to stop\n");
 
 		// Keep process running

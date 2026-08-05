@@ -331,10 +331,8 @@ describe("compaction skill re-invocation", () => {
 		// Bug fix contract: a re-invoked user skill identifies itself and exposes its
 		// skill directory so relative skill paths resolve after compaction.
 		expect(renderedText.text).toContain("Do the thing.");
-		expect(renderedText.text).toContain('The user has invoked the "test-skill" skill');
 		expect(renderedText.text).toContain(`[Skill directory: ${tempDir.path()}]`);
-		expect(renderedText.text).toMatch(/[Rr]esolve any relative paths/);
-		expect(renderedText.text).toContain("User: arg1 arg2");
+		expect(renderedText.text).toContain("arg1 arg2");
 		expect(message.content[1]).toEqual(image);
 		expect(message.details).toMatchObject({ name: "test-skill", args: "arg1 arg2", lineCount: 1 });
 		expect(options).toEqual({

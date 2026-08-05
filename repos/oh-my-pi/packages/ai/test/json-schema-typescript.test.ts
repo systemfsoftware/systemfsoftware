@@ -18,6 +18,23 @@ describe("jsonSchemaToTypeScript", () => {
 		expect(ts).toContain("limit?: number;");
 	});
 
+	it("renders the harmony style with line comments, comma delimiters, and no indentation", () => {
+		const ts = jsonSchemaToTypeScript(
+			{
+				type: "object",
+				properties: {
+					position: { type: "number", description: "keypad position, 1 through 5" },
+					digit: { type: "number", description: "digit guess, 0 through 9" },
+				},
+				required: ["position", "digit"],
+			},
+			{ style: "harmony" },
+		);
+		expect(ts).toBe(
+			"{\n// keypad position, 1 through 5\nposition: number,\n// digit guess, 0 through 9\ndigit: number,\n}",
+		);
+	});
+
 	it("renders enums and consts as literal unions", () => {
 		const ts = jsonSchemaToTypeScript({
 			type: "object",

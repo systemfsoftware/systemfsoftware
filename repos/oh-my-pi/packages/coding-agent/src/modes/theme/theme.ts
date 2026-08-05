@@ -1,5 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { type } from "@oh-my-pi/omptype";
 import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import type { Effort } from "@oh-my-pi/pi-ai";
 import {
@@ -9,9 +10,16 @@ import {
 	highlightCode as nativeHighlightCode,
 	supportsLanguage as nativeSupportsLanguage,
 } from "@oh-my-pi/pi-natives";
-import type { EditorTheme, MarkdownTheme, SelectListTheme, SettingsListTheme, SymbolTheme } from "@oh-my-pi/pi-tui";
+import type {
+	EditorTheme,
+	MarkdownTheme,
+	SelectListTheme,
+	SettingsListTheme,
+	SymbolTheme,
+	Terminal,
+	TerminalAppearance,
+} from "@oh-my-pi/pi-tui";
 import { adjustHsv, colorLuma, getCustomThemesDir, isEnoent, logger, relativeLuminance } from "@oh-my-pi/pi-utils";
-import { type } from "arktype";
 import chalk from "chalk";
 import { LRUCache } from "lru-cache/raw";
 // Embed theme JSON files at build time
@@ -1110,7 +1118,7 @@ const spinnerFramesSchema = type("unknown").narrow((value): value is SpinnerFram
 const themeJsonSchema = type({
 	"$schema?": "string",
 	name: "string",
-	"vars?": "Record<string, string | number>",
+	"vars?": { "[string]": "string | number" },
 	colors: themeColorsSchema,
 	"export?": {
 		"pageBg?": "string | number",
@@ -1119,7 +1127,7 @@ const themeJsonSchema = type({
 	},
 	"symbols?": {
 		"preset?": "'unicode' | 'nerd' | 'ascii'",
-		"overrides?": "Record<string, string>",
+		"overrides?": { "[string]": "string" },
 		"spinnerFrames?": spinnerFramesSchema,
 	},
 });
@@ -2315,10 +2323,13 @@ export function setAutoThemeMapping(mode: "dark" | "light", themeName: string): 
  * The terminal layer queries OSC 11 (background color) and computes luminance;
  * Mode 2031 notifications trigger re-queries rather than providing the value directly.
  */
-export function onTerminalAppearanceChange(mode: "dark" | "light"): void {
+export function onTerminalAppearanceChange(
+	mode: "dark" | "light",
+	event: ThemeChangeEvent = { ephemeral: true },
+): void {
 	if (terminalReportedAppearance === mode) return;
 	terminalReportedAppearance = mode;
-	reevaluateAutoTheme("terminal appearance");
+	reevaluateAutoTheme("terminal appearance", event);
 }
 
 export function setThemeInstance(themeInstance: Theme): void {
@@ -2493,27 +2504,168 @@ async function startThemeWatcher(): Promise<void> {
 }
 
 /**
- * Shared logic for re-evaluating the auto-detected theme.
- * Called from SIGWINCH, terminal appearance change handler, and macOS fallback observer.
+ * Load and apply an already-resolved auto-theme name.
  */
-function reevaluateAutoTheme(debugLabel: string, event: ThemeChangeEvent = {}): void {
-	if (!autoDetectedTheme) return;
-	const resolved = getDefaultTheme();
+function applyResolvedAutoTheme(resolved: string, debugLabel: string, event: ThemeChangeEvent): void {
 	if (resolved === currentThemeName) return;
 	currentThemeName = resolved;
+	const requestId = ++themeLoadRequestId;
 	loadTheme(resolved, getCurrentThemeOptions())
 		.then(loadedTheme => {
+			if (requestId !== themeLoadRequestId) return;
 			theme = loadedTheme;
 			notifyThemeChange(event);
 		})
 		.catch(err => {
+			if (requestId !== themeLoadRequestId) return;
 			logger.debug(`Theme switch on ${debugLabel} failed`, { error: String(err) });
 		});
+}
+
+/**
+ * Shared logic for re-evaluating the auto-detected theme.
+ * An explicit appearance is provisional input and does not alter terminal-reported state.
+ */
+function reevaluateAutoTheme(debugLabel: string, event: ThemeChangeEvent = {}, appearance?: "dark" | "light"): void {
+	if (!autoDetectedTheme) return;
+	const resolved =
+		appearance === undefined ? getDefaultTheme() : appearance === "dark" ? autoDarkTheme : autoLightTheme;
+	applyResolvedAutoTheme(resolved, debugLabel, event);
+}
+
+function reevaluateAutoThemeForAppearance(debugLabel: string, appearance?: "dark" | "light"): void {
+	reevaluateAutoTheme(debugLabel, { ephemeral: true }, appearance);
 }
 
 // ============================================================================
 // macOS Appearance Fallback Observer
 // ============================================================================
+
+type MacOSAppearanceReprobeTerminal = Pick<
+	Terminal,
+	"appearance" | "onAppearanceChange" | "onAppearanceReport" | "onPrivateModeReport" | "refreshAppearance"
+>;
+
+const MACOS_APPEARANCE_REPROBE_DELAYS_MS = [25, 50, 100, 250, 500, 1000] as const;
+const MACOS_APPEARANCE_RECONCILE_DELAY_MS = 1100;
+
+/**
+ * Fall back to native macOS appearance notifications when the terminal
+ * explicitly confirms that Mode 2031 notifications are unsupported.
+ *
+ * Native notifications provisionally repaint from the host appearance and
+ * synchronously trigger an OSC 11 probe, followed by a bounded burst of six
+ * retries. A changed terminal classification cancels the sequence; otherwise
+ * a confirmed terminal classification is restored at the validation deadline.
+ */
+export function startMacOSAppearanceReprobeFallback(terminal: MacOSAppearanceReprobeTerminal): () => void {
+	let disposed = false;
+	let observerStartAttempted = false;
+	let observer: MacAppearanceObserver | undefined;
+	let probeGeneration = 0;
+	let probeSequenceActive = false;
+	let probeBaseline: TerminalAppearance | undefined;
+	let probeResponseConfirmed = false;
+	const probeTimers = new Set<Timer>();
+	let reconciliationTimer: Timer | undefined;
+
+	const cancelProbeSequence = (): void => {
+		probeGeneration++;
+		probeSequenceActive = false;
+		probeBaseline = undefined;
+		probeResponseConfirmed = false;
+		if (reconciliationTimer) {
+			clearTimeout(reconciliationTimer);
+			reconciliationTimer = undefined;
+		}
+		for (const timer of probeTimers) {
+			clearTimeout(timer);
+		}
+		probeTimers.clear();
+	};
+
+	const scheduleProbeSequence = (): void => {
+		cancelProbeSequence();
+		if (disposed || !autoDetectedTheme) return;
+
+		probeSequenceActive = true;
+		probeBaseline = terminal.appearance;
+		probeResponseConfirmed = false;
+		const generation = probeGeneration;
+		terminal.refreshAppearance?.();
+		if (disposed || generation !== probeGeneration || !autoDetectedTheme) return;
+		for (const delay of MACOS_APPEARANCE_REPROBE_DELAYS_MS) {
+			const timer = setTimeout(() => {
+				probeTimers.delete(timer);
+				if (disposed || generation !== probeGeneration) return;
+				if (!autoDetectedTheme) {
+					cancelProbeSequence();
+					return;
+				}
+				terminal.refreshAppearance?.();
+			}, delay);
+			timer.unref?.();
+			probeTimers.add(timer);
+		}
+		reconciliationTimer = setTimeout(() => {
+			reconciliationTimer = undefined;
+			if (disposed || generation !== probeGeneration) return;
+			const appearance = probeResponseConfirmed ? terminal.appearance : undefined;
+			cancelProbeSequence();
+			if (!autoDetectedTheme || !appearance) return;
+			reevaluateAutoThemeForAppearance("macOS appearance reconciliation", appearance);
+		}, MACOS_APPEARANCE_RECONCILE_DELAY_MS);
+		reconciliationTimer.unref?.();
+	};
+
+	const unsubscribeAppearanceReport = terminal.onAppearanceReport?.(() => {
+		if (disposed || !probeSequenceActive) return;
+		probeResponseConfirmed = true;
+	});
+
+	terminal.onAppearanceChange(appearance => {
+		if (disposed || !probeSequenceActive || appearance === probeBaseline) return;
+		cancelProbeSequence();
+	});
+
+	terminal.onPrivateModeReport?.((mode, supported, confirmed) => {
+		if (disposed || observerStartAttempted || mode !== 2031 || supported || confirmed !== true) {
+			return;
+		}
+
+		observerStartAttempted = true;
+		try {
+			observer = MacAppearanceObserver.start((err, appearance) => {
+				if (disposed) return;
+				if (err) {
+					cancelProbeSequence();
+					return;
+				}
+				if (appearance === "dark" || appearance === "light") {
+					reevaluateAutoThemeForAppearance("macOS provisional appearance", appearance);
+				}
+				scheduleProbeSequence();
+			});
+		} catch (err) {
+			logger.warn("Failed to start macOS appearance reprobe observer", { err });
+		}
+	});
+
+	return () => {
+		if (disposed) return;
+		disposed = true;
+		cancelProbeSequence();
+		if (unsubscribeAppearanceReport) unsubscribeAppearanceReport();
+		const activeObserver = observer;
+		observer = undefined;
+		if (!activeObserver) return;
+		try {
+			activeObserver.stop();
+		} catch (err) {
+			logger.debug("Failed to stop macOS appearance reprobe observer", { err });
+		}
+	};
+}
 
 var macObserver: { stop(): void } | undefined;
 
@@ -2525,7 +2677,7 @@ function startMacAppearanceObserver(): void {
 		macObserver = MacAppearanceObserver.start((err, appearance) => {
 			if (!err && (appearance === "dark" || appearance === "light")) {
 				macOSReportedAppearance = appearance;
-				reevaluateAutoTheme("macOS fallback");
+				reevaluateAutoThemeForAppearance("macOS fallback");
 			}
 		});
 	} catch (err) {
@@ -2549,7 +2701,7 @@ function stopMacAppearanceObserver(): void {
 function startSigwinchListener(): void {
 	stopSigwinchListener();
 	sigwinchHandler = () => {
-		reevaluateAutoTheme("SIGWINCH");
+		reevaluateAutoThemeForAppearance("SIGWINCH");
 	};
 	process.on("SIGWINCH", sigwinchHandler);
 	startMacAppearanceObserver();

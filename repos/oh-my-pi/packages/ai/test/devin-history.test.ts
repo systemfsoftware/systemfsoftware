@@ -108,4 +108,13 @@ describe("streamDevin history handoff", () => {
 		expect(native?.thinking).toBe("native reasoning");
 		expect(native?.signature).toBe("native-signature");
 	});
+
+	it("accepts a bare-string system prompt", async () => {
+		const request = await captureRequest({
+			systemPrompt: "You are a test." as unknown as string[],
+			messages: [{ role: "user", content: "hi", timestamp: 0 }],
+		});
+
+		expect(request.prompt).toBe("You are a test.");
+	});
 });
