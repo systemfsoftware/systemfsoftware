@@ -1,8 +1,8 @@
 import { reporterPluginsFileUrl, strykerPlugins } from './reporters/index.js'
-import { StrykerCli } from './stryker-cli.js'
+import { runStrykerCli } from './stryker-cli.js'
 import { Stryker } from './stryker.js'
 
-export { Stryker, StrykerCli }
+export { runStrykerCli, Stryker }
 export { reporterPluginsFileUrl, strykerPlugins }
 
 // One default export for backward compatibility
