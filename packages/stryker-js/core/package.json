@@ -89,6 +89,7 @@
     "@std/jsonc": "catalog:",
     "@stryker-mutator/vitest-runner": "catalog:stryker",
     "@systemfsoftware/arethetypeswrong-cli": "workspace:^",
+    "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/diff-match-patch": "1.0.36",
     "@types/json-schema": "7.0.15",
