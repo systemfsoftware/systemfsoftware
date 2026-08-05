@@ -29,6 +29,71 @@ const ajv = new Ajv({
   strict: false,
 })
 
+/**
+ * A name the rebuild removed (U2-U9). R2 requires a removed name to fail
+ * loudly in both entry paths — the CLI half already lands in the framework's
+ * usage-error path; this denylist closes the config-file half, where a
+ * removed key could otherwise pass the AJV schema silently (a removed key is
+ * absent from the schema by definition, so the check must live ahead of
+ * `schemaValidate`, not inside it).
+ */
+export interface RemovedOption {
+  /** The removed name: a top-level config key or a reporter name. */
+  readonly name: string
+  /** What to do instead, shown in the error message. */
+  readonly remediation: string
+}
+
+/**
+ * The canonical removed-names denylist, derived from what U2-U9 actually
+ * deleted: the four reporters pruned from the registry (`dots`,
+ * `event-recorder`, `progress-append-only`, `dashboard`) and the config keys
+ * their deletion orphaned (`dashboard`, `eventReporter`). The CI-provider
+ * stack, the initializer, and the dropped commands (`init`, `serve`,
+ * `runServer`) exposed no config-file surface — environment variables and
+ * commands only — so nothing from them belongs here; flags U2 dropped that
+ * were never config keys (`--files`, `--allowConsoleColors`, `--dashboard.*`)
+ * fail as unknown arguments on the command line and are not denylisted.
+ * Deprecated-but-migrated keys (`files`, `transpilers`, `testFramework`, ...)
+ * are rewritten by `removeDeprecatedOptions` and deliberately stay soft.
+ *
+ * U11 imports this list as the removed-names oracle for the `--llms` manifest
+ * drift guard — the names are shared, never re-listed.
+ */
+export const REMOVED_OPTIONS: readonly RemovedOption[] = [
+  {
+    name: 'dots',
+    remediation: 'the "dots" reporter was removed; use "clear-text" instead',
+  },
+  {
+    name: 'event-recorder',
+    remediation:
+      'the "event-recorder" reporter was removed; use the "json" reporter or the machine-mode progress stream for structured output',
+  },
+  {
+    name: 'progress-append-only',
+    remediation: 'the "progress-append-only" reporter was removed; use "progress-stream" instead',
+  },
+  {
+    name: 'dashboard',
+    remediation:
+      'the "dashboard" reporter and its options were removed; write the "json" or "html" report and publish it yourself',
+  },
+  {
+    name: 'eventReporter',
+    remediation: 'the event-recorder reporter was removed; remove this option',
+  },
+]
+
+/** The removed names as a set, for U11's manifest drift guard. */
+export const REMOVED_OPTION_NAMES: ReadonlySet<string> = new Set(
+  REMOVED_OPTIONS.map(({ name }) => name),
+)
+
+const removedOptionByKey: ReadonlyMap<string, RemovedOption> = new Map(
+  REMOVED_OPTIONS.map((entry) => [entry.name, entry] as const),
+)
+
 export class OptionsValidator {
   private readonly validateFn: ValidateFunction
 
@@ -55,11 +120,50 @@ export class OptionsValidator {
     mark = false,
   ): asserts options is StrykerOptions {
     this.removeDeprecatedOptions(options)
+    this.validateRemovedSurface(options)
     this.schemaValidate(options)
     this.customValidation(options)
     if (mark) {
       this.markOptions(options)
     }
+  }
+
+  /**
+   * Hard-fails on config names the rebuild removed (U2-U9): a removed
+   * top-level key (`dashboard`, `eventReporter`) or a removed reporter name
+   * inside `reporters` (`dots`, `event-recorder`, `progress-append-only`,
+   * `dashboard`). Runs ahead of `schemaValidate` because a removed key is
+   * absent from the AJV schema, so schema validation can never see it, and
+   * the warning path (`markExcessOptions`) only fires when `mark` is set and
+   * the `unknownOptions` warning is enabled — a removed key could otherwise
+   * be silently accepted. Only the known-removed names are checked; an
+   * unknown-but-not-removed key keeps its warning-only behaviour.
+   */
+  private validateRemovedSurface(rawOptions: Record<string, unknown>) {
+    const errors: string[] = []
+    for (const key of Object.keys(rawOptions)) {
+      const entry = removedOptionByKey.get(key)
+      if (entry) {
+        errors.push(
+          `Config option "${key}" is no longer supported. ${entry.remediation}`,
+        )
+      }
+    }
+    const reporters = rawOptions.reporters
+    if (Array.isArray(reporters)) {
+      for (const name of reporters) {
+        if (typeof name === 'string') {
+          const entry = removedOptionByKey.get(name)
+          if (entry) {
+            errors.push(
+              `Config option "reporters" contains removed reporter name "${name}". ${entry.remediation}`,
+            )
+          }
+        }
+      }
+    }
+    errors.forEach((error) => this.log.error(error))
+    this.throwErrorIfNeeded(errors)
   }
 
   private removeDeprecatedOptions(rawOptions: Record<string, unknown>) {
@@ -244,11 +348,10 @@ export class OptionsValidator {
 
   private throwErrorIfNeeded(errors: string[]) {
     if (errors.length > 0) {
-      throw new ConfigError(
-        errors.length === 1
-          ? 'Please correct this configuration error and try again.'
-          : 'Please correct these configuration errors and try again.',
-      )
+      const headline = errors.length === 1
+        ? 'Please correct this configuration error and try again.'
+        : 'Please correct these configuration errors and try again.'
+      throw new ConfigError(`${headline} ${errors.join(' ')}`)
     }
   }
 

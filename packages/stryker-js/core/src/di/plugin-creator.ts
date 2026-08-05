@@ -14,6 +14,7 @@ import {
 } from '@stryker-mutator/api/plugin'
 import { InjectableClass, InjectableFunction } from 'typed-inject'
 
+import { ConfigError } from '../errors.js'
 import { coreTokens } from './index.js'
 
 export class PluginCreator {
@@ -67,14 +68,15 @@ export class PluginCreator {
       if (pluginFound) {
         return pluginFound as Plugins[T]
       } else {
-        throw new Error(
+        // A missing plugin is a configuration problem: ConfigError keeps it on the config-error exit class (R2).
+        throw new ConfigError(
           `Cannot find ${kind} plugin "${name}". Did you forget to install it? Loaded ${kind} plugins were: ${
             new Intl.ListFormat('en').format(plugins.map((p) => `"${p.name}"`))
           }`,
         )
       }
     } else {
-      throw new Error(
+      throw new ConfigError(
         `Cannot find ${kind} plugin "${name}". In fact, no ${kind} plugins were loaded. Did you forget to install it?`,
       )
     }
