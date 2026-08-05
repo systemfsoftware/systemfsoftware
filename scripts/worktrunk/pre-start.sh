@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Worktrunk pre-start: symlink .issues, register worktree in primary's .repos/,
+# Worktrunk pre-start: symlink .repos and .issues from the primary worktree,
 # convert gitdir paths to relative, disable GitKraken-incompatible settings.
 # Invoked by .config/wt.toml. Args: worktree_path [primary_worktree_path]
 
@@ -50,23 +50,29 @@ convert_worktree_gitfile_to_relative() {
     echo "  .git -> $rel_path"
 }
 
-# Register this worktree in the primary repo's .repos/ directory as a symlink
-# named by the (sanitized) branch: .repos/<branch> -> worktree. Lets the main
-# checkout reach every active worktree at a stable path.
-register_worktree_in_repos() {
-    local worktree_path="$1" primary_path="$2"
-    local branch
-    branch="$(git -C "$worktree_path" branch --show-current 2>/dev/null || true)"
-    [[ -z "$branch" ]] && return 0
-
-    # Mirror the worktree sanitize filter: replace / and \ with -.
-    local name="${branch//\//-}"
-    name="${name//\\/-}"
-
+# Symlink this worktree's .repos/ to the primary's .repos/ so the sibling
+# checkouts reachable at .repos/<name> from the main checkout are available at
+# the same path in every worktree. .repos is gitignored and shared — symlink,
+# never copy. Only replaces an existing symlink; a real directory is untouched.
+link_worktree_repos() {
+    local worktree_path="${1%/}" primary_path="$2"
     local repos_dir="$primary_path/.repos"
-    mkdir -p "$repos_dir"
-    ln -sfn "$worktree_path" "$repos_dir/$name"
-    echo "pre-start: .repos/$name -> $worktree_path"
+    if [[ ! -d "$repos_dir" ]]; then
+        echo "pre-start: no .repos in primary, skipping symlink"
+        return 0
+    fi
+
+    local target="$worktree_path/.repos"
+    if [[ -e "$target" && ! -L "$target" ]]; then
+        echo "pre-start: $target is a real directory, leaving it"
+        return 0
+    fi
+    rm -f "$target"
+
+    local rel
+    rel="$(realpath --relative-to="$worktree_path" "$repos_dir")"
+    ln -s "$rel" "$target"
+    echo "pre-start: .repos -> $rel"
 }
 
 WORKTREE_PATH="${1:?worktree_path required}"
@@ -84,7 +90,7 @@ if [[ -z "$PRIMARY_PATH" ]]; then
     exit 0
 fi
 
-register_worktree_in_repos "$WORKTREE_PATH" "$PRIMARY_PATH"
+link_worktree_repos "$WORKTREE_PATH" "$PRIMARY_PATH"
 
 # Symlink the .issues directory if it exists in the primary repo.
 ISSUES_DIR="$PRIMARY_PATH/.issues"

@@ -29,11 +29,3 @@ gitkraken-compat = "{{ worktree_path }}/scripts/worktrunk/post-switch.sh '{{ wor
 # --- Pre-merge: cleanup before merge ---
 [pre-merge]
 cleanup = "{{ worktree_path }}/scripts/worktrunk/pre-merge.sh '{{ worktree_path }}'"
-
-# --- Pre-remove: unregister worktree from primary's .repos/ ---
-[[pre-remove]]
-repo-link = "{{ worktree_path }}/scripts/worktrunk/pre-remove.sh '{{ worktree_path }}' '{{ primary_worktree_path }}'"
-
-# --- Cleaner cleanup: auto-delete branch on worktree remove ---
-[remove]
-delete-branch = true
