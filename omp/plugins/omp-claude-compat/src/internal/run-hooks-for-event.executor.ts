@@ -5,6 +5,7 @@ import type { HookOutcome } from '../hook-dispatcher.schema.js'
 import { analyzeSettings } from '../hook-settings.acl.js'
 import type { HookEntry } from '../hook-settings.acl.js'
 import { InterpretHookCommand, interpretHookResult } from '../hook-verdict.workflow.js'
+import type { HooksForEventResult } from './hook-feedback.kernel.js'
 import { asToolInput, EMPTY_TOOL_INPUT } from './hook-payload.kernel.js'
 import type { HookSession } from './hook-session.kernel.js'
 import { runHookScript } from './run-hook-script.executor.js'
@@ -16,14 +17,6 @@ export class RunHooksForEventExecutorDeps extends Context.Tag('RunHooksForEventE
 >() {}
 
 const AGGREGATE_CEILING_MS = 26_000
-
-export interface HooksForEventResult {
-  readonly block?: boolean
-  readonly reason?: string
-  readonly warning?: string
-  readonly updatedInput?: Record<string, unknown>
-}
-
 const runHooksForEventUnbounded = Effect.fn('runHooksForEventUnbounded')(function*(
   entries: readonly HookEntry[],
   matchValue: string,

@@ -140,12 +140,6 @@ export const dispatchHookEvent = (cmd: HookEventCommand) =>
           const settings = yield* loadSettingsWithPaths(settingsPaths(homedir(), ctx.cwd))
           if (!settings) return undefined as HookDispatchResult
           const result = yield* runToolResultHooks(settings, event, ctx)
-          if (result.block === true) {
-            return {
-              isError: true,
-              content: [{ type: 'text' as const, text: result.reason ?? 'Blocked by PostToolUse hook' }],
-            } as HookDispatchResult
-          }
           if (result.warning !== undefined) {
             return {
               content: [...event.content, { type: 'text' as const, text: result.warning }],

@@ -47,9 +47,9 @@ Feature('Hooks for a tool call that failed')
     const dispatch = (dir: string, tool: string, isError: boolean) =>
       Effect.gen(function*() {
         const settings = yield* loadSettingsWithPaths([`${dir}/.claude/settings.json`])
-        if (settings === null) return { ran: [] as readonly string[], warning: undefined, block: undefined }
+        if (settings === null) return { ran: [] as readonly string[], warning: undefined }
         const result = yield* runToolResultHooks(settings, toolResult(tool, isError), makeCtx(dir))
-        return { ran: yield* runInvocations(dir), warning: result.warning, block: result.block }
+        return { ran: yield* runInvocations(dir), warning: result.warning }
       })
 
     const bothRecorded = (dir: string) =>
@@ -154,7 +154,6 @@ Feature('Hooks for a tool call that failed')
         Then('the complaint arrives as a warning and nothing is blocked')((s) =>
           Effect.sync(() => {
             expect(s.outcome.warning).toContain('the build was already broken')
-            expect(s.outcome.block).toBeUndefined()
           })
         ),
       ),
@@ -177,7 +176,6 @@ Feature('Hooks for a tool call that failed')
         Then('the malformed output becomes a warning rather than throwing')((s) =>
           Effect.sync(() => {
             expect(s.outcome.warning).toContain('invalid JSON')
-            expect(s.outcome.block).toBeUndefined()
           })
         ),
       ),
