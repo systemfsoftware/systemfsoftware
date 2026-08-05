@@ -8,6 +8,12 @@ const requireTestContribution = {
   default: ['.property.test.ts'],
 }
 
+const extendsProperty = {
+  description:
+    'Path to another stryker config file whose options merge underneath this one. Resolved relative to this file. A child scalar or array replaces the inherited value; a child object merges one level deep; a child key set to null deletes the inherited key. Inheritance chains are not rewritten, so an inherited relative path value still resolves against the working directory of the run that reads it.',
+  type: 'string',
+}
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
@@ -16,6 +22,6 @@ const baseProperties = strykerCoreSchema.properties
 export const forkCoreSchema: Record<string, unknown> = {
   ...strykerCoreSchema,
   properties: isRecord(baseProperties)
-    ? { ...baseProperties, requireTestContribution }
-    : { requireTestContribution },
+    ? { ...baseProperties, requireTestContribution, extends: extendsProperty }
+    : { requireTestContribution, extends: extendsProperty },
 }

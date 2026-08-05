@@ -4,6 +4,10 @@
   "description": "Options for Stryker for JS and TypeScript and all officially supported plugins.",
   "type": "object",
   "properties": {
+    "extends": {
+      "description": "Path to another stryker config file whose options merge underneath this one. Resolved relative to this file.",
+      "type": "string"
+    },
     "vitest": {
       "description": "Configuration for @stryker-mutator/vitest-runner",
       "title": "VitestRunnerOptions",
@@ -27,18 +31,25 @@
       }
     },
     "typescriptChecker": {
-      "description": "Configuration for @stryker-mutator/typescript-checker",
+      "description": "Configuration for @stryker-mutator/typescript-checker. Set to null to omit the typescript checker entirely.",
       "title": "TypescriptCheckerOptions",
       "additionalProperties": false,
-      "type": "object",
-      "default": {},
-      "properties": {
-        "prioritizePerformanceOverAccuracy": {
-          "description": "Configures the performance of the TypescriptChecker. Setting this to false results in a slower, but more accurate result.",
-          "type": "boolean",
-          "default": true
+      "oneOf": [
+        {
+          "type": "object",
+          "default": {},
+          "properties": {
+            "prioritizePerformanceOverAccuracy": {
+              "description": "Configures the performance of the TypescriptChecker. Setting this to false results in a slower, but more accurate result.",
+              "type": "boolean",
+              "default": true
+            }
+          }
+        },
+        {
+          "type": "null"
         }
-      }
+      ]
     },
     "tap": {
       "description": "Configuration for @stryker-mutator/tap-runner",
@@ -273,8 +284,11 @@
       ]
     },
     "checkers": {
-      "description": "Enable checker plugins here. A checker plugin will be invoked for each mutant before it is run in a test runner. It can check to see of a given mutant is valid, by for example validate that it won't result in a type error",
-      "type": "array",
+      "description": "Enable checker plugins here. A checker plugin will be invoked for each mutant before it is run in a test runner. It can check to see of a given mutant is valid, by for example validate that it won't result in a type error. Set to null to omit the checkers array.",
+      "type": [
+        "array",
+        "null"
+      ],
       "items": {
         "type": "string"
       },
@@ -337,8 +351,11 @@
       "default": {}
     },
     "ignorePatterns": {
-      "description": "A comma separated list of patterns used for specifying which files need to be ignored. This should only be used in cases where you experience a slow Stryker startup, because too many (or too large) files are copied to the sandbox that are not needed to run the tests. For example, image or movie directories. Note: This option will have NO effect when using the `--inPlace` option. The directories `node_modules`, `.git` and some others are always ignored. Example: `--ignorePatterns dist`. These patterns are ALWAYS ignored: [`node_modules`, `.git`, `/reports`, `*.tsbuildinfo`, `/stryker.log`, `.stryker-tmp`]. Because Stryker always ignores these, you should rarely have to adjust the `ignorePatterns` setting at all. This is useful to speed up Stryker by ignoring big directories/files you might have in your repo that has nothing to do with your code. For example, 1.5GB of movie/image files. Specify the patterns to all files or directories that are not used to run your tests and thus should NOT be copied to the sandbox directory for mutation testing. Each patterns in this array should be a [glob pattern](#usage-of-globbing-expressions-on-options). If a glob pattern starts with `/`, the pattern is relative to the current working directory. For example, `/foo.js` matches to `foo.js` but not `subdir/foo.js`. However to SELECT specific files TO BE mutated, you better use `--mutate`.",
-      "type": "array",
+      "description": "A comma separated list of patterns used for specifying which files need to be ignored. Set to null to omit the ignorePatterns list.",
+      "type": [
+        "array",
+        "null"
+      ],
       "items": {
         "type": "string"
       },
@@ -351,12 +368,18 @@
     },
     "incremental": {
       "description": "Enable 'incremental mode'. Stryker will store results in a file and use that file to speed up the next --incremental run",
-      "type": "boolean",
+      "type": [
+        "boolean",
+        "null"
+      ],
       "default": false
     },
     "incrementalFile": {
-      "description": "Specify the file to use for incremental mode.",
-      "type": "string",
+      "description": "Specify the file to use for incremental mode. Set to null to omit the incremental file path.",
+      "type": [
+        "string",
+        "null"
+      ],
       "default": "reports/stryker-incremental.json"
     },
     "force": {
@@ -444,8 +467,15 @@
       ]
     },
     "htmlReporter": {
-      "description": "The options for the html reporter",
-      "$ref": "#/definitions/htmlReporterOptions",
+      "description": "The options for the html reporter. Set to null to omit the html reporter.",
+      "oneOf": [
+        {
+          "$ref": "#/definitions/htmlReporterOptions"
+        },
+        {
+          "type": "null"
+        }
+      ],
       "default": {}
     },
     "jsonReporter": {
@@ -562,8 +592,11 @@
       "default": false
     },
     "ignorers": {
-      "description": "Specify which ignore-plugins to use. With an ignore-plugin you can ignore mutants inside common code patterns that you don't want to test for some reason. For example, you can use this to ignore all `console.debug()` statements from being mutated.",
-      "type": "array",
+      "description": "Specify which ignore-plugins to use. With an ignore-plugin you can ignore mutants inside common code patterns that you don't want to test for some reason. For example, you can use this to ignore all `console.debug()` statements from being mutated. Set to null to omit the ignorers list.",
+      "type": [
+        "array",
+        "null"
+      ],
       "items": {
         "type": "string"
       },

@@ -1,48 +1,18 @@
 {
-  "$schema": "./node_modules/@systemfsoftware/stryker-js-core/schema/stryker-schema.json",
-  "packageManager": "pnpm",
-  "testRunner": "vitest",
-  "checkers": [
-    "typescript"
-  ],
-  "plugins": [
-    "@stryker-mutator/vitest-runner",
-    "@systemfsoftware/stryker-js-typescript-checker"
-  ],
-  "reporters": [
-    "progress",
-    "html",
-    "json"
-  ],
-  "htmlReporter": {
-    "fileName": "reports/mutation-report.html"
-  },
-  "jsonReporter": {
-    "fileName": "reports/mutation-report.json"
-  },
-  "vitest": {
-    "configFile": "vitest.config.ts",
-    "dir": ".",
-    "related": true
-  },
-  "typescriptChecker": {
-    "prioritizePerformanceOverAccuracy": true
-  },
-  "coverageAnalysis": "all",
-  "disableBail": true,
+  "extends": "../../../stryker.base.json",
   "mutate": [
     "src/**/*.ts",
     "!src/**/*.test.ts",
     "!src/**/*.config.ts",
     "!src/index.ts"
   ],
-  "ignorePatterns": [
-    "reports",
-    "coverage"
+  "plugins": [
+    "@stryker-mutator/vitest-runner",
+    "@systemfsoftware/stryker-js-typescript-checker"
   ],
-  "thresholds": {
-    "high": 100,
-    "low": 80,
-    "break": 100
-  }
+  "coverageAnalysis": "all",
+  "disableBail": true,
+  "incremental": null,
+  "incrementalFile": null,
+  "ignorers": null
 }
