@@ -1,5 +1,7 @@
 import { DynamicSpecTypeId } from './brands.kernel.js'
 
+export const DEFAULT_MAX_CHILDREN = 1000
+
 export const dynamic = <
   Args,
   CH,
@@ -17,5 +19,5 @@ export const dynamic = <
   [DynamicSpecTypeId]: DynamicSpecTypeId,
   name: opts.name,
   child: opts.child,
-  maxChildren: opts.maxChildren ?? 1000,
+  maxChildren: opts.maxChildren ?? DEFAULT_MAX_CHILDREN,
 })

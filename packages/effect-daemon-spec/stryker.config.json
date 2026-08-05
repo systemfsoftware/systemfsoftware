@@ -10,14 +10,6 @@
     "@systemfsoftware/stryker-plugins"
   ],
   "incremental": true,
-  "mutator": {
-    "excludedMutations": [
-      "StringLiteral",
-      "Regex",
-      "ObjectLiteral",
-      "UpdateOperator"
-    ]
-  },
   "ignorers": [
     "effect-schema-declarations",
     "in-source-vitest-block"
@@ -25,7 +17,7 @@
   "thresholds": {
     "high": 100,
     "low": 100,
-    "break": 0
+    "break": 100
   },
   "ignorePatterns": null
 }
