@@ -31,6 +31,11 @@ ruleTester.run('src-property-test-cell', srcPropertyTestCell, {
       filename: '/repo/pkg/src/money.schema.property.test.ts',
     },
     {
+      name: 'Should_Allow_KernelPropertyTest_When_ColocatedInSrc',
+      code: '',
+      filename: '/repo/pkg/src/backoff.kernel.property.test.ts',
+    },
+    {
       name: 'Should_Allow_PropertyTestOutsideSrc_When_InTestsDir',
       code: '',
       filename: '/repo/pkg/tests/legacy.property.test.ts',

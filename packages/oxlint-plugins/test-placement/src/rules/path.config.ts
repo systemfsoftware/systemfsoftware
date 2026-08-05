@@ -52,12 +52,20 @@ export const SCHEMA_SUFFIX = '.schema.test.ts' as const
 /**
  * The cells the matrix grants authored property tests.
  *
+ * `kernel` is admitted because a kernel is domain-blind pure behaviour whose
+ * laws are algebraic: every mutant is either a broken law or genuinely
+ * equivalent, which is the ideal property-test target. AGENTS.md REPO-S5
+ * already gates kernels "by colocated K-law property tests" — omitting the
+ * suffix here made that sanctioned path unreachable, so kernel properties were
+ * written inside `import.meta.vitest` blocks instead, where the mutation
+ * contribution gate (which judges by filename) cannot see them.
+ *
  * `schema` is admitted for ONE purpose: refusal. The generated laws draw from
  * each schema's own arbitrary, so every input already satisfies the refinement
  * under test — no law can state what a schema REJECTS. This module rules on
  * the filename only; what may appear inside the file is not its concern.
  */
-export const PROPERTY_CELLS = ['workflow', 'policy', 'schema'] as const
+export const PROPERTY_CELLS = ['workflow', 'policy', 'schema', 'kernel'] as const
 
 export const PURE_CELL_SUFFIXES: ReadonlyArray<string> = [
   '.kernel',
