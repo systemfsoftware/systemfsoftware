@@ -29,6 +29,5 @@
   "checkers": null,
   "htmlReporter": null,
   "typescriptChecker": null,
-  "incrementalFile": null,
   "ignorers": null
 }

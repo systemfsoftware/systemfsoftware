@@ -49,7 +49,20 @@ jobs:
       - uses: ./.github/actions/install-deps
       - run: corepack pnpm build
 
+      - uses: actions/cache/restore@v6
+        with:
+          path: ${{ matrix.package }}/reports/stryker-incremental.json
+          key: ${{ runner.os }}-stryker-${{ matrix.package }}-main
+          restore-keys: |
+            ${{ runner.os }}-stryker-${{ matrix.package }}-
+
       - run: corepack pnpm turbo mutation --filter=./${{ matrix.package }}
+
+      - uses: actions/cache/save@v6
+        if: github.ref == 'refs/heads/main'
+        with:
+          path: ${{ matrix.package }}/reports/stryker-incremental.json
+          key: ${{ runner.os }}-stryker-${{ matrix.package }}-main-${{ github.run_id }}
 
       - name: Sanitize artifact name
         id: sanitize

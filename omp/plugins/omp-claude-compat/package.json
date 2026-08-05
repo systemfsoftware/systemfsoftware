@@ -21,6 +21,7 @@
     "typecheck": "tsc --noEmit --incremental",
     "test": "vitest run",
     "mutation": "stryker run",
+    "mutation:full": "stryker run --force",
     "lint": "oxlint . ${AGENT:+--format=unix --quiet}"
   },
   "peerDependencies": {
