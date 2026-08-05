@@ -27,6 +27,7 @@ import * as Option from 'effect/Option'
 import { forkCoreSchema } from './config/fork-schema.js'
 import { ConfigReader, defaultOptions, OptionsValidator } from './config/index.js'
 import { ConfigError } from './errors.js'
+import { emitLLMSManifest } from './llms-manifest.js'
 import { toRelativeNormalizedFileName } from './mutants/incremental-differ.js'
 import {
   admitSurvivorsRun,
@@ -335,7 +336,7 @@ const runOptions = {
 } satisfies Record<string, Options.Options<unknown>>
 
 const runArgs = {
-  configFile: Args.optional(Args.text()),
+  configFile: Args.optional(Args.text({ name: 'configFile' })),
 }
 
 const runConfig = {
@@ -346,7 +347,7 @@ const runConfig = {
 const rootConfig = {
   llms: Options.map(Options.boolean('llms'), absentWhenFalse).pipe(
     Options.withDescription(
-      'Print the agent-facing command manifest (implemented by a later unit; for now the flag parses).',
+      'Print the agent-facing command manifest as one JSON object on stdout: every option, alias, kind, default, allowed value set and description, plus the subcommands and positional arguments, walked from the command descriptors.',
     ),
   ),
 }
@@ -573,7 +574,12 @@ function runSurvivorsAdmission(
   })
 }
 
-function makeStrykerCommand(runMutationTest: StrykerRun) {
+/**
+ * Builds the full command tree — root plus the `run` subcommand — from the
+ * same option/arg records the parser matches against. Exported so the U11
+ * manifest tests can walk the real surface.
+ */
+export function makeStrykerCommand(runMutationTest: StrykerRun) {
   const runCommand = Command.make(
     'run',
     runConfig,
@@ -655,14 +661,21 @@ function makeStrykerCommand(runMutationTest: StrykerRun) {
     readonly llms: boolean | undefined
   }> = Command.make('stryker', rootConfig, (config) => {
     if (config.llms === true) {
-      // U11 prints the `--llms` command manifest here.
-      return Effect.void
+      // U11 — the manifest is walked from the command's own descriptors
+      // (llms-manifest.ts), so a newly added option appears with no manifest
+      // change. `strykerCommand` is the final tree, subcommands included; the
+      // handler runs only after the const is bound (the same pattern as
+      // `root.descriptor` below).
+      return Effect.sync(() => {
+        process.stdout.write(`${emitLLMSManifest(strykerCommand, strykerVersion)}\n`)
+      })
     }
     // Bare `stryker`: render help and exit 0, matching commander.
     return Effect.failSync(() => ValidationError.helpRequested(root.descriptor))
   })
 
-  return root.pipe(Command.withSubcommands([runCommand]))
+  const strykerCommand = root.pipe(Command.withSubcommands([runCommand]))
+  return strykerCommand
 }
 
 /**
