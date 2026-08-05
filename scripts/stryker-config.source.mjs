@@ -13,21 +13,26 @@
 // that can parse JSON. Same reasoning REPO-S4 already applies to
 // package.json#exports being produced from tsdown.config.ts.
 //
-// This file exists because copy-paste put two never-loading plugins into this
-// repo and nothing noticed for the life of both:
+// This file exists because copy-paste put a never-loading plugin into 13
+// configs and nothing noticed for the life of it:
+// `@systemfsoftware/stryker-plugins/lint-rule-helper-ignorer`. No file, export,
+// or commit by that name has ever existed. It was not written 13 times -- one
+// template was copied 13 times and the error rode along, which is why the fix
+// is a table you can read in one screen rather than 24 files you must diff.
+// Stryker logs a plugin load failure as a WARN and continues, so nothing
+// downstream ever went red.
 //
-//   1. `@systemfsoftware/stryker-plugins/lint-rule-helper-ignorer`, declared by
-//      13 packages. No file, export, or commit by that name has ever existed.
-//   2. `@systemfsoftware/stryker-plugins/effect-schema-ignorer`, declared by 16
-//      packages that never depended on the package providing it -- node resolves
-//      it MODULE_NOT_FOUND from every one of them. Corroborated by the mutation
-//      reports: the only packages with non-zero Ignored counts (hex-schema 104,
-//      effect-daemon-spec 45) are exactly the ones where it does load.
+// `@systemfsoftware/stryker-plugins/effect-schema-ignorer` looks like the same
+// defect and is NOT: 16 packages declare it without depending on the package
+// that provides it, so it resolves MODULE_NOT_FOUND *from the consumer* -- yet
+// it loads. pnpm's generated `stryker` bin shim exports
+// `node_modules/.pnpm/node_modules` as NODE_PATH, and the plugin resolves from
+// there. Deleting it on the strength of the consumer-side resolution was a real
+// mistake, made and reverted on 2026-08-05; `check-stryker-config.mjs` now
+// resolves through the same fallback so the gate cannot repeat it.
 //
-// Neither was written N times. One template was copied N times and the error
-// rode along, which is why the fix is a table you can read in one screen rather
-// than 24 files you must diff. Stryker logs a plugin load failure as a WARN and
-// continues, so nothing downstream ever went red.
+// The undeclared dependency is still a latent fragility -- it survives only
+// while pnpm hoists -- but that is a dependency fix, not a config deletion.
 
 /**
  * Marks a key as deliberately ABSENT for a package, as distinct from "same as
@@ -72,7 +77,11 @@ export const defaults = {
   packageManager: 'pnpm',
   testRunner: 'vitest',
   checkers: ['typescript'],
-  plugins: ['@stryker-mutator/vitest-runner', '@systemfsoftware/stryker-js-typescript-checker'],
+  plugins: [
+    '@stryker-mutator/vitest-runner',
+    '@systemfsoftware/stryker-js-typescript-checker',
+    '@systemfsoftware/stryker-plugins/effect-schema-ignorer',
+  ],
   reporters: ['progress', 'html', 'json'],
   htmlReporter: { fileName: 'reports/mutation-report.html' },
   jsonReporter: { fileName: 'reports/mutation-report.json' },
@@ -83,8 +92,19 @@ export const defaults = {
   incrementalFile: 'reports/stryker-incremental.json',
   mutate: ['src/rules/*.ts', '!src/rules/**/*.test.ts', '!src/rules/*.config.ts'],
   ignorePatterns: ['reports', 'coverage'],
+  ignorers: ['effect-schema-declarations'],
   thresholds: { high: 100, low: 80, break: 100 },
 }
+
+/**
+ * The plugin list minus the schema ignorer, for packages that declare no Effect
+ * Schema and so have nothing for it to ignore. Named rather than repeated so
+ * the exception is one edit, which is the whole point of this file.
+ */
+const WITHOUT_IGNORER = [
+  '@stryker-mutator/vitest-runner',
+  '@systemfsoftware/stryker-js-typescript-checker',
+]
 
 /**
  * Per-package deviations, keyed by package directory relative to the repo root.
@@ -103,14 +123,8 @@ export const overrides = {
     reason:
       'Plugin package, not a rule package: the only pure decisions are *.workflow.ts. `dist` joins ignorePatterns because the built output ships in-tree here.',
     config: {
-      plugins: [
-        '@stryker-mutator/vitest-runner',
-        '@systemfsoftware/stryker-js-typescript-checker',
-        '@systemfsoftware/stryker-plugins/effect-schema-ignorer',
-      ],
       mutate: ['src/*.workflow.ts'],
       ignorePatterns: ['reports', 'coverage', 'dist'],
-      ignorers: ['effect-schema-declarations'],
     },
   },
 
@@ -156,6 +170,8 @@ export const overrides = {
     reason:
       'RuleTester suites report no per-test coverage, so `related: false` runs the whole suite per mutant and coverageAnalysis is off.',
     config: {
+      plugins: WITHOUT_IGNORER,
+      ignorers: ABSENT,
       vitest: { configFile: 'vitest.config.ts', dir: '.', related: false },
       coverageAnalysis: 'off',
     },
@@ -165,6 +181,8 @@ export const overrides = {
     reason:
       'General rule set: mutates all of src rather than src/rules only. Runs non-incrementally with no incremental file.',
     config: {
+      plugins: WITHOUT_IGNORER,
+      ignorers: ABSENT,
       incremental: ABSENT,
       incrementalFile: ABSENT,
       mutate: ['src/**/*.ts', '!src/**/*.test.ts', '!src/**/*.config.ts', '!src/index.ts'],
@@ -183,6 +201,8 @@ export const overrides = {
     reason:
       'Rules live under src/rules/** with a __tests__ directory rather than colocated *.test.ts, so the mutate glob differs.',
     config: {
+      plugins: WITHOUT_IGNORER,
+      ignorers: ABSENT,
       incremental: true,
       mutate: ['src/rules/**/*.ts', '!src/rules/__tests__/**', '!src/rules/**/*.config.ts'],
       thresholds: { high: 100, low: 100, break: 100 },
@@ -201,6 +221,8 @@ export const overrides = {
     reason:
       '`disableBail: true` buys the exact per-file kill attribution the test-contribution check needs -- under bail a second killer goes unrecorded (root AGENTS.md). coverageAnalysis "all" pairs with it. Mutates all of src.',
     config: {
+      plugins: WITHOUT_IGNORER,
+      ignorers: ABSENT,
       coverageAnalysis: 'all',
       disableBail: true,
       incremental: ABSENT,
@@ -224,6 +246,7 @@ export const overrides = {
       $schema: './schema/stryker-schema.json',
       checkers: ABSENT,
       plugins: ['@stryker-mutator/vitest-runner'],
+      ignorers: ABSENT,
       reporters: ['progress', 'json'],
       htmlReporter: ABSENT,
       typescriptChecker: ABSENT,

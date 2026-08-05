@@ -88,72 +88,55 @@ export const splitSpecifier = (specifier) => {
 }
 
 /**
- * Whether `exports` publishes `subpath`. Handles the three legal shapes: a bare
- * string, a conditions object with no subpath keys, and a subpath map with
- * optional `*` wildcards. A subpath mapped to null is explicitly blocked.
+ * Where pnpm parks packages a workspace package never declared. The `.bin`
+ * shim pnpm generates for `stryker` exports this directory as `NODE_PATH`, so a
+ * plugin living here loads at runtime even though the consuming package cannot
+ * see it through an ordinary `node_modules` walk.
+ *
+ * Measured 2026-08-05, and the reason this file no longer walks manifests:
+ * resolving from the consumer reported `@systemfsoftware/stryker-plugins` as
+ * "not installed" for 16 packages whose Stryker runs load it without a murmur.
  */
-export const exportsPublishes = (exportsField, subpath) => {
-  if (exportsField === undefined || exportsField === null) return subpath === '.'
-  if (typeof exportsField === 'string') return subpath === '.'
-  const keys = Object.keys(exportsField)
-  const isSubpathMap = keys.some((k) => k === '.' || k.startsWith('./'))
-  if (!isSubpathMap) return subpath === '.'
-  if (Object.hasOwn(exportsField, subpath)) return exportsField[subpath] !== null
-  return keys.some((k) => {
-    if (!k.includes('*')) return false
-    const [prefix, suffix = ''] = k.split('*')
-    return (
-      subpath.length >= prefix.length + suffix.length &&
-      subpath.startsWith(prefix) &&
-      subpath.endsWith(suffix) &&
-      exportsField[k] !== null
-    )
-  })
-}
+export const hoistedDir = (root) => path.join(root, 'node_modules', '.pnpm', 'node_modules')
 
 /**
- * Locate a package's manifest by walking `node_modules` upward from the package
- * that declares the plugin — which is where Stryker itself resolves it from, and
- * the only place a workspace-local dependency is guaranteed to be visible.
+ * Resolve a plugin specifier the way the Stryker process will, and let Node's
+ * own resolver answer. An export map re-implemented here would be a second
+ * parser to keep in step with Node's -- and the question is not what the
+ * manifest says, it is whether the import succeeds.
  *
- * Deliberately NOT `require.resolve('<name>/package.json')`: most packages here
- * do not publish `./package.json` in `exports`, so that call throws
- * ERR_PACKAGE_PATH_NOT_EXPORTED and every plugin reads as "not installed" — a
- * gate that fails on everything is as useless as one that passes on everything.
- * Reading the file directly sidesteps export maps, which is correct: we are
- * inspecting the manifest, not importing from the package.
+ * Returns null when the specifier resolves, else the most informative failure.
+ * `ERR_PACKAGE_PATH_NOT_EXPORTED` outranks `MODULE_NOT_FOUND`: it means the
+ * package was found and the subpath is the problem, which is the phantom this
+ * gate exists to catch. Reporting whichever attempt happened to run last would
+ * let the hoisted fallback's "not found" bury the real diagnosis.
  */
-export const findManifest = (fromDir, name, stopAt) => {
-  let dir = fromDir
-  for (;;) {
-    const candidate = path.join(dir, 'node_modules', name, 'package.json')
-    if (fs.existsSync(candidate)) {
-      try {
-        return JSON.parse(fs.readFileSync(candidate, 'utf8'))
-      } catch {
-        return null
-      }
+export const resolvePlugin = (specifier, fromDir, root) => {
+  const req = createRequire(path.join(fromDir, 'package.json'))
+  const errors = []
+  for (const options of [undefined, { paths: [hoistedDir(root)] }]) {
+    try {
+      options === undefined ? req.resolve(specifier) : req.resolve(specifier, options)
+      return null
+    } catch (err) {
+      errors.push(err)
     }
-    if (dir === stopAt) return null
-    const parent = path.dirname(dir)
-    if (parent === dir) return null
-    dir = parent
   }
+  return errors.find((e) => e.code === 'ERR_PACKAGE_PATH_NOT_EXPORTED') ?? errors[0]
 }
 
-export const checkPluginSubpaths = (file, config, readManifest, report) => {
+export const checkPluginSubpaths = (file, config, fromDir, root, report) => {
   for (const specifier of config.plugins ?? []) {
+    const err = resolvePlugin(specifier, fromDir, root)
+    if (err === null) continue
     const { name, subpath } = splitSpecifier(specifier)
-    const manifest = readManifest(name)
-    if (manifest === null) {
-      report.error(`${file}: plugin \`${specifier}\` names package \`${name}\`, which is not installed`)
-      continue
-    }
-    if (!exportsPublishes(manifest.exports, subpath)) {
-      report.error(
-        `${file}: plugin \`${specifier}\` requires subpath \`${subpath}\`, which \`${name}\` does not export`,
-      )
-    }
+    report.error(
+      err.code === 'ERR_PACKAGE_PATH_NOT_EXPORTED'
+        ? `${file}: plugin \`${specifier}\` requires subpath \`${subpath}\`, which \`${name}\` does not export`
+        : `${file}: plugin \`${specifier}\` does not resolve from \`${fromDir}\` or the hoisted store (${
+          err.code ?? 'unknown error'
+        })`,
+    )
   }
 }
 
@@ -242,15 +225,6 @@ export const checkAll = (root = repoRoot(), today = new Date().toISOString().sli
 
   const validate = loadSchemaValidator(root)
   const generated = generateAll(root, files)
-  const manifestCache = new Map()
-  const readManifestFrom = (fromDir) => (name) => {
-    const key = `${fromDir}\u0000${name}`
-    if (manifestCache.has(key)) return manifestCache.get(key)
-    const manifest = findManifest(path.join(root, fromDir), name, root)
-    manifestCache.set(key, manifest)
-    return manifest
-  }
-
   checkReasons(report)
 
   for (const file of files) {
@@ -262,7 +236,7 @@ export const checkAll = (root = repoRoot(), today = new Date().toISOString().sli
     }
     const dir = path.dirname(file)
     checkSchema(file, config, validate, report)
-    checkPluginSubpaths(file, config, readManifestFrom(dir), report)
+    checkPluginSubpaths(file, config, path.join(root, dir), root, report)
     checkRelaxation(dir, config, overrides[dir], today, report)
     checkDrift(file, raw, generated.get(file), report)
   }
@@ -281,16 +255,46 @@ const BASE = {
   thresholds: { high: 100, low: 80, break: 100 },
 }
 
-const MANIFESTS = {
-  '@stryker-mutator/vitest-runner': { exports: { '.': './dist/index.js' } },
-  '@systemfsoftware/stryker-plugins': {
-    exports: { '.': './dist/index.js', './effect-schema-ignorer': './dist/effect-schema-ignorer.mjs' },
-  },
-  '@wildcard/pkg': { exports: { './*': './dist/*.js' } },
-  '@blocked/pkg': { exports: { '.': './i.js', './secret': null } },
-  '@conditions/pkg': { exports: { import: './i.mjs', require: './i.cjs' } },
+/**
+ * Build a real `node_modules` tree on disk and let Node resolve against it.
+ * Fake manifests cannot be used here: the thing under test IS Node's resolver,
+ * and the bug this replaced was a hand-written model of it that disagreed with
+ * the real one on every package pnpm hoists.
+ */
+const makeFixtureTree = () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stryker-config-fixture-'))
+  const put = (dir, manifest, files) => {
+    fs.mkdirSync(dir, { recursive: true })
+    fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ name: path.basename(dir), ...manifest }))
+    for (const f of files) {
+      const abs = path.join(dir, f)
+      fs.mkdirSync(path.dirname(abs), { recursive: true })
+      fs.writeFileSync(abs, 'export default {}\n')
+    }
+  }
+  const consumer = path.join(root, 'pkg')
+  fs.mkdirSync(consumer, { recursive: true })
+  fs.writeFileSync(path.join(consumer, 'package.json'), JSON.stringify({ name: 'consumer' }))
+
+  const local = path.join(consumer, 'node_modules')
+  put(path.join(local, '@x', 'exported'), {
+    exports: { '.': './i.js', './sub': './sub.js' },
+  }, ['i.js', 'sub.js'])
+  put(path.join(local, '@x', 'wildcard'), { exports: { './*': './dist/*.js' } }, ['dist/anything.js'])
+  put(path.join(local, '@x', 'blocked'), { exports: { '.': './i.js', './secret': null } }, ['i.js'])
+  put(path.join(local, '@x', 'conditions'), { exports: { import: './i.mjs', require: './i.cjs' } }, [
+    'i.mjs',
+    'i.cjs',
+  ])
+
+  // Reachable only through the NODE_PATH directory pnpm's bin shim injects --
+  // invisible to a node_modules walk from the consumer, yet loadable at runtime.
+  put(path.join(root, 'node_modules', '.pnpm', 'node_modules', '@x', 'hoisted'), {
+    exports: { '.': './i.js', './ok': './ok.js' },
+  }, ['i.js', 'ok.js'])
+
+  return { root, consumer }
 }
-const fakeManifest = (name) => MANIFESTS[name] ?? null
 
 const selftest = () => {
   const root = repoRoot()
@@ -323,50 +327,45 @@ const selftest = () => {
     }
   })
 
-  // -- check 3: plugin subpaths
-  scenario('exported subpath passes', (r) => {
-    checkPluginSubpaths(
-      'f',
-      { plugins: ['@systemfsoftware/stryker-plugins/effect-schema-ignorer'] },
-      fakeManifest,
-      r,
-    )
-  })
-  scenario('THE PHANTOM: unexported subpath fails, naming subpath and package', (r) => {
-    const inner = makeReport()
-    checkPluginSubpaths(
-      'f',
-      { plugins: ['@systemfsoftware/stryker-plugins/lint-rule-helper-ignorer'] },
-      fakeManifest,
-      inner,
-    )
-    if (inner.errors.length !== 1) r.error('expected exactly one error for the phantom subpath')
-    else if (!/lint-rule-helper-ignorer/.test(inner.errors[0]) || !/stryker-plugins/.test(inner.errors[0])) {
-      r.error(`error names neither subpath nor package: ${inner.errors[0]}`)
+  // -- check 3: plugin resolution, against a real node_modules tree
+  {
+    const fixture = makeFixtureTree()
+    const plug = (specifier) => {
+      const inner = makeReport()
+      checkPluginSubpaths('f', { plugins: [specifier] }, fixture.consumer, fixture.root, inner)
+      return inner.errors
     }
-  })
-  scenario('root specifier passes', (r) => {
-    checkPluginSubpaths('f', { plugins: ['@systemfsoftware/stryker-plugins'] }, fakeManifest, r)
-  })
-  scenario('uninstalled package fails', (r) => {
-    const inner = makeReport()
-    checkPluginSubpaths('f', { plugins: ['@nope/missing'] }, fakeManifest, inner)
-    if (inner.errors.length !== 1) r.error('expected one error for an uninstalled plugin package')
-  })
-  scenario('wildcard export resolves', (r) => {
-    checkPluginSubpaths('f', { plugins: ['@wildcard/pkg/anything'] }, fakeManifest, r)
-  })
-  scenario('null-mapped subpath is blocked', (r) => {
-    const inner = makeReport()
-    checkPluginSubpaths('f', { plugins: ['@blocked/pkg/secret'] }, fakeManifest, inner)
-    if (inner.errors.length !== 1) r.error('a subpath mapped to null must be treated as unexported')
-  })
-  scenario('conditions-only exports publish the root', (r) => {
-    checkPluginSubpaths('f', { plugins: ['@conditions/pkg'] }, fakeManifest, r)
-    const inner = makeReport()
-    checkPluginSubpaths('f', { plugins: ['@conditions/pkg/sub'] }, fakeManifest, inner)
-    if (inner.errors.length !== 1) r.error('conditions-only exports must not publish subpaths')
-  })
+    const passes = (name, specifier) =>
+      scenario(name, (r) => {
+        const errors = plug(specifier)
+        if (errors.length !== 0) r.error(`expected \`${specifier}\` to resolve, got: ${JSON.stringify(errors)}`)
+      })
+    const fails = (name, specifier, needle) =>
+      scenario(name, (r) => {
+        const errors = plug(specifier)
+        if (errors.length !== 1) r.error(`expected exactly one error for \`${specifier}\`, got ${errors.length}`)
+        else if (needle && !needle.test(errors[0])) r.error(`error does not name the cause: ${errors[0]}`)
+      })
+
+    passes('exported subpath passes', '@x/exported/sub')
+    passes('root specifier passes', '@x/exported')
+    passes('wildcard export resolves', '@x/wildcard/anything')
+    passes('conditions-only exports publish the root', '@x/conditions')
+    // The bug that made this rewrite necessary: a package reachable only through
+    // the hoisted store read as "not installed" and was deleted from 16 configs.
+    passes('REGRESSION: hoisted-only package resolves', '@x/hoisted/ok')
+    fails(
+      'THE PHANTOM: unexported subpath fails, naming subpath and package',
+      '@x/exported/lint-rule-helper-ignorer',
+      /lint-rule-helper-ignorer[\s\S]*@x\/exported|@x\/exported[\s\S]*lint-rule-helper-ignorer/,
+    )
+    fails('null-mapped subpath is blocked', '@x/blocked/secret', /does not export/)
+    fails('conditions-only exports publish no subpath', '@x/conditions/sub', /does not export/)
+    fails('uninstalled package fails', '@nope/missing', /does not resolve/)
+    fails('hoisted package, unexported subpath still fails', '@x/hoisted/nope', /does not export/)
+
+    fs.rmSync(fixture.root, { recursive: true, force: true })
+  }
 
   // -- check 2: schema, independent of byte-equality
   scenario('schema-valid config passes', (r) => checkSchema('f', BASE, validate, r))
