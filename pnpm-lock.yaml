@@ -2265,6 +2265,9 @@ importers:
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: workspace:^
         version: link:../../arethetypeswrong/cli
+      '@systemfsoftware/tsconfig':
+        specifier: workspace:^
+        version: link:../../tsconfig
       '@systemfsoftware/vitest-config':
         specifier: workspace:^
         version: link:../../vitest-config
