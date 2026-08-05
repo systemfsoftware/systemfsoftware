@@ -1,0 +1,85 @@
+{
+  "name": "@systemfsoftware/effect-atom-react",
+  "license": "MIT",
+  "version": "0.5.0",
+  "author": "Effect contributors (forked by systemfsoftware)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
+    "directory": "packages/effect-atom/atom-react"
+  },
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/effect-atom/atom-react#readme",
+  "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
+  "description": "React bindings for effect-atom — forked under systemfsoftware from tim-smart/effect-atom.",
+  "keywords": [
+    "effect",
+    "effect-ts",
+    "atom",
+    "react",
+    "reactive",
+    "state"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "@systemfsoftware/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "clean": "rimraf dist",
+    "build": "tsdown && pnpm dts:check",
+    "typecheck": "tsc --noEmit --incremental",
+    "test": "vitest run --passWithNoTests",
+    "test:watch": "vitest",
+    "lint": "oxlint . --config oxlint.config.ts",
+    "attw": "attw --pack .",
+    "dts:check": "tsc --noEmit -p tsconfig.dts.json"
+  },
+  "dependencies": {
+    "@systemfsoftware/effect-atom": "workspace:^"
+  },
+  "peerDependencies": {
+    "effect": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "scheduler": "*"
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "@systemfsoftware/arethetypeswrong-cli": "workspace:^",
+    "@systemfsoftware/tsconfig": "workspace:^",
+    "@testing-library/dom": "catalog:",
+    "@testing-library/jest-dom": "catalog:",
+    "@testing-library/react": "catalog:",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@types/scheduler": "catalog:",
+    "effect": "catalog:",
+    "jsdom": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "react-error-boundary": "catalog:",
+    "rimraf": "catalog:",
+    "scheduler": "catalog:",
+    "tsdown": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.mjs"
+      },
+      "./package.json": "./package.json"
+    },
+    "provenance": true
+  }
+}

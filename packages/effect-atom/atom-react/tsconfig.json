@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "@systemfsoftware/tsconfig/tsc/dom/library-monorepo",
+  "compilerOptions": {
+    "customConditions": ["@systemfsoftware/source"],
+    "jsx": "react-jsx",
+    "types": [],
+    "plugins": [
+      {
+        "name": "@effect/tsgo"
+      }
+    ]
+  },
+  "include": ["src"],
+  "references": [
+    {
+      "path": "./tsconfig.node.json"
+    }
+  ]
+}
