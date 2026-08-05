@@ -8,6 +8,12 @@ const requireTestContribution = {
   default: ['.property.test.ts'],
 }
 
+const survivorsPriorReport = {
+  description:
+    'The path of the prior mutation report a --survivors run admits against and re-tests the survivors of. Defaults to "reports/mutation-report.json" when unset. Deliberately has no default: a default would be injected into every resolved options object and written into every report, poisoning the KTD7 marker that identifies a report produced by a survivors run.',
+  type: 'string',
+}
+
 const extendsProperty = {
   description:
     'Path to another stryker config file whose options merge underneath this one. Resolved relative to this file. A child scalar or array replaces the inherited value; a child object merges one level deep; a child key set to null deletes the inherited key. Inheritance chains are not rewritten, so an inherited relative path value still resolves against the working directory of the run that reads it.',
@@ -22,6 +28,8 @@ const baseProperties = strykerCoreSchema.properties
 export const forkCoreSchema: Record<string, unknown> = {
   ...strykerCoreSchema,
   properties: isRecord(baseProperties)
+    ? { ...baseProperties, requireTestContribution, survivorsPriorReport }
+    : { requireTestContribution, survivorsPriorReport },
     ? { ...baseProperties, requireTestContribution, extends: extendsProperty }
     : { requireTestContribution, extends: extendsProperty },
 }
