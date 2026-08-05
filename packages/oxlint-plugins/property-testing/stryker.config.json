@@ -27,7 +27,7 @@
     "related": false
   },
   "typescriptChecker": {
-    "prioritizePerformanceOverAccuracy": false
+    "prioritizePerformanceOverAccuracy": true
   },
   "coverageAnalysis": "off",
   "incremental": false,

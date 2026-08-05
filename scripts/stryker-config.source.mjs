@@ -86,7 +86,7 @@ export const defaults = {
   htmlReporter: { fileName: 'reports/mutation-report.html' },
   jsonReporter: { fileName: 'reports/mutation-report.json' },
   vitest: { configFile: 'vitest.config.ts', dir: '.', related: true },
-  typescriptChecker: { prioritizePerformanceOverAccuracy: false },
+  typescriptChecker: { prioritizePerformanceOverAccuracy: true },
   coverageAnalysis: 'perTest',
   incremental: false,
   incrementalFile: 'reports/stryker-incremental.json',
