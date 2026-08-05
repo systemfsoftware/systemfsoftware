@@ -1,0 +1,224 @@
+import path from 'path'
+
+import { MutantStatus, schema } from '@stryker-mutator/api/core'
+import { normalizeFileName } from '@stryker-mutator/util'
+import { calculateMutationTestMetrics } from 'mutation-testing-metrics'
+import { randomFillSync } from 'node:crypto'
+
+import type { ModeSignal, OutputMode } from '../output-mode.js'
+
+import { judgeTestContribution, type TestContributionVerdict } from './test-contribution.js'
+
+/**
+ * U4 — the verdict envelope (R5, R11): the single JSON document machine mode
+ * prints to stdout at the end of a run. Everything an agent needs to act
+ * without opening the report file, including the survivor re-run matching key
+ * per mutant. All functions here are pure over the report — no I/O side
+ * effects, no randomness except inside `generateRunId`.
+ */
+export const VERDICT_ENVELOPE_SCHEMA_VERSION = '1.0'
+
+/**
+ * One mutant as the envelope reports it. `file` is the report's relative file
+ * key; `location`/`mutator`/`replacement` are exactly the survivor re-run
+ * matching key (R10/R11).
+ */
+export interface VerdictMutant {
+  readonly id: string
+  readonly file: string
+  readonly location: schema.Location
+  readonly mutator: string
+  readonly replacement: string | null
+  readonly status: MutantStatus
+}
+
+/**
+ * The configured thresholds. `break` rides along even though the report
+ * schema does not declare it — it is the threshold the exit code depends on.
+ */
+export interface VerdictThresholds {
+  readonly high: number
+  readonly low: number
+  readonly break: number | null
+}
+
+export interface VerdictCounts {
+  readonly killed: number
+  readonly timeout: number
+  readonly survived: number
+  readonly noCoverage: number
+  readonly runtimeErrors: number
+  readonly compileErrors: number
+  readonly ignored: number
+  readonly pending: number
+}
+
+/**
+ * The full verdict document. `score` and `reportFile` are `null` for a run
+ * with zero mutants (AE3): there is no score to report and no report file was
+ * written. `testContribution` is `null` when the check is not configured.
+ */
+export interface VerdictEnvelope {
+  readonly schemaVersion: string
+  readonly runId: string
+  readonly mode: OutputMode
+  readonly signal: ModeSignal
+  readonly score: number | null
+  readonly thresholds: VerdictThresholds
+  readonly counts: VerdictCounts
+  readonly testContribution: TestContributionVerdict | null
+  readonly reportFile: string | null
+  readonly mutants: readonly VerdictMutant[]
+}
+
+const CROCKFORD_BASE32 = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
+
+/**
+ * A ULID-shaped run identifier: 48 bits of millisecond time followed by 80
+ * random bits, Crockford base32-encoded into exactly 26 characters. The time
+ * prefix keeps ids roughly sortable; the randomness makes collisions
+ * negligible.
+ */
+export function generateRunId(): string {
+  const bytes = new Uint8Array(16)
+  const now = Date.now()
+  bytes[0] = (now / 0x10000000000) % 0x100
+  bytes[1] = (now / 0x100000000) % 0x100
+  bytes[2] = (now / 0x1000000) % 0x100
+  bytes[3] = (now / 0x10000) % 0x100
+  bytes[4] = (now / 0x100) % 0x100
+  bytes[5] = now % 0x100
+  randomFillSync(bytes.subarray(6))
+  let chars = ''
+  let value = 0
+  let bits = 0
+  for (const byte of bytes) {
+    value = (value << 8) | byte
+    bits += 8
+    while (bits >= 5) {
+      chars += CROCKFORD_BASE32[(value >>> (bits - 5)) & 0x1f]
+      bits -= 5
+      value &= (1 << bits) - 1
+    }
+  }
+  if (bits > 0) {
+    chars += CROCKFORD_BASE32[(value << (5 - bits)) & 0x1f]
+  }
+  return chars
+}
+
+/**
+ * The resolved options the report helper embeds as `report.config` (it writes
+ * `config: this.options`). Read through `in`-narrowing because the report
+ * schema types `config` as `{}`, while the embedded value is our own resolved
+ * options with their index signature.
+ */
+function embeddedConfig(
+  report: schema.MutationTestResult,
+): {
+  readonly jsonReporterFileName: string | undefined
+  readonly requireTestContribution: unknown
+  readonly disableBail: boolean
+} {
+  const config = report.config
+  let jsonReporterFileName: string | undefined
+  let requireTestContribution: unknown
+  let disableBail = false
+  if (typeof config === 'object' && config !== null) {
+    if (
+      'jsonReporter' in config &&
+      typeof config.jsonReporter === 'object' &&
+      config.jsonReporter !== null &&
+      'fileName' in config.jsonReporter &&
+      typeof config.jsonReporter.fileName === 'string'
+    ) {
+      jsonReporterFileName = config.jsonReporter.fileName
+    }
+    if ('requireTestContribution' in config) {
+      requireTestContribution = config.requireTestContribution
+    }
+    if ('disableBail' in config && typeof config.disableBail === 'boolean') {
+      disableBail = config.disableBail
+    }
+  }
+  return { jsonReporterFileName, requireTestContribution, disableBail }
+}
+
+function breakThreshold(thresholds: schema.Thresholds): number | null {
+  if ('break' in thresholds) {
+    const breakValue = thresholds.break
+    if (typeof breakValue === 'number') {
+      return breakValue
+    }
+    if (breakValue === null) {
+      return null
+    }
+  }
+  return null
+}
+
+export function buildVerdictEnvelope(
+  report: schema.MutationTestResult,
+  mode: OutputMode,
+  signal: ModeSignal,
+  runId: string,
+): VerdictEnvelope {
+  const { jsonReporterFileName, requireTestContribution, disableBail } = embeddedConfig(report)
+  const metrics = calculateMutationTestMetrics(report)
+    .systemUnderTestMetrics.metrics
+  const hasMutants = metrics.totalMutants > 0
+  const score = hasMutants && Number.isFinite(metrics.mutationScore)
+    ? metrics.mutationScore
+    : null
+  const reportFile = hasMutants && jsonReporterFileName !== undefined
+    ? normalizeFileName(path.relative(process.cwd(), jsonReporterFileName))
+    : null
+  const mutants: VerdictMutant[] = []
+  for (const [file, fileResult] of Object.entries(report.files)) {
+    for (const mutant of fileResult.mutants) {
+      mutants.push({
+        id: mutant.id,
+        file,
+        location: mutant.location,
+        mutator: mutant.mutatorName,
+        replacement: mutant.replacement ?? null,
+        status: mutant.status,
+      })
+    }
+  }
+  return {
+    schemaVersion: VERDICT_ENVELOPE_SCHEMA_VERSION,
+    runId,
+    mode,
+    signal,
+    score,
+    thresholds: {
+      high: report.thresholds.high,
+      low: report.thresholds.low,
+      break: breakThreshold(report.thresholds),
+    },
+    counts: {
+      killed: metrics.killed,
+      timeout: metrics.timeout,
+      survived: metrics.survived,
+      noCoverage: metrics.noCoverage,
+      runtimeErrors: metrics.runtimeErrors,
+      compileErrors: metrics.compileErrors,
+      ignored: metrics.ignored,
+      pending: metrics.pending,
+    },
+    testContribution: judgeTestContribution(report, requireTestContribution, disableBail) ??
+      null,
+    reportFile,
+    mutants,
+  }
+}
+
+export function emitVerdictEnvelope(
+  report: schema.MutationTestResult,
+  mode: OutputMode,
+  signal: ModeSignal,
+  runId: string,
+): string {
+  return JSON.stringify(buildVerdictEnvelope(report, mode, signal, runId))
+}
