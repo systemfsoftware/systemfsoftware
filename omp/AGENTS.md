@@ -2,8 +2,8 @@
 
 > **Location:** `omp/` — the OMP workspace. Two directories:
 >
-> - `omp/plugins/` — OMP extension packages (have `omp.extensions`, register `pi.on` handlers): `omp-agent-discipline`, `omp-claude-compat`.
-> - `omp/packages/` — shared libraries consumed by plugins: `omp-utils`.
+> - `omp/plugins/` — host extension packages (carry `omp.extensions`, loaded per session by the OMP host). **Leaf: `omp/plugins/AGENTS.md`** — read it before editing any entry, handler, or runtime wiring there.
+> - `omp/packages/` — plain libraries consumed by plugins. No leaf: the root plus this file govern them.
 >   Universal agent rules live in the root `AGENTS.md`; this file carries only `omp/`-specific deltas.
 
 ## Critical
@@ -52,7 +52,7 @@ export class MalformedJson extends S.TaggedClass<MalformedJson>()('MalformedJson
 }) {}
 ```
 
-**Decision variants** (`Block`, `Allow`, `Warning`, `Blocked`, `Continue` in this workspace) are data and stay `S.TaggedClass`. The rule applies to the **error channel only**. Audit: `grep -n 'extends S.TaggedClass' omp/plugins/*/src/*.workflow.ts omp/packages/*/src/*.workflow.ts` — every match must be a decision/command class. Compare the grep output against the workflow's error type: any `TaggedClass` declared with an `_tag` whose name appears in the `Either<..., Error>` channel is a violation.
+**Decision variants** (`Block`, `Allow`, `Warning`, `Blocked`, `Continue` in this workspace) are data and stay `S.TaggedClass`. The rule applies to the **error channel only**. Audit: `grep -n 'extends S.TaggedClass' omp/plugins/*/src/*.workflow.ts` — every match must be a decision/command class. Compare the grep output against the workflow's error type: any `TaggedClass` declared with an `_tag` whose name appears in the `Either<..., Error>` channel is a violation.
 
 ## ACL Gates (Schema.transformOrFail rule)
 
@@ -87,27 +87,13 @@ export const TomlConfigFromText = Schema.transformOrFail(
 
 **WRONG — hand-written decode outside Schema's contract** (this is what the existing `tool-input.acl.ts`, `tool-name.acl.ts`, and `context-mode.acl.ts` do; flagged as a follow-up to bring into ACL1 compliance):
 
-````ts
+```ts
 export function normalizeToolName(name: string): string {
   if (name.length === 0) return name
   return name.charAt(0).toUpperCase() + name.slice(1)
 }
 // → VIOLATION: lowercase→capitalized is a foreign-shape→domain mapping re-implemented in code; the correct shape is a Schema.transformOrFail from `Schema.String` to a branded `NormalizedToolName` brand.
-
-## Extension Registration Contract
-
-**All `pi.on(...)` registrations MUST complete synchronously before the `default export function(pi)` returns.** The OMP ExtensionAPI requires this — handlers are collected during the function call, not after. A dynamic import inside the factory defers the callbacks, violating the contract.
-
-Consequence for the lazy-init pattern: `*.handler.ts` files are statically imported from `src/index.ts` so their module-level `pi.on(...)` calls execute synchronously during the factory. The runtime (`.runtime.ts`) is backed by `await import('./runtime.js')` inside each callback, so its construction is deferred to first handler fire — but the handler registration itself is synchronous.
-
-```yaml
-- id: EXT1
-  title: OMP handlers register synchronously in the factory
-  do: statically import handler modules and call pi.on(...) in the default export function before it returns
-  dont: register pi.on(...) handlers inside a module-scope Effect or inside a then/callback of a dynamic import
-  harm: handlers are never collected and the extension silently does nothing
-  check: grep -rn 'pi.on(' omp/plugins/*/src/index.ts — pi.on is called directly in the factory body, not inside a then() or Effect.runSync
-````
+```
 
 **Audit:**
 
@@ -133,9 +119,8 @@ omp plugin link omp/plugins/<name>
 
 ## Failure Modes (cell-specific)
 
-| Symptom                                                                       | Cause                                                                                        | Fix                                                                          |
-| ----------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| `error TS2769: No overload matches this call` on `pi.on(...)`                 | OMP installed a stricter `ExtensionHandler` overload than the source pinned                  | Type-narrow the handler locally; do not change pi.on signature               |
-| Workflow tests pass but `pnpm check` reports `pure-core` mutations unkillable | A workflow swallowed a typed error into `null` (unfalsifiable code path)                     | Surface the error variant via `S.TaggedError`; let the executor branch on it |
-| Plugin loads but handlers never fire                                          | Factory threw before `pi.on(...)` calls                                                      | Run the smoke tool with `--cwd /tmp/plugin-smoke`; check stderr              |
-| Two CLAUDE.md files in the same workspace appear different                    | `omp/CLAUDE.md` was added — it should be a one-line `@AGENTS.md` shim, not a content carrier | Replace any content beyond `@AGENTS.md` with the root or this leaf           |
+| Symptom                                                                       | Cause                                                                       | Fix                                                                          |
+| ----------------------------------------------------------------------------- | --------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `error TS2769: No overload matches this call` on `pi.on(...)`                 | OMP installed a stricter `ExtensionHandler` overload than the source pinned | Type-narrow the handler locally; do not change pi.on signature               |
+| Workflow tests pass but `pnpm check` reports `pure-core` mutations unkillable | A workflow swallowed a typed error into `null` (unfalsifiable code path)    | Surface the error variant via `S.TaggedError`; let the executor branch on it |
+| Plugin loads but handlers never fire                                          | Factory threw before `pi.on(...)` calls                                     | Run the smoke tool with `--cwd /tmp/plugin-smoke`; check stderr              |

@@ -84,7 +84,7 @@ apis:
     check: "`import { defineRule } from '@oxlint/plugins'` is the only rule constructor in the package"
   - id: OX-A2
     title: core/ keeps ESLintUtils until a dedicated migration
-    do: follow the `ESLintUtils.RuleCreator` template in `core/AGENTS.md` when editing `core/`
+    do: follow the `ESLintUtils.RuleCreator` shape already used by the rules in `core/src/rules/` when editing `core/`
     dont: rewrite core rules to defineRule inside an unrelated task
     harm: an opportunistic API migration mixes refactor with behavior change and nothing stays reviewable
     check: every rule in `core/src/rules/` uses `createRule`
