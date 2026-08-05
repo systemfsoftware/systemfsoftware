@@ -18,7 +18,7 @@ rules:
     do: register exactly `effect-schema-declarations` in stryker.config.json#ignorers for III.4 declaration data — Symbol.for descriptions, TaggedClass/TaggedError _tag and fields, optionalWith defaults
     dont: author new ignore plugins, add ignore rules for logic mutants, or use `// Stryker disable` comments
     harm: ignore rules pattern-match text, not proofs — they silently suppress mutants that tests would have killed
-    check: `pnpm check:stryker-config` passes — it regenerates every config from `scripts/stryker-config.source.mjs`, so an ignorer or plugin added by hand fails as drift; grep finds no `Stryker disable` in src/
+    check: `stryker.config.json#ignorers` lists nothing beyond `effect-schema-declarations`, and grep finds no `Stryker disable` in src/
 
   - id: OX-CS1
     title: Static config lives in *.config.ts

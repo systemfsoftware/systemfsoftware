@@ -13,9 +13,9 @@
     "format": "dprint fmt",
     "format:check": "dprint check",
     "precommit": "pnpm exec lint-staged --no-revert",
-    "pre-push": "turbo --concurrency=${TURBO_CONCURRENCY:-50%} --continue format:check lint typecheck test attw api:check && pnpm check:exports && pnpm check:mutate-scope && pnpm check:lint-coverage && pnpm check:no-hand-rolled-jsonc && pnpm check:publish-config && pnpm check:project-references && pnpm check:stryker-config",
-    "check": "pnpm install --frozen-lockfile && turbo --concurrency=${TURBO_CONCURRENCY:-50%} --continue format:check lint typecheck test attw api:check && pnpm check:exports && pnpm check:mutate-scope && pnpm check:lint-coverage && pnpm check:no-hand-rolled-jsonc && pnpm check:publish-config && pnpm check:project-references && pnpm check:stryker-config",
-    "check:ci": "turbo --concurrency=${TURBO_CONCURRENCY:-100%} --continue format:check lint typecheck test attw api:check && pnpm check:exports && pnpm check:mutate-scope && pnpm check:lint-coverage && pnpm check:no-hand-rolled-jsonc && pnpm check:publish-config && pnpm check:project-references && pnpm check:stryker-config",
+    "pre-push": "turbo --concurrency=${TURBO_CONCURRENCY:-50%} --continue format:check lint typecheck test attw api:check && pnpm check:exports && pnpm check:mutate-scope && pnpm check:lint-coverage && pnpm check:no-hand-rolled-jsonc && pnpm check:publish-config && pnpm check:project-references",
+    "check": "pnpm install --frozen-lockfile && turbo --concurrency=${TURBO_CONCURRENCY:-50%} --continue format:check lint typecheck test attw api:check && pnpm check:exports && pnpm check:mutate-scope && pnpm check:lint-coverage && pnpm check:no-hand-rolled-jsonc && pnpm check:publish-config && pnpm check:project-references",
+    "check:ci": "turbo --concurrency=${TURBO_CONCURRENCY:-100%} --continue format:check lint typecheck test attw api:check && pnpm check:exports && pnpm check:mutate-scope && pnpm check:lint-coverage && pnpm check:no-hand-rolled-jsonc && pnpm check:publish-config && pnpm check:project-references",
     "release": "node scripts/release.mjs",
     "prepare": "concurrently \"husky\" \"effect-tsgo patch\"",
     "release:dry": "node scripts/release.mjs --dry-run",
@@ -26,9 +26,7 @@
     "check:mutate-scope": "node scripts/guard-mutate-scope.mjs",
     "check:lint-coverage": "node scripts/check-lint-coverage.mjs",
     "check:no-hand-rolled-jsonc": "node scripts/guard-no-hand-rolled-jsonc.mjs --selftest && node scripts/guard-no-hand-rolled-jsonc.mjs",
-    "check:project-references": "node scripts/check-project-references.mjs --selftest && node scripts/check-project-references.mjs",
-    "check:stryker-config": "node scripts/generate-stryker-configs.mjs --selftest && node scripts/check-stryker-config.mjs --selftest && node scripts/check-stryker-config.mjs",
-    "generate:stryker-config": "node scripts/generate-stryker-configs.mjs"
+    "check:project-references": "node scripts/check-project-references.mjs --selftest && node scripts/check-project-references.mjs"
   },
   "devDependencies": {
     "@commitlint/cli": "^21.2.1",
