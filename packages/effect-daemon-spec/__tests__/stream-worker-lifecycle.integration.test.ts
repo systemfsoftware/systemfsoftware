@@ -1,5 +1,5 @@
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Duration, Effect, Either, Stream, TestClock } from 'effect'
+import { Duration, Effect, Either, Option, Ref, Stream, TestClock } from 'effect'
 import { expect } from 'vitest'
 import { Daemon } from '../src/mod.js'
 import { dynamic } from '../src/mod.js'
@@ -130,6 +130,43 @@ Feature('Stream Worker Lifecycle')
           Effect.sync(() => {
             expect(s.result.stillRunning).toBe(true)
           })
+        ),
+      ),
+    )
+
+    scenario(
+      'Each stream worker span starts a new trace, ignoring the caller trace',
+      Gherkin.Do.pipe(
+        Given('a rooted probe')('streamSpanRooted', () => Ref.make<Array<boolean>>([])),
+        When('a stream worker runs while a caller trace is active')('health', (s) =>
+          Effect.gen(function*() {
+            const worker = Daemon.stream({
+              name: 'stream-root',
+              stream: Stream.make(1, 2, 3).pipe(
+                Stream.tap(() =>
+                  Effect.currentSpan.pipe(
+                    Effect.flatMap((span) =>
+                      Ref.update(s.streamSpanRooted, (arr) => [...arr, Option.isNone(span.parent)])
+                    ),
+                  )
+                ),
+              ),
+              tick: { tickTimeout: Duration.seconds(90) },
+              lock: { mode: 'none' },
+            })
+            const health = yield* run.worker(worker).pipe(Effect.withSpan('caller.trace'))
+            yield* TestClock.adjust(Duration.millis(10))
+            return health
+          })),
+        Then('every stream worker span has no parent')((s) =>
+          Ref.get(s.streamSpanRooted).pipe(
+            Effect.flatMap((rooted) =>
+              Effect.sync(() => {
+                expect(rooted.length).toBeGreaterThan(0)
+                expect(rooted.every((value) => value === true)).toBe(true)
+              })
+            ),
+          )
         ),
       ),
     )

@@ -27,7 +27,7 @@
     "related": true
   },
   "typescriptChecker": {
-    "prioritizePerformanceOverAccuracy": false
+    "prioritizePerformanceOverAccuracy": true
   },
   "coverageAnalysis": "perTest",
   "incremental": true,
@@ -45,7 +45,8 @@
     ]
   },
   "ignorers": [
-    "effect-schema-declarations"
+    "effect-schema-declarations",
+    "in-source-vitest-block"
   ],
   "thresholds": {
     "high": 100,
