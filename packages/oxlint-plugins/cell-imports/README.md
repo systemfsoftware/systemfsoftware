@@ -30,7 +30,7 @@ export default defineConfig({
 
 ## Rules
 
-The rule set is intentionally empty while the cell-imports rule is authored separately.
+`cell-import-boundary` — enforces every cell-to-cell import edge in the taxonomy. Enabled by the `recommended` config.
 
 ## Requirements
 
@@ -38,7 +38,7 @@ The rule set is intentionally empty while the cell-imports rule is authored sepa
 
 ## Contributing
 
-[AGENTS.md](https://github.com/systemfsoftware/systemfsoftware/blob/main/packages/oxlint-plugins/cell-imports/AGENTS.md)
+[AGENTS.md](https://github.com/systemfsoftware/systemfsoftware/blob/main/packages/oxlint-plugins/AGENTS.md)
 
 ## License
 
