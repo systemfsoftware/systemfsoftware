@@ -627,6 +627,11 @@ export function getPuppeteerDir(): string {
 	return dirs.rootSubdir("puppeteer", "cache");
 }
 
+/** Get the browser relay extension install directory (~/.omp/browser-relay). */
+export function getBrowserRelayDir(): string {
+	return dirs.rootSubdir("browser-relay", "data");
+}
+
 /** Get DOCS_RS cache directory () */
 export function getDocsRsCacheDir(): string {
 	return dirs.rootSubdir("webcache", "cache");
@@ -721,6 +726,16 @@ export function getAutoresearchRunDir(encodedProject: string, runId: number): st
 	return path.join(getAutoresearchProjectDir(encodedProject), "runs", String(runId).padStart(4, "0"));
 }
 
+/** Get the security-analysis state directory (~/.omp/security). */
+export function getSecurityDir(): string {
+	return dirs.rootSubdir("security", "state");
+}
+
+/** Get one project's security-analysis state directory (~/.omp/security/<project-key>). */
+export function getSecurityProjectDir(projectKey: string): string {
+	return path.join(getSecurityDir(), projectKey);
+}
+
 // =============================================================================
 // Agent subdirectories (~/.omp/agent/*)
 // =============================================================================
@@ -808,6 +823,58 @@ export function getCrashLogPath(agentDir?: string): string {
 /** Get the debug log path (~/.omp/agent/omp-debug.log). */
 export function getDebugLogPath(agentDir?: string): string {
 	return dirs.agentSubdir(agentDir, `${APP_NAME}-debug.log`, "state");
+}
+
+/**
+ * Best-effort one-time copy of a legacy config-root file to its redirected XDG
+ * location. Existing installs that enable XDG after the file was created keep
+ * their data (e.g. a placeholder key whose loss would break deobfuscation of
+ * persisted transcripts). The legacy file is left in place for older omp
+ * versions sharing the profile.
+ */
+function adoptLegacyFile(legacyPath: string, targetPath: string): void {
+	if (targetPath === legacyPath) return;
+	try {
+		if (fs.existsSync(targetPath) || !fs.existsSync(legacyPath)) return;
+		fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+		fs.copyFileSync(legacyPath, targetPath, fs.constants.COPYFILE_EXCL);
+	} catch {
+		// Opportunistic: a copy race or unwritable XDG dir falls back to a fresh
+		// file at the new path — the pre-adoption behavior.
+	}
+}
+
+/** Get the secret placeholder key path (~/.omp/agent/secret-placeholder.key; XDG default: $XDG_STATE_HOME/omp/secret-placeholder.key). Adopts a legacy key on first XDG resolution. */
+export function getSecretPlaceholderKeyPath(): string {
+	const keyPath = dirs.agentSubdir(undefined, "secret-placeholder.key", "state");
+	adoptLegacyFile(path.join(dirs.agentDir, "secret-placeholder.key"), keyPath);
+	return keyPath;
+}
+
+/** Get the daemon runtime directory for a project (~/.omp/run/daemons/<hash>; XDG default: $XDG_STATE_HOME/omp/run/daemons/<hash>). */
+export function getDaemonRuntimeDir(projectDir: string): string {
+	const key = Bun.hash.wyhash(path.resolve(projectDir)).toString(16).padStart(16, "0");
+	return dirs.rootSubdir(path.join("run", "daemons", key), "state");
+}
+
+/** Get a profile-independent runtime directory for a machine-global daemon service. */
+export function getGlobalDaemonRuntimeDir(service: string): string {
+	if (!/^[a-z0-9][a-z0-9._-]*$/i.test(service)) {
+		throw new Error(`Invalid global daemon service name: ${JSON.stringify(service)}`);
+	}
+	return path.join(getBaseConfigRoot(), "run", "daemons", "global", service);
+}
+
+/** Get the provider in-flight root directory (~/.omp/run/provider-inflight; XDG default: $XDG_STATE_HOME/omp/run/provider-inflight). */
+export function getProviderInFlightRoot(): string {
+	return dirs.rootSubdir(path.join("run", "provider-inflight"), "state");
+}
+
+/** Get the marketplaces registry path (~/.omp/marketplaces.json; XDG default: $XDG_DATA_HOME/omp/marketplaces.json). Adopts a legacy registry on first XDG resolution. */
+export function getMarketplacesRegistryPath(): string {
+	const registryPath = dirs.rootSubdir("marketplaces.json", "data");
+	adoptLegacyFile(path.join(dirs.configRoot, "marketplaces.json"), registryPath);
+	return registryPath;
 }
 
 // =============================================================================

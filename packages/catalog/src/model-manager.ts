@@ -14,10 +14,10 @@ const NON_AUTHORITATIVE_RETRY_MS = 5 * 60 * 1000;
 export type ModelRefreshStrategy = "online" | "offline" | "online-if-uncached";
 
 /**
- * Hook for loading and mapping models.dev fallback data into canonical model objects.
+ * Hook for loading and mapping stencil.so fallback data into canonical model objects.
  */
 export interface ModelsDevFallback<TApi extends Api = Api, TPayload = unknown> {
-	/** Fetches raw fallback payload (for example from models.dev). */
+	/** Fetches raw fallback payload (for example from stencil.so). */
 	fetch(): Promise<TPayload>;
 	/** Maps payload into provider models. */
 	map(payload: TPayload, providerId: Provider): readonly ModelSpec<TApi>[];
@@ -39,11 +39,19 @@ export interface ModelManagerOptions<TApi extends Api = Api, TModelsDevPayload =
 	cacheTtlMs?: number;
 	/** When true, a successful dynamic fetch is the complete provider catalog and prunes static-only models. */
 	dynamicModelsAuthoritative?: boolean;
-	/** Cached model ids to ignore when the cache was written against a different static catalog fingerprint. */
+	/** Cached model ids whose presence forces refresh when the static or migration-policy fingerprint changes. */
 	dropCachedModelIdsOnStaticMismatch?: readonly string[];
+	/**
+	 * Trusted, provider-wide request headers (compile-time constants, never
+	 * credentials) that the cache may restore by value for any model whose live
+	 * headers matched them at write time. Lets header-bearing dynamic models
+	 * without a bundled static entry survive offline reads instead of being
+	 * dropped as unrestorable (e.g. GitHub Copilot's User-Agent + API version).
+	 */
+	restorableHeaderFallback?: Record<string, string>;
 	/** Optional dynamic endpoint fetcher. */
 	fetchDynamicModels?: () => Promise<readonly ModelSpec<TApi>[] | null>;
-	/** Optional models.dev fallback hook. */
+	/** Optional stencil.so fallback hook. */
 	modelsDev?: ModelsDevFallback<TApi, TModelsDevPayload>;
 	/** Clock override for deterministic tests. */
 	now?: () => number;
@@ -53,7 +61,8 @@ export interface ModelManagerOptions<TApi extends Api = Api, TModelsDevPayload =
  * Resolution result.
  *
  * `stale` is false when the resolved catalog is authoritative for the selected provider:
- * - dynamic endpoint data was fetched in this call,
+ * - a dynamic endpoint fetch succeeded in this call (an empty catalog is still
+ *   authoritative for the cycle, so downstream pruning of removed models runs),
  * - a still-fresh authoritative cache was reused in `online-if-uncached` mode, or
  * - the provider has no dynamic fetcher configured.
  */
@@ -123,6 +132,7 @@ function restoreCachedModelHeaders<TApi extends Api>(
 	headerOmittedModelIds: readonly string[],
 	unrestorableHeaderModelIds: readonly string[],
 	legacyHeaderRestoreMarkers: boolean,
+	restorableHeaderFallback: Record<string, string> | undefined,
 ): CachedHeaderRestoreResult<TApi> {
 	const models = passModelList<TApi>(cachedModels);
 	if (headerOmittedModelIds.length === 0) {
@@ -144,6 +154,13 @@ function restoreCachedModelHeaders<TApi extends Api>(
 				: undefined
 			: (staticById.get(model.id) ?? (model.requestModelId ? staticById.get(model.requestModelId) : undefined));
 		if (!staticModel?.headers) {
+			// A non-unrestorable row whose static source is gone was cached with
+			// headers matching the provider's trusted constant (e.g. a Copilot
+			// model with no bundled entry). Reattach the constant by value instead
+			// of dropping the model on this offline read.
+			if (!unrestorable && restorableHeaderFallback) {
+				return { ...model, headers: { ...restorableHeaderFallback } };
+			}
 			unresolvedModelIds.add(model.id);
 			return model;
 		}
@@ -154,7 +171,7 @@ function restoreCachedModelHeaders<TApi extends Api>(
 
 /**
  * Resolves provider models with source precedence:
- * static -> models.dev -> cache -> dynamic.
+ * static -> stencil.so -> cache -> dynamic.
  *
  * Later sources override earlier ones by model id.
  */
@@ -166,6 +183,7 @@ export async function resolveProviderModels<TApi extends Api = Api, TModelsDevPa
 	const now = options.now ?? Date.now;
 	const ttlMs = options.cacheTtlMs ?? DEFAULT_CACHE_TTL_MS;
 	const dbPath = options.cacheDbPath;
+	const restorableHeaderFallback = options.restorableHeaderFallback;
 	const staticModels = options.staticModels
 		? passModelList<TApi>(options.staticModels)
 		: (getBundledModels(options.providerId as GeneratedProvider) as Model<TApi>[]);
@@ -176,14 +194,29 @@ export async function resolveProviderModels<TApi extends Api = Api, TModelsDevPa
 		cache?.headerOmittedModelIds ?? [],
 		cache?.unrestorableHeaderModelIds ?? [],
 		cache?.legacyHeaderRestoreMarkers ?? false,
+		restorableHeaderFallback,
 	);
 	const usableCachedModels = restoredCache.models.filter(model => !restoredCache.unresolvedModelIds.has(model.id));
 	const cacheHasUnresolvedHeaders = restoredCache.unresolvedModelIds.size > 0;
 	const dynamicModelsAuthoritative = options.dynamicModelsAuthoritative ?? false;
-	const staticFingerprint = fingerprintStatic(staticModels, dynamicModelsAuthoritative);
+	const cacheDropIds = options.dropCachedModelIdsOnStaticMismatch;
+	const staticCatalogFingerprint = fingerprintStatic(staticModels, dynamicModelsAuthoritative);
+	// Endpoint-migration policy is cache identity: adding an id must invalidate
+	// matching-static-catalog caches written by the prior resolver.
+	const staticFingerprint =
+		cacheDropIds && cacheDropIds.length > 0
+			? `${staticCatalogFingerprint}:drop:${Bun.hash(cacheDropIds.join("\0")).toString(36)}`
+			: staticCatalogFingerprint;
 	const cacheFingerprintMatches = cache?.staticFingerprint === staticFingerprint && staticFingerprint.length > 0;
+	const cacheNeedsModelMigration =
+		!cacheFingerprintMatches &&
+		cacheDropIds !== undefined &&
+		usableCachedModels.some(model => cacheDropIds.includes(model.id));
 	const hasUsableFreshCache =
-		(cache?.fresh ?? false) && !cacheHasUnresolvedHeaders && (!dynamicModelsAuthoritative || cacheFingerprintMatches);
+		(cache?.fresh ?? false) &&
+		!cacheHasUnresolvedHeaders &&
+		!cacheNeedsModelMigration &&
+		(!dynamicModelsAuthoritative || cacheFingerprintMatches);
 	const dynamicFetcher = options.fetchDynamicModels;
 	const hasDynamicFetcher = typeof dynamicFetcher === "function";
 	const hasAuthoritativeCache = ((cache?.authoritative ?? false) && hasUsableFreshCache) || !hasDynamicFetcher;
@@ -226,6 +259,12 @@ export async function resolveProviderModels<TApi extends Api = Api, TModelsDevPa
 				options.dropCachedModelIdsOnStaticMismatch,
 			);
 	const dynamicModels = fetchedDynamicModels ?? [];
+	// A successful empty result stays authoritative for THIS cycle (so an
+	// intentional catalog emptying still prunes removed models downstream), but
+	// is NOT pinned into the cache as authoritative — that would suppress the
+	// short retry that recovers a transient empty response (#6620). The two
+	// concerns are deliberately separate: result authority vs. cache retry.
+	const dynamicCacheAuthoritative = dynamicFetchSucceeded && dynamicModels.length > 0;
 	const mergedWithCache = mergeDynamicModels(mergeModelSources(staticModels, modelsDevModels), cacheModels);
 	const mergedModels = mergeDynamicModels(mergedWithCache, dynamicModels);
 	const models = collapseBuiltModelVariants(
@@ -242,10 +281,11 @@ export async function resolveProviderModels<TApi extends Api = Api, TModelsDevPa
 				cacheProviderId,
 				now(),
 				collapseBuiltModelVariants(snapshotModels),
-				true,
+				dynamicCacheAuthoritative,
 				staticFingerprint,
 				dbPath,
 				staticModels,
+				restorableHeaderFallback,
 			);
 		} else {
 			// Dynamic fetch failed — update cache with a non-authoritative snapshot so
@@ -257,28 +297,31 @@ export async function resolveProviderModels<TApi extends Api = Api, TModelsDevPa
 				latestCache?.headerOmittedModelIds ?? cache?.headerOmittedModelIds ?? [],
 				latestCache?.unrestorableHeaderModelIds ?? cache?.unrestorableHeaderModelIds ?? [],
 				latestCache?.legacyHeaderRestoreMarkers ?? cache?.legacyHeaderRestoreMarkers ?? false,
+				restorableHeaderFallback,
 			);
 			const latestUsableCacheModels = latestRestoredCache.models.filter(
 				model => !latestRestoredCache.unresolvedModelIds.has(model.id),
 			);
+			const fallbackSnapshotModels = collapseBuiltModelVariants(
+				mergeDynamicModels(
+					mergeModelSources(staticModels, modelsDevModels),
+					prepareCacheModelsForStaticMismatch(
+						latestUsableCacheModels,
+						staticModels,
+						cacheFingerprintMatches,
+						options.dropCachedModelIdsOnStaticMismatch,
+					),
+				),
+			);
 			writeModelCache(
 				cacheProviderId,
 				now(),
-				collapseBuiltModelVariants(
-					mergeDynamicModels(
-						mergeModelSources(staticModels, modelsDevModels),
-						prepareCacheModelsForStaticMismatch(
-							latestUsableCacheModels,
-							staticModels,
-							cacheFingerprintMatches,
-							options.dropCachedModelIdsOnStaticMismatch,
-						),
-					),
-				),
+				fallbackSnapshotModels,
 				false,
 				staticFingerprint,
 				dbPath,
 				staticModels,
+				restorableHeaderFallback,
 			);
 		}
 	}
@@ -455,13 +498,25 @@ function mergeDynamicModel<TApi extends Api>(existingModel: Model<TApi>, dynamic
 	const supportsImage = dynamicInputAuthoritative
 		? dynamicModel.input.includes("image")
 		: existingModel.input.includes("image") || dynamicModel.input.includes("image");
+	// Synthetic's discovery is authoritative (`dynamicModelsAuthoritative`) and
+	// its per-model `reasoning_parameters.efforts` vocabulary is the route's
+	// whole truth: when the wire advertises only the `none` off-state the
+	// mapper emits `reasoning: false`, and OR-ing the bundled reference's
+	// stale `reasoning: true` back would re-arm an effort dial the route
+	// doesn't expose. Other providers keep the OR so a bundled reasoning flag
+	// survives a discovery row that simply omits the capability.
+	const dynamicReasoningAuthoritative =
+		existingModel.provider === "synthetic" && dynamicModel.provider === "synthetic";
+	const reasoning = dynamicReasoningAuthoritative
+		? dynamicModel.reasoning
+		: existingModel.reasoning || dynamicModel.reasoning;
 	// Re-build from spec stage: sparse compat comes from `compatConfig` (the
 	// verbatim override vocabulary), never the resolved `compat` record.
 	return buildModel({
 		...existingModel,
 		...dynamicModel,
 		name: preferDiscoveryName(dynamicModel.name, existingModel.name, dynamicModel.id),
-		reasoning: existingModel.reasoning || dynamicModel.reasoning,
+		reasoning,
 		input: supportsImage ? ["text", "image"] : ["text"],
 		cost: {
 			input: preferDiscoveryCost(dynamicModel.cost.input, existingModel.cost.input),

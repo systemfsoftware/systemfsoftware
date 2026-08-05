@@ -85,6 +85,17 @@ describe("multiselect settings (array-of-enum)", () => {
 		expect(comp.render(120).join("\n")).toContain(firstChoice!.label);
 	});
 
+	it("hides excluded providers from the web search order list", () => {
+		const comp = createSelector();
+		settings.set("providers.webSearchExclude", [firstChoice!.value]);
+		for (const ch of "web search provider order") comp.handleInput(ch);
+		comp.handleInput("\n");
+
+		const menu = comp.render(120).join("\n");
+		expect(menu).not.toContain(firstChoice!.label);
+		expect(menu).toContain(secondChoice!.label);
+	});
+
 	it("splices the hovered option into the pressed digit's position", () => {
 		const [a, b, c] = SEARCH_PROVIDER_CHOICES;
 		const comp = createSelector();

@@ -129,25 +129,94 @@ describe("ProcessTerminal OSC 11 appearance detection", () => {
 		terminal.stop();
 	});
 
-	it("OSC 11 updates terminal.appearance and fires callbacks with dedup", () => {
-		const { terminal } = setupTerminal();
-		const appearances: string[] = [];
-		terminal.onAppearanceChange(a => appearances.push(a));
+	it("preserves an explicit refresh token queued behind an automatic OSC 11 query", () => {
+		vi.useFakeTimers();
+		const { terminal, queryCount } = setupTerminal();
 
-		// Send dark background response + DA1
+		// Seed the current appearance and drain all startup probe sentinels.
+		process.stdin.emit("data", "\x1b]11;rgb:0000/0000/0000\x07");
+		for (let i = 0; i < 7; i++) process.stdin.emit("data", "\x1b[?1;2c");
+
+		const events: Array<{ kind: "report" | "change"; appearance: string; token: number | undefined }> = [];
+		terminal.onAppearanceReport?.((appearance, token) => {
+			events.push({ kind: "report", appearance, token });
+		});
+		terminal.onAppearanceChange((appearance, token) => {
+			events.push({ kind: "change", appearance, token });
+		});
+		events.length = 0;
+
+		// Mode 2031 starts an automatic query. The explicit refresh must queue
+		// behind it rather than lending its identity to the in-flight response.
+		process.stdin.emit("data", "\x1b[?997;1n");
+		vi.advanceTimersByTime(100);
+		expect(queryCount()).toBe(2);
+		const supersededToken = 41;
+		const requestToken = 42;
+		expect(terminal.refreshAppearance?.(supersededToken)).toBe(supersededToken);
+		expect(terminal.refreshAppearance?.(requestToken)).toBe(requestToken);
+		expect(queryCount()).toBe(2);
+
+		// The automatic response is unchanged and therefore reports without a
+		// change callback or request token. Its DA1 starts the queued refresh.
 		process.stdin.emit("data", "\x1b]11;rgb:0000/0000/0000\x07");
 		process.stdin.emit("data", "\x1b[?1;2c");
+		expect(queryCount()).toBe(3);
 
-		expect(terminal.appearance).toBe("dark");
-		expect(appearances).toEqual(["dark"]);
-
-		// Send same color again — callback should NOT fire again
-		process.stdin.emit("data", "\x1b]11;rgb:0000/0000/0000\x07");
+		process.stdin.emit("data", "\x1b]11;rgb:ffff/ffff/ffff\x07");
 		process.stdin.emit("data", "\x1b[?1;2c");
-
-		expect(appearances).toEqual(["dark"]);
-
 		terminal.stop();
+
+		expect(events).toEqual([
+			{ kind: "report", appearance: "dark", token: undefined },
+			{ kind: "report", appearance: "light", token: requestToken },
+			{ kind: "change", appearance: "light", token: requestToken },
+		]);
+	});
+
+	it("reports every OSC 11 response while change callbacks remain deduplicated", () => {
+		const { terminal } = setupTerminal();
+		const reports: Array<{ reported: string; current: string | undefined }> = [];
+		const changes: string[] = [];
+		let selfUnsubscribeCalls = 0;
+		const unsubscribeSelf = terminal.onAppearanceReport?.(() => {
+			selfUnsubscribeCalls++;
+			unsubscribeSelf?.();
+		});
+		terminal.onAppearanceReport?.(() => {
+			throw new Error("report callback failure");
+		});
+		const unsubscribeCollector = terminal.onAppearanceReport?.(appearance => {
+			reports.push({ reported: appearance, current: terminal.appearance });
+		});
+		terminal.onAppearanceChange(appearance => changes.push(appearance));
+
+		// Complete the startup query and drain every startup probe sentinel before
+		// issuing explicit refreshes, so each response belongs to a real query cycle.
+		process.stdin.emit("data", "\x1b]11;rgb:0000/0000/0000\x07");
+		for (let i = 0; i < 7; i++) process.stdin.emit("data", "\x1b[?1;2c");
+
+		terminal.refreshAppearance?.();
+		process.stdin.emit("data", "\x1b]11;rgb:0000/0000/0000\x07");
+		process.stdin.emit("data", "\x1b[?1;2c");
+
+		terminal.refreshAppearance?.();
+		process.stdin.emit("data", "\x1b]11;rgb:ffff/ffff/ffff\x07");
+		process.stdin.emit("data", "\x1b[?1;2c");
+
+		// Stop before asserting so a failed expectation cannot leak stdin listeners
+		// or terminal modes into subsequent tests.
+		terminal.stop();
+		unsubscribeCollector?.();
+		unsubscribeCollector?.();
+
+		expect(reports).toEqual([
+			{ reported: "dark", current: "dark" },
+			{ reported: "dark", current: "dark" },
+			{ reported: "light", current: "light" },
+		]);
+		expect(selfUnsubscribeCalls).toBe(1);
+		expect(changes).toEqual(["dark", "light"]);
 	});
 
 	it("replays already detected OSC 11 appearance to late subscribers", () => {
@@ -273,15 +342,22 @@ describe("ProcessTerminal OSC 11 appearance detection", () => {
 
 		// An explicit refresh gesture (Ctrl+L) issues one bounded probe.
 		terminal.refreshAppearance?.();
-		expect(queryCount()).toBe(afterInitial + 1);
+		const afterFirstRefresh = queryCount();
 
 		// Complete that query's cycle, then refresh again: still one probe each.
 		process.stdin.emit("data", "\x1b]11;rgb:0000/0000/0000\x07");
 		process.stdin.emit("data", "\x1b[?1;2c");
 		terminal.refreshAppearance?.();
-		expect(queryCount()).toBe(afterInitial + 2);
+		const afterSecondRefresh = queryCount();
 
 		terminal.stop();
+		const afterStop = queryCount();
+		terminal.refreshAppearance?.();
+		const afterStoppedRefresh = queryCount();
+
+		expect(afterFirstRefresh).toBe(afterInitial + 1);
+		expect(afterSecondRefresh).toBe(afterInitial + 2);
+		expect(afterStoppedRefresh).toBe(afterStop);
 	});
 
 	it("passes an explicit appearance refresh through tmux without changing the startup probe", () => {
@@ -525,7 +601,7 @@ describe("ProcessTerminal OSC 11 appearance detection", () => {
 		// Simulate kitty-capable terminal reply (level >=1).
 		process.stdin.emit("data", "\x1b[?1u");
 
-		const pushes = writes.filter(w => w === "\x1b[>1u" || w === "\x1b[>7u" || w === "\x1b[>31u").length;
+		const pushes = writes.filter(w => w === "\x1b[>5u" || w === "\x1b[>7u" || w === "\x1b[>31u").length;
 		expect(pushes).toBe(1);
 
 		terminal.stop();

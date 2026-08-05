@@ -14,18 +14,47 @@ const RUST_AFFECTING_FILE_NAMES = [
 	"rustfmt.toml",
 	".rustfmt.toml",
 ] as const satisfies readonly string[];
+// brush-core/brush-builtins became workspace members for Bazel hermeticity
+// (path-patch rendering is machine-local), but the cargo dev tasks keep their
+// historical scope: the vendored fork is not held to workspace lint/test gates.
+const VENDORED_FORK_EXCLUDES = [
+	"--exclude",
+	"brush-core",
+	"--exclude",
+	"brush-builtins",
+] as const satisfies readonly string[];
 const TASK_COMMANDS = {
 	"check:rs": [
 		["cargo", "fmt", "--all", "--", "--check"],
-		["cargo", "clippy", "--workspace", "--", "-D", "warnings"],
+		["cargo", "clippy", "--workspace", ...VENDORED_FORK_EXCLUDES, "--no-deps", "--", "-D", "warnings"],
 	],
 	"fix:rs": [
 		["cargo", "fmt", "--all"],
-		["cargo", "clippy", "--workspace", "--fix", "--allow-dirty", "--no-deps", "--allow-staged", "--allow-no-vcs"],
+		[
+			"cargo",
+			"clippy",
+			"--workspace",
+			...VENDORED_FORK_EXCLUDES,
+			"--fix",
+			"--allow-dirty",
+			"--no-deps",
+			"--allow-staged",
+			"--allow-no-vcs",
+		],
 	],
 	"fmt:rs": [["cargo", "fmt", "--all"]],
-	"lint:rs": [["cargo", "clippy", "--workspace", "--", "-D", "warnings"]],
-	"test:rs": [["cargo", "nextest", "run", "--workspace", "--status-level=fail", "--final-status-level=fail"]],
+	"lint:rs": [["cargo", "clippy", "--workspace", ...VENDORED_FORK_EXCLUDES, "--no-deps", "--", "-D", "warnings"]],
+	"test:rs": [
+		[
+			"cargo",
+			"nextest",
+			"run",
+			"--workspace",
+			...VENDORED_FORK_EXCLUDES,
+			"--status-level=fail",
+			"--final-status-level=fail",
+		],
+	],
 } as const satisfies Record<string, readonly (readonly string[])[]>;
 
 type RustTaskName = keyof typeof TASK_COMMANDS;

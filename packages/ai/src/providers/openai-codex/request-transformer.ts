@@ -33,7 +33,7 @@ export interface CodexRequestOptions {
 	/** User-facing effort; maps 1:1 onto the wire tier of the same name. */
 	reasoningEffort?: CodexCallerEffort | "none";
 	reasoningSummary?: ReasoningConfig["summary"] | null;
-	/** Explicit `reasoning.context` override; defaults to `all_turns` when unset. Gated to gpt-5.4+ Codex models (older ids reject it, so it is suppressed and `context` omitted). Note that under Responses Lite (`responsesLite`), the server strictly requires `reasoning.context` to be `all_turns`, which overrides this option and forces `all_turns`. */
+	/** Explicit `reasoning.context` override. Omitted by default; Responses Lite forces `all_turns` as required by that transport. */
 	reasoningContext?: CodexReasoningContext;
 	textVerbosity?: "low" | "medium" | "high";
 	include?: string[];
@@ -145,13 +145,12 @@ function getReasoningConfig(
 	const config: ReasoningConfig = {
 		effort: effort === "none" ? "none" : mapCodexWireEffort(model, effort),
 	};
-	// `reasoning.summary` is accepted only from gpt-5.4 onward; earlier Codex ids
-	// (gpt-5.1-codex, gpt-5.3-codex, gpt-5.3-codex-spark) reject it with
-	// "Unsupported parameter: 'reasoning.summary' is not supported with this model".
-	// Mirrors the all_turns gate: an explicit summary is suppressed on unsupported
-	// ids, letting the server skip the human-readable summary stream.
-	if (options.reasoningSummary !== null && supportsCodexReasoningSummary(model.id)) {
-		config.summary = options.reasoningSummary ?? "detailed";
+	if (
+		options.reasoningSummary !== undefined &&
+		options.reasoningSummary !== null &&
+		supportsCodexReasoningSummary(model.id)
+	) {
+		config.summary = options.reasoningSummary;
 	}
 	return config;
 }
@@ -312,18 +311,38 @@ export interface CodexLiteShapedBody {
  * rewrite removes top-level `tools`, a forced hosted-tool choice (e.g.
  * `{ type: "web_search" }`) would leave the backend unable to validate the
  * choice against a tools collection and it rejects the request with HTTP 400
- * (#5771). Such choices must fall back to `"auto"`; explicit string constraints
- * such as `"none"` and `"required"` remain valid. Shared by normal turns and
- * both remote-compaction paths — codex-rs routes `/responses/compact` through
- * the same builder.
+ * (#5771). Native computer and named-function choices preserve exact forcing
+ * by isolating the selected declaration and using `"required"`; other hosted
+ * choices fall back to `"auto"`. Explicit string constraints such as `"none"`
+ * and `"required"` remain valid. Shared by normal turns and both remote-compaction
+ * paths — codex-rs routes `/responses/compact` through the same builder.
  */
 export function applyCodexResponsesLiteShape(body: CodexLiteShapedBody): void {
 	const input = Array.isArray(body.input) ? body.input : [];
 	stripImageDetails(input);
 	body.parallel_tool_calls = false;
-	const prefix: InputItem[] = [
-		{ type: "additional_tools", role: "developer", tools: Array.isArray(body.tools) ? body.tools : [] },
-	];
+	const declaredTools = Array.isArray(body.tools) ? body.tools : [];
+	let additionalTools = declaredTools;
+	if (body.tool_choice && typeof body.tool_choice === "object" && "type" in body.tool_choice) {
+		const choice = body.tool_choice;
+		const selected = declaredTools.find(tool => {
+			if (tool === null || typeof tool !== "object" || !("type" in tool)) return false;
+			if (choice.type === "computer") return tool.type === "computer";
+			return (
+				choice.type === "function" &&
+				tool.type === "function" &&
+				"name" in choice &&
+				typeof choice.name === "string" &&
+				"name" in tool &&
+				tool.name === choice.name
+			);
+		});
+		if (selected) {
+			additionalTools = [selected];
+			body.tool_choice = "required";
+		}
+	}
+	const prefix: InputItem[] = [{ type: "additional_tools", role: "developer", tools: additionalTools }];
 	if (typeof body.instructions === "string" && body.instructions.length > 0) {
 		prefix.push({
 			type: "message",
@@ -424,21 +443,14 @@ export async function transformRequestBody(
 			...body.reasoning,
 			...reasoningConfig,
 		};
-		// Default reasoning replay to `all_turns`, mirroring codex-rs; an
-		// explicit `reasoningContext` overrides the default. The `all_turns`
-		// value is only accepted from gpt-5.4 onward — earlier Codex ids
-		// (gpt-5.1-codex, gpt-5.3-codex, gpt-5.3-codex-spark) reject it with
-		// "Unsupported value: 'all_turns' is not supported with this model".
-		// For those, drop `context` so the server applies its `current_turn`
-		// default. The version gate is authoritative: even an explicit
-		// `all_turns` override is suppressed on unsupported models, while
-		// `current_turn`/`auto` (universally supported) always pass through.
-		// Note: Responses Lite forces `all_turns` to satisfy the transport's server invariant.
-		const context = responsesLite ? "all_turns" : (options.reasoningContext ?? "all_turns");
-		if (context === "all_turns" && !supportsAllTurnsReasoningContext(model.id)) {
-			delete body.reasoning.context;
-		} else {
-			body.reasoning.context = context;
+		// Responses Lite requires `all_turns`; the full transport leaves context to the server unless explicitly set.
+		const context = responsesLite ? "all_turns" : options.reasoningContext;
+		if (context !== undefined) {
+			if (context === "all_turns" && !supportsAllTurnsReasoningContext(model.id)) {
+				delete body.reasoning.context;
+			} else {
+				body.reasoning.context = context;
+			}
 		}
 	} else {
 		delete body.reasoning;
@@ -461,10 +473,12 @@ export async function transformRequestBody(
 		delete body.stream_options;
 	}
 
-	body.text = {
-		...body.text,
-		verbosity: options.textVerbosity || "medium",
-	};
+	if (options.textVerbosity !== undefined) {
+		body.text = {
+			...body.text,
+			verbosity: options.textVerbosity,
+		};
+	}
 
 	const include = Array.isArray(options.include) ? [...options.include] : [];
 	include.push("reasoning.encrypted_content");

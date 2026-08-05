@@ -13,6 +13,7 @@ import {
 	getRemainingTimeoutMs,
 	isCancellationError,
 	isTimedOutCancellation,
+	resolveOwnerScopedSessionKey,
 	waitForPromiseWithCancellation,
 } from "../executor-base";
 import type { JsStatusEvent } from "../js/shared/types";
@@ -407,7 +408,13 @@ async function ensureToolBridge(options: RubyExecutorOptions): Promise<void> {
 
 async function executeOnSession(code: string, cwd: string, options: RubyExecutorOptions): Promise<RubyResult> {
 	const sessionId = options.sessionId ?? `session:${cwd}`;
-	const sessionKey = buildSessionKey(sessionId, cwd, options.interpreter);
+	const sessionKey = resolveOwnerScopedSessionKey({
+		baseKey: buildSessionKey(sessionId, cwd, options.interpreter),
+		ownerId: options.kernelOwnerId,
+		reset: options.reset === true,
+		hasSession: key => sessions.has(key) || startingSessions.has(key),
+		getOwners: key => sessions.get(key) ?? startingSessions.get(key),
+	});
 	if (options.bridge && !options.bridgeSessionId) {
 		options.bridgeSessionId = sessionId;
 	}

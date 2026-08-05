@@ -1,4 +1,4 @@
-import * as AIError from "../error";
+import { ProviderHttpError } from "../error/classes";
 import type { FetchImpl } from "../types";
 
 type OpenAICompatibleValidationOptions = {
@@ -40,6 +40,20 @@ function resolveValidationHeaders(
 	return typeof headers === "function" ? headers() : headers;
 }
 
+async function createApiKeyValidationError(provider: string, response: Response): Promise<ProviderHttpError> {
+	let details = "";
+	try {
+		details = (await response.text()).trim();
+	} catch {
+		// Ignore body read errors; the HTTP status still preserves the failure category.
+	}
+
+	const message = details
+		? `${provider} API key validation failed (${response.status}): ${details}`
+		: `${provider} API key validation failed (${response.status})`;
+	return new ProviderHttpError(message, response.status, { headers: response.headers });
+}
+
 /**
  * Validate an API key against an OpenAI-compatible chat completions endpoint.
  *
@@ -69,17 +83,7 @@ export async function validateOpenAICompatibleApiKey(options: OpenAICompatibleVa
 		return;
 	}
 
-	let details = "";
-	try {
-		details = (await response.text()).trim();
-	} catch {
-		// ignore body parse errors, status is enough
-	}
-
-	const message = details
-		? `${options.provider} API key validation failed (${response.status}): ${details}`
-		: `${options.provider} API key validation failed (${response.status})`;
-	throw new AIError.ApiKeyRequiredError(message);
+	throw await createApiKeyValidationError(options.provider, response);
 }
 
 /**
@@ -110,17 +114,7 @@ export async function validateAnthropicCompatibleApiKey(options: AnthropicCompat
 		return;
 	}
 
-	let details = "";
-	try {
-		details = (await response.text()).trim();
-	} catch {
-		// ignore body parse errors, status is enough
-	}
-
-	const message = details
-		? `${options.provider} API key validation failed (${response.status}): ${details}`
-		: `${options.provider} API key validation failed (${response.status})`;
-	throw new AIError.ApiKeyRequiredError(message);
+	throw await createApiKeyValidationError(options.provider, response);
 }
 
 /**
@@ -147,15 +141,5 @@ export async function validateApiKeyAgainstModelsEndpoint(options: ModelListVali
 		return;
 	}
 
-	let details = "";
-	try {
-		details = (await response.text()).trim();
-	} catch {
-		// ignore body parse errors, status is enough
-	}
-
-	const message = details
-		? `${options.provider} API key validation failed (${response.status}): ${details}`
-		: `${options.provider} API key validation failed (${response.status})`;
-	throw new AIError.ApiKeyRequiredError(message);
+	throw await createApiKeyValidationError(options.provider, response);
 }

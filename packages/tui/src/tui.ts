@@ -1055,6 +1055,13 @@ export class TUI extends Container {
 	#ghosttyInitialImageDelayTimer: RenderTimer | undefined;
 	#ghosttyImageReadyAtMs = 0;
 	#clearScrollbackOnNextRender = false;
+	// Set by `resetDisplay()` and consumed by the next authoritative normal-screen
+	// render. If that render is a full paint, it is a user-driven replay of the
+	// current transcript (Ctrl+O expand, thinking/setting toggles, display reset)
+	// that must show every row, so it opts out of #truncateLargeConptyFrame.
+	// Multiplexer resets render as in-place updates; consuming the flag there
+	// prevents a later /resume or handoff bulk replacement from inheriting it.
+	#unboundedConptyPaintRequested = false;
 	#forceViewportRepaintOnNextRender = false;
 	#hasEverRendered = false;
 	#scrollbackRebuildEnabled =
@@ -1663,7 +1670,10 @@ export class TUI extends Container {
 
 	#querySixelSupport(): void {
 		if (TERMINAL.imageProtocol) return;
-		if (process.platform !== "win32") return;
+		// win32 native or WSL under Windows Terminal — both are ConPTY-hosted and
+		// reach the same WT graphics negotiation. WSL reports process.platform
+		// "linux", so a bare win32 check silently skips the probe there (#6009).
+		if (!isConPTYHosted()) return;
 		if (!Bun.env.WT_SESSION) return;
 		if (!process.stdin.isTTY || !process.stdout.isTTY) return;
 
@@ -1868,7 +1878,9 @@ export class TUI extends Container {
 			this.terminal.write(targetRow <= viewportBottom ? "\r" : "\r\n");
 		}
 
-		this.terminal.showCursor();
+		// Force: the parent shell needs the cursor back regardless of what the
+		// terminal-level dedupe believes was last written.
+		this.terminal.showCursor(true);
 		this.#forgetHardwareCursorState();
 		this.terminal.stop();
 	}
@@ -1889,6 +1901,10 @@ export class TUI extends Container {
 	 */
 	resetDisplay(): void {
 		if (this.#stopped) return;
+		// This is a user-driven redraw of the current transcript; it must replay
+		// every row, so opt the next full paint out of the ConPTY resume bound.
+		// Set before the multiplexer early-return so it survives a deferred paint.
+		this.#unboundedConptyPaintRequested = true;
 		this.invalidate();
 		// A reset that lands inside a tmux/screen/zellij resize burst would
 		// paint mid-reflow and re-introduce the flash race (issue #2088).
@@ -2655,7 +2671,14 @@ export class TUI extends Container {
 		overlayWidth: number,
 		totalWidth: number,
 	): string {
-		if (TERMINAL.isImageLine(baseLine)) return baseLine;
+		if (TERMINAL.isImageLine(baseLine)) {
+			// Full-width overlays such as /switch are opaque: replace the
+			// Unicode placeholder cells so the image cannot cover the modal.
+			// Partial overlays cannot safely splice placement control sequences.
+			if (startCol !== 0 || overlayWidth < totalWidth) return baseLine;
+			const overlay = sliceWithWidth(overlayLine, 0, totalWidth, true);
+			return SEGMENT_RESET + overlay.text + " ".repeat(Math.max(0, totalWidth - overlay.width));
+		}
 
 		// Single pass through baseLine extracts both before and after segments
 		const afterStart = startCol + overlayWidth;
@@ -3154,6 +3177,12 @@ export class TUI extends Container {
 		}
 		const cursorTrackingLineCount = hasVisibleOverlay ? Math.max(frame.length, windowTop + height) : frame.length;
 
+		// `resetDisplay()` requests an unbounded replay of the current
+		// transcript. Consume that one-shot intent on this authoritative
+		// normal-screen render even when a multiplexer makes it an in-place
+		// update; otherwise a later /resume or handoff full paint inherits it.
+		const unboundedConptyPaint = this.#unboundedConptyPaintRequested;
+		this.#unboundedConptyPaintRequested = false;
 		const intent: RenderIntent = fullPaint
 			? {
 					kind: "fullPaint",
@@ -3187,6 +3216,7 @@ export class TUI extends Container {
 				chunkTo,
 				windowTop,
 				cursorTrackingLineCount,
+				boundConptyPaint: !unboundedConptyPaint,
 				leadingSequence: deferredAltExit,
 			});
 			this.#pendingAltExit = "";
@@ -3588,6 +3618,16 @@ export class TUI extends Container {
 			chunkTo: number;
 			windowTop: number;
 			cursorTrackingLineCount: number;
+			/**
+			 * Whether this paint may be bounded by {@link #truncateLargeConptyFrame}
+			 * on ConPTY hosts. True for bulk transcript-replacement paints — first
+			 * paint, /resume, handoff, and resize geometry rebuilds — where a
+			 * multi-megabyte synchronized frame stalls conhost (issue #2115). False
+			 * for a user-driven `resetDisplay()` (Ctrl+O expand, thinking/setting
+			 * toggles, display reset), which must replay the whole transcript so
+			 * nothing is silently dropped from scrollback (issue #4863).
+			 */
+			boundConptyPaint: boolean;
 			leadingSequence: string;
 		},
 	): void {
@@ -3604,16 +3644,19 @@ export class TUI extends Container {
 				paintCursorPos = { row: chunkTo + cursorPos.row - windowTop, col: cursorPos.col };
 			}
 		}
-		// ConPTY hosts bound the replay: merge prefix + window into one array
-		// so #truncateLargeConptyFrame can measure the payload and retain only
-		// the tail. Gated on the host check — everywhere else the merge would
-		// copy a pointer per committed row (a 50k-row session = 50k-entry
-		// array per resize step / theme change / session replace) just to be
-		// returned unchanged. `paintLines` stays null unless truncation
-		// actually rewrote the replay.
+		// ConPTY hosts bound bulk transcript-replacement replays (resume, handoff,
+		// first paint, resize): merge prefix + window into one array so
+		// #truncateLargeConptyFrame can measure the payload and retain only the
+		// tail (#2115). Gated on `boundConptyPaint` — a user-driven `resetDisplay()`
+		// (Ctrl+O expand, toggles) sets it false and replays the whole transcript
+		// untruncated so nothing is dropped from scrollback (#4863). Gated on the
+		// host check too — everywhere else the merge would copy a pointer per
+		// committed row (a 50k-row session = 50k-entry array per resize step /
+		// theme change / session replace) just to be returned unchanged.
+		// `paintLines` stays null unless truncation actually rewrote the replay.
 		let paintLines: string[] | null = null;
 		let paintLineCount = chunkTo + height;
-		if (isConPTYHosted()) {
+		if (options.boundConptyPaint && isConPTYHosted()) {
 			const merged = new Array<string>(chunkTo + height);
 			for (let i = 0; i < chunkTo; i++) merged[i] = frame[i] ?? "";
 			for (let screenRow = 0; screenRow < height; screenRow++) {

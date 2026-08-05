@@ -1,15 +1,16 @@
 /**
  * Generate and optionally push a commit with changelog updates.
  */
+
 import { postmortem } from "@oh-my-pi/pi-utils";
 import { Command, Flags } from "@oh-my-pi/pi-utils/cli";
+import { commitHelp as commandHelp } from "../cli/command-help";
 import { runCommitCommand } from "../commit";
 import type { CommitCommandArgs } from "../commit/types";
 import { initTheme } from "../modes/theme/theme";
 
 export default class Commit extends Command {
-	static description = "Generate a commit message and update changelogs";
-
+	static description = commandHelp.description;
 	static flags = {
 		push: Flags.boolean({ description: "Push after committing" }),
 		"dry-run": Flags.boolean({ description: "Preview without committing" }),

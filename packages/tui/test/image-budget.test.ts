@@ -707,6 +707,48 @@ describe("TUI inline-image budget", () => {
 		}
 	});
 
+	it("lets a full-width non-fullscreen overlay replace Unicode image placeholder rows", async () => {
+		const originalGraphics = { ...getKittyGraphics() };
+		const term = new VirtualTerminal(40, 12);
+		const writes: string[] = [];
+		const realWrite = term.write.bind(term);
+		vi.spyOn(term, "write").mockImplementation((data: string) => {
+			writes.push(data);
+			realWrite(data);
+		});
+
+		setKittyGraphics({ unicodePlaceholders: true });
+		const tui = new TUI(term);
+		tui.addChild(makeImage(tui.imageBudget, "behind-modal"));
+		try {
+			tui.start();
+			await settle(term);
+			writes.length = 0;
+
+			const overlay = tui.showOverlay(new Text("MODEL SELECTOR\nMODEL ROW 2\nMODEL ROW 3\nMODEL ROW 4", 0, 0), {
+				anchor: "top-left",
+				width: "100%",
+				maxHeight: "100%",
+			});
+			await settle(term);
+
+			const modalOutput = writes.join("");
+			expect(modalOutput).not.toContain("\x1b[?1049h");
+			const modalViewport = term.getViewport().join("\n");
+			expect(modalViewport).toContain("MODEL SELECTOR");
+			expect(modalViewport).not.toContain(KITTY_PLACEHOLDER);
+
+			writes.length = 0;
+			overlay.hide();
+			await settle(term);
+
+			expect(term.getViewport().join("\n")).toContain(KITTY_PLACEHOLDER);
+		} finally {
+			tui.stop();
+			setKittyGraphics(originalGraphics);
+		}
+	});
+
 	it("transmits image data only once; a later full redraw re-emits just the placement", async () => {
 		const term = new VirtualTerminal(40, 12);
 		const writes: string[] = [];

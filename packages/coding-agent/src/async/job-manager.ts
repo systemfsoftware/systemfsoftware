@@ -94,6 +94,12 @@ export interface AsyncJobDeliveryState {
 	pendingJobIds: string[];
 }
 
+export interface AsyncJobReapResult {
+	settled: boolean;
+	pendingJobIds: string[];
+	completion: Promise<void>;
+}
+
 export interface AsyncJobRegisterOptions {
 	id?: string;
 	/** Registry id of the agent that owns this job; used to scope cancelAll. */
@@ -417,6 +423,26 @@ export class AsyncJobManager {
 		}
 	}
 
+	/**
+	 * Immediately evict completed and failed jobs matching the filter instead of
+	 * waiting for retention expiry, dropping every queued delivery so a prior
+	 * session's result can never be injected into a later transcript. Returns the
+	 * number of jobs evicted.
+	 *
+	 * A delivery whose sink call is already in flight (or drained onto a caller's
+	 * yield queue) is guarded by the owner's delivery generation, not the per-id
+	 * suppression marker — that marker is cleared when the id is reused.
+	 */
+	evictCompletedJobs(filter?: AsyncJobFilter): number {
+		let evicted = 0;
+		for (const job of this.#filterJobs(this.#jobs.values(), filter)) {
+			if (job.status !== "completed" && job.status !== "failed") continue;
+			this.acknowledgeDeliveries([job.id]);
+			if (this.#evictJob(job.id)) evicted += 1;
+		}
+		return evicted;
+	}
+
 	async waitForAll(): Promise<void> {
 		await Promise.all(Array.from(this.#jobs.values()).map(job => job.promise));
 	}
@@ -468,6 +494,26 @@ export class AsyncJobManager {
 			);
 			if (!settled) return false;
 		}
+	}
+
+	/**
+	 * Cancel every job owned by `ownerId`, then wait only until `deadlineAt`.
+	 * The returned completion keeps waiting for actual process settlement when
+	 * the deadline expires, so callers can move that cleanup out of the
+	 * user-visible Task wait without losing ownership of the live work.
+	 */
+	async cancelAndReapOwnerJobs(ownerId: string, deadlineAt: number): Promise<AsyncJobReapResult> {
+		this.cancelAll({ ownerId });
+		const timeoutMs = Math.max(0, deadlineAt - Date.now());
+		const settled = await this.waitForOwnerJobs(ownerId, { timeoutMs });
+		if (settled) {
+			return { settled: true, pendingJobIds: [], completion: Promise.resolve() };
+		}
+		const pendingJobIds = this.getAllJobs({ ownerId })
+			.filter(job => job.status === "running" || job.status === "cancelled")
+			.map(job => job.id);
+		const completion = this.waitForOwnerJobs(ownerId).then(() => {});
+		return { settled: false, pendingJobIds, completion };
 	}
 
 	async #waitForAllUntil(deadline: number): Promise<boolean> {
@@ -579,12 +625,18 @@ export class AsyncJobManager {
 		return candidate;
 	}
 
+	#evictJob(jobId: string): boolean {
+		clearTimeout(this.#evictionTimers.get(jobId));
+		this.#evictionTimers.delete(jobId);
+		this.#suppressedDeliveries.delete(jobId);
+		this.#watchedJobs.delete(jobId);
+		return this.#jobs.delete(jobId);
+	}
+
 	#scheduleEviction(jobId: string): void {
 		if (this.#disposed) return;
 		if (this.#retentionMs <= 0) {
-			this.#jobs.delete(jobId);
-			this.#suppressedDeliveries.delete(jobId);
-			this.#watchedJobs.delete(jobId);
+			this.#evictJob(jobId);
 			return;
 		}
 		const existing = this.#evictionTimers.get(jobId);
@@ -592,10 +644,7 @@ export class AsyncJobManager {
 			clearTimeout(existing);
 		}
 		const timer = setTimeout(() => {
-			this.#evictionTimers.delete(jobId);
-			this.#jobs.delete(jobId);
-			this.#suppressedDeliveries.delete(jobId);
-			this.#watchedJobs.delete(jobId);
+			this.#evictJob(jobId);
 		}, this.#retentionMs);
 		timer.unref();
 		this.#evictionTimers.set(jobId, timer);

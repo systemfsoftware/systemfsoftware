@@ -31,6 +31,7 @@ type ConfigurableEditorAction = Extract<
 	| "app.model.select"
 	| "app.model.selectTemporary"
 	| "app.tools.expand"
+	| "app.tools.toggleVisibility"
 	| "app.thinking.toggle"
 	| "app.editor.external"
 	| "app.history.search"
@@ -46,17 +47,18 @@ const DEFAULT_ACTION_KEYS: Record<ConfigurableEditorAction, KeyId[]> = {
 	"app.clear": ["ctrl+c"],
 	"app.exit": ["ctrl+d"],
 	"app.suspend": ["ctrl+z"],
-	"app.display.reset": ["ctrl+l"],
+	"app.display.reset": ["alt+l"],
 	"app.thinking.cycle": ["shift+tab"],
 	"app.model.cycleForward": ["ctrl+p"],
 	"app.model.cycleBackward": ["shift+ctrl+p"],
 	"app.model.select": ["alt+m"],
 	"app.model.selectTemporary": ["alt+p"],
 	"app.tools.expand": ["ctrl+o"],
+	"app.tools.toggleVisibility": ["ctrl+shift+o"],
 	"app.thinking.toggle": ["ctrl+t"],
 	"app.editor.external": ["ctrl+g"],
 	"app.history.search": ["ctrl+r"],
-	"app.message.dequeue": ["alt+up"],
+	"app.message.dequeue": ["alt+up", "shift+up"],
 	"app.retry": ["alt+r"],
 	"app.clipboard.pasteImage": ["ctrl+v"],
 	"app.clipboard.pasteTextRaw": ["ctrl+shift+v", "alt+shift+v"],
@@ -71,6 +73,14 @@ function buildMatchKeys(keys: readonly KeyId[]): Set<string> {
 	return matchKeys;
 }
 
+function unionOfMatchKeys(matchKeys: ReadonlyMap<ConfigurableEditorAction, ReadonlySet<string>>): Set<string> {
+	const union = new Set<string>();
+	for (const keys of matchKeys.values()) {
+		for (const key of keys) union.add(key);
+	}
+	return union;
+}
+
 const BRACKETED_PASTE_START = "\x1b[200~";
 const BRACKETED_PASTE_END = "\x1b[201~";
 const BRACKETED_IMAGE_PATH_REGEX = /\.(?:png|jpe?g|gif|webp)$/i;
@@ -79,13 +89,34 @@ const URI_SCHEME_REGEX = /^[a-z][a-z0-9+.-]*:/i;
 const FILE_URI_REGEX = /^file:\/\//i;
 const WINDOWS_DRIVE_PATH_REGEX = /^[a-z]:[\\/]/i;
 /**
- * Whole-string anchor for paths that are unambiguously absolute. Restricts the
- * "treat the entire clipboard text as one path" branch of
- * {@link extractImagePathFromText} to inputs that start with a clearly-anchored
- * filesystem prefix, so prose containing a path-shaped fragment (e.g.
- * "see /tmp/x.png") never hijacks the smart fallback.
+ * Alternation of the filesystem prefixes that make a path unambiguously
+ * absolute (POSIX root, home, `file://`, UNC, Windows drive). Shared by
+ * {@link ABSOLUTE_PATH_PREFIX_REGEX} and {@link INTERIOR_PATH_ANCHOR_REGEX} so
+ * the leading-anchor test and the second-anchor test can never disagree about
+ * what counts as the start of a path.
  */
-const ABSOLUTE_PATH_PREFIX_REGEX = /^(?:\/|~\/|file:\/\/|\\\\|[A-Za-z]:[\\/])/;
+const ABSOLUTE_PATH_PREFIX_SOURCE = String.raw`(?:\/|~\/|file:\/\/|\\\\|[A-Za-z]:[\\/])`;
+/**
+ * Whole-string anchor for paths that are unambiguously absolute. Restricts the
+ * "treat the entire text as one path" pass of {@link extractWholeTextImagePath}
+ * to inputs that start with a clearly-anchored filesystem prefix, so prose
+ * containing a path-shaped fragment (e.g. "see /tmp/x.png") never hijacks the
+ * smart fallback.
+ */
+const ABSOLUTE_PATH_PREFIX_REGEX = new RegExp(`^${ABSOLUTE_PATH_PREFIX_SOURCE}`);
+/**
+ * A second path anchor after *unescaped* whitespace — the signature of a
+ * multi-path payload (`/tmp/a.png /tmp/b shot.png`, `/tmp/a.png ./b shot.png`)
+ * rather than of one path whose name merely contains spaces. Anchors are the
+ * absolute prefixes plus dot-relative starts (`./`, `../`, `.\`), which never
+ * begin a component of a single sane path. Bare relatives (`dir/b shot.png`)
+ * are deliberately NOT anchors: an interior `token/` after a space is exactly
+ * the shape of a single path with a spaced directory name
+ * (`/Users/me/My Photos/shot 1.png`), which this fallback exists to recover.
+ * Escaped whitespace (`/tmp/My\ Photos/x.png`) is exempt: the escape is the
+ * terminal asserting the space belongs to the path.
+ */
+const INTERIOR_PATH_ANCHOR_REGEX = new RegExp(String.raw`(?<!\\)\s(?:${ABSOLUTE_PATH_PREFIX_SOURCE}|\.\.?[\\/])`);
 
 /** Max gap (ms) between two spaces for the later one to count as OS key auto-repeat rather than a
  *  deliberate press. OS auto-repeat is fast; a deliberate tap (even a fast one) is slower. */
@@ -228,16 +259,28 @@ export function extractPastePathsFromText(text: string): string[] | undefined {
 	return extractExplicitPathSegments(text);
 }
 
-export function extractBracketedPastePaths(data: string): string[] | undefined {
-	if (!data.startsWith(BRACKETED_PASTE_START)) return undefined;
-	const endIndex = data.indexOf(BRACKETED_PASTE_END, BRACKETED_PASTE_START.length);
-	if (endIndex === -1 || endIndex + BRACKETED_PASTE_END.length !== data.length) return undefined;
-	return extractExplicitPathSegments(data.slice(BRACKETED_PASTE_START.length, endIndex));
-}
-
-export function extractBracketedImagePastePaths(data: string): string[] | undefined {
-	const paths = extractBracketedPastePaths(data);
-	return paths?.every(isImagePath) ? paths : undefined;
+/**
+ * Whole-text-as-path pass shared by {@link extractImagePastePathsFromText}
+ * and {@link extractImagePathFromText}: treat the entire text as one path
+ * when it is anchored by {@link ABSOLUTE_PATH_PREFIX_REGEX}, contains no
+ * newlines, and points at a supported image extension. Recovers single paths
+ * whose unescaped spaces defeat the segment splitter (macOS screenshot names).
+ *
+ * Refuses payloads carrying a second {@link INTERIOR_PATH_ANCHOR_REGEX} anchor.
+ * Dragging two files at once emits `/tmp/a.png /tmp/b shot.png`, which the
+ * splitter also refuses (`shot.png` is not explicit); swallowing it as one path
+ * attaches nothing, and `handleImagePathPaste`'s ENOENT branch only surfaces a
+ * status — unlike its other failure branches it never re-pastes the text — so
+ * both paths would vanish. Genuinely ambiguous input lands here too (a
+ * directory whose name ends in a space, as in `/tmp/odd dir /sub/x.png`); a
+ * plain text paste is the losing-nothing outcome, so ambiguity resolves that way.
+ */
+function extractWholeTextImagePath(text: string): string | undefined {
+	const trimmed = text.trim();
+	if (!trimmed || /[\r\n]/.test(trimmed) || !ABSOLUTE_PATH_PREFIX_REGEX.test(trimmed)) return undefined;
+	if (INTERIOR_PATH_ANCHOR_REGEX.test(trimmed)) return undefined;
+	const wholePath = normalizePastedPath(trimmed);
+	return wholePath && isExplicitPastedPath(wholePath) && isImagePath(wholePath) ? wholePath : undefined;
 }
 
 /**
@@ -245,10 +288,35 @@ export function extractBracketedImagePastePaths(data: string): string[] | undefi
  * payload that has already been stripped of the `\x1b[200~` / `\x1b[201~`
  * markers — used by the assembled-paste router in {@link CustomEditor.handleInput}
  * so split bracketed pastes get the same image-path detection as single-chunk ones.
+ *
+ * When the segment splitter fails (an unescaped space in a real path breaks
+ * its every-segment-is-a-path invariant), falls back to
+ * {@link extractWholeTextImagePath}, so a dropped macOS screenshot
+ * (`Screenshot 2026-06-25 at 1.23.45 PM.png`) attaches as an image instead of
+ * degrading to literal text (#6578).
  */
 export function extractImagePastePathsFromText(text: string): string[] | undefined {
 	const paths = extractPastePathsFromText(text);
-	return paths?.every(isImagePath) ? paths : undefined;
+	if (paths !== undefined) return paths.every(isImagePath) ? paths : undefined;
+	const wholePath = extractWholeTextImagePath(text);
+	return wholePath ? [wholePath] : undefined;
+}
+
+function bracketedPastePayload(data: string): string | undefined {
+	if (!data.startsWith(BRACKETED_PASTE_START)) return undefined;
+	const endIndex = data.indexOf(BRACKETED_PASTE_END, BRACKETED_PASTE_START.length);
+	if (endIndex === -1 || endIndex + BRACKETED_PASTE_END.length !== data.length) return undefined;
+	return data.slice(BRACKETED_PASTE_START.length, endIndex);
+}
+
+export function extractBracketedPastePaths(data: string): string[] | undefined {
+	const payload = bracketedPastePayload(data);
+	return payload === undefined ? undefined : extractExplicitPathSegments(payload);
+}
+
+export function extractBracketedImagePastePaths(data: string): string[] | undefined {
+	const payload = bracketedPastePayload(data);
+	return payload === undefined ? undefined : extractImagePastePathsFromText(payload);
 }
 
 export function extractBracketedImagePastePath(data: string): string | undefined {
@@ -272,25 +340,17 @@ export function extractBracketedImagePastePath(data: string): string | undefined
  *    ambiguous multi-path clipboard text like `/tmp/a.png /tmp/b.png`
  *    still falls through to the text fallback instead of being mis-loaded
  *    as one giant path).
- * 2. Whole-text-as-path pass — only reached when the splitter failed
- *    (every segment must look like an explicit path; an unescaped space in
- *    a real path breaks that). Restricted to inputs anchored by
- *    {@link ABSOLUTE_PATH_PREFIX_REGEX} so prose containing a path-shaped
- *    fragment ("see /tmp/x.png") never hijacks the smart fallback. This
- *    is what recovers macOS screenshot filenames like
+ * 2. {@link extractWholeTextImagePath} — only reached when the splitter
+ *    failed (every segment must look like an explicit path; an unescaped
+ *    space in a real path breaks that). This is what recovers macOS
+ *    screenshot filenames like
  *    `/Users/me/Desktop/Screenshot 2026-06-25 at 1.23.45 PM.png`.
  */
 export function extractImagePathFromText(text: string): string | undefined {
 	const paths = extractPastePathsFromText(text);
 	if (paths?.length === 1 && isImagePath(paths[0])) return paths[0];
 	if (paths !== undefined) return undefined;
-	const trimmed = text.trim();
-	if (!trimmed || /[\r\n]/.test(trimmed) || !ABSOLUTE_PATH_PREFIX_REGEX.test(trimmed)) return undefined;
-	const wholePath = normalizePastedPath(trimmed);
-	if (wholePath && isExplicitPastedPath(wholePath) && isImagePath(wholePath)) {
-		return wholePath;
-	}
-	return undefined;
+	return extractWholeTextImagePath(text);
 }
 
 /**
@@ -369,6 +429,17 @@ export class CustomEditor extends Editor {
 		this.pendingImageLinks = [];
 	}
 
+	/** Replace the composer draft with a restored historical prompt: sets the text and
+	 *  re-attaches the message's images so positional `[Image #N]` markers resolve on
+	 *  resubmit instead of degrading to literal text (esc-esc branch, `/tree`). Source
+	 *  links are unknown for restored drafts, so every link slot is `undefined`. */
+	setDraft(text: string, images?: readonly ImageContent[]): void {
+		this.setText(text);
+		this.imageLinks = undefined;
+		this.pendingImages = images ? [...images] : [];
+		this.pendingImageLinks = images ? images.map(() => undefined) : [];
+	}
+
 	/** Treat image/paste markers as indivisible: a stray backspace deletes the whole token
 	 *  instead of corrupting `[Paste #1, +30 lines]` into plain text. */
 	override atomicTokenPattern = PLACEHOLDER_REGEX;
@@ -395,7 +466,7 @@ export class CustomEditor extends Editor {
 	/** Decorate magic keywords, attachments, and the queue-composer header/list markers.
 	 *  Queue shorthand reserves its first logical line as a dim `Queueing` label; sequential
 	 *  item markers use the accent color so separate follow-ups remain visible while composing. */
-	decorateText = (text: string): string => {
+	override decorateText = (text: string): string => {
 		const editorText = this.getText();
 		const animated = this.focused && this.#shimmerEnabled() && hasMagicKeyword(editorText);
 		const phase = animated ? (Date.now() % CustomEditor.SHIMMER_PERIOD_MS) / CustomEditor.SHIMMER_PERIOD_MS : 0;
@@ -481,6 +552,7 @@ export class CustomEditor extends Editor {
 	onCycleModelBackward?: () => void;
 	onSelectModel?: () => void;
 	onExpandTools?: () => void;
+	onToggleToolActivity?: () => void;
 	onToggleThinking?: () => void;
 	onExternalEditor?: () => void;
 	onHistorySearch?: () => void;
@@ -550,14 +622,14 @@ export class CustomEditor extends Editor {
 			buildMatchKeys(keys),
 		]),
 	);
+	/** Union of every action's match keys: one probe in `handleInput` decides
+	 *  whether the per-action interception chain can match at all. */
+	#actionMatchKeyUnion = unionOfMatchKeys(this.#actionMatchKeys);
 
 	setActionKeys(action: ConfigurableEditorAction, keys: KeyId[]): void {
 		this.#actionKeys.set(action, [...keys]);
-		this.#rebuildActionMatchKeys(action);
-	}
-
-	#rebuildActionMatchKeys(action: ConfigurableEditorAction): void {
-		this.#actionMatchKeys.set(action, buildMatchKeys(this.#actionKeys.get(action) ?? []));
+		this.#actionMatchKeys.set(action, buildMatchKeys(keys));
+		this.#actionMatchKeyUnion = unionOfMatchKeys(this.#actionMatchKeys);
 	}
 
 	#rebuildCustomMatchKeys(): void {
@@ -703,15 +775,17 @@ export class CustomEditor extends Editor {
 		void promise.then(this.#onPasteSettled, this.#onPasteSettled);
 	}
 
-	handleInput(data: string): void {
+	override handleInput(data: string): void {
 		// Serialize behind any in-flight async paste so a trailing Enter / follow-up key can't
 		// submit before the clipboard image reaches `pendingImages` (Codex PR #3602 review).
 		if (this.#pasteInFlight > 0) {
 			this.#pendingInput.push(data);
 			return;
 		}
-		const hadBareQueuePrefix = this.getText() === "->" || this.getText() === "=>";
-		const kittyParsed = parseKittySequence(data);
+		// textEquals avoids getText()'s O(buffer) join on every keystroke; kitty
+		// sequences always start with ESC, so plain bytes skip the native parse.
+		const hadBareQueuePrefix = this.textEquals("->") || this.textEquals("=>");
+		const kittyParsed = data.charCodeAt(0) === 0x1b ? parseKittySequence(data) : null;
 		if (kittyParsed && (kittyParsed.modifier & 64) !== 0 && this.onCapsLock) {
 			// Caps Lock is modifier bit 64
 			this.onCapsLock();
@@ -773,7 +847,12 @@ export class CustomEditor extends Editor {
 		// Space-hold push-to-talk: a sustained space bar starts/stops STT instead of typing spaces.
 		if (this.#handleSpaceHold(data, canonical)) return;
 
-		if (canonical !== undefined) {
+		// One union probe decides whether any per-action interception below can
+		// match — plain typing then skips the ~20 per-action set lookups per key.
+		if (
+			canonical !== undefined &&
+			(this.#actionMatchKeyUnion.has(canonical) || this.#customMatchKeys.has(canonical))
+		) {
 			// Intercept configured image paste (async - fires and handles result)
 			if (this.#matchesAction(canonical, "app.clipboard.pasteImage") && this.onPasteImage) {
 				void this.onPasteImage();
@@ -831,6 +910,12 @@ export class CustomEditor extends Editor {
 			// Intercept configured tool output expansion shortcut
 			if (this.#matchesAction(canonical, "app.tools.expand") && this.onExpandTools) {
 				this.onExpandTools();
+				return;
+			}
+
+			// Intercept configured tool activity visibility toggle
+			if (this.#matchesAction(canonical, "app.tools.toggleVisibility") && this.onToggleToolActivity) {
+				this.onToggleToolActivity();
 				return;
 			}
 
@@ -914,14 +999,38 @@ export class CustomEditor extends Editor {
 
 		// Pass to parent for normal handling
 		super.handleInput(data);
-		const cursor = this.getCursor();
-		if (
-			!hadBareQueuePrefix &&
-			(this.getText() === "->" || this.getText() === "=>") &&
-			cursor.line === 0 &&
-			cursor.col === 2
-		) {
-			this.insertText("\n");
+		if (!hadBareQueuePrefix && (this.textEquals("->") || this.textEquals("=>"))) {
+			const cursor = this.getCursor();
+			if (cursor.line === 0 && cursor.col === 2) {
+				this.insertText("\n");
+			}
 		}
+	}
+
+	/**
+	 * Route a keystroke through the base text-editor pipeline only, skipping the
+	 * app-level shortcut interception in {@link handleInput} (Agent Hub, model
+	 * selector, history search, external editor, …). Used when the editor is
+	 * mounted for draft editing beneath another focused surface — e.g. an Ask
+	 * dialog opened over a non-empty prompt — so finishing or submitting the
+	 * draft can never fire an editor-slot shortcut that clears `editorContainer`
+	 * and orphans the overlay. Only text editing, cursor movement, submission,
+	 * and the clear action reach the buffer.
+	 */
+	handleDraftEdit(data: string): void {
+		// The base editor reserves Ctrl+C for parent handling and returns without
+		// touching the buffer, so the configured clear action must be dispatched
+		// explicitly here — otherwise the guard's "finish or clear the prompt"
+		// instruction has no working clear key. onClear (Ctrl+C → handleCtrlC)
+		// clears the draft on first press without swapping the editor slot; a
+		// standalone editor with no callback clears its own text.
+		const parsed = parseKey(data);
+		const canonical = parsed !== undefined ? canonicalKeyId(parsed) : undefined;
+		if (canonical !== undefined && this.#matchesAction(canonical, "app.clear")) {
+			if (this.onClear) this.onClear();
+			else this.setText("");
+			return;
+		}
+		super.handleInput(data);
 	}
 }

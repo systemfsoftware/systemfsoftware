@@ -2,17 +2,27 @@ import { describe, expect, it } from "bun:test";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
+import { type } from "@oh-my-pi/omptype";
 import type { AgentTool } from "@oh-my-pi/pi-agent-core";
 import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
 import * as themeModule from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 import { ToolChoiceQueue } from "@oh-my-pi/pi-coding-agent/session/tool-choice-queue";
-import { createTools, type ToolSession } from "@oh-my-pi/pi-coding-agent/tools";
+import { createTools, type Tool, type ToolSession } from "@oh-my-pi/pi-coding-agent/tools";
 import { githubToolRenderer } from "@oh-my-pi/pi-coding-agent/tools/gh-renderer";
 import { ToolError } from "@oh-my-pi/pi-coding-agent/tools/tool-errors";
 import { WriteTool, writeToolRenderer } from "@oh-my-pi/pi-coding-agent/tools/write";
-import { XdevRegistry } from "@oh-my-pi/pi-coding-agent/tools/xdev";
+import {
+	listXdevTools,
+	resolveMountedXdevTool,
+	XDEV_DOCS_PER_DEVICE_CAP,
+	XDEV_DOCS_TOTAL_BUDGET,
+	XDEV_EXTERNAL_DESCRIPTION_CAP,
+	type XdevState,
+	xdevDocs,
+	xdevDocsAll,
+	xdevEntries,
+} from "@oh-my-pi/pi-coding-agent/tools/xdev";
 import { removeWithRetries } from "@oh-my-pi/pi-utils";
-import { type } from "arktype";
 
 // xdev mounting is default-on: discoverable tools like ast_edit unmount into
 // xd://, and a plain `write xd://ast_edit` dispatches them. These guard the
@@ -28,6 +38,15 @@ function xdevSession(cwd: string, overrides: Partial<ToolSession> = {}): ToolSes
 		getSessionSpawns: () => "*",
 		settings: Settings.isolated({}),
 		...overrides,
+	};
+}
+
+function createTestXdevState(tools: Tool[], builtInNames: Iterable<string> = tools.map(tool => tool.name)): XdevState {
+	return {
+		tools: new Map(tools.map(tool => [tool.name, tool])),
+		mountedNames: new Set(tools.map(tool => tool.name)),
+		builtInNames: new Set(builtInNames),
+		isActive: () => false,
 	};
 }
 
@@ -77,6 +96,9 @@ describe("read and write route xd:// device URLs", () => {
 			expect(previewResult.isError).toBeUndefined();
 			expect(previewResult.details?.xdev?.tool).toBe("ast_edit");
 			expect(previewResult.details?.xdev?.mode).toBe("execute");
+			// The dispatch records the wrapped tool's approval tier so prewalk can
+			// tell a mutation from a read-only device call (issue #7312).
+			expect(previewResult.details?.xdev?.tier).toBe("write");
 			const previewText = previewResult.content.find(entry => entry.type === "text")?.text ?? "";
 			expect(previewText).toContain("modernWrap");
 
@@ -88,6 +110,63 @@ describe("read and write route xd:// device URLs", () => {
 		} finally {
 			await removeWithRetries(tempDir);
 		}
+	});
+
+	it("records a read tier on the dispatch of a read-only device", async () => {
+		const readDevice: AgentTool = {
+			name: "peek",
+			label: "Peek",
+			description: "Read-only device",
+			parameters: type({ q: "string" }),
+			approval: () => "read",
+			async execute() {
+				return { content: [{ type: "text", text: "peeked" }] };
+			},
+		};
+		const xdev = createTestXdevState([readDevice]);
+		const write = new WriteTool(xdevSession(process.cwd(), { xdev }));
+
+		const result = await write.execute("write-xdev-read", { path: "xd://peek", content: JSON.stringify({ q: "x" }) });
+		expect(result.isError).toBeUndefined();
+		expect(result.details?.xdev).toMatchObject({ tool: "peek", mode: "execute", tier: "read" });
+	});
+
+	it("records the effective tier reported after an execution decorator rewrites device args", async () => {
+		let executedQuery: string | undefined;
+		const device: AgentTool = {
+			name: "peek",
+			label: "Peek",
+			description: "Argument-dependent device",
+			parameters: type({ q: "string" }),
+			approval: args => (args && typeof args === "object" && "q" in args && args.q === "mutate" ? "write" : "read"),
+			async execute(_id, args) {
+				if (!args || typeof args !== "object" || !("q" in args) || typeof args.q !== "string") {
+					throw new Error("Expected a string query");
+				}
+				executedQuery = args.q;
+				return { content: [{ type: "text", text: "done" }] };
+			},
+		};
+		const xdev = createTestXdevState([device]);
+		xdev.decorateExecution = canonical => ({
+			...canonical,
+			async execute(id, _args, signal, onUpdate, context) {
+				const revised = { q: "mutate" };
+				context?.xdevTierResolved?.("write");
+				return canonical.execute(id, revised as never, signal, onUpdate, context);
+			},
+		});
+		const write = new WriteTool(xdevSession(process.cwd(), { xdev }));
+
+		const result = await write.execute(
+			"write-xdev-revised",
+			{ path: "xd://peek", content: JSON.stringify({ q: "inspect" }) },
+			undefined,
+			undefined,
+			{} as never,
+		);
+		expect(executedQuery).toBe("mutate");
+		expect(result.details?.xdev?.tier).toBe("write");
 	});
 
 	it("rejects near-miss xd addresses before filesystem fallback", async () => {
@@ -201,8 +280,8 @@ describe("read and write route xd:// device URLs", () => {
 				throw new ToolError("gh: Not Found (HTTP 404)");
 			},
 		};
-		const registry = new XdevRegistry([githubDevice]);
-		const write = new WriteTool(xdevSession(process.cwd(), { xdevRegistry: registry }));
+		const xdev = createTestXdevState([githubDevice]);
+		const write = new WriteTool(xdevSession(process.cwd(), { xdev }));
 		const content = JSON.stringify({ op: "repo_view" });
 
 		const result = await write.execute("write-xdev-error", { path: "xd://github", content });
@@ -218,7 +297,7 @@ describe("read and write route xd:// device URLs", () => {
 			{
 				expanded: false,
 				isPartial: false,
-				renderContext: { resolveXdevMounted: name => registry.get(name) },
+				renderContext: { resolveXdevMounted: name => resolveMountedXdevTool(xdev, name) },
 			},
 			uiTheme,
 			{ path: "xd://github", content },
@@ -243,8 +322,8 @@ describe("read and write route xd:// device URLs", () => {
 				return { content: [{ type: "text", text: "Tokyo: 22°C" }] };
 			},
 		};
-		const registry = new XdevRegistry([weatherDevice]);
-		const write = new WriteTool(xdevSession(process.cwd(), { xdevRegistry: registry }));
+		const xdev = createTestXdevState([weatherDevice]);
+		const write = new WriteTool(xdevSession(process.cwd(), { xdev }));
 		const content = JSON.stringify({ query: "Tokyo" });
 		const result = await write.execute("write-xdev-default-renderer", {
 			path: "xd://weather",
@@ -256,7 +335,7 @@ describe("read and write route xd:// device URLs", () => {
 			{
 				expanded: false,
 				isPartial: false,
-				renderContext: { resolveXdevMounted: name => registry.get(name) },
+				renderContext: { resolveXdevMounted: name => resolveMountedXdevTool(xdev, name) },
 			},
 			uiTheme,
 			{ path: "xd://weather", content },
@@ -273,24 +352,85 @@ describe("read and write route xd:// device URLs", () => {
 		expect(lines.some(line => line.includes(backgroundPrefix))).toBe(true);
 	});
 
+	// Dynamic device summaries are third-party text inlined into the system
+	// prompt. A character bound is not a byte bound: a multi-byte summary passes
+	// several times the intended budget, and cutting a byte budget by character
+	// index splits code points.
+	it("bounds dynamic device summaries in UTF-8 bytes on a code point boundary", () => {
+		const multiByteTail = "あ".repeat(XDEV_EXTERNAL_DESCRIPTION_CAP);
+		const dynamicDevice: AgentTool = {
+			name: "mcp__weather__forecast",
+			label: "Forecast",
+			description: "Weather forecast for a place.",
+			summary: `Napoved\u0007\u2028vremena ${multiByteTail}`,
+			parameters: type({ query: "string" }),
+			async execute() {
+				return { content: [{ type: "text", text: "" }] };
+			},
+		};
+		const builtInDevice: AgentTool = {
+			name: "weather",
+			label: "Weather",
+			description: "Weather for a place.",
+			summary: `Gets the weather ${multiByteTail}`,
+			parameters: type({ query: "string" }),
+			async execute() {
+				return { content: [{ type: "text", text: "" }] };
+			},
+		};
+		const xdev = createTestXdevState([builtInDevice, dynamicDevice], ["weather"]);
+		const entries = new Map(xdevEntries(xdev).map(entry => [entry.name, entry]));
+
+		const dynamic = entries.get("mcp__weather__forecast");
+		if (!dynamic) throw new Error("expected the dynamic device entry");
+		expect(dynamic.dynamic).toBe(true);
+		// Control characters and Unicode line separators collapse to a space
+		// instead of reaching the prompt.
+		expect(dynamic.summary.startsWith("Napoved vremena ")).toBe(true);
+		expect(dynamic.summary.endsWith("…")).toBe(true);
+
+		const body = dynamic.summary.slice(0, -1);
+		const bodyBytes = Buffer.byteLength(body, "utf-8");
+		const summaryBytes = Buffer.byteLength(dynamic.summary, "utf-8");
+		expect(summaryBytes).toBeLessThanOrEqual(XDEV_EXTERNAL_DESCRIPTION_CAP);
+		// The ellipsis is inside the byte budget, and the cut backs off at most
+		// one code point rather than splitting the character at the boundary.
+		expect(bodyBytes).toBeLessThanOrEqual(XDEV_EXTERNAL_DESCRIPTION_CAP - Buffer.byteLength("…", "utf-8"));
+		expect(bodyBytes).toBeGreaterThan(XDEV_EXTERNAL_DESCRIPTION_CAP - 6);
+		expect(body.endsWith("あ")).toBe(true);
+		// A split code point would decode to U+FFFD and fail the round trip.
+		expect(Buffer.from(body, "utf-8").toString("utf-8")).toBe(body);
+
+		// The same boolean drives the cap and the flag, so a built-in device is
+		// never capped and never reported as untrusted.
+		const builtIn = entries.get("weather");
+		if (!builtIn) throw new Error("expected the built-in device entry");
+		expect(builtIn.dynamic).toBe(false);
+		expect(builtIn.summary).toBe(`Gets the weather ${multiByteTail}`);
+	});
+
 	it("docsAll inlines small device docs and falls back to a listing past the caps", async () => {
 		const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "write-xdev-docs-"));
 		try {
 			const session = xdevSession(tempDir);
 			expect(session.settings.get("tools.xdevDocs")).toBe("builtins");
 			await createTools(session);
-			const mounted = session.xdevRegistry?.list() ?? [];
+			const xdev = session.xdev;
+			if (!xdev) throw new Error("expected xdev state");
+			const mounted = listXdevTools(xdev);
 			expect(mounted.length).toBeGreaterThan(0);
 
 			// One device with a pathological description must fall back to the
 			// listing without starving the rest of the catalog.
 			const giant = Object.create(mounted[0]!) as (typeof mounted)[number];
 			Object.defineProperty(giant, "name", { value: "giant_mcp_tool" });
-			Object.defineProperty(giant, "description", { value: "x".repeat(XdevRegistry.DOCS_PER_DEVICE_CAP + 1) });
-			const registry = new XdevRegistry([...mounted, giant]);
+			Object.defineProperty(giant, "description", { value: "x".repeat(XDEV_DOCS_PER_DEVICE_CAP + 1) });
+			xdev.tools.set(giant.name, giant);
+			xdev.mountedNames.add(giant.name);
+			xdev.builtInNames.add(giant.name);
 
-			const docs = registry.docsAll();
-			expect(docs.length).toBeLessThan(XdevRegistry.DOCS_TOTAL_BUDGET + XdevRegistry.DOCS_PER_DEVICE_CAP);
+			const docs = xdevDocsAll(xdev);
+			expect(docs.length).toBeLessThan(XDEV_DOCS_TOTAL_BUDGET + XDEV_DOCS_PER_DEVICE_CAP);
 			expect(docs).toContain(`## ${mounted[0]!.name}`);
 			expect(docs).toContain("## Additional devices (docs on demand)");
 			expect(docs).toContain("- xd://giant_mcp_tool —");
@@ -306,56 +446,61 @@ describe("read and write route xd:// device URLs", () => {
 			const session = xdevSession(tempDir);
 			expect(session.settings.get("tools.xdevDocs")).toBe("builtins");
 			await createTools(session);
-			const registry = session.xdevRegistry;
-			if (!registry) throw new Error("expected xdev registry");
-			const mounted = registry.list();
+			const xdev = session.xdev;
+			if (!xdev) throw new Error("expected xdev state");
+			const mounted = listXdevTools(xdev);
+			const builtInMountedNames = [...xdev.mountedNames];
 
-			const longDescription = `LEDE ${"y".repeat(XdevRegistry.EXTERNAL_DESCRIPTION_CAP * 3)} TAIL`;
+			const longDescription = `LEDE ${"y".repeat(XDEV_EXTERNAL_DESCRIPTION_CAP * 3)} TAIL`;
 			const external = Object.create(mounted[0]!) as (typeof mounted)[number];
 			Object.defineProperty(external, "name", { value: "mcp_external_tool" });
 			Object.defineProperty(external, "description", { value: longDescription });
 			Object.defineProperty(external, "summary", {
-				value: `SUMMARY ${"z".repeat(XdevRegistry.EXTERNAL_DESCRIPTION_CAP * 3)} TAIL`,
+				value: `SUMMARY ${"z".repeat(XDEV_EXTERNAL_DESCRIPTION_CAP * 3)} TAIL`,
 			});
-			registry.reconcile([external]);
+			xdev.tools.set(external.name, external);
+			xdev.mountedNames.add(external.name);
 
-			const inlineDocs = registry.docsAll("inline");
+			const inlineDocs = xdevDocsAll(xdev, "inline");
 			expect(inlineDocs).toContain("## mcp_external_tool");
 			expect(inlineDocs).toContain("LEDE ");
 			expect(inlineDocs).not.toContain("TAIL");
 			expect(inlineDocs).toContain("… (full docs: read xd://mcp_external_tool)");
 
-			const builtinsDocs = registry.docsAll("builtins");
+			const builtinsDocs = xdevDocsAll(xdev, "builtins");
 			expect(builtinsDocs).toContain("## ");
 			expect(builtinsDocs).not.toContain("## mcp_external_tool");
 			expect(builtinsDocs).toContain("- xd://mcp_external_tool —");
 			expect(builtinsDocs).not.toContain("TAIL");
-			const catalogDocs = registry.docsAll("catalog");
+			const catalogDocs = xdevDocsAll(xdev, "catalog");
 			expect(catalogDocs).not.toContain(`## ${mounted[0]!.name}`);
 			expect(catalogDocs).toContain("- xd://");
 			expect(catalogDocs).toContain("- xd://mcp_external_tool —");
-			expect(registry.docs("mcp_external_tool")).toContain("TAIL");
+			expect(xdevDocs(xdev, "mcp_external_tool")).toContain("TAIL");
 
 			const contextMode = Object.create(mounted[0]!) as (typeof mounted)[number];
 			Object.defineProperty(contextMode, "name", { value: "mcp__context_mode_ctx_execute" });
 			const unrelatedMcp = Object.create(mounted[0]!) as (typeof mounted)[number];
 			Object.defineProperty(unrelatedMcp, "name", { value: "mcp__other_server_execute" });
-			registry.reconcile([contextMode, unrelatedMcp]);
+			xdev.tools.set(contextMode.name, contextMode);
+			xdev.tools.set(unrelatedMcp.name, unrelatedMcp);
+			xdev.mountedNames.clear();
+			for (const name of [...builtInMountedNames, contextMode.name, unrelatedMcp.name]) xdev.mountedNames.add(name);
 
-			const allowlistedDocs = registry.docsAll("builtins", ["mcp__context_mode_*"]);
+			const allowlistedDocs = xdevDocsAll(xdev, "builtins", ["mcp__context_mode_*"]);
 			expect(allowlistedDocs).toContain("## mcp__context_mode_ctx_execute");
 			expect(allowlistedDocs).not.toContain("## mcp__other_server_execute");
 			expect(allowlistedDocs).toContain("- xd://mcp__other_server_execute —");
 
-			const catalogWithAllowlistDocs = registry.docsAll("catalog", ["mcp__context_mode_*"]);
+			const catalogWithAllowlistDocs = xdevDocsAll(xdev, "catalog", ["mcp__context_mode_*"]);
 			expect(catalogWithAllowlistDocs).not.toContain("## mcp__context_mode_ctx_execute");
 
 			// Malformed user config (scalar or non-string entries reach the
 			// registry unvalidated) degrades to the catalog listing instead of
 			// throwing while the system prompt is built.
-			const scalarAllowlistDocs = registry.docsAll("builtins", "mcp__context_mode_*" as never);
+			const scalarAllowlistDocs = xdevDocsAll(xdev, "builtins", "mcp__context_mode_*" as never);
 			expect(scalarAllowlistDocs).toContain("- xd://mcp__context_mode_ctx_execute —");
-			const nonStringAllowlistDocs = registry.docsAll("builtins", [123] as never);
+			const nonStringAllowlistDocs = xdevDocsAll(xdev, "builtins", [123] as never);
 			expect(nonStringAllowlistDocs).toContain("- xd://mcp__context_mode_ctx_execute —");
 		} finally {
 			await removeWithRetries(tempDir);
@@ -364,7 +509,7 @@ describe("read and write route xd:// device URLs", () => {
 });
 
 describe("web_search stays top-level under xdev", () => {
-	it("keeps web_search a direct tool and off the xd:// registry with default config", async () => {
+	it("keeps web_search direct and out of the mounted-name set with default config", async () => {
 		const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "write-xdev-websearch-"));
 		try {
 			const session = xdevSession(tempDir);
@@ -374,8 +519,70 @@ describe("web_search stays top-level under xdev", () => {
 			// Regression for #5973: models call web_search directly, so it must
 			// remain a top-level function and never mount behind the xd:// device.
 			expect(tools.some(entry => entry.name === "web_search")).toBe(true);
-			const mounted = session.xdevRegistry ? [...session.xdevRegistry.list()].map(t => t.name) : [];
+			const mounted = session.xdev ? [...session.xdev.mountedNames] : [];
 			expect(mounted).not.toContain("web_search");
+
+			const write = tools.find(tool => tool.name === "write");
+			const read = tools.find(tool => tool.name === "read");
+			expect(write).toBeDefined();
+			expect(read).toBeDefined();
+
+			const docs = await read!.execute("read-xdev-web-search", { path: "xd://web_search" });
+			expect(docs.content.find(entry => entry.type === "text")?.text).toContain("# web_search");
+
+			// Missing required args fails schema validation after routing to web_search,
+			// rather than failing lookup because the tool is top-level.
+			const dispatched = await write!.execute("write-xdev-web-search", {
+				path: "xd://web_search",
+				content: "{}",
+			});
+			expect(dispatched.isError).toBe(true);
+			expect(dispatched.details?.xdev?.tool).toBe("web_search");
+			expect(dispatched.content.find(entry => entry.type === "text")?.text).not.toContain("No such tool");
+		} finally {
+			await removeWithRetries(tempDir);
+		}
+	});
+});
+
+describe("xd:// and top-level calls share the canonical tool map", () => {
+	it("dispatches and documents an unmounted top-level tool, and still rejects unknown names", async () => {
+		const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "write-xdev-fallback-"));
+		try {
+			await Bun.write(path.join(tempDir, "haystack.txt"), "alpha\nfallback-needle\nomega\n");
+			const session = xdevSession(tempDir);
+			const tools = await createTools(session);
+			const write = tools.find(entry => entry.name === "write");
+			const read = tools.find(entry => entry.name === "read");
+			expect(write).toBeDefined();
+			expect(read).toBeDefined();
+
+			// grep is kept top-level (XDEV_KEEP_TOP_LEVEL) and thus not a mounted
+			// device — the unified namespace must still dispatch it via xd://.
+			const mounted = [...session.xdev!.mountedNames];
+			expect(mounted).not.toContain("grep");
+
+			const dispatched = await write!.execute("write-xdev-fallback-grep", {
+				path: "xd://grep",
+				content: JSON.stringify({ pattern: "fallback-needle", path: tempDir }),
+			});
+			expect(dispatched.isError).toBeUndefined();
+			expect(dispatched.details?.xdev?.tool).toBe("grep");
+			expect(dispatched.content.find(entry => entry.type === "text")?.text).toContain("fallback-needle");
+
+			// Docs resolve through the same fallback.
+			const docs = await read!.execute("read-xdev-fallback-grep", { path: "xd://grep" });
+			expect(docs.content.find(entry => entry.type === "text")?.text).toContain("# grep");
+
+			// Genuinely unknown names still fail with the catalog error.
+			const unknown = await write!.execute("write-xdev-fallback-unknown", {
+				path: "xd://no_such_tool",
+				content: "{}",
+			});
+			expect(unknown.isError).toBe(true);
+			expect(unknown.content.find(entry => entry.type === "text")?.text).toContain(
+				"No such tool: xd://no_such_tool",
+			);
 		} finally {
 			await removeWithRetries(tempDir);
 		}

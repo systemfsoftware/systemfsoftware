@@ -9,7 +9,7 @@ import { resolvePrimaryModel, resolveSmolModel } from "../../commit/model-select
 import type { CommitCommandArgs, ConventionalAnalysis, NumstatEntry } from "../../commit/types";
 import { ModelRegistry } from "../../config/model-registry";
 import { Settings } from "../../config/settings";
-import { discoverAuthStorage, discoverContextFiles } from "../../sdk";
+import { discoverAuthStorage, discoverContextFiles, loadCliExtensionProviders } from "../../sdk";
 import * as git from "../../utils/git";
 import { type ExistingChangelogEntries, runCommitAgentSession } from "./agent";
 import { generateFallbackProposal } from "./fallback";
@@ -32,6 +32,7 @@ export async function runAgenticCommit(args: CommitCommandArgs): Promise<void> {
 	process.stdout.write("● Resolving model...\n");
 	const modelRegistry = new ModelRegistry(authStorage);
 	await modelRegistry.refresh();
+	await loadCliExtensionProviders(modelRegistry, settings, cwd);
 	const stagedFilesPromise = (async () => {
 		let stagedFiles = await git.diff.changedFiles(cwd, { cached: true });
 		if (stagedFiles.length === 0) {

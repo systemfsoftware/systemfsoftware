@@ -7,7 +7,7 @@ import type {
 	AgentToolUpdateCallback,
 	ToolApprovalDecision,
 } from "@oh-my-pi/pi-agent-core";
-import { logger, once, prompt, untilAborted } from "@oh-my-pi/pi-utils";
+import { isEnoent, logger, once, prompt, untilAborted } from "@oh-my-pi/pi-utils";
 import type { BunFile } from "bun";
 import { type Theme, theme } from "../modes/theme/theme";
 import lspDescription from "../prompts/tools/lsp.md" with { type: "text" };
@@ -17,6 +17,7 @@ import { formatPathRelativeToCwd, resolveToCwd } from "../tools/path-utils";
 import { ToolAbortError, ToolError, throwIfAborted } from "../tools/tool-errors";
 import { clampTimeout } from "../tools/tool-timeouts";
 import {
+	clearInitializationFailure,
 	ensureFileOpen,
 	FileChangeType,
 	getActiveClients,
@@ -46,6 +47,7 @@ import {
 } from "./edits";
 import { resolveFormatOptions } from "./format-options";
 import { detectLspmux } from "./lspmux";
+import { MUX_RESTART_METHOD } from "./mux/protocol";
 import {
 	type CodeAction,
 	type CodeActionContext,
@@ -534,6 +536,13 @@ async function reloadServer(client: LspClient, serverName: string, signal?: Abor
 		// from the registry by identity and awaiting confirmed process exit) so
 		// the next request cold-starts a fresh client. A kill that never confirms
 		// exit is not a restart: surface the teardown failure truthfully.
+		//
+		// On a broker-shared link a per-session teardown only detaches this
+		// process while the wedged server keeps serving everyone else — ask the
+		// mux to kill the shared server first (best-effort; it also severs us).
+		if (client.proc.sharedMux) {
+			await sendNotification(client, MUX_RESTART_METHOD, undefined, AbortSignal.timeout(2_000)).catch(() => {});
+		}
 		if (!(await shutdownClientInstance(client))) {
 			throw new Error(`Failed to restart ${serverName}: server process did not exit after kill`);
 		}
@@ -1113,9 +1122,12 @@ export async function writethroughNoop(
 
 interface PendingWritethrough {
 	dst: string;
-	content: string;
 	file?: BunFile;
 	changeType: FileChangeType;
+}
+
+interface RunLspWritethroughOptions {
+	contentAlreadyWritten?: boolean;
 }
 
 interface LspWritethroughBatchRequest {
@@ -1316,12 +1328,16 @@ async function runLspWritethrough(
 		onDeferredDiagnostics: (diagnostics: FileDiagnosticsResult) => void;
 		signal: AbortSignal;
 	},
+	runOptions?: RunLspWritethroughOptions,
 ): Promise<FileDiagnosticsResult | undefined> {
 	const { enableFormat, enableDiagnostics } = options;
+	const contentAlreadyWritten = runOptions?.contentAlreadyWritten ?? false;
 
 	let finalContent = content;
 	const writeContent = async (value: string) => (file ? file.write(value) : Bun.write(dst, value));
-	const getWritePromise = once(() => writeContent(finalContent));
+	const getWritePromise = once(() =>
+		contentAlreadyWritten && finalContent === content ? Promise.resolve() : writeContent(finalContent),
+	);
 	let writeNotified = false;
 	const notifyWriteCommitted = async (notifySignal: AbortSignal | undefined = signal) => {
 		if (writeNotified) return;
@@ -1382,7 +1398,7 @@ async function runLspWritethrough(
 			if (useCustomFormatter) {
 				// Custom linters operate on on-disk input; the shared pre-write also
 				// supports implementations that inspect the file before formatting.
-				await writeContent(content);
+				if (!contentAlreadyWritten) await writeContent(content);
 				const [formattedContent, capturedVersions] = await Promise.all([
 					formatContent(dst, content, cwd, customLinterServers, operationSignal),
 					minVersionsPromise,
@@ -1390,7 +1406,7 @@ async function runLspWritethrough(
 				finalContent = formattedContent;
 				minVersions = capturedVersions;
 				formatter = finalContent !== content ? FileFormatResult.FORMATTED : FileFormatResult.UNCHANGED;
-				await writeContent(finalContent);
+				if (!contentAlreadyWritten || finalContent !== content) await writeContent(finalContent);
 				await notifyWriteCommitted(operationSignal);
 				await syncFileContent(dst, finalContent, cwd, lspServers, operationSignal, enableDiagnostics);
 			} else {
@@ -1484,6 +1500,14 @@ async function flushWritethroughBatch(
 	const results: Array<FileDiagnosticsResult | undefined> = [];
 	for (const entry of batch) {
 		const bundle = getDeferred?.(entry.dst);
+		let content: string;
+		try {
+			content = await fs.promises.readFile(entry.dst, "utf8");
+		} catch (error) {
+			if (!isEnoent(error)) throw error;
+			bundle?.finalize(undefined);
+			continue;
+		}
 		const deferredInner =
 			bundle &&
 			({
@@ -1492,13 +1516,14 @@ async function flushWritethroughBatch(
 			} as const);
 		const diag = await runLspWritethrough(
 			entry.dst,
-			entry.content,
+			content,
 			cwd,
 			options,
 			entry.changeType,
 			signal,
 			entry.file,
 			deferredInner,
+			{ contentAlreadyWritten: true },
 		);
 		bundle?.finalize(diag);
 		results.push(diag);
@@ -1544,13 +1569,37 @@ export function createLspWritethrough(cwd: string, options?: WritethroughOptions
 			return diagnostics;
 		}
 
-		const state = getOrCreateWritethroughBatch(batch.id, resolvedOptions);
-		state.entries.set(dst, { dst, content, file, changeType });
-
-		if (!batch.flush) {
+		// File commits are never deferred: the batch owns only LSP post-processing,
+		// so a later flush cannot replay an obsolete whole-file snapshot.
+		try {
 			await writethroughNoop(dst, content, signal, file);
-			return undefined;
+		} catch (error) {
+			if (batch.flush) {
+				const pending = writethroughBatches.get(batch.id);
+				if (pending) {
+					writethroughBatches.delete(batch.id);
+					try {
+						await flushWritethroughBatch(
+							Array.from(pending.entries.values()),
+							cwd,
+							pending.options,
+							signal,
+							getDeferred,
+						);
+					} catch (flushError) {
+						logger.warn("Failed to flush pending LSP batch after final write failure", {
+							batchId: batch.id,
+							error: flushError instanceof Error ? flushError.message : String(flushError),
+						});
+					}
+				}
+			}
+			throw error;
 		}
+
+		const state = getOrCreateWritethroughBatch(batch.id, resolvedOptions);
+		state.entries.set(dst, { dst, file, changeType });
+		if (!batch.flush) return undefined;
 
 		writethroughBatches.delete(batch.id);
 		return flushWritethroughBatch(Array.from(state.entries.values()), cwd, state.options, signal, getDeferred);
@@ -1598,6 +1647,9 @@ export class LspTool implements AgentTool<typeof lspSchema, LspToolDetails, Them
 		_context?: AgentToolContext,
 	): Promise<AgentToolResult<LspToolDetails>> {
 		const { action, file, line, symbol, query, new_name, apply, timeout } = params;
+		if (this.session.lspReadOnly && !LSP_READONLY_ACTIONS.has(action)) {
+			throw new ToolError(`LSP action ${action} is disabled in this read-only session`);
+		}
 		const timeoutSec = clampTimeout("lsp", timeout, this.session.settings.get("tools.maxTimeout"));
 		const timeoutSignal = AbortSignal.timeout(timeoutSec * 1000);
 		const callerSignal = signal;
@@ -2345,6 +2397,7 @@ export class LspTool implements AgentTool<typeof lspSchema, LspToolDetails, Them
 			const outputs: string[] = [];
 			for (const [workspaceServerName, workspaceServerConfig] of servers) {
 				throwIfAborted(signal);
+				clearInitializationFailure(workspaceServerConfig, this.session.cwd);
 				try {
 					const workspaceClient = await getOrCreateClient(
 						workspaceServerConfig,
@@ -2376,6 +2429,8 @@ export class LspTool implements AgentTool<typeof lspSchema, LspToolDetails, Them
 		}
 
 		const [serverName, serverConfig] = serverInfo;
+
+		if (action === "reload") clearInitializationFailure(serverConfig, this.session.cwd);
 
 		try {
 			const client = await getOrCreateClient(serverConfig, this.session.cwd, undefined, signal);

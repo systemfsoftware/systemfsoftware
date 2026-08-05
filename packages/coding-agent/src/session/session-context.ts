@@ -154,6 +154,21 @@ function snapcompactHistoryBlocksForContext(
 	return snapcompact.historyBlocks(archive, snapcompactHistoryBlockOptions(archive, options));
 }
 
+export function getOpenAiRemoteCompactionPayload(
+	compaction: CompactionEntry | null | undefined,
+): ProviderPayload | undefined {
+	const candidate = compaction?.preserveData?.openaiRemoteCompaction;
+	if (!candidate || typeof candidate !== "object") return undefined;
+	const remote = candidate as { provider?: unknown; replacementHistory?: unknown };
+	if (typeof remote.provider !== "string" || remote.provider.length === 0) return undefined;
+	if (!Array.isArray(remote.replacementHistory)) return undefined;
+	return {
+		type: "openaiResponsesHistory",
+		provider: remote.provider,
+		items: remote.replacementHistory as Array<Record<string, unknown>>,
+	};
+}
+
 export function buildSessionContext(
 	entries: SessionEntry[],
 	leafId?: string | null,
@@ -269,6 +284,12 @@ export function buildSessionContext(
 
 	const injectedTtsrRules = Array.from(injectedTtsrRulesSet);
 
+	// Index on the path of the latest `/clear` boundary, or -1 when none. The
+	// collapsed live transcript and the model-context rebuild start emission
+	// after it (see the emission branch below); the full-history export path
+	// ignores it.
+	const resetBoundaryIdx = path.reduce((latest, entry, i) => (entry.type === "reset_boundary" ? i : latest), -1);
+
 	// Build messages and collect corresponding entries
 	// When there's a compaction, we need to:
 	// 1. Emit summary first (entry = compaction)
@@ -364,19 +385,28 @@ export function buildSessionContext(
 				appendMessage(entry);
 			}
 		}
+	} else if (
+		resetBoundaryIdx >= 0 &&
+		resetBoundaryIdx > (compaction ? path.findIndex(e => e.type === "compaction" && e.id === compaction.id) : -1)
+	) {
+		// A `/clear` boundary durably starts emission after it — for BOTH the
+		// collapsed live transcript AND the model context (non-transcript) rebuild
+		// that feeds agent.replaceMessages (resume, /shake, reload, image drop).
+		// Without honoring it here, those model-context rebuilds walk the full
+		// persisted branch and put the pre-reset turns back into the LLM context
+		// even though `/clear` reported it empty. The full-history export path
+		// (`transcript && !collapseCompactedHistory`) is handled by the first
+		// branch above and left untouched, so on-disk history stays recoverable.
+		// When a compaction and a reset boundary interact, the later one on the
+		// path wins: a boundary after the latest compaction elides that compaction
+		// (and its kept tail) too, so only genuinely post-reset entries emit; a
+		// boundary before the latest compaction is superseded by it (the
+		// `else if (compaction)` branch below handles that case via this guard).
+		for (let i = resetBoundaryIdx + 1; i < path.length; i++) {
+			appendMessage(path[i]);
+		}
 	} else if (compaction) {
-		const providerPayload: ProviderPayload | undefined = (() => {
-			const candidate = compaction.preserveData?.openaiRemoteCompaction;
-			if (!candidate || typeof candidate !== "object") return undefined;
-			const remote = candidate as { provider?: unknown; replacementHistory?: unknown };
-			if (typeof remote.provider !== "string" || remote.provider.length === 0) return undefined;
-			if (!Array.isArray(remote.replacementHistory)) return undefined;
-			return {
-				type: "openaiResponsesHistory",
-				provider: remote.provider,
-				items: remote.replacementHistory as Array<Record<string, unknown>>,
-			};
-		})();
+		const providerPayload = getOpenAiRemoteCompactionPayload(compaction);
 		const remoteReplacementHistory = providerPayload?.items;
 
 		// Re-attach any archived snapcompact frames so the model can keep

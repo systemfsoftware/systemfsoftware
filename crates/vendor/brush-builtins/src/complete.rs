@@ -189,7 +189,7 @@ impl CommonCompleteCommandArgs {
 		actions
 	}
 
-	fn has_completion_spec(&self) -> bool {
+	const fn has_completion_spec(&self) -> bool {
 		!self.options.is_empty()
 			|| !self.actions.is_empty()
 			|| self.glob_pattern.is_some()

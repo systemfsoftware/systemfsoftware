@@ -56,6 +56,22 @@ const EMPTY_STRING_PARTS: string[] = [];
 const EMPTY_TOOLS: ReadonlyArray<Pick<Tool, "name" | "description" | "parameters">> = [];
 const EMPTY_SKILLS: readonly Skill[] = [];
 
+/**
+ * Skills actually rendered into the system prompt, mirroring the filter in
+ * `buildSystemPrompt` (`system-prompt.ts`): the `read` tool must be present so
+ * the model can fetch skill content, and skills with frontmatter `hide: true`
+ * (or `disable-model-invocation`, normalized onto `hide`) are excluded.
+ * Accounting must count only these so the Skills category and the System-prompt
+ * subtraction stay aligned with the provider-facing prompt.
+ */
+function renderedSkills(
+	skills: readonly Skill[],
+	tools: ReadonlyArray<Pick<Tool, "name" | "description" | "parameters">>,
+): readonly Skill[] {
+	if (!tools.some(tool => tool.name === "read")) return EMPTY_SKILLS;
+	return skills.filter(skill => skill.hide !== true);
+}
+
 export function estimateSkillsTokens(skills: readonly Skill[]): number {
 	const fragments: string[] = [];
 	for (const skill of skills) {
@@ -171,8 +187,9 @@ export function computeNonMessageBreakdown(session: NonMessageTokenSource): {
 } {
 	const entry = nonMessageTokenCacheEntry(session);
 	if (entry.breakdown) return entry.breakdown;
-	const skillsTokens = estimateSkillsTokens(session.skills ?? EMPTY_SKILLS);
-	const toolsTokens = estimateToolSchemaTokens(session.agent?.state?.tools ?? EMPTY_TOOLS);
+	const tools = session.agent?.state?.tools ?? EMPTY_TOOLS;
+	const skillsTokens = estimateSkillsTokens(renderedSkills(session.skills ?? EMPTY_SKILLS, tools));
+	const toolsTokens = estimateToolSchemaTokens(tools);
 	const systemPromptParts = session.systemPrompt ?? EMPTY_STRING_PARTS;
 	const systemContextTokens = countTokens(systemPromptParts.slice(1));
 	const systemPromptTokens = Math.max(0, countTokens(systemPromptParts[0] ?? "") - skillsTokens);

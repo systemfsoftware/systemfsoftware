@@ -69,8 +69,12 @@ function createController(authStorage: AuthStorage, mcpManagerOverrides: Record<
 			pendingProviderId: undefined,
 			tryClaimInput: vi.fn(),
 		},
+		settings: {
+			get: vi.fn((_key: string): unknown => undefined),
+		},
 		session: {
 			refreshMCPTools: vi.fn(),
+			setMCPPromptCommands: vi.fn(),
 			modelRegistry: { authStorage },
 		},
 		mcpManager,
@@ -552,5 +556,75 @@ describe("/mcp auth commands", () => {
 				.catch(() => "{}"),
 		) as TestConfigFile;
 		expect(userConfig.mcpServers?.discovered).toBeUndefined();
+	});
+
+	test("passes env-expanded OAuth client credentials to the reauth flow", async () => {
+		const authStorage = freshAuthStorage();
+		await authStorage.reload();
+		const originalClientId = Bun.env.MCP_OAUTH_CLIENT_ID;
+		const originalClientSecret = Bun.env.MCP_OAUTH_CLIENT_SECRET;
+		Bun.env.MCP_OAUTH_CLIENT_ID = "expanded-client-id";
+		Bun.env.MCP_OAUTH_CLIENT_SECRET = "expanded-client-secret";
+		await Bun.write(
+			configPath,
+			`${JSON.stringify(
+				{
+					mcpServers: {
+						envserver: {
+							type: "http",
+							url: RAW_SERVER_URL,
+							oauth: {
+								// biome-ignore lint/suspicious/noTemplateCurlyInString: test placeholder string for env expansion
+								clientId: "${MCP_OAUTH_CLIENT_ID}",
+								// biome-ignore lint/suspicious/noTemplateCurlyInString: test placeholder string for env expansion
+								clientSecret: "${MCP_OAUTH_CLIENT_SECRET}",
+							},
+						},
+					},
+				},
+				null,
+				2,
+			)}\n`,
+		);
+		try {
+			vi.spyOn(mcpClient, "connectToServer").mockRejectedValue(AUTH_ERROR);
+			let flowClientId: string | undefined;
+			let flowClientSecret: string | undefined;
+			vi.spyOn(oauthFlow.MCPOAuthFlow.prototype, "login").mockImplementation(async function (
+				this: oauthFlow.MCPOAuthFlow,
+			) {
+				// MCPOAuthFlow keeps its config private; read it back to assert the
+				// resolved credentials the flow will use. Structurally known shape,
+				// no runtime validation is meaningful here.
+				const flow = this as unknown as { config: { clientId?: string; clientSecret?: string } };
+				flowClientId = flow.config.clientId;
+				flowClientSecret = flow.config.clientSecret;
+				return {
+					access: "fresh-access",
+					refresh: "fresh-refresh",
+					expires: Date.now() + 3_600_000,
+				};
+			});
+			const { controller, showError } = createController(authStorage);
+
+			await controller.handle("/mcp reauth envserver");
+
+			expect(showError).not.toHaveBeenCalled();
+			// The token exchange must receive the resolved secret, not the literal
+			// `${...}` placeholder.
+			expect(flowClientId).toBe("expanded-client-id");
+			expect(flowClientSecret).toBe("expanded-client-secret");
+
+			// The config file keeps the placeholder; only the flow sees the value.
+			const saved = JSON.parse(await Bun.file(configPath).text()) as TestConfigFile;
+			const savedServer = saved.mcpServers?.envserver;
+			// biome-ignore lint/suspicious/noTemplateCurlyInString: test placeholder string for env expansion
+			expect(savedServer?.oauth?.clientSecret).toBe("${MCP_OAUTH_CLIENT_SECRET}");
+			// biome-ignore lint/suspicious/noTemplateCurlyInString: test placeholder string for env expansion
+			expect(savedServer?.oauth?.clientId).toBe("${MCP_OAUTH_CLIENT_ID}");
+		} finally {
+			restoreEnvValue("MCP_OAUTH_CLIENT_ID", originalClientId);
+			restoreEnvValue("MCP_OAUTH_CLIENT_SECRET", originalClientSecret);
+		}
 	});
 });

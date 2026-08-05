@@ -37,7 +37,7 @@ import { AsyncLocalStorageContextManager } from "@opentelemetry/context-async-ho
 import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-proto";
 import { OTLPMetricExporter } from "@opentelemetry/exporter-metrics-otlp-proto";
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-proto";
-import { resourceFromAttributes } from "@opentelemetry/resources";
+import { detectResources, envDetector, resourceFromAttributes } from "@opentelemetry/resources";
 import { BatchLogRecordProcessor, LoggerProvider } from "@opentelemetry/sdk-logs";
 import { MeterProvider, PeriodicExportingMetricReader } from "@opentelemetry/sdk-metrics";
 import { BatchSpanProcessor } from "@opentelemetry/sdk-trace-base";
@@ -146,9 +146,13 @@ export async function initTelemetryExport(): Promise<void> {
 }
 
 async function registerProviders(signalConfig: SignalConfig): Promise<void> {
-	const resource = resourceFromAttributes({
-		"service.name": process.env.OTEL_SERVICE_NAME ?? SERVICE_NAME,
-	});
+	// `envDetector` parses OTEL_RESOURCE_ATTRIBUTES (percent-decoded, per spec) and
+	// OTEL_SERVICE_NAME; merged last so both take precedence over the fallback
+	// service.name — with OTEL_SERVICE_NAME still winning service.name inside the
+	// detector itself.
+	const resource = resourceFromAttributes({ "service.name": SERVICE_NAME }).merge(
+		detectResources({ detectors: [envDetector] }),
+	);
 
 	if (signalConfig.trace) {
 		const exporter = new OTLPTraceExporter();

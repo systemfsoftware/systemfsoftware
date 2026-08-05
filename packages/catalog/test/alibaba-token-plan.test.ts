@@ -46,7 +46,7 @@ describe("QwenCloud Token Plan provider", () => {
 		]);
 	});
 
-	test("discovers the subscribed allowlist from the native models endpoint", async () => {
+	test("discovers subscribed chat models from the native models endpoint", async () => {
 		let requestedUrl = "";
 		let authorization = "";
 		const fetchMock: FetchImpl = (input, init) => {
@@ -62,6 +62,15 @@ describe("QwenCloud Token Plan provider", () => {
 							context_length: 262_144,
 							max_completion_tokens: 16_384,
 						},
+						{ id: "deepseek-v4-flash", owned_by: "qwencloud" },
+						{ id: "deepseek-v4-flash-0731", owned_by: "qwencloud" },
+						{ id: "kimi-k2.7-code", owned_by: "qwencloud" },
+						{ id: "MiniMax-M2.5", owned_by: "qwencloud" },
+						{ id: "fun-asr", owned_by: "qwencloud" },
+						{ id: "qwen-image-2.0-pro", owned_by: "qwencloud" },
+						{ id: "qwen-audio-3.0-tts-plus", owned_by: "qwencloud" },
+						{ id: "happyhorse-1.1-t2v", owned_by: "qwencloud" },
+						{ id: "text-embedding-v4", owned_by: "qwencloud" },
 						{ id: "wan2.7-image", owned_by: "qwencloud" },
 					],
 				}),
@@ -74,8 +83,28 @@ describe("QwenCloud Token Plan provider", () => {
 
 		expect(requestedUrl).toBe(`${ALIBABA_TOKEN_PLAN_BASE_URL}/models`);
 		expect(authorization).toBe("Bearer sk-sp-test");
-		expect(models).toHaveLength(1);
-		expect(models?.[0]).toMatchObject({
+		expect(models?.map(model => model.id)).toEqual([
+			"deepseek-v4-flash",
+			"deepseek-v4-flash-0731",
+			"kimi-k2.7-code",
+			"MiniMax-M2.5",
+			"qwen3.7-plus",
+		]);
+		expect(models?.find(model => model.id === "deepseek-v4-flash")).toMatchObject({
+			reasoning: true,
+			thinking: {
+				mode: "effort",
+				efforts: ["high", "max"],
+			},
+		});
+		expect(models?.find(model => model.id === "deepseek-v4-flash-0731")).toMatchObject({
+			reasoning: true,
+			thinking: {
+				mode: "effort",
+				efforts: ["high", "max"],
+			},
+		});
+		expect(models?.find(model => model.id === "qwen3.7-plus")).toMatchObject({
 			id: "qwen3.7-plus",
 			provider: "alibaba-token-plan",
 			name: "Qwen3.7 Plus",
@@ -83,6 +112,28 @@ describe("QwenCloud Token Plan provider", () => {
 			maxTokens: 64_000,
 		});
 		expect(options.dynamicModelsAuthoritative).toBe(true);
+	});
+
+	test("routes discovery to the credential's region when it is China (Beijing)", async () => {
+		let requestedUrl = "";
+		const fetchMock: FetchImpl = input => {
+			requestedUrl = String(input);
+			return Promise.resolve(Response.json({ data: [{ id: "qwen3.7-plus", owned_by: "qwencloud" }] }));
+		};
+
+		const apiKey = serializeAlibabaTokenPlanCredential(
+			"sk-sp-beijing",
+			"",
+			"https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
+		);
+		const options = alibabaTokenPlanModelManagerOptions({ apiKey, fetch: fetchMock });
+		const models = await options.fetchDynamicModels?.();
+
+		expect(requestedUrl).toBe("https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1/models");
+		expect(models?.[0]).toMatchObject({
+			id: "qwen3.7-plus",
+			baseUrl: "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
+		});
 	});
 
 	test("rejects malformed compound credentials before model discovery", () => {

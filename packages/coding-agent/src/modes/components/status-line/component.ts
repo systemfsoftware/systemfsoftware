@@ -15,6 +15,11 @@ import { getSessionAccentAnsi, getSessionAccentHex } from "../../../utils/sessio
 import { calculateTokensPerSecond } from "../../../utils/token-rate";
 import { sanitizeStatusText } from "../../shared";
 import { theme } from "../../theme/theme";
+import {
+	type CodexResetFireworksEvent,
+	type CodexResetUsageSnapshot,
+	detectCodexResetFireworks,
+} from "../codex-reset-fireworks";
 import { canReuseCachedPr, createPrCacheContext, isSamePrCacheContext, type PrCacheContext } from "./git-utils";
 import { getPreset } from "./presets";
 import { renderSegment, type SegmentContext } from "./segments";
@@ -28,6 +33,37 @@ import type {
 } from "./types";
 
 const JJ_REFRESH_TTL_MS = 5000;
+const WATCHER_FAILURE_POLL_TTL_MS = 5000;
+
+function normalizeCodexIdentityValue(value: unknown): string | undefined {
+	return typeof value === "string" && value.trim() ? value.trim().toLowerCase() : undefined;
+}
+
+/**
+ * Fireworks are stateful, so their report match must be stricter than the
+ * status display's fallback matching: every known credential identifier must
+ * be present and equal or a workspace sibling can mutate this account's
+ * baseline.
+ */
+function codexReportMatchesExactIdentity(report: UsageReport, identity: OAuthAccountIdentity | undefined): boolean {
+	if (!identity) return false;
+	const accountId = normalizeCodexIdentityValue(identity.accountId);
+	const email = normalizeCodexIdentityValue(identity.email);
+	const projectId = normalizeCodexIdentityValue(identity.projectId);
+	const orgId = normalizeCodexIdentityValue(identity.orgId);
+	if (!accountId && !email && !projectId && !orgId) return false;
+
+	const metadata = report.metadata ?? {};
+	const reportAccountId =
+		normalizeCodexIdentityValue(metadata.accountId) ?? normalizeCodexIdentityValue(metadata.account_id);
+	const reportProjectId =
+		normalizeCodexIdentityValue(metadata.projectId) ?? normalizeCodexIdentityValue(metadata.project_id);
+	if (accountId && reportAccountId !== accountId) return false;
+	if (email && normalizeCodexIdentityValue(metadata.email) !== email) return false;
+	if (projectId && reportProjectId !== projectId) return false;
+	if (orgId && normalizeCodexIdentityValue(metadata.orgId) !== orgId) return false;
+	return true;
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Context-usage memo
@@ -174,6 +210,17 @@ interface ActiveRepoCache {
 	worktree: WorktreeContext | null;
 }
 
+interface BranchResolveRequest {
+	id: number;
+	cwd: string;
+	controller: AbortController;
+}
+
+interface JjResolveRequest {
+	id: number;
+	controller: AbortController;
+}
+
 interface WorktreeContext {
 	/** Primary-checkout (project) name shown by the path segment. */
 	projectName: string;
@@ -250,7 +297,31 @@ export class StatusLineComponent implements Component {
 	#cachedBranch: string | null | undefined = undefined;
 	#cachedBranchRepoId: string | null | undefined = undefined;
 	#cachedBranchCwd: string | undefined = undefined;
+	#cachedBranchHasGitRepository = false;
+	// In-flight reftable resolve slot. Ownership is the launch id, not the cwd:
+	// two live resolves can share a cwd string across an invalidation, and a
+	// stale one must never free (or poison) a slot it no longer owns.
+	#branchResolveSeq = 0;
+	#branchResolveActive: BranchResolveRequest | undefined = undefined;
+	// Bumped on every branch-cache reset (#invalidateGitCaches — a HEAD move or
+	// repo-context change). An in-flight reftable resolve captures this at
+	// launch; a mismatch on resolve means the cache was invalidated underneath
+	// it (a newer resolve superseded it), so its result is stale and must be
+	// dropped rather than overwrite the value the newer resolve committed.
+	// Mirrors #jjCacheGeneration / #getJjBranch in this file.
+	// Timestamp of the latest branch read; only bounds cache freshness when the
+	// HEAD watcher could not be installed.
+	#branchLastFetch: number | undefined = undefined;
+	// Bumped on every branch-cache reset (invalidateGitCaches — a HEAD move or
+	// repo-context change). An in-flight reftable resolve captures this at
+	// launch; a mismatch on resolve means the cache was invalidated underneath
+	// it (a newer resolve superseded it), so its result is stale and must be
+	// dropped rather than overwrite the value the newer resolve committed.
+	// Mirrors #jjCacheGeneration / #getJjBranch in this file.
+	#branchCacheGeneration = 0;
 	#gitWatcher: fs.FSWatcher | null = null;
+	#gitWatcherErrorListener: (() => void) | undefined = undefined;
+	#gitWatcherUnavailable = false;
 	#onBranchChange: (() => void) | null = null;
 	#disposed = false;
 	#autoCompactEnabled: boolean = true;
@@ -299,10 +370,11 @@ export class StatusLineComponent implements Component {
 	#jjRootCwd: string | undefined = undefined;
 	#cachedJjBranch: string | null = null;
 	#jjBranchLastFetch = 0;
-	#jjBranchInFlight = false;
+	#jjResolveSeq = 0;
+	#jjBranchActive: JjResolveRequest | undefined = undefined;
 	#cachedJjStatus: { staged: number; unstaged: number; untracked: number } | null = null;
 	#jjStatusLastFetch = 0;
-	#jjStatusInFlight = false;
+	#jjStatusActive: JjResolveRequest | undefined = undefined;
 	// Bumped on every jj-cache reset — a cwd switch (#jjRootFor) or a HEAD /
 	// bookmark move (#invalidateGitCaches). An in-flight jj query captures this
 	// at launch; a mismatch on resolve means the caches were reset underneath it
@@ -330,6 +402,12 @@ export class StatusLineComponent implements Component {
 	#usageFetchedAt = 0;
 	#usageInFlight = false;
 	#usageStartTimer: Timer | null = null;
+	// A timed-out request may still resolve. Its result remains eligible only
+	// until a newer request has applied.
+	#usageRefreshSequence = 0;
+	#latestAppliedUsageRefreshSequence = 0;
+	#codexResetSnapshots = new Map<string, CodexResetUsageSnapshot>();
+	#onCodexResetFireworks: ((event: CodexResetFireworksEvent) => void) | undefined;
 	// Context-usage memo. The status line redraws on every agent event, so the
 	// hot path must not recompute context tokens unless an input changed.
 	// `getContextUsage()` anchors on the last assistant's real prompt-token
@@ -548,6 +626,11 @@ export class StatusLineComponent implements Component {
 		this.#collabStatus = status;
 	}
 
+	/** Set the callback that presents detected Codex reset celebrations, or clear it with `undefined`. */
+	setCodexResetFireworksHandler(handler: ((event: CodexResetFireworksEvent) => void) | undefined): void {
+		this.#onCodexResetFireworks = handler;
+	}
+
 	setHookStatus(key: string, text: string | undefined): void {
 		if (text === undefined) {
 			this.#hookStatuses.delete(key);
@@ -562,45 +645,70 @@ export class StatusLineComponent implements Component {
 	}
 
 	#setupGitWatcher(): void {
-		if (this.#gitWatcher) {
-			this.#gitWatcher.close();
-			this.#gitWatcher = null;
-		}
+		this.#retireGitWatcher();
+		this.#gitWatcherUnavailable = false;
 
 		if (!this.#gitEnabled() || !this.#hasGitBackedSegment()) {
-			this.#invalidateGitCaches();
+			this.invalidateGitCaches();
 			return;
 		}
 
 		const { effectiveGitCwd } = this.#resolveActiveRepoCache();
 		const repository = git.repo.resolveSync(effectiveGitCwd);
-		if (!repository) return;
+		if (!repository) {
+			// There is no path to watch yet. Cache the negative result only for the
+			// fallback poll interval so a later `git init` becomes visible without
+			// generic invalidations or a render-path probe on every paint.
+			this.#gitWatcherUnavailable = true;
+			return;
+		}
 
 		const watchPath = git.repo.isReftableSync(repository)
 			? path.join(repository.gitDir, "reftable")
 			: repository.headPath;
 
 		try {
-			this.#gitWatcher = fs.watch(watchPath, () => {
-				if (this.#disposed) return;
-				this.#invalidateGitCaches();
-				if (this.#onBranchChange) {
-					this.#onBranchChange();
-				}
+			const watcher = fs.watch(watchPath, () => {
+				if (this.#disposed || this.#gitWatcher !== watcher) return;
+				this.invalidateGitCaches();
+				this.#onBranchChange?.();
 			});
+			const onError = () => {
+				if (this.#gitWatcher !== watcher) return;
+				this.#retireGitWatcher();
+				this.#gitWatcherUnavailable = true;
+				if (this.#disposed) return;
+				this.invalidateGitCaches();
+				this.#onBranchChange?.();
+			};
+			this.#gitWatcher = watcher;
+			this.#gitWatcherErrorListener = onError;
+			watcher.on("error", onError);
 		} catch {
-			this.#invalidateGitCaches();
+			this.#gitWatcherUnavailable = true;
 		}
+	}
+
+	#retireGitWatcher(): void {
+		const watcher = this.#gitWatcher;
+		const onError = this.#gitWatcherErrorListener;
+		this.#gitWatcher = null;
+		this.#gitWatcherErrorListener = undefined;
+		if (!watcher) return;
+		if (onError) watcher.off("error", onError);
+		watcher.close();
 	}
 
 	dispose(): void {
 		this.#disposed = true;
+		this.#branchResolveActive?.controller.abort();
+		this.#branchResolveActive = undefined;
+		this.#resetJjRequests();
 		this.#onBranchChange = null;
 		this.#clearUsageStartTimer();
-		if (this.#gitWatcher) {
-			this.#gitWatcher.close();
-			this.#gitWatcher = null;
-		}
+		this.#onCodexResetFireworks = undefined;
+		this.#codexResetSnapshots.clear();
+		this.#retireGitWatcher();
 	}
 
 	#clearUsageStartTimer(): void {
@@ -610,7 +718,17 @@ export class StatusLineComponent implements Component {
 	}
 
 	invalidate(): void {
-		this.#invalidateGitCaches();
+		// Generic repaint invalidation (theme change, message event, model
+		// switch, …). Must NOT abort or restart a live reftable HEAD/PR resolve:
+		// the render path self-invalidates via cwd/context cache-miss checks, so
+		// a generic paint only needs to re-render — not tear down in-flight VCS
+		// work. Aborting here would fan out a new git subprocess on every agent
+		// event, re-introducing the render-path spawn churn the async resolve
+		// was designed to avoid. Explicit Git/repository invalidation (watcher
+		// HEAD-move, cwd/repo switch) goes through {@link invalidateGitCaches}.
+		// A tool may open, close, or merge a PR without moving HEAD. Expire the
+		// settled PR context on ordinary activity while leaving HEAD work intact.
+		this.#cachedPrContext = undefined;
 	}
 	#invalidateSessionCaches(): void {
 		this.#clearUsageStartTimer();
@@ -622,14 +740,30 @@ export class StatusLineComponent implements Component {
 		this.#lastTokensPerSecondTimestamp = null;
 	}
 
-	#invalidateGitCaches(): void {
+	/**
+	 * Explicit Git/repository cache invalidation. Aborts any in-flight
+	 * reftable HEAD/PR resolve, bumps the stale-result generation, and drops
+	 * the branch/PR/jj caches so the next render refetches from disk. Called
+	 * by the git watcher on a HEAD move and by {@link applyCwdChange} on a
+	 * repo/cwd switch. Generic repaints use {@link invalidate} instead and
+	 * must never reach this path.
+	 */
+	invalidateGitCaches(): void {
 		this.#cachedBranch = undefined;
 		this.#cachedBranchRepoId = undefined;
 		this.#cachedBranchCwd = undefined;
+		this.#cachedBranchHasGitRepository = false;
+		// Abort before releasing the in-flight slot. Releasing alone would allow
+		// repeated invalidations to fan out still-running git subprocesses.
+		this.#branchResolveActive?.controller.abort();
+		this.#branchResolveActive = undefined;
+		this.#branchLastFetch = undefined;
+		this.#branchCacheGeneration++;
 		this.#cachedPrContext = undefined;
 		// jj label/status share the git segment's lifecycle: a HEAD move (e.g. a
 		// colocated `jj new`/bookmark move) must drop the throttled jj caches too,
 		// mirroring #jjRootFor's per-cwd reset so the next render refetches.
+		this.#resetJjRequests();
 		this.#jjRoot = undefined;
 		this.#jjRootCwd = undefined;
 		this.#cachedJjBranch = null;
@@ -638,25 +772,111 @@ export class StatusLineComponent implements Component {
 		this.#jjStatusLastFetch = 0;
 		this.#jjCacheGeneration++;
 	}
+
+	/**
+	 * Re-point the status line's VCS watcher and caches at a new cwd/repository.
+	 * Atomically retires the old watcher/listeners, invalidates VCS caches and
+	 * in-flight controllers, then runs watcher setup for the new cwd and requests
+	 * a repaint. Called by {@link InteractiveMode.applyCwdChange} after the
+	 * SessionManager's cwd has moved — the watcher ownership always follows the
+	 * effective cwd/repo, so a stale watcher for the previous repo can never
+	 * invalidate the new one. Generic repaints use {@link invalidate} and must
+	 * never retire the watcher or abort a live resolve.
+	 */
+	applyCwdChange(): void {
+		this.#retireGitWatcher();
+		this.invalidateGitCaches();
+		this.#setupGitWatcher();
+		this.#onBranchChange?.();
+	}
+
+	#resetJjRequests(): void {
+		this.#jjBranchActive?.controller.abort();
+		this.#jjBranchActive = undefined;
+		this.#jjStatusActive?.controller.abort();
+		this.#jjStatusActive = undefined;
+	}
 	#getCurrentBranch(effectiveGitCwd?: string): string | null {
 		if (!this.#gitEnabled()) return null;
 
 		const gitCwd = effectiveGitCwd ?? this.#resolveActiveRepoCache().effectiveGitCwd;
-		if (this.#cachedBranch !== undefined && this.#cachedBranchCwd === gitCwd) {
+		const fallbackCacheExpired =
+			this.#gitWatcherUnavailable &&
+			(this.#branchLastFetch === undefined || Date.now() - this.#branchLastFetch >= WATCHER_FAILURE_POLL_TTL_MS);
+		if (this.#cachedBranch !== undefined && this.#cachedBranchCwd === gitCwd && !fallbackCacheExpired) {
 			return this.#cachedBranch;
 		}
 
+		// A reftable repo resolves HEAD by spawning `git symbolic-ref` +
+		// `git rev-parse` — the unbounded spawn that froze the render path (F7).
+		// A non-reftable repo resolves HEAD with cheap sync filesystem reads, so
+		// only the reftable branch moves off the render path, mirroring
+		// #getGitStatus and #getJjBranch in this file.
+		const repository = git.repo.resolveSync(gitCwd);
+		if (repository && git.repo.isReftableSync(repository)) {
+			if (this.#branchResolveActive !== undefined) {
+				return this.#branchResolveActive.cwd === gitCwd && this.#cachedBranchCwd === gitCwd
+					? (this.#cachedBranch ?? null)
+					: null;
+			}
+			const request: BranchResolveRequest = {
+				id: ++this.#branchResolveSeq,
+				cwd: gitCwd,
+				controller: new AbortController(),
+			};
+			this.#branchResolveActive = request;
+			// Capture the cache generation at launch. invalidateGitCaches bumps it
+			// on a HEAD move and clears the in-flight slot, so a fresher resolve can
+			// start while this one is still pending. Without a generation check the
+			// older resolve would finish later, install its stale HEAD, and clear the
+			// slot — dropping the fresh result and freezing the status line on the
+			// pre-change branch. Mirrors #jjCacheGeneration / #getJjBranch.
+			const generation = this.#branchCacheGeneration;
+			(async () => {
+				let next: string | null = null;
+				let repoId: string | null = null;
+				try {
+					const headState = await git.head.resolve(gitCwd, request.controller.signal);
+					repoId = headState?.headPath ?? null;
+					next = !headState
+						? null
+						: headState.kind === "ref"
+							? (headState.branchName ?? headState.ref)
+							: "detached";
+				} catch {
+					next = null;
+				} finally {
+					// Release the slot only if this resolve still owns it: after an
+					// invalidation a fresher resolve may hold it, and freeing that
+					// slot here would let a third same-generation resolve launch and
+					// race the fresh one to the cache commit.
+					if (this.#branchResolveActive?.id === request.id) this.#branchResolveActive = undefined;
+				}
+				// Only the latest generation may update the cache; a mismatch means a
+				// newer resolve superseded this one (or the component disposed).
+				if (this.#branchCacheGeneration !== generation || this.#disposed) return;
+				const prev = this.#cachedBranchCwd === gitCwd ? this.#cachedBranch : undefined;
+				this.#cachedBranchCwd = gitCwd;
+				this.#cachedBranchRepoId = repoId;
+				this.#cachedBranchHasGitRepository = next === null;
+				this.#cachedBranch = next;
+				this.#branchLastFetch = Date.now();
+				if (prev !== next && this.#onBranchChange) this.#onBranchChange();
+			})();
+			return this.#cachedBranchCwd === gitCwd ? (this.#cachedBranch ?? null) : null;
+		}
+
+		// Non-reftable: cheap sync filesystem read, safe on the render path.
 		const head = git.head.resolveSync(gitCwd);
 		const gitHeadPath = head?.headPath ?? null;
 		this.#cachedBranchCwd = gitCwd;
 		this.#cachedBranchRepoId = gitHeadPath;
+		this.#branchLastFetch = Date.now();
 		if (!head) {
 			this.#cachedBranch = null;
 			return null;
 		}
-
 		this.#cachedBranch = head.kind === "ref" ? (head.branchName ?? head.ref) : "detached";
-
 		return this.#cachedBranch ?? null;
 	}
 
@@ -741,17 +961,24 @@ export class StatusLineComponent implements Component {
 		const cwd = effectiveGitCwd ?? this.#resolveActiveRepoCache().effectiveGitCwd;
 		const root = this.#jjRootFor(cwd);
 		if (!root) return null;
-		if (this.#jjBranchInFlight || Date.now() - this.#jjBranchLastFetch < JJ_REFRESH_TTL_MS) {
+		if (this.#jjBranchActive || Date.now() - this.#jjBranchLastFetch < JJ_REFRESH_TTL_MS) {
 			return this.#cachedJjBranch;
 		}
-		this.#jjBranchInFlight = true;
+		const request: JjResolveRequest = {
+			id: ++this.#jjResolveSeq,
+			controller: new AbortController(),
+		};
+		this.#jjBranchActive = request;
 		const generation = this.#jjCacheGeneration;
 		(async () => {
 			let next: string | null = null;
 			try {
-				next = await jj.workingCopy.label(root);
+				next = await jj.workingCopy.label(root, {
+					signal: request.controller.signal,
+					timeoutMs: jj.JJ_COMMAND_TIMEOUT_MS,
+				});
 			} finally {
-				this.#jjBranchInFlight = false;
+				if (this.#jjBranchActive?.id === request.id) this.#jjBranchActive = undefined;
 				// Advance the throttle only if no reset raced this query; a reset
 				// leaves LastFetch at 0 so the current root refetches instead of
 				// being throttled on a superseded result.
@@ -763,7 +990,7 @@ export class StatusLineComponent implements Component {
 			if (this.#jjCacheGeneration !== generation || this.#disposed) return;
 			const changed = next !== this.#cachedJjBranch;
 			this.#cachedJjBranch = next;
-			if (changed && this.#onBranchChange) this.#onBranchChange();
+			if (changed) this.#onBranchChange?.();
 		})();
 		return this.#cachedJjBranch;
 	}
@@ -775,23 +1002,30 @@ export class StatusLineComponent implements Component {
 		const cwd = effectiveGitCwd ?? this.#resolveActiveRepoCache().effectiveGitCwd;
 		const root = this.#jjRootFor(cwd);
 		if (!root) return null;
-		if (this.#jjStatusInFlight || Date.now() - this.#jjStatusLastFetch < JJ_REFRESH_TTL_MS) {
+		if (this.#jjStatusActive || Date.now() - this.#jjStatusLastFetch < JJ_REFRESH_TTL_MS) {
 			return this.#cachedJjStatus;
 		}
-		this.#jjStatusInFlight = true;
+		const request: JjResolveRequest = {
+			id: ++this.#jjResolveSeq,
+			controller: new AbortController(),
+		};
+		this.#jjStatusActive = request;
 		const generation = this.#jjCacheGeneration;
 		(async () => {
 			let next: { staged: number; unstaged: number; untracked: number } | null = null;
 			try {
-				next = await jj.status.summary(root);
+				next = await jj.status.summary(root, {
+					signal: request.controller.signal,
+					timeoutMs: jj.JJ_COMMAND_TIMEOUT_MS,
+				});
 			} finally {
-				this.#jjStatusInFlight = false;
+				if (this.#jjStatusActive?.id === request.id) this.#jjStatusActive = undefined;
 				if (this.#jjCacheGeneration === generation) this.#jjStatusLastFetch = Date.now();
 			}
 			if (this.#jjCacheGeneration !== generation || this.#disposed) return;
 			const prev = this.#cachedJjStatus;
 			this.#cachedJjStatus = next;
-			if (this.#onBranchChange && JSON.stringify(prev) !== JSON.stringify(next)) this.#onBranchChange();
+			if (JSON.stringify(prev) !== JSON.stringify(next)) this.#onBranchChange?.();
 		})();
 		return this.#cachedJjStatus;
 	}
@@ -939,10 +1173,8 @@ export class StatusLineComponent implements Component {
 		return this.#vibeWorkerTokenRate?.() ?? null;
 	}
 
-	#getUsageContextKey(session: AgentSession): string {
-		const activeProvider = session.state.model?.provider ?? session.model?.provider ?? "";
+	#formatUsageContextKey(activeProvider: string | undefined, identity: OAuthAccountIdentity | undefined): string {
 		if (!activeProvider) return "";
-		const identity = session.modelRegistry?.authStorage?.getOAuthAccountIdentity(activeProvider, session.sessionId);
 		// orgId is part of the key: rotating between two same-email Anthropic
 		// subscriptions must invalidate the cached usage immediately instead of
 		// showing the previous org's quota for the rest of the cache TTL.
@@ -953,6 +1185,14 @@ export class StatusLineComponent implements Component {
 			identity?.projectId ?? "",
 			identity?.orgId ?? "",
 		].join("\0");
+	}
+
+	#getUsageContextKey(session: AgentSession): string {
+		const activeProvider = session.state.model?.provider ?? session.model?.provider;
+		const identity = activeProvider
+			? session.modelRegistry?.authStorage?.getOAuthAccountIdentity(activeProvider, session.sessionId)
+			: undefined;
+		return this.#formatUsageContextKey(activeProvider, identity);
 	}
 
 	/**
@@ -984,40 +1224,60 @@ export class StatusLineComponent implements Component {
 			this.#usageInFlight = false;
 			return;
 		}
+		const sequence = ++this.#usageRefreshSequence;
 		const signal = AbortSignal.timeout(STATUS_USAGE_REFRESH_TIMEOUT_MS);
 		let reportsPromise: Promise<unknown> | undefined;
 		try {
 			reportsPromise = fetcher.call(session, signal);
-			this.#applyUsageRefreshReports(session, await this.#raceUsageRefreshWithSignal(reportsPromise, signal));
+			this.#applyUsageRefreshReports(
+				session,
+				await this.#raceUsageRefreshWithSignal(reportsPromise, signal),
+				sequence,
+			);
 		} catch {
 			if (this.session !== session) return;
 			this.#usageFetchedAt = Date.now();
 			if (signal.aborted && reportsPromise) {
-				this.#observeLateUsageRefresh(session, reportsPromise);
+				this.#observeLateUsageRefresh(session, reportsPromise, sequence);
 			}
 		} finally {
 			if (this.session === session) this.#usageInFlight = false;
 		}
 	}
 
-	#applyUsageRefreshReports(session: AgentSession, reports: unknown): void {
-		if (this.#disposed || this.session !== session) return;
+	#applyUsageRefreshReports(session: AgentSession, reports: unknown, sequence: number): void {
+		if (this.#disposed || this.session !== session || sequence < this.#latestAppliedUsageRefreshSequence) {
+			return;
+		}
+		this.#latestAppliedUsageRefreshSequence = sequence;
 		const activeProvider = session.state.model?.provider ?? session.model?.provider;
 		const activeIdentity =
 			activeProvider && session.modelRegistry?.authStorage
 				? session.modelRegistry.authStorage.getOAuthAccountIdentity(activeProvider, session.sessionId)
 				: undefined;
-		this.#cachedUsage = this.#normalizeUsageReports(reports, activeProvider, activeIdentity);
+		const normalized = this.#normalizeUsageReports(reports, activeProvider, activeIdentity);
+		const resetSnapshot =
+			activeProvider === "openai-codex" ? this.#normalizeCodexResetSnapshot(reports, activeIdentity) : null;
+		this.#cachedUsage = normalized;
 		this.#usageFetchedAt = Date.now();
+		if (!resetSnapshot) return;
+		const contextKey = this.#formatUsageContextKey(activeProvider, activeIdentity);
+		const previous = this.#codexResetSnapshots.get(contextKey);
+		this.#codexResetSnapshots.set(contextKey, resetSnapshot);
+		if (!previous || !settings.get("tui.codexResetFireworks")) return;
+		const event = detectCodexResetFireworks(previous, resetSnapshot);
+		if (event) this.#onCodexResetFireworks?.(event);
 	}
 
-	#observeLateUsageRefresh(session: AgentSession, reportsPromise: Promise<unknown>): void {
+	#observeLateUsageRefresh(session: AgentSession, reportsPromise: Promise<unknown>, sequence: number): void {
 		void reportsPromise
 			.then(reports => {
-				this.#applyUsageRefreshReports(session, reports);
+				this.#applyUsageRefreshReports(session, reports, sequence);
 			})
 			.catch(() => {
-				if (this.#disposed || this.session !== session) return;
+				if (this.#disposed || this.session !== session || sequence < this.#latestAppliedUsageRefreshSequence) {
+					return;
+				}
 				this.#usageFetchedAt = Date.now();
 			});
 	}
@@ -1032,6 +1292,72 @@ export class StatusLineComponent implements Component {
 		} finally {
 			signal.removeEventListener("abort", onAbort);
 		}
+	}
+
+	#normalizeCodexResetSnapshot(
+		reports: unknown,
+		activeIdentity: OAuthAccountIdentity | undefined,
+	): CodexResetUsageSnapshot | null {
+		if (!Array.isArray(reports)) return null;
+		let matchingReport: UsageReport | undefined;
+		for (const report of reports) {
+			if (!report || typeof report !== "object") continue;
+			if (
+				!("provider" in report) ||
+				report.provider !== "openai-codex" ||
+				!("limits" in report) ||
+				!Array.isArray(report.limits)
+			) {
+				continue;
+			}
+			// The report boundary above validates the fields this extractor iterates;
+			// optional metadata and credit fields are narrowed again before use.
+			const usageReport = report as UsageReport;
+			if (!codexReportMatchesExactIdentity(usageReport, activeIdentity)) continue;
+			matchingReport = usageReport;
+			break;
+		}
+		if (!matchingReport) return null;
+
+		const plan =
+			typeof matchingReport.metadata?.planType === "string" && matchingReport.metadata.planType
+				? matchingReport.metadata.planType
+				: undefined;
+		let sevenDay: CodexResetUsageSnapshot["sevenDay"];
+		let sevenDayTier: string | undefined;
+		for (const limit of matchingReport.limits) {
+			if (!limit || typeof limit !== "object") continue;
+			const candidate = limit as {
+				scope?: { windowId?: string; tier?: string };
+				window?: { resetsAt?: number };
+				amount?: { usedFraction?: number };
+			};
+			const fraction = candidate.amount?.usedFraction;
+			if (candidate.scope?.windowId !== "7d" || typeof fraction !== "number" || !Number.isFinite(fraction)) {
+				continue;
+			}
+			const tier =
+				typeof candidate.scope?.tier === "string" && candidate.scope.tier ? candidate.scope.tier : undefined;
+			if (sevenDay && (sevenDayTier === undefined || tier)) continue;
+			const resetsAt = candidate.window?.resetsAt;
+			sevenDay = {
+				percent: fraction * 100,
+				resetsAt: typeof resetsAt === "number" && Number.isFinite(resetsAt) ? resetsAt : undefined,
+				tier,
+				plan,
+			};
+			sevenDayTier = tier;
+		}
+
+		const fetchedAt = matchingReport.fetchedAt;
+		const availableCount = matchingReport.resetCredits?.availableCount;
+		const observedAt = typeof fetchedAt === "number" && Number.isFinite(fetchedAt) ? fetchedAt : undefined;
+		const savedResets =
+			typeof availableCount === "number" && Number.isFinite(availableCount)
+				? Math.max(0, Math.trunc(availableCount))
+				: undefined;
+		if (!sevenDay && savedResets === undefined) return null;
+		return { observedAt, sevenDay, savedResets };
 	}
 
 	#normalizeUsageReports(
@@ -1055,12 +1381,10 @@ export class StatusLineComponent implements Component {
 			if (activeProvider && provider !== activeProvider) continue;
 			const limits = (report as { limits?: unknown }).limits;
 			if (!Array.isArray(limits)) continue;
+			const usageReport = report as UsageReport;
 			for (const limit of limits) {
 				if (!limit || typeof limit !== "object") continue;
-				if (
-					activeIdentity &&
-					!limitMatchesActiveAccount(report as UsageReport, limit as UsageLimit, activeIdentity)
-				) {
+				if (activeIdentity && !limitMatchesActiveAccount(usageReport, limit as UsageLimit, activeIdentity)) {
 					continue;
 				}
 				const l = limit as {
@@ -1213,11 +1537,14 @@ export class StatusLineComponent implements Component {
 			: { projectDir, activeRepo: null, effectiveGitCwd: projectDir, worktree: null };
 		let gitBranch = includeGit || includePr ? this.#getCurrentBranch(activeRepoCache.effectiveGitCwd) : null;
 		// A jj repo has no git branch to read: git HEAD is detached (colocated) or
-		// absent. Gate BOTH the jj branch label and the jj status counts on that
-		// same condition, captured before the label overlay rewrites gitBranch, so
-		// a nested ordinary git checkout under a parent jj workspace keeps its own
-		// git branch AND its own git status instead of the ancestor jj status.
-		const gitHeadIsJjLike = gitBranch === "detached" || gitBranch === null;
+		// absent. A pending reftable resolve owns this cwd as an explicit Git repo,
+		// so it must not be mistaken for an absent Git checkout and fall through to
+		// an ancestor jj workspace.
+		const gitHeadResolvePending = this.#branchResolveActive?.cwd === activeRepoCache.effectiveGitCwd;
+		const gitHeadIsJjLike =
+			!this.#cachedBranchHasGitRepository &&
+			!gitHeadResolvePending &&
+			(gitBranch === "detached" || gitBranch === null);
 		if (includeGit && gitHeadIsJjLike) {
 			gitBranch = this.#getJjBranch(activeRepoCache.effectiveGitCwd) ?? gitBranch;
 		}
@@ -1458,7 +1785,7 @@ export class StatusLineComponent implements Component {
 						: separatorDef.endCaps.left
 					: "";
 			const capPrefix = separatorDef.endCaps?.useBgAsFg ? bgAnsi.replace("\x1b[48;", "\x1b[38;") : bgAnsi + sepAnsi;
-			const capText = cap ? `${capPrefix}${cap}\x1b[0m` : "";
+			const capText = cap ? `${capPrefix}${this.#focusedAgentId ? "\x1b[22m" : ""}${cap}\x1b[0m` : "";
 
 			let content = bgAnsi + fgAnsi;
 			content += ` ${parts.join(` ${sepAnsi}${sep}${fgAnsi} `)} `;

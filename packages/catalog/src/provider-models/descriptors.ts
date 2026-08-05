@@ -9,11 +9,13 @@ import type { ModelManagerConfig, ProviderCatalogEntry, ProviderDescriptor } fro
 import { googleModelManagerOptions, googleVertexModelManagerOptions } from "./google";
 import { ollamaCloudModelManagerOptions } from "./ollama";
 import {
+	aiandModelManagerOptions,
 	aimlApiModelManagerOptions,
 	alibabaCodingPlanModelManagerOptions,
 	alibabaTokenPlanModelManagerOptions,
 	anthropicModelManagerOptions,
 	basetenModelManagerOptions,
+	bedrockMantleModelManagerOptions,
 	cerebrasModelManagerOptions,
 	cloudflareAiGatewayModelManagerOptions,
 	coreWeaveModelManagerOptions,
@@ -21,6 +23,7 @@ import {
 	firepassModelManagerOptions,
 	fireworksModelManagerOptions,
 	githubCopilotModelManagerOptions,
+	gmiCloudModelManagerOptions,
 	groqModelManagerOptions,
 	huggingfaceModelManagerOptions,
 	kiloModelManagerOptions,
@@ -41,6 +44,8 @@ import {
 	qianfanModelManagerOptions,
 	qwenPortalModelManagerOptions,
 	sakanaModelManagerOptions,
+	siliconflowCnModelManagerOptions,
+	siliconflowModelManagerOptions,
 	syntheticModelManagerOptions,
 	togetherModelManagerOptions,
 	umansModelManagerOptions,
@@ -62,6 +67,14 @@ import {
 } from "./special";
 
 export const CATALOG_PROVIDERS = [
+	{
+		id: "aiand",
+		defaultModel: "moonshotai/kimi-k2.7-code",
+		envVars: ["AIAND_API_KEY"],
+		createModelManagerOptions: (config: ModelManagerConfig) => aiandModelManagerOptions(config),
+		dynamicModelsAuthoritative: true,
+		catalogDiscovery: { label: "ai&" },
+	},
 	{
 		id: "aimlapi",
 		defaultModel: "gpt-5.5-2026-04-23",
@@ -96,6 +109,13 @@ export const CATALOG_PROVIDERS = [
 	{
 		id: "amazon-bedrock",
 		defaultModel: "us.anthropic.claude-opus-4-8",
+	},
+	{
+		id: "bedrock-mantle",
+		defaultModel: "openai.gpt-5.6-terra",
+		envVars: ["AWS_BEARER_TOKEN_BEDROCK"],
+		createModelManagerOptions: (config: ModelManagerConfig) => bedrockMantleModelManagerOptions(config),
+		dynamicModelsAuthoritative: true,
 	},
 	{
 		id: "anthropic",
@@ -175,6 +195,14 @@ export const CATALOG_PROVIDERS = [
 		envVars: ["GITLAB_TOKEN"],
 		createModelManagerOptions: (config: ModelManagerConfig) => gitLabDuoWorkflowModelManagerOptions(config),
 		dynamicModelsAuthoritative: true,
+	},
+	{
+		id: "gmi-cloud",
+		defaultModel: "deepseek-ai/DeepSeek-V4-Flash",
+		envVars: ["GMI_API_KEY"],
+		createModelManagerOptions: (config: ModelManagerConfig) => gmiCloudModelManagerOptions(config),
+		dynamicModelsAuthoritative: true,
+		catalogDiscovery: { label: "GMI Cloud" },
 	},
 	{
 		id: "google",
@@ -368,6 +396,20 @@ export const CATALOG_PROVIDERS = [
 		createModelManagerOptions: (config: ModelManagerConfig) => sakanaModelManagerOptions(config),
 		dynamicModelsAuthoritative: true,
 		catalogDiscovery: { label: "Sakana AI" },
+	},
+	{
+		id: "siliconflow",
+		defaultModel: "zai-org/GLM-5.1",
+		envVars: ["SILICONFLOW_API_KEY"],
+		createModelManagerOptions: (config: ModelManagerConfig) => siliconflowModelManagerOptions(config),
+		dynamicModelsAuthoritative: true,
+	},
+	{
+		id: "siliconflow-cn",
+		defaultModel: "deepseek-ai/DeepSeek-V4-Pro",
+		envVars: ["SILICONFLOW_CN_API_KEY"],
+		createModelManagerOptions: (config: ModelManagerConfig) => siliconflowCnModelManagerOptions(config),
+		dynamicModelsAuthoritative: true,
 	},
 	{
 		id: "synthetic",

@@ -6,6 +6,7 @@ import {
 	setTerminalTitleState,
 } from "@oh-my-pi/pi-coding-agent/utils/title-generator";
 import { setTerminalHeadless } from "@oh-my-pi/pi-utils";
+import { mockWindowsConsoleTitle, type WindowsConsoleTitleMock } from "./terminal-title-test-utils";
 
 const LABEL = "my-project";
 
@@ -18,9 +19,9 @@ describe("buildTerminalTitleWithState", () => {
 		expect(buildTerminalTitleWithState(LABEL, "attention", 0, true)).toBe(`π ! ${LABEL}`);
 	});
 
-	it("animates spinner frames in the separator slot while working", () => {
-		const frame0 = buildTerminalTitleWithState(LABEL, "working", 0, true);
-		const frame1 = buildTerminalTitleWithState(LABEL, "working", 1, true);
+	it("animates spinner frames in the separator slot while working outside Windows", () => {
+		const frame0 = buildTerminalTitleWithState(LABEL, "working", 0, true, "linux");
+		const frame1 = buildTerminalTitleWithState(LABEL, "working", 1, true, "linux");
 		// The brand stays a bare `π`; only the separator between brand and label
 		// carries the spinner glyph, and it advances per frame.
 		expect(frame0).toBe(`π ⠋ ${LABEL}`);
@@ -28,16 +29,22 @@ describe("buildTerminalTitleWithState", () => {
 		expect(frame1).not.toBe(frame0);
 		// The frame index is taken modulo the frame count, so it never throws or
 		// produces an "undefined" separator for a large counter.
-		const wrapped = buildTerminalTitleWithState(LABEL, "working", 9999, true);
+		const wrapped = buildTerminalTitleWithState(LABEL, "working", 9999, true, "linux");
 		expect(wrapped.startsWith("π ")).toBe(true);
 		expect(wrapped.endsWith(` ${LABEL}`)).toBe(true);
 		expect(wrapped).not.toContain("undefined");
 	});
 
+	it("uses a static colon while working on Windows", () => {
+		expect(buildTerminalTitleWithState(LABEL, "working", 0, true, "win32")).toBe(`π : ${LABEL}`);
+		expect(buildTerminalTitleWithState(LABEL, "working", 1, true, "win32")).toBe(`π : ${LABEL}`);
+		expect(buildTerminalTitleWithState(undefined, "working", 1, true, "win32")).toBe("π :");
+	});
+
 	it("keeps the state visible as a trailing separator when there is no label", () => {
 		expect(buildTerminalTitleWithState(undefined, "idle", 0, true)).toBe("π >");
 		expect(buildTerminalTitleWithState(undefined, "attention", 0, true)).toBe("π !");
-		expect(buildTerminalTitleWithState(undefined, "working", 0, true)).toBe("π ⠋");
+		expect(buildTerminalTitleWithState(undefined, "working", 0, true, "linux")).toBe("π ⠋");
 	});
 
 	it("renders the pre-state `π: label` layout when disabled, regardless of state", () => {
@@ -74,6 +81,7 @@ describe("disposeTerminalTitleState", () => {
 	let stdoutSpy: { mockRestore(): void } | undefined;
 	let prevHeadless = false;
 	let ttyDescriptor: PropertyDescriptor | undefined;
+	let windowsTitleMock: WindowsConsoleTitleMock | undefined;
 
 	beforeEach(() => {
 		vi.useFakeTimers();
@@ -82,6 +90,7 @@ describe("disposeTerminalTitleState", () => {
 		ttyDescriptor = Object.getOwnPropertyDescriptor(process.stdout, "isTTY");
 		Object.defineProperty(process.stdout, "isTTY", { value: true, configurable: true });
 
+		windowsTitleMock = mockWindowsConsoleTitle();
 		writes = [];
 		stdoutSpy = spyOn(process.stdout, "write").mockImplementation((chunk: unknown) => {
 			writes.push(typeof chunk === "string" ? chunk : new TextDecoder().decode(chunk as Uint8Array));
@@ -99,6 +108,8 @@ describe("disposeTerminalTitleState", () => {
 		// A started interval must never leak between tests.
 		disposeTerminalTitleState();
 		stdoutSpy?.mockRestore();
+		windowsTitleMock?.restore();
+		windowsTitleMock = undefined;
 		stdoutSpy = undefined;
 		if (ttyDescriptor) Object.defineProperty(process.stdout, "isTTY", ttyDescriptor);
 		else Reflect.deleteProperty(process.stdout, "isTTY");
@@ -106,28 +117,31 @@ describe("disposeTerminalTitleState", () => {
 		vi.useRealTimers();
 	});
 
-	it("stops the spinner so no further OSC-title write fires on a tick after dispose", () => {
-		// CONTRACT (the fix): entering `working` arms the spinner interval; once
-		// `disposeTerminalTitleState()` runs, advancing the clock across many tick
-		// periods must produce ZERO additional OSC-title writes. A pending tick
-		// re-emitting the title after teardown is exactly the shell-tab leak.
-		setTerminalTitleState("working");
+	it.skipIf(process.platform === "win32")(
+		"stops the spinner so no further OSC-title write fires on a tick after dispose",
+		() => {
+			// CONTRACT (the fix): entering `working` arms the spinner interval; once
+			// `disposeTerminalTitleState()` runs, advancing the clock across many tick
+			// periods must produce ZERO additional OSC-title writes. A pending tick
+			// re-emitting the title after teardown is exactly the shell-tab leak.
+			setTerminalTitleState("working");
 
-		// Control: BEFORE dispose the interval is live — advancing the clock across
-		// several 80ms tick periods DOES emit further OSC-title writes (proves the
-		// timer was actually running, so the post-dispose silence is meaningful and
-		// not a headless/TTY misconfiguration masking all writes).
-		writes.length = 0;
-		vi.advanceTimersByTime(400);
-		const ticksWhileLive = writes.filter(payload => payload.includes(OSC_TITLE_SEQ)).length;
-		expect(ticksWhileLive).toBeGreaterThan(0);
+			// Control: BEFORE dispose the interval is live — advancing the clock across
+			// several 80ms tick periods DOES emit further OSC-title writes (proves the
+			// timer was actually running, so the post-dispose silence is meaningful and
+			// not a headless/TTY misconfiguration masking all writes).
+			writes.length = 0;
+			vi.advanceTimersByTime(400);
+			const ticksWhileLive = writes.filter(payload => payload.includes(OSC_TITLE_SEQ)).length;
+			expect(ticksWhileLive).toBeGreaterThan(0);
 
-		// The fix under test.
-		disposeTerminalTitleState();
+			// The fix under test.
+			disposeTerminalTitleState();
 
-		// After dispose: advance far past many tick periods. No tick may fire.
-		writes.length = 0;
-		vi.advanceTimersByTime(4000);
-		expect(writes.filter(payload => payload.includes(OSC_TITLE_SEQ))).toEqual([]);
-	});
+			// After dispose: advance far past many tick periods. No tick may fire.
+			writes.length = 0;
+			vi.advanceTimersByTime(4000);
+			expect(writes.filter(payload => payload.includes(OSC_TITLE_SEQ))).toEqual([]);
+		},
+	);
 });

@@ -20,28 +20,53 @@ import { cleanModelName } from "./utils";
 
 const OPENAI_GA_COMPUTER_MODEL_RE = /^gpt-5\.(?:[4-9]|[1-9]\d)(?:[.-]|$)/i;
 
-function supportsOpenAIGAComputerUse(spec: ModelSpec<Api>): boolean {
-	if (spec.supportsComputerUse !== undefined) return spec.supportsComputerUse;
-	if (
-		spec.api !== "openai-responses" &&
-		spec.api !== "openai-codex-responses" &&
-		spec.api !== "azure-openai-responses"
-	) {
+function isDirectOpenAIResponsesEndpoint(spec: ModelSpec<Api>): boolean {
+	if (spec.api === "openai-responses") {
+		if (spec.provider !== "openai") return false;
+		if (!spec.baseUrl) return true;
+		try {
+			const url = new URL(spec.baseUrl);
+			return url.protocol === "https:" && url.hostname === "api.openai.com";
+		} catch {
+			return false;
+		}
+	}
+	if (spec.api !== "azure-openai-responses" || (spec.provider !== "azure" && spec.provider !== "azure-openai")) {
 		return false;
 	}
-	if (spec.api !== "azure-openai-responses" && spec.provider !== "openai" && spec.provider !== "openai-codex") {
+	if (!spec.baseUrl) return true;
+	try {
+		const url = new URL(spec.baseUrl);
+		return (
+			url.protocol === "https:" &&
+			(url.hostname.endsWith(".openai.azure.com") || url.hostname === "models.inference.ai.azure.com")
+		);
+	} catch {
 		return false;
 	}
+}
+
+function explicitComputerUseConfig(spec: ModelSpec<Api>): boolean | undefined {
+	return "supportsComputerUseConfig" in spec
+		? (spec as Model<Api>).supportsComputerUseConfig
+		: spec.supportsComputerUse;
+}
+
+function supportsOpenAIGAComputerUse(spec: ModelSpec<Api>, explicitSupport: boolean | undefined): boolean {
+	if (explicitSupport !== undefined) return explicitSupport;
+	if (!isDirectOpenAIResponsesEndpoint(spec)) return false;
 	return OPENAI_GA_COMPUTER_MODEL_RE.test(spec.requestModelId ?? spec.id);
 }
 
 export function buildModel<TApi extends Api>(spec: ModelSpec<TApi>): Model<TApi> {
 	const compat = buildCompat(spec) as CompatOf<TApi>;
+	const supportsComputerUseConfig = explicitComputerUseConfig(spec);
 	return {
 		...spec,
 		name: cleanModelName(spec.name),
 		thinking: resolveModelThinking(spec, compat),
-		supportsComputerUse: supportsOpenAIGAComputerUse(spec),
+		supportsComputerUse: supportsOpenAIGAComputerUse(spec, supportsComputerUseConfig),
+		supportsComputerUseConfig,
 		compat,
 		compatConfig: spec.compat,
 	} as Model<TApi>;

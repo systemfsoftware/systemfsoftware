@@ -511,12 +511,14 @@ struct SizeFilter {
 	bytes:    u64,
 }
 
+#[cfg_attr(not(unix), allow(dead_code))]
 #[derive(Clone, Copy)]
 enum OwnerSide {
 	Include(u32),
 	Exclude(u32),
 }
 
+#[cfg_attr(not(unix), allow(dead_code))]
 #[derive(Clone, Copy)]
 struct OwnerMatcher {
 	user:  Option<OwnerSide>,
@@ -1183,6 +1185,7 @@ fn matches_owner_filters(filters: &[OwnerMatcher], _metadata: Option<&Metadata>)
 	filters.is_empty()
 }
 
+#[cfg(unix)]
 const fn owner_side_matches(side: OwnerSide, actual: u32) -> bool {
 	match side {
 		OwnerSide::Include(expected) => actual == expected,

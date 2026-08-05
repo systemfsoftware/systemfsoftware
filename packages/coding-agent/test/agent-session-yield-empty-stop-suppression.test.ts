@@ -210,6 +210,19 @@ describe("AgentSession yield empty-stop suppression", () => {
 		expect(mock.calls).toHaveLength(1);
 		expect(reminderMessages(session.agent.state.messages)).toHaveLength(0);
 
+		const observerEvents: string[] = [];
+		const observerSettled = Promise.withResolvers<void>();
+		session.subscribe(event => {
+			if (event.type === "agent_end") observerEvents.push(`agent_end:${mock.calls.length}`);
+		});
+		session.setIrcWakeTurnObserver(() => {
+			observerEvents.push("started");
+			return () => {
+				observerEvents.push(`finished:${mock.calls.length}`);
+				observerSettled.resolve();
+			};
+		});
+
 		const outcome = await session.deliverIrcMessage({
 			id: "irc-empty-stop-after-yield",
 			from: "peer",
@@ -219,9 +232,11 @@ describe("AgentSession yield empty-stop suppression", () => {
 		} as IrcMessage);
 		expect(outcome).toBe("woken");
 		await session.waitForIdle();
+		await observerSettled.promise;
 
 		expect(mock.calls).toHaveLength(3);
 		expect(reminderMessages(session.agent.state.messages)).toHaveLength(1);
 		expect(assistantText(session.agent.state.messages)).toContain("recovered after IRC retry");
+		expect(observerEvents).toEqual(["started", "agent_end:3", "finished:3"]);
 	});
 });

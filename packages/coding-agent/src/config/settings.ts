@@ -11,6 +11,7 @@
  *   const isolated = Settings.isolated({ "compaction.enabled": false });
  */
 
+import { randomUUID } from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -21,12 +22,15 @@ import {
 	getAgentDir,
 	getLastChangelogVersionPath,
 	getProjectDir,
+	hasFsCode,
 	isEnoent,
 	logger,
 	MAIN_CONFIG_FILENAMES,
 	procmgr,
 	setWorktreesDir,
+	toError,
 } from "@oh-my-pi/pi-utils";
+import { withFileLock } from "@oh-my-pi/pi-utils/file-lock";
 import { JSONC, YAML } from "bun";
 import { invalidate as invalidateCapabilityFsCache } from "../capability/fs";
 import { type Settings as SettingsCapabilityItem, settingsCapability } from "../capability/settings";
@@ -36,8 +40,8 @@ import { isLightTheme, setAutoThemeMapping, setColorBlindMode, setSymbolPreset }
 import { AgentStorage } from "../session/agent-storage";
 import { AUTO_IMAGE_PROVIDER_ORDER, isImageProviderId } from "../tools/image-providers";
 import { type EditMode, normalizeEditMode } from "../utils/edit-mode";
+import { INSPECT_IMAGE_MODES } from "../utils/inspect-image-mode";
 import { isSearchProviderId, SEARCH_PROVIDER_ORDER } from "../web/search/types";
-import { withFileLock } from "./file-lock";
 import {
 	type BashInterceptorRule,
 	type GroupPrefix,
@@ -60,6 +64,12 @@ export * from "./settings-schema";
 export interface RawSettings {
 	[key: string]: unknown;
 }
+
+type YamlLoadResult =
+	| { kind: "missing" }
+	| { kind: "loaded"; settings: RawSettings }
+	| { kind: "invalid"; error: unknown; backupPath?: string }
+	| { kind: "unreadable"; error: unknown };
 
 export interface SettingsOptions {
 	/** Current working directory for project settings discovery */
@@ -319,8 +329,16 @@ export class Settings {
 	#global: RawSettings = {};
 	/** Project settings from .claude/settings.yml etc */
 	#project: RawSettings = {};
+	/** Last successfully loaded native .omp/config.yml contents. */
+	#projectFileSettings: RawSettings = {};
+	/** Logical config paths whose malformed targets were moved aside. */
+	#quarantinedYamlTargets = new Map<string, string>();
 	/** Extra config.yml-style overlays passed by CLI */
 	#configOverlay: RawSettings = {};
+	/** Project settings file that most recently supplied shellPath. */
+	#projectShellPathSource: string | undefined;
+	/** Explicit config overlay that most recently supplied shellPath. */
+	#overlayShellPathSource: string | undefined;
 	/** Runtime overrides (not persisted) */
 	#overrides: RawSettings = {};
 	/** Merged view (global + project + overrides) */
@@ -592,8 +610,10 @@ export class Settings {
 		cloned.#configPath = this.#configPath;
 		cloned.#global = structuredClone(this.#global);
 		cloned.#project = this.#persist ? await cloned.#loadProjectSettings() : structuredClone(this.#project);
+		if (!this.#persist) cloned.#projectShellPathSource = this.#projectShellPathSource;
 		cloned.#configFiles = [...this.#configFiles];
 		cloned.#configOverlay = structuredClone(this.#configOverlay);
+		cloned.#overlayShellPathSource = this.#overlayShellPathSource;
 		cloned.#overrides = this.#buildOriginalOverrides();
 		cloned.#rebuildMerged();
 		cloned.#fireAllHooks();
@@ -652,7 +672,17 @@ export class Settings {
 	 */
 	getShellConfig() {
 		const shell = this.get("shellPath");
-		return procmgr.getShellConfig(shell);
+		let configSource = this.#configPath ?? path.join(this.#agentDir, MAIN_CONFIG_FILENAMES[0]);
+		if (Object.hasOwn(this.#project, "shellPath")) {
+			configSource = this.#projectShellPathSource ?? "the active project configuration";
+		}
+		if (Object.hasOwn(this.#configOverlay, "shellPath")) {
+			configSource = this.#overlayShellPathSource ?? "the active config overlay";
+		}
+		if (Object.hasOwn(this.#overrides, "shellPath")) {
+			configSource = "the runtime settings override";
+		}
+		return procmgr.getShellConfig(shell, { configSource });
 	}
 
 	/**
@@ -1004,27 +1034,18 @@ export class Settings {
 	// ─────────────────────────────────────────────────────────────────────────
 
 	async #load(): Promise<Settings> {
-		// Project settings load (loadCapability scans cwd) is independent of the
-		// persist chain (storage open → legacy migration → global config read), so
-		// kick it off first and await after the persist chain completes. The
-		// persist steps remain sequential: existing config discovery decides
-		// whether migration may write config.yml before the global config is read;
-		// migration's db fallback needs #storage opened.
-		const projectPromise = this.#loadProjectSettings();
+		// Project settings discovery is independent of the persist chain, while
+		// the persist steps themselves remain sequential. Wait for both branches
+		// to settle so simultaneous failures produce one catchable error without
+		// abandoning the other rejection.
+		const [globalResult, projectResult] = await Promise.allSettled([
+			this.#persist ? this.#loadGlobalSettings() : Promise.resolve(),
+			this.#loadProjectSettings(),
+		]);
+		if (globalResult.status === "rejected") throw globalResult.reason;
+		if (projectResult.status === "rejected") throw projectResult.reason;
 
-		if (this.#persist) {
-			this.#storage = await AgentStorage.open(getAgentDbPath(this.#agentDir));
-			const existingConfig = await this.#loadExistingMainYaml();
-			if (existingConfig) {
-				this.#global = existingConfig;
-			} else {
-				await this.#migrateFromLegacy();
-				this.#global = await this.#loadYaml(this.#configPath!);
-			}
-			await this.#seedLastChangelogVersionMarker();
-		}
-
-		this.#project = await projectPromise;
+		this.#project = projectResult.value;
 		this.#configOverlay = await this.#loadConfigOverlays();
 
 		// Build merged view (global → project → overrides; project wins over global)
@@ -1032,45 +1053,161 @@ export class Settings {
 		this.#fireAllHooks();
 		return this;
 	}
-
-	async #loadReadOnly(): Promise<Settings> {
-		const projectPromise = this.#loadProjectSettings();
-
+	async #loadGlobalSettings(): Promise<void> {
+		this.#storage = await AgentStorage.open(getAgentDbPath(this.#agentDir));
 		const existingConfig = await this.#loadExistingMainYaml();
 		if (existingConfig) {
 			this.#global = existingConfig;
+		} else {
+			await this.#migrateFromLegacy();
+			this.#global = await this.#loadYaml(this.#configPath!);
+		}
+		await this.#seedLastChangelogVersionMarker();
+	}
+
+	async #loadReadOnly(): Promise<Settings> {
+		const [globalResult, projectResult] = await Promise.allSettled([
+			this.#loadExistingMainYaml(),
+			this.#loadProjectSettings(),
+		]);
+		if (globalResult.status === "rejected") throw globalResult.reason;
+		if (projectResult.status === "rejected") throw projectResult.reason;
+		if (globalResult.value) {
+			this.#global = globalResult.value;
 		}
 
-		this.#project = await projectPromise;
+		this.#project = projectResult.value;
 		this.#configOverlay = await this.#loadConfigOverlays();
 		this.#rebuildMerged();
 		return this;
 	}
 
 	async #loadYaml(filePath: string): Promise<RawSettings> {
-		const loaded = await this.#loadYamlIfPresent(filePath);
+		const loaded = await this.#loadYamlIfPresentForStartup(filePath);
 		return loaded ?? {};
 	}
 
-	async #loadYamlIfPresent(filePath: string): Promise<RawSettings | null> {
+	async #loadYamlIfPresent(filePath: string): Promise<YamlLoadResult> {
 		let content: string;
 		try {
-			content = await Bun.file(filePath).text();
+			content = await fs.promises.readFile(filePath, "utf8");
 		} catch (error) {
-			if (isEnoent(error)) return null;
-			logger.warn("Settings: failed to load", { path: filePath, error: String(error) });
-			return {};
+			if (isEnoent(error)) return { kind: "missing" };
+			return { kind: "unreadable", error };
 		}
 
+		let parsed: unknown;
 		try {
-			const parsed = YAML.parse(content);
-			if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-				return {};
-			}
-			return this.#migrateRawSettings(parsed as RawSettings);
+			parsed = YAML.parse(content);
 		} catch (error) {
-			logger.warn("Settings: failed to load", { path: filePath, error: String(error) });
-			return {};
+			return { kind: "invalid", error };
+		}
+		if (parsed === null || parsed === undefined) {
+			return { kind: "loaded", settings: {} };
+		}
+		if (typeof parsed !== "object" || Array.isArray(parsed)) {
+			return {
+				kind: "invalid",
+				error: new Error("Settings YAML must contain a mapping at the document root"),
+			};
+		}
+		return { kind: "loaded", settings: this.#migrateRawSettings(parsed as RawSettings) };
+	}
+
+	async #resolveYamlWritePath(filePath: string): Promise<string> {
+		const quarantinedTarget = this.#quarantinedYamlTargets.get(filePath);
+		if (quarantinedTarget) return quarantinedTarget;
+		try {
+			return await fs.promises.realpath(filePath);
+		} catch (error) {
+			if (!isEnoent(error)) throw error;
+		}
+
+		// realpath fails for a dangling symlink. Resolve its immediate target so
+		// recreating a quarantined config repairs the target without replacing
+		// the user-managed link.
+		try {
+			const stat = await fs.promises.lstat(filePath);
+			if (stat.isSymbolicLink()) {
+				const target = await fs.promises.readlink(filePath);
+				return path.resolve(path.dirname(filePath), target);
+			}
+		} catch (error) {
+			if (!isEnoent(error)) throw error;
+		}
+		return path.resolve(filePath);
+	}
+
+	async #withYamlWriteLock<T>(filePath: string, fn: (writePath: string) => Promise<T>): Promise<T> {
+		const writePath = await this.#resolveYamlWritePath(filePath);
+		return await withFileLock(writePath, async () => fn(writePath));
+	}
+
+	async #loadYamlIfPresentForStartup(filePath: string): Promise<RawSettings | null> {
+		const result = await this.#loadYamlIfPresent(filePath);
+		if (result.kind !== "invalid" || !this.#persist) {
+			return this.#unwrapYamlLoadResult(filePath, result);
+		}
+		return await this.#withYamlWriteLock(filePath, async writePath =>
+			this.#loadYamlIfPresentForWriteLocked(filePath, writePath, true),
+		);
+	}
+
+	/**
+	 * Read a YAML settings file while its write lock is held. Invalid files are
+	 * moved aside before reporting failure, so a later write can never truncate
+	 * the only copy of the user's configuration.
+	 */
+	async #loadYamlIfPresentForWriteLocked(
+		filePath: string,
+		writePath: string,
+		rejectMissing = false,
+	): Promise<RawSettings | null> {
+		let result = await this.#loadYamlIfPresent(writePath);
+		if (result.kind === "missing" && rejectMissing) {
+			throw new Error(
+				`Settings config was invalid before locking and is now missing: ${filePath}; another process may have moved it aside`,
+			);
+		}
+		if (result.kind === "invalid") {
+			result = await this.#quarantineInvalidYamlLocked(writePath, result);
+			this.#quarantinedYamlTargets.set(filePath, writePath);
+		}
+		return this.#unwrapYamlLoadResult(filePath, result);
+	}
+
+	async #quarantineInvalidYamlLocked(
+		filePath: string,
+		result: Extract<YamlLoadResult, { kind: "invalid" }>,
+	): Promise<Extract<YamlLoadResult, { kind: "invalid" }>> {
+		const backupPath = `${filePath}.broken-${Date.now()}-${process.pid}-${randomUUID()}`;
+		try {
+			await fs.promises.rename(filePath, backupPath);
+		} catch (error) {
+			throw new Error(
+				`Settings config is invalid and could not be moved aside: ${filePath}; refusing to overwrite it: ${String(error)}`,
+			);
+		}
+		logger.warn("Settings: moved invalid config aside", {
+			path: filePath,
+			backupPath,
+			error: String(result.error),
+		});
+		return { ...result, backupPath };
+	}
+
+	#unwrapYamlLoadResult(filePath: string, result: YamlLoadResult): RawSettings | null {
+		switch (result.kind) {
+			case "missing":
+				return null;
+			case "loaded":
+				return result.settings;
+			case "invalid":
+				throw new Error(
+					`Settings config is invalid: ${filePath}${result.backupPath ? ` (moved to ${result.backupPath})` : ""}: ${String(result.error)}`,
+				);
+			case "unreadable":
+				throw new Error(`Failed to read settings config ${filePath}: ${String(result.error)}`);
 		}
 	}
 
@@ -1078,7 +1215,7 @@ export class Settings {
 		if (!this.#configPath) return null;
 		for (const filename of MAIN_CONFIG_FILENAMES) {
 			const configPath = path.join(this.#agentDir, filename);
-			const loaded = await this.#loadYamlIfPresent(configPath);
+			const loaded = await this.#loadYamlIfPresentForStartup(configPath);
 			if (loaded) {
 				this.#configPath = configPath;
 				return loaded;
@@ -1089,29 +1226,38 @@ export class Settings {
 	}
 
 	async #loadProjectSettings(): Promise<RawSettings> {
+		this.#projectShellPathSource = undefined;
+		let merged: RawSettings = {};
 		try {
 			const result = await loadCapability(settingsCapability.id, { cwd: this.#cwd });
-			let merged: RawSettings = {};
 			for (const item of result.items as SettingsCapabilityItem[]) {
 				if (item.level === "project") {
 					merged = this.#deepMerge(merged, item.data as RawSettings);
+					if (Object.hasOwn(item.data, "shellPath")) this.#projectShellPathSource = item.path;
 				}
 			}
-			const nativeProject = await this.#loadYaml(path.join(this.#cwd, ".omp", "config.yml"));
-			const nativeModelRoles = getByPath(nativeProject, ["modelRoles"]);
-			if (nativeModelRoles !== undefined) {
-				merged = this.#deepMerge(merged, { modelRoles: nativeModelRoles });
-			}
-			return this.#migrateRawSettings(merged);
 		} catch {
-			return {};
+			this.#projectShellPathSource = undefined;
+			// Capability discovery is best-effort; the native project config below
+			// remains authoritative for its model-role layer and must not be hidden.
 		}
+		const projectConfigPath = path.join(this.#cwd, ".omp", "config.yml");
+		const nativeProject = await this.#loadYaml(projectConfigPath);
+		this.#projectFileSettings = structuredClone(nativeProject);
+		const nativeModelRoles = getByPath(nativeProject, ["modelRoles"]);
+		if (nativeModelRoles !== undefined) {
+			merged = this.#deepMerge(merged, { modelRoles: nativeModelRoles });
+		}
+		return this.#migrateRawSettings(merged);
 	}
 
 	async #loadConfigOverlays(): Promise<RawSettings> {
+		this.#overlayShellPathSource = undefined;
 		let merged: RawSettings = {};
 		for (const filePath of this.#configFiles) {
-			merged = this.#deepMerge(merged, await this.#loadOverlayYaml(filePath));
+			const overlay = await this.#loadOverlayYaml(filePath);
+			merged = this.#deepMerge(merged, overlay);
+			if (Object.hasOwn(overlay, "shellPath")) this.#overlayShellPathSource = filePath;
 		}
 		return merged;
 	}
@@ -1176,7 +1322,7 @@ export class Settings {
 		// 3. Write merged settings
 		if (migrated && Object.keys(settings).length > 0) {
 			try {
-				await Bun.write(this.#configPath, YAML.stringify(settings, null, 2));
+				await this.#writeYamlAtomically(this.#configPath, settings);
 				logger.debug("Settings: migrated to config.yml", { path: this.#configPath });
 			} catch {}
 		}
@@ -1200,6 +1346,31 @@ export class Settings {
 		}
 		delete raw.lastChangelogVersion;
 
+		// collapseChangelog (boolean) -> startup.changelogMode (enum). Preserve
+		// every explicit legacy choice while giving new installs the schema's
+		// "summary" default: true -> summary, false -> expanded. A separately
+		// configured new mode always wins.
+		const startupObj = isRecord(raw.startup) ? (raw.startup as Record<string, unknown>) : undefined;
+		const legacyCollapseChangelog = typeof raw.collapseChangelog === "boolean" ? raw.collapseChangelog : undefined;
+		const flatChangelogMode = raw["startup.changelogMode"];
+		const normalizedFlatChangelogMode =
+			flatChangelogMode === "summary" || flatChangelogMode === "expanded" || flatChangelogMode === "hidden"
+				? flatChangelogMode
+				: undefined;
+		if (legacyCollapseChangelog !== undefined || normalizedFlatChangelogMode !== undefined) {
+			if (!startupObj) {
+				raw.startup = {};
+			}
+			const target = raw.startup as Record<string, unknown>;
+			if (target.changelogMode === undefined) {
+				target.changelogMode =
+					normalizedFlatChangelogMode ??
+					(legacyCollapseChangelog !== undefined ? (legacyCollapseChangelog ? "summary" : "expanded") : undefined);
+			}
+		}
+		delete raw.collapseChangelog;
+		delete raw["startup.changelogMode"];
+
 		// ask.timeout: ms -> seconds (if value > 1000, it's old ms format)
 		if (raw.ask && typeof (raw.ask as Record<string, unknown>).timeout === "number") {
 			const oldValue = (raw.ask as Record<string, unknown>).timeout as number;
@@ -1219,6 +1390,40 @@ export class Settings {
 				const slot = isLightTheme(oldTheme) ? "light" : "dark";
 				raw.theme = { [slot]: oldTheme };
 			}
+		}
+
+		// inspect_image.enabled (boolean) -> inspect_image.mode (enum). Explicit
+		// user choices are preserved: true -> "on", false -> "off". Configs with
+		// no legacy key get the new "auto" default, which hides the tool for
+		// models with native image input. Handles nested and quoted-dotted
+		// ("inspect_image.enabled") sources; the target is always the nested
+		// form, which is the only shape the resolver reads.
+		const inspectImageObj = isRecord(raw.inspect_image) ? (raw.inspect_image as Record<string, unknown>) : undefined;
+		const legacyEnabled =
+			typeof inspectImageObj?.enabled === "boolean"
+				? inspectImageObj.enabled
+				: typeof raw["inspect_image.enabled"] === "boolean"
+					? (raw["inspect_image.enabled"] as boolean)
+					: undefined;
+		if (legacyEnabled !== undefined) {
+			if (!inspectImageObj) {
+				raw.inspect_image = {};
+			}
+			const target = raw.inspect_image as Record<string, unknown>;
+			const flatMode = raw["inspect_image.mode"];
+			if (target.mode === undefined) {
+				// A quoted-dotted explicit mode wins over the legacy boolean but
+				// must be normalized into the nested form the resolver reads.
+				target.mode =
+					typeof flatMode === "string" && (INSPECT_IMAGE_MODES as readonly string[]).includes(flatMode)
+						? flatMode
+						: legacyEnabled
+							? "on"
+							: "off";
+			}
+			delete target.enabled;
+			delete raw["inspect_image.enabled"];
+			delete raw["inspect_image.mode"];
 		}
 
 		// task.isolation.enabled (boolean) -> task.isolation.mode (enum)
@@ -1683,6 +1888,72 @@ export class Settings {
 	// Saving
 	// ─────────────────────────────────────────────────────────────────────────
 
+	async #writeYamlAtomically(filePath: string, settings: RawSettings): Promise<void> {
+		const tempPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
+		let removeTemp = false;
+		try {
+			const handle = await fs.promises.open(tempPath, "wx", 0o600);
+			removeTemp = true;
+			try {
+				await handle.writeFile(YAML.stringify(settings, null, 2), "utf8");
+				await handle.sync();
+			} finally {
+				await handle.close();
+			}
+			try {
+				await fs.promises.rename(tempPath, filePath);
+			} catch (error) {
+				if (!hasFsCode(error, "EPERM")) throw error;
+				await this.#replaceYamlAfterEperm(tempPath, filePath, error);
+			}
+			removeTemp = false;
+		} finally {
+			if (removeTemp) {
+				await fs.promises.rm(tempPath, { force: true }).catch(() => {});
+			}
+		}
+	}
+	async #replaceYamlAfterEperm(tempPath: string, filePath: string, renameError: unknown): Promise<void> {
+		const backupPath = `${filePath}.${process.pid}.${randomUUID()}.bak`;
+		try {
+			await fs.promises.rename(filePath, backupPath);
+		} catch (error) {
+			if (isEnoent(error)) {
+				await fs.promises.rename(tempPath, filePath);
+				return;
+			}
+			throw renameError;
+		}
+
+		try {
+			await fs.promises.rename(tempPath, filePath);
+		} catch (replaceError) {
+			try {
+				await fs.promises.rename(backupPath, filePath);
+			} catch (rollbackError) {
+				throw new Error(
+					`Failed to replace settings file after EPERM (original: ${toError(renameError).message}; retry: ${
+						toError(replaceError).message
+					}; rollback: ${toError(rollbackError).message})`,
+					{ cause: toError(renameError) },
+				);
+			}
+			throw replaceError;
+		}
+
+		try {
+			await fs.promises.rm(backupPath);
+		} catch (error) {
+			if (!isEnoent(error)) {
+				logger.warn("Settings: failed to remove atomic-write backup", {
+					path: filePath,
+					backupPath,
+					error: toError(error).message,
+				});
+			}
+		}
+	}
+
 	#queueSave(): void {
 		if (!this.#persist || !this.#configPath) return;
 
@@ -1717,9 +1988,13 @@ export class Settings {
 		this.#modifiedGlobalModelRoles.clear();
 
 		try {
-			await withFileLock(configPath, async () => {
-				// Re-read to preserve external changes
-				const current = await this.#loadYaml(configPath);
+			await this.#withYamlWriteLock(configPath, async writePath => {
+				// Re-read to preserve external changes. If this instance moved a
+				// malformed file aside, recover from its last in-memory state
+				// rather than recreating the config from only the pending path.
+				const loaded = await this.#loadYamlIfPresentForWriteLocked(configPath, writePath);
+				const current =
+					loaded ?? (this.#quarantinedYamlTargets.has(configPath) ? structuredClone(this.#global) : {});
 
 				// Apply only our modified whole-value paths
 				for (const modPath of modifiedPaths) {
@@ -1765,10 +2040,10 @@ export class Settings {
 
 				// Update our global with any external changes we preserved
 				this.#global = current;
-				await Bun.write(configPath, YAML.stringify(this.#global, null, 2));
+				await this.#writeYamlAtomically(writePath, this.#global);
+				this.#quarantinedYamlTargets.delete(configPath);
 				// These pending roles were included in this write. Remove each
-				// only if no newer local change arrived while Bun.write was in
-				// flight; a newer value still needs the queued follow-up save.
+				// only if no newer local change arrived while the write was in flight.
 				const globalRolesAfterWrite = this.#modelRolesFromLayer(this.#global);
 				for (const role of rolesToPreserve) {
 					if (latestGlobalRoles[role] === globalRolesAfterWrite[role]) {
@@ -1785,6 +2060,8 @@ export class Settings {
 			for (const role of modifiedModelRoles) {
 				this.#modifiedGlobalModelRoles.add(role);
 			}
+			this.#rebuildMerged();
+			throw error;
 		}
 
 		this.#rebuildMerged();
@@ -1818,8 +2095,11 @@ export class Settings {
 
 		try {
 			await fs.promises.mkdir(path.dirname(projectConfigPath), { recursive: true });
-			await withFileLock(projectConfigPath, async () => {
-				const projectSettings = await this.#loadYaml(projectConfigPath);
+			await this.#withYamlWriteLock(projectConfigPath, async writePath => {
+				const loaded = await this.#loadYamlIfPresentForWriteLocked(projectConfigPath, writePath);
+				const projectSettings =
+					loaded ??
+					(this.#quarantinedYamlTargets.has(projectConfigPath) ? structuredClone(this.#projectFileSettings) : {});
 
 				const projectRoles = getByPath(this.#project, ["modelRoles"]);
 				for (const role of modifiedModelRoles) {
@@ -1827,7 +2107,9 @@ export class Settings {
 					setByPath(projectSettings, ["modelRoles", role], value);
 				}
 
-				await Bun.write(projectConfigPath, YAML.stringify(projectSettings, null, 2));
+				await this.#writeYamlAtomically(writePath, projectSettings);
+				this.#projectFileSettings = structuredClone(projectSettings);
+				this.#quarantinedYamlTargets.delete(projectConfigPath);
 			});
 			invalidateCapabilityFsCache(projectConfigPath);
 		} catch (error) {

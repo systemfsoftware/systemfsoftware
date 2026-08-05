@@ -154,9 +154,11 @@ impl FileHandling {
 				self.header_printer.print(display_name.as_str());
 			}
 
+			// pi-uutils: a closed downstream reader must end the follow loop
+			// silently (SIGPIPE semantics), not as a printed tail error.
 			let mut writer = BufWriter::new(pi_uutils_ctx::stdout().lock());
-			chunks.print(&mut writer)?;
-			writer.flush()?;
+			chunks.print(&mut writer).map_err(crate::map_output_error)?;
+			writer.flush().map_err(crate::map_output_error)?;
 
 			self.last.replace(path.to_owned());
 			self.update_metadata(path, None);

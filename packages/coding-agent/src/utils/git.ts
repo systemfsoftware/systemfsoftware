@@ -197,12 +197,14 @@ const GIT_NON_INTERACTIVE_ENV = {
 	GIT_ASKPASS: "true",
 	GIT_EDITOR: "true",
 	GIT_TERMINAL_PROMPT: "0",
+	LC_ALL: undefined,
+	LC_MESSAGES: "C",
 	SSH_ASKPASS: "/usr/bin/false",
-} satisfies Record<string, string>;
+} satisfies Record<string, string | undefined>;
 const GH_NON_INTERACTIVE_ENV = {
 	...GIT_NON_INTERACTIVE_ENV,
 	GH_PROMPT_DISABLED: "1",
-} satisfies Record<string, string>;
+} satisfies Record<string, string | undefined>;
 
 /** Default deadline for git and gh subprocesses spawned by the coding agent. */
 export const GIT_COMMAND_TIMEOUT_MS = 5 * 60 * 1000;
@@ -215,6 +217,14 @@ export const GIT_COMMAND_TIMEOUT_MS = 5 * 60 * 1000;
 export const GIT_NETWORK_TIMEOUT_MS = 30 * 60 * 1000;
 /** Maximum captured stdout or stderr bytes retained from git and gh subprocesses. */
 export const GIT_COMMAND_OUTPUT_LIMIT_BYTES = 8 * 1024 * 1024;
+/**
+ * Deadline for synchronous git plumbing commands launched via
+ * {@link gitSpawnSyncText}. These run on the render path (e.g. reftable HEAD
+ * resolution), so the deadline is short: a command that has not exited by then
+ * is killed and reported as {@link GIT_COMMAND_TIMEOUT_EXIT_CODE} so the caller
+ * degrades instead of freezing the UI indefinitely.
+ */
+export const GIT_SPAWN_SYNC_TIMEOUT_MS = 5_000;
 
 const GIT_COMMAND_TIMEOUT_EXIT_CODE = 124;
 // Exit code returned when the `git` binary cannot be launched at all (spawn
@@ -378,14 +388,33 @@ function normalizeStdin(input: CommandOptions["stdin"]): "ignore" | Uint8Array {
 	return new Uint8Array(input);
 }
 
-function buildGitEnv(overrides?: Record<string, string | undefined>): Record<string, string | undefined> {
+function buildNonInteractiveEnv(
+	env: Record<string, string | undefined>,
+	pinnedEnv: Record<string, string | undefined>,
+): Record<string, string | undefined> {
+	const preservedCharacterLocale =
+		env.LC_ALL !== undefined && /(?:^|[._-])utf-?8(?:$|[.@_-])/i.test(env.LC_ALL) ? env.LC_ALL : undefined;
 	return {
-		...process.env,
-		GIT_OPTIONAL_LOCKS: "0",
-		...AMBIENT_GIT_ENV,
-		...overrides,
-		...GIT_NON_INTERACTIVE_ENV,
+		...env,
+		...(preservedCharacterLocale === undefined ? {} : { LC_CTYPE: preservedCharacterLocale }),
+		...pinnedEnv,
 	};
+}
+
+function buildGitEnv(overrides?: Record<string, string | undefined>): Record<string, string | undefined> {
+	return buildNonInteractiveEnv(
+		{
+			...process.env,
+			GIT_OPTIONAL_LOCKS: "0",
+			...AMBIENT_GIT_ENV,
+			...overrides,
+		},
+		GIT_NON_INTERACTIVE_ENV,
+	);
+}
+
+function buildGhEnv(): Record<string, string | undefined> {
+	return buildNonInteractiveEnv({ ...process.env }, GH_NON_INTERACTIVE_ENV);
 }
 
 function ensureAvailable(): void {
@@ -399,8 +428,17 @@ function ensureAvailable(): void {
  * exit code plus trimmed stdout; a missing `git` binary (spawn ENOENT) is
  * reported as {@link GIT_SPAWN_ENOENT_EXIT_CODE} so sync read-only callers
  * degrade to `null` instead of throwing an uncaught error during rendering.
+ *
+ * A deadline ({@link GIT_SPAWN_SYNC_TIMEOUT_MS}) is enforced so a pathological
+ * git invocation (lock contention, NFS stall, …) cannot hang the render path
+ * indefinitely: a child killed by the deadline is reported as
+ * {@link GIT_COMMAND_TIMEOUT_EXIT_CODE} rather than a successful exit.
  */
-function gitSpawnSyncText(cwd: string, args: readonly string[]): { exitCode: number; stdout: string } {
+function gitSpawnSyncText(
+	cwd: string,
+	args: readonly string[],
+	timeoutMs: number = GIT_SPAWN_SYNC_TIMEOUT_MS,
+): { exitCode: number; stdout: string } {
 	const commandArgs = withShortLivedGitConfig(withNoOptionalLocks(args));
 	try {
 		const result = Bun.spawnSync(["git", ...commandArgs], {
@@ -409,8 +447,14 @@ function gitSpawnSyncText(cwd: string, args: readonly string[]): { exitCode: num
 			stdout: "pipe",
 			stderr: "pipe",
 			windowsHide: true,
+			timeout: timeoutMs,
 		});
-		return { exitCode: result.exitCode ?? 0, stdout: new TextDecoder().decode(result.stdout).trim() };
+		// Bun's timeout marker is authoritative even when process cleanup reports
+		// exit code zero, so render-path callers never trust partial output.
+		const exitCode = result.exitedDueToTimeout
+			? GIT_COMMAND_TIMEOUT_EXIT_CODE
+			: (result.exitCode ?? GIT_COMMAND_TIMEOUT_EXIT_CODE);
+		return { exitCode, stdout: new TextDecoder().decode(result.stdout).trim() };
 	} catch (err) {
 		if (isEnoent(err)) return { exitCode: GIT_SPAWN_ENOENT_EXIT_CODE, stdout: "" };
 		throw err;
@@ -1683,6 +1727,12 @@ export const revList = {
 	async range(cwd: string, base: string, head: string, signal?: AbortSignal): Promise<string[]> {
 		return splitLines(await runText(cwd, ["rev-list", "--reverse", `${base}..${head}`], { readOnly: true, signal }));
 	},
+	/** Commits reachable from `ref` that touched `file`, newest first, capped at `limit`. */
+	async touching(cwd: string, ref: string, file: string, limit: number, signal?: AbortSignal): Promise<string[]> {
+		return splitLines(
+			await runText(cwd, ["rev-list", `--max-count=${limit}`, ref, "--", file], { readOnly: true, signal }),
+		);
+	},
 };
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -2374,10 +2424,7 @@ export const github = {
 		try {
 			const child = Bun.spawn(["gh", ...args], {
 				cwd,
-				env: {
-					...process.env,
-					...GH_NON_INTERACTIVE_ENV,
-				},
+				env: buildGhEnv(),
 				stdin: "ignore",
 				stdout: "pipe",
 				stderr: "pipe",

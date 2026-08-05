@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import * as path from "node:path";
 import { Agent } from "@oh-my-pi/pi-agent-core";
-import type { Api, Model } from "@oh-my-pi/pi-ai";
+import type { Api, Model, ProviderSessionState } from "@oh-my-pi/pi-ai";
 import { buildModel } from "@oh-my-pi/pi-catalog/build";
 import { getBundledModel } from "@oh-my-pi/pi-catalog/models";
 import { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
@@ -59,6 +59,28 @@ describe("/fast targets the current model's service-tier family", () => {
 		session.setFastMode(true);
 		expect(session.serviceTierByFamily).toEqual({ anthropic: "priority" });
 		expect(session.isFastModeEnabled()).toBe(true);
+	});
+
+	it("keeps Anthropic priority enabled while an exact-model provider fallback makes it inactive", async () => {
+		const model = getBundledModel("anthropic", "claude-sonnet-4-5");
+		if (!model) throw new Error("Expected bundled test model anthropic/claude-sonnet-4-5 to exist");
+		const session = await createSessionForModel(model);
+		session.setFastMode(true);
+		const state = {
+			strictToolsDisabled: false,
+			fastModeDisabled: true,
+			replayUnsignedThinkingDisabled: false,
+			close: () => {},
+		} as ProviderSessionState & { fastModeDisabled: boolean };
+		session.providerSessionState.set(`anthropic-messages:${model.baseUrl}\u0000${model.id}`, state);
+
+		expect(session.isFastModeEnabled()).toBe(true);
+		expect(session.isFastModeActive()).toBe(false);
+
+		session.setFastMode(true);
+		expect(session.isFastModeEnabled()).toBe(true);
+		expect(session.isFastModeActive()).toBe(true);
+		expect(state.fastModeDisabled).toBe(false);
 	});
 
 	it("enables priority on the OpenAI family for an OpenAI model", async () => {

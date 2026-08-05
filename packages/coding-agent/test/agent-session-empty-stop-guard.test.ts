@@ -80,13 +80,19 @@ function signedThinkingOnlyStop(): MockResponse {
 async function createHarness(
 	responses: MockResponse[],
 	settingsOverrides: SettingsOverrides = {},
-	options: { persistSession?: boolean; extensionRunner?: ExtensionRunner } = {},
+	options: {
+		persistSession?: boolean;
+		extensionRunner?: ExtensionRunner;
+		provider?: string;
+		id?: string;
+	} = {},
 ): Promise<Harness & { mock: MockModel }> {
 	const tempDir = TempDir.createSync("@pi-empty-stop-guard-");
 	const authStorage = await AuthStorage.create(path.join(tempDir.path(), "auth.db"));
 	authStorage.setRuntimeApiKey("mock", "test-key");
 
-	const mock = createMockModel({ responses });
+	const mock = createMockModel({ provider: options.provider, id: options.id, responses });
+	authStorage.setRuntimeApiKey(mock.provider, "test-key");
 	const modelRegistry = new ModelRegistry(authStorage, path.join(tempDir.path(), "models.yml"));
 	const settings = Settings.isolated({
 		"compaction.enabled": false,
@@ -491,6 +497,46 @@ describe("AgentSession empty stop guard", () => {
 		});
 		expect(session.isRetrying).toBe(false);
 		expect(reminderMessages(session.agent.state.messages)).toHaveLength(1);
+	});
+
+	it("preserves Codex commentary when discarding a colliding empty final stop", async () => {
+		const timestamp = 1_725_287_000_000;
+		vi.spyOn(Date, "now").mockReturnValue(timestamp);
+		const commentary = "Codex commentary before the empty final answer.";
+		const recovered = "Recovered after the empty final-answer retry.";
+		const { session, mock } = await createHarness(
+			[{ content: [commentary], stopReason: "stop" }, emptyStop(), { content: [recovered], stopReason: "stop" }],
+			{},
+			{ provider: "openai-codex", id: "gpt-5.5-codex" },
+		);
+
+		await session.prompt("produce commentary");
+		await session.waitForIdle();
+		// Persisted identity must win regardless of branch enumeration order. The
+		// coarse matcher otherwise selects the commentary when it is encountered first.
+		const getBranch = session.sessionManager.getBranch.bind(session.sessionManager);
+		const branchSpy = vi
+			.spyOn(session.sessionManager, "getBranch")
+			.mockImplementation(() => getBranch().slice().reverse());
+		await session.followUp("continue after commentary");
+		await session.waitForIdle();
+		branchSpy.mockRestore();
+
+		const assistantTexts = (messages: AgentMessage[]): string[] =>
+			messages
+				.filter((message): message is Extract<AgentMessage, { role: "assistant" }> => message.role === "assistant")
+				.flatMap(message => message.content.flatMap(block => (block.type === "text" ? [block.text] : [])));
+
+		expect(mock.calls).toHaveLength(3);
+		expect(assistantTexts(session.agent.state.messages)).toEqual([commentary, recovered]);
+		expect(emptyAssistantStops(session.agent.state.messages)).toHaveLength(0);
+
+		const persistedMessages = session.sessionManager
+			.getBranch()
+			.filter(entry => entry.type === "message")
+			.map(entry => entry.message as AgentMessage);
+		expect(assistantTexts(persistedMessages)).toEqual([commentary, recovered]);
+		expect(emptyAssistantStops(persistedMessages)).toHaveLength(0);
 	});
 
 	it("does not retry normal stop or tool-use turns", async () => {

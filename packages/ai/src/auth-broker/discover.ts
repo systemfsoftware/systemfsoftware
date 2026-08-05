@@ -6,6 +6,7 @@
  */
 import * as path from "node:path";
 import {
+	$envExact,
 	getAgentDbPath,
 	getAgentDir,
 	getAuthBrokerSnapshotCachePath,
@@ -17,7 +18,7 @@ import {
 import { YAML } from "bun";
 import { AuthStorage } from "../auth-storage";
 import * as AIError from "../error";
-import { AuthBrokerClient } from "./client";
+import { AuthBrokerClient, AuthBrokerError } from "./client";
 import { type AuthBrokerAccountPool, RemoteAuthCredentialStore } from "./remote-store";
 import { readAuthBrokerSnapshotCache, writeAuthBrokerSnapshotCache } from "./snapshot-cache";
 import { DEFAULT_SNAPSHOT_CACHE_TTL_MS, type SnapshotResponse } from "./types";
@@ -41,6 +42,8 @@ export interface DiscoverAuthStorageOptions {
 	accountPool?: AuthBrokerAccountPool;
 }
 
+const SNAPSHOT_CACHE_REVALIDATION_TIMEOUT_MS = 500;
+
 /** Path to the local bearer token file. Created by `omp auth-broker token`. */
 export function getAuthBrokerTokenFilePath(): string {
 	return path.join(getConfigRootDir(), "auth-broker.token");
@@ -53,7 +56,7 @@ export function getAuthBrokerTokenFilePath(): string {
  */
 async function defaultResolveConfigValue(config: string): Promise<string | undefined> {
 	if (config.startsWith("!")) return undefined;
-	const envValue = process.env[config];
+	const envValue = $envExact(config);
 	return envValue || config;
 }
 
@@ -254,9 +257,9 @@ export async function discoverAuthStorage(options: DiscoverAuthStorageOptions = 
 					}
 				: undefined;
 
-		let initialSnapshot: SnapshotResponse | undefined;
+		let cachedSnapshot: SnapshotResponse | undefined;
 		if (ttlMs > 0) {
-			initialSnapshot =
+			cachedSnapshot =
 				(await readAuthBrokerSnapshotCache({
 					path: cachePath,
 					token: brokerConfig.token,
@@ -267,14 +270,21 @@ export async function discoverAuthStorage(options: DiscoverAuthStorageOptions = 
 					return null;
 				})) ?? undefined;
 		}
-		if (!initialSnapshot) {
-			const initialResult = await client.fetchSnapshot();
+
+		let initialSnapshot = cachedSnapshot;
+		try {
+			const initialResult = await client.fetchSnapshot({
+				signal: cachedSnapshot ? AbortSignal.timeout(SNAPSHOT_CACHE_REVALIDATION_TIMEOUT_MS) : undefined,
+			});
 			if (initialResult.status !== 200)
-				throw new AIError.AuthBrokerError("Auth broker returned no initial snapshot", {
+				throw new AuthBrokerError("Auth broker returned no initial snapshot", {
 					status: initialResult.status,
 				});
 			initialSnapshot = initialResult.snapshot;
 			persist?.(initialSnapshot);
+		} catch (error) {
+			if (!cachedSnapshot || (error instanceof AuthBrokerError && [401, 403].includes(error.status ?? 0)))
+				throw error;
 		}
 		const store = new RemoteAuthCredentialStore({
 			client,

@@ -56,14 +56,14 @@ export function parseSessionContent(content: string): {
 	return { entries: foldTitleSlot(entries, slot), titleSlot: slot };
 }
 
-/** Exported for testing — the ≥8MiB streaming path (works on any file size). */
-export async function loadEntriesFromFileStream(filePath: string): Promise<{
-	entries: FileEntry[];
-	titleSlot: SessionTitleUpdate | undefined;
-}> {
-	const entries: FileEntry[] = [];
+/** Parse session JSONL and visit each entry without retaining prior entries. */
+export async function visitEntriesFromFileStream(
+	filePath: string,
+	visit: (entry: FileEntry) => void,
+): Promise<SessionTitleUpdate | undefined> {
 	let titleSlot: SessionTitleUpdate | undefined;
 	let sawFirstLine = false;
+	let visitorThrew = false;
 	// Byte buffer (NOT a decoded string): multibyte UTF-8 sequences that straddle
 	// a stream-chunk boundary stay intact, and Bun.JSONL.parseChunk accepts typed
 	// arrays directly. Only the unconsumed remainder is held (≤ one record + a
@@ -75,8 +75,13 @@ export async function loadEntriesFromFileStream(filePath: string): Promise<{
 	const drain = () => {
 		while (buffer.length > 0) {
 			const { values, error, read, done } = Bun.JSONL.parseChunk(buffer);
-			if (values.length > 0) {
-				for (const value of values) entries.push(value as FileEntry);
+			for (const value of values) {
+				try {
+					visit(value as FileEntry);
+				} catch (err) {
+					visitorThrew = true;
+					throw err;
+				}
 			}
 			if (error) {
 				// Malformed record: skip past the next newline and continue.
@@ -125,10 +130,21 @@ export async function loadEntriesFromFileStream(filePath: string): Promise<{
 		}
 		drain();
 	} catch (err) {
-		if (isEnoent(err)) return { entries: [], titleSlot: undefined };
+		if (visitorThrew) throw err;
+		if (isEnoent(err)) return undefined;
 		throw err;
 	}
 
+	return titleSlot;
+}
+
+/** Exported for testing — the ≥8MiB streaming path (works on any file size). */
+export async function loadEntriesFromFileStream(filePath: string): Promise<{
+	entries: FileEntry[];
+	titleSlot: SessionTitleUpdate | undefined;
+}> {
+	const entries: FileEntry[] = [];
+	const titleSlot = await visitEntriesFromFileStream(filePath, entry => entries.push(entry));
 	return { entries: foldTitleSlot(entries, titleSlot), titleSlot };
 }
 

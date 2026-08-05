@@ -12,6 +12,7 @@ use nix::unistd::User;
 use super::{ComparableValue, Matcher, MatcherIO, WalkEntry};
 
 pub struct UserMatcher {
+	#[cfg_attr(not(unix), allow(dead_code))]
 	uid: ComparableValue,
 }
 

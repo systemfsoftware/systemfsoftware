@@ -784,7 +784,9 @@ describe("AgentSession auto-compaction queue resume", () => {
 
 		const retryableError = {
 			role: "assistant" as const,
-			content: [{ type: "text" as const, text: "Transient provider failure." }],
+			// Thinking-only partial: a committed visible text block would classify the
+			// failed turn as replay-unsafe and suppress the retry this test depends on.
+			content: [{ type: "thinking" as const, thinking: "Transient provider failure." }],
 			api: "anthropic-messages" as const,
 			provider: "anthropic" as const,
 			model: "claude-sonnet-4-5",

@@ -19,7 +19,7 @@ import { executeHashlineSingle, hashlineEditParamsSchema } from "./hashline";
 import { type ApplyPatchParams, applyPatchSchema, expandApplyPatchToEntries } from "./modes/apply-patch";
 import applyPatchGrammar from "./modes/apply-patch.lark" with { type: "text" };
 import { executePatchSingle, type PatchEditEntry, type PatchParams, patchEditSchema } from "./modes/patch";
-import { executeReplaceSingle, type ReplaceEditEntry, type ReplaceParams, replaceEditSchema } from "./modes/replace";
+import { executeReplace, type ReplaceBatchParams, type ReplaceParams, replaceEditSchema } from "./modes/replace";
 import { type EditToolDetails, type EditToolPerFileResult, getLspBatchRequest, type LspBatchRequest } from "./renderer";
 import { pruneOversizedEditSnapshots } from "./snapshot-details";
 import { EDIT_MODE_STRATEGIES } from "./streaming";
@@ -46,7 +46,7 @@ type TInput =
 
 type HashlineParams = typeof hashlineEditParamsSchema.infer;
 
-type EditParams = ReplaceParams | PatchParams | HashlineParams | ApplyPatchParams;
+type EditParams = ReplaceParams | ReplaceBatchParams | PatchParams | HashlineParams | ApplyPatchParams;
 
 type EditModeDefinition = {
 	description: (session: ToolSession) => string;
@@ -399,14 +399,24 @@ export class EditTool implements AgentTool<TInput> {
 	readonly #editMode?: EditMode;
 	readonly #deferredDiagnostics: DeferredDiagnostics;
 
-	constructor(private readonly session: ToolSession) {
+	/**
+	 * `mode` pins the edit variant for this instance, for callers whose protocol
+	 * fixes the shape of an edit. The Cursor `pi_edit` frame carries
+	 * `old_string`/`new_string` args, which only `replace` accepts — under the
+	 * default `hashline` mode those args do not match the schema at all. Left
+	 * unset, the env/settings resolution applies as before.
+	 */
+	constructor(
+		private readonly session: ToolSession,
+		mode?: EditMode,
+	) {
 		const {
 			PI_EDIT_FUZZY: editFuzzy = "auto",
 			PI_EDIT_FUZZY_THRESHOLD: editFuzzyThreshold = "auto",
 			PI_EDIT_VARIANT: envEditVariant = "auto",
 		} = Bun.env;
 
-		this.#editMode = resolveConfiguredEditMode(envEditVariant);
+		this.#editMode = mode ?? resolveConfiguredEditMode(envEditVariant);
 		this.#allowFuzzy = resolveAllowFuzzy(session, editFuzzy);
 		this.#fuzzyThreshold = resolveFuzzyThreshold(session, editFuzzyThreshold);
 		const deduplicateDiagnostics =
@@ -652,11 +662,24 @@ export class EditTool implements AgentTool<TInput> {
 					batchRequest: LspBatchRequest | undefined,
 					onUpdate?: (partialResult: AgentToolResult<EditToolDetails, TInput>) => void,
 				) => {
-					const { edits, path } = params as ReplaceParams;
-					const targetPath = await resolveEditPath(tool.session, path, { mustExist: true, signal });
-					const runs = (edits as ReplaceEditEntry[]).map(
+					// `edits` is the internal `ReplaceBatchParams` form only the Cursor
+					// exec bridge produces (multi-replacement `pi_edit` frames run as one
+					// lifecycle); model calls always arrive in the single-edit schema shape.
+					const replaceParams = params as ReplaceParams | ReplaceBatchParams;
+					const entries =
+						"edits" in replaceParams
+							? replaceParams.edits
+							: [
+									{
+										old_string: replaceParams.old_string,
+										new_string: replaceParams.new_string,
+										replace_all: replaceParams.replace_all,
+									},
+								];
+					const targetPath = await resolveEditPath(tool.session, replaceParams.path, { mustExist: true, signal });
+					const runs = entries.map(
 						entry => (br: LspBatchRequest | undefined) =>
-							executeReplaceSingle({
+							executeReplace({
 								session: tool.session,
 								path: targetPath,
 								params: entry,

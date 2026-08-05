@@ -224,5 +224,8 @@ describe("omp completions (integration / drift)", () => {
 		// Hidden/default commands must NOT surface as completable subcommands.
 		expect(stdout).not.toContain("_omp_cmd_launch");
 		expect(stdout).not.toContain("_omp_cmd___complete");
-	});
+		// Spawns the whole CLI entry graph, so the wall time is cold-transpile bound
+		// (~1s warm) rather than an assertion about latency. Bun's 5s default starves
+		// it when CI runs several test chunks in parallel on a shared runner.
+	}, 30_000);
 });

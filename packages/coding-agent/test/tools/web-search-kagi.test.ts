@@ -58,6 +58,29 @@ describe("Kagi web search error handling", () => {
 			"Kagi API error (502)",
 		);
 	});
+	it("applies the configured timeout at the provider fetch boundary", async () => {
+		const timeoutSignal = new AbortController().signal;
+		const timeoutSpy = vi.spyOn(AbortSignal, "timeout").mockReturnValue(timeoutSignal);
+		let fetchSignal: AbortSignal | null | undefined;
+		const fetchMock: FetchImpl = async (_input, init) => {
+			fetchSignal = init?.signal;
+			return new Response(JSON.stringify({ meta: { trace: "req-timeout" }, data: {} }), {
+				status: 200,
+				headers: { "Content-Type": "application/json" },
+			});
+		};
+
+		await new KagiProvider().search({
+			query: "slow kagi search",
+			systemPrompt: "",
+			authStorage: fakeAuthStorage,
+			timeoutMs: 180_000,
+			fetch: fetchMock,
+		});
+
+		expect(timeoutSpy).toHaveBeenCalledWith(180_000);
+		expect(fetchSignal).toBe(timeoutSignal);
+	});
 });
 
 describe("Kagi search result parsing", () => {

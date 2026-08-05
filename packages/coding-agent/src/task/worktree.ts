@@ -6,6 +6,7 @@ import * as natives from "@oh-my-pi/pi-natives";
 import { getWorktreeDir, logger, Snowflake } from "@oh-my-pi/pi-utils";
 import * as git from "../utils/git";
 import * as jj from "../utils/jj";
+import { writeIsolationOwner } from "./isolation-ownership";
 import { mapWithConcurrencyLimit } from "./parallel";
 
 const { IsoBackendKind } = natives;
@@ -434,6 +435,13 @@ export async function ensureIsolation(
 
 	for (const candidate of candidates) {
 		await fs.rm(baseDir, { recursive: true, force: true });
+		// Claim ownership before the backend materialises `m`. Backends only
+		// create/replace `mergedDir` (and overlay upper/work), never the base
+		// dir, so the marker survives `isoStart` — and a concurrent
+		// `omp worktree clear` never sees this sandbox without a live owner,
+		// even while a large clone is still in progress.
+		await fs.mkdir(baseDir, { recursive: true });
+		await writeIsolationOwner(baseDir, id);
 		try {
 			await natives.isoStart(candidate, repoRoot, mergedDir);
 			// Sever the isolation's git metadata from the source checkout. Copy

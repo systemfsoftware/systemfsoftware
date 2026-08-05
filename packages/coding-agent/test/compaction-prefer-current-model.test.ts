@@ -49,7 +49,9 @@ describe("compaction prefers the current session model over modelRoles.default",
 		const settings = Settings.isolated({ "compaction.keepRecentTokens": 1, "compaction.strategy": "context-full" });
 		settings.setModelRole("default", `${defaultRoleModel.provider}/${defaultRoleModel.id}`);
 
+		const promptCacheKey = "inherited-parent-cache";
 		const agent = new Agent({
+			promptCacheKey,
 			initialState: {
 				model: currentModel,
 				systemPrompt: ["Test"],
@@ -98,6 +100,7 @@ describe("compaction prefers the current session model over modelRoles.default",
 		expect(compactSpy).toHaveBeenCalled();
 		const [, firstCandidate] = compactSpy.mock.calls[0]!;
 		expect(`${firstCandidate.provider}/${firstCandidate.id}`).toBe(`${currentModel.provider}/${currentModel.id}`);
+		expect(compactSpy.mock.calls[0]?.[5]?.promptCacheKey).toBe(promptCacheKey);
 	});
 
 	it("falls back when the authenticated Bedrock candidate cannot resolve AWS credentials", async () => {

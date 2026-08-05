@@ -25,6 +25,18 @@ export const kStreamingBlockIndex = Symbol("provider.block.index");
 /** Stores the last parsed argument prefix length for throttled streaming JSON parsing. */
 export const kStreamingLastParseLen = Symbol("provider.block.lastParseLen");
 
+/**
+ * The Cursor interaction envelope's `call_id` for a streamed tool-call block.
+ *
+ * Tracked separately from the block's own `id` because they are NOT the same
+ * key: MCP and Pi blocks are filed under the id inside the call's `args`, which
+ * is what the exec channel pairs its result under, while every streamed
+ * `ToolCall*Update` correlates on the envelope's `call_id`. Matching
+ * completions against the block id would mis-route every call whose args carry
+ * their own id.
+ */
+export const kStreamingEnvelopeId = Symbol("provider.block.envelopeId");
+
 /** Marks streamed tool-call arguments that already received an authoritative done payload. */
 export const kStreamingArgumentsDone = Symbol("provider.block.argumentsDone");
 

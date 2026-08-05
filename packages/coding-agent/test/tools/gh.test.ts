@@ -16,7 +16,8 @@ import {
 	resolveDefaultRepoMemoized,
 } from "@oh-my-pi/pi-coding-agent/tools/gh";
 import * as git from "@oh-my-pi/pi-coding-agent/utils/git";
-import { getAgentDir, hashPath, removeWithRetries, setAgentDir } from "@oh-my-pi/pi-utils";
+import * as piUtils from "@oh-my-pi/pi-utils";
+import { $which, getAgentDir, hashPath, removeWithRetries, setAgentDir, WhichCachePolicy } from "@oh-my-pi/pi-utils";
 
 // Isolate every `git` invocation in this file from the developer's host
 // configuration. The fixture spawns dozens of git subprocesses against tiny
@@ -1084,6 +1085,151 @@ exec ${JSON.stringify(realGit)} "$@"
 				await removeWithRetries(fakeBin);
 			}
 		});
+
+		it("pins Git messages while preserving UTF-8 character locale", async () => {
+			if (process.platform === "win32") return;
+			const originalPath = process.env.PATH;
+			const originalLocale = {
+				EXPECTED_LC_CTYPE: process.env.EXPECTED_LC_CTYPE,
+				LANG: process.env.LANG,
+				LC_ALL: process.env.LC_ALL,
+				LC_CTYPE: process.env.LC_CTYPE,
+				LC_MESSAGES: process.env.LC_MESSAGES,
+			};
+			const fakeBin = await fs.mkdtemp(path.join(os.tmpdir(), "omp-fake-git-locale-"));
+			const realGit = $which("git");
+			expect(realGit).not.toBeNull();
+			if (realGit === null) return;
+			const fakeGit = path.join(fakeBin, "git");
+			await fs.writeFile(
+				fakeGit,
+				`#!/bin/sh
+if [ "\${LC_MESSAGES-}" != "C" ]; then
+	echo "LC_MESSAGES was \${LC_MESSAGES-<unset>}" >&2
+	exit 41
+fi
+if [ "\${LC_CTYPE-}" != "\${EXPECTED_LC_CTYPE-}" ]; then
+	echo "LC_CTYPE was \${LC_CTYPE-<unset>}, expected \${EXPECTED_LC_CTYPE-<unset>}" >&2
+	exit 42
+fi
+if [ "\${LC_ALL+x}" = "x" ]; then
+	echo "LC_ALL leaked: \${LC_ALL}" >&2
+	exit 43
+fi
+exec ${JSON.stringify(realGit)} "$@"
+`,
+			);
+			await fs.chmod(fakeGit, 0o755);
+
+			try {
+				process.env.PATH = fakeBin;
+				process.env.EXPECTED_LC_CTYPE = "C.UTF-8";
+				process.env.LC_ALL = "C.UTF-8";
+				delete process.env.LANG;
+				process.env.LC_CTYPE = "";
+				delete process.env.LC_MESSAGES;
+				await git.diff(remoteFixture.repoRoot, { env: { LC_MESSAGES: undefined } });
+
+				process.env.EXPECTED_LC_CTYPE = "fr_FR.UTF-8";
+				process.env.LC_ALL = "fr_FR.UTF-8";
+				process.env.LC_CTYPE = "C";
+				process.env.LC_MESSAGES = "fr_FR.UTF-8";
+				await git.diff(remoteFixture.repoRoot, { env: { LC_MESSAGES: undefined } });
+
+				process.env.EXPECTED_LC_CTYPE = "UTF-8-SENTINEL";
+				process.env.LC_ALL = "fr_FR.UTF-8";
+				process.env.LC_CTYPE = "UTF-8-SENTINEL";
+				process.env.LC_MESSAGES = "fr_FR.UTF-8";
+				await git.diff(remoteFixture.repoRoot, { env: { LC_ALL: "C", LC_MESSAGES: undefined } });
+			} finally {
+				if (originalPath === undefined) {
+					delete process.env.PATH;
+				} else {
+					process.env.PATH = originalPath;
+				}
+				for (const [key, value] of Object.entries(originalLocale)) {
+					if (value === undefined) {
+						delete process.env[key];
+					} else {
+						process.env[key] = value;
+					}
+				}
+				await removeWithRetries(fakeBin);
+			}
+		});
+	});
+
+	it("pins gh messages while preserving UTF-8 character locale", async () => {
+		if (process.platform === "win32") return;
+		const originalPath = process.env.PATH;
+		const originalLocale = {
+			EXPECTED_LC_CTYPE: process.env.EXPECTED_LC_CTYPE,
+			LANG: process.env.LANG,
+			LC_ALL: process.env.LC_ALL,
+			LC_CTYPE: process.env.LC_CTYPE,
+			LC_MESSAGES: process.env.LC_MESSAGES,
+		};
+		const fakeBin = await fs.mkdtemp(path.join(os.tmpdir(), "omp-fake-gh-locale-"));
+		const fakeGh = path.join(fakeBin, "gh");
+		await fs.writeFile(
+			fakeGh,
+			`#!/bin/sh
+if [ "\${LC_MESSAGES-}" != "C" ]; then
+	echo "LC_MESSAGES was \${LC_MESSAGES-<unset>}" >&2
+	exit 41
+fi
+if [ "\${LC_CTYPE-}" != "\${EXPECTED_LC_CTYPE-}" ]; then
+	echo "LC_CTYPE was \${LC_CTYPE-<unset>}, expected \${EXPECTED_LC_CTYPE-<unset>}" >&2
+	exit 42
+fi
+if [ "\${LC_ALL+x}" = "x" ]; then
+	echo "LC_ALL leaked: \${LC_ALL}" >&2
+	exit 43
+fi
+echo ok
+`,
+		);
+		const realWhich = $which;
+		const whichSpy = vi
+			.spyOn(piUtils, "$which")
+			.mockImplementation((command, options) =>
+				command === "gh"
+					? realWhich(command, { ...options, cache: WhichCachePolicy.Bypass })
+					: realWhich(command, options),
+			);
+
+		await fs.chmod(fakeGh, 0o755);
+
+		try {
+			process.env.PATH = fakeBin;
+			for (const lcCtype of [undefined, ""] as const) {
+				process.env.EXPECTED_LC_CTYPE = "C.UTF-8";
+				process.env.LC_ALL = "C.UTF-8";
+				delete process.env.LANG;
+				delete process.env.LC_MESSAGES;
+				if (lcCtype === undefined) {
+					delete process.env.LC_CTYPE;
+				} else {
+					process.env.LC_CTYPE = lcCtype;
+				}
+				await expect(git.github.run(process.cwd(), ["--version"])).resolves.toMatchObject({ stdout: "ok" });
+			}
+		} finally {
+			whichSpy.mockRestore();
+			if (originalPath === undefined) {
+				delete process.env.PATH;
+			} else {
+				process.env.PATH = originalPath;
+			}
+			for (const [key, value] of Object.entries(originalLocale)) {
+				if (value === undefined) {
+					delete process.env[key];
+				} else {
+					process.env[key] = value;
+				}
+			}
+			await removeWithRetries(fakeBin);
+		}
 	});
 
 	it("serializes concurrent git mutations through withRepoLock so callers don't race git's internal locks", async () => {

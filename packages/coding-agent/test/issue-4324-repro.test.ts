@@ -97,7 +97,10 @@ describe("issue #4324 — worker subprocess stderr survives to the exit error", 
 			cwd: repoRoot,
 			stdout: "pipe",
 			stderr: "pipe",
-			env: { ...process.env, BUN_ENV: "development", NODE_ENV: "development" },
+			// The wrapper simulates a production parent: the CI harness exports
+			// PI_TEST_RUNTIME=1, which makes isBunTestRuntime() suppress unref in
+			// the worker client and deterministically keeps the wrapper alive.
+			env: { ...process.env, BUN_ENV: "development", NODE_ENV: "development", PI_TEST_RUNTIME: "0" },
 		});
 		const [stdout, stderr, exitCode] = await Promise.all([
 			new Response(proc.stdout).text(),

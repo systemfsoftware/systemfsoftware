@@ -3,6 +3,7 @@ import type { Model, ProviderSessionState, ServiceTier, ServiceTierByFamily, Ser
 import {
 	clearAnthropicFastModeFallback,
 	Effort,
+	isAnthropicFastModeFallbackDisabled,
 	realizesPriorityServiceTier,
 	resolveModelServiceTier,
 	serviceTierFamily,
@@ -27,6 +28,7 @@ import {
 	AUTO_THINKING,
 	type ConfiguredThinkingLevel,
 	clampAutoThinkingEffort,
+	clampThinkingLevelToCeiling,
 	resolveProvisionalAutoLevel,
 	resolveThinkingLevelForModel,
 	shouldDisableReasoning,
@@ -51,7 +53,7 @@ export interface ModelControlsHost {
 	promptGeneration(): number;
 	resolveActiveEditMode(): EditMode;
 	syncAfterModelChange(previousEditMode: EditMode): Promise<void>;
-	setModelWithProviderSessionReset(model: Model): void;
+	setModelWithProviderSessionReset(model: Model): Promise<void>;
 	clearActiveRetryFallback(): void;
 	clearInheritedProviderPromptCacheKey(): void;
 	magicKeywordEnabled(keyword: "orchestrate" | "ultrathink" | "workflow"): boolean;
@@ -65,6 +67,8 @@ export class ModelControls {
 	readonly #host: ModelControlsHost;
 	#scopedModels: Array<{ model: Model; thinkingLevel?: ThinkingLevel }>;
 	#thinkingLevel: ThinkingLevel | undefined;
+	/** Hard per-session effort ceiling (e.g. a task spawn's `task.maxEffort` cap); recovery paths re-clamp to it. */
+	readonly #thinkingLevelCeiling: Effort | undefined;
 	#autoThinking = false;
 	#autoResolvedLevel: Effort | undefined;
 	#serviceTierByFamily: ServiceTierByFamily;
@@ -74,18 +78,28 @@ export class ModelControls {
 		options: {
 			scopedModels?: Array<{ model: Model; thinkingLevel?: ThinkingLevel }>;
 			thinkingLevel?: ConfiguredThinkingLevel;
+			thinkingLevelCeiling?: Effort;
 			serviceTierByFamily?: ServiceTierByFamily;
 		},
 	) {
 		this.#host = host;
 		this.#scopedModels = options.scopedModels ?? [];
 		this.#serviceTierByFamily = options.serviceTierByFamily ?? {};
+		this.#thinkingLevelCeiling = options.thinkingLevelCeiling;
 		if (options.thinkingLevel === AUTO_THINKING) {
 			// Keep auto pending until the first turn while exposing a valid wire effort.
 			this.#autoThinking = true;
-			this.#thinkingLevel = resolveProvisionalAutoLevel(this.#model);
+			this.#thinkingLevel = clampThinkingLevelToCeiling(
+				this.#model,
+				resolveProvisionalAutoLevel(this.#model),
+				this.#thinkingLevelCeiling,
+			);
 		} else {
-			this.#thinkingLevel = options.thinkingLevel;
+			this.#thinkingLevel = clampThinkingLevelToCeiling(
+				this.#model,
+				options.thinkingLevel,
+				this.#thinkingLevelCeiling,
+			);
 		}
 		this.#applyThinkingLevelToAgent(this.#thinkingLevel);
 	}
@@ -97,6 +111,11 @@ export class ModelControls {
 	/** Effective metadata-clamped thinking level applied to the agent. */
 	get thinkingLevel(): ThinkingLevel | undefined {
 		return this.#thinkingLevel;
+	}
+
+	/** Hard per-session effort ceiling every thinking-level change is clamped to. */
+	get thinkingLevelCeiling(): Effort | undefined {
+		return this.#thinkingLevelCeiling;
 	}
 
 	/** Configured selector, preserving `auto` while classification is active. */
@@ -130,8 +149,15 @@ export class ModelControls {
 		this.#autoResolvedLevel = undefined;
 		this.#thinkingLevel =
 			level === AUTO_THINKING
-				? resolveProvisionalAutoLevel(this.#model)
-				: resolveThinkingLevelForModel(this.#model, level);
+				? clampThinkingLevelToCeiling(
+						this.#model,
+						resolveProvisionalAutoLevel(this.#model),
+						this.#thinkingLevelCeiling,
+					)
+				: resolveThinkingLevelForModel(
+						this.#model,
+						clampThinkingLevelToCeiling(this.#model, level, this.#thinkingLevelCeiling),
+					);
 		this.#applyThinkingLevelToAgent(this.#thinkingLevel);
 	}
 
@@ -183,7 +209,6 @@ export class ModelControls {
 			selector?: string;
 			thinkingLevel?: ThinkingLevel;
 			persist?: boolean;
-			currentContextTokens?: number;
 		},
 	): Promise<{ switched: boolean }> {
 		const previousEditMode = this.#host.resolveActiveEditMode();
@@ -195,7 +220,7 @@ export class ModelControls {
 
 		this.#host.modelRegistry.clearSuppressedSelector(formatModelStringWithRouting(targetModel));
 		this.#host.clearActiveRetryFallback();
-		this.#host.setModelWithProviderSessionReset(targetModel);
+		await this.#host.setModelWithProviderSessionReset(targetModel);
 		this.#host.sessionManager.appendModelChange(`${targetModel.provider}/${targetModel.id}`, role);
 		if (options?.persist) {
 			this.#host.settings.setModelRole(
@@ -240,7 +265,7 @@ export class ModelControls {
 
 		this.#host.modelRegistry.clearSuppressedSelector(formatModelStringWithRouting(targetModel));
 		this.#host.clearActiveRetryFallback();
-		this.#host.setModelWithProviderSessionReset(targetModel);
+		await this.#host.setModelWithProviderSessionReset(targetModel);
 		this.#host.sessionManager.appendModelChange(
 			`${targetModel.provider}/${targetModel.id}`,
 			options?.ephemeral ? EPHEMERAL_MODEL_CHANGE_ROLE : "temporary",
@@ -400,7 +425,7 @@ export class ModelControls {
 		// Apply model
 		this.#host.modelRegistry.clearSuppressedSelector(formatModelStringWithRouting(next.model));
 		this.#host.clearActiveRetryFallback();
-		this.#host.setModelWithProviderSessionReset(next.model);
+		await this.#host.setModelWithProviderSessionReset(next.model);
 		this.#host.sessionManager.appendModelChange(`${next.model.provider}/${next.model.id}`);
 		this.#host.settings.getStorage()?.recordModelUsage(`${next.model.provider}/${next.model.id}`);
 
@@ -431,7 +456,7 @@ export class ModelControls {
 
 		this.#host.modelRegistry.clearSuppressedSelector(formatModelStringWithRouting(nextModel));
 		this.#host.clearActiveRetryFallback();
-		this.#host.setModelWithProviderSessionReset(nextModel);
+		await this.#host.setModelWithProviderSessionReset(nextModel);
 		this.#host.sessionManager.appendModelChange(`${nextModel.provider}/${nextModel.id}`);
 		this.#host.settings.getStorage()?.recordModelUsage(`${nextModel.provider}/${nextModel.id}`);
 		// Re-apply the current thinking level (or auto) for the newly selected model
@@ -469,7 +494,11 @@ export class ModelControls {
 	 */
 	setThinkingLevel(level: ConfiguredThinkingLevel | undefined, persist: boolean = false): void {
 		if (level === AUTO_THINKING) {
-			const provisional = resolveProvisionalAutoLevel(this.#model);
+			const provisional = clampThinkingLevelToCeiling(
+				this.#model,
+				resolveProvisionalAutoLevel(this.#model),
+				this.#thinkingLevelCeiling,
+			);
 			const wasAuto = this.#autoThinking;
 			const previousLevel = this.#thinkingLevel;
 			this.#autoThinking = true;
@@ -493,7 +522,10 @@ export class ModelControls {
 		const wasAuto = this.#autoThinking;
 		this.#autoThinking = false;
 		this.#autoResolvedLevel = undefined;
-		const effectiveLevel = resolveThinkingLevelForModel(this.#model, level);
+		const effectiveLevel = resolveThinkingLevelForModel(
+			this.#model,
+			clampThinkingLevelToCeiling(this.#model, level, this.#thinkingLevelCeiling),
+		);
 		// Leaving auto must persist even when the resolved effort is unchanged (e.g.
 		// auto resolved to medium, then the user pins medium): otherwise the latest
 		// session entry keeps `configured: "auto"` and resume re-enables auto.
@@ -549,9 +581,9 @@ export class ModelControls {
 
 	/**
 	 * Classify the current user turn and set the effective thinking level for it.
-	 * Bounded by a timeout + abort; on any failure (no smol model, timeout, parse
-	 * error) it falls back to the provisional concrete level and continues. Never
-	 * throws into the turn, and never clears `#autoThinking` (auto stays active).
+	 * Bounded by a timeout + abort; on failure it preserves the last classified
+	 * level, or uses the provisional concrete level before the first resolution.
+	 * Never throws into the turn, and never clears `#autoThinking`.
 	 */
 	async applyAutoThinkingLevel(promptText: string, generation: number): Promise<void> {
 		const model = this.#model;
@@ -564,8 +596,8 @@ export class ModelControls {
 		let resolved: Effort | undefined;
 		if (this.#host.magicKeywordEnabled("ultrathink") && containsUltrathink(promptText)) {
 			// The user explicitly asked for maximum thinking; bypass the classifier
-			// (and its xhigh auto ceiling) and jump straight to the highest
-			// supported level for this model.
+			// (and the `providers.autoThinkingMaxEffort` ceiling) and jump straight
+			// to the highest supported level for this model.
 			resolved = clampAutoThinkingEffort(model, Effort.Max);
 		} else {
 			const controller = new AbortController();
@@ -591,7 +623,11 @@ export class ModelControls {
 		// Drop the result if the turn was aborted/superseded while classifying.
 		if (this.#host.promptGeneration() !== generation || !this.#autoThinking) return;
 
-		const effort = resolved ?? resolveProvisionalAutoLevel(model);
+		const effort = clampThinkingLevelToCeiling(
+			model,
+			resolved ?? this.#autoResolvedLevel ?? resolveProvisionalAutoLevel(model),
+			this.#thinkingLevelCeiling,
+		);
 		if (effort === undefined) return;
 		const shouldPersistResolution = this.#thinkingLevel !== effort;
 		this.#autoResolvedLevel = effort;
@@ -630,7 +666,11 @@ export class ModelControls {
 	 */
 	isFastModeActive(): boolean {
 		const model = this.#model;
-		return !!model && realizesPriorityServiceTier(this.effectiveServiceTier(model), model);
+		if (!model || !realizesPriorityServiceTier(this.effectiveServiceTier(model), model)) return false;
+		if (model.provider === "anthropic") {
+			return !isAnthropicFastModeFallbackDisabled(this.#host.providerSessionState, model);
+		}
+		return true;
 	}
 
 	/**
@@ -694,6 +734,9 @@ export class ModelControls {
 		if (!enabled) {
 			if (this.#serviceTierByFamily[family] === "priority") this.setServiceTierFamily(family, undefined);
 			return true;
+		}
+		if (family === "anthropic" && this.#serviceTierByFamily.anthropic === "priority") {
+			clearAnthropicFastModeFallback(this.#host.providerSessionState);
 		}
 		this.setServiceTierFamily(family, "priority");
 		return true;

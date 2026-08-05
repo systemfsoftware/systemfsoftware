@@ -2,6 +2,7 @@ import { mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { formatHashlineHeader } from "@oh-my-pi/hashline";
+import { type } from "@oh-my-pi/omptype";
 import type {
 	AgentTool,
 	AgentToolContext,
@@ -13,7 +14,6 @@ import { type GrepMatch, GrepOutputMode, type GrepResult, grep } from "@oh-my-pi
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Text } from "@oh-my-pi/pi-tui";
 import { prompt, untilAborted } from "@oh-my-pi/pi-utils";
-import { type } from "arktype";
 import { recordFileSnapshot, recordSeenLinesFromBody } from "../edit/file-snapshot-store";
 import type { RenderResultOptions } from "../extensibility/custom-tools/types";
 import type { LocalProtocolOptions } from "../internal-urls/local-protocol";
@@ -22,6 +22,7 @@ import type { InternalResource, ResolveContext } from "../internal-urls/types";
 import type { Theme } from "../modes/theme/theme";
 import grepDescription from "../prompts/tools/grep.md" with { type: "text" };
 import { DEFAULT_MAX_COLUMN, type TruncationResult, truncateHead, truncateLine } from "../session/streaming-output";
+import { isScoutSpawnable } from "../task/spawn-policy";
 import {
 	Ellipsis,
 	fileHyperlink,
@@ -884,6 +885,22 @@ export interface GrepToolDetails {
 
 type SearchParams = typeof searchSchema.infer;
 
+/**
+ * Construction-time overrides for callers that are not the model.
+ *
+ * The model-facing schema deliberately does not grow these: they exist for
+ * wire bridges (the Cursor `pi_grep` frame) whose protocol carries an explicit
+ * context width and total match cap, and which would otherwise have to drop
+ * them. Unset means "use the session settings / built-in caps" — the behavior
+ * every model-issued call keeps.
+ */
+export interface GrepToolOptions {
+	/** Overrides `grep.contextBefore`/`grep.contextAfter` for every call on this instance. */
+	context?: number;
+	/** Caps total surfaced matches. Applied on top of the built-in per-file and file-window caps, never above them. */
+	totalMatchLimit?: number;
+}
+
 export class GrepTool implements AgentTool<typeof searchSchema, GrepToolDetails> {
 	readonly name = "grep";
 	readonly approval = (args: unknown): ToolTier => {
@@ -893,16 +910,31 @@ export class GrepTool implements AgentTool<typeof searchSchema, GrepToolDetails>
 	readonly label = "Grep";
 	readonly loadMode = "discoverable";
 	readonly summary = "Grep file contents using ripgrep (fast regex search)";
-	readonly description: string;
+	get description(): string {
+		const displayMode = resolveFileDisplayMode(this.session);
+		return prompt.render(grepDescription, {
+			IS_HL_MODE: displayMode.hashLines,
+			IS_LINE_NUMBER_MODE: !displayMode.hashLines && displayMode.lineNumbers,
+			scoutAvailable: isScoutSpawnable(
+				this.session.settings.get("task.disabledAgents") as string[] | undefined,
+				this.session.getSessionSpawns?.() ?? "*",
+			),
+		});
+	}
 	readonly parameters = searchSchema;
 	readonly strict = true;
 
-	constructor(private readonly session: ToolSession) {
-		const displayMode = resolveFileDisplayMode(session);
-		this.description = prompt.render(grepDescription, {
-			IS_HL_MODE: displayMode.hashLines,
-			IS_LINE_NUMBER_MODE: !displayMode.hashLines && displayMode.lineNumbers,
-		});
+	readonly #contextOverride?: number;
+	readonly #totalMatchLimit?: number;
+
+	constructor(
+		private readonly session: ToolSession,
+		options?: GrepToolOptions,
+	) {
+		const context = options?.context;
+		this.#contextOverride = context !== undefined ? Math.max(0, Math.floor(context)) : undefined;
+		const total = options?.totalMatchLimit;
+		this.#totalMatchLimit = total !== undefined ? Math.max(1, Math.floor(total)) : undefined;
 	}
 
 	async execute(
@@ -978,8 +1010,8 @@ export class GrepTool implements AgentTool<typeof searchSchema, GrepToolDetails>
 							`or pass a UTF-8 text member.`,
 					);
 				}
-				const normalizedContextBefore = this.session.settings.get("grep.contextBefore");
-				const normalizedContextAfter = this.session.settings.get("grep.contextAfter");
+				const normalizedContextBefore = this.#contextOverride ?? this.session.settings.get("grep.contextBefore");
+				const normalizedContextAfter = this.#contextOverride ?? this.session.settings.get("grep.contextAfter");
 				const ignoreCase = !(caseSensitive ?? true);
 				const useGitignore = gitignore ?? true;
 				const patternHasNewline = normalizedPattern.includes("\n") || normalizedPattern.includes("\\n");
@@ -1297,9 +1329,22 @@ export class GrepTool implements AgentTool<typeof searchSchema, GrepToolDetails>
 				// Single-file scopes can't paginate — there is one file by definition.
 				const canPaginate = isMultiScope;
 				const skipFiles = canPaginate ? Math.min(normalizedSkip, totalFiles) : 0;
-				const windowFiles = canPaginate ? fileOrder.slice(skipFiles, skipFiles + DEFAULT_FILE_LIMIT) : fileOrder;
-				const fileLimitReached = canPaginate && totalFiles > skipFiles + DEFAULT_FILE_LIMIT;
+				// A caller with a total match cap is not paginating: the cap bounds the
+				// output, and the only consumer that sets one (`pi_grep`) has no `skip`
+				// field to follow a "use skip=N" suggestion with. Windowing it to the
+				// first 20 files would silently return fewer matches than it asked for
+				// while reporting the cap as unreached.
+				//
+				// The window is cap+1 files, not cap: with one match per file, a cap
+				// of N over exactly N files is complete, while over N+1 files it is
+				// clipped — and only reading that extra file distinguishes the two.
+				// The cap below then does the trimming and records that it bit, so
+				// `match_limit_reached` reaches the frame set.
+				const fileWindow = this.#totalMatchLimit !== undefined ? this.#totalMatchLimit + 1 : DEFAULT_FILE_LIMIT;
+				const windowFiles = canPaginate ? fileOrder.slice(skipFiles, skipFiles + fileWindow) : fileOrder;
+				const fileLimitReached = canPaginate && totalFiles > skipFiles + fileWindow;
 				const selectedMatches: GrepMatch[] = [];
+				let totalMatchLimitReached = false;
 				if (windowFiles.length > 0) {
 					const lists = windowFiles.map(file => matchesByPath.get(file) ?? []);
 					const cursors = new Array<number>(lists.length).fill(0);
@@ -1312,6 +1357,14 @@ export class GrepTool implements AgentTool<typeof searchSchema, GrepToolDetails>
 								anyAdded = true;
 							}
 						}
+					}
+					// Round-robin above interleaves files for diversity, so the cap is
+					// applied after selection rather than as a per-list bound: trimming
+					// mid-rotation would silently favour whichever files sort first.
+					const cap = this.#totalMatchLimit;
+					if (cap !== undefined && selectedMatches.length > cap) {
+						selectedMatches.length = cap;
+						totalMatchLimitReached = true;
 					}
 				}
 				const nextSkip = skipFiles + windowFiles.length;
@@ -1503,7 +1556,12 @@ export class GrepTool implements AgentTool<typeof searchSchema, GrepToolDetails>
 				const output = truncation.content;
 				const displayText = displayLines.join("\n");
 				const truncated = Boolean(
-					fileLimitReached || perFileLimitReached || result.limitReached || truncation.truncated || linesTruncated,
+					fileLimitReached ||
+						perFileLimitReached ||
+						totalMatchLimitReached ||
+						result.limitReached ||
+						truncation.truncated ||
+						linesTruncated,
 				);
 				const details: GrepToolDetails = {
 					scopePath,
@@ -1517,8 +1575,12 @@ export class GrepTool implements AgentTool<typeof searchSchema, GrepToolDetails>
 						count: fileMatchCounts.get(path) ?? 0,
 					})),
 					truncated,
-					fileLimitReached: fileLimitReached ? DEFAULT_FILE_LIMIT : undefined,
-					perFileLimitReached: perFileLimitReached ? perFileMatchCap : undefined,
+					fileLimitReached: fileLimitReached ? fileWindow : undefined,
+					perFileLimitReached: totalMatchLimitReached
+						? this.#totalMatchLimit
+						: perFileLimitReached
+							? perFileMatchCap
+							: undefined,
 					displayContent: displayText,
 					missingPaths: missingPaths.length > 0 ? missingPaths : undefined,
 				};

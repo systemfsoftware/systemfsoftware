@@ -1,14 +1,16 @@
-import { afterEach, describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it, vi } from "bun:test";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import * as jj from "@oh-my-pi/pi-coding-agent/utils/jj";
 import { removeWithRetries } from "@oh-my-pi/pi-utils";
+import type { Subprocess } from "bun";
 
 describe("jj workspace detection", () => {
 	let tmpDir: string | undefined;
 
 	afterEach(async () => {
+		vi.restoreAllMocks();
 		jj.repo.clearRootCache();
 		if (tmpDir) {
 			await removeWithRetries(tmpDir);
@@ -182,5 +184,61 @@ describe("jj status", () => {
 
 	it("reports a clean working copy as all zeros", () => {
 		expect(jj.status.parse("")).toEqual({ staged: 0, unstaged: 0, untracked: 0 });
+	});
+});
+
+describe("jj subprocess deadlines", () => {
+	type SpawnOptions = Bun.SpawnOptions.SpawnOptions<
+		Bun.SpawnOptions.Writable,
+		Bun.SpawnOptions.Readable,
+		Bun.SpawnOptions.Readable
+	>;
+	const calls: SpawnOptions[] = [];
+
+	afterEach(() => {
+		calls.length = 0;
+		vi.restoreAllMocks();
+	});
+
+	function textStream(text = ""): ReadableStream<Uint8Array> {
+		const body = new Response(text).body;
+		if (!body) throw new Error("missing response body");
+		return body;
+	}
+
+	function mockSpawn(options: SpawnOptions & { cmd: string[] }): Subprocess;
+	function mockSpawn(cmd: string[], options?: SpawnOptions): Subprocess;
+	function mockSpawn(first: string[] | (SpawnOptions & { cmd: string[] }), second?: SpawnOptions): Subprocess {
+		calls.push(Array.isArray(first) ? (second ?? ({} as SpawnOptions)) : first);
+		return {
+			pid: 12345,
+			stdout: textStream(),
+			stderr: textStream(),
+			exited: Promise.resolve(0),
+		} as Subprocess;
+	}
+
+	it("combines caller cancellation with a finite subprocess deadline", async () => {
+		vi.spyOn(Bun, "spawn").mockImplementation(mockSpawn);
+		const controller = new AbortController();
+
+		await jj.workingCopy.label("/fake", { signal: controller.signal, timeoutMs: 1 });
+		const signal = calls[0]?.signal;
+		expect(signal).toBeDefined();
+		expect(signal).not.toBe(controller.signal);
+		expect(signal?.aborted).toBe(false);
+
+		controller.abort();
+		expect(signal?.aborted).toBe(true);
+	});
+
+	it("aborts the spawned process signal at its explicit deadline", async () => {
+		vi.spyOn(Bun, "spawn").mockImplementation(mockSpawn);
+
+		await jj.status.summary("/fake", { timeoutMs: 1 });
+		const signal = calls[0]?.signal;
+		expect(signal?.aborted).toBe(false);
+		await Bun.sleep(10);
+		expect(signal?.aborted).toBe(true);
 	});
 });

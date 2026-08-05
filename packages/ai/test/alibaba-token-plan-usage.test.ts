@@ -27,13 +27,17 @@ describe("QwenCloud Token Plan opt-in usage", () => {
 			}
 			return Promise.resolve(
 				Response.json({
-					code: "200",
-					successResponse: true,
 					data: {
-						per5HourPercentage: 0.25,
-						per5HourResetTime: 1_800_000_000_000,
-						per1WeekPercentage: 0.5,
-						per1WeekResetTime: 1_800_100_000_000,
+						DataV2: {
+							data: {
+								data: {
+									per5HourPercentage: 0.25,
+									per5HourResetTime: 1_800_000_000_000,
+									per1WeekPercentage: 0.5,
+									per1WeekResetTime: 1_800_100_000_000,
+								},
+							},
+						},
 					},
 				}),
 			);
@@ -48,7 +52,7 @@ describe("QwenCloud Token Plan opt-in usage", () => {
 		expect(new Headers(requests[0]?.init?.headers).get("Cookie")).toBe(cookie);
 		expect(requests[0]?.init?.redirect).toBe("manual");
 		expect(requests[1]?.url).toBe(
-			"https://home.qwencloud.com/data/api.json?product=sfm_bailian&action=IntlBroadScopeAspnGateway",
+			"https://cs-data.qwencloud.com/data/api.json?product=sfm_bailian&action=IntlBroadScopeAspnGateway&api=zeldaHttp.apikeyMgr.%2Ftokenplan%2Fpersonal%2Fapi%2Fv2%2Fusage",
 		);
 		const usageHeaders = new Headers(requests[1]?.init?.headers);
 		expect(usageHeaders.get("Cookie")).toBe(cookie);
@@ -59,8 +63,22 @@ describe("QwenCloud Token Plan opt-in usage", () => {
 		expect(usageHeaders.get("x-csrf-token")).toBe("csrf-token");
 		expect(requests[1]?.init?.redirect).toBe("manual");
 		const body = new URLSearchParams(String(requests[1]?.init?.body));
+		expect(body.get("sec_token")).toBe("sec-token");
 		expect(body.get("params")).toBe(
-			JSON.stringify({ Api: "zeldaHttp.apikeyMgr./tokenplan/personal/api/v2/usage", Data: {} }),
+			JSON.stringify({
+				Api: "zeldaHttp.apikeyMgr./tokenplan/personal/api/v2/usage",
+				Data: {
+					cornerstoneParam: {
+						domain: "home.qwencloud.com",
+						consoleSite: "QWENCLOUD",
+						console: "ONE_CONSOLE",
+						xsp_lang: "en-US",
+						protocol: "V2",
+						productCode: "p_efm",
+					},
+				},
+				V: "1.0",
+			}),
 		);
 		expect(report).toMatchObject({
 			provider: "alibaba-token-plan",

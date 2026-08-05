@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as url from "node:url";
 import { __buildLegacyPiPackageRootOverrides } from "@oh-my-pi/pi-coding-agent/extensibility/plugins/legacy-pi-compat";
@@ -81,6 +82,59 @@ process.stdout.write(JSON.stringify([
 		// pinned to e.g. `@oh-my-pi/pi-ai/providers/openai` keep resolving.
 		expect(bundledModuleKeys.has("@oh-my-pi/pi-ai/oauth/anthropic")).toBe(true);
 		expect(bundledModuleKeys.has("@oh-my-pi/pi-ai/oauth/openai-codex")).toBe(true);
+	});
+
+	it("actually loads the shim's shared Pi translation through the bundled registry", async () => {
+		// The legacy shim performs the same Pi arg translation as the modern
+		// bridge and imports the shared helpers rather than copying them. Those
+		// use the explicit single-segment `providers/cursor-pi-args` target; wildcard
+		// exports may also match nested paths, whose registry coverage is tested below.
+		//
+		// Executing the generated registry is the contract — a key present in the
+		// override map still proves nothing if the module cannot be imported.
+		const key = "@oh-my-pi/pi-ai/providers/cursor-pi-args";
+		const entry = (await collectBundledPiEntries()).find(candidate => candidate.key === key);
+		expect(entry).toBeDefined();
+
+		// The rendered registry imports by bare specifier, exactly as the real
+		// bundle does, so it must run somewhere those specifiers resolve — the
+		// package itself. A temp dir has no workspace links and would fail for
+		// a reason unrelated to the export map.
+		const packageRoot = path.join(path.dirname(url.fileURLToPath(import.meta.url)), "..", "..");
+		const registryPath = path.join(packageRoot, `.probe-legacy-pi-args-${Bun.randomUUIDv7()}.ts`);
+		await Bun.write(
+			registryPath,
+			`${__renderLegacyPiVirtualModule([entry!])}
+const mod = await BUNDLED_PI_MODULE_LOADERS[${JSON.stringify(key)}]();
+process.stdout.write(JSON.stringify([
+	mod.piEscapeRegexLiteral("a.b*c"),
+	mod.piJoinPath("src", "*.ts"),
+]));
+`,
+		);
+		let exitCode: number;
+		let stdout: string;
+		let stderr: string;
+		try {
+			const proc = Bun.spawn([process.execPath, registryPath], {
+				cwd: packageRoot,
+				stdout: "pipe",
+				stderr: "pipe",
+			});
+			[exitCode, stdout, stderr] = await Promise.all([
+				proc.exited,
+				new Response(proc.stdout).text(),
+				new Response(proc.stderr).text(),
+			]);
+		} finally {
+			await fs.rm(registryPath, { force: true });
+		}
+		expect(stderr).toBe("");
+		expect(exitCode).toBe(0);
+		expect(JSON.parse(stdout)).toEqual(["a\\.b\\*c", path.join("src", "*.ts")]);
+
+		const overrides = __buildLegacyPiPackageRootOverrides(true, bundledModuleKeys);
+		expect(overrides[key]).toBe(`omp-legacy-pi-bundled:${key}`);
 	});
 
 	it("expands web search provider wildcard exports for compiled plugin imports", () => {
@@ -166,5 +220,20 @@ process.stdout.write(JSON.stringify([
 		// virtual loader would race the dedicated shim path.
 		const overrides = __buildLegacyPiPackageRootOverrides(true, bundledModuleKeys);
 		expect(overrides).not.toHaveProperty("typebox");
+	});
+
+	it("bundles nested wildcard subpaths so a compiled extension can import them", async () => {
+		// Node matches `*` in an `exports` pattern across `/`, so
+		// `./slash-commands/*` genuinely serves
+		// `slash-commands/helpers/active-oauth-account`. Enumerating only the
+		// top level left every nested key out of the compiled registry, so the
+		// import resolved from source and failed inside a binary — which is how
+		// a real extension (`quota-hud.ts`) broke on this exact specifier.
+		const entries = await collectBundledPiEntries();
+		const keys = new Set(entries.map(entry => entry.key));
+		expect(keys.has("@oh-my-pi/pi-coding-agent/slash-commands/helpers/active-oauth-account")).toBe(true);
+		// Directory index modules stay excluded: `./x/*` must not serve `x/y`
+		// from `y/index.ts`, which Node would not resolve either.
+		expect(keys.has("@oh-my-pi/pi-coding-agent/modes/theme/defaults/index")).toBe(false);
 	});
 });

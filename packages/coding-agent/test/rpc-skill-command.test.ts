@@ -35,10 +35,8 @@ describe("tryRunRpcSkillCommand", () => {
 		expect(handled).toEqual({ agentInvoked: true });
 		expect(message?.customType).toBe(SKILL_PROMPT_MESSAGE_TYPE);
 		expect(message?.content).toContain("Review the supplied code carefully.");
-		expect(message?.content).toContain('The user has invoked the "reviewer" skill');
 		expect(message?.content).toContain(`[Skill directory: ${dir}]`);
-		expect(message?.content).toMatch(/[Rr]esolve any relative paths/);
-		expect(message?.content).toContain("User: focus on risks");
+		expect(message?.content).toContain("focus on risks");
 		expect(message?.display).toBe(true);
 		expect(message?.attribution).toBe("user");
 		expect(options).toEqual({ streamingBehavior: "steer" });

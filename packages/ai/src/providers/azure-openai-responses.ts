@@ -131,9 +131,10 @@ export const streamAzureOpenAIResponses: StreamFunction<"azure-openai-responses"
 
 		try {
 			const apiKey = options?.apiKey || getEnvApiKey(model.provider) || "";
-			const { url, headers } = buildAzureResponsesRequest(model, apiKey, options);
-			let params = buildParams(model, context, options, deploymentName);
-			const replacementPayload = await options?.onPayload?.(params, model);
+			const { url, headers, baseUrl } = buildAzureResponsesRequest(model, apiKey, options);
+			const requestModel = modelForAzureEndpoint(model, baseUrl);
+			let params = buildParams(requestModel, context, options, deploymentName);
+			const replacementPayload = await options?.onPayload?.(params, requestModel);
 			if (replacementPayload !== undefined) {
 				params = replacementPayload as typeof params;
 			}
@@ -294,6 +295,23 @@ function resolveAzureConfig(
 	};
 }
 
+function modelForAzureEndpoint(
+	model: Model<"azure-openai-responses">,
+	baseUrl: string,
+): Model<"azure-openai-responses"> {
+	if (model.supportsComputerUseConfig !== undefined || model.supportsComputerUse !== true) return model;
+	try {
+		const url = new URL(baseUrl);
+		if (
+			url.protocol === "https:" &&
+			(url.hostname.endsWith(".openai.azure.com") || url.hostname === "models.inference.ai.azure.com")
+		) {
+			return model;
+		}
+	} catch {}
+	return { ...model, supportsComputerUse: false };
+}
+
 /**
  * Replicates the `AzureOpenAI` SDK client's request shape for `/responses`:
  * a string api key becomes a single `api-key` header (azure.mjs `authHeaders`;
@@ -307,7 +325,7 @@ function buildAzureResponsesRequest(
 	model: Model<"azure-openai-responses">,
 	apiKey: string,
 	options?: AzureOpenAIResponsesOptions,
-): { url: string; headers: Record<string, string> } {
+): { url: string; headers: Record<string, string>; baseUrl: string } {
 	if (!apiKey) {
 		const envKey = $env.AZURE_OPENAI_API_KEY;
 		if (!envKey) {
@@ -329,6 +347,7 @@ function buildAzureResponsesRequest(
 	return {
 		url: `${baseUrl}/responses?api-version=${encodeURIComponent(apiVersion)}`,
 		headers,
+		baseUrl,
 	};
 }
 
@@ -386,8 +405,20 @@ function buildParams(
 		if (serializedTools.length > 0) {
 			params.tools = serializedTools;
 			if (options?.toolChoice) {
-				const toolChoice = mapToOpenAIResponsesToolChoice(options.toolChoice);
+				let toolChoice = mapToOpenAIResponsesToolChoice(options.toolChoice);
 				const hasComputerTool = serializedTools.some(tool => tool.type === "computer");
+				if (toolChoice && typeof toolChoice !== "string" && toolChoice.type === "computer" && !hasComputerTool) {
+					const computer = context.tools.find(tool => tool.native?.type === "computer");
+					if (computer && serializedTools.some(tool => tool.type === "function" && tool.name === computer.name)) {
+						toolChoice = { type: "function", name: computer.name };
+					}
+				}
+				if (toolChoice && typeof toolChoice !== "string" && toolChoice.type === "function" && hasComputerTool) {
+					const computer = context.tools.find(tool => tool.native?.type === "computer");
+					if (computer?.name === toolChoice.name) {
+						toolChoice = { type: "computer" };
+					}
+				}
 				if (
 					toolChoice &&
 					(typeof toolChoice === "string" ||

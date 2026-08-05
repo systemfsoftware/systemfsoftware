@@ -410,7 +410,10 @@ fn fill_repeat_bands_rgb(pixels: &mut [u8], width: usize, height: usize, grid: &
 		for copy in 1..grid.repeat {
 			let band_top = (row * grid.repeat + copy) * grid.cell_h;
 			for y in band_top..(band_top + grid.cell_h).min(height) {
-				for px in pixels[y * width * 3..(y + 1) * width * 3].chunks_exact_mut(3) {
+				for px in pixels[y * width * 3..(y + 1) * width * 3]
+					.as_chunks_mut::<3>()
+					.0
+				{
 					px.copy_from_slice(&band);
 				}
 			}
@@ -1302,7 +1305,7 @@ fn render_snapcompact_png_sync(
 				render_bitmap(&text, src_w, src_h, font, &native, black_ink)
 			};
 			let mut rgb = vec![0f32; src_w * src_h * 3];
-			for (dst, &idx) in rgb.chunks_exact_mut(3).zip(&indexed) {
+			for (dst, &idx) in rgb.as_chunks_mut::<3>().0.iter_mut().zip(&indexed) {
 				let [r, g, b] = PALETTE[idx as usize];
 				dst[0] = f32::from(r);
 				dst[1] = f32::from(g);

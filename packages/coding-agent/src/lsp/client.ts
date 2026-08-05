@@ -4,17 +4,20 @@ import { MessageFramer } from "../jsonrpc/message-framing";
 import { ToolAbortError, throwIfAborted } from "../tools/tool-errors";
 import { applyWorkspaceEdit } from "./edits";
 import { getLspmuxCommand, isLspmuxSupported } from "./lspmux";
+import { connectSharedLspTransport } from "./mux/daemon";
 import type {
 	LspClient,
 	LspJsonRpcId,
 	LspJsonRpcNotification,
 	LspJsonRpcRequest,
 	LspJsonRpcResponse,
+	LspTransport,
+	LspWriteSink,
 	PublishDiagnosticsParams,
 	ServerConfig,
 	WorkspaceEdit,
 } from "./types";
-import { detectLanguageId, fileToUri } from "./utils";
+import { detectLanguageId, EquivalentUriMap, fileToUri } from "./utils";
 
 // =============================================================================
 // Client State
@@ -27,11 +30,23 @@ const fileOperationLocks = new Map<string, Promise<void>>();
 /** Negative cache of recent init failures so a broken server fails fast instead of re-spawning per call. */
 const INIT_FAILURE_BACKOFF_MS = 3 * 60 * 1000;
 const initFailures = new Map<string, { at: number; message: string }>();
+const READER_EXIT_GRACE_MS = 100;
 
 // Idle timeout configuration (disabled by default)
 let idleTimeoutMs: number | null = null;
 let idleCheckInterval: NodeJS.Timeout | null = null;
 const IDLE_CHECK_INTERVAL_MS = 60 * 1000;
+
+// Broker-shared server mode (one language server per project shared by every
+// omp instance through the LSP mux daemon). Off by default so embedders and
+// tests that drive getOrCreateClient directly never touch the daemon broker;
+// the SDK turns it on from the `lsp.shared` setting at session creation.
+let sharedLspEnabled = false;
+
+/** Enable or disable attaching to broker-shared language servers. */
+export function setSharedLspEnabled(enabled: boolean): void {
+	sharedLspEnabled = enabled;
+}
 
 /**
  * Configure the idle timeout for LSP clients.
@@ -200,15 +215,15 @@ function abortReason(signal: AbortSignal): Error {
 	return signal.reason instanceof Error ? signal.reason : new ToolAbortError();
 }
 
-class LspFlushAbortError extends Error {
+class LspDrainAbortError extends Error {
 	constructor(readonly reason: Error) {
 		super(reason.message);
-		this.name = "LspFlushAbortError";
+		this.name = "LspDrainAbortError";
 	}
 }
 
 async function writeMessage(
-	sink: Bun.FileSink,
+	sink: LspWriteSink,
 	message: LspJsonRpcRequest | LspJsonRpcNotification | LspJsonRpcResponse,
 	signal?: AbortSignal,
 ): Promise<void> {
@@ -216,26 +231,30 @@ async function writeMessage(
 		throw abortReason(signal);
 	}
 	const content = JSON.stringify(message);
-	sink.write(`Content-Length: ${Buffer.byteLength(content, "utf-8")}\r\n\r\n${content}`);
-	const flush = Promise.resolve(sink.flush());
+	const write = Promise.resolve(
+		sink.write(`Content-Length: ${Buffer.byteLength(content, "utf-8")}\r\n\r\n${content}`),
+	);
+	// Attach before flush(): it may throw synchronously after write() returned a
+	// rejected Promise, and leaving that rejection unobserved kills the host.
+	void write.catch(() => {});
+	const drain = Promise.all([write, Promise.resolve(sink.flush())]).then(() => {});
 	if (!signal) {
-		await flush;
+		await drain;
 		return;
 	}
-	// The sink's flush blocks on the OS-level pipe drain: if the server is
-	// alive but stopped reading stdin, `await sink.flush()` never resolves.
-	// Race the flush against the caller's signal so a wedged server surfaces
-	// as the tool's normal timeout/cancel instead of a permanent hang.
+	// Either sink operation can block on the OS-level pipe drain when a live
+	// server stops reading stdin. Race the combined drain against the caller's
+	// signal so a wedged server surfaces as the tool's normal timeout/cancel.
 	const { promise, resolve, reject } = Promise.withResolvers<void>();
 	const onAbort = () => {
 		signal.removeEventListener("abort", onAbort);
-		// The underlying flush stays pending in the background; suppress its
+		// The underlying drain stays pending in the background; suppress its
 		// eventual settlement so we do not surface an unhandled rejection.
-		flush.catch(() => {});
-		reject(new LspFlushAbortError(abortReason(signal)));
+		drain.catch(() => {});
+		reject(new LspDrainAbortError(abortReason(signal)));
 	};
 	signal.addEventListener("abort", onAbort, { once: true });
-	flush.then(
+	drain.then(
 		() => {
 			signal.removeEventListener("abort", onAbort);
 			resolve();
@@ -249,8 +268,8 @@ async function writeMessage(
 }
 
 /**
- * Kill a client whose write queue is stuck (aborted flush left the sink's
- * flush promise pending, so subsequent writes queue behind a wedge forever).
+ * Kill a client whose write queue is stuck (an aborted drain left a sink
+ * operation pending, so subsequent writes queue behind the wedge forever).
  * Remove it from `clients` immediately so concurrent `getOrCreateClient`
  * callers do not grab the corpse before `proc.exited` cleans up.
  */
@@ -270,8 +289,8 @@ function queueWriteMessage(
 ): Promise<void> {
 	const write = client.writeQueue.catch(() => {}).then(() => writeMessage(client.proc.stdin, message, signal));
 	const result = write.catch((err: unknown) => {
-		if (err instanceof LspFlushAbortError) {
-			// Only an abort that raced this write's in-flight flush leaves
+		if (err instanceof LspDrainAbortError) {
+			// Only an abort that raced this write's in-flight drain leaves
 			// the sink pending. Pre-write aborts and queued caller timeouts
 			// must not kill a healthy shared client.
 			teardownWedgedClient(client);
@@ -299,6 +318,7 @@ async function startMessageReader(client: LspClient): Promise<void> {
 
 	const framer = new MessageFramer(Buffer.from(client.messageBuffer));
 
+	let readerFailed = false;
 	try {
 		while (true) {
 			const { done, value } = await reader.read();
@@ -387,6 +407,7 @@ async function startMessageReader(client: LspClient): Promise<void> {
 			}
 		}
 	} catch (err) {
+		readerFailed = true;
 		// Connection closed or error - reject all pending requests
 		for (const pending of Array.from(client.pendingRequests.values())) {
 			pending.reject(new Error(`LSP connection closed: ${err}`));
@@ -397,6 +418,9 @@ async function startMessageReader(client: LspClient): Promise<void> {
 		client.messageBuffer = framer.remainder();
 		reader.releaseLock();
 		client.isReading = false;
+		if (!readerFailed && client.proc.exitCode === null) {
+			await waitForExit(client, READER_EXIT_GRACE_MS);
+		}
 		// Reader exited while the server process is still alive (unrecoverable
 		// read error or bad stream state): nothing will route responses anymore,
 		// so tear the client down — the next call respawns instead of timing out.
@@ -672,6 +696,15 @@ const PROJECT_LOAD_TIMEOUT_MS = 15_000;
 const SHUTDOWN_TIMEOUT_MS = 5_000;
 const EXIT_TIMEOUT_MS = 1_000;
 
+function clientKey(config: ServerConfig, cwd: string): string {
+	return `${config.command}:${cwd}`;
+}
+
+/** Allow an explicit user reload to retry a matching initialization failure immediately. */
+export function clearInitializationFailure(config: ServerConfig, cwd: string): void {
+	initFailures.delete(clientKey(config, cwd));
+}
+
 /**
  * Get or create an LSP client for the given server configuration and working directory.
  * @param config - Server configuration
@@ -688,7 +721,7 @@ export async function getOrCreateClient(
 	initTimeoutMs?: number,
 	signal?: AbortSignal,
 ): Promise<LspClient> {
-	const key = `${config.command}:${cwd}`;
+	const key = clientKey(config, cwd);
 
 	// Check if client already exists
 	const existingClient = clients.get(key);
@@ -723,7 +756,14 @@ export async function getOrCreateClient(
 			? await getLspmuxCommand(baseCommand, baseArgs)
 			: { command: baseCommand, args: baseArgs };
 
-		const proc = ptree.spawn([command, ...args], {
+		// Prefer the broker-shared server unless an external lspmux wrapper is
+		// already multiplexing this command. Any shared-path failure falls back
+		// to a private spawn so LSP never regresses on broker trouble.
+		let proc: LspTransport | null = null;
+		if (sharedLspEnabled && command === baseCommand) {
+			proc = await connectSharedLspTransport({ command, args, cwd, env, signal });
+		}
+		proc ??= ptree.spawn([command, ...args], {
 			cwd,
 			stdin: "pipe",
 			env: env ? { ...Bun.env, ...env } : undefined,
@@ -747,7 +787,7 @@ export async function getOrCreateClient(
 			proc,
 			config,
 			requestId: 0,
-			diagnostics: new Map(),
+			diagnostics: new EquivalentUriMap(),
 			diagnosticsVersion: 0,
 			dynamicCapabilityRegistrations: new Map(),
 			openFiles: new Map(),
@@ -861,13 +901,13 @@ export async function getActiveOrPendingClient(
 	signal?: AbortSignal,
 ): Promise<LspClient | undefined> {
 	throwIfAborted(signal);
-	const client = clients.get(`${config.command}:${cwd}`);
+	const client = clients.get(clientKey(config, cwd));
 	if (client) {
 		client.lastActivity = Date.now();
 		return client;
 	}
 
-	const pending = clientLocks.get(`${config.command}:${cwd}`);
+	const pending = clientLocks.get(clientKey(config, cwd));
 	if (!pending) return undefined;
 	try {
 		return await untilAborted(signal, pending);
@@ -914,7 +954,7 @@ export async function ensureFileOpen(client: LspClient, filePath: string, signal
 			if (isEnoent(err)) return;
 			throw err;
 		}
-		const languageId = detectLanguageId(filePath);
+		const languageId = client.config.languageId ?? detectLanguageId(filePath);
 		throwIfAborted(signal);
 
 		await sendNotification(
@@ -988,7 +1028,7 @@ export async function syncContent(
 
 		if (!info) {
 			// Open file with provided content instead of reading from disk
-			const languageId = detectLanguageId(filePath);
+			const languageId = client.config.languageId ?? detectLanguageId(filePath);
 			throwIfAborted(signal);
 			await sendNotification(
 				client,
@@ -1067,7 +1107,7 @@ const WATCHED_FILES_NOTIFY_TIMEOUT_MS = 2_000;
  * This covers sibling files that are not open text documents, such as generated
  * CSS modules or type files that another edited document imports immediately.
  *
- * The underlying stdin flush is self-bounded by
+ * The underlying stdin write drain is self-bounded by
  * {@link WATCHED_FILES_NOTIFY_TIMEOUT_MS}; only an abort of the caller's
  * `signal` rejects.
  */

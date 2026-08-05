@@ -86,4 +86,59 @@ describe("createAgentSession auto-learn tool activation", () => {
 		expect(names).toContain("read");
 		expect(names).not.toContain("manage_skill");
 	});
+
+	it("activates checkpoint and rewind when only checkpoint is in an explicit toolNames list", async () => {
+		const { session } = await createAgentSession({
+			cwd: registryDir,
+			agentDir: registryDir,
+			modelRegistry,
+			sessionManager: SessionManager.inMemory(),
+			settings: Settings.isolated({ "checkpoint.enabled": true }),
+			model: getBundledModel("openai", "gpt-4o-mini"),
+			disableExtensionDiscovery: true,
+			toolNames: ["checkpoint"],
+			requireYieldTool: true,
+		});
+		sessions.push(session);
+		const names = session.getActiveToolNames();
+		expect(names).toContain("checkpoint");
+		expect(names).toContain("rewind");
+	});
+
+	it("activates checkpoint and rewind when only rewind is in an explicit toolNames list", async () => {
+		const { session } = await createAgentSession({
+			cwd: registryDir,
+			agentDir: registryDir,
+			modelRegistry,
+			sessionManager: SessionManager.inMemory(),
+			settings: Settings.isolated({ "checkpoint.enabled": true }),
+			model: getBundledModel("openai", "gpt-4o-mini"),
+			disableExtensionDiscovery: true,
+			toolNames: ["rewind"],
+			requireYieldTool: true,
+		});
+		sessions.push(session);
+		const names = session.getActiveToolNames();
+		expect(names).toContain("checkpoint");
+		expect(names).toContain("rewind");
+	});
+
+	it("activates checkpoint and rewind in a restricted session with one-sided toolNames", async () => {
+		const { session } = await createAgentSession({
+			cwd: registryDir,
+			agentDir: registryDir,
+			modelRegistry,
+			sessionManager: SessionManager.inMemory(),
+			settings: Settings.isolated({ "checkpoint.enabled": true }),
+			model: getBundledModel("openai", "gpt-4o-mini"),
+			disableExtensionDiscovery: true,
+			toolNames: ["checkpoint"],
+			requireYieldTool: true,
+			restrictToolNames: true,
+		});
+		sessions.push(session);
+		const names = session.getActiveToolNames();
+		expect(names).toContain("checkpoint");
+		expect(names).toContain("rewind");
+	});
 });

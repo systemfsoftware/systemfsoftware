@@ -67,7 +67,7 @@ export type MockApi = typeof MOCK_API;
 export type MockContent =
 	| string
 	| { type: "text"; text: string }
-	| { type: "thinking"; thinking: string }
+	| { type: "thinking"; thinking: string; thinkingSignature?: string }
 	| {
 			type: "toolCall";
 			/** Optional explicit id; auto-generated when omitted. */

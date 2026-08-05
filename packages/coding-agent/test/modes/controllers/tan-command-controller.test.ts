@@ -3,10 +3,11 @@ import * as path from "node:path";
 import type { AssistantMessage, Model } from "@oh-my-pi/pi-ai";
 import type { AsyncJobRegisterOptions } from "@oh-my-pi/pi-coding-agent/async/job-manager";
 import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
+import { resolveLocalRoot } from "@oh-my-pi/pi-coding-agent/internal-urls/local-protocol";
 import { TanCommandController } from "@oh-my-pi/pi-coding-agent/modes/controllers/tan-command-controller";
 import type { InteractiveModeContext } from "@oh-my-pi/pi-coding-agent/modes/types";
 import { AgentRegistry, MAIN_AGENT_ID } from "@oh-my-pi/pi-coding-agent/registry/agent-registry";
-import type { CreateAgentSessionResult } from "@oh-my-pi/pi-coding-agent/sdk";
+import type { CreateAgentSessionOptions, CreateAgentSessionResult } from "@oh-my-pi/pi-coding-agent/sdk";
 import * as sdkModule from "@oh-my-pi/pi-coding-agent/sdk";
 import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
 import { TempDir } from "@oh-my-pi/pi-utils";
@@ -118,10 +119,15 @@ function createContext(overrides?: {
 			sequence.push("sendCustomMessage");
 		}),
 	} as unknown as InteractiveModeContext["session"];
+	const parentArtifactsDir = parentFile.slice(0, -6);
+	const getArtifactsDir = vi.fn(() => parentArtifactsDir);
+	const getSessionId = vi.fn(() => "parent-local-session");
 	const sessionManager = {
 		getSessionFile: vi.fn(() => parentFile),
 		getCwd: vi.fn(() => tempDir.path()),
 		getSessionDir: vi.fn(() => tempDir.path()),
+		getArtifactsDir,
+		getSessionId,
 		ensureOnDisk: vi.fn(async () => {}),
 		flush: vi.fn(async () => {}),
 	} as unknown as InteractiveModeContext["sessionManager"];
@@ -141,9 +147,12 @@ function createContext(overrides?: {
 	return {
 		tempDir,
 		parentFile,
+		parentArtifactsDir,
 		cloneFile,
 		cloneManager,
 		ctx,
+		getArtifactsDir,
+		getSessionId,
 		register,
 		sequence,
 		get capturedRun() {
@@ -223,6 +232,32 @@ describe("TanCommandController", () => {
 		);
 		expect(harness.ctx.rebuildChatFromMessages).toHaveBeenCalled();
 		expect(harness.ctx.showStatus).toHaveBeenCalledWith("Dispatched background tan job-123");
+	});
+
+	it("keeps the dispatching session's local:// root after the interactive session switches", async () => {
+		const harness = createContext();
+		vi.spyOn(SessionManager, "forkFrom").mockResolvedValue(harness.cloneManager);
+		const { clone } = createCloneStub({ lastAssistantText: "done" });
+		let capturedOptions: CreateAgentSessionOptions | undefined;
+		vi.spyOn(sdkModule, "createAgentSession").mockImplementation(async options => {
+			capturedOptions = options;
+			return { session: clone } as unknown as CreateAgentSessionResult;
+		});
+		const controller = new TanCommandController(harness.ctx);
+
+		await controller.start("read local://paste-1.md");
+		harness.getArtifactsDir.mockReturnValue(path.join(harness.tempDir.path(), "other-session"));
+		harness.getSessionId.mockReturnValue("other-session");
+		const capturedRun = harness.capturedRun;
+		if (!capturedRun) throw new Error("run function was not captured");
+		await capturedRun({ jobId: "job-123", signal: new AbortController().signal, reportProgress: async () => {} });
+
+		const opts = capturedOptions?.localProtocolOptions;
+		if (!opts) throw new Error("localProtocolOptions was not passed");
+		expect(resolveLocalRoot(opts)).toBe(path.join(harness.parentArtifactsDir, "local"));
+		// The local mapping keys off the session-manager id (not `session.sessionId`,
+		// still "parent-session"), matching the parent's large-paste / local:// writes.
+		expect(opts.getSessionId?.()).toBe("parent-local-session");
 	});
 
 	it("aborts the cloned agent when the background job signal aborts", async () => {

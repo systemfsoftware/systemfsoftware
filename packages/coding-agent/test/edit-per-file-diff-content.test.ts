@@ -8,7 +8,7 @@ import {
 	EditTool,
 	type EditToolDetails,
 	executePatchSingle,
-	executeReplaceSingle,
+	executeReplace,
 } from "@oh-my-pi/pi-coding-agent/edit";
 import { writethroughNoop } from "@oh-my-pi/pi-coding-agent/lsp";
 import type { ToolSession } from "@oh-my-pi/pi-coding-agent/tools";
@@ -141,17 +141,17 @@ describe("EditTool patch aggregation — oldText/newText propagation", () => {
 	});
 });
 
-// ─── executeReplaceSingle ─────────────────────────────────────────────────────
+// ─── executeReplace ─────────────────────────────────────────────────────────
 
-describe("executeReplaceSingle — oldText/newText propagation", () => {
+describe("executeReplace — oldText/newText propagation", () => {
 	test("replace: oldText is full file before, newText is full file after", async () => {
 		const originalContent = "line one\nline two\nline three\n";
 		await Bun.write(path.join(tempDir, "bar.txt"), originalContent);
 
-		const result = await executeReplaceSingle({
+		const result = await executeReplace({
 			session: makeSession(tempDir),
 			path: "bar.txt",
-			params: { old_text: "line two", new_text: "line TWO" },
+			params: { old_string: "line two", new_string: "line TWO" },
 			allowFuzzy: false,
 			fuzzyThreshold: DEFAULT_FUZZY_THRESHOLD,
 			writethrough: writethroughNoop,

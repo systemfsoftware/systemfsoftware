@@ -1,9 +1,9 @@
+import { type } from "@oh-my-pi/omptype";
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import type { ToolExample } from "@oh-my-pi/pi-ai";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Text } from "@oh-my-pi/pi-tui";
-import { isRecord, prompt } from "@oh-my-pi/pi-utils";
-import { type } from "arktype";
+import { isRecord, prompt, sanitizeText } from "@oh-my-pi/pi-utils";
 import chalk from "chalk";
 import type { RenderResultOptions } from "../extensibility/custom-tools/types";
 import type { Theme } from "../modes/theme/theme";
@@ -12,7 +12,7 @@ import type { ToolSession } from "../sdk";
 import type { SessionEntry } from "../session/session-entries";
 import { framedBlock, renderStatusLine, renderTreeList } from "../tui";
 import { normalizePathLikeInput, resolveToCwd } from "./path-utils";
-import { formatErrorDetail, formatMoreItems, PREVIEW_LIMITS, pluralize } from "./render-utils";
+import { formatErrorDetail, formatMoreItems, PREVIEW_LIMITS, pluralize, replaceTabs } from "./render-utils";
 
 // =============================================================================
 // Types
@@ -929,9 +929,27 @@ export function phaseRomanNumeral(oneBasedIndex: number): string {
 	return out;
 }
 
-/** Display-only phase header: `I. Foundation`. State and prompts never see this. */
+/**
+ * Every render boundary in this file funnels display text through here.
+ *
+ * `sanitizeText` strips ANSI/C0 sequences but deliberately preserves tabs, and
+ * a raw tab punches holes in bordered TUI output, so both are needed. The raw
+ * value stays untouched everywhere else: task content and phase names are the
+ * identity keys the local list is looked up by, and what gets persisted.
+ */
+function forDisplay(text: string): string {
+	return replaceTabs(sanitizeText(text));
+}
+
+/**
+ * Display-only phase header: `I. Foundation`. State and prompts never see this.
+ *
+ * Sanitized for the same reason task labels are: this is a render boundary and
+ * the name may carry provider or session text holding control sequences. The
+ * raw `phase.name` stays the lookup key everywhere else.
+ */
 export function formatPhaseDisplayName(name: string, oneBasedIndex: number): string {
-	return `${phaseRomanNumeral(oneBasedIndex)}. ${name}`;
+	return `${phaseRomanNumeral(oneBasedIndex)}. ${forDisplay(name)}`;
 }
 
 export const TODO_STRIKE_HOLD_FRAMES = 2;
@@ -970,27 +988,31 @@ function formatTodoLine(
 	matched = false,
 ): string {
 	const checkbox = uiTheme.checkbox;
+	// Sanitize only for display. A mirrored Cursor snapshot carries provider text
+	// verbatim, and a label holding ANSI/C0 sequences would otherwise rewrite the
+	// terminal every time the list renders or replays. `item.content` stays raw
+	// everywhere else: it is the identity key the local list is looked up by
+	// (`findTaskByContent`) and what gets persisted.
+	const label = forDisplay(item.content);
 	switch (item.status) {
 		case "completed": {
-			const revealCount = completionKeys.has(item.content) ? strikeRevealCount(item.content, frame) : undefined;
+			const revealCount = completionKeys.has(item.content) ? strikeRevealCount(label, frame) : undefined;
 			const content =
-				revealCount === undefined
-					? strikethroughText(item.content)
-					: partialStrikethrough(item.content, revealCount);
+				revealCount === undefined ? strikethroughText(label) : partialStrikethrough(label, revealCount);
 			return uiTheme.fg("success", `${prefix}${checkbox.checked} ${content}`);
 		}
 		case "in_progress":
-			return uiTheme.fg("accent", `${prefix}${checkbox.unchecked} ${item.content}`);
+			return uiTheme.fg("accent", `${prefix}${checkbox.unchecked} ${label}`);
 		case "abandoned":
-			return uiTheme.fg("error", `${prefix}${checkbox.unchecked} ${strikethroughText(item.content)}`);
+			return uiTheme.fg("error", `${prefix}${checkbox.unchecked} ${strikethroughText(label)}`);
 		case "blocked": {
-			const note = item.blocker ? `blocked: ${item.blocker}` : "blocked";
-			return uiTheme.fg("warning", `${prefix}${checkbox.unchecked} ${item.content} (${note})`);
+			const note = item.blocker ? `blocked: ${forDisplay(item.blocker)}` : "blocked";
+			return uiTheme.fg("warning", `${prefix}${checkbox.unchecked} ${label} (${note})`);
 		}
 		default:
 			// A pending todo lit by a live subagent match renders accent, matching
 			// the sticky HUD's convention (#5873).
-			return uiTheme.fg(matched ? "accent" : "dim", `${prefix}${checkbox.unchecked} ${item.content}`);
+			return uiTheme.fg(matched ? "accent" : "dim", `${prefix}${checkbox.unchecked} ${label}`);
 	}
 }
 
@@ -1065,13 +1087,15 @@ export const todoToolRenderer = {
 		// both the new single-op and legacy batch shapes so a malformed delta
 		// never breaks the TUI render loop (#2005).
 		const opsList = normalizeTodoArg(args);
+		// Model-authored, partially-streamed strings going straight into a header:
+		// `renderStatusLine` only flattens CR/LF and leaves the rest to the caller.
 		const ops =
 			opsList.length === 0
 				? ["update"]
 				: opsList.map(e => {
-						const parts = [e.op ?? "update"];
-						if (e.task) parts.push(e.task);
-						if (e.phase) parts.push(e.phase);
+						const parts = [forDisplay(e.op ?? "update")];
+						if (e.task) parts.push(forDisplay(e.task));
+						if (e.phase) parts.push(forDisplay(e.phase));
 						if (Array.isArray(e.items) && e.items.length) {
 							parts.push(`${e.items.length} item${e.items.length === 1 ? "" : "s"}`);
 						}
@@ -1125,7 +1149,10 @@ export const todoToolRenderer = {
 			uiTheme,
 		);
 		if (allTasks.length === 0) {
-			const fallback = result.content?.find(content => content.type === "text")?.text ?? "No todos";
+			// Provider text on the Cursor path (the todo summary or a refusal note),
+			// so sanitize like every other label. The error branch above already
+			// goes through `formatErrorDetail`.
+			const fallback = forDisplay(result.content?.find(content => content.type === "text")?.text ?? "No todos");
 			return new Text(`${header}\n  ${uiTheme.fg("dim", fallback)}`, 0, 0);
 		}
 

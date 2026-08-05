@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { stream } from "@oh-my-pi/pi-ai/stream";
 import type {
+	AnthropicServerToolContent,
 	AssistantMessage,
 	AssistantMessageEvent,
 	Context,
@@ -346,6 +347,107 @@ describe("wrapLeakedThinkingStream", () => {
 		expect(thinkingEnd).toBeLessThan(toolStart);
 	});
 
+	it("preserves complete Anthropic web-search history at its source positions", async () => {
+		const firstThinking = { type: "thinking" as const, thinking: "choose source", thinkingSignature: "sig-1" };
+		const serverBlocks: AnthropicServerToolContent[] = [
+			{
+				type: "anthropicServerTool",
+				block: {
+					type: "server_tool_use",
+					id: "srvtoolu_search",
+					name: "web_search",
+					input: { query: "current UTC date", nested: { source: "authoritative" } },
+				},
+			},
+			{
+				type: "anthropicServerTool",
+				block: {
+					type: "web_search_tool_result",
+					tool_use_id: "srvtoolu_search",
+					content: [
+						{
+							type: "web_search_result",
+							url: "https://example.test/date",
+							encrypted_content: "opaque-ciphertext",
+						},
+					],
+				},
+			},
+		];
+		const secondThinking = { type: "thinking" as const, thinking: "use result", thinkingSignature: "sig-2" };
+		const call: ToolCall = {
+			type: "toolCall",
+			id: "toolu_write",
+			name: "write",
+			arguments: { path: "date.txt", content: "2026-07-26" },
+		};
+		const content: AssistantMessage["content"] = [firstThinking, ...serverBlocks, secondThinking, call];
+
+		const { result } = await runWrapper(inner => {
+			inner.push({ type: "start", partial: msg() });
+			inner.push({
+				type: "thinking_delta",
+				contentIndex: 0,
+				delta: firstThinking.thinking,
+				partial: msg({ content: [firstThinking] }),
+			});
+			inner.push({
+				type: "thinking_end",
+				contentIndex: 0,
+				content: firstThinking.thinking,
+				partial: msg({ content: [firstThinking] }),
+			});
+			inner.push({
+				type: "thinking_delta",
+				contentIndex: 3,
+				delta: secondThinking.thinking,
+				partial: msg({ content: content.slice(0, 4) }),
+			});
+			inner.push({
+				type: "thinking_end",
+				contentIndex: 3,
+				content: secondThinking.thinking,
+				partial: msg({ content: content.slice(0, 4) }),
+			});
+			const terminal = msg({ content, stopReason: "toolUse" });
+			inner.push({ type: "toolcall_start", contentIndex: 4, partial: terminal });
+			inner.push({ type: "toolcall_end", contentIndex: 4, toolCall: call, partial: terminal });
+			inner.push({ type: "done", reason: "toolUse", message: terminal });
+		});
+
+		expect(result.content).toEqual(content);
+		expect(result.content.slice(1, 3)).toEqual(serverBlocks);
+	});
+
+	it("drops incomplete Anthropic web-search history instead of replaying orphan blocks", async () => {
+		const content: AssistantMessage["content"] = [
+			{
+				type: "anthropicServerTool",
+				block: {
+					type: "server_tool_use",
+					id: "srvtoolu_unmatched_call",
+					name: "web_search",
+					input: { query: "orphan call" },
+				},
+			},
+			{
+				type: "anthropicServerTool",
+				block: {
+					type: "web_search_tool_result",
+					tool_use_id: "srvtoolu_unmatched_result",
+					content: [],
+				},
+			},
+			{ type: "text", text: "safe terminal text" },
+		];
+		const { result } = await runWrapper(inner => {
+			inner.push({ type: "start", partial: msg() });
+			inner.push({ type: "done", reason: "stop", message: msg({ content }) });
+		});
+
+		expect(result.content).toEqual([{ type: "text", text: "safe terminal text" }]);
+	});
+
 	it("recovers a signature-bearing thinking block that emitted no per-block events", async () => {
 		const signature = JSON.stringify({ id: "rs_1", type: "reasoning", encrypted_content: "abc" });
 		const block = { type: "thinking" as const, thinking: "recovered reasoning", thinkingSignature: signature };
@@ -437,6 +539,19 @@ describe("wrapLeakedThinkingStream", () => {
 			"sig",
 			"sig",
 		]);
+	});
+
+	it("resets terminal text signatures at source block boundaries", async () => {
+		const content: AssistantMessage["content"] = [
+			{ type: "text", text: "signed text", textSignature: "sig-1" },
+			{ type: "text", text: "unsigned text" },
+		];
+		const { result } = await runWrapper(inner => {
+			inner.push({ type: "start", partial: msg() });
+			inner.push({ type: "done", reason: "stop", message: msg({ content }) });
+		});
+
+		expect(result.content).toEqual(content);
 	});
 
 	it("passes clean text through unchanged and forwards native thinking", async () => {
@@ -594,5 +709,202 @@ describe("leaked thinking healing through stream()", () => {
 			.join("");
 		expect(thinking).toContain("Deliberate.");
 		expect(texts(result).join("").trim()).toBe("Final answer.");
+	});
+
+	it("replays native web-search history on a custom Anthropic continuation", async () => {
+		const searchResult = {
+			type: "web_search_tool_result",
+			tool_use_id: "srvtoolu_1",
+			content: [
+				{
+					type: "web_search_result",
+					url: "https://example.test/date",
+					title: "UTC date",
+					encrypted_content: "opaque-search-result",
+				},
+			],
+		};
+		const nativeSearchResponse = [
+			sseFrame("message_start", {
+				type: "message_start",
+				message: { id: "msg_native_search", usage: { input_tokens: 12, output_tokens: 0 } },
+			}),
+			sseFrame("content_block_start", {
+				type: "content_block_start",
+				index: 0,
+				content_block: { type: "thinking", thinking: "" },
+			}),
+			sseFrame("content_block_delta", {
+				type: "content_block_delta",
+				index: 0,
+				delta: { type: "thinking_delta", thinking: "Choose an authoritative source." },
+			}),
+			sseFrame("content_block_delta", {
+				type: "content_block_delta",
+				index: 0,
+				delta: { type: "signature_delta", signature: "sig-1" },
+			}),
+			sseFrame("content_block_stop", { type: "content_block_stop", index: 0 }),
+			sseFrame("content_block_start", {
+				type: "content_block_start",
+				index: 1,
+				content_block: { type: "server_tool_use", id: "srvtoolu_1", name: "web_search" },
+			}),
+			sseFrame("content_block_delta", {
+				type: "content_block_delta",
+				index: 1,
+				delta: { type: "input_json_delta", partial_json: '{"query":"current UTC date"}' },
+			}),
+			sseFrame("content_block_stop", { type: "content_block_stop", index: 1 }),
+			sseFrame("content_block_start", {
+				type: "content_block_start",
+				index: 2,
+				content_block: searchResult,
+			}),
+			sseFrame("content_block_stop", { type: "content_block_stop", index: 2 }),
+			sseFrame("content_block_start", {
+				type: "content_block_start",
+				index: 3,
+				content_block: { type: "thinking", thinking: "" },
+			}),
+			sseFrame("content_block_delta", {
+				type: "content_block_delta",
+				index: 3,
+				delta: { type: "thinking_delta", thinking: "Use the result." },
+			}),
+			sseFrame("content_block_delta", {
+				type: "content_block_delta",
+				index: 3,
+				delta: { type: "signature_delta", signature: "sig-2" },
+			}),
+			sseFrame("content_block_stop", { type: "content_block_stop", index: 3 }),
+			sseFrame("content_block_start", {
+				type: "content_block_start",
+				index: 4,
+				content_block: { type: "text", text: "" },
+			}),
+			sseFrame("content_block_delta", {
+				type: "content_block_delta",
+				index: 4,
+				delta: { type: "text_delta", text: "Writing the date." },
+			}),
+			sseFrame("content_block_stop", { type: "content_block_stop", index: 4 }),
+			sseFrame("content_block_start", {
+				type: "content_block_start",
+				index: 5,
+				content_block: { type: "tool_use", id: "toolu_write", name: "write", input: {} },
+			}),
+			sseFrame("content_block_delta", {
+				type: "content_block_delta",
+				index: 5,
+				delta: { type: "input_json_delta", partial_json: '{"path":"date.txt","content":"2026-07-26"}' },
+			}),
+			sseFrame("content_block_stop", { type: "content_block_stop", index: 5 }),
+			sseFrame("message_delta", {
+				type: "message_delta",
+				delta: { stop_reason: "tool_use" },
+				usage: {
+					input_tokens: 12,
+					output_tokens: 20,
+					server_tool_use: { web_search_requests: 1 },
+				},
+			}),
+			sseFrame("message_stop", { type: "message_stop" }),
+		].join("");
+		const continuationResponse = [
+			sseFrame("message_start", {
+				type: "message_start",
+				message: { id: "msg_continuation", usage: { input_tokens: 30, output_tokens: 0 } },
+			}),
+			sseFrame("content_block_start", {
+				type: "content_block_start",
+				index: 0,
+				content_block: { type: "text", text: "" },
+			}),
+			sseFrame("content_block_delta", {
+				type: "content_block_delta",
+				index: 0,
+				delta: { type: "text_delta", text: "DONE" },
+			}),
+			sseFrame("content_block_stop", { type: "content_block_stop", index: 0 }),
+			sseFrame("message_delta", {
+				type: "message_delta",
+				delta: { stop_reason: "end_turn" },
+				usage: { input_tokens: 30, output_tokens: 1 },
+			}),
+			sseFrame("message_stop", { type: "message_stop" }),
+		].join("");
+		let requestCount = 0;
+		let continuationRequest: unknown;
+		const customFetch = Object.assign(
+			async (_input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+				requestCount++;
+				if (requestCount === 2) {
+					if (typeof init?.body !== "string") throw new Error("Expected JSON request body");
+					continuationRequest = JSON.parse(init.body);
+				}
+				return new Response(requestCount === 1 ? nativeSearchResponse : continuationResponse, {
+					status: 200,
+					headers: { "content-type": "text/event-stream", "request-id": `req_${requestCount}` },
+				});
+			},
+			{ preconnect: fetch.preconnect },
+		);
+		const customModel = anthropicModel({
+			provider: "anthropic",
+			baseUrl: "https://anthropic-proxy.example.test/v1",
+		});
+		const first = await stream(customModel, context, { apiKey: "test", fetch: customFetch }).result();
+		expect(first.content.map(block => block.type)).toEqual([
+			"thinking",
+			"anthropicServerTool",
+			"anthropicServerTool",
+			"thinking",
+			"text",
+			"toolCall",
+		]);
+
+		const continuedContext: Context = {
+			messages: [
+				...context.messages,
+				first,
+				{
+					role: "toolResult",
+					toolCallId: "toolu_write",
+					toolName: "write",
+					content: [{ type: "text", text: "Wrote date.txt" }],
+					isError: false,
+					timestamp: 2,
+				},
+			],
+		};
+		await stream(customModel, continuedContext, { apiKey: "test", fetch: customFetch }).result();
+
+		if (
+			typeof continuationRequest !== "object" ||
+			continuationRequest === null ||
+			!("messages" in continuationRequest) ||
+			!Array.isArray(continuationRequest.messages)
+		) {
+			throw new Error("Expected captured Anthropic messages");
+		}
+		const assistant = continuationRequest.messages.find(
+			message =>
+				typeof message === "object" && message !== null && "role" in message && message.role === "assistant",
+		);
+		if (
+			typeof assistant !== "object" ||
+			assistant === null ||
+			!("content" in assistant) ||
+			!Array.isArray(assistant.content)
+		) {
+			throw new Error("Expected captured assistant content");
+		}
+		const assistantContent: unknown[] = assistant.content;
+		expect(
+			assistantContent.map(block =>
+				typeof block === "object" && block !== null && "type" in block ? block.type : undefined,
+			),
+		).toEqual(["thinking", "server_tool_use", "web_search_tool_result", "thinking", "text", "tool_use"]);
 	});
 });

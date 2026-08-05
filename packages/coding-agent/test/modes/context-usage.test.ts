@@ -6,6 +6,7 @@
  * internals, which massively overcounts.
  */
 import { describe, expect, it } from "bun:test";
+import { type } from "@oh-my-pi/omptype";
 import { arkToWireSchema } from "@oh-my-pi/pi-ai/utils/schema";
 import {
 	type ContextBreakdown,
@@ -14,7 +15,6 @@ import {
 	estimateToolSchemaTokens,
 	renderContextUsage,
 } from "@oh-my-pi/pi-coding-agent/modes/utils/context-usage";
-import { type } from "arktype";
 
 describe("estimateToolSchemaTokens", () => {
 	it("counts arktype tool schemas by their wire JSON Schema, not arktype internals", () => {
@@ -135,5 +135,38 @@ describe("computeNonMessageTokens / computeNonMessageBreakdown memoization", () 
 		session.systemPrompt = ["shared prompt but longer now to shift the count"];
 		expect(computeNonMessageTokens(session as never)).not.toBe(tokens);
 		expect(computeNonMessageBreakdown(session as never).systemPromptTokens).not.toBe(breakdown.systemPromptTokens);
+	});
+});
+
+/**
+ * Contract: the Skills category counts only skills actually rendered into the
+ * system prompt (mirroring `buildSystemPrompt`'s filter) — hidden/explicit-only
+ * skills, and every skill when the `read` tool is absent, contribute zero. The
+ * System-prompt subtraction must not be inflated by unrendered skill metadata
+ * and clamped to 0 (issue #6498).
+ */
+describe("computeNonMessageBreakdown skills filtering", () => {
+	const readTool = { name: "read", description: "read files", parameters: {} };
+	const hidden = { name: "hidden-skill", description: "X".repeat(4000), filePath: "/s/h.md", hide: true };
+	const visible = { name: "vis", description: "small visible skill", filePath: "/s/v.md" };
+	// First prompt block as rendered: only the visible skill appears.
+	const renderedPrompt = "You are an agent.\nSkills:\n- vis: small visible skill\n";
+
+	function session(tools: unknown[], skills: unknown[]) {
+		return { systemPrompt: [renderedPrompt], agent: { state: { tools } }, skills } as never;
+	}
+
+	it("excludes hidden skills and does not clamp System prompt to 0", () => {
+		const b = computeNonMessageBreakdown(session([readTool], [hidden, visible]));
+		// Only the visible skill is counted, not the large hidden one.
+		expect(b.skillsTokens).toBe(computeNonMessageBreakdown(session([readTool], [visible])).skillsTokens);
+		expect(b.skillsTokens).toBeLessThan(100);
+		expect(b.systemPromptTokens).toBeGreaterThan(0);
+	});
+
+	it("counts zero Skills tokens when the read tool is unavailable", () => {
+		const b = computeNonMessageBreakdown(session([], [hidden, visible]));
+		expect(b.skillsTokens).toBe(0);
+		expect(b.systemPromptTokens).toBe(computeNonMessageBreakdown(session([], [])).systemPromptTokens);
 	});
 });

@@ -3,11 +3,16 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { getOAuthProviders } from "@oh-my-pi/pi-ai/oauth";
 import { type AutocompleteItem, Spacer } from "@oh-my-pi/pi-tui";
-import { APP_NAME, getProjectDir, setProjectDir } from "@oh-my-pi/pi-utils";
+import { APP_NAME, getMCPConfigPath, getProjectDir, logger, setProjectDir } from "@oh-my-pi/pi-utils";
 import { reset as resetCapabilities } from "../capability";
 import { COLLAB_GUEST_ALLOWED_COMMANDS, CollabGuestLink } from "../collab/guest";
 import { CollabHost } from "../collab/host";
-import { expandRoleAlias, getModelMatchPreferences, resolveCliModel } from "../config/model-resolver";
+import {
+	expandRoleAlias,
+	formatModelString,
+	getModelMatchPreferences,
+	resolveCliModel,
+} from "../config/model-resolver";
 import { applyProviderGlobalsFromSettings } from "../config/provider-globals";
 import type { SettingPath, SettingValue } from "../config/settings";
 import { settings } from "../config/settings";
@@ -26,8 +31,10 @@ import {
 	getPluginsCacheDir,
 	MarketplaceManager,
 } from "../extensibility/plugins/marketplace";
-import { resolveMemoryBackend } from "../memory-backend";
+import { readMCPConfigFile } from "../mcp/config-writer";
+import { memoryStatsUnavailableMessage, resolveMemoryBackend } from "../memory-backend";
 import { runPauseScreen } from "../modes/components/pause-screen";
+import { collectMcpServerNames, MCPCommandController } from "../modes/controllers/mcp-command-controller";
 import { describeLoopLimitRuntime } from "../modes/loop-limit";
 import { theme } from "../modes/theme/theme";
 import type { InteractiveModeContext } from "../modes/types";
@@ -37,6 +44,8 @@ import type { SessionOAuthAccountList } from "../session/agent-session-types";
 import { COMPACT_MODES, parseCompactArgs } from "../session/compact-modes";
 import { resolveResumableSession } from "../session/session-listing";
 import { formatShakeSummary, type ShakeMode } from "../session/shake-types";
+import type { ComputerTool } from "../tools/computer";
+import { computerExposureMode } from "../tools/computer/exposure";
 import { expandTilde, resolveToCwd } from "../tools/path-utils";
 import { urlHyperlinkAlways } from "../tui";
 import {
@@ -46,6 +55,7 @@ import {
 	renderChangelogEntries,
 } from "../utils/changelog";
 import { copyToClipboard } from "../utils/clipboard";
+import type { InspectImageMode } from "../utils/inspect-image-mode";
 import { CollabQrCodeComponent } from "./helpers/collab-qrcode";
 import { buildContextReportText } from "./helpers/context-report";
 import { formatDuration } from "./helpers/format";
@@ -53,6 +63,7 @@ import { createMarketplaceManager } from "./helpers/marketplace-manager";
 import { handleMcpAcp } from "./helpers/mcp";
 import { commandConsumed, errorMessage, parseSlashCommand, parseSubcommand, usage } from "./helpers/parse";
 import { describeRedeemOutcome, type ResetUsageAccount, toResetUsageAccounts } from "./helpers/reset-usage";
+import { handleSecurityCommand } from "./helpers/security";
 import { matchSessionPinAccounts, toSessionPinAccounts } from "./helpers/session-pin";
 import { handleSshAcp } from "./helpers/ssh";
 import { launchStatsDashboard, parseStatsDashboardArgs } from "./helpers/stats-dashboard";
@@ -90,9 +101,44 @@ function formatFastModeStatus(session: AgentSession): string {
 	return session.isFastModeEnabled() ? "on" : "off";
 }
 
-/** `/computer status` label for the session-effective `computer.enabled` value. */
-function formatComputerUseStatus(session: AgentSession): string {
-	return session.settings.get("computer.enabled") ? "on" : "off";
+/** Detailed, session-effective `/computer status` diagnostics. */
+async function formatComputerUseStatus(session: AgentSession): Promise<string> {
+	const enabled = session.settings.get("computer.enabled");
+	const active = session.getEnabledToolNames().includes("computer");
+	const model = session.model;
+	const modelName = model ? formatModelString(model) : "none";
+	const exposure = !enabled
+		? "not exposed (disabled)"
+		: !active
+			? "not exposed (tool inactive)"
+			: computerExposureMode(model);
+	const configured = {
+		display: session.settings.get("computer.display"),
+		maxWidth: session.settings.get("computer.maxWidth"),
+		maxHeight: session.settings.get("computer.maxHeight"),
+	};
+	const computerTool = active
+		? (session.getToolByName("computer") as Pick<ComputerTool, "capabilities"> | undefined)
+		: undefined;
+	const capabilities = await computerTool?.capabilities();
+	const capabilityStatus = capabilities
+		? [
+				`backend=${capabilities.backend}${capabilities.displayServer ? `/${capabilities.displayServer}` : ""}`,
+				`capture=${capabilities.capture} (${capabilities.capturePermission})`,
+				`input=${capabilities.input} (${capabilities.inputPermission})`,
+				`ax=${capabilities.ax} (${capabilities.axPermission})`,
+				`backgroundWindowInput=${capabilities.backgroundWindowInput}`,
+				`deliveryModes=${capabilities.deliveryModes.join(",") || "none"}`,
+			].join(", ")
+		: "session not started";
+	return [
+		`Computer use: ${enabled ? "enabled" : "disabled"}`,
+		`tool: ${active ? "active" : "inactive"}`,
+		`exposure: ${exposure}`,
+		`model: ${modelName}`,
+		`configured: display=${configured.display}, maxWidth=${configured.maxWidth}, maxHeight=${configured.maxHeight}`,
+		`capabilities: ${capabilityStatus}`,
+	].join(" · ");
 }
 
 /**
@@ -107,7 +153,36 @@ async function applyComputerUseToggle(session: AgentSession, enable: boolean): P
 		return "Computer use is unavailable in this session.";
 	}
 	session.settings.override("computer.enabled", enable);
-	return `Computer use ${enable ? "enabled" : "disabled"} for this session.`;
+	return enable
+		? `Computer use enabled for this session. ${await formatComputerUseStatus(session)}`
+		: "Computer use disabled for this session.";
+}
+
+/** Session-effective `/vision status` line. */
+function formatVisionStatus(session: AgentSession): string {
+	const { mode, active, model } = session.inspectImageState();
+	const override = session.getInspectImageModeOverride();
+	const modelObj = session.model;
+	const capability = modelObj
+		? modelObj.input.includes("image")
+			? "native image input"
+			: "no native image input"
+		: "no active model";
+	return [
+		`inspect_image: ${active ? "active" : "inactive"}`,
+		`mode: ${mode}${override ? " (session override)" : ""}`,
+		...(override ? [`configured: ${session.settings.get("inspect_image.mode")}`] : []),
+		`model: ${model ?? "none"} (${capability})`,
+	].join(" · ");
+}
+
+/** Applies a `/vision` mode for this session and returns the operator feedback line. */
+async function applyVisionMode(session: AgentSession, mode: InspectImageMode): Promise<string> {
+	const applied = await session.setInspectImageMode(mode);
+	if (!applied) {
+		return "inspect_image is unavailable in this session.";
+	}
+	return `Vision mode: ${mode}. ${formatVisionStatus(session)}`;
 }
 
 const AUTOCOMPLETE_DETAIL_LIMIT = 48;
@@ -304,6 +379,26 @@ function formatWorkspaceDirectories(runtime: SlashCommandRuntime, note?: string)
 
 const BUILTIN_SLASH_COMMAND_REGISTRY: ReadonlyArray<SlashCommandSpec> = [
 	{
+		name: "security",
+		description: "Plan, run, inspect, import, and compare OMP-native security scans",
+		allowArgs: true,
+		acpInputHint: "<plan|scan|status|cancel|scans|show|import|export|validate|compare|disposition>",
+		subcommands: [
+			{ name: "plan", description: "Create an immutable security scan plan" },
+			{ name: "scan", description: "Start a planned or newly planned native scan" },
+			{ name: "status", description: "Show native scan operation status" },
+			{ name: "cancel", description: "Cancel a running native scan" },
+			{ name: "scans", description: "List stored project security scans" },
+			{ name: "show", description: "Render a scan or security:// resource" },
+			{ name: "import", description: "Import SARIF or a Codex Security bundle" },
+			{ name: "export", description: "Export a canonical bundle, SARIF, or report" },
+			{ name: "validate", description: "Validate one finding with OMP-native tools" },
+			{ name: "compare", description: "Compare finding lineage across two scans" },
+			{ name: "disposition", description: "Set a finding disposition with rationale" },
+		],
+		handle: handleSecurityCommand,
+	},
+	{
 		name: "settings",
 		description: "Open settings menu",
 		handleTui: (_command, runtime) => {
@@ -399,12 +494,15 @@ const BUILTIN_SLASH_COMMAND_REGISTRY: ReadonlyArray<SlashCommandSpec> = [
 	},
 	{
 		name: "guided-goal",
-		description: "Interview and refine a goal before enabling goal mode",
+		description: "Have the agent interview you in chat, then set up goal mode",
 		inlineHint: "[rough objective]",
 		allowArgs: true,
 		handleTui: async (command, runtime) => {
-			await runtime.ctx.handleGuidedGoalCommand(command.args || undefined);
+			// Clear the slash draft BEFORE the await: the handler blocks for the
+			// whole kickoff turn, and a post-await clear would wipe an answer the
+			// user starts typing while the first interview question streams.
 			runtime.ctx.editor.setText("");
+			await runtime.ctx.handleGuidedGoalCommand(command.args || undefined);
 		},
 	},
 	{
@@ -573,11 +671,12 @@ const BUILTIN_SLASH_COMMAND_REGISTRY: ReadonlyArray<SlashCommandSpec> = [
 			{ name: "status", description: "Show computer use status" },
 		],
 		allowArgs: true,
-		getTuiAutocompleteDescription: runtime => `Computer: ${formatComputerUseStatus(runtime.ctx.session)}`,
+		getTuiAutocompleteDescription: runtime =>
+			`Computer: ${runtime.ctx.session.settings.get("computer.enabled") ? "on" : "off"}`,
 		handle: async (command, runtime) => {
 			const arg = command.args.trim().toLowerCase();
 			if (arg === "status") {
-				await runtime.output(`Computer use is ${formatComputerUseStatus(runtime.session)}.`);
+				await runtime.output(await formatComputerUseStatus(runtime.session));
 				return commandConsumed();
 			}
 			if (!arg || arg === "toggle" || arg === "on" || arg === "off") {
@@ -590,7 +689,7 @@ const BUILTIN_SLASH_COMMAND_REGISTRY: ReadonlyArray<SlashCommandSpec> = [
 		handleTui: async (command, runtime) => {
 			const arg = command.args.trim().toLowerCase();
 			if (arg === "status") {
-				runtime.ctx.showStatus(`Computer use is ${formatComputerUseStatus(runtime.ctx.session)}.`);
+				runtime.ctx.showStatus(await formatComputerUseStatus(runtime.ctx.session));
 				runtime.ctx.editor.setText("");
 				return;
 			}
@@ -602,6 +701,47 @@ const BUILTIN_SLASH_COMMAND_REGISTRY: ReadonlyArray<SlashCommandSpec> = [
 				return;
 			}
 			runtime.ctx.showStatus("Usage: /computer [on|off|status]");
+			runtime.ctx.editor.setText("");
+		},
+	},
+	{
+		name: "vision",
+		description: "Control the inspect_image vision-delegation tool for this session",
+		acpDescription: "Toggle vision delegation",
+		acpInputHint: "[on|off|auto|status]",
+		subcommands: [
+			{ name: "on", description: "Always expose inspect_image this session" },
+			{ name: "off", description: "Never expose inspect_image this session" },
+			{ name: "auto", description: "Follow inspect_image.mode (auto hides it for vision-capable models)" },
+			{ name: "status", description: "Show inspect_image status" },
+		],
+		allowArgs: true,
+		getTuiAutocompleteDescription: runtime => `Vision: ${runtime.ctx.session.inspectImageState().mode}`,
+		handle: async (command, runtime) => {
+			const arg = command.args.trim().toLowerCase();
+			if (arg === "status") {
+				await runtime.output(formatVisionStatus(runtime.session));
+				return commandConsumed();
+			}
+			if (arg === "on" || arg === "off" || arg === "auto") {
+				await runtime.output(await applyVisionMode(runtime.session, arg));
+				return commandConsumed();
+			}
+			return usage("Usage: /vision [on|off|auto|status]", runtime);
+		},
+		handleTui: async (command, runtime) => {
+			const arg = command.args.trim().toLowerCase();
+			if (arg === "status") {
+				runtime.ctx.showStatus(formatVisionStatus(runtime.ctx.session));
+				runtime.ctx.editor.setText("");
+				return;
+			}
+			if (arg === "on" || arg === "off" || arg === "auto") {
+				runtime.ctx.showStatus(await applyVisionMode(runtime.ctx.session, arg));
+				runtime.ctx.editor.setText("");
+				return;
+			}
+			runtime.ctx.showStatus("Usage: /vision [on|off|auto|status]");
 			runtime.ctx.editor.setText("");
 		},
 	},
@@ -1551,7 +1691,6 @@ const BUILTIN_SLASH_COMMAND_REGISTRY: ReadonlyArray<SlashCommandSpec> = [
 	},
 	{
 		name: "new",
-		aliases: ["clear"],
 		description: "Start a new session",
 		handleTui: async (_command, runtime) => {
 			runtime.ctx.editor.setText("");
@@ -1577,6 +1716,16 @@ const BUILTIN_SLASH_COMMAND_REGISTRY: ReadonlyArray<SlashCommandSpec> = [
 		handleTui: async (_command, runtime) => {
 			runtime.ctx.editor.setText("");
 			await runtime.ctx.handleFreshCommand();
+		},
+	},
+	{
+		name: "clear",
+		description: "Clear the conversation context in place, keeping the session",
+		getTuiAutocompleteDescription: runtime =>
+			runtime.ctx.session.isStreaming ? "Clear: unavailable while streaming" : "Clear: drop context, keep session",
+		handleTui: async (_command, runtime) => {
+			runtime.ctx.editor.setText("");
+			await runtime.ctx.handleResetContextCommand();
 		},
 	},
 	{
@@ -1676,11 +1825,16 @@ const BUILTIN_SLASH_COMMAND_REGISTRY: ReadonlyArray<SlashCommandSpec> = [
 	{
 		name: "resume",
 		description: "Resume a different session",
-		inlineHint: "[session id]",
+		inlineHint: "[session id|@claude|@codex]",
 		allowArgs: true,
 		handleTui: async (command, runtime) => {
 			const sessionArg = command.args.trim();
 			runtime.ctx.editor.setText("");
+			const foreignSource = sessionArg === "@claude" ? "claude" : sessionArg === "@codex" ? "codex" : undefined;
+			if (foreignSource) {
+				runtime.ctx.showSessionSelector(foreignSource);
+				return;
+			}
 			if (!sessionArg) {
 				runtime.ctx.showSessionSelector();
 				return;
@@ -1805,7 +1959,7 @@ const BUILTIN_SLASH_COMMAND_REGISTRY: ReadonlyArray<SlashCommandSpec> = [
 				case "diagnose": {
 					const hook = verb === "stats" ? backend.stats : backend.diagnose;
 					const payload = await hook?.(runtime.settings.getAgentDir(), runtime.cwd, runtime.session);
-					await runtime.output(payload ?? `Memory ${verb} is not available for the ${backend.id} backend.`);
+					await runtime.output(payload ?? memoryStatsUnavailableMessage(backend.id, verb));
 					return commandConsumed();
 				}
 				case "mm":
@@ -2486,13 +2640,7 @@ const BUILTIN_SLASH_COMMAND_REGISTRY: ReadonlyArray<SlashCommandSpec> = [
 			return commandConsumed();
 		},
 		handleTui: async (_command, runtime) => {
-			// Invalidate registry fs caches and the plugin roots cache so
-			// listClaudePluginRoots re-reads from disk on next access.
-			const projectPath = await resolveActiveProjectRegistryPath(runtime.ctx.sessionManager.getCwd());
-			clearPluginRootsAndCaches(projectPath ? [projectPath] : undefined);
-			await runtime.ctx.refreshSkillState();
-			await runtime.ctx.refreshSlashCommandState();
-			resetCapabilities();
+			await reloadTuiPluginState(runtime.ctx);
 			runtime.ctx.showStatus("Plugins reloaded.");
 			runtime.ctx.editor.setText("");
 		},
@@ -2598,6 +2746,124 @@ function buildArgumentCompletions(subcommands: SubcommandDef[]): (prefix: string
 			}));
 		return matches.length > 0 ? matches : null;
 	};
+}
+
+/** /mcp subcommands whose argument is a server name (per their `usage: "<name>..."`). */
+const MCP_SERVER_NAME_SUBCOMMANDS: Readonly<Record<string, true>> = {
+	enable: true,
+	disable: true,
+	test: true,
+	remove: true,
+	reconnect: true,
+	reauth: true,
+	unauth: true,
+};
+
+/** Subcommands that accept names found only in `userConfig.disabledServers`. */
+const MCP_DISABLED_ONLY_ELIGIBLE_SUBCOMMANDS: Readonly<Record<string, true>> = {
+	enable: true,
+	disable: true,
+};
+
+/**
+ * Subcommands that accept configured servers whose `enabled` flag is false.
+ * `unauth` can clear persisted credentials without connecting; test,
+ * reconnect, and reauth explicitly require an enabled server.
+ */
+const MCP_DISABLED_CONFIG_ELIGIBLE_SUBCOMMANDS: Readonly<Record<string, true>> = {
+	enable: true,
+	disable: true,
+	unauth: true,
+};
+
+/**
+ * Build getArgumentCompletions for /mcp. Delegates to the generic
+ * declarative subcommand completer while the subcommand name itself is
+ * still being typed, then switches to MCP server-name completion (sourced
+ * from {@link collectMcpServerNames}) once a recognized server-name
+ * subcommand (enable/disable/test/remove/reconnect/reauth/unauth) is
+ * followed by a space. `remove` gets its own scope-aware completions (see
+ * {@link buildMcpRemoveCompletions}) since — unlike the others —
+ * it only ever succeeds against a config-file entry. Subcommands with a
+ * different argument shape (add, smithery-search, ...) get no argument
+ * completion.
+ */
+function buildMcpArgumentCompletions(
+	subcommands: SubcommandDef[],
+	runtime: TuiSlashCommandRuntime,
+): (argumentPrefix: string) => Promise<AutocompleteItem[] | null> {
+	const genericCompletions = buildArgumentCompletions(subcommands);
+	return async (argumentPrefix: string) => {
+		const spaceIndex = argumentPrefix.indexOf(" ");
+		if (spaceIndex === -1) return genericCompletions(argumentPrefix);
+
+		const rawSubcommand = argumentPrefix.slice(0, spaceIndex);
+		const lowerSubcommand = rawSubcommand.toLowerCase();
+		if (MCP_SERVER_NAME_SUBCOMMANDS[lowerSubcommand] !== true) return null;
+		const namePrefix = argumentPrefix.slice(spaceIndex + 1).toLowerCase();
+		if (lowerSubcommand === "remove") {
+			return await buildMcpRemoveCompletions(rawSubcommand, namePrefix);
+		}
+
+		let serverNames: string[];
+		try {
+			serverNames = await collectMcpServerNames(
+				runtime.ctx,
+				undefined,
+				MCP_DISABLED_ONLY_ELIGIBLE_SUBCOMMANDS[lowerSubcommand] === true,
+				MCP_DISABLED_CONFIG_ELIGIBLE_SUBCOMMANDS[lowerSubcommand] === true,
+			);
+		} catch (error) {
+			logger.warn("MCP server-name autocomplete failed to read config", { error });
+			return null;
+		}
+		const matches: AutocompleteItem[] = serverNames
+			.filter(name => name.toLowerCase().startsWith(namePrefix))
+			.map(name => ({ value: `${rawSubcommand} ${name} `, label: name }));
+		return matches.length > 0 ? matches : null;
+	};
+}
+
+/**
+ * Build `/mcp remove <name>` completions. Unlike the other server-name
+ * subcommands, `#handleRemove` only ever succeeds against a config-file
+ * `mcpServers` entry in the target scope (project by default, user with an
+ * explicit `--scope user`) — a purely runtime-discovered server has no
+ * config entry to remove and always fails with `Server "<name>" not found
+ * in <scope> config.`. Completions are therefore restricted to config-file
+ * names, and a name that exists only in the user config is completed with
+ * `--scope user` appended so the inserted command is directly executable.
+ */
+async function buildMcpRemoveCompletions(
+	rawSubcommand: string,
+	namePrefix: string,
+): Promise<AutocompleteItem[] | null> {
+	const cwd = getProjectDir();
+	let projectNames: string[];
+	let userNames: string[];
+	try {
+		const [projectConfig, userConfig] = await Promise.all([
+			readMCPConfigFile(getMCPConfigPath("project", cwd)),
+			readMCPConfigFile(getMCPConfigPath("user", cwd)),
+		]);
+		projectNames = Object.keys(projectConfig.mcpServers ?? {});
+		userNames = Object.keys(userConfig.mcpServers ?? {});
+	} catch (error) {
+		logger.warn("MCP remove autocomplete failed to read config", { error });
+		return null;
+	}
+
+	const projectNameSet = new Set(projectNames);
+	const allNames = new Set([...projectNames, ...userNames]);
+	const matches: AutocompleteItem[] = [...allNames]
+		.filter(name => name.toLowerCase().startsWith(namePrefix))
+		.map(name =>
+			projectNameSet.has(name)
+				? { value: `${rawSubcommand} ${name} `, label: name }
+				: { value: `${rawSubcommand} ${name} --scope user `, label: `${name} (user)` },
+		)
+		.sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
+	return matches.length > 0 ? matches : null;
 }
 
 /**
@@ -2763,7 +3029,10 @@ function materializeTuiBuiltinSlashCommand(
 ): TuiBuiltinSlashCommand {
 	const materialized: TuiBuiltinSlashCommand = { ...cmd };
 	if (cmd.subcommands) {
-		materialized.getArgumentCompletions = buildArgumentCompletions(cmd.subcommands);
+		materialized.getArgumentCompletions =
+			cmd.name === "mcp" && runtime
+				? buildMcpArgumentCompletions(cmd.subcommands, runtime)
+				: buildArgumentCompletions(cmd.subcommands);
 		materialized.getInlineHint = buildSubcommandInlineHint(cmd.subcommands);
 	} else if (cmd.name === "move") {
 		materialized.getArgumentCompletions = buildDirectoryArgumentCompletions();
@@ -2795,6 +3064,24 @@ export function buildTuiBuiltinSlashCommands(runtime: TuiSlashCommandRuntime): R
  * ACP dispatcher requires `handle` and skips TUI-only entries.
  */
 export const BUILTIN_SLASH_COMMANDS_INTERNAL: ReadonlyArray<SlashCommandSpec> = BUILTIN_SLASH_COMMAND_REGISTRY;
+
+/**
+ * Reload the interactive session's plugin runtime: invalidate fs/plugin-root
+ * caches, rediscover skills and file slash commands, reset the capability
+ * cache, and reconnect MCP servers (rebinding the session's MCP tools). Shared
+ * by `/reload-plugins`'s TUI handler and the `handle`-adapter's `reloadPlugins`
+ * hook so both honor the command's documented MCP reload scope (#7189).
+ */
+async function reloadTuiPluginState(ctx: InteractiveModeContext): Promise<void> {
+	const projectPath = await resolveActiveProjectRegistryPath(ctx.sessionManager.getCwd());
+	clearPluginRootsAndCaches(projectPath ? [projectPath] : undefined);
+	await ctx.refreshSkillState();
+	await ctx.refreshSlashCommandState();
+	resetCapabilities();
+	if (ctx.mcpManager) {
+		await new MCPCommandController(ctx).reloadServers();
+	}
+}
 
 /**
  * Execute a builtin slash command in the interactive TUI.
@@ -2844,13 +3131,7 @@ export async function executeBuiltinSlashCommand(
 				ctx.showStatus(text);
 			},
 			refreshCommands: () => ctx.refreshSlashCommandState(),
-			reloadPlugins: async () => {
-				const projectPath = await resolveActiveProjectRegistryPath(ctx.sessionManager.getCwd());
-				clearPluginRootsAndCaches(projectPath ? [projectPath] : undefined);
-				await ctx.refreshSkillState();
-				await ctx.refreshSlashCommandState();
-				resetCapabilities();
-			},
+			reloadPlugins: () => reloadTuiPluginState(ctx),
 		};
 		const result = await command.handle(parsed, adapted);
 		ctx.editor.setText("");

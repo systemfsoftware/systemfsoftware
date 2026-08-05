@@ -44,4 +44,16 @@ describe("cursor buildMcpToolDefinitions", () => {
 		const names = buildMcpToolDefinitions([tool("read"), tool("write"), tool("bash")]).map(def => def.name);
 		expect(names).toEqual([]);
 	});
+
+	it("advertises lsp, which Cursor has no native equivalent for", () => {
+		// `lsp` is deliberately absent from the native-filtered set: Cursor's own
+		// tools cover none of definition/references/rename, so filtering it out
+		// leaves the model with no way to reach them at all.
+		const defs = buildMcpToolDefinitions([tool("read"), tool("bash"), tool("lsp")]);
+
+		const lspDef = defs.find(def => def.name === "lsp");
+		expect(lspDef).toBeDefined();
+		expect(lspDef?.providerIdentifier).toBe("pi-agent");
+		expect(lspDef?.toolName).toBe("lsp");
+	});
 });

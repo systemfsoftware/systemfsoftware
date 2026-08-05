@@ -8,10 +8,13 @@ export const loginNovita = createApiKeyLogin({
 	promptMessage: "Paste your Novita API key",
 	placeholder: "sk_...",
 	validation: {
-		kind: "models-endpoint",
+		// Validate against inference, not billing: `/openapi/v1/billing/balance/detail`
+		// requires the account-level Balance permission, which Novita's Developer and
+		// Basic team roles don't hold, so their valid inference keys were rejected.
+		kind: "chat-completions",
 		provider: "Novita",
-		modelsUrl: "https://api.novita.ai/openapi/v1/billing/balance/detail",
-		headers: { "Content-Type": "application/json" },
+		baseUrl: "https://api.novita.ai/openai/v1",
+		model: "moonshotai/kimi-k2.7-code",
 	},
 });
 

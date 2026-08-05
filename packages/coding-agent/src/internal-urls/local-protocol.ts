@@ -390,8 +390,9 @@ export class LocalProtocolHandler implements ProtocolHandler {
 
 	/**
 	 * Install a process-global override that wins over the AgentRegistry-based
-	 * derivation. Used by SDK consumers that wire `localProtocolOptions` on
-	 * `createAgentSession` and by subagents that share their parent's root.
+	 * derivation. Used by top-level SDK consumers that wire
+	 * `localProtocolOptions` on `createAgentSession`; subagents keep their
+	 * inherited mapping session-bound.
 	 */
 	static setOverride(value: LocalProtocolOptions | undefined): void {
 		LocalProtocolHandler.#override = value;

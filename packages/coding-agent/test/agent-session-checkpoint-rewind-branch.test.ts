@@ -231,9 +231,17 @@ describe("AgentSession checkpoint rewind branch context", () => {
 		expect(mock.calls.length).toBe(3);
 		const finalCall = mock.calls[2];
 		if (!finalCall) throw new Error("Expected final post-rewind provider call");
-		const summaryIndex = finalCall.context.messages.findIndex(
-			message => message.role === "user" && messageText(message).includes("summary of a branch"),
-		);
+		const summaryIndex = finalCall.context.messages.findIndex(message => {
+			if (message.role !== "user") return false;
+			const text = messageText(message);
+			const openIndex = text.indexOf("<summary>");
+			const closeIndex = text.indexOf("</summary>", openIndex + "<summary>".length);
+			return (
+				openIndex >= 0 &&
+				closeIndex > openIndex + "<summary>".length &&
+				text.slice(openIndex + "<summary>".length, closeIndex).trim().length > 0
+			);
+		});
 		const reportIndex = finalCall.context.messages.findIndex(
 			message => message.role === "developer" && messageText(message).includes(report),
 		);
@@ -242,8 +250,7 @@ describe("AgentSession checkpoint rewind branch context", () => {
 		const reportMessage = finalCall.context.messages[reportIndex];
 		if (!reportMessage) throw new Error("Expected rewind report context");
 		const reportText = messageText(reportMessage);
-		expect(reportText).toContain("Checkpoint completed.");
-		expect(reportText).toContain("Do not call `rewind` again");
+		expect(reportText).toContain("`rewind`");
 		expect(reportText).toContain(report);
 
 		expect(

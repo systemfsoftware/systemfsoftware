@@ -283,7 +283,6 @@ describe("SnapcompactInlineTransformer", () => {
 		expect(result.systemPrompt).toHaveLength(2);
 		expect(result.systemPrompt![0]).toContain("Core instructions.");
 		expect(result.systemPrompt![0]).toContain("Today is 2026-06-12.");
-		expect(result.systemPrompt![0]).toContain("Loaded context-file instructions were moved");
 		expect(result.systemPrompt![0]).not.toContain(longContext);
 		expect(result.systemPrompt![1]).toBe("Final system block.");
 

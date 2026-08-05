@@ -4,7 +4,7 @@
  * and options.
  */
 
-import { type } from "arktype";
+import { type } from "@oh-my-pi/omptype";
 import type {
 	ContentBlockParam,
 	ImageBlockParam,

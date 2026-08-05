@@ -1,5 +1,5 @@
 import * as AIError from "@oh-my-pi/pi-ai/error";
-import { logger, readSseEvents, Snowflake } from "@oh-my-pi/pi-utils";
+import { logger, readSseEvents } from "@oh-my-pi/pi-utils";
 import type {
 	JsonRpcError,
 	JsonRpcMessage,
@@ -10,6 +10,7 @@ import type {
 	MCPTransport,
 } from "../../mcp/types";
 import { toJsonRpcError } from "../../mcp/types";
+import { RequestIdAllocator } from "../request-id";
 import { createMCPTimeout, getNeverAbortSignal, resolveMCPTimeoutMs } from "../timeout";
 
 interface MCPTimeoutOperation {
@@ -32,6 +33,7 @@ export class LegacySseTransport implements MCPTransport {
 	#sseConnection: AbortController | null = null;
 	#pending = new Map<string | number, PendingLegacySseRequest>();
 	#config: MCPSseServerConfig;
+	readonly #requestIds = new RequestIdAllocator();
 
 	onClose?: () => void;
 	onError?: (error: Error) => void;
@@ -194,7 +196,7 @@ export class LegacySseTransport implements MCPTransport {
 			throw new Error("Transport not connected");
 		}
 
-		const id = Snowflake.next();
+		const id = this.#requestIds.next(this.#config.requestIdFormat);
 		const body = {
 			jsonrpc: "2.0" as const,
 			id,

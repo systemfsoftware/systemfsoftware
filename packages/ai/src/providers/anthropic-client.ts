@@ -43,6 +43,12 @@ export interface AnthropicRequestOptions {
 	timeout?: number;
 	/** Per-request retry budget override. */
 	maxRetries?: number;
+	/**
+	 * Maximum delay in milliseconds to wait for a server-directed retry. If the
+	 * server's `retry-after` hint exceeds this value, the retry is declined and
+	 * the original error is surfaced. Non-positive values disable the cap. Defaults to 60000.
+	 */
+	maxRetryDelayMs?: number;
 	/** Per-request headers merged after client defaults. */
 	headers?: Record<string, string>;
 }
@@ -74,6 +80,12 @@ export interface AnthropicClientOptions {
 	authToken?: string | null;
 	baseURL?: string | null;
 	maxRetries?: number;
+	/**
+	 * Maximum delay in milliseconds to wait for a server-directed retry. If the
+	 * server's `retry-after` hint exceeds this value, the retry is declined and
+	 * the original error is surfaced. Non-positive values disable the cap. Defaults to 60000.
+	 */
+	maxRetryDelayMs?: number;
 	/** Pre-response timeout in milliseconds. Defaults to 10 minutes. */
 	timeout?: number;
 	defaultHeaders?: Record<string, string>;
@@ -97,7 +109,7 @@ function shouldRetryResponse(response: Response): boolean {
 }
 
 /** Server-suggested delay (`retry-after-ms`, then `retry-after` seconds or HTTP date). */
-export function retryDelayFromHeaders(headers: Headers | undefined): number | undefined {
+export function retryDelayFromHeaders(headers: Pick<Headers, "get"> | undefined): number | undefined {
 	if (!headers) return undefined;
 	const retryAfterMs = headers.get("retry-after-ms");
 	if (retryAfterMs) {
@@ -216,6 +228,7 @@ export class AnthropicMessagesClient implements AnthropicMessagesClientLike {
 		const callerSignal = options?.signal;
 		const timeoutMs = options?.timeout ?? opts.timeout ?? DEFAULT_TIMEOUT_MS;
 		const maxRetries = Math.max(0, options?.maxRetries ?? opts.maxRetries ?? DEFAULT_MAX_RETRIES);
+		const maxRetryDelayMs = options?.maxRetryDelayMs ?? opts.maxRetryDelayMs ?? 60_000;
 		const url = `${opts.baseURL ?? "https://api.anthropic.com"}${path}`;
 		const headers = this.#buildHeaders(options?.headers);
 		const body = JSON.stringify(params);
@@ -239,11 +252,20 @@ export class AnthropicMessagesClient implements AnthropicMessagesClientLike {
 			if (response.ok) return response;
 
 			if (attempt < maxRetries && shouldRetryResponse(response)) {
+				// Bound the server-directed wait: an over-cap `retry-after` declines
+				// the retry and surfaces the original error (status/body/headers
+				// intact) so higher-level recovery can run. A non-positive cap disables enforcement.
+				// Checked before draining the body so `fromResponse` can still read it.
+				const headerDelayMs = retryDelayFromHeaders(response.headers);
+				if (headerDelayMs !== undefined && maxRetryDelayMs > 0 && headerDelayMs > maxRetryDelayMs) {
+					throw await AIError.AnthropicApiError.fromResponse(response, callerSignal);
+				}
 				await response.body?.cancel().catch(() => {});
 				await this.#backoff(attempt, response.headers, callerSignal);
 				continue;
 			}
-			throw await AIError.AnthropicApiError.fromResponse(response);
+
+			throw await AIError.AnthropicApiError.fromResponse(response, callerSignal);
 		}
 	}
 
