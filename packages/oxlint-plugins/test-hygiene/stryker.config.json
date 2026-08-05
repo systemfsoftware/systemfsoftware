@@ -25,11 +25,11 @@
     "dir": ".",
     "related": true
   },
-  "disableBail": true,
   "typescriptChecker": {
     "prioritizePerformanceOverAccuracy": false
   },
   "coverageAnalysis": "all",
+  "disableBail": true,
   "mutate": [
     "src/**/*.ts",
     "!src/**/*.test.ts",

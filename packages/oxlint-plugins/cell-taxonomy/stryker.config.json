@@ -2,12 +2,18 @@
   "$schema": "./node_modules/@systemfsoftware/stryker-js-core/schema/stryker-schema.json",
   "packageManager": "pnpm",
   "testRunner": "vitest",
-  "checkers": ["typescript"],
+  "checkers": [
+    "typescript"
+  ],
   "plugins": [
     "@stryker-mutator/vitest-runner",
     "@systemfsoftware/stryker-js-typescript-checker"
   ],
-  "reporters": ["progress", "html", "json"],
+  "reporters": [
+    "progress",
+    "html",
+    "json"
+  ],
   "htmlReporter": {
     "fileName": "reports/mutation-report.html"
   },
@@ -30,7 +36,10 @@
     "!src/rules/**/*.test.ts",
     "!src/rules/*.config.ts"
   ],
-  "ignorePatterns": ["reports", "coverage"],
+  "ignorePatterns": [
+    "reports",
+    "coverage"
+  ],
   "thresholds": {
     "high": 100,
     "low": 80,

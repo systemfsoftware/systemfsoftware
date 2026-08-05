@@ -2,13 +2,34 @@
   "$schema": "./schema/stryker-schema.json",
   "packageManager": "pnpm",
   "testRunner": "vitest",
-  "plugins": ["@stryker-mutator/vitest-runner"],
-  "reporters": ["progress", "json"],
-  "jsonReporter": { "fileName": "reports/mutation-report.json" },
-  "vitest": { "configFile": "vitest.config.ts", "dir": ".", "related": true },
+  "plugins": [
+    "@stryker-mutator/vitest-runner"
+  ],
+  "reporters": [
+    "progress",
+    "json"
+  ],
+  "jsonReporter": {
+    "fileName": "reports/mutation-report.json"
+  },
+  "vitest": {
+    "configFile": "vitest.config.ts",
+    "dir": ".",
+    "related": true
+  },
   "coverageAnalysis": "perTest",
   "incremental": false,
-  "mutate": ["src/reporters/test-contribution.ts"],
-  "ignorePatterns": ["reports", "coverage", "dist"],
-  "thresholds": { "high": 100, "low": 100, "break": 100 }
+  "mutate": [
+    "src/reporters/test-contribution.ts"
+  ],
+  "ignorePatterns": [
+    "reports",
+    "coverage",
+    "dist"
+  ],
+  "thresholds": {
+    "high": 100,
+    "low": 100,
+    "break": 100
+  }
 }

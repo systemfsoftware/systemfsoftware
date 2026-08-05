@@ -10,9 +10,6 @@
     "@systemfsoftware/stryker-js-typescript-checker",
     "@systemfsoftware/stryker-plugins"
   ],
-  "ignorers": [
-    "effect-schema-declarations"
-  ],
   "reporters": [
     "progress",
     "html",
@@ -46,6 +43,9 @@
       "UpdateOperator"
     ]
   },
+  "ignorers": [
+    "effect-schema-declarations"
+  ],
   "thresholds": {
     "high": 100,
     "low": 100,

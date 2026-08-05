@@ -10,10 +10,6 @@
     "@systemfsoftware/stryker-js-typescript-checker",
     "@systemfsoftware/stryker-plugins"
   ],
-  "ignorers": [
-    "effect-schema-declarations",
-    "in-source-vitest-block"
-  ],
   "reporters": [
     "progress",
     "html",
@@ -45,6 +41,10 @@
   "mutator": {
     "excludedMutations": []
   },
+  "ignorers": [
+    "effect-schema-declarations",
+    "in-source-vitest-block"
+  ],
   "thresholds": {
     "high": 100,
     "low": 100,
