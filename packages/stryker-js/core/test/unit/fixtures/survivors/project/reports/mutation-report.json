@@ -27,14 +27,7 @@
       "reportScoreTable": true,
       "skipFull": false
     },
-    "dashboard": {
-      "baseUrl": "https://dashboard.stryker-mutator.io/api/reports",
-      "reportType": "full"
-    },
     "dryRunOnly": false,
-    "eventReporter": {
-      "baseDir": "reports/mutation/events"
-    },
     "ignorePatterns": [],
     "ignoreStatic": false,
     "incremental": false,
@@ -102,8 +95,14 @@
           "mutatorName": "BlockStatement",
           "replacement": "{}",
           "location": {
-            "start": { "line": 1, "column": 51 },
-            "end": { "line": 3, "column": 2 }
+            "start": {
+              "line": 1,
+              "column": 51
+            },
+            "end": {
+              "line": 3,
+              "column": 2
+            }
           },
           "status": "Killed"
         },
@@ -112,8 +111,14 @@
           "mutatorName": "ConditionalExpression",
           "replacement": "true",
           "location": {
-            "start": { "line": 2, "column": 10 },
-            "end": { "line": 2, "column": 15 }
+            "start": {
+              "line": 2,
+              "column": 10
+            },
+            "end": {
+              "line": 2,
+              "column": 15
+            }
           },
           "status": "Survived"
         },
@@ -122,8 +127,14 @@
           "mutatorName": "ConditionalExpression",
           "replacement": "false",
           "location": {
-            "start": { "line": 2, "column": 10 },
-            "end": { "line": 2, "column": 15 }
+            "start": {
+              "line": 2,
+              "column": 10
+            },
+            "end": {
+              "line": 2,
+              "column": 15
+            }
           },
           "status": "Killed"
         },
@@ -132,8 +143,14 @@
           "mutatorName": "EqualityOperator",
           "replacement": "a >= b",
           "location": {
-            "start": { "line": 2, "column": 10 },
-            "end": { "line": 2, "column": 15 }
+            "start": {
+              "line": 2,
+              "column": 10
+            },
+            "end": {
+              "line": 2,
+              "column": 15
+            }
           },
           "status": "Survived"
         },
@@ -142,8 +159,14 @@
           "mutatorName": "EqualityOperator",
           "replacement": "a <= b",
           "location": {
-            "start": { "line": 2, "column": 10 },
-            "end": { "line": 2, "column": 15 }
+            "start": {
+              "line": 2,
+              "column": 10
+            },
+            "end": {
+              "line": 2,
+              "column": 15
+            }
           },
           "status": "Killed"
         }

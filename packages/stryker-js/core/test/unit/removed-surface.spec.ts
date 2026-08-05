@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
-import { PluginKind } from '@stryker-mutator/api/plugin'
+import { commonTokens, PluginKind } from '@stryker-mutator/api/plugin'
 import { noopLogger } from '@stryker-mutator/util'
 import { Effect, Exit } from 'effect'
 import { createInjector } from 'typed-inject'
@@ -11,7 +11,8 @@ import type { MockInstance } from 'vitest'
 
 import { ConfigReader } from '../../src/config/config-reader.js'
 import { forkCoreSchema } from '../../src/config/fork-schema.js'
-import { OptionsValidator, REMOVED_OPTION_NAMES, REMOVED_OPTIONS } from '../../src/config/options-validator.js'
+import { createDefaultOptions, OptionsValidator } from '../../src/config/options-validator.js'
+import { REMOVED_OPTIONS } from '../../src/config/removed-surface.js'
 import { PluginCreator } from '../../src/di/plugin-creator.js'
 import { ConfigError } from '../../src/errors.js'
 import { resolveCliExitCode, runStrykerCli, strykerCliEffect } from '../../src/stryker-cli.js'
@@ -53,13 +54,13 @@ const REMOVED_FLAGS = [
 
 // The top-level config keys U9 orphaned. The upstream schema still declares
 // them, so without the denylist scan they pass AJV and are silently ignored.
-const REMOVED_KEYS = REMOVED_OPTIONS.filter(({ name }) => name === 'dashboard' || name === 'eventReporter')
+const entriesFor = (...names: string[]) => names.map((name) => ({ name, remediation: REMOVED_OPTIONS[name] as string }))
+
+const REMOVED_KEYS = entriesFor('dashboard', 'eventReporter')
 
 // The reporter names U9 pruned from the registry. They pass the schema as
 // plain string items, so the scan must check the `reporters` array values.
-const REMOVED_REPORTERS = REMOVED_OPTIONS.filter(({ name }) =>
-  name === 'dots' || name === 'event-recorder' || name === 'progress-append-only' || name === 'dashboard'
-)
+const REMOVED_REPORTERS = entriesFor('dots', 'event-recorder', 'progress-append-only', 'dashboard')
 
 describe('removed surface on the command line', () => {
   it.each(REMOVED_FLAGS)('rejects the removed flag %s with exit 2', async (flag) => {
@@ -144,7 +145,11 @@ describe('removed surface through the full CLI', () => {
   it('classifies a missing plugin as a config error, not a plain Error', () => {
     const pluginCreator = new PluginCreator(
       new Map(),
-      createInjector(),
+      createInjector()
+        .provideValue(commonTokens.options, createDefaultOptions())
+        .provideValue(commonTokens.fileDescriptions, {})
+        .provideValue(commonTokens.getLogger, () => noopLogger)
+        .provideValue(commonTokens.logger, noopLogger),
     )
     expect(() => pluginCreator.create(PluginKind.Reporter, 'dots')).toThrow(ConfigError)
     expect(() => pluginCreator.create(PluginKind.Reporter, 'some-typo-reporter')).toThrow(ConfigError)
@@ -152,7 +157,7 @@ describe('removed surface through the full CLI', () => {
 
   it('exports exactly the names U9 removed', () => {
     // Pins the content, so dropping an entry (or smuggling one in) goes red.
-    expect([...REMOVED_OPTION_NAMES].sort()).toEqual([
+    expect(Object.keys(REMOVED_OPTIONS).sort()).toEqual([
       'dashboard',
       'dots',
       'event-recorder',
@@ -162,15 +167,26 @@ describe('removed surface through the full CLI', () => {
   })
 
   it('enforces every name it exports as a config key, so U11 can trust the oracle', () => {
-    for (const { name } of REMOVED_OPTIONS) {
+    for (const name of Object.keys(REMOVED_OPTIONS)) {
       expect(() => validator().validate({ [name]: {} })).toThrow(ConfigError)
     }
   })
 
   it('enforces every name it exports inside the reporters array', () => {
-    for (const { name } of REMOVED_OPTIONS) {
+    for (const name of Object.keys(REMOVED_OPTIONS)) {
       expect(() => validator().validate({ reporters: [name] })).toThrow(ConfigError)
     }
+  })
+
+  it('keeps the removed options out of the schema so no default injects them', () => {
+    // The regression that made every consumer fail: AJV injects a default for
+    // each declared property, so a declared `dashboard` landed in the resolved
+    // options of runs whose config never mentioned it.
+    const properties = forkCoreSchema.properties
+    if (typeof properties !== 'object' || properties === null) {
+      throw new Error('the fork schema declares no properties object')
+    }
+    expect(Object.keys(properties).filter((name) => Object.hasOwn(REMOVED_OPTIONS, name))).toEqual([])
   })
 })
 

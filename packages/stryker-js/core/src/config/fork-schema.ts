@@ -1,5 +1,7 @@
 import { strykerCoreSchema } from '@stryker-mutator/api/core'
 
+import { REMOVED_OPTIONS } from './removed-surface.js'
+
 const requireTestContribution = {
   description:
     'Fail the run when a test file whose name ends with one of these suffixes kills no mutant that another test file does not also kill. Such a file could be deleted without leaving a single mutant alive, so a passing mutation score is no evidence it earns its place. Set to null to disable the check. Under bail only files that killed nothing at all are accused, since a second killer may go unrecorded; set disableBail for the exact measure.',
@@ -20,6 +22,18 @@ const extendsProperty = {
   type: 'string',
 }
 
+/**
+ * The upstream schema still declares the removed options, several with
+ * defaults. AJV injects a default for every declared property, so leaving
+ * them here would put `dashboard` and `eventReporter` into the resolved
+ * options of every run and the denylist would reject configs nobody wrote
+ * them in. Deleting the properties removes the defaults with them.
+ */
+const withoutRemovedSurface = (properties: Record<string, unknown>): Record<string, unknown> =>
+  Object.fromEntries(
+    Object.entries(properties).filter(([name]) => !Object.hasOwn(REMOVED_OPTIONS, name)),
+  )
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
@@ -28,6 +42,11 @@ const baseProperties = strykerCoreSchema.properties
 export const forkCoreSchema: Record<string, unknown> = {
   ...strykerCoreSchema,
   properties: isRecord(baseProperties)
-    ? { ...baseProperties, requireTestContribution, survivorsPriorReport, extends: extendsProperty }
+    ? {
+      ...withoutRemovedSurface(baseProperties),
+      requireTestContribution,
+      survivorsPriorReport,
+      extends: extendsProperty,
+    }
     : { requireTestContribution, survivorsPriorReport, extends: extendsProperty },
 }

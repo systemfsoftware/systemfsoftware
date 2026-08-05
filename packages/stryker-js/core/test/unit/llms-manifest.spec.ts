@@ -3,7 +3,7 @@ import * as Options from '@effect/cli/Options'
 import { Effect } from 'effect'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { REMOVED_OPTION_NAMES } from '../../src/config/options-validator.js'
+import { REMOVED_OPTIONS } from '../../src/config/removed-surface.js'
 import { buildLLMSManifest, LLMS_MANIFEST_SCHEMA_VERSION } from '../../src/llms-manifest.js'
 import type { LLMSManifest } from '../../src/llms-manifest.js'
 import { makeStrykerCommand, resolveCliExitCode, strykerCliEffect } from '../../src/stryker-cli.js'
@@ -151,7 +151,7 @@ describe('--llms manifest', () => {
     const command = makeStrykerCommand(async () => {})
     const manifest = buildLLMSManifest(command, strykerVersion)
     const names = new Set(allManifestOptionNames(manifest))
-    const overlap = [...REMOVED_OPTION_NAMES].filter((name) => names.has(name))
+    const overlap = Object.keys(REMOVED_OPTIONS).filter((name) => names.has(name))
     expect(overlap).toEqual([])
   })
 
