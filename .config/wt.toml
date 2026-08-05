@@ -1,21 +1,26 @@
 # Worktree lifecycle hooks — modern split: pre-start (blocking, fast) + post-start (background).
-# pre-start: sequential blocks; keys within a block run concurrently.
-# post-start: all keys run in background — output goes to log files (wt config state logs).
+# pre-start and post-start are both pipelines of sequential [[block]] tables;
+# keys within one block run concurrently. Output goes to log files (wt config state logs).
 
-# --- Blocking: filesystem setup (must complete before the worktree is usable) ---
+# --- Blocking: filesystem setup + CodeGraph warm-start (concurrent, fast) ---
 [[pre-start]]
 setup = "{{ worktree_path }}/scripts/worktrunk/pre-start.sh '{{ worktree_path }}' '{{ primary_worktree_path }}'"
+codegraph = "{{ worktree_path }}/scripts/worktrunk/copy-codegraph.sh '{{ worktree_path }}' '{{ primary_worktree_path }}'"
 
-# --- Background: build cache, deps, artifacts (agent can edit while these run) ---
-[post-start]
-# 1. Reflink build caches from primary worktree (CoW — ~20s vs 2m for cp -R)
+# --- Background: copy cache -> install deps -> generate artifacts ---
+# Block order is load-bearing. Reflink caches before the package manager reconciles
+# them, and install before generate — generate runs the build from node_modules,
+# so a concurrent table dies with "command not found".
+[[post-start]]
 copy = "wt step copy-ignored"
 
-# 2. Install dependencies (auto-detects package manager)
+[[post-start]]
 deps = "{{ worktree_path }}/scripts/worktrunk/install-deps.sh '{{ worktree_path }}'"
 
-# 3. Generate build artifacts so checks pass out of the box
+[[post-start]]
 generate = "{{ worktree_path }}/scripts/worktrunk/generate-artifacts.sh '{{ worktree_path }}'"
+# Dev server with auto-kill on worktree remove (v0.52.0+). Needs deps, not generate.
+# server = "wt step tether -- pnpm dev"
 
 # --- Post-switch: runs every time you switch into this worktree ---
 [post-switch]
@@ -24,6 +29,10 @@ gitkraken-compat = "{{ worktree_path }}/scripts/worktrunk/post-switch.sh '{{ wor
 # --- Pre-merge: cleanup before merge ---
 [pre-merge]
 cleanup = "{{ worktree_path }}/scripts/worktrunk/pre-merge.sh '{{ worktree_path }}'"
+
+# --- Pre-remove: unregister worktree from primary's .repos/ ---
+[[pre-remove]]
+repo-link = "{{ worktree_path }}/scripts/worktrunk/pre-remove.sh '{{ worktree_path }}' '{{ primary_worktree_path }}'"
 
 # --- Cleaner cleanup: auto-delete branch on worktree remove ---
 [remove]

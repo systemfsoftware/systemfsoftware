@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Worktrunk pre-start: symlink .issues, create .repo directory,
+# Worktrunk pre-start: symlink .issues, register worktree in primary's .repos/,
 # convert gitdir paths to relative, disable GitKraken-incompatible settings.
 # Invoked by .config/wt.toml. Args: worktree_path [primary_worktree_path]
 
@@ -50,6 +50,25 @@ convert_worktree_gitfile_to_relative() {
     echo "  .git -> $rel_path"
 }
 
+# Register this worktree in the primary repo's .repos/ directory as a symlink
+# named by the (sanitized) branch: .repos/<branch> -> worktree. Lets the main
+# checkout reach every active worktree at a stable path.
+register_worktree_in_repos() {
+    local worktree_path="$1" primary_path="$2"
+    local branch
+    branch="$(git -C "$worktree_path" branch --show-current 2>/dev/null || true)"
+    [[ -z "$branch" ]] && return 0
+
+    # Mirror the worktree sanitize filter: replace / and \ with -.
+    local name="${branch//\//-}"
+    name="${name//\\/-}"
+
+    local repos_dir="$primary_path/.repos"
+    mkdir -p "$repos_dir"
+    ln -sfn "$worktree_path" "$repos_dir/$name"
+    echo "pre-start: .repos/$name -> $worktree_path"
+}
+
 WORKTREE_PATH="${1:?worktree_path required}"
 PRIMARY_PATH="${2:-$(resolve_primary_repo "$WORKTREE_PATH" 2>/dev/null)}"
 
@@ -64,6 +83,8 @@ if [[ -z "$PRIMARY_PATH" ]]; then
     echo "pre-start: running in primary repo (not a worktree) — done"
     exit 0
 fi
+
+register_worktree_in_repos "$WORKTREE_PATH" "$PRIMARY_PATH"
 
 # Symlink the .issues directory if it exists in the primary repo.
 ISSUES_DIR="$PRIMARY_PATH/.issues"
