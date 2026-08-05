@@ -45,7 +45,8 @@
     ]
   },
   "ignorers": [
-    "effect-schema-declarations"
+    "effect-schema-declarations",
+    "in-source-vitest-block"
   ],
   "thresholds": {
     "high": 100,

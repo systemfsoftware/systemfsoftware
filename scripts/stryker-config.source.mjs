@@ -130,7 +130,7 @@ export const overrides = {
 
   'packages/effect-daemon-spec': {
     reason:
-      'Mutation debt, measured 2026-08-05: 45 Ignored, 4 Survived. `break: 0` means the run cannot fail on score, and excludedMutations narrows the operator set -- both are §III.3 relaxations, so both expire together. Loads the stryker-plugins root export rather than the effect-schema-ignorer subpath.',
+      'Mutation debt, measured 2026-08-05: 45 Ignored, 4 Survived. `break: 0` means the run cannot fail on score, and excludedMutations narrows the operator set -- both are §III.3 relaxations, so both expire together. Loads the stryker-plugins root export rather than the effect-schema-ignorer subpath. Three `*.kernel.ts` files carry in-source tests, so `in-source-vitest-block` joins the ignorers on the same grounds as hex-schema: a no-op for the committed workflow/schema scope (no file in it holds a block) and the difference between 7 and 52 unkilled mutants the moment kernels are measured, because mutating test code measures nothing.',
     issue: 'https://github.com/systemfsoftware/systemfsoftware/issues/47',
     expires: '2026-11-03',
     config: {
@@ -147,7 +147,7 @@ export const overrides = {
       mutate: ['src/**/*.workflow.ts', 'src/**/*.schema.ts'],
       mutator: { excludedMutations: ['StringLiteral', 'Regex', 'ObjectLiteral', 'UpdateOperator'] },
       ignorePatterns: ABSENT,
-      ignorers: ['effect-schema-declarations'],
+      ignorers: ['effect-schema-declarations', 'in-source-vitest-block'],
       thresholds: { high: 100, low: 100, break: 0 },
     },
   },
