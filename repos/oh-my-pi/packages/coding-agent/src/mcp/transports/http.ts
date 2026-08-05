@@ -5,7 +5,7 @@
  * Based on MCP spec 2025-03-26.
  */
 import * as AIError from "@oh-my-pi/pi-ai/error";
-import { logger, readSseJson, Snowflake } from "@oh-my-pi/pi-utils";
+import { logger, readSseJson } from "@oh-my-pi/pi-utils";
 import type {
 	JsonRpcError,
 	JsonRpcMessage,
@@ -17,6 +17,7 @@ import type {
 	MCPTransport,
 } from "../../mcp/types";
 import { toJsonRpcError } from "../../mcp/types";
+import { RequestIdAllocator } from "../request-id";
 import { createMCPTimeout, getNeverAbortSignal, isMCPTimeoutEnabled, resolveMCPTimeoutMs } from "../timeout";
 
 const HTTP_SSE_CONNECT_TIMEOUT_MS = 1_000;
@@ -42,6 +43,7 @@ export class HttpTransport implements MCPTransport {
 	#connected = false;
 	#sessionId: string | null = null;
 	#sseConnection: AbortController | null = null;
+	readonly #requestIds = new RequestIdAllocator();
 
 	onClose?: () => void;
 	onError?: (error: Error) => void;
@@ -209,7 +211,7 @@ export class HttpTransport implements MCPTransport {
 			throw new Error("Transport not connected");
 		}
 
-		const id = Snowflake.next();
+		const id = this.#requestIds.next(this.config.requestIdFormat);
 		const body = {
 			jsonrpc: "2.0" as const,
 			id,

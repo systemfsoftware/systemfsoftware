@@ -93,6 +93,7 @@ async function makeJsonlSessionFile(dirPath: string, entries: object[]): Promise
 function makeSubagentRegistry(sessions: ObservableSession[]): SessionObserverRegistry {
 	return {
 		getSessions: () => sessions,
+		getSession: (id: string) => sessions.find(session => session.id === id),
 		onChange: () => () => {},
 		setMainSession: () => {},
 		getActiveSubagentCount: () => sessions.filter(session => session.status === "active").length,

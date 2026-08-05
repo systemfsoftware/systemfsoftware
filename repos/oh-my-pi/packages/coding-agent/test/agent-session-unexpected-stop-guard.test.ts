@@ -50,6 +50,13 @@ function unexpectedStop(text: string): MockResponse {
 	};
 }
 
+function thinkingOnlyStop(thinking: string): MockResponse {
+	return {
+		content: [{ type: "thinking", thinking, thinkingSignature: "reasoning_content" }],
+		stopReason: "stop",
+	};
+}
+
 async function createHarness(
 	responses: MockResponse[],
 	settingsOverrides: SettingsOverrides = {},
@@ -165,6 +172,30 @@ describe("AgentSession unexpected stop guard", () => {
 		await session.waitForIdle();
 
 		expect(spy).toHaveBeenCalledTimes(2);
+		expect(mock.calls).toHaveLength(2);
+		expect(assistantText(session.agent.state.messages)).toContain("done now");
+		expect(reminderMessages(session.agent.state.messages)).toHaveLength(1);
+	});
+
+	it("classifies a thinking-only stop on its thinking text and continues", async () => {
+		let calls = 0;
+		const spy = vi.spyOn(unexpectedStopClassifier, "classifyUnexpectedStop").mockImplementation(async () => {
+			calls++;
+			return calls === 1;
+		});
+		const { session, mock } = await createHarness(
+			[thinkingOnlyStop(" 响应"), { content: ["done now"], stopReason: "stop" }],
+			{
+				"features.unexpectedStopDetection": true,
+				"providers.unexpectedStopModel": "online",
+			},
+		);
+
+		await session.prompt("do the thing");
+		await session.waitForIdle();
+
+		expect(spy).toHaveBeenCalledTimes(2);
+		expect(spy.mock.calls[0]?.[0]).toContain("响应");
 		expect(mock.calls).toHaveLength(2);
 		expect(assistantText(session.agent.state.messages)).toContain("done now");
 		expect(reminderMessages(session.agent.state.messages)).toHaveLength(1);

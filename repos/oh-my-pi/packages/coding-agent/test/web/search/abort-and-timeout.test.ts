@@ -13,6 +13,7 @@
  */
 import { afterEach, describe, expect, it, vi } from "bun:test";
 import type { AuthStorage, FetchImpl } from "@oh-my-pi/pi-ai";
+import { resetSettingsForTest, Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
 import type { AgentStorage } from "@oh-my-pi/pi-coding-agent/session/agent-storage";
 import type { ToolSession } from "@oh-my-pi/pi-coding-agent/tools";
 import { ToolAbortError } from "@oh-my-pi/pi-coding-agent/tools/tool-errors";
@@ -162,7 +163,10 @@ describe("Brave provider hard-timeout wiring", () => {
 });
 
 describe("executeSearch abort propagation", () => {
-	afterEach(() => vi.restoreAllMocks());
+	afterEach(() => {
+		vi.restoreAllMocks();
+		resetSettingsForTest();
+	});
 
 	function fakeProvider(
 		id: SearchProviderId,
@@ -187,6 +191,67 @@ describe("executeSearch abort propagation", () => {
 			return match;
 		});
 	}
+
+	it("passes the configured provider-request timeout into the search adapter", async () => {
+		resetSettingsForTest();
+		const config = await Settings.init({ inMemory: true });
+		config.set("providers.webSearchTimeoutSeconds", 180);
+		let timeoutMs: number | undefined;
+		mockProviderChain([
+			fakeProvider("codex", async params => {
+				timeoutMs = params.timeoutMs;
+				return {
+					provider: "codex",
+					sources: [{ title: "Configured result", url: "https://example.com/configured" }],
+				};
+			}),
+		]);
+
+		const result = await new WebSearchTool(FAKE_SESSION).execute("test-id", { query: "anything" });
+
+		expect(result.details?.response.provider).toBe("codex");
+		expect(timeoutMs).toBe(180_000);
+	});
+
+	it("caps the configured provider-request timeout at five minutes", async () => {
+		resetSettingsForTest();
+		const config = await Settings.init({ inMemory: true });
+		config.set("providers.webSearchTimeoutSeconds", 600);
+		let timeoutMs: number | undefined;
+		mockProviderChain([
+			fakeProvider("codex", async params => {
+				timeoutMs = params.timeoutMs;
+				return {
+					provider: "codex",
+					sources: [{ title: "Capped result", url: "https://example.com/capped" }],
+				};
+			}),
+		]);
+
+		await new WebSearchTool(FAKE_SESSION).execute("test-id", { query: "anything" });
+
+		expect(timeoutMs).toBe(300_000);
+	});
+
+	it("uses the default provider timeout for a non-positive setting", async () => {
+		resetSettingsForTest();
+		const config = await Settings.init({ inMemory: true });
+		config.set("providers.webSearchTimeoutSeconds", 0);
+		let timeoutMs: number | undefined;
+		mockProviderChain([
+			fakeProvider("codex", async params => {
+				timeoutMs = params.timeoutMs;
+				return {
+					provider: "codex",
+					sources: [{ title: "Default result", url: "https://example.com/default" }],
+				};
+			}),
+		]);
+
+		await new WebSearchTool(FAKE_SESSION).execute("test-id", { query: "anything" });
+
+		expect(timeoutMs).toBe(60_000);
+	});
 
 	it("surfaces caller cancellation as ToolAbortError instead of falling through to the next provider", async () => {
 		// Two providers: the first throws an AbortError after the caller aborted,

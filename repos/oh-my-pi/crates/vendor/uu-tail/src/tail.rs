@@ -123,6 +123,43 @@ fn rewrite_bsd_invocation(argv: &[OsString]) -> Option<Result<Vec<OsString>, Str
 	Some(Ok(tac_argv))
 }
 
+/// Exit status of a process killed by SIGPIPE (128 + 13).
+const SIGPIPE_EXIT_CODE: i32 = 141;
+
+/// pi-uutils: marker for a closed stdout pipe. Real tail is killed silently by
+/// SIGPIPE when the downstream reader exits early (`tail file | head`); the
+/// in-process builtin cannot die by signal, so output errors map to this
+/// sentinel and [`run`] turns it into a bare exit 141 with no diagnostic,
+/// mirroring the fd builtin's convention.
+#[derive(Debug)]
+struct BrokenPipeExit;
+
+impl std::fmt::Display for BrokenPipeExit {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.write_str("Broken pipe")
+	}
+}
+
+impl std::error::Error for BrokenPipeExit {}
+
+impl UError for BrokenPipeExit {
+	fn code(&self) -> i32 {
+		SIGPIPE_EXIT_CODE
+	}
+}
+
+/// Maps a stdout write error into the tail exit contract: `BrokenPipe`
+/// becomes the silent [`BrokenPipeExit`] sentinel, everything else the
+/// standard uucore io wrapper. Used by every path that copies data to the
+/// context stdout, including follow mode.
+pub(crate) fn map_output_error(err: io::Error) -> Box<dyn UError> {
+	if err.kind() == ErrorKind::BrokenPipe {
+		Box::new(BrokenPipeExit)
+	} else {
+		err.into()
+	}
+}
+
 /// In-process builtin entry point. Unlike upstream's `#[uucore::main] uumain`,
 /// this renders clap help/usage/version to the context streams and never calls
 /// `std::process::exit`, so it is safe inside the long-lived host shell
@@ -160,6 +197,11 @@ pub fn run(args: Vec<OsString>) -> i32 {
 		Ok(()) => pi_uutils_ctx::exit_code(),
 		Err(err) => {
 			let code = err.code();
+			if code == SIGPIPE_EXIT_CODE {
+				// Downstream closed the pipe; exit silently like SIGPIPE would
+				// kill a real tail (see `BrokenPipeExit`).
+				return SIGPIPE_EXIT_CODE;
+			}
 			let _ = writeln!(pi_uutils_ctx::stderr(), "tail: {err}");
 			if code == 0 { 1 } else { code }
 		},
@@ -299,11 +341,11 @@ fn tail_file(
 					&& file.is_seekable(if input.is_stdin() { offset } else { 0 })
 					&& (!st.is_file() || st.len() > blksize_limit)
 				{
-					bounded_tail(&mut file, settings)?;
+					bounded_tail(&mut file, settings).map_err(map_output_error)?;
 					reader = BufReader::new(file);
 				} else {
 					reader = BufReader::new(file);
-					unbounded_tail(&mut reader, settings)?;
+					unbounded_tail(&mut reader, settings).map_err(map_output_error)?;
 				}
 				if input.is_tailable() {
 					observer.add_path(
@@ -391,7 +433,7 @@ fn tail_stdin(
 	// streaming (pipe) path.
 	header_printer.print_input(input);
 	let mut reader = BufReader::new(pi_uutils_ctx::stdin());
-	unbounded_tail(&mut reader, settings)?;
+	unbounded_tail(&mut reader, settings).map_err(map_output_error)?;
 	Ok(())
 }
 
@@ -531,7 +573,7 @@ fn backwards_thru_file(file: &mut File, num_delimiters: u64, delimiter: u8) {
 /// end of the file, and then read the file "backwards" in blocks of size
 /// `BLOCK_SIZE` until we find the location of the first line/byte. This ends up
 /// being a nice performance win for very large files.
-fn bounded_tail(file: &mut File, settings: &Settings) -> UResult<()> {
+fn bounded_tail(file: &mut File, settings: &Settings) -> io::Result<()> {
 	debug_assert!(!settings.presume_input_pipe);
 	let mut limit = None;
 
@@ -568,7 +610,7 @@ fn bounded_tail(file: &mut File, settings: &Settings) -> UResult<()> {
 	Ok(())
 }
 
-fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UResult<()> {
+fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> io::Result<()> {
 	let mut writer = BufWriter::new(pi_uutils_ctx::stdout().lock());
 	match &settings.mode {
 		FilterMode::Lines(Signum::Negative(count), sep) => {
@@ -636,8 +678,8 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
 	// pi-uutils: upstream emulates Unix SIGPIPE on Windows by calling
 	// `std::process::exit(13)` on a broken-pipe flush. That would kill the
 	// long-lived host shell process. An in-process builtin must never
-	// `process::exit`; let the broken pipe surface as a normal `io::Error` and
-	// propagate to the caller, matching every other pi-uutils builtin.
+	// `process::exit`; the broken pipe surfaces as a normal `io::Error`, which
+	// callers map to the silent SIGPIPE exit via `map_output_error`.
 	writer.flush()?;
 	Ok(())
 }
@@ -834,12 +876,13 @@ mod tests {
 		file.flush().expect("flush");
 		drop(file);
 
+		let stderr_buf = Arc::new(Mutex::new(Vec::new()));
 		let io = pi_uutils_ctx::ScopeIo {
 			stdin:                 Box::new(io::empty()),
 			stdin_fd:              None,
 			stdin_is_search_input: false,
 			stdout:                Box::new(BrokenPipeWriter),
-			stderr:                Box::new(io::sink()),
+			stderr:                Box::new(SharedWriter { buf: stderr_buf.clone() }),
 			cwd:                   std::env::temp_dir(),
 			env:                   HashMap::new(),
 			cancel:                Arc::new(AtomicBool::new(false)),
@@ -849,7 +892,10 @@ mod tests {
 			crate::run(vec![OsString::from("tail"), OsString::from(&path)])
 		});
 
-		assert_ne!(code, 0, "broken pipe must surface as a non-zero exit, not a panic");
+		// Real tail dies silently from SIGPIPE (exit 128+13); the in-process
+		// builtin must match: no "tail: Broken pipe" noise on stderr.
+		assert_eq!(code, 141, "broken pipe must map to the silent SIGPIPE exit");
+		assert_eq!(String::from_utf8(stderr_buf.lock().clone()).unwrap(), "");
 	}
 
 	#[test]
@@ -877,12 +923,13 @@ mod tests {
 		}
 
 		let input = b"1\n2\n3\n4\n5\n".to_vec();
+		let stderr_buf = Arc::new(Mutex::new(Vec::new()));
 		let io = pi_uutils_ctx::ScopeIo {
 			stdin:                 Box::new(Cursor::new(input)),
 			stdin_fd:              None,
 			stdin_is_search_input: false,
 			stdout:                Box::new(BrokenPipeWriter),
-			stderr:                Box::new(io::sink()),
+			stderr:                Box::new(SharedWriter { buf: stderr_buf.clone() }),
 			cwd:                   std::env::temp_dir(),
 			env:                   HashMap::new(),
 			cancel:                Arc::new(AtomicBool::new(false)),
@@ -892,6 +939,9 @@ mod tests {
 			crate::run(vec![OsString::from("tail"), OsString::from("-n"), OsString::from("3")])
 		});
 
-		assert_ne!(code, 0, "broken pipe must surface as a non-zero exit, not process::exit");
+		// Same silent-SIGPIPE contract as the bounded test: exit 141, no
+		// diagnostic — this is the `tail -c N file | jq | …` regression.
+		assert_eq!(code, 141, "broken pipe must map to the silent SIGPIPE exit");
+		assert_eq!(String::from_utf8(stderr_buf.lock().clone()).unwrap(), "");
 	}
 }

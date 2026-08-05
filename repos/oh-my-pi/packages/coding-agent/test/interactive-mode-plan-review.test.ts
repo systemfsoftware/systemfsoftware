@@ -394,6 +394,34 @@ describe("InteractiveMode plan review rendering", () => {
 		expect(onInput).toHaveBeenCalledTimes(1);
 	});
 
+	it("promotes the reviewed plan path into plan-mode state before refining", async () => {
+		const resolve = (url: string) =>
+			resolveLocalUrlToPath(url, {
+				getArtifactsDir: () => session.sessionManager.getArtifactsDir(),
+				getSessionId: () => session.sessionManager.getSessionId(),
+			});
+		const oldPlanPath = "local://old-plan.md";
+		const newPlanPath = "local://new-draft-plan.md";
+		await Bun.write(resolve(oldPlanPath), "# Old\n\nold body");
+		await Bun.write(resolve(newPlanPath), "# New\n\nnew body");
+
+		mode.planModeEnabled = true;
+		mode.planModePlanFilePath = oldPlanPath;
+		// State still points at the previously reviewed (older) plan.
+		session.setPlanModeState({ enabled: true, planFilePath: oldPlanPath, workflow: "parallel", reentry: true });
+
+		const feedback = "Refinement feedback:\n- add more detail\n";
+		vi.spyOn(mode, "showPlanReview").mockImplementation(async (_plan, _title, _options, dialogOptions) => {
+			dialogOptions?.onFeedbackChange?.(feedback);
+			return "Refine plan";
+		});
+		vi.spyOn(session, "prompt").mockResolvedValue(undefined as never);
+
+		await mode.handlePlanApproval({ planFilePath: newPlanPath, planExists: true, title: "NEW" });
+
+		expect(session.getPlanModeState()?.planFilePath).toBe(newPlanPath);
+	});
+
 	it("opens the annotation external editor from the real plan review overlay", async () => {
 		const editorPath = path.join(tempDir.path(), "annotation-editor.sh");
 		await Bun.write(

@@ -1,5 +1,6 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "bun:test";
 import * as path from "node:path";
+import { type } from "@oh-my-pi/omptype";
 import { Agent, type AgentTool } from "@oh-my-pi/pi-agent-core";
 import { type Api, Effort, type Model } from "@oh-my-pi/pi-ai";
 import { resetSettingsForTest, Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
@@ -8,11 +9,10 @@ import { AgentSession } from "@oh-my-pi/pi-coding-agent/session/agent-session";
 import { AuthStorage } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
 import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
 import { TempDir } from "@oh-my-pi/pi-utils";
-import { type } from "arktype";
 import { ModelRegistry } from "../src/config/model-registry";
 import type { CustomTool } from "../src/extensibility/custom-tools/types";
 import { InteractiveMode } from "../src/modes/interactive-mode";
-import { XdevRegistry } from "../src/tools/xdev";
+import { resolveXdevTool, type XdevState } from "../src/tools/xdev";
 
 function makeTool(name: string): AgentTool {
 	return {
@@ -30,7 +30,7 @@ interface HarnessOptions {
 	extraRegistryTools?: readonly AgentTool[];
 	builtInToolNames?: Iterable<string>;
 	rebuildGate?: { fail: boolean; calls?: number };
-	xdevRegistry?: XdevRegistry;
+	xdev?: XdevState;
 }
 
 describe("InteractiveMode plan.defaultOnStartup", () => {
@@ -83,12 +83,13 @@ describe("InteractiveMode plan.defaultOnStartup", () => {
 		// AgentSession requires a Map-typed tool registry; `read` is the initial
 		// active tool. Plan approval is a `write` to xd://propose, so plan-mode
 		// entry only augments the built-in `write` tool when present.
-		const toolRegistry = new Map<string, AgentTool>([[readTool.name, readTool]]);
+		const xdev = options.xdev;
+		const toolRegistry = xdev?.tools ?? new Map<string, AgentTool>();
+		toolRegistry.set(readTool.name, readTool);
 		for (const tool of options.extraRegistryTools ?? []) {
 			toolRegistry.set(tool.name, tool);
 		}
 		const manager = SessionManager.create(tempDir.path(), path.join(tempDir.path(), `active-${Bun.nanoseconds()}`));
-		const xdevRegistry = options.xdevRegistry;
 		const createdSession = new AgentSession({
 			agent: new Agent({
 				initialState: {
@@ -111,7 +112,7 @@ describe("InteractiveMode plan.defaultOnStartup", () => {
 						return { systemPrompt: ["Test"] };
 					}
 				: undefined,
-			xdevRegistry,
+			xdev,
 		});
 		session = createdSession;
 		mode = new InteractiveMode(createdSession, "test");
@@ -217,11 +218,16 @@ describe("InteractiveMode plan.defaultOnStartup", () => {
 				return { content: [{ type: "text", text: "ok" }] };
 			},
 		};
-		const xdevRegistry = new XdevRegistry([]);
+		const xdev: XdevState = {
+			tools: new Map(),
+			mountedNames: new Set(),
+			builtInNames: new Set(["read", "write"]),
+			isActive: name => session?.getActiveToolNames().includes(name) === true,
+		};
 		const created = createHarness(settings, {
 			extraRegistryTools: [writeTool, planSelectedTool],
 			builtInToolNames: ["read", "write"],
-			xdevRegistry,
+			xdev,
 		});
 		const previousModel = session?.model;
 		await created.init({ suppressWelcomeIntro: true });
@@ -235,7 +241,7 @@ describe("InteractiveMode plan.defaultOnStartup", () => {
 		expect(session?.configuredThinkingLevel()).toBe(Effort.High);
 		expect(planActiveTools).toEqual(["read", "write", planSelectedTool.name]);
 		expect(planMountedTools).toEqual([mountedTool.name]);
-		expect(xdevRegistry.get(mountedTool.name)?.name).toBe(mountedTool.name);
+		expect(xdev.mountedNames.has(mountedTool.name)).toBe(true);
 
 		const setModelTemporary = session!.setModelTemporary.bind(session);
 		const restoreModel = vi.spyOn(session!, "setModelTemporary").mockImplementationOnce(async (...args) => {
@@ -253,7 +259,7 @@ describe("InteractiveMode plan.defaultOnStartup", () => {
 		expect(session?.getEnabledToolNames()).toEqual(planTools);
 		expect(session?.getActiveToolNames()).toEqual(planActiveTools);
 		expect(session?.getMountedXdevToolNames()).toEqual(planMountedTools);
-		expect(xdevRegistry.get(mountedTool.name)?.name).toBe(mountedTool.name);
+		expect(xdev.mountedNames.has(mountedTool.name)).toBe(true);
 
 		restoreModel.mockRestore();
 		await created.handlePlanModeCommand();
@@ -264,7 +270,8 @@ describe("InteractiveMode plan.defaultOnStartup", () => {
 		// pre-plan tool set drops the MCP device and plan-only selections entirely.
 		expect(session?.getActiveToolNames()).toEqual(["read"]);
 		expect(session?.getMountedXdevToolNames()).toEqual([]);
-		expect(xdevRegistry.get(mountedTool.name)).toBeUndefined();
+		expect(xdev.tools.has(mountedTool.name)).toBe(true);
+		expect(resolveXdevTool(xdev, mountedTool.name)).toBeUndefined();
 	});
 
 	it("clears old plan UI state when target-session reconciliation restore fails", async () => {

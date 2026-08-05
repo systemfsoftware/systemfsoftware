@@ -139,6 +139,63 @@ describe("runIsolatedSubprocess", () => {
 		expect(deleteSpy).toHaveBeenCalledWith(repoRoot, "omp/task/PreserveBranchFailure");
 		expect(cleanupSpy).toHaveBeenCalledTimes(1);
 	});
+
+	it("keeps an isolated worktree until deferred child cleanup settles", async () => {
+		const cleanupGate = Promise.withResolvers<void>();
+		vi.spyOn(worktreeModule, "ensureIsolation").mockResolvedValue({
+			mergedDir: "/repo/isolated",
+			backend: natives.IsoBackendKind.Rcopy,
+			fellBack: false,
+			fallbackReason: null,
+		});
+		vi.spyOn(executorModule, "runSubprocess").mockImplementation(async options => {
+			options.onCleanupDeferred?.(cleanupGate.promise);
+			return result({ exitCode: 1, aborted: true, error: "cleanup exceeded its deadline" });
+		});
+		const cleanupSpy = vi.spyOn(worktreeModule, "cleanupIsolation").mockResolvedValue();
+
+		const outcome = await runIsolatedSubprocess({
+			baseOptions: {
+				cwd: "/repo",
+				agent: {
+					name: "task",
+					description: "Task agent",
+					systemPrompt: "test",
+					source: "bundled",
+				},
+				task: "Do work",
+				index: 0,
+				id: "DeferredCleanup",
+			},
+			context: {
+				repoRoot: "/repo",
+				baseline: {
+					root: {
+						repoRoot: "/repo",
+						headCommit: "base",
+						staged: "",
+						unstaged: "",
+						untracked: [],
+						untrackedPatch: "",
+					},
+					nested: [],
+				},
+			},
+			preferredBackend: undefined,
+			agentId: "DeferredCleanup",
+			mergeMode: "patch",
+			artifactsDir: "/artifacts",
+			buildFailureResult: error => result({ exitCode: 1, error: String(error) }),
+		});
+
+		expect(outcome.exitCode).toBe(1);
+		expect(cleanupSpy).not.toHaveBeenCalled();
+		cleanupGate.resolve();
+		await cleanupGate.promise;
+		await Promise.resolve();
+		await Promise.resolve();
+		expect(cleanupSpy).toHaveBeenCalledTimes(1);
+	});
 });
 
 describe("mergeIsolatedChanges", () => {

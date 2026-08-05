@@ -1,4 +1,5 @@
 import * as fs from "node:fs";
+import { type } from "@oh-my-pi/omptype";
 import type {
 	AgentTool,
 	AgentToolContext,
@@ -9,7 +10,6 @@ import type {
 import type { Component } from "@oh-my-pi/pi-tui";
 import { ImageProtocol, TERMINAL } from "@oh-my-pi/pi-tui";
 import { getProjectDir, isEnoent, logger, prompt } from "@oh-my-pi/pi-utils";
-import { type } from "arktype";
 import type { Settings } from "../config/settings";
 import { applyDirenvPreflight, type BashResult, executeBash } from "../exec/bash-executor";
 import type { RenderResultOptions } from "../extensibility/custom-tools/types";
@@ -37,6 +37,7 @@ import { invalidateGithubCacheForBashCommand } from "./gh-cache-invalidation";
 import {
 	formatStyledTruncationWarning,
 	type OutputMeta,
+	resolveInlineByteCapBudget,
 	stripOutputNotice,
 	stripRawOutputArtifactNotice,
 } from "./output-meta";
@@ -48,6 +49,7 @@ import {
 	previewWindowRows,
 	replaceTabs,
 } from "./render-utils";
+import { tokenizeShellSegments } from "./shell-tokenize";
 import { ToolAbortError, ToolError } from "./tool-errors";
 import { toolResult } from "./tool-result";
 import { clampTimeout, TOOL_TIMEOUTS } from "./tool-timeouts";
@@ -56,7 +58,65 @@ export const BASH_DEFAULT_PREVIEW_LINES = DEFAULT_TERMINAL_PREVIEW_LINES;
 
 const BASH_ENV_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const DEFAULT_AUTO_BACKGROUND_THRESHOLD_MS = 60_000;
-const BASH_APPROVAL_SHELL_CONTROL_RE = /[\n\r;&|<>`$()]/u;
+const BASH_APPROVAL_SHELL_CONTROL_CHARS: Record<string, true> = {
+	"\n": true,
+	"\r": true,
+	";": true,
+	"&": true,
+	"|": true,
+	"<": true,
+	">": true,
+	"`": true,
+	$: true,
+	"(": true,
+	")": true,
+};
+const BASH_APPROVAL_REINTERPRETED_ARGUMENT_RE = /(?:^|[ \t])(?:-[^-]*[ce]|--(?:command|eval))(?:[= \t]|$)/u;
+
+function hasBashApprovalShellControl(command: string): boolean {
+	let quote: "'" | '"' | undefined;
+	let hasReinterpretableShellControl = false;
+	for (let i = 0; i < command.length; i++) {
+		const ch = command[i];
+		if (quote === "'") {
+			if (ch === "'") {
+				quote = undefined;
+			} else if (Object.hasOwn(BASH_APPROVAL_SHELL_CONTROL_CHARS, ch)) {
+				hasReinterpretableShellControl = true;
+			}
+			continue;
+		}
+		if (ch === "\\") {
+			const escaped = command[i + 1];
+			if (escaped && Object.hasOwn(BASH_APPROVAL_SHELL_CONTROL_CHARS, escaped)) {
+				hasReinterpretableShellControl = true;
+			}
+			i++;
+			continue;
+		}
+		if (quote === '"') {
+			if (ch === '"') {
+				quote = undefined;
+				continue;
+			}
+			// Expansion is active inside double quotes even in the original line.
+			if (ch === "`" || ch === "$") return true;
+			// Other control characters are literal here but become executable if a
+			// `-c`/`-e` option reinterprets the argument through another shell.
+			if (Object.hasOwn(BASH_APPROVAL_SHELL_CONTROL_CHARS, ch)) hasReinterpretableShellControl = true;
+			continue;
+		}
+		if (ch === "'" || ch === '"') {
+			quote = ch;
+			continue;
+		}
+		if (Object.hasOwn(BASH_APPROVAL_SHELL_CONTROL_CHARS, ch)) return true;
+	}
+	// Options such as `git -c alias.x='!...'` and `sh -c "..."` reinterpret
+	// otherwise literal quoted or escaped arguments as executable code.
+	return hasReinterpretableShellControl && BASH_APPROVAL_REINTERPRETED_ARGUMENT_RE.test(command);
+}
+
 const BASH_PATTERN_APPROVAL_VALUES = new Set(["allow", "deny", "prompt"]);
 
 /**
@@ -71,12 +131,13 @@ const BASH_PATTERN_APPROVAL_VALUES = new Set(["allow", "deny", "prompt"]);
  * containing a space, pipe, `&&`, redirect, or `$(...)`.
  *
  * The wrap reuses the same shell binary + args the local `bash-executor` would
- * pick via `settings.getShellConfig()` — Git Bash / `bash.exe` on Windows,
+ * pick via `settings.getShellConfig()` — Git Bash / `bash.exe` on Windows
+ * (`cmd.exe /c` as the last-resort fallback when no bash exists on the host),
  * `$SHELL` (bash/zsh) with the `sh` fallback on POSIX — so the ACP path
  * preserves `bash` tool semantics (`$VAR`, `$(...)`, `source`, POSIX quoting,
- * `-l`) instead of dropping to `cmd.exe` on Windows. The agent host's shell
- * path is used as a proxy for the client's, matching the near-universal
- * ACP deployment shape of an editor spawning omp as a co-hosted subprocess.
+ * `-l`) wherever a POSIX shell is available. The agent host's shell path is
+ * used as a proxy for the client's, matching the near-universal ACP
+ * deployment shape of an editor spawning omp as a co-hosted subprocess.
  */
 export function wrapShellLineForClientTerminal(
 	line: string,
@@ -189,16 +250,43 @@ function commandMatchesBashApprovalPattern(command: string, pattern: string): bo
 	return bashApprovalPatternToRegExp(pattern).test(normalizedCommand);
 }
 
+// `deny`/`prompt` rules are matched per segment so a dangerous command buried in
+// a compound line (`cd x && rm -rf /`, `sleep 1 & rm -rf /`) is still caught.
+// Reuse the shared shell tokenizer so segmentation stays in one place and honors
+// every command boundary (`;`, `&&`, `||`, `|`, `&`, subshells, newlines).
+function bashCommandSegments(command: string): string[] {
+	return tokenizeShellSegments(command)
+		.map(segment => segment.join(" "))
+		.filter(segment => segment.length > 0);
+}
+
+// `deny`/`prompt` matching: the rule fires when its glob matches the whole
+// command or any single segment of a compound command.
+function commandSegmentMatchesBashApprovalPattern(command: string, pattern: string): boolean {
+	const regex = bashApprovalPatternToRegExp(pattern);
+	const normalizedCommand = normalizeBashApprovalPattern(command);
+	if (normalizedCommand.length === 0) return false;
+	if (regex.test(normalizedCommand)) return true;
+	return bashCommandSegments(command).some(segment => regex.test(segment));
+}
+
+// A rule "applies" to a command under approval-specific semantics: `allow` must
+// vouch for the ENTIRE command and never rides a compound line (shell control
+// syntax could smuggle an unsafe segment past a narrow allow), while `deny` and
+// `prompt` fire on any matching segment so they mean what they appear to.
+function bashApprovalRuleMatches(command: string, rule: BashApprovalPatternRule): boolean {
+	if (rule.approval === "allow") {
+		if (hasBashApprovalShellControl(command)) return false;
+		return commandMatchesBashApprovalPattern(command, rule.match);
+	}
+	return commandSegmentMatchesBashApprovalPattern(command, rule.match);
+}
+
 function findBashApprovalPatternRule(
 	command: string,
 	rules: readonly BashApprovalPatternRule[],
 ): BashApprovalPatternRule | undefined {
-	return rules.find(rule => {
-		if (rule.approval === "allow" && BASH_APPROVAL_SHELL_CONTROL_RE.test(command)) {
-			return false;
-		}
-		return commandMatchesBashApprovalPattern(command, rule.match);
-	});
+	return rules.find(rule => bashApprovalRuleMatches(command, rule));
 }
 
 async function saveBashOriginalArtifact(session: ToolSession, originalText: string): Promise<string | undefined> {
@@ -459,7 +547,7 @@ export class BashTool implements AgentTool<typeof bashSchemaBase | typeof bashSc
 		const rawCommand = (args as Partial<BashToolInput>).command;
 		const command = typeof rawCommand === "string" ? rawCommand : "";
 		const patternRules = getBashApprovalPatternRules(this.session.settings.get("bash.patterns"));
-		const patternRule = patternRules.find(rule => commandMatchesBashApprovalPattern(command, rule.match));
+		const patternRule = findBashApprovalPatternRule(command, patternRules);
 		if (patternRule?.approval === "deny") {
 			return {
 				tier: "exec",
@@ -471,14 +559,13 @@ export class BashTool implements AgentTool<typeof bashSchemaBase | typeof bashSc
 		if (command !== "" && CRITICAL_BASH_PATTERNS.some(pattern => pattern.test(command))) {
 			return { tier: "exec", override: true, reason: "Critical pattern detected" };
 		}
-		const safePatternRule = findBashApprovalPatternRule(command, patternRules);
-		if (safePatternRule?.approval === "allow") return { tier: "write", policy: "allow" };
-		if (safePatternRule?.approval === "prompt") {
+		if (patternRule?.approval === "allow") return { tier: "write", policy: "allow" };
+		if (patternRule?.approval === "prompt") {
 			return {
 				tier: "exec",
 				override: true,
 				policy: "prompt",
-				reason: `Prompt required by bash pattern: ${safePatternRule.match}`,
+				reason: `Prompt required by bash pattern: ${patternRule.match}`,
 			};
 		}
 		return "exec";
@@ -627,6 +714,18 @@ export class BashTool implements AgentTool<typeof bashSchemaBase | typeof bashSc
 			details.exitCode = exitCode;
 		}
 
+		// Final-defense inline cap config, shared by the timeout and normal
+		// completion paths. The sink already bounds inline bodies to the spill
+		// threshold, so with the notice slack this only fires on paths that
+		// bypass the sink (client-bridge terminals, minimizer misses). When the
+		// sink spilled, its artifact already holds the full raw stream — reuse
+		// that id instead of saving a second (already-truncated) copy, so the
+		// `[raw output: artifact://N]` footer and the truncation notice agree.
+		const inlineCap = {
+			maxBytes: resolveInlineByteCapBudget(this.session.settings),
+			saveArtifact: (full: string) => result.artifactId ?? saveBashOriginalArtifact(this.session, full),
+		};
+
 		if (isTimeout) {
 			details.timedOut = true;
 			const message =
@@ -636,9 +735,7 @@ export class BashTool implements AgentTool<typeof bashSchemaBase | typeof bashSc
 			if (!normalizeResultOutput(result).startsWith(`[${message}]\n`)) {
 				outputLines.push("", `[${message}]`);
 			}
-			const timeoutOutputText = await enforceInlineByteCap(outputLines.join("\n"), {
-				saveArtifact: full => saveBashOriginalArtifact(this.session, full),
-			});
+			const timeoutOutputText = await enforceInlineByteCap(outputLines.join("\n"), inlineCap);
 			return toolResult(details)
 				.text(timeoutOutputText)
 				.truncationFromSummary(result, { direction: "tail" })
@@ -649,12 +746,8 @@ export class BashTool implements AgentTool<typeof bashSchemaBase | typeof bashSc
 		// Non-timeout cancellations and missing exit status still propagate as thrown errors.
 		this.#throwIfUnfinished(result, timeoutSec, outputText);
 
-		// Final defense at the tool-result boundary: no bash path (client bridge,
-		// head-retention spill, minimizer miss) may emit more than
-		// ~DEFAULT_MAX_BYTES inline. No-op for already-bounded output.
-		const cappedOutputText = await enforceInlineByteCap(outputText, {
-			saveArtifact: full => saveBashOriginalArtifact(this.session, full),
-		});
+		// No-op for already-bounded output; see `inlineCap` above.
+		const cappedOutputText = await enforceInlineByteCap(outputText, inlineCap);
 
 		const resultBuilder = toolResult(details)
 			.text(cappedOutputText)
@@ -808,13 +901,18 @@ export class BashTool implements AgentTool<typeof bashSchemaBase | typeof bashSc
 			return { kind: "steer" };
 		}
 
+		// Cancellable threshold: a bare Bun.sleep(thresholdMs) leaves a live, ref'd
+		// timer for the full threshold after the command finishes (or abort/steer)
+		// wins the race first — delaying SDK/headless shutdown and accumulating
+		// timers under fast command rates. Settle a withResolvers promise from
+		// setTimeout so the finally can clear it regardless of which waiter wins.
+		const { promise: thresholdPromise, resolve: resolveThreshold } = Promise.withResolvers<{
+			kind: "running";
+		}>();
+		const thresholdTimer = setTimeout(() => resolveThreshold({ kind: "running" }), thresholdMs);
 		const waiters: Array<
 			Promise<ManagedBashJobCompletion | { kind: "running" } | { kind: "steer" } | { kind: "aborted" }>
-		> = [job.completion, Bun.sleep(thresholdMs).then(() => ({ kind: "running" as const }))];
-
-		if (!signal && !steeringSignal) {
-			return await Promise.race(waiters);
-		}
+		> = [job.completion, thresholdPromise];
 
 		const { promise: abortedPromise, resolve: resolveAborted } = Promise.withResolvers<{ kind: "aborted" }>();
 		const onAbort = () => resolveAborted({ kind: "aborted" });
@@ -831,6 +929,7 @@ export class BashTool implements AgentTool<typeof bashSchemaBase | typeof bashSc
 		try {
 			return await Promise.race(waiters);
 		} finally {
+			clearTimeout(thresholdTimer);
 			signal?.removeEventListener("abort", onAbort);
 			steeringSignal?.removeEventListener("abort", onSteer);
 		}
@@ -885,7 +984,7 @@ export class BashTool implements AgentTool<typeof bashSchemaBase | typeof bashSc
 			const rules = this.session.settings.getBashInterceptorRules();
 			const commandsToCheck = rawCommand === command ? [command] : [rawCommand, command];
 			for (const commandToCheck of commandsToCheck) {
-				const interception = checkBashInterception(commandToCheck, ctx?.toolNames ?? [], rules);
+				const interception = checkBashInterception(commandToCheck, ctx?.toolNames ?? [], rules, rawCommand);
 				if (interception.block) {
 					throw new ToolError(interception.message ?? "Command blocked");
 				}

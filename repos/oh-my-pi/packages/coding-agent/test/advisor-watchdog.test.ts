@@ -142,14 +142,9 @@ describe("advisor watchdog prompt discovery", () => {
 		fs.writeFileSync(path.join(cwd, "WATCHDOG.md"), watchdogContent, "utf8");
 
 		await withAdvisorHistory(tempDir, cwd, dump => {
-			expect(dump).toContain("Especially pay attention to:");
-			expect(dump).toContain("exactly one direct child git repository");
 			expect(dump).toContain("`active-project`");
-			expect(dump).toContain("Do not claim work is missing, destroyed, or absent at the parent cwd");
 			expect(dump).toContain(watchdogContent);
-			expect(dump.indexOf(watchdogContent)).toBeLessThan(
-				dump.indexOf("Do not claim work is missing, destroyed, or absent at the parent cwd"),
-			);
+			expect(dump.indexOf(watchdogContent)).toBeLessThan(dump.indexOf("`active-project`"));
 		});
 	});
 

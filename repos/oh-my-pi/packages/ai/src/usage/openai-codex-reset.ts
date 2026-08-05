@@ -147,6 +147,33 @@ export async function listCodexResetCredits(auth: CodexResetAuth): Promise<Codex
 }
 
 /**
+ * Pick the credit to spend: the available one that expires soonest.
+ *
+ * Credits are perishable, so spending in expiry order maximizes the bank's
+ * lifetime value. Available credits without a parseable `expiresAt` rank after
+ * dated ones; when nothing is available the first credit is returned unchanged
+ * (the consume then surfaces the backend's business outcome verbatim).
+ */
+export function pickSoonestExpiringCredit(credits: readonly CodexResetCredit[]): CodexResetCredit | undefined {
+	let best: CodexResetCredit | undefined;
+	let bestExpiry = Number.POSITIVE_INFINITY;
+	let undated: CodexResetCredit | undefined;
+	for (const credit of credits) {
+		if ((credit.status ?? "available") !== "available") continue;
+		const expiry = credit.expiresAt ? Date.parse(credit.expiresAt) : Number.NaN;
+		if (Number.isNaN(expiry)) {
+			undated ??= credit;
+			continue;
+		}
+		if (expiry < bestExpiry) {
+			best = credit;
+			bestExpiry = expiry;
+		}
+	}
+	return best ?? undated ?? credits[0];
+}
+
+/**
  * Spend one saved reset. `redeemRequestId` is the idempotency key; one is
  * generated when omitted, so retrying with the SAME id is safe and won't
  * double-spend. The returned `code` is `"reset"` on success.

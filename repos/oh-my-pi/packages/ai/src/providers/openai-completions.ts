@@ -757,7 +757,13 @@ const streamOpenAICompletionsOnce = (
 					disableStrictTools = true;
 					openaiStream = await createCompletionsStream("none");
 				} else {
-					if (!shouldRetryWithoutStrictTools(error, capturedErrorResponse, appliedStrictTools, context.tools)) {
+					if (
+						!shouldRetryWithoutStrictTools(error, capturedErrorResponse, {
+							model,
+							strictToolsApplied: appliedStrictTools,
+							tools: context.tools,
+						})
+					) {
 						throw error;
 					}
 					// Remember the rejection for the rest of the session so every
@@ -1498,6 +1504,11 @@ function applyOpenAIChatCompletionsPromptCachePolicy(
 	model: Model<"openai-completions">,
 	options: OpenAICompletionsOptions | undefined,
 ): void {
+	const promptCacheKey = getOpenAIPromptCacheKey(options);
+	if (model.provider === "kimi-code" && promptCacheKey !== undefined) {
+		params.prompt_cache_key = promptCacheKey;
+	}
+
 	const promptCache = options?.promptCache;
 	if (!promptCache || resolveCacheRetention(options?.cacheRetention) === "none") return;
 	if (!model.compat.supportsPromptCacheBreakpoints) {
@@ -1509,7 +1520,7 @@ function applyOpenAIChatCompletionsPromptCachePolicy(
 		return;
 	}
 
-	params.prompt_cache_key = getOpenAIPromptCacheKey(options);
+	params.prompt_cache_key = promptCacheKey;
 	params.prompt_cache_options = {
 		mode: promptCache.mode,
 		ttl: promptCache.ttl ?? model.compat.promptCacheBreakpointTtl,
@@ -1599,17 +1610,32 @@ function buildParams(
 	if (options?.toolChoice && initialCompat.supportsToolChoice) {
 		params.tool_choice = mapToOpenAICompletionsToolChoice(options.toolChoice);
 	}
+	const forcedToolName =
+		typeof params.tool_choice === "object" && params.tool_choice !== null && "function" in params.tool_choice
+			? params.tool_choice.function.name
+			: undefined;
 	if (
 		typeof params.tool_choice === "object" &&
 		params.tool_choice !== null &&
 		!initialCompat.supportsNamedToolChoice
 	) {
+		// String-only hosts (llama.cpp, LM Studio) accept only none/auto/required,
+		// so a named object degrades to "required". "required" alone lets the host
+		// satisfy the hard choice with ANY advertised tool, defeating the named
+		// force. When the forced tool is present, narrow the advertised tools to it
+		// so "required" still enforces that specific call (mirrors the Ollama chat
+		// transport's selectToolsForToolChoice). When it is absent, leave the full
+		// list intact and let the absent-tool guard below drop the choice for an
+		// unforced turn.
+		if (
+			forcedToolName !== undefined &&
+			Array.isArray(params.tools) &&
+			params.tools.some(tool => tool.type === "function" && tool.function.name === forcedToolName)
+		) {
+			params.tools = params.tools.filter(tool => tool.type === "function" && tool.function.name === forcedToolName);
+		}
 		params.tool_choice = "required";
 	}
-	const forcedToolName =
-		typeof params.tool_choice === "object" && params.tool_choice !== null && "function" in params.tool_choice
-			? params.tool_choice.function.name
-			: undefined;
 	if (
 		forcedToolName !== undefined &&
 		Array.isArray(params.tools) &&

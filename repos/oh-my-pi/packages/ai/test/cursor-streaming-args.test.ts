@@ -58,6 +58,7 @@ function newHarness(): Harness {
 		get currentToolCall() {
 			return toolCall;
 		},
+		openToolCalls: new Map(),
 		resolvedMcpToolCallIds: new Set(),
 		firstTokenTime: undefined,
 		setTextBlock: b => {
@@ -182,6 +183,26 @@ describe("Cursor MCP exec resolution", () => {
 
 		const block = h.output.content[0] as ToolCallState;
 		expect(block[kCursorExecResolved]).toBe(true);
+		expect(h.state.resolvedMcpToolCallIds.size).toBe(0);
+	});
+
+	it("does not duplicate an MCP call synthesized from an earlier exec frame", () => {
+		const h = newHarness();
+		synthesizeCursorExecToolCall(h.output, h.stream, h.state, "call-resolved", "web_search", {
+			query: "latest chess news",
+		});
+		h.state.resolvedMcpToolCallIds.add("call-resolved");
+
+		startMcpToolCall(h, "web_search", "call-resolved");
+
+		expect(h.output.content).toHaveLength(1);
+		expect(h.output.content[0]).toMatchObject({
+			type: "toolCall",
+			id: "call-resolved",
+			name: "web_search",
+			arguments: { query: "latest chess news" },
+		});
+		expect(h.captured.map(event => event.type)).toEqual(["toolcall_start", "toolcall_end"]);
 		expect(h.state.resolvedMcpToolCallIds.size).toBe(0);
 	});
 });

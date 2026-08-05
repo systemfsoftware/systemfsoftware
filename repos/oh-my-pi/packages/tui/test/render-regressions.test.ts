@@ -87,7 +87,7 @@ class WrappingLinesComponent implements Component {
 }
 
 class UnknownViewportTerminal extends VirtualTerminal {
-	isNativeViewportAtBottom(): undefined {
+	override isNativeViewportAtBottom(): undefined {
 		return undefined;
 	}
 }
@@ -96,7 +96,7 @@ class StaleBottomViewportTerminal extends VirtualTerminal {
 	#previous: boolean | undefined;
 	#returnStale = false;
 
-	isNativeViewportAtBottom(): boolean | undefined {
+	override isNativeViewportAtBottom(): boolean | undefined {
 		const current = super.isNativeViewportAtBottom();
 		if (this.#returnStale) {
 			this.#returnStale = false;
@@ -113,18 +113,18 @@ class StaleBottomViewportTerminal extends VirtualTerminal {
 class CountingViewportTerminal extends VirtualTerminal {
 	viewportProbeCount = 0;
 
-	isNativeViewportAtBottom(): boolean | undefined {
+	override isNativeViewportAtBottom(): boolean | undefined {
 		this.viewportProbeCount += 1;
 		return super.isNativeViewportAtBottom();
 	}
 }
 
 class LegacyKeyboardVirtualTerminal extends VirtualTerminal {
-	get keyboardEnhancementEnterSequence(): string | null {
+	override get keyboardEnhancementEnterSequence(): string | null {
 		return undefined as unknown as string | null;
 	}
 
-	get keyboardEnhancementExitSequence(): string | null {
+	override get keyboardEnhancementExitSequence(): string | null {
 		return undefined as unknown as string | null;
 	}
 }

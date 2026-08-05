@@ -1,11 +1,14 @@
-import { WorkerCore } from "./worker-core";
+import { type RejectionInterceptor, WorkerCore } from "./worker-core";
 import type { WorkerInbound, WorkerOutbound } from "./worker-protocol";
 
 /** Start the JavaScript evaluator inside a subprocess IPC transport. */
-export function startJsEvalProcess(transport: {
-	send(message: WorkerOutbound): void;
-	onMessage(handler: (message: WorkerInbound) => void): () => void;
-}): void {
+export function startJsEvalProcess(
+	transport: {
+		send(message: WorkerOutbound): void;
+		onMessage(handler: (message: WorkerInbound) => void): () => void;
+	},
+	interceptUnhandledRejections: RejectionInterceptor,
+): void {
 	new WorkerCore(
 		{
 			send: message => transport.send(message),
@@ -22,6 +25,7 @@ export function startJsEvalProcess(transport: {
 			// the project instead of the install dir. Worker threads cannot pass
 			// this — `process.chdir` is unavailable there.
 			chdir: cwd => process.chdir(cwd),
+			interceptUnhandledRejections,
 		},
 	);
 }

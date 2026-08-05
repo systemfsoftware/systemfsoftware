@@ -4,6 +4,8 @@
 // file that was distributed with this source code.
 // spell-checker:ignore datetime
 
+#![cfg_attr(windows, feature(windows_by_handle))]
+
 // pi-uutils: vendored from uutils/coreutils 0.8.0 and patched to run in-process
 // as a shell builtin. Every filesystem syscall (stat/lstat/statfs/readlink)
 // resolves its path operand against the shell working directory via
@@ -12,26 +14,29 @@
 // typed). All process-global stdio is routed through `pi_uutils_ctx`,
 // `translate!` strings are literalized from locales/en-US.ftl, QUOTING_STYLE is
 // read from the scope environment, SELinux support is dropped, and the entry
-// point no longer calls `std::process::exit`. The upstream implementation is
-// unix-only (it relies on `std::os::unix`), so it lives behind `#[cfg(unix)]`;
-// non-unix targets get a stub that reports the builtin as unsupported.
+// point no longer calls `std::process::exit`. The upstream file-status code is
+// Unix-only (it relies on `std::os::unix`), so on Windows a native backend
+// reimplements the metadata directives on top of `std::fs` and the Win32
+// volume APIs; targets that are neither Unix nor Windows get a stub that
+// reports the builtin as unsupported.
 // BSD-style invocations (`stat -f FORMAT`, macOS muscle memory) are detected
 // and translated to the GNU format language before argument parsing; see
 // `rewrite_bsd_invocation`.
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 pub use imp::{run, uu_app};
 
-/// pi-uutils: non-unix stub — upstream stat cannot be built off unix.
-#[cfg(not(unix))]
+/// pi-uutils: stub for exotic targets (wasm, etc.) that are neither Unix nor
+/// Windows — upstream stat cannot be built there.
+#[cfg(not(any(unix, windows)))]
 pub fn run(_argv: Vec<std::ffi::OsString>) -> i32 {
 	use std::io::Write;
 	let _ = writeln!(pi_uutils_ctx::stderr(), "stat: unsupported on this platform");
 	1
 }
 
-/// pi-uutils: minimal non-unix counterpart of the real `uu_app`.
-#[cfg(not(unix))]
+/// pi-uutils: minimal counterpart of the real `uu_app` for exotic targets.
+#[cfg(not(any(unix, windows)))]
 pub fn uu_app() -> clap::Command {
 	clap::Command::new("stat")
 		.version(uucore::crate_version!())
@@ -39,25 +44,33 @@ pub fn uu_app() -> clap::Command {
 		.override_usage(pi_uutils_ctx::format_usage("stat [OPTION]... FILE..."))
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 mod imp {
+	#[cfg(unix)]
+	use std::os::unix::fs::{FileTypeExt, MetadataExt};
+	#[cfg(windows)]
+	use std::os::windows::fs::MetadataExt;
 	use std::{
 		borrow::Cow,
 		cell::OnceCell,
 		ffi::{OsStr, OsString},
 		fs::{self, FileType, Metadata},
 		io::Write,
-		os::unix::fs::{FileTypeExt, MetadataExt},
 		path::Path,
 	};
 
 	use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser};
 	use pi_uutils_ctx::format_usage;
 	use thiserror::Error;
+	#[cfg(windows)]
+	use uucore::time::{FormatSystemTimeFallback, format_system_time, system_time_to_sec};
 	use uucore::{
 		display::Quotable,
-		entries,
 		error::{UError, UResult, USimpleError},
+	};
+	#[cfg(unix)]
+	use uucore::{
+		entries,
 		fs::{display_permissions, major, minor},
 		fsext::{
 			FsMeta, MetadataTimeField, StatFs, metadata_get_time, pretty_filetype, pretty_fstype,
@@ -133,8 +146,10 @@ for details about the options it supports.";
 		#[error("{directive}: invalid directive")]
 		InvalidDirective { directive: String },
 		#[error("cannot read table of mounted file systems: {error}")]
+		#[cfg_attr(not(unix), allow(dead_code))]
 		CannotReadFilesystem { error: String },
 		#[error("using '-' to denote standard input does not work in file system mode")]
+		#[cfg_attr(not(unix), allow(dead_code))]
 		StdinFilesystemMode,
 		#[error("cannot read file system information for {file}: {error}")]
 		CannotReadFilesystemInfo { file: String, error: String },
@@ -214,6 +229,8 @@ for details about the options it supports.";
 	///
 	/// On Unix systems, this preserves non-UTF8 data by printing raw bytes
 	/// On other platforms, falls back to lossy string conversion
+	// pi-uutils: raw-byte output is only reachable via `%m` (OsStr) on Unix.
+	#[cfg(unix)]
 	fn pad_and_print_bytes<W: Write>(
 		mut writer: W,
 		bytes: &[u8],
@@ -249,6 +266,7 @@ for details about the options it supports.";
 	/// write padding based on a writer W and n size
 	/// writer is genric to be any buffer like: `std::io::stdout`
 	/// n is the calculated padding size
+	#[cfg(unix)]
 	fn write_padding<W: Write>(writer: &mut W, n: usize) -> Result<(), std::io::Error> {
 		for _ in 0..n {
 			writer.write_all(b" ")?;
@@ -259,6 +277,7 @@ for details about the options it supports.";
 	#[derive(Debug)]
 	pub enum OutputType<'a> {
 		Str(String),
+		#[cfg_attr(not(unix), allow(dead_code))]
 		OsStr(&'a OsString),
 		Integer(i64),
 		Unsigned(u64),
@@ -397,9 +416,12 @@ for details about the options it supports.";
 		show_fs:            bool,
 		from_user:          bool,
 		files:              Vec<OsString>,
+		#[cfg_attr(not(unix), allow(dead_code))]
 		mount_list:         OnceCell<Option<Vec<OsString>>>,
+		#[cfg_attr(not(unix), allow(dead_code))]
 		mount_list_needed:  bool,
 		default_tokens:     Vec<Token>,
+		#[cfg_attr(not(unix), allow(dead_code))]
 		default_dev_tokens: Vec<Token>,
 	}
 
@@ -523,18 +545,28 @@ for details about the options it supports.";
 	/// * `width` - The width of the field for the printed string.
 	/// * `precision` - How many digits of precision, if any.
 	fn print_os_str(s: &OsString, flags: Flags, width: usize, precision: Precision) {
-		// pi-uutils: this module is unix-only, so upstream's `cfg(not(unix))`
-		// lossy fallback branch is dropped; bytes go to the context stdout.
-		use std::os::unix::ffi::OsStrExt;
-
-		let bytes = s.as_bytes();
-
-		if pad_and_print_bytes(pi_uutils_ctx::stdout(), bytes, flags.left, width, precision).is_err()
+		// pi-uutils: on Unix, preserve non-UTF8 operands by printing raw bytes
+		// (upstream behavior); the `OsStr` output type is only produced by the
+		// `%m` mount-point directive, which is Unix-only. Elsewhere fall back to
+		// a lossy string so the code compiles and behaves sensibly.
+		#[cfg(unix)]
 		{
-			// if an error occurred while trying to print bytes fall back to normal lossy
-			// string so it can be printed
-			let fallback_string = s.to_string_lossy();
-			print_str(&fallback_string, flags, width, precision);
+			use std::os::unix::ffi::OsStrExt;
+
+			let bytes = s.as_bytes();
+
+			if pad_and_print_bytes(pi_uutils_ctx::stdout(), bytes, flags.left, width, precision)
+				.is_err()
+			{
+				// if an error occurred while trying to print bytes fall back to normal lossy
+				// string so it can be printed
+				let fallback_string = s.to_string_lossy();
+				print_str(&fallback_string, flags, width, precision);
+			}
+		}
+		#[cfg(not(unix))]
+		{
+			print_str(&s.to_string_lossy(), flags, width, precision);
 		}
 	}
 
@@ -589,6 +621,7 @@ for details about the options it supports.";
 		}
 	}
 
+	#[cfg(unix)]
 	fn process_token_filesystem(t: &Token, meta: &StatFs, display_name: &str) {
 		match *t {
 			Token::Byte(byte) => write_raw_byte(byte),
@@ -1033,6 +1066,7 @@ for details about the options it supports.";
 			Ok(tokens)
 		}
 
+		#[cfg(unix)]
 		fn populate_mount_list() -> UResult<Vec<OsString>> {
 			let mut mount_list = read_fs_list()
 				.map_err(|e| {
@@ -1101,6 +1135,7 @@ for details about the options it supports.";
 			})
 		}
 
+		#[cfg(unix)]
 		fn find_mount_point<P: AsRef<Path>>(&self, p: P) -> Option<&OsString> {
 			if !self.mount_list_needed {
 				return None;
@@ -1129,6 +1164,7 @@ for details about the options it supports.";
 				.find(|root| path.starts_with(root))
 		}
 
+		#[cfg(unix)]
 		fn exec(&self) -> i32 {
 			let mut stdin_is_fifo = false;
 			if let Ok(md) = fs::metadata("/dev/stdin") {
@@ -1142,6 +1178,7 @@ for details about the options it supports.";
 			ret
 		}
 
+		#[cfg(unix)]
 		fn process_token_files(
 			&self,
 			t: &Token,
@@ -1280,6 +1317,7 @@ for details about the options it supports.";
 			Ok(())
 		}
 
+		#[cfg(unix)]
 		fn do_stat(&self, file: &OsStr, stdin_is_fifo: bool) -> i32 {
 			let display_name = file.to_string_lossy();
 			let file = if display_name == "-" {
@@ -1822,6 +1860,7 @@ for details about the options it supports.";
 
 	const PRETTY_DATETIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S.%N %z";
 
+	#[cfg(unix)]
 	fn pretty_time(meta: &Metadata, md_time_field: MetadataTimeField) -> String {
 		if let Some(time) = metadata_get_time(meta, md_time_field) {
 			let mut tmp = Vec::new();
@@ -1932,6 +1971,459 @@ for details about the options it supports.";
 			assert_eq!(precision_trunc(123.456, Precision::Number(0)), "123");
 			assert_eq!(precision_trunc(123.456, Precision::Number(1)), "123.4");
 			assert_eq!(precision_trunc(123.456, Precision::Number(5)), "123.45600");
+		}
+	}
+	/// pi-uutils: Windows-native metadata helpers for `stat`. Upstream's
+	/// file-status path is Unix-only (`std::os::unix`); this reimplements the
+	/// GNU directives on top of `std::fs::Metadata`, the `windows_by_handle`
+	/// metadata extensions (inode / link count / device via
+	/// `GetFileInformationByHandle`), and the Win32 volume APIs for
+	/// `--file-system` mode.
+	#[cfg(windows)]
+	mod win {
+		use std::{
+			ffi::OsStr, fs::Metadata, os::windows::fs::MetadataExt, path::Path, time::SystemTime,
+		};
+
+		/// `FILE_ATTRIBUTE_READONLY`.
+		const READONLY: u32 = 0x0000_0001;
+
+		// POSIX `st_mode` type bits, synthesized for `%f`/`%F`/`%A`/`%a`.
+		const S_IFDIR: u32 = 0o040000;
+		const S_IFREG: u32 = 0o100000;
+		const S_IFLNK: u32 = 0o120000;
+
+		/// Which timestamp a directive refers to. Windows exposes creation,
+		/// access, and write times; it has no POSIX "status change" time, so
+		/// `%z`/`%Z` reuse the write time (last data modification), matching
+		/// how ports such as Cygwin's `stat` behave.
+		#[derive(Clone, Copy)]
+		pub enum TimeField {
+			Access,
+			Modification,
+			Change,
+			Birth,
+		}
+
+		/// Resolve a [`TimeField`] to the corresponding [`SystemTime`], or
+		/// `None` when the platform cannot supply it.
+		pub fn md_time(md: &Metadata, field: TimeField) -> Option<SystemTime> {
+			match field {
+				TimeField::Access => md.accessed().ok(),
+				TimeField::Modification | TimeField::Change => md.modified().ok(),
+				TimeField::Birth => md.created().ok(),
+			}
+		}
+
+		/// Synthesize a POSIX-style `st_mode` from Windows attributes: the file
+		/// type bits plus a best-effort permission mask (read-only files/dirs
+		/// drop their write bits; directories and symlinks are traversable).
+		pub fn synth_mode(md: &Metadata) -> u32 {
+			let readonly = md.file_attributes() & READONLY != 0;
+			let ft = md.file_type();
+			if ft.is_symlink() {
+				S_IFLNK | 0o777
+			} else if ft.is_dir() {
+				S_IFDIR | if readonly { 0o555 } else { 0o755 }
+			} else {
+				S_IFREG | if readonly { 0o444 } else { 0o644 }
+			}
+		}
+
+		/// Human-readable file type for `%F`, mirroring uucore's
+		/// `pretty_filetype` for the types reachable on Windows.
+		pub fn file_type_str(mode: u32, size: u64) -> String {
+			match mode & 0o170000 {
+				S_IFDIR => "directory",
+				S_IFLNK => "symbolic link",
+				_ if size == 0 => "regular empty file",
+				_ => "regular file",
+			}
+			.to_string()
+		}
+
+		/// `ls -l`-style permission string for `%A` derived from the synthetic
+		/// mode (e.g. `drwxr-xr-x`).
+		pub fn perms_string(mode: u32) -> String {
+			let mut s = String::with_capacity(10);
+			s.push(match mode & 0o170000 {
+				S_IFDIR => 'd',
+				S_IFLNK => 'l',
+				_ => '-',
+			});
+			for shift in [6u32, 3, 0] {
+				let bits = (mode >> shift) & 0o7;
+				s.push(if bits & 0o4 != 0 { 'r' } else { '-' });
+				s.push(if bits & 0o2 != 0 { 'w' } else { '-' });
+				s.push(if bits & 0o1 != 0 { 'x' } else { '-' });
+			}
+			s
+		}
+
+		/// On-disk allocated size in bytes for `%b`, honoring sparse and
+		/// compressed files via `GetCompressedFileSizeW`. `Metadata::len()` is
+		/// the logical size, which overstates allocation for sparse files, so
+		/// the compressed/allocated size is queried directly. Falls back to
+		/// `logical` when the query fails.
+		pub fn allocated_size(path: &Path, logical: u64) -> u64 {
+			use std::os::windows::ffi::OsStrExt;
+
+			use windows_sys::Win32::Storage::FileSystem::GetCompressedFileSizeW;
+
+			const INVALID_FILE_SIZE: u32 = u32::MAX;
+
+			let wide: Vec<u16> = path
+				.as_os_str()
+				.encode_wide()
+				.chain(std::iter::once(0))
+				.collect();
+			let mut high: u32 = 0;
+			// SAFETY: `wide` is NUL-terminated and `high` is a valid `&mut u32`.
+			let low = unsafe { GetCompressedFileSizeW(wide.as_ptr(), &mut high) };
+			// A low dword of INVALID_FILE_SIZE is ambiguous (a real 4 GiB-1 low
+			// word or an error); MSDN says to disambiguate via GetLastError.
+			if low == INVALID_FILE_SIZE
+				&& std::io::Error::last_os_error().raw_os_error().unwrap_or(0) != 0
+			{
+				return logical;
+			}
+			(u64::from(high) << 32) | u64::from(low)
+		}
+
+		/// File-system status collected for `stat --file-system` on Windows.
+		pub struct StatFs {
+			pub fs_type:      String,
+			pub serial:       u64,
+			pub name_len:     u64,
+			pub cluster_size: u64,
+			pub total_blocks: u64,
+			pub free_blocks:  u64,
+		}
+
+		/// Query volume information for the file's containing volume via Win32.
+		/// Returns a human-readable error string on failure (mapped to the GNU
+		/// "cannot read file system information" message by the caller).
+		pub fn statfs(path: &Path) -> Result<StatFs, String> {
+			use std::os::windows::ffi::OsStrExt;
+
+			use windows_sys::Win32::Storage::FileSystem::{
+				GetDiskFreeSpaceW, GetVolumeInformationW, GetVolumePathNameW,
+			};
+
+			fn wide(s: &OsStr) -> Vec<u16> {
+				s.encode_wide().chain(std::iter::once(0)).collect()
+			}
+
+			fn wide_to_string(buf: &[u16]) -> String {
+				let len = buf.iter().position(|&c| c == 0).unwrap_or(buf.len());
+				String::from_utf16_lossy(&buf[..len])
+			}
+
+			let file_wide = wide(path.as_os_str());
+			// Resolve the mount root (e.g. `C:\`) that owns the path.
+			let mut root = [0u16; 260];
+			// SAFETY: `file_wide` is NUL-terminated and `root` is a valid
+			// mutable buffer whose capacity is passed as `root.len()`.
+			if unsafe { GetVolumePathNameW(file_wide.as_ptr(), root.as_mut_ptr(), root.len() as u32) }
+				== 0
+			{
+				return Err(std::io::Error::last_os_error().to_string());
+			}
+
+			let mut fs_name = [0u16; 260];
+			let mut serial: u32 = 0;
+			let mut max_component: u32 = 0;
+			let mut flags: u32 = 0;
+			// SAFETY: `root` is a NUL-terminated path; the serial/flag out
+			// params are valid `&mut u32`; `fs_name` is a valid buffer sized by
+			// `fs_name.len()`; the volume-name buffer is null with size 0.
+			if unsafe {
+				GetVolumeInformationW(
+					root.as_ptr(),
+					std::ptr::null_mut(),
+					0,
+					&mut serial,
+					&mut max_component,
+					&mut flags,
+					fs_name.as_mut_ptr(),
+					fs_name.len() as u32,
+				)
+			} == 0
+			{
+				return Err(std::io::Error::last_os_error().to_string());
+			}
+
+			let mut sectors_per_cluster: u32 = 0;
+			let mut bytes_per_sector: u32 = 0;
+			let mut free_clusters: u32 = 0;
+			let mut total_clusters: u32 = 0;
+			// SAFETY: `root` is a NUL-terminated path and every out param is a
+			// valid `&mut u32`.
+			if unsafe {
+				GetDiskFreeSpaceW(
+					root.as_ptr(),
+					&mut sectors_per_cluster,
+					&mut bytes_per_sector,
+					&mut free_clusters,
+					&mut total_clusters,
+				)
+			} == 0
+			{
+				return Err(std::io::Error::last_os_error().to_string());
+			}
+
+			let cluster_size = u64::from(sectors_per_cluster) * u64::from(bytes_per_sector);
+			Ok(StatFs {
+				fs_type: wide_to_string(&fs_name),
+				serial: u64::from(serial),
+				name_len: u64::from(max_component),
+				cluster_size,
+				total_blocks: u64::from(total_clusters),
+				free_blocks: u64::from(free_clusters),
+			})
+		}
+	}
+
+	/// pi-uutils: Windows counterpart of `pretty_time`, formatting a
+	/// `std::fs::Metadata` timestamp through the shared datetime format.
+	#[cfg(windows)]
+	fn pretty_time(meta: &Metadata, field: win::TimeField) -> String {
+		if let Some(time) = win::md_time(meta, field) {
+			let mut tmp = Vec::new();
+			if format_system_time(
+				&mut tmp,
+				time,
+				PRETTY_DATETIME_FORMAT,
+				FormatSystemTimeFallback::Float,
+			)
+			.is_ok()
+			{
+				return String::from_utf8(tmp).unwrap();
+			}
+		}
+		"-".to_string()
+	}
+
+	/// pi-uutils: Windows counterpart of `process_token_filesystem`.
+	#[cfg(windows)]
+	fn process_token_filesystem(t: &Token, meta: &win::StatFs, display_name: &str) {
+		match *t {
+			Token::Byte(byte) => write_raw_byte(byte),
+			Token::Char(c) => {
+				let _ = write!(pi_uutils_ctx::stdout(), "{c}");
+			},
+			Token::Directive { flag, width, precision, format } => {
+				let output = match format {
+					// free blocks available to non-superuser
+					'a' => OutputType::Unsigned(meta.free_blocks),
+					// total data blocks in file system
+					'b' => OutputType::Unsigned(meta.total_blocks),
+					// total / free file nodes (not tracked on Windows)
+					'c' | 'd' => OutputType::Unsigned(0),
+					// free blocks in file system
+					'f' => OutputType::Unsigned(meta.free_blocks),
+					// file system ID in hex (volume serial number)
+					'i' => OutputType::UnsignedHex(meta.serial),
+					// maximum length of filenames
+					'l' => OutputType::Unsigned(meta.name_len),
+					// file name
+					'n' => OutputType::Str(display_name.to_string()),
+					// block size (for faster transfers)
+					's' => OutputType::Unsigned(meta.cluster_size),
+					// fundamental block size (for block counts)
+					'S' => OutputType::Integer(meta.cluster_size as i64),
+					// file system type in hex (no numeric magic on Windows)
+					't' => OutputType::UnsignedHex(0),
+					// file system type in human readable form
+					'T' => OutputType::Str(meta.fs_type.clone()),
+					_ => OutputType::Unknown,
+				};
+				print_it(&output, flag, width, precision);
+			},
+		}
+	}
+
+	#[cfg(windows)]
+	impl Stater {
+		fn exec(&self) -> i32 {
+			let mut ret = 0;
+			for f in &self.files {
+				ret |= self.do_stat(f);
+			}
+			ret
+		}
+
+		fn process_token_files(
+			&self,
+			t: &Token,
+			meta: &Metadata,
+			display_name: &str,
+			resolved: &Path,
+			file_type: FileType,
+			from_user: bool,
+		) -> Result<(), i32> {
+			match *t {
+				Token::Byte(byte) => write_raw_byte(byte),
+				Token::Char(c) => {
+					let _ = write!(pi_uutils_ctx::stdout(), "{c}");
+				},
+				Token::Directive { flag, width, precision, format } => {
+					let mode = win::synth_mode(meta);
+					let output = match format {
+						// access rights in octal
+						'a' => OutputType::UnsignedOct(0o7777 & mode),
+						// access rights in human readable form
+						'A' => OutputType::Str(win::perms_string(mode)),
+						// number of blocks allocated (512-byte units, see %B)
+						'b' => {
+							OutputType::Unsigned(win::allocated_size(resolved, meta.len()).div_ceil(512))
+						},
+						// the size in bytes of each block reported by %b
+						'B' => OutputType::Unsigned(512),
+						// SELinux security context string (unsupported)
+						'C' => OutputType::Str("unsupported for this operating system".to_string()),
+						// device number: Windows volume serial number
+						'd' if flag.major || flag.minor => OutputType::Unsigned(0),
+						'd' => OutputType::Unsigned(meta.volume_serial_number().map_or(0, u64::from)),
+						// device number in hex
+						'D' => OutputType::UnsignedHex(meta.volume_serial_number().map_or(0, u64::from)),
+						// raw mode in hex
+						'f' => OutputType::UnsignedHex(u64::from(mode)),
+						// file type
+						'F' => OutputType::Str(win::file_type_str(mode, meta.len())),
+						// group ID of owner (not modeled on Windows)
+						'g' => OutputType::Unsigned(0),
+						// group name of owner
+						'G' => OutputType::Str("UNKNOWN".to_string()),
+						// number of hard links
+						'h' => OutputType::Unsigned(meta.number_of_links().map_or(1, u64::from)),
+						// inode number (NTFS file index)
+						'i' => OutputType::Unsigned(meta.file_index().unwrap_or(0)),
+						// mount point (not resolved on Windows)
+						'm' => OutputType::Str(String::new()),
+						// file name
+						'n' => OutputType::Str(display_name.to_string()),
+						// quoted file name with dereference if symbolic link
+						'N' => OutputType::Str(get_quoted_file_name(
+							display_name,
+							resolved,
+							file_type,
+							from_user,
+						)?),
+						// optimal I/O transfer size hint
+						'o' => OutputType::Unsigned(4096),
+						// total size, in bytes
+						's' => OutputType::Integer(meta.len() as i64),
+						// device type (no special files on Windows)
+						't' | 'T' => OutputType::UnsignedHex(0),
+						// user ID of owner (not modeled on Windows)
+						'u' => OutputType::Unsigned(0),
+						// user name of owner
+						'U' => OutputType::Str("UNKNOWN".to_string()),
+						// time of file birth, human-readable; - if unknown
+						'w' => OutputType::Str(pretty_time(meta, win::TimeField::Birth)),
+						// time of file birth, seconds since Epoch; 0 if unknown
+						'W' => OutputType::Integer(
+							win::md_time(meta, win::TimeField::Birth)
+								.map_or(0, |x| system_time_to_sec(x).0),
+						),
+						// time of last access, human-readable
+						'x' => OutputType::Str(pretty_time(meta, win::TimeField::Access)),
+						// time of last access, seconds since Epoch
+						'X' => {
+							let (sec, nsec) = win::md_time(meta, win::TimeField::Access)
+								.map_or((0, 0), system_time_to_sec);
+							OutputType::Float(sec as f64 + nsec as f64 / 1_000_000_000.0)
+						},
+						// time of last data modification, human-readable
+						'y' => OutputType::Str(pretty_time(meta, win::TimeField::Modification)),
+						// time of last data modification, seconds since Epoch
+						'Y' => {
+							let (sec, nsec) = win::md_time(meta, win::TimeField::Modification)
+								.map_or((0, 0), system_time_to_sec);
+							OutputType::Float(sec as f64 + nsec as f64 / 1_000_000_000.0)
+						},
+						// time of last status change, human-readable (write time)
+						'z' => OutputType::Str(pretty_time(meta, win::TimeField::Change)),
+						// time of last status change, seconds since Epoch
+						'Z' => {
+							let (sec, nsec) = win::md_time(meta, win::TimeField::Change)
+								.map_or((0, 0), system_time_to_sec);
+							OutputType::Float(sec as f64 + nsec as f64 / 1_000_000_000.0)
+						},
+						// rdev (no device special files on Windows)
+						'R' => OutputType::UnsignedHex(0),
+						'r' => OutputType::Unsigned(0),
+						_ => OutputType::Unknown,
+					};
+					print_it(&output, flag, width, precision);
+				},
+			}
+			Ok(())
+		}
+
+		fn do_stat(&self, file: &OsStr) -> i32 {
+			let display_name = file.to_string_lossy();
+			// pi-uutils: resolve the operand against the shell working
+			// directory; `display_name` keeps the operand as typed for `%n`
+			// and error messages.
+			let resolved = pi_uutils_ctx::resolve(file);
+			if self.show_fs {
+				let result = fs::metadata(&resolved)
+					.map_err(|error| error.to_string())
+					.and_then(|_| win::statfs(&resolved));
+				match result {
+					Ok(meta) => {
+						for t in &self.default_tokens {
+							process_token_filesystem(t, &meta, &display_name);
+						}
+					},
+					Err(error) => {
+						let _ = writeln!(
+							pi_uutils_ctx::stderr(),
+							"stat: {}",
+							StatError::CannotReadFilesystemInfo {
+								file: display_name.quote().to_string(),
+								error,
+							}
+						);
+						return 1;
+					},
+				}
+			} else {
+				let result = if self.follow {
+					fs::metadata(&resolved)
+				} else {
+					fs::symlink_metadata(&resolved)
+				};
+				match result {
+					Ok(meta) => {
+						let file_type = meta.file_type();
+						// Windows has no character/block special files, so the
+						// device-type default format is never selected.
+						for t in &self.default_tokens {
+							if let Err(code) = self.process_token_files(
+								t,
+								&meta,
+								&display_name,
+								&resolved,
+								file_type,
+								self.from_user,
+							) {
+								return code;
+							}
+						}
+					},
+					Err(e) => {
+						let _ = writeln!(pi_uutils_ctx::stderr(), "stat: {}", StatError::CannotStat {
+							file:  display_name.quote().to_string(),
+							error: e.to_string(),
+						});
+						return 1;
+					},
+				}
+			}
+			0
 		}
 	}
 }
@@ -2169,6 +2661,133 @@ mod tests {
 		assert_eq!(stdout, "");
 		assert!(
 			stderr.contains("unsupported BSD format directive '%v'"),
+			"unexpected stderr: {stderr:?}"
+		);
+	}
+}
+
+#[cfg(all(test, windows))]
+mod win_tests {
+	use std::{collections::HashMap, ffi::OsString, fs, io::Write, path::PathBuf, sync::Arc};
+
+	use parking_lot::Mutex;
+	use pi_uutils_ctx::ScopeIo;
+
+	use super::run;
+
+	fn run_in(cwd: PathBuf, args: Vec<&str>) -> (i32, String, String) {
+		let stdout_buf = Arc::new(Mutex::new(Vec::new()));
+		let stderr_buf = Arc::new(Mutex::new(Vec::new()));
+
+		#[derive(Clone)]
+		struct SharedWriter {
+			buf: Arc<Mutex<Vec<u8>>>,
+		}
+		impl Write for SharedWriter {
+			fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+				self.buf.lock().write(buf)
+			}
+
+			fn flush(&mut self) -> std::io::Result<()> {
+				self.buf.lock().flush()
+			}
+		}
+
+		let io = ScopeIo {
+			stdin: Box::new(std::io::empty()),
+			stdin_fd: None,
+			stdin_is_search_input: false,
+			stdout: Box::new(SharedWriter { buf: stdout_buf.clone() }),
+			stderr: Box::new(SharedWriter { buf: stderr_buf.clone() }),
+			cwd,
+			env: HashMap::new(),
+			cancel: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+		};
+
+		let argv: Vec<OsString> = std::iter::once("stat")
+			.chain(args)
+			.map(OsString::from)
+			.collect();
+
+		let code = pi_uutils_ctx::scope(io, || run(argv));
+		let out_str = String::from_utf8(stdout_buf.lock().clone()).unwrap();
+		let err_str = String::from_utf8(stderr_buf.lock().clone()).unwrap();
+		(code, out_str, err_str)
+	}
+
+	fn tempdir() -> (tempfile::TempDir, PathBuf) {
+		let dir = tempfile::tempdir().unwrap();
+		let canon = fs::canonicalize(dir.path()).unwrap();
+		(dir, canon)
+	}
+
+	/// Regression for #6723: on native Windows `stat` deterministically exited
+	/// 1 ("unsupported on this platform"). It must now succeed and report the
+	/// real size and file type.
+	#[test]
+	fn reports_size_and_type_for_regular_file() {
+		let (_dir, root) = tempdir();
+		fs::write(root.join("data.bin"), b"hello world!").unwrap();
+
+		let (code, stdout, stderr) = run_in(root, vec!["-c", "%s %F", "data.bin"]);
+		assert_eq!(code, 0);
+		assert_eq!(stdout, "12 regular file\n");
+		assert_eq!(stderr, "");
+	}
+
+	#[test]
+	fn empty_file_reports_regular_empty_file() {
+		let (_dir, root) = tempdir();
+		fs::write(root.join("empty.bin"), b"").unwrap();
+
+		let (code, stdout, stderr) = run_in(root, vec!["-c", "%F", "empty.bin"]);
+		assert_eq!(code, 0);
+		assert_eq!(stdout, "regular empty file\n");
+		assert_eq!(stderr, "");
+	}
+
+	#[test]
+	fn percent_n_prints_operand_as_typed() {
+		let (_dir, root) = tempdir();
+		fs::write(root.join("data.bin"), b"x").unwrap();
+
+		let (code, stdout, stderr) = run_in(root, vec!["-c", "%n", "data.bin"]);
+		assert_eq!(code, 0);
+		assert_eq!(stdout, "data.bin\n");
+		assert_eq!(stderr, "");
+	}
+
+	#[test]
+	fn nonexistent_file_reports_cannot_stat() {
+		let (_dir, root) = tempdir();
+
+		let (code, stdout, stderr) = run_in(root, vec!["-c", "%s", "missing.bin"]);
+		assert_eq!(code, 1);
+		assert_eq!(stdout, "");
+		assert!(stderr.contains("cannot stat"), "unexpected stderr: {stderr:?}");
+	}
+
+	/// `--file-system` mode goes through the Win32 volume backend and must not
+	/// error on a real path.
+	#[test]
+	fn file_system_mode_succeeds() {
+		let (_dir, root) = tempdir();
+		fs::write(root.join("data.bin"), b"x").unwrap();
+
+		let (code, _stdout, stderr) = run_in(root, vec!["-f", "-c", "%T", "data.bin"]);
+		assert_eq!(code, 0);
+		assert_eq!(stderr, "");
+	}
+
+	#[test]
+	fn file_system_mode_rejects_missing_file() {
+		let (_dir, root) = tempdir();
+
+		let (code, stdout, stderr) = run_in(root, vec!["-f", "-c", "%T", "missing.bin"]);
+		assert_eq!(code, 1);
+		assert_eq!(stdout, "");
+		assert!(
+			stderr.contains("cannot read file system information"),
 			"unexpected stderr: {stderr:?}"
 		);
 	}

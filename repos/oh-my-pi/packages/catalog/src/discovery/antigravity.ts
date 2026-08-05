@@ -1,4 +1,4 @@
-import { type } from "arktype";
+import { type } from "@oh-my-pi/omptype";
 import type { ModelSpec } from "../types";
 import { discoveryFetch, toPositiveNumber } from "../utils";
 import {

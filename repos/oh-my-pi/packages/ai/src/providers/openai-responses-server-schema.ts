@@ -8,7 +8,7 @@
  * is a worse outcome than dropping them on the floor.
  */
 
-import { type } from "arktype";
+import { type } from "@oh-my-pi/omptype";
 import type {
 	EasyInputMessage,
 	ResponseCreateParams,

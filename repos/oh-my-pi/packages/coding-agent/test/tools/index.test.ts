@@ -148,12 +148,23 @@ describe("createTools", () => {
 		expect(names).toEqual(["read", "write"]);
 	});
 
-	it("creates an xd:// registry without remounting explicitly requested built-ins", async () => {
+	it("creates xd:// presentation state without remounting explicitly requested built-ins", async () => {
+		const session = createTestSession();
+		const tools = await createTools(session, ["read", "lsp", "write"]);
+
+		expect(session.xdev).toBeDefined();
+		expect(session.xdev?.mountedNames.size).toBe(0);
+		expect(tools.map(tool => tool.name)).toEqual(["read", "lsp", "write"]);
+	});
+
+	it("skips xd:// state entirely when the session grants no write tool", async () => {
+		// The xd:// transport rides `write xd://<tool>`; without a granted write
+		// tool nothing can dispatch a device, so no state is allocated and later
+		// SDK assembly exposes custom/MCP tools top-level instead.
 		const session = createTestSession();
 		const tools = await createTools(session, ["read", "lsp"]);
 
-		expect(session.xdevRegistry).toBeDefined();
-		expect(session.xdevRegistry?.entries()).toEqual([]);
+		expect(session.xdev).toBeUndefined();
 		expect(tools.map(tool => tool.name)).toEqual(["read", "lsp"]);
 	});
 
@@ -299,6 +310,117 @@ describe("createTools", () => {
 
 		expect(session.isToolActive?.("bash")).toBe(true);
 		expect(session.isToolActive?.("read")).toBe(false);
+	});
+
+	it("allows checkpoint/rewind in subagent when explicitly requested and enabled", async () => {
+		const names = (
+			await createTools(
+				createTestSession({
+					taskDepth: 1,
+					settings: createSettingsWithOverrides({ "checkpoint.enabled": true }),
+				}),
+				["checkpoint", "rewind"],
+			)
+		).map(t => t.name);
+		expect(names).toContain("checkpoint");
+		expect(names).toContain("rewind");
+	});
+
+	it("excludes checkpoint/rewind from subagent when not explicitly requested", async () => {
+		const names = (
+			await createTools(
+				createTestSession({
+					taskDepth: 1,
+					settings: createSettingsWithOverrides({ "checkpoint.enabled": true }),
+				}),
+			)
+		).map(t => t.name);
+		expect(names).not.toContain("checkpoint");
+		expect(names).not.toContain("rewind");
+	});
+
+	it("excludes checkpoint/rewind from subagent when disabled even if explicitly requested", async () => {
+		const names = (
+			await createTools(
+				createTestSession({
+					taskDepth: 1,
+					settings: createSettingsWithOverrides({ "checkpoint.enabled": false }),
+				}),
+				["checkpoint", "rewind"],
+			)
+		).map(t => t.name);
+		expect(names).not.toContain("checkpoint");
+		expect(names).not.toContain("rewind");
+	});
+
+	it("allows checkpoint/rewind at top level when enabled and explicitly requested", async () => {
+		const names = (
+			await createTools(
+				createTestSession({
+					settings: createSettingsWithOverrides({ "checkpoint.enabled": true }),
+				}),
+				["checkpoint", "rewind"],
+			)
+		).map(t => t.name);
+		expect(names).toContain("checkpoint");
+		expect(names).toContain("rewind");
+	});
+
+	it("auto-includes rewind when only checkpoint is in the explicit list", async () => {
+		const names = (
+			await createTools(
+				createTestSession({
+					taskDepth: 1,
+					settings: createSettingsWithOverrides({ "checkpoint.enabled": true }),
+				}),
+				["checkpoint"],
+			)
+		).map(t => t.name);
+		expect(names).toContain("checkpoint");
+		expect(names).toContain("rewind");
+	});
+
+	it("auto-includes checkpoint when only rewind is in the explicit list", async () => {
+		const names = (
+			await createTools(
+				createTestSession({
+					taskDepth: 1,
+					settings: createSettingsWithOverrides({ "checkpoint.enabled": true }),
+				}),
+				["rewind"],
+			)
+		).map(t => t.name);
+		expect(names).toContain("checkpoint");
+		expect(names).toContain("rewind");
+	});
+
+	it("does not auto-include checkpoint/rewind when neither is requested", async () => {
+		const names = (
+			await createTools(
+				createTestSession({
+					taskDepth: 1,
+					settings: createSettingsWithOverrides({ "checkpoint.enabled": true }),
+				}),
+				["read"],
+			)
+		).map(t => t.name);
+		expect(names).not.toContain("checkpoint");
+		expect(names).not.toContain("rewind");
+	});
+
+	it("auto-pairs checkpoint/rewind in a restricted subagent with one-sided list", async () => {
+		const names = (
+			await createTools(
+				createTestSession({
+					taskDepth: 1,
+					restrictToolNames: true,
+					settings: createSettingsWithOverrides({ "checkpoint.enabled": true }),
+				}),
+				["checkpoint"],
+			)
+		).map(t => t.name);
+		expect(names).toContain("checkpoint");
+		expect(names).toContain("rewind");
 	});
 
 	it("HIDDEN_TOOLS contains yield and goal", () => {

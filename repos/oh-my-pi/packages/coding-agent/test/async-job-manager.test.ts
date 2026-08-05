@@ -113,6 +113,30 @@ describe("AsyncJobManager", () => {
 		expect(completions).toHaveLength(0);
 	});
 
+	test("bounds owner-job reap while preserving late settlement", async () => {
+		const manager = new AsyncJobManager({ onJobComplete: async () => {} });
+		const release = Promise.withResolvers<void>();
+		const jobId = manager.register(
+			"task",
+			"ignores abort",
+			async () => {
+				await release.promise;
+				return "late result";
+			},
+			{ ownerId: "owner" },
+		);
+
+		const reap = await manager.cancelAndReapOwnerJobs("owner", Date.now());
+
+		expect(reap.settled).toBe(false);
+		expect(reap.pendingJobIds).toEqual([jobId]);
+		expect(manager.getJob(jobId)?.status).toBe("cancelled");
+
+		release.resolve();
+		await reap.completion;
+		expect(manager.getJob(jobId)?.resultText).toBe("late result");
+	});
+
 	test("enforces maxRunningJobs cap", () => {
 		const manager = new AsyncJobManager({
 			maxRunningJobs: 1,

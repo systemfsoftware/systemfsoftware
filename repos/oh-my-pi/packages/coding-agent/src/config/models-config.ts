@@ -4,12 +4,8 @@
 
 import type { Api, ModelSpec } from "@oh-my-pi/pi-ai/types";
 import { ConfigFile } from "./config-file";
-import {
-	type ModelsConfig,
-	ModelsConfigSchema,
-	type ProviderAuthMode,
-	type ProviderDiscovery,
-} from "./models-config-schema";
+import type { ModelsConfig, ProviderAuthMode, ProviderDiscovery } from "./models-config-schema";
+import { getModelsConfigSchema } from "./models-config-schema-bundle";
 
 export type ProviderValidationMode = "models-config" | "runtime-register";
 
@@ -106,29 +102,29 @@ export function validateProviderConfiguration(
 	}
 }
 
-export const ModelsConfigFile = new ConfigFile<ModelsConfig>("models", ModelsConfigSchema).withValidation(
-	"models",
-	config => {
-		const providers = config.providers ?? {};
-		for (const providerName in providers) {
-			const providerConfig = providers[providerName];
-			validateProviderConfiguration(
-				providerName,
-				{
-					baseUrl: providerConfig.baseUrl,
-					headers: providerConfig.headers,
-					apiKey: providerConfig.apiKey,
-					api: providerConfig.api as Api | undefined,
-					auth: (providerConfig.auth ?? "apiKey") as ProviderAuthMode,
-					discovery: providerConfig.discovery as ProviderDiscovery | undefined,
-					compat: providerConfig.compat,
-					remoteCompaction: providerConfig.remoteCompaction,
-					disableStrictTools: providerConfig.disableStrictTools,
-					modelOverrides: providerConfig.modelOverrides,
-					models: (providerConfig.models ?? []) as ProviderValidationModel[],
-				},
-				"models-config",
-			);
-		}
-	},
-);
+export const ModelsConfigFile = new ConfigFile<ModelsConfig>("models", {
+	kind: "deferred",
+	resolve: getModelsConfigSchema,
+}).withValidation("models", config => {
+	const providers = config.providers ?? {};
+	for (const providerName in providers) {
+		const providerConfig = providers[providerName];
+		validateProviderConfiguration(
+			providerName,
+			{
+				baseUrl: providerConfig.baseUrl,
+				headers: providerConfig.headers,
+				apiKey: providerConfig.apiKey,
+				api: providerConfig.api as Api | undefined,
+				auth: (providerConfig.auth ?? "apiKey") as ProviderAuthMode,
+				discovery: providerConfig.discovery as ProviderDiscovery | undefined,
+				compat: providerConfig.compat,
+				remoteCompaction: providerConfig.remoteCompaction,
+				disableStrictTools: providerConfig.disableStrictTools,
+				modelOverrides: providerConfig.modelOverrides,
+				models: (providerConfig.models ?? []) as ProviderValidationModel[],
+			},
+			"models-config",
+		);
+	}
+});

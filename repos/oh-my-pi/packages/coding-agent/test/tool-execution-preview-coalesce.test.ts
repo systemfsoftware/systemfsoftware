@@ -37,15 +37,13 @@ describe("streaming edit preview coalescing", () => {
 		await removeWithRetries(tmpDir);
 	});
 
-	// Read `edits[0].new_text` by narrowing rather than asserting an inline shape,
+	// Read `new_string` by narrowing rather than asserting an inline shape,
 	// so the captured args identity stays type-checked.
 	function firstNewText(args: unknown): unknown {
-		if (!args || typeof args !== "object" || !("edits" in args)) return undefined;
-		const edits = args.edits;
-		if (!Array.isArray(edits) || edits.length === 0) return undefined;
-		const first: unknown = edits[0];
-		if (!first || typeof first !== "object" || !("new_text" in first)) return undefined;
-		return first.new_text;
+		if (args && typeof args === "object" && "new_string" in args) {
+			return args.new_string;
+		}
+		return undefined;
 	}
 
 	test("a slow compute is not aborted by a newer chunk; it lands, then re-runs with the latest args", async () => {
@@ -80,7 +78,7 @@ describe("streaming edit preview coalescing", () => {
 		// (mock returns an unresolved promise) so we can race a newer chunk against it.
 		const component = new ToolExecutionComponent(
 			"edit",
-			{ path: file, edits: [{ old_text: "const a = 1;", new_text: "a" }] },
+			{ path: file, old_string: "const a = 1;", new_string: "a" },
 			{},
 			tool,
 			ui,
@@ -93,7 +91,7 @@ describe("streaming edit preview coalescing", () => {
 
 			// A newer chunk arrives mid-compute. Coalescing must NOT cancel #0 and
 			// must NOT launch a second concurrent compute — only mark a rerun pending.
-			component.updateArgs({ path: file, edits: [{ old_text: "const a = 1;", new_text: "ab" }] });
+			component.updateArgs({ path: file, old_string: "const a = 1;", new_string: "ab" });
 			expect(calls.length).toBe(1);
 			expect(calls[0]!.signal.aborted).toBe(false);
 

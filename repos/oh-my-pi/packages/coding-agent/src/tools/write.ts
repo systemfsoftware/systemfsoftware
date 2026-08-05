@@ -3,6 +3,7 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 
 import { formatHashlineHeader, stripHashlinePrefixes } from "@oh-my-pi/hashline";
+import { type } from "@oh-my-pi/omptype";
 import type {
 	AgentTool,
 	AgentToolContext,
@@ -12,7 +13,6 @@ import type {
 } from "@oh-my-pi/pi-agent-core";
 import { type Component, Text } from "@oh-my-pi/pi-tui";
 import { isEnoent, isRecord, prompt, untilAborted } from "@oh-my-pi/pi-utils";
-import { type } from "arktype";
 
 import { canonicalSnapshotKey, getFileSnapshotStore } from "../edit/file-snapshot-store";
 import { normalizeToLF } from "../edit/normalize";
@@ -88,7 +88,14 @@ import {
 } from "./sqlite-reader";
 import { ToolError } from "./tool-errors";
 import { toolResult } from "./tool-result";
-import { renderXdevCall, renderXdevResult, type XdevDispatch } from "./xdev";
+import {
+	dispatchXdevTool,
+	renderXdevCall,
+	renderXdevResult,
+	resolveXdevTool,
+	type XdevDispatch,
+	xdevListing,
+} from "./xdev";
 
 const LOOSE_HASHLINE_HEADER_RE = /^\s*\[[^#\r\n]+#[^ \t\r\n]*\]\s*$/;
 const EXECUTABLE_NOTICE = "[Notice: Made executable via chmod +x]";
@@ -153,7 +160,42 @@ function throwReadSelectorMisfire(target: string, sel: string): never {
 	);
 }
 
+/**
+ * Recognize a semicolon-joined list of read-tool selectors mis-dispatched as a
+ * single write target — the multi-file read expression the scout emitted in
+ * issue #6809 (`a.txt:1-2;b/c.txt:3-4`). Every `;`-segment must be non-empty and
+ * carry its own read selector ({@link splitPathAndSel} peels a `:N-M`, `:raw`,
+ * or `:conflicts` tail). No real call targets such a list: `read` accepts one
+ * path, `write` writes one file. Unlike {@link readSelectorForEmptyWrite} this
+ * fires regardless of `content` — the non-empty-content escape hatch exists for
+ * a lone selector-shaped *filename*, never a `;`-list, and honoring it here
+ * silently creates a nested directory tree (`a.txt:1-2;b/`) in the workspace.
+ * The caller still probes the literal target first, so an existing POSIX file
+ * by that exact name stays writable (same escape as the single-selector guard).
+ */
+function readSelectorListMisfire(target: string): number | undefined {
+	if (!target.includes(";")) return undefined;
+	const segments = target.split(";");
+	if (segments.length < 2) return undefined;
+	for (const segment of segments) {
+		const trimmed = segment.trim();
+		if (trimmed.length === 0 || splitPathAndSel(trimmed).sel === undefined) return undefined;
+	}
+	return segments.length;
+}
+
+function throwReadSelectorListMisfire(target: string, count: number): never {
+	throw new ToolError(
+		`write target '${target}' is a semicolon-joined list of ${count} read-tool selectors, not a filesystem path — refusing to create it. ` +
+			`write creates a single file; issue one read() per path to read these ranges (e.g. read({ path: "<one path>:<range>" })).`,
+	);
+}
+
 async function assertNotReadSelectorMisfire(target: string, content: string, cwd: string): Promise<void> {
+	const listCount = readSelectorListMisfire(target);
+	if (listCount !== undefined && (await probeLiteralPathExists(target, cwd)) === "missing") {
+		throwReadSelectorListMisfire(target, listCount);
+	}
 	const sel = readSelectorForEmptyWrite(target, content);
 	if (sel === undefined) return;
 	if ((await probeLiteralPathExists(target, cwd)) !== "missing") return;
@@ -471,7 +513,8 @@ export class WriteTool implements AgentTool<typeof writeSchema, WriteToolDetails
 		if (xdevTarget) {
 			if (xdevTarget.name === REPORT_ISSUE_DEVICE_NAME) return "write";
 			if (xdevTarget.name && isResolutionDeviceName(xdevTarget.name)) return "read";
-			const inst = xdevTarget.name ? this.session.xdevRegistry?.get(xdevTarget.name) : undefined;
+			const inst =
+				xdevTarget.name && this.session.xdev ? resolveXdevTool(this.session.xdev, xdevTarget.name) : undefined;
 			if (!inst) return "exec";
 			// Decode the device JSON payload and evaluate the mounted tool's own
 			// approval (which may be argument-dependent, e.g. ast_edit is read-tier
@@ -1104,14 +1147,15 @@ export class WriteTool implements AgentTool<typeof writeSchema, WriteToolDetails
 									};
 									return;
 								}
-								const registry = this.session.xdevRegistry;
-								if (!registry || registry.size === 0) {
+								const xdev = this.session.xdev;
+								if (!xdev) {
 									throw new ToolError("xd:// is not mounted in this session.");
 								}
 								if (!name) {
-									throw new ToolError(`Cannot write to xd:// itself — pick a device:\n${registry.listing()}`);
+									throw new ToolError(`Cannot write to xd:// itself — pick a device:\n${xdevListing(xdev)}`);
 								}
-								const { result, xdev } = await registry.dispatch(
+								const { result, xdev: dispatch } = await dispatchXdevTool(
+									xdev,
 									name,
 									deviceContent,
 									_toolCallId,
@@ -1124,7 +1168,7 @@ export class WriteTool implements AgentTool<typeof writeSchema, WriteToolDetails
 								);
 								xdResult = {
 									content: result.content,
-									details: { xdev },
+									details: { xdev: dispatch },
 									isError: result.isError,
 									useless: result.useless,
 								};
@@ -1223,9 +1267,15 @@ export class WriteTool implements AgentTool<typeof writeSchema, WriteToolDetails
 
 			// Try ACP bridge first for editor-visible filesystem paths. Internal
 			// artifacts such as local:// plans are owned by OMP, not the editor.
-			if (await routeWriteThroughBridge(this.session, path, absolutePath, cleanContent, signal)) {
-				const madeExecutable = await maybeMarkExecutableForShebang(absolutePath, cleanContent);
-				const header = maybeWriteSnapshotHeader(this.session, absolutePath, cleanContent);
+			const bridgeWrite = await routeWriteThroughBridge(this.session, path, absolutePath, cleanContent, signal);
+			if (bridgeWrite) {
+				// `write` always replaces the whole file, so (unlike hashline's
+				// hunk-scoped diff) there's no size cost to keying the header/
+				// executable-bit check on the verified post-write content —
+				// use it so a drifted write (e.g. client format-on-save) still
+				// hands back a tag that matches what's actually on disk.
+				const madeExecutable = await maybeMarkExecutableForShebang(absolutePath, bridgeWrite.text);
+				const header = maybeWriteSnapshotHeader(this.session, absolutePath, bridgeWrite.text);
 				const writeLine = `Successfully wrote ${cleanContent.length} bytes to ${displayPath}`;
 				let resultText = header ? `${header}\n${writeLine}` : writeLine;
 				if (stripped) {

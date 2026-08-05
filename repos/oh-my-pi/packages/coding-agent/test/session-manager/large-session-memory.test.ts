@@ -12,7 +12,7 @@ import * as snapcompact from "@oh-my-pi/snapcompact";
 class CountingMemorySessionStorage extends MemorySessionStorage {
 	writeTextSyncCalls = 0;
 
-	writeTextSync(filePath: string, content: string): void {
+	override writeTextSync(filePath: string, content: string): void {
 		this.writeTextSyncCalls++;
 		super.writeTextSync(filePath, content);
 	}

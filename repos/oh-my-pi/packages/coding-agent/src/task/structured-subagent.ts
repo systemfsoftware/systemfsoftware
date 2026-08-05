@@ -20,6 +20,7 @@ import type { TaskEffort } from "../thinking";
 import type { ToolSession } from "../tools";
 import { isIrcEnabled } from "../tools/hub";
 import { buildOutputValidator } from "../tools/output-schema-validator";
+import { trackLateCleanup } from "../utils/late-cleanup";
 import { type DiscoveryResult, discoverAgents, getAgent } from "./discovery";
 import { type ExecutorOptions, runSubprocess } from "./executor";
 import {
@@ -373,10 +374,12 @@ function buildExecutorOptions(
 		getArtifactsDir: session.getArtifactsDir ?? (() => null),
 		getSessionId: session.getSessionId ?? (() => null),
 	};
-	const enableMCP = !policy.planMode && (session.enableMCP ?? true);
+	const restrictToolNames = policy.planMode || session.restrictToolNames === true;
+	const enableMCP = !restrictToolNames && (session.enableMCP ?? true);
 	return {
 		cwd: session.cwd,
 		additionalDirectories: session.additionalDirectories,
+		getApiKey: session.getApiKey,
 		agent: policy.effectiveAgent,
 		task: renderSubagentPrompt(request.assignment),
 		assignment: request.assignment.trim(),
@@ -408,7 +411,7 @@ function buildExecutorOptions(
 		enableLsp: policy.enableLsp,
 		enableIrc: policy.enableIrc,
 		maxRuntimeMs: request.maxRuntimeMs,
-		restrictToolNames: policy.planMode,
+		restrictToolNames,
 		keepAlive: request.keepAlive,
 		signal: request.signal,
 		eventBus: session.eventBus,
@@ -424,8 +427,8 @@ function buildExecutorOptions(
 		workspaceTree: session.workspaceTree,
 		promptTemplates: session.promptTemplates,
 		rules: session.rules,
-		preloadedExtensionPaths: policy.planMode ? [] : session.extensionPaths,
-		preloadedCustomToolPaths: policy.planMode ? [] : session.customToolPaths,
+		preloadedExtensionPaths: restrictToolNames ? [] : session.extensionPaths,
+		preloadedCustomToolPaths: restrictToolNames ? [] : session.customToolPaths,
 		localProtocolOptions,
 		parentArtifactManager: session.getArtifactManager?.() ?? undefined,
 		parentHindsightSessionState: session.getHindsightSessionState?.(),
@@ -538,12 +541,16 @@ export async function runStructuredSubagent(request: StructuredSubagentRequest):
 	let mergeSummary = "";
 	let requiresRecoveryArtifacts = false;
 	let completedSuccessfully = false;
+	let deferredCleanup: Promise<void> | undefined;
 	try {
 		const id = await reserveStructuredSubagentId(request.session, {
 			...request.identity,
 			label: request.identity?.label ?? (request.invocationKind === "eval" ? "EvalAgent" : undefined),
 		});
 		const baseOptions = buildExecutorOptions(request, policy, lease, id);
+		baseOptions.onCleanupDeferred = completion => {
+			deferredCleanup = completion;
+		};
 		baseOptions.planReference = await loadPlanReference(request, policy);
 		let isolationContext: IsolationContext | null = null;
 		if (policy.isIsolated) {
@@ -637,8 +644,18 @@ export async function runStructuredSubagent(request: StructuredSubagentRequest):
 			(policy.isIsolated && (!policy.applyChanges || changesApplied === false || requiresRecoveryArtifacts));
 		const shouldCleanup = lease.temporary && !shouldRetainArtifacts;
 		if (shouldCleanup) {
-			await fs.rm(lease.artifactsDir, { recursive: true, force: true });
-			lease.unregister?.();
+			const cleanupArtifacts = async (): Promise<void> => {
+				await fs.rm(lease.artifactsDir, { recursive: true, force: true });
+				lease.unregister?.();
+			};
+			if (deferredCleanup) {
+				trackLateCleanup(deferredCleanup.then(cleanupArtifacts), {
+					resource: "artifacts",
+					artifactsDir: lease.artifactsDir,
+				});
+			} else {
+				await cleanupArtifacts();
+			}
 		}
 	}
 }

@@ -1,9 +1,11 @@
-import { afterEach, beforeAll, describe, expect, test, vi } from "bun:test";
+import { afterAll, afterEach, beforeAll, describe, expect, test, vi } from "bun:test";
 import type { AssistantMessage } from "@oh-my-pi/pi-ai";
+import { resetSettingsForTest, Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
 import { AssistantMessageComponent } from "@oh-my-pi/pi-coding-agent/modes/components/assistant-message";
 import { ToolExecutionComponent } from "@oh-my-pi/pi-coding-agent/modes/components/tool-execution";
 import { TranscriptContainer } from "@oh-my-pi/pi-coding-agent/modes/components/transcript-container";
 import { theme as activeTheme, initTheme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
+import type { AgentProgress, TaskToolDetails } from "@oh-my-pi/pi-coding-agent/task/types";
 import { evalToolRenderer } from "@oh-my-pi/pi-coding-agent/tools/eval-render";
 import { previewWindowRows } from "@oh-my-pi/pi-coding-agent/tools/render-utils";
 import { type Component, TUI } from "@oh-my-pi/pi-tui";
@@ -159,9 +161,61 @@ function makeEvalProbeResult(output: string, status: "running" | "complete") {
 		isError: false,
 	};
 }
+
+/**
+ * Six running designer agents at `tick`, shaped as a detached (async-running)
+ * task snapshot. Rows carry the time-derived fields the real executor sets —
+ * a current-tool start (elapsed suffix) and one retry countdown — so the
+ * regression also covers clock-derived byte drift.
+ */
+function detachedTaskDetails(tick: number): TaskToolDetails {
+	const now = Date.now();
+	const progress: AgentProgress[] = Array.from({ length: 6 }, (_, index) => ({
+		index,
+		id: `Task${index + 1}`,
+		agent: "designer",
+		agentSource: "bundled",
+		status: "running",
+		task: `Design concept ${index + 1}`,
+		assignment: `Design concept ${index + 1}`,
+		description: `Concept ${index + 1}, update ${tick}`,
+		currentTool: tick % 2 === 0 ? "read" : "hub",
+		currentToolStartMs: now - 20_000,
+		lastIntent: `progress ${tick}`,
+		recentTools: [],
+		recentOutput: [],
+		toolCount: tick,
+		requests: tick,
+		tokens: tick * 100,
+		cost: tick / 100,
+		durationMs: tick * 100,
+		retryState:
+			index === 5
+				? {
+						attempt: 1,
+						maxAttempts: 5,
+						delayMs: 120_000,
+						errorMessage: "429 rate limited",
+						startedAtMs: now,
+					}
+				: undefined,
+	}));
+	return {
+		projectAgentsDir: null,
+		results: [],
+		totalDurationMs: tick * 100,
+		progress,
+		async: { state: "running", jobId: "Task1", type: "task" },
+	};
+}
 describe("streaming tool output never sprays duplicate scrollback banners", () => {
 	beforeAll(async () => {
+		resetSettingsForTest();
+		await Settings.init({ inMemory: true, cwd: process.cwd() });
 		await initTheme();
+	});
+	afterAll(() => {
+		resetSettingsForTest();
 	});
 	afterEach(() => {
 		if (ORIGINAL_ROWS) Object.defineProperty(process.stdout, "rows", ORIGINAL_ROWS);
@@ -201,6 +255,224 @@ describe("streaming tool output never sprays duplicate scrollback banners", () =
 			expect(banners).toBeLessThanOrEqual(1);
 		} finally {
 			bash.stopAnimation();
+			tui.stop();
+			await term.flush();
+		}
+	}, 30_000);
+
+	// The detached-task smear (user report): a background (`async.state ===
+	// "running"`) task block reports finalized so later turns can commit, but
+	// as the transcript tail its head rows enter native scrollback the moment
+	// the frame outgrows the viewport. Progress snapshots kept mutating those
+	// committed rows; with scrollback rebuild off (default) every audit repair
+	// appended a fresh copy of the agent one-liners below the stale one.
+	test("task: detached progress never duplicates agent rows in scrollback", async () => {
+		const rows = 24;
+		stubStdoutRows(rows);
+		const term = new VirtualTerminal(100, rows);
+		const scheduler = makeDrainableScheduler();
+		const tui = new TUI(term, undefined, { renderScheduler: scheduler });
+		// Default engine mode: divergence repairs append below the stale copy,
+		// which is exactly the duplication this test guards against.
+		tui.setScrollbackRebuild(false);
+		const transcript = new TranscriptContainer();
+		const taskArgs = {
+			context: Array.from({ length: 40 }, (_, index) => `context-line-${index}`).join("\n"),
+			tasks: Array.from({ length: 6 }, (_, index) => ({
+				name: `Task${index + 1}`,
+				agent: "designer",
+				task: `Design concept ${index + 1}`,
+			})),
+		};
+		const task = new ToolExecutionComponent(
+			"task",
+			taskArgs,
+			{ liveRegion: transcript },
+			undefined,
+			tui,
+			process.cwd(),
+		);
+		transcript.addChild(task);
+		tui.addChild(transcript);
+		tui.addChild(new Footer(6));
+
+		try {
+			tui.start();
+			scheduler.flush();
+			await term.flush();
+			for (let tick = 1; tick <= 12; tick++) {
+				task.updateResult(
+					{ content: [{ type: "text", text: "running" }], details: detachedTaskDetails(tick) },
+					true,
+				);
+				term.scrollLines(1000);
+				tui.requestRender();
+				scheduler.flush();
+				await term.flush();
+			}
+
+			// The turn's reply streams in below the card (the screenshot shape):
+			// the whole card — progress rows included — is pushed above the
+			// window top and committed to the tape as frozen history.
+			transcript.addChild(new StaticBlock(Array.from({ length: 24 }, (_, i) => `reply-line-${i}`)));
+			term.scrollLines(1000);
+			tui.requestRender();
+			scheduler.flush();
+			await term.flush();
+
+			// A rebuild without a new snapshot (settings toggle, theme epoch)
+			// re-derives the frame; time-derived rows (current-tool elapsed,
+			// retry countdown) must not drift under committed history, so the
+			// render clock freezes with the latch: the rebuild output must be
+			// byte-identical even with the wall clock 90s ahead.
+			const beforeRebuild = task.render(100).join("\n");
+			vi.spyOn(Date, "now").mockReturnValue(Date.now() + 90_000);
+			task.setShowImages(false);
+			expect(task.render(100).join("\n")).toBe(beforeRebuild);
+			term.scrollLines(1000);
+			tui.requestRender();
+			scheduler.flush();
+			await term.flush();
+
+			// The terminal snapshot settles an on-screen card in place, but a
+			// card with committed rows is immutable history: replacing it would
+			// re-commit the whole slab below the stale copy, so it is dropped
+			// (the job result surfaces through its own delivery message).
+			const settledDetails = detachedTaskDetails(13);
+			settledDetails.async = { state: "completed", jobId: "Task1", type: "task" };
+			settledDetails.progress = [];
+			settledDetails.results = Array.from({ length: 6 }, (_, index) => ({
+				index,
+				id: `Task${index + 1}`,
+				agent: "designer",
+				agentSource: "bundled" as const,
+				task: `Design concept ${index + 1}`,
+				assignment: `Design concept ${index + 1}`,
+				description: `Concept ${index + 1}`,
+				exitCode: 0,
+				output: `concept ${index + 1} shipped`,
+				stderr: "",
+				truncated: false,
+				durationMs: 1000 + index,
+				tokens: 1200,
+				requests: 12,
+			}));
+			task.updateResult({ content: [{ type: "text", text: "done" }], details: settledDetails }, false);
+			// A committed card is immutable: the dropped settlement leaves its
+			// render byte-identical (the frozen progress rows, not result rows).
+			expect(task.render(100).join("\n")).toBe(beforeRebuild);
+			for (let i = 0; i < 2; i++) {
+				term.scrollLines(1000);
+				tui.requestRender();
+				scheduler.flush();
+				await term.flush();
+			}
+
+			const buffer = plainScrollBuffer(term);
+			// The launch brief is append-only content: it belongs in history,
+			// exactly once.
+			expect(buffer.filter(line => line.includes("context-line-0"))).toHaveLength(1);
+			// Collapsed view shows the last 4 agents; each one-liner must appear
+			// exactly once across history + grid — no stale generations stacked.
+			for (let index = 3; index <= 6; index++) {
+				expect(buffer.filter(line => line.includes(`Task${index}`)).length).toBeLessThanOrEqual(1);
+			}
+			expect(buffer.filter(line => line.includes("more agents"))).toHaveLength(1);
+			expect(buffer.filter(line => line.includes("retrying 1/5")).length).toBeLessThanOrEqual(1);
+			// The dropped settlement never re-rendered the card as results.
+			expect(buffer.some(line => line.includes("shipped"))).toBe(false);
+		} finally {
+			task.stopAnimation();
+			tui.stop();
+			await term.flush();
+		}
+	}, 30_000);
+
+	// A blocking (foreground) task call is a self-replacing dashboard: its
+	// progress rows rewrite in place, so none of them may be recorded as
+	// frozen scrollback snapshots mid-run. Only the finalized result commits.
+	test("task: blocking progress taller than the viewport records only the final frame", async () => {
+		const rows = 24;
+		stubStdoutRows(rows);
+		const term = new VirtualTerminal(100, rows);
+		const scheduler = makeDrainableScheduler();
+		const tui = new TUI(term, undefined, { renderScheduler: scheduler });
+		tui.setScrollbackRebuild(false);
+		const transcript = new TranscriptContainer();
+		const taskArgs = {
+			context: Array.from({ length: 40 }, (_, index) => `context-line-${index}`).join("\n"),
+			tasks: Array.from({ length: 6 }, (_, index) => ({
+				name: `Task${index + 1}`,
+				agent: "designer",
+				task: `Design concept ${index + 1}`,
+			})),
+		};
+		const task = new ToolExecutionComponent(
+			"task",
+			taskArgs,
+			{ liveRegion: transcript },
+			undefined,
+			tui,
+			process.cwd(),
+		);
+		transcript.addChild(task);
+		tui.addChild(transcript);
+		tui.addChild(new Footer(6));
+
+		try {
+			tui.start();
+			scheduler.flush();
+			await term.flush();
+			for (let tick = 1; tick <= 12; tick++) {
+				const details = detachedTaskDetails(tick);
+				delete details.async; // blocking call: no async job attached
+				task.updateResult({ content: [{ type: "text", text: "running" }], details }, true);
+				term.scrollLines(1000);
+				tui.requestRender();
+				scheduler.flush();
+				await term.flush();
+			}
+
+			const midRun = plainScrollBuffer(term);
+			for (let index = 1; index <= 6; index++) {
+				expect(midRun.filter(line => line.includes(`Task${index}`)).length).toBeLessThanOrEqual(1);
+			}
+
+			// Finalize: results replace the progress rows and commit exactly once.
+			const finalDetails = detachedTaskDetails(12);
+			delete finalDetails.async;
+			finalDetails.progress = [];
+			finalDetails.results = Array.from({ length: 6 }, (_, index) => ({
+				index,
+				id: `Task${index + 1}`,
+				agent: "designer",
+				agentSource: "bundled" as const,
+				task: `Design concept ${index + 1}`,
+				assignment: `Design concept ${index + 1}`,
+				description: `Concept ${index + 1}`,
+				exitCode: 0,
+				output: `concept ${index + 1} shipped`,
+				stderr: "",
+				truncated: false,
+				durationMs: 1000 + index,
+				tokens: 1200,
+				requests: 12,
+			}));
+			task.updateResult({ content: [{ type: "text", text: "done" }], details: finalDetails }, false);
+			for (let i = 0; i < 2; i++) {
+				term.scrollLines(1000);
+				tui.requestRender();
+				scheduler.flush();
+				await term.flush();
+			}
+
+			const settled = plainScrollBuffer(term);
+			expect(settled.filter(line => line.includes("context-line-0"))).toHaveLength(1);
+			for (let index = 1; index <= 6; index++) {
+				expect(settled.filter(line => line.includes(`Task${index}`)).length).toBeLessThanOrEqual(1);
+			}
+		} finally {
+			task.stopAnimation();
 			tui.stop();
 			await term.flush();
 		}

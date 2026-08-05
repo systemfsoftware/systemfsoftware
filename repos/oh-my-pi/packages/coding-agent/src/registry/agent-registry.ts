@@ -105,19 +105,23 @@ export class AgentRegistry {
 	}
 
 	/**
-	 * Register a new id only when it is absent, or reuse the exact ref a parked
-	 * revival was authorized to revive. A missing expected ref is a failed CAS:
-	 * callers must never claim an id after its prior generation disappeared.
+	 * Register a new id only when it is absent, or reuse the exact detached
+	 * `parked` ref a revival was authorized to revive. A missing, replaced, or
+	 * terminal expected ref is a failed CAS: delayed revivers must never claim an
+	 * id after its prior generation disappeared or was hard-killed.
 	 */
 	registerIfAvailable(input: RegisterInput, expected: AgentRef | null): AgentRef | undefined {
 		const current = this.#refs.get(input.id);
 		if (expected === null) return current ? undefined : this.register(input);
-		return current === expected ? current : undefined;
+		return current === expected && current.status === "parked" && !current.session ? current : undefined;
 	}
 
 	setStatus(id: string, status: AgentStatus, expected?: AgentRefExpectation): boolean {
 		const ref = this.#refs.get(id);
 		if (!ref || !this.#matchesExpected(ref, expected)) return false;
+		// `aborted` is terminal: delayed progress/revival work from the killed
+		// generation must never transition the tombstone back to a live status.
+		if (ref.status === "aborted") return status === "aborted";
 		if (ref.status === status) return true;
 		ref.status = status;
 		// Activity describes current work; it is meaningless once the agent
@@ -159,7 +163,10 @@ export class AgentRegistry {
 		expected?: AgentRefExpectation,
 	): boolean {
 		const ref = this.#refs.get(id);
-		if (!ref || !this.#matchesExpected(ref, expected)) return false;
+		// Never attach a late-created session to a hard-killed tombstone. This
+		// closes the race between a parked reviver claiming the ref and finishing
+		// createAgentSession after an explicit kill.
+		if (!ref || ref.status === "aborted" || !this.#matchesExpected(ref, expected)) return false;
 		ref.session = session;
 		if (sessionFile !== undefined) ref.sessionFile = sessionFile;
 		ref.lastActivity = Date.now();

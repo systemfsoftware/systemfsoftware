@@ -183,6 +183,7 @@ export class AgentHubOverlayComponent extends Container {
 
 	// Table state
 	#rows: AgentRef[] = [];
+	#statusCounts: Record<AgentStatus, number> = { running: 0, idle: 0, parked: 0, aborted: 0 };
 	#selectedRow = 0;
 	#notice: string | undefined;
 	/** Captured row order from the first refresh; keeps the hub stable while open. */
@@ -258,7 +259,7 @@ export class AgentHubOverlayComponent extends Container {
 	}
 
 	/** Tear down every subscription and timer. Called by the overlay owner on close. */
-	dispose(): void {
+	override dispose(): void {
 		for (const unsubscribe of this.#unsubscribers.splice(0)) unsubscribe();
 		if (this.#ageTimer) {
 			clearInterval(this.#ageTimer);
@@ -368,6 +369,9 @@ export class AgentHubOverlayComponent extends Container {
 	#refreshRows(): void {
 		const selectedId = this.#rows[this.#selectedRow]?.id;
 		const refs = this.#registry.list().filter(ref => ref.id !== MAIN_AGENT_ID);
+		const counts: Record<AgentStatus, number> = { running: 0, idle: 0, parked: 0, aborted: 0 };
+		for (const ref of refs) counts[ref.status]++;
+		this.#statusCounts = counts;
 
 		if (!this.#rowOrder) {
 			// First refresh (usually the constructor): order by status, then recency.
@@ -398,7 +402,7 @@ export class AgentHubOverlayComponent extends Container {
 	}
 
 	#observableFor(id: string): ObservableSession | undefined {
-		return this.#observers.getSessions().find(s => s.id === id);
+		return this.#observers.getSession(id);
 	}
 
 	// ========================================================================
@@ -418,30 +422,46 @@ export class AgentHubOverlayComponent extends Container {
 			const termHeight = process.stdout.rows || 40;
 			// Chrome: 2 borders + title + notice? + blank + hints + border
 			const budget = Math.max(4, termHeight - 7 - (this.#notice ? 1 : 0));
-			const entries = this.#rows.map((ref, i) => this.#renderEntry(ref, i === this.#selectedRow, width));
-			// Entries are 1-2 lines tall; grow a window around the selection until
-			// the line budget is spent, so the selected entry stays centered.
+			// Render outward from the selection and stop once the viewport is full.
+			// Cache rendered entries so a boundary probe is not paid twice when the
+			// same index is later accepted into the window.
+			const rendered = new Map<number, string[]>();
+			const entryAt = (index: number): string[] => {
+				const cached = rendered.get(index);
+				if (cached) return cached;
+				const ref = this.#rows[index];
+				if (!ref) return [];
+				const entry = this.#renderEntry(ref, index === this.#selectedRow, width);
+				rendered.set(index, entry);
+				return entry;
+			};
 			let start = this.#selectedRow;
 			let end = this.#selectedRow + 1;
-			let used = entries[start]?.length ?? 0;
+			let used = entryAt(start).length;
 			for (let grew = true; grew; ) {
 				grew = false;
-				if (end < entries.length && used + entries[end].length <= budget) {
-					used += entries[end].length;
-					end++;
-					grew = true;
+				if (end < this.#rows.length) {
+					const next = entryAt(end);
+					if (used + next.length <= budget) {
+						used += next.length;
+						end++;
+						grew = true;
+					}
 				}
-				if (start > 0 && used + entries[start - 1].length <= budget) {
-					start--;
-					used += entries[start].length;
-					grew = true;
+				if (start > 0) {
+					const previous = entryAt(start - 1);
+					if (used + previous.length <= budget) {
+						start--;
+						used += previous.length;
+						grew = true;
+					}
 				}
 			}
 			if (start > 0) {
 				lines.push(` ${theme.fg("dim", `… ${start} more`)}`);
 			}
 			for (let i = start; i < end; i++) {
-				lines.push(...entries[i]);
+				lines.push(...entryAt(i));
 			}
 			if (end < this.#rows.length) {
 				lines.push(` ${theme.fg("dim", `… ${this.#rows.length - end} more`)}`);
@@ -458,13 +478,9 @@ export class AgentHubOverlayComponent extends Container {
 	}
 
 	#statusSummary(): string {
-		const counts: Record<AgentStatus, number> = { running: 0, idle: 0, parked: 0, aborted: 0 };
-		for (const ref of this.#rows) {
-			counts[ref.status]++;
-		}
 		const parts: string[] = [];
 		for (const status of ["running", "idle", "parked", "aborted"] as const) {
-			const count = counts[status];
+			const count = this.#statusCounts[status];
 			if (count > 0) parts.push(`${count} ${status}`);
 		}
 		return parts.join(theme.sep.dot);
@@ -636,7 +652,7 @@ export class AgentHubOverlayComponent extends Container {
 				if (ref.status === "running" && ref.session) {
 					await ref.session.abort({ reason: USER_INTERRUPT_LABEL });
 				}
-				await this.#lifecycle().release(ref.id, ref);
+				await this.#lifecycle().release(ref.id, ref, { tombstone: true });
 			} catch (error) {
 				logger.warn("Agent hub: kill failed", { id: ref.id, error: String(error) });
 				this.#notice = error instanceof Error ? error.message : String(error);

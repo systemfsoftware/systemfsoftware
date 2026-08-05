@@ -5,7 +5,7 @@
  */
 import { ExponentialYield } from "@oh-my-pi/pi-agent-core/utils/yield";
 import { type MinimizerOptions, Shell, type ShellRunResult } from "@oh-my-pi/pi-natives";
-import { isExecutable, type ShellConfig } from "@oh-my-pi/pi-utils/procmgr";
+import { isCmdShell, isExecutable, type ShellConfig } from "@oh-my-pi/pi-utils/procmgr";
 import { Settings, type ShellMinimizerSettings } from "../config/settings";
 import { OutputSink } from "../session/streaming-output";
 import { resolveOutputMaxColumns, resolveOutputSinkHeadBytes } from "../tools/output-meta";
@@ -367,8 +367,10 @@ export async function executeBash(command: string, options?: BashExecutorOptions
 	});
 	const commandEnv = buildNonInteractiveEnv(preflight.env);
 	const runCdInPersistentShell = options?.useUserShell === true && !prefix && isPersistentShellCdCommand(command);
+	// Never wrap in cmd.exe: it is only the Windows no-bash fallback for spawn
+	// paths, and the embedded brush shell runs the POSIX line better directly.
 	const finalCommand =
-		options?.useUserShell === true && !bashShell && !runCdInPersistentShell
+		options?.useUserShell === true && !bashShell && !isCmdShell(shell) && !runCdInPersistentShell
 			? buildUserShellCommand(shell, args, preflight.command)
 			: preflight.command;
 

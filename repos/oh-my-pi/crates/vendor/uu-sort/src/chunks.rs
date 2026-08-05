@@ -245,7 +245,14 @@ pub fn read<T: Read>(
 			);
 			Ok(ChunkContents { lines, line_data, token_buffer, line_count_hint })
 		});
-		sender.send(payload?).unwrap();
+		// pi-uutils: diverge from upstream, which unwraps the send here and panics
+		// with `SendError(..)` when the receiver has disconnected (issue #6736).
+		// The receiver goes away when the consumer thread (sorter, merger, or
+		// checker) stops early after hitting an error or a closed output. Stop
+		// reading gracefully; the real error is reported by that other thread.
+		if sender.send(payload?).is_err() {
+			return Ok(false);
+		}
 	}
 	Ok(should_continue)
 }
@@ -451,4 +458,39 @@ pub fn parse_into_chunk<'a>(
 		settings,
 	);
 	ChunkContents { lines, line_data, token_buffer, line_count_hint }
+}
+
+#[cfg(test)]
+mod tests {
+	use std::iter;
+
+	use super::*;
+
+	/// Regression test for issue #6736: when the receiving end of the chunk
+	/// channel has disconnected (the consumer thread stopped early), `read`
+	/// must stop gracefully and report end-of-input instead of panicking on
+	/// `SendError`.
+	#[test]
+	fn read_stops_gracefully_when_receiver_disconnected() {
+		let (sender, receiver) = flume::bounded::<Chunk>(1);
+		drop(receiver);
+
+		let settings = GlobalSettings::default();
+		let mut carry_over = Vec::new();
+		let mut input: &[u8] = b"c\na\nb\n";
+
+		let should_continue = read(
+			&sender,
+			RecycledChunk::new(64 * 1024),
+			None,
+			&mut carry_over,
+			&mut input,
+			&mut iter::empty::<UResult<&[u8]>>(),
+			b'\n',
+			&settings,
+		)
+		.expect("read must not error on a disconnected receiver");
+
+		assert!(!should_continue);
+	}
 }

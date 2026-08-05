@@ -1,3 +1,4 @@
+import { isAnthropicWebSearchHistoryBlock } from "@oh-my-pi/pi-ai/providers/anthropic-wire";
 import {
 	type BlobStore,
 	externalizeImageDataSync,
@@ -99,6 +100,21 @@ function truncateForPersistence(obj: unknown, blobStore: BlobStore, key?: string
 	// Persist signed blocks verbatim — never truncate, externalize, or descend.
 	// Unsigned blocks (e.g. an interrupted stream) have no such binding and stay
 	// truncatable for size control.
+	// Anthropic validates native web-search history byte-for-byte on replay.
+	// Keep the complete typed block atomic, including nested encrypted_content.
+	if (typeof obj === "object" && "type" in obj && obj.type === "anthropicServerTool" && "block" in obj) {
+		const block = obj.block;
+		if (typeof block === "object" && block !== null && "type" in block && typeof block.type === "string") {
+			const validationView = {
+				type: block.type,
+				...("name" in block ? { name: block.name } : {}),
+				...("id" in block ? { id: block.id } : {}),
+				...("tool_use_id" in block ? { tool_use_id: block.tool_use_id } : {}),
+				...("content" in block ? { content: block.content } : {}),
+			};
+			if (isAnthropicWebSearchHistoryBlock(validationView)) return obj;
+		}
+	}
 	if (typeof obj === "object" && "type" in obj) {
 		const signed =
 			(obj.type === "thinking" && "thinkingSignature" in obj && isNonEmptyString(obj.thinkingSignature)) ||

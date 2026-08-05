@@ -123,6 +123,26 @@ describe.skipIf(!supportsReftable)("git reftable support", () => {
 		}
 	});
 
+	test("head.resolveSync treats Bun's timeout marker as a failed symbolic-ref even with exit code zero", () => {
+		const baseResult = Bun.spawnSync(["true"], { stdout: "pipe", stderr: "pipe" });
+		const timedOutSymbolicRef = {
+			...baseResult,
+			exitCode: 0,
+			exitedDueToTimeout: true,
+			stdout: Buffer.from("refs/heads/feature-branch\n"),
+		} satisfies Bun.ReadableSyncSubprocess;
+		const successfulRevParse = {
+			...baseResult,
+			exitCode: 0,
+			stdout: Buffer.from(`${headSha}\n`),
+		} satisfies Bun.ReadableSyncSubprocess;
+		vi.spyOn(Bun, "spawnSync").mockReturnValueOnce(timedOutSymbolicRef).mockReturnValueOnce(successfulRevParse);
+
+		const headState = git.head.resolveSync(sharedRepoDir);
+		expect(headState?.kind).toBe("detached");
+		expect(headState?.commit).toBe(headSha);
+	});
+
 	test("handles git config trailing comments correctly", async () => {
 		const repository = await git.repo.resolve(configRepoDir);
 		expect(repository).not.toBeNull();

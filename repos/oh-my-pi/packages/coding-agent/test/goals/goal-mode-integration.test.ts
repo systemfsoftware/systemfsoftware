@@ -271,7 +271,6 @@ describe("InteractiveMode goal mode integration", () => {
 		expect(content).toContain("- [completed] Identify gaps");
 		expect(content).toContain("- [in_progress] Choose &lt;next&gt; &amp; slice &lt;/todo_context&gt;");
 		expect(content).toContain("- [pending] Run focused checks");
-		expect(content).toContain("call the `todo` tool first");
 		expect(content.match(/<\/todo_context>/g)).toHaveLength(1);
 	});
 

@@ -11,7 +11,7 @@
  * JSON Schema dialect.
  */
 
-import type { Type } from "arktype";
+import type { Type } from "@oh-my-pi/omptype";
 // We import the Zod *value* (z) for runtime APIs. Marker checks rely on the
 // `_zod` symbol that every Zod v4 schema instance carries.
 import { type ZodType, z } from "zod/v4";

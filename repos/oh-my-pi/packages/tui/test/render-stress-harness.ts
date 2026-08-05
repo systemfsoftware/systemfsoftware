@@ -425,7 +425,7 @@ const BURST_STEP_METADATA = {
 } satisfies Record<BurstStepKind, BurstStepMetadata>;
 
 class UnknownViewportTerminal extends VirtualTerminal {
-	isNativeViewportAtBottom(): undefined {
+	override isNativeViewportAtBottom(): undefined {
 		return undefined;
 	}
 }
@@ -433,7 +433,7 @@ class UnknownViewportTerminal extends VirtualTerminal {
 class IntermittentUnknownViewportTerminal extends VirtualTerminal {
 	#probeCount = 0;
 
-	isNativeViewportAtBottom(): boolean | undefined {
+	override isNativeViewportAtBottom(): boolean | undefined {
 		this.#probeCount += 1;
 		return this.#probeCount % 3 === 0 ? undefined : super.isNativeViewportAtBottom();
 	}
@@ -443,7 +443,7 @@ class StaleBottomTerminal extends VirtualTerminal {
 	#previous: boolean | undefined;
 	#returnStale = false;
 
-	isNativeViewportAtBottom(): boolean | undefined {
+	override isNativeViewportAtBottom(): boolean | undefined {
 		const current = super.isNativeViewportAtBottom();
 		if (this.#returnStale) {
 			this.#returnStale = false;

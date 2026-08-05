@@ -4,7 +4,7 @@
  * Provides a normalized schema to represent multiple limit windows, model tiers,
  * and shared quotas across providers.
  */
-import { type } from "arktype";
+import { type } from "@oh-my-pi/omptype";
 import type { FetchImpl, Provider } from "./types";
 export type UsageUnit = "percent" | "tokens" | "requests" | "usd" | "minutes" | "bytes" | "unknown";
 
@@ -391,6 +391,16 @@ export interface CredentialRankingStrategy {
 	 * not block unrelated families on the same OAuth credential.
 	 */
 	blockScope?(context?: CredentialRankingContext): string | undefined;
+	/**
+	 * Scopes that apply to a request, most specific first. With a context, the
+	 * request's own scope plus any legacy catch-all scope whose blocks still
+	 * apply to everything. Without one — reconciliation runs with no request —
+	 * every scope whose blocks must be healed.
+	 *
+	 * A provider that scopes backoff by model family must implement this, or a
+	 * block written under one scope is invisible to requests and to healing.
+	 */
+	blockScopes?(context?: CredentialRankingContext): string[];
 	/** Fallback window durations (ms) when limits don't specify durationMs. */
 	windowDefaults: {
 		primaryMs: number;

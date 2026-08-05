@@ -2,7 +2,7 @@ import { scheduler } from "node:timers/promises";
 import { bareModelId, parseAnthropicModel } from "@oh-my-pi/pi-catalog/identity";
 import { toNumber } from "@oh-my-pi/pi-catalog/utils";
 import * as AIError from "../error";
-import { claudeCodeVersion } from "../providers/anthropic";
+import { claudeCodeVersion } from "../providers/claude-code-fingerprint";
 import {
 	type CredentialRankingContext,
 	type CredentialRankingStrategy,
@@ -153,6 +153,12 @@ function getApiLimitDisplayName(scope: unknown): string | undefined {
  * `seven_day_sonnet`) are permanently null. Model-scoped weekly caps now arrive
  * only through generic `limits[]` entries (`kind: "weekly_scoped"`) with the
  * model family named by `scope.model.display_name`.
+ *
+ * `is_active` is deliberately ignored: live payloads mark only the currently
+ * binding limit active (an account pinned at a 100% Fable cap reports its 77%
+ * shared weekly row as `is_active: false`), so it signals severity ranking,
+ * not bucket existence. Filtering on it hid real utilization — a scoped row
+ * at 5% with a live reset rendered as `not reported` in `omp usage`.
  */
 function parseApiLimitEntries(raw: unknown): ParsedApiLimitEntry[] {
 	if (!Array.isArray(raw)) return [];
@@ -161,7 +167,6 @@ function parseApiLimitEntries(raw: unknown): ParsedApiLimitEntry[] {
 		if (!isRecord(rawEntry)) continue;
 		const entry = rawEntry as ClaudeApiLimitEntry;
 		if (typeof entry.kind !== "string") continue;
-		if (entry.is_active === false) continue;
 		const utilization = toNumber(entry.percent);
 		const resetsAt = parseIsoTime(typeof entry.resets_at === "string" ? entry.resets_at : undefined);
 		if (utilization === undefined && resetsAt === undefined) continue;

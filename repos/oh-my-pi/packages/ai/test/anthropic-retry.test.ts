@@ -105,4 +105,22 @@ describe("isProviderRetryableError", () => {
 		expect(isProviderRetryableError(err, "anthropic")).toBe(false);
 		expect(isProviderRetryableError(err)).toBe(false);
 	});
+
+	it("retries Copilot's model_not_available_for_integrator 400 from the Anthropic messages proxy", () => {
+		// Shape thrown by @anthropic-ai/sdk against api.githubcopilot.com/v1/messages:
+		// the parsed body lands on `.error` and is itself `{ error: { code } }`.
+		const body = {
+			error: {
+				message:
+					'The requested model is not available for integrator "copilot-language-server". Available models: [gpt-4.1 claude-opus-4.7]. Verify the correct Copilot-Integration-Id header is being sent.',
+				code: "model_not_available_for_integrator",
+				param: "model",
+				type: "invalid_request_error",
+			},
+		};
+		const err = new Error(`400 ${JSON.stringify(body)}`);
+		Object.assign(err, { status: 400, error: body });
+		expect(isProviderRetryableError(err, "github-copilot")).toBe(true);
+		expect(isProviderRetryableError(err, "anthropic")).toBe(false);
+	});
 });

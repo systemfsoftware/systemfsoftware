@@ -10,6 +10,7 @@ import {
 	estimateTokens,
 	findCutPoint,
 	getLastAssistantUsage,
+	hasContextTokenUsage,
 	prepareCompaction,
 	resolveThresholdTokens,
 	shouldCompact,
@@ -186,6 +187,19 @@ describe("Token calculation", () => {
 	it("should handle zero values", () => {
 		const usage = createMockUsage(0, 0, 0, 0);
 		expect(calculateContextTokens(usage)).toBe(0);
+	});
+
+	it("prefers positive provider context occupancy without accepting an explicit zero", () => {
+		const usage = { ...createMockUsage(0, 0, 0, 0), contextTokens: 120_000 };
+		expect(calculateContextTokens(usage)).toBe(120_000);
+		expect(hasContextTokenUsage(usage)).toBe(true);
+		expect(hasContextTokenUsage({ ...usage, contextTokens: 0 })).toBe(false);
+	});
+
+	it("preserves total-only provider context without accepting response-only totals", () => {
+		const responseOnly = createMockUsage(0, 29, 0, 0);
+		expect(hasContextTokenUsage(responseOnly)).toBe(false);
+		expect(hasContextTokenUsage({ ...responseOnly, totalTokens: 120_000 })).toBe(true);
 	});
 });
 
@@ -933,7 +947,6 @@ describe("remote compaction setting", () => {
 			})
 			.join("\n");
 
-		expect(promptText).toContain("Previous snapcompact archive source text:");
 		expect(promptText).toContain("Archived snapcompact source");
 		expect(result.preserveData).toEqual({ otherState: "keep-me" });
 	});

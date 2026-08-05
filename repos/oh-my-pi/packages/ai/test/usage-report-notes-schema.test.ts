@@ -10,9 +10,9 @@
  */
 
 import { describe, expect, it } from "bun:test";
+import { type } from "@oh-my-pi/omptype";
 import { usageReportSchema } from "@oh-my-pi/pi-ai";
 import { usageResponseSchema } from "@oh-my-pi/pi-ai/auth-broker/wire-schemas";
-import { type } from "arktype";
 
 const DISCLAIMER = "OMP-observed spend only; OpenCode usage outside OMP is not included.";
 

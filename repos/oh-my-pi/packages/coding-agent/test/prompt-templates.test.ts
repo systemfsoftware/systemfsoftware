@@ -230,6 +230,19 @@ describe("parseCommandArgs + substituteArgs integration", () => {
 		const template2 = "Implement: $ARGUMENTS";
 		expect(substituteArgs(template1, args)).toBe(substituteArgs(template2, args));
 	});
+	test("should not recursively expand $@ or $ARGUMENTS present inside user positional arguments", () => {
+		const args = ["check $@ and $ARGUMENTS", "extra"];
+		const template = "Instruction: $1";
+		const result = substituteArgs(template, args);
+		expect(result).toBe("Instruction: check $@ and $ARGUMENTS");
+	});
+
+	test("should not recursively expand positional placeholders $1, $2 inside positional argument values", () => {
+		const args = ["value with $2", "nested"];
+		const template = "Result: $1";
+		const result = substituteArgs(template, args);
+		expect(result).toBe("Result: value with $2");
+	});
 });
 
 // ============================================================================

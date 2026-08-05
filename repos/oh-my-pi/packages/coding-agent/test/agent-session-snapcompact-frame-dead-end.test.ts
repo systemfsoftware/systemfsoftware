@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { Agent } from "@oh-my-pi/pi-agent-core";
+import { Agent, RESCUE_SHAKE_CONFIG } from "@oh-my-pi/pi-agent-core";
 import * as compactionModule from "@oh-my-pi/pi-agent-core/compaction";
 import { getBundledModel } from "@oh-my-pi/pi-catalog/models";
 import { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
@@ -389,7 +389,7 @@ describe("AgentSession snapcompact frame dead-end rescue", () => {
 		const notices = collectNotices();
 		await triggerMaintenance();
 
-		expect(shakeSpy).toHaveBeenCalledWith("elide", expect.anything());
+		expect(shakeSpy).toHaveBeenCalledWith("elide", expect.objectContaining({ config: RESCUE_SHAKE_CONFIG }));
 		const noProgress = notices.filter(n => n.source === NOTICE_SOURCE && n.message.includes(NO_PROGRESS_FRAGMENT));
 		expect(noProgress.length).toBe(1);
 		expect(noProgress[0].level).toBe("warning");
@@ -431,7 +431,7 @@ describe("AgentSession snapcompact frame dead-end rescue", () => {
 		await triggerMaintenance();
 
 		expect(compactSpy).not.toHaveBeenCalled();
-		expect(shakeSpy).toHaveBeenCalledWith("elide", expect.anything());
+		expect(shakeSpy).toHaveBeenCalledWith("elide", expect.objectContaining({ config: RESCUE_SHAKE_CONFIG }));
 		expect(sessionManager.getBranch().at(-1)?.type).not.toBe("compaction");
 	});
 
@@ -455,7 +455,7 @@ describe("AgentSession snapcompact frame dead-end rescue", () => {
 		await triggerMaintenance();
 
 		expect(compactSpy).not.toHaveBeenCalled();
-		expect(shakeSpy).toHaveBeenCalledWith("elide", expect.anything());
+		expect(shakeSpy).toHaveBeenCalledWith("elide", expect.objectContaining({ config: RESCUE_SHAKE_CONFIG }));
 	});
 
 	it("leaves an oversized non-archive tail to the elide tiers instead of rescuing the archive", async () => {
@@ -492,7 +492,7 @@ describe("AgentSession snapcompact frame dead-end rescue", () => {
 
 		// The archive was NOT rebuilt; the elide tier got its shot at the tail.
 		expect(compactSpy).not.toHaveBeenCalled();
-		expect(shakeSpy).toHaveBeenCalledWith("elide", expect.anything());
+		expect(shakeSpy).toHaveBeenCalledWith("elide", expect.objectContaining({ config: RESCUE_SHAKE_CONFIG }));
 		const lastEntry = sessionManager.getBranch().at(-1);
 		expect(lastEntry?.type).not.toBe("compaction");
 		const noProgress = notices.filter(n => n.source === NOTICE_SOURCE && n.message.includes(NO_PROGRESS_FRAGMENT));
@@ -539,7 +539,7 @@ describe("AgentSession snapcompact frame dead-end rescue", () => {
 		// Text-only model: no frame re-render; existing tiers still run and the
 		// existing dead-end warning is preserved.
 		expect(compactSpy).not.toHaveBeenCalled();
-		expect(shakeSpy).toHaveBeenCalledWith("elide", expect.anything());
+		expect(shakeSpy).toHaveBeenCalledWith("elide", expect.objectContaining({ config: RESCUE_SHAKE_CONFIG }));
 		const noProgress = notices.filter(n => n.source === NOTICE_SOURCE && n.message.includes(NO_PROGRESS_FRAGMENT));
 		expect(noProgress.length).toBe(1);
 	});

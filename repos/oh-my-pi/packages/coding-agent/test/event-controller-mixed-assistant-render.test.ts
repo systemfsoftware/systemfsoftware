@@ -15,6 +15,9 @@ const TOOL_RESULT_A_MARKER = "TOOL RESULT FROM FIRST TOOL";
 const MIDDLE_MARKER = "MIDDLE TEXT BETWEEN TOOL CALLS";
 const TOOL_RESULT_B_MARKER = "TOOL RESULT FROM SECOND TOOL";
 const FINAL_MARKER = "FINAL ANSWER AFTER SECOND TOOL";
+const HIDDEN_BASH_COMMAND_MARKER = "HIDDEN BASH COMMAND MARKER";
+const HIDDEN_BASH_FAILURE_MARKER = "HIDDEN BASH FAILURE MARKER";
+const HIDDEN_READ_PATH_MARKER = "hidden-tool-activity.ts";
 
 function zeroUsage(): Usage {
 	return {
@@ -48,7 +51,7 @@ function lineContaining(lines: string[], marker: string): number {
 	return index;
 }
 
-function createFixture() {
+function createFixture(hideToolActivity = false) {
 	const chatContainer = new TranscriptContainer();
 	const pendingTools = new Map();
 	const ui = {
@@ -72,6 +75,7 @@ function createFixture() {
 		transcriptMessageComponents: new WeakMap(),
 		pendingTools,
 		toolOutputExpanded: false,
+		hideToolActivity,
 		effectiveHideThinkingBlock: false,
 		proseOnlyThinking: true,
 		statusLine: { invalidate: vi.fn() },
@@ -210,5 +214,82 @@ describe("EventController mixed assistant text/tool rendering", () => {
 		expect(lines.filter(line => line.includes(MIDDLE_MARKER))).toHaveLength(1);
 		expect(middleLine).toBeLessThan(toolResultBLine);
 		expect(toolResultBLine).toBeLessThan(finalLine);
+	});
+
+	it("keeps assistant text streaming while hiding bash failures and grouped read activity", async () => {
+		const { controller, chatContainer } = createFixture(true);
+		const bashCall: ToolCall = {
+			type: "toolCall",
+			id: TOOL_CALL_A_ID,
+			name: "bash",
+			arguments: { command: `printf '${HIDDEN_BASH_COMMAND_MARKER}'` },
+		};
+		const readCall: ToolCall = {
+			type: "toolCall",
+			id: TOOL_CALL_B_ID,
+			name: "read",
+			arguments: { path: HIDDEN_READ_PATH_MARKER },
+		};
+		const started = assistantMessage([]);
+		const streaming = assistantMessage([
+			{ type: "text", text: INTRO_MARKER },
+			bashCall,
+			{ type: "text", text: MIDDLE_MARKER },
+			readCall,
+			{ type: "text", text: FINAL_MARKER },
+		]);
+
+		await controller.handleEvent({ type: "message_start", message: started } as Extract<
+			AgentSessionEvent,
+			{ type: "message_start" }
+		>);
+		await controller.handleEvent({
+			type: "message_update",
+			message: streaming,
+			assistantMessageEvent: {
+				type: "toolcall_end",
+				contentIndex: 3,
+				toolCall: readCall,
+				partial: streaming,
+			},
+		} as Extract<AgentSessionEvent, { type: "message_update" }>);
+		await controller.handleEvent({
+			type: "tool_execution_start",
+			toolCallId: TOOL_CALL_A_ID,
+			toolName: "bash",
+			args: bashCall.arguments,
+		} as Extract<AgentSessionEvent, { type: "tool_execution_start" }>);
+		await controller.handleEvent({
+			type: "tool_execution_end",
+			toolCallId: TOOL_CALL_A_ID,
+			toolName: "bash",
+			result: { content: [{ type: "text", text: HIDDEN_BASH_FAILURE_MARKER }] },
+			isError: true,
+		} as Extract<AgentSessionEvent, { type: "tool_execution_end" }>);
+		await controller.handleEvent({
+			type: "tool_execution_start",
+			toolCallId: TOOL_CALL_B_ID,
+			toolName: "read",
+			args: readCall.arguments,
+		} as Extract<AgentSessionEvent, { type: "tool_execution_start" }>);
+		await controller.handleEvent({
+			type: "tool_execution_end",
+			toolCallId: TOOL_CALL_B_ID,
+			toolName: "read",
+			result: { content: [{ type: "text", text: "read result must stay hidden" }] },
+			isError: false,
+		} as Extract<AgentSessionEvent, { type: "tool_execution_end" }>);
+		await controller.handleEvent({ type: "message_end", message: streaming } as Extract<
+			AgentSessionEvent,
+			{ type: "message_end" }
+		>);
+
+		const rendered = Bun.stripANSI(chatContainer.render(120).join("\n"));
+		expect(rendered).toContain(INTRO_MARKER);
+		expect(rendered).toContain(MIDDLE_MARKER);
+		expect(rendered).toContain(FINAL_MARKER);
+		expect(rendered).not.toContain(HIDDEN_BASH_COMMAND_MARKER);
+		expect(rendered).not.toContain(HIDDEN_BASH_FAILURE_MARKER);
+		expect(rendered).not.toContain(HIDDEN_READ_PATH_MARKER);
 	});
 });

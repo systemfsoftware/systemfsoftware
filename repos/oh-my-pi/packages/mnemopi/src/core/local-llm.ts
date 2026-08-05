@@ -254,6 +254,7 @@ export function cleanOutput(text: string): string {
 		.replaceAll("<|user|>", "")
 		.replaceAll("</s>", "")
 		.trim()
+		.replace(/^(?:\s*<think>[\s\S]*?<\/think>)+\s*/i, "")
 		.replace(/^(Summarize the following memories.*?[.!?:]\s*)/is, "")
 		.replace(/^(Preserve facts.*?[.!?:]\s*)/is, "")
 		.replace(/^Source:.*?\n/im, "")

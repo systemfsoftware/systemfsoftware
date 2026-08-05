@@ -15,10 +15,8 @@
 use std::{
 	collections::VecDeque,
 	fs::File,
-	io::{BufRead, Read, Seek, SeekFrom, Write},
+	io::{self, BufRead, Read, Seek, SeekFrom, Write},
 };
-
-use uucore::error::UResult;
 
 /// When reading files in reverse in `bounded_tail`, this is the size of each
 /// block read at a time.
@@ -209,10 +207,10 @@ impl BytesChunk {
 
 	/// Fills `self.buffer` with maximal [`BUFFER_SIZE`] number of bytes,
 	/// draining the reader by that number of bytes. If EOF is reached (so 0
-	/// bytes are read), it returns [`UResult<None>`]; otherwise, it returns
-	/// [`UResult<Some(bytes)>`], where bytes is the number of bytes read from
+	/// bytes are read), it returns `Ok(None)`; otherwise, it returns
+	/// `Ok(Some(bytes))`, where bytes is the number of bytes read from
 	/// the source.
-	pub fn fill(&mut self, filehandle: &mut impl BufRead) -> UResult<Option<usize>> {
+	pub fn fill(&mut self, filehandle: &mut impl BufRead) -> io::Result<Option<usize>> {
 		let num_bytes = filehandle.read(&mut self.buffer)?;
 		self.bytes = num_bytes;
 		if num_bytes == 0 {
@@ -286,7 +284,7 @@ impl BytesChunkBuffer {
 	/// let mut chunks = BytesChunkBuffer::new(num_print);
 	/// chunks.fill(&mut reader).unwrap();
 	/// ```
-	pub fn fill(&mut self, reader: &mut impl BufRead) -> UResult<()> {
+	pub fn fill(&mut self, reader: &mut impl BufRead) -> io::Result<()> {
 		let mut chunk = Box::new(BytesChunk::new());
 
 		// fill chunks with all bytes from reader and reuse already instantiated chunks
@@ -323,7 +321,7 @@ impl BytesChunkBuffer {
 		Ok(())
 	}
 
-	pub fn print(&self, writer: &mut impl Write) -> UResult<()> {
+	pub fn print(&self, writer: &mut impl Write) -> io::Result<()> {
 		for chunk in &self.chunks {
 			writer.write_all(chunk.get_buffer())?;
 		}
@@ -459,7 +457,7 @@ impl LinesChunk {
 	/// the [`BytesChunk::fill`] function besides that this function also counts
 	/// and stores the number of lines encountered while reading from
 	/// the `filehandle`.
-	pub fn fill(&mut self, filehandle: &mut impl BufRead) -> UResult<Option<usize>> {
+	pub fn fill(&mut self, filehandle: &mut impl BufRead) -> io::Result<Option<usize>> {
 		match self.chunk.fill(filehandle)? {
 			None => {
 				self.lines = 0;
@@ -517,7 +515,7 @@ impl LinesChunk {
 	///
 	/// * `writer`: must implement [`Write`]
 	/// * `offset`: An offset in number of lines.
-	pub fn write_lines(&self, writer: &mut impl Write, offset: usize) -> UResult<()> {
+	pub fn write_lines(&self, writer: &mut impl Write, offset: usize) -> io::Result<()> {
 		self.write_bytes(writer, self.calculate_bytes_offset_from(offset))
 	}
 
@@ -528,7 +526,7 @@ impl LinesChunk {
 	///
 	/// * `writer`: must implement [`Write`]
 	/// * `offset`: An offset in number of bytes.
-	pub fn write_bytes(&self, writer: &mut impl Write, offset: usize) -> UResult<()> {
+	pub fn write_bytes(&self, writer: &mut impl Write, offset: usize) -> io::Result<()> {
 		writer.write_all(self.get_buffer_with(offset))?;
 		Ok(())
 	}
@@ -565,7 +563,7 @@ impl LinesChunkBuffer {
 	/// chunks. If there are no chunks, for example because the piped stdin
 	/// contained no lines, or `num_print = 0` then `iterator.next` will return
 	/// None.
-	pub fn fill(&mut self, reader: &mut impl BufRead) -> UResult<()> {
+	pub fn fill(&mut self, reader: &mut impl BufRead) -> io::Result<()> {
 		let mut chunk = Box::new(LinesChunk::new(self.delimiter));
 
 		while chunk.fill(reader)?.is_some() {
@@ -620,7 +618,7 @@ impl LinesChunkBuffer {
 		Ok(())
 	}
 
-	pub fn write(&self, mut writer: impl Write) -> UResult<()> {
+	pub fn write(&self, mut writer: impl Write) -> io::Result<()> {
 		for chunk in &self.chunks {
 			chunk.write_bytes(&mut writer, 0)?;
 		}

@@ -1,5 +1,6 @@
 export * from "./apply";
 export * from "./block";
+export * from "./clipboard";
 export * from "./diff-preview";
 export * from "./format";
 export * from "./fs";

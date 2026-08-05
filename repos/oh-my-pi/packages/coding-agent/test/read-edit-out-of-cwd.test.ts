@@ -89,7 +89,7 @@ describe("read → edit round-trip for out-of-cwd files", () => {
 		expect(header).toMatch(/^\[.+settings\.json#[0-9A-F]{4}\]$/);
 		expect(header).toContain(path.basename(outDir));
 
-		const result = await executeHashlineSingle(editOptions(session, `${header}\nSWAP 1.=1:\n+ALPHA\n`));
+		const result = await executeHashlineSingle(editOptions(session, `${header}\nPUT 1-1:\n+ALPHA\n`));
 		const resultText = result.content.map(part => (part.type === "text" ? part.text : "")).join("\n");
 
 		expect(resultText).not.toContain("File not found");
@@ -145,7 +145,8 @@ describe("read → edit round-trip for out-of-cwd files", () => {
 				run: async (tool, fileName) => {
 					await tool.execute("edit-workspace-suffix-replace", {
 						path: fileName,
-						edits: [{ old_text: "alpha", new_text: "ALPHA" }],
+						old_string: "alpha",
+						new_string: "ALPHA",
 					});
 				},
 			},

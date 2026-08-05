@@ -5,14 +5,17 @@
  * This module defines:
  * - `AuthCredentialStore` interface: persistence abstraction (SQLite, remote vault, …)
  * - `AuthStorage` class: credential management with round-robin, usage limits, OAuth refresh
- * - `SqliteAuthCredentialStore`: concrete SQLite-backed implementation
+ * - re-exported `SqliteAuthCredentialStore`: concrete SQLite-backed implementation
  */
-import { Database, type Statement } from "bun:sqlite";
 import { createHash } from "node:crypto";
-import * as fs from "node:fs/promises";
-import * as path from "node:path";
-import { parseAlibabaTokenPlanCredential } from "@oh-my-pi/pi-catalog/wire/alibaba-token-plan";
-import { $env, getAgentDbPath, logger } from "@oh-my-pi/pi-utils";
+import { $env, $envExact, extractRetryHint, getAgentDbPath, logger } from "@oh-my-pi/pi-utils";
+import {
+	isSqliteCorruptionError,
+	resolveCredentialIdentityKey,
+	SqliteAuthCredentialStore,
+	serializeCredential,
+	USAGE_REPORT_TTL_MS,
+} from "./auth/sqlite-credential-store";
 import type { ApiKeyResolver } from "./auth-retry";
 import * as AIError from "./error";
 import { isUsageLimitOutcome } from "./error/rate-limit";
@@ -28,7 +31,6 @@ import type {
 import { getEnvApiKey, getEnvApiKeyName } from "./stream";
 import type { Provider } from "./types";
 import type {
-	ClientProviderUsage,
 	ClientUsageReport,
 	ClientUsageSummary,
 	CredentialRankingContext,
@@ -54,6 +56,7 @@ import { googleGeminiCliUsageProvider } from "./usage/gemini";
 import { githubCopilotUsageProvider } from "./usage/github-copilot";
 import { antigravityRankingStrategy, antigravityUsageProvider } from "./usage/google-antigravity";
 import { kimiUsageProvider } from "./usage/kimi";
+import { minimaxCodeUsageProvider } from "./usage/minimax-code";
 import { ollamaCloudUsageProvider, ollamaUsageProvider } from "./usage/ollama";
 import { codexRankingStrategy, openaiCodexUsageProvider } from "./usage/openai-codex";
 import {
@@ -61,11 +64,19 @@ import {
 	type CodexResetCredit,
 	consumeCodexResetCredit,
 	listCodexResetCredits,
+	pickSoonestExpiringCredit,
 } from "./usage/openai-codex-reset";
 import { opencodeGoUsageProvider } from "./usage/opencode-go";
 import { syntheticUsageProvider } from "./usage/synthetic";
+import { umansUsageProvider } from "./usage/umans";
 import { xaiOauthUsageProvider } from "./usage/xai-oauth";
 import { zaiRankingStrategy, zaiUsageProvider } from "./usage/zai";
+
+export {
+	isSqliteBusyError,
+	isSqliteCorruptionError,
+	SqliteAuthCredentialStore,
+} from "./auth/sqlite-credential-store";
 
 const USAGE_RANKING_METRIC_EPSILON = 1e-9;
 /**
@@ -168,6 +179,28 @@ export interface StoredCredentialBlock {
 	blockedUntilMs: number;
 	/** Last row update timestamp in epoch milliseconds, when provided by the backing store. */
 	updatedAtMs?: number;
+}
+
+/**
+ * Identity slice of a disabled (soft-deleted) credential tombstone — cause and
+ * account identity only, never token material. Surfaced so auto-disabled
+ * accounts (e.g. an expired Anthropic OAuth grant) stay visible in `omp usage`
+ * instead of silently vanishing until the user notices missing quota.
+ */
+export interface DisabledCredentialSummary {
+	/** Database row id (matches {@link StoredAuthCredential.id}). */
+	id: number;
+	provider: string;
+	type: AuthCredential["type"];
+	email?: string;
+	accountId?: string;
+	/** Organization/workspace the credential was scoped to (Anthropic/ChatGPT multi-subscription). */
+	orgId?: string;
+	orgName?: string;
+	/** Verbatim disable cause captured when the row was torn down. */
+	cause: string;
+	/** Epoch ms the row was disabled (SQLite `updated_at`), when known. */
+	disabledAtMs?: number;
 }
 
 /**
@@ -350,9 +383,31 @@ export interface CredentialRefreshLeaseFence {
 
 export interface AuthCredentialStore {
 	close(): void;
+	/**
+	 * Stateful probe for commits made by another process to the backing store.
+	 * Returns true once per observed change.
+	 */
+	pollExternalChanges?(): boolean;
+	/** Record the current auth revision after a local mutation already notified consumers. */
+	acknowledgeLocalChanges?(): void;
 	/** Optional hook to notify the underlying store that usage report cache is stale. */
 	invalidateUsageCache?(signal?: AbortSignal): Promise<void>;
 	listAuthCredentials(provider?: string): StoredAuthCredential[];
+	/**
+	 * Optional store hook to re-hydrate the credential snapshot from its
+	 * backing source. Remote broker stores re-fetch `GET /v1/snapshot` so a
+	 * disk-cached snapshot (up to an hour stale) cannot be paired with live
+	 * per-credential data; local SQLite stores omit it — their reads are
+	 * always current.
+	 */
+	refreshSnapshot?(): Promise<unknown>;
+	/**
+	 * Disabled credential tombstones (see {@link DisabledCredentialSummary}).
+	 * Optional: remote stores forward to the broker's
+	 * `GET /v1/credentials/disabled` (empty list when the broker predates the
+	 * endpoint); stores without tombstones omit it.
+	 */
+	listDisabledCredentials?(provider?: string, signal?: AbortSignal): Promise<DisabledCredentialSummary[]>;
 	updateAuthCredential(id: number, credential: AuthCredential): void;
 	deleteAuthCredential(id: number, disabledCause: string): void;
 	tryDisableAuthCredentialIfMatches(
@@ -381,6 +436,8 @@ export interface AuthCredentialStore {
 	getCredentialBlockReconcileAfter?(credentialId: number, providerKey: string, blockScope: string): number | undefined;
 	/** Upsert with MAX semantics: keep the later blockedUntilMs on conflict. */
 	upsertCredentialBlock?(block: StoredCredentialBlock): void;
+	/** Drop one block row for a credential/provider/scope key. */
+	deleteCredentialBlock?(credentialId: number, providerKey: string, blockScope: string): void;
 	/** Drop every block row for a credential (all providerKeys/scopes). */
 	deleteCredentialBlocks?(credentialId: number): void;
 	/** Prune rows with blocked_until_ms <= nowMs. */
@@ -594,7 +651,7 @@ export type AuthStorageOptions = {
  * Does NOT support "!command" syntax (that requires pi-natives).
  */
 async function defaultConfigValueResolver(config: string): Promise<string | undefined> {
-	const envValue = process.env[config];
+	const envValue = $envExact(config);
 	return envValue || config;
 }
 
@@ -606,12 +663,14 @@ const DEFAULT_USAGE_PROVIDERS: UsageProvider[] = [
 	alibabaTokenPlanUsageProvider,
 	openaiCodexUsageProvider,
 	kimiUsageProvider,
+	minimaxCodeUsageProvider,
 	antigravityUsageProvider,
 	googleGeminiCliUsageProvider,
 	ollamaUsageProvider,
 	ollamaCloudUsageProvider,
 	claudeUsageProvider,
 	zaiUsageProvider,
+	umansUsageProvider,
 	opencodeGoUsageProvider,
 	githubCopilotUsageProvider,
 	cursorUsageProvider,
@@ -624,26 +683,8 @@ const DEFAULT_USAGE_PROVIDER_MAP = new Map<Provider, UsageProvider>(
 );
 
 const USAGE_CACHE_PREFIX = "usage_cache:";
-// 5 min stale tolerance. Anthropic / OpenAI rate-limit /usage hard at the IP
-// level so we can't fetch all N credentials every cycle; with a long cache
-// each credential's last-known value sticks visible while peers retry. UI
-// data (5h / 7d / monthly limits) is fine being a few minutes stale.
-const USAGE_REPORT_TTL_MS = 5 * 60_000;
 const USAGE_HEADER_INGEST_INTERVAL_MS = 60_000;
 const USAGE_LAST_GOOD_RETENTION_MS = 24 * 60 * 60_000;
-/**
- * Downsample usage history to at most one row per hour per account window: a
- * snapshot landing in the same hour bucket as the series' latest row
- * overwrites it in place. That bound makes further retention pruning
- * unnecessary — 1 row/hour is ~9k rows per account window per year.
- */
-const USAGE_HISTORY_BUCKET_MS = 60 * 60_000;
-/**
- * Merge client observed-usage flushes into at most one row per 5 minutes per
- * (install, provider, model): ~300 rows/day per active model per client
- * instead of one row per 10s flush.
- */
-const CLIENT_USAGE_BUCKET_MS = 5 * 60_000;
 /**
  * Per-credential cool-down after a usage fetch fails. While this window is
  * active we serve the last successful value to avoid dropping the credential
@@ -902,7 +943,9 @@ export interface ResetCreditRedeemOutcome {
 	 * Result code. Backend codes: `reset` (success), `already_redeemed`,
 	 * `no_credit`, `nothing_to_reset`. Locally-synthesized: `no_account`
 	 * (target not found), `account_unavailable` (token refresh failed),
-	 * `http_<status>` (unexpected HTTP).
+	 * `credit_list_failed` (transport/auth failure while listing credits —
+	 * retryable, unlike a genuine `no_credit`), `http_<status>` (unexpected
+	 * HTTP).
 	 */
 	code: CodexResetConsumeCode;
 	accountId?: string;
@@ -1211,6 +1254,15 @@ export class AuthStorage {
 	#credentialBackoff: Map<string, Map<number, number>> = new Map();
 	/** Earliest time a freshly-set in-memory block may be cleared by live usage reconciliation. */
 	#credentialBackoffProbeAfter: Map<string, Map<number, number>> = new Map();
+	/**
+	 * Latched true once the persistent credential-block store reports an
+	 * unrecoverable error (SQLite corruption / not-a-database). While set, every
+	 * persisted-block read and write short-circuits for the life of the process:
+	 * availability is preserved through {@link AuthStorage.#credentialBackoff}, but
+	 * cross-process persistence is abandoned rather than re-querying a broken store
+	 * on every credential evaluation.
+	 */
+	#persistedBlockStoreDamaged = false;
 	#usageProviderResolver?: (provider: Provider) => UsageProvider | undefined;
 	#rankingStrategyResolver?: (provider: Provider) => CredentialRankingStrategy | undefined;
 	#usageCache: UsageCache;
@@ -1259,8 +1311,10 @@ export class AuthStorage {
 		}
 		try {
 			this.#store.cleanExpiredCredentialBlocks?.(Date.now());
-		} catch {
-			// Best-effort.
+		} catch (err) {
+			// Best-effort, but init-time corruption must latch the block store
+			// immediately so the first evaluation doesn't re-query a broken DB.
+			this.#handlePersistedBlockStoreError(err);
 		}
 		this.#usageFetch = options.usageFetch ?? fetch;
 		this.#usageRequestTimeoutMs = options.usageRequestTimeoutMs ?? DEFAULT_USAGE_REQUEST_TIMEOUT_MS;
@@ -1305,6 +1359,19 @@ export class AuthStorage {
 		return this.#generation;
 	}
 
+	/**
+	 * Reload state after another process commits to the backing store, then
+	 * notify snapshot consumers even when only credential blocks changed.
+	 */
+	async pollExternalChanges(): Promise<boolean> {
+		const pollExternalChanges = this.#store.pollExternalChanges?.bind(this.#store);
+		if (!pollExternalChanges?.()) return false;
+		const previousGeneration = this.#generation;
+		await this.reload();
+		if (this.#generation === previousGeneration) this.#bumpGeneration("external-store");
+		return true;
+	}
+
 	onGenerationChanged(listener: (generation: number) => void): () => void {
 		this.#generationListeners.add(listener);
 		return () => {
@@ -1318,6 +1385,7 @@ export class AuthStorage {
 
 	#bumpGeneration(reason: string): void {
 		this.#generation += 1;
+		this.#store.acknowledgeLocalChanges?.();
 		for (const listener of [...this.#generationListeners]) {
 			try {
 				listener(this.#generation);
@@ -1416,7 +1484,16 @@ export class AuthStorage {
 	 * Reload credentials from storage.
 	 */
 	async reload(): Promise<void> {
-		const records = this.#store.listAuthCredentials();
+		let records: StoredAuthCredential[];
+		try {
+			records = this.#store.listAuthCredentials();
+		} catch (err) {
+			// Latch + surface repair guidance on corruption, but still fail the
+			// reload: silently continuing with zero credentials would log the
+			// user out of every provider without explanation.
+			this.#handlePersistedBlockStoreError(err);
+			throw err;
+		}
 		const grouped = new Map<string, StoredCredential[]>();
 		for (const record of records) {
 			const list = grouped.get(record.provider) ?? [];
@@ -1634,11 +1711,13 @@ export class AuthStorage {
 		providerKey: string,
 		blockScope: string | undefined,
 	): number | undefined {
+		if (this.#persistedBlockStoreDamaged) return undefined;
 		const getCredentialBlock = this.#store.getCredentialBlock?.bind(this.#store);
 		if (!getCredentialBlock) return undefined;
 		try {
 			return getCredentialBlock(credentialId, providerKey, blockScope ?? "");
 		} catch (err) {
+			if (this.#handlePersistedBlockStoreError(err)) return undefined;
 			logger.debug("Failed to read credential block from persistent store", {
 				err,
 				credentialId,
@@ -1649,16 +1728,41 @@ export class AuthStorage {
 		}
 	}
 
+	#readPersistedCredentialBlockReconcileAfter(credentialId: number, providerKey: string, blockScope: string): number {
+		if (this.#persistedBlockStoreDamaged) return 0;
+		const getCredentialBlockReconcileAfter = this.#store.getCredentialBlockReconcileAfter?.bind(this.#store);
+		if (!getCredentialBlockReconcileAfter) return 0;
+		try {
+			return getCredentialBlockReconcileAfter(credentialId, providerKey, blockScope) ?? 0;
+		} catch (err) {
+			if (this.#handlePersistedBlockStoreError(err)) return 0;
+			// Advisory read: transient failures (e.g. SQLITE_BUSY) fall back to
+			// the in-memory probe window, mirroring #readPersistedCredentialBlock.
+			logger.debug("Failed to read credential block reconcile-after time from persistent store", {
+				err,
+				credentialId,
+				providerKey,
+				blockScope,
+			});
+			return 0;
+		}
+	}
+
 	/** Returns block expiry timestamp for a credential, checking unscoped and scoped blocks. */
 	#getCredentialBlockedUntil(
 		provider: string,
 		providerKey: string,
 		credentialIndex: number,
-		blockScope: string | undefined = undefined,
+		blockScopeOrScopes: string | readonly string[] | undefined = undefined,
 	): number | undefined {
 		const nowMs = Date.now();
+		// A request honours its own scope plus any legacy catch-all scope, so a
+		// block written before backoff was scoped still applies to everything.
+		const scopes = (
+			typeof blockScopeOrScopes === "string" ? [blockScopeOrScopes] : (blockScopeOrScopes ?? [])
+		).filter(scope => scope.length > 0);
 		let blockedUntil = this.#getCredentialBlockedUntilForKey(providerKey, credentialIndex, nowMs);
-		if (blockScope) {
+		for (const blockScope of scopes) {
 			const scopedBlockedUntil = this.#getCredentialBlockedUntilForKey(
 				this.#toScopedBackoffKey(providerKey, blockScope),
 				credentialIndex,
@@ -1671,16 +1775,14 @@ export class AuthStorage {
 
 		const credentialId = this.#getStoredCredentials(provider)[credentialIndex]?.id;
 		if (credentialId === undefined) return blockedUntil;
-		if (!blockScope || provider !== "openai-codex") {
-			const persistedGlobalBlockedUntil = this.#readPersistedCredentialBlock(credentialId, providerKey, "");
-			if (
-				persistedGlobalBlockedUntil !== undefined &&
-				(blockedUntil === undefined || persistedGlobalBlockedUntil > blockedUntil)
-			) {
-				blockedUntil = persistedGlobalBlockedUntil;
-			}
+		const persistedGlobalBlockedUntil = this.#readPersistedCredentialBlock(credentialId, providerKey, "");
+		if (
+			persistedGlobalBlockedUntil !== undefined &&
+			(blockedUntil === undefined || persistedGlobalBlockedUntil > blockedUntil)
+		) {
+			blockedUntil = persistedGlobalBlockedUntil;
 		}
-		if (blockScope) {
+		for (const blockScope of scopes) {
 			const persistedScopedBlockedUntil = this.#readPersistedCredentialBlock(credentialId, providerKey, blockScope);
 			if (
 				persistedScopedBlockedUntil !== undefined &&
@@ -1697,7 +1799,7 @@ export class AuthStorage {
 		provider: string,
 		providerKey: string,
 		credentialIndex: number,
-		blockScope: string | undefined = undefined,
+		blockScope: string | readonly string[] | undefined = undefined,
 	): boolean {
 		return this.#getCredentialBlockedUntil(provider, providerKey, credentialIndex, blockScope) !== undefined;
 	}
@@ -1722,7 +1824,7 @@ export class AuthStorage {
 		this.#invalidateUsageReportCache(provider);
 
 		const upsertCredentialBlock = this.#store.upsertCredentialBlock?.bind(this.#store);
-		if (!upsertCredentialBlock) return;
+		if (!upsertCredentialBlock || this.#persistedBlockStoreDamaged) return;
 		const credentialId = this.#getStoredCredentials(provider)[credentialIndex]?.id;
 		if (credentialId === undefined) return;
 		try {
@@ -1733,6 +1835,7 @@ export class AuthStorage {
 				blockedUntilMs: nextBlockedUntil,
 			});
 		} catch (err) {
+			if (this.#handlePersistedBlockStoreError(err)) return;
 			logger.debug("Failed to persist credential block", {
 				err,
 				credentialId,
@@ -1744,15 +1847,50 @@ export class AuthStorage {
 		}
 	}
 
-	/** Records which credential was used for a session (for rate-limit switching). */
+	#handlePersistedBlockStoreError(err: unknown): boolean {
+		if (!isSqliteCorruptionError(err)) return false;
+		this.#reportDamagedBlockStore(err);
+		return true;
+	}
+
+	#assertPersistedBlockStoreWritable(): void {
+		if (!this.#persistedBlockStoreDamaged) return;
+		const store = this.#sourceLabel ?? `local ${getAgentDbPath()}`;
+		throw new Error(`Persistent credential block store ${store} is unavailable after SQLite corruption`);
+	}
+
+	/**
+	 * Latches {@link AuthStorage.#persistedBlockStoreDamaged} on the first
+	 * unrecoverable persisted-block store error and surfaces it once at `error`
+	 * level with the store location, so an operator can repair or replace it.
+	 * Later reads/writes short-circuit silently — the in-memory backoff map keeps
+	 * rate-limit blocks applying for the life of the process; only cross-process
+	 * persistence is lost.
+	 */
+	#reportDamagedBlockStore(err: unknown): void {
+		if (this.#persistedBlockStoreDamaged) return;
+		this.#persistedBlockStoreDamaged = true;
+		const store = this.#sourceLabel ?? `local ${getAgentDbPath()}`;
+		logger.error(
+			"Persistent credential store is corrupt; cross-process rate-limit persistence is disabled for this process. In-memory backoff still applies. Repair the store with `sqlite3 <path> '.recover'` or delete it to recreate on next login.",
+			{ err, store },
+		);
+	}
+
+	/**
+	 * Records which credential was used for a session (for rate-limit switching).
+	 * `lastUsedAtMs` backdates the sticky (session-file pin restores on resume);
+	 * it defaults to now for live selections.
+	 */
 	#recordSessionCredential(
 		provider: string,
 		sessionId: string | undefined,
 		type: AuthCredential["type"],
 		index: number,
+		lastUsedAtMs?: number,
 	): void {
 		if (!sessionId) return;
-		const nowMs = Date.now();
+		const nowMs = lastUsedAtMs ?? Date.now();
 		const sessionMap = this.#sessionLastCredential.get(provider) ?? new Map();
 		sessionMap.set(sessionId, { type, index, lastUsedAtMs: nowMs });
 		this.#sessionLastCredential.set(provider, sessionMap);
@@ -1882,6 +2020,8 @@ export class AuthStorage {
 		strategy: CredentialRankingStrategy;
 		rankingContext: CredentialRankingContext;
 		blockScope?: string;
+		/** Scopes a block may live under for this request; reads honour all of them. */
+		blockScopes?: readonly string[];
 	}): Promise<ApiKeyCandidate[]> {
 		const nowMs = Date.now();
 		const { strategy } = args;
@@ -1895,7 +2035,7 @@ export class AuthStorage {
 					args.provider,
 					args.providerKey,
 					selection.index,
-					args.blockScope,
+					args.blockScopes ?? args.blockScope,
 				);
 				if (blockedUntil !== undefined) {
 					return { selection, usage: null, usageChecked: false, blockedUntil };
@@ -1920,7 +2060,7 @@ export class AuthStorage {
 					args.provider,
 					args.providerKey,
 					selection.index,
-					args.blockScope,
+					args.blockScopes ?? args.blockScope,
 				);
 				return { selection, usage: null, usageChecked: false, blockedUntil };
 			});
@@ -1948,7 +2088,6 @@ export class AuthStorage {
 			const windows = usage ? strategy.findWindowLimits(usage, args.rankingContext) : undefined;
 			const primary = windows?.primary;
 			const secondary = windows?.secondary;
-			const secondaryTarget = secondary ?? primary;
 			ranked.push({
 				selection,
 				usage,
@@ -1957,9 +2096,9 @@ export class AuthStorage {
 				blockedUntil,
 				hasPriorityBoost: strategy.hasPriorityBoost?.(primary) ?? false,
 				planPriority: 0,
-				secondaryUsed: this.#normalizeUsageFraction(secondaryTarget),
+				secondaryUsed: this.#normalizeUsageFraction(secondary),
 				secondaryRequiredDrain: this.#computeWindowRequiredDrain(
-					secondaryTarget,
+					secondary,
 					nowMs,
 					strategy.windowDefaults.secondaryMs,
 				),
@@ -2003,6 +2142,7 @@ export class AuthStorage {
 
 		const rankingContext: CredentialRankingContext = { modelId: options?.modelId };
 		const blockScope = strategy.blockScope?.(rankingContext);
+		const blockScopes = strategy.blockScopes?.(rankingContext) ?? (blockScope ? [blockScope] : []);
 		const candidates = await this.#rankApiKeySelections({
 			providerKey,
 			provider,
@@ -2012,6 +2152,7 @@ export class AuthStorage {
 			strategy,
 			rankingContext,
 			blockScope,
+			blockScopes,
 		});
 		return candidates[0]?.selection ?? fallback;
 	}
@@ -2252,10 +2393,19 @@ export class AuthStorage {
 			if (!current) {
 				return { credential: undefined, refreshed: false, removed: false };
 			}
-			if (options.observedCredential && !authCredentialEquals(current, options.observedCredential)) {
+			const currentIsFresh = Date.now() + refreshSkewMs < current.expires;
+			// A peer rotated the credential out from under the caller's observation.
+			// Adopt the stored copy only when it is still usable; a stored copy that
+			// is itself expired must fall through to a refresh rather than be handed
+			// back and fail the downstream `getOAuthApiKey` expiry precondition.
+			if (
+				options.observedCredential &&
+				!authCredentialEquals(current, options.observedCredential) &&
+				currentIsFresh
+			) {
 				return { credential: current, refreshed: false, removed: false };
 			}
-			if (!options.forceRefresh && Date.now() + refreshSkewMs < current.expires) {
+			if (!options.forceRefresh && currentIsFresh) {
 				return { credential: current, refreshed: false, removed: false };
 			}
 			if (options.canRefresh && !options.canRefresh(current)) {
@@ -2295,10 +2445,17 @@ export class AuthStorage {
 			if (!current) {
 				return { credential: undefined, refreshed: false, removed: false };
 			}
-			if (options.observedCredential && !authCredentialEquals(current, options.observedCredential)) {
+			const currentIsFresh = Date.now() + refreshSkewMs < current.expires;
+			// Re-check after acquiring the lease: only adopt the stored copy on an
+			// observed mismatch when it is still usable, mirroring the pre-lease guard.
+			if (
+				options.observedCredential &&
+				!authCredentialEquals(current, options.observedCredential) &&
+				currentIsFresh
+			) {
 				return { credential: current, refreshed: false, removed: false };
 			}
-			if (!options.forceRefresh && Date.now() + refreshSkewMs < current.expires) {
+			if (!options.forceRefresh && currentIsFresh) {
 				return { credential: current, refreshed: false, removed: false };
 			}
 			if (options.canRefresh && !options.canRefresh(current)) {
@@ -2708,7 +2865,10 @@ export class AuthStorage {
 			this.#resetProviderAssignments(provider);
 			return { type: "api_key" };
 		}
-		const newCredential: OAuthCredential = { type: "oauth", ...result };
+		// Stamp the interactive-login instant: providers with an absolute grant
+		// lifetime (Anthropic) need it to surface re-login deadlines, and token
+		// refreshes only ever merge over this credential without clearing it.
+		const newCredential: OAuthCredential = { type: "oauth", ...result, authorizedAt: Date.now() };
 		// Use #upsertOAuthCredential to upsert the new credential.
 		// Any legacy api_key rows from older versions will be cleaned up so they do not
 		// shadow the new OAuth row, while preserving other active OAuth credentials.
@@ -2927,6 +3087,9 @@ export class AuthStorage {
 			apiEndpoint: next.apiEndpoint,
 			orgId: next.orgId ?? entry.credential.orgId,
 			orgName: next.orgName ?? entry.credential.orgName,
+			// Not part of UsageCredential — carried from the stored row so the
+			// interactive-login anchor survives usage-path refresh persists.
+			authorizedAt: entry.credential.authorizedAt,
 		});
 	}
 
@@ -3535,7 +3698,7 @@ export class AuthStorage {
 	}
 
 	#isUsageLimitExhausted(limit: UsageLimit): boolean {
-		if (limit.status === "exhausted") return true;
+		if (limit.status !== undefined && limit.status !== "unknown") return limit.status === "exhausted";
 		const amount = limit.amount;
 		if (amount.usedFraction !== undefined && amount.usedFraction >= 1) return true;
 		if (amount.remainingFraction !== undefined && amount.remainingFraction <= 0) return true;
@@ -3683,16 +3846,19 @@ export class AuthStorage {
 				: undefined;
 
 		const rankingContext: CredentialRankingContext = { modelId: options.modelId };
+		const planRequirement = resolveOpenAICodexPlanRequirement(provider, options.modelId);
+		const planEligibilityByCredential = new Map<number, boolean | undefined>();
 		const blockScope = strategy.blockScope?.(rankingContext);
+		const blockScopes = strategy.blockScopes?.(rankingContext) ?? (blockScope ? [blockScope] : []);
 		const reserveFraction = Number.isFinite(options.reserveFraction)
 			? Math.max(0, Math.min(1, options.reserveFraction))
 			: 0;
 		const nowMs = Date.now();
-		const accounts = await Promise.all(
+		let accounts = await Promise.all(
 			pool.map(async ({ entry, index }): Promise<ModelUsageAccountHealth> => {
 				const credentialType = entry.credential.type;
 				const providerKey = this.#getProviderTypeKey(provider, credentialType);
-				let blockedUntil = this.#getCredentialBlockedUntil(provider, providerKey, index, blockScope);
+				let blockedUntil = this.#getCredentialBlockedUntil(provider, providerKey, index, blockScopes);
 				if (blockedUntil !== undefined && provider !== "openai-codex") {
 					return {
 						credentialId: entry.id,
@@ -3716,9 +3882,12 @@ export class AuthStorage {
 					if (options.signal?.aborted) throw error;
 					report = null;
 				}
+				if (planRequirement !== "none") {
+					planEligibilityByCredential.set(entry.id, getOpenAICodexPlanEligibility(report, planRequirement));
+				}
 
 				if (provider === "openai-codex") {
-					blockedUntil = this.#getCredentialBlockedUntil(provider, providerKey, index, blockScope);
+					blockedUntil = this.#getCredentialBlockedUntil(provider, providerKey, index, blockScopes);
 				}
 				if (blockedUntil !== undefined) {
 					return {
@@ -3768,6 +3937,9 @@ export class AuthStorage {
 				};
 			}),
 		);
+		if (planRequirement !== "none") {
+			accounts = accounts.filter(account => planEligibilityByCredential.get(account.credentialId) !== false);
+		}
 		if (selectedCredentialId !== undefined) {
 			const selectedAccount = accounts.find(account => account.credentialId === selectedCredentialId);
 			if (selectedAccount) selectedAccount.selected = true;
@@ -4145,11 +4317,15 @@ export class AuthStorage {
 		const strategy = this.#rankingStrategyResolver?.(provider);
 		const rankingContext: CredentialRankingContext = { modelId: options?.modelId };
 		const blockScope = strategy?.blockScope?.(rankingContext);
+		const siblingBlockScopes = strategy?.blockScopes?.(rankingContext) ?? (blockScope ? [blockScope] : []);
 		const now = Date.now();
 		let blockedUntil = now + (options?.retryAfterMs ?? AuthStorage.#defaultBackoffMs);
 
 		if (credentialType === "oauth" && target.credential.type === "oauth" && strategy) {
-			const report = await this.#getUsageReport(provider, target.credential, options);
+			const report = await raceUsageWithSignal(
+				this.#getUsageReport(provider, target.credential, options),
+				options?.signal,
+			);
 			if (report) {
 				const scopedLimits = this.#getScopedUsageLimits(strategy, report, rankingContext);
 				if (this.#isUsageLimitReached(scopedLimits)) {
@@ -4160,6 +4336,7 @@ export class AuthStorage {
 				}
 			}
 		}
+		options?.signal?.throwIfAborted();
 
 		// Usage lookup may refresh, disable, or remove a row. Re-resolve its
 		// durable id before applying positional in-memory and persisted blocks.
@@ -4179,11 +4356,14 @@ export class AuthStorage {
 
 		let retryAtMs: number | undefined;
 		for (const candidate of remainingCredentials) {
+			// Sibling availability must use the same scope set selection reads, or
+			// this reports a sibling as free that selection will then refuse, most
+			// visibly when the sibling still carries a legacy shared block.
 			const candidateBlockedUntil = this.#getCredentialBlockedUntil(
 				provider,
 				providerKey,
 				candidate.index,
-				blockScope,
+				siblingBlockScopes,
 			);
 			if (candidateBlockedUntil === undefined) return { switched: true };
 			if (retryAtMs === undefined || candidateBlockedUntil < retryAtMs) retryAtMs = candidateBlockedUntil;
@@ -4305,6 +4485,8 @@ export class AuthStorage {
 		strategy: CredentialRankingStrategy;
 		rankingContext: CredentialRankingContext;
 		blockScope?: string;
+		/** Scopes a block may live under for this request; reads honour all of them. */
+		blockScopes?: readonly string[];
 	}): Promise<OAuthCandidate[]> {
 		const nowMs = Date.now();
 		const { strategy } = args;
@@ -4322,7 +4504,7 @@ export class AuthStorage {
 					args.provider,
 					args.providerKey,
 					selection.index,
-					args.blockScope,
+					args.blockScopes ?? args.blockScope,
 				);
 				let usage: UsageReport | null = null;
 				let usageChecked = false;
@@ -4336,7 +4518,7 @@ export class AuthStorage {
 						args.provider,
 						args.providerKey,
 						selection.index,
-						args.blockScope,
+						args.blockScopes ?? args.blockScope,
 					);
 				}
 				if (blockedUntil !== undefined) return { selection, usage, usageChecked, blockedUntil };
@@ -4390,7 +4572,6 @@ export class AuthStorage {
 			const windows = usage ? strategy.findWindowLimits(usage, args.rankingContext) : undefined;
 			const primary = windows?.primary;
 			const secondary = windows?.secondary;
-			const secondaryTarget = secondary ?? primary;
 			ranked.push({
 				selection,
 				usage,
@@ -4399,9 +4580,9 @@ export class AuthStorage {
 				blockedUntil,
 				hasPriorityBoost: strategy.hasPriorityBoost?.(primary) ?? false,
 				planPriority: getOpenAICodexPlanPriority(usage, args.planRequirement),
-				secondaryUsed: this.#normalizeUsageFraction(secondaryTarget),
+				secondaryUsed: this.#normalizeUsageFraction(secondary),
 				secondaryRequiredDrain: this.#computeWindowRequiredDrain(
-					secondaryTarget,
+					secondary,
 					nowMs,
 					strategy.windowDefaults.secondaryMs,
 				),
@@ -4447,6 +4628,8 @@ export class AuthStorage {
 		const strategy = this.#rankingStrategyResolver?.(provider);
 		const rankingContext: CredentialRankingContext = { modelId: options?.modelId };
 		const blockScope = strategy?.blockScope?.(rankingContext);
+		// Reads honour every scope that applies; the scalar above is for args that persist.
+		const blockScopes = strategy?.blockScopes?.(rankingContext) ?? (blockScope ? [blockScope] : []);
 		const planRequirement = resolveOpenAICodexPlanRequirement(provider, options?.modelId);
 		const hasPlanRequirement = planRequirement !== "none";
 		const checkUsage = strategy !== undefined && (credentials.length > 1 || hasPlanRequirement);
@@ -4475,7 +4658,7 @@ export class AuthStorage {
 		const sessionPreferredIsAvailable =
 			sessionPreferredIndex !== undefined &&
 			sessionPreferredCanRefreshOrUse &&
-			!this.#isCredentialBlocked(provider, providerKey, sessionPreferredIndex, blockScope);
+			!this.#isCredentialBlocked(provider, providerKey, sessionPreferredIndex, blockScopes);
 		const shouldRank = checkUsage && (!sessionPreferredIsAvailable || !sessionPreferredIsWarm || hasPlanRequirement);
 		// When ranking, seed the pinned credential first in the evaluation order so it wins genuine
 		// ties (the ranked comparator falls back to `orderPos`) without overriding a strictly-better
@@ -4504,6 +4687,7 @@ export class AuthStorage {
 					strategy: strategy!,
 					rankingContext,
 					blockScope,
+					blockScopes,
 				})
 			: order
 					.map(idx => credentials[idx])
@@ -4516,7 +4700,7 @@ export class AuthStorage {
 		if (!shouldRank && sessionPreferredIndex !== undefined && !hasPlanRequirement) {
 			const sessionPreferredCandidate = candidates.findIndex(
 				candidate =>
-					!this.#isCredentialBlocked(provider, providerKey, candidate.selection.index, blockScope) &&
+					!this.#isCredentialBlocked(provider, providerKey, candidate.selection.index, blockScopes) &&
 					candidate.selection.index === sessionPreferredIndex,
 			);
 			if (sessionPreferredCandidate > 0) {
@@ -4610,7 +4794,7 @@ export class AuthStorage {
 		if (hasPlanRequirement && sessionPreferredIndex !== undefined) {
 			const sessionPreferredCandidate = candidates.findIndex(
 				candidate =>
-					!this.#isCredentialBlocked(provider, providerKey, candidate.selection.index, blockScope) &&
+					!this.#isCredentialBlocked(provider, providerKey, candidate.selection.index, blockScopes) &&
 					candidate.selection.index === sessionPreferredIndex,
 			);
 			if (sessionPreferredCandidate > 0) {
@@ -4647,6 +4831,7 @@ export class AuthStorage {
 						strategy,
 						rankingContext,
 						blockScope,
+						blockScopes,
 					},
 				);
 				if (resolved) return resolved;
@@ -4824,6 +5009,7 @@ export class AuthStorage {
 			strategy?: CredentialRankingStrategy;
 			rankingContext?: CredentialRankingContext;
 			blockScope?: string;
+			blockScopes?: readonly string[];
 			/** When false, a definitive failure of THIS credential returns undefined instead of falling back to the ranked/round-robin selector (target-only resolution). */
 			allowFallback?: boolean;
 		},
@@ -4838,9 +5024,13 @@ export class AuthStorage {
 			strategy,
 			rankingContext,
 			blockScope,
+			blockScopes,
 			allowFallback = true,
 		} = usageOptions;
-		if (!allowBlocked && this.#isCredentialBlocked(provider, providerKey, selection.index, blockScope)) {
+		if (
+			!allowBlocked &&
+			this.#isCredentialBlocked(provider, providerKey, selection.index, blockScopes ?? blockScope)
+		) {
 			return undefined;
 		}
 
@@ -4933,6 +5123,7 @@ export class AuthStorage {
 				apiEndpoint: result.newCredentials.apiEndpoint ?? selection.credential.apiEndpoint,
 				orgId: result.newCredentials.orgId ?? selection.credential.orgId,
 				orgName: result.newCredentials.orgName ?? selection.credential.orgName,
+				authorizedAt: result.newCredentials.authorizedAt ?? selection.credential.authorizedAt,
 			};
 			if (credentialId !== undefined) {
 				const idx = this.#replaceCredentialById(provider, credentialId, updated);
@@ -5307,8 +5498,18 @@ export class AuthStorage {
 	 * The durable credential id keeps the pin stable across credential refreshes,
 	 * storage reordering, and process restarts. Normal auth retry and usage-limit
 	 * handling may still route around an unavailable account.
+	 *
+	 * `options.lastUsedAtMs` backdates the sticky's last-use timestamp so a pin
+	 * restored from a persisted session keeps the provider's warm-window
+	 * semantics: a resume inside the prompt-cache TTL reuses the account, a
+	 * stale resume still re-ranks.
 	 */
-	pinSessionOAuthAccount(provider: string, sessionId: string, credentialId: number): boolean {
+	pinSessionOAuthAccount(
+		provider: string,
+		sessionId: string,
+		credentialId: number,
+		options?: { lastUsedAtMs?: number },
+	): boolean {
 		if (!sessionId || this.#runtimeOverrides.has(provider) || this.#configOverrides.has(provider)) {
 			return false;
 		}
@@ -5316,7 +5517,7 @@ export class AuthStorage {
 		const index = stored.findIndex(entry => entry.id === credentialId);
 		const target = stored[index];
 		if (target?.credential.type !== "oauth") return false;
-		this.#recordSessionCredential(provider, sessionId, "oauth", index);
+		this.#recordSessionCredential(provider, sessionId, "oauth", index, options?.lastUsedAtMs);
 		return true;
 	}
 
@@ -5360,6 +5561,33 @@ export class AuthStorage {
 			return undefined;
 		}
 		const selection = this.#getStoredOAuthSelections(provider)[position];
+		if (!selection) return undefined;
+		const providerKey = this.#getProviderTypeKey(provider, "oauth");
+		return this.#resolveStoredOAuthAccess(provider, selection, providerKey, options);
+	}
+
+	/**
+	 * Resolve one stored OAuth credential by its durable storage row id.
+	 *
+	 * Unlike the normal session resolver, this method never ranks, rotates, or
+	 * falls back to sibling credentials. A forced refresh re-mints only the
+	 * requested row, preserving exact-account affinity for operations whose
+	 * provenance and policy boundary are tied to one workspace.
+	 *
+	 * Returns `undefined` when the row does not exist for `provider` or an
+	 * explicit runtime/config API-key override suppresses OAuth.
+	 */
+	async getOAuthAccessByCredentialId(
+		provider: string,
+		credentialId: number,
+		options?: AuthApiKeyOptions,
+	): Promise<OAuthAccessResolution | undefined> {
+		if (this.#runtimeOverrides.has(provider) || this.#configOverrides.has(provider)) {
+			return undefined;
+		}
+		const selection = this.#getStoredOAuthSelections(provider).find(
+			candidate => candidate.credentialId === credentialId,
+		);
 		if (!selection) return undefined;
 		const providerKey = this.#getProviderTypeKey(provider, "oauth");
 		return this.#resolveStoredOAuthAccess(provider, selection, providerKey, options);
@@ -5452,7 +5680,13 @@ export class AuthStorage {
 				fetch: this.#usageFetch,
 				signal: options.signal,
 			});
-			const credit = list?.credits.find(entry => (entry.status ?? "available") === "available") ?? list?.credits[0];
+			// Transport/auth failure is NOT "no credits": callers treat `no_credit`
+			// as terminal for the episode, so conflating them would bury a live
+			// credit behind one flaky request.
+			if (!list) {
+				return { ok: false, code: "credit_list_failed", accountId: match.accountId, email: match.email };
+			}
+			const credit = pickSoonestExpiringCredit(list.credits);
 			if (!credit) return { ok: false, code: "no_credit", accountId: match.accountId, email: match.email };
 			creditId = credit.id;
 		}
@@ -5573,6 +5807,70 @@ export class AuthStorage {
 	 * persisted and in-memory `openai-codex:oauth` blocks so credential selection
 	 * can re-include recovered seats before a stale block naturally expires.
 	 */
+	/**
+	 * Narrow a usage report to the limits a backoff scope covers, so a scope is
+	 * judged only by the meters it gates. A legacy scope that meant "block
+	 * everything" keeps the whole report.
+	 */
+	#scopeUsageReportToBlockScope(
+		report: UsageReport,
+		blockScope: string | undefined,
+		strategy: CredentialRankingStrategy | undefined,
+	): UsageReport {
+		if (!blockScope || !strategy?.scopeLimits || !strategy.blockScopes) return report;
+		// Find a request context whose scope set leads with this scope; its scoped
+		// limits are the ones this block gates.
+		const modelId = blockScope === "spark" ? "gpt-5.3-codex-spark" : "gpt-5.3-codex";
+		if (strategy.blockScopes({ modelId })[0] !== blockScope) return report;
+		const scopedLimits = strategy.scopeLimits(report, { modelId });
+		const meterStates = report.metadata?.meterStates;
+		const meterState =
+			meterStates !== null && typeof meterStates === "object"
+				? (meterStates as Record<string, { allowed?: boolean; limitReached?: boolean }>)[blockScope]
+				: undefined;
+		return {
+			...report,
+			limits: scopedLimits,
+			metadata:
+				meterState || blockScope === "spark"
+					? {
+							...report.metadata,
+							allowed: meterState?.allowed,
+							limitReached: meterState?.limitReached,
+						}
+					: report.metadata,
+		};
+	}
+
+	/**
+	 * Clear one backoff scope. The in-memory backoff is per scope so it is
+	 * dropped directly; the persisted store deletes a credential's blocks as a
+	 * unit, so it is only purged once no other scope still holds a live block.
+	 * Leaving a persisted row behind is safe: the scope it belongs to is
+	 * unblocked in memory, and the row heals on the pass where its own meter
+	 * recovers.
+	 */
+	#clearCredentialBlockScope(
+		provider: string,
+		credentialId: number,
+		credentialIndex: number,
+		providerKey: string,
+		blockScope: string | undefined,
+	): void {
+		const key = this.#toScopedBackoffKey(providerKey, blockScope);
+		const backoffMap = this.#credentialBackoff.get(key);
+		backoffMap?.delete(credentialIndex);
+		if (backoffMap?.size === 0) this.#credentialBackoff.delete(key);
+		const probeAfterMap = this.#credentialBackoffProbeAfter.get(key);
+		probeAfterMap?.delete(credentialIndex);
+		if (probeAfterMap?.size === 0) this.#credentialBackoffProbeAfter.delete(key);
+		try {
+			this.deleteCredentialBlock(credentialId, providerKey, blockScope ?? "");
+		} catch (err) {
+			logger.debug("Failed to clear persisted credential block", { err, provider, credentialId, blockScope });
+		}
+	}
+
 	#isHealthyCodexUsageReport(report: UsageReport): boolean {
 		if (report.provider !== "openai-codex") return false;
 		const metadata = report.metadata;
@@ -5581,13 +5879,51 @@ export class AuthStorage {
 	}
 
 	#reconcileCodexUsageBlockForCredential(provider: Provider, credentialId: number, report: UsageReport): void {
-		if (!this.#isHealthyCodexUsageReport(report)) return;
 		const providerKey = this.#getProviderTypeKey(provider, "oauth");
 		const credentialIndex = this.#getStoredCredentials(provider).findIndex(entry => entry.id === credentialId);
 		if (credentialIndex < 0) return;
 		// Mirror selection: consult the same strategy scope `markUsageLimitReached`
 		// persists under, else a scoped block is invisible here and never healed.
-		const blockScope = this.#rankingStrategyResolver?.(provider)?.blockScope?.({});
+		// Reconciliation has no request context, so it cannot know which scope a
+		// block was written under. Heal every scope the strategy can produce, plus
+		// any legacy scope it still lists, or a block persisted under one scope
+		// stays invisible here forever.
+		const strategy = this.#rankingStrategyResolver?.(provider);
+		const blockScopes =
+			strategy?.blockScopes?.() ?? [strategy?.blockScope?.({})].filter(scope => scope !== undefined);
+		const scopesToHeal = blockScopes.length > 0 ? blockScopes : [undefined];
+		for (const blockScope of scopesToHeal) {
+			this.#healCodexUsageBlockScope(
+				provider,
+				providerKey,
+				credentialId,
+				credentialIndex,
+				blockScope,
+				report,
+				strategy,
+			);
+		}
+	}
+
+	/**
+	 * Heal one backoff scope against the limits that scope actually covers.
+	 *
+	 * Judging a scope by the whole report is wrong once scopes are per-meter: an
+	 * exhausted Spark meter would keep a recovered chat block alive, and healing
+	 * would then delete every scope including a block that is still valid. So
+	 * each scope is evaluated against its own limits and cleared on its own.
+	 */
+	#healCodexUsageBlockScope(
+		provider: Provider,
+		providerKey: string,
+		credentialId: number,
+		credentialIndex: number,
+		blockScope: string | undefined,
+		report: UsageReport,
+		strategy: CredentialRankingStrategy | undefined,
+	): void {
+		const scopedReport = this.#scopeUsageReportToBlockScope(report, blockScope, strategy);
+		if (!this.#isHealthyCodexUsageReport(scopedReport)) return;
 		const blockedUntilMs = this.#getCredentialBlockedUntil(provider, providerKey, credentialIndex, blockScope);
 		if (blockedUntilMs === undefined) return;
 		// `/usage` can lag the request path that just returned 429. Fresh local or
@@ -5597,16 +5933,20 @@ export class AuthStorage {
 		const scopedBackoffKey = this.#toScopedBackoffKey(providerKey, blockScope);
 		const globalProbeAfterMs = this.#credentialBackoffProbeAfter.get(providerKey)?.get(credentialIndex) ?? 0;
 		const scopedProbeAfterMs = this.#credentialBackoffProbeAfter.get(scopedBackoffKey)?.get(credentialIndex) ?? 0;
-		const getStoreReconcileAfter = this.#store.getCredentialBlockReconcileAfter?.bind(this.#store);
-		const storeGlobalProbeAfterMs = getStoreReconcileAfter?.(credentialId, providerKey, "") ?? 0;
-		const storeScopedProbeAfterMs = getStoreReconcileAfter?.(credentialId, providerKey, blockScope ?? "") ?? 0;
+		const storeGlobalProbeAfterMs = this.#readPersistedCredentialBlockReconcileAfter(credentialId, providerKey, "");
+		const storeScopedProbeAfterMs = this.#readPersistedCredentialBlockReconcileAfter(
+			credentialId,
+			providerKey,
+			blockScope ?? "",
+		);
 		if (Math.max(globalProbeAfterMs, scopedProbeAfterMs, storeGlobalProbeAfterMs, storeScopedProbeAfterMs) > nowMs) {
 			return;
 		}
-		this.#clearCredentialBlocks(provider, credentialId);
+		this.#clearCredentialBlockScope(provider, credentialId, credentialIndex, providerKey, blockScope);
 		logger.info("Cleared stale Codex usage-limit block after healthy live usage report", {
 			credentialId,
 			provider,
+			blockScope,
 			clearedBlockedUntilMs: blockedUntilMs,
 		});
 	}
@@ -5647,7 +5987,6 @@ export class AuthStorage {
 	#reconcileCodexUsageBlocksFromReports(reports: UsageReport[]): void {
 		const reconciled = new Set<number>();
 		for (const report of reports) {
-			if (!this.#isHealthyCodexUsageReport(report)) continue;
 			for (const credentialId of this.#findStoredCredentialIdsForUsageReport(report)) {
 				if (reconciled.has(credentialId)) continue;
 				reconciled.add(credentialId);
@@ -5754,8 +6093,13 @@ export class AuthStorage {
 		const status = AIError.status(error);
 		const message = error instanceof Error ? error.message : typeof error === "string" ? error : undefined;
 		if (AIError.isUsageLimit(error) || isUsageLimitOutcome(status, message)) {
+			// Thread the provider-specified reset window (e.g. Devin "Your limit
+			// will reset in 13 minutes") into the block duration so the credential
+			// is not reselected and hammered while the cap remains active.
+			const retryAfterMs = extractRetryHint(undefined, message);
 			return (
 				await this.markUsageLimitReached(provider, sessionId, {
+					retryAfterMs,
 					modelId: options?.modelId,
 					apiKey: options?.apiKey,
 					credentialId: options?.credentialId,
@@ -5893,6 +6237,28 @@ export class AuthStorage {
 	}
 
 	/**
+	 * Disabled credential tombstones for display surfaces (`omp usage`,
+	 * broker `GET /v1/credentials/disabled`). Empty when the backing store
+	 * keeps no tombstones or the remote broker predates the endpoint.
+	 */
+	async listDisabledCredentials(provider?: string, signal?: AbortSignal): Promise<DisabledCredentialSummary[]> {
+		if (!this.#store.listDisabledCredentials) return [];
+		return this.#store.listDisabledCredentials(provider, signal);
+	}
+
+	/**
+	 * Force the backing store to revalidate its credential snapshot, then
+	 * reload. Remote broker stores re-fetch the snapshot; local stores are
+	 * always current, so only the reload runs. Callers that pair live
+	 * per-credential data with stored identities (`omp usage`) use this so a
+	 * disk-cached snapshot cannot misattribute fresh reports.
+	 */
+	async revalidateCredentials(): Promise<void> {
+		if (this.#store.refreshSnapshot) await this.#store.refreshSnapshot();
+		await this.reload();
+	}
+
+	/**
 	 * Refresh the OAuth credential with the given id through a per-credential
 	 * single-flight. Concurrent callers for the same row await the same upstream
 	 * refresh attempt, which is required for providers that rotate refresh tokens
@@ -5982,6 +6348,7 @@ export class AuthStorage {
 				apiEndpoint: refreshed.apiEndpoint ?? attempted.apiEndpoint,
 				orgId: refreshed.orgId ?? attempted.orgId,
 				orgName: refreshed.orgName ?? attempted.orgName,
+				authorizedAt: refreshed.authorizedAt ?? attempted.authorizedAt,
 			};
 			// Persist by id: the array may have been reordered/shrunk while the
 			// refresh was in flight, so the pre-await positional index is unsafe. A
@@ -6052,16 +6419,30 @@ export class AuthStorage {
 	 * Broker-server seam: list non-expired persisted blocks for snapshot entries.
 	 */
 	listCredentialBlocks(credentialIds: readonly number[]): StoredCredentialBlock[] {
-		return this.#store.listCredentialBlocks?.(credentialIds) ?? [];
+		if (this.#persistedBlockStoreDamaged) return [];
+		const listCredentialBlocks = this.#store.listCredentialBlocks?.bind(this.#store);
+		if (!listCredentialBlocks) return [];
+		try {
+			return listCredentialBlocks(credentialIds);
+		} catch (err) {
+			if (this.#handlePersistedBlockStoreError(err)) return [];
+			throw err;
+		}
 	}
 
 	/**
 	 * Broker-server seam: persist one credential block and notify snapshot waiters.
 	 */
 	upsertCredentialBlock(block: StoredCredentialBlock): void {
+		this.#assertPersistedBlockStoreWritable();
 		const upsertCredentialBlock = this.#store.upsertCredentialBlock?.bind(this.#store);
 		if (!upsertCredentialBlock) return;
-		upsertCredentialBlock(block);
+		try {
+			upsertCredentialBlock(block);
+		} catch (err) {
+			if (this.#handlePersistedBlockStoreError(err)) this.#assertPersistedBlockStoreWritable();
+			throw err;
+		}
 		this.#invalidateUsageReportCacheForProviderKey(block.providerKey);
 		this.#bumpGeneration("credential-block");
 	}
@@ -6069,10 +6450,30 @@ export class AuthStorage {
 	/**
 	 * Broker-server seam: clear all persisted blocks for one credential and notify snapshot waiters.
 	 */
+	deleteCredentialBlock(credentialId: number, providerKey: string, blockScope: string): void {
+		this.#assertPersistedBlockStoreWritable();
+		const deleteCredentialBlock = this.#store.deleteCredentialBlock?.bind(this.#store);
+		if (!deleteCredentialBlock) return;
+		try {
+			deleteCredentialBlock(credentialId, providerKey, blockScope);
+		} catch (err) {
+			if (this.#handlePersistedBlockStoreError(err)) this.#assertPersistedBlockStoreWritable();
+			throw err;
+		}
+		this.#invalidateUsageReportCacheForProviderKey(providerKey);
+		this.#bumpGeneration("credential-block");
+	}
+
 	deleteCredentialBlocks(credentialId: number): void {
+		this.#assertPersistedBlockStoreWritable();
 		const deleteCredentialBlocks = this.#store.deleteCredentialBlocks?.bind(this.#store);
 		if (!deleteCredentialBlocks) return;
-		deleteCredentialBlocks(credentialId);
+		try {
+			deleteCredentialBlocks(credentialId);
+		} catch (err) {
+			if (this.#handlePersistedBlockStoreError(err)) this.#assertPersistedBlockStoreWritable();
+			throw err;
+		}
 		this.#bumpGeneration("credential-block");
 	}
 
@@ -6135,1544 +6536,5 @@ export class AuthStorage {
 		if (apiKeySource) return apiKeySource;
 		if (this.#fallbackResolver?.(provider) !== undefined) return "fallback resolver";
 		return undefined;
-	}
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SqliteAuthCredentialStore
-// ─────────────────────────────────────────────────────────────────────────────
-
-/** Row shape for auth_credentials table queries */
-type AuthRow = {
-	id: number;
-	provider: string;
-	credential_type: string;
-	data: string;
-	disabled_cause: string | null;
-	identity_key: string | null;
-};
-
-type CredentialBlockRow = {
-	credential_id: number;
-	provider_key: string;
-	block_scope: string;
-	blocked_until_ms: number;
-	updated_at: number;
-};
-
-type SerializedCredentialRecord = {
-	credentialType: AuthCredential["type"];
-	data: string;
-	identityKey: string | null;
-};
-
-const AUTH_SCHEMA_VERSION = 6;
-const SQLITE_NOW_EPOCH = "CAST(strftime('%s','now') AS INTEGER)";
-
-/**
- * SQLite's busy result code family — base `SQLITE_BUSY` plus the extended
- * variants `SQLITE_BUSY_RECOVERY` (concurrent WAL recovery), `SQLITE_BUSY_SNAPSHOT`,
- * and `SQLITE_BUSY_TIMEOUT`. All warrant the same backoff-and-retry treatment.
- */
-export function isSqliteBusyError(err: unknown): boolean {
-	if (err === null || typeof err !== "object") return false;
-	const code = (err as { code?: unknown }).code;
-	return typeof code === "string" && code.startsWith("SQLITE_BUSY");
-}
-
-function normalizeStoredAccountId(accountId: string | null | undefined): string | null {
-	const normalized = accountId?.trim();
-	return normalized && normalized.length > 0 ? normalized : null;
-}
-
-function normalizeStoredEmail(email: string | null | undefined): string | null {
-	const normalized = email?.trim().toLowerCase();
-	return normalized && normalized.length > 0 ? normalized : null;
-}
-
-function normalizeStoredIdentityKey(identityKey: string | null | undefined): string | null {
-	const normalized = identityKey?.trim();
-	return normalized && normalized.length > 0 ? normalized : null;
-}
-
-function serializeCredential(provider: string, credential: AuthCredential): SerializedCredentialRecord | null {
-	if (credential.type === "api_key") {
-		const data = credential.source === "login" ? { key: credential.key, source: "login" } : { key: credential.key };
-		return {
-			credentialType: "api_key",
-			data: JSON.stringify(data),
-			identityKey: null,
-		};
-	}
-	if (credential.type === "oauth") {
-		const { type: _type, ...rest } = credential;
-		return {
-			credentialType: "oauth",
-			data: JSON.stringify(rest),
-			identityKey: resolveCredentialIdentityKey(provider, credential),
-		};
-	}
-	return null;
-}
-
-function deserializeCredential(row: AuthRow): AuthCredential | null {
-	let parsed: unknown;
-	try {
-		parsed = JSON.parse(row.data);
-	} catch {
-		return null;
-	}
-	if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-		return null;
-	}
-	if (row.credential_type === "api_key") {
-		const data = parsed as Record<string, unknown>;
-		if (typeof data.key === "string") {
-			const source = data.source === "login" ? "login" : undefined;
-			return source ? { type: "api_key", key: data.key, source } : { type: "api_key", key: data.key };
-		}
-	}
-	if (row.credential_type === "oauth") {
-		return { type: "oauth", ...(parsed as Record<string, unknown>) } as AuthCredential;
-	}
-	return null;
-}
-
-function normalizeDisabledCause(disabledCause: string): string {
-	const normalized = disabledCause.trim();
-	return normalized.length > 0 ? normalized : "disabled";
-}
-
-function toStoredAuthCredential(row: AuthRow, credential: AuthCredential): StoredAuthCredential {
-	return { id: row.id, provider: row.provider, credential, disabledCause: row.disabled_cause };
-}
-
-function resolveProviderCredentialIdentityKey(provider: string, identifiers: string[]): string | null {
-	const emailIdentifier = identifiers.find(identifier => identifier.startsWith("email:"));
-	if (provider === "anthropic" || provider === "openai-codex") {
-		// One account email can hold several organizations/workspaces (e.g. a
-		// Team seat plus a personal plan), each with its own org-scoped token
-		// and limit pools. Scope identity by org so both subscriptions can be
-		// stored side by side. The qualifier rides on whichever base identity
-		// is available, so an unqualified account/project fallback would
-		// still collapse two subscriptions whenever the email could not be
-		// recovered. Org-less credentials (rows written before org capture
-		// existed) keep their bare key.
-		const base =
-			emailIdentifier ??
-			identifiers.find(identifier => identifier.startsWith("account:")) ??
-			identifiers.find(identifier => identifier.startsWith("project:"));
-		const orgIdentifier = identifiers.find(identifier => identifier.startsWith("org:"));
-		if (base) return orgIdentifier ? `${base}|${orgIdentifier}` : base;
-		// No base identity at all: the org alone still distinguishes the row.
-		return orgIdentifier ?? null;
-	}
-	const accountIdentifier = identifiers.find(identifier => identifier.startsWith("account:"));
-	if (accountIdentifier) return accountIdentifier;
-	if (emailIdentifier) return emailIdentifier;
-	const projectIdentifier = identifiers.find(identifier => identifier.startsWith("project:"));
-	if (projectIdentifier) return projectIdentifier;
-	return null;
-}
-
-function resolveCredentialIdentityKey(provider: string, credential: AuthCredential): string | null {
-	if (credential.type === "api_key") return null;
-	return resolveProviderCredentialIdentityKey(provider, extractOAuthCredentialIdentifiers(credential));
-}
-
-function resolveRowCredentialIdentityKey(provider: string, row: AuthRow): string | null {
-	const identityKey = normalizeStoredIdentityKey(row.identity_key);
-	if (identityKey) return identityKey;
-	const credential = deserializeCredential(row);
-	return credential?.type === "oauth" ? resolveCredentialIdentityKey(provider, credential) : null;
-}
-
-function matchesReplacementCredential(
-	provider: string,
-	existing: AuthCredential | null,
-	existingIdentityKey: string | null,
-	incoming: AuthCredential,
-): boolean {
-	if (!existing || existing.type !== incoming.type) return false;
-	if (incoming.type === "api_key") {
-		if (existing.type !== "api_key") return false;
-		if (existing.key === incoming.key) return true;
-		if (provider !== "alibaba-token-plan") return false;
-		const existingToken = parseAlibabaTokenPlanCredential(existing.key)?.token;
-		const incomingToken = parseAlibabaTokenPlanCredential(incoming.key)?.token;
-		return existingToken !== undefined && existingToken === incomingToken;
-	}
-	const incomingIdentifiers = extractOAuthCredentialIdentifiers(incoming);
-	const incomingIdentityKey = resolveProviderCredentialIdentityKey(provider, incomingIdentifiers);
-	if (incomingIdentityKey === null) return false;
-	if (incomingIdentityKey === existingIdentityKey) return true;
-	if (existingIdentityKey === null) return false;
-	// One-way upgrade, applied only when the INCOMING identity key carries the
-	// org qualifier (only anthropic and openai-codex keys do, so other
-	// providers never reach the checks below). An org-scoped login `org:<o>`
-	// claims (and re-keys) any existing row that denotes the same subscription:
-	//   - `org:<o>` — org-only row stored when identity recovery failed, claimed
-	//     once a later same-org login recovers a base identity;
-	//   - `<b>` for any base identity `<b>` (email/account/project) the incoming
-	//     credential carries — a pre-org legacy row, mirroring the pre-org
-	//     replace behavior;
-	//   - `<b>|org:<o>` for any such base — the same subscription keyed by a
-	//     different base, e.g. an account-keyed row stored while the email could
-	//     not be recovered, claimed once a later login recovers the email;
-	//   - any same-org row whose STORED credential shares a base identity with
-	//     the incoming one — a stored credential can retain identifiers its key
-	//     does not use (an email-keyed row also carries the account UUID), so a
-	//     later login that loses the email but keeps the account still updates
-	//     its row instead of duplicating the subscription.
-	// The reverse stays a non-match: an org-less credential only ever replaces
-	// via exact key equality above and must never clobber an org-scoped row.
-	const orgIdentifier = incomingIdentifiers.find(identifier => identifier.startsWith("org:"));
-	if (orgIdentifier === undefined) return false;
-	if (incomingIdentityKey !== orgIdentifier && !incomingIdentityKey.endsWith(`|${orgIdentifier}`)) return false;
-	if (existingIdentityKey === orgIdentifier) return true;
-	const existingIdentifiers =
-		existing.type === "oauth" && existingIdentityKey.endsWith(`|${orgIdentifier}`)
-			? extractOAuthCredentialIdentifiers(existing)
-			: null;
-	// A base identifier that merely repeats the org qualifier's id carries no
-	// per-user identity (openai-codex stores the ChatGPT workspace id as both
-	// accountId and orgId, shared by every member) — letting it act as a
-	// claimable base would re-key another member's same-org row.
-	const orgQualifierId = orgIdentifier.slice("org:".length);
-	for (const identifier of incomingIdentifiers) {
-		const isBase =
-			identifier.startsWith("email:") || identifier.startsWith("account:") || identifier.startsWith("project:");
-		if (!isBase) continue;
-		if (identifier.slice(identifier.indexOf(":") + 1) === orgQualifierId) continue;
-		if (existingIdentityKey === identifier) return true;
-		if (existingIdentityKey === `${identifier}|${orgIdentifier}`) return true;
-		if (existingIdentifiers?.includes(identifier)) return true;
-	}
-	return false;
-}
-
-function extractOAuthCredentialIdentifiers(credential: OAuthCredential): string[] {
-	const identifiers = new Set<string>();
-	const accountId = normalizeStoredAccountId(credential.accountId);
-	if (accountId) identifiers.add(`account:${accountId}`);
-	const email = normalizeStoredEmail(credential.email);
-	if (email) identifiers.add(`email:${email}`);
-	const projectId = normalizeStoredAccountId(credential.projectId);
-	if (projectId) identifiers.add(`project:${projectId}`);
-	const orgId = normalizeStoredAccountId(credential.orgId);
-	if (orgId) identifiers.add(`org:${orgId}`);
-	const accessIdentifiers = extractOAuthTokenIdentifiers(credential.access) ?? [];
-	for (const identifier of accessIdentifiers) {
-		identifiers.add(identifier);
-	}
-	const refreshIdentifiers = extractOAuthTokenIdentifiers(credential.refresh) ?? [];
-	for (const identifier of refreshIdentifiers) {
-		identifiers.add(identifier);
-	}
-	return [...identifiers];
-}
-
-function extractOAuthTokenIdentifiers(token: string | undefined): string[] | undefined {
-	if (!token) return undefined;
-	const parts = token.split(".");
-	if (parts.length !== 3) return undefined;
-	try {
-		const payload = JSON.parse(
-			new TextDecoder("utf-8").decode(Uint8Array.fromBase64(parts[1], { alphabet: "base64url" })),
-		) as Record<string, unknown>;
-		const identifiers = new Set<string>();
-		const directEmail = normalizeStoredEmail(typeof payload.email === "string" ? payload.email : undefined);
-		if (directEmail) identifiers.add(`email:${directEmail}`);
-		const openAiProfile = payload["https://api.openai.com/profile"];
-		if (typeof openAiProfile === "object" && openAiProfile !== null && !Array.isArray(openAiProfile)) {
-			const claimEmail = normalizeStoredEmail(
-				(openAiProfile as Record<string, unknown>).email as string | undefined,
-			);
-			if (claimEmail) identifiers.add(`email:${claimEmail}`);
-		}
-		const openAiAuth = payload["https://api.openai.com/auth"];
-		const authClaims =
-			typeof openAiAuth === "object" && openAiAuth !== null && !Array.isArray(openAiAuth)
-				? (openAiAuth as Record<string, unknown>)
-				: undefined;
-		const accountId = normalizeStoredAccountId(
-			typeof payload.account_id === "string"
-				? payload.account_id
-				: typeof payload.accountId === "string"
-					? payload.accountId
-					: typeof payload.user_id === "string"
-						? payload.user_id
-						: typeof payload.sub === "string"
-							? payload.sub
-							: typeof authClaims?.chatgpt_account_id === "string"
-								? authClaims.chatgpt_account_id
-								: undefined,
-		);
-		if (accountId) identifiers.add(`account:${accountId}`);
-		return identifiers.size > 0 ? [...identifiers] : undefined;
-	} catch {
-		return undefined;
-	}
-}
-/**
- * Default SQLite-backed implementation of {@link AuthCredentialStore}.
- *
- * Used by the pi-ai CLI and as the default store for `AuthStorage.create()`.
- * Also exposes convenience methods (`saveOAuth`, `getOAuth`, `saveApiKey`,
- * `getApiKey`, `listProviders`, `deleteProvider`) that callers can use directly
- * without going through `AuthStorage`.
- */
-export class SqliteAuthCredentialStore implements AuthCredentialStore {
-	#db: Database;
-	#listActiveStmt: Statement;
-	#listActiveByProviderStmt: Statement;
-	#listDisabledByProviderStmt: Statement;
-	#insertStmt: Statement;
-	#updateStmt: Statement;
-	#deleteStmt: Statement;
-	#deleteIfMatchesStmt: Statement;
-	#updateIfMatchesStmt: Statement;
-	#deleteByProviderStmt: Statement;
-	#hardDeleteStmt: Statement;
-	#getCacheStmt: Statement;
-	#getCacheIncludingExpiredStmt: Statement;
-	#upsertCacheStmt: Statement;
-	#deleteCachePrefixStmt: Statement;
-	#deleteExpiredCacheStmt: Statement;
-	#updateIfMatchesWithLeaseStmt: Statement;
-	#deleteIfMatchesWithLeaseStmt: Statement;
-	#getCredentialBlockStmt: Statement;
-	#listCredentialBlocksByCredentialStmt: Statement;
-	#upsertCredentialBlockStmt: Statement;
-	#deleteCredentialBlocksStmt: Statement;
-	#deleteExpiredCredentialBlocksStmt: Statement;
-	#acquireCredentialRefreshLeaseStmt: Statement;
-	#getCredentialRefreshLeaseStmt: Statement;
-	#renewCredentialRefreshLeaseStmt: Statement;
-	#releaseCredentialRefreshLeaseStmt: Statement;
-	#credentialBlockReconcileAfter: Map<string, number> = new Map();
-	#insertUsageHistoryStmt: Statement;
-	#insertUsageCostStmt: Statement;
-	#listUsageCostsStmt: Statement;
-	#lastUsageHistoryStmt: Statement;
-	#listUsageHistoryStmt: Statement;
-	#updateUsageHistoryStmt: Statement;
-	#closed = false;
-
-	constructor(db: Database) {
-		this.#db = db;
-		this.#initializeSchema();
-
-		this.#listActiveStmt = this.#db.prepare(
-			"SELECT id, provider, credential_type, data, disabled_cause, identity_key FROM auth_credentials WHERE disabled_cause IS NULL ORDER BY id ASC",
-		);
-		this.#listActiveByProviderStmt = this.#db.prepare(
-			"SELECT id, provider, credential_type, data, disabled_cause, identity_key FROM auth_credentials WHERE provider = ? AND disabled_cause IS NULL ORDER BY id ASC",
-		);
-		this.#listDisabledByProviderStmt = this.#db.prepare(
-			"SELECT id, provider, credential_type, data, disabled_cause, identity_key FROM auth_credentials WHERE provider = ? AND disabled_cause IS NOT NULL ORDER BY id ASC",
-		);
-		this.#insertStmt = this.#db.prepare(
-			`INSERT INTO auth_credentials (provider, credential_type, data, identity_key, created_at, updated_at) VALUES (?, ?, ?, ?, ${SQLITE_NOW_EPOCH}, ${SQLITE_NOW_EPOCH}) RETURNING id`,
-		);
-		this.#updateStmt = this.#db.prepare(
-			`UPDATE auth_credentials SET credential_type = ?, data = ?, identity_key = ?, updated_at = ${SQLITE_NOW_EPOCH} WHERE id = ?`,
-		);
-		this.#updateIfMatchesStmt = this.#db.prepare(
-			`UPDATE auth_credentials SET credential_type = ?, data = ?, identity_key = ?, updated_at = ${SQLITE_NOW_EPOCH} WHERE id = ? AND data = ? AND disabled_cause IS NULL`,
-		);
-		this.#updateIfMatchesWithLeaseStmt = this.#db.prepare(
-			`UPDATE auth_credentials
-			SET credential_type = ?, data = ?, identity_key = ?, updated_at = ${SQLITE_NOW_EPOCH}
-			WHERE id = ? AND data = ? AND disabled_cause IS NULL
-				AND EXISTS (
-					SELECT 1 FROM auth_credential_refresh_leases
-					WHERE credential_id = ? AND owner = ? AND expires_at_ms > ?
-				)`,
-		);
-		this.#deleteStmt = this.#db.prepare(
-			`UPDATE auth_credentials SET disabled_cause = ?, updated_at = ${SQLITE_NOW_EPOCH} WHERE id = ?`,
-		);
-		this.#deleteIfMatchesStmt = this.#db.prepare(
-			`UPDATE auth_credentials SET disabled_cause = ?, updated_at = ${SQLITE_NOW_EPOCH} WHERE id = ? AND data = ? AND disabled_cause IS NULL`,
-		);
-		this.#deleteIfMatchesWithLeaseStmt = this.#db.prepare(
-			`UPDATE auth_credentials
-			SET disabled_cause = ?, updated_at = ${SQLITE_NOW_EPOCH}
-			WHERE id = ? AND data = ? AND disabled_cause IS NULL
-				AND EXISTS (
-					SELECT 1 FROM auth_credential_refresh_leases
-					WHERE credential_id = ? AND owner = ? AND expires_at_ms > ?
-				)`,
-		);
-		this.#deleteByProviderStmt = this.#db.prepare(
-			`UPDATE auth_credentials SET disabled_cause = ?, updated_at = ${SQLITE_NOW_EPOCH} WHERE provider = ? AND disabled_cause IS NULL`,
-		);
-		this.#hardDeleteStmt = this.#db.prepare("DELETE FROM auth_credentials WHERE id = ?");
-		this.#getCacheStmt = this.#db.prepare(
-			`SELECT value FROM cache WHERE key = ? AND expires_at > ${SQLITE_NOW_EPOCH}`,
-		);
-		this.#getCacheIncludingExpiredStmt = this.#db.prepare("SELECT value FROM cache WHERE key = ?");
-		this.#upsertCacheStmt = this.#db.prepare(
-			"INSERT INTO cache (key, value, expires_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, expires_at = excluded.expires_at",
-		);
-		this.#deleteCachePrefixStmt = this.#db.prepare("DELETE FROM cache WHERE substr(key, 1, ?) = ?");
-		this.#deleteExpiredCacheStmt = this.#db.prepare(`DELETE FROM cache WHERE expires_at <= ${SQLITE_NOW_EPOCH}`);
-		this.#getCredentialBlockStmt = this.#db.prepare(
-			"SELECT blocked_until_ms, updated_at FROM auth_credential_blocks WHERE credential_id = ? AND provider_key = ? AND block_scope = ? AND blocked_until_ms > ?",
-		);
-		this.#listCredentialBlocksByCredentialStmt = this.#db.prepare(
-			"SELECT credential_id, provider_key, block_scope, blocked_until_ms, updated_at FROM auth_credential_blocks WHERE credential_id = ? AND blocked_until_ms > ? ORDER BY provider_key ASC, block_scope ASC",
-		);
-		this.#upsertCredentialBlockStmt = this.#db.prepare(
-			`INSERT INTO auth_credential_blocks (credential_id, provider_key, block_scope, blocked_until_ms, updated_at)
-			VALUES (?, ?, ?, ?, ${SQLITE_NOW_EPOCH})
-			ON CONFLICT(credential_id, provider_key, block_scope) DO UPDATE SET
-				blocked_until_ms = MAX(blocked_until_ms, excluded.blocked_until_ms),
-				updated_at = excluded.updated_at`,
-		);
-		this.#deleteCredentialBlocksStmt = this.#db.prepare("DELETE FROM auth_credential_blocks WHERE credential_id = ?");
-		this.#deleteExpiredCredentialBlocksStmt = this.#db.prepare(
-			"DELETE FROM auth_credential_blocks WHERE blocked_until_ms <= ?",
-		);
-		this.#acquireCredentialRefreshLeaseStmt = this.#db.prepare(
-			`INSERT INTO auth_credential_refresh_leases (credential_id, owner, expires_at_ms, updated_at)
-			VALUES (?, ?, ?, ${SQLITE_NOW_EPOCH})
-			ON CONFLICT(credential_id) DO UPDATE SET
-				owner = excluded.owner,
-				expires_at_ms = excluded.expires_at_ms,
-				updated_at = excluded.updated_at
-			WHERE auth_credential_refresh_leases.expires_at_ms <= ?`,
-		);
-		this.#getCredentialRefreshLeaseStmt = this.#db.prepare(
-			"SELECT expires_at_ms FROM auth_credential_refresh_leases WHERE credential_id = ?",
-		);
-		this.#renewCredentialRefreshLeaseStmt = this.#db.prepare(
-			`UPDATE auth_credential_refresh_leases SET expires_at_ms = ?, updated_at = ${SQLITE_NOW_EPOCH} WHERE credential_id = ? AND owner = ?`,
-		);
-		this.#releaseCredentialRefreshLeaseStmt = this.#db.prepare(
-			"DELETE FROM auth_credential_refresh_leases WHERE credential_id = ? AND owner = ?",
-		);
-		this.#insertUsageHistoryStmt = this.#db.prepare(
-			"INSERT INTO usage_history (recorded_at, provider, account_key, email, account_id, limit_id, label, window_label, used_fraction, status, resets_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-		);
-		this.#lastUsageHistoryStmt = this.#db.prepare(
-			"SELECT id, recorded_at FROM usage_history WHERE provider = ? AND account_key = ? AND limit_id = ? ORDER BY recorded_at DESC LIMIT 1",
-		);
-		this.#updateUsageHistoryStmt = this.#db.prepare(
-			"UPDATE usage_history SET recorded_at = ?, email = ?, account_id = ?, label = ?, window_label = ?, used_fraction = ?, status = ?, resets_at = ? WHERE id = ?",
-		);
-		this.#listUsageHistoryStmt = this.#db.prepare(
-			"SELECT recorded_at, provider, account_key, email, account_id, limit_id, label, window_label, used_fraction, status, resets_at FROM usage_history WHERE recorded_at >= ? AND (? IS NULL OR provider = ?) ORDER BY recorded_at ASC",
-		);
-		this.#insertUsageCostStmt = this.#db.prepare(
-			"INSERT INTO usage_cost_history (recorded_at, provider, account_key, cost_usd) VALUES (?, ?, ?, ?)",
-		);
-		this.#listUsageCostsStmt = this.#db.prepare(
-			"SELECT recorded_at, provider, account_key, cost_usd FROM usage_cost_history WHERE recorded_at >= ? AND (? IS NULL OR provider = ?) AND (? IS NULL OR account_key = ?) ORDER BY recorded_at ASC",
-		);
-	}
-
-	static async open(dbPath: string = getAgentDbPath()): Promise<SqliteAuthCredentialStore> {
-		const dir = path.dirname(dbPath);
-		const dirExists = await fs
-			.stat(dir)
-			.then(s => s.isDirectory())
-			.catch(() => false);
-		if (!dirExists) {
-			await fs.mkdir(dir, { recursive: true, mode: 0o700 });
-		}
-
-		// Concurrent omp startups can race against WAL recovery and the schema
-		// init's first lock-taking statement. Bun's default `busy_timeout` is 0,
-		// so retry the open on `SQLITE_BUSY` / `SQLITE_BUSY_RECOVERY` with bounded
-		// exponential backoff before surfacing the failure. See issue #2421.
-		const maxAttempts = 4;
-		const baseDelayMs = 100;
-		let lastBusyError: Error | undefined;
-		for (let attempt = 0; attempt < maxAttempts; attempt++) {
-			let db: Database | undefined;
-			try {
-				db = new Database(dbPath);
-				try {
-					await fs.chmod(dbPath, 0o600);
-				} catch {
-					// Ignore chmod failures (e.g., Windows)
-				}
-				SqliteAuthCredentialStore.#ensureAuthCredentialRefreshLeasesTable(db);
-				return new SqliteAuthCredentialStore(db);
-			} catch (err) {
-				db?.close();
-				if (!isSqliteBusyError(err)) {
-					throw err;
-				}
-				lastBusyError = err instanceof Error ? err : new Error(String(err));
-				if (attempt < maxAttempts - 1) {
-					await Bun.sleep(baseDelayMs * 2 ** attempt);
-				}
-			}
-		}
-		throw new AIError.ConfigurationError(
-			`Failed to open auth database at '${dbPath}' after ${maxAttempts} attempts: ${lastBusyError?.message}`,
-			{ cause: lastBusyError },
-		);
-	}
-
-	static #ensureAuthCredentialRefreshLeasesTable(db: Database): void {
-		db.run(`
-			CREATE TABLE IF NOT EXISTS auth_credential_refresh_leases (
-				credential_id INTEGER PRIMARY KEY,
-				owner TEXT NOT NULL,
-				expires_at_ms INTEGER NOT NULL,
-				updated_at INTEGER NOT NULL
-			);
-			CREATE INDEX IF NOT EXISTS idx_auth_credential_refresh_leases_expires ON auth_credential_refresh_leases(expires_at_ms);
-		`);
-	}
-
-	#initializeSchema(): void {
-		// Install the busy handler BEFORE any lock-taking statement (incl.
-		// `PRAGMA journal_mode=WAL`, which acquires an exclusive lock during WAL
-		// recovery). Without this, concurrent omp startups can crash here with
-		// `SQLITE_BUSY` / `SQLITE_BUSY_RECOVERY`. See issue #2421.
-		this.#db.run("PRAGMA busy_timeout = 5000");
-		this.#db.run(`
-			PRAGMA journal_mode=WAL;
-			PRAGMA synchronous=NORMAL;
-			CREATE TABLE IF NOT EXISTS auth_schema_version (
-				id INTEGER PRIMARY KEY CHECK (id = 1),
-				version INTEGER NOT NULL
-			);
-			CREATE TABLE IF NOT EXISTS cache (
-				key TEXT PRIMARY KEY,
-				value TEXT NOT NULL,
-				expires_at INTEGER NOT NULL
-			);
-			CREATE INDEX IF NOT EXISTS idx_cache_expires ON cache(expires_at);
-			CREATE TABLE IF NOT EXISTS usage_history (
-				id INTEGER PRIMARY KEY AUTOINCREMENT,
-				recorded_at INTEGER NOT NULL,
-				provider TEXT NOT NULL,
-				account_key TEXT NOT NULL,
-				email TEXT,
-				account_id TEXT,
-				limit_id TEXT NOT NULL,
-				label TEXT NOT NULL,
-				window_label TEXT,
-				used_fraction REAL,
-				status TEXT,
-				resets_at INTEGER
-			);
-			CREATE INDEX IF NOT EXISTS idx_usage_history_series ON usage_history(provider, account_key, limit_id, recorded_at);
-			CREATE TABLE IF NOT EXISTS usage_cost_history (
-				id INTEGER PRIMARY KEY AUTOINCREMENT,
-				recorded_at INTEGER NOT NULL,
-				provider TEXT NOT NULL,
-				account_key TEXT NOT NULL,
-				cost_usd REAL NOT NULL
-			);
-			CREATE INDEX IF NOT EXISTS idx_usage_cost_history_lookup ON usage_cost_history(provider, account_key, recorded_at);
-			CREATE INDEX IF NOT EXISTS idx_usage_history_recorded ON usage_history(recorded_at);
-			CREATE TABLE IF NOT EXISTS clients (
-				install_id TEXT PRIMARY KEY,
-				hostname TEXT,
-				first_seen INTEGER NOT NULL,
-				last_seen INTEGER NOT NULL
-			);
-			CREATE TABLE IF NOT EXISTS client_usage (
-				id INTEGER PRIMARY KEY AUTOINCREMENT,
-				recorded_at INTEGER NOT NULL,
-				install_id TEXT NOT NULL,
-				provider TEXT NOT NULL,
-				model TEXT NOT NULL,
-				requests INTEGER NOT NULL,
-				input_tokens INTEGER NOT NULL,
-				output_tokens INTEGER NOT NULL,
-				cache_read_tokens INTEGER NOT NULL,
-				cache_write_tokens INTEGER NOT NULL,
-				cost_usd REAL NOT NULL DEFAULT 0
-			);
-			CREATE INDEX IF NOT EXISTS idx_client_usage_series ON client_usage(install_id, provider, model, recorded_at);
-			CREATE INDEX IF NOT EXISTS idx_client_usage_recorded ON client_usage(recorded_at);
-		`);
-
-		if (!this.#authCredentialsTableExists()) {
-			this.#createAuthCredentialsTable();
-			this.#createAuthCredentialBlocksTable();
-			this.#createAuthCredentialRefreshLeasesTable();
-			this.#writeAuthSchemaVersion(AUTH_SCHEMA_VERSION);
-			return;
-		}
-
-		const recordedVersion = this.#readAuthSchemaVersion();
-		const schemaVersion = recordedVersion ?? this.#inferAuthSchemaVersion();
-		if (schemaVersion > AUTH_SCHEMA_VERSION) {
-			logger.warn("SqliteAuthCredentialStore schema version mismatch", {
-				current: schemaVersion,
-				expected: AUTH_SCHEMA_VERSION,
-			});
-		} else if (schemaVersion < AUTH_SCHEMA_VERSION) {
-			this.#migrateAuthSchema(schemaVersion);
-		}
-
-		this.#createAuthCredentialIndexes();
-		this.#createAuthCredentialBlocksTable();
-		this.#createAuthCredentialRefreshLeasesTable();
-		this.#backfillCredentialIdentityKeys();
-		// Rewriting an already-current version row is a no-op write transaction
-		// on every boot; only persist when the recorded version actually changes.
-		if (recordedVersion !== AUTH_SCHEMA_VERSION && schemaVersion <= AUTH_SCHEMA_VERSION) {
-			this.#writeAuthSchemaVersion(AUTH_SCHEMA_VERSION);
-		}
-	}
-
-	#authCredentialsTableExists(): boolean {
-		const stmt = this.#db.prepare(
-			"SELECT 1 AS present FROM sqlite_master WHERE type = 'table' AND name = 'auth_credentials'",
-		);
-		try {
-			const row = stmt.get() as { present?: number } | undefined;
-			return row?.present === 1;
-		} finally {
-			stmt.finalize();
-		}
-	}
-
-	#readAuthSchemaVersion(): number | null {
-		const stmt = this.#db.prepare("SELECT version FROM auth_schema_version WHERE id = 1");
-		try {
-			const row = stmt.get() as { version?: number } | undefined;
-			return typeof row?.version === "number" ? row.version : null;
-		} finally {
-			stmt.finalize();
-		}
-	}
-
-	#writeAuthSchemaVersion(version: number): void {
-		const stmt = this.#db.prepare("INSERT OR REPLACE INTO auth_schema_version(id, version) VALUES (1, ?)");
-		try {
-			stmt.run(version);
-		} finally {
-			stmt.finalize();
-		}
-	}
-
-	#inferAuthSchemaVersion(): number {
-		const stmt = this.#db.prepare("PRAGMA table_info(auth_credentials)");
-		try {
-			const cols = stmt.all() as Array<{ name?: string }>;
-			return this.#inferAuthSchemaVersionFromColumns(cols);
-		} finally {
-			stmt.finalize();
-		}
-	}
-
-	#inferAuthSchemaVersionFromColumns(cols: Array<{ name?: string }>): number {
-		const hasDisabledCause = cols.some(column => column.name === "disabled_cause");
-		const hasIdentityKey = cols.some(column => column.name === "identity_key");
-		const hasAccountId = cols.some(column => column.name === "account_id");
-		const hasEmail = cols.some(column => column.name === "email");
-		if (hasIdentityKey) return 3;
-		if (hasAccountId || hasEmail) return 2;
-		if (hasDisabledCause) return 1;
-		return 0;
-	}
-
-	#createAuthCredentialsTable(): void {
-		this.#db.run(`
-			CREATE TABLE IF NOT EXISTS auth_credentials (
-				id INTEGER PRIMARY KEY AUTOINCREMENT,
-				provider TEXT NOT NULL,
-				credential_type TEXT NOT NULL,
-				data TEXT NOT NULL,
-				disabled_cause TEXT DEFAULT NULL,
-				identity_key TEXT DEFAULT NULL,
-				created_at INTEGER NOT NULL DEFAULT (${SQLITE_NOW_EPOCH}),
-				updated_at INTEGER NOT NULL DEFAULT (${SQLITE_NOW_EPOCH})
-			);
-		`);
-		this.#createAuthCredentialIndexes();
-	}
-
-	#createAuthCredentialIndexes(): void {
-		this.#db.run(`
-			CREATE INDEX IF NOT EXISTS idx_auth_provider ON auth_credentials(provider);
-			CREATE INDEX IF NOT EXISTS idx_auth_provider_identity ON auth_credentials(provider, identity_key) WHERE identity_key IS NOT NULL;
-		`);
-	}
-
-	#createAuthCredentialBlocksTable(): void {
-		this.#db.run(`
-			CREATE TABLE IF NOT EXISTS auth_credential_blocks (
-				credential_id INTEGER NOT NULL,
-				provider_key TEXT NOT NULL,
-				block_scope TEXT NOT NULL DEFAULT '',
-				blocked_until_ms INTEGER NOT NULL,
-				updated_at INTEGER NOT NULL,
-				PRIMARY KEY (credential_id, provider_key, block_scope)
-			);
-			CREATE INDEX IF NOT EXISTS idx_auth_credential_blocks_expires ON auth_credential_blocks(blocked_until_ms);
-		`);
-	}
-
-	#createAuthCredentialRefreshLeasesTable(): void {
-		SqliteAuthCredentialStore.#ensureAuthCredentialRefreshLeasesTable(this.#db);
-	}
-
-	#migrateAuthSchema(fromVersion: number): void {
-		if (fromVersion < 1) {
-			this.#migrateAuthSchemaV0ToV1();
-		}
-		if (fromVersion < 3) {
-			this.#migrateAuthSchemaV1OrV2ToV3();
-		}
-		if (fromVersion < 4) {
-			this.#migrateAuthSchemaV3ToV4();
-		}
-		if (fromVersion < 5) {
-			this.#migrateAuthSchemaV4ToV5();
-		}
-		if (fromVersion < 6) {
-			this.#migrateAuthSchemaV5ToV6();
-		}
-	}
-
-	#migrateAuthSchemaV0ToV1(): void {
-		const migrate = this.#db.transaction(() => {
-			const stmt = this.#db.prepare("PRAGMA table_info(auth_credentials)");
-			let hasDisabled = false;
-			try {
-				const v0Cols = stmt.all() as Array<{ name?: string }>;
-				hasDisabled = v0Cols.some(col => col.name === "disabled");
-			} finally {
-				stmt.finalize();
-			}
-
-			this.#db.run("ALTER TABLE auth_credentials RENAME TO auth_credentials_v0");
-			this.#db.run(`
-				CREATE TABLE auth_credentials (
-					id INTEGER PRIMARY KEY AUTOINCREMENT,
-					provider TEXT NOT NULL,
-					credential_type TEXT NOT NULL,
-					data TEXT NOT NULL,
-					disabled_cause TEXT DEFAULT NULL,
-					created_at INTEGER NOT NULL DEFAULT (${SQLITE_NOW_EPOCH}),
-					updated_at INTEGER NOT NULL DEFAULT (${SQLITE_NOW_EPOCH})
-				);
-			`);
-			this.#db.run(`
-				INSERT INTO auth_credentials (id, provider, credential_type, data, disabled_cause, created_at, updated_at)
-				SELECT
-					id,
-					provider,
-					credential_type,
-					data,
-					${hasDisabled ? "CASE WHEN disabled = 1 THEN 'disabled' ELSE NULL END" : "NULL"},
-					created_at,
-					updated_at
-				FROM auth_credentials_v0
-			`);
-			this.#db.run("DROP TABLE auth_credentials_v0");
-		});
-		migrate();
-	}
-
-	#migrateAuthSchemaV1OrV2ToV3(): void {
-		const migrate = this.#db.transaction(() => {
-			this.#db.run("ALTER TABLE auth_credentials RENAME TO auth_credentials_legacy");
-			this.#createAuthCredentialsTable();
-			this.#db.run(`
-				INSERT INTO auth_credentials (id, provider, credential_type, data, disabled_cause, identity_key, created_at, updated_at)
-				SELECT
-					id,
-					provider,
-					credential_type,
-					data,
-					disabled_cause,
-					NULL,
-					created_at,
-					updated_at
-				FROM auth_credentials_legacy
-			`);
-			this.#db.run("DROP TABLE auth_credentials_legacy");
-		});
-		migrate();
-	}
-
-	#migrateAuthSchemaV3ToV4(): void {
-		const migrate = this.#db.transaction(() => {
-			this.#db.run("ALTER TABLE auth_credentials RENAME TO auth_credentials_v3");
-			this.#createAuthCredentialsTable();
-			this.#db.run(`
-				INSERT INTO auth_credentials (id, provider, credential_type, data, disabled_cause, identity_key, created_at, updated_at)
-				SELECT
-					id,
-					provider,
-					credential_type,
-					data,
-					disabled_cause,
-					identity_key,
-					created_at,
-					updated_at
-				FROM auth_credentials_v3
-			`);
-			this.#db.run("DROP TABLE auth_credentials_v3");
-		});
-		migrate();
-	}
-
-	#migrateAuthSchemaV4ToV5(): void {
-		const migrate = this.#db.transaction(() => {
-			this.#createAuthCredentialBlocksTable();
-		});
-		migrate();
-	}
-
-	#migrateAuthSchemaV5ToV6(): void {
-		const migrate = this.#db.transaction(() => {
-			this.#createAuthCredentialRefreshLeasesTable();
-		});
-		migrate();
-	}
-
-	#backfillCredentialIdentityKeys(): void {
-		const selectRowsStmt = this.#db.prepare(
-			"SELECT id, provider, credential_type, data, disabled_cause, identity_key FROM auth_credentials WHERE identity_key IS NULL ORDER BY id ASC",
-		);
-		let rows: AuthRow[];
-		try {
-			rows = selectRowsStmt.all() as AuthRow[];
-		} finally {
-			selectRowsStmt.finalize();
-		}
-		if (rows.length === 0) return;
-
-		let updateIdentity: Statement | null = null;
-		try {
-			for (const row of rows) {
-				const identityKey = resolveRowCredentialIdentityKey(row.provider, row);
-				// Rows whose identity cannot be derived stay NULL; writing NULL over
-				// NULL would just burn a write transaction on every boot.
-				if (identityKey === null) continue;
-				updateIdentity ??= this.#db.prepare("UPDATE auth_credentials SET identity_key = ? WHERE id = ?");
-				updateIdentity.run(identityKey, row.id);
-			}
-		} finally {
-			updateIdentity?.finalize();
-		}
-	}
-
-	// ─── AuthCredentialStore interface ──────────────────────────────────────
-
-	listAuthCredentials(provider?: string): StoredAuthCredential[] {
-		const rows =
-			(provider
-				? (this.#listActiveByProviderStmt.all(provider) as AuthRow[])
-				: (this.#listActiveStmt.all() as AuthRow[])) ?? [];
-
-		const results: StoredAuthCredential[] = [];
-		for (const row of rows) {
-			const credential = deserializeCredential(row);
-			if (!credential) continue;
-			results.push(toStoredAuthCredential(row, credential));
-		}
-		return results;
-	}
-
-	replaceAuthCredentialsForProvider(provider: string, credentials: AuthCredential[]): StoredAuthCredential[] {
-		const replace = this.#db.transaction((providerName: string, items: AuthCredential[]) => {
-			const existingRows = this.#listActiveByProviderStmt.all(providerName) as AuthRow[];
-			const existing = existingRows.map(row => ({
-				id: row.id,
-				credential: deserializeCredential(row),
-				identityKey: resolveRowCredentialIdentityKey(providerName, row),
-			}));
-
-			const result: StoredAuthCredential[] = [];
-			const matchedExistingIds = new Set<number>();
-
-			for (const credential of items) {
-				const serialized = serializeCredential(providerName, credential);
-				if (!serialized) continue;
-				const match = existing.find(
-					entry =>
-						!matchedExistingIds.has(entry.id) &&
-						matchesReplacementCredential(providerName, entry.credential, entry.identityKey, credential),
-				);
-				if (match) {
-					matchedExistingIds.add(match.id);
-					this.#updateStmt.run(serialized.credentialType, serialized.data, serialized.identityKey, match.id);
-					result.push({ id: match.id, provider: providerName, credential, disabledCause: null });
-				} else {
-					const row = this.#insertStmt.get(
-						providerName,
-						serialized.credentialType,
-						serialized.data,
-						serialized.identityKey,
-					) as { id?: number } | undefined;
-					if (row?.id) {
-						result.push({ id: row.id, provider: providerName, credential, disabledCause: null });
-					}
-				}
-			}
-
-			for (const row of existing) {
-				if (!matchedExistingIds.has(row.id)) {
-					this.#deleteStmt.run("replaced by newer credential", row.id);
-				}
-			}
-
-			return result;
-		});
-
-		const result = replace(provider, credentials);
-		this.#purgeSupersededDisabledRows(provider, result);
-		return result;
-	}
-
-	upsertAuthCredentialForProvider(provider: string, credential: AuthCredential): StoredAuthCredential[] {
-		const upsert = this.#db.transaction((providerName: string, item: AuthCredential) => {
-			const serialized = serializeCredential(providerName, item);
-			if (!serialized) return this.listAuthCredentials(providerName);
-			const existingRows = this.#listActiveByProviderStmt.all(providerName) as AuthRow[];
-			const existing = existingRows.map(row => ({
-				id: row.id,
-				credential: deserializeCredential(row),
-				identityKey: resolveRowCredentialIdentityKey(providerName, row),
-			}));
-
-			if (item.type === "oauth") {
-				for (const row of existing) {
-					if (row.credential && row.credential.type === "api_key") {
-						this.#deleteStmt.run("replaced by oauth login", row.id);
-					}
-				}
-			}
-
-			let targetId: number | null = null;
-			for (const row of existing) {
-				if (!matchesReplacementCredential(providerName, row.credential, row.identityKey, item)) continue;
-				if (targetId === null) {
-					targetId = row.id;
-					this.#updateStmt.run(serialized.credentialType, serialized.data, serialized.identityKey, row.id);
-					continue;
-				}
-				this.#deleteStmt.run("replaced by newer credential", row.id);
-			}
-
-			if (targetId === null) {
-				const row = this.#insertStmt.get(
-					providerName,
-					serialized.credentialType,
-					serialized.data,
-					serialized.identityKey,
-				) as { id?: number } | undefined;
-				targetId = row?.id ?? null;
-			}
-
-			const activeRows = this.#listActiveByProviderStmt.all(providerName) as AuthRow[];
-			const result: StoredAuthCredential[] = [];
-			for (const row of activeRows) {
-				const activeCredential = deserializeCredential(row);
-				if (!activeCredential) continue;
-				result.push(toStoredAuthCredential(row, activeCredential));
-			}
-			return result;
-		});
-
-		const result = upsert(provider, credential);
-		this.#purgeSupersededDisabledRows(provider, result);
-		return result;
-	}
-
-	/**
-	 * Hard-deletes disabled rows for a provider when an active replacement exists.
-	 * OAuth credentials match by identity key; API keys match by provider and type.
-	 * Disabled rows without an active same-type replacement remain recoverable.
-	 */
-	#purgeSupersededDisabledRows(provider: string, activeRows: StoredAuthCredential[]): void {
-		try {
-			let hasActiveApiKey = false;
-			const activeIdentityKeys = new Set<string>();
-			for (const row of activeRows) {
-				if (row.credential.type === "api_key") {
-					hasActiveApiKey = true;
-					continue;
-				}
-				const identityKey = resolveCredentialIdentityKey(provider, row.credential);
-				if (identityKey) activeIdentityKeys.add(identityKey);
-			}
-			if (!hasActiveApiKey && activeIdentityKeys.size === 0) return;
-
-			const disabledRows = this.#listDisabledByProviderStmt.all(provider) as AuthRow[];
-			for (const row of disabledRows) {
-				if (hasActiveApiKey && row.credential_type === "api_key") {
-					this.#hardDeleteStmt.run(row.id);
-					continue;
-				}
-				const identityKey = resolveRowCredentialIdentityKey(provider, row);
-				if (identityKey && activeIdentityKeys.has(identityKey)) {
-					this.#hardDeleteStmt.run(row.id);
-				}
-			}
-		} catch {
-			// Best-effort cleanup; don't let it break the main operation
-		}
-	}
-
-	updateAuthCredential(id: number, credential: AuthCredential): void {
-		try {
-			const providerStmt = this.#db.prepare("SELECT provider FROM auth_credentials WHERE id = ?");
-			let providerRow: { provider?: string } | undefined;
-			try {
-				providerRow = providerStmt.get(id) as { provider?: string } | undefined;
-			} finally {
-				providerStmt.finalize();
-			}
-			const provider = providerRow?.provider ?? "";
-			const serialized = serializeCredential(provider, credential);
-			if (!serialized) return;
-			this.#updateStmt.run(serialized.credentialType, serialized.data, serialized.identityKey, id);
-			if (provider) {
-				this.#purgeSupersededDisabledRows(provider, this.listAuthCredentials(provider));
-			}
-		} catch {
-			// Ignore update failures
-		}
-	}
-
-	tryUpdateAuthCredentialIfMatches(
-		id: number,
-		expectedData: string,
-		credential: AuthCredential,
-		lease?: CredentialRefreshLeaseFence,
-	): boolean {
-		const providerStmt = this.#db.prepare("SELECT provider FROM auth_credentials WHERE id = ?");
-		let providerRow: { provider?: string } | undefined;
-		try {
-			providerRow = providerStmt.get(id) as { provider?: string } | undefined;
-		} finally {
-			providerStmt.finalize();
-		}
-		const provider = providerRow?.provider ?? "";
-		const serialized = serializeCredential(provider, credential);
-		if (!serialized) return false;
-		const result = lease
-			? (this.#updateIfMatchesWithLeaseStmt.run(
-					serialized.credentialType,
-					serialized.data,
-					serialized.identityKey,
-					id,
-					expectedData,
-					id,
-					lease.owner,
-					lease.nowMs,
-				) as { changes: number })
-			: (this.#updateIfMatchesStmt.run(
-					serialized.credentialType,
-					serialized.data,
-					serialized.identityKey,
-					id,
-					expectedData,
-				) as { changes: number });
-		if (result.changes !== 1) return false;
-		if (provider) {
-			this.#purgeSupersededDisabledRows(provider, this.listAuthCredentials(provider));
-		}
-		return true;
-	}
-
-	deleteAuthCredential(id: number, disabledCause: string): void {
-		try {
-			this.#deleteStmt.run(normalizeDisabledCause(disabledCause), id);
-		} catch {
-			// Ignore delete failures
-		}
-	}
-
-	/**
-	 * CAS-style disable: only soft-deletes the row when its `data` column still
-	 * matches `expectedData` and the row has not already been disabled. Used by
-	 * the OAuth refresh-failure path to avoid clobbering a peer that rotated the
-	 * row between our pre-check and the disable.
-	 */
-	tryDisableAuthCredentialIfMatches(
-		id: number,
-		expectedData: string,
-		disabledCause: string,
-		lease?: CredentialRefreshLeaseFence,
-	): boolean {
-		const result = lease
-			? (this.#deleteIfMatchesWithLeaseStmt.run(
-					normalizeDisabledCause(disabledCause),
-					id,
-					expectedData,
-					id,
-					lease.owner,
-					lease.nowMs,
-				) as { changes: number })
-			: (this.#deleteIfMatchesStmt.run(normalizeDisabledCause(disabledCause), id, expectedData) as {
-					changes: number;
-				});
-		return result.changes === 1;
-	}
-	deleteAuthCredentialsForProvider(provider: string, disabledCause: string): void {
-		try {
-			this.#deleteByProviderStmt.run(normalizeDisabledCause(disabledCause), provider);
-		} catch {
-			// Ignore delete failures
-		}
-	}
-
-	getCache(key: string, options?: { includeExpired?: boolean }): string | null {
-		try {
-			const stmt = options?.includeExpired === true ? this.#getCacheIncludingExpiredStmt : this.#getCacheStmt;
-			const row = stmt.get(key) as { value?: string } | undefined;
-			return row?.value ?? null;
-		} catch {
-			return null;
-		}
-	}
-
-	setCache(key: string, value: string, expiresAtSec: number): void {
-		try {
-			this.#upsertCacheStmt.run(key, value, expiresAtSec);
-		} catch {
-			// Ignore cache set failures
-		}
-	}
-
-	/** Drop all cache rows whose keys start with the supplied prefix. */
-	deleteCachePrefix(prefix: string): void {
-		try {
-			this.#deleteCachePrefixStmt.run(prefix.length, prefix);
-		} catch {
-			// Ignore cache delete failures
-		}
-	}
-
-	cleanExpiredCache(): void {
-		try {
-			this.#deleteExpiredCacheStmt.run();
-		} catch {
-			// Ignore cleanup errors
-		}
-	}
-
-	getCredentialBlock(credentialId: number, providerKey: string, blockScope: string): number | undefined {
-		const nowMs = Date.now();
-		this.#deleteExpiredCredentialBlocksStmt.run(nowMs);
-		const row = this.#getCredentialBlockStmt.get(credentialId, providerKey, blockScope, nowMs) as
-			| { blocked_until_ms?: number; updated_at?: number }
-			| undefined;
-		return typeof row?.blocked_until_ms === "number" ? row.blocked_until_ms : undefined;
-	}
-
-	getCredentialBlockReconcileAfter(credentialId: number, providerKey: string, blockScope: string): number | undefined {
-		const nowMs = Date.now();
-		this.#deleteExpiredCredentialBlocksStmt.run(nowMs);
-		const row = this.#getCredentialBlockStmt.get(credentialId, providerKey, blockScope, nowMs) as
-			| { blocked_until_ms?: number; updated_at?: number }
-			| undefined;
-		if (typeof row?.blocked_until_ms !== "number") return undefined;
-		const memoryReconcileAfter =
-			this.#credentialBlockReconcileAfter.get(`${credentialId}\0${providerKey}\0${blockScope}`) ?? 0;
-		const persistedReconcileAfter =
-			typeof row.updated_at === "number" ? row.updated_at * 1000 + USAGE_REPORT_TTL_MS : 0;
-		const reconcileAfter = Math.max(memoryReconcileAfter, persistedReconcileAfter);
-		return reconcileAfter > nowMs ? Math.min(row.blocked_until_ms, reconcileAfter) : undefined;
-	}
-
-	upsertCredentialBlock(block: StoredCredentialBlock): void {
-		this.#upsertCredentialBlockStmt.run(
-			block.credentialId,
-			block.providerKey,
-			block.blockScope,
-			block.blockedUntilMs,
-		);
-		this.#credentialBlockReconcileAfter.set(
-			`${block.credentialId}\0${block.providerKey}\0${block.blockScope}`,
-			Math.min(block.blockedUntilMs, Date.now() + USAGE_REPORT_TTL_MS),
-		);
-	}
-
-	deleteCredentialBlocks(credentialId: number): void {
-		this.#deleteCredentialBlocksStmt.run(credentialId);
-		for (const key of this.#credentialBlockReconcileAfter.keys()) {
-			if (key.startsWith(`${credentialId}\0`)) this.#credentialBlockReconcileAfter.delete(key);
-		}
-	}
-
-	cleanExpiredCredentialBlocks(nowMs: number): void {
-		this.#deleteExpiredCredentialBlocksStmt.run(nowMs);
-		for (const [key, reconcileAfterMs] of this.#credentialBlockReconcileAfter) {
-			if (reconcileAfterMs <= nowMs) this.#credentialBlockReconcileAfter.delete(key);
-		}
-	}
-
-	listCredentialBlocks(credentialIds: readonly number[]): StoredCredentialBlock[] {
-		if (credentialIds.length === 0) return [];
-		const nowMs = Date.now();
-		this.cleanExpiredCredentialBlocks(nowMs);
-		const seenCredentialIds = new Set<number>();
-		const blocks: StoredCredentialBlock[] = [];
-		for (const credentialId of credentialIds) {
-			if (seenCredentialIds.has(credentialId)) continue;
-			seenCredentialIds.add(credentialId);
-			const rows = this.#listCredentialBlocksByCredentialStmt.all(credentialId, nowMs) as CredentialBlockRow[];
-			for (const row of rows) {
-				blocks.push({
-					credentialId: row.credential_id,
-					providerKey: row.provider_key,
-					blockScope: row.block_scope,
-					blockedUntilMs: row.blocked_until_ms,
-					updatedAtMs: row.updated_at * 1000,
-				});
-			}
-		}
-		return blocks;
-	}
-
-	tryAcquireCredentialRefreshLease(credentialId: number, owner: string, expiresAtMs: number): boolean {
-		const result = this.#acquireCredentialRefreshLeaseStmt.run(credentialId, owner, expiresAtMs, Date.now()) as {
-			changes: number;
-		};
-		return result.changes === 1;
-	}
-
-	getCredentialRefreshLeaseExpiresAt(credentialId: number): number | undefined {
-		const row = this.#getCredentialRefreshLeaseStmt.get(credentialId) as { expires_at_ms?: number } | undefined;
-		if (typeof row?.expires_at_ms !== "number") return undefined;
-		if (row.expires_at_ms <= Date.now()) return undefined;
-		return row.expires_at_ms;
-	}
-
-	renewCredentialRefreshLease(credentialId: number, owner: string, expiresAtMs: number): boolean {
-		const result = this.#renewCredentialRefreshLeaseStmt.run(expiresAtMs, credentialId, owner) as {
-			changes: number;
-		};
-		return result.changes === 1;
-	}
-
-	releaseCredentialRefreshLease(credentialId: number, owner: string): void {
-		try {
-			this.#releaseCredentialRefreshLeaseStmt.run(credentialId, owner);
-		} catch {
-			// Ignore lease release failures; expired leases are stealable.
-		}
-	}
-
-	recordUsageSnapshots(entries: UsageHistoryEntry[]): void {
-		try {
-			for (const entry of entries) {
-				const bucket = Math.floor(entry.recordedAt / USAGE_HISTORY_BUCKET_MS);
-				const last = this.#lastUsageHistoryStmt.get(entry.provider, entry.accountKey, entry.limitId) as
-					| { id: number; recorded_at: number }
-					| undefined;
-				if (last && Math.floor(last.recorded_at / USAGE_HISTORY_BUCKET_MS) === bucket) {
-					this.#updateUsageHistoryStmt.run(
-						entry.recordedAt,
-						entry.email ?? null,
-						entry.accountId ?? null,
-						entry.label,
-						entry.windowLabel ?? null,
-						entry.usedFraction ?? null,
-						entry.status ?? null,
-						entry.resetsAt ?? null,
-						last.id,
-					);
-					continue;
-				}
-				this.#insertUsageHistoryStmt.run(
-					entry.recordedAt,
-					entry.provider,
-					entry.accountKey,
-					entry.email ?? null,
-					entry.accountId ?? null,
-					entry.limitId,
-					entry.label,
-					entry.windowLabel ?? null,
-					entry.usedFraction ?? null,
-					entry.status ?? null,
-					entry.resetsAt ?? null,
-				);
-			}
-		} catch {
-			// History is best-effort; never break the usage fetch path.
-		}
-	}
-
-	listUsageHistory(query?: UsageHistoryQuery): UsageHistoryEntry[] {
-		try {
-			const provider = query?.provider ?? null;
-			const rows = this.#listUsageHistoryStmt.all(query?.sinceMs ?? 0, provider, provider) as Array<{
-				recorded_at: number;
-				provider: string;
-				account_key: string;
-				email: string | null;
-				account_id: string | null;
-				limit_id: string;
-				label: string;
-				window_label: string | null;
-				used_fraction: number | null;
-				status: string | null;
-				resets_at: number | null;
-			}>;
-			return rows.map(row => ({
-				recordedAt: row.recorded_at,
-				provider: row.provider as Provider,
-				accountKey: row.account_key,
-				email: row.email ?? undefined,
-				accountId: row.account_id ?? undefined,
-				limitId: row.limit_id,
-				label: row.label,
-				windowLabel: row.window_label ?? undefined,
-				usedFraction: row.used_fraction ?? undefined,
-				status: (row.status ?? undefined) as UsageHistoryEntry["status"],
-				resetsAt: row.resets_at ?? undefined,
-			}));
-		} catch {
-			return [];
-		}
-	}
-	recordUsageCosts(entries: UsageCostHistoryEntry[]): void {
-		try {
-			for (const entry of entries) {
-				this.#insertUsageCostStmt.run(entry.recordedAt, entry.provider, entry.accountKey, entry.costUsd);
-			}
-		} catch {
-			// Cost history is best-effort; never break request persistence.
-		}
-	}
-
-	listUsageCosts(query?: UsageCostHistoryQuery): UsageCostHistoryEntry[] {
-		try {
-			const provider = query?.provider ?? null;
-			const accountKey = query?.accountKey ?? null;
-			const rows = this.#listUsageCostsStmt.all(
-				query?.sinceMs ?? 0,
-				provider,
-				provider,
-				accountKey,
-				accountKey,
-			) as Array<{
-				recorded_at: number;
-				provider: string;
-				account_key: string;
-				cost_usd: number;
-			}>;
-			return rows.map(row => ({
-				recordedAt: row.recorded_at,
-				provider: row.provider as Provider,
-				accountKey: row.account_key,
-				costUsd: row.cost_usd,
-			}));
-		} catch {
-			return [];
-		}
-	}
-
-	recordClientUsage(report: ClientUsageReport): void {
-		const now = Date.now();
-		this.#db
-			.query(
-				`INSERT INTO clients (install_id, hostname, first_seen, last_seen) VALUES (?, ?, ?, ?)
-				 ON CONFLICT(install_id) DO UPDATE SET hostname = COALESCE(excluded.hostname, hostname), last_seen = excluded.last_seen`,
-			)
-			.run(report.installId, report.hostname ?? null, now, now);
-		const findBucket = this.#db.query(
-			`SELECT id FROM client_usage
-			 WHERE install_id = ? AND provider = ? AND model = ? AND recorded_at >= ?
-			 ORDER BY recorded_at DESC LIMIT 1`,
-		);
-		const merge = this.#db.query(
-			`UPDATE client_usage SET recorded_at = ?, requests = requests + ?, input_tokens = input_tokens + ?,
-				output_tokens = output_tokens + ?, cache_read_tokens = cache_read_tokens + ?,
-				cache_write_tokens = cache_write_tokens + ?, cost_usd = cost_usd + ? WHERE id = ?`,
-		);
-		const insert = this.#db.query(
-			`INSERT INTO client_usage (recorded_at, install_id, provider, model, requests, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_usd)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		);
-		for (const entry of report.entries) {
-			// Merge into the newest row of the same (install, provider, model)
-			// bucket so 10s client flushes don't accrete one row apiece forever.
-			const bucketFloor = entry.at - CLIENT_USAGE_BUCKET_MS;
-			const existing = findBucket.get(report.installId, entry.provider, entry.model, bucketFloor) as {
-				id: number;
-			} | null;
-			if (existing) {
-				merge.run(
-					entry.at,
-					entry.requests,
-					entry.inputTokens,
-					entry.outputTokens,
-					entry.cacheReadTokens,
-					entry.cacheWriteTokens,
-					entry.costUsd,
-					existing.id,
-				);
-				continue;
-			}
-			insert.run(
-				entry.at,
-				report.installId,
-				entry.provider,
-				entry.model,
-				entry.requests,
-				entry.inputTokens,
-				entry.outputTokens,
-				entry.cacheReadTokens,
-				entry.cacheWriteTokens,
-				entry.costUsd,
-			);
-		}
-	}
-
-	getClientUsageSummary(sinceMs: number): ClientUsageSummary {
-		const clients = this.#db
-			.query("SELECT install_id, hostname, first_seen, last_seen FROM clients ORDER BY last_seen DESC")
-			.all() as Array<{ install_id: string; hostname: string | null; first_seen: number; last_seen: number }>;
-		const aggregates = this.#db
-			.query(
-				`SELECT install_id, provider, SUM(requests) requests, SUM(input_tokens) input_tokens,
-					SUM(output_tokens) output_tokens, SUM(cache_read_tokens) cache_read_tokens,
-					SUM(cache_write_tokens) cache_write_tokens, SUM(cost_usd) cost_usd
-				 FROM client_usage WHERE recorded_at >= ? GROUP BY install_id, provider
-				 ORDER BY install_id, SUM(input_tokens + output_tokens + cache_read_tokens + cache_write_tokens) DESC`,
-			)
-			.all(sinceMs) as Array<{
-			install_id: string;
-			provider: string;
-			requests: number;
-			input_tokens: number;
-			output_tokens: number;
-			cache_read_tokens: number;
-			cache_write_tokens: number;
-			cost_usd: number;
-		}>;
-		const providersByInstall = new Map<string, ClientProviderUsage[]>();
-		for (const row of aggregates) {
-			let list = providersByInstall.get(row.install_id);
-			if (!list) {
-				list = [];
-				providersByInstall.set(row.install_id, list);
-			}
-			list.push({
-				provider: row.provider,
-				requests: row.requests,
-				inputTokens: row.input_tokens,
-				outputTokens: row.output_tokens,
-				cacheReadTokens: row.cache_read_tokens,
-				cacheWriteTokens: row.cache_write_tokens,
-				costUsd: row.cost_usd,
-			});
-		}
-		return {
-			clients: clients.map(client => ({
-				installId: client.install_id,
-				hostname: client.hostname ?? undefined,
-				firstSeen: client.first_seen,
-				lastSeen: client.last_seen,
-				providers: providersByInstall.get(client.install_id) ?? [],
-			})),
-		};
-	}
-
-	// ─── Convenience methods for CLI ────────────────────────────────────────
-
-	/**
-	 * Save OAuth credentials for a provider.
-	 * Preserves unrelated identities and replaces only the matching credential.
-	 */
-	saveOAuth(provider: string, credentials: OAuthCredentials): void {
-		const credential: AuthCredential = { type: "oauth", ...credentials };
-		this.upsertAuthCredentialForProvider(provider, credential);
-	}
-
-	/**
-	 * Get OAuth credentials for a provider.
-	 */
-	getOAuth(provider: string): OAuthCredentials | null {
-		const rows = this.#listActiveByProviderStmt.all(provider) as AuthRow[];
-		for (const row of rows) {
-			const credential = deserializeCredential(row);
-			if (credential && credential.type === "oauth") {
-				const { type: _type, ...oauth } = credential;
-				return oauth as OAuthCredentials;
-			}
-		}
-		return null;
-	}
-
-	/**
-	 * Save API key for a provider (replaces existing).
-	 */
-	saveApiKey(provider: string, apiKey: string): void {
-		const credential: AuthCredential = { type: "api_key", key: apiKey };
-		this.replaceAuthCredentialsForProvider(provider, [credential]);
-	}
-
-	/**
-	 * Get API key for a provider.
-	 */
-	getApiKey(provider: string): string | null {
-		const rows = this.#listActiveByProviderStmt.all(provider) as AuthRow[];
-		for (const row of rows) {
-			const credential = deserializeCredential(row);
-			if (credential && credential.type === "api_key") {
-				return credential.key;
-			}
-		}
-		return null;
-	}
-
-	/**
-	 * List all providers with credentials.
-	 */
-	listProviders(): string[] {
-		const rows = this.#listActiveStmt.all() as AuthRow[];
-		const providers = new Set<string>();
-		for (const row of rows) {
-			providers.add(row.provider);
-		}
-		return Array.from(providers);
-	}
-
-	/**
-	 * Delete all credentials for a provider.
-	 */
-	deleteProvider(provider: string): void {
-		this.deleteAuthCredentialsForProvider(provider, "deleted by user");
-	}
-
-	close(): void {
-		if (this.#closed) return;
-		this.#closed = true;
-		this.#listActiveStmt.finalize();
-		this.#listActiveByProviderStmt.finalize();
-		this.#listDisabledByProviderStmt.finalize();
-		this.#insertStmt.finalize();
-		this.#updateStmt.finalize();
-		this.#deleteStmt.finalize();
-		this.#deleteIfMatchesStmt.finalize();
-		this.#deleteByProviderStmt.finalize();
-		this.#hardDeleteStmt.finalize();
-		this.#getCacheStmt.finalize();
-		this.#getCacheIncludingExpiredStmt.finalize();
-		this.#upsertCacheStmt.finalize();
-		this.#deleteExpiredCacheStmt.finalize();
-		this.#getCredentialBlockStmt.finalize();
-		this.#listCredentialBlocksByCredentialStmt.finalize();
-		this.#upsertCredentialBlockStmt.finalize();
-		this.#deleteCredentialBlocksStmt.finalize();
-		this.#deleteExpiredCredentialBlocksStmt.finalize();
-		this.#insertUsageHistoryStmt.finalize();
-		this.#lastUsageHistoryStmt.finalize();
-		this.#listUsageHistoryStmt.finalize();
-		this.#updateUsageHistoryStmt.finalize();
-		this.#insertUsageCostStmt.finalize();
-		this.#listUsageCostsStmt.finalize();
-		this.#db.close();
 	}
 }

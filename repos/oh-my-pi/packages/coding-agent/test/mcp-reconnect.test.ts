@@ -1,8 +1,14 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, vi } from "bun:test";
 import type { MCPReconnect } from "@oh-my-pi/pi-coding-agent/mcp/tool-bridge";
-import { DeferredMCPTool, isRetriableConnectionError, MCPTool } from "@oh-my-pi/pi-coding-agent/mcp/tool-bridge";
+import {
+	DeferredMCPTool,
+	deduplicateMCPToolsByName,
+	isRetriableConnectionError,
+	MCPTool,
+} from "@oh-my-pi/pi-coding-agent/mcp/tool-bridge";
 import type { MCPServerConnection, MCPToolCallResult, MCPTransport } from "@oh-my-pi/pi-coding-agent/mcp/types";
 import { ToolAbortError } from "@oh-my-pi/pi-coding-agent/tools/tool-errors";
+import { logger } from "@oh-my-pi/pi-utils";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -33,6 +39,31 @@ function makeConnection(transport: MCPTransport, name = "test-server"): MCPServe
 		capabilities: { tools: {} },
 	};
 }
+
+// ---------------------------------------------------------------------------
+// deduplicateMCPToolsByName
+// ---------------------------------------------------------------------------
+
+describe("deduplicateMCPToolsByName", () => {
+	it("keeps the same collision winner after a reconnect reorders the tool list", () => {
+		const warn = vi.spyOn(logger, "warn").mockImplementation(() => {});
+		try {
+			const dotted = { name: "mcp__foo_bar_lookup", mcpServerName: "foo.bar", mcpToolName: "lookup" };
+			const underscored = { name: "mcp__foo_bar_lookup", mcpServerName: "foo_bar", mcpToolName: "lookup" };
+
+			const before = deduplicateMCPToolsByName([dotted, underscored]);
+			expect(before).toEqual([dotted]);
+
+			// Simulate MCPManager#replaceServerTools on the current winner: its
+			// tools are removed and re-appended, reordering it behind the loser.
+			// The minted name must not silently switch owners.
+			const after = deduplicateMCPToolsByName([underscored, dotted]);
+			expect(after).toEqual([dotted]);
+		} finally {
+			warn.mockRestore();
+		}
+	});
+});
 
 // ---------------------------------------------------------------------------
 // isRetriableConnectionError

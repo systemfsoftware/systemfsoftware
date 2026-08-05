@@ -30,6 +30,8 @@ import {
 	wrapTextWithAnsi,
 } from "../native/index.js";
 
+const addonUrl = new URL("../native/index.js", import.meta.url).href;
+
 let testDir: string;
 
 async function setupFixtures() {
@@ -800,6 +802,86 @@ describe("pi-natives", () => {
 			expect(cleaned).toContain("Main content");
 			// Navigation/footer may or may not be removed depending on preprocessing
 		});
+
+		it("should reject depth-truncated HTML", async () => {
+			const html = `${"<div>".repeat(90)}<p>deep-content</p>${"</div>".repeat(90)}`;
+
+			await expect(htmlToMarkdown(html, { cleanContent: true })).rejects.toThrow(
+				/Conversion error: .*effective depth limit of 64/,
+			);
+		});
+
+		it("should survive pathologically deep HTML", async () => {
+			const script = `
+import { htmlToMarkdown } from ${JSON.stringify(addonUrl)};
+
+const cases = [
+	{
+		label: "balanced-div",
+		input: "<div>".repeat(5_000) + "leaf" + "</div>".repeat(5_000),
+	},
+	{
+		label: "malformed-table",
+		input: "<table><tr>" + "<td>leaf".repeat(20_000),
+	},
+];
+
+for (const { label, input } of cases) {
+	console.error("case=" + label + ":start");
+	const pending = htmlToMarkdown(input, { cleanContent: true });
+	if (pending === null || typeof pending.then !== "function") {
+		throw new TypeError("htmlToMarkdown did not return a Promise for " + label);
+	}
+
+	let rejected = false;
+	let value;
+	try {
+		value = await pending;
+	} catch {
+		rejected = true;
+	}
+	if (!rejected && typeof value !== "string") {
+		throw new TypeError("htmlToMarkdown fulfilled with a non-string for " + label);
+	}
+	console.error("case=" + label + ":done");
+}
+
+console.log("ok");
+`;
+			const child = Bun.spawn([process.execPath, "--eval", script], {
+				stdout: "pipe",
+				stderr: "pipe",
+			});
+			const pid = child.pid;
+			let watchdogFired = false;
+			// A real deadline is required because the child may hang inside native code and never emit an event.
+			const timer = setTimeout(() => {
+				if (child.exitCode === null) {
+					watchdogFired = true;
+					child.kill("SIGKILL");
+				}
+			}, 25_000);
+			const exited = child.exited.finally(() => clearTimeout(timer));
+			let stdout = "";
+			let stderr = "";
+			let exitCode: number | null = null;
+
+			try {
+				[stdout, stderr, exitCode] = await Promise.all([
+					new Response(child.stdout).text(),
+					new Response(child.stderr).text(),
+					exited,
+				]);
+			} finally {
+				clearTimeout(timer);
+			}
+
+			if (watchdogFired || exitCode !== 0 || stdout.trim() !== "ok") {
+				throw new Error(
+					`deep HTML child failed: pid=${pid}, exitCode=${exitCode}, signalCode=${child.signalCode}, watchdogFired=${watchdogFired}, stderr=${stderr}`,
+				);
+			}
+		}, 30_000);
 	});
 
 	describe("MacOSPowerAssertion", () => {

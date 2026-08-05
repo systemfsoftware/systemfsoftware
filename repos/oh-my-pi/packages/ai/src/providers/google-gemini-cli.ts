@@ -5,6 +5,7 @@
  */
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { scheduler } from "node:timers/promises";
+import { type } from "@oh-my-pi/omptype";
 import { calculateCost } from "@oh-my-pi/pi-catalog/models";
 import {
 	ANTIGRAVITY_SYSTEM_INSTRUCTION,
@@ -13,7 +14,6 @@ import {
 	getGeminiCliHeaders,
 } from "@oh-my-pi/pi-catalog/wire/gemini-headers";
 import { extractHttpStatusFromError, fetchWithRetry, readSseJson } from "@oh-my-pi/pi-utils";
-import { type } from "arktype";
 import * as AIError from "../error";
 import type {
 	Api,

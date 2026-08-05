@@ -51,7 +51,7 @@ import {
 import { CustomMessageComponent } from "./custom-message";
 import { EvalExecutionComponent } from "./eval-execution";
 import { type LateDiagnosticsFile, LateDiagnosticsMessageComponent } from "./late-diagnostics-message";
-import { ReadToolGroupComponent, readArgsCollapseIntoGroup } from "./read-tool-group";
+import { groupedReadUsageCallIds, ReadToolGroupComponent, readArgsCollapseIntoGroup } from "./read-tool-group";
 import { SkillMessageComponent } from "./skill-message";
 import { ToolExecutionComponent } from "./tool-execution";
 import { TranscriptContainer } from "./transcript-container";
@@ -86,6 +86,7 @@ export class ChatTranscriptBuilder {
 	#pendingUsageDuration: number | undefined;
 	#pendingUsageTtft: number | undefined;
 	#pendingUsageTimestamp: number | undefined;
+	#pendingReadUsageCallIds: string[] | undefined;
 	#lastAssistantUsage: Usage | undefined;
 	#waitingPoll: ToolExecutionComponent | null = null;
 	#todoSnapshot: ToolExecutionComponent | null = null;
@@ -135,6 +136,7 @@ export class ChatTranscriptBuilder {
 		this.#pendingUsageDuration = undefined;
 		this.#pendingUsageTtft = undefined;
 		this.#pendingUsageTimestamp = undefined;
+		this.#pendingReadUsageCallIds = undefined;
 		this.#lastAssistantUsage = undefined;
 		this.#waitingPoll = null;
 		this.#todoSnapshot = null;
@@ -188,36 +190,53 @@ export class ChatTranscriptBuilder {
 			this.#readGroup = new ReadToolGroupComponent({
 				showContentPreview: settings.get("read.toolResultPreview"),
 			});
+			this.#readGroup.setToolActivityVisible(!settings.get("display.hideToolActivity"));
 			this.#trackExpandable(this.#readGroup);
 			this.container.addChild(this.#readGroup);
 		}
 		return this.#readGroup;
 	}
 
-	// The per-turn token-usage row must land below the turn's tool blocks, but
-	// normal `read` calls only materialize their group in #appendToolResult. Defer
-	// the row: stash it on the assistant message and flush once the turn's tools
-	// are placed, sealing the read run so the row sits under it.
+	// Defer per-turn metrics until the turn's tool results have materialized.
+	// Read-only invisible turns attach the metrics to their shared compact
+	// group; every other turn keeps the standalone row below its tool blocks.
 	#flushPendingUsage(): void {
 		if (!this.#pendingUsage) return;
-		this.#readGroup?.seal();
-		this.#readGroup = null;
-		this.container.addChild(
-			createUsageRowBlock(
+		const usageAttached =
+			this.#pendingReadUsageCallIds !== undefined &&
+			(this.#readGroup?.attachUsage(
+				this.#pendingReadUsageCallIds,
 				this.#pendingUsage,
 				this.#pendingUsageDuration,
 				this.#pendingUsageTtft,
 				this.#pendingUsageTimestamp,
-			),
-		);
+			) ??
+				false);
+		if (!usageAttached) {
+			this.#readGroup?.seal();
+			this.#readGroup = null;
+			this.container.addChild(
+				createUsageRowBlock(
+					this.#pendingUsage,
+					this.#pendingUsageDuration,
+					this.#pendingUsageTtft,
+					this.#pendingUsageTimestamp,
+				),
+			);
+		}
 		this.#pendingUsage = undefined;
 		this.#pendingUsageDuration = undefined;
 		this.#pendingUsageTtft = undefined;
 		this.#pendingUsageTimestamp = undefined;
+		this.#pendingReadUsageCallIds = undefined;
 	}
 
 	#appendChatMessage(message: AgentMessage): void {
 		if (message.role !== "toolResult") this.#flushPendingUsage();
+		if (message.role !== "assistant" && message.role !== "toolResult") {
+			this.#readGroup?.seal();
+			this.#readGroup = null;
+		}
 		switch (message.role) {
 			case "assistant":
 				this.#appendAssistantMessage(message);
@@ -303,6 +322,8 @@ export class ChatTranscriptBuilder {
 			proseOnlyThinking,
 		);
 		assistantComponent.setImagesVisible(settings.get("terminal.showImages"));
+		assistantComponent.setToolResultImagesVisible(!settings.get("display.hideToolActivity"));
+		this.#trackExpandable(assistantComponent);
 		this.container.addChild(assistantComponent);
 
 		if (settings.get("display.cacheMissMarker")) {
@@ -334,6 +355,8 @@ export class ChatTranscriptBuilder {
 				proseOnlyThinking,
 			);
 			component.setImagesVisible(settings.get("terminal.showImages"));
+			component.setToolResultImagesVisible(!settings.get("display.hideToolActivity"));
+			this.#trackExpandable(component);
 			this.container.addChild(component);
 		};
 
@@ -381,6 +404,7 @@ export class ChatTranscriptBuilder {
 				this.deps.cwd,
 				content.id,
 			);
+			component.setToolActivityVisible(!settings.get("display.hideToolActivity"));
 			this.#trackExpandable(component);
 			this.container.addChild(component);
 
@@ -401,6 +425,7 @@ export class ChatTranscriptBuilder {
 		this.#pendingUsageDuration = message.duration;
 		this.#pendingUsageTtft = message.ttft;
 		this.#pendingUsageTimestamp = message.timestamp;
+		this.#pendingReadUsageCallIds = this.#pendingUsage ? groupedReadUsageCallIds(message) : undefined;
 	}
 
 	#appendToolResult(message: Extract<AgentMessage, { role: "toolResult" }>): void {

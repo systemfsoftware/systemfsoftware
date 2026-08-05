@@ -43,7 +43,9 @@ find_tarball() {
 }
 
 section "Binary install smoke"
-bun --cwd=packages/natives run build
+if [ "${OMP_INSTALL_TEST_SKIP_NATIVE_BUILD:-0}" != "1" ]; then
+   bun --cwd=packages/natives run build
+fi
 bun --cwd=packages/coding-agent run build
 
 BINARY_DIR="$WORK_DIR/binary-bin"
@@ -93,7 +95,7 @@ cp "$natives_pkg_backup" "$ROOT_DIR/packages/natives/package.json"
 # 3. Pack the remaining workspace packages (natives core and coding-agent
 #    handled separately). `collab-web` is private but still packed here so its
 #    prepack build and tarball file list stay release-safe.
-for pkg in utils wire hashline catalog ai mnemopi snapcompact agent tui stats collab-web; do
+for pkg in utils wire omptype hashline catalog ai mnemopi snapcompact agent tui stats collab-web; do
    (
       cd "$ROOT_DIR/packages/$pkg"
       bun pm pack --destination "$TARBALL_DIR" --quiet >/dev/null
@@ -118,6 +120,7 @@ cp "$agent_pkg_backup" "$ROOT_DIR/packages/coding-agent/package.json"
 
 utils_tgz="$(find_tarball "$TARBALL_DIR"/oh-my-pi-pi-utils-*.tgz)"
 wire_tgz="$(find_tarball "$TARBALL_DIR"/oh-my-pi-pi-wire-*.tgz)"
+omptype_tgz="$(find_tarball "$TARBALL_DIR"/oh-my-pi-omptype-*.tgz)"
 natives_tgz="$(find_tarball "$TARBALL_DIR"/oh-my-pi-pi-natives-[0-9]*.tgz)"
 natives_leaf_tgz="$(find_tarball "$TARBALL_DIR"/oh-my-pi-pi-natives-"$host_tag"-*.tgz)"
 hashline_tgz="$(find_tarball "$TARBALL_DIR"/oh-my-pi-hashline-*.tgz)"
@@ -144,6 +147,7 @@ mkdir -p "$TARBALL_APP_DIR"
 		pkg.overrides = {
 			'@oh-my-pi/pi-utils': '$utils_tgz',
 			'@oh-my-pi/pi-wire': '$wire_tgz',
+			'@oh-my-pi/omptype': '$omptype_tgz',
 			'@oh-my-pi/pi-natives': '$natives_tgz',
 			'@oh-my-pi/pi-natives-$host_tag': '$natives_leaf_tgz',
 			'@oh-my-pi/hashline': '$hashline_tgz',
@@ -160,7 +164,7 @@ mkdir -p "$TARBALL_APP_DIR"
 		require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2));
 	"
 
-   bun add "$utils_tgz" "$wire_tgz" "$natives_tgz" "$hashline_tgz" "$catalog_tgz" "$ai_tgz" "$mnemopi_tgz" "$snapcompact_tgz" "$agent_tgz" "$tui_tgz" "$stats_tgz" "$coding_agent_tgz" "$collab_web_tgz"
+   bun add "$utils_tgz" "$wire_tgz" "$omptype_tgz" "$natives_tgz" "$hashline_tgz" "$catalog_tgz" "$ai_tgz" "$mnemopi_tgz" "$snapcompact_tgz" "$agent_tgz" "$tui_tgz" "$stats_tgz" "$coding_agent_tgz" "$collab_web_tgz"
    # The platform leaf must arrive through the core's optionalDependencies +
    # override, not as a direct dependency — assert it landed before smoking so a
    # resolution regression is distinguishable from a runtime loader bug.
@@ -172,6 +176,19 @@ mkdir -p "$TARBALL_APP_DIR"
    wire_proto="$(bun -e 'import { COLLAB_PROTO } from "@oh-my-pi/pi-wire"; process.stdout.write(String(COLLAB_PROTO));')"
    [ "$wire_proto" = "3" ] || {
       echo "Unexpected @oh-my-pi/pi-wire COLLAB_PROTO: $wire_proto"
+      exit 1
+   }
+   omptype_probe="$(bun -e '
+      import { type } from "@oh-my-pi/omptype";
+      import { Type } from "@oh-my-pi/omptype/typebox";
+      import { z } from "@oh-my-pi/omptype/zod";
+      const root = type({ name: "string", enabled: "boolean = false" }).assert({ name: "omp" });
+      const typebox = Type.Object({ name: Type.String() }).assert({ name: "tb" });
+      const zod = z.object({ name: z.string() }).parse({ name: "z" });
+      process.stdout.write(`${root.name}:${root.enabled}:${typebox.name}:${zod.name}`);
+   ')"
+   [ "$omptype_probe" = "omp:false:tb:z" ] || {
+      echo "Unexpected @oh-my-pi/omptype probe result: $omptype_probe"
       exit 1
    }
    [ -f "node_modules/@oh-my-pi/collab-web/dist/index.html" ] || {

@@ -72,7 +72,7 @@ Transport implementations own framing and I/O details:
 
 ## Request IDs
 
-Each transport generates per-request IDs with `Snowflake.next()`. IDs are transport-local correlation tokens.
+Each transport owns a `RequestIdAllocator`. Outbound IDs default to monotonically increasing integers starting at `1`, which matches the wider MCP ecosystem and servers such as Apple's `xcrun mcpbridge`. A server config can set `requestIdFormat: "string"` to use collision-resistant `Snowflake.next()` strings instead. IDs remain transport-local correlation tokens.
 
 ## Stdio correlation path
 
@@ -99,8 +99,8 @@ If SSE stream ends before matching response, request fails with `No response rec
 
 Client emits JSON-RPC notifications via `transport.notify(...)`.
 
-- Stdio: writes notification frame to stdin (`jsonrpc`, `method`, `params`) plus newline via `writeFrame()`; a failed write closes the transport and throws.
-- HTTP: sends POST body without `id`; success accepts `2xx` or `202 Accepted`.
+- Stdio: writes a notification frame to stdin (`jsonrpc`, `method`, `params`) plus newline via `writeFrame()`. A synchronous write failure closes the transport and throws; asynchronous `FileSink` rejections are neutralized because notifications have no response promise to reject.
+- HTTP: sends POST body without `id`; success accepts any `2xx` response, including `202 Accepted`.
 
 Server-initiated notifications are surfaced through transport `onNotification`; `MCPManager` consumes known MCP list/update notifications and can forward all notifications through its own callback.
 
@@ -127,7 +127,7 @@ Per request:
 
 - timeout from `resolveMCPTimeoutMs`: `OMP_MCP_TIMEOUT_MS` env override, else `config.timeout ?? 30000`; `0` disables
 - optional `AbortSignal` from caller
-- abort and timeout both reject the pending promise and clean map entry
+- abort and timeout both reject the pending promise and clean its map entry; a late write rejection is ignored after settlement
 
 Cancellation is local only: transport does not send protocol-level cancellation notification to the server.
 
@@ -151,8 +151,8 @@ When process exits or stream closes:
 
 ## Backpressure/streaming notes
 
-- `request()` awaits `stdin.write()` + `flush()` so broken-pipe failures reject the request; `notify()` writes through `writeFrame()`, which does not await and neutralizes async EPIPE rejections.
-- There is no explicit queue or high-watermark management in transport.
+- `request()` deliberately does **not** await `stdin.write()` or `flush()`: awaiting a full pipe can strand the async function before it returns the response promise, preventing its timeout/abort rejection from reaching the caller. Synchronous throws and asynchronous write/flush rejections instead reject that pending response promise. `notify()` writes through `writeFrame()`, which detects synchronous failure but neutralizes asynchronous EPIPE rejections.
+- There is no explicit queue or high-watermark management in the transport.
 - Inbound processing is stream-driven (`for await` over `readJsonl`), one parsed message at a time.
 
 ## Streamable HTTP transport internals

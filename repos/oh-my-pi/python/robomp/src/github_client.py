@@ -265,7 +265,13 @@ class GitHubClient:
                 last_exc = exc
                 log.warning(
                     "transient github 5xx, retrying",
-                    extra={"method": method, "path": path, "attempt": attempt + 1, "delay": delay, "status": exc.status},
+                    extra={
+                        "method": method,
+                        "path": path,
+                        "attempt": attempt + 1,
+                        "delay": delay,
+                        "status": exc.status,
+                    },
                 )
                 time.sleep(delay)
         raise last_exc  # type: ignore[misc]
@@ -294,7 +300,13 @@ class GitHubClient:
                 last_exc = exc
                 log.warning(
                     "transient github 5xx, retrying",
-                    extra={"method": method, "path": path, "attempt": attempt + 1, "delay": delay, "status": exc.status},
+                    extra={
+                        "method": method,
+                        "path": path,
+                        "attempt": attempt + 1,
+                        "delay": delay,
+                        "status": exc.status,
+                    },
                 )
                 await asyncio.sleep(delay)
         raise last_exc  # type: ignore[misc]

@@ -117,13 +117,14 @@ function blockReason(page: LoadedHtmlPage): "javascript" | "traffic" | undefined
 }
 
 async function callGoogleHtml(params: SearchParams, numResults: number): Promise<string> {
-	const signal = withHardTimeout(params.signal);
+	const signal = withHardTimeout(params.signal, params.timeoutMs);
 	const url = buildSearchUrl(params, numResults);
 	let page: LoadedHtmlPage;
 	try {
 		page = await browserFetch(url, {
 			fetch: params.fetch,
 			signal,
+			timeoutMs: params.timeoutMs,
 			referer: GOOGLE_HOME_URL,
 			browser: {
 				homeUrl: GOOGLE_HOME_URL,

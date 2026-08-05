@@ -13,6 +13,8 @@ import {
 	getRemainingTimeoutMs,
 	isCancellationError,
 	isTimedOutCancellation,
+	resolveOwnerScopedSessionKey,
+	type SessionOwners,
 	waitForPromiseWithCancellation,
 } from "../executor-base";
 import type { JsStatusEvent } from "../js/shared/types";
@@ -154,8 +156,12 @@ interface PythonSession {
 	hasFallbackOwner: boolean;
 }
 
+interface StartingPythonSession extends SessionOwners {
+	promise: Promise<PythonSession>;
+}
+
 const sessions = new Map<string, PythonSession>();
-const startingSessions = new Map<string, Promise<PythonSession>>();
+const startingSessions = new Map<string, StartingPythonSession>();
 const resettingSessions = new Map<string, Promise<void>>();
 
 function normalizeSessionCwd(cwd: string): string {
@@ -252,10 +258,10 @@ async function acquireSession(
 	}
 	const starting = startingSessions.get(sessionKey);
 	if (starting) {
-		const session = await starting;
-		attachSessionOwner(session, sessionId, options.kernelOwnerId);
-		return session;
+		attachSessionOwner(starting, sessionId, options.kernelOwnerId);
+		return await starting.promise;
 	}
+	let startingSession!: StartingPythonSession;
 	const startup = (async () => {
 		const kernel = await startKernel(cwd, options);
 		const session: PythonSession = {
@@ -264,19 +270,28 @@ async function acquireSession(
 			cwd,
 			kernel,
 			generation: 0,
-			ownerIds: new Set(),
-			hasFallbackOwner: false,
+			ownerIds: new Set(startingSession.ownerIds),
+			hasFallbackOwner: startingSession.hasFallbackOwner,
 		};
-		sessions.set(sessionKey, session);
+		// Publish only while this startup still owns the key: owner disposal or
+		// a concurrent dispose-all may have already reaped the starting record,
+		// and publishing here would resurrect a kernel that was just torn down.
+		if (startingSessions.get(sessionKey) === startingSession) {
+			sessions.set(sessionKey, session);
+		}
 		return session;
 	})();
-	startingSessions.set(sessionKey, startup);
+	startingSession = {
+		ownerIds: new Set(),
+		hasFallbackOwner: false,
+		promise: startup,
+	};
+	attachSessionOwner(startingSession, sessionId, options.kernelOwnerId);
+	startingSessions.set(sessionKey, startingSession);
 	try {
-		const session = await startup;
-		attachSessionOwner(session, sessionId, options.kernelOwnerId);
-		return session;
+		return await startup;
 	} finally {
-		if (startingSessions.get(sessionKey) === startup) startingSessions.delete(sessionKey);
+		if (startingSessions.get(sessionKey) === startingSession) startingSessions.delete(sessionKey);
 	}
 }
 
@@ -370,7 +385,8 @@ async function acquireLiveSessionKernel(
 }
 
 async function resetSession(sessionKey: string): Promise<void> {
-	const existing = sessions.get(sessionKey) ?? (await startingSessions.get(sessionKey)?.catch(() => undefined));
+	const existing =
+		sessions.get(sessionKey) ?? (await startingSessions.get(sessionKey)?.promise.catch(() => undefined));
 	if (!existing) return;
 	existing.generation += 1;
 	sessions.delete(sessionKey);
@@ -382,7 +398,7 @@ async function resetSession(sessionKey: string): Promise<void> {
 // ---------------------------------------------------------------------------
 
 export async function disposeAllKernelSessions(): Promise<void> {
-	const pending = [...startingSessions.values()];
+	const pending = [...startingSessions.values()].map(starting => starting.promise);
 	startingSessions.clear();
 	const started = await Promise.allSettled(pending);
 	const all = [...sessions.entries()];
@@ -422,9 +438,27 @@ export async function disposeKernelSessionsByOwner(ownerId: string): Promise<voi
 		}
 		session.ownerIds.delete(ownerId);
 	}
+	const startingToShutdown: StartingPythonSession[] = [];
+	for (const [sessionKey, starting] of [...startingSessions.entries()]) {
+		if (sessions.has(sessionKey) || !starting.ownerIds.has(ownerId)) continue;
+		if (starting.ownerIds.size === 1) {
+			startingSessions.delete(sessionKey);
+			startingToShutdown.push(starting);
+			continue;
+		}
+		starting.ownerIds.delete(ownerId);
+	}
 	for (const session of toShutdown) {
 		session.generation += 1;
 		if (sessions.get(session.sessionKey) === session) sessions.delete(session.sessionKey);
+	}
+	const started = await Promise.allSettled(startingToShutdown.map(starting => starting.promise));
+	for (const result of started) {
+		if (result.status !== "fulfilled") continue;
+		const session = result.value;
+		session.generation += 1;
+		if (sessions.get(session.sessionKey) === session) sessions.delete(session.sessionKey);
+		toShutdown.push(session);
 	}
 	const results = await Promise.allSettled(toShutdown.map(session => shutdownInvalidatedSession(session)));
 	for (let i = 0; i < toShutdown.length; i += 1) {
@@ -503,7 +537,13 @@ async function executePerCall(code: string, cwd: string, options: PythonExecutor
 
 async function executeOnSession(code: string, cwd: string, options: PythonExecutorOptions): Promise<PythonResult> {
 	const sessionId = options.sessionId ?? `session:${cwd}`;
-	const sessionKey = buildSessionKey(sessionId, cwd, options.interpreter);
+	const sessionKey = resolveOwnerScopedSessionKey({
+		baseKey: buildSessionKey(sessionId, cwd, options.interpreter),
+		ownerId: options.kernelOwnerId,
+		reset: options.reset === true,
+		hasSession: key => sessions.has(key) || startingSessions.has(key),
+		getOwners: key => sessions.get(key) ?? startingSessions.get(key),
+	});
 	if (options.bridge && !options.bridgeSessionId) {
 		options.bridgeSessionId = sessionId;
 	}

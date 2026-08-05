@@ -1,3 +1,4 @@
+import { type } from "@oh-my-pi/omptype";
 import type {
 	AgentIdentity,
 	AgentTelemetryConfig,
@@ -7,7 +8,6 @@ import type {
 	AgentToolUpdateCallback,
 } from "@oh-my-pi/pi-agent-core";
 import { escapeXmlAttribute, escapeXmlText } from "@oh-my-pi/pi-utils";
-import { type } from "arktype";
 import adviseDescription from "../prompts/advisor/advise-tool.md" with { type: "text" };
 
 const adviseSchema = type({
@@ -73,17 +73,6 @@ export function formatAdvisorBatchContent(notes: readonly AdvisorNote[]): string
  */
 export function isInterruptingSeverity(severity: AdvisorSeverity | undefined): boolean {
 	return severity === "concern" || severity === "blocker";
-}
-
-/**
- * Append a staleness caveat to an advisor note when newer primary turns arrived
- * after the reviewed transcript window (i.e. `hasFreshBacklog` is true on the
- * advisor runtime at delivery time). Pure function — no session coupling — so it
- * can be unit-tested in isolation and called from `AgentSession#routeAdvice`.
- */
-export function annotateForStaleness(note: string, hasFreshBacklog: boolean): string {
-	if (!hasFreshBacklog) return note;
-	return `${note}\n\n_(Note: newer primary turns arrived after this reviewed window — verify this still applies.)_`;
 }
 
 /** How an advisor note is routed to the primary. */
@@ -191,12 +180,23 @@ export class AdviseTool implements AgentTool<typeof adviseSchema, AdviseDetails>
 	 *  escalation: nit → concern → blocker), so an advisor cannot bypass dedupe
 	 *  by retagging the same text at a lower or equal severity. */
 	#deliveredNoteSeverities = new Map<string, number>();
+	#inProgressUpdate = false;
 
 	constructor(private readonly onAdvice: (note: string, severity?: AdviseDetails["severity"]) => void) {}
+
+	/**
+	 * Mark whether the next advisor prompt reviews an in-progress primary turn.
+	 * Non-blockers are withheld until a completed update so partial work does
+	 * not interrupt the primary before it can finish its planned steps.
+	 */
+	beginUpdate(inProgress: boolean): void {
+		this.#inProgressUpdate = inProgress;
+	}
 
 	/** Clear delivered-note memory when the advisor starts a fresh conversation. */
 	resetDeliveredNotes(): void {
 		this.#deliveredNoteSeverities.clear();
+		this.#inProgressUpdate = false;
 	}
 
 	async execute(
@@ -206,6 +206,13 @@ export class AdviseTool implements AgentTool<typeof adviseSchema, AdviseDetails>
 		_onUpdate?: AgentToolUpdateCallback<AdviseDetails>,
 		_context?: AgentToolContext,
 	): Promise<AgentToolResult<AdviseDetails>> {
+		if (this.#inProgressUpdate && args.severity !== "blocker") {
+			return {
+				content: [{ type: "text", text: "Recorded." }],
+				details: { note: args.note, severity: args.severity },
+				useless: true,
+			};
+		}
 		const key = advisorNoteDedupeKey(args.note);
 		const rank = advisorSeverityRank(args.severity);
 		const previousRank = this.#deliveredNoteSeverities.get(key) ?? 0;

@@ -8,12 +8,14 @@
  */
 
 import type { Api, CodexCompactionContext, FetchImpl, Model, ProviderSessionState } from "@oh-my-pi/pi-ai";
-import { isTransientStatus, ProviderHttpError } from "@oh-my-pi/pi-ai/error";
+import * as AIError from "@oh-my-pi/pi-ai/error";
 import { applyCodexResponsesLiteShape } from "@oh-my-pi/pi-ai/providers/openai-codex/request-transformer";
 import {
 	createOpenAICodexCompactionRequestContext,
 	createOpenAICodexCompatibilityMetadata,
+	type OpenAICodexCompactionBody,
 	type OpenAICodexCompatibilityMetadata,
+	openCodexCompactionEventStream,
 } from "@oh-my-pi/pi-ai/providers/openai-codex-responses";
 import {
 	getOpenAIPromptCacheKey,
@@ -21,6 +23,7 @@ import {
 	parseAzureDeploymentNameMap,
 	resolveOpenAIRequestSetup,
 } from "@oh-my-pi/pi-ai/providers/openai-shared";
+import { captureOpenAIHttpError } from "@oh-my-pi/pi-ai/utils/openai-http";
 import {
 	CODEX_BASE_URL,
 	getCodexAccountId,
@@ -127,6 +130,14 @@ function isOpenAiV2CompatibleModel(model: Model): boolean {
 	return api === "openai-responses" || api === "azure-openai-responses" || api === "openai-codex-responses";
 }
 
+function shouldUseCodexProviderTransport(model: Model): model is Model<"openai-codex-responses"> {
+	return (
+		model.api === "openai-codex-responses" &&
+		model.remoteCompaction?.v2Endpoint === undefined &&
+		model.remoteCompaction?.streamingEndpoint === undefined
+	);
+}
+
 function resolveOpenAiResponsesEndpoint(baseUrl: string | undefined): string {
 	const rawBase = baseUrl && baseUrl.length > 0 ? baseUrl : "https://api.openai.com/v1";
 	const normalizedBase = rawBase.replace(/\/+$/, "");
@@ -227,6 +238,7 @@ export async function requestCompactionV2Streaming(
 		retryWait?: (delayMs: number, signal?: AbortSignal) => Promise<void>;
 		providerSessionState?: Map<string, ProviderSessionState>;
 		codexCompaction?: CodexCompactionContext;
+		preferWebsockets?: boolean;
 	},
 ): Promise<CompactionV2Response> {
 	const endpoint = getCompactionV2Endpoint(model);
@@ -237,31 +249,29 @@ export async function requestCompactionV2Streaming(
 	const fetchImpl = options?.fetch ?? globalThis.fetch;
 	const retryWait = options?.retryWait ?? ((delayMs: number) => Bun.sleep(delayMs));
 	const isCodexResponses = compactionV2Api(model) === "openai-codex-responses" || model.provider === "openai-codex";
-	const codexMetadata = isCodexResponses
-		? createOpenAICodexCompatibilityMetadata({
-				sessionId: request.sessionId,
-				providerSessionState: options?.providerSessionState,
-				requestKind: "compaction",
-				compaction: createOpenAICodexCompactionRequestContext({
-					context: options?.codexCompaction,
-					implementation: "responses_compaction_v2",
-				}),
-			})
-		: undefined;
+	const codexMetadata =
+		isCodexResponses && !shouldUseCodexProviderTransport(model)
+			? createOpenAICodexCompatibilityMetadata({
+					sessionId: request.sessionId,
+					providerSessionState: options?.providerSessionState,
+					requestKind: "compaction",
+					compaction: createOpenAICodexCompactionRequestContext({
+						context: options?.codexCompaction,
+						implementation: "responses_compaction_v2",
+					}),
+				})
+			: undefined;
 	let lastError: Error | undefined;
 
 	for (let attempt = 0; attempt <= V2_COMPACTION_MAX_RETRIES; attempt++) {
 		const timeoutSignal = withRequestTimeout(signal, options?.timeoutMs ?? V2_COMPACTION_TIMEOUT_MS);
 		try {
-			return await attemptCompactionV2Streaming(
-				endpoint,
-				apiKey,
-				model,
-				request,
-				fetchImpl,
-				timeoutSignal,
+			return await attemptCompactionV2Streaming(endpoint, apiKey, model, request, fetchImpl, timeoutSignal, {
 				codexMetadata,
-			);
+				providerSessionState: options?.providerSessionState,
+				codexCompaction: options?.codexCompaction,
+				preferWebsockets: options?.preferWebsockets,
+			});
 		} catch (err) {
 			const error = err instanceof Error ? err : new Error(String(err));
 			if (signal?.aborted) throw error;
@@ -291,15 +301,20 @@ async function attemptCompactionV2Streaming(
 	model: Model,
 	request: CompactionV2Request,
 	fetchImpl: FetchImpl,
-	signal?: AbortSignal,
-	codexMetadata?: OpenAICodexCompatibilityMetadata,
+	signal: AbortSignal | undefined,
+	options: {
+		codexMetadata?: OpenAICodexCompatibilityMetadata;
+		providerSessionState?: Map<string, ProviderSessionState>;
+		codexCompaction?: CodexCompactionContext;
+		preferWebsockets?: boolean;
+	},
 ): Promise<CompactionV2Response> {
 	// Faithful to Codex: append the compaction trigger as the final input item
 	// of an otherwise-normal Responses request, then stream the result. `store`
 	// stays false — compaction must never persist a server-side response object.
 	const cacheOptions = { sessionId: request.sessionId, promptCacheKey: request.promptCacheKey };
 	const promptCacheKey = getOpenAIPromptCacheKey(cacheOptions);
-	const body: Record<string, unknown> = {
+	const body: OpenAICodexCompactionBody = {
 		model: request.model,
 		input: [...request.input, COMPACTION_TRIGGER_ITEM],
 		instructions: request.instructions,
@@ -317,8 +332,8 @@ async function attemptCompactionV2Streaming(
 		...(promptCacheKey ? { prompt_cache_key: promptCacheKey } : {}),
 		...(request.tools && request.tools.length > 0 ? { tools: request.tools, tool_choice: "auto" } : {}),
 	};
-	if (codexMetadata) {
-		body.client_metadata = codexMetadata.clientMetadata;
+	if (options.codexMetadata) {
+		body.client_metadata = options.codexMetadata.clientMetadata;
 	}
 	// Responses Lite models take the same rewrite on the compaction stream:
 	// instructions/tools ride as input items (codex-rs `compact_remote_v2`
@@ -326,26 +341,45 @@ async function attemptCompactionV2Streaming(
 	if (model.useResponsesLite) {
 		applyCodexResponsesLiteShape(body);
 	}
+
+	if (shouldUseCodexProviderTransport(model)) {
+		const eventStream = await openCodexCompactionEventStream(model, body, {
+			apiKey,
+			signal,
+			fetch: fetchImpl,
+			sessionId: request.sessionId,
+			providerSessionState: options.providerSessionState,
+			preferWebsockets: options.preferWebsockets,
+			responsesLite: model.useResponsesLite,
+			codexCompaction: createOpenAICodexCompactionRequestContext({
+				context: options.codexCompaction,
+				implementation: "responses_compaction_v2",
+			}),
+		});
+		return collectCompactionV2Events(eventStream, request);
+	}
+
 	const response = await fetchImpl(endpoint, {
 		method: "POST",
-		headers: buildCompactionV2Headers(model, apiKey, request, codexMetadata),
+		headers: buildCompactionV2Headers(model, apiKey, request, options.codexMetadata),
 		body: stringifyJson(body),
 		signal,
 	});
 
 	if (!response.ok) {
-		const errorText = await response.text().catch(() => "");
+		const cause = await captureOpenAIHttpError(response);
 		logger.warn("V2 remote compaction failed", {
 			endpoint,
 			status: response.status,
 			statusText: response.statusText,
-			errorText,
+			errorText: cause.captured.bodyText ?? "",
 		});
-		throw new ProviderHttpError(
+		throw new AIError.ProviderHttpError(
 			`V2 remote compaction failed (${response.status} ${response.statusText})`,
 			response.status,
 			{
 				headers: response.headers,
+				cause,
 			},
 		);
 	}
@@ -398,6 +432,33 @@ function buildCompactionV2Headers(
 	return headers;
 }
 
+interface CompactionV2CollectionState {
+	outputItemCount: number;
+	compactionItems: Array<Record<string, unknown>>;
+	sawCompleted: boolean;
+	usage: CompactionV2Usage | undefined;
+}
+
+function createCompactionV2CollectionState(): CompactionV2CollectionState {
+	return {
+		outputItemCount: 0,
+		compactionItems: [],
+		sawCompleted: false,
+		usage: undefined,
+	};
+}
+
+async function collectCompactionV2Events(
+	events: AsyncIterable<Record<string, unknown>>,
+	request: CompactionV2Request,
+): Promise<CompactionV2Response> {
+	const state = createCompactionV2CollectionState();
+	for await (const event of events) {
+		handleCompactionV2Event(event, undefined, state);
+	}
+	return finishCompactionV2Collection(state, request);
+}
+
 async function collectCompactionV2Output(
 	response: Response,
 	request: CompactionV2Request,
@@ -407,13 +468,7 @@ async function collectCompactionV2Output(
 		throw new Error("No response body for V2 compaction streaming");
 	}
 
-	const state = {
-		outputItemCount: 0,
-		compactionItems: [] as Array<Record<string, unknown>>,
-		sawCompleted: false,
-		usage: undefined as CompactionV2Usage | undefined,
-	};
-
+	const state = createCompactionV2CollectionState();
 	try {
 		const decoder = new TextDecoder();
 		let buffer = "";
@@ -460,6 +515,13 @@ async function collectCompactionV2Output(
 		reader.releaseLock();
 	}
 
+	return finishCompactionV2Collection(state, request);
+}
+
+function finishCompactionV2Collection(
+	state: CompactionV2CollectionState,
+	request: CompactionV2Request,
+): CompactionV2Response {
 	if (!state.sawCompleted) {
 		throw new Error("V2 compaction stream closed before response.completed");
 	}
@@ -475,7 +537,6 @@ async function collectCompactionV2Output(
 		compactionItem,
 		request.retainedMessageBudget,
 	);
-
 	return {
 		compactionItem,
 		replacementHistory,
@@ -488,12 +549,7 @@ async function collectCompactionV2Output(
 function handleCompactionV2SseEvent(
 	data: string,
 	eventName: string | undefined,
-	state: {
-		outputItemCount: number;
-		compactionItems: Array<Record<string, unknown>>;
-		sawCompleted: boolean;
-		usage: CompactionV2Usage | undefined;
-	},
+	state: CompactionV2CollectionState,
 ): void {
 	if (data === "[DONE]") return;
 	let event: Record<string, unknown>;
@@ -502,7 +558,14 @@ function handleCompactionV2SseEvent(
 	} catch (err) {
 		throw new Error(`V2 compaction stream parse failed: ${err instanceof Error ? err.message : String(err)}`);
 	}
+	handleCompactionV2Event(event, eventName, state);
+}
 
+function handleCompactionV2Event(
+	event: Record<string, unknown>,
+	eventName: string | undefined,
+	state: CompactionV2CollectionState,
+): void {
 	const type = typeof event.type === "string" ? event.type : eventName;
 	if (type === "response.output_item.done") {
 		state.outputItemCount++;
@@ -560,6 +623,10 @@ function formatCompactionV2Failure(event: Record<string, unknown>, type: string)
 }
 
 function isRetryableCompactionError(error: Error): boolean {
+	// The gateway's synthetic auth_unavailable is an HTTP 503, but the
+	// captured response cause classifies it as auth. Let provider fallback run
+	// immediately instead of spending the transient retry budget.
+	if (AIError.is(AIError.classify(error), AIError.Flag.AuthFailed)) return false;
 	if (
 		error.name === "AbortError" ||
 		error.name === "TimeoutError" ||
@@ -567,8 +634,8 @@ function isRetryableCompactionError(error: Error): boolean {
 	) {
 		return true;
 	}
-	if (error instanceof ProviderHttpError) {
-		return isTransientStatus(error.status);
+	if (error instanceof AIError.ProviderHttpError) {
+		return AIError.isTransientStatus(error.status);
 	}
 	const message = error.message.toLowerCase();
 	return (

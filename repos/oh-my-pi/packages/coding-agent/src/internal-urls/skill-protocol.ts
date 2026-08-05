@@ -30,7 +30,12 @@ export function validateRelativePath(relativePath: string): void {
 	}
 
 	const normalized = path.normalize(relativePath);
-	if (normalized.startsWith("..") || normalized.includes("/../") || normalized.includes("/..")) {
+	if (
+		relativePath.split(/[\\/]/).includes("..") ||
+		normalized.startsWith("..") ||
+		normalized.includes("/../") ||
+		normalized.includes("/..")
+	) {
 		throw new Error("Path traversal (..) is not allowed in skill:// URLs");
 	}
 }

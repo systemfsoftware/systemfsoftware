@@ -975,5 +975,3 @@ def test_route_non_directive_comment_carries_no_pragmas() -> None:
     )
     assert decision.directive is False
     assert decision.directive_pragmas == ()
-
-

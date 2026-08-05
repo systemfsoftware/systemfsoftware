@@ -1018,7 +1018,7 @@ pub enum ChildSessionAction {
 /// `child_stdin_is_terminal` arm before pipeline membership would ever matter.
 ///
 /// Foregrounding remains gated on `new_pg && child_stdin_is_terminal`.
-pub fn child_session_action(
+pub const fn child_session_action(
 	new_pg: bool,
 	child_stdin_is_terminal: bool,
 	_in_pipeline_group: bool,

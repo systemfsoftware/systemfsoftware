@@ -82,8 +82,9 @@ const availabilityCache = new Map<string, Promise<PythonKernelAvailability>>();
 export async function checkPythonKernelAvailability(
 	cwd: string,
 	interpreter?: string,
+	options?: { forceProbe?: boolean },
 ): Promise<PythonKernelAvailability> {
-	if (isBunTestRuntime() || $flag("PI_PYTHON_SKIP_CHECK")) {
+	if (!options?.forceProbe && (isBunTestRuntime() || $flag("PI_PYTHON_SKIP_CHECK"))) {
 		return { ok: true };
 	}
 	const resolvedCwd = path.resolve(cwd);

@@ -73,7 +73,7 @@ Unified LLM API with automatic model discovery, provider configuration, token an
 - **Xiaomi MiMo** (requires `XIAOMI_API_KEY`)
 - **ZenMux** (requires `ZENMUX_API_KEY`)
 - **Qwen Portal** (supports `QWEN_OAUTH_TOKEN` or `QWEN_PORTAL_API_KEY`)
-- **QwenCloud Token Plan** (supports `/login alibaba-token-plan`, `ALIBABA_TOKEN_PLAN_API_KEY`, or `BAILIAN_TOKEN_PLAN_API_KEY`; interactive login optionally stores a `home.qwencloud.com` Cookie request header for best-effort 5-hour and 7-day quota reporting)
+- **QwenCloud Token Plan** (supports `/login alibaba-token-plan`, `ALIBABA_TOKEN_PLAN_API_KEY`, or `BAILIAN_TOKEN_PLAN_API_KEY`; interactive login first selects a region — International (Singapore, default), China (Beijing) for 百炼 Token Plan keys, or a custom base URL — since region keys are non-interchangeable, then optionally stores a `home.qwencloud.com` Cookie request header for best-effort 5-hour and 7-day quota reporting)
   To enable quota reporting, sign in to the Token Plan dashboard, copy the `Cookie` request-header value from a `home.qwencloud.com` request in browser developer tools, and paste it at the second login prompt. Press Enter to skip; the Cookie is sensitive and session-lived, so rerun login when it expires.
 - **Cloudflare AI Gateway** (requires `CLOUDFLARE_AI_GATEWAY_API_KEY` and provider-specific gateway base URL)
 - **Ollama** (local OpenAI-compatible runtime; optional `OLLAMA_API_KEY`)

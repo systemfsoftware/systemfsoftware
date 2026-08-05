@@ -1057,7 +1057,7 @@ async def _run_compiled_async(code, ns: dict, *, want_value: bool) -> Any:
 
 
 def _compile_source(source: str) -> tuple[Any, Any | None, bool]:
-    module = ast.parse(source, mode="exec")
+    module = ast.parse(source, "<cell>", "exec")
     if not module.body:
         return None, None, False
 
@@ -1279,7 +1279,21 @@ async def _handle_request_async(req: dict) -> None:
 
 
 def _emit_error(rid: str, exc: BaseException) -> None:
-    tb_lines = traceback.format_exception(type(exc), exc, exc.__traceback__)
+    if isinstance(exc, SyntaxError) and exc.filename == "<cell>":
+        # Syntax error in the cell source itself: every stack frame is runner
+        # machinery, so emit only the caret display, like a REPL.
+        tb_lines = traceback.format_exception_only(type(exc), exc)
+    else:
+        # Drop the leading runner-internal frames (_handle_request_async ->
+        # _exec_source_async -> _run_compiled_*) so tracebacks start at user
+        # code. If the exception never reached user code it is a runner bug;
+        # keep the full traceback because those frames are the diagnosis.
+        tb = exc.__traceback__
+        while tb is not None and tb.tb_frame.f_code.co_filename == __file__:
+            tb = tb.tb_next
+        tb_lines = traceback.format_exception(
+            type(exc), exc, tb if tb is not None else exc.__traceback__
+        )
     _emit(
         {
             "type": "error",

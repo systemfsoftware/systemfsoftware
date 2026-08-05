@@ -1,6 +1,6 @@
+import { type BaseType, type } from "@oh-my-pi/omptype";
 import type { Usage } from "@oh-my-pi/pi-ai";
 import { $env } from "@oh-my-pi/pi-utils";
-import { type BaseType, type } from "arktype";
 import type { AgentSessionEvent } from "../session/agent-session";
 import type { ConfiguredThinkingLevel, TaskEffort } from "../thinking";
 import type { NestedRepoPatch } from "./worktree";
@@ -115,7 +115,6 @@ export const taskItemSchema = type({
 	"name?": "string",
 	agent: "string = 'task'",
 	task: "string",
-	"effort?": effortRule,
 	"outputSchema?": outputSchemaInputSchema,
 	"schemaMode?": '"permissive" | "strict"',
 	"+": "delete",
@@ -124,7 +123,6 @@ const taskItemSchemaIsolated = type({
 	"name?": "string",
 	agent: "string = 'task'",
 	task: "string",
-	"effort?": effortRule,
 	"outputSchema?": outputSchemaInputSchema,
 	"schemaMode?": '"permissive" | "strict"',
 	"isolated?": "boolean",
@@ -153,7 +151,6 @@ export const taskSchema = type({
 	"name?": "string",
 	agent: "string = 'task'",
 	task: "string",
-	"effort?": effortRule,
 	"outputSchema?": outputSchemaInputSchema,
 	"schemaMode?": '"permissive" | "strict"',
 	"isolated?": "boolean",
@@ -163,7 +160,6 @@ const taskSchemaNoIsolation = type({
 	"name?": "string",
 	agent: "string = 'task'",
 	task: "string",
-	"effort?": effortRule,
 	"outputSchema?": outputSchemaInputSchema,
 	"schemaMode?": '"permissive" | "strict"',
 	"+": "delete",
@@ -200,15 +196,17 @@ function createTaskSchema(options: {
 	isolationEnabled: boolean;
 	batchEnabled: boolean;
 	defaultAgent: string;
+	effortEnabled: boolean;
 }): BaseType {
 	const agent = taskAgentSchemaRule(options.defaultAgent);
+	const effortField = options.effortEnabled ? { "effort?": effortRule } : {};
 	if (options.batchEnabled) {
 		if (options.isolationEnabled) {
 			const item = type.raw({
 				"name?": "string",
 				agent,
 				task: "string",
-				"effort?": effortRule,
+				...effortField,
 				"outputSchema?": outputSchemaInputSchema,
 				"schemaMode?": '"permissive" | "strict"',
 				"isolated?": "boolean",
@@ -224,7 +222,7 @@ function createTaskSchema(options: {
 			"name?": "string",
 			agent,
 			task: "string",
-			"effort?": effortRule,
+			...effortField,
 			"outputSchema?": outputSchemaInputSchema,
 			"schemaMode?": '"permissive" | "strict"',
 			"+": "delete",
@@ -240,7 +238,7 @@ function createTaskSchema(options: {
 			"name?": "string",
 			agent,
 			task: "string",
-			"effort?": effortRule,
+			...effortField,
 			"outputSchema?": outputSchemaInputSchema,
 			"schemaMode?": '"permissive" | "strict"',
 			"isolated?": "boolean",
@@ -251,33 +249,30 @@ function createTaskSchema(options: {
 		"name?": "string",
 		agent,
 		task: "string",
-		"effort?": effortRule,
+		...effortField,
 		"outputSchema?": outputSchemaInputSchema,
 		"schemaMode?": '"permissive" | "strict"',
 		"+": "delete",
 	});
 }
 
-export function getTaskSchema(options: { isolationEnabled: boolean; batchEnabled: boolean }): DynamicTaskSchema;
+/** Build the task wire schema for the current settings and spawn policy. */
 export function getTaskSchema(options: {
 	isolationEnabled: boolean;
 	batchEnabled: boolean;
-	defaultAgent: string;
-}): TaskToolSchemaInstance;
-export function getTaskSchema(options: {
-	isolationEnabled: boolean;
-	batchEnabled: boolean;
+	effortEnabled?: boolean;
 	defaultAgent?: string;
 }): TaskToolSchemaInstance {
 	const defaultAgent = options.defaultAgent ?? "task";
-	if (defaultAgent === "task") {
+	const effortEnabled = options.effortEnabled ?? false;
+	if (defaultAgent === "task" && !effortEnabled) {
 		if (options.batchEnabled) return options.isolationEnabled ? taskSchemaBatch : taskSchemaBatchNoIsolation;
 		return options.isolationEnabled ? taskSchema : taskSchemaNoIsolation;
 	}
-	const key = `${options.isolationEnabled ? "iso" : "flat"}:${options.batchEnabled ? "batch" : "single"}:${defaultAgent}`;
+	const key = `${options.isolationEnabled ? "iso" : "flat"}:${options.batchEnabled ? "batch" : "single"}:${effortEnabled ? "effort" : "default"}:${defaultAgent}`;
 	const cached = taskSchemaCache.get(key);
 	if (cached) return cached;
-	const schema = createTaskSchema({ ...options, defaultAgent });
+	const schema = createTaskSchema({ ...options, effortEnabled, defaultAgent });
 	taskSchemaCache.set(key, schema);
 	return schema;
 }

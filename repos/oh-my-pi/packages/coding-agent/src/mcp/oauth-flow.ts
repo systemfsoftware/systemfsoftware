@@ -489,11 +489,21 @@ export class MCPOAuthFlow extends OAuthCallbackFlow {
 		}
 
 		const data = (await response.json()) as {
-			access_token: string;
+			access_token?: string;
 			refresh_token?: string;
 			expires_in?: number;
 			token_type?: string;
+			error?: string;
+			error_description?: string;
 		};
+
+		// Some providers (e.g. the Slack Web API) signal failure with HTTP 200 and
+		// an `{ ok: false, error }` body. Accepting such a response would store an
+		// empty access token and only surface `invalid_token` on a later request.
+		if (typeof data.access_token !== "string" || data.access_token.length === 0) {
+			const providerError = data.error_description ?? data.error;
+			throw new Error(`Token exchange returned no access token${providerError ? `: ${providerError}` : ""}`);
+		}
 
 		// Calculate expiry timestamp
 		const expiresIn = data.expires_in ?? 3600; // Default to 1 hour

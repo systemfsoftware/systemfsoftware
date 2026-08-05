@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import * as path from "node:path";
-import { Agent, type AgentTool } from "@oh-my-pi/pi-agent-core";
+import { Agent, type AgentTool, ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import { type Api, Effort, type Model, z } from "@oh-my-pi/pi-ai";
 import { createMockModel, type MockResponse } from "@oh-my-pi/pi-ai/providers/mock";
 import { getBundledModel } from "@oh-my-pi/pi-catalog/models";
@@ -10,6 +10,7 @@ import { AgentSession } from "@oh-my-pi/pi-coding-agent/session/agent-session";
 import { AuthStorage } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
 import { convertToLlm } from "@oh-my-pi/pi-coding-agent/session/messages";
 import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
+import { AUTO_THINKING } from "@oh-my-pi/pi-coding-agent/thinking";
 import { TempDir } from "@oh-my-pi/pi-utils";
 
 /**
@@ -399,6 +400,135 @@ describe("AgentSession prewalk", () => {
 		expect(session.model?.id).toBe(primary.id);
 	});
 
+	it("does not switch on a read-only xd:// device dispatched through write (issue #7312)", async () => {
+		const primary = modelOrThrow("claude-sonnet-4-5");
+		const target = modelOrThrow("claude-sonnet-4-6");
+		const modelRegistry = new ModelRegistry(authStorage, path.join(tempDir.path(), "models.yml"));
+
+		// A read-only lsp navigation is dispatched as `write xd://lsp`; the write
+		// result carries the wrapped tool's read tier. Like a bash step, it must
+		// not arm the hand-off — the model keeps reasoning about code shape on the
+		// strong model. Mirrors the bounded-continuation flow: one continuation,
+		// four turns, all primary, then a clean stop.
+		const readDeviceWrite: AgentTool<typeof writeToolSchema, { xdev: { tool: string; mode: string; tier: string } }> =
+			{
+				name: "write",
+				label: "Write",
+				description: "Dispatch a read-only device",
+				parameters: writeToolSchema,
+				async execute() {
+					return {
+						content: [{ type: "text", text: "references" }],
+						details: { xdev: { tool: "lsp", mode: "execute", tier: "read" } },
+					};
+				},
+			};
+		const mock = createMockModel({
+			responses: [
+				toolCall("t1", "record"),
+				toolCall("t2", "write"),
+				{ content: [{ type: "text", text: "Still planning." }], stopReason: "stop" },
+				{ content: [{ type: "text", text: "Done planning." }], stopReason: "stop" },
+			],
+		});
+		const requested: string[] = [];
+		const agent = new Agent({
+			getApiKey: () => "test-key",
+			initialState: {
+				model: primary,
+				systemPrompt: ["Test"],
+				tools: [recordTool as AgentTool, readDeviceWrite as AgentTool],
+				messages: [],
+				thinkingLevel: Effort.Medium,
+			},
+			convertToLlm,
+			streamFn: (model, context, options) => {
+				requested.push(`${model.provider}/${model.id}`);
+				return mock.stream(model, context, options);
+			},
+		});
+		session = new AgentSession({
+			agent,
+			sessionManager: SessionManager.inMemory(),
+			settings: Settings.isolated({ "compaction.enabled": false }),
+			modelRegistry,
+			toolRegistry: new Map([
+				[recordTool.name, recordTool as AgentTool],
+				[readDeviceWrite.name, readDeviceWrite as AgentTool],
+			]),
+			prewalk: { target },
+		});
+
+		await session.prompt("investigate the code shape");
+
+		expect(requested).toEqual(Array(4).fill(`${primary.provider}/${primary.id}`));
+		expect(session.model?.id).toBe(primary.id);
+	});
+
+	it("switches on a write-tier xd:// device dispatched through write (issue #7312)", async () => {
+		const primary = modelOrThrow("claude-sonnet-4-5");
+		const target = modelOrThrow("claude-sonnet-4-6");
+		const modelRegistry = new ModelRegistry(authStorage, path.join(tempDir.path(), "models.yml"));
+
+		// An lsp rename is a write-tier device call — it must arm the hand-off
+		// just like a direct edit/write: the write turn stays on the strong model,
+		// the next turn runs on the target.
+		const writeDeviceWrite: AgentTool<
+			typeof writeToolSchema,
+			{ xdev: { tool: string; mode: string; tier: string } }
+		> = {
+			name: "write",
+			label: "Write",
+			description: "Dispatch a write-tier device",
+			parameters: writeToolSchema,
+			async execute() {
+				return {
+					content: [{ type: "text", text: "renamed" }],
+					details: { xdev: { tool: "lsp", mode: "execute", tier: "write" } },
+				};
+			},
+		};
+		const mock = createMockModel({
+			responses: [toolCall("t1", "record"), toolCall("t2", "write"), { content: ["done"] }],
+		});
+		const requested: string[] = [];
+		const agent = new Agent({
+			getApiKey: () => "test-key",
+			initialState: {
+				model: primary,
+				systemPrompt: ["Test"],
+				tools: [recordTool as AgentTool, writeDeviceWrite as AgentTool],
+				messages: [],
+				thinkingLevel: Effort.Medium,
+			},
+			convertToLlm,
+			streamFn: (model, context, options) => {
+				requested.push(`${model.provider}/${model.id}`);
+				return mock.stream(model, context, options);
+			},
+		});
+		session = new AgentSession({
+			agent,
+			sessionManager: SessionManager.inMemory(),
+			settings: Settings.isolated({ "compaction.enabled": false }),
+			modelRegistry,
+			toolRegistry: new Map([
+				[recordTool.name, recordTool as AgentTool],
+				[writeDeviceWrite.name, writeDeviceWrite as AgentTool],
+			]),
+			prewalk: { target },
+		});
+
+		await session.prompt("rename the symbol");
+
+		expect(requested).toEqual([
+			`${primary.provider}/${primary.id}`,
+			`${primary.provider}/${primary.id}`,
+			`${target.provider}/${target.id}`,
+		]);
+		expect(session.model?.id).toBe(target.id);
+	});
+
 	it("re-arms continuation after tool progress between prose turns", async () => {
 		// Regression: a normal prewalk can split planning across several turns:
 		// prose plan, todo init, then prose before implementation. Each tool
@@ -551,5 +681,211 @@ describe("AgentSession prewalk", () => {
 		// immediately — no second primary-model turn needed.
 		expect(requested).toEqual([`${primary.provider}/${primary.id}`, `${target.provider}/${target.id}`]);
 		expect(session.model?.id).toBe(target.id);
+	});
+
+	it("effort-only prewalk on the same model downgrades the thinking level instead of silently skipping", async () => {
+		// Regression (#6659): the switch guard compared model identity only, so a
+		// same-model target at a cheaper thinking level (a legitimate effort
+		// downgrade, common with role aliases like `prewalk: "@task"`) was dropped
+		// as a no-op. On a reasoning model the effort is the bulk of the cost, so
+		// this must still switch.
+		const model = modelOrThrow("claude-sonnet-4-5");
+		const modelRegistry = new ModelRegistry(authStorage, path.join(tempDir.path(), "models.yml"));
+		const checklistMarker = "grep for every other call site";
+
+		// todo excluded from the active slate → the gate opens; record then write.
+		const mock = createMockModel({
+			responses: [toolCall("t1", "record"), toolCall("t2", "write"), { content: ["done"] }],
+		});
+		const calls: Array<{ model: string; hasChecklist: boolean }> = [];
+		const agent = new Agent({
+			getApiKey: () => "test-key",
+			initialState: {
+				model,
+				systemPrompt: ["Test"],
+				tools: [recordTool as AgentTool, writeTool as AgentTool],
+				messages: [],
+				thinkingLevel: Effort.Medium,
+			},
+			convertToLlm,
+			streamFn: (streamModel, context, options) => {
+				calls.push({
+					model: `${streamModel.provider}/${streamModel.id}`,
+					hasChecklist: contextMessagesHaveMarker(context.messages, checklistMarker),
+				});
+				return mock.stream(streamModel, context, options);
+			},
+		});
+		session = new AgentSession({
+			agent,
+			sessionManager: SessionManager.inMemory(),
+			settings: Settings.isolated({ "compaction.enabled": false }),
+			modelRegistry,
+			toolRegistry,
+			thinkingLevel: Effort.Medium,
+			prewalk: { target: model, thinkingLevel: Effort.Low },
+		});
+
+		expect(session.thinkingLevel).toBe(Effort.Medium);
+
+		await session.prompt("do the task");
+
+		// The model id never changes, but the effort drops after the first write.
+		expect(session.model?.id).toBe(model.id);
+		expect(session.thinkingLevel).toBe(Effort.Low);
+		// The switch ran: the post-switch checklist is present on the final turn.
+		expect(calls.at(-1)?.hasChecklist).toBe(true);
+	});
+
+	it("emits a notice and skips the checklist when the prewalk target is a genuine no-op", async () => {
+		// Same model AND same effective thinking level: nothing to switch. The
+		// early return must be visible (a notice), not silent, and must not fire
+		// the post-switch checklist.
+		const model = modelOrThrow("claude-sonnet-4-5");
+		const modelRegistry = new ModelRegistry(authStorage, path.join(tempDir.path(), "models.yml"));
+		const checklistMarker = "grep for every other call site";
+
+		const mock = createMockModel({
+			responses: [toolCall("t1", "record"), toolCall("t2", "write"), { content: ["done"] }],
+		});
+		const calls: Array<{ hasChecklist: boolean }> = [];
+		const agent = new Agent({
+			getApiKey: () => "test-key",
+			initialState: {
+				model,
+				systemPrompt: ["Test"],
+				tools: [recordTool as AgentTool, writeTool as AgentTool],
+				messages: [],
+				thinkingLevel: Effort.Medium,
+			},
+			convertToLlm,
+			streamFn: (streamModel, context, options) => {
+				calls.push({ hasChecklist: contextMessagesHaveMarker(context.messages, checklistMarker) });
+				return mock.stream(streamModel, context, options);
+			},
+		});
+		session = new AgentSession({
+			agent,
+			sessionManager: SessionManager.inMemory(),
+			settings: Settings.isolated({ "compaction.enabled": false }),
+			modelRegistry,
+			toolRegistry,
+			thinkingLevel: Effort.Medium,
+			prewalk: { target: model, thinkingLevel: Effort.Medium },
+		});
+		const notices: string[] = [];
+		session.subscribe(event => {
+			if (event.type === "notice" && event.source === "prewalk") notices.push(event.message);
+		});
+
+		await session.prompt("do the task");
+
+		expect(session.model?.id).toBe(model.id);
+		expect(session.thinkingLevel).toBe(Effort.Medium);
+		// The no-op is announced, not silent.
+		expect(notices.some(message => message.includes("nothing to switch"))).toBe(true);
+		// The checklist steer only fires on a real switch.
+		expect(calls.every(call => !call.hasChecklist)).toBe(true);
+	});
+
+	it("treats a target effort the model clamps back to the active effort as a no-op", async () => {
+		// Review edge case: a model capped at `high` running at `high` with a
+		// prewalk target of `xhigh`. The raw selectors differ, but the target
+		// clamps to `high`, so switching would reset the model and inject the
+		// nudges for no effective change — it must be recognized as a no-op.
+		const model = modelOrThrow("claude-sonnet-4-6"); // supported efforts cap at high
+		const modelRegistry = new ModelRegistry(authStorage, path.join(tempDir.path(), "models.yml"));
+		const checklistMarker = "grep for every other call site";
+
+		const mock = createMockModel({
+			responses: [toolCall("t1", "record"), toolCall("t2", "write"), { content: ["done"] }],
+		});
+		const calls: Array<{ hasChecklist: boolean }> = [];
+		const agent = new Agent({
+			getApiKey: () => "test-key",
+			initialState: {
+				model,
+				systemPrompt: ["Test"],
+				tools: [recordTool as AgentTool, writeTool as AgentTool],
+				messages: [],
+				thinkingLevel: Effort.High,
+			},
+			convertToLlm,
+			streamFn: (streamModel, context, options) => {
+				calls.push({ hasChecklist: contextMessagesHaveMarker(context.messages, checklistMarker) });
+				return mock.stream(streamModel, context, options);
+			},
+		});
+		session = new AgentSession({
+			agent,
+			sessionManager: SessionManager.inMemory(),
+			settings: Settings.isolated({ "compaction.enabled": false }),
+			modelRegistry,
+			toolRegistry,
+			thinkingLevel: Effort.High,
+			prewalk: { target: model, thinkingLevel: Effort.XHigh },
+		});
+		const notices: string[] = [];
+		session.subscribe(event => {
+			if (event.type === "notice" && event.source === "prewalk") notices.push(event.message);
+		});
+
+		await session.prompt("do the task");
+
+		expect(session.thinkingLevel).toBe(Effort.High);
+		expect(notices.some(message => message.includes("nothing to switch"))).toBe(true);
+		expect(calls.every(call => !call.hasChecklist)).toBe(true);
+	});
+
+	it("switches when a same-model target clears auto mode even though efforts both resolve to undefined", async () => {
+		// Review edge case: session in `auto`, same-model prewalk target `:inherit`.
+		// Both selectors resolve to an `undefined` effort, but `:inherit` clears
+		// per-turn classification, so this is a real change and must switch — not
+		// collapse to a no-op.
+		const model = modelOrThrow("claude-sonnet-4-5");
+		const modelRegistry = new ModelRegistry(authStorage, path.join(tempDir.path(), "models.yml"));
+		const checklistMarker = "grep for every other call site";
+
+		const mock = createMockModel({
+			responses: [toolCall("t1", "record"), toolCall("t2", "write"), { content: ["done"] }],
+		});
+		const calls: Array<{ hasChecklist: boolean }> = [];
+		const agent = new Agent({
+			getApiKey: () => "test-key",
+			initialState: {
+				model,
+				systemPrompt: ["Test"],
+				tools: [recordTool as AgentTool, writeTool as AgentTool],
+				messages: [],
+				thinkingLevel: Effort.Medium,
+			},
+			convertToLlm,
+			streamFn: (streamModel, context, options) => {
+				calls.push({ hasChecklist: contextMessagesHaveMarker(context.messages, checklistMarker) });
+				return mock.stream(streamModel, context, options);
+			},
+		});
+		session = new AgentSession({
+			agent,
+			sessionManager: SessionManager.inMemory(),
+			settings: Settings.isolated({ "compaction.enabled": false }),
+			modelRegistry,
+			toolRegistry,
+			thinkingLevel: AUTO_THINKING,
+			prewalk: { target: model, thinkingLevel: ThinkingLevel.Inherit },
+		});
+		const notices: string[] = [];
+		session.subscribe(event => {
+			if (event.type === "notice" && event.source === "prewalk") notices.push(event.message);
+		});
+
+		expect(session.isAutoThinking).toBe(true);
+
+		await session.prompt("do the task");
+
+		// The hand-off ran: auto is cleared and the post-switch checklist fired.
+		expect(session.isAutoThinking).toBe(false);
+		expect(notices.some(message => message.includes("nothing to switch"))).toBe(false);
+		expect(calls.at(-1)?.hasChecklist).toBe(true);
 	});
 });

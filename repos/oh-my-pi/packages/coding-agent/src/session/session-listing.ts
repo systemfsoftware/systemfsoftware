@@ -2,8 +2,9 @@ import * as os from "node:os";
 import * as path from "node:path";
 import type { Message } from "@oh-my-pi/pi-ai";
 import { getAgentDir as getDefaultAgentDir, logger, parseJsonlLenient, toError } from "@oh-my-pi/pi-utils";
+import { LRUCache } from "lru-cache/raw";
 import { computeDefaultSessionDir } from "./session-paths";
-import { FileSessionStorage, type SessionStorage } from "./session-storage";
+import { FileSessionStorage, type SessionStorage, type SessionStorageStat } from "./session-storage";
 
 /**
  * Coarse lifecycle status of a session, derived from its last persisted message.
@@ -64,6 +65,44 @@ const SESSION_LIST_PREFIX_BYTES = 4096;
 const SESSION_LIST_SUFFIX_BYTES = 32_768;
 const SESSION_LIST_PARALLEL_THRESHOLD = 64;
 const SESSION_LIST_MAX_WORKERS = 16;
+
+/**
+ * Memoizes {@link scanSessionFile} results keyed by stat identity so listing
+ * refreshes (resume picker opens, startup recent-sessions, cross-project
+ * scans) skip the open+read+parse for unchanged files. The `statSync` still
+ * runs on every scan — it IS the invalidation check: a hit requires both
+ * `mtimeMs` and `size` to match. This covers the two mutation paths:
+ * - streaming appends grow `size` (and bump `mtimeMs`);
+ * - `updateSessionTitle` rewrites the fixed-width title slot in place via
+ *   `writeSync`, which leaves `size` unchanged but updates `mtimeMs`.
+ * Negative results (unparseable files) are cached too, as `undefined` info.
+ * Entries are small header objects, so a generous cap is cheap.
+ */
+const SESSION_SCAN_CACHE_MAX = 4096;
+
+interface SessionScanCacheEntry {
+	mtimeMs: number;
+	size: number;
+	info: SessionInfo | undefined;
+}
+
+type SessionScanCache = LRUCache<string, SessionScanCacheEntry>;
+
+/** All {@link FileSessionStorage} instances view the same real filesystem, so they share one cache. */
+const fileSessionScanCache: SessionScanCache = new LRUCache({ max: SESSION_SCAN_CACHE_MAX });
+/** Other storages (in-memory test doubles) each carry their own cache to avoid cross-instance path collisions. */
+const kScanCache = Symbol("session-listing.scanCache");
+
+interface StorageWithScanCache extends SessionStorage {
+	[kScanCache]?: SessionScanCache;
+}
+
+function getSessionScanCache(storage: SessionStorage): SessionScanCache {
+	if (storage instanceof FileSessionStorage) return fileSessionScanCache;
+	const holder = storage as StorageWithScanCache;
+	if (!holder[kScanCache]) holder[kScanCache] = new LRUCache({ max: SESSION_SCAN_CACHE_MAX });
+	return holder[kScanCache];
+}
 
 function sanitizeSessionName(value: string | undefined): string | undefined {
 	if (!value) return undefined;
@@ -355,8 +394,22 @@ async function scanSessionFile(
 	storage: SessionStorage,
 	withStatus: boolean,
 ): Promise<SessionInfo | undefined> {
+	let stat: SessionStorageStat;
 	try {
-		const stat = storage.statSync(file);
+		stat = storage.statSync(file);
+	} catch {
+		// Missing/unstatable file: no stat identity to cache under.
+		return undefined;
+	}
+	const cache = getSessionScanCache(storage);
+	// `withStatus` changes what a scan reads (tail window) and returns, so the
+	// two variants are cached under distinct keys.
+	const cacheKey = withStatus ? `s\0${file}` : `h\0${file}`;
+	const cached = cache.get(cacheKey);
+	if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) {
+		return cached.info ? { ...cached.info } : undefined;
+	}
+	try {
 		const [content, suffix] = await storage.readTextSlices(
 			file,
 			SESSION_LIST_PREFIX_BYTES,
@@ -365,7 +418,12 @@ async function scanSessionFile(
 		const { size, mtime } = stat;
 		const entries = parseJsonlLenient<Record<string, unknown>>(content);
 		const header = parseSessionListHeader(content, entries);
-		if (!header) return undefined;
+		if (!header) {
+			// Cache the negative result too: an unparseable file stays unparseable
+			// until its stat identity changes.
+			cache.set(cacheKey, { mtimeMs: stat.mtimeMs, size: stat.size, info: undefined });
+			return undefined;
+		}
 
 		let parsedMessageCount = 0;
 		let firstMessage = "";
@@ -398,7 +456,7 @@ async function scanSessionFile(
 
 		firstMessage ||= extractFirstDisplayMessageFromPrefix(content) ?? "";
 		const messageCount = Math.max(parsedMessageCount, countMessageMarkers(content));
-		return {
+		const info: SessionInfo = {
 			path: file,
 			id: header.id,
 			cwd: header.cwd ?? "",
@@ -412,6 +470,10 @@ async function scanSessionFile(
 			allMessagesText: allMessages.length > 0 ? allMessages.join(" ") : firstMessage,
 			status: withStatus ? deriveSessionStatus(suffix) : undefined,
 		};
+		// The cache keeps its own shallow copy; hits also hand out copies, so
+		// callers can never mutate the shared cached object.
+		cache.set(cacheKey, { mtimeMs: stat.mtimeMs, size: stat.size, info: { ...info } });
+		return info;
 	} catch {
 		return undefined;
 	}

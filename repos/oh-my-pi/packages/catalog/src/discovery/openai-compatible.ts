@@ -1,4 +1,4 @@
-import { type } from "arktype";
+import { type } from "@oh-my-pi/omptype";
 import type { Api, FetchImpl, ModelSpec, Provider } from "../types";
 import { discoveryFetch } from "../utils";
 

@@ -1,5 +1,6 @@
 import * as os from "node:os";
 import * as path from "node:path";
+import { type } from "@oh-my-pi/omptype";
 import { type ApiKey, type FetchImpl, getEnvApiKey, type Model, withAuth } from "@oh-my-pi/pi-ai";
 import { ProviderHttpError } from "@oh-my-pi/pi-ai/error";
 import {
@@ -20,7 +21,6 @@ import {
 	Snowflake,
 	untilAborted,
 } from "@oh-my-pi/pi-utils";
-import { type } from "arktype";
 import packageJson from "../../package.json" with { type: "json" };
 import { isAuthenticated, type ModelRegistry } from "../config/model-registry";
 import { settings } from "../config/settings";

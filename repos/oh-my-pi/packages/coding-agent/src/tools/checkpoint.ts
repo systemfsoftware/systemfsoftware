@@ -1,6 +1,6 @@
+import { type } from "@oh-my-pi/omptype";
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import { prompt } from "@oh-my-pi/pi-utils";
-import { type } from "arktype";
 import checkpointDescription from "../prompts/tools/checkpoint.md" with { type: "text" };
 import rewindDescription from "../prompts/tools/rewind.md" with { type: "text" };
 import type { ToolSession } from ".";
@@ -50,11 +50,6 @@ export interface RewindToolDetails {
 	meta?: OutputMeta;
 }
 
-function isTopLevelSession(session: ToolSession): boolean {
-	const depth = session.taskDepth;
-	return depth === undefined || depth === 0;
-}
-
 export class CheckpointTool implements AgentTool<typeof checkpointSchema, CheckpointToolDetails> {
 	readonly name = "checkpoint";
 	readonly approval = "read" as const;
@@ -71,7 +66,6 @@ export class CheckpointTool implements AgentTool<typeof checkpointSchema, Checkp
 	}
 
 	static createIf(session: ToolSession): CheckpointTool | null {
-		if (!isTopLevelSession(session)) return null;
 		return new CheckpointTool(session);
 	}
 
@@ -82,9 +76,6 @@ export class CheckpointTool implements AgentTool<typeof checkpointSchema, Checkp
 		_onUpdate?: AgentToolUpdateCallback<CheckpointToolDetails>,
 		_context?: AgentToolContext,
 	): Promise<AgentToolResult<CheckpointToolDetails>> {
-		if (!isTopLevelSession(this.session)) {
-			throw new ToolError("Checkpoint not available in subagents.");
-		}
 		if (this.session.getCheckpointState?.()) {
 			throw new ToolError("Checkpoint already active.");
 		}
@@ -117,7 +108,6 @@ export class RewindTool implements AgentTool<typeof rewindSchema, RewindToolDeta
 	}
 
 	static createIf(session: ToolSession): RewindTool | null {
-		if (!isTopLevelSession(session)) return null;
 		return new RewindTool(session);
 	}
 
@@ -128,9 +118,6 @@ export class RewindTool implements AgentTool<typeof rewindSchema, RewindToolDeta
 		_onUpdate?: AgentToolUpdateCallback<RewindToolDetails>,
 		_context?: AgentToolContext,
 	): Promise<AgentToolResult<RewindToolDetails>> {
-		if (!isTopLevelSession(this.session)) {
-			throw new ToolError("Checkpoint not available in subagents.");
-		}
 		if (!this.session.getCheckpointState?.()) {
 			if (this.session.getLastCompletedRewind?.()) {
 				throw new ToolError(

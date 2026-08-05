@@ -32,6 +32,9 @@ function makeSession(testDir: string): ToolSession {
 		getSessionFile: () => sessionFile,
 		getArtifactsDir: () => artifactsDir,
 		getSessionSpawns: () => null,
+		// A restricted slate without inspect_image (and no xdev mount) must keep
+		// inlining images — metadata-only guidance would point at an absent tool.
+		isToolActive: () => false,
 		settings: Settings.isolated({ "images.autoResize": false }),
 	} as unknown as ToolSession;
 }

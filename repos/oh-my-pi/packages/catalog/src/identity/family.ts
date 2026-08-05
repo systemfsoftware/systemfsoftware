@@ -262,6 +262,19 @@ export const modelFamilyToken = memo((modelId: string): string => {
 });
 
 /**
+ * True for Claude generations that support extended thinking: Sonnet/Opus 3.7+,
+ * every 4.x/5+ Opus/Sonnet, and the Fable/Mythos generation. Pre-thinking
+ * models (Claude 3.5 and older) are excluded so no thinking effort dial is
+ * fabricated for a model that rejects thinking parameters. Classifier-based, so
+ * dotted and dashed version forms both match; ids the classifier does not parse
+ * (e.g. Haiku, bare dated ids) return false.
+ */
+export const anthropicModelSupportsThinking = memo((modelId: string): boolean => {
+	const parsed = parseAnthropicModel(bareModelId(modelId));
+	return parsed !== null && semverGte(parsed.version, "3.7");
+});
+
+/**
  * Adaptive thinking `display` is supported starting with Claude Opus 4.7+,
  * Sonnet 5+, and the Claude Fable/Mythos 5 generation. Older adaptive-thinking
  * models (Opus 4.6, Sonnet 4.6) reject the field. Classifier-based, so dotted

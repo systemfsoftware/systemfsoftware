@@ -724,6 +724,12 @@ export interface SessionSelectorOptions {
 	loadAllSessions?: () => Promise<SessionInfo[]>;
 	/** Preloaded all-projects list; cached so the first Tab toggle is instant. */
 	allSessions?: SessionInfo[];
+	/** Picker heading; defaults to "Resume Session". */
+	title?: string;
+	/** Fixed scope label, or false to omit the scope suffix. */
+	scopeLabel?: string | false;
+	/** Show each session's working directory in the list. */
+	showCwd?: boolean;
 	/**
 	 * Reads the live terminal height so the visible window fits the viewport.
 	 * Omitted only in tests; defaults to a conservative 24 rows.
@@ -773,6 +779,8 @@ export class SessionSelectorComponent extends Container {
 	readonly #getTerminalRows: () => number;
 	readonly #fillHeight: boolean;
 	readonly #bottomBorder = new DynamicBorder();
+	readonly #title: string;
+	readonly #scopeLabel: string | false | undefined;
 
 	constructor(
 		sessions: SessionInfo[],
@@ -790,6 +798,8 @@ export class SessionSelectorComponent extends Container {
 		this.#globalSessions = options.allSessions ?? null;
 		this.#getTerminalRows = options.getTerminalRows ?? (() => 24);
 		this.#fillHeight = options.fillHeight ?? false;
+		this.#title = options.title ?? "Resume Session";
+		this.#scopeLabel = options.scopeLabel;
 		// Add header
 		this.addChild(new Spacer(1));
 		this.#headerText = new Text(this.#headerLabel(), 1, 0);
@@ -801,7 +811,12 @@ export class SessionSelectorComponent extends Container {
 		// Create session list in folder scope; the empty-state hint invites the
 		// user to Tab into all-projects rather than silently surfacing other
 		// projects' history (issue #3099).
-		this.#sessionList = new SessionList(sessions, false, options.historyMatcher, options.getTerminalRows);
+		this.#sessionList = new SessionList(
+			sessions,
+			options.showCwd ?? false,
+			options.historyMatcher,
+			options.getTerminalRows,
+		);
 		// Every exit path cancels the list's pending history merge, so a stale
 		// debounce timer can never run its SQLite lookup after the picker closed.
 		this.#sessionList.onSelect = session => {
@@ -831,8 +846,9 @@ export class SessionSelectorComponent extends Container {
 	}
 
 	#headerLabel(): string {
-		const scopeLabel = this.#scope === "all" ? "all projects" : "current folder";
-		return `${theme.bold("Resume Session")} ${theme.fg("muted", `(${scopeLabel})`)}`;
+		if (this.#scopeLabel === false) return theme.bold(this.#title);
+		const scopeLabel = this.#scopeLabel ?? (this.#scope === "all" ? "all projects" : "current folder");
+		return `${theme.bold(this.#title)} ${theme.fg("muted", `(${scopeLabel})`)}`;
 	}
 
 	/**
@@ -889,7 +905,7 @@ export class SessionSelectorComponent extends Container {
 	 * is mounted the list is detached from the child tree, so Container's
 	 * child-walking dispose would miss its pending history-merge timer.
 	 */
-	dispose(): void {
+	override dispose(): void {
 		this.#sessionList.dispose();
 		super.dispose();
 	}
@@ -955,7 +971,7 @@ export class SessionSelectorComponent extends Container {
 	 * footer is always visible and never drifts as the list window resizes. The
 	 * in-editor selector just appends the footer directly.
 	 */
-	render(width: number): readonly string[] {
+	override render(width: number): readonly string[] {
 		const lines: string[] = [];
 		for (const child of this.children) {
 			const childLines = child.render(width);

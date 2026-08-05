@@ -30,6 +30,7 @@
  * real implementations at the dispatch site.
  */
 
+import { isServiceTierOpenAISettingValue, SERVICE_TIER_OPENAI_VALUES } from "../config/service-tier";
 import type { ConfiguredThinkingLevel } from "../thinking";
 import type { Args } from "./args";
 import { CliUsageError } from "./usage-error";
@@ -151,6 +152,14 @@ export const STRING_SETTERS: Record<string, StringSetter> = {
 	},
 	"--max-time": (result, value) => {
 		result.maxTime = parseMaxTimeSeconds(value);
+	},
+	"--service-tier": (result, value) => {
+		if (!isServiceTierOpenAISettingValue(value)) {
+			throw new CliUsageError(
+				`Invalid --service-tier value: ${JSON.stringify(value)}. Expected one of: ${SERVICE_TIER_OPENAI_VALUES.join(", ")}.`,
+			);
+		}
+		result.serviceTier = value;
 	},
 	"--api-key": (result, value) => {
 		result.apiKey = value;
@@ -290,6 +299,8 @@ export const VALUELESS_FLAGS: ReadonlySet<string> = new Set([
 	"--version",
 	"--allow-home",
 	"--continue",
+	"--from-claude",
+	"--from-codex",
 	"--no-session",
 	"--no-tools",
 	"--no-lsp",

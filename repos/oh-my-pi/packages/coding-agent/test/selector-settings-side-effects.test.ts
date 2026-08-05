@@ -9,6 +9,7 @@ import { getSupportedEfforts } from "@oh-my-pi/pi-catalog/model-thinking";
 import { getBundledModel } from "@oh-my-pi/pi-catalog/models";
 import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
 import { AssistantMessageComponent } from "@oh-my-pi/pi-coding-agent/modes/components/assistant-message";
+import { ReadToolGroupComponent } from "@oh-my-pi/pi-coding-agent/modes/components/read-tool-group";
 import { ToolExecutionComponent } from "@oh-my-pi/pi-coding-agent/modes/components/tool-execution";
 import { SelectorController } from "@oh-my-pi/pi-coding-agent/modes/controllers/selector-controller";
 import { getThemeByName, setThemeInstance } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
@@ -77,6 +78,22 @@ describe("selector setting side effects", () => {
 
 		expect(applyMemoryBackend).toHaveBeenCalledTimes(1);
 	});
+	it("stops the live advisor runtime when advisor.enabled is turned off in /settings", () => {
+		const setAdvisorEnabled = vi.fn();
+		const invalidate = vi.fn();
+		const requestRender = vi.fn();
+		const controller = new SelectorController({
+			session: { setAdvisorEnabled },
+			statusLine: { invalidate },
+			ui: { requestRender },
+		} as unknown as InteractiveModeContext);
+
+		controller.handleSettingChange("advisor.enabled", false);
+
+		expect(setAdvisorEnabled).toHaveBeenCalledWith(false);
+		expect(invalidate).toHaveBeenCalledTimes(1);
+		expect(requestRender).toHaveBeenCalledTimes(1);
+	});
 
 	for (const id of ["terminal.showImages", "showImages"]) {
 		for (const visible of [false, true]) {
@@ -107,6 +124,50 @@ describe("selector setting side effects", () => {
 				}
 			});
 		}
+	}
+
+	for (const hidden of [true, false]) {
+		it(`applies display.hideToolActivity=${hidden} to existing tool components`, () => {
+			const setToolVisible = vi.fn();
+			const setToolExpanded = vi.fn();
+			const tool = Object.create(ToolExecutionComponent.prototype) as ToolExecutionComponent;
+			tool.setToolActivityVisible = setToolVisible;
+			tool.setExpanded = setToolExpanded;
+			const setReadVisible = vi.fn();
+			const setReadExpanded = vi.fn();
+			const readGroup = Object.create(ReadToolGroupComponent.prototype) as ReadToolGroupComponent;
+			readGroup.setToolActivityVisible = setReadVisible;
+			readGroup.setExpanded = setReadExpanded;
+			const setToolResultImagesVisible = vi.fn();
+			const assistant = Object.create(AssistantMessageComponent.prototype) as AssistantMessageComponent;
+			assistant.setToolResultImagesVisible = setToolResultImagesVisible;
+			const clearInlineImages = vi.fn();
+			const resetDisplay = vi.fn();
+			const ctx = {
+				hideToolActivity: !hidden,
+				toolOutputExpanded: true,
+				chatContainer: { children: [tool, readGroup, assistant] },
+				ui: { clearInlineImages, resetDisplay },
+			};
+			const controller = new SelectorController(ctx as unknown as InteractiveModeContext);
+
+			controller.handleSettingChange("display.hideToolActivity", hidden);
+
+			expect(ctx.hideToolActivity).toBe(hidden);
+			expect(setToolVisible).toHaveBeenCalledWith(!hidden);
+			expect(setReadVisible).toHaveBeenCalledWith(!hidden);
+			expect(setToolResultImagesVisible).toHaveBeenCalledWith(!hidden);
+			expect(setToolExpanded).toHaveBeenCalledTimes(hidden ? 0 : 1);
+			expect(setReadExpanded).toHaveBeenCalledTimes(hidden ? 0 : 1);
+			expect(ctx.toolOutputExpanded).toBe(hidden);
+			expect(clearInlineImages).toHaveBeenCalledTimes(hidden ? 1 : 0);
+			expect(resetDisplay).toHaveBeenCalledTimes(1);
+			if (hidden) {
+				expect(clearInlineImages.mock.invocationCallOrder[0]).toBeLessThan(
+					resetDisplay.mock.invocationCallOrder[0],
+				);
+			}
+		});
 	}
 
 	it("clears stale default role thinking when auto is selected", async () => {

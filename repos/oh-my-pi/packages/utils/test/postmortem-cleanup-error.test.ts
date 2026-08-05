@@ -20,8 +20,10 @@ async function runPostmortemProbe(
 			stderr: "pipe",
 			env: { ...process.env, OMP_AGENT_DIR: join(root, "agent") },
 		});
-		// Process-level regressions can hang the child; the watchdog bounds the fixture without slowing green runs.
-		const watchdog = Bun.sleep(2000).then(() => {
+		// Process-level regressions can hang the child; the watchdog bounds the fixture without slowing
+		// green runs (the race resolves on exit). Generous deadline: a cold bun spawn transpiling the
+		// pi-utils module graph can take multiple seconds on a loaded parallel CI runner (observed >2s).
+		const watchdog = Bun.sleep(15_000).then(() => {
 			proc.kill();
 			return -999;
 		});

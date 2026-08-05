@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { type } from "@oh-my-pi/omptype";
 import {
 	buildTransformedCodexRequestBody,
 	convertOpenAICodexResponsesTools as convertCodexTools,
@@ -18,7 +19,6 @@ import {
 } from "@oh-my-pi/pi-ai/providers/openai-shared";
 import type { AssistantMessage, Model, ModelSpec, Tool, ToolResultMessage } from "@oh-my-pi/pi-ai/types";
 import { buildModel } from "@oh-my-pi/pi-catalog/build";
-import { type } from "arktype";
 
 const GRAMMAR = [
 	"// top-level comment",

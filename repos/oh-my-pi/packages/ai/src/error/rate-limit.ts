@@ -6,12 +6,14 @@
 export type RateLimitReason =
 	| "QUOTA_EXHAUSTED"
 	| "RATE_LIMIT_EXCEEDED"
+	| "CONCURRENT_LIMIT"
 	| "MODEL_CAPACITY_EXHAUSTED"
 	| "SERVER_ERROR"
 	| "UNKNOWN";
 
 const QUOTA_EXHAUSTED_BACKOFF_MS = 30 * 60 * 1000; // 30 min
 const RATE_LIMIT_EXCEEDED_BACKOFF_MS = 30 * 1000; // 30s
+const CONCURRENT_LIMIT_BACKOFF_MS = 5 * 1000; // 5s
 const MODEL_CAPACITY_BASE_MS = 45 * 1000; // 45s base
 const MODEL_CAPACITY_JITTER_MS = 30 * 1000; // ±15s
 const SERVER_ERROR_BACKOFF_MS = 20 * 1000; // 20s
@@ -21,17 +23,37 @@ const ACCOUNT_RATE_LIMIT_PATTERN =
 const INSUFFICIENT_BALANCE_PATTERN = /insufficient.?balance/i;
 const SPEND_LIMIT_PATTERN = /spend.?limit/i;
 const OPENROUTER_DAILY_FREE_LIMIT_PATTERN = /\bfree[-_ ]models[-_ ]per[-_ ]day\b/i;
+// gRPC/Connect end-streams carry the status as its name (`resource_exhausted`),
+// while HTTP bodies use the phrase ("resource exhausted"). Strip either form
+// before classifying explicit details; an otherwise opaque status is transient
+// model capacity, while quota/rate-limit/server wording remains authoritative.
+const RESOURCE_EXHAUSTED_PATTERN = /resource.?exhausted/gi;
+const CONCURRENT_LIMIT_PATTERN =
+	// Require an actual cap signal near "concurrent". "Too many concurrent
+	// requests" is itself a cap signal; bare feature rejections such as
+	// "concurrent invocation is not supported" remain excluded.
+	/\btoo many\s+concurren\w*\s+(?:requests?|invocations?)\b|\bconcurren\w*\b[^\n]{0,60}\b(?:limit|quota|exceed\w*|reach\w*)\b|\b(?:limit|quota|exceed\w*|reach\w*)\b[^\n]{0,60}\bconcurren\w*\b|\bconcurren[a-z]*[-_](?:[a-z]+[_-])*(?:limit|quota|exceed\w*|reach\w*)/i;
+const ACCOUNT_SCOPED_403_PATTERN =
+	// The bare "limit will reset" / "will reset in" phrasing also appears on
+	// statusless per-minute transients ("Rate limit will reset in 30 seconds"),
+	// so gate the reset-window alternative on account-specific wording (Devin's
+	// "Your limit will reset in …"); the overall/account qualifiers arm above
+	// already covers the rest.
+	/\b(?:overall|account|organization|team|workspace)\b[^\n]{0,40}\b(?:message |request )?rate.?limit\b|\byour\b[^\n]{0,30}\b(?:limit )?will reset\b/i;
 
 /**
  * Classify a rate-limit error message into a reason category.
- * Priority order: QUOTA (Antigravity "quota will reset") > MODEL_CAPACITY > QUOTA (account) >
- * RATE_LIMIT > QUOTA (generic) > SERVER_ERROR > UNKNOWN.
+ * Priority order: explicit details in a resource-exhausted error > QUOTA
+ * (Antigravity "quota will reset") > CONCURRENT_LIMIT > MODEL_CAPACITY >
+ * QUOTA (account) > RATE_LIMIT > QUOTA (generic) > SERVER_ERROR > bare resource-exhausted > UNKNOWN.
  *
- * "resource exhausted" maps to MODEL_CAPACITY (transient, short wait)
- * "quota exceeded" / "quota will reset" maps to QUOTA_EXHAUSTED (long wait, switch account)
+ * Bare "resource exhausted" / "resource_exhausted" maps to MODEL_CAPACITY (transient, short wait).
+ * Explicit details such as "quota exceeded" retain their normal classification.
  */
 export function parseRateLimitReason(errorMessage: string): RateLimitReason {
-	const lower = errorMessage.toLowerCase();
+	const lowerWithStatus = errorMessage.toLowerCase();
+	const lower = lowerWithStatus.replace(RESOURCE_EXHAUSTED_PATTERN, "");
+	const hasResourceExhaustedStatus = lower !== lowerWithStatus;
 
 	// Antigravity / Cloud Code Assist surface multi-hour daily-quota exhaustion as
 	// "You have exhausted your capacity on this model. Your quota will reset after …".
@@ -42,13 +64,11 @@ export function parseRateLimitReason(errorMessage: string): RateLimitReason {
 		return "QUOTA_EXHAUSTED";
 	}
 
-	if (
-		lower.includes("capacity") ||
-		lower.includes("overloaded") ||
-		lower.includes("529") ||
-		lower.includes("503") ||
-		lower.includes("resource exhausted")
-	) {
+	if (CONCURRENT_LIMIT_PATTERN.test(errorMessage)) {
+		return "CONCURRENT_LIMIT";
+	}
+
+	if (lower.includes("capacity") || lower.includes("overloaded") || lower.includes("529") || lower.includes("503")) {
 		return "MODEL_CAPACITY_EXHAUSTED";
 	}
 
@@ -92,6 +112,10 @@ export function parseRateLimitReason(errorMessage: string): RateLimitReason {
 		return "SERVER_ERROR";
 	}
 
+	if (hasResourceExhaustedStatus) {
+		return "MODEL_CAPACITY_EXHAUSTED";
+	}
+
 	return "UNKNOWN";
 }
 
@@ -105,6 +129,8 @@ export function calculateRateLimitBackoffMs(reason: RateLimitReason): number {
 			return QUOTA_EXHAUSTED_BACKOFF_MS;
 		case "RATE_LIMIT_EXCEEDED":
 			return RATE_LIMIT_EXCEEDED_BACKOFF_MS;
+		case "CONCURRENT_LIMIT":
+			return CONCURRENT_LIMIT_BACKOFF_MS;
 		case "MODEL_CAPACITY_EXHAUSTED":
 			return MODEL_CAPACITY_BASE_MS + Math.random() * MODEL_CAPACITY_JITTER_MS;
 		case "SERVER_ERROR":
@@ -142,18 +168,37 @@ export function isUsageLimitStatus(status: number | undefined): boolean {
  *  3. Body is absent or {@link isOpaqueStatusBody opaque} (just the status,
  *     empty JSON, HTTP framing only) → rotate conservatively: the server
  *     gave us nothing else to go on.
- *  4. Body has content → defer to {@link parseRateLimitReason}. Only
- *     `QUOTA_EXHAUSTED` rotates; `RATE_LIMIT_EXCEEDED` (`Too many requests`,
+ *  4. Body has content → defer to {@link parseRateLimitReason}. `QUOTA_EXHAUSTED`
+ *     rotates; for the categorical 402 billing cap a `CONCURRENT_LIMIT` body
+ *     also rotates (the cap is concurrent-worded but the status is still an
+ *     exhausted billing cap). `RATE_LIMIT_EXCEEDED` (`Too many requests`,
  *     per-minute caps), `MODEL_CAPACITY_EXHAUSTED` (`Service overloaded`),
  *     `SERVER_ERROR`, and `UNKNOWN` (`Please retry in 5s`) stay in the
  *     provider's own backoff layer so transient 429s don't burn sibling
  *     credentials.
  */
 export function isUsageLimitOutcome(status: number | undefined, message: string | undefined): boolean {
+	// Concurrency caps are shed-and-backoff, not credential-rotatable — but only
+	// for quota-worded 429 / other statuses. HTTP 402 is categorically an
+	// account-billing cap, so a 402 whose body happens to mention concurrency is
+	// still an exhausted billing cap and must rotate; gate the exclusion on the
+	// status not being that categorical billing cap.
+	const isBillingCapStatus = status === 402;
+	if (isConcurrencyCapExclusion(status, message)) return false;
 	if (message && matchesUsageLimitText(message)) return true;
+	// A 403 is normally an auth failure, but several providers deliver an
+	// account-scoped cap with it (Devin/Codeium Connect `permission_denied`,
+	// GitHub Copilot). Devin's end-of-stream Connect trailer carries no HTTP
+	// status at all (it arrives as a `permission_denied` ValidationError), so
+	// accept an undefined status too — but only when the body names a cap that
+	// resets, never on a bare 403, which stays an auth failure.
+	if ((status === 403 || status === undefined) && message && isAccountScopedCapText(message)) return true;
 	if (!isUsageLimitStatus(status)) return false;
 	if (!message || isOpaqueStatusBody(message)) return true;
-	return parseRateLimitReason(message) === "QUOTA_EXHAUSTED";
+	const reason = parseRateLimitReason(message);
+	// For the categorical 402 billing cap a concurrency-worded body is still an
+	// exhausted cap (rotate); for 429 / other only QUOTA_EXHAUSTED rotates.
+	return reason === "QUOTA_EXHAUSTED" || (isBillingCapStatus && reason === "CONCURRENT_LIMIT");
 }
 
 /**
@@ -183,4 +228,24 @@ export function matchesUsageLimitText(errorMessage: string): boolean {
 		ACCOUNT_RATE_LIMIT_PATTERN.test(errorMessage) ||
 		OPENROUTER_DAILY_FREE_LIMIT_PATTERN.test(errorMessage)
 	);
+}
+
+/**
+ * Account-scoped cap phrasing delivered on a 403 (or a statusless Connect
+ * trailer): "Reached overall message rate limit", "Your limit will reset in …".
+ * Kept separate from {@link matchesUsageLimitText} because the bare wording is
+ * ambiguous without the 403 / statusless-account context; consumed by both
+ * {@link isUsageLimitOutcome} (rotation decision) and `flags.ts` (Flag.UsageLimit).
+ */
+export function isAccountScopedCapText(message: string): boolean {
+	return ACCOUNT_SCOPED_403_PATTERN.test(message);
+}
+
+/**
+ * A concurrency cap on a non-billing status is shed-and-backoff, not
+ * credential-rotatable. This mirrors the exclusion in {@link isUsageLimitOutcome}
+ * for the 403 auth-retry entry points. A 402 remains a categorical billing cap.
+ */
+export function isConcurrencyCapExclusion(status: number | undefined, message: string | undefined): boolean {
+	return message !== undefined && parseRateLimitReason(message) === "CONCURRENT_LIMIT" && status !== 402;
 }

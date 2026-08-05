@@ -4,6 +4,7 @@
 
 import type { Message, ToolCall } from "@oh-my-pi/pi-ai";
 import { type Dialect, getDialectDefinition } from "@oh-my-pi/pi-ai/dialect";
+import { escapeHarmonyControlTokens } from "@oh-my-pi/pi-ai/utils/harmony-leak";
 import { formatGroupedPaths, prompt, stringifyJson } from "@oh-my-pi/pi-utils";
 import type { AgentMessage } from "../types";
 import fileOperationsTemplate from "./prompts/file-operations.md" with { type: "text" };
@@ -207,15 +208,13 @@ export function truncateToolResultForSummary(text: string): string {
 	return `${text.slice(0, TOOL_RESULT_MAX_CHARS)}\n\n[... ${truncatedChars} more characters truncated]`;
 }
 
-const HARMONY_CONTROL_TOKEN_RE = /<\|(start|end|message|channel|constrain|return|call)\|>/g;
-
 /**
  * Serialize LLM messages as plain summary input without provider control tokens.
  */
 export function serializeConversationForSummary(messages: Message[], dialect?: Dialect): string {
 	const conversation = serializeConversation(messages, dialect);
 	if (dialect !== "harmony") return conversation;
-	return conversation.replace(HARMONY_CONTROL_TOKEN_RE, "<\\|$1\\|>");
+	return escapeHarmonyControlTokens(conversation);
 }
 
 /**

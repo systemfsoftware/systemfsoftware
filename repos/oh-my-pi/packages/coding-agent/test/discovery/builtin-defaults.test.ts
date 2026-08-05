@@ -99,6 +99,39 @@ describe("builtin-defaults rule provider", () => {
 		).toEqual([]);
 	});
 
+	it("fires ts-no-local-is-record on local function and lambda definitions", async () => {
+		const rules = await loadBuiltinRules();
+		const rule = rules.find(r => r.name === "ts-no-local-is-record");
+		if (!rule) throw new Error("ts-no-local-is-record rule missing");
+
+		const manager = new TtsrManager();
+		expect(manager.addRule(rule)).toBe(true);
+
+		for (const snippet of [
+			'function isRecord(value: unknown): value is Record<string, unknown> { return typeof value === "object"; }',
+			'const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object";',
+			'const isRecord = function (value: unknown): value is Record<string, unknown> { return typeof value === "object"; };',
+		]) {
+			manager.resetBuffer();
+			expect(
+				manager.checkDelta(snippet, {
+					source: "tool",
+					toolName: "write",
+					filePaths: ["packages/x/src/foo.ts"],
+				}),
+			).toHaveLength(1);
+		}
+
+		manager.resetBuffer();
+		expect(
+			manager.checkDelta('import { isRecord } from "@oh-my-pi/pi-utils";', {
+				source: "tool",
+				toolName: "write",
+				filePaths: ["packages/x/src/foo.ts"],
+			}),
+		).toEqual([]);
+	});
+
 	it("fires ts-no-inline-cast-access on inline cast-and-access but not named-type casts", async () => {
 		const rules = await loadBuiltinRules();
 		const rule = rules.find(r => r.name === "ts-no-inline-cast-access");

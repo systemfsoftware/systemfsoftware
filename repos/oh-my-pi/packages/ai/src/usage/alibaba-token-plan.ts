@@ -14,13 +14,21 @@ const PROVIDER = "alibaba-token-plan";
 const CONSOLE_ORIGIN = "https://home.qwencloud.com";
 const DASHBOARD_URL = `${CONSOLE_ORIGIN}/billing/subscription/token-plan-individual`;
 const USER_INFO_URL = `${CONSOLE_ORIGIN}/tool/user/info.json`;
-const USAGE_URL = `${CONSOLE_ORIGIN}/data/api.json?product=sfm_bailian&action=IntlBroadScopeAspnGateway`;
 const GATEWAY_ACTION = "IntlBroadScopeAspnGateway";
 const USAGE_API = "zeldaHttp.apikeyMgr./tokenplan/personal/api/v2/usage";
+const USAGE_URL = `https://cs-data.qwencloud.com/data/api.json?product=sfm_bailian&action=${GATEWAY_ACTION}&api=${encodeURIComponent(USAGE_API)}`;
 const BROWSER_USER_AGENT =
 	"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36";
 const FIVE_HOURS_MS = 5 * 60 * 60 * 1000;
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+const CONSOLE_CORNERSTONE_PARAM = {
+	domain: "home.qwencloud.com",
+	consoleSite: "QWENCLOUD",
+	console: "ONE_CONSOLE",
+	xsp_lang: "en-US",
+	protocol: "V2",
+	productCode: "p_efm",
+} as const;
 
 function extractCookieValue(header: string, name: string): string | undefined {
 	for (const segment of header.split(";")) {
@@ -30,6 +38,21 @@ function extractCookieValue(header: string, name: string): string | undefined {
 		return value || undefined;
 	}
 	return undefined;
+}
+
+function unwrapGatewayData(value: Record<string, unknown>): Record<string, unknown> {
+	let current = value;
+	if (typeof current.Data === "string") {
+		try {
+			const parsed: unknown = JSON.parse(current.Data);
+			if (isRecord(parsed)) current = parsed;
+		} catch {
+			return current;
+		}
+	}
+	if (isRecord(current.DataV2) && isRecord(current.DataV2.data)) current = current.DataV2.data;
+	if (isRecord(current.data)) current = current.data;
+	return current;
 }
 
 function parseResetTime(value: unknown): number | undefined {
@@ -127,7 +150,11 @@ async function fetchAlibabaTokenPlanUsage(
 			action: GATEWAY_ACTION,
 			region: "ap-southeast-1",
 			sec_token: secToken,
-			params: JSON.stringify({ Api: USAGE_API, Data: {} }),
+			params: JSON.stringify({
+				Api: USAGE_API,
+				Data: { cornerstoneParam: CONSOLE_CORNERSTONE_PARAM },
+				V: "1.0",
+			}),
 		});
 		const usageResponse = await ctx.fetch(USAGE_URL, {
 			method: "POST",
@@ -145,22 +172,23 @@ async function fetchAlibabaTokenPlanUsage(
 			ctx.logger?.warn("QwenCloud usage response invalid", { provider: PROVIDER });
 			return null;
 		}
+		const responseData = unwrapGatewayData(payload.data);
 		const accountId = accountIdFromUserData(userPayload.data);
 		const limits = [
 			buildLimit(
 				"5h",
 				"5 Hour Credits",
 				FIVE_HOURS_MS,
-				parseUsedFraction(payload.data.per5HourPercentage),
-				parseResetTime(payload.data.per5HourResetTime),
+				parseUsedFraction(responseData.per5HourPercentage),
+				parseResetTime(responseData.per5HourResetTime),
 				accountId,
 			),
 			buildLimit(
 				"7d",
 				"7 Day Credits",
 				SEVEN_DAYS_MS,
-				parseUsedFraction(payload.data.per1WeekPercentage),
-				parseResetTime(payload.data.per1WeekResetTime),
+				parseUsedFraction(responseData.per1WeekPercentage),
+				parseResetTime(responseData.per1WeekResetTime),
 				accountId,
 			),
 		].filter((limit): limit is UsageLimit => limit !== undefined);

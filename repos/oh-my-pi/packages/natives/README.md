@@ -9,6 +9,7 @@ Native Rust functionality via N-API.
 - **SIXEL**: Terminal image encoding for SIXEL-capable terminals (decode, resize, encode in one pass)
 - **Audio**: Cross-platform low-latency microphone capture and gapless speaker playback
 - **WebRTC**: Native Opus media, SDP offer/answer negotiation, and data-channel events for live sessions
+- **File locking**: Process-owned cross-process locks with in-memory kernel names on Linux/Windows and `flock(2)` sidecars on other Unix platforms
 
 General-purpose image processing (decode/resize/encode for files and buffers)
 lives in [`Bun.Image`](https://bun.com/docs/runtime/image) on the JS side; this

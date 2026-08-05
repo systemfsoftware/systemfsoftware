@@ -7,6 +7,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { scheduler } from "node:timers/promises";
+import { type } from "@oh-my-pi/omptype";
 import { Agent, AgentBusyError, type AgentMessage, type AgentTool } from "@oh-my-pi/pi-agent-core";
 import type { AssistantMessage, Message, ToolCall } from "@oh-my-pi/pi-ai";
 import { createMockModel } from "@oh-my-pi/pi-ai/providers/mock";
@@ -26,7 +27,6 @@ import { convertToLlm } from "@oh-my-pi/pi-coding-agent/session/messages";
 import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
 import { EventBus } from "@oh-my-pi/pi-coding-agent/utils/event-bus";
 import { removeSyncWithRetries, Snowflake } from "@oh-my-pi/pi-utils";
-import { type } from "arktype";
 import { createAssistantMessage } from "./helpers/agent-session-setup";
 
 // Mock stream that mimics AssistantMessageEventStream
@@ -510,7 +510,7 @@ describe("AgentSession concurrent prompt guard", () => {
 		expect(emitSessionStop).not.toHaveBeenCalled();
 	});
 
-	it("does not continue session_stop feedback after aborting a slow hook", async () => {
+	it("cancels an active session_stop pass without applying stale continuation feedback", async () => {
 		const model = getBundledModel("anthropic", "claude-sonnet-4-5")!;
 		const mock = createMockModel({
 			handler: () => ({ content: ["Done"] }),
@@ -521,32 +521,62 @@ describe("AgentSession concurrent prompt guard", () => {
 			streamFn: mock.stream,
 			convertToLlm,
 		});
+		const stopStarted = Promise.withResolvers<void>();
 		const stopHook = Promise.withResolvers<{ continue: true; additionalContext: string }>();
-		const emitSessionStop = vi.fn(() => (emitSessionStop.mock.calls.length === 1 ? stopHook.promise : undefined));
-		const extensionRunner = {
-			emit: vi.fn().mockResolvedValue(undefined),
-			emitBeforeAgentStart: vi.fn().mockResolvedValue(undefined),
-			hasHandlers: vi.fn((eventType: string) => eventType === "session_stop"),
-			emitSessionStop,
-		} as unknown as ExtensionRunner;
+		let firstStopSignal: AbortSignal | undefined;
+		let stopCount = 0;
+		const extensionRuntime = new ExtensionRuntime();
+		const extension = await loadExtensionFromFactory(
+			pi => {
+				pi.on("session_stop", event => {
+					stopCount++;
+					if (stopCount !== 1) return;
+					firstStopSignal = event.signal;
+					stopStarted.resolve();
+					return stopHook.promise;
+				});
+			},
+			tempDir,
+			new EventBus(),
+			extensionRuntime,
+			"slow-session-stop",
+		);
 		const sessionManager = SessionManager.inMemory();
 		const settings = Settings.isolated();
 		const authStorage = await AuthStorage.create(path.join(tempDir, "testauth.db"));
 		authStorages.push(authStorage);
 		const modelRegistry = new ModelRegistry(authStorage, path.join(tempDir, "models.yml"));
 		authStorage.setRuntimeApiKey("anthropic", "test-key");
+		const extensionRunner = new ExtensionRunner(
+			[extension],
+			extensionRuntime,
+			tempDir,
+			sessionManager,
+			modelRegistry,
+		);
+		const extensionErrors: string[] = [];
+		extensionRunner.onError(error => extensionErrors.push(error.error));
 
 		session = new AgentSession({ agent, sessionManager, settings, modelRegistry, extensionRunner });
 
 		const promptPromise = session.prompt("First message");
-		await waitFor(() => emitSessionStop.mock.calls.length === 1);
-		const abortPromise = session.abort();
+		await stopStarted.promise;
+		let abortSettled = false;
+		const abortPromise = session.abort().then(() => {
+			abortSettled = true;
+		});
+		await scheduler.yield();
+		const abortSettledBeforeHandler = abortSettled;
+		const signalWasCancelled = firstStopSignal?.aborted;
 		stopHook.resolve({ continue: true, additionalContext: "Should not run after abort." });
 
 		await abortPromise;
 		await promptPromise;
 		await session.waitForIdle();
 
+		expect(abortSettledBeforeHandler).toBe(true);
+		expect(signalWasCancelled).toBe(true);
+		expect(extensionErrors).toEqual([]);
 		expect(mock.calls).toHaveLength(1);
 		expect(session.queuedMessageCount).toBe(0);
 

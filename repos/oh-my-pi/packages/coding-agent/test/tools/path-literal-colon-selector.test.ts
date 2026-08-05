@@ -121,6 +121,13 @@ describe("literal colon filename resolution (issue #4618)", () => {
 			await fs.symlink(path.join(tmpDir, "nowhere"), literal);
 			expect(await probeLiteralPathExists(literal, tmpDir)).toBe("exists");
 		});
+
+		it('returns "missing" for an ENAMETOOLONG path (issue #7597)', async () => {
+			// A single component past NAME_MAX can never name a real entry, so the
+			// probe must report "missing" (not "unknown") to let delimited splits run.
+			const overlong = path.join(tmpDir, "x".repeat(300));
+			expect(await probeLiteralPathExists(overlong, tmpDir)).toBe("missing");
+		});
 	});
 
 	describe("read tool", () => {

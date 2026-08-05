@@ -129,6 +129,16 @@ export function getProxyForProvider(provider: string): string | undefined {
 	return value;
 }
 
+/** Resolves provider-specific and standard proxy variables for a target URL, honoring NO_PROXY. */
+export function getProxyForUrl(provider: string, url: URL): string | undefined {
+	if (shouldBypassProxy(url)) return undefined;
+	const protocolProxy =
+		url.protocol === "https:" || url.protocol === "wss:"
+			? Bun.env.HTTPS_PROXY || Bun.env.https_proxy
+			: Bun.env.HTTP_PROXY || Bun.env.http_proxy;
+	return getProxyForProvider(provider) || protocolProxy || Bun.env.ALL_PROXY || Bun.env.all_proxy || undefined;
+}
+
 /**
  * Wraps a fetch implementation to inject proxy options for non-local hosts.
  */
@@ -167,6 +177,8 @@ export interface ConnectProxiedSocketOptions {
 	signal?: AbortSignal;
 	/** Maximum wall-clock time to establish the final TLS tunnel. Disabled when absent or non-positive. */
 	timeoutMs?: number;
+	/** Target TLS profile. Cursor defaults to HTTP/2 when this is absent. */
+	tls?: tls.ConnectionOptions;
 }
 
 /**
@@ -251,10 +263,12 @@ export async function connectProxiedSocket(
 			return;
 		}
 
+		const tlsOptions = options?.tls;
 		tunnelSocket = tls.connect({
+			...tlsOptions,
 			socket: rawSocket,
-			servername: targetHost,
-			ALPNProtocols: ["h2"],
+			servername: tlsOptions?.servername ?? targetHost,
+			ALPNProtocols: tlsOptions?.ALPNProtocols ?? ["h2"],
 		});
 		tunnelSocket.once("secureConnect", onTunnelReady);
 		tunnelSocket.once("error", onTunnelError);
