@@ -889,6 +889,15 @@ export function buildErrorEnvelope(
   }
 }
 
+/**
+ * The POSIX descriptors, written to directly rather than through
+ * `process.stdout.fd` / `process.stderr.fd`: those are `undefined` whenever
+ * the streams are not backed by real descriptors — most notably on a worker
+ * thread, where `writeSync(undefined, ...)` throws and the envelope is lost.
+ */
+const STDOUT_FD = 1
+const STDERR_FD = 2
+
 function writeLine(fd: number, line: string): void {
   // Synchronous write: the envelope is emitted immediately before
   // `process.exit`, and an async `process.stderr.write` can be dropped by the
@@ -907,12 +916,12 @@ function writeLine(fd: number, line: string): void {
 function emitMachineModeOutput(exit: Exit.Exit<unknown, unknown>, code: number): void {
   const captured = readCapturedConsole()
   if (Exit.isFailure(exit)) {
-    writeLine(process.stderr.fd, `${JSON.stringify(buildErrorEnvelope(exit, code, captured))}\n`)
+    writeLine(STDERR_FD, `${JSON.stringify(buildErrorEnvelope(exit, code, captured))}\n`)
     return
   }
   if (captured.length > 0) {
     const document: HelpEnvelope = { schemaVersion: '1.0', code: 0, help: captured }
-    writeLine(process.stdout.fd, `${JSON.stringify(document)}\n`)
+    writeLine(STDOUT_FD, `${JSON.stringify(document)}\n`)
   }
 }
 
