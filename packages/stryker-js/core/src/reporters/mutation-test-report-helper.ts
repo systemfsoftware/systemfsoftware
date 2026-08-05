@@ -14,7 +14,7 @@ import { FileSystem, Project } from '../fs/index.js'
 import { TestCoverage } from '../mutants/index.js'
 import { type ResolvedMode, resolveMode } from '../output-mode.js'
 import { strykerVersion } from '../stryker-package.js'
-import { objectUtils } from '../utils/object-utils.js'
+import { ExitClass, objectUtils, setPendingExitClass } from '../utils/object-utils.js'
 
 import { judgeTestContribution } from './test-contribution.js'
 import { buildVerdictEnvelope, generateRunId, type VerdictEnvelope } from './verdict-envelope.js'
@@ -212,7 +212,7 @@ export class MutationTestReportHelper {
     this.log.info(
       '(sharpen or delete them, or set `requireTestContribution = null` to prevent this error in the future)',
     )
-    objectUtils.setExitCode(1)
+    setPendingExitClass(ExitClass.VerdictFail)
   }
 
   private determineExitCode(metrics: MutationTestMetricsResult) {
@@ -227,7 +227,7 @@ export class MutationTestReportHelper {
         this.log.info(
           '(improve mutation score or set `thresholds.break = null` to prevent this error in the future)',
         )
-        objectUtils.setExitCode(1)
+        setPendingExitClass(ExitClass.VerdictFail)
       } else {
         this.log.info(
           `Final mutation score of ${formattedScore} is greater than or equal to break threshold ${breaking}`,
