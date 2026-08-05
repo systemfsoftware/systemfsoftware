@@ -52,6 +52,7 @@
     "test": "vitest run",
     "build": "tsdown",
     "lint": "oxlint",
+    "attw": "attw --pack .",
     "mutation": "node ./bin/stryker.js run"
   },
   "dependencies": {
@@ -63,7 +64,6 @@
     "chalk": "~5.6.0",
     "commander": "~14.0.0",
     "diff-match-patch": "1.0.5",
-    "effect": "catalog:",
     "emoji-regex": "~10.6.0",
     "execa": "~9.6.0",
     "json-rpc-2.0": "^1.7.0",
@@ -83,10 +83,17 @@
     "typed-inject": "~5.0.0",
     "typed-rest-client": "~2.3.0"
   },
+  "peerDependencies": {
+    "@effect/cli": "catalog:",
+    "@effect/platform": "catalog:",
+    "@effect/printer": "catalog:",
+    "@effect/printer-ansi": "catalog:",
+    "effect": "catalog:"
+  },
   "devDependencies": {
     "@std/jsonc": "catalog:",
     "@stryker-mutator/vitest-runner": "catalog:stryker",
-    "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/arethetypeswrong-cli": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/diff-match-patch": "1.0.36",
     "@types/json-schema": "7.0.15",
