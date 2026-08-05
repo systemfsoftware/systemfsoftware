@@ -54,7 +54,7 @@
     "api:update": "concurrently --kill-others-on-fail \"api-extractor run --local\" \"api-extractor run --local --config api-extractor.effect-schema-ignorer.json\""
   },
   "devDependencies": {
-    "@babel/types": "^7.29.0",
+    "@babel/types": "^8.0.4",
     "@effect/vitest": "catalog:",
     "@microsoft/api-extractor": "catalog:",
     "@stryker-mutator/api": "catalog:stryker",
