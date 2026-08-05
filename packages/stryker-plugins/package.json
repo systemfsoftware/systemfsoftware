@@ -47,7 +47,6 @@
     "test": "vitest run",
     "test:run": "vitest run --coverage",
     "test:types": "tstyche",
-    "mutation:full": "stryker run",
     "lint": "oxlint . ${AGENT:+--format=unix --quiet}",
     "attw": "attw --pack .",
     "api:check": "concurrently --kill-others-on-fail \"api-extractor run\" \"api-extractor run --config api-extractor.effect-schema-ignorer.json\"",
