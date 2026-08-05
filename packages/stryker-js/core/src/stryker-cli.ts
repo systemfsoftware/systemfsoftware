@@ -2,7 +2,7 @@ import semver from 'semver'
 
 guardMinimalNodeVersion()
 
-import { writeSync } from 'node:fs'
+import { readFileSync, writeSync } from 'node:fs'
 
 import * as Args from '@effect/cli/Args'
 import * as CliConfig from '@effect/cli/CliConfig'
@@ -15,6 +15,8 @@ import * as Path from '@effect/platform/Path'
 import * as Runtime from '@effect/platform/Runtime'
 import * as Terminal from '@effect/platform/Terminal'
 import type { LogLevel, PartialStrykerOptions, StrykerOptions } from '@stryker-mutator/api/core'
+import { Mutant, schema } from '@stryker-mutator/api/core'
+import { noopLogger } from '@stryker-mutator/util'
 import * as Cause from 'effect/Cause'
 import * as Console from 'effect/Console'
 import * as Effect from 'effect/Effect'
@@ -22,9 +24,19 @@ import * as Exit from 'effect/Exit'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 
-import { defaultOptions } from './config/index.js'
+import { forkCoreSchema } from './config/fork-schema.js'
+import { ConfigReader, defaultOptions, OptionsValidator } from './config/index.js'
 import { ConfigError } from './errors.js'
+import { toRelativeNormalizedFileName } from './mutants/incremental-differ.js'
+import {
+  admitSurvivorsRun,
+  DEFAULT_SURVIVORS_PRIOR_REPORT,
+  sourceContentHash,
+  SURVIVORS_REJECT_EXIT_CLASS,
+  SurvivorsRejection,
+} from './mutants/survivors.js'
 import { humanConsoleLayer, machineConsoleLayer, readCapturedConsole, resolveMode } from './output-mode.js'
+import { emitVerdictEnvelope, generateRunId } from './reporters/verdict-envelope.js'
 import { strykerEngines, strykerVersion } from './stryker-package.js'
 import { Stryker } from './stryker.js'
 import { ExitClass, getPendingExitClasses, resolveExitCode } from './utils/object-utils.js'
@@ -317,7 +329,7 @@ const runOptions = {
     ),
   survivors: Options.map(Options.boolean('survivors'), absentWhenFalse).pipe(
     Options.withDescription(
-      'Re-run only the mutants that survived a previous run (the survivor re-run is implemented by a later unit; for now the flag parses).',
+      "Re-run only the mutants that survived a previous run. Admits against the previous run's mutation report (the `survivorsPriorReport` config option, default `reports/mutation-report.json`) and re-tests exactly the survivor set. Exits 2 with a remediation naming a full run when the report is missing, drifted, or the configuration changed; exits 0 with a null score when the report has no survivors.",
     ),
   ),
 } satisfies Record<string, Options.Options<unknown>>
@@ -357,21 +369,232 @@ function setIfPresent<K extends keyof StrykerOptions>(
   }
 }
 
-function makeStrykerCommand(runMutationTest: StrykerRun) {
-  const runCommand = Command.make('run', runConfig, (config) => {
-    // The framework would otherwise swallow any unmatched `--flag` as the
-    // configFile positional, silently accepting removed flags (`--files`,
-    // `--allowConsoleColors`, `--dashboard.*`). Reject dash-prefixed values so
-    // they surface as unknown arguments (exit 2), like commander did.
-    const configFile = Option.getOrUndefined(config.configFile)
-    if (configFile !== undefined && configFile.startsWith('-')) {
-      return Effect.zipRight(
-        Console.error(`Received unknown argument: '${configFile}'`),
-        Effect.failSync(() => ValidationError.invalidValue(HelpDoc.p(`Received unknown argument: '${configFile}'`))),
-      )
+// =============================================================================
+// U8 — the `--survivors` run (R10, R11, KTD6, KTD7)
+//
+// When `--survivors` is given, the run handler admits against the prior run's
+// mutation report instead of starting the pipeline straight away: a single
+// structural hash of the resolved options, the framework version and the
+// per-file source content must all match (KTD6). On admission the mutant set
+// is restricted to the survivor spans and the run re-tests exactly those
+// mutants. A missing, unreadable or misshapen report, a drifted source or a
+// changed configuration rejects with a `SurvivorsRejection` (exit 2) whose
+// remediation names the full run to do first; a report with zero survivors
+// exits 0 through the success path without starting the pipeline, and machine
+// mode still emits the U4 verdict envelope with a null score.
+// =============================================================================
+
+/**
+ * The options of a `--survivors` run: the full resolved options plus the
+ * survivors-run bookkeeping the report helper embeds (KTD7) and the mutation
+ * scope restriction the run is admitted on.
+ */
+type SurvivorsRunOptions = PartialStrykerOptions & {
+  readonly survivors?: readonly Mutant[]
+  readonly survivorsPriorReport?: string
+}
+
+/**
+ * Resolves the current options the same way the pipeline does — defaults +
+ * config file + CLI, validated against the fork schema (which carries the
+ * survivors-run properties). The admission hash compares these resolved
+ * options against the prior report's embedded config.
+ */
+async function resolveSurvivorsRunOptions(
+  cliOptions: PartialStrykerOptions,
+): Promise<StrykerOptions> {
+  const configReader = new ConfigReader(
+    noopLogger,
+    new OptionsValidator(forkCoreSchema, noopLogger),
+  )
+  return configReader.readConfig(cliOptions)
+}
+
+/**
+ * The prior report a `--survivors` run reads: the `survivorsPriorReport`
+ * config option when set, else the default path. The report path is run
+ * bookkeeping, never a CLI flag.
+ */
+function priorReportPathOf(resolved: StrykerOptions): string {
+  const configured = resolved['survivorsPriorReport']
+  return typeof configured === 'string' ? configured : DEFAULT_SURVIVORS_PRIOR_REPORT
+}
+
+/**
+ * A report is usable only when it parses and carries a `files` dictionary; a
+ * missing, unreadable or misshapen report is the `no-report` rejection.
+ */
+function isMutationTestResultShape(value: unknown): value is schema.MutationTestResult {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return false
+  }
+  return (
+    'files' in value &&
+    typeof value.files === 'object' &&
+    value.files !== null &&
+    !Array.isArray(value.files)
+  )
+}
+
+function readPriorReport(priorReportPath: string): schema.MutationTestResult | undefined {
+  try {
+    const raw = readFileSync(priorReportPath, 'utf-8')
+    const parsed: unknown = JSON.parse(raw)
+    return isMutationTestResultShape(parsed) ? parsed : undefined
+  } catch {
+    return undefined
+  }
+}
+
+function readSourceFile(file: string): string {
+  try {
+    return readFileSync(file, 'utf-8')
+  } catch {
+    // A file the report names but the disk no longer has cannot match the
+    // prior side's embedded source; hashing the empty string rejects with a
+    // mismatch instead of admitting a run that would re-test a ghost.
+    return ''
+  }
+}
+
+/**
+ * The per-file content hashes of the current sources, keyed by the relative
+ * file names the prior report uses — the current side of the admission
+ * comparison (`admitSurvivorsRun` hashes the prior side from the sources the
+ * report embeds).
+ */
+function sourceContentHashesOf(
+  priorReport: schema.MutationTestResult | undefined,
+): Record<string, string> {
+  const hashes: Record<string, string> = {}
+  if (priorReport === undefined) {
+    return hashes
+  }
+  for (const file of Object.keys(priorReport.files)) {
+    hashes[file] = sourceContentHash(readSourceFile(file))
+  }
+  return hashes
+}
+
+/**
+ * The survivor spans as `file:startLine:startCol-endLine:endCol` mutate
+ * ranges: the report's 1-based lines with the internal 0-based columns,
+ * relative file names, deduplicated in first-seen order.
+ */
+function survivorMutateSpans(survivors: readonly Mutant[]): string[] {
+  const spans: string[] = []
+  const seen = new Set<string>()
+  for (const survivor of survivors) {
+    const file = toRelativeNormalizedFileName(survivor.fileName)
+    const { start, end } = survivor.location
+    const span = `${file}:${start.line + 1}:${start.column}-${end.line + 1}:${end.column}`
+    if (!seen.has(span)) {
+      seen.add(span)
+      spans.push(span)
     }
-    return Effect.promise(() => runMutationTest(readStrykerOptions(config)))
-  }).pipe(Command.withDescription('Run mutation testing'))
+  }
+  return spans
+}
+
+/**
+ * Machine mode emits the U4 verdict envelope for a zero-survivor run: no
+ * pipeline ran and no report file was written, so the envelope carries a null
+ * score and an empty mutant list (AE3). Human mode prints nothing.
+ */
+function emitEmptySurvivorsVerdict(resolved: StrykerOptions): void {
+  const resolvedMode = resolveMode({
+    stdoutIsTTY: process.stdout.isTTY === true,
+    envMode: process.env['STRYKER_MODE'],
+    agent: process.env['AGENT'],
+    toolVars: {
+      CLAUDECODE: process.env['CLAUDECODE'],
+      CODEX_SANDBOX: process.env['CODEX_SANDBOX'],
+    },
+  })
+  if (resolvedMode.mode !== 'machine') {
+    return
+  }
+  const report: schema.MutationTestResult = {
+    schemaVersion: '1.0',
+    files: {},
+    thresholds: resolved.thresholds,
+    projectRoot: process.cwd(),
+    config: resolved,
+    framework: { name: 'StrykerJS', version: strykerVersion },
+  }
+  const envelope = emitVerdictEnvelope(
+    report,
+    resolvedMode.mode,
+    resolvedMode.signal,
+    generateRunId(),
+  )
+  process.stdout.write(`${envelope}\n`)
+}
+
+/**
+ * The `--survivors` run: resolve the current options, read and guard the
+ * prior report, admit against it, then re-run only the survivors. A rejected
+ * admission fails with a `SurvivorsRejection` (exit 2); zero survivors exits
+ * `SURVIVORS_EMPTY_EXIT_CODE` (0) through the success path without starting
+ * the pipeline or touching the prior report.
+ */
+function runSurvivorsAdmission(
+  runMutationTest: StrykerRun,
+  cliOptions: PartialStrykerOptions,
+): Effect.Effect<unknown, SurvivorsRejection, never> {
+  return Effect.gen(function*() {
+    const resolvedOptions = yield* Effect.promise(() => resolveSurvivorsRunOptions(cliOptions))
+    const priorReportPath = priorReportPathOf(resolvedOptions)
+    const priorReport = readPriorReport(priorReportPath)
+    const admission = admitSurvivorsRun({
+      priorReport,
+      currentConfig: resolvedOptions,
+      frameworkVersion: strykerVersion,
+      sourceContentHashes: sourceContentHashesOf(priorReport),
+    })
+    if (admission.ok === false) {
+      const reason = admission.reason
+      const remediation = admission.remediation
+      if (reason === 'empty') {
+        emitEmptySurvivorsVerdict(resolvedOptions)
+        return undefined
+      }
+      return yield* Effect.failSync(() => new SurvivorsRejection(reason, remediation))
+    }
+    const restricted: SurvivorsRunOptions = {
+      ...resolvedOptions,
+      survivors: admission.survivors,
+      mutate: survivorMutateSpans(admission.survivors),
+      survivorsPriorReport: priorReportPath,
+      // The differ would otherwise reuse the prior run's survived verdicts.
+      incremental: false,
+    }
+    return yield* Effect.promise(() => runMutationTest(restricted))
+  })
+}
+
+function makeStrykerCommand(runMutationTest: StrykerRun) {
+  const runCommand = Command.make(
+    'run',
+    runConfig,
+    (config): Effect.Effect<void, ValidationError.ValidationError | SurvivorsRejection, never> => {
+      // The framework would otherwise swallow any unmatched `--flag` as the
+      // configFile positional, silently accepting removed flags (`--files`,
+      // `--allowConsoleColors`, `--dashboard.*`). Reject dash-prefixed values so
+      // they surface as unknown arguments (exit 2), like commander did.
+      const configFile = Option.getOrUndefined(config.configFile)
+      if (configFile !== undefined && configFile.startsWith('-')) {
+        return Effect.zipRight(
+          Console.error(`Received unknown argument: '${configFile}'`),
+          Effect.failSync(() => ValidationError.invalidValue(HelpDoc.p(`Received unknown argument: '${configFile}'`))),
+        )
+      }
+      if (config.survivors === true) {
+        return runSurvivorsAdmission(runMutationTest, readStrykerOptions(config))
+      }
+      return Effect.promise(() => runMutationTest(readStrykerOptions(config)))
+    },
+  ).pipe(Command.withDescription('Run mutation testing'))
 
   // The parsed-config type mirrors `Command.ParseConfig` (not resolvable under
   // the TS7 compiler used in this workspace): each option/arg unwraps to its
@@ -478,9 +701,10 @@ const cliLayer = Layer.mergeAll(
 )
 
 /**
- * U2's minimal teardown: usage/parse failures (`ValidationError`) exit 2, all
- * other failures exit 1 (the framework's default). U5 replaces this with the
- * classed resolver (0/1/2/3/4, signal-aware).
+ * Classifies a failed run for the teardown: usage/parse failures
+ * (`ValidationError`) and rejected survivors runs (`SurvivorsRejection`) exit
+ * 2, all other failures exit 1 (the framework's default). A successful run
+ * exits 0; the verdict gates (U5) then resolve the final classed code.
  */
 export function resolveCliExitCode(exit: Exit.Exit<unknown, unknown>): number {
   if (Exit.isSuccess(exit)) {
@@ -490,8 +714,13 @@ export function resolveCliExitCode(exit: Exit.Exit<unknown, unknown>): number {
     return 1
   }
   const failure = Cause.failureOption(exit.cause)
-  if (Option.isSome(failure) && ValidationError.isValidationError(failure.value)) {
-    return 2
+  if (Option.isSome(failure)) {
+    if (ValidationError.isValidationError(failure.value)) {
+      return 2
+    }
+    if (failure.value instanceof SurvivorsRejection) {
+      return SURVIVORS_REJECT_EXIT_CLASS
+    }
   }
   return 1
 }
@@ -550,9 +779,10 @@ const ISSUE_TRACKER_URL = 'https://github.com/systemfsoftware/systemfsoftware/is
 /**
  * The contextual remediation for a failure, picked from the cause's shape:
  * usage/parse errors point at `--help`, config errors name the offending file
- * (ConfigError messages carry it), runtime errors point at the report file
- * and the verdict envelope, and internal defects ask for a bug report.
- * Signal terminations (POSIX `128 + n`) are called out as interruptions.
+ * (ConfigError messages carry it), rejected survivors runs name the full run
+ * to do first, runtime errors point at the report file and the verdict
+ * envelope, and internal defects ask for a bug report. Signal terminations
+ * (POSIX `128 + n`) are called out as interruptions.
  */
 export function remediationFor(exit: Exit.Exit<unknown, unknown>, code: number): string {
   if (code > 128) {
@@ -565,6 +795,9 @@ export function remediationFor(exit: Exit.Exit<unknown, unknown>, code: number):
     }
     if (value instanceof ConfigError) {
       return `check the config file: ${value.message}`
+    }
+    if (value instanceof SurvivorsRejection) {
+      return value.remediation
     }
   }
   switch (code) {

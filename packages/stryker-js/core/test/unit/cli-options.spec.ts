@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 import type { PartialStrykerOptions } from '@stryker-mutator/api/core'
 import { noopLogger } from '@stryker-mutator/util'
@@ -195,9 +196,24 @@ describe('stryker cli option parsing', () => {
   })
 
   it('accepts the --survivors flag for the survivor re-run', async () => {
-    const { code, options } = await parseArgs(['run', '--survivors'])
-    expect(code).toBe(0)
-    expect(options).toEqual({})
+    // U8 wired the flag: it now admits against the prior report of the
+    // fixture project and re-tests exactly the survivor set.
+    const fixtureDir = fileURLToPath(new URL('./fixtures/survivors/project', import.meta.url))
+    const originalCwd = process.cwd()
+    process.chdir(fixtureDir)
+    try {
+      const { code, options } = await parseArgs(['run', '--survivors'])
+      expect(code).toBe(0)
+      expect(options).toEqual(
+        expect.objectContaining({
+          survivors: expect.any(Array),
+          mutate: ['src/thing.ts:2:9-2:14'],
+          incremental: false,
+        }),
+      )
+    } finally {
+      process.chdir(originalCwd)
+    }
   })
 
   it('accepts the --llms global flag', async () => {

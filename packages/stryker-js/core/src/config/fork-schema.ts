@@ -8,6 +8,12 @@ const requireTestContribution = {
   default: ['.property.test.ts'],
 }
 
+const survivorsPriorReport = {
+  description:
+    'The path of the prior mutation report a --survivors run admits against and re-tests the survivors of. Defaults to "reports/mutation-report.json" when unset. Deliberately has no default: a default would be injected into every resolved options object and written into every report, poisoning the KTD7 marker that identifies a report produced by a survivors run.',
+  type: 'string',
+}
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
@@ -16,6 +22,6 @@ const baseProperties = strykerCoreSchema.properties
 export const forkCoreSchema: Record<string, unknown> = {
   ...strykerCoreSchema,
   properties: isRecord(baseProperties)
-    ? { ...baseProperties, requireTestContribution }
-    : { requireTestContribution },
+    ? { ...baseProperties, requireTestContribution, survivorsPriorReport }
+    : { requireTestContribution, survivorsPriorReport },
 }
