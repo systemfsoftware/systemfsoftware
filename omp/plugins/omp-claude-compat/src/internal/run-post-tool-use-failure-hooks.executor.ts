@@ -1,9 +1,9 @@
 import { normalizeToolInput, normalizeToolName, sessionIds } from '@systemfsoftware/omp-utils'
 import { Context, Effect, Option, Schema as S, type Scope } from 'effect'
 import type { HookSettings } from '../hook-settings.acl.js'
+import { blockAsFeedback, type FeedbackOnlyResult } from './hook-feedback.kernel.js'
 import { asToolInput, EMPTY_TOOL_INPUT } from './hook-payload.kernel.js'
 import type { HookSession, HookToolResult } from './hook-session.kernel.js'
-import type { HooksForEventResult } from './run-hooks-for-event.executor.js'
 import { runHooksForEvent } from './run-hooks-for-event.executor.js'
 
 export class RunPostToolUseFailureHooksExecutorDeps extends Context.Tag('RunPostToolUseFailureHooksExecutorDeps')<
@@ -47,12 +47,6 @@ export const runPostToolUseFailureHooks = Effect.fn('runPostToolUseFailureHooks'
     ctx,
     'PostToolUseFailure',
   )
-  // Claude Code documents this event as non-blocking: the tool already failed,
-  // so an exit-2 verdict reaches the model as feedback rather than a block.
-  const degraded: HooksForEventResult = result.block !== true
-    ? result
-    : result.reason === undefined
-    ? {}
-    : { warning: result.reason }
-  return degraded
+  const feedback: FeedbackOnlyResult = result.block === true ? blockAsFeedback(result) : result
+  return feedback
 })
