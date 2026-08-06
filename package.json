@@ -17,7 +17,7 @@
     "check": "pnpm install --frozen-lockfile && TURBO_CONCURRENCY=${TURBO_CONCURRENCY:-50%} pnpm check:ci",
     "check:ci": "turbo --concurrency=${TURBO_CONCURRENCY:-100%} --continue format:check lint typecheck test attw api:check //#check:mutate-scope //#check:lint-coverage //#check:no-hand-rolled-jsonc //#check:publish-config //#check:script-provenance //#check:project-references && turbo --concurrency=${TURBO_CONCURRENCY:-100%} --continue //#check:exports //#check:runtime-deps",
     "release": "node scripts/release.mjs",
-    "prepare": "concurrently \"husky\" \"effect-tsgo patch\"",
+    "prepare": "concurrently \"husky\" \"node scripts/patch-tsgo-if-needed.mjs\"",
     "release:dry": "node scripts/release.mjs --dry-run",
     "bump:minor": "node scripts/bump-all-minor.mjs",
     "check:publish-config": "node scripts/validate-publish-config.mjs --selftest && node scripts/validate-publish-config.mjs",
