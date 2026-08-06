@@ -1,4 +1,5 @@
 import { it } from '@effect/vitest'
+import { refutes } from '@systemfsoftware/effect-schema-law'
 import { Either, FastCheck as fc, Schema as S } from 'effect'
 import { StrictHex } from './strict-hex.schema.js'
 
@@ -36,8 +37,6 @@ it.prop(
  * and that is the distinction `HexString` leans on when it lowercases before
  * delegating here.
  */
-it.prop(
-  '∀s_StrictHexAlphabet_⊥',
-  [fc.tuple(hexPart, outsider, hexPart)],
-  ([[head, out, tail]]) => Either.isLeft(decode(`${head}${out}${tail}`)),
-)
+refutes(StrictHex, {
+  StrictHexAlphabet: fc.tuple(hexPart, outsider, hexPart).map(([head, out, tail]) => `${head}${out}${tail}`),
+})

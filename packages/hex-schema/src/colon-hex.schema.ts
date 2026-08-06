@@ -28,7 +28,8 @@ if (import.meta.vitest !== void 0) {
   // so this branch is statically dead in the build and the runner never enters
   // the published module graph. A static import would ship it.
   const { it } = await import('@effect/vitest')
-  const { Either, FastCheck: fc } = await import('effect')
+  const { FastCheck: fc } = await import('effect')
+  const { refutes } = await import('@systemfsoftware/effect-schema-law')
   const { expectTypeOf } = await import('vitest')
 
   /**
@@ -59,13 +60,9 @@ if (import.meta.vitest !== void 0) {
    * digits"), never from the pattern literal, so a three-nibble group must be
    * refused however the regex is rewritten.
    */
-  const decodeColonHex = S.decodeUnknownEither(ColonHex)
-
-  it.prop(
-    '∀g_ColonHexTripleGroup_⊥',
-    [fc.stringMatching(/^[0-9A-Fa-f]{3}$/)],
-    ([group]) => Either.isLeft(decodeColonHex(group)),
-  )
+  refutes(ColonHex, {
+    ColonHexTripleGroup: fc.stringMatching(/^[0-9A-Fa-f]{3}$/),
+  })
 
   /**
    * The law above strips the colons before comparing, so it cannot see where
