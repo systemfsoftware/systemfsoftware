@@ -119,6 +119,75 @@
       "outputs": [],
       "cache": false
     },
+    "//#check:exports": {
+      "inputs": [
+        "$TURBO_ROOT$/scripts/check-exports.mjs",
+        "$TURBO_ROOT$/packages/**/package.json",
+        "$TURBO_ROOT$/packages/**/api-extractor*.json",
+        "$TURBO_ROOT$/packages/**/dist/**"
+      ],
+      "outputs": [],
+      "cache": false
+    },
+    "//#check:runtime-deps": {
+      "inputs": [
+        "$TURBO_ROOT$/scripts/check-runtime-deps.mjs",
+        "$TURBO_ROOT$/packages/**/package.json",
+        "$TURBO_ROOT$/packages/**/dist/**"
+      ],
+      "outputs": [],
+      "cache": false
+    },
+    "//#check:mutate-scope": {
+      "inputs": [
+        "$TURBO_ROOT$/scripts/guard-mutate-scope.mjs",
+        "$TURBO_ROOT$/packages/**/stryker.config.json",
+        "$TURBO_ROOT$/packages/**/src/**"
+      ],
+      "outputs": [],
+      "cache": false
+    },
+    "//#check:lint-coverage": {
+      "inputs": [
+        "$TURBO_ROOT$/scripts/check-lint-coverage.mjs",
+        "$TURBO_ROOT$/packages/**/package.json",
+        "$TURBO_ROOT$/packages/**/oxlint.config.ts"
+      ],
+      "outputs": [],
+      "cache": false
+    },
+    "//#check:no-hand-rolled-jsonc": {
+      "inputs": [
+        "$TURBO_ROOT$/scripts/guard-no-hand-rolled-jsonc.mjs",
+        "$TURBO_ROOT$/**/*.{ts,mts,cts,js,mjs,cjs}"
+      ],
+      "outputs": [],
+      "cache": false
+    },
+    "//#check:publish-config": {
+      "inputs": [
+        "$TURBO_ROOT$/scripts/validate-publish-config.mjs",
+        "$TURBO_ROOT$/packages/**/package.json"
+      ],
+      "outputs": [],
+      "cache": false
+    },
+    "//#check:script-provenance": {
+      "inputs": [
+        "$TURBO_ROOT$/scripts/**"
+      ],
+      "outputs": [],
+      "cache": false
+    },
+    "//#check:project-references": {
+      "inputs": [
+        "$TURBO_ROOT$/scripts/check-project-references.mjs",
+        "$TURBO_ROOT$/packages/**/tsconfig*.json",
+        "$TURBO_ROOT$/packages/**/src/**"
+      ],
+      "outputs": [],
+      "cache": false
+    },
     "clean": {
       "cache": false
     },
