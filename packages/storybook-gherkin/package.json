@@ -1,0 +1,74 @@
+{
+  "name": "@systemfsoftware/storybook-gherkin",
+  "license": "MIT",
+  "version": "0.1.0",
+  "author": "Ryan Lee <drdgvhbh@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
+    "directory": "packages/storybook-gherkin"
+  },
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/storybook-gherkin#readme",
+  "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
+  "description": "Feature specs as Storybook stories — Gherkin Given/When/Then embedded in CSF with typed captures and scenario outlines, executing under Storybook's browser-mode play functions.",
+  "keywords": [
+    "effect",
+    "effect-ts",
+    "storybook",
+    "gherkin",
+    "bdd",
+    "cucumber",
+    "given-when-then",
+    "scenario-outline",
+    "stories",
+    "csf",
+    "acceptance-testing"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "@systemfsoftware/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "clean": "rimraf dist",
+    "build": "tsdown && pnpm dts:check",
+    "typecheck": "tsc --noEmit --incremental",
+    "lint": "oxlint . --config oxlint.config.ts",
+    "attw": "attw --pack .",
+    "dts:check": "node scripts/check-dts.mjs"
+  },
+  "dependencies": {
+    "type-fest": "catalog:"
+  },
+  "peerDependencies": {
+    "effect": "catalog:",
+    "storybook": ">=10.0.0"
+  },
+  "devDependencies": {
+    "@systemfsoftware/arethetypeswrong-cli": "workspace:^",
+    "@systemfsoftware/tsconfig": "workspace:^",
+    "@types/node": "catalog:",
+    "effect": "catalog:",
+    "rimraf": "catalog:",
+    "storybook": "catalog:",
+    "tsdown": "catalog:",
+    "typescript": "catalog:"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.mjs"
+      },
+      "./package.json": "./package.json"
+    },
+    "provenance": true
+  }
+}

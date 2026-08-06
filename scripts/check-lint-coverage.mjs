@@ -27,6 +27,10 @@ const TOOLING = [
     'packages/effect-atom/',
     'vendored effect-atom fork: upstream-shaped library code, not Effect cell code, so cell rules are the wrong observer; carries its own oxlint baseline',
   ],
+  [
+    'packages/storybook-gherkin/',
+    'vendored storybook-gherkin DSL: upstream-shaped library code, not Effect cell code, so cell rules are the wrong observer; carries its own oxlint baseline',
+  ],
   ['packages/stryker-plugins/', 'mutation tooling, not shipped product code'],
   ['packages/arethetypeswrong/', 'port of arethetypeswrong, tooling'],
   ['packages/tsconfig/', 'shared tsconfig, no runtime source'],
