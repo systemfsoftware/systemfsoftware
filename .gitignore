@@ -18,3 +18,4 @@ repos/**/.gitignore
 repos/**/.codegraph/
 .repos
 .issues
+wiki

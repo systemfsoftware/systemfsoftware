@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Worktrunk pre-start: symlink .repos and .issues from the primary worktree,
-# convert gitdir paths to relative, disable GitKraken-incompatible settings.
-# Invoked by .config/wt.toml. Args: worktree_path [primary_worktree_path]
+# Worktrunk pre-start: symlink .repos, .issues, and wiki from the primary
+# worktree, convert gitdir paths to relative, disable GitKraken-incompatible
+# settings. Invoked by .config/wt.toml. Args: worktree_path [primary_worktree_path]
 
 set -e
 
@@ -50,19 +50,18 @@ convert_worktree_gitfile_to_relative() {
     echo "  .git -> $rel_path"
 }
 
-# Symlink this worktree's .repos/ to the primary's .repos/ so the sibling
-# checkouts reachable at .repos/<name> from the main checkout are available at
-# the same path in every worktree. .repos is gitignored and shared — symlink,
+# Symlink a shared, gitignored directory from the primary worktree into this
+# worktree so both see the same files (e.g. .repos, .issues, wiki). Symlink,
 # never copy. Only replaces an existing symlink; a real directory is untouched.
-link_worktree_repos() {
-    local worktree_path="${1%/}" primary_path="$2"
-    local repos_dir="$primary_path/.repos"
-    if [[ ! -d "$repos_dir" ]]; then
-        echo "pre-start: no .repos in primary, skipping symlink"
+link_shared_dir() {
+    local name="$1" worktree_path="${2%/}" primary_path="$3"
+    local src="$primary_path/$name"
+    if [[ ! -d "$src" ]]; then
+        echo "pre-start: no $name in primary, skipping symlink"
         return 0
     fi
 
-    local target="$worktree_path/.repos"
+    local target="$worktree_path/$name"
     if [[ -e "$target" && ! -L "$target" ]]; then
         echo "pre-start: $target is a real directory, leaving it"
         return 0
@@ -70,9 +69,9 @@ link_worktree_repos() {
     rm -f "$target"
 
     local rel
-    rel="$(realpath --relative-to="$worktree_path" "$repos_dir")"
+    rel="$(realpath --relative-to="$worktree_path" "$src")"
     ln -s "$rel" "$target"
-    echo "pre-start: .repos -> $rel"
+    echo "pre-start: $name -> $rel"
 }
 
 WORKTREE_PATH="${1:?worktree_path required}"
@@ -90,17 +89,6 @@ if [[ -z "$PRIMARY_PATH" ]]; then
     exit 0
 fi
 
-link_worktree_repos "$WORKTREE_PATH" "$PRIMARY_PATH"
-
-# Symlink the .issues directory if it exists in the primary repo.
-ISSUES_DIR="$PRIMARY_PATH/.issues"
-WORKTREE_ISSUES="$WORKTREE_PATH/.issues"
-
-if [[ ! -d "$ISSUES_DIR" ]]; then
-    echo "pre-start: no .issues directory in primary, skipping symlink"
-    exit 0
-fi
-RELATIVE_ISSUES=$(realpath --relative-to="$WORKTREE_PATH" "$ISSUES_DIR")
-[[ -e "$WORKTREE_ISSUES" ]] && rm -rf "$WORKTREE_ISSUES"
-ln -s "$RELATIVE_ISSUES" "$WORKTREE_ISSUES"
-echo "pre-start: symlinked .issues -> $RELATIVE_ISSUES"
+link_shared_dir .repos "$WORKTREE_PATH" "$PRIMARY_PATH"
+link_shared_dir .issues "$WORKTREE_PATH" "$PRIMARY_PATH"
+link_shared_dir wiki "$WORKTREE_PATH" "$PRIMARY_PATH"
