@@ -78,6 +78,7 @@ const QUOTED_OUTBURSTS = [
   { quoted: '"you are wrong" is the string the test asserts' },
   { quoted: 'the fixture prints `never mind` on exit' },
   { quoted: 'note <-- i already told you' },
+  { quoted: "the error banner still reads 'you are wrong' after the retry" },
   { quoted: '```\nyou are wrong\n```' },
 ] as const
 
