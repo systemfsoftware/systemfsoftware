@@ -46,6 +46,8 @@ catalog:
   react-dom: ^19.2.8
   react-error-boundary: ^6.1.2
   scheduler: ^0.27.0
+  storybook: ^10.5.0
+  type-fest: ^5.8.0
 catalogMode: prefer
 catalogs:
   oxlint:
