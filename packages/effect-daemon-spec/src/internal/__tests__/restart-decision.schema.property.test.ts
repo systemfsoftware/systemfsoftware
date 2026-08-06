@@ -1,4 +1,5 @@
 import { it } from '@systemfsoftware/effect-gherkin-spec'
+import { refutes } from '@systemfsoftware/effect-schema-law'
 import { Arbitrary, Either, FastCheck as fc, Schema } from 'effect'
 import { DEFAULT_MAX_CHILDREN } from '../../supervisor-dynamic.kernel.js'
 import { DecideInput } from '../restart-decision.schema.js'
@@ -41,4 +42,35 @@ it.prop('∀g_WidthPastEnforcedCap_=Left', [fc.gen()], ([g]) => {
     max: DEFAULT_MAX_CHILDREN + OVERSHOOT,
   })
   return Either.isLeft(decodeOf({ ...sampled, totalChildren }))
+})
+
+refutes(DecideInput, {
+  DecideIndexPastWidth: fc.record({
+    strategy: fc.constantFrom('one_for_one'),
+    totalChildren: fc.integer({ min: 1, max: 100 }),
+    failedIndex: fc.integer({ min: 0, max: 99 }),
+    exitSuccess: fc.boolean(),
+    intensityExceeded: fc.boolean(),
+  }).map((d) => ({ ...d, failedIndex: d.totalChildren + (d.failedIndex % 5) })),
+  DecideWidthPastCap: fc.record({
+    strategy: fc.constantFrom('one_for_one'),
+    totalChildren: fc.integer({ min: DEFAULT_MAX_CHILDREN + 1, max: DEFAULT_MAX_CHILDREN + 500 }),
+    failedIndex: fc.constant(0),
+    exitSuccess: fc.boolean(),
+    intensityExceeded: fc.boolean(),
+  }),
+  DecideWidthNonInteger: fc.record({
+    strategy: fc.constantFrom('one_for_one'),
+    totalChildren: fc.integer({ min: 1, max: 98 }).map((n) => n + 0.5),
+    failedIndex: fc.constant(0),
+    exitSuccess: fc.boolean(),
+    intensityExceeded: fc.boolean(),
+  }),
+  DecideIndexNegative: fc.record({
+    strategy: fc.constantFrom('one_for_one'),
+    totalChildren: fc.integer({ min: 1, max: 100 }),
+    failedIndex: fc.integer({ min: -100, max: -1 }),
+    exitSuccess: fc.boolean(),
+    intensityExceeded: fc.boolean(),
+  }),
 })

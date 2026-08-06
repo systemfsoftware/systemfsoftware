@@ -1,4 +1,5 @@
 import type { Expression, MemberExpression, TSType } from '@oxc-project/types'
+import type { Dirent } from 'node:fs'
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname, extname, join, relative, resolve } from 'node:path'
 import { parseSync } from 'oxc-parser'
@@ -117,6 +118,59 @@ function findExportedSchemaNames(source: string): string[] {
   }
 }
 
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null
+
+const identifierName = (value: unknown): string | undefined => {
+  if (!isRecord(value)) return undefined
+  return value['type'] === 'Identifier' && typeof value['name'] === 'string' ? value['name'] : undefined
+}
+
+function findRefutesCallSites(source: string): string[] {
+  try {
+    const names: string[] = []
+    const visit = (node: unknown): void => {
+      if (Array.isArray(node)) {
+        for (const child of node) visit(child)
+        return
+      }
+      if (!isRecord(node)) return
+      if (node['type'] === 'CallExpression' && identifierName(node['callee']) === 'refutes') {
+        const args = node['arguments']
+        const first = Array.isArray(args) ? identifierName(args[0]) : undefined
+        if (first !== undefined) names.push(first)
+      }
+      for (const value of Object.values(node)) visit(value)
+    }
+    visit(parseSync('temp.ts', source).program.body)
+    return names
+  } catch {
+    return []
+  }
+}
+
+function findRefutedSchemaNames(dir: string): ReadonlySet<string> {
+  const refuted = new Set<string>()
+  const walk = (current: string): void => {
+    let entries: ReadonlyArray<Dirent>
+    try {
+      entries = readdirSync(current, { withFileTypes: true })
+    } catch {
+      return
+    }
+    for (const dirent of entries) {
+      const full = join(current, dirent.name)
+      if (dirent.isDirectory()) {
+        if (dirent.name === 'node_modules' || dirent.name === '.git') continue
+        walk(full)
+      } else if (dirent.isFile() && extname(dirent.name) === '.ts') {
+        for (const name of findRefutesCallSites(readFileSync(full, 'utf-8'))) refuted.add(name)
+      }
+    }
+  }
+  walk(dir)
+  return refuted
+}
+
 function typeRefContainsSchema(t: TSType | null | undefined): boolean {
   if (!t) return false
 
@@ -213,11 +267,36 @@ export const generateSchemaLaws = (lawFilePath: string, srcDir: string): string 
     return rel.startsWith('.') ? rel : `./${rel}`
   }
 
+  const refuted = findRefutedSchemaNames(srcDir)
+  const quoted = [...refuted].sort().map((n) => `'${n}'`).join(', ')
+
   return [
-    `import { ruleOfSchemas } from '@systemfsoftware/effect-schema-law'`,
+    `import type { AST } from 'effect/SchemaAST'`,
+    `import { it } from 'vitest'`,
+    `import { obligationsOf, ruleOfSchemas } from '@systemfsoftware/effect-schema-law'`,
     schemas.map((s) => `import { ${s.name} } from '${specifierOf(s.filePath)}'`).join('\n'),
     '',
     schemas.map((s) => `ruleOfSchemas('${s.name}', ${s.name})`).join('\n'),
+    '',
+    `const REFUTED: ReadonlySet<string> = new Set([${quoted}])`,
+    '',
+    `const EXPORTED: ReadonlyArray<readonly [string, Parameters<typeof obligationsOf>[0]]> = [`,
+    schemas.map((s) => `  ['${s.name}', ${s.name}],`).join('\n'),
+    `]`,
+    '',
+    `it('every obligation reachable from an exported schema is refuted somewhere', () => {`,
+    `  const covered = new Set<AST>()`,
+    `  for (const [name, schema] of EXPORTED) {`,
+    `    if (!REFUTED.has(name)) continue`,
+    `    for (const node of obligationsOf(schema).keys()) covered.add(node)`,
+    `  }`,
+    `  const naked = EXPORTED`,
+    `    .filter(([, schema]) => [...obligationsOf(schema).keys()].some((n) => !covered.has(n)))`,
+    `    .map(([name]) => name)`,
+    `  if (naked.length > 0) {`,
+    "    throw new Error(`schema(s) reaching an obligation no refutes call discharges: ${naked.join(', ')}`)",
+    `  }`,
+    `})`,
   ].join('\n')
 }
 

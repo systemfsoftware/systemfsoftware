@@ -76,6 +76,26 @@ A hand-authored property asserting that a schema **refuses** an input — the ha
 
 By design, refusal is the only thing such a test is meant to assert. The mechanical gate is narrower than the rule: it rejects the generated laws' own machinery — round-trip identity, equivalence, encoded-schema stability — rather than proving every remaining assertion is a refusal. The gap between the rule and its gate is held by review.
 
+### Schema weakening
+
+A schema built from another by dropping exactly one arm of its `SchemaAST` — a refinement's predicate, or one side of a transformation — leaving the rest intact. It is the schema-level analogue of an extreme mutation operator: it deletes a unit of the declaration rather than perturbing an expression inside one, which is what makes it able to express contracts a conventional mutator's operator catalogue cannot construct. The walk recurses through composites, rebuilding the enclosing tree around each weakened child, so an arm nested inside a struct field or a union member is reachable. Built in-process from the schema value, so it needs no source rewriting and no instrumenter.
+
+### Witness
+
+An input the weakened schema accepts and the original rejects. It is what promotes an arm to a refutation obligation, and it is existential — so sampling can establish it, which the containment claim it replaced could never do. Recording it is what lets a failure name the specific illegal value now getting through.
+
+### Refutation obligation
+
+A weakening for which a witness exists, and which therefore must be discriminated by some rejection property. The witness is what makes the set honest: a weakening that only loses accepted inputs belongs to the generated laws instead, so demanding a refusal for it would accuse a test of missing a fault another instrument already owns. An arm may be _mixed_ — simultaneously more permissive in one direction and less in another — and a witness still qualifies it, because the permissiveness it adds is real however much it also breaks.
+
+### Obligation node
+
+The `SchemaAST` node a weakening removes, and the identity an obligation is keyed by. Arms reached through different paths, or from different schemas, that remove the same node are one obligation — Effect shares nodes across composed schemas, so three schemas built on one refinement owe one refusal between them, not three. Keying by node rather than by path is also what makes discharge scope-free: a generator discharges a node wherever that node appears, regardless of which file it was declared in.
+
+### Refutation adequacy
+
+The criterion that every obligation node reachable from a schema is discharged by at least one declared refusal generator. It asks for coverage, never uniqueness — whether each node is defended, not whether a given test is its only defender. The distinction is load-bearing: a uniqueness criterion is test-suite minimization, whose fault-detection cost is measured, and it is the error the `soleKills > 0` gate made.
+
 ## Agent context injection
 
 ### Context file
@@ -144,8 +164,12 @@ A mutant a given test file is the **only** file credited with killing. Distinct 
 
 ### toothless test file
 
-A test file whose deletion would leave every mutant just as dead. The claim is counterfactual and therefore only as sound as the run's attribution — a file can look toothless because it genuinely defends nothing, or because the run failed to record what it killed. The two are not interchangeable, and only the first is grounds for deleting anything.
+A test file whose deletion would leave every mutant just as dead. The claim is counterfactual and therefore only as sound as the run's attribution — a file can look toothless because it genuinely defends nothing, because the run failed to record what it killed, or because the mutant set cannot express the contract the file defends. Only the first is grounds for deleting anything.
 
 ### unattributed kill
 
 A mutant that died with no test credited for killing it. It arises when a mutant's death is not observed per-test — a run that hangs is killed wholesale, so no individual test is named — leaving a kill that counts toward the score while belonging to nobody. Any file covering one is **unmeasurable** rather than toothless: it is a live candidate for being the killer, so the counterfactual behind the accusation cannot be evaluated for it.
+
+### collateral kill
+
+A mutant killed because the mutation corrupted a schema's derived arbitrary and some _other_ schema's law then choked on the garbage it generated, rather than because any test observed the mutated contract. It counts toward the score and toward attribution exactly like an observed kill, which is what makes it dangerous: it credits a law that is tautological with respect to the mutated schema, and the credit is then evidence against the hand-authored tests that state the contract properly.

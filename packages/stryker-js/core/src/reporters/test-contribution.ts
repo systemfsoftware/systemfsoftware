@@ -20,8 +20,8 @@ export interface TestContributionInput {
    * Whether the run recorded every killing test rather than stopping at the first.
    *
    * Under bail Stryker stops a mutant at its first killer, so a second defender can go
-   * unrecorded and sole-kill counts are not trustworthy. Only a file that killed nothing
-   * at all is provably toothless then, which is the weaker question this falls back to.
+   * unrecorded and sole-kill counts are not trustworthy. The gate then refuses to reach a
+   * verdict at all rather than falling back to a weaker accusation.
    */
   readonly everyKillerRecorded: boolean
 }
@@ -122,7 +122,7 @@ export interface TestContributionVerdict {
 const precisionOf = (everyKillerRecorded: boolean): string =>
   everyKillerRecorded
     ? 'every killing test was recorded'
-    : 'the run bailed at the first killing test, so only files that killed nothing at all are provably toothless'
+    : 'the run bailed at the first killing test, so sole-kill attribution is not trustworthy'
 
 export const judgeTestContribution = (
   report: ReportView,
@@ -137,6 +137,16 @@ export const judgeTestContribution = (
   if (inScope.length === 0) {
     return { failed: false, message: `No test file matching ${matches} ran, so none was judged.` }
   }
+  if (!everyKillerRecorded) {
+    // Bail stops each mutant at its first killing test, so a second defender can go
+    // unrecorded and the gate's claim — that deleting a file changes nothing — cannot be
+    // made on this evidence. Refuse to judge rather than accuse, naming `disableBail: true`.
+    return {
+      failed: true,
+      message:
+        `This run used Stryker's bail mode, which stops each mutant at its first killing test. A test file's contribution therefore cannot be measured on this evidence. Set \`disableBail: true\` to record every killing test, or remove \`${matches}\` from \`requireTestContribution\` (set it to \`null\` to disable the check) to narrow the gate out of scope for this run.`,
+    }
+  }
   // Zero attribution is the run failing to say who killed what, not every test failing to
   // defend: with no killer recorded anywhere, every file scores zero and the check would
   // accuse all of them. Blame the run, which is the thing that can actually be fixed.
@@ -148,6 +158,7 @@ export const judgeTestContribution = (
         `This run credited no kill to any test file, so no test file's contribution to it can be measured. Until that is fixed the ${inScope.length} file(s) matching ${matches} are unjudged, not cleared.`,
     }
   }
+
   const toothless = toothlessTestFiles(contribution, { suffixes, everyKillerRecorded })
   const precision = precisionOf(everyKillerRecorded)
   if (toothless.length === 0) {

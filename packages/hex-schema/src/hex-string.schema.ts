@@ -33,7 +33,8 @@ if (import.meta.vitest !== void 0) {
   // so this branch is statically dead in the build and the runner never enters
   // the published module graph. A static import would ship it.
   const { it } = await import('@effect/vitest')
-  const { Either, FastCheck: fc } = await import('effect')
+  const { FastCheck: fc } = await import('effect')
+  const { refutes } = await import('@systemfsoftware/effect-schema-law')
   const { expectTypeOf } = await import('vitest')
 
   /**
@@ -63,15 +64,14 @@ if (import.meta.vitest !== void 0) {
    * hex digit survives `toStrictHex` — this schema is case-insensitive where
    * `StrictHex` is not.
    */
-  const decodeHexString = S.decodeUnknownEither(HexString)
   const hexPart = fc.stringMatching(/^[0-9a-fA-F]*$/)
   const outsider = fc.stringMatching(/^[^0-9a-fA-Fx]$/)
 
-  it.prop(
-    '∀s_HexStringAlphabet_⊥',
-    [fc.tuple(hexPart, outsider, hexPart)],
-    ([[head, out, tail]]) => Either.isLeft(decodeHexString(`${head}${out}${tail}`)),
-  )
+  refutes(HexString, {
+    HexStringAlphabet: fc
+      .tuple(hexPart, outsider, hexPart)
+      .map(([head, out, tail]) => `${head}${out}${tail}`),
+  })
 
   /**
    * The brand exists only in the type, so only a type can state it. `tsc`
