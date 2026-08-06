@@ -39,6 +39,13 @@ Effect-TS libraries + the oxlint plugin enforcing the constitution (at `repos/co
   dont: add `*.executor.ts`, `*.kernel.ts`, `*.acl.ts`, `*.store.ts`, `*.handler.ts`, `*.middleware.ts`, `*.state.ts`, `*.adapter.ts`, `*.policy.ts`, `*.shape.ts`, or `*.observer.ts` to any `mutate` glob; leave `mutate` unset (the Stryker default sweeps every source file and auto-enrolls each new cell)
   harm: wrong observer. The mutator asks "do the tests notice a changed decision?" — a shell cell decides nothing, so every mutant is equivalent or is killed by a composition test that was proving something else; the score certifies nothing and the package pays hours of runtime for it
   check: node scripts/guard-mutate-scope.mjs exits 0 (wired into pnpm check); shell cells stay gated by lint provenance + composition tests, kernels by colocated K-law property tests
+
+- id: REPO-S6
+  title: Enforcement for a published concern ships inside the published artifact
+  do: carry a rule in a published oxlint plugin or a published type signature; put the failing fixture in that package's own suite; when the rule is genuinely repo-local (workspace layout, release metadata, vendored trees, local tooling), declare it in the `scripts/guard-script-provenance.mjs` manifest with the category that admits it
+  dont: enforce a doctrine we publish with a `scripts/*.mjs` gate, a `pnpm check` step, `CONSTITUTION.md`, or the wiki — a consumer installs packages, not this repository; read a doctrine artifact from a script, which promotes prose to a spec nobody maintains
+  harm: the rule binds one clone. Everywhere else the same doctrine arrives as prose in a skill, which is the channel restraints do not survive; the design looks enforced here and is advisory for every consumer
+  check: `pnpm check:script-provenance` exits 0 — `scripts/` is a closed set and no script reads doctrine. The judgement half stays with the reviewer: name the artifact a stranger installs that carries the rule. `scripts/`, `pnpm check`, `CONSTITUTION.md`, and the wiki are not answers
 ```
 
 ## Stack
@@ -54,11 +61,13 @@ Effect-TS libraries + the oxlint plugin enforcing the constitution (at `repos/co
 
 ## Surface Classes
 
-| Surface              | Examples                                                                                                                                                                                                                      | Rule                                                                                                                                                                                                                                                                                      |
-| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Locked**           | `AGENTS.md`, `repos/`, `.github/workflows/`, evaluation gates (`packages/stryker-js/core/src/reporters/test-contribution.ts`, `scripts/guard-mutate-scope.mjs`, `scripts/check-lint-coverage.mjs`)                            | Read and propose changes, but do not edit to make verification pass.                                                                                                                                                                                                                      |
-| **Editable**         | `packages/*/` (EXCEPT the evaluation gate named Locked above), `scripts/` (EXCEPT the evaluation scripts named Locked above), `docs/solutions/`, `wiki/` (the wiki), `tsdown.config.ts`, `dprint.json`, `pnpm-workspace.yaml` | Edit freely within the active task. `docs/solutions/` holds documented solutions to past problems (bugs, best practices, workflow patterns), organized by category with YAML frontmatter (`module`, `tags`, `problem_type`); relevant when implementing or debugging in documented areas. |
-| **Human-controlled** | Merge to `main`, publish, deploy, destructive ops, credentials                                                                                                                                                                | Ask the user before acting.                                                                                                                                                                                                                                                               |
+| Surface              | Examples                                                                                                                                                                                        | Rule                                                                                                                                                                                                                                                                                                                                    |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Evaluator**        | `packages/stryker-js/core/src/reporters/test-contribution.ts`, `scripts/guard-mutate-scope.mjs`, `scripts/check-lint-coverage.mjs`, `scripts/guard-script-provenance.mjs`, `.github/workflows/` | Never change in the same commit as the work it judges. Evolve it in its own commit, with the reason stated and the gate observed red before and green after for the right reason. Adding a `scripts/` entry means editing the provenance manifest, which is Evaluator — deliberately a separate commit.                                 |
+| **Doctrine**         | `CONSTITUTION.md`, `CONCEPTS.md`, every `AGENTS.md`/`CLAUDE.md`, `wiki/`, `docs/solutions/`                                                                                                     | Context engineering: these change what an agent does by being **read by the agent**. Editable under the Editable rule below, plus one prohibition — **never an input to a gate.** No script parses them; a gate over prose asserts a claim nobody maintains and goes green proving nothing. Enforced by `pnpm check:script-provenance`. |
+| **Editable**         | Everything else, including every `packages/*/` (oxlint rules included), `scripts/` (except the Evaluator scripts above), `docs/`, `tsdown.config.ts`, `dprint.json`                             | Edit freely, including the rules that govern you. One prohibition, and it binds every surface: **never weaken a rule, threshold, budget, glob, or instruction in order to make your current change pass.** Strengthening is always in scope; loosening needs its own commit and its own reason.                                         |
+| **Vendored**         | `repos/`                                                                                                                                                                                        | REPO-S3 — amend upstream.                                                                                                                                                                                                                                                                                                               |
+| **Human-controlled** | Merge to `main`, publish, deploy, destructive ops, credentials                                                                                                                                  | Ask the user before acting.                                                                                                                                                                                                                                                                                                             |
 
 ## Startup Workflow
 
@@ -117,8 +126,14 @@ If baseline verification fails, repair it first before adding new scope.
 Run in order before claiming done:
 
 ```bash
-pnpm check  # pnpm install --frozen-lockfile → turbo (format:check, lint, typecheck, test, attw, api:check) → check:exports → check:mutate-scope → check:lint-coverage → check:no-hand-rolled-jsonc → check:publish-config → check:project-references
+pnpm check  # pnpm install --frozen-lockfile → pnpm check:ci
 ```
+
+`check:ci` is the **one** definition of the gate, and every step runs through turbo. Call one runs `format:check`, `lint`, `typecheck`, `test`, `attw`, `api:check` alongside six root-task guards — `//#check:mutate-scope`, `//#check:lint-coverage`, `//#check:no-hand-rolled-jsonc`, `//#check:publish-config`, `//#check:script-provenance`, `//#check:project-references` — all in parallel under `--continue`, so one run reports every failure rather than the first. Call two runs `//#check:exports` and `//#check:runtime-deps`, which read `dist/` and so must follow a build.
+
+That seam is a turbo limitation, not a preference: a root task's `dependsOn: ["build"]` resolves to `//#build`, which does not exist, and `^build` resolves to the root's workspace dependencies, of which there are zero. So turbo cannot express "root task after all package builds" here, and the two dist-readers are ordered by the `&&` instead. Both fail loudly on an unbuilt tree rather than passing — `check-exports.mjs` counts the builds it saw and `check-runtime-deps.mjs` counts the packages it reached, because every dist-dependent assertion in them is skippable and a skipped run would otherwise report zero issues.
+
+The three other callers add exactly one thing each and duplicate nothing: `pnpm check` prepends the frozen install, `pnpm pre-push` pins concurrency to 50%, and CI runs `pnpm lint:ci` first for GitHub annotations. **A gate added to `check:ci` reaches all four callers.** Before this collapsed, four hand-maintained lists had drifted: `attw` never ran in CI, `check:runtime-deps` ran in one of four, and `.github/AGENTS.md` called `check:ci` "CI-equivalent" while CI did not invoke it.
 
 `pnpm check:publish-config` is part of that chain and is never run on its own (REPO-A1). Every publishable package must carry `repository.url` exactly `git+https://github.com/systemfsoftware/systemfsoftware.git` and a `repository.directory` matching its real path; npm validates both against the sigstore provenance attestation and rejects the upload with **422** otherwise. It earns a gate because the version bump, changelog, commit, and git tag all land _before_ the publish is attempted — a rejection leaves git claiming a release npm never received, which is exactly how `stryker-js-core` and `stryker-js-typescript-checker` sat at `0.1.0` on npm while git advanced to `v1.2.1`.
 
@@ -238,13 +253,6 @@ This root file holds workspace-wide invariants only. Directories with distinct b
   dont: edit files another agent owns without coordination
   harm: merge conflicts and contradictory changes
   check: claimed files are unique per agent
-
-- id: REPO-M2
-  title: Root verification gates done
-  do: ensure root-level `pnpm check` passes before any agent claims done
-  dont: claim done with a red tree
-  harm: subsystem failure becomes global failure
-  check: pnpm check exits 0
 ```
 
 ## Escalation
@@ -252,9 +260,9 @@ This root file holds workspace-wide invariants only. Directories with distinct b
 ```yaml
 - id: REPO-E1
   title: When stuck
-  do: consult CONCEPTS.md for domain vocabulary; consult ARCHITECTURE.md/CONSTITUTION.md for architecture; check project docs for requirements; flag repeated failures for human review; re-read this file for scope ambiguity
-  dont: guess; bypass checks; edit vendored code
-  harm: wrong deliverable; masked failures; vendored drift
+  do: consult CONCEPTS.md for domain vocabulary; consult ARCHITECTURE.md/CONSTITUTION.md for architecture; read `docs/solutions/` before implementing or debugging in an area it documents — it holds solved problems (bugs, best practices, workflow patterns) filed by category with `module`, `tags`, and `problem_type` frontmatter; read `wiki/` for prior rulings, observations, and adjudicated theory before asking the user a question it may already answer; check project docs for requirements; flag repeated failures for human review; re-read this file for scope ambiguity
+  dont: guess; bypass checks; edit vendored code; cite any `wiki/` path in a plan, doc, or commit — the wiki is gitignored, so ingest it and restate the substance in the artifact's own words
+  harm: wrong deliverable; masked failures; vendored drift; a question the user must answer that `wiki/` already had; a plan whose citations resolve to nothing in a fresh clone
   check: the change names the doc or rule it was grounded in
 ```
 
