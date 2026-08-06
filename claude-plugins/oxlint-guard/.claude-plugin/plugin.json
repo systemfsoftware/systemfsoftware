@@ -1,7 +1,6 @@
 {
   "name": "oxlint-guard",
-  "version": "0.1.0",
-  "description": "Lint agent edits with oxlint (PostToolUse) and block edits that weaken the oxlint config (PreToolUse). Hermetic, zero-import Deno scripts; no network access.",
+  "description": "Lint every agent edit with oxlint (PostToolUse) and block edits that weaken the oxlint config (PreToolUse).",
   "author": {
     "name": "systemfsoftware"
   },

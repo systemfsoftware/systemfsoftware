@@ -1,5 +1,5 @@
 {
-  "description": "Lint each edit with oxlint (PostToolUse) and block edits that add off severities to the oxlint config (PreToolUse). Both hooks run hermetic Deno scripts with --allow-read --allow-run --allow-env only — no network access.",
+  "description": "Lint every edited file with oxlint (PostToolUse) and block edits that turn an oxlint rule off (PreToolUse). Both hooks are self-contained Bun bundles: no network access, no PATH lookup for the linter.",
   "hooks": {
     "PostToolUse": [
       {
@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "deno run --allow-read --allow-run --allow-env ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/oxlint-guard.ts",
+            "command": "command -v bun >/dev/null 2>&1 || { echo 'oxlint-guard: bun not found on PATH - install Bun (https://bun.sh) so the lint guard can run' >&2; exit 1; }; exec bun \"${CLAUDE_PLUGIN_ROOT}/dist/oxlint-guard.mjs\"",
             "timeout": 120
           }
         ]
@@ -19,7 +19,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "deno run --allow-read --allow-run --allow-env ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/oxlint-config-off-guard.ts",
+            "command": "command -v bun >/dev/null 2>&1 || { echo 'oxlint-guard: bun not found on PATH - install Bun (https://bun.sh) so the config guard can run' >&2; exit 1; }; exec bun \"${CLAUDE_PLUGIN_ROOT}/dist/oxlint-config-off-guard.mjs\"",
             "timeout": 30
           }
         ]
