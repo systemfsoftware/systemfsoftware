@@ -3,7 +3,9 @@ import { correctionSignal } from './correction-signal.kernel.js'
 import type { PromptStdio } from './process-stdio.adapter.js'
 import { decodeSubmission } from './prompt-submission.acl.js'
 
-export class CaptureCorrectionExecutorDeps extends Context.Tag('CaptureCorrectionExecutorDeps')<
+export class CaptureCorrectionExecutorDeps extends Context.Tag(
+  '@systemfsoftware/claude-correction-plugin/capture-correction.executor/CaptureCorrectionExecutorDeps',
+)<
   CaptureCorrectionExecutorDeps,
   {
     readonly readSubmission: PromptStdio['Type']['readSubmission']

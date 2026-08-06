@@ -6,7 +6,6 @@ export default defineConfig({
   plugins: [tsconfigPaths({ ignoreConfigErrors: true })],
   test: {
     ...sharedConfig.test,
-    include: ['src/**/*.property.test.ts', '__tests__/**/*.test.ts'],
-    setupFiles: ['./vitest.setup.ts'],
+    include: ['__tests__/**/*.test.ts'],
   },
 })

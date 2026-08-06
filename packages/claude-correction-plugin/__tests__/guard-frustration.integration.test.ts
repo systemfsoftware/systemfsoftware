@@ -12,7 +12,9 @@ interface PromptTerminal {
   readonly noticesSeenByTheAgent: Effect.Effect<string>
 }
 
-class Terminal extends Context.Tag('PromptTerminal')<Terminal, PromptTerminal>() {}
+class Terminal extends Context.Tag(
+  '@systemfsoftware/claude-correction-plugin/__tests__/guard-frustration.integration.test/Terminal',
+)<Terminal, PromptTerminal>() {}
 
 const FakeTerminal = Layer.unwrapEffect(
   Effect.gen(function*() {

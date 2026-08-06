@@ -3,7 +3,9 @@ import { frustrationSignal } from './frustration-signal.kernel.js'
 import type { PromptStdio } from './process-stdio.adapter.js'
 import { decodeSubmission } from './prompt-submission.acl.js'
 
-export class GuardFrustrationExecutorDeps extends Context.Tag('GuardFrustrationExecutorDeps')<
+export class GuardFrustrationExecutorDeps extends Context.Tag(
+  '@systemfsoftware/claude-correction-plugin/guard-frustration.executor/GuardFrustrationExecutorDeps',
+)<
   GuardFrustrationExecutorDeps,
   {
     readonly readSubmission: PromptStdio['Type']['readSubmission']
