@@ -61,6 +61,11 @@ catalogs:
     "@stryker-mutator/instrumenter": ^9.6.1
     semver: ^7.7.0
     tslib: ~2.8.0
+  attw:
+    # arethetypeswrong core runs the JS compiler bridge (typescript@6).
+    # typescript@7 is the native Go compiler with no JS API; see
+    # docs/solutions/tooling-decisions/arethetypeswrong-core-requires-js-typescript-api.md
+    typescript: ^6.0.3
 minimumReleaseAge: 1440
 overrides:
   fast-check: ^4
