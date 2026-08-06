@@ -1,6 +1,6 @@
 import { describe, it } from '@effect/vitest'
 import { Effect, Exit, FastCheck as fc, Fiber, Ref, Scope, TestClock } from 'effect'
-import { detachIn } from './deadline.policy.js'
+import { detachIn } from '../deadline.policy.js'
 
 /**
  * Each case forks a fibre and drives the clock, so these cost far more than a

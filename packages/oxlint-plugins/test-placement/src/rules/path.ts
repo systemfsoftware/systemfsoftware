@@ -1,5 +1,5 @@
 import { Array as A, Schema as S } from 'effect'
-import { PROPERTY_SUFFIX, SANCTIONED_TEST_DIRS, TEST_BASENAME } from './path.config.js'
+import { NESTED_TEST_DIR, PROPERTY_SUFFIX, SANCTIONED_TEST_DIRS, TEST_BASENAME } from './path.config.js'
 
 const PathSegments = S.NonEmptyArray(S.String)
 
@@ -15,6 +15,8 @@ export const isUnderSrc = (filename: string): boolean => directoriesOf(filename)
 
 export const isInSanctionedTestDir = (filename: string): boolean =>
   directoriesOf(filename).some((segment) => SANCTIONED_TEST_DIRS.has(segment))
+
+export const isInNestedTestsDir = (filename: string): boolean => directoriesOf(filename).includes(NESTED_TEST_DIR)
 
 export const isTestFile = (basename: string): boolean => TEST_BASENAME.test(basename)
 

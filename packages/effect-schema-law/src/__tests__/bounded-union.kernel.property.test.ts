@@ -1,6 +1,6 @@
 import { it } from '@effect/vitest'
 import { Arbitrary, FastCheck as fc, Schema as S } from 'effect'
-import { boundedUnion } from './bounded-union.kernel.js'
+import { boundedUnion } from '../bounded-union.kernel.js'
 
 /**
  * `ruleOfSchemas` covers a schema's codec laws; the arbitrary `boundedUnion`

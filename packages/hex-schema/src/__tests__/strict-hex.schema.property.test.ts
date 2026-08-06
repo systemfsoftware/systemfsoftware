@@ -1,7 +1,7 @@
 import { it } from '@effect/vitest'
 import { refutes } from '@systemfsoftware/effect-schema-law'
 import { Either, FastCheck as fc, Schema as S } from 'effect'
-import { StrictHex } from './strict-hex.schema.js'
+import { StrictHex } from '../strict-hex.schema.js'
 
 const decode = S.decodeUnknownEither(StrictHex)
 

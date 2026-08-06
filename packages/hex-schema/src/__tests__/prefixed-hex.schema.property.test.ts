@@ -1,7 +1,7 @@
 import { refutes } from '@systemfsoftware/effect-schema-law'
 import { type Brand, FastCheck as fc, Schema as S } from 'effect'
 import { expectTypeOf } from 'vitest'
-import { PrefixedHex } from './prefixed-hex.schema.js'
+import { PrefixedHex } from '../prefixed-hex.schema.js'
 
 const hexBody = fc.stringMatching(/^[0-9a-f]*$/)
 const outsider = fc.stringMatching(/^[^0-9a-f]$/)

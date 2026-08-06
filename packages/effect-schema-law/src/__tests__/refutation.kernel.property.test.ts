@@ -1,12 +1,12 @@
 import { it } from '@effect/vitest'
 import { FastCheck as fc } from 'effect'
-import { dischargedBy, obligationsOf, scanObligations } from './refutation.kernel.js'
+import { dischargedBy, obligationsOf, scanObligations } from '../refutation.kernel.js'
 import {
   FixturePlainRecipe,
   FixtureRecipe,
   makeRestrictiveSchema,
   makeVacuousSchema,
-} from './schema-recipe.observer.js'
+} from '../schema-recipe.observer.js'
 
 /**
  * The same shapes built with refinements that reject nothing: a weakening no

@@ -1,8 +1,8 @@
 import { it } from '@effect/vitest'
 import { Either, FastCheck as fc, Schema as S } from 'effect'
-import { obligationsOf } from './refutation.kernel.js'
-import { adequacyReport, discriminates, refutes } from './refutes.kernel.js'
-import { ruleOfSchemas } from './rule-of-schemas.kernel.js'
+import { obligationsOf } from '../refutation.kernel.js'
+import { adequacyReport, discriminates, refutes } from '../refutes.kernel.js'
+import { ruleOfSchemas } from '../rule-of-schemas.kernel.js'
 
 const ALPHABET: readonly string[] = [
   '0',

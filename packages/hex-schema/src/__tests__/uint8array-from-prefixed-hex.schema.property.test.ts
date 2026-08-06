@@ -1,7 +1,7 @@
 import { refutes } from '@systemfsoftware/effect-schema-law'
 import { FastCheck as fc, Schema as S } from 'effect'
 import { expectTypeOf } from 'vitest'
-import { Uint8ArrayFromPrefixedHex } from './uint8array-from-prefixed-hex.schema.js'
+import { Uint8ArrayFromPrefixedHex } from '../uint8array-from-prefixed-hex.schema.js'
 
 const bytePairs = fc.stringMatching(/^(?:[0-9a-f]{2})*$/)
 const nibble = fc.stringMatching(/^[0-9a-f]$/)

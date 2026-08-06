@@ -1,8 +1,10 @@
-import { MESSAGE } from './path.config.js'
+import { MESSAGE, SANCTIONED_TEST_DIRS } from './path.config.js'
 
-export const STRAY_TEST_FILE_EXPECTED = 'test files outside src/ under a tests/ or __tests__/ directory' as const
+const SANCTIONED_DIRS = [...SANCTIONED_TEST_DIRS].map((dir) => `${dir}/`).join(' or ')
+
+export const STRAY_TEST_FILE_EXPECTED = `test files outside src/ under a ${SANCTIONED_DIRS} directory`
 export const STRAY_TEST_FILE_ACTUAL = 'a test file outside src/ and outside any tests directory' as const
-export const STRAY_TEST_FILE_FIX = 'move it into the package tests/ or __tests__/ directory' as const
+export const STRAY_TEST_FILE_FIX = `move it into the package ${SANCTIONED_DIRS} directory`
 
 export const meta = {
   type: 'problem',

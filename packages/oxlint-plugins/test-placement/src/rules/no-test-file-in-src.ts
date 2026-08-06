@@ -2,6 +2,9 @@ import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
 import {
   meta,
+  PROPERTY_TEST_LOCATION_ACTUAL,
+  PROPERTY_TEST_LOCATION_EXPECTED,
+  PROPERTY_TEST_LOCATION_FIX,
   SCHEMA_TEST_ACTUAL,
   SCHEMA_TEST_EXPECTED,
   SCHEMA_TEST_FIX,
@@ -10,9 +13,9 @@ import {
   TEST_FILE_IN_SRC_FIX,
 } from './no-test-file-in-src.config.js'
 import { PROPERTY_SUFFIX, SCHEMA_LAWS_BASENAME, SCHEMA_SUFFIX } from './path.config.js'
-import { basenameOf, isTestFile, isUnderSrc } from './path.js'
+import { basenameOf, isInNestedTestsDir, isTestFile, isUnderSrc } from './path.js'
 
-export type MessageIds = 'testFileInSrc' | 'schemaTestInSrc'
+export type MessageIds = 'testFileInSrc' | 'schemaTestInSrc' | 'propertyTestOutsideTestsDir'
 
 interface Violation {
   readonly messageId: MessageIds
@@ -35,6 +38,13 @@ const UNSANCTIONED: Violation = {
   fix: TEST_FILE_IN_SRC_FIX,
 }
 
+const PROPERTY_TEST_LOCATION: Violation = {
+  messageId: 'propertyTestOutsideTestsDir',
+  expected: PROPERTY_TEST_LOCATION_EXPECTED,
+  actual: PROPERTY_TEST_LOCATION_ACTUAL,
+  fix: PROPERTY_TEST_LOCATION_FIX,
+}
+
 export const noTestFileInSrc = defineRule({
   meta,
   create(context: Context) {
@@ -42,8 +52,13 @@ export const noTestFileInSrc = defineRule({
     if (!isUnderSrc(context.filename)) return {}
     if (!isTestFile(basename)) return {}
     if (basename === SCHEMA_LAWS_BASENAME) return {}
-    if (basename.endsWith(PROPERTY_SUFFIX)) return {}
-    const { messageId, ...detail } = basename.endsWith(SCHEMA_SUFFIX) ? SCHEMA_TEST : UNSANCTIONED
+    const isPropertyTest = basename.endsWith(PROPERTY_SUFFIX)
+    if (isPropertyTest && isInNestedTestsDir(context.filename)) return {}
+    const { messageId, ...detail } = basename.endsWith(SCHEMA_SUFFIX)
+      ? SCHEMA_TEST
+      : isPropertyTest
+      ? PROPERTY_TEST_LOCATION
+      : UNSANCTIONED
     return {
       Program(node: ESTree.Program) {
         context.report({

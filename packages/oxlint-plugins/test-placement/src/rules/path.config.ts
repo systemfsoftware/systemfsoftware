@@ -2,6 +2,13 @@ export const TEST_BASENAME = /\.(?:test|spec)\.[cm]?tsx?$/
 
 export const SANCTIONED_TEST_DIRS: ReadonlySet<string> = new Set(['tests', '__tests__'])
 
+/**
+ * The only test location sanctioned under `src/`. A property test earns
+ * colocation with the cell it covers, but not adjacency: it lives in a
+ * `__tests__` directory beside that cell, never as a sibling file.
+ */
+export const NESTED_TEST_DIR = '__tests__' as const
+
 export const PROPERTY_SUFFIX = '.property.test.ts' as const
 export const INTEGRATION_SUFFIX = '.integration.test.ts' as const
 

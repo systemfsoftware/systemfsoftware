@@ -2,7 +2,7 @@ import { it } from '@effect/vitest'
 import { Either, FastCheck as fc, Schema as S } from 'effect'
 import * as AST from 'effect/SchemaAST'
 import { expectTypeOf } from 'vitest'
-import { armsOf } from './weaken.kernel.js'
+import { armsOf } from '../weaken.kernel.js'
 
 /**
  * R2 in the only channel that can fire. The walk recurses through exactly the

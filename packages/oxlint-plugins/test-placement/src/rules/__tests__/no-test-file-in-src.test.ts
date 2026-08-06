@@ -1,4 +1,7 @@
 import {
+  PROPERTY_TEST_LOCATION_ACTUAL,
+  PROPERTY_TEST_LOCATION_EXPECTED,
+  PROPERTY_TEST_LOCATION_FIX,
   SCHEMA_TEST_ACTUAL,
   SCHEMA_TEST_EXPECTED,
   SCHEMA_TEST_FIX,
@@ -31,12 +34,27 @@ const schemaTest = (name: string) => [{
   },
 }]
 
+const propertyLocation = (name: string) => [{
+  messageId: 'propertyTestOutsideTestsDir',
+  data: {
+    name,
+    expected: PROPERTY_TEST_LOCATION_EXPECTED,
+    actual: PROPERTY_TEST_LOCATION_ACTUAL,
+    fix: PROPERTY_TEST_LOCATION_FIX,
+  },
+}]
+
 ruleTester.run('no-test-file-in-src', noTestFileInSrc, {
   valid: [
     {
-      name: 'Should_Allow_PropertyTestInSrc_When_BesidesWorkflow',
+      name: 'Should_Allow_PropertyTestInSrc_When_InsideNestedTestsDir',
       code: '',
-      filename: '/repo/pkg/src/confirm-order.workflow.property.test.ts',
+      filename: '/repo/pkg/src/__tests__/confirm-order.workflow.property.test.ts',
+    },
+    {
+      name: 'Should_Allow_PropertyTestInSrc_When_InsideDeeperNestedTestsDir',
+      code: '',
+      filename: '/repo/pkg/src/order/__tests__/confirm-order.workflow.property.test.ts',
     },
     {
       name: 'Should_Allow_SchemaLawsEntryPoint_When_NamedExactly',
@@ -106,6 +124,18 @@ ruleTester.run('no-test-file-in-src', noTestFileInSrc, {
       code: '',
       filename: '/repo/pkg/src/__tests__/a.test.ts',
       errors: unsanctioned('a.test.ts'),
+    },
+    {
+      name: 'Should_Report_PropertyTestInSrc_When_BesideItsSource',
+      code: '',
+      filename: '/repo/pkg/src/confirm-order.workflow.property.test.ts',
+      errors: propertyLocation('confirm-order.workflow.property.test.ts'),
+    },
+    {
+      name: 'Should_Report_PropertyTestInSrc_When_BesideSourceInDeeperDir',
+      code: '',
+      filename: '/repo/pkg/src/order/confirm-order.workflow.property.test.ts',
+      errors: propertyLocation('confirm-order.workflow.property.test.ts'),
     },
   ],
 })
