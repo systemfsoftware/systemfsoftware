@@ -1,6 +1,10 @@
+import { readFile } from 'node:fs/promises'
+import { resolve as resolvePath } from 'node:path'
+
 import { schema } from '@stryker-mutator/api/core'
 import { describe, expect, it } from 'vitest'
 
+import { forkCoreSchema } from '../../src/config/fork-schema.js'
 import {
   contributionByTestFile,
   judgeTestContribution,
@@ -211,13 +215,38 @@ describe('judgeTestContribution', () => {
     expect(verdict?.message).toContain('kills a mutant nothing else kills')
   })
 
-  it('says which precision the answer carries when the run bailed', () => {
+  it('fails the run with a configuration error when bail is on and an in-scope file ran', () => {
     const verdict = judgeTestContribution(twoFiles, PROPERTY, false)
-    expect(verdict?.message).toContain('the run bailed at the first killing test')
+    expect(verdict?.failed).toBe(true)
+    expect(verdict?.message).toContain('bail')
+    expect(verdict?.message).toContain('disableBail: true')
   })
 
-  it('returns no verdict at all when the check is not configured', () => {
-    expect(judgeTestContribution(twoFiles, null, true)).toBeUndefined()
+  it('judges the same package normally once disableBail: true is set, and a zero-kill file is still accused', () => {
+    const verdict = judgeTestContribution(twoFiles, PROPERTY, true)
+    expect(verdict?.failed).toBe(true)
+    expect(verdict?.message).toContain('idle.property.test.ts')
+    expect(verdict?.message).not.toContain('disableBail: true')
+  })
+
+  it('stays silent under bail when no file matches the configured suffixes', () => {
+    const noneInScope = reportOf([mutantOf('m1', 'Killed', ['t1'])], { 'plain.test.ts': ['t1'] })
+    const verdict = judgeTestContribution(noneInScope, PROPERTY, false)
+    expect(verdict?.failed).toBe(false)
+    expect(verdict?.message).toContain('so none was judged')
+    expect(verdict?.message).not.toContain('disableBail: true')
+  })
+
+  it('does not single out a zero-killing file when bail is on: the configuration error names no test file', () => {
+    const soleKiller = reportOf([mutantOf('m1', 'Killed', ['t1']), mutantOf('m2', 'Killed', ['t1'])], {
+      'sole.workflow.property.test.ts': ['t1'],
+      'idle.workflow.property.test.ts': ['t2'],
+    })
+    const WORKFLOW = ['.workflow.property.test.ts']
+    const verdict = judgeTestContribution(soleKiller, WORKFLOW, false)
+    expect(verdict?.message).not.toContain('sole.workflow.property.test.ts')
+    expect(verdict?.message).not.toContain('idle.workflow.property.test.ts')
+    expect(verdict?.message).toContain('disableBail: true')
   })
 
   it('blames the run, not the tests, when no kill was credited to any test file', () => {
@@ -279,5 +308,65 @@ describe('judgeTestContribution', () => {
     expect(judgeTestContribution(bothIdle, PROPERTY, true)?.message).toContain(
       '  - alpha.property.test.ts\n  - beta.property.test.ts',
     )
+  })
+})
+
+describe('requireTestContribution default suffix list', () => {
+  const props = forkCoreSchema.properties as Record<string, { default?: unknown; description?: string }>
+  const defaultSuffixes = (props.requireTestContribution?.default ?? []) as string[]
+
+  it('retains .workflow.property.test.ts so the gate applies to workflow property tests', () => {
+    expect(defaultSuffixes).toContain('.workflow.property.test.ts')
+  })
+
+  it('retains .policy.property.test.ts so the gate applies to policy property tests', () => {
+    expect(defaultSuffixes).toContain('.policy.property.test.ts')
+  })
+
+  it('retains .kernel.property.test.ts so the gate applies to kernel property tests', () => {
+    expect(defaultSuffixes).toContain('.kernel.property.test.ts')
+  })
+
+  it('does not retain .schema.property.test.ts — the mutator cannot express schema refusals', () => {
+    expect(defaultSuffixes).not.toContain('.schema.property.test.ts')
+  })
+
+  it('produces no contribution verdict for a run whose only property tests are schema tests', () => {
+    const report = reportOf([mutantOf('m1', 'Killed', ['t1'])], {
+      'earns.schema.property.test.ts': ['t1'],
+      'idle.schema.property.test.ts': ['t2'],
+    })
+    expect(judgeTestContribution(report, defaultSuffixes, true)?.message).toContain('so none was judged')
+  })
+
+  it('still produces a verdict for a package that contains a workflow property test', () => {
+    const report = reportOf([mutantOf('m1', 'Killed', ['t1'])], {
+      'earns.workflow.property.test.ts': ['t1'],
+      'idle.workflow.property.test.ts': ['t2'],
+    })
+    expect(judgeTestContribution(report, defaultSuffixes, true)?.failed).toBe(true)
+  })
+
+  it('an explicit requireTestContribution in a config still overrides the default', () => {
+    const report = reportOf([mutantOf('m1', 'Killed', ['t1'])], {
+      'earns.schema.property.test.ts': ['t1'],
+      'idle.schema.property.test.ts': ['t2'],
+    })
+    expect(judgeTestContribution(report, ['.schema.property.test.ts'], true)?.failed).toBe(true)
+  })
+
+  it('description in fork-schema.ts and stryker-schema.json are identical and do not claim files are accused under bail', async () => {
+    const forkDescription = props.requireTestContribution?.description ?? ''
+    const schemaRaw = await readFile(
+      resolvePath(import.meta.dirname, '../../schema/stryker-schema.json'),
+      'utf-8',
+    )
+    const schemaJson = JSON.parse(schemaRaw) as {
+      properties?: Record<string, { description?: string }>
+    }
+    const schemaDescription = schemaJson.properties?.requireTestContribution?.description ?? ''
+    expect(forkDescription).toBe(schemaDescription)
+    expect(forkDescription).not.toContain('Under bail only files that killed nothing at all are accused')
+    expect(forkDescription).not.toContain('provably toothless')
   })
 })

@@ -82,7 +82,9 @@
     "ignorers": [],
     "testFiles": [],
     "requireTestContribution": [
-      ".property.test.ts"
+      ".workflow.property.test.ts",
+      ".policy.property.test.ts",
+      ".kernel.property.test.ts"
     ]
   },
   "files": {
