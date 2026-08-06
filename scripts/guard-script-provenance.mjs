@@ -113,6 +113,10 @@ const MANIFEST = new Map([
     'workspace-layout',
     'This file. The set it polices IS the workspace arrangement of scripts/.',
   ]],
+  ['patch-tsgo-if-needed.mjs', [
+    'workspace-layout',
+    'Guards the shared native tsc all 41 packages typecheck through against a non-idempotent devDependency install hook. No package can see another package node_modules.',
+  ]],
   ['release-monorepo-filter.mjs', [
     'release-metadata',
     'semantic-release plugin, loaded by release.mjs.',
