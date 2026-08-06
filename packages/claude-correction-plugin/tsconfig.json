@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": ["@systemfsoftware/tsconfig/bundler/no-dom/app", "@systemfsoftware/tsconfig/effect"],
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["node"],
+    "customConditions": [
+      "@systemfsoftware/source"
+    ],
+    "isolatedModules": true
+  },
+  "include": [
+    "src",
+    "__tests__"
+  ],
+  "references": [
+    {
+      "path": "./tsconfig.node.json"
+    }
+  ]
+}

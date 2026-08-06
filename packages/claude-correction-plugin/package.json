@@ -1,0 +1,32 @@
+{
+  "name": "@systemfsoftware/claude-correction-plugin",
+  "private": true,
+  "license": "MIT",
+  "version": "0.1.0",
+  "author": "Ryan Lee <drdgvhbh@gmail.com>",
+  "description": "Claude Code plugin: UserPromptSubmit hooks that catch a user correction or a frustrated prompt and make the agent capture the durable rule.",
+  "type": "module",
+  "scripts": {
+    "clean": "rimraf dist",
+    "build": "tsdown",
+    "typecheck": "tsc --noEmit --incremental",
+    "test": "vitest run",
+    "test:run": "vitest run",
+    "lint": "oxlint . ${AGENT:+--format=unix --quiet}"
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "@systemfsoftware/effect-gherkin-spec": "workspace:^",
+    "@systemfsoftware/oxlint-config": "workspace:^",
+    "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
+    "@types/node": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
+    "effect": "catalog:",
+    "fast-check": "catalog:",
+    "rimraf": "catalog:",
+    "tsdown": "catalog:",
+    "vite-tsconfig-paths": "catalog:",
+    "vitest": "catalog:"
+  }
+}
