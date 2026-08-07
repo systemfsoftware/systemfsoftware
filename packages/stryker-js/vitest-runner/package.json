@@ -1,0 +1,71 @@
+{
+  "name": "@systemfsoftware/stryker-js-vitest-runner",
+  "version": "0.1.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
+    "directory": "packages/stryker-js/vitest-runner"
+  },
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/stryker-js/vitest-runner#readme",
+  "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
+  "description": "Vitest test-runner plugin for Stryker",
+  "type": "module",
+  "exports": {
+    ".": {
+      "@systemfsoftware/source": "./src/index.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./stryker-setup": {
+      "@systemfsoftware/source": "./src/stryker-setup.ts",
+      "default": "./dist/stryker-setup.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "clean": "rimraf dist",
+    "build": "tsdown",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "lint": "oxlint ."
+  },
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "keywords": [
+    "stryker",
+    "vitest",
+    "@stryker-mutator/test-runner-plugin"
+  ],
+  "initStrykerConfig": {
+    "coverageAnalysis": "perTest"
+  },
+  "dependencies": {
+    "@stryker-mutator/api": "catalog:stryker",
+    "@stryker-mutator/util": "catalog:stryker",
+    "semver": "catalog:stryker",
+    "tslib": "catalog:stryker"
+  },
+  "peerDependencies": {
+    "vitest": ">=2.0.0"
+  },
+  "devDependencies": {
+    "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
+    "@types/node": "catalog:",
+    "@types/semver": "7.7.1",
+    "ajv": "~8.18.0",
+    "rimraf": "catalog:",
+    "tsdown": "catalog:",
+    "typed-inject": "~5.0.0",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": "./dist/index.mjs",
+      "./stryker-setup": "./dist/stryker-setup.mjs",
+      "./package.json": "./package.json"
+    }
+  }
+}

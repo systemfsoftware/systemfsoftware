@@ -12,7 +12,7 @@ const basePreset: PartialStrykerOptions = {
   testRunner: 'vitest',
   checkers: ['typescript'],
   plugins: [
-    '@stryker-mutator/vitest-runner',
+    '@systemfsoftware/stryker-js-vitest-runner',
     '@systemfsoftware/stryker-js-typescript-checker',
     '@systemfsoftware/stryker-plugins/effect-schema-ignorer',
   ],

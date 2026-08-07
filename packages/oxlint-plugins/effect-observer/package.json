@@ -55,10 +55,10 @@
   },
   "devDependencies": {
     "@microsoft/api-extractor": "catalog:",
-    "@stryker-mutator/vitest-runner": "catalog:stryker",
     "@systemfsoftware/arethetypeswrong-cli": "workspace:^",
     "@systemfsoftware/stryker-js-core": "workspace:^",
     "@systemfsoftware/stryker-js-typescript-checker": "workspace:^",
+    "@systemfsoftware/stryker-js-vitest-runner": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
