@@ -18,7 +18,7 @@ In `stryker.config.json`:
 ```jsonc
 {
   "plugins": [
-    "@stryker-mutator/vitest-runner",
+    "@systemfsoftware/stryker-js-vitest-runner",
     "@stryker-mutator/typescript-checker",
     "@systemfsoftware/stryker-plugins"
   ],

@@ -5,7 +5,7 @@
   ],
   "$schema": "./schema/stryker-schema.json",
   "plugins": [
-    "@stryker-mutator/vitest-runner"
+    "@systemfsoftware/stryker-js-vitest-runner"
   ],
   "vitest": {
     "configFile": "vitest.stryker.config.ts",

@@ -6,7 +6,7 @@
     "!src/rules/**/*.config.ts"
   ],
   "plugins": [
-    "@stryker-mutator/vitest-runner",
+    "@systemfsoftware/stryker-js-vitest-runner",
     "@systemfsoftware/stryker-js-typescript-checker"
   ],
   "thresholds": {

@@ -4,7 +4,7 @@ import { defineConfig, sharedConfig } from '@systemfsoftware/vitest-config'
  * The config Stryker runs with. Identical to `vitest.config.ts` except that it
  * drops the two specs which call `process.chdir()`.
  *
- * `@stryker-mutator/vitest-runner` hardcodes `pool: 'threads'`, and Node
+ * `@systemfsoftware/stryker-js-vitest-runner` hardcodes `pool: 'threads'`, and Node
  * forbids `process.chdir()` on a worker thread, so those specs throw during
  * the initial dry run and abort the whole mutation run. They exercise the CLI
  * against a fixture project on disk, which needs a real working directory --
