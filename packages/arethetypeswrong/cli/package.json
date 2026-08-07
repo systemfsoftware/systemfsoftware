@@ -10,11 +10,12 @@
     "directory": "packages/arethetypeswrong/cli"
   },
   "files": [
+    "bin",
     "dist",
     "LICENSE"
   ],
   "bin": {
-    "attw": "./dist/index.mjs"
+    "attw": "./bin/attw.mjs"
   },
   "exports": {
     "./package.json": "./package.json",
