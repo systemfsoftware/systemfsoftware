@@ -12,6 +12,7 @@ import { Effect } from 'effect'
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, relative, resolve } from 'node:path'
+import { parseSync } from 'oxc-parser'
 import { afterAll, expect } from 'vitest'
 
 import { generateSchemaLaws, LAW_FILE_BASENAME } from '../src/mod.js'
@@ -65,6 +66,12 @@ const lawsIn = (code: string): ReadonlyMap<string, string> => {
   )
 }
 
+const aliasesIn = (code: string, pattern: RegExp): ReadonlyMap<string, string> =>
+  new Map([...code.matchAll(pattern)].map(([, title, local]) => [title ?? '', local ?? '']))
+
+const refutedIn = (code: string): string | undefined =>
+  /const REFUTED: ReadonlySet<string> = new Set\(\[([^\]]*)\]\)/.exec(code)?.[1]
+
 const NESTED = makePackage('schema-laws-', { 'nested/schemas.ts': MIXED_DECLARATIONS })
 
 const NAMESAKES = makePackage('schema-laws-namesake-', {
@@ -77,10 +84,25 @@ const NAMESAKES = makePackage('schema-laws-namesake-', {
   ].join('\n'),
 })
 
-const BARE = makePackage('schema-laws-empty-', {})
+const BARE = makePackage('schema-laws-empty-', { 'helpers.ts': `export const ok = (x: string) => x.length > 0\n` })
+
+const BARRELLED = makePackage('schema-laws-barrel-', {
+  'money/money.schema.ts': MONEY,
+  'money/index.ts': `export { Money } from './money.schema.js'\n`,
+  'money/__tests__/money.schema.property.test.ts': [
+    `import { refutes } from '@systemfsoftware/effect-schema-law'`,
+    `import { Money } from '../index.js'`,
+    `refutes(Money, {})`,
+  ].join('\n'),
+})
+
+const QUOTED = makePackage('schema-laws-quote-', {
+  "pat's-money/money.schema.ts": MONEY,
+  'plain-money/money.schema.ts': MONEY,
+})
 
 afterAll(() => {
-  for (const root of [NESTED, NAMESAKES, BARE]) rmSync(root, { recursive: true, force: true })
+  for (const root of [NESTED, NAMESAKES, BARE, BARRELLED, QUOTED]) rmSync(root, { recursive: true, force: true })
 })
 
 Feature('Generating codec laws for every schema a package exports').body(({ scenario }) => {
@@ -135,6 +157,11 @@ Feature('Generating codec laws for every schema a package exports').body(({ scen
           'Money (./second/money.schema)': './second/money.schema',
         })
       }),
+      Then('the obligation roster binds each title to the same schema its law pair runs against')((s) => {
+        expect(Object.fromEntries(aliasesIn(s.code, /^ {2}\['([^']+)', (\w+)\],$/gm))).toEqual(
+          Object.fromEntries(aliasesIn(s.code, /ruleOfSchemas\('([^']+)', (\w+)\)/g)),
+        )
+      }),
     ),
   )
 
@@ -147,7 +174,7 @@ Feature('Generating codec laws for every schema a package exports').body(({ scen
       ),
       When('the plugin generates that package\u2019s law suite')('code', (s) => Effect.sync(() => lawSuiteFor(s.pkg))),
       Then('only the schema the refusal was stated against counts as refuted')((s) => {
-        expect(/new Set\(\[([^\]]*)\]\)/.exec(s.code)?.[1]).toBe(`'Money (./second/money.schema)'`)
+        expect(refutedIn(s.code)).toBe(`'Money (./second/money.schema)'`)
       }),
     ),
   )
@@ -161,7 +188,38 @@ Feature('Generating codec laws for every schema a package exports').body(({ scen
       ),
       When('the plugin generates that package\u2019s law suite')('code', (s) => Effect.sync(() => lawSuiteFor(s.pkg))),
       Then('the refusal still discharges the schema it was stated against')((s) => {
-        expect(/new Set\(\[([^\]]*)\]\)/.exec(s.code)?.[1]).toBe(`'Money (./second/money.schema)'`)
+        expect(refutedIn(s.code)).toBe(`'Money (./second/money.schema)'`)
+      }),
+    ),
+  )
+
+  scenario(
+    'A refusal that reaches its schema through a re-exporting folder still discharges it',
+    Gherkin.Do.pipe(
+      Given('a package whose only refusal imports Money through the folder that re-exports it')(
+        'pkg',
+        () => Effect.succeed(BARRELLED),
+      ),
+      When('the plugin generates that package\u2019s law suite')('code', (s) => Effect.sync(() => lawSuiteFor(s.pkg))),
+      Then('the refusal is credited to the module that declares Money')((s) => {
+        expect(refutedIn(s.code)).toBe(`'Money'`)
+      }),
+    ),
+  )
+
+  scenario(
+    'A schema kept in a folder whose name carries an apostrophe still yields a suite that parses',
+    Gherkin.Do.pipe(
+      Given('a package where one of two namesake schemas sits in a folder named after Pat\u2019s money')(
+        'pkg',
+        () => Effect.succeed(QUOTED),
+      ),
+      When('the plugin generates that package\u2019s law suite')('code', (s) => Effect.sync(() => lawSuiteFor(s.pkg))),
+      Then('the generated suite is syntactically valid')((s) => {
+        expect(parseSync(LAW_FILE_BASENAME, s.code).errors).toEqual([])
+      }),
+      Then('the folder name survives in the title rather than being dropped')((s) => {
+        expect(s.code).toContain(String.raw`\'s-money`)
       }),
     ),
   )
@@ -169,7 +227,7 @@ Feature('Generating codec laws for every schema a package exports').body(({ scen
   scenario(
     'A package that exports no schemas at all earns an empty law suite',
     Gherkin.Do.pipe(
-      Given('a package with an empty source folder')('pkg', () => Effect.succeed(BARE)),
+      Given('a package whose source folder holds no schema at all')('pkg', () => Effect.succeed(BARE)),
       When('the plugin generates that package\u2019s law suite')('code', (s) => Effect.sync(() => lawSuiteFor(s.pkg))),
       Then('the law suite is an empty module')((s) => {
         expect(s.code).toBe('// no schemas found\nexport {}\n')
