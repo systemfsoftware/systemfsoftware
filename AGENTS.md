@@ -108,6 +108,13 @@ If baseline verification fails, repair it first before adding new scope.
   dont: rely on file trackers
   harm: next session loses context
   check: memory and task list are current before yielding
+
+- id: REPO-W4
+  title: Search the wiki before planning or deciding
+  do: before writing a plan, choosing between options, settling a design question, debugging a failure, or asking the user a design question — search `wiki/` and read what it returns; enter at `wiki/manifest.md` (one `[[slug]] | title | type` line per page), open the candidate slugs under `wiki/entities/` and `wiki/pages/`, and read each page's prose to triage it; where a page bears on the decision read its `## Warrant` atom table as well — or the `pages/<slug>-warrant.md` it points at when the table was split out — because the per-claim atom, never the frontmatter `warrant:` band, is what adjudicates; then the appeal order in `wiki/SCHEMA.md` settles the contradiction, except that a `CONSTITUTION.md` axiom governs here and the divergence is logged
+  dont: search from anywhere but `wiki` — the directory is gitignored, so a grep rooted at the repo, or unrooted, matches nothing inside it and reports that as no match; take such a silence for an answer; read `wiki/log.md` or the generated `wiki/pages/first-principles.md` whole; read past the pages you named, or keep opening pages once one has settled the question — if more than about five slugs look like candidates the question is too broad, so narrow it rather than read them all; cite a `wiki/` path in a plan, doc, commit, or issue — the wiki does not ship with the clone, so restate the substance in the artifact's own words
+  harm: the corpus has already adjudicated most of what a plan here decides, so skipping it re-litigates a settled ruling, asks the user a question the wiki answered, or ships a decision canon already refused — and the repo-rooted search that silently returns nothing is what makes the skip feel like diligence
+  check: every plan and design decision names the wiki ruling it rests on, restated in its own words and carrying the deciding atom's warrant band; a nil result is admissible only where the artifact records the verbatim query and the `wiki`-scoped path it ran against, so anyone holding the wiki can re-run it and falsify the claim; when `wiki/` is absent — a fresh clone has none — say so once and proceed
 ```
 
 ## Definition of Done
@@ -260,9 +267,9 @@ This root file holds workspace-wide invariants only. Directories with distinct b
 ```yaml
 - id: REPO-E1
   title: When stuck
-  do: consult CONCEPTS.md for domain vocabulary; consult ARCHITECTURE.md/CONSTITUTION.md for architecture; read `docs/solutions/` before implementing or debugging in an area it documents — it holds solved problems (bugs, best practices, workflow patterns) filed by category with `module`, `tags`, and `problem_type` frontmatter; read `wiki/` for prior rulings, observations, and adjudicated theory before asking the user a question it may already answer; check project docs for requirements; flag repeated failures for human review; re-read this file for scope ambiguity
-  dont: guess; bypass checks; edit vendored code; cite any `wiki/` path in a plan, doc, or commit — the wiki is gitignored, so ingest it and restate the substance in the artifact's own words
-  harm: wrong deliverable; masked failures; vendored drift; a question the user must answer that `wiki/` already had; a plan whose citations resolve to nothing in a fresh clone
+  do: consult CONCEPTS.md for domain vocabulary; consult ARCHITECTURE.md/CONSTITUTION.md for architecture; read `docs/solutions/` before implementing or debugging in an area it documents — it holds solved problems (bugs, best practices, workflow patterns) filed by category with `module`, `tags`, and `problem_type` frontmatter; check project docs for requirements; flag repeated failures for human review; re-read this file for scope ambiguity
+  dont: guess; bypass checks; edit vendored code
+  harm: wrong deliverable; masked failures; vendored drift
   check: the change names the doc or rule it was grounded in
 ```
 
