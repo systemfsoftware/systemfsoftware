@@ -19,15 +19,17 @@ type ResolvedBrowserOptions = ResolvedConfig['browser']
 
 const Ajv = ajvModule.default
 const ajv = new Ajv({ useDefaults: true, strict: false })
+const validateStrykerOptions = ajv.compile(strykerCoreSchema)
 
 // Fills in every Stryker option default registered in the schema, so the options factory
 // returns a complete StrykerOptions instead of hand-copying ~45 schema defaults that rot.
 function fillStrykerDefaults(
   options: Partial<StrykerOptions>,
 ): asserts options is StrykerOptions {
-  const validate = ajv.compile(strykerCoreSchema)
-  if (!validate(options)) {
-    throw new Error(`Unknown stryker options ${ajv.errorsText(validate.errors)}`)
+  if (!validateStrykerOptions(options)) {
+    throw new Error(
+      `Unknown stryker options ${ajv.errorsText(validateStrykerOptions.errors)}`,
+    )
   }
 }
 
@@ -146,10 +148,13 @@ export function createStrykerOptions(
   }
 }
 
-export const createTestInjector = (options: VitestRunnerOptionsWithStrykerOptions) =>
+export const createTestInjector = (
+  options: VitestRunnerOptionsWithStrykerOptions,
+  logger: Logger = createLogger(),
+) =>
   createInjector()
     .provideValue(commonTokens.options, options)
-    .provideValue(commonTokens.logger, createLogger())
+    .provideValue(commonTokens.logger, logger)
 
 export function createMutant(overrides?: Partial<Mutant>): Mutant {
   return {

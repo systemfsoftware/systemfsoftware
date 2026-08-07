@@ -1,16 +1,20 @@
 import type { Logger } from '@stryker-mutator/api/logging'
-import { commonTokens } from '@stryker-mutator/api/plugin'
 import { TestRunnerCapabilities } from '@stryker-mutator/api/test-runner'
 import fs from 'fs'
-import { createInjector } from 'typed-inject'
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest'
 import type { Vitest } from 'vitest/node'
 
 import { VITEST_ERROR_CODES } from '../../src/vitest-helpers.js'
-import { VitestRunnerOptionsWithStrykerOptions } from '../../src/vitest-runner-options-with-stryker-options.js'
+import type { VitestRunnerOptionsWithStrykerOptions } from '../../src/vitest-runner-options-with-stryker-options.js'
 import { createVitestTestRunnerFactory, VitestTestRunner } from '../../src/vitest-test-runner.js'
 import { vitestWrapper } from '../../src/vitest-wrapper.js'
-import { createDryRunOptions, createLogger, createStrykerOptions, createVitestMock } from '../util/factories.js'
+import {
+  createDryRunOptions,
+  createLogger,
+  createStrykerOptions,
+  createTestInjector,
+  createVitestMock,
+} from '../util/factories.js'
 
 describe(VitestTestRunner.name, () => {
   let sut: VitestTestRunner
@@ -22,10 +26,9 @@ describe(VitestTestRunner.name, () => {
   beforeEach(() => {
     logger = createLogger()
     options = createStrykerOptions()
-    sut = createInjector()
-      .provideValue(commonTokens.options, options)
-      .provideValue(commonTokens.logger, logger)
-      .injectFunction(createVitestTestRunnerFactory('__stryker2__'))
+    sut = createTestInjector(options, logger).injectFunction(
+      createVitestTestRunnerFactory('__stryker2__'),
+    )
     createVitestStub = vi.spyOn(vitestWrapper, 'createVitest')
     vitestStub = createVitestMock()
     createVitestStub.mockResolvedValue(vitestStub)
@@ -37,7 +40,7 @@ describe(VitestTestRunner.name, () => {
     vi.restoreAllMocks()
   })
 
-  it('should not have reload capabilities', () => {
+  it('should declare reload capabilities', () => {
     // The files under test are cached between runs
     const expectedCapabilities: TestRunnerCapabilities = {
       reloadEnvironment: true,
@@ -170,6 +173,34 @@ describe(VitestTestRunner.name, () => {
 
       // Assert
       expect(logger.warn).not.toHaveBeenCalled()
+    })
+
+    it('should run the given test files verbatim and skip the related-files warning', async () => {
+      // Arrange
+      vitestStub.config.related = undefined
+
+      // Act
+      await sut.dryRun(
+        createDryRunOptions({
+          files: ['src/file.js'],
+          testFiles: ['tests/a.spec.ts'],
+        }),
+      )
+
+      // Assert
+      expect(vitestStub.start).toHaveBeenCalledWith(['tests/a.spec.ts'])
+      expect(vitestStub.config.related).toEqual(['src/file.js'])
+      expect(logger.warn).not.toHaveBeenCalled()
+    })
+
+    it('should propagate a start failure that is not a missing-test-files error', async () => {
+      // Arrange
+      vi.mocked(vitestStub.start).mockRejectedValue(new Error('config exploded'))
+
+      // Act & Assert
+      await expect(sut.dryRun(createDryRunOptions())).rejects.toThrow(
+        'config exploded',
+      )
     })
   })
 })

@@ -1,3 +1,9 @@
+import path from 'path'
+
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+
+import { createVitestTestRunnerFactory, VitestTestRunner } from '../../dist/index.mjs'
+import type { VitestRunnerOptionsWithStrykerOptions } from '../../src/vitest-runner-options-with-stryker-options.js'
 import { expectCompleted, expectKilled, sortTestResults } from '../util/assertions.js'
 import {
   createDryRunOptions,
@@ -5,14 +11,8 @@ import {
   createMutantRunOptions,
   createStrykerOptions,
   createTestInjector,
-  createVitestRunnerOptions,
 } from '../util/factories.js'
 import { TempTestDirectorySandbox } from '../util/temp-test-directory-sandbox.js'
-
-import path from 'path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { createVitestTestRunnerFactory, VitestTestRunner } from '../../dist/index.mjs'
-import { VitestRunnerOptionsWithStrykerOptions } from '../../src/vitest-runner-options-with-stryker-options.js'
 
 // Tests for [Vitest's related mode](https://vitest.dev/guide/cli.html#vitest-related)
 // @see https://github.com/stryker-mutator/stryker-js/issues/5465
@@ -31,7 +31,6 @@ describe('Vitest runner related', () => {
     sut = createTestInjector(options).injectFunction(
       createVitestTestRunnerFactory('__stryker2__'),
     )
-    options.vitest = createVitestRunnerOptions()
     sandbox = new TempTestDirectorySandbox('multiple-files')
     await sandbox.init()
     mathFileName = path.resolve(sandbox.tmpDir, 'src', 'math.ts')

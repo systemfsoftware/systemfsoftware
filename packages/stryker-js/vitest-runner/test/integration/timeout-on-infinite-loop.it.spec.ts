@@ -11,7 +11,7 @@ import {
 import { TempTestDirectorySandbox } from '../util/temp-test-directory-sandbox.js'
 
 import { createVitestTestRunnerFactory, VitestTestRunner } from '../../dist/index.mjs'
-import { VitestRunnerOptionsWithStrykerOptions } from '../../src/vitest-runner-options-with-stryker-options.js'
+import type { VitestRunnerOptionsWithStrykerOptions } from '../../src/vitest-runner-options-with-stryker-options.js'
 
 describe('Infinite loop', () => {
   let sut: VitestTestRunner
@@ -35,14 +35,14 @@ describe('Infinite loop', () => {
   it('should be able to recover using a hit counter', async () => {
     // Arrange
     await sut.init()
-    const options = createMutantRunOptions({
+    const mutantRunOptions = createMutantRunOptions({
       activeMutant: createMutant({ id: '4' }),
       testFilter: ['infinite-loop.spec.js'],
       hitLimit: 10,
     })
 
     // Act
-    const result = await sut.mutantRun(options)
+    const result = await sut.mutantRun(mutantRunOptions)
 
     // Assert
     expectTimeout(result)

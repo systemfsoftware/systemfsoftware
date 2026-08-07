@@ -6,7 +6,6 @@ import {
   DryRunStatus,
   ErrorDryRunResult,
   ErrorMutantRunResult,
-  FailedTestResult,
   KilledMutantRunResult,
   MutantRunResult,
   MutantRunStatus,
@@ -31,12 +30,6 @@ export function expectTimeout(
   result: MutantRunResult,
 ): asserts result is TimeoutMutantRunResult {
   assert.strictEqual(result.status, MutantRunStatus.Timeout)
-}
-
-export function expectFailed(
-  result: TestResult,
-): asserts result is FailedTestResult {
-  assert.strictEqual(result.status, TestStatus.Failed)
 }
 
 export function expectCompleted(
@@ -88,10 +81,10 @@ export function expectTestResults(
   const actualPruned = pruneUnexpected(actual.tests, expectedTestResults)
   actualPruned.forEach((test) => {
     if (test.status === TestStatus.Failed && test.failureMessage) {
-      test.failureMessage = test.failureMessage.substring(
-        0,
-        test.failureMessage.indexOf('\n'),
-      )
+      const firstLineEnd = test.failureMessage.indexOf('\n')
+      if (firstLineEnd !== -1) {
+        test.failureMessage = test.failureMessage.substring(0, firstLineEnd)
+      }
     }
   })
   sortTestResults(actualPruned)
@@ -119,10 +112,10 @@ function pruneUnexpected(
     if (expectedTest) {
       return {
         id,
-        ...Object.keys(expectedTest).reduce<Partial<TestResult>>((acc, key) => {
+        ...Object.keys(expectedTest).reduce<Record<string, unknown>>((acc, key) => {
           const prop = key as keyof TestResult
           if (prop !== 'id') {
-            ;(acc as any)[prop] = actualTestData[prop]
+            acc[prop] = actualTestData[prop]
           }
           return acc
         }, {}),

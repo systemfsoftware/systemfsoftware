@@ -4,7 +4,7 @@ import { TestStatus } from '@stryker-mutator/api/test-runner'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { createVitestTestRunnerFactory, VitestTestRunner } from '../../dist/index.mjs'
-import { VitestRunnerOptionsWithStrykerOptions } from '../../src/vitest-runner-options-with-stryker-options.js'
+import type { VitestRunnerOptionsWithStrykerOptions } from '../../src/vitest-runner-options-with-stryker-options.js'
 import { expectCompleted, expectErrored, expectKilled, expectSurvived, expectTestResults } from '../util/assertions.js'
 import {
   createDryRunOptions,
@@ -275,7 +275,6 @@ describe('VitestRunner integration', () => {
           sandboxFileName,
           testFilter: [test1],
         })
-        mutantRunOptions.activeMutant.id = '1'
 
         const runResult = await sut.mutantRun(mutantRunOptions)
 
