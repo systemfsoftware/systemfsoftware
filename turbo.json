@@ -115,7 +115,12 @@
     },
     "//#format:check": {
       "inputs": [
-        "$TURBO_ROOT$/**/*.{ts,mts,cts,js,mjs,cjs,json,jsonc,md}"
+        "$TURBO_ROOT$/*.{ts,mts,cts,js,mjs,cjs,json,jsonc,md}",
+        "$TURBO_ROOT$/packages/**/*.{ts,mts,cts,js,mjs,cjs,json,jsonc,md}",
+        "$TURBO_ROOT$/scripts/**/*.{ts,mts,cts,js,mjs,cjs,json,jsonc,md}",
+        "$TURBO_ROOT$/omp/**/*.{ts,mts,cts,js,mjs,cjs,json,jsonc,md}",
+        "$TURBO_ROOT$/docs/**/*.{json,jsonc,md}",
+        "$TURBO_ROOT$/.github/**/*.{js,mjs,json,md}"
       ],
       "outputs": [],
       "cache": false
@@ -160,7 +165,10 @@
     "//#check:no-hand-rolled-jsonc": {
       "inputs": [
         "$TURBO_ROOT$/scripts/guard-no-hand-rolled-jsonc.mjs",
-        "$TURBO_ROOT$/**/*.{ts,mts,cts,js,mjs,cjs}"
+        "$TURBO_ROOT$/packages/**/*.{ts,mts,cts,js,mjs,cjs}",
+        "$TURBO_ROOT$/scripts/**/*.{ts,mts,cts,js,mjs,cjs}",
+        "$TURBO_ROOT$/omp/**/*.{ts,mts,cts,js,mjs,cjs}",
+        "$TURBO_ROOT$/.github/**/*.{js,mjs}"
       ],
       "outputs": [],
       "cache": false
