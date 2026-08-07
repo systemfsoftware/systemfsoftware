@@ -12,12 +12,13 @@ import { calculateMutationTestMetrics, MutationTestMetricsResult } from 'mutatio
 import { coreTokens } from '../di/index.js'
 import { FileSystem, Project } from '../fs/index.js'
 import { TestCoverage } from '../mutants/index.js'
-import { type ResolvedMode, resolveMode } from '../output-mode.js'
+import { detectMode, type ResolvedMode } from '../output-mode.js'
+import { emitTerminal, streamRunId } from '../progress-stream.js'
 import { strykerVersion } from '../stryker-package.js'
 import { ExitClass, objectUtils, setPendingExitClass } from '../utils/object-utils.js'
 
 import { judgeTestContribution } from './test-contribution.js'
-import { buildVerdictEnvelope, generateRunId, type VerdictEnvelope } from './verdict-envelope.js'
+import { buildVerdictEnvelope, type VerdictEnvelope } from './verdict-envelope.js'
 
 const STRYKER_FRAMEWORK: Readonly<
   Pick<schema.FrameworkInformation, 'branding' | 'name' | 'version'>
@@ -56,22 +57,18 @@ export class MutationTestReportHelper {
     private readonly fs: I<FileSystem>,
     private readonly requireFromCwd: typeof requireResolve,
     /**
-     * The cli layer (U6) supplies the printer that writes the verdict
-     * envelope to stdout in machine mode; until then the default is a no-op.
+     * The printer that writes the verdict envelope as the terminal `verdict`
+     * line of the machine stream (U6). The default routes through the stream
+     * module, which owns the mode gate, the run id and the one-terminal-line
+     * invariant; tests inject a spy to capture the document.
      */
-    private readonly emitEnvelope: (envelope: VerdictEnvelope) => void = () => {},
+    private readonly emitEnvelope: (envelope: VerdictEnvelope) => void = (envelope) => {
+      emitTerminal({ kind: 'verdict', ...envelope })
+    },
   ) {
     // Resolved once here from the same detection inputs the broadcast
     // reporter uses (U3) — never a second probe at the print site.
-    this.resolvedMode = resolveMode({
-      stdoutIsTTY: process.stdout.isTTY === true,
-      envMode: process.env['STRYKER_MODE'],
-      agent: process.env['AGENT'],
-      toolVars: {
-        CLAUDECODE: process.env['CLAUDECODE'],
-        CODEX_SANDBOX: process.env['CODEX_SANDBOX'],
-      },
-    })
+    this.resolvedMode = detectMode()
   }
 
   public reportCheckFailed(
@@ -175,8 +172,10 @@ export class MutationTestReportHelper {
 
   /**
    * Emits the verdict envelope at the end of a machine-mode run (U4). Human
-   * mode skips the emit entirely; the cli layer (U6) supplies the
-   * `emitEnvelope` callback that writes the document to stdout.
+   * mode skips the emit entirely; the `emitEnvelope` callback writes the
+   * document as the terminal `verdict` line of the stdout stream (U6). The
+   * run id comes from the stream module, so the verdict matches the header
+   * and every stream line of this run — never a fresh id (KTD11/U6).
    */
   private emitVerdict(report: schema.MutationTestResult): void {
     if (this.resolvedMode.mode !== 'machine') {
@@ -187,7 +186,7 @@ export class MutationTestReportHelper {
         report,
         this.resolvedMode.mode,
         this.resolvedMode.signal,
-        generateRunId(),
+        streamRunId(),
       ),
     )
   }

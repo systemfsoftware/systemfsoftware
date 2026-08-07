@@ -206,7 +206,7 @@ describe('machine-mode envelope for a removed config key', () => {
     vi.restoreAllMocks()
   })
 
-  it('names the removed key and its remediation in the stderr envelope', async () => {
+  it('names the removed key and its remediation in the stdout error terminal event', async () => {
     const dir = mkdtempSync(path.join(os.tmpdir(), 'stryker-removed-surface-'))
     const configFile = path.join(dir, 'stryker.config.json')
     writeFileSync(configFile, JSON.stringify({ dashboard: { project: 'x' } }))
@@ -228,15 +228,22 @@ describe('machine-mode envelope for a removed config key', () => {
 
       expect(exitMock).toHaveBeenCalled()
       const exitCode = exitMock.mock.calls[0]?.[0]
-      const stderrLines = fsMocks.writeSync.mock.calls
-        .filter((call) => call[0] === 2)
+      const stdoutLines = fsMocks.writeSync.mock.calls
+        .filter((call) => call[0] === 1)
         .map((call) => String(call[1]))
-      expect(stderrLines).toHaveLength(1)
-      const envelope = JSON.parse(stderrLines[0] as string) as {
+      const [streamHeader = '', errorTerminal = ''] = stdoutLines
+      expect(stdoutLines).toHaveLength(2)
+      expect(JSON.parse(streamHeader)).toMatchObject({ kind: 'stream' })
+      const envelope = JSON.parse(errorTerminal) as {
+        kind: string
         code: number
         error: string
         remediation: string
       }
+      expect(envelope.kind).toBe('error')
+      expect(
+        fsMocks.writeSync.mock.calls.filter((call) => call[0] === 2),
+      ).toHaveLength(0)
       // Pin the value, not just envelope/exit agreement: both were 1 while
       // this only compared them to each other, so a config error was
       // indistinguishable from a failed verdict.

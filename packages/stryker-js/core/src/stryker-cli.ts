@@ -2,7 +2,7 @@ import semver from 'semver'
 
 guardMinimalNodeVersion()
 
-import { readFileSync, writeSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 
 import * as Args from '@effect/cli/Args'
 import * as CliConfig from '@effect/cli/CliConfig'
@@ -36,8 +36,16 @@ import {
   SURVIVORS_REJECT_EXIT_CLASS,
   SurvivorsRejection,
 } from './mutants/survivors.js'
-import { humanConsoleLayer, machineConsoleLayer, readCapturedConsole, resolveMode } from './output-mode.js'
-import { emitVerdictEnvelope, generateRunId } from './reporters/verdict-envelope.js'
+import { detectMode, humanConsoleLayer, machineConsoleLayer, readCapturedConsole } from './output-mode.js'
+import {
+  configureStream,
+  emitTerminal,
+  isStreamEnabled,
+  STREAM_SCHEMA_VERSION,
+  streamRunId,
+} from './progress-stream.js'
+import type { StreamHelpLine, StreamManifestLine } from './progress-stream.js'
+import { buildVerdictEnvelope } from './reporters/verdict-envelope.js'
 import { strykerEngines, strykerVersion } from './stryker-package.js'
 import { Stryker } from './stryker.js'
 import { ExitClass, getPendingExitClasses, resolveExitCode } from './utils/object-utils.js'
@@ -498,38 +506,43 @@ function survivorMutateSpans(survivors: readonly Mutant[]): string[] {
 }
 
 /**
- * Machine mode emits the U4 verdict envelope for a zero-survivor run: no
- * pipeline ran and no report file was written, so the envelope carries a null
- * score and an empty mutant list (AE3). Human mode prints nothing.
+ * Machine mode emits the U4 verdict envelope for a run that produced no
+ * mutants and no report file: a `--survivors` run with zero survivors (AE3)
+ * or a successful `--dryRunOnly` run that ended before the mutation
+ * pipeline. The envelope carries a null score and an empty mutant list and is
+ * written as the terminal `verdict` line of the stdout stream (U6), carrying
+ * the run id the stream header already opened with (KTD11 — never a fresh
+ * id). Human mode prints nothing.
  */
-function emitEmptySurvivorsVerdict(resolved: StrykerOptions): void {
-  const resolvedMode = resolveMode({
-    stdoutIsTTY: process.stdout.isTTY === true,
-    envMode: process.env['STRYKER_MODE'],
-    agent: process.env['AGENT'],
-    toolVars: {
-      CLAUDECODE: process.env['CLAUDECODE'],
-      CODEX_SANDBOX: process.env['CODEX_SANDBOX'],
-    },
-  })
+function emitNullScoreVerdict(thresholds: schema.Thresholds, config: object): void {
+  const resolvedMode = detectMode()
   if (resolvedMode.mode !== 'machine') {
     return
   }
   const report: schema.MutationTestResult = {
     schemaVersion: '1.0',
     files: {},
-    thresholds: resolved.thresholds,
+    thresholds,
     projectRoot: process.cwd(),
-    config: resolved,
+    config,
     framework: { name: 'StrykerJS', version: strykerVersion },
   }
-  const envelope = emitVerdictEnvelope(
+  const envelope = buildVerdictEnvelope(
     report,
     resolvedMode.mode,
     resolvedMode.signal,
-    generateRunId(),
+    streamRunId(),
   )
-  process.stdout.write(`${envelope}\n`)
+  emitTerminal({ kind: 'verdict', ...envelope })
+}
+
+/**
+ * The `--survivors` zero-survivor path: the prior report held no survivors,
+ * so the run emits the null-score verdict without starting the pipeline. The
+ * full resolved options ride along as the report's embedded config (KTD7).
+ */
+function emitEmptySurvivorsVerdict(resolved: StrykerOptions): void {
+  emitNullScoreVerdict(resolved.thresholds, resolved)
 }
 
 /**
@@ -665,9 +678,24 @@ export function makeStrykerCommand(runMutationTest: StrykerRun) {
       // (llms-manifest.ts), so a newly added option appears with no manifest
       // change. `strykerCommand` is the final tree, subcommands included; the
       // handler runs only after the const is bound (the same pattern as
-      // `root.descriptor` below).
+      // `root.descriptor` below). Requesting `--llms` IS the machine signal,
+      // so the command always produces the machine contract — a `stream`
+      // header followed by one tagged `manifest` terminal event (R5) —
+      // regardless of TTY or resolved mode. When the run bootstrap did not
+      // configure the stream (a TTY or a bare effect run), the handler opens
+      // it first so the header precedes the terminal line; a raw document
+      // never reaches stdout on any path.
       return Effect.sync(() => {
-        process.stdout.write(`${emitLLMSManifest(strykerCommand, strykerVersion)}\n`)
+        if (!isStreamEnabled()) {
+          configureStream({ mode: 'machine', signal: 'flag', stdoutIsTTY: process.stdout.isTTY === true })
+        }
+        const document: StreamManifestLine = {
+          kind: 'manifest',
+          schemaVersion: STREAM_SCHEMA_VERSION,
+          code: 0,
+          manifest: emitLLMSManifest(strykerCommand, strykerVersion),
+        }
+        emitTerminal(document)
       })
     }
     // Bare `stryker`: render help and exit 0, matching commander.
@@ -777,32 +805,29 @@ const SIGNAL_NUMBERS: Readonly<Partial<Record<NodeJS.Signals, number>>> = Object
 })
 
 // =============================================================================
-// U6 — the error envelope on stderr (R7)
+// U6 — the terminal events on stdout (R5, R7)
 //
-// A machine-mode failure must be exactly one parseable JSON object on stderr,
+// A machine-mode failure must be exactly one parseable JSON object — the
+// `error` terminal event — written as the last line of the stdout stream,
 // never the framework's ANSI-rendered help/error document. The framework
 // writes that document through the `Console` service (KTD3), so machine mode
-// swaps in the capturing layer from output-mode.ts: nothing reaches the real
-// stderr during the run, and the teardown below emits the captured content as
-// the envelope. The envelope's `code` is the same code the process exits
-// with; the remediation is picked from the cause's shape.
+// swaps in the capturing layer from output-mode.ts: nothing reaches any real
+// descriptor during the run, and the teardown below emits the captured
+// content through the stream module (U7) as the terminal event. The
+// envelope's `code` is the same code the process exits with; the remediation
+// is picked from the cause's shape. A successful machine-mode `--help` or
+// `--version` run emits its captured document as the `help` terminal event
+// (U7), closing the stream it opened; a successful run that never reached a
+// verdict — `--dryRunOnly` ends before the mutation pipeline — closes the
+// stream with a null-score `verdict`. The last stdout line is therefore
+// always a terminal event (R5).
 // =============================================================================
 
 export interface ErrorEnvelope {
-  readonly schemaVersion: '1.0'
+  readonly schemaVersion: string
   readonly code: number
   readonly error: string
   readonly remediation: string
-}
-
-/**
- * The structured document a successful machine-mode `--help`/`--version` run
- * emits on stdout instead of the framework's ANSI rendering.
- */
-export interface HelpEnvelope {
-  readonly schemaVersion: '1.0'
-  readonly code: 0
-  readonly help: string
 }
 
 const ISSUE_TRACKER_URL = 'https://github.com/systemfsoftware/systemfsoftware/issues'
@@ -882,7 +907,7 @@ export function buildErrorEnvelope(
   captured: string,
 ): ErrorEnvelope {
   return {
-    schemaVersion: '1.0',
+    schemaVersion: STREAM_SCHEMA_VERSION,
     code,
     error: captured.length > 0 ? captured : describeFailure(exit),
     remediation: remediationFor(exit, code),
@@ -890,38 +915,38 @@ export function buildErrorEnvelope(
 }
 
 /**
- * The POSIX descriptors, written to directly rather than through
- * `process.stdout.fd` / `process.stderr.fd`: those are `undefined` whenever
- * the streams are not backed by real descriptors — most notably on a worker
- * thread, where `writeSync(undefined, ...)` throws and the envelope is lost.
- */
-const STDOUT_FD = 1
-const STDERR_FD = 2
-
-function writeLine(fd: number, line: string): void {
-  // Synchronous write: the envelope is emitted immediately before
-  // `process.exit`, and an async `process.stderr.write` can be dropped by the
-  // exit before the pipe flushes.
-  writeSync(fd, line)
-}
-
-/**
- * Emits the machine-mode output at teardown: the error envelope on stderr for
- * a failed run, or — for a successful run whose only console output was the
- * framework's help/version rendering — the captured document as one
- * structured JSON line on stdout, so `--help` in machine mode never leaks an
- * ANSI document. A successful run with an empty buffer (the normal verdict
- * path) emits nothing extra.
+ * Emits the machine-mode output at teardown: a failed run writes the `error`
+ * terminal event as the last line of the stdout stream; a successful run
+ * whose only console output was the framework's help/version rendering
+ * emits that captured document as the `help` terminal event, so `--help` in
+ * machine mode never leaks an ANSI document. A successful run with an empty
+ * buffer (the normal verdict path) emits nothing extra — the run already
+ * wrote its terminal `verdict` line through the same module — unless the
+ * stream is still open, which means the run never reached a verdict (the
+ * `--dryRunOnly` early return): then a null-score `verdict` closes the
+ * stream so the last stdout line is always a terminal event (R5).
  */
 function emitMachineModeOutput(exit: Exit.Exit<unknown, unknown>, code: number): void {
   const captured = readCapturedConsole()
   if (Exit.isFailure(exit)) {
-    writeLine(STDERR_FD, `${JSON.stringify(buildErrorEnvelope(exit, code, captured))}\n`)
+    emitTerminal({ kind: 'error', ...buildErrorEnvelope(exit, code, captured) })
     return
   }
   if (captured.length > 0) {
-    const document: HelpEnvelope = { schemaVersion: '1.0', code: 0, help: captured }
-    writeLine(STDOUT_FD, `${JSON.stringify(document)}\n`)
+    const document: StreamHelpLine = {
+      kind: 'help',
+      schemaVersion: STREAM_SCHEMA_VERSION,
+      code: 0,
+      help: captured,
+    }
+    emitTerminal(document)
+    return
+  }
+  if (isStreamEnabled()) {
+    // The run succeeded without a verdict and without a terminal line. The
+    // teardown never sees the finished run's resolved options, so the
+    // framework defaults stand in for the thresholds it would have used.
+    emitNullScoreVerdict(defaultOptions.thresholds, {})
   }
 }
 
@@ -935,13 +960,14 @@ function emitMachineModeOutput(exit: Exit.Exit<unknown, unknown>, code: number):
  * verdict classes decide. `process.exit` is called at most once, only when a
  * signal was received or the code is non-zero, so a clean run flushes stdout.
  *
- * Machine mode (U6) provides the capturing `Console` layer before the run and
- * emits the captured content as the JSON error envelope on stderr at
- * teardown (or a structured help document on stdout for `--help`). The
- * framework's automatic error reporting is disabled in machine mode — it
- * renders the failure cause through the effect logger *outside* the provided
- * layer's scope, which would leak prose into a stderr that must carry exactly
- * one JSON object.
+ * Machine mode (U6) configures the stdout stream (U7) before the program
+ * runs — the header and heartbeat precede every phase and terminal event —
+ * provides the capturing `Console` layer, and emits the captured content as
+ * the `error` terminal event at teardown (or a structured help document on
+ * stdout for `--help`). The framework's automatic error reporting is
+ * disabled in machine mode — it renders the failure cause through the effect
+ * logger *outside* the provided layer's scope, which would leak prose into a
+ * stderr that must carry only logs and prose.
  */
 export function runStrykerCli(
   argv: string[] = process.argv,
@@ -949,15 +975,8 @@ export function runStrykerCli(
 ): void {
   // One resolved mode decides the Console layer, from the same detection
   // inputs the reporters use (U3) — never a second probe.
-  const resolvedMode = resolveMode({
-    stdoutIsTTY: process.stdout.isTTY === true,
-    envMode: process.env['STRYKER_MODE'],
-    agent: process.env['AGENT'],
-    toolVars: {
-      CLAUDECODE: process.env['CLAUDECODE'],
-      CODEX_SANDBOX: process.env['CODEX_SANDBOX'],
-    },
-  })
+  const resolvedMode = detectMode()
+  configureStream(resolvedMode)
   const consoleLayer = resolvedMode.mode === 'machine'
     ? machineConsoleLayer()
     : humanConsoleLayer()

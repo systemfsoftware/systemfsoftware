@@ -39,9 +39,11 @@ provideLogging.inject = [
 export async function provideLoggingBackend(
   injector: Injector,
   loggerConsoleOut: NodeJS.WriteStream,
+  showColors: boolean,
 ) {
   const out = injector
     .provideValue(coreTokens.loggerConsoleOut, loggerConsoleOut)
+    .provideValue(coreTokens.loggerShowColors, showColors)
     .provideClass(coreTokens.loggingSink, LoggingBackend)
     .provideClass(coreTokens.loggingServer, LoggingServer)
   const loggingServer = out.resolve(coreTokens.loggingServer)
