@@ -119,10 +119,8 @@ export interface TestContributionVerdict {
   readonly message: string
 }
 
-const precisionOf = (everyKillerRecorded: boolean): string =>
-  everyKillerRecorded
-    ? 'every killing test was recorded'
-    : 'the run bailed at the first killing test, so sole-kill attribution is not trustworthy'
+// Past the bail guard, which returns before any verdict when killers went unrecorded.
+const PRECISION = 'every killing test was recorded'
 
 export const judgeTestContribution = (
   report: ReportView,
@@ -160,17 +158,17 @@ export const judgeTestContribution = (
   }
 
   const toothless = toothlessTestFiles(contribution, { suffixes, everyKillerRecorded })
-  const precision = precisionOf(everyKillerRecorded)
+
   if (toothless.length === 0) {
     return {
       failed: false,
-      message: `Every test file matching ${matches} kills a mutant nothing else kills (${precision}).`,
+      message: `Every test file matching ${matches} kills a mutant nothing else kills (${PRECISION}).`,
     }
   }
   const listed = toothless.map((fileName) => `  - ${fileName}`).join('\n')
   return {
     failed: true,
     message:
-      `Deleting these ${toothless.length} test file(s) would leave every mutant just as dead (${precision}):\n${listed}`,
+      `Deleting these ${toothless.length} test file(s) would leave every mutant just as dead (${PRECISION}):\n${listed}`,
   }
 }
