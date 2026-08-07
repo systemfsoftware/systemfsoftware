@@ -86,7 +86,8 @@
       ],
       "outputs": [],
       "dependsOn": [
-        "^build"
+        "^build",
+        "build"
       ],
       "env": [
         "NODE_ENV"
