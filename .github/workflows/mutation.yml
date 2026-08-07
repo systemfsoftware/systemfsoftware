@@ -13,8 +13,6 @@ concurrency:
 
 permissions:
   contents: read
-  pull-requests: write
-  checks: write
 
 jobs:
   discover:
@@ -43,7 +41,7 @@ jobs:
         package: ${{ fromJson(needs.discover.outputs.packages) }}
     name: Mutation (${{ matrix.package }})
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 70
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/install-deps
@@ -56,13 +54,28 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-stryker-${{ matrix.package }}-
 
-      - run: corepack pnpm turbo mutation --filter=./${{ matrix.package }}
+      # Advisory: a mutation failure or timeout never fails this job. The merged
+      # report in the `report` job carries the verdict. Infrastructure steps above
+      # still fail red.
+      - name: Mutation
+        id: mutation
+        continue-on-error: true
+        timeout-minutes: 60
+        run: corepack pnpm turbo mutation --filter=./${{ matrix.package }}
 
       - uses: actions/cache/save@v6
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' && steps.mutation.outcome == 'success'
         with:
           path: ${{ matrix.package }}/reports/stryker-incremental.json
           key: ${{ runner.os }}-stryker-${{ matrix.package }}-main-${{ github.run_id }}
+
+      - name: Record part metadata
+        if: always()
+        run: |
+          mkdir -p '${{ matrix.package }}/reports'
+          printf '{"package":"%s","outcome":"%s"}\n' \
+            '${{ matrix.package }}' '${{ steps.mutation.outcome }}' \
+            > '${{ matrix.package }}/reports/mutation-part.json'
 
       - name: Sanitize artifact name
         id: sanitize
@@ -73,6 +86,50 @@ jobs:
         if: always()
         continue-on-error: true
         with:
-          name: mutation-report-${{ steps.sanitize.outputs.name }}-${{ github.run_number }}
-          path: ${{ matrix.package }}/reports/*
+          name: mutation-part-${{ steps.sanitize.outputs.name }}
+          path: |
+            ${{ matrix.package }}/reports/mutation-part.json
+            ${{ matrix.package }}/reports/mutation-report.json
+          if-no-files-found: ignore
           retention-days: 1
+
+  report:
+    name: Mutation report
+    needs: [discover, mutation]
+    if: ${{ !cancelled() && needs.discover.outputs.package_count > 0 }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/install-deps
+      - run: node scripts/merge-mutation-reports.mjs --selftest
+
+      - uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          path: mutation-parts
+          pattern: mutation-part-*
+
+      - name: Merge
+        env:
+          PACKAGES: ${{ needs.discover.outputs.packages }}
+        run: node scripts/merge-mutation-reports.mjs --parts mutation-parts --out mutation-merged
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: mutation-report-${{ github.run_number }}
+          path: mutation-merged/*
+          retention-days: 14
+
+      - name: Delete part artifacts
+        if: always()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts" \
+            --jq '.artifacts[] | select(.name | startswith("mutation-part-")) | .id' \
+          | while read -r id; do gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/$id"; done
