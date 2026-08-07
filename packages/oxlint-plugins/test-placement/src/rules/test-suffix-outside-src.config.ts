@@ -1,6 +1,6 @@
-import { MESSAGE, NESTED_TEST_DIR, PROPERTY_CELLS } from './path.config.js'
+import { COLOCATABLE_CELLS, MESSAGE, NESTED_TEST_DIR } from './path.config.js'
 
-const SANCTIONED_CELLS = PROPERTY_CELLS.join(', ')
+const SANCTIONED_CELLS = COLOCATABLE_CELLS.join(', ')
 
 export const UNSANCTIONED_SUFFIX_EXPECTED = 'exactly *.integration.test.ts outside src/' as const
 export const UNSANCTIONED_SUFFIX_ACTUAL = 'an unsanctioned test suffix outside src/' as const

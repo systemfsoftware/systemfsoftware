@@ -1,64 +1,39 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
+import { Schema as S } from 'effect'
 import {
+  type Detail,
   meta,
-  PROPERTY_TEST_LOCATION_ACTUAL,
-  PROPERTY_TEST_LOCATION_EXPECTED,
-  PROPERTY_TEST_LOCATION_FIX,
-  SCHEMA_TEST_ACTUAL,
-  SCHEMA_TEST_EXPECTED,
-  SCHEMA_TEST_FIX,
-  TEST_FILE_IN_SRC_ACTUAL,
-  TEST_FILE_IN_SRC_EXPECTED,
-  TEST_FILE_IN_SRC_FIX,
+  Options,
+  propertyTestLocationDetail,
+  SCHEMA_TEST_DETAIL,
+  testFileInSrcDetail,
 } from './no-test-file-in-src.config.js'
 import { PROPERTY_SUFFIX, SCHEMA_LAWS_BASENAME, SCHEMA_SUFFIX } from './path.config.js'
-import { basenameOf, isInNestedTestsDir, isTestFile, isUnderSrc } from './path.js'
+import { basenameOf, isInConfiguredTestDir, isTestFile, isUnderSrc, namesColocatableCell, testStem } from './path.js'
 
 export type MessageIds = 'testFileInSrc' | 'schemaTestInSrc' | 'propertyTestOutsideTestsDir'
 
-interface Violation {
-  readonly messageId: MessageIds
-  readonly expected: string
-  readonly actual: string
-  readonly fix: string
-}
-
-const SCHEMA_TEST: Violation = {
-  messageId: 'schemaTestInSrc',
-  expected: SCHEMA_TEST_EXPECTED,
-  actual: SCHEMA_TEST_ACTUAL,
-  fix: SCHEMA_TEST_FIX,
-}
-
-const UNSANCTIONED: Violation = {
-  messageId: 'testFileInSrc',
-  expected: TEST_FILE_IN_SRC_EXPECTED,
-  actual: TEST_FILE_IN_SRC_ACTUAL,
-  fix: TEST_FILE_IN_SRC_FIX,
-}
-
-const PROPERTY_TEST_LOCATION: Violation = {
-  messageId: 'propertyTestOutsideTestsDir',
-  expected: PROPERTY_TEST_LOCATION_EXPECTED,
-  actual: PROPERTY_TEST_LOCATION_ACTUAL,
-  fix: PROPERTY_TEST_LOCATION_FIX,
-}
+const violationOf = (basename: string, isPropertyTest: boolean, dir: string): readonly [MessageIds, Detail] =>
+  basename.endsWith(SCHEMA_SUFFIX)
+    ? ['schemaTestInSrc', SCHEMA_TEST_DETAIL]
+    : isPropertyTest
+    ? ['propertyTestOutsideTestsDir', propertyTestLocationDetail(dir)]
+    : ['testFileInSrc', testFileInSrcDetail(dir)]
 
 export const noTestFileInSrc = defineRule({
   meta,
   create(context: Context) {
+    const { sanctionedDirs } = S.decodeUnknownSync(Options)(context.options[0] ?? {})
     const basename = basenameOf(context.filename)
     if (!isUnderSrc(context.filename)) return {}
     if (!isTestFile(basename)) return {}
     if (basename === SCHEMA_LAWS_BASENAME) return {}
     const isPropertyTest = basename.endsWith(PROPERTY_SUFFIX)
-    if (isPropertyTest && isInNestedTestsDir(context.filename)) return {}
-    const { messageId, ...detail } = basename.endsWith(SCHEMA_SUFFIX)
-      ? SCHEMA_TEST
-      : isPropertyTest
-      ? PROPERTY_TEST_LOCATION
-      : UNSANCTIONED
+    const isSchemaTest = basename.endsWith(SCHEMA_SUFFIX)
+    const colocated = isInConfiguredTestDir(context.filename, sanctionedDirs)
+    if (!isSchemaTest && colocated && namesColocatableCell(testStem(basename))) return {}
+    const [messageId, detail] = violationOf(basename, isPropertyTest, sanctionedDirs[0])
     return {
       Program(node: ESTree.Program) {
         context.report({

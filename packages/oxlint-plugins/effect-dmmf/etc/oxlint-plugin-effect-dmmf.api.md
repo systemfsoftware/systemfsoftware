@@ -85,6 +85,8 @@ const _default: {
         'no-assert-in-property': Rule;
         'property-file-purity': Rule;
         'require-effect-fastcheck': Rule;
+        'no-unbounded-fanout': Rule;
+        'no-nested-quantification': Rule;
         'damp-test-naming': Rule;
         'no-behaviourless-assertion': Rule;
         'no-unrun-effect-test': Rule;

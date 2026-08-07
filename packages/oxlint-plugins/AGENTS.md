@@ -56,11 +56,11 @@ rules:
     check: pnpm --filter <pkg> test exits 0 and the self-hosted `@systemfsoftware/test-hygiene(damp-test-naming)` lint passes
 
   - id: OX-TS2
-    title: Filesystem-backed rules are untestable here
-    do: leave "every X has a test" obligations to the consumer's coverage and mutation gates
-    dont: stat the filesystem for a sibling test file
-    harm: RuleTester resolves every filename into node_modules, so such a rule can never have a passing valid case — and an untestable rule cannot meet OX-MG1
-    check: grep finds no `existsSync`, `statSync`, or `readdirSync` in any `src/rules/` file
+    title: A rule may only depend on facts RuleTester can supply
+    do: take project knowledge through `options` or `settings` and read everything else from the linted file's own AST; check such a declaration against a real tree in the plugin's own suite, where the filesystem legally lives
+    dont: make a verdict depend on a fact only the disk carries — a sibling file's existence, a directory listing, another package's contents
+    harm: RuleTester cannot create a sibling, so a disk-dependent arm never gets a passing valid case and cannot meet OX-MG1. Stating that as a platform limit is false — `Context` carries `cwd`, `physicalFilename`, and `settings`, and a rule runs in Node — and the false version pushes the next author off the lint channel for a rule that was always writable
+    check: every arm is reachable from a RuleTester case built out of `code`, `filename`, `options`, and `settings` alone — `src-property-test-cell`'s `cellsRequiringTest` arm is the worked example; grep still finds no `existsSync`, `statSync`, or `readdirSync` in any `src/rules/` file
 
   - id: OX-OB1
     title: Keep an obligation, not only prohibitions

@@ -35,6 +35,16 @@ export interface Arm {
 // @public
 export const armsOf: (schema: Schema.Schema.Any) => readonly Arm[];
 
+// @public
+export interface BlindArm {
+    // (undocumented)
+    readonly kind: string;
+    // (undocumented)
+    readonly message: string;
+    // (undocumented)
+    readonly path: string;
+}
+
 // @public (undocumented)
 export const boundedUnion: <Base extends readonly [Schema.Schema.Any, ...ReadonlyArray<Schema.Schema.Any>], Recur extends readonly [Schema.Schema.Any, ...ReadonlyArray<Schema.Schema.Any>]>(identifier: string, options: {
     readonly base: Base;
@@ -62,6 +72,14 @@ export interface Obligation {
     readonly witness: unknown;
 }
 
+// @public
+export interface ObligationScan {
+    // (undocumented)
+    readonly blind: readonly BlindArm[];
+    // (undocumented)
+    readonly obligations: ReadonlyMap<AST.AST, Obligation>;
+}
+
 // @public (undocumented)
 export const obligationsOf: (schema: Schema.Schema.AnyNoContext) => ReadonlyMap<AST.AST, Obligation>;
 
@@ -73,6 +91,9 @@ export const refutes: (schema: Schema.Schema.AnyNoContext, generators: RefusalGe
 
 // @public
 export const ruleOfSchemas: <A, I>(name: string, schema: Schema.Schema<A, I, never>) => void;
+
+// @public
+export const scanObligations: (schema: Schema.Schema.AnyNoContext) => ObligationScan;
 
 // @public
 export const WITNESS_BUDGET = 256;

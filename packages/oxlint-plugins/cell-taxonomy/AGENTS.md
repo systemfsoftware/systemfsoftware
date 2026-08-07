@@ -7,7 +7,7 @@ This package mechanizes the positive half of Constitution IV.2 — a source file
 ```yaml
 - id: CT1
   title: Non-test filenames only
-  do: skip every test artifact - a *.test.ts / *.spec.ts basename, and anything under tests/ or __tests__/
+  do: skip every test artifact - a *.test.ts / *.spec.ts basename, and anything under __tests__/
   dont: rule on where a test file may live or which test suffix is sanctioned
   harm: test placement belongs to @systemfsoftware/oxlint-plugin-test-placement under its TP3, and two packages ruling on it is the live contradiction TP3 exists to prevent
   check: every test-shaped filename is a valid case in this package's RuleTester suite

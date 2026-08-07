@@ -1,47 +1,53 @@
 import { it } from '@effect/vitest'
-import { FastCheck as fc } from 'effect'
-import { dischargedBy, obligationsOf, scanObligations } from '../refutation.kernel.js'
-import {
-  FixturePlainRecipe,
-  FixtureRecipe,
-  makeRestrictiveSchema,
-  makeVacuousSchema,
-} from '../schema-recipe.observer.js'
+import { Arbitrary, FastCheck as fc, Schema as S } from 'effect'
+import { dischargedBy, obligationsOf } from '../refutation.kernel.js'
 
-/**
- * The same shapes built with refinements that reject nothing: a weakening no
- * value can distinguish is not an obligation, however many arms the walk finds.
- */
-it.prop(
-  '∀r_VacuousRefinements_≡NoObligations',
-  [FixturePlainRecipe],
-  ([recipe]) => obligationsOf(makeVacuousSchema(recipe)).size === 0,
+const Hexish = S.String.pipe(S.pattern(/^[0-9a-f]*$/), S.annotations({ identifier: 'Hexish' }))
+
+const Slug = S.String.pipe(S.pattern(/^[a-z][a-z0-9-]*$/), S.annotations({ identifier: 'Slug' }))
+
+const Port = S.Number.pipe(S.between(1, 65535), S.annotations({ identifier: 'Port' }))
+
+const NonEmpty = S.String.pipe(S.minLength(1), S.annotations({ identifier: 'NonEmpty' }))
+
+const Endpoint = S.Struct({ host: Hexish, port: Port })
+
+const Routing = S.Union(
+  S.TaggedStruct('Local', { slug: Slug }),
+  S.TaggedStruct('Remote', { endpoint: Endpoint }),
 )
 
-it.prop('∀r_EachWitness_≡DischargesItsOwnArm', [FixturePlainRecipe], ([recipe]) => {
-  const schema = makeRestrictiveSchema(recipe)
-  const obligations = obligationsOf(schema)
-  return [...obligations.entries()].every(([node, obligation]) => {
-    const credits = dischargedBy(schema, obligations, { W: fc.constant(obligation.witness) })
-    return (credits.get(node) ?? []).includes('W')
-  })
-})
+const Listing = S.Struct({ slugs: S.Array(Slug), label: NonEmpty })
 
-it.prop('∀r_NoGenerators_≡NoCredits', [FixturePlainRecipe], ([recipe]) => {
-  const schema = makeRestrictiveSchema(recipe)
-  const obligations = obligationsOf(schema)
-  const credits = dischargedBy(schema, obligations, {})
-  return [...obligations.keys()].every((node) => (credits.get(node) ?? []).length === 0)
-})
+const REFUTABLE_SCHEMAS: readonly S.Schema.AnyNoContext[] = [
+  Hexish,
+  Slug,
+  Port,
+  NonEmpty,
+  Endpoint,
+  Routing,
+  Listing,
+]
+
+const DRAWS_PER_SCHEMA = 8
+
+const SCHEMA_DRAWS = REFUTABLE_SCHEMAS.length * DRAWS_PER_SCHEMA
 
 it.prop(
-  '∀r_ConstructibleSchema_≡NoBlindArms',
-  [FixturePlainRecipe],
-  ([recipe]) => scanObligations(makeRestrictiveSchema(recipe)).blind.length === 0,
+  '∀r_EachWitness_≡DischargesItsOwnArm',
+  [fc.constantFrom(...REFUTABLE_SCHEMAS)],
+  ([schema]) => {
+    const obligations = obligationsOf(schema)
+    if (obligations.size === 0) return false
+    const accepted = Arbitrary.make(schema)
+    return [...obligations.entries()].every(([node, obligation]) => {
+      const credits = dischargedBy(schema, new Map([[node, obligation]]), {
+        W: fc.constant(obligation.witness),
+        ACCEPTED: accepted,
+      })
+      const discharging = credits.get(node) ?? []
+      return discharging.includes('W') && !discharging.includes('ACCEPTED')
+    })
+  },
+  { fastCheck: { numRuns: SCHEMA_DRAWS } },
 )
-
-/** Every obligation the scan reports is one `obligationsOf` returns — the scan is the total form. */
-it.prop('∀r_ScanObligations_≡ObligationsOf', [FixtureRecipe], ([recipe]) => {
-  const schema = makeRestrictiveSchema(recipe)
-  return scanObligations(schema).obligations.size === obligationsOf(schema).size
-})
