@@ -87,6 +87,12 @@ ruleTester.run('src-property-test-cell', srcPropertyTestCell, {
       filename: '/repo/pkg/src/index.ts',
       options: [{ cellsRequiringTest: ['kernel'] }],
     },
+    {
+      name: 'Should_StaySilent_When_ADeclaredCellSitsBeforeTheTerminalSuffix',
+      code: 'export const build = (n: number) => n',
+      filename: '/repo/pkg/src/widget.kernel.ts.workflow.ts',
+      options: [{ cellsRequiringTest: ['kernel'] }],
+    },
   ],
   invalid: [
     {
@@ -155,6 +161,21 @@ ruleTester.run('src-property-test-cell', srcPropertyTestCell, {
         messageId: 'missingCellTest',
         data: {
           name: 'backoff.kernel.ts',
+          expected: MISSING_CELL_TEST_EXPECTED,
+          actual: MISSING_CELL_TEST_ACTUAL,
+          fix: MISSING_CELL_TEST_FIX,
+        },
+      }],
+    },
+    {
+      name: 'Should_Report_When_DeclaredCellCarriesMtsExtension',
+      code: 'export const fold = (n: number) => n',
+      filename: '/repo/pkg/src/backoff.kernel.mts',
+      options: [{ cellsRequiringTest: ['kernel'] }],
+      errors: [{
+        messageId: 'missingCellTest',
+        data: {
+          name: 'backoff.kernel.mts',
           expected: MISSING_CELL_TEST_EXPECTED,
           actual: MISSING_CELL_TEST_ACTUAL,
           fix: MISSING_CELL_TEST_FIX,

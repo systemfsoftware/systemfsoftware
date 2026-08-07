@@ -74,6 +74,16 @@ ruleTester.run('no-test-file-in-src', noTestFileInSrc, {
       code: '',
       filename: '/repo/pkg/src/__tests__/backoff.kernel.test.ts',
     },
+    {
+      name: 'Should_StaySilent_When_ColocatedTestCarriesMtsExtension',
+      code: '',
+      filename: '/repo/pkg/src/order/__tests__/confirm-order.workflow.test.mts',
+    },
+    {
+      name: 'Should_StaySilent_When_OnlyTheTerminalTestSuffixIsStripped',
+      code: '',
+      filename: '/repo/pkg/src/order/__tests__/confirm-order.spec.ts.workflow.test.ts',
+    },
   ],
   invalid: [
     {
