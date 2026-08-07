@@ -1,10 +1,23 @@
 import {
+  MISSING_CELL_TEST_ACTUAL,
+  MISSING_CELL_TEST_EXPECTED,
+  MISSING_CELL_TEST_FIX,
   UNSANCTIONED_CELL_ACTUAL,
   UNSANCTIONED_CELL_EXPECTED,
   UNSANCTIONED_CELL_FIX,
 } from '../src-property-test-cell.config.js'
 import { srcPropertyTestCell } from '../src-property-test-cell.js'
 import { createRuleTester } from './_tester.js'
+
+const IN_SOURCE_BLOCK = `export const decide = (n: number) => n > 0
+
+if (import.meta.vitest) {
+  const { expect, it } = import.meta.vitest
+  it('decides', () => {
+    expect(decide(1)).toBe(true)
+  })
+}
+`
 
 const ruleTester = createRuleTester()
 
@@ -44,6 +57,35 @@ ruleTester.run('src-property-test-cell', srcPropertyTestCell, {
       name: 'Should_Allow_NonPropertyTestInSrc_When_RuleInactiveForNonProperty',
       code: '',
       filename: '/repo/pkg/src/widget.ts',
+    },
+    {
+      name: 'Should_StaySilent_When_NoCellsAreDeclared',
+      code: 'export const fold = (n: number) => n',
+      filename: '/repo/pkg/src/backoff.kernel.ts',
+    },
+    {
+      name: 'Should_StaySilent_When_CellIsNotInDeclaredList',
+      code: 'export const decide = (n: number) => n',
+      filename: '/repo/pkg/src/confirm-order.workflow.ts',
+      options: [{ cellsRequiringTest: ['kernel'] }],
+    },
+    {
+      name: 'Should_StaySilent_When_CellCarriesInSourceBlock',
+      code: IN_SOURCE_BLOCK,
+      filename: '/repo/pkg/src/backoff.kernel.ts',
+      options: [{ cellsRequiringTest: ['kernel'] }],
+    },
+    {
+      name: 'Should_StaySilent_When_TestFileSuffixCollidesWithADeclaredCell',
+      code: '',
+      filename: '/repo/pkg/src/__tests__/backoff.kernel.test.ts',
+      options: [{ cellsRequiringTest: ['kernel', 'test'] }],
+    },
+    {
+      name: 'Should_StaySilent_When_FileHasNoCellSuffix',
+      code: 'export const helper = (n: number) => n',
+      filename: '/repo/pkg/src/index.ts',
+      options: [{ cellsRequiringTest: ['kernel'] }],
     },
   ],
   invalid: [
@@ -86,6 +128,36 @@ ruleTester.run('src-property-test-cell', srcPropertyTestCell, {
           expected: UNSANCTIONED_CELL_EXPECTED,
           actual: UNSANCTIONED_CELL_ACTUAL,
           fix: UNSANCTIONED_CELL_FIX,
+        },
+      }],
+    },
+    {
+      name: 'Should_Report_When_DeclaredCellHasNoColocatedTestAndNoInSourceBlock',
+      code: 'export const fold = (n: number) => n',
+      filename: '/repo/pkg/src/backoff.kernel.ts',
+      options: [{ cellsRequiringTest: ['kernel'] }],
+      errors: [{
+        messageId: 'missingCellTest',
+        data: {
+          name: 'backoff.kernel.ts',
+          expected: MISSING_CELL_TEST_EXPECTED,
+          actual: MISSING_CELL_TEST_ACTUAL,
+          fix: MISSING_CELL_TEST_FIX,
+        },
+      }],
+    },
+    {
+      name: 'Should_Report_When_DeclaredCellGuardsOnSomethingOtherThanImportMetaVitest',
+      code: 'export const fold = (n: number) => n\n\nif (globalThis.vitest) {\n  fold(1)\n}\n',
+      filename: '/repo/pkg/src/backoff.kernel.ts',
+      options: [{ cellsRequiringTest: ['kernel'] }],
+      errors: [{
+        messageId: 'missingCellTest',
+        data: {
+          name: 'backoff.kernel.ts',
+          expected: MISSING_CELL_TEST_EXPECTED,
+          actual: MISSING_CELL_TEST_ACTUAL,
+          fix: MISSING_CELL_TEST_FIX,
         },
       }],
     },

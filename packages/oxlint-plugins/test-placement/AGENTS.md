@@ -39,4 +39,11 @@ This package ships eight rules enforcing where tests may live and which test suf
   dont: re-introduce `*.composition.test.ts` or any second behaviour suffix; keep a `*.feature.test.ts` suffix or a rename of it that still names "feature" rather than the layer; treat a suffix choice as a destination rather than a decision the assertion must earn
   harm: the retired `.feature.test.ts` suffix let an AI produce 41 gherkin scenarios asserting pure-function results — a unit test in gherkin costume; the composition/integration split that replaced it asked authors to encode a doubles policy in a filename, which produced the same misfiling one layer up. The remaining rules must keep behaviour tests reaching a real use case AND make deletion reachable from every `Fix:` they emit
   check: grep finds no `.composition.test.ts` and no `.feature.test.ts` outside test-suffix-outside-src fixtures asserting they are rejected; test-suffix-outside-src admits exactly INTEGRATION_SUFFIX; the four behaviour rules' `Fix:` strings make "delete it" a first-class outcome
+
+- id: TP6
+  title: The obligation this package carries is src-property-test-cell's presence arm
+  do: keep `src-property-test-cell`'s `missingCellTest` report — for a source file whose suffix names a cell listed in the `cellsRequiringTest` option, it fires on the ABSENCE of an in-source vitest block, and that arm is this package's OX-OB1 obligation
+  dont: reduce this package to prohibitions by deleting the presence arm; satisfy it by widening the arm to stat the disk for a sibling test, which OX-TS2 forbids — the satisfying evidence must be readable from the linted file's own AST
+  harm: with prohibitions alone a cell carrying no test at all passes every rule here, so the taxonomy only channels tests someone already chose to write; the list defaults empty, which keeps the arm opt-in and leaves a consumer who declares nothing unaccused
+  check: `src-property-test-cell` registers messageId `missingCellTest`, and `Should_Report_When_DeclaredCellHasNoColocatedTestAndNoInSourceBlock` plus `Should_StaySilent_When_NoCellsAreDeclared` are both in its suite
 ```

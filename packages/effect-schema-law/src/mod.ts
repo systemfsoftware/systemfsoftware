@@ -1,5 +1,13 @@
 export * from './bounded-union.kernel.js'
-export { dischargedBy, type Obligation, obligationsOf, WITNESS_BUDGET } from './refutation.kernel.js'
+export {
+  type BlindArm,
+  dischargedBy,
+  type Obligation,
+  type ObligationScan,
+  obligationsOf,
+  scanObligations,
+  WITNESS_BUDGET,
+} from './refutation.kernel.js'
 export {
   type AdequacyReport,
   adequacyReport,

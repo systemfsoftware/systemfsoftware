@@ -1,34 +1,54 @@
-import { MESSAGE, PROPERTY_CELLS } from './path.config.js'
+import { JSONSchema, Schema as S } from 'effect'
+import { COLOCATABLE_CELLS, MESSAGE, NESTED_TEST_DIR } from './path.config.js'
 
-const SANCTIONED_CELLS = PROPERTY_CELLS.join(', ')
+const SANCTIONED_CELLS = COLOCATABLE_CELLS.join(', ')
 
-export const TEST_FILE_IN_SRC_EXPECTED =
-  'src/**/__tests__/<cell>.property.test.ts on a sanctioned cell suffix, or the generated schema-laws.test.ts entry point' as const
-export const TEST_FILE_IN_SRC_ACTUAL =
-  'a test file under src/ that is neither the schema-laws entry point nor a property test inside a __tests__ directory' as const
-export const TEST_FILE_IN_SRC_FIX =
-  `pick the arm matching what this file exercises. A sanctioned cell (${SANCTIONED_CELLS}) -> move to src/<dir>/__tests__/<cell>.property.test.ts, e.g. src/order/__tests__/confirm-order.workflow.property.test.ts. The package public surface -> move outside src/ to __tests__/<name>.integration.test.ts. A private, non-exported binding -> delete this file and inline its assertions as an \`if (import.meta.vitest)\` block in the module declaring that binding. No arm matches -> delete this file`
+export const Options = S.Struct({
+  sanctionedDirs: S.optionalWith(
+    S.NonEmptyArray(S.String),
+    { default: () => [NESTED_TEST_DIR] as const },
+  ),
+})
 
-export const PROPERTY_TEST_LOCATION_EXPECTED =
-  'src/**/__tests__/<name> — a property test one directory down from the cell it covers, never beside it' as const
-export const PROPERTY_TEST_LOCATION_ACTUAL =
-  'a property test beside its source under src/, outside any __tests__ directory' as const
-export const PROPERTY_TEST_LOCATION_FIX =
-  'move the file down one directory into __tests__: src/<dir>/<name> -> src/<dir>/__tests__/<name>. The suffix is already sanctioned; only the directory is wrong. Relative imports shift one level: ./<cell>.js -> ../<cell>.js' as const
+export type Options = S.Schema.Type<typeof Options>
 
-export const SCHEMA_TEST_EXPECTED =
-  'no authored test under this name — the generated schema-laws.test.ts carries the ruleOfSchemas pair for every exported schema' as const
-export const SCHEMA_TEST_ACTUAL = 'an authored *.schema.test.ts restating generated coverage' as const
-export const SCHEMA_TEST_FIX =
-  'delete it. The generated laws already state round-trip identity and encode stability. What they cannot state is rejection — every input they draw comes from the arbitrary the schema itself supplies — so a refusal belongs in <name>.schema.property.test.ts, never here' as const
+export interface Detail {
+  readonly expected: string
+  readonly actual: string
+  readonly fix: string
+}
+
+export const testFileInSrcDetail = (dir: string): Detail => ({
+  expected:
+    `src/**/${dir}/<cell>.test.ts or <cell>.property.test.ts on a sanctioned cell suffix, or the generated schema-laws.test.ts entry point`,
+  actual:
+    `a test file under src/ that is neither the schema-laws entry point nor a test naming a sanctioned cell inside a ${dir} directory`,
+  fix:
+    `pick the arm matching what this file exercises. A sanctioned cell (${SANCTIONED_CELLS}) -> move to src/<path>/${dir}/<cell>.test.ts in whichever form the behaviour needs, e.g. src/order/${dir}/confirm-order.workflow.property.test.ts for a law or src/order/${dir}/confirm-order.workflow.test.ts to pin existing behaviour. The package public surface -> move outside src/ to ${dir}/<name>.integration.test.ts. A private, non-exported binding -> delete this file and inline its assertions as an \`if (import.meta.vitest)\` block in the module declaring that binding. No arm matches -> delete this file`,
+})
+
+export const propertyTestLocationDetail = (dir: string): Detail => ({
+  expected: `src/**/${dir}/<name> — a property test one directory down from the cell it covers, never beside it`,
+  actual: `a property test beside its source under src/, outside any ${dir} directory`,
+  fix:
+    `move the file down one directory into ${dir}: src/<path>/<name> -> src/<path>/${dir}/<name>. The suffix is already sanctioned; only the directory is wrong. Relative imports shift one level: ./<cell>.js -> ../<cell>.js`,
+})
+
+export const SCHEMA_TEST_DETAIL: Detail = {
+  expected:
+    'no authored test under this name — the generated schema-laws.test.ts carries the ruleOfSchemas pair for every exported schema',
+  actual: 'an authored *.schema.test.ts restating generated coverage',
+  fix:
+    'delete it. The generated laws already state round-trip identity and encode stability. What they cannot state is rejection — every input they draw comes from the arbitrary the schema itself supplies — so a refusal belongs in <name>.schema.property.test.ts, never here',
+}
 
 export const meta = {
   type: 'problem',
   docs: {
     description:
-      'Under src/, the only sanctioned test files are a sanctioned-cell *.property.test.ts inside a __tests__ directory and the generated schema-laws.test.ts entry point. A property test beside its source is reported for location alone. *.schema.test.ts is forbidden outright; every other test form must move outside src/ as an integration test or become an in-source vitest block testing private code.',
+      'Under src/, the only sanctioned test files are a test whose stem names a colocatable cell inside a sanctioned test directory — in whichever form the behaviour needs, a law or a characterization test — and the generated schema-laws.test.ts entry point. A property test beside its source is reported for location alone. *.schema.test.ts is forbidden outright; a test naming no cell must move outside src/ as an integration test or become an in-source vitest block testing private code. The sanctioned directory list is the sanctionedDirs option, defaulting to the one directory this repo runs.',
   },
-  schema: [],
+  schema: [JSONSchema.make(Options)],
   messages: {
     testFileInSrc: MESSAGE,
     schemaTestInSrc: MESSAGE,

@@ -124,7 +124,7 @@ Rejection properties initially had no legal home in this repo, which is why the 
 - `<cell>.property.test.ts` was restricted to `.workflow` / `.policy` stems.
 - The in-source `if (import.meta.vitest)` route needs a module-level non-exported binding, which `prefixed-hex.schema.ts` and `uint8array-from-prefixed-hex.schema.ts` do not have — they are pure pipes with no local helper to pin.
 
-The resolution: `.schema` joined `PROPERTY_CELLS` (`path.config.ts:30`) — not a new suffix, the existing `<cell>.property.test.ts` scheme — and the original ban kept its teeth through a new lint rule, `no-schema-law-duplicate` in `packages/oxlint-plugins/effect-schema`, which fails the build if a `*.schema.property.test.ts` calls `ruleOfSchemas`, `Schema.equivalence`, or `Schema.encodedSchema`. That door is deliberately narrow: the file earns its place by stating a refusal, or it does not exist. The `architect-schema` agent skill carries the same mandate as gate item 7.
+The resolution: `.schema` joined `COLOCATABLE_CELLS` (`path.config.ts:49`) — not a new suffix, the existing `<cell>.property.test.ts` scheme — and the original ban kept its teeth through a new lint rule, `no-schema-law-duplicate` in `packages/oxlint-plugins/effect-schema`, which fails the build if a `*.schema.property.test.ts` calls `ruleOfSchemas`, `Schema.equivalence`, or `Schema.encodedSchema`. That door is deliberately narrow: the file earns its place by stating a refusal, or it does not exist. The `architect-schema` agent skill carries the same mandate as gate item 7.
 
 ## When to Apply
 

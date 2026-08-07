@@ -29,7 +29,7 @@ export const GENERATED_SEGMENT = 'generated' as const
 /** Test filenames belong to the test-placement plugin, which is their sole owner. */
 export const TEST_SEGMENTS: ReadonlySet<string> = new Set(['test', 'spec'])
 
-export const SANCTIONED_TEST_DIRS: ReadonlySet<string> = new Set(['tests', '__tests__'])
+export const SANCTIONED_TEST_DIRS: ReadonlySet<string> = new Set(['__tests__'])
 
 export const MESSAGE = '{{name}} is forbidden. Expected: {{expected}}. Actual: {{actual}}. Fix: {{fix}}.' as const
 
