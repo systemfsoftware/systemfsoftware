@@ -113,6 +113,10 @@ const MANIFEST = new Map([
     'workspace-layout',
     'This file. The set it polices IS the workspace arrangement of scripts/.',
   ]],
+  ['merge-mutation-reports.mjs', [
+    'workspace-layout',
+    'Aggregates one mutation report per package from a CI matrix run into a single report. Spans every package; no package can see the workspace.',
+  ]],
   ['patch-tsgo-if-needed.mjs', [
     'workspace-layout',
     'Guards the shared native tsc all 41 packages typecheck through against a non-idempotent devDependency install hook. No package can see another package node_modules.',
