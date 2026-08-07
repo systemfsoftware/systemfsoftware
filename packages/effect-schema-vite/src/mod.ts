@@ -1,6 +1,6 @@
 import type { Expression, MemberExpression, TSType } from '@oxc-project/types'
 import type { Dirent } from 'node:fs'
-import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname, extname, join, relative, resolve } from 'node:path'
 import { parseSync } from 'oxc-parser'
 import type { Plugin, ResolvedConfig } from 'vite'
@@ -24,6 +24,18 @@ interface FoundSchema {
   /** Absolute path of the file declaring the schema. */
   filePath: string
 }
+
+/**
+ * A schema is identified by the module that declares it *and* its exported
+ * name — never the name alone. Two files may export the same name, and every
+ * name-keyed decision (import binding, law title, refutation coverage) then
+ * conflates them.
+ *
+ * The path is resolved because the two sides reach it differently: a walk
+ * joins the caller's `srcDir`, which may be relative, while an import is
+ * resolved against the importing file and is always absolute.
+ */
+const identityOf = (filePath: string, name: string): string => `${resolve(filePath)}#${name}`
 
 /**
  * Walk a directory and return every exported const whose type annotation
@@ -148,7 +160,32 @@ function findRefutesCallSites(source: string): string[] {
   }
 }
 
-function findRefutedSchemaNames(dir: string): ReadonlySet<string> {
+const resolveLocalModule = (fromFile: string, specifier: string): string | undefined => {
+  if (!specifier.startsWith('.')) return undefined
+  const base = resolve(dirname(fromFile), specifier.replace(/\.js$/, ''))
+  return [`${base}.ts`, join(base, 'index.ts')].find((candidate) => existsSync(candidate))
+}
+
+const localBindings = (filePath: string, source: string): ReadonlyMap<string, string> => {
+  const bindings = new Map<string, string>()
+  try {
+    for (const node of parseSync('temp.ts', source).program.body) {
+      if (node.type !== 'ImportDeclaration') continue
+      const declaring = resolveLocalModule(filePath, node.source.value)
+      if (declaring === undefined) continue
+      for (const spec of node.specifiers ?? []) {
+        if (spec.type !== 'ImportSpecifier') continue
+        if (spec.imported.type !== 'Identifier') continue
+        bindings.set(spec.local.name, identityOf(declaring, spec.imported.name))
+      }
+    }
+  } catch {
+    return bindings
+  }
+  return bindings
+}
+
+function findRefutedIdentities(dir: string): ReadonlySet<string> {
   const refuted = new Set<string>()
   const walk = (current: string): void => {
     let entries: ReadonlyArray<Dirent>
@@ -163,7 +200,11 @@ function findRefutedSchemaNames(dir: string): ReadonlySet<string> {
         if (dirent.name === 'node_modules' || dirent.name === '.git') continue
         walk(full)
       } else if (dirent.isFile() && extname(dirent.name) === '.ts') {
-        for (const name of findRefutesCallSites(readFileSync(full, 'utf-8'))) refuted.add(name)
+        const source = readFileSync(full, 'utf-8')
+        const sites = findRefutesCallSites(source)
+        if (sites.length === 0) continue
+        const bindings = localBindings(full, source)
+        for (const name of sites) refuted.add(bindings.get(name) ?? identityOf(full, name))
       }
     }
   }
@@ -256,6 +297,12 @@ function extendsSchemaClass(superClass: Expression | null | undefined): boolean 
  * file being rewritten lives in `src/`, so a root-relative specifier resolves
  * to `src/src/…` and yields a suite that silently imports nothing.
  *
+ * Every schema is imported under a generated local alias. Two modules may
+ * export the same name, and a bare `import { X }` pair for them is invalid
+ * ESM — one binding wins, so a schema silently loses its laws to its
+ * namesake while the suite still reports a passing pair for it. An alias also
+ * keeps a schema named `it` or `ruleOfSchemas` from shadowing the harness.
+ *
  * @since 1.4.0
  */
 export const generateSchemaLaws = (lawFilePath: string, srcDir: string): string => {
@@ -267,21 +314,31 @@ export const generateSchemaLaws = (lawFilePath: string, srcDir: string): string 
     return rel.startsWith('.') ? rel : `./${rel}`
   }
 
-  const refuted = findRefutedSchemaNames(srcDir)
-  const quoted = [...refuted].sort().map((n) => `'${n}'`).join(', ')
+  const nameCount = new Map<string, number>()
+  for (const s of schemas) nameCount.set(s.name, (nameCount.get(s.name) ?? 0) + 1)
+
+  const labelOf = (s: FoundSchema): string =>
+    (nameCount.get(s.name) ?? 0) > 1 ? `${s.name} (${specifierOf(s.filePath)})` : s.name
+
+  const refuted = findRefutedIdentities(srcDir)
+  const quoted = schemas
+    .filter((s) => refuted.has(identityOf(s.filePath, s.name)))
+    .map((s) => `'${labelOf(s)}'`)
+    .sort()
+    .join(', ')
 
   return [
     `import type { AST } from 'effect/SchemaAST'`,
     `import { it } from 'vitest'`,
     `import { obligationsOf, ruleOfSchemas } from '@systemfsoftware/effect-schema-law'`,
-    schemas.map((s) => `import { ${s.name} } from '${specifierOf(s.filePath)}'`).join('\n'),
+    schemas.map((s, i) => `import { ${s.name} as schema_${i} } from '${specifierOf(s.filePath)}'`).join('\n'),
     '',
-    schemas.map((s) => `ruleOfSchemas('${s.name}', ${s.name})`).join('\n'),
+    schemas.map((s, i) => `ruleOfSchemas('${labelOf(s)}', schema_${i})`).join('\n'),
     '',
     `const REFUTED: ReadonlySet<string> = new Set([${quoted}])`,
     '',
     `const EXPORTED: ReadonlyArray<readonly [string, Parameters<typeof obligationsOf>[0]]> = [`,
-    schemas.map((s) => `  ['${s.name}', ${s.name}],`).join('\n'),
+    schemas.map((s, i) => `  ['${labelOf(s)}', schema_${i}],`).join('\n'),
     `]`,
     '',
     `it('every obligation reachable from an exported schema is refuted somewhere', () => {`,
