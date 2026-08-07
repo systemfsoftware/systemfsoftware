@@ -16,13 +16,14 @@ const LOG_FILE_NAME = 'stryker.log'
 export class LoggingBackend implements LoggingSink, Disposable {
   activeStdoutLevel: LogLevel = LogLevel.Information
   activeFileLevel: LogLevel = LogLevel.Off
-  showColors = true
+  showColors: boolean
   #consoleOut
 
-  static readonly inject = [coreTokens.loggerConsoleOut] as const
+  static readonly inject = [coreTokens.loggerConsoleOut, coreTokens.loggerShowColors] as const
 
-  constructor(consoleOut: NodeJS.WritableStream) {
+  constructor(consoleOut: NodeJS.WritableStream, showColors: boolean) {
     this.#consoleOut = consoleOut
+    this.showColors = showColors
   }
 
   log(event: LoggingEvent) {
@@ -53,19 +54,18 @@ export class LoggingBackend implements LoggingSink, Disposable {
     return logLevelPriority[this.activeLogLevel]
   }
 
-  configure({
-    logLevel,
-    fileLogLevel,
-    allowConsoleColors,
-  }: PartialStrykerOptions) {
+  /**
+   * `allowConsoleColors` is deliberately not read here (R8). It defaults to
+   * `true` in the schema, so honouring it would re-enable colour on every run
+   * and defeat the machine-mode contract; colour is decided once, from the
+   * resolved mode and `NO_COLOR`, and injected at construction.
+   */
+  configure({ logLevel, fileLogLevel }: PartialStrykerOptions) {
     if (logLevel) {
       this.activeStdoutLevel = logLevel
     }
     if (fileLogLevel) {
       this.activeFileLevel = fileLogLevel
-    }
-    if (allowConsoleColors !== undefined) {
-      this.showColors = allowConsoleColors
     }
   }
 

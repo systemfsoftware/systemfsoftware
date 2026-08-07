@@ -16,7 +16,7 @@ const basePreset: PartialStrykerOptions = {
     '@systemfsoftware/stryker-js-typescript-checker',
     '@systemfsoftware/stryker-plugins/effect-schema-ignorer',
   ],
-  reporters: ['progress', 'html', 'json'],
+  reporters: ['progress', 'html', 'json', 'progress-stream'],
   htmlReporter: { fileName: 'reports/mutation-report.html' },
   jsonReporter: { fileName: 'reports/mutation-report.json' },
   vitest: { configFile: 'vitest.config.ts', dir: '.', related: true },

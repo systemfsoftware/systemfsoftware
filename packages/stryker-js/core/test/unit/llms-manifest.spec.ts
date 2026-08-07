@@ -6,8 +6,21 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { REMOVED_OPTIONS } from '../../src/config/removed-surface.js'
 import { buildLLMSManifest, LLMS_MANIFEST_SCHEMA_VERSION } from '../../src/llms-manifest.js'
 import type { LLMSManifest } from '../../src/llms-manifest.js'
+import { resetStream, STREAM_SCHEMA_VERSION } from '../../src/progress-stream.js'
 import { makeStrykerCommand, resolveCliExitCode, strykerCliEffect } from '../../src/stryker-cli.js'
 import { strykerVersion } from '../../src/stryker-package.js'
+
+// The `--llms` command emits through the stream module's synchronous fd-1
+// writer (`fs.writeSync`), never `process.stdout.write`, so the stdout
+// contract is observed through this mock.
+const fsMocks = vi.hoisted(() => ({
+  writeSync: vi.fn<(fd: number, text: string) => number>(),
+}))
+
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs')>()
+  return { ...actual, writeSync: fsMocks.writeSync }
+})
 
 // -----------------------------------------------------------------------------
 // The parser's declared option list, read straight off the command descriptor
@@ -103,6 +116,10 @@ function allManifestOptionNames(manifest: LLMSManifest): string[] {
 describe('--llms manifest', () => {
   afterEach(() => {
     vi.restoreAllMocks()
+    // The emission test configures the stream module (header + terminal
+    // state); a fresh run must start unconfigured.
+    resetStream()
+    fsMocks.writeSync.mockClear()
   })
 
   it('lists every declared option exactly once — no duplicates, no omissions', () => {
@@ -155,21 +172,30 @@ describe('--llms manifest', () => {
     expect(overlap).toEqual([])
   })
 
-  it('emits a parseable manifest on stdout and exits 0', async () => {
-    const lines: string[] = []
-    const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
-      lines.push(String(chunk))
-      return true
-    })
-    try {
-      const exit = await Effect.runPromise(
-        Effect.exit(strykerCliEffect(['node', 'stryker', '--llms'])),
-      )
-      expect(resolveCliExitCode(exit)).toBe(0)
-    } finally {
-      writeSpy.mockRestore()
+  it('emits the stream header and one tagged manifest terminal line on stdout, and exits 0', async () => {
+    fsMocks.writeSync.mockClear()
+    const exit = await Effect.runPromise(
+      Effect.exit(strykerCliEffect(['node', 'stryker', '--llms'])),
+    )
+    expect(resolveCliExitCode(exit)).toBe(0)
+    // `--llms` is a machine request by definition: the handler opens the
+    // stream itself when the run bootstrap did not, so the stdout contract is
+    // header first, then the single tagged `manifest` terminal event.
+    const lines = fsMocks.writeSync.mock.calls
+      .filter((call) => call[0] === 1)
+      .map((call) => String(call[1]))
+    expect(lines.length).toBeGreaterThanOrEqual(2)
+    expect(JSON.parse(lines[0] as string) as { kind?: string }).toMatchObject({ kind: 'stream' })
+    const terminal = JSON.parse(lines[lines.length - 1] as string) as {
+      kind: string
+      schemaVersion: string
+      code: number
+      manifest: string
     }
-    const document = JSON.parse(lines.join('')) as LLMSManifest
+    expect(terminal.kind).toBe('manifest')
+    expect(terminal.schemaVersion).toBe(STREAM_SCHEMA_VERSION)
+    expect(terminal.code).toBe(0)
+    const document = JSON.parse(terminal.manifest) as LLMSManifest
     expect(document.schemaVersion).toBe(LLMS_MANIFEST_SCHEMA_VERSION)
     expect(document.tool).toBe('stryker')
     expect(document.commands[0].name).toBe('stryker')

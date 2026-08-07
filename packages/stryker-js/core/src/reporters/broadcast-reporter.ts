@@ -6,7 +6,7 @@ import { MutationTestMetricsResult } from 'mutation-testing-metrics'
 import { tokens } from 'typed-inject'
 
 import { coreTokens, PluginCreator } from '../di/index.js'
-import { isProgressEnabled, resolveMode } from '../output-mode.js'
+import { detectMode, isProgressEnabled } from '../output-mode.js'
 
 import { StrictReporter } from './strict-reporter.js'
 
@@ -19,6 +19,14 @@ export class BroadcastReporter implements StrictReporter {
   )
 
   public readonly reporters: Record<string, Reporter>
+
+  /**
+   * Machine mode's stdout belongs to the NDJSON stream alone (R5): the prose
+   * reporters write to fd 1 with no mode awareness of their own, so this
+   * boundary drops them before dispatch. Resolved once here, at construction,
+   * from the same detection inputs as `progressEnabled`.
+   */
+  private readonly machineMode: boolean
 
   /**
    * The progress bar's gate. Human mode on a non-TTY stdout suppresses the
@@ -34,17 +42,9 @@ export class BroadcastReporter implements StrictReporter {
     private readonly log: Logger,
     private readonly reporterOverride: Reporter | undefined,
   ) {
-    this.progressEnabled = isProgressEnabled(
-      resolveMode({
-        stdoutIsTTY: process.stdout.isTTY === true,
-        envMode: process.env['STRYKER_MODE'],
-        agent: process.env['AGENT'],
-        toolVars: {
-          CLAUDECODE: process.env['CLAUDECODE'],
-          CODEX_SANDBOX: process.env['CODEX_SANDBOX'],
-        },
-      }),
-    )
+    const resolved = detectMode()
+    this.machineMode = resolved.mode === 'machine'
+    this.progressEnabled = isProgressEnabled(resolved)
     this.reporters = {}
     if (this.reporterOverride) {
       this.reporters['in-memory'] = this.reporterOverride
@@ -86,7 +86,10 @@ export class BroadcastReporter implements StrictReporter {
   ): Promise<void[]> {
     return Promise.all(
       Object.entries(this.reporters).map(async ([reporterName, reporter]) => {
-        if (reporterName === 'progress' && !this.progressEnabled) {
+        if (
+          (reporterName === 'progress' && !this.progressEnabled) ||
+          (reporterName === 'clear-text' && this.machineMode)
+        ) {
           return
         }
         if (reporter[methodName]) {

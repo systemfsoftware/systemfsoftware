@@ -1,7 +1,7 @@
 import * as ValidationError from '@effect/cli/ValidationError'
 import { describe, expect, it } from 'vitest'
 
-import { isProgressEnabled, resolveMode, TOOL_VARIABLES } from '../../src/output-mode.js'
+import { isColorEnabled, isProgressEnabled, resolveMode, TOOL_VARIABLES } from '../../src/output-mode.js'
 import type { ModeInput } from '../../src/output-mode.js'
 
 const ttyInput = (overrides: Partial<ModeInput> = {}): ModeInput => ({
@@ -153,5 +153,22 @@ describe('isProgressEnabled', () => {
     expect(isProgressEnabled(resolveMode({ stdoutIsTTY: false }))).toBe(false)
     expect(isProgressEnabled(resolveMode({ stdoutIsTTY: false, text: true }))).toBe(false)
     expect(isProgressEnabled(resolveMode(ttyInput({ agent: '1' })))).toBe(false)
+  })
+})
+
+describe('isColorEnabled (R8)', () => {
+  it('colours the human console when NO_COLOR is unset or empty', () => {
+    expect(isColorEnabled(resolveMode(ttyInput()), undefined)).toBe(true)
+    expect(isColorEnabled(resolveMode(ttyInput()), '')).toBe(true)
+  })
+
+  it('honours any non-empty NO_COLOR value, including "0"', () => {
+    expect(isColorEnabled(resolveMode(ttyInput()), '1')).toBe(false)
+    expect(isColorEnabled(resolveMode(ttyInput()), '0')).toBe(false)
+  })
+
+  it('never colours machine mode, whatever NO_COLOR says', () => {
+    expect(isColorEnabled(resolveMode(ttyInput({ agent: '1' })), undefined)).toBe(false)
+    expect(isColorEnabled(resolveMode({ stdoutIsTTY: false }), '')).toBe(false)
   })
 })

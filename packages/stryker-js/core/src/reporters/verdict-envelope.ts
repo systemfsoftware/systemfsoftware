@@ -10,13 +10,33 @@ import type { ModeSignal, OutputMode } from '../output-mode.js'
 import { judgeTestContribution, type TestContributionVerdict } from './test-contribution.js'
 
 /**
- * U4 — the verdict envelope (R5, R11): the single JSON document machine mode
- * prints to stdout at the end of a run. Everything an agent needs to act
- * without opening the report file, including the survivor re-run matching key
- * per mutant. All functions here are pure over the report — no I/O side
- * effects, no randomness except inside `generateRunId`.
+ * U4 — the verdict envelope (R5, R11, R20): the single JSON document machine
+ * mode prints to stdout at the end of a run. Everything an agent needs to
+ * act without opening the report file, including the survivor re-run
+ * matching key per actionable mutant (R20 bounds the list). All functions
+ * here are pure over the report — no I/O side effects, no randomness except
+ * inside `generateRunId`.
  */
 export const VERDICT_ENVELOPE_SCHEMA_VERSION = '1.0'
+
+/**
+ * The statuses a `verdict.mutants` entry (and a `mutant` stream line, U7) is
+ * recorded for (R20). `Killed`, `Ignored`, and `CompileError` are reported
+ * as counts only: the full per-mutant record stays in the report file, and
+ * enumerating killed mutants served no consumer while pushing the terminal
+ * line past the 64 KB limit of `bufio.Scanner`-class readers. Measured:
+ * `oxlint-plugins/effect-workflow` produced a 2164-entry, ~440 KB line with
+ * zero actionable entries. This is the single definition of the R20 filter,
+ * shared with the progress stream.
+ */
+export const ACTIONABLE_STATUSES = ['Survived', 'NoCoverage', 'Timeout', 'RuntimeError'] as const
+
+/**
+ * Whether `status` is actionable (R20) — one of `ACTIONABLE_STATUSES`.
+ */
+export function isActionableStatus(status: MutantStatus): boolean {
+  return ACTIONABLE_STATUSES.some((actionable) => actionable === status)
+}
 
 /**
  * One mutant as the envelope reports it. `file` is the report's relative file
@@ -57,6 +77,8 @@ export interface VerdictCounts {
  * The full verdict document. `score` and `reportFile` are `null` for a run
  * with zero mutants (AE3): there is no score to report and no report file was
  * written. `testContribution` is `null` when the check is not configured.
+ * `mutants` is bounded to `ACTIONABLE_STATUSES` (R20) — see that definition
+ * for why the remaining statuses are counts only.
  */
 export interface VerdictEnvelope {
   readonly schemaVersion: string
@@ -176,6 +198,9 @@ export function buildVerdictEnvelope(
   const mutants: VerdictMutant[] = []
   for (const [file, fileResult] of Object.entries(report.files)) {
     for (const mutant of fileResult.mutants) {
+      if (!isActionableStatus(mutant.status)) {
+        continue
+      }
       mutants.push({
         id: mutant.id,
         file,
@@ -212,13 +237,4 @@ export function buildVerdictEnvelope(
     reportFile,
     mutants,
   }
-}
-
-export function emitVerdictEnvelope(
-  report: schema.MutationTestResult,
-  mode: OutputMode,
-  signal: ModeSignal,
-  runId: string,
-): string {
-  return JSON.stringify(buildVerdictEnvelope(report, mode, signal, runId))
 }

@@ -16,6 +16,7 @@ import {
   structuralHash,
   survivorIdentifyingKey,
 } from '../../src/mutants/survivors.js'
+import { configureStream, resetStream } from '../../src/progress-stream.js'
 import { remediationFor, resolveCliExitCode, runStrykerCli, strykerCliEffect } from '../../src/stryker-cli.js'
 import type { StrykerRun } from '../../src/stryker-cli.js'
 import { strykerVersion } from '../../src/stryker-package.js'
@@ -30,6 +31,9 @@ vi.mock('node:fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs')>()
   return { ...actual, writeSync: fsMocks.writeSync }
 })
+
+const writtenLines = (fd: number): string[] =>
+  fsMocks.writeSync.mock.calls.filter((call) => call[0] === fd).map((call) => String(call[1]))
 
 const FIXTURE_DIR = fileURLToPath(new URL('./fixtures/survivors', import.meta.url))
 const PROJECT_DIR = path.join(FIXTURE_DIR, 'project')
@@ -394,10 +398,14 @@ describe('zero-survivor run', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
     exitMock = vi.spyOn(process, 'exit').mockImplementation((() => {}) as (code?: number) => never)
     process.env['STRYKER_MODE'] = 'machine'
+    resetStream()
+    configureStream({ mode: 'machine', signal: 'env', stdoutIsTTY: false }, 'run-test')
+    fsMocks.writeSync.mockClear()
   })
 
   afterEach(() => {
     delete process.env['STRYKER_MODE']
+    resetStream()
     vi.restoreAllMocks()
   })
 
@@ -415,9 +423,6 @@ describe('zero-survivor run', () => {
       writeFileSync(path.join(tmp, PRIOR_REPORT_PATH), JSON.stringify(report))
       process.chdir(tmp)
 
-      const stdoutWrite = vi
-        .spyOn(process.stdout, 'write')
-        .mockImplementation(() => true)
       let runCalled = false
       const runMutationTest: StrykerRun = async () => {
         runCalled = true
@@ -428,12 +433,15 @@ describe('zero-survivor run', () => {
       )
       expect(resolveCliExitCode(exit)).toBe(0)
       expect(runCalled).toBe(false)
-      const stdoutLines = stdoutWrite.mock.calls.map((call) => String(call[0])).join('')
-      const envelope = JSON.parse(stdoutLines) as {
+      const stdoutLines = writtenLines(1)
+      expect(stdoutLines).toHaveLength(1)
+      const envelope = JSON.parse(stdoutLines[0] ?? '') as {
+        kind: string
         score: number | null
         mutants: unknown[]
         counts: { survived: number }
       }
+      expect(envelope.kind).toBe('verdict')
       expect(envelope.score).toBeNull()
       expect(envelope.mutants).toEqual([])
       expect(envelope.counts.survived).toBe(0)
@@ -452,18 +460,17 @@ describe('machine-mode error envelope for a rejected survivors run', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
     exitMock = vi.spyOn(process, 'exit').mockImplementation((() => {}) as (code?: number) => never)
     process.env['STRYKER_MODE'] = 'machine'
+    resetStream()
     fsMocks.writeSync.mockClear()
   })
 
   afterEach(() => {
     delete process.env['STRYKER_MODE']
+    resetStream()
     vi.restoreAllMocks()
   })
 
-  const writtenLines = (fd: number): string[] =>
-    fsMocks.writeSync.mock.calls.filter((call) => call[0] === fd).map((call) => String(call[1]))
-
-  it('writes one JSON envelope to stderr with code 2 and a remediation naming the full run', async () => {
+  it('writes the error terminal event to stdout with code 2 and a remediation naming the full run', async () => {
     const originalCwd = process.cwd()
     const tmp = mkdtempSync(path.join(os.tmpdir(), 'stryker-survivors-'))
     try {
@@ -472,18 +479,22 @@ describe('machine-mode error envelope for a rejected survivors run', () => {
       await flushUntil(() => exitMock.mock.calls.length > 0)
 
       expect(exitMock).toHaveBeenCalledWith(2)
-      const stderrLines = writtenLines(2)
-      expect(stderrLines).toHaveLength(1)
-      const envelope = JSON.parse(stderrLines[0] as string) as {
+      const stdoutLines = writtenLines(1)
+      const [streamHeader = '', errorTerminal = ''] = stdoutLines
+      expect(stdoutLines).toHaveLength(2)
+      expect(JSON.parse(streamHeader)).toMatchObject({ kind: 'stream' })
+      const envelope = JSON.parse(errorTerminal) as {
+        kind: string
         schemaVersion: string
         code: number
         error: string
         remediation: string
       }
+      expect(envelope.kind).toBe('error')
       expect(envelope.schemaVersion).toBe('1.0')
       expect(envelope.code).toBe(2)
       expect(envelope.remediation).toContain('full `stryker run`')
-      expect(writtenLines(1)).toHaveLength(0)
+      expect(writtenLines(2)).toHaveLength(0)
     } finally {
       process.chdir(originalCwd)
       rmSync(tmp, { recursive: true, force: true })
@@ -502,7 +513,9 @@ describe('machine-mode error envelope for a rejected survivors run', () => {
       await flushUntil(() => exitMock.mock.calls.length > 0)
 
       expect(exitMock).toHaveBeenCalledWith(2)
-      const envelope = JSON.parse(writtenLines(2)[0] as string) as {
+      const [streamHeader = '', errorTerminal = ''] = writtenLines(1)
+      expect(JSON.parse(streamHeader)).toMatchObject({ kind: 'stream' })
+      const envelope = JSON.parse(errorTerminal) as {
         code: number
         remediation: string
       }

@@ -15,6 +15,18 @@ import { resolveCliExitCode, strykerCliEffect } from '../../src/stryker-cli.js'
 import type { StrykerRun } from '../../src/stryker-cli.js'
 import { strykerVersion } from '../../src/stryker-package.js'
 
+// The `--llms` handler emits through the stream module's synchronous fd-1
+// writer; without a mock, accepting the flag would leak the header and the
+// terminal line into the runner's real stdout.
+const fsMocks = vi.hoisted(() => ({
+  writeSync: vi.fn<(fd: number, text: string) => number>(),
+}))
+
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs')>()
+  return { ...actual, writeSync: fsMocks.writeSync }
+})
+
 function parseArgs(args: string[]): Promise<{
   code: number
   options: PartialStrykerOptions | undefined
@@ -217,8 +229,15 @@ describe('stryker cli option parsing', () => {
   })
 
   it('accepts the --llms global flag', async () => {
+    fsMocks.writeSync.mockClear()
     const { code } = await parseArgs(['--llms'])
     expect(code).toBe(0)
+    // The handler opens the machine stream itself, so the header and the
+    // terminal line land in the capture instead of the runner's real stdout.
+    const stdoutLines = fsMocks.writeSync.mock.calls
+      .filter((call) => call[0] === 1)
+      .map((call) => String(call[1]))
+    expect(stdoutLines.length).toBeGreaterThanOrEqual(2)
   })
 
   it('accepts a config file as the run positional', async () => {

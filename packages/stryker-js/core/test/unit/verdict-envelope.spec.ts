@@ -6,14 +6,33 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createDefaultOptions } from '../../src/config/index.js'
 import { FileSystem, Project } from '../../src/fs/index.js'
 import { TestCoverage } from '../../src/mutants/index.js'
+import { detectMode } from '../../src/output-mode.js'
+import { configureStream, resetStream } from '../../src/progress-stream.js'
 import { MutationTestReportHelper } from '../../src/reporters/mutation-test-report-helper.js'
 import {
   buildVerdictEnvelope,
-  emitVerdictEnvelope,
   generateRunId,
+  isActionableStatus,
   VERDICT_ENVELOPE_SCHEMA_VERSION,
 } from '../../src/reporters/verdict-envelope.js'
 import type { VerdictEnvelope } from '../../src/reporters/verdict-envelope.js'
+
+// The stream module writes with `fs.writeSync` (a synchronous fd write, so
+// `process.exit` cannot drop it — KTD11); the run-id identity test captures
+// those writes through this mock.
+const fsMocks = vi.hoisted(() => ({
+  writeSync: vi.fn<(fd: number, text: string) => number>(),
+}))
+
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs')>()
+  return { ...actual, writeSync: fsMocks.writeSync }
+})
+
+const writtenLines = (): string[] =>
+  fsMocks.writeSync.mock.calls
+    .filter((call) => call[0] === 1)
+    .map((call) => String(call[1]))
 
 const RUN_ID = '01HZJ4QW2TB6N7P8K9M3X5Y7ZA'
 
@@ -99,14 +118,15 @@ describe('buildVerdictEnvelope', () => {
     })
     expect(envelope.testContribution).toBeNull()
     expect(envelope.reportFile).toBe('reports/mutation/mutation.json')
-    expect(envelope.mutants).toHaveLength(4)
+    expect(envelope.mutants).toHaveLength(2)
+    expect(envelope.mutants.map((mutant) => mutant.id)).toEqual(['1', '3'])
   })
 
-  it('carries the full survivor re-run key for survivor, killed and no-coverage mutants', () => {
+  it('carries the full survivor re-run key for survivor, timeout and no-coverage mutants', () => {
     const envelope = buildVerdictEnvelope(
       reportOf([
         mutantOf('1', 'Survived', LOCATION_A, { replacement: '-' }),
-        mutantOf('2', 'Killed', LOCATION_B, { replacement: '+' }),
+        mutantOf('2', 'Timeout', LOCATION_B, { replacement: '+' }),
         mutantOf('3', 'NoCoverage', LOCATION_C, { replacement: '*' }),
       ]),
       'machine',
@@ -129,7 +149,7 @@ describe('buildVerdictEnvelope', () => {
         location: LOCATION_B,
         mutator: 'BinaryOperator',
         replacement: '+',
-        status: 'Killed',
+        status: 'Timeout',
       },
       {
         id: '3',
@@ -140,6 +160,54 @@ describe('buildVerdictEnvelope', () => {
         status: 'NoCoverage',
       },
     ])
+  })
+
+  it('reports killed and compile-error mutants in counts only, absent from mutants', () => {
+    const envelope = buildVerdictEnvelope(
+      reportOf([
+        mutantOf('1', 'Killed', LOCATION_A),
+        mutantOf('2', 'CompileError', LOCATION_B),
+        mutantOf('3', 'Survived', LOCATION_C, { replacement: '-' }),
+      ]),
+      'machine',
+      'tty',
+      RUN_ID,
+    )
+
+    expect(envelope.mutants).toEqual([
+      {
+        id: '3',
+        file: 'src/subject.ts',
+        location: LOCATION_C,
+        mutator: 'BinaryOperator',
+        replacement: '-',
+        status: 'Survived',
+      },
+    ])
+    expect(envelope.counts.killed).toBe(1)
+    expect(envelope.counts.compileErrors).toBe(1)
+    expect(envelope.counts.survived).toBe(1)
+    const countedTotal = Object.values(envelope.counts).reduce(
+      (sum, count) => sum + count,
+      0,
+    )
+    expect(countedTotal).toBe(3)
+  })
+
+  it('yields an empty mutants array, never a missing key, when every mutant is killed', () => {
+    const envelope = buildVerdictEnvelope(
+      reportOf([
+        mutantOf('1', 'Killed', LOCATION_A),
+        mutantOf('2', 'Killed', LOCATION_B),
+        mutantOf('3', 'Killed', LOCATION_C),
+      ]),
+      'machine',
+      'tty',
+      RUN_ID,
+    )
+
+    expect(envelope.mutants).toEqual([])
+    expect(envelope.counts.killed).toBe(3)
   })
 
   it('uses the report file name from the embedded config', () => {
@@ -215,13 +283,32 @@ describe('buildVerdictEnvelope', () => {
   })
 })
 
-describe('emitVerdictEnvelope', () => {
-  it('returns exactly one JSON document that parses back to the envelope', () => {
-    const report = reportOf([mutantOf('1', 'Survived', LOCATION_A)])
-    const json = emitVerdictEnvelope(report, 'machine', 'tty', RUN_ID)
-    expect(JSON.parse(json)).toEqual(
-      buildVerdictEnvelope(report, 'machine', 'tty', RUN_ID),
+describe('verdict envelope size bound (R20)', () => {
+  it('keeps an all-killed 2164-mutant report under the 64 KB scanner limit', () => {
+    const mutants: schema.MutantResult[] = []
+    for (let index = 0; index < 2164; index++) {
+      mutants.push(mutantOf(`m${index}`, 'Killed', LOCATION_A))
+    }
+    const line = JSON.stringify(
+      buildVerdictEnvelope(reportOf(mutants), 'machine', 'tty', RUN_ID),
     )
+    expect(Buffer.byteLength(line)).toBeLessThan(64 * 1024)
+  })
+})
+
+describe('isActionableStatus', () => {
+  it('accepts Survived, NoCoverage, Timeout and RuntimeError', () => {
+    expect(isActionableStatus('Survived')).toBe(true)
+    expect(isActionableStatus('NoCoverage')).toBe(true)
+    expect(isActionableStatus('Timeout')).toBe(true)
+    expect(isActionableStatus('RuntimeError')).toBe(true)
+  })
+
+  it('rejects every non-actionable MutantStatus', () => {
+    expect(isActionableStatus('Killed')).toBe(false)
+    expect(isActionableStatus('CompileError')).toBe(false)
+    expect(isActionableStatus('Ignored')).toBe(false)
+    expect(isActionableStatus('Pending')).toBe(false)
   })
 })
 
@@ -229,6 +316,7 @@ describe('MutationTestReportHelper', () => {
   let originalMode: string | undefined
 
   afterEach(() => {
+    resetStream()
     if (originalMode === undefined) {
       delete process.env.STRYKER_MODE
     } else {
@@ -236,7 +324,7 @@ describe('MutationTestReportHelper', () => {
     }
   })
 
-  const createHelper = (emitEnvelope: (envelope: VerdictEnvelope) => void) => {
+  const createHelper = (emitEnvelope?: (envelope: VerdictEnvelope) => void) => {
     const options = createDefaultOptions()
     options.incremental = false
     options.thresholds = { high: 80, low: 60, break: null }
@@ -319,14 +407,6 @@ describe('MutationTestReportHelper', () => {
         status: 'Survived',
       },
       {
-        id: '2',
-        file: 'src/subject.ts',
-        location: LOCATION_A,
-        mutator: 'BinaryOperator',
-        replacement: '-',
-        status: 'Killed',
-      },
-      {
         id: '3',
         file: 'src/subject.ts',
         location: LOCATION_A,
@@ -335,6 +415,7 @@ describe('MutationTestReportHelper', () => {
         status: 'NoCoverage',
       },
     ])
+    expect(envelope.counts.killed).toBe(1)
   })
 
   it('skips the envelope entirely in human mode', async () => {
@@ -346,5 +427,26 @@ describe('MutationTestReportHelper', () => {
     await helper.reportAll([runResult('1', 'Survived')])
 
     expect(emitEnvelope).not.toHaveBeenCalled()
+  })
+
+  it('writes a verdict run id identical to the stream header run id of the same run, never a freshly minted one', async () => {
+    originalMode = process.env.STRYKER_MODE
+    process.env.STRYKER_MODE = 'machine'
+    resetStream()
+    fsMocks.writeSync.mockClear()
+    configureStream(detectMode())
+
+    const { helper } = createHelper()
+    await helper.reportAll([
+      runResult('1', 'Survived'),
+      runResult('2', 'Killed'),
+    ])
+
+    const parsedLines = writtenLines().map((line) => JSON.parse(line))
+    const headerLine = parsedLines[0]
+    const terminalLine = parsedLines[parsedLines.length - 1]
+    expect(headerLine.kind).toBe('stream')
+    expect(terminalLine.kind).toBe('verdict')
+    expect(headerLine.runId).toBe(terminalLine.runId)
   })
 })

@@ -112,6 +112,23 @@ export function resolveMode(input: ModeInput): ResolvedMode {
 }
 
 /**
+ * The one impure adapter over `resolveMode`: reads the process environment so
+ * callers with no CLI-parsed flags — the library entry point, the reporters —
+ * cannot drift into private copies of the probe and disagree about the mode.
+ */
+export function detectMode(): ResolvedMode {
+  return resolveMode({
+    stdoutIsTTY: process.stdout.isTTY === true,
+    envMode: process.env['STRYKER_MODE'],
+    agent: process.env['AGENT'],
+    toolVars: {
+      CLAUDECODE: process.env['CLAUDECODE'],
+      CODEX_SANDBOX: process.env['CODEX_SANDBOX'],
+    },
+  })
+}
+
+/**
  * The progress bar's gate. Human mode on a non-TTY stdout (AE1) must not leak
  * its control sequences into a pipe, and machine mode keeps stdout clean for
  * the verdict envelope (R5). Decided from the resolved mode's own detection
@@ -119,6 +136,16 @@ export function resolveMode(input: ModeInput): ResolvedMode {
  */
 export function isProgressEnabled(resolved: ResolvedMode): boolean {
   return resolved.mode === 'human' && resolved.stdoutIsTTY
+}
+
+/**
+ * The log colouriser's gate (R8). Machine mode never emits colour, so a
+ * harness merging `2>&1` is not handed escape sequences it must strip, and
+ * `NO_COLOR` is honoured for the human path per the convention: any value
+ * other than an unset or empty variable disables colour.
+ */
+export function isColorEnabled(resolved: ResolvedMode, noColor: string | undefined): boolean {
+  return resolved.mode === 'human' && (noColor === undefined || noColor.length === 0)
 }
 
 // =============================================================================

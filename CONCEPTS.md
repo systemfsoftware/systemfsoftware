@@ -142,11 +142,11 @@ The CLI state where output is structured for a machine consumer instead of a hum
 
 ### verdict envelope
 
-The JSON object the stryker CLI prints to stdout in machine mode: mutation score, thresholds, per-status mutant counts, test-contribution verdict, per-mutant status, the report file path, a run identifier, and the resolved mode with the signal that decided it. Per-mutant entries are keyed on file, location, mutator, and replacement — the same key a survivor re-run matches on, so the envelope alone is enough to address individual survivors. The full mutation report still goes to a file; the envelope is the small, schema-stable contract agents parse instead of scraping human output.
+The JSON object the stryker CLI prints to stdout in machine mode: mutation score, thresholds, per-status mutant counts, test-contribution verdict, per-mutant status for the actionable statuses, the report file path, a run identifier, and the resolved mode with the signal that decided it. Per-mutant entries are keyed on file, location, mutator, and replacement — the same key a survivor re-run matches on, so the envelope alone is enough to address individual survivors. The full mutation report still goes to a file; the envelope is the small, schema-stable contract agents parse instead of scraping human output.
 
 ### progress stream
 
-The newline-delimited JSON the stryker CLI writes to stderr in machine mode, one object per completed mutant plus a plan event naming the total. It replaces the deleted `progress-append-only` reporter as the non-TTY progress path, so an agent sees a many-minute run advancing rather than silence followed by a verdict. Human mode keeps the interactive progress bar on stdout instead.
+The newline-delimited JSON the stryker CLI writes to stdout in machine mode: a `stream` header first (schema version, run id, resolved mode, deciding signal), then `phase` lifecycle lines, a `plan` line naming the total, `mutant` lines filtered to the actionable statuses (`Survived`, `NoCoverage`, `Timeout`, `RuntimeError`), `tick` heartbeats on an interval, and always a terminal `verdict` or `error` line last. It replaces the deleted `progress-append-only` reporter as the non-TTY progress path, so an agent sees a many-minute run advancing rather than silence followed by a verdict. Human mode keeps the interactive progress bar on stdout instead.
 
 ### survivor re-run
 
