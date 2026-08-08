@@ -9,7 +9,7 @@ import type { Logger } from '@stryker-mutator/api/logging'
 import { Either } from 'effect'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { HybridFileSystem } from '../../src/fs/hybrid-file-system.js'
+import { HybridFileSystem } from '../../src/project/hybrid-file-system.js'
 import { overrideOptions, parseTsConfig } from '../../src/tsconfig-helpers.js'
 import { TypescriptChecker } from '../../src/typescript-checker.js'
 import { TypescriptCompiler } from '../../src/typescript-compiler.js'

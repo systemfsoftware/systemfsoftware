@@ -60,6 +60,25 @@
       ],
       "cache": true
     },
+    "test:contract": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "vitest.contract.config.ts",
+        "__tests__/**"
+      ],
+      "outputLogs": "new-only",
+      "dependsOn": [
+        "^build",
+        "build"
+      ],
+      "outputs": [],
+      "env": [
+        "CI",
+        "DOCKER_HOST",
+        "TESTCONTAINERS_RYUK_DISABLED"
+      ],
+      "cache": false
+    },
     "mutation": {
       "dependsOn": [
         "^build"

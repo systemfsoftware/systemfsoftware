@@ -14,6 +14,7 @@ const _default: {
     rules: {
         'cell-import-boundary': Rule;
         'cell-suffix-required': Rule;
+        'capability-named-directory': Rule;
         'acl-no-anti-pattern-path': Rule;
         'acl-no-as-casts': Rule;
         'acl-single-transform-export': Rule;

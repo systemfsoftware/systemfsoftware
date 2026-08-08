@@ -1,5 +1,5 @@
 {
-  "extends": "@systemfsoftware/stryker-js-core/config/base",
+  "extends": "@systemfsoftware/stryker-js-mutation-run/config/base",
   "mutate": [
     "src/rules/*.ts",
     "!src/rules/**/*.test.ts",
