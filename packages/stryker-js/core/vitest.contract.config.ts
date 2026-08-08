@@ -10,6 +10,7 @@ export default defineConfig({
   test: {
     ...sharedConfig.test,
     include: ['__tests__/**/*.integration.test.ts'],
+    globalSetup: ['./__tests__/global-setup.ts'],
 
     // Overrides `sharedConfig`. R18: a glob matching nothing must fail, not pass.
     passWithNoTests: false,
@@ -17,8 +18,11 @@ export default defineConfig({
     // Overrides `sharedConfig`. Keeps `src/**` in-source tests out of the container gate.
     includeSource: [],
 
-    // Image pull and container start are charged to the first test, not a hook.
-    // A real hang must still fail inside the lane, not as an outer runner kill.
-    testTimeout: 300_000,
+    // Packing and container start are charged to `globalSetup`, so the hook
+    // budget stays at its default and these bound real work only: the slowest
+    // scenario is the ~43s heartbeat fixture, and teardown is one container
+    // stop. Both are tight enough that a genuine hang fails the lane.
+    testTimeout: 75_000,
+    teardownTimeout: 30_000,
   },
 })
