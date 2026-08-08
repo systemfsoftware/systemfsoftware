@@ -1,7 +1,15 @@
 import path from 'path'
 
 import { CheckResult, CheckStatus, PassedCheckResult } from '@stryker-mutator/api/check'
-import { MutantResult, MutantStatus, MutantTestCoverage, schema, StrykerOptions } from '@stryker-mutator/api/core'
+import {
+  Location,
+  MutantResult,
+  MutantStatus,
+  MutantTestCoverage,
+  Position,
+  schema,
+  StrykerOptions,
+} from '@stryker-mutator/api/core'
 import { Logger } from '@stryker-mutator/api/logging'
 import { commonTokens, tokens } from '@stryker-mutator/api/plugin'
 import { Reporter } from '@stryker-mutator/api/report'
@@ -9,13 +17,13 @@ import { MutantRunResult, MutantRunStatus, TestResult } from '@stryker-mutator/a
 import { I, normalizeFileName, normalizeWhitespaces, type requireResolve } from '@stryker-mutator/util'
 import { calculateMutationTestMetrics, MutationTestMetricsResult } from 'mutation-testing-metrics'
 
-import { coreTokens } from '../di/index.js'
-import { FileSystem, Project } from '../fs/index.js'
+import { ExitClass, setPendingExitClass } from '../exit-classification.js'
 import { TestCoverage } from '../mutants/index.js'
 import type { ResolvedMode } from '../output-mode.js'
+import { injectionTokens } from '../plugins/index.js'
+import { FileSystem, Project } from '../project/index.js'
 import type { RunEventSink } from '../run-event.js'
 import { strykerVersion } from '../stryker-package.js'
-import { ExitClass, objectUtils, setPendingExitClass } from '../utils/object-utils.js'
 
 import { judgeTestContribution } from '../test-contribution.js'
 import { buildVerdictEnvelope } from '../verdict-envelope.js'
@@ -33,20 +41,44 @@ const STRYKER_FRAMEWORK: Readonly<
 })
 
 /**
+ * Converts an internal StrykerJS 0-based location to a schema.Location (1-based).
+ * @param location the StrykerJS 0-based location
+ * @returns the schema.Location (1-based)
+ */
+function toSchemaLocation(location: Location): schema.Location {
+  return {
+    end: toSchemaPosition(location.end),
+    start: toSchemaPosition(location.start),
+  }
+}
+
+/**
+ * Converts an internal StrykerJS 0-based position to a schema.Position (1-based).
+ * @param pos the StrykerJS 0-based position
+ * @returns the schema.Position (1-based)
+ */
+function toSchemaPosition(pos: Position): schema.Position {
+  return {
+    column: pos.column + 1,
+    line: pos.line + 1,
+  }
+}
+
+/**
  * A helper class to convert and report mutants that survived or get killed
  */
 export class MutationTestReportHelper {
   public static inject = tokens(
-    coreTokens.reporter,
+    injectionTokens.reporter,
     commonTokens.options,
-    coreTokens.project,
+    injectionTokens.project,
     commonTokens.logger,
-    coreTokens.testCoverage,
-    coreTokens.fs,
-    coreTokens.requireFromCwd,
-    coreTokens.runEventSink,
-    coreTokens.runId,
-    coreTokens.resolvedMode,
+    injectionTokens.testCoverage,
+    injectionTokens.fs,
+    injectionTokens.requireFromCwd,
+    injectionTokens.runEventSink,
+    injectionTokens.runId,
+    injectionTokens.resolvedMode,
   )
 
   constructor(
@@ -66,7 +98,7 @@ export class MutationTestReportHelper {
     mutant: MutantTestCoverage,
     checkResult: Exclude<CheckResult, PassedCheckResult>,
   ): MutantResult {
-    const location = objectUtils.toSchemaLocation(mutant.location)
+    const location = toSchemaLocation(mutant.location)
     return this.reportOne({
       ...mutant,
       status: this.checkStatusToResultStatus(checkResult.status),
@@ -79,7 +111,7 @@ export class MutationTestReportHelper {
     mutant: MutantTestCoverage,
     status: MutantStatus,
   ): MutantResult {
-    const location = objectUtils.toSchemaLocation(mutant.location)
+    const location = toSchemaLocation(mutant.location)
     return this.reportOne({
       ...mutant,
       status,
@@ -91,7 +123,7 @@ export class MutationTestReportHelper {
     mutant: MutantTestCoverage,
     result: MutantRunResult,
   ): MutantResult {
-    const location = objectUtils.toSchemaLocation(mutant.location)
+    const location = toSchemaLocation(mutant.location)
 
     // Prune fields used for Stryker bookkeeping
     switch (result.status) {
@@ -355,7 +387,7 @@ export class MutationTestReportHelper {
       id: remapTestId(test.id),
       name: test.name,
       location: test.startPosition
-        ? { start: objectUtils.toSchemaPosition(test.startPosition) }
+        ? { start: toSchemaPosition(test.startPosition) }
         : undefined,
     }
   }

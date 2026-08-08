@@ -17,8 +17,8 @@ import {
 } from '@stryker-mutator/api/test-runner'
 import { errorToString, testFilesProvided } from '@stryker-mutator/util'
 
-import { objectUtils } from '../utils/object-utils.js'
-import { Timer } from '../utils/timer.js'
+import { Timer } from '../timer.js'
+import { kill } from '../worker-pool/kill.js'
 
 /**
  * A test runner that uses a (bash or cmd) command to execute the tests.
@@ -99,8 +99,7 @@ export class CommandTestRunner implements TestRunner {
         env,
       })
       childProcess.on('error', (error) => {
-        objectUtils
-          .kill(childProcess.pid)
+        kill(childProcess.pid)
           .then(() => handleResolve(errorResult(error)))
           .catch(rej)
       })
@@ -117,7 +116,7 @@ export class CommandTestRunner implements TestRunner {
 
       this.timeoutHandler = async () => {
         handleResolve({ status: DryRunStatus.Timeout })
-        await objectUtils.kill(childProcess.pid)
+        await kill(childProcess.pid)
       }
 
       const handleResolve = (runResult: DryRunResult) => {

@@ -2,10 +2,11 @@ import { MutantResult, PartialStrykerOptions } from '@stryker-mutator/api/core'
 import { commonTokens } from '@stryker-mutator/api/plugin'
 import { createInjector, Injector } from 'typed-inject'
 
-import { coreTokens } from './di/index.js'
 import { ConfigError, retrieveCause } from './errors.js'
 import { LoggingBackend, provideLogging, provideLoggingBackend } from './logging/index.js'
 import type { ResolvedMode } from './output-mode.js'
+import { injectionTokens } from './plugins/index.js'
+import type { RunEventSink, RunPhase } from './run-event.js'
 import {
   DryRunExecutor,
   MutantInstrumenterExecutor,
@@ -13,11 +14,10 @@ import {
   PrepareExecutor,
   PrepareExecutorArgs,
   PrepareExecutorContext,
-} from './process/index.js'
-import type { RunEventSink, RunPhase } from './run-event.js'
+} from './run-stages/index.js'
 
 type MutationRunContext = PrepareExecutorContext & {
-  [coreTokens.loggingSink]: LoggingBackend
+  [injectionTokens.loggingSink]: LoggingBackend
 }
 
 /**
@@ -77,21 +77,21 @@ export class Stryker {
           this.hostOptions.showColors,
         ),
       )
-        .provideValue(coreTokens.reporterOverride, undefined)
-        .provideValue(coreTokens.runEventSink, this.hostOptions.runEventSink)
-        .provideValue(coreTokens.runId, this.hostOptions.runId)
-        .provideValue(coreTokens.resolvedMode, this.hostOptions.resolvedMode)
+        .provideValue(injectionTokens.reporterOverride, undefined)
+        .provideValue(injectionTokens.runEventSink, this.hostOptions.runEventSink)
+        .provideValue(injectionTokens.runId, this.hostOptions.runId)
+        .provideValue(injectionTokens.resolvedMode, this.hostOptions.resolvedMode)
         .provideValue(
-          coreTokens.progressEnabled,
+          injectionTokens.progressEnabled,
           this.hostOptions.progressEnabled,
         )
         .provideValue(
-          coreTokens.clearTextEnabled,
+          injectionTokens.clearTextEnabled,
           this.hostOptions.clearTextEnabled,
         )
-        .provideValue(coreTokens.runStartedAt, this.hostOptions.runStartedAt)
+        .provideValue(injectionTokens.runStartedAt, this.hostOptions.runStartedAt)
         .provideValue(
-          coreTokens.reporterPluginModules,
+          injectionTokens.reporterPluginModules,
           this.hostOptions.reporterPluginModules,
         )
       return await Stryker.run(prepareInjector, {
@@ -114,8 +114,8 @@ export class Stryker {
   ): Promise<MutantResult[]> {
     // Resolved once, at the top: the phase pushes and their elapsed times
     // share one sink and one clock zero.
-    const sink = mutationRunInjector.resolve(coreTokens.runEventSink)
-    const runStartedAt = mutationRunInjector.resolve(coreTokens.runStartedAt)
+    const sink = mutationRunInjector.resolve(injectionTokens.runEventSink)
+    const runStartedAt = mutationRunInjector.resolve(injectionTokens.runStartedAt)
     const emitPhase = (phase: RunPhase): void => {
       sink({ kind: 'phase', phase, elapsedMs: Date.now() - runStartedAt })
     }
@@ -160,7 +160,7 @@ export class Stryker {
           )
           log.debug('Not removing the temp dir because an error occurred')
           mutantInstrumenterInjector.resolve(
-            coreTokens.temporaryDirectory,
+            injectionTokens.temporaryDirectory,
           ).removeDuringDisposal = false
         }
         throw error

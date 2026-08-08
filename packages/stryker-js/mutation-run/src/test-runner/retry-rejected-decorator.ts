@@ -9,7 +9,7 @@ import {
 } from '@stryker-mutator/api/test-runner'
 import { errorToString } from '@stryker-mutator/util'
 
-import { OutOfMemoryError } from '../child-proxy/out-of-memory-error.js'
+import { OutOfMemoryError } from '../worker-pool/out-of-memory-error.js'
 
 import { Logger } from '@stryker-mutator/api/logging'
 import { TestRunnerDecorator } from './test-runner-decorator.js'

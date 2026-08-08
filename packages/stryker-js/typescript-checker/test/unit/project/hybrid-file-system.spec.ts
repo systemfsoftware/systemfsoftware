@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { HybridFileSystem } from '../../../src/fs/hybrid-file-system.js'
+import { HybridFileSystem } from '../../../src/project/hybrid-file-system.js'
 
 describe('HybridFileSystem', () => {
   function createSut(): HybridFileSystem {

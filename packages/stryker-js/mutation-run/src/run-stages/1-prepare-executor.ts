@@ -7,32 +7,32 @@ import { forkCoreSchema } from '../config/fork-schema.js'
 
 import { ConfigReader } from '../config/config-reader.js'
 import { MetaSchemaBuilder, OptionsValidator } from '../config/index.js'
-import { coreTokens, PluginCreator } from '../di/index.js'
-import { PluginLoader } from '../di/plugin-loader.js'
 import { ConfigError } from '../errors.js'
 import type { ResolvedMode } from '../output-mode.js'
+import { injectionTokens, PluginCreator } from '../plugins/index.js'
+import { PluginLoader } from '../plugins/plugin-loader.js'
 import { BroadcastReporter } from '../reporting/broadcast-reporter.js'
 import type { RunEventSink } from '../run-event.js'
-import { UnexpectedExitHandler } from '../utils/exit-handler.js'
-import { TemporaryDirectory } from '../utils/temporary-directory.js'
-import { Timer } from '../utils/timer.js'
+import { TemporaryDirectory } from '../sandbox/temporary-directory.js'
+import { Timer } from '../timer.js'
+import { UnexpectedExitHandler } from '../unexpected-exit-handler.js'
 
-import { FileSystem, ProjectReader } from '../fs/index.js'
+import { FileSystem, ProjectReader } from '../project/index.js'
 
 import { Reporter } from '@stryker-mutator/api/report'
 import { LoggingBackend, LoggingServerAddress } from '../logging/index.js'
 import { MutantInstrumenterContext } from './index.js'
 
 export interface PrepareExecutorContext extends BaseContext {
-  [coreTokens.loggingServerAddress]: LoggingServerAddress
-  [coreTokens.reporterOverride]?: Reporter
-  [coreTokens.reporterPluginModules]: string[]
-  [coreTokens.runEventSink]: RunEventSink
-  [coreTokens.runId]: string
-  [coreTokens.resolvedMode]: ResolvedMode
-  [coreTokens.progressEnabled]: boolean
-  [coreTokens.clearTextEnabled]: boolean
-  [coreTokens.runStartedAt]: number
+  [injectionTokens.loggingServerAddress]: LoggingServerAddress
+  [injectionTokens.reporterOverride]?: Reporter
+  [injectionTokens.reporterPluginModules]: string[]
+  [injectionTokens.runEventSink]: RunEventSink
+  [injectionTokens.runId]: string
+  [injectionTokens.resolvedMode]: ResolvedMode
+  [injectionTokens.progressEnabled]: boolean
+  [injectionTokens.clearTextEnabled]: boolean
+  [injectionTokens.runStartedAt]: number
 }
 
 export interface PrepareExecutorArgs {
@@ -43,8 +43,8 @@ export interface PrepareExecutorArgs {
 export class PrepareExecutor {
   public static readonly inject = tokens(
     commonTokens.injector,
-    coreTokens.loggingSink,
-    coreTokens.reporterPluginModules,
+    injectionTokens.loggingSink,
+    injectionTokens.reporterPluginModules,
   )
   constructor(
     private readonly injector: Injector<PrepareExecutorContext>,
@@ -64,8 +64,8 @@ export class PrepareExecutor {
 
     // Read the config file
     const configReaderInjector = this.injector
-      .provideValue(coreTokens.validationSchema, forkCoreSchema)
-      .provideClass(coreTokens.optionsValidator, OptionsValidator)
+      .provideValue(injectionTokens.validationSchema, forkCoreSchema)
+      .provideClass(injectionTokens.optionsValidator, OptionsValidator)
     const configReader = configReaderInjector.injectClass(ConfigReader)
     const options: StrykerOptions = await configReader.readConfig(cliOptions)
 
@@ -85,7 +85,7 @@ export class PrepareExecutor {
       loadedPlugins.schemaContributions,
     )
     const optionsValidatorInjector = configReaderInjector.provideValue(
-      coreTokens.validationSchema,
+      injectionTokens.validationSchema,
       metaSchema,
     )
     const validator: OptionsValidator = optionsValidatorInjector.injectClass(OptionsValidator)
@@ -100,9 +100,9 @@ export class PrepareExecutor {
     // Resolve input files
     const projectFileReaderInjector = optionsValidatorInjector
       .provideValue(commonTokens.options, options)
-      .provideClass(coreTokens.temporaryDirectory, TemporaryDirectory)
-      .provideClass(coreTokens.fs, FileSystem)
-      .provideValue(coreTokens.pluginsByKind, loadedPlugins.pluginsByKind)
+      .provideClass(injectionTokens.temporaryDirectory, TemporaryDirectory)
+      .provideClass(injectionTokens.fs, FileSystem)
+      .provideValue(injectionTokens.pluginsByKind, loadedPlugins.pluginsByKind)
     const project = await projectFileReaderInjector
       .injectClass(ProjectReader)
       .read(targetMutatePatterns)
@@ -112,20 +112,20 @@ export class PrepareExecutor {
     } else {
       // Done preparing, finish up and return
       await projectFileReaderInjector
-        .resolve(coreTokens.temporaryDirectory)
+        .resolve(injectionTokens.temporaryDirectory)
         .initialize()
       return projectFileReaderInjector
-        .provideValue(coreTokens.project, project)
+        .provideValue(injectionTokens.project, project)
         .provideValue(commonTokens.fileDescriptions, project.fileDescriptions)
-        .provideClass(coreTokens.pluginCreator, PluginCreator)
-        .provideClass(coreTokens.reporter, BroadcastReporter)
-        .provideValue(coreTokens.timer, timer)
-        .provideValue(coreTokens.project, project)
-        .provideValue(coreTokens.execa, execaCommand)
-        .provideValue(coreTokens.process, process)
-        .provideClass(coreTokens.unexpectedExitRegistry, UnexpectedExitHandler)
+        .provideClass(injectionTokens.pluginCreator, PluginCreator)
+        .provideClass(injectionTokens.reporter, BroadcastReporter)
+        .provideValue(injectionTokens.timer, timer)
+        .provideValue(injectionTokens.project, project)
+        .provideValue(injectionTokens.execa, execaCommand)
+        .provideValue(injectionTokens.process, process)
+        .provideClass(injectionTokens.unexpectedExitRegistry, UnexpectedExitHandler)
         .provideValue(
-          coreTokens.pluginModulePaths,
+          injectionTokens.pluginModulePaths,
           loadedPlugins.pluginModulePaths,
         )
     }

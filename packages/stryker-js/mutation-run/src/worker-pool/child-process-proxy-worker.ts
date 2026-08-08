@@ -5,9 +5,8 @@ import { commonTokens, Injector, PluginContext } from '@stryker-mutator/api/plug
 import { errorToString } from '@stryker-mutator/util'
 import { createInjector } from 'typed-inject'
 
-import { coreTokens, PluginCreator } from '../di/index.js'
-import { PluginLoader } from '../di/plugin-loader.js'
-import { deserialize, serialize } from '../utils/string-utils.js'
+import { injectionTokens, PluginCreator } from '../plugins/index.js'
+import { PluginLoader } from '../plugins/plugin-loader.js'
 
 import { Logger } from '@stryker-mutator/api/logging'
 import { minPriority } from '../logging/priority.js'
@@ -20,9 +19,9 @@ import {
   WorkerMessage,
   WorkerMessageKind,
 } from './message-protocol.js'
-
+import { deserialize, serialize } from './string-utils.js'
 export interface ChildProcessContext extends PluginContext {
-  [coreTokens.pluginCreator]: PluginCreator
+  [injectionTokens.pluginCreator]: PluginCreator
 }
 
 export class ChildProcessProxyWorker {
@@ -92,8 +91,8 @@ export class ChildProcessProxyWorker {
         message.pluginModulePaths,
       )
       const injector: Injector<ChildProcessContext> = pluginInjector
-        .provideValue(coreTokens.pluginsByKind, pluginsByKind)
-        .provideClass(coreTokens.pluginCreator, PluginCreator)
+        .provideValue(injectionTokens.pluginsByKind, pluginsByKind)
+        .provideClass(injectionTokens.pluginCreator, PluginCreator)
 
       const childModule = await import(message.modulePath)
       const RealSubjectClass = childModule[message.namedExport]

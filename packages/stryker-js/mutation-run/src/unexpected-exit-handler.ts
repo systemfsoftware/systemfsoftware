@@ -1,6 +1,6 @@
 import { Disposable } from '@stryker-mutator/api/plugin'
 
-import { coreTokens } from '../di/index.js'
+import { injectionTokens } from './plugins/index.js'
 
 export type ExitHandler = () => void
 
@@ -14,7 +14,7 @@ export type ExitHandler = () => void
 export class UnexpectedExitHandler implements Disposable {
   private readonly unexpectedExitHandlers: ExitHandler[] = []
 
-  public static readonly inject = [coreTokens.process] as const
+  public static readonly inject = [injectionTokens.process] as const
   constructor(
     private readonly process: Pick<NodeJS.Process, 'off' | 'on'>,
   ) {

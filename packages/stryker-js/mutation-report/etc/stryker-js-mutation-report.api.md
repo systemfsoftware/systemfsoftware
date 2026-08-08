@@ -5,8 +5,8 @@
 ```ts
 
 import { ClassPlugin } from '@stryker-mutator/api/plugin';
-import { coreTokens } from '@systemfsoftware/stryker-js-mutation-run/di';
 import { DryRunCompletedEvent } from '@stryker-mutator/api/report';
+import { injectionTokens } from '@systemfsoftware/stryker-js-mutation-run/plugins';
 import { Injector } from 'typed-inject';
 import { Logger } from '@stryker-mutator/api/logging';
 import { MutantResult } from '@stryker-mutator/api/core';
@@ -63,7 +63,7 @@ export class ProgressBarReporter extends ProgressKeeper {
 // @public
 export class ProgressStreamReporter implements Reporter {
     constructor(injector: Injector<PluginContext & {
-        [coreTokens.runEventSink]: RunEventSink;
+        [injectionTokens.runEventSink]: RunEventSink;
     }>);
     // (undocumented)
     static readonly inject: ["$injector"];

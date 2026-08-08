@@ -3,11 +3,11 @@ import { LoggerFactoryMethod } from '@stryker-mutator/api/logging'
 import { commonTokens, tokens } from '@stryker-mutator/api/plugin'
 import { TestRunner } from '@stryker-mutator/api/test-runner'
 
-import { coreTokens } from '../di/index.js'
 import { LoggingServerAddress } from '../logging/index.js'
+import { injectionTokens } from '../plugins/index.js'
 import { Sandbox } from '../sandbox/sandbox.js'
 
-import { IdGenerator } from '../child-proxy/id-generator.js'
+import { IdGenerator } from '../worker-pool/id-generator.js'
 
 import { ChildProcessTestRunnerProxy } from './child-process-test-runner-proxy.js'
 import { CommandTestRunner } from './command-test-runner.js'
@@ -19,11 +19,11 @@ import { TimeoutDecorator } from './timeout-decorator.js'
 createTestRunnerFactory.inject = tokens(
   commonTokens.options,
   commonTokens.fileDescriptions,
-  coreTokens.sandbox,
-  coreTokens.loggingServerAddress,
+  injectionTokens.sandbox,
+  injectionTokens.loggingServerAddress,
   commonTokens.getLogger,
-  coreTokens.pluginModulePaths,
-  coreTokens.workerIdGenerator,
+  injectionTokens.pluginModulePaths,
+  injectionTokens.workerIdGenerator,
 )
 export function createTestRunnerFactory(
   options: StrykerOptions,

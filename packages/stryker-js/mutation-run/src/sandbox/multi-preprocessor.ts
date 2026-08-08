@@ -1,4 +1,4 @@
-import { Project } from '../fs/project.js'
+import { Project } from '../project/project.js'
 
 import { FilePreprocessor } from './file-preprocessor.js'
 

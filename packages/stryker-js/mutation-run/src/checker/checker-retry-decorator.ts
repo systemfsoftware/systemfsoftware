@@ -1,9 +1,9 @@
 import { Mutant } from '@stryker-mutator/api/core'
 import { Logger } from '@stryker-mutator/api/logging'
 
-import { ChildProcessCrashedError } from '../child-proxy/child-process-crashed-error.js'
-import { OutOfMemoryError } from '../child-proxy/out-of-memory-error.js'
-import { ResourceDecorator } from '../concurrent/index.js'
+import { ChildProcessCrashedError } from '../worker-pool/child-process-crashed-error.js'
+import { ResourceDecorator } from '../worker-pool/index.js'
+import { OutOfMemoryError } from '../worker-pool/out-of-memory-error.js'
 
 import { CheckerResource } from './checker-resource.js'
 

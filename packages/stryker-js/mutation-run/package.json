@@ -20,14 +20,14 @@
       "./config/base": "./dist/config/base.mjs",
       "./config/config-resolution": "./dist/config/config-resolution.mjs",
       "./config/fork-schema": "./dist/config/fork-schema.mjs",
-      "./di": "./dist/di.mjs",
       "./errors": "./dist/errors.mjs",
+      "./exit-classification": "./dist/exit-classification.mjs",
       "./mutants/incremental-differ": "./dist/mutants/incremental-differ.mjs",
       "./output-mode": "./dist/output-mode.mjs",
+      "./plugins": "./dist/plugins.mjs",
       "./run-event": "./dist/run-event.mjs",
       "./stryker-package": "./dist/stryker-package.mjs",
-      "./utils/exit-classification": "./dist/utils/exit-classification.mjs",
-      "./utils/timer": "./dist/utils/timer.mjs",
+      "./timer": "./dist/timer.mjs",
       "./verdict-envelope": "./dist/verdict-envelope.mjs",
       "./package.json": "./package.json"
     }
@@ -42,7 +42,7 @@
       "default": "./dist/checker-worker.mjs"
     },
     "./child-process-proxy-worker": {
-      "@systemfsoftware/source": "./src/child-proxy/child-process-proxy-worker.ts",
+      "@systemfsoftware/source": "./src/worker-pool/child-process-proxy-worker.ts",
       "default": "./dist/child-process-proxy-worker.mjs"
     },
     "./child-process-test-runner-worker": {
@@ -61,13 +61,13 @@
       "@systemfsoftware/source": "./src/config/fork-schema.ts",
       "default": "./dist/config/fork-schema.mjs"
     },
-    "./di": {
-      "@systemfsoftware/source": "./src/di/index.ts",
-      "default": "./dist/di.mjs"
-    },
     "./errors": {
       "@systemfsoftware/source": "./src/errors.ts",
       "default": "./dist/errors.mjs"
+    },
+    "./exit-classification": {
+      "@systemfsoftware/source": "./src/exit-classification.ts",
+      "default": "./dist/exit-classification.mjs"
     },
     "./mutants/incremental-differ": {
       "@systemfsoftware/source": "./src/mutants/incremental-differ.ts",
@@ -77,6 +77,10 @@
       "@systemfsoftware/source": "./src/output-mode.ts",
       "default": "./dist/output-mode.mjs"
     },
+    "./plugins": {
+      "@systemfsoftware/source": "./src/plugins/index.ts",
+      "default": "./dist/plugins.mjs"
+    },
     "./run-event": {
       "@systemfsoftware/source": "./src/run-event.ts",
       "default": "./dist/run-event.mjs"
@@ -85,13 +89,9 @@
       "@systemfsoftware/source": "./src/stryker-package.ts",
       "default": "./dist/stryker-package.mjs"
     },
-    "./utils/exit-classification": {
-      "@systemfsoftware/source": "./src/utils/exit-classification.ts",
-      "default": "./dist/utils/exit-classification.mjs"
-    },
-    "./utils/timer": {
-      "@systemfsoftware/source": "./src/utils/timer.ts",
-      "default": "./dist/utils/timer.mjs"
+    "./timer": {
+      "@systemfsoftware/source": "./src/timer.ts",
+      "default": "./dist/timer.mjs"
     },
     "./verdict-envelope": {
       "@systemfsoftware/source": "./src/verdict-envelope.ts",

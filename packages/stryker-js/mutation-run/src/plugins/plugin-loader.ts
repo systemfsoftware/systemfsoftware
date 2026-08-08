@@ -6,8 +6,8 @@ import { Logger } from '@stryker-mutator/api/logging'
 import { commonTokens, Plugin, PluginKind, tokens } from '@stryker-mutator/api/plugin'
 import { notEmpty, propertyPath } from '@stryker-mutator/util'
 
+import { importModule } from '../config/module-loader.js'
 import { defaultOptions } from '../config/options-validator.js'
-import { fileUtils } from '../utils/file-utils.js'
 
 const IGNORED_PACKAGES = ['core', 'api', 'util', 'instrumenter']
 
@@ -162,7 +162,7 @@ export class PluginLoader {
   > {
     this.log.debug('Loading plugin %s', descriptor)
     try {
-      const module = await fileUtils.importModule(descriptor)
+      const module = await importModule(descriptor)
       const plugins = isPluginModule(module)
         ? module.strykerPlugins
         : undefined

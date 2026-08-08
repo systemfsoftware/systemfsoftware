@@ -7,6 +7,6 @@
  * job because it also exports the reporter classes, which do not belong in the
  * published surface the loader reads — so the enumerated entry is this file,
  * not the barrel (the plan's U7 ruling, same shape as the engine's
- * `utils/exit-classification.ts`).
+ * `exit-classification.ts`).
  */
 export { strykerPlugins } from './index.js'

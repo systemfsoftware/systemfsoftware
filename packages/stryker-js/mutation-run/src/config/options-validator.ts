@@ -9,13 +9,14 @@ import ajvModule, { ValidateFunction } from 'ajv'
 import type { JSONSchema7 } from 'json-schema'
 import { Minimatch } from 'minimatch'
 
-import { coreTokens } from '../di/index.js'
 import { ConfigError } from '../errors.js'
-import { IGNORE_PATTERN_CHARACTER, MUTATION_RANGE_REGEX } from '../fs/index.js'
+import { injectionTokens } from '../plugins/index.js'
+import { IGNORE_PATTERN_CHARACTER, MUTATION_RANGE_REGEX } from '../project/index.js'
 import { CommandTestRunner } from '../test-runner/command-test-runner.js'
-import { objectUtils, optionsPath } from '../utils/index.js'
 
 import { forkCoreSchema } from './fork-schema.js'
+import { isWarningEnabled } from './is-warning-enabled.js'
+import { optionsPath } from './options-path.js'
 import { REMOVED_OPTIONS } from './removed-surface.js'
 import { describeErrors } from './validation-errors.js'
 
@@ -34,7 +35,7 @@ export class OptionsValidator {
   private readonly validateFn: ValidateFunction
 
   public static readonly inject = tokens(
-    coreTokens.validationSchema,
+    injectionTokens.validationSchema,
     commonTokens.logger,
   )
 
@@ -293,7 +294,7 @@ export class OptionsValidator {
   private markExcessOptions(options: StrykerOptions) {
     const OPTIONS_ADDED_BY_STRYKER = ['set', 'configFile', '$schema']
 
-    if (objectUtils.isWarningEnabled('unknownOptions', options.warnings)) {
+    if (isWarningEnabled('unknownOptions', options.warnings)) {
       const schemaKeys = Object.keys(this.schema.properties!)
       const excessPropertyNames = Object.keys(options)
         .filter((key) => !key.endsWith('_comment'))
@@ -321,7 +322,7 @@ export class OptionsValidator {
 
   private markUnserializableOptions(options: StrykerOptions) {
     if (
-      objectUtils.isWarningEnabled('unserializableOptions', options.warnings)
+      isWarningEnabled('unserializableOptions', options.warnings)
     ) {
       const unserializables = findUnserializables(options)
       if (unserializables) {

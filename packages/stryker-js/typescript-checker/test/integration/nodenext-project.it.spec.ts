@@ -7,7 +7,7 @@ import type { Location, Mutant, StrykerOptions } from '@stryker-mutator/api/core
 import type { Logger } from '@stryker-mutator/api/logging'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { HybridFileSystem } from '../../src/fs/hybrid-file-system.js'
+import { HybridFileSystem } from '../../src/project/hybrid-file-system.js'
 import { TypescriptChecker } from '../../src/typescript-checker.js'
 import { TypescriptCompiler } from '../../src/typescript-compiler.js'
 

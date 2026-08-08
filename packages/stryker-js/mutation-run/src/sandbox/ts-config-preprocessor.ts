@@ -5,7 +5,7 @@ import { Logger } from '@stryker-mutator/api/logging'
 import { commonTokens, tokens } from '@stryker-mutator/api/plugin'
 import { Either } from 'effect'
 
-import { Project } from '../fs/project.js'
+import { Project } from '../project/project.js'
 
 import { FilePreprocessor } from './file-preprocessor.js'
 import { parseTsConfig } from './parse-config-helper.js'

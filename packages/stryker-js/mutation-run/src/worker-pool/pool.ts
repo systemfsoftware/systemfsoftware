@@ -16,7 +16,7 @@ import {
 import { Disposable, tokens } from 'typed-inject'
 
 import { CheckerFacade } from '../checker/index.js'
-import { coreTokens } from '../di/index.js'
+import { injectionTokens } from '../plugins/index.js'
 
 const MAX_CONCURRENT_INIT = 2
 
@@ -30,8 +30,8 @@ export interface Resource extends Partial<Disposable> {
 }
 
 createTestRunnerPool.inject = tokens(
-  coreTokens.testRunnerFactory,
-  coreTokens.testRunnerConcurrencyTokens,
+  injectionTokens.testRunnerFactory,
+  injectionTokens.testRunnerConcurrencyTokens,
 )
 export function createTestRunnerPool(
   factory: () => TestRunnerResource,
@@ -41,8 +41,8 @@ export function createTestRunnerPool(
 }
 
 createCheckerPool.inject = tokens(
-  coreTokens.checkerFactory,
-  coreTokens.checkerConcurrencyTokens,
+  injectionTokens.checkerFactory,
+  injectionTokens.checkerConcurrencyTokens,
 )
 export function createCheckerPool(
   factory: () => CheckerFacade,

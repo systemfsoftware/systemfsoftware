@@ -15,11 +15,11 @@ import {
 import { InjectableClass, InjectableFunction } from 'typed-inject'
 
 import { ConfigError } from '../errors.js'
-import { coreTokens } from './index.js'
+import { injectionTokens } from './index.js'
 
 export class PluginCreator {
   public static readonly inject = tokens(
-    coreTokens.pluginsByKind,
+    injectionTokens.pluginsByKind,
     commonTokens.injector,
   )
   constructor(

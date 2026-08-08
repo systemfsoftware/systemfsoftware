@@ -5,18 +5,18 @@ import { DryRunCompletedEvent, MutationTestingPlanReadyEvent, Reporter } from '@
 import { MutationTestMetricsResult } from 'mutation-testing-metrics'
 import { tokens } from 'typed-inject'
 
-import { coreTokens, PluginCreator } from '../di/index.js'
+import { injectionTokens, PluginCreator } from '../plugins/index.js'
 
 import { StrictReporter } from './strict-reporter.js'
 
 export class BroadcastReporter implements StrictReporter {
   public static readonly inject = tokens(
     commonTokens.options,
-    coreTokens.pluginCreator,
+    injectionTokens.pluginCreator,
     commonTokens.logger,
-    coreTokens.reporterOverride,
-    coreTokens.progressEnabled,
-    coreTokens.clearTextEnabled,
+    injectionTokens.reporterOverride,
+    injectionTokens.progressEnabled,
+    injectionTokens.clearTextEnabled,
   )
 
   public readonly reporters: Record<string, Reporter>

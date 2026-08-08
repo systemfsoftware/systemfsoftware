@@ -14,12 +14,12 @@ import { commonTokens, tokens } from '@stryker-mutator/api/plugin'
 import { TestResult } from '@stryker-mutator/api/test-runner'
 import { I, notEmpty, split } from '@stryker-mutator/util'
 
-import { coreTokens } from '../di/index.js'
-import { Project } from '../fs/project.js'
+import { isWarningEnabled } from '../config/is-warning-enabled.js'
+import { optionsPath } from '../config/options-path.js'
+import { injectionTokens } from '../plugins/index.js'
+import { Project } from '../project/project.js'
 import { StrictReporter } from '../reporting/strict-reporter.js'
 import { Sandbox } from '../sandbox/index.js'
-import { optionsPath } from '../utils/index.js'
-import { objectUtils } from '../utils/object-utils.js'
 
 import { IncrementalDiffer, toRelativeNormalizedFileName } from './incremental-differ.js'
 import { TestCoverage } from './test-coverage.js'
@@ -38,12 +38,12 @@ const HIT_LIMIT_FACTOR = 100
  */
 export class MutantTestPlanner {
   public static readonly inject = tokens(
-    coreTokens.testCoverage,
-    coreTokens.incrementalDiffer,
-    coreTokens.reporter,
-    coreTokens.sandbox,
-    coreTokens.project,
-    coreTokens.timeOverheadMS,
+    injectionTokens.testCoverage,
+    injectionTokens.incrementalDiffer,
+    injectionTokens.reporter,
+    injectionTokens.sandbox,
+    injectionTokens.project,
+    injectionTokens.timeOverheadMS,
     commonTokens.options,
     commonTokens.logger,
   )
@@ -214,7 +214,7 @@ export class MutantTestPlanner {
   private warnAboutSlow(mutantPlans: readonly MutantTestPlan[]) {
     if (
       !this.options.ignoreStatic &&
-      objectUtils.isWarningEnabled('slow', this.options.warnings)
+      isWarningEnabled('slow', this.options.warnings)
     ) {
       // Only warn when the estimated time to run all static mutants exceeds 40%
       // ... and when the average performance impact of a static mutant is estimated to be twice that (or more) of a non-static mutant

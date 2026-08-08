@@ -7,16 +7,16 @@ import { ExpirableTask, isErrnoException, StrykerError, Task } from '@stryker-mu
 import { Disposable, InjectableClass, InjectionToken } from 'typed-inject'
 
 import { LoggingServerAddress } from '../logging/index.js'
-import { objectUtils } from '../utils/object-utils.js'
-import { StringBuilder } from '../utils/string-builder.js'
-import { deserialize, padLeft, serialize } from '../utils/string-utils.js'
 
 import { Logger, LoggerFactoryMethod } from '@stryker-mutator/api/logging'
 import { ChildProcessCrashedError } from './child-process-crashed-error.js'
 import { ChildProcessContext } from './child-process-proxy-worker.js'
 import { IdGenerator } from './id-generator.js'
+import { kill } from './kill.js'
 import { InitMessage, ParentMessage, ParentMessageKind, WorkerMessage, WorkerMessageKind } from './message-protocol.js'
 import { OutOfMemoryError } from './out-of-memory-error.js'
+import { StringBuilder } from './string-builder.js'
+import { deserialize, padLeft, serialize } from './string-utils.js'
 
 type Func<TS extends any[], R> = (...args: TS) => R
 
@@ -330,7 +330,7 @@ export class ChildProcessProxy<T> implements Disposable {
         await this.disposeTask.promise
       } finally {
         this.log.debug('Kill %s', this.worker.pid)
-        await objectUtils.kill(this.worker.pid)
+        await kill(this.worker.pid)
       }
     }
   }

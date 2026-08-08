@@ -6,44 +6,44 @@ import { I } from '@stryker-mutator/util'
 import type { execaCommand } from 'execa'
 
 import { createCheckerFactory } from '../checker/index.js'
-import { IdGenerator } from '../child-proxy/id-generator.js'
-import { ConcurrencyTokenProvider, createCheckerPool } from '../concurrent/index.js'
-import { coreTokens, PluginCreator } from '../di/index.js'
-import { FileSystem, Project } from '../fs/index.js'
 import type { ResolvedMode } from '../output-mode.js'
+import { injectionTokens, PluginCreator } from '../plugins/index.js'
+import { FileSystem, Project } from '../project/index.js'
 import type { RunEventSink } from '../run-event.js'
 import { createPreprocessor } from '../sandbox/index.js'
 import { Sandbox } from '../sandbox/sandbox.js'
-import { UnexpectedExitHandler } from '../utils/exit-handler.js'
-import { TemporaryDirectory } from '../utils/temporary-directory.js'
-import { Timer } from '../utils/timer.js'
+import { TemporaryDirectory } from '../sandbox/temporary-directory.js'
+import { Timer } from '../timer.js'
+import { UnexpectedExitHandler } from '../unexpected-exit-handler.js'
+import { IdGenerator } from '../worker-pool/id-generator.js'
+import { ConcurrencyTokenProvider, createCheckerPool } from '../worker-pool/index.js'
 
 import { DryRunContext } from './3-dry-run-executor.js'
 
 export interface MutantInstrumenterContext extends PluginContext {
   [commonTokens.options]: StrykerOptions
-  [coreTokens.project]: Project
-  [coreTokens.reporter]: Required<Reporter>
-  [coreTokens.timer]: I<Timer>
-  [coreTokens.temporaryDirectory]: I<TemporaryDirectory>
-  [coreTokens.execa]: typeof execaCommand
-  [coreTokens.process]: NodeJS.Process
-  [coreTokens.unexpectedExitRegistry]: I<UnexpectedExitHandler>
-  [coreTokens.pluginModulePaths]: readonly string[]
-  [coreTokens.fs]: I<FileSystem>
-  [coreTokens.pluginCreator]: PluginCreator
-  [coreTokens.loggingServerAddress]: { port: number }
-  [coreTokens.runEventSink]: RunEventSink
-  [coreTokens.runId]: string
-  [coreTokens.resolvedMode]: ResolvedMode
+  [injectionTokens.project]: Project
+  [injectionTokens.reporter]: Required<Reporter>
+  [injectionTokens.timer]: I<Timer>
+  [injectionTokens.temporaryDirectory]: I<TemporaryDirectory>
+  [injectionTokens.execa]: typeof execaCommand
+  [injectionTokens.process]: NodeJS.Process
+  [injectionTokens.unexpectedExitRegistry]: I<UnexpectedExitHandler>
+  [injectionTokens.pluginModulePaths]: readonly string[]
+  [injectionTokens.fs]: I<FileSystem>
+  [injectionTokens.pluginCreator]: PluginCreator
+  [injectionTokens.loggingServerAddress]: { port: number }
+  [injectionTokens.runEventSink]: RunEventSink
+  [injectionTokens.runId]: string
+  [injectionTokens.resolvedMode]: ResolvedMode
 }
 
 export class MutantInstrumenterExecutor {
   public static readonly inject = tokens(
     commonTokens.injector,
-    coreTokens.project,
+    injectionTokens.project,
     commonTokens.options,
-    coreTokens.pluginCreator,
+    injectionTokens.pluginCreator,
   )
   constructor(
     private readonly injector: Injector<MutantInstrumenterContext>,
@@ -70,29 +70,29 @@ export class MutantInstrumenterExecutor {
 
     // Initialize the checker pool
     const concurrencyTokenProviderProvider = this.injector.provideClass(
-      coreTokens.concurrencyTokenProvider,
+      injectionTokens.concurrencyTokenProvider,
       ConcurrencyTokenProvider,
     )
     const concurrencyTokenProvider = concurrencyTokenProviderProvider.resolve(
-      coreTokens.concurrencyTokenProvider,
+      injectionTokens.concurrencyTokenProvider,
     )
 
     const checkerPoolProvider = concurrencyTokenProviderProvider
       .provideValue(
-        coreTokens.checkerConcurrencyTokens,
+        injectionTokens.checkerConcurrencyTokens,
         concurrencyTokenProvider.checkerToken$,
       )
-      .provideClass(coreTokens.workerIdGenerator, IdGenerator)
-      .provideFactory(coreTokens.checkerFactory, createCheckerFactory)
-      .provideFactory(coreTokens.checkerPool, createCheckerPool)
-    const checkerPool = checkerPoolProvider.resolve(coreTokens.checkerPool)
+      .provideClass(injectionTokens.workerIdGenerator, IdGenerator)
+      .provideFactory(injectionTokens.checkerFactory, createCheckerFactory)
+      .provideFactory(injectionTokens.checkerPool, createCheckerPool)
+    const checkerPool = checkerPoolProvider.resolve(injectionTokens.checkerPool)
     await checkerPool.init()
 
     // Feed the sandbox
     const dryRunProvider = checkerPoolProvider
-      .provideClass(coreTokens.sandbox, Sandbox)
-      .provideValue(coreTokens.mutants, instrumentResult.mutants)
-    const sandbox = dryRunProvider.resolve(coreTokens.sandbox)
+      .provideClass(injectionTokens.sandbox, Sandbox)
+      .provideValue(injectionTokens.mutants, instrumentResult.mutants)
+    const sandbox = dryRunProvider.resolve(injectionTokens.sandbox)
     await sandbox.init()
     return dryRunProvider
   }

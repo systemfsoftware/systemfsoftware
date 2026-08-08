@@ -7,7 +7,7 @@ import {
   TestRunnerCapabilities,
 } from '@stryker-mutator/api/test-runner'
 
-import { ResourceDecorator } from '../concurrent/index.js'
+import { ResourceDecorator } from '../worker-pool/index.js'
 
 export class TestRunnerDecorator extends ResourceDecorator<TestRunner> {
   public async capabilities(): Promise<TestRunnerCapabilities> {

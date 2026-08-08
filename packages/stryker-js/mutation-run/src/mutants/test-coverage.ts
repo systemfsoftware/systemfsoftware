@@ -4,7 +4,7 @@ import { commonTokens } from '@stryker-mutator/api/plugin'
 import { CompleteDryRunResult, TestResult } from '@stryker-mutator/api/test-runner'
 import { notEmpty } from '@stryker-mutator/util'
 
-import { coreTokens } from '../di/index.js'
+import { injectionTokens } from '../plugins/index.js'
 
 export class TestCoverage {
   readonly #testsByMutantId
@@ -117,6 +117,6 @@ function testCoverageFrom(
   )
 }
 testCoverageFrom.inject = [
-  coreTokens.dryRunResult,
+  injectionTokens.dryRunResult,
   commonTokens.logger,
 ] as const

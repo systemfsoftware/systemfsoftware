@@ -15,21 +15,21 @@ import { bufferTime, concat, EMPTY, from, lastValueFrom, merge, mergeMap, Observ
 import { map, shareReplay, tap, toArray } from 'rxjs/operators'
 
 import { CheckerFacade } from '../checker/index.js'
-import { ConcurrencyTokenProvider, Pool } from '../concurrent/index.js'
-import { coreTokens } from '../di/index.js'
 import { isEarlyResult, MutantTestPlanner } from '../mutants/index.js'
+import { injectionTokens } from '../plugins/index.js'
 import { MutationTestReportHelper } from '../reporting/mutation-test-report-helper.js'
 import { StrictReporter } from '../reporting/strict-reporter.js'
-import { Timer } from '../utils/timer.js'
+import { Timer } from '../timer.js'
+import { ConcurrencyTokenProvider, Pool } from '../worker-pool/index.js'
 
 import { DryRunContext } from './3-dry-run-executor.js'
 
 export interface MutationTestContext extends DryRunContext {
-  [coreTokens.testRunnerPool]: I<Pool<TestRunner>>
-  [coreTokens.timeOverheadMS]: number
-  [coreTokens.mutationTestReportHelper]: MutationTestReportHelper
-  [coreTokens.mutantTestPlanner]: MutantTestPlanner
-  [coreTokens.dryRunResult]: I<CompleteDryRunResult>
+  [injectionTokens.testRunnerPool]: I<Pool<TestRunner>>
+  [injectionTokens.timeOverheadMS]: number
+  [injectionTokens.mutationTestReportHelper]: MutationTestReportHelper
+  [injectionTokens.mutantTestPlanner]: MutantTestPlanner
+  [injectionTokens.dryRunResult]: I<CompleteDryRunResult>
 }
 
 const CHECK_BUFFER_MS = 10_000
@@ -46,17 +46,17 @@ const BUFFER_FOR_SORTING_MS = 0
 
 export class MutationTestExecutor {
   public static inject = tokens(
-    coreTokens.reporter,
-    coreTokens.testRunnerPool,
-    coreTokens.checkerPool,
-    coreTokens.mutants,
-    coreTokens.mutantTestPlanner,
-    coreTokens.mutationTestReportHelper,
+    injectionTokens.reporter,
+    injectionTokens.testRunnerPool,
+    injectionTokens.checkerPool,
+    injectionTokens.mutants,
+    injectionTokens.mutantTestPlanner,
+    injectionTokens.mutationTestReportHelper,
     commonTokens.logger,
     commonTokens.options,
-    coreTokens.timer,
-    coreTokens.concurrencyTokenProvider,
-    coreTokens.dryRunResult,
+    injectionTokens.timer,
+    injectionTokens.concurrencyTokenProvider,
+    injectionTokens.dryRunResult,
   )
 
   constructor(

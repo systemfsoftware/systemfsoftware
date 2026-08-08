@@ -3,7 +3,7 @@ import { commonTokens, PluginContext } from '@stryker-mutator/api/plugin'
 import { MutationTestingPlanReadyEvent, Reporter } from '@stryker-mutator/api/report'
 import { Injector, tokens } from 'typed-inject'
 
-import { coreTokens } from '@systemfsoftware/stryker-js-mutation-run/di'
+import { injectionTokens } from '@systemfsoftware/stryker-js-mutation-run/plugins'
 import type { RunEventSink } from '@systemfsoftware/stryker-js-mutation-run/run-event'
 import { isActionableStatus } from '@systemfsoftware/stryker-js-mutation-run/verdict-envelope'
 
@@ -11,7 +11,7 @@ import { isActionableStatus } from '@systemfsoftware/stryker-js-mutation-run/ver
  * The machine-mode progress events (R17, R19, R20): the reporter seam that
  * turns the plan and the tested-mutant callbacks into `plan` and `mutant`
  * run events. The sink (U4) is resolved from the plugin creator's injector
- * at construction — the same chain core provided `coreTokens.runEventSink`
+ * at construction — the same chain core provided `injectionTokens.runEventSink`
  * on — so an unwired chain throws here rather than pushing into a silent
  * no-op (R2). Everything else — the mode gate, the fd-1 write path, the
  * heartbeat, the terminal line — lives on the sink's host side, not here.
@@ -24,8 +24,8 @@ export class ProgressStreamReporter implements Reporter {
   private total = 0
   private completed = 0
 
-  constructor(injector: Injector<PluginContext & { [coreTokens.runEventSink]: RunEventSink }>) {
-    this.runEventSink = injector.resolve(coreTokens.runEventSink)
+  constructor(injector: Injector<PluginContext & { [injectionTokens.runEventSink]: RunEventSink }>) {
+    this.runEventSink = injector.resolve(injectionTokens.runEventSink)
   }
 
   private readonly runEventSink: RunEventSink

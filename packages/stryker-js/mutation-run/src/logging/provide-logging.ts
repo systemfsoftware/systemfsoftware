@@ -1,7 +1,7 @@
 import { Logger, LoggerFactoryMethod } from '@stryker-mutator/api/logging'
 import { commonTokens, Scope } from '@stryker-mutator/api/plugin'
 import { Injector } from 'typed-inject'
-import { coreTokens } from '../di/index.js'
+import { injectionTokens } from '../plugins/index.js'
 import { LogLevel } from './log-level.js'
 import { LoggerImpl } from './logger-impl.js'
 import { LoggingBackend } from './logging-backend.js'
@@ -12,7 +12,7 @@ import { LoggingSink } from './logging-sink.js'
 function getLoggerFactory(loggingSink: LoggingSink) {
   return (categoryName?: string): Logger => new LoggerImpl(categoryName ?? 'UNKNOWN', loggingSink)
 }
-getLoggerFactory.inject = [coreTokens.loggingSink] as const
+getLoggerFactory.inject = [injectionTokens.loggingSink] as const
 
 function loggerFactory(
   getLogger: LoggerFactoryMethod,
@@ -24,7 +24,7 @@ function loggerFactory(
 loggerFactory.inject = [commonTokens.getLogger, commonTokens.target] as const
 
 export function provideLogging<
-  T extends { [coreTokens.loggingSink]: LoggingSink },
+  T extends { [injectionTokens.loggingSink]: LoggingSink },
 >(injector: Injector<T>) {
   return injector
     .provideFactory(commonTokens.getLogger, getLoggerFactory)
@@ -32,7 +32,7 @@ export function provideLogging<
     .provideClass('loggingServer', LoggingServer)
 }
 provideLogging.inject = [
-  coreTokens.loggingSink,
+  injectionTokens.loggingSink,
   commonTokens.injector,
 ] as const
 
@@ -42,14 +42,14 @@ export async function provideLoggingBackend(
   showColors: boolean,
 ) {
   const out = injector
-    .provideValue(coreTokens.loggerConsoleOut, loggerConsoleOut)
-    .provideValue(coreTokens.loggerShowColors, showColors)
-    .provideClass(coreTokens.loggingSink, LoggingBackend)
-    .provideClass(coreTokens.loggingServer, LoggingServer)
-  const loggingServer = out.resolve(coreTokens.loggingServer)
+    .provideValue(injectionTokens.loggerConsoleOut, loggerConsoleOut)
+    .provideValue(injectionTokens.loggerShowColors, showColors)
+    .provideClass(injectionTokens.loggingSink, LoggingBackend)
+    .provideClass(injectionTokens.loggingServer, LoggingServer)
+  const loggingServer = out.resolve(injectionTokens.loggingServer)
   const loggingServerAddress = await loggingServer.listen()
   return out.provideValue(
-    coreTokens.loggingServerAddress,
+    injectionTokens.loggingServerAddress,
     loggingServerAddress,
   )
 }
@@ -63,9 +63,9 @@ export async function provideLoggingClient(
   activeLogLevel: LogLevel,
 ) {
   const out = injector
-    .provideValue(coreTokens.loggingServerAddress, loggingServerAddress)
-    .provideValue(coreTokens.loggerActiveLevel, activeLogLevel)
-    .provideClass(coreTokens.loggingSink, LoggingClient)
-  await out.resolve(coreTokens.loggingSink).openConnection()
+    .provideValue(injectionTokens.loggingServerAddress, loggingServerAddress)
+    .provideValue(injectionTokens.loggerActiveLevel, activeLogLevel)
+    .provideClass(injectionTokens.loggingSink, LoggingClient)
+  await out.resolve(injectionTokens.loggingSink).openConnection()
   return out
 }

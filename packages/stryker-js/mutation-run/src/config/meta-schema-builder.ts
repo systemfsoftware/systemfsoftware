@@ -2,11 +2,11 @@ import { Logger } from '@stryker-mutator/api/logging'
 import { commonTokens, tokens } from '@stryker-mutator/api/plugin'
 import type { JSONSchema7 } from 'json-schema'
 
-import { coreTokens } from '../di/index.js'
+import { injectionTokens } from '../plugins/index.js'
 
 export class MetaSchemaBuilder {
   public static inject = tokens(
-    coreTokens.validationSchema,
+    injectionTokens.validationSchema,
     commonTokens.logger,
   )
   constructor(

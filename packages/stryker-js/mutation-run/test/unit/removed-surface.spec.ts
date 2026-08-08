@@ -6,8 +6,8 @@ import { describe, expect, it } from 'vitest'
 import { forkCoreSchema } from '../../src/config/fork-schema.js'
 import { createDefaultOptions, OptionsValidator } from '../../src/config/options-validator.js'
 import { REMOVED_OPTIONS } from '../../src/config/removed-surface.js'
-import { PluginCreator } from '../../src/di/plugin-creator.js'
 import { ConfigError } from '../../src/errors.js'
+import { PluginCreator } from '../../src/plugins/plugin-creator.js'
 
 const validator = (): OptionsValidator => new OptionsValidator(forkCoreSchema, noopLogger)
 

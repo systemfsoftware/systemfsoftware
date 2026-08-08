@@ -12,11 +12,11 @@ import {
 } from '@stryker-mutator/api/test-runner'
 import { ExpirableTask } from '@stryker-mutator/util'
 
-import { ChildProcessCrashedError } from '../child-proxy/child-process-crashed-error.js'
-import { ChildProcessProxy } from '../child-proxy/child-process-proxy.js'
 import { LoggingServerAddress } from '../logging/index.js'
+import { ChildProcessCrashedError } from '../worker-pool/child-process-crashed-error.js'
+import { ChildProcessProxy } from '../worker-pool/child-process-proxy.js'
 
-import { IdGenerator } from '../child-proxy/id-generator.js'
+import { IdGenerator } from '../worker-pool/id-generator.js'
 
 import { ChildProcessTestRunnerWorker } from './child-process-test-runner-worker.js'
 

@@ -15,12 +15,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import basePreset from '../../src/config/base-preset.js'
 import { createDefaultOptions } from '../../src/config/options-validator.js'
-import { coreTokens } from '../../src/di/index.js'
-import { PluginCreator } from '../../src/di/plugin-creator.js'
 import type { StrykerHostOptions } from '../../src/index.js'
 import { provideLogging, provideLoggingBackend } from '../../src/logging/index.js'
-import { type MutantInstrumenterContext, PrepareExecutor } from '../../src/process/index.js'
+import { injectionTokens } from '../../src/plugins/index.js'
+import { PluginCreator } from '../../src/plugins/plugin-creator.js'
 import { BroadcastReporter } from '../../src/reporting/index.js'
+import { type MutantInstrumenterContext, PrepareExecutor } from '../../src/run-stages/index.js'
 
 // `wrapUp` is the driven method — it takes no event argument, so the dispatch
 // gate is exercised without fabricating a full MutantResult.
@@ -132,7 +132,7 @@ const fixtureDir = fileURLToPath(
 // The fork's reporter registry, split out of this package into the sibling
 // mutation-report package (U6). Addressed through its source file; vitest
 // transforms the .ts on import. Its transitive imports of this engine's
-// subpaths (`./di`, `./utils/timer`, ...) resolve through the built dist, so
+// subpaths (`./plugins`, `./timer`, ...) resolve through the built dist, so
 // the engine must be built before this spec runs.
 const registrySpecifier = new URL(
   '../../../mutation-report/src/stryker-plugins.ts',
@@ -217,15 +217,15 @@ async function executePreparePhase(
       hostOptions.showColors,
     ),
   )
-    .provideValue(coreTokens.reporterOverride, undefined)
-    .provideValue(coreTokens.runEventSink, hostOptions.runEventSink)
-    .provideValue(coreTokens.runId, hostOptions.runId)
-    .provideValue(coreTokens.resolvedMode, hostOptions.resolvedMode)
-    .provideValue(coreTokens.progressEnabled, hostOptions.progressEnabled)
-    .provideValue(coreTokens.clearTextEnabled, hostOptions.clearTextEnabled)
-    .provideValue(coreTokens.runStartedAt, hostOptions.runStartedAt)
+    .provideValue(injectionTokens.reporterOverride, undefined)
+    .provideValue(injectionTokens.runEventSink, hostOptions.runEventSink)
+    .provideValue(injectionTokens.runId, hostOptions.runId)
+    .provideValue(injectionTokens.resolvedMode, hostOptions.resolvedMode)
+    .provideValue(injectionTokens.progressEnabled, hostOptions.progressEnabled)
+    .provideValue(injectionTokens.clearTextEnabled, hostOptions.clearTextEnabled)
+    .provideValue(injectionTokens.runStartedAt, hostOptions.runStartedAt)
     .provideValue(
-      coreTokens.reporterPluginModules,
+      injectionTokens.reporterPluginModules,
       hostOptions.reporterPluginModules,
     )
   const prepareExecutor = prepareInjector.injectClass(PrepareExecutor)
@@ -296,11 +296,14 @@ describe('the reporter plugin module seam (U4)', () => {
       // context type omits it, so typed-inject's string token falls outside
       // its key set; the assertions below verify the resolved value.
       // @ts-expect-error pluginsByKind is provided at runtime, not declared on MutantInstrumenterContext
-      const pluginsByKind = injector.resolve(coreTokens.pluginsByKind) as Map<PluginKind, Array<Plugin<PluginKind>>>
+      const pluginsByKind = injector.resolve(injectionTokens.pluginsByKind) as Map<
+        PluginKind,
+        Array<Plugin<PluginKind>>
+      >
       expect(pluginsByKind.get(PluginKind.Reporter)).toBeUndefined()
       // The configured clear-text reporter cannot be created: the run's
       // ConfigError, never a crash.
-      expect(() => injector.resolve(coreTokens.reporter)).toThrow(
+      expect(() => injector.resolve(injectionTokens.reporter)).toThrow(
         /no Reporter plugins were loaded/,
       )
     } finally {
@@ -316,7 +319,7 @@ describe('the reporter plugin module seam (U4)', () => {
       runOptions({ reporters: [] }),
     )
     try {
-      const broadcastReporter = injector.resolve(coreTokens.reporter)
+      const broadcastReporter = injector.resolve(injectionTokens.reporter)
       await broadcastReporter.wrapUp()
       expect(stdout.output()).not.toContain('% Mutation score')
     } finally {
@@ -333,7 +336,7 @@ describe('the reporter plugin module seam (U4)', () => {
       runOptions({ reporters: ['clear-text'] }),
     )
     try {
-      const broadcastReporter = injector.resolve(coreTokens.reporter)
+      const broadcastReporter = injector.resolve(injectionTokens.reporter)
       const report = createMinimalReport()
       broadcastReporter.onMutationTestReportReady(
         report,
@@ -377,7 +380,10 @@ describe('the reporter plugin module seam (U4)', () => {
         instrumenterSpecifier,
       ])
       // @ts-expect-error pluginsByKind is provided at runtime, not declared on MutantInstrumenterContext
-      const pluginsByKind = injector.resolve(coreTokens.pluginsByKind) as Map<PluginKind, Array<Plugin<PluginKind>>>
+      const pluginsByKind = injector.resolve(injectionTokens.pluginsByKind) as Map<
+        PluginKind,
+        Array<Plugin<PluginKind>>
+      >
       expect(
         pluginsByKind.get(PluginKind.Reporter)?.map((plugin) => plugin.name),
       ).toEqual(expect.arrayContaining(['clear-text']))

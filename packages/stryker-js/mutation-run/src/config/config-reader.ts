@@ -5,13 +5,13 @@ import { pathToFileURL } from 'url'
 import { PartialStrykerOptions, StrykerOptions } from '@stryker-mutator/api/core'
 import { Logger } from '@stryker-mutator/api/logging'
 import { commonTokens, tokens } from '@stryker-mutator/api/plugin'
-import { deepMerge, I } from '@stryker-mutator/util'
+import { deepMerge, I, isErrnoException } from '@stryker-mutator/util'
 
-import { coreTokens } from '../di/index.js'
 import { ConfigError } from '../errors.js'
-import { fileUtils } from '../utils/file-utils.js'
+import { injectionTokens } from '../plugins/index.js'
 
 import { SUPPORTED_CONFIG_FILE_NAMES } from './config-file-formats.js'
+import { importModule } from './module-loader.js'
 import { OptionsValidator } from './options-validator.js'
 import { resolveExtendsChain } from './resolve-extends.js'
 
@@ -34,10 +34,23 @@ module.exports = {
 
 See https://stryker-mutator.io/docs/stryker-js/config-file for more information.`.trim()
 
+async function exists(fileName: string): Promise<boolean> {
+  try {
+    await fs.promises.access(fileName)
+    return true
+  } catch (err) {
+    if (isErrnoException(err) && err.code === 'ENOENT') {
+      return false
+    } else {
+      throw err
+    }
+  }
+}
+
 export class ConfigReader {
   public static inject = tokens(
     commonTokens.logger,
-    coreTokens.optionsValidator,
+    injectionTokens.optionsValidator,
   )
   constructor(
     private readonly log: Logger,
@@ -84,14 +97,14 @@ export class ConfigReader {
     configFileName: unknown,
   ): Promise<string | undefined> {
     if (typeof configFileName === 'string') {
-      if (await fileUtils.exists(configFileName)) {
+      if (await exists(configFileName)) {
         return configFileName
       } else {
         throw new ConfigReaderError('File does not exist!', configFileName)
       }
     }
     for (const fileName of SUPPORTED_CONFIG_FILE_NAMES) {
-      if (await fileUtils.exists(fileName)) {
+      if (await exists(fileName)) {
         return fileName
       }
     }
@@ -166,7 +179,7 @@ export class ConfigReader {
 
   private async importJSConfigModule(configFile: string): Promise<unknown> {
     try {
-      return await fileUtils.importModule(
+      return await importModule(
         pathToFileURL(path.resolve(configFile)).toString(),
       )
     } catch (err) {

@@ -1,7 +1,7 @@
 import { CheckResult } from '@stryker-mutator/api/check'
 import { Mutant } from '@stryker-mutator/api/core'
 
-import { Resource } from '../concurrent/index.js'
+import { Resource } from '../worker-pool/index.js'
 
 export interface CheckerResource extends Resource {
   check(

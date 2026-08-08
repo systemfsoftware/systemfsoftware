@@ -11,7 +11,7 @@ import type { MutationTestResult } from 'mutation-testing-report-schema/api'
 import { OpenEndLocation } from 'mutation-testing-report-schema'
 
 import { defaultOptions, FileMatcher } from '../config/index.js'
-import { coreTokens } from '../di/index.js'
+import { injectionTokens } from '../plugins/index.js'
 
 import { FileSystem } from './file-system.js'
 import { Project } from './project.js'
@@ -45,7 +45,7 @@ export class ProjectReader {
   private readonly incrementalFile: string
 
   public static inject = tokens(
-    coreTokens.fs,
+    injectionTokens.fs,
     commonTokens.logger,
     commonTokens.options,
   )

@@ -5,7 +5,7 @@ const emojiRe = emojiRegex()
 
 /**
  * The presentation-only string helpers of the clear-text reporter. They are
- * separated from the framing helpers in the engine's `utils/string-utils.ts`
+ * separated from the framing helpers in the engine's `worker-pool/string-utils.ts`
  * (which the child-process proxy and its worker depend on).
  */
 export function plural(items: number): string {

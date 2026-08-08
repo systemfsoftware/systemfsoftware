@@ -3,9 +3,9 @@ import { URL } from 'url'
 import { FileDescriptions, Mutant, StrykerOptions } from '@stryker-mutator/api/core'
 import { Disposable } from 'typed-inject'
 
-import { ChildProcessProxy } from '../child-proxy/child-process-proxy.js'
-import { IdGenerator } from '../child-proxy/id-generator.js'
-import { Resource } from '../concurrent/pool.js'
+import { ChildProcessProxy } from '../worker-pool/child-process-proxy.js'
+import { IdGenerator } from '../worker-pool/id-generator.js'
+import { Resource } from '../worker-pool/pool.js'
 
 import { LoggerFactoryMethod } from '@stryker-mutator/api/logging'
 import { LoggingServerAddress } from '../logging/index.js'

@@ -1,7 +1,7 @@
 import { Disposable } from '@stryker-mutator/api/plugin'
 import net from 'node:net'
 import { promisify } from 'node:util'
-import { coreTokens } from '../di/index.js'
+import { injectionTokens } from '../plugins/index.js'
 import { LogLevel } from './log-level.js'
 import { LoggingEvent, SerializedLoggingEvent } from './logging-event.js'
 import { LoggingSink } from './logging-sink.js'
@@ -13,7 +13,7 @@ export interface LoggingServerAddress {
 export const DELIMITER = '__STRYKER_CORE__'
 
 export class LoggingServer implements Disposable {
-  static readonly inject = [coreTokens.loggingSink] as const
+  static readonly inject = [injectionTokens.loggingSink] as const
   #server
 
   constructor(private readonly loggingSink: LoggingSink) {

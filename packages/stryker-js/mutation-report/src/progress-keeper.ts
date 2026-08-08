@@ -2,7 +2,7 @@ import { MutantResult, MutantRunPlan, MutantTestPlan, PlanKind } from '@stryker-
 import { DryRunCompletedEvent, MutationTestingPlanReadyEvent, Reporter, RunTiming } from '@stryker-mutator/api/report'
 import { TestRunnerCapabilities } from '@stryker-mutator/api/test-runner'
 
-import { Timer } from '@systemfsoftware/stryker-js-mutation-run/utils/timer'
+import { Timer } from '@systemfsoftware/stryker-js-mutation-run/timer'
 
 export abstract class ProgressKeeper implements Reporter {
   private timer!: Timer

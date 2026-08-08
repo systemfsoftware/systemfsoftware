@@ -1,4 +1,4 @@
-import { Project } from '../fs/project.js'
+import { Project } from '../project/project.js'
 
 /**
  * A preprocessor changes files before writing them to the sandbox.

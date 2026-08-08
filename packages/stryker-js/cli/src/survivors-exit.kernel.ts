@@ -1,4 +1,4 @@
-import { ExitClass } from '@systemfsoftware/stryker-js-mutation-run/utils/exit-classification'
+import { ExitClass } from '@systemfsoftware/stryker-js-mutation-run/exit-classification'
 
 /** The exit class a rejected survivors run exits with (R6: exit 2). */
 export const SURVIVORS_REJECT_EXIT_CLASS: ExitClass = ExitClass.ConfigError

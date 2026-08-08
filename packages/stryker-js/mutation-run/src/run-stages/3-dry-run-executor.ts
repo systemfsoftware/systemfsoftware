@@ -18,19 +18,19 @@ import { I, requireResolve } from '@stryker-mutator/util'
 import { lastValueFrom, of } from 'rxjs'
 
 import { CheckerFacade } from '../checker/index.js'
-import { ConcurrencyTokenProvider, createTestRunnerPool, Pool } from '../concurrent/index.js'
 import { FileMatcher } from '../config/index.js'
-import { coreTokens } from '../di/index.js'
 import { ConfigError } from '../errors.js'
 import { IncrementalDiffer, MutantTestPlanner, TestCoverage } from '../mutants/index.js'
+import { injectionTokens } from '../plugins/index.js'
 import { MutationTestReportHelper } from '../reporting/mutation-test-report-helper.js'
 import { StrictReporter } from '../reporting/strict-reporter.js'
 import { Sandbox } from '../sandbox/sandbox.js'
 import { createTestRunnerFactory } from '../test-runner/index.js'
-import { objectUtils } from '../utils/object-utils.js'
-import { Timer } from '../utils/timer.js'
+import { Timer } from '../timer.js'
+import { ConcurrencyTokenProvider, createTestRunnerPool, Pool } from '../worker-pool/index.js'
 
-import { IdGenerator } from '../child-proxy/id-generator.js'
+import { IdGenerator } from '../worker-pool/id-generator.js'
+import { map } from './map.js'
 
 import { MutantInstrumenterContext } from './2-mutant-instrumenter-executor.js'
 import { MutationTestContext } from './4-mutation-test-executor.js'
@@ -38,10 +38,10 @@ import { MutationTestContext } from './4-mutation-test-executor.js'
 const INITIAL_TEST_RUN_MARKER = 'Initial test run'
 
 export interface DryRunContext extends MutantInstrumenterContext {
-  [coreTokens.sandbox]: I<Sandbox>
-  [coreTokens.mutants]: readonly Mutant[]
-  [coreTokens.checkerPool]: I<Pool<I<CheckerFacade>>>
-  [coreTokens.concurrencyTokenProvider]: I<ConcurrencyTokenProvider>
+  [injectionTokens.sandbox]: I<Sandbox>
+  [injectionTokens.mutants]: readonly Mutant[]
+  [injectionTokens.checkerPool]: I<Pool<I<CheckerFacade>>>
+  [injectionTokens.concurrencyTokenProvider]: I<ConcurrencyTokenProvider>
 }
 
 function isFailedTest(testResult: TestResult): testResult is FailedTestResult {
@@ -53,10 +53,10 @@ export class DryRunExecutor {
     commonTokens.injector,
     commonTokens.logger,
     commonTokens.options,
-    coreTokens.timer,
-    coreTokens.concurrencyTokenProvider,
-    coreTokens.sandbox,
-    coreTokens.reporter,
+    injectionTokens.timer,
+    injectionTokens.concurrencyTokenProvider,
+    injectionTokens.sandbox,
+    injectionTokens.reporter,
   )
 
   constructor(
@@ -71,15 +71,15 @@ export class DryRunExecutor {
 
   public async execute(): Promise<Injector<MutationTestContext>> {
     const testRunnerInjector = this.injector
-      .provideClass(coreTokens.workerIdGenerator, IdGenerator)
-      .provideFactory(coreTokens.testRunnerFactory, createTestRunnerFactory)
+      .provideClass(injectionTokens.workerIdGenerator, IdGenerator)
+      .provideFactory(injectionTokens.testRunnerFactory, createTestRunnerFactory)
       .provideValue(
-        coreTokens.testRunnerConcurrencyTokens,
+        injectionTokens.testRunnerConcurrencyTokens,
         this.concurrencyTokenProvider.testRunnerToken$,
       )
-      .provideFactory(coreTokens.testRunnerPool, createTestRunnerPool)
+      .provideFactory(injectionTokens.testRunnerPool, createTestRunnerPool)
     const testRunnerPool = testRunnerInjector.resolve(
-      coreTokens.testRunnerPool,
+      injectionTokens.testRunnerPool,
     )
     const { result, timing } = await lastValueFrom(
       testRunnerPool.schedule(of(0), (testRunner) => this.executeDryRun(testRunner)),
@@ -93,17 +93,17 @@ export class DryRunExecutor {
     }
 
     return testRunnerInjector
-      .provideValue(coreTokens.timeOverheadMS, timing.overhead)
-      .provideValue(coreTokens.dryRunResult, result)
-      .provideValue(coreTokens.requireFromCwd, requireResolve)
-      .provideFactory(coreTokens.testCoverage, TestCoverage.from)
-      .provideClass(coreTokens.incrementalDiffer, IncrementalDiffer)
-      .provideClass(coreTokens.mutantTestPlanner, MutantTestPlanner)
+      .provideValue(injectionTokens.timeOverheadMS, timing.overhead)
+      .provideValue(injectionTokens.dryRunResult, result)
+      .provideValue(injectionTokens.requireFromCwd, requireResolve)
+      .provideFactory(injectionTokens.testCoverage, TestCoverage.from)
+      .provideClass(injectionTokens.incrementalDiffer, IncrementalDiffer)
+      .provideClass(injectionTokens.mutantTestPlanner, MutantTestPlanner)
       .provideClass(
-        coreTokens.mutationTestReportHelper,
+        injectionTokens.mutationTestReportHelper,
         MutationTestReportHelper,
       )
-      .provideClass(coreTokens.workerIdGenerator, IdGenerator)
+      .provideClass(injectionTokens.workerIdGenerator, IdGenerator)
   }
 
   private validateResultCompleted(
@@ -140,8 +140,8 @@ export class DryRunExecutor {
     }
 
     const dryRunTimeout = this.options.dryRunTimeoutMinutes * 1000 * 60
-    const project = this.injector.resolve(coreTokens.project)
-    const dryRunFiles = objectUtils.map(project.filesToMutate, (_, name) => this.sandbox.sandboxFileFor(name))
+    const project = this.injector.resolve(injectionTokens.project)
+    const dryRunFiles = map(project.filesToMutate, (_, name) => this.sandbox.sandboxFileFor(name))
     const testFiles = project.testFiles.length > 0
       ? project.testFiles.map((file) => this.sandbox.sandboxFileFor(file))
       : undefined

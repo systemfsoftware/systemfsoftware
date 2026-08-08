@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { ExitClass, resolveExitCode } from '../../src/utils/object-utils.js'
+import { ExitClass, resolveExitCode } from '../../src/exit-classification.js'
 
 describe('resolveExitCode', () => {
   it.each(

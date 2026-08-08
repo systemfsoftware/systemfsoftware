@@ -2,7 +2,7 @@ import { commonTokens, Injector, PluginContext, tokens } from '@stryker-mutator/
 
 import { disableTypeChecks } from '@stryker-mutator/instrumenter'
 
-import { coreTokens } from '../di/index.js'
+import { injectionTokens } from '../plugins/index.js'
 
 import { DisableTypeChecksPreprocessor } from './disable-type-checks-preprocessor.js'
 import { FilePreprocessor } from './file-preprocessor.js'
@@ -15,7 +15,7 @@ export function createPreprocessor(
 ): FilePreprocessor {
   return new MultiPreprocessor([
     injector
-      .provideValue(coreTokens.disableTypeChecksHelper, disableTypeChecks)
+      .provideValue(injectionTokens.disableTypeChecksHelper, disableTypeChecks)
       .injectClass(DisableTypeChecksPreprocessor),
     injector.injectClass(TSConfigPreprocessor),
   ])

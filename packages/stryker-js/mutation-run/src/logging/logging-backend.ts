@@ -2,7 +2,7 @@ import { PartialStrykerOptions } from '@stryker-mutator/api/core'
 import fs from 'fs'
 import { Disposable } from 'typed-inject'
 import { promisify } from 'util'
-import { coreTokens } from '../di/index.js'
+import { injectionTokens } from '../plugins/index.js'
 import { LogLevel } from './log-level.js'
 import { LoggingEvent } from './logging-event.js'
 import { LoggingSink } from './logging-sink.js'
@@ -19,7 +19,7 @@ export class LoggingBackend implements LoggingSink, Disposable {
   showColors: boolean
   #consoleOut
 
-  static readonly inject = [coreTokens.loggerConsoleOut, coreTokens.loggerShowColors] as const
+  static readonly inject = [injectionTokens.loggerConsoleOut, injectionTokens.loggerShowColors] as const
 
   constructor(consoleOut: NodeJS.WritableStream, showColors: boolean) {
     this.#consoleOut = consoleOut

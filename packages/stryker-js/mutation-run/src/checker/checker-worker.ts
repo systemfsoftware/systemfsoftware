@@ -3,14 +3,14 @@ import { Mutant, StrykerOptions } from '@stryker-mutator/api/core'
 import { commonTokens, PluginKind, tokens } from '@stryker-mutator/api/plugin'
 import { StrykerError } from '@stryker-mutator/util'
 
-import { coreTokens, PluginCreator } from '../di/index.js'
+import { injectionTokens, PluginCreator } from '../plugins/index.js'
 
 import { CheckerResource } from './checker-resource.js'
 
 export class CheckerWorker implements CheckerResource {
   private readonly innerCheckers: Map<string, Checker>
 
-  public static inject = tokens(commonTokens.options, coreTokens.pluginCreator)
+  public static inject = tokens(commonTokens.options, injectionTokens.pluginCreator)
   constructor(options: StrykerOptions, pluginCreator: PluginCreator) {
     this.innerCheckers = new Map(
       options.checkers.map((name) => [

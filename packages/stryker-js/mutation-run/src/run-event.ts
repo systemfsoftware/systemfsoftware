@@ -7,7 +7,7 @@ import type { VerdictEnvelope } from './verdict-envelope.js'
  * What a run emits, as a closed vocabulary (R1, R2, R35).
  *
  * Declaration only. Core pushes these into a sink it receives through
- * `coreTokens.runEventSink`; how they reach a descriptor — NDJSON framing,
+ * `injectionTokens.runEventSink`; how they reach a descriptor — NDJSON framing,
  * ordering, the terminal-once guarantee, the drain — belongs to whoever
  * binds the sink, not here. The `kind` tags are the wire contract and are
  * fixed: a consumer parses on them, so they may be added to but never

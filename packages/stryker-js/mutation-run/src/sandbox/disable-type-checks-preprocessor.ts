@@ -6,11 +6,12 @@ import { commonTokens, tokens } from '@stryker-mutator/api/plugin'
 import type { disableTypeChecks } from '@stryker-mutator/instrumenter'
 
 import { FileMatcher } from '../config/index.js'
-import { coreTokens } from '../di/index.js'
-import { optionsPath } from '../utils/index.js'
-import { objectUtils } from '../utils/object-utils.js'
+import { isWarningEnabled } from '../config/is-warning-enabled.js'
+import { optionsPath } from '../config/options-path.js'
+import { injectionTokens } from '../plugins/index.js'
+import { map } from '../run-stages/map.js'
 
-import { Project } from '../fs/project.js'
+import { Project } from '../project/project.js'
 
 import { FilePreprocessor } from './file-preprocessor.js'
 
@@ -22,7 +23,7 @@ export class DisableTypeChecksPreprocessor implements FilePreprocessor {
   public static readonly inject = tokens(
     commonTokens.logger,
     commonTokens.options,
-    coreTokens.disableTypeChecksHelper,
+    injectionTokens.disableTypeChecksHelper,
   )
   constructor(
     private readonly log: Logger,
@@ -34,7 +35,7 @@ export class DisableTypeChecksPreprocessor implements FilePreprocessor {
     const matcher = new FileMatcher(this.options.disableTypeChecks)
     let warningLogged = false
     await Promise.all(
-      objectUtils.map(project.files, async (file, name) => {
+      map(project.files, async (file, name) => {
         if (matcher.matches(path.resolve(name))) {
           try {
             const { content } = await this.impl(
@@ -44,7 +45,7 @@ export class DisableTypeChecksPreprocessor implements FilePreprocessor {
             file.setContent(content)
           } catch (err) {
             if (
-              objectUtils.isWarningEnabled(
+              isWarningEnabled(
                 'preprocessorErrors',
                 this.options.warnings,
               )

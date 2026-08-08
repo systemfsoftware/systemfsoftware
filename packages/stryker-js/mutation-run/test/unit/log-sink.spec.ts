@@ -5,18 +5,18 @@ import { createInjector } from 'typed-inject'
 import { describe, expect, it, vi } from 'vitest'
 import type { Mock } from 'vitest'
 
-import { coreTokens } from '../../src/di/index.js'
 import { LogLevel } from '../../src/logging/log-level.js'
 import { LoggingBackend } from '../../src/logging/logging-backend.js'
 import { LoggingEvent } from '../../src/logging/logging-event.js'
 import type { ResolvedMode } from '../../src/output-mode.js'
+import { injectionTokens } from '../../src/plugins/index.js'
+import type { RunEventSink, RunPhase } from '../../src/run-event.js'
 import {
   DryRunExecutor,
   MutantInstrumenterExecutor,
   MutationTestExecutor,
   PrepareExecutor,
-} from '../../src/process/index.js'
-import type { RunEventSink, RunPhase } from '../../src/run-event.js'
+} from '../../src/run-stages/index.js'
 import { Stryker } from '../../src/stryker.js'
 
 const machineResolved: ResolvedMode = { mode: 'machine', signal: 'tty', stdoutIsTTY: false }
@@ -56,15 +56,15 @@ function createRunInjector(executorFns: ExecutorFns, sink: RunEventSink) {
     .provideValue(commonTokens.getLogger, () => noopLogger)
     .provideValue(commonTokens.logger, noopLogger)
     .provideValue(commonTokens.options, { cleanTempDir: 'always' })
-    .provideValue(coreTokens.loggingServerAddress, { port: 0 })
-    .provideValue(coreTokens.loggingSink, new LoggingBackend(memoryWritable(), false))
-    .provideValue(coreTokens.runEventSink, sink)
-    .provideValue(coreTokens.runId, 'fake-run-id')
-    .provideValue(coreTokens.resolvedMode, machineResolved)
-    .provideValue(coreTokens.progressEnabled, false)
-    .provideValue(coreTokens.clearTextEnabled, false)
-    .provideValue(coreTokens.runStartedAt, 0)
-    .provideValue(coreTokens.reporterPluginModules, [])
+    .provideValue(injectionTokens.loggingServerAddress, { port: 0 })
+    .provideValue(injectionTokens.loggingSink, new LoggingBackend(memoryWritable(), false))
+    .provideValue(injectionTokens.runEventSink, sink)
+    .provideValue(injectionTokens.runId, 'fake-run-id')
+    .provideValue(injectionTokens.resolvedMode, machineResolved)
+    .provideValue(injectionTokens.progressEnabled, false)
+    .provideValue(injectionTokens.clearTextEnabled, false)
+    .provideValue(injectionTokens.runStartedAt, 0)
+    .provideValue(injectionTokens.reporterPluginModules, [])
   vi.spyOn(injector, 'injectClass').mockImplementation((cls: unknown): unknown => {
     if (cls === PrepareExecutor) {
       return { execute: executorFns.prepare }

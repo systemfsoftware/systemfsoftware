@@ -1,3 +1,4 @@
+import fs from 'fs'
 import path from 'path'
 
 import { StrykerOptions } from '@stryker-mutator/api/core'
@@ -7,13 +8,76 @@ import { I, isErrnoException, normalizeWhitespaces } from '@stryker-mutator/util
 import type { execaCommand } from 'execa'
 import { npmRunPathEnv } from 'npm-run-path'
 
-import { coreTokens } from '../di/index.js'
-import { ProjectFile } from '../fs/index.js'
-import { Project } from '../fs/project.js'
-import { UnexpectedExitHandler } from '../utils/exit-handler.js'
-import { fileUtils } from '../utils/file-utils.js'
-import { objectUtils } from '../utils/index.js'
-import { TemporaryDirectory } from '../utils/temporary-directory.js'
+import { injectionTokens } from '../plugins/index.js'
+import { ProjectFile } from '../project/index.js'
+import { Project } from '../project/project.js'
+import { map } from '../run-stages/map.js'
+import { UnexpectedExitHandler } from '../unexpected-exit-handler.js'
+
+import { TemporaryDirectory } from './temporary-directory.js'
+
+async function findNodeModulesList(
+  basePath: string,
+  tempDirName?: string,
+): Promise<string[]> {
+  const nodeModulesList: string[] = []
+  const dirBfsQueue: string[] = ['.']
+
+  let dir: string | undefined
+  while ((dir = dirBfsQueue.pop())) {
+    if (path.basename(dir) === tempDirName) {
+      continue
+    }
+
+    if (path.basename(dir) === 'node_modules') {
+      nodeModulesList.push(dir)
+      continue
+    }
+
+    const parentDir = dir
+    const filesWithType = await fs.promises.readdir(
+      path.join(basePath, dir),
+      { withFileTypes: true },
+    )
+    const dirs = filesWithType
+      .filter((file) => file.isDirectory())
+      .map((childDir) => path.join(parentDir, childDir.name))
+    dirBfsQueue.push(...dirs)
+  }
+
+  return nodeModulesList
+}
+
+async function symlinkJunction(to: string, from: string): Promise<void> {
+  await fs.promises.mkdir(path.dirname(from), { recursive: true })
+  return fs.promises.symlink(to, from, 'junction')
+}
+
+/**
+ * Recursively walks the from directory and copy the content to the target directory synchronously
+ * @param from The source directory to move from
+ * @param to The target directory to move to
+ */
+function moveDirectoryRecursiveSync(from: string, to: string): void {
+  if (!fs.existsSync(from)) {
+    return
+  }
+  if (!fs.existsSync(to)) {
+    fs.mkdirSync(to)
+  }
+  const files = fs.readdirSync(from)
+  for (const file of files) {
+    const fromFileName = path.join(from, file)
+    const toFileName = path.join(to, file)
+    const stats = fs.lstatSync(fromFileName)
+    if (stats.isFile()) {
+      fs.renameSync(fromFileName, toFileName)
+    } else {
+      moveDirectoryRecursiveSync(fromFileName, toFileName)
+    }
+  }
+  fs.rmdirSync(from)
+}
 
 export class Sandbox implements Disposable {
   private readonly fileMap = new Map<string, string>()
@@ -31,10 +95,10 @@ export class Sandbox implements Disposable {
   public static readonly inject = tokens(
     commonTokens.options,
     commonTokens.logger,
-    coreTokens.temporaryDirectory,
-    coreTokens.project,
-    coreTokens.execa,
-    coreTokens.unexpectedExitRegistry,
+    injectionTokens.temporaryDirectory,
+    injectionTokens.project,
+    injectionTokens.execa,
+    injectionTokens.unexpectedExitRegistry,
   )
 
   /**
@@ -89,7 +153,7 @@ export class Sandbox implements Disposable {
 
   private async fillSandbox(): Promise<void> {
     await Promise.all(
-      objectUtils.map(this.project.files, (file, name) => this.sandboxFile(name, file)),
+      map(this.project.files, (file, name) => this.sandboxFile(name, file)),
     )
   }
 
@@ -114,7 +178,7 @@ export class Sandbox implements Disposable {
     if (this.options.symlinkNodeModules && !this.options.inPlace) {
       // TODO: Change with this.options.basePath when we have it
       const basePath = process.cwd()
-      const nodeModulesList = await fileUtils.findNodeModulesList(
+      const nodeModulesList = await findNodeModulesList(
         basePath,
         this.options.tempDirName,
       )
@@ -124,11 +188,10 @@ export class Sandbox implements Disposable {
           this.log.debug(
             `Create symlink from ${path.resolve(nodeModules)} to ${path.join(this.workingDirectory, nodeModules)}`,
           )
-          await fileUtils
-            .symlinkJunction(
-              path.resolve(nodeModules),
-              path.join(this.workingDirectory, nodeModules),
-            )
+          await symlinkJunction(
+            path.resolve(nodeModules),
+            path.join(this.workingDirectory, nodeModules),
+          )
             .catch((error: unknown) => {
               if (isErrnoException(error) && error.code === 'EEXIST') {
                 this.log.warn(
@@ -185,7 +248,7 @@ export class Sandbox implements Disposable {
           `Resetting your original files from ${path.relative(process.cwd(), this.backupDirectory)}.`,
         )
       }
-      fileUtils.moveDirectoryRecursiveSync(
+      moveDirectoryRecursiveSync(
         this.backupDirectory,
         this.workingDirectory,
       )

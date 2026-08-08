@@ -1,5 +1,5 @@
 /**
- * Published as the `./utils/timer` subpath: the mutation-report package's
+ * Published as the `./timer` subpath: the mutation-report package's
  * progress reporters construct a `Timer` from here (KTD7).
  */
 export class Timer {

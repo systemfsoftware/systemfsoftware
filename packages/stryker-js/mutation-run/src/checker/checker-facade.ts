@@ -1,7 +1,7 @@
 import { CheckResult } from '@stryker-mutator/api/check'
 import { MutantRunPlan } from '@stryker-mutator/api/core'
 
-import { ResourceDecorator } from '../concurrent/index.js'
+import { ResourceDecorator } from '../worker-pool/index.js'
 
 import { CheckerResource } from './checker-resource.js'
 

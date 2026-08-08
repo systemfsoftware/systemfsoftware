@@ -160,7 +160,7 @@ function stdoutSink(): Sink.Sink<void, string, never, StdoutWriteError, never> {
  * zero, and the controls to open, inspect and close the stream.
  */
 export interface RunEventStream {
-  /** The sink core receives through `coreTokens.runEventSink`. */
+  /** The sink core receives through `injectionTokens.runEventSink`. */
   readonly sink: RunEventSink
   /**
    * The id the `stream` header and the `verdict` envelope share, minted when

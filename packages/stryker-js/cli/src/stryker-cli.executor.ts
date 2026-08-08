@@ -24,14 +24,14 @@ import {
 } from '@systemfsoftware/stryker-js-mutation-run/config/config-resolution'
 import { forkCoreSchema } from '@systemfsoftware/stryker-js-mutation-run/config/fork-schema'
 import { ConfigError, retrieveCause } from '@systemfsoftware/stryker-js-mutation-run/errors'
-import type { ResolvedMode } from '@systemfsoftware/stryker-js-mutation-run/output-mode'
-import type { HelpRendered, ManifestRendered } from '@systemfsoftware/stryker-js-mutation-run/run-event'
-import { strykerVersion } from '@systemfsoftware/stryker-js-mutation-run/stryker-package'
 import {
   ExitClass,
   getPendingExitClasses,
   resolveExitCode,
-} from '@systemfsoftware/stryker-js-mutation-run/utils/exit-classification'
+} from '@systemfsoftware/stryker-js-mutation-run/exit-classification'
+import type { ResolvedMode } from '@systemfsoftware/stryker-js-mutation-run/output-mode'
+import type { HelpRendered, ManifestRendered } from '@systemfsoftware/stryker-js-mutation-run/run-event'
+import { strykerVersion } from '@systemfsoftware/stryker-js-mutation-run/stryker-package'
 import { buildVerdictEnvelope } from '@systemfsoftware/stryker-js-mutation-run/verdict-envelope'
 
 import { humanConsoleLayer, machineConsoleLayer, readCapturedConsole } from './output-mode-console.state.js'
