@@ -1,3 +1,4 @@
+import { capabilityNamedDirectory } from './rules/capability-named-directory.js'
 import { cellSuffixRequired } from './rules/cell-suffix-required.js'
 
 const PLUGIN_NAME = '@systemfsoftware/oxlint-plugin-cell-taxonomy'
@@ -14,6 +15,7 @@ export default {
   },
   rules: {
     'cell-suffix-required': cellSuffixRequired,
+    'capability-named-directory': capabilityNamedDirectory,
   },
   configs: {
     recommended: {
