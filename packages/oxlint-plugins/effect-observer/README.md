@@ -78,4 +78,4 @@ A: Expected — oxlint shortens the namespace when printing. Both spellings work
 
 ## License
 
-[MIT](https://github.com/systemfsoftware/systemfsoftware/blob/main/LICENSE)
+[Apache 2.0](https://github.com/systemfsoftware/systemfsoftware/blob/main/LICENSE)

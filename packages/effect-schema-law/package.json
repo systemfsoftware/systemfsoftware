@@ -1,6 +1,6 @@
 {
   "name": "@systemfsoftware/effect-schema-law",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "version": "0.6.1",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {

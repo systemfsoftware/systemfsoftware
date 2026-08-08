@@ -85,4 +85,4 @@ A: A test importing `main.ts` proves the same thing a production import proves: 
 
 ## License
 
-[MIT](https://github.com/systemfsoftware/systemfsoftware/blob/main/LICENSE)
+[Apache 2.0](https://github.com/systemfsoftware/systemfsoftware/blob/main/LICENSE)

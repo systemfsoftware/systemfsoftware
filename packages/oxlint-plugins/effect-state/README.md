@@ -35,4 +35,4 @@ export default defineConfig({
 
 Spec of record: `skill://architect-state` (gates STA1–STA5). STA3 and STA5 are review-gated and out of mechanical reach for this package; STA3 is owned by the importing pure cell, STA5 by `cell-taxonomy`.
 
-[MIT](https://github.com/systemfsoftware/systemfsoftware/blob/main/LICENSE)
+[Apache 2.0](https://github.com/systemfsoftware/systemfsoftware/blob/main/LICENSE)

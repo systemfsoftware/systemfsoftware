@@ -1,6 +1,6 @@
 {
   "name": "@systemfsoftware/omp-claude-compat",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "version": "1.6.2",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "description": "OMP Claude Code compatibility: dispatch .claude/settings.json hooks + inject CLAUDE.md @-references",

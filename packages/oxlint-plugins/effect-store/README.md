@@ -77,4 +77,4 @@ A: Existence checks never read `_tag`, so they pass. Only branches on a domain-t
 **Q: Why is `store-no-domain-branch` stricter than the executor's rule?**
 A: An executor is allowed to dispatch over the decision a workflow _returned_ (translation). A store has no sanctioned `_tag` dispatch at all — STO4b's allowlist covers only null/existence checks.
 
-[MIT](https://github.com/systemfsoftware/systemfsoftware/blob/main/LICENSE)
+[Apache 2.0](https://github.com/systemfsoftware/systemfsoftware/blob/main/LICENSE)

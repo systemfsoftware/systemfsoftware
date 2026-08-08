@@ -1,6 +1,6 @@
 {
   "name": "@systemfsoftware/oxlint-plugin",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "version": "0.4.2",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
