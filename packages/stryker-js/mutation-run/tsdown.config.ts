@@ -13,7 +13,7 @@ export default defineConfig({
     errors: './src/errors.ts',
     'mutants/incremental-differ': './src/mutants/incremental-differ.ts',
     'output-mode': './src/output-mode.ts',
-    'reporters/verdict-envelope': './src/reporters/verdict-envelope.ts',
+    'verdict-envelope': './src/verdict-envelope.ts',
     'run-event': './src/run-event.ts',
     'stryker-package': './src/stryker-package.ts',
     'utils/exit-classification': './src/utils/exit-classification.ts',

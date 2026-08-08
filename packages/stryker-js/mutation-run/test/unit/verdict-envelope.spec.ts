@@ -6,7 +6,7 @@ import {
   generateRunId,
   isActionableStatus,
   VERDICT_ENVELOPE_SCHEMA_VERSION,
-} from '../../src/reporters/verdict-envelope.js'
+} from '../../src/verdict-envelope.js'
 
 const RUN_ID = '01HZJ4QW2TB6N7P8K9M3X5Y7ZA'
 

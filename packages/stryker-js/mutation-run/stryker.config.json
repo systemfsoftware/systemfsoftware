@@ -1,7 +1,7 @@
 {
   "extends": "@systemfsoftware/stryker-js-mutation-run/config/base",
   "mutate": [
-    "src/reporters/test-contribution.ts"
+    "src/test-contribution.ts"
   ],
   "$schema": "./schema/stryker-schema.json",
   "plugins": [

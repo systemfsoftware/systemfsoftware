@@ -11,8 +11,8 @@ import * as Stream from 'effect/Stream'
 import type { EmitOpsPush } from 'effect/StreamEmit'
 
 import type { ModeSignal, OutputMode, ResolvedMode } from '@systemfsoftware/stryker-js-mutation-run/output-mode'
-import { generateRunId } from '@systemfsoftware/stryker-js-mutation-run/reporters/verdict-envelope'
 import type { RunEvent, RunEventSink } from '@systemfsoftware/stryker-js-mutation-run/run-event'
+import { generateRunId } from '@systemfsoftware/stryker-js-mutation-run/verdict-envelope'
 
 import { STREAM_SCHEMA_VERSION, TICK_INTERVAL_MS } from './stream-protocol.kernel.js'
 

@@ -16,7 +16,7 @@ import { I, notEmpty, split } from '@stryker-mutator/util'
 
 import { coreTokens } from '../di/index.js'
 import { Project } from '../fs/project.js'
-import { StrictReporter } from '../reporters/strict-reporter.js'
+import { StrictReporter } from '../reporting/strict-reporter.js'
 import { Sandbox } from '../sandbox/index.js'
 import { optionsPath } from '../utils/index.js'
 import { objectUtils } from '../utils/object-utils.js'

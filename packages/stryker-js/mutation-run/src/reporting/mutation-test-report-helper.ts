@@ -17,8 +17,8 @@ import type { RunEventSink } from '../run-event.js'
 import { strykerVersion } from '../stryker-package.js'
 import { ExitClass, objectUtils, setPendingExitClass } from '../utils/object-utils.js'
 
-import { judgeTestContribution } from './test-contribution.js'
-import { buildVerdictEnvelope } from './verdict-envelope.js'
+import { judgeTestContribution } from '../test-contribution.js'
+import { buildVerdictEnvelope } from '../verdict-envelope.js'
 
 const STRYKER_FRAMEWORK: Readonly<
   Pick<schema.FrameworkInformation, 'branding' | 'name' | 'version'>

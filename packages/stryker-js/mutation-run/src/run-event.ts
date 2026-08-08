@@ -1,7 +1,7 @@
 import type { MutantStatus, schema } from '@stryker-mutator/api/core'
 
 import type { ModeSignal, OutputMode } from './output-mode.js'
-import type { VerdictEnvelope } from './reporters/verdict-envelope.js'
+import type { VerdictEnvelope } from './verdict-envelope.js'
 
 /**
  * What a run emits, as a closed vocabulary (R1, R2, R35).

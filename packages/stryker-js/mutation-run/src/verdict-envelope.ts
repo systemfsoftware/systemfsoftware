@@ -5,7 +5,7 @@ import { normalizeFileName } from '@stryker-mutator/util'
 import { calculateMutationTestMetrics } from 'mutation-testing-metrics'
 import { randomFillSync } from 'node:crypto'
 
-import type { ModeSignal, OutputMode } from '../output-mode.js'
+import type { ModeSignal, OutputMode } from './output-mode.js'
 
 import { judgeTestContribution, type TestContributionVerdict } from './test-contribution.js'
 

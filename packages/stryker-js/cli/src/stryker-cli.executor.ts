@@ -25,7 +25,6 @@ import {
 import { forkCoreSchema } from '@systemfsoftware/stryker-js-mutation-run/config/fork-schema'
 import { ConfigError, retrieveCause } from '@systemfsoftware/stryker-js-mutation-run/errors'
 import type { ResolvedMode } from '@systemfsoftware/stryker-js-mutation-run/output-mode'
-import { buildVerdictEnvelope } from '@systemfsoftware/stryker-js-mutation-run/reporters/verdict-envelope'
 import type { HelpRendered, ManifestRendered } from '@systemfsoftware/stryker-js-mutation-run/run-event'
 import { strykerVersion } from '@systemfsoftware/stryker-js-mutation-run/stryker-package'
 import {
@@ -33,6 +32,7 @@ import {
   getPendingExitClasses,
   resolveExitCode,
 } from '@systemfsoftware/stryker-js-mutation-run/utils/exit-classification'
+import { buildVerdictEnvelope } from '@systemfsoftware/stryker-js-mutation-run/verdict-envelope'
 
 import { humanConsoleLayer, machineConsoleLayer, readCapturedConsole } from './output-mode-console.state.js'
 import type { OutputModeProbe } from './output-mode.adapter.js'

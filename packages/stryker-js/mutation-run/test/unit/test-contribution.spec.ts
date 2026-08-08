@@ -10,7 +10,7 @@ import {
   judgeTestContribution,
   suffixesToRequire,
   toothlessTestFiles,
-} from '../../src/reporters/test-contribution.js'
+} from '../../src/test-contribution.js'
 
 const LOCATION = { start: { line: 1, column: 1 }, end: { line: 1, column: 2 } }
 

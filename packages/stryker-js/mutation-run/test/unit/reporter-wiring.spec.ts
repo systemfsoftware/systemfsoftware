@@ -20,7 +20,7 @@ import { PluginCreator } from '../../src/di/plugin-creator.js'
 import type { StrykerHostOptions } from '../../src/index.js'
 import { provideLogging, provideLoggingBackend } from '../../src/logging/index.js'
 import { type MutantInstrumenterContext, PrepareExecutor } from '../../src/process/index.js'
-import { BroadcastReporter } from '../../src/reporters/broadcast-reporter.js'
+import { BroadcastReporter } from '../../src/reporting/index.js'
 
 // `wrapUp` is the driven method — it takes no event argument, so the dispatch
 // gate is exercised without fabricating a full MutantResult.
