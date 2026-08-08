@@ -6,6 +6,9 @@ export default defineConfig({
   plugins: [tsconfigPaths({ ignoreConfigErrors: true })],
   test: {
     ...sharedConfig.test,
-    include: ['src/**/*.test.ts', '__tests__/**/*.test.ts'],
+    // KTD5: the container lane lives in `__tests__` under its own config
+    // (`test:contract`); the default `test` task stays container-free and
+    // covers the relocated unit specs and the in-source property tests.
+    include: ['src/**/*.test.ts'],
   },
 })

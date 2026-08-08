@@ -11,8 +11,10 @@
  */
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect } from 'effect'
+import semver from 'semver'
 import { expect } from 'vitest'
-import { CLI_BIN, fixtureDir, layerStrykerCli, StrykerCli } from './stryker-cli.adapter.js'
+import { CLI_BIN, fixtureDir, WORKDIR } from './stryker-cli-env.js'
+import { type CliResult, layerStrykerCli, StrykerCli } from './stryker-cli.adapter.js'
 
 interface StreamLine {
   readonly kind: string
@@ -51,6 +53,69 @@ const shIn = (fixture: string, script: string): Effect.Effect<Observed, never, S
     const cli = yield* StrykerCli
     const result = yield* cli.sh(script, { cwd: fixtureDir(fixture) })
     return { ...result, lines: parseStream(result.stdout) }
+  })
+
+interface CoreEntryImport {
+  readonly entry: string
+  readonly specifier: string
+  readonly exitCode: number
+  readonly stdout: string
+  readonly stderr: string
+}
+
+interface CorePurityProbe {
+  readonly nodeVersion: string
+  readonly enginesFloor: string
+  readonly nodeUnsupported: boolean
+  readonly entries: ReadonlyArray<CoreEntryImport>
+  readonly cliVersion: CliResult
+}
+
+const CORE_PACKAGE_MANIFEST = `${WORKDIR}/node_modules/@systemfsoftware/stryker-js-core/package.json`
+
+/**
+ * U9: core's imports used to run `guardMinimalNodeVersion()` at module scope,
+ * so a mere import could write to stderr and throw. The guard moved to the
+ * cli package; core is now side-effect-free. This probe re-asserts the old
+ * red-by-design property as a green one: every entry core declares today must
+ * import silently, under a real per-entry node process (R19, R33).
+ */
+const corePurityProbe = (fixture: string): Effect.Effect<CorePurityProbe, never, StrykerCli> =>
+  Effect.gen(function*() {
+    const cli = yield* StrykerCli
+    const options = { cwd: fixtureDir(fixture) }
+    const nodeVersionResult = yield* cli.sh('node --version', options)
+    const manifestResult = yield* cli.sh(
+      `node -e "process.stdout.write(JSON.stringify(Object.keys(require('${CORE_PACKAGE_MANIFEST}').exports)))"`,
+      options,
+    )
+    const enginesResult = yield* cli.sh(
+      `node -e "process.stdout.write(require('${CORE_PACKAGE_MANIFEST}').engines.node)"`,
+      options,
+    )
+    const entries = (JSON.parse(manifestResult.stdout) as ReadonlyArray<string>).filter(
+      (entry) => entry !== './package.json',
+    )
+    const imports: Array<CoreEntryImport> = []
+    for (const entry of entries) {
+      const specifier = `@systemfsoftware/stryker-js-core${entry.slice(1)}`
+      // The specifier travels in the environment so a future entry's spelling
+      // can never break the shell quoting of the probe command itself.
+      const probe = yield* cli.sh('node --input-type=module -e "await import(process.env.CORE_ENTRY)"', {
+        ...options,
+        env: { CORE_ENTRY: specifier },
+      })
+      imports.push({ entry, specifier, ...probe })
+    }
+    const nodeVersion = nodeVersionResult.stdout.trim()
+    const enginesFloor = enginesResult.stdout.trim()
+    return {
+      nodeVersion,
+      enginesFloor,
+      nodeUnsupported: !semver.satisfies(nodeVersion, enginesFloor),
+      entries: imports,
+      cliVersion: yield* cli.run(['--version'], options),
+    }
   })
 
 const kindsOf = (observed: Observed): ReadonlyArray<string> => observed.lines.map((line) => line.kind)
@@ -576,6 +641,45 @@ Feature('Driving the mutation tester from an agent harness')
         }),
         Then('a score of nothing still clears a threshold that demands nothing')((s) => {
           expect(s.observed.exitCode).toBe(0)
+        }),
+      ),
+    )
+
+    scenario(
+      'Importing any declared part of the core package stays silent while the tool alone refuses unsupported Node versions',
+      Gherkin.Do.pipe(
+        Given('a container that has the packed core and cli packages installed')(
+          'fixture',
+          () => Effect.succeed('minimal-project'),
+        ),
+        When('the lane probes every declared core entry and asks the tool which version it is')(
+          'probe',
+          (s) => corePurityProbe(s.fixture),
+        ),
+        Then('every declared entry is read from the installed manifest rather than a fixed list')((s) => {
+          const declared = s.probe.entries.map((entry) => entry.entry)
+          expect(declared.length).toBeGreaterThan(0)
+          expect(declared).toEqual(
+            expect.arrayContaining(['.', './errors', './run-event', './utils/exit-classification']),
+          )
+          expect(declared).not.toContain('./package.json')
+        }),
+        Then('importing each declared entry exits cleanly and writes nothing to either descriptor')((s) => {
+          for (const entry of s.probe.entries) {
+            expect(entry).toMatchObject({ exitCode: 0, stdout: '', stderr: '' })
+          }
+        }),
+        Then('the tool alone refuses the node versions the core package no longer guards')((s) => {
+          expect(s.probe.nodeVersion).toMatch(/^v\d+\.\d+\.\d+/)
+          expect(s.probe.enginesFloor).not.toBe('')
+          if (s.probe.nodeUnsupported) {
+            expect(s.probe.cliVersion.exitCode).not.toBe(0)
+            expect(s.probe.cliVersion.stdout).toBe('')
+            expect(s.probe.cliVersion.stderr).toContain('Node.js version')
+          } else {
+            expect(s.probe.cliVersion.exitCode).toBe(0)
+            expect(s.probe.cliVersion.stderr).toBe('')
+          }
         }),
       ),
     )

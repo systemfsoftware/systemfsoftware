@@ -16,12 +16,18 @@ declare module 'vitest' {
 const execFileAsync = promisify(execFile)
 
 const NODE_IMAGE = 'node:22-alpine'
-const CORE_PACKAGE = '@systemfsoftware/stryker-js-core'
+// The CLI's workspace dependencies are not on the registry at this version,
+// so each one is packed and installed from a local tarball beside it.
+const WORKSPACE_PACKAGES = [
+  '@systemfsoftware/stryker-js-cli',
+  '@systemfsoftware/stryker-js-core',
+  '@systemfsoftware/effect-cell-types',
+] as const
 const REPO_ROOT = fileURLToPath(new URL('../../../../', import.meta.url))
-const CORE_DIR = fileURLToPath(new URL('../', import.meta.url))
+const CLI_DIR = fileURLToPath(new URL('../', import.meta.url))
 const FIXTURES_DIR = fileURLToPath(new URL('./fixtures', import.meta.url))
 const WORKDIR = '/work'
-const TARBALL_IN_CONTAINER = '/opt/core.tgz'
+const TARBALLS_IN_CONTAINER = '/opt/tarballs'
 
 let container: StartedTestContainer | undefined
 let tarballDir: string | undefined
@@ -32,7 +38,7 @@ let tarballDir: string | undefined
  * Vitest bounds this function separately, and a failure here fails the run.
  */
 export async function setup(project: TestProject): Promise<void> {
-  const distEntry = join(CORE_DIR, 'dist', 'index.mjs')
+  const distEntry = join(CLI_DIR, 'dist', 'index.mjs')
   await access(distEntry).catch(() => {
     throw new Error(`the CLI contract lane needs a built package: ${distEntry} is missing - run \`pnpm build\` first`)
   })
@@ -41,21 +47,31 @@ export async function setup(project: TestProject): Promise<void> {
     throw new Error(
       `the CLI contract lane needs a container runtime, and DOCKER_HOST=${
         process.env['DOCKER_HOST'] ?? '<unset>'
-      } is not reachable: ${String(cause)}`,
+      } is not reachable`,
+      { cause },
     )
   })
 
-  tarballDir = await mkdtemp(join(tmpdir(), 'stryker-contract-'))
-  await execFileAsync(
-    'pnpm',
-    ['--filter', CORE_PACKAGE, 'exec', 'pnpm', 'pack', '--pack-destination', tarballDir],
-    { cwd: REPO_ROOT },
-  )
-  const packed = (await readdir(tarballDir)).find((entry) => entry.endsWith('.tgz'))
-  if (packed === undefined) throw new Error(`pnpm pack wrote no tarball into ${tarballDir}`)
+  const packDir = await mkdtemp(join(tmpdir(), 'stryker-contract-'))
+  tarballDir = packDir
+  for (const workspacePackage of WORKSPACE_PACKAGES) {
+    await execFileAsync(
+      'pnpm',
+      ['--filter', workspacePackage, 'exec', 'pnpm', 'pack', '--pack-destination', packDir],
+      { cwd: REPO_ROOT },
+    )
+  }
+  const packed = (await readdir(packDir)).filter((entry) => entry.endsWith('.tgz'))
+  if (packed.length !== WORKSPACE_PACKAGES.length) {
+    throw new Error(
+      `expected ${WORKSPACE_PACKAGES.length} tarballs in ${packDir}, found ${packed.length}: ${packed.join(', ')}`,
+    )
+  }
 
   container = await new GenericContainer(NODE_IMAGE)
-    .withCopyFilesToContainer([{ source: join(tarballDir, packed), target: TARBALL_IN_CONTAINER }])
+    .withCopyFilesToContainer(
+      packed.map((name) => ({ source: join(packDir, name), target: `${TARBALLS_IN_CONTAINER}/${name}` })),
+    )
     .withCopyDirectoriesToContainer([{ source: FIXTURES_DIR, target: `${WORKDIR}/fixtures` }])
     .withCopyContentToContainer([{
       content: JSON.stringify({ name: 'stryker-contract-workspace', private: true }),
@@ -66,7 +82,14 @@ export async function setup(project: TestProject): Promise<void> {
     .start()
 
   const installed = await container.exec(
-    ['npm', 'install', '--no-audit', '--no-fund', '--loglevel=error', TARBALL_IN_CONTAINER],
+    [
+      'npm',
+      'install',
+      '--no-audit',
+      '--no-fund',
+      '--loglevel=error',
+      ...packed.map((name) => `${TARBALLS_IN_CONTAINER}/${name}`),
+    ],
     { workingDir: WORKDIR },
   )
   if (installed.exitCode !== 0) {

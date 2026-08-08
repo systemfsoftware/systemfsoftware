@@ -18,6 +18,16 @@
       "./child-process-proxy-worker": "./dist/child-process-proxy-worker.mjs",
       "./child-process-test-runner-worker": "./dist/child-process-test-runner-worker.mjs",
       "./config/base": "./dist/config/base.mjs",
+      "./config/config-resolution": "./dist/config/config-resolution.mjs",
+      "./config/fork-schema": "./dist/config/fork-schema.mjs",
+      "./errors": "./dist/errors.mjs",
+      "./mutants/incremental-differ": "./dist/mutants/incremental-differ.mjs",
+      "./output-mode": "./dist/output-mode.mjs",
+      "./reporters/stryker-plugins": "./dist/reporters/stryker-plugins.mjs",
+      "./reporters/verdict-envelope": "./dist/reporters/verdict-envelope.mjs",
+      "./run-event": "./dist/run-event.mjs",
+      "./stryker-package": "./dist/stryker-package.mjs",
+      "./utils/exit-classification": "./dist/utils/exit-classification.mjs",
       "./package.json": "./package.json"
     }
   },
@@ -42,24 +52,60 @@
       "@systemfsoftware/source": "./src/config/base-preset.ts",
       "default": "./dist/config/base.mjs"
     },
+    "./config/config-resolution": {
+      "@systemfsoftware/source": "./src/config/config-resolution.ts",
+      "default": "./dist/config/config-resolution.mjs"
+    },
+    "./config/fork-schema": {
+      "@systemfsoftware/source": "./src/config/fork-schema.ts",
+      "default": "./dist/config/fork-schema.mjs"
+    },
+    "./errors": {
+      "@systemfsoftware/source": "./src/errors.ts",
+      "default": "./dist/errors.mjs"
+    },
+    "./mutants/incremental-differ": {
+      "@systemfsoftware/source": "./src/mutants/incremental-differ.ts",
+      "default": "./dist/mutants/incremental-differ.mjs"
+    },
+    "./output-mode": {
+      "@systemfsoftware/source": "./src/output-mode.ts",
+      "default": "./dist/output-mode.mjs"
+    },
+    "./reporters/stryker-plugins": {
+      "@systemfsoftware/source": "./src/reporters/stryker-plugins.ts",
+      "default": "./dist/reporters/stryker-plugins.mjs"
+    },
+    "./reporters/verdict-envelope": {
+      "@systemfsoftware/source": "./src/reporters/verdict-envelope.ts",
+      "default": "./dist/reporters/verdict-envelope.mjs"
+    },
+    "./run-event": {
+      "@systemfsoftware/source": "./src/run-event.ts",
+      "default": "./dist/run-event.mjs"
+    },
+    "./stryker-package": {
+      "@systemfsoftware/source": "./src/stryker-package.ts",
+      "default": "./dist/stryker-package.mjs"
+    },
+    "./utils/exit-classification": {
+      "@systemfsoftware/source": "./src/utils/exit-classification.ts",
+      "default": "./dist/utils/exit-classification.mjs"
+    },
     "./package.json": "./package.json"
-  },
-  "bin": {
-    "stryker": "./bin/stryker.js"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:contract": "vitest run --config vitest.contract.config.ts",
-    "build": "tsdown",
+    "build": "tsdown && pnpm api:check",
+    "api:check": "api-extractor run",
+    "api:update": "api-extractor run --local",
     "lint": "oxlint",
     "attw": "attw --pack .",
-    "mutation": "node ./bin/stryker.js run",
-    "mutation:full": "node ./bin/stryker.js run --force"
+    "mutation": "stryker run",
+    "mutation:full": "stryker run --force"
   },
   "dependencies": {
-    "@effect/cli": "catalog:",
-    "@effect/platform": "catalog:",
     "@stryker-mutator/api": "catalog:stryker",
     "@stryker-mutator/instrumenter": "catalog:stryker",
     "@stryker-mutator/util": "catalog:stryker",
@@ -87,10 +133,9 @@
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
+    "@microsoft/api-extractor": "catalog:",
     "@std/jsonc": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "workspace:^",
-    "@systemfsoftware/effect-gherkin-spec": "workspace:^",
-    "@systemfsoftware/oxlint-plugin-test-placement": "workspace:^",
     "@systemfsoftware/stryker-js-vitest-runner": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
@@ -102,7 +147,6 @@
     "@types/semver": "7.7.1",
     "effect": "catalog:",
     "glob": "13.0.6",
-    "testcontainers": "catalog:",
     "tsdown": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
@@ -112,6 +156,7 @@
   },
   "license": "Apache-2.0",
   "inlinedDependencies": {
-    "@jsr/std__jsonc": "1.0.2"
+    "@jsr/std__jsonc": "1.0.2",
+    "@types/json-schema": "7.0.15"
   }
 }

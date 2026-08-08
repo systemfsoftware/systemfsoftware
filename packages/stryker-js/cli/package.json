@@ -21,30 +21,40 @@
     "build": "tsdown && pnpm api:check",
     "typecheck": "tsc --noEmit --incremental",
     "test": "vitest run",
-    "test:run": "vitest run",
+    "test:contract": "vitest run --config vitest.contract.config.ts",
     "lint": "oxlint . ${AGENT:+--format=unix --quiet}",
     "api:check": "api-extractor run",
     "api:update": "api-extractor run --local",
-    "attw": "attw --pack ."
+    "attw": "attw --pack .",
+    "mutation": "stryker run",
+    "mutation:full": "stryker run --force"
   },
   "dependencies": {
     "@effect/cli": "catalog:",
     "@effect/platform": "catalog:",
     "@effect/platform-node": "catalog:",
+    "@stryker-mutator/api": "catalog:stryker",
+    "@stryker-mutator/util": "catalog:stryker",
+    "@systemfsoftware/effect-cell-types": "workspace:^",
     "@systemfsoftware/stryker-js-core": "workspace:^",
-    "effect": "catalog:"
+    "effect": "catalog:",
+    "semver": "catalog:stryker"
   },
   "devDependencies": {
     "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "workspace:^",
+    "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/oxlint-plugin-effect-entrypoint": "workspace:^",
     "@systemfsoftware/oxlint-plugin-test-placement": "workspace:^",
+    "@systemfsoftware/stryker-js-vitest-runner": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
+    "@types/semver": "7.7.1",
     "@vitest/coverage-v8": "catalog:",
     "rimraf": "catalog:",
+    "testcontainers": "catalog:",
     "tsdown": "catalog:",
     "vite-tsconfig-paths": "catalog:",
     "vitest": "catalog:"

@@ -2,7 +2,7 @@ import type * as Command from '@effect/cli/Command'
 import { PluginKind } from '@stryker-mutator/api/plugin'
 import { Option } from 'effect'
 
-import { strykerPlugins } from './reporters/index.js'
+import { strykerPlugins } from '@systemfsoftware/stryker-js-core/reporters/stryker-plugins'
 
 // =============================================================================
 // U11 — the `--llms` command manifest (R13)
@@ -105,7 +105,8 @@ function spanToText(span: unknown): string {
   if (!isObject(span)) {
     return ''
   }
-  if (span['_tag'] === 'Concat') {
+  const tag = span['_tag']
+  if (tag === 'Concat') {
     return `${spanToText(span['left'])}${spanToText(span['right'])}`
   }
   const value = span['value']
@@ -116,7 +117,8 @@ function helpDocToText(doc: unknown): string {
   if (!isObject(doc)) {
     return ''
   }
-  switch (doc['_tag']) {
+  const tag = doc['_tag']
+  switch (tag) {
     case 'Empty':
       return ''
     case 'Paragraph':
@@ -234,7 +236,8 @@ function walkOptions(instruction: unknown, ctx: WalkContext, out: LLMSManifestOp
   if (!isObject(instruction)) {
     return
   }
-  switch (instruction['_tag']) {
+  const tag = instruction['_tag']
+  switch (tag) {
     case 'Empty':
       return
     case 'Single':
@@ -287,7 +290,8 @@ function walkArgs(instruction: unknown, hasDefault: boolean, out: LLMSManifestAr
   if (!isObject(instruction)) {
     return
   }
-  switch (instruction['_tag']) {
+  const tag = instruction['_tag']
+  switch (tag) {
     case 'Empty':
       return
     case 'Single':
@@ -323,7 +327,8 @@ function describeCommandNode(node: unknown): LLMSManifestCommand | undefined {
   if (!isObject(node)) {
     return undefined
   }
-  switch (node['_tag']) {
+  const tag = node['_tag']
+  switch (tag) {
     case 'Standard': {
       const options: LLMSManifestOption[] = []
       walkOptions(node['options'], { hasDefault: false, defaultValue: undefined }, options)

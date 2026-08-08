@@ -1,12 +1,7 @@
 import { Context, Effect, Layer } from 'effect'
 import { getContainerRuntimeClient } from 'testcontainers'
-import { inject } from 'vitest'
 
-const WORKDIR = '/work'
-
-export const CLI_BIN = `${WORKDIR}/node_modules/.bin/stryker`
-
-export const fixtureDir = (name: string): string => `${WORKDIR}/fixtures/${name}`
+import { CLI_BIN, strykerContainerId, WORKDIR } from './stryker-cli-env.js'
 
 export interface CliResult {
   readonly exitCode: number
@@ -29,7 +24,7 @@ export const layerStrykerCli: Layer.Layer<StrykerCli> = Layer.effect(
   Effect.map(
     Effect.promise(async () => {
       const client = await getContainerRuntimeClient()
-      return { client, container: client.container.getById(inject('strykerContainerId')) }
+      return { client, container: client.container.getById(strykerContainerId()) }
     }),
     ({ client, container }) => {
       const exec = (command: ReadonlyArray<string>, options?: ExecOptions) =>

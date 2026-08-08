@@ -6,13 +6,13 @@
 
 The `stryker` bin's home. Core (`@systemfsoftware/stryker-js-core`) is the mutation engine; this package owns the terminal-facing half — NDJSON run-event framing on stdout, mode and colour detection, signal handling, drain-before-exit, and the classed exit code — and reaches core through the injected run-event sink. The bin name is `stryker`, unchanged from core's, so consumer script text does not move.
 
-## Skeleton state: the bin's target is not here yet
+## Bin and entry point
 
-`bin/stryker.js` imports `runStrykerCli` from `../dist/index.mjs`, mirroring the core bin it will replace. That symbol does not exist in this package yet — the extraction unit that relocates the CLI as cells lands it, with `src/mod.ts` as the barrel. Until then the bin is not runnable: importing a missing binding fails at link time. Do not stub the export to make it run.
+`bin/stryker.js` imports `runStrykerCli` from `../dist/index.mjs`; the export lives in `src/mod.ts`, the composition root that wires the handler's effect to the executor, output-mode, and run-event-stream layers and interprets it through `NodeRuntime.runMain`. The packed bin is runnable, and the contract lane exercises it end to end — 24/24 scenarios pass in real containers against the packed tarball.
 
-## No mutation config — deliberate
+## Mutation config
 
-There is no `stryker.config.json` here. The Stryker default `mutate` sweep auto-enrolls every source file, and REPO-S5 (root `AGENTS.md`) forbids shell cells in a mutation surface; `scripts/guard-mutate-scope.mjs` fails any config whose `mutate` glob names a forbidden cell. The mutation config arrives with the unit that lands genuine `*.workflow.ts`/`*.schema.ts` content — and only if that trigger fires. Until then the package has no mutation observer, which is correct: nothing here decides anything yet.
+`stryker.config.json` exists and scopes `mutate` to `src/survivors.workflow.ts`, the package's decision cell; the gate runs through the `mutation` and `mutation:full` scripts. REPO-S5 (root `AGENTS.md`) forbids shell cells in a mutation surface, and `scripts/guard-mutate-scope.mjs` fails any config whose `mutate` glob names a forbidden cell — so widen the glob only for a new genuine `*.workflow.ts` cell, never to sweep the whole `src/` tree.
 
 ## Lint enrolment
 
@@ -25,7 +25,9 @@ There is no `stryker.config.json` here. The Stryker default `mutate` sweep auto-
 ## Verification
 
 - Types: `pnpm --filter @systemfsoftware/stryker-js-cli typecheck`
-- Tests: `pnpm --filter @systemfsoftware/stryker-js-cli test:run`
+- Tests: `pnpm --filter @systemfsoftware/stryker-js-cli test` (colocated cell tests under `src/__tests__/`)
+- Contract lane: `pnpm --filter @systemfsoftware/stryker-js-cli test:contract` (Gherkin scenarios in real containers via testcontainers)
+- Mutation gate: `pnpm --filter @systemfsoftware/stryker-js-cli mutation`
 - Lint: `pnpm --filter @systemfsoftware/stryker-js-cli lint`
 - API surface: `pnpm --filter @systemfsoftware/stryker-js-cli api:check`
 - Update report: `pnpm --filter @systemfsoftware/stryker-js-cli api:update`

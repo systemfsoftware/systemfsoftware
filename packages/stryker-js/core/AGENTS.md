@@ -9,6 +9,6 @@ Deltas from root:
 - **Lint is baseline oxlint, not the cell config** — `scripts/check-lint-coverage.mjs` records the exemption and its reason. `pnpm --filter @systemfsoftware/stryker-js-core lint` still has to pass.
 - **`mutate` covers only decisions we wrote**, today `src/reporters/test-contribution.ts`. Widen it when we take ownership of another decision; never narrow it to lift a score.
 
-🛑 Rebuild (`pnpm build`) after any source change — `bin/stryker.js` runs `dist/`, so an unbuilt edit tests the previous version.
+🛑 Rebuild (`pnpm build`) after any source change — the CLI package and programmatic API users consume core's built `dist/` (every export resolves through `./dist/*.mjs`), so an unbuilt edit tests the previous version.
 
 🛑 Keep the worker subpath exports (`./checker-worker`, `./child-process-proxy-worker`, `./child-process-test-runner-worker`); worker entrypoints resolve through them.

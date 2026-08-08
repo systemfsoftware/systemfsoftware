@@ -189,6 +189,9 @@ importers:
       '@std/jsonc':
         specifier: 'catalog:'
         version: '@jsr/std__jsonc@1.0.2'
+      '@systemfsoftware/stryker-js-cli':
+        specifier: workspace:^
+        version: link:packages/stryker-js/cli
       concurrently:
         specifier: ^9.2.1
         version: 9.2.3
@@ -2359,12 +2362,24 @@ importers:
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 0.97.1(@effect/cluster@0.49.6(@effect/platform@0.97.1(effect@3.22.1))(@effect/rpc@0.76.2(@effect/platform@0.97.1(effect@3.22.1))(effect@3.22.1))(@effect/sql@0.45.0(@effect/experimental@0.61.1(@effect/platform@0.97.1(effect@3.22.1))(effect@3.22.1))(@effect/platform@0.97.1(effect@3.22.1))(effect@3.22.1))(@effect/workflow@0.10.3(@effect/platform@0.97.1(effect@3.22.1))(@effect/rpc@0.76.2(@effect/platform@0.97.1(effect@3.22.1))(effect@3.22.1))(effect@3.22.1))(effect@3.22.1))(@effect/platform@0.97.1(effect@3.22.1))(@effect/rpc@0.76.2(@effect/platform@0.97.1(effect@3.22.1))(effect@3.22.1))(@effect/sql@0.45.0(@effect/experimental@0.61.1(@effect/platform@0.97.1(effect@3.22.1))(effect@3.22.1))(@effect/platform@0.97.1(effect@3.22.1))(effect@3.22.1))(effect@3.22.1)
+      '@stryker-mutator/api':
+        specifier: catalog:stryker
+        version: 9.6.1
+      '@stryker-mutator/util':
+        specifier: catalog:stryker
+        version: 9.6.1
+      '@systemfsoftware/effect-cell-types':
+        specifier: workspace:^
+        version: link:../../effect-cell-types
       '@systemfsoftware/stryker-js-core':
         specifier: workspace:^
         version: link:../core
       effect:
         specifier: 'catalog:'
         version: 3.22.1
+      semver:
+        specifier: catalog:stryker
+        version: 7.8.5
     devDependencies:
       '@microsoft/api-extractor':
         specifier: 'catalog:'
@@ -2372,6 +2387,9 @@ importers:
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: workspace:^
         version: link:../../arethetypeswrong/cli
+      '@systemfsoftware/effect-gherkin-spec':
+        specifier: workspace:^
+        version: link:../../effect-gherkin-spec
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
         version: link:../../oxlint-config
@@ -2381,6 +2399,9 @@ importers:
       '@systemfsoftware/oxlint-plugin-test-placement':
         specifier: workspace:^
         version: link:../../oxlint-plugins/test-placement
+      '@systemfsoftware/stryker-js-vitest-runner':
+        specifier: workspace:^
+        version: link:../vitest-runner
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../tsconfig
@@ -2390,12 +2411,18 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.2
+      '@types/semver':
+        specifier: 7.7.1
+        version: 7.7.1
       '@vitest/coverage-v8':
         specifier: 'catalog:'
         version: 4.1.9(vitest@4.1.9)
       rimraf:
         specifier: 'catalog:'
         version: 6.1.3
+      testcontainers:
+        specifier: 'catalog:'
+        version: 12.1.0(supports-color@8.1.1)
       tsdown:
         specifier: 'catalog:'
         version: 0.22.9(oxc-resolver@11.24.2)(typescript@5.9.3)(unrun@0.2.39)
@@ -2408,12 +2435,6 @@ importers:
 
   packages/stryker-js/core:
     dependencies:
-      '@effect/cli':
-        specifier: 'catalog:'
-        version: 0.77.0(@effect/platform@0.97.1(effect@3.22.1))(@effect/printer-ansi@0.51.0(@effect/typeclass@0.41.0(effect@3.22.1))(effect@3.22.1))(@effect/printer@0.51.0(@effect/typeclass@0.41.0(effect@3.22.1))(effect@3.22.1))(effect@3.22.1)
-      '@effect/platform':
-        specifier: 'catalog:'
-        version: 0.97.1(effect@3.22.1)
       '@stryker-mutator/api':
         specifier: catalog:stryker
         version: 9.6.1
@@ -2481,18 +2502,15 @@ importers:
       '@effect/vitest':
         specifier: 'catalog:'
         version: 0.30.0(effect@3.22.1)(vitest@4.1.9)
+      '@microsoft/api-extractor':
+        specifier: 'catalog:'
+        version: 7.58.9(@types/node@24.13.2)
       '@std/jsonc':
         specifier: 'catalog:'
         version: '@jsr/std__jsonc@1.0.2'
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: workspace:^
         version: link:../../arethetypeswrong/cli
-      '@systemfsoftware/effect-gherkin-spec':
-        specifier: workspace:^
-        version: link:../../effect-gherkin-spec
-      '@systemfsoftware/oxlint-plugin-test-placement':
-        specifier: workspace:^
-        version: link:../../oxlint-plugins/test-placement
       '@systemfsoftware/stryker-js-vitest-runner':
         specifier: workspace:^
         version: link:../vitest-runner
@@ -2526,9 +2544,6 @@ importers:
       glob:
         specifier: 13.0.6
         version: 13.0.6
-      testcontainers:
-        specifier: 'catalog:'
-        version: 12.1.0(supports-color@8.1.1)
       tsdown:
         specifier: 'catalog:'
         version: 0.22.9(oxc-resolver@11.24.2)(typescript@7.0.2)(unrun@0.2.39)
@@ -13550,7 +13565,7 @@ snapshots:
   readable-stream@3.6.2:
     dependencies:
       inherits: 2.0.4
-      string_decoder: 1.1.1
+      string_decoder: 1.3.0
       util-deprecate: 1.0.2
 
   readable-stream@4.7.0:

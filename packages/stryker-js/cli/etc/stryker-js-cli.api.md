@@ -4,6 +4,9 @@
 
 ```ts
 
+// @public
+export function runStrykerCli(argv: string[]): void;
+
 // (No @packageDocumentation comment for this package)
 
 ```
