@@ -40,6 +40,8 @@ export interface StrykerHostOptions {
   readonly clearTextEnabled: boolean
   /** The run's clock zero: `elapsedMs` values measure from here. */
   readonly runStartedAt: number
+  /** The module specifiers whose `strykerPlugins` the run loads, resolved by the host (U4). */
+  readonly reporterPluginModules: string[]
 }
 
 /**
@@ -88,6 +90,10 @@ export class Stryker {
           this.hostOptions.clearTextEnabled,
         )
         .provideValue(coreTokens.runStartedAt, this.hostOptions.runStartedAt)
+        .provideValue(
+          coreTokens.reporterPluginModules,
+          this.hostOptions.reporterPluginModules,
+        )
       return await Stryker.run(prepareInjector, {
         cliOptions: this.cliOptions,
         targetMutatePatterns: undefined,

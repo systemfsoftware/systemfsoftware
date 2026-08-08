@@ -64,6 +64,7 @@ function createRunInjector(executorFns: ExecutorFns, sink: RunEventSink) {
     .provideValue(coreTokens.progressEnabled, false)
     .provideValue(coreTokens.clearTextEnabled, false)
     .provideValue(coreTokens.runStartedAt, 0)
+    .provideValue(coreTokens.reporterPluginModules, [])
   vi.spyOn(injector, 'injectClass').mockImplementation((cls: unknown): unknown => {
     if (cls === PrepareExecutor) {
       return { execute: executorFns.prepare }

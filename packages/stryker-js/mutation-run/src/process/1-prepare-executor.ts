@@ -12,7 +12,6 @@ import { PluginLoader } from '../di/plugin-loader.js'
 import { ConfigError } from '../errors.js'
 import type { ResolvedMode } from '../output-mode.js'
 import { BroadcastReporter } from '../reporters/broadcast-reporter.js'
-import { reporterPluginsFileUrl } from '../reporters/index.js'
 import type { RunEventSink } from '../run-event.js'
 import { UnexpectedExitHandler } from '../utils/exit-handler.js'
 import { TemporaryDirectory } from '../utils/temporary-directory.js'
@@ -27,6 +26,7 @@ import { MutantInstrumenterContext } from './index.js'
 export interface PrepareExecutorContext extends BaseContext {
   [coreTokens.loggingServerAddress]: LoggingServerAddress
   [coreTokens.reporterOverride]?: Reporter
+  [coreTokens.reporterPluginModules]: string[]
   [coreTokens.runEventSink]: RunEventSink
   [coreTokens.runId]: string
   [coreTokens.resolvedMode]: ResolvedMode
@@ -44,10 +44,12 @@ export class PrepareExecutor {
   public static readonly inject = tokens(
     commonTokens.injector,
     coreTokens.loggingSink,
+    coreTokens.reporterPluginModules,
   )
   constructor(
     private readonly injector: Injector<PrepareExecutorContext>,
     private readonly loggingBackend: LoggingBackend,
+    private readonly reporterPluginModules: readonly string[],
   ) {}
 
   public async execute({
@@ -72,7 +74,7 @@ export class PrepareExecutor {
     const pluginDescriptors = [
       ...options.plugins,
       frameworkPluginsFileUrl,
-      reporterPluginsFileUrl,
+      ...this.reporterPluginModules,
       ...options.appendPlugins,
     ]
     const loadedPlugins = await pluginLoader.load(pluginDescriptors)

@@ -17,9 +17,6 @@ import { Reporter } from '@stryker-mutator/api/report';
 import { schema } from '@stryker-mutator/api/core';
 
 // @public
-export const reporterPluginsFileUrl: string;
-
-// @public
 class Stryker {
     constructor(cliOptions: PartialStrykerOptions, hostOptions: StrykerHostOptions, injectorFactory?: typeof createInjector);
     // Warning: (ae-forgotten-export) The symbol "MutationRunContext" needs to be exported by the entry point index.d.mts
@@ -40,6 +37,7 @@ export interface StrykerHostOptions {
     readonly loggerConsoleOut: NodeJS.WriteStream;
     // (undocumented)
     readonly progressEnabled: boolean;
+    readonly reporterPluginModules: string[];
     // Warning: (ae-forgotten-export) The symbol "ResolvedMode" needs to be exported by the entry point index.d.mts
     readonly resolvedMode: ResolvedMode;
     // Warning: (ae-forgotten-export) The symbol "RunEventSink" needs to be exported by the entry point index.d.mts
