@@ -50,6 +50,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:contract": "vitest run --config vitest.contract.config.ts",
     "build": "tsdown",
     "lint": "oxlint",
     "attw": "attw --pack .",
@@ -85,8 +86,11 @@
     "effect": "catalog:"
   },
   "devDependencies": {
+    "@effect/vitest": "catalog:",
     "@std/jsonc": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "workspace:^",
+    "@systemfsoftware/effect-gherkin-spec": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-test-placement": "workspace:^",
     "@systemfsoftware/stryker-js-vitest-runner": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
@@ -98,6 +102,7 @@
     "@types/semver": "7.7.1",
     "effect": "catalog:",
     "glob": "13.0.6",
+    "testcontainers": "catalog:",
     "tsdown": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
