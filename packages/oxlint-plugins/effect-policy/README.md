@@ -77,4 +77,4 @@ A: Both pass — importing `.policy` modules is how policies compose (`andThen`)
 
 ## License
 
-[MIT](https://github.com/systemfsoftware/systemfsoftware/blob/main/LICENSE)
+[Apache 2.0](https://github.com/systemfsoftware/systemfsoftware/blob/main/LICENSE)

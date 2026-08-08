@@ -201,3 +201,13 @@ Apache License
    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
    See the License for the specific language governing permissions and
    limitations under the License.
+
+
+----------------------------------------------------------------------
+Third-party notices
+
+Portions of this software are derived from @stryker-mutator/vitest-runner
+v9.6.1 (upstream commit e1abfbe), part of StrykerJS
+(https://github.com/stryker-mutator/stryker-js), which is licensed under the
+Apache License, Version 2.0 — the same license this package is distributed
+under. The derived files have been modified.

@@ -1,6 +1,6 @@
 {
   "name": "@systemfsoftware/oxlint-plugin-effect-acl",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "version": "1.0.2",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {

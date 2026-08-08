@@ -54,4 +54,4 @@ Development setup and workflow: [AGENTS.md](AGENTS.md).
 
 ## License
 
-[MIT](LICENSE)
+[Apache 2.0](LICENSE)

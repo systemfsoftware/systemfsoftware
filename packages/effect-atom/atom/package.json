@@ -1,6 +1,6 @@
 {
   "name": "@systemfsoftware/effect-atom",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "version": "0.5.3",
   "author": "Effect contributors (forked by systemfsoftware)",
   "repository": {

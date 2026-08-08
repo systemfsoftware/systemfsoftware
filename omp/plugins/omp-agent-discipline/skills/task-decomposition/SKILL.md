@@ -7,7 +7,7 @@ description: >-
   long or its output takes too long to verify. Triggers: 'split into
   subagents', 'fan out', 'parallelize', 'decompose the task'. Do not use
   for one-shot single-agent tasks.
-license: MIT
+license: Apache-2.0
 metadata:
   version: "1.2.0"
 ---

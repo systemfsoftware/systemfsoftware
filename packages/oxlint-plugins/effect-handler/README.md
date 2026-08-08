@@ -83,4 +83,4 @@ A: The cells disagree by design. A workflow is a pure decision — a new variant
 
 ## License
 
-[MIT](https://github.com/systemfsoftware/systemfsoftware/blob/main/LICENSE)
+[Apache 2.0](https://github.com/systemfsoftware/systemfsoftware/blob/main/LICENSE)
