@@ -59,6 +59,10 @@ const TOOLING = new Map([
     `packages/stryker-js/${name}`,
     'our Stryker fork: upstream-shaped, not Effect cell code, so cell rules are the wrong observer; carries its own oxlint baseline and mutation gate',
   ]),
+  [
+    'packages/stryker-js/mutation-report',
+    'our Stryker fork: upstream-shaped reporter adapters, not Effect cell code, so cell rules are the wrong observer; carries its own oxlint baseline (REPO-S5 forbids its own mutation gate)',
+  ],
   ...[
     'packages/stryker-js/typescript-checker/testResources/nodenext-project',
     'packages/stryker-js/vitest-runner/testResources/async-failure',
