@@ -16,23 +16,23 @@ import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Ref from 'effect/Ref'
 
-import { Stryker, type StrykerHostOptions } from '@systemfsoftware/stryker-js-core'
+import { Stryker, type StrykerHostOptions } from '@systemfsoftware/stryker-js-mutation-run'
 import {
   ConfigReader,
   defaultOptions,
   OptionsValidator,
-} from '@systemfsoftware/stryker-js-core/config/config-resolution'
-import { forkCoreSchema } from '@systemfsoftware/stryker-js-core/config/fork-schema'
-import { ConfigError, retrieveCause } from '@systemfsoftware/stryker-js-core/errors'
-import type { ResolvedMode } from '@systemfsoftware/stryker-js-core/output-mode'
-import { buildVerdictEnvelope } from '@systemfsoftware/stryker-js-core/reporters/verdict-envelope'
-import type { HelpRendered, ManifestRendered } from '@systemfsoftware/stryker-js-core/run-event'
-import { strykerVersion } from '@systemfsoftware/stryker-js-core/stryker-package'
+} from '@systemfsoftware/stryker-js-mutation-run/config/config-resolution'
+import { forkCoreSchema } from '@systemfsoftware/stryker-js-mutation-run/config/fork-schema'
+import { ConfigError, retrieveCause } from '@systemfsoftware/stryker-js-mutation-run/errors'
+import type { ResolvedMode } from '@systemfsoftware/stryker-js-mutation-run/output-mode'
+import { buildVerdictEnvelope } from '@systemfsoftware/stryker-js-mutation-run/reporters/verdict-envelope'
+import type { HelpRendered, ManifestRendered } from '@systemfsoftware/stryker-js-mutation-run/run-event'
+import { strykerVersion } from '@systemfsoftware/stryker-js-mutation-run/stryker-package'
 import {
   ExitClass,
   getPendingExitClasses,
   resolveExitCode,
-} from '@systemfsoftware/stryker-js-core/utils/exit-classification'
+} from '@systemfsoftware/stryker-js-mutation-run/utils/exit-classification'
 
 import { humanConsoleLayer, machineConsoleLayer, readCapturedConsole } from './output-mode-console.state.js'
 import type { OutputModeProbe } from './output-mode.adapter.js'

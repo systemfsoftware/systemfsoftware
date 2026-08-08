@@ -1,7 +1,7 @@
 import type { Mutant } from '@stryker-mutator/api/core'
 import { schema } from '@stryker-mutator/api/core'
 
-import { toRelativeNormalizedFileName } from '@systemfsoftware/stryker-js-core/mutants/incremental-differ'
+import { toRelativeNormalizedFileName } from '@systemfsoftware/stryker-js-mutation-run/mutants/incremental-differ'
 
 /**
  * U8 — survivor re-run admission (R10, R11, KTD6, KTD7).

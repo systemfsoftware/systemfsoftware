@@ -5,7 +5,7 @@ import { FastCheck as fc } from 'effect'
 import { createHash } from 'node:crypto'
 import { isDeepStrictEqual } from 'node:util'
 
-import { toRelativeNormalizedFileName } from '@systemfsoftware/stryker-js-core/mutants/incremental-differ'
+import { toRelativeNormalizedFileName } from '@systemfsoftware/stryker-js-mutation-run/mutants/incremental-differ'
 
 import {
   extractSurvivors,

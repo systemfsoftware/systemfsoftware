@@ -71,7 +71,7 @@ interface CorePurityProbe {
   readonly cliVersion: CliResult
 }
 
-const CORE_PACKAGE_MANIFEST = `${WORKDIR}/node_modules/@systemfsoftware/stryker-js-core/package.json`
+const CORE_PACKAGE_MANIFEST = `${WORKDIR}/node_modules/@systemfsoftware/stryker-js-mutation-run/package.json`
 
 /**
  * U9: core's imports used to run `guardMinimalNodeVersion()` at module scope,
@@ -98,7 +98,7 @@ const corePurityProbe = (fixture: string): Effect.Effect<CorePurityProbe, never,
     )
     const imports: Array<CoreEntryImport> = []
     for (const entry of entries) {
-      const specifier = `@systemfsoftware/stryker-js-core${entry.slice(1)}`
+      const specifier = `@systemfsoftware/stryker-js-mutation-run${entry.slice(1)}`
       // The specifier travels in the environment so a future entry's spelling
       // can never break the shell quoting of the probe command itself.
       const probe = yield* cli.sh('node --input-type=module -e "await import(process.env.CORE_ENTRY)"', {

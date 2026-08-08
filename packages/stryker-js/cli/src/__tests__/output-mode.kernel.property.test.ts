@@ -1,5 +1,5 @@
 import { describe, it } from '@systemfsoftware/effect-gherkin-spec'
-import type { ResolvedMode } from '@systemfsoftware/stryker-js-core/output-mode'
+import type { ResolvedMode } from '@systemfsoftware/stryker-js-mutation-run/output-mode'
 import { FastCheck as fc } from 'effect'
 import * as Either from 'effect/Either'
 import { isDeepStrictEqual } from 'node:util'

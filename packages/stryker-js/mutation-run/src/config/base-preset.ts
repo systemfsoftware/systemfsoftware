@@ -2,7 +2,7 @@ import type { PartialStrykerOptions } from '@stryker-mutator/api/core'
 
 /**
  * Modal Stryker options, inherited via
- * `"extends": "@systemfsoftware/stryker-js-core/config/base"`.
+ * `"extends": "@systemfsoftware/stryker-js-mutation-run/config/base"`.
  *
  * Relative paths below resolve against the working directory of the run that
  * reads them — the consuming package — not against this file.

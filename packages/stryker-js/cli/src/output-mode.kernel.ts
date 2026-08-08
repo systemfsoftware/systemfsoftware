@@ -2,7 +2,7 @@ import * as HelpDoc from '@effect/cli/HelpDoc'
 import * as ValidationError from '@effect/cli/ValidationError'
 import * as Either from 'effect/Either'
 
-import type { ResolvedMode } from '@systemfsoftware/stryker-js-core/output-mode'
+import type { ResolvedMode } from '@systemfsoftware/stryker-js-mutation-run/output-mode'
 
 /**
  * The known tool variables. Narrow per the plan — exactly

@@ -1,12 +1,12 @@
 {
-  "name": "@systemfsoftware/stryker-js-core",
+  "name": "@systemfsoftware/stryker-js-mutation-run",
   "version": "1.2.5",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
-    "directory": "packages/stryker-js/core"
+    "directory": "packages/stryker-js/mutation-run"
   },
-  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/stryker-js/core#readme",
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/stryker-js/mutation-run#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
   "description": "A source-code fork of @stryker-mutator/core",
   "type": "module",

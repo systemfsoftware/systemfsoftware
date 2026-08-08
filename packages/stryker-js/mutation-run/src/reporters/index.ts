@@ -33,5 +33,5 @@ export const strykerPlugins = [
  * and a source tree with no build can still import this barrel.
  */
 export const reporterPluginsFileUrl = import.meta.resolve(
-  '@systemfsoftware/stryker-js-core/reporters/stryker-plugins',
+  '@systemfsoftware/stryker-js-mutation-run/reporters/stryker-plugins',
 )

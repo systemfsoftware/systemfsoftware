@@ -15,9 +15,9 @@ import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import * as Ref from 'effect/Ref'
 
-import { defaultOptions } from '@systemfsoftware/stryker-js-core/config/config-resolution'
-import type { ManifestRendered } from '@systemfsoftware/stryker-js-core/run-event'
-import { strykerVersion } from '@systemfsoftware/stryker-js-core/stryker-package'
+import { defaultOptions } from '@systemfsoftware/stryker-js-mutation-run/config/config-resolution'
+import type { ManifestRendered } from '@systemfsoftware/stryker-js-mutation-run/run-event'
+import { strykerVersion } from '@systemfsoftware/stryker-js-mutation-run/stryker-package'
 
 import { emitLLMSManifest } from './llms-manifest.kernel.js'
 import { STREAM_SCHEMA_VERSION } from './stream-protocol.kernel.js'

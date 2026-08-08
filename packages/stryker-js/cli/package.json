@@ -30,7 +30,7 @@
     "@stryker-mutator/api": "catalog:stryker",
     "@stryker-mutator/util": "catalog:stryker",
     "@systemfsoftware/effect-cell-types": "workspace:^",
-    "@systemfsoftware/stryker-js-core": "workspace:^",
+    "@systemfsoftware/stryker-js-mutation-run": "workspace:^",
     "effect": "catalog:",
     "semver": "catalog:stryker"
   },

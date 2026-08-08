@@ -360,7 +360,7 @@ describe('extends via a package specifier', () => {
 describe('the shipped base preset', () => {
   it('is resolvable by the specifier every package config uses', () => {
     const resolved = resolveExtendsTarget(
-      '@systemfsoftware/stryker-js-core/config/base',
+      '@systemfsoftware/stryker-js-mutation-run/config/base',
       path.resolve(import.meta.dirname, '../..'),
     )
     expect(fs.existsSync(resolved)).toBe(true)
@@ -368,7 +368,7 @@ describe('the shipped base preset', () => {
 
   it('supplies the modal options a package config omits', async () => {
     const child = await writeJson('stryker.config.json', {
-      extends: '@systemfsoftware/stryker-js-core/config/base',
+      extends: '@systemfsoftware/stryker-js-mutation-run/config/base',
       mutate: ['src/only-this.ts'],
     })
     const out = await resolveExtendsChain(child) as Record<string, unknown>
@@ -379,7 +379,7 @@ describe('the shipped base preset', () => {
 
   it('turns incremental on for every package that does not opt out', async () => {
     const child = await writeJson('stryker.config.json', {
-      extends: '@systemfsoftware/stryker-js-core/config/base',
+      extends: '@systemfsoftware/stryker-js-mutation-run/config/base',
       mutate: ['src/only-this.ts'],
     })
     const out = await resolveExtendsChain(child) as Record<string, unknown>

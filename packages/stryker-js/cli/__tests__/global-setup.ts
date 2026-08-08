@@ -20,7 +20,7 @@ const NODE_IMAGE = 'node:22-alpine'
 // so each one is packed and installed from a local tarball beside it.
 const WORKSPACE_PACKAGES = [
   '@systemfsoftware/stryker-js-cli',
-  '@systemfsoftware/stryker-js-core',
+  '@systemfsoftware/stryker-js-mutation-run',
   '@systemfsoftware/effect-cell-types',
 ] as const
 const REPO_ROOT = fileURLToPath(new URL('../../../../', import.meta.url))

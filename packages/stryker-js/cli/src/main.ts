@@ -4,7 +4,7 @@ import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import semver from 'semver'
 
-import { strykerEngines } from '@systemfsoftware/stryker-js-core/stryker-package'
+import { strykerEngines } from '@systemfsoftware/stryker-js-mutation-run/stryker-package'
 
 import { OutputModeProbe, OutputModeProbeLive } from './output-mode.adapter.js'
 import { RunEventStreamLive, RunEventStreamPort } from './run-event-stream.adapter.js'

@@ -10,9 +10,9 @@ import * as Sink from 'effect/Sink'
 import * as Stream from 'effect/Stream'
 import type { EmitOpsPush } from 'effect/StreamEmit'
 
-import type { ModeSignal, OutputMode, ResolvedMode } from '@systemfsoftware/stryker-js-core/output-mode'
-import { generateRunId } from '@systemfsoftware/stryker-js-core/reporters/verdict-envelope'
-import type { RunEvent, RunEventSink } from '@systemfsoftware/stryker-js-core/run-event'
+import type { ModeSignal, OutputMode, ResolvedMode } from '@systemfsoftware/stryker-js-mutation-run/output-mode'
+import { generateRunId } from '@systemfsoftware/stryker-js-mutation-run/reporters/verdict-envelope'
+import type { RunEvent, RunEventSink } from '@systemfsoftware/stryker-js-mutation-run/run-event'
 
 import { STREAM_SCHEMA_VERSION, TICK_INTERVAL_MS } from './stream-protocol.kernel.js'
 
