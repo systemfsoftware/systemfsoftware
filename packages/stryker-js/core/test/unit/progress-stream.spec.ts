@@ -17,14 +17,9 @@ import {
   streamRunId,
   TICK_INTERVAL_MS,
 } from '../../src/progress-stream.js'
-import type {
-  StreamErrorLine,
-  StreamHelpLine,
-  StreamMutantLine,
-  StreamTerminalLine,
-} from '../../src/progress-stream.js'
 import { ProgressStreamReporter } from '../../src/reporters/progress-stream-reporter.js'
 import type { VerdictEnvelope } from '../../src/reporters/verdict-envelope.js'
+import type { HelpRendered, MutantTested, RunFailed, RunTerminalEvent } from '../../src/run-event.js'
 
 // The stream module writes with `fs.writeSync` (a synchronous fd write, so
 // `process.exit` cannot drop it — KTD11); the tests capture those writes
@@ -46,7 +41,7 @@ const location: schema.Location = {
 const machineMode: ResolvedMode = { mode: 'machine', signal: 'tty', stdoutIsTTY: false }
 const humanMode: ResolvedMode = { mode: 'human', signal: 'tty', stdoutIsTTY: true }
 
-const baseMutant: Omit<StreamMutantLine, 'kind'> = {
+const baseMutant: Omit<MutantTested, 'kind'> = {
   id: '1',
   status: 'Survived',
   file: 'src/foo.ts',
@@ -79,9 +74,9 @@ const verdictEnvelope = (): VerdictEnvelope => ({
   mutants: [],
 })
 
-const verdictLine = (): StreamTerminalLine => ({ kind: 'verdict', ...verdictEnvelope() })
+const verdictLine = (): RunTerminalEvent => ({ kind: 'verdict', ...verdictEnvelope() })
 
-const errorLine = (): StreamErrorLine => ({
+const errorLine = (): RunFailed => ({
   kind: 'error',
   schemaVersion: STREAM_SCHEMA_VERSION,
   code: 2,
@@ -415,7 +410,7 @@ describe('progress stream', () => {
     configureStream(machineMode, 'run-1')
     fsMocks.writeSync.mockClear()
 
-    const helpLine: StreamHelpLine = {
+    const helpLine: HelpRendered = {
       kind: 'help',
       schemaVersion: STREAM_SCHEMA_VERSION,
       code: 0,

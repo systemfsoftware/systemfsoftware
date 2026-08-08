@@ -44,8 +44,8 @@ import {
   STREAM_SCHEMA_VERSION,
   streamRunId,
 } from './progress-stream.js'
-import type { StreamHelpLine, StreamManifestLine } from './progress-stream.js'
 import { buildVerdictEnvelope } from './reporters/verdict-envelope.js'
+import type { HelpRendered, ManifestRendered } from './run-event.js'
 import { strykerEngines, strykerVersion } from './stryker-package.js'
 import { Stryker } from './stryker.js'
 import { ExitClass, getPendingExitClasses, resolveExitCode } from './utils/object-utils.js'
@@ -689,7 +689,7 @@ export function makeStrykerCommand(runMutationTest: StrykerRun) {
         if (!isStreamEnabled()) {
           configureStream({ mode: 'machine', signal: 'flag', stdoutIsTTY: process.stdout.isTTY === true })
         }
-        const document: StreamManifestLine = {
+        const document: ManifestRendered = {
           kind: 'manifest',
           schemaVersion: STREAM_SCHEMA_VERSION,
           code: 0,
@@ -933,7 +933,7 @@ function emitMachineModeOutput(exit: Exit.Exit<unknown, unknown>, code: number):
     return
   }
   if (captured.length > 0) {
-    const document: StreamHelpLine = {
+    const document: HelpRendered = {
       kind: 'help',
       schemaVersion: STREAM_SCHEMA_VERSION,
       code: 0,

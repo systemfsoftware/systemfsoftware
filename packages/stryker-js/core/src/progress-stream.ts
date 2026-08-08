@@ -1,10 +1,8 @@
 import { writeSync } from 'node:fs'
 
-import type { MutantStatus, schema } from '@stryker-mutator/api/core'
-
-import type { ModeSignal, OutputMode, ResolvedMode } from './output-mode.js'
+import type { ResolvedMode } from './output-mode.js'
 import { generateRunId, isActionableStatus } from './reporters/verdict-envelope.js'
-import type { VerdictEnvelope } from './reporters/verdict-envelope.js'
+import type { MutantTested, RunPhase, RunTerminalEvent } from './run-event.js'
 
 /**
  * U7 — the machine-mode progress stream on stdout (R17, R19, R20, R21).
@@ -40,122 +38,6 @@ export const STREAM_SCHEMA_VERSION = '1.0'
  * consumer can tell "slow" from "hung" without waiting for a mutant event.
  */
 export const TICK_INTERVAL_MS = 10_000
-
-/**
- * The lifecycle phases of a run (R18), in the order the executor chain emits
- * them. `prepare` is the first observable moment of the run — the header and
- * the heartbeat must precede it so the "appears hung" window never opens.
- */
-export type StreamPhase = 'prepare' | 'instrument' | 'dry-run' | 'mutation-test'
-
-/**
- * The first line of the stream (R5, R21): carries the stream schema version,
- * the run id shared with the verdict envelope (U4/U6), and the resolved mode
- * plus the signal that decided it.
- */
-export interface StreamHeaderLine {
-  readonly kind: 'stream'
-  readonly schemaVersion: string
-  readonly runId: string
-  readonly mode: OutputMode
-  readonly signal: ModeSignal
-}
-
-/**
- * A lifecycle phase boundary (R18). `elapsedMs` is time since the stream was
- * configured — the start of the run.
- */
-export interface StreamPhaseLine {
-  readonly kind: 'phase'
-  readonly phase: StreamPhase
-  readonly elapsedMs: number
-}
-
-/**
- * The mutant-testing plan (R17): emitted once the plan is known, before any
- * mutant is tested. Names the total a consumer can count `mutant` lines
- * against.
- */
-export interface StreamPlanLine {
-  readonly kind: 'plan'
-  readonly total: number
-}
-
-/**
- * One tested mutant that passed the R20 actionable filter. Carries the full
- * survivor re-run matching key — file, location, mutator, replacement — so a
- * consumer can address the mutant without opening the report file (R11).
- */
-export interface StreamMutantLine {
-  readonly kind: 'mutant'
-  readonly id: string
-  readonly status: MutantStatus
-  readonly file: string
-  readonly location: schema.Location
-  readonly mutator: string
-  readonly replacement: string | null
-  readonly completed: number
-  readonly total: number
-}
-
-/**
- * The heartbeat (R19), emitted on the tick interval while a phase is in
- * flight, so a long phase never looks hung. `total` is `null` until the plan
- * is known — a pre-plan `0` would read as a finished run of zero mutants.
- */
-export interface StreamTickLine {
-  readonly kind: 'tick'
-  readonly elapsedMs: number
-  readonly completed: number
-  readonly total: number | null
-}
-
-/**
- * The failure terminal event (R7): the last line of the stream when the run
- * does not reach a verdict. `code` is the classed exit code (R6).
- */
-export interface StreamErrorLine {
-  readonly kind: 'error'
-  readonly schemaVersion: string
-  readonly code: number
-  readonly error: string
-  readonly remediation: string
-}
-
-/**
- * The terminal event of a `--help` invocation: closes the stream of a
- * non-run command with the rendered help text and a success code, so an
- * agent that reads the last stdout line still gets a tagged event.
- */
-export interface StreamHelpLine {
-  readonly kind: 'help'
-  readonly schemaVersion: string
-  readonly code: 0
-  readonly help: string
-}
-
-/**
- * The terminal event of a `--llms` manifest invocation (R9): closes the
- * stream of a non-run command with the manifest text and a success code.
- */
-export interface StreamManifestLine {
-  readonly kind: 'manifest'
-  readonly schemaVersion: string
-  readonly code: 0
-  readonly manifest: string
-}
-
-/**
- * The single terminal line (R5): exactly one of these is the last line of
- * the stream — a `verdict` for a run that reached a score, an `error` for a
- * failure, or a `help`/`manifest` event closing a non-run command.
- * `emitTerminal` refuses a second one.
- */
-export type StreamTerminalLine =
-  | (VerdictEnvelope & { readonly kind: 'verdict' })
-  | StreamErrorLine
-  | StreamHelpLine
-  | StreamManifestLine
 
 /**
  * The literal stdout descriptor. Written to directly rather than through
@@ -280,7 +162,7 @@ export function isStreamEnabled(): boolean {
  * A lifecycle phase boundary (R18). Emitted by the executor chain before each
  * stage runs, so a long run is never silent even before the plan exists.
  */
-export function emitPhase(phase: StreamPhase): void {
+export function emitPhase(phase: RunPhase): void {
   if (config === null) {
     return
   }
@@ -306,7 +188,7 @@ export function emitPlan(total: number): void {
  * only. The filter is the shared definition from the verdict envelope, so the
  * `mutant` lines and the `verdict.mutants` list can never disagree.
  */
-export function emitMutant(line: Omit<StreamMutantLine, 'kind'>): void {
+export function emitMutant(line: Omit<MutantTested, 'kind'>): void {
   if (config === null) {
     return
   }
@@ -334,7 +216,7 @@ export function recordProgress(completed: number, total: number): void {
  * stdout line is always the terminal event" an invariant rather than a
  * convention. No tick or other line can follow the terminal line.
  */
-export function emitTerminal(line: StreamTerminalLine): void {
+export function emitTerminal(line: RunTerminalEvent): void {
   if (config === null || terminalWritten) {
     return
   }
