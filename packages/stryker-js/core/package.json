@@ -48,7 +48,7 @@
     "stryker": "./bin/stryker.js"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit --incremental",
     "test": "vitest run",
     "build": "tsdown",
     "lint": "oxlint",
