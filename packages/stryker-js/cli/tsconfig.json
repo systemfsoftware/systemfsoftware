@@ -3,13 +3,8 @@
   "extends": ["@systemfsoftware/tsconfig/bundler/dom/library-monorepo", "@systemfsoftware/tsconfig/effect"],
   "compilerOptions": {
     "types": ["node"],
-    // No `@systemfsoftware/source` custom condition here: core (the loose
-    // upstream fork) cannot compile under this package's strict options, and
-    // resolving it through the condition would drag core's whole source tree
-    // into this program. tsc resolves core's published dist declarations
-    // instead (skipLibCheck), which is the same surface a published consumer
-    // sees; tsdown and vitest resolve core through their own mechanisms
-    // (tsdown's `devExports` condition, vitest's exports-map default).
+    // No `@systemfsoftware/source` condition: core is `strict: false`, so its
+    // source in this program reports 374 errors. Add it when core is strict.
     "isolatedModules": true
   },
   "include": [
