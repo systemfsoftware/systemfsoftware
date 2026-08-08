@@ -3,7 +3,8 @@ import { getContainerRuntimeClient } from 'testcontainers'
 import { inject } from 'vitest'
 
 const WORKDIR = '/work'
-const CLI_BIN = `${WORKDIR}/node_modules/.bin/stryker`
+
+export const CLI_BIN = `${WORKDIR}/node_modules/.bin/stryker`
 
 export const fixtureDir = (name: string): string => `${WORKDIR}/fixtures/${name}`
 
@@ -20,6 +21,7 @@ export interface ExecOptions {
 
 export class StrykerCli extends Context.Tag('StrykerCli')<StrykerCli, {
   readonly run: (args: ReadonlyArray<string>, options?: ExecOptions) => Effect.Effect<CliResult>
+  readonly sh: (script: string, options?: ExecOptions) => Effect.Effect<CliResult>
 }>() {}
 
 export const layerStrykerCli: Layer.Layer<StrykerCli> = Layer.effect(
@@ -29,17 +31,22 @@ export const layerStrykerCli: Layer.Layer<StrykerCli> = Layer.effect(
       const client = await getContainerRuntimeClient()
       return { client, container: client.container.getById(inject('strykerContainerId')) }
     }),
-    ({ client, container }) => ({
-      run: (args: ReadonlyArray<string>, options?: ExecOptions) =>
+    ({ client, container }) => {
+      const exec = (command: ReadonlyArray<string>, options?: ExecOptions) =>
         Effect.map(
           Effect.promise(() =>
-            client.container.exec(container, [CLI_BIN, ...args], {
+            client.container.exec(container, [...command], {
               workingDir: options?.cwd ?? WORKDIR,
               ...(options?.env === undefined ? {} : { env: options.env }),
             })
           ),
           (result) => ({ exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr }),
-        ),
-    }),
+        )
+
+      return {
+        run: (args: ReadonlyArray<string>, options?: ExecOptions) => exec([CLI_BIN, ...args], options),
+        sh: (script: string, options?: ExecOptions) => exec(['sh', '-c', script], options),
+      }
+    },
   ),
 )

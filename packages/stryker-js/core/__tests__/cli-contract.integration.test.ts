@@ -4,14 +4,15 @@
  * presentation path cannot change the observable surface in silence.
  *
  * Every assertion here was captured from a real run of the real tarball in a
- * real container. Two scenarios pin behaviour that is wrong today - the run
- * command rejects the output-format and json options - so a later unit that
- * wires them turns this lane red on purpose rather than by accident.
+ * real container. Three scenarios pin behaviour that is wrong today - the run
+ * command rejects the output-format and json options, and prose keeps its
+ * colour codes when no terminal is listening - so a later unit that fixes any
+ * of them turns this lane red on purpose rather than by accident.
  */
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect } from 'effect'
 import { expect } from 'vitest'
-import { fixtureDir, layerStrykerCli, StrykerCli } from './stryker-cli.adapter.js'
+import { CLI_BIN, fixtureDir, layerStrykerCli, StrykerCli } from './stryker-cli.adapter.js'
 
 interface StreamLine {
   readonly kind: string
@@ -42,6 +43,13 @@ const invoke = (
       cwd: fixtureDir(fixture),
       ...(env === undefined ? {} : { env }),
     })
+    return { ...result, lines: parseStream(result.stdout) }
+  })
+
+const shIn = (fixture: string, script: string): Effect.Effect<Observed, never, StrykerCli> =>
+  Effect.gen(function*() {
+    const cli = yield* StrykerCli
+    const result = yield* cli.sh(script, { cwd: fixtureDir(fixture) })
     return { ...result, lines: parseStream(result.stdout) }
   })
 
@@ -426,6 +434,148 @@ Feature('Driving the mutation tester from an agent harness')
         }),
         Then('not one machine-readable line is written')((s) => {
           expect(s.observed.lines).toEqual([])
+        }),
+        Then('the prose still carries colour codes today, with nothing on the far end able to read them')((s) => {
+          const escape = String.fromCharCode(27)
+          expect(s.observed.stdout).toContain(`${escape}[`)
+        }),
+      ),
+    )
+
+    scenario(
+      'A run told to leave colour alone writes prose no terminal has to decode',
+      Gherkin.Do.pipe(
+        Given('a project whose suite kills every one of its mutants')(
+          'fixture',
+          () => Effect.succeed('minimal-project'),
+        ),
+        When('the harness asks for prose with colour turned off')(
+          'observed',
+          (s) => invoke(s.fixture, ['run'], { STRYKER_MODE: 'human', NO_COLOR: '1' }),
+        ),
+        Then('not one colour code reaches either descriptor')((s) => {
+          const escape = String.fromCharCode(27)
+          expect(s.observed.stdout + s.observed.stderr).not.toContain(`${escape}[`)
+        }),
+        Then('the run still succeeds')((s) => {
+          expect(s.observed.exitCode).toBe(0)
+        }),
+      ),
+    )
+
+    scenario(
+      'Asking the tool which version it is prints the version and starts no run',
+      Gherkin.Do.pipe(
+        Given('a project the harness could run against')(
+          'fixture',
+          () => Effect.succeed('minimal-project'),
+        ),
+        When('the harness asks the tool which version it is')(
+          'observed',
+          (s) => invoke(s.fixture, ['--version']),
+        ),
+        Then('the closing line carries the version it reported')((s) => {
+          expect(terminal(s.observed)).toMatchObject({ kind: 'help', code: 0 })
+          expect(String(terminal(s.observed)['help'])).toMatch(/^\d+\.\d+\.\d+/)
+        }),
+        Then('no stage of a run was ever announced')((s) => {
+          expect(kindsOf(s.observed)).toEqual(['stream', 'help'])
+        }),
+        Then('the tool reports that it succeeded')((s) => {
+          expect(s.observed.exitCode).toBe(0)
+        }),
+      ),
+    )
+
+    scenario(
+      'A run stopped part way through by the operator still closes with one terminal line',
+      Gherkin.Do.pipe(
+        Given('a project whose run lasts long enough to be interrupted')(
+          'fixture',
+          () => Effect.succeed('slow-project'),
+        ),
+        When('the operator interrupts the run once it is under way')(
+          'observed',
+          (s) =>
+            shIn(
+              s.fixture,
+              `${CLI_BIN} run > /tmp/int.out 2>/dev/null & P=$!; sleep 12; kill -INT $P; wait $P; echo "@@$?"; cat /tmp/int.out`,
+            ),
+        ),
+        Then('the run reports the interruption as its closing line')((s) => {
+          expect(terminal(s.observed)).toMatchObject({ kind: 'error', code: 130 })
+        }),
+        Then('the closing line tells the caller a signal ended the run')((s) => {
+          expect(String(terminal(s.observed)['remediation'])).toContain('signal')
+        }),
+        Then('the run hands its caller the status a signal leaves behind')((s) => {
+          expect(s.observed.stdout).toContain('@@130')
+        }),
+      ),
+    )
+
+    scenario(
+      'A reader that stops listening part way through does not wedge the run',
+      Gherkin.Do.pipe(
+        Given('a project whose run lasts long enough to outlive a short reader')(
+          'fixture',
+          () => Effect.succeed('slow-project'),
+        ),
+        When('the harness reads only the first four lines and then closes the pipe')(
+          'observed',
+          (s) =>
+            shIn(
+              s.fixture,
+              `{ ${CLI_BIN} run 2>/dev/null; echo $? > /tmp/prc; } | head -4; echo "@@$(cat /tmp/prc)"`,
+            ),
+        ),
+        Then('the run reaches its own ending rather than hanging on the closed pipe')((s) => {
+          expect(s.observed.stdout).toContain('@@')
+        }),
+        Then('the status reported belongs to the run and not to the reader')((s) => {
+          expect(s.observed.stdout).toContain('@@0')
+        }),
+      ),
+    )
+
+    scenario(
+      'Asking for the survivors of a run nobody has done yet is refused with a pointer to what is missing',
+      Gherkin.Do.pipe(
+        Given('a project that has never been run')(
+          'fixture',
+          () => Effect.succeed('minimal-project'),
+        ),
+        When('the harness asks for only the survivors')(
+          'observed',
+          (s) => invoke(s.fixture, ['run', '--survivors']),
+        ),
+        Then('the refusal names the missing report and what to do about it')((s) => {
+          expect(terminal(s.observed)).toMatchObject({ kind: 'error', code: 2 })
+          expect(String(terminal(s.observed)['error'])).toContain('previous run')
+        }),
+        Then('the tool reports the refusal as a configuration fault')((s) => {
+          expect(s.observed.exitCode).toBe(2)
+        }),
+      ),
+    )
+
+    scenario(
+      'A project whose mutant survives still reaches a verdict when its threshold permits one',
+      Gherkin.Do.pipe(
+        Given('a project with one mutant its suite never kills, allowed to score nothing')(
+          'fixture',
+          () => Effect.succeed('surviving-mutant-project'),
+        ),
+        When('the harness runs the mutation test')('observed', (s) => invoke(s.fixture, ['run'])),
+        Then('the verdict reports a score of nothing')((s) => {
+          expect(terminal(s.observed)).toMatchObject({ kind: 'verdict', score: 0 })
+        }),
+        Then('the surviving mutant is named in the verdict')((s) => {
+          const survivors = terminal(s.observed)['mutants'] as ReadonlyArray<Record<string, unknown>>
+          expect(survivors.map((mutant) => mutant['status'])).toEqual(['Survived'])
+        }),
+        Then('a score of nothing still clears a threshold that demands nothing')((s) => {
+          expect(s.observed.exitCode).toBe(0)
         }),
       ),
     )
