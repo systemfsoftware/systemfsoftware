@@ -43,6 +43,7 @@ import {
   isProgressEnabled,
   machineConsoleLayer,
   readCapturedConsole,
+  type ResolvedMode,
 } from './output-mode.js'
 import { buildVerdictEnvelope } from './reporters/verdict-envelope.js'
 import { createRunEventStream, type RunEventStream, STREAM_SCHEMA_VERSION } from './run-event-stream.js'
@@ -72,8 +73,15 @@ const defaultRunMutationTest = (hostOptions: StrykerHostOptions): StrykerRun => 
  */
 let activeStream: RunEventStream | null = null
 
+/**
+ * The mode the terminating bootstrap resolved once at the edge (R27). The
+ * null-verdict path reads it instead of probing the terminal a second time;
+ * the fallback keeps a bare effect run working without a bootstrap.
+ */
+let activeResolvedMode: ResolvedMode | null = null
+
 function ensureActiveStream(): RunEventStream {
-  activeStream ??= createRunEventStream(detectMode())
+  activeStream ??= createRunEventStream(activeResolvedMode ?? detectMode())
   return activeStream
 }
 
@@ -535,7 +543,7 @@ function survivorMutateSpans(survivors: readonly Mutant[]): string[] {
  */
 function emitNullScoreVerdict(thresholds: schema.Thresholds, config: object): void {
   const stream = ensureActiveStream()
-  const resolvedMode = detectMode()
+  const resolvedMode = activeResolvedMode ?? detectMode()
   const report: schema.MutationTestResult = {
     schemaVersion: '1.0',
     files: {},
@@ -699,19 +707,27 @@ export function makeStrykerCommand(runMutationTest: StrykerRun) {
       // so the command always produces the machine contract — a `stream`
       // header followed by one tagged `manifest` terminal event (R5) —
       // regardless of TTY or resolved mode. When the run bootstrap did not
-      // open the stream (a TTY or a bare effect run), the handler opens it
-      // first so the header precedes the terminal line; a raw document
-      // never reaches stdout on any path.
-      return Effect.sync(() => {
+      // open the stream (a TTY or a bare effect run), the handler drives the
+      // drain itself so the header precedes the terminal line; a raw
+      // document never reaches stdout on any path.
+      const document: ManifestRendered = {
+        kind: 'manifest',
+        schemaVersion: STREAM_SCHEMA_VERSION,
+        code: 0,
+        manifest: emitLLMSManifest(strykerCommand, strykerVersion),
+      }
+      return Effect.gen(function*() {
         const stream = ensureActiveStream()
         stream.ensureOpen({ mode: 'machine', signal: 'flag', stdoutIsTTY: process.stdout.isTTY === true })
-        const document: ManifestRendered = {
-          kind: 'manifest',
-          schemaVersion: STREAM_SCHEMA_VERSION,
-          code: 0,
-          manifest: emitLLMSManifest(strykerCommand, strykerVersion),
+        if (stream.isOpen()) {
+          stream.sink(document)
+          return
         }
+        // No run bootstrap is consuming the stream: open, push and await the
+        // drain here so --llms still closes with the terminal line written.
+        yield* stream.open
         stream.sink(document)
+        yield* stream.closeAndDrain
       })
     }
     // Bare `stryker`: render help and exit 0, matching commander.
@@ -931,9 +947,10 @@ export function buildErrorEnvelope(
 }
 
 /**
- * Emits the machine-mode output at teardown: a failed run writes the `error`
- * terminal event as the last line of the stdout stream; a successful run
- * whose only console output was the framework's help/version rendering
+ * Emits the machine-mode output from the run's `onExit` finalizer — it runs
+ * on success, failure and interruption alike (R30): a failed run writes the
+ * `error` terminal event as the last line of the stdout stream; a successful
+ * run whose only console output was the framework's help/version rendering
  * emits that captured document as the `help` terminal event, so `--help` in
  * machine mode never leaks an ANSI document. A successful run with an empty
  * buffer (the normal verdict path) emits nothing extra — the run already
@@ -971,21 +988,27 @@ function emitMachineModeOutput(exit: Exit.Exit<unknown, unknown>, code: number):
  * Runs the CLI through an Effect runtime main — the equivalent of
  * `NodeRuntime.runMain` (same `Runtime.makeRunMain` seam). SIGINT/SIGTERM
  * interrupt the main fiber (so finalizers run) instead of exiting
- * synchronously; the teardown resolves the classed exit code exactly once
- * (R6): a tracked signal maps to `128 + n`, a failed run keeps the
- * usage-vs-other classification, and a successful run lets the pending
- * verdict classes decide. `process.exit` is called at most once, only when a
- * signal was received or the code is non-zero, so a clean run flushes stdout.
+ * synchronously; the terminal line is written from an `onExit` finalizer so
+ * it fires on success, failure and interruption alike, and the drain is
+ * awaited before the process exits (R30).
  *
- * Machine mode (U6) builds the stdout stream (U7) before the program runs —
- * the header and heartbeat precede every phase and terminal event — hands
- * the sink, run id, mode and timing to core through `StrykerHostOptions`,
- * provides the capturing `Console` layer, and emits the captured content as
- * the `error` terminal event at teardown (or a structured help document on
- * stdout for `--help`). The framework's automatic error reporting is
- * disabled in machine mode — it renders the failure cause through the effect
- * logger *outside* the provided layer's scope, which would leak prose into a
- * stderr that must carry only logs and prose.
+ * Machine mode (U6) forks the stdout drain before the program runs — the
+ * header and heartbeat precede every phase and terminal event — hands the
+ * sink, run id, mode and timing to core through `StrykerHostOptions`,
+ * provides the capturing `Console` layer, and pushes the captured content as
+ * the `error` terminal event from the finalizer (or a structured help
+ * document on stdout for `--help`). The framework's automatic error
+ * reporting is disabled in machine mode — it renders the failure cause
+ * through the effect logger *outside* the provided layer's scope, which
+ * would leak prose into a stderr that must carry only logs and prose.
+ *
+ * The classed exit code is resolved exactly once (R6) — in the finalizer,
+ * where the terminal event's `code` is chosen from the same inputs the
+ * teardown used before: a tracked signal maps to `128 + n`, a failed run
+ * keeps the usage-vs-other classification, and a successful run lets the
+ * pending verdict classes decide. `process.exit` is called at most once,
+ * only when a signal was received or the code is non-zero, so a clean run
+ * flushes stdout.
  */
 export function runStrykerCli(
   argv: string[] = process.argv,
@@ -994,6 +1017,7 @@ export function runStrykerCli(
   // One resolved mode decides the Console layer and the stream, from the
   // same detection inputs the reporters use (U3) — never a second probe.
   const resolvedMode = detectMode()
+  activeResolvedMode = resolvedMode
   const stream = createRunEventStream(resolvedMode)
   activeStream = stream
   const hostOptions: StrykerHostOptions = {
@@ -1012,11 +1036,50 @@ export function runStrykerCli(
   const consoleLayer = resolvedMode.mode === 'machine'
     ? machineConsoleLayer()
     : humanConsoleLayer()
-  const program = strykerCliEffect(
+  const cliEffect = strykerCliEffect(
     argv,
     runMutationTest ?? defaultRunMutationTest(hostOptions),
   ).pipe(Effect.provide(consoleLayer))
+
+  // The signal and exit-code cells both the signal handler and the finalizer
+  // write and read across fiber boundaries.
   const lastSignal: { current: number | null } = { current: null }
+  const resolvedExitCode: { current: number | null } = { current: null }
+
+  const resolveClassedExitCode = (exit: Exit.Exit<unknown, unknown>): number => {
+    const signal = lastSignal.current
+    if (signal !== null) {
+      return 128 + signal
+    }
+    if (Exit.isFailure(exit)) {
+      // A failure no verdict gate classified: keep U2's usage-vs-other
+      // classification (U6 refines it with the error envelope). A failed
+      // run must never exit 0.
+      return resolveCliExitCode(exit)
+    }
+    return resolveExitCode(getPendingExitClasses(), null)
+  }
+
+  const program = Effect.gen(function*() {
+    // Fork the drain first: the register runs synchronously inside the fork,
+    // so the sink is bound — and the header precedes every event — before
+    // the CLI starts pushing.
+    yield* stream.open
+    yield* cliEffect
+  }).pipe(
+    Effect.onExit((exit) => {
+      const code = resolveClassedExitCode(exit)
+      resolvedExitCode.current = code
+      if (resolvedMode.mode === 'machine') {
+        emitMachineModeOutput(exit, code)
+      }
+      // Runs on success, failure and interruption (R30): the terminal event
+      // above (or the run's own verdict) ended the stream, and this waits
+      // until every buffered line is written and stdout has finished.
+      return stream.closeAndDrain
+    }),
+  )
+
   Runtime.makeRunMain(({ fiber, teardown }) => {
     const keepAlive = setInterval(() => {}, 2 ** 31 - 1)
     const onSignal = (signal: NodeJS.Signals): void => {
@@ -1034,9 +1097,6 @@ export function runStrykerCli(
         process.removeListener('SIGTERM', onSignal)
       }
       teardown(exit, (code) => {
-        if (resolvedMode.mode === 'machine') {
-          emitMachineModeOutput(exit, code)
-        }
         if (lastSignal.current !== null || code !== 0) {
           process.exit(code)
         } else {
@@ -1046,20 +1106,10 @@ export function runStrykerCli(
     })
   })(program, {
     disableErrorReporting: resolvedMode.mode === 'machine',
+    // The finalizer already resolved the classed code; the fallback re-runs
+    // the classification for a hypothetical run whose finalizer never ran.
     teardown: (exit, onExit) => {
-      const signal = lastSignal.current
-      if (signal !== null) {
-        onExit(128 + signal)
-        return
-      }
-      if (Exit.isFailure(exit)) {
-        // A failure no verdict gate classified: keep U2's usage-vs-other
-        // classification (U6 refines it with the error envelope). A failed
-        // run must never exit 0.
-        onExit(resolveCliExitCode(exit))
-        return
-      }
-      onExit(resolveExitCode(getPendingExitClasses(), null))
+      onExit(resolvedExitCode.current ?? resolveClassedExitCode(exit))
     },
   })
 }
