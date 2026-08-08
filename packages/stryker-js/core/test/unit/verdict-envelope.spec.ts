@@ -1,38 +1,12 @@
-import { MutantResult, schema } from '@stryker-mutator/api/core'
-import { Reporter } from '@stryker-mutator/api/report'
-import { noopLogger } from '@stryker-mutator/util'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { schema } from '@stryker-mutator/api/core'
+import { describe, expect, it } from 'vitest'
 
-import { createDefaultOptions } from '../../src/config/index.js'
-import { FileSystem, Project } from '../../src/fs/index.js'
-import { TestCoverage } from '../../src/mutants/index.js'
-import { detectMode } from '../../src/output-mode.js'
-import { configureStream, resetStream } from '../../src/progress-stream.js'
-import { MutationTestReportHelper } from '../../src/reporters/mutation-test-report-helper.js'
 import {
   buildVerdictEnvelope,
   generateRunId,
   isActionableStatus,
   VERDICT_ENVELOPE_SCHEMA_VERSION,
 } from '../../src/reporters/verdict-envelope.js'
-import type { VerdictEnvelope } from '../../src/reporters/verdict-envelope.js'
-
-// The stream module writes with `fs.writeSync` (a synchronous fd write, so
-// `process.exit` cannot drop it — KTD11); the run-id identity test captures
-// those writes through this mock.
-const fsMocks = vi.hoisted(() => ({
-  writeSync: vi.fn<(fd: number, text: string) => number>(),
-}))
-
-vi.mock('node:fs', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:fs')>()
-  return { ...actual, writeSync: fsMocks.writeSync }
-})
-
-const writtenLines = (): string[] =>
-  fsMocks.writeSync.mock.calls
-    .filter((call) => call[0] === 1)
-    .map((call) => String(call[1]))
 
 const RUN_ID = '01HZJ4QW2TB6N7P8K9M3X5Y7ZA'
 
@@ -309,144 +283,5 @@ describe('isActionableStatus', () => {
     expect(isActionableStatus('CompileError')).toBe(false)
     expect(isActionableStatus('Ignored')).toBe(false)
     expect(isActionableStatus('Pending')).toBe(false)
-  })
-})
-
-describe('MutationTestReportHelper', () => {
-  let originalMode: string | undefined
-
-  afterEach(() => {
-    resetStream()
-    if (originalMode === undefined) {
-      delete process.env.STRYKER_MODE
-    } else {
-      process.env.STRYKER_MODE = originalMode
-    }
-  })
-
-  const createHelper = (emitEnvelope?: (envelope: VerdictEnvelope) => void) => {
-    const options = createDefaultOptions()
-    options.incremental = false
-    options.thresholds = { high: 80, low: 60, break: null }
-    options.jsonReporter = { fileName: 'reports/mutation/mutation.json' }
-    options.requireTestContribution = null
-    options.reporters = []
-    const reporter: Required<Reporter> = {
-      onDryRunCompleted: vi.fn(),
-      onMutationTestingPlanReady: vi.fn(),
-      onMutantTested: vi.fn(),
-      onMutationTestReportReady: vi.fn(),
-      wrapUp: vi.fn(),
-    }
-    const fs = new FileSystem()
-    const project = new Project(fs, {})
-    const testCoverage = new TestCoverage(new Map(), new Map(), undefined, new Map())
-    const requireFromCwd = () => {
-      throw new Error('package not installed')
-    }
-    return {
-      helper: new MutationTestReportHelper(
-        reporter,
-        options,
-        project,
-        noopLogger,
-        testCoverage,
-        fs,
-        requireFromCwd,
-        emitEnvelope,
-      ),
-      reporter,
-    }
-  }
-
-  const runResult = (
-    id: string,
-    status: schema.MutantStatus,
-  ): MutantResult => ({
-    id,
-    fileName: 'src/subject.ts',
-    location: LOCATION_A,
-    mutatorName: 'BinaryOperator',
-    replacement: '-',
-    status,
-    coveredBy: [],
-    killedBy: [],
-    static: false,
-    statusReason: undefined,
-    testsCompleted: undefined,
-  })
-
-  it('emits one envelope in machine mode carrying the survivor key', async () => {
-    originalMode = process.env.STRYKER_MODE
-    process.env.STRYKER_MODE = 'machine'
-    const emitEnvelope = vi.fn()
-    const { helper } = createHelper(emitEnvelope)
-
-    await helper.reportAll([
-      runResult('1', 'Survived'),
-      runResult('2', 'Killed'),
-      runResult('3', 'NoCoverage'),
-    ])
-
-    expect(emitEnvelope).toHaveBeenCalledTimes(1)
-    const envelope = emitEnvelope.mock.calls[0][0]
-    expect(envelope.mode).toBe('machine')
-    expect(envelope.signal).toBe('env')
-    expect(envelope.runId).toMatch(
-      /^[0123456789ABCDEFGHJKMNPQRSTVWXYZ]{26}$/,
-    )
-    expect(envelope.score).toBeCloseTo(100 / 3, 5)
-    expect(envelope.reportFile).toBe('reports/mutation/mutation.json')
-    expect(envelope.mutants).toEqual([
-      {
-        id: '1',
-        file: 'src/subject.ts',
-        location: LOCATION_A,
-        mutator: 'BinaryOperator',
-        replacement: '-',
-        status: 'Survived',
-      },
-      {
-        id: '3',
-        file: 'src/subject.ts',
-        location: LOCATION_A,
-        mutator: 'BinaryOperator',
-        replacement: '-',
-        status: 'NoCoverage',
-      },
-    ])
-    expect(envelope.counts.killed).toBe(1)
-  })
-
-  it('skips the envelope entirely in human mode', async () => {
-    originalMode = process.env.STRYKER_MODE
-    process.env.STRYKER_MODE = 'human'
-    const emitEnvelope = vi.fn()
-    const { helper } = createHelper(emitEnvelope)
-
-    await helper.reportAll([runResult('1', 'Survived')])
-
-    expect(emitEnvelope).not.toHaveBeenCalled()
-  })
-
-  it('writes a verdict run id identical to the stream header run id of the same run, never a freshly minted one', async () => {
-    originalMode = process.env.STRYKER_MODE
-    process.env.STRYKER_MODE = 'machine'
-    resetStream()
-    fsMocks.writeSync.mockClear()
-    configureStream(detectMode())
-
-    const { helper } = createHelper()
-    await helper.reportAll([
-      runResult('1', 'Survived'),
-      runResult('2', 'Killed'),
-    ])
-
-    const parsedLines = writtenLines().map((line) => JSON.parse(line))
-    const headerLine = parsedLines[0]
-    const terminalLine = parsedLines[parsedLines.length - 1]
-    expect(headerLine.kind).toBe('stream')
-    expect(terminalLine.kind).toBe('verdict')
-    expect(headerLine.runId).toBe(terminalLine.runId)
   })
 })

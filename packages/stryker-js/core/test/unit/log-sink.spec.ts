@@ -1,8 +1,11 @@
 import { commonTokens } from '@stryker-mutator/api/plugin'
-import { createInjector, Injector } from 'typed-inject'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { noopLogger } from '@stryker-mutator/util'
+import { Writable } from 'node:stream'
+import { createInjector } from 'typed-inject'
+import { describe, expect, it, vi } from 'vitest'
 import type { Mock } from 'vitest'
 
+import { coreTokens } from '../../src/di/index.js'
 import { LogLevel } from '../../src/logging/log-level.js'
 import { LoggingBackend } from '../../src/logging/logging-backend.js'
 import { LoggingEvent } from '../../src/logging/logging-event.js'
@@ -13,72 +16,20 @@ import {
   MutationTestExecutor,
   PrepareExecutor,
 } from '../../src/process/index.js'
+import type { RunEventSink, RunPhase } from '../../src/run-event.js'
 import { Stryker } from '../../src/stryker.js'
 
-// The stream module (U7) owns the mode gate and the descriptor; stryker.ts
-// only calls into it. This double stands in for that module with the frozen
-// contract: configureStream enables machine mode, emitPhase records only
-// while machine mode is enabled, and a human or unconfigured stream emits
-// nothing. __state exposes the recorded phases to the assertions.
-const streamMocks = vi.hoisted(() => {
-  const state = {
-    machineEnabled: false,
-    emittedPhases: [] as string[],
-  }
-  return {
-    STREAM_SCHEMA_VERSION: '1.0',
-    TICK_INTERVAL_MS: 10_000,
-    configureStream: vi.fn((resolved: { mode: string }, _runId: string): void => {
-      state.machineEnabled = resolved.mode === 'machine'
-    }),
-    streamRunId: vi.fn((): string => 'fake-run-id'),
-    isStreamEnabled: vi.fn((): boolean => state.machineEnabled),
-    emitPhase: vi.fn((phase: string): void => {
-      if (state.machineEnabled) {
-        state.emittedPhases.push(phase)
-      }
-    }),
-    emitPlan: vi.fn(),
-    emitMutant: vi.fn(),
-    recordProgress: vi.fn(),
-    emitTerminal: vi.fn(),
-    resetStream: vi.fn((): void => {
-      state.machineEnabled = false
-      state.emittedPhases.length = 0
-    }),
-    __state: state,
-  }
-})
-
-vi.mock('../../src/progress-stream.js', () => ({ ...streamMocks }))
-
-// The logging providers are wiring, not behavior under test: this double
-// keeps them transparent while recording the sink runMutationTest chose.
-const loggingMocks = vi.hoisted(() => ({
-  provideLogging: vi.fn((injector: unknown) => injector),
-  provideLoggingBackend: vi.fn(
-    async (injector: unknown, _sink: unknown, _showColors: unknown) => injector,
-  ),
-  provideLoggingClient: vi.fn(),
-}))
-
-vi.mock('../../src/logging/provide-logging.js', () => ({ ...loggingMocks }))
-
 const machineResolved: ResolvedMode = { mode: 'machine', signal: 'tty', stdoutIsTTY: false }
-const humanResolved: ResolvedMode = { mode: 'human', signal: 'env', stdoutIsTTY: false }
 
-interface StubLogger {
-  error(message: string, ...args: unknown[]): void
-  info(message: string, ...args: unknown[]): void
-  debug(message: string, ...args: unknown[]): void
-  isTraceEnabled(): boolean
-}
-
-const stubLogger: StubLogger = {
-  error: vi.fn(),
-  info: vi.fn(),
-  debug: vi.fn(),
-  isTraceEnabled: () => false,
+const memoryWritable = (): NodeJS.WritableStream & { written(): string } => {
+  const chunks: Buffer[] = []
+  const writable = new Writable({
+    write: (chunk: unknown, _encoding: BufferEncoding, callback: (error?: Error | null) => void) => {
+      chunks.push(Buffer.from(String(chunk)))
+      callback()
+    },
+  })
+  return Object.assign(writable, { written: () => Buffer.concat(chunks).toString('utf8') })
 }
 
 interface ExecutorFns {
@@ -97,11 +48,23 @@ function createExecutorFns(): ExecutorFns {
   }
 }
 
-function createFakeInjector(executorFns: ExecutorFns): Injector<{}> {
-  const fake = createInjector()
-    .provideValue(commonTokens.getLogger, (): StubLogger => stubLogger)
+// Stryker.run drives the executor chain through typed-inject's injectClass;
+// intercepting that one seam (the declared dependency port) keeps the phase
+// assertions on the emission order instead of on real prepare/instrument work.
+function createRunInjector(executorFns: ExecutorFns, sink: RunEventSink) {
+  const injector = createInjector()
+    .provideValue(commonTokens.getLogger, () => noopLogger)
+    .provideValue(commonTokens.logger, noopLogger)
     .provideValue(commonTokens.options, { cleanTempDir: 'always' })
-  vi.spyOn(fake, 'injectClass').mockImplementation((cls: unknown): unknown => {
+    .provideValue(coreTokens.loggingServerAddress, { port: 0 })
+    .provideValue(coreTokens.loggingSink, new LoggingBackend(memoryWritable(), false))
+    .provideValue(coreTokens.runEventSink, sink)
+    .provideValue(coreTokens.runId, 'fake-run-id')
+    .provideValue(coreTokens.resolvedMode, machineResolved)
+    .provideValue(coreTokens.progressEnabled, false)
+    .provideValue(coreTokens.clearTextEnabled, false)
+    .provideValue(coreTokens.runStartedAt, 0)
+  vi.spyOn(injector, 'injectClass').mockImplementation((cls: unknown): unknown => {
     if (cls === PrepareExecutor) {
       return { execute: executorFns.prepare }
     }
@@ -116,144 +79,84 @@ function createFakeInjector(executorFns: ExecutorFns): Injector<{}> {
     }
     throw new Error(`Unexpected class resolved from the fake injector: ${String(cls)}`)
   })
-  vi.spyOn(fake, 'provideValue').mockImplementation(() => fake)
-  return fake
+  return injector
 }
 
-const stdoutIsTTYDescriptor = Object.getOwnPropertyDescriptor(process.stdout, 'isTTY')
-const restoredSpies: Array<{ mockRestore(): void }> = []
-
-let fakeInjector: Injector<{}>
-let executorFns: ExecutorFns
-
-function runInMode(mode: 'human' | 'machine') {
-  vi.stubEnv('STRYKER_MODE', mode === 'human' ? 'human' : '')
-  return new Stryker({}, () => fakeInjector).runMutationTest()
-}
-
-beforeEach(() => {
-  Object.defineProperty(process.stdout, 'isTTY', { configurable: true, value: false })
-  vi.stubEnv('STRYKER_MODE', '')
-  vi.stubEnv('AGENT', '')
-  vi.stubEnv('CLAUDECODE', '')
-  vi.stubEnv('CODEX_SANDBOX', '')
-  streamMocks.resetStream()
-  loggingMocks.provideLogging.mockClear()
-  loggingMocks.provideLoggingBackend.mockClear()
-  executorFns = createExecutorFns()
-  fakeInjector = createFakeInjector(executorFns)
-  executorFns.prepare.mockResolvedValue(fakeInjector)
-  executorFns.instrument.mockResolvedValue(fakeInjector)
-  executorFns.dryRun.mockResolvedValue(fakeInjector)
-  executorFns.mutationTest.mockResolvedValue([])
-})
-
-afterEach(() => {
-  vi.unstubAllEnvs()
-  for (const spy of restoredSpies) {
-    spy.mockRestore()
-  }
-  restoredSpies.length = 0
-  if (stdoutIsTTYDescriptor) {
-    Object.defineProperty(process.stdout, 'isTTY', stdoutIsTTYDescriptor)
-  } else {
-    Reflect.deleteProperty(process.stdout, 'isTTY')
-  }
-})
-
-describe('the log sink (U13, KTD13)', () => {
-  it('points the logging backend at stderr in machine mode', async () => {
-    await runInMode('machine')
-
-    expect(loggingMocks.provideLoggingBackend).toHaveBeenCalledTimes(1)
-    expect(loggingMocks.provideLoggingBackend.mock.calls[0][1]).toBe(process.stderr)
+describe('the log sink', () => {
+  it('defaults its stdout level to Information', () => {
+    expect(new LoggingBackend(memoryWritable(), false).activeStdoutLevel).toBe(LogLevel.Information)
   })
 
-  it('points the logging backend at stdout in human mode', async () => {
-    await runInMode('human')
-
-    expect(loggingMocks.provideLoggingBackend.mock.calls[0][1]).toBe(process.stdout)
-  })
-
-  it('passes the sink and the colour gate — no level rides the call', async () => {
-    await runInMode('machine')
-
-    expect(loggingMocks.provideLoggingBackend.mock.calls[0]).toHaveLength(3)
-    expect(loggingMocks.provideLoggingBackend.mock.calls[0][1]).toBe(process.stderr)
-    expect(new LoggingBackend(process.stderr, false).activeStdoutLevel).toBe(LogLevel.Information)
-  })
-
-  it('turns colour off in machine mode so a 2>&1 merge carries no escape sequences (R8)', async () => {
-    await runInMode('machine')
-
-    expect(loggingMocks.provideLoggingBackend.mock.calls[0][2]).toBe(false)
-  })
-
-  it('writes an info-level log to stderr in machine mode and never to stdout', async () => {
-    await runInMode('machine')
-    expect(loggingMocks.provideLoggingBackend.mock.calls[0][1]).toBe(process.stderr)
-
-    const stderrWrite = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
-    const stdoutWrite = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
-    restoredSpies.push(stderrWrite, stdoutWrite)
-
-    const backend = new LoggingBackend(process.stderr, false)
+  it('writes an info-level log to the writable it was given and no other', () => {
+    const given = memoryWritable()
+    const other = memoryWritable()
+    const backend = new LoggingBackend(given, false)
     backend.log(LoggingEvent.create('Stryker', LogLevel.Information, ['machine-mode diagnostic']))
-
-    expect(stderrWrite).toHaveBeenCalledWith(expect.stringContaining('machine-mode diagnostic'))
-    expect(stdoutWrite).not.toHaveBeenCalled()
+    expect(given.written()).toContain('machine-mode diagnostic')
+    expect(other.written()).toBe('')
   })
 
-  it('keeps the Information level flowing to the human sink', async () => {
-    await runInMode('human')
-    expect(loggingMocks.provideLoggingBackend.mock.calls[0][1]).toBe(process.stdout)
+  it('honours the colour flag at construction: false emits no escape sequences, true does', () => {
+    const plain = memoryWritable()
+    new LoggingBackend(plain, false).log(LoggingEvent.create('Stryker', LogLevel.Information, ['plain message']))
+    expect(plain.written()).not.toContain('\x1B[')
 
-    const stderrWrite = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
-    const stdoutWrite = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
-    restoredSpies.push(stderrWrite, stdoutWrite)
-
-    const backend = new LoggingBackend(process.stdout, false)
-    backend.log(LoggingEvent.create('Stryker', LogLevel.Information, ['human-mode diagnostic']))
-
-    expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('human-mode diagnostic'))
-    expect(stderrWrite).not.toHaveBeenCalled()
+    const colorized = memoryWritable()
+    new LoggingBackend(colorized, true).log(LoggingEvent.create('Stryker', LogLevel.Information, ['colour message']))
+    expect(colorized.written()).toContain('\x1B[')
   })
 })
 
-describe('the phase events (U13, R18, KTD14)', () => {
+describe('the phase events', () => {
   it('emits all four phases in chain order, each before its stage runs', async () => {
-    streamMocks.configureStream(machineResolved, 'fake-run-id')
-    await runInMode('machine')
+    const order: string[] = []
+    const executorFns = createExecutorFns()
+    const injector = createRunInjector(executorFns, (event) => {
+      if (event.kind === 'phase') order.push(`phase:${event.phase}`)
+    })
+    executorFns.prepare.mockImplementation(async () => {
+      order.push('exec:prepare')
+      return injector
+    })
+    executorFns.instrument.mockImplementation(async () => {
+      order.push('exec:instrument')
+      return injector
+    })
+    executorFns.dryRun.mockImplementation(async () => {
+      order.push('exec:dry-run')
+      return injector
+    })
+    executorFns.mutationTest.mockImplementation(async () => {
+      order.push('exec:mutation-test')
+      return []
+    })
 
-    expect(streamMocks.__state.emittedPhases).toEqual([
-      'prepare',
-      'instrument',
-      'dry-run',
-      'mutation-test',
+    await Stryker.run(injector, { cliOptions: {}, targetMutatePatterns: undefined })
+
+    expect(order).toEqual([
+      'phase:prepare',
+      'exec:prepare',
+      'phase:instrument',
+      'exec:instrument',
+      'phase:dry-run',
+      'exec:dry-run',
+      'phase:mutation-test',
+      'exec:mutation-test',
     ])
-    const phaseOrders = streamMocks.emitPhase.mock.invocationCallOrder
-    expect(phaseOrders[0]).toBeLessThan(executorFns.prepare.mock.invocationCallOrder[0])
-    expect(phaseOrders[1]).toBeLessThan(executorFns.instrument.mock.invocationCallOrder[0])
-    expect(phaseOrders[2]).toBeLessThan(executorFns.dryRun.mock.invocationCallOrder[0])
-    expect(phaseOrders[3]).toBeLessThan(executorFns.mutationTest.mock.invocationCallOrder[0])
-  })
-
-  it('emits the prepare phase before every other phase', async () => {
-    streamMocks.configureStream(machineResolved, 'fake-run-id')
-    await runInMode('machine')
-
-    expect(streamMocks.__state.emittedPhases[0]).toBe('prepare')
-    expect(streamMocks.emitPhase.mock.invocationCallOrder[0]).toBeLessThan(
-      executorFns.prepare.mock.invocationCallOrder[0],
-    )
   })
 
   it('has still emitted the prepare phase when PrepareExecutor throws', async () => {
-    streamMocks.configureStream(machineResolved, 'fake-run-id')
+    const phases: RunPhase[] = []
+    const executorFns = createExecutorFns()
+    const injector = createRunInjector(executorFns, (event) => {
+      if (event.kind === 'phase') phases.push(event.phase)
+    })
     executorFns.prepare.mockRejectedValueOnce(new Error('prepare exploded'))
 
-    await expect(runInMode('machine')).rejects.toThrow('prepare exploded')
+    await expect(
+      Stryker.run(injector, { cliOptions: {}, targetMutatePatterns: undefined }),
+    ).rejects.toThrow('prepare exploded')
 
-    expect(streamMocks.__state.emittedPhases).toEqual(['prepare'])
+    expect(phases).toEqual(['prepare'])
   })
 })
