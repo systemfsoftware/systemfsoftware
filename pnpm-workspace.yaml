@@ -51,8 +51,8 @@ catalog:
 catalogMode: prefer
 catalogs:
   oxlint:
-    oxlint: ^1.74.0
-    "@oxlint/plugins": ^1.74.0
+    oxlint: ^1.77.0
+    "@oxlint/plugins": ^1.77.0
     oxlint-tsgolint: ">=0.24.0"
   stryker:
     "@stryker-mutator/api": ^9.6.1
