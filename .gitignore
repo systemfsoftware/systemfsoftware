@@ -19,3 +19,5 @@ repos/**/.codegraph/
 .repos
 .issues
 wiki
+- Local per-clone hooks (machine-specific: qmd-mcp orphan cleanup, etc.)
+.claude/settings.local.json
