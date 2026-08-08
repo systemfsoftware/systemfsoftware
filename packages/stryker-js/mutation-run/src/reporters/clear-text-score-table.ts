@@ -6,7 +6,7 @@ import { MetricsResult } from 'mutation-testing-metrics'
 
 import chalk from 'chalk'
 
-import { stringWidth } from '../utils/string-utils.js'
+import { stringWidth } from './render-text.js'
 
 const FILES_ROOT_NAME = 'All files'
 

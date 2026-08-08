@@ -3,6 +3,7 @@ import path from 'path'
 import { FileDescriptions, Mutant, schema } from '@stryker-mutator/api/core'
 import { Logger } from '@stryker-mutator/api/logging'
 import { TestResult, TestStatus } from '@stryker-mutator/api/test-runner'
+import chalk from 'chalk'
 import { describe, expect, it } from 'vitest'
 
 import { createDefaultOptions } from '../../src/config/options-validator.js'
@@ -106,5 +107,40 @@ describe('IncrementalDiffer static-mutant reuse', () => {
     const [reused] = diffWith(perTest, { ...survivedMutantResult, coveredBy: ['test-1'] })
 
     expect(reused?.status).toBe('Survived')
+  })
+
+  it('logs the reuse count and file-change totals as plain text with no ANSI escapes', () => {
+    const infoMessages: string[] = []
+    const infoLogger: Logger = {
+      ...silentLogger,
+      isInfoEnabled: () => true,
+      info: (input: string) => infoMessages.push(input),
+    }
+    const perTest = new TestCoverage(
+      new Map([['1', new Set([passingTest])]]),
+      new Map([[passingTest.id, passingTest]]),
+      {},
+      new Map(),
+    )
+    const differ = new IncrementalDiffer(infoLogger, createDefaultOptions(), fileDescriptions)
+
+    const previousChalkLevel = chalk.level
+    chalk.level = 1
+    try {
+      differ.diff(
+        [currentMutant],
+        perTest,
+        incrementalReport({ ...survivedMutantResult, coveredBy: ['test-1'] }),
+        currentFiles,
+      )
+    } finally {
+      chalk.level = previousChalkLevel
+    }
+
+    const logOutput = infoMessages.join('\n')
+    expect(logOutput).toContain('Incremental report:')
+    expect(logOutput).toContain('0 files changed (+0 -0)')
+    expect(logOutput).toContain('1 of 1 mutant result(s) are reused.')
+    expect(logOutput).not.toContain('\u001b')
   })
 })

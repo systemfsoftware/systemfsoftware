@@ -1,10 +1,8 @@
-import chalk from 'chalk'
-
 export class DiffChanges {
   public added = 0
   public removed = 0
   public toString(): string {
-    return `${chalk.greenBright(`+${this.added}`)} ${chalk.redBright(`-${this.removed}`)}`
+    return `+${this.added} -${this.removed}`
   }
 }
 export type DiffChange = 'added' | 'removed'
@@ -42,6 +40,6 @@ export class DiffStatisticsCollector {
   }
 
   public createTotalsReport(): string {
-    return `${chalk.yellowBright(this.changesByFile.size)} files changed (${this.total.toString()})`
+    return `${this.changesByFile.size} files changed (${this.total.toString()})`
   }
 }

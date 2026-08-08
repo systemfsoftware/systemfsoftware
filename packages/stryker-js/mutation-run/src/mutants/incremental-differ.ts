@@ -13,7 +13,6 @@ import { Logger } from '@stryker-mutator/api/logging'
 import { commonTokens } from '@stryker-mutator/api/plugin'
 import { TestResult, TestStatus } from '@stryker-mutator/api/test-runner'
 import { I, normalizeFileName, normalizeLineEndings, notEmpty } from '@stryker-mutator/util'
-import chalk from 'chalk'
 import { diff_match_patch as DiffMatchPatch } from 'diff-match-patch'
 import { TestDefinition } from 'mutation-testing-report-schema'
 
@@ -235,9 +234,7 @@ export class IncrementalDiffer {
       this.logger.info(
         `Incremental report:\n\tMutants:\t${mutantStatisticsCollector.createTotalsReport()}` +
           testInfo +
-          `\n\tResult:\t\t${
-            chalk.yellowBright(reusedMutantCount)
-          } of ${currentMutants.length} mutant result(s) are reused.`,
+          `\n\tResult:\t\t${reusedMutantCount} of ${currentMutants.length} mutant result(s) are reused.`,
       )
     }
     if (this.logger.isDebugEnabled()) {

@@ -16,7 +16,7 @@ import {
 } from 'mutation-testing-metrics'
 import { tokens } from 'typed-inject'
 
-import { getEmojiForStatus, plural } from '../utils/string-utils.js'
+import { getEmojiForStatus, plural } from './render-text.js'
 
 import { ClearTextScoreTable } from './clear-text-score-table.js'
 
