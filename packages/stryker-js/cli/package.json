@@ -1,0 +1,74 @@
+{
+  "name": "@systemfsoftware/stryker-js-cli",
+  "version": "1.2.5",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
+    "directory": "packages/stryker-js/cli"
+  },
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/stryker-js/cli#readme",
+  "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
+  "description": "The stryker command-line interface — terminal framing, run-event stream, and exit handling for the @systemfsoftware Stryker fork.",
+  "type": "module",
+  "bin": {
+    "stryker": "./bin/stryker.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "clean": "rimraf dist",
+    "build": "tsdown && pnpm api:check",
+    "typecheck": "tsc --noEmit --incremental",
+    "test": "vitest run",
+    "test:run": "vitest run",
+    "lint": "oxlint . ${AGENT:+--format=unix --quiet}",
+    "api:check": "api-extractor run",
+    "api:update": "api-extractor run --local",
+    "attw": "attw --pack ."
+  },
+  "dependencies": {
+    "@effect/cli": "catalog:",
+    "@effect/platform": "catalog:",
+    "@effect/platform-node": "catalog:",
+    "@systemfsoftware/stryker-js-core": "workspace:^",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@microsoft/api-extractor": "catalog:",
+    "@systemfsoftware/arethetypeswrong-cli": "workspace:^",
+    "@systemfsoftware/oxlint-config": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-effect-entrypoint": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-test-placement": "workspace:^",
+    "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
+    "@types/node": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
+    "rimraf": "catalog:",
+    "tsdown": "catalog:",
+    "vite-tsconfig-paths": "catalog:",
+    "vitest": "catalog:"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "license": "Apache-2.0",
+  "publishConfig": {
+    "provenance": true,
+    "exports": {
+      ".": {
+        "types": "./dist/stryker-js-cli.d.ts",
+        "default": "./dist/index.mjs"
+      },
+      "./package.json": "./package.json"
+    }
+  },
+  "exports": {
+    ".": {
+      "@systemfsoftware/source": "./src/mod.ts",
+      "types": "./dist/stryker-js-cli.d.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./package.json": "./package.json"
+  }
+}
