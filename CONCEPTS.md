@@ -28,6 +28,12 @@ A package.json `dependencies` (or `peerDependencies`) entry that tsdown leaves a
 
 A `bundledPackages` array entry in `api-extractor.json` listing workspace dependencies whose types should be inlined into the rollup output. Inlining means consumers don't have to install the dep at all for type resolution — the rollup contains everything. Used when a package is a structural re-export layer (barrels from one or more workspace deps) so its published types stand alone.
 
+### Toolchain bootstrap cycle
+
+A mutual dev-dependency between two of this repo's own tooling packages, arising because the repo self-hosts what it publishes: a lint plugin governs the mutation tooling, while that same mutation tooling exercises the plugin's own tests.
+
+The cycle is legitimate at the package level and false at the build level. Each dependency exists because the depending package's _verification_ needs it, so deleting either one removes a real check rather than a redundant edge. But neither package's build consumes the other's build output, so the build graph must be told per package that a tooling edge carries no build ordering — otherwise the topological build dependency turns the pair into an unschedulable loop and no task runs at all, which masks every other fault in the tree behind a single graph error. Distinct from an externalized dependency, which concerns what a published tarball needs at runtime; this concept concerns only what must be built before what.
+
 ## Build cache
 
 ### Input-hash completeness
