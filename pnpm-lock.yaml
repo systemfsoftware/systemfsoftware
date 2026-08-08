@@ -2460,6 +2460,9 @@ importers:
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
+      '@systemfsoftware/oxlint-plugin-cell-taxonomy':
+        specifier: workspace:^
+        version: link:../../oxlint-plugins/cell-taxonomy
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../tsconfig
@@ -2551,6 +2554,9 @@ importers:
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: workspace:^
         version: link:../../arethetypeswrong/cli
+      '@systemfsoftware/oxlint-plugin-cell-taxonomy':
+        specifier: workspace:^
+        version: link:../../oxlint-plugins/cell-taxonomy
       '@systemfsoftware/stryker-js-vitest-runner':
         specifier: workspace:^
         version: link:../vitest-runner
@@ -2615,6 +2621,9 @@ importers:
       '@std/jsonc':
         specifier: 'catalog:'
         version: '@jsr/std__jsonc@1.0.2'
+      '@systemfsoftware/oxlint-plugin-cell-taxonomy':
+        specifier: workspace:^
+        version: link:../../oxlint-plugins/cell-taxonomy
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../tsconfig
