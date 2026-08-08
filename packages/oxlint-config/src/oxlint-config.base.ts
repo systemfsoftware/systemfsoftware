@@ -10,7 +10,13 @@ export default defineConfig({
     typeAware: true,
   },
 
-  plugins: ['typescript', 'import', 'jsdoc', 'node', 'promise', 'vitest', 'unicorn'],
+  // `import` is deliberately absent. Its only `correctness` rules are
+  // `import/default` and `import/namespace`, and `tsc --noEmit` reports both at the
+  // same positions (TS1192, TS2339) with `strict` closing the untyped-import gap via
+  // TS7016 — so the plugin's module-graph resolution cost bought a duplicate check.
+  // A package that wants a rule tsc cannot reach, such as `import/no-cycle`, adds
+  // `plugins: ['import']` in its own config.
+  plugins: ['typescript', 'jsdoc', 'node', 'promise', 'vitest', 'unicorn'],
 
   jsPlugins: [
     import.meta.resolve('@systemfsoftware/oxlint-plugin'),

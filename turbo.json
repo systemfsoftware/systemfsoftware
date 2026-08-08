@@ -1,5 +1,8 @@
 {
   "$schema": "https://v2-10-1.turborepo.dev/schema.json",
+  "globalDependencies": [
+    "scripts/patch-tsgo-if-needed.mjs"
+  ],
   "tasks": {
     "build": {
       "outputLogs": "new-only",
@@ -26,13 +29,14 @@
       "inputs": [
         "$TURBO_DEFAULT$",
         "tsconfig.json",
-        "tsconfig.*.json"
+        "tsconfig.*.json",
+        "$TURBO_ROOT$/packages/tsconfig/**"
       ],
       "outputs": [],
       "dependsOn": [
         "^build"
       ],
-      "cache": false
+      "cache": true
     },
     "test": {
       "inputs": [
@@ -80,9 +84,11 @@
     "lint": {
       "inputs": [
         "$TURBO_DEFAULT$",
+        "oxlint.config.ts",
         "tsconfig.json",
         "tsconfig.*.json",
-        "$TURBO_ROOT$/packages/oxlint-config/**"
+        "$TURBO_ROOT$/packages/oxlint-config/**",
+        "$TURBO_ROOT$/packages/tsconfig/**"
       ],
       "outputs": [],
       "dependsOn": [
@@ -90,7 +96,9 @@
         "build"
       ],
       "env": [
-        "NODE_ENV"
+        "NODE_ENV",
+        "AGENT",
+        "GITHUB_ACTIONS"
       ],
       "cache": true
     },
