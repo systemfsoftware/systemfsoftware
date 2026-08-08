@@ -1,7 +1,8 @@
-import { execFileSync, type SpawnSyncReturns } from 'child_process'
+import { execFile } from 'child_process'
 import { access, readFile, writeFile } from 'fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { promisify } from 'node:util'
 import { afterAll, assert, describe, test } from 'vitest'
 
 const directoryPath = path.dirname(fileURLToPath(import.meta.url))
@@ -12,6 +13,13 @@ function resolveFileRelativePath(relPath: string) {
 const attw = resolveFileRelativePath('../dist/index.mjs')
 const updateSnapshots = process.env.UPDATE_SNAPSHOTS || process.env.U
 const testFilter = (process.env.TEST_FILTER || process.env.T)?.toLowerCase()
+
+const execFileAsync = promisify(execFile)
+
+type ExecFileFailure = { readonly stdout: string; readonly stderr: string; readonly code?: number }
+
+const isExecFileFailure = (error: unknown): error is ExecFileFailure =>
+  typeof error === 'object' && error !== null && 'stdout' in error && 'stderr' in error
 
 const tests = [
   ['@apollo__client-3.7.16.tgz'],
@@ -84,21 +92,26 @@ describe('snapshots', async () => {
       continue
     }
 
-    test(fixture, async () => {
+    test.concurrent(fixture, async () => {
       const tarballPath = resolveFileRelativePath(`../../core/test/fixtures/${tarball}`)
       let stdout
       let stderr = ''
       let exitCode = 0
       try {
-        stdout = execFileSync(process.execPath, [attw, tarballPath, ...(options ?? defaultOpts).split(' ')], {
+        stdout = (await execFileAsync(process.execPath, [
+          attw,
+          tarballPath,
+          ...(options ?? defaultOpts).split(' '),
+        ], {
           maxBuffer: 1024 * 1024 * 1024,
           encoding: 'utf8',
           env: { ...process.env, FORCE_COLOR: '0' },
-        })
+        })).stdout
       } catch (error) {
-        stdout = (error as SpawnSyncReturns<string>).stdout
-        stderr = (error as SpawnSyncReturns<string>).stderr
-        exitCode = (error as SpawnSyncReturns<string>).status ?? 1
+        if (!isExecFileFailure(error)) throw error
+        stdout = error.stdout
+        stderr = error.stderr
+        exitCode = typeof error.code === 'number' ? error.code : 1
       }
       const snapshotDir = new URL('snapshots/', import.meta.url)
       const snapshotURL = new URL(`${fixture}.md`, snapshotDir)
