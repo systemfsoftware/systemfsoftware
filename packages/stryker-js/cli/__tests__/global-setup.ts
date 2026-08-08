@@ -21,6 +21,7 @@ const NODE_IMAGE = 'node:22-alpine'
 const WORKSPACE_PACKAGES = [
   '@systemfsoftware/stryker-js-cli',
   '@systemfsoftware/stryker-js-mutation-run',
+  '@systemfsoftware/stryker-js-mutation-report',
   '@systemfsoftware/effect-cell-types',
 ] as const
 const REPO_ROOT = fileURLToPath(new URL('../../../../', import.meta.url))
@@ -38,7 +39,7 @@ let tarballDir: string | undefined
  * Vitest bounds this function separately, and a failure here fails the run.
  */
 export async function setup(project: TestProject): Promise<void> {
-  const distEntry = join(CLI_DIR, 'dist', 'index.mjs')
+  const distEntry = join(CLI_DIR, 'dist', 'main.mjs')
   await access(distEntry).catch(() => {
     throw new Error(`the CLI contract lane needs a built package: ${distEntry} is missing - run \`pnpm build\` first`)
   })

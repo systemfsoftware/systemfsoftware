@@ -6,8 +6,11 @@ import { JsonReporter } from './json-reporter.js'
 import { ProgressBarReporter } from './progress-reporter.js'
 import { ProgressStreamReporter } from './progress-stream-reporter.js'
 
-export { BroadcastReporter } from './broadcast-reporter.js'
-export type { StrictReporter } from './strict-reporter.js'
+export { ClearTextReporter }
+export { HtmlReporter }
+export { JsonReporter }
+export { ProgressBarReporter }
+export { ProgressStreamReporter }
 
 export const strykerPlugins = [
   declareClassPlugin(PluginKind.Reporter, 'clear-text', ClearTextReporter),

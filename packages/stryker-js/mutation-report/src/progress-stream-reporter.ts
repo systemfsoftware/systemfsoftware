@@ -3,10 +3,9 @@ import { commonTokens, PluginContext } from '@stryker-mutator/api/plugin'
 import { MutationTestingPlanReadyEvent, Reporter } from '@stryker-mutator/api/report'
 import { Injector, tokens } from 'typed-inject'
 
-import { coreTokens } from '../di/index.js'
-import type { RunEventSink } from '../run-event.js'
-
-import { isActionableStatus } from './verdict-envelope.js'
+import { coreTokens } from '@systemfsoftware/stryker-js-mutation-run/di'
+import { isActionableStatus } from '@systemfsoftware/stryker-js-mutation-run/reporters/verdict-envelope'
+import type { RunEventSink } from '@systemfsoftware/stryker-js-mutation-run/run-event'
 
 /**
  * The machine-mode progress events (R17, R19, R20): the reporter seam that

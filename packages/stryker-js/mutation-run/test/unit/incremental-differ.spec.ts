@@ -3,7 +3,6 @@ import path from 'path'
 import { FileDescriptions, Mutant, schema } from '@stryker-mutator/api/core'
 import { Logger } from '@stryker-mutator/api/logging'
 import { TestResult, TestStatus } from '@stryker-mutator/api/test-runner'
-import chalk from 'chalk'
 import { describe, expect, it } from 'vitest'
 
 import { createDefaultOptions } from '../../src/config/options-validator.js'
@@ -124,18 +123,12 @@ describe('IncrementalDiffer static-mutant reuse', () => {
     )
     const differ = new IncrementalDiffer(infoLogger, createDefaultOptions(), fileDescriptions)
 
-    const previousChalkLevel = chalk.level
-    chalk.level = 1
-    try {
-      differ.diff(
-        [currentMutant],
-        perTest,
-        incrementalReport({ ...survivedMutantResult, coveredBy: ['test-1'] }),
-        currentFiles,
-      )
-    } finally {
-      chalk.level = previousChalkLevel
-    }
+    differ.diff(
+      [currentMutant],
+      perTest,
+      incrementalReport({ ...survivedMutantResult, coveredBy: ['test-1'] }),
+      currentFiles,
+    )
 
     const logOutput = infoMessages.join('\n')
     expect(logOutput).toContain('Incremental report:')

@@ -129,11 +129,13 @@ describe('the reporter dispatch gates', () => {
 const fixtureDir = fileURLToPath(
   new URL('../../../cli/__tests__/fixtures/minimal-project/', import.meta.url),
 )
-// The engine's own reporter registry, addressed through its source file so the
-// test stays hermetic (no dist/ build required). The plugin loader imports the
-// specifier it is given verbatim; vitest transforms the .ts source on import.
+// The fork's reporter registry, split out of this package into the sibling
+// mutation-report package (U6). Addressed through its source file; vitest
+// transforms the .ts on import. Its transitive imports of this engine's
+// subpaths (`./di`, `./utils/timer`, ...) resolve through the built dist, so
+// the engine must be built before this spec runs.
 const registrySpecifier = new URL(
-  '../../src/reporters/stryker-plugins.ts',
+  '../../../mutation-report/src/stryker-plugins.ts',
   import.meta.url,
 ).href
 // A second real module exporting `strykerPlugins` (Ignore-kind plugins).

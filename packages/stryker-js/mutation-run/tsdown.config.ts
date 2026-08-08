@@ -9,19 +9,24 @@ export default defineConfig({
     'config/base': './src/config/base-preset.ts',
     'config/config-resolution': './src/config/config-resolution.ts',
     'config/fork-schema': './src/config/fork-schema.ts',
+    'di': './src/di/index.ts',
     errors: './src/errors.ts',
     'mutants/incremental-differ': './src/mutants/incremental-differ.ts',
     'output-mode': './src/output-mode.ts',
-    'reporters/stryker-plugins': './src/reporters/stryker-plugins.ts',
     'reporters/verdict-envelope': './src/reporters/verdict-envelope.ts',
     'run-event': './src/run-event.ts',
     'stryker-package': './src/stryker-package.ts',
     'utils/exit-classification': './src/utils/exit-classification.ts',
+    'utils/timer': './src/utils/timer.ts',
   },
   format: 'esm',
   dts: true,
   exports: { devExports: '@systemfsoftware/source' },
   // Inlined, not externalized: see the note in ../typescript-checker/tsdown.config.ts.
   noExternal: ['@std/jsonc'],
-  clean: false,
+  // Clean the dist before each build: with clean: false, content-hashed chunks
+  // accumulate and a stale chunk (e.g. the pre-U6 reporters-*.mjs importing
+  // chalk and progress) trips check:runtime-deps against a manifest that no
+  // longer declares those deps.
+  clean: true,
 })

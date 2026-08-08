@@ -2,7 +2,7 @@ import type * as Command from '@effect/cli/Command'
 import { PluginKind } from '@stryker-mutator/api/plugin'
 import { Option } from 'effect'
 
-import { strykerPlugins } from '@systemfsoftware/stryker-js-mutation-run/reporters/stryker-plugins'
+import { strykerPlugins } from '@systemfsoftware/stryker-js-mutation-report/stryker-plugins'
 
 // =============================================================================
 // U11 — the `--llms` command manifest (R13)

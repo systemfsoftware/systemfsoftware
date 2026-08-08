@@ -5,14 +5,12 @@
 ```ts
 
 import { BaseContext } from '@stryker-mutator/api/plugin';
-import { ClassPlugin } from '@stryker-mutator/api/plugin';
 import { createInjector } from 'typed-inject';
 import { Disposable as Disposable_2 } from 'typed-inject';
 import { Injector } from 'typed-inject';
 import { MutantResult } from '@stryker-mutator/api/core';
 import { MutantStatus } from '@stryker-mutator/api/core';
 import { PartialStrykerOptions } from '@stryker-mutator/api/core';
-import { PluginKind } from '@stryker-mutator/api/plugin';
 import { Reporter } from '@stryker-mutator/api/report';
 import { schema } from '@stryker-mutator/api/core';
 
@@ -49,9 +47,6 @@ export interface StrykerHostOptions {
     // (undocumented)
     readonly showColors: boolean;
 }
-
-// @public (undocumented)
-export const strykerPlugins: ClassPlugin<PluginKind.Reporter, []>[];
 
 // (No @packageDocumentation comment for this package)
 

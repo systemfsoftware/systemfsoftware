@@ -1,3 +1,7 @@
+/**
+ * Published as the `./utils/timer` subpath: the mutation-report package's
+ * progress reporters construct a `Timer` from here (KTD7).
+ */
 export class Timer {
   private readonly start: Date
   private readonly markers: Record<string, Date | undefined> = Object.create(null)

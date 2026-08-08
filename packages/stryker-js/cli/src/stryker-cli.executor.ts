@@ -142,16 +142,13 @@ function hostOptionsOf(mode: ResolvedMode, stream: RunEventStream): StrykerHostO
     progressEnabled: isProgressEnabled(mode),
     clearTextEnabled: mode.mode === 'human',
     runStartedAt: stream.startedAt,
-    // U4: the host now names the reporter registry. Resolving the engine's own
-    // subpath here keeps today's behaviour; a later unit retargets this to the
-    // extracted presentation package. The resolved URL is required (not the
-    // bare specifier) because tsdown mangles export names inside shared
-    // chunks — only the generated entry wrapper for a declared subpath
-    // re-exports `strykerPlugins` under its real name.
+    // The host names the reporter registry. Since U6 it lives in the
+    // mutation-report package's own `stryker-plugins` subpath. The resolved
+    // URL is required (not the bare specifier) because tsdown mangles export
+    // names inside shared chunks — only the generated entry wrapper for a
+    // declared subpath re-exports `strykerPlugins` under its real name.
     reporterPluginModules: [
-      import.meta.resolve(
-        '@systemfsoftware/stryker-js-mutation-run/reporters/stryker-plugins',
-      ),
+      import.meta.resolve('@systemfsoftware/stryker-js-mutation-report/stryker-plugins'),
     ],
   }
 }
