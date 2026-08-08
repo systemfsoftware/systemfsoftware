@@ -1,7 +1,7 @@
 {
   "extends": "@systemfsoftware/stryker-js-core/config/base",
   "mutate": [
-    "src/survivors.workflow.ts"
+    "src/**/*.workflow.ts"
   ],
   "disableBail": true,
   "plugins": [

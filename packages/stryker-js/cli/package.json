@@ -10,22 +10,16 @@
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
   "description": "The stryker command-line interface — terminal framing, run-event stream, and exit handling for the @systemfsoftware Stryker fork.",
   "type": "module",
-  "bin": {
-    "stryker": "./bin/stryker.js"
-  },
   "files": [
     "dist"
   ],
   "scripts": {
     "clean": "rimraf dist",
-    "build": "tsdown && pnpm api:check",
+    "build": "tsdown",
     "typecheck": "tsc --noEmit --incremental",
     "test": "vitest run",
     "test:contract": "vitest run --config vitest.contract.config.ts",
     "lint": "oxlint . ${AGENT:+--format=unix --quiet}",
-    "api:check": "api-extractor run",
-    "api:update": "api-extractor run --local",
-    "attw": "attw --pack .",
     "mutation": "stryker run",
     "mutation:full": "stryker run --force"
   },
@@ -41,8 +35,6 @@
     "semver": "catalog:stryker"
   },
   "devDependencies": {
-    "@microsoft/api-extractor": "catalog:",
-    "@systemfsoftware/arethetypeswrong-cli": "workspace:^",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/oxlint-plugin-effect-entrypoint": "workspace:^",
@@ -64,21 +56,12 @@
   },
   "license": "Apache-2.0",
   "publishConfig": {
-    "provenance": true,
-    "exports": {
-      ".": {
-        "types": "./dist/stryker-js-cli.d.ts",
-        "default": "./dist/index.mjs"
-      },
-      "./package.json": "./package.json"
-    }
+    "provenance": true
   },
   "exports": {
-    ".": {
-      "@systemfsoftware/source": "./src/mod.ts",
-      "types": "./dist/stryker-js-cli.d.ts",
-      "default": "./dist/index.mjs"
-    },
     "./package.json": "./package.json"
+  },
+  "bin": {
+    "stryker": "./dist/main.mjs"
   }
 }
