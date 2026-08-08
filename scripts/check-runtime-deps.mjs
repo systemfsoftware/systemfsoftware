@@ -2,7 +2,8 @@
 // Fails when a publishable package's SHIPPED build imports a package its manifest
 // declares nowhere.
 //
-// This is the gate that was missing when @systemfsoftware/stryker-js-core shipped a
+// This is the gate that was missing when the package now published as
+// @systemfsoftware/stryker-js-mutation-run shipped a
 // `bin` whose dist/index.mjs imported @effect/cli, @effect/platform and effect at
 // runtime while declaring all of them as `peerDependencies` only. Every other gate
 // passed: the code compiles, the types resolve, the tests run -- because in the

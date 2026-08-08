@@ -55,7 +55,7 @@ const TOOLING = new Map([
 
   // Our Stryker fork. Enumerated one package at a time: `packages/stryker-js/cli` is NOT
   // here, because we authored it and chartered it for full cell compliance.
-  ...['core', 'typescript-checker', 'vitest-runner'].map((name) => [
+  ...['mutation-run', 'typescript-checker', 'vitest-runner'].map((name) => [
     `packages/stryker-js/${name}`,
     'our Stryker fork: upstream-shaped, not Effect cell code, so cell rules are the wrong observer; carries its own oxlint baseline and mutation gate',
   ]),
