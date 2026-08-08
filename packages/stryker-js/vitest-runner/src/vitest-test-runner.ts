@@ -28,7 +28,7 @@ import {
   VITEST_ERROR_CODES,
 } from './vitest-helpers.js'
 import { VitestRunnerOptionsWithStrykerOptions } from './vitest-runner-options-with-stryker-options.js'
-import { Vitest, vitestWrapper } from './vitest-wrapper.js'
+import { resolveVitest, Vitest, VitestResolver } from './vitest-wrapper.js'
 
 type StrykerNamespace = '__stryker__' | '__stryker2__'
 const STRYKER_SETUP = fileURLToPath(
@@ -59,16 +59,23 @@ export class VitestTestRunner implements TestRunner {
   ] as const
   private ctx?: Vitest
   private readonly options: VitestRunnerOptionsWithStrykerOptions
-  private localSetupFile = path.resolve(
-    `./stryker-setup-${process.env.STRYKER_MUTATOR_WORKER ?? 0}.js`,
-  )
+  private resolvedProjectDir?: string
+  private localSetupFile?: string
 
   constructor(
     options: StrykerOptions,
     private readonly log: Logger,
     private globalNamespace: StrykerNamespace,
+    private readonly resolveVitestFor: VitestResolver = resolveVitest,
   ) {
     this.options = options as VitestRunnerOptionsWithStrykerOptions
+  }
+
+  private get projectDir(): string {
+    if (this.resolvedProjectDir === undefined) {
+      throw new Error('VitestTestRunner.init() must run before the project directory is read')
+    }
+    return this.resolvedProjectDir
   }
 
   public capabilities(): TestRunnerCapabilities {
@@ -77,9 +84,15 @@ export class VitestTestRunner implements TestRunner {
 
   public async init(): Promise<void> {
     this.setEnv()
-    await fs.promises.copyFile(STRYKER_SETUP, this.localSetupFile)
+    const projectDir = this.options.vitest?.dir ?? process.cwd()
+    this.resolvedProjectDir = projectDir
+    const localSetupFile = path.resolve(projectDir, `stryker-setup-${process.pid}.js`)
+    this.localSetupFile = localSetupFile
+    await fs.promises.copyFile(STRYKER_SETUP, localSetupFile)
 
-    this.ctx = await vitestWrapper.createVitest('test', {
+    const { createVitest, version } = await this.resolveVitestFor(projectDir)
+
+    this.ctx = await createVitest('test', {
       config: this.options.vitest?.configFile,
       // @ts-expect-error threads got renamed to "pool: threads" in vitest 1.0.0
       threads: true,
@@ -96,19 +109,19 @@ export class VitestTestRunner implements TestRunner {
       singleThread: false,
       maxConcurrency: 1,
       watch: false,
-      dir: this.options.vitest.dir,
+      dir: projectDir,
       bail: this.options.disableBail ? 0 : 1,
       onConsoleLog: () => false,
     })
     this.ctx.provide('globalNamespace', this.globalNamespace)
     this.ctx.provide(
       'isGreaterThanVitest4Point1',
-      semver.satisfies(vitestWrapper.version, '>=4.1.0'),
+      semver.satisfies(version, '>=4.1.0'),
     )
     this.ctx.config.browser.screenshotFailures = false
     this.ctx.projects.forEach((project) => {
       project.config.setupFiles = [
-        this.localSetupFile,
+        localSetupFile,
         ...project.config.setupFiles,
       ]
       project.config.browser.screenshotFailures = false
@@ -209,7 +222,7 @@ export class VitestTestRunner implements TestRunner {
 
     let failure = false
     const testResults = tests.map((test) => {
-      const testResult = convertTestToTestResult(test)
+      const testResult = convertTestToTestResult(test, this.projectDir)
       failure ||= testResult.status === TestStatus.Failed
       return testResult
     })
@@ -261,7 +274,7 @@ export class VitestTestRunner implements TestRunner {
         ([, file]) => (file.meta as { mutantCoverage?: MutantCoverage }).mutantCoverage,
       )
       .filter(notEmpty)
-      .map(normalizeCoverage)
+      .map((coverage) => normalizeCoverage(coverage, this.projectDir))
 
     if (coverages.length > 1) {
       return coverages.reduce((acc, projectCoverage) => {
@@ -294,8 +307,11 @@ export class VitestTestRunner implements TestRunner {
   }
 
   public async dispose(): Promise<void> {
+    const localSetupFile = this.localSetupFile
     this.ctx?.onClose(async () => {
-      await fs.promises.rm(this.localSetupFile, { force: true })
+      if (localSetupFile !== undefined) {
+        await fs.promises.rm(localSetupFile, { force: true })
+      }
     })
     await this.ctx?.close()
   }

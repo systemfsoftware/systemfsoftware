@@ -23,6 +23,7 @@ describe('Infinite loop', () => {
     await sandbox.init()
     options = createStrykerOptions()
     options.vitest = createVitestRunnerOptions({ related: false })
+    options.vitest.dir = sandbox.tmpDir
     sut = createTestInjector(options).injectFunction(
       createVitestTestRunnerFactory('__stryker2__'),
     )

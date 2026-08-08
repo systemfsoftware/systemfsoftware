@@ -46,6 +46,7 @@ describe('VitestRunner integration', () => {
     beforeEach(async () => {
       sandbox = new TempTestDirectorySandbox('simple-project')
       await sandbox.init()
+      options.vitest.dir = sandbox.tmpDir
       sandboxFileName = path.resolve(sandbox.tmpDir, 'math.ts')
     })
 
@@ -60,37 +61,37 @@ describe('VitestRunner integration', () => {
         expectTestResults(runResult, [
           {
             id: test1,
-            fileName: path.resolve('tests/add.spec.ts'),
+            fileName: path.resolve(sandbox.tmpDir, 'tests/add.spec.ts'),
             name: 'add should be able to add two numbers',
             status: TestStatus.Success,
           },
           {
             id: test2,
-            fileName: path.resolve('tests/add.spec.ts'),
+            fileName: path.resolve(sandbox.tmpDir, 'tests/add.spec.ts'),
             name: 'add should be able to add a negative number',
             status: TestStatus.Success,
           },
           {
             id: test3,
-            fileName: path.resolve('tests/math.spec.ts'),
+            fileName: path.resolve(sandbox.tmpDir, 'tests/math.spec.ts'),
             name: 'math should be able negate a number',
             status: TestStatus.Success,
           },
           {
             id: test4,
-            fileName: path.resolve('tests/math.spec.ts'),
+            fileName: path.resolve(sandbox.tmpDir, 'tests/math.spec.ts'),
             name: 'math should be able to add one to a number',
             status: TestStatus.Success,
           },
           {
             id: test5,
-            fileName: path.resolve('tests/math.spec.ts'),
+            fileName: path.resolve(sandbox.tmpDir, 'tests/math.spec.ts'),
             name: 'math should be able to recognize a negative number',
             status: TestStatus.Success,
           },
           {
             id: test6,
-            fileName: path.resolve('tests/pi.spec.ts'),
+            fileName: path.resolve(sandbox.tmpDir, 'tests/pi.spec.ts'),
             name: 'pi should be 3.14',
             status: TestStatus.Success,
           },
@@ -288,6 +289,7 @@ describe('VitestRunner integration', () => {
     beforeEach(async () => {
       sandbox = new TempTestDirectorySandbox('multiple-configs')
       await sandbox.init()
+      options.vitest.dir = sandbox.tmpDir
     })
 
     it('should load default vitest config when config file is not set', async () => {
@@ -324,6 +326,7 @@ describe('VitestRunner integration', () => {
     beforeEach(async () => {
       sandbox = new TempTestDirectorySandbox('workspaces')
       await sandbox.init()
+      options.vitest.dir = sandbox.tmpDir
       fooTestId = 'packages/foo/src/math.spec.js#min should min 44, 2 = 42'
       barTestId = 'packages/bar/src/math.spec.js#add should add 40, 2 = 42'
     })
@@ -370,6 +373,7 @@ describe('VitestRunner integration', () => {
     beforeEach(async () => {
       sandbox = new TempTestDirectorySandbox('async-failure')
       await sandbox.init()
+      options.vitest.dir = sandbox.tmpDir
     })
 
     async function actErroredMutant() {
@@ -402,10 +406,11 @@ describe('VitestRunner integration', () => {
     beforeEach(async () => {
       sandbox = new TempTestDirectorySandbox('deep-project')
       await sandbox.init()
+      options.vitest.dir = sandbox.tmpDir
     })
 
     it('should be able to report an ErrorResult', async () => {
-      options.vitest.dir = 'packages'
+      options.vitest.dir = path.resolve(sandbox.tmpDir, 'packages')
       await sut.init()
       const runResult = await sut.dryRun(createDryRunOptions())
       expectCompleted(runResult)
@@ -429,6 +434,7 @@ describe('VitestRunner integration', () => {
     beforeEach(async () => {
       sandbox = new TempTestDirectorySandbox('vitest-fixtures')
       await sandbox.init()
+      options.vitest.dir = sandbox.tmpDir
     })
 
     it('should run tests that use vitest fixtures', async () => {

@@ -33,6 +33,7 @@ describe('Vitest runner related', () => {
     )
     sandbox = new TempTestDirectorySandbox('multiple-files')
     await sandbox.init()
+    options.vitest.dir = sandbox.tmpDir
     mathFileName = path.resolve(sandbox.tmpDir, 'src', 'math.ts')
     stringUtilsFileName = path.resolve(
       sandbox.tmpDir,

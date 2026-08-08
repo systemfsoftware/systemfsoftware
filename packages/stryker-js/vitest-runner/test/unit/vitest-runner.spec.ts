@@ -1,24 +1,19 @@
 import type { Logger } from '@stryker-mutator/api/logging'
 import { TestRunnerCapabilities } from '@stryker-mutator/api/test-runner'
 import fs from 'fs'
-import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest'
 import type { Vitest } from 'vitest/node'
 
 import { VITEST_ERROR_CODES } from '../../src/vitest-helpers.js'
 import type { VitestRunnerOptionsWithStrykerOptions } from '../../src/vitest-runner-options-with-stryker-options.js'
-import { createVitestTestRunnerFactory, VitestTestRunner } from '../../src/vitest-test-runner.js'
-import { vitestWrapper } from '../../src/vitest-wrapper.js'
-import {
-  createDryRunOptions,
-  createLogger,
-  createStrykerOptions,
-  createTestInjector,
-  createVitestMock,
-} from '../util/factories.js'
+import { VitestTestRunner } from '../../src/vitest-test-runner.js'
+import type { ResolvedVitest, VitestResolver } from '../../src/vitest-wrapper.js'
+import { createDryRunOptions, createLogger, createStrykerOptions, createVitestMock } from '../util/factories.js'
 
 describe(VitestTestRunner.name, () => {
   let sut: VitestTestRunner
-  let createVitestStub: MockInstance<typeof vitestWrapper.createVitest>
+  let createVitestStub: Mock<ResolvedVitest['createVitest']>
+  let vitestResolverStub: Mock<VitestResolver>
   let options: VitestRunnerOptionsWithStrykerOptions
   let vitestStub: Vitest
   let logger: Logger
@@ -26,12 +21,20 @@ describe(VitestTestRunner.name, () => {
   beforeEach(() => {
     logger = createLogger()
     options = createStrykerOptions()
-    sut = createTestInjector(options, logger).injectFunction(
-      createVitestTestRunnerFactory('__stryker2__'),
-    )
-    createVitestStub = vi.spyOn(vitestWrapper, 'createVitest')
+    createVitestStub = vi.fn<ResolvedVitest['createVitest']>()
     vitestStub = createVitestMock()
     createVitestStub.mockResolvedValue(vitestStub)
+    vitestResolverStub = vi.fn<VitestResolver>()
+    vitestResolverStub.mockResolvedValue({
+      createVitest: createVitestStub,
+      version: '1.0.0',
+    })
+    sut = new VitestTestRunner(
+      options,
+      logger,
+      '__stryker2__',
+      vitestResolverStub,
+    )
     vi.spyOn(fs.promises, 'copyFile').mockResolvedValue()
     vi.spyOn(fs.promises, 'rm').mockResolvedValue()
   })
@@ -73,7 +76,7 @@ describe(VitestTestRunner.name, () => {
         singleThread: false,
         maxConcurrency: 1,
         watch: false,
-        dir: undefined,
+        dir: process.cwd(),
         bail: 1,
         onConsoleLog: expect.any(Function),
       })

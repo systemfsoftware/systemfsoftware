@@ -26,10 +26,10 @@ function convertTaskStateToTestStatus(
   return TestStatus.Failed
 }
 
-export function convertTestToTestResult(test: RunnerTestCase): TestResult {
+export function convertTestToTestResult(test: RunnerTestCase, dir: string): TestResult {
   const status = convertTaskStateToTestStatus(test.result?.state, test.mode)
   const baseTestResult: BaseTestResult = {
-    id: normalizeTestId(toRawTestId(test)),
+    id: normalizeTestId(toRawTestId(test), dir),
     name: collectTestName(test),
     timeSpentMs: test.result?.duration ?? 0,
     fileName: test.file?.filepath && path.resolve(test.file.filepath),
@@ -78,16 +78,16 @@ export function fromTestId(id: string): { file: string; test: string } {
   return { file, test: name.join('#') }
 }
 
-export function normalizeTestId(id: string): string {
+export function normalizeTestId(id: string, dir: string): string {
   const { file, test } = fromTestId(id)
-  return `${path.relative(process.cwd(), file).replace(/\\/g, '/')}#${test}`
+  return `${path.relative(dir, file).replace(/\\/g, '/')}#${test}`
 }
 
-export function normalizeCoverage(rawCoverage: MutantCoverage): MutantCoverage {
+export function normalizeCoverage(rawCoverage: MutantCoverage, dir: string): MutantCoverage {
   return {
     perTest: Object.fromEntries(
       Object.entries(rawCoverage.perTest).map(
-        ([rawTestId, coverageData]) => [normalizeTestId(rawTestId), coverageData] as const,
+        ([rawTestId, coverageData]) => [normalizeTestId(rawTestId, dir), coverageData] as const,
       ),
     ),
     static: rawCoverage.static,
