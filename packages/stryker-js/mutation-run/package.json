@@ -95,7 +95,7 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit --incremental",
     "test": "vitest run",
     "build": "tsdown && pnpm api:check",
     "api:check": "api-extractor run",
