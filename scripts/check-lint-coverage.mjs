@@ -16,29 +16,72 @@ const root = process.cwd()
 // distinction is not derivable: tooling packages are published too, so `private` does
 // not discriminate (measured 2026-08-01: 26 false positives).
 // Every entry states why the package is exempt. An entry without a reason is a bug.
-const TOOLING = [
-  ['packages/oxlint-plugins/', 'lint rules themselves; declaring oxlint-config closes a CO4 dependency cycle'],
-  ['packages/oxlint-config/', 'the config package; cannot extend itself'],
-  [
-    'packages/stryker-js/',
-    'our Stryker fork: not Effect cell code, so cell rules are the wrong observer; carries its own oxlint baseline and mutation gate',
-  ],
-  [
-    'packages/effect-atom/',
-    'vendored effect-atom fork: upstream-shaped library code, not Effect cell code, so cell rules are the wrong observer; carries its own oxlint baseline',
-  ],
-  [
-    'packages/storybook-gherkin/',
-    'vendored storybook-gherkin DSL: upstream-shaped library code, not Effect cell code, so cell rules are the wrong observer; carries its own oxlint baseline',
-  ],
-  ['packages/stryker-plugins/', 'mutation tooling, not shipped product code'],
-  ['packages/arethetypeswrong/', 'port of arethetypeswrong, tooling'],
-  ['packages/tsconfig/', 'shared tsconfig, no runtime source'],
-  ['packages/vitest-config/', 'shared vitest config, no runtime source'],
-  ['repos/', 'vendored upstream, read-only (REPO-S3)'],
-]
+//
+// Keys are EXACT package directories, never path prefixes. A prefix silently adopts
+// every package created beneath it later, which is how `packages/stryker-js/cli` — a
+// package authored for full cell compliance — inherited the fork's exemption and shipped
+// with every cell rule absent. A new package must now be classified deliberately: the
+// gate fails until someone either enrols it or adds a line here with a reason.
+const TOOLING = new Map([
+  // The lint rules themselves; declaring oxlint-config would close a CO4 dependency cycle.
+  ...[
+    'cell-imports',
+    'cell-taxonomy',
+    'core',
+    'effect-acl',
+    'effect-adapter',
+    'effect-dmmf',
+    'effect-entrypoint',
+    'effect-executor',
+    'effect-handler',
+    'effect-kernel',
+    'effect-middleware',
+    'effect-observer',
+    'effect-policy',
+    'effect-schema',
+    'effect-shape',
+    'effect-state',
+    'effect-store',
+    'effect-workflow',
+    'property-testing',
+    'recommended',
+    'test-hygiene',
+    'test-placement',
+  ].map((name) => [
+    `packages/oxlint-plugins/${name}`,
+    'lint rules themselves; declaring oxlint-config closes a CO4 dependency cycle',
+  ]),
+  ['packages/oxlint-config', 'the config package; cannot extend itself'],
 
-const toolingReason = (dir) => TOOLING.find(([prefix]) => `${dir}/`.startsWith(prefix))?.[1]
+  // Our Stryker fork. Enumerated one package at a time: `packages/stryker-js/cli` is NOT
+  // here, because we authored it and chartered it for full cell compliance.
+  ...['core', 'typescript-checker', 'vitest-runner'].map((name) => [
+    `packages/stryker-js/${name}`,
+    'our Stryker fork: upstream-shaped, not Effect cell code, so cell rules are the wrong observer; carries its own oxlint baseline and mutation gate',
+  ]),
+  ...[
+    'packages/stryker-js/typescript-checker/testResources/nodenext-project',
+    'packages/stryker-js/vitest-runner/testResources/async-failure',
+    'packages/stryker-js/vitest-runner/testResources/multiple-files',
+  ].map((dir) => [dir, 'test fixture project consumed by a runner suite, not product code']),
+
+  ...['atom', 'atom-react'].map((name) => [
+    `packages/effect-atom/${name}`,
+    'vendored effect-atom fork: upstream-shaped library code, not Effect cell code; carries its own oxlint baseline',
+  ]),
+  [
+    'packages/storybook-gherkin',
+    'vendored storybook-gherkin DSL: upstream-shaped library code, not Effect cell code; carries its own oxlint baseline',
+  ],
+  ['packages/stryker-plugins', 'mutation tooling, not shipped product code'],
+  ...['cli', 'core'].map((name) => [`packages/arethetypeswrong/${name}`, 'port of arethetypeswrong, tooling']),
+])
+
+// The one sanctioned prefix. Vendored trees are read-only (REPO-S3), so we never author a
+// package beneath them and silent adoption is the correct behaviour there.
+const VENDORED = 'vendored upstream, read-only (REPO-S3)'
+
+const toolingReason = (dir) => TOOLING.get(dir) ?? (dir.startsWith('repos/') ? VENDORED : undefined)
 
 const tracked = execFileSync('git', ['ls-files'], { cwd: root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
   .split('\n')
