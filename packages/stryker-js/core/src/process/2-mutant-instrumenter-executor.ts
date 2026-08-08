@@ -10,6 +10,8 @@ import { IdGenerator } from '../child-proxy/id-generator.js'
 import { ConcurrencyTokenProvider, createCheckerPool } from '../concurrent/index.js'
 import { coreTokens, PluginCreator } from '../di/index.js'
 import { FileSystem, Project } from '../fs/index.js'
+import type { ResolvedMode } from '../output-mode.js'
+import type { RunEventSink } from '../run-event.js'
 import { createPreprocessor } from '../sandbox/index.js'
 import { Sandbox } from '../sandbox/sandbox.js'
 import { UnexpectedExitHandler } from '../utils/exit-handler.js'
@@ -31,6 +33,9 @@ export interface MutantInstrumenterContext extends PluginContext {
   [coreTokens.fs]: I<FileSystem>
   [coreTokens.pluginCreator]: PluginCreator
   [coreTokens.loggingServerAddress]: { port: number }
+  [coreTokens.runEventSink]: RunEventSink
+  [coreTokens.runId]: string
+  [coreTokens.resolvedMode]: ResolvedMode
 }
 
 export class MutantInstrumenterExecutor {

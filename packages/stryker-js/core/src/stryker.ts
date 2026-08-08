@@ -5,7 +5,7 @@ import { createInjector, Injector } from 'typed-inject'
 import { coreTokens } from './di/index.js'
 import { ConfigError, retrieveCause } from './errors.js'
 import { LoggingBackend, provideLogging, provideLoggingBackend } from './logging/index.js'
-import { detectMode, isColorEnabled } from './output-mode.js'
+import type { ResolvedMode } from './output-mode.js'
 import {
   DryRunExecutor,
   MutantInstrumenterExecutor,
@@ -14,10 +14,32 @@ import {
   PrepareExecutorArgs,
   PrepareExecutorContext,
 } from './process/index.js'
-import { emitPhase } from './progress-stream.js'
+import type { RunEventSink, RunPhase } from './run-event.js'
 
 type MutationRunContext = PrepareExecutorContext & {
   [coreTokens.loggingSink]: LoggingBackend
+}
+
+/**
+ * What the host (the CLI composition root) resolved once and hands to core
+ * alongside the cli options: the log descriptor and its colour flag, the
+ * run-event sink, and the run's identity and timing. Core receives these as
+ * data — it never probes the terminal — and an unwired host is a compile
+ * error, never a silent no-op (R2).
+ */
+export interface StrykerHostOptions {
+  /** The writable the logging backend writes to (stderr in machine mode, stdout otherwise). */
+  readonly loggerConsoleOut: NodeJS.WriteStream
+  readonly showColors: boolean
+  readonly runEventSink: RunEventSink
+  /** The run id shared with the stream header and the verdict envelope. */
+  readonly runId: string
+  /** The mode resolved once at the edge, and the signal that decided it. */
+  readonly resolvedMode: ResolvedMode
+  readonly progressEnabled: boolean
+  readonly clearTextEnabled: boolean
+  /** The run's clock zero: `elapsedMs` values measure from here. */
+  readonly runStartedAt: number
 }
 
 /**
@@ -28,31 +50,44 @@ export class Stryker {
   /**
    * @constructor
    * @param cliOptions The cli options.
+   * @param hostOptions What the host resolved for this run, see {@link StrykerHostOptions}.
    * @param injectorFactory The injector factory, for testing purposes only
    */
   constructor(
     private readonly cliOptions: PartialStrykerOptions,
+    private readonly hostOptions: StrykerHostOptions,
     private readonly injectorFactory = createInjector,
   ) {}
 
   public async runMutationTest(): Promise<MutantResult[]> {
     const rootInjector = this.injectorFactory()
     try {
-      // U13 — the log sink follows the resolved mode (R5, KTD13). Machine
-      // mode keeps stdout exclusively for the NDJSON stream, so the logging
-      // backend is pointed at stderr; human mode keeps the stdout sink. The
-      // fix is the descriptor, never the log level — a level change would
-      // hide the diagnostics the human path wants and would leave the
-      // descriptor wrong for the next caller.
-      const resolvedMode = detectMode()
-      const logSink = resolvedMode.mode === 'machine' ? process.stderr : process.stdout
+      // The log descriptor and the colour flag arrive already resolved
+      // (U13): machine mode keeps stdout exclusively for the NDJSON stream,
+      // so the host points the logging backend at stderr; human mode keeps
+      // the stdout sink. The fix is the descriptor, never the log level — a
+      // level change would hide the diagnostics the human path wants and
+      // would leave the descriptor wrong for the next caller.
       const prepareInjector = provideLogging(
         await provideLoggingBackend(
           rootInjector,
-          logSink,
-          isColorEnabled(resolvedMode, process.env['NO_COLOR']),
+          this.hostOptions.loggerConsoleOut,
+          this.hostOptions.showColors,
         ),
-      ).provideValue(coreTokens.reporterOverride, undefined)
+      )
+        .provideValue(coreTokens.reporterOverride, undefined)
+        .provideValue(coreTokens.runEventSink, this.hostOptions.runEventSink)
+        .provideValue(coreTokens.runId, this.hostOptions.runId)
+        .provideValue(coreTokens.resolvedMode, this.hostOptions.resolvedMode)
+        .provideValue(
+          coreTokens.progressEnabled,
+          this.hostOptions.progressEnabled,
+        )
+        .provideValue(
+          coreTokens.clearTextEnabled,
+          this.hostOptions.clearTextEnabled,
+        )
+        .provideValue(coreTokens.runStartedAt, this.hostOptions.runStartedAt)
       return await Stryker.run(prepareInjector, {
         cliOptions: this.cliOptions,
         targetMutatePatterns: undefined,
@@ -71,14 +106,21 @@ export class Stryker {
     mutationRunInjector: Injector<MutationRunContext>,
     args: PrepareExecutorArgs,
   ): Promise<MutantResult[]> {
+    // Resolved once, at the top: the phase pushes and their elapsed times
+    // share one sink and one clock zero.
+    const sink = mutationRunInjector.resolve(coreTokens.runEventSink)
+    const runStartedAt = mutationRunInjector.resolve(coreTokens.runStartedAt)
+    const emitPhase = (phase: RunPhase): void => {
+      sink({ kind: 'phase', phase, elapsedMs: Date.now() - runStartedAt })
+    }
     try {
       // 1. Prepare. Load Stryker configuration, load the input files
       // U13 — phase events (R18, KTD14): the Reporter interface exposes no
-      // hook before the dry run, so the phases are emitted here, from the
+      // hook before the dry run, so the phases are pushed here, from the
       // executor chain, immediately before each stage. `prepare` is the
       // first observable moment of the run — the true start of the silent
-      // window R18 exists to cover. The stream module (U7) owns the mode
-      // gate; these calls are no-ops in human mode and before configuration.
+      // window R18 exists to cover. Whether an event renders is the host
+      // sink's decision, not core's.
       emitPhase('prepare')
       const prepareExecutor = mutationRunInjector.injectClass(PrepareExecutor)
       const mutantInstrumenterInjector = await prepareExecutor.execute(args)

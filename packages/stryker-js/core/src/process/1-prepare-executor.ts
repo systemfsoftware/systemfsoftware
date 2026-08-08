@@ -10,8 +10,10 @@ import { MetaSchemaBuilder, OptionsValidator } from '../config/index.js'
 import { coreTokens, PluginCreator } from '../di/index.js'
 import { PluginLoader } from '../di/plugin-loader.js'
 import { ConfigError } from '../errors.js'
+import type { ResolvedMode } from '../output-mode.js'
 import { BroadcastReporter } from '../reporters/broadcast-reporter.js'
 import { reporterPluginsFileUrl } from '../reporters/index.js'
+import type { RunEventSink } from '../run-event.js'
 import { UnexpectedExitHandler } from '../utils/exit-handler.js'
 import { TemporaryDirectory } from '../utils/temporary-directory.js'
 import { Timer } from '../utils/timer.js'
@@ -25,6 +27,12 @@ import { MutantInstrumenterContext } from './index.js'
 export interface PrepareExecutorContext extends BaseContext {
   [coreTokens.loggingServerAddress]: LoggingServerAddress
   [coreTokens.reporterOverride]?: Reporter
+  [coreTokens.runEventSink]: RunEventSink
+  [coreTokens.runId]: string
+  [coreTokens.resolvedMode]: ResolvedMode
+  [coreTokens.progressEnabled]: boolean
+  [coreTokens.clearTextEnabled]: boolean
+  [coreTokens.runStartedAt]: number
 }
 
 export interface PrepareExecutorArgs {

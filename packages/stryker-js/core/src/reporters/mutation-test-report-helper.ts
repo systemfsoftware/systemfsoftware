@@ -12,13 +12,13 @@ import { calculateMutationTestMetrics, MutationTestMetricsResult } from 'mutatio
 import { coreTokens } from '../di/index.js'
 import { FileSystem, Project } from '../fs/index.js'
 import { TestCoverage } from '../mutants/index.js'
-import { detectMode, type ResolvedMode } from '../output-mode.js'
-import { emitTerminal, streamRunId } from '../progress-stream.js'
+import type { ResolvedMode } from '../output-mode.js'
+import type { RunEventSink } from '../run-event.js'
 import { strykerVersion } from '../stryker-package.js'
 import { ExitClass, objectUtils, setPendingExitClass } from '../utils/object-utils.js'
 
 import { judgeTestContribution } from './test-contribution.js'
-import { buildVerdictEnvelope, type VerdictEnvelope } from './verdict-envelope.js'
+import { buildVerdictEnvelope } from './verdict-envelope.js'
 
 const STRYKER_FRAMEWORK: Readonly<
   Pick<schema.FrameworkInformation, 'branding' | 'name' | 'version'>
@@ -44,9 +44,10 @@ export class MutationTestReportHelper {
     coreTokens.testCoverage,
     coreTokens.fs,
     coreTokens.requireFromCwd,
+    coreTokens.runEventSink,
+    coreTokens.runId,
+    coreTokens.resolvedMode,
   )
-
-  private readonly resolvedMode: ResolvedMode
 
   constructor(
     private readonly reporter: Required<Reporter>,
@@ -56,20 +57,10 @@ export class MutationTestReportHelper {
     private readonly testCoverage: I<TestCoverage>,
     private readonly fs: I<FileSystem>,
     private readonly requireFromCwd: typeof requireResolve,
-    /**
-     * The printer that writes the verdict envelope as the terminal `verdict`
-     * line of the machine stream (U6). The default routes through the stream
-     * module, which owns the mode gate, the run id and the one-terminal-line
-     * invariant; tests inject a spy to capture the document.
-     */
-    private readonly emitEnvelope: (envelope: VerdictEnvelope) => void = (envelope) => {
-      emitTerminal({ kind: 'verdict', ...envelope })
-    },
-  ) {
-    // Resolved once here from the same detection inputs the broadcast
-    // reporter uses (U3) — never a second probe at the print site.
-    this.resolvedMode = detectMode()
-  }
+    private readonly runEventSink: RunEventSink,
+    private readonly runId: string,
+    private readonly resolvedMode: ResolvedMode,
+  ) {}
 
   public reportCheckFailed(
     mutant: MutantTestCoverage,
@@ -171,24 +162,22 @@ export class MutationTestReportHelper {
   }
 
   /**
-   * Emits the verdict envelope at the end of a machine-mode run (U4). Human
-   * mode skips the emit entirely; the `emitEnvelope` callback writes the
-   * document as the terminal `verdict` line of the stdout stream (U6). The
-   * run id comes from the stream module, so the verdict matches the header
-   * and every stream line of this run — never a fresh id (KTD11/U6).
+   * Emits the verdict envelope as the terminal `verdict` run event at the
+   * end of a run (U4). Core always pushes; whether the event renders — and
+   * as what — is the host sink's decision, never core's. The run id comes
+   * from the host alongside the sink, so the verdict matches the header and
+   * every stream line of this run — never a fresh id (KTD11/U6).
    */
   private emitVerdict(report: schema.MutationTestResult): void {
-    if (this.resolvedMode.mode !== 'machine') {
-      return
-    }
-    this.emitEnvelope(
-      buildVerdictEnvelope(
+    this.runEventSink({
+      kind: 'verdict',
+      ...buildVerdictEnvelope(
         report,
         this.resolvedMode.mode,
         this.resolvedMode.signal,
-        streamRunId(),
+        this.runId,
       ),
-    )
+    })
   }
 
   private determineTestContribution(report: schema.MutationTestResult) {

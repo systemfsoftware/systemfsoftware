@@ -36,18 +36,19 @@ import {
   SURVIVORS_REJECT_EXIT_CLASS,
   SurvivorsRejection,
 } from './mutants/survivors.js'
-import { detectMode, humanConsoleLayer, machineConsoleLayer, readCapturedConsole } from './output-mode.js'
 import {
-  configureStream,
-  emitTerminal,
-  isStreamEnabled,
-  STREAM_SCHEMA_VERSION,
-  streamRunId,
-} from './progress-stream.js'
+  detectMode,
+  humanConsoleLayer,
+  isColorEnabled,
+  isProgressEnabled,
+  machineConsoleLayer,
+  readCapturedConsole,
+} from './output-mode.js'
 import { buildVerdictEnvelope } from './reporters/verdict-envelope.js'
+import { createRunEventStream, type RunEventStream, STREAM_SCHEMA_VERSION } from './run-event-stream.js'
 import type { HelpRendered, ManifestRendered } from './run-event.js'
 import { strykerEngines, strykerVersion } from './stryker-package.js'
-import { Stryker } from './stryker.js'
+import { Stryker, type StrykerHostOptions } from './stryker.js'
 import { ExitClass, getPendingExitClasses, resolveExitCode } from './utils/object-utils.js'
 
 /**
@@ -56,7 +57,25 @@ import { ExitClass, getPendingExitClasses, resolveExitCode } from './utils/objec
  */
 export type StrykerRun = (options: PartialStrykerOptions) => Promise<unknown>
 
-const defaultRunMutationTest: StrykerRun = (options) => new Stryker(options).runMutationTest()
+/**
+ * The default run: binds the host-resolved run options (the sink, the mode,
+ * the timing) to a fresh `Stryker` and runs mutation testing.
+ */
+const defaultRunMutationTest = (hostOptions: StrykerHostOptions): StrykerRun => (options) =>
+  new Stryker(options, hostOptions).runMutationTest()
+
+/**
+ * The run's stream, bound once by the terminating bootstrap. The command
+ * tree's `--llms` handler and the teardown push their terminal events through
+ * it; `ensureActiveStream` mints one on first use so a bare effect run
+ * (tests) keeps working without a bootstrap.
+ */
+let activeStream: RunEventStream | null = null
+
+function ensureActiveStream(): RunEventStream {
+  activeStream ??= createRunEventStream(detectMode())
+  return activeStream
+}
 
 function createSplitter(separator: string) {
   return (value: string) => value.split(separator).filter(Boolean)
@@ -515,10 +534,8 @@ function survivorMutateSpans(survivors: readonly Mutant[]): string[] {
  * id). Human mode prints nothing.
  */
 function emitNullScoreVerdict(thresholds: schema.Thresholds, config: object): void {
+  const stream = ensureActiveStream()
   const resolvedMode = detectMode()
-  if (resolvedMode.mode !== 'machine') {
-    return
-  }
   const report: schema.MutationTestResult = {
     schemaVersion: '1.0',
     files: {},
@@ -531,9 +548,9 @@ function emitNullScoreVerdict(thresholds: schema.Thresholds, config: object): vo
     report,
     resolvedMode.mode,
     resolvedMode.signal,
-    streamRunId(),
+    stream.runId,
   )
-  emitTerminal({ kind: 'verdict', ...envelope })
+  stream.sink({ kind: 'verdict', ...envelope })
 }
 
 /**
@@ -682,20 +699,19 @@ export function makeStrykerCommand(runMutationTest: StrykerRun) {
       // so the command always produces the machine contract — a `stream`
       // header followed by one tagged `manifest` terminal event (R5) —
       // regardless of TTY or resolved mode. When the run bootstrap did not
-      // configure the stream (a TTY or a bare effect run), the handler opens
-      // it first so the header precedes the terminal line; a raw document
+      // open the stream (a TTY or a bare effect run), the handler opens it
+      // first so the header precedes the terminal line; a raw document
       // never reaches stdout on any path.
       return Effect.sync(() => {
-        if (!isStreamEnabled()) {
-          configureStream({ mode: 'machine', signal: 'flag', stdoutIsTTY: process.stdout.isTTY === true })
-        }
+        const stream = ensureActiveStream()
+        stream.ensureOpen({ mode: 'machine', signal: 'flag', stdoutIsTTY: process.stdout.isTTY === true })
         const document: ManifestRendered = {
           kind: 'manifest',
           schemaVersion: STREAM_SCHEMA_VERSION,
           code: 0,
           manifest: emitLLMSManifest(strykerCommand, strykerVersion),
         }
-        emitTerminal(document)
+        stream.sink(document)
       })
     }
     // Bare `stryker`: render help and exit 0, matching commander.
@@ -791,7 +807,7 @@ export function resolveCliExitCode(exit: Exit.Exit<unknown, unknown>): number {
  */
 export function strykerCliEffect(
   argv: string[],
-  runMutationTest: StrykerRun = defaultRunMutationTest,
+  runMutationTest: StrykerRun,
 ): Effect.Effect<void, unknown, never> {
   const command = makeStrykerCommand(runMutationTest)
   return Command.run({ name: 'stryker', version: strykerVersion })(command)(argv).pipe(
@@ -927,9 +943,10 @@ export function buildErrorEnvelope(
  * stream so the last stdout line is always a terminal event (R5).
  */
 function emitMachineModeOutput(exit: Exit.Exit<unknown, unknown>, code: number): void {
+  const stream = ensureActiveStream()
   const captured = readCapturedConsole()
   if (Exit.isFailure(exit)) {
-    emitTerminal({ kind: 'error', ...buildErrorEnvelope(exit, code, captured) })
+    stream.sink({ kind: 'error', ...buildErrorEnvelope(exit, code, captured) })
     return
   }
   if (captured.length > 0) {
@@ -939,10 +956,10 @@ function emitMachineModeOutput(exit: Exit.Exit<unknown, unknown>, code: number):
       code: 0,
       help: captured,
     }
-    emitTerminal(document)
+    stream.sink(document)
     return
   }
-  if (isStreamEnabled()) {
+  if (stream.isOpen()) {
     // The run succeeded without a verdict and without a terminal line. The
     // teardown never sees the finished run's resolved options, so the
     // framework defaults stand in for the thresholds it would have used.
@@ -960,8 +977,9 @@ function emitMachineModeOutput(exit: Exit.Exit<unknown, unknown>, code: number):
  * verdict classes decide. `process.exit` is called at most once, only when a
  * signal was received or the code is non-zero, so a clean run flushes stdout.
  *
- * Machine mode (U6) configures the stdout stream (U7) before the program
- * runs — the header and heartbeat precede every phase and terminal event —
+ * Machine mode (U6) builds the stdout stream (U7) before the program runs —
+ * the header and heartbeat precede every phase and terminal event — hands
+ * the sink, run id, mode and timing to core through `StrykerHostOptions`,
  * provides the capturing `Console` layer, and emits the captured content as
  * the `error` terminal event at teardown (or a structured help document on
  * stdout for `--help`). The framework's automatic error reporting is
@@ -971,16 +989,33 @@ function emitMachineModeOutput(exit: Exit.Exit<unknown, unknown>, code: number):
  */
 export function runStrykerCli(
   argv: string[] = process.argv,
-  runMutationTest: StrykerRun = defaultRunMutationTest,
+  runMutationTest: StrykerRun | undefined,
 ): void {
-  // One resolved mode decides the Console layer, from the same detection
-  // inputs the reporters use (U3) — never a second probe.
+  // One resolved mode decides the Console layer and the stream, from the
+  // same detection inputs the reporters use (U3) — never a second probe.
   const resolvedMode = detectMode()
-  configureStream(resolvedMode)
+  const stream = createRunEventStream(resolvedMode)
+  activeStream = stream
+  const hostOptions: StrykerHostOptions = {
+    // Machine mode keeps stdout exclusively for the NDJSON stream, so the
+    // logging backend is pointed at stderr; human mode keeps the stdout
+    // sink. The fix is the descriptor, never the log level.
+    loggerConsoleOut: resolvedMode.mode === 'machine' ? process.stderr : process.stdout,
+    showColors: isColorEnabled(resolvedMode, process.env['NO_COLOR']),
+    runEventSink: stream.sink,
+    runId: stream.runId,
+    resolvedMode,
+    progressEnabled: isProgressEnabled(resolvedMode),
+    clearTextEnabled: resolvedMode.mode === 'human',
+    runStartedAt: stream.startedAt,
+  }
   const consoleLayer = resolvedMode.mode === 'machine'
     ? machineConsoleLayer()
     : humanConsoleLayer()
-  const program = strykerCliEffect(argv, runMutationTest).pipe(Effect.provide(consoleLayer))
+  const program = strykerCliEffect(
+    argv,
+    runMutationTest ?? defaultRunMutationTest(hostOptions),
+  ).pipe(Effect.provide(consoleLayer))
   const lastSignal: { current: number | null } = { current: null }
   Runtime.makeRunMain(({ fiber, teardown }) => {
     const keepAlive = setInterval(() => {}, 2 ** 31 - 1)

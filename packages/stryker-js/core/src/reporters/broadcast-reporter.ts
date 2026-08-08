@@ -6,7 +6,6 @@ import { MutationTestMetricsResult } from 'mutation-testing-metrics'
 import { tokens } from 'typed-inject'
 
 import { coreTokens, PluginCreator } from '../di/index.js'
-import { detectMode, isProgressEnabled } from '../output-mode.js'
 
 import { StrictReporter } from './strict-reporter.js'
 
@@ -16,35 +15,38 @@ export class BroadcastReporter implements StrictReporter {
     coreTokens.pluginCreator,
     commonTokens.logger,
     coreTokens.reporterOverride,
+    coreTokens.progressEnabled,
+    coreTokens.clearTextEnabled,
   )
 
   public readonly reporters: Record<string, Reporter>
 
   /**
-   * Machine mode's stdout belongs to the NDJSON stream alone (R5): the prose
-   * reporters write to fd 1 with no mode awareness of their own, so this
-   * boundary drops them before dispatch. Resolved once here, at construction,
-   * from the same detection inputs as `progressEnabled`.
-   */
-  private readonly machineMode: boolean
-
-  /**
-   * The progress bar's gate. Human mode on a non-TTY stdout suppresses the
-   * bar so its control sequences never reach a pipe (U3). Resolved once here,
-   * at construction, from the same detection inputs that decide the run's
-   * mode — never a second `process.stdout.isTTY` probe at each print site.
+   * The progress bar's gate, resolved by the host once at the edge (U13):
+   * human mode on a non-TTY stdout suppresses the bar so its control
+   * sequences never reach a pipe. Received as data — core no longer probes
+   * the terminal.
    */
   private readonly progressEnabled: boolean
+
+  /**
+   * The clear-text reporter's gate, resolved by the host once at the edge
+   * (U13): machine mode keeps stdout exclusively for the NDJSON stream, so
+   * the prose reporter is dropped before dispatch. Received as data — core
+   * no longer probes the terminal.
+   */
+  private readonly clearTextEnabled: boolean
 
   constructor(
     private readonly options: StrykerOptions,
     private readonly pluginCreator: PluginCreator,
     private readonly log: Logger,
     private readonly reporterOverride: Reporter | undefined,
+    progressEnabled: boolean,
+    clearTextEnabled: boolean,
   ) {
-    const resolved = detectMode()
-    this.machineMode = resolved.mode === 'machine'
-    this.progressEnabled = isProgressEnabled(resolved)
+    this.progressEnabled = progressEnabled
+    this.clearTextEnabled = clearTextEnabled
     this.reporters = {}
     if (this.reporterOverride) {
       this.reporters['in-memory'] = this.reporterOverride
@@ -57,8 +59,8 @@ export class BroadcastReporter implements StrictReporter {
   private createReporter(reporterName: string): void {
     // The former non-TTY downgrade of 'progress' to 'progress-append-only'
     // (U3) is gone: the run's resolved mode decides instead, and the
-    // broadcast call site passes `progressEnabled` down to the dispatch, so
-    // the bar is suppressed rather than renamed.
+    // constructor-injected gates suppress the bar and the clear-text
+    // reporter at dispatch rather than renaming them.
     this.reporters[reporterName] = this.pluginCreator.create(
       PluginKind.Reporter,
       reporterName,
@@ -88,7 +90,7 @@ export class BroadcastReporter implements StrictReporter {
       Object.entries(this.reporters).map(async ([reporterName, reporter]) => {
         if (
           (reporterName === 'progress' && !this.progressEnabled) ||
-          (reporterName === 'clear-text' && this.machineMode)
+          (reporterName === 'clear-text' && !this.clearTextEnabled)
         ) {
           return
         }
