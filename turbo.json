@@ -30,7 +30,9 @@
         "$TURBO_DEFAULT$",
         "tsconfig.json",
         "tsconfig.*.json",
-        "$TURBO_ROOT$/packages/tsconfig/**"
+        "$TURBO_ROOT$/packages/tsconfig/**",
+        "!$TURBO_ROOT$/packages/tsconfig/.turbo/**",
+        "!$TURBO_ROOT$/packages/tsconfig/**/*.tsbuildinfo"
       ],
       "outputs": [],
       "dependsOn": [
@@ -107,7 +109,11 @@
         "tsconfig.json",
         "tsconfig.*.json",
         "$TURBO_ROOT$/packages/oxlint-config/**",
-        "$TURBO_ROOT$/packages/tsconfig/**"
+        "!$TURBO_ROOT$/packages/oxlint-config/.turbo/**",
+        "!$TURBO_ROOT$/packages/oxlint-config/**/*.tsbuildinfo",
+        "$TURBO_ROOT$/packages/tsconfig/**",
+        "!$TURBO_ROOT$/packages/tsconfig/.turbo/**",
+        "!$TURBO_ROOT$/packages/tsconfig/**/*.tsbuildinfo"
       ],
       "outputs": [],
       "dependsOn": [
@@ -116,7 +122,6 @@
       ],
       "env": [
         "NODE_ENV",
-        "AGENT",
         "GITHUB_ACTIONS"
       ],
       "cache": true
