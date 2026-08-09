@@ -1,10 +1,12 @@
 import * as Effect from 'effect/Effect'
 import * as Equal from 'effect/Equal'
 import * as Exit from 'effect/Exit'
+import * as FiberId from 'effect/FiberId'
 import { constVoid, pipe } from 'effect/Function'
 import { globalValue } from 'effect/GlobalValue'
 import * as Option from 'effect/Option'
 import * as Queue from 'effect/Queue'
+import * as Runtime from 'effect/Runtime'
 import * as Stream from 'effect/Stream'
 import type * as Atom from '../Atom.js'
 import type * as Registry from '../Registry.js'
@@ -203,16 +205,21 @@ class RegistryImpl implements Registry.Registry {
       }
     }
     const ttl = Math.ceil(idleTTL! / this.timeoutResolution) * this.timeoutResolution
-    const timestamp = Date.now() + ttl
+    const timestamp = performance.now() + ttl
     const bucket = timestamp - (timestamp % this.timeoutResolution) + this.timeoutResolution
 
     let entry = this.timeoutBuckets.get(bucket)
     if (entry === undefined) {
-      const handle = setTimeout(() => this.sweepBucket(bucket), bucket - Date.now())
-      entry = [new Set<Node<any>>(), () => clearTimeout(handle)]
-      this.timeoutBuckets.set(bucket, entry!)
+      const fiber = Runtime.runFork(Runtime.defaultRuntime)(
+        Effect.sleep(bucket - performance.now()).pipe(
+          Effect.andThen(() => this.sweepBucket(bucket)),
+        ),
+      )
+      entry = [new Set<Node<any>>(), () => fiber.unsafeInterruptAsFork(FiberId.none)]
+      this.timeoutBuckets.set(bucket, entry)
     }
-    entry![0]!.add(node)
+    const [nodes] = entry
+    nodes.add(node)
     this.nodeTimeoutBucket.set(node, bucket)
   }
 
@@ -688,11 +695,11 @@ const LifetimeProto: Omit<Lifetime<any>, 'node' | 'finalizers' | 'disposed' | 'i
       ),
       Effect.tap((queue) =>
         Effect.acquireRelease(
-          Effect.sync(() => {
-            return this.node.registry.subscribe(atom, (_) => {
+          Effect.sync(() =>
+            this.node.registry.subscribe(atom, (_) => {
               Queue.unsafeOffer(queue, _)
             }, { immediate: options?.withoutInitialValue !== true })
-          }),
+          ),
           (cancel) => Effect.sync(cancel),
         )
       ),
