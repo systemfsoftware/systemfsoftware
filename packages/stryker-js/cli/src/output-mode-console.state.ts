@@ -136,65 +136,17 @@ const capturingConsole: Console.Console = {
  * default-services FiberRef (`consoleWith`), so a plain `Layer.succeed`
  * provide is a silent no-op. `Console.setConsole` is the primitive that
  * rewrites `currentServices` for the provided scope.
+ *
+ * Human mode provides no Console layer at all: effect's own default console
+ * delegates every method to the global console, which is exactly the prose
+ * rendering a human-mode run uses. Mirroring it here would reimplement the
+ * library default (V.7).
  */
 export function machineConsoleLayer(): Layer.Layer<Console.Console> {
   resetCapturedConsole()
   return Layer.mergeAll(
     Console.setConsole(capturingConsole),
     Layer.succeed(Console.Console, capturingConsole),
-  )
-}
-
-/**
- * The identity console, mirroring effect's internal default: every method
- * delegates to the global `console`, which is exactly the prose rendering a
- * human-mode run uses. Provided for symmetry with `machineConsoleLayer` so
- * the bootstrap picks a layer by mode and the two paths cannot drift.
- */
-const humanConsole: Console.Console = {
-  [Console.TypeId]: Console.TypeId,
-  assert: (condition: boolean, ...args: ReadonlyArray<unknown>) =>
-    Effect.sync(() => console.assert(condition, ...args)),
-  clear: Effect.sync(() => console.clear()),
-  count: (label) => Effect.sync(() => console.count(label)),
-  countReset: (label) => Effect.sync(() => console.countReset(label)),
-  debug: (...args: ReadonlyArray<unknown>) => Effect.sync(() => console.debug(...args)),
-  dir: (item: unknown, options?: InspectOptions) => Effect.sync(() => console.dir(item, options)),
-  dirxml: (...args: ReadonlyArray<unknown>) => Effect.sync(() => console.dirxml(...args)),
-  error: (...args: ReadonlyArray<unknown>) => Effect.sync(() => console.error(...args)),
-  group: (options) =>
-    Effect.sync(() => {
-      if (options === undefined) {
-        console.group()
-      } else if (options.collapsed) {
-        console.groupCollapsed(options.label)
-      } else {
-        console.group(options.label)
-      }
-    }),
-  groupEnd: Effect.sync(() => console.groupEnd()),
-  info: (...args: ReadonlyArray<unknown>) => Effect.sync(() => console.info(...args)),
-  log: (...args: ReadonlyArray<unknown>) => Effect.sync(() => console.log(...args)),
-  table: (tabularData: unknown, properties?: ReadonlyArray<string>) =>
-    Effect.sync(() => console.table(tabularData, properties)),
-  time: (label) => Effect.sync(() => console.time(label)),
-  timeEnd: (label) => Effect.sync(() => console.timeEnd(label)),
-  timeLog: (label: string | undefined, ...args: ReadonlyArray<unknown>) =>
-    Effect.sync(() => console.timeLog(label, ...args)),
-  trace: (...args: ReadonlyArray<unknown>) => Effect.sync(() => console.trace(...args)),
-  warn: (...args: ReadonlyArray<unknown>) => Effect.sync(() => console.warn(...args)),
-  unsafe: console,
-}
-
-/**
- * The human-mode `Console` layer: identity — the framework's prose rendering
- * reaches the real stdout/stderr unchanged. Same `setConsole` mechanism as
- * the machine layer so the two paths cannot drift.
- */
-export function humanConsoleLayer(): Layer.Layer<Console.Console> {
-  return Layer.mergeAll(
-    Console.setConsole(humanConsole),
-    Layer.succeed(Console.Console, humanConsole),
   )
 }
 
