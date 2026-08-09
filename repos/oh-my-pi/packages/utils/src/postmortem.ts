@@ -67,6 +67,17 @@ function exitProcess(code: number): never {
 let cleanupPromise: Promise<void> | undefined;
 let stdioDisconnectRegistrations = 0;
 
+/** User-facing command printed before fatal cleanup so interrupted work can be resumed. */
+export interface FatalRecoveryHint {
+	/** Stable label identifying the recoverable session or process. */
+	label: string;
+	/** Complete shell command the user can execute to resume the interrupted work. */
+	command: string;
+}
+
+type FatalRecoveryHintProvider = () => FatalRecoveryHint | undefined;
+const fatalRecoveryHintProviders = new Set<FatalRecoveryHintProvider>();
+
 /**
  * Internal: runs all registered cleanup callbacks for the given reason.
  * Ensures each callback is invoked at most once. Handles errors and prevents reentrancy.
@@ -196,6 +207,38 @@ export function interceptUnhandledRejections(interceptor: (reason: unknown) => b
 	return () => rejectionInterceptors.delete(interceptor);
 }
 
+/**
+ * Register a synchronous recovery command to print when the process exits
+ * through an uncaught exception or unhandled rejection.
+ */
+export function registerFatalRecoveryHint(provider: FatalRecoveryHintProvider): () => void {
+	fatalRecoveryHintProviders.add(provider);
+	return () => fatalRecoveryHintProviders.delete(provider);
+}
+
+function escapeFatalHintText(value: string): string {
+	return value.replace(/[\u0000-\u001f\u007f-\u009f]/gu, char => {
+		const code = char.codePointAt(0) ?? 0;
+		return `\\u${code.toString(16).padStart(4, "0")}`;
+	});
+}
+
+function formatFatalRecoveryHints(): string {
+	const lines: string[] = [];
+	const seenCommands = new Set<string>();
+	for (const provider of fatalRecoveryHintProviders) {
+		try {
+			const hint = provider();
+			if (!hint?.command || seenCommands.has(hint.command)) continue;
+			seenCommands.add(hint.command);
+			lines.push(`  ${escapeFatalHintText(hint.label)}: ${escapeFatalHintText(hint.command)}`);
+		} catch (err) {
+			logger.warn("Fatal recovery hint provider failed", { err });
+		}
+	}
+	return lines.length > 0 ? `\n[Recovery]\n${lines.join("\n")}\n` : "";
+}
+
 function formatFatalError(label: string, err: Error): string {
 	const name = err.name || "Error";
 	const message = err.message || "(no message)";
@@ -212,7 +255,7 @@ async function exitAfterFatal(label: string, logMessage: string, err: Error, rea
 		// A revoked terminal can make stream writes raise another fatal error. Use
 		// the descriptor directly so failure stays synchronous and contained.
 		try {
-			fs.writeSync(2, formatFatalError(label, err));
+			fs.writeSync(2, `${formatFatalError(label, err)}${formatFatalRecoveryHints()}`);
 		} catch {}
 		logger.error(logMessage, { err });
 		await runCleanup(reason);

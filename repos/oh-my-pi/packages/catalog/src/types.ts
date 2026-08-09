@@ -518,6 +518,12 @@ export interface BedrockCompat {
 	 * Capability metadata only; zero means no explicit checkpoints.
 	 */
 	promptCacheMaximumCheckpoints?: number;
+	/**
+	 * Stream-watchdog idle-timeout fallback in ms; 0 disables the idle watchdog.
+	 * Undefined defers to `PI_STREAM_IDLE_TIMEOUT_MS`, then the legacy
+	 * `PI_OPENAI_STREAM_IDLE_TIMEOUT_MS` alias, then the 300s default.
+	 */
+	streamIdleTimeoutMs?: number;
 }
 
 /** Fully-resolved Bedrock Converse prompt-cache capabilities, materialized once by `buildModel`. */
@@ -526,6 +532,13 @@ export interface ResolvedBedrockCompat {
 	supportsLongPromptCacheRetention: boolean;
 	promptCacheMinimumTokens: number;
 	promptCacheMaximumCheckpoints: number;
+	/**
+	 * Stream-watchdog idle-timeout fallback in ms for hosts with no keepalive
+	 * events; 0 disables the idle watchdog. Undefined defers to
+	 * `PI_STREAM_IDLE_TIMEOUT_MS`, then the legacy
+	 * `PI_OPENAI_STREAM_IDLE_TIMEOUT_MS` alias, then the 300s default.
+	 */
+	streamIdleTimeoutMs?: number;
 }
 
 /**

@@ -687,7 +687,9 @@ export class CombinedAutocompleteProvider implements AutocompleteProvider {
 			pathPrefix.startsWith("/") ||
 			pathPrefix.startsWith("./") ||
 			pathPrefix.startsWith("../") ||
-			pathPrefix.startsWith("~/")
+			pathPrefix.startsWith("~/") ||
+			// Windows drive-absolute paths (C:/Users, C:\Users).
+			/^[A-Za-z]:[\\/]/.test(pathPrefix)
 		) {
 			return pathPrefix;
 		}

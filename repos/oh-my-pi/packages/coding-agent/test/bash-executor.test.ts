@@ -231,12 +231,12 @@ describe("executeBash", () => {
 	});
 
 	it("applies non-interactive environment defaults", async () => {
-		const result = await executeBash('echo "$GIT_TERMINAL_PROMPT:$PI_TEST_ENV"', {
+		const result = await executeBash('echo "$AGENT:$GIT_TERMINAL_PROMPT:$PI_TEST_ENV"', {
 			cwd: tempDir,
 			timeout: 5000,
 			env: { PI_TEST_ENV: "hello" },
 		});
-		expect(result.output.trim()).toBe("0:hello");
+		expect(result.output.trim()).toBe("1:0:hello");
 	});
 
 	it("runs non-bash shellPath commands through the configured shell", async () => {

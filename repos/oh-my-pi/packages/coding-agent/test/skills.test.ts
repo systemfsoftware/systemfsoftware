@@ -284,7 +284,7 @@ describe("skills", () => {
 				wslPath: () => undefined,
 			});
 
-			expect(resolved).toBe(path.join("/mnt", "c", "Users", "alice"));
+			expect(resolved).toBe("/mnt/c/Users/alice");
 		});
 
 		it("resolves the Windows profile through interop when USERPROFILE is not exported (#3779)", () => {

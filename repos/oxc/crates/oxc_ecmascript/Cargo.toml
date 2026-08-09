@@ -1,0 +1,41 @@
+[package]
+name = "oxc_ecmascript"
+version = "0.143.0"
+authors.workspace = true
+categories.workspace = true
+edition.workspace = true
+homepage.workspace = true
+include = ["/src"]
+keywords.workspace = true
+license.workspace = true
+publish = true
+repository.workspace = true
+rust-version.workspace = true
+description.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+test = true
+doctest = false
+
+[features]
+side_effects = ["dep:oxc_allocator", "dep:oxc_compat", "dep:oxc_regular_expression"]
+constant_evaluation = ["side_effects", "dep:cow-utils", "dep:smallvec"]
+
+[dependencies]
+oxc_allocator = { workspace = true, optional = true }
+oxc_ast = { workspace = true }
+oxc_compat = { workspace = true, optional = true }
+oxc_data_structures = { workspace = true, features = ["inline_string"] }
+oxc_regular_expression = { workspace = true, optional = true }
+oxc_span = { workspace = true }
+oxc_syntax = { workspace = true, features = ["to_js_string"] }
+
+cow-utils = { workspace = true, optional = true }
+dragonbox_ecma = { workspace = true }
+itoa = { workspace = true }
+num-bigint = { workspace = true }
+num-traits = { workspace = true }
+smallvec = { workspace = true, optional = true }

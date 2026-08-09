@@ -11,6 +11,7 @@ import { ModelRegistry } from "../../config/model-registry";
 import { Settings } from "../../config/settings";
 import { discoverAuthStorage, discoverContextFiles, loadCliExtensionProviders } from "../../sdk";
 import * as git from "../../utils/git";
+import { abortOnGitFailure, pushOrAbort } from "../execute";
 import { type ExistingChangelogEntries, runCommitAgentSession } from "./agent";
 import { generateFallbackProposal } from "./fallback";
 import { assignLockFilesToPlan } from "./lock-files";
@@ -25,7 +26,7 @@ interface CommitExecutionContext {
 	push: boolean;
 }
 
-export async function runAgenticCommit(args: CommitCommandArgs): Promise<void> {
+export async function runAgenticCommit(args: CommitCommandArgs): Promise<{ usedFallback: boolean }> {
 	const cwd = getProjectDir();
 	const [settings, authStorage] = await Promise.all([Settings.init({ cwd }), discoverAuthStorage()]);
 
@@ -56,8 +57,13 @@ export async function runAgenticCommit(args: CommitCommandArgs): Promise<void> {
 	);
 
 	if (stagedFiles.length === 0) {
+		if (args.push) {
+			process.stdout.write("No changes to commit; pushing existing commits...\n");
+			await pushOrAbort(cwd);
+			return { usedFallback: false };
+		}
 		process.stderr.write("No changes to commit.\n");
-		return;
+		return { usedFallback: false };
 	}
 
 	if (!args.noChangelog) {
@@ -94,7 +100,7 @@ export async function runAgenticCommit(args: CommitCommandArgs): Promise<void> {
 		process.stdout.write("● Forcing fallback commit generation...\n");
 		const fallbackProposal = generateFallbackProposal(numstat);
 		await runSingleCommit(fallbackProposal, { cwd, dryRun: args.dryRun, push: args.push });
-		return;
+		return { usedFallback: true };
 	}
 
 	const trivialChange = detectTrivialChange(diff);
@@ -111,7 +117,7 @@ export async function runAgenticCommit(args: CommitCommandArgs): Promise<void> {
 			warnings: [],
 		};
 		await runSingleCommit(trivialProposal, { cwd, dryRun: args.dryRun, push: args.push });
-		return;
+		return { usedFallback: false };
 	}
 
 	let existingChangelogEntries: ExistingChangelogEntries[] | undefined;
@@ -124,6 +130,7 @@ export async function runAgenticCommit(args: CommitCommandArgs): Promise<void> {
 
 	process.stdout.write("● Starting commit agent...\n");
 	let agentSessionCompleted = false;
+	let usedFallback = false;
 
 	try {
 		await runCommitAgentSession({
@@ -141,7 +148,7 @@ export async function runAgenticCommit(args: CommitCommandArgs): Promise<void> {
 			existingChangelogEntries,
 			onComplete: async commitState => {
 				agentSessionCompleted = true;
-				await completeAgentCommitState(commitState, {
+				usedFallback = await completeAgentCommitState(commitState, {
 					cwd,
 					dryRun: args.dryRun,
 					push: args.push,
@@ -151,7 +158,7 @@ export async function runAgenticCommit(args: CommitCommandArgs): Promise<void> {
 				});
 			},
 		});
-		return;
+		return { usedFallback };
 	} catch (error) {
 		if (agentSessionCompleted) {
 			throw error;
@@ -164,7 +171,7 @@ export async function runAgenticCommit(args: CommitCommandArgs): Promise<void> {
 		process.stdout.write("● Using fallback commit generation...\n");
 		const fallbackProposal = generateFallbackProposal(numstat);
 		await runSingleCommit(fallbackProposal, { cwd, dryRun: args.dryRun, push: args.push });
-		return;
+		return { usedFallback: true };
 	}
 }
 
@@ -175,7 +182,7 @@ async function completeAgentCommitState(
 		changelogTargets: string[];
 		numstat: NumstatEntry[];
 	},
-): Promise<void> {
+): Promise<boolean> {
 	let usedFallback = false;
 	if (!commitState.proposal && !commitState.splitProposal) {
 		if ($env.PI_COMMIT_NO_FALLBACK?.toLowerCase() !== "true") {
@@ -211,7 +218,7 @@ async function completeAgentCommitState(
 
 	if (commitState.proposal) {
 		await runSingleCommit(commitState.proposal, ctx);
-		return;
+		return usedFallback;
 	}
 
 	if (commitState.splitProposal) {
@@ -221,7 +228,7 @@ async function completeAgentCommitState(
 			push: ctx.push,
 			additionalFiles: updatedChangelogFiles,
 		});
-		return;
+		return usedFallback;
 	}
 
 	throw new Error("Commit agent did not provide a proposal.");
@@ -238,12 +245,14 @@ async function runSingleCommit(proposal: CommitProposal, ctx: CommitExecutionCon
 		return;
 	}
 	process.stdout.write("● Creating commit...\n");
-	await git.commit(ctx.cwd, commitMessage);
-	process.stdout.write("Commit created.\n");
-	if (ctx.push) {
-		await git.push(ctx.cwd);
-		process.stdout.write("Pushed to remote.\n");
+	try {
+		await git.commit(ctx.cwd, commitMessage);
+	} catch (error) {
+		if (error instanceof git.GitCommandError) abortOnGitFailure("Commit failed", error);
+		throw error;
 	}
+	process.stdout.write("Commit created.\n");
+	if (ctx.push) await pushOrAbort(ctx.cwd);
 }
 
 async function runSplitCommit(
@@ -296,7 +305,7 @@ async function runSplitCommit(
 	process.stdout.write("● Creating split commits...\n");
 	const stagedDiff = await git.diff(ctx.cwd, { cached: true, binary: true });
 	await git.stage.reset(ctx.cwd);
-	for (const commitIndex of order) {
+	for (const [position, commitIndex] of order.entries()) {
 		const commit = plan.commits[commitIndex];
 		await git.stage.hunks(ctx.cwd, commit.changes, { rawDiff: stagedDiff, diffCached: true });
 		const analysis: ConventionalAnalysis = {
@@ -306,14 +315,23 @@ async function runSplitCommit(
 			issueRefs: commit.issueRefs,
 		};
 		const message = formatCommitMessage(analysis, commit.summary);
-		await git.commit(ctx.cwd, message);
+		try {
+			await git.commit(ctx.cwd, message);
+		} catch (error) {
+			if (error instanceof git.GitCommandError) {
+				const stagedNow = await git.diff.changedFiles(ctx.cwd, { cached: true });
+				abortOnGitFailure(
+					`Commit ${position + 1} of ${order.length} failed`,
+					error,
+					`${position} of ${order.length} commits created; ${stagedNow.length} file(s) remain staged. No changes were lost.`,
+				);
+			}
+			throw error;
+		}
 		await git.stage.reset(ctx.cwd);
 	}
 	process.stdout.write("Split commits created.\n");
-	if (ctx.push) {
-		await git.push(ctx.cwd);
-		process.stdout.write("Pushed to remote.\n");
-	}
+	if (ctx.push) await pushOrAbort(ctx.cwd);
 }
 
 function appendFilesToLastCommit(plan: SplitCommitPlan, files: string[]): void {

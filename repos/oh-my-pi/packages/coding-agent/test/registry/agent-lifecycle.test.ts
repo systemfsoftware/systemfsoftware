@@ -614,10 +614,11 @@ describe("AgentLifecycleManager", () => {
 		// session (the ref carries session === null), it treats it as unrevivable.
 		await expect(lifecycle.ensureLive(workerId)).rejects.toThrow(/aborted/);
 
-		// Reopening the Agent Hub rescans on-disk transcripts. The surviving
-		// `.jsonl` must not be re-adopted as a fresh `parked` row, because the
-		// id is still present in the registry.
-		await registerPersistedSubagents(registry, rootSessionFile);
-		expect(registry.get(workerId)?.status).toBe("aborted");
+		// Reopening after the original registry is gone must preserve the terminal
+		// decision from the sidecar, not infer a fresh parked agent from the JSONL.
+		expect(await Bun.file(`${workerSessionFile}.tombstone`).exists()).toBe(true);
+		const restoredRegistry = new AgentRegistry();
+		await registerPersistedSubagents(restoredRegistry, rootSessionFile);
+		expect(restoredRegistry.get(workerId)?.status).toBe("aborted");
 	});
 });

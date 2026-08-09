@@ -29,15 +29,13 @@ const testContext: Context = {
 };
 
 /**
- * Verbatim body served by `api.githubcopilot.com/v1/messages` when the request
- * lands on a fleet replica whose integrator allowlist predates the model, even
- * though `/models` on the same host advertises it.
+ * Copilot's transient response when a request lands on a fleet replica that
+ * does not yet support a model advertised by `/models`.
  */
 const FLEET_SKEW_BODY = {
 	error: {
-		message:
-			'The requested model is not available for integrator "copilot-language-server". Available models: [gpt-4.1 claude-opus-4.7 claude-sonnet-4.5]. Verify the correct Copilot-Integration-Id header is being sent.',
-		code: "model_not_available_for_integrator",
+		message: "The requested model is not supported by this fleet replica.",
+		code: "model_not_supported",
 		param: "model",
 		type: "invalid_request_error",
 	},

@@ -1,7 +1,7 @@
 {
   "type": "module",
   "name": "@oh-my-pi/pi-tui",
-  "version": "17.2.9",
+  "version": "17.2.12",
   "description": "Terminal User Interface library with differential rendering for efficient text-based applications",
   "homepage": "https://omp.sh",
   "author": "Can Boluk",
@@ -38,12 +38,9 @@
   },
   "dependencies": {
     "@oh-my-pi/pi-natives": "catalog:",
-    "@oh-my-pi/pi-utils": "catalog:",
-    "lru-cache": "catalog:",
-    "marked": "catalog:"
+    "@oh-my-pi/pi-utils": "catalog:"
   },
   "devDependencies": {
-    "chalk": "catalog:",
     "ghostty-web": "catalog:"
   },
   "engines": {

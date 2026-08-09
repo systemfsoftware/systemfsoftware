@@ -862,6 +862,36 @@ describe("DebugTool launch validation", () => {
 		}
 	});
 
+	it("shows supported install options when the JavaScript debug adapter is unavailable", async () => {
+		const launchSpy = spyOn(dapModule, "selectLaunchAdapter").mockReturnValue({
+			kind: "unavailable",
+			adapterName: "js-debug-adapter",
+			command: "js-debug-adapter",
+		});
+		try {
+			const cwd = await fs.mkdtemp(path.join(os.tmpdir(), "omp-debug-js-debug-hint-"));
+			try {
+				await fs.writeFile(path.join(cwd, "main.js"), "console.log('hi');\n");
+				const session: ToolSession = {
+					cwd,
+					hasUI: false,
+					getSessionFile: () => null,
+					getSessionSpawns: () => "*",
+					settings: Settings.isolated({ "debug.enabled": true }),
+				};
+				const tool = new DebugTool(session);
+
+				await expect(tool.execute("call", { action: "launch", program: "main.js" })).rejects.toThrow(
+					/download.*github\.com\/microsoft\/vscode-js-debug/,
+				);
+			} finally {
+				await removeWithRetries(cwd);
+			}
+		} finally {
+			launchSpy.mockRestore();
+		}
+	});
+
 	it("points to DAP configuration when a custom adapter command is unavailable", async () => {
 		const launchSpy = spyOn(dapModule, "selectLaunchAdapter").mockReturnValue({
 			kind: "unavailable",

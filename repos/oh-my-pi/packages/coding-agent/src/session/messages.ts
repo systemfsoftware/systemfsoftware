@@ -42,6 +42,7 @@ import { formatOutputNotice } from "../tools/output-meta";
 export const SKILL_PROMPT_MESSAGE_TYPE = "skill-prompt";
 export const LSP_LATE_DIAGNOSTIC_MESSAGE_TYPE = "lsp-late-diagnostic";
 export const BACKGROUND_TAN_DISPATCH_MESSAGE_TYPE = "background-tan-dispatch";
+export const PREWALK_PLAN_MESSAGE_TYPE = "prewalk-plan";
 
 /**
  * Logs provider-error turns so their actual cause is available outside the

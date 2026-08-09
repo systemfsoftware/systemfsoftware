@@ -9,8 +9,8 @@
  */
 import { afterEach, describe, expect, it, vi } from "bun:test";
 import * as path from "node:path";
+import { type } from "@oh-my-pi/omptype";
 import { Agent, type AgentMessage, type AgentTool } from "@oh-my-pi/pi-agent-core";
-import { z } from "@oh-my-pi/pi-ai";
 import { createMockModel, type MockModel, type MockResponse } from "@oh-my-pi/pi-ai/providers/mock";
 import { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
 import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
@@ -21,8 +21,8 @@ import { convertToLlm } from "@oh-my-pi/pi-coding-agent/session/messages";
 import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
 import { TempDir } from "@oh-my-pi/pi-utils";
 
-const yieldToolSchema = z.object({ result: z.unknown() });
-const recordToolSchema = z.object({ value: z.string() });
+const yieldToolSchema = type({ result: type("unknown") });
+const recordToolSchema = type({ value: type("string") });
 
 type Harness = { session: AgentSession; authStorage: AuthStorage; tempDir: TempDir };
 const activeHarnesses: Harness[] = [];

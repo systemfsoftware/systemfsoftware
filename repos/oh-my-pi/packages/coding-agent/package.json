@@ -1,7 +1,7 @@
 {
   "type": "module",
   "name": "@oh-my-pi/pi-coding-agent",
-  "version": "17.2.9",
+  "version": "17.2.12",
   "description": "Coding agent CLI with read, bash, edit, write tools and session management",
   "homepage": "https://omp.sh",
   "author": "Can Boluk",
@@ -49,9 +49,7 @@
     "bench:guard": "bun scripts/bench-guard.ts"
   },
   "dependencies": {
-    "@agentclientprotocol/sdk": "catalog:",
     "@babel/parser": "catalog:",
-    "@mozilla/readability": "catalog:",
     "@oh-my-pi/hashline": "catalog:",
     "@oh-my-pi/omp-stats": "catalog:",
     "@oh-my-pi/omptype": "catalog:",
@@ -75,29 +73,15 @@
     "@opentelemetry/sdk-metrics": "catalog:",
     "@opentelemetry/sdk-trace-base": "catalog:",
     "@opentelemetry/sdk-trace-node": "catalog:",
-    "@puppeteer/browsers": "catalog:",
-    "@types/turndown": "catalog:",
-    "@xterm/headless": "catalog:",
-    "chalk": "catalog:",
-    "fast-xml-parser": "catalog:",
-    "handlebars": "catalog:",
-    "header-generator": "catalog:",
-    "linkedom": "catalog:",
-    "lru-cache": "catalog:",
-    "mammoth": "catalog:",
     "mupdf": "catalog:",
-    "puppeteer-core": "catalog:",
-    "turndown": "catalog:",
-    "turndown-plugin-gfm": "catalog:",
-    "zod": "catalog:"
+    "puppeteer-core": "catalog:"
   },
   "optionalDependencies": {
     "@huggingface/transformers": "catalog:",
     "sherpa-onnx-node": "1.13.2"
   },
   "devDependencies": {
-    "@types/bun": "catalog:",
-    "marked": "catalog:"
+    "@types/bun": "catalog:"
   },
   "engines": {
     "bun": ">=1.3.14"

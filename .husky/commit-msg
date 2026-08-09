@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -e
-# Subtree merge commits stage only repos/ paths; commitlint's pnpm bootstrap
-# cannot run against the vendored subtree state, so skip lint for pure
-# repos/ commits (git-subtree-vendor G23).
-if git diff --cached --name-only | grep -qv '^repos/'; then
+# Subtree merge commits stage only repos/ paths, and the registration commit
+# stages only subtrees.toml; commitlint's pnpm bootstrap cannot run against
+# the vendored subtree state, so skip lint for both (git-subtree-vendor G23).
+if git diff --cached --name-only | grep -qvE '^(repos/|subtrees\.toml)$'; then
   pnpm exec commitlint --edit "$1"
 fi

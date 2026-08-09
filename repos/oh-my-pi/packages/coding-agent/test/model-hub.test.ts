@@ -167,11 +167,11 @@ describe("ModelHub", () => {
 			installTestTheme();
 
 			const rendered = normalize(hub.render(220));
-			expect(rendered).toContain("●default");
-			expect(rendered).toContain("●custom-fast");
+			expect(rendered).toContain("● default");
+			expect(rendered).toContain("● custom-fast");
 			// Explicit :low suffix surfaces as the low thinking glyph on the chip.
 			expect(rendered).toContain("◔");
-			expect(rendered).toContain("●smol");
+			expect(rendered).toContain("● smol");
 		});
 
 		test("list rows carry no role chips; only the selected model's detail line is tagged", () => {
@@ -185,9 +185,9 @@ describe("ModelHub", () => {
 			// Auto-selection tags smol → haiku and slow → codex, but only the
 			// selected model's chips render (in the detail line). With row
 			// chips both would appear at once.
-			const hollow = ["○smol", "○slow"].filter(chip => rendered.includes(chip));
+			const hollow = ["○ smol", "○ slow"].filter(chip => rendered.includes(chip));
 			expect(hollow).toHaveLength(1);
-			expect(rendered).not.toContain("●smol");
+			expect(rendered).not.toContain("● smol");
 		});
 
 		test("roles view reflects auto thinking from defaultThinkingLevel and :auto suffixes", () => {
@@ -446,7 +446,7 @@ describe("ModelHub", () => {
 				expect(settings.getProjectModelRole("default")).toBe(selector);
 
 				const projectDefault = createHub({ models: [model], scoped: true, settings });
-				expect(normalize(projectDefault.hub.render(220))).toContain("○smol");
+				expect(normalize(projectDefault.hub.render(220))).toContain("○ smol");
 				projectDefault.hub.handleInput("\n");
 				projectDefault.hub.handleInput("\n");
 				expect(projectDefault.onUnassign).toHaveBeenCalledWith("default", "project");
@@ -484,7 +484,7 @@ describe("ModelHub", () => {
 			const model = makeModel("test", "claude-haiku-4.5");
 			const settings = Settings.isolated({ modelRoleStorage: "project" });
 			const { hub, onAssign, onUnassign } = createHub({ models: [model], scoped: true, settings });
-			expect(normalize(hub.render(220))).toContain("○smol");
+			expect(normalize(hub.render(220))).toContain("○ smol");
 
 			hub.handleInput("\n");
 			hub.handleInput(DOWN);

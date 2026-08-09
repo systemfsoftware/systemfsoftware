@@ -10,12 +10,9 @@ import { formatModelString } from "../config/model-resolver";
 import type { Settings } from "../config/settings";
 import { validateProviderMaxInFlightRequests } from "../config/settings";
 import type { LocalProtocolOptions } from "../internal-urls";
-import {
-	deobfuscateSessionContext,
-	obfuscateMessages,
-	type SecretObfuscator,
-	stripPendingSecretPlaceholderSuffix,
-} from "../secrets/obfuscator";
+import { deobfuscateSessionContext, obfuscateMessages } from "../secrets/message-transform";
+import type { SecretObfuscator } from "../secrets/obfuscator";
+import { stripPendingSecretPlaceholderSuffix } from "../secrets/placeholder";
 import { normalizeModelContextImages } from "../utils/image-loading";
 import { describeAttachedImagesForTextModel } from "../utils/image-vision-fallback";
 import { type CustomMessage, convertToLlm } from "./messages";

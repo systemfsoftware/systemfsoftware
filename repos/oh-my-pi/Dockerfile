@@ -34,8 +34,8 @@ ENV BUN_INSTALL=/opt/bun \
     PATH=/opt/bun/bin:/usr/local/cargo/bin:/usr/local/bin:/usr/bin:/bin \
     CARGO_TERM_COLOR=never
 
-# clang/libclang-dev: bindgen for maudio-sys (miniaudio); cmake/make/ninja-build:
-# audiopus_sys builds bundled libopus via CMake (native audio stack, 17.1.1+).
+# clang/libclang-dev: bindgen for pipewire-sys/libspa-sys (Linux desktop capture);
+# cmake/make/ninja-build: audiopus_sys builds bundled libopus via CMake.
 # bazelisk: hermetic bazel launcher for the native addon build (17.1.5+).
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \

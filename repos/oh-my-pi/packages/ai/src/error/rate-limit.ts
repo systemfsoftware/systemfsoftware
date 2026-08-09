@@ -22,6 +22,13 @@ const ACCOUNT_RATE_LIMIT_PATTERN =
 	/\baccount(?:'s)?\b[^\n]{0,80}\brate.?limit\b|\brate.?limit\b[^\n]{0,80}\baccount\b/i;
 const INSUFFICIENT_BALANCE_PATTERN = /insufficient.?balance/i;
 const SPEND_LIMIT_PATTERN = /spend.?limit/i;
+const SUBSCRIPTION_CAP_PATTERN =
+	/\b(?:subscription|plan|membership)\b[^\n]{0,80}\b(?:rate.?limits?|quota|cap)\b|\b(?:rate.?limits?|quota|cap)\b[^\n]{0,80}\b(?:subscription|plan|membership)\b/i;
+const TRANSIENT_INTERVAL_RATE_LIMIT_PATTERN = /\bper\s+(?:second|minute)\b/i;
+
+function matchesSubscriptionCapText(errorMessage: string): boolean {
+	return SUBSCRIPTION_CAP_PATTERN.test(errorMessage) && !TRANSIENT_INTERVAL_RATE_LIMIT_PATTERN.test(errorMessage);
+}
 const OPENROUTER_DAILY_FREE_LIMIT_PATTERN = /\bfree[-_ ]models[-_ ]per[-_ ]day\b/i;
 // gRPC/Connect end-streams carry the status as its name (`resource_exhausted`),
 // while HTTP bodies use the phrase ("resource exhausted"). Strip either form
@@ -40,6 +47,25 @@ const ACCOUNT_SCOPED_403_PATTERN =
 	// "Your limit will reset in …"); the overall/account qualifiers arm above
 	// already covers the rest.
 	/\b(?:overall|account|organization|team|workspace)\b[^\n]{0,40}\b(?:message |request )?rate.?limit\b|\byour\b[^\n]{0,30}\b(?:limit )?will reset\b/i;
+// Simplified Chinese account-quota exhaustion phrasing. Zhipu Coding Plan
+// returns e.g. "429 已达到 5 小时的使用上限。您的限额将在 2026-08-06 20:06:00 重置。"
+// (type=1308) when the 5h window is spent; other CN providers use 额度已用完 /
+// 配额已耗尽 / 余额不足. These are persistent account-local caps that must
+// rotate to a sibling credential, not transient rate limits, so they are
+// matched before the RATE_LIMIT_EXCEEDED branch. The 上限 arm is anchored on
+// the 使用 token: a rate/concurrency cap phrased as 每分钟请求数已达上限 /
+// 并发请求数已达上限 / 速率达到上限 (no 使用) must NOT match, or it would burn a
+// healthy sibling credential as a false quota. "速率限制" is absent for the
+// same reason.
+const CN_QUOTA_EXHAUSTED_PATTERN = /使用.{0,30}?上限|(?:额度|配额)已?(?:用|耗)(?:完|尽)|限额.{0,30}重置|余额不足/;
+// Simplified Chinese rate/concurrency caps can contain both 使用 and 上限, but
+// remain transient rather than account quota exhaustion.
+const CN_TRANSIENT_CAP_PATTERN =
+	/速率.{0,30}上限|频率.{0,30}上限|每分钟.{0,30}上限|并发.{0,30}上限|使用.{0,30}(?:速率|频率|每分钟|并发).{0,30}上限/;
+// Common Simplified Chinese throttle phrasing. Consulted by
+// isOpaqueStatusBody so CN transients stay in the provider backoff lane instead
+// of rotating through the opaque-429 fallback.
+const CN_THROTTLE_PATTERN = /速率(?:限制|过快)|频率(?:过高|过快)|过于频繁|稍后[重再]试/;
 
 /**
  * Classify a rate-limit error message into a reason category.
@@ -64,6 +90,13 @@ export function parseRateLimitReason(errorMessage: string): RateLimitReason {
 		return "QUOTA_EXHAUSTED";
 	}
 
+	// Simplified Chinese quota-exhaustion phrasing (Zhipu Coding Plan and other
+	// CN providers). Must precede the MODEL_CAPACITY / RATE_LIMIT branches so an
+	// account-local cap rotates instead of backing off as a transient.
+	if (CN_QUOTA_EXHAUSTED_PATTERN.test(errorMessage) && !CN_TRANSIENT_CAP_PATTERN.test(errorMessage)) {
+		return "QUOTA_EXHAUSTED";
+	}
+
 	if (CONCURRENT_LIMIT_PATTERN.test(errorMessage)) {
 		return "CONCURRENT_LIMIT";
 	}
@@ -77,6 +110,10 @@ export function parseRateLimitReason(errorMessage: string): RateLimitReason {
 	}
 
 	if (SPEND_LIMIT_PATTERN.test(errorMessage)) {
+		return "QUOTA_EXHAUSTED";
+	}
+
+	if (matchesSubscriptionCapText(errorMessage)) {
 		return "QUOTA_EXHAUSTED";
 	}
 
@@ -212,7 +249,20 @@ export function isOpaqueStatusBody(message: string): boolean {
 	const cleaned = message
 		.replace(/\b(?:429|402)\b/g, "")
 		.replace(/\b(?:http|https|status|error|code|response|message)\b/gi, "");
-	return !/[a-z\d]{3,}/i.test(cleaned);
+	// A body is informative when the text classifier can act on it. Any Latin
+	// word or Simplified Chinese phrasing the classifier recognizes (quota
+	// exhaustion or a throttle) defers to parseRateLimitReason; a body that
+	// is only status digits / HTTP framing is opaque and rotates conservatively.
+	// A Han-only body the classifier cannot interpret (e.g. Japanese Kanji
+	// quota text, since Japanese is out of scope) must stay opaque so the
+	// opaque-429 fallback still rotates. This keeps the exception scoped to
+	// text we actually classify, rather than to any Han ideograph.
+	return (
+		!/[a-z\d]{3,}/i.test(cleaned) &&
+		!CN_QUOTA_EXHAUSTED_PATTERN.test(cleaned) &&
+		!CN_TRANSIENT_CAP_PATTERN.test(cleaned) &&
+		!CN_THROTTLE_PATTERN.test(cleaned)
+	);
 }
 
 /**
@@ -224,8 +274,10 @@ export function isOpaqueStatusBody(message: string): boolean {
 export function matchesUsageLimitText(errorMessage: string): boolean {
 	return (
 		USAGE_LIMIT_PATTERN.test(errorMessage) ||
+		(CN_QUOTA_EXHAUSTED_PATTERN.test(errorMessage) && !CN_TRANSIENT_CAP_PATTERN.test(errorMessage)) ||
 		SPEND_LIMIT_PATTERN.test(errorMessage) ||
 		ACCOUNT_RATE_LIMIT_PATTERN.test(errorMessage) ||
+		matchesSubscriptionCapText(errorMessage) ||
 		OPENROUTER_DAILY_FREE_LIMIT_PATTERN.test(errorMessage)
 	);
 }
