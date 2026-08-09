@@ -15,7 +15,6 @@ import {
   FORBIDDEN_EXPECTED,
   FORBIDDEN_FIX,
   meta,
-  Options,
   PROCESS_ENV_EXPECTED,
   PROCESS_ENV_FIX,
 } from './workflow-no-ambient-impurity.config.js'
@@ -151,9 +150,9 @@ export const workflowNoAmbientImpurity = defineRule({
       VariableDeclarator(node: ESTree.VariableDeclarator) {
         if (node.init === null || node.init.type !== 'Identifier') return
         const objectName = node.init.name
-        if (!Object.hasOwn(BANNED_DESTRUCTURES, objectName)) return
+        const bannedMembers = BANNED_DESTRUCTURES[objectName]
+        if (bannedMembers === undefined) return
         if (node.id.type !== 'ObjectPattern') return
-        const bannedMembers = BANNED_DESTRUCTURES[objectName]!
         for (const property of node.id.properties) {
           if (property.type !== 'Property') continue
           const value = property.value

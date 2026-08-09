@@ -30,7 +30,9 @@
         "$TURBO_DEFAULT$",
         "tsconfig.json",
         "tsconfig.*.json",
-        "$TURBO_ROOT$/packages/tsconfig/**"
+        "$TURBO_ROOT$/packages/tsconfig/**",
+        "!$TURBO_ROOT$/packages/tsconfig/.turbo/**",
+        "!$TURBO_ROOT$/packages/tsconfig/**/*.tsbuildinfo"
       ],
       "outputs": [],
       "dependsOn": [
@@ -56,7 +58,8 @@
       ],
       "env": [
         "NODE_ENV",
-        "CI"
+        "CI",
+        "AGENT"
       ],
       "cache": true
     },
@@ -96,7 +99,8 @@
       ],
       "env": [
         "NODE_ENV",
-        "CI"
+        "CI",
+        "AGENT"
       ],
       "cache": true
     },
@@ -107,7 +111,11 @@
         "tsconfig.json",
         "tsconfig.*.json",
         "$TURBO_ROOT$/packages/oxlint-config/**",
-        "$TURBO_ROOT$/packages/tsconfig/**"
+        "!$TURBO_ROOT$/packages/oxlint-config/.turbo/**",
+        "!$TURBO_ROOT$/packages/oxlint-config/**/*.tsbuildinfo",
+        "$TURBO_ROOT$/packages/tsconfig/**",
+        "!$TURBO_ROOT$/packages/tsconfig/.turbo/**",
+        "!$TURBO_ROOT$/packages/tsconfig/**/*.tsbuildinfo"
       ],
       "outputs": [],
       "dependsOn": [
@@ -116,7 +124,6 @@
       ],
       "env": [
         "NODE_ENV",
-        "AGENT",
         "GITHUB_ACTIONS"
       ],
       "cache": true
@@ -160,7 +167,7 @@
         "$TURBO_ROOT$/packages/**/dist/**"
       ],
       "outputs": [],
-      "cache": false
+      "cache": true
     },
     "//#check:runtime-deps": {
       "inputs": [
@@ -169,7 +176,7 @@
         "$TURBO_ROOT$/packages/**/dist/**"
       ],
       "outputs": [],
-      "cache": false
+      "cache": true
     },
     "//#check:mutate-scope": {
       "inputs": [
@@ -178,7 +185,7 @@
         "$TURBO_ROOT$/packages/**/src/**"
       ],
       "outputs": [],
-      "cache": false
+      "cache": true
     },
     "//#check:lint-coverage": {
       "inputs": [
@@ -187,7 +194,7 @@
         "$TURBO_ROOT$/packages/**/oxlint.config.ts"
       ],
       "outputs": [],
-      "cache": false
+      "cache": true
     },
     "//#check:no-hand-rolled-jsonc": {
       "inputs": [
@@ -198,7 +205,7 @@
         "$TURBO_ROOT$/.github/**/*.{js,mjs}"
       ],
       "outputs": [],
-      "cache": false
+      "cache": true
     },
     "//#check:publish-config": {
       "inputs": [
@@ -206,14 +213,14 @@
         "$TURBO_ROOT$/packages/**/package.json"
       ],
       "outputs": [],
-      "cache": false
+      "cache": true
     },
     "//#check:script-provenance": {
       "inputs": [
         "$TURBO_ROOT$/scripts/**"
       ],
       "outputs": [],
-      "cache": false
+      "cache": true
     },
     "//#check:project-references": {
       "inputs": [
@@ -222,7 +229,7 @@
         "$TURBO_ROOT$/packages/**/src/**"
       ],
       "outputs": [],
-      "cache": false
+      "cache": true
     },
     "clean": {
       "cache": false

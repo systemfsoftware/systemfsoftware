@@ -23,7 +23,11 @@ export function extractShellCommand(toolName: string, input: Record<string, unkn
   }
 
   if (Array.isArray(input['commands'])) {
-    return input['commands']
+    // `Array.isArray` narrows `unknown` to `any[]`, so re-type the narrowed
+    // array as `unknown[]` to keep each entry `unknown` and force explicit
+    // narrowing at the member access below.
+    const commands: unknown[] = input['commands']
+    return commands
       .map((entry) =>
         typeof entry === 'object' && entry !== null && 'command' in entry && typeof entry['command'] === 'string'
           ? entry['command']

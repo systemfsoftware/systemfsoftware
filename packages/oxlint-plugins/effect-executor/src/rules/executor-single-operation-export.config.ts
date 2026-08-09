@@ -17,8 +17,7 @@ export const EFFECT_FN_NAMES: Record<string, true> = {
 export const SINGLE_OPERATION_EXPECTED =
   'exactly one operation function export — the use case itself, with optional <Executor>Deps Tag and Layer that binds it' as const
 
-export const TOO_MANY_FUNCTION_EXPORTS_ACTUAL_TEMPLATE = (count: number): string =>
-  `${count} function exports` as string
+export const TOO_MANY_FUNCTION_EXPORTS_ACTUAL_TEMPLATE = (count: number): string => `${count} function exports`
 
 export const TOO_MANY_FUNCTION_EXPORTS_FIX =
   'move the second use case (and any helpers that are not the use case) into their own *.executor.ts or a sibling cell; make them private if only this executor uses them' as const

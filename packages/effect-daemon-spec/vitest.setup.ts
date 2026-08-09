@@ -1,9 +1,10 @@
+import { isCI } from '@systemfsoftware/vitest-config'
 import { Match } from 'effect'
 import { FastCheck as fc } from 'effect'
 
 const mode = Match.value({
   strykerWorker: Boolean(process.env.STRYKER_MUTATOR_WORKER),
-  ci: Boolean(process.env.CI),
+  ci: isCI,
 }).pipe(
   Match.when({ strykerWorker: true }, () => 'stryker' as const),
   Match.when({ ci: true }, () => 'ci' as const),

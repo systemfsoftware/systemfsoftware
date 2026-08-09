@@ -1,7 +1,7 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
 import { Schema as S } from 'effect'
-import { BANNED_PATH_SEGMENTS, meta, Options, SRC_DIR } from './policy-no-junk-drawer-path.config.js'
+import { BANNED_PATH_SEGMENTS, meta, SRC_DIR } from './policy-no-junk-drawer-path.config.js'
 
 export type MessageIds = 'junkDrawerPath'
 

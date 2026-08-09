@@ -70,6 +70,10 @@ catalogs:
     typescript: ^6.0.3
 minimumReleaseAge: 1440
 overrides:
+  # platform-node and platform-node-shared take `@effect/cluster` as a peer
+  # (^0.60.2 / ^0.60.1). Nothing here imports it, so pnpm auto-installed it, and an
+  # effect-group bump left it at 0.49.6 - which predates `RunnerStorage`.
+  "@effect/cluster": ^0.60.2
   fast-check: ^4
   vite: ^7
 packages:

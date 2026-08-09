@@ -1,7 +1,7 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
 import { Array as A, Schema as S } from 'effect'
-import { ACL_SUFFIX, meta, Options } from './acl-transform-orfail-required.config.js'
+import { ACL_SUFFIX, meta } from './acl-transform-orfail-required.config.js'
 
 export type MessageIds = 'transformOrFailRequired'
 

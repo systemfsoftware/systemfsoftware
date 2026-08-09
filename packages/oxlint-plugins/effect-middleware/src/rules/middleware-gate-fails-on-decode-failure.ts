@@ -1,6 +1,6 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
-import { meta, Options } from './middleware-gate-fails-on-decode-failure.config.js'
+import { meta } from './middleware-gate-fails-on-decode-failure.config.js'
 
 export type MessageIds = 'gateFail'
 

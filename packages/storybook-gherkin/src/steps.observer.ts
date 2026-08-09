@@ -188,7 +188,7 @@ const decodeCapture = (
         cause: error,
       })
     },
-    onRight: (v) => v,
+    onRight: (v: unknown) => v,
   })
 }
 

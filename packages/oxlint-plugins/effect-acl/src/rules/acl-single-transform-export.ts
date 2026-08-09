@@ -1,6 +1,6 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
-import { ACL_SUFFIX, meta, Options } from './acl-single-transform-export.config.js'
+import { ACL_SUFFIX, meta } from './acl-single-transform-export.config.js'
 
 export type MessageIds = 'tooManyTransformExports' | 'disallowedExport'
 

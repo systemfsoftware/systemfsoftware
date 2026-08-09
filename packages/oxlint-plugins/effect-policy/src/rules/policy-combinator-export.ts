@@ -1,6 +1,6 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
-import { meta, Options } from './policy-combinator-export.config.js'
+import { meta } from './policy-combinator-export.config.js'
 
 export type MessageIds = 'noCombinator'
 
