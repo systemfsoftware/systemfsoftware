@@ -136,7 +136,7 @@
     "@effect/vitest": "catalog:",
     "@microsoft/api-extractor": "catalog:",
     "@std/jsonc": "catalog:",
-    "@systemfsoftware/arethetypeswrong-cli": "workspace:^",
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
     "@systemfsoftware/oxlint-plugin-cell-taxonomy": "workspace:^",
     "@systemfsoftware/stryker-js-vitest-runner": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",

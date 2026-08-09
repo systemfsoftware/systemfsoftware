@@ -71,7 +71,7 @@
   },
   "devDependencies": {
     "@microsoft/api-extractor": "catalog:",
-    "@systemfsoftware/arethetypeswrong-cli": "workspace:^",
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
     "@systemfsoftware/tsconfig": "workspace:^",
     "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
