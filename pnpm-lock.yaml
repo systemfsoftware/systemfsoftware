@@ -6,6 +6,9 @@ settings:
 
 catalogs:
   attw:
+    '@systemfsoftware/arethetypeswrong-cli':
+      specifier: ^1.1.1
+      version: 1.1.1
     typescript:
       specifier: ^6.0.3
       version: 6.0.3
@@ -519,8 +522,8 @@ importers:
         specifier: 'catalog:'
         version: 0.30.0(effect@3.22.1)(vitest@4.1.9)
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: workspace:^
-        version: link:../../arethetypeswrong/cli
+        specifier: catalog:attw
+        version: 1.1.1
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../tsconfig
@@ -553,8 +556,8 @@ importers:
         specifier: 'catalog:'
         version: 0.30.0(effect@3.22.1)(vitest@4.1.9)
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: workspace:^
-        version: link:../../arethetypeswrong/cli
+        specifier: catalog:attw
+        version: 1.1.1
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../tsconfig
@@ -616,8 +619,8 @@ importers:
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: workspace:^
-        version: link:../arethetypeswrong/cli
+        specifier: catalog:attw
+        version: 1.1.1
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
         version: link:../oxlint-config
@@ -652,8 +655,8 @@ importers:
         specifier: ^7.58.7
         version: 7.58.9(@types/node@24.13.2)
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: workspace:^
-        version: link:../arethetypeswrong/cli
+        specifier: catalog:attw
+        version: 1.1.1
       '@systemfsoftware/effect-cell-types':
         specifier: workspace:^
         version: link:../effect-cell-types
@@ -715,8 +718,8 @@ importers:
         specifier: 'catalog:'
         version: 0.30.0(effect@3.22.1)(vitest@4.1.9)
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: workspace:^
-        version: link:../arethetypeswrong/cli
+        specifier: catalog:attw
+        version: 1.1.1
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
         version: link:../oxlint-config
@@ -764,8 +767,8 @@ importers:
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: workspace:^
-        version: link:../arethetypeswrong/cli
+        specifier: catalog:attw
+        version: 1.1.1
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
         version: link:../oxlint-config
@@ -807,8 +810,8 @@ importers:
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: workspace:^
-        version: link:../arethetypeswrong/cli
+        specifier: catalog:attw
+        version: 1.1.1
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
         version: link:../oxlint-config
@@ -849,8 +852,8 @@ importers:
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: workspace:^
-        version: link:../arethetypeswrong/cli
+        specifier: catalog:attw
+        version: 1.1.1
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:^
         version: link:../effect-gherkin-spec
@@ -895,8 +898,8 @@ importers:
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: workspace:^
-        version: link:../arethetypeswrong/cli
+        specifier: catalog:attw
+        version: 1.1.1
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:^
         version: link:../effect-gherkin-spec
@@ -940,8 +943,8 @@ importers:
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: workspace:^
-        version: link:../arethetypeswrong/cli
+        specifier: catalog:attw
+        version: 1.1.1
       '@systemfsoftware/effect-schema-law':
         specifier: workspace:^
         version: link:../effect-schema-law
@@ -1053,8 +1056,8 @@ importers:
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: workspace:^
-        version: link:../../arethetypeswrong/cli
+        specifier: catalog:attw
+        version: 1.1.1
       '@systemfsoftware/stryker-js-mutation-run':
         specifier: workspace:^
         version: link:../../stryker-js/mutation-run
@@ -1108,8 +1111,8 @@ importers:
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: workspace:^
-        version: link:../../arethetypeswrong/cli
+        specifier: catalog:attw
+        version: 1.1.1
       '@systemfsoftware/stryker-js-mutation-run':
         specifier: workspace:^
         version: link:../../stryker-js/mutation-run
@@ -1163,8 +1166,8 @@ importers:
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: workspace:^
-        version: link:../../arethetypeswrong/cli
+        specifier: catalog:attw
+        version: 1.1.1
       '@systemfsoftware/stryker-js-mutation-run':
         specifier: workspace:^
         version: link:../../stryker-js/mutation-run
@@ -1218,8 +1221,8 @@ importers:
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: workspace:^
-        version: link:../../arethetypeswrong/cli
+        specifier: catalog:attw
+        version: 1.1.1
       '@systemfsoftware/stryker-js-mutation-run':
         specifier: workspace:^
         version: link:../../stryker-js/mutation-run
@@ -1273,8 +1276,8 @@ importers:
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: workspace:^
-        version: link:../../arethetypeswrong/cli
+        specifier: catalog:attw
+        version: 1.1.1
       '@systemfsoftware/stryker-js-mutation-run':
         specifier: workspace:^
         version: link:../../stryker-js/mutation-run
@@ -1379,8 +1382,8 @@ importers:
         specifier: 'catalog:'
         version: 7.58.9(@types/node@25.9.5)
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: workspace:^
-        version: link:../../arethetypeswrong/cli
+        specifier: catalog:attw
+        version: 1.1.1
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../tsconfig
@@ -1410,8 +1413,8 @@ importers:
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: workspace:^
-        version: link:../../arethetypeswrong/cli
+        specifier: catalog:attw
+        version: 1.1.1
       '@systemfsoftware/stryker-js-mutation-run':
         specifier: workspace:^
         version: link:../../stryker-js/mutation-run
@@ -1465,8 +1468,8 @@ importers:
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: workspace:^
-        version: link:../../arethetypeswrong/cli
+        specifier: catalog:attw
+        version: 1.1.1
       '@systemfsoftware/stryker-js-mutation-run':
         specifier: workspace:^
         version: link:../../stryker-js/mutation-run
@@ -1520,8 +1523,8 @@ importers:
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: workspace:^
-        version: link:../../arethetypeswrong/cli
+        specifier: catalog:attw
+        version: 1.1.1
       '@systemfsoftware/stryker-js-mutation-run':
         specifier: workspace:^
         version: link:../../stryker-js/mutation-run
@@ -1575,8 +1578,8 @@ importers:
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: workspace:^
-        version: link:../../arethetypeswrong/cli
+        specifier: catalog:attw
+        version: 1.1.1
       '@systemfsoftware/stryker-js-mutation-run':
         specifier: workspace:^
         version: link:../../stryker-js/mutation-run
@@ -1630,8 +1633,8 @@ importers:
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: workspace:^
-        version: link:../../arethetypeswrong/cli
+        specifier: catalog:attw
+        version: 1.1.1
       '@systemfsoftware/stryker-js-mutation-run':
         specifier: workspace:^
         version: link:../../stryker-js/mutation-run
@@ -1685,8 +1688,8 @@ importers:
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: workspace:^
-        version: link:../../arethetypeswrong/cli
+        specifier: catalog:attw
+        version: 1.1.1
       '@systemfsoftware/stryker-js-mutation-run':
         specifier: workspace:^
         version: link:../../stryker-js/mutation-run
@@ -1740,8 +1743,8 @@ importers:
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: workspace:^
-        version: link:../../arethetypeswrong/cli
+        specifier: catalog:attw
+        version: 1.1.1
       '@systemfsoftware/stryker-js-mutation-run':
         specifier: workspace:^
         version: link:../../stryker-js/mutation-run
@@ -1795,8 +1798,8 @@ importers:
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: workspace:^
-        version: link:../../arethetypeswrong/cli
+        specifier: catalog:attw
+        version: 1.1.1
       '@systemfsoftware/stryker-js-mutation-run':
         specifier: workspace:^
         version: link:../../stryker-js/mutation-run
@@ -1850,8 +1853,8 @@ importers:
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: workspace:^
-        version: link:../../arethetypeswrong/cli
+        specifier: catalog:attw
+        version: 1.1.1
       '@systemfsoftware/stryker-js-mutation-run':
         specifier: workspace:^
         version: link:../../stryker-js/mutation-run
@@ -1905,8 +1908,8 @@ importers:
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: workspace:^
-        version: link:../../arethetypeswrong/cli
+        specifier: catalog:attw
+        version: 1.1.1
       '@systemfsoftware/stryker-js-mutation-run':
         specifier: workspace:^
         version: link:../../stryker-js/mutation-run
@@ -1960,8 +1963,8 @@ importers:
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: workspace:^
-        version: link:../../arethetypeswrong/cli
+        specifier: catalog:attw
+        version: 1.1.1
       '@systemfsoftware/stryker-js-mutation-run':
         specifier: workspace:^
         version: link:../../stryker-js/mutation-run
@@ -2015,8 +2018,8 @@ importers:
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: workspace:^
-        version: link:../../arethetypeswrong/cli
+        specifier: catalog:attw
+        version: 1.1.1
       '@systemfsoftware/stryker-js-mutation-run':
         specifier: workspace:^
         version: link:../../stryker-js/mutation-run
@@ -2070,8 +2073,8 @@ importers:
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: workspace:^
-        version: link:../../arethetypeswrong/cli
+        specifier: catalog:attw
+        version: 1.1.1
       '@systemfsoftware/stryker-js-mutation-run':
         specifier: workspace:^
         version: link:../../stryker-js/mutation-run
@@ -2118,8 +2121,8 @@ importers:
         specifier: 'catalog:'
         version: 7.58.9(@types/node@25.9.5)
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: workspace:^
-        version: link:../../arethetypeswrong/cli
+        specifier: catalog:attw
+        version: 1.1.1
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../tsconfig
@@ -2149,8 +2152,8 @@ importers:
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: workspace:^
-        version: link:../../arethetypeswrong/cli
+        specifier: catalog:attw
+        version: 1.1.1
       '@systemfsoftware/stryker-js-mutation-run':
         specifier: workspace:^
         version: link:../../stryker-js/mutation-run
@@ -2204,8 +2207,8 @@ importers:
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: workspace:^
-        version: link:../../arethetypeswrong/cli
+        specifier: catalog:attw
+        version: 1.1.1
       '@systemfsoftware/stryker-js-mutation-run':
         specifier: workspace:^
         version: link:../../stryker-js/mutation-run
@@ -2255,8 +2258,8 @@ importers:
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: workspace:^
-        version: link:../arethetypeswrong/cli
+        specifier: catalog:attw
+        version: 1.1.1
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:^
         version: link:../effect-gherkin-spec
@@ -2301,8 +2304,8 @@ importers:
         version: 5.8.0
     devDependencies:
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: workspace:^
-        version: link:../arethetypeswrong/cli
+        specifier: catalog:attw
+        version: 1.1.1
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../tsconfig
@@ -2399,7 +2402,7 @@ importers:
         version: 0.22.14(oxc-resolver@11.24.2)(typescript@5.9.3)(unrun@0.2.39)
       vite-tsconfig-paths:
         specifier: 'catalog:'
-        version: 6.1.1(typescript@5.9.3)(vite@7.3.5(@types/node@24.13.2)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0))
+        version: 6.1.1(supports-color@8.1.1)(typescript@5.9.3)(vite@7.3.5(@types/node@24.13.2)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0))
       vitest:
         specifier: 'catalog:'
         version: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1)(vite@7.3.5(@types/node@24.13.2)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0))
@@ -2526,8 +2529,8 @@ importers:
         specifier: 'catalog:'
         version: '@jsr/std__jsonc@1.0.2'
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: workspace:^
-        version: link:../../arethetypeswrong/cli
+        specifier: catalog:attw
+        version: 1.1.1
       '@systemfsoftware/oxlint-plugin-cell-taxonomy':
         specifier: workspace:^
         version: link:../../oxlint-plugins/cell-taxonomy
@@ -2685,8 +2688,8 @@ importers:
         specifier: catalog:stryker
         version: 9.6.1
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: workspace:^
-        version: link:../arethetypeswrong/cli
+        specifier: catalog:attw
+        version: 1.1.1
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:^
         version: link:../effect-gherkin-spec
@@ -5307,6 +5310,15 @@ packages:
 
   '@stryker-mutator/util@9.6.1':
     resolution: {integrity: sha512-Lk/ALVctJjFv1vvwR+CFoKzDCWvsBlq7flDUnmnpuwTrGbm156EdZD1Jjq4o8KdOap0ezUZqQNE9OAI1m2+pUQ==}
+
+  '@systemfsoftware/arethetypeswrong-cli@1.1.1':
+    resolution: {integrity: sha512-r29NC9TC1U6mNFUmUR5TjthX+YwEziF52whKvlrFyxYsZoOxg5gzvBJkTR9gHVTkEOsr24di+NDVZWzOP0nK6w==}
+    engines: {node: '>=22'}
+    hasBin: true
+
+  '@systemfsoftware/arethetypeswrong-core@1.1.0':
+    resolution: {integrity: sha512-9mXbVygdA53JCzGPLxcCg1ni4f2OToYOZS+3nyDgwcBnE8ELSkZlBwvV5YqmuwoVKtDaqDL3LBE+ovZnCiqEZA==}
+    engines: {node: '>=22'}
 
   '@tailwindcss/node@4.3.3':
     resolution: {integrity: sha512-/T8IKEsf9VTU6tLjgC7+sv2mOPtQxzE2jMw7u4Tt40Tx+QSZxpzh95/H6cMKoja9XuW7iMdLJYBB0o9G1CaAgg==}
@@ -11184,6 +11196,27 @@ snapshots:
 
   '@stryker-mutator/util@9.6.1': {}
 
+  '@systemfsoftware/arethetypeswrong-cli@1.1.1':
+    dependencies:
+      '@systemfsoftware/arethetypeswrong-core': 1.1.0
+      chalk: 4.1.2
+      cli-table3: 0.6.5
+      commander: 10.0.1
+      marked: 9.1.6
+      marked-terminal: 7.3.0(marked@9.1.6)
+      semver: 7.8.5
+
+  '@systemfsoftware/arethetypeswrong-core@1.1.0':
+    dependencies:
+      '@andrewbranch/untar.js': 1.0.3
+      '@loaderkit/resolve': 1.0.6
+      cjs-module-lexer: 1.4.3
+      fflate: 0.8.3
+      lru-cache: 11.5.2
+      semver: 7.8.5
+      typescript: 5.9.3
+      validate-npm-package-name: 5.0.1
+
   '@tailwindcss/node@4.3.3':
     dependencies:
       '@jridgewell/remapping': 2.3.5
@@ -14523,7 +14556,7 @@ snapshots:
 
   verkit@0.3.2: {}
 
-  vite-tsconfig-paths@6.1.1(typescript@5.9.3)(vite@7.3.5(@types/node@24.13.2)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0)):
+  vite-tsconfig-paths@6.1.1(supports-color@8.1.1)(typescript@5.9.3)(vite@7.3.5(@types/node@24.13.2)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0)):
     dependencies:
       debug: 4.4.3(supports-color@8.1.1)
       globrex: 0.1.2
