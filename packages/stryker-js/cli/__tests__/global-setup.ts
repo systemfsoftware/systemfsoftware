@@ -1,3 +1,5 @@
+import * as Effect from 'effect/Effect'
+import * as Runtime from 'effect/Runtime'
 import { execFile } from 'node:child_process'
 import { access, mkdtemp, readdir, rm } from 'node:fs/promises'
 import { connect } from 'node:net'
@@ -30,6 +32,7 @@ const CLI_DIR = fileURLToPath(new URL('../', import.meta.url))
 const FIXTURES_DIR = fileURLToPath(new URL('./fixtures', import.meta.url))
 const WORKDIR = '/work'
 const TARBALLS_IN_CONTAINER = '/opt/tarballs'
+const WORKSPACE_MANIFEST = JSON.stringify({ name: 'stryker-contract-workspace', private: true })
 
 let container: StartedTestContainer | undefined
 let tarballDir: string | undefined
@@ -55,6 +58,11 @@ const reachable = (socketPath: string): Promise<boolean> => {
   return promise
 }
 
+const dockerHost = (): string | undefined => process.env['DOCKER_HOST']
+const setDockerHost = (host: string): void => {
+  process.env['DOCKER_HOST'] = host
+}
+
 /**
  * A host can carry a docker socket FILE that no daemon is listening on while
  * podman serves the real runtime, and testcontainers reads the stale file as
@@ -63,86 +71,127 @@ const reachable = (socketPath: string): Promise<boolean> => {
  * `pnpm check` green on either runtime with no env ritual - and keeps an
  * explicit DOCKER_HOST authoritative.
  */
-const selectContainerRuntime = async (): Promise<void> => {
-  if (process.env['DOCKER_HOST'] !== undefined) return
-  if (await reachable(DOCKER_SOCKET)) return
+const selectContainerRuntime = Effect.gen(function*() {
+  if (dockerHost() !== undefined) return
+  if (yield* Effect.promise(() => reachable(DOCKER_SOCKET))) return
   for (const candidate of podmanSockets()) {
-    if (await reachable(candidate)) {
-      process.env['DOCKER_HOST'] = `unix://${candidate}`
+    if (yield* Effect.promise(() => reachable(candidate))) {
+      setDockerHost(`unix://${candidate}`)
       return
     }
   }
-}
+})
 
 /**
  * Packing, starting and installing all happen here rather than in a suite hook
  * so the per-hook and per-test budgets stay small enough to catch a real hang.
  * Vitest bounds this function separately, and a failure here fails the run.
+ * The setup is the harness boundary: an Effect program interpreted once
+ * through the platform runtime, because vitest's hook API is promise-shaped.
  */
-export async function setup(project: TestProject): Promise<void> {
-  const distEntry = join(CLI_DIR, 'dist', 'main.mjs')
-  await access(distEntry).catch(() => {
-    throw new Error(`the CLI contract lane needs a built package: ${distEntry} is missing - run \`pnpm build\` first`)
-  })
+export function setup(project: TestProject): Promise<void> {
+  return Runtime.runPromise(
+    Runtime.defaultRuntime,
+    Effect.gen(function*() {
+      const distEntry = join(CLI_DIR, 'dist', 'main.mjs')
+      const distPresent = yield* Effect.promise(() =>
+        access(distEntry).then(
+          () => true,
+          () => false,
+        )
+      )
+      if (!distPresent) {
+        return yield* Effect.die(
+          new Error(`the CLI contract lane needs a built package: ${distEntry} is missing - run \`pnpm build\` first`),
+        )
+      }
 
-  await selectContainerRuntime()
-  await getContainerRuntimeClient().catch((cause: unknown) => {
-    throw new Error(
-      `the CLI contract lane needs a container runtime, and DOCKER_HOST=${
-        process.env['DOCKER_HOST'] ?? '<unset>'
-      } is not reachable - tried ${[DOCKER_SOCKET, ...podmanSockets()].join(', ')}`,
-      { cause },
-    )
-  })
+      yield* selectContainerRuntime
+      yield* Effect.promise(() =>
+        getContainerRuntimeClient().catch((cause: unknown) => {
+          throw new Error(
+            `the CLI contract lane needs a container runtime, and DOCKER_HOST=${
+              process.env['DOCKER_HOST'] ?? '<unset>'
+            } is not reachable - tried ${[DOCKER_SOCKET, ...podmanSockets()].join(', ')}`,
+            { cause },
+          )
+        })
+      )
 
-  const packDir = await mkdtemp(join(tmpdir(), 'stryker-contract-'))
-  tarballDir = packDir
-  for (const workspacePackage of WORKSPACE_PACKAGES) {
-    await execFileAsync(
-      'pnpm',
-      ['--filter', workspacePackage, 'exec', 'pnpm', 'pack', '--pack-destination', packDir],
-      { cwd: REPO_ROOT },
-    )
-  }
-  const packed = (await readdir(packDir)).filter((entry) => entry.endsWith('.tgz'))
-  if (packed.length !== WORKSPACE_PACKAGES.length) {
-    throw new Error(
-      `expected ${WORKSPACE_PACKAGES.length} tarballs in ${packDir}, found ${packed.length}: ${packed.join(', ')}`,
-    )
-  }
+      const packDir = yield* Effect.promise(() => mkdtemp(join(tmpdir(), 'stryker-contract-')))
+      tarballDir = packDir
+      for (const workspacePackage of WORKSPACE_PACKAGES) {
+        yield* Effect.promise(() =>
+          execFileAsync(
+            'pnpm',
+            ['--filter', workspacePackage, 'exec', 'pnpm', 'pack', '--pack-destination', packDir],
+            { cwd: REPO_ROOT },
+          )
+        )
+      }
+      const packed = (yield* Effect.promise(() => readdir(packDir))).filter((entry) => entry.endsWith('.tgz'))
+      if (packed.length !== WORKSPACE_PACKAGES.length) {
+        return yield* Effect.die(
+          new Error(
+            `expected ${WORKSPACE_PACKAGES.length} tarballs in ${packDir}, found ${packed.length}: ${
+              packed.join(', ')
+            }`,
+          ),
+        )
+      }
 
-  container = await new GenericContainer(NODE_IMAGE)
-    .withCopyFilesToContainer(
-      packed.map((name) => ({ source: join(packDir, name), target: `${TARBALLS_IN_CONTAINER}/${name}` })),
-    )
-    .withCopyDirectoriesToContainer([{ source: FIXTURES_DIR, target: `${WORKDIR}/fixtures` }])
-    .withCopyContentToContainer([{
-      content: JSON.stringify({ name: 'stryker-contract-workspace', private: true }),
-      target: `${WORKDIR}/package.json`,
-    }])
-    .withWorkingDir(WORKDIR)
-    .withCommand(['sleep', 'infinity'])
-    .start()
+      const startedContainer = yield* Effect.promise(() =>
+        new GenericContainer(NODE_IMAGE)
+          .withCopyFilesToContainer(
+            packed.map((name) => ({ source: join(packDir, name), target: `${TARBALLS_IN_CONTAINER}/${name}` })),
+          )
+          .withCopyDirectoriesToContainer([{ source: FIXTURES_DIR, target: `${WORKDIR}/fixtures` }])
+          .withCopyContentToContainer([{
+            content: WORKSPACE_MANIFEST,
+            target: `${WORKDIR}/package.json`,
+          }])
+          .withWorkingDir(WORKDIR)
+          .withCommand(['sleep', 'infinity'])
+          .start()
+      )
+      container = startedContainer
 
-  const installed = await container.exec(
-    [
-      'npm',
-      'install',
-      '--no-audit',
-      '--no-fund',
-      '--loglevel=error',
-      ...packed.map((name) => `${TARBALLS_IN_CONTAINER}/${name}`),
-    ],
-    { workingDir: WORKDIR },
+      const installed = yield* Effect.promise(() =>
+        startedContainer.exec(
+          [
+            'npm',
+            'install',
+            '--no-audit',
+            '--no-fund',
+            '--loglevel=error',
+            ...packed.map((name) => `${TARBALLS_IN_CONTAINER}/${name}`),
+          ],
+          { workingDir: WORKDIR },
+        )
+      )
+      if (installed.exitCode !== 0) {
+        return yield* Effect.die(
+          new Error(`installing the packed tarball failed with ${installed.exitCode}:\n${installed.output}`),
+        )
+      }
+
+      project.provide('strykerContainerId', startedContainer.getId())
+    }),
   )
-  if (installed.exitCode !== 0) {
-    throw new Error(`installing the packed tarball failed with ${installed.exitCode}:\n${installed.output}`)
-  }
-
-  project.provide('strykerContainerId', container.getId())
 }
 
-export async function teardown(): Promise<void> {
-  await container?.stop()
-  if (tarballDir !== undefined) await rm(tarballDir, { recursive: true, force: true })
+export function teardown(): Promise<void> {
+  return Runtime.runPromise(
+    Runtime.defaultRuntime,
+    Effect.gen(function*() {
+      const started = container
+      if (started !== undefined) {
+        yield* Effect.promise(() => started.stop())
+      }
+      const packDir = tarballDir
+      if (packDir !== undefined) {
+        yield* Effect.promise(() => rm(packDir, { recursive: true, force: true }))
+      }
+    }),
+  )
 }

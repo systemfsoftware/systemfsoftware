@@ -180,9 +180,9 @@ const corePurityProbe = (fixture: string): Effect.Effect<CorePurityProbe, never,
       `node -e "process.stdout.write(require('${CORE_PACKAGE_MANIFEST}').engines.node)"`,
       options,
     )
-    const entries = S.decodeUnknownSync(S.parseJson(S.Array(S.String)))(manifestResult.stdout).filter(
-      (entry) => entry !== './package.json',
-    )
+    const entries = (
+      yield* S.decodeUnknown(S.parseJson(S.Array(S.String)))(manifestResult.stdout).pipe(Effect.orDie)
+    ).filter((entry) => entry !== './package.json')
     const imports: Array<CoreEntryImport> = []
     for (const entry of entries) {
       const specifier = `@systemfsoftware/stryker-js-mutation-run${entry.slice(1)}`

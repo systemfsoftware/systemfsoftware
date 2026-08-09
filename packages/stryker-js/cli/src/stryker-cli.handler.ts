@@ -520,17 +520,20 @@ export function strykerCliEffect(
     const mode = deps.detectMode()
     const requestRef = yield* Ref.make<Option.Option<CliRequest>>(Option.none())
     const command = makeStrykerCommand(requestRef)
-    const consoleLayer = mode.mode === 'machine'
-      ? strykerCliConsoleLayers.machine()
-      : strykerCliConsoleLayers.human()
     // The framework renders help/error documents through the `Console`
     // service (KTD3), so the machine-mode layer is provided before the
     // command effect runs — nothing reaches any real descriptor during the
     // run, and the executor's finalizer emits the captured content as the
-    // terminal event.
+    // terminal event. Human mode provides no Console layer: effect's own
+    // default console already writes the prose rendering to the real
+    // descriptors (output-mode-console.state.ts).
     const cliEffect = Command.run({ name: 'stryker', version: strykerVersion })(command)(argv).pipe(
-      Effect.provide(consoleLayer),
-      Effect.provide(cliLayer),
+      Effect.provide(
+        Layer.mergeAll(
+          mode.mode === 'machine' ? strykerCliConsoleLayers.machine() : Layer.empty,
+          cliLayer,
+        ),
+      ),
     )
     const outcome = yield* Effect.either(
       runStrykerCli({ program: cliEffect, requestRef, mode, runMutationTest, recordExitCode }),
