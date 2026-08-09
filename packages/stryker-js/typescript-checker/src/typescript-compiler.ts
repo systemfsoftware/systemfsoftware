@@ -1,9 +1,9 @@
 import { readFileSync } from 'fs'
 import path from 'path'
 
-import type { Mutant, StrykerOptions } from '@stryker-mutator/api/core'
-import type { Logger } from '@stryker-mutator/api/logging'
-import { commonTokens, tokens } from '@stryker-mutator/api/plugin'
+import type { Mutant, StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
+import type { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
+import { commonTokens, tokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 import { Either } from 'effect'
 import { type SourceFile, SyntaxKind } from 'typescript/unstable/ast'
 import type { FileSystem } from 'typescript/unstable/fs'

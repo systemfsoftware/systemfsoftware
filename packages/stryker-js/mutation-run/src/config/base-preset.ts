@@ -1,4 +1,4 @@
-import type { PartialStrykerOptions } from '@stryker-mutator/api/core'
+import type { PartialStrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
 
 /**
  * Modal Stryker options, inherited via

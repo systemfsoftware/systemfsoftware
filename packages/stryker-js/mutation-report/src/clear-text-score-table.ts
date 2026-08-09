@@ -1,6 +1,6 @@
 import os from 'os'
 
-import { MutationScoreThresholds, StrykerOptions } from '@stryker-mutator/api/core'
+import { MutationScoreThresholds, StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
 
 import { MetricsResult } from 'mutation-testing-metrics'
 

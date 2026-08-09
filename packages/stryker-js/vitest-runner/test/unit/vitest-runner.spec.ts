@@ -1,6 +1,7 @@
-import type { Logger } from '@stryker-mutator/api/logging'
-import { TestRunnerCapabilities } from '@stryker-mutator/api/test-runner'
+import type { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
+import { TestRunnerCapabilities } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
 import fs from 'fs'
+import path from 'path'
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest'
 import type { Vitest } from 'vitest/node'
 
@@ -17,10 +18,12 @@ describe(VitestTestRunner.name, () => {
   let options: VitestRunnerOptionsWithStrykerOptions
   let vitestStub: Vitest
   let logger: Logger
+  let sandboxDirectory: string
 
   beforeEach(() => {
     logger = createLogger()
     options = createStrykerOptions()
+    sandboxDirectory = '/sandbox'
     createVitestStub = vi.fn<ResolvedVitest['createVitest']>()
     vitestStub = createVitestMock()
     createVitestStub.mockResolvedValue(vitestStub)
@@ -33,6 +36,7 @@ describe(VitestTestRunner.name, () => {
       options,
       logger,
       '__stryker2__',
+      sandboxDirectory,
       vitestResolverStub,
     )
     vi.spyOn(fs.promises, 'copyFile').mockResolvedValue()
@@ -61,6 +65,9 @@ describe(VitestTestRunner.name, () => {
     it('should initialize the vitest environment', async () => {
       await sut.init()
 
+      expect(vitestResolverStub).toHaveBeenCalledExactlyOnceWith(
+        sandboxDirectory,
+      )
       expect(createVitestStub).toHaveBeenCalledExactlyOnceWith('test', {
         config: undefined,
         threads: true,
@@ -76,10 +83,24 @@ describe(VitestTestRunner.name, () => {
         singleThread: false,
         maxConcurrency: 1,
         watch: false,
-        dir: process.cwd(),
+        root: sandboxDirectory,
         bail: 1,
         onConsoleLog: expect.any(Function),
       })
+    })
+
+    it('should resolve the scan filter against the project root and pass it as `dir`', async () => {
+      options.vitest.dir = 'packages'
+
+      await sut.init()
+
+      expect(createVitestStub).toHaveBeenCalledExactlyOnceWith(
+        'test',
+        expect.objectContaining({
+          root: sandboxDirectory,
+          dir: path.resolve(sandboxDirectory, 'packages'),
+        }),
+      )
     })
 
     it('should set the NODE_ENV environment variable', async () => {

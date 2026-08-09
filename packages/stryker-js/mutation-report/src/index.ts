@@ -1,4 +1,4 @@
-import { declareClassPlugin, PluginKind } from '@stryker-mutator/api/plugin'
+import { declareClassPlugin, PluginKind } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 
 import { ClearTextReporter } from './clear-text-reporter.js'
 import { HtmlReporter } from './html-reporter.js'

@@ -1,4 +1,4 @@
-import { schema } from '@stryker-mutator/api/core'
+import { schema } from '@systemfsoftware/stryker-js-plugin-api/core'
 
 export interface TestFileContribution {
   readonly soleKills: number

@@ -56,13 +56,13 @@
     "@babel/types": "^7.29.0",
     "@effect/vitest": "catalog:",
     "@microsoft/api-extractor": "catalog:",
-    "@stryker-mutator/api": "catalog:stryker",
     "@systemfsoftware/arethetypeswrong-cli": "workspace:^",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/effect-schema-law": "workspace:^",
     "@systemfsoftware/effect-schema-vite": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/stryker-js-mutation-run": "workspace:^",
+    "@systemfsoftware/stryker-js-plugin-api": "workspace:^",
     "@systemfsoftware/stryker-js-typescript-checker": "workspace:^",
     "@systemfsoftware/stryker-js-vitest-runner": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
@@ -76,7 +76,7 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@stryker-mutator/api": "catalog:stryker",
+    "@systemfsoftware/stryker-js-plugin-api": "workspace:^",
     "effect": "catalog:",
     "typescript": ">=5.0.0"
   },

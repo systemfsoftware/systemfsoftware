@@ -12,7 +12,7 @@
       "default": {},
       "properties": {
         "dir": {
-          "description": "Configure the `--dir <path>` command line option",
+          "description": "The directory from which Vitest scans for test files (the `--dir <path>` command line option), resolved against the project root. The project root is Stryker's sandbox directory and is not user-configurable.",
           "type": "string"
         },
         "related": {

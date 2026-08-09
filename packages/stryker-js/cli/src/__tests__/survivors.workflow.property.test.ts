@@ -1,6 +1,6 @@
-import type { Mutant } from '@stryker-mutator/api/core'
-import { schema } from '@stryker-mutator/api/core'
 import { describe, it } from '@systemfsoftware/effect-gherkin-spec'
+import type { Mutant } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { schema } from '@systemfsoftware/stryker-js-plugin-api/core'
 import { Either, FastCheck as fc } from 'effect'
 import * as S from 'effect/Schema'
 import { createHash } from 'node:crypto'

@@ -3,12 +3,17 @@ import { resolve } from 'node:path'
 import { Writable } from 'node:stream'
 import { fileURLToPath } from 'node:url'
 
-import { type LogLevel, type PartialStrykerOptions, schema, type StrykerOptions } from '@stryker-mutator/api/core'
-import { commonTokens, declareValuePlugin, PluginKind } from '@stryker-mutator/api/plugin'
-import type { Plugin } from '@stryker-mutator/api/plugin'
-import type { Reporter } from '@stryker-mutator/api/report'
 import { frameworkPluginsFileUrl } from '@stryker-mutator/instrumenter'
 import { noopLogger } from '@stryker-mutator/util'
+import {
+  type LogLevel,
+  type PartialStrykerOptions,
+  schema,
+  type StrykerOptions,
+} from '@systemfsoftware/stryker-js-plugin-api/core'
+import { commonTokens, declareValuePlugin, PluginKind } from '@systemfsoftware/stryker-js-plugin-api/plugin'
+import type { Plugin } from '@systemfsoftware/stryker-js-plugin-api/plugin'
+import type { Reporter } from '@systemfsoftware/stryker-js-plugin-api/report'
 import { calculateMutationTestMetrics } from 'mutation-testing-metrics'
 import { createInjector, type Injector } from 'typed-inject'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'

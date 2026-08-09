@@ -5,7 +5,7 @@ import {
   MutantRunResult,
   TestRunner,
   TestRunnerCapabilities,
-} from '@stryker-mutator/api/test-runner'
+} from '@systemfsoftware/stryker-js-plugin-api/test-runner'
 
 import { ResourceDecorator } from '../worker-pool/index.js'
 

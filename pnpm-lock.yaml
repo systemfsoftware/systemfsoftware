@@ -132,9 +132,6 @@ catalogs:
       specifier: '>=0.24.0'
       version: 0.24.0
   stryker:
-    '@stryker-mutator/api':
-      specifier: ^9.6.1
-      version: 9.6.1
     '@stryker-mutator/instrumenter':
       specifier: ^9.6.1
       version: 9.6.1
@@ -2343,7 +2340,7 @@ importers:
         version: 6.1.3
       storybook:
         specifier: 'catalog:'
-        version: 10.5.6(@types/react@19.2.18)(react@19.2.8)
+        version: 10.5.6(@types/react@19.2.18)(prettier@3.9.6)(react@19.2.8)
       tsdown:
         specifier: 'catalog:'
         version: 0.22.14(oxc-resolver@11.24.2)(typescript@7.0.2)(unrun@0.2.39)
@@ -2362,9 +2359,6 @@ importers:
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 0.108.1(@effect/cluster@0.49.6(@effect/platform@0.97.1(effect@3.22.1))(@effect/rpc@0.76.2(@effect/platform@0.97.1(effect@3.22.1))(effect@3.22.1))(@effect/sql@0.45.0(@effect/experimental@0.61.1(@effect/platform@0.97.1(effect@3.22.1))(effect@3.22.1))(@effect/platform@0.97.1(effect@3.22.1))(effect@3.22.1))(@effect/workflow@0.10.3(@effect/platform@0.97.1(effect@3.22.1))(@effect/rpc@0.76.2(@effect/platform@0.97.1(effect@3.22.1))(effect@3.22.1))(effect@3.22.1))(effect@3.22.1))(@effect/platform@0.97.1(effect@3.22.1))(@effect/rpc@0.76.2(@effect/platform@0.97.1(effect@3.22.1))(effect@3.22.1))(@effect/sql@0.45.0(@effect/experimental@0.61.1(@effect/platform@0.97.1(effect@3.22.1))(effect@3.22.1))(@effect/platform@0.97.1(effect@3.22.1))(effect@3.22.1))(effect@3.22.1)
-      '@stryker-mutator/api':
-        specifier: catalog:stryker
-        version: 9.6.1
       '@stryker-mutator/util':
         specifier: catalog:stryker
         version: 9.6.1
@@ -2377,6 +2371,9 @@ importers:
       '@systemfsoftware/stryker-js-mutation-run':
         specifier: workspace:^
         version: link:../mutation-run
+      '@systemfsoftware/stryker-js-plugin-api':
+        specifier: workspace:^
+        version: link:../plugin-api
       effect:
         specifier: 'catalog:'
         version: 3.22.1
@@ -2432,12 +2429,12 @@ importers:
 
   packages/stryker-js/mutation-report:
     dependencies:
-      '@stryker-mutator/api':
-        specifier: catalog:stryker
-        version: 9.6.1
       '@systemfsoftware/stryker-js-mutation-run':
         specifier: workspace:^
         version: link:../mutation-run
+      '@systemfsoftware/stryker-js-plugin-api':
+        specifier: workspace:^
+        version: link:../plugin-api
       chalk:
         specifier: ~5.6.0
         version: 5.6.2
@@ -2490,15 +2487,15 @@ importers:
 
   packages/stryker-js/mutation-run:
     dependencies:
-      '@stryker-mutator/api':
-        specifier: catalog:stryker
-        version: 9.6.1
       '@stryker-mutator/instrumenter':
         specifier: catalog:stryker
         version: 9.6.1(supports-color@8.1.1)
       '@stryker-mutator/util':
         specifier: catalog:stryker
         version: 9.6.1
+      '@systemfsoftware/stryker-js-plugin-api':
+        specifier: workspace:^
+        version: link:../plugin-api
       ajv:
         specifier: ~8.18.0
         version: 8.18.0
@@ -2597,14 +2594,48 @@ importers:
         specifier: 'catalog:'
         version: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1)(vite@7.3.5(@types/node@24.13.2)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0))
 
+  packages/stryker-js/plugin-api:
+    dependencies:
+      mutation-testing-metrics:
+        specifier: 3.7.3
+        version: 3.7.3
+      mutation-testing-report-schema:
+        specifier: 3.7.3
+        version: 3.7.3
+      tslib:
+        specifier: catalog:stryker
+        version: 2.8.1
+      typed-inject:
+        specifier: ~5.0.0
+        version: 5.0.0
+    devDependencies:
+      '@systemfsoftware/tsconfig':
+        specifier: workspace:^
+        version: link:../../tsconfig
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.2
+      json-schema-to-typescript:
+        specifier: 15.0.4
+        version: 15.0.4
+      rimraf:
+        specifier: 'catalog:'
+        version: 6.1.3
+      tsdown:
+        specifier: 'catalog:'
+        version: 0.22.14(oxc-resolver@11.24.2)(typescript@7.0.2)(unrun@0.2.39)
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
   packages/stryker-js/typescript-checker:
     dependencies:
-      '@stryker-mutator/api':
-        specifier: catalog:stryker
-        version: 9.6.1
       '@stryker-mutator/util':
         specifier: catalog:stryker
         version: 9.6.1
+      '@systemfsoftware/stryker-js-plugin-api':
+        specifier: workspace:^
+        version: link:../plugin-api
       effect:
         specifier: 'catalog:'
         version: 3.22.1
@@ -2648,12 +2679,12 @@ importers:
 
   packages/stryker-js/vitest-runner:
     dependencies:
-      '@stryker-mutator/api':
-        specifier: catalog:stryker
-        version: 9.6.1
       '@stryker-mutator/util':
         specifier: catalog:stryker
         version: 9.6.1
+      '@systemfsoftware/stryker-js-plugin-api':
+        specifier: workspace:^
+        version: link:../plugin-api
       semver:
         specifier: catalog:stryker
         version: 7.8.5
@@ -2707,9 +2738,6 @@ importers:
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
-      '@stryker-mutator/api':
-        specifier: catalog:stryker
-        version: 9.6.1
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: workspace:^
         version: link:../arethetypeswrong/cli
@@ -2728,6 +2756,9 @@ importers:
       '@systemfsoftware/stryker-js-mutation-run':
         specifier: workspace:^
         version: link:../stryker-js/mutation-run
+      '@systemfsoftware/stryker-js-plugin-api':
+        specifier: workspace:^
+        version: link:../stryker-js/plugin-api
       '@systemfsoftware/stryker-js-typescript-checker':
         specifier: workspace:^
         version: link:../stryker-js/typescript-checker
@@ -2788,6 +2819,10 @@ packages:
 
   '@andrewbranch/untar.js@1.0.3':
     resolution: {integrity: sha512-Jh15/qVmrLGhkKJBdXlK1+9tY4lZruYjsgkDFj08ZmDiWVBLJcqkok7Z0/R0In+i1rScBpJlSvrTS2Lm41Pbnw==}
+
+  '@apidevtools/json-schema-ref-parser@11.9.3':
+    resolution: {integrity: sha512-60vepv88RwcJtSHrD6MjIL6Ta3SOYbgfnkHb+ppAVK+o9mXprRtulx7VlRl3lN3bbvysAfCS7WMVfhUYemB0IQ==}
+    engines: {node: '>= 16'}
 
   '@ark/schema@0.56.2':
     resolution: {integrity: sha512-Qx4D2JFbBWpntiHZaTv7bGG4H/M2rigiknezKg/WVyDSaLdE4YCcWAOoFB7pjjDqHbbV2OqRfntm1nnXvwMexg==}
@@ -3718,6 +3753,9 @@ packages:
 
   '@js-sdsl/ordered-map@4.4.2':
     resolution: {integrity: sha512-iUKgm52T8HOE/makSxjqoWhe95ZJA1/G1sYsGev2JDKUSS14KAgg1LHb+Ba+IPow0xflbnSkOsZcO08C7w1gYw==}
+
+  '@jsdevtools/ono@7.1.3':
+    resolution: {integrity: sha512-4JQNk+3mVzK3xh2rqd6RB4J46qUR19azEHBneZyTZM+c456qOrbbM/5xcR8huNCCcbVt7+UmizG6GuUvPvKUYg==}
 
   '@jsonjoy.com/base64@1.1.2':
     resolution: {integrity: sha512-q6XAnWQDIMA3+FTiOYajoYqySkO+JSat0ytXGSuRdq9uXE7o92gzuQwQM14xaCRlBLGq3v5miDGC4vkVTn54xA==}
@@ -7057,6 +7095,11 @@ packages:
   json-parse-even-better-errors@2.3.1:
     resolution: {integrity: sha512-xyFwyhro/JEof6Ghe2iz2NcXoj2sloNsWr/XsERDK/oiPCfaNhl5ONfp+jQdAZRQQ0IJWNzH9zIZF7li91kh2w==}
 
+  json-schema-to-typescript@15.0.4:
+    resolution: {integrity: sha512-Su9oK8DR4xCmDsLlyvadkXzX6+GGXJpbhwoLtOGArAG61dvbW4YQmSEno2y66ahpIdmLMg6YUf/QHLgiwvkrHQ==}
+    engines: {node: '>=16.0.0'}
+    hasBin: true
+
   json-schema-traverse@1.0.0:
     resolution: {integrity: sha512-NM8/P9n3XjXhIZn1lLhkFaACTOURQXjWhV4BA/RnOv8xvgqtqpAX9IO4mRQxSx1Rlo4tqzeqb0sOlruaOy3dug==}
 
@@ -7776,6 +7819,11 @@ packages:
   postcss@8.5.26:
     resolution: {integrity: sha512-u82N74LFzG8ca+dD8puPnplTXoGH4fTPpVGuIbt36G3qvNlkvfD0lEAZSxaly3KX8TS/L1A1gsCEmvKmBcVbkQ==}
     engines: {node: ^10 || ^12 || >=14}
+
+  prettier@3.9.6:
+    resolution: {integrity: sha512-OpN0zzVdiaiAhxpuuj5efpIS4sY9j7bY6uR5mnj5yPzGkdkjNKSJeUThPb60Jw29QuAZgA4o+/iB49kFiaBX6g==}
+    engines: {node: '>=14'}
+    hasBin: true
 
   pretty-format@27.5.1:
     resolution: {integrity: sha512-Qb1gy5OrP5+zDf2Bvnzdl3jsTf1qXVMazbvCoKhtKqVs4/YK4ozX4gKQJJVyNe+cajNPn0KoC0MC3FUmaHWEmQ==}
@@ -8909,6 +8957,12 @@ snapshots:
 
   '@andrewbranch/untar.js@1.0.3': {}
 
+  '@apidevtools/json-schema-ref-parser@11.9.3':
+    dependencies:
+      '@jsdevtools/ono': 7.1.3
+      '@types/json-schema': 7.0.15
+      js-yaml: 4.2.0
+
   '@ark/schema@0.56.2':
     dependencies:
       '@ark/util': 0.56.2
@@ -9781,6 +9835,8 @@ snapshots:
       '@jridgewell/sourcemap-codec': 1.5.5
 
   '@js-sdsl/ordered-map@4.4.2': {}
+
+  '@jsdevtools/ono@7.1.3': {}
 
   '@jsonjoy.com/base64@1.1.2(tslib@2.8.1)':
     dependencies:
@@ -12818,6 +12874,18 @@ snapshots:
 
   json-parse-even-better-errors@2.3.1: {}
 
+  json-schema-to-typescript@15.0.4:
+    dependencies:
+      '@apidevtools/json-schema-ref-parser': 11.9.3
+      '@types/json-schema': 7.0.15
+      '@types/lodash': 4.17.24
+      is-glob: 4.0.3
+      js-yaml: 4.2.0
+      lodash: 4.18.1
+      minimist: 1.2.8
+      prettier: 3.9.6
+      tinyglobby: 0.2.17
+
   json-schema-traverse@1.0.0: {}
 
   json-stringify-safe@5.0.1:
@@ -13501,6 +13569,8 @@ snapshots:
       picocolors: 1.1.1
       source-map-js: 1.2.1
 
+  prettier@3.9.6: {}
+
   pretty-format@27.5.1:
     dependencies:
       ansi-regex: 5.0.1
@@ -14040,7 +14110,7 @@ snapshots:
 
   std-env@4.2.0: {}
 
-  storybook@10.5.6(@types/react@19.2.18)(react@19.2.8):
+  storybook@10.5.6(@types/react@19.2.18)(prettier@3.9.6)(react@19.2.8):
     dependencies:
       '@storybook/global': 5.0.0
       '@storybook/icons': 2.1.0(react@19.2.8)
@@ -14061,6 +14131,7 @@ snapshots:
       ws: 8.21.1
     optionalDependencies:
       '@types/react': 19.2.18
+      prettier: 3.9.6
     transitivePeerDependencies:
       - bufferutil
       - react

@@ -1,4 +1,4 @@
-import { FailedTestResult, TestStatus } from '@stryker-mutator/api/test-runner'
+import { FailedTestResult, TestStatus } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -11,7 +11,7 @@ import {
 import { createSuite, createVitestTest } from '../util/factories.js'
 
 describe('vitest-helpers', () => {
-  const projectDir = '/project'
+  const projectRoot = '/project'
 
   describe(fromTestId.name, () => {
     it('should return correct file and test name', () => {
@@ -25,7 +25,7 @@ describe('vitest-helpers', () => {
     describe('taskState of test is skipped', () => {
       it('should have status skipped', () => {
         const test = createVitestTest({ result: { state: 'skip' } })
-        const result = convertTestToTestResult(test, projectDir)
+        const result = convertTestToTestResult(test, projectRoot)
         expect(result.status).toBe(TestStatus.Skipped)
       })
 
@@ -41,7 +41,7 @@ describe('vitest-helpers', () => {
           suite,
           result: { state: 'skip' },
         })
-        const result = convertTestToTestResult(test, projectDir)
+        const result = convertTestToTestResult(test, projectRoot)
         expect(result.status).toBe(TestStatus.Failed)
         expect((result as FailedTestResult).failureMessage).toBe(
           failureMessage,
@@ -68,7 +68,7 @@ describe('vitest-helpers', () => {
           suite: deeplyNestedSuite,
           result: { state: 'skip' },
         })
-        const result = convertTestToTestResult(test, projectDir)
+        const result = convertTestToTestResult(test, projectRoot)
         expect(result.status).toBe(TestStatus.Failed)
         expect((result as FailedTestResult).failureMessage).toBe(
           failureMessage,
@@ -86,7 +86,7 @@ describe('vitest-helpers', () => {
           suite,
           result: { state: 'skip' },
         })
-        const result = convertTestToTestResult(test, projectDir)
+        const result = convertTestToTestResult(test, projectRoot)
         expect(result.status).toBe(TestStatus.Failed)
         expect((result as FailedTestResult).failureMessage).toBe(
           'StrykerJS: Suite execution failed',
@@ -96,33 +96,33 @@ describe('vitest-helpers', () => {
 
     it('should have status skipped if task state is todo', () => {
       const test = createVitestTest({ result: { state: 'todo' } })
-      const result = convertTestToTestResult(test, projectDir)
+      const result = convertTestToTestResult(test, projectRoot)
       expect(result.status).toBe(TestStatus.Skipped)
     })
 
     it('should have status Failed if result is undefined', () => {
       const test = createVitestTest({ result: undefined })
-      const result = convertTestToTestResult(test, projectDir)
+      const result = convertTestToTestResult(test, projectRoot)
       expect(result.status).toBe(TestStatus.Failed)
     })
 
     it('should have status Success if task state is pass', () => {
       const test = createVitestTest({ result: { state: 'pass' } })
-      const result = convertTestToTestResult(test, projectDir)
+      const result = convertTestToTestResult(test, projectRoot)
       expect(result.status).toBe(TestStatus.Success)
     })
   })
 
   describe(normalizeTestId.name, () => {
     it('should return the file path relative to the supplied directory', () => {
-      expect(normalizeTestId('/project/src/math.spec.ts#adds two numbers', projectDir)).toBe(
+      expect(normalizeTestId('/project/src/math.spec.ts#adds two numbers', projectRoot)).toBe(
         'src/math.spec.ts#adds two numbers',
       )
     })
 
     it('should give the same absolute file two different ids under two different directories', () => {
       const absoluteTestId = '/project/packages/app/src/math.spec.ts#adds two numbers'
-      expect(normalizeTestId(absoluteTestId, projectDir)).toBe(
+      expect(normalizeTestId(absoluteTestId, projectRoot)).toBe(
         'packages/app/src/math.spec.ts#adds two numbers',
       )
       expect(normalizeTestId(absoluteTestId, '/project/packages/app')).toBe(
@@ -139,7 +139,7 @@ describe('vitest-helpers', () => {
           perTest: { '/project/src/math.spec.ts#adds two numbers': { '3': 4 } },
           static: staticCoverage,
         },
-        projectDir,
+        projectRoot,
       )
       expect(normalized.perTest).toEqual({ 'src/math.spec.ts#adds two numbers': { '3': 4 } })
       expect(normalized.static).toBe(staticCoverage)

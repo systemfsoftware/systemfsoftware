@@ -20,7 +20,7 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { join, resolve } from 'path'
 import { fileURLToPath } from 'url'
 
-import { Logger } from '@stryker-mutator/api/logging'
+import { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
 import { Either } from 'effect'
 import { afterEach, describe, expect, it, Mock, vi } from 'vitest'
 

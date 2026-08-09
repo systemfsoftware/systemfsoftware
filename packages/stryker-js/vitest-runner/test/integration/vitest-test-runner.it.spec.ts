@@ -1,6 +1,7 @@
 import path from 'path'
 
-import { TestStatus } from '@stryker-mutator/api/test-runner'
+import { commonTokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
+import { TestStatus } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { createVitestTestRunnerFactory, VitestTestRunner } from '../../dist/index.mjs'
@@ -23,9 +24,6 @@ describe('VitestRunner integration', () => {
 
   beforeEach(() => {
     options = createStrykerOptions()
-    sut = createTestInjector(options).injectFunction(
-      createVitestTestRunnerFactory('__stryker2__'),
-    )
     options.vitest = createVitestRunnerOptions({ related: false })
   })
 
@@ -46,7 +44,9 @@ describe('VitestRunner integration', () => {
     beforeEach(async () => {
       sandbox = new TempTestDirectorySandbox('simple-project')
       await sandbox.init()
-      options.vitest.dir = sandbox.tmpDir
+      sut = createTestInjector(options)
+        .provideValue(commonTokens.sandboxDirectory, sandbox.tmpDir)
+        .injectFunction(createVitestTestRunnerFactory('__stryker2__'))
       sandboxFileName = path.resolve(sandbox.tmpDir, 'math.ts')
     })
 
@@ -289,7 +289,9 @@ describe('VitestRunner integration', () => {
     beforeEach(async () => {
       sandbox = new TempTestDirectorySandbox('multiple-configs')
       await sandbox.init()
-      options.vitest.dir = sandbox.tmpDir
+      sut = createTestInjector(options)
+        .provideValue(commonTokens.sandboxDirectory, sandbox.tmpDir)
+        .injectFunction(createVitestTestRunnerFactory('__stryker2__'))
     })
 
     it('should load default vitest config when config file is not set', async () => {
@@ -326,7 +328,9 @@ describe('VitestRunner integration', () => {
     beforeEach(async () => {
       sandbox = new TempTestDirectorySandbox('workspaces')
       await sandbox.init()
-      options.vitest.dir = sandbox.tmpDir
+      sut = createTestInjector(options)
+        .provideValue(commonTokens.sandboxDirectory, sandbox.tmpDir)
+        .injectFunction(createVitestTestRunnerFactory('__stryker2__'))
       fooTestId = 'packages/foo/src/math.spec.js#min should min 44, 2 = 42'
       barTestId = 'packages/bar/src/math.spec.js#add should add 40, 2 = 42'
     })
@@ -373,7 +377,9 @@ describe('VitestRunner integration', () => {
     beforeEach(async () => {
       sandbox = new TempTestDirectorySandbox('async-failure')
       await sandbox.init()
-      options.vitest.dir = sandbox.tmpDir
+      sut = createTestInjector(options)
+        .provideValue(commonTokens.sandboxDirectory, sandbox.tmpDir)
+        .injectFunction(createVitestTestRunnerFactory('__stryker2__'))
     })
 
     async function actErroredMutant() {
@@ -406,11 +412,13 @@ describe('VitestRunner integration', () => {
     beforeEach(async () => {
       sandbox = new TempTestDirectorySandbox('deep-project')
       await sandbox.init()
-      options.vitest.dir = sandbox.tmpDir
+      sut = createTestInjector(options)
+        .provideValue(commonTokens.sandboxDirectory, sandbox.tmpDir)
+        .injectFunction(createVitestTestRunnerFactory('__stryker2__'))
     })
 
     it('should be able to report an ErrorResult', async () => {
-      options.vitest.dir = path.resolve(sandbox.tmpDir, 'packages')
+      options.vitest.dir = 'packages'
       await sut.init()
       const runResult = await sut.dryRun(createDryRunOptions())
       expectCompleted(runResult)
@@ -434,7 +442,9 @@ describe('VitestRunner integration', () => {
     beforeEach(async () => {
       sandbox = new TempTestDirectorySandbox('vitest-fixtures')
       await sandbox.init()
-      options.vitest.dir = sandbox.tmpDir
+      sut = createTestInjector(options)
+        .provideValue(commonTokens.sandboxDirectory, sandbox.tmpDir)
+        .injectFunction(createVitestTestRunnerFactory('__stryker2__'))
     })
 
     it('should run tests that use vitest fixtures', async () => {

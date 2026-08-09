@@ -22,6 +22,7 @@ const WORKSPACE_PACKAGES = [
   '@systemfsoftware/stryker-js-cli',
   '@systemfsoftware/stryker-js-mutation-run',
   '@systemfsoftware/stryker-js-mutation-report',
+  '@systemfsoftware/stryker-js-plugin-api',
   '@systemfsoftware/effect-cell-types',
 ] as const
 const REPO_ROOT = fileURLToPath(new URL('../../../../', import.meta.url))

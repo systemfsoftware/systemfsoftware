@@ -1,8 +1,8 @@
 import os from 'os'
 
-import { StrykerOptions } from '@stryker-mutator/api/core'
-import { Logger } from '@stryker-mutator/api/logging'
-import { commonTokens } from '@stryker-mutator/api/plugin'
+import { StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
+import { commonTokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 import { Observable, range, ReplaySubject } from 'rxjs'
 import { Disposable, tokens } from 'typed-inject'
 

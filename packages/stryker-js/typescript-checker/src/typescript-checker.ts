@@ -1,12 +1,12 @@
 import { EOL } from 'os'
 
-import type { Checker, CheckResult } from '@stryker-mutator/api/check'
-import { CheckStatus } from '@stryker-mutator/api/check'
-import type { Mutant, StrykerOptions } from '@stryker-mutator/api/core'
-import type { Logger, LoggerFactoryMethod } from '@stryker-mutator/api/logging'
-import { commonTokens, Scope, tokens } from '@stryker-mutator/api/plugin'
-import type { Injector, PluginContext } from '@stryker-mutator/api/plugin'
 import { split, strykerReportBugUrl } from '@stryker-mutator/util'
+import type { Checker, CheckResult } from '@systemfsoftware/stryker-js-plugin-api/check'
+import { CheckStatus } from '@systemfsoftware/stryker-js-plugin-api/check'
+import type { Mutant, StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
+import type { Logger, LoggerFactoryMethod } from '@systemfsoftware/stryker-js-plugin-api/logging'
+import { commonTokens, Scope, tokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
+import type { Injector, PluginContext } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 import { DiagnosticCategory } from 'typescript/unstable/sync'
 import type { Diagnostic } from 'typescript/unstable/sync'
 

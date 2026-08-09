@@ -1,9 +1,9 @@
 import path from 'path'
 
-import { schema, StrykerOptions } from '@stryker-mutator/api/core'
-import { Logger } from '@stryker-mutator/api/logging'
-import { commonTokens, tokens } from '@stryker-mutator/api/plugin'
-import { Reporter } from '@stryker-mutator/api/report'
+import { schema, StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
+import { commonTokens, tokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
+import { Reporter } from '@systemfsoftware/stryker-js-plugin-api/report'
 import { pathToFileURL } from 'url'
 import { reporterUtil } from './reporter-util.js'
 

@@ -1,4 +1,4 @@
-import { Logger } from '@stryker-mutator/api/logging'
+import { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
 import { LogLevel } from './log-level.js'
 import { LoggingEvent } from './logging-event.js'
 import { LoggingSink } from './logging-sink.js'

@@ -1,3 +1,3 @@
-import { Reporter } from '@stryker-mutator/api/report'
+import { Reporter } from '@systemfsoftware/stryker-js-plugin-api/report'
 
 export type StrictReporter = Required<Reporter>

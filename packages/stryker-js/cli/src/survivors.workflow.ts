@@ -1,5 +1,5 @@
-import { schema } from '@stryker-mutator/api/core'
 import type { Workflow } from '@systemfsoftware/effect-cell-types'
+import { schema } from '@systemfsoftware/stryker-js-plugin-api/core'
 import * as Either from 'effect/Either'
 import { pipe } from 'effect/Function'
 import * as Option from 'effect/Option'

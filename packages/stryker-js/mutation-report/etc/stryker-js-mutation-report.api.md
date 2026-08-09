@@ -4,20 +4,20 @@
 
 ```ts
 
-import { ClassPlugin } from '@stryker-mutator/api/plugin';
-import { DryRunCompletedEvent } from '@stryker-mutator/api/report';
+import { ClassPlugin } from '@systemfsoftware/stryker-js-plugin-api/plugin';
+import { DryRunCompletedEvent } from '@systemfsoftware/stryker-js-plugin-api/report';
 import { injectionTokens } from '@systemfsoftware/stryker-js-mutation-run/plugins';
 import { Injector } from 'typed-inject';
-import { Logger } from '@stryker-mutator/api/logging';
-import { MutantResult } from '@stryker-mutator/api/core';
-import { MutationTestingPlanReadyEvent } from '@stryker-mutator/api/report';
+import { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging';
+import { MutantResult } from '@systemfsoftware/stryker-js-plugin-api/core';
+import { MutationTestingPlanReadyEvent } from '@systemfsoftware/stryker-js-plugin-api/report';
 import { MutationTestMetricsResult } from 'mutation-testing-metrics';
-import { PluginContext } from '@stryker-mutator/api/plugin';
-import { PluginKind } from '@stryker-mutator/api/plugin';
-import { Reporter } from '@stryker-mutator/api/report';
+import { PluginContext } from '@systemfsoftware/stryker-js-plugin-api/plugin';
+import { PluginKind } from '@systemfsoftware/stryker-js-plugin-api/plugin';
+import { Reporter } from '@systemfsoftware/stryker-js-plugin-api/report';
 import { RunEventSink } from '@systemfsoftware/stryker-js-mutation-run/run-event';
-import { schema } from '@stryker-mutator/api/core';
-import { StrykerOptions } from '@stryker-mutator/api/core';
+import { schema } from '@systemfsoftware/stryker-js-plugin-api/core';
+import { StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core';
 
 // @public (undocumented)
 export class ClearTextReporter implements Reporter {

@@ -1,10 +1,10 @@
 import fs from 'fs'
 import path from 'path'
 
-import { StrykerOptions } from '@stryker-mutator/api/core'
-import { Logger } from '@stryker-mutator/api/logging'
-import { commonTokens, Disposable, tokens } from '@stryker-mutator/api/plugin'
 import { I, isErrnoException, normalizeWhitespaces } from '@stryker-mutator/util'
+import { StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
+import { commonTokens, Disposable, tokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 import type { execaCommand } from 'execa'
 import { npmRunPathEnv } from 'npm-run-path'
 

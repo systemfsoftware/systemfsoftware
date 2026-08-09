@@ -1,4 +1,4 @@
-import type { StrykerOptions } from '@stryker-mutator/api/core'
+import type { StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
 
 export interface TypescriptCheckerPluginOptions {
   typescriptChecker: {

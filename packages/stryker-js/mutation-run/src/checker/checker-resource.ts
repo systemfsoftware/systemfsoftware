@@ -1,5 +1,5 @@
-import { CheckResult } from '@stryker-mutator/api/check'
-import { Mutant } from '@stryker-mutator/api/core'
+import { CheckResult } from '@systemfsoftware/stryker-js-plugin-api/check'
+import { Mutant } from '@systemfsoftware/stryker-js-plugin-api/core'
 
 import { Resource } from '../worker-pool/index.js'
 

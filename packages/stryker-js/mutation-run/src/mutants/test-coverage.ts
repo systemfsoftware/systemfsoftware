@@ -1,8 +1,8 @@
-import { CoverageData } from '@stryker-mutator/api/core'
-import { Logger } from '@stryker-mutator/api/logging'
-import { commonTokens } from '@stryker-mutator/api/plugin'
-import { CompleteDryRunResult, TestResult } from '@stryker-mutator/api/test-runner'
 import { notEmpty } from '@stryker-mutator/util'
+import { CoverageData } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
+import { commonTokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
+import { CompleteDryRunResult, TestResult } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
 
 import { injectionTokens } from '../plugins/index.js'
 

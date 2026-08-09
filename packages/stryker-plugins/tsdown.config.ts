@@ -29,7 +29,9 @@ export default defineConfig({
   format: 'esm',
   dts: true,
   tsconfig: './tsconfig.build.json',
-  clean: false,
+  // Chunk filenames are content-hashed, so stale output is never overwritten:
+  // `files: ["dist"]` then ships orphans importing undeclared specifiers.
+  clean: true,
   outExtensions: () => ({ js: '.mjs', dts: '.d.ts' }),
   exports: {
     devExports: '@systemfsoftware/source',

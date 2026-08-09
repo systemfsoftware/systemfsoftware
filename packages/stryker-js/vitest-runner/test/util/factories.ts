@@ -2,11 +2,11 @@ import ajvModule from 'ajv'
 import { vi } from 'vitest'
 import type { RunnerTestCase, RunnerTestFile, RunnerTestSuite, Vitest } from 'vitest/node'
 
-import type { Mutant, StrykerOptions } from '@stryker-mutator/api/core'
-import { strykerCoreSchema } from '@stryker-mutator/api/core'
-import type { Logger } from '@stryker-mutator/api/logging'
-import { commonTokens } from '@stryker-mutator/api/plugin'
-import type { DryRunOptions, MutantRunOptions } from '@stryker-mutator/api/test-runner'
+import type { Mutant, StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { strykerCoreSchema } from '@systemfsoftware/stryker-js-plugin-api/core'
+import type { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
+import { commonTokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
+import type { DryRunOptions, MutantRunOptions } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
 import { createInjector } from 'typed-inject'
 
 import type {

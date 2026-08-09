@@ -1,6 +1,7 @@
 import path from 'path'
 
-import { CheckResult, CheckStatus, PassedCheckResult } from '@stryker-mutator/api/check'
+import { I, normalizeFileName, normalizeWhitespaces, type requireResolve } from '@stryker-mutator/util'
+import { CheckResult, CheckStatus, PassedCheckResult } from '@systemfsoftware/stryker-js-plugin-api/check'
 import {
   Location,
   MutantResult,
@@ -9,12 +10,11 @@ import {
   Position,
   schema,
   StrykerOptions,
-} from '@stryker-mutator/api/core'
-import { Logger } from '@stryker-mutator/api/logging'
-import { commonTokens, tokens } from '@stryker-mutator/api/plugin'
-import { Reporter } from '@stryker-mutator/api/report'
-import { MutantRunResult, MutantRunStatus, TestResult } from '@stryker-mutator/api/test-runner'
-import { I, normalizeFileName, normalizeWhitespaces, type requireResolve } from '@stryker-mutator/util'
+} from '@systemfsoftware/stryker-js-plugin-api/core'
+import { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
+import { commonTokens, tokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
+import { Reporter } from '@systemfsoftware/stryker-js-plugin-api/report'
+import { MutantRunResult, MutantRunStatus, TestResult } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
 import { calculateMutationTestMetrics, MutationTestMetricsResult } from 'mutation-testing-metrics'
 
 import { ExitClass, setPendingExitClass } from '../exit-classification.js'

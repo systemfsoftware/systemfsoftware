@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { resolve as resolvePath } from 'node:path'
 
-import { schema } from '@stryker-mutator/api/core'
+import { schema } from '@systemfsoftware/stryker-js-plugin-api/core'
 import { describe, expect, it } from 'vitest'
 
 import { forkCoreSchema } from '../../src/config/fork-schema.js'
