@@ -68,6 +68,10 @@ catalogs:
     # typescript@7 is the native Go compiler with no JS API; see
     # docs/solutions/tooling-decisions/arethetypeswrong-core-requires-js-typescript-api.md
     typescript: ^6.0.3
+    # The published CLI. Consumers that must not close a workspace cycle resolve
+    # through this catalog instead of `workspace:^`; see
+    # docs/solutions/tooling-decisions/registry-consumption-of-self-hosted-forks.md
+    "@systemfsoftware/arethetypeswrong-cli": ^1.1.1
 minimumReleaseAge: 1440
 overrides:
   # platform-node and platform-node-shared take `@effect/cluster` as a peer
