@@ -1,7 +1,9 @@
+import { Cause, Deferred, Effect, Exit, Fiber, Runtime } from 'effect'
 import { screen } from 'storybook/test'
 
 import {
   BackgroundNotGiven,
+  CaptureDecodeFailed,
   EmptyScenario,
   MissingThen,
   OutlineDuplicateRowName,
@@ -21,6 +23,15 @@ export interface StorySpec<TArgs = unknown> {
 export interface ScenarioOptions {
   /** Capture values for a plain (non-outline) scenario, keyed by capture name. */
   readonly with?: Readonly<Record<string, string>>
+}
+
+export interface FeatureOptions {
+  /**
+   * Runtime that interprets a scenario's step program at the play edge,
+   * defaulting to `Runtime.defaultRuntime`. Supply a runtime carrying
+   * services or custom scheduling to make them available to step handlers.
+   */
+  readonly runtime?: Runtime.Runtime<never>
 }
 
 /**
@@ -84,22 +95,81 @@ const buildStepContext = <TArgs>(ctx: PlayContext<TArgs>): StepContext<TArgs> =>
   context: ctx,
 })
 
-const executeSteps = async <TArgs>(
+/**
+ * Total classification of an interpreted program's `Exit`, shared by the play
+ * edge and the step bridge: interruption resolves silently, success returns
+ * the value, and any other cause is rethrown as the original error instance
+ * (`Cause.squash`) so Storybook's panel keeps the matcher diff.
+ */
+const squashExit = <A>(exit: Exit.Exit<A, unknown>): A | undefined => {
+  if (Exit.isInterrupted(exit)) return undefined
+  if (Exit.isSuccess(exit)) return exit.value
+  throw Cause.squash(exit.cause)
+}
+
+/**
+ * One scenario step, composed as an Effect. Storybook's instrumented `step`
+ * expects a promise whose settlement tracks the step's work, so the body runs
+ * in a child fiber that settles a deferred; the bridge promise given to
+ * `ctx.step` awaits that deferred and rejects with the step's original error.
+ * The bridge interprets only this pure signalling effect; user code runs in
+ * the single play-edge interpretation. The `ensuring` finalizer interrupts
+ * the child on every parent exit — success (no-op on a joined fiber),
+ * failure, and interruption — so an independently failed `ctx.step` never
+ * orphans a running step body.
+ */
+const runStep = <TArgs>(
+  step: Step<TArgs>,
+  values: Readonly<Record<string, string>>,
+  stepCtx: StepContext<TArgs>,
+  ctx: PlayContext<TArgs>,
+): Effect.Effect<void, CaptureDecodeFailed> => {
+  const label = `${displayKeyword(step.model)} ${renderStepText(step.model, values)}`
+  return Deferred.make<Exit.Exit<void, CaptureDecodeFailed>>().pipe(
+    Effect.flatMap((done) => {
+      const bridge = (): Promise<void> =>
+        Effect.runPromiseExit(
+          Deferred.await(done).pipe(
+            Effect.flatMap((exit) =>
+              Exit.isSuccess(exit) || Exit.isInterrupted(exit)
+                ? Effect.void
+                : Effect.failCause(exit.cause)
+            ),
+          ),
+        ).then(squashExit)
+      return Effect.fork(
+        step.run(values, stepCtx).pipe(
+          Effect.exit,
+          Effect.flatMap((exit) => Deferred.succeed(done, exit)),
+          Effect.ensuring(Deferred.interrupt(done).pipe(Effect.asVoid)),
+        ),
+      ).pipe(
+        Effect.flatMap((fiber) =>
+          Effect.promise(() => Promise.resolve(ctx.step(label, bridge))).pipe(
+            Effect.flatMap(() => Fiber.join(fiber)),
+            Effect.ensuring(Fiber.interrupt(fiber).pipe(Effect.asVoid)),
+          )
+        ),
+      )
+    }),
+  )
+}
+
+const executeSteps = <TArgs>(
   ordered: readonly Step<TArgs>[],
   values: Readonly<Record<string, string>>,
   ctx: PlayContext<TArgs>,
-): Promise<void> => {
+): Effect.Effect<void, CaptureDecodeFailed> => {
   const stepCtx = buildStepContext(ctx)
-  let prev: Promise<unknown> = Promise.resolve()
-  for (const s of ordered) {
-    prev = prev.then(() => {
-      const model = s.model
-      const label = `${displayKeyword(model)} ${renderStepText(model, values)}`
-      return ctx.step(label, () => s.run(values, stepCtx))
-    })
-  }
-  await prev
+  return Effect.forEach(ordered, (s) => runStep(s, values, stepCtx, ctx), { discard: true })
 }
+
+/** The single interpretation edge of the package. */
+const interpretPlay = <A, E>(
+  runtime: Runtime.Runtime<never>,
+  program: Effect.Effect<A, E>,
+  ctx: { readonly abortSignal: AbortSignal },
+): Promise<A | undefined> => Runtime.runPromiseExit(runtime)(program, { signal: ctx.abortSignal }).then(squashExit)
 
 const rowValuesFor = (row: ExampleRow): Readonly<Record<string, string>> =>
   Object.fromEntries(Object.entries(row).filter(([k]) => k !== 'name'))
@@ -171,6 +241,7 @@ const parseScenarioArgs = <TArgs>(
 const makeScenario = <TArgs>(
   background: readonly Step<TArgs>[],
   prefix: string,
+  runtime: Runtime.Runtime<never>,
 ): ScenarioFn<TArgs> => {
   function scenario(
     name: string,
@@ -192,7 +263,8 @@ const makeScenario = <TArgs>(
     return {
       ...(options === undefined ? {} : omitWith(options)),
       name: fullName,
-      play: (ctx: PlayContext<TArgs>) => executeSteps([...background, ...steps], withRecord, ctx),
+      play: (ctx: PlayContext<TArgs>) =>
+        interpretPlay(runtime, executeSteps([...background, ...steps], withRecord, ctx), ctx),
     }
   }
   return scenario
@@ -235,6 +307,7 @@ const validateOutlineRows = (
 const makeOutline = <TArgs>(
   background: readonly Step<TArgs>[],
   prefix: string,
+  runtime: Runtime.Runtime<never>,
 ): OutlineFn<TArgs> => {
   function outline(
     name: string,
@@ -267,7 +340,11 @@ const makeOutline = <TArgs>(
       ...extra,
       name: `${fullName} — ${row.name}`,
       play: (ctx: PlayContext<TArgs>) =>
-        executeSteps([...background, ...steps], { ...withRecord, ...rowValuesFor(row) }, ctx),
+        interpretPlay(
+          runtime,
+          executeSteps([...background, ...steps], { ...withRecord, ...rowValuesFor(row) }, ctx),
+          ctx,
+        ),
     })
 
     const examples = (
@@ -301,23 +378,33 @@ const makeBackground = <TArgs>(background: Step<TArgs>[]) => (...steps: readonly
   background.push(...steps)
 }
 
-const makeFeature = <M, TArgs = unknown>(meta: M): Feature<M, TArgs> => {
+const makeFeature = <M, TArgs = unknown>(
+  meta: M,
+  runtime: Runtime.Runtime<never>,
+): Feature<M, TArgs> => {
   const background: Step<TArgs>[] = []
   const feature: Feature<M, TArgs> = {
     meta,
-    type: <TNext>(): Feature<M, TNext> => makeFeature<M, TNext>(meta),
+    type: <TNext>(): Feature<M, TNext> => makeFeature<M, TNext>(meta, runtime),
     background: makeBackground<TArgs>(background),
-    scenario: makeScenario<TArgs>(background, ''),
-    scenarioOutline: makeOutline<TArgs>(background, ''),
+    scenario: makeScenario<TArgs>(background, '', runtime),
+    scenarioOutline: makeOutline<TArgs>(background, '', runtime),
     rule: (ruleName: string): RuleScope<TArgs> => ({
-      scenario: makeScenario<TArgs>(background, ruleName),
-      scenarioOutline: makeOutline<TArgs>(background, ruleName),
+      scenario: makeScenario<TArgs>(background, ruleName, runtime),
+      scenarioOutline: makeOutline<TArgs>(background, ruleName, runtime),
     }),
   }
   return feature
 }
 
-export const feature = <M>(meta: M): Feature<M> => makeFeature<M>(meta)
+/**
+ * Declare a feature: a story set whose scenarios execute as CSF `play`
+ * functions. `options.runtime` (default `Runtime.defaultRuntime`) is the
+ * Effect runtime interpreting each scenario's composed step program exactly
+ * once, at the play edge.
+ */
+export const feature = <M>(meta: M, options: FeatureOptions = {}): Feature<M> =>
+  makeFeature<M>(meta, options.runtime ?? Runtime.defaultRuntime)
 
 export const Steps = <TArgs>(...steps: readonly Step<TArgs>[]): Step<TArgs>[] => [...steps]
 
@@ -331,9 +418,8 @@ export const From = <TArgs>(story: StoryWithPlay<TArgs>): Step<TArgs>[] => {
   const step: Step<TArgs> = {
     _tag: 'Step',
     model: { keyword: 'Given', parts: ['the prior scenario completed'], captures: [] },
-    run: async (_values: Readonly<Record<string, string>>, ctx: StepContext<TArgs>) => {
-      await play(ctx.context)
-    },
+    run: (_values: Readonly<Record<string, string>>, ctx: StepContext<TArgs>) =>
+      Effect.promise(() => Promise.resolve(play(ctx.context))),
   }
   return [step]
 }

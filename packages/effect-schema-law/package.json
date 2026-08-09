@@ -60,7 +60,7 @@
     "fast-check": "catalog:",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "^4.1.10"
   },
   "peerDependencies": {
     "@effect/vitest": "catalog:",

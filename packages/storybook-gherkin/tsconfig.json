@@ -8,7 +8,7 @@
     "customConditions": ["@systemfsoftware/source"],
     "types": []
   },
-  "include": ["src"],
+  "include": ["src", "test/browser"],
   "references": [
     {
       "path": "./tsconfig.node.json"
