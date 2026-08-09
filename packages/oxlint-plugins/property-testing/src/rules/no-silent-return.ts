@@ -147,22 +147,31 @@ const pathExits = (stmt: ESTree.Statement | ESTree.Directive): boolean => {
   }
 }
 
+/** Narrow an arbitrary ESTree-adjacent value to a walkable object record. */
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null
+
+/** Narrow an object whose `type`/`generator` fields mark it as a generator function expression. */
+const isGeneratorFunction = (value: unknown): value is ESTree.Function => {
+  if (typeof value !== 'object' || value === null) return false
+  if (!('type' in value) || value['type'] !== 'FunctionExpression') return false
+  return 'generator' in value && Boolean(value['generator'])
+}
+
 /** Collect generator functions (Effect.gen bodies are verdict carriers). */
 const collectGenerators = (value: unknown): ESTree.Function[] => {
   const out: ESTree.Function[] = []
   const walk = (inner: unknown): void => {
     const items = Array.isArray(inner) ? inner : [inner]
     for (const item of items) {
-      if (item === null || typeof item !== 'object') continue
-      const node = item as ESTree.Node
-      if (node.type === 'FunctionExpression') {
-        if (node.generator) out.push(node)
+      if (!isRecord(item)) continue
+      if (item['type'] === 'FunctionExpression') {
+        if (isGeneratorFunction(item)) out.push(item)
         continue
       }
-      if (node.type === 'ArrowFunctionExpression') continue
-      for (const key of Object.keys(node)) {
+      if (item['type'] === 'ArrowFunctionExpression') continue
+      for (const key of Object.keys(item)) {
         if (key === 'parent') continue
-        walk((node as unknown as Record<string, unknown>)[key])
+        walk(item[key])
       }
     }
   }

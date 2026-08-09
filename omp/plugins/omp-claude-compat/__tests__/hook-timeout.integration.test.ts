@@ -1,4 +1,5 @@
-import { NodeCommandExecutor, NodeFileSystem } from '@effect/platform-node'
+import * as NodeCommandExecutor from '@effect/platform-node/NodeCommandExecutor'
+import * as NodeFileSystem from '@effect/platform-node/NodeFileSystem'
 import { FileSystem } from '@effect/platform/FileSystem'
 import * as PathModule from '@effect/platform/Path'
 import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
@@ -21,11 +22,9 @@ const testLayer = HookScopeLive.pipe(
   ),
 )
 
-const runWithRealClock = <A, E, R>(effect: Effect.Effect<A, E, R>): Promise<A> =>
+const runWithRealClock = <A, E>(effect: Effect.Effect<A, E, never>): Promise<A> =>
   Effect.runPromise(
-    Effect.tryPromise(() =>
-      Effect.runPromise(effect.pipe(Effect.scoped, Effect.provide(testLayer)) as Effect.Effect<A, never, never>)
-    ),
+    Effect.tryPromise(() => Effect.runPromise(effect)),
   )
 const runSlowHook = (timeout: number | undefined, sleepSeconds: number) =>
   Effect.gen(function*() {

@@ -41,7 +41,7 @@ function createMockGuard() {
     const list = handlers.get(event) ?? []
     let result: unknown
     for (const handler of list) {
-      result = handler(payload as unknown, mockCtx)
+      result = handler(payload, mockCtx)
     }
     return result
   }

@@ -104,9 +104,9 @@ export const noLoggingInCatch = defineRule({
       'FunctionExpression:exit': exitCatchCallback,
 
       CallExpression(node: ESTree.CallExpression) {
-        if (catchMethodStack.length === 0) return
+        const catchMethod = catchMethodStack[catchMethodStack.length - 1]
+        if (catchMethod === undefined) return
 
-        const catchMethod = catchMethodStack[catchMethodStack.length - 1]!
         const { callee } = node
 
         if (callee.type !== 'MemberExpression') return
@@ -134,7 +134,8 @@ export const noLoggingInCatch = defineRule({
 
       // Detect Effect.log* passed as pipe argument: something.pipe(Effect.log)
       MemberExpression(node: ESTree.MemberExpression) {
-        if (catchMethodStack.length === 0) return
+        const catchMethod = catchMethodStack[catchMethodStack.length - 1]
+        if (catchMethod === undefined) return
         if (node.parent.type !== 'CallExpression') return
 
         const pipeCallee = node.parent.callee
@@ -151,7 +152,7 @@ export const noLoggingInCatch = defineRule({
           reportViolation(
             node.parent,
             `${node.object.name}.${node.property.name}`,
-            catchMethodStack[catchMethodStack.length - 1]!,
+            catchMethod,
           )
         }
       },

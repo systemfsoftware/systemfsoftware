@@ -133,7 +133,7 @@ export const dispatchHookEvent = (cmd: HookEventCommand) =>
         Effect.gen(function*() {
           const settings = yield* loadSettingsWithPaths(settingsPaths(homedir(), ctx.cwd))
           if (!settings) return undefined as HookDispatchResult
-          return (yield* runPreToolUseHooks(settings, event, ctx)) as HookDispatchResult
+          return (yield* runPreToolUseHooks(settings, event, ctx))
         })),
       Match.tag('ToolResult', ({ event, ctx }) =>
         Effect.gen(function*() {
@@ -144,7 +144,7 @@ export const dispatchHookEvent = (cmd: HookEventCommand) =>
             return {
               content: [...event.content, { type: 'text' as const, text: result.warning }],
               isError: event.isError,
-            } as HookDispatchResult
+            }
           }
           return undefined as HookDispatchResult
         })),
@@ -152,7 +152,7 @@ export const dispatchHookEvent = (cmd: HookEventCommand) =>
         Effect.gen(function*() {
           const settings = yield* loadSettingsWithPaths(settingsPaths(homedir(), ctx.cwd))
           if (!settings) return undefined as HookDispatchResult
-          return (yield* runUserPromptSubmitHooks(settings, event, ctx)) as HookDispatchResult
+          return (yield* runUserPromptSubmitHooks(settings, event, ctx))
         })),
       Match.tag('SessionStart', ({ reason, ctx }) =>
         Effect.gen(function*() {
@@ -208,7 +208,7 @@ export const dispatchHookEvent = (cmd: HookEventCommand) =>
             `Compaction cancelled by a PreCompact hook: ${result.reason ?? 'no reason given'}`,
             'warning',
           )
-          return { cancel: true } as HookDispatchResult
+          return { cancel: true }
         })),
       Match.tag('SessionSwitch', ({ reason, ctx }) =>
         Effect.gen(function*() {
@@ -233,5 +233,5 @@ export const dispatchHookEvent = (cmd: HookEventCommand) =>
         })),
       Match.exhaustive,
     )
-    return (yield* matched) as HookDispatchResult
+    return (yield* matched)
   })

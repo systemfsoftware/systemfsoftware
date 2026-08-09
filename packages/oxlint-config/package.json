@@ -29,7 +29,8 @@
     "@systemfsoftware/oxlint-plugin-property-testing": "workspace:^",
     "@systemfsoftware/oxlint-plugin-test-hygiene": "workspace:^",
     "@systemfsoftware/oxlint-plugin-test-placement": "workspace:^",
-    "oxlint": "catalog:oxlint"
+    "oxlint": "catalog:oxlint",
+    "oxlint-tsgolint": "catalog:oxlint"
   },
   "devDependencies": {
     "@systemfsoftware/tsconfig": "workspace:^",

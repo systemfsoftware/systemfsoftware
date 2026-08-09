@@ -7,7 +7,7 @@
     "build": "turbo --concurrency=${TURBO_CONCURRENCY:-50%} build",
     "typecheck": "turbo --concurrency=${TURBO_CONCURRENCY:-50%} --continue typecheck",
     "test": "turbo --concurrency=${TURBO_CONCURRENCY:-50%} test",
-    "lint": "pnpm format:check && turbo --concurrency=${TURBO_CONCURRENCY:-50%} lint ${AGENT:+-- --format=unix}",
+    "lint": "pnpm format:check && turbo --concurrency=${TURBO_CONCURRENCY:-50%} lint",
     "lint:ci": "pnpm format:check && turbo --concurrency=${TURBO_CONCURRENCY:-50%} lint -- --format=github",
     "api:check": "turbo --concurrency=${TURBO_CONCURRENCY:-50%} api:check",
     "format": "dprint fmt",

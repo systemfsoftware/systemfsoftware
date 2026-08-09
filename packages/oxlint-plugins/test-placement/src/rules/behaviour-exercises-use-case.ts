@@ -42,10 +42,7 @@ const isFoundationPackage = (source: string): boolean => FOUNDATION_PACKAGES.has
 
 const isBehaviourTest = (basename: string): boolean => basename.endsWith(INTEGRATION_SUFFIX)
 
-const specifierBasename = (source: string): string => {
-  const segments = source.split('/')
-  return segments[segments.length - 1] as string
-}
+const specifierBasename = (source: string): string => source.slice(source.lastIndexOf('/') + 1)
 
 const isShellImport = (source: string): boolean => {
   if (isBarePackage(source)) return !isFoundationPackage(source)

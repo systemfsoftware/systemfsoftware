@@ -180,6 +180,11 @@ export const dampTestNaming = defineRule({
           return
         }
 
+        const firstArg = node.arguments[0]
+        if (!firstArg) {
+          return
+        }
+
         const testName = extractTestName(node)
         if (!testName) {
           return
@@ -188,7 +193,7 @@ export const dampTestNaming = defineRule({
         const errorCode = validateDampFormat(testName)
         if (errorCode) {
           context.report({
-            node: node.arguments[0]!,
+            node: firstArg,
             messageId: errorCode,
             data: {
               expected: getExpected(errorCode),

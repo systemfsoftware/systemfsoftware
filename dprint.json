@@ -15,6 +15,7 @@
     "**/dist",
     "**/*-lock.json",
     ".turbo",
+    ".worktrees/**",
     "pnpm-lock.yaml",
     "**/etc/*.api.md",
     "vendor/**",

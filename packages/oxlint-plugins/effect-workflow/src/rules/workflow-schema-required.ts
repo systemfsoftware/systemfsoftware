@@ -2,7 +2,7 @@ import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
 import { Array as A, Schema as S } from 'effect'
 import { getExportedWorkflowFunction } from './exported-workflow-fn.js'
-import { COMMAND_SUFFIX, EITHER_TYPE_NAME, meta, Options, WORKFLOW_SUFFIX } from './workflow-schema-required.config.js'
+import { COMMAND_SUFFIX, EITHER_TYPE_NAME, meta, WORKFLOW_SUFFIX } from './workflow-schema-required.config.js'
 
 export type MessageIds = 'noSchemaVariants' | 'tooFewDecisionVariants' | 'missingErrorChannel'
 

@@ -1,7 +1,7 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
 import { Array as A, Schema as S } from 'effect'
-import { ACL_SUFFIX, BANNED_PATH_SEGMENTS, meta, Options } from './acl-no-anti-pattern-path.config.js'
+import { ACL_SUFFIX, BANNED_PATH_SEGMENTS, meta } from './acl-no-anti-pattern-path.config.js'
 
 export type MessageIds = 'antiPatternPath'
 

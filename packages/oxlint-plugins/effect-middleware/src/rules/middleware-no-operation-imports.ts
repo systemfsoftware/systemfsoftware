@@ -1,6 +1,6 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
-import { meta, OPERATION_SYMBOL_SUFFIXES, Options } from './middleware-no-operation-imports.config.js'
+import { meta, OPERATION_SYMBOL_SUFFIXES } from './middleware-no-operation-imports.config.js'
 
 export type MessageIds = 'operationSymbolImport'
 

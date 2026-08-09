@@ -1,4 +1,5 @@
-import { NodeCommandExecutor, NodeFileSystem } from '@effect/platform-node'
+import * as NodeCommandExecutor from '@effect/platform-node/NodeCommandExecutor'
+import * as NodeFileSystem from '@effect/platform-node/NodeFileSystem'
 import type { PlatformError } from '@effect/platform/Error'
 import { FileSystem } from '@effect/platform/FileSystem'
 import * as PathModule from '@effect/platform/Path'

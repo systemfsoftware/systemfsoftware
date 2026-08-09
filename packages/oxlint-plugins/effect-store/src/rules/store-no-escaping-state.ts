@@ -15,8 +15,9 @@ const newExpressionConstructor = (init: ESTree.VariableDeclarator['init']): stri
   if (init === null) return null
   if (init.type !== 'NewExpression') return null
   if (init.callee.type !== 'Identifier') return null
-  if (!(ESCAPING_CONSTRUCTORS as readonly string[]).includes(init.callee.name)) return null
-  return init.callee.name
+  const calleeName = init.callee.name
+  if (!ESCAPING_CONSTRUCTORS.some((candidate) => candidate === calleeName)) return null
+  return calleeName
 }
 
 export const storeNoEscapingState = defineRule({

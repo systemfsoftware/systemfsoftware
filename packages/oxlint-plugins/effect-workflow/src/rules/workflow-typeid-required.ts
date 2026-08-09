@@ -1,7 +1,7 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
 import { getClassName, getTypeIdIdentifier, isTaggedClassOrError } from './tagged-class.js'
-import { meta, Options } from './workflow-typeid-required.config.js'
+import { meta } from './workflow-typeid-required.config.js'
 
 export type MessageIds = 'missingTypeId'
 

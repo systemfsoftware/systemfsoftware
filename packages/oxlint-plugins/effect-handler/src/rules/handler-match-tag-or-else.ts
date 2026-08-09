@@ -1,6 +1,6 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
-import { identifierName, meta, Options } from './handler-match-tag-or-else.config.js'
+import { identifierName, meta } from './handler-match-tag-or-else.config.js'
 
 export type MessageIds = 'missingOrElse' | 'exhaustiveInsteadOfOrElse'
 

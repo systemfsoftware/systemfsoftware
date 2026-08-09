@@ -327,6 +327,10 @@ const makeRunEventStream = (resolved: ResolvedMode): Effect.Effect<RunEventStrea
           // Host-produced: the header is written above, the tick by the merged
           // timer stream. Core never pushes either.
           return
+        case 'phase':
+          // R18: a phase boundary carries no progress and is not terminal —
+          // the emit below writes it verbatim, like plan/mutant.
+          break
         case 'plan':
           state.progress = { ...state.progress, total: event.total }
           break
