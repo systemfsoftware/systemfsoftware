@@ -3,9 +3,12 @@ import { Schema as S } from 'effect'
 const ConcreteKeywordSchema = S.Literal('Given', 'When', 'Then')
 
 /**
- * Every violation in this module is thrown at declaration time — during module
- * evaluation of the story file — so a malformed spec fails the Storybook
- * import before any story runs.
+ * Two channels:
+ * - Declaration time: every violation except `CaptureDecodeFailed` is thrown
+ *   during module evaluation of the story file, so a malformed spec fails the
+ *   Storybook import before any story runs.
+ * - Run time: `CaptureDecodeFailed` travels the typed error channel of
+ *   `Step.run` and surfaces when the play edge interprets the scenario.
  */
 
 export class EmptyScenario extends S.TaggedError<EmptyScenario>()('EmptyScenario', {
