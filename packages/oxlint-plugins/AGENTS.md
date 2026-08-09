@@ -1,6 +1,6 @@
 # AGENTS.md — `packages/oxlint-plugins/`
 
-> **Location:** `packages/oxlint-plugins/` — the oxlint plugin family. General: `core/` (general rule set), `test-hygiene/` (test naming), `property-testing/` (property-test contract), `test-placement/` (test location and suffix), `cell-taxonomy/` (source filenames name their cell), `effect-entrypoint/` (`main.ts` is an interpretation edge, not a cell), `recommended/`, `effect-dmmf/` (combines property-testing + effect-executor + effect-workflow + cell-taxonomy under one entrypoint). One package per architecture cell: `effect-{workflow,executor,handler,middleware,acl,adapter,store,state,schema,shape,policy,kernel,observer}/`. Universal agent rules live in the root `AGENTS.md`; this file carries the shared rule-authoring conventions for every plugin in this folder. Package leaves carry only their package's delta.
+> **Location:** `packages/oxlint-plugins/` — the oxlint plugin family. General: `core/` (general rule set), `test-hygiene/` (test naming), `property-testing/` (property-test contract), `test-placement/` (test location and suffix), `cell-taxonomy/` (source filenames name their cell), `effect-entrypoint/` (`main.ts` is an interpretation edge, not a cell), `recommended/`, `effect-dmmf/` (aggregates all eighteen source plugins under one entrypoint). One package per architecture cell: `effect-{workflow,executor,handler,middleware,acl,adapter,store,state,schema,shape,policy,kernel,observer}/`. Universal agent rules live in the root `AGENTS.md`; this file carries the shared rule-authoring conventions for every plugin in this folder. Package leaves carry only their package's delta.
 
 ## Critical
 
@@ -117,6 +117,22 @@ export default {
   harm: "oxlint's `Plugin` interface is `{ meta?, rules }` and never reads `configs`; its top-level `plugins` field accepts only built-in namespaces, so a JS plugin name there fails config parsing outright with `Unknown plugin: '<name>'` for every consumer who spreads the preset whole"
   check: "review — `Object.keys(configs.recommended)` is exactly `['rules']`. A violation is not silent: every consumer spreading the preset fails config parsing at startup."
 ```
+
+## Runtime Budget
+
+Rule population is gated on two budgets, not on a rule count:
+
+- **Aggregate false positives** — the product of rule count and per-rule
+  false-positive rate, not the count itself.
+- **Runtime** — rule count times files scanned.
+
+Measured 2026-08-09 on oxlint 1.77.0 against `packages/oxlint-plugins/core`
+(52 TypeScript files / 8,038 LoC): type-aware ON 6829 ms, OFF
+(`--disable-type-aware`) 1607 ms — 4.25x, +5.2 s.
+
+An enabled-but-unwanted rule is set to `off`, NEVER `warn` — a `warn` rule
+still runs and still costs its per-file time. Count is not the axis: there
+is no fixed rule-count ceiling, only the two budgets above.
 
 ## Package Deltas
 
