@@ -92,6 +92,12 @@ The classification of who invoked a run — an agent, a forge, or a human workin
 
 The classes are mutually exclusive and ordered, because an agent shell commonly sets the forge's marker as well: an agent run is a development run and takes the fast path even when `CI` is present, so `AGENT` outranks it. Membership is decided by a marker's presence rather than by comparing it against a value, since every producer that means "I am a forge" sets its marker to something and no two of them agree on what — an equality test silently reclassifies every producer whose spelling differs. One definition of the classification is exported and imported everywhere it is read; a second definition is a second opinion, and two will diverge the moment a producer writes a value one of them does not expect. Because the class changes what a run computes rather than only how its output is presented, it is a legitimate cache-key input — see Key partition.
 
+### Contract lane
+
+The verification altitude that exercises a published command-line surface from outside the process that produces it: the package is packed exactly as it would be published, installed into a clean container, and driven as a real program whose observable behavior is then asserted. Distinct from the default test task, which stays container-free and never spawns the shipped artifact.
+
+It exists because a class of properties is process-level by category and admits no honest double: exit status, bytes arriving on a real file descriptor, a timer firing in real elapsed time, a pipe closed by its reader, a signal delivered mid-run, resolution of an installed binary, and whether importing a module has side effects. Substituting the process, the writer, or the clock for any of these asserts the substitute rather than the program, so evidence gathered that way does not count at this altitude — while a logical property, such as the order in which a pipeline emits events, stays at composition altitude and is asserted against a declared port instead. Because the lane depends on a container runtime it can fail for reasons unrelated to the code, and its governing rule is that such a failure must be loud and must name its cause: reporting a skip, or zero passing tests, would make an unrun lane indistinguishable from a passing one, which is the false green the lane was built to remove.
+
 ## Architecture cells (constitution §I–V)
 
 ### Cell
