@@ -26,14 +26,21 @@ afterAll(() => {
 });
 
 /** Minimal SegmentContext factory — only path/git fields matter for these tests. */
-function createCtx(overrides?: { pathMaxLength?: number; branch?: string | null }): SegmentContext {
+function createCtx(overrides?: {
+	pathMaxLength?: number;
+	branch?: string | null;
+	sessionName?: string;
+	sessionAccent?: boolean;
+}): SegmentContext {
+	const hasName = overrides?.sessionName !== undefined;
 	return {
 		session: {
 			state: {},
 			isFastModeEnabled: () => false,
 			modelRegistry: { isUsingOAuth: () => false },
-			sessionManager: undefined,
+			sessionManager: hasName ? { getSessionName: () => overrides.sessionName } : undefined,
 		} as unknown as SegmentContext["session"],
+		sessionAccent: overrides?.sessionAccent,
 		width: 120,
 		compactThinkingLevel: false,
 		options: {
@@ -137,10 +144,13 @@ describe("status line session accent", () => {
 	}
 
 	// Computed lazily: `theme` is assigned by initTheme() in beforeAll, after module evaluation.
-	const accentAnsi = () =>
-		getSessionAccentAnsi(
+	const accentAnsi = (): string => {
+		const ansi = getSessionAccentAnsi(
 			getSessionAccentHex("Named session", theme.getMajorThemeColorHexes(), theme.accentSurfaceLuminance),
 		);
+		if (!ansi) throw new Error("expected a session accent ANSI sequence for the test theme");
+		return ansi;
+	};
 
 	it("paints the gap with the session accent when enabled", () => {
 		const ansi = accentAnsi();
@@ -155,10 +165,28 @@ describe("status line session accent", () => {
 		const border = buildComponent(false).getTopBorder(80).content;
 		// Positive: gap is rendered with the theme border color.
 		expect(border).toContain(`${theme.getFgAnsi("border")}${theme.boxRound.horizontal}`);
-		// Negative: the gap-painting pattern (accent ANSI directly followed by a horizontal
-		// glyph) must not appear. The session_name segment may still emit the accent ANSI
-		// for its own text — we only care that the gap is not accent-painted.
-		expect(border).not.toContain(`${ansi}${theme.boxRound.horizontal}`);
+		// Negative: neither the gap nor the session-name segment may emit the
+		// hash-derived session accent when the effective setting is disabled.
+		expect(border).not.toContain(ansi);
+	});
+
+	it("renders the session name with the theme accent color when the accent is disabled", () => {
+		const ansi = accentAnsi();
+		expect(ansi).toBeDefined();
+		const disabled = renderSegment("session_name", createCtx({ sessionName: "Named session", sessionAccent: false }));
+		expect(disabled.visible).toBe(true);
+		// Positive: the name uses the theme accent color, not the hash-derived session ANSI.
+		expect(disabled.content).toContain(theme.getFgAnsi("accent"));
+		// Negative: the hash-derived session ANSI must not appear for the name text.
+		expect(disabled.content).not.toContain(ansi);
+	});
+
+	it("still renders the session name with the hash-derived accent when enabled", () => {
+		const ansi = accentAnsi();
+		expect(ansi).toBeDefined();
+		const enabled = renderSegment("session_name", createCtx({ sessionName: "Named session", sessionAccent: true }));
+		expect(enabled.visible).toBe(true);
+		expect(enabled.content).toContain(ansi);
 	});
 });
 

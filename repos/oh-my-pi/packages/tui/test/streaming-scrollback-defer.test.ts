@@ -179,7 +179,7 @@ function saveTerminalEnv(): Record<string, string | undefined> {
 	// ambient terminal identity to keep the direct-terminal scrollback
 	// assertions deterministic on any dev machine.
 	const saved: Record<string, string | undefined> = {};
-	for (const key of ["TERM_PROGRAM", "PI_TUI_RESIZE_IN_PLACE"]) {
+	for (const key of ["TERM_PROGRAM", "PI_TUI_RESIZE_IN_PLACE", "HERDR_ENV"]) {
 		saved[key] = Bun.env[key];
 		delete Bun.env[key];
 	}

@@ -367,7 +367,17 @@ class SocketDaemonClient implements DaemonBrokerClient {
 			try {
 				message = parseDaemonWireMessage(decoded);
 			} catch (error) {
-				this.#rejectPending(error instanceof Error ? error : new Error(String(error)));
+				const parseError = error instanceof Error ? error : new Error(String(error));
+				if (
+					typeof decoded === "object" &&
+					decoded !== null &&
+					"event" in decoded &&
+					decoded.event === "daemon-completed"
+				) {
+					logger.warn("Ignoring malformed daemon completion", { error: parseError.message });
+					continue;
+				}
+				this.#rejectPending(parseError);
 				continue;
 			}
 			if ("event" in message) {

@@ -201,7 +201,7 @@ function parseChangelogContent(content: string): ChangelogEntry[] {
  * Compare changelog entries by their parsed version parts.
  * Returns: -1 if v1 < v2, 0 if v1 === v2, 1 if v1 > v2
  */
-export function compareChangelogEntries(v1: ChangelogEntry, v2: ChangelogEntry): number {
+function compareChangelogEntries(v1: ChangelogEntry, v2: ChangelogEntry): number {
 	if (v1.major !== v2.major) return v1.major - v2.major;
 	if (v1.minor !== v2.minor) return v1.minor - v2.minor;
 	return v1.patch - v2.patch;

@@ -20,6 +20,7 @@ import type { MCPRequestIdFormat } from "../mcp/types";
 import { type ConfiguredThinkingLevel, parseConfiguredThinkingLevel } from "../thinking";
 import { normalizeToolNames } from "../tools/builtin-names";
 
+import { realpathIfExists, resolveContainedPath } from "./contained-path";
 import { buildPluginDirRoot } from "./plugin-dir-roots";
 
 /**
@@ -1141,17 +1142,30 @@ export async function injectPluginDirRoots(home: string, dirs: string[], cwd?: s
 	const injected: ClaudePluginRoot[] = [];
 	for (const dir of dirs) {
 		const resolved = path.resolve(dir);
-		// Read plugin name from manifest
+		// Read plugin name from manifest: Claude marketplace layout first, then
+		// the Agent Plugins standard root manifest (agent-plugins.org). Each
+		// manifest is resolved and proven inside the plugin directory BEFORE the
+		// read (Agent Plugins §4.1) — an escaping symlink falls back to the
+		// directory basename without consuming outside content.
 		let pluginName = path.basename(resolved);
-		try {
-			const manifestPath = path.join(resolved, ".claude-plugin", "plugin.json");
-			const content = await Bun.file(manifestPath).text();
-			const manifest = JSON.parse(content);
-			if (typeof manifest.name === "string" && manifest.name) {
-				pluginName = manifest.name;
+		const realRoot = await realpathIfExists(resolved);
+		if (realRoot !== null) {
+			for (const manifestPath of [
+				path.join(realRoot, ".claude-plugin", "plugin.json"),
+				path.join(realRoot, "plugin.json"),
+			]) {
+				const contained = await resolveContainedPath(realRoot, manifestPath);
+				if (contained.status !== "ok") continue;
+				try {
+					const manifest = await Bun.file(contained.realPath).json();
+					if (typeof manifest?.name === "string" && manifest.name) {
+						pluginName = manifest.name;
+						break;
+					}
+				} catch {
+					// Invalid manifest — try next, fall back to directory name
+				}
 			}
-		} catch {
-			// No manifest or invalid — use directory name
 		}
 
 		injected.push(buildPluginDirRoot(resolved, pluginName));

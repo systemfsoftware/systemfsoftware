@@ -145,7 +145,7 @@ crate.from_cargo(
     ],
     # The root manifest covers all workspace members, including the vendored
     # brush fork (members so their sources render hermetically; the
-    # [patch.crates-io] entries redirect brush-builtins' registry dep to them).
+    # [patch.crates-io] entry redirects brush-core's registry dep to it).
     manifests = ["//:Cargo.toml"],
 )
 
@@ -197,17 +197,6 @@ crate.annotation(
 crate.annotation(
     crate = "tree-sitter-just",
     build_script_env = {"CFLAGS": "-UNDEBUG"},
-)
-
-# `generate-bindings` is enabled for darwin so miniaudio's Rust bindings match
-# its CoreAudio C layout. Build scripts execute for the host, however, so a
-# macOS-hosted Linux cross-build also sees that feature. Use Cargo's TARGET to
-# keep bindgen darwin-only and select checked GNU/musl bindings by compilation
-# target, including ARM64's larger glibc pthread layouts.
-crate.annotation(
-    crate = "maudio-sys",
-    patches = ["//bazel/patches:maudio-sys-target-bindings.patch"],
-    patch_args = ["-p1"],
 )
 
 use_repo(crate, "crates")

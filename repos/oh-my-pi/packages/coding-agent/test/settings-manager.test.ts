@@ -919,6 +919,60 @@ describe("Settings", () => {
 	});
 
 	describe("migrations", () => {
+		it("consolidates legacy Exa suite toggles onto exa.enabled", async () => {
+			await writeSettings({
+				exa: {
+					enabled: true,
+					enableSearch: false,
+					enableResearcher: true,
+					enableWebsets: true,
+				},
+			});
+
+			const settings = await Settings.init({ cwd: projectDir, agentDir });
+
+			expect(settings.get("exa.enabled")).toBe(false);
+			settings.set("display.showTokenUsage", true);
+			await settings.flush();
+			expect((await readSettings()).exa).toEqual({ enabled: false });
+		});
+
+		it("migrates quoted dotted Exa toggles and removes obsolete suite settings", async () => {
+			await Bun.write(
+				getConfigPath(),
+				`"exa.enabled": true\n"exa.enableSearch": false\n"exa.enableResearcher": true\n"exa.enableWebsets": true\n`,
+			);
+
+			const settings = await Settings.init({ cwd: projectDir, agentDir });
+
+			expect(settings.get("exa.enabled")).toBe(false);
+			settings.set("display.showTokenUsage", true);
+			await settings.flush();
+			expect((await readSettings()).exa).toEqual({ enabled: false });
+		});
+
+		it("removes the legacy Exa block when it contains only retired suite toggles", async () => {
+			await writeSettings({ exa: { enableResearcher: true, enableWebsets: true } });
+
+			const settings = await Settings.init({ cwd: projectDir, agentDir });
+
+			expect(settings.get("exa.enabled")).toBe(true);
+			settings.set("display.showTokenUsage", true);
+			await settings.flush();
+			expect((await readSettings()).exa).toBeUndefined();
+		});
+
+		it("removes the retired computer backend setting", async () => {
+			await writeSettings({ computer: { backend: "auto", enabled: true }, "computer.backend": "native" });
+
+			const settings = await Settings.init({ cwd: projectDir, agentDir });
+
+			expect(settings.get("computer.enabled")).toBe(true);
+			settings.set("display.showTokenUsage", true);
+			await settings.flush();
+			expect((await readSettings()).computer).toEqual({ enabled: true });
+		});
+
 		it("maps removed atom edit mode settings to hashline", async () => {
 			await writeSettings({
 				edit: {

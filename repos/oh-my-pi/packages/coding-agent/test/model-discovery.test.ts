@@ -2285,6 +2285,73 @@ providers:
 		expect(zeroCtx?.contextWindow).toBe(128000);
 	});
 
+	test("proxy discovery uses proxy-reported name over bundled placeholder", async () => {
+		writeRawModelsJson({
+			"proxy-test": {
+				baseUrl: "http://127.0.0.1:9998",
+				auth: "none",
+				discovery: { type: "proxy" },
+			},
+		});
+		const fetchMock: FetchImpl = async input => {
+			const url = String(input);
+			if (url === "http://127.0.0.1:9998/v1/models") {
+				return new Response(
+					JSON.stringify({
+						data: [
+							{
+								id: "act_two",
+								name: "Act Two",
+								supported_endpoint_types: ["openai"],
+								context_length: 65536,
+							},
+						],
+					}),
+					{ status: 200, headers: { "Content-Type": "application/json" } },
+				);
+			}
+			throw new Error(`Unexpected URL: ${url}`);
+		};
+		const registry = new ModelRegistry(authStorage, modelsJsonPath, { fetch: fetchMock });
+		await registry.refresh();
+		const model = registry.find("proxy-test", "act_two");
+		expect(model).toBeDefined();
+		expect(model?.name).toBe("Act Two");
+	});
+
+	test("proxy discovery falls back to bundled name when proxy reports none", async () => {
+		writeRawModelsJson({
+			"proxy-test": {
+				baseUrl: "http://127.0.0.1:9998",
+				auth: "none",
+				discovery: { type: "proxy" },
+			},
+		});
+		const fetchMock: FetchImpl = async input => {
+			const url = String(input);
+			if (url === "http://127.0.0.1:9998/v1/models") {
+				return new Response(
+					JSON.stringify({
+						data: [
+							{
+								id: "gpt-5",
+								supported_endpoint_types: ["openai"],
+								context_length: 128000,
+							},
+						],
+					}),
+					{ status: 200, headers: { "Content-Type": "application/json" } },
+				);
+			}
+			throw new Error(`Unexpected URL: ${url}`);
+		};
+		const registry = new ModelRegistry(authStorage, modelsJsonPath, { fetch: fetchMock });
+		await registry.refresh();
+		const model = registry.find("proxy-test", "gpt-5");
+		expect(model).toBeDefined();
+		expect(model?.name).toBe("GPT-5");
+	});
+
 	test("litellm discovery maps rich model metadata and keeps runtime /v1 baseUrl", async () => {
 		writeRawModelsJson({
 			"litellm-test": {

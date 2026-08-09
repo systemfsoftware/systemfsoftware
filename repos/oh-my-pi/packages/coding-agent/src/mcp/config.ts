@@ -54,6 +54,7 @@ function convertToLegacyConfig(server: MCPServer): MCPServerConfig {
 		};
 		if (server.args) config.args = server.args;
 		if (server.env) config.env = server.env;
+		if (server.envPolicy) config.envPolicy = server.envPolicy;
 		if (server.cwd) config.cwd = server.cwd;
 		return config;
 	}
@@ -65,6 +66,7 @@ function convertToLegacyConfig(server: MCPServer): MCPServerConfig {
 			url: server.url ?? "",
 		};
 		if (server.headers) config.headers = server.headers;
+		if (server.headerPolicy) config.headerPolicy = server.headerPolicy;
 		return config;
 	}
 
@@ -75,6 +77,7 @@ function convertToLegacyConfig(server: MCPServer): MCPServerConfig {
 			url: server.url ?? "",
 		};
 		if (server.headers) config.headers = server.headers;
+		if (server.headerPolicy) config.headerPolicy = server.headerPolicy;
 		return config;
 	}
 

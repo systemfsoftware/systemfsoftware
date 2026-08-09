@@ -24,6 +24,7 @@ import {
 import {
 	findThinkingVariantToken,
 	isDeepseekModelIdOrName,
+	isDeepseekV4FlashModelId,
 	isGlm52ReasoningEffortModelId,
 	isKimiK3ModelId,
 	isMimoModelIdOrName,
@@ -62,9 +63,9 @@ const GEMINI_3_FLASH_EFFORTS: readonly Effort[] = [Effort.Minimal, Effort.Low, E
 const GPT_5_2_PLUS_EFFORTS: readonly Effort[] = [Effort.Low, Effort.Medium, Effort.High, Effort.XHigh];
 const GPT_5_1_CODEX_MINI_EFFORTS: readonly Effort[] = [Effort.Medium, Effort.High];
 const LOW_MEDIUM_HIGH_REASONING_EFFORTS: readonly Effort[] = [Effort.Low, Effort.Medium, Effort.High];
-/** Wire-exact `low`/`high`/`max` scale used by Kimi K3 and OpenRouter DeepSeek V4 Flash 0731. */
+/** Wire-exact `low`/`high`/`max` scale used by Kimi K3 and DeepSeek V4 Flash (direct API and aggregators). */
 const LOW_HIGH_MAX_REASONING_EFFORTS: readonly Effort[] = [Effort.Low, Effort.High, Effort.Max];
-/** Wire-exact two-tier scale (`high`/`max`): GLM-5.2 on Z.ai/Umans/Ollama Cloud/Baseten, Sakana Fugu, DeepSeek. */
+/** Wire-exact two-tier scale (`high`/`max`): GLM-5.2 on Z.ai/Umans/Ollama Cloud/Baseten, Sakana Fugu, DeepSeek V4 Pro. */
 const HIGH_MAX_REASONING_EFFORTS: readonly Effort[] = [Effort.High, Effort.Max];
 /** OpenRouter's DeepSeek route accepts only `high`. */
 const HIGH_ONLY_REASONING_EFFORTS: readonly Effort[] = [Effort.High];
@@ -366,14 +367,14 @@ function getModelDefinedEfforts<TApi extends Api>(
 		return OLLAMA_REASONING_EFFORTS;
 	}
 	if (isOpenAICompatReasoningApi(spec.api) && isDeepseekReasoningModel(spec)) {
-		// OpenRouter generally exposes only high for DeepSeek, but V4 Flash 0731
-		// advertises and accepts the wire-exact low/high/max ladder.
-		if (isOpenRouterThinkingFormat(compat)) {
-			return bareModelId(spec.id) === "deepseek-v4-flash-0731"
-				? LOW_HIGH_MAX_REASONING_EFFORTS
-				: HIGH_ONLY_REASONING_EFFORTS;
+		// DeepSeek V4 Flash accepts the wire-exact low/high/max ladder on every
+		// host — the direct API and aggregators alike (medium/xhigh map to
+		// high). V4 Pro and the older reasoners top out at high/max, and
+		// OpenRouter's non-flash DeepSeek route exposes only high.
+		if (isDeepseekV4FlashModelId(spec.id)) {
+			return LOW_HIGH_MAX_REASONING_EFFORTS;
 		}
-		return HIGH_MAX_REASONING_EFFORTS;
+		return isOpenRouterThinkingFormat(compat) ? HIGH_ONLY_REASONING_EFFORTS : HIGH_MAX_REASONING_EFFORTS;
 	}
 	if (spec.provider === "baseten" && isOpenAIGptOssModelId(spec.id)) {
 		// Baseten's gpt-oss router mirrors its GLM route: high/max only.

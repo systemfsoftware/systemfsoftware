@@ -1,4 +1,5 @@
 import { Buffer } from "node:buffer";
+import { toNumber } from "@oh-my-pi/pi-catalog/utils";
 import type {
 	CredentialRankingContext,
 	CredentialRankingStrategy,
@@ -14,7 +15,7 @@ import type {
 import { isRecord } from "../utils";
 import { normalizeCodexBaseUrl } from "./openai-codex-base-url";
 import { listCodexResetCredits } from "./openai-codex-reset";
-import { toNumber } from "./shared";
+import { HOUR_MS } from "./shared";
 
 const CODEX_USAGE_PATH = "wham/usage";
 const JWT_AUTH_CLAIM = "https://api.openai.com/auth";
@@ -558,8 +559,6 @@ export const openaiCodexUsageProvider: UsageProvider = {
 	},
 };
 
-const FIVE_HOUR_MS = 5 * 60 * 60 * 1000;
-
 // A Codex request gates only on the chat windows it actually consumes. A
 // "-spark" model spends the separate Spark meter; every other Codex model spends
 // the 5h/weekly chat windows. Scoping the gating set this way keeps an exhausted
@@ -619,7 +618,7 @@ export const codexRankingStrategy: CredentialRankingStrategy = {
 			windowId === "5h" ||
 			(typeof durationMs === "number" &&
 				Number.isFinite(durationMs) &&
-				Math.abs(durationMs - FIVE_HOUR_MS) <= 60_000);
+				Math.abs(durationMs - 5 * HOUR_MS) <= 60_000);
 		if (!isFiveHourWindow) return false;
 		const usedFraction = primary.amount.usedFraction;
 		return typeof usedFraction === "number" && Number.isFinite(usedFraction) && usedFraction === 0;

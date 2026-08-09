@@ -330,9 +330,7 @@ describe("searchCodex model selection", () => {
 		expect(sentUserText()).toBe('bun runtime "exact phrase" site:bun.sh -site:reddit.com after:2024-01-01');
 		// Tool config stays untouched: the ChatGPT backend's filter support is
 		// unverified, so no `filters` field is added to the web_search tool.
-		const input = capturedRequest?.body?.input as Array<Record<string, unknown>>;
-		const additionalTools = input.find(item => item.type === "additional_tools");
-		expect(additionalTools?.tools).toEqual([{ type: "web_search", search_context_size: "high" }]);
+		expect(capturedRequest?.body?.tools).toEqual([{ type: "web_search", search_context_size: "high" }]);
 	});
 
 	it("sends directive-free queries byte-identical", async () => {
@@ -470,65 +468,29 @@ describe("searchCodex model selection", () => {
 		expect(result.sources).toEqual([{ title: "Example Article", url: "https://example.com/article" }]);
 	});
 
-	it("encodes explicit gpt-5.6-sol as a Responses-Lite request", async () => {
+	it("keeps hosted web_search top-level for explicit Responses-Lite catalog models (#7666)", async () => {
 		process.env.PI_CODEX_WEB_SEARCH_MODEL = "gpt-5.6-sol";
 		const result = await searchCodex(makeSearchParams("Sol web search", mockCodexFetch("gpt-5.6-sol")));
 
 		expect(capturedRequest).not.toBeNull();
 		const headers = new Headers(capturedRequest?.headers);
-		expect(headers.get("x-openai-internal-codex-responses-lite")).toBe("true");
-		expect(headers.get("session-id")).toBeTruthy();
-		expect(headers.get("thread-id")).toBeTruthy();
-		expect(headers.get("x-codex-window-id")).toBeTruthy();
+		expect(headers.get("x-openai-internal-codex-responses-lite")).toBeNull();
 		expect(capturedRequest?.body).toEqual(
 			expect.objectContaining({
 				model: "gpt-5.6-sol",
-				tool_choice: "auto",
-				reasoning: { context: "all_turns" },
-				parallel_tool_calls: false,
+				tools: [{ type: "web_search", search_context_size: "high" }],
+				tool_choice: { type: "web_search" },
+				instructions: "Codex test system prompt",
 				input: [
-					{
-						type: "additional_tools",
-						role: "developer",
-						tools: [{ type: "web_search", search_context_size: "high" }],
-					},
-					{
-						type: "message",
-						role: "developer",
-						content: [{ type: "input_text", text: "Codex test system prompt" }],
-					},
 					{
 						type: "message",
 						role: "user",
 						content: [{ type: "input_text", text: "Sol web search" }],
 					},
 				],
-				client_metadata: expect.objectContaining({
-					session_id: headers.get("session-id"),
-					thread_id: headers.get("thread-id"),
-					"x-codex-window-id": headers.get("x-codex-window-id"),
-				}),
 			}),
 		);
-		expect(capturedRequest?.body?.tools).toBeUndefined();
-		expect(capturedRequest?.body?.instructions).toBeUndefined();
 		expect(result.model).toBe("gpt-5.6-sol");
-	});
-
-	it("never leaves a forced hosted tool_choice on a Responses-Lite request (#5771)", async () => {
-		process.env.PI_CODEX_WEB_SEARCH_MODEL = "gpt-5.6-sol";
-		await searchCodex(makeSearchParams("forced choice guard", mockCodexFetch("gpt-5.6-sol")));
-
-		const body = capturedRequest?.body;
-		expect(body).not.toBeNull();
-		// Lite moves tools into `additional_tools` and drops top-level `tools`;
-		// a forced hosted choice against absent top-level tools is rejected 400.
-		const additionalTools = (body?.input as Array<Record<string, unknown>>)?.[0];
-		expect(additionalTools?.type).toBe("additional_tools");
-		expect(additionalTools?.tools).toEqual([{ type: "web_search", search_context_size: "high" }]);
-		expect(body?.tools).toBeUndefined();
-		expect(body?.tool_choice).toBe("auto");
-		expect(body?.tool_choice).not.toEqual({ type: "web_search" });
 	});
 
 	it("does not retry default candidates when PI_CODEX_WEB_SEARCH_MODEL is explicitly unsupported", async () => {

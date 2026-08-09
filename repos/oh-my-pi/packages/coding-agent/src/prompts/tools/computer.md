@@ -16,7 +16,7 @@ Controls the host desktop with a JS script: windows, screenshots, native input, 
 - Pointer `x,y` are pixels in the MOST RECENT screenshot of the SAME target (window or desktop). No screenshot of that target yet → coordinate input throws. AX coordinates (`.bounds()`, `elementAt`) are global desktop coords — two spaces, both converted automatically; never mix them.
 - Each `.ax()` of a window starts a new ref generation; refs from the current and previous snapshot stay valid, older ones throw StaleRef — re-snapshot, don't guess.
 - Input defaults to `delivery: "background"` — delivered to the target window without touching the user's focus, pointer, or window order. On macOS, keyboard input to an app with multiple windows throws `BackgroundUnavailable` because the OS accepts only a process id and could send keys to a different window; retry with `delivery: "foreground"` (briefly activates the target, acts, restores focus) or act through AX instead. Targets whose input stack drops other background events also throw `BackgroundUnavailable` naming the window class and event kind. Never assume a background action landed because no error was displayed — errors are how this surface reports failure.
-- Wayland only: there is no per-window background input (compositor-focus-only); use AX actions, or `delivery: "foreground"`.
+- Wayland only: per-window native input and `raise()` are unavailable; use AX actions, or desktop input after focusing the target yourself.
 - `read_only: true` for pure inspection — input and mutation throw, approval is lighter.
 - Screenshots auto-display to you and save full-res to a temp path; pass `{silent: true}` in loops.
 

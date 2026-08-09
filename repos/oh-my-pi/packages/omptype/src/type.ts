@@ -3302,6 +3302,38 @@ export namespace type {
 		return buildOr<NaryOrOutput<definitions>, NaryOrInput<definitions>>(definitions);
 	}
 
+	/** Build an array schema from an element definition. */
+	export function array<const definition>(
+		definition: definition,
+	): FluentType<InferDef<definition>[], InferDefIn<definition>[]> {
+		return type(definition).array();
+	}
+
+	/** Build a union from a runtime array of definitions. */
+	export function union<const definitions extends readonly unknown[]>(
+		definitions: definitions,
+	): FluentType<NaryOrOutput<definitions>, NaryOrInput<definitions>> {
+		return buildOr<NaryOrOutput<definitions>, NaryOrInput<definitions>>(definitions);
+	}
+
+	/** Build a tuple schema from a runtime array of definitions. */
+	export function tuple<const definitions extends readonly unknown[]>(
+		definitions: definitions,
+	): FluentType<InferDef<definitions>, InferDefIn<definitions>> {
+		return type(definitions);
+	}
+
+	/** Build an open record schema from key and value definitions. */
+	export function record<const key, const value>(
+		key: key,
+		value: value,
+	): FluentType<
+		Record<Extract<InferDef<key>, PropertyKey>, InferDef<value>>,
+		Record<Extract<InferDefIn<key>, PropertyKey>, InferDefIn<value>>
+	> {
+		return keywords.Record(key, value);
+	}
+
 	/** Build an intersection from zero or more definitions. */
 	export function and<const definitions extends readonly unknown[]>(
 		...definitions: definitions
@@ -3564,6 +3596,11 @@ export namespace type {
 		const ir: IR =
 			members.length === 0 ? { k: "never" } : members.length === 1 ? members[0] : { k: "union", members };
 		return makeType<values[number]>(ir, [], {});
+	}
+
+	/** Build a literal union from a runtime array. */
+	export function enumeration<const values extends readonly unknown[]>(values: values): FluentType<values[number]> {
+		return enumerated(...values);
 	}
 
 	/** Enumerate an enum-like object's forward values, excluding numeric reverse mappings. */

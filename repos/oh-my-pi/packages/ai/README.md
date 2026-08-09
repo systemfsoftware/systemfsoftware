@@ -94,21 +94,18 @@ npm install @oh-my-pi/pi-ai
 ## Quick Start
 
 ```typescript
-import { z, getModel, stream, complete, Context, Tool } from "@oh-my-pi/pi-ai";
+import { getModel, stream, complete, Context, Tool, type } from "@oh-my-pi/pi-ai";
 
 // Fully typed with auto-complete support for both providers and models
 const model = getModel("openai", "gpt-4o-mini");
 
-// Define tools with Zod schemas for type safety and validation
+// Define tools with omptype schemas for type safety and validation
 const tools: Tool[] = [
 	{
 		name: "get_time",
 		description: "Get the current time",
-		parameters: z.object({
-			timezone: z
-				.string()
-				.optional()
-				.describe("Optional timezone (e.g., America/New_York)"),
+		parameters: type({
+			"timezone?": type("string").describe("Optional timezone (e.g., America/New_York)"),
 		}),
 	},
 ];
@@ -221,31 +218,30 @@ for (const block of response.content) {
 
 ## Tools
 
-Tools enable LLMs to interact with external systems. This library uses **Zod** schemas for type-safe tool definitions with automatic validation. Schemas are converted to JSON Schema for providers as needed.
+Tools enable LLMs to interact with external systems. Omptype schemas provide type-safe definitions, runtime validation, and JSON Schema conversion for providers.
 
 ### Defining Tools
 
 ```typescript
-import { z, Tool } from "@oh-my-pi/pi-ai";
+import { type Tool, type } from "@oh-my-pi/pi-ai";
 
-// Define tool parameters with Zod
 const weatherTool: Tool = {
 	name: "get_weather",
 	description: "Get current weather for a location",
-	parameters: z.object({
-		location: z.string().describe("City name or coordinates"),
-		units: z.enum(["celsius", "fahrenheit"]).default("celsius"),
+	parameters: type({
+		location: type("string").describe("City name or coordinates"),
+		units: type.enumerated("celsius", "fahrenheit").default("celsius"),
 	}),
 };
 
 const bookMeetingTool: Tool = {
 	name: "book_meeting",
 	description: "Schedule a meeting",
-	parameters: z.object({
-		title: z.string().min(1),
-		startTime: z.string().describe("ISO 8601 date-time"),
-		endTime: z.string().describe("ISO 8601 date-time"),
-		attendees: z.array(z.email()).min(1),
+	parameters: type({
+		title: type("string").atLeastLength(1),
+		startTime: type("string").describe("ISO 8601 date-time"),
+		endTime: type("string").describe("ISO 8601 date-time"),
+		attendees: type("string.email").array().atLeastLength(1),
 	}),
 };
 ```
@@ -345,7 +341,7 @@ for await (const event of s) {
 
 ### Validating Tool Arguments
 
-When using `agentLoop`, tool arguments are automatically validated against your Zod parameter schemas before execution. If validation fails, the error is returned to the model as a tool result, allowing it to retry.
+When using `agentLoop`, tool arguments are automatically validated against their omptype schemas before execution. Validation failures are returned to the model as tool results so it can retry.
 
 When implementing your own tool execution loop with `stream()` or `complete()`, use `validateToolCall` to validate arguments before passing them to your tools:
 
