@@ -437,6 +437,9 @@ importers:
       rimraf:
         specifier: 'catalog:'
         version: 6.1.3
+      testcontainers:
+        specifier: 'catalog:'
+        version: 12.1.0(supports-color@8.1.1)
       ts-expose-internals:
         specifier: ^5.6.0
         version: 5.6.3
@@ -455,12 +458,18 @@ importers:
       '@andrewbranch/untar.js':
         specifier: ^1.0.3
         version: 1.0.3
+      '@effect/platform':
+        specifier: 'catalog:'
+        version: 0.97.1(effect@3.22.1)
       '@loaderkit/resolve':
         specifier: ^1.0.2
         version: 1.0.6
       cjs-module-lexer:
         specifier: ^1.2.3
         version: 1.4.3
+      effect:
+        specifier: 'catalog:'
+        version: 3.22.1
       fflate:
         specifier: ^0.8.3
         version: 0.8.3
@@ -477,6 +486,9 @@ importers:
         specifier: ^5.0.0
         version: 5.0.1
     devDependencies:
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 0.30.0(effect@3.22.1)(vitest@4.1.9)
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../tsconfig
@@ -492,6 +504,9 @@ importers:
       '@types/validate-npm-package-name':
         specifier: ^4.0.0
         version: 4.0.2
+      fast-check:
+        specifier: ^4
+        version: 4.9.0
       rimraf:
         specifier: 'catalog:'
         version: 6.1.3
