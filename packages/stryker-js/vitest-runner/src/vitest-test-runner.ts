@@ -84,6 +84,8 @@ export class VitestTestRunner implements TestRunner {
   public async init(): Promise<void> {
     this.setEnv()
     const projectRoot = this.sandboxDirectory
+    // Anchored at the project root, never the scan dir: a consumer-supplied
+    // `vitest.dir` subdirectory must not move the file Vitest's setup runs.
     const localSetupFile = path.resolve(projectRoot, `stryker-setup-${process.pid}.js`)
     this.localSetupFile = localSetupFile
     await fs.promises.copyFile(STRYKER_SETUP, localSetupFile)
@@ -198,7 +200,9 @@ export class VitestTestRunner implements TestRunner {
         .map(({ test: name }) => escapeRegExp(name))
         .join('|')
       const regex = new RegExp(regexTestNameFilter)
-      testFilesToRun = parsedTests.map(({ file }) => file)
+      // Id file parts are root-relative, but Vitest matches filters against
+      // the scan dir; absolute paths hit filterFiles' absolute branch.
+      testFilesToRun = parsedTests.map(({ file }) => path.resolve(this.sandboxDirectory, file))
       this.ctx!.projects.forEach((project) => {
         project.config.testNamePattern = regex
       })

@@ -21,10 +21,13 @@ export interface PluginContext extends BaseContext {
 }
 
 /**
- * The dependency injection context for plugins that Stryker instantiates inside the sandbox,
- * such as test runners and checkers. `sandboxDirectory` is the absolute path of the project
- * copy under test. It is only available to plugins constructed in a sandbox worker process;
- * plugins that run in the main process, such as reporters, must not inject it.
+ * The dependency injection context for test-runner plugins that Stryker
+ * instantiates inside the sandbox. `sandboxDirectory` is the absolute path of
+ * the project copy under test. It is bound only in test-runner workers: the
+ * test-runner proxy passes the sandbox's working directory, while checker
+ * workers are spawned with the main process cwd and must not inject it.
+ * Plugins that run in the main process, such as reporters, must not inject it
+ * either.
  */
 export interface SandboxPluginContext extends PluginContext {
   [commonTokens.sandboxDirectory]: string

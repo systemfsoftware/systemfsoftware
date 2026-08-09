@@ -1,3 +1,4 @@
+import fs from 'fs'
 import path from 'path'
 
 import { commonTokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
@@ -40,6 +41,9 @@ describe('VitestRunner integration', () => {
     const test5 = 'tests/math.spec.ts#math should be able to recognize a negative number'
     const test6 = 'tests/pi.spec.ts#pi should be 3.14'
     let sandboxFileName: string
+    let addSpecFile: string
+    let mathSpecFile: string
+    let piSpecFile: string
 
     beforeEach(async () => {
       sandbox = new TempTestDirectorySandbox('simple-project')
@@ -48,6 +52,9 @@ describe('VitestRunner integration', () => {
         .provideValue(commonTokens.sandboxDirectory, sandbox.tmpDir)
         .injectFunction(createVitestTestRunnerFactory('__stryker2__'))
       sandboxFileName = path.resolve(sandbox.tmpDir, 'math.ts')
+      addSpecFile = path.resolve(sandbox.tmpDir, 'tests/add.spec.ts')
+      mathSpecFile = path.resolve(sandbox.tmpDir, 'tests/math.spec.ts')
+      piSpecFile = path.resolve(sandbox.tmpDir, 'tests/pi.spec.ts')
     })
 
     describe(VitestTestRunner.prototype.dryRun.name, () => {
@@ -61,37 +68,37 @@ describe('VitestRunner integration', () => {
         expectTestResults(runResult, [
           {
             id: test1,
-            fileName: path.resolve(sandbox.tmpDir, 'tests/add.spec.ts'),
+            fileName: addSpecFile,
             name: 'add should be able to add two numbers',
             status: TestStatus.Success,
           },
           {
             id: test2,
-            fileName: path.resolve(sandbox.tmpDir, 'tests/add.spec.ts'),
+            fileName: addSpecFile,
             name: 'add should be able to add a negative number',
             status: TestStatus.Success,
           },
           {
             id: test3,
-            fileName: path.resolve(sandbox.tmpDir, 'tests/math.spec.ts'),
+            fileName: mathSpecFile,
             name: 'math should be able negate a number',
             status: TestStatus.Success,
           },
           {
             id: test4,
-            fileName: path.resolve(sandbox.tmpDir, 'tests/math.spec.ts'),
+            fileName: mathSpecFile,
             name: 'math should be able to add one to a number',
             status: TestStatus.Success,
           },
           {
             id: test5,
-            fileName: path.resolve(sandbox.tmpDir, 'tests/math.spec.ts'),
+            fileName: mathSpecFile,
             name: 'math should be able to recognize a negative number',
             status: TestStatus.Success,
           },
           {
             id: test6,
-            fileName: path.resolve(sandbox.tmpDir, 'tests/pi.spec.ts'),
+            fileName: piSpecFile,
             name: 'pi should be 3.14',
             status: TestStatus.Success,
           },
@@ -430,6 +437,33 @@ describe('VitestRunner integration', () => {
         },
       ])
     })
+
+    it('should kill a mutant when the scan dir is a subdirectory', async () => {
+      // F1: with a root-anchored test id and a subdirectory scan dir, the
+      // selection must still reach the covering test file.
+      options.vitest.dir = 'packages'
+      await sut.init()
+      const runResult = await sut.mutantRun(
+        createMutantRunOptions({
+          activeMutant: createMutant({ id: '1' }),
+          sandboxFileName: path.resolve(
+            sandbox.tmpDir,
+            'packages',
+            'app',
+            'src',
+            'math.js',
+          ),
+          mutantActivation: 'runtime',
+          testFilter: [
+            'packages/app/src/math.spec.js#math should be 5 for add(2, 3)',
+          ],
+        }),
+      )
+      expectKilled(runResult)
+      expect(runResult.killedBy).toEqual([
+        'packages/app/src/math.spec.js#math should be 5 for add(2, 3)',
+      ])
+    })
   })
 
   // Vitest fixtures (test.extend) require hooks like beforeEach to use object destructuring,
@@ -496,6 +530,52 @@ describe('VitestRunner integration', () => {
       )
       expectKilled(runResult)
       expect(runResult.killedBy).toEqual([test1])
+    })
+  })
+
+  describe('using two runners in one process', () => {
+    let sut2: VitestTestRunner | undefined
+    let sandbox2: TempTestDirectorySandbox
+
+    beforeEach(async () => {
+      sandbox = new TempTestDirectorySandbox('simple-project')
+      await sandbox.init()
+      sut = createTestInjector(options)
+        .provideValue(commonTokens.sandboxDirectory, sandbox.tmpDir)
+        .injectFunction(createVitestTestRunnerFactory('__stryker2__'))
+      sandbox2 = new TempTestDirectorySandbox('simple-project')
+      await sandbox2.init()
+      sut2 = createTestInjector(options)
+        .provideValue(commonTokens.sandboxDirectory, sandbox2.tmpDir)
+        .injectFunction(createVitestTestRunnerFactory('__stryker2__'))
+    })
+
+    afterEach(async () => {
+      await sut2?.dispose()
+      await sandbox2.dispose()
+    })
+
+    it('should write two distinct setup files and each disposal removes only its own', async () => {
+      await sut.init()
+      await sut2!.init()
+
+      const setupFile1 = path.resolve(
+        sandbox.tmpDir,
+        `stryker-setup-${process.pid}.js`,
+      )
+      const setupFile2 = path.resolve(
+        sandbox2.tmpDir,
+        `stryker-setup-${process.pid}.js`,
+      )
+      expect(setupFile1).not.toBe(setupFile2)
+      await expect(fs.promises.access(setupFile1)).resolves.toBeUndefined()
+      await expect(fs.promises.access(setupFile2)).resolves.toBeUndefined()
+
+      await sut2!.dispose()
+      sut2 = undefined
+
+      await expect(fs.promises.access(setupFile1)).resolves.toBeUndefined()
+      await expect(fs.promises.access(setupFile2)).rejects.toThrow()
     })
   })
 })
