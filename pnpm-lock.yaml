@@ -149,6 +149,7 @@ catalogs:
       version: 2.8.1
 
 overrides:
+  '@effect/cluster': ^0.60.2
   fast-check: ^4
   vite: ^7
 
@@ -1037,6 +1038,9 @@ importers:
       oxlint:
         specifier: catalog:oxlint
         version: 1.77.0(oxlint-tsgolint@0.24.0)
+      oxlint-tsgolint:
+        specifier: catalog:oxlint
+        version: 0.24.0
     devDependencies:
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
@@ -1391,22 +1395,13 @@ importers:
     devDependencies:
       '@microsoft/api-extractor':
         specifier: 'catalog:'
-        version: 7.58.9(@types/node@24.13.2)
+        version: 7.58.9(@types/node@25.9.5)
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: workspace:^
         version: link:../../arethetypeswrong/cli
-      '@systemfsoftware/oxlint-plugin':
-        specifier: workspace:^
-        version: link:../core
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../tsconfig
-      '@systemfsoftware/vitest-config':
-        specifier: workspace:^
-        version: link:../../vitest-config
-      '@types/node':
-        specifier: 'catalog:'
-        version: 24.13.2
       oxlint:
         specifier: catalog:oxlint
         version: 1.77.0(oxlint-tsgolint@0.24.0)
@@ -1419,9 +1414,6 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
-      vitest:
-        specifier: 'catalog:'
-        version: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1)(vite@7.3.5(@types/node@24.13.2)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0))
 
   packages/oxlint-plugins/effect-entrypoint:
     dependencies:
@@ -3224,7 +3216,7 @@ packages:
   '@effect/platform-node-shared@0.61.1':
     resolution: {integrity: sha512-MJAJ1Nc43pYJb5ulFtdNID8klNyRLcbQ0zZ7XYRcBAlT/DrCyN4yAD89AzosmUyfOU+LMHdc8LTMt4rKNEMFaA==}
     peerDependencies:
-      '@effect/cluster': ^0.60.1
+      '@effect/cluster': ^0.60.2
       '@effect/platform': ^0.97.1
       '@effect/rpc': ^0.76.1
       '@effect/sql': ^0.52.1
