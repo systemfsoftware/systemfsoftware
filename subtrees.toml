@@ -17,3 +17,8 @@ tag_prefix = "v"
 name = "deno-std"
 url = "https://github.com/denoland/std"
 tag_prefix = "release-"
+
+[[repos]]
+name = "effect"
+url = "https://github.com/Effect-TS/effect"
+tag_prefix = "effect@3."
