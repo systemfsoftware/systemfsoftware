@@ -1,8 +1,15 @@
 export { defineConfig } from 'vitest/config'
 
-const isCI = process.env['CI'] === 'true' || process.env['GITHUB_ACTIONS'] !== undefined
+// AGENT outranks CI. This repo's agent shell sets both, so a CI-first reading
+// gives every agent run the thorough forge treatment - tenfold property draws
+// and coverage - for work that wants fast feedback. An agent run is a dev run.
+const isAgent = process.env['AGENT'] !== undefined
 
-const isAgent = !isCI && !process.stdout.isTTY
+// Presence, not equality: GitHub Actions writes "true" and the agent shell
+// writes "1", so testing against either value classifies the other as local.
+export const isCI = !isAgent && typeof process.env['CI'] === 'string' && process.env['CI'].length > 0
+
+const isGithubActions = process.env['GITHUB_ACTIONS'] !== undefined
 
 const sharedTestTimeout = isCI ? 30_000 : isAgent ? 15_000 : 8_000
 
@@ -20,7 +27,7 @@ export const sharedConfig = {
     silent: isAgent ? 'passed-only' : false,
     ...(isAgent ? { bail: 1 } : {}),
 
-    reporters: (isCI
+    reporters: (isGithubActions
       ? ['default', 'github-actions']
       : ['default', ['json', { outputFile: './reports/vitest-output.json' }]]),
 

@@ -1,10 +1,10 @@
-import { defineConfig, sharedConfig } from '@systemfsoftware/vitest-config'
+import { defineConfig, isCI, sharedConfig } from '@systemfsoftware/vitest-config'
 
 export default defineConfig({
   ...sharedConfig,
   test: {
     ...sharedConfig.test,
-    testTimeout: process.env.CI ? 60_000 : 30_000,
+    testTimeout: isCI ? 60_000 : 30_000,
     include: ['src/**/*.test.ts', '__tests__/**/*.test.ts'],
     coverage: {
       provider: 'v8',

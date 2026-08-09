@@ -58,7 +58,8 @@
       ],
       "env": [
         "NODE_ENV",
-        "CI"
+        "CI",
+        "AGENT"
       ],
       "cache": true
     },
@@ -98,7 +99,8 @@
       ],
       "env": [
         "NODE_ENV",
-        "CI"
+        "CI",
+        "AGENT"
       ],
       "cache": true
     },
