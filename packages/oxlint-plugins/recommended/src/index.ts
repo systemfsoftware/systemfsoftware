@@ -1,4 +1,4 @@
-const PLUGIN_NAME = '@systemfsoftware/oxlint-plugin-recommended'
+import type { OxlintConfig, OxlintOverride } from 'oxlint'
 
 const PURE_CELLS = [
   '**/*.schema.ts',
@@ -77,7 +77,7 @@ const EFFECT_RUNTIME_IMPORT = {
   importNames: ['Effect', 'Layer', 'Runtime', 'Fiber', 'Ref', 'Queue', 'Stream'],
   allowTypeImports: true,
   message: 'I.1 / II.2: a pure cell describes no effects. Borrow the type, run it in the shell.',
-} as const
+}
 
 const ADAPTER_MODULES = ['**/*.adapter', '**/*.adapter.js', '**/*.adapter.ts'] as const
 const WORKFLOW_MODULES = ['**/*.workflow', '**/*.workflow.js', '**/*.workflow.ts'] as const
@@ -92,17 +92,17 @@ const ADAPTER_GROUP = {
   group: [...ADAPTER_MODULES],
   allowTypeImports: true,
   message: 'The technology cell is bound at the composition root. A domain cell never names a driver.',
-} as const
+}
 
 const SHELL_GROUP_FOR_FRONT_HALF = {
   group: [...EXECUTOR_MODULES, ...WORKFLOW_MODULES, ...STORE_MODULES],
   message: 'Atlas: the transport front-half attaches facts, never decisions. Move the call to the terminus.',
-} as const
+}
 
 const BYPASS_GROUP_FOR_TERMINUS = {
   group: [...WORKFLOW_MODULES, ...STORE_MODULES],
   message: 'Atlas: the terminus calls exactly one executor. Reaching past it splits the I/O sandwich.',
-} as const
+}
 
 const DOMAIN_GROUP_FOR_KERNEL = {
   group: [
@@ -117,7 +117,7 @@ const DOMAIN_GROUP_FOR_KERNEL = {
   ],
   message:
     'The kernel is domain-blind: it cannot name a domain type. Move the function to the cell that owns the vocabulary.',
-} as const
+}
 
 /**
  * Built-in namespaces the recommended rules key on. Spread into `plugins`;
@@ -144,7 +144,7 @@ export const options = { typeAware: true } as const
  *
  * @public
  */
-export const overrides = [
+export const overrides: OxlintOverride[] = [
   {
     files: [...PURE_CELLS],
     rules: {
@@ -181,9 +181,16 @@ export const overrides = [
       'vitest/no-identical-title': 'error',
     },
   },
-] as const
+]
 
-const universalRules = {
+/**
+ * The universal defect tier: one rule per defect class, applied to every file.
+ * Spread into `rules` for partial adoption; the default export carries the
+ * whole preset.
+ *
+ * @public
+ */
+export const rules: NonNullable<OxlintConfig['rules']> = {
   'no-ternary': 'error',
   'typescript/no-explicit-any': 'error',
   'typescript/consistent-type-assertions': ['error', { assertionStyle: 'never' }],
@@ -221,14 +228,24 @@ const universalRules = {
   'import/no-cycle': 'error',
   'import/no-mutable-exports': 'error',
   'no-var': 'error',
-} as const
-
-export default {
-  meta: { name: PLUGIN_NAME },
-  rules: {},
-  configs: {
-    recommended: {
-      rules: universalRules,
-    },
-  },
 }
+
+/**
+ * The whole preset as one `extends`-consumable config: `extends: [recommended]`
+ * delivers the plugins, type awareness, the correctness category, the universal
+ * tier, and the cell-scoped tiers together.
+ *
+ * Typed as the host's own `OxlintConfig`, so a shape oxlint would ignore fails
+ * this package's typecheck instead of silently under-enforcing in a consumer.
+ *
+ * @public
+ */
+const recommended: OxlintConfig = {
+  plugins: [...plugins],
+  options: { ...options },
+  categories: { correctness: 'error' },
+  rules: { ...rules },
+  overrides: [...overrides],
+}
+
+export default recommended
