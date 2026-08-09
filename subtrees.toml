@@ -12,3 +12,8 @@ branch = "main"
 name = "tsdown"
 url = "https://github.com/rolldown/tsdown"
 tag_prefix = "v"
+
+[[repos]]
+name = "deno-std"
+url = "https://github.com/denoland/std"
+tag_prefix = "release-"
