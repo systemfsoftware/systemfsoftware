@@ -27,3 +27,8 @@ tag_prefix = "effect@3."
 name = "storybook"
 url = "https://github.com/storybookjs/storybook"
 tag_prefix = "v"
+
+[[repos]]
+name = "oxc"
+url = "https://github.com/oxc-project/oxc"
+branch = "main"
