@@ -1,10 +1,20 @@
 #!/usr/bin/env node
-// `effect-tsgo patch` is not idempotent. It renames whatever sits at the native
-// tsc into the next free `tsc.original.N` slot and copies its own binary in,
-// never asking whether that binary is already there. Wired into `prepare`, which
-// runs on every install, it spent 100 rounds backing up its own output -- 2.9 GB
-// of byte-identical 29 MB copies -- until its own >100 counter hard-failed every
-// `pnpm install`. Upstream owes the check; until then it lives here.
+// `effect-tsgo patch` is not idempotent in two directions, and both bite here.
+//
+// Copying: it renames whatever sits at the native tsc into the next free
+// `tsc.original.N` slot and copies its own binary in, never asking whether that
+// binary is already there. Wired into `prepare`, which runs on every install, it
+// spent 100 rounds backing up its own output -- 2.9 GB of byte-identical 29 MB
+// copies -- until its own >100 counter hard-failed every `pnpm install`.
+//
+// Refusing: once a backup exists it declines to patch at all, printing
+// "skipped because backup already exists" and exiting 0. So on an @effect/tsgo
+// version bump the sha check below fires, `patch` politely does nothing, and the
+// toolchain keeps running the previous release's compiler while every log line
+// says the upgrade succeeded. Restoring first frees the backup slot; the
+// post-condition then refuses to let a silent no-op pass as a patch.
+//
+// Upstream owes both checks; until then they live here.
 //
 // The target is resolved the way `typescript/lib/getExePath.js` resolves it, so
 // this tracks the compiler the toolchain actually runs rather than a second
@@ -36,5 +46,14 @@ const packaged = execFileSync(tsgo, ['get-exe-path'], { encoding: 'utf8' }).trim
 if (existsSync(target) && sha256Of(target) === sha256Of(packaged)) {
   console.log(`patch-tsgo-if-needed: native tsc already is ${basename(dirname(dirname(packaged)))}, skipping patch`)
 } else {
+  if (existsSync(`${target}.original`)) {
+    execFileSync(tsgo, ['unpatch'], { stdio: 'inherit' })
+  }
   execFileSync(tsgo, ['patch'], { stdio: 'inherit' })
+  if (!existsSync(target) || sha256Of(target) !== sha256Of(packaged)) {
+    throw new Error(
+      `patch-tsgo-if-needed: patch exited 0 but ${target} is not the packaged ` +
+        `${basename(dirname(dirname(packaged)))} build -- the toolchain would run a stale compiler`,
+    )
+  }
 }

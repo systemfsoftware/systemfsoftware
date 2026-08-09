@@ -128,6 +128,21 @@
       ],
       "cache": true
     },
+    "lint:tsgo": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "tsconfig.json",
+        "tsconfig.*.json",
+        "$TURBO_ROOT$/packages/tsconfig/**",
+        "!$TURBO_ROOT$/packages/tsconfig/.turbo/**",
+        "!$TURBO_ROOT$/packages/tsconfig/**/*.tsbuildinfo"
+      ],
+      "outputs": [],
+      "env": [
+        "TSGO_FORMAT"
+      ],
+      "cache": true
+    },
     "api:check": {
       "outputLogs": "errors-only",
       "inputs": [
