@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/// <reference types="node" />
 // dts:check for this package: fail only on errors in the declarations WE ship.
 //
 // The strict check (skipLibCheck: false) is a strict consumer of dist/*.d.ts,
@@ -25,7 +26,9 @@ const result = spawnSync(tscBin, ['--noEmit', '-p', 'tsconfig.dts.json'], {
 })
 const lines = `${result.stdout ?? ''}${result.stderr ?? ''}`.split('\n').filter(Boolean)
 
+/** @param {string} line @returns {boolean} */
 const isTypeError = (line) => /: error TS\d+:/u.test(line)
+/** @param {string} line @returns {string} */
 const fileOf = (line) => line.slice(0, line.indexOf('('))
 
 const ours = lines.filter((l) => isTypeError(l) && fileOf(l).startsWith(`${distDir}${sep}`))
