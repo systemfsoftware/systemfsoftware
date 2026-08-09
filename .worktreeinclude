@@ -1,8 +1,0 @@
-# Worktree include whitelist — only gitignored files matching these patterns
-# are copied by wt step copy-ignored.
-
-.turbo
-.turbo/**
-
-dist
-dist/**
