@@ -116,7 +116,7 @@
     "@stryker-mutator/util": "catalog:stryker",
     "ajv": "~8.18.0",
     "diff-match-patch": "1.0.5",
-    "execa": "~9.6.0",
+    "execa": "~10.0.1",
     "lodash.groupby": "~4.6.0",
     "minimatch": "~10.2.4",
     "mutation-testing-metrics": "3.7.3",

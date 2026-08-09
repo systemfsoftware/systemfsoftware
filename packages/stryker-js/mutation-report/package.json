@@ -25,7 +25,7 @@
   "dependencies": {
     "@stryker-mutator/api": "catalog:stryker",
     "@systemfsoftware/stryker-js-mutation-run": "workspace:^",
-    "chalk": "~5.6.0",
+    "chalk": "~6.0.0",
     "emoji-regex": "~10.6.0",
     "mutation-testing-elements": "3.7.3",
     "mutation-testing-metrics": "3.7.3",
