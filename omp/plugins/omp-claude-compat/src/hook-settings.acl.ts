@@ -344,13 +344,39 @@ function mergeSettings(sources: readonly SettingsSource[]): HookSettings {
   return { hooks }
 }
 
+/**
+ * In-memory analysis commands: constructed inside this ACL, consumed by
+ * `analyzeSettings`, never decoded from an external source. Field schemas are
+ * `S.Any` because no schema exists for the source types (SettingsSource and
+ * DisableSource are plain interfaces); the exported type is hand-declared to
+ * keep the real field types. Must not drift into a decode path.
+ */
+export const SettingsAnalysisCommandSchema = S.Union(
+  S.TaggedStruct('Merge', { sources: S.Any }),
+  S.TaggedStruct('Coverage', { json: S.Any }),
+  S.TaggedStruct('DisabledCoverage', { sources: S.Any }),
+  S.TaggedStruct('UnsupportedHookTypes', { json: S.Any }),
+  S.TaggedStruct('MatcherUnreadable', { event: S.Any }),
+  S.TaggedStruct('IfEvaluatingEvent', { event: S.Any }),
+)
+
+type SettingsAnalysisMergeCommand = { readonly _tag: 'Merge'; readonly sources: readonly SettingsSource[] }
+type SettingsAnalysisCoverageCommand = { readonly _tag: 'Coverage'; readonly json: unknown }
+type SettingsAnalysisDisabledCoverageCommand = {
+  readonly _tag: 'DisabledCoverage'
+  readonly sources: readonly DisableSource[]
+}
+type SettingsAnalysisUnsupportedHookTypesCommand = { readonly _tag: 'UnsupportedHookTypes'; readonly json: unknown }
+type SettingsAnalysisMatcherUnreadableCommand = { readonly _tag: 'MatcherUnreadable'; readonly event: string }
+type SettingsAnalysisIfEvaluatingEventCommand = { readonly _tag: 'IfEvaluatingEvent'; readonly event: string }
+
 export type SettingsAnalysisCommand =
-  | { readonly _tag: 'Merge'; readonly sources: readonly SettingsSource[] }
-  | { readonly _tag: 'Coverage'; readonly json: unknown }
-  | { readonly _tag: 'DisabledCoverage'; readonly sources: readonly DisableSource[] }
-  | { readonly _tag: 'UnsupportedHookTypes'; readonly json: unknown }
-  | { readonly _tag: 'MatcherUnreadable'; readonly event: string }
-  | { readonly _tag: 'IfEvaluatingEvent'; readonly event: string }
+  | SettingsAnalysisMergeCommand
+  | SettingsAnalysisCoverageCommand
+  | SettingsAnalysisDisabledCoverageCommand
+  | SettingsAnalysisUnsupportedHookTypesCommand
+  | SettingsAnalysisMatcherUnreadableCommand
+  | SettingsAnalysisIfEvaluatingEventCommand
 
 type SettingsAnalysisValue =
   | HookSettings

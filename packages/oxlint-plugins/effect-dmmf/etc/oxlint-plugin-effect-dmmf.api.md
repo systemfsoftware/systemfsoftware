@@ -51,6 +51,7 @@ const _default: {
         'policy-no-junk-drawer-path': Rule;
         'ban-effect-schema-imports': Rule;
         'ban-data-taggederror': Rule;
+        'no-manual-tag-member': Rule;
         'no-manual-tag-property': Rule;
         'no-schema-law-duplicate': Rule;
         'schema-exports-only-schemas': Rule;

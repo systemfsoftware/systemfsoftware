@@ -93,7 +93,8 @@
     "rimraf": "catalog:",
     "tsdown": "catalog:",
     "typescript": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "@systemfsoftware/oxlint-plugin-effect-schema": "workspace:^"
   },
   "publishConfig": {
     "exports": {

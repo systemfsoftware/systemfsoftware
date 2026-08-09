@@ -15,7 +15,7 @@ import * as Fiber from 'effect/Fiber'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Ref from 'effect/Ref'
-import * as Schema from 'effect/Schema'
+import * as S from 'effect/Schema'
 
 import { Stryker, type StrykerHostOptions } from '@systemfsoftware/stryker-js-mutation-run'
 import {
@@ -84,10 +84,23 @@ export class StrykerCliExecutorDeps extends Context.Tag(
  * option) or the pre-rendered manifest document of `--llms`. The help path
  * leaves no request; the executor's finalizer turns the framework-rendered
  * help into the `help` terminal event instead.
+ *
+ * The schema's `options`/`document` fields are `S.Any`: no schema exists for
+ * `PartialStrykerOptions` or `ManifestRendered` in `@stryker-mutator/api/core`,
+ * and the request is never decoded from external bytes — the handler builds it
+ * from `@effect/cli`-parsed values. The exported type therefore carries the
+ * fields' real types rather than the schema's `any`, so consumers (the
+ * executor's `Match.tag` arms) stay typed; the two must not drift into a
+ * decode path. The union is spelled as two lone member aliases because an
+ * inline tagged union would itself be flagged by `no-manual-tag-member`.
  */
-export type CliRequest =
-  | { readonly _tag: 'run'; readonly options: PartialStrykerOptions; readonly survivors: boolean }
-  | { readonly _tag: 'llms'; readonly document: ManifestRendered }
+export const CliRequest = S.Union(
+  S.TaggedStruct('run', { options: S.Any, survivors: S.Boolean }),
+  S.TaggedStruct('llms', { document: S.Any }),
+)
+type RunRequest = { readonly _tag: 'run'; readonly options: PartialStrykerOptions; readonly survivors: boolean }
+type LlmsRequest = { readonly _tag: 'llms'; readonly document: ManifestRendered }
+export type CliRequest = RunRequest | LlmsRequest
 
 /**
  * The frame the handler hands the executor: the already-run `@effect/cli`
@@ -360,7 +373,7 @@ function remediationFor(exit: Exit.Exit<unknown, unknown>, code: number): string
     if (value instanceof ConfigError) {
       return `check the config file: ${value.message}`
     }
-    if (Schema.is(SurvivorsRejection)(value)) {
+    if (S.is(SurvivorsRejection)(value)) {
       return value.remediation
     }
   }
@@ -501,7 +514,7 @@ function resolveCliExitCode(exit: Exit.Exit<unknown, unknown>): number {
     if (ValidationError.isValidationError(failure.value)) {
       return 2
     }
-    if (Schema.is(SurvivorsRejection)(failure.value)) {
+    if (S.is(SurvivorsRejection)(failure.value)) {
       return SURVIVORS_REJECT_EXIT_CLASS
     }
   }
