@@ -42,11 +42,25 @@ The property a cached task's key must have before its stored verdict can be trus
 
 Completeness spans four classes of input, and only the first is covered by default: the files the task reads, the environment variables its command's shell expansion reads, the tool binaries an install-time script may swap while the declared dependency version holds still, and the task's own definition. The failure it prevents is silent and directional — an incomplete key does not slow a gate or error it, it lets the gate report a pass for work that never ran. Enabling a cache and closing its key's holes therefore belong in one change rather than in sequence, since every verdict stored or restored in between was produced under a key known to be incomplete.
 
+Completeness is only half the criterion, and pursued alone it produces the opposite failure — see Volatile input and Key partition. The key must move exactly when the answer can change, and never otherwise.
+
 ### Relocatable output
 
 An artifact a cached task may declare as an output, on the criterion that it stays true when restored into a checkout other than the one that produced it. Restoration writes the stored bytes back verbatim and rewrites nothing inside them, so an artifact embedding absolute paths or other machine-local state is not relocatable and must be left undeclared even though caching it would be faster.
 
 The criterion binds hardest where several working trees of one repository share a cache, which is the default rather than the exception — the sharing is automatic unless a cache location is pinned explicitly. Where an output is not relocatable the honest declaration is none at all: the pass-or-fail verdict and the logs still cache, and the machine-local artifact stays where it was built.
+
+### Volatile input
+
+A file inside a task's input set that a normal run of the pipeline itself rewrites, so the key moves although the answer did not. Tool-written state is the whole class: a task runner's own per-task logs, a compiler's incremental state, build output. It is the mirror image of an incomplete key — completeness fails silently toward a stale pass, volatility fails loudly toward a permanent miss.
+
+Volatility is contagious across packages, which is what makes it hard to see. A shared configuration package globbed wholesale into every dependent's input set carries its own tool-written state along with the config, so running that one package's task rewrites state that every dependent hashes, and the whole graph misses on the next run. The glob is the defect, not the shared dependency: the authored config belongs in the key and the tool-written state beside it does not, so a directory input must exclude the state its own tools write. A cross-package invalidation of this kind cannot be observed in a run that filters the graph down, because the filter drops the very task whose run does the rewriting.
+
+### Key partition
+
+A split of one task's cache into disjoint sets, caused by a value that varies with who invoked the task rather than with what the task must answer. Command-line arguments and declared environment variables both enter the key, so an entry point that passes different flags — or reads a variable only some callers set — hashes the same work under a different key and can never reuse another caller's entry.
+
+A partition is not always a defect: where two callers genuinely require different answers, keying them apart is correct. The test is whether the varying value can change the task's verdict. A flag that alters only how a result is presented cannot, so keying on it buys no safety and costs every hit; a variable that selects a different check does, and belongs in the key. Where a deliberate split is wanted, key it on a variable every caller sets deterministically rather than one that merely happens to be present in some environments.
 
 ## Release pipeline
 
