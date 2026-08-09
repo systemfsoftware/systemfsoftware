@@ -22,3 +22,8 @@ tag_prefix = "release-"
 name = "effect"
 url = "https://github.com/Effect-TS/effect"
 tag_prefix = "effect@3."
+
+[[repos]]
+name = "storybook"
+url = "https://github.com/storybookjs/storybook"
+tag_prefix = "v"
