@@ -34,8 +34,6 @@ This package mechanizes the positive half of Constitution IV.2 — a source file
   check: the RuleTester suite pairs valid *.generated.ts cases with invalid near-misses (generated.ts, foo.generated.helper.ts)
 ```
 
-| Check    | Command                                                                |
-| -------- | ---------------------------------------------------------------------- |
-| Types    | `pnpm --filter @systemfsoftware/oxlint-plugin-cell-taxonomy typecheck` |
-| Test     | `pnpm --filter @systemfsoftware/oxlint-plugin-cell-taxonomy test`      |
-| Mutation | `pnpm --filter @systemfsoftware/oxlint-plugin-cell-taxonomy mutation`  |
+- Types: `pnpm --filter @systemfsoftware/oxlint-plugin-cell-taxonomy typecheck`
+- Test: `pnpm --filter @systemfsoftware/oxlint-plugin-cell-taxonomy test`
+- Mutation: `pnpm --filter @systemfsoftware/oxlint-plugin-cell-taxonomy mutation`

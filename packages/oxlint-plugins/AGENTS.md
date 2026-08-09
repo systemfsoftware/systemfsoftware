@@ -72,8 +72,6 @@ rules:
 
 ## Rule APIs
 
-Two styles exist. Use the one the package already uses; never mix styles inside a package.
-
 ```yaml
 apis:
   - id: OX-A1
@@ -146,16 +144,5 @@ default, not a delta. Listed here only where a package departs from it.
 | `cell-taxonomy/`                                | Sole owner of non-test source filenames (`CT1`); default lists are defaults, not law (`CT2`)                                     |
 | `test-placement/`                               | Not enrolled in its own rules (`TP1`), sole owner of test placement (`TP2`)                                                      |
 | `effect-entrypoint/`                            | Not a cell — keyed on the exact filename `main.ts` (`EP1`); the two rules that close cell-taxonomy's `main.ts` exemption (`EP2`) |
-| `effect-workflow/`                              | Deliberate non-gates                                                                                                             |
 | `effect-executor/`                              | Deliberate non-gates                                                                                                             |
 | `effect-{acl,handler,adapter,policy,workflow}/` | Each names its OX-OB1 obligation rule                                                                                            |
-
-## Verification
-
-Run in order before claiming done on any rule change:
-
-```bash
-pnpm --filter <pkg> test        # RuleTester suites
-pnpm --filter <pkg> mutation    # root gate, plus zero Ignored — see OX-MG1
-pnpm check                      # root gate, exits 0
-```
