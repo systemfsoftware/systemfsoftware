@@ -194,7 +194,7 @@ export const success = <A, E = never>(value: A, options?: {
   result._tag = 'Success'
   result.value = value
   result.waiting = options?.waiting ?? false
-  result.timestamp = options?.timestamp ?? Date.now()
+  result.timestamp = options?.timestamp ?? performance.now()
   return result
 }
 
@@ -295,7 +295,7 @@ export const waiting = <R extends Result<any, any>>(self: R, options?: {
   const result = Object.assign(Object.create(ResultProto), self)
   result.waiting = true
   if (options?.touch && isSuccess(result)) {
-    return Object.assign(Object.create(ResultProto), result, { timestamp: Date.now() }) as R
+    return Object.assign(Object.create(ResultProto), result, { timestamp: performance.now() }) as R
   }
   return result as R
 }
