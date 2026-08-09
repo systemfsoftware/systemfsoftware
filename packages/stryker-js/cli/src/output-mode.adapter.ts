@@ -24,7 +24,7 @@ export interface OutputModeProbe {
 }
 
 class OutputModeProbeTag extends Context.Tag(
-  '@systemfsoftware/stryker-js-cli/output-mode.adapter/OutputModeProbe',
+  '@systemfsoftware/stryker-js-cli/output-mode.adapter/OutputModeProbeTag',
 )<OutputModeProbeTag, OutputModeProbe>() {}
 
 const OutputModeProbe = OutputModeProbeTag

@@ -35,7 +35,7 @@ import type { HelpRendered, ManifestRendered } from '@systemfsoftware/stryker-js
 import { strykerVersion } from '@systemfsoftware/stryker-js-mutation-run/stryker-package'
 import { buildVerdictEnvelope } from '@systemfsoftware/stryker-js-mutation-run/verdict-envelope'
 
-import { humanConsoleLayer, machineConsoleLayer, readCapturedConsole } from './output-mode-console.state.js'
+import { machineConsoleLayer, readCapturedConsole } from './output-mode-console.state.js'
 import type { OutputModeProbe } from './output-mode.adapter.js'
 import { isColorEnabled, isProgressEnabled } from './output-mode.kernel.js'
 import type { RunEventStream, RunEventStreamPort } from './run-event-stream.adapter.js'
@@ -123,12 +123,13 @@ export interface RunStrykerCliInput {
 }
 
 /**
- * The machine-mode `Console` layers, bundled so the transport (which resolves
- * the mode) can provide the right one without importing the state cell.
+ * The machine-mode `Console` layer, bundled so the transport (which resolves
+ * the mode) can provide it without importing the state cell. Human mode
+ * provides no layer — effect's own default console is the prose rendering
+ * (output-mode-console.state.ts).
  */
 export const strykerCliConsoleLayers = {
   machine: machineConsoleLayer,
-  human: humanConsoleLayer,
 } as const
 
 const SIGNAL_NUMBERS: Readonly<Partial<Record<NodeJS.Signals, number>>> = Object.freeze({
@@ -219,7 +220,7 @@ function runSurvivorsAdmission(
  * survivors-run properties). The admission hash compares these resolved
  * options against the prior report's embedded config.
  */
-async function resolveSurvivorsRunOptions(
+function resolveSurvivorsRunOptions(
   cliOptions: PartialStrykerOptions,
 ): Promise<StrykerOptions> {
   const configReader = new ConfigReader(
@@ -372,7 +373,7 @@ function remediationFor(exit: Exit.Exit<unknown, unknown>, code: number): string
     if (value instanceof ConfigError) {
       return `check the config file: ${value.message}`
     }
-    if (value instanceof SurvivorsRejection) {
+    if (S.is(SurvivorsRejection)(value)) {
       return value.remediation
     }
   }
@@ -513,7 +514,7 @@ function resolveCliExitCode(exit: Exit.Exit<unknown, unknown>): number {
     if (ValidationError.isValidationError(failure.value)) {
       return 2
     }
-    if (failure.value instanceof SurvivorsRejection) {
+    if (S.is(SurvivorsRejection)(failure.value)) {
       return SURVIVORS_REJECT_EXIT_CLASS
     }
   }

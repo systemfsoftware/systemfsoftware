@@ -14,7 +14,9 @@ export interface ExecOptions {
   readonly env?: Record<string, string>
 }
 
-export class StrykerCli extends Context.Tag('StrykerCli')<StrykerCli, {
+export class StrykerCli extends Context.Tag(
+  '@systemfsoftware/stryker-js-cli/__tests__/stryker-cli.adapter/StrykerCli',
+)<StrykerCli, {
   readonly run: (args: ReadonlyArray<string>, options?: ExecOptions) => Effect.Effect<CliResult>
   readonly sh: (script: string, options?: ExecOptions) => Effect.Effect<CliResult>
 }>() {}
@@ -22,10 +24,12 @@ export class StrykerCli extends Context.Tag('StrykerCli')<StrykerCli, {
 export const layerStrykerCli: Layer.Layer<StrykerCli> = Layer.effect(
   StrykerCli,
   Effect.map(
-    Effect.promise(async () => {
-      const client = await getContainerRuntimeClient()
-      return { client, container: client.container.getById(strykerContainerId()) }
-    }),
+    Effect.promise(() =>
+      getContainerRuntimeClient().then((client) => ({
+        client,
+        container: client.container.getById(strykerContainerId()),
+      }))
+    ),
     ({ client, container }) => {
       const exec = (command: ReadonlyArray<string>, options?: ExecOptions) =>
         Effect.map(

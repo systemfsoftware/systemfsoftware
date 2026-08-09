@@ -45,7 +45,7 @@ export interface RunEventStreamPort {
 }
 
 class RunEventStreamPortTag extends Context.Tag(
-  '@systemfsoftware/stryker-js-cli/run-event-stream.adapter/RunEventStreamPort',
+  '@systemfsoftware/stryker-js-cli/run-event-stream.adapter/RunEventStreamPortTag',
 )<RunEventStreamPortTag, RunEventStreamPort>() {}
 
 const RunEventStreamPort = RunEventStreamPortTag
@@ -140,12 +140,12 @@ function stdoutSink(): Sink.Sink<void, string, never, StdoutWriteError, never> {
           // result handoff. A flush failure still carries the handoff — the
           // framework destructures it — as a sink failure.
           return finish().pipe(
-            Effect.catchAll((writeError) => Effect.fail([Either.left(writeError), Chunk.empty<never>()] as const)),
+            Effect.mapError((writeError) => [Either.left(writeError), Chunk.empty<never>()] as const),
             Effect.flatMap(() => Effect.fail([Either.right(void 0), Chunk.empty<never>()] as const)),
           )
         }
         return writeChunk(input.value).pipe(
-          Effect.catchAll((writeError) => Effect.fail([Either.left(writeError), Chunk.empty<never>()] as const)),
+          Effect.mapError((writeError) => [Either.left(writeError), Chunk.empty<never>()] as const),
         )
       }
     }),
