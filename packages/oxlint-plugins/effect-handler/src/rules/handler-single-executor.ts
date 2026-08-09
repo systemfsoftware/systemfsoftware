@@ -1,7 +1,7 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
 import { Array as A, Schema as S } from 'effect'
-import { EXECUTOR_SUFFIX, HANDLER_SUFFIX, meta, Options } from './handler-single-executor.config.js'
+import { EXECUTOR_SUFFIX, HANDLER_SUFFIX, meta } from './handler-single-executor.config.js'
 
 export type MessageIds =
   | 'noExecutorImport'

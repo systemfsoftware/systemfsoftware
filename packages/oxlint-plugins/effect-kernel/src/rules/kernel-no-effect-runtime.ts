@@ -1,7 +1,7 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
 import { Option } from 'effect'
-import { BANNED_RUN_CALLS, meta, Options, RUN_CALL_EXPECTED, RUN_CALL_FIX } from './kernel-no-effect-runtime.config.js'
+import { BANNED_RUN_CALLS, meta, RUN_CALL_EXPECTED, RUN_CALL_FIX } from './kernel-no-effect-runtime.config.js'
 
 export type MessageIds = 'effectRunCall'
 

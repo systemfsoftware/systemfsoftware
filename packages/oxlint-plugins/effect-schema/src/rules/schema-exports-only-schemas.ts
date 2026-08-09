@@ -11,7 +11,7 @@ const getMemberPropertyName = (node: ESTree.MemberExpression): string | undefine
   return undefined
 }
 
-const isSchemaMemberExpression = (node: ESTree.Node): boolean => {
+const isSchemaMemberExpression = (node: ESTree.Node): node is ESTree.MemberExpression => {
   if (node.type !== 'MemberExpression') return false
   let object: ESTree.Node = node.object
   while (object.type === 'MemberExpression') {
@@ -44,8 +44,9 @@ const isSchemaClassSuper = (node: ESTree.Node | null): boolean => {
   if (node === null) return false
   let current: ESTree.Node = node
   while (current.type === 'CallExpression') {
-    if (isSchemaMemberExpression(current.callee)) {
-      const name = getMemberPropertyName(current.callee as ESTree.MemberExpression)
+    const callee = current.callee
+    if (isSchemaMemberExpression(callee)) {
+      const name = getMemberPropertyName(callee)
       if (name === 'TaggedClass' || name === 'TaggedError' || name === 'Class') return true
     }
     current = current.callee

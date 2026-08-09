@@ -1,6 +1,6 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
-import { BRANCHING_NAMES, ITERATION_KEYWORDS, meta, Options } from './workflow-single-path.config.js'
+import { BRANCHING_NAMES, ITERATION_KEYWORDS, meta } from './workflow-single-path.config.js'
 
 export type MessageIds = 'branchingStatement' | 'iterationStatement' | 'excessTernary'
 

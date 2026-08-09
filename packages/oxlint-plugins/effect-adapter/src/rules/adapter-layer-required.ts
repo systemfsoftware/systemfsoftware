@@ -1,6 +1,6 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
-import { meta, Options } from './adapter-layer-required.config.js'
+import { meta } from './adapter-layer-required.config.js'
 
 export type MessageIds = 'layerExportRequired'
 

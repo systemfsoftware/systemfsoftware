@@ -50,7 +50,7 @@ export const runHookScript = Effect.fn('runHookScript')(function*(
   input: Record<string, unknown>,
   cwd: string,
   event: string,
-  callerIsWaiting = true,
+  callerIsWaiting: boolean = true,
 ) {
   const executor = yield* CommandExecutor
   const { timeoutMs, capNote } = resolveHookBudget(hook.timeout, event, callerIsWaiting)

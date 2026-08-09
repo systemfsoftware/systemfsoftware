@@ -1,7 +1,7 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
 import { Array as A, Schema as S } from 'effect'
-import { meta, Options, PORT_ROOTS, SCOPED_ROOT_REGEX } from './adapter-single-external-system.config.js'
+import { meta, PORT_ROOTS, SCOPED_ROOT_REGEX } from './adapter-single-external-system.config.js'
 
 export type MessageIds = 'multipleExternalSystems'
 
@@ -30,6 +30,7 @@ export const adapterSingleExternalSystem = defineRule({
     if (!isAdapterFile(context.filename)) return {}
 
     const seenRoots = new Set<string>()
+    let firstForeignRoot: string | null = null
 
     return {
       ImportDeclaration(node: ESTree.ImportDeclaration) {
@@ -37,12 +38,11 @@ export const adapterSingleExternalSystem = defineRule({
         if (!isForeignPackageImport(source)) return
         const root = packageRootOf(source)
         if (seenRoots.has(root)) return
-        if (seenRoots.size === 0) {
-          seenRoots.add(root)
+        seenRoots.add(root)
+        if (firstForeignRoot === null) {
+          firstForeignRoot = root
           return
         }
-        const firstForeignRoot = seenRoots.values().next().value as string
-        seenRoots.add(root)
         context.report({
           node,
           messageId: 'multipleExternalSystems',

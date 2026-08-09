@@ -1,4 +1,5 @@
 import { format as utilFormat, inspect as utilInspect } from 'node:util'
+import type { InspectOptions } from 'node:util'
 
 import * as Clock from 'effect/Clock'
 import * as Console from 'effect/Console'
@@ -63,18 +64,19 @@ function captureTrace(args: ReadonlyArray<unknown>): void {
 
 const capturingConsole: Console.Console = {
   [Console.TypeId]: Console.TypeId,
-  assert: (condition, ...args) => Effect.sync(() => captureAssert(condition, args)),
+  assert: (condition: boolean, ...args: ReadonlyArray<unknown>) => Effect.sync(() => captureAssert(condition, args)),
   clear: Effect.void,
   count: (label) => Effect.sync(() => captureCount(label)),
   countReset: (label) => Effect.sync(() => countByLabel.delete(label ?? 'default')),
-  debug: (...args) => captureEffect(args),
-  dir: (item, options) => Effect.sync(() => capturedConsoleChunks.push(utilInspect(item, options))),
+  debug: (...args: ReadonlyArray<unknown>) => captureEffect(args),
+  dir: (item: unknown, options?: InspectOptions) =>
+    Effect.sync(() => capturedConsoleChunks.push(utilInspect(item, options))),
   dirxml: (item) => Effect.sync(() => capturedConsoleChunks.push(utilInspect(item))),
-  error: (...args) => captureEffect(args),
+  error: (...args: ReadonlyArray<unknown>) => captureEffect(args),
   group: () => Effect.void,
   groupEnd: Effect.void,
-  info: (...args) => captureEffect(args),
-  log: (...args) => captureEffect(args),
+  info: (...args: ReadonlyArray<unknown>) => captureEffect(args),
+  log: (...args: ReadonlyArray<unknown>) => captureEffect(args),
   table: (tabularData) =>
     Effect.sync(() => capturedConsoleChunks.push(utilInspect(tabularData, { colors: false, depth: null }))),
   time: (label) =>
@@ -85,7 +87,7 @@ const capturingConsole: Console.Console = {
     Effect.gen(function*() {
       captureTimeEnd(label, yield* Clock.currentTimeMillis)
     }),
-  timeLog: (label, ...args) =>
+  timeLog: (label: string | undefined, ...args: ReadonlyArray<unknown>) =>
     Effect.gen(function*() {
       const key = label ?? 'default'
       const started = timeByLabel.get(key)
@@ -93,34 +95,34 @@ const capturingConsole: Console.Console = {
         capturedConsoleChunks.push(`${key}: ${(yield* Clock.currentTimeMillis) - started}ms ${formatArgs(args)}`)
       }
     }),
-  trace: (...args) => Effect.sync(() => captureTrace(args)),
-  warn: (...args) => captureEffect(args),
+  trace: (...args: ReadonlyArray<unknown>) => Effect.sync(() => captureTrace(args)),
+  warn: (...args: ReadonlyArray<unknown>) => captureEffect(args),
   unsafe: {
-    assert: (condition, ...args) => captureAssert(condition, args),
+    assert: (condition: boolean, ...args: ReadonlyArray<unknown>) => captureAssert(condition, args),
     clear: () => {},
     count: (label) => captureCount(label),
     countReset: (label) => countByLabel.delete(label ?? 'default'),
-    debug: (...args) => captureSync(args),
-    dir: (item, options) => capturedConsoleChunks.push(utilInspect(item, options)),
+    debug: (...args: ReadonlyArray<unknown>) => captureSync(args),
+    dir: (item: unknown, options?: InspectOptions) => capturedConsoleChunks.push(utilInspect(item, options)),
     dirxml: (item) => capturedConsoleChunks.push(utilInspect(item)),
-    error: (...args) => captureSync(args),
+    error: (...args: ReadonlyArray<unknown>) => captureSync(args),
     group: () => {},
     groupCollapsed: () => {},
     groupEnd: () => {},
-    info: (...args) => captureSync(args),
-    log: (...args) => captureSync(args),
+    info: (...args: ReadonlyArray<unknown>) => captureSync(args),
+    log: (...args: ReadonlyArray<unknown>) => captureSync(args),
     table: (tabularData) => capturedConsoleChunks.push(utilInspect(tabularData, { colors: false, depth: null })),
     time: (label) => timeByLabel.set(label ?? 'default', Effect.runSync(Clock.currentTimeMillis)),
     timeEnd: (label) => captureTimeEnd(label, Effect.runSync(Clock.currentTimeMillis)),
-    timeLog: (label, ...args) => {
+    timeLog: (label: string | undefined, ...args: ReadonlyArray<unknown>) => {
       const key = label ?? 'default'
       const started = timeByLabel.get(key)
       if (started !== undefined) {
         capturedConsoleChunks.push(`${key}: ${Effect.runSync(Clock.currentTimeMillis) - started}ms ${formatArgs(args)}`)
       }
     },
-    trace: (...args) => captureTrace(args),
-    warn: (...args) => captureSync(args),
+    trace: (...args: ReadonlyArray<unknown>) => captureTrace(args),
+    warn: (...args: ReadonlyArray<unknown>) => captureSync(args),
   },
 }
 
@@ -151,14 +153,15 @@ export function machineConsoleLayer(): Layer.Layer<Console.Console> {
  */
 const humanConsole: Console.Console = {
   [Console.TypeId]: Console.TypeId,
-  assert: (condition, ...args) => Effect.sync(() => console.assert(condition, ...args)),
+  assert: (condition: boolean, ...args: ReadonlyArray<unknown>) =>
+    Effect.sync(() => console.assert(condition, ...args)),
   clear: Effect.sync(() => console.clear()),
   count: (label) => Effect.sync(() => console.count(label)),
   countReset: (label) => Effect.sync(() => console.countReset(label)),
-  debug: (...args) => Effect.sync(() => console.debug(...args)),
-  dir: (item, options) => Effect.sync(() => console.dir(item, options)),
-  dirxml: (...args) => Effect.sync(() => console.dirxml(...args)),
-  error: (...args) => Effect.sync(() => console.error(...args)),
+  debug: (...args: ReadonlyArray<unknown>) => Effect.sync(() => console.debug(...args)),
+  dir: (item: unknown, options?: InspectOptions) => Effect.sync(() => console.dir(item, options)),
+  dirxml: (...args: ReadonlyArray<unknown>) => Effect.sync(() => console.dirxml(...args)),
+  error: (...args: ReadonlyArray<unknown>) => Effect.sync(() => console.error(...args)),
   group: (options) =>
     Effect.sync(() => {
       if (options === undefined) {
@@ -170,15 +173,17 @@ const humanConsole: Console.Console = {
       }
     }),
   groupEnd: Effect.sync(() => console.groupEnd()),
-  info: (...args) => Effect.sync(() => console.info(...args)),
-  log: (...args) => Effect.sync(() => console.log(...args)),
-  table: (tabularData, properties) => Effect.sync(() => console.table(tabularData, properties)),
+  info: (...args: ReadonlyArray<unknown>) => Effect.sync(() => console.info(...args)),
+  log: (...args: ReadonlyArray<unknown>) => Effect.sync(() => console.log(...args)),
+  table: (tabularData: unknown, properties?: ReadonlyArray<string>) =>
+    Effect.sync(() => console.table(tabularData, properties)),
   time: (label) => Effect.sync(() => console.time(label)),
   timeEnd: (label) => Effect.sync(() => console.timeEnd(label)),
-  timeLog: (label, ...args) => Effect.sync(() => console.timeLog(label, ...args)),
-  trace: (...args) => Effect.sync(() => console.trace(...args)),
-  warn: (...args) => Effect.sync(() => console.warn(...args)),
-  unsafe: console as Console.UnsafeConsole,
+  timeLog: (label: string | undefined, ...args: ReadonlyArray<unknown>) =>
+    Effect.sync(() => console.timeLog(label, ...args)),
+  trace: (...args: ReadonlyArray<unknown>) => Effect.sync(() => console.trace(...args)),
+  warn: (...args: ReadonlyArray<unknown>) => Effect.sync(() => console.warn(...args)),
+  unsafe: console,
 }
 
 /**

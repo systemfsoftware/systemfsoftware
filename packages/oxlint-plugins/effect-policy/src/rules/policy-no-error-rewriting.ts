@@ -1,6 +1,6 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
-import { ERROR_REWRITING_METHODS, meta, Options } from './policy-no-error-rewriting.config.js'
+import { ERROR_REWRITING_METHODS, meta } from './policy-no-error-rewriting.config.js'
 
 export type MessageIds = 'errorRewriting'
 
