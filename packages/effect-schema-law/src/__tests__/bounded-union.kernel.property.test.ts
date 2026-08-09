@@ -9,36 +9,24 @@ import { boundedUnion } from '../bounded-union.kernel.js'
  * is quantified over every seed rather than recorded at one.
  */
 
-interface Lit {
-  readonly _tag: 'Lit'
-  readonly value: number
-}
-interface Id {
-  readonly _tag: 'Id'
-  readonly name: string
-}
-interface Binary {
-  readonly _tag: 'Binary'
-  readonly op: string
-  readonly left: Expr
-  readonly right: Expr
-}
-interface Member {
-  readonly _tag: 'Member'
-  readonly object: Expr
-  readonly property: Expr
-}
-interface Conditional {
+/**
+ * The recursive members keep explicit type anchors: deriving a recursive type
+ * from its schema const (`type Binary = S.Schema.Type<typeof Binary>` with the
+ * const annotated `: S.Schema<Binary>`) is circular (TS2502/TS2456), and
+ * leaving the const unannotated cannot be inferred (TS7022). The leaf members
+ * derive from their consts; the recursive anchors are structurally identical
+ * to the interfaces they replaced.
+ */
+type Binary = { readonly _tag: 'Binary'; readonly op: string; readonly left: Expr; readonly right: Expr }
+type Member = { readonly _tag: 'Member'; readonly object: Expr; readonly property: Expr }
+type Conditional = {
   readonly _tag: 'Conditional'
   readonly test: Expr
   readonly consequent: Expr
   readonly alternate: Expr
 }
-interface Call {
-  readonly _tag: 'Call'
-  readonly callee: Expr
-  readonly args: ReadonlyArray<Expr>
-}
+type Call = { readonly _tag: 'Call'; readonly callee: Expr; readonly args: ReadonlyArray<Expr> }
+
 type Expr = Lit | Id | Binary | Member | Conditional | Call
 
 const Lit = S.TaggedStruct('Lit', { value: S.JsonNumber })
@@ -61,6 +49,9 @@ const BASE = [Lit, Id] as const
 const RECUR = [Binary, Member, Conditional, Call] as const
 
 const Expr: S.Schema<Expr> = boundedUnion('Expr', { base: BASE, recur: RECUR })
+
+type Lit = S.Schema.Type<typeof Lit>
+type Id = S.Schema.Type<typeof Id>
 
 /**
  * The default `maxDepth` is 2, and depth counts recursive *descents*: a root

@@ -6,6 +6,7 @@ import * as Either from 'effect/Either'
 import * as Fiber from 'effect/Fiber'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
+import * as S from 'effect/Schema'
 import * as Sink from 'effect/Sink'
 import * as Stream from 'effect/Stream'
 import type { EmitOpsPush } from 'effect/StreamEmit'
@@ -56,10 +57,7 @@ export { RunEventStreamPort }
  * descriptor is gone. Typed so the drain can swallow it without mistaking it
  * for a run failure (R31).
  */
-interface StdoutWriteError {
-  readonly _tag: 'stdout-write-error'
-  readonly cause: unknown
-}
+class StdoutWriteError extends S.TaggedError<StdoutWriteError>()('stdout-write-error', { cause: S.Unknown }) {}
 
 const isTerminalEvent = (event: RunEvent): boolean =>
   event.kind === 'verdict' || event.kind === 'error' || event.kind === 'help' || event.kind === 'manifest'
@@ -95,11 +93,11 @@ function stdoutSink(): Sink.Sink<void, string, never, StdoutWriteError, never> {
               if (error === undefined || error === null) {
                 settle(Effect.void)
               } else {
-                settle(Effect.fail({ _tag: 'stdout-write-error', cause: error }))
+                settle(Effect.fail(new StdoutWriteError({ cause: error })))
               }
             })
           } catch (error) {
-            settle(Effect.fail({ _tag: 'stdout-write-error', cause: error }))
+            settle(Effect.fail(new StdoutWriteError({ cause: error })))
           }
         })
       const finish = (): Effect.Effect<void, StdoutWriteError, never> =>
@@ -115,7 +113,7 @@ function stdoutSink(): Sink.Sink<void, string, never, StdoutWriteError, never> {
           }
           const onFinish = (): void => settle(Effect.void)
           const onError = (error: unknown): void => {
-            settle(Effect.fail({ _tag: 'stdout-write-error', cause: error }))
+            settle(Effect.fail(new StdoutWriteError({ cause: error })))
           }
           process.stdout.once('finish', onFinish)
           process.stdout.once('error', onError)

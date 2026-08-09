@@ -521,6 +521,9 @@ importers:
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: workspace:^
         version: link:../../arethetypeswrong/cli
+      '@systemfsoftware/oxlint-plugin-effect-schema':
+        specifier: workspace:^
+        version: link:../../oxlint-plugins/effect-schema
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../tsconfig
@@ -2303,6 +2306,9 @@ importers:
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: workspace:^
         version: link:../arethetypeswrong/cli
+      '@systemfsoftware/oxlint-plugin-effect-schema':
+        specifier: workspace:^
+        version: link:../oxlint-plugins/effect-schema
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../tsconfig
@@ -2399,7 +2405,7 @@ importers:
         version: 0.22.14(oxc-resolver@11.24.2)(typescript@5.9.3)(unrun@0.2.39)
       vite-tsconfig-paths:
         specifier: 'catalog:'
-        version: 6.1.1(typescript@5.9.3)(vite@7.3.5(@types/node@24.13.2)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0))
+        version: 6.1.1(supports-color@8.1.1)(typescript@5.9.3)(vite@7.3.5(@types/node@24.13.2)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0))
       vitest:
         specifier: 'catalog:'
         version: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1)(vite@7.3.5(@types/node@24.13.2)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0))
@@ -14523,7 +14529,7 @@ snapshots:
 
   verkit@0.3.2: {}
 
-  vite-tsconfig-paths@6.1.1(typescript@5.9.3)(vite@7.3.5(@types/node@24.13.2)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0)):
+  vite-tsconfig-paths@6.1.1(supports-color@8.1.1)(typescript@5.9.3)(vite@7.3.5(@types/node@24.13.2)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0)):
     dependencies:
       debug: 4.4.3(supports-color@8.1.1)
       globrex: 0.1.2

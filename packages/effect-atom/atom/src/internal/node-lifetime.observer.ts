@@ -1,7 +1,11 @@
-export type NodeFate =
-  | { readonly _tag: 'Alive' }
-  | { readonly _tag: 'RemoveNow' }
-  | { readonly _tag: 'RemoveAfterTtl'; readonly ttlMillis: number }
+import { Schema as S } from 'effect'
+
+export const NodeFate = S.Union(
+  S.TaggedStruct('Alive', {}),
+  S.TaggedStruct('RemoveNow', {}),
+  S.TaggedStruct('RemoveAfterTtl', { ttlMillis: S.Number }),
+)
+export type NodeFate = S.Schema.Type<typeof NodeFate>
 
 export interface NodeLifetimeInput {
   readonly keepAlive: boolean

@@ -59,7 +59,8 @@
     "rimraf": "catalog:",
     "storybook": "catalog:",
     "tsdown": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "@systemfsoftware/oxlint-plugin-effect-schema": "workspace:^"
   },
   "publishConfig": {
     "exports": {

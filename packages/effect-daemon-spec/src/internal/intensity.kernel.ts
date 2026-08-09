@@ -1,15 +1,18 @@
-import { Clock, Duration, Effect, Match, Ref } from 'effect'
+import { Clock, Duration, Effect, Match, Ref, Schema as S } from 'effect'
 import { exceedsRestarts, pruneTimestamps, recordTimestamp } from './intensity-window.kernel.js'
 
 /**
  * Structural shape of a restart-intensity setting. Declared here rather than imported
- * from `daemon-policy.schema.ts` so this kernel stays domain-blind: the domain's
- * `Intensity` union satisfies it by shape, and `src/mod.ts` re-exports the domain-typed
- * surface for consumers.
+ * from `daemon-policy.schema.ts` so this kernel stays domain-blind: the schema is a
+ * shape declaration (structural, no domain behavior), the domain's `Intensity` union
+ * satisfies it by shape, and `src/mod.ts` re-exports the domain-typed surface for
+ * consumers.
  */
-export type IntensitySpec =
-  | { readonly _tag: 'Unbounded' }
-  | { readonly _tag: 'Bounded'; readonly restarts: number; readonly window: Duration.Duration }
+export const IntensitySpec = S.Union(
+  S.TaggedStruct('Unbounded', {}),
+  S.TaggedStruct('Bounded', { restarts: S.Number, window: S.DurationFromSelf }),
+)
+export type IntensitySpec = S.Schema.Type<typeof IntensitySpec>
 
 export interface IntensityTracker {
   readonly record: Effect.Effect<void>
