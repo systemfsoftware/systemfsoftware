@@ -1,0 +1,9 @@
+{
+  "name": "@std/regexp",
+  "version": "1.0.2",
+  "exports": {
+    ".": "./mod.ts",
+    "./escape": "./escape.ts",
+    "./unstable-replace-all-async": "./unstable_replace_all_async.ts"
+  }
+}
