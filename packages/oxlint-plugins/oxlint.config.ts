@@ -43,4 +43,26 @@ export default defineConfig({
     '**/.opencode/**',
     '**/.sisyphus/**',
   ],
+
+  // `_guards.test.ts` drives two node predicates directly, so it has to construct
+  // ESTree nodes by hand. It cannot: every member of the `Node` union extends `Span`
+  // and carries a REQUIRED, self-referential `parent`, so no literal satisfies the
+  // type and the doubles are asserted into it. The rule stays on everywhere else --
+  // this is the one file in the tree that fabricates an AST instead of parsing one.
+  //
+  // The standing fix is to delete the file: the same two predicates are already
+  // exercised through real source by the RuleTester suite beside it, and this repo's
+  // plugin convention is RuleTester over unit-testing internals. That deletion is
+  // deferred, not declined -- `src/rules/*.ts` is inside the package's mutate scope,
+  // so removing a test needs the mutation gate to show it costs no kills, and that
+  // gate cannot run today (`@systemfsoftware/stryker-js-core` resolves to a directory
+  // with a `dist/` but no `package.json`, so `stryker run` cannot find its binary).
+  overrides: [
+    {
+      files: ['test-placement/src/rules/__tests__/_guards.test.ts'],
+      rules: {
+        'typescript/consistent-type-assertions': 'off',
+      },
+    },
+  ],
 })
