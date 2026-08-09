@@ -11,8 +11,7 @@
       "@systemfsoftware/source"
     ],
     "types": [
-      "node",
-      "ts-expose-internals"
+      "node"
     ],
     // Fork of arethetypeswrong.github.io: the constitution policy in
     // @systemfsoftware/tsconfig/effect is deliberately NOT extended here, so the upstream diff stays

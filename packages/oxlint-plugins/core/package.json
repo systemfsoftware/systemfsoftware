@@ -10,7 +10,7 @@
   },
   "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/oxlint-plugins/core#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "Oxlint rules for Effect-TS — enforce a pure functional core and imperative shell: ban classes and string errors, forbid native Date/Promise/timers in Effect, require pipeable composition.",
+  "description": "Oxlint rules for Effect-TS \u2014 enforce a pure functional core and imperative shell: ban classes and string errors, forbid native Date/Promise/timers in Effect, require pipeable composition.",
   "keywords": [
     "oxlint",
     "oxlint-plugin",
@@ -44,7 +44,6 @@
     "mutation": "stryker run",
     "mutation:full": "stryker run --force",
     "lint": "oxlint . ${AGENT:+--format=unix --quiet}",
-    "attw": "attw --pack .",
     "api:check": "api-extractor run",
     "api:update": "api-extractor run --local"
   },
@@ -54,7 +53,6 @@
   },
   "devDependencies": {
     "@microsoft/api-extractor": "catalog:",
-    "@systemfsoftware/arethetypeswrong-cli": "workspace:^",
     "@systemfsoftware/stryker-js-mutation-run": "workspace:^",
     "@systemfsoftware/stryker-js-typescript-checker": "workspace:^",
     "@systemfsoftware/stryker-js-vitest-runner": "workspace:^",

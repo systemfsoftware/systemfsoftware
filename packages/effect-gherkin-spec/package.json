@@ -48,7 +48,6 @@
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
-    "@systemfsoftware/arethetypeswrong-cli": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
@@ -59,7 +58,8 @@
     "tsdown": "catalog:",
     "tstyche": "catalog:",
     "vite-tsconfig-paths": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "@systemfsoftware/arethetypeswrong-cli": "npm:@systemfsoftware/arethetypeswrong-cli@^1.1.1"
   },
   "peerDependencies": {
     "@effect/vitest": "catalog:",

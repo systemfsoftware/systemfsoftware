@@ -2,9 +2,8 @@ import { defineConfig } from 'tsdown'
 
 export default defineConfig({
   entry: [
-    'src/index.ts',
-    'src/getExitCode.ts',
-    'src/render/index.ts',
+    'src/main.ts',
+    'src/attw.handler.ts',
   ],
   format: 'esm',
   clean: true,
@@ -14,12 +13,9 @@ export default defineConfig({
   deps: {
     neverBundle: [
       '@systemfsoftware/arethetypeswrong-core',
-      'chalk',
-      'cli-table3',
-      'commander',
-      'marked',
-      'marked-terminal',
-      'semver',
+      'effect',
+      '@effect/cli',
+      '@effect/printer',
     ],
   },
 })

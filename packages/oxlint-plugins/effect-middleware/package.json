@@ -10,7 +10,7 @@
   },
   "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/oxlint-plugins/effect-middleware#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "Oxlint rules enforcing the *.middleware.ts cell — transport front-half only: no operation imports, decode-failure gates fail closed with Effect.fail.",
+  "description": "Oxlint rules enforcing the *.middleware.ts cell \u2014 transport front-half only: no operation imports, decode-failure gates fail closed with Effect.fail.",
   "keywords": [
     "oxlint",
     "oxlint-plugin",
@@ -46,7 +46,6 @@
     "mutation": "stryker run",
     "mutation:full": "stryker run --force",
     "lint": "oxlint . ${AGENT:+--format=unix --quiet}",
-    "attw": "attw --pack .",
     "api:check": "api-extractor run",
     "api:update": "api-extractor run --local"
   },
@@ -56,7 +55,6 @@
   },
   "devDependencies": {
     "@microsoft/api-extractor": "catalog:",
-    "@systemfsoftware/arethetypeswrong-cli": "workspace:^",
     "@systemfsoftware/stryker-js-mutation-run": "workspace:^",
     "@systemfsoftware/stryker-js-typescript-checker": "workspace:^",
     "@systemfsoftware/stryker-js-vitest-runner": "workspace:^",

@@ -25,8 +25,11 @@ export type ProblemKind = Schema.Schema.Type<typeof ProblemKindSchema>
 export const ModuleKindReasonSchema = Schema.Literal('extension', 'type', 'no:type')
 export type ModuleKindReason = Schema.Schema.Type<typeof ModuleKindReasonSchema>
 
-export const ModuleKindSyntaxSchema = Schema.Literal('CommonJS', 'ESNext')
+export const ModuleKindSyntaxSchema = Schema.Literal(1, 99)
 export type ModuleKindSyntax = Schema.Schema.Type<typeof ModuleKindSyntaxSchema>
+
+export const CommonJSModuleKind = 1 as const
+export const ESNextModuleKind = 99 as const
 
 export const ModuleKindSchema = Schema.Struct({
   detectedKind: ModuleKindSyntaxSchema,

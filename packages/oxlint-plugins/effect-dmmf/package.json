@@ -45,7 +45,6 @@
     "typecheck": "tsc --noEmit --incremental",
     "format": "dprint fmt",
     "lint": "oxlint . ${AGENT:+--format=unix --quiet}",
-    "attw": "attw --pack .",
     "api:check": "api-extractor run",
     "api:update": "api-extractor run --local"
   },
@@ -72,7 +71,6 @@
   },
   "devDependencies": {
     "@microsoft/api-extractor": "catalog:",
-    "@systemfsoftware/arethetypeswrong-cli": "workspace:^",
     "@systemfsoftware/oxlint-plugin": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",

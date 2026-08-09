@@ -1,4 +1,5 @@
 import type { ModuleKind } from './problem.schema.js'
+import { CommonJSModuleKind, ESNextModuleKind } from './problem.schema.js'
 import type { FalseCJSProblem, FalseESMProblem } from './problem.schema.js'
 
 export interface ModuleKindDisagreementInput {
@@ -15,7 +16,9 @@ export const detectModuleKindDisagreement = (
   if (!typesFileName || !implementationFileName || !typesModuleKind || !implementationModuleKind) {
     return undefined
   }
-  if (typesModuleKind.detectedKind === 'ESNext' && implementationModuleKind.detectedKind === 'CommonJS') {
+  if (
+    typesModuleKind.detectedKind === ESNextModuleKind && implementationModuleKind.detectedKind === CommonJSModuleKind
+  ) {
     return {
       kind: 'FalseESM',
       typesFileName,
@@ -24,7 +27,9 @@ export const detectModuleKindDisagreement = (
       implementationModuleKind,
     }
   }
-  if (typesModuleKind.detectedKind === 'CommonJS' && implementationModuleKind.detectedKind === 'ESNext') {
+  if (
+    typesModuleKind.detectedKind === CommonJSModuleKind && implementationModuleKind.detectedKind === ESNextModuleKind
+  ) {
     return {
       kind: 'FalseCJS',
       typesFileName,

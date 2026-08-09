@@ -10,7 +10,7 @@
   },
   "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/oxlint-plugins/effect-shape#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "Oxlint rules enforcing the *.shape.ts cell — foreign-model declarations only: no domain imports, no behaviour, one foreign system per file.",
+  "description": "Oxlint rules enforcing the *.shape.ts cell \u2014 foreign-model declarations only: no domain imports, no behaviour, one foreign system per file.",
   "keywords": [
     "oxlint",
     "oxlint-plugin",
@@ -48,7 +48,6 @@
     "mutation": "stryker run",
     "mutation:full": "stryker run --force",
     "lint": "oxlint . ${AGENT:+--format=unix --quiet}",
-    "attw": "attw --pack .",
     "api:check": "api-extractor run",
     "api:update": "api-extractor run --local"
   },
@@ -58,7 +57,6 @@
   },
   "devDependencies": {
     "@microsoft/api-extractor": "catalog:",
-    "@systemfsoftware/arethetypeswrong-cli": "workspace:^",
     "@systemfsoftware/stryker-js-mutation-run": "workspace:^",
     "@systemfsoftware/stryker-js-typescript-checker": "workspace:^",
     "@systemfsoftware/stryker-js-vitest-runner": "workspace:^",

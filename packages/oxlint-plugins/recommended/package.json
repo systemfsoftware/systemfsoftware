@@ -43,13 +43,11 @@
     "typecheck": "tsc --noEmit --incremental",
     "format": "dprint fmt",
     "lint": "node scripts/guard-no-behavior.mjs && oxlint . ${AGENT:+--format=unix --quiet}",
-    "attw": "attw --pack .",
     "api:check": "api-extractor run",
     "api:update": "api-extractor run --local"
   },
   "devDependencies": {
     "@microsoft/api-extractor": "catalog:",
-    "@systemfsoftware/arethetypeswrong-cli": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",

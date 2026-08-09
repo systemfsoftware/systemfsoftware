@@ -1,5 +1,11 @@
 import { resolvedThroughFallback } from './fallback.kernel.js'
-import type { EntrypointResolutionAnalysis, ModuleKind, Problem } from './problem.schema.js'
+import {
+  CommonJSModuleKind,
+  type EntrypointResolutionAnalysis,
+  ESNextModuleKind,
+  type ModuleKind,
+  type Problem,
+} from './problem.schema.js'
 
 export interface EntrypointResolutionsInput {
   readonly subpath: string
@@ -37,8 +43,8 @@ export const detectEntrypointResolutions = (
     const implModuleKind = entrypoint.implementationResolution && node16ModuleKinds
       ? node16ModuleKinds[entrypoint.implementationResolution.fileName]
       : undefined
-    const isTypesESM = typesModuleKind?.detectedKind === 'ESNext'
-    const isImplESM = implModuleKind?.detectedKind === 'ESNext'
+    const isTypesESM = typesModuleKind?.detectedKind === ESNextModuleKind
+    const isImplESM = implModuleKind?.detectedKind === ESNextModuleKind
     if (isTypesESM || isImplESM) {
       problems.push({
         kind: 'CJSResolvesToESM',
