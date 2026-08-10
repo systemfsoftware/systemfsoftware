@@ -1,8 +1,15 @@
 # Worktree include whitelist — only gitignored files matching these patterns
 # are copied by wt step copy-ignored.
-
-.turbo
-.turbo/**
+#
+# .turbo is deliberately ABSENT. Turbo resolves a linked worktree's cache to the
+# PRIMARY worktree's .turbo/cache and never reads the worktree-local copy, so
+# copying it moved 192 MB / 31,309 files per worktree for nothing. Verified by
+# moving a worktree's .turbo/cache aside: turbo still reported 29/29 cached,
+# FULL TURBO, "using shared worktree cache".
+#
+# Exactly three things turn that redirect off and would make a local cache live
+# again: an explicit cacheDir in turbo.json, --cache-dir, or TURBO_CACHE_DIR.
+# Re-add .turbo here only if this repo starts setting one of them.
 
 dist
 dist/**

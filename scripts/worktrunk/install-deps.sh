@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Worktrunk pre-start: install dependencies.
+# Worktrunk post-start: install dependencies.
 # Invoked by .config/wt.toml. Arg: worktree_path
 
 set -e
