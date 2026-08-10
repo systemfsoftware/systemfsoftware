@@ -231,7 +231,7 @@ const configuration: UserConfig = {
     'type-matches-diff-shape': [2, 'always'],
 
     // Commit types — aligned with semantic-release changelog filtering
-    // feat, fix, perf, api, revert appear in changelog; everything else is noise-filtered
+    // feat/fix/perf/api/revert/improvement/deps/security bump a version; the rest are noise-filtered out of the changelog
     'type-enum': [
       2,
       'always',
@@ -263,23 +263,23 @@ const configuration: UserConfig = {
     'type-case': [2, 'always', 'lower-case'],
     'type-empty': [2, 'never'],
 
-    // Subject constraints
-    'subject-case': [2, 'always', 'lower-case'],
+    // Subject — case disabled (agents capitalize; cosmetic, no release impact)
+    'subject-case': [0],
     'subject-empty': [2, 'never'],
     'subject-full-stop': [2, 'never', '.'],
 
-    // Length constraints
-    'header-max-length': [2, 'always', 72],
-    'body-max-line-length': [2, 'always', 120],
-    'footer-max-line-length': [2, 'always', 100],
+    // Disabled — length / blank-line cosmetics that burn tokens on retries; semantic-release ignores them
+    'header-max-length': [0],
+    'body-max-line-length': [0],
+    'footer-max-line-length': [0],
+    'body-leading-blank': [0],
+    'footer-leading-blank': [0],
 
-    // Structural constraints
-    'body-leading-blank': [2, 'always'],
-    'footer-leading-blank': [2, 'always'],
+    // Structural constraints (kept — low friction, prevent trailing-period noise)
     'header-full-stop': [2, 'never', '.'],
     'body-full-stop': [2, 'never', '.'],
 
-    // References encouraged but not required
+    // References encouraged but not required (warning, non-blocking)
     'references-empty': [1, 'never'],
   },
 
