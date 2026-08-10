@@ -1,6 +1,11 @@
 # Worktree include whitelist — only gitignored files matching these patterns
 # are copied by wt step copy-ignored.
 #
+# This file is read from the SOURCE worktree, which defaults to the main
+# worktree — not from the worktree being created. An edit here is inert for new
+# worktrees until the main worktree's checkout carries it. Prove which copy
+# governs with: wt step copy-ignored --from <branch> --to <dest> --dry-run
+#
 # .turbo is deliberately ABSENT. Turbo resolves a linked worktree's cache to the
 # PRIMARY worktree's .turbo/cache and never reads the worktree-local copy, so
 # copying it moved 192 MB / 31,309 files per worktree for nothing. Verified by
