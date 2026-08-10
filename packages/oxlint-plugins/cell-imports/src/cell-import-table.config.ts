@@ -34,6 +34,23 @@ export const CELL_IMPORT_TABLE: Readonly<Record<string, CellEdge>> = {
     forbidValue: ['.adapter'],
     exceptVia: { segment: 'internal', cells: ['.executor'] },
   },
+  // Domain-TYPED composition over domain-BLIND kernels: unlike `.kernel` it may name
+  // the domain, which is why `.schema` is absent from this row and present in that one.
+  '.combinator.ts': {
+    forbid: [
+      '.shape',
+      '.state',
+      '.executor',
+      '.acl',
+      '.handler',
+      '.middleware',
+      '.adapter',
+      '.policy',
+      '.observer',
+      '.store',
+    ],
+    forbidRuntime: RUNTIME_MODULE_WITH_PROMISES,
+  },
   '.kernel.ts': {
     forbid: [
       '.schema',

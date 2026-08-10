@@ -4,6 +4,7 @@ import type { RuleMeta } from '@oxlint/plugins'
 export const CELLS: ReadonlyArray<string> = [
   'acl',
   'adapter',
+  'combinator',
   'executor',
   'handler',
   'harness',
