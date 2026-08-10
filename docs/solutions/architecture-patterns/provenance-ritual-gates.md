@@ -56,10 +56,12 @@ Three claims in the second layer were tested. All three were false.
    rule set does not run there, because `check-lint-coverage.mjs` classifies the fork as
    tooling. The manifest paraphrased that header, inverted it, and cited the header while
    doing so.
-3. The `AGENTS.md` Surface Classes table names
+3. The `AGENTS.md` Surface Classes table named
    `packages/stryker-js/core/src/reporters/test-contribution.ts` as an Evaluator surface.
-   No `core` package exists. The file is at
-   `packages/stryker-js/mutation-run/src/test-contribution.ts`.
+   No `core` package existed. The file is at
+   `packages/stryker-js/mutation-run/src/test-contribution.ts`. **Corrected since
+   measurement** — the root `AGENTS.md` now names the real path. The measurement stands as
+   taken; the pointer it caught is fixed.
 
 Eight product gates were tested against the same standard. Five name a real origin
 defect, and the strongest are specific: `check-runtime-deps.mjs:5-12` names the binary

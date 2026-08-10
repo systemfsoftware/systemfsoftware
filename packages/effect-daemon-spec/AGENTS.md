@@ -6,13 +6,13 @@
 
 `etc/effect-daemon-spec.api.md` IS the public API surface. Treat it as a committed snapshot.
 
-| Trigger                                 | Required Action                                        |
-| --------------------------------------- | ------------------------------------------------------ |
-| Change to anything exported by `mod.ts` | `pnpm build && pnpm api:update`, commit `etc/*.api.md` |
-| New `Warning: (ae-forgotten-export)`    | Export the type from `mod.ts` OR inline it             |
-| `*_base` warning on a NEW class         | Refactor with named base const — never suppress        |
+| Trigger                                 | Required Action                                           |
+| --------------------------------------- | --------------------------------------------------------- |
+| Change to anything exported by `mod.ts` | run `build`, then `api:update`, and commit `etc/*.api.md` |
+| New `Warning: (ae-forgotten-export)`    | Export the type from `mod.ts` OR inline it                |
+| `*_base` warning on a NEW class         | Refactor with named base const — never suppress           |
 
-`pnpm api:check` (no `--local`) compares live analysis to the committed report; non-zero exit if stale. Wired into root `pre-push` and CI.
+`api:check` (no `--local`) compares live analysis to the committed report; non-zero exit if stale. Wired into root `pre-push` and CI. The invocation form for every script named in this file is in Verification below.
 
 ## Accepted Noise
 
@@ -20,7 +20,7 @@
 
 ## Pipeline Ordering
 
-`pnpm build` MUST precede `pnpm api:check` / `pnpm api:update`. Build sequence: `tsdown` → `dist/index.d.ts` → `api-extractor` → `dist/effect-daemon-spec.d.ts` (rollup) + `etc/*.api.md` (report).
+`build` MUST precede `api:check` / `api:update`. Build sequence: `tsdown` → `dist/index.d.ts` → `api-extractor` → `dist/effect-daemon-spec.d.ts` (rollup) + `etc/*.api.md` (report).
 
 ## Exports Field
 

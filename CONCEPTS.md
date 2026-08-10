@@ -84,6 +84,30 @@ The script at `scripts/check-exports.mjs` that compares each package's `package.
 
 `arethetypeswrong` — the type-resolution validator. `attw --pack .` runs against the package tarball the same way npm would install it, validating that `exports` declarations resolve to consistent types across node10 / node16-CJS / node16-ESM / bundler. Catches downstream-facing drift that workspace-local checks miss.
 
+## Gate provenance
+
+### Evaluator surface
+
+A file whose job is to judge other work — a gate, a scoring harness, a forge workflow, a contribution check. What sets it apart is not its contents but a commit rule: it never changes in the same commit as the work it judges, because a change that moves both the work and its judge leaves no evidence which of the two produced the green result.
+
+Evolving one means its own commit, the reason stated, and the gate observed red before and green after for the intended reason. An agent that can edit its own evaluator can pass by editing it, so the surface is held outside whatever it scores.
+
+### Ritual gate
+
+A gate that checks a proxy for a claim and then reports the claim. It asks whether a justification has the right shape — a field is present, a reason is non-empty, a digest was written — and announces that the underlying requirement was met. Because the proxy is always satisfiable by the same author who supplies it, the gate has full precision against nothing, and a green run teaches every later reader that something was verified when nothing was.
+
+The distinguishing question is whether the check recomputes anything the writer did not supply. A gate that only reads back what a writer stamped is a ritual regardless of how strict its wording is.
+
+### Provenance manifest
+
+The closed registry that admits each root-level tooling script by declared category, so a script's right to exist is stated rather than inferred from its presence on disk. Adding a script means editing the manifest, and the manifest is itself an Evaluator surface — which deliberately forces that edit into its own commit.
+
+### Known-bad fixture
+
+An artifact that deliberately contains the violation a gate claims to detect, run before the real check so that a non-zero finding count proves the gate can fail at all. Paired with a known-good artifact, which must produce zero.
+
+Without the pair, a gate reporting no findings is indistinguishable between two states: a clean tree, or a check that never ran. The fixture is what converts silence into evidence.
+
 ## Test execution
 
 ### Run class

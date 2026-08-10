@@ -13,14 +13,14 @@ tags:
   - tsdown
   - publish-config
   - build-system
-  - stryker-js-core
+  - stryker-js-mutation-run
 ---
 
 # tsdown manages publishConfig.exports during build
 
 ## Context
 
-The `packages/stryker-js/core/package.json` has two `publishConfig` blocks — one with `access: public` and another with `exports: {...}` pointing to `dist/` output files. This looks like an error (duplicate JSON keys) but is intentional: tsdown generates the `exports` variant during build.
+A forked package's `package.json` can arrive with two `publishConfig` blocks — one with `access: public` and another with `exports: {...}` pointing to `dist/` output files. This looks like an error (duplicate JSON keys) but is intentional: tsdown generates the `exports` variant during build. No package in this repo carries the duplicate today; the first build normalized every one of them, which is exactly the behaviour this note describes.
 
 ## Guidance
 
@@ -37,7 +37,7 @@ The `packages/stryker-js/core/package.json` has two `publishConfig` blocks — o
   }
   ```
 - Reading the source file with `JSON.parse` before a build would silently drop `access: public` (JSON keeps only the last duplicate key). tsdown reads the file with its own parser that handles duplicates.
-- This pattern is most visible in forked packages (like `stryker-js/core`) where upstream's `publishConfig` layout wasn't reformatted. First-party packages normally only carry `publishConfig.exports` (set by tsdown) and rely on `pnpm publish --access public` at the CI level.
+- This pattern shows up in freshly forked packages (`packages/stryker-js/mutation-run` arrived this way) where upstream's `publishConfig` layout wasn't reformatted. First-party packages normally only carry `publishConfig.exports` (set by tsdown) and rely on `pnpm publish --access public` at the CI level.
 
 ## Why This Matters
 
@@ -52,5 +52,5 @@ Wasting time merging "duplicate" `publishConfig` blocks or assuming they're a bu
 ## Related
 
 - AGENTS.md: "Don't hand-edit package.json#exports on tsdown packages — change tsdown.config.ts."
-- `packages/stryker-js/core/tsdown.config.ts` — uses `exports: { devExports: '@systemfsoftware/source' }`
+- `packages/stryker-js/mutation-run/tsdown.config.ts` — uses `exports: { devExports: '@systemfsoftware/source' }`
 - `scripts/bump-all-minor.mjs` — the version-bump script that would hit this issue via JSON.parse

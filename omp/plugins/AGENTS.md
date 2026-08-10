@@ -28,14 +28,14 @@ The cache-bust is what hides it. Each session really does get its own handler cl
   do: register `process.on`/`process.once` handlers, and construct any process-wide singleton, at the top level of the cached module that owns the resource
   dont: register a signal handler, or construct process-wide state, inside the default-export factory or inside a helper the factory invokes
   harm: the factory runs once per session, so every subagent adds another listener against the one shared instance — measured 2 listeners after 2 loads, and a MaxListenersExceededWarning past ten subagents
-  check: "grep -n 'process\\.on\\|process\\.once' omp/plugins/*/src/*.ts — every hit is at module top level, never inside a function the factory calls"
+  check: "`grep -n 'process\\.on\\|process\\.once' omp/plugins/*/src/*.ts` — review that every hit sits at module top level, never inside a function the factory calls"
 
 - id: PLG2
   title: NEVER dispose a shared runtime from a per-session event
   do: let a process-cached `ManagedRuntime` be disposed only by a process-level signal, or give it a refcount if a session must be able to release it
   dont: call `runtime.dispose()` from `session_shutdown`, `session_stop`, or any other per-session handler
   harm: "`dispose()` is terminal and the runtime is shared, so one subagent finishing poisons every live session — the main session's next keystroke throws `ManagedRuntime disposed`. This shipped."
-  check: "grep -rn 'dispose' omp/plugins/*/src/*.handler.ts omp/plugins/*/src/index.ts — zero hits inside a per-session `pi.on(...)` callback"
+  check: "`grep -rn 'dispose' omp/plugins/*/src/*.handler.ts omp/plugins/*/src/index.ts` — review that no hit sits inside a per-session `pi.on(...)` callback"
 
 - id: PLG3
   title: Registration must complete before the factory's promise settles — order is load-bearing
@@ -49,7 +49,7 @@ The cache-bust is what hides it. Each session really does get its own handler cl
   do: warm after `session_start` via `warmRuntimeAfterStart` from `@systemfsoftware/omp-utils/runtime-lifecycle`
   dont: await runtime construction, or statically import a platform-node layer, in the factory body
   harm: the host awaits the factory, so layer evaluation lands on the startup path — measured ~30s
-  check: "`src/index.ts` imports the runtime module only through `await import(...)` inside a callback"
+  check: "`grep -n 'await import(' src/index.ts` accounts for every runtime-module import, each inside a callback; a top-level `import` of the runtime module is the violation"
 ```
 
 ## Verifying a lifecycle change

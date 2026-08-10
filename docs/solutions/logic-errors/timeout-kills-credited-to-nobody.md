@@ -2,7 +2,7 @@
 title: Timeout kills are credited to nobody, so the contribution gate accuses innocent property tests
 date: 2026-08-05
 category: logic-errors
-module: stryker-js-core
+module: stryker-js-mutation-run
 problem_type: logic_error
 component: testing_framework
 severity: high
@@ -127,7 +127,7 @@ The second is the load-bearing one — without it, `return []` passes the first.
 
 **Treat a countable assertion in a gate message as a claim to audit.** "every killing test was recorded" was false in a way nothing checked. A message asserting completeness should be derived from the same data that establishes it.
 
-**A defensive guard the gate cannot kill is dead code, so delete it rather than test it.** `packages/stryker-js/core` mutates exactly this one file at `break: 100`, and the first draft of the fix scored **97.62%** with three survivors — all on the new lines. One was real (nothing covered an _absent_ `killedBy`, only an empty one) and earned the test above. The other two were equivalent by construction: a `coveredBy ?? []` fallback and a `fileName !== undefined` guard, both unobservable because an unresolvable id changes no outcome either way. Routing the coverers through the existing `killersOf` helper — which already falls back to the raw id and so never yields `undefined` — deleted both branches and the file returned to 100%. Reaching for a fourth test instead would have been writing tests for code that does nothing.
+**A defensive guard the gate cannot kill is dead code, so delete it rather than test it.** `packages/stryker-js/mutation-run` mutates exactly this one file at `break: 100`, and the first draft of the fix scored **97.62%** with three survivors — all on the new lines. One was real (nothing covered an _absent_ `killedBy`, only an empty one) and earned the test above. The other two were equivalent by construction: a `coveredBy ?? []` fallback and a `fileName !== undefined` guard, both unobservable because an unresolvable id changes no outcome either way. Routing the coverers through the existing `killersOf` helper — which already falls back to the raw id and so never yields `undefined` — deleted both branches and the file returned to 100%. Reaching for a fourth test instead would have been writing tests for code that does nothing.
 
 ## Still Open
 
