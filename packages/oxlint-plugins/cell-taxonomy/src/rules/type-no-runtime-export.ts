@@ -1,6 +1,6 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
-import { ACTUAL, EXPECTED, FIX, meta, TYPE_FILE } from './no-runtime-export-in-type-cell.config.js'
+import { ACTUAL, EXPECTED, FIX, meta, TYPE_FILE } from './type-no-runtime-export.config.js'
 
 export type MessageIds = 'runtimeValueExport'
 
@@ -35,7 +35,7 @@ const declaredNames = (pattern: ESTree.BindingPattern): ReadonlyArray<ESTree.Bin
 
 const isAmbient = (declaration: ESTree.Declaration): boolean => 'declare' in declaration && declaration.declare === true
 
-export const noRuntimeExportInTypeCell = defineRule({
+export const typeNoRuntimeExport = defineRule({
   meta,
   create(context: Context) {
     if (!TYPE_FILE.test(context.filename)) return {}

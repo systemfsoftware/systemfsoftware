@@ -1,5 +1,5 @@
-import { ACTUAL, EXPECTED, FIX } from '../no-runtime-export-in-type-cell.config.js'
-import { noRuntimeExportInTypeCell } from '../no-runtime-export-in-type-cell.js'
+import { ACTUAL, EXPECTED, FIX } from '../type-no-runtime-export.config.js'
+import { typeNoRuntimeExport } from '../type-no-runtime-export.js'
 import { createRuleTester } from './_tester.js'
 
 const ruleTester = createRuleTester()
@@ -14,7 +14,7 @@ const runtimeValueExport = (name: string) => [{
   },
 }]
 
-ruleTester.run('no-runtime-export-in-type-cell', noRuntimeExportInTypeCell, {
+ruleTester.run('type-no-runtime-export', typeNoRuntimeExport, {
   valid: [
     {
       name: 'Should_Allow_TypeAlias_When_TypeCell',

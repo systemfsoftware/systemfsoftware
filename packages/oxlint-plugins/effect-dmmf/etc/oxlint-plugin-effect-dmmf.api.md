@@ -13,8 +13,12 @@ const _default: {
     };
     rules: {
         'cell-import-boundary': Rule;
+        'no-barrel-import-in-cell': Rule;
+        'no-test-runtime-in-pure-cell': Rule;
         'cell-suffix-required': Rule;
         'capability-named-directory': Rule;
+        'harness-no-module-scope-registration': Rule;
+        'no-runtime-export-in-type-cell': Rule;
         'acl-no-anti-pattern-path': Rule;
         'acl-no-as-casts': Rule;
         'acl-single-transform-export': Rule;
