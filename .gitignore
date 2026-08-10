@@ -20,8 +20,10 @@ repos/**/.codegraph/
 .issues
 wiki
 research
+# Corpus-derived digests citing gitignored wiki paths (REPO-W4)
+docs/local/
 **/__pycache__/
-- Local per-clone hooks (machine-specific: qmd-mcp orphan cleanup, etc.)
+# Local per-clone hooks (machine-specific: qmd-mcp orphan cleanup, etc.)
 .claude/settings.local.json
 # Eval scratch — constitution-disclosure arm outputs, graders, results
 .eval/
