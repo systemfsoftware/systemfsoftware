@@ -7,6 +7,7 @@
 
 import { banClasses } from './rules/ban-classes.js'
 import { banErrorString } from './rules/ban-error-string.js'
+import { entrySurfaceOrUnit } from './rules/entry-surface-or-unit.js'
 import { noBarrels } from './rules/no-barrels.js'
 import { noBodylessStatusAssertion } from './rules/no-bodyless-status-assertion.js'
 import { noContextGenericTag } from './rules/no-context-generic-tag.js'
@@ -33,6 +34,7 @@ export default {
   rules: {
     'ban-classes': banClasses,
     'ban-error-string': banErrorString,
+    'entry-surface-or-unit': entrySurfaceOrUnit,
     'no-barrels': noBarrels,
     'no-bodyless-status-assertion': noBodylessStatusAssertion,
     'no-context-generic-tag': noContextGenericTag,

@@ -14,6 +14,7 @@ const _default: {
     rules: {
         'ban-classes': Rule;
         'ban-error-string': Rule;
+        'entry-surface-or-unit': Rule;
         'no-barrels': Rule;
         'no-bodyless-status-assertion': Rule;
         'no-context-generic-tag': Rule;
@@ -29,6 +30,7 @@ const _default: {
         'no-native-set-in-effect': Rule;
         'no-native-setinterval-in-effect': Rule;
         'no-native-settimeout-in-effect': Rule;
+        'no-wildcard-reexport': Rule;
     };
 };
 export default _default;
