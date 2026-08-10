@@ -1,8 +1,8 @@
 # Constitution
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache%202.0-blue?style=flat-square)](LICENSE)
 [![System F Software](https://img.shields.io/badge/systemfsoftware.com-constitution-black?style=flat-square)](https://systemfsoftware.com/constitution)
-[![Source of truth](https://img.shields.io/badge/source-single-purple?style=flat-square)](CONSTITUTION.md)
+[![Source of truth](https://img.shields.io/badge/source-single-blue?style=flat-square)](CONSTITUTION.md)
 
 > **Constitution is the design law for teams who want unbreakable code without tools lock-in.**
 
@@ -20,7 +20,12 @@ flowchart LR
 
 One source of truth. Every consumer vendored. Zero drift.
 
----
+```bash
+# brand-new repo? commit once first: git commit --allow-empty -m "init"
+git fetch https://github.com/systemfsoftware/constitution.git main:refs/remotes/vendor/constitution
+git subtree add --prefix=vendor/constitution refs/remotes/vendor/constitution --squash -m "chore: vendor shared constitution"
+ln -s vendor/constitution/CONSTITUTION.md CONSTITUTION.md
+```
 
 ## The Problem
 
@@ -32,18 +37,19 @@ Design principles live in CONTRIBUTING.md, ARCHITECTURE.md, PR comments, Slack t
 
 Stack neutrality is the load-bearing constraint: principles stay at the level of *"a state machine hidden in a record"* and *"mutation is the measure,"* not *"use this ESLint rule"* or *"this ORM."* Tools change every year; the laws do not.
 
----
-
 ## Quick Start
 
-Vendor the constitution into your repository as a squashed, signed subtree, then symlink it to the repo root:
+Vendor the constitution into your repository as a squashed subtree, then symlink it to the repo root:
 
 ```bash
+# 0. A brand-new repo needs one commit before the subtree add
+git commit --allow-empty -m "init"
+
 # 1. Fetch into a named ref — a transient FETCH_HEAD silently breaks subtree tracking
 git fetch https://github.com/systemfsoftware/constitution.git main:refs/remotes/vendor/constitution
 
-# 2. Vendor it as a squashed, signed subtree
-git subtree add --prefix=vendor/constitution refs/remotes/vendor/constitution --squash -S \
+# 2. Vendor it as a squashed subtree
+git subtree add --prefix=vendor/constitution refs/remotes/vendor/constitution --squash \
   -m "chore: vendor shared constitution"
 
 # 3. Symlink it to the repo root
@@ -58,19 +64,14 @@ Reference it from your agent harness (`AGENTS.md` or `CLAUDE.md`) so the bound r
 
 You should see `vendor/constitution/CONSTITUTION.md` tracked in git, `CONSTITUTION.md` at the root as a symlink, and `git subtree pull` ready to refresh it.
 
----
-
 ## Update a Consumer
 
 ```bash
-git fetch https://github.com/systemfsoftware/constitution.git main:refs/remotes/vendor/constitution
-git subtree pull --prefix=vendor/constitution refs/remotes/vendor/constitution --squash -S \
+git subtree pull --prefix=vendor/constitution https://github.com/systemfsoftware/constitution.git main --squash \
   -m "chore: update constitution"
 ```
 
 The symlink never changes — it always points at `vendor/constitution/`, so a pull just refreshes the content underneath.
-
----
 
 ## Articles
 
@@ -84,13 +85,9 @@ The symlink never changes — it always points at `vendor/constitution/`, so a p
 
 Each rule is a YAML block with `do`, `dont`, `harm`, and `gate` — machine-readable, agent-discoverable, and ready for property tests over the corpus. Read the full text: [`CONSTITUTION.md`](CONSTITUTION.md).
 
----
-
 ## Amendment
 
 The constitution is amendable by design. An amendment carries a written rationale, a version bump, a date, and a matching update to the consuming `AGENTS.md`. Proposed additions go through challenge first (`CONST-W2`) — every rule must name the harm it prevents, and removal is the default response to slop at every scale (`CONST-S4`).
-
----
 
 ## FAQ
 
@@ -106,10 +103,15 @@ A: No — that is what an amendment is for. Override-by-fork has been the failur
 **Q: How do I cite a rule in a PR?**
 A: By the harm it prevents, not by clause number. `CONST-G1`: *"invoke a principle by showing the harm is present."* Ids are stable for cross-document reference and the prose around them can change — the family letter says what the rule is about (`CONST-B3` is a boundary rule), never which article it sits in.
 
+**Q: `git subtree add` fails with "ambiguous argument 'HEAD'".**
+A: The subtree command needs an existing commit. In a brand-new repo, run `git commit --allow-empty -m "init"` first, then re-run the add.
+
 **Q: Is this only for TypeScript / Effect / a specific stack?**
 A: No. The principles are stack-neutral. The harness that enforces them (`AGENTS.md`, lint rules, property tests) lives in each consumer repo and is free to vary by stack.
 
----
+## Support
+
+Questions, bug reports, and amendment proposals: [issue tracker](https://github.com/systemfsoftware/constitution/issues).
 
 ## Contributing
 
@@ -117,4 +119,4 @@ Development workflow, commit conventions, and verification commands: [AGENTS.md]
 
 ## License
 
-[MIT](LICENSE) © 2026 Ryan Lee.
+[Apache-2.0](LICENSE) © 2026 Ryan Lee.
