@@ -77,6 +77,7 @@ export default defineConfig({
     ...effectDmmf.configs.recommended.rules,
     '@systemfsoftware/oxlint-plugin/no-new-worker-with-wasm-import': 'error',
     '@systemfsoftware/oxlint-plugin/no-wildcard-reexport': 'error',
+    '@systemfsoftware/oxlint-plugin/entry-surface-or-unit': 'error',
     '@systemfsoftware/oxlint-plugin/no-barrels': 'off',
     '@systemfsoftware/oxlint-plugin/no-inline-destructured-type': 'off',
   },
