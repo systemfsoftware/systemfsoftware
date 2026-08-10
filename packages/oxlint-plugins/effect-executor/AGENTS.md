@@ -10,7 +10,7 @@ Rules here gate the `architect-executor` cell spec (`*.executor.ts` — the impu
   do: resolve a module source through `cellOf` in `src/rules/cell.ts` and key the rule on the cell it returns
   dont: infer a cell from an identifier's spelling, a `Deps` suffix, or a call's shape
   harm: identifier-shaped heuristics misfire on every legitimately named binding; the import edge is the only evidence the AST actually carries
-  check: every rule that classifies a value traces it to an `ImportDeclaration` source
+  check: review — every rule that classifies a value traces it to an `ImportDeclaration` source
 
 - id: EE2
   title: A rule ships only when it has no legitimate counterexample
@@ -24,12 +24,12 @@ Rules here gate the `architect-executor` cell spec (`*.executor.ts` — the impu
   do: let the executor dispatch over the decision a workflow RETURNED; flag only dispatch over a value that came out of an ACL or store call
   dont: ban `Match` outright in `*.executor.ts`
   harm: the executor's sanctioned job is to translate the decision, which requires dispatching on it — a blanket ban flags the correct implementation
-  check: "`executor-no-domain-branch` has a valid case dispatching over a workflow result and an invalid case dispatching over a decoded value"
+  check: `pnpm --filter @systemfsoftware/oxlint-plugin-effect-executor test` exits 0 — it pins the valid workflow-dispatch case and the invalid decoded-dispatch case of executor-no-domain-branch
 
 - id: EE5
   title: Deliberate non-gates
   do: leave sandwich ORDERING (EX3c), read completeness (EX3b), the data-integrity allowlist (EX4b), and anti-pattern FILE NAMES (EX5) to review
   dont: add a rule for them here
   harm: ordering needs a READ/WRITE distinction the AST cannot supply — the writing methods arrive through Context.Tag destructuring, so no import edge names their cell; read completeness and the allowlist need cross-module type resolution or a domain judgment; EX5 is family-wide and belongs to a naming rule in the shared plugin, not to twelve per-cell copies
-  check: no rule in `src/rules/` claims to enforce statement order, read completeness, or filename bans
+  check: review — no rule in `src/rules/` claims to enforce statement order, read completeness, or filename bans
 ```

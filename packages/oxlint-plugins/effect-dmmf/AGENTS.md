@@ -10,14 +10,14 @@ This package is the ONE-SHOT bundle: a consumer installs `@systemfsoftware/oxlin
   do: keep the colocated suite at src/__tests__/ green — it imports the real source plugins and asserts (a) no two sources share a rule name, (b) core is absent, (c) every source-recommended rule is enabled under this bundle's own plugin name and workflow-inline-schemas stays registered-but-unrecommended
   dont: delete the suite, reintroduce fixture plugins, or special-case a source's rule names — the collision guard exists because a plain object spread silently drops duplicates
   harm: seventeen real sources aggregated by hand WILL collide eventually; a dropped duplicate either fails the bundle (missing rule) or, worse, silently overrides an identically-named rule from a sibling source — the suite is the only thing that names the colliding rule and both owners
-  check: pnpm --filter @systemfsoftware/oxlint-plugin-effect-dmmf test exits 0 under vitest (the test stack mirrors packages/oxlint-plugins/effect-adapter; no node:test loader, no test-infra guard — both were scaffolding for the previous "pure re-export, no test surface" assumption that ended once src/index.ts gained recommendedFrom)
+  check: `test -d src/__tests__` — currently RED: the suite this rule names does not exist, so the collision guard is unenforced; until it lands, review — no two sources in the bundle entrypoint share a rule name, core is absent, every source-recommended rule is enabled under the bundle's own plugin name, and workflow-inline-schemas stays registered-but-unrecommended
 
 - id: ED2
   title: Core is excluded by contract
   do: keep @systemfsoftware/oxlint-plugin (core) out of the src/index.ts imports, the dependencies map, and the bundle's rules — its rule names must appear in NONE of the exported rule keys
   dont: add core to the aggregation because "it's just a few more rules" — core is a junk drawer of general-purpose rules, its package name is banned by CONSTITUTION.md IV.2, and the one-shot bundle's whole point is a curated architecture surface
   harm: bundling a junk drawer into the DMMF family muddies the curated surface, invites rule-name collisions with the real cell plugins, and violates the naming constitution
-  check: the test suite imports core in the TEST ONLY (purely to read its rule list) and asserts zero overlap with the bundle's exported rule keys
+  check: `grep -c "from '@systemfsoftware/oxlint-plugin'" src/index.ts` returns 0 — core's bare specifier is absent from the imports; the stronger claim (zero overlap between core's rule names and this bundle's exported keys) is unenforced while `src/__tests__` does not exist
 
 - id: ED3
   title: Aggregation rules read configs.recommended generically

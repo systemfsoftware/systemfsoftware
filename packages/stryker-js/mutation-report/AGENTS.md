@@ -6,7 +6,6 @@ This package owns every `PluginKind.Reporter` implementation of the fork (clear-
 
 Deltas from root:
 
-- **Lint is baseline oxlint, not the cell config** — `scripts/check-lint-coverage.mjs` records the exemption and its reason. `pnpm --filter @systemfsoftware/stryker-js-mutation-report lint` still has to pass.
 - **No `stryker.config.json`, and do not add one** (REPO-S5): every source file here is an adapter, and a shell-cell mutate glob over them is forbidden.
 - **`src/stryker-plugins.ts` is load-bearing as an enumerated tsdown entry** — the plugin loader imports this subpath and reads the `strykerPlugins` export under its real name. Keep the enumerated entry and its re-export shape; do not fold it into the barrel.
 

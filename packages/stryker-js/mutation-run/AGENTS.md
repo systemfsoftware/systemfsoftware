@@ -6,7 +6,6 @@ It began as `@stryker-mutator/core` and has diverged: TS7 deleted APIs it relied
 
 Deltas from root:
 
-- **Lint is baseline oxlint, not the cell config** — `scripts/check-lint-coverage.mjs` records the exemption and its reason. `pnpm --filter @systemfsoftware/stryker-js-mutation-run lint` still has to pass.
 - **`mutate` names the decisions we wrote**, today `src/test-contribution.ts`. Name each new one as we take ownership of it; never narrow the list to lift a score. It is a literal path list on purpose — the Effect cell suffixes (`*.workflow.ts` and its siblings) get their meaning from the cell-taxonomy rules, and this package is exempt from those, so a suffix here would name a taxonomy nothing enforces.
 
 🛑 Rebuild (`pnpm build`) after any source change — the CLI package and programmatic API users consume this package's built `dist/` (every export resolves through `./dist/*.mjs`), so an unbuilt edit tests the previous version.

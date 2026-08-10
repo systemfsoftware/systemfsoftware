@@ -10,7 +10,7 @@ Rules here gate the `architect-middleware` cell spec — read `skill://architect
   do: keep middleware-no-operation-imports scoped to the operation trio's bindings — *Executor/*Workflow/*Store import bindings only; the .middleware.ts → .executor/.workflow/.store module edge lives in cell-import-boundary (@systemfsoftware/oxlint-plugin-cell-imports)
   dont: extend it to effect submodules or the effect barrel
   harm: middleware is impure transport behavior; banning effect/Effect forbids the whole job the cell exists to do
-  check: a valid case imports effect/Effect and passes
+  check: `grep -q "from 'effect/Effect'" src/rules/__tests__/middleware-no-operation-imports.test.ts` — a RuleTester valid case imports effect/Effect and passes
 
 - id: MM2
   title: The gate rule keys on decode-failure branch context
@@ -24,5 +24,5 @@ Rules here gate the `architect-middleware` cell spec — read `skill://architect
   do: match the canonical identifiers Effect and Option directly, like the family matches S
   dont: accept aliases or destructured Option members
   harm: every rule here hardcodes canonical identifiers; widening one puts it out of step with its siblings
-  check: each rule has a near-miss valid case proving the canonical identifier is required
+  check: `grep -q "Other.succeed" src/rules/__tests__/middleware-gate-fails-on-decode-failure.test.ts && grep -q "storefront" src/rules/__tests__/middleware-no-operation-imports.test.ts` — each rule has a near-miss valid case proving the canonical identifier is required
 ```

@@ -7,6 +7,12 @@
     "reports/stryker-incremental.json": "Per-package path, deliberately written package-relative in the root mutation-evidence rule. It exists as packages/<pkg>/reports/stryker-incremental.json only after a mutation run, so no repo-root file can ever resolve it.",
     "src/schema-laws.test.ts": "A file in the DOWNSTREAM CONSUMER's project, not this repo. effect-schema-vite generates it in the consuming app via its transform hook; the basename is load-bearing and documented for that reason.",
     "src/index.ts": "Generic per-plugin barrel referenced collectively in omp/AGENTS.md prose, not one file. Each omp plugin has its own; no single path resolves.",
-    "omp/CLAUDE.md": "A hypothetical in a troubleshooting table describing what to do IF someone adds this file. Its absence is the correct state the row defends."
+    "omp/CLAUDE.md": "A hypothetical in a troubleshooting table describing what to do IF someone adds this file. Its absence is the correct state the row defends.",
+    "tasks/generate-json-schema-to-ts.js": "UPSTREAM's generator path, named in plugin-api/AGENTS.md to describe how upstream produces src-generated/ before this fork committed the output instead. It has never existed in this repo and must not.",
+    "./dist/src/core/index.js": "The target of upstream's deleted core.d.ts shim. plugin-api/AGENTS.md names it to state that the tsdown build no longer produces this layout — the path's absence IS the documented fact.",
+    "../../schema/stryker-core.json": "A runtime-relative read performed by an emitted module under dist/, quoted in plugin-api/AGENTS.md to explain why entries nest two levels deep. It resolves relative to the built module, never relative to the repo or the leaf.",
+    "core.d.ts": "Deleted from this fork on purpose. plugin-api/AGENTS.md names it only to record the deletion and why ESM exports replace it; a resolvable core.d.ts would mean the rule was violated.",
+    "./stryker-setup.js": "Upstream's module specifier, quoted in vitest-runner/AGENTS.md only to record the rename away from it. A resolvable ./stryker-setup.js would mean the documented edit was reverted.",
+    "./stryker-setup.mjs": "The replacement module specifier as written inside vitest-runner's source, quoted to document the rename. It resolves against the emitted dist/ (dist/stryker-setup.mjs exists), never against the leaf directory."
   }
 }

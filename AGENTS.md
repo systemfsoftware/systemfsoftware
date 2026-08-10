@@ -10,35 +10,35 @@ Effect-TS libraries + the oxlint plugin enforcing the constitution (at `repos/co
   do: keep isolatedDeclarations disabled in every tsconfig
   dont: enable isolatedDeclarations anywhere
   harm: 153 compile errors in idiomatic Effect
-  check: "no tsconfig has isolatedDeclarations: true"
+  check: `grep -rl '"isolatedDeclarations": true' --include='tsconfig*.json' .` returns nothing
 
 - id: REPO-S2
   title: NEVER modify minimumReleaseAgeExclude
   do: pin younger deps tighter (e.g. ~0.22.9) or wait for the 24h cutoff
   dont: modify minimumReleaseAgeExclude in pnpm-workspace.yaml
   harm: supply-chain policy violation
-  check: pnpm-workspace.yaml minimumReleaseAgeExclude is unmodified
+  check: review — the diff touches no `minimumReleaseAgeExclude` entry
 
 - id: REPO-S3
   title: Vendored subtrees are read-only
   do: amend upstream
   dont: edit any tree under repos/<name>/ — vendored subtree content; `repos/AGENTS.md` at the repos/ root is ours and editable (it maps the subtrees)
   harm: vendored copies diverge from upstream
-  check: no file under a vendored subtree (repos/<name>/) is modified
+  check: `git diff --name-only HEAD | grep '^repos/'` returns nothing
 
 - id: REPO-S4
   title: Never hand-edit package.json#exports on tsdown packages
   do: change tsdown.config.ts
   dont: edit package.json#exports or publishConfig.exports directly
   harm: exports drift from build output
-  check: exports changes come from tsdown.config.ts only
+  check: `pnpm check:exports` exits 0 — exports match build output
 
 - id: REPO-S5
   title: NEVER put a shell cell in a mutation surface
   do: mutate only pure decisions — `*.workflow.ts` in a cell package, the rule file in a lint plugin, `*.schema.ts` where generated laws do not already cover it
   dont: add `*.executor.ts`, `*.kernel.ts`, `*.acl.ts`, `*.store.ts`, `*.handler.ts`, `*.middleware.ts`, `*.state.ts`, `*.adapter.ts`, `*.policy.ts`, `*.shape.ts`, or `*.observer.ts` to any `mutate` glob; leave `mutate` unset (the Stryker default sweeps every source file and auto-enrolls each new cell)
   harm: wrong observer. The mutator asks "do the tests notice a changed decision?" — a shell cell decides nothing, so every mutant is equivalent or is killed by a composition test that was proving something else; the score certifies nothing and the package pays hours of runtime for it
-  check: node scripts/guard-mutate-scope.mjs exits 0 (wired into pnpm check); shell cells stay gated by lint provenance + composition tests, kernels by colocated K-law property tests
+  check: `node scripts/guard-mutate-scope.mjs` exits 0 (wired into `pnpm check`); shell cells stay gated by lint provenance + composition tests, kernels by colocated K-law property tests
 
 - id: REPO-S6
   title: Enforcement for a published concern ships inside the published artifact
@@ -118,28 +118,35 @@ If baseline verification fails, repair it first before adding new scope.
   do: finish current task before starting another
   dont: context-switch
   harm: partial completion across tasks = no verifiable deliverable
-  check: todo list has exactly one active task
+  check: review — exactly one task is in progress
 
 - id: REPO-W2
   title: Stay in scope
   do: modify only files related to the current task
   dont: add retries, validation, telemetry, or refactors unasked
   harm: untested scope creep
-  check: changed files match task scope
+  check: review — every changed file belongs to the current task
 
 - id: REPO-W3
   title: Record state to runtime memory
   do: save decisions, bugs, conventions to memory; track active work in task list
   dont: rely on file trackers
   harm: next session loses context
-  check: memory and task list are current before yielding
+  check: review — memory and task list were written before yielding
 
 - id: REPO-W4
   title: Search the wiki before planning or deciding
   do: before writing a plan, choosing between options, settling a design question, debugging a failure, or asking the user a design question — search the gitignored `wiki/` corpus, entering at its `manifest.md` index of one `[[slug]] | title | type` line per page; open at most five candidate slugs and stop as soon as one settles the question; where a page bears on the decision read its per-claim Warrant table too, because the frontmatter band is a summary and the atom is what adjudicates
   dont: run the search from the repo root or unrooted — the corpus is gitignored, so such a search matches nothing inside it and reports that silence as "no ruling"; read the corpus log or its generated first-principles page whole; keep opening pages once one has answered, or widen past five candidates instead of narrowing the question; cite a `wiki/` path in a plan, doc, commit, or issue, because the corpus does not ship with the clone
   harm: the corpus has already adjudicated most of what a plan here decides, so skipping it re-litigates a settled ruling, asks the user a question the corpus answered, or ships a decision the canon refused — and the repo-rooted search that returns nothing silently is what makes the skip feel like diligence
-  check: every plan and design decision restates the ruling it rests on in its own words, carrying the deciding atom's warrant band; a nil result names the verbatim query and the corpus-scoped path it ran against, so anyone holding the corpus can re-run it and falsify the claim; when the corpus is absent, as in a fresh clone, say so once and proceed
+  check: review — the plan restates the ruling it rests on in its own words, carrying the deciding atom's warrant band; a nil result names the verbatim query and the corpus-scoped path it ran against, so anyone holding the corpus can re-run it and falsify the claim; when the corpus is absent, as in a fresh clone, say so once and proceed
+
+- id: REPO-W5
+  title: Query qmd with collection syntax, never bare
+  do: pass at least one `-c <name>` on every `qmd query`, `qmd search`, and `qmd vsearch`; take the names from `qmd collection list`, and address a known file with `qmd ls <collection>` or `qmd get qmd://<collection>/<path>`, which are already collection-scoped and need no flag
+  dont: run a bare `qmd query`/`qmd search`/`qmd vsearch` — it hits every collection flagged `includeByDefault`, and which collections a machine has is local state this file cannot know; substitute a repo-root `grep`/`glob` for the REPO-W4 corpus search, because `wiki/` is gitignored and that search reports its own blindness as silence
+  harm: an unscoped query blends corpora that adjudicate at different levels, so a draft can outrank the ruling that governs it and no hit carries its provenance; it also makes a REPO-W4 nil result unfalsifiable — "I searched and found nothing" names no scope, so nobody can re-run it
+  check: every `-c` value used resolves in `qmd collection list`, and an unknown name fails loudly (`Collection not found: <name>`); review — no bare invocation in the transcript
 ```
 
 ## Definition of Done
@@ -150,7 +157,7 @@ If baseline verification fails, repair it first before adding new scope.
   do: implement target behavior; run full verification after last edit; record evidence; leave repo restartable; validate publish metadata (repository.url, repository.directory) on publishable package.json changes
   dont: claim done with failing checks, stale evidence, or uncommitted state
   harm: undone work passes as done
-  check: pnpm check exits 0 from this session after the last edit
+  check: `pnpm check` exits 0 from this session after the last edit
 ```
 
 ## Verification Commands
@@ -183,21 +190,21 @@ It judges the test files the run actually executed. Under `"vitest": { "related"
   do: run exactly pnpm check
   dont: run individual steps, --skip, --grep, or --no-verify
   harm: partial verification masks failures
-  check: no filter flags in command
+  check: review — the command run was exactly `pnpm check`, with no filter flags
 
 - id: REPO-A2
   title: Current-run evidence only
   do: use output from this session after last edit
   dont: reference CI or prior session output
   harm: stale evidence hides regressions
-  check: evidence timestamp is after last edit
+  check: review — the evidence postdates the last edit
 
 - id: REPO-A3
   title: Any failure blocks done
   do: resolve every failure before claiming done
   dont: claim done with red checks even if "unrelated"
   harm: unrelated failures become related after deploy
-  check: every verification command exits 0
+  check: `pnpm check` exits 0
 ```
 
 ### Hallucination Prevention
@@ -208,7 +215,7 @@ It judges the test files the run actually executed. Under `"vitest": { "related"
   do: read current source for library APIs; read target file in this session before editing; run verification before claiming done
   dont: write from training memory; edit from memory; claim without evidence
   harm: stale or hallucinated code; unverified claims
-  check: every edit preceded by a read; every done claim has current verification output
+  check: review — every edit was preceded by a read, and the done claim carries current verification output
 ```
 
 ## Instruction Hierarchy
@@ -248,21 +255,21 @@ This root file holds workspace-wide invariants only. Directories with distinct b
   do: "use `type(scope): subject ≤72 chars`"
   dont: use wrong type or omit scope
   harm: release tooling and changelog rely on conventional commits
-  check: commitlint passes
+  check: `pnpm exec commitlint --edit <msgfile>` exits 0 — the commit-msg hook runs it on every commit that touches a path outside the vendored trees
 
 - id: REPO-C2
   title: Commit types
   do: use feat/fix/chore/build/ci/deps/docs/perf/refactor/revert/style/test
   dont: use feat/fix for config-only changes
   harm: wrong version bumps and changelog categories
-  check: type matches diff shape
+  check: review — the type matches the diff shape
 
 - id: REPO-C3
   title: No AI co-author trailers
   do: sign commits as the human author
   dont: add Co-authored-by or AI attribution
   harm: attribution pollution
-  check: commit has no AI trailers
+  check: `git log -1 --format=%B | grep -i 'co-authored-by'` returns nothing
 ```
 
 ## Human Approval
@@ -273,7 +280,7 @@ This root file holds workspace-wide invariants only. Directories with distinct b
   do: request approval for merge to main, publish, deploy, destructive ops, credentials
   dont: proceed without explicit approval
   harm: automated destructive or credential-exposing actions
-  check: every controlled action preceded by user approval
+  check: review — every controlled action was preceded by user approval
 ```
 
 ## Multi-Agent Ownership
@@ -284,7 +291,7 @@ This root file holds workspace-wide invariants only. Directories with distinct b
   do: each agent owns a disjoint file/module set
   dont: edit files another agent owns without coordination
   harm: merge conflicts and contradictory changes
-  check: claimed files are unique per agent
+  check: review — no two agents claim the same file
 ```
 
 ## Escalation
@@ -295,7 +302,7 @@ This root file holds workspace-wide invariants only. Directories with distinct b
   do: consult CONCEPTS.md for domain vocabulary; consult ARCHITECTURE.md/CONSTITUTION.md for architecture; read `docs/solutions/` before implementing or debugging in an area it documents — it holds solved problems (bugs, best practices, workflow patterns) filed by category with `module`, `tags`, and `problem_type` frontmatter; check project docs for requirements; flag repeated failures for human review; re-read this file for scope ambiguity
   dont: guess; bypass checks; edit vendored code
   harm: wrong deliverable; masked failures; vendored drift
-  check: the change names the doc or rule it was grounded in
+  check: review — the change names the doc or rule it was grounded in
 ```
 
 ## End of Session
@@ -306,5 +313,5 @@ This root file holds workspace-wide invariants only. Directories with distinct b
   do: record decisions, blockers, next steps to memory; commit safe state
   dont: end with uncommitted work or unrecorded decisions
   harm: next session loses context
-  check: working tree clean; memory and task list current
+  check: `git status --porcelain` is empty; review — memory and task list are current
 ```
