@@ -40,9 +40,7 @@ const program = main(process.argv).pipe(
 )
 
 const provided = program.pipe(
-  Effect.provide(cliLayer),
-  Effect.provide(cliConfigLayer),
-  Effect.provide(nodeRuntime),
+  Effect.provide(Layer.provideMerge(Layer.mergeAll(cliLayer, cliConfigLayer), nodeRuntime)),
 )
 
 nodeRunMain(provided)

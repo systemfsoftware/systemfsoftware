@@ -21,6 +21,8 @@ export default defineConfig({
 
     // Overrides `sharedConfig`. Keeps `src/**` in-source tests out of the container gate.
     includeSource: [],
+    // v8 coverage ENOENTs across the testcontainers process boundary; the default `test` task keeps coverage.
+    coverage: { enabled: false },
 
     // Packing and container start are charged to `globalSetup`, so the hook
     // budget stays at its default and these bound real work only. The slowest

@@ -9,7 +9,7 @@ import {
   type ProblemKind,
   type ResolutionKind,
 } from '@systemfsoftware/arethetypeswrong-core'
-import { Context, Effect, Layer } from 'effect'
+import { Context, Data, Effect, Layer } from 'effect'
 
 import { CliFilesystem as Filesystem } from './filesystem.adapter.js'
 import { computeExitCode, ComputeExitCodeCommand } from './getExitCode.workflow.js'
@@ -77,6 +77,8 @@ export const prepareAnalysis = (
   return { result, ignoreRules, ignoreResolutions }
 }
 
+class RegistryFetchError extends Data.TaggedError('RegistryFetchError')<{ message: string }> {}
+
 const acquireTarball = (
   request: CliRequest,
 ): Effect.Effect<
@@ -118,19 +120,19 @@ const acquireTarball = (
           const res = await fetch(
             `${request.registry.replace(/\/$/, '')}/${encodeURIComponent(name ?? npmTarget)}/${version}`,
           )
-          if (res.status === 404) throw new Error(`Package not found: ${npmTarget}`)
-          if (!res.ok) throw new Error(`Registry returned ${res.status} for ${npmTarget}`)
+          if (res.status === 404) throw new RegistryFetchError({ message: `Package not found: ${npmTarget}` })
+          if (!res.ok) throw new RegistryFetchError({ message: `Registry returned ${res.status} for ${npmTarget}` })
           return res.json() as Promise<{ name: string; version: string; dist: { tarball: string } }>
         },
-        catch: (e) => new Error(String(e)),
+        catch: (e) => (e instanceof RegistryFetchError ? e : new RegistryFetchError({ message: String(e) })),
       }).pipe(Effect.orDie)
       const tarballRes = yield* Effect.tryPromise({
         try: async () => {
           const res = await fetch(registry.dist.tarball)
-          if (!res.ok) throw new Error(`Tarball fetch returned ${res.status}`)
+          if (!res.ok) throw new RegistryFetchError({ message: `Tarball fetch returned ${res.status}` })
           return new Uint8Array(await res.arrayBuffer())
         },
-        catch: (e) => new Error(String(e)),
+        catch: (e) => (e instanceof RegistryFetchError ? e : new RegistryFetchError({ message: String(e) })),
       }).pipe(Effect.orDie)
       return {
         bytes: tarballRes,
@@ -163,8 +165,7 @@ export const runAttw = (
         entrypointsLegacy: request.entrypointsLegacy,
       })
     }).pipe(
-      Effect.provide(checkPackageLayer),
-      Effect.provide(storeLayer),
+      Effect.provide(Layer.mergeAll(checkPackageLayer, storeLayer)),
       Effect.catchAll(() =>
         Effect.succeed<CheckResult>({
           packageName: request.fileOrDirectory,
