@@ -94,8 +94,8 @@ export class ChildProcessProxyWorker {
       const workingDir = path.resolve(message.workingDirectory)
       const injector: Injector<ChildProcessContext> = pluginInjector
         .provideValue(injectionTokens.pluginsByKind, pluginsByKind)
-        .provideClass(injectionTokens.pluginCreator, PluginCreator)
         .provideValue(commonTokens.sandboxDirectory, workingDir)
+        .provideClass(injectionTokens.pluginCreator, PluginCreator)
 
       const childModule = await import(message.modulePath)
       const RealSubjectClass = childModule[message.namedExport]
