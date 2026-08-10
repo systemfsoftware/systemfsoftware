@@ -34,7 +34,6 @@ catalog:
   "@microsoft/api-extractor": ^7.58.7
   oxc-parser: ^0.140.0
   "@oxc-project/types": ^0.140.0
-  "@semantic-release/git": ^10.0.1
   "@oh-my-pi/pi-coding-agent": ^17.0.5
   "@std/toml": jsr:^1.0.11
   "@std/jsonc": jsr:^1.0.2
