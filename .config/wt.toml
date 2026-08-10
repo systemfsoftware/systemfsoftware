@@ -2,17 +2,21 @@
 # pre-start and post-start are both pipelines of sequential [[block]] tables;
 # keys within one block run concurrently. Output goes to log files (wt config state logs).
 
-# --- Blocking: filesystem setup + CodeGraph warm-start (concurrent, fast) ---
+# --- Blocking: filesystem setup only. Nothing that a later step does not need. ---
+# Keep this block cheap: every command here is wall-clock the shell waits on.
 [[pre-start]]
 setup = "{{ worktree_path }}/scripts/worktrunk/pre-start.sh '{{ worktree_path }}' '{{ primary_worktree_path }}'"
-codegraph = "{{ worktree_path }}/scripts/worktrunk/copy-codegraph.sh '{{ worktree_path }}' '{{ primary_worktree_path }}'"
 
-# --- Background: copy cache -> install deps -> generate artifacts ---
-# Block order is load-bearing. Reflink caches before the package manager reconciles
+# --- Background: copy caches + warm CodeGraph -> install deps -> generate artifacts ---
+# Block order is load-bearing. Seed caches before the package manager reconciles
 # them, and install before generate — generate runs the build from node_modules,
 # so a concurrent table dies with "command not found".
+#
+# codegraph sits here, not in pre-start, because nothing downstream reads the index:
+# the daemon picks it up whenever it lands. Blocking the shell on it bought nothing.
 [[post-start]]
 copy = "wt step copy-ignored"
+codegraph = "{{ worktree_path }}/scripts/worktrunk/copy-codegraph.sh '{{ worktree_path }}' '{{ primary_worktree_path }}'"
 
 [[post-start]]
 deps = "{{ worktree_path }}/scripts/worktrunk/install-deps.sh '{{ worktree_path }}'"

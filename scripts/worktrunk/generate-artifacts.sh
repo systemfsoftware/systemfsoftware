@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Worktrunk pre-start: generate all build artifacts.
+# Worktrunk post-start: generate all build artifacts.
 # Invoked by .config/wt.toml. Arg: worktree_path
 #
 # A fresh worktree has none of the gitignored generated files that checks
