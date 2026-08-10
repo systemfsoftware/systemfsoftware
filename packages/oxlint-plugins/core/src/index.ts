@@ -9,7 +9,6 @@ import { banClasses } from './rules/ban-classes.js'
 import { banErrorString } from './rules/ban-error-string.js'
 import { entryNameSpan } from './rules/entry-name-span.js'
 import { entrySurfaceOrUnit } from './rules/entry-surface-or-unit.js'
-import { noBarrels } from './rules/no-barrels.js'
 import { noBodylessStatusAssertion } from './rules/no-bodyless-status-assertion.js'
 import { noContextGenericTag } from './rules/no-context-generic-tag.js'
 import { noDateNowInEffect } from './rules/no-date-now-in-effect.js'
@@ -33,7 +32,6 @@ const recommendedRules = {
   [`${PLUGIN_NAME}/ban-error-string`]: 'error',
   [`${PLUGIN_NAME}/entry-name-span`]: 'error',
   [`${PLUGIN_NAME}/entry-surface-or-unit`]: 'error',
-  [`${PLUGIN_NAME}/no-barrels`]: 'error',
   [`${PLUGIN_NAME}/no-bodyless-status-assertion`]: 'error',
   [`${PLUGIN_NAME}/no-context-generic-tag`]: 'error',
   [`${PLUGIN_NAME}/no-date-now-in-effect`]: 'error',
@@ -60,7 +58,6 @@ export default {
     'ban-error-string': banErrorString,
     'entry-name-span': entryNameSpan,
     'entry-surface-or-unit': entrySurfaceOrUnit,
-    'no-barrels': noBarrels,
     'no-bodyless-status-assertion': noBodylessStatusAssertion,
     'no-context-generic-tag': noContextGenericTag,
     'no-date-now-in-effect': noDateNowInEffect,

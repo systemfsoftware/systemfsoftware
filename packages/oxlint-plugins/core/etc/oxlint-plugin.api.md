@@ -14,8 +14,8 @@ const _default: {
     rules: {
         'ban-classes': Rule;
         'ban-error-string': Rule;
+        'entry-name-span': Rule;
         'entry-surface-or-unit': Rule;
-        'no-barrels': Rule;
         'no-bodyless-status-assertion': Rule;
         'no-context-generic-tag': Rule;
         'no-date-now-in-effect': Rule;
@@ -31,6 +31,31 @@ const _default: {
         'no-native-setinterval-in-effect': Rule;
         'no-native-settimeout-in-effect': Rule;
         'no-wildcard-reexport': Rule;
+    };
+    configs: {
+        recommended: {
+            rules: {
+                readonly "@systemfsoftware/oxlint-plugin/ban-classes": 'error';
+                readonly "@systemfsoftware/oxlint-plugin/ban-error-string": 'error';
+                readonly "@systemfsoftware/oxlint-plugin/entry-name-span": 'error';
+                readonly "@systemfsoftware/oxlint-plugin/entry-surface-or-unit": 'error';
+                readonly "@systemfsoftware/oxlint-plugin/no-bodyless-status-assertion": 'error';
+                readonly "@systemfsoftware/oxlint-plugin/no-context-generic-tag": 'error';
+                readonly "@systemfsoftware/oxlint-plugin/no-date-now-in-effect": 'error';
+                readonly "@systemfsoftware/oxlint-plugin/no-direct-tag-access": 'error';
+                readonly "@systemfsoftware/oxlint-plugin/no-either-tag-assertions": 'error';
+                readonly "@systemfsoftware/oxlint-plugin/no-inline-destructured-type": 'error';
+                readonly "@systemfsoftware/oxlint-plugin/no-io-boundary-tests": 'error';
+                readonly "@systemfsoftware/oxlint-plugin/no-logging-in-catch": 'error';
+                readonly "@systemfsoftware/oxlint-plugin/no-native-map-in-effect": 'error';
+                readonly "@systemfsoftware/oxlint-plugin/no-native-set-in-effect": 'error';
+                readonly "@systemfsoftware/oxlint-plugin/no-native-setinterval-in-effect": 'error';
+                readonly "@systemfsoftware/oxlint-plugin/no-native-settimeout-in-effect": 'error';
+                readonly "@systemfsoftware/oxlint-plugin/no-new-promise-in-effect": 'error';
+                readonly "@systemfsoftware/oxlint-plugin/no-new-worker-with-wasm-import": 'error';
+                readonly "@systemfsoftware/oxlint-plugin/no-wildcard-reexport": 'error';
+            };
+        };
     };
 };
 export default _default;
