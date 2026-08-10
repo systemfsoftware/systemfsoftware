@@ -3,6 +3,7 @@ import { Duration, Effect, Either, Option, Ref, Stream, TestClock } from 'effect
 import { expect } from 'vitest'
 import { Daemon } from '../src/mod.js'
 import { dynamic } from '../src/mod.js'
+import { MaxChildren } from '../src/mod.js'
 import { run } from '../src/mod.js'
 import { NoopLayer } from './helpers/shared-layers.js'
 import { BufferedRef } from './helpers/test-utils.js'
@@ -80,7 +81,7 @@ Feature('Stream Worker Lifecycle')
               const spec = dynamic({
                 name: 'silent-stream-sup',
                 child: () => worker,
-                maxChildren: 1,
+                maxChildren: MaxChildren.make(1),
               })
               const handle = yield* run.dynamic(spec)
               const ref = yield* handle.startChild(void 0)
@@ -114,7 +115,7 @@ Feature('Stream Worker Lifecycle')
               const spec = dynamic({
                 name: 'long-lived-sup',
                 child: () => worker,
-                maxChildren: 1,
+                maxChildren: MaxChildren.make(1),
               })
               const handle = yield* run.dynamic(spec)
               const ref = yield* handle.startChild(void 0)
