@@ -28,7 +28,7 @@
           },
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-protected-writes.sh\"",
+            "command": "command -v deno >/dev/null 2>&1 || { echo 'guard-protected-writes: deno not found on PATH - install Deno (https://deno.land) so the guard can run' >&2; exit 1; }; exec deno run --quiet --allow-env --allow-read \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-protected-writes.ts\"",
             "timeout": 5
           }
         ]
@@ -38,7 +38,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-qmd-scope.sh\"",
+            "command": "command -v deno >/dev/null 2>&1 || { echo 'guard-qmd-scope: deno not found on PATH - install Deno (https://deno.land) so the guard can run' >&2; exit 1; }; exec deno run --quiet \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-qmd-scope.ts\"",
             "timeout": 5
           }
         ]
@@ -64,7 +64,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/stamp-wiki-query.sh\"",
+            "command": "command -v deno >/dev/null 2>&1 || exit 0; exec deno run --quiet --allow-env --allow-read --allow-write \"$CLAUDE_PROJECT_DIR/.claude/hooks/stamp-wiki-query.ts\"",
             "timeout": 5
           }
         ]
