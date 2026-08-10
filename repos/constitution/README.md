@@ -88,7 +88,7 @@ Each rule is a YAML block with `do`, `dont`, `harm`, and `gate` — machine-read
 
 ## Amendment
 
-The constitution is amendable by design. An amendment carries a written rationale, a version bump, a date, and a matching update to the consuming `AGENTS.md`. Proposed additions go through challenge first (§V.5) — every rule must name the harm it prevents, and removal is the default response to slop at every scale (§V.7).
+The constitution is amendable by design. An amendment carries a written rationale, a version bump, a date, and a matching update to the consuming `AGENTS.md`. Proposed additions go through challenge first (`CONST-W2`) — every rule must name the harm it prevents, and removal is the default response to slop at every scale (`CONST-S4`).
 
 ---
 
@@ -104,7 +104,7 @@ A: Drift. The whole point of one source of truth is that an amendment here propa
 A: No — that is what an amendment is for. Override-by-fork has been the failure mode for every prior attempt at a shared design law.
 
 **Q: How do I cite a rule in a PR?**
-A: By the harm it prevents, not by clause number. §A.1: *"invoke a principle by showing the harm is present."* The rule ids (`I.1`, `II.3`, `V.7` …) are stable for cross-document reference; the prose around them can change.
+A: By the harm it prevents, not by clause number. `CONST-G1`: *"invoke a principle by showing the harm is present."* Ids are stable for cross-document reference and the prose around them can change — the family letter says what the rule is about (`CONST-B3` is a boundary rule), never which article it sits in.
 
 **Q: Is this only for TypeScript / Effect / a specific stack?**
 A: No. The principles are stack-neutral. The harness that enforces them (`AGENTS.md`, lint rules, property tests) lives in each consumer repo and is free to vary by stack.

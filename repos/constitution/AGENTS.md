@@ -20,6 +20,47 @@ Before making changes:
 - **Stay in scope.** Don't modify files unrelated to the task. Scope reduction requires explicit user approval.
 - **Leave clean state.** The next session must run verification immediately.
 
+## Amending the Constitution
+
+### Writing a rule
+
+A rule is a fenced YAML block carrying `id`, `title`, `gate`, `do`, `dont`, `harm`, `check`, and — only where wrong and right look alike — `example`, `scope`, or `layers`. Do not restate that list anywhere: `pnpm test` owns it, and rejects a missing field, an unknown one, or an unregistered `gate` value.
+
+### Minting an id
+
+A rule id is `CONST-<family><n>`. Pick the family letter from what the rule is **about**, never from the article it lands in — a family spans articles, which is why `CONST-P3` (purity) lives in Article II. The number is the next free one in that family: mint order, not a position.
+
+| letter | family | fires when you are |
+|---|---|---|
+| `G` | Governance | invoking the constitution, or resolving it against another document |
+| `E` | Enforcement | deciding how a principle is enforced, or claiming done |
+| `P` | Purity | writing or classifying a decision function |
+| `D` | Domain modelling | declaring a domain type |
+| `B` | Boundary | moving data or control between the core and the outside |
+| `T` | Testing | choosing, writing, or judging a test |
+| `N` | Naming & structure | placing or naming a module |
+| `W` | Work discipline | deviating mid-task — shrinking scope, skipping challenge, breaking a rule |
+| `S` | Subtraction | about to add code, copy a pattern, or patch a symptom |
+
+A one-member family is correct; never merge families to balance their sizes. A new letter must be added to `FAMILIES` in the validator in the same change — the gate rejects an unregistered one.
+
+### Changing an existing rule
+
+The identifier tracks the **obligation**, not the sentence. Ask: would an agent that complied with the old text still comply with the new one?
+
+| operation | identifier |
+|---|---|
+| moved to another article | keep — position is not identity |
+| reworded, same obligation | keep, however extensive the rewrite |
+| obligation narrowed or widened | new id; the old number stays vacant |
+| split in two | the part carrying the original obligation keeps the id |
+| merged from two | keep either id; the other number stays vacant |
+| deleted | the number stays vacant, forever |
+
+There is no retirement ledger and no backwards compatibility. Never renumber to close a gap: a gap is free, and a citation into one resolves to nothing — which is loud. A reused number resolves silently, to the wrong rule.
+
+This is gated rather than requested because the remaining defect is the quiet one — an id that survives while its rule changes underneath it. Of the surfaces citing an id, only a gate script fails loudly, so run the reassignment check below after any commit that re-scopes a rule.
+
 ## Surface Classes
 
 | Surface | Files | Rule |
@@ -41,7 +82,14 @@ A task is done only when ALL of the following are true:
 ## Verification Commands
 
 ```bash
+pnpm test                          # schema, coverage, ids, families, dangling citations
 pnpm exec commitlint --from HEAD~1
+```
+
+After a commit that deletes, splits, merges, or re-scopes a rule — not after every edit — also run the reassignment check against the revision before it:
+
+```bash
+pnpm test -- --against <rev>
 ```
 
 ### Anti-Bypass Rules
