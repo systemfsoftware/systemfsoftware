@@ -55,7 +55,8 @@
     "vitest": "catalog:",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/stryker-js-mutation-run": "workspace:^",
-    "@systemfsoftware/stryker-js-vitest-runner": "workspace:^"  },
+    "@systemfsoftware/stryker-js-vitest-runner": "workspace:^"
+  },
   "engines": {
     "node": ">=24"
   }
