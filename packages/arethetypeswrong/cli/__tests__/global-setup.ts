@@ -2,26 +2,24 @@ import { execFile } from 'node:child_process'
 import { access, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { setTimeout as sleep } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { GenericContainer, getContainerRuntimeClient, type StartedTestContainer } from 'testcontainers'
 import type { TestProject } from 'vitest/node'
 
+import { FIXTURE_FILES, FIXTURE_PACKAGE, STUB_REGISTRY_PORT, STUB_REGISTRY_SCRIPT } from './stub-registry.js'
+
 declare module 'vitest' {
   interface ProvidedContext {
     attwContainerId: string
-    verdaccioContainerId: string
   }
 }
 
 const execFileAsync = promisify(execFile)
 
 const NODE_IMAGE = 'node:22-alpine'
-const VERDACCIO_IMAGE = 'verdaccio/verdaccio:6'
-const VERDACCIO_PORT = 4873
 
-// The CLI's workspace dependencies are not on the registry at this version,
-// so each is packed and installed from a local tarball beside it.
 const WORKSPACE_PACKAGES = [
   '@systemfsoftware/arethetypeswrong-cli',
   '@systemfsoftware/arethetypeswrong-core',
@@ -32,27 +30,15 @@ const CLI_DIR = fileURLToPath(new URL('../', import.meta.url))
 const FIXTURES_DIR = fileURLToPath(new URL('./fixtures', import.meta.url))
 const WORKDIR = '/work'
 const TARBALLS_IN_CONTAINER = '/opt/tarballs'
-
-const VERDACCIO_CONFIG = `
-storage: /verdaccio/storage/data
-packages:
-  '@*/*':
-    access: $all
-    publish: $all
-    unpublish: $all
-  '**':
-    access: $all
-    publish: $all
-    unpublish: $all
-`
+const STUB_SCRIPT_PATH = `${WORKDIR}/stub-registry.mjs`
+const FIXTURE_TARBALL_IN_CONTAINER = `${TARBALLS_IN_CONTAINER}/${FIXTURE_PACKAGE.name}-${FIXTURE_PACKAGE.version}.tgz`
 
 let attwContainer: StartedTestContainer | undefined
-let verdaccioContainer: StartedTestContainer | undefined
 let tarballDir: string | undefined
-let publishDir: string | undefined
+let fixtureDir: string | undefined
 
 export async function setup(project: TestProject): Promise<void> {
-  const distEntry = join(CLI_DIR, 'dist', 'index.mjs')
+  const distEntry = join(CLI_DIR, 'dist', 'main.mjs')
   await access(distEntry).catch(() => {
     throw new Error(
       `the CLI contract lane needs a built package: ${distEntry} is missing - run \`pnpm build\` first`,
@@ -84,58 +70,29 @@ export async function setup(project: TestProject): Promise<void> {
     )
   }
 
-  verdaccioContainer = await new GenericContainer(VERDACCIO_IMAGE)
-    .withCopyContentToContainer([{ content: VERDACCIO_CONFIG, target: '/verdaccio/conf/config.yaml' }])
-    .withExposedPorts(VERDACCIO_PORT)
-    .withCommand(['verdaccio', '--config', '/verdaccio/conf/config.yaml', '--listen', '0.0.0.0:4873'])
-    .start()
-
-  const verdaccioBaseUrl = `http://${verdaccioContainer.getHost()}:${
-    verdaccioContainer.getMappedPort(
-      VERDACCIO_PORT,
-    )
-  }/`
-
-  publishDir = await mkdtemp(join(tmpdir(), 'attw-fixture-pkg-'))
-  await writeFile(
-    join(publishDir, 'package.json'),
-    JSON.stringify(
-      {
-        name: 'attw-fixture-pkg',
-        version: '1.0.0',
-        description: 'fixture for attw --from-npm contract scenarios',
-        type: 'module',
-        main: 'index.js',
-        types: 'index.d.ts',
-        files: ['index.js', 'index.d.ts'],
-      },
-      null,
-      2,
-    ),
-  )
-  await writeFile(join(publishDir, 'index.js'), 'export const value = 1\n')
-  await writeFile(join(publishDir, 'index.d.ts'), 'export declare const value: number\n')
-
-  const published = await execFileAsync(
-    'npm',
-    ['publish', '--registry', verdaccioBaseUrl, '--loglevel=error', '--userconfig', join(publishDir, '.npmrc')],
-    { cwd: publishDir, env: { ...process.env, npm_config_registry: verdaccioBaseUrl } },
-  )
-  if (!published.stdout.includes('+ attw-fixture-pkg@1.0.0')) {
-    throw new Error(
-      `publishing fixture to verdaccio failed: stderr=${published.stderr}\nstdout=${published.stdout}`,
-    )
+  fixtureDir = await mkdtemp(join(tmpdir(), 'attw-fixture-pkg-'))
+  await writeFile(join(fixtureDir, 'package.json'), JSON.stringify(FIXTURE_PACKAGE, null, 2))
+  for (const [name, content] of Object.entries(FIXTURE_FILES)) {
+    await writeFile(join(fixtureDir, name), content)
   }
+  await execFileAsync('npm', ['pack'], { cwd: fixtureDir })
+  const fixtureTarball = join(fixtureDir, `${FIXTURE_PACKAGE.name}-${FIXTURE_PACKAGE.version}.tgz`)
 
   attwContainer = await new GenericContainer(NODE_IMAGE)
     .withCopyFilesToContainer(
-      packed.map((name) => ({ source: join(packDir, name), target: `${TARBALLS_IN_CONTAINER}/${name}` })),
+      [
+        ...packed.map((name) => ({ source: join(packDir, name), target: `${TARBALLS_IN_CONTAINER}/${name}` })),
+        { source: fixtureTarball, target: FIXTURE_TARBALL_IN_CONTAINER },
+      ],
     )
+    .withCopyContentToContainer([
+      { content: STUB_REGISTRY_SCRIPT, target: STUB_SCRIPT_PATH },
+      {
+        content: JSON.stringify({ name: 'attw-contract-workspace', private: true }),
+        target: `${WORKDIR}/package.json`,
+      },
+    ])
     .withCopyDirectoriesToContainer([{ source: FIXTURES_DIR, target: `${WORKDIR}/fixtures` }])
-    .withCopyContentToContainer([{
-      content: JSON.stringify({ name: 'attw-contract-workspace', private: true }),
-      target: `${WORKDIR}/package.json`,
-    }])
     .withWorkingDir(WORKDIR)
     .withCommand(['sleep', 'infinity'])
     .start()
@@ -155,13 +112,33 @@ export async function setup(project: TestProject): Promise<void> {
     throw new Error(`installing the packed tarball failed with ${installed.exitCode}:\n${installed.output}`)
   }
 
+  const stubStart = await attwContainer.exec(
+    ['sh', '-c', `nohup node ${STUB_SCRIPT_PATH} ${FIXTURE_TARBALL_IN_CONTAINER} > /tmp/stub.log 2>&1 &`],
+    { workingDir: WORKDIR },
+  )
+  if (stubStart.exitCode !== 0) {
+    throw new Error(`starting the stub registry failed: ${stubStart.output}`)
+  }
+  // Poll until the stub answers, so the --from-npm scenario never races the server startup.
+  for (let attempt = 0; attempt < 40; attempt++) {
+    const probe = await attwContainer.exec([
+      'node',
+      '-e',
+      `fetch('http://localhost:${STUB_REGISTRY_PORT}/${FIXTURE_PACKAGE.name}/latest').then(r=>r.text()).then(()=>process.exit(0)).catch(()=>process.exit(1))`,
+    ])
+    if (probe.exitCode === 0) break
+    if (attempt === 39) {
+      const log = await attwContainer.exec(['cat', '/tmp/stub.log'])
+      throw new Error(`stub registry did not start within 20s. stub log:\n${log.output}`)
+    }
+    await sleep(500)
+  }
+
   project.provide('attwContainerId', attwContainer.getId())
-  project.provide('verdaccioContainerId', verdaccioContainer.getId())
 }
 
 export async function teardown(): Promise<void> {
   await attwContainer?.stop()
-  await verdaccioContainer?.stop()
   if (tarballDir !== undefined) await rm(tarballDir, { recursive: true, force: true })
-  if (publishDir !== undefined) await rm(publishDir, { recursive: true, force: true })
+  if (fixtureDir !== undefined) await rm(fixtureDir, { recursive: true, force: true })
 }

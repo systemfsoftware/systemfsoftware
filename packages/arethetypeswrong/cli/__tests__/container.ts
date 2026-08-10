@@ -6,7 +6,7 @@ export const WORKDIR = '/work'
 
 export const CLI_BIN = `${WORKDIR}/node_modules/.bin/attw`
 
-export const fixtureDir = (name: string): string => `${WORKDIR}/fixtures/${name}`
+export const fixtureDir = (_name: string): string => `${WORKDIR}/fixtures`
 
 export interface CliResult {
   readonly exitCode: number

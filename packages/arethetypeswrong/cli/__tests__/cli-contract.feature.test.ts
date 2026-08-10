@@ -2,11 +2,11 @@ import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoft
 import { Effect } from 'effect'
 import { expect } from 'vitest'
 
-import { Container, ContainerLive, fixtureDir } from './container.js'
+import { Container, ContainerLive, fixtureDir, WORKDIR } from './container.js'
 
 const Feature = makeFeature({ it, layer })
 
-const fixture = (name: string): string => `${name}.tgz`
+const fixture = (name: string): string => `${WORKDIR}/fixtures/${name}.tgz`
 
 Feature('Analyzing published packages with the installed binary')
   .withLayer(ContainerLive)
@@ -148,11 +148,19 @@ Feature('Analyzing published packages with the installed binary')
         When('a fixture package is requested from the registry')('result', () =>
           Effect.gen(function*() {
             const container = yield* Container
-            return yield* container.run(['--from-npm', 'attw-fixture-pkg@1.0.0'])
+            return yield* container.run([
+              '--from-npm',
+              'attw-fixture-pkg@1.0.0',
+              '--registry',
+              'http://localhost:4873',
+              '-f',
+              'json',
+            ])
           })),
         Then('the analysis names the fixture package')((s) => {
           expect([0, 1]).toContain(s.result.exitCode)
-          expect(s.result.stdout).toMatch(/attw-fixture-pkg|analysis|No types/)
+          const parsed = JSON.parse(s.result.stdout) as { analysis: { packageName: string } }
+          expect(parsed.analysis.packageName).toBe('attw-fixture-pkg')
         }),
       ),
     )
