@@ -2,7 +2,7 @@ import { FileSystem } from '@effect/platform/FileSystem'
 import * as PathModule from '@effect/platform/Path'
 import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { MemoryFileSystem } from '@systemfsoftware/effect-memfs'
+import { Contents, layer as memoryFileSystemLayer } from '@systemfsoftware/effect-memfs'
 import { TomlLoader, TomlLoaderLive } from '@systemfsoftware/omp-utils'
 import { Effect, Layer } from 'effect'
 import { expect } from 'vitest'
@@ -23,7 +23,8 @@ function makeFsLayer(contents: Record<string, string>) {
     Layer.provideMerge(
       TomlLoaderLive.pipe(
         Layer.provideMerge(
-          MemoryFileSystem.layerWith(contents).pipe(
+          memoryFileSystemLayer.pipe(
+            Layer.provide(Layer.succeed(Contents, contents)),
             Layer.provideMerge(PathModule.layer),
           ),
         ),

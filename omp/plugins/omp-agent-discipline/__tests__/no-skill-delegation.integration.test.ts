@@ -1,7 +1,7 @@
 import * as PathModule from '@effect/platform/Path'
 import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { MemoryFileSystem } from '@systemfsoftware/effect-memfs'
+import { Contents, layer as memoryFileSystemLayer } from '@systemfsoftware/effect-memfs'
 import { TomlLoader, TomlLoaderLive } from '@systemfsoftware/omp-utils'
 import { Effect, Layer } from 'effect'
 import { expect } from 'vitest'
@@ -23,7 +23,7 @@ function seededLayer(contents: Record<string, string>) {
     }),
   ).pipe(
     Layer.provide(TomlLoaderLive.pipe(
-      Layer.provide(MemoryFileSystem.layerWith(contents)),
+      Layer.provide(memoryFileSystemLayer.pipe(Layer.provide(Layer.succeed(Contents, contents)))),
       Layer.provide(PathModule.layer),
     )),
   )
@@ -150,9 +150,9 @@ Feature('No-skill-delegation — executor integration')
               }),
             ).pipe(
               Layer.provide(TomlLoaderLive.pipe(
-                Layer.provide(MemoryFileSystem.layerWith({
+                Layer.provide(memoryFileSystemLayer.pipe(Layer.provide(Layer.succeed(Contents, {
                   '/project-a/systemfsoftware.toml': 'no_delegate_skills = ["ce-work"]',
-                })),
+                })))),
                 Layer.provide(PathModule.layer),
               )),
             ),

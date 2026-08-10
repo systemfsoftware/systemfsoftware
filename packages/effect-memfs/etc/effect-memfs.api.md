@@ -17,6 +17,9 @@ export class Contents extends Contents_base {}
 // @public (undocumented)
 export const layer: Layer.Layer<FileSystem_2.FileSystem, never, Contents>;
 
+// @public (undocumented)
+export type SeedContents = memfs.DirectoryJSON;
+
 // (No @packageDocumentation comment for this package)
 
 ```

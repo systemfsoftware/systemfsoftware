@@ -3,8 +3,7 @@ import * as CommandExecutor from '@effect/platform/CommandExecutor'
 import * as PlatformError from '@effect/platform/Error'
 import * as Path from '@effect/platform/Path'
 import { And, Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { MemoryFileSystem } from '@systemfsoftware/effect-memfs'
-import type { Contents } from '@systemfsoftware/effect-memfs'
+import { Contents, layer as memoryFileSystemLayer, type SeedContents } from '@systemfsoftware/effect-memfs'
 import * as Chunk from 'effect/Chunk'
 import * as Context from 'effect/Context'
 import * as Duration from 'effect/Duration'
@@ -40,7 +39,7 @@ interface SpawnBox {
 const SpawnRecords = Context.GenericTag<SpawnBox>('@oxlint-guard-test/SpawnRecords')
 
 interface Environment {
-  readonly tree: Contents
+  readonly tree: SeedContents
   readonly cwd: string
 }
 
@@ -226,7 +225,7 @@ const execute = (
     const layers = Layer.merge(
       Layer.provide(
         lintGuardAdapterLayer,
-        Layer.mergeAll(Path.layer, MemoryFileSystem.layerWith(env.tree)),
+        Layer.mergeAll(Path.layer, memoryFileSystemLayer.pipe(Layer.provide(Layer.succeed(Contents, env.tree)))),
       ),
       Path.layer,
     )
@@ -236,7 +235,7 @@ const execute = (
 
 const payload = (filePath: string): string => JSON.stringify({ tool_name: 'Edit', tool_input: { file_path: filePath } })
 
-const fullTree: Contents = {
+const fullTree: SeedContents = {
   '/project/oxlint.config.mjs': 'export default {}',
   '/project/node_modules/.bin/oxlint': 'fake-oxlint',
   '/project/bun.lock': 'lockfile v1',
@@ -261,7 +260,7 @@ const fullTree: Contents = {
 
 const PROJECT: Environment = { tree: fullTree, cwd: '/project' }
 
-const relativeTree: Contents = {
+const relativeTree: SeedContents = {
   ...fullTree,
   // A .git marker (worktree style — a file, not a directory) makes the walk
   // stop at /project even though the scenario's cwd is the nested /project/a.
@@ -269,12 +268,12 @@ const relativeTree: Contents = {
   '/project/a/b/src/relative.ts': 'export const relative = 1\n',
 }
 
-const noConfigTree: Contents = {
+const noConfigTree: SeedContents = {
   '/project/node_modules/.bin/oxlint': 'fake-oxlint',
   '/project/src/clean.ts': 'export const ok = 1\nexport default ok\n',
 }
 
-const noBinaryTree = (lockfile: Contents): Contents => ({
+const noBinaryTree = (lockfile: SeedContents): SeedContents => ({
   '/project/oxlint.config.mjs': 'export default {}',
   '/project/src/clean.ts': 'export const ok = 1\nexport default ok\n',
   ...lockfile,
@@ -282,14 +281,14 @@ const noBinaryTree = (lockfile: Contents): Contents => ({
 
 // A directory where node_modules/.bin/oxlint should be — it passes exists() but
 // can never be spawned.
-const directoryBinaryTree: Contents = {
+const directoryBinaryTree: SeedContents = {
   '/project/oxlint.config.mjs': 'export default {}',
   '/project/node_modules/.bin/oxlint/': null,
   '/project/src/clean.ts': 'export const ok = 1\nexport default ok\n',
 }
 
 // No local binary, but one planted in an ancestor directory outside the root.
-const ancestorBinaryTree: Contents = {
+const ancestorBinaryTree: SeedContents = {
   '/project/oxlint.config.mjs': 'export default {}',
   '/project/src/clean.ts': 'export const ok = 1\nexport default ok\n',
   '/tmp/node_modules/.bin/oxlint': 'planted-oxlint',

@@ -1,6 +1,6 @@
 import { And, Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { type Contents, MemoryFileSystem } from '@systemfsoftware/effect-memfs'
-import { Effect } from 'effect'
+import { Contents, layer as memoryFileSystemLayer, type SeedContents } from '@systemfsoftware/effect-memfs'
+import { Effect, Layer } from 'effect'
 import { afterEach, expect, vi } from 'vitest'
 import { runGuard } from '../src/config-guard/main.js'
 
@@ -9,8 +9,10 @@ const Feature = makeFeature({ it, layer })
 const payload = (toolName: string, toolInput: Record<string, unknown>): string =>
   JSON.stringify({ tool_name: toolName, tool_input: toolInput })
 
-const runWithFs = (raw: string, contents: Contents): Effect.Effect<number, never, never> =>
-  runGuard(raw, '/').pipe(Effect.provide(MemoryFileSystem.layerWith(contents)))
+const runWithFs = (raw: string, contents: SeedContents): Effect.Effect<number, never, never> =>
+  runGuard(raw, '/').pipe(
+    Effect.provide(memoryFileSystemLayer.pipe(Layer.provide(Layer.succeed(Contents, contents)))),
+  )
 
 const stderrText = (calls: readonly unknown[][]): string =>
   calls.map((call: readonly unknown[]) => String(call[0])).join('\n')
@@ -143,7 +145,7 @@ afterEach(() => {
 })
 
 Feature('Guarding oxlint configs against silenced rules')
-  .withScenarioLayer(MemoryFileSystem.layerWith({}))
+  .withScenarioLayer(memoryFileSystemLayer.pipe(Layer.provide(Layer.succeed(Contents, {}))))
   .body(({ scenario, scenarioOutline }) => {
     scenarioOutline(
       'An edit that turns a rule off in <config> is refused, naming the rule',

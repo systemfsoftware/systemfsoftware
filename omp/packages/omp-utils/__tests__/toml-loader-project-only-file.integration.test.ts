@@ -9,7 +9,7 @@
 import * as PathModule from '@effect/platform/Path'
 import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { MemoryFileSystem } from '@systemfsoftware/effect-memfs'
+import { Contents, layer as memoryFileSystemLayer } from '@systemfsoftware/effect-memfs'
 import { Effect, Layer } from 'effect'
 import { expect } from 'vitest'
 
@@ -23,7 +23,7 @@ process.env['OMP_USER_CONFIG_HOME'] = HOME
 
 const buildLayer = (contents: Record<string, string>) =>
   TomlLoaderLive.pipe(
-    Layer.provide(MemoryFileSystem.layerWith(contents)),
+    Layer.provide(memoryFileSystemLayer.pipe(Layer.provide(Layer.succeed(Contents, contents)))),
     Layer.provide(PathModule.layer),
   )
 
