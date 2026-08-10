@@ -13,11 +13,13 @@ const _default: {
     };
     rules: {
         'cell-import-boundary': Rule;
+        'no-test-runtime-in-pure-cell': Rule;
     };
     configs: {
         recommended: {
             rules: {
                 "@systemfsoftware/oxlint-plugin-cell-imports/cell-import-boundary": string;
+                "@systemfsoftware/oxlint-plugin-cell-imports/no-test-runtime-in-pure-cell": string;
             };
         };
     };

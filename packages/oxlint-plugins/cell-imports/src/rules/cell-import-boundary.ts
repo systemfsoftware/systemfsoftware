@@ -26,7 +26,7 @@ export type MessageIds =
   | 'forbiddenRuntimeImport'
   | 'forbiddenObserverImport'
 
-const cellOf = (specifier: string): string | null => {
+export const cellOf = (specifier: string): string | null => {
   const segments = specifier.split('/').filter((segment) => segment.length > 0)
   const last = segments.at(-1)
   if (last === undefined) return null
@@ -46,7 +46,7 @@ const edgeFor = (filename: string): CellEdge | null => {
 const isProductionCaller = (filename: string): boolean =>
   !NON_PRODUCTION_CALLER.some((pattern) => pattern.test(filename))
 
-const hasValueBinding = (node: ESTree.ImportDeclaration): boolean => {
+export const hasValueBinding = (node: ESTree.ImportDeclaration): boolean => {
   if (node.importKind === 'type') return false
   if (node.specifiers.length === 0) return true
   return !node.specifiers.every(
