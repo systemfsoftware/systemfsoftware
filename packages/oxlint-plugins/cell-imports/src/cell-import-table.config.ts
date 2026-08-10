@@ -139,6 +139,19 @@ export const CELL_IMPORT_TABLE: Readonly<Record<string, CellEdge>> = {
       '.shape',
     ],
   },
+  '.harness.ts': {
+    forbid: [
+      '.executor',
+      '.handler',
+      '.middleware',
+      '.adapter',
+      '.store',
+      '.state',
+      '.policy',
+      '.acl',
+      '.observer',
+    ],
+  },
   '.integration.test.ts': {
     forbid: ['.kernel', '.workflow', '.schema', '.acl'],
   },

@@ -6,6 +6,7 @@ export const CELLS: ReadonlyArray<string> = [
   'adapter',
   'executor',
   'handler',
+  'harness',
   'kernel',
   'middleware',
   'observer',
