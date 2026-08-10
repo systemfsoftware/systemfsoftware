@@ -32,9 +32,9 @@ Article I binds through lint and the type system. Run the gate; reading it to co
   check: `pnpm check:script-provenance` exits 0. The judgement half stays with the reviewer: name the artifact a stranger installs that carries the rule. `scripts/`, `pnpm check`, `CONSTITUTION.md` and the wiki are not answers
 ```
 
-- **REPO-S1** — `isolatedDeclarations` stays disabled in every tsconfig; it produces 153 compile errors in idiomatic Effect. Gate: `.claude/hooks/guard-protected-writes.sh`.
-- **REPO-S2** — never modify `minimumReleaseAgeExclude`; pin a young dependency tighter or wait out the 24h cutoff. Gate: `.claude/hooks/guard-protected-writes.sh`.
-- **REPO-S3** — `repos/` is a vendored subtree, read-only; amend upstream. `repos/AGENTS.md` is ours. Gate: `.claude/hooks/guard-protected-writes.sh`.
+- **REPO-S1** — `isolatedDeclarations` stays disabled in every tsconfig; it produces 153 compile errors in idiomatic Effect. Gate: `.claude/hooks/guard-protected-writes.ts`.
+- **REPO-S2** — never modify `minimumReleaseAgeExclude`; pin a young dependency tighter or wait out the 24h cutoff. Gate: `.claude/hooks/guard-protected-writes.ts`.
+- **REPO-S3** — `repos/` is a vendored subtree, read-only; amend upstream. `repos/AGENTS.md` is ours. Gate: `.claude/hooks/guard-protected-writes.ts`.
 - **REPO-S4** — never hand-edit `package.json#exports` or `publishConfig.exports` on a tsdown package; change `tsdown.config.ts`. Gate: `pnpm check:exports`.
 
 ## Stack
@@ -77,7 +77,7 @@ Directories only; files are discovered with tools.
 ## Working Rules
 
 - **REPO-W2** — modify only files belonging to the active task. No unasked retries, validation, telemetry or refactors. Reducing accepted scope needs the user's consent. Gate: review — the reviewer names the active task each changed file belongs to.
-- **REPO-W4** — search the gitignored `wiki/` corpus before writing a plan, choosing between options, settling a design question, or asking the user one. Enter at its `manifest.md`, open at most five candidate slugs, stop as soon as one settles it, and read the per-claim Warrant table rather than the frontmatter band. Never cite a `wiki/` path in a plan, doc, commit or issue — the corpus does not ship with the clone. A nil result names the verbatim query and the corpus-scoped path it ran against, so anyone holding the corpus can re-run it and falsify the claim. Gate: `.claude/hooks/guard-protected-writes.sh` refuses a write under `docs/plans/` until a `-c wiki` query has run this session; it confirms a search happened, not that it was good.
+- **REPO-W4** — search the gitignored `wiki/` corpus before writing a plan, choosing between options, settling a design question, or asking the user one. Enter at its `manifest.md`, open at most five candidate slugs, stop as soon as one settles it, and read the per-claim Warrant table rather than the frontmatter band. Never cite a `wiki/` path in a plan, doc, commit or issue — the corpus does not ship with the clone. A nil result names the verbatim query and the corpus-scoped path it ran against, so anyone holding the corpus can re-run it and falsify the claim. Gate: `.claude/hooks/guard-protected-writes.ts` refuses a write under `docs/plans/` until a `-c wiki` query has run this session; it confirms a search happened, not that it was good.
 
 ## Definition of Done
 
