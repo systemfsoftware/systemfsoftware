@@ -37,11 +37,30 @@ const groupByConfig = (files) => {
 
 export default {
   '*.{js,jsx,ts,tsx,mjs,cjs}': (filenames) => {
-    const files = lintable(filenames)
-    const cmds = [`dprint fmt --allow-no-files -- ${files.join(' ')}`]
+    const cmds = []
+    const formattable = lintable(filenames)
+    // `dprint fmt --allow-no-files --` with nothing after the separator is not a no-op:
+    // with no patterns dprint falls back to its config includes and formats the entire
+    // repo (measured 2026-08-10). Reachable whenever every staged source file is
+    // vendored, so the list is guarded rather than trusted - as the glob below already does.
+    if (formattable.length > 0) cmds.push(`dprint fmt --allow-no-files -- ${formattable.join(' ')}`)
     for (const [config, group] of groupByConfig(lintableSource(filenames))) {
-      const scope = config === null ? '' : `--config ${relative(ROOT, config)} `
-      cmds.push(`oxlint --fix ${scope}${group.join(' ')} --type-aware --type-check --quiet`)
+      // No owning config means no package gate lints this path. `turbo lint` runs one
+      // config per package, and `check-lint-coverage.mjs` defines lint scope as exactly
+      // those packages, so root-level tooling files are outside it. A hook that lints
+      // them anyway invents a gate CI does not have, then fails on default severities it
+      // was never configured with: commitlint.config.ts reports 7 phantom TS errors,
+      // because type-aware runs with no tsconfig in scope.
+      if (config === null) continue
+      // Every path in a group can be ignored by the owning config - a committed bundle
+      // under dist/, a testResources fixture, a .d.ts. oxlint then sees zero files and
+      // exits 1 ("No files found to lint"), a tooling dead end rather than a failing
+      // gate. The flag is oxlint's own answer; a real violation still fails.
+      cmds.push(
+        `oxlint --fix --no-error-on-unmatched-pattern --config ${relative(ROOT, config)} ${
+          group.join(' ')
+        } --type-aware --type-check --quiet`,
+      )
     }
     return cmds
   },
