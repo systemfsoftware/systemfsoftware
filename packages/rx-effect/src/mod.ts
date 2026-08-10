@@ -1,1 +1,1 @@
-export * from './from-observable.kernel.js'
+export { fromObservable } from './from-observable.kernel.js'

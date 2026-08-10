@@ -1,1 +1,1 @@
-export * from '@systemfsoftware/hex-schema'
+export { ColonHex, HexString, PrefixedHex, StrictHex } from '@systemfsoftware/hex-schema'

@@ -1,4 +1,4 @@
-export * from '@effect/vitest'
+export { describe, it, layer } from '@effect/vitest'
 export { And, But, Gherkin, Given, Then, When } from './do-notation.kernel.js'
 export type {
   GherkinEffect,

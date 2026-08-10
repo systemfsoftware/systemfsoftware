@@ -1,4 +1,4 @@
-export * from './bounded-union.kernel.js'
+export { boundedUnion } from './bounded-union.kernel.js'
 export {
   type BlindArm,
   dischargedBy,
@@ -15,5 +15,5 @@ export {
   type RefusalGenerators,
   refutes,
 } from './refutes.harness.js'
-export * from './rule-of-schemas.harness.js'
+export { ruleOfSchemas } from './rule-of-schemas.harness.js'
 export { type Arm, armsOf } from './weaken.kernel.js'

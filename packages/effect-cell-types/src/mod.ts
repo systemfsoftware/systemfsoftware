@@ -1,2 +1,1 @@
-export * from './workflow-contract.kernel.js'
-export * from './workflow.kernel.js'
+export type { UninhabitedDecision, UninhabitedError, Workflow } from './workflow.kernel.js'
