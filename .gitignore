@@ -23,3 +23,5 @@ research
 **/__pycache__/
 - Local per-clone hooks (machine-specific: qmd-mcp orphan cleanup, etc.)
 .claude/settings.local.json
+# Eval scratch — constitution-disclosure arm outputs, graders, results
+.eval/
