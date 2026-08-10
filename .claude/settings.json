@@ -25,6 +25,21 @@
             "type": "command",
             "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/deliver-leaf-agents-md.sh\"",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-protected-writes.sh\"",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-qmd-scope.sh\"",
+            "timeout": 5
           }
         ]
       }
@@ -41,6 +56,16 @@
             "type": "command",
             "command": "command -v bun >/dev/null 2>&1 || { echo 'oxlint-guard: bun not found on PATH - install Bun (https://bun.sh) so the guard can run' >&2; exit 1; }; exec bun \"$CLAUDE_PROJECT_DIR/claude-plugins/oxlint-guard/dist/oxlint-guard.mjs\"",
             "timeout": 120
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/stamp-wiki-query.sh\"",
+            "timeout": 5
           }
         ]
       }
