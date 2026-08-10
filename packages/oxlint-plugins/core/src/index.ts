@@ -22,6 +22,7 @@ import { noNativeSetIntervalInEffect } from './rules/no-native-setinterval-in-ef
 import { noNativeSetTimeoutInEffect } from './rules/no-native-settimeout-in-effect.js'
 import { noNewPromiseInEffect } from './rules/no-new-promise-in-effect.js'
 import { noNewWorkerWithWasmImport } from './rules/no-new-worker-with-wasm-import.js'
+import { noWildcardReexport } from './rules/no-wildcard-reexport.js'
 
 const PLUGIN_NAME = '@systemfsoftware/oxlint-plugin'
 
@@ -47,5 +48,6 @@ export default {
     'no-native-set-in-effect': noNativeSetInEffect,
     'no-native-setinterval-in-effect': noNativeSetIntervalInEffect,
     'no-native-settimeout-in-effect': noNativeSetTimeoutInEffect,
+    'no-wildcard-reexport': noWildcardReexport,
   },
 }
