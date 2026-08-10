@@ -1,0 +1,15 @@
+{
+  "$schema": "https://v2-10-1.turborepo.dev/schema.json",
+  "extends": [
+    "//"
+  ],
+  "tasks": {
+    "lint": {
+      "dependsOn": [
+        "^build",
+        "build",
+        "@systemfsoftware/oxlint-plugin-cell-taxonomy#build"
+      ]
+    }
+  }
+}

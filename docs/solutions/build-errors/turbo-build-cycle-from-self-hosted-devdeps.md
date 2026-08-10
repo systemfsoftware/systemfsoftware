@@ -1,6 +1,7 @@
 ---
 title: "Circular turbo build task graph from self-hosted toolchain devDependencies"
 date: 2026-08-08
+updated: "2026-08-10"
 category: build-errors
 module: build-pipeline
 problem_type: build_error
@@ -10,97 +11,96 @@ symptoms:
   - "x Cyclic dependency detected: @systemfsoftware/stryker-js-mutation-run#build, @systemfsoftware/oxlint-plugin-cell-taxonomy#build, @systemfsoftware/stryker-js-typescript-checker#build"
   - "pnpm check exits 1 within seconds having run zero tasks: nothing builds, tests, or typechecks"
   - "WARNING Circular package dependency detected: @systemfsoftware/stryker-js-mutation-run, @systemfsoftware/stryker-js-typescript-checker, @systemfsoftware/oxlint-plugin-cell-taxonomy"
+  - "[WARN] There are cyclic workspace dependencies: packages/oxlint-plugins/cell-taxonomy, packages/stryker-js/mutation-run"
 root_cause: config_error
 resolution_type: config_change
 tags: [turbo, circular-dependency, devdependencies, workspace, build-graph, toolchain, monorepo]
-related_components: [oxlint-plugin-cell-taxonomy, stryker-js-mutation-run, stryker-js-typescript-checker, stryker-js-vitest-runner]
+related_components: [oxlint-plugin-cell-taxonomy, stryker-js-mutation-run, stryker-js-typescript-checker, stryker-js-mutation-report, stryker-js-vitest-runner]
 ---
 
 # Circular turbo build task graph from self-hosted toolchain devDependencies
 
 ## Problem
 
-`pnpm check`, the repository's whole verification gate, failed within seconds without executing a single task: turbo could not construct the task graph because mutual devDependencies between the oxlint cell-taxonomy plugin and the stryker-js tooling packages produced a cyclic `build` dependency that turbo refuses to schedule.
+The oxlint cell-taxonomy plugin and the stryker-js tooling packages form a self-hosting toolchain cycle: the plugin dev-depends on the stryker packages to run its own mutation testing, and the stryker packages dev-depend on the plugin to lint themselves. The package graph cycle printed on stderr of every turbo and pnpm command, and — before the fixes below — turbo could not construct its task graph at all, so `pnpm check` failed within seconds without executing a single task.
 
 ## Symptoms
 
-The gate aborted before any task ran, with turbo's hard task-graph error:
+Two independent detectors warn about one package-graph cycle, plus one hard task-graph error (now resolved):
 
-```text
-WARNING  Circular package dependency detected: @systemfsoftware/stryker-js-mutation-run, @systemfsoftware/stryker-js-typescript-checker, @systemfsoftware/oxlint-plugin-cell-taxonomy
+- **Turbo's task-graph error (fixed 2026-08-08):** turbo refused to schedule the cyclic `build` tasks:
+  ```text
   x Cyclic dependency detected:
   | 	@systemfsoftware/stryker-js-mutation-run#build, @systemfsoftware/oxlint-plugin-cell-taxonomy#build, @systemfsoftware/stryker-js-typescript-checker#build
-  |
   | The cycle can be broken by removing any of these sets of dependencies:
   | 	cell-taxonomy#build -> typescript-checker#build, mutation-run#build -> cell-taxonomy#build
-  | 	mutation-run#build -> cell-taxonomy#build, typescript-checker#build -> cell-taxonomy#build
-  | 	cell-taxonomy#build -> mutation-run#build, cell-taxonomy#build -> typescript-checker#build
-  | 	cell-taxonomy#build -> mutation-run#build, typescript-checker#build -> cell-taxonomy#build
-[ELIFECYCLE] Command failed with exit code 1.
-```
-
-Package names are abbreviated in the four removal sets above; turbo prints them fully qualified and hard-wrapped to terminal width. The four sets matter — they are the fix menu, and turbo computed it for you.
-
-Zero tasks ran. The entire verification gate was blocked on a task-graph construction error, not on any code failure — no package built, tested, or typechecked.
+  | 	...
+  ```
+  Zero tasks ran; the entire gate was blocked on graph construction, masking every other failure in the tree.
+- **Turbo's package-graph warning (fixed 2026-08-10):** turbo's `PackageGraph::validate()` runs on every command and printed `WARNING Circular package dependency detected: ...` on stderr whenever the workspace package graph was cyclic. This is turbo's own diagnostic, emitted by `crates/turborepo-repository/src/package_graph/mod.rs`; it is unconditional and has no suppression config. (Earlier versions of this doc misattributed it to pnpm — corrected 2026-08-10.)
+- **pnpm's install warning (fixed 2026-08-10):** pnpm printed `[WARN] There are cyclic workspace dependencies: <paths>` on stderr of its install step, gated by the Boolean `ignore-workspace-cycles` setting (default `false`; pnpm 11.9.0 — note `allowCyclicDependencies` does not exist in this pnpm).
 
 ## What Didn't Work
 
 Three candidate fixes were considered and rejected — rejected by reasoning about what each would break, not by trial:
 
-- **Delete the plugin devDependency from the two stryker packages.** Removing `@systemfsoftware/oxlint-plugin-cell-taxonomy` from `packages/stryker-js/mutation-run/package.json:140` and `packages/stryker-js/typescript-checker/package.json:38` breaks `import.meta.resolve('@systemfsoftware/oxlint-plugin-cell-taxonomy')` in `packages/stryker-js/mutation-run/oxlint.config.ts:4`, and drops the `capability-named-directory` rule (`packages/stryker-js/mutation-run/oxlint.config.ts:7`) from those packages' lint coverage. The repo's AGENTS.md forbids weakening a rule or threshold to make a change pass. Both reverse edges are load-bearing; neither could go.
-- **Delete cell-taxonomy's stryker devDependencies.** Removing the mutation runner, typescript-checker, and vitest-runner devDeps (`packages/oxlint-plugins/cell-taxonomy/package.json:58-60`) breaks the plugin's own mutation testing: its `mutation` script runs `stryker run` (`packages/oxlint-plugins/cell-taxonomy/package.json:44`), which the repo's AGENTS.md requires at 100% on changed pure core. The plugin genuinely needs the stryker packages at dev time.
-- **Suppress the pnpm circular-dependency warning.** The `WARNING Circular package dependency detected` is true: the package graph genuinely is mutual — a self-hosting toolchain where the lint plugin lints the tools that mutate-test the plugin. Silencing a true warning would be dishonest, and it would hide the next real cycle behind a suppressed diagnostic.
-
-The cycle was also genuinely new, so there was no stale-edge excuse for deleting something "obviously wrong". Before the `core` → `mutation-run` rename, the plugin depended on the stryker packages one way only and neither depended back; a later commit wiring the `capability-named-directory` rule into those two packages added the reverse edges and closed the loop.
+- **Deleting the plugin devDependency from the stryker packages.** Removing `@systemfsoftware/oxlint-plugin-cell-taxonomy` from `packages/stryker-js/mutation-run/package.json` and `packages/stryker-js/typescript-checker/package.json` breaks `import.meta.resolve('@systemfsoftware/oxlint-plugin-cell-taxonomy')` in their `oxlint.config.ts` and drops the `capability-named-directory` rule from their lint coverage. The repo's AGENTS.md forbids weakening a rule or threshold to make a change pass.
+  - **Superseded 2026-08-10 in one precise sense:** the edge _was_ removed — by replacing the mechanism, not by deleting the check. oxlint's `jsPlugins` accepts a filesystem path with no `package.json` edge, so the three fork packages now load the plugin's built bundle by path (`new URL('../../oxlint-plugins/cell-taxonomy/dist/index.mjs', import.meta.url).pathname`) and the rule still applies. The rejection stands against removing the edge _without_ a replacement mechanism.
+- **Deleting cell-taxonomy's stryker devDependencies.** Removing the mutation runner, typescript-checker, and vitest-runner devDeps breaks the plugin's own mutation testing (`stryker run`, required at 100% on changed pure core). The plugin genuinely needs the stryker packages at dev time — and `mutation-run` and `vitest-runner` are not published on npm (verified 404), so the plugin cannot consume published artifacts instead. Still immutable.
+- **Suppressing the warning.** The `WARNING Circular package dependency detected` was true: the package graph genuinely was mutual — a self-hosting toolchain where the lint plugin lints the tools that mutate-test the plugin. Silencing a true warning would be dishonest and would hide the next real cycle behind a suppressed diagnostic. It would also have been ineffective: pnpm's `ignore-workspace-cycles` silences only pnpm's own install warning — turbo's `validate()` warning is independent and would remain (empirically verified with turbo 2.10.5). The durable fix removes the cycle itself.
 
 ## Solution
 
-The fix is a package-level turbo override that makes the plugin's `build` a graph leaf — exactly turbo's own third option from its cycle diagnostic, which listed the two edges it would accept removing (`cell-taxonomy#build -> mutation-run#build` and `-> typescript-checker#build`). New file `packages/oxlint-plugins/cell-taxonomy/turbo.json`:
+Two stages, both shipped:
+
+**Stage 1 (2026-08-08): make the plugin's build a graph leaf.** New file `packages/oxlint-plugins/cell-taxonomy/turbo.json` overrides `build` to `dependsOn: []`. This stopped the hard task-graph error: the plugin's build no longer waits on the fork packages' builds (which it never consumed). The override is truthful — the plugin's runtime `dependencies` are external only (`@oxc-project/types`, `@oxlint/plugins`), so its `build` genuinely consumes no workspace `dist`. It remains in place: the plugin's forward devDependencies (the fork packages, needed for mutation) still exist, so `^build` would otherwise re-create the three false build-task edges.
+
+**Stage 2 (2026-08-10): remove the back edges so the package graph is acyclic.** The three fork packages (`mutation-run`, `typescript-checker`, `mutation-report`) no longer devDepend the plugin. Their `oxlint.config.ts` entries changed from `import.meta.resolve('@systemfsoftware/oxlint-plugin-cell-taxonomy')` to a path into the plugin's built bundle:
+
+```ts
+jsPlugins: [new URL('../../oxlint-plugins/cell-taxonomy/dist/index.mjs', import.meta.url).pathname],
+```
+
+The path must target the **built bundle**, not `src/index.ts`: oxlint loads plugins through Node's ESM resolver, which cannot resolve the TypeScript source's `.js`-specifier internal imports (`ERR_MODULE_NOT_FOUND` on `./rules/capability-named-directory.js` — verified). The built bundle loads and the rule fires by its configured name (verified with oxlint 1.77.0).
+
+The lost `^build` ordering — the fork packages' lint needs the plugin's dist built first — is compensated by an explicit lint task edge in each fork package's `turbo.json` (the sibling plan's U3 instrument; turbo's `extends` replaces `dependsOn`, so root's `["^build", "build"]` is re-declared). The edge is therefore declared four times — root plus the three fork `turbo.json` files — and a fork that drops its own copy silently loses the ordering (its lint then races the plugin's build); keep the copies in sync:
 
 ```json
 {
   "$schema": "https://v2-10-1.turborepo.dev/schema.json",
-  "extends": [
-    "//"
-  ],
-  "tasks": {
-    "build": {
-      "dependsOn": []
-    }
-  }
+  "extends": ["//"],
+  "tasks": { "lint": { "dependsOn": ["^build", "build", "@systemfsoftware/oxlint-plugin-cell-taxonomy#build"] } }
 }
 ```
 
-Package-level overrides already have precedent in this repo: `packages/stryker-js/vitest-runner/turbo.json` and `packages/arethetypeswrong/cli/turbo.json` both `extends: ["//"]` and override a single task's `dependsOn` (there, `test`, to add `build` before it). This fix applies the same shape to `build` on the plugin.
+Verified 2026-08-10: `pnpm turbo ls` and `pnpm install --frozen-lockfile` print no cyclic-workspace warning (both detectors); all three fork packages lint clean with the rule applied; each fork `lint` task depends on `cell-taxonomy#build` (dry-run task graph); the plugin's mutation task still resolves the fork packages from the workspace.
+
+**Verifying the rule is live (re-runnable probe).** A bare "lint exits 0" does not prove the path-loaded plugin registered its rules. Re-verify at any time with the temporary-fixture probe: (1) create `packages/stryker-js/mutation-run/src/utils/__verify-rule.ts` with one line of code — the `utils/` segment is banned by `capability-named-directory`; (2) run `pnpm --filter @systemfsoftware/stryker-js-mutation-run lint` and confirm the diagnostic names `@systemfsoftware/cell-taxonomy(capability-named-directory)` and reports `utils is forbidden`; (3) delete the fixture and re-run lint, which must exit 0 again.
 
 ## Why This Works
 
-The root `turbo.json` declares `build` with `"dependsOn": ["^build"]` (`turbo.json:23-25`) — the topological task dependency. Turbo derives `^build` edges from the pnpm workspace graph, and in this repo that graph provably includes devDependencies: the diagnostic above names the edge `cell-taxonomy#build -> mutation-run#build`, yet cell-taxonomy declares no runtime dependency on any workspace package at all (see below), so the devDependency is the only declaration that could have produced that edge. Dev-only tooling edges therefore become `build`-task edges. That mechanism is what turns a legitimate package-level cycle into an illegal task-level cycle: the plugin dev-depends on the stryker packages to run its own mutation tests, and the stryker packages dev-depend on the plugin to lint themselves.
+Two distinct mechanisms were needed because the cycle operated at two levels:
 
-Those edges are false at the build level. A lint plugin is not a build input for the tools that load it — they resolve it at lint time via `import.meta.resolve` (`packages/stryker-js/mutation-run/oxlint.config.ts:4`), not at build time. A mutation runner is not a build input for the plugin — the plugin's `dist` never imports it; the runner only executes the plugin's tests. Overriding only `build` (`dependsOn: []`) drops the two false outgoing edges, while `typecheck` (`turbo.json:38-40`), `test` (`turbo.json:53-55`), and `mutation` (`turbo.json:85-88`) keep `^build` from the root config, so the plugin's verification tasks still get their dependencies built before they run.
+- **The task-graph error** came from turbo deriving `^build` edges from the pnpm workspace graph, which in this repo provably includes devDependencies. The override on the plugin's `build` drops the plugin's two false outgoing build edges. A lint plugin is not a build input for the tools that load it — they resolve it at lint time, not at build time; a mutation runner is not a build input for the plugin — its `dist` never imports the runner.
+- **The package-graph warnings** (turbo's `validate()` + pnpm's install check) came from the package graph being cyclic. The cycle was closed by removing the two back edges that closed the SCC (`mutation-run` → plugin and `typescript-checker` → plugin, forced by `import.meta.resolve` in their `oxlint.config.ts` files); `mutation-report`'s edge was one-way and was removed for uniformity, not to close the SCC. Path-based loading removes the edges while keeping the check: oxlint loads the plugin's built bundle from a filesystem path with no `package.json` edge, so the workspace graph holds only one-way edges out of the plugin (plugin → fork, for mutation) and is acyclic. An acyclic package graph is silent under both detectors.
 
-The override is truthful, not a mute: cell-taxonomy's runtime `dependencies` are external only — `@oxc-project/types` and `@oxlint/plugins` (`packages/oxlint-plugins/cell-taxonomy/package.json:51-53`) — so its `build` genuinely consumes no workspace `dist`. There is no build edge being hidden; there never was one. The config simply states that fact.
-
-Verified this session: turbo now executes the graph — a full `pnpm check` scheduled 257 tasks and completed 251 of them over 16m23s, recording cache hits and misses, where previously zero ran — and the hard `Cyclic dependency detected` error is gone. `oxlint-plugin-cell-taxonomy#build` itself ran and succeeded, which is the direct evidence that the two removed edges were never real build inputs. The pnpm `WARNING Circular package dependency detected` remains and was deliberately **not** suppressed: the package graph genuinely is mutual, as a self-hosting toolchain must be.
-
-Nothing here claims the gate is green. The unblocked run finished red, with 6 failed tasks across three packages this fix never touched — and they do not share a cause: `omp-agent-discipline#build` and `omp-claude-compat#build` both fail on `RESOLVE_ERROR` for `@effect/cluster` subpaths reached through `@effect/platform-node`; `stryker-js-cli#typecheck` reports 19 Effect language-service diagnostics; `stryker-js-cli#test:contract` dies in the container runtime (`failed to create shim`). Every one of those was invisible while the cycle stood. The verified claim is the narrow one: the cyclic task-graph error is gone and turbo executes tasks.
-
-**Corrected 2026-08-09.** The `test:contract` entry above originally carried a verdict: that its failure was environmental rather than a code fault. That verdict did not survive. The lane held a real defect — it never looked for the working podman runtime on the host, so it failed on a machine that could run containers the entire time, and after the fix it passes 24/24 with no environment variables set. Whether the `failed to create shim` string quoted above came from that same defect or from a separate transient docker state was never established, which is precisely why the label was unsafe: it assigned a cause to a failure nobody had traced, and the item then sat parked awaiting a host reboot it never needed. See `docs/solutions/test-failures/contract-lane-stops-at-dead-docker-socket.md`. The other two groups are resolved as well, and a later full run reached 256 of 256 tasks, so read the red-run list above as a dated snapshot rather than as current state.
+The override stays: the plugin's forward devDependencies are immutable (unpublished fork packages), and `^build` on the plugin would otherwise re-create false build-task edges. The sibling plan's sweep (`docs/plans/2026-08-08-003-refactor-path-resolved-stryker-base-plan.md`) removes the forward devDependencies and deletes the override when it lands; until then the override is the accurate statement that the plugin's build consumes no workspace build output.
 
 ## Prevention
 
-- **Recognise the shape.** Two workspace packages that dev-depend on each other are a self-hosting toolchain bootstrap — the lint plugin lints the mutation tools, and the mutation tools exercise the plugin's own tests. At the package level this mutual devDependency is legitimate, even load-bearing: each edge exists because the consumer's own verification requires it. At the build-task level it is false, because a devDependency is not a build input. The whole diagnosis is that distinction: package-level truth, task-level falsehood.
-- **Treat a task-graph cycle as a masking failure.** It fails the gate for a reason that hides every other reason. Because no task runs, a cycle makes an arbitrarily broken tree indistinguishable from a healthy one — here it concealed six failing tasks in three other packages, arising from three unrelated causes. Fix a cycle before drawing any conclusion from a red gate, and re-read the gate afterward rather than assuming the cycle was the only fault.
-- **Prefer the override on the plugin side.** Plugin←consumer edges multiply as lint coverage spreads: every new package that dev-depends on the plugin to run its rules adds an incoming edge, while the plugin side stays bounded at its fixed set of verification tooling. Overriding the plugin's `build` closes the loop at its single choke point; overriding each consumer instead is the accretion trap — a per-consumer override pile that grows with every lint adoption.
-- **Read the diagnostic instead of guessing.** Turbo's cyclic-dependency error prints the exact edge sets it would accept removing — four of them here, quoted in full under Symptoms. The fix chosen is the third set: drop both of the plugin's outgoing build edges, which is precisely what `"build": { "dependsOn": [] }` on the plugin does. When turbo names the edges, drop exactly those, and only the ones that are false at the build level.
-- **Check for an existing named remedy before inventing one.** This repo had already named the failure class: `scripts/check-lint-coverage.mjs:26` exempts the lint-rule packages from a config-dependency check with the comment "declaring oxlint-config would close a CO4 dependency cycle", repeated as the machine-readable exemption reason at `scripts/check-lint-coverage.mjs:52`. A gate that already documents a cycle-shaped carve-out for a package is a signpost: look for the same carve-out before proposing a new mechanism.
+- **Recognise the shape.** Two workspace packages that dev-depend on each other are a self-hosting toolchain bootstrap — the lint plugin lints the mutation tools, and the mutation tools exercise the plugin's own tests. At the package level this mutual devDependency is legitimate, even load-bearing; at the build-task level it is false, because a devDependency is not a build input.
+- **Treat a task-graph cycle as a masking failure.** Because no task runs, a cycle makes an arbitrarily broken tree indistinguishable from a healthy one — here it concealed six failing tasks in three other packages. Fix a cycle before drawing any conclusion from a red gate.
+- **Read the diagnostic instead of guessing.** Turbo's cyclic-dependency error prints the exact edge sets it would accept removing. The override applied the third set (drop the plugin's outgoing build edges).
+- **Distinguish the two warning detectors.** Turbo's `WARNING Circular package dependency detected` (package-graph validation, runs on every command, no suppression) and pnpm's `[WARN] There are cyclic workspace dependencies` (install-time, gated by `ignore-workspace-cycles`) are separate. pnpm's key cannot silence turbo's warning. The only durable silence is an acyclic package graph.
+- **The override was the right first move, not the right end state.** The plugin-side override was the single choke point — preferable to per-consumer overrides, which are the accretion trap (an override pile that grows with every lint adoption). But the durable fix removed the back edges at the package level: the fork packages load the plugin by path, with the build ordering expressed as an explicit task edge. A future author must not "simplify" the path back to `import.meta.resolve('<pkg>')` plus a workspace devDep — that recreates the cycle, which returns loudly but non-fatally (both detectors print stderr warnings on every turbo/pnpm command; `pnpm check` still exits 0 — the loud signal is the noise, not a gate failure), and the explicit lint task edge must not be dropped either (the fork lint then races the plugin's build).
+- **The plugin's `dist` is a real artifact dependency.** The fork lint consumes the plugin's built bundle; its cache key does not include the plugin dist (a pre-existing hole — a cached fork lint survives a plugin rule change; unchanged by this fix, documented in the fix plan's risks).
+- **Check for an existing named remedy before inventing one.** This repo had named the cycle class (`scripts/check-lint-coverage.mjs`'s cycle carve-outs) and the registry-consumption remedy (`docs/solutions/tooling-decisions/registry-consumption-of-self-hosted-forks.md`); the sibling plan had designated ownership of this exact SCC. The fix here follows the sibling plan's Q4 alternative.
 
-Deliberately out of scope: `mutation-run#build -> cell-taxonomy#build` and `typescript-checker#build -> cell-taxonomy#build` are also false edges, but they create no cycle — only serial ordering — so they were left alone. Fixing them would require an override in every consumer, which is precisely the accretion trap named above.
+## Related
 
-## Related Issues
-
-- `docs/solutions/tooling-decisions/turbo-cache-requires-complete-input-hash.md` — same root `turbo.json` `dependsOn: ["^build"]` surface, complementary mechanism: cache-key completeness rather than graph construction.
-- `docs/solutions/build-errors/exports-types-rollup-drift.md` — same `build_error` / `config_error` / `config_change` shape in the build pipeline.
+- `docs/plans/2026-08-10-002-fix-toolchain-cycle-warning-plan.md` — the implementation plan for the 2026-08-10 stage (back-edge removal, explicit lint edges, doc corrections).
+- `docs/plans/2026-08-08-003-refactor-path-resolved-stryker-base-plan.md` — the sibling plan that owns the forward-edge class (self-locating base preset); its U4 deletes the retained override when its sweep lands and its U5 rewrites this doc — its executor must reconcile with plan `2026-08-10-002`'s Risks (which adopted this plan's Q4 alternative) and preserve this doc's detector correction.
+- `docs/solutions/tooling-decisions/registry-consumption-of-self-hosted-forks.md` — the registry-consumption remedy for cycles that cannot be path-resolved; a Tarjan pass (2026-08-09) measured this triple as the only non-trivial SCC in the workspace graph — the 2026-08-10 back-edge removal dissolved it, leaving no non-trivial SCC.
+- `docs/solutions/tooling-decisions/turbo-cache-requires-complete-input-hash.md` — the input-hash-completeness learning that owns the stale-dist cache hole surfaced in Prevention (fork lint's cache key excludes the plugin dist).
+- `docs/solutions/test-failures/contract-lane-stops-at-dead-docker-socket.md` — the `test:contract` failure recorded under the unblocked gate; its environmental label was later falsified and the lane's real cause documented (the masking-failure lesson, applied again).
 - `docs/solutions/build-errors/tsdown-private-dependency-bare-import-dist.md` — the `dependencies` vs `devDependencies` distinction that seeds the mutual-devDep cycle, applied in the opposite direction.
-- `docs/solutions/test-failures/contract-lane-stops-at-dead-docker-socket.md` — the `test:contract` failure listed under Why This Works; the environmental label recorded there was falsified and the lane's real cause documented.
-- No related GitHub issue: searches for `turbo cyclic dependency`, `turbo circular devDependencies`, `cell-taxonomy stryker`, and `turbo.json dependsOn` returned no matches.
