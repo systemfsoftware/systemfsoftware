@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -e
-# Subtree merge commits stage only repos/ paths, and the registration commit
-# stages only subtrees.toml; commitlint's pnpm bootstrap cannot run against
-# the vendored subtree state, so skip lint for both (git-subtree-vendor G23).
-if git diff --cached --name-only | grep -qvE '^(repos/|subtrees\.toml)$'; then
+# Vendored content commits are written by commit-tree and never reach this hook;
+# the subtrees.toml registration commit does. Anchor the alternation so real
+# paths match — `^repos/$` matches the literal string and no file under it
+# (git-subtree-vendor G23).
+if git diff --cached --name-only | grep -qvE '^(repos/.*|subtrees\.toml)$'; then
   pnpm exec commitlint --edit "$1"
 fi
