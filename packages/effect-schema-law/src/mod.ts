@@ -14,6 +14,6 @@ export {
   discriminates,
   type RefusalGenerators,
   refutes,
-} from './refutes.kernel.js'
-export * from './rule-of-schemas.kernel.js'
+} from './refutes.harness.js'
+export * from './rule-of-schemas.harness.js'
 export { type Arm, armsOf } from './weaken.kernel.js'

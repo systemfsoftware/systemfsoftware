@@ -23,7 +23,7 @@ export {
   type FeatureLayerOptions,
   type FeatureSuiteOptions,
   makeFeature,
-} from './feature.kernel.js'
+} from './feature.harness.js'
 export { expandOutline, renderTitle, stringifyForTitle, tokenizeTemplate } from './outline-expand.kernel.js'
 export type { OutlineRow, TemplateToken } from './outline-expand.kernel.js'
 export { StepError } from './step-error.kernel.js'
