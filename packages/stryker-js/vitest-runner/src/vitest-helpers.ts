@@ -1,7 +1,7 @@
 import path from 'path'
 
-import { MutantCoverage } from '@stryker-mutator/api/core'
-import { BaseTestResult, TestResult, TestStatus } from '@stryker-mutator/api/test-runner'
+import { MutantCoverage } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { BaseTestResult, TestResult, TestStatus } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
 import { type RunMode, type RunnerTestSuite, type TaskState } from 'vitest'
 import { RunnerTestCase } from 'vitest/node'
 import { collectTestName, toRawTestId } from './test-helpers.js'
@@ -26,10 +26,10 @@ function convertTaskStateToTestStatus(
   return TestStatus.Failed
 }
 
-export function convertTestToTestResult(test: RunnerTestCase): TestResult {
+export function convertTestToTestResult(test: RunnerTestCase, projectRoot: string): TestResult {
   const status = convertTaskStateToTestStatus(test.result?.state, test.mode)
   const baseTestResult: BaseTestResult = {
-    id: normalizeTestId(toRawTestId(test)),
+    id: normalizeTestId(toRawTestId(test), projectRoot),
     name: collectTestName(test),
     timeSpentMs: test.result?.duration ?? 0,
     fileName: test.file?.filepath && path.resolve(test.file.filepath),
@@ -78,16 +78,16 @@ export function fromTestId(id: string): { file: string; test: string } {
   return { file, test: name.join('#') }
 }
 
-export function normalizeTestId(id: string): string {
+export function normalizeTestId(id: string, projectRoot: string): string {
   const { file, test } = fromTestId(id)
-  return `${path.relative(process.cwd(), file).replace(/\\/g, '/')}#${test}`
+  return `${path.relative(projectRoot, file).replace(/\\/g, '/')}#${test}`
 }
 
-export function normalizeCoverage(rawCoverage: MutantCoverage): MutantCoverage {
+export function normalizeCoverage(rawCoverage: MutantCoverage, projectRoot: string): MutantCoverage {
   return {
     perTest: Object.fromEntries(
       Object.entries(rawCoverage.perTest).map(
-        ([rawTestId, coverageData]) => [normalizeTestId(rawTestId), coverageData] as const,
+        ([rawTestId, coverageData]) => [normalizeTestId(rawTestId, projectRoot), coverageData] as const,
       ),
     ),
     static: rawCoverage.static,

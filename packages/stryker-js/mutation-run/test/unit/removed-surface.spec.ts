@@ -1,5 +1,5 @@
-import { commonTokens, PluginKind } from '@stryker-mutator/api/plugin'
 import { noopLogger } from '@stryker-mutator/util'
+import { commonTokens, PluginKind } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 import { createInjector } from 'typed-inject'
 import { describe, expect, it } from 'vitest'
 

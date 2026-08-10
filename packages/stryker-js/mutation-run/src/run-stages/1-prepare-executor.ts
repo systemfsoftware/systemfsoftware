@@ -1,7 +1,7 @@
-import { PartialStrykerOptions, StrykerOptions } from '@stryker-mutator/api/core'
-import { BaseContext, commonTokens, Injector, tokens } from '@stryker-mutator/api/plugin'
 import { frameworkPluginsFileUrl } from '@stryker-mutator/instrumenter'
 import { deepFreeze } from '@stryker-mutator/util'
+import { PartialStrykerOptions, StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { BaseContext, commonTokens, Injector, tokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 import { execaCommand } from 'execa'
 import { forkCoreSchema } from '../config/fork-schema.js'
 
@@ -19,7 +19,7 @@ import { UnexpectedExitHandler } from '../unexpected-exit-handler.js'
 
 import { FileSystem, ProjectReader } from '../project/index.js'
 
-import { Reporter } from '@stryker-mutator/api/report'
+import { Reporter } from '@systemfsoftware/stryker-js-plugin-api/report'
 import { LoggingBackend, LoggingServerAddress } from '../logging/index.js'
 import { MutantInstrumenterContext } from './index.js'
 

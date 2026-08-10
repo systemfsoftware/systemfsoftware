@@ -1,5 +1,5 @@
-import { Logger, LoggerFactoryMethod } from '@stryker-mutator/api/logging'
-import { commonTokens, Scope } from '@stryker-mutator/api/plugin'
+import { Logger, LoggerFactoryMethod } from '@systemfsoftware/stryker-js-plugin-api/logging'
+import { commonTokens, Scope } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 import { Injector } from 'typed-inject'
 import { injectionTokens } from '../plugins/index.js'
 import { LogLevel } from './log-level.js'

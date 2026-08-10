@@ -1,5 +1,5 @@
-import type { Mutant } from '@stryker-mutator/api/core'
-import { schema } from '@stryker-mutator/api/core'
+import type { Mutant } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { schema } from '@systemfsoftware/stryker-js-plugin-api/core'
 
 import { toRelativeNormalizedFileName } from '@systemfsoftware/stryker-js-mutation-run/mutants/incremental-differ'
 

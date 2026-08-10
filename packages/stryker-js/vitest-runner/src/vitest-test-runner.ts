@@ -1,6 +1,12 @@
-import { CoverageData, INSTRUMENTER_CONSTANTS, MutantCoverage, StrykerOptions } from '@stryker-mutator/api/core'
-import { Logger } from '@stryker-mutator/api/logging'
-import { commonTokens, Injector, PluginContext, tokens } from '@stryker-mutator/api/plugin'
+import { errorToString, escapeRegExp, normalizeFileName, notEmpty, testFilesProvided } from '@stryker-mutator/util'
+import {
+  CoverageData,
+  INSTRUMENTER_CONSTANTS,
+  MutantCoverage,
+  StrykerOptions,
+} from '@systemfsoftware/stryker-js-plugin-api/core'
+import { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
+import { commonTokens, Injector, SandboxPluginContext, tokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 import {
   determineHitLimitReached,
   DryRunOptions,
@@ -12,8 +18,7 @@ import {
   TestRunnerCapabilities,
   TestStatus,
   toMutantRunResult,
-} from '@stryker-mutator/api/test-runner'
-import { errorToString, escapeRegExp, normalizeFileName, notEmpty, testFilesProvided } from '@stryker-mutator/util'
+} from '@systemfsoftware/stryker-js-plugin-api/test-runner'
 import fs from 'fs'
 import path from 'path'
 import semver from 'semver'
@@ -28,7 +33,7 @@ import {
   VITEST_ERROR_CODES,
 } from './vitest-helpers.js'
 import { VitestRunnerOptionsWithStrykerOptions } from './vitest-runner-options-with-stryker-options.js'
-import { Vitest, vitestWrapper } from './vitest-wrapper.js'
+import { resolveVitest, Vitest, VitestResolver } from './vitest-wrapper.js'
 
 type StrykerNamespace = '__stryker__' | '__stryker2__'
 const STRYKER_SETUP = fileURLToPath(
@@ -56,17 +61,18 @@ export class VitestTestRunner implements TestRunner {
     commonTokens.options,
     commonTokens.logger,
     'globalNamespace',
+    commonTokens.sandboxDirectory,
   ] as const
   private ctx?: Vitest
   private readonly options: VitestRunnerOptionsWithStrykerOptions
-  private localSetupFile = path.resolve(
-    `./stryker-setup-${process.env.STRYKER_MUTATOR_WORKER ?? 0}.js`,
-  )
+  private localSetupFile?: string
 
   constructor(
     options: StrykerOptions,
     private readonly log: Logger,
     private globalNamespace: StrykerNamespace,
+    private readonly sandboxDirectory: string,
+    private readonly resolveVitestFor: VitestResolver = resolveVitest,
   ) {
     this.options = options as VitestRunnerOptionsWithStrykerOptions
   }
@@ -77,9 +83,20 @@ export class VitestTestRunner implements TestRunner {
 
   public async init(): Promise<void> {
     this.setEnv()
-    await fs.promises.copyFile(STRYKER_SETUP, this.localSetupFile)
+    const projectRoot = this.sandboxDirectory
+    // Anchored at the project root, never the scan dir: a consumer-supplied
+    // `vitest.dir` subdirectory must not move the file Vitest's setup runs.
+    const localSetupFile = path.resolve(projectRoot, `stryker-setup-${process.pid}.js`)
+    this.localSetupFile = localSetupFile
+    await fs.promises.copyFile(STRYKER_SETUP, localSetupFile)
 
-    this.ctx = await vitestWrapper.createVitest('test', {
+    const { createVitest, version } = await this.resolveVitestFor(projectRoot)
+
+    const scanDir = this.options.vitest?.dir
+      ? path.resolve(projectRoot, this.options.vitest.dir)
+      : undefined
+
+    this.ctx = await createVitest('test', {
       config: this.options.vitest?.configFile,
       // @ts-expect-error threads got renamed to "pool: threads" in vitest 1.0.0
       threads: true,
@@ -96,19 +113,20 @@ export class VitestTestRunner implements TestRunner {
       singleThread: false,
       maxConcurrency: 1,
       watch: false,
-      dir: this.options.vitest.dir,
+      root: projectRoot,
+      ...(scanDir === undefined ? {} : { dir: scanDir }),
       bail: this.options.disableBail ? 0 : 1,
       onConsoleLog: () => false,
     })
     this.ctx.provide('globalNamespace', this.globalNamespace)
     this.ctx.provide(
       'isGreaterThanVitest4Point1',
-      semver.satisfies(vitestWrapper.version, '>=4.1.0'),
+      semver.satisfies(version, '>=4.1.0'),
     )
     this.ctx.config.browser.screenshotFailures = false
     this.ctx.projects.forEach((project) => {
       project.config.setupFiles = [
-        this.localSetupFile,
+        localSetupFile,
         ...project.config.setupFiles,
       ]
       project.config.browser.screenshotFailures = false
@@ -182,7 +200,9 @@ export class VitestTestRunner implements TestRunner {
         .map(({ test: name }) => escapeRegExp(name))
         .join('|')
       const regex = new RegExp(regexTestNameFilter)
-      testFilesToRun = parsedTests.map(({ file }) => file)
+      // Id file parts are root-relative, but Vitest matches filters against
+      // the scan dir; absolute paths hit filterFiles' absolute branch.
+      testFilesToRun = parsedTests.map(({ file }) => path.resolve(this.sandboxDirectory, file))
       this.ctx!.projects.forEach((project) => {
         project.config.testNamePattern = regex
       })
@@ -209,7 +229,7 @@ export class VitestTestRunner implements TestRunner {
 
     let failure = false
     const testResults = tests.map((test) => {
-      const testResult = convertTestToTestResult(test)
+      const testResult = convertTestToTestResult(test, this.sandboxDirectory)
       failure ||= testResult.status === TestStatus.Failed
       return testResult
     })
@@ -261,7 +281,7 @@ export class VitestTestRunner implements TestRunner {
         ([, file]) => (file.meta as { mutantCoverage?: MutantCoverage }).mutantCoverage,
       )
       .filter(notEmpty)
-      .map(normalizeCoverage)
+      .map((coverage) => normalizeCoverage(coverage, this.sandboxDirectory))
 
     if (coverages.length > 1) {
       return coverages.reduce((acc, projectCoverage) => {
@@ -294,8 +314,11 @@ export class VitestTestRunner implements TestRunner {
   }
 
   public async dispose(): Promise<void> {
+    const localSetupFile = this.localSetupFile
     this.ctx?.onClose(async () => {
-      await fs.promises.rm(this.localSetupFile, { force: true })
+      if (localSetupFile !== undefined) {
+        await fs.promises.rm(localSetupFile, { force: true })
+      }
     })
     await this.ctx?.close()
   }
@@ -308,11 +331,11 @@ export function createVitestTestRunnerFactory(
     | typeof INSTRUMENTER_CONSTANTS.NAMESPACE
     | '__stryker2__' = INSTRUMENTER_CONSTANTS.NAMESPACE,
 ): {
-  (injector: Injector<PluginContext>): VitestTestRunner
+  (injector: Injector<SandboxPluginContext>): VitestTestRunner
   inject: ['$injector']
 } {
   createVitestTestRunner.inject = tokens(commonTokens.injector)
-  function createVitestTestRunner(injector: Injector<PluginContext>) {
+  function createVitestTestRunner(injector: Injector<SandboxPluginContext>) {
     return injector
       .provideValue('globalNamespace', namespace)
       .injectClass(VitestTestRunner)

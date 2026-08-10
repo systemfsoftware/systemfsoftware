@@ -1,7 +1,7 @@
-import { FileDescriptions, StrykerOptions } from '@stryker-mutator/api/core'
-import { LoggerFactoryMethod } from '@stryker-mutator/api/logging'
-import { commonTokens, tokens } from '@stryker-mutator/api/plugin'
-import { TestRunner } from '@stryker-mutator/api/test-runner'
+import { FileDescriptions, StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { LoggerFactoryMethod } from '@systemfsoftware/stryker-js-plugin-api/logging'
+import { commonTokens, tokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
+import { TestRunner } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
 
 import { LoggingServerAddress } from '../logging/index.js'
 import { injectionTokens } from '../plugins/index.js'

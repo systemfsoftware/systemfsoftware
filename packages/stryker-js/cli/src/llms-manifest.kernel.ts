@@ -1,5 +1,5 @@
 import type * as Command from '@effect/cli/Command'
-import { PluginKind } from '@stryker-mutator/api/plugin'
+import { PluginKind } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 import { Option } from 'effect'
 
 import { strykerPlugins } from '@systemfsoftware/stryker-js-mutation-report/stryker-plugins'

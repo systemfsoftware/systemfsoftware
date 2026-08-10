@@ -1,5 +1,6 @@
 import path from 'path'
 
+import { I, normalizeFileName, normalizeLineEndings, notEmpty } from '@stryker-mutator/util'
 import {
   FileDescriptions,
   Location,
@@ -8,11 +9,10 @@ import {
   Position,
   schema,
   StrykerOptions,
-} from '@stryker-mutator/api/core'
-import { Logger } from '@stryker-mutator/api/logging'
-import { commonTokens } from '@stryker-mutator/api/plugin'
-import { TestResult, TestStatus } from '@stryker-mutator/api/test-runner'
-import { I, normalizeFileName, normalizeLineEndings, notEmpty } from '@stryker-mutator/util'
+} from '@systemfsoftware/stryker-js-plugin-api/core'
+import { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
+import { commonTokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
+import { TestResult, TestStatus } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
 import { diff_match_patch as DiffMatchPatch } from 'diff-match-patch'
 import { TestDefinition } from 'mutation-testing-report-schema'
 

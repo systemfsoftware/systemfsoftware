@@ -27,11 +27,11 @@
     "@effect/cli": "catalog:",
     "@effect/platform": "catalog:",
     "@effect/platform-node": "catalog:",
-    "@stryker-mutator/api": "catalog:stryker",
     "@stryker-mutator/util": "catalog:stryker",
     "@systemfsoftware/effect-cell-types": "workspace:^",
     "@systemfsoftware/stryker-js-mutation-report": "workspace:^",
     "@systemfsoftware/stryker-js-mutation-run": "workspace:^",
+    "@systemfsoftware/stryker-js-plugin-api": "workspace:^",
     "effect": "catalog:",
     "semver": "catalog:stryker"
   },

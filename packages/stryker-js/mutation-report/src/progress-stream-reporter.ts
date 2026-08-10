@@ -1,6 +1,6 @@
-import { MutantResult } from '@stryker-mutator/api/core'
-import { commonTokens, PluginContext } from '@stryker-mutator/api/plugin'
-import { MutationTestingPlanReadyEvent, Reporter } from '@stryker-mutator/api/report'
+import { MutantResult } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { commonTokens, PluginContext } from '@systemfsoftware/stryker-js-plugin-api/plugin'
+import { MutationTestingPlanReadyEvent, Reporter } from '@systemfsoftware/stryker-js-plugin-api/report'
 import { Injector, tokens } from 'typed-inject'
 
 import { injectionTokens } from '@systemfsoftware/stryker-js-mutation-run/plugins'

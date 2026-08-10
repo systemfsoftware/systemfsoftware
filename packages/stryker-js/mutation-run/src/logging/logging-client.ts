@@ -1,4 +1,4 @@
-import { Disposable } from '@stryker-mutator/api/plugin'
+import { Disposable } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 import net from 'net'
 import { promisify } from 'util'
 import { LoggingServerAddress, LoggingSink } from '../logging/index.js'

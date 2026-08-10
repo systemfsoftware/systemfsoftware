@@ -29,7 +29,7 @@ In `stryker.config.json`:
 Mutants it recognizes are reported as `Ignored`, each carrying the reason it was safe to skip.
 
 > [!NOTE]
-> `@stryker-mutator/api` is a peer dependency — your Stryker install provides it. `effect` is a direct dependency (the plugin decodes AST nodes with `Schema`).
+> `@systemfsoftware/stryker-js-plugin-api` is a peer dependency — your Stryker install provides it. `effect` is a direct dependency (the plugin decodes AST nodes with `Schema`).
 
 ## What it ignores
 

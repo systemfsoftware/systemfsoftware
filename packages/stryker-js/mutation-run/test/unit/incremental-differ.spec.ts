@@ -1,8 +1,8 @@
 import path from 'path'
 
-import { FileDescriptions, Mutant, schema } from '@stryker-mutator/api/core'
-import { Logger } from '@stryker-mutator/api/logging'
-import { TestResult, TestStatus } from '@stryker-mutator/api/test-runner'
+import { FileDescriptions, Mutant, schema } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
+import { TestResult, TestStatus } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
 import { describe, expect, it } from 'vitest'
 
 import { createDefaultOptions } from '../../src/config/options-validator.js'

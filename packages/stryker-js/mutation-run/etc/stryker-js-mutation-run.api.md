@@ -4,15 +4,15 @@
 
 ```ts
 
-import { BaseContext } from '@stryker-mutator/api/plugin';
+import { BaseContext } from '@systemfsoftware/stryker-js-plugin-api/plugin';
 import { createInjector } from 'typed-inject';
 import { Disposable as Disposable_2 } from 'typed-inject';
 import { Injector } from 'typed-inject';
-import { MutantResult } from '@stryker-mutator/api/core';
-import { MutantStatus } from '@stryker-mutator/api/core';
-import { PartialStrykerOptions } from '@stryker-mutator/api/core';
-import { Reporter } from '@stryker-mutator/api/report';
-import { schema } from '@stryker-mutator/api/core';
+import { MutantResult } from '@systemfsoftware/stryker-js-plugin-api/core';
+import { MutantStatus } from '@systemfsoftware/stryker-js-plugin-api/core';
+import { PartialStrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core';
+import { Reporter } from '@systemfsoftware/stryker-js-plugin-api/report';
+import { schema } from '@systemfsoftware/stryker-js-plugin-api/core';
 
 // @public
 class Stryker {

@@ -1,5 +1,6 @@
 import path from 'path'
 
+import { commonTokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { createVitestTestRunnerFactory, VitestTestRunner } from '../../dist/index.mjs'
@@ -28,11 +29,11 @@ describe('Vitest runner related', () => {
 
   beforeEach(async () => {
     options = createStrykerOptions()
-    sut = createTestInjector(options).injectFunction(
-      createVitestTestRunnerFactory('__stryker2__'),
-    )
     sandbox = new TempTestDirectorySandbox('multiple-files')
     await sandbox.init()
+    sut = createTestInjector(options)
+      .provideValue(commonTokens.sandboxDirectory, sandbox.tmpDir)
+      .injectFunction(createVitestTestRunnerFactory('__stryker2__'))
     mathFileName = path.resolve(sandbox.tmpDir, 'src', 'math.ts')
     stringUtilsFileName = path.resolve(
       sandbox.tmpDir,

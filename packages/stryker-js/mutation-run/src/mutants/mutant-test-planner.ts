@@ -1,5 +1,6 @@
 import path from 'path'
 
+import { I, notEmpty, split } from '@stryker-mutator/util'
 import {
   Mutant,
   MutantEarlyResultPlan,
@@ -8,11 +9,10 @@ import {
   MutantTestPlan,
   PlanKind,
   StrykerOptions,
-} from '@stryker-mutator/api/core'
-import { Logger } from '@stryker-mutator/api/logging'
-import { commonTokens, tokens } from '@stryker-mutator/api/plugin'
-import { TestResult } from '@stryker-mutator/api/test-runner'
-import { I, notEmpty, split } from '@stryker-mutator/util'
+} from '@systemfsoftware/stryker-js-plugin-api/core'
+import { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
+import { commonTokens, tokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
+import { TestResult } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
 
 import { isWarningEnabled } from '../config/is-warning-enabled.js'
 import { optionsPath } from '../config/options-path.js'

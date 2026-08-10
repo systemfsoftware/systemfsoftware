@@ -1,4 +1,4 @@
-import { PartialStrykerOptions } from '@stryker-mutator/api/core'
+import { PartialStrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
 import fs from 'fs'
 import { Disposable } from 'typed-inject'
 import { promisify } from 'util'

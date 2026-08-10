@@ -1,14 +1,15 @@
 import path from 'path'
 import { fileURLToPath } from 'url'
 
-import { commonTokens, Injector, PluginContext } from '@stryker-mutator/api/plugin'
 import { errorToString } from '@stryker-mutator/util'
+import { commonTokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
+import type { Injector, SandboxPluginContext } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 import { createInjector } from 'typed-inject'
 
 import { injectionTokens, PluginCreator } from '../plugins/index.js'
 import { PluginLoader } from '../plugins/plugin-loader.js'
 
-import { Logger } from '@stryker-mutator/api/logging'
+import { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
 import { minPriority } from '../logging/priority.js'
 import { provideLogging, provideLoggingClient } from '../logging/provide-logging.js'
 import {
@@ -20,7 +21,7 @@ import {
   WorkerMessageKind,
 } from './message-protocol.js'
 import { deserialize, serialize } from './string-utils.js'
-export interface ChildProcessContext extends PluginContext {
+export interface ChildProcessContext extends SandboxPluginContext {
   [injectionTokens.pluginCreator]: PluginCreator
 }
 
@@ -90,13 +91,14 @@ export class ChildProcessProxyWorker {
       const { pluginsByKind } = await pluginLoader.load(
         message.pluginModulePaths,
       )
+      const workingDir = path.resolve(message.workingDirectory)
       const injector: Injector<ChildProcessContext> = pluginInjector
         .provideValue(injectionTokens.pluginsByKind, pluginsByKind)
         .provideClass(injectionTokens.pluginCreator, PluginCreator)
+        .provideValue(commonTokens.sandboxDirectory, workingDir)
 
       const childModule = await import(message.modulePath)
       const RealSubjectClass = childModule[message.namedExport]
-      const workingDir = path.resolve(message.workingDirectory)
       if (process.cwd() !== workingDir) {
         this.log.debug(
           `Changing current working directory for this process to ${workingDir}`,

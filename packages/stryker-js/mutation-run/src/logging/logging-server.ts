@@ -1,4 +1,4 @@
-import { Disposable } from '@stryker-mutator/api/plugin'
+import { Disposable } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 import net from 'node:net'
 import { promisify } from 'node:util'
 import { injectionTokens } from '../plugins/index.js'

@@ -2,10 +2,10 @@ import fs from 'fs'
 import path from 'path'
 import { pathToFileURL } from 'url'
 
-import { PartialStrykerOptions, StrykerOptions } from '@stryker-mutator/api/core'
-import { Logger } from '@stryker-mutator/api/logging'
-import { commonTokens, tokens } from '@stryker-mutator/api/plugin'
 import { deepMerge, I, isErrnoException } from '@stryker-mutator/util'
+import { PartialStrykerOptions, StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
+import { commonTokens, tokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 
 import { ConfigError } from '../errors.js'
 import { injectionTokens } from '../plugins/index.js'
@@ -18,7 +18,7 @@ import { resolveExtendsChain } from './resolve-extends.js'
 export const CONFIG_SYNTAX_HELP = `
 Example of how a config file should look:
 /**
-  * @type {import('@stryker-mutator/api/core').StrykerOptions}
+  * @type {import('@systemfsoftware/stryker-js-plugin-api/core').StrykerOptions}
   */
 export default {
   // You're options here!
@@ -26,7 +26,7 @@ export default {
 
 Or using commonjs:
 /**
-  * @type {import('@stryker-mutator/api/core').StrykerOptions}
+  * @type {import('@systemfsoftware/stryker-js-plugin-api/core').StrykerOptions}
   */
 module.exports = {
   // You're options here!

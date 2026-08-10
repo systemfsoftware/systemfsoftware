@@ -1,4 +1,4 @@
-import { declareValuePlugin, PluginKind } from '@stryker-mutator/api/plugin'
+import { declareValuePlugin, PluginKind } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 import {
   decideInSourceTestIgnore,
   IN_SOURCE_TEST_IGNORED,

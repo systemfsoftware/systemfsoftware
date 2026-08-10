@@ -1,3 +1,4 @@
+import { commonTokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { expectKilled, expectTimeout } from '../util/assertions.js'
@@ -23,9 +24,9 @@ describe('Infinite loop', () => {
     await sandbox.init()
     options = createStrykerOptions()
     options.vitest = createVitestRunnerOptions({ related: false })
-    sut = createTestInjector(options).injectFunction(
-      createVitestTestRunnerFactory('__stryker2__'),
-    )
+    sut = createTestInjector(options)
+      .provideValue(commonTokens.sandboxDirectory, sandbox.tmpDir)
+      .injectFunction(createVitestTestRunnerFactory('__stryker2__'))
   })
   afterEach(async () => {
     await sut.dispose()

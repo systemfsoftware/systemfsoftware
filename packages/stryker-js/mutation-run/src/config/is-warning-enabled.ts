@@ -1,5 +1,5 @@
-import { WarningOptions } from '@stryker-mutator/api/core'
 import { KnownKeys } from '@stryker-mutator/util'
+import { WarningOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
 
 export function isWarningEnabled(
   warningType: KnownKeys<WarningOptions>,

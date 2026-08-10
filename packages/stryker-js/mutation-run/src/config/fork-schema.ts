@@ -1,4 +1,4 @@
-import { strykerCoreSchema } from '@stryker-mutator/api/core'
+import { strykerCoreSchema } from '@systemfsoftware/stryker-js-plugin-api/core'
 
 import { REMOVED_OPTIONS } from './removed-surface.js'
 
