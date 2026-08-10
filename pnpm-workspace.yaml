@@ -13,6 +13,7 @@ allowBuilds:
 catalog:
   typescript: ^7
   "@effect/platform": ^0.97.1
+  "@effect/platform-bun": ^0.91.2
   "@effect/platform-node": ^0.108.1
   "@effect/platform-node-shared": ^0.61.1
   "@effect/printer": ^0.51.0
@@ -98,3 +99,4 @@ packages:
   - packages/effect-atom/*
   - omp/packages/*
   - omp/plugins/*
+  - claude-plugins/*

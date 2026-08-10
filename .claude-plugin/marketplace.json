@@ -1,0 +1,21 @@
+{
+  "name": "systemfsoftware",
+  "description": "Claude Code plugins published from the systemfsoftware monorepo",
+  "owner": {
+    "name": "systemfsoftware",
+    "url": "https://github.com/systemfsoftware"
+  },
+  "plugins": [
+    {
+      "name": "oxlint-guard",
+      "source": "./claude-plugins/oxlint-guard",
+      "description": "Lints every agent edit with oxlint and blocks edits that weaken the oxlint config",
+      "category": "linting",
+      "keywords": [
+        "oxlint",
+        "lint",
+        "hooks"
+      ]
+    }
+  ]
+}
