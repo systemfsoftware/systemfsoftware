@@ -35,19 +35,26 @@ const groupByConfig = (files) => {
   return groups
 }
 
+const TOLERATE_A_ZERO_FILE_SET = '--no-error-on-unmatched-pattern'
+
+const hasOwningConfig = ([config]) => config !== null
+
+const formatCommands = (filenames) => {
+  const formattable = lintable(filenames)
+  if (formattable.length === 0) return []
+  return [`dprint fmt --allow-no-files -- ${formattable.join(' ')}`]
+}
+
+const lintCommands = (filenames) =>
+  [...groupByConfig(lintableSource(filenames))]
+    .filter(hasOwningConfig)
+    .map(([config, group]) =>
+      `oxlint --fix ${TOLERATE_A_ZERO_FILE_SET} --config ${relative(ROOT, config)} ${
+        group.join(' ')
+      } --type-aware --type-check --quiet`
+    )
+
 export default {
-  '*.{js,jsx,ts,tsx,mjs,cjs}': (filenames) => {
-    const files = lintable(filenames)
-    const cmds = [`dprint fmt --allow-no-files -- ${files.join(' ')}`]
-    for (const [config, group] of groupByConfig(lintableSource(filenames))) {
-      const scope = config === null ? '' : `--config ${relative(ROOT, config)} `
-      cmds.push(`oxlint --fix ${scope}${group.join(' ')} --type-aware --type-check --quiet`)
-    }
-    return cmds
-  },
-  '*.{json,jsonc,md,yaml,yml,toml}': (filenames) => {
-    const files = lintable(filenames)
-    if (files.length === 0) return []
-    return [`dprint fmt --allow-no-files -- ${files.join(' ')}`]
-  },
+  '*.{js,jsx,ts,tsx,mjs,cjs}': (filenames) => [...formatCommands(filenames), ...lintCommands(filenames)],
+  '*.{json,jsonc,md,yaml,yml,toml}': (filenames) => formatCommands(filenames),
 }
