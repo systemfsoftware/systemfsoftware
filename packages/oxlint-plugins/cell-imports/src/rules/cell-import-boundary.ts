@@ -4,7 +4,7 @@ import { dirname, join, normalize } from '@std/path/posix'
 import type { CellEdge } from '../cell-import-table.config.js'
 import {
   CELL_IMPORT_TABLE,
-  MODULE_EXTENSION,
+  finalPathStem,
   NON_PRODUCTION_CALLER,
   OBSERVER_MODULE,
 } from '../cell-import-table.config.js'
@@ -27,10 +27,8 @@ export type MessageIds =
   | 'forbiddenObserverImport'
 
 export const cellOf = (specifier: string): string | null => {
-  const segments = specifier.split('/').filter((segment) => segment.length > 0)
-  const last = segments.at(-1)
-  if (last === undefined) return null
-  const stem = last.replace(MODULE_EXTENSION, '')
+  const stem = finalPathStem(specifier)
+  if (stem === null) return null
   const dot = stem.lastIndexOf('.')
   if (dot <= 0) return null
   return stem.slice(dot)

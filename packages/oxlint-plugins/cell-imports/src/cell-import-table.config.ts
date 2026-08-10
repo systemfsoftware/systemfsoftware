@@ -189,3 +189,17 @@ export const NON_PRODUCTION_CALLER: readonly RegExp[] = [
 ]
 
 export const MODULE_EXTENSION = /\.(?:[cm]?[tj]sx?)$/
+
+/**
+ * The final path segment of a module specifier, with the optional module
+ * extension stripped. This is the single shared derivation behind every
+ * specifier judgement the plugin makes: `cellOf` reads the cell suffix off
+ * the stem, and `no-barrel-import-in-cell` reads whether the stem names a
+ * barrel. One copy — the two rules cannot drift on what a specifier means.
+ */
+export const finalPathStem = (specifier: string): string | null => {
+  const segments = specifier.split('/').filter((segment) => segment.length > 0)
+  const last = segments.at(-1)
+  if (last === undefined) return null
+  return last.replace(MODULE_EXTENSION, '')
+}
