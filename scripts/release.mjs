@@ -78,10 +78,6 @@ const pluginsFor = () => [
     prepareCmd: 'pnpm version ${nextRelease.version} --no-git-tag-version --allow-same-version',
     publishCmd: 'pnpm publish --no-git-checks --access public',
   }],
-  ['@semantic-release/git', {
-    assets: ['package.json'],
-    message: 'chore(release): ${nextRelease.gitTag} [skip ci]\n\n${nextRelease.notes}',
-  }],
   ['@semantic-release/github', { successComment: false, failComment: false }],
 ]
 
