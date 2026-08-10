@@ -5,9 +5,9 @@ import * as fc from 'effect/FastCheck'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as S from 'effect/Schema'
-import { LintableExtension, ToolName } from '../edit-command.schema.js'
-import { decideLintPlan } from './lint-plan.workflow.js'
-import type { LintFacts, LintPlanDecision } from './lint-plan.workflow.js'
+import { LintableExtension, ToolName } from '../../edit-command.schema.js'
+import { decideLintPlan } from '../lint-plan.workflow.js'
+import type { LintFacts, LintPlanDecision } from '../lint-plan.workflow.js'
 
 // The lockfile -> install command contract, stated independently of the workflow's
 // private mapping so a drift in either side fails this test.

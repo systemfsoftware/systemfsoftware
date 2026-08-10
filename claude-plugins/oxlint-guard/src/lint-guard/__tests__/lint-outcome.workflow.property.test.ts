@@ -2,8 +2,8 @@ import { describe, it } from '@effect/vitest'
 import * as Either from 'effect/Either'
 import * as fc from 'effect/FastCheck'
 import * as Match from 'effect/Match'
-import { classifyLintResult } from './lint-outcome.workflow.js'
-import type { LintResult, ProcessResult } from './lint-outcome.workflow.js'
+import { classifyLintResult } from '../lint-outcome.workflow.js'
+import type { LintResult, ProcessResult } from '../lint-outcome.workflow.js'
 
 const arbitraryProcessResult: fc.Arbitrary<ProcessResult> = fc.record({
   exitCode: fc.integer({ min: 0, max: 255 }),

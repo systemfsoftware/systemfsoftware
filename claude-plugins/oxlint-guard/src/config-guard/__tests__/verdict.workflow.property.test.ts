@@ -3,16 +3,16 @@ import { FastCheck as fc } from 'effect'
 import * as Either from 'effect/Either'
 import * as Option from 'effect/Option'
 import * as S from 'effect/Schema'
-import { FilePath } from '../edit-command.schema.js'
+import { FilePath } from '../../edit-command.schema.js'
 import {
   ContentlessDecision,
   type ContentPair,
   type Extractable,
   PairsDecision,
   UnrecoverableError,
-} from './extraction.workflow.js'
-import { DecideCommand } from './verdict-command.schema.js'
-import { type CannotVerify, decide, type Verdict } from './verdict.workflow.js'
+} from '../extraction.workflow.js'
+import { DecideCommand } from '../verdict-command.schema.js'
+import { type CannotVerify, decide, type Verdict } from '../verdict.workflow.js'
 
 const pathOf = (value: string): FilePath => {
   const decoded = S.decodeUnknownEither(FilePath)(value)
@@ -86,6 +86,14 @@ const isOff = (severity: unknown): boolean =>
   severity === 0 ||
   (Array.isArray(severity) && severity.length > 0 && isOff(severity[0]))
 
+// The rule names that went from non-off to off between two configs. Computed
+// at module level so a property predicate pays one top-level call instead of
+// an iteration over a drawn value with a free `isOff` call inside.
+const rulesThatWentOff = (oldRules: Record<string, unknown>, newRules: Record<string, unknown>): string[] =>
+  Object.entries(newRules)
+    .filter(([name, severity]) => isOff(severity) && !isOff(oldRules[name]))
+    .map(([name]) => name)
+
 const extractionArb: fc.Arbitrary<Extractable> = fc.oneof(
   fc.constant<Extractable>(new ContentlessDecision()),
   fc.tuple(fc.string(), fc.string()).map(([oldSide, newSide]): Extractable => pairsOf(pair(oldSide, newSide))),
@@ -137,9 +145,7 @@ describe('decide — JSON configs', () => {
       const outcome = decide(
         commandOf(pathOf('oxlint.json'), pairsOf(contentPair(Option.some(jsonConfig(oldRules)), jsonConfig(newRules)))),
       )
-      const expected = Object.entries(newRules)
-        .filter(([name, severity]) => isOff(severity) && !isOff(oldRules[name]))
-        .map(([name]) => name)
+      const expected = rulesThatWentOff(oldRules, newRules)
       if (Either.isLeft(outcome)) return false
       const verdict = outcome.right
       if (verdict._tag === 'Allow') return expected.length === 0

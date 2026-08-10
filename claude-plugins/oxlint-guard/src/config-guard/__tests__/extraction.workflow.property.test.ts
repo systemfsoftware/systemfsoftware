@@ -3,9 +3,9 @@ import { FastCheck as fc } from 'effect'
 import * as Either from 'effect/Either'
 import * as Option from 'effect/Option'
 import * as S from 'effect/Schema'
-import { EditCommand } from '../edit-command.schema.js'
-import { ExtractionCommand } from './extraction-command.schema.js'
-import { type Extractable, extractPairs, PairsDecision } from './extraction.workflow.js'
+import { EditCommand } from '../../edit-command.schema.js'
+import { ExtractionCommand } from '../extraction-command.schema.js'
+import { type Extractable, extractPairs, PairsDecision } from '../extraction.workflow.js'
 
 const makeCommand = (toolName: string, toolInput: object, filePath = 'oxlint.json'): EditCommand => {
   const decoded = S.decodeUnknownEither(EditCommand)({ _tag: 'EditCommand', toolName, filePath, toolInput })
