@@ -16,6 +16,7 @@ export const CELLS: ReadonlyArray<string> = [
   'shape',
   'state',
   'store',
+  'type',
   'workflow',
 ]
 

@@ -169,6 +169,11 @@ export const CELL_IMPORT_TABLE: Readonly<Record<string, CellEdge>> = {
       '.observer',
     ],
   },
+  // Every cell may import a declaration cell, so forbid carries only the impure
+  // cells - a runtime reach from here would launder behavior into every importer.
+  '.type.ts': {
+    forbid: ['.executor', '.adapter', '.store', '.handler', '.middleware', '.state', '.observer', '.harness'],
+  },
   '.integration.test.ts': {
     forbid: ['.kernel', '.workflow', '.schema', '.acl'],
   },

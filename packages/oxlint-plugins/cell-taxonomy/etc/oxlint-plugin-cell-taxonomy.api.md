@@ -14,6 +14,8 @@ const _default: {
     rules: {
         'cell-suffix-required': Rule;
         'capability-named-directory': Rule;
+        'harness-no-module-scope-registration': Rule;
+        'no-runtime-export-in-type-cell': Rule;
     };
     configs: {
         recommended: {
