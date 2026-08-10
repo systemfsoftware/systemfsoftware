@@ -38,7 +38,7 @@ both bugs shipped hidden behind a green-but-unrun gate.
 
 ## What Didn't Work
 
-- Chasing the symptom as flakiness. The contract lane showed a *different*
+- Chasing the symptom as flakiness. The contract lane showed a _different_
   scenario failing each run, which looked like a container-exec race. It was not:
   `effect-gherkin-spec` short-circuits remaining scenarios after the first
   failure, so whichever scenario landed first reported the failure and the rest
@@ -110,12 +110,12 @@ excludeEntrypoints: request.excludeEntrypoints?.length ? [...request.excludeEntr
 `Options.optional(Options.repeated(...))` models "the user did not pass the
 flag" as `Some([])`, not `None`, because the inner `repeated` option always
 parses to a (possibly empty) array and `optional` only wraps whether the
-underlying option was *invoked*. This is the correct encoding for a
+underlying option was _invoked_. This is the correct encoding for a
 zero-or-more flag, but it inverts the usual Option discipline: an absent flag is
-a *present* value, not an absent one. Any downstream "was this set?" check must
+a _present_ value, not an absent one. Any downstream "was this set?" check must
 test `.length`, never truthiness — `[]` is truthy. The two bugs compounded: the
 service dropped the options entirely (so even a correctly-set flag did nothing),
-and once that was fixed, the empty-array forwarding made the *absence* of a flag
+and once that was fixed, the empty-array forwarding made the _absence_ of a flag
 act like an explicit "check nothing."
 
 ## Prevention
