@@ -11,10 +11,9 @@ export type {
 export type { PairwiseMatrix, PairwiseResult } from './extensions/pairwise.kernel.js'
 export { pairwiseFor } from './extensions/pairwise.kernel.js'
 export { resolveScenarioArgs } from './feature-runtime.kernel.js'
-export type { OutlineFn, ScenarioBody, ScenarioFn, ScenarioOptions } from './feature-runtime.kernel.js'
+export type { FeatureBody, OutlineFn, ScenarioBody, ScenarioFn, ScenarioOptions } from './feature-runtime.kernel.js'
 export {
   type EffectVitestDeps,
-  type FeatureBody,
   type FeatureBuilder,
   type FeatureBuilderBoth,
   type FeatureBuilderWithLayer,

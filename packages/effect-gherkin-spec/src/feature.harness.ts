@@ -17,18 +17,8 @@ import {
   type ScenarioBody,
 } from './feature-runtime.kernel.js'
 
-export {
-  type FeatureBody,
-  type OutlineFn,
-  type ScenarioBody,
-  type ScenarioFn,
-  type ScenarioOptions,
-} from './feature-runtime.kernel.js'
-
 type DescribeMode = 'describe' | 'skip' | 'only'
 type EmptyScopeMap = Readonly<Record<string, never>>
-
-export { type RegisterMode } from './feature-runtime.kernel.js'
 
 export type FeatureLayerOptions = {
   readonly excludeTestServices?: boolean
