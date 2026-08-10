@@ -7,6 +7,7 @@
 
 import { banClasses } from './rules/ban-classes.js'
 import { banErrorString } from './rules/ban-error-string.js'
+import { entryNameSpan } from './rules/entry-name-span.js'
 import { entrySurfaceOrUnit } from './rules/entry-surface-or-unit.js'
 import { noBarrels } from './rules/no-barrels.js'
 import { noBodylessStatusAssertion } from './rules/no-bodyless-status-assertion.js'
@@ -27,6 +28,29 @@ import { noWildcardReexport } from './rules/no-wildcard-reexport.js'
 
 const PLUGIN_NAME = '@systemfsoftware/oxlint-plugin'
 
+const recommendedRules = {
+  [`${PLUGIN_NAME}/ban-classes`]: 'error',
+  [`${PLUGIN_NAME}/ban-error-string`]: 'error',
+  [`${PLUGIN_NAME}/entry-name-span`]: 'error',
+  [`${PLUGIN_NAME}/entry-surface-or-unit`]: 'error',
+  [`${PLUGIN_NAME}/no-barrels`]: 'error',
+  [`${PLUGIN_NAME}/no-bodyless-status-assertion`]: 'error',
+  [`${PLUGIN_NAME}/no-context-generic-tag`]: 'error',
+  [`${PLUGIN_NAME}/no-date-now-in-effect`]: 'error',
+  [`${PLUGIN_NAME}/no-direct-tag-access`]: 'error',
+  [`${PLUGIN_NAME}/no-either-tag-assertions`]: 'error',
+  [`${PLUGIN_NAME}/no-inline-destructured-type`]: 'error',
+  [`${PLUGIN_NAME}/no-io-boundary-tests`]: 'error',
+  [`${PLUGIN_NAME}/no-logging-in-catch`]: 'error',
+  [`${PLUGIN_NAME}/no-native-map-in-effect`]: 'error',
+  [`${PLUGIN_NAME}/no-native-set-in-effect`]: 'error',
+  [`${PLUGIN_NAME}/no-native-setinterval-in-effect`]: 'error',
+  [`${PLUGIN_NAME}/no-native-settimeout-in-effect`]: 'error',
+  [`${PLUGIN_NAME}/no-new-promise-in-effect`]: 'error',
+  [`${PLUGIN_NAME}/no-new-worker-with-wasm-import`]: 'error',
+  [`${PLUGIN_NAME}/no-wildcard-reexport`]: 'error',
+} as const
+
 export default {
   meta: {
     name: PLUGIN_NAME,
@@ -34,6 +58,7 @@ export default {
   rules: {
     'ban-classes': banClasses,
     'ban-error-string': banErrorString,
+    'entry-name-span': entryNameSpan,
     'entry-surface-or-unit': entrySurfaceOrUnit,
     'no-barrels': noBarrels,
     'no-bodyless-status-assertion': noBodylessStatusAssertion,
@@ -51,5 +76,10 @@ export default {
     'no-native-setinterval-in-effect': noNativeSetIntervalInEffect,
     'no-native-settimeout-in-effect': noNativeSetTimeoutInEffect,
     'no-wildcard-reexport': noWildcardReexport,
+  },
+  configs: {
+    recommended: {
+      rules: recommendedRules,
+    },
   },
 }

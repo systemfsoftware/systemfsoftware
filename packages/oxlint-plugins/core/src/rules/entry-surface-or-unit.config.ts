@@ -1,17 +1,11 @@
 import { JSONSchema, Schema as S } from 'effect'
 
-// Mirrors the `ENTRYPOINT_FILE` regex convention of `entrypoint-no-exports.config.ts`
-// with the barrel filename the doctrine names (KTD-5): a declared entry is `mod.ts`.
-// Overridable per package through the `entryPattern` option (R10) — a package whose
-// barrel is `index.ts` passes `{ entryPattern: '(?:^|[\\\\/])index\\.ts$' }` rather
-// than going unjudged.
-export const DEFAULT_ENTRY_PATTERN = '(?:^|[\\\\/])mod\\.ts$' as const
+import { DEFAULT_ENTRY_PATTERN, ENTRY_PATTERN_OPTION } from './shared-entry-pattern.config.js'
+
+export { DEFAULT_ENTRY_PATTERN }
 
 export const Options = S.Struct({
-  entryPattern: S.optionalWith(
-    S.String,
-    { default: () => DEFAULT_ENTRY_PATTERN },
-  ),
+  entryPattern: ENTRY_PATTERN_OPTION,
 })
 
 export const ENTRY_MIX_EXPECTED =
