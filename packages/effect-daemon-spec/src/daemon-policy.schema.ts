@@ -1,5 +1,5 @@
 import { Schema } from 'effect'
-import { MAX_CHILDREN_CEILING } from './supervisor-dynamic.kernel.js'
+import { MAX_CHILDREN_CEILING } from './brands.kernel.js'
 
 export const IntensityConfig = Schema.Struct({
   restarts: Schema.Int.pipe(Schema.greaterThanOrEqualTo(0)),

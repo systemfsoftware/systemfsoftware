@@ -3,7 +3,6 @@ import type { DaemonHealth, SupervisorHealth } from './daemon-health.schema.js'
 import type { ChildPolicyConfig } from './daemon-policy.schema.js'
 import type { SupervisionPolicy } from './daemon-spec.schema.js'
 import type { IntensityTracker } from './internal/intensity.kernel.js'
-import type { SupervisorBodyExecutorDeps } from './internal/supervisor-body.executor.js'
 
 export interface BootedChild<R> {
   readonly name: string
@@ -12,18 +11,18 @@ export interface BootedChild<R> {
   readonly childPolicy: ChildPolicyConfig
 }
 
-export interface SupervisionContext<R> {
+export interface SupervisionContext<R, D = never> {
   readonly name: string
   readonly booted: ReadonlyArray<BootedChild<R>>
   readonly health: SupervisorHealth
   readonly policy: SupervisionPolicy
-  readonly reportRestart: (cause: Cause.Cause<never>) => Effect.Effect<void, never, SupervisorBodyExecutorDeps>
-  readonly reportExhausted: (cause: Cause.Cause<never>) => Effect.Effect<void, never, SupervisorBodyExecutorDeps>
+  readonly reportRestart: (cause: Cause.Cause<never>) => Effect.Effect<void, never, D>
+  readonly reportExhausted: (cause: Cause.Cause<never>) => Effect.Effect<void, never, D>
   readonly intensityEff: Effect.Effect<IntensityTracker>
 }
 
-export type Supervision<R> = Effect.Effect<
+export type Supervision<R, D = never> = Effect.Effect<
   void,
   never,
-  R | SupervisorBodyExecutorDeps | Scope.Scope
+  R | D | Scope.Scope
 >

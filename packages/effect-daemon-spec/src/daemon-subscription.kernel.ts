@@ -11,7 +11,7 @@ type WorkerRecord<TICK, THOOKS, CHILD, LCK, L> = {
   readonly lock: LCK
 }
 
-export const subscription = <
+export const subscriptionKernel = <
   AE,
   AR,
   ACQ extends Effect.Effect<unknown, AE, AR>,

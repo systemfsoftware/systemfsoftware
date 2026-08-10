@@ -12,3 +12,5 @@ export const DynamicSpecTypeId: unique symbol = Symbol.for(
   '@systemfsoftware/effect-daemon/DynamicSpec',
 )
 export type DynamicSpecTypeId = typeof DynamicSpecTypeId
+
+export const MAX_CHILDREN_CEILING = 1000

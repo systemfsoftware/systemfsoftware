@@ -8,7 +8,7 @@ import { SupervisorBodyExecutorDeps, WithLeaderLockExecutorLive } from '../src/m
 import { Daemon } from '../src/mod.js'
 import { LeaderLock } from '../src/mod.js'
 import { Supervision } from '../src/mod.js'
-import { oneForOne } from '../src/mod.js'
+import { oneForOne } from '../src/supervisor-one-for-one.combinator.js'
 import { ReporterSpyContext } from './helpers/reporter-spy.js'
 import { NoopLayer } from './helpers/shared-layers.js'
 

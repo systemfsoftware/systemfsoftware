@@ -1,6 +1,6 @@
 import { Duration, Effect, Schedule } from 'effect'
 
-export const task = <
+export const taskKernel = <
   INTENSITY,
   COOLDOWN extends Duration.DurationInput,
   BACKOFFBASE extends Duration.DurationInput,

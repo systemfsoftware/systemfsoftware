@@ -1,7 +1,7 @@
 import { refutes } from '@systemfsoftware/effect-schema-law'
 import { Arbitrary, Schema } from 'effect'
+import { MAX_CHILDREN_CEILING } from '../brands.kernel.js'
 import { MaxChildren } from '../daemon-policy.schema.js'
-import { MAX_CHILDREN_CEILING } from '../supervisor-dynamic.kernel.js'
 
 const CapOutsideSpan = Schema.Int.pipe(
   Schema.filter((children) => children < 1 || children > MAX_CHILDREN_CEILING),

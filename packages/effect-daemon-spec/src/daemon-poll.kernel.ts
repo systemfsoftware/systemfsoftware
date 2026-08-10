@@ -30,7 +30,7 @@ type PollShape<W, D, WE, WR> =
     readonly prereq?: undefined
   }
 
-export const poll = <
+export const pollKernel = <
   W extends Effect.Effect<unknown, WE, WR>,
   D,
   WE,

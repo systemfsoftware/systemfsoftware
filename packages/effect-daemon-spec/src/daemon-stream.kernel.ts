@@ -10,7 +10,7 @@ type WorkerRecord<TICK, THOOKS, CHILD, LCK, L> = {
   readonly lock: LCK
 }
 
-export const stream = <
+export const streamKernel = <
   S,
   TICK,
   THOOKS,

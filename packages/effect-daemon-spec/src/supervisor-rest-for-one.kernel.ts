@@ -10,7 +10,7 @@ type SupervisorRecord<CH, SP, LCK, RP, STRATEGY extends string> = {
   readonly reporter: RP | Record<never, never>
 }
 
-export const restForOne = <
+export const restForOneKernel = <
   CH,
   SP,
   LCK,

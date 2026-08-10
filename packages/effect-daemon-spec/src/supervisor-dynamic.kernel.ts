@@ -1,8 +1,6 @@
 import { DynamicSpecTypeId } from './brands.kernel.js'
 
-export const MAX_CHILDREN_CEILING = 1000
-
-export const dynamic = <
+export const dynamicKernel = <
   Args,
   CH,
   MAX,

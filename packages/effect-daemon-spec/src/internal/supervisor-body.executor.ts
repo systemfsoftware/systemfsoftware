@@ -38,7 +38,7 @@ export class SupervisorBodyExecutorDeps extends Context.Tag(
 >() {}
 
 const handleExhausted = <R>(
-  ctx: SupervisionContext<R>,
+  ctx: SupervisionContext<R, SupervisorBodyExecutorDeps>,
   cause: Cause.Cause<never>,
 ): Effect.Effect<CooldownEpoch, never, SupervisorBodyExecutorDeps> =>
   Effect.gen(function*() {
@@ -51,7 +51,7 @@ const handleExhausted = <R>(
   })
 
 const handleRestart = <R>(
-  ctx: SupervisionContext<R>,
+  ctx: SupervisionContext<R, SupervisorBodyExecutorDeps>,
   cause: Cause.Cause<never>,
   onSignal: Effect.Effect<void, never, SupervisorBodyExecutorDeps>,
 ): Effect.Effect<RestartEpoch, never, SupervisorBodyExecutorDeps> =>
@@ -61,7 +61,9 @@ const handleRestart = <R>(
     return new RestartEpoch()
   })
 
-const reopenHealthyAfterCooldown = <R>(ctx: SupervisionContext<R>): Effect.Effect<void, never, never> =>
+const reopenHealthyAfterCooldown = <R>(
+  ctx: SupervisionContext<R, SupervisorBodyExecutorDeps>,
+): Effect.Effect<void, never, never> =>
   Effect.zipRight(
     ctx.health.healthy.open,
     Metric.set(Metric.tagged(Metric.tagged(healthStateGauge, 'daemon', ctx.name), 'latch', 'healthy'), 1),
@@ -69,7 +71,7 @@ const reopenHealthyAfterCooldown = <R>(ctx: SupervisionContext<R>): Effect.Effec
 
 const runSupervisionEpochWithBackoff = <R>(
   attempt: Effect.Effect<EpochStep, never, R>,
-  ctx: SupervisionContext<R>,
+  ctx: SupervisionContext<R, SupervisorBodyExecutorDeps>,
 ): Effect.Effect<SupervisionEpochResultType, never, R> =>
   Effect.gen(function*() {
     const driver = yield* Schedule.driver(ctx.policy.backoff)
@@ -98,7 +100,7 @@ const runSupervisionEpochWithBackoff = <R>(
     return yield* loop()
   })
 
-const openAllReady = <R>(ctx: SupervisionContext<R>): Effect.Effect<void, never, never> =>
+const openAllReady = <R>(ctx: SupervisionContext<R, SupervisorBodyExecutorDeps>): Effect.Effect<void, never, never> =>
   Effect.gen(function*() {
     yield* Effect.yieldNow()
     yield* Effect.forEach(ctx.booted, (b) => b.health.ready.await, { concurrency: 'unbounded' })
@@ -109,16 +111,16 @@ const openAllReady = <R>(ctx: SupervisionContext<R>): Effect.Effect<void, never,
   })
 
 const superviseChild = <R>(
-  ctx: SupervisionContext<R>,
-  child: SupervisionContext<R>['booted'][number],
+  ctx: SupervisionContext<R, SupervisorBodyExecutorDeps>,
+  child: SupervisionContext<R, SupervisorBodyExecutorDeps>['booted'][number],
   idx: number,
-): Supervision<R> =>
+): Supervision<R, SupervisorBodyExecutorDeps> =>
   Effect.gen(function*() {
     const childIntensityOpt = yield* Option.match(Option.fromNullable(child.childPolicy.intensity), {
       onNone: () => Effect.succeed(Option.none<IntensityTracker>()),
       onSome: (cfg: IntensityConfig) => Effect.map(makeIntensity(cfg.restarts, cfg.window), Option.some),
     })
-    const loop = (): Supervision<R> =>
+    const loop = (): Supervision<R, SupervisorBodyExecutorDeps> =>
       Effect.gen(function*() {
         const supIntensity = yield* ctx.intensityEff
         const attempt = Effect.gen(function*() {
@@ -176,7 +178,9 @@ const superviseChild = <R>(
     return yield* loop()
   })
 
-const runIndependent = <R>(ctx: SupervisionContext<R>): Supervision<R> =>
+const runIndependent = <R>(
+  ctx: SupervisionContext<R, SupervisorBodyExecutorDeps>,
+): Supervision<R, SupervisorBodyExecutorDeps> =>
   Effect.gen(function*() {
     const fibers = yield* Effect.forEach(
       ctx.booted,
@@ -193,10 +197,10 @@ const runIndependent = <R>(ctx: SupervisionContext<R>): Supervision<R> =>
 
 const runGroup = <R>(
   strategy: Exclude<RestartStrategy, 'one_for_one'>,
-  ctx: SupervisionContext<R>,
-): Supervision<R> =>
+  ctx: SupervisionContext<R, SupervisorBodyExecutorDeps>,
+): Supervision<R, SupervisorBodyExecutorDeps> =>
   Effect.gen(function*() {
-    const loop = (): Supervision<R> =>
+    const loop = (): Supervision<R, SupervisorBodyExecutorDeps> =>
       Effect.gen(function*() {
         const intensity = yield* ctx.intensityEff
         const childIntensityTrackers = yield* Effect.forEach(ctx.booted, (b: BootedChild<R>) =>
@@ -280,8 +284,8 @@ const runGroup = <R>(
 
 const superviseTree = <R>(
   strategy: RestartStrategy,
-  ctx: SupervisionContext<R>,
-): Supervision<R> =>
+  ctx: SupervisionContext<R, SupervisorBodyExecutorDeps>,
+): Supervision<R, SupervisorBodyExecutorDeps> =>
   Match.value(strategy).pipe(
     Match.when('one_for_one', () => runIndependent(ctx)),
     Match.when('one_for_all', () => runGroup('one_for_all', ctx)),
@@ -344,7 +348,7 @@ const buildSupervisorBody = <E, R>(
         reportRestart,
         reportExhausted,
         intensityEff,
-      } satisfies SupervisionContext<R | SupervisorBodyExecutorDeps | Scope.Scope>,
+      } satisfies SupervisionContext<R | SupervisorBodyExecutorDeps | Scope.Scope, SupervisorBodyExecutorDeps>,
     )
 
     yield* Effect.andThen(health.paused.await, runStrategy)

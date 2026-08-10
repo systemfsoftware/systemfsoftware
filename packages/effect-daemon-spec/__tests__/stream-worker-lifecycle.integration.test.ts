@@ -2,9 +2,9 @@ import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoft
 import { Duration, Effect, Either, Option, Ref, Stream, TestClock } from 'effect'
 import { expect } from 'vitest'
 import { Daemon } from '../src/mod.js'
-import { dynamic } from '../src/mod.js'
 import { MaxChildren } from '../src/mod.js'
 import { run } from '../src/mod.js'
+import { dynamic } from '../src/supervisor-dynamic.combinator.js'
 import { NoopLayer } from './helpers/shared-layers.js'
 import { BufferedRef } from './helpers/test-utils.js'
 

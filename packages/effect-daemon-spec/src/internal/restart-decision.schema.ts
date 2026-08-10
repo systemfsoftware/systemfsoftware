@@ -1,5 +1,5 @@
 import { Schema } from 'effect'
-import { MAX_CHILDREN_CEILING } from '../supervisor-dynamic.kernel.js'
+import { MAX_CHILDREN_CEILING } from '../brands.kernel.js'
 
 export const RestartStrategy = Schema.Literal('one_for_one', 'one_for_all', 'rest_for_one')
 export type RestartStrategy = typeof RestartStrategy.Type
