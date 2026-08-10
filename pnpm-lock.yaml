@@ -2463,6 +2463,9 @@ importers:
 
   packages/stryker-js/mutation-report:
     dependencies:
+      '@stryker-mutator/api':
+        specifier: catalog:stryker
+        version: 9.6.1
       '@systemfsoftware/stryker-js-mutation-run':
         specifier: workspace:^
         version: link:../mutation-run
@@ -2521,6 +2524,9 @@ importers:
 
   packages/stryker-js/mutation-run:
     dependencies:
+      '@stryker-mutator/api':
+        specifier: catalog:stryker
+        version: 9.6.1
       '@stryker-mutator/instrumenter':
         specifier: catalog:stryker
         version: 9.6.1

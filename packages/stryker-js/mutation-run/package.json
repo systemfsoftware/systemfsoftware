@@ -111,6 +111,7 @@
     "mutation:full": "stryker run --force"
   },
   "dependencies": {
+    "@stryker-mutator/api": "catalog:stryker",
     "@stryker-mutator/instrumenter": "catalog:stryker",
     "@stryker-mutator/util": "catalog:stryker",
     "@systemfsoftware/stryker-js-plugin-api": "workspace:^",
