@@ -18,7 +18,8 @@ declare module 'vitest' {
 
 const execFileAsync = promisify(execFile)
 
-const NODE_IMAGE = 'node:22-alpine'
+// Manifest-list digest (not the amd64 platform digest) for tag 22-alpine, resolved 2026-08-10.
+const NODE_IMAGE = 'node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32'
 
 const WORKSPACE_PACKAGES = [
   '@systemfsoftware/arethetypeswrong-cli',
