@@ -1,6 +1,6 @@
 import fs from 'fs'
 
-import { declareFactoryPlugin, PluginKind } from '@stryker-mutator/api/plugin'
+import { declareFactoryPlugin, PluginKind } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 
 import { vitestTestRunnerFactory } from './vitest-test-runner.js'
 

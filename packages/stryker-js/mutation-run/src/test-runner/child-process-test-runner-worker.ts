@@ -1,5 +1,6 @@
-import { StrykerOptions } from '@stryker-mutator/api/core'
-import { commonTokens, PluginKind, tokens } from '@stryker-mutator/api/plugin'
+import { errorToString } from '@stryker-mutator/util'
+import { StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { commonTokens, PluginKind, tokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 import {
   DryRunOptions,
   DryRunResult,
@@ -9,8 +10,7 @@ import {
   MutantRunStatus,
   TestRunner,
   TestRunnerCapabilities,
-} from '@stryker-mutator/api/test-runner'
-import { errorToString } from '@stryker-mutator/util'
+} from '@systemfsoftware/stryker-js-plugin-api/test-runner'
 
 import { injectionTokens, PluginCreator } from '../plugins/index.js'
 

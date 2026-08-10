@@ -1,5 +1,5 @@
-import { Logger } from '@stryker-mutator/api/logging'
-import { commonTokens, tokens } from '@stryker-mutator/api/plugin'
+import { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
+import { commonTokens, tokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 import type { JSONSchema7 } from 'json-schema'
 
 import { injectionTokens } from '../plugins/index.js'

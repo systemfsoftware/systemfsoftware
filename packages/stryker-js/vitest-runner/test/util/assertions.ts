@@ -13,7 +13,7 @@ import {
   TestResult,
   TestStatus,
   TimeoutMutantRunResult,
-} from '@stryker-mutator/api/test-runner'
+} from '@systemfsoftware/stryker-js-plugin-api/test-runner'
 import { expect } from 'vitest'
 
 export function expectKilled(

@@ -1,5 +1,5 @@
-import type { MutantCoverage } from '@stryker-mutator/api/core'
-import type { MutantActivation } from '@stryker-mutator/api/test-runner'
+import type { MutantCoverage } from '@systemfsoftware/stryker-js-plugin-api/core'
+import type { MutantActivation } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
 import { afterAll, afterEach, beforeAll, beforeEach, inject, RunnerTestCase, RunnerTestSuite } from 'vitest'
 
 // This file is copied to the sandbox dir, don't import anything local!

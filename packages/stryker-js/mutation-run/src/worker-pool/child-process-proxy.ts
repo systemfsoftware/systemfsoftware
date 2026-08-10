@@ -2,13 +2,13 @@ import childProcess from 'child_process'
 import os from 'os'
 import { fileURLToPath, URL } from 'url'
 
-import { FileDescriptions, StrykerOptions } from '@stryker-mutator/api/core'
 import { ExpirableTask, isErrnoException, StrykerError, Task } from '@stryker-mutator/util'
+import { FileDescriptions, StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
 import { Disposable, InjectableClass, InjectionToken } from 'typed-inject'
 
 import { LoggingServerAddress } from '../logging/index.js'
 
-import { Logger, LoggerFactoryMethod } from '@stryker-mutator/api/logging'
+import { Logger, LoggerFactoryMethod } from '@systemfsoftware/stryker-js-plugin-api/logging'
 import { ChildProcessCrashedError } from './child-process-crashed-error.js'
 import { ChildProcessContext } from './child-process-proxy-worker.js'
 import { IdGenerator } from './id-generator.js'

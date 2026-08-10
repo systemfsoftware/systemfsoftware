@@ -1,5 +1,5 @@
-import { MutantResult, PartialStrykerOptions } from '@stryker-mutator/api/core'
-import { commonTokens } from '@stryker-mutator/api/plugin'
+import { MutantResult, PartialStrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { commonTokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 import { createInjector, Injector } from 'typed-inject'
 
 import { ConfigError, retrieveCause } from './errors.js'

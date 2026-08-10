@@ -1,9 +1,10 @@
 import { EOL } from 'os'
 
-import { Mutant, StrykerOptions } from '@stryker-mutator/api/core'
-import { Logger } from '@stryker-mutator/api/logging'
-import { commonTokens, Injector, tokens } from '@stryker-mutator/api/plugin'
-import { DryRunCompletedEvent, RunTiming } from '@stryker-mutator/api/report'
+import { I, requireResolve } from '@stryker-mutator/util'
+import { Mutant, StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
+import { commonTokens, Injector, tokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
+import { DryRunCompletedEvent, RunTiming } from '@systemfsoftware/stryker-js-plugin-api/report'
 import {
   CompleteDryRunResult,
   DryRunResult,
@@ -13,8 +14,7 @@ import {
   TestResult,
   TestRunner,
   TestStatus,
-} from '@stryker-mutator/api/test-runner'
-import { I, requireResolve } from '@stryker-mutator/util'
+} from '@systemfsoftware/stryker-js-plugin-api/test-runner'
 import { lastValueFrom, of } from 'rxjs'
 
 import { CheckerFacade } from '../checker/index.js'

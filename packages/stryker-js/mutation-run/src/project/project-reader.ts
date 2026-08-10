@@ -1,10 +1,16 @@
 import path from 'path'
 import { isDeepStrictEqual } from 'util'
 
-import { FileDescription, FileDescriptions, Location, Position, StrykerOptions } from '@stryker-mutator/api/core'
-import { Logger } from '@stryker-mutator/api/logging'
-import { commonTokens, tokens } from '@stryker-mutator/api/plugin'
 import { ERROR_CODES, I, isErrnoException, notEmpty } from '@stryker-mutator/util'
+import {
+  FileDescription,
+  FileDescriptions,
+  Location,
+  Position,
+  StrykerOptions,
+} from '@systemfsoftware/stryker-js-plugin-api/core'
+import { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
+import { commonTokens, tokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 import { Minimatch } from 'minimatch'
 import type { MutationTestResult } from 'mutation-testing-report-schema/api'
 

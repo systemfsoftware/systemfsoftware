@@ -1,4 +1,5 @@
-import { CheckStatus } from '@stryker-mutator/api/check'
+import { I } from '@stryker-mutator/util'
+import { CheckStatus } from '@systemfsoftware/stryker-js-plugin-api/check'
 import {
   Mutant,
   MutantResult,
@@ -6,11 +7,10 @@ import {
   MutantTestPlan,
   PlanKind,
   StrykerOptions,
-} from '@stryker-mutator/api/core'
-import { Logger } from '@stryker-mutator/api/logging'
-import { commonTokens, tokens } from '@stryker-mutator/api/plugin'
-import { CompleteDryRunResult, TestRunner } from '@stryker-mutator/api/test-runner'
-import { I } from '@stryker-mutator/util'
+} from '@systemfsoftware/stryker-js-plugin-api/core'
+import { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
+import { commonTokens, tokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
+import { CompleteDryRunResult, TestRunner } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
 import { bufferTime, concat, EMPTY, from, lastValueFrom, merge, mergeMap, Observable, partition } from 'rxjs'
 import { map, shareReplay, tap, toArray } from 'rxjs/operators'
 

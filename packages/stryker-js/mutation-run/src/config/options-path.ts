@@ -1,5 +1,5 @@
-import { StrykerOptions } from '@stryker-mutator/api/core'
 import { propertyPath } from '@stryker-mutator/util'
+import { StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
 
 /**
  * Print the name of (or path to) a stryker option

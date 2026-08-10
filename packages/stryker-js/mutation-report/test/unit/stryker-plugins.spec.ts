@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { PluginKind } from '@stryker-mutator/api/plugin'
+import { PluginKind } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 
 // U6 regression: the plugin loader imports the `./stryker-plugins` subpath and
 // reads the `strykerPlugins` export under its real name, but tsdown inlines

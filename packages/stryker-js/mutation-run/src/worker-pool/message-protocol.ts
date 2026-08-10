@@ -1,4 +1,4 @@
-import { FileDescriptions, StrykerOptions } from '@stryker-mutator/api/core'
+import { FileDescriptions, StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
 
 import type { LoggingServerAddress } from '../logging/index.js'
 

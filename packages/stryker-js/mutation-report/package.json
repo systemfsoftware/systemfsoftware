@@ -23,8 +23,8 @@
     "api:update": "api-extractor run --local"
   },
   "dependencies": {
-    "@stryker-mutator/api": "catalog:stryker",
     "@systemfsoftware/stryker-js-mutation-run": "workspace:^",
+    "@systemfsoftware/stryker-js-plugin-api": "workspace:^",
     "chalk": "~5.6.0",
     "emoji-regex": "~10.6.0",
     "mutation-testing-elements": "3.7.3",

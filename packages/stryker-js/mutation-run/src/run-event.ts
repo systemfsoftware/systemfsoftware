@@ -1,4 +1,4 @@
-import type { MutantStatus, schema } from '@stryker-mutator/api/core'
+import type { MutantStatus, schema } from '@systemfsoftware/stryker-js-plugin-api/core'
 
 import type { ModeSignal, OutputMode } from './output-mode.js'
 import type { VerdictEnvelope } from './verdict-envelope.js'

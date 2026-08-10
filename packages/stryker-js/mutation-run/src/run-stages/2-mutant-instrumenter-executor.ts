@@ -1,8 +1,14 @@
-import { StrykerOptions } from '@stryker-mutator/api/core'
-import { commonTokens, Injector, PluginContext, PluginKind, tokens } from '@stryker-mutator/api/plugin'
-import { Reporter } from '@stryker-mutator/api/report'
 import { createInstrumenter, InstrumentResult } from '@stryker-mutator/instrumenter'
 import { I } from '@stryker-mutator/util'
+import { StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
+import {
+  commonTokens,
+  Injector,
+  PluginContext,
+  PluginKind,
+  tokens,
+} from '@systemfsoftware/stryker-js-plugin-api/plugin'
+import { Reporter } from '@systemfsoftware/stryker-js-plugin-api/report'
 import type { execaCommand } from 'execa'
 
 import { createCheckerFactory } from '../checker/index.js'

@@ -2,9 +2,9 @@ import fs from 'fs'
 import path from 'path'
 import { fileURLToPath, pathToFileURL, URL } from 'url'
 
-import { Logger } from '@stryker-mutator/api/logging'
-import { commonTokens, Plugin, PluginKind, tokens } from '@stryker-mutator/api/plugin'
 import { notEmpty, propertyPath } from '@stryker-mutator/util'
+import { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
+import { commonTokens, Plugin, PluginKind, tokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 
 import { importModule } from '../config/module-loader.js'
 import { defaultOptions } from '../config/options-validator.js'

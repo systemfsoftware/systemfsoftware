@@ -1,5 +1,5 @@
-import { Mutant } from '@stryker-mutator/api/core'
-import { Logger } from '@stryker-mutator/api/logging'
+import { Mutant } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
 
 import { ChildProcessCrashedError } from '../worker-pool/child-process-crashed-error.js'
 import { ResourceDecorator } from '../worker-pool/index.js'

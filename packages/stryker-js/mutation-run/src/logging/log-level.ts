@@ -1,11 +1,11 @@
 /**
- * Re-export of @stryker-mutator/api/core's LogLevel const enum as a local runtime object.
+ * Re-export of @systemfsoftware/stryker-js-plugin-api/core's LogLevel const enum as a local runtime object.
  * The upstream uses `const enum` which rolldown/oxc doesn't inline at bundle time,
  * and which has no runtime emit.
  *
  * Using a const object + type pattern instead of an enum keeps the type structurally
  * compatible with the upstream's LogLevel (both are the same string literal union),
- * so values from @stryker-mutator/api/core types are assignable without casting.
+ * so values from @systemfsoftware/stryker-js-plugin-api/core types are assignable without casting.
  */
 export const LogLevel = {
   Trace: 'trace',

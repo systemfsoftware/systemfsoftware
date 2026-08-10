@@ -1,13 +1,13 @@
 import { URL } from 'url'
 
-import { FileDescriptions, Mutant, StrykerOptions } from '@stryker-mutator/api/core'
+import { FileDescriptions, Mutant, StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
 import { Disposable } from 'typed-inject'
 
 import { ChildProcessProxy } from '../worker-pool/child-process-proxy.js'
 import { IdGenerator } from '../worker-pool/id-generator.js'
 import { Resource } from '../worker-pool/pool.js'
 
-import { LoggerFactoryMethod } from '@stryker-mutator/api/logging'
+import { LoggerFactoryMethod } from '@systemfsoftware/stryker-js-plugin-api/logging'
 import { LoggingServerAddress } from '../logging/index.js'
 import { CheckerResource } from './checker-resource.js'
 import { CheckerWorker } from './checker-worker.js'

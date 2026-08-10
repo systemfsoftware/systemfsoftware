@@ -11,7 +11,7 @@ import {
   Plugins,
   tokens,
   ValuePlugin,
-} from '@stryker-mutator/api/plugin'
+} from '@systemfsoftware/stryker-js-plugin-api/plugin'
 import { InjectableClass, InjectableFunction } from 'typed-inject'
 
 import { ConfigError } from '../errors.js'

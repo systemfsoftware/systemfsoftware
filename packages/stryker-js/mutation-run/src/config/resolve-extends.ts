@@ -3,7 +3,7 @@ import { createRequire } from 'module'
 import path from 'path'
 import { pathToFileURL } from 'url'
 
-import type { PartialStrykerOptions } from '@stryker-mutator/api/core'
+import type { PartialStrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
 
 import { ConfigError } from '../errors.js'
 

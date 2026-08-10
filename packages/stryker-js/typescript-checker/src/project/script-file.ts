@@ -1,4 +1,4 @@
-import type { Mutant, Position } from '@stryker-mutator/api/core'
+import type { Mutant, Position } from '@systemfsoftware/stryker-js-plugin-api/core'
 
 export class ScriptFile {
   private readonly originalContent: string

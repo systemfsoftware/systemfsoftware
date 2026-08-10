@@ -10,7 +10,6 @@ import path from 'path'
  */
 export class TempTestDirectorySandbox {
   public tmpDir!: string
-  private originalWorkingDir: string | undefined
   private readonly from
   private readonly soft
 
@@ -27,29 +26,26 @@ export class TempTestDirectorySandbox {
    * Copies all files `from` to the temp test directory
    */
   public async init(): Promise<void> {
-    this.originalWorkingDir = process.cwd()
     if (this.soft) {
       this.tmpDir = path.resolve(this.from)
     } else {
       this.tmpDir = path.resolve(
-        this.originalWorkingDir,
+        process.cwd(),
         'testResources',
         'tmp',
         `workDir-${random()}`,
       )
       await fs.promises.cp(this.from, this.tmpDir, { recursive: true })
     }
-    process.chdir(this.tmpDir)
   }
 
   /**
    * Deletes the temp file
    */
   public async dispose(): Promise<void> {
-    if (!this.originalWorkingDir) {
+    if (!this.tmpDir) {
       throw new Error('Disposed without initialized')
     }
-    process.chdir(this.originalWorkingDir)
     if (!this.soft) {
       await this.rm()
     }

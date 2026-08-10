@@ -1,7 +1,11 @@
-import { MutantResult, schema, StrykerOptions } from '@stryker-mutator/api/core'
-import { Logger } from '@stryker-mutator/api/logging'
-import { commonTokens, PluginKind } from '@stryker-mutator/api/plugin'
-import { DryRunCompletedEvent, MutationTestingPlanReadyEvent, Reporter } from '@stryker-mutator/api/report'
+import { MutantResult, schema, StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
+import { commonTokens, PluginKind } from '@systemfsoftware/stryker-js-plugin-api/plugin'
+import {
+  DryRunCompletedEvent,
+  MutationTestingPlanReadyEvent,
+  Reporter,
+} from '@systemfsoftware/stryker-js-plugin-api/report'
 import { MutationTestMetricsResult } from 'mutation-testing-metrics'
 import { tokens } from 'typed-inject'
 
