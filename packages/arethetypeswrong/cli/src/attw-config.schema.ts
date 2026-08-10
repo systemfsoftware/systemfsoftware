@@ -17,11 +17,11 @@ export const AttwConfigSchema = Schema.Struct({
   entrypointsLegacy: Schema.optional(Schema.Boolean),
   fromNpm: Schema.optional(Schema.Boolean),
   pack: Schema.optional(Schema.Boolean),
-  profile: Schema.optional(Schema.Literal('strict', 'node16', 'esm-only')),
+  registry: Schema.optional(Schema.String),
 })
 export type AttwConfig = Schema.Schema.Type<typeof AttwConfigSchema>
 
-const readAttwConfigJson = async (): Promise<unknown | null> => {
+const readAttwConfigJson = async (): Promise<unknown> => {
   const cwd = process.cwd()
   for (const candidate of ['.attw.json', path.join(cwd, '.attw.json')]) {
     try {
@@ -44,6 +44,6 @@ const configProviderEffect: Effect.Effect<ConfigProvider.ConfigProvider, never, 
 
 export const AttwConfigFileLayer: Layer.Layer<never, never, never> = Layer.unwrapEffect(
   Effect.map(configProviderEffect, (provider) => Layer.setConfigProvider(provider.pipe(ConfigProvider.constantCase))),
-) as Layer.Layer<never, never, never>
+)
 
 export const _internal = { readAttwConfigJson }

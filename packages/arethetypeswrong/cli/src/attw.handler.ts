@@ -1,6 +1,7 @@
 import * as Args from '@effect/cli/Args'
 import * as Command from '@effect/cli/Command'
 import * as Options from '@effect/cli/Options'
+import * as Config from 'effect/Config'
 import * as Effect from 'effect/Effect'
 import * as Option from 'effect/Option'
 
@@ -26,7 +27,7 @@ const profileOptions = (): Options.Options<typeof CliProfile[number]> =>
 const ignoreRulesOptions = (): Options.Options<Option.Option<ReadonlyArray<string>>> =>
   Options.optional(
     Options.repeated(Options.text('ignore-rules').pipe(Options.withAlias('ignore-rule'))),
-  ) as unknown as Options.Options<Option.Option<ReadonlyArray<string>>>
+  )
 
 /**
  * `--definitely-typed` is tri-state: absent | `true` | a version-or-path string.
@@ -36,6 +37,16 @@ const ignoreRulesOptions = (): Options.Options<Option.Option<ReadonlyArray<strin
 const definitelyTypedOptions = (): Options.Options<Option.Option<string>> =>
   Options.optional(Options.text('definitely-typed')).pipe(
     Options.withDescription('Specify the version range of @types to use. Pass `false` to disable.'),
+  )
+
+const registryOptions = (): Options.Options<string> =>
+  Options.text('registry').pipe(
+    Options.withDescription(
+      'URL of the npm registry to read packages from with --from-npm (default: https://registry.npmjs.org)',
+    ),
+    Options.withFallbackConfig(
+      Config.string('registry').pipe(Config.withDefault('https://registry.npmjs.org')),
+    ),
   )
 
 const unwrap = <A>(opt: Option.Option<A>): A | undefined => Option.isSome(opt) ? opt.value : undefined
@@ -60,22 +71,20 @@ export const attwCommand = Command.make(
       Options.withAlias('q'),
       Options.withDescription("Don't print anything to STDOUT (overrides all other options)"),
     ),
-    entrypoints: Options.optional(Options.repeated(Options.text('entrypoints'))) as unknown as Options.Options<
-      Option.Option<ReadonlyArray<string>>
-    >,
+    entrypoints: Options.optional(Options.repeated(Options.text('entrypoints'))),
     includeEntrypoints: Options.optional(
       Options.repeated(Options.text('include-entrypoints')),
-    ) as unknown as Options.Options<Option.Option<ReadonlyArray<string>>>,
+    ),
     excludeEntrypoints: Options.optional(
       Options.repeated(Options.text('exclude-entrypoints')),
-    ) as unknown as Options.Options<Option.Option<ReadonlyArray<string>>>,
+    ),
     entrypointsLegacy: Options.boolean('entrypoints-legacy'),
     ignoreRules: ignoreRulesOptions(),
     profile: profileOptions(),
     summary: Options.boolean('no-summary', { ifPresent: false }),
     emoji: Options.boolean('no-emoji', { ifPresent: false }),
     color: Options.boolean('no-color', { ifPresent: false }),
-    configPath: Options.optional(Options.text('config-path')) as unknown as Options.Options<Option.Option<string>>,
+    registry: registryOptions(),
   } as const,
   (config) =>
     Effect.gen(function*() {
@@ -95,7 +104,7 @@ export const attwCommand = Command.make(
         summary: config.summary,
         emoji: config.emoji,
         color: config.color,
-        configPath: unwrap(config.configPath),
+        registry: config.registry,
       }
       const exitCode = yield* runAttw(input)
       yield* Effect.sync(() => {

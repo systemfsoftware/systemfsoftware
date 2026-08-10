@@ -40,6 +40,7 @@ export interface CliRequest {
   readonly color?: boolean
   readonly configPath?: string
   readonly moduleKinds?: ReadonlyArray<string>
+  readonly registry: string
 }
 
 export interface AttwCliExecutorDepsService {
@@ -114,7 +115,9 @@ const acquireTarball = (
       const [name, version = 'latest'] = npmTarget.split('@').filter(Boolean)
       const registry = yield* Effect.tryPromise({
         try: async () => {
-          const res = await fetch(`https://registry.npmjs.org/${encodeURIComponent(name ?? npmTarget)}/${version}`)
+          const res = await fetch(
+            `${request.registry.replace(/\/$/, '')}/${encodeURIComponent(name ?? npmTarget)}/${version}`,
+          )
           if (res.status === 404) throw new Error(`Package not found: ${npmTarget}`)
           if (!res.ok) throw new Error(`Registry returned ${res.status} for ${npmTarget}`)
           return res.json() as Promise<{ name: string; version: string; dist: { tarball: string } }>
@@ -158,11 +161,11 @@ export const runAttw = (
       Effect.provide(checkPackageLayer),
       Effect.provide(storeLayer),
       Effect.catchAll(() =>
-        Effect.succeed({
+        Effect.succeed<CheckResult>({
           packageName: request.fileOrDirectory,
           packageVersion: 'error',
           types: false,
-        } as CheckResult)
+        })
       ),
     )
     const result = yield* checkEffect
