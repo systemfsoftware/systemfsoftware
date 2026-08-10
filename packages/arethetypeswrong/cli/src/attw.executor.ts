@@ -156,7 +156,12 @@ export const runAttw = (
 
     const checkEffect: Effect.Effect<CheckResult, never, never> = Effect.gen(function*() {
       const checkPackage = yield* CheckPackage
-      return yield* checkPackage.execute(request.fileOrDirectory)
+      return yield* checkPackage.execute(request.fileOrDirectory, {
+        entrypoints: request.entrypoints?.length ? [...request.entrypoints] : undefined,
+        includeEntrypoints: request.includeEntrypoints?.length ? [...request.includeEntrypoints] : undefined,
+        excludeEntrypoints: request.excludeEntrypoints?.length ? [...request.excludeEntrypoints] : undefined,
+        entrypointsLegacy: request.entrypointsLegacy,
+      })
     }).pipe(
       Effect.provide(checkPackageLayer),
       Effect.provide(storeLayer),
