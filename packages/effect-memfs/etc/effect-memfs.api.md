@@ -4,29 +4,18 @@
 
 ```ts
 
+import { Context } from 'effect';
 import * as FileSystem_2 from '@effect/platform/FileSystem';
 import { Layer } from 'effect';
 import * as memfs from 'memfs';
 
+// Warning: (ae-forgotten-export) The symbol "Contents_base" needs to be exported by the entry point index.d.ts
+//
 // @public (undocumented)
-export type Contents = memfs.DirectoryJSON;
+export class Contents extends Contents_base {}
 
 // @public (undocumented)
-export const layerWith: (contents: Contents) => Layer.Layer<FileSystem_2.FileSystem>;
-
-// @public (undocumented)
-export function make(contents?: Contents, opts?: {
-    cwd: string;
-}): FileSystem_2.FileSystem;
-
-// @public (undocumented)
-export const MemoryFileSystem: {
-    readonly layer: Layer.Layer<FileSystem_2.FileSystem>;
-    readonly layerWith: (contents: Contents) => Layer.Layer<FileSystem_2.FileSystem>;
-    readonly make: (contents?: Contents, opts?: {
-        cwd: string;
-    }) => FileSystem_2.FileSystem;
-};
+export const layer: Layer.Layer<FileSystem_2.FileSystem, never, Contents>;
 
 // (No @packageDocumentation comment for this package)
 
