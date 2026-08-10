@@ -6,6 +6,7 @@ import { DynamicLimitExceeded } from '../src/mod.js'
 import { run } from '../src/mod.js'
 import { Daemon } from '../src/mod.js'
 import { dynamic } from '../src/mod.js'
+import { MaxChildren } from '../src/mod.js'
 import { NoopLayer } from './helpers/shared-layers.js'
 
 const Feature = makeFeature({ it, layer })
@@ -30,7 +31,7 @@ const longPoll = (name: string) =>
 
 const mkHandle = (name: string, max: number) =>
   Effect.gen(function*() {
-    const spec = dynamic({ name, child: NoopChild, maxChildren: max })
+    const spec = dynamic({ name, child: NoopChild, maxChildren: MaxChildren.make(max) })
     return yield* run.dynamic(spec)
   })
 
@@ -141,7 +142,7 @@ Feature('Dynamic Supervisor')
                     tick: { tickTimeout: Duration.seconds(90) },
                     lock: { mode: 'none' },
                   }),
-                maxChildren: 1,
+                maxChildren: MaxChildren.make(1),
               })
               const handle = yield* run.dynamic(spec)
               return { handle, ticks }
@@ -196,7 +197,7 @@ Feature('Dynamic Supervisor')
                   tick: { tickTimeout: Duration.seconds(90) },
                   lock: { mode: 'none' },
                 }),
-              maxChildren: 10,
+              maxChildren: MaxChildren.make(10),
             })
             const handle = yield* run.dynamic(spec)
             yield* handle.startChild(void 0)
@@ -257,7 +258,7 @@ Feature('Dynamic Supervisor')
                     tick: { tickTimeout: Duration.seconds(90) },
                     lock: { mode: 'none' },
                   }),
-                maxChildren: 1,
+                maxChildren: MaxChildren.make(1),
               })
               const handle = yield* run.dynamic(spec)
               return { handle, acquired }
@@ -305,7 +306,7 @@ Feature('Dynamic Supervisor')
                     Match.when(2, () => longPoll('long-triplet-b')),
                     Match.exhaustive,
                   ),
-                maxChildren: 10,
+                maxChildren: MaxChildren.make(10),
               })
               const handle = yield* run.dynamic(spec)
               return { handle }
@@ -343,7 +344,7 @@ Feature('Dynamic Supervisor')
                     tick: { tickTimeout: Duration.seconds(90) },
                     lock: { mode: 'none' },
                   }),
-                maxChildren: 5,
+                maxChildren: MaxChildren.make(5),
               })
               return yield* run.dynamic(spec)
             }),
@@ -378,7 +379,7 @@ Feature('Dynamic Supervisor')
                     tick: { tickTimeout: Duration.seconds(90) },
                     lock: { mode: 'none' },
                   }),
-                maxChildren: 1,
+                maxChildren: MaxChildren.make(1),
               })
               return yield* run.dynamic(spec)
             }),
@@ -413,7 +414,7 @@ Feature('Dynamic Supervisor')
                   tick: { tickTimeout: Duration.seconds(90) },
                   lock: { mode: 'none' },
                 }),
-              maxChildren: 10,
+              maxChildren: MaxChildren.make(10),
             })
             const handle = yield* run.dynamic(spec)
             return { handle }
@@ -462,7 +463,7 @@ Feature('Dynamic Supervisor')
                     tick: { tickTimeout: Duration.seconds(90) },
                     lock: { mode: 'none' },
                   }),
-                maxChildren: 5,
+                maxChildren: MaxChildren.make(5),
               })
               const handle = yield* run.dynamic(streamSpec)
               return { handle, release, completed }

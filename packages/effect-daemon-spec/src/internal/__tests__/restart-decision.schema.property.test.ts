@@ -1,7 +1,7 @@
 import { it } from '@systemfsoftware/effect-gherkin-spec'
 import { refutes } from '@systemfsoftware/effect-schema-law'
 import { Arbitrary, Either, FastCheck as fc, Schema } from 'effect'
-import { DEFAULT_MAX_CHILDREN } from '../../supervisor-dynamic.kernel.js'
+import { MAX_CHILDREN_CEILING } from '../../supervisor-dynamic.kernel.js'
 import { DecideInput } from '../restart-decision.schema.js'
 
 const BOUND_MESSAGE = 'failedIndex must be < totalChildren'
@@ -15,13 +15,13 @@ const messageOf = (input: unknown): string =>
 it.prop('∀d_SampledInput_∈DeclaredBounds', [DecideInput], ([input]) =>
   input.failedIndex >= 0 &&
   input.failedIndex < input.totalChildren &&
-  input.totalChildren <= DEFAULT_MAX_CHILDREN)
+  input.totalChildren <= MAX_CHILDREN_CEILING)
 
 it.prop('∀g_IndexAtOrPastWidth_=Left', [fc.gen()], ([g]) => {
   const sampled = g(Arbitrary.make, DecideInput)
   const failedIndex = g(fc.integer, {
     min: sampled.totalChildren,
-    max: Math.min(sampled.totalChildren + OVERSHOOT, DEFAULT_MAX_CHILDREN),
+    max: Math.min(sampled.totalChildren + OVERSHOOT, MAX_CHILDREN_CEILING),
   })
   return Either.isLeft(decodeOf({ ...sampled, failedIndex }))
 })
@@ -30,7 +30,7 @@ it.prop('∀g_IndexAtOrPastWidth_⊇BoundMessage', [fc.gen()], ([g]) => {
   const sampled = g(Arbitrary.make, DecideInput)
   const failedIndex = g(fc.integer, {
     min: sampled.totalChildren,
-    max: Math.min(sampled.totalChildren + OVERSHOOT, DEFAULT_MAX_CHILDREN),
+    max: Math.min(sampled.totalChildren + OVERSHOOT, MAX_CHILDREN_CEILING),
   })
   return messageOf({ ...sampled, failedIndex }).includes(BOUND_MESSAGE)
 })
@@ -38,8 +38,8 @@ it.prop('∀g_IndexAtOrPastWidth_⊇BoundMessage', [fc.gen()], ([g]) => {
 it.prop('∀g_WidthPastEnforcedCap_=Left', [fc.gen()], ([g]) => {
   const sampled = g(Arbitrary.make, DecideInput)
   const totalChildren = g(fc.integer, {
-    min: DEFAULT_MAX_CHILDREN + 1,
-    max: DEFAULT_MAX_CHILDREN + OVERSHOOT,
+    min: MAX_CHILDREN_CEILING + 1,
+    max: MAX_CHILDREN_CEILING + OVERSHOOT,
   })
   return Either.isLeft(decodeOf({ ...sampled, totalChildren }))
 })
@@ -54,7 +54,7 @@ refutes(DecideInput, {
   }).map((d) => ({ ...d, failedIndex: d.totalChildren + (d.failedIndex % 5) })),
   DecideWidthPastCap: fc.record({
     strategy: fc.constantFrom('one_for_one'),
-    totalChildren: fc.integer({ min: DEFAULT_MAX_CHILDREN + 1, max: DEFAULT_MAX_CHILDREN + 500 }),
+    totalChildren: fc.integer({ min: MAX_CHILDREN_CEILING + 1, max: MAX_CHILDREN_CEILING + 500 }),
     failedIndex: fc.constant(0),
     exitSuccess: fc.boolean(),
     intensityExceeded: fc.boolean(),

@@ -7,6 +7,7 @@ import { Daemon } from '../src/mod.js'
 import { dynamic } from '../src/mod.js'
 import { SupervisorBodyExecutorDeps, WithLeaderLockExecutorLive } from '../src/mod.js'
 import { LeaderLock } from '../src/mod.js'
+import { MaxChildren } from '../src/mod.js'
 import { Supervision } from '../src/mod.js'
 import { oneForOne } from '../src/mod.js'
 import { ReporterSpyContext } from './helpers/reporter-spy.js'
@@ -46,7 +47,7 @@ Feature('Daemon supervisor boundaries')
                   tick: { tickTimeout: Duration.seconds(90) },
                   lock: { mode: 'none' },
                 }),
-              maxChildren: 10,
+              maxChildren: MaxChildren.make(10),
             })
             return yield* run.dynamic(spec)
           })),
@@ -83,7 +84,7 @@ Feature('Daemon supervisor boundaries')
               const spec = dynamic({
                 name: 'stream-timeout-sup',
                 child: () => worker,
-                maxChildren: 1,
+                maxChildren: MaxChildren.make(1),
               })
               const handle = yield* run.dynamic(spec)
               const ref = yield* handle.startChild(void 0)
@@ -115,7 +116,7 @@ Feature('Daemon supervisor boundaries')
               const spec = dynamic({
                 name: 'sub-timeout-sup',
                 child: () => worker,
-                maxChildren: 1,
+                maxChildren: MaxChildren.make(1),
               })
               const handle = yield* run.dynamic(spec)
               const ref = yield* handle.startChild(void 0)

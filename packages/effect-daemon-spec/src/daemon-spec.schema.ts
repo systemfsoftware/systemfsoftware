@@ -1,6 +1,6 @@
 import type { Cause, Duration, Effect, Metric, Option, Schedule, Stream } from 'effect'
 import type { DynamicSpecTypeId, SupervisorTypeId, WorkerTypeId } from './brands.kernel.js'
-import type { ChildPolicyConfig, Intensity, TickPolicyConfig } from './daemon-policy.schema.js'
+import type { ChildPolicyConfig, Intensity, MaxChildren, TickPolicyConfig } from './daemon-policy.schema.js'
 
 export type LockConfig =
   | { mode: 'none' }
@@ -79,7 +79,7 @@ export interface DynamicSpec<E, R, Args> {
   readonly [DynamicSpecTypeId]: DynamicSpecTypeId
   readonly name: string
   readonly child: (args: Args) => Worker<E, R>
-  readonly maxChildren: number
+  readonly maxChildren: MaxChildren
 }
 
 export type Child<E, R> = Worker<E, R> | Supervisor<E, R>
