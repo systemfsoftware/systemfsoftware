@@ -4,6 +4,7 @@ export default defineConfig({
   ...sharedConfig,
   test: {
     ...sharedConfig.test,
-    include: ['test/**/*.test.ts'],
+    include: ['__tests__/**/*.test.ts', 'src/schema-laws.test.ts'],
+    exclude: [...(sharedConfig.test?.exclude ?? []), '**/*.feature.test.ts'],
   },
 })

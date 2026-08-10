@@ -24,12 +24,16 @@
     "lint": "oxlint . ${AGENT:+--format=unix --quiet}"
   },
   "peerDependencies": {
+    "@effect/cluster": "catalog:",
     "@effect/platform": "catalog:",
     "@effect/platform-node": "catalog:",
     "@oh-my-pi/pi-coding-agent": "catalog:",
-    "effect": "catalog:"
+    "effect": "catalog:",
+    "@effect/sql": "catalog:",
+    "@effect/workflow": "catalog:"
   },
   "devDependencies": {
+    "@effect/cluster": "catalog:",
     "@effect/platform": "catalog:",
     "@effect/platform-node": "catalog:",
     "@effect/vitest": "catalog:",
@@ -44,7 +48,9 @@
     "rimraf": "catalog:",
     "tsdown": "catalog:",
     "typescript": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "@effect/sql": "catalog:",
+    "@effect/workflow": "catalog:"
   },
   "omp": {
     "extensions": [
