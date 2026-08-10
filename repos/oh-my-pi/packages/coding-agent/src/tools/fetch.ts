@@ -516,7 +516,7 @@ function cleanFeedText(text: string): string {
  * Parse RSS/Atom feed to markdown
  */
 async function parseFeedToMarkdown(content: string, maxItems = 10): Promise<string> {
-	const { parseHTML } = await import("linkedom");
+	const { parseHTML } = await import("@oh-my-pi/pi-utils/dom");
 	try {
 		const doc = parseHTML(content).document;
 

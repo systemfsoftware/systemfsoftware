@@ -95,7 +95,7 @@ export interface DaemonReporterService {
 export const dynamic: <E, R, Args>(opts: {
     readonly name: string;
     readonly child: (args: Args) => Worker_2<E, R>;
-    readonly maxChildren?: number;
+    readonly maxChildren?: MaxChildren;
 }) => DynamicSpec<E, R, Args>;
 
 // @public (undocumented)
@@ -122,7 +122,7 @@ export interface DynamicSpec<E, R, Args> {
     // (undocumented)
     readonly child: (args: Args) => Worker_2<E, R>;
     // (undocumented)
-    readonly maxChildren: number;
+    readonly maxChildren: MaxChildren;
     // (undocumented)
     readonly name: string;
 }
@@ -234,6 +234,12 @@ export interface LockPrimitiveService {
 
 // @public (undocumented)
 export type LoopShape<E, R> = PollLoop<E, R> | StreamLoop<E, R> | SubscriptionLoop<E, R>;
+
+// @public (undocumented)
+export const MaxChildren: Schema.brand<Schema.filter<typeof Schema.Int>, "MaxChildren">;
+
+// @public (undocumented)
+export type MaxChildren = typeof MaxChildren.Type;
 
 // @public (undocumented)
 export const Noop: Layer.Layer<DaemonReporter>;
@@ -495,8 +501,8 @@ export type WorkerTypeId = typeof WorkerTypeId;
 
 // Warnings were encountered during analysis:
 //
-// dist/index.d.ts:334:3 - (ae-forgotten-export) The symbol "dynamic$1" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:343:3 - (ae-forgotten-export) The symbol "custom" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:336:3 - (ae-forgotten-export) The symbol "dynamic$1" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:345:3 - (ae-forgotten-export) The symbol "custom" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

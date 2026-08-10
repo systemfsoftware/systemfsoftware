@@ -48,6 +48,7 @@ import { Settings } from "../../config/settings";
 import agentCreationArchitectPrompt from "../../prompts/system/agent-creation-architect.md" with { type: "text" };
 import agentCreationUserPrompt from "../../prompts/system/agent-creation-user.md" with { type: "text" };
 import { createAgentSession } from "../../sdk";
+import { refreshAgentDiscovery } from "../../task";
 import { discoverAgents } from "../../task/discovery";
 import { resolveAgentPrewalkDefault } from "../../task/prewalk";
 import type { AgentDefinition, AgentSource } from "../../task/types";
@@ -824,6 +825,7 @@ export class AgentDashboard extends Container {
 		).trimEnd();
 		const content = `---\n${frontmatter}\n---\n\n${spec.systemPrompt.trim()}\n`;
 		await Bun.write(filePath, content);
+		await refreshAgentDiscovery(this.cwd);
 		await this.#reloadData();
 		this.#clearCreateFlow();
 		this.#notice = `Created agent ${spec.identifier} at ${shortenPath(filePath)}`;

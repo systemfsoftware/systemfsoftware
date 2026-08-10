@@ -27,6 +27,7 @@ import { TASK_EFFORTS, type TaskEffort } from "../thinking";
 import { truncateForPrompt } from "../tools/approval";
 import { isIrcEnabled } from "../tools/hub";
 import { formatBytes, formatDuration } from "../tools/render-utils";
+import { isReadOnlyAgent } from "./read-only-policy";
 import { isScoutSpawnable, resolveSpawnPolicy } from "./spawn-policy";
 import {
 	type AgentDefinition,
@@ -102,6 +103,7 @@ export { loadBundledAgents as BUNDLED_AGENTS } from "./agents";
 export { discoverCommands, expandCommand, getCommand } from "./commands";
 export { discoverAgents, getAgent } from "./discovery";
 export { AgentOutputManager } from "./output-manager";
+export * from "./read-only-policy";
 export type {
 	AgentDefinition,
 	AgentProgress,
@@ -118,32 +120,6 @@ export {
 	TASK_SUBAGENT_PROGRESS_CHANNEL,
 	taskSchema,
 } from "./types";
-
-// Built-in tools whose approval tier is "read" (see tool classes' `approval`).
-// An agent is read-only iff its declared tools are a non-empty subset of this set.
-// Fail-safe: any unknown tool makes the agent not read-only.
-export const READ_ONLY_TOOL_NAMES: ReadonlySet<string> = new Set([
-	"read",
-	"grep",
-	"glob",
-	"web_search",
-	"ast_grep",
-	"yield",
-	"hub",
-	"ask",
-	"todo",
-	"recall",
-	"reflect",
-	"retain",
-	"memory_edit",
-	"inspect_image",
-	"checkpoint",
-	"rewind",
-]);
-
-export function isReadOnlyAgent(agent: AgentDefinition): boolean {
-	return !!agent.tools?.length && agent.tools.every(tool => READ_ONLY_TOOL_NAMES.has(tool));
-}
 
 /**
  * Preview text for a child result. Falls back to "(no output)" — annotated
@@ -465,16 +441,19 @@ export function composeSpawnAdvisory(args: {
 class TaskJobError extends Error {}
 
 /**
- * Process-level memo for create-time agent discovery, keyed by resolved cwd.
+ * Process-level create-time discovery memo and published reload snapshots,
+ * keyed by resolved cwd.
  *
  * `TaskTool.create` runs for every (sub)agent session in this process and the
  * walk-up + plugin-registry scan in `discoverAgents` is identical for a given
- * cwd, so repeat creations reuse the first scan. Execution-time discovery
- * (`#runSpawn`) intentionally stays fresh. The memo also tracks the live
- * `discoverAgents` binding: test spies swap that binding, which invalidates
- * the memo automatically.
+ * cwd, so repeat creations reuse the first scan. Explicit plugin reloads
+ * replace the matching snapshot so already-created tools advertise the latest
+ * definitions. Execution-time discovery (`#runSpawn`) intentionally stays
+ * fresh. The memo also tracks the live `discoverAgents` binding: test spies
+ * swap that binding, which invalidates both caches automatically.
  */
 const discoveryMemo = new Map<string, Promise<DiscoveryResult>>();
+const discoverySnapshots = new Map<string, AgentDefinition[]>();
 let discoveryMemoFn: typeof discoverAgents | undefined;
 
 function discoverAgentsForCreate(cwd: string): Promise<DiscoveryResult> {
@@ -482,6 +461,7 @@ function discoverAgentsForCreate(cwd: string): Promise<DiscoveryResult> {
 	if (discoveryMemoFn !== fn) {
 		discoveryMemoFn = fn;
 		discoveryMemo.clear();
+		discoverySnapshots.clear();
 	}
 	const key = path.resolve(cwd);
 	let pending = discoveryMemo.get(key);
@@ -493,6 +473,17 @@ function discoverAgentsForCreate(cwd: string): Promise<DiscoveryResult> {
 		});
 	}
 	return pending;
+}
+
+/** Rescan one cwd and publish its definitions to existing and future task tools. */
+export async function refreshAgentDiscovery(cwd: string): Promise<void> {
+	const key = path.resolve(cwd);
+	discoveryMemo.delete(key);
+	const pending = discoverAgentsForCreate(cwd);
+	const { agents } = await pending;
+	if (discoveryMemo.get(key) === pending) {
+		discoverySnapshots.set(key, agents);
+	}
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -611,7 +602,7 @@ export class TaskTool implements AgentTool<TaskToolSchemaInstance, TaskToolDetai
 		const planMode = this.session.getPlanModeState?.()?.enabled === true;
 		const isolationMode = this.session.settings.get("task.isolation.mode");
 		return renderDescription({
-			agents: this.#discoveredAgents,
+			agents: discoverySnapshots.get(path.resolve(this.session.cwd)) ?? this.#discoveredAgents,
 			isolationEnabled: !planMode && isolationMode !== "none",
 			applyIsolatedChanges: this.session.settings.get("task.isolation.apply"),
 			disabledAgents,
@@ -860,6 +851,7 @@ export class TaskTool implements AgentTool<TaskToolSchemaInstance, TaskToolDetai
 					id: agentId,
 					agent: agentType,
 					agentSource,
+					modelRole: policy.modelRole,
 					status: "pending",
 					task: renderSubagentUserPrompt(assignment),
 					assignment,
@@ -1143,8 +1135,10 @@ export class TaskTool implements AgentTool<TaskToolSchemaInstance, TaskToolDetai
 							// polling row reflects the resolved model, reasoning level,
 							// and running counters without reverting the "running"
 							// status back to the subagent's initial "pending" snapshot.
+							progress.modelRole = nextProgress.modelRole ?? progress.modelRole;
 							progress.resolvedModel = nextProgress.resolvedModel;
-							progress.resolvedModelIsFallback = nextProgress.resolvedModelIsFallback;
+							progress.resolvedModelIsFallback =
+								nextProgress.resolvedModelIsFallback ?? progress.resolvedModelIsFallback;
 							progress.tokens = nextProgress.tokens;
 							progress.requests = nextProgress.requests;
 							progress.contextTokens = nextProgress.contextTokens;
@@ -1187,9 +1181,11 @@ export class TaskTool implements AgentTool<TaskToolSchemaInstance, TaskToolDetai
 					progress.extractedToolData = singleResult?.extractedToolData;
 					progress.retryFailure = singleResult?.retryFailure;
 					progress.retryState = undefined;
+					progress.modelRole = singleResult?.modelRole ?? progress.modelRole;
 					if (singleResult?.resolvedModel) {
 						progress.resolvedModel = singleResult.resolvedModel;
-						progress.resolvedModelIsFallback = singleResult.resolvedModelIsFallback;
+						progress.resolvedModelIsFallback =
+							singleResult.resolvedModelIsFallback ?? progress.resolvedModelIsFallback;
 					} else {
 						delete progress.resolvedModel;
 						delete progress.resolvedModelIsFallback;

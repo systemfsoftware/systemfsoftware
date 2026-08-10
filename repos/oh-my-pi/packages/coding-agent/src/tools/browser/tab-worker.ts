@@ -3,7 +3,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 
 import { postmortem, Snowflake, untilAborted, withTimeout } from "@oh-my-pi/pi-utils";
-import type { HTMLElement } from "linkedom";
+import type { HTMLElement } from "@oh-my-pi/pi-utils/dom";
 import type {
 	Browser,
 	CDPSession,
@@ -23,10 +23,15 @@ import { formatScreenshot } from "../render-utils";
 import {
 	bindRunFacade,
 	CELL_BUDGET_SLACK_MS,
+	installBrowserWorkerRejectionGuard,
+	isBrowserRunOwnedRejection,
+	markBrowserRunRejection,
 	markHandled,
+	observeBrowserRunPromise,
 	resolvePredicateTimeout,
 	type WaitPredicateOptions,
 	waitForRun,
+	withBrowserPromiseCombinatorTracking,
 } from "../run-scope";
 import { ToolAbortError, ToolError, throwIfAborted } from "../tool-errors";
 import {
@@ -44,6 +49,7 @@ import {
 	loadPuppeteerInWorker,
 } from "./launch";
 import { extractReadableFromHtml, type ReadableFormat } from "./readable";
+
 import { cloneSafe, RunOutput } from "./run-output";
 import type {
 	Observation,
@@ -701,6 +707,9 @@ interface ActiveRun {
 	output: RunOutput;
 	screenshots: ScreenshotResult[];
 	pendingTools: Map<string, { resolve(value: unknown): void; reject(error: Error): void }>;
+	rejectionOwner: object;
+	floatingRejections: unknown[];
+	floatingFailure: { promise: Promise<never>; reject(reason?: unknown): void };
 	/** Helper invocations currently awaiting the page/network, keyed by op id. */
 	inflight: Map<number, InflightOp>;
 	opCounter: number;
@@ -748,17 +757,75 @@ export class WorkerCore {
 	#active: ActiveRun | null = null;
 	#runtime: JsRuntime | null = null;
 	#unsub: () => void;
+	#isolated: boolean;
+	#uninstallRejectionGuard: () => void;
 	#mode?: WorkerInitPayload["mode"];
 	#activateForScreenshot = true;
 	#dialogPolicy?: DialogPolicy;
 	#dialogHandler?: (dialog: Dialog) => void;
 	#openDialog?: OpenDialogInfo;
 
-	constructor(transport: Transport) {
+	constructor(transport: Transport, isolated: boolean) {
 		this.#transport = transport;
+		this.#isolated = isolated;
 		this.#unsub = this.#transport.onMessage(msg => {
 			void this.#handleMessage(msg as WorkerInbound);
 		});
+		this.#uninstallRejectionGuard = this.#installRejectionGuard();
+	}
+
+	#installRejectionGuard(): () => void {
+		if (!this.#isolated) {
+			return postmortem.interceptUnhandledRejections(reason => this.#consumeUnhandledRejection(reason));
+		}
+		return installBrowserWorkerRejectionGuard(reason => this.#consumeUnhandledRejection(reason));
+	}
+
+	#consumeUnhandledRejection(reason: unknown): boolean {
+		const active = this.#active;
+		if (!active) return false;
+		if (!isBrowserRunOwnedRejection(reason, active.rejectionOwner, `browser-run-${active.id}.js`)) return false;
+		this.#recordFloatingRejection(active, reason);
+		return true;
+	}
+
+	#recordFloatingRejection(active: ActiveRun, reason: unknown): void {
+		if (postmortem.isExpectedCleanupError(reason)) return;
+		if (this.#active !== active) {
+			this.#log("warn", "Unhandled rejection after browser run ended", {
+				runId: active.id,
+				error: reason instanceof Error ? reason.message : String(reason),
+			});
+			return;
+		}
+		const isFirst = active.floatingRejections.length === 0;
+		active.floatingRejections.push(reason);
+		if (isFirst) active.floatingFailure.reject(this.#floatingRejectionError(reason));
+	}
+
+	#floatingRejectionError(reason: unknown): Error {
+		const message = reason instanceof Error ? reason.message : String(reason);
+		const error = new Error(`Unhandled rejection (missing await?): ${message}`, { cause: reason });
+		if (reason instanceof Error) error.name = reason.name;
+		return error;
+	}
+
+	#foldFloatingRejections(active: ActiveRun, failure: { error: unknown } | undefined): { error: unknown } | undefined {
+		const rejections = active.floatingRejections;
+		if (rejections.length === 0) return failure;
+		let reported = rejections;
+		if (!failure) {
+			failure = { error: this.#floatingRejectionError(rejections[0]) };
+			reported = rejections.slice(1);
+		} else if (failure.error instanceof Error && failure.error.cause === rejections[0]) {
+			reported = rejections.slice(1);
+		}
+		for (const reason of reported) {
+			this.#log("warn", "Additional unhandled browser-run rejection", {
+				error: reason instanceof Error ? reason.message : String(reason),
+			});
+		}
+		return failure;
 	}
 
 	nextElementId(): number {
@@ -973,6 +1040,7 @@ export class WorkerCore {
 		const signal = AbortSignal.any([timeoutSignal, ac.signal, runAc.signal]);
 		const output = new RunOutput();
 		const screenshots: ScreenshotResult[] = [];
+		const floatingFailure = Promise.withResolvers<never>();
 		const active: ActiveRun = {
 			id: msg.id,
 			ac,
@@ -980,6 +1048,9 @@ export class WorkerCore {
 			output,
 			screenshots,
 			pendingTools: new Map(),
+			rejectionOwner: {},
+			floatingRejections: [],
+			floatingFailure,
 			inflight: new Map(),
 			opCounter: 0,
 		};
@@ -995,10 +1066,11 @@ export class WorkerCore {
 			const tabApi = this.#createTabApi(msg.name, msg.timeoutMs, signal, msg.session, output, screenshots, active);
 			const runtime = this.#ensureRuntime(msg.session);
 			runtime.setCwd(msg.session.cwd);
+			const onFloatingRejection = (reason: unknown): void => this.#recordFloatingRejection(active, reason);
 			runtime.setRunScope({
-				page: bindRunFacade(runPage.page, signal),
-				browser: bindRunFacade(browser, signal),
-				tab: bindRunFacade(tabApi, signal),
+				page: bindRunFacade(runPage.page, signal, active.rejectionOwner, onFloatingRejection),
+				browser: bindRunFacade(browser, signal, active.rejectionOwner, onFloatingRejection),
+				tab: bindRunFacade(tabApi, signal, active.rejectionOwner, onFloatingRejection),
 				assert: (cond: unknown, text?: string): void => {
 					if (!cond) throw new ToolError(text ?? "Assertion failed");
 				},
@@ -1010,10 +1082,12 @@ export class WorkerCore {
 						typeof msOrPredicate === "number"
 							? undefined
 							: { timeout: resolvePredicateTimeout(msg.timeoutMs, opts?.timeout), interval: opts?.interval };
-					return markHandled(
+					return observeBrowserRunPromise(
 						this.#runOp(active, label, signal, Number.POSITIVE_INFINITY, sig =>
 							waitForRun(msOrPredicate, sig, resolved),
 						),
+						active.rejectionOwner,
+						onFloatingRejection,
 					);
 				},
 			});
@@ -1051,10 +1125,19 @@ export class WorkerCore {
 			try {
 				const hooks = this.#hooksForActiveRun();
 				if (!hooks) throw new ToolError("Browser runtime started without an active run");
-				returnValue = await Promise.race([
-					runtime.run(msg.code, `browser-run-${msg.id}.js`, hooks, { runId: msg.id, cwd: msg.session.cwd }),
-					cancelRejection,
-				]);
+				returnValue = await withBrowserPromiseCombinatorTracking(
+					active.rejectionOwner,
+					onFloatingRejection,
+					async () =>
+						await Promise.race([
+							runtime.run(msg.code, `browser-run-${msg.id}.js`, hooks, {
+								runId: msg.id,
+								cwd: msg.session.cwd,
+							}),
+							cancelRejection,
+							floatingFailure.promise,
+						]),
+				);
 				completed = true;
 			} finally {
 				signal.removeEventListener("abort", onCancel);
@@ -1063,11 +1146,13 @@ export class WorkerCore {
 			failure = { error };
 		} finally {
 			runAc.abort(postmortem.markExpectedCleanupError(new ToolAbortError("Browser run ended")));
+			await Bun.sleep(0);
 			try {
 				await runPage?.cleanup();
 			} catch (error) {
 				failure = { error };
 			}
+			failure = this.#foldFloatingRejections(active, failure);
 			if (this.#active?.id === msg.id) this.#active = null;
 		}
 		if (failure) {
@@ -1182,9 +1267,12 @@ export class WorkerCore {
 				(opTimeout?.aborted || (err instanceof Error && err.name === "TimeoutError"))
 			) {
 				const hint = selector ? await this.#selectorTimeoutHint(selector) : "";
-				throw new ToolError(`${label} timed out after ${perOpTimeoutMs}ms${hint}`);
+				throw markBrowserRunRejection(
+					new ToolError(`${label} timed out after ${perOpTimeoutMs}ms${hint}`),
+					active.rejectionOwner,
+				);
 			}
-			throw err;
+			throw markBrowserRunRejection(err, active.rejectionOwner);
 		} finally {
 			earlyAc.abort();
 			active.inflight.delete(opId);
@@ -1868,6 +1956,7 @@ export class WorkerCore {
 
 	async #close(): Promise<void> {
 		this.#unsub();
+		this.#uninstallRejectionGuard();
 		this.#clearElementCache();
 		const page = this.#page;
 		if (this.#dialogHandler && page && !page.isClosed()) page.off("dialog", this.#dialogHandler);

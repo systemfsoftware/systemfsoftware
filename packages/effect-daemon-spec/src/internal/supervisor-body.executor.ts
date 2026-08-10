@@ -3,7 +3,7 @@ import type { Scope } from 'effect'
 import { WorkerTypeId } from '../brands.kernel.js'
 import type { SupervisorHealth } from '../daemon-health.schema.js'
 import { healthStateGauge, supervisorExhaustionsCounter, supervisorRestartsCounter } from '../daemon-metrics.kernel.js'
-import { BoundedIntensity, type IntensityConfig } from '../daemon-policy.schema.js'
+import type { Intensity, IntensityConfig } from '../daemon-policy.schema.js'
 import type { DaemonReporter } from '../daemon-reporter.adapter.js'
 import type { Child, LockConfig, Supervisor, Worker } from '../daemon-spec.schema.js'
 import { isModeNone } from '../leader-lock.kernel.js'
@@ -12,7 +12,7 @@ import type { BootedChild, Supervision, SupervisionContext } from '../supervisio
 import { allocateSupervisorHealth } from './allocate-supervisor-health.kernel.js'
 import { allocateWorkerHealth } from './allocate-worker-health.kernel.js'
 import { buildWorkerLoop } from './build-worker-loop.kernel.js'
-import { type IntensityTracker, make as makeIntensity } from './intensity.kernel.js'
+import { type IntensityTracker, make as makeIntensity, neverExceeds } from './intensity.kernel.js'
 import { raceForExit } from './race-for-exit.kernel.js'
 import { type RestartStrategy } from './restart-decision.schema.js'
 import { decideRestart } from './restart-decision.workflow.js'
@@ -116,7 +116,7 @@ const superviseChild = <R>(
   Effect.gen(function*() {
     const childIntensityOpt = yield* Option.match(Option.fromNullable(child.childPolicy.intensity), {
       onNone: () => Effect.succeed(Option.none<IntensityTracker>()),
-      onSome: (cfg: IntensityConfig) => Effect.map(makeIntensity(new BoundedIntensity(cfg)), Option.some),
+      onSome: (cfg: IntensityConfig) => Effect.map(makeIntensity(cfg.restarts, cfg.window), Option.some),
     })
     const loop = (): Supervision<R> =>
       Effect.gen(function*() {
@@ -202,7 +202,7 @@ const runGroup = <R>(
         const childIntensityTrackers = yield* Effect.forEach(ctx.booted, (b: BootedChild<R>) =>
           Option.match(Option.fromNullable(b.childPolicy.intensity), {
             onNone: () => Effect.succeed(Option.none<IntensityTracker>()),
-            onSome: (cfg: IntensityConfig) => Effect.map(makeIntensity(new BoundedIntensity(cfg)), Option.some),
+            onSome: (cfg: IntensityConfig) => Effect.map(makeIntensity(cfg.restarts, cfg.window), Option.some),
           }))
         const cursor = yield* Ref.make(0)
         const attempt = Effect.gen(function*() {
@@ -289,6 +289,13 @@ const superviseTree = <R>(
     Match.exhaustive,
   )
 
+const intensityTracker = (intensity: Intensity): Effect.Effect<IntensityTracker> =>
+  Match.value(intensity).pipe(
+    Match.tag('Unbounded', () => Effect.succeed(neverExceeds)),
+    Match.tag('Bounded', ({ restarts, window }) => makeIntensity(restarts, window)),
+    Match.exhaustive,
+  )
+
 const buildSupervisorBody = <E, R>(
   sup: Supervisor<E, R>,
   health: SupervisorHealth,
@@ -299,7 +306,7 @@ const buildSupervisorBody = <E, R>(
     // One tracker per supervisor: `make` builds a fresh Ref-backed tracker on every
     // evaluation, so an unmemoised Effect would hand each failure a zero-count budget
     // and exhaustion could never fire.
-    const tracker = makeIntensity(policy.intensity).pipe(Effect.runSync)
+    const tracker = yield* intensityTracker(policy.intensity)
     const intensityEff = Effect.succeed(tracker)
     const reportRestart = (
       cause: Cause.Cause<never>,

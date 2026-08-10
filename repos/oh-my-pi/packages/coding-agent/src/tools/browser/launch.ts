@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { $which, getPuppeteerDir, logger, removeWithRetries } from "@oh-my-pi/pi-utils";
-import type * as BrowsersNs from "@puppeteer/browsers";
+import type * as BrowsersNs from "@oh-my-pi/pi-utils/browsers";
 import type { Browser, CDPSession, Page, default as Puppeteer, Target } from "puppeteer-core";
 import stealthTamperingScript from "../puppeteer/00_stealth_tampering.txt" with { type: "text" };
 import stealthActivityScript from "../puppeteer/01_stealth_activity.txt" with { type: "text" };
@@ -115,7 +115,7 @@ export async function loadPuppeteerInWorker(safeDir: string): Promise<typeof Pup
 let browsersModule: typeof BrowsersNs | undefined;
 async function loadBrowsers(): Promise<typeof BrowsersNs> {
 	if (!browsersModule) {
-		browsersModule = await import("@puppeteer/browsers");
+		browsersModule = await import("@oh-my-pi/pi-utils/browsers");
 	}
 	return browsersModule;
 }
@@ -133,7 +133,7 @@ let chromiumExecutablePromise: Promise<string | undefined> | undefined;
 export async function ensureChromiumExecutable(): Promise<string | undefined> {
 	const envPath = process.env.PUPPETEER_EXECUTABLE_PATH;
 	if (envPath) return envPath;
-	const sysChrome = resolveSystemChromium();
+	const sysChrome = await resolveSystemChromium();
 	if (sysChrome) return sysChrome;
 	if (chromiumExecutablePromise) return chromiumExecutablePromise;
 
@@ -166,13 +166,13 @@ export async function ensureChromiumExecutable(): Promise<string | undefined> {
 			buildId,
 			cacheDir,
 			platform,
-			downloadProgressCallback: (downloaded, total) => {
-				if (total <= 0) return;
-				const pct = Math.floor((downloaded / total) * 100);
-				if (pct >= lastReportedPercent + 10 || downloaded === total) {
+			downloadProgressCallback: ({ downloadedBytes, totalBytes }) => {
+				if (totalBytes <= 0) return;
+				const pct = Math.floor((downloadedBytes / totalBytes) * 100);
+				if (pct >= lastReportedPercent + 10 || downloadedBytes === totalBytes) {
 					lastReportedPercent = pct;
 					logger.debug(
-						`Chromium download: ${pct}% (${Math.round(downloaded / 1_000_000)} / ${Math.round(total / 1_000_000)} MB)`,
+						`Chromium download: ${pct}% (${Math.round(downloadedBytes / 1_000_000)} / ${Math.round(totalBytes / 1_000_000)} MB)`,
 					);
 				}
 			},
@@ -193,7 +193,32 @@ let resolvedChromium: string | null | undefined; // undefined = unchecked; null 
 function isExecutableFile(p: string): boolean {
 	try {
 		const st = fs.statSync(p);
-		return st.isFile();
+		if (!st.isFile()) return false;
+		if (process.platform === "win32") return true;
+		fs.accessSync(p, fs.constants.X_OK);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+async function isChromiumExecutable(p: string): Promise<boolean> {
+	if (!isExecutableFile(p)) return false;
+	try {
+		const probeTimeoutMs = 3000;
+		const proc = Bun.spawn([p, "--version"], {
+			stdout: "pipe",
+			stderr: "ignore",
+			signal: AbortSignal.timeout(probeTimeoutMs),
+			killSignal: "SIGKILL",
+		});
+		const stdout = await Promise.race([
+			new Response(proc.stdout).text(),
+			Bun.sleep(probeTimeoutMs + 500).then(() => null),
+		]);
+		if (stdout === null) return false;
+		await proc.exited;
+		return proc.exitCode === 0 && /Chrom|Edg/i.test(stdout);
 	} catch {
 		return false;
 	}
@@ -278,13 +303,13 @@ function systemChromiumCandidates(
 	return candidates;
 }
 
-function resolveSystemChromium(): string | undefined {
+async function resolveSystemChromium(): Promise<string | undefined> {
 	if (resolvedChromium !== undefined) return resolvedChromium ?? undefined;
 	const seen = new Set<string>();
 	for (const candidate of systemChromiumCandidates()) {
 		if (!candidate || seen.has(candidate)) continue;
 		seen.add(candidate);
-		if (isExecutableFile(candidate)) {
+		if (await isChromiumExecutable(candidate)) {
 			resolvedChromium = candidate;
 			logger.debug("Using system Chrome/Chromium", { path: candidate });
 			return candidate;
@@ -889,9 +914,13 @@ export async function applyStealthPatches(
 export function systemChromiumCandidatesForTest(
 	platform: NodeJS.Platform = process.platform,
 	home?: string,
-	which?: (name: string) => string | undefined,
+	which?: (name: string) => string | null | undefined,
 ): string[] {
 	return systemChromiumCandidates(platform, home, which);
+}
+
+export async function chromiumExecutableProbeForTest(executablePath: string): Promise<boolean> {
+	return isChromiumExecutable(executablePath);
 }
 
 export function stealthIgnoreDefaultArgsForTest(executablePath: string | undefined): string[] {

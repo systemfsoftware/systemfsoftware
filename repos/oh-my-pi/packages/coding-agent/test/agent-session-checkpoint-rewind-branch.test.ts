@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import * as path from "node:path";
+import { type } from "@oh-my-pi/omptype";
 import { Agent, type AgentMessage, type AgentTool } from "@oh-my-pi/pi-agent-core";
 import type { AssistantMessage, Message, ThinkingContent } from "@oh-my-pi/pi-ai";
-import { z } from "@oh-my-pi/pi-ai";
 import { createMockModel, type MockContent, type MockModel, type MockResponse } from "@oh-my-pi/pi-ai/providers/mock";
 import { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
 import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
@@ -16,10 +16,10 @@ import { RewindTool, type ToolSession } from "@oh-my-pi/pi-coding-agent/tools";
 import { EventBus } from "@oh-my-pi/pi-coding-agent/utils/event-bus";
 import { TempDir } from "@oh-my-pi/pi-utils";
 
-const checkpointSchema = z.object({ goal: z.string() });
-const rewindSchema = z.object({ report: z.string() });
+const checkpointSchema = type({ goal: type("string") });
+const rewindSchema = type({ report: type("string") });
 
-const xdevWriteSchema = z.object({ path: z.string(), content: z.string() });
+const xdevWriteSchema = type({ path: type("string"), content: type("string") });
 
 const xdevWriteTool: AgentTool<typeof xdevWriteSchema, unknown> = {
 	name: "write",
@@ -265,6 +265,50 @@ describe("AgentSession checkpoint rewind branch context", () => {
 		const finalThinking = finalAssistant.content.find((block): block is ThinkingContent => block.type === "thinking");
 		expect(finalThinking?.thinking).toBe("answer after rewind");
 		expect(finalThinking?.thinkingSignature).toBe("sig_after_rewind");
+	});
+
+	it("ignores a completed cycle's rewind result after rebuilding context", async () => {
+		const staleReport = "findings from the previous checkpoint";
+		const currentReport = "findings from the current checkpoint";
+		const { session, mock } = await createHarness([
+			{
+				content: [
+					{ type: "toolCall", id: "call_checkpoint_a", name: "checkpoint", arguments: { goal: "inspect A" } },
+				],
+				stopReason: "toolUse",
+			},
+			{
+				content: [{ type: "toolCall", id: "call_rewind_a", name: "rewind", arguments: { report: staleReport } }],
+				stopReason: "toolUse",
+			},
+			{ content: ["DONE"], stopReason: "stop" },
+		]);
+		await session.prompt("investigate the first checkpoint");
+
+		session.sessionManager.appendMessage({
+			role: "toolResult",
+			toolCallId: "call_rewind_a_late",
+			toolName: "rewind",
+			content: [{ type: "text", text: "rewind requested" }],
+			details: { report: staleReport, rewound: true },
+			isError: false,
+			timestamp: Date.now(),
+		});
+		session.agent.replaceMessages(session.buildDisplaySessionContext().messages);
+
+		mock.push({
+			content: [{ type: "toolCall", id: "call_checkpoint_b", name: "checkpoint", arguments: { goal: "inspect B" } }],
+			stopReason: "toolUse",
+		});
+		mock.push({
+			content: [{ type: "toolCall", id: "call_rewind_b", name: "rewind", arguments: { report: currentReport } }],
+			stopReason: "toolUse",
+		});
+		mock.push({ content: ["DONE"], stopReason: "stop" });
+
+		await session.prompt("investigate the second checkpoint");
+
+		expect(session.getLastCompletedRewind()?.report).toBe(currentReport);
 	});
 
 	it("does not start checkpoint tracking for xdev help envelopes", async () => {

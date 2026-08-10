@@ -640,7 +640,16 @@ describe("pi-natives", () => {
 			expect(callbackError).toBeNull();
 			expect(result.exitCode).toBe(0);
 			expect(result.timedOut).toBeFalse();
-			expect(JSON.parse(output.trim())).toEqual(expected);
+			// ConPTY interleaves terminal negotiation with the child's own bytes
+			// (`ESC[6n`, SGR reset, an OSC 0 title set, cursor show), so strip the
+			// escape sequences before parsing the payload. The OSC body match is
+			// non-greedy: `[^\u0007]` also matches ESC, so a greedy run would eat
+			// past an ST (`ESC \`) terminator to the last one in the buffer,
+			// over-stripping everything between two ST-terminated OSCs.
+			const payload = output
+				.replace(/\u001b\][^\u0007]*?(?:\u0007|\u001b\\)|\u001b\[[0-9;?]*[ -/]*[@-~]/g, "")
+				.trim();
+			expect(JSON.parse(payload)).toEqual(expected);
 		});
 
 		it("reports the child PID as soon as the PTY process starts", async () => {

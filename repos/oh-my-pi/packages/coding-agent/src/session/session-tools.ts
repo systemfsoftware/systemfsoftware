@@ -7,7 +7,7 @@ import { formatModelString } from "../config/model-resolver";
 import type { Settings, SkillsSettings } from "../config/settings";
 import type { CustomTool, CustomToolContext } from "../extensibility/custom-tools/types";
 import { CustomToolAdapter } from "../extensibility/custom-tools/wrapper";
-import type { ExtensionRunner } from "../extensibility/extensions";
+import type { ExtensionRunner, SourceInfo, ToolInfo } from "../extensibility/extensions";
 import { ExtensionToolWrapper } from "../extensibility/extensions/wrapper";
 import { loadSkills, type Skill, type SkillWarning, setActiveSkills } from "../extensibility/skills";
 import { type LocalProtocolOptions, XD_URL_PREFIX } from "../internal-urls";
@@ -198,6 +198,15 @@ export class SessionTools {
 	#presentationPinnedToolNames: ReadonlySet<string> | undefined;
 	#runtimeSelectedToolNames: ReadonlySet<string> | undefined;
 	#baseSystemPrompt: string[];
+	/**
+	 * Per-turn system prompt returned by a `before_agent_start` extension hook
+	 * ("replace the system prompt for this turn"). While set, base-prompt
+	 * rebuilds keep this override on the agent instead of the rebuilt base, so a
+	 * rebuild landing in the prompt window (compaction/promotion, memory
+	 * promotion, MCP/RPC tool refresh, hindsight MM-TTL refresh) cannot silently
+	 * drop it before the request. Cleared when the turn ends.
+	 */
+	#turnSystemPromptOverride: string[] | undefined;
 	#lastAppliedToolSignature: string | undefined;
 	/**
 	 * `xd://` device names the current base system prompt renders in its catalog
@@ -260,6 +269,31 @@ export class SessionTools {
 	/** Replaces the controller-owned base prompt without applying it to the agent. */
 	setBaseSystemPrompt(prompt: string[]): void {
 		this.#baseSystemPrompt = prompt;
+	}
+
+	/**
+	 * Pushes `base` to the agent as the effective system prompt, unless an active
+	 * per-turn {@link #turnSystemPromptOverride} takes precedence. Every base
+	 * rebuild applies its result through here so a mid-turn rebuild preserves the
+	 * override.
+	 */
+	#applyAgentSystemPrompt(base: string[]): void {
+		this.#host.agent.setSystemPrompt(this.#turnSystemPromptOverride ?? base);
+	}
+
+	/**
+	 * Registers the per-turn `before_agent_start` system-prompt override and
+	 * applies it to the agent. Base rebuilds during the turn preserve it until
+	 * {@link clearTurnSystemPromptOverride}.
+	 */
+	setTurnSystemPromptOverride(prompt: string[]): void {
+		this.#turnSystemPromptOverride = prompt;
+		this.#host.agent.setSystemPrompt(prompt);
+	}
+
+	/** Drops the active per-turn override; later rebuilds fall back to the base prompt. */
+	clearTurnSystemPromptOverride(): void {
+		this.#turnSystemPromptOverride = undefined;
 	}
 
 	/** Skills currently rendered into the system prompt. */
@@ -331,6 +365,33 @@ export class SessionTools {
 	/** Names of every registered tool. */
 	getAllToolNames(): string[] {
 		return Array.from(this.#toolRegistry.keys());
+	}
+
+	/**
+	 * Full metadata for every registered tool, including source provenance.
+	 *
+	 * Backs the `getAllTools()` ExtensionAPI method. Returns {@link ToolInfo}
+	 * objects (not bare names) so extensions authored against upstream
+	 * `@earendil-works/pi-coding-agent` — which promises `ToolInfo[]` — can read
+	 * `sourceInfo.source` unchanged.
+	 */
+	getAllToolInfos(): ToolInfo[] {
+		return Array.from(this.#toolRegistry, ([name, tool]) => {
+			const source = this.#builtInToolNames.has(name)
+				? "builtin"
+				: isMCPToolName(name)
+					? "mcp"
+					: this.#rpcHostToolNames.has(name)
+						? "sdk"
+						: "extension";
+			const sourceInfo: SourceInfo = {
+				path: `<${source}:${name}>`,
+				source,
+				scope: "temporary",
+				origin: "top-level",
+			};
+			return { name, description: tool.description, parameters: tool.parameters, sourceInfo };
+		});
 	}
 
 	#wrapRuntimeTool(tool: AgentTool): AgentTool {
@@ -663,7 +724,7 @@ export class SessionTools {
 			if (this.#lastAppliedToolSignature !== undefined) this.#host.clearInheritedProviderPromptCacheKey();
 			this.#baseSystemPrompt = rebuiltSystemPrompt;
 			this.#host.clearMemoryPromotionSnapshot();
-			this.#host.agent.setSystemPrompt(this.#baseSystemPrompt);
+			this.#applyAgentSystemPrompt(this.#baseSystemPrompt);
 			this.#lastAppliedToolSignature = rebuiltSignature;
 			this.#promptModelKey = this.#currentPromptModelKey();
 			this.#basePromptXdevNames = new Set(rebuiltXdevCatalogNames);
@@ -1103,7 +1164,7 @@ export class SessionTools {
 		) {
 			this.#host.clearInheritedProviderPromptCacheKey();
 		}
-		this.#host.agent.setSystemPrompt(this.#baseSystemPrompt);
+		this.#applyAgentSystemPrompt(this.#baseSystemPrompt);
 		this.#promptModelKey = this.#currentPromptModelKey();
 		// Refresh the cached signature so a subsequent `applyActiveToolsByName` with
 		// the same tool set does not re-rebuild on top of the explicit refresh we
@@ -1143,7 +1204,7 @@ export class SessionTools {
 			this.#host.captureMemoryPromotionSnapshot(previousBaseSystemPrompt);
 			const stablePrompt = [...previousBaseSystemPrompt, injected];
 			this.#baseSystemPrompt = stablePrompt;
-			this.#host.agent.setSystemPrompt(stablePrompt);
+			this.#applyAgentSystemPrompt(stablePrompt);
 			return stablePrompt;
 		} catch (err) {
 			logger.debug("Memory backend beforeAgentStartPrompt failed", {

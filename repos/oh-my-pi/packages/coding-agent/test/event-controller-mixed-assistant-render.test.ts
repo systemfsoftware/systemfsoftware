@@ -61,6 +61,7 @@ function createFixture(hideToolActivity = false) {
 	} as unknown as TUI;
 	const viewSession = {
 		getToolByName: () => undefined,
+		hasBuiltInTool: () => true,
 		extensionRunner: undefined,
 		isTtsrAbortPending: false,
 		retryAttempt: 0,

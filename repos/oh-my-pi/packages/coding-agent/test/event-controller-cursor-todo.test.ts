@@ -45,7 +45,7 @@ function createFixture(): Fixture {
 		// (`#handleMessageUpdate`) only runs while one exists.
 		streamingComponent: { setHideThinkingBlock: vi.fn(), markTranscriptBlockFinalized: vi.fn() },
 		streamingMessage: undefined,
-		viewSession: { isStreaming: false, getToolByName: () => undefined },
+		viewSession: { isStreaming: false, getToolByName: () => undefined, hasBuiltInTool: () => true },
 		sessionManager: { getCwd: () => "/tmp" },
 		chatContainer: {
 			addChild: (block: unknown) => blocks.push(block),

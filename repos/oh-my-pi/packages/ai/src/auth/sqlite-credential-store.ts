@@ -1374,11 +1374,13 @@ export class SqliteAuthCredentialStore implements AuthCredentialStore {
 		try {
 			let hasActiveApiKey = false;
 			const activeIdentityKeys = new Set<string>();
+			const activeOAuthCredentials: AuthCredential[] = [];
 			for (const row of activeRows) {
 				if (row.credential.type === "api_key") {
 					hasActiveApiKey = true;
 					continue;
 				}
+				activeOAuthCredentials.push(row.credential);
 				const identityKey = resolveCredentialIdentityKey(provider, row.credential);
 				if (identityKey) activeIdentityKeys.add(identityKey);
 			}
@@ -1393,7 +1395,22 @@ export class SqliteAuthCredentialStore implements AuthCredentialStore {
 				const identityKey = resolveRowCredentialIdentityKey(provider, row);
 				if (identityKey && activeIdentityKeys.has(identityKey)) {
 					this.#hardDeleteStmt.run(row.id);
+					continue;
 				}
+				// Exact key equality misses a tombstone whose key predates a format
+				// the active row now uses (pre-org `<b>` vs `<b>|org:<o>`). An active
+				// credential that WOULD have replaced this row had it still been
+				// active supersedes its tombstone too, so mirror the replacement
+				// matcher rather than restating a weaker rule. The one-way upgrade
+				// and shared-workspace guards in matchesReplacementCredential carry
+				// over, so this never over-deletes another member's or subscription's
+				// row.
+				const disabledCredential = deserializeCredential(row);
+				if (disabledCredential === null) continue;
+				const superseded = activeOAuthCredentials.some(active =>
+					matchesReplacementCredential(provider, disabledCredential, identityKey, active),
+				);
+				if (superseded) this.#hardDeleteStmt.run(row.id);
 			}
 		} catch {
 			// Best-effort cleanup; don't let it break the main operation

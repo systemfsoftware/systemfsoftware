@@ -1578,8 +1578,10 @@ export const debounce: {
       get.subscribe(self, function(val) {
         value = val
         cancel?.()
-        const handle = setTimeout(update, millis)
-        cancel = () => clearTimeout(handle)
+        const fiber = Runtime.runFork(Runtime.defaultRuntime)(
+          Effect.sleep(millis).pipe(Effect.andThen(update)),
+        )
+        cancel = () => fiber.unsafeInterruptAsFork(FiberId.none)
       })
       return value
     })

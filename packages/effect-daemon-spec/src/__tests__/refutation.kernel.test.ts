@@ -2,7 +2,7 @@ import { scanObligations } from '@systemfsoftware/effect-schema-law'
 import type { Schema as S } from 'effect'
 import { expect, it } from 'vitest'
 import { DynamicLimitExceeded } from '../daemon-health.schema.js'
-import { IntensityConfig } from '../daemon-policy.schema.js'
+import { IntensityConfig, MaxChildren } from '../daemon-policy.schema.js'
 import { LeaderLockInfraError, LeaderLockNotAcquired } from '../leader-lock.schema.js'
 import { LockPrimitiveError } from '../lock-primitive.schema.js'
 
@@ -12,6 +12,7 @@ const EXPORTED_SCHEMAS: Readonly<Record<string, S.Schema.AnyNoContext>> = {
   LeaderLockInfraError,
   LeaderLockNotAcquired,
   LockPrimitiveError,
+  MaxChildren,
 }
 
 const RECORDED_MODEL = {
@@ -20,6 +21,7 @@ const RECORDED_MODEL = {
   LeaderLockInfraError: { obligations: 0, blind: [] },
   LeaderLockNotAcquired: { obligations: 0, blind: [] },
   LockPrimitiveError: { obligations: 0, blind: [] },
+  MaxChildren: { obligations: 2, blind: [] },
 }
 
 it('Should_MatchTheRecordedObligationModel_When_ScanningEveryRefutableSchema', () => {

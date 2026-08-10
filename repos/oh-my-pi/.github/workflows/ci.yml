@@ -163,15 +163,22 @@ jobs:
          # Clippy scope mirrors `cargo clippy --workspace` (libraries only, no
          # test targets) plus the strict/default split: crates with
          # `[lints] workspace = true` get the workspace policy, the vendored
-         # brush fork is exempt (same as run-rs-task.ts's cargo excludes).
+         # brush-core fork is exempt (same as run-rs-task.ts's cargo excludes).
+         # pi-builtins allows every clippy group in its own manifest (ported
+         # brush/uutils/jaq code) but is still held to zero rustc warnings;
+         # cargo honors that via `[lints]`, bazel via the clippy-ported config.
          - name: Clippy (workspace lint policy on opted-in crates)
            run: |
               bazelisk query "kind('rust_library|rust_shared_library', //crates/pi-ast/... + //crates/pi-iso/... + //crates/pi-natives/... + //crates/pi-shell/... + //crates/pi-voice/... + //crates/pi-walker/...)" \
                 | xargs bazelisk --bazelrc="${{ steps.cache.outputs.rc }}" build --config=clippy-strict --
          - name: Clippy (default lints elsewhere)
            run: |
-              bazelisk query "kind('rust_library|rust_shared_library', //crates/... - (//crates/pi-ast/... + //crates/pi-iso/... + //crates/pi-natives/... + //crates/pi-shell/... + //crates/pi-voice/... + //crates/pi-walker/...) - //crates/vendor/brush-core/... - //crates/vendor/brush-builtins/...)" \
+              bazelisk query "kind('rust_library|rust_shared_library', //crates/... - (//crates/pi-ast/... + //crates/pi-iso/... + //crates/pi-natives/... + //crates/pi-shell/... + //crates/pi-voice/... + //crates/pi-walker/...) - //crates/pi-builtins/... - //crates/vendor/brush-core/...)" \
                 | xargs bazelisk --bazelrc="${{ steps.cache.outputs.rc }}" build --config=clippy --
+         - name: Clippy (manifest allows on ported pi-builtins)
+           run: |
+              bazelisk query "kind('rust_library|rust_shared_library', //crates/pi-builtins/...)" \
+                | xargs bazelisk --bazelrc="${{ steps.cache.outputs.rc }}" build --config=clippy-ported --
          - name: Rustfmt
            run: bazelisk --bazelrc="${{ steps.cache.outputs.rc }}" build --config=rustfmt //crates/...
 
@@ -756,6 +763,14 @@ jobs:
          # is needed on this runner.
          - name: Build browser relay artifacts
            run: bun run --cwd packages/browser-relay build
+         # Generated after every other release asset is in place and before
+         # the release is created, so SHA256SUMS.txt itself ships as an asset
+         # and covers every other file uploaded alongside it.
+         - name: Generate checksums
+           run: |
+              bun run ci:release:checksums SHA256SUMS.txt \
+                packages/coding-agent/binaries/omp-* \
+                packages/browser-relay/dist/omp-browser-relay-extension.zip
          - name: Create GitHub Release
            uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
            with:
@@ -763,6 +778,7 @@ jobs:
               files: |
                  packages/coding-agent/binaries/omp-*
                  packages/browser-relay/dist/omp-browser-relay-extension.zip
+                 SHA256SUMS.txt
               body_path: release-notes.md
               generate_release_notes: true
 

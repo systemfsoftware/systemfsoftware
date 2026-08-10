@@ -40,7 +40,7 @@ Sources: [`packages/omptype/README.md`](../packages/omptype/README.md), [`packag
 
 - Package: public `@oh-my-pi/omptype`; install with `bun add @oh-my-pi/omptype`; requires Bun 1.3.14 or newer.
 - Feature: callable ArkType-compatible schemas with cheap interpreted startup, lazy hot-path compilation, validation errors, defaults and morphs, and JSON Schema emission.
-- Public surfaces: `@oh-my-pi/omptype` for native authoring, `@oh-my-pi/omptype/typebox` and `/zod` for compatibility builders, and `/ark` for the alias-free ArkType compatibility facade.
+- Public surfaces: `@oh-my-pi/omptype` for native authoring, `/typebox` and `/zod` for compatibility builders, and `/ark` for the alias-free ArkType compatibility facade.
 - Runtime behavior: schema calls return the validated value or `type.errors`; `.assert()` returns the value or throws; `.allows()` performs a boolean check.
 - Limits: this is an intentionally focused compatibility surface rather than a complete implementation of every ArkType, TypeBox, or Zod API.
 

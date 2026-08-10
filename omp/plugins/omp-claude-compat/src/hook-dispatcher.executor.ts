@@ -39,52 +39,52 @@ export class HookDispatcherExecutorDeps extends Context.Tag('HookDispatcherExecu
   Scope.Scope
 >() {}
 
-export interface HookToolCallCommand {
+export type HookToolCallCommand = {
   readonly _tag: 'ToolCall'
   readonly event: HookToolCall
   readonly ctx: HookSession
 }
 
-export interface HookToolResultCommand {
+export type HookToolResultCommand = {
   readonly _tag: 'ToolResult'
   readonly event: ToolResultEvent
   readonly ctx: HookSession
 }
 
-export interface HookPromptCommand {
+export type HookPromptCommand = {
   readonly _tag: 'Prompt'
   readonly event: HookPrompt
   readonly ctx: HookSession
 }
 
-export interface HookSessionStartCommand {
+export type HookSessionStartCommand = {
   readonly _tag: 'SessionStart'
   readonly reason: string
   readonly ctx: HookSession
 }
 
-export interface HookSessionCompactCommand {
+export type HookSessionCompactCommand = {
   readonly _tag: 'SessionCompact'
   readonly ctx: HookSession
 }
 
-export interface HookPreCompactCommand {
+export type HookPreCompactCommand = {
   readonly _tag: 'PreCompact'
   readonly ctx: HookSession
 }
 
-export interface HookSessionSwitchCommand {
+export type HookSessionSwitchCommand = {
   readonly _tag: 'SessionSwitch'
   readonly reason: string
   readonly ctx: HookSession
 }
 
-export interface HookSessionShutdownCommand {
+export type HookSessionShutdownCommand = {
   readonly _tag: 'SessionShutdown'
   readonly ctx: HookSession
 }
 
-export interface HookSessionStopCommand {
+export type HookSessionStopCommand = {
   readonly _tag: 'SessionStop'
   readonly ctx: HookSession
 }

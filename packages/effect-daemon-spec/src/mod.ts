@@ -10,11 +10,13 @@ export {
   Intensity,
   IntensityConfig,
   LockPolicyConfig,
+  MaxChildren,
   TickPolicyConfig,
   UnboundedIntensity,
 } from './daemon-policy.schema.js'
 export * from './daemon-reporter.adapter.js'
 export * from './daemon-spec.schema.js'
+import { MaxChildren } from './daemon-policy.schema.js'
 import type { ChildPolicyConfig, TickPolicyConfig } from './daemon-policy.schema.js'
 import { poll as pollKernel } from './daemon-poll.kernel.js'
 import type {
@@ -123,18 +125,22 @@ export const Supervision = {
   task,
   custom,
 } as const
-import { dynamic as dynamicKernel } from './supervisor-dynamic.kernel.js'
+import { dynamic as dynamicKernel, MAX_CHILDREN_CEILING } from './supervisor-dynamic.kernel.js'
 import { oneForAll as oneForAllKernel } from './supervisor-one-for-all.kernel.js'
 import { oneForOne as oneForOneKernel } from './supervisor-one-for-one.kernel.js'
 import { restForOne as restForOneKernel } from './supervisor-rest-for-one.kernel.js'
 export const dynamic = <E, R, Args>(
-  opts: { readonly name: string; readonly child: (args: Args) => Worker<E, R>; readonly maxChildren?: number },
-): DynamicSpec<E, R, Args> =>
-  dynamicKernel<Args, Worker<E, R>, {
+  opts: {
     readonly name: string
     readonly child: (args: Args) => Worker<E, R>
-    readonly maxChildren?: number
-  }>(opts)
+    readonly maxChildren?: MaxChildren
+  },
+): DynamicSpec<E, R, Args> =>
+  dynamicKernel<Args, Worker<E, R>, MaxChildren, {
+    readonly name: string
+    readonly child: (args: Args) => Worker<E, R>
+    readonly maxChildren: MaxChildren
+  }>({ ...opts, maxChildren: opts.maxChildren ?? MaxChildren.make(MAX_CHILDREN_CEILING) })
 export const oneForAll = <E, R, L extends LockConfig = LockConfig>(
   opts: SupervisorOpts<E, R, L>,
 ): Supervisor<E, R, L> =>

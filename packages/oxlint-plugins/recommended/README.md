@@ -16,26 +16,50 @@ pnpm add -D @systemfsoftware/oxlint-plugin-recommended
 ```
 
 ```ts
-import recommended, { options, overrides, plugins } from '@systemfsoftware/oxlint-plugin-recommended'
+import recommended from '@systemfsoftware/oxlint-plugin-recommended'
+import { defineConfig } from 'oxlint'
+
+export default defineConfig({ extends: [recommended] })
+```
+
+One `extends` entry delivers the whole preset. This replaces the five-key
+spread this README used to teach — `plugins`, `options`, `categories`,
+`rules`, and `overrides` written out by hand. Every one of those keys
+propagates through `extends` (measured on oxlint 1.77.0), so the old failure
+mode is structurally impossible: a consumer who forgot a spread key — most
+often `options` or `plugins` — had the preset quietly enforce less than it
+claims, with a type-aware rule producing no diagnostics at all and a rule
+whose namespace is missing from `plugins` reported as unknown rather than
+applied. Nothing is left to forget now.
+
+No `jsPlugins` entry is needed: this package ships no rules of its own, only
+settings over stock ones.
+
+### Partial adoption
+
+The fragments the preset is built from stay exported as named values, for a
+consumer that wants only part of it:
+
+```ts
+import recommended, { options, overrides, plugins, rules } from '@systemfsoftware/oxlint-plugin-recommended'
 import { defineConfig } from 'oxlint'
 
 export default defineConfig({
   plugins: [...plugins],
   options: { ...options },
   categories: { correctness: 'error' },
-  rules: { ...recommended.configs.recommended.rules },
+  rules: { ...rules },
   overrides: [...overrides],
 })
 ```
 
-No `jsPlugins` entry is needed: this package ships no rules of its own, only
-settings over stock ones.
+### `ignorePatterns` does not propagate
 
-`options` and `plugins` are not decoration. Half the universal tier is
-type-aware, and a type-aware rule with `typeAware` off produces **no
-diagnostics at all** — it does not warn that it is inert. A rule whose
-namespace is missing from `plugins` is reported as unknown rather than
-applied. Spread both, or the preset quietly enforces less than it claims.
+`extends` propagates every key the preset carries — `plugins`, `options`,
+`categories`, `rules`, `overrides` — but **not** `ignorePatterns`. It is the
+one key oxlint leaves to each consumer (measured on oxlint 1.77.0): a
+project with custom ignores must restate them in its own config; they will
+not arrive through `extends`.
 
 ## What "honest" means here
 

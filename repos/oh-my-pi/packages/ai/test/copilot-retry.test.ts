@@ -46,29 +46,27 @@ describe("isCopilotTransientModelError", () => {
 		expect(isCopilotTransientModelError(err)).toBe(true);
 	});
 
-	it("matches 400 model_not_available_for_integrator nested two envelopes deep (Anthropic SDK shape)", () => {
-		// api.githubcopilot.com/v1/messages: the SDK stores the parsed body on
-		// `.error`, and that body is itself `{ error: { code } }`.
+	it("does not match per-integrator entitlement errors nested two envelopes deep", () => {
 		const err = copilotError({
 			status: 400,
 			error: {
 				error: {
 					code: "model_not_available_for_integrator",
-					message: 'The requested model is not available for integrator "copilot-language-server".',
+					message: 'The requested model is not available for integrator "opencode".',
 				},
 			},
 			message:
-				'400 {"error":{"message":"The requested model is not available for integrator \\"copilot-language-server\\". Available models: [gpt-4.1 claude-opus-4.7]","code":"model_not_available_for_integrator","param":"model","type":"invalid_request_error"}}',
+				'400 {"error":{"message":"The requested model is not available for integrator \\"opencode\\". Available models: [gpt-4.1 claude-opus-4.7]","code":"model_not_available_for_integrator","param":"model","type":"invalid_request_error"}}',
 		});
-		expect(isCopilotTransientModelError(err)).toBe(true);
+		expect(isCopilotTransientModelError(err)).toBe(false);
 	});
 
-	it("falls back to the stringified body when no envelope exposes a code", () => {
+	it("does not infer fleet skew from per-integrator entitlement text", () => {
 		const err = copilotError({
 			status: 400,
-			message: '400 {"error":{"message":"The requested model is not available for integrator \\"x\\"."}}',
+			message: '400 {"error":{"message":"The requested model is not available for integrator \\"opencode\\"."}}',
 		});
-		expect(isCopilotTransientModelError(err)).toBe(true);
+		expect(isCopilotTransientModelError(err)).toBe(false);
 	});
 
 	it("does not match other 400 codes", () => {
@@ -162,6 +160,26 @@ describe("callWithCopilotModelRetry", () => {
 					throw err;
 				},
 				{ provider: "github-copilot" },
+			),
+		).rejects.toBe(err);
+		expect(calls).toBe(1);
+	});
+
+	it("does not retry per-integrator entitlement errors", async () => {
+		let calls = 0;
+		const err = copilotError({
+			status: 400,
+			code: "model_not_available_for_integrator",
+			message:
+				'400 The requested model is not available for integrator "opencode". Available models: [gpt-4.1 claude-opus-4.7]',
+		});
+		await expect(
+			callWithCopilotModelRetry(
+				async () => {
+					calls += 1;
+					throw err;
+				},
+				{ provider: "github-copilot", retryBaseDelayMs: 0 },
 			),
 		).rejects.toBe(err);
 		expect(calls).toBe(1);
@@ -263,7 +281,7 @@ describe("callWithCopilotModelRetry", () => {
 		await expect(
 			callWithCopilotModelRetry(
 				async () => {
-					throw copilotError({ status: 400, code: "model_not_available_for_integrator", message: "flap" });
+					throw copilotError({ status: 400, code: "model_not_supported", message: "flap" });
 				},
 				{ provider: "github-copilot", retryBaseDelayMs: 100 },
 			),

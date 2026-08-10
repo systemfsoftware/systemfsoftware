@@ -60,7 +60,13 @@ Volatility is contagious across packages, which is what makes it hard to see. A 
 
 A split of one task's cache into disjoint sets, caused by a value that varies with who invoked the task rather than with what the task must answer. Command-line arguments and declared environment variables both enter the key, so an entry point that passes different flags — or reads a variable only some callers set — hashes the same work under a different key and can never reuse another caller's entry.
 
-A partition is not always a defect: where two callers genuinely require different answers, keying them apart is correct. The test is whether the varying value can change the task's verdict. A flag that alters only how a result is presented cannot, so keying on it buys no safety and costs every hit; a variable that selects a different check does, and belongs in the key. Where a deliberate split is wanted, key it on a variable every caller sets deterministically rather than one that merely happens to be present in some environments.
+A partition is not always a defect: where two callers genuinely require different answers, keying them apart is correct. The test is whether the varying value can change the task's verdict. A flag that alters only how a result is presented cannot, so keying on it buys no safety and costs every hit; a variable that selects a different check does, and belongs in the key. Where the split is deliberate rather than forced — separating two audiences for one verdict — prefer a marker every caller in that audience sets deterministically over one that merely happens to be present. A variable that changes the answer belongs in the key regardless of how few callers set it.
+
+### Stale pass
+
+A pass a cached task restores rather than earns, for work whose answer has changed since the verdict was stored. It is the silent direction of cache failure: nothing errors and nothing slows, so a gate reports success for a check that never ran.
+
+A key can be complete with respect to every input it declares and still return one, because the tools that produce the answer are not themselves inputs. The exposed shape is any task that regenerates an artifact and compares it against a committed copy: the comparison keeps passing for as long as the key holds still while the generator moves underneath it, so the drift becomes visible only when some unrelated edit happens to move the key. Detection from inside the cache is impossible by construction, since a hit is precisely the decision not to look. The remedies are to bring whatever can move the answer into the key, or to leave the comparison uncached.
 
 ## Release pipeline
 
@@ -77,6 +83,20 @@ The script at `scripts/check-exports.mjs` that compares each package's `package.
 ### attw
 
 `arethetypeswrong` — the type-resolution validator. `attw --pack .` runs against the package tarball the same way npm would install it, validating that `exports` declarations resolve to consistent types across node10 / node16-CJS / node16-ESM / bundler. Catches downstream-facing drift that workspace-local checks miss.
+
+## Test execution
+
+### Run class
+
+The classification of who invoked a run — an agent, a forge, or a human working locally — which decides how thoroughly the suite executes: how many samples a property test draws, whether coverage is collected, and which reporter receives the output.
+
+The classes are mutually exclusive and ordered, because an agent shell commonly sets the forge's marker as well: an agent run is a development run and takes the fast path even when `CI` is present, so `AGENT` outranks it. Membership is decided by a marker's presence rather than by comparing it against a value, since every producer that means "I am a forge" sets its marker to something and no two of them agree on what — an equality test silently reclassifies every producer whose spelling differs. One definition of the classification is exported and imported everywhere it is read; a second definition is a second opinion, and two will diverge the moment a producer writes a value one of them does not expect. Because the class changes what a run computes rather than only how its output is presented, it is a legitimate cache-key input — see Key partition.
+
+### Contract lane
+
+The verification altitude that exercises a published command-line surface from outside the process that produces it: the package is packed exactly as it would be published, installed into a clean container, and driven as a real program whose observable behavior is then asserted. Distinct from the default test task, which stays container-free and never spawns the shipped artifact.
+
+It exists because a class of properties is process-level by category and admits no honest double: exit status, bytes arriving on a real file descriptor, a timer firing in real elapsed time, a pipe closed by its reader, a signal delivered mid-run, resolution of an installed binary, and whether importing a module has side effects. Substituting the process, the writer, or the clock for any of these asserts the substitute rather than the program, so evidence gathered that way does not count at this altitude — while a logical property, such as the order in which a pipeline emits events, stays at composition altitude and is asserted against a declared port instead. Because the lane depends on a container runtime it can fail for reasons unrelated to the code, and its governing rule is that such a failure must be loud and must name its cause: reporting a skip, or zero passing tests, would make an unrun lane indistinguishable from a passing one, which is the false green the lane was built to remove.
 
 ## Architecture cells (constitution §I–V)
 

@@ -97,6 +97,9 @@ describe("issue #6879 — tool output appears twice after a superseded turn", ()
 			settings: Settings.isolated(),
 			modelRegistry,
 		});
+		// The session is constructed with no tools; bash is a built-in in real
+		// sessions, so provenance-gated rendering must treat it as one here.
+		vi.spyOn(session, "hasBuiltInTool").mockReturnValue(true);
 		mode = new InteractiveMode(session, "test");
 		mode.ui.requestRender = vi.fn();
 		Object.defineProperty(session, "isStreaming", { configurable: true, get: () => true });

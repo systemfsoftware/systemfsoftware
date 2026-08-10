@@ -1,0 +1,12 @@
+{
+  "name": "@std/xml",
+  "version": "0.2.0",
+  "exports": {
+    ".": "./mod.ts",
+    "./parse": "./parse.ts",
+    "./parse-records": "./parse_records.ts",
+    "./parse-stream": "./parse_stream.ts",
+    "./stringify": "./stringify.ts",
+    "./types": "./types.ts"
+  }
+}

@@ -59,7 +59,7 @@
     "tsdown": "catalog:",
     "typed-inject": "~5.0.0",
     "typescript": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "^4.1.10"
   },
   "publishConfig": {
     "exports": {

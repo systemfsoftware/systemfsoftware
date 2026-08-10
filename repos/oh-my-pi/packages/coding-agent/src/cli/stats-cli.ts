@@ -6,7 +6,7 @@
 
 import { truncateToWidth } from "@oh-my-pi/pi-tui/utils";
 import { APP_NAME, formatDuration, formatNumber, formatPercent } from "@oh-my-pi/pi-utils";
-import chalk from "chalk";
+import chalk from "@oh-my-pi/pi-utils/chalk";
 import { openPath } from "../utils/open";
 
 /**

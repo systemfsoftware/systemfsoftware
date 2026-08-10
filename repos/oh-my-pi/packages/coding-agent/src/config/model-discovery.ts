@@ -974,8 +974,8 @@ export async function discoverProxyModels(
 		const reference = resolveModelReference(id, getBundledModelReferenceIndex());
 		const discoveryName = typeof item.name === "string" ? item.name.trim() : "";
 		const displayName =
-			reference?.name ??
 			(discoveryName && discoveryName !== id ? discoveryName : undefined) ??
+			reference?.name ??
 			stripBracketedModelIdAffixes(id) ??
 			id;
 		discovered.push(

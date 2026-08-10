@@ -68,4 +68,39 @@ describe("prewalk startup degradation", () => {
 		expect(options.prewalk?.target.provider).toBe(model.provider);
 		expect(options.prewalk?.target.id).toBe(model.id);
 	});
+
+	test("does not implicitly re-arm configured prewalk while restoring a session", async () => {
+		const model = getBundledModel("anthropic", "claude-sonnet-4-5");
+		if (!model) throw new Error("expected claude-sonnet-4-5 to be bundled");
+		const settings = Settings.isolated();
+		settings.set("prewalk.enabled", true);
+		settings.setModelRole("smol", `${model.provider}/${model.id}`);
+		const { authStorage, modelRegistry } = await newRegistry("restoring");
+		authStorage.setRuntimeApiKey(model.provider, "test-key");
+
+		for (const args of [parseArgs(["--continue"]), parseArgs(["--resume=session.jsonl"])]) {
+			const options = await buildSessionOptions(args, [], SessionManager.inMemory(), modelRegistry, settings);
+			expect(options.prewalk).toBeUndefined();
+		}
+	});
+
+	test("honors an explicit prewalk flag while restoring a session", async () => {
+		const model = getBundledModel("anthropic", "claude-sonnet-4-5");
+		if (!model) throw new Error("expected claude-sonnet-4-5 to be bundled");
+		const settings = Settings.isolated();
+		settings.setModelRole("smol", `${model.provider}/${model.id}`);
+		const { authStorage, modelRegistry } = await newRegistry("explicit-restore");
+		authStorage.setRuntimeApiKey(model.provider, "test-key");
+
+		const options = await buildSessionOptions(
+			parseArgs(["--continue", "--prewalk"]),
+			[],
+			SessionManager.inMemory(),
+			modelRegistry,
+			settings,
+		);
+
+		expect(options.prewalk?.target.provider).toBe(model.provider);
+		expect(options.prewalk?.target.id).toBe(model.id);
+	});
 });

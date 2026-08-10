@@ -505,7 +505,7 @@ const ADAPTER_UNAVAILABLE_MESSAGES: Readonly<Record<string, string>> = {
 	dlv: "adapter 'dlv' is not available: install with 'go install github.com/go-delve/delve/cmd/dlv@latest'",
 	rdbg: "adapter 'rdbg' is not available: install with 'gem install debug'",
 	"js-debug-adapter":
-		"adapter 'js-debug-adapter' is not available: install vscode-js-debug with Mason or set JS_DEBUG_DAP_SERVER to dapDebugServer.js",
+		"adapter 'js-debug-adapter' is not available: download it from https://github.com/microsoft/vscode-js-debug",
 };
 
 const ADAPTER_CANONICAL_COMMANDS: Readonly<Record<string, string>> = {

@@ -8,13 +8,13 @@ Rules here gate `main.ts` as a real interpretation edge. The spec of record is `
 - id: EP1
   title: Keyed on a filename, not a cell suffix
   do: gate the exact basename `main.ts`
-  dont: add `entrypoint` to the cell-taxonomy CELLS list or invent a `.entrypoint.ts` suffix
+  dont: NEVER add `entrypoint` to the cell-taxonomy CELLS list or invent a `.entrypoint.ts` suffix
   harm: `main.ts` is one of cell-taxonomy's EXEMPT names (`CT1`); making it a cell would give the same file two owners
   check: every rule file matches on ENTRYPOINT_FILE, and cell-taxonomy's CELLS list is unchanged
 
 - id: EP2
   title: The exemption is closed by content, not by name
-  do: keep `entrypoint-no-exports` and `entrypoint-not-imported` enabled together
+  do: keep `entrypoint-no-exports` and `entrypoint-not-imported` enabled together — the two MUST stay enabled as a pair
   dont: relax either one to let a package expose bindings from `main.ts`
   harm: cell-taxonomy exempts `main.ts` from needing a cell suffix, so any behavior parked there escapes every cell rule at once — the two rules are what make the exemption cost more than naming the file correctly
   check: a `main.ts` that exports anything, or that any module imports, is red

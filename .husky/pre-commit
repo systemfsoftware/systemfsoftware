@@ -5,8 +5,9 @@ if [ -e "$(git rev-parse --git-path MERGE_HEAD)" ]; then
   exit 0
 fi
 
-# Skip lint-staged for pure repos/ subtree commits (vendored content; the
-# pnpm bootstrap cannot run against the subtree's workspace state).
-if git diff --cached --name-only | grep -qv '^repos/'; then
+# Skip lint-staged for pure repos/ subtree commits and the subtrees.toml
+# registration commit (vendored content plus its one-line registry append;
+# lint-staged's stash/restore machinery cannot operate on vendored work).
+if git diff --cached --name-only | grep -qvE '^(repos/|subtrees\.toml)$'; then
   pnpm precommit
 fi
