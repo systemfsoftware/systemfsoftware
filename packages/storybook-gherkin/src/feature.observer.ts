@@ -42,26 +42,18 @@ export type StepArg<TArgs> = Step<TArgs> | readonly Step<TArgs>[]
 
 export interface ScenarioFn<TArgs> {
   (name: string, ...steps: readonly StepArg<TArgs>[]): StorySpec<TArgs>
-  <TOptions extends ScenarioOptions>(
-    name: string,
-    options: TOptions,
-    ...steps: readonly StepArg<TArgs>[]
-  ): StorySpec<TArgs> & Omit<TOptions, 'with'>
+  (name: string, options: ScenarioOptions, ...steps: readonly StepArg<TArgs>[]): StorySpec<TArgs>
 }
 
-export interface OutlineBuilder<TArgs, TOptions extends ScenarioOptions = ScenarioOptions> {
+export interface OutlineBuilder<TArgs> {
   readonly examples: (
     rows: readonly ExampleRow[],
-  ) => Record<string, StorySpec<TArgs> & Omit<TOptions, 'with'>>
+  ) => Record<string, StorySpec<TArgs>>
 }
 
 export interface OutlineFn<TArgs> {
   (name: string, ...steps: readonly StepArg<TArgs>[]): OutlineBuilder<TArgs>
-  <TOptions extends ScenarioOptions>(
-    name: string,
-    options: TOptions,
-    ...steps: readonly StepArg<TArgs>[]
-  ): OutlineBuilder<TArgs, TOptions>
+  (name: string, options: ScenarioOptions, ...steps: readonly StepArg<TArgs>[]): OutlineBuilder<TArgs>
 }
 
 export interface RuleScope<TArgs> {
@@ -180,9 +172,6 @@ const sortKeys = (keys: readonly string[]): readonly string[] => {
   return sorted
 }
 
-const omitWith = (options: ScenarioOptions): Record<string, unknown> =>
-  Object.fromEntries(Object.entries(options).filter(([k]) => k !== 'with'))
-
 const validateScenarioSteps = (
   fullName: string,
   models: readonly StepModel[],
@@ -247,11 +236,11 @@ const makeScenario = <TArgs>(
     name: string,
     ...steps: readonly StepArg<TArgs>[]
   ): StorySpec<TArgs>
-  function scenario<TOptions extends ScenarioOptions>(
+  function scenario(
     name: string,
-    options: TOptions,
+    options: ScenarioOptions,
     ...steps: readonly StepArg<TArgs>[]
-  ): StorySpec<TArgs> & Omit<TOptions, 'with'>
+  ): StorySpec<TArgs>
   function scenario(
     name: string,
     ...rest: readonly (StepArg<TArgs> | ScenarioOptions)[]
@@ -261,7 +250,6 @@ const makeScenario = <TArgs>(
     const withRecord: Readonly<Record<string, string>> = options?.with ?? {}
     validateScenarioSteps(fullName, steps.map((s) => s.model), withRecord)
     return {
-      ...(options === undefined ? {} : omitWith(options)),
       name: fullName,
       play: (ctx: PlayContext<TArgs>) =>
         interpretPlay(runtime, executeSteps([...background, ...steps], withRecord, ctx), ctx),
@@ -313,11 +301,11 @@ const makeOutline = <TArgs>(
     name: string,
     ...steps: readonly StepArg<TArgs>[]
   ): OutlineBuilder<TArgs>
-  function outline<TOptions extends ScenarioOptions>(
+  function outline(
     name: string,
-    options: TOptions,
+    options: ScenarioOptions,
     ...steps: readonly StepArg<TArgs>[]
-  ): OutlineBuilder<TArgs, TOptions>
+  ): OutlineBuilder<TArgs>
   function outline(
     name: string,
     ...rest: readonly (StepArg<TArgs> | ScenarioOptions)[]
@@ -325,7 +313,6 @@ const makeOutline = <TArgs>(
     const { options, steps } = parseScenarioArgs(rest)
     const fullName = prefix === '' ? name : `${prefix}: ${name}`
     const withRecord: Readonly<Record<string, string>> = options?.with ?? {}
-    const extra = options === undefined ? {} : omitWith(options)
     const models = steps.map((s) => s.model)
     if (models.length === 0) {
       throw new EmptyScenario({ scenario: fullName })
@@ -336,8 +323,7 @@ const makeOutline = <TArgs>(
     const captureNames = new Set<string>()
     for (const m of models) for (const c of m.captures) captureNames.add(c.name)
 
-    const buildRowSpec = (row: ExampleRow): StorySpec<TArgs> & Omit<ScenarioOptions, 'with'> => ({
-      ...extra,
+    const buildRowSpec = (row: ExampleRow): StorySpec<TArgs> => ({
       name: `${fullName} — ${row.name}`,
       play: (ctx: PlayContext<TArgs>) =>
         interpretPlay(
@@ -349,9 +335,9 @@ const makeOutline = <TArgs>(
 
     const examples = (
       rows: readonly ExampleRow[],
-    ): Record<string, StorySpec<TArgs> & Omit<ScenarioOptions, 'with'>> => {
+    ): Record<string, StorySpec<TArgs>> => {
       validateOutlineRows(rows, captureNames, fullName)
-      const out: Record<string, StorySpec<TArgs> & Omit<ScenarioOptions, 'with'>> = {}
+      const out: Record<string, StorySpec<TArgs>> = {}
       for (const row of rows) out[row.name] = buildRowSpec(row)
       return out
     }
