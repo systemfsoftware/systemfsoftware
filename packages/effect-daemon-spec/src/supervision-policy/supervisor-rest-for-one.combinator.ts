@@ -6,7 +6,7 @@ import type {
   SupervisionPolicy,
   Supervisor,
   SupervisorOpts,
-} from './daemon-spec.schema.js'
+} from '../daemon-spec/daemon-spec.schema.js'
 import { restForOneKernel } from './supervisor-rest-for-one.kernel.js'
 
 export const restForOne = <E, R, L extends LockConfig = LockConfig>(

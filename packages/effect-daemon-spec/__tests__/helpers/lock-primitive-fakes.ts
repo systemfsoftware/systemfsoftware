@@ -1,6 +1,6 @@
 import { Effect, HashMap, Layer, Option, Ref, Scope } from 'effect'
-import { LockPrimitive } from '../../src/leader-lock.adapter.js'
-import { LockPrimitiveError } from '../../src/lock-primitive.schema.js'
+import { LockPrimitive } from '../../src/leader-lock/leader-lock.adapter.js'
+import { LockPrimitiveError } from '../../src/leader-lock/lock-primitive.schema.js'
 
 export const mkStatefulLockPrimitive: Layer.Layer<LockPrimitive> = Layer.effect(
   LockPrimitive,

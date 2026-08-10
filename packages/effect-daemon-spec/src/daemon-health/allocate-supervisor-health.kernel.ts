@@ -1,5 +1,5 @@
 import { Effect, Metric } from 'effect'
-import { healthStateGauge } from '../daemon-metrics.kernel.js'
+import { healthStateGauge } from '../daemon-metrics/daemon-metrics.kernel.js'
 
 export const allocateSupervisorHealth = <C>(
   name: string,

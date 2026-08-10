@@ -1,6 +1,6 @@
-import { MAX_CHILDREN_CEILING } from './brands.kernel.js'
-import { MaxChildren } from './daemon-policy.schema.js'
-import type { DynamicSpec, Worker } from './daemon-spec.schema.js'
+import { MAX_CHILDREN_CEILING } from '../daemon-spec/brands.kernel.js'
+import { MaxChildren } from '../daemon-spec/daemon-policy.schema.js'
+import type { DynamicSpec, Worker } from '../daemon-spec/daemon-spec.schema.js'
 import { dynamicKernel } from './supervisor-dynamic.kernel.js'
 
 export const dynamic = <E, R, Args>(

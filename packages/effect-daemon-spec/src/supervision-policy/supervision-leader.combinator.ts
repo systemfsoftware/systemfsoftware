@@ -1,6 +1,6 @@
 import { Context, Duration, Effect } from 'effect'
-import { UnboundedIntensity } from './daemon-policy.schema.js'
-import type { SupervisionConfig, SupervisionPolicy } from './daemon-spec.schema.js'
+import { UnboundedIntensity } from '../daemon-spec/daemon-policy.schema.js'
+import type { SupervisionConfig, SupervisionPolicy } from '../daemon-spec/daemon-spec.schema.js'
 import { leaderKernel } from './supervision-leader.kernel.js'
 
 export class LeaderConfig extends Context.Reference<LeaderConfig>()(

@@ -1,4 +1,4 @@
-import { SupervisorTypeId } from './brands.kernel.js'
+import { SupervisorTypeId } from '../daemon-spec/brands.kernel.js'
 
 type SupervisorRecord<CH, SP, LCK, RP, STRATEGY extends string> = {
   readonly [SupervisorTypeId]: SupervisorTypeId

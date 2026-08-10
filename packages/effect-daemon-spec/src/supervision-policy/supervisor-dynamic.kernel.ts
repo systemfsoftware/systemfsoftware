@@ -1,4 +1,4 @@
-import { DynamicSpecTypeId } from './brands.kernel.js'
+import { DynamicSpecTypeId } from '../daemon-spec/brands.kernel.js'
 
 export const dynamicKernel = <
   Args,

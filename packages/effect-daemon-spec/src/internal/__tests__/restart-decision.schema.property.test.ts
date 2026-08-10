@@ -1,7 +1,7 @@
 import { it } from '@systemfsoftware/effect-gherkin-spec'
 import { refutes } from '@systemfsoftware/effect-schema-law'
 import { Arbitrary, Either, FastCheck as fc, Schema } from 'effect'
-import { MAX_CHILDREN_CEILING } from '../../brands.kernel.js'
+import { MAX_CHILDREN_CEILING } from '../../daemon-spec/brands.kernel.js'
 import { DecideInput } from '../restart-decision.schema.js'
 
 const BOUND_MESSAGE = 'failedIndex must be < totalChildren'

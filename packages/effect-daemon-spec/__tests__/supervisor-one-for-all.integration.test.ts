@@ -6,7 +6,7 @@ import { BoundedIntensity } from '../src/mod.js'
 import { run } from '../src/mod.js'
 import { Daemon } from '../src/mod.js'
 import { Supervision } from '../src/mod.js'
-import { oneForAll } from '../src/supervisor-one-for-all.combinator.js'
+import { oneForAll } from '../src/supervision-policy/supervisor-one-for-all.combinator.js'
 import { NoopLayer } from './helpers/shared-layers.js'
 
 class SimulatedFailure extends S.TaggedError<SimulatedFailure>()('SimulatedFailure', {}) {}

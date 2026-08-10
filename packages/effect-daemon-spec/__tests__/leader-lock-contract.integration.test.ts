@@ -2,7 +2,7 @@ import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Duration, Effect, Either, Fiber, Layer, Option, TestClock } from 'effect'
 import { expect } from 'vitest'
-import { LeaderLockFromPrimitive } from '../src/leader-lock.adapter.js'
+import { LeaderLockFromPrimitive } from '../src/leader-lock/leader-lock.adapter.js'
 import { LeaderLock } from '../src/mod.js'
 import { mkFailingLockPrimitive, mkStatefulLockPrimitive } from './helpers/lock-primitive-fakes.js'
 

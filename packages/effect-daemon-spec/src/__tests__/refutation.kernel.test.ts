@@ -1,10 +1,10 @@
 import { scanObligations } from '@systemfsoftware/effect-schema-law'
 import type { Schema as S } from 'effect'
 import { expect, it } from 'vitest'
-import { DynamicLimitExceeded } from '../daemon-health.schema.js'
-import { IntensityConfig, MaxChildren } from '../daemon-policy.schema.js'
-import { LeaderLockInfraError, LeaderLockNotAcquired } from '../leader-lock.schema.js'
-import { LockPrimitiveError } from '../lock-primitive.schema.js'
+import { DynamicLimitExceeded } from '../daemon-health/daemon-health.schema.js'
+import { IntensityConfig, MaxChildren } from '../daemon-spec/daemon-policy.schema.js'
+import { LeaderLockInfraError, LeaderLockNotAcquired } from '../leader-lock/leader-lock.schema.js'
+import { LockPrimitiveError } from '../leader-lock/lock-primitive.schema.js'
 
 const EXPORTED_SCHEMAS: Readonly<Record<string, S.Schema.AnyNoContext>> = {
   DynamicLimitExceeded,

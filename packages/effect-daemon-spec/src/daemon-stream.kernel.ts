@@ -1,4 +1,4 @@
-import { WorkerTypeId } from './brands.kernel.js'
+import { WorkerTypeId } from './daemon-spec/brands.kernel.js'
 
 type WorkerRecord<TICK, THOOKS, CHILD, LCK, L> = {
   readonly [WorkerTypeId]: WorkerTypeId

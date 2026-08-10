@@ -1,6 +1,6 @@
 import type { Stream } from 'effect'
-import type { ChildPolicyConfig, TickPolicyConfig } from './daemon-policy.schema.js'
-import type { CommonOpts, LockConfig, TickPolicyHooks, Worker } from './daemon-spec.schema.js'
+import type { ChildPolicyConfig, TickPolicyConfig } from './daemon-spec/daemon-policy.schema.js'
+import type { CommonOpts, LockConfig, TickPolicyHooks, Worker } from './daemon-spec/daemon-spec.schema.js'
 import { streamKernel } from './daemon-stream.kernel.js'
 
 export const stream = <A, E, R, L extends LockConfig>(

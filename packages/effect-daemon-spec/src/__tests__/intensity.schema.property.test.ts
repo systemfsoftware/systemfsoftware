@@ -1,7 +1,7 @@
 import { refutes } from '@systemfsoftware/effect-schema-law'
 import { Duration, FastCheck as fc } from 'effect'
-import { DynamicLimitExceeded } from '../daemon-health.schema.js'
-import { IntensityConfig } from '../daemon-policy.schema.js'
+import { DynamicLimitExceeded } from '../daemon-health/daemon-health.schema.js'
+import { IntensityConfig } from '../daemon-spec/daemon-policy.schema.js'
 
 const window = Duration.seconds(1)
 

@@ -1,6 +1,6 @@
 import { Context, Duration, Effect, Match, Option, Predicate, Schedule } from 'effect'
-import type { LeaderLock } from '../leader-lock.adapter.js'
-import { type LeaderLockAcquireError, LeaderLockNotAcquired } from '../leader-lock.schema.js'
+import type { LeaderLock } from '../leader-lock/leader-lock.adapter.js'
+import { type LeaderLockAcquireError, LeaderLockNotAcquired } from '../leader-lock/leader-lock.schema.js'
 
 export interface LeaderLockOptions {
   readonly key: string

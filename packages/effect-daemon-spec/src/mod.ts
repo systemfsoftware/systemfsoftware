@@ -7,13 +7,13 @@ import { worker } from './daemon-worker.executor.js'
 import { dynamic as dynamicRuntime } from './internal/build-dynamic.executor.js'
 import { supervisor, SupervisorBodyExecutorDeps } from './internal/supervisor-body.executor.js'
 import { withLeaderLock, WithLeaderLockExecutorDeps } from './internal/with-leader-lock.executor.js'
-import { LeaderLock } from './leader-lock.adapter.js'
-import { custom } from './supervision-custom.kernel.js'
-import { leader } from './supervision-leader.combinator.js'
-import { task } from './supervision-task.combinator.js'
-import { supervision } from './supervision-worker.combinator.js'
-export { DynamicLimitExceeded } from './daemon-health.schema.js'
-export { healthStateGauge } from './daemon-metrics.kernel.js'
+import { LeaderLock } from './leader-lock/leader-lock.adapter.js'
+import { custom } from './supervision-policy/supervision-custom.kernel.js'
+import { leader } from './supervision-policy/supervision-leader.combinator.js'
+import { task } from './supervision-policy/supervision-task.combinator.js'
+import { supervision } from './supervision-policy/supervision-worker.combinator.js'
+export { DynamicLimitExceeded } from './daemon-health/daemon-health.schema.js'
+export { healthStateGauge } from './daemon-metrics/daemon-metrics.kernel.js'
 export {
   BoundedIntensity,
   ChildPolicyConfig,
@@ -23,13 +23,13 @@ export {
   MaxChildren,
   TickPolicyConfig,
   UnboundedIntensity,
-} from './daemon-policy.schema.js'
-export type { LockConfig } from './daemon-spec.schema.js'
-export { LeaderLockNotAcquired } from './leader-lock.schema.js'
-export { LockPrimitiveError } from './lock-primitive.schema.js'
-export { LeaderConfig } from './supervision-leader.combinator.js'
-export { TaskConfig } from './supervision-task.combinator.js'
-export { WorkerConfig } from './supervision-worker.combinator.js'
+} from './daemon-spec/daemon-policy.schema.js'
+export type { LockConfig } from './daemon-spec/daemon-spec.schema.js'
+export { LeaderLockNotAcquired } from './leader-lock/leader-lock.schema.js'
+export { LockPrimitiveError } from './leader-lock/lock-primitive.schema.js'
+export { LeaderConfig } from './supervision-policy/supervision-leader.combinator.js'
+export { TaskConfig } from './supervision-policy/supervision-task.combinator.js'
+export { WorkerConfig } from './supervision-policy/supervision-worker.combinator.js'
 export const Daemon = {
   poll,
   stream,

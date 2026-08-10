@@ -1,6 +1,6 @@
 import { Context, Duration, Effect } from 'effect'
-import { BoundedIntensity } from './daemon-policy.schema.js'
-import type { SupervisionConfig, SupervisionPolicy } from './daemon-spec.schema.js'
+import { BoundedIntensity } from '../daemon-spec/daemon-policy.schema.js'
+import type { SupervisionConfig, SupervisionPolicy } from '../daemon-spec/daemon-spec.schema.js'
 import { workerKernel } from './supervision-worker.kernel.js'
 
 export class WorkerConfig extends Context.Reference<WorkerConfig>()(

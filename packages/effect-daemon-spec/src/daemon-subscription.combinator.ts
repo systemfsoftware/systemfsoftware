@@ -1,6 +1,6 @@
 import { Effect } from 'effect'
-import type { ChildPolicyConfig, TickPolicyConfig } from './daemon-policy.schema.js'
-import type { CommonOpts, LockConfig, TickPolicyHooks, Worker } from './daemon-spec.schema.js'
+import type { ChildPolicyConfig, TickPolicyConfig } from './daemon-spec/daemon-policy.schema.js'
+import type { CommonOpts, LockConfig, TickPolicyHooks, Worker } from './daemon-spec/daemon-spec.schema.js'
 import { subscriptionKernel } from './daemon-subscription.kernel.js'
 
 export const subscription = <A, E, R, L extends LockConfig>(

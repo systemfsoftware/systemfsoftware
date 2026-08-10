@@ -1,4 +1,4 @@
-import { SupervisorTypeId } from './brands.kernel.js'
+import { SupervisorTypeId } from '../daemon-spec/brands.kernel.js'
 
 type SupervisorRecord<CH, SP, LCK, RP, STRATEGY extends string> = {
   readonly [SupervisorTypeId]: SupervisorTypeId
@@ -10,7 +10,7 @@ type SupervisorRecord<CH, SP, LCK, RP, STRATEGY extends string> = {
   readonly reporter: RP | Record<never, never>
 }
 
-export const oneForAllKernel = <
+export const oneForOneKernel = <
   CH,
   SP,
   LCK,
@@ -22,10 +22,10 @@ export const oneForAllKernel = <
     readonly lock: LCK
     readonly reporter?: RP
   },
->(opts: O): SupervisorRecord<CH, SP, LCK, RP, 'one_for_all'> => ({
+>(opts: O): SupervisorRecord<CH, SP, LCK, RP, 'one_for_one'> => ({
   [SupervisorTypeId]: SupervisorTypeId,
   name: opts.name,
-  strategy: 'one_for_all',
+  strategy: 'one_for_one',
   children: opts.children,
   supervision: opts.supervision,
   lock: opts.lock,

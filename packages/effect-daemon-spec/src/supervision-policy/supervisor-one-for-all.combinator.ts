@@ -6,7 +6,7 @@ import type {
   SupervisionPolicy,
   Supervisor,
   SupervisorOpts,
-} from './daemon-spec.schema.js'
+} from '../daemon-spec/daemon-spec.schema.js'
 import { oneForAllKernel } from './supervisor-one-for-all.kernel.js'
 
 export const oneForAll = <E, R, L extends LockConfig = LockConfig>(

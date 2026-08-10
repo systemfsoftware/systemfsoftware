@@ -1,6 +1,6 @@
 import { describe, expect, it } from '@effect/vitest'
 import { Duration as D, Effect, TestClock } from 'effect'
-import { make } from '../intensity.kernel.js'
+import { make } from '../intensity/intensity.kernel.js'
 
 describe('make', () => {
   it.effect('Should_NotExceed_When_RecordsStayBelowThreshold', () =>

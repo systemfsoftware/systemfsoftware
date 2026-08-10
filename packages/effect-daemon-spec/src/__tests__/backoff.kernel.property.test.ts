@@ -1,6 +1,6 @@
 import { describe, it } from '@systemfsoftware/effect-gherkin-spec'
 import { Array, Chunk, Duration, Effect, FastCheck as fc, Schedule } from 'effect'
-import { cappedBackoff } from '../backoff.kernel.js'
+import { cappedBackoff } from '../backoff/backoff.kernel.js'
 
 const CAP_MULTIPLIER_MAX = 8
 const STEPS_MIN_UNTIL_EXPONENTIAL_EXCEEDS_CAP = 6

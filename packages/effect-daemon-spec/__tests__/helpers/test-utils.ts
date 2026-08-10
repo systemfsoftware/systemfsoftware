@@ -1,5 +1,5 @@
 import { Duration, Effect, Ref } from 'effect'
-import type { Worker } from '../../src/daemon-spec.schema.js'
+import type { Worker } from '../../src/daemon-spec/daemon-spec.schema.js'
 import { Daemon } from '../../src/mod.js'
 
 export const CounterRef = {

@@ -8,8 +8,8 @@ import { SupervisorBodyExecutorDeps, WithLeaderLockExecutorLive } from '../src/m
 import { LeaderLock } from '../src/mod.js'
 import { MaxChildren } from '../src/mod.js'
 import { Supervision } from '../src/mod.js'
-import { dynamic } from '../src/supervisor-dynamic.combinator.js'
-import { oneForOne } from '../src/supervisor-one-for-one.combinator.js'
+import { dynamic } from '../src/supervision-policy/supervisor-dynamic.combinator.js'
+import { oneForOne } from '../src/supervision-policy/supervisor-one-for-one.combinator.js'
 import { ReporterSpyContext } from './helpers/reporter-spy.js'
 import { NoopLayer } from './helpers/shared-layers.js'
 
