@@ -12,9 +12,6 @@ export const ColonHex: Schema.brand<Schema.transform<Schema.transform<Schema.fil
 // @public (undocumented)
 export type ColonHex = Schema.Schema.Type<typeof ColonHex>;
 
-// @public
-export const HexBytes: Schema.Schema<Uint8Array<ArrayBufferLike>, string, never>;
-
 // @public (undocumented)
 export const HexString: Schema.brand<Schema.transform<Schema.SchemaClass<string, string, never>, Schema.refine<string, typeof Schema.String>>, "HexString">;
 
@@ -29,12 +26,6 @@ export type PrefixedHex = Schema.Schema.Type<typeof PrefixedHex>;
 
 // @public (undocumented)
 export const StrictHex: Schema.refine<string, typeof Schema.String>;
-
-// @public (undocumented)
-export const Uint8ArrayFromPrefixedHex: Schema.transform<Schema.brand<Schema.transform<Schema.TemplateLiteral<`0x${string}`>, Schema.refine<string, typeof Schema.String>>, "PrefixedHex">, Schema.Schema<Uint8Array<ArrayBufferLike>, string, never>>;
-
-// @public (undocumented)
-export type Uint8ArrayFromPrefixedHex = Schema.Schema.Type<typeof Uint8ArrayFromPrefixedHex>;
 
 // (No @packageDocumentation comment for this package)
 

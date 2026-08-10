@@ -6,25 +6,6 @@
 
 import { Either } from 'effect/Either';
 
-// Warning: (ae-forgotten-export) The symbol "Holds" needs to be exported by the entry point index.d.ts
-// Warning: (ae-forgotten-export) The symbol "Identical" needs to be exported by the entry point index.d.ts
-// Warning: (ae-forgotten-export) The symbol "Cmd" needs to be exported by the entry point index.d.ts
-// Warning: (ae-forgotten-export) The symbol "Dec" needs to be exported by the entry point index.d.ts
-// Warning: (ae-forgotten-export) The symbol "Alt" needs to be exported by the entry point index.d.ts
-// Warning: (ae-forgotten-export) The symbol "Err" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export type DecisionUnionSurvivesDistribution = Holds<Identical<Workflow<Cmd, Dec | Alt, Err>, (command: Cmd) => Either<Dec | Alt, Err>>>;
-
-// @public (undocumented)
-export type InhabitedWorkflowIsCallable = Holds<Identical<Workflow<Cmd, Dec, Err>, (command: Cmd) => Either<Dec, Err>>>;
-
-// @public (undocumented)
-export type NeverDecisionIsRejected = Holds<Identical<Workflow<Cmd, never, Err>, UninhabitedDecision>>;
-
-// @public (undocumented)
-export type NeverErrorIsRejected = Holds<Identical<Workflow<Cmd, Dec, never>, UninhabitedError>>;
-
 // @public (undocumented)
 export interface UninhabitedDecision {
     // (undocumented)
