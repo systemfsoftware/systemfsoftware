@@ -32,7 +32,28 @@
       "types": "./dist/effect-daemon-spec.d.ts",
       "default": "./dist/index.mjs"
     },
-    "./package.json": "./package.json"
+    "./DaemonReporter": {
+      "@systemfsoftware/source": "./src/daemon-reporter.adapter.ts",
+      "types": "./dist/DaemonReporter.rollup.d.ts",
+      "default": "./dist/DaemonReporter.mjs"
+    },
+    "./DaemonSpec": {
+      "@systemfsoftware/source": "./src/daemon-spec/mod.ts",
+      "types": "./dist/DaemonSpec.rollup.d.ts",
+      "default": "./dist/DaemonSpec.mjs"
+    },
+    "./LeaderLock": {
+      "@systemfsoftware/source": "./src/leader-lock/mod.ts",
+      "types": "./dist/LeaderLock.rollup.d.ts",
+      "default": "./dist/LeaderLock.mjs"
+    },
+    "./SupervisionPolicy": {
+      "@systemfsoftware/source": "./src/supervision-policy/mod.ts",
+      "types": "./dist/SupervisionPolicy.rollup.d.ts",
+      "default": "./dist/SupervisionPolicy.mjs"
+    },
+    "./package.json": "./package.json",
+    "./internal/*": null
   },
   "files": [
     "dist"
@@ -46,8 +67,8 @@
     "mutation": "stryker run",
     "mutation:full": "stryker run --force",
     "lint": "oxlint . ${AGENT:+--format=unix --quiet}",
-    "api:check": "api-extractor run",
-    "api:update": "api-extractor run --local",
+    "api:check": "api-extractor run && api-extractor run --config api-extractor.SupervisionPolicy.json && api-extractor run --config api-extractor.LeaderLock.json && api-extractor run --config api-extractor.DaemonReporter.json && api-extractor run --config api-extractor.DaemonSpec.json",
+    "api:update": "api-extractor run --local && api-extractor run --local --config api-extractor.SupervisionPolicy.json && api-extractor run --local --config api-extractor.LeaderLock.json && api-extractor run --local --config api-extractor.DaemonReporter.json && api-extractor run --local --config api-extractor.DaemonSpec.json",
     "attw": "attw --pack ."
   },
   "devDependencies": {
@@ -82,7 +103,24 @@
         "types": "./dist/effect-daemon-spec.d.ts",
         "default": "./dist/index.mjs"
       },
-      "./package.json": "./package.json"
+      "./DaemonReporter": {
+        "types": "./dist/DaemonReporter.rollup.d.ts",
+        "default": "./dist/DaemonReporter.mjs"
+      },
+      "./DaemonSpec": {
+        "types": "./dist/DaemonSpec.rollup.d.ts",
+        "default": "./dist/DaemonSpec.mjs"
+      },
+      "./LeaderLock": {
+        "types": "./dist/LeaderLock.rollup.d.ts",
+        "default": "./dist/LeaderLock.mjs"
+      },
+      "./SupervisionPolicy": {
+        "types": "./dist/SupervisionPolicy.rollup.d.ts",
+        "default": "./dist/SupervisionPolicy.mjs"
+      },
+      "./package.json": "./package.json",
+      "./internal/*": null
     },
     "provenance": true
   }

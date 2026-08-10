@@ -39,3 +39,25 @@ pnpm add @systemfsoftware/effect-daemon-spec
 
 > [!NOTE]
 > `effect` is a peer dependency — you bring your own.
+
+## Depth floor: exhibited, not enforced
+
+The doctrine's depth floor — that a declared entry's exposed names stay below
+the count of implementation modules it hides — is exhibited by this package's
+shape but not enforced by any shipped gate. A per-file linter cannot count the
+modules behind an entry, and a repo-local script would enforce a published
+concern outside the published artifact (REPO-S6). No shippable carrier exists
+for it, so the statement lives here instead of being faked as a rule.
+
+## Subpaths
+
+Beyond the root entry, concept-scoped subpaths are published for the surfaces a
+consumer reaches for directly:
+
+- `@systemfsoftware/effect-daemon-spec/SupervisionPolicy`
+- `@systemfsoftware/effect-daemon-spec/LeaderLock`
+- `@systemfsoftware/effect-daemon-spec/DaemonReporter`
+- `@systemfsoftware/effect-daemon-spec/DaemonSpec`
+
+Everything under `./internal/*` is sealed: the executors are implementation
+detail and resolve to `ERR_PACKAGE_PATH_NOT_EXPORTED`.
