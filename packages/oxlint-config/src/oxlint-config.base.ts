@@ -76,6 +76,7 @@ export default defineConfig({
     '@systemfsoftware/oxlint-plugin-cell-taxonomy/capability-named-directory': 'error',
     ...effectDmmf.configs.recommended.rules,
     '@systemfsoftware/oxlint-plugin/no-new-worker-with-wasm-import': 'error',
+    '@systemfsoftware/oxlint-plugin/no-wildcard-reexport': 'error',
     '@systemfsoftware/oxlint-plugin/no-barrels': 'off',
     '@systemfsoftware/oxlint-plugin/no-inline-destructured-type': 'off',
   },
