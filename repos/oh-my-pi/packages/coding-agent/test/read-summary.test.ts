@@ -82,6 +82,24 @@ describe("read summary", () => {
 		expect(result.details?.summary?.elidedSpans).toBe(2);
 	});
 
+	it("uses the resolved path in elision recovery selectors after suffix matching", async () => {
+		const fixture = path.join(tmpDir, "project", "src", "fixture.ts");
+		await fs.mkdir(path.dirname(fixture), { recursive: true });
+		await fs.writeFile(
+			fixture,
+			"export function alpha(value: string): string {\n\tconst clean = value.trim();\n\tconst label = clean || 'alpha';\n\treturn label.toUpperCase();\n}\n\nexport function beta(): number {\n\tconst one = 1;\n\tconst two = 2;\n\treturn one + two;\n}\n",
+		);
+		const malformed = "src/fixture.ts";
+
+		const tool = new ReadTool(createSession(tmpDir));
+		const result = await tool.execute("read-summary-suffix-path", { path: malformed });
+		const text = textOutput(result);
+
+		expect(result.details?.suffixResolution?.to).toBe("project/src/fixture.ts");
+		expect(text).toContain("with project/src/fixture.ts:1-5,7-11]");
+		expect(text).not.toContain(`with ${malformed}:`);
+	});
+
 	it("summarizes Markdown only when prose summaries are enabled", async () => {
 		const fixture = path.join(tmpDir, "fixture.md");
 		await fs.writeFile(
@@ -316,9 +334,9 @@ describe("read summary", () => {
 		expect(result.details?.summary?.elidedSpans).toBe(2);
 		expect(result.details?.summary?.elidedLines).toBeGreaterThan(0);
 		expect(text).toContain("ln elided");
-		expect(text).toContain(`${fixture}:1-5,7-11`);
-		expect(text).not.toContain(`${fixture}:raw`);
-		expect(text).not.toContain(`${fixture}:1-9999`);
+		expect(text).toContain("footer.ts:1-5,7-11");
+		expect(text).not.toContain("footer.ts:raw");
+		expect(text).not.toContain("footer.ts:1-9999");
 		// Footer must be the LAST block of output so the recovery hint sits
 		// next to the structural summary it describes.
 		expect(text.trimEnd().endsWith("]")).toBe(true);

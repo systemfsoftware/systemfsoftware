@@ -10,7 +10,7 @@ This package ships settings, not rules: `src/index.ts` declares which **stock** 
   do: express every setting as a literal — rule keys written out, glob arrays written out, groups composed by spreading named constants
   dont: compute a rule key or a glob (a helper, a map, a loop), or add stryker/vitest/test files to this package
   harm: a computed glob or key is behavior a mutation can get wrong, and a wrong glob is worse than a missing rule — the gate reports nothing and reads as passing; the same reasoning exempts this package from MG1, and it only holds while there is nothing here to mutate
-  check: node scripts/guard-no-behavior.mjs — wired into this package's `lint` script, so it runs on every `pnpm check`; verified firing on an injected arrow function (exit 1) and clean on the real source (exit 0)
+  check: `node scripts/guard-no-behavior.mjs` — wired into this package's `lint` script, so it runs on every `pnpm check`; verified firing on an injected arrow function (exit 1) and clean on the real source (exit 0)
 
 - id: RC2
   title: RC1 holds only while this package stays declaration data

@@ -1,6 +1,6 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
-import { meta, Options } from './workflow-no-effect-import.config.js'
+import { meta } from './workflow-no-effect-import.config.js'
 
 export type MessageIds = 'topLevelEffectImport' | 'effectRuntimeImport'
 

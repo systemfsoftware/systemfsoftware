@@ -1,6 +1,6 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
-import { COMMAND_SUFFIX, meta, Options } from './workflow-no-unconstructed-variant.config.js'
+import { COMMAND_SUFFIX, meta } from './workflow-no-unconstructed-variant.config.js'
 
 export type MessageIds = 'unconstructedVariant'
 

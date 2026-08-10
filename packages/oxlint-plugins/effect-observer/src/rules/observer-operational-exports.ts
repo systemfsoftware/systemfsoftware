@@ -6,7 +6,6 @@ import {
   OPERATIONAL_EXPORT_EXPECTED,
   OPERATIONAL_EXPORT_FIX,
   OPERATIONAL_PREFIXES,
-  Options,
   UPPER_SNAKE_NAME,
 } from './observer-operational-exports.config.js'
 

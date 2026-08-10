@@ -109,11 +109,6 @@ ruleTester.run('cell-suffix-required', cellSuffixRequired, {
       filename: '/repo/pkg/src/__tests__/_tester.ts',
     },
     {
-      name: 'Should_Allow_TestInfrastructure_When_UnderTestsDir',
-      code: '',
-      filename: '/repo/pkg/src/tests/fixtures.ts',
-    },
-    {
       name: 'Should_Allow_ProjectSuffix_When_CellsOptionCarriesIt',
       code: '',
       filename: '/repo/pkg/src/no-barrels.config.ts',
@@ -188,6 +183,12 @@ ruleTester.run('cell-suffix-required', cellSuffixRequired, {
       code: '',
       filename: '/repo/pkg/src/foo.generated.helper.ts',
       errors: unsanctioned('foo.generated.helper.ts'),
+    },
+    {
+      name: 'Should_Report_SourceFile_When_UnderTestsDir',
+      code: '',
+      filename: '/repo/pkg/src/tests/fixtures.ts',
+      errors: unsanctioned('fixtures.ts'),
     },
   ],
 })

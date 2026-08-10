@@ -1,6 +1,6 @@
 {
   "name": "@systemfsoftware/effect-schema-vite",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "version": "1.5.1",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
@@ -51,7 +51,7 @@
   },
   "devDependencies": {
     "@microsoft/api-extractor": "catalog:",
-    "@systemfsoftware/arethetypeswrong-cli": "workspace:^",
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/effect-schema-law": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
@@ -62,7 +62,7 @@
     "rimraf": "catalog:",
     "tsdown": "catalog:",
     "vite": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "^4.1.10"
   },
   "peerDependencies": {
     "@systemfsoftware/effect-schema-law": "*",

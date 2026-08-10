@@ -13,6 +13,7 @@ const _default: {
     };
     rules: {
         'cell-suffix-required': Rule;
+        'capability-named-directory': Rule;
     };
     configs: {
         recommended: {

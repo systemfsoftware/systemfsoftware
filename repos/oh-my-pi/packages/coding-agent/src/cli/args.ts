@@ -1,8 +1,9 @@
 /**
  * CLI argument parsing and help display
  */
+import * as path from "node:path";
 import { $env, APP_NAME, logger } from "@oh-my-pi/pi-utils";
-import chalk from "chalk";
+import chalk from "@oh-my-pi/pi-utils/chalk";
 import type { ServiceTierOpenAISettingValue } from "../config/service-tier";
 import { CLI_THINKING_LEVELS, type ConfiguredThinkingLevel, parseCliThinkingLevel } from "../thinking";
 import { BUILTIN_TOOL_NAMES, HIDDEN_TOOL_NAMES, normalizeToolNames } from "../tools/builtin-names";
@@ -68,6 +69,7 @@ export interface Args {
 	noPty?: boolean;
 	hooks?: string[];
 	extensions?: string[];
+	trustedExtensions?: string[];
 	noExtensions?: boolean;
 	pluginDirs?: string[];
 	print?: boolean;
@@ -110,7 +112,7 @@ const PARSE_DEPS: ParseDeps = {
 	thinkingEfforts: CLI_THINKING_LEVELS,
 };
 
-const WINDOWS_PATH_VALUE_FLAGS: ReadonlySet<string> = new Set(["--extension", "-e", "--hook"]);
+const WINDOWS_PATH_VALUE_FLAGS = new Set(["--extension", "-e", "--hook", "--trusted-extension"]);
 const WINDOWS_PATH_START_RE =
 	/^(?:[A-Za-z]:[\\/]|\\\\[?]\\(?:[A-Za-z]:[\\/]|UNC[\\/])|\\\\[^\\/]+[\\/][^\\/]+[\\/]|\/\/[?]\/(?:[A-Za-z]:\/|UNC\/)|\/\/[^/]+\/[^/]+\/)/;
 const WINDOWS_MODULE_PATH_SUFFIX_RE = /\.(?:[cm]?[jt]sx?)$/i;
@@ -156,6 +158,7 @@ export function parseArgs(inputArgs: string[], extensionFlags?: Map<string, { ty
 	// `--` ends option parsing (POSIX end-of-options). Everything after it is
 	// literal positional text, so flag-shaped messages are not parsed or rejected.
 	let sawSeparator = false;
+	let trustedFlagCount = 0;
 	for (let i = 0; i < args.length; i++) {
 		let arg = args[i];
 		if (sawSeparator) {
@@ -200,6 +203,7 @@ export function parseArgs(inputArgs: string[], extensionFlags?: Map<string, { ty
 				}
 			}
 		} else if (STRING_VALUE_FLAGS.has(arg)) {
+			if (arg === "--trusted-extension") trustedFlagCount++;
 			// Built-in string flags consume the next token even when it is flag-looking
 			// (`--system-prompt --profile foo` ⇒ the prompt is the literal "--profile").
 			// The one token they must never absorb is the profile bootstrap's internal
@@ -301,6 +305,24 @@ export function parseArgs(inputArgs: string[], extensionFlags?: Map<string, { ty
 		// through to a later iteration and become a positional message.
 		if (equalsValueIndex !== -1 && i === flagIndex) {
 			args.splice(equalsValueIndex, 1);
+		}
+	}
+
+	const swallowedTrustedFlag = [...(result.extensions ?? []), ...(result.hooks ?? [])].some(
+		value => value === "--trusted-extension" || value.startsWith("--trusted-extension="),
+	);
+	if ((result.trustedExtensions?.length ?? 0) !== trustedFlagCount || swallowedTrustedFlag) {
+		throw new CliUsageError("--trusted-extension requires a non-empty, non-flag value");
+	}
+	if (trustedFlagCount > 0 && ((result.extensions?.length ?? 0) > 0 || (result.hooks?.length ?? 0) > 0)) {
+		throw new CliUsageError("--trusted-extension cannot be combined with --extension, -e, or --hook");
+	}
+	for (const trustedPath of result.trustedExtensions ?? []) {
+		if (trustedPath.length === 0) {
+			throw new CliUsageError("--trusted-extension requires a non-empty, non-flag value");
+		}
+		if (!path.isAbsolute(trustedPath)) {
+			throw new CliUsageError(`--trusted-extension requires an absolute path: ${trustedPath}`);
 		}
 	}
 

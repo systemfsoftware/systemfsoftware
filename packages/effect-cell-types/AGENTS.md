@@ -11,7 +11,8 @@ rules:
     do: keep the package free of runtime exports
     dont: add runtime helpers, a stryker config, or a mutation script
     harm: there is no behavior to mutate, so a gate here certifies nothing
-    check: package.json has no mutation script; src/ declares only types
+    check: review — package.json carries no mutation or stryker script and src/
+      declares only types
 
   - id: CELL-T2
     title: No test file — the type is the contract
@@ -19,7 +20,7 @@ rules:
       src/workflow-contract.kernel.ts; a false claim fails the build
     dont: add a test file, runtime assertions, it.prop, or fast-check
     harm: a behavioural test can pass while the public type silently widens
-    check: pnpm --filter @systemfsoftware/effect-cell-types typecheck
+    check: `pnpm --filter @systemfsoftware/effect-cell-types typecheck` exits 0
 ```
 
 ## Verification

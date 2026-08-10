@@ -123,10 +123,10 @@ const isEitherUnwrapCall = (
 const getGuardSource = (
   expectArg: ESTree.CallExpression,
   sourceCode: { getText(node: ESTree.Node): string },
-): string =>
-  expectArg.arguments[0] != null
-    ? sourceCode.getText(expectArg.arguments[0]!)
-    : 'value'
+): string => {
+  const firstArg = expectArg.arguments[0]
+  return firstArg == null ? 'value' : sourceCode.getText(firstArg)
+}
 
 export const noEitherTagAssertions = defineRule({
   meta,
@@ -283,8 +283,9 @@ export const noEitherTagAssertions = defineRule({
 
       const unwrapCall = isEitherUnwrapCall(obj)
       if (unwrapCall != null) {
-        const source = unwrapCall.call.arguments[0] !== undefined
-          ? getSourceText(unwrapCall.call.arguments[0]!)
+        const firstArg = unwrapCall.call.arguments[0]
+        const source = firstArg !== undefined
+          ? getSourceText(firstArg)
           : 'value'
         context.report({
           node: node.property,

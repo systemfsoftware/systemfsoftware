@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema",
+  "type": "object",
+  "title": "StrykerVitestRunnerOptions",
+  "additionalProperties": false,
+  "properties": {
+    "vitest": {
+      "description": "Configuration for @systemfsoftware/stryker-js-vitest-runner",
+      "title": "VitestRunnerOptions",
+      "additionalProperties": false,
+      "type": "object",
+      "default": {},
+      "properties": {
+        "dir": {
+          "description": "The directory from which Vitest scans for test files (the `--dir <path>` command line option), resolved against the project root. The project root is Stryker's sandbox directory and is not user-configurable.",
+          "type": "string"
+        },
+        "related": {
+          "description": "Use [related mode](https://vitest.dev/guide/cli.html#vitest-related) to narrow down the tests to run",
+          "type": "boolean",
+          "default": true
+        },
+        "configFile": {
+          "description": "Path to the config file. Default resolving to `vitest.config.*`, `vite.config.*`",
+          "type": "string"
+        }
+      }
+    }
+  }
+}

@@ -9,7 +9,7 @@ export default defineConfig({
     correctness: 'error',
   },
 
-  plugins: ['typescript', 'import', 'jsdoc', 'node', 'promise', 'vitest', 'unicorn'],
+  plugins: ['typescript', 'jsdoc', 'node', 'promise', 'vitest', 'unicorn'],
 
   rules: {
     'no-console': 'off',

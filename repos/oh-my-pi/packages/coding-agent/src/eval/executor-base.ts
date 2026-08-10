@@ -116,9 +116,13 @@ export async function waitForPromiseWithCancellation<T>(
 	promise: Promise<T>,
 	options: { signal?: AbortSignal; deadlineMs?: number },
 	cancelledErrorClass: CancelledErrorClass,
+	timedOutResolver?: (error: unknown, signal?: AbortSignal) => boolean,
 ): Promise<T> {
 	if (options.signal?.aborted) {
-		throw new cancelledErrorClass(isTimedOutCancellation(options.signal.reason, cancelledErrorClass, options.signal));
+		throw new cancelledErrorClass(
+			timedOutResolver?.(options.signal.reason, options.signal) ??
+				isTimedOutCancellation(options.signal.reason, cancelledErrorClass, options.signal),
+		);
 	}
 	const remainingMs = getRemainingTimeoutMs(options.deadlineMs);
 	if (remainingMs !== undefined && remainingMs <= 0) {
@@ -139,7 +143,8 @@ export async function waitForPromiseWithCancellation<T>(
 			finish(() =>
 				reject(
 					new cancelledErrorClass(
-						isTimedOutCancellation(options.signal?.reason, cancelledErrorClass, options.signal),
+						timedOutResolver?.(options.signal?.reason, options.signal) ??
+							isTimedOutCancellation(options.signal?.reason, cancelledErrorClass, options.signal),
 					),
 				),
 			);
@@ -276,9 +281,32 @@ interface ManagedKernelEnvOptions {
 	bridge?: { url: string; token: string };
 	localRoots?: Record<string, string>;
 }
+interface ManagedKernelEnvPolicy {
+	sparse?: boolean;
+}
 
-export function buildManagedKernelEnvPatch(options: ManagedKernelEnvOptions): Record<string, string | null> {
+export function buildManagedKernelEnvPatch(options: ManagedKernelEnvOptions): Record<string, string | null>;
+export function buildManagedKernelEnvPatch(
+	options: ManagedKernelEnvOptions,
+	policy: { sparse: true },
+): Record<string, string | undefined>;
+export function buildManagedKernelEnvPatch(
+	options: ManagedKernelEnvOptions,
+	policy?: ManagedKernelEnvPolicy,
+): KernelEnvPatch {
 	const localRoots = options.localRoots;
+	if (policy?.sparse) {
+		const patch: Record<string, string | undefined> = {};
+		if (options.sessionFile) patch.PI_SESSION_FILE = options.sessionFile;
+		if (options.artifactsDir) patch.PI_ARTIFACTS_DIR = options.artifactsDir;
+		if (options.bridge) {
+			patch.PI_TOOL_BRIDGE_URL = options.bridge.url;
+			patch.PI_TOOL_BRIDGE_TOKEN = options.bridge.token;
+			patch.PI_TOOL_BRIDGE_SESSION = options.bridgeSessionId ?? "";
+		}
+		if (localRoots) patch.PI_EVAL_LOCAL_ROOTS = JSON.stringify(localRoots);
+		return patch;
+	}
 	return {
 		PI_SESSION_FILE: options.sessionFile ?? null,
 		PI_ARTIFACTS_DIR: options.artifactsDir ?? null,
@@ -289,13 +317,18 @@ export function buildManagedKernelEnvPatch(options: ManagedKernelEnvOptions): Re
 	};
 }
 
-export function buildManagedKernelEnv(options: ManagedKernelEnvOptions): Record<string, string> | undefined {
-	const patch = buildManagedKernelEnvPatch(options);
+export function buildManagedKernelEnv(
+	options: ManagedKernelEnvOptions,
+	policy?: ManagedKernelEnvPolicy,
+): Record<string, string> | undefined {
+	const patch = policy?.sparse
+		? buildManagedKernelEnvPatch(options, { sparse: true })
+		: buildManagedKernelEnvPatch(options);
 	const env: Record<string, string> = {};
 	let hasKeys = false;
 	for (const key of MANAGED_KERNEL_ENV_KEYS) {
 		const value = patch[key];
-		if (value !== null) {
+		if (typeof value === "string") {
 			env[key] = value;
 			hasKeys = true;
 		}

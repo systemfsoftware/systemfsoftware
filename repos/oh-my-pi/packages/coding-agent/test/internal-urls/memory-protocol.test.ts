@@ -15,6 +15,7 @@ import { AgentRegistry } from "@oh-my-pi/pi-coding-agent/registry/agent-registry
 import type { AgentSession } from "@oh-my-pi/pi-coding-agent/session/agent-session";
 import type { ToolSession } from "@oh-my-pi/pi-coding-agent/tools";
 import { GlobTool } from "@oh-my-pi/pi-coding-agent/tools/glob";
+import { ReadTool } from "@oh-my-pi/pi-coding-agent/tools/read";
 import { getAgentDir, removeWithRetries, setAgentDir, TempDir } from "@oh-my-pi/pi-utils";
 
 // Mnemopi state is loaded lazily; preload so `new MnemopiSessionState(...)` can
@@ -62,7 +63,7 @@ function createGlobTool(cwd: string): GlobTool {
 	const session: ToolSession = {
 		cwd,
 		hasUI: false,
-		settings: Settings.isolated({}),
+		settings: Settings.isolated({ "memory.backend": "local" }),
 		getSessionFile: () => null,
 		getSessionSpawns: () => null,
 	};
@@ -78,6 +79,31 @@ describe("MemoryProtocolHandler", () => {
 	afterEach(() => {
 		AgentRegistry.resetGlobalForTests();
 		InternalUrlRouter.resetForTests();
+	});
+
+	it("rejects memory URLs when the calling session disables memory", async () => {
+		const router = InternalUrlRouter.instance();
+		const settings = Settings.isolated({ "memory.backend": "off" });
+
+		await expect(router.resolve("memory://", { settings })).rejects.toThrow("Unknown protocol: memory://");
+		await expect(router.resolve("memory://root", { settings })).rejects.toThrow("Unknown protocol: memory://");
+	});
+
+	it("advertises memory URLs only while a memory backend is enabled", () => {
+		const settings = Settings.isolated();
+		const session: ToolSession = {
+			cwd: process.cwd(),
+			hasUI: false,
+			settings,
+			getSessionFile: () => null,
+			getSessionSpawns: () => null,
+		};
+		const tool = new ReadTool(session);
+
+		expect(JSON.stringify(tool.parameters.toJsonSchema())).not.toContain("memory://");
+
+		settings.override("memory.backend", "local");
+		expect(JSON.stringify(tool.parameters.toJsonSchema())).toContain("memory://");
 	});
 
 	it("resolves memory://root to memory_summary.md", async () => {

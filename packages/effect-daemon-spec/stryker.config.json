@@ -1,11 +1,11 @@
 {
-  "extends": "@systemfsoftware/stryker-js-core/config/base",
+  "extends": "@systemfsoftware/stryker-js-mutation-run/config/base",
   "mutate": [
     "src/**/*.workflow.ts",
     "src/**/*.schema.ts"
   ],
   "plugins": [
-    "@stryker-mutator/vitest-runner",
+    "@systemfsoftware/stryker-js-vitest-runner",
     "@systemfsoftware/stryker-js-typescript-checker",
     "@systemfsoftware/stryker-plugins"
   ],
@@ -18,5 +18,7 @@
     "low": 100,
     "break": 100
   },
+  "dryRunTimeoutMinutes": 10,
+  "disableBail": true,
   "ignorePatterns": null
 }

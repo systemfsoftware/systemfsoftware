@@ -61,7 +61,7 @@ export function buildSession(opts: {
     const list = handlers.get(event) ?? []
     let result: unknown
     for (const handler of list) {
-      result = handler(payload as unknown, mockCtx)
+      result = handler(payload, mockCtx)
     }
     return result
   }
@@ -70,7 +70,7 @@ export function buildSession(opts: {
     const list = handlers.get(event) ?? []
     let result: unknown
     for (const handler of list) {
-      result = await handler(payload as unknown, mockCtx)
+      result = await handler(payload, mockCtx)
     }
     return result
   }

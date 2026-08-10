@@ -14,6 +14,7 @@ const _default: {
     rules: {
         'cell-import-boundary': Rule;
         'cell-suffix-required': Rule;
+        'capability-named-directory': Rule;
         'acl-no-anti-pattern-path': Rule;
         'acl-no-as-casts': Rule;
         'acl-single-transform-export': Rule;
@@ -50,6 +51,7 @@ const _default: {
         'policy-no-junk-drawer-path': Rule;
         'ban-effect-schema-imports': Rule;
         'ban-data-taggederror': Rule;
+        'no-manual-tag-member': Rule;
         'no-manual-tag-property': Rule;
         'no-schema-law-duplicate': Rule;
         'schema-exports-only-schemas': Rule;
@@ -85,6 +87,8 @@ const _default: {
         'no-assert-in-property': Rule;
         'property-file-purity': Rule;
         'require-effect-fastcheck': Rule;
+        'no-unbounded-fanout': Rule;
+        'no-nested-quantification': Rule;
         'damp-test-naming': Rule;
         'no-behaviourless-assertion': Rule;
         'no-unrun-effect-test': Rule;

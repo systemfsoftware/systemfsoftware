@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/omp-utils",
   "private": true,
-  "license": "MIT",
+  "license": "Apache-2.0",
   "version": "0.0.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "description": "OMP bridge utilities — ACL translations between OMP and Claude Code hook shapes",

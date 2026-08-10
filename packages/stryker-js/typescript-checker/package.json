@@ -8,7 +8,7 @@
   },
   "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/stryker-js/typescript-checker#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "TypeScript checker plugin for Stryker — TS7 native",
+  "description": "TypeScript checker plugin for Stryker \u2014 TS7 native",
   "type": "module",
   "exports": {
     ".": {
@@ -20,14 +20,14 @@
   "scripts": {
     "clean": "rimraf dist",
     "build": "tsdown",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit --incremental",
     "test": "vitest run",
     "lint": "oxlint ."
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@stryker-mutator/api": "catalog:stryker",
     "@stryker-mutator/util": "catalog:stryker",
+    "@systemfsoftware/stryker-js-plugin-api": "workspace:^",
     "effect": "catalog:",
     "semver": "catalog:stryker",
     "tslib": "catalog:stryker",
@@ -35,6 +35,7 @@
   },
   "devDependencies": {
     "@std/jsonc": "catalog:",
+    "@systemfsoftware/oxlint-plugin-cell-taxonomy": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",

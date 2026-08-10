@@ -1,6 +1,6 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
-import { ACL_SUFFIX, meta, Options } from './acl-no-as-casts.config.js'
+import { ACL_SUFFIX, meta } from './acl-no-as-casts.config.js'
 
 export type MessageIds = 'asCast'
 

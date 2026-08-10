@@ -11,12 +11,7 @@ const ruleTester = createRuleTester()
 ruleTester.run('test-file-outside-tests-dir', testFileOutsideTestsDir, {
   valid: [
     {
-      name: 'Should_Allow_IntegrationTest_When_InTestsDir',
-      code: '',
-      filename: '/repo/pkg/tests/a.integration.test.ts',
-    },
-    {
-      name: 'Should_Allow_IntegrationTest_When_InUnderscoreTestsDir',
+      name: 'Should_StaySilent_When_TestIsInNestedTestsDir',
       code: '',
       filename: '/repo/pkg/__tests__/a.integration.test.ts',
     },
@@ -32,6 +27,20 @@ ruleTester.run('test-file-outside-tests-dir', testFileOutsideTestsDir, {
     },
   ],
   invalid: [
+    {
+      name: 'Should_Report_When_TestIsInTestsDir',
+      code: '',
+      filename: '/repo/pkg/tests/a.integration.test.ts',
+      errors: [{
+        messageId: 'strayTestFile',
+        data: {
+          name: 'a.integration.test.ts',
+          expected: STRAY_TEST_FILE_EXPECTED,
+          actual: STRAY_TEST_FILE_ACTUAL,
+          fix: STRAY_TEST_FILE_FIX,
+        },
+      }],
+    },
     {
       name: 'Should_Report_StrayIntegrationTest_When_AtRepoRoot',
       code: '',

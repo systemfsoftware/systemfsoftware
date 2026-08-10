@@ -1,5 +1,5 @@
 {
-  "extends": "@systemfsoftware/stryker-js-core/config/base",
+  "extends": "@systemfsoftware/stryker-js-mutation-run/config/base",
   "mutate": [
     "src/**/*.ts",
     "!src/**/*.test.ts",
@@ -7,7 +7,7 @@
     "!src/index.ts"
   ],
   "plugins": [
-    "@stryker-mutator/vitest-runner",
+    "@systemfsoftware/stryker-js-vitest-runner",
     "@systemfsoftware/stryker-js-typescript-checker"
   ],
   "ignorers": null

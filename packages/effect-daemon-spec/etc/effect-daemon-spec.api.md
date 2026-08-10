@@ -61,13 +61,9 @@ export interface CommonOpts<L extends LockConfig> {
 
 // @public (undocumented)
 export const Daemon: {
-    readonly poll: <A, E, R, L extends LockConfig>(opts: PollOpts<A, E, R, L>) => Worker_2<E, R, L>;
-    readonly stream: <A, E, R, L extends LockConfig>(opts: CommonOpts<L> & {
-        readonly stream: Stream.Stream<A, E, R>;
-    }) => Worker_2<E, R, L>;
-    readonly subscription: <A, E, R, L extends LockConfig>(opts: CommonOpts<L> & {
-        readonly acquire: Effect.Effect<A, E, R>;
-    }) => Worker_2<E, R, L>;
+    readonly poll: typeof poll;
+    readonly stream: typeof stream;
+    readonly subscription: typeof subscription;
 };
 
 // @public (undocumented)
@@ -99,7 +95,7 @@ export interface DaemonReporterService {
 export const dynamic: <E, R, Args>(opts: {
     readonly name: string;
     readonly child: (args: Args) => Worker_2<E, R>;
-    readonly maxChildren?: number;
+    readonly maxChildren?: MaxChildren;
 }) => DynamicSpec<E, R, Args>;
 
 // @public (undocumented)
@@ -126,7 +122,7 @@ export interface DynamicSpec<E, R, Args> {
     // (undocumented)
     readonly child: (args: Args) => Worker_2<E, R>;
     // (undocumented)
-    readonly maxChildren: number;
+    readonly maxChildren: MaxChildren;
     // (undocumented)
     readonly name: string;
 }
@@ -240,6 +236,12 @@ export interface LockPrimitiveService {
 export type LoopShape<E, R> = PollLoop<E, R> | StreamLoop<E, R> | SubscriptionLoop<E, R>;
 
 // @public (undocumented)
+export const MaxChildren: Schema.brand<Schema.filter<typeof Schema.Int>, "MaxChildren">;
+
+// @public (undocumented)
+export type MaxChildren = typeof MaxChildren.Type;
+
+// @public (undocumented)
 export const Noop: Layer.Layer<DaemonReporter>;
 
 // @public (undocumented)
@@ -284,12 +286,12 @@ export const restForOne: <E, R, L extends LockConfig = LockConfig>(opts: Supervi
 export const run: {
     readonly worker: {
         <E, R>(w: Worker_2<E, R, {
-            mode: "none";
+            mode: 'none';
         }>): Effect.Effect<DaemonHealth, never, R | Scope_2>;
         <E, R>(w: Worker_2<E, R, LockConfig>): Effect.Effect<DaemonHealth, never, R | WithLeaderLockExecutorDeps | Scope_2>;
     };
-    readonly supervisor: <E, R>(s: Supervisor<E, R, LockConfig>) => Effect.Effect<SupervisorHealth, never, R | SupervisorBodyExecutorDeps | WithLeaderLockExecutorDeps | Scope_2>;
-    readonly dynamic: <E, R, Args>(spec: DynamicSpec<E, R, Args>) => Effect.Effect<DynamicHandle<Args, R | WithLeaderLockExecutorDeps | SupervisorBodyExecutorDeps | Scope_2>, never, R | WithLeaderLockExecutorDeps | SupervisorBodyExecutorDeps | Scope_2>;
+    readonly supervisor: typeof supervisor;
+    readonly dynamic: typeof dynamic$1;
 };
 
 // @public (undocumented)
@@ -316,10 +318,10 @@ export type SubscriptionLoop<E, R> = {
 
 // @public (undocumented)
 export const Supervision: {
-    readonly leader: (cap: Duration.DurationInput) => Effect.Effect<SupervisionPolicy>;
-    readonly worker: (cap: Duration.DurationInput) => Effect.Effect<SupervisionPolicy>;
-    readonly task: (budget: Duration.DurationInput) => Effect.Effect<SupervisionPolicy>;
-    readonly custom: <P>(policy: P) => Effect.Effect<P>;
+    readonly leader: typeof leader;
+    readonly worker: typeof supervision;
+    readonly task: typeof task;
+    readonly custom: typeof custom;
 };
 
 // @public (undocumented)
@@ -496,6 +498,11 @@ export const WorkerTypeId: unique symbol;
 
 // @public (undocumented)
 export type WorkerTypeId = typeof WorkerTypeId;
+
+// Warnings were encountered during analysis:
+//
+// dist/index.d.ts:336:3 - (ae-forgotten-export) The symbol "dynamic$1" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:345:3 - (ae-forgotten-export) The symbol "custom" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

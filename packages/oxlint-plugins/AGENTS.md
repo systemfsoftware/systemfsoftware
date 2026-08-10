@@ -1,6 +1,6 @@
 # AGENTS.md — `packages/oxlint-plugins/`
 
-> **Location:** `packages/oxlint-plugins/` — the oxlint plugin family. General: `core/` (general rule set), `test-hygiene/` (test naming), `property-testing/` (property-test contract), `test-placement/` (test location and suffix), `cell-taxonomy/` (source filenames name their cell), `effect-entrypoint/` (`main.ts` is an interpretation edge, not a cell), `recommended/`, `effect-dmmf/` (combines property-testing + effect-executor + effect-workflow + cell-taxonomy under one entrypoint). One package per architecture cell: `effect-{workflow,executor,handler,middleware,acl,adapter,store,state,schema,shape,policy,kernel,observer}/`. Universal agent rules live in the root `AGENTS.md`; this file carries the shared rule-authoring conventions for every plugin in this folder. Package leaves carry only their package's delta.
+> **Location:** `packages/oxlint-plugins/` — the oxlint plugin family. General: `core/` (general rule set), `test-hygiene/` (test naming), `property-testing/` (property-test contract), `test-placement/` (test location and suffix), `cell-taxonomy/` (source filenames name their cell), `effect-entrypoint/` (`main.ts` is an interpretation edge, not a cell), `recommended/`, `effect-dmmf/` (aggregates all eighteen source plugins under one entrypoint). One package per architecture cell: `effect-{workflow,executor,handler,middleware,acl,adapter,store,state,schema,shape,policy,kernel,observer}/`. Universal agent rules live in the root `AGENTS.md`; this file carries the shared rule-authoring conventions for every plugin in this folder. Package leaves carry only their package's delta.
 
 ## Critical
 
@@ -11,21 +11,21 @@ rules:
     do: kill every mutant with a distinguishing test or eliminate it with a restructure
     dont: reach the number by ignoring a killable mutant
     harm: the score excludes Ignored from its denominator, so a package can report a passing score while an ignorer absorbs mutants no test kills
-    check: pnpm --filter <pkg> mutation exits 0 and reports/mutation-report.json shows zero Ignored, Survived, and NoCoverage
+    check: `pnpm --filter <pkg> mutation` exits 0 and `jq '[.. | .status? // empty | select(. == "Ignored" or . == "Survived" or . == "NoCoverage")] | length' reports/mutation-report.json` returns 0
 
   - id: OX-MG2
     title: Ignores are declaration data only
     do: register exactly `effect-schema-declarations` in stryker.config.json#ignorers for III.4 declaration data — Symbol.for descriptions, TaggedClass/TaggedError _tag and fields, optionalWith defaults
     dont: author new ignore plugins, add ignore rules for logic mutants, or use `// Stryker disable` comments
     harm: ignore rules pattern-match text, not proofs — they silently suppress mutants that tests would have killed
-    check: `stryker.config.json#ignorers` lists nothing beyond `effect-schema-declarations`, and grep finds no `Stryker disable` in src/
+    check: `grep -rn 'Stryker disable' src/` returns nothing, and `jq -r '.ignorers // [] | join(",")' stryker.config.json` reports an empty list or exactly `effect-schema-declarations`
 
   - id: OX-CS1
     title: Static config lives in *.config.ts
     do: place meta, messages, schema, Options, constants, regexes, and message templates in `src/rules/<rule>.config.ts`; keep guards, predicates, selectors, and `create()` in the rule file; pass the imported config `meta` to `defineRule` directly without spread
     dont: declare static config inside the rule file
     harm: static data inflates the mutation surface with equivalent mutants no test can kill; behavior and declaration stop being distinguishable (III.4)
-    check: the mutate glob in stryker.config.json excludes `*.config.ts`; rule files import `meta` from `./<rule>.config.js`
+    check: `jq -r '.mutate | join("\n")' stryker.config.json` lists a `!*.config.ts` exclusion, and `grep -rn '\.config\.js' src/rules/` shows a `meta` import for every rule with a static config
 
   - id: OX-EF1
     title: AI-native error message format
@@ -53,26 +53,24 @@ rules:
     do: drive `oxlint/plugins-dev` RuleTester with vitest bindings; name tests `Should_[Behavior]_When_[Condition]` in strict PascalCase; assert with `expect()` including report `data` fields; cover every conditional with distinguishing cases per side — operator direction, computed access, aliasing, near-misses (`Object.for`, `X.TaggedClass`)
     dont: return booleans from plain `it()`; assert messageId only; assert on path prefixes; spawn oxlint as a subprocess, import `dist/`, or assert on `configs`/`meta` shape
     harm: boolean returns are vacuous passes; messageId-only assertions let data-field mutants survive; the RuleTester resolves filenames to absolute paths inside node_modules so path-shape assertions never fire
-    check: pnpm --filter <pkg> test exits 0 and the self-hosted `@systemfsoftware/test-hygiene(damp-test-naming)` lint passes
+    check: `pnpm --filter <pkg> test` exits 0, and `pnpm check:lint-coverage` gates the self-hosted `@systemfsoftware/test-hygiene(damp-test-naming)` rule's delivery to every production package — the zero-violation run over the repo's own tests is review
 
   - id: OX-TS2
-    title: Filesystem-backed rules are untestable here
-    do: leave "every X has a test" obligations to the consumer's coverage and mutation gates
-    dont: stat the filesystem for a sibling test file
-    harm: RuleTester resolves every filename into node_modules, so such a rule can never have a passing valid case — and an untestable rule cannot meet OX-MG1
-    check: grep finds no `existsSync`, `statSync`, or `readdirSync` in any `src/rules/` file
+    title: A rule may only depend on facts RuleTester can supply
+    do: take project knowledge through `options` or `settings` and read everything else from the linted file's own AST; check such a declaration against a real tree in the plugin's own suite, where the filesystem legally lives
+    dont: make a verdict depend on a fact only the disk carries — a sibling file's existence, a directory listing, another package's contents
+    harm: RuleTester cannot create a sibling, so a disk-dependent arm never gets a passing valid case and cannot meet OX-MG1. Stating that as a platform limit is false — `Context` carries `cwd`, `physicalFilename`, and `settings`, and a rule runs in Node — and the false version pushes the next author off the lint channel for a rule that was always writable
+    check: `grep -rn 'existsSync\|statSync\|readdirSync' src/rules/` returns nothing, and every arm's reachability from a RuleTester case built out of `code`, `filename`, `options`, and `settings` alone is review — `src-property-test-cell`'s `cellsRequiringTest` arm is the worked example
 
   - id: OX-OB1
     title: Keep an obligation, not only prohibitions
     do: keep at least one rule per cell that fails a file for LACKING something
     dont: reduce a cell's rule set to conditional prohibitions
     harm: with prohibitions alone an empty or degenerate file passes every rule, and the cell collapses into a naming convention — avoiding the cell's own vocabulary becomes the cheapest way to pass
-    check: each cell plugin registers at least one rule whose report fires on absence; the leaf names which rule that is
+    check: review — each cell plugin registers at least one rule whose report fires on absence, and the leaf names which rule that is
 ```
 
 ## Rule APIs
-
-Two styles exist. Use the one the package already uses; never mix styles inside a package.
 
 ```yaml
 apis:
@@ -87,7 +85,7 @@ apis:
     do: follow the `ESLintUtils.RuleCreator` shape already used by the rules in `core/src/rules/` when editing `core/`
     dont: rewrite core rules to defineRule inside an unrelated task
     harm: an opportunistic API migration mixes refactor with behavior change and nothing stays reviewable
-    check: every rule in `core/src/rules/` uses `createRule`
+    check: `grep -rn 'ESLintUtils\|createRule' core/src/rules/` returns nothing — the core package has already migrated to `defineRule`; review that no edit rewrites a rule's constructor shape inside an unrelated task
 ```
 
 ## Integration
@@ -118,6 +116,22 @@ export default {
   check: "review — `Object.keys(configs.recommended)` is exactly `['rules']`. A violation is not silent: every consumer spreading the preset fails config parsing at startup."
 ```
 
+## Runtime Budget
+
+Rule population is gated on two budgets, not on a rule count:
+
+- **Aggregate false positives** — the product of rule count and per-rule
+  false-positive rate, not the count itself.
+- **Runtime** — rule count times files scanned.
+
+Measured 2026-08-09 on oxlint 1.77.0 against `packages/oxlint-plugins/core`
+(52 TypeScript files / 8,038 LoC): type-aware ON 6829 ms, OFF
+(`--disable-type-aware`) 1607 ms — 4.25x, +5.2 s.
+
+An enabled-but-unwanted rule is set to `off`, NEVER `warn` — a `warn` rule
+still runs and still costs its per-file time. Count is not the axis: there
+is no fixed rule-count ceiling, only the two budgets above.
+
 ## Package Deltas
 
 Every `effect-<cell>/` package's spec of record is its `architect-<cell>` skill — that is the
@@ -130,16 +144,5 @@ default, not a delta. Listed here only where a package departs from it.
 | `cell-taxonomy/`                                | Sole owner of non-test source filenames (`CT1`); default lists are defaults, not law (`CT2`)                                     |
 | `test-placement/`                               | Not enrolled in its own rules (`TP1`), sole owner of test placement (`TP2`)                                                      |
 | `effect-entrypoint/`                            | Not a cell — keyed on the exact filename `main.ts` (`EP1`); the two rules that close cell-taxonomy's `main.ts` exemption (`EP2`) |
-| `effect-workflow/`                              | Deliberate non-gates                                                                                                             |
 | `effect-executor/`                              | Deliberate non-gates                                                                                                             |
 | `effect-{acl,handler,adapter,policy,workflow}/` | Each names its OX-OB1 obligation rule                                                                                            |
-
-## Verification
-
-Run in order before claiming done on any rule change:
-
-```bash
-pnpm --filter <pkg> test        # RuleTester suites
-pnpm --filter <pkg> mutation    # root gate, plus zero Ignored — see OX-MG1
-pnpm check                      # root gate, exits 0
-```

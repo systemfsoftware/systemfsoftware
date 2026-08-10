@@ -1,4 +1,4 @@
-import { declareValuePlugin, PluginKind } from '@stryker-mutator/api/plugin'
+import { declareValuePlugin, PluginKind } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 import {
   ANNOTATION_OBJECT_IGNORED,
   ANNOTATION_TEXT_IGNORED,

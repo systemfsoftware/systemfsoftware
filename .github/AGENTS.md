@@ -2,34 +2,31 @@
 
 ## Workflow
 
-The `Release` workflow runs on push to `main`. One job per phase: `build · typecheck · test · lint`, then `Semantic Release`.
+`Release` runs on push to `main`: one `the gate (pnpm check:ci)` job, then `Semantic Release`.
 
-### Job steps
+**CI enumerates no steps.** Root `package.json` `check:ci` is the only definition of what the gate runs; `reusable-checks.yml` invokes it plus one annotations-only `lint:ci` pass. Read that script to learn what is covered — a copy here would drift, which is exactly how `attw` stopped running in CI while three other lists still claimed it.
 
-| Step                  | Command                                           | Failure pattern                                                 |
-| --------------------- | ------------------------------------------------- | --------------------------------------------------------------- |
-| `actions/checkout@v7` | checkout                                          | Git exit 128 → usually cascade from earlier failure             |
-| `install-deps`        | `pnpm install --frozen-lockfile`                  | Lockfile drift → run `pnpm install` locally and commit lockfile |
-| `build`               | `pnpm build`                                      | tsdown/TypeScript errors                                        |
-| `typecheck`           | `pnpm typecheck`                                  | tsc errors                                                      |
-| `test`                | `pnpm test`                                       | Vitest failures                                                 |
-| `lint:ci`             | `pnpm format:check && turbo lint --format=github` | dprint/oxlint failures                                          |
-| `api:check`           | `pnpm api:check`                                  | api-extractor (effect-daemon-spec only)                         |
+### Failure patterns by task
+
+| Task                   | Failure pattern                                                   |
+| ---------------------- | ----------------------------------------------------------------- |
+| `install-deps`         | Lockfile drift → `pnpm install` locally and commit the lockfile   |
+| `build`                | tsdown / TypeScript errors                                        |
+| `typecheck`            | tsc errors                                                        |
+| `test`                 | Vitest failures                                                   |
+| `lint`, `format:check` | oxlint / dprint failures                                          |
+| `api:check`            | api-extractor (effect-daemon-spec only)                           |
+| `//#check:*` guards    | each prints its own remedy on stderr; run the one script it names |
+| `actions/checkout@v7`  | git exit 128 → usually a cascade from an earlier failure          |
 
 ## Local reproduction
 
 ```bash
-# Full CI-equivalent check:
-pnpm check:ci
-
-# Individual steps:
-pnpm install --frozen-lockfile   # match CI install
-pnpm build
-pnpm typecheck
-pnpm test
-pnpm lint:ci
-pnpm api:check
+pnpm check      # frozen install, then the full gate
+pnpm check:ci   # the gate alone — exactly what CI runs
 ```
+
+`check:ci` runs under `--continue`, so one run reports every failing task. The first red task is not necessarily the only one.
 
 ## Common failure patterns
 

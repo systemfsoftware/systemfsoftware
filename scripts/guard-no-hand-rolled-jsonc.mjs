@@ -9,8 +9,9 @@
 // four known shapes is present", never "no hand-rolled parser exists".
 //
 // It exists because per-package lint cannot reach the code that broke:
-// `scripts/check-lint-coverage.mjs` exempts `packages/stryker-js/` as a vendored
-// fork, and `packages/stryker-js/core` has no lint script at all. A root script
+// `scripts/check-lint-coverage.mjs` classifies every `packages/stryker-js/`
+// package as tooling, so the shared cell rule set never runs there and each
+// package lints against its own baseline instead. A root script
 // scans every file regardless -- and the selftest pins that reach: if the scanned
 // set ever stops including `packages/stryker-js/`, the guard has been neutered
 // and the selftest fails.

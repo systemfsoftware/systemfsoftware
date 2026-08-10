@@ -1,6 +1,6 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
-import { CAST_EXPECTED, CAST_FIX, meta, Options } from './adapter-no-cast.config.js'
+import { CAST_EXPECTED, CAST_FIX, meta } from './adapter-no-cast.config.js'
 
 export type MessageIds = 'asAssertion' | 'angleBracketAssertion'
 

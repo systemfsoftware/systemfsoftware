@@ -1,0 +1,25 @@
+deno.lock
+http/testdata/%25A.txt
+http/testdata/file#2.txt
+http/testdata/test file.txt
+docs/
+
+# rust build output
+crypto/_wasm/target
+cli/testdata/unicode_width_crate/target
+
+# coverage
+coverage/
+
+# misc files
+.DS_Store
+.idea
+.vim
+_tmp/
+!_tmp/.keep
+*.sublime-project
+*.sublime-workspace
+
+# tsconfig for bun
+/tsconfig.json
+.claude/

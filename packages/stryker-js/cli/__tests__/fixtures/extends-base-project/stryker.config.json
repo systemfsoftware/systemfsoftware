@@ -1,0 +1,16 @@
+{
+  "extends": "@systemfsoftware/stryker-js-mutation-run/config/base",
+  "testRunner": "command",
+  "coverageAnalysis": "off",
+  "reporters": [
+    "progress-stream"
+  ],
+  "mutate": [
+    "src/**/*.js"
+  ],
+  "tempDirName": ".stryker-tmp",
+  "checkers": [],
+  "plugins": [],
+  "incremental": false,
+  "ignorers": []
+}

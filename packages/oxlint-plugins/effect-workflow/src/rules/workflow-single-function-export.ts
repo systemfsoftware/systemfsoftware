@@ -1,7 +1,7 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
 import { functionVariableDeclaratorName, getExportedWorkflowFunction } from './exported-workflow-fn.js'
-import { CLASS_NAME_FALLBACK, meta, Options } from './workflow-single-function-export.config.js'
+import { CLASS_NAME_FALLBACK, meta } from './workflow-single-function-export.config.js'
 
 export type MessageIds = 'tooManyFunctionExports' | 'disallowedExport'
 

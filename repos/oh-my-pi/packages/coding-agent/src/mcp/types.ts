@@ -100,6 +100,13 @@ export interface MCPStdioServerConfig extends MCPServerConfigBase {
 	command: string;
 	args?: string[];
 	env?: Record<string, string>;
+	/**
+	 * `literal`: env values are opaque plugin package data (Agent Plugins
+	 * §§4.1/9.2) — no env-name lookup, no `!command` execution, no dropping of
+	 * empty values. The provider already applied the only permitted expansion
+	 * (`${PLUGIN_ROOT}`/`${PLUGIN_DATA}`).
+	 */
+	envPolicy?: "literal";
 	cwd?: string;
 }
 
@@ -108,6 +115,12 @@ export interface MCPHttpServerConfig extends MCPServerConfigBase {
 	type: "http";
 	url: string;
 	headers?: Record<string, string>;
+	/**
+	 * `origin-locked`: configured headers are literal package data pinned to the
+	 * configured URL's origin (Agent Plugins §7.2.1) — never expanded, never
+	 * forwarded cross-origin, and client-generated headers win case-insensitively.
+	 */
+	headerPolicy?: "origin-locked";
 }
 
 /** SSE server configuration (deprecated, use HTTP) */
@@ -115,6 +128,8 @@ export interface MCPSseServerConfig extends MCPServerConfigBase {
 	type: "sse";
 	url: string;
 	headers?: Record<string, string>;
+	/** See {@link MCPHttpServerConfig.headerPolicy}. */
+	headerPolicy?: "origin-locked";
 }
 
 export type MCPServerConfig = MCPStdioServerConfig | MCPHttpServerConfig | MCPSseServerConfig;

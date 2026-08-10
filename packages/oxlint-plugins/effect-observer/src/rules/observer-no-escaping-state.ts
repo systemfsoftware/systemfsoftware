@@ -6,7 +6,6 @@ import {
   MODULE_LEVEL_LET_FIX,
   MUTABLE_CONTAINERS,
   MUTABLE_MODULE_CONSTANT_FIX,
-  Options,
 } from './observer-no-escaping-state.config.js'
 
 export type MessageIds = 'moduleLevelLet' | 'mutableModuleConstant'

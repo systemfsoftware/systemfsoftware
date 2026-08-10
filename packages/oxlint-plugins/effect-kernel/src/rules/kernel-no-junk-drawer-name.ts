@@ -1,7 +1,7 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
 import { Array as A, Option, Schema as S } from 'effect'
-import { BANNED_SEGMENTS, KERNEL_SUFFIX, meta, Options } from './kernel-no-junk-drawer-name.config.js'
+import { BANNED_SEGMENTS, KERNEL_SUFFIX, meta } from './kernel-no-junk-drawer-name.config.js'
 
 export type MessageIds = 'junkDrawerSegment'
 

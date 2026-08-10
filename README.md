@@ -4,7 +4,7 @@
 
 _Effect-TS libraries and the lint plugin that enforces the [constitution](https://systemfsoftware.com/constitution)_
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
+[![License: Apache 2.0](https://img.shields.io/badge/license-Apache_2.0-blue?style=flat-square)](LICENSE)
 [![CI](https://img.shields.io/github/actions/workflow/status/systemfsoftware/systemfsoftware/release.yml?branch=main&style=flat-square&label=CI)](https://github.com/systemfsoftware/systemfsoftware/actions)
 [![Constitution](https://img.shields.io/badge/built%20to-the%20constitution-black?style=flat-square)](https://systemfsoftware.com/constitution)
 
@@ -46,4 +46,4 @@ Read the [constitution](https://systemfsoftware.com/constitution) and [`CONSTITU
 
 ## License
 
-Licensed under [MIT](LICENSE).
+Licensed under [Apache 2.0](LICENSE).

@@ -86,7 +86,9 @@ describe("loadEntriesFromFileStream (Bun.JSONL parity)", () => {
 		].join("\n");
 		const file = await writeTemp(content);
 		const visited: FileEntry[] = [];
-		const titleSlot = await sessionLoader.visitEntriesFromFileStream(file, entry => visited.push(entry));
+		const titleSlot = await sessionLoader.visitEntriesFromFileStream(file, entry => {
+			visited.push(entry);
+		});
 
 		expect(titleSlot?.title).toBe("Visitor");
 		expect(entryIds(visited)).toEqual(["s1", "m1", "m2"]);
@@ -101,9 +103,33 @@ describe("loadEntriesFromFileStream (Bun.JSONL parity)", () => {
 		const file = await writeTemp(content);
 		const visited: FileEntry[] = [];
 
-		await sessionLoader.visitEntriesFromFileStream(file, entry => visited.push(entry));
+		await sessionLoader.visitEntriesFromFileStream(file, entry => {
+			visited.push(entry);
+		});
 
 		expect(entryIds(visited)).toEqual(["s1", "m1", "m2"]);
+	});
+
+	it("bounds visitor scans by physical records, including malformed lines", async () => {
+		const content = [
+			JSON.stringify(HEADER),
+			"{ malformed one",
+			"{ malformed two",
+			"{ malformed three",
+			JSON.stringify(msg("after-bad", "s1", "must not be visited")),
+		].join("\n");
+		const file = await writeTemp(content);
+		const visited: FileEntry[] = [];
+
+		await sessionLoader.visitEntriesFromFileStream(
+			file,
+			entry => {
+				visited.push(entry);
+			},
+			{ maxRecords: 2 },
+		);
+
+		expect(entryIds(visited)).toEqual(["s1"]);
 	});
 
 	it("propagates ENOENT errors thrown by the visitor", async () => {

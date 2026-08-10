@@ -57,4 +57,4 @@ Browse [`src/rules/`](src/rules/) for every rule and its implementation — that
 
 ## License
 
-MIT
+Apache 2.0

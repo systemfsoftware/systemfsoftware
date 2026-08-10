@@ -1,4 +1,5 @@
 import { Schema } from 'effect'
+import { MAX_CHILDREN_CEILING } from './supervisor-dynamic.kernel.js'
 
 export const IntensityConfig = Schema.Struct({
   restarts: Schema.Int.pipe(Schema.greaterThanOrEqualTo(0)),
@@ -40,3 +41,9 @@ export class TickPolicyConfig extends Schema.Class<TickPolicyConfig>('TickPolicy
   tickTimeout: Schema.DurationFromSelf,
   startLogLevel: Schema.optional(Schema.Literal('debug', 'info')),
 }) {}
+
+export const MaxChildren = Schema.Int.pipe(
+  Schema.between(1, MAX_CHILDREN_CEILING),
+  Schema.brand('MaxChildren'),
+)
+export type MaxChildren = typeof MaxChildren.Type

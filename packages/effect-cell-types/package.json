@@ -1,6 +1,6 @@
 {
   "name": "@systemfsoftware/effect-cell-types",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "version": "1.0.1",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
@@ -45,7 +45,7 @@
   },
   "devDependencies": {
     "@microsoft/api-extractor": "catalog:",
-    "@systemfsoftware/arethetypeswrong-cli": "workspace:^",
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
@@ -53,7 +53,6 @@
     "effect": "catalog:",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
-    "vite-tsconfig-paths": "catalog:",
     "vitest": "catalog:"
   },
   "peerDependencies": {

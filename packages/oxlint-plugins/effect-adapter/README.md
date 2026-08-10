@@ -82,4 +82,4 @@ A: The composition root selects the port's implementation by importing the Layer
 
 ## License
 
-[MIT](https://github.com/systemfsoftware/systemfsoftware/blob/main/LICENSE)
+[Apache 2.0](https://github.com/systemfsoftware/systemfsoftware/blob/main/LICENSE)

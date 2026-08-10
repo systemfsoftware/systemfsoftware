@@ -10,7 +10,7 @@ Exports `inlineSchemaTests` — a Vite plugin that walks the consumer's `src/`, 
   do: rely on the injected law tests for round-trip identity and encode stability of every exported schema; reserve hand-written property tests for domain invariants
   dont: hand-write it.prop cases re-asserting decode∘encode identity or S.equivalence roundtrips for a schema the plugin already covers
   harm: a hand-written law test duplicates the injected one and drifts — two sources of truth for the same law
-  check: grep finds no hand-written S.equivalence roundtrip it.prop in a consumer's *.test.ts
+  check: `grep -rnE 'S\.equivalence' packages/effect-daemon-spec/src packages/hex-schema/src` returns nothing — no hand-written S.equivalence roundtrip it.prop in a consumer *.test.ts
 ```
 
 | Check | Command                                                       |

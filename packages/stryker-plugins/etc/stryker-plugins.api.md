@@ -4,8 +4,8 @@
 
 ```ts
 
-import { PluginKind } from '@stryker-mutator/api/plugin';
-import { ValuePlugin } from '@stryker-mutator/api/plugin';
+import { PluginKind } from '@systemfsoftware/stryker-js-plugin-api/plugin';
+import { ValuePlugin } from '@systemfsoftware/stryker-js-plugin-api/plugin';
 
 // @public (undocumented)
 export const strykerPlugins: ValuePlugin<PluginKind.Ignore>[];

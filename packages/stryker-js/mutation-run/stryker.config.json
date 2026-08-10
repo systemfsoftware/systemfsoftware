@@ -1,0 +1,33 @@
+{
+  "extends": "@systemfsoftware/stryker-js-mutation-run/config/base",
+  "mutate": [
+    "src/test-contribution.ts"
+  ],
+  "$schema": "./schema/stryker-schema.json",
+  "plugins": [
+    "@systemfsoftware/stryker-js-vitest-runner"
+  ],
+  "vitest": {
+    "configFile": "vitest.stryker.config.ts",
+    "dir": ".",
+    "related": true
+  },
+  "reporters": [
+    "progress",
+    "json"
+  ],
+  "ignorePatterns": [
+    "reports",
+    "coverage",
+    "dist"
+  ],
+  "thresholds": {
+    "high": 100,
+    "low": 100,
+    "break": 100
+  },
+  "checkers": null,
+  "htmlReporter": null,
+  "typescriptChecker": null,
+  "ignorers": null
+}

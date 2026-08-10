@@ -152,8 +152,8 @@ const validate = () => {
 // the check stays green while manifests are being repaired. The accepted side
 // pins all three URL spellings npm normalizes identically; the rejected side
 // pins the failure modes npm actually 422s on.
-const PACKAGE_NAME = '@systemfsoftware/stryker-js-core'
-const REL_DIR = 'packages/stryker-js/core'
+const PACKAGE_NAME = '@systemfsoftware/stryker-js-mutation-run'
+const REL_DIR = 'packages/stryker-js/mutation-run'
 const OTHER_REPO = 'git+https://github.com/someone-else/other.git'
 const OTHER_REPO_NORMALIZED = 'https://github.com/someone-else/other'
 

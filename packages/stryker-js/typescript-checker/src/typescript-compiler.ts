@@ -1,17 +1,17 @@
 import { readFileSync } from 'fs'
 import path from 'path'
 
-import type { Mutant, StrykerOptions } from '@stryker-mutator/api/core'
-import type { Logger } from '@stryker-mutator/api/logging'
-import { commonTokens, tokens } from '@stryker-mutator/api/plugin'
+import type { Mutant, StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
+import type { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
+import { commonTokens, tokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 import { Either } from 'effect'
 import { type SourceFile, SyntaxKind } from 'typescript/unstable/ast'
 import type { FileSystem } from 'typescript/unstable/fs'
 import { API, type Diagnostic, type DocumentIdentifier, type Program, type Snapshot } from 'typescript/unstable/sync'
 
-import { HybridFileSystem } from './fs/index.js'
 import { TSFileNode } from './grouping/ts-file-node.js'
 import * as pluginTokens from './plugin-tokens.js'
+import { HybridFileSystem } from './project/index.js'
 import {
   determineBuildModeEnabled,
   getSourceMappingURL,

@@ -1,6 +1,6 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
-import { meta, Options } from './handler-single-handler-export.config.js'
+import { meta } from './handler-single-handler-export.config.js'
 
 export type MessageIds = 'tooManyFunctionExports' | 'disallowedExport'
 

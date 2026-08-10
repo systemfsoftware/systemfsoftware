@@ -14,11 +14,16 @@ import { type ConfiguredThinkingLevel, prewalkWouldBeNoop } from "../thinking";
 import type { PlanProposalHandler } from "../tools/resolve";
 import { ToolError } from "../tools/tool-errors";
 import type { PlanYolo, Prewalk } from "./agent-session-types";
+import { PREWALK_PLAN_MESSAGE_TYPE } from "./messages";
 import type { SessionManager } from "./session-manager";
 
-const PREWALK_PLAN_MESSAGE_TYPE = "prewalk-plan";
 const PREWALK_CONTINUE_MESSAGE_TYPE = "prewalk-continue";
 const PREWALK_CHECKLIST_MESSAGE_TYPE = "prewalk-checklist";
+
+/** Hidden plan steering is consumed within the live run and must not reappear after a context rebuild. */
+export function isPrewalkPlanNudge(message: AgentMessage): boolean {
+	return message.role === "custom" && message.customType === PREWALK_PLAN_MESSAGE_TYPE;
+}
 const PREWALK_ACTION_TOOLS: Record<string, true> = {
 	edit: true,
 	write: true,
@@ -99,10 +104,40 @@ export class PrewalkCoordinator {
 		return this.#prewalk;
 	}
 
+	#isNoop(prewalk: Prewalk): boolean {
+		return prewalkWouldBeNoop(
+			this.#host.model(),
+			this.#host.configuredThinkingLevel(),
+			prewalk.target,
+			prewalk.thinkingLevel,
+		);
+	}
+
+	#clearPrewalkState(): void {
+		this.#prewalk = undefined;
+		this.#planInjected = false;
+		this.#continuePending = false;
+		this.#todoSeen = false;
+	}
+
+	#disarmNoop(prewalk: Prewalk): void {
+		this.#clearPrewalkState();
+		this.#host.emitNotice(
+			"info",
+			`Prewalk: target ${prewalk.target.provider}/${prewalk.target.id} already matches the active model and thinking level; nothing to switch.`,
+			"prewalk",
+		);
+	}
+
 	/** Advances the one-way prewalk switch at a completed assistant-turn boundary. */
 	async advanceAtTurnEnd(liveMessages: AgentMessage[], context: AgentTurnEndContext | undefined): Promise<void> {
 		const prewalk = this.#prewalk;
 		if (!prewalk || context?.message.role !== "assistant") return;
+		if (this.#isNoop(prewalk)) {
+			this.#scrubPlanNudge(liveMessages);
+			this.#disarmNoop(prewalk);
+			return;
+		}
 		if (context.toolResults.some(result => result.toolName === "todo" && !result.isError)) this.#todoSeen = true;
 
 		const hasToolResults = context.toolResults.length > 0;
@@ -147,18 +182,12 @@ export class PrewalkCoordinator {
 		}
 		this.#scrubPlanNudge(liveMessages);
 		const target = prewalk.target;
-		const currentModel = this.#host.model();
-		if (prewalkWouldBeNoop(currentModel, this.#host.configuredThinkingLevel(), target, prewalk.thinkingLevel)) {
-			this.#prewalk = undefined;
-			this.#host.emitNotice(
-				"info",
-				`Prewalk: target ${target.provider}/${target.id} already matches the active model and thinking level; nothing to switch.`,
-				"prewalk",
-			);
+		if (this.#isNoop(prewalk)) {
+			this.#disarmNoop(prewalk);
 			return;
 		}
 		await this.#host.setModelTemporary(target, prewalk.thinkingLevel, { ephemeral: true });
-		this.#prewalk = undefined;
+		this.#clearPrewalkState();
 		this.#host.emitNotice(
 			"info",
 			`Prewalk: switched to ${target.provider}/${target.id} after first ${action.toolName} call.`,
@@ -175,18 +204,29 @@ export class PrewalkCoordinator {
 	}
 
 	/** Arms a prewalk immediately for an explicit slash-command request. */
-	arm(target: Model, thinkingLevel?: ConfiguredThinkingLevel): void {
-		if (this.#prewalk) {
+	arm(target: Model, thinkingLevel?: ConfiguredThinkingLevel): boolean {
+		const active = this.#prewalk;
+		if (active) {
 			this.#host.emitNotice(
 				"info",
-				`Prewalk: already armed for ${this.#prewalk.target.provider}/${this.#prewalk.target.id}, waiting for the first edit/write.`,
+				`Prewalk: already armed for ${active.target.provider}/${active.target.id}, waiting for the first edit/write.`,
 				"prewalk",
 			);
-			return;
+			return (
+				active.target.provider === target.provider &&
+				active.target.id === target.id &&
+				active.thinkingLevel === thinkingLevel
+			);
 		}
-		this.#prewalk = { target, thinkingLevel };
+		const candidate = { target, thinkingLevel };
+		if (this.#isNoop(candidate)) {
+			this.#disarmNoop(candidate);
+			return false;
+		}
+		this.#prewalk = candidate;
 		this.#planInjected = true;
 		this.#continuePending = true;
+		this.#todoSeen = false;
 		this.#host.agent.steer({
 			role: "custom",
 			customType: PREWALK_PLAN_MESSAGE_TYPE,
@@ -200,6 +240,7 @@ export class PrewalkCoordinator {
 			`Prewalk: armed for ${target.provider}/${target.id} — will switch at the first edit/write once the todo list exists.`,
 			"prewalk",
 		);
+		return true;
 	}
 
 	/** Lazily enables plan-yolo's plan phase before the first prompt is built. */
@@ -220,8 +261,7 @@ export class PrewalkCoordinator {
 
 	#scrubPlanNudge(liveMessages: AgentMessage[]): void {
 		if (!this.#planInjected) return;
-		const isPlanNudge = (message: AgentMessage): boolean =>
-			message.role === "custom" && message.customType === PREWALK_PLAN_MESSAGE_TYPE;
+		const isPlanNudge = isPrewalkPlanNudge;
 		for (let index = liveMessages.length - 1; index >= 0; index--) {
 			if (!isPlanNudge(liveMessages[index])) continue;
 			invalidateMessageCache(liveMessages[index]);

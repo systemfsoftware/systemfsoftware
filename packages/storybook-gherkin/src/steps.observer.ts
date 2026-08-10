@@ -1,4 +1,4 @@
-import { Array as Arr, Either, Match, Schema } from 'effect'
+import { Array as Arr, Effect, Either, Match, Schema } from 'effect'
 import type { screen, UserEventObject, within } from 'storybook/test'
 import type { Simplify, UnionToIntersection } from 'type-fest'
 
@@ -99,6 +99,13 @@ export interface StepContext<TArgs = unknown> {
   readonly parameters: Record<string, unknown>
   readonly loaded: Record<string, unknown>
   readonly canvasElement: HTMLElement
+  /**
+   * Fires on story teardown (remount, navigation, HMR). Since the 2026-08-09
+   * Effect-composition refactor, the play edge interrupts the in-flight step
+   * on abort — steps no longer run to completion after teardown. The step
+   * handler's own promise is abandoned, not cancelled: observe this signal
+   * for cleanup or to race long-running work.
+   */
   readonly abortSignal: AbortSignal
   readonly reporting: ReportingAPI
   readonly context: PlayContext<TArgs>
@@ -121,7 +128,10 @@ export type StepHandler<TCaps, TArgs = unknown> = (
 export interface Step<TArgs = unknown> {
   readonly _tag: 'Step'
   readonly model: StepModel
-  readonly run: (values: Readonly<Record<string, string>>, ctx: StepContext<TArgs>) => Promise<void>
+  readonly run: (
+    values: Readonly<Record<string, string>>,
+    ctx: StepContext<TArgs>,
+  ) => Effect.Effect<void, CaptureDecodeFailed>
 }
 
 export interface StepBuilder<THoles extends readonly Hole[], TArgs = unknown> {
@@ -176,20 +186,16 @@ const decodeCapture = (
   cap: CaptureModel,
   values: Readonly<Record<string, string>>,
   model: StepModel,
-): unknown => {
+): Either.Either<unknown, CaptureDecodeFailed> => {
   const raw = values[cap.name] ?? cap.default
-  if (cap.schema === undefined) return raw
-  return Either.match(Schema.decodeUnknownEither(cap.schema)(raw), {
-    onLeft: (error) => {
-      throw new CaptureDecodeFailed({
-        step: displayPattern(model),
-        capture: cap.name,
-        value: raw === undefined ? '' : raw,
-        cause: error,
-      })
-    },
-    onRight: (v) => v,
-  })
+  if (cap.schema === undefined) return Either.right(raw)
+  return Either.mapLeft(Schema.decodeUnknownEither(cap.schema)(raw), (error) =>
+    new CaptureDecodeFailed({
+      step: displayPattern(model),
+      capture: cap.name,
+      value: raw === undefined ? '' : raw,
+      cause: error,
+    }))
 }
 
 const makeStepCtor = (keyword: Keyword): StepCtor => {
@@ -210,13 +216,14 @@ const makeStepCtor = (keyword: Keyword): StepCtor => {
       const _step: Step<TArgs> = {
         _tag: STEP_TAG,
         model,
-        run: async (values: Readonly<Record<string, string>>, ctx: StepContext<TArgs>) => {
-          const caps: Record<string, unknown> = {}
-          for (const cap of model.captures) {
-            caps[cap.name] = decodeCapture(cap, values, model)
-          }
-          await handler(ctx, caps)
-        },
+        run: (values: Readonly<Record<string, string>>, ctx: StepContext<TArgs>) =>
+          Effect.forEach(model.captures, (cap) => decodeCapture(cap, values, model)).pipe(
+            Effect.flatMap((decoded) => {
+              const caps: Record<string, unknown> = {}
+              for (const [cap, value] of Arr.zip(model.captures, decoded)) caps[cap.name] = value
+              return Effect.promise(() => Promise.resolve(handler(ctx, caps)))
+            }),
+          ),
       }
       return _step
     }

@@ -2,11 +2,11 @@ import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
 
-import type { Location, Mutant, StrykerOptions } from '@stryker-mutator/api/core'
-import type { Logger } from '@stryker-mutator/api/logging'
+import type { Location, Mutant, StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
+import type { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
 import { describe, expect, it } from 'vitest'
 
-import { HybridFileSystem } from '../../src/fs/hybrid-file-system.js'
+import { HybridFileSystem } from '../../src/project/hybrid-file-system.js'
 import { TypescriptChecker } from '../../src/typescript-checker.js'
 import { TypescriptCompiler } from '../../src/typescript-compiler.js'
 

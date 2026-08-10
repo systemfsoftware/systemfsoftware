@@ -23,9 +23,8 @@ const COPILOT_MODEL_RETRY_BASE_DELAY_MS = 400;
 const COPILOT_RETRY_AFTER_MAX_WAIT_MS = 30_000;
 
 /**
- * Wrap an initial Copilot request so transient model-availability 400s
- * (`model_not_supported`, `model_not_available_for_integrator`) are retried a
- * small number of times. No-op for non-Copilot providers.
+ * Wrap an initial Copilot request so transient `model_not_supported` 400s are
+ * retried a small number of times. No-op for non-Copilot providers.
  *
  * The callback **MUST** create a fresh in-flight request each invocation — a
  * once-consumed AsyncIterable cannot be re-iterated.

@@ -82,6 +82,7 @@ import { modelsAreEqual } from "@oh-my-pi/pi-catalog/models";
 import { MacOSPowerAssertion } from "@oh-my-pi/pi-natives";
 import {
 	$env,
+	APP_NAME,
 	escapeXmlText,
 	formatDuration,
 	getAgentDbPath,
@@ -126,6 +127,7 @@ import type {
 	ToolExecutionEndEvent,
 	ToolExecutionStartEvent,
 	ToolExecutionUpdateEvent,
+	ToolInfo,
 	TreePreparation,
 	TurnEndEvent,
 	TurnStartEvent,
@@ -172,8 +174,8 @@ import {
 	deobfuscateSessionContext,
 	deobfuscateToolArguments,
 	obfuscateProviderContext,
-	type SecretObfuscator,
-} from "../secrets/obfuscator";
+} from "../secrets/message-transform";
+import type { SecretObfuscator } from "../secrets/obfuscator";
 import {
 	AUTO_THINKING,
 	type ConfiguredThinkingLevel,
@@ -302,7 +304,7 @@ import {
 	USER_INTERRUPT_LABEL,
 } from "./messages";
 import { ModelControls, type ModelControlsHost } from "./model-controls";
-import { PrewalkCoordinator, type PrewalkCoordinatorHost } from "./prewalk";
+import { isPrewalkPlanNudge, PrewalkCoordinator, type PrewalkCoordinatorHost } from "./prewalk";
 import {
 	isAdvisorCard,
 	isDisplayableQueuedMessage,
@@ -445,6 +447,7 @@ export class AgentSession {
 	// Event subscription state
 	#unsubscribeAgent?: () => void;
 	#cancelExitRecorder?: () => void;
+	#cancelFatalRecoveryHint?: () => void;
 	#exitRecorded = false;
 	#unsubscribeAppendOnly?: () => void;
 	#unsubscribeModelRoles?: () => void;
@@ -878,8 +881,8 @@ export class AgentSession {
 	/**
 	 * Arm prewalk outside the normal startup path so an explicit slash command starts immediately.
 	 */
-	armPrewalk(target: Model, thinkingLevel?: ConfiguredThinkingLevel): void {
-		this.#prewalk.arm(target, thinkingLevel);
+	armPrewalk(target: Model, thinkingLevel?: ConfiguredThinkingLevel): boolean {
+		return this.#prewalk.arm(target, thinkingLevel);
 	}
 
 	/** Validate the active plan artifact and shape an `xd://propose` result for review-mode hosts. */
@@ -1375,6 +1378,14 @@ export class AgentSession {
 		});
 		this.#cancelExitRecorder = postmortem.register(`agent-session:${this.sessionManager.getSessionId()}`, reason => {
 			this.#recordSessionExit(reason);
+		});
+		this.#cancelFatalRecoveryHint = postmortem.registerFatalRecoveryHint(() => {
+			const sessionId = this.sessionManager.getSessionId();
+			if (!sessionId || !this.sessionManager.getSessionFile()) return undefined;
+			return {
+				label: this.#agentId ?? (this.#agentKind === "main" ? "Main" : "Agent"),
+				command: `${APP_NAME} --resume ${sessionId}`,
+			};
 		});
 
 		const advisorsHost: SessionAdvisorsHost = {
@@ -2045,6 +2056,41 @@ export class AgentSession {
 	 */
 	#prunedTerminalRefusal: AssistantMessage | undefined = undefined;
 
+	/**
+	 * In-flight {@link #dispatchAgentEvent} promises. agent-core invokes the
+	 * event subscriber fire-and-forget, so a `message_end`/`agent_end` handler
+	 * can still be awaiting extension/subscriber/maintenance work — and thus its
+	 * `sessionManager`/`agent.state` append — after `agent.waitForIdle()`
+	 * resolves. Dispose drains this set so the late append lands *before* the
+	 * memory release, never after it.
+	 */
+	#inFlightEventHandlers = new Set<Promise<void>>();
+
+	/**
+	 * Subscriber entry point. Delegates to {@link #dispatchAgentEvent} and
+	 * records the dispatch in {@link #inFlightEventHandlers} until it settles so
+	 * {@link #drainInFlightEventHandlers} can await the session's async
+	 * event/persistence pipeline during teardown.
+	 */
+	#handleAgentEvent = (event: AgentEvent): Promise<void> => {
+		const processing = this.#dispatchAgentEvent(event);
+		this.#inFlightEventHandlers.add(processing);
+		void processing.finally(() => this.#inFlightEventHandlers.delete(processing)).catch(() => {});
+		return processing;
+	};
+
+	/**
+	 * Await every in-flight event handler (and any it chains into) so a late
+	 * message/entry append cannot land after the caller clears session memory.
+	 * The agent must already be idle — otherwise new events keep arriving and
+	 * this never drains.
+	 */
+	async #drainInFlightEventHandlers(): Promise<void> {
+		while (this.#inFlightEventHandlers.size > 0) {
+			await Promise.allSettled([...this.#inFlightEventHandlers]);
+		}
+	}
+
 	/** Internal handler for agent events - shared by subscribe and reconnect.
 	 *
 	 * `agent_end` handling schedules deferred post-prompt recovery work
@@ -2059,7 +2105,7 @@ export class AgentSession {
 	 * `#postPromptTasksPromise` is set the moment `#emit` invokes this handler, so
 	 * the recovery wait always sees the in-flight handler and blocks until it — and
 	 * everything it schedules — settles. */
-	#handleAgentEvent = async (event: AgentEvent): Promise<void> => {
+	#dispatchAgentEvent = async (event: AgentEvent): Promise<void> => {
 		if (event.type === "tool_execution_end" && this.#isTerminalYieldToolResult(event)) {
 			const alreadyTerminated = this.#synchronouslyTerminatedYieldToolCallIds.delete(event.toolCallId);
 			if (!alreadyTerminated) {
@@ -2478,14 +2524,17 @@ export class AgentSession {
 			const persistMessageEnd = () => {
 				// Check if this is a hook/custom message
 				if (event.message.role === "hookMessage" || event.message.role === "custom") {
-					// Persist as CustomMessageEntry
-					this.sessionManager.appendCustomMessageEntry(
-						event.message.customType,
-						event.message.content,
-						event.message.display,
-						event.message.details,
-						event.message.attribution ?? "agent",
-					);
+					// Prewalk's plan nudge is a one-run steering instruction. Persisting it would
+					// resurrect the consumed prompt on resume, fork, or any context rebuild.
+					if (!isPrewalkPlanNudge(event.message)) {
+						this.sessionManager.appendCustomMessageEntry(
+							event.message.customType,
+							event.message.content,
+							event.message.display,
+							event.message.details,
+							event.message.attribution ?? "agent",
+						);
+					}
 					if (event.message.role === "custom" && event.message.customType === "ttsr-injection") {
 						this.#ttsr.markInjectedFromDetails(event.message.details);
 					}
@@ -2634,7 +2683,7 @@ export class AgentSession {
 				// here after maintenance routing, tagged isTerminal so subscribers can
 				// tell final settles from scheduled continuations.
 				await this.#emitSessionEvent({ ...event, isTerminal: !options?.willContinue });
-				void this.#emitAgentEndNotification(activeMessages, options).catch(err => {
+				void this.#emitAgentEndNotification([...activeMessages], options).catch(err => {
 					logger.error("Agent end extension notification failed", { err });
 				});
 			};
@@ -3006,10 +3055,22 @@ export class AgentSession {
 				}
 				this.#beginInFlight();
 				try {
-					await this.#recovery.maybeRestoreRetryFallbackPrimary();
+					const reverted = await this.#recovery.maybeRestoreRetryFallbackPrimary();
 					if (signal.aborted || this.#isDisposed) {
 						this.#skipAgentContinue("post-restore-unavailable", options);
 						return;
+					}
+					// A cooldown-expiry revert can drop the active window below the
+					// accumulated context. The user-prompt path re-checks context after
+					// the revert via runPrePromptCompactionIfNeeded; the auto-continue
+					// path must do the same so agent.continue() never sends a
+					// predictably oversized request to the reverted (smaller) model.
+					if (reverted) {
+						await this.#maintenance.runPrePromptCompactionIfNeeded([]);
+						if (signal.aborted || this.#isDisposed) {
+							this.#skipAgentContinue("post-restore-unavailable", options);
+							return;
+						}
 					}
 					if (this.settings.get("retry.usageAwareFallback")) {
 						if (!(await this.#runQueuedUsageAwarePreflight(signal))) {
@@ -3429,7 +3490,7 @@ export class AgentSession {
 				success: event.success,
 				attempt: event.attempt,
 				finalError: event.finalError,
-				recoveredErrors: event.recoveredErrors,
+				retryErrors: event.retryErrors,
 			});
 		} else if (event.type === "ttsr_triggered") {
 			await this.#extensionRunner.emit({ type: "ttsr_triggered", rules: event.rules });
@@ -3758,6 +3819,8 @@ export class AgentSession {
 		this.#recordSessionExit(options.reason ?? "dispose");
 		this.#cancelExitRecorder?.();
 		this.#cancelExitRecorder = undefined;
+		this.#cancelFatalRecoveryHint?.();
+		this.#cancelFatalRecoveryHint = undefined;
 		try {
 			await emitSessionShutdownEvent(this.#extensionRunner);
 		} catch (error) {
@@ -3807,8 +3870,6 @@ export class AgentSession {
 		this.#releasePowerAssertion();
 		await cleanupEmptyMoveSession(this.sessionManager, this.#movedFromEmptySessionFile);
 		this.#movedFromEmptySessionFile = undefined;
-		// All teardown branches that can append session entries have settled.
-		await this.sessionManager.close();
 		this.#closeAllProviderSessions("dispose");
 		this.setHindsightSessionState(undefined);
 		hindsightState?.dispose();
@@ -3823,6 +3884,77 @@ export class AgentSession {
 		}
 		this.#eventListeners = [];
 		this.#sessionChangeCallbacks.clear();
+
+		// A dispose triggered mid-turn (Ctrl-C / timeout / hard-killed subagent)
+		// only *signals* the agent loop via the earlier abort(); the loop and the
+		// session's fire-and-forget event handlers still unwind asynchronously.
+		// Detach the response/SSE interceptors so a late frame cannot re-record
+		// into rawSseDebugBuffer, then wait (bounded) for both the core run AND
+		// the in-flight event/persistence handlers to settle — the latter can
+		// still append the finished message/entries after agent.waitForIdle()
+		// alone. Without this the release races the unwind and a disposed session
+		// is repopulated with exactly the state we are trying to drop.
+		this.agent.setProviderResponseInterceptor(undefined);
+		this.agent.setRawSseEventInterceptor(undefined);
+		let drained = false;
+		try {
+			await withTimeout(
+				(async () => {
+					await this.agent.waitForIdle();
+					await this.#drainInFlightEventHandlers();
+				})(),
+				options.drainTimeoutMs ?? POST_PROMPT_DRAIN_TIMEOUT_MS,
+				"Timed out waiting for the active agent run to settle during dispose",
+			);
+			drained = true;
+		} catch (error) {
+			logger.warn("Active agent run still settling at dispose deadline", { error: String(error) });
+		}
+
+		// Event handlers can reopen the append writer while they persist their
+		// terminal message; that pipeline has drained (or hit the deadline).
+		// Raise the write barrier BEFORE the final close: a handler that
+		// outlived the deadline could otherwise enqueue disk work behind the
+		// closing tail while we await it, and that work would run against the
+		// file after a revival reopens it. The seal also bumps the disk epoch,
+		// superseding queued tail work and fencing already-running atomic
+		// rewrites at their commit guard; hot-path appends drained above are
+		// already durable, and close() (scheduled post-seal) still flushes and
+		// closes the writer.
+		this.sessionManager.seal();
+		await this.sessionManager.close();
+
+		// Release retained conversation memory. dispose() is terminal, and every
+		// revival path reopens the transcript from disk (AgentLifecycleManager
+		// reviver / persisted-revive / `history://`), so the in-memory copy is
+		// dead weight from here on. Dropping it lets a parked subagent's session
+		// graph shed its heavy payloads even while the lifecycle adoption record's
+		// reviver closure still references the session object. Fixes #8003.
+		this.#releaseRetainedSessionMemory();
+
+		// The deadline does not cancel the drain: a handler parked in a slow
+		// extension hook resumes afterwards and would repopulate exactly the
+		// state released above. Its disk writes are already dead — the release
+		// SEALED the session manager (a revival may reopen the same JSONL
+		// through a new manager the moment dispose returns, and this manager
+		// must never race that writer) — so re-run only the in-memory reset
+		// once the pipeline genuinely settles. The extension runner bounds hook
+		// runtime, so this deferred pass is not unbounded.
+		if (!drained) {
+			void (async () => {
+				await this.agent.waitForIdle();
+				await this.#drainInFlightEventHandlers();
+				this.#releaseRetainedSessionMemory();
+			})().catch(error => logger.warn("Deferred dispose finalization failed", { error: String(error) }));
+		}
+	}
+
+	/** Drop the in-memory conversation state after the terminal dispose flush. */
+	#releaseRetainedSessionMemory(): void {
+		this.agent.reset();
+		this.agent.setAppendOnlyContext(undefined);
+		this.rawSseDebugBuffer.clear();
+		this.sessionManager.releaseRetainedEntries();
 	}
 
 	#closeAllProviderSessions(reason: string): void {
@@ -4167,6 +4299,11 @@ export class AgentSession {
 	/** Names of every registered tool. */
 	getAllToolNames(): string[] {
 		return this.#tools.getAllToolNames();
+	}
+
+	/** Full metadata for every registered tool, including source provenance (backs `getAllTools()`). */
+	getAllToolInfos(): ToolInfo[] {
+		return this.#tools.getAllToolInfos();
 	}
 
 	/** Installs and activates the ephemeral vibe tool set. */
@@ -5255,11 +5392,13 @@ export class AgentSession {
 
 				if (result?.systemPrompt !== undefined) {
 					baseXdevCatalogDelivered = false;
-					this.agent.setSystemPrompt(result.systemPrompt);
+					this.#tools.setTurnSystemPromptOverride(result.systemPrompt);
 				} else {
+					this.#tools.clearTurnSystemPromptOverride();
 					this.agent.setSystemPrompt(beforeAgentStartSystemPrompt);
 				}
 			} else {
+				this.#tools.clearTurnSystemPromptOverride();
 				this.agent.setSystemPrompt(beforeAgentStartSystemPrompt);
 			}
 
@@ -5324,6 +5463,8 @@ export class AgentSession {
 				await this.#waitForPostPromptRecovery(generation);
 			}
 		} finally {
+			// The per-turn before_agent_start override lives only for this turn.
+			this.#tools.clearTurnSystemPromptOverride();
 			this.#usagePreflightReadyForNextModelCall = false;
 			this.#endInFlight();
 		}
@@ -6182,6 +6323,9 @@ export class AgentSession {
 			this.abortRetry();
 			this.#promptGeneration++;
 			this.#scheduledHiddenNextTurnGeneration = undefined;
+			// Abort the handoff first so generic compaction cancellation cannot replace
+			// the harness reason with an unreasoned "Handoff cancelled".
+			this.#handoff.abortHandoff(new Error(options?.reason ?? "Handoff aborted by session"));
 			if (options?.preserveCompaction) {
 				// Manual `/compact` installed its own #compactionAbortController before
 				// this internal abort and must keep it alive (that marker is what makes
@@ -6193,7 +6337,6 @@ export class AgentSession {
 			} else {
 				this.abortCompaction();
 			}
-			this.abortHandoff();
 			this.abortBash();
 			this.abortEval();
 			const postPromptDrain = this.#cancelPostPromptTasks();
@@ -6669,9 +6812,10 @@ export class AgentSession {
 	}
 
 	#extractRewindReport(messages: AgentMessage[]): string | undefined {
-		if (!this.#checkpointState) return undefined;
+		const checkpointState = this.#checkpointState;
+		if (!checkpointState) return undefined;
 		if (this.#pendingRewindReport) return this.#pendingRewindReport;
-		for (let i = messages.length - 1; i >= 0; i--) {
+		for (let i = messages.length - 1; i >= checkpointState.checkpointMessageCount; i--) {
 			const message = messages[i];
 			if (message?.role !== "toolResult" || message.isError) continue;
 			const semanticResult = semanticToolResult(message.toolName, message);

@@ -197,7 +197,7 @@ The tool returns one result per call; no streaming partial output is emitted fro
 - Network
   - CDP attach paths poll `http://127.0.0.1:<port>/json/version` or the supplied `cdp_url` `/json/version`.
   - Headless/browser-attach sessions create CDP websocket connections.
-  - Headless first-use Chromium download uses `@puppeteer/browsers`.
+  - Headless first-use Chromium download uses the in-house `@oh-my-pi/pi-utils/browsers` installer.
   - Loopback relay mode may start the machine-global `omp.browser.relay` daemon. The extension connects outbound to the relay, and Puppeteer connects to its CDP-compatible endpoint.
   - User `page` / `tab` operations perform normal browser network traffic.
 - Subprocesses / native bindings

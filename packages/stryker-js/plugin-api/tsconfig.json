@@ -1,0 +1,34 @@
+{
+  "extends": "@systemfsoftware/tsconfig/tsc/no-dom/library",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": ".",
+    "verbatimModuleSyntax": false,
+    "isolatedModules": false,
+    "noUncheckedIndexedAccess": false,
+    "exactOptionalPropertyTypes": false,
+    "noPropertyAccessFromIndexSignature": false,
+    "noImplicitOverride": false,
+    "skipLibCheck": true,
+    "types": [
+      "node"
+    ],
+    // Fork of @stryker-mutator/api. The overrides above reproduce upstream's
+    // tsconfig.settings.json exactly (strict: true, nothing else on), so the vendored source
+    // typechecks unmodified. The constitution policy in @systemfsoftware/tsconfig/effect is
+    // deliberately NOT extended — same reasoning as the two sibling forks.
+    "plugins": [
+      {
+        "name": "@effect/language-service"
+      }
+    ]
+  },
+  "include": [
+    "src",
+    "src-generated"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
+}

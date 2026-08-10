@@ -464,7 +464,7 @@ export class ExaProvider extends SearchProvider {
 
 	#settingsAllowSearch(): boolean {
 		try {
-			if (settings.get("exa.enabled") === false || settings.get("exa.enableSearch") === false) {
+			if (settings.get("exa.enabled") === false) {
 				return false;
 			}
 		} catch {

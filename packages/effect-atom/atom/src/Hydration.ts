@@ -48,7 +48,7 @@ export const dehydrate = (
 ): Array<DehydratedAtom> => {
   const encodeInitialResultMode = options?.encodeInitialAs ?? 'ignore'
   const arr: Array<DehydratedAtomValue> = Arr.empty<DehydratedAtomValue>()
-  const now = Date.now()
+  const now = performance.now()
   registry.getNodes().forEach((node, key) => {
     if (!Atom.isSerializable(node.atom)) return
     const atom = node.atom
@@ -57,17 +57,14 @@ export const dehydrate = (
     if (encodeInitialResultMode === 'ignore' && isInitial) return
     const encodedValue = atom[Atom.SerializableTypeId].encode(value)
 
-    // Inline deferred pattern (es2022 lib lacks Promise.withResolvers).
-    // Genuine typing: a fresh Promise whose resolver is captured externally.
+    // Deferred that resolves when the atom leaves Initial; the resolver is
+    // captured for the subscription callback below.
     let resultPromise: Promise<unknown> | undefined
     if (encodeInitialResultMode === 'promise' && isInitial) {
-      let resolvePromise!: (value: unknown) => void
-      const promise = new Promise<unknown>((resolve) => {
-        resolvePromise = resolve
-      })
+      const { promise, resolve } = Promise.withResolvers<unknown>()
       const unsubscribe = registry.subscribe(atom, (newValue) => {
         if (Result.isResult(newValue) && !Result.isInitial(newValue)) {
-          resolvePromise(atom[Atom.SerializableTypeId].encode(newValue))
+          resolve(atom[Atom.SerializableTypeId].encode(newValue))
           unsubscribe()
         }
       })

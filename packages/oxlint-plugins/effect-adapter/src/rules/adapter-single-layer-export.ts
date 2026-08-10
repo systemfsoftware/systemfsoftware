@@ -1,6 +1,6 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
-import { meta, Options } from './adapter-single-layer-export.config.js'
+import { meta } from './adapter-single-layer-export.config.js'
 
 export type MessageIds = 'tooManyLayerExports' | 'leakedHelper'
 

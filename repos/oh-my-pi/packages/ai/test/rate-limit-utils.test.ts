@@ -4,6 +4,7 @@ import { classify, Flag, is, isUsageLimit, retriable } from "@oh-my-pi/pi-ai/err
 import {
 	calculateRateLimitBackoffMs,
 	isConcurrencyCapExclusion,
+	isOpaqueStatusBody,
 	isUsageLimitOutcome,
 	isUsageLimitStatus,
 	parseRateLimitReason,
@@ -93,6 +94,40 @@ describe("parseRateLimitReason", () => {
 
 	it("returns UNKNOWN for unrecognised messages", () => {
 		expect(parseRateLimitReason("Something completely unexpected happened")).toBe("UNKNOWN");
+	});
+
+	it("classifies Simplified Chinese quota exhaustion as QUOTA_EXHAUSTED", () => {
+		// Zhipu Coding Plan returns this exact phrasing (type=1308) when the 5h
+		// window is spent. Previously classified UNKNOWN, so the session stayed
+		// pinned to the exhausted credential instead of rotating to a sibling key.
+		const zhipu =
+			"429 已达到 5 小时的使用上限。您的限额将在 2026-08-06 20:06:00 重置。\n已达到 5 小时的使用上限。您的限额将在 2026-08-06 20:06:00 重置。 (type=1308)";
+		expect(parseRateLimitReason(zhipu)).toBe("QUOTA_EXHAUSTED");
+		expect(parseRateLimitReason("已达到 5 小时的使用上限")).toBe("QUOTA_EXHAUSTED");
+		expect(parseRateLimitReason("您的限额将在 2026-08-06 20:06:00 重置")).toBe("QUOTA_EXHAUSTED");
+		expect(parseRateLimitReason("今日使用量已达上限，请明天再试")).toBe("QUOTA_EXHAUSTED");
+		expect(parseRateLimitReason("额度已用完，请充值")).toBe("QUOTA_EXHAUSTED");
+		expect(parseRateLimitReason("配额已用尽")).toBe("QUOTA_EXHAUSTED");
+		expect(parseRateLimitReason("额度已耗尽")).toBe("QUOTA_EXHAUSTED");
+		expect(parseRateLimitReason("配额用完")).toBe("QUOTA_EXHAUSTED");
+		expect(parseRateLimitReason("账户余额不足")).toBe("QUOTA_EXHAUSTED");
+	});
+
+	it("keeps Simplified Chinese rate limiting in the transient lane", () => {
+		// "速率限制" is a plain throttle, not an account quota cap — must not
+		// rotate credentials or classify as QUOTA_EXHAUSTED.
+		expect(parseRateLimitReason("429 已达到速率限制")).toBe("UNKNOWN");
+		expect(parseRateLimitReason("请求过于频繁，请稍后重试")).toBe("UNKNOWN");
+		// "达到…使用上限" requires the 使用 token, so a concurrency/rate cap phrased
+		// as "达到…上限" (no 使用) must NOT match — it stays in the upstream-backoff
+		// lane instead of burning a credential as a quota exhaustion.
+		expect(parseRateLimitReason("并发请求达到上限")).toBe("UNKNOWN");
+		expect(parseRateLimitReason("速率达到上限，请稍后重试")).toBe("UNKNOWN");
+		// Bare 已达上限 (no 使用 token) is a transient rate/concurrency cap, not a
+		// quota — must not rotate. Without this guard it burned a sibling credential.
+		expect(parseRateLimitReason("每分钟请求数已达上限，请稍后重试")).toBe("UNKNOWN");
+		expect(parseRateLimitReason("并发请求数已达上限，请稍后重试")).toBe("UNKNOWN");
+		expect(parseRateLimitReason("API 使用频率已达上限")).toBe("UNKNOWN");
 	});
 
 	it("classifies Codex usage limit error as QUOTA_EXHAUSTED", () => {
@@ -201,6 +236,27 @@ describe("isUsageLimit", () => {
 		expect(isUsageLimit("额度耗尽")).toBe(true);
 	});
 
+	it("detects Simplified Chinese quota exhaustion as a credential-rotatable usage limit", () => {
+		// Zhipu Coding Plan (type=1308). Without this match the error is UNKNOWN,
+		// Flag.UsageLimit is never set, and the session sticks to the exhausted
+		// api_key credential instead of rotating to the sibling key.
+		const zhipu =
+			"429 已达到 5 小时的使用上限。您的限额将在 2026-08-06 20:06:00 重置。\n已达到 5 小时的使用上限。您的限额将在 2026-08-06 20:06:00 重置。 (type=1308)";
+		expect(isUsageLimit(zhipu)).toBe(true);
+		expect(isUsageLimit("已达到 5 小时的使用上限")).toBe(true);
+		expect(isUsageLimit("您的限额将在 2026-08-06 20:06:00 重置")).toBe(true);
+		expect(isUsageLimit("今日使用量已达上限，请明天再试")).toBe(true);
+		expect(isUsageLimit("额度已用完，请充值")).toBe(true);
+		expect(isUsageLimit("配额已用尽")).toBe(true);
+		expect(isUsageLimit("账户余额不足")).toBe(true);
+	});
+
+	it("does not treat Simplified Chinese throttling as a usage limit", () => {
+		expect(isUsageLimit("429 已达到速率限制")).toBe(false);
+		expect(isUsageLimit("请求过于频繁，请稍后重试")).toBe(false);
+		expect(isUsageLimit("API 使用频率已达上限")).toBe(false);
+	});
+
 	it("detects xAI Grok SuperGrok credit exhaustion as a credential-rotatable usage limit", () => {
 		// xAI returns HTTP 403 with (type=personal-team-blocked:spending-limit), not a
 		// 429 usage_limit_reached. Without this match, multi-account xai-oauth pools
@@ -257,6 +313,24 @@ describe("isUsageLimitOutcome", () => {
 		expect(isUsageLimitOutcome(429, "Please retry in 5s")).toBe(false);
 	});
 
+	it("rotates on subscription caps without treating generic rate limits as usage exhaustion", () => {
+		const subscriptionCap =
+			"429 You've exceeded your subscription rate limits. Upgrade, or try again later. You can view your usage at https://api.synthetic.new/usage";
+		expect(parseRateLimitReason(subscriptionCap)).toBe("QUOTA_EXHAUSTED");
+		expect(isUsageLimitOutcome(429, subscriptionCap)).toBe(true);
+		expect(isUsageLimit(Object.assign(new Error(subscriptionCap), { status: 429 }))).toBe(true);
+
+		const transient = "429 Rate limit exceeded, too many requests";
+		expect(parseRateLimitReason(transient)).toBe("RATE_LIMIT_EXCEEDED");
+		expect(isUsageLimitOutcome(429, transient)).toBe(false);
+		expect(isUsageLimit(Object.assign(new Error(transient), { status: 429 }))).toBe(false);
+
+		const planPerMinuteLimit = "429 Your plan has a rate limit of 60 requests per minute";
+		expect(parseRateLimitReason(planPerMinuteLimit)).toBe("RATE_LIMIT_EXCEEDED");
+		expect(isUsageLimitOutcome(429, planPerMinuteLimit)).toBe(false);
+		expect(isUsageLimit(Object.assign(new Error(planPerMinuteLimit), { status: 429 }))).toBe(false);
+	});
+
 	it("still rotates on 429 with explicit account rate-limit framing", () => {
 		expect(
 			isUsageLimitOutcome(
@@ -272,6 +346,41 @@ describe("isUsageLimitOutcome", () => {
 		expect(
 			isUsageLimitOutcome(403, "403 订阅额度不足或未配置订阅: subscription quota insufficient, need=14447"),
 		).toBe(true);
+	});
+
+	it("rotates on Simplified Chinese quota exhaustion (Zhipu 429)", () => {
+		const zhipu =
+			"429 已达到 5 小时的使用上限。您的限额将在 2026-08-06 20:06:00 重置。\n已达到 5 小时的使用上限。您的限额将在 2026-08-06 20:06:00 重置。 (type=1308)";
+		expect(isUsageLimitOutcome(429, zhipu)).toBe(true);
+		expect(isUsageLimitOutcome(429, "已达到 5 小时的使用上限")).toBe(true);
+		expect(isUsageLimitOutcome(429, "您的限额将在 2026-08-06 20:06:00 重置")).toBe(true);
+		expect(isUsageLimitOutcome(429, "今日使用量已达上限，请明天再试")).toBe(true);
+		expect(isUsageLimitOutcome(429, "额度已用完，请充值")).toBe(true);
+		expect(isUsageLimitOutcome(429, "配额已用尽")).toBe(true);
+		expect(isUsageLimitOutcome(429, "账户余额不足")).toBe(true);
+	});
+
+	it("keeps Simplified Chinese throttling in the upstream-backoff lane", () => {
+		expect(isUsageLimitOutcome(429, "已达到速率限制")).toBe(false);
+		expect(isUsageLimitOutcome(429, "请求过于频繁，请稍后重试")).toBe(false);
+		expect(isUsageLimitOutcome(429, "并发请求达到上限")).toBe(false);
+		expect(isUsageLimitOutcome(429, "每分钟使用次数已达上限")).toBe(false);
+		expect(isUsageLimitOutcome(429, "API 使用频率已达上限")).toBe(false);
+	});
+
+	it("treats Simplified Chinese error bodies the classifier can read as informative", () => {
+		// A bare 429/empty body is opaque and rotates conservatively, but a body
+		// carrying CN quota or throttle phrasing the classifier recognizes defers
+		// to parseRateLimitReason instead of being treated as a status-only 429.
+		expect(isOpaqueStatusBody("已达到速率限制")).toBe(false);
+		expect(isOpaqueStatusBody("请求过于频繁，请稍后重试")).toBe(false);
+		expect(isOpaqueStatusBody("429 已达到 5 小时的使用上限")).toBe(false);
+		expect(isOpaqueStatusBody("429")).toBe(true);
+		expect(isOpaqueStatusBody("")).toBe(true);
+		// A Han body the classifier cannot interpret stays opaque so the
+		// opaque-429 fallback still rotates. Japanese quota text (e.g. 利用上限に
+		// 達しました) is out of scope and must not be treated as informative.
+		expect(isOpaqueStatusBody("429 利用上限に達しました")).toBe(true);
 	});
 
 	// The MODEL_CAPACITY reclassification of resource_exhausted (#7032) must NOT

@@ -66,11 +66,17 @@ const parseSegments = (
   if (parts.length !== 3) {
     return null
   }
-  return {
-    scopeSegment: parts[0]!,
-    domainSegment: parts[1]!,
-    predicateSegment: parts[2]!,
+  const scopeSegment = parts[0]
+  const domainSegment = parts[1]
+  const predicateSegment = parts[2]
+  if (
+    scopeSegment === undefined ||
+    domainSegment === undefined ||
+    predicateSegment === undefined
+  ) {
+    return null
   }
+  return { scopeSegment, domainSegment, predicateSegment }
 }
 
 export const pbtNaming = defineRule({
@@ -82,6 +88,11 @@ export const pbtNaming = defineRule({
           return
         }
 
+        const firstArg = node.arguments[0]
+        if (!firstArg) {
+          return
+        }
+
         const testName = extractTestName(node)
         if (!testName) {
           return
@@ -90,7 +101,7 @@ export const pbtNaming = defineRule({
         const segments = parseSegments(testName)
         if (!segments) {
           context.report({
-            node: node.arguments[0]!,
+            node: firstArg,
             messageId: 'invalidSegments',
             data: {
               actual: testName,
@@ -105,7 +116,7 @@ export const pbtNaming = defineRule({
         const scopeSymbol = scopeSegment.charAt(0)
         if (!SCOPE_SYMBOLS.has(scopeSymbol)) {
           context.report({
-            node: node.arguments[0]!,
+            node: firstArg,
             messageId: 'invalidScopeSymbol',
             data: { actual: testName, firstChar: scopeSymbol },
           })
@@ -114,7 +125,7 @@ export const pbtNaming = defineRule({
 
         if (scopeSegment.slice(1).length === 0) {
           context.report({
-            node: node.arguments[0]!,
+            node: firstArg,
             messageId: 'incompleteScope',
             data: { symbol: scopeSymbol, scope: scopeSegment },
           })
@@ -123,7 +134,7 @@ export const pbtNaming = defineRule({
 
         if (!PASCAL_CASE.test(domainSegment)) {
           context.report({
-            node: node.arguments[0]!,
+            node: firstArg,
             messageId: 'emptyDomain',
             data: { actual: testName },
           })
@@ -133,7 +144,7 @@ export const pbtNaming = defineRule({
         const dampMatch = DAMP_WORDS.exec(domainSegment)
         if (dampMatch) {
           context.report({
-            node: node.arguments[0]!,
+            node: firstArg,
             messageId: 'domainLeaksDAMP',
             data: { domain: domainSegment, word: dampMatch[0] },
           })
@@ -143,7 +154,7 @@ export const pbtNaming = defineRule({
         const predicateSymbol = predicateSegment.charAt(0)
         if (!PREDICATE_SYMBOLS.has(predicateSymbol)) {
           context.report({
-            node: node.arguments[0]!,
+            node: firstArg,
             messageId: 'invalidPredicateSymbol',
             data: { actual: testName, firstChar: predicateSymbol },
           })
@@ -152,7 +163,7 @@ export const pbtNaming = defineRule({
 
         if (!NULLARY_PREDICATE_SYMBOLS.has(predicateSymbol) && predicateSegment.slice(1).length === 0) {
           context.report({
-            node: node.arguments[0]!,
+            node: firstArg,
             messageId: 'incompletePredicate',
             data: { symbol: predicateSymbol, predicate: predicateSegment },
           })

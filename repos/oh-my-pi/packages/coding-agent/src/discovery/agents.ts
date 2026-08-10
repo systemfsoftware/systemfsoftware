@@ -44,12 +44,14 @@ function isWsl(platform: NodeJS.Platform, env: NodeJS.ProcessEnv): boolean {
 function convertWindowsPathToDefaultWslMount(windowsPath: string): string | undefined {
 	const trimmed = windowsPath.trim();
 	if (trimmed.length === 0) return undefined;
-	if (path.isAbsolute(trimmed)) return path.normalize(trimmed);
+	// The result is always a WSL (POSIX) path, so build it with posix
+	// semantics regardless of the host platform.
+	if (path.posix.isAbsolute(trimmed)) return path.posix.normalize(trimmed);
 	const match = WINDOWS_DRIVE_PROFILE_PATTERN.exec(trimmed);
 	if (!match) return undefined;
 	const [, drive, rest] = match;
 	const segments = rest.replace(/\\/g, "/").split("/").filter(Boolean);
-	return path.join("/mnt", drive.toLowerCase(), ...segments);
+	return path.posix.join("/mnt", drive.toLowerCase(), ...segments);
 }
 
 function resolveWithWslPath(windowsPath: string): string | undefined {

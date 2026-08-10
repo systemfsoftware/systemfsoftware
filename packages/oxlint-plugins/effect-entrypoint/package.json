@@ -1,6 +1,6 @@
 {
   "name": "@systemfsoftware/oxlint-plugin-effect-entrypoint",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "version": "1.0.2",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
@@ -56,10 +56,10 @@
   },
   "devDependencies": {
     "@microsoft/api-extractor": "catalog:",
-    "@stryker-mutator/vitest-runner": "catalog:stryker",
-    "@systemfsoftware/arethetypeswrong-cli": "workspace:^",
-    "@systemfsoftware/stryker-js-core": "workspace:^",
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
+    "@systemfsoftware/stryker-js-mutation-run": "workspace:^",
     "@systemfsoftware/stryker-js-typescript-checker": "workspace:^",
+    "@systemfsoftware/stryker-js-vitest-runner": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",

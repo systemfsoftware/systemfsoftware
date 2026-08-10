@@ -28,6 +28,46 @@ A package.json `dependencies` (or `peerDependencies`) entry that tsdown leaves a
 
 A `bundledPackages` array entry in `api-extractor.json` listing workspace dependencies whose types should be inlined into the rollup output. Inlining means consumers don't have to install the dep at all for type resolution — the rollup contains everything. Used when a package is a structural re-export layer (barrels from one or more workspace deps) so its published types stand alone.
 
+### Toolchain bootstrap cycle
+
+A mutual dev-dependency between two of this repo's own tooling packages, arising because the repo self-hosts what it publishes: a lint plugin governs the mutation tooling, while that same mutation tooling exercises the plugin's own tests.
+
+The cycle is legitimate at the package level and false at the build level. Each dependency exists because the depending package's _verification_ needs it, so deleting either one removes a real check rather than a redundant edge. But neither package's build consumes the other's build output, so the build graph must be told per package that a tooling edge carries no build ordering — otherwise the topological build dependency turns the pair into an unschedulable loop and no task runs at all, which masks every other fault in the tree behind a single graph error. Distinct from an externalized dependency, which concerns what a published tarball needs at runtime; this concept concerns only what must be built before what.
+
+## Build cache
+
+### Input-hash completeness
+
+The property a cached task's key must have before its stored verdict can be trusted: every input capable of changing the task's answer is inside the key. A key is complete or it is not — partial completeness buys nothing, because the single uncovered input is the one that returns a stale pass.
+
+Completeness spans four classes of input, and only the first is covered by default: the files the task reads, the environment variables its command's shell expansion reads, the tool binaries an install-time script may swap while the declared dependency version holds still, and the task's own definition. The failure it prevents is silent and directional — an incomplete key does not slow a gate or error it, it lets the gate report a pass for work that never ran. Enabling a cache and closing its key's holes therefore belong in one change rather than in sequence, since every verdict stored or restored in between was produced under a key known to be incomplete.
+
+Completeness is only half the criterion, and pursued alone it produces the opposite failure — see Volatile input and Key partition. The key must move exactly when the answer can change, and never otherwise.
+
+### Relocatable output
+
+An artifact a cached task may declare as an output, on the criterion that it stays true when restored into a checkout other than the one that produced it. Restoration writes the stored bytes back verbatim and rewrites nothing inside them, so an artifact embedding absolute paths or other machine-local state is not relocatable and must be left undeclared even though caching it would be faster.
+
+The criterion binds hardest where several working trees of one repository share a cache, which is the default rather than the exception — the sharing is automatic unless a cache location is pinned explicitly. Where an output is not relocatable the honest declaration is none at all: the pass-or-fail verdict and the logs still cache, and the machine-local artifact stays where it was built.
+
+### Volatile input
+
+A file inside a task's input set that a normal run of the pipeline itself rewrites, so the key moves although the answer did not. Tool-written state is the whole class: a task runner's own per-task logs, a compiler's incremental state, build output. It is the mirror image of an incomplete key — completeness fails silently toward a stale pass, volatility fails loudly toward a permanent miss.
+
+Volatility is contagious across packages, which is what makes it hard to see. A shared configuration package globbed wholesale into every dependent's input set carries its own tool-written state along with the config, so running that one package's task rewrites state that every dependent hashes, and the whole graph misses on the next run. The glob is the defect, not the shared dependency: the authored config belongs in the key and the tool-written state beside it does not, so a directory input must exclude the state its own tools write. A cross-package invalidation of this kind cannot be observed in a run that filters the graph down, because the filter drops the very task whose run does the rewriting.
+
+### Key partition
+
+A split of one task's cache into disjoint sets, caused by a value that varies with who invoked the task rather than with what the task must answer. Command-line arguments and declared environment variables both enter the key, so an entry point that passes different flags — or reads a variable only some callers set — hashes the same work under a different key and can never reuse another caller's entry.
+
+A partition is not always a defect: where two callers genuinely require different answers, keying them apart is correct. The test is whether the varying value can change the task's verdict. A flag that alters only how a result is presented cannot, so keying on it buys no safety and costs every hit; a variable that selects a different check does, and belongs in the key. Where the split is deliberate rather than forced — separating two audiences for one verdict — prefer a marker every caller in that audience sets deterministically over one that merely happens to be present. A variable that changes the answer belongs in the key regardless of how few callers set it.
+
+### Stale pass
+
+A pass a cached task restores rather than earns, for work whose answer has changed since the verdict was stored. It is the silent direction of cache failure: nothing errors and nothing slows, so a gate reports success for a check that never ran.
+
+A key can be complete with respect to every input it declares and still return one, because the tools that produce the answer are not themselves inputs. The exposed shape is any task that regenerates an artifact and compares it against a committed copy: the comparison keeps passing for as long as the key holds still while the generator moves underneath it, so the drift becomes visible only when some unrelated edit happens to move the key. Detection from inside the cache is impossible by construction, since a hit is precisely the decision not to look. The remedies are to bring whatever can move the answer into the key, or to leave the comparison uncached.
+
 ## Release pipeline
 
 ### semantic-release
@@ -43,6 +83,44 @@ The script at `scripts/check-exports.mjs` that compares each package's `package.
 ### attw
 
 `arethetypeswrong` — the type-resolution validator. `attw --pack .` runs against the package tarball the same way npm would install it, validating that `exports` declarations resolve to consistent types across node10 / node16-CJS / node16-ESM / bundler. Catches downstream-facing drift that workspace-local checks miss.
+
+## Gate provenance
+
+### Evaluator surface
+
+A file whose job is to judge other work — a gate, a scoring harness, a forge workflow, a contribution check. What sets it apart is not its contents but a commit rule: it never changes in the same commit as the work it judges, because a change that moves both the work and its judge leaves no evidence which of the two produced the green result.
+
+Evolving one means its own commit, the reason stated, and the gate observed red before and green after for the intended reason. An agent that can edit its own evaluator can pass by editing it, so the surface is held outside whatever it scores.
+
+### Ritual gate
+
+A gate that checks a proxy for a claim and then reports the claim. It asks whether a justification has the right shape — a field is present, a reason is non-empty, a digest was written — and announces that the underlying requirement was met. Because the proxy is always satisfiable by the same author who supplies it, the gate has full precision against nothing, and a green run teaches every later reader that something was verified when nothing was.
+
+The distinguishing question is whether the check recomputes anything the writer did not supply. A gate that only reads back what a writer stamped is a ritual regardless of how strict its wording is.
+
+### Provenance manifest
+
+The closed registry that admits each root-level tooling script by declared category, so a script's right to exist is stated rather than inferred from its presence on disk. Adding a script means editing the manifest, and the manifest is itself an Evaluator surface — which deliberately forces that edit into its own commit.
+
+### Known-bad fixture
+
+An artifact that deliberately contains the violation a gate claims to detect, run before the real check so that a non-zero finding count proves the gate can fail at all. Paired with a known-good artifact, which must produce zero.
+
+Without the pair, a gate reporting no findings is indistinguishable between two states: a clean tree, or a check that never ran. The fixture is what converts silence into evidence.
+
+## Test execution
+
+### Run class
+
+The classification of who invoked a run — an agent, a forge, or a human working locally — which decides how thoroughly the suite executes: how many samples a property test draws, whether coverage is collected, and which reporter receives the output.
+
+The classes are mutually exclusive and ordered, because an agent shell commonly sets the forge's marker as well: an agent run is a development run and takes the fast path even when `CI` is present, so `AGENT` outranks it. Membership is decided by a marker's presence rather than by comparing it against a value, since every producer that means "I am a forge" sets its marker to something and no two of them agree on what — an equality test silently reclassifies every producer whose spelling differs. One definition of the classification is exported and imported everywhere it is read; a second definition is a second opinion, and two will diverge the moment a producer writes a value one of them does not expect. Because the class changes what a run computes rather than only how its output is presented, it is a legitimate cache-key input — see Key partition.
+
+### Contract lane
+
+The verification altitude that exercises a published command-line surface from outside the process that produces it: the package is packed exactly as it would be published, installed into a clean container, and driven as a real program whose observable behavior is then asserted. Distinct from the default test task, which stays container-free and never spawns the shipped artifact.
+
+It exists because a class of properties is process-level by category and admits no honest double: exit status, bytes arriving on a real file descriptor, a timer firing in real elapsed time, a pipe closed by its reader, a signal delivered mid-run, resolution of an installed binary, and whether importing a module has side effects. Substituting the process, the writer, or the clock for any of these asserts the substitute rather than the program, so evidence gathered that way does not count at this altitude — while a logical property, such as the order in which a pipeline emits events, stays at composition altitude and is asserted against a declared port instead. Because the lane depends on a container runtime it can fail for reasons unrelated to the code, and its governing rule is that such a failure must be loud and must name its cause: reporting a skip, or zero passing tests, would make an unrun lane indistinguishable from a passing one, which is the false green the lane was built to remove.
 
 ## Architecture cells (constitution §I–V)
 
@@ -75,6 +153,26 @@ _Aliases:_ `ruleOfSchemas` pair, the round-trip laws
 A hand-authored property asserting that a schema **refuses** an input — the half of a schema's contract no generated law can reach. Its generator must be derived from the domain contract (what the type promises about its values) and never read back off the refinement literal, because a generator built from the literal reproduces the same circularity that makes generated laws blind.
 
 By design, refusal is the only thing such a test is meant to assert. The mechanical gate is narrower than the rule: it rejects the generated laws' own machinery — round-trip identity, equivalence, encoded-schema stability — rather than proving every remaining assertion is a refusal. The gap between the rule and its gate is held by review.
+
+### Schema weakening
+
+A schema built from another by dropping exactly one arm of its `SchemaAST` — a refinement's predicate, or one side of a transformation — leaving the rest intact. It is the schema-level analogue of an extreme mutation operator: it deletes a unit of the declaration rather than perturbing an expression inside one, which is what makes it able to express contracts a conventional mutator's operator catalogue cannot construct. The walk recurses through composites, rebuilding the enclosing tree around each weakened child, so an arm nested inside a struct field or a union member is reachable. Built in-process from the schema value, so it needs no source rewriting and no instrumenter.
+
+### Witness
+
+An input the weakened schema accepts and the original rejects. It is what promotes an arm to a refutation obligation, and it is existential — so sampling can establish it, which the containment claim it replaced could never do. Recording it is what lets a failure name the specific illegal value now getting through.
+
+### Refutation obligation
+
+A weakening for which a witness exists, and which therefore must be discriminated by some rejection property. The witness is what makes the set honest: a weakening that only loses accepted inputs belongs to the generated laws instead, so demanding a refusal for it would accuse a test of missing a fault another instrument already owns. An arm may be _mixed_ — simultaneously more permissive in one direction and less in another — and a witness still qualifies it, because the permissiveness it adds is real however much it also breaks.
+
+### Obligation node
+
+The `SchemaAST` node a weakening removes, and the identity an obligation is keyed by. Arms reached through different paths, or from different schemas, that remove the same node are one obligation — Effect shares nodes across composed schemas, so three schemas built on one refinement owe one refusal between them, not three. Keying by node rather than by path is also what makes discharge scope-free: a generator discharges a node wherever that node appears, regardless of which file it was declared in.
+
+### Refutation adequacy
+
+The criterion that every obligation node reachable from a schema is discharged by at least one declared refusal generator. It asks for coverage, never uniqueness — whether each node is defended, not whether a given test is its only defender. The distinction is load-bearing: a uniqueness criterion is test-suite minimization, whose fault-detection cost is measured, and it is the error the `soleKills > 0` gate made.
 
 ## Agent context injection
 
@@ -122,11 +220,11 @@ The CLI state where output is structured for a machine consumer instead of a hum
 
 ### verdict envelope
 
-The JSON object the stryker CLI prints to stdout in machine mode: mutation score, thresholds, per-status mutant counts, test-contribution verdict, per-mutant status, the report file path, a run identifier, and the resolved mode with the signal that decided it. Per-mutant entries are keyed on file, location, mutator, and replacement — the same key a survivor re-run matches on, so the envelope alone is enough to address individual survivors. The full mutation report still goes to a file; the envelope is the small, schema-stable contract agents parse instead of scraping human output.
+The JSON object the stryker CLI prints to stdout in machine mode: mutation score, thresholds, per-status mutant counts, test-contribution verdict, per-mutant status for the actionable statuses, the report file path, a run identifier, and the resolved mode with the signal that decided it. Per-mutant entries are keyed on file, location, mutator, and replacement — the same key a survivor re-run matches on, so the envelope alone is enough to address individual survivors. The full mutation report still goes to a file; the envelope is the small, schema-stable contract agents parse instead of scraping human output.
 
 ### progress stream
 
-The newline-delimited JSON the stryker CLI writes to stderr in machine mode, one object per completed mutant plus a plan event naming the total. It replaces the deleted `progress-append-only` reporter as the non-TTY progress path, so an agent sees a many-minute run advancing rather than silence followed by a verdict. Human mode keeps the interactive progress bar on stdout instead.
+The newline-delimited JSON the stryker CLI writes to stdout in machine mode: a `stream` header first (schema version, run id, resolved mode, deciding signal), then `phase` lifecycle lines, a `plan` line naming the total, `mutant` lines filtered to the actionable statuses (`Survived`, `NoCoverage`, `Timeout`, `RuntimeError`), `tick` heartbeats on an interval, and always a terminal `verdict` or `error` line last. It replaces the deleted `progress-append-only` reporter as the non-TTY progress path, so an agent sees a many-minute run advancing rather than silence followed by a verdict. Human mode keeps the interactive progress bar on stdout instead.
 
 ### survivor re-run
 
@@ -144,8 +242,12 @@ A mutant a given test file is the **only** file credited with killing. Distinct 
 
 ### toothless test file
 
-A test file whose deletion would leave every mutant just as dead. The claim is counterfactual and therefore only as sound as the run's attribution — a file can look toothless because it genuinely defends nothing, or because the run failed to record what it killed. The two are not interchangeable, and only the first is grounds for deleting anything.
+A test file whose deletion would leave every mutant just as dead. The claim is counterfactual and therefore only as sound as the run's attribution — a file can look toothless because it genuinely defends nothing, because the run failed to record what it killed, or because the mutant set cannot express the contract the file defends. Only the first is grounds for deleting anything.
 
 ### unattributed kill
 
 A mutant that died with no test credited for killing it. It arises when a mutant's death is not observed per-test — a run that hangs is killed wholesale, so no individual test is named — leaving a kill that counts toward the score while belonging to nobody. Any file covering one is **unmeasurable** rather than toothless: it is a live candidate for being the killer, so the counterfactual behind the accusation cannot be evaluated for it.
+
+### collateral kill
+
+A mutant killed because the mutation corrupted a schema's derived arbitrary and some _other_ schema's law then choked on the garbage it generated, rather than because any test observed the mutated contract. It counts toward the score and toward attribution exactly like an observed kill, which is what makes it dangerous: it credits a law that is tautological with respect to the mutated schema, and the credit is then evidence against the hand-authored tests that state the contract properly.

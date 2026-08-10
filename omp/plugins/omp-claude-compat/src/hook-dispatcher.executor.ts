@@ -39,52 +39,52 @@ export class HookDispatcherExecutorDeps extends Context.Tag('HookDispatcherExecu
   Scope.Scope
 >() {}
 
-export interface HookToolCallCommand {
+export type HookToolCallCommand = {
   readonly _tag: 'ToolCall'
   readonly event: HookToolCall
   readonly ctx: HookSession
 }
 
-export interface HookToolResultCommand {
+export type HookToolResultCommand = {
   readonly _tag: 'ToolResult'
   readonly event: ToolResultEvent
   readonly ctx: HookSession
 }
 
-export interface HookPromptCommand {
+export type HookPromptCommand = {
   readonly _tag: 'Prompt'
   readonly event: HookPrompt
   readonly ctx: HookSession
 }
 
-export interface HookSessionStartCommand {
+export type HookSessionStartCommand = {
   readonly _tag: 'SessionStart'
   readonly reason: string
   readonly ctx: HookSession
 }
 
-export interface HookSessionCompactCommand {
+export type HookSessionCompactCommand = {
   readonly _tag: 'SessionCompact'
   readonly ctx: HookSession
 }
 
-export interface HookPreCompactCommand {
+export type HookPreCompactCommand = {
   readonly _tag: 'PreCompact'
   readonly ctx: HookSession
 }
 
-export interface HookSessionSwitchCommand {
+export type HookSessionSwitchCommand = {
   readonly _tag: 'SessionSwitch'
   readonly reason: string
   readonly ctx: HookSession
 }
 
-export interface HookSessionShutdownCommand {
+export type HookSessionShutdownCommand = {
   readonly _tag: 'SessionShutdown'
   readonly ctx: HookSession
 }
 
-export interface HookSessionStopCommand {
+export type HookSessionStopCommand = {
   readonly _tag: 'SessionStop'
   readonly ctx: HookSession
 }
@@ -133,7 +133,7 @@ export const dispatchHookEvent = (cmd: HookEventCommand) =>
         Effect.gen(function*() {
           const settings = yield* loadSettingsWithPaths(settingsPaths(homedir(), ctx.cwd))
           if (!settings) return undefined as HookDispatchResult
-          return (yield* runPreToolUseHooks(settings, event, ctx)) as HookDispatchResult
+          return (yield* runPreToolUseHooks(settings, event, ctx))
         })),
       Match.tag('ToolResult', ({ event, ctx }) =>
         Effect.gen(function*() {
@@ -144,7 +144,7 @@ export const dispatchHookEvent = (cmd: HookEventCommand) =>
             return {
               content: [...event.content, { type: 'text' as const, text: result.warning }],
               isError: event.isError,
-            } as HookDispatchResult
+            }
           }
           return undefined as HookDispatchResult
         })),
@@ -152,7 +152,7 @@ export const dispatchHookEvent = (cmd: HookEventCommand) =>
         Effect.gen(function*() {
           const settings = yield* loadSettingsWithPaths(settingsPaths(homedir(), ctx.cwd))
           if (!settings) return undefined as HookDispatchResult
-          return (yield* runUserPromptSubmitHooks(settings, event, ctx)) as HookDispatchResult
+          return (yield* runUserPromptSubmitHooks(settings, event, ctx))
         })),
       Match.tag('SessionStart', ({ reason, ctx }) =>
         Effect.gen(function*() {
@@ -208,7 +208,7 @@ export const dispatchHookEvent = (cmd: HookEventCommand) =>
             `Compaction cancelled by a PreCompact hook: ${result.reason ?? 'no reason given'}`,
             'warning',
           )
-          return { cancel: true } as HookDispatchResult
+          return { cancel: true }
         })),
       Match.tag('SessionSwitch', ({ reason, ctx }) =>
         Effect.gen(function*() {
@@ -233,5 +233,5 @@ export const dispatchHookEvent = (cmd: HookEventCommand) =>
         })),
       Match.exhaustive,
     )
-    return (yield* matched) as HookDispatchResult
+    return (yield* matched)
   })

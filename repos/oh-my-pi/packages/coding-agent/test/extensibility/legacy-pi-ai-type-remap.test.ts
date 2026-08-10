@@ -97,33 +97,14 @@ describe("legacy-pi @(scope)/pi-ai root `Type` remap (issue #1437)", () => {
 		expect(loaded.probe).toBe(TypeBoxShimType);
 	});
 
-	it("preserves canonical pi-ai exports alongside the shimmed Type (z is still re-exported)", async () => {
-		const entry = await writeFixtureExtension(
-			[
-				'import { Type, z } from "@earendil-works/pi-ai";',
-				"export const obj = Type.Object({ name: Type.String() });",
-				"export const zodObj = z.object({ name: z.string() });",
-			].join("\n"),
-		);
-
-		const loaded = (await loadLegacyPiModule(entry)) as {
-			obj: { safeParse: (input: unknown) => { success: boolean } };
-			zodObj: { safeParse: (input: unknown) => { success: boolean } };
-		};
-
-		expect(loaded.obj.safeParse({ name: "ok" }).success).toBe(true);
-		expect(loaded.zodObj.safeParse({ name: "ok" }).success).toBe(true);
-		expect(loaded.zodObj.safeParse({}).success).toBe(false);
-	});
-
 	it("does not redirect subpath imports such as @oh-my-pi/pi-ai/utils/schema", async () => {
 		const entry = await writeFixtureExtension(
 			[
-				// `zodToWireSchema` is only exported from the subpath, not the root,
+				// `arkToWireSchema` is only exported from the subpath, not the root,
 				// so a successful import proves the subpath still resolves directly
 				// against the bundled pi-ai package rather than the shim.
-				'import { zodToWireSchema } from "@oh-my-pi/pi-ai/utils/schema";',
-				"export const fn = zodToWireSchema;",
+				'import { arkToWireSchema } from "@oh-my-pi/pi-ai/utils/schema";',
+				"export const fn = arkToWireSchema;",
 			].join("\n"),
 		);
 

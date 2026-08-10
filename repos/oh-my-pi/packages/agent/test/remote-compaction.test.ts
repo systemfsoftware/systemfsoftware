@@ -324,8 +324,22 @@ function codexAssistant(calls: Array<{ callId: string; custom?: boolean }>, dt: 
 	}));
 	const items = calls.map(c =>
 		c.custom
-			? { type: "custom_tool_call", id: `ctc_${c.callId}`, call_id: c.callId, name: "apply_patch", input: "p" }
-			: { type: "function_call", id: `fc_${c.callId}`, call_id: c.callId, name: "read", arguments: "{}" },
+			? {
+					type: "custom_tool_call",
+					id: `ctc_${c.callId}`,
+					call_id: c.callId,
+					name: "apply_patch",
+					input: "p",
+					status: "completed",
+				}
+			: {
+					type: "function_call",
+					id: `fc_${c.callId}`,
+					call_id: c.callId,
+					name: "read",
+					arguments: "{}",
+					status: "completed",
+				},
 	);
 	return {
 		role: "assistant",
@@ -358,6 +372,9 @@ describe("buildOpenAiNativeHistory call-id tracking", () => {
 			CODEX_MODEL,
 		);
 		const output = items.find(item => item.type === "function_call_output");
+		const call = items.find(item => item.type === "function_call");
+		expect(call).toBeDefined();
+		expect(call).not.toHaveProperty("status");
 		expect(output?.call_id).toBe("call_1");
 		expect(items.find(item => item.type === "custom_tool_call_output")).toBeUndefined();
 	});
@@ -506,8 +523,8 @@ describe("buildOpenAiNativeHistory computer calls", () => {
 		expect(recovery).toMatchObject({
 			type: "message",
 			role: "assistant",
-			status: "completed",
 		});
+		expect(recovery).not.toHaveProperty("status");
 		expect(String(recovery?.id)).toMatch(/^msg_[a-z0-9-]+$/);
 		expect(recovery?.content).toEqual([expect.objectContaining({ type: "output_text", annotations: [] })]);
 		expect(JSON.stringify(items)).toContain("failed before a screenshot was recorded");
@@ -533,7 +550,8 @@ describe("buildOpenAiNativeHistory computer calls", () => {
 		const second = buildOpenAiNativeHistory([computerAssistant(), result], unsupportedModel);
 		expect(first).toHaveLength(2);
 		for (const note of first) {
-			expect(note).toMatchObject({ type: "message", role: "assistant", status: "completed" });
+			expect(note).toMatchObject({ type: "message", role: "assistant" });
+			expect(note).not.toHaveProperty("status");
 			expect(String(note.id)).toMatch(/^msg_[a-z0-9-]+$/);
 			expect(note.content).toEqual([expect.objectContaining({ type: "output_text", annotations: [] })]);
 		}
@@ -1791,6 +1809,13 @@ describe("compact() remote compaction failure handling", () => {
 		expect(input.some(item => item.type === "reasoning")).toBe(true);
 		expect(input.some(item => item.type === "function_call" && item.name === "read")).toBe(true);
 		expect(input.some(item => item.type === "function_call_output")).toBe(true);
+		expect(
+			input.some(
+				item =>
+					(item.type === "message" || item.type === "function_call" || item.type === "custom_tool_call") &&
+					Object.hasOwn(item, "status"),
+			),
+		).toBe(false);
 		// Reasoning effort is sent like a normal turn (gpt-5 is a reasoning model).
 		expect(requestBody?.reasoning).toMatchObject({ effort: "high", summary: "auto" });
 		const remote = getCompactionV2PreserveData(result.preserveData);

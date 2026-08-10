@@ -71,12 +71,19 @@ function findDtsSidecar(jsPath) {
 
 const packages = discoverPackages(packagesRoot)
 
+// Every dist-dependent check below is guarded by `hasDist`, so an unbuilt tree
+// skips them all and reports "0 issues" -- a pass bought by looking at nothing.
+// Counting the builds this run actually saw turns that into a loud failure.
+// Same guard as check-runtime-deps.mjs, which already had it.
+let packagesWithDist = 0
+
 for (const { path: pkgPath, manifest } of packages) {
   const name = manifest.name
   const unscopedName = resolveUnscopedName(manifest)
   const distDir = join(pkgPath, 'dist')
   const relPath = relative(packagesRoot, pkgPath)
   const hasDist = existsSync(distDir)
+  if (hasDist) packagesWithDist += 1
 
   if (!manifest.exports) {
     warn(`${name} (${relPath}): no exports field`)
@@ -156,5 +163,16 @@ for (const { path: pkgPath, manifest } of packages) {
   }
 }
 
-console.log(`\n${errors + warnings} issues (${errors} errors, ${warnings} warnings)`)
+if (packagesWithDist === 0) {
+  console.error(
+    `\ncheck-exports: ${packages.length} publishable package(s) discovered and NONE has a dist/.`,
+  )
+  console.error('Every dist-dependent check was skipped, so this run proves nothing.')
+  console.error('Build the workspace first (`pnpm turbo build`), or repair discovery in this script.')
+  process.exit(1)
+}
+
+console.log(
+  `\n${errors + warnings} issues (${errors} errors, ${warnings} warnings) across ${packagesWithDist} built package(s)`,
+)
 process.exit(errors > 0 ? 1 : 0)

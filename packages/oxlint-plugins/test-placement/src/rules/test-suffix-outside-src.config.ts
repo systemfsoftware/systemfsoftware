@@ -1,9 +1,11 @@
-import { MESSAGE } from './path.config.js'
+import { COLOCATABLE_CELLS, MESSAGE, NESTED_TEST_DIR } from './path.config.js'
+
+const SANCTIONED_CELLS = COLOCATABLE_CELLS.join(', ')
 
 export const UNSANCTIONED_SUFFIX_EXPECTED = 'exactly *.integration.test.ts outside src/' as const
 export const UNSANCTIONED_SUFFIX_ACTUAL = 'an unsanctioned test suffix outside src/' as const
 export const UNSANCTIONED_SUFFIX_FIX =
-  'first ask what bug this file could catch. If each scenario restates a literal from a pure cell — a lookup-table entry, a constant, a mapping — it is a change detector and not a test: delete it. Otherwise name it *.integration.test.ts: one behaviour suffix, whether or not the layer doubles at a port. A property test belongs in src/ beside a workflow, policy, or kernel cell, never here.' as const
+  `name what this file exercises. Every scenario restates a literal from a pure cell (a lookup-table entry, a constant, a mapping) -> it is a change detector, not a test: delete it. It drives the package through its public surface -> rename it *.integration.test.ts, the one behaviour suffix, whether or not a layer doubles at a port. It is a property over a sanctioned cell (${SANCTIONED_CELLS}) -> it does not belong outside src/: move it to src/<dir>/${NESTED_TEST_DIR}/<cell>.property.test.ts`
 
 export const meta = {
   type: 'problem',

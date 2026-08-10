@@ -1,6 +1,6 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
-import { meta, Options } from './workflow-no-async.config.js'
+import { meta } from './workflow-no-async.config.js'
 
 export type MessageIds = 'asyncFunction' | 'awaitExpression' | 'promiseType'
 
