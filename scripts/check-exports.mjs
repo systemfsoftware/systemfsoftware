@@ -18,6 +18,7 @@ const packagesRoot = join(repoRoot, 'packages')
 
 let errors = 0
 let warnings = 0
+let sealedSubpaths = 0
 
 function error(msg) {
   errors += 1
@@ -114,6 +115,15 @@ for (const { path: pkgPath, manifest } of packages) {
   for (const [subpath, entry] of Object.entries(manifest.exports)) {
     if (subpath === './package.json') continue
 
+    // A null export value is a deliberate seal (e.g. "./internal/*": null): the
+    // path is closed to consumers, so there is nothing to check against dist/.
+    // Count it separately from passing and failing subpaths so a sealed path is
+    // visible in the output rather than silently absorbed.
+    if (entry === null) {
+      sealedSubpaths += 1
+      continue
+    }
+
     const defaultPath = typeof entry === 'string' ? entry : entry.default
     const typesPath = typeof entry === 'object' && entry !== null ? entry.types : undefined
 
@@ -172,7 +182,10 @@ if (packagesWithDist === 0) {
   process.exit(1)
 }
 
+const sealedNote = sealedSubpaths > 0 ? `, ${sealedSubpaths} sealed subpath(s)` : ''
 console.log(
-  `\n${errors + warnings} issues (${errors} errors, ${warnings} warnings) across ${packagesWithDist} built package(s)`,
+  `\n${
+    errors + warnings
+  } issues (${errors} errors, ${warnings} warnings) across ${packagesWithDist} built package(s)${sealedNote}`,
 )
 process.exit(errors > 0 ? 1 : 0)
