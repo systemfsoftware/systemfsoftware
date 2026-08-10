@@ -32,12 +32,12 @@ A private workspace package (`@systemfsoftware/omp-utils`) listed in `dependenci
 
 ## What Didn't Work
 
-| Check that stayed green                                          | Why it masked the bug                                                                                                                                                                                                                         |
-| ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Workspace smoke tests                                            | `pnpm test` and the smoke tool ran inside the monorepo; pnpm's workspace protocol resolves `"workspace:^"` whether the entry sits in `dependencies` or `devDependencies`. Category only matters at bundle time, not at local resolution time. |
-| Post-build `verify-dist` (`omp/scripts/check-dist-builtins.mjs`) | Only checks expected Node builtins (`node:fs`, `node:path`) — never scans for bare workspace-scope imports.                                                                                                                                   |
-| `scripts/release.mjs --dry-run`                                  | Discovers publishable packages and packs them; never imports the packed tarball's dist to verify resolution.                                                                                                                                  |
-| Sibling plugin as reference                                      | `omp-claude-compat` had the same import in source but was never affected — its `omp-utils` entry was in `devDependencies` all along, so tsdown inlined it. The divergence hid in `package.json`, not in code.                                 |
+| Check that stayed green                                                         | Why it masked the bug                                                                                                                                                                                                                         |
+| ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Workspace smoke tests                                                           | `pnpm test` and the smoke tool ran inside the monorepo; pnpm's workspace protocol resolves `"workspace:^"` whether the entry sits in `dependencies` or `devDependencies`. Category only matters at bundle time, not at local resolution time. |
+| Post-build `verify-dist` (`omp/scripts/check-dist-builtins.mjs`, since deleted) | Only checked expected Node builtins (`node:fs`, `node:path`) — never scanned for bare workspace-scope imports.                                                                                                                                |
+| `scripts/release.mjs --dry-run`                                                 | Discovers publishable packages and packs them; never imports the packed tarball's dist to verify resolution.                                                                                                                                  |
+| Sibling plugin as reference                                                     | `omp-claude-compat` had the same import in source but was never affected — its `omp-utils` entry was in `devDependencies` all along, so tsdown inlined it. The divergence hid in `package.json`, not in code.                                 |
 
 ## Solution
 
@@ -84,7 +84,7 @@ The dependency _category_ is therefore part of a publishable package's distribut
   ```bash
   ! grep -n 'from "@systemfsoftware/' dist/index.js
   ```
-  (The existing `check-dist-builtins.mjs` could grow a `--no-external` flag for this.)
+  (`check-dist-builtins.mjs` has since been deleted. `scripts/check-runtime-deps.mjs` now enforces the adjacent rule — every import in a shipped `dist/` must be declared — but it passes a private workspace helper that _is_ declared in `dependencies`, which is exactly this failure.)
 - **Synthetic-cwd smoke:** load the dist from a directory outside the workspace — `node omp/scripts/smoke-plugin.mjs <dist> --cwd /tmp/plugin-smoke` catches resolution failures that workspace-context tests structurally cannot.
 - **Review-time greps:** `from "@systemfsoftware/` in `dist/index.js` (externalized private import); a `"private": true` package referenced from any publishable package's `dependencies` (root cause at the source).
 
@@ -92,5 +92,5 @@ The dependency _category_ is therefore part of a publishable package's distribut
 
 - [tsdown manages publishConfig during build](../tooling-decisions/tsdown-manages-publishconfig-during-build.md) — same tool, adjacent failure class (exports-field drift, not dependency externalization); AGENTS.md REPO-S4 covers exports, not dep categorization.
 - [exports/types rollup drift](../build-errors/exports-types-rollup-drift.md) — same verify-the-dist family; note attw only checks type resolution, not import resolubility, so it would not have caught this.
-- `.claude/skills/omp-plugin-development/references/manifest-and-packaging.md` — plugin practice skill; covers the peerDep/devDep split for the OMP SDK and the externalize/bundle categorization rule.
+- `omp-plugin-development` skill, `references/manifest-and-packaging.md` — covers the peerDep/devDep split for the OMP SDK and the externalize/bundle categorization rule. Operator-layer: this ships with the installed skill, not with this clone, so the path does not resolve here.
 - Detected by ce-code-review run `20260720-181925` (ten reviewers; three flagged it as a P1); fixed in `0b4bab7ec0`.

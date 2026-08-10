@@ -42,10 +42,10 @@ The penny dropped on widening a pattern by hand — `{1,2}` to `{1,3}`, a charac
 
 **If a schema's `S.pattern(...)` (or any refinement) mutants survive while its round-trip laws stay green, the laws are tautological with respect to that refinement. Stop adding round-trip laws. Author rejection properties whose generators come from the domain contract, never from the pattern literal.**
 
-The mechanism is visible in `packages/effect-schema-law/src/schema.ts`. `ruleOfSchemas` (`schema.ts:13`) registers exactly two properties per schema, and feeds both from the schema itself:
+The mechanism is visible in `packages/effect-schema-law/src/rule-of-schemas.kernel.ts`. `ruleOfSchemas` (`rule-of-schemas.kernel.ts:13`) registers exactly two properties per schema, and feeds both from the schema itself:
 
 ```ts
-// packages/effect-schema-law/src/schema.ts:34-42
+// packages/effect-schema-law/src/rule-of-schemas.kernel.ts:34-42
 it.prop(
   `∀x_${name}_=x`,
   [schema], // ← the arbitrary IS the schema under test
