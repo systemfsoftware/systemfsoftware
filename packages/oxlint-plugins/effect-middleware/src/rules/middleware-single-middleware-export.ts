@@ -1,6 +1,6 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
-import { meta, Options } from './middleware-single-middleware-export.config.js'
+import { meta } from './middleware-single-middleware-export.config.js'
 
 export type MessageIds = 'tooManyFunctionExports' | 'disallowedExport'
 

@@ -45,6 +45,7 @@
     "mutation": "stryker run",
     "mutation:full": "stryker run --force",
     "lint": "oxlint . ${AGENT:+--format=unix --quiet}",
+    "attw": "attw --pack .",
     "api:check": "api-extractor run",
     "api:update": "api-extractor run --local"
   },
@@ -55,6 +56,7 @@
   },
   "devDependencies": {
     "@microsoft/api-extractor": "catalog:",
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
     "@systemfsoftware/stryker-js-mutation-run": "workspace:^",
     "@systemfsoftware/stryker-js-typescript-checker": "workspace:^",
     "@systemfsoftware/stryker-js-vitest-runner": "workspace:^",

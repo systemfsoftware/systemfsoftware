@@ -1,16 +1,14 @@
 {
   "$schema": "https://json.schemastore.org/tsconfig",
-  "extends": "@systemfsoftware/tsconfig/tsc/dom/library-monorepo",
+  "extends": [
+    "@systemfsoftware/tsconfig/tsc/dom/library-monorepo",
+    "@systemfsoftware/tsconfig/effect"
+  ],
   "compilerOptions": {
     "customConditions": ["@systemfsoftware/source"],
-    "types": [],
-    "plugins": [
-      {
-        "name": "@effect/tsgo"
-      }
-    ]
+    "types": []
   },
-  "include": ["src"],
+  "include": ["src", "test/browser"],
   "references": [
     {
       "path": "./tsconfig.node.json"

@@ -1,6 +1,6 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
-import { meta, Options } from './handler-no-casts.config.js'
+import { meta } from './handler-no-casts.config.js'
 
 export type MessageIds = 'asAssertion' | 'angleBracketAssertion'
 

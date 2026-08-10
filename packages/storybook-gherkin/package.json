@@ -41,8 +41,11 @@
     "build": "tsdown && pnpm dts:check",
     "typecheck": "tsc --noEmit --incremental",
     "lint": "oxlint . --config oxlint.config.ts",
+    "lint:tsgo": "effect-tsgo diagnostics --project tsconfig.json --format ${TSGO_FORMAT:-text}",
     "attw": "attw --pack .",
-    "dts:check": "node scripts/check-dts.mjs"
+    "dts:check": "node scripts/check-dts.mjs",
+    "storybook": "storybook dev -p 6006 --no-open",
+    "test:browser": "vitest run"
   },
   "dependencies": {
     "type-fest": "catalog:"
@@ -52,14 +55,26 @@
     "storybook": ">=10.0.0"
   },
   "devDependencies": {
-    "@systemfsoftware/arethetypeswrong-cli": "workspace:^",
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
     "@systemfsoftware/tsconfig": "workspace:^",
+    "@storybook/addon-vitest": "catalog:",
+    "@storybook/react-vite": "catalog:",
     "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@vitest/browser": "catalog:",
+    "@vitest/browser-playwright": "catalog:",
     "effect": "catalog:",
+    "playwright": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
     "rimraf": "catalog:",
     "storybook": "catalog:",
     "tsdown": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:",
+    "@systemfsoftware/oxlint-plugin-effect-schema": "workspace:^"
   },
   "publishConfig": {
     "exports": {

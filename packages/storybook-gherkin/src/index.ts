@@ -4,6 +4,7 @@ export * from './errors.js'
 export { feature, From, Steps } from './feature.observer.js'
 export type {
   Feature,
+  FeatureOptions,
   OutlineBuilder,
   OutlineFn,
   RuleScope,

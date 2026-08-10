@@ -998,7 +998,7 @@ describe("AgentSession message pipeline", () => {
 				name: "bash",
 				label: "Bash",
 				description: "wrapped bash",
-				parameters: pi.zod.object({ command: pi.zod.string() }),
+				parameters: pi.arktype({ command: pi.arktype("string") }),
 				async execute(
 					_toolCallId: string,
 					_params: unknown,

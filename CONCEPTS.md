@@ -42,11 +42,31 @@ The property a cached task's key must have before its stored verdict can be trus
 
 Completeness spans four classes of input, and only the first is covered by default: the files the task reads, the environment variables its command's shell expansion reads, the tool binaries an install-time script may swap while the declared dependency version holds still, and the task's own definition. The failure it prevents is silent and directional — an incomplete key does not slow a gate or error it, it lets the gate report a pass for work that never ran. Enabling a cache and closing its key's holes therefore belong in one change rather than in sequence, since every verdict stored or restored in between was produced under a key known to be incomplete.
 
+Completeness is only half the criterion, and pursued alone it produces the opposite failure — see Volatile input and Key partition. The key must move exactly when the answer can change, and never otherwise.
+
 ### Relocatable output
 
 An artifact a cached task may declare as an output, on the criterion that it stays true when restored into a checkout other than the one that produced it. Restoration writes the stored bytes back verbatim and rewrites nothing inside them, so an artifact embedding absolute paths or other machine-local state is not relocatable and must be left undeclared even though caching it would be faster.
 
 The criterion binds hardest where several working trees of one repository share a cache, which is the default rather than the exception — the sharing is automatic unless a cache location is pinned explicitly. Where an output is not relocatable the honest declaration is none at all: the pass-or-fail verdict and the logs still cache, and the machine-local artifact stays where it was built.
+
+### Volatile input
+
+A file inside a task's input set that a normal run of the pipeline itself rewrites, so the key moves although the answer did not. Tool-written state is the whole class: a task runner's own per-task logs, a compiler's incremental state, build output. It is the mirror image of an incomplete key — completeness fails silently toward a stale pass, volatility fails loudly toward a permanent miss.
+
+Volatility is contagious across packages, which is what makes it hard to see. A shared configuration package globbed wholesale into every dependent's input set carries its own tool-written state along with the config, so running that one package's task rewrites state that every dependent hashes, and the whole graph misses on the next run. The glob is the defect, not the shared dependency: the authored config belongs in the key and the tool-written state beside it does not, so a directory input must exclude the state its own tools write. A cross-package invalidation of this kind cannot be observed in a run that filters the graph down, because the filter drops the very task whose run does the rewriting.
+
+### Key partition
+
+A split of one task's cache into disjoint sets, caused by a value that varies with who invoked the task rather than with what the task must answer. Command-line arguments and declared environment variables both enter the key, so an entry point that passes different flags — or reads a variable only some callers set — hashes the same work under a different key and can never reuse another caller's entry.
+
+A partition is not always a defect: where two callers genuinely require different answers, keying them apart is correct. The test is whether the varying value can change the task's verdict. A flag that alters only how a result is presented cannot, so keying on it buys no safety and costs every hit; a variable that selects a different check does, and belongs in the key. Where the split is deliberate rather than forced — separating two audiences for one verdict — prefer a marker every caller in that audience sets deterministically over one that merely happens to be present. A variable that changes the answer belongs in the key regardless of how few callers set it.
+
+### Stale pass
+
+A pass a cached task restores rather than earns, for work whose answer has changed since the verdict was stored. It is the silent direction of cache failure: nothing errors and nothing slows, so a gate reports success for a check that never ran.
+
+A key can be complete with respect to every input it declares and still return one, because the tools that produce the answer are not themselves inputs. The exposed shape is any task that regenerates an artifact and compares it against a committed copy: the comparison keeps passing for as long as the key holds still while the generator moves underneath it, so the drift becomes visible only when some unrelated edit happens to move the key. Detection from inside the cache is impossible by construction, since a hit is precisely the decision not to look. The remedies are to bring whatever can move the answer into the key, or to leave the comparison uncached.
 
 ## Release pipeline
 
@@ -63,6 +83,20 @@ The script at `scripts/check-exports.mjs` that compares each package's `package.
 ### attw
 
 `arethetypeswrong` — the type-resolution validator. `attw --pack .` runs against the package tarball the same way npm would install it, validating that `exports` declarations resolve to consistent types across node10 / node16-CJS / node16-ESM / bundler. Catches downstream-facing drift that workspace-local checks miss.
+
+## Test execution
+
+### Run class
+
+The classification of who invoked a run — an agent, a forge, or a human working locally — which decides how thoroughly the suite executes: how many samples a property test draws, whether coverage is collected, and which reporter receives the output.
+
+The classes are mutually exclusive and ordered, because an agent shell commonly sets the forge's marker as well: an agent run is a development run and takes the fast path even when `CI` is present, so `AGENT` outranks it. Membership is decided by a marker's presence rather than by comparing it against a value, since every producer that means "I am a forge" sets its marker to something and no two of them agree on what — an equality test silently reclassifies every producer whose spelling differs. One definition of the classification is exported and imported everywhere it is read; a second definition is a second opinion, and two will diverge the moment a producer writes a value one of them does not expect. Because the class changes what a run computes rather than only how its output is presented, it is a legitimate cache-key input — see Key partition.
+
+### Contract lane
+
+The verification altitude that exercises a published command-line surface from outside the process that produces it: the package is packed exactly as it would be published, installed into a clean container, and driven as a real program whose observable behavior is then asserted. Distinct from the default test task, which stays container-free and never spawns the shipped artifact.
+
+It exists because a class of properties is process-level by category and admits no honest double: exit status, bytes arriving on a real file descriptor, a timer firing in real elapsed time, a pipe closed by its reader, a signal delivered mid-run, resolution of an installed binary, and whether importing a module has side effects. Substituting the process, the writer, or the clock for any of these asserts the substitute rather than the program, so evidence gathered that way does not count at this altitude — while a logical property, such as the order in which a pipeline emits events, stays at composition altitude and is asserted against a declared port instead. Because the lane depends on a container runtime it can fail for reasons unrelated to the code, and its governing rule is that such a failure must be loud and must name its cause: reporting a skip, or zero passing tests, would make an unrun lane indistinguishable from a passing one, which is the false green the lane was built to remove.
 
 ## Architecture cells (constitution §I–V)
 

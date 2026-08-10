@@ -73,7 +73,6 @@
     "rimraf": "catalog:",
     "ts-expose-internals": "^5.6.0",
     "tsdown": "catalog:",
-    "vite-tsconfig-paths": "catalog:",
     "vitest": "catalog:"
   },
   "engines": {

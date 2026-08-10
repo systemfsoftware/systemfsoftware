@@ -109,4 +109,24 @@ describe("EventController superseded agent_end", () => {
 		expect(loader.stop).toHaveBeenCalledTimes(1);
 		expect(ctx.loadingAnimation).toBeUndefined();
 	});
+
+	it("flushes queued command panels at a non-terminal settle", async () => {
+		const { ctx, streamState } = createContext();
+		const controller = new EventController(ctx);
+
+		await controller.handleEvent(AGENT_START);
+		// An async fan-out settles the loop without ending the run. `isStreaming`
+		// is already false here, so any command issued now mounts immediately —
+		// panels queued during the turn have to mount too, or they render out of
+		// order whenever the terminal settle finally lands.
+		streamState.isStreaming = false;
+		await controller.handleEvent({
+			type: "agent_end",
+			messages: [],
+			isTerminal: false,
+		} as unknown as AgentSessionEvent);
+
+		expect(ctx.flushPendingModelSwitch).toHaveBeenCalled();
+		expect(ctx.flushPendingCommandOutput).toHaveBeenCalled();
+	});
 });

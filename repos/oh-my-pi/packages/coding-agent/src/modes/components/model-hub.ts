@@ -837,7 +837,10 @@ export class ModelHubComponent implements Component {
 				chips.push({
 					label,
 					styled: assignedHere
-						? theme.fg(info.color ?? "muted", `${theme.status.enabled}${label}`) +
+						? // Separator required: under the `nerd` preset this glyph is a
+							// two-cell-wide PUA icon that `visibleWidth` counts as one, so
+							// without it the icon overhangs and eats `label`'s first char.
+							theme.fg(info.color ?? "muted", `${theme.status.enabled} ${label}`) +
 							theme.fg("dim", ` ${theme.status.success}`)
 						: theme.fg(info.color ?? "muted", label),
 					role,

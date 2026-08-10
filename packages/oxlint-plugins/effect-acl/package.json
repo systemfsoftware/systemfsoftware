@@ -10,7 +10,7 @@
   },
   "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/oxlint-plugins/effect-acl#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "Oxlint rules enforcing the *.acl.ts cell \u2014 unidirectional Schema.transformOrFail boundary translation, decode-don't-cast branding, junk-drawer-free placement.",
+  "description": "Oxlint rules enforcing the *.acl.ts cell — unidirectional Schema.transformOrFail boundary translation, decode-don't-cast branding, junk-drawer-free placement.",
   "keywords": [
     "oxlint",
     "oxlint-plugin",
@@ -47,6 +47,7 @@
     "mutation": "stryker run",
     "mutation:full": "stryker run --force",
     "lint": "oxlint . ${AGENT:+--format=unix --quiet}",
+    "attw": "attw --pack .",
     "api:check": "api-extractor run",
     "api:update": "api-extractor run --local"
   },
@@ -56,6 +57,7 @@
   },
   "devDependencies": {
     "@microsoft/api-extractor": "catalog:",
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
     "@systemfsoftware/stryker-js-mutation-run": "workspace:^",
     "@systemfsoftware/stryker-js-typescript-checker": "workspace:^",
     "@systemfsoftware/stryker-js-vitest-runner": "workspace:^",

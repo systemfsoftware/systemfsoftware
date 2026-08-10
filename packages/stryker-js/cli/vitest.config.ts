@@ -1,9 +1,7 @@
 import { defineConfig, sharedConfig } from '@systemfsoftware/vitest-config'
-import tsconfigPaths from 'vite-tsconfig-paths'
 
 export default defineConfig({
   ...sharedConfig,
-  plugins: [tsconfigPaths({ ignoreConfigErrors: true })],
   test: {
     ...sharedConfig.test,
     // KTD5: the container lane lives in `__tests__` under its own config

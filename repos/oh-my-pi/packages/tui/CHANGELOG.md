@@ -2,6 +2,29 @@
 
 ## [Unreleased]
 
+## [17.2.12] - 2026-08-08
+
+### Fixed
+
+- Fixed slow Loader paints exceeding their cost-aware CPU duty cycle on WSL/ConPTY when a 200 ms backpressure cap was shorter than the proportional delay ([#8012](https://github.com/can1357/oh-my-pi/issues/8012)).
+- Fixed display-math (`$$…$$`) fractions rendering as fragmented text when the numerator and denominator are written on separate source lines: `latexToBlock` treated the top-level newline between `\frac{num}` and `{den}` as a row break, severing `\frac` from its denominator. Such argument-continuation newlines are now preserved so the fraction stays stacked ([#7996](https://github.com/can1357/oh-my-pi/issues/7996)).
+
+## [17.2.11] - 2026-08-07
+
+### Fixed
+
+- Fixed an issue where Herdr panes lost native terminal scrollback during TUI transcript replacements or resize redraws.
+- Fixed an issue inside tmux where explicit display resets retained stale light/dark palettes and leaked terminal capability bytes into the editor.
+
+## [17.2.10] - 2026-08-06
+
+### Fixed
+
+- Fixed a startup crash (EIO error) in multiplexer or SSH sessions when a revoked pty leaves stdin.isTTY active.
+- Fixed prompt autocomplete to support Windows drive-absolute paths (e.g., C:/ or C:\).
+- Fixed desktop notifications in systemd, tmux, or SSH-attached Linux sessions when DBUS_SESSION_BUS_ADDRESS is unset.
+- Fixed an issue where Shift+letter and shifted symbol inputs (such as capital letters, ?, and !) were silently dropped on Windows and WSL terminals using ConPTY (e.g., WezTerm).
+
 ## [17.2.9] - 2026-08-05
 
 ### Fixed

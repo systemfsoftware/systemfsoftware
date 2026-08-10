@@ -74,6 +74,7 @@ function makeRenderCtx(transcript: SessionContext): { ctx: InteractiveModeContex
 		viewSession: {
 			buildTranscriptSessionContext: () => transcript,
 			getToolByName: () => undefined,
+			hasBuiltInTool: () => true,
 			extensionRunner: undefined,
 			sessionManager: {
 				getEntries: vi.fn(() => []),

@@ -143,6 +143,8 @@ Split a job across workers and get typed results back. task fans out into isolat
 
 _[Watch the capture ↗](https://omp.sh/clips/irc.mp4)_
 
+Watch the fan-out while it runs: `Alt+A` opens [Agent Hub](docs/agent-hub.md), where the roster shows current activity and usage for every subagent. Open one to read its live transcript, type a steering message, revive a parked worker, or kill a stuck one without aborting the parent session.
+
 ### 06 · A second model, watching every turn.
 
 Pair a reviewer model to the 'advisor' role and it reads every turn the main agent takes, injecting notes inline — a quiet aside, a concern, or a hard blocker. It runs on its own context and its own model, so it catches what the doer rushed past. The main agent sees the note and course-corrects, or tells you why it won't.
@@ -169,7 +171,7 @@ _[Watch the capture ↗](https://omp.sh/clips/web.mp4)_
 
 ### 09 · Unapologetically native. Even on Windows.
 
-Other agents shell out to rg, grep, find, and bash. On many machines those binaries don't exist, and on the ones where they do, every call costs a fork-exec round-trip. omp links the real implementations into the process. ripgrep, glob, find: in-process. brush is the bash — with sessions that survive across calls, and 46 vendored coreutils (ls, sed, sort, xargs, even jq via jaq) that run as in-process builtins, zero fork/exec. The same omp binary runs on macOS, Linux, and Windows — no WSL bridge.
+Other agents shell out to rg, grep, find, and bash. On many machines those binaries don't exist, and on the ones where they do, every call costs a fork-exec round-trip. omp links the real implementations into the process. ripgrep, glob, find: in-process. brush is the bash — with sessions that survive across calls, and 58 command-line utilities (ls, sed, sort, xargs, even jq) ported into the builtins crate and run in-process, zero fork/exec. The same omp binary runs on macOS, Linux, and Windows — no WSL bridge.
 
 ### 10 · Code review with priorities and a verdict
 
@@ -425,9 +427,9 @@ Vuln lookups answer with vendor data, not blog summaries.
 
 ## Roughly **~80,000** lines of Rust, doing the work other harnesses shell out for.
 
-Nine crates, one platform-tagged N-API addon. Search, shell, AST, highlight, PTY, desktop control, image decode, BPE counting — all in-process on the libuv pool. No fork/exec on the hot path. Another ~77k lines ride along vendored: the brush bash fork, a jq engine (jaq), and 46 uutils coreutils compiled straight into the shell.
+Six crates, one platform-tagged N-API addon. Search, shell, AST, highlight, PTY, desktop control, image decode, BPE counting — all in-process on the libuv pool. No fork/exec on the hot path. Another ~80k lines ride along vendored: the brush bash fork, plus 58 command-line utilities — coreutils, findutils, sed, jq, ripgrep-backed grep, fd, diff, moreutils — ported into the builtins crate and compiled straight into the shell.
 
-- Crates: `pi-natives`, `pi-shell`, `pi-ast`, `pi-iso`, `pi-voice`, `pi-walker`, `pi-uu-grep`, `pi-uu-diff`, `pi-uutils-ctx`
+- Crates: `pi-natives`, `pi-shell`, `pi-ast`, `pi-iso`, `pi-voice`, `pi-walker`
 - Platforms: `linux-x64`, `linux-arm64`, `darwin-x64`, `darwin-arm64`, `win32-x64` — x64 ships dual AVX2 and baseline binaries
 
 Per crate, code lines only:
@@ -438,11 +440,8 @@ Per crate, code lines only:
 | pi-natives    | The N-API surface — every module in the table below                                    | 25,000 |
 | pi-walker     | Parallel ignore-aware walker + scan cache shared by grep · glob · workspace · shell    |  5,200 |
 | pi-iso        | Workspace isolation · apfs · btrfs · zfs · reflink · overlayfs · projfs · rcopy        |  3,300 |
-| pi-uu-grep    | ripgrep-backed grep, run as an in-process shell builtin                                |  3,300 |
 | pi-ast        | tree-sitter + ast-grep matching, block resolution, structural summaries                |  2,900 |
 | pi-voice      | Audio capture/playback · Opus · live WebRTC                                            |  1,000 |
-| pi-uu-diff    | Structured diff builtin backed by similar                                              |    500 |
-| pi-uutils-ctx | Thread-local stdio/cwd/env so builtins run concurrently without a fork                 |    300 |
 
 Inside `pi-natives`, the per-module breakdown (glue and tests omitted):
 
@@ -628,13 +627,8 @@ For architecture and contribution guidelines, see [packages/coding-agent/DEVELOP
 | **[pi-iso](crates/pi-iso)**                        | Task isolation backend resolver: APFS clones, btrfs/zfs reflinks, overlayfs, projfs, rcopy          |
 | **[pi-voice](crates/pi-voice)**                    | Audio capture/playback, Opus codecs, and live WebRTC streaming primitives                           |
 | **[pi-walker](crates/pi-walker)**                  | Parallel ignore-aware filesystem walker with the scan cache shared by grep, glob, and workspace     |
-| **[pi-uu-grep](crates/pi-uu-grep)**                | ripgrep-library-backed grep executed as an in-process shell builtin                                 |
-| **[pi-uu-diff](crates/pi-uu-diff)**                | Structured diff builtin backed by the similar crate                                                 |
-| **[pi-uutils-ctx](crates/pi-uutils-ctx)**          | Thread-local stdio/cwd/env context so in-process builtins run concurrently                          |
 | **[brush-core](crates/vendor/brush-core)**         | Vendored fork of [brush-shell](https://github.com/reubeno/brush) for embedded bash execution        |
-| **[brush-builtins](crates/vendor/brush-builtins)** | Vendored bash builtins (cd, echo, test, printf, read, export, etc.)                                 |
-| **[jaq](crates/vendor/jaq)**                       | Vendored jq-compatible JSON query engine, run as an in-process builtin                              |
-| **uu-\* family** ([crates/vendor](crates/vendor))  | 46 vendored uutils coreutils (ls, sed, sort, xargs, …) executed in-process, no fork/exec            |
+| **[pi-builtins](crates/pi-builtins)**              | Bash builtins (cd, echo, test, printf, read, export, …) plus 67 in-process command-line utilities |
 
 ## Contributing
 

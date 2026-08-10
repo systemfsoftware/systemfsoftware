@@ -72,6 +72,7 @@
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
     "lint": "oxlint . --config oxlint.config.ts",
+    "lint:tsgo": "effect-tsgo diagnostics --project tsconfig.json --format ${TSGO_FORMAT:-text}",
     "attw": "attw --pack .",
     "dts:check": "tsc --noEmit -p tsconfig.dts.json"
   },
@@ -85,14 +86,15 @@
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
-    "@systemfsoftware/arethetypeswrong-cli": "workspace:^",
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@types/node": "catalog:",
     "effect": "catalog:",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
     "typescript": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "@systemfsoftware/oxlint-plugin-effect-schema": "workspace:^"
   },
   "publishConfig": {
     "exports": {

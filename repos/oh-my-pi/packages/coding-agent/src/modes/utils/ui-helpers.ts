@@ -500,6 +500,7 @@ export class UiHelpers {
 						content.name,
 						renderArgs,
 						{
+							useBuiltInRenderer: this.ctx.viewSession.hasBuiltInTool(content.name),
 							snapshots: getFileSnapshotStore(this.ctx.viewSession),
 							clipboard: getEditClipboard(this.ctx.viewSession),
 							showImages: settings.get("terminal.showImages"),

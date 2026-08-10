@@ -25,7 +25,6 @@ import { MCPManager } from "../mcp/manager";
 import vibeTurnResultTemplate from "../prompts/tools/vibe-turn-result.md" with { type: "text" };
 import { AgentLifecycleManager } from "../registry/agent-lifecycle";
 import { type AgentRef, AgentRegistry, MAIN_AGENT_ID } from "../registry/agent-registry";
-import type { SessionEntry } from "../session/session-entries";
 import { SessionManager, SessionPersistenceIndeterminateError } from "../session/session-manager";
 import { getBundledAgent } from "../task/agents";
 import { type ExecutorOptions, runSubagentFollowUpTurn, runSubprocess } from "../task/executor";
@@ -363,11 +362,12 @@ function parseLifecycleEvent(value: unknown): VibeLifecycleEvent | undefined {
 	return undefined;
 }
 
-/** Child ids claimed by any valid Vibe spawn event, independent of current parent scope. */
-export function persistedVibeChildIds(entries: Iterable<SessionEntry>): Set<string> {
+/** Child ids claimed by valid Vibe spawn records from untrusted persisted JSON. */
+export function persistedVibeChildIds(entries: Iterable<unknown>): Set<string> {
 	const ids = new Set<string>();
-	for (const entry of entries) {
-		if (entry.type !== "custom" || entry.customType !== VIBE_LIFECYCLE_CUSTOM_TYPE) continue;
+	for (const value of entries) {
+		const entry = objectRecord(value);
+		if (entry?.type !== "custom" || entry.customType !== VIBE_LIFECYCLE_CUSTOM_TYPE) continue;
 		const event = parseLifecycleEvent(entry.data);
 		if (
 			event?.action === "spawn" &&

@@ -106,6 +106,7 @@
     "api:check": "api-extractor run",
     "api:update": "api-extractor run --local",
     "lint": "oxlint",
+    "attw": "attw --pack .",
     "mutation": "stryker run",
     "mutation:full": "stryker run --force"
   },
@@ -135,6 +136,7 @@
     "@effect/vitest": "catalog:",
     "@microsoft/api-extractor": "catalog:",
     "@std/jsonc": "catalog:",
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
     "@systemfsoftware/oxlint-plugin-cell-taxonomy": "workspace:^",
     "@systemfsoftware/stryker-js-vitest-runner": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",

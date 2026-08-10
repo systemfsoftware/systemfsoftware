@@ -8,35 +8,31 @@ import * as Either from 'effect/Either'
 import * as Exit from 'effect/Exit'
 import * as FiberId from 'effect/FiberId'
 import * as Option from 'effect/Option'
-import { isTagged } from 'effect/Predicate'
 import * as Runtime from 'effect/Runtime'
 import { SyncScheduler } from 'effect/Scheduler'
 
-// Concrete (non-Effect) union of terminal values an Effect can carry.
-// Effect unifies with these via the typeSymbol, but TS can't see that
-// without an explicit cast; the single cast below lands on a concrete type.
-type TaggedValue<A, E> =
-  | Exit.Exit<A, E>
-  | Either.Either<A, E>
-  | Option.Option<A>
+// Concrete (non-Effect) terminal values an Effect can carry: a completed
+// effect is an Exit, and Effect unifies with Either and Option values too.
+// The predicates below re-express that unification without assertions.
+
+const isExitValue = <A, E>(value: unknown): value is Exit.Exit<A, E> => Exit.isExit(value)
 
 const fastPath = <R, E, A>(effect: Effect.Effect<A, E, R>): Exit.Exit<A, E> | undefined => {
-  const op = effect as TaggedValue<A, E>
-  if (isTagged('Success')(op) || isTagged('Failure')(op)) {
-    return op as Exit.Exit<A, E>
+  const op: unknown = effect
+  if (isExitValue<A, E>(op)) {
+    return op
   }
-  if (isTagged('Left')(op)) {
-    return Exit.fail((op as Either.Left<E, A>).left)
+  if (Either.isEither(op)) {
+    return Either.match(op, {
+      onLeft: (left) => Exit.fail(left as E),
+      onRight: (right) => Exit.succeed(right as A),
+    })
   }
-  if (isTagged('Right')(op)) {
-    return Exit.succeed((op as Either.Right<E, A>).right)
-  }
-  if (isTagged('Some')(op)) {
-    return Exit.succeed((op as Option.Some<A>).value)
-  }
-  if (isTagged('None')(op)) {
-    const cause = Cause.fail(new NoSuchElementException()) as Cause.Cause<E>
-    return Exit.failCause(cause)
+  if (Option.isOption(op)) {
+    return Option.match(op, {
+      onNone: () => Exit.failCause(Cause.fail(new NoSuchElementException()) as Cause.Cause<E>),
+      onSome: (value) => Exit.succeed(value as A),
+    })
   }
   return undefined
 }

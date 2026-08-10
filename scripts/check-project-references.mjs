@@ -51,9 +51,16 @@ const PRESET_EXTENDS = '@systemfsoftware/tsconfig/node'
 // ── discovery ────────────────────────────────────────────────────────────────
 // `git ls-files` rather than a directory walk: tracked-only excludes stryker
 // sandboxes (.stryker-tmp/**), build output, and every other untracked copy by
-// construction, with no exclusion list to drift out of date.
+// construction, with no exclusion list to drift out of date. One pathspec
+// exclusion earns its place: `repos/` is vendored, read-only under REPO-S3, so
+// a tsconfig.node.json in there is upstream's, is referenced by nothing we own,
+// and can never be repaired here. Scanning it reports failures no one in this
+// repo is permitted to fix -- the same boundary check-lint-coverage draws.
 const discoverProjects = () =>
-  execFileSync('git', ['ls-files', `**/${PROJECT_FILENAME}`], { cwd: repoRoot, encoding: 'utf8' })
+  execFileSync('git', ['ls-files', `**/${PROJECT_FILENAME}`, ':(exclude)repos/**'], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+  })
     .split('\n')
     .filter(Boolean)
     .map(dirname)

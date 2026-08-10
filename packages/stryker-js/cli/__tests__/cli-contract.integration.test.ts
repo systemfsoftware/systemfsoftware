@@ -11,13 +11,42 @@
  */
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect } from 'effect'
+import * as S from 'effect/Schema'
 import semver from 'semver'
 import { expect } from 'vitest'
 import { CLI_BIN, fixtureDir, WORKDIR } from './stryker-cli-env.js'
 import { type CliResult, layerStrykerCli, StrykerCli } from './stryker-cli.adapter.js'
 
+/**
+ * The stream lines the CLI writes are decoded once, at the parse boundary,
+ * against the wire contract the cli package itself emits (run-event.ts and
+ * verdict-envelope.ts): a `kind` tag plus a fixed set of typed optional
+ * fields, with any further machine fields preserved as `unknown`. Every field
+ * a scenario asserts on is declared here so the assertion needs no cast.
+ */
 interface StreamLine {
   readonly kind: string
+  readonly runId?: string | undefined
+  readonly schemaVersion?: string | undefined
+  readonly mode?: string | undefined
+  readonly phase?: string | undefined
+  readonly elapsedMs?: number | undefined
+  readonly id?: string | undefined
+  readonly status?: string | undefined
+  readonly file?: string | undefined
+  readonly mutator?: string | undefined
+  readonly replacement?: string | null | undefined
+  readonly completed?: number | undefined
+  readonly total?: number | null | undefined
+  readonly score?: number | null | undefined
+  readonly thresholds?: { readonly high: number; readonly low: number; readonly break: number | null } | undefined
+  readonly reportFile?: string | null | undefined
+  readonly code?: number | undefined
+  readonly error?: string | undefined
+  readonly remediation?: string | undefined
+  readonly help?: string | undefined
+  readonly manifest?: string | undefined
+  readonly mutants?: ReadonlyArray<DecodedMutant> | undefined
   readonly [field: string]: unknown
 }
 
@@ -28,11 +57,69 @@ interface Observed {
   readonly lines: ReadonlyArray<StreamLine>
 }
 
+const LocationSchema = S.Struct({
+  start: S.Struct({ line: S.Number, column: S.Number }),
+  end: S.Struct({ line: S.Number, column: S.Number }),
+})
+
+const MutantSchema = S.Struct({
+  id: S.String,
+  file: S.String,
+  location: LocationSchema,
+  mutator: S.String,
+  replacement: S.NullOr(S.String),
+  status: S.String,
+})
+
+type DecodedMutant = S.Schema.Type<typeof MutantSchema>
+
+const StreamLineSchema = S.Struct({
+  kind: S.String,
+  runId: S.optional(S.String),
+  schemaVersion: S.optional(S.String),
+  mode: S.optional(S.String),
+  phase: S.optional(S.String),
+  elapsedMs: S.optional(S.Number),
+  id: S.optional(S.String),
+  status: S.optional(S.String),
+  file: S.optional(S.String),
+  location: S.optional(LocationSchema),
+  mutator: S.optional(S.String),
+  replacement: S.optional(S.NullOr(S.String)),
+  completed: S.optional(S.Number),
+  total: S.optional(S.NullOr(S.Number)),
+  score: S.optional(S.NullOr(S.Number)),
+  thresholds: S.optional(S.Struct({ high: S.Number, low: S.Number, break: S.NullOr(S.Number) })),
+  reportFile: S.optional(S.NullOr(S.String)),
+  code: S.optional(S.Number),
+  error: S.optional(S.String),
+  remediation: S.optional(S.String),
+  help: S.optional(S.String),
+  manifest: S.optional(S.String),
+  mutants: S.optional(S.Array(MutantSchema)),
+}).pipe(
+  S.extend(S.Record({ key: S.String, value: S.Unknown })),
+)
+
+const ManifestSchema = S.Struct({
+  tool: S.String,
+  commands: S.Array(
+    S.Struct({
+      subcommands: S.Array(S.Struct({ name: S.String, description: S.String })),
+    }),
+  ),
+})
+
+const decodeStreamLine = S.decodeUnknownSync(S.parseJson(StreamLineSchema))
+
 const parseStream = (stdout: string): ReadonlyArray<StreamLine> =>
   stdout
     .split('\n')
     .filter((line) => line.trim().startsWith('{'))
-    .map((line) => JSON.parse(line) as StreamLine)
+    .map((line) => decodeStreamLine(line))
+
+/** `expect.any` is typed `any` by vitest; the matcher's shape is untyped by design. */
+const anyNumberMatcher: unknown = expect.any(Number)
 
 const invoke = (
   fixture: string,
@@ -93,9 +180,9 @@ const corePurityProbe = (fixture: string): Effect.Effect<CorePurityProbe, never,
       `node -e "process.stdout.write(require('${CORE_PACKAGE_MANIFEST}').engines.node)"`,
       options,
     )
-    const entries = (JSON.parse(manifestResult.stdout) as ReadonlyArray<string>).filter(
-      (entry) => entry !== './package.json',
-    )
+    const entries = (
+      yield* S.decodeUnknown(S.parseJson(S.Array(S.String)))(manifestResult.stdout).pipe(Effect.orDie)
+    ).filter((entry) => entry !== './package.json')
     const imports: Array<CoreEntryImport> = []
     for (const entry of entries) {
       const specifier = `@systemfsoftware/stryker-js-mutation-run${entry.slice(1)}`
@@ -131,8 +218,9 @@ const terminal = (observed: Observed): StreamLine => {
  * between runs. Sorting by mutator name before comparing keeps the assertion
  * about which mutations survived rather than about which finished first.
  */
-const byMutatorName = (lines: ReadonlyArray<StreamLine>): ReadonlyArray<StreamLine> =>
-  [...lines].sort((left, right) => String(left['mutator']).localeCompare(String(right['mutator'])))
+const byMutatorName = <T extends { readonly mutator?: string | undefined }>(
+  lines: ReadonlyArray<T>,
+): ReadonlyArray<T> => [...lines].sort((left, right) => String(left['mutator']).localeCompare(String(right['mutator'])))
 
 const TERMINAL_KINDS = ['verdict', 'error', 'help', 'manifest']
 
@@ -176,7 +264,8 @@ Feature('Driving the mutation tester from an agent harness')
         Then('each stage says how long the run had been going when it began')((s) => {
           const elapsed = s.observed.lines
             .filter((line) => line.kind === 'phase')
-            .map((line) => line['elapsedMs'] as number)
+            .map((line) => line['elapsedMs'])
+            .filter((ms): ms is number => ms !== undefined)
           expect(elapsed).toEqual([...elapsed].sort((left, right) => left - right))
         }),
       ),
@@ -301,15 +390,15 @@ Feature('Driving the mutation tester from an agent harness')
           ])
           for (const survivor of survivors) {
             expect(survivor['total']).toBe(4)
-            expect(survivor['completed'] as number).toBeGreaterThan(0)
+            expect(survivor['completed'] ?? NaN).toBeGreaterThan(0)
             expect(survivor['location']).toMatchObject({
-              start: { line: expect.any(Number), column: expect.any(Number) },
-              end: { line: expect.any(Number), column: expect.any(Number) },
+              start: { line: anyNumberMatcher, column: anyNumberMatcher },
+              end: { line: anyNumberMatcher, column: anyNumberMatcher },
             })
           }
         }),
         Then('the closing line lists the same survivors against a path relative to the project')((s) => {
-          expect(byMutatorName(terminal(s.observed)['mutants'] as ReadonlyArray<StreamLine>)).toMatchObject([
+          expect(byMutatorName(terminal(s.observed)['mutants'] ?? [])).toMatchObject([
             { status: 'Survived', file: 'src/calculator.js', mutator: 'ArithmeticOperator' },
             { status: 'Survived', file: 'src/calculator.js', mutator: 'ArrowFunction' },
           ])
@@ -407,10 +496,7 @@ Feature('Driving the mutation tester from an agent harness')
         }),
         Then('the description names the tool and the command that runs mutation testing')((s) => {
           expect(terminal(s.observed)).toMatchObject({ kind: 'manifest', code: 0 })
-          const described = JSON.parse(terminal(s.observed)['manifest'] as string) as {
-            tool: string
-            commands: ReadonlyArray<{ subcommands: ReadonlyArray<{ name: string; description: string }> }>
-          }
+          const described = S.decodeUnknownSync(S.parseJson(ManifestSchema))(terminal(s.observed)['manifest'] ?? '')
           expect(described.tool).toBe('stryker')
           expect(described.commands[0]?.subcommands).toContainEqual(
             expect.objectContaining({ name: 'run', description: 'Run mutation testing' }),
@@ -461,7 +547,8 @@ Feature('Driving the mutation tester from an agent harness')
         Then('each report comes about ten seconds after the one before it')((s) => {
           const elapsed = s.observed.lines
             .filter((line) => line.kind === 'tick')
-            .map((line) => line['elapsedMs'] as number)
+            .map((line) => line['elapsedMs'])
+            .filter((ms): ms is number => ms !== undefined)
           for (const [index, value] of elapsed.entries()) {
             expect(value).toBeGreaterThanOrEqual((index + 1) * 10_000)
             expect(value).toBeLessThan((index + 1) * 10_000 + 5_000)
@@ -469,10 +556,10 @@ Feature('Driving the mutation tester from an agent harness')
         }),
         Then('progress only moves forward, never past the announced total, and stops at the score')((s) => {
           const ticks = s.observed.lines.filter((line) => line.kind === 'tick')
-          const done = ticks.map((line) => line['completed'] as number)
+          const done = ticks.map((line) => line['completed']).filter((n): n is number => n !== undefined)
           expect(done).toEqual([...done].sort((left, right) => left - right))
           for (const tick of ticks) expect(tick['total']).toBe(18)
-          expect(done.at(-1) as number).toBeLessThanOrEqual(18)
+          expect(done.at(-1) ?? NaN).toBeLessThanOrEqual(18)
           const kinds = kindsOf(s.observed)
           expect(kinds.indexOf('tick')).toBeGreaterThan(kinds.indexOf('plan'))
           expect(kinds.lastIndexOf('tick')).toBeLessThan(kinds.indexOf('verdict'))
@@ -636,7 +723,7 @@ Feature('Driving the mutation tester from an agent harness')
           expect(terminal(s.observed)).toMatchObject({ kind: 'verdict', score: 0 })
         }),
         Then('the surviving mutant is named in the verdict')((s) => {
-          const survivors = terminal(s.observed)['mutants'] as ReadonlyArray<Record<string, unknown>>
+          const survivors = terminal(s.observed)['mutants'] ?? []
           expect(survivors.map((mutant) => mutant['status'])).toEqual(['Survived'])
         }),
         Then('a score of nothing still clears a threshold that demands nothing')((s) => {

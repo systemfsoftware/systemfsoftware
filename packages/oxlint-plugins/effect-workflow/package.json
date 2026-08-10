@@ -10,7 +10,7 @@
   },
   "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/oxlint-plugins/effect-workflow#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "Oxlint rules enforcing the *.workflow.ts cell \u2014 TypeId pattern, inline schemas, Match.exhaustive, purity gate, step extraction, single export.",
+  "description": "Oxlint rules enforcing the *.workflow.ts cell — TypeId pattern, inline schemas, Match.exhaustive, purity gate, step extraction, single export.",
   "keywords": [
     "oxlint",
     "oxlint-plugin",
@@ -45,6 +45,7 @@
     "mutation": "stryker run",
     "mutation:full": "stryker run --force",
     "lint": "oxlint . ${AGENT:+--format=unix --quiet}",
+    "attw": "attw --pack .",
     "api:check": "api-extractor run",
     "api:update": "api-extractor run --local"
   },
@@ -54,6 +55,7 @@
   },
   "devDependencies": {
     "@microsoft/api-extractor": "catalog:",
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
     "@systemfsoftware/stryker-js-mutation-run": "workspace:^",
     "@systemfsoftware/stryker-js-typescript-checker": "workspace:^",
     "@systemfsoftware/stryker-js-vitest-runner": "workspace:^",

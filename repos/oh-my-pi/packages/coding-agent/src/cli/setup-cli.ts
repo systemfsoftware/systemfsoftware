@@ -5,7 +5,7 @@
  */
 import * as path from "node:path";
 import { APP_NAME, getProjectDir, getPythonEnvDir } from "@oh-my-pi/pi-utils";
-import chalk from "chalk";
+import chalk from "@oh-my-pi/pi-utils/chalk";
 import { Settings, settings } from "../config/settings";
 import { checkPythonKernelAvailability } from "../eval/py/kernel";
 import { theme } from "../modes/theme/theme";

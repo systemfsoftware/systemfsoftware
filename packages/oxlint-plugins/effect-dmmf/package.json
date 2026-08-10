@@ -41,10 +41,10 @@
   "scripts": {
     "build": "tsdown && pnpm api:check",
     "clean": "rimraf dist",
-    "test": "vitest run",
     "typecheck": "tsc --noEmit --incremental",
     "format": "dprint fmt",
     "lint": "oxlint . ${AGENT:+--format=unix --quiet}",
+    "attw": "attw --pack .",
     "api:check": "api-extractor run",
     "api:update": "api-extractor run --local"
   },
@@ -71,15 +71,12 @@
   },
   "devDependencies": {
     "@microsoft/api-extractor": "catalog:",
-    "@systemfsoftware/oxlint-plugin": "workspace:^",
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
     "@systemfsoftware/tsconfig": "workspace:^",
-    "@systemfsoftware/vitest-config": "workspace:^",
-    "@types/node": "catalog:",
     "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
-    "typescript": "catalog:",
-    "vitest": "catalog:"
+    "typescript": "catalog:"
   },
   "peerDependencies": {
     "oxlint": "catalog:oxlint"

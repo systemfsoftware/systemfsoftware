@@ -15,7 +15,6 @@ import {
   FORBIDDEN_EXPECTED,
   FORBIDDEN_FIX,
   meta,
-  Options,
   PROCESS_ENV_EXPECTED,
   PROCESS_ENV_FIX,
 } from './kernel-no-ambient-impurity.config.js'

@@ -4,6 +4,9 @@
 'use client'
 import type * as Atom from '@systemfsoftware/effect-atom/Atom'
 import * as Registry from '@systemfsoftware/effect-atom/Registry'
+import * as Effect from 'effect/Effect'
+import * as FiberId from 'effect/FiberId'
+import * as Runtime from 'effect/Runtime'
 import * as React from 'react'
 import * as Scheduler from 'scheduler'
 
@@ -37,7 +40,7 @@ export const RegistryProvider = (options: {
 }) => {
   const ref = React.useRef<{
     readonly registry: Registry.Registry
-    timeout?: ReturnType<typeof setTimeout> | undefined
+    timeout?: (() => void) | undefined
   }>(null)
   if (ref.current === null) {
     ref.current = {
@@ -50,12 +53,19 @@ export const RegistryProvider = (options: {
     }
   }
   React.useEffect(() => {
-    clearTimeout(ref.current!.timeout)
+    const current = ref.current
+    if (current === null) return
+    current.timeout?.()
     return () => {
-      ref.current!.timeout = setTimeout(() => {
-        ref.current?.registry.dispose()
-        ref.current = null
-      }, 500)
+      const fiber = Runtime.runFork(Runtime.defaultRuntime)(
+        Effect.sleep(500).pipe(
+          Effect.andThen(() => {
+            current.registry.dispose()
+            ref.current = null
+          }),
+        ),
+      )
+      current.timeout = () => fiber.unsafeInterruptAsFork(FiberId.none)
     }
   }, [ref])
   return React.createElement(RegistryContext.Provider, { value: ref.current.registry }, options?.children)

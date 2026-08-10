@@ -816,10 +816,18 @@ async function tryDelimitedPathSplit(
 export async function splitDelimitedPathEntry(
 	entry: string,
 	cwd: string,
-	options: { splitter?: PathEntrySplitter } = {},
+	options: {
+		splitter?: PathEntrySplitter;
+		routedUrlPredicate?: (entry: string) => boolean;
+	} = {},
 ): Promise<string[] | null> {
 	const normalizedEntry = normalizePathLikeInput(entry);
 	if (!hasTopLevelPathDelimiter(normalizedEntry)) return null;
+	const splitter = options.splitter ?? parseSearchPath;
+	if (options.routedUrlPredicate?.(normalizedEntry)) {
+		const parts = await tryDelimitedPathSplit(normalizedEntry, cwd, splitter, "semicolon", "none");
+		return parts?.every(options.routedUrlPredicate) ? parts : null;
+	}
 	if (isInternalUrlPath(normalizedEntry)) return null;
 	// A real POSIX file may contain the delimiter and a selector-shaped tail
 	// (`a;b:1-2`, `a b:1-2`). Preserve the raw entry whenever the full literal
@@ -827,7 +835,6 @@ export async function splitDelimitedPathEntry(
 	// splitters see it before delimiter expansion peels or splits (issue #4618
 	// reviewer feedback: delimited expansion ran before the literal check).
 	if ((await probeLiteralPathExists(normalizedEntry, cwd)) !== "missing") return null;
-	const splitter = options.splitter ?? parseSearchPath;
 	const peeledEntry = splitPathAndSel(normalizedEntry).path;
 	if (!hasGlobPathChars(peeledEntry) && (await delimitedPathPartResolves(normalizedEntry, cwd, splitter))) {
 		return null;

@@ -18,5 +18,7 @@
     "low": 100,
     "break": 100
   },
+  "dryRunTimeoutMinutes": 10,
+  "disableBail": true,
   "ignorePatterns": null
 }

@@ -1,7 +1,7 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
 import { Array as A, Schema as S } from 'effect'
-import { meta, Options, WORKFLOW_SUFFIX } from './workflow-inline-schemas.config.js'
+import { meta, WORKFLOW_SUFFIX } from './workflow-inline-schemas.config.js'
 
 export type MessageIds = 'singleConsumerSchema'
 
@@ -35,7 +35,7 @@ export const workflowInlineSchemas = defineRule({
           data: {
             name: source,
             expected: 'types consumed by exactly one workflow to be declared in the workflow file',
-            actual: `importing ${source} from ${filename.split('/').pop()!}`,
+            actual: `importing ${source} from ${filename.split('/').at(-1) ?? filename}`,
             fix: 'move the declarations inline or rename the schema file if it is shared',
           },
         })

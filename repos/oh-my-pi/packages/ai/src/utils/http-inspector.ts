@@ -95,11 +95,10 @@ export async function finalizeErrorMessage(
  * Rewrite error message for GitHub Copilot request failures.
  * Must run AFTER finalizeErrorMessage since it replaces the message entirely.
  *
- * 400 model-unavailable = Copilot fleet skew. A model that `/models` advertises
- *        (claude-sonnet-4.6, claude-opus-4.6, gpt-5.4, gpt-5.3-codex, ...)
- *        flaps between 200 and 400 because only part of Copilot's fleet has it
- *        in the integrator allowlist. After the in-request retry exhausts,
- *        surface guidance rather than the raw error.
+ * 400 `model_not_supported` = Copilot fleet skew. A model that `/models`
+ *        advertises can flap between 200 and 400 because only part of
+ *        Copilot's fleet has it in the integrator allowlist. After the
+ *        in-request retry exhausts, surface guidance rather than the raw error.
  * 401 = token invalid/expired → credential removal is safe, prompt re-login.
  * 403 = token valid but access denied (plan, model policy, org restriction) →
  *       do NOT reuse the auth-failed string (which triggers credential removal).

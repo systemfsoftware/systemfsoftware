@@ -1,7 +1,10 @@
-import { describe, expect, it, type Mock, vi } from "bun:test";
+import { beforeAll, describe, expect, it, type Mock, vi } from "bun:test";
 import type { ImageContent } from "@oh-my-pi/pi-ai";
+import { TreeSelectorComponent } from "@oh-my-pi/pi-coding-agent/modes/components/tree-selector";
 import { InputController } from "@oh-my-pi/pi-coding-agent/modes/controllers/input-controller";
+import { initTheme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 import type { InteractiveModeContext } from "@oh-my-pi/pi-coding-agent/modes/types";
+import type { SessionTreeNode } from "@oh-my-pi/pi-coding-agent/session/session-entries";
 import { type KeyId, matchesKey } from "@oh-my-pi/pi-tui";
 import manualContinuePrompt from "../src/prompts/system/manual-continue.md" with { type: "text" };
 
@@ -64,6 +67,7 @@ async function createContext() {
 		"app.retry": ["alt+r"],
 		"app.clipboard.pasteImage": ["ctrl+v"],
 		"app.tools.toggleVisibility": ["ctrl+shift+o"],
+		"app.tools.expand": ["ctrl+o"],
 	};
 	const customHandlers = new Map<string, () => void>();
 	const setActionKeys = vi.fn();
@@ -79,6 +83,7 @@ async function createContext() {
 	const requestRender = vi.fn();
 	const showError = vi.fn();
 	let focused: unknown;
+	let overlayVisible = false;
 	const addInputListener = vi.fn((listener: InputListener) => {
 		void listener;
 	});
@@ -149,6 +154,7 @@ async function createContext() {
 			addInputListener,
 			addStartListener,
 			getFocused: vi.fn(() => focused),
+			hasOverlay: vi.fn(() => overlayVisible),
 			terminal: { write: terminalWrite, refreshAppearance },
 		} as unknown as InteractiveModeContext["ui"],
 		loadingAnimation: undefined,
@@ -229,6 +235,12 @@ async function createContext() {
 		customHandlers,
 		setFocused(target: unknown) {
 			focused = target;
+		},
+		setOverlayVisible(visible: boolean) {
+			overlayVisible = visible;
+		},
+		setKeybinding(action: string, keys: KeyId[]) {
+			keyMap[action] = keys;
 		},
 		spies: {
 			setActionKeys,
@@ -659,5 +671,93 @@ describe("InputController keybinding setup", () => {
 				userInitiated: true,
 			});
 		}
+	});
+});
+
+describe("InputController global tool-output expand (ctrl+o)", () => {
+	const CTRL_O = "\x0f";
+
+	beforeAll(async () => {
+		await initTheme(false);
+	});
+
+	async function setup() {
+		const context = await createContext();
+		const controller = new context.InputController(context.ctx);
+		controller.setupKeyHandlers();
+		return { ...context, listeners: registeredInputListeners(context.spies.addInputListener) };
+	}
+
+	it("toggles tool-output expansion when a non-editor prompt holds focus (#7837)", async () => {
+		const { ctx, listeners, setFocused } = await setup();
+		// An approval / select prompt owns keyboard focus, not the editor.
+		setFocused({ handleInput() {} });
+		expect(ctx.toolOutputExpanded).toBe(false);
+
+		expect(dispatchInput(listeners, CTRL_O)).toEqual({ consume: true });
+		expect(ctx.toolOutputExpanded).toBe(true);
+	});
+
+	it("still toggles when the editor holds focus", async () => {
+		const { ctx, listeners } = await setup();
+		// The editor is the default focus target in the harness.
+		expect(dispatchInput(listeners, CTRL_O)).toEqual({ consume: true });
+		expect(ctx.toolOutputExpanded).toBe(true);
+	});
+
+	it("defers while a fullscreen/anchored overlay owns the surface", async () => {
+		const { ctx, listeners, setOverlayVisible } = await setup();
+		setOverlayVisible(true);
+
+		expect(dispatchInput(listeners, CTRL_O)).toBeUndefined();
+		expect(ctx.toolOutputExpanded).toBe(false);
+	});
+
+	it("defers to the tree selector's own ctrl+o filter cycle", async () => {
+		const { ctx, listeners, setFocused } = await setup();
+		const tree = [
+			{
+				entry: { id: "root", type: "message", parentId: null, message: { role: "user", content: "hi" } },
+				children: [],
+			},
+		] as unknown as SessionTreeNode[];
+		setFocused(
+			new TreeSelectorComponent(
+				tree,
+				"root",
+				20,
+				() => {},
+				() => {},
+			),
+		);
+
+		expect(dispatchInput(listeners, CTRL_O)).toBeUndefined();
+		expect(ctx.toolOutputExpanded).toBe(false);
+	});
+
+	it("honors a remapped expand key while the tree selector has focus", async () => {
+		const context = await createContext();
+		context.setKeybinding("app.tools.expand", ["ctrl+x"]);
+		const controller = new context.InputController(context.ctx);
+		controller.setupKeyHandlers();
+		const listeners = registeredInputListeners(context.spies.addInputListener);
+		const tree = [
+			{
+				entry: { id: "root", type: "message", parentId: null, message: { role: "user", content: "hi" } },
+				children: [],
+			},
+		] as unknown as SessionTreeNode[];
+		context.setFocused(
+			new TreeSelectorComponent(
+				tree,
+				"root",
+				20,
+				() => {},
+				() => {},
+			),
+		);
+
+		expect(dispatchInput(listeners, "\x18")).toEqual({ consume: true });
+		expect(context.ctx.toolOutputExpanded).toBe(true);
 	});
 });

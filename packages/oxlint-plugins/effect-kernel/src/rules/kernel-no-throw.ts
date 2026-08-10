@@ -1,6 +1,6 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
-import { meta, Options } from './kernel-no-throw.config.js'
+import { meta } from './kernel-no-throw.config.js'
 
 export type MessageIds = 'throwStatement'
 

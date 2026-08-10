@@ -1,6 +1,6 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
-import { EMPTY_VISITOR, identifierName, MATCH_ARM_KINDS, meta, Options } from './workflow-match-exhaustive.config.js'
+import { EMPTY_VISITOR, identifierName, MATCH_ARM_KINDS, meta } from './workflow-match-exhaustive.config.js'
 
 export type MessageIds = 'orElseOnClosedUnion' | 'orElseOnOpenDispatch' | 'missingExhaustive'
 

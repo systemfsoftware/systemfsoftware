@@ -117,34 +117,34 @@ describe("legacy-pi in-place module loading (issue #1674)", () => {
 		expect(mod.sharesHostType).toBe(true);
 	});
 
-	it("loads a default import from linkedom's CommonJS canvas fallback", async () => {
+	it("loads a default import from an ESM package's CommonJS canvas fallback", async () => {
 		const dir = await writePackage({
-			"package.json": JSON.stringify({ name: "linkedom-consumer", version: "1.0.0", type: "module" }),
-			"index.js": 'export { canvasValue } from "linkedom";\n',
-			"node_modules/linkedom/package.json": JSON.stringify({
-				name: "linkedom",
-				version: "0.18.12",
+			"package.json": JSON.stringify({ name: "esm-canvas-consumer", version: "1.0.0", type: "module" }),
+			"index.js": 'export { canvasValue } from "esm-canvas-package";\n',
+			"node_modules/esm-canvas-package/package.json": JSON.stringify({
+				name: "esm-canvas-package",
+				version: "1.0.0",
 				type: "module",
 				exports: "./index.js",
 			}),
-			"node_modules/linkedom/index.js": [
+			"node_modules/esm-canvas-package/index.js": [
 				'import Canvas from "./commonjs/canvas.cjs";',
 				"export const canvasValue = Canvas.createCanvas();",
 			].join("\n"),
-			"node_modules/linkedom/commonjs/canvas.cjs": [
+			"node_modules/esm-canvas-package/commonjs/canvas.cjs": [
 				"try {",
 				'  module.exports = require("canvas");',
 				"} catch {",
 				'  module.exports = require("./canvas-shim.cjs");',
 				"}",
 			].join("\n"),
-			"node_modules/linkedom/commonjs/canvas-shim.cjs":
-				'module.exports = { createCanvas: () => "linkedom-canvas-shim" };\n',
+			"node_modules/esm-canvas-package/commonjs/canvas-shim.cjs":
+				'module.exports = { createCanvas: () => "canvas-shim" };\n',
 		});
 
 		const mod = await loadLegacyPiModule(path.join(dir, "index.js"));
 
-		expect(Reflect.get(Object(mod), "canvasValue")).toBe("linkedom-canvas-shim");
+		expect(Reflect.get(Object(mod), "canvasValue")).toBe("canvas-shim");
 	});
 
 	it("preserves named ESM imports from CommonJS helpers", async () => {
@@ -781,20 +781,19 @@ describe("legacy-pi in-place module loading (issue #1674)", () => {
 				// `@earendil-works/*` is a fork alias with no real published package,
 				// so a working import proves the load-time rewrite fired rather than
 				// a coincidental native resolution against a cached package.
-				'import { z } from "@earendil-works/pi-ai";',
+				'import { Effort } from "@earendil-works/pi-ai";',
 				"export const depValue = cjs.value;",
-				'export const hasZod = typeof z?.object === "function";',
+				'export const hasAi = typeof Effort === "object";',
 				"export default function (pi) { void pi; }",
 			].join("\n"),
 		});
 
-		const mod = (await loadLegacyPiModule(path.join(dir, "index.ts"))) as { depValue: string; hasZod: boolean };
+		const mod = (await loadLegacyPiModule(path.join(dir, "index.ts"))) as { depValue: string; hasAi: boolean };
 
 		// CJS dep under node_modules keeps Bun's native resolution (it is excluded
-		// from the rewrite onLoad), and the legacy pi import is remapped to the
-		// bundled Zod-backed shim.
+		// from the rewrite onLoad), and the legacy pi import is remapped.
 		expect(mod.depValue).toBe("cjs-native");
-		expect(mod.hasZod).toBe(true);
+		expect(mod.hasAi).toBe(true);
 	});
 
 	it("exposes legacy root tool factories used by pi-lean-ctx", async () => {
@@ -1529,8 +1528,8 @@ describe("legacy-pi in-place module loading (issue #1674)", () => {
 			// `@earendil-works/*` only resolves via the rewrite, so an un-rewritten
 			// import fails — proving the hook did not over-reach to this sibling.
 			"unrelated.ts": [
-				'import { z } from "@earendil-works/pi-ai";',
-				'export const hasZod = typeof z?.object === "function";',
+				'import { Effort } from "@earendil-works/pi-ai";',
+				'export const hasAi = typeof Effort === "object";',
 			].join("\n"),
 		});
 

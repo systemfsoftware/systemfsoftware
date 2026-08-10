@@ -37,6 +37,7 @@ import {
 	getOpenAIResponsesHistoryItems,
 	getOpenAIResponsesHistoryPayload,
 	normalizeResponsesToolCallId,
+	stripOpenAIResponsesOutputOnlyStatusesForReplay,
 } from "@oh-my-pi/pi-ai/utils";
 import { captureOpenAIHttpError } from "@oh-my-pi/pi-ai/utils/openai-http";
 import {
@@ -739,7 +740,7 @@ export function buildOpenAiNativeHistory(
 		msgIndex++;
 	}
 
-	return input;
+	return stripOpenAIResponsesOutputOnlyStatusesForReplay(input);
 }
 
 // ============================================================================

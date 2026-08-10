@@ -36,7 +36,6 @@ import type {
 import type { Effort } from "@oh-my-pi/pi-catalog/effort";
 import { isOpenAIModelId } from "@oh-my-pi/pi-catalog/identity/family";
 import type { Api, FetchImpl, KnownApi, Model, Provider, ThinkingBudgets, Usage } from "@oh-my-pi/pi-catalog/types";
-import type { ZodType, z } from "zod/v4";
 import type { ApiKey } from "./auth-retry";
 import type { BedrockOptions } from "./providers/amazon-bedrock";
 import type { AnthropicOptions } from "./providers/anthropic";
@@ -831,22 +830,32 @@ export interface DeveloperMessage {
 	timestamp: number; // Unix timestamp in milliseconds
 }
 
+/** How an automatic retry recovered or ultimately settled a failed attempt. */
 export type AssistantRetryRecoveryKind = "credential" | "model" | "wait" | "plain";
 
-export interface AssistantRetryRecovery {
-	kind: "auto-retry";
-	status: "recovered";
-	attempt: number;
-	recoveredAt: string;
-	recovery: AssistantRetryRecoveryKind;
-	note: string;
-	supersededBy?: {
-		timestamp: number;
-		responseId?: string;
-		provider: string;
-		model: string;
-	};
-}
+/** Persisted presentation state for an assistant error superseded by an automatic retry saga. */
+export type AssistantRetryRecovery =
+	| {
+			kind: "auto-retry";
+			status: "recovered";
+			attempt: number;
+			recoveredAt: string;
+			recovery: AssistantRetryRecoveryKind;
+			note: string;
+			supersededBy?: {
+				timestamp: number;
+				responseId?: string;
+				provider: string;
+				model: string;
+			};
+	  }
+	| {
+			kind: "auto-retry";
+			status: "superseded";
+			attempt: number;
+			recovery: AssistantRetryRecoveryKind;
+			note: string;
+	  };
 
 export interface ContextSnapshot {
 	promptTokens: number; // authoritative provider prompt/input tokens
@@ -1140,19 +1149,13 @@ export type TJsonSchema = Record<string, unknown>;
 /**
  * Schema type accepted by the {@link Tool} interface.
  *
- * Canonical authoring uses Zod or ArkType. Extension compat may supply a JSON
- * Schema object (including TypeBox static schema objects).
+ * Canonical authoring uses ArkType. Extension compat may supply a JSON Schema
+ * object (including TypeBox static schema objects).
  */
-export type TSchema = ZodType | Type | TJsonSchema;
+export type TSchema = Type | TJsonSchema;
 
 /** Resolve parameter types for tool execution / handlers. */
-export type Static<S> = S extends ZodType
-	? z.infer<S>
-	: S extends Type
-		? S["infer"]
-		: S extends { static: infer T }
-			? T
-			: unknown;
+export type Static<S> = S extends Type ? S["infer"] : S extends { static: infer T } ? T : unknown;
 
 export interface ToolCallExample<TArgs = Record<string, unknown>> {
 	caption?: string;

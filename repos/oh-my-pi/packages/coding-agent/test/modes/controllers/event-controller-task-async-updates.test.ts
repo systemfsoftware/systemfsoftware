@@ -68,9 +68,9 @@ describe("EventController async update finalization", () => {
 			transcriptMessageComponents: new WeakMap(),
 			pendingTools,
 			chatContainer,
-			session: { getToolByName: () => undefined, isStreaming: true },
+			session: { getToolByName: () => undefined, hasBuiltInTool: () => true, isStreaming: true },
 			showWarning: vi.fn(),
-			viewSession: { getToolByName: () => undefined },
+			viewSession: { getToolByName: () => undefined, hasBuiltInTool: () => true },
 			sessionManager: { getCwd: () => process.cwd() },
 			setTodos: vi.fn(),
 		} as unknown as InteractiveModeContext;

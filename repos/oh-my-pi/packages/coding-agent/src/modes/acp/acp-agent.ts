@@ -1,5 +1,8 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import type { AgentToolResult } from "@oh-my-pi/pi-agent-core";
+import type { AssistantMessage, Model } from "@oh-my-pi/pi-ai";
+import { getBlobsDir, isEnoent, logger, type postmortem, VERSION } from "@oh-my-pi/pi-utils";
 import {
 	type Agent,
 	type AgentSideConnection,
@@ -39,10 +42,7 @@ import {
 	type SetSessionModeRequest,
 	type SetSessionModeResponse,
 	type Usage,
-} from "@agentclientprotocol/sdk";
-import type { AgentToolResult } from "@oh-my-pi/pi-agent-core";
-import type { AssistantMessage, Model } from "@oh-my-pi/pi-ai";
-import { getBlobsDir, isEnoent, logger, type postmortem, VERSION } from "@oh-my-pi/pi-utils";
+} from "@oh-my-pi/pi-utils/acp";
 import { disableProvider, enableProvider, reset as resetCapabilities } from "../../capability";
 import { Settings } from "../../config/settings";
 import { clearPluginRootsAndCaches, resolveActiveProjectRegistryPath } from "../../discovery/helpers";
@@ -70,6 +70,7 @@ import { SessionManager } from "../../session/session-manager";
 import { executeAcpBuiltinSlashCommand } from "../../slash-commands/acp-builtins";
 import { buildAvailableSlashCommands, toAcpAvailableCommands } from "../../slash-commands/available-commands";
 import { DEFAULT_STT_MODEL_KEY, STT_MODEL_OPTIONS } from "../../stt/models";
+import { refreshAgentDiscovery } from "../../task";
 import { AUTO_THINKING, parseConfiguredThinkingLevel } from "../../thinking";
 import { normalizeLocalScheme } from "../../tools/path-utils";
 import { ToolError } from "../../tools/tool-errors";
@@ -1930,14 +1931,15 @@ export class AcpAgent implements Agent {
 	/**
 	 * Reload plugin/registry state for an ACP session. Mirrors the interactive
 	 * `/reload-plugins` and `/move` flows: invalidates the plugin-roots cache,
-	 * resets the capability cache, refreshes the session's slash-command state,
-	 * then re-advertises commands so the client sees newly installed/disabled
-	 * plugins.
+	 * refreshes task agents, resets the capability cache, refreshes the
+	 * session's slash-command state, then re-advertises commands so the client
+	 * sees newly installed/disabled plugins.
 	 */
 	async #reloadPluginState(record: ManagedSessionRecord): Promise<void> {
 		const cwd = record.session.sessionManager.getCwd();
 		const projectPath = await resolveActiveProjectRegistryPath(cwd);
 		clearPluginRootsAndCaches(projectPath ? [projectPath] : undefined);
+		await refreshAgentDiscovery(cwd);
 		resetCapabilities();
 		await record.session.refreshSkills();
 		const fileCommands = await loadSlashCommands({ cwd });
@@ -2019,7 +2021,16 @@ export class AcpAgent implements Agent {
 
 	async #findStoredSession(sessionId: string, cwd: string): Promise<StoredSessionInfo | undefined> {
 		const sessions = await this.#listStoredSessions(cwd);
-		return sessions.find(session => session.id === sessionId);
+		const scoped = sessions.find(session => session.id === sessionId);
+		if (scoped) {
+			return scoped;
+		}
+		// The cwd-derived directory only covers sessions stored under the current
+		// naming scheme. Sessions written under a legacy/hashed project directory
+		// (the 17.2.5+ scheme reverted in #7656) live elsewhere, so fall back to a
+		// global by-id scan: the session id is globally unique, and
+		// #openStoredSession reopens the file with the request cwd. See #7779.
+		return this.#findStoredSessionById(sessionId);
 	}
 
 	async #findStoredSessionById(sessionId: string): Promise<StoredSessionInfo | undefined> {
@@ -2348,7 +2359,7 @@ export class AcpAgent implements Agent {
 					record.session.sessionManager.appendLabelChange(targetId, label);
 				},
 				getActiveTools: () => record.session.getEnabledToolNames(),
-				getAllTools: () => record.session.getAllToolNames(),
+				getAllTools: () => record.session.getAllToolInfos(),
 				setActiveTools: toolNames => record.session.setActiveToolsByName(toolNames),
 				getCommands: () => getSessionSlashCommands(record.session),
 				setModel: async model => {

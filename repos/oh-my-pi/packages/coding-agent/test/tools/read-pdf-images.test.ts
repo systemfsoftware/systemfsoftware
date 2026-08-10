@@ -125,8 +125,8 @@ describe("read PDF image extraction", () => {
 			.join("\n");
 
 		expect(text).not.toContain("<!-- image:");
-		expect(text).toContain(`read \`${pdfPath}:p11-img0.png\``);
-		expect(text).toContain(`read \`${pdfPath}:p11-img1.png\``);
+		expect(text).toContain("read `doc.pdf:p11-img0.png`");
+		expect(text).toContain("read `doc.pdf:p11-img1.png`");
 		// Page/size metadata is preserved in the handle text.
 		expect(text).toContain("page 11, 199x124pt");
 	});
@@ -144,7 +144,7 @@ describe("read PDF image extraction", () => {
 			.join("\n");
 
 		expect(text).not.toContain("<!-- image:");
-		expect(text).toContain(`read \`${pdfPath}:p3-img0.png\``);
+		expect(text).toContain("read `doc.pdf:p3-img0.png`");
 	});
 
 	it("extracts a PDF image member as an inline image block", async () => {

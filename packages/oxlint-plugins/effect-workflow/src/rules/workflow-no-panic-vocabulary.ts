@@ -1,7 +1,7 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
 import { Array as A, Option } from 'effect'
-import { GENERIC_SUFFIXES, meta, Options, PANIC_PREFIXES } from './workflow-no-panic-vocabulary.config.js'
+import { GENERIC_SUFFIXES, meta, PANIC_PREFIXES } from './workflow-no-panic-vocabulary.config.js'
 
 export type MessageIds = 'panicVocabulary'
 

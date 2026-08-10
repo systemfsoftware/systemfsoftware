@@ -1,0 +1,1482 @@
+commit: 06b6eae3
+
+Passed: 769/1162
+
+# All Passed:
+* babel-plugin-transform-logical-assignment-operators
+* babel-plugin-transform-export-namespace-from
+* babel-plugin-transform-optional-chaining
+* babel-plugin-transform-optional-catch-binding
+* babel-plugin-transform-react-display-name
+
+
+# babel-preset-env (38/85)
+* dynamic-import/auto-esm-unsupported-import-unsupported/input.mjs
+x Output mismatch
+
+* dynamic-import/modules-amd/input.js
+env: Amd module is not implemented.
+
+* dynamic-import/modules-cjs/input.mjs
+x Output mismatch
+
+* dynamic-import/modules-systemjs/input.mjs
+env: Systemjs module is not implemented.
+
+* dynamic-import/modules-umd/input.mjs
+env: Umd module is not implemented.
+
+* export-namespace-from/auto-esm-not-supported/input.mjs
+x Output mismatch
+
+* export-namespace-from/auto-export-namespace-not-supported/input.mjs
+x Output mismatch
+
+* modules/auto-cjs/input.mjs
+x Output mismatch
+
+* modules/modules-cjs/input.mjs
+x Output mismatch
+
+* modules/modules-commonjs/input.mjs
+x Output mismatch
+
+* modules/modules-systemjs/input.mjs
+env: Systemjs module is not implemented.
+
+* modules/modules-umd/input.mjs
+env: Umd module is not implemented.
+
+* plugins-integration/block-scoping-inside-generator/input.js
+x Output mismatch
+
+* plugins-integration/class-arrow-super-tagged-expr/input.js
+x Output mismatch
+
+* plugins-integration/class-features-node-12/input.js
+x Output mismatch
+
+* plugins-integration/for-of-array-block-scoping/input.js
+x Output mismatch
+
+* plugins-integration/for-of-array-block-scoping-2/input.js
+x Output mismatch
+
+* plugins-integration/issue-10662/input.mjs
+env: Umd module is not implemented.
+
+* plugins-integration/issue-11278/input.mjs
+x Output mismatch
+
+* plugins-integration/issue-15012/input.js
+x Output mismatch
+
+* plugins-integration/issue-15170/input.js
+x Output mismatch
+
+* plugins-integration/issue-16155/input.mjs
+x Output mismatch
+
+* plugins-integration/issue-7527/input.mjs
+x Output mismatch
+
+* plugins-integration/regression-2892/input.mjs
+x Output mismatch
+
+* plugins-integration/regression-4855/input.js
+x Output mismatch
+
+* plugins-integration/spread-super-firefox-40/input.js
+x Output mismatch
+
+* preset-options/browserslist-config-ignore-config-with-false/input.mjs
+x Output mismatch
+
+* preset-options/browserslist-config-ignore-package-with-false/input.mjs
+x Output mismatch
+
+* preset-options/deno-1_0/input.mjs
+x Output mismatch
+
+* preset-options/destructuring-edge/input.js
+x Output mismatch
+
+* preset-options/duplicate-named-capturing-groups-regex-chrome-123/input.js
+x Output mismatch
+
+* preset-options/include/input.mjs
+x Output mismatch
+
+* preset-options/include-scoped/input.mjs
+x Output mismatch
+
+* preset-options/ios-6/input.mjs
+x Output mismatch
+
+* preset-options/regexp-modifiers-chrome-121/input.js
+x Output mismatch
+
+* preset-options/reserved-keys-ie8/input.mjs
+x Output mismatch
+
+* preset-options/reserved-names-ie8/input.mjs
+x Output mismatch
+
+* preset-options/rhino-1_7_13/input.mjs
+x Output mismatch
+
+* preset-options/safari-10_3-block-scoped/input.js
+x Output mismatch
+
+* preset-options/safari-tagged-template-literals/input.js
+x Output mismatch
+
+* preset-options/unicode-property-regex-chrome-49/input.js
+x Output mismatch
+
+* preset-options/unicode-sets-regex-chrome-111/input.js
+x Output mismatch
+
+* sanity/block-scoping-for-of/input.js
+x Output mismatch
+
+* sanity/regex-dot-all/input.js
+x Output mismatch
+
+* sanity/transform-duplicate-keys/input.js
+x Output mismatch
+
+* shipped-proposals/new-class-features-chrome-90/input.js
+x Output mismatch
+
+* shipped-proposals/new-class-features-firefox-70/input.js
+x Output mismatch
+
+
+# babel-plugin-transform-explicit-resource-management (25/28)
+* integration/commonjs-transform/input.js
+x Output mismatch
+
+* transform-sync/named-evaluation/input.js
+x Output mismatch
+
+* transform-top-level/hoisting-mutate-outer-class-binding/input.js
+x Output mismatch
+
+
+# babel-plugin-transform-unicode-sets-regex (0/4)
+* basic/basic/input.js
+x Output mismatch
+
+* basic/string-properties/input.js
+x Output mismatch
+
+* transform-u/basic/input.js
+x Output mismatch
+
+* transform-u/string-properties/input.js
+x Output mismatch
+
+
+# babel-plugin-transform-class-properties (214/269)
+* assumption-constantSuper/complex-super-class/input.js
+x Output mismatch
+
+* assumption-constantSuper/static-field/input.js
+x Output mismatch
+
+* assumption-noDocumentAll/optional-chain-before-member-call/input.js
+x Output mismatch
+
+* assumption-noDocumentAll/optional-chain-cast-to-boolean/input.js
+x Output mismatch
+
+* assumption-noUninitializedPrivateFieldAccess/static-private/input.js
+x Output mismatch
+
+* assumption-setPublicClassFields/computed/input.js
+x Output mismatch
+
+* assumption-setPublicClassFields/static-infer-name/input.js
+x Output mismatch
+
+* assumption-setPublicClassFields/static-super-loose/input.js
+x Output mismatch
+
+* class-name-tdz/general/input.js
+x Output mismatch
+
+* class-name-tdz/static-edgest-case/input.js
+x Output mismatch
+
+* class-name-tdz/static-general/input.js
+x Output mismatch
+
+* class-name-tdz/static-loose/input.js
+x Output mismatch
+
+* class-name-tdz/typescript-type/input.ts
+x Output mismatch
+
+* nested-class/super-call-in-decorator/input.js
+x Output mismatch
+
+* nested-class/super-property-in-accessor-key/input.js
+x Output mismatch
+
+* nested-class/super-property-in-decorator/input.js
+x Output mismatch
+
+* private/class-shadow-builtins/input.mjs
+x Output mismatch
+
+* private/optional-chain-cast-to-boolean/input.js
+x Output mismatch
+
+* private/optional-chain-delete-property-with-transform/input.js
+x Output mismatch
+
+* private/optional-chain-in-function-param/input.js
+x Output mismatch
+
+* private/optional-chain-in-function-param-with-transform/input.js
+x Output mismatch
+
+* private/optional-chain-member-optional-call-spread-arguments/input.js
+x Output mismatch
+
+* private/optional-chain-member-optional-call-with-transform/input.js
+x Output mismatch
+
+* private/parenthesized-optional-member-call-with-transform/input.js
+x Output mismatch
+
+* private/static-infer-name/input.js
+x Output mismatch
+
+* private/static-shadow/input.js
+x Output mismatch
+
+* private-loose/canonical/input.js
+x Output mismatch
+
+* private-loose/class-shadow-builtins/input.mjs
+x Output mismatch
+
+* private-loose/optional-chain-before-member-call/input.js
+x Output mismatch
+
+* private-loose/optional-chain-before-member-call-with-transform/input.js
+x Output mismatch
+
+* private-loose/optional-chain-before-property/input.js
+x Output mismatch
+
+* private-loose/optional-chain-before-property-with-transform/input.js
+x Output mismatch
+
+* private-loose/optional-chain-cast-to-boolean/input.js
+x Output mismatch
+
+* private-loose/optional-chain-delete-property-with-transform/input.js
+x Output mismatch
+
+* private-loose/optional-chain-in-function-param/input.js
+x Output mismatch
+
+* private-loose/optional-chain-in-function-param-with-transform/input.js
+x Output mismatch
+
+* private-loose/optional-chain-member-optional-call/input.js
+x Output mismatch
+
+* private-loose/optional-chain-member-optional-call-with-transform/input.js
+x Output mismatch
+
+* private-loose/optional-chain-optional-member-call/input.js
+x Output mismatch
+
+* private-loose/optional-chain-optional-member-call-with-transform/input.js
+x Output mismatch
+
+* private-loose/optional-chain-optional-property-with-transform/input.js
+x Output mismatch
+
+* private-loose/parenthesized-optional-member-call/input.js
+x Output mismatch
+
+* private-loose/parenthesized-optional-member-call-with-transform/input.js
+x Output mismatch
+
+* private-loose/static-infer-name/input.js
+x Output mismatch
+
+* public/class-shadow-builtins/input.mjs
+x Output mismatch
+
+* public/computed/input.js
+x Output mismatch
+
+* public/delete-super-property/input.js
+x Output mismatch
+
+* public/static-infer-name/input.js
+x Output mismatch
+
+* public-loose/class-shadow-builtins/input.mjs
+x Output mismatch
+
+* public-loose/computed/input.js
+x Output mismatch
+
+* public-loose/static-infer-name/input.js
+x Output mismatch
+
+* public-loose/static-super/input.js
+x Output mismatch
+
+* regression/6153/input.js
+x Output mismatch
+
+* source-maps/private-get/input.js
+x Output mismatch
+
+* source-maps/private-set/input.js
+x Output mismatch
+
+
+# babel-plugin-transform-class-static-block (11/24)
+* class-static-block/before-static-fields/input.js
+x Output mismatch
+
+* class-static-block/class-binding/input.js
+x Output mismatch
+
+* class-static-block/class-declaration/input.js
+x Output mismatch
+
+* class-static-block/class-inferred-name/input.js
+x Output mismatch
+
+* class-static-block/in-class-heritage/input.js
+x Output mismatch
+
+* class-static-block/multiple-static-initializers/input.js
+x Output mismatch
+
+* class-static-block/name-conflict/input.js
+x Output mismatch
+
+* class-static-block/new-target/input.js
+x Output mismatch
+
+* class-static-block/preserve-comments/input.js
+x Output mismatch
+
+* class-static-block/var-scope/input.js
+x Output mismatch
+
+* integration/in-class-heritage/input.js
+x Output mismatch
+
+* integration-loose/in-class-heritage/input.js
+x Output mismatch
+
+* integration-loose/super-static-block/input.js
+x Output mismatch
+
+
+# babel-plugin-transform-private-methods (48/148)
+* accessors-loose/basic/input.js
+x Output mismatch
+
+* accessors-loose/class-binding/input.js
+x Output mismatch
+
+* accessors-loose/get-only-setter/input.js
+x Output mismatch
+
+* accessors-loose/preserve-comments/input.js
+x Output mismatch
+
+* accessors-loose/reassignment/input.js
+x Output mismatch
+
+* accessors-loose/set-only-getter/input.js
+x Output mismatch
+
+* accessors-loose/updates/input.js
+x Output mismatch
+
+* accessors-privateFieldsAsProperties/basic/input.js
+x Output mismatch
+
+* accessors-privateFieldsAsProperties/class-binding/input.js
+x Output mismatch
+
+* accessors-privateFieldsAsProperties/get-only-setter/input.js
+x Output mismatch
+
+* accessors-privateFieldsAsProperties/preserve-comments/input.js
+x Output mismatch
+
+* accessors-privateFieldsAsProperties/set-only-getter/input.js
+x Output mismatch
+
+* accessors-privateFieldsAsProperties/updates/input.js
+x Output mismatch
+
+* accessors-privateFieldsAsSymbols/basic/input.js
+x Output mismatch
+
+* accessors-privateFieldsAsSymbols/class-binding/input.js
+x Output mismatch
+
+* accessors-privateFieldsAsSymbols/get-only-setter/input.js
+x Output mismatch
+
+* accessors-privateFieldsAsSymbols/preserve-comments/input.js
+x Output mismatch
+
+* accessors-privateFieldsAsSymbols/set-only-getter/input.js
+x Output mismatch
+
+* accessors-privateFieldsAsSymbols/updates/input.js
+x Output mismatch
+
+* assumption-constantSuper/private-method-super/input.js
+x Output mismatch
+
+* private-method/super/input.js
+x Output mismatch
+
+* private-method-loose/assignment/input.js
+x Output mismatch
+
+* private-method-loose/async/input.js
+x Output mismatch
+
+* private-method-loose/before-fields/input.js
+x Output mismatch
+
+* private-method-loose/class-binding/input.js
+x Output mismatch
+
+* private-method-loose/class-expression/input.js
+x Output mismatch
+
+* private-method-loose/context/input.js
+x Output mismatch
+
+* private-method-loose/exfiltrated/input.js
+x Output mismatch
+
+* private-method-loose/generator/input.js
+x Output mismatch
+
+* private-method-loose/preserve-comments/input.js
+x Output mismatch
+
+* private-method-loose/reassignment/input.js
+x Output mismatch
+
+* private-method-loose/super/input.js
+x Output mismatch
+
+* private-method-privateFieldsAsProperties/assignment/input.js
+x Output mismatch
+
+* private-method-privateFieldsAsProperties/async/input.js
+x Output mismatch
+
+* private-method-privateFieldsAsProperties/before-fields/input.js
+x Output mismatch
+
+* private-method-privateFieldsAsProperties/class-binding/input.js
+x Output mismatch
+
+* private-method-privateFieldsAsProperties/class-expression/input.js
+x Output mismatch
+
+* private-method-privateFieldsAsProperties/context/input.js
+x Output mismatch
+
+* private-method-privateFieldsAsProperties/exfiltrated/input.js
+x Output mismatch
+
+* private-method-privateFieldsAsProperties/generator/input.js
+x Output mismatch
+
+* private-method-privateFieldsAsProperties/super/input.js
+x Output mismatch
+
+* private-method-privateFieldsAsSymbols/assignment/input.js
+x Output mismatch
+
+* private-method-privateFieldsAsSymbols/async/input.js
+x Output mismatch
+
+* private-method-privateFieldsAsSymbols/before-fields/input.js
+x Output mismatch
+
+* private-method-privateFieldsAsSymbols/class-binding/input.js
+x Output mismatch
+
+* private-method-privateFieldsAsSymbols/class-expression/input.js
+x Output mismatch
+
+* private-method-privateFieldsAsSymbols/context/input.js
+x Output mismatch
+
+* private-method-privateFieldsAsSymbols/exfiltrated/input.js
+x Output mismatch
+
+* private-method-privateFieldsAsSymbols/generator/input.js
+x Output mismatch
+
+* private-method-privateFieldsAsSymbols/super/input.js
+x Output mismatch
+
+* private-static-method/async/input.js
+
+  x TS(1108): A 'return' statement can only be used within a function body.
+    ,-[tasks/coverage/babel/packages/babel-plugin-transform-private-methods/test/fixtures/private-static-method/async/input.js:11:1]
+ 10 | 
+ 11 | return new Cl().test().then(val => {
+    : ^^^^^^
+ 12 |   expect(val).toBe(2);
+    `----
+
+
+* private-static-method/read-only/input.js
+x Output mismatch
+
+* private-static-method-loose/async/input.js
+
+  x TS(1108): A 'return' statement can only be used within a function body.
+    ,-[tasks/coverage/babel/packages/babel-plugin-transform-private-methods/test/fixtures/private-static-method-loose/async/input.js:11:1]
+ 10 | 
+ 11 | return new Cl().test().then(val => {
+    : ^^^^^^
+ 12 |   expect(val).toBe(2);
+    `----
+
+
+* private-static-method-loose/basic/input.js
+x Output mismatch
+
+* private-static-method-loose/class-check/input.js
+x Output mismatch
+
+* private-static-method-loose/class-expression/input.js
+x Output mismatch
+
+* private-static-method-loose/exfiltrated/input.js
+x Output mismatch
+
+* private-static-method-loose/generator/input.js
+x Output mismatch
+
+* private-static-method-loose/preserve-comments/input.js
+x Output mismatch
+
+* private-static-method-loose/reassignment/input.js
+x Output mismatch
+
+* private-static-method-loose/super/input.js
+x Output mismatch
+
+* private-static-method-loose/this/input.js
+x Output mismatch
+
+* private-static-method-privateFieldsAsProperties/async/input.js
+
+  x TS(1108): A 'return' statement can only be used within a function body.
+    ,-[tasks/coverage/babel/packages/babel-plugin-transform-private-methods/test/fixtures/private-static-method-privateFieldsAsProperties/async/input.js:11:1]
+ 10 | 
+ 11 | return new Cl().test().then(val => {
+    : ^^^^^^
+ 12 |   expect(val).toBe(2);
+    `----
+
+
+* private-static-method-privateFieldsAsProperties/basic/input.js
+x Output mismatch
+
+* private-static-method-privateFieldsAsProperties/class-check/input.js
+x Output mismatch
+
+* private-static-method-privateFieldsAsProperties/class-expression/input.js
+x Output mismatch
+
+* private-static-method-privateFieldsAsProperties/exfiltrated/input.js
+x Output mismatch
+
+* private-static-method-privateFieldsAsProperties/generator/input.js
+x Output mismatch
+
+* private-static-method-privateFieldsAsProperties/reassignment/input.js
+x Output mismatch
+
+* private-static-method-privateFieldsAsProperties/super/input.js
+x Output mismatch
+
+* private-static-method-privateFieldsAsProperties/this/input.js
+x Output mismatch
+
+* private-static-method-privateFieldsAsSymbols/async/input.js
+
+  x TS(1108): A 'return' statement can only be used within a function body.
+    ,-[tasks/coverage/babel/packages/babel-plugin-transform-private-methods/test/fixtures/private-static-method-privateFieldsAsSymbols/async/input.js:11:1]
+ 10 | 
+ 11 | return new Cl().test().then(val => {
+    : ^^^^^^
+ 12 |   expect(val).toBe(2);
+    `----
+
+
+* private-static-method-privateFieldsAsSymbols/basic/input.js
+x Output mismatch
+
+* private-static-method-privateFieldsAsSymbols/class-check/input.js
+x Output mismatch
+
+* private-static-method-privateFieldsAsSymbols/class-expression/input.js
+x Output mismatch
+
+* private-static-method-privateFieldsAsSymbols/exfiltrated/input.js
+x Output mismatch
+
+* private-static-method-privateFieldsAsSymbols/generator/input.js
+x Output mismatch
+
+* private-static-method-privateFieldsAsSymbols/reassignment/input.js
+x Output mismatch
+
+* private-static-method-privateFieldsAsSymbols/super/input.js
+x Output mismatch
+
+* private-static-method-privateFieldsAsSymbols/this/input.js
+x Output mismatch
+
+* static-accessors/get-only-setter/input.js
+x Output mismatch
+
+* static-accessors/set-only-getter/input.js
+x Output mismatch
+
+* static-accessors-loose/basic/input.js
+x Output mismatch
+
+* static-accessors-loose/destructure-set/input.js
+x Output mismatch
+
+* static-accessors-loose/get-only-setter/input.js
+x Output mismatch
+
+* static-accessors-loose/preserve-comments/input.js
+x Output mismatch
+
+* static-accessors-loose/set-only-getter/input.js
+x Output mismatch
+
+* static-accessors-loose/updates/input.js
+x Output mismatch
+
+* static-accessors-privateFieldsAsProperties/basic/input.js
+x Output mismatch
+
+* static-accessors-privateFieldsAsProperties/destructure-set/input.js
+x Output mismatch
+
+* static-accessors-privateFieldsAsProperties/get-only-setter/input.js
+x Output mismatch
+
+* static-accessors-privateFieldsAsProperties/preserve-comments/input.js
+x Output mismatch
+
+* static-accessors-privateFieldsAsProperties/set-only-getter/input.js
+x Output mismatch
+
+* static-accessors-privateFieldsAsProperties/updates/input.js
+x Output mismatch
+
+* static-accessors-privateFieldsAsSymbols/basic/input.js
+x Output mismatch
+
+* static-accessors-privateFieldsAsSymbols/destructure-set/input.js
+x Output mismatch
+
+* static-accessors-privateFieldsAsSymbols/get-only-setter/input.js
+x Output mismatch
+
+* static-accessors-privateFieldsAsSymbols/preserve-comments/input.js
+x Output mismatch
+
+* static-accessors-privateFieldsAsSymbols/set-only-getter/input.js
+x Output mismatch
+
+* static-accessors-privateFieldsAsSymbols/updates/input.js
+x Output mismatch
+
+
+# babel-plugin-transform-private-property-in-object (24/59)
+* assumption-privateFieldsAsProperties/accessor/input.js
+x Output mismatch
+
+* assumption-privateFieldsAsProperties/compiled-classes/input.js
+x Output mismatch
+
+* assumption-privateFieldsAsProperties/field/input.js
+x Output mismatch
+
+* assumption-privateFieldsAsProperties/method/input.js
+x Output mismatch
+
+* assumption-privateFieldsAsProperties/nested-class/input.js
+x Output mismatch
+
+* assumption-privateFieldsAsProperties/nested-class-other-redeclared/input.js
+x Output mismatch
+
+* assumption-privateFieldsAsProperties/nested-class-redeclared/input.js
+x Output mismatch
+
+* assumption-privateFieldsAsProperties/static-accessor/input.js
+x Output mismatch
+
+* assumption-privateFieldsAsProperties/static-field/input.js
+x Output mismatch
+
+* assumption-privateFieldsAsProperties/static-method/input.js
+x Output mismatch
+
+* assumption-privateFieldsAsSymbols/accessor/input.js
+x Output mismatch
+
+* assumption-privateFieldsAsSymbols/compiled-classes/input.js
+x Output mismatch
+
+* assumption-privateFieldsAsSymbols/field/input.js
+x Output mismatch
+
+* assumption-privateFieldsAsSymbols/method/input.js
+x Output mismatch
+
+* assumption-privateFieldsAsSymbols/nested-class/input.js
+x Output mismatch
+
+* assumption-privateFieldsAsSymbols/nested-class-other-redeclared/input.js
+x Output mismatch
+
+* assumption-privateFieldsAsSymbols/nested-class-redeclared/input.js
+x Output mismatch
+
+* assumption-privateFieldsAsSymbols/static-accessor/input.js
+x Output mismatch
+
+* assumption-privateFieldsAsSymbols/static-field/input.js
+x Output mismatch
+
+* assumption-privateFieldsAsSymbols/static-method/input.js
+x Output mismatch
+
+* private/static-shadow/input.js
+x Output mismatch
+
+* private-loose/accessor/input.js
+x Output mismatch
+
+* private-loose/field/input.js
+x Output mismatch
+
+* private-loose/method/input.js
+x Output mismatch
+
+* private-loose/native-classes/input.js
+x Output mismatch
+
+* private-loose/nested-class/input.js
+x Output mismatch
+
+* private-loose/nested-class-other-redeclared/input.js
+x Output mismatch
+
+* private-loose/nested-class-redeclared/input.js
+x Output mismatch
+
+* private-loose/static-accessor/input.js
+x Output mismatch
+
+* private-loose/static-field/input.js
+x Output mismatch
+
+* private-loose/static-method/input.js
+x Output mismatch
+
+* private-loose/static-shadow/input.js
+x Output mismatch
+
+* to-native-fields/class-expression-in-default-param/input.js
+x Output mismatch
+
+* to-native-fields/static-shadow/input.js
+x Output mismatch
+
+* to-native-fields/static-shadowed-binding/input.js
+x Output mismatch
+
+
+# babel-plugin-transform-nullish-coalescing-operator (9/24)
+* assumption-noDocumentAll/transform/input.js
+x Output mismatch
+
+* assumption-noDocumentAll/transform-in-default-destructuring/input.js
+x Output mismatch
+
+* assumption-noDocumentAll/transform-in-default-param/input.js
+x Output mismatch
+
+* assumption-noDocumentAll/transform-in-function/input.js
+x Output mismatch
+
+* assumption-noDocumentAll/transform-static-refs-in-default/input.js
+x Output mismatch
+
+* assumption-noDocumentAll/transform-static-refs-in-function/input.js
+x Output mismatch
+
+* assumption-pureGetters/logical-assignment/input.js
+x Output mismatch
+
+* assumption-pureGetters/logical-assignment-undeclared/input.js
+x Output mismatch
+
+* assumption-pureGetters/transform-in-default-param/input.js
+x Output mismatch
+
+* assumption-pureGetters/transform-static-refs-in-function/input.js
+x Output mismatch
+
+* nullish-coalescing/logical-assignment/input.js
+x Output mismatch
+
+* nullish-coalescing/logical-assignment-undeclared/input.js
+x Output mismatch
+
+* nullish-coalescing/transform-loose/input.js
+x Output mismatch
+
+* nullish-coalescing/transform-static-refs-in-function/input.js
+x Output mismatch
+
+* nullish-coalescing/undeclared/input.js
+x Output mismatch
+
+
+# babel-plugin-transform-async-generator-functions (19/20)
+* async-generators/class-private-method/input.js
+x Output mismatch
+
+
+# babel-plugin-transform-object-rest-spread (29/39)
+* object-rest/for-x/input.js
+x Output mismatch
+
+* object-rest/for-x-array-pattern/input.js
+x Output mismatch
+
+* object-rest/for-x-array-pattern-rest-only/input.js
+x Output mismatch
+
+* object-rest/for-x-assignment-shadowed-block-scoped-bindings/input.js
+x Output mismatch
+
+* object-rest/for-x-completion-record/input.js
+x Output mismatch
+
+* object-rest/for-x-declaration-shadowed-block-scoped-bindings/input.js
+x Output mismatch
+
+* object-rest/object-ref-computed/input.js
+x Output mismatch
+
+* object-rest/symbol/input.js
+x Output mismatch
+
+* regression/gh-17274/input.js
+x Output mismatch
+
+* regression/gh-8323/input.js
+
+  x Option `loose` is not implemented for object-rest-spread.
+
+
+
+# babel-plugin-transform-dotall-regex (0/3)
+* dotall-regex/simple/input.js
+x Output mismatch
+
+* dotall-regex/with-unicode-flag/input.js
+x Output mismatch
+
+* dotall-regex/with-unicode-property-escape/input.js
+x Output mismatch
+
+
+# babel-plugin-transform-async-to-generator (9/31)
+* assumption-ignoreFunctionLength-true/basic/input.mjs
+
+  x Compiler assumption `ignoreFunctionLength` is not implemented for object-
+  | rest-spread.
+
+
+* assumption-ignoreFunctionLength-true/export-default-function/input.mjs
+
+  x Compiler assumption `ignoreFunctionLength` is not implemented for object-
+  | rest-spread.
+
+
+* assumption-noNewArrows-false/basic/input.js
+x Output mismatch
+
+* async-to-generator/async-complex-params/input.js
+x Output mismatch
+
+* async-to-generator/async-iife-with-regenerator/input.js
+x Output mismatch
+
+* async-to-generator/async-iife-with-regenerator-spec/input.js
+x Output mismatch
+
+* async-to-generator/class-method-arity/input.js
+x Output mismatch
+
+* async-to-generator/class-method-arity-ignore-length/input.js
+
+  x Compiler assumption `ignoreFunctionLength` is not implemented for object-
+  | rest-spread.
+
+
+* bluebird-coroutines/arrow-function/input.js
+x Output mismatch
+
+* bluebird-coroutines/class/input.js
+x Output mismatch
+
+* bluebird-coroutines/expression/input.js
+x Output mismatch
+
+* bluebird-coroutines/named-expression/input.js
+x Output mismatch
+
+* bluebird-coroutines/statement/input.js
+x Output mismatch
+
+* export-async/default-arrow-export/input.mjs
+x Output mismatch
+
+* export-async/default-export/input.mjs
+x Output mismatch
+
+* export-async/import-and-export/input.mjs
+x Output mismatch
+
+* export-async/lone-export/input.mjs
+x Output mismatch
+
+* regression/15978/input.js
+x Output mismatch
+
+* regression/T7108/input.js
+x Output mismatch
+
+* regression/gh-6923/input.js
+x Output mismatch
+
+* regression/in-uncompiled-class-fields/input.js
+x Output mismatch
+
+* regression/regression-2765/input.js
+x Output mismatch
+
+
+# babel-plugin-transform-exponentiation-operator (2/7)
+* exponentiation-operator/memoise-object/input.js
+x Output mismatch
+
+* exponentiation-operator/memoise-object-in-default-args/input.js
+x Output mismatch
+
+* regression/4349/input.js
+x Output mismatch
+
+* regression/4349-keep-super/input.js
+x Output mismatch
+
+* regression/4403/input.js
+x Output mismatch
+
+
+# babel-plugin-transform-arrow-functions (3/11)
+* arrow-functions/implicit-var-arguments/input.js
+x Output mismatch
+
+* arrow-functions/self-referential/input.js
+x Output mismatch
+
+* arrow-functions/spec/input.js
+x Output mismatch
+
+* assumption-newableArrowFunctions-false/basic/input.js
+x Output mismatch
+
+* assumption-newableArrowFunctions-false/naming/input.js
+x Output mismatch
+
+* assumption-newableArrowFunctions-false/self-referential/input.js
+x Output mismatch
+
+* spec/newableArrowFunction-default/input.js
+x Output mismatch
+
+* spec/newableArrowFunction-vs-spec-false/input.js
+x Output mismatch
+
+
+# babel-preset-typescript (9/12)
+* node-extensions/import-in-cts/input.cts
+x Output mismatch
+
+* opts/rewriteImportExtensions/input.ts
+x Output mismatch
+
+* opts/rewriteImportExtensions-createImportExpressions/input.ts
+x Output mismatch
+
+
+# babel-plugin-transform-typescript (113/155)
+* class/accessor-allowDeclareFields-false/input.ts
+
+  x TS(18010): An accessibility modifier cannot be used with a private
+  | identifier.
+   ,-[tasks/coverage/babel/packages/babel-plugin-transform-typescript/test/fixtures/class/accessor-allowDeclareFields-false/input.ts:8:3]
+ 7 |   abstract accessor prop6: number;
+ 8 |   private accessor #p: any;
+   :   ^^^^^^^
+ 9 | 
+   `----
+  help: Private identifiers are enforced at runtime, while accessibility
+        modifiers only affect type checking, so using both is redundant.
+
+
+  x TS(1243): 'accessor' modifier cannot be used with 'readonly' modifier.
+    ,-[tasks/coverage/babel/packages/babel-plugin-transform-typescript/test/fixtures/class/accessor-allowDeclareFields-false/input.ts:14:3]
+ 13 |   abstract accessor f = 1;
+ 14 |   readonly accessor g;
+    :   ^^^^^^^^
+ 15 | }
+    `----
+  help: Allowed modifiers are: private, protected, public, static, abstract,
+        override
+
+
+* class/accessor-allowDeclareFields-true/input.ts
+
+  x TS(18010): An accessibility modifier cannot be used with a private
+  | identifier.
+   ,-[tasks/coverage/babel/packages/babel-plugin-transform-typescript/test/fixtures/class/accessor-allowDeclareFields-true/input.ts:8:3]
+ 7 |   abstract accessor prop6: number;
+ 8 |   private accessor #p: any;
+   :   ^^^^^^^
+ 9 | 
+   `----
+  help: Private identifiers are enforced at runtime, while accessibility
+        modifiers only affect type checking, so using both is redundant.
+
+
+  x TS(1243): 'accessor' modifier cannot be used with 'readonly' modifier.
+    ,-[tasks/coverage/babel/packages/babel-plugin-transform-typescript/test/fixtures/class/accessor-allowDeclareFields-true/input.ts:14:3]
+ 13 |   abstract accessor f = 1;
+ 14 |   readonly accessor g;
+    :   ^^^^^^^^
+ 15 | }
+    `----
+  help: Allowed modifiers are: private, protected, public, static, abstract,
+        override
+
+
+* class/parameter-properties-late-super/input.ts
+x Output mismatch
+
+* class/private-method-override-transform-private/input.ts
+x Output mismatch
+
+* declarations/const-enum/input.ts
+Bindings mismatch:
+after transform: ScopeId(0): ["E"]
+rebuilt        : ScopeId(0): []
+
+* declarations/erased/input.ts
+Bindings mismatch:
+after transform: ScopeId(0): ["C", "E", "N", "f", "x"]
+rebuilt        : ScopeId(0): []
+
+* declarations/export-declare-enum/input.ts
+Bindings mismatch:
+after transform: ScopeId(0): ["A"]
+rebuilt        : ScopeId(0): []
+
+* declarations/nested-namespace/input.mjs
+Bindings mismatch:
+after transform: ScopeId(0): ["P"]
+rebuilt        : ScopeId(0): []
+
+* enum/enum-merging-inner-references/input.ts
+Symbol redeclarations mismatch for "Animals":
+after transform: SymbolId(0): [Span { start: 5, end: 12 }, Span { start: 41, end: 48 }]
+rebuilt        : SymbolId(0): []
+Unresolved references mismatch:
+after transform: ["Cat", "Dog"]
+rebuilt        : []
+
+* enum/enum-merging-inner-references-shadow/input.ts
+Symbol reference IDs mismatch for "Cat":
+after transform: SymbolId(0): [ReferenceId(0)]
+rebuilt        : SymbolId(0): []
+Symbol reference IDs mismatch for "Dog":
+after transform: SymbolId(1): [ReferenceId(1)]
+rebuilt        : SymbolId(1): []
+Symbol redeclarations mismatch for "Animals":
+after transform: SymbolId(2): [Span { start: 38, end: 45 }, Span { start: 65, end: 72 }, Span { start: 92, end: 99 }]
+rebuilt        : SymbolId(2): []
+
+* enum/export/input.ts
+Symbol redeclarations mismatch for "E":
+after transform: SymbolId(0): [Span { start: 12, end: 13 }, Span { start: 40, end: 41 }]
+rebuilt        : SymbolId(0): []
+
+* enum/mix-references/input.ts
+x Output mismatch
+
+* enum/non-constant-member-reference/input.ts
+Missing ReferenceId: "Foo"
+Missing ReferenceId: "Foo"
+Symbol reference IDs mismatch for "Foo":
+after transform: SymbolId(7): [ReferenceId(4), ReferenceId(5), ReferenceId(6), ReferenceId(7), ReferenceId(8), ReferenceId(9), ReferenceId(10), ReferenceId(11), ReferenceId(12)]
+rebuilt        : SymbolId(2): [ReferenceId(0), ReferenceId(1), ReferenceId(3), ReferenceId(4), ReferenceId(5), ReferenceId(6), ReferenceId(7), ReferenceId(8), ReferenceId(9), ReferenceId(10), ReferenceId(12)]
+
+* enum/non-scoped/input.ts
+Symbol redeclarations mismatch for "E":
+after transform: SymbolId(0): [Span { start: 5, end: 6 }, Span { start: 40, end: 41 }]
+rebuilt        : SymbolId(0): []
+
+* enum/outer-references/input.ts
+Symbol reference IDs mismatch for "socketType":
+after transform: SymbolId(0): [ReferenceId(0), ReferenceId(1), ReferenceId(2), ReferenceId(10)]
+rebuilt        : SymbolId(0): [ReferenceId(7)]
+
+* enum/reverse-mappings-syntactically-determinable/input.ts
+x Output mismatch
+
+* enum/ts5.0-const-foldable/input.ts
+x Output mismatch
+
+* exports/declare-namespace/input.ts
+Symbol flags mismatch for "N":
+after transform: SymbolId(0): SymbolFlags(Class | NamespaceModule | Ambient)
+rebuilt        : SymbolId(0): SymbolFlags(Class)
+Symbol redeclarations mismatch for "N":
+after transform: SymbolId(0): [Span { start: 13, end: 14 }, Span { start: 83, end: 84 }]
+rebuilt        : SymbolId(0): []
+
+* exports/declare-shadowed/input.ts
+Symbol flags mismatch for "Signal":
+after transform: SymbolId(0): SymbolFlags(Class | Function | Ambient)
+rebuilt        : SymbolId(0): SymbolFlags(Function)
+Symbol span mismatch for "Signal":
+after transform: SymbolId(0): Span { start: 14, end: 20 }
+rebuilt        : SymbolId(0): Span { start: 54, end: 60 }
+Symbol redeclarations mismatch for "Signal":
+after transform: SymbolId(0): [Span { start: 14, end: 20 }, Span { start: 54, end: 60 }]
+rebuilt        : SymbolId(0): []
+Symbol flags mismatch for "Signal2":
+after transform: SymbolId(3): SymbolFlags(Class | Function | Ambient)
+rebuilt        : SymbolId(2): SymbolFlags(Function)
+Symbol redeclarations mismatch for "Signal2":
+after transform: SymbolId(3): [Span { start: 147, end: 154 }, Span { start: 225, end: 232 }]
+rebuilt        : SymbolId(2): []
+
+* exports/declared-types/input.ts
+Bindings mismatch:
+after transform: ScopeId(0): ["BB", "BB2", "C", "C2", "E", "N", "f", "foo", "x"]
+rebuilt        : ScopeId(0): ["BB", "BB2", "C2", "foo"]
+Symbol redeclarations mismatch for "BB":
+after transform: SymbolId(10): [Span { start: 445, end: 447 }, Span { start: 461, end: 463 }]
+rebuilt        : SymbolId(1): []
+
+* exports/interface/input.ts
+x Output mismatch
+
+* function/overloads/input.ts
+Symbol span mismatch for "f":
+after transform: SymbolId(0): Span { start: 9, end: 10 }
+rebuilt        : SymbolId(0): Span { start: 29, end: 30 }
+Symbol redeclarations mismatch for "f":
+after transform: SymbolId(0): [Span { start: 9, end: 10 }, Span { start: 29, end: 30 }]
+rebuilt        : SymbolId(0): []
+
+* function/overloads-exports/input.mjs
+Symbol span mismatch for "f":
+after transform: SymbolId(0): Span { start: 9, end: 10 }
+rebuilt        : SymbolId(0): Span { start: 29, end: 30 }
+Symbol redeclarations mismatch for "f":
+after transform: SymbolId(0): [Span { start: 9, end: 10 }, Span { start: 29, end: 30 }]
+rebuilt        : SymbolId(0): []
+
+* imports/type-only-export-specifier-2/input.ts
+x Output mismatch
+
+* namespace/alias/input.ts
+Bindings mismatch:
+after transform: ScopeId(0): ["AliasModule", "LongNameModule", "bar", "baz", "node", "some", "str"]
+rebuilt        : ScopeId(0): ["AliasModule", "bar", "baz", "node", "some", "str"]
+Reference symbol mismatch for "LongNameModule":
+after transform: SymbolId(0) "LongNameModule"
+rebuilt        : <None>
+Unresolved references mismatch:
+after transform: ["console"]
+rebuilt        : ["LongNameModule", "console"]
+
+* namespace/clobber-enum/input.ts
+Symbol redeclarations mismatch for "A":
+after transform: SymbolId(0): [Span { start: 5, end: 6 }, Span { start: 30, end: 31 }]
+rebuilt        : SymbolId(0): []
+
+* namespace/declare/input.ts
+Bindings mismatch:
+after transform: ScopeId(1): ["B", "C", "_N", "e", "f", "v"]
+rebuilt        : ScopeId(1): ["_N"]
+
+* namespace/empty-removed/input.ts
+Bindings mismatch:
+after transform: ScopeId(1): ["_a", "b", "c", "d"]
+rebuilt        : ScopeId(1): ["_a", "c"]
+Bindings mismatch:
+after transform: ScopeId(6): ["_WithTypes", "a", "b", "c", "d"]
+rebuilt        : ScopeId(3): ["_WithTypes", "d"]
+Bindings mismatch:
+after transform: ScopeId(12): ["D", "_d"]
+rebuilt        : ScopeId(4): ["_d"]
+
+* namespace/export-type-only/input.ts
+Bindings mismatch:
+after transform: ScopeId(0): ["Platform"]
+rebuilt        : ScopeId(0): []
+
+* namespace/mutable-fail/input.ts
+
+  ! Namespaces exporting non-const are not supported by Oxc. Change
+  | to const or see: https://oxc.rs/docs/guide/usage/transformer/
+  | typescript.html#partial-namespace-support
+   ,-[tasks/coverage/babel/packages/babel-plugin-transform-typescript/test/fixtures/namespace/mutable-fail/input.ts:2:14]
+ 1 | namespace N {
+ 2 |   export let V;
+   :              ^
+ 3 | }
+   `----
+
+
+* namespace/namespace-flag/input.ts
+
+  ! Namespace not marked type-only declare are disabled. To enable and
+  | review caveats see: https://oxc.rs/docs/guide/usage/transformer/
+  | typescript.html#partial-namespace-support
+   ,-[tasks/coverage/babel/packages/babel-plugin-transform-typescript/test/fixtures/namespace/namespace-flag/input.ts:1:1]
+ 1 | namespace N {}
+   : ^^^^^^^^^^^^^^
+   `----
+
+
+* namespace/nested-namespace/input.ts
+Bindings mismatch:
+after transform: ScopeId(1): ["B", "G", "_A"]
+rebuilt        : ScopeId(1): ["G", "_A"]
+
+* optimize-const-enums/custom-values-exported/input.ts
+x Output mismatch
+
+* optimize-const-enums/declare/input.ts
+Bindings mismatch:
+after transform: ScopeId(0): ["A"]
+rebuilt        : ScopeId(0): []
+
+* optimize-const-enums/export-const-enum/input.ts
+x Output mismatch
+
+* optimize-const-enums/export-const-enum-type-and-value/input.ts
+x Output mismatch
+
+* optimize-const-enums/export-const-enum-type-no-deopt/input.ts
+x Output mismatch
+
+* optimize-const-enums/exported/input.ts
+x Output mismatch
+
+* optimize-const-enums/merged/input.ts
+Symbol redeclarations mismatch for "A":
+after transform: SymbolId(0): [Span { start: 11, end: 12 }, Span { start: 36, end: 37 }]
+rebuilt        : SymbolId(0): []
+
+* optimize-const-enums/merged-exported/input.ts
+x Output mismatch
+
+* optimize-const-enums/namespace/input.ts
+x Output mismatch
+
+* regression/15768/input.ts
+x Output mismatch
+
+
+# babel-preset-react (4/10)
+* preset-options/development/input.js
+react: unknown field `developmentSourceSelf`, expected one of `runtime`, `development`, `throwIfNamespace`, `pure`, `importSource`, `pragma`, `pragmaFrag`, `useBuiltIns`, `useSpread`, `refresh`
+
+* preset-options/development-no-source-self/input.js
+x Output mismatch
+
+* preset-options/development-runtime-automatic/input.js
+react: unknown field `developmentSourceSelf`, expected one of `runtime`, `development`, `throwIfNamespace`, `pure`, `importSource`, `pragma`, `pragmaFrag`, `useBuiltIns`, `useSpread`, `refresh`
+
+* preset-options/pure/input.js
+x Output mismatch
+
+* preset-options/runtime-classic-pragma-no-frag/input.js
+x Output mismatch
+
+* regression/11294/input.mjs
+x Output mismatch
+
+
+# babel-plugin-transform-react-jsx (137/149)
+* autoImport/after-polyfills-compiled-to-cjs/input.mjs
+x Output mismatch
+
+* pure/false-default-pragma-automatic-runtime/input.js
+x Output mismatch
+
+* pure/false-default-pragma-classic-runtime/input.js
+x Output mismatch
+
+* react/should-disallow-valueless-key/input.js
+
+  ! Please provide an explicit key value. Using "key" as a shorthand for
+  | "key={true}" is not allowed.
+   ,-[tasks/coverage/babel/packages/babel-plugin-transform-react-jsx/test/fixtures/react/should-disallow-valueless-key/input.js:2:15]
+ 1 | 
+ 2 | var x = [<div key></div>];
+   :               ^^^
+   `----
+
+
+* react/should-disallow-xml-namespacing/input.js
+
+  ! Namespace tags are not supported by default. React's JSX doesn't support
+  | namespace tags. You can set `throwIfNamespace: false` to bypass this
+  | warning.
+   ,-[tasks/coverage/babel/packages/babel-plugin-transform-react-jsx/test/fixtures/react/should-disallow-xml-namespacing/input.js:1:2]
+ 1 | <Namespace:Component />;
+   :  ^^^^^^^^^^^^^^^^^^^
+   `----
+
+
+* react/should-throw-error-namespaces-if-not-flag/input.js
+
+  ! Namespace tags are not supported by default. React's JSX doesn't support
+  | namespace tags. You can set `throwIfNamespace: false` to bypass this
+  | warning.
+   ,-[tasks/coverage/babel/packages/babel-plugin-transform-react-jsx/test/fixtures/react/should-throw-error-namespaces-if-not-flag/input.js:1:2]
+ 1 | <f:image />;
+   :  ^^^^^^^
+   `----
+
+
+* react-automatic/does-not-add-source-self-automatic/input.mjs
+transform-react-jsx: unknown field `autoImport`, expected one of `runtime`, `development`, `throwIfNamespace`, `pure`, `importSource`, `pragma`, `pragmaFrag`, `useBuiltIns`, `useSpread`, `refresh`
+
+* react-automatic/should-disallow-valueless-key/input.js
+
+  ! Please provide an explicit key value. Using "key" as a shorthand for
+  | "key={true}" is not allowed.
+   ,-[tasks/coverage/babel/packages/babel-plugin-transform-react-jsx/test/fixtures/react-automatic/should-disallow-valueless-key/input.js:2:15]
+ 1 | 
+ 2 | var x = [<div key></div>];
+   :               ^^^
+   `----
+
+
+* react-automatic/should-disallow-xml-namespacing/input.js
+
+  ! Namespace tags are not supported by default. React's JSX doesn't support
+  | namespace tags. You can set `throwIfNamespace: false` to bypass this
+  | warning.
+   ,-[tasks/coverage/babel/packages/babel-plugin-transform-react-jsx/test/fixtures/react-automatic/should-disallow-xml-namespacing/input.js:1:2]
+ 1 | <Namespace:Component />;
+   :  ^^^^^^^^^^^^^^^^^^^
+   `----
+
+
+* react-automatic/should-throw-error-namespaces-if-not-flag/input.js
+
+  ! Namespace tags are not supported by default. React's JSX doesn't support
+  | namespace tags. You can set `throwIfNamespace: false` to bypass this
+  | warning.
+   ,-[tasks/coverage/babel/packages/babel-plugin-transform-react-jsx/test/fixtures/react-automatic/should-throw-error-namespaces-if-not-flag/input.js:1:2]
+ 1 | <f:image />;
+   :  ^^^^^^^
+   `----
+
+
+* spread-transform/transform-to-babel-extend/input.js
+
+  x Option `loose` is not implemented for object-rest-spread.
+
+
+* spread-transform/transform-to-object-assign/input.js
+
+  x Option `loose` is not implemented for object-rest-spread.
+
+
+  x Option `useBuiltIns` is not implemented for object-rest-spread.
+
+
+
+# babel-plugin-transform-react-jsx-development (0/9)
+* cross-platform/auto-import-dev/input.js
+transform-react-jsx-development: unknown field `sourceSelf`, expected one of `runtime`, `development`, `throwIfNamespace`, `pure`, `importSource`, `pragma`, `pragmaFrag`, `useBuiltIns`, `useSpread`, `refresh`
+
+* cross-platform/classic-runtime/input.js
+transform-react-jsx-development: unknown field `sourceSelf`, expected one of `runtime`, `development`, `throwIfNamespace`, `pure`, `importSource`, `pragma`, `pragmaFrag`, `useBuiltIns`, `useSpread`, `refresh`
+
+* cross-platform/fragments/input.js
+transform-react-jsx-development: unknown field `sourceSelf`, expected one of `runtime`, `development`, `throwIfNamespace`, `pure`, `importSource`, `pragma`, `pragmaFrag`, `useBuiltIns`, `useSpread`, `refresh`
+
+* cross-platform/handle-fragments-with-key/input.js
+transform-react-jsx-development: unknown field `sourceSelf`, expected one of `runtime`, `development`, `throwIfNamespace`, `pure`, `importSource`, `pragma`, `pragmaFrag`, `useBuiltIns`, `useSpread`, `refresh`
+
+* cross-platform/handle-nonstatic-children/input.js
+transform-react-jsx-development: unknown field `sourceSelf`, expected one of `runtime`, `development`, `throwIfNamespace`, `pure`, `importSource`, `pragma`, `pragmaFrag`, `useBuiltIns`, `useSpread`, `refresh`
+
+* cross-platform/handle-static-children/input.js
+transform-react-jsx-development: unknown field `sourceSelf`, expected one of `runtime`, `development`, `throwIfNamespace`, `pure`, `importSource`, `pragma`, `pragmaFrag`, `useBuiltIns`, `useSpread`, `refresh`
+
+* cross-platform/no-source-self/input.js
+x Output mismatch
+
+* cross-platform/within-derived-classes-constructor/input.js
+transform-react-jsx-development: unknown field `sourceSelf`, expected one of `runtime`, `development`, `throwIfNamespace`, `pure`, `importSource`, `pragma`, `pragmaFrag`, `useBuiltIns`, `useSpread`, `refresh`
+
+* cross-platform/within-ts-module-block/input.ts
+transform-react-jsx-development: unknown field `sourceSelf`, expected one of `runtime`, `development`, `throwIfNamespace`, `pure`, `importSource`, `pragma`, `pragmaFrag`, `useBuiltIns`, `useSpread`, `refresh`
+
+
