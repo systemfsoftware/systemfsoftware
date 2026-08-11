@@ -22,7 +22,7 @@ Article I binds through lint and the type system. Run the gate; reading it to co
   do: mutate only pure decisions — `*.workflow.ts` in a cell package, the rule file in a lint plugin, `*.schema.ts` where generated laws do not already cover it
   dont: add any shell-cell suffix (`*.executor.ts`, `*.kernel.ts`, `*.acl.ts`, `*.store.ts`, `*.handler.ts`, `*.middleware.ts`, `*.state.ts`, `*.adapter.ts`, `*.policy.ts`, `*.shape.ts`, `*.observer.ts`) to a `mutate` glob; leave `mutate` unset so the Stryker default sweeps every source file and auto-enrols each new cell
   harm: wrong observer. The mutator asks "do the tests notice a changed decision?" — a shell cell decides nothing, so every mutant is equivalent or is killed by a composition test that was proving something else. The score certifies nothing and the package pays hours of runtime for it
-  check: `node scripts/guard-mutate-scope.mjs` exits 0, wired into `pnpm check`
+  check: `node scripts/guard-mutate-scope.mjs` exits 0, wired into `pnpm check:local`
 
 - id: REPO-S6
   title: Enforcement for a published concern ships inside the published artifact
@@ -71,7 +71,7 @@ Directories only; files are discovered with tools.
 ## Startup
 
 1. `pwd` — must be the monorepo root.
-2. `pnpm check` — repair a red baseline before adding scope.
+2. `pnpm check:local` — repair a red baseline before adding scope.
 3. Confirm the active task from the task list; `git log --oneline -5` for recent intent.
 
 ## Working Rules
@@ -81,21 +81,16 @@ Directories only; files are discovered with tools.
 
 ## Definition of Done
 
-- **REPO-D1** — target behaviour implemented and exercised, the full gate run _after_ the last edit, tree left restartable. A publishable `package.json` change additionally needs `repository.url` exactly `git+https://github.com/systemfsoftware/systemfsoftware.git` and a `repository.directory` matching the real path; npm validates both against the provenance attestation and rejects the upload with 422 after the version bump, changelog, commit and tag have already landed. Gate: `pnpm check` exits 0.
+- **REPO-D1** — target behaviour implemented and exercised, `pnpm check:local` run _after_ the last edit, and the work delivered as a pull request watched to green. Tree left restartable. Gate: `pnpm check:local` exits 0; `gh pr checks --watch --fail-fast` exits 0; and where the branch diff names a source file in a package carrying a `stryker.config.json`, `pnpm --filter <pkg> mutation` reports 100% on the changed pure-core files — CI's Mutation workflow is `continue-on-error`, so it never carries that verdict.
+- **REPO-D2** — commit, push a branch and open the PR with the session's commit-push-open-PR skill where one is installed, then watch the checks. `no checks reported` is the post-create registration race, not a failure: sleep and re-poll, never re-push to clear it — `cancel-in-progress: true` means a re-push cancels the run being awaited. Re-push only for a named failing check. Merging stays human (`REPO-P1`). Gate: `gh pr checks --watch --fail-fast` exits 0.
 
 ## Verification
 
-```bash
-pnpm check   # frozen install, then check:ci
-```
+`pnpm check:local` is the agent's gate: `check:ci`'s task list minus `test:contract` and the two `dist/`-reading root checks. The contract lanes are `cache: false` and 85-92% of `check:ci`'s wall clock; they need a live container runtime. All three run in CI on every PR, so a change touching `package.json#exports`, `publishConfig.exports` or a runtime dependency (`REPO-S4`) has no local signal and is unverified until the PR is green.
 
-`check:ci` is the one definition of the gate; a gate added there reaches all three callers. Call one runs `format:check`, `lint`, `typecheck`, `test`, `attw`, `api:check` and six root guards in parallel under `--continue`, so one run reports every failure. Call two runs `check:exports` and `check:runtime-deps`, which read `dist/` and must follow a build — turbo cannot express "root task after all package builds", so the `&&` is load-bearing and not a style choice. Both fail loudly on an unbuilt tree, because every dist-dependent assertion in them is skippable and a skipped run reports zero issues.
-
-Then `pnpm --filter <pkg> mutation` — 100% on changed pure-core files.
-
-- **REPO-A1** — run exactly `pnpm check`. No `--skip`, no `--grep`, no filter flags, no individual steps.
-- **REPO-A2** — evidence comes from this session, after the last edit. Never CI, never a prior session. Gate: review — the reviewer confirms the recorded output postdates the last edit.
-- **REPO-A3** — any failure blocks done, including one that looks unrelated. Gate: `pnpm check` exits 0.
+- **REPO-A1** — run exactly `pnpm check:local`. No `--skip`, no `--grep`, no filter flags, no individual steps.
+- **REPO-A2** — local evidence from this session, after the last edit; CI evidence from a completed, non-cancelled run whose head SHA is the pushed commit. Never a prior session, never a run predating the last push. Gate: review — the reviewer confirms both.
+- **REPO-A3** — any failure blocks done, local or CI, including one that looks unrelated.
 
 ## Release and Commits
 
