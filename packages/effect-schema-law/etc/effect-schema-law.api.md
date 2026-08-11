@@ -15,7 +15,7 @@ export const obligationsOf: (schema: Schema.Schema.AnyNoContext) => ReadonlyMap<
 
 // @public (undocumented)
 export namespace Refutation {
-    export { BlindArm, Obligation, ObligationScan, RefusalGenerators, WITNESS_BUDGET, dischargedBy, discriminates, obligationsOf, scanObligations };
+    export { AdequacyReport, BlindArm, Obligation, ObligationScan, RefusalGenerators, WITNESS_BUDGET, adequacyReport, dischargedBy, discriminates, obligationsOf, scanObligations };
 }
 
 // Warning: (ae-forgotten-export) The symbol "RefusalGenerators" needs to be exported by the entry point index.d.ts
@@ -33,7 +33,7 @@ export const scanObligations: (schema: Schema.Schema.AnyNoContext) => Obligation
 
 // @public (undocumented)
 export namespace Weakening {
-    export { AdequacyReport, Arm, adequacyReport, armsOf, boundedUnion };
+    export { Arm, armsOf, boundedUnion };
 }
 
 // (No @packageDocumentation comment for this package)

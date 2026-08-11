@@ -1,7 +1,6 @@
 import { type FastCheck, Schema as S } from 'effect'
 import * as Arbitrary from 'effect/Arbitrary'
 import * as AST from 'effect/SchemaAST'
-import { dischargedBy, type Obligation, type RefusalGenerators, scanObligations } from './refutation.kernel.js'
 
 /**
  * One weakening of an Effect schema, produced by `armsOf`. Each arm identifies
@@ -190,55 +189,6 @@ const walk = (
       depthCap,
       (replacement) => rebuild(new AST.Suspend(() => replacement, node.annotations)),
     )
-  }
-}
-
-/** Verdict for one schema's obligation set, carrying the detail R7 requires in a failure. */
-export interface AdequacyReport {
-  readonly adequate: boolean
-  readonly undischarged: readonly Obligation[]
-  readonly message: string
-}
-
-const renderWitness = (witness: unknown): string => {
-  try {
-    return JSON.stringify(witness) ?? String(witness)
-  } catch {
-    return String(witness)
-  }
-}
-
-/**
- * Which obligations no declared generator discharges. A bare "adequacy failed" leaves
- * the author nothing to act on, so the message names each node's tag, every path
- * reaching it, and the witness that proves the weakening is permissive.
- */
-export const adequacyReport = (
-  schema: S.Schema.AnyNoContext,
-  generators: RefusalGenerators,
-): AdequacyReport => {
-  const scan = scanObligations(schema)
-  const credits = dischargedBy(schema, scan.obligations, generators)
-  const undischarged = [...scan.obligations.values()].filter(
-    (obligation) => (credits.get(obligation.node) ?? []).length === 0,
-  )
-  if (scan.blind.length > 0) {
-    return {
-      adequate: false,
-      undischarged,
-      message: `${scan.blind.length} arm(s) could not be searched for a witness:\n` +
-        scan.blind.map((b) => `  ${b.message}`).join('\n'),
-    }
-  }
-  if (undischarged.length === 0) return { adequate: true, undischarged, message: '' }
-
-  const detail = undischarged
-    .map((o) => `  ${o.tag} reached by [${o.paths.join(' | ')}] — witness ${renderWitness(o.witness)}`)
-    .join('\n')
-  return {
-    adequate: false,
-    undischarged,
-    message: `${undischarged.length} obligation(s) discharged by no declared generator:\n${detail}`,
   }
 }
 

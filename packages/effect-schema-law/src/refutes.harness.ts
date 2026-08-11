@@ -1,9 +1,36 @@
 import { it } from '@effect/vitest'
 import { Either, Option, Schema as S } from 'effect'
+import { toStringUnknown } from 'effect/Inspectable'
 import * as AST from 'effect/SchemaAST'
 import { expect } from 'vitest'
-import { discriminates, obligationsOf, type RefusalGenerators } from './refutation.kernel.js'
-import { adequacyReport } from './weaken.kernel.js'
+import {
+  type AdequacyReport,
+  adequacyReport,
+  discriminates,
+  obligationsOf,
+  type RefusalGenerators,
+} from './refutation.kernel.js'
+
+/**
+ * Injective over the rejection pool, which no single renderer manages: `JSON.stringify`
+ * collapses `NaN`, `Infinity` and `null` onto one `null` and throws on a BigInt, while
+ * `toStringUnknown` prints a string unquoted and collapses `'0'` onto `0`. Splitting on
+ * `string` takes the half each gets right. Naming the wrong witness is worse than none.
+ */
+const renderWitness = (witness: unknown): string =>
+  typeof witness === 'string' ? JSON.stringify(witness) : toStringUnknown(witness, 0)
+
+const renderAdequacy = (report: AdequacyReport): string => {
+  if (report.blind.length > 0) {
+    return `${report.blind.length} arm(s) could not be searched for a witness:\n` +
+      report.blind.map((b) => `  ${b.message}`).join('\n')
+  }
+  if (report.undischarged.length === 0) return ''
+  const detail = report.undischarged
+    .map((o) => `  ${o.tag} reached by [${o.paths.join(' | ')}] — witness ${renderWitness(o.witness)}`)
+    .join('\n')
+  return `${report.undischarged.length} obligation(s) discharged by no declared generator:\n${detail}`
+}
 
 /**
  * Property-test one schema's rejection contract. Registers per generator a refusal
@@ -28,7 +55,6 @@ export const refutes = (schema: S.Schema.AnyNoContext, generators: RefusalGenera
   }
 
   it('∀s_' + name + '_adequate', () => {
-    const report = adequacyReport(schema, generators)
-    expect(report.message).toBe('')
+    expect(renderAdequacy(adequacyReport(schema, generators))).toBe('')
   })
 }

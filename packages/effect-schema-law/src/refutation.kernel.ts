@@ -219,3 +219,27 @@ export const discriminates = (
   }
   return false
 }
+
+/** Verdict for one schema's obligation set: what went undischarged, and what could not be searched. */
+export interface AdequacyReport {
+  readonly adequate: boolean
+  readonly undischarged: readonly Obligation[]
+  readonly blind: readonly BlindArm[]
+}
+
+/** Which obligations no declared generator discharges. Rendering the verdict belongs to the caller. */
+export const adequacyReport = (
+  schema: S.Schema.AnyNoContext,
+  generators: RefusalGenerators,
+): AdequacyReport => {
+  const scan = scanObligations(schema)
+  const credits = dischargedBy(schema, scan.obligations, generators)
+  const undischarged = [...scan.obligations.values()].filter(
+    (obligation) => (credits.get(obligation.node) ?? []).length === 0,
+  )
+  return {
+    adequate: scan.blind.length === 0 && undischarged.length === 0,
+    undischarged,
+    blind: scan.blind,
+  }
+}

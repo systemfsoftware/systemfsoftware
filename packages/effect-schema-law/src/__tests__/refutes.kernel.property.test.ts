@@ -1,9 +1,8 @@
 import { it } from '@effect/vitest'
 import { Either, FastCheck as fc, Schema as S } from 'effect'
-import { discriminates, obligationsOf } from '../refutation.kernel.js'
+import { adequacyReport, discriminates, obligationsOf } from '../refutation.kernel.js'
 import { refutes } from '../refutes.harness.js'
 import { ruleOfSchemas } from '../rule-of-schemas.harness.js'
-import { adequacyReport } from '../weaken.kernel.js'
 
 const ALPHABET: readonly string[] = [
   '0',
@@ -59,21 +58,23 @@ it.prop('∀sn_ForeignTypeValue_¬Discriminates', [properSubset, fc.integer()], 
   return !discriminates(schema, obligationsOf(schema), value)
 })
 
-/** R7: an undischarged obligation must name its tag, a reaching path, and the witness. */
-it.prop('∀s_InsiderGenerator_≡InadequateNamingWitness', [properSubset], ([chars]) => {
+/** R7: an undischarged obligation must carry a reaching path and a genuine witness — one the
+ * weakened schema accepts and the original rejects. */
+it.prop('∀s_InsiderGenerator_≡InadequateCarryingWitness', [properSubset], ([chars]) => {
   const report = adequacyReport(subsetSchema(chars), { Insider: insiderOf(chars) })
   const [only] = report.undischarged
   if (only === undefined) return false
   return !report.adequate &&
     report.undischarged.length === 1 &&
-    report.message.includes(only.tag) &&
-    report.message.includes(only.paths[0] ?? '\u0000') &&
-    report.message.includes('witness')
+    report.blind.length === 0 &&
+    only.paths.length > 0 &&
+    Either.isRight(S.decodeUnknownEither(S.make(only.weakened))(only.witness)) &&
+    Either.isLeft(S.decodeUnknownEither(subsetSchema(chars))(only.witness))
 })
 
 it.prop('∀s_OutsiderGenerator_≡Adequate', [properSubset], ([chars]) => {
   const report = adequacyReport(subsetSchema(chars), { Outsider: outsiderOf(chars) })
-  return report.adequate && report.undischarged.length === 0 && report.message === ''
+  return report.adequate && report.undischarged.length === 0 && report.blind.length === 0
 })
 
 it.prop('∀s_SeveralDischargingGenerators_≡Adequate', [properSubset], ([chars]) => {
