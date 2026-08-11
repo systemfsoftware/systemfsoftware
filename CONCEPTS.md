@@ -20,6 +20,12 @@ The consolidated `.d.ts` written by `api-extractor` to `dist/<name>.d.ts` per th
 
 _Avoid:_ "the dist .d.ts" (ambiguous with tsdown output)
 
+### API report
+
+A committed, human-readable snapshot of one published entry point's whole public type surface, regenerated on each check and compared against the stored copy. Distinct from the api-extractor rollup, which is the declaration consumers actually resolve: the rollup ships, while the report exists only to make a surface change visible as a reviewable diff.
+
+The comparison is exact and carries no severity, so a purely representational change from a newer toolchain and a genuine removal of an export fail identically — the failure never distinguishes "the API moved" from "the formatting moved", and separating them means comparing the two export sets rather than reading the diff. A package holds one report per entry point, so re-chunking an entry set changes how many reports exist without changing how many packages have one. Nothing about the artifact forces it to be checked: a package that commits a report while declaring no check task holds one that drifts from the moment it is written, with no failure mode available to it because no comparison ever runs.
+
 ### Externalized dependency
 
 A package.json `dependencies` (or `peerDependencies`) entry that tsdown leaves as a bare import in the tsdown output instead of inlining — the consumer's environment must provide it at runtime. The counterpart, a `devDependencies` entry, is inlined into the output. The dependency category therefore decides what a published tarball still needs from outside: anything private or unpublishable must never be externalized, because no consumer environment can provide it. Distinct from `bundledPackages`, which inlines _types_ into the api-extractor rollup — this concept concerns _runtime code_ in the tsdown output.
@@ -175,6 +181,14 @@ The `SchemaAST` node a weakening removes, and the identity an obligation is keye
 ### Refutation adequacy
 
 The criterion that every obligation node reachable from a schema is discharged by at least one declared refusal generator. It asks for coverage, never uniqueness — whether each node is defended, not whether a given test is its only defender. The distinction is load-bearing: a uniqueness criterion is test-suite minimization, whose fault-detection cost is measured, and it is the error the `soleKills > 0` gate made.
+
+## Type-level guarantees
+
+### Typed refusal
+
+A misuse the compiler rejects because the API's types make the wrong call unrepresentable, rather than because anything checks it at runtime. The usual construction replaces the offending slot's type with a string literal spelling out the correct approach, so the failure arrives as the sentence the author needed to read. Distinct from a rejection property, which asserts a refusal a schema performs on real values while a program runs; a typed refusal never executes.
+
+Its strength is exactly the reachability of whatever key the type demands. When a type is made unforgeable by requiring a branded symbol, every published entry point that re-exports the module holding that symbol hands consumers the means to satisfy the type by hand, and the refusal silently becomes advisory — no test fails, because the mechanism was never runtime behavior. Reachability is therefore a property of the package's whole export surface, not of the file declaring the type, and it has to be re-established whenever an entry file or an exports map changes. A negative test defends the mechanism only if it mints the key and still expects a compile error; one that omits the key proves only that the type refuses values nobody was going to construct.
 
 ## Agent context injection
 
