@@ -1,5 +1,5 @@
 import type { Cause, Duration, Effect, Metric, Option, Schedule, Stream } from 'effect'
-import type { DynamicSpecTypeId, SupervisorTypeId, WorkerTypeId } from './brands.kernel.js'
+import type { DynamicSpecTypeId, SupervisionPolicyTypeId, SupervisorTypeId, WorkerTypeId } from './brands.kernel.js'
 import type { ChildPolicyConfig, Intensity, MaxChildren, TickPolicyConfig } from './daemon-policy.schema.js'
 
 export type LockConfig =
@@ -85,6 +85,7 @@ export interface DynamicSpec<E, R, Args> {
 export type Child<E, R> = Worker<E, R> | Supervisor<E, R>
 
 export interface SupervisionPolicy {
+  readonly [SupervisionPolicyTypeId]: SupervisionPolicyTypeId
   readonly intensity: Intensity
   readonly backoff: Schedule.Schedule<Duration.Duration>
   readonly cooldown: Duration.DurationInput
@@ -96,10 +97,19 @@ export interface SupervisionConfig {
   readonly cooldown: Duration.DurationInput
 }
 
-export interface SupervisorOpts<E, R, L extends LockConfig> {
+export interface SupervisorOpts<E, R, L extends LockConfig, S = Effect.Effect<SupervisionPolicy>> {
   readonly name: string
   readonly children: ReadonlyArray<Child<E, R>>
-  readonly supervision: Effect.Effect<SupervisionPolicy>
+  readonly supervision: S
   readonly lock: L
   readonly reporter?: ReporterPolicyHooks
 }
+
+// Intersected with SupervisorOpts at each supervisor. `unknown` is the identity for
+// intersection, so a branded policy adds no constraint and anything else replaces the
+// `supervision` slot with the sentence.
+export type PolicyBuiltFirst<S> = [S] extends [Effect.Effect<SupervisionPolicy>] ? unknown
+  : {
+    readonly supervision:
+      'build the supervision policy before the supervisor: pass Supervision.leader, Supervision.worker, Supervision.task or Supervision.custom, because a hand-built policy skips the config those combinators read'
+  }

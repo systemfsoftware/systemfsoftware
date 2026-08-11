@@ -162,6 +162,10 @@ export interface SupervisionConfig {
 
 // @public (undocumented)
 export interface SupervisionPolicy {
+    // Warning: (ae-forgotten-export) The symbol "SupervisionPolicyTypeId" needs to be exported by the entry point DaemonSpec.d.ts
+    //
+    // (undocumented)
+    readonly [SupervisionPolicyTypeId]: SupervisionPolicyTypeId;
     // (undocumented)
     readonly backoff: Schedule.Schedule<Duration.Duration>;
     // (undocumented)
@@ -189,7 +193,7 @@ export interface Supervisor<E, R, L extends LockConfig = LockConfig> {
 }
 
 // @public (undocumented)
-export interface SupervisorOpts<E, R, L extends LockConfig> {
+export interface SupervisorOpts<E, R, L extends LockConfig, S = Effect.Effect<SupervisionPolicy>> {
     // (undocumented)
     readonly children: ReadonlyArray<Child<E, R>>;
     // (undocumented)
@@ -199,7 +203,7 @@ export interface SupervisorOpts<E, R, L extends LockConfig> {
     // (undocumented)
     readonly reporter?: ReporterPolicyHooks;
     // (undocumented)
-    readonly supervision: Effect.Effect<SupervisionPolicy>;
+    readonly supervision: S;
 }
 
 // Warning: (ae-forgotten-export) The symbol "SupervisorPolicyConfig_base" needs to be exported by the entry point DaemonSpec.d.ts

@@ -13,4 +13,9 @@ export const DynamicSpecTypeId: unique symbol = Symbol.for(
 )
 export type DynamicSpecTypeId = typeof DynamicSpecTypeId
 
+export const SupervisionPolicyTypeId: unique symbol = Symbol.for(
+  '@systemfsoftware/effect-daemon/SupervisionPolicy',
+)
+export type SupervisionPolicyTypeId = typeof SupervisionPolicyTypeId
+
 export const MAX_CHILDREN_CEILING = 1000

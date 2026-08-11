@@ -1,7 +1,7 @@
 import { Duration, Effect, Schedule } from 'effect'
 import { cappedBackoff } from '../backoff/backoff.kernel.js'
 
-export const leaderKernel = <
+export const cappedPolicyKernel = <
   INTENSITY,
   COOLDOWN extends Duration.DurationInput,
   BACKOFFBASE extends Duration.DurationInput,

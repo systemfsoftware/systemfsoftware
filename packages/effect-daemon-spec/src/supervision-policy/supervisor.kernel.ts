@@ -10,11 +10,12 @@ type SupervisorRecord<CH, SP, LCK, RP, STRATEGY extends string> = {
   readonly reporter: RP | Record<never, never>
 }
 
-export const restForOneKernel = <
+export const supervisorKernel = <
   CH,
   SP,
   LCK,
   RP,
+  STRATEGY extends string,
   O extends {
     readonly name: string
     readonly children: ReadonlyArray<CH>
@@ -22,10 +23,10 @@ export const restForOneKernel = <
     readonly lock: LCK
     readonly reporter?: RP
   },
->(opts: O): SupervisorRecord<CH, SP, LCK, RP, 'rest_for_one'> => ({
+>(strategy: STRATEGY, opts: O): SupervisorRecord<CH, SP, LCK, RP, STRATEGY> => ({
   [SupervisorTypeId]: SupervisorTypeId,
   name: opts.name,
-  strategy: 'rest_for_one',
+  strategy,
   children: opts.children,
   supervision: opts.supervision,
   lock: opts.lock,

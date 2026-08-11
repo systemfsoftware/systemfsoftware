@@ -9,13 +9,26 @@ import { WithLeaderLockExecutorLive } from '../src/leader-lock/mod.js'
 import { run } from '../src/mod.js'
 import { Daemon } from '../src/mod.js'
 import { Supervision } from '../src/mod.js'
-import { oneForAll } from '../src/supervision-policy/supervisor-one-for-all.combinator.js'
-import { oneForOne } from '../src/supervision-policy/supervisor-one-for-one.combinator.js'
-import { restForOne } from '../src/supervision-policy/supervisor-rest-for-one.combinator.js'
+import { oneForAll, oneForOne, restForOne } from '../src/supervision-policy/supervisor.combinator.js'
 import { ReporterSpyContext } from './helpers/reporter-spy.js'
 import { NoopLayer } from './helpers/shared-layers.js'
 
 class SimulatedFailure extends S.TaggedError<SimulatedFailure>()('SimulatedFailure', {}) {}
+
+// U6 gate: never called - tsc is the assertion. Deleting this removes the proof
+// that a hand-built policy cannot reach a supervisor.
+export const handBuiltPolicyIsRefusedAtTheSupervisor = () =>
+  oneForAll({
+    name: 'hand-built-policy-refusal',
+    children: [],
+    // @ts-expect-error the policy skipped Supervision.*, so this slot is the refusal sentence
+    supervision: Effect.succeed({
+      intensity: new BoundedIntensity({ restarts: 1, window: Duration.seconds(1) }),
+      backoff: Schedule.exponential(Duration.millis(10)),
+      cooldown: Duration.minutes(30),
+    }),
+    lock: { mode: 'none' },
+  })
 
 const Feature = makeFeature({ it, layer })
 Feature('Uniform Supervisor Behavior')

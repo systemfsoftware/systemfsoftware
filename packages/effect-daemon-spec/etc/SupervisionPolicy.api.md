@@ -33,8 +33,11 @@ export interface BootedChild<R> {
     readonly run: Effect.Effect<void, never, R>;
 }
 
+// Warning: (ae-forgotten-export) The symbol "SupervisionPolicy" needs to be exported by the entry point SupervisionPolicy.d.ts
+// Warning: (ae-forgotten-export) The symbol "SupervisionPolicyTypeId" needs to be exported by the entry point SupervisionPolicy.d.ts
+//
 // @public (undocumented)
-export const custom: <P>(policy: P) => Effect.Effect<P>;
+export const custom: (policy: Omit<SupervisionPolicy, typeof SupervisionPolicyTypeId>) => Effect.Effect<SupervisionPolicy>;
 
 // Warning: (ae-forgotten-export) The symbol "DynamicSpec" needs to be exported by the entry point SupervisionPolicy.d.ts
 //
@@ -46,20 +49,6 @@ export const dynamic: <E, R, Args>(opts: {
 }) => DynamicSpec<E, R, Args>;
 
 // @public (undocumented)
-export const dynamicKernel: <Args, CH, MAX, O extends {
-    readonly name: string;
-    readonly child: (args: Args) => CH;
-    readonly maxChildren: MAX;
-}>(opts: O) => {
-    readonly [DynamicSpecTypeId]: DynamicSpecTypeId;
-    readonly name: string;
-    readonly child: (args: Args) => CH;
-    readonly maxChildren: MAX;
-};
-
-// Warning: (ae-forgotten-export) The symbol "SupervisionPolicy" needs to be exported by the entry point SupervisionPolicy.d.ts
-//
-// @public (undocumented)
 export const leader: (cap: Duration_2.DurationInput) => Effect.Effect<SupervisionPolicy>;
 
 // Warning: (ae-forgotten-export) The symbol "LeaderConfig_base" needs to be exported by the entry point SupervisionPolicy.d.ts
@@ -67,62 +56,19 @@ export const leader: (cap: Duration_2.DurationInput) => Effect.Effect<Supervisio
 // @public (undocumented)
 export class LeaderConfig extends LeaderConfig_base {}
 
-// @public (undocumented)
-export const leaderKernel: <INTENSITY, COOLDOWN extends Duration_2.DurationInput, BACKOFFBASE extends Duration_2.DurationInput>(config: {
-    readonly intensity: INTENSITY;
-    readonly backoffBase: BACKOFFBASE;
-    readonly cooldown: COOLDOWN;
-}, cap: Duration_2.DurationInput) => Effect.Effect<{
-    readonly intensity: INTENSITY;
-    readonly backoff: Schedule.Schedule<Duration_2.Duration>;
-    readonly cooldown: COOLDOWN;
-}>;
-
 // Warning: (ae-forgotten-export) The symbol "LockConfig" needs to be exported by the entry point SupervisionPolicy.d.ts
 // Warning: (ae-forgotten-export) The symbol "SupervisorOpts" needs to be exported by the entry point SupervisionPolicy.d.ts
+// Warning: (ae-forgotten-export) The symbol "PolicyBuiltFirst" needs to be exported by the entry point SupervisionPolicy.d.ts
 // Warning: (ae-forgotten-export) The symbol "Supervisor" needs to be exported by the entry point SupervisionPolicy.d.ts
 //
 // @public (undocumented)
-export const oneForAll: <E, R, L extends LockConfig = LockConfig>(opts: SupervisorOpts<E, R, L>) => Supervisor<E, R, L>;
-
-// Warning: (ae-forgotten-export) The symbol "SupervisorRecord$2" needs to be exported by the entry point SupervisionPolicy.d.ts
-//
-// @public (undocumented)
-export const oneForAllKernel: <CH, SP, LCK, RP, O extends {
-    readonly name: string;
-    readonly children: ReadonlyArray<CH>;
-    readonly supervision: SP;
-    readonly lock: LCK;
-    readonly reporter?: RP;
-}>(opts: O) => SupervisorRecord$2<CH, SP, LCK, RP, 'one_for_all'>;
+export function oneForAll<E, R, L extends LockConfig = LockConfig, S = Effect.Effect<SupervisionPolicy>>(opts: SupervisorOpts<E, R, L, S> & PolicyBuiltFirst<S>): Supervisor<E, R, L>;
 
 // @public (undocumented)
-export const oneForOne: <E, R, L extends LockConfig = LockConfig>(opts: SupervisorOpts<E, R, L>) => Supervisor<E, R, L>;
-
-// Warning: (ae-forgotten-export) The symbol "SupervisorRecord$1" needs to be exported by the entry point SupervisionPolicy.d.ts
-//
-// @public (undocumented)
-export const oneForOneKernel: <CH, SP, LCK, RP, O extends {
-    readonly name: string;
-    readonly children: ReadonlyArray<CH>;
-    readonly supervision: SP;
-    readonly lock: LCK;
-    readonly reporter?: RP;
-}>(opts: O) => SupervisorRecord$1<CH, SP, LCK, RP, 'one_for_one'>;
+export function oneForOne<E, R, L extends LockConfig = LockConfig, S = Effect.Effect<SupervisionPolicy>>(opts: SupervisorOpts<E, R, L, S> & PolicyBuiltFirst<S>): Supervisor<E, R, L>;
 
 // @public (undocumented)
-export const restForOne: <E, R, L extends LockConfig = LockConfig>(opts: SupervisorOpts<E, R, L>) => Supervisor<E, R, L>;
-
-// Warning: (ae-forgotten-export) The symbol "SupervisorRecord" needs to be exported by the entry point SupervisionPolicy.d.ts
-//
-// @public (undocumented)
-export const restForOneKernel: <CH, SP, LCK, RP, O extends {
-    readonly name: string;
-    readonly children: ReadonlyArray<CH>;
-    readonly supervision: SP;
-    readonly lock: LCK;
-    readonly reporter?: RP;
-}>(opts: O) => SupervisorRecord<CH, SP, LCK, RP, 'rest_for_one'>;
+export function restForOne<E, R, L extends LockConfig = LockConfig, S = Effect.Effect<SupervisionPolicy>>(opts: SupervisorOpts<E, R, L, S> & PolicyBuiltFirst<S>): Supervisor<E, R, L>;
 
 // @public (undocumented)
 export type Supervision<R, D = never> = Effect.Effect<void, never, R | D | Scope.Scope>;
@@ -158,38 +104,15 @@ export const task: (budget: Duration_2.DurationInput) => Effect.Effect<Supervisi
 // @public (undocumented)
 export class TaskConfig extends TaskConfig_base {}
 
-// @public (undocumented)
-export const taskKernel: <INTENSITY, COOLDOWN extends Duration_2.DurationInput, BACKOFFBASE extends Duration_2.DurationInput>(config: {
-    readonly intensity: INTENSITY;
-    readonly backoffBase: BACKOFFBASE;
-    readonly cooldown: COOLDOWN;
-}, budget: Duration_2.DurationInput) => Effect.Effect<{
-    readonly intensity: INTENSITY;
-    readonly backoff: Schedule.Schedule<Duration_2.Duration>;
-    readonly cooldown: COOLDOWN;
-}>;
-
 // Warning: (ae-forgotten-export) The symbol "WorkerConfig_base" needs to be exported by the entry point SupervisionPolicy.d.ts
 //
 // @public (undocumented)
 export class WorkerConfig extends WorkerConfig_base {}
 
-// @public (undocumented)
-export const workerKernel: <INTENSITY, COOLDOWN extends Duration_2.DurationInput, BACKOFFBASE extends Duration_2.DurationInput>(config: {
-    readonly intensity: INTENSITY;
-    readonly backoffBase: BACKOFFBASE;
-    readonly cooldown: COOLDOWN;
-}, cap: Duration_2.DurationInput) => Effect.Effect<{
-    readonly intensity: INTENSITY;
-    readonly backoff: Schedule.Schedule<Duration_2.Duration>;
-    readonly cooldown: COOLDOWN;
-}>;
-
 // Warnings were encountered during analysis:
 //
-// dist/SupervisionPolicy.d.ts:66:3 - (ae-forgotten-export) The symbol "Worker_2" needs to be exported by the entry point SupervisionPolicy.d.ts
-// dist/SupervisionPolicy.d.ts:67:3 - (ae-forgotten-export) The symbol "MaxChildren" needs to be exported by the entry point SupervisionPolicy.d.ts
-// dist/SupervisionPolicy.d.ts:76:3 - (ae-forgotten-export) The symbol "DynamicSpecTypeId" needs to be exported by the entry point SupervisionPolicy.d.ts
+// dist/SupervisionPolicy.d.ts:33:3 - (ae-forgotten-export) The symbol "Worker_2" needs to be exported by the entry point SupervisionPolicy.d.ts
+// dist/SupervisionPolicy.d.ts:34:3 - (ae-forgotten-export) The symbol "MaxChildren" needs to be exported by the entry point SupervisionPolicy.d.ts
 
 // (No @packageDocumentation comment for this package)
 

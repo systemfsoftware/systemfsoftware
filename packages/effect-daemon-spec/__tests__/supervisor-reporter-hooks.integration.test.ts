@@ -9,7 +9,7 @@ import { WithLeaderLockExecutorLive } from '../src/leader-lock/mod.js'
 import { run } from '../src/mod.js'
 import { Daemon } from '../src/mod.js'
 import { Supervision } from '../src/mod.js'
-import { oneForOne } from '../src/supervision-policy/supervisor-one-for-one.combinator.js'
+import { oneForOne } from '../src/supervision-policy/supervisor.combinator.js'
 import { ReporterSpyContext } from './helpers/reporter-spy.js'
 import { NoopLayer } from './helpers/shared-layers.js'
 
