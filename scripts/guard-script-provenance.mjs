@@ -113,6 +113,10 @@ const MANIFEST = new Map([
     'workspace-layout',
     'This file. The set it polices IS the workspace arrangement of scripts/.',
   ]],
+  ['guard-action-provenance.mjs', [
+    'workspace-layout',
+    'Allowlists every `uses:` across .github/ to repo-local, GitHub-owned, and one named third party. CI workflow arrangement; no published package can see or constrain it.',
+  ]],
   ['merge-mutation-reports.mjs', [
     'workspace-layout',
     'Aggregates one mutation report per package from a CI matrix run into a single report. Spans every package; no package can see the workspace.',
