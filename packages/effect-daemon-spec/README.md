@@ -5,19 +5,26 @@ Supervise dynamic worker trees in [Effect](https://effect.website) — restart p
 Effect's built-in `Supervisor` tracks fibre lifecycles but doesn't give you daemon semantics. This library fills the gap: exponential backoff on restart, distributed leader election via `Duration`-based fencing, and poll-based health checks that gate restart decisions.
 
 ```ts
-import { Daemon, RestartPolicy } from '@systemfsoftware/effect-daemon-spec'
-import { Effect } from 'effect'
+import { Daemon, run } from '@systemfsoftware/effect-daemon-spec'
+import { Duration, Effect } from 'effect'
 
-const pool = Daemon.supervised('worker-pool', {
-  bootstrap: [worker, worker, worker],
-  policy: RestartPolicy.exponential({
-    minDelay: '100 millis',
-    maxDelay: '10 seconds',
-  }),
+const heartbeat = Daemon.poll({
+  name: 'heartbeat',
+  work: Effect.void,
+  interval: Duration.seconds(10),
+  tick: { tickTimeout: Duration.seconds(90) },
+  child: { restart: 'permanent' },
+  lock: { mode: 'none' },
 })
 
-Effect.scoped(pool).pipe(Effect.runFork)
+Effect.runFork(Effect.scoped(run.worker(heartbeat)))
 ```
+
+Restart policy, leader election and health gating are chosen through
+`Supervision.leader`, `Supervision.worker`, `Supervision.task` or
+`Supervision.custom`, and handed to a supervisor. Building a policy by hand is
+a compiler error: the supervisor's policy slot only accepts a value one of
+those four constructors produced.
 
 A leader-lock coordinator ensures only one node acts as the leader for a given key:
 
