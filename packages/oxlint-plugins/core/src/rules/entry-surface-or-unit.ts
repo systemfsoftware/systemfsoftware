@@ -176,25 +176,38 @@ export const entrySurfaceOrUnit = defineRule({
       }
     }
 
+    // Conditional because non-entry is the common case: registering these walks
+    // every call site in the repo to fill two arrays that branch never reads.
+    const collectors = isEntry
+      ? {
+        CallExpression: recordCandidate,
+        FunctionExpression(node: ESTree.Function) {
+          functionRanges.push({ start: node.start, end: node.end })
+        },
+        ArrowFunctionExpression(node: ESTree.ArrowFunctionExpression) {
+          functionRanges.push({ start: node.start, end: node.end })
+        },
+      }
+      : {}
+
     return {
-      CallExpression: recordCandidate,
-      FunctionExpression(node: ESTree.Function) {
-        functionRanges.push({ start: node.start, end: node.end })
-      },
-      ArrowFunctionExpression(node: ESTree.ArrowFunctionExpression) {
-        functionRanges.push({ start: node.start, end: node.end })
-      },
+      ...collectors,
 
       'Program:exit'(node: ESTree.Program) {
         const importedNames = new Set<string>()
         const declaredKinds = new Map<string, DeclaredKind>()
-        for (const statement of node.body) {
-          if (statement.type === 'ImportDeclaration') {
-            for (const specifier of statement.specifiers) {
+        for (const node_ of node.body) {
+          if (node_.type === 'ImportDeclaration') {
+            for (const specifier of node_.specifiers) {
               if (specifier.local.type === 'Identifier') importedNames.add(specifier.local.name)
             }
             continue
           }
+          // `export const x` is an ExportNamedDeclaration wrapper, so the shapes below never
+          // see it bare. Unwrap, or a later `export { x }` reads x as undeclared.
+          const statement = node_.type === 'ExportNamedDeclaration' && node_.declaration !== null
+            ? node_.declaration
+            : node_
           if (statement.type === 'VariableDeclaration') {
             for (const declarator of statement.declarations) {
               if (declarator.id.type === 'Identifier') declaredKinds.set(declarator.id.name, 'behaviour')

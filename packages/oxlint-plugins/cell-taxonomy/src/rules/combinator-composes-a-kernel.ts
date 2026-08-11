@@ -1,5 +1,6 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
+import { basename } from '@std/path'
 import { ACTUAL, COMBINATOR_FILE, EXPECTED, FIX, KERNEL_IMPORT, meta } from './combinator-composes-a-kernel.config.js'
 
 export type MessageIds = 'kernelImportMissing'
@@ -9,7 +10,7 @@ export const combinatorComposesAKernel = defineRule({
   create(context: Context) {
     if (!COMBINATOR_FILE.test(context.filename)) return {}
 
-    const name = context.filename.slice(context.filename.lastIndexOf('/') + 1)
+    const name = basename(context.filename)
     let hasKernelImport = false
     let program: ESTree.Program | null = null
 

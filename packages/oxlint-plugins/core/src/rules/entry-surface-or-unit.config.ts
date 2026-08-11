@@ -26,29 +26,11 @@ export const NON_ENTRY_REEXPORT_FIX =
 export const NON_ENTRY_REEXPORT_MESSAGE =
   '{{name}} is forbidden. Expected: {{expected}}. Actual: {{actual}}. Fix: {{fix}}.' as const
 
-// The two Q3 decisions this unit must answer before its fixtures were written.
-//
-// Q3a - Does Clause B exempt a type-only re-export (`export type { T } from './t.js'`)?
-// NO. The cell import table polices type-only re-exports as real edges:
-// `cell-import-boundary` inspects every `ExportNamedDeclaration` with a source,
-// passing `exportKind !== 'type'` only as the VALUE-binding flag, so the forbid
-// and forbidRuntime checks fire for `export type { T } from` exactly as they do
-// for a value re-export; only the narrower forbidValue list is gated on a runtime
-// binding. An integration test may not import the `.kernel` cell even type-only,
-// so exempting type-only re-exports here would open a laundering hole for
-// precisely the edges the table refuses. A type-only re-export is still a
-// re-export of a foreign name, and R8 draws no runtime/type distinction.
-//
-// Q3b - Does Clause B reach a `.harness.ts` cell?
-// YES. R8 exempts no cell, and the harness is a real cell: it has its own row in
-// the import table and is a specifier tests may legally import, so a foreign
-// re-export from a harness launders a test->cell edge the table refuses (the
-// `.integration.test.ts` row forbids `.kernel`/`.workflow`/`.schema`/`.acl`,
-// including type imports). The measured expectation in the plan tracks the
-// gherkin violation through the U8 rename of feature.kernel.ts to
-// feature.harness.ts, which only makes sense if the harness stays in radius.
-// Neither decision is resolved by an ad-hoc exemption at a call site: the rule
-// applies uniformly, and fallout is the orchestrator's to fix.
+// Clause B exempts neither type-only re-exports nor `.harness.ts`, and both are
+// load-bearing: `cell-import-boundary` gates only its `forbidValue` list on a
+// runtime binding, so `export type { T } from` is a real edge, and the harness
+// has its own import-table row. Exempting either laundries an edge the table
+// refuses.
 
 export const meta = {
   type: 'problem',

@@ -1,5 +1,6 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
+import { basename } from '@std/path'
 import { Schema as S } from 'effect'
 
 import { meta, NAME_SPAN_ACTUAL, NAME_SPAN_EXPECTED, NAME_SPAN_FIX, Options } from './entry-name-span.config.js'
@@ -59,18 +60,16 @@ const exportNameCount = (statement: ESTree.Statement): number | null => {
   }
 }
 
-const entryBasename = (filename: string): string => filename.split(/[\\/]/).pop() ?? filename
-
 export const entryNameSpan = defineRule({
   meta,
   create(context: Context) {
     const options = S.decodeUnknownSync(Options)(context.options[0] ?? {})
     const isEntry = new RegExp(options.entryPattern, 'u').test(context.filename)
 
+    if (!isEntry) return {}
+
     return {
       'Program:exit'(node: ESTree.Program) {
-        if (!isEntry) return
-
         let count = 0
         let lastExport: ESTree.Statement | null = null
         for (const statement of node.body) {
@@ -89,7 +88,7 @@ export const entryNameSpan = defineRule({
           node: lastExport,
           messageId: 'nameSpan',
           data: {
-            name: entryBasename(context.filename),
+            name: basename(context.filename),
             expected: NAME_SPAN_EXPECTED(options.nameSpan),
             actual: NAME_SPAN_ACTUAL(count),
             fix: NAME_SPAN_FIX,

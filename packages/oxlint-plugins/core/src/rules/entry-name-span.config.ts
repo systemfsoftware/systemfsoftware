@@ -2,9 +2,9 @@ import { JSONSchema, Schema as S } from 'effect'
 
 import { ENTRY_PATTERN_OPTION } from './shared-entry-pattern.config.js'
 
-// The doctrine's 7±2 working-memory span is the shared policy's pick, not the
-// rule's: the rule carries this default, and the policy layer (the repo's base
-// oxlint config) states the number explicitly when it switches the rule on.
+// 9 is the doctrine's 7±2 working-memory span, a policy pick rather than a fact
+// about the rule. Consumers override it per package; the repo's base config does
+// not, so this default is the bound in force everywhere here.
 export const DEFAULT_NAME_SPAN = 9
 
 export const Options = S.Struct({

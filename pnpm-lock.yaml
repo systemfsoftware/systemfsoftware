@@ -1226,6 +1226,9 @@ importers:
       '@oxlint/plugins':
         specifier: catalog:oxlint
         version: 1.77.0
+      '@std/path':
+        specifier: 'catalog:'
+        version: '@jsr/std__path@1.1.6'
     devDependencies:
       '@microsoft/api-extractor':
         specifier: 'catalog:'
@@ -1281,6 +1284,9 @@ importers:
       '@oxlint/plugins':
         specifier: catalog:oxlint
         version: 1.77.0
+      '@std/path':
+        specifier: 'catalog:'
+        version: '@jsr/std__path@1.1.6'
     devDependencies:
       '@microsoft/api-extractor':
         specifier: 'catalog:'

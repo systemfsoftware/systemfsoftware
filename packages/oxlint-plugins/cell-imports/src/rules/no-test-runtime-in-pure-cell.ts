@@ -44,16 +44,14 @@ const isTypeOnlyExport = (node: ESTree.ExportNamedDeclaration): boolean =>
 export const noTestRuntimeInPureCell = defineRule({
   meta,
   create(context: Context) {
-    const options = S.decodeUnknownSync(OptionsElement)(context.options[0] ?? {})
     const filename = context.filename
     const cell = cellOf(filename)
     if (cell === null) return {}
 
-    const pureCell = cell.slice(1)
-    if (!options.pureCells.includes(pureCell)) return {}
+    if (NON_PRODUCTION_CALLER.some((pattern) => pattern.test(filename))) return {}
 
-    const isNonProductionCaller = NON_PRODUCTION_CALLER.some((pattern) => pattern.test(filename))
-    if (isNonProductionCaller) return {}
+    const options = S.decodeUnknownSync(OptionsElement)(context.options[0] ?? {})
+    if (!options.pureCells.includes(cell.slice(1))) return {}
 
     const guards: ESTree.MemberExpression[] = []
 
