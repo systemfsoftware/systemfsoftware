@@ -1,4 +1,3 @@
-export * as Brands from './brands.kernel.js'
 export * as Policy from './daemon-policy.schema.js'
 export { BoundedIntensity, MaxChildren } from './daemon-policy.schema.js'
 export * as Spec from './daemon-spec.schema.js'

@@ -19,11 +19,6 @@ export class BoundedIntensity extends BoundedIntensity_base {
 }
 
 // @public (undocumented)
-export namespace Brands {
-    export { DynamicSpecTypeId, MAX_CHILDREN_CEILING, SupervisionPolicyTypeId, SupervisorTypeId, WorkerTypeId };
-}
-
-// @public (undocumented)
 export type LockConfig = {
     mode: 'none';
 } | {
