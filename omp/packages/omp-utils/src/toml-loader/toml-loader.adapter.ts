@@ -4,6 +4,7 @@ import * as PathModule from '@effect/platform/Path'
 import { parse } from '@std/toml'
 import { Context, Effect, Layer, MutableHashMap, Option, ParseResult, Ref, Schema } from 'effect'
 import os from 'node:os'
+import { mergeByOverride } from './toml-loader-merge.kernel.js'
 import { TomlConfig } from './toml-loader.schema.js'
 
 const PROJECT_CONFIG_FILE = 'systemfsoftware.toml'
@@ -22,27 +23,6 @@ export class TomlLoader extends Context.Tag('@systemfsoftware/omp-utils/toml-loa
     readonly load: (cwd: string) => Effect.Effect<TomlConfig, PlatformError, never>
   }
 >() {}
-
-/**
- * Private per-key merge for the layered config.
- *
- * Precedence (gitconfig model): a later layer replaces a key's whole value;
- * arrays are NEVER concatenated. Folded left-to-right so `user → project →
- * local` gives `local` the final word. The reusable generic form lives in
- * `toml-loader-merge.kernel.ts`; the adapter owns this copy because the
- * adapter cell may not import the kernel cell.
- */
-const mergeLayers = <V>(
-  layers: ReadonlyArray<Readonly<Record<string, readonly V[]>>>,
-): Record<string, readonly V[]> => {
-  const out: Record<string, readonly V[]> = {}
-  for (const layer of layers) {
-    for (const [key, value] of Object.entries(layer)) {
-      out[key] = value
-    }
-  }
-  return out
-}
 
 /**
  * TOML text → `TomlConfig`. The foreign parse is owned here — the adapter
@@ -103,7 +83,7 @@ const makeTomlLoader = (home: string) =>
         const localLayer = yield* readLayer(fs, pathService, localPath)
 
         const merged = yield* Schema.decode(TomlConfig)(
-          mergeLayers([userLayer, projectLayer, localLayer]),
+          mergeByOverride([userLayer, projectLayer, localLayer]),
         ).pipe(Effect.orDie)
 
         yield* Ref.update(cache, (m) => (MutableHashMap.set(m, cwd, merged), m))
