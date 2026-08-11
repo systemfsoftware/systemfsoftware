@@ -121,14 +121,6 @@ const MANIFEST = new Map([
     'workspace-layout',
     'Guards the shared native tsc all 41 packages typecheck through against a non-idempotent devDependency install hook. No package can see another package node_modules.',
   ]],
-  ['release-monorepo-filter.mjs', [
-    'release-metadata',
-    'semantic-release plugin, loaded by release.mjs.',
-  ]],
-  ['release.mjs', [
-    'release-metadata',
-    'The release pipeline.',
-  ]],
   ['rolldown-eager-entry-budget.mjs', [
     'local-tooling',
     'Bundle eager-entry probe. NO CALLERS as of 2026-08-06; a deletion candidate, not a gate.',
@@ -136,6 +128,14 @@ const MANIFEST = new Map([
   ['validate-publish-config.mjs', [
     'release-metadata',
     'repository.url and repository.directory per publishable manifest; npm rejects a mismatch with 422 after the tag lands.',
+  ]],
+  ['check-changeset.mjs', [
+    'release-metadata',
+    'The changeset gate for publishable-package PRs; invoked by changeset-check.yml, never a package dependency.',
+  ]],
+  ['tag-released-packages.mjs', [
+    'release-metadata',
+    'Idempotently tags name@v<version> for released packages; invoked by release.yml after publish, never a package dependency.',
   ]],
   ['worktrunk', [
     'local-tooling',

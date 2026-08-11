@@ -100,6 +100,7 @@ Then `pnpm --filter <pkg> mutation` — 100% on changed pure-core files.
 ## Release and Commits
 
 - **REPO-R1** — every package is pre-1.0 ALPHA; API stability is never a design constraint. When a change is cleaner as a break, make the break; accept proposed breaks without resistance and do not wait for a major release. A compatibility objection is rejected unless it names a concrete in-repo consumer migration. Gate: `pnpm exec commitlint` accepts the `api!` marker and the `BREAKING CHANGE:` footer that record the break.
+- **REPO-R2** — a change to a publishable package (`packages/**`) ships with a `.changeset/` intent authored via `pnpm change --bump <none|patch|minor|major>`; use `--bump none` only for a genuinely non-releasable touch. Gate: the changeset check (`.github/workflows/changeset-check.yml`) fails a PR that touches a publishable package without an intent. A `none` on a behavior-visible change is the same silent non-release the gate exists to catch — review consumed `none` intents on the Release PR before merging.
 - **REPO-C1** — `type(scope): subject`, 72 characters or fewer. Gate: `pnpm exec commitlint --edit <msgfile>`.
 - **REPO-C2** — feat, fix, chore, build, ci, deps, docs, perf, refactor, revert, style, test. Config-only changes are not feat or fix. Gate: `pnpm exec commitlint`, run by the `commit-msg` hook on every commit touching a path outside the vendored trees.
 
