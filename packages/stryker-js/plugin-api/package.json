@@ -15,7 +15,7 @@
     "generate": "node tasks/generate-stryker-core.mjs",
     "build": "tsdown",
     "typecheck": "tsc --noEmit --incremental",
-    "lint": "oxlint ."
+    "lint": "oxlint . --format=${OXLINT_FORMAT:-default}"
   },
   "license": "Apache-2.0",
   "engines": {

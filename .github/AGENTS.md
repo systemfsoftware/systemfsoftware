@@ -4,7 +4,7 @@
 
 `Release` is two-phase pnpm-native: on push to `main`, `pnpm version -r` consumes `.changeset/` intents and opens a Release PR (`changeset-release/main`); on that PR's merge it runs `the gate (pnpm check:ci)` via `reusable-checks.yml`, then builds, publishes via npm OIDC trusted publishing with provenance, and tags each released `name@v<version>`. `changeset-check.yml` fails a PR that touches `packages/**` without a `.changeset/` intent.
 
-**CI enumerates no steps.** Root `package.json` `check:ci` is the only definition of what the gate runs; `reusable-checks.yml` invokes it plus one annotations-only `lint:ci` pass. Read that script to learn what is covered — a copy here would drift, which is exactly how `attw` stopped running in CI while three other lists still claimed it.
+**CI enumerates no steps.** Root `package.json` `check:ci` is the only definition of what the gate runs; `reusable-checks.yml` invokes it. Read that script to learn what is covered — a copy here would drift, which is exactly how `attw` stopped running in CI while three other lists still claimed it.
 
 ### Failure patterns by task
 
@@ -95,6 +95,6 @@ Any package's `lint` script that uses `@systemfsoftware/oxlint-config/base` with
 
 1. ✅ Is the lockfile committed? → `git diff pnpm-lock.yaml`
 2. ✅ Does a clean `pnpm install --frozen-lockfile` succeed?
-3. ✅ Does `pnpm lint:ci` pass locally? (catches most CI-only issues)
+3. ✅ Does `pnpm check:local` pass locally? (catches most CI-only issues)
 4. ✅ Are annotations the first failure or a cascade? (check step order)
 5. ✅ Is the `oxlint-tsgolint` binary present in CI? (caught by step 2)

@@ -42,7 +42,7 @@
     "test:run": "vitest run",
     "api:check": "api-extractor run",
     "api:update": "api-extractor run --local",
-    "lint": "oxlint . ${AGENT:+--format=unix --quiet}",
+    "lint": "oxlint . --format=${OXLINT_FORMAT:-default}",
     "attw": "attw --pack ."
   },
   "dependencies": {

@@ -18,7 +18,7 @@
     "build": "tsdown && pnpm api:check",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "lint": "oxlint",
+    "lint": "oxlint --format=${OXLINT_FORMAT:-default}",
     "api:check": "api-extractor run",
     "api:update": "api-extractor run --local"
   },

@@ -8,7 +8,6 @@
     "typecheck": "turbo --concurrency=${TURBO_CONCURRENCY:-50%} --continue typecheck",
     "test": "turbo --concurrency=${TURBO_CONCURRENCY:-50%} test",
     "lint": "pnpm format:check && turbo --concurrency=${TURBO_CONCURRENCY:-50%} lint",
-    "lint:ci": "s=0; pnpm format:check || s=1; turbo --concurrency=${TURBO_CONCURRENCY:-50%} --continue lint -- --format=github || s=1; TSGO_FORMAT=github-actions turbo --concurrency=${TURBO_CONCURRENCY:-50%} --continue lint:tsgo || s=1; exit $s",
     "api:check": "turbo --concurrency=${TURBO_CONCURRENCY:-50%} api:check",
     "format": "dprint fmt",
     "format:check": "dprint check",

@@ -25,7 +25,7 @@
     "build": "tsdown",
     "typecheck": "tsc --noEmit --incremental",
     "test": "vitest run",
-    "lint": "oxlint . ${AGENT:+--format=unix --quiet}"
+    "lint": "oxlint . --format=${OXLINT_FORMAT:-default}"
   },
   "devDependencies": {
     "@effect/platform": "catalog:",
