@@ -14,6 +14,14 @@ const isSMemberAccess = (node: ESTree.Node): node is ESTree.StaticMemberExpressi
   return node.property.type === 'Identifier'
 }
 
+const sRootedPropertyName = (node: ESTree.Node): string | undefined => {
+  if (node.type !== 'MemberExpression') return undefined
+  if (node.property.type !== 'Identifier') return undefined
+  const object = node.object
+  if (object.type === 'Identifier') return object.name === 'S' ? node.property.name : undefined
+  return sRootedPropertyName(object) === undefined ? undefined : node.property.name
+}
+
 const TRANSFORM_NAMES: Record<string, true> = { transform: true, transformOrFail: true }
 
 const isTransformCallee = (callee: ESTree.Expression | ESTree.Super): boolean => {
@@ -27,7 +35,9 @@ const isTransformCallExpression = (node: ESTree.Node): boolean =>
 
 const isSchemaCallExpression = (node: ESTree.Node): boolean => {
   if (node.type !== 'CallExpression') return false
-  return isSMemberAccess(node.callee) && TRANSFORM_NAMES[node.callee.property.name] !== true
+  const propertyName = sRootedPropertyName(node.callee)
+  if (propertyName === undefined) return false
+  return TRANSFORM_NAMES[propertyName] !== true
 }
 
 const isSchemaDeclaration = (decl: ESTree.VariableDeclarator): boolean => {

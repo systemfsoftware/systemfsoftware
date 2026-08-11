@@ -80,6 +80,22 @@ ruleTester.run('acl-single-transform-export', aclSingleTransformExport, {
       filename: 'order.acl.ts',
     },
     {
+      name: 'Should_Pass_When_SchemaDeclarationUsesPipeChain_InAcl',
+      code: `
+import * as S from 'effect/Schema'
+import { ParseResult } from 'effect'
+
+export const JsonObjectKey = S.String.pipe(S.filter((x) => x.length > 0))
+
+export const OrderFromRow = S.transformOrFail(S.Struct({ orderId: S.String }), S.Struct({ id: S.String }), {
+  strict: true,
+  decode: (row) => ParseResult.succeed({ id: row.orderId }),
+  encode: (_, __, ast) => ParseResult.fail(new ParseResult.Forbidden(ast, _, 'Decode-only ACL')),
+})
+`,
+      filename: 'order.acl.ts',
+    },
+    {
       name: 'Should_Pass_When_OnlyTypesAndSchemas_InAcl',
       code: `
 import * as S from 'effect/Schema'
