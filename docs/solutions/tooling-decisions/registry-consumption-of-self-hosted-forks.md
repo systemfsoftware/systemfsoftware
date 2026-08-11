@@ -40,7 +40,7 @@ Only the `workspace:` protocol links a workspace package into a consumer. A plai
 
 All 36 consumers now declare `"@systemfsoftware/arethetypeswrong-cli": "catalog:attw"` (registry range `^1.1.1` via the `attw` catalog in `pnpm-workspace.yaml`) instead of `workspace:^`. The CLI's own packages stay workspace-linked — `arethetypeswrong-cli` keeps its `workspace:*` runtime link to `arethetypeswrong-core` — and the rewrite's devDependencies on gherkin and dmmf remain workspace links. The workspace graph holds only one-way edges out of the CLI, so no devDependency the rewrite later adds can close a loop.
 
-Verified with a Tarjan strongly-connected-component pass over the lockfile's `link:` edges, in both graph states (main, and with the rewrite's devDependencies applied): the only non-trivial SCC is the known `{oxlint-plugin-cell-taxonomy, stryker-js-mutation-run, stryker-js-typescript-checker}` triple owned by the path-resolved-base plan (`docs/plans/2026-08-08-003-refactor-path-resolved-stryker-base-plan.md`). The CLI appears in no non-trivial SCC, and zero workspace edges point into it.
+Verified with a Tarjan strongly-connected-component pass over the lockfile's `link:` edges, in both graph states (main, and with the rewrite's devDependencies applied): the only non-trivial SCC was the known `{oxlint-plugin-cell-taxonomy, stryker-js-mutation-run, stryker-js-typescript-checker}` triple owned by the path-resolved-base plan (`docs/plans/2026-08-08-003-refactor-path-resolved-stryker-base-plan.md`). The CLI appeared in no non-trivial SCC, and zero workspace edges pointed into it. (Measurement dated 2026-08-09: the triple was dissolved 2026-08-10 by the back-edge removal in `docs/plans/2026-08-10-002-fix-toolchain-cycle-warning-plan.md`, so main currently holds no non-trivial SCC.)
 
 ## Guidance
 
@@ -57,4 +57,4 @@ Verified with a Tarjan strongly-connected-component pass over the lockfile's `li
 - `docs/solutions/build-errors/turbo-build-cycle-from-self-hosted-devdeps.md` — the recorded cycle class
 - `docs/solutions/tooling-decisions/pnpm-catalogs-for-monorepo-dependency-management.md` — the named-catalog convention
 - `pnpm-workspace.yaml` — the `attw` catalog entry and `minimumReleaseAge`
-- `docs/plans/2026-08-08-003-refactor-path-resolved-stryker-base-plan.md` — the sibling plan that owns the remaining SCC
+- `docs/plans/2026-08-08-003-refactor-path-resolved-stryker-base-plan.md` — the sibling plan that owned the SCC (dissolved 2026-08-10) and owns the forward-edge class

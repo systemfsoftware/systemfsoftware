@@ -1,7 +1,7 @@
 import { defineConfig } from 'oxlint'
 
 export default defineConfig({
-  jsPlugins: [import.meta.resolve('@systemfsoftware/oxlint-plugin-cell-taxonomy')],
+  jsPlugins: [new URL('../../oxlint-plugins/cell-taxonomy/dist/index.mjs', import.meta.url).pathname],
 
   rules: {
     '@systemfsoftware/oxlint-plugin-cell-taxonomy/capability-named-directory': 'error',
