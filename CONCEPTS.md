@@ -34,6 +34,12 @@ A mutual dev-dependency between two of this repo's own tooling packages, arising
 
 The repo's instance is resolved at the package level (2026-08-10): the lint plugin is loaded by its consumers via a filesystem path into its built bundle, so the fork packages carry no workspace edge into the plugin and the graph holds only one-way edges out of it. The real artifact ordering (fork lint consumes the plugin's `dist`) is expressed as an explicit task edge in the consumers' `turbo.json` rather than a package edge. A reintroduced mutual devDependency returns loudly but non-fatally — turbo's package-graph validation and pnpm's install check both print stderr warnings on every command (`pnpm check` still exits 0; the retained plugin build override also keeps the hard task-graph error from returning), and pnpm's `ignore-workspace-cycles` silences only pnpm's own warning. Distinct from an externalized dependency, which concerns what a published tarball needs at runtime; this concept concerns only what must be built before what.
 
+### Bin target
+
+The file a workspace package's `bin` field names as the executable its command resolves to. When that file is build output rather than a committed source file, it does not exist at install time, so the package must build itself during install for the link to succeed.
+
+The package manager links command shims twice per install, once before lifecycle scripts and once after, and the second pass exists precisely so a target built by a script gets linked. A shim whose target is absent in both passes is skipped with a warning, never an error, and no later install revisits a package already considered linked — so a link that failed once stays failed for the life of the checkout, and every command depending on it is missing while the install reports success.
+
 ## Build cache
 
 ### Input-hash completeness
@@ -109,6 +115,12 @@ The closed registry that admits each root-level tooling script by declared categ
 An artifact that deliberately contains the violation a gate claims to detect, run before the real check so that a non-zero finding count proves the gate can fail at all. Paired with a known-good artifact, which must produce zero.
 
 Without the pair, a gate reporting no findings is indistinguishable between two states: a clean tree, or a check that never ran. The fixture is what converts silence into evidence.
+
+### Advisory step
+
+A pipeline step permitted to fail without failing its job, because the verdict it contributes is carried by something downstream. The permission is granted with one outcome in mind — the judged work scored below a threshold — and silently extends to every other way the step can fail.
+
+The extension is the hazard: an infrastructure failure is not a score outcome, so a run that crashed, timed out, or never started at all is absolved by the same flag. An advisory step is only honest when paired with a separate, non-advisory assertion that the run produced the artifact its verdict is read from.
 
 ## Test execution
 
