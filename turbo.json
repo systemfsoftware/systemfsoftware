@@ -229,6 +229,14 @@
       "outputs": [],
       "cache": true
     },
+    "//#check:action-provenance": {
+      "inputs": [
+        "$TURBO_ROOT$/scripts/guard-action-provenance.mjs",
+        "$TURBO_ROOT$/.github/**/*.{yml,yaml}"
+      ],
+      "outputs": [],
+      "cache": true
+    },
     "//#check:project-references": {
       "inputs": [
         "$TURBO_ROOT$/scripts/check-project-references.mjs",
