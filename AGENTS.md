@@ -16,6 +16,13 @@
   dont: enforce a doctrine we publish with a `scripts/*.mjs` gate, a `pnpm check` step, `CONSTITUTION.md`, or the wiki — a consumer installs packages, not this repository; read a doctrine artifact from a script, which promotes prose to a spec nobody maintains
   harm: the rule binds one clone. Everywhere else the same doctrine arrives as prose in a skill, which is the channel restraints do not survive — the design looks enforced here and is advisory for every consumer
   check: `pnpm check:script-provenance` exits 0. The judgement half stays with the reviewer: name the artifact a stranger installs that carries the rule. `scripts/`, `pnpm check`, `CONSTITUTION.md` and the wiki are not answers
+
+- id: REPO-S7
+  title: A gate earns its place, and the tenth one is not free
+  do: before adding an entry to the gate, name the mistake it prevents — a specific wrong thing that specifically happened here, in the form a leaf must earn its own existence — then retire or subsume something, or give the rule to a published artifact instead (`REPO-S6`); raise `GATE_BUDGET` only in its own commit, with the entry's technique class and the suite's resulting aggregate stated
+  dont: add an entry whose verdict depends on scheduler order, cache state, or which task finished first; gate a regex or substring scan over source and call it enforcement; raise `GATE_BUDGET` in the same commit as the entry that exceeded it
+  harm: for N entries each misfiring independently with probability p a clean run is blocked with probability 1-(1-p)^N, so affordability is N x p and never N — at 2% each, ten entries block 18% of clean runs and twenty block 33%, and the suite is waived long before anyone admits it. Two failures measured here on 2026-08-11 are what the prohibitions name: `//#check:project-references` read built declarations while declaring no dependency on any `build`, and reported 11 projects broken in one CI run and 37 clean in another on the same tree; and a guard arm shipped that morning produced its first false positive within hours, on the first real corpus it met. A gate that is green by luck is worse than none, because it teaches the team to re-run until it passes
+    check: `pnpm check:script-provenance` prints the gate-entry count against `GATE_BUDGET` and exits non-zero when the count exceeds it. The judgement half stays with the reviewer: whether the named mistake is a real event or a class of badness, and whether a technique the table calls a tripwire is being sold as a gate
 ```
 
 - **REPO-S1** — `isolatedDeclarations` stays disabled in every tsconfig; it produces 153 compile errors in idiomatic Effect. Gate: `.claude/hooks/guard-protected-writes.ts`.
