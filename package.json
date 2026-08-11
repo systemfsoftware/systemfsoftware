@@ -14,8 +14,8 @@
     "format:check": "dprint check",
     "precommit": "pnpm exec lint-staged --no-revert --config .lintstagedrc.js",
     "check": "pnpm install --frozen-lockfile && TURBO_CONCURRENCY=${TURBO_CONCURRENCY:-50%} pnpm check:ci",
-    "check:ci": "s=0; pnpm format:check || s=1; turbo --concurrency=${TURBO_CONCURRENCY:-100%} --continue lint lint:tsgo typecheck test attw api:check test:contract //#check:mutate-scope //#check:lint-coverage //#check:no-hand-rolled-jsonc //#check:publish-config //#check:script-provenance //#check:action-provenance //#check:project-references && turbo --concurrency=${TURBO_CONCURRENCY:-100%} --continue //#check:exports //#check:runtime-deps || s=1; exit $s",
-    "check:local": "s=0; dprint check || s=1; turbo --concurrency=${TURBO_CONCURRENCY:-50%} --continue lint lint:tsgo typecheck test attw api:check //#check:mutate-scope //#check:lint-coverage //#check:no-hand-rolled-jsonc //#check:publish-config //#check:script-provenance //#check:action-provenance //#check:project-references || s=1; exit $s",
+    "check:ci": "s=0; pnpm format:check || s=1; pnpm check:turbo-graph || s=1; turbo --concurrency=${TURBO_CONCURRENCY:-100%} --continue lint lint:tsgo typecheck test attw api:check test:contract //#check:mutate-scope //#check:lint-coverage //#check:no-hand-rolled-jsonc //#check:publish-config //#check:script-provenance //#check:action-provenance //#check:project-references && turbo --concurrency=${TURBO_CONCURRENCY:-100%} --continue //#check:exports //#check:runtime-deps || s=1; exit $s",
+    "check:local": "s=0; dprint check || s=1; pnpm check:turbo-graph || s=1; turbo --concurrency=${TURBO_CONCURRENCY:-50%} --continue lint lint:tsgo typecheck test attw api:check //#check:mutate-scope //#check:lint-coverage //#check:no-hand-rolled-jsonc //#check:publish-config //#check:script-provenance //#check:action-provenance //#check:project-references || s=1; exit $s",
     "prepare": "concurrently \"husky\" \"node scripts/patch-tsgo-if-needed.mjs\"",
     "bump:minor": "node scripts/bump-all-minor.mjs",
     "check:publish-config": "node scripts/validate-publish-config.mjs --selftest && node scripts/validate-publish-config.mjs",
@@ -27,7 +27,8 @@
     "check:no-hand-rolled-jsonc": "node scripts/guard-no-hand-rolled-jsonc.mjs --selftest && node scripts/guard-no-hand-rolled-jsonc.mjs",
     "check:project-references": "node scripts/check-project-references.mjs --selftest && node scripts/check-project-references.mjs",
     "check:script-provenance": "node scripts/guard-script-provenance.mjs --selftest && node scripts/guard-script-provenance.mjs",
-    "check:action-provenance": "node scripts/guard-action-provenance.mjs --selftest && node scripts/guard-action-provenance.mjs"
+    "check:action-provenance": "node scripts/guard-action-provenance.mjs --selftest && node scripts/guard-action-provenance.mjs",
+    "check:turbo-graph": "node scripts/guard-turbo-graph.mjs --selftest && node scripts/guard-turbo-graph.mjs"
   },
   "devDependencies": {
     "@commitlint/cli": "^21.2.1",
