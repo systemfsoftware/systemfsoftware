@@ -1,19 +1,5 @@
 # systemfsoftware — workspace invariants
 
-Effect-TS libraries and the oxlint plugin enforcing the constitution (vendored at `repos/constitution/`; amend upstream). Leaf `AGENTS.md` files carry per-directory deltas; the delivery hook refuses the first write under a governing leaf until it is read.
-
-## Doctrine Index
-
-`CONSTITUTION.md` is not in context. Read the one article the decision needs; never re-derive an axiom from memory. Ordered by how often an agent violated the article without having read it.
-
-- Article A, Application — a failing gate outranks a quoted clause. Read when someone cites a clause at you.
-- Article IV, Organization — organize by capability, names scream the domain, one responsibility per module. Read before naming a file or splitting a module.
-- Article III, Verification — testing trophy, properties over examples, mutation as the measure, behavior where the mutator can see it. Read before choosing a test layer or a mutation scope.
-- Article II, The Boundary — functional core with an imperative shell, effects as values, the I/O sandwich, decode never cast. Read before writing an executor, adapter, ACL, or handler.
-- Article V, Conduct — depth over expedience, scope discipline, first principles over precedent, subtract before adding. Read when tempted by a patch, a copy-paste, or one more helper.
-
-Article I binds through lint and the type system. Run the gate; reading it to comply is wasted.
-
 ## Safety
 
 ```yaml
@@ -58,15 +44,16 @@ Not derivable from the manifests:
 
 Directories only; files are discovered with tools.
 
-| Directory   | What it is                                   | Governance                                  |
-| ----------- | -------------------------------------------- | ------------------------------------------- |
-| `packages/` | Workspace packages                           | Root invariants plus a hook-delivered leaf  |
-| `repos/`    | Vendored git subtrees, read-only             | `REPO-S3`; registry in `subtrees.toml`      |
-| `scripts/`  | Root guards, release and harness tooling     | Editable except the Evaluator scripts above |
-| `.github/`  | CI workflows and reusable actions            | Evaluator                                   |
-| `docs/`     | Solutions, plans, audits, decision records   | `REPO-E1`                                   |
-| `omp/`      | OMP plugin packages                          | Leaf-governed                               |
-| `wiki/`     | Gitignored corpus, absent from a fresh clone | `REPO-W4`                                   |
+| Directory             | What it is                                                                         | Governance                                                      |
+| --------------------- | ---------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| `packages/`           | Workspace packages                                                                 | Root invariants plus a hook-delivered leaf                      |
+| `repos/`              | Vendored git subtrees, read-only                                                   | `REPO-S3`; registry in `subtrees.toml`                          |
+| `scripts/`            | Root guards, release and harness tooling                                           | Editable except the Evaluator scripts above                     |
+| `.github/`            | CI workflows and reusable actions                                                  | Evaluator                                                       |
+| `docs/`               | Solutions, plans, audits, decision records                                         | `REPO-E1`                                                       |
+| `docs/cell-taxonomy/` | Gitignored working spec of the cell taxonomy, absent from a fresh clone            | `REPO-W5`                                                       |
+| `omp/`                | OMP plugin packages                                                                | Leaf-governed                                                   |
+| `wiki/`               | Nested standalone repo (`software-wiki`), gitignored here to avoid double-tracking | `REPO-W4` here; its own root `AGENTS.md` governs work inside it |
 
 ## Startup
 
@@ -78,6 +65,10 @@ Directories only; files are discovered with tools.
 
 - **REPO-W2** — modify only files belonging to the active task. No unasked retries, validation, telemetry or refactors. Reducing accepted scope needs the user's consent. Gate: review — the reviewer names the active task each changed file belongs to.
 - **REPO-W4** — search the gitignored `wiki/` corpus before writing a plan, choosing between options, settling a design question, or asking the user one. Enter at its `manifest.md`, open at most five candidate slugs, stop as soon as one settles it, and read the per-claim Warrant table rather than the frontmatter band. Never cite a `wiki/` path in a plan, doc, commit or issue — the corpus does not ship with the clone. A nil result names the verbatim query and the corpus-scoped path it ran against, so anyone holding the corpus can re-run it and falsify the claim. Gate: `.claude/hooks/guard-protected-writes.ts` refuses a write under `docs/plans/` until a `-c wiki` query has run this session; it confirms a search happened, not that it was good.
+- **REPO-W5** _(temporary — delete when the taxonomy is folded into the published oxlint plugins and `CONSTITUTION.md`, or when the corpus is abandoned)_ — `docs/cell-taxonomy/` is the working specification of the cell taxonomy and the design authority for every cell decision; it is gitignored and absent from a fresh clone. Read `SPECIFICATION.md` before naming a cell suffix, splitting a module, or placing a test, and open a `references/` file only when that decision needs it. Construction is the griller: where a build contradicts the specification, enter the contradiction in `references/ledger.md` under that file's own protocol — never code around it, and never reword a rule to match what was just written. A sealed entry is retracted only by the owner, so a contradiction with one is surfaced to the user rather than resolved in the diff. Never cite a `docs/cell-taxonomy/` path in a plan, doc, commit, issue or published package; the corpus does not ship with the clone. Gate: review — the reviewer names the specification section the cell choice rests on, or the ledger entry recording where it failed.
+- **REPO-W6** — a claim about this repo is reported with the check that decided it, run this session: a `file:line`, a command's output, or a fixture observed red and then green. Two of these failures are silent and no gate reaches them. A generator produces exactly the declared input type of the function under test — one that carves out a domain no type or schema declares is testing an invention and passes forever. A capability or a rule asserted as blocking shows the call that failed or the clause reread this turn, never the inference that it would have. The rest is already mechanical and is not restated here: `no-assert-in-property` and `no-silent-return` reject a predicate that cannot fail, and `REPO-D1`'s mutation score rejects a test that kills nothing. Gate: review — for each claim the reviewer names the check that ran, and for each new arbitrary the declared type whose domain it reproduces.
+- **REPO-W7** — the repository is the subject under test, never the warrant. Observing what the code, a config, a lint rule or a sibling package does settles a question of fact — whether a gate fires, what a rule rejects, which cells a table names — and settles nothing about what ought to be. A design conclusion drawn from established practice, an installed rule, a shipped default or a prior commit is circular, and it reads as grounding, which is why it survives review. Theory governs: a design question is answered by derivation, and where derivation and the repository disagree the repository is wrong until the derivation is defeated by argument, never the reverse. The count of packages already doing something is not an argument, and neither is the age of the convention. Gate: review — the reviewer names the derivation each design decision rests on, and rejects any warrant whose only support is that the repo already does it.
+- **REPO-W8** — a choice that is costly to reverse is researched before it is made, never defaulted into: a framework, a protocol implementation, a wire format, a runtime boundary, or a dependency that will spread across modules. Establish what comparable projects actually ship by reading their manifests or their source, never by recalling it; name at least two candidates and why the losers lost; and confirm no maintained implementation exists before hand-rolling one. Record the candidates, the deciding criterion and the observation that would reverse the choice with the other decision records under `docs/`. Defaulting is the expensive failure precisely because it is quiet — the first plausible option compiles, passes, and reveals its ceiling only after everything depending on it is written, when replacing it is no longer a dependency swap. This is the outward-facing half of `REPO-W4`, which searches the corpus we hold; neither substitutes for the other. Gate: review — for each new dependency and each hand-rolled protocol in the diff, the reviewer names its record and the alternative it beat.
 
 ## Definition of Done
 
