@@ -1,9 +1,5 @@
 import { declareValuePlugin, PluginKind } from '@systemfsoftware/stryker-js-plugin-api/plugin'
-import {
-  decideInSourceTestIgnore,
-  IN_SOURCE_TEST_IGNORED,
-  isInSourceTestGuard,
-} from './in-source-test-ignore.kernel.js'
+import { decideInSourceTestIgnore } from './in-source-test-ignore.kernel.js'
 
 interface IgnorerPath {
   readonly node: unknown
@@ -23,7 +19,3 @@ export const strykerPlugins = [
     },
   }),
 ]
-
-// Public-surface decision: tests reach the decision function through the
-// barrel rather than deep-importing the .kernel.ts cell.
-export { decideInSourceTestIgnore, IN_SOURCE_TEST_IGNORED, isInSourceTestGuard }

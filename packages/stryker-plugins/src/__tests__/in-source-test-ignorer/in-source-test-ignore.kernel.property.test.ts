@@ -6,9 +6,15 @@ import {
   decideInSourceTestIgnore,
   IN_SOURCE_TEST_IGNORED,
   isInSourceTestGuard,
-} from '../../src/in-source-test-ignorer/index.js'
+} from '../../in-source-test-ignorer/in-source-test-ignore.kernel.js'
 
-import { binaryOf, guardOf, identifier, importMetaMember, metaOf } from '../helpers/in-source-test-ast.fixtures.js'
+import {
+  binaryOf,
+  guardOf,
+  identifier,
+  importMetaMember,
+  metaOf,
+} from '../../../__tests__/helpers/in-source-test-ast.fixtures.js'
 
 const Feature = makeFeature({ it, layer })
 
