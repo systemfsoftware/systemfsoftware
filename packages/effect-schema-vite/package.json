@@ -65,7 +65,7 @@
     "vitest": "^4.1.10"
   },
   "peerDependencies": {
-    "@systemfsoftware/effect-schema-law": "*",
+    "@systemfsoftware/effect-schema-law": "workspace:*",
     "effect": "catalog:",
     "vite": ">5.0.0",
     "vitest": "*"
