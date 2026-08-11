@@ -17,11 +17,13 @@ set -euo pipefail
 repo_root="$(git rev-parse --show-toplevel)"
 registry="${NPM_REGISTRY:-https://registry.npmjs.org}"
 check_mode=false
+preflight_mode=false
 
 usage() {
-  echo "Usage: $0 [--check] [--json]" >&2
-  echo "  --check   exit 1 if any non-private package is unpublished or lacks OIDC attestations" >&2
-  echo "  --json    emit a machine-readable JSON report" >&2
+  echo "Usage: $0 [--check] [--json] [--preflight]" >&2
+  echo "  --check     exit 1 if any non-private package is unpublished or lacks OIDC attestations" >&2
+  echo "  --json      emit a machine-readable JSON report" >&2
+  echo "  --preflight exit 1 if any non-private package has never been published (the release gate)" >&2
   echo "  NPM_REGISTRY env overrides the registry base URL" >&2
   exit 2
 }
@@ -31,6 +33,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --check) check_mode=true ;;
     --json) json_mode=true ;;
+    --preflight) preflight_mode=true ;;
     -h|--help) usage ;;
     *) echo "Unknown option: $1" >&2; usage ;;
   esac
@@ -50,6 +53,7 @@ fi
 
 # --- 2. Per-package registry + config checks ----------------------------------------------
 declare -A local_version=()
+declare -A pkg_path=()
 declare -A provenance_config=()
 declare -A repo_field=()
 declare -A npm_status=()   # published | unpublished | error
@@ -62,6 +66,7 @@ for row in "${pkgs[@]}"; do
   pkg_json="$path/package.json"
 
   local_version["$name"]="$(jq -r '.version // "?"' "$pkg_json")"
+  pkg_path["$name"]="$path"
   provenance_config["$name"]="$(jq -r 'if .publishConfig.provenance == true then "yes" else "no" end' "$pkg_json")"
   repo_field["$name"]="$(jq -r 'if (.repository.url // "") != "" then "yes" else "no" end' "$pkg_json")"
 
@@ -166,6 +171,41 @@ printf '  no-oidc:     %s\n' "$(count no-oidc)"
 printf '  stuck:       %s\n' "$(count stuck)"
 printf '  ok:          %s\n' "$(count ok)"
 if [[ "$(count error)" -gt 0 ]]; then printf '  error:       %s\n' "$(count error)"; fi
+
+# --- 5a. --preflight gate -----------------------------------------------------------------
+# Fails on the one class npm OIDC provably cannot serve: a package that has never been
+# published. npm-trust's prerequisites require the package to already exist on the registry,
+# so no trusted publisher can be registered for it, and `pnpm publish -r` would reach it
+# mid-batch and abort with an OIDC auth error after publishing its predecessors.
+#
+# `no-oidc` is deliberately NOT a failure here: a previously unattested version says nothing
+# about whether a trusted publisher is registered now, and registration cannot be read
+# without authenticating, which this script does not do. This is a publishability preflight,
+# not a registration preflight — the honest scope.
+#
+# The bootstrap runbook lives in docs/solutions/tooling-decisions/. Its path stays in this
+# comment and never in an echo: guard-script-provenance.mjs Arm 1 treats a doctrine path in
+# a non-comment shell line as a doctrine read and fails the build.
+if $preflight_mode; then
+  slug="$(git -C "$repo_root" remote get-url origin 2>/dev/null \
+    | sed -E 's#(git@github.com:|https://github.com/)##; s#\.git$##' || true)"
+  slug="${slug:-<owner>/<repo>}"
+  echo ""
+  if [[ "$(count unpublished)" -eq 0 && "$(count error)" -eq 0 ]]; then
+    echo "PREFLIGHT OK: every non-private workspace package exists on the registry."
+  else
+    echo "::error::preflight failed — $(count unpublished) package(s) have never been published, $(count error) unqueryable. OIDC cannot debut a package; bootstrap each one from a maintainer machine, then re-run." >&2
+    for name in "${!klass[@]}"; do
+      [[ "${klass[$name]}" == "unpublished" || "${klass[$name]}" == "error" ]] || continue
+      echo "" >&2
+      echo "  $name (${pkg_path[$name]#"$repo_root"/}) — ${klass[$name]}" >&2
+      echo "    corepack pnpm --filter $name build" >&2
+      echo "    corepack pnpm --filter $name publish --access public --no-git-checks" >&2
+      echo "    npm trust github $name --repo $slug --file release.yml --allow-publish --yes" >&2
+    done
+    exit 1
+  fi
+fi
 
 # --- 5. --check gate ----------------------------------------------------------------------
 if $check_mode; then
