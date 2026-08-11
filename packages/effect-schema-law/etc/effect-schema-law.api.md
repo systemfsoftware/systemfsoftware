@@ -8,95 +8,33 @@ import * as AST from 'effect/SchemaAST';
 import { FastCheck } from 'effect';
 import { Schema } from 'effect';
 
-// @public
-export interface AdequacyReport {
-    // (undocumented)
-    readonly adequate: boolean;
-    // (undocumented)
-    readonly message: string;
-    // (undocumented)
-    readonly undischarged: readonly Obligation[];
-}
-
-// @public
-export const adequacyReport: (schema: Schema.Schema.AnyNoContext, generators: RefusalGenerators) => AdequacyReport;
-
-// @public
-export interface Arm {
-    // (undocumented)
-    readonly kind: 'drop-refinement' | 'drop-to-arm' | 'drop-from-arm';
-    readonly node: AST.AST;
-    // (undocumented)
-    readonly path: string;
-    // (undocumented)
-    readonly weakened: AST.AST;
-}
-
-// @public
-export const armsOf: (schema: Schema.Schema.Any) => readonly Arm[];
-
-// @public
-export interface BlindArm {
-    // (undocumented)
-    readonly kind: string;
-    // (undocumented)
-    readonly message: string;
-    // (undocumented)
-    readonly path: string;
-}
-
-// @public (undocumented)
-export const boundedUnion: <Base extends readonly [Schema.Schema.Any, ...ReadonlyArray<Schema.Schema.Any>], Recur extends readonly [Schema.Schema.Any, ...ReadonlyArray<Schema.Schema.Any>]>(identifier: string, options: {
-    readonly base: Base;
-    readonly recur: Recur;
-    readonly maxDepth?: number;
-}) => Schema.Schema<Schema.Schema.Type<Base[number] | Recur[number]>, Schema.Schema.Encoded<Base[number] | Recur[number]>, Schema.Schema.Context<Base[number] | Recur[number]>>;
-
-// @public
-export const dischargedBy: (schema: Schema.Schema.AnyNoContext, obligations: ReadonlyMap<AST.AST, Obligation>, generators: Readonly<Record<string, FastCheck.Arbitrary<unknown>>>) => ReadonlyMap<AST.AST, readonly string[]>;
-
-// @public
-export const discriminates: (schema: Schema.Schema.AnyNoContext, obligations: ReadonlyMap<AST.AST, Obligation>, value: unknown) => boolean;
-
-// @public
-export interface Obligation {
-    // (undocumented)
-    readonly node: AST.AST;
-    // (undocumented)
-    readonly paths: readonly string[];
-    // (undocumented)
-    readonly tag: string;
-    // (undocumented)
-    readonly weakened: AST.AST;
-    // (undocumented)
-    readonly witness: unknown;
-}
-
-// @public
-export interface ObligationScan {
-    // (undocumented)
-    readonly blind: readonly BlindArm[];
-    // (undocumented)
-    readonly obligations: ReadonlyMap<AST.AST, Obligation>;
-}
-
+// Warning: (ae-forgotten-export) The symbol "Obligation" needs to be exported by the entry point index.d.ts
+//
 // @public (undocumented)
 export const obligationsOf: (schema: Schema.Schema.AnyNoContext) => ReadonlyMap<AST.AST, Obligation>;
 
-// @public
-export type RefusalGenerators = Record<string, FastCheck.Arbitrary<unknown>>;
+// @public (undocumented)
+export namespace Refutation {
+    export { BlindArm, Obligation, ObligationScan, RefusalGenerators, WITNESS_BUDGET, dischargedBy, discriminates, obligationsOf, scanObligations };
+}
 
+// Warning: (ae-forgotten-export) The symbol "RefusalGenerators" needs to be exported by the entry point index.d.ts
+//
 // @public
 export const refutes: (schema: Schema.Schema.AnyNoContext, generators: RefusalGenerators) => void;
 
 // @public
 export const ruleOfSchemas: <A, I>(name: string, schema: Schema.Schema<A, I, never>) => void;
 
+// Warning: (ae-forgotten-export) The symbol "ObligationScan" needs to be exported by the entry point index.d.ts
+//
 // @public
 export const scanObligations: (schema: Schema.Schema.AnyNoContext) => ObligationScan;
 
-// @public
-export const WITNESS_BUDGET = 256;
+// @public (undocumented)
+export namespace Weakening {
+    export { AdequacyReport, Arm, adequacyReport, armsOf, boundedUnion };
+}
 
 // (No @packageDocumentation comment for this package)
 

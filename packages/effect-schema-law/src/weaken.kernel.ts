@@ -1,6 +1,7 @@
 import { type FastCheck, Schema as S } from 'effect'
 import * as Arbitrary from 'effect/Arbitrary'
 import * as AST from 'effect/SchemaAST'
+import { dischargedBy, type Obligation, type RefusalGenerators, scanObligations } from './refutation.kernel.js'
 
 /**
  * One weakening of an Effect schema, produced by `armsOf`. Each arm identifies
@@ -192,26 +193,80 @@ const walk = (
   }
 }
 
-/**
- * The fast-check arbitrary for the encoded side of a schema, drawn via
- * `either`-style failure isolation: a schema whose arbitrary construction
- * throws is reported as a thrown error rather than a silent `None`. U2's
- * fallback chain consumes this alongside the type-side arbitrary.
- *
- * @internal
- */
-export const safeEncodedArbitrary = (
-  schema: S.Schema.Any,
-): FastCheck.Arbitrary<unknown> => {
-  const encoded = S.encodedSchema(schema)
-  return Arbitrary.make(encoded)
+/** Verdict for one schema's obligation set, carrying the detail R7 requires in a failure. */
+export interface AdequacyReport {
+  readonly adequate: boolean
+  readonly undischarged: readonly Obligation[]
+  readonly message: string
+}
+
+const renderWitness = (witness: unknown): string => {
+  try {
+    return JSON.stringify(witness) ?? String(witness)
+  } catch {
+    return String(witness)
+  }
 }
 
 /**
- * The fast-check arbitrary for the type side of a schema. Safe the same way
- * `safeEncodedArbitrary` is — never returns a placeholder for a thrown
- * arbitrary.
- *
- * @internal
+ * Which obligations no declared generator discharges. A bare "adequacy failed" leaves
+ * the author nothing to act on, so the message names each node's tag, every path
+ * reaching it, and the witness that proves the weakening is permissive.
  */
-export const safeTypeArbitrary = (schema: S.Schema.Any): FastCheck.Arbitrary<unknown> => Arbitrary.make(schema)
+export const adequacyReport = (
+  schema: S.Schema.AnyNoContext,
+  generators: RefusalGenerators,
+): AdequacyReport => {
+  const scan = scanObligations(schema)
+  const credits = dischargedBy(schema, scan.obligations, generators)
+  const undischarged = [...scan.obligations.values()].filter(
+    (obligation) => (credits.get(obligation.node) ?? []).length === 0,
+  )
+  if (scan.blind.length > 0) {
+    return {
+      adequate: false,
+      undischarged,
+      message: `${scan.blind.length} arm(s) could not be searched for a witness:\n` +
+        scan.blind.map((b) => `  ${b.message}`).join('\n'),
+    }
+  }
+  if (undischarged.length === 0) return { adequate: true, undischarged, message: '' }
+
+  const detail = undischarged
+    .map((o) => `  ${o.tag} reached by [${o.paths.join(' | ')}] — witness ${renderWitness(o.witness)}`)
+    .join('\n')
+  return {
+    adequate: false,
+    undischarged,
+    message: `${undischarged.length} obligation(s) discharged by no declared generator:\n${detail}`,
+  }
+}
+
+export const boundedUnion = <
+  Base extends readonly [S.Schema.Any, ...ReadonlyArray<S.Schema.Any>],
+  Recur extends readonly [S.Schema.Any, ...ReadonlyArray<S.Schema.Any>],
+>(
+  identifier: string,
+  options: {
+    readonly base: Base
+    readonly recur: Recur
+    readonly maxDepth?: number
+  },
+): S.Schema<
+  S.Schema.Type<Base[number] | Recur[number]>,
+  S.Schema.Encoded<Base[number] | Recur[number]>,
+  S.Schema.Context<Base[number] | Recur[number]>
+> => {
+  const { base, maxDepth = 2, recur } = options
+  const baseArbitraries = base.map((member) => Arbitrary.make(member))
+  const recurArbitraries = recur.map((member) => Arbitrary.make(member))
+  return S.Union(...base, ...recur).annotations({
+    identifier,
+    arbitrary: () => (fc: typeof FastCheck) =>
+      fc.oneof(
+        { depthIdentifier: identifier, maxDepth },
+        fc.oneof(...baseArbitraries),
+        ...recurArbitraries,
+      ),
+  })
+}

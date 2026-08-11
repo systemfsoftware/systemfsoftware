@@ -203,3 +203,19 @@ export const dischargedBy = (
   }
   return out
 }
+
+/** Named refusal generators: each draws rejection-class inputs the schema must reject. */
+export type RefusalGenerators = Record<string, FastCheck.Arbitrary<unknown>>
+
+/** True when `value` is a witness for some obligation: accepted by that weakening, rejected by the schema. */
+export const discriminates = (
+  schema: S.Schema.AnyNoContext,
+  obligations: ReadonlyMap<AST.AST, Obligation>,
+  value: unknown,
+): boolean => {
+  if (Either.isRight(S.decodeUnknownEither(schema)(value))) return false
+  for (const obligation of obligations.values()) {
+    if (Either.isRight(S.decodeUnknownEither(S.make(obligation.weakened))(value))) return true
+  }
+  return false
+}

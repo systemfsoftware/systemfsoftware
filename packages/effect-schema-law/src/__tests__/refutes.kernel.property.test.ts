@@ -1,8 +1,9 @@
 import { it } from '@effect/vitest'
 import { Either, FastCheck as fc, Schema as S } from 'effect'
-import { obligationsOf } from '../refutation.kernel.js'
-import { adequacyReport, discriminates, refutes } from '../refutes.harness.js'
+import { discriminates, obligationsOf } from '../refutation.kernel.js'
+import { refutes } from '../refutes.harness.js'
 import { ruleOfSchemas } from '../rule-of-schemas.harness.js'
+import { adequacyReport } from '../weaken.kernel.js'
 
 const ALPHABET: readonly string[] = [
   '0',

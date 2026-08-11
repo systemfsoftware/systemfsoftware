@@ -24,7 +24,7 @@ ruleOfSchemas('Email', Email)
 `boundedUnion` builds the same union — decode, encode, and equivalence are identical to `S.Union(...)` — but caps generation depth. Past `maxDepth` (default `2`), generation collapses to the base case, so every variant stays reachable while the recursion always terminates. Split the members into the non-recursive `base` (the leaves, used as the base case) and the self-referential `recur`:
 
 ```ts
-import { boundedUnion, ruleOfSchemas } from '@systemfsoftware/effect-schema-law'
+import { ruleOfSchemas, Weakening } from '@systemfsoftware/effect-schema-law'
 import { Schema as S } from 'effect'
 
 interface Lit {
@@ -41,7 +41,7 @@ type Expr = Lit | Add
 const Lit = S.Struct({ _tag: S.Literal('Lit'), value: S.JsonNumber })
 const Add: S.Schema<Add> = S.suspend((): S.Schema<Add> => S.Struct({ _tag: S.Literal('Add'), left: Expr, right: Expr }))
 
-const Expr: S.Schema<Expr> = boundedUnion('Expr', {
+const Expr: S.Schema<Expr> = Weakening.boundedUnion('Expr', {
   base: [Lit],
   recur: [Add],
 })
