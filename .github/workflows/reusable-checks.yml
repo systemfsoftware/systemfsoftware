@@ -21,6 +21,13 @@ jobs:
         with:
           fetch-depth: 2
       - uses: ./.github/actions/install-deps
+      - name: Turbo cache
+        uses: actions/cache@v4
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-
       # Root package.json `check:ci` is the one definition. Never re-enumerate its steps here.
       - name: Gate
         run: corepack pnpm check:ci
