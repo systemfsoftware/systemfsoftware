@@ -6,8 +6,16 @@
 
 import { Cause } from 'effect';
 import { Context } from 'effect';
+import { Duration } from 'effect';
+import { Duration as Duration_2 } from 'effect/Duration';
 import { Effect } from 'effect';
 import { Layer } from 'effect';
+import { Metric } from 'effect';
+import { Option as Option_2 } from 'effect';
+import { Schedule } from 'effect';
+import { Schema } from 'effect';
+import { Scope } from 'effect';
+import { Stream } from 'effect';
 
 // Warning: (ae-forgotten-export) The symbol "DaemonReporter_base" needs to be exported by the entry point DaemonReporter.d.ts
 //
@@ -24,6 +32,22 @@ export interface DaemonReporterService {
 
 // @public (undocumented)
 export const Noop: Layer.Layer<DaemonReporter>;
+
+// Warning: (ae-forgotten-export) The symbol "Supervisor" needs to be exported by the entry point DaemonReporter.d.ts
+// Warning: (ae-forgotten-export) The symbol "LockConfig" needs to be exported by the entry point DaemonReporter.d.ts
+// Warning: (ae-forgotten-export) The symbol "SupervisorHealth" needs to be exported by the entry point DaemonReporter.d.ts
+// Warning: (ae-forgotten-export) The symbol "WithLeaderLockExecutorDeps" needs to be exported by the entry point DaemonReporter.d.ts
+//
+// @public (undocumented)
+export const supervisor: <E, R>(s: Supervisor<E, R, LockConfig>) => Effect.Effect<SupervisorHealth, never, R | SupervisorBodyExecutorDeps | WithLeaderLockExecutorDeps | Scope.Scope>;
+
+// Warning: (ae-forgotten-export) The symbol "SupervisorBodyExecutorDeps_base" needs to be exported by the entry point DaemonReporter.d.ts
+//
+// @public (undocumented)
+export class SupervisorBodyExecutorDeps extends SupervisorBodyExecutorDeps_base {}
+
+// @public (undocumented)
+export const SupervisorBodyExecutorLive: Layer.Layer<SupervisorBodyExecutorDeps, never, DaemonReporter>;
 
 // (No @packageDocumentation comment for this package)
 

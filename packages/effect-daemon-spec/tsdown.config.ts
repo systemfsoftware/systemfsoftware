@@ -36,7 +36,7 @@ export default defineConfig({
     index: './src/mod.ts',
     SupervisionPolicy: './src/supervision-policy/mod.ts',
     LeaderLock: './src/leader-lock/mod.ts',
-    DaemonReporter: './src/daemon-reporter.adapter.ts',
+    DaemonReporter: './src/daemon-reporter/mod.ts',
     DaemonSpec: './src/daemon-spec/mod.ts',
   },
   exports: {

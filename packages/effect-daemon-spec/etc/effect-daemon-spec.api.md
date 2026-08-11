@@ -6,9 +6,10 @@
 
 import { Cause } from 'effect';
 import { Context } from 'effect';
-import { Duration } from 'effect/Duration';
-import { Duration as Duration_2 } from 'effect';
+import { Duration } from 'effect';
+import { Duration as Duration_2 } from 'effect/Duration';
 import { Effect } from 'effect';
+import { Effect as Effect_2 } from 'effect/Effect';
 import { Layer } from 'effect';
 import { Metric } from 'effect';
 import { Option as Option_2 } from 'effect';
@@ -17,21 +18,6 @@ import { Schema } from 'effect';
 import { Scope } from 'effect/Scope';
 import { Scope as Scope_2 } from 'effect';
 import { Stream } from 'effect';
-
-// Warning: (ae-forgotten-export) The symbol "BoundedIntensity_base" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export class BoundedIntensity extends BoundedIntensity_base {
-    // Warning: (ae-forgotten-export) The symbol "IntensityTypeId" needs to be exported by the entry point index.d.ts
-    //
-    // (undocumented)
-    readonly [IntensityTypeId]: symbol;
-}
-
-// Warning: (ae-forgotten-export) The symbol "ChildPolicyConfig_base" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export class ChildPolicyConfig extends ChildPolicyConfig_base {}
 
 // @public (undocumented)
 export const Daemon: {
@@ -49,83 +35,12 @@ export class DynamicLimitExceeded extends DynamicLimitExceeded_base {}
 export const healthStateGauge: Metric.Metric.Gauge<number>;
 
 // @public (undocumented)
-export const Intensity: Schema.Union<[typeof BoundedIntensity, typeof UnboundedIntensity]>;
-
-// @public (undocumented)
-export type Intensity = typeof Intensity.Type;
-
-// @public (undocumented)
-export const IntensityConfig: Schema.Struct<{
-    restarts: Schema.filter<typeof Schema.Int>;
-    window: typeof Schema.DurationFromSelf;
-}>;
-
-// @public (undocumented)
-export type IntensityConfig = typeof IntensityConfig.Type;
-
-// Warning: (ae-forgotten-export) The symbol "LeaderConfig_base" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export class LeaderConfig extends LeaderConfig_base {}
-
-// Warning: (ae-forgotten-export) The symbol "LeaderLock_base" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export class LeaderLock extends LeaderLock_base {
-    // (undocumented)
-    static readonly Noop: Layer.Layer<LeaderLock>;
-}
-
-// Warning: (ae-forgotten-export) The symbol "LeaderLockNotAcquired_base" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export class LeaderLockNotAcquired extends LeaderLockNotAcquired_base {}
-
-// @public (undocumented)
-export interface LeaderLockOptions {
-    // (undocumented)
-    readonly acquireRetryBackoff?: Schedule.Schedule<Duration_2.Duration>;
-    // (undocumented)
-    readonly key: string;
-    // (undocumented)
-    readonly mode: 'required' | 'optional';
-}
-
-// @public (undocumented)
-export type LockConfig = {
-    mode: 'none';
-} | {
-    mode: 'optional';
-    key: string;
-} | {
-    mode: 'required';
-    key: string;
-    acquireRetryBackoff: Schedule.Schedule<Duration_2.Duration>;
-};
-
-// Warning: (ae-forgotten-export) The symbol "LockPolicyConfig_base" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export class LockPolicyConfig extends LockPolicyConfig_base {}
-
-// Warning: (ae-forgotten-export) The symbol "LockPrimitiveError_base" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export class LockPrimitiveError extends LockPrimitiveError_base {}
-
-// @public (undocumented)
-export const MaxChildren: Schema.brand<Schema.filter<typeof Schema.Int>, "MaxChildren">;
-
-// @public (undocumented)
-export type MaxChildren = typeof MaxChildren.Type;
-
-// @public (undocumented)
 export const run: {
     readonly worker: {
         <E, R>(w: Worker_2<E, R, {
             mode: 'none';
-        }>): Effect.Effect<DaemonHealth, never, R | Scope>;
-        <E, R>(w: Worker_2<E, R, LockConfig>): Effect.Effect<DaemonHealth, never, R | WithLeaderLockExecutorDeps | Scope>;
+        }>): Effect_2<DaemonHealth, never, R | Scope>;
+        <E, R>(w: Worker_2<E, R, LockConfig>): Effect_2<DaemonHealth, never, R | WithLeaderLockExecutorDeps | Scope>;
     };
     readonly supervisor: typeof supervisor;
     readonly dynamic: typeof dynamic;
@@ -139,78 +54,21 @@ export const Supervision: {
     readonly custom: typeof custom;
 };
 
-// Warning: (ae-forgotten-export) The symbol "Supervisor" needs to be exported by the entry point index.d.ts
-// Warning: (ae-forgotten-export) The symbol "SupervisorHealth" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export const supervisor: <E, R>(s: Supervisor<E, R, LockConfig>) => Effect.Effect<SupervisorHealth, never, R | SupervisorBodyExecutorDeps | WithLeaderLockExecutorDeps | Scope_2.Scope>;
-
-// Warning: (ae-forgotten-export) The symbol "SupervisorBodyExecutorDeps_base" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export class SupervisorBodyExecutorDeps extends SupervisorBodyExecutorDeps_base {}
-
-// Warning: (ae-forgotten-export) The symbol "DaemonReporter" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export const SupervisorBodyExecutorLive: Layer.Layer<SupervisorBodyExecutorDeps, never, DaemonReporter>;
-
-// Warning: (ae-forgotten-export) The symbol "TaskConfig_base" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export class TaskConfig extends TaskConfig_base {}
-
-// Warning: (ae-forgotten-export) The symbol "TickPolicyConfig_base" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export class TickPolicyConfig extends TickPolicyConfig_base {}
-
-// Warning: (ae-forgotten-export) The symbol "UnboundedIntensity_base" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export class UnboundedIntensity extends UnboundedIntensity_base {
-    // (undocumented)
-    readonly [IntensityTypeId]: symbol;
-}
-
-// Warning: (ae-forgotten-export) The symbol "LeaderLockAcquireError" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export function withLeaderLock<A, E, R>(self: Effect.Effect<A, E, R>, options: LeaderLockOptions): Effect.Effect<A | void, E | LeaderLockAcquireError, R | WithLeaderLockExecutorDeps>;
-
-// Warning: (ae-forgotten-export) The symbol "WithLeaderLockExecutorDeps_base" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export class WithLeaderLockExecutorDeps extends WithLeaderLockExecutorDeps_base {}
-
-// @public (undocumented)
-export const WithLeaderLockExecutorLive: Layer.Layer<WithLeaderLockExecutorDeps, never, LeaderLock>;
-
-// @public (undocumented)
-export const worker: {
-    <E, R>(w: Worker_2<E, R, {
-        mode: 'none';
-    }>): Effect.Effect<DaemonHealth, never, R | Scope_2.Scope>;
-    <E, R>(w: Worker_2<E, R, LockConfig>): Effect.Effect<DaemonHealth, never, R | WithLeaderLockExecutorDeps | Scope_2.Scope>;
-};
-
-// Warning: (ae-forgotten-export) The symbol "WorkerConfig_base" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export class WorkerConfig extends WorkerConfig_base {}
-
 // Warnings were encountered during analysis:
 //
-// dist/index.d.ts:55:3 - (ae-forgotten-export) The symbol "poll" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:56:3 - (ae-forgotten-export) The symbol "stream" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:57:3 - (ae-forgotten-export) The symbol "subscription" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:61:5 - (ae-forgotten-export) The symbol "Worker_2" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:61:5 - (ae-forgotten-export) The symbol "DaemonHealth" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:67:3 - (ae-forgotten-export) The symbol "dynamic" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:70:3 - (ae-forgotten-export) The symbol "leader" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:71:3 - (ae-forgotten-export) The symbol "supervision" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:72:3 - (ae-forgotten-export) The symbol "task" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:73:3 - (ae-forgotten-export) The symbol "custom" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:28:3 - (ae-forgotten-export) The symbol "poll" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:29:3 - (ae-forgotten-export) The symbol "stream" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:30:3 - (ae-forgotten-export) The symbol "subscription" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:34:5 - (ae-forgotten-export) The symbol "Worker_2" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:34:5 - (ae-forgotten-export) The symbol "DaemonHealth" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:37:5 - (ae-forgotten-export) The symbol "LockConfig" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:37:5 - (ae-forgotten-export) The symbol "WithLeaderLockExecutorDeps" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:39:3 - (ae-forgotten-export) The symbol "supervisor" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:40:3 - (ae-forgotten-export) The symbol "dynamic" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:43:3 - (ae-forgotten-export) The symbol "leader" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:44:3 - (ae-forgotten-export) The symbol "supervision" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:45:3 - (ae-forgotten-export) The symbol "task" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:46:3 - (ae-forgotten-export) The symbol "custom" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

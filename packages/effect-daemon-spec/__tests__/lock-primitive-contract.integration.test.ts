@@ -3,7 +3,7 @@ import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/e
 import { Duration, Effect, Either, Fiber, TestClock } from 'effect'
 import { expect } from 'vitest'
 import { LockPrimitive } from '../src/leader-lock/leader-lock.adapter.js'
-import { LockPrimitiveError } from '../src/mod.js'
+import { Primitive } from '../src/leader-lock/mod.js'
 import {
   mkBlockingStatefulLockPrimitive,
   mkFailingLockPrimitive,
@@ -229,7 +229,7 @@ Feature('Lock Primitive Contract')
         Then('the call surfaces an infrastructure failure for the requested key')((s) =>
           Effect.sync(() => {
             expect(s.error).toEqual(
-              Either.left(new LockPrimitiveError({ key: 'any-key', cause: 'infrastructure unavailable' })),
+              Either.left(new Primitive.LockPrimitiveError({ key: 'any-key', cause: 'infrastructure unavailable' })),
             )
           })
         ),

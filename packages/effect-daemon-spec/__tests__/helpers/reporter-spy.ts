@@ -1,5 +1,5 @@
 import { Cause, Effect, Layer, Ref } from 'effect'
-import { DaemonReporter } from '../../src/daemon-reporter.adapter.js'
+import { DaemonReporter } from '../../src/daemon-reporter/daemon-reporter.adapter.js'
 
 export const ReporterSpyContext = Effect.gen(function*() {
   const restartsRef = yield* Ref.make<Array<{ name: string; cause: Cause.Cause<unknown> }>>([])

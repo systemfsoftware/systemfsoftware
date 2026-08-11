@@ -2,8 +2,9 @@ import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Either, Fiber, Layer, TestClock } from 'effect'
 import { expect } from 'vitest'
-import { Noop } from '../src/daemon-reporter.adapter.js'
-import { LeaderLockNotAcquired, withLeaderLock, WithLeaderLockExecutorLive } from '../src/mod.js'
+import { Noop } from '../src/daemon-reporter/daemon-reporter.adapter.js'
+import { Schema } from '../src/leader-lock/mod.js'
+import { withLeaderLock, WithLeaderLockExecutorLive } from '../src/leader-lock/mod.js'
 import { LeaderLockFake } from './helpers/leader-lock-fake.js'
 
 const Feature = makeFeature({ it, layer })
@@ -65,7 +66,7 @@ Feature('withLeaderLock Combinator Contract')
         ),
         Then('the call fails because the lock could not be acquired for key "task"')((s) =>
           Effect.sync(() => {
-            expect(s.error).toEqual(Either.left(new LeaderLockNotAcquired({ key: 'task' })))
+            expect(s.error).toEqual(Either.left(new Schema.LeaderLockNotAcquired({ key: 'task' })))
           })
         ),
         And('the holder fiber is interrupted')((s) => Fiber.interrupt(s.holder)),

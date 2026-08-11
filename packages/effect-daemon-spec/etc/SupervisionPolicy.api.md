@@ -187,9 +187,9 @@ export const workerKernel: <INTENSITY, COOLDOWN extends Duration_2.DurationInput
 
 // Warnings were encountered during analysis:
 //
-// dist/SupervisionPolicy.d.ts:65:3 - (ae-forgotten-export) The symbol "Worker_2" needs to be exported by the entry point SupervisionPolicy.d.ts
-// dist/SupervisionPolicy.d.ts:66:3 - (ae-forgotten-export) The symbol "MaxChildren" needs to be exported by the entry point SupervisionPolicy.d.ts
-// dist/SupervisionPolicy.d.ts:75:3 - (ae-forgotten-export) The symbol "DynamicSpecTypeId" needs to be exported by the entry point SupervisionPolicy.d.ts
+// dist/SupervisionPolicy.d.ts:66:3 - (ae-forgotten-export) The symbol "Worker_2" needs to be exported by the entry point SupervisionPolicy.d.ts
+// dist/SupervisionPolicy.d.ts:67:3 - (ae-forgotten-export) The symbol "MaxChildren" needs to be exported by the entry point SupervisionPolicy.d.ts
+// dist/SupervisionPolicy.d.ts:76:3 - (ae-forgotten-export) The symbol "DynamicSpecTypeId" needs to be exported by the entry point SupervisionPolicy.d.ts
 
 // (No @packageDocumentation comment for this package)
 

@@ -5,7 +5,7 @@ import { allocateWorkerHealth } from '../daemon-health/allocate-worker-health.ke
 import type { ChildRef, DynamicHandle, SupervisorHealth } from '../daemon-health/daemon-health.schema.js'
 import { DynamicLimitExceeded } from '../daemon-health/daemon-health.schema.js'
 import { healthStateGauge, supervisorChildrenGauge } from '../daemon-metrics/daemon-metrics.kernel.js'
-import type { DaemonReporter } from '../daemon-reporter.adapter.js'
+import type { DaemonReporter } from '../daemon-reporter/daemon-reporter.adapter.js'
 import type { DynamicSpec } from '../daemon-spec/daemon-spec.schema.js'
 import type { LeaderLock } from '../leader-lock/leader-lock.adapter.js'
 import { buildWorkerLoop } from './build-worker-loop.kernel.js'

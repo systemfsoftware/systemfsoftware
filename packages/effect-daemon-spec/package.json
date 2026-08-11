@@ -33,7 +33,7 @@
       "default": "./dist/index.mjs"
     },
     "./DaemonReporter": {
-      "@systemfsoftware/source": "./src/daemon-reporter.adapter.ts",
+      "@systemfsoftware/source": "./src/daemon-reporter/mod.ts",
       "types": "./dist/DaemonReporter.rollup.d.ts",
       "default": "./dist/DaemonReporter.mjs"
     },

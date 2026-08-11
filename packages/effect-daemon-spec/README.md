@@ -22,13 +22,9 @@ Effect.scoped(pool).pipe(Effect.runFork)
 A leader-lock coordinator ensures only one node acts as the leader for a given key:
 
 ```ts
-import { LeaderLock } from '@systemfsoftware/effect-daemon-spec'
+import { Adapter } from '@systemfsoftware/effect-daemon-spec/LeaderLock'
 
-const myLock = LeaderLock.make({
-  key: 'daemon-leader',
-  leaseDuration: '5 seconds',
-  renewInterval: '1 second',
-})
+const myLock = Adapter.LeaderLock
 ```
 
 ## Install

@@ -1,4 +1,5 @@
-import { describe, it } from '@systemfsoftware/effect-gherkin-spec'
+import { describe } from '@effect/vitest'
+import { it } from '@systemfsoftware/effect-gherkin-spec'
 import { Array, Match, Option } from 'effect'
 import { DecideInput } from '../restart-decision.schema.js'
 import { decideRestart, type RestartDecisionEither } from '../restart-decision.workflow.js'

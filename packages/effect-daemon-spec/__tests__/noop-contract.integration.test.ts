@@ -2,8 +2,9 @@ import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { And, Gherkin, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Fiber, Layer, TestClock } from 'effect'
 import { expect } from 'vitest'
-import { Noop } from '../src/daemon-reporter.adapter.js'
-import { LeaderLock, withLeaderLock, WithLeaderLockExecutorLive } from '../src/mod.js'
+import { Noop } from '../src/daemon-reporter/daemon-reporter.adapter.js'
+import { LeaderLock } from '../src/leader-lock/leader-lock.adapter.js'
+import { withLeaderLock, WithLeaderLockExecutorLive } from '../src/leader-lock/mod.js'
 
 const Feature = makeFeature({ it, layer })
 

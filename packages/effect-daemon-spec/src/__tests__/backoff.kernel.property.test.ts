@@ -1,4 +1,5 @@
-import { describe, it } from '@systemfsoftware/effect-gherkin-spec'
+import { describe } from '@effect/vitest'
+import { it } from '@systemfsoftware/effect-gherkin-spec'
 import { Array, Chunk, Duration, Effect, FastCheck as fc, Schedule } from 'effect'
 import { cappedBackoff } from '../backoff/backoff.kernel.js'
 

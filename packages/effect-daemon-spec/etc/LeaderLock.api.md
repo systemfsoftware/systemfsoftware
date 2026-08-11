@@ -5,64 +5,57 @@
 ```ts
 
 import { Context } from 'effect';
+import { Duration } from 'effect';
 import { Effect } from 'effect';
 import { Layer } from 'effect';
 import { Option as Option_2 } from 'effect';
-import { Schema } from 'effect';
-import { Scope } from 'effect';
+import { Schedule } from 'effect';
+import { Schema as Schema_2 } from 'effect';
 
 // @public (undocumented)
-export const isModeNone: <L extends {
-    readonly mode: string;
-}>(lock: L) => lock is Extract<L, {
-    readonly mode: 'none';
-}>;
-
-// Warning: (ae-forgotten-export) The symbol "LeaderLock_base" needs to be exported by the entry point LeaderLock.d.ts
-//
-// @public (undocumented)
-export class LeaderLock extends LeaderLock_base {
-    // (undocumented)
-    static readonly Noop: Layer.Layer<LeaderLock>;
+export namespace Adapter {
+    export { LeaderLock, LeaderLockFromPrimitive, LeaderLockService, LockPrimitive, LockPrimitiveService };
 }
 
 // @public (undocumented)
-export type LeaderLockAcquireError = LeaderLockNotAcquired | LeaderLockInfraError;
-
-// @public (undocumented)
-export const LeaderLockFromPrimitive: Layer.Layer<LeaderLock, never, LockPrimitive>;
-
-// Warning: (ae-forgotten-export) The symbol "LeaderLockInfraError_base" needs to be exported by the entry point LeaderLock.d.ts
-//
-// @public (undocumented)
-export class LeaderLockInfraError extends LeaderLockInfraError_base {}
-
-// Warning: (ae-forgotten-export) The symbol "LeaderLockNotAcquired_base" needs to be exported by the entry point LeaderLock.d.ts
-//
-// @public (undocumented)
-export class LeaderLockNotAcquired extends LeaderLockNotAcquired_base {}
-
-// @public (undocumented)
-export interface LeaderLockService {
-    // (undocumented)
-    readonly withLock: <A, E, R>(key: string, self: Effect.Effect<A, E, R>) => Effect.Effect<Option_2.Option<A>, E | LeaderLockInfraError, R>;
+export namespace Kernel {
+    export { isModeNone };
 }
 
-// Warning: (ae-forgotten-export) The symbol "LockPrimitive_base" needs to be exported by the entry point LeaderLock.d.ts
-//
 // @public (undocumented)
-export class LockPrimitive extends LockPrimitive_base {}
-
-// Warning: (ae-forgotten-export) The symbol "LockPrimitiveError_base" needs to be exported by the entry point LeaderLock.d.ts
-//
-// @public (undocumented)
-export class LockPrimitiveError extends LockPrimitiveError_base {}
-
-// @public (undocumented)
-export interface LockPrimitiveService {
+export interface LeaderLockOptions {
     // (undocumented)
-    readonly tryAcquire: (key: string) => Effect.Effect<boolean, LockPrimitiveError, Scope.Scope>;
+    readonly acquireRetryBackoff?: Schedule.Schedule<Duration.Duration>;
+    // (undocumented)
+    readonly key: string;
+    // (undocumented)
+    readonly mode: 'required' | 'optional';
 }
+
+// @public (undocumented)
+export namespace Primitive {
+    export { LockPrimitiveError };
+}
+
+// @public (undocumented)
+export namespace Schema {
+    export { LeaderLockAcquireError, LeaderLockInfraError, LeaderLockNotAcquired };
+}
+
+// Warning: (ae-forgotten-export) The symbol "LeaderLockAcquireError" needs to be exported by the entry point LeaderLock.d.ts
+//
+// @public (undocumented)
+export function withLeaderLock<A, E, R>(self: Effect.Effect<A, E, R>, options: LeaderLockOptions): Effect.Effect<A | void, E | LeaderLockAcquireError, R | WithLeaderLockExecutorDeps>;
+
+// Warning: (ae-forgotten-export) The symbol "WithLeaderLockExecutorDeps_base" needs to be exported by the entry point LeaderLock.d.ts
+//
+// @public (undocumented)
+export class WithLeaderLockExecutorDeps extends WithLeaderLockExecutorDeps_base {}
+
+// Warning: (ae-forgotten-export) The symbol "LeaderLock" needs to be exported by the entry point LeaderLock.d.ts
+//
+// @public (undocumented)
+export const WithLeaderLockExecutorLive: Layer.Layer<WithLeaderLockExecutorDeps, never, LeaderLock>;
 
 // (No @packageDocumentation comment for this package)
 

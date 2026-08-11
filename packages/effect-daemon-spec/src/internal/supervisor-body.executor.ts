@@ -8,7 +8,7 @@ import {
   supervisorExhaustionsCounter,
   supervisorRestartsCounter,
 } from '../daemon-metrics/daemon-metrics.kernel.js'
-import type { DaemonReporter } from '../daemon-reporter.adapter.js'
+import type { DaemonReporter } from '../daemon-reporter/daemon-reporter.adapter.js'
 import { WorkerTypeId } from '../daemon-spec/brands.kernel.js'
 import type { Intensity, IntensityConfig } from '../daemon-spec/daemon-policy.schema.js'
 import type { Child, LockConfig, Supervisor, Worker } from '../daemon-spec/daemon-spec.schema.js'
