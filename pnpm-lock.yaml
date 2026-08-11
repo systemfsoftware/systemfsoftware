@@ -2523,6 +2523,9 @@ importers:
         specifier: catalog:stryker
         version: 7.8.5
     devDependencies:
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 0.30.0(effect@3.22.1)(vitest@4.1.10)
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:^
         version: link:../../effect-gherkin-spec

@@ -10,7 +10,7 @@ import { it, layer, makeFeature } from '@systemfsoftware/effect-gherkin-spec'
 import { Context, Effect, Either, Layer, Ref } from 'effect'
 import { UnknownException } from 'effect/Cause'
 import { expect } from 'vitest'
-import { Gherkin, pairwiseFor, StepError, Then } from '../src/mod.js'
+import { Gherkin, Spec, Then } from '../src/mod.js'
 
 const Feature = makeFeature({ it, layer })
 
@@ -19,7 +19,7 @@ class Widget extends Context.Tag('test/Widget')<Widget, { readonly value: string
 const layerA = Layer.succeed(Widget, { value: 'side-a' })
 const layerB = Layer.succeed(Widget, { value: 'side-b' })
 
-const PairwiseAB = pairwiseFor(
+const PairwiseAB = Spec.pairwiseFor(
   { a: { name: 'A', layer: layerA }, b: { name: 'B', layer: layerB } },
   Widget,
 )
@@ -52,7 +52,7 @@ Feature('pairwiseFor — dual-side execution').body(({ scenario }) => {
       )
       const result = yield* Effect.either(piped)
       if (!Either.isLeft(result)) throw new Error('Expected Either.left but got Either.right')
-      expect(result.left).toBeInstanceOf(StepError)
+      expect(result.left).toBeInstanceOf(Spec.StepError)
     }),
   )
 
@@ -66,7 +66,7 @@ Feature('pairwiseFor — dual-side execution').body(({ scenario }) => {
           Effect.map((n) => ({ value: `fresh-${n}` })),
         ),
       )
-      const PairwiseFresh = pairwiseFor(
+      const PairwiseFresh = Spec.pairwiseFor(
         { a: { name: 'FA', layer: layerSide }, b: { name: 'FB', layer: layerSide } },
         Widget,
       )

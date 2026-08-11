@@ -10,7 +10,7 @@
 import { it, layer, makeFeature } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Either } from 'effect'
 import { expect } from 'vitest'
-import { expandOutline, Gherkin, Given, renderTitle, stringifyForTitle, Then, tokenizeTemplate } from '../src/mod.js'
+import { Gherkin, Given, Spec, Then } from '../src/mod.js'
 
 const Feature = makeFeature({ it, layer })
 
@@ -19,7 +19,7 @@ Feature('Scenario outline — template expansion').body(({ scenario, scenarioOut
     'Should expand rows when rows have matching keys',
     Effect.sync(() => {
       const rows = Either.getOrThrow(
-        expandOutline('Valid login for <user>', [{ user: 'alice' }, { user: 'bob' }]),
+        Spec.expandOutline('Valid login for <user>', [{ user: 'alice' }, { user: 'bob' }]),
       )
       expect(rows).toHaveLength(2)
       expect(rows[0]).toEqual({ row: { user: 'alice' }, title: 'Valid login for alice' })
@@ -31,7 +31,7 @@ Feature('Scenario outline — template expansion').body(({ scenario, scenarioOut
     'Should handle multiple tokens when template has several',
     Effect.sync(() => {
       const rows = Either.getOrThrow(
-        expandOutline('<user> buys <item> for <price>', [
+        Spec.expandOutline('<user> buys <item> for <price>', [
           { user: 'alice', item: 'book', price: '$10' },
         ]),
       )
@@ -46,7 +46,7 @@ Feature('Scenario outline — template expansion').body(({ scenario, scenarioOut
   scenario(
     'Should return empty when rows empty',
     Effect.sync(() => {
-      expect(expandOutline('some name', [])).toEqual(Either.right([]))
+      expect(Spec.expandOutline('some name', [])).toEqual(Either.right([]))
     }),
   )
 
@@ -54,7 +54,7 @@ Feature('Scenario outline — template expansion').body(({ scenario, scenarioOut
     'Should use template name when no tokens present',
     Effect.sync(() => {
       const rows = Either.getOrThrow(
-        expandOutline('Static scenario name', [{ user: 'alice' }]),
+        Spec.expandOutline('Static scenario name', [{ user: 'alice' }]),
       )
       expect(rows[0]?.title).toBe('Static scenario name')
     }),
@@ -63,7 +63,7 @@ Feature('Scenario outline — template expansion').body(({ scenario, scenarioOut
   scenario(
     'Should report missing key when template tag missing from row',
     Effect.sync(() => {
-      const result = expandOutline('<a> and <b>', [{ a: 'only-a' }])
+      const result = Spec.expandOutline('<a> and <b>', [{ a: 'only-a' }])
       expect(result).toEqual(
         Either.left('scenarioOutline: template tag <b> has no matching row key (available: a)'),
       )
@@ -75,7 +75,7 @@ Feature('Scenario outline — template expansion').body(({ scenario, scenarioOut
     Effect.sync(() => {
       type Row = { role: 'admin' | 'user'; count: number }
       const rows = Either.getOrThrow(
-        expandOutline<Row>('role=<role> count=<count>', [
+        Spec.expandOutline<Row>('role=<role> count=<count>', [
           { role: 'admin', count: 3 },
           { role: 'user', count: 1 },
         ]),
@@ -89,65 +89,65 @@ Feature('Scenario outline — template expansion').body(({ scenario, scenarioOut
   scenario(
     'Should return string when value is string',
     Effect.sync(() => {
-      expect(stringifyForTitle('hello')).toBe('hello')
+      expect(Spec.stringifyForTitle('hello')).toBe('hello')
     }),
   )
 
   scenario(
     'Should stringify number when value is number',
     Effect.sync(() => {
-      expect(stringifyForTitle(42)).toBe('42')
+      expect(Spec.stringifyForTitle(42)).toBe('42')
     }),
   )
 
   scenario(
     'Should stringify boolean when value is boolean',
     Effect.sync(() => {
-      expect(stringifyForTitle(true)).toBe('true')
-      expect(stringifyForTitle(false)).toBe('false')
+      expect(Spec.stringifyForTitle(true)).toBe('true')
+      expect(Spec.stringifyForTitle(false)).toBe('false')
     }),
   )
 
   scenario(
     'Should stringify bigint when value is bigint',
     Effect.sync(() => {
-      expect(stringifyForTitle(10n)).toBe('10')
+      expect(Spec.stringifyForTitle(10n)).toBe('10')
     }),
   )
 
   scenario(
     'Should return null literal when value is null',
     Effect.sync(() => {
-      expect(stringifyForTitle(null)).toBe('null')
+      expect(Spec.stringifyForTitle(null)).toBe('null')
     }),
   )
 
   scenario(
     'Should JSON-stringify when value is object',
     Effect.sync(() => {
-      expect(stringifyForTitle({ a: 1 })).toBe('{"a":1}')
-      expect(stringifyForTitle([1, 2])).toBe('[1,2]')
+      expect(Spec.stringifyForTitle({ a: 1 })).toBe('{"a":1}')
+      expect(Spec.stringifyForTitle([1, 2])).toBe('[1,2]')
     }),
   )
 
   scenario(
     'Should return undefined literal when value is undefined',
     Effect.sync(() => {
-      expect(stringifyForTitle(void 0)).toBe('undefined')
+      expect(Spec.stringifyForTitle(void 0)).toBe('undefined')
     }),
   )
 
   scenario(
     'Should return empty when no angle brackets',
     Effect.sync(() => {
-      expect(tokenizeTemplate('hello world')).toEqual([])
+      expect(Spec.tokenizeTemplate('hello world')).toEqual([])
     }),
   )
 
   scenario(
     'Should extract single token when one tag present',
     Effect.sync(() => {
-      const result = tokenizeTemplate('<user> logs in')
+      const result = Spec.tokenizeTemplate('<user> logs in')
       expect(result).toHaveLength(1)
       expect(result[0]).toEqual({ tag: 'user', rest: ' logs in' })
     }),
@@ -156,7 +156,7 @@ Feature('Scenario outline — template expansion').body(({ scenario, scenarioOut
   scenario(
     'Should extract multiple tokens when several tags present',
     Effect.sync(() => {
-      const result = tokenizeTemplate('<user> buys <item> for <price>')
+      const result = Spec.tokenizeTemplate('<user> buys <item> for <price>')
       expect(result).toHaveLength(3)
       expect(result[0]).toEqual({ tag: 'user', rest: ' buys <item> for <price>' })
       expect(result[1]).toEqual({ tag: 'item', rest: ' for <price>' })
@@ -167,21 +167,21 @@ Feature('Scenario outline — template expansion').body(({ scenario, scenarioOut
   scenario(
     'Should return empty when unclosed tag',
     Effect.sync(() => {
-      expect(tokenizeTemplate('<user')).toEqual([])
+      expect(Spec.tokenizeTemplate('<user')).toEqual([])
     }),
   )
 
   scenario(
     'Should return empty when only open bracket',
     Effect.sync(() => {
-      expect(tokenizeTemplate('<')).toEqual([])
+      expect(Spec.tokenizeTemplate('<')).toEqual([])
     }),
   )
 
   scenario(
     'Should extract tag when no closing bracket in rest',
     Effect.sync(() => {
-      const result = tokenizeTemplate('<a>hello<b')
+      const result = Spec.tokenizeTemplate('<a>hello<b')
       expect(result).toHaveLength(1)
       expect(result[0]).toEqual({ tag: 'a', rest: 'hello<b' })
     }),
@@ -190,7 +190,7 @@ Feature('Scenario outline — template expansion').body(({ scenario, scenarioOut
   scenario(
     'Should skip text before first open bracket when text precedes tag',
     Effect.sync(() => {
-      const result = tokenizeTemplate('prefix<name>')
+      const result = Spec.tokenizeTemplate('prefix<name>')
       expect(result).toHaveLength(1)
       expect(result[0]).toEqual({ tag: 'name', rest: '' })
     }),
@@ -199,7 +199,7 @@ Feature('Scenario outline — template expansion').body(({ scenario, scenarioOut
   scenario(
     'Should handle empty tag when angle brackets adjacent',
     Effect.sync(() => {
-      const result = tokenizeTemplate('<>rest')
+      const result = Spec.tokenizeTemplate('<>rest')
       expect(result).toHaveLength(1)
       expect(result[0]).toEqual({ tag: '', rest: 'rest' })
     }),
@@ -208,7 +208,7 @@ Feature('Scenario outline — template expansion').body(({ scenario, scenarioOut
   scenario(
     'Should continue after first token when more tokens follow',
     Effect.sync(() => {
-      const result = tokenizeTemplate('<a>mid<b>end')
+      const result = Spec.tokenizeTemplate('<a>mid<b>end')
       expect(result).toHaveLength(2)
       expect(result[0]).toEqual({ tag: 'a', rest: 'mid<b>end' })
       expect(result[1]).toEqual({ tag: 'b', rest: 'end' })
@@ -218,36 +218,36 @@ Feature('Scenario outline — template expansion').body(({ scenario, scenarioOut
   scenario(
     'Should replace all tokens when all keys present',
     Effect.sync(() => {
-      expect(renderTitle('<a> and <b>', { a: '1', b: '2' })).toBe('1 and 2')
+      expect(Spec.renderTitle('<a> and <b>', { a: '1', b: '2' })).toBe('1 and 2')
     }),
   )
 
   scenario(
     'Should leave token when key not in row',
     Effect.sync(() => {
-      expect(renderTitle('<a> missing <b>', { a: 'found' })).toBe('found missing <b>')
+      expect(Spec.renderTitle('<a> missing <b>', { a: 'found' })).toBe('found missing <b>')
     }),
   )
 
   scenario(
     'Should return template when no tokens',
     Effect.sync(() => {
-      expect(renderTitle('no tokens', { x: 'y' })).toBe('no tokens')
+      expect(Spec.renderTitle('no tokens', { x: 'y' })).toBe('no tokens')
     }),
   )
 
   scenario(
     'Should stringify non-string values when row has mixed types',
     Effect.sync(() => {
-      expect(renderTitle('<n> items', { n: 42 })).toBe('42 items')
-      expect(renderTitle('<flag> active', { flag: true })).toBe('true active')
+      expect(Spec.renderTitle('<n> items', { n: 42 })).toBe('42 items')
+      expect(Spec.renderTitle('<flag> active', { flag: true })).toBe('true active')
     }),
   )
 
   scenario(
     'Should use custom stringifier when provided',
     Effect.sync(() => {
-      expect(renderTitle('<x>', { x: 'a' }, () => 'CUSTOM')).toBe('CUSTOM')
+      expect(Spec.renderTitle('<x>', { x: 'a' }, () => 'CUSTOM')).toBe('CUSTOM')
     }),
   )
 

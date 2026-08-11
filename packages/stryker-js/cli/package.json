@@ -36,6 +36,7 @@
     "semver": "catalog:stryker"
   },
   "devDependencies": {
+    "@effect/vitest": "catalog:",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/oxlint-plugin-effect-entrypoint": "workspace:^",

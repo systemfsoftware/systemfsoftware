@@ -1,4 +1,5 @@
-import { describe, it } from '@systemfsoftware/effect-gherkin-spec'
+import { describe } from '@effect/vitest'
+import { it } from '@systemfsoftware/effect-gherkin-spec'
 import type { ResolvedMode } from '@systemfsoftware/stryker-js-mutation-run/output-mode'
 import { FastCheck as fc } from 'effect'
 import * as Either from 'effect/Either'

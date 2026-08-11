@@ -10,7 +10,7 @@ import { it, layer, makeFeature } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Either } from 'effect'
 import { Schema } from 'effect'
 import { expect } from 'vitest'
-import { And, But, Gherkin, Given, StepError, Then, When } from '../src/mod.js'
+import { And, Gherkin, Given, Spec, Then, When } from '../src/mod.js'
 
 class TestDomainError extends Schema.TaggedError<TestDomainError>()('TestDomainError', {
   message: Schema.String,
@@ -47,7 +47,7 @@ Feature('Gherkin step combinators').body(({ scenario }) => {
         Given('boom')('x', () => Effect.fail('kaboom')),
         Effect.either,
       )
-      expect(result).toEqual(Either.left(expect.any(StepError)))
+      expect(result).toEqual(Either.left(expect.any(Spec.StepError)))
     }),
   )
 
@@ -81,7 +81,7 @@ Feature('Gherkin step combinators').body(({ scenario }) => {
         When('explode')('y', () => Effect.fail('boom')),
         Effect.either,
       )
-      expect(result).toEqual(Either.left(expect.any(StepError)))
+      expect(result).toEqual(Either.left(expect.any(Spec.StepError)))
     }),
   )
 
@@ -126,7 +126,7 @@ Feature('Gherkin step combinators').body(({ scenario }) => {
     'Should preserve scope when But step succeeds',
     Gherkin.Do.pipe(
       Given('setup')('x', () => Effect.succeed(1)),
-      But('negative check')((s) => {
+      Spec.But('negative check')((s) => {
         expect(s).toEqual(expect.objectContaining({ x: 1 }))
       }),
     ),
@@ -139,7 +139,7 @@ Feature('Gherkin step combinators').body(({ scenario }) => {
         Given('failing step')('x', () => Effect.fail(new TestDomainError({ message: 'domain oops' }))),
         Effect.either,
       )
-      expect(result).toEqual(Either.left(expect.any(StepError)))
+      expect(result).toEqual(Either.left(expect.any(Spec.StepError)))
     }),
   )
 
@@ -153,7 +153,7 @@ Feature('Gherkin step combinators').body(({ scenario }) => {
         }),
         Effect.either,
       )
-      expect(Either.getLeft(result)).not.toBeInstanceOf(StepError)
+      expect(Either.getLeft(result)).not.toBeInstanceOf(Spec.StepError)
     }),
   )
 
@@ -167,14 +167,14 @@ Feature('Gherkin step combinators').body(({ scenario }) => {
         }),
         Effect.either,
       )
-      expect(result).toEqual(Either.left(expect.any(StepError)))
+      expect(result).toEqual(Either.left(expect.any(Spec.StepError)))
     }),
   )
 
   scenario(
     'Should have keyword and text when constructed',
     Effect.sync(() => {
-      const err = new StepError({ keyword: 'when', text: 'action', cause: null })
+      const err = new Spec.StepError({ keyword: 'when', text: 'action', cause: null })
       expect(err).toEqual(expect.objectContaining({ keyword: 'when', text: 'action', cause: null }))
     }),
   )
@@ -183,7 +183,7 @@ Feature('Gherkin step combinators').body(({ scenario }) => {
     'Should preserve original cause when wrapping',
     Effect.sync(() => {
       const original = new Error('deep failure')
-      const err = new StepError({ keyword: 'given', text: 'step', cause: original })
+      const err = new Spec.StepError({ keyword: 'given', text: 'step', cause: original })
       expect(err).toEqual(expect.objectContaining({ cause: original }))
     }),
   )
@@ -197,8 +197,8 @@ Feature('Gherkin step combinators').body(({ scenario }) => {
       )
       Either.match(result, {
         onLeft: (err) => {
-          expect(err).toBeInstanceOf(StepError)
-          if (err instanceof StepError) {
+          expect(err).toBeInstanceOf(Spec.StepError)
+          if (err instanceof Spec.StepError) {
             expect(err.keyword).toBe('given')
           }
         },
@@ -217,8 +217,8 @@ Feature('Gherkin step combinators').body(({ scenario }) => {
       )
       Either.match(result, {
         onLeft: (err) => {
-          expect(err).toBeInstanceOf(StepError)
-          if (err instanceof StepError) {
+          expect(err).toBeInstanceOf(Spec.StepError)
+          if (err instanceof Spec.StepError) {
             expect(err.keyword).toBe('when')
           }
         },
@@ -239,8 +239,8 @@ Feature('Gherkin step combinators').body(({ scenario }) => {
       )
       Either.match(result, {
         onLeft: (err) => {
-          expect(err).toBeInstanceOf(StepError)
-          if (err instanceof StepError) {
+          expect(err).toBeInstanceOf(Spec.StepError)
+          if (err instanceof Spec.StepError) {
             expect(err.keyword).toBe('then')
           }
         },
@@ -261,8 +261,8 @@ Feature('Gherkin step combinators').body(({ scenario }) => {
       )
       Either.match(result, {
         onLeft: (err) => {
-          expect(err).toBeInstanceOf(StepError)
-          if (err instanceof StepError) {
+          expect(err).toBeInstanceOf(Spec.StepError)
+          if (err instanceof Spec.StepError) {
             expect(err.keyword).toBe('and')
           }
         },
@@ -276,15 +276,15 @@ Feature('Gherkin step combinators').body(({ scenario }) => {
     Effect.gen(function*() {
       const result = yield* Gherkin.Do.pipe(
         Given('ok')('x', () => Effect.succeed(1)),
-        But('throwing but')(() => {
+        Spec.But('throwing but')(() => {
           throw new Error('but-err')
         }),
         Effect.either,
       )
       Either.match(result, {
         onLeft: (err) => {
-          expect(err).toBeInstanceOf(StepError)
-          if (err instanceof StepError) {
+          expect(err).toBeInstanceOf(Spec.StepError)
+          if (err instanceof Spec.StepError) {
             expect(err.keyword).toBe('but')
           }
         },
@@ -377,7 +377,7 @@ Feature('Gherkin step combinators').body(({ scenario }) => {
         Then('Effect that fails')(() => Effect.fail(new TestDomainError({ message: 'effect-fail' }))),
         Effect.either,
       )
-      expect(result).toEqual(Either.left(expect.any(StepError)))
+      expect(result).toEqual(Either.left(expect.any(Spec.StepError)))
     }),
   )
 

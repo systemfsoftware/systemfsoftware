@@ -1,4 +1,5 @@
-import { describe, it } from '@systemfsoftware/effect-gherkin-spec'
+import { describe } from '@effect/vitest'
+import { it } from '@systemfsoftware/effect-gherkin-spec'
 import { ExitClass } from '@systemfsoftware/stryker-js-mutation-run/exit-classification'
 import { FastCheck as fc } from 'effect'
 

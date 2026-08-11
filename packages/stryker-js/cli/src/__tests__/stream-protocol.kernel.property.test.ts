@@ -1,4 +1,5 @@
-import { describe, it } from '@systemfsoftware/effect-gherkin-spec'
+import { describe } from '@effect/vitest'
+import { it } from '@systemfsoftware/effect-gherkin-spec'
 import { FastCheck as fc } from 'effect'
 
 import { STREAM_SCHEMA_VERSION, TICK_INTERVAL_MS } from '../stream-protocol.kernel.js'

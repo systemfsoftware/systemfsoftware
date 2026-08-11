@@ -1,6 +1,7 @@
 import * as Command from '@effect/cli/Command'
 import * as Options from '@effect/cli/Options'
-import { describe, it } from '@systemfsoftware/effect-gherkin-spec'
+import { describe } from '@effect/vitest'
+import { it } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, FastCheck as fc } from 'effect'
 import { isDeepStrictEqual } from 'node:util'
 
