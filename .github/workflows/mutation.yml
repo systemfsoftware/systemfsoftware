@@ -25,7 +25,10 @@ jobs:
       - uses: actions/checkout@v7
       - id: discover
         run: |
-          PACKAGES=$(find . -name "stryker.config.json" -not -path "./node_modules/*" -exec dirname {} \; | sed 's|^\./||' | jq -R -s -c 'split("\n") | map(select(length > 0))')
+          # A mutation target is a workspace package. A stryker.config.json under
+          # __tests__ belongs to a CLI fixture the contract lane drives on purpose
+          # (broken-config-project is meant to fail), and repos/ is a vendored tree.
+          PACKAGES=$(find . -name "stryker.config.json" -not -path "./node_modules/*" -not -path "*/node_modules/*" -not -path "./repos/*" -not -path "*/__tests__/*" -exec dirname {} \; | sed 's|^\./||' | jq -R -s -c 'split("\n") | map(select(length > 0))')
           if [ -z "$PACKAGES" ] || [ "$PACKAGES" = "[]" ]; then
             PACKAGES="[]"
           fi
@@ -54,14 +57,24 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-stryker-${{ matrix.package }}-
 
-      # Advisory: a mutation failure or timeout never fails this job. The merged
-      # report in the `report` job carries the verdict. Infrastructure steps above
-      # still fail red.
+      # Advisory: a mutation score below threshold never fails this job — the
+      # merged report in the `report` job carries that verdict. A run that never
+      # produced a report is not a score outcome, so the step below fails red:
+      # a missing binary, a crashed run or a timeout must never read green.
       - name: Mutation
         id: mutation
         continue-on-error: true
         timeout-minutes: 60
         run: corepack pnpm turbo mutation --filter=./${{ matrix.package }}
+
+      - name: Require a mutation report
+        if: ${{ !cancelled() }}
+        run: |
+          report='${{ matrix.package }}/reports/mutation-report.json'
+          if [ ! -f "$report" ]; then
+            echo "::error title=Mutation produced no report::${{ matrix.package }}: stryker exited '${{ steps.mutation.outcome }}' without writing $report — infrastructure failure (missing binary, crashed run or timeout), not a score outcome."
+            exit 1
+          fi
 
       - uses: actions/cache/save@v6
         if: github.ref == 'refs/heads/main' && steps.mutation.outcome == 'success'
