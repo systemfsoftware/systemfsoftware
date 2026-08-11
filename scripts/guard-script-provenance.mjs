@@ -113,6 +113,10 @@ const MANIFEST = new Map([
     'workspace-layout',
     'This file. The set it polices IS the workspace arrangement of scripts/.',
   ]],
+  ['guard-turbo-graph.mjs', [
+    'workspace-layout',
+    'The turbo task graph spans every package: CLI-argument hash poisoning in the root scripts, env declared per task in turbo.json, and cycles between packages. No published package can see the graph it belongs to.',
+  ]],
   ['guard-action-provenance.mjs', [
     'workspace-layout',
     'Allowlists every `uses:` across .github/ to repo-local, GitHub-owned, and one named third party. CI workflow arrangement; no published package can see or constrain it.',
