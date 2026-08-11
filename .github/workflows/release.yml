@@ -117,6 +117,12 @@ jobs:
         with:
           fetch-depth: 0
       - uses: ./.github/actions/install-deps
+      - name: Preflight — every package must already exist on npm
+        # Necessary: npm trusted publishing cannot debut a package (npm-trust
+        # prerequisite "Package must exist"). Without this, `pnpm publish -r`
+        # attempts each never-published package, aborts on an OIDC auth error,
+        # and leaves a partial publish behind.
+        run: bash scripts/check-npm-publish.sh --preflight
       - uses: denoland/setup-deno@v2
       - name: Build
         # Necessary: every package publishes files: ["dist"] against a gitignored

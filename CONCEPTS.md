@@ -78,9 +78,19 @@ A key can be complete with respect to every input it declares and still return o
 
 ## Release pipeline
 
+### intent versioning
+
+The pnpm-native release model the repo uses since leaving semantic-release (2026-08-10): the manifest `version` is the source of truth for what a package will publish, not a placeholder a tool overwrites. A change is recorded with `pnpm change`, which writes a `.changeset/` intent; a push to `main` runs `pnpm version -r`, which consumes pending intents and bumps the manifests; the Release PR commits those bumps.
+
+Because the manifest version is what npm carries, the first release of a package publishes that string verbatim — there is no "dev" placeholder convention here. Adopting semantic-release's `0.0.0-development` placeholder would ship `0.0.0-development` as a package's literal debut version.
+
+### Release PR
+
+The pull request (`changeset-release/main`, opened by the Release workflow on push to `main`) that carries the version bumps produced by consuming `.changeset/` intents. Merging it runs the gate, then the publish job, which publishes via npm OIDC trusted publishing with provenance and tags each released package. It can only open when workflow permissions allow GitHub Actions to create pull requests.
+
 ### semantic-release
 
-The npm publish orchestrator triggered by push to `main`. Runs `pnpm build` per package, then per-package semantic-release which analyzes commits since the last release tag, derives the next semver from conventional-commit types, and calls `pnpm publish`. Each package is released independently based on which files its `commitsForPackage` filter (in `scripts/release-monorepo-filter.mjs`) finds touched.
+The npm publish orchestrator the repo used before adopting intent versioning: triggered by push to `main`, it analyzed commits since the last release tag per package, derived the next semver from conventional-commit types, and called `pnpm publish`. Retired 2026-08-10; its conventions (notably the `0.0.0-development` placeholder version) are incompatible with intent versioning and must not be reintroduced.
 
 ## Validation tooling
 
