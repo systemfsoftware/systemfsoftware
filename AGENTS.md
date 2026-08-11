@@ -86,7 +86,9 @@ Directories only; files are discovered with tools.
 
 ## Verification
 
-`pnpm check:local` is the agent's gate: `check:ci`'s task list minus `test:contract` and the two `dist/`-reading root checks. The contract lanes are `cache: false` and 85-92% of `check:ci`'s wall clock; they need a live container runtime. All three run in CI on every PR, so a change touching `package.json#exports`, `publishConfig.exports` or a runtime dependency (`REPO-S4`) has no local signal and is unverified until the PR is green.
+`pnpm check:local` is the agent's gate: `check:ci`'s task list minus `test:contract`. The contract lanes are `cache: false` and 85-92% of `check:ci`'s wall clock; they need a live container runtime, so a change they alone cover is unverified until the PR is green.
+
+The `dist/`-reading root checks run in `gate:dist`, which builds in its own turbo invocation before it checks. A root task declares no dependency on any package's `build`, so sharing an invocation with the build it reads makes its verdict scheduler order rather than a fact about the tree.
 
 - **REPO-A1** — run exactly `pnpm check:local`. No `--skip`, no `--grep`, no filter flags, no individual steps.
 - **REPO-A2** — local evidence from this session, after the last edit; CI evidence from a completed, non-cancelled run whose head SHA is the pushed commit. Never a prior session, never a run predating the last push. Gate: review — the reviewer confirms both.

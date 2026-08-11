@@ -51,7 +51,8 @@
       ],
       "outputLogs": "errors-only",
       "dependsOn": [
-        "^build"
+        "^build",
+        "build"
       ],
       "outputs": [
         "coverage/**"
@@ -242,7 +243,8 @@
       "inputs": [
         "$TURBO_ROOT$/scripts/check-project-references.mjs",
         "$TURBO_ROOT$/packages/**/tsconfig*.json",
-        "$TURBO_ROOT$/packages/**/src/**"
+        "$TURBO_ROOT$/packages/**/src/**",
+        "$TURBO_ROOT$/packages/**/dist/**"
       ],
       "outputs": [],
       "cache": true
