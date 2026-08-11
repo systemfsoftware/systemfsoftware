@@ -16,6 +16,7 @@
   "scripts": {
     "clean": "rimraf dist",
     "build": "tsdown",
+    "prepare": "tsdown",
     "typecheck": "tsc --noEmit --incremental",
     "test": "vitest run",
     "test:contract": "vitest run --config vitest.contract.config.ts",
