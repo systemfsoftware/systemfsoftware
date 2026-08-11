@@ -21,6 +21,8 @@ jobs:
         with:
           fetch-depth: 2
       - uses: ./.github/actions/install-deps
+      # `check:turbo-graph` runs a deno-shebang script; the gate job has no deno otherwise.
+      - uses: denoland/setup-deno@v2
       - name: Turbo cache
         uses: actions/cache@v4
         with:

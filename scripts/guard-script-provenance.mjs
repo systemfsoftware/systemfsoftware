@@ -115,7 +115,7 @@ const MANIFEST = new Map([
   ]],
   ['guard-turbo-graph.mjs', [
     'workspace-layout',
-    'The turbo task graph spans every package: CLI-argument hash poisoning in the root scripts, env declared per task in turbo.json, and cycles between packages. No published package can see the graph it belongs to.',
+    'What turbo hashes spans every package: CLI-argument hash poisoning in the root scripts, and env declared per task in turbo.json. Both failures are silent, and no published package can see the run graph it belongs to.',
   ]],
   ['guard-action-provenance.mjs', [
     'workspace-layout',
