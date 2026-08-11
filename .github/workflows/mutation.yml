@@ -25,7 +25,10 @@ jobs:
       - uses: actions/checkout@v7
       - id: discover
         run: |
-          PACKAGES=$(find . -name "stryker.config.json" -not -path "./node_modules/*" -exec dirname {} \; | sed 's|^\./||' | jq -R -s -c 'split("\n") | map(select(length > 0))')
+          # A mutation target is a workspace package. A stryker.config.json under
+          # __tests__ belongs to a CLI fixture the contract lane drives on purpose
+          # (broken-config-project is meant to fail), and repos/ is a vendored tree.
+          PACKAGES=$(find . -name "stryker.config.json" -not -path "./node_modules/*" -not -path "*/node_modules/*" -not -path "./repos/*" -not -path "*/__tests__/*" -exec dirname {} \; | sed 's|^\./||' | jq -R -s -c 'split("\n") | map(select(length > 0))')
           if [ -z "$PACKAGES" ] || [ "$PACKAGES" = "[]" ]; then
             PACKAGES="[]"
           fi
