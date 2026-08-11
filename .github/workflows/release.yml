@@ -3,46 +3,88 @@ name: Release
 on:
   push:
     branches: [main]
+  pull_request:
+    types: [closed]
 
-concurrency: release-${{ github.ref }}
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 permissions:
   contents: write
-  issues: write
   pull-requests: write
-  id-token: write
 
 jobs:
-  checks:
-    name: build · lint · typecheck · test
-    uses: ./.github/workflows/reusable-checks.yml
-
-  semantic-release:
-    name: Semantic Release
-    needs: [checks]
+  version:
+    if: github.event_name == 'push'
+    name: version · open release PR
     runs-on: ubuntu-latest
     env:
-      HUSKY: 0
+      HUSKY: "0"
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - name: Configure git user
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
       - uses: ./.github/actions/install-deps
-      - run: corepack pnpm build
-      - name: Run semantic-release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: corepack pnpm release
-      - name: Capture dirty tree diff on failure
-        if: failure()
-        run: git diff --patch --stat HEAD > /tmp/dirty-tree.patch
-      - uses: actions/upload-artifact@v7
-        if: failure()
+      - name: Consume pending change intents
+        run: corepack pnpm version -r
+      - name: Open or update the Release PR
+        uses: peter-evans/create-pull-request@v7
         with:
-          name: dirty-tree-diff-${{ github.run_id }}
-          path: /tmp/dirty-tree.patch
-          retention-days: 7
+          branch: changeset-release/main
+          title: "chore(release): version packages"
+          commit-message: "chore(release): version packages"
+          labels: release
+          body: |
+            Consumes pending `.changeset/` intents via `pnpm version -r`.
+
+            Merging runs the gate, then builds, publishes (OIDC + provenance),
+            and tags the changed packages.
+
+            Review every consumed `none` intent before merging — a `none` on a
+            behavior-visible change is a silent non-release.
+
+            Packages not registered as npm trusted publishers fail at publish
+            with an OIDC auth error; register them at https://www.npmjs.com.
+
+  gate:
+    if: >-
+      github.event_name == 'pull_request'
+      && github.event.pull_request.merged == true
+      && github.event.pull_request.head.ref == 'changeset-release/main'
+      && github.event.pull_request.user.login == 'github-actions[bot]'
+    name: the gate (pnpm check:ci)
+    uses: ./.github/workflows/reusable-checks.yml
+
+  publish:
+    if: >-
+      github.event_name == 'pull_request'
+      && github.event.pull_request.merged == true
+      && github.event.pull_request.head.ref == 'changeset-release/main'
+      && github.event.pull_request.user.login == 'github-actions[bot]'
+    permissions:
+      contents: write
+      id-token: write
+    name: publish · oidc · tag
+    needs: [gate]
+    runs-on: ubuntu-latest
+    env:
+      HUSKY: "0"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/install-deps
+      - uses: denoland/setup-deno@v2
+      - name: Build
+        # Necessary: every package publishes files: ["dist"] against a gitignored
+        # dist/ and none carries a prepack hook, so the build is an explicit step.
+        run: corepack pnpm build
+      - name: Publish via OIDC trusted publishing
+        # Necessary: --no-git-checks disables pnpm's clean-tree and commit-is-HEAD
+        # checks because the version-bump commit from the Release PR need not be
+        # HEAD-of-remote at publish time. Do not copy this flag elsewhere.
+        # Unregistered packages fail loudly with an OIDC auth error.
+        run: corepack pnpm publish -r --provenance --access public --no-git-checks
+      - name: Tag released versions
+        run: deno run --allow-run=git,pnpm --allow-read scripts/tag-released-packages.mjs
