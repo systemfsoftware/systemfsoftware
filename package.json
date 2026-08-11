@@ -15,9 +15,7 @@
     "precommit": "pnpm exec lint-staged --no-revert --config .lintstagedrc.js",
     "check": "pnpm install --frozen-lockfile && TURBO_CONCURRENCY=${TURBO_CONCURRENCY:-50%} pnpm check:ci",
     "check:ci": "s=0; pnpm format:check || s=1; turbo --concurrency=${TURBO_CONCURRENCY:-100%} --continue lint lint:tsgo typecheck test attw api:check test:contract //#check:mutate-scope //#check:lint-coverage //#check:no-hand-rolled-jsonc //#check:publish-config //#check:script-provenance //#check:project-references && turbo --concurrency=${TURBO_CONCURRENCY:-100%} --continue //#check:exports //#check:runtime-deps || s=1; exit $s",
-    "release": "node scripts/release.mjs",
     "prepare": "concurrently \"husky\" \"node scripts/patch-tsgo-if-needed.mjs\"",
-    "release:dry": "node scripts/release.mjs --dry-run",
     "bump:minor": "node scripts/bump-all-minor.mjs",
     "check:publish-config": "node scripts/validate-publish-config.mjs --selftest && node scripts/validate-publish-config.mjs",
     "check:runtime-deps": "node scripts/check-runtime-deps.mjs --selftest && node scripts/check-runtime-deps.mjs",
@@ -35,15 +33,9 @@
     "@commitlint/config-pnpm-scopes": "^21.2.0",
     "@commitlint/types": "^21.2.0",
     "@effect/tsgo": "^0.36.0",
-    "@semantic-release/commit-analyzer": "^13.0.1",
-    "@semantic-release/exec": "^7.1.0",
-    "@semantic-release/git": "catalog:",
-    "@semantic-release/github": "^11.0.6",
-    "@semantic-release/release-notes-generator": "^14.0.3",
     "@std/jsonc": "catalog:",
     "@systemfsoftware/stryker-js-cli": "workspace:^",
     "concurrently": "^9.2.1",
-    "conventional-changelog-conventionalcommits": "^9.1.0",
     "dprint": "^0.54.0",
     "estree-walker": "^3",
     "husky": "^9.1.7",
@@ -53,9 +45,8 @@
     "oxc-parser": "catalog:",
     "oxlint": "catalog:oxlint",
     "oxlint-tsgolint": "catalog:oxlint",
-    "semantic-release": "^24.2.9",
     "turbo": "^2.10.5",
     "typescript": "catalog:"
   },
-  "packageManager": "pnpm@11.9.0"
+  "packageManager": "pnpm@11.21.0"
 }
