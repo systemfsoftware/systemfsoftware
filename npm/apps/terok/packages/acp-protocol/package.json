@@ -1,0 +1,50 @@
+{
+  "name": "@terok/acp-protocol",
+  "license": "Apache-2.0",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Agent Client Protocol — Effect-native, generated from the canonical protocol schema.",
+  "type": "module",
+  "exports": {
+    ".": {
+      "@systemfsoftware/source": "./src/mod.ts",
+      "types": "./dist/acp-protocol.d.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "clean": "rimraf dist",
+    "build": "tsdown",
+    "typecheck": "tsc --noEmit --incremental",
+    "test": "vitest run",
+    "lint": "oxlint . ${AGENT:+--format=unix --quiet}",
+    "codegen": "deno run --allow-read=../../protocol,scripts --allow-write=src scripts/generate-shape.ts",
+    "codegen:check": "deno check scripts/generate-shape.ts",
+    "mutation": "stryker run"
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "@systemfsoftware/effect-schema-law": "workspace:^",
+    "@systemfsoftware/effect-schema-vite": "workspace:^",
+    "@systemfsoftware/oxlint-config": "workspace:^",
+    "@systemfsoftware/stryker-js-mutation-run": "workspace:^",
+    "@systemfsoftware/stryker-js-typescript-checker": "workspace:^",
+    "@systemfsoftware/stryker-js-vitest-runner": "workspace:^",
+    "@systemfsoftware/stryker-plugins": "workspace:^",
+    "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
+    "@types/node": "catalog:",
+    "effect": "catalog:",
+    "fast-check": "catalog:",
+    "rimraf": "catalog:",
+    "tsdown": "catalog:",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "effect": "catalog:"
+  }
+}

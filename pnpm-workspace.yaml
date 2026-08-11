@@ -99,3 +99,5 @@ packages:
   - omp/packages/*
   - omp/plugins/*
   - claude-plugins/*
+  - npm/apps/terok/apps/*
+  - npm/apps/terok/packages/*

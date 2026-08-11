@@ -296,6 +296,396 @@ importers:
         specifier: 'catalog:'
         version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1)(vite@8.2.1(@types/node@24.13.2)(esbuild@0.27.7)(jiti@2.7.0)(yaml@2.9.0))
 
+  npm/apps/terok/packages/acp-protocol:
+    devDependencies:
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 0.30.0(effect@3.22.1)(vitest@4.1.10)
+      '@systemfsoftware/effect-schema-law':
+        specifier: workspace:^
+        version: link:../../../../../packages/effect-schema-law
+      '@systemfsoftware/effect-schema-vite':
+        specifier: workspace:^
+        version: link:../../../../../packages/effect-schema-vite
+      '@systemfsoftware/oxlint-config':
+        specifier: workspace:^
+        version: link:../../../../../packages/oxlint-config
+      '@systemfsoftware/stryker-js-mutation-run':
+        specifier: workspace:^
+        version: link:../../../../../packages/stryker-js/mutation-run
+      '@systemfsoftware/stryker-js-typescript-checker':
+        specifier: workspace:^
+        version: link:../../../../../packages/stryker-js/typescript-checker
+      '@systemfsoftware/stryker-js-vitest-runner':
+        specifier: workspace:^
+        version: link:../../../../../packages/stryker-js/vitest-runner
+      '@systemfsoftware/stryker-plugins':
+        specifier: workspace:^
+        version: link:../../../../../packages/stryker-plugins
+      '@systemfsoftware/tsconfig':
+        specifier: workspace:^
+        version: link:../../../../../packages/tsconfig
+      '@systemfsoftware/vitest-config':
+        specifier: workspace:^
+        version: link:../../../../../packages/vitest-config
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.2
+      effect:
+        specifier: 'catalog:'
+        version: 3.22.1
+      fast-check:
+        specifier: ^4
+        version: 4.9.0
+      rimraf:
+        specifier: 'catalog:'
+        version: 6.1.3
+      tsdown:
+        specifier: 'catalog:'
+        version: 0.22.14(oxc-resolver@11.24.2)(typescript@7.0.2)(unrun@0.2.39)
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1)(vite@8.2.1(@types/node@24.13.2)(esbuild@0.27.7)(jiti@2.7.0)(yaml@2.9.0))
+
+  npm/apps/terok/packages/credentials:
+    devDependencies:
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 0.30.0(effect@3.22.1)(vitest@4.1.10)
+      '@systemfsoftware/effect-schema-law':
+        specifier: workspace:^
+        version: link:../../../../../packages/effect-schema-law
+      '@systemfsoftware/effect-schema-vite':
+        specifier: workspace:^
+        version: link:../../../../../packages/effect-schema-vite
+      '@systemfsoftware/oxlint-config':
+        specifier: workspace:^
+        version: link:../../../../../packages/oxlint-config
+      '@systemfsoftware/stryker-js-mutation-run':
+        specifier: workspace:^
+        version: link:../../../../../packages/stryker-js/mutation-run
+      '@systemfsoftware/stryker-js-typescript-checker':
+        specifier: workspace:^
+        version: link:../../../../../packages/stryker-js/typescript-checker
+      '@systemfsoftware/stryker-js-vitest-runner':
+        specifier: workspace:^
+        version: link:../../../../../packages/stryker-js/vitest-runner
+      '@systemfsoftware/stryker-plugins':
+        specifier: workspace:^
+        version: link:../../../../../packages/stryker-plugins
+      '@systemfsoftware/tsconfig':
+        specifier: workspace:^
+        version: link:../../../../../packages/tsconfig
+      '@systemfsoftware/vitest-config':
+        specifier: workspace:^
+        version: link:../../../../../packages/vitest-config
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.2
+      effect:
+        specifier: 'catalog:'
+        version: 3.22.1
+      fast-check:
+        specifier: ^4
+        version: 4.9.0
+      rimraf:
+        specifier: 'catalog:'
+        version: 6.1.3
+      tsdown:
+        specifier: 'catalog:'
+        version: 0.22.14(oxc-resolver@11.24.2)(typescript@7.0.2)(unrun@0.2.39)
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1)(vite@8.2.1(@types/node@24.13.2)(esbuild@0.27.7)(jiti@2.7.0)(yaml@2.9.0))
+
+  npm/apps/terok/packages/egress-shield:
+    devDependencies:
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 0.30.0(effect@3.22.1)(vitest@4.1.10)
+      '@systemfsoftware/effect-schema-law':
+        specifier: workspace:^
+        version: link:../../../../../packages/effect-schema-law
+      '@systemfsoftware/effect-schema-vite':
+        specifier: workspace:^
+        version: link:../../../../../packages/effect-schema-vite
+      '@systemfsoftware/oxlint-config':
+        specifier: workspace:^
+        version: link:../../../../../packages/oxlint-config
+      '@systemfsoftware/tsconfig':
+        specifier: workspace:^
+        version: link:../../../../../packages/tsconfig
+      '@systemfsoftware/vitest-config':
+        specifier: workspace:^
+        version: link:../../../../../packages/vitest-config
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.2
+      effect:
+        specifier: 'catalog:'
+        version: 3.22.1
+      fast-check:
+        specifier: ^4
+        version: 4.9.0
+      rimraf:
+        specifier: 'catalog:'
+        version: 6.1.3
+      tsdown:
+        specifier: 'catalog:'
+        version: 0.22.14(oxc-resolver@11.24.2)(typescript@7.0.2)(unrun@0.2.39)
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1)(vite@8.2.1(@types/node@24.13.2)(esbuild@0.27.7)(jiti@2.7.0)(yaml@2.9.0))
+
+  npm/apps/terok/packages/image-setup:
+    devDependencies:
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 0.30.0(effect@3.22.1)(vitest@4.1.10)
+      '@systemfsoftware/effect-schema-law':
+        specifier: workspace:^
+        version: link:../../../../../packages/effect-schema-law
+      '@systemfsoftware/effect-schema-vite':
+        specifier: workspace:^
+        version: link:../../../../../packages/effect-schema-vite
+      '@systemfsoftware/oxlint-config':
+        specifier: workspace:^
+        version: link:../../../../../packages/oxlint-config
+      '@systemfsoftware/stryker-js-mutation-run':
+        specifier: workspace:^
+        version: link:../../../../../packages/stryker-js/mutation-run
+      '@systemfsoftware/stryker-js-typescript-checker':
+        specifier: workspace:^
+        version: link:../../../../../packages/stryker-js/typescript-checker
+      '@systemfsoftware/stryker-js-vitest-runner':
+        specifier: workspace:^
+        version: link:../../../../../packages/stryker-js/vitest-runner
+      '@systemfsoftware/stryker-plugins':
+        specifier: workspace:^
+        version: link:../../../../../packages/stryker-plugins
+      '@systemfsoftware/tsconfig':
+        specifier: workspace:^
+        version: link:../../../../../packages/tsconfig
+      '@systemfsoftware/vitest-config':
+        specifier: workspace:^
+        version: link:../../../../../packages/vitest-config
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.2
+      effect:
+        specifier: 'catalog:'
+        version: 3.22.1
+      fast-check:
+        specifier: ^4
+        version: 4.9.0
+      rimraf:
+        specifier: 'catalog:'
+        version: 6.1.3
+      tsdown:
+        specifier: 'catalog:'
+        version: 0.22.14(oxc-resolver@11.24.2)(typescript@7.0.2)(unrun@0.2.39)
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1)(vite@8.2.1(@types/node@24.13.2)(esbuild@0.27.7)(jiti@2.7.0)(yaml@2.9.0))
+
+  npm/apps/terok/packages/ops-surface:
+    devDependencies:
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 0.30.0(effect@3.22.1)(vitest@4.1.10)
+      '@systemfsoftware/effect-schema-law':
+        specifier: workspace:^
+        version: link:../../../../../packages/effect-schema-law
+      '@systemfsoftware/effect-schema-vite':
+        specifier: workspace:^
+        version: link:../../../../../packages/effect-schema-vite
+      '@systemfsoftware/oxlint-config':
+        specifier: workspace:^
+        version: link:../../../../../packages/oxlint-config
+      '@systemfsoftware/stryker-js-mutation-run':
+        specifier: workspace:^
+        version: link:../../../../../packages/stryker-js/mutation-run
+      '@systemfsoftware/stryker-js-typescript-checker':
+        specifier: workspace:^
+        version: link:../../../../../packages/stryker-js/typescript-checker
+      '@systemfsoftware/stryker-js-vitest-runner':
+        specifier: workspace:^
+        version: link:../../../../../packages/stryker-js/vitest-runner
+      '@systemfsoftware/stryker-plugins':
+        specifier: workspace:^
+        version: link:../../../../../packages/stryker-plugins
+      '@systemfsoftware/tsconfig':
+        specifier: workspace:^
+        version: link:../../../../../packages/tsconfig
+      '@systemfsoftware/vitest-config':
+        specifier: workspace:^
+        version: link:../../../../../packages/vitest-config
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.2
+      effect:
+        specifier: 'catalog:'
+        version: 3.22.1
+      fast-check:
+        specifier: ^4
+        version: 4.9.0
+      rimraf:
+        specifier: 'catalog:'
+        version: 6.1.3
+      tsdown:
+        specifier: 'catalog:'
+        version: 0.22.14(oxc-resolver@11.24.2)(typescript@7.0.2)(unrun@0.2.39)
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1)(vite@8.2.1(@types/node@24.13.2)(esbuild@0.27.7)(jiti@2.7.0)(yaml@2.9.0))
+
+  npm/apps/terok/packages/project-agents:
+    devDependencies:
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 0.30.0(effect@3.22.1)(vitest@4.1.10)
+      '@systemfsoftware/effect-cell-types':
+        specifier: workspace:^
+        version: link:../../../../../packages/effect-cell-types
+      '@systemfsoftware/effect-schema-law':
+        specifier: workspace:^
+        version: link:../../../../../packages/effect-schema-law
+      '@systemfsoftware/effect-schema-vite':
+        specifier: workspace:^
+        version: link:../../../../../packages/effect-schema-vite
+      '@systemfsoftware/oxlint-config':
+        specifier: workspace:^
+        version: link:../../../../../packages/oxlint-config
+      '@systemfsoftware/stryker-js-mutation-run':
+        specifier: workspace:^
+        version: link:../../../../../packages/stryker-js/mutation-run
+      '@systemfsoftware/stryker-js-typescript-checker':
+        specifier: workspace:^
+        version: link:../../../../../packages/stryker-js/typescript-checker
+      '@systemfsoftware/stryker-js-vitest-runner':
+        specifier: workspace:^
+        version: link:../../../../../packages/stryker-js/vitest-runner
+      '@systemfsoftware/stryker-plugins':
+        specifier: workspace:^
+        version: link:../../../../../packages/stryker-plugins
+      '@systemfsoftware/tsconfig':
+        specifier: workspace:^
+        version: link:../../../../../packages/tsconfig
+      '@systemfsoftware/vitest-config':
+        specifier: workspace:^
+        version: link:../../../../../packages/vitest-config
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.2
+      effect:
+        specifier: 'catalog:'
+        version: 3.22.1
+      fast-check:
+        specifier: ^4
+        version: 4.9.0
+      rimraf:
+        specifier: 'catalog:'
+        version: 6.1.3
+      tsdown:
+        specifier: 'catalog:'
+        version: 0.22.14(oxc-resolver@11.24.2)(typescript@7.0.2)(unrun@0.2.39)
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1)(vite@8.2.1(@types/node@24.13.2)(esbuild@0.27.7)(jiti@2.7.0)(yaml@2.9.0))
+
+  npm/apps/terok/packages/sandbox-executor:
+    devDependencies:
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 0.30.0(effect@3.22.1)(vitest@4.1.10)
+      '@systemfsoftware/effect-schema-law':
+        specifier: workspace:^
+        version: link:../../../../../packages/effect-schema-law
+      '@systemfsoftware/effect-schema-vite':
+        specifier: workspace:^
+        version: link:../../../../../packages/effect-schema-vite
+      '@systemfsoftware/oxlint-config':
+        specifier: workspace:^
+        version: link:../../../../../packages/oxlint-config
+      '@systemfsoftware/tsconfig':
+        specifier: workspace:^
+        version: link:../../../../../packages/tsconfig
+      '@systemfsoftware/vitest-config':
+        specifier: workspace:^
+        version: link:../../../../../packages/vitest-config
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.2
+      effect:
+        specifier: 'catalog:'
+        version: 3.22.1
+      fast-check:
+        specifier: ^4
+        version: 4.9.0
+      rimraf:
+        specifier: 'catalog:'
+        version: 6.1.3
+      tsdown:
+        specifier: 'catalog:'
+        version: 0.22.14(oxc-resolver@11.24.2)(typescript@7.0.2)(unrun@0.2.39)
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1)(vite@8.2.1(@types/node@24.13.2)(esbuild@0.27.7)(jiti@2.7.0)(yaml@2.9.0))
+
+  npm/apps/terok/packages/task-lifecycle:
+    devDependencies:
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 0.30.0(effect@3.22.1)(vitest@4.1.10)
+      '@systemfsoftware/effect-cell-types':
+        specifier: workspace:^
+        version: link:../../../../../packages/effect-cell-types
+      '@systemfsoftware/effect-schema-law':
+        specifier: workspace:^
+        version: link:../../../../../packages/effect-schema-law
+      '@systemfsoftware/effect-schema-vite':
+        specifier: workspace:^
+        version: link:../../../../../packages/effect-schema-vite
+      '@systemfsoftware/oxlint-config':
+        specifier: workspace:^
+        version: link:../../../../../packages/oxlint-config
+      '@systemfsoftware/stryker-js-mutation-run':
+        specifier: workspace:^
+        version: link:../../../../../packages/stryker-js/mutation-run
+      '@systemfsoftware/stryker-js-typescript-checker':
+        specifier: workspace:^
+        version: link:../../../../../packages/stryker-js/typescript-checker
+      '@systemfsoftware/stryker-js-vitest-runner':
+        specifier: workspace:^
+        version: link:../../../../../packages/stryker-js/vitest-runner
+      '@systemfsoftware/stryker-plugins':
+        specifier: workspace:^
+        version: link:../../../../../packages/stryker-plugins
+      '@systemfsoftware/tsconfig':
+        specifier: workspace:^
+        version: link:../../../../../packages/tsconfig
+      '@systemfsoftware/vitest-config':
+        specifier: workspace:^
+        version: link:../../../../../packages/vitest-config
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.2
+      effect:
+        specifier: 'catalog:'
+        version: 3.22.1
+      fast-check:
+        specifier: ^4
+        version: 4.9.0
+      rimraf:
+        specifier: 'catalog:'
+        version: 6.1.3
+      tsdown:
+        specifier: 'catalog:'
+        version: 0.22.14(oxc-resolver@11.24.2)(typescript@7.0.2)(unrun@0.2.39)
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1)(vite@8.2.1(@types/node@24.13.2)(esbuild@0.27.7)(jiti@2.7.0)(yaml@2.9.0))
+
   omp/packages/omp-utils:
     dependencies:
       '@std/toml':
