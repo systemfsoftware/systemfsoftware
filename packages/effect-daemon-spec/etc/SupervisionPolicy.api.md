@@ -5,7 +5,6 @@
 ```ts
 
 import { Cause } from 'effect';
-import { Context } from 'effect';
 import { Duration } from 'effect/Duration';
 import { Duration as Duration_2 } from 'effect';
 import { Effect } from 'effect';
@@ -33,12 +32,6 @@ export interface BootedChild<R> {
     readonly run: Effect.Effect<void, never, R>;
 }
 
-// Warning: (ae-forgotten-export) The symbol "SupervisionPolicy" needs to be exported by the entry point SupervisionPolicy.d.ts
-// Warning: (ae-forgotten-export) The symbol "SupervisionPolicyTypeId" needs to be exported by the entry point SupervisionPolicy.d.ts
-//
-// @public (undocumented)
-export const custom: (policy: Omit<SupervisionPolicy, typeof SupervisionPolicyTypeId>) => Effect.Effect<SupervisionPolicy>;
-
 // Warning: (ae-forgotten-export) The symbol "DynamicSpec" needs to be exported by the entry point SupervisionPolicy.d.ts
 //
 // @public (undocumented)
@@ -49,32 +42,17 @@ export const dynamic: <E, R, Args>(opts: {
 }) => DynamicSpec<E, R, Args>;
 
 // @public (undocumented)
-export const leader: (cap: Duration_2.DurationInput) => Effect.Effect<SupervisionPolicy>;
-
-// Warning: (ae-forgotten-export) The symbol "LeaderConfig_base" needs to be exported by the entry point SupervisionPolicy.d.ts
-//
-// @public (undocumented)
-export class LeaderConfig extends LeaderConfig_base {}
-
-// Warning: (ae-forgotten-export) The symbol "LockConfig" needs to be exported by the entry point SupervisionPolicy.d.ts
-// Warning: (ae-forgotten-export) The symbol "SupervisorOpts" needs to be exported by the entry point SupervisionPolicy.d.ts
-// Warning: (ae-forgotten-export) The symbol "PolicyBuiltFirst" needs to be exported by the entry point SupervisionPolicy.d.ts
-// Warning: (ae-forgotten-export) The symbol "Supervisor" needs to be exported by the entry point SupervisionPolicy.d.ts
-//
-// @public (undocumented)
-export function oneForAll<E, R, L extends LockConfig = LockConfig, S = Effect.Effect<SupervisionPolicy>>(opts: SupervisorOpts<E, R, L, S> & PolicyBuiltFirst<S>): Supervisor<E, R, L>;
+export namespace Policy {
+    export { LeaderConfig, TaskConfig, WorkerConfig, custom, leader, supervision, task };
+}
 
 // @public (undocumented)
-export function oneForOne<E, R, L extends LockConfig = LockConfig, S = Effect.Effect<SupervisionPolicy>>(opts: SupervisorOpts<E, R, L, S> & PolicyBuiltFirst<S>): Supervisor<E, R, L>;
-
-// @public (undocumented)
-export function restForOne<E, R, L extends LockConfig = LockConfig, S = Effect.Effect<SupervisionPolicy>>(opts: SupervisorOpts<E, R, L, S> & PolicyBuiltFirst<S>): Supervisor<E, R, L>;
+export namespace Strategy {
+    export { oneForAll, oneForOne, restForOne };
+}
 
 // @public (undocumented)
 export type Supervision<R, D = never> = Effect.Effect<void, never, R | D | Scope.Scope>;
-
-// @public (undocumented)
-export const supervision: (cap: Duration_2.DurationInput) => Effect.Effect<SupervisionPolicy>;
 
 // @public (undocumented)
 export interface SupervisionContext<R, D = never> {
@@ -88,6 +66,8 @@ export interface SupervisionContext<R, D = never> {
     readonly intensityEff: Effect.Effect<IntensityTracker>;
     // (undocumented)
     readonly name: string;
+    // Warning: (ae-forgotten-export) The symbol "SupervisionPolicy" needs to be exported by the entry point SupervisionPolicy.d.ts
+    //
     // (undocumented)
     readonly policy: SupervisionPolicy;
     // (undocumented)
@@ -95,19 +75,6 @@ export interface SupervisionContext<R, D = never> {
     // (undocumented)
     readonly reportRestart: (cause: Cause.Cause<never>) => Effect.Effect<void, never, D>;
 }
-
-// @public (undocumented)
-export const task: (budget: Duration_2.DurationInput) => Effect.Effect<SupervisionPolicy>;
-
-// Warning: (ae-forgotten-export) The symbol "TaskConfig_base" needs to be exported by the entry point SupervisionPolicy.d.ts
-//
-// @public (undocumented)
-export class TaskConfig extends TaskConfig_base {}
-
-// Warning: (ae-forgotten-export) The symbol "WorkerConfig_base" needs to be exported by the entry point SupervisionPolicy.d.ts
-//
-// @public (undocumented)
-export class WorkerConfig extends WorkerConfig_base {}
 
 // Warnings were encountered during analysis:
 //

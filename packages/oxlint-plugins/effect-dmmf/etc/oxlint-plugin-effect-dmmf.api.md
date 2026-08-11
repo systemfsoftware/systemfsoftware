@@ -17,8 +17,9 @@ const _default: {
         'no-test-runtime-in-pure-cell': Rule;
         'cell-suffix-required': Rule;
         'capability-named-directory': Rule;
+        'combinator-composes-a-kernel': Rule;
         'harness-no-module-scope-registration': Rule;
-        'no-runtime-export-in-type-cell': Rule;
+        'type-no-runtime-export': Rule;
         'acl-no-anti-pattern-path': Rule;
         'acl-no-as-casts': Rule;
         'acl-single-transform-export': Rule;

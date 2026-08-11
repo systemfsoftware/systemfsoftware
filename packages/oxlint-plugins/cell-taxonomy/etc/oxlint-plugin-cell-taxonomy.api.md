@@ -14,8 +14,9 @@ const _default: {
     rules: {
         'cell-suffix-required': Rule;
         'capability-named-directory': Rule;
+        'combinator-composes-a-kernel': Rule;
         'harness-no-module-scope-registration': Rule;
-        'no-runtime-export-in-type-cell': Rule;
+        'type-no-runtime-export': Rule;
     };
     configs: {
         recommended: {
