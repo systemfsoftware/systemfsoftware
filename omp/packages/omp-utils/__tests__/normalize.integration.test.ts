@@ -17,15 +17,14 @@ import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoft
 import { Effect } from 'effect'
 import { expect } from 'vitest'
 
+import { matchesMatcher, sessionIds } from '../src/mod.js'
 import {
   denormalizeToolInput,
   extractShellCommand,
   isContextModeShellTool,
-  matchesMatcher,
   normalizeToolInput,
   normalizeToolName,
-  sessionIds,
-} from '../src/mod.js'
+} from '../src/tool/mod.js'
 
 const Feature = makeFeature({ it, layer })
 

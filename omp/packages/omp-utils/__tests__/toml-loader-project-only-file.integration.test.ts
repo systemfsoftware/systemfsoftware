@@ -13,7 +13,7 @@ import { Contents, layer as memoryFileSystemLayer } from '@systemfsoftware/effec
 import { Effect, Layer } from 'effect'
 import { expect } from 'vitest'
 
-import { TomlLoader, TomlLoaderLive } from '../src/toml-loader.adapter.js'
+import { TomlLoader, TomlLoaderLive } from '../src/toml-loader/toml-loader.adapter.js'
 
 const Feature = makeFeature({ it, layer })
 

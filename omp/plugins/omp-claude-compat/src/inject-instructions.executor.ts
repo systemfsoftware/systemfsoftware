@@ -1,6 +1,6 @@
 import { FileSystem } from '@effect/platform/FileSystem'
 import * as PathModule from '@effect/platform/Path'
-import { TomlLoader } from '@systemfsoftware/omp-utils'
+import { TomlLoader } from '@systemfsoftware/omp-utils/toml-loader'
 import { Context, Effect, Either } from 'effect'
 
 // ═══════════════════════════════════════════════════════════

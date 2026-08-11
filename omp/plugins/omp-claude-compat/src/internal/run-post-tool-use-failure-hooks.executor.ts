@@ -1,4 +1,5 @@
-import { normalizeToolInput, normalizeToolName, sessionIds } from '@systemfsoftware/omp-utils'
+import { sessionIds } from '@systemfsoftware/omp-utils'
+import { normalizeToolInput, normalizeToolName } from '@systemfsoftware/omp-utils/tool'
 import { Context, Effect, Option, Schema as S, type Scope } from 'effect'
 import type { HookSettings } from '../hook-settings.acl.js'
 import { blockAsFeedback, type FeedbackOnlyResult } from './hook-feedback.kernel.js'

@@ -1,6 +1,6 @@
 import * as NodeFileSystem from '@effect/platform-node/NodeFileSystem'
 import * as PathModule from '@effect/platform/Path'
-import { TomlLoaderLive } from '@systemfsoftware/omp-utils'
+import { TomlLoaderLive } from '@systemfsoftware/omp-utils/toml-loader'
 import { Layer, ManagedRuntime } from 'effect'
 
 const nodeLayer = Layer.mergeAll(

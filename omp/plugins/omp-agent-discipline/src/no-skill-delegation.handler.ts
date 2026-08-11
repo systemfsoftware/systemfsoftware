@@ -1,5 +1,5 @@
 import type { ExtensionAPI } from '@oh-my-pi/pi-coding-agent'
-import { TomlLoader } from '@systemfsoftware/omp-utils'
+import { TomlLoader } from '@systemfsoftware/omp-utils/toml-loader'
 import { Effect, Either } from 'effect'
 import { NoSkillDelegationExecutorDeps, runNoSkillDelegation } from './no-skill-delegation.executor.js'
 import type { RunSafe } from './run-safe.kernel.js'

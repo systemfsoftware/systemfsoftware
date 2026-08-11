@@ -15,6 +15,14 @@
       "@systemfsoftware/source": "./src/runtime-lifecycle.middleware.ts",
       "default": "./dist/runtime-lifecycle.js"
     },
+    "./toml-loader": {
+      "@systemfsoftware/source": "./src/toml-loader/mod.ts",
+      "default": "./dist/toml-loader.js"
+    },
+    "./tool": {
+      "@systemfsoftware/source": "./src/tool/mod.ts",
+      "default": "./dist/tool.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -49,6 +57,8 @@
     "exports": {
       ".": "./dist/index.js",
       "./runtime-lifecycle": "./dist/runtime-lifecycle.js",
+      "./toml-loader": "./dist/toml-loader.js",
+      "./tool": "./dist/tool.js",
       "./package.json": "./package.json"
     }
   },

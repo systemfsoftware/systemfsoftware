@@ -16,7 +16,7 @@ const EMPTY_CONFIG: TomlConfig = Schema.decodeSync(TomlConfig)({})
  * Port: the layered TOML config provider. The adapter implements it and the
  * composition root wires `TomlLoaderLive`.
  */
-export class TomlLoader extends Context.Tag('@systemfsoftware/omp-utils/toml-loader.adapter/TomlLoader')<
+export class TomlLoader extends Context.Tag('@systemfsoftware/omp-utils/toml-loader/toml-loader.adapter/TomlLoader')<
   TomlLoader,
   {
     readonly load: (cwd: string) => Effect.Effect<TomlConfig, PlatformError, never>

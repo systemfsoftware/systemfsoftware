@@ -1,6 +1,6 @@
 import type { PlatformError } from '@effect/platform/Error'
-import { TomlLoader } from '@systemfsoftware/omp-utils'
-import type { TomlConfig } from '@systemfsoftware/omp-utils'
+import { TomlLoader } from '@systemfsoftware/omp-utils/toml-loader'
+import type { TomlConfig } from '@systemfsoftware/omp-utils/toml-loader'
 import { Context, Effect, Match } from 'effect'
 import * as Option from 'effect/Option'
 import * as S from 'effect/Schema'

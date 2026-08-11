@@ -34,7 +34,7 @@
  */
 
 import type { ExtensionAPI, ExtensionContext } from '@oh-my-pi/pi-coding-agent'
-import { TomlLoader } from '@systemfsoftware/omp-utils'
+import { TomlLoader } from '@systemfsoftware/omp-utils/toml-loader'
 import { Effect, Either } from 'effect'
 import {
   DispatchDoctrineExecutorDeps,

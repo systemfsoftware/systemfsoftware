@@ -1,11 +1,10 @@
+import { editTargetPaths, sessionIds } from '@systemfsoftware/omp-utils'
 import {
   denormalizeToolInput,
-  editTargetPaths,
   extractShellCommand,
   normalizeToolInput,
   normalizeToolName,
-  sessionIds,
-} from '@systemfsoftware/omp-utils'
+} from '@systemfsoftware/omp-utils/tool'
 import { Context, Effect, Option, type Scope } from 'effect'
 import type { HookSettings } from '../hook-settings.acl.js'
 import type { HooksForEventResult } from './hook-feedback.kernel.js'
