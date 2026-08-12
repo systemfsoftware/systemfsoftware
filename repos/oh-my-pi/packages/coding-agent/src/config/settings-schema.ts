@@ -1139,6 +1139,17 @@ export const SETTINGS_SCHEMA = {
 		},
 	},
 
+	externalThinking: {
+		type: "boolean",
+		default: false,
+		ui: {
+			tab: "model",
+			group: "Thinking",
+			label: "External Thinking",
+			description: "Private scratchpad; not shown to user. Disables supported GPT, Claude, and Gemini reasoning",
+		},
+	},
+
 	"model.loopGuard.enabled": {
 		type: "boolean",
 		default: true,
@@ -5468,6 +5479,11 @@ export const SETTINGS_SCHEMA = {
 
 	"searxng.language": {
 		type: "string",
+		default: undefined,
+	},
+
+	"searxng.safesearch": {
+		type: "number",
 		default: undefined,
 	},
 

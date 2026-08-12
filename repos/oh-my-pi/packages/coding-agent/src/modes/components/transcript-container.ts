@@ -6,6 +6,7 @@ import {
 	type RenderStablePrefix,
 	type ViewportTailProvider,
 } from "@oh-my-pi/pi-tui";
+import { isToolActivityComponent } from "./tool-activity";
 
 /**
  * A transcript block that is still mutating (a foreground tool awaiting its
@@ -160,6 +161,7 @@ export class TranscriptContainer
 	extends Container
 	implements NativeScrollbackLiveRegion, NativeScrollbackCommittedRows, RenderStablePrefix, ViewportTailProvider
 {
+	#toolActivityVisible = true;
 	// Bumped to retire every block segment at once (theme change / clear); a
 	// segment is only reused when its stored generation matches.
 	#generation = 0;
@@ -182,6 +184,20 @@ export class TranscriptContainer
 	// consumes the report and re-bases the baseline). Out-of-band renders
 	// between engine frames lower it; they can never inflate it.
 	#stableRowsFloor = 0;
+	override addChild(component: Component): void {
+		if (isToolActivityComponent(component)) component.setToolActivityVisible(this.#toolActivityVisible);
+		super.addChild(component);
+	}
+
+	setToolActivityVisible(visible: boolean): void {
+		if (this.#toolActivityVisible === visible) return;
+		this.#toolActivityVisible = visible;
+		for (const child of this.children) {
+			if (isToolActivityComponent(child)) child.setToolActivityVisible(visible);
+		}
+		this.invalidate();
+	}
+
 	override invalidate(): void {
 		// Theme/global invalidation: retire every diff snapshot so stale styling
 		// is not diffed against the recolored render.

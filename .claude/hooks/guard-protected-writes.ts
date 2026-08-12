@@ -86,7 +86,7 @@ export const decide = (payload: WritePayload, facts: Facts): Verdict => {
     return {
       refused: true,
       reason:
-        "Search the corpus before planning: run a wiki-scoped query (qmd query -c wiki '<question>'). Running one clears this gate for the session (REPO-W4).",
+        "Search the corpus before planning: run a wiki-scoped query (qmd search -c wiki '<question>'). Running one clears this gate for the session (REPO-W4).",
     }
   }
 
