@@ -45,7 +45,17 @@ const discoverGroupScopes = (dir: string): readonly string[] => {
   return groups
 }
 
-const EXTRA_SCOPES = ['repo', 'deps', 'release', 'ci', ...discoverGroupScopes(packagesDir)] as const
+// `oxlint-guard` is a Deno workspace under `claude-plugins/`, so pnpm-workspace.yaml
+// no longer supplies its scope. It is still a package in this repo and its commits
+// still name it.
+const EXTRA_SCOPES = [
+  'repo',
+  'deps',
+  'release',
+  'ci',
+  'oxlint-guard',
+  ...discoverGroupScopes(packagesDir),
+] as const
 
 const matchesAny = (...patterns: readonly RegExp[]) => (path: string) => patterns.some((p) => p.test(path))
 
