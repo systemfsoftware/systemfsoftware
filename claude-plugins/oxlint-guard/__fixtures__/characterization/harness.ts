@@ -88,6 +88,32 @@ const materialize = async (spec: TreeSpec): Promise<{ readonly root: string; rea
 
 const decoder = new TextDecoder()
 
+// HOME points at the throwaway project, so without an explicit DENO_DIR every
+// child would resolve a cold module cache and write download progress to stderr.
+// Pinning the real cache observes the steady state a hook actually runs in; the
+// one-time cold-start fetch is a separate, documented event (KTD5).
+let denoDirMemo: Promise<string> | undefined
+
+const denoDir = (): Promise<string> => {
+  denoDirMemo ??= (async (): Promise<string> => {
+    const output = await new Deno.Command(await resolveBinary('deno'), {
+      args: ['info', '--json'],
+      stdout: 'piped',
+      stderr: 'null',
+    }).output()
+    const parsed: unknown = JSON.parse(decoder.decode(output.stdout))
+    if (typeof parsed !== 'object' || parsed === null || !('denoDir' in parsed)) {
+      throw new TypeError('characterization harness: could not resolve denoDir')
+    }
+    const resolved = parsed.denoDir
+    if (typeof resolved !== 'string') {
+      throw new TypeError('characterization harness: denoDir is not a string')
+    }
+    return resolved
+  })()
+  return denoDirMemo
+}
+
 export const observe = async (runner: Runner, testCase: CharacterizationCase): Promise<Observation> => {
   const { root, pathEnv } = await materialize(testCase.tree)
   const cwd = testCase.cwd === undefined ? root : path.join(root, testCase.cwd)
@@ -100,6 +126,7 @@ export const observe = async (runner: Runner, testCase: CharacterizationCase): P
       PATH: pathEnv,
       HOME: root,
       CLAUDE_PROJECT_DIR: root,
+      DENO_DIR: await denoDir(),
       // A leak into a linter subprocess is observable rather than theoretical:
       // no fixture may ever surface this value.
       OXLINT_GUARD_TEST_SECRET: 'must-not-reach-a-subprocess',
@@ -115,7 +142,16 @@ export const observe = async (runner: Runner, testCase: CharacterizationCase): P
 
   const { code, stderr } = await child.output()
 
-  return { exitCode: code, stderr: decoder.decode(stderr).replaceAll(root, '{{ROOT}}') }
+  const normalized = decoder
+    .decode(stderr)
+    .replaceAll(root, '{{ROOT}}')
+    // The tail after this phrase is the RUNTIME's spawn-error wording, not the
+    // guard's. It cannot survive a runtime change and is not part of the
+    // contract; the guard's own sentence and its exit code are, and both stay
+    // pinned. Normalizing here keeps the fixture honest instead of re-baselining
+    // the case until it agrees with whichever runtime ran last.
+    .replace(/(but is not executable: ).*/g, '$1<runtime spawn error>')
+  return { exitCode: code, stderr: normalized }
 }
 
 // Resolves through the parent's PATH, which the harness clears for the child.

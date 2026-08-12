@@ -109,7 +109,7 @@
   },
   "lint-binary-not-executable": {
     "exitCode": 2,
-    "stderr": "oxlint-guard: oxlint binary found at {{ROOT}}/node_modules/.bin/oxlint but is not executable: PermissionDenied: Command.spawn ({{ROOT}}/node_modules/.bin/oxlint --type-aware --type-check -f unix -c {{ROOT}}/oxlint.config.mjs -- {{ROOT}}/src/eacces.ts): EACCES: permission denied, posix_spawn '{{ROOT}}/node_modules/.bin/oxlint'\n"
+    "stderr": "oxlint-guard: oxlint binary found at {{ROOT}}/node_modules/.bin/oxlint but is not executable: <runtime spawn error>\n"
   },
   "lint-clean-allowed": {
     "exitCode": 0,
