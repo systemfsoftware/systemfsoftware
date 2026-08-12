@@ -143,7 +143,7 @@ export const parseOpenAIModel = parser((modelId): OpenAIModel | null => {
  * `parseKnownModel`.
  */
 export const parseGlmModel = parser((modelId): GlmModel | null => {
-	const match = /glm-(\d{1,2}(?:\.\d+)?)(v)?(?:-(air|turbo|flashx|flash|preview))?\b/.exec(modelId);
+	const match = /glm-(\d{1,2}(?:\.\d+)?)(v)?(?:-(air|turbo|flashx|flash|preview))?\b/i.exec(modelId);
 	if (!match) {
 		return null;
 	}
@@ -153,8 +153,8 @@ export const parseGlmModel = parser((modelId): GlmModel | null => {
 	}
 	return {
 		family: "glm",
-		variant: (match[3] as GlmVariant | undefined) ?? "base",
-		vision: match[2] === "v",
+		variant: (match[3]?.toLowerCase() as GlmVariant | undefined) ?? "base",
+		vision: match[2]?.toLowerCase() === "v",
 		version,
 	};
 });
@@ -181,7 +181,9 @@ function createSemVer(major: number, minor: number, patch = 0): SemVer {
 	return { major, minor, patch };
 }
 
-// extend this table if we need anything more than 9.10
+// Fast path for the common 1–2 component versions; anything the table misses
+// (large minors, 3-part versions) parses dynamically below so no future
+// version ever classifies as unknown (the failure class #8256 fixed).
 const precomputeTable: Record<string, SemVer> = {};
 for (let major = 0; major <= 9; major++) {
 	for (let minor = 0; minor <= 10; minor++) {
@@ -192,8 +194,14 @@ for (let major = 0; major <= 9; major++) {
 	precomputeTable[`${major}`] = createSemVer(major, 0, 0);
 }
 
+const SEMVER_PATTERN = /^(\d{1,2})(?:[.-](\d{1,2}))?(?:[.-](\d{1,2}))?$/;
+
 export function parseSemVer(version: string): SemVer | null {
-	return precomputeTable[version] ?? null;
+	const hit = precomputeTable[version];
+	if (hit) return hit;
+	const match = SEMVER_PATTERN.exec(version);
+	if (!match) return null;
+	return createSemVer(Number(match[1]), Number(match[2] ?? 0), Number(match[3] ?? 0));
 }
 
 export function semverGte(left: SemVer | string, right: SemVer | string): boolean {

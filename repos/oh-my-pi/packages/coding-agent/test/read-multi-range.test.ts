@@ -2,8 +2,12 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
+import { Patch, Patcher } from "@oh-my-pi/hashline";
 import type { AgentToolResult } from "@oh-my-pi/pi-agent-core";
 import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
+import { getFileSnapshotStore } from "@oh-my-pi/pi-coding-agent/edit/file-snapshot-store";
+import { HashlineFilesystem } from "@oh-my-pi/pi-coding-agent/edit/hashline/filesystem";
+import { writethroughNoop } from "@oh-my-pi/pi-coding-agent/lsp";
 import type { ClientBridge } from "@oh-my-pi/pi-coding-agent/session/client-bridge";
 import type { ToolSession } from "@oh-my-pi/pi-coding-agent/tools";
 import type { ReadToolDetails } from "@oh-my-pi/pi-coding-agent/tools/read";
@@ -284,5 +288,33 @@ describe("read tool multi-range selector", () => {
 		expect(text).toContain("bridge five");
 		expect(text).not.toContain("bridge three");
 		expect(text).not.toContain("disk one");
+	});
+
+	it("keeps ACP multi-range blanks editable without exposing the EOF sentinel", async () => {
+		const filePath = path.join(tmpDir, "bridge.txt");
+		const bridgeText = "first\n\nlast\n";
+		await fs.writeFile(filePath, bridgeText);
+		const bridge: ClientBridge = {
+			capabilities: { readTextFile: true },
+			readTextFile: async () => bridgeText,
+		};
+		const session = createSession(tmpDir, bridge);
+		const text = textOutput(await new ReadTool(session).execute("call-bridge-eof", { path: `${filePath}:1-2,3-3` }));
+		const header = text.split("\n")[0] ?? "";
+		expect(header).toMatch(/^\[bridge\.txt#[0-9A-F]{4}\]$/);
+		expect(text).toContain("1:first\n2:");
+		expect(text).not.toContain("\n4:");
+
+		const patch = Patch.parse(`${header}\nCUT 2`, { cwd: tmpDir });
+		const filesystem = new HashlineFilesystem({
+			session,
+			writethrough: writethroughNoop,
+			beginDeferredDiagnosticsForPath: () => {
+				throw new Error("deferred diagnostics are unused");
+			},
+		});
+		await new Patcher({ fs: filesystem, snapshots: getFileSnapshotStore(session) }).apply(patch);
+
+		expect(await fs.readFile(filePath, "utf8")).toBe("first\nlast\n");
 	});
 });

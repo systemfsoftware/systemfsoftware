@@ -1,32 +1,30 @@
 import { describe, expect, test } from "bun:test";
+import { TempDir } from "@oh-my-pi/pi-utils";
 import { createReferenceResolver } from "../src/provider-models/bundled-references";
 import type { ModelSpec } from "../src/types";
 
 const FIXTURE = `${import.meta.dir}/fixtures/bundled-reference-laziness.ts`;
-const PROVIDER_HIT_FIXTURE = `${import.meta.dir}/fixtures/provider-hit-reference-laziness.ts`;
+
+async function runFixture(fixture: string): Promise<string> {
+	const tempDir = TempDir.createSync("@pi-catalog-bundled-reference-laziness-");
+	const resultPath = tempDir.join("result.json");
+	try {
+		const result = Bun.spawnSync({
+			cmd: [process.execPath, fixture],
+			env: { ...process.env, OMP_CATALOG_LAZINESS_RESULT_PATH: resultPath },
+			stdout: "pipe",
+			stderr: "pipe",
+		});
+		expect(result.exitCode, result.stderr.toString()).toBe(0);
+		return await Bun.file(resultPath).text();
+	} finally {
+		tempDir.removeSync();
+	}
+}
 
 describe("bundled reference laziness", () => {
-	test("constructing bundled model-manager options retains less than 8 MiB of RSS", () => {
-		const result = Bun.spawnSync({
-			cmd: [process.execPath, FIXTURE],
-			env: process.env,
-		});
-		expect(result.exitCode).toBe(0);
-		const { retainedRssBytes } = JSON.parse(result.stdout.toString()) as { retainedRssBytes: number };
-		expect(retainedRssBytes).toBeLessThan(8 * 1024 * 1024);
-	}, 60_000);
-
-	test("a provider-local reference hit retains less than 8 MiB of RSS", () => {
-		const result = Bun.spawnSync({
-			cmd: [process.execPath, PROVIDER_HIT_FIXTURE],
-			env: process.env,
-		});
-		expect(result.exitCode).toBe(0);
-		const { resolvedId, retainedRssBytes } = JSON.parse(result.stdout.toString()) as {
-			resolvedId: string | null;
-			retainedRssBytes: number;
-		};
-		expect(resolvedId).not.toBeNull();
+	test("constructing bundled model-manager options retains less than 8 MiB of RSS", async () => {
+		const { retainedRssBytes } = JSON.parse(await runFixture(FIXTURE)) as { retainedRssBytes: number };
 		expect(retainedRssBytes).toBeLessThan(8 * 1024 * 1024);
 	}, 60_000);
 

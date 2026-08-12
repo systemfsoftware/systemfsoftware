@@ -38,8 +38,7 @@ import type {
 	MCPTransport,
 } from "./types";
 
-/** MCP protocol version we support */
-const PROTOCOL_VERSION = "2025-03-26";
+import { MCP_PROTOCOL_VERSION } from "./types";
 
 /** Client info sent during initialization */
 const CLIENT_INFO = {
@@ -98,7 +97,7 @@ async function initializeConnection(
 	},
 ): Promise<MCPInitializeResult> {
 	const params: MCPInitializeParams = {
-		protocolVersion: PROTOCOL_VERSION,
+		protocolVersion: MCP_PROTOCOL_VERSION,
 		capabilities: {
 			roots: { listChanged: false },
 		},
@@ -114,6 +113,11 @@ async function initializeConnection(
 	if (options?.signal?.aborted) {
 		throw options.signal.reason instanceof Error ? options.signal.reason : new Error("Aborted");
 	}
+
+	// Echo the negotiated protocol version on every subsequent request. The MCP
+	// Streamable HTTP spec requires the MCP-Protocol-Version header after
+	// initialize; transports that don't need it ignore this.
+	transport.setProtocolVersion?.(result.protocolVersion);
 
 	// Hook point: the transport now has the session ID from the initialize response.
 	// For HTTP, this is the moment to open the SSE stream so server-to-client requests

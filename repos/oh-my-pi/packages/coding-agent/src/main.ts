@@ -1333,6 +1333,10 @@ export async function runRootCommand(
 	if (parsedArgs.advisor) {
 		settingsInstance.override("advisor.enabled", true);
 	}
+	// Apply --external-thinking CLI flag (ephemeral, not persisted)
+	if (parsedArgs.externalThinking) {
+		settingsInstance.override("externalThinking", true);
+	}
 
 	await logger.time(
 		"initTheme:final",
