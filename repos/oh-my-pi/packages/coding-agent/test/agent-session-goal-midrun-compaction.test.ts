@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "bun:test";
 import * as path from "node:path";
 import { type } from "@oh-my-pi/omptype";
 import { Agent, type AgentMessage, type AgentTool } from "@oh-my-pi/pi-agent-core";
@@ -47,7 +47,22 @@ function highUsage(input: number) {
 
 describe("AgentSession mid-run threshold compaction", () => {
 	let tempDir: TempDir;
+	let sharedDir: TempDir;
+	let sharedAuthStorage: AuthStorage;
+	let sharedModelRegistry: ModelRegistry;
 	const cleanups: Array<() => Promise<void>> = [];
+
+	beforeAll(async () => {
+		sharedDir = TempDir.createSync("@pi-agent-goal-midrun-compaction-shared-");
+		sharedAuthStorage = await AuthStorage.create(path.join(sharedDir.path(), "auth.db"));
+		sharedAuthStorage.setRuntimeApiKey("anthropic", "test-key");
+		sharedModelRegistry = new ModelRegistry(sharedAuthStorage, path.join(sharedDir.path(), "models.yml"));
+	});
+
+	afterAll(() => {
+		sharedAuthStorage.close();
+		sharedDir.removeSync();
+	});
 
 	beforeEach(() => {
 		tempDir = TempDir.createSync("@pi-agent-goal-midrun-compaction-");
@@ -73,9 +88,7 @@ describe("AgentSession mid-run threshold compaction", () => {
 		const model = getBundledModel("anthropic", "claude-sonnet-4-5");
 		if (!model) throw new Error("Expected claude-sonnet-4-5 model to exist");
 
-		const authStorage = await AuthStorage.create(path.join(tempDir.path(), `testauth-${cleanups.length}.db`));
-		authStorage.setRuntimeApiKey("anthropic", "test-key");
-		const modelRegistry = new ModelRegistry(authStorage, path.join(tempDir.path(), `models-${cleanups.length}.yml`));
+		const modelRegistry = sharedModelRegistry;
 		const settings = Settings.isolated({
 			"compaction.enabled": true,
 			"compaction.strategy": "context-full",
@@ -148,10 +161,7 @@ describe("AgentSession mid-run threshold compaction", () => {
 			extensionRunner: options.extensionRunner,
 		});
 
-		cleanups.push(async () => {
-			await session.dispose();
-			authStorage.close();
-		});
+		cleanups.push(() => session.dispose());
 		return { session, sessionManager, observedContexts };
 	}
 
@@ -283,16 +293,12 @@ describe("AgentSession mid-run threshold compaction", () => {
 			extensionRuntime,
 			"assistant-display-variant",
 		);
-		const extensionAuthStorage = await AuthStorage.create(path.join(tempDir.path(), "extension-auth-variant.db"));
-		cleanups.push(async () => {
-			extensionAuthStorage.close();
-		});
 		const extensionRunner = new ExtensionRunner(
 			[extension],
 			extensionRuntime,
 			tempDir.path(),
 			SessionManager.inMemory(),
-			new ModelRegistry(extensionAuthStorage, path.join(tempDir.path(), "extension-models-variant.yml")),
+			sharedModelRegistry,
 		);
 		const { session, observedContexts } = await createHarness({}, { extensionRunner });
 		const compactSpy = mockCompaction("MID-RUN-COMPACTED-WITH-CONTENT-VARIANT");

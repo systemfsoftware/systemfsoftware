@@ -101,3 +101,264 @@ describe("MCP Streamable HTTP transport timeouts", () => {
 		});
 	});
 });
+
+describe("MCP Streamable HTTP protocol version header", () => {
+	it("omits MCP-Protocol-Version until the version is negotiated", async () => {
+		const seen: { version: string | null; present: boolean } = { version: null, present: true };
+		server = Bun.serve({
+			port: 0,
+			fetch(req) {
+				seen.present = req.headers.has("MCP-Protocol-Version");
+				seen.version = req.headers.get("MCP-Protocol-Version");
+				return Response.json({ jsonrpc: "2.0", id: 1, result: {} });
+			},
+		});
+		const transport = await connectedTransport();
+
+		// No setProtocolVersion yet: this stands in for the initialize request,
+		// which must not carry the header before negotiation completes.
+		await withPendingGuard(transport.request("initialize"), "request");
+		expect(seen.present).toBe(false);
+		expect(seen.version).toBeNull();
+	});
+
+	it("echoes the negotiated version on requests after setProtocolVersion", async () => {
+		const seen: { version: string | null } = { version: null };
+		server = Bun.serve({
+			port: 0,
+			fetch(req) {
+				seen.version = req.headers.get("MCP-Protocol-Version");
+				return Response.json({ jsonrpc: "2.0", id: 1, result: {} });
+			},
+		});
+		const transport = await connectedTransport();
+		transport.setProtocolVersion("2025-06-18");
+
+		await withPendingGuard(transport.request("tools/list"), "request");
+		expect(seen.version).toBe("2025-06-18");
+	});
+
+	it("never lets a configured MCP-Protocol-Version reach the server", async () => {
+		const seen: { pre: string | null; post: string | null } = { pre: null, post: null };
+		server = Bun.serve({
+			port: 0,
+			fetch(req) {
+				const body = req.headers.get("MCP-Protocol-Version");
+				return Response.json({ jsonrpc: "2.0", id: 1, result: { seen: body } });
+			},
+		});
+		if (!server) throw new Error("Test server was not started");
+		const transport = new HttpTransport({
+			type: "http",
+			url: `http://127.0.0.1:${server.port}/mcp`,
+			timeout: REQUEST_TIMEOUT_MS,
+			headers: { "MCP-Protocol-Version": "1999-01-01" },
+		});
+		await transport.connect();
+
+		// Pre-negotiation: configured header must be stripped, not leaked.
+		seen.pre = await withPendingGuard(transport.request<{ seen: string | null }>("initialize"), "request").then(
+			r => r.seen,
+		);
+		// Post-negotiation: the negotiated version wins over the configured one.
+		transport.setProtocolVersion("2025-11-25");
+		seen.post = await withPendingGuard(transport.request<{ seen: string | null }>("tools/list"), "request").then(
+			r => r.seen,
+		);
+
+		expect(seen.pre).toBeNull();
+		expect(seen.post).toBe("2025-11-25");
+	});
+});
+
+describe("MCP Streamable HTTP POST response resumption", () => {
+	it("resumes a closed response stream with Last-Event-ID after the requested retry delay", async () => {
+		const observed: {
+			lastEventId: string | null;
+			protocolVersion: string | null;
+			postClosedAt: number;
+			resumedAt: number;
+		} = { lastEventId: null, protocolVersion: null, postClosedAt: 0, resumedAt: 0 };
+		server = Bun.serve({
+			port: 0,
+			fetch(req) {
+				if (req.method === "POST") {
+					observed.postClosedAt = performance.now();
+					return new Response("id: stream-1\nretry: 20\ndata:\n\n", {
+						headers: { "Content-Type": "text/event-stream" },
+					});
+				}
+				observed.resumedAt = performance.now();
+				observed.lastEventId = req.headers.get("Last-Event-ID");
+				observed.protocolVersion = req.headers.get("MCP-Protocol-Version");
+				return new Response(
+					'id: stream-2\ndata: {"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"resumed","inputSchema":{"type":"object"}}]}}\n\n',
+					{ headers: { "Content-Type": "text/event-stream" } },
+				);
+			},
+		});
+		if (!server) throw new Error("Test server was not started");
+		const transport = new HttpTransport({
+			type: "http",
+			url: `http://127.0.0.1:${server.port}/mcp`,
+			timeout: GUARD_TIMEOUT_MS,
+		});
+		await transport.connect();
+		transport.setProtocolVersion("2025-11-25");
+
+		await expect(withPendingGuard(transport.request<ToolList>("tools/list"), "request")).resolves.toEqual({
+			tools: [{ name: "resumed", inputSchema: { type: "object" } }],
+		});
+		expect(observed.lastEventId).toBe("stream-1");
+		expect(observed.protocolVersion).toBe("2025-11-25");
+		expect(observed.resumedAt - observed.postClosedAt).toBeGreaterThanOrEqual(15);
+	});
+	it("refreshes auth on a 401 resume GET without replaying the POST", async () => {
+		const observed = { posts: 0, gets: 0, auth: [] as (string | null)[], lastEventId: null as string | null };
+		server = Bun.serve({
+			port: 0,
+			fetch(req) {
+				if (req.method === "POST") {
+					observed.posts++;
+					return new Response("id: stream-1\nretry: 10\ndata:\n\n", {
+						headers: { "Content-Type": "text/event-stream" },
+					});
+				}
+				observed.gets++;
+				observed.auth.push(req.headers.get("Authorization"));
+				observed.lastEventId = req.headers.get("Last-Event-ID");
+				if (req.headers.get("Authorization") !== "Bearer fresh") {
+					return new Response("expired", { status: 401 });
+				}
+				return new Response(
+					'id: stream-2\ndata: {"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"resumed","inputSchema":{"type":"object"}}]}}\n\n',
+					{ headers: { "Content-Type": "text/event-stream" } },
+				);
+			},
+		});
+		if (!server) throw new Error("Test server was not started");
+		const transport = new HttpTransport({
+			type: "http",
+			url: `http://127.0.0.1:${server.port}/mcp`,
+			timeout: GUARD_TIMEOUT_MS,
+			headers: { Authorization: "Bearer stale" },
+		});
+		transport.onAuthError = async () => ({ Authorization: "Bearer fresh" });
+		await transport.connect();
+
+		await expect(withPendingGuard(transport.request<ToolList>("tools/list"), "request")).resolves.toEqual({
+			tools: [{ name: "resumed", inputSchema: { type: "object" } }],
+		});
+		// One POST only: replaying it after the server accepted the request
+		// could double-execute a state-changing tool.
+		expect(observed.posts).toBe(1);
+		expect(observed.gets).toBe(2);
+		expect(observed.auth).toEqual(["Bearer stale", "Bearer fresh"]);
+		expect(observed.lastEventId).toBe("stream-1");
+	});
+
+	it("resumes after an abrupt stream drop once an event ID exists", async () => {
+		// Bun.serve cannot produce a genuine mid-body transport failure in-process
+		// (stream errors surface as clean EOF client-side), so speak raw HTTP: a
+		// chunked response without the terminal chunk, closed mid-body, makes the
+		// client's body read throw.
+		const observed = { posts: 0, lastEventId: null as string | null };
+		const sseChunk = (payload: string): string =>
+			`HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\n\r\n${payload.length.toString(16)}\r\n${payload}\r\n`;
+		const listener = Bun.listen({
+			hostname: "127.0.0.1",
+			port: 0,
+			socket: {
+				data(socket, data) {
+					const request = new TextDecoder().decode(data);
+					if (request.startsWith("POST")) {
+						observed.posts++;
+						// Priming event, then close without the terminal 0-chunk.
+						socket.write(sseChunk("id: stream-1\nretry: 10\ndata:\n\n"));
+						socket.end();
+						return;
+					}
+					if (!request.startsWith("GET")) return;
+					observed.lastEventId = /^Last-Event-ID:\s*(.+)$/im.exec(request)?.[1]?.trim() ?? null;
+					socket.write(
+						`${sseChunk(
+							'id: stream-2\ndata: {"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"resumed","inputSchema":{"type":"object"}}]}}\n\n',
+						)}0\r\n\r\n`,
+					);
+					socket.end();
+				},
+			},
+		});
+		try {
+			const transport = new HttpTransport({
+				type: "http",
+				url: `http://127.0.0.1:${listener.port}/mcp`,
+				timeout: GUARD_TIMEOUT_MS,
+			});
+			await transport.connect();
+
+			await expect(withPendingGuard(transport.request<ToolList>("tools/list"), "request")).resolves.toEqual({
+				tools: [{ name: "resumed", inputSchema: { type: "object" } }],
+			});
+			expect(observed.posts).toBe(1);
+			expect(observed.lastEventId).toBe("stream-1");
+		} finally {
+			listener.stop(true);
+		}
+	});
+});
+
+describe("MCP Streamable HTTP GET listener resumption", () => {
+	it("resumes the long-lived GET stream with Last-Event-ID instead of reconnecting", async () => {
+		const observed = { gets: 0, lastEventIds: [] as (string | null)[] };
+		server = Bun.serve({
+			port: 0,
+			fetch(req) {
+				if (req.method !== "GET") {
+					return Response.json({ jsonrpc: "2.0", id: 1, result: {} });
+				}
+				observed.gets++;
+				observed.lastEventIds.push(req.headers.get("Last-Event-ID"));
+				if (observed.gets === 1) {
+					// Polling-style server: deliver one notification with an
+					// event ID, then close the physical connection.
+					return new Response(
+						'id: poll-1\nretry: 10\ndata: {"jsonrpc":"2.0","method":"notifications/first"}\n\n',
+						{ headers: { "Content-Type": "text/event-stream" } },
+					);
+				}
+				return new Response(
+					new ReadableStream<Uint8Array>({
+						start(controller) {
+							controller.enqueue(
+								encoder.encode('id: poll-2\ndata: {"jsonrpc":"2.0","method":"notifications/second"}\n\n'),
+							);
+							// Held open: the logical stream continues.
+						},
+					}),
+					{ headers: { "Content-Type": "text/event-stream" } },
+				);
+			},
+		});
+		const transport = await connectedTransport();
+		const notifications: string[] = [];
+		let closed = false;
+		const secondNotification = Promise.withResolvers<void>();
+		transport.onNotification = method => {
+			notifications.push(method);
+			if (notifications.length === 2) secondNotification.resolve();
+		};
+		transport.onClose = () => {
+			closed = true;
+		};
+
+		await transport.startSSEListener();
+		await withPendingGuard(secondNotification.promise, "resumed notification");
+
+		expect(notifications).toEqual(["notifications/first", "notifications/second"]);
+		expect(observed.lastEventIds).toEqual([null, "poll-1"]);
+		// The resume replaced the manager-level reconnect: no close fired.
+		expect(closed).toBe(false);
+		await transport.close();
+	});
+});

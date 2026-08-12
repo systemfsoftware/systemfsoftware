@@ -8,4 +8,10 @@ ollamaCloudModelManagerOptions();
 Bun.gc(true);
 const retainedRssBytes = process.memoryUsage().rss - rssBefore;
 
-console.log(JSON.stringify({ retainedRssBytes }));
+const result = JSON.stringify({ retainedRssBytes });
+const resultPath = process.env.OMP_CATALOG_LAZINESS_RESULT_PATH;
+if (resultPath) {
+	await Bun.write(resultPath, result);
+} else {
+	process.stdout.write(result);
+}

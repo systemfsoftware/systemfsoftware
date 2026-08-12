@@ -172,11 +172,13 @@ describe("boundary-balance repair", () => {
 	it("preserves a duplicated opener when it does not account for the imbalance", () => {
 		const file = ["if (a) {", "\tfoo();", "}", "bar();"].join("\n");
 		// Payload duplicates `if (a) {` but is net +2 braces; dropping the one
-		// opener cannot zero the delta, so nothing is repaired.
+		// opener cannot zero the delta, so nothing is repaired — the result is
+		// applied as written and the breakage is reported, not rewritten.
 		const diff = ["PUT 2-2:", "+if (a) {", "+\tif (b) {", "+\t\tfoo();"].join("\n");
 		const { text, warnings } = apply(file, diff);
 		expect(text).toBe(["if (a) {", "if (a) {", "\tif (b) {", "\t\tfoo();", "}", "bar();"].join("\n"));
-		expect(warnings).toHaveLength(0);
+		expect(warnings.some(w => /delimiter-balance/.test(w))).toBe(false);
+		expect(warnings).toEqual([expect.stringContaining("introduced a syntax error")]);
 	});
 
 	// Genuine missing-closer: payload omits the trailing `});`.
@@ -895,5 +897,144 @@ describe("boundary-balance repair through stale-snapshot recovery", () => {
 		expect(recovered?.text).toContain("const tail = 99;");
 		// The repair warning propagates out through the recovery result.
 		expect(recovered?.warnings.some(w => /delimiter-balance/.test(w))).toBe(true);
+	});
+});
+
+// Regressions from a live omp-ar refactor session: two hashline edits broke a
+// Rust file with zero feedback. Both must now surface a warning in the same
+// response, and correctly authored edits on the same shapes must stay silent.
+describe("rust lifetime delimiter counting (the extension() incident)", () => {
+	// `pub const fn extension(self) -> &'static str {` — the `'` of the
+	// lifetime used to enter string state and swallow the trailing `{`, so a
+	// range covering signature + match block looked balance-neutral and the
+	// missing-signature result applied silently.
+	const file = [
+		"/// Archive container format.",
+		"#[derive(Debug, Clone, Copy, PartialEq, Eq)]",
+		"pub enum Format {",
+		"   Zip,",
+		"   Tar,",
+		"   TarGz,",
+		"}",
+		"",
+		"impl Format {",
+		"   /// Returns the canonical filename extension for this format.",
+		"   pub const fn extension(self) -> &'static str {",
+		"      match self {",
+		'         Self::Zip => "zip",',
+		'         Self::Tar => "tar",',
+		'         Self::TarGz => "tar.gz",',
+		"      }",
+		"   }",
+		"}",
+	].join("\n");
+
+	it("flags a range that swallows a lifetime-carrying signature line", () => {
+		// Range 11-16 deletes the signature's `{` (hidden behind `'static`
+		// before the fix) and the match block; payload is only the new body.
+		const { text, warnings } = applyRust(file, "PUT 11.=16:\n+\t\tself.into()");
+		// Applied as authored — advisory, not repair.
+		expect(text).toContain("\t\tself.into()");
+		expect(text).not.toContain("pub const fn extension");
+		expect(warnings.some(w => /deleted 1 opening delimiter/.test(w))).toBe(true);
+		expect(warnings.some(w => /introduced a syntax error/.test(w))).toBe(true);
+	});
+
+	it("stays silent for the correct whole-construct replacement", () => {
+		const diff = [
+			"PUT 11.=17:",
+			"+   pub const fn extension(self) -> &'static str {",
+			"+      self.into()",
+			"+   }",
+		].join("\n");
+		const { warnings } = applyRust(file, diff);
+		expect(warnings).toHaveLength(0);
+	});
+
+	it("stays silent editing below a multi-lifetime signature", () => {
+		// `<'a>(left: &'a str, right: &'a str)` — pairing apostrophes across
+		// lifetimes would swallow the `(` and fabricate a paren delta.
+		const multi = [
+			"fn join<'a>(left: &'a str, right: &'a str) -> String {",
+			'   let out = format!("{left}{right}");',
+			"   out",
+			"}",
+		].join("\n");
+		const { warnings } = applyRust(multi, 'PUT 2.=2:\n+   let out = format!("{left}-{right}");');
+		expect(warnings).toHaveLength(0);
+	});
+
+	it("still lexes rust char literals as literals", () => {
+		// `'{'` / `'}'` in match arms are content, not delimiters.
+		const arms = [
+			"fn depth(c: char, mut n: i32) -> i32 {",
+			"   match c {",
+			"      '{' => n += 1,",
+			"      '}' => n -= 1,",
+			"      _ => {},",
+			"   }",
+			"   n",
+			"}",
+		].join("\n");
+		const { warnings } = applyRust(arms, "PUT 7.=7:\n+   n + 1");
+		expect(warnings).toHaveLength(0);
+	});
+});
+
+describe("post-apply parse advisory (the resolve_alias_path incident)", () => {
+	// A balance-neutral single-line replacement landed on the wrong line — a
+	// `return` swapped onto a method-chain step — leaving no delimiter anomaly
+	// for the repair heuristics. The parse probe is the only witness.
+	const file = [
+		"impl A {",
+		"   fn write_all(&self) -> Result<()> {",
+		"      let paths: Vec<_> = self",
+		"         .entries",
+		"         .iter()",
+		"         .filter(|entry| !entry.is_directory())",
+		"         .map(|entry| entry.path.clone())",
+		"         .collect();",
+		"      Ok(())",
+		"   }",
+		"",
+		"   fn resolve_path(&self, path: Str) -> Result<Str> {",
+		"      if matches!(self.format, Format::Tar | Format::TarGz) {",
+		"         return tar::resolve_alias_path(&self.entries, path);",
+		"      }",
+		"      Ok(path)",
+		"   }",
+		"}",
+	].join("\n");
+	const misplaced = "PUT 7.=7:\n+\t\t\treturn tar::resolve_alias_path(&self.entries, path, self.limits);";
+
+	it("warns when a balance-neutral edit stops the file parsing", () => {
+		const { text, warnings } = applyRust(file, misplaced);
+		// Applied as authored; the warning names the landing line.
+		expect(text).toContain("return tar::resolve_alias_path(&self.entries, path, self.limits);");
+		expect(warnings).toEqual([expect.stringContaining("introduced a syntax error near line 7")]);
+	});
+
+	it("stays silent when the same statement lands on the intended line", () => {
+		const { warnings } = applyRust(
+			file,
+			"PUT 14.=14:\n+         return tar::resolve_alias_path(&self.entries, path, self.limits);",
+		);
+		expect(warnings).toHaveLength(0);
+	});
+
+	it("casts no advisory when the baseline was already broken", () => {
+		// Mid-refactor file that never parsed: the edit did not cause the
+		// damage, so reporting it would be noise.
+		const broken = ["impl A {", "   fn half(", "   let x = 1;"].join("\n");
+		const { warnings } = applyRust(broken, "PUT 3.=3:\n+   let x = 2;");
+		expect(warnings).toHaveLength(0);
+	});
+
+	it("casts no advisory for languages the probe cannot parse", () => {
+		// Markdown braces are prose; `parsesCleanly` never vouches for the
+		// baseline, so breakage cannot be attributed to the edit.
+		const prose = ["# Title", "", "Uses { braces } freely.", "Done."].join("\n");
+		const { warnings } = applyProse(prose, "PUT 4.=4:\n+Still { unbalanced");
+		expect(warnings).toHaveLength(0);
 	});
 });

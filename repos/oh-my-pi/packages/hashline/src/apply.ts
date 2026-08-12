@@ -15,6 +15,7 @@ import {
 	ambiguousCloserSpareMessage,
 	ambiguousLeadingCloserSpareMessage,
 	blockInsertLandingShiftWarning,
+	editBrokeParseWarning,
 	midBlockRangeWarning,
 	REPLACEMENT_INDENT_AUTO_SHIFT_WARNING,
 	UNRESOLVED_BLOCK_INTERNAL,
@@ -258,12 +259,37 @@ interface DelimiterBalance {
 }
 
 /**
+ * Single-quote lexing mode for {@link computeDelimiterBalance}. `"literal"`:
+ * `'…'` is a same-line string (JS/Python/C-like default, the original
+ * behavior). `"rust"`: `'` opens a literal only when it lexes as a Rust char
+ * literal (`'a'`, `'\n'`, `'\u{7FFF}'`); any other `'` is a lifetime or
+ * apostrophe and stays an ordinary character — pairing arbitrary apostrophes
+ * would swallow real delimiters between two lifetimes (`<'a>(x: &'a str)`
+ * loses the `(`), and quote-state-to-EOL hides the opener on signature lines
+ * (`&'static str {` — the `extension()` incident).
+ *
+ * Module-scoped rather than threaded: the scan helpers are a dozen pure free
+ * functions all rooted in the synchronous `applyEdits` call, which sets the
+ * mode from its target path on every entry.
+ */
+let singleQuoteMode: "literal" | "rust" = "literal";
+
+/** Set {@link singleQuoteMode} from the target file's extension. */
+function setDelimiterScanLanguage(path: string | undefined): void {
+	singleQuoteMode = path?.endsWith(".rs") ? "rust" : "literal";
+}
+
+/** Rust char literal at one position: `'a'`, `'\n'`, `'\x41'`, `'\u{7FFF}'`. */
+const RUST_CHAR_LITERAL_RE = /^'(?:\\u\{[0-9a-fA-F_]{1,6}\}|\\x[0-9a-fA-F]{2}|\\.|[^\\'])'/;
+
+/**
  * Net `()` / `[]` / `{}` delta across `lines`, skipping delimiters inside line
  * comments (`//`), block comments, and string/template literals. Block-comment
  * and backtick-template state carry across lines; `"` / `'` reset at EOL since
- * they cannot span lines. Deliberately language-light: constructs it cannot
- * classify (e.g. regex literals) are counted naively, which can only suppress a
- * repair (the safe direction), never force one.
+ * they cannot span lines. Single-quote handling follows the target language
+ * (see {@link singleQuoteMode}). Deliberately language-light otherwise:
+ * constructs it cannot classify (e.g. regex literals) are counted naively,
+ * which can only suppress a repair (the safe direction), never force one.
  */
 function computeDelimiterBalance(lines: readonly string[]): DelimiterBalance {
 	const balance: DelimiterBalance = { paren: 0, bracket: 0, brace: 0 };
@@ -282,6 +308,13 @@ function computeDelimiterBalance(lines: readonly string[]): DelimiterBalance {
 			if (quote) {
 				if (ch === "\\") i++;
 				else if (ch === quote) quote = "";
+				continue;
+			}
+			if (ch === "'" && singleQuoteMode === "rust") {
+				// A real char literal is skipped whole; a lifetime (`'static`,
+				// `<'a>`) or apostrophe is an ordinary character.
+				const literal = RUST_CHAR_LITERAL_RE.exec(line.slice(i));
+				if (literal) i += literal[0].length - 1;
 				continue;
 			}
 			if (ch === '"' || ch === "'" || ch === "`") {
@@ -1600,6 +1633,7 @@ function materializeEdits(originalLines: readonly string[], edits: readonly Appl
  */
 export function applyEdits(text: string, edits: readonly Edit[], options: ApplyEditsOptions = {}): ApplyResult {
 	if (edits.length === 0) return { text, firstChangedLine: undefined };
+	setDelimiterScanLanguage(options.path);
 
 	const fileLines = text.split("\n");
 
@@ -1633,6 +1667,14 @@ export function applyEdits(text: string, edits: readonly Edit[], options: ApplyE
 	const authored = repairReplacementBoundaries(targetEdits, fileLines, false);
 	const finish = (result: Materialized, warnings: string[]): ApplyResult => {
 		const merged = [...warnings, ...result.warnings];
+		// Post-apply syntax advisory: the result stopped parsing while the
+		// pre-edit text parsed, so this patch demonstrably introduced the
+		// error. Catches balance-neutral misplacements (a statement swapped
+		// onto the wrong line) that no delimiter heuristic can see. Both
+		// probes are content-cached; a pathless call short-circuits to false.
+		if (!parsesCleanly(options.path, result.text) && parsesCleanly(options.path, text)) {
+			merged.push(editBrokeParseWarning(result.firstChangedLine));
+		}
 		return {
 			text: result.text,
 			firstChangedLine: result.firstChangedLine,

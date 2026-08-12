@@ -76,6 +76,21 @@ describe("parseAnthropicModel", () => {
 		});
 		expect(parseAnthropicModel("anthropic--claude-4.8-haiku")).toBeNull();
 	});
+
+	test("parses versions past the precompute table instead of classifying the model unknown", () => {
+		// The semver precompute table gates parsing; a too-small bound silently
+		// downgraded `claude-opus-5-11`-shaped ids to unknown (#8256 class).
+		expect(parseAnthropicModel("claude-opus-5-11")).toEqual({
+			family: "anthropic",
+			kind: "opus",
+			version: { major: 5, minor: 11, patch: 0 },
+		});
+		expect(parseAnthropicModel("claude-sonnet-4.25")).toEqual({
+			family: "anthropic",
+			kind: "sonnet",
+			version: { major: 4, minor: 25, patch: 0 },
+		});
+	});
 });
 
 describe("supportsAdaptiveThinkingDisplay", () => {
@@ -226,6 +241,17 @@ describe("isReasoningGlmModelId", () => {
 		expect(isReasoningGlmModelId("glm-4.7-flashx")).toBe(false);
 		expect(isReasoningGlmModelId("glm-4.5v")).toBe(false);
 		expect(isReasoningGlmModelId("qwen3.5")).toBe(false);
+	});
+
+	test("matches uppercase provider-prefixed GLM ids", () => {
+		// Baseten, CoreWeave, HuggingFace, etc. serve GLM under uppercase ids.
+		expect(isReasoningGlmModelId("zai-org/GLM-5.2")).toBe(true);
+		expect(isReasoningGlmModelId("zai-org/GLM-5.2-Fast")).toBe(true);
+		expect(isReasoningGlmModelId("zai-org/GLM-4.7")).toBe(true);
+		expect(isReasoningGlmModelId("zai-org/GLM-4.5-Air")).toBe(true);
+		expect(isReasoningGlmModelId("zai-org/GLM-5-Turbo")).toBe(true);
+		// Vision SKUs are still excluded even in uppercase.
+		expect(isReasoningGlmModelId("zai-org/GLM-4.5V")).toBe(false);
 	});
 });
 

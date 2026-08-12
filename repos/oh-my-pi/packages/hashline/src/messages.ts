@@ -367,6 +367,25 @@ export function midBlockRangeWarning(startLine: number, endLine: number, orphane
 }
 
 /**
+ * The applied result no longer parses while the pre-edit content did: the
+ * patch introduced a syntax error. Advisory, never a rejection — the applier
+ * honors the authored edit — but the breakage is machine-confirmed (the
+ * tree-sitter probe parsed the original and rejects the result), so it is
+ * surfaced in the same response instead of waiting for a compiler pass. The
+ * classic trigger is a balance-neutral misplacement: a statement landed on
+ * the wrong line number with no delimiter anomaly for the repair heuristics
+ * to notice.
+ */
+export function editBrokeParseWarning(firstChangedLine: number | undefined): string {
+	const at = firstChangedLine === undefined ? "" : ` near line ${firstChangedLine}`;
+	return (
+		`This edit introduced a syntax error${at}: the file parsed before the patch and no longer does. ` +
+		`It was applied exactly as written, so a line number or range endpoint is likely wrong — ` +
+		`re-read the touched region and re-issue a correcting edit.`
+	);
+}
+
+/**
  * Internal invariant: `applyEdits` received an unresolved block edit;
  * `resolveBlockEdits` must run first.
  */

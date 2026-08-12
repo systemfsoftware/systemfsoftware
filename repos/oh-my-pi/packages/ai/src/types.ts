@@ -479,6 +479,12 @@ export interface StreamOptions {
 	 */
 	statefulResponses?: boolean;
 	/**
+	 * Disable native reasoning when the caller supplies an external scratchpad.
+	 * OpenAI Responses emits `reasoning: { effort: "none" }`; Anthropic and
+	 * Google transports use their native thinking-off controls.
+	 */
+	forceReasoningOff?: boolean;
+	/**
 	 * Provider-scoped mutable state store for this agent session.
 	 * Providers can use this to persist transport/session state between turns.
 	 */
@@ -552,6 +558,13 @@ export interface StreamOptions {
 	 * Optional retry delay hook for tests and transports that need custom scheduling.
 	 */
 	providerRetryWait?: (delayMs: number, signal?: AbortSignal) => Promise<void>;
+	/**
+	 * Accept a Google `STOP` response with no visible text or tool call as a
+	 * successful completion. Passive callers such as advisors use this because
+	 * silence is a valid result; interactive agent turns retain empty-response
+	 * retries by default. Ignored by non-Google providers.
+	 */
+	acceptEmptyResponse?: boolean;
 	/**
 	 * Optional `fetch` implementation override. Providers route every HTTP
 	 * request — direct calls, SDK clients, and retry helpers — through this
