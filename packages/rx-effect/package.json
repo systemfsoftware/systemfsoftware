@@ -41,7 +41,7 @@
     "typecheck": "tsc --noEmit --incremental",
     "test": "vitest run",
     "test:run": "vitest run",
-    "lint": "oxlint . ${AGENT:+--format=unix --quiet}",
+    "lint": "oxlint . --format=${OXLINT_FORMAT:-default}",
     "attw": "attw --pack .",
     "api:check": "api-extractor run",
     "api:update": "api-extractor run --local"

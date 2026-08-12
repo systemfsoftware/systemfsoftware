@@ -14,17 +14,22 @@ jobs:
     env:
       NODE_OPTIONS: "--max-old-space-size=4096"
       CI: "true"
+      OXLINT_FORMAT: github
+      TSGO_FORMAT: github-actions
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 2
       - uses: ./.github/actions/install-deps
-      # Annotations only (`--format=github`); turbo cannot pass that from a multi-task run.
-      # Never fail-fast here: continue-on-error keeps a lint failure from skipping the Gate,
-      # which re-runs the same checks under check:ci --continue and reports every failure.
-      - name: Lint (GitHub annotations)
-        run: corepack pnpm lint:ci
-        continue-on-error: true
+      # `check:turbo-graph` runs a deno-shebang script; the gate job has no deno otherwise.
+      - uses: denoland/setup-deno@v2
+      - name: Turbo cache
+        uses: actions/cache@v4
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-
       # Root package.json `check:ci` is the one definition. Never re-enumerate its steps here.
       - name: Gate
         run: corepack pnpm check:ci

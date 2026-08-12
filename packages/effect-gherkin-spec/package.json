@@ -43,7 +43,7 @@
     "test": "vitest run",
     "test:run": "vitest run",
     "test:types": "tstyche",
-    "lint": "oxlint . ${AGENT:+--format=unix --quiet}",
+    "lint": "oxlint . --format=${OXLINT_FORMAT:-default}",
     "attw": "attw --pack ."
   },
   "devDependencies": {

@@ -40,7 +40,7 @@
     "clean": "rimraf dist",
     "build": "tsdown && pnpm dts:check",
     "typecheck": "tsc --noEmit --incremental",
-    "lint": "oxlint . --config oxlint.config.ts",
+    "lint": "oxlint . --config oxlint.config.ts --format=${OXLINT_FORMAT:-default}",
     "lint:tsgo": "effect-tsgo diagnostics --project tsconfig.json --format ${TSGO_FORMAT:-text}",
     "attw": "attw --pack .",
     "dts:check": "node scripts/check-dts.mjs",

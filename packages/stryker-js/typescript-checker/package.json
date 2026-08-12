@@ -22,7 +22,7 @@
     "build": "tsdown",
     "typecheck": "tsc --noEmit --incremental",
     "test": "vitest run",
-    "lint": "oxlint ."
+    "lint": "oxlint . --format=${OXLINT_FORMAT:-default}"
   },
   "license": "Apache-2.0",
   "dependencies": {

@@ -37,7 +37,7 @@
     "typecheck": "tsc --noEmit --incremental",
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
-    "lint": "oxlint . --config oxlint.config.ts",
+    "lint": "oxlint . --config oxlint.config.ts --format=${OXLINT_FORMAT:-default}",
     "lint:tsgo": "effect-tsgo diagnostics --project tsconfig.json --format ${TSGO_FORMAT:-text}",
     "attw": "attw --pack .",
     "dts:check": "tsc --noEmit -p tsconfig.dts.json"

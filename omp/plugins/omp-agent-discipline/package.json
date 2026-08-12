@@ -21,7 +21,7 @@
     "clean": "rimraf dist",
     "typecheck": "tsc --noEmit --incremental",
     "test": "vitest run",
-    "lint": "oxlint . ${AGENT:+--format=unix --quiet}"
+    "lint": "oxlint . --format=${OXLINT_FORMAT:-default}"
   },
   "peerDependencies": {
     "@effect/cluster": "catalog:",
