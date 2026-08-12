@@ -54,13 +54,13 @@
     "@andrewbranch/untar.js": "^1.0.3",
     "@effect/platform": "catalog:",
     "@loaderkit/resolve": "^1.0.2",
-    "cjs-module-lexer": "^1.2.3",
+    "cjs-module-lexer": "^2.2.0",
     "effect": "catalog:",
     "fflate": "^0.8.3",
     "lru-cache": "^11.0.1",
     "semver": "^7.5.4",
     "typescript": "catalog:attw",
-    "validate-npm-package-name": "^5.0.0"
+    "validate-npm-package-name": "^8.0.0"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",

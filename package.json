@@ -40,7 +40,7 @@
 
     "@std/jsonc": "catalog:",
     "@systemfsoftware/stryker-js-cli": "workspace:^",
-    "concurrently": "^9.2.1",
+    "concurrently": "^10.0.4",
     "dprint": "^0.54.0",
     "estree-walker": "^3",
     "husky": "^9.1.7",
