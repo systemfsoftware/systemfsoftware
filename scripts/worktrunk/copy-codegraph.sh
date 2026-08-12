@@ -29,6 +29,18 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORKTREE_PATH="${1:?worktree_path required}"
 PRIMARY_PATH="${2:-$(resolve_primary_repo "$WORKTREE_PATH" 2>/dev/null)}"
 
+# Provision the worktree's codegraph MCP entry (instance + worktree-local
+# .mcp.json pointing at the instance's HOST socket). Best-effort: runs even
+# when the index copy below is skipped (re-run, no separate primary). The
+# shared omp-container mcp.json entry is container-scoped (/tmp/codegraph.sock
+# — mounted per-CWD by the omp wrapper); a host-side agent running in the
+# worktree (Claude Code / opencode reading project-root .mcp.json) needs the
+# host socket path. The provisioner is VENDORED next to this script (no user
+# config or harness paths referenced from the repo); re-vendor it from the
+# omp-infra-bootstrap skill when that script changes.
+"$SCRIPT_DIR/codegraph-worktree-mcp.sh" "$WORKTREE_PATH" \
+  || echo "copy-codegraph: codegraph MCP provisioning skipped (rc=$?)"
+
 if [[ -z "$PRIMARY_PATH" || "$PRIMARY_PATH" == "$WORKTREE_PATH" ]]; then
     echo "copy-codegraph: no separate primary worktree, skipping"
     exit 0
