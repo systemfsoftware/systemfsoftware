@@ -27,3 +27,5 @@ research
 .eval/
 # Cell-taxonomy corpus — internal, never published
 docs/cell-taxonomy/
+# Generated per-worktree MCP config (codegraph host socket) — machine-specific
+.mcp.json
