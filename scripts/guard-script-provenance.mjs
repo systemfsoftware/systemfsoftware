@@ -42,11 +42,15 @@
 //     category is one of four. It does NOT check that the reason is true. The
 //     reason is prose a human reads in the diff; presence is the whole machine
 //     claim.
+//   - Arm 3 counts entries, not cost. It cannot see a gate's false-positive rate
+//     or its wall clock; those stay with the reviewer under REPO-S7. What it does
+//     see is the number growing, which is the part that used to arrive unnoticed.
 //   - `local-tooling` extends REPO-S6's three named categories (workspace
 //     layout, release metadata, vendored trees). Stated here rather than
 //     smuggled: REPO-S6 governs ENFORCEMENT channels, and a developer
 //     convenience wired into no chain enforces nothing.
 
+import { parse as parseJsonc } from '@std/jsonc'
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname, join, relative } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -259,7 +263,39 @@ const scan = (root) => {
     for (const hit of hits) reads.push({ file: rel, ...hit })
   }
 
-  return { badCategories, filesScanned: present.length, reads, stale, unlisted }
+  const rootScripts = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).scripts ?? {}
+  const turboConfig = parseJsonc(readFileSync(join(root, 'turbo.json'), 'utf8'))
+  const gateEntries = countGateEntries(rootScripts, turboConfig)
+
+  return { badCategories, filesScanned: present.length, gateEntries, reads, stale, unlisted }
+}
+
+// Arm 3 -- is the gate suite inside its budget?
+//   For N entries each misfiring independently with probability p, a clean run is
+//   blocked with probability 1-(1-p)^N, so affordability is N x p and never N. A
+//   ceiling makes growth arrive as a diff instead of as one more plausible guard,
+//   because deletion otherwise produces no artifact and addition always does.
+//   Measured 2026-08-11: nine entries here, and the tenth slot is `check:turbo-graph`
+//   from the in-flight turbo-graph change -- which is why the ceiling is ten rather
+//   than nine, and why raising it again is its own commit stating the new entry's
+//   technique class and the suite's resulting aggregate (REPO-S7).
+const GATE_BUDGET = 10
+
+const GATE_CHAIN = ['check:ci', 'check:local']
+const SCRIPT_FILE = /scripts\/[a-z0-9-]+\.(?:mjs|ts)\b/
+
+/**
+ * Every entry the gate runs: the root `//#check:*` turbo tasks plus the root
+ * script steps the chain invokes. Both forms count, because counting only the
+ * turbo tasks would let the next entry arrive as a `pnpm` step and pay nothing.
+ */
+const countGateEntries = (rootScripts, turboConfig) => {
+  const tasks = Object.keys(turboConfig.tasks ?? {}).filter((name) => name.startsWith('//#check:'))
+  const chain = GATE_CHAIN.map((name) => rootScripts[name] ?? '').join(' ')
+  const steps = Object.keys(rootScripts).filter((name) =>
+    !GATE_CHAIN.includes(name) && SCRIPT_FILE.test(rootScripts[name] ?? '') && chain.includes(`pnpm ${name}`)
+  )
+  return [...tasks, ...steps].sort()
 }
 
 const FIXTURES = [
@@ -304,16 +340,36 @@ const selftest = () => {
   const live = scan(repoRoot)
   if (live.filesScanned < 10) failures.push(`  reach: scanned only ${live.filesScanned} entries in scripts/`)
 
+  const overBudget = countGateEntries(
+    { 'check:ci': 'pnpm gate:extra || s=1', 'gate:extra': 'node scripts/guard-extra.mjs' },
+    { tasks: Object.fromEntries(Array.from({ length: GATE_BUDGET }, (_, i) => [`//#check:t${i}`, {}])) },
+  )
+  if (overBudget.length !== GATE_BUDGET + 1) {
+    failures.push(`  budget: expected ${GATE_BUDGET + 1} entries over budget, got ${overBudget.length}`)
+  }
+
+  const unreferenced = countGateEntries(
+    { 'check:ci': 'turbo lint', 'bench:local': 'node scripts/bench-mutation.mjs' },
+    { tasks: { '//#check:one': {} } },
+  )
+  if (unreferenced.join() !== '//#check:one') {
+    failures.push(`  budget: a script step the chain never invokes must not count, got ${unreferenced.join()}`)
+  }
+
+  if (live.gateEntries.length > GATE_BUDGET) {
+    failures.push(`  budget: the live gate is already over budget (${live.gateEntries.length} > ${GATE_BUDGET})`)
+  }
+
   if (failures.length > 0) {
     console.error('guard-script-provenance: selftest FAILED\n')
     console.error(failures.join('\n'))
     process.exit(1)
   }
-  console.log(`guard-script-provenance: selftest ok (${FIXTURES.length + 5} fixtures)`)
+  console.log(`guard-script-provenance: selftest ok (${FIXTURES.length + 8} fixtures)`)
 }
 
 const run = () => {
-  const { badCategories, filesScanned, reads, stale, unlisted } = scan(repoRoot)
+  const { badCategories, filesScanned, gateEntries, reads, stale, unlisted } = scan(repoRoot)
   let failed = false
 
   if (reads.length > 0) {
@@ -364,8 +420,24 @@ const run = () => {
     console.error(`\nPermitted categories: ${[...CATEGORIES].join(', ')}`)
   }
 
+  if (gateEntries.length > GATE_BUDGET) {
+    failed = true
+    console.error(`\nguard-script-provenance: ${gateEntries.length} gate entries, budget ${GATE_BUDGET}\n`)
+    for (const entry of gateEntries) console.error(`  ${entry}`)
+    console.error(
+      `\nAffordability is N x p, never N: for N entries each misfiring with probability p a\n` +
+        `clean run is blocked with probability 1-(1-p)^N, so the entry you are adding raises\n` +
+        `the false-positive requirement on every entry already here. Retire or subsume one,\n` +
+        `or give the rule to a published artifact (REPO-S6). Raising GATE_BUDGET is its own\n` +
+        `commit, and it states the new entry's technique class and the resulting aggregate.`,
+    )
+  }
+
   if (failed) process.exit(1)
-  console.log(`guard-script-provenance: ${filesScanned} entr(y/ies) in scripts/ declared, no doctrine reads`)
+  console.log(
+    `guard-script-provenance: ${filesScanned} entr(y/ies) in scripts/ declared, no doctrine reads, ` +
+      `${gateEntries.length}/${GATE_BUDGET} gate entries`,
+  )
 }
 
 // Entry point. Runs only when executed directly, not when imported.
@@ -374,4 +446,4 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   else run()
 }
 
-export { checkCategories, checkClosedSet, findDoctrineReads, findDoctrineReadsShell, scan }
+export { checkCategories, checkClosedSet, countGateEntries, findDoctrineReads, findDoctrineReadsShell, scan }

@@ -7,10 +7,10 @@ This package is the ONE-SHOT bundle: a consumer installs `@systemfsoftware/oxlin
 ```yaml
 - id: ED1
   title: Aggregation is tested, not trusted
-  do: keep the colocated suite at src/__tests__/ green — it imports the real source plugins and asserts (a) no two sources share a rule name, (b) core is absent, (c) every source-recommended rule is enabled under this bundle's own plugin name and workflow-inline-schemas stays registered-but-unrecommended
-  dont: delete the suite, reintroduce fixture plugins, or special-case a source's rule names — the collision guard exists because a plain object spread silently drops duplicates
+  do: verify, on every change to `src/index.ts`, that (a) no two sources share a rule name, (b) core is absent, (c) every source-recommended rule is enabled under this bundle's own plugin name and workflow-inline-schemas stays registered-but-unrecommended; a colocated suite at `src/__tests__/` importing the real source plugins is the mechanization this is waiting for
+  dont: drop the collision check, reintroduce fixture plugins, or special-case a source's rule names — the check exists because a plain object spread silently drops duplicates
   harm: seventeen real sources aggregated by hand WILL collide eventually; a dropped duplicate either fails the bundle (missing rule) or, worse, silently overrides an identically-named rule from a sibling source — the suite is the only thing that names the colliding rule and both owners
-  check: `test -d src/__tests__` — currently RED: the suite this rule names does not exist, so the collision guard is unenforced; until it lands, review — no two sources in the bundle entrypoint share a rule name, core is absent, every source-recommended rule is enabled under the bundle's own plugin name, and workflow-inline-schemas stays registered-but-unrecommended
+  check: review — no two sources in the bundle entrypoint share a rule name, core is absent, every source-recommended rule is enabled under the bundle's own plugin name, and workflow-inline-schemas stays registered-but-unrecommended. Reviewer-checked, not mechanized: `src/__tests__/` does not exist, and naming a command here that no one can run green would make this rule look enforced while proving nothing
 
 - id: ED2
   title: Core is excluded by contract
