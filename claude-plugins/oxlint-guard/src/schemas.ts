@@ -38,8 +38,7 @@ export interface EditCommand {
   readonly toolInput: Readonly<Record<string, unknown>>
 }
 
-export const isEditToolName = (value: string): value is EditToolName =>
-  EDIT_TOOL_NAMES.some((name) => name === value)
+export const isEditToolName = (value: string): value is EditToolName => EDIT_TOOL_NAMES.some((name) => name === value)
 
 export const isLintableExtension = (value: string): value is LintableExtension =>
   LINTABLE_EXTENSIONS.some((extension) => extension === value)

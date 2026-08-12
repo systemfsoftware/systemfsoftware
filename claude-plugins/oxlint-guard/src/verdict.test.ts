@@ -6,7 +6,7 @@ import type { Result } from './result.ts'
 import type { FilePath } from './schemas.ts'
 import { decodeEditCommand } from './schemas.ts'
 import type { CannotVerify, Verdict } from './verdict.ts'
-import { DecideCommand, decide } from './verdict.ts'
+import { decide, DecideCommand } from './verdict.ts'
 
 const pathOf = (value: string): FilePath => {
   const decoded = decodeEditCommand(JSON.stringify({ tool_name: 'Edit', tool_input: { file_path: value } }))

@@ -1,7 +1,6 @@
 import fc from 'fast-check'
-import type { ExtractionCommand } from './extraction.ts'
-import { extractPairs, PairsDecision } from './extraction.ts'
-import type { Extractable, ExtractionEither } from './extraction.ts'
+import type { Extractable, ExtractionCommand, ExtractionEither, PairsDecision } from './extraction.ts'
+import { extractPairs } from './extraction.ts'
 import type { EditCommand } from './schemas.ts'
 import { decodeEditCommand } from './schemas.ts'
 
@@ -15,15 +14,16 @@ const makeCommand = (toolName: string, toolInput: Record<string, unknown>, fileP
   return decoded
 }
 
-const commandOf = (command: EditCommand, diskContent: string | undefined): ExtractionCommand =>
-  ({ command, diskContent })
+const commandOf = (command: EditCommand, diskContent: string | undefined): ExtractionCommand => ({
+  command,
+  diskContent,
+})
 
 const diskArb = fc.option(fc.string(), { nil: undefined })
 
 const isPairs = (
   result: ExtractionEither,
-): result is { readonly ok: true; readonly value: PairsDecision } =>
-  result.ok && result.value._tag === 'Pairs'
+): result is { readonly ok: true; readonly value: PairsDecision } => result.ok && result.value._tag === 'Pairs'
 
 const newSideOf = (result: Extract<Extractable, { readonly _tag: 'Pairs' }>): string => result.pairs[0].newSide
 
@@ -64,7 +64,9 @@ Deno.test('Edit shape: ∀e_EditFirstOccurrence_=Replaced', () => {
 Deno.test('Edit shape: ∀e_EditWithoutDisk_=Unrecoverable', () => {
   fc.assert(
     fc.property(fc.string(), fc.string(), (oldString, newString) => {
-      const result = extractPairs(commandOf(makeCommand('Edit', { old_string: oldString, new_string: newString }), undefined))
+      const result = extractPairs(
+        commandOf(makeCommand('Edit', { old_string: oldString, new_string: newString }), undefined),
+      )
       return !result.ok
     }),
   )

@@ -1,7 +1,7 @@
 import * as fc from 'fast-check'
 import * as v from 'valibot'
 import { decideLintPlan, type LintFacts, type LintPlanDecision } from './lint-plan.ts'
-import { LINTABLE_EXTENSIONS, ToolNameSchema, type ToolName } from './schemas.ts'
+import { LINTABLE_EXTENSIONS, type ToolName, ToolNameSchema } from './schemas.ts'
 
 // The lockfile -> install command contract, stated independently of the workflow's
 // private mapping so a drift in either side fails this test.
@@ -58,6 +58,7 @@ const arbitraryLintFacts: fc.Arbitrary<LintFacts> = fc.record({
   configPath: arbitraryOptionString,
   oxlintBinary: arbitraryOptionString,
   lockfile: arbitraryOptionString,
+  denoConfig: arbitraryOptionString,
 })
 
 const tagOf = (decision: LintPlanDecision): string => (decision.ok ? decision.value._tag : decision.error._tag)
@@ -71,6 +72,7 @@ const noBinaryFacts = (lockfile: string | undefined): LintFacts => ({
   configPath: '/p/oxlint.config.mjs',
   oxlintBinary: undefined,
   lockfile,
+  denoConfig: undefined,
 })
 
 Deno.test('∀facts_FileMissingSkip_=Skip — a missing file always skips with reason file-missing', () => {
@@ -93,8 +95,11 @@ Deno.test('∀facts_NonLintableExtensionSkip_=Skip — a non-lintable extension 
 
 Deno.test('∀facts_NonLintablePrecedence_=Skip — a non-lintable extension precedes every later arm', () => {
   fc.assert(
-    fc.property(arbitraryLintFacts, arbitraryNonLintableExtension, (facts, extension) =>
-      tagOf(decideLintPlan({ ...facts, exists: true, extension })) === 'Skip'),
+    fc.property(
+      arbitraryLintFacts,
+      arbitraryNonLintableExtension,
+      (facts, extension) => tagOf(decideLintPlan({ ...facts, exists: true, extension })) === 'Skip',
+    ),
   )
 })
 
@@ -123,27 +128,54 @@ Deno.test('∀facts_DenoShebangPrecedence_=RunDeno — a deno shebang precedes t
       arbitraryLintableExtension,
       arbitraryDenoShebang,
       (facts, extension, firstLine) =>
-        tagOf(decideLintPlan({ ...facts, exists: true, extension, firstLine, configPath: undefined, oxlintBinary: undefined })) ===
-        'RunDeno',
+        tagOf(
+          decideLintPlan({
+            ...facts,
+            exists: true,
+            extension,
+            firstLine,
+            configPath: undefined,
+            oxlintBinary: undefined,
+          }),
+        ) ===
+          'RunDeno',
     ),
   )
 })
 
-Deno.test('∀facts_NonDenoShebang_≠RunDeno — a non-deno first line never routes to RunDeno', () => {
+Deno.test('∀facts_NonDenoShebang_≠RunDeno — outside a deno workspace, a non-deno first line never routes to RunDeno', () => {
   fc.assert(
-    fc.property(arbitraryLintFacts, arbitraryLintableExtension, arbitraryNonDenoFirstLine, (facts, extension, firstLine) => {
-      const decision = decideLintPlan({ ...facts, exists: true, extension, firstLine })
-      return !decision.ok || decision.value._tag !== 'RunDeno'
-    }),
+    fc.property(
+      arbitraryLintFacts,
+      arbitraryLintableExtension,
+      arbitraryNonDenoFirstLine,
+      (facts, extension, firstLine) => {
+        const decision = decideLintPlan({ ...facts, exists: true, extension, firstLine, denoConfig: undefined })
+        return !decision.ok || decision.value._tag !== 'RunDeno'
+      },
+    ),
   )
 })
 
-Deno.test('∀facts_NoConfigFailure_=InstallHint — a missing config fails with the lockfile-derived hint', () => {
+Deno.test('∀facts_NoConfigFailure_=InstallHint — a missing config outside a deno workspace fails with the hint', () => {
   fc.assert(
-    fc.property(arbitraryLintFacts, arbitraryLintableExtension, arbitraryNonDenoFirstLine, (facts, extension, firstLine) => {
-      const decision = decideLintPlan({ ...facts, exists: true, extension, firstLine, configPath: undefined })
-      return !decision.ok && decision.error._tag === 'NoOxlintConfig' && decision.error.installHint === hintFor(facts.lockfile)
-    }),
+    fc.property(
+      arbitraryLintFacts,
+      arbitraryLintableExtension,
+      arbitraryNonDenoFirstLine,
+      (facts, extension, firstLine) => {
+        const decision = decideLintPlan({
+          ...facts,
+          exists: true,
+          extension,
+          firstLine,
+          configPath: undefined,
+          denoConfig: undefined,
+        })
+        return !decision.ok && decision.error._tag === 'NoOxlintConfig' &&
+          decision.error.installHint === hintFor(facts.lockfile)
+      },
+    ),
   )
 })
 
@@ -154,34 +186,104 @@ Deno.test('∀facts_ConfigMissingPrecedence_=NoOxlintConfig — a missing config
       arbitraryLintableExtension,
       arbitraryNonDenoFirstLine,
       (facts, extension, firstLine) =>
-        tagOf(decideLintPlan({ ...facts, exists: true, extension, firstLine, configPath: undefined, oxlintBinary: undefined })) ===
-        'NoOxlintConfig',
+        tagOf(decideLintPlan({
+          ...facts,
+          exists: true,
+          extension,
+          firstLine,
+          configPath: undefined,
+          oxlintBinary: undefined,
+          denoConfig: undefined,
+        })) === 'NoOxlintConfig',
+    ),
+  )
+})
+
+Deno.test('∀facts_DenoWorkspaceFallback_=RunDeno — a deno workspace with no oxlint config lints with deno', () => {
+  fc.assert(
+    fc.property(
+      arbitraryLintFacts,
+      arbitraryLintableExtension,
+      arbitraryNonDenoFirstLine,
+      fc.string({ minLength: 1 }),
+      (facts, extension, firstLine, denoConfig) => {
+        const decision = decideLintPlan({
+          ...facts,
+          exists: true,
+          extension,
+          firstLine,
+          configPath: undefined,
+          denoConfig,
+        })
+        return decision.ok && decision.value._tag === 'RunDeno' && decision.value.filePath === facts.resolvedPath
+      },
+    ),
+  )
+})
+
+Deno.test('∀facts_OxlintOutranksDenoWorkspace_=RunOxlint — an oxlint config wins over a sibling deno workspace', () => {
+  fc.assert(
+    fc.property(
+      arbitraryLintFacts,
+      arbitraryLintableExtension,
+      arbitraryNonDenoFirstLine,
+      fc.string({ minLength: 1 }),
+      (facts, extension, firstLine, denoConfig) => {
+        const decision = decideLintPlan({
+          ...facts,
+          exists: true,
+          extension,
+          firstLine,
+          configPath: `${facts.resolvedPath}/oxlint.config.mjs`,
+          oxlintBinary: `${facts.resolvedPath}/node_modules/.bin/oxlint`,
+          denoConfig,
+        })
+        return decision.ok && decision.value._tag === 'RunOxlint'
+      },
     ),
   )
 })
 
 Deno.test('∀facts_BinaryMissingFailure_=NoOxlintBinary — a present config with a missing binary reports NoOxlintBinary with the hint', () => {
   fc.assert(
-    fc.property(arbitraryLintFacts, arbitraryLintableExtension, arbitraryNonDenoFirstLine, (facts, extension, firstLine) => {
-      const configPath = facts.resolvedPath + '/oxlint.config.mjs'
-      const decision = decideLintPlan({ ...facts, exists: true, extension, firstLine, configPath, oxlintBinary: undefined })
-      return !decision.ok && decision.error._tag === 'NoOxlintBinary' && decision.error.installHint === hintFor(facts.lockfile)
-    }),
+    fc.property(
+      arbitraryLintFacts,
+      arbitraryLintableExtension,
+      arbitraryNonDenoFirstLine,
+      (facts, extension, firstLine) => {
+        const configPath = facts.resolvedPath + '/oxlint.config.mjs'
+        const decision = decideLintPlan({
+          ...facts,
+          exists: true,
+          extension,
+          firstLine,
+          configPath,
+          oxlintBinary: undefined,
+        })
+        return !decision.ok && decision.error._tag === 'NoOxlintBinary' &&
+          decision.error.installHint === hintFor(facts.lockfile)
+      },
+    ),
   )
 })
 
 Deno.test('∀facts_RunOxlintRoute_=RunOxlint — config and binary present route to RunOxlint carrying both', () => {
   fc.assert(
-    fc.property(arbitraryLintFacts, arbitraryLintableExtension, arbitraryNonDenoFirstLine, (facts, extension, firstLine) => {
-      const configPath = facts.resolvedPath + '/oxlint.config.mjs'
-      const oxlintBinary = facts.resolvedPath + '/node_modules/.bin/oxlint'
-      const decision = decideLintPlan({ ...facts, exists: true, extension, firstLine, configPath, oxlintBinary })
-      return decision.ok &&
-        decision.value._tag === 'RunOxlint' &&
-        decision.value.filePath === facts.resolvedPath &&
-        decision.value.configPath === configPath &&
-        decision.value.oxlintBinary === oxlintBinary
-    }),
+    fc.property(
+      arbitraryLintFacts,
+      arbitraryLintableExtension,
+      arbitraryNonDenoFirstLine,
+      (facts, extension, firstLine) => {
+        const configPath = facts.resolvedPath + '/oxlint.config.mjs'
+        const oxlintBinary = facts.resolvedPath + '/node_modules/.bin/oxlint'
+        const decision = decideLintPlan({ ...facts, exists: true, extension, firstLine, configPath, oxlintBinary })
+        return decision.ok &&
+          decision.value._tag === 'RunOxlint' &&
+          decision.value.filePath === facts.resolvedPath &&
+          decision.value.configPath === configPath &&
+          decision.value.oxlintBinary === oxlintBinary
+      },
+    ),
   )
 })
 
@@ -200,7 +302,8 @@ Deno.test('∀name_InstallHintMapping_∈Table — known lockfiles map to their 
   fc.assert(
     fc.property(fc.constantFrom(...Object.keys(INSTALL_COMMANDS)), (name) => {
       const decision = decideLintPlan(noBinaryFacts(name))
-      return !decision.ok && decision.error._tag === 'NoOxlintBinary' && decision.error.installHint === INSTALL_COMMANDS[name]
+      return !decision.ok && decision.error._tag === 'NoOxlintBinary' &&
+        decision.error.installHint === INSTALL_COMMANDS[name]
     }),
   )
 })
@@ -209,7 +312,8 @@ Deno.test('∀lockfile_InstallHintMapping_=GenericHint — unknown or missing lo
   fc.assert(
     fc.property(fc.oneof(fc.constant(undefined), fc.string()), (lockfile) => {
       const decision = decideLintPlan(noBinaryFacts(lockfile))
-      return !decision.ok && decision.error._tag === 'NoOxlintBinary' && decision.error.installHint === hintFor(lockfile)
+      return !decision.ok && decision.error._tag === 'NoOxlintBinary' &&
+        decision.error.installHint === hintFor(lockfile)
     }),
   )
 })

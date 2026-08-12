@@ -87,8 +87,7 @@ const applyHunks = (buffer: string, hunks: readonly Hunk[]): Result<string, Unre
       if (next === undefined) {
         return err(
           UnrecoverableError({
-            reason:
-              `hunk old_string ${JSON.stringify(hunk.oldString)} is not present in the on-disk config content`,
+            reason: `hunk old_string ${JSON.stringify(hunk.oldString)} is not present in the on-disk config content`,
           }),
         )
       }
@@ -106,8 +105,7 @@ const reconstructedPair = (diskContent: string | undefined, hunks: readonly Hunk
   if (diskContent === undefined) {
     return err(
       UnrecoverableError({
-        reason:
-          'there is no on-disk config content to apply the edit to, so the edited result cannot be reconstructed',
+        reason: 'there is no on-disk config content to apply the edit to, so the edited result cannot be reconstructed',
       }),
     )
   }

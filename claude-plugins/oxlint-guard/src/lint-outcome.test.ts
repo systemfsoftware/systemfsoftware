@@ -71,7 +71,9 @@ Deno.test('∀result_NoFilesFoundPrecedence_=BenignNoFiles — no-files outranks
   fc.assert(
     fc.property(arbitraryProcessResult, (result) =>
       outcomeTag(
-        classify(nonzero({ ...result, stdout: 'No files found to lint', stderr: 'Failed to find tsgolint executable' })),
+        classify(
+          nonzero({ ...result, stdout: 'No files found to lint', stderr: 'Failed to find tsgolint executable' }),
+        ),
       ) === 'BenignNoFiles'),
   )
 })
@@ -80,7 +82,9 @@ Deno.test('∀result_OutsideRootPrecedence_=IgnoredPath — outside-root outrank
   fc.assert(
     fc.property(arbitraryProcessResult, (result) =>
       outcomeTag(
-        classify(nonzero({ ...result, stdout: 'path is expected to be under the root', stderr: 'oxlint-tsgolint missing' })),
+        classify(
+          nonzero({ ...result, stdout: 'path is expected to be under the root', stderr: 'oxlint-tsgolint missing' }),
+        ),
       ) === 'IgnoredPath'),
   )
 })
@@ -121,8 +125,7 @@ Deno.test('∀result_TsgolintRetryExhausted_=LintViolation — without canRetry 
     fc.property(
       arbitraryProcessResult,
       markerWithShortTail('tsgolint'),
-      (result, stderr) =>
-        outcomeTag(classify(nonzero({ ...result, stdout: '', stderr }), false)) === 'LintViolation',
+      (result, stderr) => outcomeTag(classify(nonzero({ ...result, stdout: '', stderr }), false)) === 'LintViolation',
     ),
   )
 })

@@ -1,19 +1,20 @@
-import { assertEquals, assert } from '@std/assert'
-import { beforeEach, afterEach, describe, it } from '@std/testing/bdd'
+import { assert, assertEquals } from '@std/assert'
+import { afterEach, beforeEach, describe, it } from '@std/testing/bdd'
 import { basename, dirname, fromFileUrl, join } from '@std/path'
 import type { ProcessResult } from './lint-outcome.ts'
 import {
-  TRUNCATION_MARKER,
-  productionDeps,
-  runLintGuard,
   type CommandSpec,
   type HookResult,
   type LintGuardDeps,
+  productionDeps,
+  runLintGuard,
+  TRUNCATION_MARKER,
 } from './lint-guard.ts'
 
 const CLEAN: ProcessResult = { exitCode: 0, stdout: '', stderr: '' }
 
-const NO_DEBUGGER_OUTPUT = 'src/bad.ts:1:1: `debugger` statement is not allowed [Error/eslint(no-debugger)]\n\n1 problem\n'
+const NO_DEBUGGER_OUTPUT =
+  'src/bad.ts:1:1: `debugger` statement is not allowed [Error/eslint(no-debugger)]\n\n1 problem\n'
 
 const VIOLATION: ProcessResult = { exitCode: 1, stdout: NO_DEBUGGER_OUTPUT, stderr: '' }
 
@@ -56,8 +57,7 @@ const VIOLATION_STDERR = `oxlint-guard: lint violations found.\n${FIX_ROOT_CAUSE
 const RETRY_VIOLATION_STDERR =
   `oxlint-guard: lint violations found.\n${TYPE_AWARE_UNAVAILABLE}\n${FIX_ROOT_CAUSE}\n\n${NO_DEBUGGER_OUTPUT}`
 
-const NO_CONFIG_STDERR =
-  'oxlint-guard: no oxlint config found in any directory up from the edited file.\n' +
+const NO_CONFIG_STDERR = 'oxlint-guard: no oxlint config found in any directory up from the edited file.\n' +
   'Add one of oxlint.config.ts, oxlint.config.js, oxlint.config.mjs, oxlint.config.cjs, .oxlintrc.json, or oxlint.json at the project root, and install oxlint locally: install oxlint as a dev dependency of this project'
 
 const NO_BINARY_BUN_STDERR =
@@ -107,8 +107,7 @@ const PROJECT_FILES: Readonly<Record<string, string>> = {
   'src/deno-missing.ts': DENO_SHEBANG,
 }
 
-const payload = (filePath: string): string =>
-  JSON.stringify({ tool_name: 'Edit', tool_input: { file_path: filePath } })
+const payload = (filePath: string): string => JSON.stringify({ tool_name: 'Edit', tool_input: { file_path: filePath } })
 
 const makeProject = async (files: Readonly<Record<string, string>> = PROJECT_FILES): Promise<string> => {
   const root = await Deno.makeTempDir({ prefix: 'oxlint-guard-test-' })
@@ -171,7 +170,7 @@ const defaultShim: Shim = (spec) => {
   }
 }
 
-const makeDeps = (root: string, shim: Shim, records: SpawnRecord[]): LintGuardDeps => ({
+const makeDeps = (shim: Shim, records: SpawnRecord[]): LintGuardDeps => ({
   readTextFile: (path) => Deno.readTextFile(path),
   exists: async (path) => {
     try {
@@ -268,11 +267,9 @@ const runGuard = async (
 ): Promise<Outcome> => {
   const { cwd = root, shim = defaultShim, commandTimeoutMs } = options
   const records: SpawnRecord[] = []
-  const deps = makeDeps(root, shim, records)
+  const deps = makeDeps(shim, records)
   const guardOptions = commandTimeoutMs === undefined ? {} : { commandTimeoutMs }
-  const result = await withEnv('CLAUDE_PROJECT_DIR', root, () =>
-    runLintGuard(stdin, cwd, deps, guardOptions)
-  )
+  const result = await withEnv('CLAUDE_PROJECT_DIR', root, () => runLintGuard(stdin, cwd, deps, guardOptions))
   return { result, records }
 }
 
@@ -413,14 +410,20 @@ describe('runLintGuard', () => {
   it('refuses a Deno script whose check fails without running the lint pass', async () => {
     const outcome = await runGuard(payload('src/deno-check-fail.ts'), root)
     assertEquals(outcome.result.exitCode, 2)
-    assertEquals(outcome.result.stderr, `oxlint-guard: deno check failed for ${join(root, 'src', 'deno-check-fail.ts')}:\n${NO_DEBUGGER_OUTPUT}`)
+    assertEquals(
+      outcome.result.stderr,
+      `oxlint-guard: deno check failed for ${join(root, 'src', 'deno-check-fail.ts')}:\n${NO_DEBUGGER_OUTPUT}`,
+    )
     assertEquals(outcome.records.length, 1)
   })
 
   it('refuses a Deno script whose lint pass fails', async () => {
     const outcome = await runGuard(payload('src/deno-lint-fail.ts'), root)
     assertEquals(outcome.result.exitCode, 2)
-    assertEquals(outcome.result.stderr, `oxlint-guard: deno lint failed for ${join(root, 'src', 'deno-lint-fail.ts')}:\n${NO_DEBUGGER_OUTPUT}`)
+    assertEquals(
+      outcome.result.stderr,
+      `oxlint-guard: deno lint failed for ${join(root, 'src', 'deno-lint-fail.ts')}:\n${NO_DEBUGGER_OUTPUT}`,
+    )
     assertEquals(outcome.records.length, 2)
   })
 
@@ -515,8 +518,7 @@ describe('runLintGuard', () => {
       const outcome = await runGuard(payload('src/clean.ts'), project)
       assertEquals(outcome.result, {
         exitCode: 2,
-        stderr:
-          `oxlint-guard: oxlint binary found at ${binaryPath} but is not executable.\n` +
+        stderr: `oxlint-guard: oxlint binary found at ${binaryPath} but is not executable.\n` +
           'Remove it (or fix its permissions) and install oxlint locally.',
       })
       assertEquals(outcome.records, [])
@@ -534,8 +536,10 @@ describe('runLintGuard', () => {
       const binaryPath = join(project, 'node_modules', '.bin', 'oxlint')
       await Deno.mkdir(dirname(binaryPath), { recursive: true })
       await writeFloodBinary(binaryPath, false)
-      const result = await withEnv('CLAUDE_PROJECT_DIR', project, () =>
-        runLintGuard(payload('src/huge-real.ts'), project, productionDeps)
+      const result = await withEnv(
+        'CLAUDE_PROJECT_DIR',
+        project,
+        () => runLintGuard(payload('src/huge-real.ts'), project, productionDeps),
       )
       assertEquals(result.exitCode, 2)
       assert(result.stderr.endsWith(TRUNCATION_MARKER))
@@ -556,10 +560,10 @@ describe('runLintGuard', () => {
       const binaryPath = join(project, 'node_modules', '.bin', 'oxlint')
       await Deno.mkdir(dirname(binaryPath), { recursive: true })
       await writeFloodBinary(binaryPath, true)
-      const result = await withHardTimeout(5000, () =>
-        withEnv('CLAUDE_PROJECT_DIR', project, () =>
-          runLintGuard(payload('src/flood.ts'), project, productionDeps)
-        )
+      const result = await withHardTimeout(
+        5000,
+        () =>
+          withEnv('CLAUDE_PROJECT_DIR', project, () => runLintGuard(payload('src/flood.ts'), project, productionDeps)),
       )
       assertEquals(result.exitCode, 2)
       assert(result.stderr.endsWith(TRUNCATION_MARKER))

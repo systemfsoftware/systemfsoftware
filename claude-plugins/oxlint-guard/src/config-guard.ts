@@ -1,7 +1,7 @@
 import { ExtractionCommand, extractPairs } from './extraction.ts'
 import type { Result } from './result.ts'
 import { decodeEditCommand } from './schemas.ts'
-import { type CannotVerify, DecideCommand, decide, type Verdict } from './verdict.ts'
+import { type CannotVerify, decide, DecideCommand, type Verdict } from './verdict.ts'
 
 // `file_path` arrives relative to the hook's process cwd. Resolve it against
 // cwd exactly once (absolute inputs pass through untouched); joining it onto a

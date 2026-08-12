@@ -60,5 +60,7 @@ export const classifyLintResult = (command: ClassifyCommand): Result<LintOutcome
   if (command.canRetry && TSGOLINT_MISSING.test(combinedOutput(command.result))) {
     return ok(new RetryWithoutTypeAware())
   }
-  return err(new LintViolation({ output: command.result.stderr !== '' ? command.result.stderr : command.result.stdout }))
+  return err(
+    new LintViolation({ output: command.result.stderr !== '' ? command.result.stderr : command.result.stdout }),
+  )
 }

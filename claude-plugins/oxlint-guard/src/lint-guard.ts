@@ -1,4 +1,4 @@
-import { SEPARATOR, basename, dirname, extname, join, resolve } from '@std/path'
+import { basename, dirname, extname, join, resolve, SEPARATOR } from '@std/path'
 import { classifyLintResult, type LintViolation, type ProcessResult } from './lint-outcome.ts'
 import { decideLintPlan, type LintFailure, type LintPlan, type RunOxlint } from './lint-plan.ts'
 import { decodeEditCommand } from './schemas.ts'
@@ -279,9 +279,7 @@ const readFirstLine = async (deps: LintGuardDeps, filePath: string): Promise<str
 
 const binaryCandidates = (dir: string): readonly string[] => {
   const bin = join(dir, 'node_modules', '.bin')
-  return SEPARATOR === '\\'
-    ? [join(bin, 'oxlint.cmd'), join(bin, 'oxlint')]
-    : [join(bin, 'oxlint')]
+  return SEPARATOR === '\\' ? [join(bin, 'oxlint.cmd'), join(bin, 'oxlint')] : [join(bin, 'oxlint')]
 }
 
 interface GatheredFacts {
@@ -291,7 +289,10 @@ interface GatheredFacts {
   readonly configPath: string | undefined
   readonly oxlintBinary: string | undefined
   readonly lockfile: string | undefined
+  readonly denoConfig: string | undefined
 }
+
+const DENO_CONFIG_BASENAMES: readonly string[] = ['deno.json', 'deno.jsonc']
 
 const gather = async (deps: LintGuardDeps, filePath: string, cwd: string): Promise<GatheredFacts> => {
   const resolved = resolve(cwd, filePath)
@@ -312,7 +313,11 @@ const gather = async (deps: LintGuardDeps, filePath: string, cwd: string): Promi
     dirs.flatMap((dir) => LOCKFILE_BASENAMES.map((name) => join(dir, name))),
   )
   const lockfile = foundLockfile === undefined ? undefined : basename(foundLockfile)
-  return { resolvedPath: resolved, exists, firstLine, configPath, oxlintBinary, lockfile }
+  const denoConfig = await findFirstExisting(
+    deps,
+    dirs.flatMap((dir) => DENO_CONFIG_BASENAMES.map((name) => join(dir, name))),
+  )
+  return { resolvedPath: resolved, exists, firstLine, configPath, oxlintBinary, lockfile, denoConfig }
 }
 
 // Keeps draining (so the child never blocks on a full pipe) but accumulates at
@@ -456,8 +461,9 @@ const buildOxlintSpec = (run: RunOxlint, cwd: string, typeAware: boolean, signal
 const runDeno = async (deps: LintGuardDeps, filePath: string, timeoutMs: number): Promise<HookResult> => {
   const cwd = dirname(filePath)
   const env = minimalEnv()
-  const checkAttempt = await runWithTimeout(timeoutMs, (signal) =>
-    deps.runCommand({ command: 'deno', args: ['check', '--', filePath], cwd, env, signal }),
+  const checkAttempt = await runWithTimeout(
+    timeoutMs,
+    (signal) => deps.runCommand({ command: 'deno', args: ['check', '--', filePath], cwd, env, signal }),
   )
   if (checkAttempt.kind === 'spawn-failure') {
     return block(describeDenoSpawnFailure(checkAttempt.failure))
@@ -470,8 +476,9 @@ const runDeno = async (deps: LintGuardDeps, filePath: string, timeoutMs: number)
   if (check.exitCode !== 0) {
     return block(`oxlint-guard: deno check failed for ${filePath}:\n${stderrOrStdout(check)}`)
   }
-  const lintAttempt = await runWithTimeout(timeoutMs, (signal) =>
-    deps.runCommand({ command: 'deno', args: ['lint', '--', filePath], cwd, env, signal }),
+  const lintAttempt = await runWithTimeout(
+    timeoutMs,
+    (signal) => deps.runCommand({ command: 'deno', args: ['lint', '--', filePath], cwd, env, signal }),
   )
   if (lintAttempt.kind === 'spawn-failure') {
     return block(describeDenoSpawnFailure(lintAttempt.failure))
@@ -489,8 +496,9 @@ const runDeno = async (deps: LintGuardDeps, filePath: string, timeoutMs: number)
 
 const runOxlint = async (deps: LintGuardDeps, run: RunOxlint, timeoutMs: number): Promise<HookResult> => {
   const cwd = dirname(run.configPath)
-  const firstAttempt = await runWithTimeout(timeoutMs, (signal) =>
-    deps.runCommand(buildOxlintSpec(run, cwd, true, signal)),
+  const firstAttempt = await runWithTimeout(
+    timeoutMs,
+    (signal) => deps.runCommand(buildOxlintSpec(run, cwd, true, signal)),
   )
   if (firstAttempt.kind === 'spawn-failure') {
     // A binary that cannot be spawned will not start on retry either — say
@@ -508,8 +516,9 @@ const runOxlint = async (deps: LintGuardDeps, run: RunOxlint, timeoutMs: number)
   }
   // The type-aware pass timed out or its backend is unavailable — retry
   // without type information rather than losing the result entirely.
-  const retryAttempt = await runWithTimeout(timeoutMs, (signal) =>
-    deps.runCommand(buildOxlintSpec(run, cwd, false, signal)),
+  const retryAttempt = await runWithTimeout(
+    timeoutMs,
+    (signal) => deps.runCommand(buildOxlintSpec(run, cwd, false, signal)),
   )
   if (retryAttempt.kind === 'spawn-failure') {
     return block(describeOxlintSpawnFailure(run.oxlintBinary, retryAttempt.failure))
@@ -525,10 +534,10 @@ const runOxlint = async (deps: LintGuardDeps, run: RunOxlint, timeoutMs: number)
   return allow()
 }
 
-const executePlan = async (deps: LintGuardDeps, plan: LintPlan, timeoutMs: number): Promise<HookResult> => {
+const executePlan = (deps: LintGuardDeps, plan: LintPlan, timeoutMs: number): Promise<HookResult> => {
   switch (plan._tag) {
     case 'Skip':
-      return allow()
+      return Promise.resolve(allow())
     case 'RunDeno':
       return runDeno(deps, plan.filePath, timeoutMs)
     case 'RunOxlint':
@@ -558,6 +567,7 @@ export const runLintGuard = async (
       configPath: facts.configPath,
       oxlintBinary: facts.oxlintBinary,
       lockfile: facts.lockfile,
+      denoConfig: facts.denoConfig,
     })
     if (!plan.ok) {
       return block(describeLintFailure(plan.error))

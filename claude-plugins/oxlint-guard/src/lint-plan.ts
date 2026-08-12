@@ -25,6 +25,7 @@ export interface LintFacts {
   readonly configPath: string | undefined
   readonly oxlintBinary: string | undefined
   readonly lockfile: string | undefined
+  readonly denoConfig: string | undefined
 }
 
 export class Skip {
@@ -84,7 +85,8 @@ const isDenoShebang = (firstLine: string | undefined): boolean =>
   firstLine !== undefined && /^#!.*\bdeno\b/.test(firstLine)
 
 // The arm order is load-bearing: file-missing, then non-lintable extension, then
-// deno shebang, then config+binary present, then config absent, then otherwise.
+// deno shebang, then config+binary present, then deno workspace without an oxlint
+// config, then config absent, then otherwise.
 export const decideLintPlan = (
   facts: LintFacts,
 ): Result<LintPlan, NoOxlintConfig | NoOxlintBinary> => {
@@ -105,6 +107,14 @@ export const decideLintPlan = (
         oxlintBinary: facts.oxlintBinary,
       }),
     )
+  }
+  // A Deno workspace with no oxlint config is linted by Deno rather than reported
+  // as a missing-config failure. Without this arm the guard hard-fails on every
+  // edit inside a Deno project — including its own source — and a guard that
+  // cries wolf on a whole tree is one nobody reads. Placed AFTER the oxlint arm,
+  // so oxlint still wins wherever it is actually configured.
+  if (facts.configPath === undefined && facts.denoConfig !== undefined) {
+    return ok(new RunDeno({ filePath: facts.resolvedPath }))
   }
   if (facts.configPath === undefined) {
     return err(new NoOxlintConfig({ installHint: installHintFor(facts.lockfile) }))

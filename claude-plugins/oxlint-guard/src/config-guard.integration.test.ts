@@ -12,14 +12,13 @@ const payload = (toolName: string, toolInput: Record<string, unknown>): string =
   JSON.stringify({ tool_name: toolName, tool_input: toolInput })
 
 const diskDeps = (files: Readonly<Record<string, string>>, reads: string[] = []): ConfigGuardDeps => ({
-  readTextFile: async (path: string): Promise<string | undefined> => {
+  readTextFile: (path: string): Promise<string | undefined> => {
     reads.push(path)
-    return files[path]
+    return Promise.resolve(files[path])
   },
 })
 
-const BLOCKED_NO_DEBUGGER =
-  'Blocked: this edit disables the oxlint rule(s) no-debugger in an oxlint config. ' +
+const BLOCKED_NO_DEBUGGER = 'Blocked: this edit disables the oxlint rule(s) no-debugger in an oxlint config. ' +
   'Fix the underlying violation instead of disabling the rule.\n'
 
 const CANNOT_VERIFY_JSONC =
