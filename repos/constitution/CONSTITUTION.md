@@ -20,10 +20,29 @@ rules:
   - id: CONST-E1
     title: Prefer the Gate
     gate: review
-    do: make any principle that can fail a command — type error, lint rule, mutation threshold, dependency check — fail that command; a failing build is the final word
-    dont: settle compliance by citing a clause against a gate
+    do: make any principle that can fail a command — type error, lint rule, mutation threshold, dependency check — fail that command, at the price CONST-E3 sets; a failing build is the final word
+    dont: settle compliance by citing a clause against a gate; read this clause as licence to add enforcement without paying for it
     harm: an ungated principle decays into prose nothing enforces
     check: review — each principle names its gate
+  - id: CONST-E3
+    title: A Gate Earns Its Place
+    gate: review
+    do:
+      - name the mistake each gate prevents — a specific wrong thing that specifically happened, in the same form a module earns its existence
+      - price the entry before adding it — for N checks each misfiring independently with probability p, a clean run is blocked with probability 1-(1-p)^N, so affordability is N x p and never N, and the Nth gate tightens the requirement on every gate already present
+      - retire or subsume when you add; a rule a published artifact can carry leaves the suite entirely and costs the budget nothing
+    dont:
+      - add a gate whose verdict depends on scheduler order, cache state, or which task happened to finish first — that is a coin flip wearing an exit code, and green from it is indistinguishable from luck
+      - keep a check whose false-positive rate has already demoted it to a suggestion the team waives
+    harm: enforcement accumulates and nothing removes it, because deletion produces no artifact while addition produces a file. An earn test that binds modules but not gates states that gates are free; the suite then blocks clean runs often enough to be routinely bypassed, and the machinery is a liability twice over — a larger agent-writable enforcement surface is measured to raise specification-violating shortcuts rather than compliance
+    check: review — each added gate names its mistake and its false-positive band, and the change states what retired; an unstated aggregate is an unpriced suite. The band itself is a contestable number and belongs in the harness, never here
+  - id: CONST-E4
+    title: The Evaluator Is Not the Agent's to Edit
+    gate: review
+    do: keep the surface that judges the work outside the surface that does it — an evaluator, rubric, threshold, budget or approval boundary changes in its own commit, observed failing before and passing after, for the reason it states
+    dont: weaken a gate, threshold, budget or glob to make the current change pass; ship an evaluator change in the same commit as the work it judges
+    harm: given a blocked task and reachable machinery, the measured behaviour is to edit the machinery rather than satisfy it, and more capable models do this more often rather than less; an agent that judges itself reports the score it chose
+    check: review — no commit carries both an evaluator change and the work it judges; a loosened threshold stands alone and names its reason
   - id: CONST-E2
     title: Evidence Before Done
     gate: review
