@@ -8,6 +8,6 @@
   "tasks": {
     "test": "deno test --allow-read --allow-write --allow-run --allow-env",
     "characterize": "deno run --allow-read --allow-write --allow-run --allow-env scripts/characterize.ts",
-    "check": "deno check src/ && deno lint"
+    "check": "deno check src/ && deno lint && deno fmt --check && deno test --allow-read --allow-write --allow-run --allow-env"
   }
 }

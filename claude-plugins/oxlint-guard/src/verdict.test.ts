@@ -304,6 +304,16 @@ const moduleRuleName = fc
   )
   .map((chars) => chars.join(''))
 
+// A bare (unquoted) config key must be a JS identifier, so this alphabet is
+// narrower than moduleRuleName's: no dash, slash, dot or colon.
+const bareKeyRuleName = fc
+  .array(
+    fc.constantFrom(...'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_$'.split('')),
+    { minLength: 1, maxLength: 12 },
+  )
+  .map((chars) => chars.join(''))
+  .filter((name) => /^[A-Za-z_$]/.test(name))
+
 Deno.test('decide module configs: ∀m_IdenticalPair_=Allow', () => {
   fc.assert(
     fc.property(fc.string({ maxLength: 200 }), (content) => {
@@ -356,11 +366,11 @@ Deno.test('decide module configs: ∀m_ArrayOffForm_=Block', () => {
 
 Deno.test('decide module configs: ∀m_BareKeyOff_=Block', () => {
   fc.assert(
-    fc.property(fc.constant(null), () => {
-      const outcome = decide(
-        commandOf(pathOf('oxlint.config.ts'), pairsOf(pair('rules: { eqeqeq: "error" }', 'rules: { eqeqeq: "off" }'))),
-      )
-      return isBlockWith(outcome, 'eqeqeq')
+    fc.property(bareKeyRuleName, fc.constantFrom("'", '"'), (rule, quote) => {
+      const oldSide = `rules: { ${rule}: ${quote}error${quote} }`
+      const newSide = `rules: { ${rule}: ${quote}off${quote} }`
+      const outcome = decide(commandOf(pathOf('oxlint.config.ts'), pairsOf(pair(oldSide, newSide))))
+      return isBlockWith(outcome, rule)
     }),
   )
 })
@@ -378,9 +388,9 @@ Deno.test('decide module configs: ∀m_OffInComments_=Allow', () => {
 
 Deno.test('decide module configs: ∀m_OxlintDisableComment_=Allow', () => {
   fc.assert(
-    fc.property(fc.constant(null), () => {
-      const newSide = "// oxlint-disable-next-line no-debugger\nexport default { rules: { 'no-debugger': 'warn' } }"
-      const oldSide = "export default { rules: { 'no-debugger': 'warn' } }"
+    fc.property(moduleRuleName, fc.constantFrom('warn', 'error'), (rule, severity) => {
+      const oldSide = `export default { rules: { '${rule}': '${severity}' } }`
+      const newSide = `// oxlint-disable-next-line ${rule}\nexport default { rules: { '${rule}': '${severity}' } }`
       const outcome = decide(commandOf(pathOf('oxlint.config.ts'), pairsOf(pair(oldSide, newSide))))
       return outcome.ok && outcome.value._tag === 'Allow'
     }),

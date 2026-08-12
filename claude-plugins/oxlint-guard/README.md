@@ -56,11 +56,13 @@ installed copies the whole dependency tree.
   your project's package manager, detected from the lockfile.
 
 - **An oxlint config somewhere above the edited file** — `oxlint.config.ts`, `oxlint.config.js`, `oxlint.config.mjs`,
-  `oxlint.config.cjs`, `.oxlintrc.json`, or `oxlint.json`. JSON configs may contain comments and trailing commas.
+  `oxlint.config.cjs`, `.oxlintrc.json`, or `oxlint.json`. JSON configs may contain comments and trailing commas. A Deno
+  project is the exception: when the walk finds a `deno.json` or `deno.jsonc` and no oxlint config at all, the file is
+  linted with `deno check` and `deno lint` instead. An oxlint config always outranks a sibling Deno workspace.
 
-A missing config or a missing local binary is a **hard failure**: the hook exits 2 with an explanatory message on
-stderr. This is deliberate — a guard that silently passes is worse than no guard, because it looks like enforcement
-while enforcing nothing.
+Outside a Deno workspace, a missing config or a missing local binary is a **hard failure**: the hook exits 2 with an
+explanatory message on stderr. This is deliberate — a guard that silently passes is worse than no guard, because it
+looks like enforcement while enforcing nothing.
 
 ## How It Works
 
@@ -94,7 +96,8 @@ global, so those files are routed to a runtime that can.
 | Reports a lint violation                                      | 2 — linter output on stderr |
 | Type-aware backend unavailable: re-lints without it           | 0 if clean, 2 if not        |
 | A linter run exceeds 30s: re-lints without type-awareness     | 0 if it then clears         |
-| Hard failure: no oxlint config above the file                 | 2 — stderr explains         |
+| Lints with `deno` instead: Deno workspace, no oxlint config   | 0 if clean, 2 if not        |
+| Hard failure: no oxlint config and no Deno workspace          | 2 — stderr explains         |
 | Hard failure: no local `node_modules/.bin/oxlint`             | 2 — stderr explains         |
 | Hard failure: that binary is present but not executable       | 2 — stderr explains         |
 | Hard failure: `deno` shebang file and no `deno` on `PATH`     | 2 — stderr explains         |
@@ -172,10 +175,15 @@ The hooks follow the standard Claude Code hook contract: **exit 0 allows, exit 2
 to the agent (PostToolUse), stdout stays machine-clean, and every diagnostic goes to stderr**. Any runner that
 dispatches hooks by that contract — including an OMP-style hook bridge — drives them without modification.
 
-A third code is possible: **exit 1 means the guard could not run at all** — Deno is missing, or the hook hit an internal
-defect. Claude Code treats exit 1 as a non-blocking error, so the edit proceeds and the message surfaces to you rather
-than to the agent. That is the intended failure mode: a guard that cannot start should be loud to the human without
-wedging the session.
+The two hooks fail differently, because only exit 2 blocks a `PreToolUse` call:
+
+- **The config guard (PreToolUse) never exits 1.** Every state in which it cannot reach a verdict — Deno missing, a
+  module that will not load, a permission it was not granted, a defect in the guard itself — is mapped onto exit 2, so
+  the edit is refused rather than silently permitted. Claude Code treats every other non-zero code as a non-blocking
+  error and lets the edit proceed, which for a guard whose only job is to veto would be a silent pass.
+- **The lint guard (PostToolUse) exits 1 only when Deno is absent.** The write has already landed, so there is nothing
+  left to veto, and exit 1 surfaces the install message to you rather than to the agent. A defect inside the running
+  guard exits 2, because exit 2 is the only code that shows a PostToolUse hook's stderr to the agent.
 
 ## License
 

@@ -21,6 +21,8 @@ export const OXLINT_CONFIG_BASENAMES = [
 
 export const LINTABLE_EXTENSIONS = ['ts', 'tsx', 'mts', 'cts', 'js', 'jsx', 'mjs', 'cjs'] as const
 
+export const HOOK_STDIN_CAP_BYTES = 1024 * 1024
+
 export type EditToolName = typeof EDIT_TOOL_NAMES[number]
 export type OxlintConfigBasename = typeof OXLINT_CONFIG_BASENAMES[number]
 export type LintableExtension = typeof LINTABLE_EXTENSIONS[number]

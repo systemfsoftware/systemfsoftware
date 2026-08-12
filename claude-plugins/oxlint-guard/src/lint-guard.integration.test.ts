@@ -329,6 +329,40 @@ describe('runLintGuard', () => {
     assertEquals(outcome.records, [])
   })
 
+  it('lints a Deno workspace that has no oxlint config with deno, instead of hard-failing', async () => {
+    const project = await makeProject({
+      'deno.json': '{}\n',
+      'src/clean.ts': 'export const a = 1\n',
+    })
+    try {
+      const outcome = await runGuard(payload('src/clean.ts'), project)
+      assertEquals(outcome.result, { exitCode: 0, stderr: '' })
+      assertEquals(outcome.records.length, 2)
+      assertEquals(outcome.records[0]?.command, 'deno')
+      assertEquals(outcome.records[0]?.args, ['check', '--', join(project, 'src', 'clean.ts')])
+      assertEquals(outcome.records[1]?.command, 'deno')
+      assertEquals(outcome.records[1]?.args, ['lint', '--', join(project, 'src', 'clean.ts')])
+    } finally {
+      await Deno.remove(project, { recursive: true })
+    }
+  })
+
+  it('still uses oxlint when a Deno workspace also carries an oxlint config', async () => {
+    const project = await makeProject({
+      'deno.json': '{}\n',
+      'oxlint.config.mjs': 'export default {}\n',
+      'node_modules/.bin/oxlint': 'fake-oxlint\n',
+      'src/clean.ts': 'export const a = 1\n',
+    })
+    try {
+      const outcome = await runGuard(payload('src/clean.ts'), project)
+      assertEquals(outcome.result, { exitCode: 0, stderr: '' })
+      assertEquals(single(outcome.records).command, join(project, 'node_modules', '.bin', 'oxlint'))
+    } finally {
+      await Deno.remove(project, { recursive: true })
+    }
+  })
+
   it('ignores a payload from a non-edit tool', async () => {
     const outcome = await runGuard(
       JSON.stringify({ tool_name: 'Read', tool_input: { file_path: 'src/clean.ts' } }),

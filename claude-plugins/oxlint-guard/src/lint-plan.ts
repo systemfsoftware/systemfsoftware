@@ -1,9 +1,9 @@
 import { err, ok, type Result } from './result.ts'
-import { LINTABLE_EXTENSIONS, type ToolName } from './schemas.ts'
+import { LINTABLE_EXTENSIONS } from './schemas.ts'
 
 // Lockfile basename -> install command. The detected package manager is used ONLY to
 // word the remediation hint; nothing is ever executed with it.
-const LOCKFILE_INSTALL_COMMANDS: Record<string, string> = {
+export const LOCKFILE_INSTALL_COMMANDS: Record<string, string> = {
   'pnpm-lock.yaml': 'pnpm add -D oxlint',
   'package-lock.json': 'npm install -D oxlint',
   'yarn.lock': 'yarn add -D oxlint',
@@ -11,13 +11,25 @@ const LOCKFILE_INSTALL_COMMANDS: Record<string, string> = {
   'bun.lock': 'bun add -d oxlint',
 }
 
+export const LOCKFILE_BASENAMES: readonly string[] = Object.keys(LOCKFILE_INSTALL_COMMANDS)
+
+export interface Invocation {
+  readonly command: string
+  readonly args: readonly string[]
+}
+
+// npm on Windows installs oxlint as a `.cmd` shim, which the OS cannot exec directly — it has to be
+// run through `cmd.exe`. Kept pure so the branch is reachable by a test on a POSIX host, where the
+// binary walk can never produce a `.cmd` path.
+export const invocationFor = (binary: string, args: readonly string[]): Invocation =>
+  binary.endsWith('.cmd') ? { command: 'cmd.exe', args: ['/c', binary, ...args] } : { command: binary, args }
+
 const NO_LOCKFILE_HINT = 'install oxlint as a dev dependency of this project'
 
 const installHintFor = (lockfile: string | undefined): string =>
   lockfile === undefined ? NO_LOCKFILE_HINT : LOCKFILE_INSTALL_COMMANDS[lockfile] ?? NO_LOCKFILE_HINT
 
 export interface LintFacts {
-  readonly toolName: ToolName
   readonly resolvedPath: string
   readonly extension: string
   readonly exists: boolean

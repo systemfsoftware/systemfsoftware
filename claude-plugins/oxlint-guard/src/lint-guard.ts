@@ -1,7 +1,14 @@
 import { basename, dirname, extname, join, resolve, SEPARATOR } from '@std/path'
 import { classifyLintResult, type LintViolation, type ProcessResult } from './lint-outcome.ts'
-import { decideLintPlan, type LintFailure, type LintPlan, type RunOxlint } from './lint-plan.ts'
-import { decodeEditCommand } from './schemas.ts'
+import {
+  decideLintPlan,
+  invocationFor,
+  type LintFailure,
+  type LintPlan,
+  LOCKFILE_BASENAMES,
+  type RunOxlint,
+} from './lint-plan.ts'
+import { decodeEditCommand, HOOK_STDIN_CAP_BYTES, OXLINT_CONFIG_BASENAMES } from './schemas.ts'
 
 export interface HookResult {
   readonly exitCode: number
@@ -49,23 +56,6 @@ export class OxlintBinaryNotExecutable extends Error {
 
 const ACCEPTED_CONFIG_NAMES =
   'oxlint.config.ts, oxlint.config.js, oxlint.config.mjs, oxlint.config.cjs, .oxlintrc.json, or oxlint.json'
-
-const CONFIG_BASENAMES: readonly string[] = [
-  'oxlint.config.ts',
-  'oxlint.config.js',
-  'oxlint.config.mjs',
-  'oxlint.config.cjs',
-  '.oxlintrc.json',
-  'oxlint.json',
-]
-
-const LOCKFILE_BASENAMES: readonly string[] = [
-  'pnpm-lock.yaml',
-  'package-lock.json',
-  'yarn.lock',
-  'bun.lockb',
-  'bun.lock',
-]
 
 // The walk for configs and binaries must never escape the project: on a shared
 // host, a binary planted in an ancestor directory (e.g. /tmp/node_modules/
@@ -302,7 +292,7 @@ const gather = async (deps: LintGuardDeps, filePath: string, cwd: string): Promi
   const firstLine = exists ? await readFirstLine(deps, resolved) : undefined
   const configPath = await findFirstExisting(
     deps,
-    dirs.flatMap((dir) => CONFIG_BASENAMES.map((name) => join(dir, name))),
+    dirs.flatMap((dir) => OXLINT_CONFIG_BASENAMES.map((name) => join(dir, name))),
   )
   const oxlintBinary = await findOxlintBinary(
     deps,
@@ -448,10 +438,10 @@ const buildOxlintSpec = (run: RunOxlint, cwd: string, typeAware: boolean, signal
     '--',
     run.filePath,
   ]
-  const viaCmd = run.oxlintBinary.endsWith('.cmd')
+  const invocation = invocationFor(run.oxlintBinary, args)
   return {
-    command: viaCmd ? 'cmd.exe' : run.oxlintBinary,
-    args: viaCmd ? ['/c', run.oxlintBinary, ...args] : args,
+    command: invocation.command,
+    args: invocation.args,
     cwd,
     env: minimalEnv(),
     signal,
@@ -559,7 +549,6 @@ export const runLintGuard = async (
     }
     const facts = await gather(deps, decoded.filePath, cwd)
     const plan = decideLintPlan({
-      toolName: decoded.toolName,
       resolvedPath: facts.resolvedPath,
       extension: extname(facts.resolvedPath).slice(1),
       exists: facts.exists,
@@ -583,7 +572,6 @@ export const runLintGuard = async (
 
 // A hook payload larger than 1 MiB is not a legitimate edit payload; capping
 // stdin is defense in depth so a runaway pipe cannot exhaust the process.
-const STDIN_CAP_BYTES = 1024 * 1024
 
 const readStdin = async (): Promise<string | undefined> => {
   const reader = Deno.stdin.readable.getReader()
@@ -594,7 +582,7 @@ const readStdin = async (): Promise<string | undefined> => {
     if (done) {
       break
     }
-    if (data.length + value.byteLength > STDIN_CAP_BYTES) {
+    if (data.length + value.byteLength > HOOK_STDIN_CAP_BYTES) {
       reader.releaseLock()
       return undefined
     }
@@ -614,11 +602,18 @@ const runEntryPoint = async (): Promise<void> => {
   if (stdin === undefined) {
     Deno.exit(0)
   }
-  const result = await runLintGuard(stdin, Deno.cwd(), productionDeps)
-  if (result.stderr !== '') {
-    console.error(result.stderr)
+  try {
+    const result = await runLintGuard(stdin, Deno.cwd(), productionDeps)
+    if (result.stderr !== '') {
+      console.error(result.stderr)
+    }
+    Deno.exit(result.exitCode)
+  } catch (error) {
+    // Claude Code shows a PostToolUse hook's stderr to the agent on exit 2 and nowhere else, so a
+    // defect in the guard must exit 2 or the lint verdict disappears with the process.
+    console.error(`oxlint-guard: the lint guard failed: ${error instanceof Error ? error.message : String(error)}`)
+    Deno.exit(2)
   }
-  Deno.exit(result.exitCode)
 }
 
 if (import.meta.main) {

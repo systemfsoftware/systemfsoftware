@@ -1,6 +1,6 @@
 import { ExtractionCommand, extractPairs } from './extraction.ts'
 import type { Result } from './result.ts'
-import { decodeEditCommand } from './schemas.ts'
+import { decodeEditCommand, HOOK_STDIN_CAP_BYTES } from './schemas.ts'
 import { type CannotVerify, decide, DecideCommand, type Verdict } from './verdict.ts'
 
 // `file_path` arrives relative to the hook's process cwd. Resolve it against
@@ -8,8 +8,6 @@ import { type CannotVerify, decide, DecideCommand, type Verdict } from './verdic
 // base that already contains it was the old implementation's double-join bug.
 const resolveAgainstCwd = (cwd: string, filePath: string): string =>
   filePath.startsWith('/') ? filePath : `${cwd.replace(/\/$/, '')}/${filePath}`
-
-const STDIN_CAP_BYTES = 1024 * 1024
 
 // The on-disk file is the pre-edit state for every edit tool: Write/Create use
 // it as the old side, and the hunk tools (Edit/MultiEdit/Update/morph) rebuild
@@ -59,7 +57,7 @@ export const runConfigGuard = async (
   cwd: string,
   deps: ConfigGuardDeps,
 ): Promise<{ exitCode: number; stderr: string }> => {
-  if (raw.length > STDIN_CAP_BYTES) {
+  if (raw.length > HOOK_STDIN_CAP_BYTES) {
     return { exitCode: 2, stderr: oversizeMessage + '\n' }
   }
   const command = decodeEditCommand(raw)
@@ -81,7 +79,7 @@ const readStdin = async (): Promise<string | 'too-large'> => {
   const decoder = new TextDecoder()
   for await (const chunk of Deno.stdin.readable) {
     data += decoder.decode(chunk, { stream: true })
-    if (data.length > STDIN_CAP_BYTES) {
+    if (data.length > HOOK_STDIN_CAP_BYTES) {
       return 'too-large'
     }
   }

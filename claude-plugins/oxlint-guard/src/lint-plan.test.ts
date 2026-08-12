@@ -1,7 +1,6 @@
 import * as fc from 'fast-check'
-import * as v from 'valibot'
-import { decideLintPlan, type LintFacts, type LintPlanDecision } from './lint-plan.ts'
-import { LINTABLE_EXTENSIONS, type ToolName, ToolNameSchema } from './schemas.ts'
+import { decideLintPlan, invocationFor, type LintFacts, type LintPlanDecision } from './lint-plan.ts'
+import { LINTABLE_EXTENSIONS } from './schemas.ts'
 
 // The lockfile -> install command contract, stated independently of the workflow's
 // private mapping so a drift in either side fails this test.
@@ -17,13 +16,6 @@ const NO_LOCKFILE_HINT = 'install oxlint as a dev dependency of this project'
 
 const hintFor = (lockfile: string | undefined): string =>
   lockfile === undefined ? NO_LOCKFILE_HINT : INSTALL_COMMANDS[lockfile] ?? NO_LOCKFILE_HINT
-
-const EDIT_TOOL = v.parse(ToolNameSchema, 'Edit')
-const WRITE_TOOL = v.parse(ToolNameSchema, 'Write')
-
-const arbitraryToolName: fc.Arbitrary<ToolName> = fc
-  .string({ minLength: 1 })
-  .map((name) => v.parse(ToolNameSchema, name))
 
 const arbitraryOptionString: fc.Arbitrary<string | undefined> = fc.oneof(fc.constant(undefined), fc.string())
 
@@ -50,7 +42,6 @@ const arbitraryNonDenoFirstLine: fc.Arbitrary<string | undefined> = fc.oneof(
 )
 
 const arbitraryLintFacts: fc.Arbitrary<LintFacts> = fc.record({
-  toolName: arbitraryToolName,
   resolvedPath: fc.string(),
   extension: fc.string(),
   exists: fc.boolean(),
@@ -64,7 +55,6 @@ const arbitraryLintFacts: fc.Arbitrary<LintFacts> = fc.record({
 const tagOf = (decision: LintPlanDecision): string => (decision.ok ? decision.value._tag : decision.error._tag)
 
 const noBinaryFacts = (lockfile: string | undefined): LintFacts => ({
-  toolName: EDIT_TOOL,
   resolvedPath: '/p/src/a.ts',
   extension: 'ts',
   exists: true,
@@ -287,17 +277,6 @@ Deno.test('∀facts_RunOxlintRoute_=RunOxlint — config and binary present rout
   )
 })
 
-Deno.test('∀facts_ToolIdentityInvariance_≡Decision — the invoking tool never changes the decision', () => {
-  fc.assert(
-    fc.property(arbitraryLintFacts, (facts) => {
-      const otherTool = facts.toolName === EDIT_TOOL ? WRITE_TOOL : EDIT_TOOL
-      const a = decideLintPlan(facts)
-      const b = decideLintPlan({ ...facts, toolName: otherTool })
-      return JSON.stringify(a) === JSON.stringify(b)
-    }),
-  )
-})
-
 Deno.test('∀name_InstallHintMapping_∈Table — known lockfiles map to their exact install commands', () => {
   fc.assert(
     fc.property(fc.constantFrom(...Object.keys(INSTALL_COMMANDS)), (name) => {
@@ -305,6 +284,33 @@ Deno.test('∀name_InstallHintMapping_∈Table — known lockfiles map to their 
       return !decision.ok && decision.error._tag === 'NoOxlintBinary' &&
         decision.error.installHint === INSTALL_COMMANDS[name]
     }),
+  )
+})
+
+Deno.test('∀binary_PosixInvocation_≡Direct — a binary that is not a .cmd shim is spawned directly, args untouched', () => {
+  fc.assert(
+    fc.property(
+      fc.string({ minLength: 1 }).filter((path) => !path.endsWith('.cmd')),
+      fc.array(fc.string(), { maxLength: 8 }),
+      (binary, args) => {
+        const invocation = invocationFor(binary, args)
+        return invocation.command === binary && JSON.stringify(invocation.args) === JSON.stringify(args)
+      },
+    ),
+  )
+})
+
+Deno.test('∀binary_CmdShimInvocation_=ViaCmdExe — a .cmd shim is spawned through cmd.exe with /c and the shim path first', () => {
+  fc.assert(
+    fc.property(
+      fc.string({ minLength: 1 }).map((stem) => `${stem}.cmd`),
+      fc.array(fc.string(), { maxLength: 8 }),
+      (binary, args) => {
+        const invocation = invocationFor(binary, args)
+        return invocation.command === 'cmd.exe' &&
+          JSON.stringify(invocation.args) === JSON.stringify(['/c', binary, ...args])
+      },
+    ),
   )
 })
 
