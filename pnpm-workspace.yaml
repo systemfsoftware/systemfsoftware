@@ -98,4 +98,3 @@ packages:
   - packages/effect-atom/*
   - omp/packages/*
   - omp/plugins/*
-  - claude-plugins/*
