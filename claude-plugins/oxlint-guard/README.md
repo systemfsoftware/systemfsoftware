@@ -31,7 +31,7 @@ Add the marketplace from the repository (as above) rather than from a local chec
 
 ## Prerequisites
 
-- **Bun** on `PATH` — the hooks run on Bun.
+- **Deno 2.x** on `PATH` — the hooks are TypeScript source, run directly by Deno. There is no build step and no bundle.
 - **`oxlint` installed as a local dev dependency of the project being edited**:
 
   ```bash
@@ -41,7 +41,6 @@ Add the marketplace from the repository (as above) rather than from a local chec
   The lint guard resolves `node_modules/.bin/oxlint` by walking up from the edited file, and stops at the project root (`CLAUDE_PROJECT_DIR`, else the enclosing git root). It never falls back to `PATH`, `npx`, `bunx`, or a network fetch, and never reaches past the project into a parent directory — if the binary is not a local dev dependency of the project, there is nothing to fall back to. When it finds nothing, the failure message names the install command for your project's package manager, detected from the lockfile.
 
 - **An oxlint config somewhere above the edited file** — `oxlint.config.ts`, `oxlint.config.js`, `oxlint.config.mjs`, `oxlint.config.cjs`, `.oxlintrc.json`, or `oxlint.json`. JSON configs may contain comments and trailing commas.
-- **Deno** on `PATH`, only if the project contains files with a `deno` shebang — see the lint guard section.
 
 A missing config or a missing local binary is a **hard failure**: the hook exits 2 with an explanatory message on stderr. This is deliberate — a guard that silently passes is worse than no guard, because it looks like enforcement while enforcing nothing.
 
@@ -113,17 +112,17 @@ One limit is worth stating plainly. JSON configs are parsed, so the guard sees t
 
 ## Hermetic by Construction
 
-The hook bundles carry their dependencies inlined, so installing the plugin fetches nothing but the plugin itself, and the hooks never touch the network.
+The plugin ships as TypeScript source rather than an inlined bundle, and that changes one property worth stating plainly. On its **first** run on a machine, Deno fetches the plugin's own dependencies (`@std/*` and valibot) from jsr into the machine-wide Deno cache and executes them with the hook's permissions; every run after that is served from cache and touches no network. A committed `deno.lock` pins an integrity hash for every one of those specifiers, so the code fetched on that first run is the code the lockfile was built against, and a tampered registry response fails the hash rather than executing. This is a weaker guarantee than the previous self-contained bundle, which fetched nothing at all.
 
-A linter binary is only ever used from the project's own `node_modules`: oxlint is never resolved from `PATH`, `npx`, `bunx`, or `pnpm exec`, and never from outside the project root. The one binary taken from `PATH` is `deno`, and only for files carrying a `deno` shebang.
+A linter binary is only ever used from the project's own `node_modules`: oxlint is never resolved from `PATH`, `npx`, `bunx`, or `pnpm exec`, and never from outside the project root. `deno` is taken from `PATH`, because it is the hooks' own runtime; it is also what checks and lints files carrying a `deno` shebang.
 
-Whatever is spawned receives a minimal allowlisted environment (`PATH`, `HOME`, and the platform's temp and shell variables) rather than the agent's own — a linter in the project's `node_modules` is the project's code, and it does not need the agent's credentials to lint a file.
+Whatever is spawned receives a minimal allowlisted environment — exactly `PATH`, `HOME`, `TMPDIR`, `TEMP`, `TMP`, `USERPROFILE`, `HOMEDRIVE`, `HOMEPATH`, `SystemRoot`, `COMSPEC`, and `PATHEXT`, and only those that are set — rather than the agent's own. A linter in the project's `node_modules` is the project's code, and it does not need the agent's credentials to lint a file. Note that `CLAUDE_PROJECT_DIR` is deliberately **not** forwarded.
 
 ## Other Hook Runners
 
 The hooks follow the standard Claude Code hook contract: **exit 0 allows, exit 2 blocks (PreToolUse) or feeds feedback to the agent (PostToolUse), stdout stays machine-clean, and every diagnostic goes to stderr**. Any runner that dispatches hooks by that contract — including an OMP-style hook bridge — drives them without modification.
 
-A third code is possible: **exit 1 means the guard could not run at all** — Bun is missing, or the hook hit an internal defect. Claude Code treats exit 1 as a non-blocking error, so the edit proceeds and the message surfaces to you rather than to the agent. That is the intended failure mode: a guard that cannot start should be loud to the human without wedging the session.
+A third code is possible: **exit 1 means the guard could not run at all** — Deno is missing, or the hook hit an internal defect. Claude Code treats exit 1 as a non-blocking error, so the edit proceeds and the message surfaces to you rather than to the agent. That is the intended failure mode: a guard that cannot start should be loud to the human without wedging the session.
 
 ## License
 

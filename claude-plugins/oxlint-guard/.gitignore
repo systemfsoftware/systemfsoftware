@@ -1,6 +1,0 @@
-# The repo root ignores `dist/` at every depth. This plugin is the exception, and the
-# carve-out is load-bearing: Claude Code installs it by copying this directory out of a
-# git clone. There is no `npm pack`, no build step, and no install hook, so an uncommitted
-# `dist/` means the hooks are simply absent on every user's machine — and no test in this
-# repo can see that, because the build works locally.
-!dist/
