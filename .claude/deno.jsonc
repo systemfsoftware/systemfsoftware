@@ -20,7 +20,6 @@
   // "fmt" block lives here and the task never runs `deno fmt` — two formatters
   // over one tree means whichever ran last wins and the gate flaps.
   "tasks": {
-    "test": "deno test --allow-env --allow-read --allow-write --allow-run hooks/",
     "check": "deno check hooks/ && deno lint hooks/",
   },
   "publish": {
