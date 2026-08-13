@@ -60,6 +60,7 @@ Directories only; files are discovered with tools.
 | `docs/`               | Solutions, plans, audits, decision records                              | `REPO-E1`                                   |
 | `docs/cell-taxonomy/` | Gitignored working spec of the cell taxonomy, absent from a fresh clone | `REPO-W5`                                   |
 | `omp/`                | OMP plugin packages                                                     | Leaf-governed                               |
+| `agent-plugins/`      | Distributable agent-plugins.org plugins (Deno, standalone)              | Leaf-governed                               |
 
 ## Startup
 
