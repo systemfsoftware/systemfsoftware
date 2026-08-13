@@ -62,7 +62,7 @@ A: `just-bash` is fetched to Deno's registry cache on the first hook run. Run on
 
 ## Contributing
 
-Development setup and workflow: [AGENTS.md](../../AGENTS.md).
+Development setup and workflow: [AGENTS.md](https://github.com/systemfsoftware/systemfsoftware/blob/main/AGENTS.md).
 
 ## License
 
