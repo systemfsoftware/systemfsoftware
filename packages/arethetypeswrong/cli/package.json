@@ -28,7 +28,6 @@
     "test": "vitest run",
     "test:run": "vitest run --coverage",
     "test:contract": "vitest run --config vitest.contract.config.ts",
-    "mutation": "stryker run",
     "prepack": "pnpm build"
   },
   "type": "module",
