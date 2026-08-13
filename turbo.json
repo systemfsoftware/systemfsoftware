@@ -83,6 +83,25 @@
       ],
       "cache": false
     },
+    "test:types": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "tstyche.json",
+        "test-types/**",
+        "tsconfig.json",
+        "tsconfig.*.json",
+        "$TURBO_ROOT$/packages/tsconfig/*.json",
+        "$TURBO_ROOT$/packages/tsconfig/bundler/**",
+        "$TURBO_ROOT$/packages/tsconfig/tsc/**"
+      ],
+      "outputLogs": "errors-only",
+      "dependsOn": [
+        "^build",
+        "build"
+      ],
+      "outputs": [],
+      "cache": true
+    },
     "mutation": {
       "dependsOn": [
         "^build"
