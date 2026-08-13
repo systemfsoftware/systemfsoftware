@@ -1,0 +1,17 @@
+{
+  "name": "correction-plugin",
+  "version": "0.1.0",
+  "description": "UserPromptSubmit hooks that catch a user correction or a frustrated prompt and make the agent capture the durable rule.",
+  "author": {
+    "name": "Ryan Lee",
+    "email": "drdgvhbh@gmail.com"
+  },
+  "license": "MIT",
+  "keywords": [
+    "claude-code",
+    "hooks",
+    "correction",
+    "memory"
+  ],
+  "hooks": "./hooks/hooks.json"
+}
