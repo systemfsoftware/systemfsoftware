@@ -49,6 +49,16 @@
         ]
       },
       {
+        "matcher": "Github",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v deno >/dev/null 2>&1 || { echo 'guard-pr-lifecycle: deno not found on PATH - install Deno (https://deno.land) so the guard can run' >&2; exit 1; }; exec deno run --quiet --allow-env=CLAUDE_PROJECT_DIR --allow-read --allow-run=git \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-pr-lifecycle.ts\"",
+            "timeout": 15
+          }
+        ]
+      },
+      {
         "matcher": "Read|Skill",
         "hooks": [
           {

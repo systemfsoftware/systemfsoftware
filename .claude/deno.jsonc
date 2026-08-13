@@ -19,8 +19,11 @@
   // dprint is this repo's formatter and owns these files (`pnpm format`), so no
   // "fmt" block lives here and the task never runs `deno fmt` — two formatters
   // over one tree means whichever ran last wins and the gate flaps.
+  // Reached from the root as `pnpm check:hooks`, which `check:local` and
+  // `check:ci` both run: a hook suite nothing schedules is an unrun test, and an
+  // unrun test defends nothing. Permissions are the suite's own, not the hooks'.
   "tasks": {
-    "check": "deno check hooks/ && deno lint hooks/",
+    "check": "deno check hooks/ && deno lint hooks/ && deno test --quiet --allow-read=/tmp --allow-write=/tmp --allow-run=git hooks/",
   },
   "publish": {
     "exclude": ["**"],
