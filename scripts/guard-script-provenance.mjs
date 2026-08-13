@@ -6,7 +6,7 @@
 // Answers two questions about `scripts/`, and nothing else.
 //
 //   Arm 1 -- does any file here READ a doctrine artifact?
-//     `CONSTITUTION.md`, `CONCEPTS.md`, `AGENTS.md`, `CLAUDE.md`, `wiki/`,
+//     `CONSTITUTION.md`, `CONCEPTS.md`, `AGENTS.md`, `CLAUDE.md`,
 //     `docs/solutions/`, `.claude/`. Doctrine is context engineering: it changes
 //     what an agent does by being read BY THE AGENT. A gate that parses it
 //     promotes prose to a spec, and the prose was never written to be one -- so
@@ -63,7 +63,6 @@ const DOCTRINE = [
   'CONCEPTS.md',
   'AGENTS.md',
   'CLAUDE.md',
-  'wiki/',
   'docs/solutions',
   '.claude/',
 ]
@@ -300,7 +299,7 @@ const countGateEntries = (rootScripts, turboConfig) => {
 
 const FIXTURES = [
   ['a bare doctrine read is reported', "readFileSync('CONSTITUTION.md', 'utf8')", 1],
-  ['a joined doctrine path is reported', "readFileSync(join(root, 'wiki/log.md'))", 1],
+  ['a joined doctrine path is reported', "readFileSync(join(root, 'docs/solutions/log.md'))", 1],
   ['a template doctrine path is reported', 'readFileSync(`${root}/CONCEPTS.md`)', 1],
   ['an operator-config read is reported', "readFileSync('.claude/CLAUDE.md')", 1],
   ['a comment citation passes', '// See AGENTS.md REPO-S5 for the rule.\nconst x = 1', 0],
@@ -317,7 +316,7 @@ const selftest = () => {
     if (actual !== expected) failures.push(`  ${label}: expected ${expected} report(s), got ${actual}`)
   }
 
-  const shellReported = findDoctrineReadsShell('# cat CONSTITUTION.md\ncat wiki/log.md\n')
+  const shellReported = findDoctrineReadsShell('# cat CONSTITUTION.md\ncat docs/solutions/log.md\n')
   if (shellReported.length !== 1 || shellReported[0].line !== 2) {
     failures.push(`  shell: expected one report on line 2, got ${JSON.stringify(shellReported)}`)
   }
@@ -381,7 +380,7 @@ const run = () => {
     }
     console.error(
       `\nDoctrine is context engineering: CONSTITUTION.md, CONCEPTS.md, AGENTS.md, CLAUDE.md,\n` +
-        `wiki/, docs/solutions/ and .claude/ change what an agent does by being read by the\n` +
+        `docs/solutions/ and .claude/ change what an agent does by being read by the\n` +
         `agent. A gate that parses them promotes prose to a spec nobody maintains, and the\n` +
         `check goes green while proving nothing (REPO-S6). Put the rule in a published oxlint\n` +
         `plugin or a published type signature. Citing a doctrine path in a comment, a\n` +
