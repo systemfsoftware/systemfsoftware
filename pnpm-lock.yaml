@@ -142,21 +142,19 @@ catalogs:
     vitest:
       specifier: ^4.1.10
       version: 4.1.10
-<<<<<<< HEAD
   effect-v4:
     '@effect/vitest':
       specifier: ^4.0.0-rc.108
       version: 4.0.0-rc.108
     effect:
       specifier: ^4.0.0-rc.108
-=======
+      version: 4.0.0-rc.108
   effect4:
     '@effect/vitest':
       specifier: 4.0.0-rc.108
       version: 4.0.0-rc.108
     effect:
       specifier: 4.0.0-rc.108
->>>>>>> 406933f0196 (feat(effect-atom)!: port atom packages onto effect v4 RC)
       version: 4.0.0-rc.108
   oxlint:
     '@oxlint/plugins':
@@ -573,12 +571,18 @@ importers:
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: catalog:attw
         version: 1.1.1
+      '@systemfsoftware/effect-gherkin-spec-v4':
+        specifier: workspace:^
+        version: link:../../effect-gherkin-spec-v4
       '@systemfsoftware/oxlint-plugin-effect-schema':
         specifier: workspace:^
         version: link:../../oxlint-plugins/effect-schema
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../tsconfig
+      '@systemfsoftware/vitest-config':
+        specifier: workspace:^
+        version: link:../../vitest-config
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.2
@@ -610,9 +614,15 @@ importers:
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: catalog:attw
         version: 1.1.1
+      '@systemfsoftware/effect-gherkin-spec-v4':
+        specifier: workspace:^
+        version: link:../../effect-gherkin-spec-v4
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../tsconfig
+      '@systemfsoftware/vitest-config':
+        specifier: workspace:^
+        version: link:../../vitest-config
       '@testing-library/dom':
         specifier: 'catalog:'
         version: 10.4.1

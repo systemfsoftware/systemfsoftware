@@ -83,7 +83,9 @@
   "devDependencies": {
     "@effect/vitest": "catalog:effect4",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
+    "@systemfsoftware/effect-gherkin-spec-v4": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
     "effect": "catalog:effect4",
     "rimraf": "catalog:",

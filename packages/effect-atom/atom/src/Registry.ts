@@ -23,6 +23,7 @@ import { MixedScheduler } from 'effect/Scheduler'
 import * as Scope from 'effect/Scope'
 import * as Stream from 'effect/Stream'
 import type * as Atom from './Atom.js'
+import { decideNodeFate } from './internal/node-lifetime.observer.js'
 import * as Result from './Result.js'
 
 /**
@@ -120,7 +121,7 @@ export const make = (
     readonly scheduleTask?: ((f: () => void) => () => void) | undefined
     readonly timeoutResolution?: number | undefined
     readonly defaultIdleTTL?: number | undefined
-  }  ,
+  },
 ): Registry =>
   new RegistryImpl(
     options?.initialValues,
@@ -499,9 +500,11 @@ class RegistryImpl implements Registry {
     if (this.#currentSweepTTL !== null) {
       idleTTL -= this.#currentSweepTTL
       if (idleTTL <= 0) {
-        this.nodes.delete(atomKey(node.atom))
-        node.remove()
-        this.onNodeRemoved?.(node)
+        if (node.canBeRemoved) {
+          this.nodes.delete(atomKey(node.atom))
+          node.remove()
+          this.onNodeRemoved?.(node)
+        }
         return
       }
     }
@@ -623,7 +626,16 @@ class NodeImpl<A> {
   }
 
   get canBeRemoved(): boolean {
-    return !this.atom.keepAlive && this.listeners.size === 0 && this.children.size === 0 && this.state !== 0
+    const value = this._value
+    return decideNodeFate({
+      keepAlive: this.atom.keepAlive,
+      listenerCount: this.listeners.size,
+      childCount: this.children.size,
+      isLive: this.state !== 0,
+      isWaiting: Result.isResult(value) && Result.isInitial(value) && value.waiting,
+      idleTTL: this.atom.idleTTL,
+      defaultIdleTTL: this.registry.defaultIdleTTL,
+    })._tag !== 'Alive'
   }
 
   _value: A = undefined as any
