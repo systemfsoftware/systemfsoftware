@@ -105,7 +105,7 @@
     "build": "tsdown && pnpm api:check",
     "api:check": "api-extractor run",
     "api:update": "api-extractor run --local",
-    "lint": "oxlint --format=${OXLINT_FORMAT:-default}",
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint --format=${f:-default}",
     "attw": "attw --pack .",
     "mutation": "stryker run",
     "mutation:full": "stryker run --force"

@@ -43,7 +43,7 @@
     "test": "vitest run",
     "test:run": "vitest run",
     "test:types": "tstyche",
-    "lint": "oxlint . --format=${OXLINT_FORMAT:-default}",
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "attw": "attw --pack ."
   },
   "devDependencies": {

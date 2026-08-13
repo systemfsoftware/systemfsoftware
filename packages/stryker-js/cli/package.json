@@ -20,7 +20,7 @@
     "typecheck": "tsc --noEmit --incremental",
     "test": "vitest run",
     "test:contract": "vitest run --config vitest.contract.config.ts",
-    "lint": "oxlint . --format=${OXLINT_FORMAT:-default}",
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "mutation": "stryker run",
     "mutation:full": "stryker run --force"
   },

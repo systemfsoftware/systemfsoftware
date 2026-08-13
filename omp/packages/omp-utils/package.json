@@ -25,7 +25,7 @@
     "build": "rimraf dist && tsdown",
     "typecheck": "tsc --noEmit --incremental",
     "test": "vitest run",
-    "lint": "oxlint . --format=${OXLINT_FORMAT:-default}"
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}"
   },
   "devDependencies": {
     "@effect/platform": "catalog:",

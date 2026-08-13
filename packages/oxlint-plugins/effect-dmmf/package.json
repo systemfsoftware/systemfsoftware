@@ -43,7 +43,7 @@
     "clean": "rimraf dist",
     "typecheck": "tsc --noEmit --incremental",
     "format": "dprint fmt",
-    "lint": "oxlint . --format=${OXLINT_FORMAT:-default}",
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "attw": "attw --pack .",
     "api:check": "api-extractor run",
     "api:update": "api-extractor run --local"
