@@ -54,8 +54,7 @@ export const decide = (payload: WritePayload, facts: Facts): Verdict => {
 
   const added = addedText(payload)
 
-  // repos/AGENTS.md is ours: it is the leaf that maps the vendored subtrees.
-  if (rel.startsWith('repos/') && rel !== 'repos/AGENTS.md') {
+  if (rel.startsWith('repos/')) {
     return {
       refused: true,
       reason: 'repos/ is a vendored subtree and is read-only — amend upstream, not the vendored copy (REPO-S3).',
