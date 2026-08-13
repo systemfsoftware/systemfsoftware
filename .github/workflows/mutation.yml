@@ -87,13 +87,11 @@ jobs:
             cp "$f" "$pkg/reports/stryker-incremental.json"
           done
 
-      # Advisory: a mutation score below threshold never fails this job — the
-      # merged report in the `report` job carries that verdict. A run that never
-      # produced a report is not a score outcome, so the step below fails red:
-      # a missing binary, a crashed run or a timeout must never read green.
+      # A mutation score below threshold fails this job — stryker exits non-zero
+      # on break. A run that never produced a report is a distinct infra failure
+      # (missing binary, crash, or timeout), caught by the step below.
       - name: Mutation
         id: mutation
-        continue-on-error: true
         timeout-minutes: 210
         run: |
           filters=$(echo '${{ matrix.bucket }}' | jq -r 'map("--filter=./" + .) | join(" ")')
