@@ -105,6 +105,53 @@ export const findUndeclaredTaskEnv = (turboConfig, packages) => {
   }))
 }
 
+/** The chains that compose the repo's gates; a guard reaches CI through one of these. */
+const CHAINS = ['check:ci', 'check:local']
+
+/**
+ * `check:turbo-graph` validates turbo's own config, so it must run before turbo
+ * does and cannot be one of turbo's tasks. Every other entry here would be a
+ * guard nobody caches, so the list stays at one and each addition states why.
+ */
+const PRE_TURBO = new Set(['check:turbo-graph'])
+
+const CHAIN_INVOKES = /\bpnpm\s+(check:[\w:-]+)/g
+
+/**
+ * Arm 3 — a guard a chain invokes directly instead of through turbo. Run that
+ * way it has no inputs to hash, so it re-executes on every run and nothing
+ * reports the waste. An existing `//#` task does not excuse the bare call: the
+ * chain then pays for the script twice, once uncached here and once from the
+ * cache in gate:tasks. One violation per (chain, script) pair.
+ */
+export const findUncachedChainGuards = (rootScripts, turboConfig) => {
+  const rootTasks = new Set(
+    Object.keys(turboConfig.tasks ?? {}).filter((task) => task.startsWith('//#')).map((task) => task.slice(3)),
+  )
+  const violations = []
+  for (const chain of CHAINS) {
+    const script = rootScripts[chain]
+    if (typeof script !== 'string') continue
+    for (const [, name] of script.matchAll(CHAIN_INVOKES)) {
+      if (PRE_TURBO.has(name) || !(name in rootScripts)) continue
+      const cached = rootTasks.has(name)
+      violations.push({
+        subject: `${chain} -> ${name}`,
+        detail: cached
+          ? `invoked as \`pnpm ${name}\` even though \`//#${name}\` exists`
+          : `invoked as \`pnpm ${name}\`, and no \`//#${name}\` task exists`,
+        reason: cached
+          ? 'the chain runs the script uncached here and again from the cache in gate:tasks, paying twice for one verdict'
+          : 'a guard outside turbo has no inputs to hash, so it re-executes on every run while every cached sibling is skipped',
+        remedy: cached
+          ? `drop the chain arm; gate:tasks already runs \`//#${name}\``
+          : `declare \`//#${name}\` in turbo.json with the inputs it reads, then run it from gate:tasks instead of the chain`,
+      })
+    }
+  }
+  return violations
+}
+
 const dec = new TextDecoder()
 
 /** Tracked `package.json` paths, vendored trees excluded: `git ls-files` is the authority. */
@@ -129,6 +176,7 @@ const run = () => {
   const violations = [
     ...findPassthroughInvocations(rootScripts),
     ...findUndeclaredTaskEnv(turboConfig, packages),
+    ...findUncachedChainGuards(rootScripts, turboConfig),
   ]
 
   if (violations.length > 0) {
@@ -142,7 +190,7 @@ const run = () => {
 
   console.log(
     `guard-turbo-graph: ${Object.keys(rootScripts).length} root scripts, ${packages.length} workspace packages clean` +
-      ' — no passthrough hash poisoning, no undeclared task env',
+      ' — no passthrough hash poisoning, no undeclared task env, no uncached chain guard',
   )
   return 0
 }
@@ -187,6 +235,33 @@ const FIXTURES = [
     0,
   ],
   [
+    'arm 3 catches a chain guard turbo never caches',
+    findUncachedChainGuards,
+    [{ 'check:local': 'pnpm check:hooks || s=1', 'check:hooks': 'deno task check' }, { tasks: {} }],
+    1,
+  ],
+  [
+    'arm 3 passes a guard reached through its root task',
+    findUncachedChainGuards,
+    [{ 'check:local': 'pnpm gate:tasks', 'check:hooks': 'deno task check' }, { tasks: { '//#check:hooks': {} } }],
+    0,
+  ],
+  [
+    'arm 3 catches a bare call that duplicates an existing root task, the case that first escaped it',
+    findUncachedChainGuards,
+    [
+      { 'check:local': 'pnpm check:hooks || s=1; pnpm gate:tasks', 'check:hooks': 'deno task check' },
+      { tasks: { '//#check:hooks': {} } },
+    ],
+    1,
+  ],
+  [
+    'arm 3 exempts the guard that must run before turbo',
+    findUncachedChainGuards,
+    [{ 'check:local': 'pnpm check:turbo-graph || s=1', 'check:turbo-graph': './g.mjs' }, { tasks: {} }],
+    0,
+  ],
+  [
     'a manifest nested under a package is not a workspace member',
     workspaceMembers,
     [['package.json', 'packages/a/package.json', 'packages/a/test/fixtures/b/package.json']],
@@ -200,6 +275,10 @@ const FIXTURE_NAMES = [
   'arm 2 catches an undeclared env var',
   'arm 2 passes a declared env var',
   'arm 2 skips a shell local, the false positive it once produced',
+  'arm 3 catches a chain guard turbo never caches',
+  'arm 3 passes a guard reached through its root task',
+  'arm 3 catches a bare call that duplicates an existing root task, the case that first escaped it',
+  'arm 3 exempts the guard that must run before turbo',
   'a manifest nested under a package is not a workspace member',
 ]
 
