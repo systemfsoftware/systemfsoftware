@@ -21,6 +21,41 @@ jobs:
     with:
       base_ref: ${{ github.event.pull_request.base.ref }}
       head_sha: ${{ github.event.pull_request.head.sha }}
+  abort-on-conflict:
+    name: abort on mid-run merge conflict
+    needs: conflicts
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Watch for the PR turning dirty
+        if: github.event.pull_request.head.sha != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          while true; do
+            state=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .mergeable_state)
+            if [ "$state" = "dirty" ]; then
+              printf '::error title=merge conflicts::This branch conflicted with the base while the run was in progress. Cancelling the remaining jobs.\n'
+              gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/jobs" \
+                --jq '.jobs[] | select(.status != "completed" and .name != "abort on mid-run merge conflict") | .id' \
+                | while read -r job_id; do
+                    gh api -X POST "repos/$GITHUB_REPOSITORY/actions/jobs/$job_id/cancel" >/dev/null 2>&1 || true
+                  done
+              exit 1
+            fi
+            active=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/jobs" \
+              --jq '[.jobs[] | select(.status != "completed")] | length')
+            if [ "$active" -le 1 ]; then
+              echo "no other jobs running; watcher done"
+              exit 0
+            fi
+            sleep 60
+          done
   discover:
     needs: conflicts
     runs-on: ubuntu-latest
