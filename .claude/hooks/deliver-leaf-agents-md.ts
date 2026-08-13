@@ -1,11 +1,9 @@
 #!/usr/bin/env -S deno run --allow-env --allow-read --allow-write
-// PreToolUse hook contract: exit 0 allows the write, exit 2 refuses it and the
-// stderr text reaches the agent. Neither code is inferable from the source.
-// Nothing below the root AGENTS.md auto-loads — work reaches a package through
-// `pnpm --filter`, never `cd`, so a leaf is delivered only by being named here.
-// Refuses the first write under each governing leaf once per session, then stops.
-// Stats AGENTS.md for existence only and reads no doctrine file, so REPO-S6 and
-// check:script-provenance stay satisfied.
+// PreToolUse hook: exit 0 allows the write, exit 2 refuses it and the stderr
+// text reaches the agent. Nothing below the root AGENTS.md auto-loads — work
+// reaches a package through `pnpm --filter`, never `cd` — so a leaf is
+// delivered only by being named here. Refuses the first write under each
+// governing leaf once per session. Reads no doctrine file (REPO-S6).
 
 import { dirname, isAbsolute, join } from '@std/path/posix'
 import { toText } from '@std/streams'
@@ -29,7 +27,6 @@ export type Verdict =
 
 const ALLOWED: Verdict = { refused: false }
 
-/** existsSync replacement: false on any stat failure, never throws. */
 const exists = async (path: string): Promise<boolean> => {
   try {
     await Deno.stat(path)
@@ -39,23 +36,17 @@ const exists = async (path: string): Promise<boolean> => {
   }
 }
 
-/**
- * bash `case "$target" in "$root"/*) strip ;; /*) pass ;; *) keep ;; esac`:
- * a target under the root is cut to its relative form, an absolute target
- * elsewhere is not this gate's business, a relative target is kept verbatim.
- */
+// bash original semantics: strip targets under the root, pass absolute
+// targets elsewhere, keep relative targets as-is.
 export const relativeToRoot = (target: string, root: string): string | null => {
   if (target.startsWith(root + '/')) return target.slice(root.length + 1)
   if (isAbsolute(target)) return null
   return target
 }
 
-/**
- * Walk up from the target's directory; the first AGENTS.md below the root is
- * the governing leaf. Dirs at or below `repos/<name>` are skipped so a vendored
- * subtree's upstream AGENTS.md never governs — the walk keeps going to
- * `repos/AGENTS.md`, which is ours and is the file that says so (REPO-S3).
- */
+// First AGENTS.md above the target governs. Dirs at or below `repos/<name>`
+// are skipped: a vendored subtree's AGENTS.md is upstream's, so the walk
+// keeps going to `repos/AGENTS.md`, which is ours (REPO-S3).
 export const governingLeaf = async (rel: string, root: string): Promise<string | null> => {
   let dir = dirname(rel)
   while (dir !== '.' && dir !== '/' && dir.length > 0) {
@@ -113,8 +104,7 @@ if (import.meta.main) {
   })
 
   if (verdict.refused) {
-    // A stamp-dir that cannot be created must not brick every write; the guard
-    // declines to rule (bash: `mkdir -p "$stampdir" || exit 0`).
+    // An unwritable stamp dir must not block writes; decline to rule.
     try {
       await Deno.mkdir(stampPath(session, tmp), { recursive: true })
     } catch {
@@ -123,8 +113,7 @@ if (import.meta.main) {
     try {
       await Deno.writeTextFile(join(stampPath(session, tmp), stampName(verdict.leaf)), '')
     } catch {
-      // The stamp failed to record; still refuse this once — the next write
-      // under the leaf is refused again (bash: `: >"$stamp"` has no guard).
+      // Stamp write failed: still refuse this once; the next write tries again.
     }
     console.error(verdict.reason)
     Deno.exit(2)
