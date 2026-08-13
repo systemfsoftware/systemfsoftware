@@ -110,8 +110,7 @@
         "$TURBO_DEFAULT$",
         "stryker.config.json",
         "vitest.config.ts",
-        "vitest.setup.ts",
-        "reports/stryker-incremental.json"
+        "vitest.setup.ts"
       ],
       "outputs": [
         "reports/mutation-report.html",
