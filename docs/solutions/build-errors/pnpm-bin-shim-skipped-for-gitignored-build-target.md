@@ -50,7 +50,7 @@ Every mutation gate in the repository reported success for weeks while the mutat
 | `rm node_modules/.bin/stryker` locally, then run the CI command                                    | The shim came back. The local modules state still says "linked", and the turbo run re-created it — deleting the artifact does not reproduce CI, whose state is "link failed, never retried".            |
 | Committing `bin/stryker.mjs` that does `await import('../dist/main.mjs')` — the sibling `attw` fix | Rejected by this package's own published lint rule. `entrypoint-not-imported` forbids importing `main.ts`'s built artifact from anything but the process: an entrypoint is interpreted, never consumed. |
 | Committing a `spawn`-based `bin/stryker.mjs` instead                                               | Untyped `.mjs` inside the type-aware program: seven `typescript/no-unsafe-*` violations. Adding the file to the tsconfig program silenced those, but the shim still had to exist at all.                |
-| A scoped `overrides` entry disabling the rule for `bin/`                                           | Blocked by design. The repo's oxlint config-guard rejects any rule-disabling override (`claude-plugins/oxlint-guard/src/config-guard/verdict.workflow.ts`), and the rule is deliberately ungated.       |
+| A scoped `overrides` entry disabling the rule for `bin/`                                           | Blocked by design. The repo's oxlint config-guard rejects any rule-disabling override (`agent-plugins/oxlint-guard/src/guard-config.ts`), and the rule is deliberately ungated.                         |
 
 Only after the shim path was closed by doctrine did the real question surface: why does the package need a committed launcher at all when the build takes 60 ms?
 
