@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Worktrunk pre-start: symlink .repos and .issues from the primary worktree,
-# convert gitdir paths to relative, disable GitKraken-incompatible settings.
+# Worktrunk pre-start: symlink .repos, .issues, and wiki from the primary
+# worktree, convert gitdir paths to relative, disable GitKraken-incompatible
+# settings.
 # Invoked by .config/wt.toml. Args: worktree_path [primary_worktree_path]
 
 set -e
@@ -91,3 +92,4 @@ fi
 
 link_shared_dir .repos "$WORKTREE_PATH" "$PRIMARY_PATH"
 link_shared_dir .issues "$WORKTREE_PATH" "$PRIMARY_PATH"
+link_shared_dir wiki "$WORKTREE_PATH" "$PRIMARY_PATH"
