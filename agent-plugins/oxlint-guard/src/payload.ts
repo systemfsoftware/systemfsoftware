@@ -33,6 +33,20 @@ export interface EditCommand {
   readonly toolInput: Record<string, unknown>
 }
 
+/** True for any non-array object; the guards' shared record predicate. */
+export const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+
+/** Existence probe via Deno.stat: absent and unreadable both read as false. */
+export const denoExists = async (target: string): Promise<boolean> => {
+  try {
+    await Deno.stat(target)
+    return true
+  } catch {
+    return false
+  }
+}
+
 // tool_input stays an open record: each tool contributes its own keys and the
 // OMP bridge synthesizes more, and a payload that cannot be parsed must still
 // be classifiable so the config guard can fail closed on it.
@@ -43,19 +57,16 @@ export const decodePayload = (raw: string): EditCommand | undefined => {
   } catch {
     return undefined
   }
-  if (typeof value !== 'object' || value === null) {
+  if (!isRecord(value)) {
     return undefined
   }
-  const payload = value as Record<string, unknown>
+  const payload = value
   const toolName = payload['tool_name']
   if (typeof toolName !== 'string' || toolName === '' || !EDIT_TOOL_NAMES.includes(toolName as never)) {
     return undefined
   }
   const toolInput = payload['tool_input']
-  const input: Record<string, unknown> =
-    typeof toolInput === 'object' && toolInput !== null && !Array.isArray(toolInput)
-      ? toolInput as Record<string, unknown>
-      : {}
+  const input: Record<string, unknown> = isRecord(toolInput) ? toolInput : {}
   const filePath = input['file_path']
   if (typeof filePath !== 'string' || filePath === '') {
     return undefined

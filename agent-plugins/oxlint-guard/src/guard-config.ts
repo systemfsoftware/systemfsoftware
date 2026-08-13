@@ -5,7 +5,7 @@
 
 import { parse as parseJsonc } from '@std/jsonc'
 import * as path from '@std/path'
-import { decodePayload, OXLINT_CONFIG_BASENAMES, readStdin } from './payload.ts'
+import { decodePayload, denoExists, isRecord, OXLINT_CONFIG_BASENAMES, readStdin } from './payload.ts'
 import type { EditCommand } from './payload.ts'
 
 /** A before/after text pair applied to a buffer. */
@@ -14,17 +14,17 @@ interface Hunk {
   readonly newString: string
 }
 
-export interface ContentPair {
+interface ContentPair {
   readonly oldSide: string | undefined
   readonly newSide: string
 }
 
-export type Extraction =
+type Extraction =
   | { readonly tag: 'pairs'; readonly pairs: ContentPair[] }
   | { readonly tag: 'contentless' }
   | { readonly tag: 'unrecoverable'; readonly reason: string }
 
-export type Verdict =
+type Verdict =
   | { readonly tag: 'allow' }
   | { readonly tag: 'block'; readonly rules: string[] }
   | { readonly tag: 'cannot-verify'; readonly reason: string }
@@ -32,9 +32,6 @@ export type Verdict =
 // ---------------------------------------------------------------------------
 // Extraction: turn a tool payload into whole-document before/after pairs.
 // ---------------------------------------------------------------------------
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value)
 
 const isArray = (value: unknown): value is readonly unknown[] => Array.isArray(value)
 
@@ -141,10 +138,15 @@ type HunkCollection = { readonly tag: 'ok'; readonly hunks: Hunk[] } | {
   readonly reason: string
 }
 
-const hunksFromEntries = (entries: readonly unknown[]): HunkCollection => {
+type HunkExtractor = (entry: unknown) => Hunk | undefined | { readonly tag: 'unrecoverable'; readonly reason: string }
+
+// Collect every entry's hunk, skipping contentless entries and failing closed
+// on the first malformed one. The per-tool extractor keeps the error message
+// tool-specific (MultiEdit vs morph) while the loop is shared.
+const collectHunks = (entries: readonly unknown[], toHunk: HunkExtractor): HunkCollection => {
   const hunks: Hunk[] = []
   for (const entry of entries) {
-    const hunk = entryHunk(entry)
+    const hunk = toHunk(entry)
     if (hunk === undefined) {
       continue
     }
@@ -167,7 +169,7 @@ const extractMultiShape = (input: Record<string, unknown>, diskContent: string |
   if (!isArray(edits)) {
     return { tag: 'unrecoverable', reason: 'MultiEdit/Update payload carries non-array edits' }
   }
-  const collected = hunksFromEntries(edits)
+  const collected = collectHunks(edits, entryHunk)
   return collected.tag === 'ok' ? pairFromHunks(diskContent, collected.hunks) : collected
 }
 
@@ -195,22 +197,12 @@ const extractMorphShape = (input: Record<string, unknown>, diskContent: string |
   const edits = input['edits']
   const fileEdits = input['file_edits']
   if (isArray(edits)) {
-    const collected = hunksFromEntries(edits)
+    const collected = collectHunks(edits, entryHunk)
     return collected.tag === 'ok' ? pairFromHunks(diskContent, collected.hunks) : collected
   }
   if (isArray(fileEdits)) {
-    const hunks: Hunk[] = []
-    for (const entry of fileEdits) {
-      const hunk = findReplaceHunk(entry)
-      if (hunk === undefined) {
-        continue
-      }
-      if ('tag' in hunk) {
-        return hunk
-      }
-      hunks.push(hunk)
-    }
-    return pairFromHunks(diskContent, hunks)
+    const collected = collectHunks(fileEdits, findReplaceHunk)
+    return collected.tag === 'ok' ? pairFromHunks(diskContent, collected.hunks) : collected
   }
   return {
     tag: 'unrecoverable',
@@ -234,7 +226,7 @@ const toolShapeOf = (name: string): 'edit' | 'write' | 'create' | 'multi' | 'mor
   }
 }
 
-export const extractPairs = (command: EditCommand, diskContent: string | undefined): Extraction => {
+const extractPairs = (command: EditCommand, diskContent: string | undefined): Extraction => {
   const shape = toolShapeOf(command.toolName)
   switch (shape) {
     case 'edit':
@@ -259,9 +251,6 @@ const configBasename = (targetPath: string): string =>
 const isConfigTarget = (targetPath: string): boolean =>
   (OXLINT_CONFIG_BASENAMES as readonly string[]).includes(configBasename(targetPath))
 
-const isJsonObject = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value)
-
 type RulesEntries = Array<readonly [string, unknown]>
 
 // Every map is read with Object.entries on the parsed value instead of being
@@ -273,21 +262,21 @@ const topLevelRules = (value: Record<string, unknown>): RulesEntries | { readonl
   if (rules === undefined) {
     return []
   }
-  if (isJsonObject(rules)) {
+  if (isRecord(rules)) {
     return Object.entries(rules)
   }
   return { reason: 'the config content is not a JSON object carrying a rules map' }
 }
 
 const overrideEntryRules = (entry: unknown): RulesEntries | undefined | { readonly reason: string } => {
-  if (!isJsonObject(entry)) {
+  if (!isRecord(entry)) {
     return undefined
   }
   const rules = entry['rules']
   if (rules === undefined) {
     return undefined
   }
-  if (isJsonObject(rules)) {
+  if (isRecord(rules)) {
     return Object.entries(rules)
   }
   return { reason: 'an overrides entry carries a rules key that is not a JSON object' }
@@ -319,7 +308,7 @@ const overrideRules = (value: Record<string, unknown>): RulesEntries | { readonl
 }
 
 const rulesEntries = (value: unknown): RulesEntries | { readonly reason: string } => {
-  if (!isJsonObject(value)) {
+  if (!isRecord(value)) {
     return { reason: 'the config content is not a JSON object carrying a rules map' }
   }
   const top = topLevelRules(value)
@@ -480,22 +469,22 @@ const decideOnConfig = (extraction: Extraction, targetPath: string): Verdict => 
   }
 }
 
-export const decide = (extraction: Extraction, targetPath: string): Verdict =>
+const decide = (extraction: Extraction, targetPath: string): Verdict =>
   isConfigTarget(targetPath) ? decideOnConfig(extraction, targetPath) : { tag: 'allow' }
 
 // ---------------------------------------------------------------------------
 // Messages.
 // ---------------------------------------------------------------------------
 
-export const blockMessage = (rules: readonly string[]): string =>
+const blockMessage = (rules: readonly string[]): string =>
   `Blocked: this edit disables the oxlint rule(s) ${rules.join(', ')} in an oxlint config. ` +
   'Fix the underlying violation instead of disabling the rule.'
 
-export const cannotVerifyMessage = (reason: string): string =>
+const cannotVerifyMessage = (reason: string): string =>
   `Blocked: cannot verify this edit to an oxlint config file (${reason}). ` +
   'Re-express the change as Edit, Write, or MultiEdit so the before/after content can be checked.'
 
-export const oversizeMessage =
+const oversizeMessage =
   'Blocked: cannot verify this edit to an oxlint config file (the hook payload exceeded the 1 MiB input cap).'
 
 // ---------------------------------------------------------------------------
@@ -507,15 +496,8 @@ export interface Fs {
   readonly readTextFile: (target: string) => Promise<string>
 }
 
-export const realFs: Fs = {
-  exists: async (target) => {
-    try {
-      await Deno.stat(target)
-      return true
-    } catch {
-      return false
-    }
-  },
+const realFs: Fs = {
+  exists: denoExists,
   readTextFile: (target) => Deno.readTextFile(target),
 }
 
@@ -532,9 +514,6 @@ const resolveAgainstCwd = (cwd: string, filePath: string): string =>
 // exactly like a new file instead of as an empty string that would fail JSON
 // parsing or look like every off-rule was newly added.
 const readOldSide = async (fs: Fs, target: string): Promise<string | undefined> => {
-  if (!await fs.exists(target)) {
-    return undefined
-  }
   try {
     return await fs.readTextFile(target)
   } catch {
@@ -542,7 +521,7 @@ const readOldSide = async (fs: Fs, target: string): Promise<string | undefined> 
   }
 }
 
-export interface GuardResult {
+interface GuardResult {
   readonly exitCode: number
   readonly stderr: string
 }
@@ -553,7 +532,10 @@ export const runConfigGuard = async (raw: string, cwd: string, fs: Fs = realFs):
     return { exitCode: 0, stderr: '' }
   }
   const target = resolveAgainstCwd(cwd, command.filePath)
-  const diskContent = await readOldSide(fs, target)
+  // Only a config target's old side can change the verdict — decide() allows
+  // every other target without consulting the extraction — so the read is
+  // gated on the same predicate decide uses.
+  const diskContent = isConfigTarget(command.filePath) ? await readOldSide(fs, target) : undefined
   const extraction = extractPairs(command, diskContent)
   const verdict = decide(extraction, command.filePath)
   switch (verdict.tag) {

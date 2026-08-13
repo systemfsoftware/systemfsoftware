@@ -6,7 +6,7 @@
 // output). Runs on Deno with --allow-read --allow-run --allow-env, never net.
 
 import * as path from '@std/path'
-import { decodePayload, LINTABLE_EXTENSIONS, OXLINT_CONFIG_BASENAMES, readStdin } from './payload.ts'
+import { decodePayload, denoExists, LINTABLE_EXTENSIONS, OXLINT_CONFIG_BASENAMES, readStdin } from './payload.ts'
 import type { EditCommand } from './payload.ts'
 
 // ---------------------------------------------------------------------------
@@ -19,14 +19,14 @@ export interface ProcessResult {
   readonly stderr: string
 }
 
-export type SpawnFailureReason = 'not-found' | 'not-executable' | 'unknown'
+type SpawnFailureReason = 'not-found' | 'not-executable' | 'unknown'
 
-export interface SpawnFailure {
+interface SpawnFailure {
   readonly reason: SpawnFailureReason
   readonly message: string
 }
 
-export type RunOutcome =
+type RunOutcome =
   | { readonly tag: 'result'; readonly result: ProcessResult }
   | { readonly tag: 'timeout' }
   | { readonly tag: 'spawn-failure'; readonly failure: SpawnFailure }
@@ -47,7 +47,7 @@ export interface LintFs {
   readonly readFirstLine: (target: string) => Promise<string | null>
 }
 
-export type LintPlan =
+type LintPlan =
   | { readonly tag: 'skip'; readonly reason: string }
   | { readonly tag: 'run-deno'; readonly filePath: string }
   | {
@@ -57,11 +57,11 @@ export type LintPlan =
     readonly oxlintBinary: string
   }
 
-export type LintFailure =
+type LintFailure =
   | { readonly tag: 'no-oxlint-config'; readonly installHint: string }
   | { readonly tag: 'no-oxlint-binary'; readonly installHint: string }
 
-export interface LintFacts {
+interface LintFacts {
   readonly toolName: string
   readonly resolvedPath: string
   readonly extension: string
@@ -81,11 +81,16 @@ export interface HookResult {
 // hook cap: oxlint type-aware (30s) + its retry (30s), or deno check + lint
 // (30s each), plus stdin and file gathering — comfortably under the cap while
 // a cold type-aware backend still gets room on a large file.
-export const LINT_COMMAND_TIMEOUT_MS = 30_000
+const LINT_COMMAND_TIMEOUT_MS = 30_000
+
+// 64 KiB per stream bounds both the buffered memory and the text that reaches
+// the block message (which carries a single stream).
+const OUTPUT_CAP_BYTES = 64 * 1024
 
 // Appended when a drained stream exceeded its byte budget, so the reader of a
 // block message knows the output was cut.
-export const TRUNCATION_MARKER = '\n[output truncated at 65536 bytes; run the linter directly for full output]'
+export const TRUNCATION_MARKER =
+  `\n[output truncated at ${OUTPUT_CAP_BYTES} bytes; run the linter directly for full output]`
 
 // ---------------------------------------------------------------------------
 // Plan: what to run for an edited file.
@@ -101,6 +106,9 @@ const LOCKFILE_INSTALL_COMMANDS: Readonly<Record<string, string>> = {
   'bun.lock': 'bun add -d oxlint',
 }
 
+// Walk targets for the install hint: the same lockfiles, in the same order.
+const LOCKFILE_BASENAMES: readonly string[] = Object.keys(LOCKFILE_INSTALL_COMMANDS)
+
 const NO_LOCKFILE_HINT = 'install oxlint as a dev dependency of this project'
 
 const installHintFor = (lockfile: string | null): string =>
@@ -111,7 +119,7 @@ const isLintableExtension = (extension: string): boolean =>
 
 const isDenoShebang = (firstLine: string | null): boolean => firstLine !== null && /^#!.*\bdeno\b/.test(firstLine)
 
-export const decideLintPlan = (facts: LintFacts): LintPlan | LintFailure => {
+const decideLintPlan = (facts: LintFacts): LintPlan | LintFailure => {
   if (!facts.exists) {
     return { tag: 'skip', reason: 'file-missing' }
   }
@@ -147,14 +155,14 @@ const combinedOutput = (result: ProcessResult): string => result.stdout + '\n' +
 
 const stderrOrStdout = (result: ProcessResult): string => (result.stderr !== '' ? result.stderr : result.stdout)
 
-export type LintOutcome =
+type LintOutcome =
   | {
     readonly tag: 'outcome'
     readonly outcome: 'clean' | 'benign-no-files' | 'ignored-path' | 'retry-without-type-aware'
   }
   | { readonly tag: 'violation'; readonly output: string }
 
-export const classifyLintResult = (result: ProcessResult, canRetry: boolean): LintOutcome => {
+const classifyLintResult = (result: ProcessResult, canRetry: boolean): LintOutcome => {
   if (result.exitCode === 0) {
     return { tag: 'outcome', outcome: 'clean' }
   }
@@ -174,8 +182,10 @@ export const classifyLintResult = (result: ProcessResult, canRetry: boolean): Li
 // Messages.
 // ---------------------------------------------------------------------------
 
-const ACCEPTED_CONFIG_NAMES =
-  'oxlint.config.ts, oxlint.config.js, oxlint.config.mjs, oxlint.config.cjs, .oxlintrc.json, or oxlint.json'
+// Same set as OXLINT_CONFIG_BASENAMES, rendered as the prose list in stderr.
+const ACCEPTED_CONFIG_NAMES = `${OXLINT_CONFIG_BASENAMES.slice(0, -1).join(', ')}, or ${
+  OXLINT_CONFIG_BASENAMES[OXLINT_CONFIG_BASENAMES.length - 1]
+}`
 
 const describeLintFailure = (failure: LintFailure): string => {
   switch (failure.tag) {
@@ -238,22 +248,10 @@ const describeDenoSpawnFailure = (failure: SpawnFailure): string => {
 
 const CONFIG_BASENAMES: readonly string[] = OXLINT_CONFIG_BASENAMES
 
-const LOCKFILE_BASENAMES: readonly string[] = [
-  'pnpm-lock.yaml',
-  'package-lock.json',
-  'yarn.lock',
-  'bun.lockb',
-  'bun.lock',
-]
-
 // The walk for configs and binaries must never escape the project: on a shared
 // host, a binary planted in an ancestor directory (e.g. /tmp/node_modules/
 // .bin/oxlint) would otherwise be selected and run against the agent's files.
 const PROJECT_ROOT_ENV = 'CLAUDE_PROJECT_DIR'
-
-// 64 KiB per stream bounds both the buffered memory and the text that reaches
-// the block message (which carries a single stream).
-const OUTPUT_CAP_BYTES = 64 * 1024
 
 const walkUp = (startDir: string): readonly string[] => {
   const dirs: string[] = []
@@ -280,9 +278,9 @@ const dirsUpToRoot = (startDir: string, root: string): readonly string[] => {
 const findProjectRoot = async (
   fs: LintFs,
   cwd: string,
-  getEnv: (key: string) => string | undefined,
+  env: Readonly<Record<string, string | undefined>>,
 ): Promise<string> => {
-  const fromEnv = getEnv(PROJECT_ROOT_ENV)
+  const fromEnv = env[PROJECT_ROOT_ENV]
   if (fromEnv !== undefined && fromEnv.trim() !== '') {
     return path.resolve(fromEnv)
   }
@@ -345,13 +343,16 @@ const gather = async (
   fs: LintFs,
   filePath: string,
   cwd: string,
-  getEnv: (key: string) => string | undefined,
+  env: Readonly<Record<string, string | undefined>>,
 ): Promise<GatheredFacts> => {
   const resolved = path.resolve(cwd, filePath)
-  const root = await findProjectRoot(fs, cwd, getEnv)
+  const root = await findProjectRoot(fs, cwd, env)
   const dirs = dirsUpToRoot(path.dirname(resolved), root)
+  const extension = path.extname(resolved).slice(1)
   const exists = await fs.exists(resolved)
-  const firstLine = exists ? await fs.readFirstLine(resolved) : null
+  // The first line only feeds the deno-shebang check, which is unreachable for
+  // a missing or non-lintable file — skip the read there entirely.
+  const firstLine = exists && isLintableExtension(extension) ? await fs.readFirstLine(resolved) : null
   const configPath = await findFirstExisting(
     fs,
     dirs.flatMap((dir) => CONFIG_BASENAMES.map((name) => path.join(dir, name))),
@@ -429,11 +430,24 @@ const reasonOf = (error: unknown): SpawnFailureReason => {
 
 // The byte budget applies to every result the guard reads, whether the runner
 // already drained the pipe within the budget (realRunner) or handed back a
-// canned string (tests): a result that still exceeds the cap is cut here.
-// Cutting a string that already ends in the marker reproduces it exactly, so
-// the real path is unaffected.
-const capOutput = (text: string): string =>
-  text.length <= OUTPUT_CAP_BYTES ? text : text.slice(0, OUTPUT_CAP_BYTES) + TRUNCATION_MARKER
+// canned string (tests): a result that still exceeds the cap is cut here at a
+// character boundary. Strings that already carry the marker are left untouched,
+// so the real path is never processed twice.
+const capOutput = (text: string): string => {
+  if (text.endsWith(TRUNCATION_MARKER)) {
+    return text
+  }
+  if (new TextEncoder().encode(text).length <= OUTPUT_CAP_BYTES) {
+    return text
+  }
+  // Back up from the byte budget to a character boundary so the cut never
+  // lands inside a multi-byte sequence.
+  let cut = OUTPUT_CAP_BYTES
+  while (cut > 0 && (text.charCodeAt(cut) & 0xc0) === 0x80) {
+    cut -= 1
+  }
+  return text.slice(0, cut) + TRUNCATION_MARKER
+}
 
 const capResult = (result: ProcessResult): ProcessResult => ({
   ...result,
@@ -453,10 +467,9 @@ const runCapped = (
     outcome.tag === 'result' ? { tag: 'result', result: capResult(outcome.result) } : outcome
   )
 
-export const realRunner: Runner = {
+const realRunner: Runner = {
   async run(program, args, cwd, env, timeoutMs) {
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), timeoutMs)
+    const signal = AbortSignal.timeout(timeoutMs)
     try {
       const command = new Deno.Command(program, {
         args,
@@ -464,25 +477,23 @@ export const realRunner: Runner = {
         env,
         stdout: 'piped',
         stderr: 'piped',
-        signal: controller.signal,
+        signal,
       })
       const process = command.spawn()
       const [stdout, stderr] = await Promise.all([drainCapped(process.stdout), drainCapped(process.stderr)])
       const status = await process.status
-      if (controller.signal.aborted) {
+      if (signal.aborted) {
         return { tag: 'timeout' }
       }
       return { tag: 'result', result: { exitCode: status.code, stdout, stderr } }
     } catch (error) {
-      if (controller.signal.aborted) {
+      if (signal.aborted) {
         return { tag: 'timeout' }
       }
       return {
         tag: 'spawn-failure',
         failure: { reason: reasonOf(error), message: error instanceof Error ? error.message : 'unknown error' },
       }
-    } finally {
-      clearTimeout(timer)
     }
   },
 }
@@ -506,15 +517,15 @@ const ALLOWLISTED_ENV_VARS: readonly string[] = [
   'PATHEXT',
 ]
 
-const minimalEnv = (getEnv: (key: string) => string | undefined): Record<string, string> => {
-  const env: Record<string, string> = {}
+const minimalEnv = (env: Readonly<Record<string, string | undefined>>): Record<string, string> => {
+  const minimal: Record<string, string> = {}
   for (const key of ALLOWLISTED_ENV_VARS) {
-    const value = getEnv(key)
+    const value = env[key]
     if (value !== undefined) {
-      env[key] = value
+      minimal[key] = value
     }
   }
-  return env
+  return minimal
 }
 
 const oxlintArgs = (run: Extract<LintPlan, { readonly tag: 'run-oxlint' }>, typeAware: boolean): string[] => [
@@ -533,11 +544,11 @@ const runDeno = async (
   runner: Runner,
   filePath: string,
   timeoutMs: number,
-  getEnv: (key: string) => string | undefined,
+  env: Readonly<Record<string, string | undefined>>,
 ): Promise<HookResult> => {
   const cwd = path.dirname(filePath)
-  const env = minimalEnv(getEnv)
-  const checkAttempt = await runCapped(runner, 'deno', ['check', '--', filePath], cwd, env, timeoutMs)
+  const minimal = minimalEnv(env)
+  const checkAttempt = await runCapped(runner, 'deno', ['check', '--', filePath], cwd, minimal, timeoutMs)
   if (checkAttempt.tag === 'spawn-failure') {
     return block(describeDenoSpawnFailure(checkAttempt.failure))
   }
@@ -548,7 +559,7 @@ const runDeno = async (
   if (checkAttempt.result.exitCode !== 0) {
     return block(`oxlint-guard: deno check failed for ${filePath}:\n${stderrOrStdout(checkAttempt.result)}`)
   }
-  const lintAttempt = await runCapped(runner, 'deno', ['lint', '--', filePath], cwd, env, timeoutMs)
+  const lintAttempt = await runCapped(runner, 'deno', ['lint', '--', filePath], cwd, minimal, timeoutMs)
   if (lintAttempt.tag === 'spawn-failure') {
     return block(describeDenoSpawnFailure(lintAttempt.failure))
   }
@@ -566,14 +577,14 @@ const runOxlint = async (
   runner: Runner,
   run: Extract<LintPlan, { readonly tag: 'run-oxlint' }>,
   timeoutMs: number,
-  getEnv: (key: string) => string | undefined,
+  env: Readonly<Record<string, string | undefined>>,
 ): Promise<HookResult> => {
   const cwd = path.dirname(run.configPath)
-  const env = minimalEnv(getEnv)
+  const minimal = minimalEnv(env)
   const program = run.oxlintBinary.endsWith('.cmd') ? 'cmd.exe' : run.oxlintBinary
   const prefix = run.oxlintBinary.endsWith('.cmd') ? ['/c', run.oxlintBinary] : []
 
-  const firstAttempt = await runCapped(runner, program, [...prefix, ...oxlintArgs(run, true)], cwd, env, timeoutMs)
+  const firstAttempt = await runCapped(runner, program, [...prefix, ...oxlintArgs(run, true)], cwd, minimal, timeoutMs)
   if (firstAttempt.tag === 'spawn-failure') {
     // A binary that cannot be spawned will not start on retry either — say
     // what is wrong instead of retrying or reporting a bogus violation.
@@ -590,7 +601,7 @@ const runOxlint = async (
   }
   // The type-aware pass timed out or its backend is unavailable — retry
   // without type information rather than losing the result entirely.
-  const retryAttempt = await runCapped(runner, program, [...prefix, ...oxlintArgs(run, false)], cwd, env, timeoutMs)
+  const retryAttempt = await runCapped(runner, program, [...prefix, ...oxlintArgs(run, false)], cwd, minimal, timeoutMs)
   if (retryAttempt.tag === 'spawn-failure') {
     return block(describeOxlintSpawnFailure(run.oxlintBinary, retryAttempt.failure))
   }
@@ -617,25 +628,30 @@ export interface LintGuardOptions {
   readonly env: Readonly<Record<string, string | undefined>>
 }
 
-export const defaultOptions = (): LintGuardOptions => ({
+const defaultOptions = (): LintGuardOptions => ({
   commandTimeoutMs: LINT_COMMAND_TIMEOUT_MS,
   fs: realLintFs,
   runner: realRunner,
   env: {},
 })
 
-const getEnv = (options: LintGuardOptions) => (key: string): string | undefined =>
-  key in options.env ? options.env[key] : Deno.env.get(key)
+// The keys the guard ever reads: the allowlist (passed to children) plus the
+// project-root override (never passed to children).
+const ENV_KEYS: readonly string[] = [...ALLOWLISTED_ENV_VARS, PROJECT_ROOT_ENV]
 
-export const realLintFs: LintFs = {
-  exists: async (target) => {
-    try {
-      await Deno.stat(target)
-      return true
-    } catch {
-      return false
-    }
-  },
+// Snapshot the effective environment once at guard start — options.env wins
+// per key, Deno.env fills the rest — so a one-shot hook process reads the
+// process environment exactly once and every consumer sees the same record.
+const snapshotEnv = (options: LintGuardOptions): Record<string, string | undefined> => {
+  const env: Record<string, string | undefined> = {}
+  for (const key of ENV_KEYS) {
+    env[key] = key in options.env ? options.env[key] : Deno.env.get(key)
+  }
+  return env
+}
+
+const realLintFs: LintFs = {
+  exists: denoExists,
   isDirectory: async (target) => {
     try {
       return (await Deno.stat(target)).isDirectory
@@ -687,7 +703,7 @@ export const runLintGuard = async (
   if (command === undefined) {
     return allow()
   }
-  const env = getEnv(options)
+  const env = snapshotEnv(options)
   const facts = await gather(options.fs, command.filePath, cwd, env)
   if (facts.brokenBinary !== null) {
     return block(describeBrokenBinary(facts.brokenBinary))
