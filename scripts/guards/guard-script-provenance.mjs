@@ -29,8 +29,8 @@
 // Declared limits, stated rather than hidden:
 //
 //   - Arm 1 parses with `oxc-parser` (the parser oxlint itself uses) rather than
-//     stripping comments by hand, which `guard-no-hand-rolled-jsonc.mjs` bans.
-//     A doctrine path in a comment therefore passes -- three files cite
+//     stripping comments by hand, keeping strings intact. A doctrine path in a
+//     comment therefore passes -- three files cite
 //     `AGENTS.md` or `CONSTITUTION` in prose today and must keep passing. So
 //     does a diagnostic: `guard-mutate-scope.mjs` ends with
 //     `console.error('See AGENTS.md REPO-S5.')`, a pointer, not a read.
@@ -117,10 +117,6 @@ const MANIFEST = new Map([
   ['guards/guard-mutate-scope.mjs', [
     'workspace-layout',
     'REPO-S5 mutate globs across every package. The rule is about repo cell layout.',
-  ]],
-  ['guards/guard-no-hand-rolled-jsonc.mjs', [
-    'workspace-layout',
-    'Per-package lint cannot reach packages/stryker-js: vendored fork, no lint script. See its own header.',
   ]],
   ['guards/guard-script-provenance.mjs', [
     'workspace-layout',

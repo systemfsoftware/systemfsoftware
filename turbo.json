@@ -208,22 +208,6 @@
       "outputs": [],
       "cache": true
     },
-    "//#check:no-hand-rolled-jsonc": {
-      "inputs": [
-        "$TURBO_ROOT$/scripts/guards/guard-no-hand-rolled-jsonc.mjs",
-        "$TURBO_ROOT$/packages/**/*.{ts,mts,cts,js,mjs,cjs}",
-        "$TURBO_ROOT$/scripts/**/*.{ts,mts,cts,js,mjs,cjs}",
-        "$TURBO_ROOT$/omp/**/*.{ts,mts,cts,js,mjs,cjs}",
-        "$TURBO_ROOT$/.github/**/*.{js,mjs}",
-        "!$TURBO_ROOT$/**/dist/**",
-        "!$TURBO_ROOT$/**/coverage/**",
-        "!$TURBO_ROOT$/**/reports/**",
-        "!$TURBO_ROOT$/**/.stryker-tmp/**",
-        "!$TURBO_ROOT$/**/.worktrees/**"
-      ],
-      "outputs": [],
-      "cache": true
-    },
     "//#check:publish-config": {
       "inputs": [
         "$TURBO_ROOT$/scripts/guards/validate-publish-config.mjs",

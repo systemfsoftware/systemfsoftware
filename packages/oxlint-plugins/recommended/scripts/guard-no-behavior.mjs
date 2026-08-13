@@ -22,9 +22,8 @@ const behaviorPatterns = [
   { pattern: /\b(?:if|for|while|switch|try)\b/u, name: 'a control-flow keyword' },
 ]
 
-// Ordering is deliberate and NOT fixed here (declared, CONSTITUTION §V.6; see the
-// exemption for this file in scripts/guard-no-hand-rolled-jsonc.mjs). Comments
-// are stripped BEFORE string literals are replaced, so a `//` inside a scanned
+// Ordering is deliberate and NOT fixed here (declared, CONSTITUTION §V.6).
+// Comments are stripped BEFORE string literals are replaced, so a `//` inside a scanned
 // string mangles that line and the gate below false-negatives. Reordering the
 // passes is a lateral move: replacing literals first breaks on any apostrophe in
 // a comment (`don't`). The correct fix is the workspace `oxc-parser`. This
