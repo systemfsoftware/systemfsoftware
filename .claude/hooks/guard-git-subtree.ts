@@ -1,25 +1,4 @@
 #!/usr/bin/env -S deno run
-/**
- * PreToolUse hook: validate `git subtree` invocations before Bash runs them.
- *
- * Pure rules (importable for tests):
- *  - subtree add/pull require --prefix, -S/--gpg-sign, --squash, and a named
- *    ref — a URL is blocked (git subtree fetches it into transient FETCH_HEAD
- *    and can squash stale content).
- *  - subtree push is always blocked (writes to the upstream repo, and the
- *    vendored subtrees are READ-ONLY).
- *
- * Hook contract (Claude Code): exit 0 allows the Bash call, exit 2 blocks it
- * with the reason on stderr. stdout stays machine-clean.
- */
-
-/**
- * Pure functions for git subtree validation.
- *
- * No hardcoded repo data — no "known prefix" whitelist.
- * Every git subtree add/pull needs --prefix, -S, --squash, and a named ref (not a URL).
- * git subtree push is always blocked.
- */
 
 const URL_PATTERN = /^(https?:\/\/|git@|git:\/\/)/
 
@@ -55,12 +34,6 @@ function findRepoArg(args: readonly string[], afterIndex: number): string {
   return ''
 }
 
-/**
- * Parse git subtree args into a structured form.
- * In production (hook), args comes from commandArgs() which excludes the
- * command name: ['subtree', 'add', '--prefix=x', ...].
- * In tests, args may be the full line split by space.
- */
 export function parseSubtreeArgs(args: readonly string[]): ParsedSubtreeArgs {
   const subIdx = args.indexOf('subtree')
   const subcommand = subIdx === -1 ? (args[0] ?? '') : (args[subIdx + 1] ?? '')
@@ -159,9 +132,6 @@ export function validateSubtree(parsed: ParsedSubtreeArgs): ValidationResult {
   return { valid: true, reason: '' }
 }
 
-// --- Shell command extraction ----------------------------------------------
-
-/** Split a shell command into pipeline-free segments (on ; && || | ( ) newline). */
 function splitSegments(command: string): string[] {
   return command
     .split(/&&|\|\||[;&|()\n]/)
@@ -169,7 +139,6 @@ function splitSegments(command: string): string[] {
     .filter(s => s.length > 0)
 }
 
-/** Shell-word tokenizer: single/double quotes, backslash escapes, # comments. */
 function tokenize(segment: string): string[] {
   const tokens: string[] = []
   let current = ''
@@ -209,7 +178,7 @@ function tokenize(segment: string): string[] {
       i += 2
       continue
     }
-    if (c === '#' && current.length === 0) break // comment to end of segment
+    if (c === '#' && current.length === 0) break
     if (/\s/.test(c)) {
       if (current.length > 0) {
         tokens.push(current)
@@ -225,7 +194,6 @@ function tokenize(segment: string): string[] {
   return tokens
 }
 
-/** All `git subtree <subcommand> ...` argument lists in one command. */
 function subtreeArgsLists(command: string): string[][] {
   const lists: string[][] = []
   for (const segment of splitSegments(command)) {
@@ -239,8 +207,6 @@ function subtreeArgsLists(command: string): string[][] {
   return lists
 }
 
-// --- Hook entry point -------------------------------------------------------
-
 interface HookPayload {
   readonly tool_name?: string
   readonly tool_input?: { readonly command?: string }
@@ -252,7 +218,7 @@ if (import.meta.main) {
   try {
     payload = JSON.parse(raw) as HookPayload
   } catch {
-    Deno.exit(0) // not hook JSON — allow
+    Deno.exit(0)
   }
 
   if (payload.tool_name !== 'Bash') Deno.exit(0)
