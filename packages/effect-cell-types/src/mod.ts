@@ -1,2 +1,2 @@
-export * from './workflow-contract.kernel.js'
-export * from './workflow.kernel.js'
+export * as Policy from './Policy.js'
+export * as Workflow from './Workflow.js'

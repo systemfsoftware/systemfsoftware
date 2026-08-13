@@ -10,21 +10,21 @@
   },
   "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/effect-cell-types#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "Type-level contracts for the repo's cell taxonomy, starting with the Workflow decision channel — a type-only package every effect kernel shares.",
+  "description": "Type-level contracts for the repo's cell taxonomy, starting with the Workflow decision channel — branded Workflow<C, D, E> types plus a runtime make constructor every effect kernel can share.",
   "keywords": [
     "effect",
     "effect-ts",
     "typescript",
     "architecture",
-    "type-level",
     "workflow",
-    "either"
+    "either",
+    "type-contracts"
   ],
   "type": "module",
   "exports": {
     ".": {
       "@systemfsoftware/source": "./src/mod.ts",
-      "types": "./dist/effect-cell-types.d.ts",
+      "types": "./dist/index.d.ts",
       "default": "./dist/index.mjs"
     },
     "./package.json": "./package.json"
@@ -38,6 +38,7 @@
     "typecheck": "tsc --noEmit --incremental",
     "test": "vitest run --passWithNoTests",
     "test:run": "vitest run --passWithNoTests",
+    "test:types": "TSTYCHE_TYPESCRIPT_MODULE=tstyche-typescript tstyche",
     "api:check": "api-extractor run",
     "api:update": "api-extractor run --local",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
@@ -53,6 +54,7 @@
     "effect": "catalog:",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
+    "tstyche": "catalog:",
     "vitest": "catalog:"
   },
   "peerDependencies": {
@@ -61,7 +63,7 @@
   "publishConfig": {
     "exports": {
       ".": {
-        "types": "./dist/effect-cell-types.d.ts",
+        "types": "./dist/index.d.ts",
         "default": "./dist/index.mjs"
       },
       "./package.json": "./package.json"

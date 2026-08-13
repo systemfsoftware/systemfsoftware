@@ -1,6 +1,6 @@
 # @systemfsoftware/effect-cell-types
 
-The type-level contract for a `*.workflow.ts` cell. A workflow is a pure decision — a command in, an `Either` out — and `Workflow<Command, Decision, Error>` pins that shape in the type system. The contract is checked by `tsc` from the file's **content** (an exported value that violates the shape stops the build), not by a lint rule keyed on the file's **name**. The package is type-only: it emits no runtime values, and consumers use `import type`.
+The type-level contract for a `*.workflow.ts` cell. A workflow is a pure decision — a command in, an `Either` out — and `Workflow<Command, Decision, Error>` pins that shape in the type system. The contract is checked by `tsc` from the file's **content** (an exported value that violates the shape stops the build), not by a lint rule keyed on the file's **name**. Beside the types the package ships exactly one runtime value — the identity constructor `make` — and the type tests (`test-types/Workflow.tst.ts`, run by tstyche) prove the channel guards still bind.
 
 ## The contract
 
@@ -12,6 +12,20 @@ type Decide = Workflow<Command, Decision, Error>
 ```
 
 When both channels are inhabited, `Workflow<Command, Decision, Error>` is exactly the function type `(command: Command) => Either<Decision, Error>`. A `never` channel does not silently collapse to that function: it resolves to a marker interface that no function can satisfy, so the mistake is a compile error with the remediation attached (below).
+
+## The constructor
+
+Executors build a workflow from a plain decider with `make` — runtime identity, one cast across the branded return:
+
+```ts
+import { make } from '@systemfsoftware/effect-cell-types'
+
+export const decide = make<DecideInput, RestartDecision, RestartDecisionExhausted>(
+  (input) => (input.exitSuccess ? right(new RestartDecisionContinue()) : left(new RestartDecisionExhausted())),
+)
+```
+
+The parameter is the plain function type, not `Workflow<C, D, E>`: the `never`-channel conditional lives on the **return** type, so a total decision (`Either<Decision, never>`) resolves to `UninhabitedError` and the call site fails with "This expression is not callable", while a `Promise`- or bare-value-returning decider is rejected at the argument. `make` is a runtime value, so consumers need it as an ordinary import only where they construct workflows; everywhere else `import type` still erases at compile time.
 
 ## Worked example
 
@@ -169,4 +183,4 @@ Measured on the real consumer: when `decideRestart`'s error channel was set to `
 pnpm add -D @systemfsoftware/effect-cell-types
 ```
 
-A devDependency — the package is type-only and `import type` is erased at runtime. `effect` is a peer dependency: bring your own (you already have it).
+A devDependency — consumers mostly use the types (`import type`), and the one runtime export, `make`, is an identity function. `effect` is a peer dependency: bring your own (you already have it).
