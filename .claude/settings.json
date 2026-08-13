@@ -43,8 +43,8 @@
           },
           {
             "type": "command",
-            "command": "command -v deno >/dev/null 2>&1 || { echo 'guard-git-subtree: deno not found on PATH - install Deno (https://deno.land) so the guard can run' >&2; exit 1; }; exec deno run --quiet --node-modules-dir=none \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-git-subtree.ts\"",
-            "timeout": 5
+            "command": "command -v deno >/dev/null 2>&1 || { echo 'guard-git-subtree: deno not found on PATH - install Deno (https://deno.land) so the guard can run' >&2; exit 1; }; exec deno run --quiet \"$CLAUDE_PROJECT_DIR/agent-plugins/git-subtrees/src/guard-git-subtree.ts\"",
+            "timeout": 15
           }
         ]
       },

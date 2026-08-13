@@ -1,0 +1,17 @@
+{
+  "description": "Blocks unsafe git subtree invocations before Bash runs them (PreToolUse).",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v deno >/dev/null 2>&1 || { echo 'git-subtrees: deno not found on PATH - install Deno (https://deno.land) so the guard can run' >&2; exit 1; }; exec deno run --quiet \"${CLAUDE_PLUGIN_ROOT}/src/guard-git-subtree.ts\"",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  }
+}
