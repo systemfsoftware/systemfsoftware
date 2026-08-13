@@ -63,6 +63,11 @@ catalog:
   playwright: ^1
 catalogMode: prefer
 catalogs:
+  effect4:
+    # Effect v4 release candidate — separate catalog so the atom packages can
+    # migrate to the v4 RC while every other package stays on effect 3.x.
+    effect: 4.0.0-rc.108
+    "@effect/vitest": 4.0.0-rc.108
   oxlint:
     oxlint: ^1.77.0
     "@oxlint/plugins": ^1.77.0
