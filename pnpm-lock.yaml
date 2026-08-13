@@ -16,9 +16,6 @@ catalogs:
     '@effect/cli':
       specifier: ^0.77.0
       version: 0.77.0
-    '@effect/experimental':
-      specifier: ^0.61.1
-      version: 0.61.1
     '@effect/platform':
       specifier: ^0.97.1
       version: 0.97.1
@@ -31,9 +28,6 @@ catalogs:
     '@effect/printer':
       specifier: ^0.51.0
       version: 0.51.0
-    '@effect/rpc':
-      specifier: ^0.76.2
-      version: 0.76.2
     '@effect/sql':
       specifier: ^0.52.1
       version: 0.52.1
@@ -148,12 +142,21 @@ catalogs:
     vitest:
       specifier: ^4.1.10
       version: 4.1.10
+<<<<<<< HEAD
   effect-v4:
     '@effect/vitest':
       specifier: ^4.0.0-rc.108
       version: 4.0.0-rc.108
     effect:
       specifier: ^4.0.0-rc.108
+=======
+  effect4:
+    '@effect/vitest':
+      specifier: 4.0.0-rc.108
+      version: 4.0.0-rc.108
+    effect:
+      specifier: 4.0.0-rc.108
+>>>>>>> 406933f0196 (feat(effect-atom)!: port atom packages onto effect v4 RC)
       version: 4.0.0-rc.108
   oxlint:
     '@oxlint/plugins':
@@ -563,20 +566,10 @@ importers:
         version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1)(vite@8.2.1(@types/node@24.13.2)(esbuild@0.27.7)(jiti@2.7.0)(yaml@2.9.0))
 
   packages/effect-atom/atom:
-    dependencies:
-      '@effect/experimental':
-        specifier: 'catalog:'
-        version: 0.61.1(@effect/platform@0.97.1(effect@3.22.1))(effect@3.22.1)
-      '@effect/platform':
-        specifier: 'catalog:'
-        version: 0.97.1(effect@3.22.1)
-      '@effect/rpc':
-        specifier: 'catalog:'
-        version: 0.76.2(@effect/platform@0.97.1(effect@3.22.1))(effect@3.22.1)
     devDependencies:
       '@effect/vitest':
-        specifier: 'catalog:'
-        version: 0.30.0(effect@3.22.1)(vitest@4.1.10)
+        specifier: catalog:effect4
+        version: 4.0.0-rc.108(effect@4.0.0-rc.108)(vitest@4.1.10)
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: catalog:attw
         version: 1.1.1
@@ -590,8 +583,8 @@ importers:
         specifier: 'catalog:'
         version: 24.13.2
       effect:
-        specifier: 'catalog:'
-        version: 3.22.1
+        specifier: catalog:effect4
+        version: 4.0.0-rc.108
       rimraf:
         specifier: 'catalog:'
         version: 6.1.3
@@ -612,8 +605,8 @@ importers:
         version: link:../atom
     devDependencies:
       '@effect/vitest':
-        specifier: 'catalog:'
-        version: 0.30.0(effect@3.22.1)(vitest@4.1.10)
+        specifier: catalog:effect4
+        version: 4.0.0-rc.108(effect@4.0.0-rc.108)(vitest@4.1.10)
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: catalog:attw
         version: 1.1.1
@@ -642,8 +635,8 @@ importers:
         specifier: 'catalog:'
         version: 0.26.0
       effect:
-        specifier: 'catalog:'
-        version: 3.22.1
+        specifier: catalog:effect4
+        version: 4.0.0-rc.108
       jsdom:
         specifier: 'catalog:'
         version: 29.1.1

@@ -1,27 +1,41 @@
-import * as _ from '@systemfsoftware/effect-atom/Result'
-import { Cause, Equal } from 'effect'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from '@effect/vitest'
+import { Cause } from 'effect'
+import * as AsyncResult from '../src/Result.js'
 
-describe('Result', () => {
-  it('match', () => {
-    const matcher = _.match({
-      onInitial: () => 'init',
-      onFailure: () => 'fail',
-      onSuccess: (s) => s.value,
+describe('AsyncResult', () => {
+  describe('builder', () => {
+    it('onDefect handles defects', () => {
+      const defect = new Error('boom')
+      const result = AsyncResult.failure<number, string>(Cause.die(defect))
+
+      const handled = AsyncResult.builder(result)
+        .onDefect((received) => received)
+        .orElse(() => null)
+
+      expect(handled).toBe(defect)
     })
 
-    expect(matcher(_.initial(false))).toEqual('init')
-    expect(matcher(_.failure(Cause.empty))).toEqual('fail')
-    expect(matcher(_.success(1))).toEqual(1)
-  })
+    it('onDefect does not handle typed errors', () => {
+      const handled = AsyncResult.builder(AsyncResult.fail('error'))
+        .onDefect(() => 'defect')
+        .orElse(() => 'fallback')
 
-  it('considers waiting flag in equality', () => {
-    const success = _.success('value')
-    const waiting = _.waiting(success)
+      expect(handled).toEqual('fallback')
+    })
 
-    expect(Equal.isEqual(success)).toBe(true)
-    expect(Equal.isEqual(waiting)).toBe(true)
-    expect(Equal.equals(success, waiting)).toBe(false)
-    expect((success as any)[Equal.symbol](waiting)).toBe(false)
+    it('exhaustive returns output when typed errors are handled', () => {
+      const handled = AsyncResult.builder(
+        AsyncResult.fail<{ readonly _tag: 'NotFoundError'; readonly resource: string }>({
+          _tag: 'NotFoundError',
+          resource: 'user',
+        }),
+      )
+        .onErrorTag('NotFoundError', (error) => `missing:${error.resource}`)
+        .onDefect(() => 'failure')
+        .onInterrupt(() => 'interrupt')
+        .exhaustive()
+
+      expect(handled).toEqual('missing:user')
+    })
   })
 })

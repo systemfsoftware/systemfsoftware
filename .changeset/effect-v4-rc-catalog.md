@@ -1,14 +1,15 @@
 ---
-"@systemfsoftware/effect-atom": patch
-"@systemfsoftware/effect-atom-react": patch
+"@systemfsoftware/effect-atom": minor
+"@systemfsoftware/effect-atom-react": minor
 ---
 
-Add a separate named catalog `effect4` in `pnpm-workspace.yaml` carrying the
-`effect@4.0.0-rc.108` and `@effect/vitest@4.0.0-rc.108` release-candidate
-versions. The default `catalog.effect` stays at `^3.22.1` so the rest of the
-workspace continues to resolve effect 3.x. No package sources are changed in
-this commit — migrating the atom packages' `src/` onto the v4 API is a
-follow-up (every `effect/Either`, `Runtime.runFork`, `Cause.NoSuchElementException`,
-`SubscriptionRef.SubscriptionRefTypeId`, `Stream.either`, `Channel.toPull`,
-`Stream.runForEachChunk`, `Effect.fn`/`Effect.fnUntraced`, `Reactivity`
-and `KeyValueStore` call site is affected).
+Port both packages onto the effect v4 release candidate (`effect@4.0.0-rc.108`,
+resolved from the `effect4` catalog). The `src/` is now the v4 reactivity API:
+absorbed packages (`@effect/experimental`, `@effect/platform`, `@effect/rpc`)
+are gone — their modules now live under `effect/unstable/*` and the core `effect`
+barrel — and every removed/renamed v3 symbol is replaced (`Effect.async`→
+`callback`, `Context.Tag`→`Context.Service`, `Runtime<R>`→`Runtime`, `Cause`
+error renames, `Schema.decodeEither`→`decodeExit`, the `Mailbox`/`Subscribable`/
+`GlobalValue`/`FiberId` modules, the `~effect-atom/atom/…` wire TypeIds
+preserved). **Breaking:** the `effect` peer dependency is now `4.0.0-rc.x`;
+consumers must move to effect v4.

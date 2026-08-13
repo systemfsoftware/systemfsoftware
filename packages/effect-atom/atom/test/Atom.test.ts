@@ -1,25 +1,43 @@
-import * as KeyValueStore from '@effect/platform/KeyValueStore'
 import { addEqualityTesters, afterEach, assert, beforeEach, describe, expect, it, test, vitest } from '@effect/vitest'
-import * as Atom from '@systemfsoftware/effect-atom/Atom'
-import * as Hydration from '@systemfsoftware/effect-atom/Hydration'
-import * as Registry from '@systemfsoftware/effect-atom/Registry'
-import * as Result from '@systemfsoftware/effect-atom/Result'
-import { Cause, Either, Equal, FiberRef, Schema, Struct, Subscribable, SubscriptionRef } from 'effect'
-import * as Arr from 'effect/Array'
-import * as Context from 'effect/Context'
-import * as Effect from 'effect/Effect'
-import * as Hash from 'effect/Hash'
-import * as Layer from 'effect/Layer'
-import * as Option from 'effect/Option'
-import * as Stream from 'effect/Stream'
+import {
+  Array as Arr,
+  Cause,
+  Context,
+  Effect,
+  Hash,
+  Latch,
+  Layer,
+  Option,
+  Result,
+  Schema,
+  Stream,
+  SubscriptionRef,
+} from 'effect'
+import { TestClock } from 'effect/testing'
+import { KeyValueStore } from 'effect/unstable/persistence'
+import * as Atom from '../src/Atom.js'
+import * as Hydration from '../src/Hydration.js'
+import * as AtomRegistry from '../src/Registry.js'
+import * as AsyncResult from '../src/Result.js'
 
 declare const global: any
 
 addEqualityTesters()
 
-describe('Atom', () => {
-  beforeEach(() => {
-    vitest.useFakeTimers()
+describe.sequential('Atom', () => {
+  beforeEach(async () => {
+    vitest.useFakeTimers({
+      toFake: [
+        'Date',
+        'hrtime',
+        'setTimeout',
+        'clearTimeout',
+        'setInterval',
+        'clearInterval',
+        'performance',
+      ],
+    })
+    await Effect.runPromise(Effect.yieldNow)
   })
   afterEach(() => {
     vitest.useRealTimers()
@@ -27,7 +45,7 @@ describe('Atom', () => {
 
   it('get/set', () => {
     const counter = Atom.make(0)
-    const r = Registry.make()
+    const r = AtomRegistry.make()
     expect(r.get(counter)).toEqual(0)
     r.set(counter, 1)
     expect(r.get(counter)).toEqual(1)
@@ -35,10 +53,10 @@ describe('Atom', () => {
 
   it('keepAlive false', async () => {
     const counter = Atom.make(0)
-    const r = Registry.make()
+    const r = AtomRegistry.make()
     r.set(counter, 1)
     expect(r.get(counter)).toEqual(1)
-    await new Promise((resolve) => resolve(null))
+    await Effect.runPromise(Effect.yieldNow)
     expect(r.get(counter)).toEqual(0)
   })
 
@@ -46,7 +64,7 @@ describe('Atom', () => {
     const counter = Atom.make(0).pipe(
       Atom.keepAlive,
     )
-    const r = Registry.make()
+    const r = AtomRegistry.make()
     r.set(counter, 1)
     expect(r.get(counter)).toEqual(1)
     await new Promise((resolve) => resolve(null))
@@ -55,24 +73,24 @@ describe('Atom', () => {
 
   it('subscribe', async () => {
     const counter = Atom.make(0)
-    const r = Registry.make()
+    const r = AtomRegistry.make()
     let count = 0
     const cancel = r.subscribe(counter, (_) => {
       count = _
     })
     r.set(counter, 1)
     expect(count).toEqual(1)
-    await new Promise((resolve) => resolve(null))
+    await Effect.runPromise(Effect.yieldNow)
 
     expect(r.get(counter)).toEqual(1)
     cancel()
-    await new Promise((resolve) => resolve(null))
+    await Effect.runPromise(Effect.yieldNow)
     expect(r.get(counter)).toEqual(0)
   })
 
   it('subscribe does not skip listeners when unsubscribing during notify', () => {
     const counter = Atom.make(0)
-    const r = Registry.make()
+    const r = AtomRegistry.make()
     let first = 0
     let second = 0
     let cancelFirst = () => {
@@ -93,45 +111,211 @@ describe('Atom', () => {
     expect(second).toEqual(1)
   })
 
-  it('runtime', async () => {
-    const count = counterRuntime.atom(Effect.flatMap(Counter, (_) => _.get))
-    const r = Registry.make()
-    const result = r.get(count)
-    assert(Result.isSuccess(result))
-    expect(result.value).toEqual(1)
+  it('withEquality skips notifications for equivalent values', () => {
+    const point = Atom.make({ x: 0, y: 0 }).pipe(
+      Atom.withEquality<{ x: number; y: number }>((a, b) => a.x === b.x && a.y === b.y),
+      Atom.keepAlive,
+    )
+    const r = AtomRegistry.make()
+    const initial = r.get(point)
+    let count = 0
+    r.subscribe(point, () => {
+      count++
+    })
+
+    r.set(point, { x: 0, y: 0 })
+    expect(count).toEqual(0)
+    expect(r.get(point)).toBe(initial)
+
+    r.set(point, { x: 1, y: 0 })
+    expect(count).toEqual(1)
+    expect(r.get(point)).toEqual({ x: 1, y: 0 })
   })
 
-  it('memoises layers per registry, not per process', async () => {
+  it('withEquality skips invalidation of derived atoms', () => {
+    const point = Atom.make({ x: 0, y: 0 }).pipe(
+      Atom.withEquality<{ x: number; y: number }>((a, b) => a.x === b.x && a.y === b.y),
+      Atom.keepAlive,
+    )
     let builds = 0
-    class Tally extends Context.Tag('test/Tally')<Tally, number>() {}
-    const tallyRuntime = Atom.runtime(Layer.sync(Tally, () => ++builds))
-    const tally = tallyRuntime.atom(Tally)
+    const x = Atom.map(point, (p) => {
+      builds++
+      return p.x
+    })
+    const r = AtomRegistry.make()
+    r.subscribe(x, () => {})
 
-    const first = Registry.make()
-    const second = Registry.make()
-    const firstBuild = first.get(tally)
-    const secondBuild = second.get(tally)
-
-    assert(Result.isSuccess(firstBuild))
-    assert(Result.isSuccess(secondBuild))
-    expect(firstBuild.value).toEqual(1)
-    expect(secondBuild.value).toEqual(2)
+    expect(r.get(x)).toEqual(0)
+    expect(builds).toEqual(1)
+    r.set(point, { x: 0, y: 0 })
+    expect(builds).toEqual(1)
+    r.set(point, { x: 2, y: 0 })
+    expect(r.get(x)).toEqual(2)
     expect(builds).toEqual(2)
   })
 
+  it('searchParam with schema reads initial query value', () => {
+    const previousWindow = (globalThis as any).window
+    const r = AtomRegistry.make()
+    Object.defineProperty(globalThis, 'window', {
+      value: {
+        location: {
+          pathname: '/',
+          search: '?page=6',
+        },
+        history: {
+          pushState: () => {
+          },
+        },
+        addEventListener: () => {
+        },
+        removeEventListener: () => {
+        },
+      },
+      configurable: true,
+      writable: true,
+    })
+
+    try {
+      const page = Atom.searchParam('page', { schema: Schema.NumberFromString })
+      expect(r.get(page)).toEqual(Option.some(6))
+    } finally {
+      r.dispose()
+      if (typeof previousWindow === 'undefined') {
+        delete (globalThis as any).window
+      } else {
+        Object.defineProperty(globalThis, 'window', {
+          value: previousWindow,
+          configurable: true,
+          writable: true,
+        })
+      }
+    }
+  })
+
+  it('runtime', async () => {
+    const count = counterRuntime.atom(Counter.use((_) => _.get)).pipe(
+      Atom.withLabel('count'),
+    )
+    const r = AtomRegistry.make()
+    const result = r.get(count)
+    assert(AsyncResult.isSuccess(result))
+    expect(result.value).toEqual(1)
+  })
+
+  it('runtime layers are disposed with their registry', () => {
+    interface Service {
+      readonly id: number
+      readonly isAlive: () => boolean
+      readonly finalize: () => void
+    }
+    const Service = Context.Service<Service>('Atom.test/RegistryScopedService')
+    const finalized: Array<number> = []
+    let builds = 0
+    const layer = Layer.effect(
+      Service,
+      Effect.acquireRelease(
+        Effect.sync(() => {
+          const id = ++builds
+          let alive = true
+          return Service.of({ id, isAlive: () => alive, finalize: () => alive = false })
+        }),
+        (service) =>
+          Effect.sync(() => {
+            service.finalize()
+            finalized.push(service.id)
+          }),
+      ),
+    )
+    const runtime = Atom.runtime(layer)
+    const service = runtime.atom(Service)
+    const registryA = AtomRegistry.make()
+    const registryB = AtomRegistry.make()
+
+    const resultA = registryA.get(service)
+    const resultB = registryB.get(service)
+    assert(AsyncResult.isSuccess(resultA))
+    assert(AsyncResult.isSuccess(resultB))
+    expect(resultA.value.id).not.toEqual(resultB.value.id)
+
+    registryA.dispose()
+
+    expect(finalized).toEqual([resultA.value.id])
+    expect(resultA.value.isAlive()).toEqual(false)
+    expect(resultB.value.isAlive()).toEqual(true)
+    assert(AsyncResult.isSuccess(registryB.get(service)))
+
+    registryB.dispose()
+  })
+
+  it('default runtime factories build layers once per registry', () => {
+    const Service = Context.Service<number>('Atom.test/DefaultRegistryScopedService')
+    let builds = 0
+    const runtime = Atom.runtime(Layer.sync(Service, () => ++builds))
+    const service = runtime.atom(Service)
+    const registryA = AtomRegistry.make()
+    const registryB = AtomRegistry.make()
+
+    expect(registryA.get(service)).toEqual(AsyncResult.success(1))
+    expect(registryB.get(service)).toEqual(AsyncResult.success(2))
+    expect(builds).toEqual(2)
+
+    registryA.dispose()
+    registryB.dispose()
+  })
+
+  it('concrete runtime memo maps share layers across registries', () => {
+    const Service = Context.Service<number>('Atom.test/SharedRuntimeService')
+    let builds = 0
+    const factory = Atom.context({ memoMap: Layer.makeMemoMapUnsafe() })
+    const runtime = factory(Layer.sync(Service, () => ++builds))
+    const service = runtime.atom(Service)
+    const registryA = AtomRegistry.make()
+    const registryB = AtomRegistry.make()
+
+    expect(registryA.get(service)).toEqual(AsyncResult.success(1))
+    expect(registryB.get(service)).toEqual(AsyncResult.success(1))
+    expect(builds).toEqual(1)
+
+    registryA.dispose()
+    registryB.dispose()
+  })
+
+  it('shared memo map atoms share within a registry and isolate across registries', () => {
+    const Service = Context.Service<number>('Atom.test/SharedRegistryScopedService')
+    let builds = 0
+    const layer = Layer.sync(Service, () => ++builds)
+    const memoMap = Atom.make(() => Layer.makeMemoMapUnsafe())
+    const factoryA = Atom.context({ memoMap })
+    const factoryB = Atom.context({ memoMap })
+    const serviceA = factoryA(layer).atom(Service)
+    const serviceB = factoryB(layer).atom(Service)
+    const registryA = AtomRegistry.make()
+    const registryB = AtomRegistry.make()
+
+    expect(registryA.get(serviceA)).toEqual(AsyncResult.success(1))
+    expect(registryA.get(serviceB)).toEqual(AsyncResult.success(1))
+    expect(registryB.get(serviceA)).toEqual(AsyncResult.success(2))
+    expect(registryB.get(serviceB)).toEqual(AsyncResult.success(2))
+    expect(builds).toEqual(2)
+
+    registryA.dispose()
+    registryB.dispose()
+  })
+
   it('runtime replacement', async () => {
-    const count = counterRuntime.atom(Effect.flatMap(Counter, (_) => _.get))
-    const r = Registry.make({
+    const count = counterRuntime.atom(Counter.use((_) => _.get))
+    const r = AtomRegistry.make({
       initialValues: [Atom.initialValue(counterRuntime.layer, CounterTest)],
     })
     const result = r.get(count)
-    assert(Result.isSuccess(result))
+    assert(AsyncResult.isSuccess(result))
     expect(result.value).toEqual(10)
   })
 
   it('runtime replacement', async () => {
     const count = Atom.fnSync<number, number>((x) => x, { initialValue: 0 })
-    const r = Registry.make({ initialValues: [Atom.initialValue(count, 10)] })
+    const r = AtomRegistry.make({ initialValues: [Atom.initialValue(count, 10)] })
     const result = r.get(count)
     expect(result).toEqual(10)
     r.set(count, 20)
@@ -140,8 +324,8 @@ describe('Atom', () => {
   })
 
   it('runtime multiple', async () => {
-    const buildCount = buildCounterRuntime.fn<void>()((_) => Effect.flatMap(BuildCounter, (_) => _.get))
-    const count = counterRuntime.atom(Effect.flatMap(Counter, (_) => _.get))
+    const buildCount = buildCounterRuntime.fn<void>()((_) => BuildCounter.use((_) => _.get))
+    const count = counterRuntime.atom(Counter.use((_) => _.get))
     const timesTwo = multiplierRuntime.atom((get) =>
       Effect.gen(function*() {
         const counter = yield* Counter
@@ -151,46 +335,38 @@ describe('Atom', () => {
         return yield* multiplier.times(2)
       })
     )
-    const r = Registry.make()
+    const r = AtomRegistry.make()
     const cancel = r.mount(buildCount)
 
     let result = r.get(timesTwo)
-    assert(Result.isSuccess(result))
+    assert(AsyncResult.isSuccess(result))
     expect(result.value).toEqual(4)
 
     result = r.get(count)
-    assert(Result.isSuccess(result))
+    assert(AsyncResult.isSuccess(result))
     expect(result.value).toEqual(2)
 
     r.set(buildCount, void 0)
-    assert.deepStrictEqual(r.get(buildCount), Result.success(1))
+    assert.deepStrictEqual(r.get(buildCount), AsyncResult.success(1))
 
-    await new Promise((resolve) => resolve(null))
-    await new Promise((resolve) => resolve(null))
+    await Effect.runPromise(Effect.yieldNow)
+    await Effect.runPromise(Effect.yieldNow)
 
     result = r.get(count)
-    assert(Result.isSuccess(result))
+    assert(AsyncResult.isSuccess(result))
     expect(result.value).toEqual(1)
 
     r.set(buildCount, void 0)
-    assert.deepStrictEqual(r.get(buildCount), Result.success(2))
+    assert.deepStrictEqual(r.get(buildCount), AsyncResult.success(2))
 
     cancel()
   })
 
-  it('runtime fiber ref', async () => {
-    const caching = fiberRefRuntime.atom(FiberRef.get(FiberRef.currentRequestCacheEnabled))
-    const r = Registry.make()
-    const result = r.get(caching)
-    assert(Result.isSuccess(result))
-    expect(result.value).toEqual(true)
-  })
-
   it('runtime direct tag', async () => {
     const counter = counterRuntime.atom(Counter)
-    const r = Registry.make()
+    const r = AtomRegistry.make()
     const result = r.get(counter)
-    assert(Result.isSuccess(result))
+    assert(AsyncResult.isSuccess(result))
     assert(Effect.isEffect(result.value.get))
   })
 
@@ -199,74 +375,74 @@ describe('Atom', () => {
       Effect.succeed(1).pipe(Effect.delay(100)),
       { initialValue: 0 },
     ).pipe(Atom.keepAlive)
-    const r = Registry.make()
+    const r = AtomRegistry.make()
     let result = r.get(count)
-    assert(Result.isSuccess(result))
+    assert(AsyncResult.isSuccess(result))
     assert.strictEqual(result.value, 0)
 
     await vitest.advanceTimersByTimeAsync(100)
     result = r.get(count)
-    assert(Result.isSuccess(result))
+    assert(AsyncResult.isSuccess(result))
     expect(result.value).toEqual(1)
   })
 
   it('effectFn', async () => {
     const count = Atom.fn((n: number) => Effect.succeed(n + 1))
-    const r = Registry.make()
+    const r = AtomRegistry.make()
     let result = r.get(count)
-    assert(Result.isInitial(result))
+    assert(AsyncResult.isInitial(result))
     r.set(count, 1)
     result = r.get(count)
-    assert(Result.isSuccess(result))
+    assert(AsyncResult.isSuccess(result))
     expect(result.value).toEqual(2)
   })
 
   it('effectFn concurrent', async () => {
-    const latches = Arr.empty<Effect.Latch>()
+    const latches = Arr.empty<Latch.Latch>()
     let done = 0
     const count = Atom.fn((_: number) => {
-      const latch = Effect.unsafeMakeLatch()
+      const latch = Latch.makeUnsafe()
       latches.push(latch)
       return latch.await.pipe(
-        Effect.tap(() => done++),
+        Effect.tap(() => Effect.sync(() => done++)),
       )
     }, { concurrent: true })
 
-    const r = Registry.make()
+    const r = AtomRegistry.make()
     r.mount(count)
 
     let result = r.get(count)
-    assert(Result.isInitial(result))
+    assert(AsyncResult.isInitial(result))
 
     r.set(count, 1)
     result = r.get(count)
-    assert(Result.isInitial(result) && result.waiting)
+    assert(AsyncResult.isInitial(result) && result.waiting)
 
     r.set(count, 1)
     r.set(count, 1)
-    assert(Result.isInitial(result) && result.waiting)
+    assert(AsyncResult.isInitial(result) && result.waiting)
     assert.strictEqual(latches.length, 3)
     assert.strictEqual(done, 0)
 
-    latches.forEach((latch) => latch.unsafeOpen())
-    await Effect.runPromise(Effect.yieldNow())
+    latches.forEach((latch) => latch.openUnsafe())
+    await Effect.runPromise(Effect.yieldNow)
     assert.strictEqual(done, 3)
 
     result = r.get(count)
-    assert(Result.isSuccess(result))
+    assert(AsyncResult.isSuccess(result))
   })
 
   it('effectFn initial', async () => {
     const count = Atom.fn((n: number) => Effect.succeed(n + 1), {
       initialValue: 0,
     })
-    const r = Registry.make()
+    const r = AtomRegistry.make()
     let result = r.get(count)
-    assert(Result.isSuccess(result))
+    assert(AsyncResult.isSuccess(result))
     assert.strictEqual(result.value, 0)
     r.set(count, 1)
     result = r.get(count)
-    assert(Result.isSuccess(result))
+    assert(AsyncResult.isSuccess(result))
     expect(result.value).toEqual(2)
   })
 
@@ -274,12 +450,12 @@ describe('Atom', () => {
     const count = Atom.fn((n: number) => Effect.succeed(n + 1)).pipe(
       Atom.mapResult((_) => _ + 1),
     )
-    const r = Registry.make()
+    const r = AtomRegistry.make()
     let result = r.get(count)
-    assert(Result.isInitial(result))
+    assert(AsyncResult.isInitial(result))
     r.set(count, 1)
     result = r.get(count)
-    assert(Result.isSuccess(result))
+    assert(AsyncResult.isSuccess(result))
     expect(result.value).toEqual(3)
   })
 
@@ -289,13 +465,13 @@ describe('Atom', () => {
       Atom.mapResult((_) => _ + 10),
       Atom.mapResult((_) => _ + 100),
     )
-    const r = Registry.make()
+    const r = AtomRegistry.make()
     let result = r.get(count)
-    assert(Result.isSuccess(result))
+    assert(AsyncResult.isSuccess(result))
     expect(result.value).toEqual(111)
     r.set(seed, 1)
     result = r.get(count)
-    assert(Result.isSuccess(result))
+    assert(AsyncResult.isSuccess(result))
     expect(result.value).toEqual(112)
   })
 
@@ -308,16 +484,49 @@ describe('Atom', () => {
       Atom.mapResult((_) => _ + 10),
       Atom.mapResult((_) => _ + 100),
     )
-    const r = Registry.make()
+    const r = AtomRegistry.make()
     let result = r.get(count)
-    assert(Result.isSuccess(result))
+    assert(AsyncResult.isSuccess(result))
     expect(result.value).toEqual(111)
     expect(rebuilds).toEqual(1)
     r.refresh(count)
     result = r.get(count)
-    assert(Result.isSuccess(result))
+    assert(AsyncResult.isSuccess(result))
     expect(result.value).toEqual(111)
     expect(rebuilds).toEqual(2)
+  })
+
+  it('keeps parent child links when a parent is read more than once', () => {
+    const flag = Atom.make(true)
+    const base = Atom.make(0)
+    const derived = Atom.make((get) => {
+      const value = get(base)
+      if (get(flag)) {
+        get(base)
+      }
+      return value
+    })
+    const registry = AtomRegistry.make()
+    const unsubscribe = registry.subscribe(derived, () => {
+    }, { immediate: true })
+    const nodes = registry.getNodes()
+    const baseNode = nodes.get(base)
+    const derivedNode = nodes.get(derived)
+
+    assert(baseNode !== undefined)
+    assert(derivedNode !== undefined)
+    assert.strictEqual(baseNode.children.has(derivedNode), true)
+    assert.strictEqual(derivedNode.parents.has(baseNode), true)
+
+    registry.set(flag, false)
+
+    assert.strictEqual(baseNode.children.has(derivedNode), true)
+    assert.strictEqual(derivedNode.parents.has(baseNode), true)
+
+    registry.set(base, 1)
+
+    assert.strictEqual(registry.get(derived), 1)
+    unsubscribe()
   })
 
   it('refresh derived before mount resolves base effect', async () => {
@@ -330,7 +539,7 @@ describe('Atom', () => {
       },
       (refresh) => refresh(baseAtom),
     )
-    const registry = Registry.make()
+    const registry = AtomRegistry.make()
 
     registry.refresh(derivedAtom)
     const unmount = registry.mount(derivedAtom)
@@ -341,7 +550,7 @@ describe('Atom', () => {
     await vitest.advanceTimersByTimeAsync(100)
 
     result = registry.get(derivedAtom)
-    assert(Result.isSuccess(result))
+    assert(AsyncResult.isSuccess(result))
     expect(result.value).toEqual('value')
 
     unmount()
@@ -351,7 +560,7 @@ describe('Atom', () => {
     let finalized = 0
     const count = Atom.fn((n: number) =>
       Effect.succeed(n + 1).pipe(
-        Effect.zipLeft(
+        Effect.tap(
           Effect.addFinalizer(() =>
             Effect.sync(() => {
               finalized++
@@ -360,16 +569,16 @@ describe('Atom', () => {
         ),
       )
     ).pipe(Atom.keepAlive)
-    const r = Registry.make()
+    const r = AtomRegistry.make()
     let result = r.get(count)
-    assert(Result.isInitial(result))
+    assert(AsyncResult.isInitial(result))
 
     await new Promise((resolve) => resolve(null))
     expect(finalized).toEqual(0)
 
     r.set(count, 1)
     result = r.get(count)
-    assert(Result.isSuccess(result))
+    assert(AsyncResult.isSuccess(result))
     expect(result.value).toEqual(2)
 
     r.set(count, 2)
@@ -377,43 +586,117 @@ describe('Atom', () => {
     expect(finalized).toEqual(1)
   })
 
-  it('stream', async () => {
+  it('disposed lifetime apis are no-ops', () => {
+    let context: Atom.AtomContext | undefined
+    const state = Atom.make(0).pipe(Atom.keepAlive)
+    const option = Atom.make<Option.Option<number>>(Option.some(1)).pipe(Atom.keepAlive)
+    const result = Atom.make<AsyncResult.AsyncResult<number, never>>(AsyncResult.success(1)).pipe(Atom.keepAlive)
+    const atom = Atom.make((get) => {
+      context = get
+      return get(state)
+    }).pipe(Atom.keepAlive)
+    const registry = AtomRegistry.make()
+
+    expect(registry.get(atom)).toEqual(0)
+    registry.refresh(atom)
+
+    assert(context !== undefined)
+    const disposed = context
+
+    expect(() =>
+      disposed.addFinalizer(() => {
+      })
+    ).not.toThrow()
+    expect(disposed(state)).toEqual(0)
+    expect(disposed.get(state)).toEqual(0)
+    expect(disposed.once(state)).toEqual(0)
+    expect(disposed.self<number>()).toEqual(Option.none())
+    expect(() => disposed.result(result)).not.toThrow()
+    expect(() => disposed.resultOnce(result)).not.toThrow()
+    expect(() => disposed.setResult(result, AsyncResult.success(2))).not.toThrow()
+    expect(() => disposed.some(option)).not.toThrow()
+    expect(() => disposed.someOnce(option)).not.toThrow()
+    expect(() => disposed.refresh(state)).not.toThrow()
+    expect(() => disposed.refreshSelf()).not.toThrow()
+    expect(() => disposed.mount(state)).not.toThrow()
+    expect(() =>
+      disposed.subscribe(state, () => {
+      })
+    ).not.toThrow()
+    expect(() => disposed.setSelf(1)).not.toThrow()
+    expect(() => disposed.set(state, 1)).not.toThrow()
+    expect(registry.get(state)).toEqual(0)
+    expect(() => disposed.stream(state)).not.toThrow()
+    expect(() => disposed.streamResult(result)).not.toThrow()
+  })
+
+  it('disposed lifetime ignores async updates', async () => {
     const count = Atom.make(
-      Stream.range(0, 2).pipe(
-        Stream.tap(() => Registry.AtomRegistry),
-        Stream.tap(() => Effect.sleep(50)),
-      ),
+      Effect.succeed(1).pipe(Effect.delay(100)),
+      {
+        initialValue: 0,
+        uninterruptible: true,
+      },
     )
-    const r = Registry.make()
-    const unmount = r.mount(count)
-    let result = r.get(count)
-    assert(result.waiting)
-    assert(Result.isInitial(result))
+    const registry = AtomRegistry.make()
+    const unmount = registry.mount(count)
 
-    await vitest.advanceTimersByTimeAsync(50)
-    result = r.get(count)
-    assert(result.waiting)
-    assert(Result.isSuccess(result))
-    assert.deepEqual(result.value, 0)
-
-    await vitest.advanceTimersByTimeAsync(50)
-    result = r.get(count)
-    assert(result.waiting)
-    assert(Result.isSuccess(result))
-    assert.deepEqual(result.value, 1)
-
-    await vitest.advanceTimersByTimeAsync(50)
-    result = r.get(count)
-    assert(!result.waiting)
-    assert(Result.isSuccess(result))
-    assert.deepEqual(result.value, 2)
+    const initial = registry.get(count)
+    assert(AsyncResult.isSuccess(initial))
+    expect(initial.waiting).toEqual(true)
+    expect(initial.value).toEqual(0)
 
     unmount()
-    await new Promise((resolve) => resolve(null))
-    result = r.get(count)
-    assert(result.waiting)
-    assert(Result.isInitial(result))
+    await vitest.advanceTimersByTimeAsync(100)
+    await Effect.runPromise(Effect.yieldNow)
+
+    const next = registry.get(count)
+    assert(AsyncResult.isSuccess(next))
+    expect(next.waiting).toEqual(true)
   })
+
+  it.effect('stream', () =>
+    Effect.gen(function*() {
+      vitest.useRealTimers()
+
+      const services = yield* Effect.context<never>()
+      const count = Atom.make(
+        Stream.range(0, 2).pipe(
+          Stream.tap(() => AtomRegistry.AtomRegistry),
+          Stream.tap((_) => Effect.sleep(50)),
+          Stream.provideContext(services),
+        ),
+      )
+      const r = AtomRegistry.make()
+      const unmount = r.mount(count)
+      let result = r.get(count)
+      assert(result.waiting)
+      assert(AsyncResult.isInitial(result))
+
+      yield* TestClock.adjust(50)
+      result = r.get(count)
+      assert(result.waiting)
+      assert(AsyncResult.isSuccess(result))
+      assert.deepEqual(result.value, 0)
+
+      yield* TestClock.adjust(50)
+      result = r.get(count)
+      assert(result.waiting)
+      assert(AsyncResult.isSuccess(result))
+      assert.deepEqual(result.value, 1)
+
+      yield* TestClock.adjust(50)
+      result = r.get(count)
+      assert(!result.waiting)
+      assert(AsyncResult.isSuccess(result))
+      assert.deepEqual(result.value, 2)
+
+      unmount()
+      yield* TestClock.adjust(50)
+      result = r.get(count)
+      assert(result.waiting)
+      assert(AsyncResult.isInitial(result))
+    }))
 
   it('stream initial', async () => {
     const count = Atom.make(
@@ -422,24 +705,24 @@ describe('Atom', () => {
       ),
       { initialValue: 0 },
     )
-    const r = Registry.make()
+    const r = AtomRegistry.make()
     const unmount = r.mount(count)
     let result = r.get(count)
     assert(result.waiting)
-    assert(Result.isSuccess(result))
+    assert(AsyncResult.isSuccess(result))
     assert.strictEqual(result.value, 0)
 
     await vitest.advanceTimersByTimeAsync(50)
     result = r.get(count)
     assert(result.waiting)
-    assert(Result.isSuccess(result))
+    assert(AsyncResult.isSuccess(result))
     assert.deepEqual(result.value, 1)
 
     unmount()
     await new Promise((resolve) => resolve(null))
     result = r.get(count)
     assert(result.waiting)
-    assert(Result.isSuccess(result))
+    assert(AsyncResult.isSuccess(result))
   })
 
   it('streamFn', async () => {
@@ -448,7 +731,7 @@ describe('Atom', () => {
         Stream.tap(() => Effect.sleep(50)),
       )
     )
-    const r = Registry.make()
+    const r = AtomRegistry.make()
     const unmount = r.mount(count)
     let result = r.get(count)
     assert.strictEqual(result._tag, 'Initial')
@@ -465,37 +748,37 @@ describe('Atom', () => {
     await vitest.advanceTimersByTimeAsync(50)
     result = r.get(count)
     assert(result.waiting)
-    assert(Result.isSuccess(result))
+    assert(AsyncResult.isSuccess(result))
     assert.deepEqual(result.value, 1)
 
     await vitest.advanceTimersByTimeAsync(50)
     result = r.get(count)
     assert(!result.waiting)
-    assert(Result.isSuccess(result))
+    assert(AsyncResult.isSuccess(result))
     assert.deepEqual(result.value, 2)
 
     r.set(count, 5)
     result = r.get(count)
     assert(result.waiting)
-    assert(Result.isSuccess(result))
+    assert(AsyncResult.isSuccess(result))
     assert.deepEqual(result.value, 2)
 
     await vitest.advanceTimersByTimeAsync(50)
     result = r.get(count)
     assert(result.waiting)
-    assert(Result.isSuccess(result))
+    assert(AsyncResult.isSuccess(result))
     assert.deepEqual(result.value, 5)
 
     await vitest.advanceTimersByTimeAsync(50)
     result = r.get(count)
     assert(!result.waiting)
-    assert(Result.isSuccess(result))
+    assert(AsyncResult.isSuccess(result))
     assert.deepEqual(result.value, 6)
 
     unmount()
-    await new Promise((resolve) => resolve(null))
+    await Effect.runPromise(Effect.yieldNow)
     result = r.get(count)
-    assert(Result.isInitial(result))
+    assert(AsyncResult.isInitial(result))
   })
 
   it('pull', async () => {
@@ -504,109 +787,108 @@ describe('Atom', () => {
         Stream.tap(() => Effect.sleep(50)),
       ),
     )
-    const r = Registry.make()
+    const r = AtomRegistry.make()
     const unmount = r.mount(count)
 
     let result = r.get(count)
     assert(result.waiting)
-    assert(Option.isNone(Result.value(result)))
+    assert(Option.isNone(AsyncResult.value(result)))
 
     await vitest.advanceTimersByTimeAsync(50)
     result = r.get(count)
     assert(!result.waiting)
-    assert(Result.isSuccess(result))
+    assert(AsyncResult.isSuccess(result))
     assert.deepEqual(result.value, { done: false, items: [0] })
 
     r.set(count, void 0)
     result = r.get(count)
     assert(result.waiting)
-    assert.deepEqual(Result.value(result), Option.some({ done: false, items: [0] }))
+    assert.deepEqual(AsyncResult.value(result), Option.some({ done: false, items: [0] }))
 
     await vitest.advanceTimersByTimeAsync(50)
     result = r.get(count)
     assert(!result.waiting)
-    assert(Result.isSuccess(result))
+    assert(AsyncResult.isSuccess(result))
     assert.deepEqual(result.value, { done: false, items: [0, 1] })
 
     r.set(count, void 0)
     result = r.get(count)
     assert(!result.waiting)
-    assert(Result.isSuccess(result))
+    assert(AsyncResult.isSuccess(result))
     assert.deepEqual(result.value, { done: true, items: [0, 1] })
 
     r.refresh(count)
     result = r.get(count)
     assert(result.waiting)
-    assert.deepEqual(Result.value(result), Option.some({ done: true, items: [0, 1] }))
+    assert.deepEqual(AsyncResult.value(result), Option.some({ done: true, items: [0, 1] }))
 
     await vitest.advanceTimersByTimeAsync(50)
     result = r.get(count)
     assert(!result.waiting)
-    assert(Result.isSuccess(result))
+    assert(AsyncResult.isSuccess(result))
     assert.deepEqual(result.value, { done: false, items: [0] })
 
     unmount()
-    await new Promise((resolve) => resolve(null))
+    await Effect.runPromise(Effect.yieldNow)
     result = r.get(count)
     assert(result.waiting)
-    assert(Option.isNone(Result.value(result)))
+    assert(Option.isNone(AsyncResult.value(result)))
   })
 
   it('pull runtime', async () => {
     const count = counterRuntime.pull(
-      Counter.pipe(
-        Effect.flatMap((_) => _.get),
+      Counter.use((_) => _.get).pipe(
         Effect.map((_) => Stream.range(_, 2, 1)),
         Stream.unwrap,
         Stream.tap(() => Effect.sleep(50)),
       ),
     )
-    const r = Registry.make()
+    const r = AtomRegistry.make()
     const unmount = r.mount(count)
 
     let result = r.get(count)
     assert(result.waiting)
-    assert(Option.isNone(Result.value(result)))
+    assert(Option.isNone(AsyncResult.value(result)))
 
     await vitest.advanceTimersByTimeAsync(50)
     result = r.get(count)
     assert(!result.waiting)
-    assert(Result.isSuccess(result))
+    assert(AsyncResult.isSuccess(result))
     assert.deepEqual(result.value, { done: false, items: [1] })
 
     r.set(count, void 0)
     result = r.get(count)
     assert(result.waiting)
-    assert.deepEqual(Result.value(result), Option.some({ done: false, items: [1] }))
+    assert.deepEqual(AsyncResult.value(result), Option.some({ done: false, items: [1] }))
 
     await vitest.advanceTimersByTimeAsync(50)
     result = r.get(count)
     assert(!result.waiting)
-    assert(Result.isSuccess(result))
+    assert(AsyncResult.isSuccess(result))
     assert.deepEqual(result.value, { done: false, items: [1, 2] })
 
     r.set(count, void 0)
     result = r.get(count)
     assert(!result.waiting)
-    assert(Result.isSuccess(result))
+    assert(AsyncResult.isSuccess(result))
     assert.deepEqual(result.value, { done: true, items: [1, 2] })
 
     r.refresh(count)
     result = r.get(count)
     assert(result.waiting)
-    assert.deepEqual(Result.value(result), Option.some({ done: true, items: [1, 2] }))
+    assert.deepEqual(AsyncResult.value(result), Option.some({ done: true, items: [1, 2] }))
 
     await vitest.advanceTimersByTimeAsync(50)
     result = r.get(count)
     assert(!result.waiting)
-    assert(Result.isSuccess(result))
+    assert(AsyncResult.isSuccess(result))
     assert.deepEqual(result.value, { done: false, items: [1] })
 
     unmount()
-    await new Promise((resolve) => resolve(null))
+    await Effect.runPromise(Effect.yieldNow)
     result = r.get(count)
     assert(result.waiting)
-    assert(Option.isNone(Result.value(result)))
+    assert(Option.isNone(AsyncResult.value(result)))
   })
 
   it('pull refreshable', async () => {
@@ -615,27 +897,27 @@ describe('Atom', () => {
         Stream.tap(() => Effect.sleep(50)),
       )
     )
-    const r = Registry.make()
+    const r = AtomRegistry.make()
     const unmount = r.mount(count)
 
     let result = r.get(count)
     assert(result.waiting)
-    assert(Result.isInitial(result))
+    assert(AsyncResult.isInitial(result))
 
     await vitest.advanceTimersByTimeAsync(50)
     result = r.get(count)
     assert(!result.waiting)
-    assert(Result.isSuccess(result))
+    assert(AsyncResult.isSuccess(result))
     assert.deepEqual(result.value, { done: false, items: [1] })
 
     unmount()
-    await new Promise((resolve) => resolve(null))
+    await Effect.runPromise(Effect.yieldNow)
     result = r.get(count)
     assert(result.waiting)
   })
 
   it('family', async () => {
-    const r = Registry.make()
+    const r = AtomRegistry.make()
 
     const count = Atom.family((n: number) => Atom.make(n))
     const hash = Hash.hash(count(1))
@@ -664,7 +946,7 @@ describe('Atom', () => {
   })
 
   it('batching', async () => {
-    const r = Registry.make()
+    const r = AtomRegistry.make()
     const state = Atom.make(1).pipe(Atom.keepAlive)
     const state2 = Atom.make('a').pipe(Atom.keepAlive)
     let count = 0
@@ -682,8 +964,66 @@ describe('Atom', () => {
     expect(r.get(derived)).toEqual('2b')
   })
 
+  it.effect('retains method-form dependencies added during a batch rebuild', () =>
+    Effect.gen(function*() {
+      const registry = AtomRegistry.make()
+      const source = Atom.make(Option.none<string>())
+      const gate = yield* Latch.make()
+      const asyncAtom = Atom.make((get) =>
+        Effect.gen(function*() {
+          const value = get(source)
+          if (Option.isNone(value)) {
+            return yield* Effect.fail('SourceIsNone' as const)
+          }
+          yield* gate.await
+          return `computed-${value.value}`
+        })
+      )
+      const derived = Atom.make((get): unknown => {
+        const value = get.get(source)
+        if (Option.isNone(value)) {
+          return 'empty'
+        }
+        return get.get(asyncAtom)
+      })
+
+      registry.subscribe(derived, () => {}, { immediate: true })
+      registry.subscribe(asyncAtom, () => {}, { immediate: true })
+
+      Atom.batch(() => registry.set(source, Option.some('a')))
+
+      yield* gate.open
+      yield* Effect.yieldNow
+
+      const result = registry.get(derived) as AsyncResult.AsyncResult<string, 'SourceIsNone'>
+      assert(AsyncResult.isSuccess(result))
+      assert.strictEqual(result.value, 'computed-a')
+    }))
+
+  it('rebuilds an atom invalidated during its own batch rebuild', () => {
+    const registry = AtomRegistry.make()
+    const source = Atom.make(0)
+    const enabled = Atom.make(false)
+    const updateSource = Atom.make((get) => {
+      get.set(source, 1)
+    })
+    const derived = Atom.make((get) => {
+      const value = get(source)
+      if (get(enabled)) {
+        get(updateSource)
+      }
+      return value
+    })
+
+    registry.subscribe(derived, () => {}, { immediate: true })
+
+    Atom.batch(() => registry.set(enabled, true))
+
+    assert.strictEqual(registry.get(derived), 1)
+  })
+
   it('nested batch', async () => {
-    const r = Registry.make()
+    const r = AtomRegistry.make()
     const state = Atom.make(1).pipe(Atom.keepAlive)
     const state2 = Atom.make('a').pipe(Atom.keepAlive)
     let count = 0
@@ -704,7 +1044,7 @@ describe('Atom', () => {
   })
 
   it('read correct updated state in batch', async () => {
-    const r = Registry.make()
+    const r = AtomRegistry.make()
     const state = Atom.make(1).pipe(Atom.keepAlive)
     const state2 = Atom.make('a').pipe(Atom.keepAlive)
     let count = 0
@@ -725,7 +1065,7 @@ describe('Atom', () => {
   })
 
   it('notifies listeners after batch commit', async () => {
-    const r = Registry.make()
+    const r = AtomRegistry.make()
     const state = Atom.make(1).pipe(Atom.keepAlive)
     const state2 = Atom.make('a').pipe(Atom.keepAlive)
     let count = 0
@@ -747,14 +1087,34 @@ describe('Atom', () => {
 
   it('initialValues', async () => {
     const state = Atom.make(0)
-    const r = Registry.make({
+    const r = AtomRegistry.make({
       initialValues: [
         Atom.initialValue(state, 10),
       ],
     })
     expect(r.get(state)).toEqual(10)
-    await new Promise((resolve) => resolve(null))
+    await Effect.runPromise(Effect.yieldNow)
     expect(r.get(state)).toEqual(0)
+  })
+
+  it('map with initialValue still rerenders when source changes', () => {
+    const state = Atom.make(0).pipe(Atom.keepAlive)
+    const mapped = state.pipe(
+      Atom.map((n) => n + 1),
+      Atom.keepAlive,
+    )
+    const r = AtomRegistry.make({
+      initialValues: [
+        Atom.initialValue(mapped, 10),
+      ],
+    })
+    r.mount(mapped)
+
+    assert.strictEqual(r.get(mapped), 10)
+
+    r.set(state, 1)
+
+    assert.strictEqual(r.get(mapped), 2)
   })
 
   it('idleTTL', async () => {
@@ -765,7 +1125,7 @@ describe('Atom', () => {
     const state3 = Atom.make(0).pipe(
       Atom.setIdleTTL(3000),
     )
-    const r = Registry.make({ defaultIdleTTL: 2000 })
+    const r = AtomRegistry.make({ defaultIdleTTL: 2000 })
     r.set(state, 10)
     r.set(state2, 10)
     r.set(state3, 10)
@@ -794,27 +1154,27 @@ describe('Atom', () => {
     const fn = Atom.fn((n: number) => Effect.succeed(n + 1)).pipe(
       Atom.setIdleTTL(0),
     )
-    const r = Registry.make({ defaultIdleTTL: 2000 })
+    const r = AtomRegistry.make({ defaultIdleTTL: 2000 })
 
     let result = r.get(fn)
-    assert(Result.isInitial(result))
+    assert(AsyncResult.isInitial(result))
 
     r.set(fn, 1)
     result = r.get(fn)
-    assert(Result.isSuccess(result))
+    assert(AsyncResult.isSuccess(result))
     expect(result.value).toEqual(2)
 
-    await new Promise((resolve) => resolve(null))
+    await Effect.runPromise(Effect.yieldNow)
 
     result = r.get(fn)
-    assert(Result.isInitial(result))
+    assert(AsyncResult.isInitial(result))
   })
 
   it('idleTTL fnSync', async () => {
     const fn = Atom.fnSync((n: number) => n + 1).pipe(
       Atom.setIdleTTL(0),
     )
-    const r = Registry.make({ defaultIdleTTL: 2000 })
+    const r = AtomRegistry.make({ defaultIdleTTL: 2000 })
 
     let result = r.get(fn)
     assert(Option.isNone(result))
@@ -824,30 +1184,15 @@ describe('Atom', () => {
     assert(Option.isSome(result))
     expect(result.value).toEqual(2)
 
-    await new Promise((resolve) => resolve(null))
+    await Effect.runPromise(Effect.yieldNow)
 
     result = r.get(fn)
     assert(Option.isNone(result))
   })
 
-  it('runtime atom with in-flight Effect is not swept while waiting', async () => {
-    const slow = Atom.fn((n: number): Effect.Effect<number> => Effect.succeed(n).pipe(Effect.delay(1000)))
-    const r = Registry.make()
-
-    r.get(slow)
-    r.set(slow, 42)
-
-    const result = r.get(slow)
-    assert(Result.isInitial(result))
-    assert(result.waiting)
-
-    await new Promise((resolve) => resolve(null))
-    assert(r.getNodes().has(slow))
-  })
-
   it('fn', async () => {
     const count = Atom.fnSync((n: number) => n).pipe(Atom.keepAlive)
-    const r = Registry.make()
+    const r = AtomRegistry.make()
     assert.deepEqual(r.get(count), Option.none())
 
     r.set(count, 1)
@@ -856,7 +1201,7 @@ describe('Atom', () => {
 
   it('fn initial', async () => {
     const count = Atom.fnSync((n: number) => n, { initialValue: 0 })
-    const r = Registry.make()
+    const r = AtomRegistry.make()
     assert.deepEqual(r.get(count), 0)
 
     r.set(count, 1)
@@ -872,39 +1217,40 @@ describe('Atom', () => {
       Atom.withFallback(Atom.make(() => Effect.succeed(0))),
       Atom.keepAlive,
     )
-    const r = Registry.make()
-    assert.deepEqual(r.get(count), Result.waiting(Result.success(0)))
+    const r = AtomRegistry.make()
+    assert.deepEqual(r.get(count), AsyncResult.waiting(AsyncResult.success(0)))
 
     await vitest.advanceTimersByTimeAsync(100)
-    assert.deepEqual(r.get(count), Result.success(1))
+    assert.deepEqual(r.get(count), AsyncResult.success(1))
   })
 
   it('failure with previousSuccess', async () => {
     const count = Atom.fn((i: number) => i === 1 ? Effect.fail('fail') : Effect.succeed(i))
-    const r = Registry.make()
+    const r = AtomRegistry.make()
 
     let result = r.get(count)
-    assert(Result.isInitial(result))
+    assert(AsyncResult.isInitial(result))
 
     r.set(count, 0)
     result = r.get(count)
-    assert(Result.isSuccess(result))
+    assert(AsyncResult.isSuccess(result))
     assert.strictEqual(result.value, 0)
 
     r.set(count, 1)
     result = r.get(count)
-    assert(Result.isFailure(result))
-    assert(Cause.isFailType(result.cause))
-    assert.strictEqual(result.cause.error, 'fail')
+    assert(AsyncResult.isFailure(result))
+    const error = Cause.findErrorOption(result.cause)
+    assert(Option.isSome(error))
+    assert.strictEqual(error.value, 'fail')
 
-    const value = Result.value(result)
+    const value = AsyncResult.value(result)
     assert(Option.isSome(value))
     assert.strictEqual(value.value, 0)
   })
 
   it('read non-object', () => {
     const bool = Atom.make(() => true)
-    const r = Registry.make()
+    const r = AtomRegistry.make()
     assert.strictEqual(r.get(bool), true)
   })
 
@@ -912,15 +1258,15 @@ describe('Atom', () => {
     const count = Atom.make(0)
     const multiplied = Atom.make((get) => get.stream(count).pipe(Stream.map((_) => _ * 2)))
 
-    const r = Registry.make()
+    const r = AtomRegistry.make()
     const cancel = r.mount(multiplied)
 
     assert.strictEqual(r.get(count), 0)
-    assert.deepStrictEqual(r.get(multiplied), Result.success(0, { waiting: true }))
+    assert.deepStrictEqual(r.get(multiplied), AsyncResult.success(0, { waiting: true }))
 
     r.set(count, 1)
-    await new Promise((resolve) => resolve(null))
-    assert.deepStrictEqual(r.get(multiplied), Result.success(2, { waiting: true }))
+    await Effect.runPromise(Effect.yieldNow)
+    assert.deepStrictEqual(r.get(multiplied), AsyncResult.success(2, { waiting: true }))
 
     cancel()
   })
@@ -930,72 +1276,70 @@ describe('Atom', () => {
     const multiplied = Atom.make((get) => get.stream(count).pipe(Stream.map((_) => _ * 2)))
     const plusOne = Atom.make((get) => get.streamResult(multiplied).pipe(Stream.map((_) => _ + 1)))
 
-    const r = Registry.make()
+    const r = AtomRegistry.make()
     const cancel = r.mount(plusOne)
 
     assert.strictEqual(r.get(count), 0)
-    assert.deepStrictEqual(r.get(plusOne), Result.success(1, { waiting: true }))
+    assert.deepStrictEqual(r.get(plusOne), AsyncResult.success(1, { waiting: true }))
 
     r.set(count, 1)
-    await new Promise((resolve) => resolve(null))
-    await new Promise((resolve) => resolve(null))
-    assert.deepStrictEqual(r.get(plusOne), Result.success(3, { waiting: true }))
+    await Effect.runPromise(Effect.yieldNow)
+    await Effect.runPromise(Effect.yieldNow)
+    assert.deepStrictEqual(r.get(plusOne), AsyncResult.success(3, { waiting: true }))
 
     cancel()
   })
 
   it('stream failure keeps previousSuccess', async () => {
     const atom = Atom.make(() => Stream.succeed(1).pipe(Stream.concat(Stream.fail('boom'))))
-    const r = Registry.make()
+    const r = AtomRegistry.make()
     const cancel = r.mount(atom)
 
     await new Promise((resolve) => resolve(null))
     const afterFail = r.get(atom)
-    assert(Result.isFailure(afterFail))
-    const prev = Result.value(afterFail)
+    assert(AsyncResult.isFailure(afterFail))
+    const prev = AsyncResult.value(afterFail)
     assert(Option.isSome(prev))
     assert.strictEqual(prev.value, 1)
 
     cancel()
   })
 
+  it('stream empty produces NoSuchElementError', async () => {
+    const atom = Atom.make(Stream.empty) satisfies Atom.Atom<
+      AsyncResult.AsyncResult<never, Cause.NoSuchElementError>
+    >
+    const r = AtomRegistry.make()
+    const cancel = r.mount(atom)
+
+    await vitest.advanceTimersByTimeAsync(0)
+    const result = r.get(atom)
+    assert(AsyncResult.isFailure(result))
+    assert.deepStrictEqual(
+      AsyncResult.error(result),
+      Option.some(new Cause.NoSuchElementError()),
+    )
+
+    cancel()
+  })
+
   it('Option is not an Effect', async () => {
     const atom = Atom.make(Option.none<string>())
-    const r = Registry.make()
+    const r = AtomRegistry.make()
     assert.deepStrictEqual(r.get(atom), Option.none())
   })
 
   it('Either is not an Effect', async () => {
-    const atom = Atom.make(Either.right(123))
-    const r = Registry.make()
-    assert.deepStrictEqual(r.get(atom), Either.right(123))
+    const atom = Atom.make(Result.succeed(123))
+    const r = AtomRegistry.make()
+    assert.deepStrictEqual(r.get(atom), Result.succeed(123))
   })
 
-  it('Subscribable', async () => {
-    vitest.useRealTimers()
-    const sub = Subscribable.make({ get: Effect.succeed(123), changes: Stream.empty })
-    const atom = Atom.subscribable(sub)
-    const r = Registry.make()
-    const unmount = r.mount(atom)
-    assert.deepStrictEqual(r.get(atom), 123)
-    unmount()
-  })
-
-  it('Subscribable effect', async () => {
-    vitest.useRealTimers()
-    const sub = Subscribable.make({ get: Effect.succeed(123), changes: Stream.succeed(123) })
-    const atom = Atom.subscribable(Effect.succeed(sub))
-    const r = Registry.make()
-    const unmount = r.mount(atom)
-    assert.isTrue(Equal.equals(r.get(atom), Result.success(123)))
-    unmount()
-  })
-
-  it('Subscribable/SubscriptionRef', async () => {
+  it('SubscriptionRef', async () => {
     vitest.useRealTimers()
     const ref = SubscriptionRef.make(123).pipe(Effect.runSync)
-    const atom = Atom.subscribable(ref)
-    const r = Registry.make()
+    const atom = Atom.subscriptionRef(ref)
+    const r = AtomRegistry.make()
     assert.deepStrictEqual(r.get(atom), 123)
     await Effect.runPromise(SubscriptionRef.update(ref, (a) => a + 1))
     assert.deepStrictEqual(r.get(atom), 124)
@@ -1005,7 +1349,7 @@ describe('Atom', () => {
     vitest.useRealTimers()
     const ref = SubscriptionRef.make(0).pipe(Effect.runSync)
     const atom = Atom.subscriptionRef(ref)
-    const r = Registry.make()
+    const r = AtomRegistry.make()
     const unmount = r.mount(atom)
     assert.deepStrictEqual(r.get(atom), 0)
     r.set(atom, 1)
@@ -1016,23 +1360,23 @@ describe('Atom', () => {
 
   it('SubscriptionRef/effect', async () => {
     const atom = Atom.subscriptionRef(SubscriptionRef.make(0))
-    const r = Registry.make()
+    const r = AtomRegistry.make()
     const unmount = r.mount(atom)
-    assert.deepStrictEqual(r.get(atom), Result.success(0, { waiting: true }))
+    assert.deepStrictEqual(r.get(atom), AsyncResult.success(0, { waiting: true }))
     r.set(atom, 1)
     await new Promise((resolve) => resolve(null))
-    assert.deepStrictEqual(r.get(atom), Result.success(1, { waiting: true }))
+    assert.deepStrictEqual(r.get(atom), AsyncResult.success(1, { waiting: true }))
     unmount()
   })
 
   it('SubscriptionRef/runtime', async () => {
     const atom = counterRuntime.subscriptionRef(SubscriptionRef.make(0))
-    const r = Registry.make()
+    const r = AtomRegistry.make()
     const unmount = r.mount(atom)
-    assert.deepStrictEqual(r.get(atom), Result.success(0, { waiting: true }))
+    assert.deepStrictEqual(r.get(atom), AsyncResult.success(0, { waiting: true }))
     r.set(atom, 1)
     await new Promise((resolve) => resolve(null))
-    assert.deepStrictEqual(r.get(atom), Result.success(1, { waiting: true }))
+    assert.deepStrictEqual(r.get(atom), AsyncResult.success(1, { waiting: true }))
     unmount()
   })
 
@@ -1048,15 +1392,15 @@ describe('Atom', () => {
         return yield* SubscriptionRef.make(0)
       }),
     )
-    const r = Registry.make()
+    const r = AtomRegistry.make()
     const unmount = r.mount(atom)
-    assert.deepStrictEqual(r.get(atom), Result.success(0, { waiting: true }))
+    assert.deepStrictEqual(r.get(atom), AsyncResult.success(0, { waiting: true }))
     r.set(atom, 1)
     await new Promise((resolve) => resolve(null))
-    assert.deepStrictEqual(r.get(atom), Result.success(1, { waiting: true }))
+    assert.deepStrictEqual(r.get(atom), AsyncResult.success(1, { waiting: true }))
     assert.strictEqual(finalized, false)
     unmount()
-    await new Promise((resolve) => resolve(null))
+    await Effect.runPromise(Effect.yieldNow)
     assert.strictEqual(finalized, true)
   })
 
@@ -1067,7 +1411,7 @@ describe('Atom', () => {
       rebuilds++
       return get(count) * 2
     }).pipe(Atom.keepAlive)
-    const r = Registry.make()
+    const r = AtomRegistry.make()
     assert.strictEqual(r.get(double), 0)
     r.set(count, 1)
     assert.strictEqual(rebuilds, 1)
@@ -1082,7 +1426,7 @@ describe('Atom', () => {
       rebuilds++
       return get(count) * 2
     }).pipe(Atom.setLazy(false), Atom.keepAlive)
-    const r = Registry.make()
+    const r = AtomRegistry.make()
     assert.strictEqual(r.get(double), 0)
     r.set(count, 1)
     assert.strictEqual(rebuilds, 2)
@@ -1091,12 +1435,12 @@ describe('Atom', () => {
   })
 
   it('derived derived with with effect result', async () => {
-    const r = Registry.make()
+    const r = AtomRegistry.make()
     const state = Atom.fn(Effect.succeed<number>)
     let count = 0
     const derived = Atom.readable((get) => {
       count++
-      return get(state).pipe(Result.getOrElse(() => -1)) % 3
+      return get(state).pipe(AsyncResult.getOrElse(() => -1)) % 3
     })
     let count2 = 0
     const derived2 = Atom.readable((get) => {
@@ -1123,18 +1467,18 @@ describe('Atom', () => {
   })
 
   test(`toStreamResult`, async () => {
-    const r = Registry.make()
+    const r = AtomRegistry.make()
     const atom = Atom.make(Effect.succeed(1))
     const eff = Atom.toStreamResult(atom).pipe(
       Stream.runHead,
-      Effect.provideService(Registry.AtomRegistry, r),
+      Effect.provideService(AtomRegistry.AtomRegistry, r),
     )
     const result = await Effect.runPromise(eff)
     expect(Option.getOrThrow(result)).toEqual(1)
   })
 
   test(`refreshOnSignal`, async () => {
-    const r = Registry.make()
+    const r = AtomRegistry.make()
     let rebuilds = 0
     const signal = Atom.make(0)
     const refreshOnSignal = Atom.makeRefreshOnSignal(signal)
@@ -1153,113 +1497,740 @@ describe('Atom', () => {
     assert.strictEqual(rebuilds, 2)
   })
 
-  it('dehydrate', async () => {
-    const r = Registry.make()
-    const notSerializable = Atom.make(0)
-    r.mount(notSerializable)
-
-    const basicSerializable = Atom.make(0).pipe(Atom.serializable({
-      key: 'basicSerializable',
-      schema: Schema.Number,
-    }))
-    r.mount(basicSerializable)
-
-    const errored = Atom.make(Effect.fail('error')).pipe(
-      Atom.serializable({
-        key: 'errored',
-        schema: Result.Schema({
-          error: Schema.String,
-        }),
-      }),
+  test(`refreshOnSignal uses registry initial values as source state`, () => {
+    let rebuilds = 0
+    let value = 0
+    const signal = Atom.make(0)
+    const source = Atom.make(() => {
+      rebuilds++
+      return value
+    }).pipe(Atom.keepAlive)
+    const atom = source.pipe(
+      Atom.makeRefreshOnSignal(signal),
+      Atom.keepAlive,
     )
-    r.mount(errored)
+    const r = AtomRegistry.make({ initialValues: [Atom.initialValue(atom, 10)] })
+    r.mount(atom)
 
-    const success = Atom.make(Effect.succeed(123)).pipe(Atom.serializable({
-      key: 'success',
-      schema: Result.Schema({
-        success: Schema.Number,
-      }),
-    }))
-    r.mount(success)
+    assert.strictEqual(r.get(atom), 10)
+    assert.strictEqual(r.get(source), 10)
+    assert.strictEqual(rebuilds, 1)
 
-    const { promise, resolve } = Promise.withResolvers<number>()
+    value = 11
+    r.set(signal, 1)
 
-    const pending = Atom.make(Effect.promise(() => promise)).pipe(Atom.serializable({
-      key: 'pending',
-      schema: Result.Schema({
-        success: Schema.Number,
-      }),
-    }))
-    r.mount(pending)
-
-    const state = Hydration.toValues(Hydration.dehydrate(r, {
-      encodeInitialAs: 'promise',
-    }))
-    const stateArr = state.map((r) => Struct.omit(r, 'dehydratedAt', 'resultPromise'))
-    expect(stateArr).toHaveLength(4)
-    expect(stateArr[0]).toEqual({
-      'key': 'basicSerializable',
-      'value': 0,
-      '~@systemfsoftware/effect-atom/DehydratedAtom': true,
-    })
-    expect(stateArr[1]).toEqual({
-      'key': 'errored',
-      'value': {
-        '_tag': 'Failure',
-        'cause': {
-          '_tag': 'Fail',
-          'error': 'error',
-        },
-        'previousSuccess': {
-          '_tag': 'None',
-        },
-        'waiting': false,
-      },
-      '~@systemfsoftware/effect-atom/DehydratedAtom': true,
-    })
-    expect(stateArr[2]).toEqual({
-      'key': 'success',
-      'value': {
-        '_tag': 'Success',
-        'timestamp': expect.any(Number),
-        'value': 123,
-        'waiting': false,
-      },
-      '~@systemfsoftware/effect-atom/DehydratedAtom': true,
-    })
-    expect(stateArr[3]).toEqual({
-      'key': 'pending',
-      'value': {
-        '_tag': 'Initial',
-        'waiting': true,
-      },
-      '~@systemfsoftware/effect-atom/DehydratedAtom': true,
-    })
-
-    expect(state.find((r) => r.key === 'pending')?.resultPromise).instanceOf(Promise)
-
-    const r2 = Registry.make()
-    Hydration.hydrate(r2, state)
-
-    expect(r2.get(notSerializable)).toEqual(0)
-    expect(r2.get(basicSerializable)).toEqual(0)
-    expect(r2.get(errored)).toEqual(Result.failure(Cause.fail('error')))
-    expect(r2.get(success)).toEqual(Result.success(123))
-    expect(r2.get(pending)).toEqual(Result.initial(true))
-
-    resolve(123)
-    await expect(state.find((r) => r.key === 'pending')?.resultPromise).resolves.toEqual({
-      '_tag': 'Success',
-      'timestamp': expect.any(Number),
-      'value': 123,
-      'waiting': false,
-    })
+    assert.strictEqual(r.get(atom), 11)
+    assert.strictEqual(r.get(source), 11)
+    assert.strictEqual(rebuilds, 2)
   })
+
+  test(`debounce uses registry initial values as source state`, async () => {
+    const source = Atom.make(0).pipe(Atom.keepAlive)
+    const atom = source.pipe(
+      Atom.debounce(100),
+      Atom.keepAlive,
+    )
+    const r = AtomRegistry.make({ initialValues: [Atom.initialValue(atom, 10)] })
+    r.mount(atom)
+
+    assert.strictEqual(r.get(atom), 10)
+    assert.strictEqual(r.get(source), 10)
+
+    r.set(source, 11)
+    assert.strictEqual(r.get(atom), 10)
+
+    await vitest.advanceTimersByTimeAsync(100)
+
+    assert.strictEqual(r.get(atom), 11)
+    assert.strictEqual(r.get(source), 11)
+  })
+
+  test(`withRefresh uses registry initial values as source state`, async () => {
+    let rebuilds = 0
+    let value = 0
+    const source = Atom.make(() => {
+      rebuilds++
+      return value
+    }).pipe(Atom.keepAlive)
+    const atom = source.pipe(
+      Atom.withRefresh(100),
+      Atom.keepAlive,
+    )
+    const r = AtomRegistry.make({ initialValues: [Atom.initialValue(atom, 10)] })
+    r.mount(atom)
+
+    assert.strictEqual(r.get(atom), 10)
+    assert.strictEqual(r.get(source), 10)
+    assert.strictEqual(rebuilds, 1)
+
+    value = 11
+    await vitest.advanceTimersByTimeAsync(100)
+
+    assert.strictEqual(r.get(atom), 11)
+    assert.strictEqual(r.get(source), 11)
+    assert.strictEqual(rebuilds, 2)
+  })
+
+  test(`swr refresh is forceful while fresh`, () => {
+    const r = AtomRegistry.make()
+    let runs = 0
+    const atom = Atom.make(Effect.sync(() => ++runs)).pipe(
+      Atom.swr({ staleTime: 1_000 }),
+    )
+    const unmount = r.mount(atom)
+
+    let result = r.get(atom)
+    assert(AsyncResult.isSuccess(result))
+    assert.strictEqual(result.value, 1)
+    assert.strictEqual(runs, 1)
+
+    r.refresh(atom)
+    result = r.get(atom)
+    assert(AsyncResult.isSuccess(result))
+    assert.strictEqual(result.value, 2)
+    assert.strictEqual(runs, 2)
+
+    unmount()
+  })
+
+  test(`swr keeps previous value while stale revalidation runs`, async () => {
+    const r = AtomRegistry.make()
+    let runs = 0
+    const atom = Atom.make(Effect.sync(() => ++runs).pipe(Effect.delay(50))).pipe(
+      Atom.swr({ staleTime: 100 }),
+    )
+    const unmount = r.mount(atom)
+
+    let result = r.get(atom)
+    assert(result.waiting)
+
+    await vitest.advanceTimersByTimeAsync(50)
+    result = r.get(atom)
+    assert(AsyncResult.isSuccess(result))
+    assert.strictEqual(result.value, 1)
+    assert.strictEqual(runs, 1)
+
+    await vitest.advanceTimersByTimeAsync(101)
+    r.refresh(atom)
+    result = r.get(atom)
+    assert(result.waiting)
+    assert.deepEqual(AsyncResult.value(result), Option.some(1))
+    assert.strictEqual(runs, 1)
+
+    await vitest.advanceTimersByTimeAsync(50)
+    result = r.get(atom)
+    assert(AsyncResult.isSuccess(result))
+    assert.strictEqual(result.value, 2)
+    assert.strictEqual(runs, 2)
+
+    unmount()
+  })
+
+  test(`swr refresh is forceful after failure with previousSuccess`, () => {
+    const r = AtomRegistry.make()
+    let runs = 0
+    const atom = Atom.fn((i: number) => {
+      runs++
+      return i === 1 ? Effect.fail('fail') : Effect.succeed(i)
+    }).pipe(
+      Atom.swr({ staleTime: 1_000 }),
+    )
+    const unmount = r.mount(atom)
+
+    r.set(atom, 0)
+    let result = r.get(atom)
+    assert(AsyncResult.isSuccess(result))
+    assert.strictEqual(result.value, 0)
+    assert.strictEqual(runs, 1)
+
+    r.set(atom, 1)
+    result = r.get(atom)
+    assert(AsyncResult.isFailure(result))
+    assert.strictEqual(runs, 2)
+
+    r.refresh(atom)
+    result = r.get(atom)
+    assert(AsyncResult.isFailure(result))
+    assert.strictEqual(runs, 3)
+
+    r.refresh(atom)
+    result = r.get(atom)
+    assert(AsyncResult.isFailure(result))
+    assert.strictEqual(runs, 4)
+
+    unmount()
+  })
+
+  test(`swr refreshes failure without previousSuccess`, () => {
+    const r = AtomRegistry.make()
+    let runs = 0
+    const atom = Atom.make(() => {
+      runs++
+      return Effect.fail('fail')
+    }).pipe(
+      Atom.swr({ staleTime: 1_000, revalidateOnMount: false }),
+    )
+    const unmount = r.mount(atom)
+
+    let result = r.get(atom)
+    assert(AsyncResult.isFailure(result))
+    assert.strictEqual(runs, 1)
+
+    r.refresh(atom)
+    result = r.get(atom)
+    assert(AsyncResult.isFailure(result))
+    assert.strictEqual(runs, 2)
+
+    unmount()
+  })
+
+  test(`swr revalidateOnMount false skips first read only`, () => {
+    const r = AtomRegistry.make()
+    const focusSignal = Atom.make(0)
+    let focus = 0
+    const emitFocus = () => r.set(focusSignal, ++focus)
+    let runs = 0
+    const atom = Atom.make(() => {
+      runs++
+      return Effect.fail('fail')
+    }).pipe(
+      Atom.swr({ staleTime: 1_000, revalidateOnMount: false, revalidateOnFocus: true, focusSignal }),
+    )
+    const unmount = r.mount(atom)
+
+    let result = r.get(atom)
+    assert(AsyncResult.isFailure(result))
+    assert.strictEqual(runs, 1)
+
+    emitFocus()
+    result = r.get(atom)
+    assert(AsyncResult.isFailure(result))
+    assert.strictEqual(runs, 2)
+
+    unmount()
+  })
+
+  test(`swr auto revalidates failure with previousSuccess only when stale`, async () => {
+    const r = AtomRegistry.make()
+    const focusSignal = Atom.make(0)
+    let focus = 0
+    const emitFocus = () => r.set(focusSignal, ++focus)
+    let runs = 0
+    const atom = Atom.fn((i: number) => {
+      runs++
+      return i === 0 ? Effect.succeed(i) : Effect.fail('fail')
+    }).pipe(
+      Atom.swr({ staleTime: 1_000, revalidateOnMount: false, revalidateOnFocus: true, focusSignal }),
+    )
+    const unmount = r.mount(atom)
+
+    r.set(atom, 0)
+    let result = r.get(atom)
+    assert(AsyncResult.isSuccess(result))
+    assert.strictEqual(result.value, 0)
+    assert.strictEqual(runs, 1)
+
+    r.set(atom, 1)
+    result = r.get(atom)
+    assert(AsyncResult.isFailure(result))
+    assert.strictEqual(runs, 2)
+
+    emitFocus()
+    result = r.get(atom)
+    assert(AsyncResult.isFailure(result))
+    assert.strictEqual(runs, 2)
+
+    await vitest.advanceTimersByTimeAsync(1_001)
+    emitFocus()
+    result = r.get(atom)
+    assert(AsyncResult.isFailure(result))
+    assert.strictEqual(runs, 3)
+
+    unmount()
+  })
+
+  test(`swr does not refresh from initial state`, () => {
+    const r = AtomRegistry.make()
+    let runs = 0
+    const atom = Atom.fn((n: number) => {
+      runs++
+      return Effect.succeed(n)
+    }).pipe(
+      Atom.swr({ staleTime: 0 }),
+    )
+    const unmount = r.mount(atom)
+
+    let result = r.get(atom)
+    assert(AsyncResult.isInitial(result))
+    assert.strictEqual(result.waiting, false)
+    assert.strictEqual(runs, 0)
+
+    r.refresh(atom)
+    result = r.get(atom)
+    assert(AsyncResult.isInitial(result))
+    assert.strictEqual(result.waiting, false)
+    assert.strictEqual(runs, 0)
+
+    unmount()
+  })
+
+  test(`swr refresh is forceful while waiting`, async () => {
+    const r = AtomRegistry.make()
+    let runs = 0
+    const atom = Atom.make(Effect.sync(() => ++runs).pipe(Effect.tap(() => Effect.sleep(50)))).pipe(
+      Atom.swr({ staleTime: 0 }),
+    )
+    const unmount = r.mount(atom)
+
+    await vitest.advanceTimersByTimeAsync(50)
+    let result = r.get(atom)
+    assert(AsyncResult.isSuccess(result))
+    assert.strictEqual(result.value, 1)
+    assert.strictEqual(runs, 1)
+
+    r.refresh(atom)
+    result = r.get(atom)
+    assert(result.waiting)
+    assert.strictEqual(runs, 2)
+
+    r.refresh(atom)
+    result = r.get(atom)
+    assert(result.waiting)
+    assert.strictEqual(runs, 3)
+
+    await vitest.advanceTimersByTimeAsync(50)
+    result = r.get(atom)
+    assert(AsyncResult.isSuccess(result))
+    assert.strictEqual(result.value, 3)
+
+    unmount()
+  })
+
+  test(`swr delegates refresh to wrapped custom refresh`, () => {
+    const r = AtomRegistry.make()
+    let runs = 0
+    const source = Atom.make(Effect.sync(() => ++runs))
+    const proxy = Atom.writable<AsyncResult.AsyncResult<number, never>, void>(
+      (get) => get(source),
+      () => {
+      },
+      (refresh) => refresh(source),
+    )
+    const atom = proxy.pipe(Atom.swr({ staleTime: 1_000, revalidateOnMount: false }))
+    const unmount = r.mount(atom)
+
+    let result = r.get(atom)
+    assert(AsyncResult.isSuccess(result))
+    assert.strictEqual(result.value, 1)
+    assert.strictEqual(runs, 1)
+
+    r.refresh(atom)
+    result = r.get(atom)
+    assert(AsyncResult.isSuccess(result))
+    assert.strictEqual(result.value, 2)
+    assert.strictEqual(runs, 2)
+
+    unmount()
+  })
+
+  test(`swr revalidates on stale remount when enabled`, async () => {
+    const r = AtomRegistry.make()
+    let runs = 0
+    const base = Atom.make(Effect.sync(() => ++runs)).pipe(Atom.keepAlive)
+    const atom = base.pipe(Atom.swr({ staleTime: 100, revalidateOnMount: true }))
+
+    const unmount1 = r.mount(atom)
+    let result = r.get(atom)
+    assert(AsyncResult.isSuccess(result))
+    assert.strictEqual(result.value, 1)
+    assert.strictEqual(runs, 1)
+    unmount1()
+
+    await Effect.runPromise(Effect.yieldNow)
+    await vitest.advanceTimersByTimeAsync(101)
+
+    const unmount2 = r.mount(atom)
+    result = r.get(atom)
+    assert(AsyncResult.isSuccess(result))
+    assert.strictEqual(result.value, 2)
+    assert.strictEqual(runs, 2)
+    unmount2()
+  })
+
+  test(`swr does not revalidate on fresh remount when enabled`, async () => {
+    const r = AtomRegistry.make()
+    let runs = 0
+    const base = Atom.make(Effect.sync(() => ++runs)).pipe(Atom.keepAlive)
+    const atom = base.pipe(Atom.swr({ staleTime: 10_000, revalidateOnMount: true }))
+
+    const unmount1 = r.mount(atom)
+    let result = r.get(atom)
+    assert(AsyncResult.isSuccess(result))
+    assert.strictEqual(result.value, 1)
+    assert.strictEqual(runs, 1)
+    unmount1()
+
+    await Effect.runPromise(Effect.yieldNow)
+
+    const unmount2 = r.mount(atom)
+    result = r.get(atom)
+    assert(AsyncResult.isSuccess(result))
+    assert.strictEqual(result.value, 1)
+    assert.strictEqual(runs, 1)
+    unmount2()
+  })
+
+  test(`swr revalidates on focus signal only when stale`, async () => {
+    const r = AtomRegistry.make()
+    const focusSignal = Atom.make(0)
+    let focus = 0
+    const emitFocus = () => r.set(focusSignal, ++focus)
+    let runs = 0
+    const atom = Atom.make(Effect.sync(() => ++runs)).pipe(
+      Atom.swr({ staleTime: 1_000, revalidateOnFocus: true, focusSignal }),
+    )
+    const unmount = r.mount(atom)
+
+    let result = r.get(atom)
+    assert(AsyncResult.isSuccess(result))
+    assert.strictEqual(result.value, 1)
+    assert.strictEqual(runs, 1)
+
+    emitFocus()
+    result = r.get(atom)
+    assert(AsyncResult.isSuccess(result))
+    assert.strictEqual(result.value, 1)
+    assert.strictEqual(runs, 1)
+
+    await vitest.advanceTimersByTimeAsync(1_001)
+    emitFocus()
+    result = r.get(atom)
+    assert(AsyncResult.isSuccess(result))
+    assert.strictEqual(result.value, 2)
+    assert.strictEqual(runs, 2)
+
+    unmount()
+  })
+
+  test(`swr can force refresh on focus signal`, () => {
+    const r = AtomRegistry.make()
+    const focusSignal = Atom.make(0)
+    let focus = 0
+    const emitFocus = () => r.set(focusSignal, ++focus)
+    let runs = 0
+    const atom = Atom.make(Effect.sync(() => ++runs)).pipe(
+      Atom.swr({ staleTime: 1_000, revalidateOnFocus: 'always', focusSignal }),
+    )
+    const unmount = r.mount(atom)
+
+    let result = r.get(atom)
+    assert(AsyncResult.isSuccess(result))
+    assert.strictEqual(result.value, 1)
+    assert.strictEqual(runs, 1)
+
+    emitFocus()
+    result = r.get(atom)
+    assert(AsyncResult.isSuccess(result))
+    assert.strictEqual(result.value, 2)
+    assert.strictEqual(runs, 2)
+
+    unmount()
+  })
+
+  test(`swr treats value as stale at exact staleTime boundary`, async () => {
+    const r = AtomRegistry.make()
+    const focusSignal = Atom.make(0)
+    let focus = 0
+    const emitFocus = () => r.set(focusSignal, ++focus)
+    let runs = 0
+    const atom = Atom.make(Effect.sync(() => ++runs)).pipe(
+      Atom.swr({ staleTime: 1_000, revalidateOnFocus: true, focusSignal }),
+    )
+    const unmount = r.mount(atom)
+
+    let result = r.get(atom)
+    assert(AsyncResult.isSuccess(result))
+    assert.strictEqual(result.value, 1)
+    assert.strictEqual(runs, 1)
+
+    await vitest.advanceTimersByTimeAsync(1_000)
+    emitFocus()
+    result = r.get(atom)
+    assert(AsyncResult.isSuccess(result))
+    assert.strictEqual(result.value, 2)
+    assert.strictEqual(runs, 2)
+
+    unmount()
+  })
+
+  test(`swr does not refresh on focus signal when disabled or omitted`, () => {
+    {
+      const r = AtomRegistry.make()
+      const focusSignal = Atom.make(0)
+      let focus = 0
+      const emitFocus = () => r.set(focusSignal, ++focus)
+      let runs = 0
+      const atom = Atom.make(Effect.sync(() => ++runs)).pipe(
+        Atom.swr({ staleTime: 10_000, revalidateOnFocus: false, focusSignal }),
+      )
+      const unmount = r.mount(atom)
+
+      let result = r.get(atom)
+      assert(AsyncResult.isSuccess(result))
+      assert.strictEqual(result.value, 1)
+      assert.strictEqual(runs, 1)
+
+      emitFocus()
+      result = r.get(atom)
+      assert(AsyncResult.isSuccess(result))
+      assert.strictEqual(result.value, 1)
+      assert.strictEqual(runs, 1)
+
+      unmount()
+    }
+
+    {
+      const r = AtomRegistry.make()
+      const focusSignal = Atom.make(0)
+      let focus = 0
+      const emitFocus = () => r.set(focusSignal, ++focus)
+      let runs = 0
+      const atom = Atom.make(Effect.sync(() => ++runs)).pipe(
+        Atom.swr({ staleTime: 10_000, focusSignal }),
+      )
+      const unmount = r.mount(atom)
+
+      let result = r.get(atom)
+      assert(AsyncResult.isSuccess(result))
+      assert.strictEqual(result.value, 1)
+      assert.strictEqual(runs, 1)
+
+      emitFocus()
+      result = r.get(atom)
+      assert(AsyncResult.isSuccess(result))
+      assert.strictEqual(result.value, 1)
+      assert.strictEqual(runs, 1)
+
+      unmount()
+    }
+  })
+
+  test(`swr does not revalidate on stale remount when disabled`, async () => {
+    const r = AtomRegistry.make()
+    let runs = 0
+    const base = Atom.make(Effect.sync(() => ++runs)).pipe(Atom.keepAlive)
+    const atom = base.pipe(Atom.swr({ staleTime: 100, revalidateOnMount: false }))
+
+    const unmount1 = r.mount(atom)
+    let result = r.get(atom)
+    assert(AsyncResult.isSuccess(result))
+    assert.strictEqual(result.value, 1)
+    assert.strictEqual(runs, 1)
+    unmount1()
+
+    await Effect.runPromise(Effect.yieldNow)
+    await vitest.advanceTimersByTimeAsync(101)
+
+    const unmount2 = r.mount(atom)
+    result = r.get(atom)
+    assert(AsyncResult.isSuccess(result))
+    assert.strictEqual(result.value, 1)
+    assert.strictEqual(runs, 1)
+    unmount2()
+  })
+
+  test(`swr composes with signal driven refresh wrappers`, async () => {
+    const r = AtomRegistry.make()
+    let runs = 0
+    const signal = Atom.make(0)
+    const atom = Atom.make(Effect.sync(() => ++runs)).pipe(
+      Atom.swr({ staleTime: 1_000 }),
+      Atom.makeRefreshOnSignal(signal),
+    )
+    const unmount = r.mount(atom)
+
+    let result = r.get(atom)
+    assert(AsyncResult.isSuccess(result))
+    assert.strictEqual(result.value, 1)
+    assert.strictEqual(runs, 1)
+
+    r.set(signal, 1)
+    result = r.get(atom)
+    assert(AsyncResult.isSuccess(result))
+    assert.strictEqual(result.value, 2)
+    assert.strictEqual(runs, 2)
+
+    r.set(signal, 2)
+    result = r.get(atom)
+    assert(AsyncResult.isSuccess(result))
+    assert.strictEqual(result.value, 3)
+    assert.strictEqual(runs, 3)
+
+    unmount()
+  })
+
+  test(`swr preserves writable set semantics`, () => {
+    const r = AtomRegistry.make()
+    let writes = 0
+    const source = Atom.writable<AsyncResult.AsyncResult<number, never>, number>(
+      (get) => Option.getOrElse(get.self<AsyncResult.AsyncResult<number, never>>(), () => AsyncResult.success(0)),
+      (ctx, value) => {
+        writes++
+        ctx.setSelf(AsyncResult.success(value))
+      },
+    )
+    const atom = source.pipe(Atom.swr({ staleTime: 1_000 }))
+    const unmount = r.mount(atom)
+
+    let result = r.get(atom)
+    assert(AsyncResult.isSuccess(result))
+    assert.strictEqual(result.value, 0)
+
+    r.set(atom, 1)
+    result = r.get(atom)
+    assert(AsyncResult.isSuccess(result))
+    assert.strictEqual(result.value, 1)
+    assert.strictEqual(writes, 1)
+
+    const sourceResult = r.get(source)
+    assert(AsyncResult.isSuccess(sourceResult))
+    assert.strictEqual(sourceResult.value, 1)
+
+    unmount()
+  })
+
+  test(`swr uses registry initial values as source state`, () => {
+    let runs = 0
+    const source = Atom.make(Effect.sync(() => ++runs)).pipe(Atom.keepAlive)
+    const atom = source.pipe(
+      Atom.swr({ staleTime: 1_000, revalidateOnMount: false }),
+      Atom.keepAlive,
+    )
+    const initial = AsyncResult.success(10)
+    const r = AtomRegistry.make({ initialValues: [Atom.initialValue(atom, initial)] })
+    r.mount(atom)
+
+    assert.deepStrictEqual(r.get(atom), initial)
+    assert.deepStrictEqual(r.get(source), initial)
+    assert.strictEqual(runs, 1)
+
+    r.refresh(atom)
+
+    const result = r.get(atom)
+    assert(AsyncResult.isSuccess(result))
+    assert.strictEqual(result.value, 2)
+    assert.strictEqual(runs, 2)
+  })
+
+  // it("dehydrate", async () => {
+  //   const r = AtomRegistry.make()
+  //   const notSerializable = Atom.make(0)
+  //   r.mount(notSerializable)
+  //
+  //   const basicSerializable = Atom.make(0).pipe(Atom.serializable({
+  //     key: "basicSerializable",
+  //     schema: Schema.Number
+  //   }))
+  //   r.mount(basicSerializable)
+  //
+  //   const errored = Atom.make(Effect.fail("error")).pipe(
+  //     Atom.serializable({
+  //       key: "errored",
+  //       schema: AsyncResult.Schema({
+  //         error: Schema.String
+  //       })
+  //     })
+  //   )
+  //   r.mount(errored)
+  //
+  //   const success = Atom.make(Effect.succeed(123)).pipe(Atom.serializable({
+  //     key: "success",
+  //     schema: AsyncResult.Schema({
+  //       success: Schema.Number
+  //     })
+  //   }))
+  //   r.mount(success)
+  //
+  //   const { promise, resolve } = Promise.withResolvers<number>()
+  //
+  //   const pending = Atom.make(Effect.promise(() => promise)).pipe(Atom.serializable({
+  //     key: "pending",
+  //     schema: AsyncResult.Schema({
+  //       success: Schema.Number
+  //     })
+  //   }))
+  //   r.mount(pending)
+  //
+  //   const state = Hydration.toValues(Hydration.dehydrate(r, {
+  //     encodeInitialAs: "promise"
+  //   }))
+  //   expect(state.map((r) => Struct.omit(r, "dehydratedAt", "resultPromise"))).toMatchInlineSnapshot(`
+  //     [
+  //       {
+  //         "key": "basicSerializable",
+  //         "value": 0,
+  //         "~@effect-atom/atom/DehydratedAtom": true,
+  //       },
+  //       {
+  //         "key": "errored",
+  //         "value": {
+  //           "_tag": "Failure",
+  //           "cause": {
+  //             "_tag": "Fail",
+  //             "error": "error",
+  //           },
+  //           "previousSuccess": {
+  //             "_tag": "None",
+  //           },
+  //           "waiting": false,
+  //         },
+  //         "~@effect-atom/atom/DehydratedAtom": true,
+  //       },
+  //       {
+  //         "key": "success",
+  //         "value": {
+  //           "_tag": "Success",
+  //           "timestamp": ${Date.now()},
+  //           "value": 123,
+  //           "waiting": false,
+  //         },
+  //         "~@effect-atom/atom/DehydratedAtom": true,
+  //       },
+  //       {
+  //         "key": "pending",
+  //         "value": {
+  //           "_tag": "Initial",
+  //           "waiting": true,
+  //         },
+  //         "~@effect-atom/atom/DehydratedAtom": true,
+  //       },
+  //     ]
+  //   `)
+  //
+  //   expect(state.find((r) => r.key === "pending")?.resultPromise).instanceOf(Promise)
+  //
+  //   const r2 = AtomRegistry.make()
+  //   Hydration.hydrate(r2, state)
+  //
+  //   expect(r2.get(notSerializable)).toEqual(0)
+  //   expect(r2.get(basicSerializable)).toEqual(0)
+  //   expect(r2.get(errored)).toEqual(AsyncResult.failure(Cause.fail("error")))
+  //   expect(r2.get(success)).toEqual(AsyncResult.success(123))
+  //   expect(r2.get(pending)).toEqual(AsyncResult.initial(true))
+  //
+  //   resolve(123)
+  //   await expect(state.find((r) => r.key === "pending")?.resultPromise).resolves.toEqual({
+  //     "_tag": "Success",
+  //     "timestamp": expect.any(Number),
+  //     "value": 123,
+  //     "waiting": false
+  //   })
+  // })
 
   describe('optimistic', () => {
     it('non-Result', async () => {
-      const latch = Effect.unsafeMakeLatch()
-      const r = Registry.make()
+      const latch = Latch.makeUnsafe()
+      const r = AtomRegistry.make()
       let i = 0
       const atom = Atom.make(() => i)
       const optimisticAtom = atom.pipe(Atom.optimistic)
@@ -1282,8 +2253,8 @@ describe('Atom', () => {
       expect(r.get(atom)).toEqual(0)
       expect(r.get(optimisticAtom)).toEqual(1)
 
-      latch.unsafeOpen()
-      await Effect.runPromise(Effect.yieldNow())
+      latch.openUnsafe()
+      await Effect.runPromise(Effect.yieldNow)
 
       // commit phase: a refresh is triggered, the authoritative value is used
       expect(r.get(atom)).toEqual(2)
@@ -1292,8 +2263,8 @@ describe('Atom', () => {
 
     it('Result', async () => {
       const runtime = Atom.runtime(Layer.empty)
-      const latch = Effect.unsafeMakeLatch()
-      const r = Registry.make()
+      const latch = Latch.makeUnsafe()
+      const r = AtomRegistry.make()
       let i = 0
       const atom = Atom.make(Effect.sync(() => {
         return i
@@ -1303,7 +2274,7 @@ describe('Atom', () => {
       )
       const fn = optimisticAtom.pipe(
         Atom.optimisticFn({
-          reducer: (_current, update: number) => Result.success(update),
+          reducer: (_current, update: number) => AsyncResult.success(update),
           fn: runtime.fn(Effect.fnUntraced(function*() {
             yield* latch.await
           })),
@@ -1313,26 +2284,26 @@ describe('Atom', () => {
       r.mount(optimisticAtom)
       r.mount(fn)
 
-      expect(r.get(atom)).toEqual(Result.success(0))
-      expect(r.get(optimisticAtom)).toEqual(Result.success(0))
+      expect(r.get(atom)).toEqual(AsyncResult.success(0))
+      expect(r.get(optimisticAtom)).toEqual(AsyncResult.success(0))
       r.set(fn, 1)
       i = 2
 
       // optimistic phase: the optimistic value is set, but the true value is not
-      expect(r.get(atom)).toEqual(Result.success(0))
-      expect(r.get(optimisticAtom)).toEqual(Result.success(1, { waiting: true }))
+      expect(r.get(atom)).toEqual(AsyncResult.success(0))
+      expect(r.get(optimisticAtom)).toEqual(AsyncResult.success(1, { waiting: true }))
 
-      latch.unsafeOpen()
-      await Effect.runPromise(Effect.yieldNow())
+      latch.openUnsafe()
+      await Effect.runPromise(Effect.yieldNow)
 
       // commit phase: a refresh is triggered, the authoritative value is used
-      expect(r.get(atom)).toEqual(Result.success(2))
-      expect(r.get(optimisticAtom)).toEqual(Result.success(2))
+      expect(r.get(atom)).toEqual(AsyncResult.success(2))
+      expect(r.get(optimisticAtom)).toEqual(AsyncResult.success(2))
     })
 
     it('failures', async () => {
-      const latch = Effect.unsafeMakeLatch()
-      const r = Registry.make()
+      const latch = Latch.makeUnsafe()
+      const r = AtomRegistry.make()
       const i = 0
       let rebuilds = 0
       const atom = Atom.make(() => {
@@ -1363,8 +2334,8 @@ describe('Atom', () => {
       expect(r.get(atom)).toEqual(0)
       expect(r.get(optimisticAtom)).toEqual(1)
 
-      latch.unsafeOpen()
-      await Effect.runPromise(Effect.yieldNow())
+      latch.openUnsafe()
+      await Effect.runPromise(Effect.yieldNow)
 
       // commit phase: the optimistic value is reset to the true value
       expect(r.get(atom)).toEqual(0)
@@ -1373,7 +2344,7 @@ describe('Atom', () => {
     })
 
     it('sync fn', async () => {
-      const r = Registry.make()
+      const r = AtomRegistry.make()
       let i = 0
       const atom = Atom.make(() => i)
       const optimisticAtom = atom.pipe(Atom.optimistic, Atom.keepAlive)
@@ -1396,8 +2367,8 @@ describe('Atom', () => {
     })
 
     it('intermediate updates', async () => {
-      const latch = Effect.unsafeMakeLatch()
-      const r = Registry.make()
+      const latch = Latch.makeUnsafe()
+      const r = AtomRegistry.make()
       let i = 0
       const atom = Atom.make(Effect.sync(() => i))
       const optimisticAtom = atom.pipe(
@@ -1405,38 +2376,66 @@ describe('Atom', () => {
       )
       const fn = optimisticAtom.pipe(
         Atom.optimisticFn({
-          reducer: (_current, update: number) => Result.success(update),
+          reducer: (_current, update: number) => AsyncResult.success(update),
           fn: (set) =>
             Atom.fn(Effect.fnUntraced(function*() {
-              set(Result.success(123))
+              set(AsyncResult.success(123))
               yield* latch.await
             })),
         }),
         Atom.keepAlive,
       )
 
-      expect(r.get(atom)).toEqual(Result.success(0))
-      assert.deepStrictEqual(r.get(optimisticAtom), Result.success(0))
+      expect(r.get(atom)).toEqual(AsyncResult.success(0))
+      assert.deepStrictEqual(r.get(optimisticAtom), AsyncResult.success(0))
       r.set(fn, 1)
       i = 2
 
       // optimistic phase: the intermediate value is set, but the true value is
       // not
-      assert.deepStrictEqual(r.get(atom), Result.success(0))
-      assert.deepStrictEqual(r.get(optimisticAtom), Result.success(123, { waiting: true }))
+      assert.deepStrictEqual(r.get(atom), AsyncResult.success(0))
+      assert.deepStrictEqual(r.get(optimisticAtom), AsyncResult.success(123, { waiting: true }))
 
-      latch.unsafeOpen()
-      await Effect.runPromise(Effect.yieldNow())
+      latch.openUnsafe()
+      await Effect.runPromise(Effect.yieldNow)
 
       // commit phase: a refresh is triggered, the authoritative value is used
-      assert.deepStrictEqual(r.get(atom), Result.success(2))
-      assert.deepStrictEqual(r.get(optimisticAtom), Result.success(2))
+      assert.deepStrictEqual(r.get(atom), AsyncResult.success(2))
+      assert.deepStrictEqual(r.get(optimisticAtom), AsyncResult.success(2))
     })
   })
 
   describe('Reactivity', () => {
+    it('does not broadcast mutations across registries', () => {
+      let reads = 0
+      const query = Atom.make(() => ++reads).pipe(
+        Atom.withReactivity(['counter']),
+        Atom.keepAlive,
+      )
+      const runtime = Atom.runtime(Layer.empty)
+      const mutation = runtime.fn(
+        Effect.fn(function*() {
+        }),
+        { reactivityKeys: ['counter'] },
+      )
+      const registryA = AtomRegistry.make()
+      const registryB = AtomRegistry.make()
+
+      expect(registryA.get(query)).toEqual(1)
+      expect(registryB.get(query)).toEqual(2)
+
+      registryA.set(mutation, void 0)
+
+      expect(reads).toEqual(3)
+      expect(registryA.get(query)).toEqual(3)
+      expect(registryB.get(query)).toEqual(2)
+
+      registryA.dispose()
+      registryB.dispose()
+    })
+
     it('rebuilds on mutation', async () => {
-      const r = Registry.make()
+      const r = AtomRegistry.make()
       let rebuilds = 0
       const atom = Atom.make(() => rebuilds++).pipe(
         Atom.withReactivity(['counter']),
@@ -1454,22 +2453,86 @@ describe('Atom', () => {
       r.set(fn, void 0)
       assert.strictEqual(r.get(atom), 3)
     })
+
+    it('rebuilds on mutation with a registry initial value', async () => {
+      let rebuilds = 0
+      let value = 0
+      const atom = Atom.make(() => {
+        rebuilds++
+        return value
+      }).pipe(
+        Atom.withReactivity(['counter']),
+        Atom.keepAlive,
+      )
+      const r = AtomRegistry.make({ initialValues: [Atom.initialValue(atom, 10)] })
+      const fn = counterRuntime.fn(
+        Effect.fn(function*() {
+        }),
+        { reactivityKeys: ['counter'] },
+      )
+      r.mount(atom)
+
+      assert.strictEqual(r.get(atom), 10)
+      assert.strictEqual(rebuilds, 1)
+
+      value = 11
+      r.set(fn, void 0)
+
+      assert.strictEqual(r.get(atom), 11)
+      assert.strictEqual(rebuilds, 2)
+    })
+
+    it('rebuilds on mutation with a hydrated value', async () => {
+      let rebuilds = 0
+      let value = 0
+      const atom = Atom.make(() => {
+        rebuilds++
+        return value
+      }).pipe(
+        Atom.withReactivity(['counter']),
+        Atom.serializable({ key: 'hydrated-counter', schema: Schema.Number }),
+        Atom.keepAlive,
+      )
+      const r = AtomRegistry.make()
+      const fn = counterRuntime.fn(
+        Effect.fn(function*() {
+        }),
+        { reactivityKeys: ['counter'] },
+      )
+      const dehydratedState: Array<Hydration.DehydratedAtomValue> = [{
+        '~effect/reactivity/DehydratedAtom': true,
+        key: 'hydrated-counter',
+        value: 10,
+        dehydratedAt: 0,
+      }]
+      Hydration.hydrate(r, dehydratedState)
+      r.mount(atom)
+
+      assert.strictEqual(r.get(atom), 10)
+      assert.strictEqual(rebuilds, 1)
+
+      value = 11
+      r.set(fn, void 0)
+
+      assert.strictEqual(r.get(atom), 11)
+      assert.strictEqual(rebuilds, 2)
+    })
   })
 
   it('Atom.Interrupt', async () => {
-    const r = Registry.make()
+    const r = AtomRegistry.make()
     const atom = Atom.fn(() => Effect.never)
     r.mount(atom)
-    expect(r.get(atom)).toEqual(Result.initial())
+    expect(r.get(atom)).toEqual(AsyncResult.initial())
     expect(r.get(atom).waiting).toBeFalsy()
     r.set(atom, void 0)
-    expect(r.get(atom)).toEqual(Result.initial(true))
+    expect(r.get(atom)).toEqual(AsyncResult.initial(true))
     expect(r.get(atom).waiting).toBeTruthy()
 
     r.set(atom, Atom.Interrupt)
-    await Effect.runPromise(Effect.yieldNow())
+    await Effect.runPromise(Effect.yieldNow)
     const result = r.get(atom)
-    expect(Result.isInterrupted(result)).toBeTruthy()
+    expect(AsyncResult.isInterrupted(result)).toBeTruthy()
   })
 
   it('writable derived clears waiting after refresh', async () => {
@@ -1484,12 +2547,12 @@ describe('Atom', () => {
     ).pipe(
       Atom.withLabel('derived'),
     )
-    const r = Registry.make()
+    const r = AtomRegistry.make()
 
     const unmount1 = r.mount(derived)
     await vitest.advanceTimersByTimeAsync(100)
     let result = r.get(derived)
-    assert(Result.isSuccess(result))
+    assert(AsyncResult.isSuccess(result))
     expect(result.value).toEqual(1)
     expect(result.waiting).toEqual(false)
     unmount1()
@@ -1500,14 +2563,14 @@ describe('Atom', () => {
 
     result = r.get(derived)
     expect(result.waiting).toEqual(false)
-    assert(Result.isSuccess(result))
+    assert(AsyncResult.isSuccess(result))
     expect(result.value).toEqual(2)
 
     unmount2()
   })
 
   it('get.result suspendOnWaiting', async () => {
-    const r = Registry.make()
+    const r = AtomRegistry.make()
 
     const inner = Atom.make(Effect.succeed(1).pipe(Effect.delay(50)))
     const outer = Atom.make((get) => get.result(inner, { suspendOnWaiting: true }))
@@ -1520,12 +2583,12 @@ describe('Atom', () => {
     await vitest.advanceTimersByTimeAsync(50)
 
     result = r.get(outer)
-    assert(Result.isSuccess(result))
+    assert(AsyncResult.isSuccess(result))
     assert.strictEqual(result.value, 1)
   })
 
   it('fn get.result suspendOnWaiting', async () => {
-    const r = Registry.make()
+    const r = AtomRegistry.make()
     let runs = 0
 
     const inner = Atom.fn((n: number) => {
@@ -1551,21 +2614,24 @@ describe('Atom', () => {
     await vitest.advanceTimersByTimeAsync(100)
 
     const result = r.get(outer)
-    assert(Result.isSuccess(result))
+    assert(AsyncResult.isSuccess(result))
     assert.strictEqual(result.value.a, 2)
     assert.strictEqual(result.value.b, 4)
     assert.strictEqual(runs, 2)
   })
 
   describe('kvs', () => {
-    const makeDelayedStore = (storage: Map<string, string>) =>
-      Layer.succeed(
+    it('memoizes defaultValue while loading empty storage', async () => {
+      let calls = 0
+      const storage = new Map<string, string>()
+
+      const DelayedKVS = Layer.succeed(
         KeyValueStore.KeyValueStore,
         KeyValueStore.makeStringOnly({
           get: (key) =>
             Effect.gen(function*() {
               yield* Effect.sleep(20)
-              return Option.fromNullable(storage.get(key))
+              return storage.get(key)
             }),
           set: (key, value) =>
             Effect.sync(() => {
@@ -1580,11 +2646,9 @@ describe('Atom', () => {
         }),
       )
 
-    it('stays Initial until the store answers, then yields defaultValue for an absent key', async () => {
-      let calls = 0
-      const storage = new Map<string, string>()
+      const kvsRuntime = Atom.runtime(DelayedKVS)
       const atom = Atom.kvs({
-        runtime: Atom.runtime(makeDelayedStore(storage)),
+        runtime: kvsRuntime,
         key: 'default-value-key',
         schema: Schema.Number,
         defaultValue: () => {
@@ -1593,62 +2657,127 @@ describe('Atom', () => {
         },
       })
 
-      const r = Registry.make()
+      const r = AtomRegistry.make()
       r.mount(atom)
 
-      assert.isTrue(Result.isInitial(r.get(atom)))
-      expect(calls).toEqual(0)
+      expect(r.get(atom)).toEqual(0)
+      expect(calls).toEqual(1)
 
       await vitest.advanceTimersByTimeAsync(50)
 
-      const loaded = r.get(atom)
-      assert.isTrue(Result.isSuccess(loaded))
-      expect(Result.getOrElse(loaded, () => -1)).toEqual(0)
+      expect(r.get(atom)).toEqual(0)
       expect(calls).toEqual(1)
-      expect(storage.has('default-value-key')).toBe(false)
     })
 
-    it('yields the stored value and never writes the default back', async () => {
+    it('preserves existing value after async load completes', async () => {
+      vitest.useRealTimers()
+      // Create an in-memory store with a pre-existing value
       const storage = new Map<string, string>()
       storage.set('test-key', JSON.stringify(42))
 
+      // Create a delayed KeyValueStore to simulate async loading
+      // Use KeyValueStore.make to get proper forSchema support
+      const DelayedKVS = Layer.succeed(
+        KeyValueStore.KeyValueStore,
+        KeyValueStore.makeStringOnly({
+          get: (key) =>
+            Effect.gen(function*() {
+              yield* Effect.sleep(20) // Short delay to create Initial state window
+              return storage.get(key)
+            }),
+          set: (key, value) =>
+            Effect.sync(() => {
+              storage.set(key, value)
+            }),
+          remove: (key) =>
+            Effect.sync(() => {
+              storage.delete(key)
+            }),
+          clear: Effect.sync(() => storage.clear()),
+          size: Effect.sync(() => storage.size),
+        }),
+      )
+
+      const kvsRuntime = Atom.runtime(DelayedKVS)
       const atom = Atom.kvs({
-        runtime: Atom.runtime(makeDelayedStore(storage)),
+        runtime: kvsRuntime,
         key: 'test-key',
         schema: Schema.Number,
         defaultValue: () => 0,
       })
 
-      const r = Registry.make()
+      const r = AtomRegistry.make()
       r.mount(atom)
 
-      assert.isTrue(Result.isInitial(r.get(atom)))
+      // First read during Initial state returns default
+      const value = r.get(atom)
+      expect(value).toEqual(0)
 
-      await vitest.advanceTimersByTimeAsync(50)
+      // Wait for async load AND any set effects to complete
+      await new Promise((resolve) => setTimeout(resolve, 50))
 
-      expect(Result.getOrElse(r.get(atom), () => -1)).toEqual(42)
+      // THE KEY ASSERTION: After load completes, storage should still have original value.
+      // The bug was that the default (0) would be written during Initial state,
+      // corrupting the storage before the async load could read it.
       expect(storage.get('test-key')).toEqual(JSON.stringify(42))
     })
 
-    it('keeps a write made before the load resolves', async () => {
+    it('async mode', async () => {
+      vitest.useRealTimers()
+      // Create an in-memory store with a pre-existing value
       const storage = new Map<string, string>()
       storage.set('test-key', JSON.stringify(42))
 
+      // Create a delayed KeyValueStore to simulate async loading
+      // Use KeyValueStore.make to get proper forSchema support
+      const DelayedKVS = Layer.succeed(
+        KeyValueStore.KeyValueStore,
+        KeyValueStore.makeStringOnly({
+          get: (key) =>
+            Effect.gen(function*() {
+              yield* Effect.sleep(20) // Short delay to create Initial state window
+              return storage.get(key)
+            }),
+          set: (key, value) =>
+            Effect.sync(() => {
+              storage.set(key, value)
+            }),
+          remove: (key) =>
+            Effect.sync(() => {
+              storage.delete(key)
+            }),
+          clear: Effect.sync(() => storage.clear()),
+          size: Effect.sync(() => storage.size),
+        }),
+      )
+
+      const kvsRuntime = Atom.runtime(DelayedKVS)
       const atom = Atom.kvs({
-        runtime: Atom.runtime(makeDelayedStore(storage)),
+        mode: 'async',
+        runtime: kvsRuntime,
         key: 'test-key',
         schema: Schema.Number,
         defaultValue: () => 0,
       })
 
-      const r = Registry.make()
+      const r = AtomRegistry.make()
       r.mount(atom)
-      r.set(atom, 7)
 
-      await vitest.advanceTimersByTimeAsync(50)
+      expect(r.get(atom)).toEqual(AsyncResult.initial(true))
 
-      expect(Result.getOrElse(r.get(atom), () => -1)).toEqual(7)
-      expect(storage.get('test-key')).toEqual(JSON.stringify(7))
+      await new Promise((resolve) => setTimeout(resolve, 50))
+
+      const result = r.get(atom)
+      assert(AsyncResult.isSuccess(result))
+      expect(result.value).toEqual(42)
+      expect(result.waiting).toEqual(false)
+      expect(storage.get('test-key')).toEqual(JSON.stringify(42))
+
+      r.set(atom, 24)
+
+      const updated = r.get(atom)
+      assert(AsyncResult.isSuccess(updated))
+      expect(updated.value).toEqual(24)
     })
   })
 })
@@ -1657,8 +2786,8 @@ interface BuildCounter {
   readonly get: Effect.Effect<number>
   readonly inc: Effect.Effect<void>
 }
-const BuildCounter = Context.GenericTag<BuildCounter>('BuildCounter')
-const BuildCounterLive = Layer.sync(BuildCounter, () => {
+const BuildCounter = Context.Service<BuildCounter>('BuildCounter')
+const BuildCounterLayer = Layer.sync(BuildCounter, () => {
   let count = 0
   return BuildCounter.of({
     get: Effect.sync(() => count),
@@ -1672,8 +2801,8 @@ interface Counter {
   readonly get: Effect.Effect<number>
   readonly inc: Effect.Effect<void>
 }
-const Counter = Context.GenericTag<Counter>('Counter')
-const CounterLive = Layer.effect(
+const Counter = Context.Service<Counter>('Counter')
+const CounterLayer = Layer.effect(
   Counter,
   Effect.gen(function*() {
     const buildCounter = yield* BuildCounter
@@ -1687,7 +2816,7 @@ const CounterLive = Layer.effect(
     })
   }),
 ).pipe(
-  Layer.provide(BuildCounterLive),
+  Layer.provide(BuildCounterLayer),
 )
 
 const CounterTest = Layer.effect(
@@ -1704,27 +2833,26 @@ const CounterTest = Layer.effect(
     })
   }),
 ).pipe(
-  Layer.provide(BuildCounterLive),
+  Layer.provide(BuildCounterLayer),
 )
 
 interface Multiplier {
   readonly times: (n: number) => Effect.Effect<number>
 }
-const Multiplier = Context.GenericTag<Multiplier>('Multiplier')
-const MultiplierLive = Layer.effect(
+const Multiplier = Context.Service<Multiplier>('Multiplier')
+const MultiplierLayer = Layer.effect(
   Multiplier,
   Effect.gen(function*() {
     const counter = yield* Counter
-    yield* Registry.AtomRegistry // test that we can access the registry
+    yield* AtomRegistry.AtomRegistry // test that we can access the registry
     return Multiplier.of({
       times: (n) => Effect.map(counter.get, (_) => _ * n),
     })
   }),
 ).pipe(
-  Layer.provideMerge(CounterLive),
+  Layer.provideMerge(CounterLayer),
 )
 
-const buildCounterRuntime = Atom.runtime(BuildCounterLive)
-const counterRuntime = Atom.runtime(CounterLive)
-const multiplierRuntime = Atom.runtime(MultiplierLive)
-const fiberRefRuntime = Atom.runtime(Layer.setRequestCaching(true))
+const buildCounterRuntime = Atom.runtime(BuildCounterLayer)
+const counterRuntime = Atom.runtime(CounterLayer)
+const multiplierRuntime = Atom.runtime(MultiplierLayer)

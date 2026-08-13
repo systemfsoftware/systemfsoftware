@@ -46,13 +46,13 @@
     "@systemfsoftware/effect-atom": "workspace:^"
   },
   "peerDependencies": {
-    "effect": "catalog:",
+    "effect": "catalog:effect4",
     "react": "catalog:",
     "react-dom": "catalog:",
     "scheduler": "*"
   },
   "devDependencies": {
-    "@effect/vitest": "catalog:",
+    "@effect/vitest": "catalog:effect4",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@testing-library/dom": "catalog:",
@@ -62,7 +62,7 @@
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "@types/scheduler": "catalog:",
-    "effect": "catalog:",
+    "effect": "catalog:effect4",
     "jsdom": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
