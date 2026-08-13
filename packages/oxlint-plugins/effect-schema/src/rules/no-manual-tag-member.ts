@@ -158,7 +158,11 @@ export const noManualTagMember = defineRule({
     const options: OptionsType = S.decodeUnknownSync(Options)(context.options[0] ?? {})
     const allow = new Set(options.allow.map((s) => s.toLowerCase()))
 
-    if (context.filename.endsWith('.shape.ts')) return {}
+    // Scope: `.shape.ts` files are wire-format declarations, and `.tst.ts` files are
+    // type-test fixtures that must contain no runtime values — a `S.TaggedStruct`
+    // prescription would demand a runtime schema in a file whose job is to hold none.
+    // The boundary is a property of what these files *are*, not of any one package.
+    if (context.filename.endsWith('.shape.ts') || context.filename.endsWith('.tst.ts')) return {}
 
     const reportTag = (
       tag: ESTree.TSPropertySignature,
