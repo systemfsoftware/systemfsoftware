@@ -5,6 +5,7 @@ const NOT_OUR_SOURCE = ['/repos/']
 const NOT_LINT_SOURCE = [...NOT_OUR_SOURCE, '/test/', '.test.ts']
 
 const ROOT = process.cwd()
+const DPRINT = join(ROOT, 'bin/dprint')
 
 const lintable = (filenames) => filenames.filter((f) => !NOT_OUR_SOURCE.some((p) => f.includes(p)))
 const lintableSource = (filenames) => filenames.filter((f) => !NOT_LINT_SOURCE.some((p) => f.includes(p)))
@@ -42,7 +43,7 @@ const hasOwningConfig = ([config]) => config !== null
 const formatCommands = (filenames) => {
   const formattable = lintable(filenames)
   if (formattable.length === 0) return []
-  return [`dprint fmt --allow-no-files -- ${formattable.join(' ')}`]
+  return [`${DPRINT} fmt --allow-no-files -- ${formattable.join(' ')}`]
 }
 
 const lintCommands = (filenames) =>
