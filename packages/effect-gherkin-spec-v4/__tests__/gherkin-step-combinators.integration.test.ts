@@ -144,7 +144,7 @@ Feature('Gherkin step combinators').body(({ scenario }) => {
   )
 
   scenario(
-    'Should pass through assertion error when assertion fails',
+    'Should wrap in StepError when Then assertion fails',
     Effect.gen(function*() {
       const result = yield* Gherkin.Do.pipe(
         Given('setup')('x', () => Effect.succeed(1)),
@@ -153,7 +153,14 @@ Feature('Gherkin step combinators').body(({ scenario }) => {
         }),
         Effect.result,
       )
-      expect(Result.getFailure(result)).not.toBeInstanceOf(StepError)
+      Result.match(result, {
+        onFailure: (err) => {
+          expect(err).toBeInstanceOf(StepError)
+        },
+        onSuccess: () => {
+          throw new Error('Expected failure')
+        },
+      })
     }),
   )
 

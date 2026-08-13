@@ -59,7 +59,7 @@ effect v4 is a breaking rewrite of the APIs this package wraps: `Either` became 
 
 - KTD1. Pin the v4 RC in a dedicated named catalog `effect-v4` (`effect: ^4.0.0-rc.108`, `@effect/vitest: ^4.0.0-rc.108`), leaving the default catalog on v3. Separate named catalogs per major version is the repo's established convention (`docs/solutions/tooling-decisions/pnpm-catalogs-for-monorepo-dependency-management.md`), and `@effect/vitest@4.0.0-rc.108` peers only on `effect ^4.0.0-rc.108` and `vitest >=4.1.0 <5.0.0` — the default catalog's `vitest: ^4.1.10` already satisfies the peer, so `vitest` stays in the default catalog.
 - KTD2. The `TestServices.TestServices` type re-expresses as `TestClock.TestClock | TestConsole.TestConsole` (v4's test-environment union), sourced from `effect/TestClock` and `effect/TestConsole`. `@effect/vitest` v4 still honors `excludeTestServices`, so R5's option survives unchanged.
-- KTD3. Private-package convention mirrors `packages/vitest-config` and `packages/oxlint-config`: keep `version`, drop `publishConfig` and `provenance`, omit a changeset, and omit the root README table row. The stale `etc/effect-gherkin-spec.api.md` is not carried forward — `effect-gherkin-spec` has no `api-extractor.json` and no `api:check` script, so the report is dead weight nothing consumes.
+- KTD3. A `private: true` package has no publish path, so `publishConfig`, `provenance`, a changeset, and a published-package README row are dead weight. Keep `version` for workspace identity. The stale `etc/effect-gherkin-spec.api.md` is not carried forward — `effect-gherkin-spec` has no `api-extractor.json` and no `api:check` script, so the report is dead weight nothing consumes.
 
 ### Assumptions
 

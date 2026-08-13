@@ -30,7 +30,13 @@ export const stringifyForTitle = (value: unknown): string => {
   if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
     return String(value)
   }
-  return JSON.stringify(value)
+  if (typeof value === 'symbol') return value.toString()
+  if (typeof value === 'function') return Function.prototype.toString.call(value)
+  const encoded = JSON.stringify(value)
+  if (encoded === void 0) {
+    return 'unknown'
+  }
+  return encoded
 }
 
 export const renderTitle = (
@@ -53,15 +59,16 @@ export const expandOutline = <Row extends Record<string, unknown>>(
   if (rows.length === 0) return Result.succeed([])
 
   const templateTokens = tokenizeTemplate(name)
-  const [firstRow] = rows
-  if (templateTokens.length > 0 && firstRow !== void 0) {
-    const rowKeys = new Set(Object.keys(firstRow))
-    for (const { tag } of templateTokens) {
-      if (!rowKeys.has(tag)) {
-        return Result.fail(
-          `scenarioOutline: template tag <${tag}> has no matching row key` +
-            ` (available: ${[...rowKeys].join(', ') || '(none)'})`,
-        )
+  if (templateTokens.length > 0) {
+    for (const [index, row] of rows.entries()) {
+      const rowKeys = new Set(Object.keys(row))
+      for (const { tag } of templateTokens) {
+        if (!rowKeys.has(tag)) {
+          return Result.fail(
+            `scenarioOutline: template tag <${tag}> has no matching row key` +
+              ` on row ${index} (available: ${[...rowKeys].join(', ') || '(none)'})`,
+          )
+        }
       }
     }
   }

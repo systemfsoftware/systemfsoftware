@@ -11,12 +11,12 @@ export type GherkinScope<A extends object> = A & {
 
 export type StepText<A extends object = object> = string | ((scope: A) => string)
 
-const resolveText = (text: StepText, scope: object): string => {
+export const resolveText = (text: StepText, scope: object): string => {
   if (typeof text === 'function') return text(scope)
   return text
 }
 
-const stepWrap = <A, E, R>(
+export const stepWrap = <A, E, R>(
   keyword: string,
   text: string,
   body: Effect.Effect<A, E, R>,

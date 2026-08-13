@@ -65,14 +65,5 @@
     "@effect/vitest": "catalog:effect-v4",
     "effect": "catalog:effect-v4",
     "vitest": ">=4.1.0 <5.0.0"
-  },
-  "publishConfig": {
-    "exports": {
-      ".": {
-        "types": "./dist/index.d.ts",
-        "default": "./dist/index.mjs"
-      },
-      "./package.json": "./package.json"
-    }
   }
 }

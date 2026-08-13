@@ -3,7 +3,6 @@ import type * as EffectVitest from '@effect/vitest'
 import type { Vitest } from '@effect/vitest'
 import * as Layer from 'effect/Layer'
 import type * as Scope from 'effect/Scope'
-import * as TestClock from 'effect/testing/TestClock'
 import type { TestOptions } from 'vitest'
 import { Gherkin, type ScopeMap } from './do-notation.kernel.js'
 import {
@@ -200,28 +199,14 @@ export const makeFeature = (deps: EffectVitestDeps): FeatureFn => {
       let bg: ScenarioBody<RFresh | RFreshReq> | null = null
       const scenario = createScenarioWithFresh<never, RFresh, RFreshReq>(
         (scenName, effect, mode) => {
-          if (useLiveClock) {
-            selectUnlayeredMode(effectIt, mode, true)(
-              scenName,
-              () => effect,
-            )
-            return
-          }
-          selectUnlayeredMode(effectIt, mode, false)(scenName, () => effect)
+          selectUnlayeredMode(effectIt, mode, useLiveClock)(scenName, () => effect)
         },
         () => bg,
         featureScenarioLayer,
       )
       const scenarioOutline = createOutlineFnWithFresh<never, RFresh, RFreshReq>(
         (scenName, effect, mode) => {
-          if (useLiveClock) {
-            selectUnlayeredMode(effectIt, mode, true)(
-              scenName,
-              () => effect,
-            )
-            return
-          }
-          selectUnlayeredMode(effectIt, mode, false)(scenName, () => effect)
+          selectUnlayeredMode(effectIt, mode, useLiveClock)(scenName, () => effect)
         },
         () => bg,
         featureScenarioLayer,
@@ -248,29 +233,17 @@ export const makeFeature = (deps: EffectVitestDeps): FeatureFn => {
     suiteOpts: FeatureSuiteOptions | undefined,
     useLiveClock: boolean,
   ): void => {
-    const layerSetup = effectVitestLayer(layerDef, { excludeTestServices })
+    const layerSetup = effectVitestLayer(layerDef, {
+      excludeTestServices: excludeTestServices || useLiveClock,
+    })
     let bg: ScenarioBody<RShared> | null = null
 
     const wireBody = (scopedIt: Vitest.MethodsNonLive<RShared>): void => {
       const scenario = createScenarioNoFresh<RShared>((scenName, effect, mode) => {
-        let wrapped = effect
-        if (useLiveClock) {
-          wrapped = TestClock.withLive(effect)
-        }
-        selectLayeredMode(scopedIt, mode)(
-          scenName,
-          () => wrapped,
-        )
+        selectLayeredMode(scopedIt, mode)(scenName, () => effect)
       }, () => bg)
       const scenarioOutline = createOutlineFnNoFresh<RShared>((scenName, effect, mode) => {
-        let wrapped = effect
-        if (useLiveClock) {
-          wrapped = TestClock.withLive(effect)
-        }
-        selectLayeredMode(scopedIt, mode)(
-          scenName,
-          () => wrapped,
-        )
+        selectLayeredMode(scopedIt, mode)(scenName, () => effect)
       }, () => bg)
       body({
         scenario,
@@ -304,34 +277,22 @@ export const makeFeature = (deps: EffectVitestDeps): FeatureFn => {
     useLiveClock: boolean,
     featureScenarioLayer: Layer.Layer<RFresh, never, RFreshReq>,
   ): void => {
-    const layerSetup = effectVitestLayer(layerDef, { excludeTestServices })
+    const layerSetup = effectVitestLayer(layerDef, {
+      excludeTestServices: excludeTestServices || useLiveClock,
+    })
     let bg: ScenarioBody<RShared | RFresh | RFreshReq> | null = null
 
     const wireBody = (scopedIt: Vitest.MethodsNonLive<RShared>): void => {
       const scenario = createScenarioWithFresh<RShared, RFresh, RFreshReq>(
         (scenName, effect, mode) => {
-          let wrapped = effect
-          if (useLiveClock) {
-            wrapped = TestClock.withLive(effect)
-          }
-          selectLayeredMode(scopedIt, mode)(
-            scenName,
-            () => wrapped,
-          )
+          selectLayeredMode(scopedIt, mode)(scenName, () => effect)
         },
         () => bg,
         featureScenarioLayer,
       )
       const scenarioOutline = createOutlineFnWithFresh<RShared, RFresh, RFreshReq>(
         (scenName, effect, mode) => {
-          let wrapped = effect
-          if (useLiveClock) {
-            wrapped = TestClock.withLive(effect)
-          }
-          selectLayeredMode(scopedIt, mode)(
-            scenName,
-            () => wrapped,
-          )
+          selectLayeredMode(scopedIt, mode)(scenName, () => effect)
         },
         () => bg,
         featureScenarioLayer,

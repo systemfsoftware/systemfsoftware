@@ -65,7 +65,24 @@ Feature('Scenario outline — template expansion').body(({ scenario, scenarioOut
     Effect.sync(() => {
       const result = expandOutline('<a> and <b>', [{ a: 'only-a' }])
       expect(result).toEqual(
-        Result.fail('scenarioOutline: template tag <b> has no matching row key (available: a)'),
+        Result.fail(
+          'scenarioOutline: template tag <b> has no matching row key on row 0 (available: a)',
+        ),
+      )
+    }),
+  )
+
+  scenario(
+    'Should report missing key when a later row omits a template tag',
+    Effect.sync(() => {
+      const result = expandOutline('<user> does <thing>', [
+        { user: 'a', thing: 'x' },
+        { user: 'b' },
+      ])
+      expect(result).toEqual(
+        Result.fail(
+          'scenarioOutline: template tag <thing> has no matching row key on row 1 (available: user)',
+        ),
       )
     }),
   )
@@ -134,6 +151,15 @@ Feature('Scenario outline — template expansion').body(({ scenario, scenarioOut
     'Should return undefined literal when value is undefined',
     Effect.sync(() => {
       expect(stringifyForTitle(void 0)).toBe('undefined')
+    }),
+  )
+
+  scenario(
+    'Should fall back to String when JSON.stringify returns undefined',
+    Effect.sync(() => {
+      const rendered = stringifyForTitle(() => 'fn')
+      expect(typeof rendered).toBe('string')
+      expect(rendered).not.toBe('undefined')
     }),
   )
 
