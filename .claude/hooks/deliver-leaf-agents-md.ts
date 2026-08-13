@@ -1,9 +1,4 @@
 #!/usr/bin/env -S deno run --allow-env --allow-read --allow-write
-// PreToolUse hook: exit 0 allows the write, exit 2 refuses it and the stderr
-// text reaches the agent. Nothing below the root AGENTS.md auto-loads — work
-// reaches a package through `pnpm --filter`, never `cd` — so a leaf is
-// delivered only by being named here. Refuses the first write under each
-// governing leaf once per session. Reads no doctrine file (REPO-S6).
 
 import { dirname, isAbsolute, join } from '@std/path/posix'
 import { toText } from '@std/streams'
@@ -36,17 +31,12 @@ const exists = async (path: string): Promise<boolean> => {
   }
 }
 
-// bash original semantics: strip targets under the root, pass absolute
-// targets elsewhere, keep relative targets as-is.
 export const relativeToRoot = (target: string, root: string): string | null => {
   if (target.startsWith(root + '/')) return target.slice(root.length + 1)
   if (isAbsolute(target)) return null
   return target
 }
 
-// First AGENTS.md above the target governs. Dirs at or below `repos/<name>`
-// are skipped: a vendored subtree's AGENTS.md is upstream's, so the walk
-// keeps going to `repos/AGENTS.md`, which is ours (REPO-S3).
 export const governingLeaf = async (rel: string, root: string): Promise<string | null> => {
   let dir = dirname(rel)
   while (dir !== '.' && dir !== '/' && dir.length > 0) {
@@ -90,7 +80,6 @@ if (import.meta.main) {
   try {
     payload = JSON.parse(raw) as WritePayload
   } catch {
-    // An unparseable payload must not brick every write; the guard declines to rule.
     Deno.exit(0)
   }
 
@@ -104,17 +93,12 @@ if (import.meta.main) {
   })
 
   if (verdict.refused) {
-    // An unwritable stamp dir must not block writes; decline to rule.
     try {
       await Deno.mkdir(stampPath(session, tmp), { recursive: true })
     } catch {
       Deno.exit(0)
     }
-    try {
-      await Deno.writeTextFile(join(stampPath(session, tmp), stampName(verdict.leaf)), '')
-    } catch {
-      // Stamp write failed: still refuse this once; the next write tries again.
-    }
+    await Deno.writeTextFile(join(stampPath(session, tmp), stampName(verdict.leaf)), '')
     console.error(verdict.reason)
     Deno.exit(2)
   }
