@@ -22,10 +22,20 @@ export type MessageIds = 'missingMake' | 'annotationInsteadOfMake' | 'localTypeD
 
 const isWorkflowFile = (filename: string): boolean => filename.endsWith('.workflow.ts')
 
-const isWorkflowShapedInit = (init: ESTree.Node | null | undefined): boolean =>
-  init?.type === 'ArrowFunctionExpression' ||
-  init?.type === 'FunctionExpression' ||
-  init?.type === 'CallExpression'
+// What counts as claiming to be the workflow: a function written inline, or a call to
+// something's `.make`. The second half matters because `X.make(...)` on a foreign module or a
+// type-only import is indistinguishable from the sanctioned form at a glance and must still be
+// rejected, while `S.Union(...)` / `S.TaggedClass(...)` / `Symbol.for(...)` never match `.make`
+// and stay legal exports of a workflow file. A bare call like `buildWorkflow()` is deliberately
+// out of reach: telling it apart from any other helper call is not decidable at depth 0, and
+// demanding `make` of every call export rejects every schema union in the cell.
+const isWorkflowClaim = (init: ESTree.Node | null | undefined): boolean => {
+  if (init?.type === 'ArrowFunctionExpression' || init?.type === 'FunctionExpression') return true
+  if (init?.type !== 'CallExpression') return false
+  const callee = init.callee
+  if (callee.type !== 'MemberExpression' || callee.computed) return false
+  return callee.property.type === 'Identifier' && callee.property.name === MAKE_METHOD_NAME
+}
 
 export const workflowDeclarationForm = defineRule({
   meta,
@@ -113,8 +123,8 @@ export const workflowDeclarationForm = defineRule({
 
         for (const declarator of declaration.declarations) {
           if (declarator.id.type !== 'Identifier') continue
-          if (!isWorkflowShapedInit(declarator.init)) continue
           if (isMakeCall(declarator.init)) continue
+          if (!isPackageWorkflowAnnotation(declarator.id) && !isWorkflowClaim(declarator.init)) continue
           if (isPackageWorkflowAnnotation(declarator.id)) {
             context.report({
               node: declarator.id,

@@ -81,6 +81,21 @@ export const decide = W.make((cmd) => cmd)`,
       code: `const decide = (cmd) => cmd; export { decide }`,
       filename: 'decide.workflow.ts',
     },
+    {
+      // Not decidable at depth 0: a bare call is indistinguishable from any other helper
+      // call, and demanding `make` of every call export rejects every `S.Union(...)` a
+      // workflow file is allowed to declare. A `.make` call on the wrong binding IS caught —
+      // see the foreign-binding and type-only-import cases below.
+      name: 'Should_Pass_When_InitializerIsABareCallThatDepth0CannotClassify',
+      code: `export const decide = buildWorkflow()`,
+      filename: 'decide.workflow.ts',
+    },
+    {
+      name: 'Should_Pass_When_SchemaUnionIsExportedFromAWorkflowFile',
+      code: `import * as S from 'effect/Schema'
+export const VerdictSchema = S.Union(AllowDecision, BlockDecision)`,
+      filename: 'verdict.workflow.ts',
+    },
   ],
   invalid: [
     {
@@ -108,17 +123,6 @@ export const decide = W.make((cmd) => cmd)`,
     {
       name: 'Should_ReportMissingMake_When_FunctionExpressionConst',
       code: `export const decide = function (cmd) { return cmd }`,
-      filename: 'decide.workflow.ts',
-      errors: [
-        {
-          messageId: 'missingMake',
-          data: { name: 'decide', ...missingMakeData },
-        },
-      ],
-    },
-    {
-      name: 'Should_ReportMissingMake_When_CallExpressionIsNotMake',
-      code: `export const decide = buildWorkflow()`,
       filename: 'decide.workflow.ts',
       errors: [
         {
