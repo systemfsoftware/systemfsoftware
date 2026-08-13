@@ -28,6 +28,12 @@ const isInComparisonOrSwitch = (node: ESTree.MemberExpression): boolean => {
 export const noDirectTagAccess = defineRule({
   meta,
   create(context) {
+    // Scope: a `.tst.ts` file is a type-test fixture that must contain no runtime
+    // values — its branch exists only to give the type checker two channels to
+    // discriminate, and the direct `_tag` comparison is the point of the test.
+    // The boundary is a property of what a type-test file *is*, not of any package.
+    if (context.filename.endsWith('.tst.ts')) return {}
+
     const options = S.decodeUnknownSync(OptionsElement)(context.options[0] ?? {})
     const allow = new Set(options.allow)
     const { expected, fix } = options

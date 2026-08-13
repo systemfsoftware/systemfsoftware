@@ -61,6 +61,17 @@ ruleTester.run('no-direct-tag-access', noDirectTagAccess, {
       code: `const x = result._tag`,
     },
     {
+      name: 'allows _tag discrimination branch in a type-test file',
+      code: `
+        if (decision._tag === 'Dec') {
+          expect(decision).type.toBe<Dec>()
+        } else {
+          expect(decision).type.toBe<Alt>()
+        }
+      `,
+      filename: 'Workflow.tst.ts',
+    },
+    {
       name: 'allows _tag access on member expression as value',
       code: `const x = foo.bar._tag`,
     },
@@ -119,6 +130,14 @@ ruleTester.run('no-direct-tag-access', noDirectTagAccess, {
       name: 'reports _tag in strict equality comparison',
       code: `if (result._tag === "Success") {}`,
       errors: defaultError('result._tag'),
+    },
+    // Scope contrast: the same comparison in ordinary domain source is still
+    // forbidden — a `.tst.ts` filename is the only exemption.
+    {
+      name: 'reports _tag discrimination in ordinary domain source',
+      code: `if (decision._tag === 'Dec') {}`,
+      filename: 'Workflow.ts',
+      errors: defaultError('decision._tag'),
     },
     // !== comparison
     {

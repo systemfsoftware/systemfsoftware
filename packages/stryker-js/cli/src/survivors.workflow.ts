@@ -1,4 +1,4 @@
-import type { Workflow } from '@systemfsoftware/effect-cell-types'
+import { Workflow } from '@systemfsoftware/effect-cell-types'
 import { schema } from '@systemfsoftware/stryker-js-plugin-api/core'
 import * as Either from 'effect/Either'
 import { pipe } from 'effect/Function'
@@ -162,35 +162,33 @@ function hashesMatch(
  * whose remediation names the full run to do first. On admission the run's
  * mutant set is exactly the prior report's survivor set.
  */
-export const admitSurvivorsRun: Workflow<
-  AdmitSurvivorsRunInput,
-  SurvivorsAdmission,
-  SurvivorsRejection
-> = (input: AdmitSurvivorsRunInput): Either.Either<SurvivorsAdmission, SurvivorsRejection> =>
-  pipe(
-    Option.fromNullable(input.priorReport),
-    Either.fromOption(() => reject('no-report', NO_REPORT_DETAIL)),
-    Either.flatMap((priorReport) =>
-      Either.map(
-        Either.filterOrLeft(
-          Either.right(priorReport),
-          (report) => !wasProducedBySurvivorsRun(report),
-          () => reject('mismatch', SURVIVORS_RUN_SOURCE_DETAIL),
-        ),
-        (report) => ({ report, survivors: extractSurvivors(report, input.resolveAbsolutePath) }),
-      )
-    ),
-    Either.flatMap(
-      ({ report, survivors }): Either.Either<SurvivorsAdmission, SurvivorsRejection> =>
-        survivors.length === 0
-          ? Either.right(new NoSurvivors())
-          : Either.map(
-            Either.filterOrLeft(
-              Either.right(report),
-              (candidate) => hashesMatch(candidate, input),
-              () => reject('mismatch', MISMATCH_DETAIL),
-            ),
-            () => new Admitted({ survivors }),
+export const admitSurvivorsRun = Workflow.make(
+  (input: AdmitSurvivorsRunInput): Either.Either<SurvivorsAdmission, SurvivorsRejection> =>
+    pipe(
+      Option.fromNullable(input.priorReport),
+      Either.fromOption(() => reject('no-report', NO_REPORT_DETAIL)),
+      Either.flatMap((priorReport) =>
+        Either.map(
+          Either.filterOrLeft(
+            Either.right(priorReport),
+            (report) => !wasProducedBySurvivorsRun(report),
+            () => reject('mismatch', SURVIVORS_RUN_SOURCE_DETAIL),
           ),
+          (report) => ({ report, survivors: extractSurvivors(report, input.resolveAbsolutePath) }),
+        )
+      ),
+      Either.flatMap(
+        ({ report, survivors }): Either.Either<SurvivorsAdmission, SurvivorsRejection> =>
+          survivors.length === 0
+            ? Either.right(new NoSurvivors())
+            : Either.map(
+              Either.filterOrLeft(
+                Either.right(report),
+                (candidate) => hashesMatch(candidate, input),
+                () => reject('mismatch', MISMATCH_DETAIL),
+              ),
+              () => new Admitted({ survivors }),
+            ),
+      ),
     ),
-  )
+)

@@ -5,6 +5,7 @@ import * as OS from "node:os";
 import * as Path$2 from "node:path";
 import * as NodeUrl from "node:url";
 import * as readline from "node:readline";
+import { Workflow } from "@systemfsoftware/effect-cell-types";
 //#region ../../node_modules/.pnpm/effect@3.22.1/node_modules/effect/dist/esm/Function.js
 /**
 * Tests if a value is a `function`.
@@ -31116,7 +31117,7 @@ const LintViolationTypeId = Symbol.for("@systemfsoftware/oxlint-guard/LintViolat
 var LintViolation = class extends TaggedError()("LintViolation", { output: String$ }) {
 	[LintViolationTypeId] = LintViolationTypeId;
 };
-const classifyLintResult = (command) => value(command).pipe(when({ result: { exitCode: 0 } }, () => right(new Clean())), when((command) => NO_FILES_FOUND.test(combinedOutput(command.result)), () => right(new BenignNoFiles())), when((command) => PATH_OUTSIDE_ROOT.test(combinedOutput(command.result)), () => right(new IgnoredPath())), when((command) => command.canRetry && TSGOLINT_MISSING.test(combinedOutput(command.result)), () => right(new RetryWithoutTypeAware())), orElse((command) => left(new LintViolation({ output: stderrOrStdout$1(command.result) }))));
+const classifyLintResult = Workflow.make((command) => value(command).pipe(when({ result: { exitCode: 0 } }, () => right(new Clean())), when((command) => NO_FILES_FOUND.test(combinedOutput(command.result)), () => right(new BenignNoFiles())), when((command) => PATH_OUTSIDE_ROOT.test(combinedOutput(command.result)), () => right(new IgnoredPath())), when((command) => command.canRetry && TSGOLINT_MISSING.test(combinedOutput(command.result)), () => right(new RetryWithoutTypeAware())), orElse((command) => left(new LintViolation({ output: stderrOrStdout$1(command.result) })))));
 //#endregion
 //#region src/lint-guard/lint-plan.workflow.ts
 const LOCKFILE_INSTALL_COMMANDS = /* @__PURE__ */ new Map([
@@ -31156,11 +31157,11 @@ var NoOxlintBinary = class extends TaggedError()("NoOxlintBinary", { installHint
 Union(NoOxlintConfig, NoOxlintBinary);
 const isLintableExtension = (extension) => is(LintableExtension)(extension.toLowerCase());
 const isDenoShebang = (firstLine) => exists(firstLine, (line) => /^#!.*\bdeno\b/.test(line));
-const decideLintPlan = (facts) => value(facts).pipe(when({ exists: false }, () => right(new Skip({ reason: "file-missing" }))), when((facts) => !isLintableExtension(facts.extension), () => right(new Skip({ reason: "not-lintable-extension" }))), when((facts) => isDenoShebang(facts.firstLine), (facts) => right(new RunDeno({ filePath: facts.resolvedPath }))), when((facts) => isSome(facts.configPath) && isSome(facts.oxlintBinary), (facts) => right(new RunOxlint({
+const decideLintPlan = Workflow.make((facts) => value(facts).pipe(when({ exists: false }, () => right(new Skip({ reason: "file-missing" }))), when((facts) => !isLintableExtension(facts.extension), () => right(new Skip({ reason: "not-lintable-extension" }))), when((facts) => isDenoShebang(facts.firstLine), (facts) => right(new RunDeno({ filePath: facts.resolvedPath }))), when((facts) => isSome(facts.configPath) && isSome(facts.oxlintBinary), (facts) => right(new RunOxlint({
 	filePath: facts.resolvedPath,
 	configPath: facts.configPath.value,
 	oxlintBinary: facts.oxlintBinary.value
-}))), when((facts) => isNone(facts.configPath), (facts) => left(new NoOxlintConfig({ installHint: installHintFor(facts.lockfile) }))), orElse((facts) => left(new NoOxlintBinary({ installHint: installHintFor(facts.lockfile) }))));
+}))), when((facts) => isNone(facts.configPath), (facts) => left(new NoOxlintConfig({ installHint: installHintFor(facts.lockfile) }))), orElse((facts) => left(new NoOxlintBinary({ installHint: installHintFor(facts.lockfile) })))));
 //#endregion
 //#region src/lint-guard/lint-guard.executor.ts
 var SpawnFailure = class extends TaggedError()("SpawnFailure", {

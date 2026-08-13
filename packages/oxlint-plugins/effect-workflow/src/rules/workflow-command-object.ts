@@ -1,6 +1,6 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
-import { getExportedWorkflowFunction } from './exported-workflow-fn.js'
+import { getExportedWorkflowFunction, workflowFunctionInit } from './exported-workflow-fn.js'
 import { COMMAND_TYPE_NODE, meta } from './workflow-command-object.config.js'
 
 export type MessageIds = 'commandArity' | 'untypedCommand' | 'notCommandObject' | 'commandNotTaggedClass'
@@ -10,9 +10,7 @@ const isWorkflowFile = (filename: string): boolean => filename.endsWith('.workfl
 const getFunctionNode = (exported: ESTree.Node): ESTree.Node | undefined => {
   if (exported.type === 'FunctionDeclaration') return exported
   if (exported.type !== 'VariableDeclarator') return undefined
-  const init = exported.init
-  if (init?.type === 'ArrowFunctionExpression' || init?.type === 'FunctionExpression') return init
-  return undefined
+  return workflowFunctionInit(exported)
 }
 
 const getParams = (node: ESTree.Node): ESTree.Node[] | undefined => {

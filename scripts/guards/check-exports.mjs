@@ -99,6 +99,15 @@ for (const { path: pkgPath, manifest } of packages) {
 
   const apiExtractorRollups = new Set(
     apiExtractorConfigs
+      // A disabled rollup emits no file, so it cannot be any subpath's `types` entry and must
+      // not constrain one. Reading `untrimmedFilePath` regardless of `enabled` invented a
+      // rollup that was never generated and then required the exports map to point at it.
+      // This matters for a real design rather than a hypothetical: api-extractor cannot express
+      // `export * as Ns` — its rollup flattens the namespace into a value, after which
+      // `Ns.Type<…>` is TS2749 and consumers' type parameters collapse — so a package shipping
+      // namespace exports disables the rollup and publishes the bundler's own emit, while
+      // api-extractor still produces the API report in `etc/` that CI compares.
+      .filter(c => c.dtsRollup?.enabled !== false)
       .map(c => c.dtsRollup?.untrimmedFilePath)
       .filter(Boolean)
       .map(p => resolveTemplate(p, unscopedName))

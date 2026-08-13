@@ -23,6 +23,15 @@ export const SRC_DIR = 'src' as const
 
 export const DECLARATION_SEGMENT = 'd' as const
 
+/**
+ * A PascalCase contract module names the symbol it exports - the vendored Effect
+ * convention (`Brand.ts` exports `Brand`, `Workflow.ts` exports `Workflow`; 176 files
+ * under `repos/effect/packages/effect/src`, zero role suffixes). Sanctioned on the
+ * name alone (CT3: filename in, decision out); a project must not exempt these
+ * per-package, or the convention stops being one.
+ */
+export const CONTRACT_MODULE_NAME = /^[A-Z][A-Za-z0-9]*$/
+
 /** A generated artifact cannot be renamed to name a cell, so the suffix rule must exempt it. */
 export const GENERATED_SEGMENT = 'generated' as const
 
@@ -36,13 +45,13 @@ export const MESSAGE = '{{name}} is forbidden. Expected: {{expected}}. Actual: {
 export const UNSANCTIONED_ACTUAL = 'a source file under src/ whose basename names no cell' as const
 
 export const UNSANCTIONED_FIX =
-  "rename it <name>.<cell>.ts after the job the file does; if it is a barrel or a composition root give it an exempt name; if this project sanctions another suffix, add it to this rule's cells or exempt option" as const
+  "rename it <name>.<cell>.ts after the job the file does; if it is a PascalCase contract module, name it after the symbol it exports (Workflow.ts exports Workflow); if it is a barrel or a composition root give it an exempt name; if this project sanctions another suffix, add it to this rule's cells or exempt option" as const
 
 export const meta: RuleMeta = {
   type: 'problem',
   docs: {
     description:
-      'Every source file under src/ names the cell it is - <name>.<cell>.ts - or carries an exempt entrypoint name.',
+      'Every source file under src/ names the cell it is - <name>.<cell>.ts - is a PascalCase contract module naming the symbol it exports, or carries an exempt entrypoint name.',
   },
   schema: [
     {

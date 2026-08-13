@@ -6,36 +6,41 @@ export type Options = S.Schema.Type<typeof Options>
 export const DECLARATION_FORM_MESSAGE =
   '{{name}} is forbidden. Expected: {{expected}}. Actual: {{actual}}. Fix: {{fix}}.' as const
 
+export const MODULE_SOURCE = '@systemfsoftware/effect-cell-types' as const
 export const WORKFLOW_TYPE_NAME = 'Workflow' as const
+export const MAKE_METHOD_NAME = 'make' as const
 
-export const FUNCTION_DECLARATION_NAME_FALLBACK = 'the exported function' as const
+export const NAME_FALLBACK = 'the exported workflow' as const
 
-export const FUNCTION_DECLARATION_EXPECTED =
-  'export const <name>: Workflow<Command, Decision, Error> = (command) => ...' as const
-export const FUNCTION_DECLARATION_ACTUAL = 'an export function declaration' as const
-export const FUNCTION_DECLARATION_FIX =
-  'rewrite as an annotated const. A function declaration has nowhere to carry the Workflow<...> annotation, so the compiler never checks the contract and the cell degrades to a filename' as const
+export const MISSING_MAKE_EXPECTED = 'export const <name> = Workflow.make((command) => ...)' as const
+export const MISSING_MAKE_ACTUAL = 'an exported const whose initializer is not a call to Workflow.make(...)' as const
+export const MISSING_MAKE_FIX =
+  'produce the workflow with `export const <name> = Workflow.make((command) => ...)`, importing { Workflow } from @systemfsoftware/effect-cell-types; only the constructor infers the decision and error channels and derives the UninhabitedDecision / UninhabitedError markers' as const
 
-export const MISSING_ANNOTATION_EXPECTED = 'a Workflow<Command, Decision, Error> type annotation on the const' as const
-export const MISSING_ANNOTATION_ACTUAL = 'an unannotated const' as const
-export const MISSING_ANNOTATION_FIX =
-  'annotate it: `export const {{name}}: Workflow<Cmd, Decision, Error> = ...`. Without the annotation tsc infers whatever the body happens to return and the both-channels-inhabited contract goes unchecked' as const
+export const FUNCTION_DECLARATION_ACTUAL =
+  'an exported function declaration — a function declaration cannot carry a Workflow.make(...) call' as const
 
-export const WRONG_ANNOTATION_EXPECTED = 'Workflow<Command, Decision, Error>' as const
-export const WRONG_ANNOTATION_ACTUAL = 'a type annotation that is not Workflow<...>' as const
-export const WRONG_ANNOTATION_FIX =
-  'a *.workflow.ts export states its contract as Workflow<Cmd, Decision, Error> from @systemfsoftware/effect-cell-types; any other annotation leaves the cell unverified' as const
+export const ANNOTATION_EXPECTED = 'a call to Workflow.make(...) with no type annotation on the const' as const
+export const ANNOTATION_ACTUAL =
+  'a Workflow.Workflow<...> type annotation instead of a Workflow.make(...) call' as const
+export const ANNOTATION_FIX =
+  'replace the annotation with `export const <name> = Workflow.make((command) => ...)`; a hand-written Workflow.Workflow<...> annotation cannot derive the UninhabitedDecision / UninhabitedError markers that the constructor infers' as const
+
+export const LOCAL_TYPE_EXPECTED = 'the Workflow type imported from @systemfsoftware/effect-cell-types' as const
+export const LOCAL_TYPE_ACTUAL = 'a local `type Workflow<...>` copy of the contract' as const
+export const LOCAL_TYPE_FIX =
+  'delete the local copy and import { Workflow } from @systemfsoftware/effect-cell-types; a hand-rolled Workflow cannot derive the UninhabitedDecision / UninhabitedError markers' as const
 
 export const meta = {
   type: 'problem',
   docs: {
     description:
-      'A *.workflow.ts exports its decision as `export const <name>: Workflow<C, D, E> = ...` — one canonical form, so the type contract is always present for tsc to check.',
+      'A *.workflow.ts exports its decision as `export const <name> = Workflow.make(...)` — one canonical form, so the decision and error channels are always inferred from the constructor and the UninhabitedDecision / UninhabitedError markers are derived.',
   },
   schema: [Options],
   messages: {
-    functionDeclaration: DECLARATION_FORM_MESSAGE,
-    missingAnnotation: DECLARATION_FORM_MESSAGE,
-    wrongAnnotation: DECLARATION_FORM_MESSAGE,
+    missingMake: DECLARATION_FORM_MESSAGE,
+    annotationInsteadOfMake: DECLARATION_FORM_MESSAGE,
+    localTypeDeclaration: DECLARATION_FORM_MESSAGE,
   },
 } as const

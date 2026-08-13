@@ -1,4 +1,5 @@
 import { workflowCommandObject } from './rules/workflow-command-object.js'
+import { workflowDeclarationForm } from './rules/workflow-declaration-form.js'
 import { workflowEitherInhabited } from './rules/workflow-either-inhabited.js'
 import { workflowInlineSchemas } from './rules/workflow-inline-schemas.js'
 import { workflowMatchExhaustive } from './rules/workflow-match-exhaustive.js'
@@ -22,6 +23,11 @@ const rule = (name: string): string => `${PLUGIN_NAME}/${name}`
 
 const recommendedRules = {
   [rule('workflow-command-object')]: 'error',
+  // First, because it is the gate that makes the rest meaningful: it forces the export
+  // through `Workflow.make`, and the constructor is what carries the channel-inhabitation
+  // and no-Promise guarantees that `workflow-either-inhabited` and `workflow-no-async`
+  // used to approximate from the outside.
+  [rule('workflow-declaration-form')]: 'error',
   [rule('workflow-schema-required')]: 'error',
   [rule('workflow-either-inhabited')]: 'error',
   [rule('workflow-typeid-required')]: 'error',
@@ -45,6 +51,7 @@ export default {
   },
   rules: {
     'workflow-command-object': workflowCommandObject,
+    'workflow-declaration-form': workflowDeclarationForm,
     'workflow-schema-required': workflowSchemaRequired,
     'workflow-either-inhabited': workflowEitherInhabited,
     'workflow-inline-schemas': workflowInlineSchemas,

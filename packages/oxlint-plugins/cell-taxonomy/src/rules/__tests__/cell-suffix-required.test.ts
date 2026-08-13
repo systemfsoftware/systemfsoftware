@@ -5,7 +5,9 @@ import { createRuleTester } from './_tester.js'
 const ruleTester = createRuleTester()
 
 const expectedFor = (cells: ReadonlyArray<string>, exempt: ReadonlyArray<string>): string =>
-  `<name>.<cell>.ts with <cell> one of ${cells.join(', ')}, or exactly one of ${exempt.join(', ')}`
+  `<name>.<cell>.ts with <cell> one of ${
+    cells.join(', ')
+  }, a PascalCase contract module naming the symbol it exports, or exactly one of ${exempt.join(', ')}`
 
 const unsanctioned = (
   name: string,
@@ -115,6 +117,21 @@ ruleTester.run('cell-suffix-required', cellSuffixRequired, {
       options: [{ cells: ['config'] }],
     },
     {
+      name: 'Should_Allow_ContractModule_When_PascalCaseNamesItsExport',
+      code: '',
+      filename: '/repo/pkg/src/Workflow.ts',
+    },
+    {
+      name: 'Should_Allow_ContractModule_When_PascalCaseMatchesEffectConvention',
+      code: '',
+      filename: '/repo/pkg/src/Brand.ts',
+    },
+    {
+      name: 'Should_Allow_ContractModule_When_PascalCaseMultiWord',
+      code: '',
+      filename: '/repo/pkg/src/ChildExecutorDecision.ts',
+    },
+    {
       name: 'Should_Allow_ProjectEntrypoint_When_ExemptOptionCarriesIt',
       code: '',
       filename: '/repo/pkg/src/server.ts',
@@ -127,6 +144,18 @@ ruleTester.run('cell-suffix-required', cellSuffixRequired, {
       code: '',
       filename: '/repo/pkg/src/money.ts',
       errors: unsanctioned('money.ts'),
+    },
+    {
+      name: 'Should_Report_KebabCaseName_When_NoCellSuffix',
+      code: '',
+      filename: '/repo/pkg/src/place-order.ts',
+      errors: unsanctioned('place-order.ts'),
+    },
+    {
+      name: 'Should_Report_MixedCaseName_When_NoCellSuffix',
+      code: '',
+      filename: '/repo/pkg/src/moneyCore.ts',
+      errors: unsanctioned('moneyCore.ts'),
     },
     {
       name: 'Should_Report_SourceFile_When_SuffixIsNotACell',

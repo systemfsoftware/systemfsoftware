@@ -50,11 +50,13 @@
     "api:update": "api-extractor run --local",
     "attw": "attw --pack ."
   },
+  "dependencies": {
+    "@systemfsoftware/effect-cell-types": "workspace:^"
+  },
   "devDependencies": {
     "@effect/vitest": "catalog:",
     "@microsoft/api-extractor": "^7.58.7",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
-    "@systemfsoftware/effect-cell-types": "workspace:^",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/effect-schema-law": "workspace:^",
     "@systemfsoftware/effect-schema-vite": "workspace:^",

@@ -2,6 +2,7 @@ import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
 import { Array as A, Schema as S } from 'effect'
 import {
+  CONTRACT_MODULE_NAME,
   DECLARATION_SEGMENT,
   GENERATED_SEGMENT,
   meta,
@@ -56,6 +57,12 @@ export const cellSuffixRequired = defineRule({
     if (exempt.includes(basename)) return {}
     if (stem.length > 1 && cells.includes(trailing)) return {}
 
+    // A single PascalCase segment is a contract module naming the symbol it exports
+    // (the vendored Effect convention: Brand.ts exports Brand, Workflow.ts exports
+    // Workflow). Sanctioned on the name alone - CT3 keeps this rule filename-in,
+    // decision-out; the lowercase and multi-segment names below stay forbidden.
+    if (stem.length === 1 && CONTRACT_MODULE_NAME.test(trailing)) return {}
+
     return {
       Program(node: ESTree.Program) {
         context.report({
@@ -63,7 +70,9 @@ export const cellSuffixRequired = defineRule({
           messageId: 'unsanctionedCell',
           data: {
             name: basename,
-            expected: `<name>.<cell>.ts with <cell> one of ${cells.join(', ')}, or exactly one of ${exempt.join(', ')}`,
+            expected: `<name>.<cell>.ts with <cell> one of ${
+              cells.join(', ')
+            }, a PascalCase contract module naming the symbol it exports, or exactly one of ${exempt.join(', ')}`,
             actual: UNSANCTIONED_ACTUAL,
             fix: UNSANCTIONED_FIX,
           },

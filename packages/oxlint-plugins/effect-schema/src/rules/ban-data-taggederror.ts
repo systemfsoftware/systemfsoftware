@@ -9,6 +9,12 @@ export type MessageIds = 'noDataTaggedError'
 export const banDataTaggedError = defineRule({
   meta,
   create(context: Context) {
+    // Scope: a `.tst.ts` file is a type-test fixture that must contain no runtime
+    // values — its rejection probes (e.g. a non-Schema `Data.TaggedError` value used
+    // to prove a Schema constructor rejects it) are the point of the file, not
+    // authoring drift. The boundary is a property of what a type-test file *is*.
+    if (context.filename.endsWith('.tst.ts')) return {}
+
     let dataImportSource: string | null = null
     let dataLocalName: string | null = null
     let hasLocalDataVariable = false

@@ -121,6 +121,30 @@ ruleTester.run('no-manual-tag-member', noManualTagMember, {
       filename: 'place-order.shape.ts',
     },
     {
+      name: 'Should_StaySilent_WhenTypeTestFixtureInterfaces',
+      code: `
+        interface Cmd {
+          readonly _tag: 'Cmd'
+        }
+
+        interface Dec {
+          readonly _tag: 'Dec'
+          readonly succeeded: boolean
+        }
+
+        interface Alt {
+          readonly _tag: 'Alt'
+          readonly reason: string
+        }
+
+        interface Err {
+          readonly _tag: 'Err'
+          readonly code: number
+        }
+      `,
+      filename: 'Workflow.tst.ts',
+    },
+    {
       name: 'Should_StaySilent_WhenInheritedInterfaceTag',
       code: `
         interface Child extends Proto {}
@@ -183,6 +207,34 @@ ruleTester.run('no-manual-tag-member', noManualTagMember, {
     },
   ],
   invalid: [
+    // Scope contrast: the exact type-test fixture shape in ordinary domain source
+    // is still forbidden — a `.tst.ts` filename is the only exemption.
+    {
+      name: 'Should_Report_WhenTaggedInterfacesInDomainSource',
+      code: `
+        interface Cmd {
+          readonly _tag: 'Cmd'
+        }
+
+        interface Dec {
+          readonly _tag: 'Dec'
+          readonly succeeded: boolean
+        }
+      `,
+      filename: 'Workflow.ts',
+      errors: [
+        interfaceError(
+          'Cmd',
+          expectedStructFor('Cmd'),
+          "replace each variant with S.TaggedStruct('Cmd', { ... }) and declare type Cmd = S.Schema.Type<typeof Cmd>",
+        ),
+        interfaceError(
+          'Dec',
+          expectedStructFor('Dec'),
+          "replace each variant with S.TaggedStruct('Dec', { ... }) and declare type Dec = S.Schema.Type<typeof Dec>",
+        ),
+      ],
+    },
     // Acceptance Example: NodeFate shape
     {
       name: 'Should_Report_EachMember_WhenUnionOfLiteralTaggedMembers',

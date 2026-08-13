@@ -32,6 +32,14 @@ ruleTester.run('ban-data-taggederror', banDataTaggedError, {
         class MyError extends Schema.TaggedError('MyError')<{ message: string }> {}
       `,
     },
+    {
+      name: 'Should_Pass_When_TypeTestRejectionProbe',
+      code: `
+        import { Data } from 'effect'
+        class MyError extends Data.TaggedError('MyError') {}
+      `,
+      filename: 'Schema.tst.ts',
+    },
 
     // --- Other patterns ---
     {
@@ -150,6 +158,25 @@ ruleTester.run('ban-data-taggederror', banDataTaggedError, {
     },
   ],
   invalid: [
+    // Scope contrast: the same rejection-probe shape in ordinary domain source is
+    // still forbidden — a `.tst.ts` filename is the only exemption.
+    {
+      name: 'Should_Report_When_RejectionProbeInDomainSource',
+      code: `
+        import { Data } from 'effect'
+        class MyError extends Data.TaggedError('MyError') {}
+      `,
+      filename: 'domain.ts',
+      errors: [{
+        messageId: 'noDataTaggedError',
+        data: {
+          name: 'Data.TaggedError',
+          expected: "S.TaggedError or Schema.TaggedError from 'effect' package",
+          actual: 'Data.TaggedError',
+          fix: "import { Schema as S } from 'effect' and use S.TaggedError('TagName')<{}>",
+        },
+      }],
+    },
     // --- Class extending Data.TaggedError ---
     {
       name: 'Should_Report_When_ClassExtendsDataTaggedError',

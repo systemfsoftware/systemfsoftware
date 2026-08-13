@@ -13,6 +13,7 @@ const _default: {
     };
     rules: {
         'workflow-command-object': Rule;
+        'workflow-declaration-form': Rule;
         'workflow-schema-required': Rule;
         'workflow-either-inhabited': Rule;
         'workflow-inline-schemas': Rule;

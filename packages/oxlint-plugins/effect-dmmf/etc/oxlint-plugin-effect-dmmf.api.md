@@ -67,6 +67,7 @@ const _default: {
         'store-no-driver-construction': Rule;
         'store-no-escaping-state': Rule;
         'workflow-command-object': Rule;
+        'workflow-declaration-form': Rule;
         'workflow-schema-required': Rule;
         'workflow-either-inhabited': Rule;
         'workflow-inline-schemas': Rule;

@@ -12,10 +12,10 @@ import {
 import { Context, Data, Effect, Layer } from 'effect'
 
 import { CliFilesystem as Filesystem } from './filesystem.adapter.js'
-import { computeExitCode, ComputeExitCodeCommand } from './getExitCode.workflow.js'
+import { computeExitCode, ComputeExitCodeCommand } from './getExitCode.kernel.js'
 import { PackRunner } from './pack-runner.adapter.js'
-import { applyProfile, ApplyProfileCommand, type CliProfileName } from './profiles.workflow.js'
-import { renderAnalysis } from './render.workflow.js'
+import { applyProfile, ApplyProfileCommand, type CliProfileName } from './profiles.kernel.js'
+import { renderAnalysis } from './render.kernel.js'
 import { Stdin } from './stdin.adapter.js'
 import { Terminal } from './terminal.adapter.js'
 
