@@ -106,17 +106,10 @@ recognised performance cost whose standard remedy is to defer it.
 
 ### Why the cost claim is measured and not asserted
 
-The same corpus records a superseded cost claim of its own and warns that cost
-belongs to a specific observer-and-domain pair, never to a class of test. So
-"integration tests are slow" is not an explanation here, and neither is a
-promised speed-up. This plan commits to a measurement and to reporting it
-whichever way it lands.
-
-**Nil-result record.** The corpus was searched for an existing ruling on
-test-runner startup cost and has none. Verbatim query
-`(?i)(cold start|nested|instance reuse|amortiz|per-test process|startup cost|fork per|spawn)`
-run against paths `wiki/entities; wiki/pages`. It returned only
-agent-orchestration pages. Re-runnable by anyone holding the corpus.
+A superseded cost claim already warns that cost belongs to a specific
+observer-and-domain pair, never to a class of test. So "integration tests are
+slow" is not an explanation here, and neither is a promised speed-up. This plan
+commits to a measurement and to reporting it whichever way it lands.
 
 ---
 

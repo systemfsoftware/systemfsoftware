@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Worktrunk pre-start: symlink .repos, .issues, and wiki from the primary
-# worktree, convert gitdir paths to relative, disable GitKraken-incompatible
-# settings. Invoked by .config/wt.toml. Args: worktree_path [primary_worktree_path]
+# Worktrunk pre-start: symlink .repos and .issues from the primary worktree,
+# convert gitdir paths to relative, disable GitKraken-incompatible settings.
+# Invoked by .config/wt.toml. Args: worktree_path [primary_worktree_path]
 
 set -e
 
@@ -51,8 +51,8 @@ convert_worktree_gitfile_to_relative() {
 }
 
 # Symlink a shared, gitignored directory from the primary worktree into this
-# worktree so both see the same files (e.g. .repos, .issues, wiki). Symlink,
-# never copy. Only replaces an existing symlink; a real directory is untouched.
+# worktree so both see the same files (e.g. .repos, .issues). Symlink, never
+# copy. Only replaces an existing symlink; a real directory is untouched.
 link_shared_dir() {
     local name="$1" worktree_path="${2%/}" primary_path="$3"
     local src="$primary_path/$name"
@@ -91,4 +91,3 @@ fi
 
 link_shared_dir .repos "$WORKTREE_PATH" "$PRIMARY_PATH"
 link_shared_dir .issues "$WORKTREE_PATH" "$PRIMARY_PATH"
-link_shared_dir wiki "$WORKTREE_PATH" "$PRIMARY_PATH"

@@ -4,8 +4,7 @@
 // Enforces behaviour only and reads no doctrine file, so REPO-S6 and
 // check:script-provenance stay satisfied.
 
-import { existsSync } from '@std/fs'
-import { isAbsolute, join, relative } from '@std/path/posix'
+import { isAbsolute, relative } from '@std/path/posix'
 import { toText } from '@std/streams'
 
 export interface WritePayload {
@@ -21,8 +20,6 @@ export interface WritePayload {
 
 export interface Facts {
   readonly root: string
-  readonly corpusPresent: boolean
-  readonly queryStamped: boolean
 }
 
 export type Verdict =
@@ -80,20 +77,8 @@ export const decide = (payload: WritePayload, facts: Facts): Verdict => {
     }
   }
 
-  if (rel.startsWith('docs/plans/')) {
-    // A clone without the gitignored corpus cannot satisfy this; say so by allowing.
-    if (!facts.corpusPresent || facts.queryStamped) return ALLOWED
-    return {
-      refused: true,
-      reason:
-        "Search the corpus before planning: run a wiki-scoped query (qmd search -c wiki '<question>'). Running one clears this gate for the session (REPO-W4).",
-    }
-  }
-
   return ALLOWED
 }
-
-export const stampPath = (session: string, tmp: string): string => join(tmp, 'claude-wiki-query', session)
 
 if (import.meta.main) {
   const raw = await toText(Deno.stdin.readable)
@@ -106,13 +91,8 @@ if (import.meta.main) {
   }
 
   const root = Deno.env.get('CLAUDE_PROJECT_DIR') ?? Deno.cwd()
-  const stamp = stampPath(payload.session_id ?? 'nosession', Deno.env.get('TMPDIR') ?? '/tmp')
 
-  const verdict = decide(payload, {
-    root,
-    corpusPresent: existsSync(join(root, 'wiki'), { isDirectory: true }),
-    queryStamped: existsSync(stamp, { isFile: true }),
-  })
+  const verdict = decide(payload, { root })
 
   if (verdict.refused) {
     console.error(verdict.reason)

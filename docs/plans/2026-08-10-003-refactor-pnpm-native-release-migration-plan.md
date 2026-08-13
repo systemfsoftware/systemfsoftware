@@ -197,8 +197,8 @@ flowchart TB
 - **Patterns to follow:** Clean cutover — migrate every reference, leave no alias. `guard-script-provenance.mjs` is a LOCKED/Evaluator surface — its MANIFEST edit lands in its own commit, with the guard observed to report a stale-entry error _before_ the fix and `pnpm check` green _after_.
 - **Test scenarios:**
   - Before fix: with the scripts deleted but MANIFEST unchanged, `pnpm check:script-provenance` fails ("manifest entry naming a file that no longer exists").
-  - After fix: `pnpm check` passes; no remaining `semantic-release`/`release-monorepo-filter` reference outside `docs/` and `wiki/`.
-- **Verification:** `pnpm check` exits 0; a search for `semantic-release` or `release-monorepo-filter` outside `docs/` and `wiki/` returns nothing.
+  - After fix: `pnpm check` passes; no remaining `semantic-release`/`release-monorepo-filter` reference outside `docs/`.
+- **Verification:** `pnpm check` exits 0; a search for `semantic-release` or `release-monorepo-filter` outside `docs/` returns nothing.
 
 ### U7. Canary release, then hand off the full release
 
@@ -221,20 +221,20 @@ flowchart TB
 
 ## Verification Contract
 
-| What                                 | Command / action                                                             | When                                       |
-| ------------------------------------ | ---------------------------------------------------------------------------- | ------------------------------------------ |
-| Full gate on the migrated tree       | `pnpm check`                                                                 | after every unit; must exit 0 (REPO-A1/A3) |
-| Native commands present              | `pnpm change --help` and `pnpm version --help`                               | U1                                         |
-| Dirty-tree precondition gone         | dirty tree → `pnpm version -r --dry-run` does not abort                      | U1 preflight                               |
-| Signature ruleset allows the landing | `gh api .../rulesets/19622269` + one trial merge                             | U1 preflight (moved out of U7)             |
-| Dry-run release plan correct         | `pnpm version -r --dry-run` with a seeded intent                             | U2, U7                                     |
-| Phase 2 trigger scoped               | publish fires only on `changeset-release/main` merge                         | U3, U7 canary                              |
-| Build before publish                 | `corepack pnpm build` runs; tarballs non-empty                               | U3, U7 canary                              |
-| Registration preflight               | unregistered package fails before publish                                    | U3, U7 canary                              |
-| Tags idempotent                      | re-run pushes no tags already in `ls-remote`                                 | U7 canary                                  |
-| Evaluator-surface discipline         | `release.yml` + guard MANIFEST each in their own commit; red-then-green      | U3, U6                                     |
-| Gate fires                           | a no-changeset PR is blocked                                                 | U7                                         |
-| No stale references                  | search `semantic-release`/`release-monorepo-filter` (excl. `docs/`, `wiki/`) | after U6                                   |
+| What                                 | Command / action                                                        | When                                       |
+| ------------------------------------ | ----------------------------------------------------------------------- | ------------------------------------------ |
+| Full gate on the migrated tree       | `pnpm check`                                                            | after every unit; must exit 0 (REPO-A1/A3) |
+| Native commands present              | `pnpm change --help` and `pnpm version --help`                          | U1                                         |
+| Dirty-tree precondition gone         | dirty tree → `pnpm version -r --dry-run` does not abort                 | U1 preflight                               |
+| Signature ruleset allows the landing | `gh api .../rulesets/19622269` + one trial merge                        | U1 preflight (moved out of U7)             |
+| Dry-run release plan correct         | `pnpm version -r --dry-run` with a seeded intent                        | U2, U7                                     |
+| Phase 2 trigger scoped               | publish fires only on `changeset-release/main` merge                    | U3, U7 canary                              |
+| Build before publish                 | `corepack pnpm build` runs; tarballs non-empty                          | U3, U7 canary                              |
+| Registration preflight               | unregistered package fails before publish                               | U3, U7 canary                              |
+| Tags idempotent                      | re-run pushes no tags already in `ls-remote`                            | U7 canary                                  |
+| Evaluator-surface discipline         | `release.yml` + guard MANIFEST each in their own commit; red-then-green | U3, U6                                     |
+| Gate fires                           | a no-changeset PR is blocked                                            | U7                                         |
+| No stale references                  | search `semantic-release`/`release-monorepo-filter` (excl. `docs/`)     | after U6                                   |
 
 The exit criterion for _code-complete_ is: `pnpm check` green, the changeset gate blocking a no-changeset PR, and one canary release published + tagged + attested. The exit criterion for _released_ is a maintainer-gated full release after npm registration — a handoff, not a unit.
 
