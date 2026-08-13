@@ -27,7 +27,7 @@ import { createRequire } from 'node:module'
 import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
+const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const tsgo = join(repoRoot, 'node_modules', '.bin', process.platform === 'win32' ? 'effect-tsgo.cmd' : 'effect-tsgo')
 
 const sha256Of = (path) => createHash('sha256').update(readFileSync(path)).digest('hex')

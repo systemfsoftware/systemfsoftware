@@ -18,4 +18,4 @@ jobs:
           fetch-depth: 0
       - uses: denoland/setup-deno@v2
       - name: Require a changeset for publishable-package changes
-        run: deno run --allow-run=git --allow-read scripts/check-changeset.mjs ${{ github.base_ref }}
+        run: deno run --allow-run=git --allow-read scripts/guards/check-changeset.mjs ${{ github.base_ref }}

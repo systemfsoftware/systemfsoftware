@@ -122,7 +122,7 @@ jobs:
         # prerequisite "Package must exist"). Without this, `pnpm publish -r`
         # attempts each never-published package, aborts on an OIDC auth error,
         # and leaves a partial publish behind.
-        run: bash scripts/check-npm-publish.sh --preflight
+        run: bash scripts/tools/check-npm-publish.sh --preflight
       - uses: denoland/setup-deno@v2
       - name: Build
         # Necessary: every package publishes files: ["dist"] against a gitignored
@@ -135,4 +135,4 @@ jobs:
         # Unregistered packages fail loudly with an OIDC auth error.
         run: corepack pnpm publish -r --provenance --access public --no-git-checks
       - name: Tag released versions
-        run: deno run --allow-run=git,pnpm --allow-read scripts/tag-released-packages.mjs
+        run: deno run --allow-run=git,pnpm --allow-read scripts/tools/tag-released-packages.mjs
