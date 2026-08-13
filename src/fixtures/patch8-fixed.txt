@@ -1,0 +1,30 @@
+await taskComplete(`Implemented backport of Cron reverse scheduling support.
+
+### ✅ Changes made
+- Added internal reverse lookup support to \`Cron\`:
+  - new internal \`last\` boundary values
+  - new internal \`prev\` lookup tables
+  - generalized lookup table builder for both directions
+- Added new public APIs in \`packages/effect/src/Cron.ts\`:
+  - \`Cron.prev(cron, now?)\`
+  - \`Cron.sequenceReverse(cron, now?)\`
+- Refactored \`Cron.next\` and \`Cron.prev\` to share core stepping logic via internal \`stepCron\`.
+- Included DST-aware reverse stepping behavior (including fall-back disambiguation handling).
+- Added test coverage in \`packages/effect/test/Cron.test.ts\` for:
+  - basic \`prev\` behavior
+  - \`sequenceReverse\`
+  - month/day edge cases (e.g. day 31 skipping shorter months)
+  - month-clamping behavior with month-only constraints
+  - DST fall-back reverse behavior
+- Added changeset:
+  - \`.changeset/backport-cron-prev.md\` (
+    \`"effect": minor\`
+    )
+
+### ✅ Validation run
+- \`pnpm lint-fix\`
+- \`pnpm test packages/effect/test/Cron.test.ts\`
+- \`pnpm check:tsgo\`
+- \`pnpm docgen\`
+
+All completed successfully.`);

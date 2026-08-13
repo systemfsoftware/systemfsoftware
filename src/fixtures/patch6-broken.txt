@@ -1,0 +1,20 @@
+const description = `Implemented in PR #1805 (branch: lalph/EFF-736, target: main).
+
+Key discoveries for future work:
+
+* Root cause in \
+\`packages/effect/src/internal/effect.ts\` (`cachedInvalidateWithTTL`): expiry was computed from start time (`now + ttlMillis` before running `self`), so long-running effects could expire before producing a value.
+* Cache behavior reference: \
+\`packages/effect/src/Cache.ts\` computes expiry from completion (`onExit`); `Effect.cachedWithTTL` should match this model.
+* Regression coverage is in \
+\`packages/effect/test/Effect.test.ts\`: `cachedWithTTL starts ttl from value creation` uses `TestClock` with 2s runtime and 1s TTL; immediate post-completion call must reuse cached value.
+* PR review follow-up: in `cachedInvalidateWithTTL`, capture `const clock = fiber.getRef(ClockRef)` once and reuse it for both `now` and `expiresAt` to avoid duplicate `getRef` calls.
+
+Validation run:
+
+* pnpm lint-fix
+* pnpm test packages/effect/test/Effect.test.ts
+* pnpm check:tsgo
+* pnpm docgen`;
+await updateTask({ taskId: 'EFF-736', state: 'in-review', description });
+console.log('task updated');

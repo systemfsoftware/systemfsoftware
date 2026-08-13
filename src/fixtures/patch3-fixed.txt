@@ -1,0 +1,21 @@
+await taskComplete(`Implemented EFF-733 and opened PR: https://github.com/Effect-TS/effect-smol/pull/1794
+
+### What was fixed
+- Fixed \`LanguageModel.streamText\` finish emission regression in \`packages/effect/src/unstable/ai/LanguageModel.ts\`.
+- Root cause: deferred finish enqueue used a conditional evaluated too early (\`deferredFinishParts.length > 0 ? ... : ...\`), so finish parts were never offered.
+- Resolution: always run \`Queue.offerAll(queue, deferredFinishParts)\` after tool handlers complete.
+
+### Tests / validation
+- Added regression test in \`packages/effect/test/unstable/ai/LanguageModelTrackerLifecycle.test.ts\`:
+  - verifies finish is emitted when a toolkit is provided and provider returns no tool-calls.
+- Added changeset: \`.changeset/tall-wombats-wave.md\`
+- Ran:
+  - \`pnpm lint-fix\`
+  - \`pnpm test packages/effect/test/unstable/ai/LanguageModelTrackerLifecycle.test.ts\`
+  - \`pnpm check:tsgo\`
+  - \`pnpm docgen\`
+
+### Task tracking
+- Updated task \`EFF-733\` description with key discovery + fix details.
+- Updated task state to \`in-review\`.
+`);

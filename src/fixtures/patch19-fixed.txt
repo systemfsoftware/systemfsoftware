@@ -1,0 +1,22 @@
+const patch = `*** Begin Patch
+*** Update File: .specs/eventlog-server-unencrypted.md
+@@
+ - \`fromSocketUnencrypted\` now maps unencrypted \`Error\` frames to
+   \`EventLogRemoteError\` for both pending writes and active change-subscription
+   queues.
++- Request-change error handling now invalidates failed subscription slots so a
++  caller can issue a fresh \`RequestChanges\` and recover on the same
++  \`publicKey\` after a rejection.
+ - \`EventLogRemote\` queue / write signatures were widened to surface remote
+   protocol failures (\`Queue.Dequeue<RemoteEntry, EventLogRemoteError>\` and
+   \`Effect<void, EventLogRemoteError>\`).
+@@
+ - background snapshotting or server-driven compaction materialization for more
+   aggressive backlog reduction
++- update \`EventLog.registerRemote(...)\` integration coverage for fallible
++  remote change queues so rejection/recovery behavior stays stable as
++  unencrypted error handling evolves
++- finish or trim the current \`EventLogServerUnencrypted.ts\` scaffold so
++  \`pnpm check:tsgo\` returns green for this branch
+*** End Patch`;
+console.log(await applyPatch(patch));
