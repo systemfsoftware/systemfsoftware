@@ -9,7 +9,7 @@
     "test": "turbo --concurrency=${TURBO_CONCURRENCY:-50%} test",
     "lint": "pnpm format:check && turbo --concurrency=${TURBO_CONCURRENCY:-50%} lint",
     "api:check": "turbo --concurrency=${TURBO_CONCURRENCY:-50%} api:check",
-    "format": "dprint fmt",
+    "format": "echo mid-run-conflict-2",
     "format:check": "dprint check",
     "precommit": "pnpm exec lint-staged --no-revert --config .lintstagedrc.js",
     "check": "pnpm install --frozen-lockfile && TURBO_CONCURRENCY=${TURBO_CONCURRENCY:-50%} pnpm check:ci",
