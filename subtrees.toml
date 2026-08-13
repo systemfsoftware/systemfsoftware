@@ -47,3 +47,8 @@ tag_prefix = "v"
 name = "effect-torch"
 url = "https://github.com/mikearnaldi/effect-torch"
 branch = "main"
+
+[[repos]]
+name = "effect-v4"
+url = "https://github.com/Effect-TS/effect"
+branch = "main"
