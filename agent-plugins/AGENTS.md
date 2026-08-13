@@ -47,4 +47,4 @@
 ## Gates
 
 - **AGT-G1** — `agent-plugins/` is outside the pnpm workspace but inside the root `dprint` scan: format new files with `pnpm exec dprint fmt <files>` before committing. Violating fails loudly — `pnpm check:local` is the check.
-- **Verification** — per-plugin: `deno task check` from the plugin directory (type-check + lint; Deno resolves `just-bash` via the plugin's own deno.jsonc regardless of cwd). Root gate: `pnpm check:local` after any change.
+- **Verification** — per-plugin: `deno task check` from the plugin directory (type-check + lint; Deno resolves `just-bash` via the plugin's own deno.jsonc regardless of cwd); `deno task test` where the plugin carries a suite (oxlint-guard). Root gate: `pnpm check:local` after any change.

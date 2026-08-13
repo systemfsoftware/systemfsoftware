@@ -1,0 +1,10 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "oxlint-guard",
+  "version": "0.1.0",
+  "description": "Lints every agent edit with oxlint (PostToolUse) and blocks edits that weaken the oxlint config (PreToolUse).",
+  "author": { "name": "systemfsoftware" },
+  "repository": "https://github.com/systemfsoftware/systemfsoftware",
+  "license": "MIT",
+  "keywords": ["oxlint", "lint", "claude-code", "hooks", "guard"]
+}
