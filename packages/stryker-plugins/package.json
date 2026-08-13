@@ -46,7 +46,7 @@
     "typecheck": "tsc --noEmit --incremental",
     "test": "vitest run",
     "test:run": "vitest run --coverage",
-    "test:types": "tstyche",
+    "test:types": "TSTYCHE_TYPESCRIPT_MODULE=tstyche-typescript tstyche",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "attw": "attw --pack .",
     "api:check": "concurrently --kill-others-on-fail \"api-extractor run\" \"api-extractor run --config api-extractor.effect-schema-ignorer.json\"",
