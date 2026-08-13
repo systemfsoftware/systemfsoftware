@@ -1,7 +1,7 @@
 #!/usr/bin/env -S deno run
 
-import { parse } from 'npm:just-bash@3.2.0'
-import type { CommandNode, ScriptNode, SimpleCommandNode, WordNode } from 'npm:just-bash@3.2.0'
+import { parse } from 'just-bash'
+import type { CommandNode, ScriptNode, SimpleCommandNode, WordNode } from 'just-bash'
 
 type WordPart = WordNode['parts'][number]
 
