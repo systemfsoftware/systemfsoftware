@@ -1,10 +1,10 @@
 import { describe, it } from '@systemfsoftware/effect-gherkin-spec'
 import { Array, Match, Option } from 'effect'
 import { DecideInput } from '../restart-decision.schema.js'
-import { decideRestart, type RestartDecisionEither } from '../restart-decision.workflow.js'
+import { decideRestart, type RestartDecisionWorkflow } from '../restart-decision.workflow.js'
 
 const tagOf = (
-  e: RestartDecisionEither,
+  e: ReturnType<RestartDecisionWorkflow>,
 ): string | null =>
   Match.value(e).pipe(
     Match.tag('Right', ({ right }) => right._tag),
@@ -13,7 +13,7 @@ const tagOf = (
   )
 
 const indicesOf = (
-  e: RestartDecisionEither,
+  e: ReturnType<RestartDecisionWorkflow>,
 ): ReadonlyArray<number> | null =>
   Match.value(e).pipe(
     Match.tag(

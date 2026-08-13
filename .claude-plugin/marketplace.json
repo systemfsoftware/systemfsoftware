@@ -16,6 +16,18 @@
         "lint",
         "hooks"
       ]
+    },
+    {
+      "name": "git-subtrees",
+      "source": "./agent-plugins/git-subtrees",
+      "description": "Blocks unsafe git subtree invocations (URL fetch, missing --squash/-S, subtree push)",
+      "category": "safety",
+      "keywords": [
+        "git",
+        "subtree",
+        "hooks",
+        "guard"
+      ]
     }
   ]
 }

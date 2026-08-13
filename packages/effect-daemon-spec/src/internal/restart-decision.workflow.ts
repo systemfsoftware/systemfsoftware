@@ -1,5 +1,5 @@
 import type { Workflow } from '@systemfsoftware/effect-cell-types'
-import { type Either, left, right } from 'effect/Either'
+import * as Either from 'effect/Either'
 import * as Match from 'effect/Match'
 import * as S from 'effect/Schema'
 import type { DecideInput, RestartStrategy } from './restart-decision.schema.js'
@@ -23,7 +23,8 @@ export class RestartDecisionExhausted extends S.TaggedError<RestartDecisionExhau
   readonly [RestartDecisionTypeId] = RestartDecisionTypeId
 }
 
-export type RestartDecisionEither = Either<
+export type RestartDecisionWorkflow = Workflow<
+  DecideInput,
   RestartDecisionContinue | RestartDecisionRestart,
   RestartDecisionExhausted
 >
@@ -50,22 +51,17 @@ const restartIndicesFor = (
     Match.exhaustive,
   )
 
-export const decideRestart: Workflow<
-  DecideInput,
-  RestartDecisionContinue | RestartDecisionRestart,
-  RestartDecisionExhausted
-> = (input: DecideInput): Either<
-  RestartDecisionContinue | RestartDecisionRestart,
-  RestartDecisionExhausted
-> =>
+export const decideRestart: RestartDecisionWorkflow = (
+  input: DecideInput,
+): Either.Either<RestartDecisionContinue | RestartDecisionRestart, RestartDecisionExhausted> =>
   Match.value(input).pipe(
-    Match.when({ exitSuccess: true }, () => right(new RestartDecisionContinue())),
+    Match.when({ exitSuccess: true }, () => Either.right(new RestartDecisionContinue())),
     Match.when(
       { exitSuccess: false, intensityExceeded: true },
-      () => left(new RestartDecisionExhausted()),
+      () => Either.left(new RestartDecisionExhausted()),
     ),
     Match.orElse(() =>
-      right(
+      Either.right(
         new RestartDecisionRestart({
           indices: restartIndicesFor(input.strategy, input.failedIndex, input.totalChildren),
         }),
