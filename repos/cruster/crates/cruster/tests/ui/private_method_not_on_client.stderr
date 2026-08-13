@@ -1,0 +1,5 @@
+error[E0599]: no method named `secret` found for reference `&PrivateEntityClient` in the current scope
+  --> tests/ui/private_method_not_on_client.rs:25:20
+   |
+25 |     let _ = client.secret(id);
+   |                    ^^^^^^ method not found in `&PrivateEntityClient`
