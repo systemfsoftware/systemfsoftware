@@ -1,0 +1,657 @@
+/**
+ * @since 1.0.0
+ */
+
+export type Chunk = {
+  readonly old: ReadonlyArray<string>
+  readonly next: ReadonlyArray<string>
+  readonly ctx?: string
+  readonly eof?: boolean
+}
+
+type Wrapped = {
+  readonly path: string
+  readonly chunks: ReadonlyArray<Chunk>
+}
+
+export type FilePatch =
+  | {
+      readonly type: "add"
+      readonly path: string
+      readonly content: string
+    }
+  | {
+      readonly type: "delete"
+      readonly path: string
+    }
+  | {
+      readonly type: "update"
+      readonly path: string
+      readonly chunks: ReadonlyArray<Chunk>
+      readonly movePath?: string
+    }
+
+const BEGIN = "*** Begin Patch"
+const END = "*** End Patch"
+const ADD = "*** Add File:"
+const DELETE = "*** Delete File:"
+const MOVE = "*** Move to:"
+const UPDATE = "*** Update File:"
+
+const stripHeredoc = (input: string): string => {
+  const match = input.match(
+    /^(?:cat\s+)?<<['"]?(\w+)['"]?\s*\n([\s\S]*?)\n\1\s*$/,
+  )
+  return match?.[2] ?? input
+}
+
+const normalize = (input: string): string =>
+  stripHeredoc(input.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim())
+
+const fail = (message: string): never => {
+  throw new Error(`applyPatch verification failed: ${message}`)
+}
+
+const locate = (text: string) => {
+  const lines = text.split("\n")
+  const begin = lines.findIndex((line) => line === BEGIN)
+  const explicitEnd = lines.findIndex((line) => line === END)
+  if (begin === -1) {
+    fail("Invalid patch format: missing Begin/End markers")
+  }
+  const end = explicitEnd === -1 ? lines.length : explicitEnd
+  if (begin >= end) {
+    fail("Invalid patch format: missing Begin/End markers")
+  }
+  return {
+    lines,
+    begin,
+    end,
+  }
+}
+
+const parseChunkHeader = (line: string): string | undefined => {
+  if (line === "@@") {
+    return
+  }
+
+  const unified = line.match(
+    /^@@\s+-\d+(?:,\d+)?\s+\+\d+(?:,\d+)?\s+@@(?:\s?(.*))?$/,
+  )
+  if (unified) {
+    const ctx = unified[1]?.trim()
+    return ctx === undefined || ctx.length === 0 ? undefined : ctx
+  }
+
+  const ctx = line.slice(2).trim()
+  return ctx.length === 0 ? undefined : ctx
+}
+
+const parseChunks = (
+  lines: ReadonlyArray<string>,
+  start: number,
+  end = lines.length,
+) => {
+  const chunks = Array<Chunk>()
+  let i = start
+
+  while (i < end) {
+    const line = lines[i]!
+    if (line.startsWith("***") || line.startsWith("diff --git ")) {
+      break
+    }
+    if (!line.startsWith("@@")) {
+      i++
+      continue
+    }
+
+    const ctx = parseChunkHeader(line)
+    const old = Array<string>()
+    const next = Array<string>()
+    let eof = false
+    i++
+
+    while (i < end) {
+      const line = lines[i]!
+      if (line === "*** End of File") {
+        eof = true
+        i++
+        break
+      }
+      if (
+        line.startsWith("@@") ||
+        line.startsWith("***") ||
+        line.startsWith("diff --git ")
+      ) {
+        break
+      }
+      if (line.startsWith(" ")) {
+        const text = line.slice(1)
+        old.push(text)
+        next.push(text)
+      } else if (line.startsWith("-")) {
+        old.push(line.slice(1))
+      } else if (line.startsWith("+")) {
+        next.push(line.slice(1))
+      } else if (line === "\\ No newline at end of file") {
+      }
+      i++
+    }
+
+    chunks.push({
+      old,
+      next,
+      ...(ctx === undefined ? {} : { ctx }),
+      ...(eof ? { eof: true } : {}),
+    })
+  }
+
+  return {
+    chunks,
+    next: i,
+  }
+}
+
+const parseWrapped = (text: string): Wrapped => {
+  const { lines, begin, end } = locate(text)
+
+  let i = begin + 1
+  while (i < end && lines[i]!.trim() === "") {
+    i++
+  }
+  if (i === end) {
+    throw new Error("patch rejected: empty patch")
+  }
+  if (!lines[i]!.startsWith(UPDATE)) {
+    fail("only single-file update patches are supported")
+  }
+  const path = lines[i]!.slice(UPDATE.length).trim()
+  if (path.length === 0) {
+    fail("missing update file path")
+  }
+
+  i++
+  if (i < end && lines[i]!.startsWith(MOVE)) {
+    fail("move patches are not supported")
+  }
+
+  const parsed = parseChunks(lines, i, end)
+  if (parsed.chunks.length === 0) {
+    fail("no hunks found")
+  }
+
+  i = parsed.next
+  while (i < end && lines[i]!.trim() === "") {
+    i++
+  }
+  if (i !== end) {
+    fail("only one update file section is supported")
+  }
+
+  return {
+    path,
+    chunks: parsed.chunks,
+  }
+}
+
+const parseAdd = (lines: ReadonlyArray<string>, start: number, end: number) => {
+  const out = Array<string>()
+  let i = start
+
+  while (i < end) {
+    const line = lines[i]!
+    if (line.startsWith("***")) {
+      break
+    }
+    if (line.startsWith("+")) {
+      out.push(line.slice(1))
+    }
+    i++
+  }
+
+  return {
+    content: out.join("\n"),
+    next: i,
+  }
+}
+
+const normalizeDiffPath = (path: string): string => {
+  if (path === "/dev/null") {
+    return path
+  }
+  if (path.startsWith("a/") || path.startsWith("b/")) {
+    return path.slice(2)
+  }
+  return path
+}
+
+const parseHeaderPath = (line: string, prefix: "--- " | "+++ "): string => {
+  const body = line.slice(prefix.length)
+  const tabIndex = body.indexOf("\t")
+  const value = tabIndex === -1 ? body : body.slice(0, tabIndex)
+  return normalizeDiffPath(value.trim())
+}
+
+const parseDiffGitPaths = (
+  line: string,
+): readonly [string, string] | undefined => {
+  const match = line.match(/^diff --git a\/(.+) b\/(.+)$/)
+  if (!match) {
+    return
+  }
+  return [match[1]!, match[2]!]
+}
+
+const hasDiffHeaders = (lines: ReadonlyArray<string>): boolean =>
+  lines.some(
+    (line) =>
+      line.startsWith("diff --git ") ||
+      line.startsWith("--- ") ||
+      line.startsWith("rename from ") ||
+      line.startsWith("rename to "),
+  )
+
+const parseGitPatch = (text: string): ReadonlyArray<FilePatch> => {
+  const lines = text.split("\n")
+  const out = Array<FilePatch>()
+  let i = 0
+
+  while (i < lines.length) {
+    while (i < lines.length && lines[i]!.trim() === "") {
+      i++
+    }
+    if (i >= lines.length) {
+      break
+    }
+
+    let oldPath: string | undefined
+    let newPath: string | undefined
+    let renameFrom: string | undefined
+    let renameTo: string | undefined
+
+    if (lines[i]!.startsWith("diff --git ")) {
+      const parsedPaths = parseDiffGitPaths(lines[i]!)
+      if (!parsedPaths) {
+        return fail(`invalid git diff header: ${lines[i]}`)
+      }
+      const [parsedOldPath, parsedNewPath] = parsedPaths
+      oldPath = parsedOldPath
+      newPath = parsedNewPath
+      i++
+    }
+
+    while (i < lines.length) {
+      const line = lines[i]!
+      if (line.startsWith("diff --git ")) {
+        break
+      }
+      if (line.startsWith("rename from ")) {
+        renameFrom = line.slice("rename from ".length).trim()
+        i++
+        continue
+      }
+      if (line.startsWith("rename to ")) {
+        renameTo = line.slice("rename to ".length).trim()
+        i++
+        continue
+      }
+      if (line.startsWith("--- ")) {
+        oldPath = parseHeaderPath(line, "--- ")
+        i++
+        if (i >= lines.length || !lines[i]!.startsWith("+++ ")) {
+          fail("missing new file header")
+        }
+        newPath = parseHeaderPath(lines[i]!, "+++ ")
+        i++
+        break
+      }
+      if (line.startsWith("@@")) {
+        break
+      }
+      i++
+    }
+
+    const parsed = parseChunks(lines, i)
+    i = parsed.next
+
+    const fromPath = normalizeDiffPath(renameFrom ?? oldPath ?? "/dev/null")
+    const toPath = normalizeDiffPath(renameTo ?? newPath ?? fromPath)
+
+    if (fromPath === "/dev/null") {
+      if (toPath === "/dev/null") {
+        fail("invalid diff: both file paths are /dev/null")
+      }
+      out.push({
+        type: "add",
+        path: toPath,
+        content: patchChunks(toPath, "", parsed.chunks),
+      })
+      continue
+    }
+
+    if (toPath === "/dev/null") {
+      out.push({
+        type: "delete",
+        path: fromPath,
+      })
+      continue
+    }
+
+    if (parsed.chunks.length === 0 && fromPath === toPath) {
+      fail(`no hunks found for ${fromPath}`)
+    }
+
+    out.push({
+      type: "update",
+      path: fromPath,
+      chunks: parsed.chunks,
+      ...(toPath === fromPath ? {} : { movePath: toPath }),
+    })
+  }
+
+  if (out.length === 0) {
+    fail("no hunks found")
+  }
+
+  return out
+}
+
+export const parsePatch = (input: string): ReadonlyArray<FilePatch> => {
+  const text = normalize(input)
+  if (text.length === 0) {
+    throw new Error("patchText is required")
+  }
+  if (text === `${BEGIN}\n${END}`) {
+    throw new Error("patch rejected: empty patch")
+  }
+
+  if (text.startsWith(BEGIN)) {
+    const { lines, begin, end } = locate(text)
+    const out = Array<FilePatch>()
+    let i = begin + 1
+
+    while (i < end) {
+      while (i < end && lines[i]!.trim() === "") {
+        i++
+      }
+      if (i === end) {
+        break
+      }
+
+      const line = lines[i]!
+      if (line.startsWith(ADD)) {
+        const path = line.slice(ADD.length).trim()
+        if (path.length === 0) {
+          fail("missing add file path")
+        }
+        const parsed = parseAdd(lines, i + 1, end)
+        out.push({
+          type: "add",
+          path,
+          content: parsed.content,
+        })
+        i = parsed.next
+        continue
+      }
+      if (line.startsWith(DELETE)) {
+        const path = line.slice(DELETE.length).trim()
+        if (path.length === 0) {
+          fail("missing delete file path")
+        }
+        out.push({
+          type: "delete",
+          path,
+        })
+        i++
+        continue
+      }
+      if (line.startsWith(UPDATE)) {
+        const path = line.slice(UPDATE.length).trim()
+        if (path.length === 0) {
+          fail("missing update file path")
+        }
+
+        i++
+        let movePath: string | undefined
+        if (i < end && lines[i]!.startsWith(MOVE)) {
+          movePath = lines[i]!.slice(MOVE.length).trim()
+          if (movePath.length === 0) {
+            fail("missing move file path")
+          }
+          i++
+        }
+
+        const parsed = parseChunks(lines, i, end)
+        if (parsed.chunks.length === 0) {
+          fail("no hunks found")
+        }
+
+        out.push({
+          type: "update",
+          path,
+          chunks: parsed.chunks,
+          ...(movePath === undefined ? {} : { movePath }),
+        })
+        i = parsed.next
+        continue
+      }
+
+      fail(`unexpected line in wrapped patch: ${line}`)
+    }
+
+    if (out.length === 0) {
+      fail("no hunks found")
+    }
+
+    return out
+  }
+
+  const lines = text.split("\n")
+  if (hasDiffHeaders(lines)) {
+    return parseGitPatch(text)
+  }
+
+  return fail("Invalid patch format: expected git/unified diff")
+}
+
+export const wrappedPath = (input: string): string | undefined => {
+  const text = normalize(input)
+  if (text.startsWith(BEGIN)) {
+    return parseWrapped(text).path
+  }
+  const lines = text.split("\n")
+  if (!hasDiffHeaders(lines)) {
+    return
+  }
+  const patch = parseGitPatch(text)
+  if (patch.length !== 1 || patch[0]!.type !== "update") {
+    return
+  }
+  return patch[0]!.path
+}
+
+const parse = (input: string): ReadonlyArray<Chunk> => {
+  const text = normalize(input)
+  if (text.length === 0) {
+    throw new Error("patchText is required")
+  }
+  if (text === `${BEGIN}\n${END}`) {
+    throw new Error("patch rejected: empty patch")
+  }
+
+  if (text.startsWith(BEGIN)) {
+    return parseWrapped(text).chunks
+  }
+
+  const parsed = parseChunks(text.split("\n"), 0)
+  if (parsed.chunks.length === 0) {
+    fail("no hunks found")
+  }
+  return parsed.chunks
+}
+
+const normalizeUnicode = (line: string): string =>
+  line
+    .replace(/[\u2018\u2019\u201A\u201B]/g, "'")
+    .replace(/[\u201C\u201D\u201E\u201F]/g, '"')
+    .replace(/[\u2010\u2011\u2012\u2013\u2014\u2015]/g, "-")
+    .replace(/\u2026/g, "...")
+    .replace(/\u00A0/g, " ")
+
+const match = (
+  lines: ReadonlyArray<string>,
+  part: ReadonlyArray<string>,
+  from: number,
+  same: (left: string, right: string) => boolean,
+  eof: boolean,
+): number => {
+  if (eof) {
+    const last = lines.length - part.length
+    if (last >= from) {
+      let ok = true
+      for (let i = 0; i < part.length; i++) {
+        if (!same(lines[last + i]!, part[i]!)) {
+          ok = false
+          break
+        }
+      }
+      if (ok) {
+        return last
+      }
+    }
+  }
+
+  for (let i = from; i <= lines.length - part.length; i++) {
+    let ok = true
+    for (let j = 0; j < part.length; j++) {
+      if (!same(lines[i + j]!, part[j]!)) {
+        ok = false
+        break
+      }
+    }
+    if (ok) {
+      return i
+    }
+  }
+
+  return -1
+}
+
+const seek = (
+  lines: ReadonlyArray<string>,
+  part: ReadonlyArray<string>,
+  from: number,
+  eof = false,
+): number => {
+  if (part.length === 0) {
+    return -1
+  }
+
+  const exact = match(lines, part, from, (left, right) => left === right, eof)
+  if (exact !== -1) {
+    return exact
+  }
+
+  const rstrip = match(
+    lines,
+    part,
+    from,
+    (left, right) => left.trimEnd() === right.trimEnd(),
+    eof,
+  )
+  if (rstrip !== -1) {
+    return rstrip
+  }
+
+  const trim = match(
+    lines,
+    part,
+    from,
+    (left, right) => left.trim() === right.trim(),
+    eof,
+  )
+  if (trim !== -1) {
+    return trim
+  }
+
+  return match(
+    lines,
+    part,
+    from,
+    (left, right) =>
+      normalizeUnicode(left.trim()) === normalizeUnicode(right.trim()),
+    eof,
+  )
+}
+
+const compute = (
+  file: string,
+  lines: ReadonlyArray<string>,
+  chunks: ReadonlyArray<Chunk>,
+): Array<readonly [number, number, ReadonlyArray<string>]> => {
+  const out = Array<readonly [number, number, ReadonlyArray<string>]>()
+  let from = 0
+
+  for (const chunk of chunks) {
+    if (chunk.ctx) {
+      const at = seek(lines, [chunk.ctx], from)
+      if (at === -1) {
+        fail(`Failed to find context '${chunk.ctx}' in ${file}`)
+      }
+      from = at + 1
+    }
+
+    if (chunk.old.length === 0) {
+      out.push([lines.length, 0, chunk.next])
+      continue
+    }
+
+    let old = chunk.old
+    let next = chunk.next
+    let at = seek(lines, old, from, chunk.eof === true)
+    if (at === -1 && old.at(-1) === "") {
+      old = old.slice(0, -1)
+      next = next.at(-1) === "" ? next.slice(0, -1) : next
+      at = seek(lines, old, from, chunk.eof === true)
+    }
+    if (at === -1) {
+      fail(`Failed to find expected lines in ${file}:\n${chunk.old.join("\n")}`)
+    }
+
+    out.push([at, old.length, next])
+    from = at + old.length
+  }
+
+  out.sort((left, right) => left[0] - right[0])
+  return out
+}
+
+export const patchChunks = (
+  file: string,
+  input: string,
+  chunks: ReadonlyArray<Chunk>,
+): string => {
+  const eol = input.includes("\r\n") ? "\r\n" : "\n"
+  const lines = input.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n")
+  if (lines.at(-1) === "") {
+    lines.pop()
+  }
+
+  const out = [...lines]
+  for (const [at, size, next] of compute(file, lines, chunks).toReversed()) {
+    out.splice(at, size, ...next)
+  }
+
+  if (out.at(-1) !== "") {
+    out.push("")
+  }
+
+  const text = out.join("\n")
+  return eol === "\r\n" ? text.replace(/\n/g, "\r\n") : text
+}
+
+export const patchContent = (
+  file: string,
+  input: string,
+  patchText: string,
+): string => patchChunks(file, input, parse(patchText))
