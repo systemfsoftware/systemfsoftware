@@ -41,7 +41,6 @@
     "build": "tsdown && pnpm api:check",
     "clean": "rimraf dist",
     "typecheck": "tsc --noEmit --incremental",
-    "format": "dprint fmt",
     "test": "vitest run",
     "test:run": "vitest run --coverage",
     "mutation": "stryker run",

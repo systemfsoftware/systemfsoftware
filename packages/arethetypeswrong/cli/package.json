@@ -24,7 +24,6 @@
     "prepare": "tsdown",
     "clean": "rimraf dist",
     "typecheck": "tsc --noEmit --incremental",
-    "format": "dprint fmt",
     "test": "vitest run",
     "test:run": "vitest run --coverage",
     "test:contract": "vitest run --config vitest.contract.config.ts",

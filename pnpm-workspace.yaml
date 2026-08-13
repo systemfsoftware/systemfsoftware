@@ -1,7 +1,6 @@
 allowBuilds:
   "@parcel/watcher": false
   cpu-features: false
-  dprint: false
   esbuild: false
   msgpackr-extract: false
   onnxruntime-node: false

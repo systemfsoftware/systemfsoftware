@@ -41,7 +41,6 @@
     "build": "tsdown && pnpm api:check",
     "clean": "rimraf dist",
     "typecheck": "tsc --noEmit --incremental",
-    "format": "dprint fmt",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; node scripts/guard-no-behavior.mjs && oxlint . --format=${f:-default}",
     "attw": "attw --pack .",
     "api:check": "api-extractor run",
