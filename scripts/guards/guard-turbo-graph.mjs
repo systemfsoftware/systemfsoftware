@@ -51,6 +51,7 @@
 //     worktree, and in a developer's dirty tree.
 
 import { parse } from '@std/jsonc'
+import { workspaceMembers } from './workspace-members.ts'
 
 const ROOT = Deno.cwd()
 
@@ -102,25 +103,6 @@ export const findUndeclaredTaskEnv = (turboConfig, packages) => {
     remedy:
       `declare ${ref} in tasks.${task}.env — only if its value is a real input, since a declared variable is hashed by value and one that varies per caller forks the cache — or stop reading it`,
   }))
-}
-
-/**
- * A workspace member is a tracked manifest whose nearest ancestor manifest is
- * the root: every workspace glob here is `<dir>/*`, so a manifest nested under
- * another package (a test fixture) is not a member and turbo never runs its
- * scripts. Judging one would be a false positive, and this arm's budget is
- * spent already.
- */
-export const workspaceMembers = (manifests) => {
-  const present = new Set(manifests)
-  return manifests.filter((rel) => {
-    if (rel === 'package.json') return false
-    const dirs = rel.split('/').slice(0, -1)
-    for (let depth = dirs.length - 1; depth >= 1; depth--) {
-      if (present.has(`${dirs.slice(0, depth).join('/')}/package.json`)) return false
-    }
-    return true
-  })
 }
 
 const dec = new TextDecoder()

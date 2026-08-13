@@ -126,6 +126,10 @@ const MANIFEST = new Map([
     'workspace-layout',
     'What turbo hashes spans every package: CLI-argument hash poisoning in the root scripts, and env declared per task in turbo.json. Both failures are silent, and no published package can see the run graph it belongs to.',
   ]],
+  ['guards/workspace-members.ts', [
+    'workspace-layout',
+    'Defines which tracked manifest is a workspace package and which is a fixture that merely contains one. Shared by guard-turbo-graph.mjs and check-changeset.ts; the rule is the workspace arrangement itself, and one copy is why the two gates cannot drift apart.',
+  ]],
   ['guards/guard-action-provenance.mjs', [
     'workspace-layout',
     'Allowlists every `uses:` across .github/ to repo-local, GitHub-owned, and one named third party. CI workflow arrangement; no published package can see or constrain it.',
@@ -146,7 +150,7 @@ const MANIFEST = new Map([
     'release-metadata',
     'repository.url and repository.directory per publishable manifest; npm rejects a mismatch with 422 after the tag lands.',
   ]],
-  ['guards/check-changeset.mjs', [
+  ['guards/check-changeset.ts', [
     'release-metadata',
     'The changeset gate for publishable-package PRs; invoked by changeset-check.yml, never a package dependency.',
   ]],
