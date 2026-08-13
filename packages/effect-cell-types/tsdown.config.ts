@@ -2,6 +2,12 @@ import { defineConfig } from 'tsdown'
 
 type ExportEntry = string | Record<string, string | undefined>
 
+// The published types entry is tsdown's own emit, NOT an api-extractor rollup. api-extractor
+// cannot express `export * as Ns` — its rollup flattens the namespace into a value, after which
+// `Workflow.Workflow<C, D, E>` is TS2749 ("refers to a value, but is being used as a type") and
+// every consumer's channels collapse to never. Measured on this package: with the rollup as the
+// types entry, `test:types` and `stryker-js-cli`'s typecheck both fail. api-extractor still runs
+// for the API report in `etc/`, which is the gate that matters; only its rollup is disabled.
 const typesMap: Record<string, string> = {
   '.': './dist/index.d.ts',
 }
