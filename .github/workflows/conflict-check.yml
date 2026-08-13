@@ -1,0 +1,47 @@
+name: Conflict check (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      base_ref:
+        description: Name of the base branch the PR targets (e.g. main)
+        required: true
+        type: string
+      head_sha:
+        description: SHA of the PR head commit (never the merge ref)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  conflicts:
+    name: no merge conflicts
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Non-PR triggers (push/workflow_dispatch) pass an empty head_sha, so both
+      # steps skip and the job succeeds; `needs:` downstream jobs still run.
+      - name: Checkout PR head
+        if: inputs.head_sha != ''
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.head_sha }}
+          fetch-depth: 0
+      - name: Detect merge conflicts with base
+        if: inputs.head_sha != ''
+        env:
+          BASE_REF: ${{ inputs.base_ref }}
+        run: |
+          git fetch --no-tags origin "$BASE_REF"
+          if git merge-tree --write-tree HEAD FETCH_HEAD >/dev/null 2>&1; then
+            echo "no merge conflicts with $BASE_REF"
+            exit 0
+          fi
+          status=$?
+          case "$status" in
+            1) printf '::error title=merge conflicts::This branch conflicts with %s. Resolve the conflicts before CI can proceed.\n' "$BASE_REF" ;;
+            *) printf '::error title=conflict detection failed::git merge-tree exited %s (unrelated histories or a git error).\n' "$status" ;;
+          esac
+          exit "$status"

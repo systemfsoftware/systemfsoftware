@@ -21,7 +21,14 @@ permissions:
   contents: read
 
 jobs:
+  conflicts:
+    name: no merge conflicts
+    uses: ./.github/workflows/conflict-check.yml
+    with:
+      base_ref: ${{ github.event.pull_request.base.ref }}
+      head_sha: ${{ github.event.pull_request.head.sha }}
   browser-suite:
+    needs: conflicts
     name: browser suite (@systemfsoftware/storybook-gherkin)
     runs-on: ubuntu-latest
     timeout-minutes: 20
