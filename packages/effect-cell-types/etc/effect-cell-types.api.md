@@ -5,6 +5,11 @@
 ```ts
 
 // @public (undocumented)
+export namespace Cell {
+    export { DecideDone, DecidePhase, DecodeDone, DecodePhase, EncodeDone, EncodePhase, Layer, Phases, ReadDone, ReadPhase, WriteDone, WritePhase, decide, decode, encode, read, write };
+}
+
+// @public (undocumented)
 export namespace Policy {
     export { Policy };
 }
