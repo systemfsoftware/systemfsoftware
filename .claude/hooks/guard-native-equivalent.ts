@@ -3,15 +3,11 @@
 // stderr text reaches the agent. Neither code is inferable from the source.
 // Behaviour only -- this guard reads no doctrine file, so REPO-S6 holds.
 //
-// Scope boundary. bashInterceptor is enabled in ~/.omp/agent/config.yml, so
-// omp's own DEFAULT_BASH_INTERCEPTOR_RULES already route cat/head/tail/less/
-// more, grep/rg/ripgrep/ag/ack, find/fd/locate, sed -i, perl -i, awk -i
-// inplace, echo/printf redirection, nohup and a trailing &, and services,
-// watchers and debuggers including gdb, lldb and tail -f. Repeating any of it
-// here would be a second implementation of a live rule. This guard covers only
-// what no built-in rule reaches: gh subcommands with a native OMP counterpart,
-// GitHub and plain-URL content fetches, and ce-babysit-pr, whose poller wraps
-// gh and whose skill load is not a Bash call at all.
+// A call that re-implements a native OMP tool is refused, and the refusal names
+// the tool to use instead. Two carve-outs keep the shell everything it is
+// better at: a pipeline ending in a count, frequency, checksum or set
+// difference computes a fact, and a stage fed by a pipe filters another
+// command's output, which no read or grep tool can do.
 
 import { toText } from '@std/streams'
 
@@ -36,10 +32,14 @@ const refuse = (offender: string, native: string, why: string): Verdict => ({
   refusal: { offender, native, why },
 })
 
-const SEPARATORS = /&&|\|\||[|;\n]/
+const SEPARATORS = /(&&|\|\||[|;\n])/
 const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/
+const BACKGROUNDED = /(?:^|\s)&$/
 const BABYSIT = /(?:^|[/:@\s])ce-babysit-pr\b/
 
+// Prefixes carrying no meaning of their own: the guard judges what they run.
+// nohup, setsid, screen and tmux are deliberately absent -- they ARE the
+// offence, so they must stay visible as the segment's own name.
 const WRAPPERS: Record<string, true> = {
   sudo: true,
   env: true,
@@ -47,24 +47,82 @@ const WRAPPERS: Record<string, true> = {
   exec: true,
   time: true,
   nice: true,
+  ionice: true,
   stdbuf: true,
   xargs: true,
+  builtin: true,
 }
 
+const AGGREGATORS: Record<string, true> = {
+  wc: true,
+  md5sum: true,
+  sha1sum: true,
+  sha224sum: true,
+  sha256sum: true,
+  sha384sum: true,
+  sha512sum: true,
+  b2sum: true,
+  cksum: true,
+  comm: true,
+  diff: true,
+  cmp: true,
+}
+
+const MUTATORS: Record<string, true> = {
+  rm: true,
+  cp: true,
+  mv: true,
+  chmod: true,
+  chown: true,
+  touch: true,
+  ln: true,
+  mkdir: true,
+  tar: true,
+  zip: true,
+  gzip: true,
+  sed: true,
+}
+
+const PAGERS: Record<string, true> = { cat: true, head: true, tail: true, less: true, more: true, bat: true, nl: true }
+const LISTERS: Record<string, true> = { ls: true, tree: true, dir: true, vdir: true }
+const FINDERS: Record<string, true> = { find: true, fd: true, fdfind: true }
+const SEARCHERS: Record<string, true> = {
+  grep: true,
+  egrep: true,
+  fgrep: true,
+  rg: true,
+  ag: true,
+  ack: true,
+  ugrep: true,
+}
+// These walk the tree with no path operand, so a bare invocation is already a
+// file search rather than a stdin filter.
+const TREE_SEARCHERS: Record<string, true> = { rg: true, ag: true, ack: true, ugrep: true }
+const FETCHERS: Record<string, true> = { curl: true, wget: true, xh: true, http: true, https: true, httpie: true }
+const DETACHERS: Record<string, true> = { nohup: true, setsid: true, screen: true, tmux: true, disown: true }
+const DEBUGGERS: Record<string, true> = { gdb: true, lldb: true, cgdb: true, debugpy: true, dlv: true, rdbg: true }
 const INTERPRETERS: Record<string, true> = {
   python: true,
   python3: true,
   uv: true,
   sh: true,
   bash: true,
+  zsh: true,
   node: true,
   bun: true,
   deno: true,
 }
+const BROWSER_VERBS: Record<string, true> = {
+  open: true,
+  codegen: true,
+  screenshot: true,
+  pdf: true,
+  cr: true,
+  wk: true,
+  ff: true,
+}
 
-const FETCHERS: Record<string, true> = { curl: true, wget: true, xh: true, http: true, httpie: true }
-
-const LOCAL_HOSTS = /^(?:localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\]|host\.docker\.internal)(?::\d+)?$/
+const LOCAL_HOSTS = /^(?:localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\]|::1|host\.docker\.internal)(?::\d+)?$/
 const GITHUB_HOSTS = /^(?:[\w.-]+\.)?(?:github\.com|githubusercontent\.com|github\.dev)$/
 
 const BABYSIT_NATIVE = 'github { op: "run_watch" } for CI plus `read pr://<N>` for the thread state'
@@ -79,7 +137,7 @@ const GH_NATIVE: Record<string, readonly [string, string]> = {
   'pr list': ['`read pr://?state=open`', 'the same listing, with state, limit, author and label as query params'],
   'pr diff': [
     '`read pr://<N>/diff`',
-    'the listing, `pr://<N>/diff/<i>` for one file and `pr://<N>/diff/all` for the whole diff share a single gh call',
+    'the listing, `pr://<N>/diff/<i>` for one file and `pr://<N>/diff/all` for the whole diff all share a single gh call',
   ],
   'pr checks': [
     'github { op: "run_watch" }',
@@ -110,8 +168,10 @@ const GH_NATIVE: Record<string, readonly [string, string]> = {
 }
 
 export interface Segment {
+  readonly raw: string
   readonly name: string
   readonly args: readonly string[]
+  readonly piped: boolean
 }
 
 const basename = (word: string): string => {
@@ -119,19 +179,26 @@ const basename = (word: string): string => {
   return bare.slice(bare.lastIndexOf('/') + 1)
 }
 
-export const segments = (command: string): readonly Segment[] =>
-  command
-    .split(SEPARATORS)
-    .map((raw) => {
-      const tokens = raw.trim().split(/\s+/).filter((token) => token.length > 0)
-      const start = tokens.findIndex((token) => !ASSIGNMENT.test(token) && WRAPPERS[basename(token)] !== true)
-      if (start === -1) return { name: '', args: [] }
-      return { name: basename(tokens[start] ?? ''), args: tokens.slice(start + 1) }
-    })
+const parse = (raw: string, piped: boolean): Segment => {
+  const tokens = raw.trim().split(/\s+/).filter((token) => token.length > 0)
+  const start = tokens.findIndex((token) => !ASSIGNMENT.test(token) && WRAPPERS[basename(token)] !== true)
+  if (start === -1) return { raw: raw.trim(), name: '', args: [], piped }
+  return { raw: raw.trim(), name: basename(tokens[start] ?? ''), args: tokens.slice(start + 1), piped }
+}
+
+export const segments = (command: string): readonly Segment[] => {
+  const parts = command.split(SEPARATORS)
+  return parts
+    .map((part, index) => parse(part, (parts[index - 1] ?? '') === '|'))
+    .filter((_, index) => index % 2 === 0)
     .filter((segment) => segment.name.length > 0)
+}
 
 const flag = (args: readonly string[], ...names: readonly string[]): boolean =>
   args.some((arg) => names.includes(arg) || names.some((name) => name.startsWith('--') && arg.startsWith(`${name}=`)))
+
+const shortFlag = (args: readonly string[], letter: string): boolean =>
+  args.some((arg) => /^-[A-Za-z]+$/.test(arg) && arg.slice(1).includes(letter))
 
 const operands = (args: readonly string[], valueFlags: readonly string[] = []): readonly string[] => {
   const out: string[] = []
@@ -193,7 +260,7 @@ const inspectFetch = (segment: Segment): Verdict => {
     return refuse(
       `${segment.name} ${url}`,
       'github { op: "file_read" }, `read pr://<N>`, or `read issue://<N>`',
-      'the GitHub tool is required over an HTTP client for anything GitHub hosts',
+      'the GitHub tool is required over curl or wget for anything GitHub hosts',
     )
   }
 
@@ -234,25 +301,129 @@ const inspectFetch = (segment: Segment): Verdict => {
   )
 }
 
+const inspectSegment = (segment: Segment, downstream: readonly Segment[]): Verdict => {
+  if (flag(segment.args, '-h', '--help', 'help')) return ALLOWED
+
+  if (BABYSIT.test(segment.name)) return refuse('ce-babysit-pr', BABYSIT_NATIVE, BABYSIT_WHY)
+
+  const runsSnapshot = basename(segment.name) === 'pr-snapshot' ||
+    (INTERPRETERS[segment.name] === true && operands(segment.args).some((arg) => basename(arg) === 'pr-snapshot'))
+  if (runsSnapshot) return refuse('ce-babysit-pr pr-snapshot', BABYSIT_NATIVE, BABYSIT_WHY)
+
+  if (BACKGROUNDED.test(segment.raw) || DETACHERS[segment.name] === true) {
+    return refuse(
+      segment.raw,
+      'hub { op: "start" }',
+      'a service, watcher or REPL started this way outlives the call unsupervised; hub gives it a name, a readiness probe, logs and a stop',
+    )
+  }
+
+  if (segment.name === 'gh') return inspectGh(segment)
+  if (FETCHERS[segment.name] === true) return inspectFetch(segment)
+
+  if (
+    DEBUGGERS[segment.name] === true || (segment.name === 'node' && flag(segment.args, '--inspect', '--inspect-brk'))
+  ) {
+    return refuse(
+      segment.raw,
+      'the debug tool',
+      'it drives the same adapters (gdb, lldb-dap, debugpy, dlv, rdbg) with breakpoints, stepping and variable reads',
+    )
+  }
+
+  if (
+    (segment.name === 'playwright' || segment.name === 'puppeteer') &&
+    operands(segment.args).some((arg) => BROWSER_VERBS[arg] === true)
+  ) {
+    return refuse(
+      segment.raw,
+      'the browser tool',
+      'it keeps a real Chromium tab across calls, with full puppeteer access',
+    )
+  }
+
+  if (
+    (segment.name === 'sed' && (flag(segment.args, '-i', '--in-place') || shortFlag(segment.args, 'i'))) ||
+    (segment.name === 'perl' && shortFlag(segment.args, 'i'))
+  ) {
+    return refuse(
+      segment.raw,
+      'the edit tool, or ast_edit for a codemod',
+      'a line-anchored edit fails loudly on a stale snapshot instead of silently rewriting the wrong lines',
+    )
+  }
+
+  const computesAFact = downstream.some((later) =>
+    AGGREGATORS[later.name] === true || (later.name === 'uniq' && shortFlag(later.args, 'c'))
+  )
+  if (computesAFact) return ALLOWED
+
+  if (PAGERS[segment.name] === true) {
+    if (segment.piped) return ALLOWED
+    if (flag(segment.args, '-f', '-F', '--follow')) return ALLOWED
+    if (operands(segment.args, ['-n', '-c', '--lines', '--bytes']).length === 0) return ALLOWED
+    return refuse(
+      segment.raw,
+      'the read tool',
+      'it takes line selectors (`file.ts:50-200`) and returns anchored, numbered lines you can edit from',
+    )
+  }
+
+  if (LISTERS[segment.name] === true && !segment.piped) {
+    return refuse(
+      segment.raw,
+      '`read <dir>`, or the glob tool for a pattern',
+      'read lists a directory directly and glob returns matches newest-first',
+    )
+  }
+
+  if (FINDERS[segment.name] === true && !segment.piped) {
+    const doesWork = flag(segment.args, '-delete', '-exec', '-execdir', '-ok', '-okdir') ||
+      downstream.some((later) => MUTATORS[later.name] === true)
+    if (doesWork) return ALLOWED
+    return refuse(
+      segment.raw,
+      'the glob tool',
+      'it takes the same patterns, honours gitignore, and groups matches by directory',
+    )
+  }
+
+  if (SEARCHERS[segment.name] === true) {
+    if (flag(segment.args, '-c', '--count') || shortFlag(segment.args, 'c')) return ALLOWED
+    const paths = operands(segment.args, [
+      '-e',
+      '--regexp',
+      '-m',
+      '--max-count',
+      '-A',
+      '-B',
+      '-C',
+      '--glob',
+      '-g',
+      '--type',
+      '-t',
+      '-f',
+      '--file',
+    ])
+    const searchesTree = shortFlag(segment.args, 'r') || shortFlag(segment.args, 'R') ||
+      flag(segment.args, '--recursive') || paths.length > 1 ||
+      (TREE_SEARCHERS[segment.name] === true && paths.length > 0 && !segment.piped)
+    if (!searchesTree) return ALLOWED
+    return refuse(
+      segment.raw,
+      'the grep tool',
+      'same regex engine with a PCRE2 fallback, plus path, glob and line-range scoping',
+    )
+  }
+
+  return ALLOWED
+}
+
 export const decideCommand = (command: string): Verdict => {
-  for (const segment of segments(command)) {
-    if (flag(segment.args, '-h', '--help', 'help')) continue
-
-    if (BABYSIT.test(segment.name)) return refuse('ce-babysit-pr', BABYSIT_NATIVE, BABYSIT_WHY)
-
-    const runsSnapshot = basename(segment.name) === 'pr-snapshot' ||
-      (INTERPRETERS[segment.name] === true && operands(segment.args).some((arg) => basename(arg) === 'pr-snapshot'))
-    if (runsSnapshot) return refuse('ce-babysit-pr pr-snapshot', BABYSIT_NATIVE, BABYSIT_WHY)
-
-    if (segment.name === 'gh') {
-      const verdict = inspectGh(segment)
-      if (verdict.refused) return verdict
-    }
-
-    if (FETCHERS[segment.name] === true) {
-      const verdict = inspectFetch(segment)
-      if (verdict.refused) return verdict
-    }
+  const parsed = segments(command)
+  for (const [index, segment] of parsed.entries()) {
+    const verdict = inspectSegment(segment, parsed.slice(index + 1))
+    if (verdict.refused) return verdict
   }
   return ALLOWED
 }

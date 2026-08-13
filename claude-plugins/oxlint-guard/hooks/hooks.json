@@ -1,5 +1,5 @@
 {
-  "description": "Lint every edited file with oxlint (PostToolUse) and block edits that turn an oxlint rule off (PreToolUse). Both hooks are self-contained Bun bundles: no network access, no PATH lookup for the linter.",
+  "description": "Lint every edited file with oxlint (PostToolUse) and block edits that turn an oxlint rule off (PreToolUse). Both hooks run from TypeScript source under Deno: the linter is resolved only from the edited project's node_modules, never from PATH. Claude Code blocks a PreToolUse call on exit 2 alone, so the config guard maps every inability to reach a verdict onto 2.",
   "hooks": {
     "PostToolUse": [
       {
@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "command -v bun >/dev/null 2>&1 || { echo 'oxlint-guard: bun not found on PATH - install Bun (https://bun.sh) so the lint guard can run' >&2; exit 1; }; exec bun \"${CLAUDE_PLUGIN_ROOT}/dist/oxlint-guard.mjs\"",
+            "command": "command -v deno >/dev/null 2>&1 || { echo 'oxlint-guard: deno not found on PATH - install Deno 2.x (https://deno.com) so the lint guard can run' >&2; exit 1; }; exec deno run --allow-read --allow-run --allow-env=PATH,HOME,TMPDIR,TEMP,TMP,USERPROFILE,HOMEDRIVE,HOMEPATH,SystemRoot,COMSPEC,PATHEXT,CLAUDE_PROJECT_DIR \"${CLAUDE_PLUGIN_ROOT}/src/lint-guard.ts\"",
             "timeout": 120
           }
         ]
@@ -19,7 +19,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "command -v bun >/dev/null 2>&1 || { echo 'oxlint-guard: bun not found on PATH - install Bun (https://bun.sh) so the config guard can run' >&2; exit 1; }; exec bun \"${CLAUDE_PLUGIN_ROOT}/dist/oxlint-config-off-guard.mjs\"",
+            "command": "command -v deno >/dev/null 2>&1 || { echo 'oxlint-guard: deno not found on PATH - install Deno 2.x (https://deno.com); blocking this edit because the config guard cannot run' >&2; exit 2; }; deno run --allow-read \"${CLAUDE_PLUGIN_ROOT}/src/config-guard.ts\"; c=$?; { [ \"$c\" = 0 ] || [ \"$c\" = 2 ]; } || { echo \"oxlint-guard: the config guard could not run (exit $c); blocking this edit\" >&2; exit 2; }; exit \"$c\"",
             "timeout": 30
           }
         ]

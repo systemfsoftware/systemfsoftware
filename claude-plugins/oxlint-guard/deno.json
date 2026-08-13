@@ -1,0 +1,13 @@
+{
+  "name": "@systemfsoftware/oxlint-guard",
+  "version": "0.1.0",
+  "exports": {
+    "./lint-guard": "./src/lint-guard.ts",
+    "./config-guard": "./src/config-guard.ts"
+  },
+  "tasks": {
+    "test": "deno test --allow-read --allow-write --allow-run --allow-env",
+    "characterize": "deno run --allow-read --allow-write --allow-run --allow-env scripts/characterize.ts",
+    "check": "deno check src/ && deno lint && deno fmt --check && deno test --allow-read --allow-write --allow-run --allow-env"
+  }
+}
