@@ -36,7 +36,8 @@
       ],
       "outputs": [],
       "dependsOn": [
-        "^build"
+        "^build",
+        "build"
       ],
       "cache": true
     },
