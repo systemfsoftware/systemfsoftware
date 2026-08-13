@@ -19,6 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
+      buckets: ${{ steps.discover.outputs.buckets }}
       packages: ${{ steps.discover.outputs.packages }}
       package_count: ${{ steps.discover.outputs.package_count }}
     steps:
@@ -28,11 +29,15 @@ jobs:
           # A mutation target is a workspace package. A stryker.config.json under
           # __tests__ belongs to a CLI fixture the contract lane drives on purpose
           # (broken-config-project is meant to fail), and repos/ is a vendored tree.
-          PACKAGES=$(find . -name "stryker.config.json" -not -path "./node_modules/*" -not -path "*/node_modules/*" -not -path "./repos/*" -not -path "*/__tests__/*" -exec dirname {} \; | sed 's|^\./||' | jq -R -s -c 'split("\n") | map(select(length > 0))')
+          PACKAGES=$(find . -name "stryker.config.json" -not -path "./node_modules/*" -not -path "*/node_modules/*" -not -path "./repos/*" -not -path "*/__tests__/*" -exec dirname {} \; | sed 's|^\./||' | jq -R -s -c 'split("\n") | map(select(length > 0)) | sort')
           if [ -z "$PACKAGES" ] || [ "$PACKAGES" = "[]" ]; then
             PACKAGES="[]"
           fi
+          # Bucket the sorted package list into groups of 5 so the matrix runs a
+          # handful of runners instead of one per package.
+          BUCKETS=$(echo "$PACKAGES" | jq -c 'def chunks($n): if length <= $n then [.] else [.[0:$n]] + (.[$n:] | chunks($n)) end; if length == 0 then [] else chunks(5) end')
           echo "packages=$PACKAGES" >> "$GITHUB_OUTPUT"
+          echo "buckets=$BUCKETS" >> "$GITHUB_OUTPUT"
           echo "package_count=$(echo "$PACKAGES" | jq 'length')" >> "$GITHUB_OUTPUT"
 
   mutation:
@@ -41,21 +46,46 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: ${{ fromJson(needs.discover.outputs.packages) }}
-    name: Mutation (${{ matrix.package }})
+        bucket: ${{ fromJson(needs.discover.outputs.buckets) }}
+    name: Mutation bucket ${{ strategy.job-index }}
     runs-on: ubuntu-latest
-    timeout-minutes: 70
+    timeout-minutes: 240
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/install-deps
+
+      # Restore the turbo cache under a mutation-specific, per-bucket key so it
+      # never collides with the check job's `turbo-...` key on the same commit.
+      - name: Restore turbo cache
+        uses: actions/cache/restore@v6
+        with:
+          path: .turbo/cache
+          key: turbo-mutation-${{ runner.os }}-${{ strategy.job-index }}-${{ github.sha }}
+          restore-keys: |
+            turbo-mutation-${{ runner.os }}-${{ strategy.job-index }}-
+
       - run: corepack pnpm build
 
-      - uses: actions/cache/restore@v6
+      # Per-package incremental reports, staged into a per-bucket directory so a
+      # bucket only persists its own packages' reports (no cross-bucket collision).
+      - name: Restore incremental reports
+        id: restore-incremental
+        uses: actions/cache/restore@v6
         with:
-          path: ${{ matrix.package }}/reports/stryker-incremental.json
-          key: ${{ runner.os }}-stryker-${{ matrix.package }}-main
+          path: bucket-incremental
+          key: stryker-incremental-${{ strategy.job-index }}-main
           restore-keys: |
-            ${{ runner.os }}-stryker-${{ matrix.package }}-
+            stryker-incremental-${{ strategy.job-index }}-
+
+      - name: Unstage incremental reports
+        if: steps.restore-incremental.outputs.cache-hit == 'true'
+        run: |
+          find bucket-incremental -name stryker-incremental.json | while read -r f; do
+            pkg=${f#bucket-incremental/}
+            pkg=${pkg%/stryker-incremental.json}
+            mkdir -p "$pkg/reports"
+            cp "$f" "$pkg/reports/stryker-incremental.json"
+          done
 
       # Advisory: a mutation score below threshold never fails this job — the
       # merged report in the `report` job carries that verdict. A run that never
@@ -64,45 +94,67 @@ jobs:
       - name: Mutation
         id: mutation
         continue-on-error: true
-        timeout-minutes: 60
-        run: corepack pnpm turbo mutation --filter=./${{ matrix.package }}
+        timeout-minutes: 210
+        run: |
+          filters=$(echo '${{ matrix.bucket }}' | jq -r 'map("--filter=./" + .) | join(" ")')
+          corepack pnpm turbo mutation $filters --concurrency=2 --continue=dependencies-successful
 
       - name: Require a mutation report
         if: ${{ !cancelled() }}
         run: |
-          report='${{ matrix.package }}/reports/mutation-report.json'
-          if [ ! -f "$report" ]; then
-            echo "::error title=Mutation produced no report::${{ matrix.package }}: stryker exited '${{ steps.mutation.outcome }}' without writing $report — infrastructure failure (missing binary, crashed run or timeout), not a score outcome."
-            exit 1
-          fi
+          pkgs=$(echo '${{ matrix.bucket }}' | jq -r '.[]')
+          for pkg in $pkgs; do
+            report="$pkg/reports/mutation-report.json"
+            if [ ! -f "$report" ]; then
+              echo "::error title=Mutation produced no report::$pkg: stryker exited '${{ steps.mutation.outcome }}' without writing $report — infrastructure failure (missing binary, crashed run or timeout), not a score outcome."
+              exit 1
+            fi
+          done
 
-      - uses: actions/cache/save@v6
+      - name: Stage incremental reports
+        if: steps.mutation.outcome == 'success'
+        run: |
+          mkdir -p bucket-incremental
+          pkgs=$(echo '${{ matrix.bucket }}' | jq -r '.[]')
+          for pkg in $pkgs; do
+            if [ -f "$pkg/reports/stryker-incremental.json" ]; then
+              mkdir -p "bucket-incremental/$pkg"
+              cp "$pkg/reports/stryker-incremental.json" "bucket-incremental/$pkg/stryker-incremental.json"
+            fi
+          done
+
+      - name: Save incremental reports
+        uses: actions/cache/save@v6
         if: github.ref == 'refs/heads/main' && steps.mutation.outcome == 'success'
         with:
-          path: ${{ matrix.package }}/reports/stryker-incremental.json
-          key: ${{ runner.os }}-stryker-${{ matrix.package }}-main-${{ github.run_id }}
+          path: bucket-incremental
+          key: stryker-incremental-${{ strategy.job-index }}-main-${{ github.run_id }}
 
-      - name: Record part metadata
+      - name: Save turbo cache
+        uses: actions/cache/save@v6
+        if: github.ref == 'refs/heads/main' && steps.mutation.outcome == 'success'
+        with:
+          path: .turbo/cache
+          key: turbo-mutation-${{ runner.os }}-${{ strategy.job-index }}-${{ github.sha }}-${{ github.run_id }}
+
+      - name: Stage part artifacts
         if: always()
         run: |
-          mkdir -p '${{ matrix.package }}/reports'
-          printf '{"package":"%s","outcome":"%s"}\n' \
-            '${{ matrix.package }}' '${{ steps.mutation.outcome }}' \
-            > '${{ matrix.package }}/reports/mutation-part.json'
-
-      - name: Sanitize artifact name
-        id: sanitize
-        if: always()
-        run: echo "name=$(echo '${{ matrix.package }}' | tr '/' '-')" >> "$GITHUB_OUTPUT"
+          mkdir -p bucket-parts
+          pkgs=$(echo '${{ matrix.bucket }}' | jq -r '.[]')
+          for pkg in $pkgs; do
+            d="bucket-parts/$(echo "$pkg" | tr '/' '-')"
+            mkdir -p "$d"
+            printf '{"package":"%s","outcome":"%s"}\n' "$pkg" '${{ steps.mutation.outcome }}' > "$d/mutation-part.json"
+            cp "$pkg/reports/mutation-report.json" "$d/mutation-report.json" 2>/dev/null || true
+          done
 
       - uses: actions/upload-artifact@v7
         if: always()
         continue-on-error: true
         with:
-          name: mutation-part-${{ steps.sanitize.outputs.name }}
-          path: |
-            ${{ matrix.package }}/reports/mutation-part.json
-            ${{ matrix.package }}/reports/mutation-report.json
+          name: mutation-part-${{ strategy.job-index }}
+          path: bucket-parts/**
           if-no-files-found: ignore
           retention-days: 1
 

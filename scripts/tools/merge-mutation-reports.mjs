@@ -40,21 +40,29 @@ const parseArgs = (argv) => {
 }
 
 const readParts = (partsDir) => {
-  const names = readdirSync(partsDir, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => entry.name)
-    .sort()
+  // Bucketed runs upload one artifact per bucket with per-package subdirs, so
+  // discover each package's mutation-part.json recursively rather than assuming
+  // one flat part per artifact directory.
+  const metaFiles = []
+  const collect = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, entry.name)
+      if (entry.isDirectory()) collect(full)
+      else if (entry.name === 'mutation-part.json') metaFiles.push(full)
+    }
+  }
+  collect(partsDir)
   const parts = []
   const skipped = []
-  for (const name of names) {
+  for (const metaPath of metaFiles.sort()) {
     let meta
     try {
-      meta = JSON.parse(readFileSync(join(partsDir, name, 'mutation-part.json'), 'utf8'))
+      meta = JSON.parse(readFileSync(metaPath, 'utf8'))
     } catch {
-      skipped.push(name)
+      skipped.push(dirname(metaPath))
       continue
     }
-    parts.push({ dir: join(partsDir, name), label: meta.package, outcome: meta.outcome })
+    parts.push({ dir: dirname(metaPath), label: meta.package, outcome: meta.outcome })
   }
   return { parts, skipped }
 }
@@ -134,7 +142,7 @@ const summaryOf = ({ merged, partsDir, rows, skipped, unreadableCount }) => {
   }
   if (skipped.length > 0) {
     lines.push('', '### Warnings', '')
-    for (const name of skipped) lines.push(`- \`${partsDir}/${name}\`: no readable mutation-part.json`)
+    for (const name of skipped) lines.push(`- \`${name}\`: no readable mutation-part.json`)
   }
   if (unreadableCount > 0) lines.push('', `Report exited non-zero: ${unreadableCount} unreadable part(s).`)
   return `${lines.join('\n')}\n`
