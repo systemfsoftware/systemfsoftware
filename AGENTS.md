@@ -2,31 +2,6 @@
 
 ## Safety
 
-```yaml
-- id: REPO-S5
-  title: NEVER put a shell cell in a mutation surface
-  do: mutate only pure decisions — `*.workflow.ts` in a cell package, the rule file in a lint plugin, `*.schema.ts` where generated laws do not already cover it
-  dont: add any shell-cell suffix (`*.executor.ts`, `*.kernel.ts`, `*.acl.ts`, `*.store.ts`, `*.handler.ts`, `*.middleware.ts`, `*.state.ts`, `*.adapter.ts`, `*.policy.ts`, `*.shape.ts`, `*.observer.ts`) to a `mutate` glob; leave `mutate` unset so the Stryker default sweeps every source file and auto-enrols each new cell
-  harm: wrong observer. The mutator asks "do the tests notice a changed decision?" — a shell cell decides nothing, so every mutant is equivalent or is killed by a composition test that was proving something else. The score certifies nothing and the package pays hours of runtime for it
-  check: `node scripts/guards/guard-mutate-scope.mjs` exits 0, wired into `pnpm check:local`
-
-- id: REPO-S6
-  title: Enforcement for a published concern ships inside the published artifact
-  do: carry the rule in a published oxlint plugin or a published type signature, with the failing fixture in that package's own suite; declare a genuinely repo-local rule (workspace layout, release metadata, vendored trees) in the `scripts/guards/guard-script-provenance.mjs` manifest
-  dont: enforce a doctrine we publish with a `scripts/*.mjs` gate, a `pnpm check` step, or `CONSTITUTION.md` — a consumer installs packages, not this repository; read a doctrine artifact from a script, which promotes prose to a spec nobody maintains
-  harm: the rule binds one clone. Everywhere else the same doctrine arrives as prose in a skill, which is the channel restraints do not survive — the design looks enforced here and is advisory for every consumer
-  check: `pnpm check:script-provenance` exits 0. The judgement half stays with the reviewer: name the artifact a stranger installs that carries the rule. `scripts/`, `pnpm check` and `CONSTITUTION.md` are not answers
-
-- id: REPO-S7
-  title: A gate earns its place, and the tenth one is not free
-  do: before adding an entry to the gate, name the mistake it prevents — a specific wrong thing that specifically happened here, in the form a leaf must earn its own existence — then retire or subsume something, or give the rule to a published artifact instead (`REPO-S6`); raise `GATE_BUDGET` only in its own commit, with the entry's technique class and the suite's resulting aggregate stated
-  dont: add an entry whose verdict depends on scheduler order, cache state, or which task finished first; gate a regex or substring scan over source and call it enforcement; raise `GATE_BUDGET` in the same commit as the entry that exceeded it
-  harm: for N entries each misfiring independently with probability p a clean run is blocked with probability 1-(1-p)^N, so affordability is N x p and never N — at 2% each, ten entries block 18% of clean runs and twenty block 33%, and the suite is waived long before anyone admits it. Two failures measured here on 2026-08-11 are what the prohibitions name: `//#check:project-references` read built declarations while declaring no dependency on any `build`, and reported 11 projects broken in one CI run and 37 clean in another on the same tree; and a guard arm shipped that morning produced its first false positive within hours, on the first real corpus it met. A gate that is green by luck is worse than none, because it teaches the team to re-run until it passes
-    check: `pnpm check:script-provenance` prints the gate-entry count against `GATE_BUDGET` and exits non-zero when the count exceeds it. The judgement half stays with the reviewer: whether the named mistake is a real event or a class of badness, and whether a technique the table calls a tripwire is being sold as a gate
-```
-
-- **REPO-S1** — `isolatedDeclarations` stays disabled in every tsconfig; it produces 153 compile errors in idiomatic Effect. Gate: `.claude/hooks/guard-protected-writes.ts`.
-- **REPO-S2** — never modify `minimumReleaseAgeExclude`; pin a young dependency tighter or wait out the 24h cutoff. Gate: `.claude/hooks/guard-protected-writes.ts`.
 - **REPO-S3** — `repos/` is a vendored subtree, read-only; amend upstream. Gate: `.claude/hooks/guard-protected-writes.ts`.
 - **REPO-S4** — never hand-edit `package.json#exports` or `publishConfig.exports` on a tsdown package; change `tsdown.config.ts`. Gate: `pnpm check:exports`.
 
