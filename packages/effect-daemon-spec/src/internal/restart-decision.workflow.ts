@@ -51,7 +51,9 @@ const restartIndicesFor = (
     Match.exhaustive,
   )
 
-export const decideRestart: RestartDecisionWorkflow = (input) =>
+export const decideRestart: RestartDecisionWorkflow = (
+  input: DecideInput,
+): Either.Either<RestartDecisionContinue | RestartDecisionRestart, RestartDecisionExhausted> =>
   Match.value(input).pipe(
     Match.when({ exitSuccess: true }, () => Either.right(new RestartDecisionContinue())),
     Match.when(

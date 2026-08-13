@@ -1,0 +1,10 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "git-subtrees",
+  "version": "0.1.0",
+  "description": "Blocks unsafe git subtree invocations: URL fetch, missing --squash, missing -S/--gpg-sign, and subtree push.",
+  "author": { "name": "systemfsoftware" },
+  "repository": "https://github.com/systemfsoftware/systemfsoftware",
+  "license": "Apache-2.0",
+  "keywords": ["git", "subtree", "claude-code", "hooks", "guard"]
+}

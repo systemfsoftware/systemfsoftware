@@ -26,14 +26,15 @@ Not derivable from the manifests:
 
 Directories only; files are discovered with tools.
 
-| Directory   | What it is                                                                                                                           | Governance                                  |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------- |
-| `packages/` | Workspace packages                                                                                                                   | Root invariants plus a hook-delivered leaf  |
-| `repos/`    | One `[[repos]]` entry in `subtrees.toml` ↔ one `repos/<name>` tree: full upstream source, tests and git history                      | `REPO-S3` read-only; `REPO-W4`              |
-| `scripts/`  | Root guards (`guards/`, wired into the check chain or CI) and utilities (`tools/`, wired into no chain); release and harness tooling | Editable except the Evaluator scripts above |
-| `.github/`  | CI workflows and reusable actions                                                                                                    | Evaluator                                   |
-| `docs/`     | Solutions, plans, audits, decision records                                                                                           | `REPO-E1`                                   |
-| `omp/`      | OMP plugin packages                                                                                                                  | Leaf-governed                               |
+| Directory        | What it is                                                                                                                           | Governance                                  |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------- |
+| `packages/`      | Workspace packages                                                                                                                   | Root invariants plus a hook-delivered leaf  |
+| `repos/`         | One `[[repos]]` entry in `subtrees.toml` ↔ one `repos/<name>` tree: full upstream source, tests and git history                      | `REPO-S3` read-only; `REPO-W4`              |
+| `scripts/`       | Root guards (`guards/`, wired into the check chain or CI) and utilities (`tools/`, wired into no chain); release and harness tooling | Editable except the Evaluator scripts above |
+| `.github/`       | CI workflows and reusable actions                                                                                                    | Evaluator                                   |
+| `docs/`          | Solutions, plans, audits, decision records                                                                                           | `REPO-E1`                                   |
+| `omp/`           | OMP plugin packages                                                                                                                  | Leaf-governed                               |
+| `agent-plugins/` | Distributable agent-plugins.org plugins (Deno, standalone)                                                                           | Leaf-governed                               |
 
 ## Working Rules
 
