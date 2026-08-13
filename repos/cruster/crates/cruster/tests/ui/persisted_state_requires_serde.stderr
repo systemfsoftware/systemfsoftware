@@ -1,0 +1,5 @@
+error: entities are stateless; use a database for state management
+  --> tests/ui/persisted_state_requires_serde.rs:12:1
+   |
+12 | #[state(BadState)]
+   | ^

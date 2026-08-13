@@ -1,0 +1,16 @@
+const files = {
+  '.changeset/green-seahorses-jump.md': `---\n"effect": minor\n---\n\nMigrate unstable \\`SqlError\\` to a reason-based shape (\\`new SqlError({ reason })\\`) with structured reason classes and retryable/classified reasons.`,
+  '.changeset/cool-islands-move.md': `---\n"@effect/sql-pg": minor\n---\n\nClassify PostgreSQL native/SQLSTATE failures into structured \\`SqlError\\` reasons and migrate driver construction to the reason-based \\`SqlError\\` shape.`,
+  '.changeset/curly-buckets-argue.md': `---\n"@effect/sql-mysql2": minor\n---\n\nClassify mysql2 native errno failures into structured \\`SqlError\\` reasons and migrate driver construction to the reason-based \\`SqlError\\` shape.`,
+  '.changeset/green-maps-think.md': `---\n"@effect/sql-mssql": minor\n---\n\nClassify MSSQL native error-number failures into structured \\`SqlError\\` reasons and migrate driver construction to the reason-based \\`SqlError\\` shape.`,
+  '.changeset/loud-gorillas-grab.md': `---\n"@effect/sql-sqlite-node": minor\n---\n\nClassify sqlite-node native SQLite failures into structured \\`SqlError\\` reasons and migrate driver construction to the reason-based \\`SqlError\\` shape.`,
+  '.changeset/late-brooms-decide.md': `---\n"@effect/sql-sqlite-bun": minor\n---\n\nClassify sqlite-bun native SQLite failures into structured \\`SqlError\\` reasons and migrate driver construction to the reason-based \\`SqlError\\` shape.`,
+  '.changeset/giant-dryers-sing.md': `---\n"@effect/sql-sqlite-wasm": minor\n---\n\nClassify sqlite-wasm native SQLite failures into structured \\`SqlError\\` reasons and migrate driver construction to the reason-based \\`SqlError\\` shape.`,
+  '.changeset/nice-walls-pull.md': `---\n"@effect/sql-sqlite-do": minor\n---\n\nClassify durable-object SQLite failures into structured \\`SqlError\\` reasons with Unknown fallback and migrate driver construction to reason-based \\`SqlError\\`.`,
+  '.changeset/flat-spoons-chew.md': `---\n"@effect/sql-sqlite-react-native": minor\n---\n\nClassify react-native SQLite failures into structured \\`SqlError\\` reasons and migrate driver construction to the reason-based \\`SqlError\\` shape.`,
+  '.changeset/metal-geese-fly.md': `---\n"@effect/sql-d1": minor\n---\n\nMigrate D1 driver \\`SqlError\\` construction to the reason-based shape and classify native failures into structured reasons with Unknown fallback when SQLite codes are unavailable.`,
+  '.changeset/clean-lions-hear.md': `---\n"@effect/sql-libsql": minor\n---\n\nClassify libSQL native failures into structured \\`SqlError\\` reasons (using SQLite code mapping where available) and migrate driver construction to reason-based \\`SqlError\\`.`,
+  '.changeset/fresh-bears-trace.md': `---\n"@effect/sql-clickhouse": minor\n---\n\nClassify ClickHouse native failures into structured \\`SqlError\\` reasons and migrate driver construction to the reason-based \\`SqlError\\` shape.`
+}
+await Promise.all(Object.entries(files).map(([path, content]) => writeFile({ path, content })))
+console.log('wrote', Object.keys(files).length, 'changesets')

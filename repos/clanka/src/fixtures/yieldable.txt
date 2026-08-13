@@ -1,0 +1,27 @@
+/**
+ * Namespace containing type utilities for Yieldable values.
+ *
+ * @since 4.0.0
+ * @category Yieldable
+ */
+export declare namespace Yieldable {
+  /**
+   * @since 4.0.0
+   * @category Yieldable
+   */
+  export type Any = Yieldable<any, any, any, any>
+
+  /**
+   * @since 4.0.0
+   * @category Yieldable
+   * @example
+   * ```ts
+   * import type { Effect } from "effect"
+   *
+   * // Extract the success type from a Yieldable
+   * type SuccessType = Effect.Yieldable.Success<Effect.Effect<string>> // string
+   * ```
+   */
+  export type Success<T> = T extends Yieldable<infer _Self, infer _A, infer _E, infer _R> ? _A
+    : never
+}

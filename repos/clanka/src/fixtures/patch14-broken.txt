@@ -1,0 +1,68 @@
+const patch = `*** Begin Patch
+*** Update File: packages/effect/src/Stream.ts
+@@
+- * Maps each element to a stream and concatenates the results in order.
++ * Maps each element to a stream and concatenates the results in order.
++ *
++ * Set \`switch: true\` to interrupt the previous inner stream when a new
++ * element arrives.
+@@
+   <A, A2, E2, R2>(
+     f: (a: A) => Stream<A2, E2, R2>,
+     options?: {
+       readonly concurrency?: number | \"unbounded\" | undefined
+       readonly bufferSize?: number | undefined
++      readonly switch?: boolean | undefined
+     } | undefined
+   ): <E, R>(self: Stream<A, E, R>) => Stream<A2, E2 | E, R2 | R>
+   <A, E, R, A2, E2, R2>(
+     self: Stream<A, E, R>,
+     f: (a: A) => Stream<A2, E2, R2>,
+     options?: {
+       readonly concurrency?: number | \"unbounded\" | undefined
+       readonly bufferSize?: number | undefined
++      readonly switch?: boolean | undefined
+     } | undefined
+   ): Stream<A2, E | E2, R | R2>
+ } = dual((args) => isStream(args[0]), <A, E, R, A2, E2, R2>(
+   self: Stream<A, E, R>,
+   f: (a: A) => Stream<A2, E2, R2>,
+   options?: {
+     readonly concurrency?: number | \"unbounded\" | undefined
+     readonly bufferSize?: number | undefined
++    readonly switch?: boolean | undefined
+   } | undefined
+ ): Stream<A2, E | E2, R | R2> =>
+   self.channel.pipe(
+     Channel.flattenArray,
+-    Channel.flatMap((a) => f(a).channel, options),
++    (options?.switch ? Channel.switchMap : Channel.flatMap)((a) => f(a).channel, options),
+     fromChannel
+   ))
+*** Update File: packages/effect/test/Stream.test.ts
+@@
+   describe("callback", () => {
+@@
+       }))
+   })
++
++  describe("flatMap", () => {
++    it.effect("supports switch semantics", () =>
++      Effect.gen(function*() {
++        const result = yield* Stream.make(1, 2, 3).pipe(
++          Stream.flatMap((n) => n === 3 ? Stream.make(n) : Stream.never, { switch: true }),
++          Stream.runCollect
++        )
++        assert.deepStrictEqual(result, [3])
++      }))
++  })
+
+   describe("bufferArray", () => {
+*** Add File: .changeset/olive-bears-kiss.md
++---
++"effect": patch
++---
++
++Add a `switch` option to `Stream.flatMap` for `switchMap` semantics.
+*** End Patch`
+console.log(await applyPatch(patch))

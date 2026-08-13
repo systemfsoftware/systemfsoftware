@@ -1,0 +1,25 @@
+syntax = "proto3";
+package cluster;
+
+service RunnerService {
+    rpc Ping(PingRequest) returns (PingResponse);
+    rpc Send(SendRequest) returns (stream ReplyMessage);
+    rpc Notify(NotifyRequest) returns (NotifyResponse);
+}
+
+message PingRequest {}
+message PingResponse {}
+
+message SendRequest {
+    bytes envelope = 1; // MessagePack-encoded Envelope (Request expected)
+}
+
+message NotifyRequest {
+    bytes envelope = 1; // MessagePack-encoded Envelope
+}
+
+message NotifyResponse {}
+
+message ReplyMessage {
+    bytes reply = 1; // MessagePack-encoded Reply
+}
