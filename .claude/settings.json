@@ -23,7 +23,7 @@
           },
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/deliver-leaf-agents-md.sh\"",
+            "command": "command -v deno >/dev/null 2>&1 || { echo 'deliver-leaf-agents-md: deno not found on PATH - install Deno (https://deno.land) so the guard can run' >&2; exit 1; }; exec deno run --quiet --allow-env --allow-read --allow-write \"$CLAUDE_PROJECT_DIR/.claude/hooks/deliver-leaf-agents-md.ts\"",
             "timeout": 5
           },
           {
