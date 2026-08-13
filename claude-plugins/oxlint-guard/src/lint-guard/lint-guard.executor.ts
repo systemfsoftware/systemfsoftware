@@ -173,7 +173,7 @@ const buildOxlintCommand = (
   const args = [
     ...(typeAware ? ['--type-aware', '--type-check'] : []),
     '-f',
-    'unix',
+    'agent',
     '-c',
     run.configPath,
     // A file whose name begins with `-` must be treated as a positional path,

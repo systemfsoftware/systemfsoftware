@@ -48,7 +48,8 @@ const clean: ProcessResult = { exitCode: 0, stdout: '', stderr: '' }
 
 const violation: ProcessResult = {
   exitCode: 1,
-  stdout: 'src/bad.ts:1:1: `debugger` statement is not allowed [Error/eslint(no-debugger)]\n\n1 problem\n',
+  stdout:
+    'src/bad.ts:1:1: error eslint(no-debugger): `debugger` statement is not allowed help: Remove the debugger statement\n',
   stderr: '',
 }
 
@@ -78,7 +79,9 @@ const tsgolintNoise: ProcessResult = {
 
 const hugeOutput: ProcessResult = {
   exitCode: 1,
-  stdout: 'huge.ts:1:1: `debugger` statement is not allowed [Error/eslint(no-debugger)]\n' + 'x'.repeat(128 * 1024),
+  stdout:
+    'huge.ts:1:1: error eslint(no-debugger): `debugger` statement is not allowed help: Remove the debugger statement\n' +
+    'x'.repeat(128 * 1024),
   stderr: '',
 }
 
@@ -375,7 +378,7 @@ Feature('Guarding edits against lint violations')
             '--type-aware',
             '--type-check',
             '-f',
-            'unix',
+            'agent',
             '-c',
             '/project/oxlint.config.mjs',
             '--',

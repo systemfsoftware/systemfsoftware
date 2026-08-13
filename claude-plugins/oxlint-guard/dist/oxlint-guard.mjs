@@ -31224,7 +31224,7 @@ const buildOxlintCommand = (run, cwd, typeAware) => {
 	const args = [
 		...typeAware ? ["--type-aware", "--type-check"] : [],
 		"-f",
-		"unix",
+		"agent",
 		"-c",
 		run.configPath,
 		"--",
