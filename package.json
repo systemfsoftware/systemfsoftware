@@ -16,7 +16,7 @@
     "gate:tasks": "turbo --concurrency=${TURBO_CONCURRENCY:-50%} --continue lint lint:tsgo typecheck test attw api:check //#check:mutate-scope //#check:lint-coverage //#check:no-hand-rolled-jsonc //#check:publish-config //#check:script-provenance //#check:action-provenance",
     "gate:dist": "turbo --concurrency=${TURBO_CONCURRENCY:-100%} build && turbo --concurrency=${TURBO_CONCURRENCY:-100%} --continue //#check:project-references //#check:exports //#check:runtime-deps",
     "check:ci": "s=0; pnpm format:check || s=1; pnpm check:turbo-graph || s=1; TURBO_CONCURRENCY=${TURBO_CONCURRENCY:-100%} pnpm gate:tasks test:contract || s=1; pnpm gate:dist || s=1; exit $s",
-    "check:local": "s=0; dprint check || s=1; pnpm check:turbo-graph || s=1; pnpm gate:tasks || s=1; pnpm gate:dist || s=1; exit $s",
+    "check:local": "s=0; dprint check || s=1; pnpm check:turbo-graph || s=1; TURBO_CONCURRENCY=${TURBO_CONCURRENCY:-100%} pnpm gate:tasks || s=1; pnpm gate:dist || s=1; exit $s",
     "prepare": "concurrently \"husky\" \"node scripts/tools/patch-tsgo-if-needed.mjs\"",
     "bump:minor": "node scripts/tools/bump-all-minor.mjs",
     "check:publish-config": "node scripts/guards/validate-publish-config.mjs --selftest && node scripts/guards/validate-publish-config.mjs",
