@@ -27,7 +27,7 @@
 
 - **REPO-S1** — `isolatedDeclarations` stays disabled in every tsconfig; it produces 153 compile errors in idiomatic Effect. Gate: `.claude/hooks/guard-protected-writes.ts`.
 - **REPO-S2** — never modify `minimumReleaseAgeExclude`; pin a young dependency tighter or wait out the 24h cutoff. Gate: `.claude/hooks/guard-protected-writes.ts`.
-- **REPO-S3** — `repos/` is a vendored subtree, read-only; amend upstream. `repos/AGENTS.md` is ours. Gate: `.claude/hooks/guard-protected-writes.ts`.
+- **REPO-S3** — `repos/` is a vendored subtree, read-only; amend upstream. Gate: `.claude/hooks/guard-protected-writes.ts`.
 - **REPO-S4** — never hand-edit `package.json#exports` or `publishConfig.exports` on a tsdown package; change `tsdown.config.ts`. Gate: `pnpm check:exports`.
 
 ## Stack
@@ -107,4 +107,4 @@ The `dist/`-reading root checks run in `gate:dist`, which builds in its own turb
 
 A rule lives in exactly one file: the highest level it applies to. A leaf carries only its delta and never restates this file. A leaf is earned where a directory has a different toolchain, ownership or risk class _and_ an agent demonstrably got something wrong there — a package manifest is not evidence, symmetry with a sibling is not a reason.
 
-`repos/<name>/AGENTS.md` are vendored roots, not leaves; amend upstream. `repos/AGENTS.md` is ours. A fork under `packages/` is ours: we publish it and we gate it, and "upstream" names only where it came from.
+`repos/<name>/AGENTS.md` are vendored roots, not leaves; amend upstream. A fork under `packages/` is ours: we publish it and we gate it, and "upstream" names only where it came from.
