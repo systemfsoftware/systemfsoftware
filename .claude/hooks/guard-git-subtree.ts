@@ -1,5 +1,10 @@
 #!/usr/bin/env -S deno run
 
+import { parse } from 'npm:just-bash@3.2.0'
+import type { CommandNode, ScriptNode, SimpleCommandNode, WordNode } from 'npm:just-bash@3.2.0'
+
+type WordPart = WordNode['parts'][number]
+
 const URL_PATTERN = /^(https?:\/\/|git@|git:\/\/)/
 
 const VALUE_FLAGS: Record<string, true> = {
@@ -132,79 +137,120 @@ export function validateSubtree(parsed: ParsedSubtreeArgs): ValidationResult {
   return { valid: true, reason: '' }
 }
 
-function splitSegments(command: string): string[] {
-  return command
-    .split(/&&|\|\||[;&|()\n]/)
-    .map(s => s.trim())
-    .filter(s => s.length > 0)
+function partText(part: WordPart): { text: string; dynamic: boolean } {
+  switch (part.type) {
+    case 'Literal':
+    case 'SingleQuoted':
+    case 'Escaped':
+      return { text: part.value, dynamic: false }
+    case 'DoubleQuoted': {
+      let text = ''
+      let dynamic = false
+      for (const inner of part.parts) {
+        const r = partText(inner)
+        text += r.text
+        dynamic = dynamic || r.dynamic
+      }
+      return { text, dynamic }
+    }
+    default:
+      return { text: '', dynamic: true }
+  }
 }
 
-function tokenize(segment: string): string[] {
-  const tokens: string[] = []
-  let current = ''
-  let inSingle = false
-  let inDouble = false
-  let i = 0
-  while (i < segment.length) {
-    const c = segment[i]!
-    if (inSingle) {
-      if (c === "'") inSingle = false
-      else current += c
-      i++
-      continue
-    }
-    if (inDouble) {
-      if (c === '"') inDouble = false
-      else if (c === '\\' && i + 1 < segment.length) {
-        current += segment[i + 1]!
-        i += 2
-        continue
-      } else current += c
-      i++
-      continue
-    }
-    if (c === "'") {
-      inSingle = true
-      i++
-      continue
-    }
-    if (c === '"') {
-      inDouble = true
-      i++
-      continue
-    }
-    if (c === '\\' && i + 1 < segment.length) {
-      current += segment[i + 1]!
-      i += 2
-      continue
-    }
-    if (c === '#' && current.length === 0) break
-    if (/\s/.test(c)) {
-      if (current.length > 0) {
-        tokens.push(current)
-        current = ''
-      }
-      i++
-      continue
-    }
-    current += c
-    i++
+function wordText(word: WordNode): { text: string; dynamic: boolean } {
+  let text = ''
+  let dynamic = false
+  for (const part of word.parts) {
+    const r = partText(part)
+    text += r.text
+    dynamic = dynamic || r.dynamic
   }
-  if (current.length > 0) tokens.push(current)
-  return tokens
+  return { text, dynamic }
 }
 
-function subtreeArgsLists(command: string): string[][] {
-  const lists: string[][] = []
-  for (const segment of splitSegments(command)) {
-    const tokens = tokenize(segment)
-    for (let i = 1; i < tokens.length; i++) {
-      if (tokens[i - 1] === 'git' && tokens[i] === 'subtree') {
-        lists.push(['subtree', ...tokens.slice(i + 1)])
+function collectSubstitutions(word: WordNode, pending: ScriptNode[]): void {
+  const stack: WordPart[] = [...word.parts]
+  while (stack.length > 0) {
+    const part = stack.pop()!
+    if (part.type === 'CommandSubstitution') {
+      pending.push(part.body)
+    } else if (part.type === 'DoubleQuoted') {
+      stack.push(...part.parts)
+    }
+  }
+}
+
+function scriptOf(statements: ScriptNode['statements']): ScriptNode {
+  return { type: 'Script', statements }
+}
+
+function visitCommand(cmd: CommandNode, visit: (cmd: SimpleCommandNode) => void, pending: ScriptNode[]): void {
+  switch (cmd.type) {
+    case 'SimpleCommand':
+      visit(cmd)
+      if (cmd.name) collectSubstitutions(cmd.name, pending)
+      for (const word of cmd.args) collectSubstitutions(word, pending)
+      for (const r of cmd.redirections) {
+        if (r.target.type === 'Word') collectSubstitutions(r.target, pending)
+      }
+      break
+    case 'FunctionDef':
+      visitCommand(cmd.body, visit, pending)
+      break
+    case 'If':
+      for (const clause of cmd.clauses) {
+        pending.push(scriptOf(clause.condition))
+        pending.push(scriptOf(clause.body))
+      }
+      if (cmd.elseBody) pending.push(scriptOf(cmd.elseBody))
+      break
+    case 'For':
+    case 'CStyleFor':
+    case 'While':
+    case 'Until':
+      pending.push(scriptOf(cmd.body))
+      if (cmd.type === 'While' || cmd.type === 'Until') pending.push(scriptOf(cmd.condition))
+      break
+    case 'Case':
+      for (const item of cmd.items) pending.push(scriptOf(item.body))
+      break
+    case 'Subshell':
+    case 'Group':
+      pending.push(scriptOf(cmd.body))
+      break
+    default:
+      break
+  }
+}
+
+function visitCommands(script: ScriptNode, visit: (cmd: SimpleCommandNode) => void): void {
+  const pending: ScriptNode[] = [script]
+  while (pending.length > 0) {
+    const s = pending.pop()!
+    for (const stmt of s.statements) {
+      for (const pipeline of stmt.pipelines) {
+        for (const cmd of pipeline.commands) {
+          visitCommand(cmd, visit, pending)
+        }
       }
     }
   }
-  return lists
+}
+
+function commandArgs(cmd: SimpleCommandNode): string[] | null {
+  const name = cmd.name ? wordText(cmd.name).text : ''
+  if (name !== 'git') return null
+  const args: string[] = [name]
+  for (const word of cmd.args) {
+    const { text, dynamic } = wordText(word)
+    if (dynamic && text.startsWith('--prefix=')) {
+      args.push('--prefix=<expanded>')
+    } else {
+      args.push(text)
+    }
+  }
+  return args
 }
 
 interface HookPayload {
@@ -225,13 +271,22 @@ if (import.meta.main) {
   const command = payload.tool_input?.command ?? ''
   if (command.length === 0) Deno.exit(0)
 
-  for (const args of subtreeArgsLists(command)) {
+  let script: ScriptNode
+  try {
+    script = parse(command)
+  } catch {
+    Deno.exit(0)
+  }
+
+  visitCommands(script, cmd => {
+    const args = commandArgs(cmd)
+    if (args === null) return
     const result = validateSubtree(parseSubtreeArgs(args))
     if (!result.valid) {
       console.error(`guard-git-subtree: blocked git subtree invocation\n\n${result.reason}`)
       Deno.exit(2)
     }
-  }
+  })
 
   Deno.exit(0)
 }
