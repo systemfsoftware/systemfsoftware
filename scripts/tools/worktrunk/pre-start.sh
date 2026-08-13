@@ -92,3 +92,4 @@ fi
 
 link_shared_dir .repos "$WORKTREE_PATH" "$PRIMARY_PATH"
 link_shared_dir .issues "$WORKTREE_PATH" "$PRIMARY_PATH"
+link_shared_dir wiki "$WORKTREE_PATH" "$PRIMARY_PATH"
