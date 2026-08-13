@@ -15,32 +15,45 @@ const ruleTester = new RuleTester({
   },
 })
 
+const missingMakeData = {
+  expected: 'export const <name> = Workflow.make((command) => ...)',
+  actual: 'an exported const whose initializer is not a call to Workflow.make(...)',
+  fix:
+    'produce the workflow with `export const <name> = Workflow.make((command) => ...)`, importing { Workflow } from @systemfsoftware/effect-cell-types; only the constructor infers the decision and error channels and derives the UninhabitedDecision / UninhabitedError markers',
+}
+
 const functionDeclarationData = {
-  expected: 'export const <name>: Workflow<Command, Decision, Error> = (command) => ...',
-  actual: 'an export function declaration',
-  fix:
-    'rewrite as an annotated const. A function declaration has nowhere to carry the Workflow<...> annotation, so the compiler never checks the contract and the cell degrades to a filename',
+  expected: 'export const <name> = Workflow.make((command) => ...)',
+  actual: 'an exported function declaration — a function declaration cannot carry a Workflow.make(...) call',
+  fix: missingMakeData.fix,
 }
 
-const missingAnnotationData = {
-  expected: 'a Workflow<Command, Decision, Error> type annotation on the const',
-  actual: 'an unannotated const',
+const annotationInsteadOfMakeData = {
+  expected: 'a call to Workflow.make(...) with no type annotation on the const',
+  actual: 'a Workflow.Workflow<...> type annotation instead of a Workflow.make(...) call',
   fix:
-    'annotate it: `export const {{name}}: Workflow<Cmd, Decision, Error> = ...`. Without the annotation tsc infers whatever the body happens to return and the both-channels-inhabited contract goes unchecked',
+    'replace the annotation with `export const <name> = Workflow.make((command) => ...)`; a hand-written Workflow.Workflow<...> annotation cannot derive the UninhabitedDecision / UninhabitedError markers that the constructor infers',
 }
 
-const wrongAnnotationData = {
-  expected: 'Workflow<Command, Decision, Error>',
-  actual: 'a type annotation that is not Workflow<...>',
+const localTypeDeclarationData = {
+  expected: 'the Workflow type imported from @systemfsoftware/effect-cell-types',
+  actual: 'a local `type Workflow<...>` copy of the contract',
   fix:
-    'a *.workflow.ts export states its contract as Workflow<Cmd, Decision, Error> from @systemfsoftware/effect-cell-types; any other annotation leaves the cell unverified',
+    'delete the local copy and import { Workflow } from @systemfsoftware/effect-cell-types; a hand-rolled Workflow cannot derive the UninhabitedDecision / UninhabitedError markers',
 }
 
 ruleTester.run('workflow-declaration-form', workflowDeclarationForm, {
   valid: [
     {
-      name: 'Should_Pass_When_ConstAnnotatedAsWorkflow',
-      code: `export const decide: Workflow<Command, Decision, Error> = (cmd) => cmd`,
+      name: 'Should_Pass_When_ConstProducedByWorkflowMake',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+export const decide = Workflow.make((cmd) => cmd)`,
+      filename: 'decide.workflow.ts',
+    },
+    {
+      name: 'Should_Pass_When_ConstProducedByAliasedWorkflowMake',
+      code: `import { Workflow as W } from '@systemfsoftware/effect-cell-types'
+export const decide = W.make((cmd) => cmd)`,
       filename: 'decide.workflow.ts',
     },
     {
@@ -71,79 +84,121 @@ ruleTester.run('workflow-declaration-form', workflowDeclarationForm, {
   ],
   invalid: [
     {
-      name: 'Should_ReportFunctionDeclaration_When_ExportedFunctionDeclaration',
+      name: 'Should_ReportMissingMake_When_ExportedFunctionDeclaration',
       code: `export function decide(cmd) { return cmd }`,
       filename: 'decide.workflow.ts',
       errors: [
         {
-          messageId: 'functionDeclaration',
+          messageId: 'missingMake',
           data: { name: 'decide', ...functionDeclarationData },
         },
       ],
     },
     {
-      name: 'Should_ReportMissingAnnotation_When_UnannotatedArrowConst',
+      name: 'Should_ReportMissingMake_When_BareArrowConst',
       code: `export const decide = (cmd) => cmd`,
       filename: 'decide.workflow.ts',
       errors: [
         {
-          messageId: 'missingAnnotation',
-          data: { name: 'decide', ...missingAnnotationData },
+          messageId: 'missingMake',
+          data: { name: 'decide', ...missingMakeData },
         },
       ],
     },
     {
-      name: 'Should_ReportMissingAnnotation_When_UnannotatedFunctionExpressionConst',
+      name: 'Should_ReportMissingMake_When_FunctionExpressionConst',
       code: `export const decide = function (cmd) { return cmd }`,
       filename: 'decide.workflow.ts',
       errors: [
         {
-          messageId: 'missingAnnotation',
-          data: { name: 'decide', ...missingAnnotationData },
+          messageId: 'missingMake',
+          data: { name: 'decide', ...missingMakeData },
         },
       ],
     },
     {
-      name: 'Should_ReportMissingAnnotation_When_UnannotatedCallExpressionConst',
+      name: 'Should_ReportMissingMake_When_CallExpressionIsNotMake',
       code: `export const decide = buildWorkflow()`,
       filename: 'decide.workflow.ts',
       errors: [
         {
-          messageId: 'missingAnnotation',
-          data: { name: 'decide', ...missingAnnotationData },
+          messageId: 'missingMake',
+          data: { name: 'decide', ...missingMakeData },
         },
       ],
     },
     {
-      name: 'Should_ReportWrongAnnotation_When_ConstAnnotatedWithOtherType',
-      code: `export const decide: Decision = (cmd) => cmd`,
+      name: 'Should_ReportMissingMake_When_MakeCalledOnForeignBinding',
+      code: `import { Workflow } from 'another-module'
+export const decide = Workflow.make((cmd) => cmd)`,
       filename: 'decide.workflow.ts',
       errors: [
         {
-          messageId: 'wrongAnnotation',
-          data: { name: 'decide', ...wrongAnnotationData },
+          messageId: 'missingMake',
+          data: { name: 'decide', ...missingMakeData },
         },
       ],
     },
     {
-      name: 'Should_ReportWrongAnnotation_When_ConstAnnotatedWithQualifiedType',
-      code: `export const decide: Some.Namespace = (cmd) => cmd`,
+      name: 'Should_ReportMissingMake_When_MakeCalledOnTypeOnlyImport',
+      code: `import type { Workflow } from '@systemfsoftware/effect-cell-types'
+export const decide = Workflow.make((cmd) => cmd)`,
       filename: 'decide.workflow.ts',
       errors: [
         {
-          messageId: 'wrongAnnotation',
-          data: { name: 'decide', ...wrongAnnotationData },
+          messageId: 'missingMake',
+          data: { name: 'decide', ...missingMakeData },
         },
       ],
     },
     {
-      name: 'Should_ReportWrongAnnotation_When_ConstAnnotatedWithFunctionType',
-      code: `export const decide: (cmd) => void = (cmd) => cmd`,
+      name: 'Should_ReportAnnotationInsteadOfMake_When_ConstAnnotatedWithPackageWorkflowType',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+export const decide: Workflow.Workflow<Command, Decision, Error> = (cmd) => cmd`,
       filename: 'decide.workflow.ts',
       errors: [
         {
-          messageId: 'wrongAnnotation',
-          data: { name: 'decide', ...wrongAnnotationData },
+          messageId: 'annotationInsteadOfMake',
+          data: { name: 'decide', ...annotationInsteadOfMakeData },
+        },
+      ],
+    },
+    {
+      name: 'Should_ReportAnnotationInsteadOfMake_When_ConstAnnotatedWithAliasedWorkflowType',
+      code: `import { Workflow as W } from '@systemfsoftware/effect-cell-types'
+export const decide: W.Workflow<Command, Decision, Error> = (cmd) => cmd`,
+      filename: 'decide.workflow.ts',
+      errors: [
+        {
+          messageId: 'annotationInsteadOfMake',
+          data: { name: 'decide', ...annotationInsteadOfMakeData },
+        },
+      ],
+    },
+    {
+      name: 'Should_ReportLocalTypeDeclaration_When_FileDeclaresOwnWorkflowType',
+      code: `type Workflow<Command, Decision, Error> = (command: Command) => Either.Either<Decision, Error>`,
+      filename: 'decide.workflow.ts',
+      errors: [
+        {
+          messageId: 'localTypeDeclaration',
+          data: { name: 'Workflow', ...localTypeDeclarationData },
+        },
+      ],
+    },
+    {
+      name: 'Should_ReportLocalTypeDeclarationAndMissingMake_When_LocalCopyBacksExportedWorkflow',
+      code: `type Workflow<Command, Decision, Error> = (command: Command) => Either.Either<Decision, Error>
+export const decide: Workflow<Command, Decision, Error> = (cmd) => cmd`,
+      filename: 'decide.workflow.ts',
+      errors: [
+        {
+          messageId: 'localTypeDeclaration',
+          data: { name: 'Workflow', ...localTypeDeclarationData },
+        },
+        {
+          messageId: 'missingMake',
+          data: { name: 'decide', ...missingMakeData },
         },
       ],
     },

@@ -1,7 +1,7 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
 import { Array as A, Schema as S } from 'effect'
-import { getExportedWorkflowFunction } from './exported-workflow-fn.js'
+import { getExportedWorkflowFunction, workflowFunctionInit } from './exported-workflow-fn.js'
 import { COMMAND_SUFFIX, EITHER_TYPE_NAME, meta, WORKFLOW_SUFFIX } from './workflow-schema-required.config.js'
 
 export type MessageIds = 'noSchemaVariants' | 'tooFewDecisionVariants' | 'missingErrorChannel'
@@ -37,9 +37,10 @@ const eitherReference = (annotation: ESTree.Node | null | undefined): ESTree.TST
 const returnTypeOf = (fn: ESTree.Node): ESTree.TSTypeAnnotation | null | undefined => {
   if (fn.type === 'FunctionDeclaration') return fn.returnType
   if (fn.type !== 'VariableDeclarator') return undefined
-  const init = fn.init
-  if (init?.type !== 'ArrowFunctionExpression' && init?.type !== 'FunctionExpression') return undefined
-  return init.returnType
+  const inner = workflowFunctionInit(fn)
+  if (inner === undefined) return undefined
+  if (inner.type !== 'ArrowFunctionExpression' && inner.type !== 'FunctionExpression') return undefined
+  return inner.returnType
 }
 
 const errorArgumentBackedByDeclaredError = (type: ESTree.TSType, errorVariantNames: string[]): boolean => {
