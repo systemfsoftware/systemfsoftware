@@ -35,7 +35,7 @@ jobs:
           fi
           # Bucket the sorted package list into groups of 5 so the matrix runs a
           # handful of runners instead of one per package.
-          BUCKETS=$(echo "$PACKAGES" | jq -c 'def chunks($n): if length <= $n then [.] else [.[0:$n]] + (.[$n:] | chunks($n)) end; if length == 0 then [] else chunks(5) end')
+          BUCKETS=$(echo "$PACKAGES" | jq -c 'def chunks($n): if length <= $n then [.] else [.[0:$n]] + (.[$n:] | chunks($n)) end; if length == 0 then [] else [chunks(5)[] | join(" ")] end')
           echo "packages=$PACKAGES" >> "$GITHUB_OUTPUT"
           echo "buckets=$BUCKETS" >> "$GITHUB_OUTPUT"
           echo "package_count=$(echo "$PACKAGES" | jq 'length')" >> "$GITHUB_OUTPUT"
@@ -94,14 +94,16 @@ jobs:
         id: mutation
         timeout-minutes: 210
         run: |
-          filters=$(echo '${{ matrix.bucket }}' | jq -r 'map("--filter=./" + .) | join(" ")')
+          filters=""
+          for pkg in ${{ matrix.bucket }}; do
+            filters="$filters --filter=./$pkg"
+          done
           corepack pnpm turbo mutation $filters --concurrency=2 --continue=dependencies-successful
 
       - name: Require a mutation report
         if: ${{ !cancelled() }}
         run: |
-          pkgs=$(echo '${{ matrix.bucket }}' | jq -r '.[]')
-          for pkg in $pkgs; do
+          for pkg in ${{ matrix.bucket }}; do
             report="$pkg/reports/mutation-report.json"
             if [ ! -f "$report" ]; then
               echo "::error title=Mutation produced no report::$pkg: stryker exited '${{ steps.mutation.outcome }}' without writing $report — infrastructure failure (missing binary, crashed run or timeout), not a score outcome."
@@ -113,8 +115,7 @@ jobs:
         if: steps.mutation.outcome == 'success'
         run: |
           mkdir -p bucket-incremental
-          pkgs=$(echo '${{ matrix.bucket }}' | jq -r '.[]')
-          for pkg in $pkgs; do
+          for pkg in ${{ matrix.bucket }}; do
             if [ -f "$pkg/reports/stryker-incremental.json" ]; then
               mkdir -p "bucket-incremental/$pkg"
               cp "$pkg/reports/stryker-incremental.json" "bucket-incremental/$pkg/stryker-incremental.json"
@@ -139,8 +140,7 @@ jobs:
         if: always()
         run: |
           mkdir -p bucket-parts
-          pkgs=$(echo '${{ matrix.bucket }}' | jq -r '.[]')
-          for pkg in $pkgs; do
+          for pkg in ${{ matrix.bucket }}; do
             d="bucket-parts/$(echo "$pkg" | tr '/' '-')"
             mkdir -p "$d"
             printf '{"package":"%s","outcome":"%s"}\n' "$pkg" '${{ steps.mutation.outcome }}' > "$d/mutation-part.json"
