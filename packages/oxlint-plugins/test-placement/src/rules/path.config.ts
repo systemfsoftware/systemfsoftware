@@ -35,8 +35,9 @@ export const SCHEMA_SUFFIX = '.schema.test.ts' as const
  *
  * `kernel` is admitted because a kernel is domain-blind pure behaviour whose
  * laws are algebraic: every mutant is either a broken law or genuinely
- * equivalent, which is the ideal property-test target. AGENTS.md REPO-S5
- * already gates kernels "by colocated K-law property tests" — omitting the
+ * equivalent, which is the ideal property-test target. The root mutation
+ * rule (`check:mutate-scope`) already gates kernels "by colocated K-law
+ * property tests" — omitting the
  * suffix here made that sanctioned path unreachable, so kernel properties were
  * written inside `import.meta.vitest` blocks instead, where the mutation
  * contribution gate (which judges by filename) cannot see them.
