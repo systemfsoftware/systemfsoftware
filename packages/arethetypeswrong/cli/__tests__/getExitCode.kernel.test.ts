@@ -2,7 +2,7 @@ import { it } from '@effect/vitest'
 import { Schema } from 'effect'
 import { describe, expect } from 'vitest'
 
-import { computeExitCode, ComputeExitCodeCommand, ComputeExitCodeDecision } from '../src/getExitCode.workflow.js'
+import { computeExitCode, ComputeExitCodeCommand, ComputeExitCodeDecision } from '../src/getExitCode.kernel.js'
 
 const typed = (
   problems: ReadonlyArray<{ kind: string; resolutionKind?: string }>,

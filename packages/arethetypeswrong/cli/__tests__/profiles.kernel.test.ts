@@ -2,7 +2,7 @@ import { it } from '@effect/vitest'
 import { Schema } from 'effect'
 import { describe, expect } from 'vitest'
 
-import { applyProfile, ApplyProfileCommand, ApplyProfileDecision } from '../src/profiles.workflow.js'
+import { applyProfile, ApplyProfileCommand, ApplyProfileDecision } from '../src/profiles.kernel.js'
 
 const commandFor = (profileName: 'strict' | 'node16' | 'esm-only', ignoreResolutions?: ReadonlyArray<string>) =>
   new ApplyProfileCommand({

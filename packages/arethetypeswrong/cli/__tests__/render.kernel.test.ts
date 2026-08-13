@@ -1,7 +1,7 @@
 import { it } from '@effect/vitest'
 import { describe, expect } from 'vitest'
 
-import { renderAnalysis, type RenderOptions } from '../src/render.workflow.js'
+import { renderAnalysis, type RenderOptions } from '../src/render.kernel.js'
 
 const defaultOptions = (overrides: Partial<RenderOptions> = {}): RenderOptions => ({
   format: 'table',
