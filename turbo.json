@@ -168,7 +168,9 @@
         "$TURBO_ROOT$/scripts/guards/check-exports.mjs",
         "$TURBO_ROOT$/packages/**/package.json",
         "$TURBO_ROOT$/packages/**/api-extractor*.json",
-        "$TURBO_ROOT$/packages/**/dist/**"
+        "$TURBO_ROOT$/packages/**/dist/**",
+        "!$TURBO_ROOT$/packages/**/.stryker-tmp/**",
+        "!$TURBO_ROOT$/packages/**/sandbox-*/**"
       ],
       "outputs": [],
       "cache": true
@@ -177,7 +179,9 @@
       "inputs": [
         "$TURBO_ROOT$/scripts/guards/check-runtime-deps.mjs",
         "$TURBO_ROOT$/packages/**/package.json",
-        "$TURBO_ROOT$/packages/**/dist/**"
+        "$TURBO_ROOT$/packages/**/dist/**",
+        "!$TURBO_ROOT$/packages/**/.stryker-tmp/**",
+        "!$TURBO_ROOT$/packages/**/sandbox-*/**"
       ],
       "outputs": [],
       "cache": true
@@ -186,7 +190,9 @@
       "inputs": [
         "$TURBO_ROOT$/scripts/guards/guard-mutate-scope.mjs",
         "$TURBO_ROOT$/packages/**/stryker.config.json",
-        "$TURBO_ROOT$/packages/**/src/**"
+        "$TURBO_ROOT$/packages/**/src/**",
+        "!$TURBO_ROOT$/packages/**/.stryker-tmp/**",
+        "!$TURBO_ROOT$/packages/**/sandbox-*/**"
       ],
       "outputs": [],
       "cache": true
@@ -195,7 +201,9 @@
       "inputs": [
         "$TURBO_ROOT$/scripts/guards/check-lint-coverage.mjs",
         "$TURBO_ROOT$/packages/**/package.json",
-        "$TURBO_ROOT$/packages/**/oxlint.config.ts"
+        "$TURBO_ROOT$/packages/**/oxlint.config.ts",
+        "!$TURBO_ROOT$/packages/**/.stryker-tmp/**",
+        "!$TURBO_ROOT$/packages/**/sandbox-*/**"
       ],
       "outputs": [],
       "cache": true
@@ -219,7 +227,9 @@
     "//#check:publish-config": {
       "inputs": [
         "$TURBO_ROOT$/scripts/guards/validate-publish-config.mjs",
-        "$TURBO_ROOT$/packages/**/package.json"
+        "$TURBO_ROOT$/packages/**/package.json",
+        "!$TURBO_ROOT$/packages/**/.stryker-tmp/**",
+        "!$TURBO_ROOT$/packages/**/sandbox-*/**"
       ],
       "outputs": [],
       "cache": true
@@ -244,7 +254,9 @@
         "$TURBO_ROOT$/scripts/guards/check-project-references.mjs",
         "$TURBO_ROOT$/packages/**/tsconfig*.json",
         "$TURBO_ROOT$/packages/**/src/**",
-        "$TURBO_ROOT$/packages/**/dist/**"
+        "$TURBO_ROOT$/packages/**/dist/**",
+        "!$TURBO_ROOT$/packages/**/.stryker-tmp/**",
+        "!$TURBO_ROOT$/packages/**/sandbox-*/**"
       ],
       "outputs": [],
       "cache": true
@@ -254,6 +266,10 @@
     },
     "attw": {
       "outputLogs": "errors-only",
+      "inputs": [
+        "dist/**",
+        "package.json"
+      ],
       "dependsOn": [
         "build"
       ]
