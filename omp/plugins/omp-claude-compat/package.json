@@ -22,7 +22,7 @@
     "test": "vitest run",
     "mutation": "stryker run",
     "mutation:full": "stryker run --force",
-    "lint": "oxlint . --format=${OXLINT_FORMAT:-default}"
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}"
   },
   "peerDependencies": {
     "@effect/cluster": "catalog:",

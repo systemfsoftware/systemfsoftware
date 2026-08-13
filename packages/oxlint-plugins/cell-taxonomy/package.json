@@ -43,7 +43,7 @@
     "test:run": "vitest run --coverage",
     "mutation": "stryker run",
     "mutation:full": "stryker run --force",
-    "lint": "oxlint . --format=${OXLINT_FORMAT:-default}",
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "attw": "attw --pack .",
     "api:check": "api-extractor run",
     "api:update": "api-extractor run --local"

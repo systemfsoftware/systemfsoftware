@@ -125,7 +125,8 @@
       "env": [
         "NODE_ENV",
         "GITHUB_ACTIONS",
-        "OXLINT_FORMAT"
+        "OXLINT_FORMAT",
+        "AGENT"
       ],
       "cache": true
     },

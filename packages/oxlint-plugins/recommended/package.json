@@ -42,7 +42,7 @@
     "clean": "rimraf dist",
     "typecheck": "tsc --noEmit --incremental",
     "format": "dprint fmt",
-    "lint": "node scripts/guard-no-behavior.mjs && oxlint . --format=${OXLINT_FORMAT:-default}",
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; node scripts/guard-no-behavior.mjs && oxlint . --format=${f:-default}",
     "attw": "attw --pack .",
     "api:check": "api-extractor run",
     "api:update": "api-extractor run --local"
