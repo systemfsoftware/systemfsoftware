@@ -132,6 +132,18 @@ A pipeline step permitted to fail without failing its job, because the verdict i
 
 The extension is the hazard: an infrastructure failure is not a score outcome, so a run that crashed, timed out, or never started at all is absolved by the same flag. An advisory step is only honest when paired with a separate, non-advisory assertion that the run produced the artifact its verdict is read from.
 
+### Reach
+
+The property a constraint has when it is actually active at the writing act, as opposed to merely being true of the codebase. There are exactly two mechanisms that confer it: the constraint occupies the **window** — the reading surface the author loads — or it **gates** the emission, failing a command that runs as the work is produced. A constraint present in neither changes nothing and can be deleted with no observable effect.
+
+Reach is asserted only by demonstration and never inferred from a green run, because losing it need not produce a complaint: a rule no config opts into still reads as installed, and a document no context loads still reads as policy. Whether a check whose pattern selects nothing is loud about it is an accident of the instrument — some abort, others report success over the empty set — so loudness is no part of the definition. A Stale pass is the cache-flavoured instance of the same silence, and an Advisory step is a gate whose reach was surrendered deliberately. Reach is also lost from outside: a gate sitting inside the write scope of the author it judges does not bind that author, because the threshold and the ignore list are editable in the same change the gate is meant to reject.
+
+### Drifted key
+
+An index key whose assignment nothing verifies. Where a suffix, tag, or path decides which doctrine applies to a file, that assignment is itself a claim, and an unchecked claim moves — a rename reassigns the key without touching anything that reads it.
+
+A drifted key is worse than a missing one. Retrieving nothing leaves the author still looking; retrieving the wrong doctrine leaves the author confident. The same drift un-enrols the file from whatever Verification observer the old key selected. That loss surfaces only if the instrument happens to object to an empty selection, and even then the cheapest repair is to delete the selection — which ends the objection and the observation together, leaving the file with no observer and nothing complaining.
+
 ## Test execution
 
 ### Run class
@@ -163,6 +175,22 @@ A cell earns a slot only when something about it cannot be reached from above: a
 ### workflow
 
 The pure-decision cell type, named `*.workflow.ts`. One business decision as a pure function: typed command in, `Either<Decision, Error>` out, no I/O. Decision variants are `S.TaggedClass`; error variants are `S.TaggedError`. Dispatch over closed unions uses `Match.value` + `Match.tag` + `Match.exhaustive`; primitives use terminal `Match.orElse`. The `never` error channel is forbidden except for total decisions (`Allow | Block` with no other outcomes). Imported only from sibling workflows and the pure Effect data modules (`Either`, `Match`, `Schema`, `Option`, `ParseResult`) — never the Effect runtime. See `skill://architect-workflow` for the nine non-negotiable gates.
+
+A workflow is produced by calling the cell's constructor, not by annotating a value with the cell's type. The annotation form type-checks while deriving none of the channel markers, so it silently forfeits the guarantee the type exists to provide; only the constructor infers the decision and error channels from the decider it is handed and derives the markers that make a total decision uncallable.
+
+### Cell constructor
+
+A `make` a cell type exposes so that authors produce that cell by calling it rather than by annotating a value. Its force lives entirely in the parameter type — what the author hands in — and it earns existence only by computing something the author could not write: inferring the cell's channels from the argument and deriving markers from them. A constructor whose rejections all follow from its parameter type alone computes nothing an annotation would not, and is ceremony rather than enforcement.
+
+A constructor and a suffix-keyed rule are disjoint instruments, never substitutes: the constructor binds where the cell is called, while the rule reads the whole file, so shipping one retires none of the other. A constructor types the seam between cells and cannot type a sequence — ordering is not expressible over a value — so the cell types that are shells have none, and the cells whose composer the effect library already supplies do not need one.
+
+### Verification observer
+
+The check that fails when a cell's behaviour changes wrongly — the instrument that actually reads a cell type, as distinct from the contract the cell declares. Each cell type has exactly one, and they are not interchangeable: the pure-decision cell is read by mutation, a domain-blind pure cell by authored property laws, and a shell by lint provenance plus composition tests. Enrolling a cell in an observer that was not assigned to it is a wrong-observer error, and it reads as coverage while measuring nothing.
+
+_Avoid:_ the bare word "observer", which also names a cell suffix in this taxonomy — see Flagged ambiguities.
+
+An observer may also be bought and never given reach: installed as a dependency, invoked by a script, pointed at a config matching no files, and wired into no gate. The author-side cost is paid and the benefit is zero, so an unreached observer is worse than none — it reads as protection in the manifest while nothing ever runs it.
 
 ## Schema verification
 
@@ -275,3 +303,8 @@ A mutant that died with no test credited for killing it. It arises when a mutant
 ### collateral kill
 
 A mutant killed because the mutation corrupted a schema's derived arbitrary and some _other_ schema's law then choked on the garbage it generated, rather than because any test observed the mutated contract. It counts toward the score and toward attribution exactly like an observed kill, which is what makes it dangerous: it credits a law that is tautological with respect to the mutated schema, and the credit is then evidence against the hand-authored tests that state the contract properly.
+
+## Flagged ambiguities
+
+- "observer" named two different things: one of the sanctioned cell suffixes, and the verification instrument that reads a cell. These are distinct — the instrument is **Verification observer**, and the bare word stays with the suffix.
+- "window" is not minted as an entry, because it already names the model's token budget. The reading surface a constraint must occupy to bind an author is defined inside **Reach** as one of its two mechanisms; the bare word stays with the token budget.
