@@ -1,10 +1,4 @@
 {
-  // Deno config for this standalone plugin. Deno discovers it by walking up
-  // from each entrypoint, so `deno run src/guard-git-subtree.ts` resolves
-  // `just-bash` and nodeModulesDir here regardless of the invoking cwd.
-  // nodeModulesDir "none": consumers already ship package.json + node_modules;
-  // the pinned npm:just-bash version must win over any local node_modules copy.
-  // No "name"/"version"/"exports": without them `deno publish` refuses outright.
   "nodeModulesDir": "none",
   "imports": {
     "just-bash": "npm:just-bash@3.2.0",
