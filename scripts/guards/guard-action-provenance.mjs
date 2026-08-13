@@ -7,7 +7,7 @@
 //
 //   is every `uses:` ref in this repository's CI on the allowlist?
 //     Repo-local (`./...`), GitHub-owned (`actions/*`), and the third parties
-//     named in ALLOWED_THIRD_PARTY — currently exactly one, with a reason.
+//     named in ALLOWED_THIRD_PARTY — currently exactly two, each with a reason.
 //
 // Why this file is LOCKED: the allowlist is the rubric. An agent free to edit
 // it would add an action and its own admission in one commit, and the gate
@@ -41,6 +41,10 @@ const ALLOWED_THIRD_PARTY = new Map([
   [
     'denoland/setup-deno',
     'Supplies the Deno runtime that scripts/guards/check-changeset.ts and scripts/tools/tag-released-packages.mjs are written in. The runner image ships no Deno and there is no GitHub-owned equivalent.',
+  ],
+  [
+    'cachix/install-nix-action',
+    'Installs the Nix that builds dprint from flake.nix. dprint is no longer an npm dependency, the runner image ships no nix, and there is no GitHub-owned installer. The gate job it runs in holds contents:read only.',
   ],
 ])
 
