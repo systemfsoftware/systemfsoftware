@@ -5,7 +5,7 @@
 # --- Blocking: filesystem setup only. Nothing that a later step does not need. ---
 # Keep this block cheap: every command here is wall-clock the shell waits on.
 [[pre-start]]
-setup = "{{ worktree_path }}/scripts/worktrunk/pre-start.sh '{{ worktree_path }}' '{{ primary_worktree_path }}'"
+setup = "{{ worktree_path }}/scripts/tools/worktrunk/pre-start.sh '{{ worktree_path }}' '{{ primary_worktree_path }}'"
 
 # --- Background: copy caches + warm CodeGraph -> install deps -> generate artifacts ---
 # Block order is load-bearing. Seed caches before the package manager reconciles
@@ -16,20 +16,20 @@ setup = "{{ worktree_path }}/scripts/worktrunk/pre-start.sh '{{ worktree_path }}
 # the daemon picks it up whenever it lands. Blocking the shell on it bought nothing.
 [[post-start]]
 copy = "wt step copy-ignored"
-codegraph = "{{ worktree_path }}/scripts/worktrunk/copy-codegraph.sh '{{ worktree_path }}' '{{ primary_worktree_path }}'"
+codegraph = "{{ worktree_path }}/scripts/tools/worktrunk/copy-codegraph.sh '{{ worktree_path }}' '{{ primary_worktree_path }}'"
 
 [[post-start]]
-deps = "{{ worktree_path }}/scripts/worktrunk/install-deps.sh '{{ worktree_path }}'"
+deps = "{{ worktree_path }}/scripts/tools/worktrunk/install-deps.sh '{{ worktree_path }}'"
 
 [[post-start]]
-generate = "{{ worktree_path }}/scripts/worktrunk/generate-artifacts.sh '{{ worktree_path }}'"
+generate = "{{ worktree_path }}/scripts/tools/worktrunk/generate-artifacts.sh '{{ worktree_path }}'"
 # Dev server with auto-kill on worktree remove (v0.52.0+). Needs deps, not generate.
 # server = "wt step tether -- pnpm dev"
 
 # --- Post-switch: runs every time you switch into this worktree ---
 [post-switch]
-gitkraken-compat = "{{ worktree_path }}/scripts/worktrunk/post-switch.sh '{{ worktree_path }}'"
+gitkraken-compat = "{{ worktree_path }}/scripts/tools/worktrunk/post-switch.sh '{{ worktree_path }}'"
 
 # --- Pre-merge: cleanup before merge ---
 [pre-merge]
-cleanup = "{{ worktree_path }}/scripts/worktrunk/pre-merge.sh '{{ worktree_path }}'"
+cleanup = "{{ worktree_path }}/scripts/tools/worktrunk/pre-merge.sh '{{ worktree_path }}'"

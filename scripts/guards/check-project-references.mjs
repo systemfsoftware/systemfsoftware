@@ -41,7 +41,7 @@ import { promisify } from 'node:util'
 
 const execFileAsync = promisify(execFile)
 
-const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
+const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const TSC = join(repoRoot, 'node_modules', '.bin', 'tsc')
 
 const PROJECT_FILENAME = 'tsconfig.node.json'

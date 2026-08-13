@@ -9,7 +9,7 @@
 // four known shapes is present", never "no hand-rolled parser exists".
 //
 // It exists because per-package lint cannot reach the code that broke:
-// `scripts/check-lint-coverage.mjs` classifies every `packages/stryker-js/`
+// `scripts/guards/check-lint-coverage.mjs` classifies every `packages/stryker-js/`
 // package as tooling, so the shared cell rule set never runs there and each
 // package lints against its own baseline instead. A root script
 // scans every file regardless -- and the selftest pins that reach: if the scanned
@@ -59,7 +59,7 @@ const EXCLUDED = [
 // short and keep the reasons true.
 const EXEMPT = new Map([
   [
-    'scripts/guard-no-hand-rolled-jsonc.mjs',
+    'scripts/guards/guard-no-hand-rolled-jsonc.mjs',
     'this file -- it necessarily contains the patterns it bans. Consequence, stated rather than hidden: a stripper added to the guard itself is not caught.',
   ],
   [

@@ -8,11 +8,11 @@
   do: mutate only pure decisions — `*.workflow.ts` in a cell package, the rule file in a lint plugin, `*.schema.ts` where generated laws do not already cover it
   dont: add any shell-cell suffix (`*.executor.ts`, `*.kernel.ts`, `*.acl.ts`, `*.store.ts`, `*.handler.ts`, `*.middleware.ts`, `*.state.ts`, `*.adapter.ts`, `*.policy.ts`, `*.shape.ts`, `*.observer.ts`) to a `mutate` glob; leave `mutate` unset so the Stryker default sweeps every source file and auto-enrols each new cell
   harm: wrong observer. The mutator asks "do the tests notice a changed decision?" — a shell cell decides nothing, so every mutant is equivalent or is killed by a composition test that was proving something else. The score certifies nothing and the package pays hours of runtime for it
-  check: `node scripts/guard-mutate-scope.mjs` exits 0, wired into `pnpm check:local`
+  check: `node scripts/guards/guard-mutate-scope.mjs` exits 0, wired into `pnpm check:local`
 
 - id: REPO-S6
   title: Enforcement for a published concern ships inside the published artifact
-  do: carry the rule in a published oxlint plugin or a published type signature, with the failing fixture in that package's own suite; declare a genuinely repo-local rule (workspace layout, release metadata, vendored trees) in the `scripts/guard-script-provenance.mjs` manifest
+  do: carry the rule in a published oxlint plugin or a published type signature, with the failing fixture in that package's own suite; declare a genuinely repo-local rule (workspace layout, release metadata, vendored trees) in the `scripts/guards/guard-script-provenance.mjs` manifest
   dont: enforce a doctrine we publish with a `scripts/*.mjs` gate, a `pnpm check` step, or `CONSTITUTION.md` — a consumer installs packages, not this repository; read a doctrine artifact from a script, which promotes prose to a spec nobody maintains
   harm: the rule binds one clone. Everywhere else the same doctrine arrives as prose in a skill, which is the channel restraints do not survive — the design looks enforced here and is advisory for every consumer
   check: `pnpm check:script-provenance` exits 0. The judgement half stays with the reviewer: name the artifact a stranger installs that carries the rule. `scripts/`, `pnpm check` and `CONSTITUTION.md` are not answers
@@ -40,26 +40,26 @@ Not derivable from the manifests:
 
 ## Surface Classes
 
-| Surface              | Examples                                                                                                                        | Rule                                                                                                                                                                                 |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Evaluator**        | `scripts/guard-*.mjs`, `scripts/check-*.mjs`, `packages/stryker-js/mutation-run/src/test-contribution.ts`, `.github/workflows/` | Never change in the same commit as the work it judges. Its own commit, gate observed red before and green after, for the right reason.                                               |
-| **Doctrine**         | `CONSTITUTION.md`, `CONCEPTS.md`, every `AGENTS.md`, `docs/solutions/`                                                          | Editable, but never an input to a gate. Enforced by `pnpm check:script-provenance`.                                                                                                  |
-| **Editable**         | Everything else, including `packages/*/`, `scripts/`, `docs/`, `tsdown.config.ts`                                               | Edit freely, including the rules that govern you. Never weaken a rule, threshold, budget or glob to make the current change pass; loosening needs its own commit and its own reason. |
-| **Human-controlled** | Merge to `main`, publish, deploy, destructive ops, credentials                                                                  | `REPO-P1`.                                                                                                                                                                           |
+| Surface              | Examples                                                                                                  | Rule                                                                                                                                                                                 |
+| -------------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Evaluator**        | `scripts/guards/*.mjs`, `packages/stryker-js/mutation-run/src/test-contribution.ts`, `.github/workflows/` | Never change in the same commit as the work it judges. Its own commit, gate observed red before and green after, for the right reason.                                               |
+| **Doctrine**         | `CONSTITUTION.md`, `CONCEPTS.md`, every `AGENTS.md`, `docs/solutions/`                                    | Editable, but never an input to a gate. Enforced by `pnpm check:script-provenance`.                                                                                                  |
+| **Editable**         | Everything else, including `packages/*/`, `scripts/`, `docs/`, `tsdown.config.ts`                         | Edit freely, including the rules that govern you. Never weaken a rule, threshold, budget or glob to make the current change pass; loosening needs its own commit and its own reason. |
+| **Human-controlled** | Merge to `main`, publish, deploy, destructive ops, credentials                                            | `REPO-P1`.                                                                                                                                                                           |
 
 ## Directory Map
 
 Directories only; files are discovered with tools.
 
-| Directory             | What it is                                                              | Governance                                  |
-| --------------------- | ----------------------------------------------------------------------- | ------------------------------------------- |
-| `packages/`           | Workspace packages                                                      | Root invariants plus a hook-delivered leaf  |
-| `repos/`              | Vendored git subtrees, read-only                                        | `REPO-S3`; registry in `subtrees.toml`      |
-| `scripts/`            | Root guards, release and harness tooling                                | Editable except the Evaluator scripts above |
-| `.github/`            | CI workflows and reusable actions                                       | Evaluator                                   |
-| `docs/`               | Solutions, plans, audits, decision records                              | `REPO-E1`                                   |
-| `docs/cell-taxonomy/` | Gitignored working spec of the cell taxonomy, absent from a fresh clone | `REPO-W5`                                   |
-| `omp/`                | OMP plugin packages                                                     | Leaf-governed                               |
+| Directory             | What it is                                                                                                                           | Governance                                  |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------- |
+| `packages/`           | Workspace packages                                                                                                                   | Root invariants plus a hook-delivered leaf  |
+| `repos/`              | Vendored git subtrees, read-only                                                                                                     | `REPO-S3`; registry in `subtrees.toml`      |
+| `scripts/`            | Root guards (`guards/`, wired into the check chain or CI) and utilities (`tools/`, wired into no chain); release and harness tooling | Editable except the Evaluator scripts above |
+| `.github/`            | CI workflows and reusable actions                                                                                                    | Evaluator                                   |
+| `docs/`               | Solutions, plans, audits, decision records                                                                                           | `REPO-E1`                                   |
+| `docs/cell-taxonomy/` | Gitignored working spec of the cell taxonomy, absent from a fresh clone                                                              | `REPO-W5`                                   |
+| `omp/`                | OMP plugin packages                                                                                                                  | Leaf-governed                               |
 
 ## Startup
 

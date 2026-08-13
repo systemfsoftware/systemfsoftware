@@ -14,9 +14,13 @@
 //     green check REPO-S6 exists to prevent.
 //
 //   Arm 2 -- is the directory a closed set?
-//     Every entry is enumerated below with the repo-local category that admits
-//     it. A new file with no entry fails. The failure forces its author to name
-//     a category -- or to discover that none fits, which is REPO-S6's answer.
+//     `scripts/` is split into `guards/` (gates wired into the check chain or CI,
+//     whose exit code is a verdict on a repo invariant) and `tools/` (utilities
+//     wired into no chain -- report, merge, tag, bump, patch, benchmark, worktrunk
+//     hooks). Every entry under both is enumerated below with the repo-local
+//     category that admits it. A new file with no entry fails. The failure forces
+//     its author to name a category -- or to discover that none fits, which is
+//     REPO-S6's answer.
 //
 // Why this file is LOCKED: the manifest is the rubric. An agent free to edit it
 // would add a script and its own permission in one commit, and the gate would
@@ -56,7 +60,7 @@ import { dirname, join, relative } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { parseSync } from 'oxc-parser'
 
-const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
+const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 
 const DOCTRINE = [
   'CONSTITUTION.md',
@@ -74,81 +78,87 @@ const CATEGORIES = new Set([
   'local-tooling',
 ])
 
-// name -> [category, why this concern cannot reach a consumer through a package]
+// relative-path[/dir-grp] -> [category, why this concern cannot reach a consumer through a package]
+// `scripts/` is split into `guards/` (gates wired into the check chain or CI) and
+// `tools/` (utilities wired into no chain: report, merge, tag, bump, patch,
+// benchmark, worktrunk hooks). A key ending in `/` names a whole directory as one
+// entry and covers every file under it. A new file with no entry fails -- the
+// failure forces its author to name a category, or to discover that none fits,
+// which is REPO-S6's answer.
 const MANIFEST = new Map([
-  ['bench-mutation.mjs', [
+  ['tools/bench-mutation.mjs', [
     'local-tooling',
     'Developer benchmark for mutation wall-clock. Wired into no chain; enforces nothing.',
   ]],
-  ['bump-all-minor.mjs', [
+  ['tools/bump-all-minor.mjs', [
     'release-metadata',
     'Rewrites every package version. Release metadata this repository owns.',
   ]],
-  ['check-exports.mjs', [
+  ['guards/check-exports.mjs', [
     'release-metadata',
     'Asserts package.json exports match tsdown output (REPO-S4). Manifest metadata, not code.',
   ]],
-  ['check-lint-coverage.mjs', [
+  ['guards/check-lint-coverage.mjs', [
     'workspace-layout',
     'DEFINES production vs tooling packages and asserts each opts into oxlint. No package can see the workspace.',
   ]],
-  ['check-npm-publish.sh', [
+  ['tools/check-npm-publish.sh', [
     'release-metadata',
     'Registry state per workspace package: unpublished, and OIDC readiness.',
   ]],
-  ['check-project-references.mjs', [
+  ['guards/check-project-references.mjs', [
     'workspace-layout',
     'The tsconfig project graph spans packages; no single package can see it.',
   ]],
-  ['check-runtime-deps.mjs', [
+  ['guards/check-runtime-deps.mjs', [
     'release-metadata',
     'Compares built dist imports against each declared dependency set.',
   ]],
-  ['guard-mutate-scope.mjs', [
+  ['guards/guard-mutate-scope.mjs', [
     'workspace-layout',
     'REPO-S5 mutate globs across every package. The rule is about repo cell layout.',
   ]],
-  ['guard-no-hand-rolled-jsonc.mjs', [
+  ['guards/guard-no-hand-rolled-jsonc.mjs', [
     'workspace-layout',
     'Per-package lint cannot reach packages/stryker-js: vendored fork, no lint script. See its own header.',
   ]],
-  ['guard-script-provenance.mjs', [
+  ['guards/guard-script-provenance.mjs', [
     'workspace-layout',
     'This file. The set it polices IS the workspace arrangement of scripts/.',
   ]],
-  ['guard-turbo-graph.mjs', [
+  ['guards/guard-turbo-graph.mjs', [
     'workspace-layout',
     'What turbo hashes spans every package: CLI-argument hash poisoning in the root scripts, and env declared per task in turbo.json. Both failures are silent, and no published package can see the run graph it belongs to.',
   ]],
-  ['guard-action-provenance.mjs', [
+  ['guards/guard-action-provenance.mjs', [
     'workspace-layout',
     'Allowlists every `uses:` across .github/ to repo-local, GitHub-owned, and one named third party. CI workflow arrangement; no published package can see or constrain it.',
   ]],
-  ['merge-mutation-reports.mjs', [
+  ['tools/merge-mutation-reports.mjs', [
     'workspace-layout',
     'Aggregates one mutation report per package from a CI matrix run into a single report. Spans every package; no package can see the workspace.',
   ]],
-  ['patch-tsgo-if-needed.mjs', [
+  ['tools/patch-tsgo-if-needed.mjs', [
     'workspace-layout',
     'Guards the shared native tsc all 41 packages typecheck through against a non-idempotent devDependency install hook. No package can see another package node_modules.',
   ]],
-  ['rolldown-eager-entry-budget.mjs', [
+  ['tools/rolldown-eager-entry-budget.mjs', [
     'local-tooling',
     'Bundle eager-entry probe. NO CALLERS as of 2026-08-06; a deletion candidate, not a gate.',
   ]],
-  ['validate-publish-config.mjs', [
+  ['guards/validate-publish-config.mjs', [
     'release-metadata',
     'repository.url and repository.directory per publishable manifest; npm rejects a mismatch with 422 after the tag lands.',
   ]],
-  ['check-changeset.mjs', [
+  ['guards/check-changeset.mjs', [
     'release-metadata',
     'The changeset gate for publishable-package PRs; invoked by changeset-check.yml, never a package dependency.',
   ]],
-  ['tag-released-packages.mjs', [
+  ['tools/tag-released-packages.mjs', [
     'release-metadata',
     'Idempotently tags name@v<version> for released packages; invoked by release.yml after publish, never a package dependency.',
   ]],
-  ['worktrunk', [
+  ['tools/worktrunk/', [
     'local-tooling',
     'Worktrunk git-worktree lifecycle hooks, invoked by .config/wt.toml. Operator workflow.',
   ]],
@@ -225,10 +235,19 @@ const findDoctrineReadsShell = (source) =>
     .map(([line, text]) => ({ line, tokens: matchDoctrine(text) }))
     .filter(({ tokens }) => tokens.length > 0)
 
-const checkClosedSet = (present, manifest) => ({
-  stale: [...manifest.keys()].filter((name) => !present.includes(name)),
-  unlisted: present.filter((name) => !manifest.has(name)),
-})
+const checkClosedSet = (present, manifest) => {
+  // `present` is the recursive list of files under scripts/ as slugs relative to
+  // it (e.g. "guards/check-exports.mjs"). A manifest key either names one such
+  // file exactly, or ends in "/" to name a whole directory as a single entry;
+  // a directory key covers every file beneath it and is stale when none exist.
+  const covered = (file) =>
+    [...manifest.keys()].some((key) => file === key || (key.endsWith('/') && file.startsWith(key)))
+  const stale = [...manifest.keys()].filter((key) =>
+    key.endsWith('/') ? !present.some((file) => file.startsWith(key)) : !present.includes(key)
+  )
+  const unlisted = present.filter((file) => !covered(file))
+  return { stale, unlisted }
+}
 
 const checkCategories = (manifest) =>
   [...manifest.entries()]
@@ -245,7 +264,7 @@ const collectFiles = (dir) =>
 
 const scan = (root) => {
   const scriptsDir = join(root, 'scripts')
-  const present = readdirSync(scriptsDir).sort()
+  const present = collectFiles(scriptsDir).map((file) => relative(scriptsDir, file)).sort()
   const { stale, unlisted } = checkClosedSet(present, MANIFEST)
   const badCategories = checkCategories(MANIFEST)
 
@@ -281,7 +300,10 @@ const scan = (root) => {
 const GATE_BUDGET = 10
 
 const GATE_CHAIN = ['check:ci', 'check:local']
-const SCRIPT_FILE = /scripts\/[a-z0-9-]+\.(?:mjs|ts)\b/
+// Nodes one-level under scripts/ (guards/, tools/) as well as a hypothetical
+// bare file at the top, so a gate step referenced as `node scripts/guards/x.mjs`
+// counts exactly like one at `node scripts/x.mjs`.
+const SCRIPT_FILE = /scripts\/(?:[a-z0-9-]+\/)?[a-z0-9-]+\.(?:mjs|ts)\b/
 
 /**
  * Every entry the gate runs: the root `//#check:*` turbo tasks plus the root
@@ -322,13 +344,19 @@ const selftest = () => {
   }
 
   const closed = checkClosedSet(
-    ['a.mjs', 'b.mjs'],
-    new Map([['a.mjs', ['local-tooling', 'x']], ['c.mjs', ['local-tooling', 'x']]]),
+    ['a.mjs', 'dir/b.mjs'],
+    new Map([['a.mjs', ['local-tooling', 'x']], ['c.mjs', ['local-tooling', 'x']], ['dir/', ['local-tooling', 'x']]]),
   )
-  if (closed.unlisted.join() !== 'b.mjs') {
-    failures.push(`  closed-set: expected b.mjs unlisted, got ${closed.unlisted.join()}`)
+  if (closed.unlisted.length !== 0) {
+    failures.push(`  closed-set: dir/b.mjs is covered, got unlisted ${closed.unlisted.join()}`)
   }
   if (closed.stale.join() !== 'c.mjs') failures.push(`  closed-set: expected c.mjs stale, got ${closed.stale.join()}`)
+
+  // An empty directory key is stale: a green run must not follow a vanished dir.
+  const emptyDir = checkClosedSet(['a.mjs'], new Map([['gone/', ['local-tooling', 'x']]]))
+  if (emptyDir.stale.join() !== 'gone/') {
+    failures.push(`  closed-set: expected empty dir gone/ stale, got ${emptyDir.stale.join()}`)
+  }
 
   const bad = checkCategories(new Map([['x.mjs', ['invented-category', 'r']], ['y.mjs', ['local-tooling', '  ']]]))
   if (bad.length !== 2) {
@@ -337,10 +365,10 @@ const selftest = () => {
 
   // The real directory must be reachable, or a green run proves nothing was looked at.
   const live = scan(repoRoot)
-  if (live.filesScanned < 10) failures.push(`  reach: scanned only ${live.filesScanned} entries in scripts/`)
+  if (live.filesScanned < 10) failures.push(`  reach: scanned only ${live.filesScanned} files in scripts/`)
 
   const overBudget = countGateEntries(
-    { 'check:ci': 'pnpm gate:extra || s=1', 'gate:extra': 'node scripts/guard-extra.mjs' },
+    { 'check:ci': 'pnpm gate:extra || s=1', 'gate:extra': 'node scripts/guards/guard-extra.mjs' },
     { tasks: Object.fromEntries(Array.from({ length: GATE_BUDGET }, (_, i) => [`//#check:t${i}`, {}])) },
   )
   if (overBudget.length !== GATE_BUDGET + 1) {
@@ -348,7 +376,7 @@ const selftest = () => {
   }
 
   const unreferenced = countGateEntries(
-    { 'check:ci': 'turbo lint', 'bench:local': 'node scripts/bench-mutation.mjs' },
+    { 'check:ci': 'turbo lint', 'bench:local': 'node scripts/tools/bench-mutation.mjs' },
     { tasks: { '//#check:one': {} } },
   )
   if (unreferenced.join() !== '//#check:one') {

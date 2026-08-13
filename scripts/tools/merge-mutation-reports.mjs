@@ -14,8 +14,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { aggregateResultsByModule, calculateMetrics } from 'mutation-testing-metrics'
 
 const USAGE = `Usage:
-  node scripts/merge-mutation-reports.mjs --parts <dir> --out <dir> [--packages <json-array>]
-  node scripts/merge-mutation-reports.mjs --selftest
+  node scripts/tools/merge-mutation-reports.mjs --parts <dir> --out <dir> [--packages <json-array>]
+  node scripts/tools/merge-mutation-reports.mjs --selftest
 
 --packages falls back to the PACKAGES env var, then to no missing-package check.`
 
