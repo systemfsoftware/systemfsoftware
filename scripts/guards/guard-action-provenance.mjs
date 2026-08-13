@@ -30,7 +30,7 @@ import { readdir, readFile } from 'node:fs/promises'
 import { dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
+const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const defaultRoot = join(repoRoot, '.github')
 
 // owner/repo -> why this third party is admitted to run code inside a job.
@@ -40,7 +40,7 @@ const defaultRoot = join(repoRoot, '.github')
 const ALLOWED_THIRD_PARTY = new Map([
   [
     'denoland/setup-deno',
-    'Supplies the Deno runtime that scripts/check-changeset.mjs and scripts/tag-released-packages.mjs are written in. The runner image ships no Deno and there is no GitHub-owned equivalent.',
+    'Supplies the Deno runtime that scripts/guards/check-changeset.mjs and scripts/tools/tag-released-packages.mjs are written in. The runner image ships no Deno and there is no GitHub-owned equivalent.',
   ],
 ])
 

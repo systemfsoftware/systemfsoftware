@@ -34,7 +34,7 @@ import { readFileSync } from 'node:fs'
 import { dirname, join, relative, sep } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
-const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
+const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 
 const CANONICAL_REPOSITORY_URL = 'git+https://github.com/systemfsoftware/systemfsoftware.git'
 

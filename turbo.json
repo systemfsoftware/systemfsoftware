@@ -1,7 +1,7 @@
 {
   "$schema": "https://v2-10-1.turborepo.dev/schema.json",
   "globalDependencies": [
-    "scripts/patch-tsgo-if-needed.mjs"
+    "scripts/tools/patch-tsgo-if-needed.mjs"
   ],
   "tasks": {
     "build": {
@@ -165,7 +165,7 @@
     },
     "//#check:exports": {
       "inputs": [
-        "$TURBO_ROOT$/scripts/check-exports.mjs",
+        "$TURBO_ROOT$/scripts/guards/check-exports.mjs",
         "$TURBO_ROOT$/packages/**/package.json",
         "$TURBO_ROOT$/packages/**/api-extractor*.json",
         "$TURBO_ROOT$/packages/**/dist/**"
@@ -175,7 +175,7 @@
     },
     "//#check:runtime-deps": {
       "inputs": [
-        "$TURBO_ROOT$/scripts/check-runtime-deps.mjs",
+        "$TURBO_ROOT$/scripts/guards/check-runtime-deps.mjs",
         "$TURBO_ROOT$/packages/**/package.json",
         "$TURBO_ROOT$/packages/**/dist/**"
       ],
@@ -184,7 +184,7 @@
     },
     "//#check:mutate-scope": {
       "inputs": [
-        "$TURBO_ROOT$/scripts/guard-mutate-scope.mjs",
+        "$TURBO_ROOT$/scripts/guards/guard-mutate-scope.mjs",
         "$TURBO_ROOT$/packages/**/stryker.config.json",
         "$TURBO_ROOT$/packages/**/src/**"
       ],
@@ -193,7 +193,7 @@
     },
     "//#check:lint-coverage": {
       "inputs": [
-        "$TURBO_ROOT$/scripts/check-lint-coverage.mjs",
+        "$TURBO_ROOT$/scripts/guards/check-lint-coverage.mjs",
         "$TURBO_ROOT$/packages/**/package.json",
         "$TURBO_ROOT$/packages/**/oxlint.config.ts"
       ],
@@ -202,7 +202,7 @@
     },
     "//#check:no-hand-rolled-jsonc": {
       "inputs": [
-        "$TURBO_ROOT$/scripts/guard-no-hand-rolled-jsonc.mjs",
+        "$TURBO_ROOT$/scripts/guards/guard-no-hand-rolled-jsonc.mjs",
         "$TURBO_ROOT$/packages/**/*.{ts,mts,cts,js,mjs,cjs}",
         "$TURBO_ROOT$/scripts/**/*.{ts,mts,cts,js,mjs,cjs}",
         "$TURBO_ROOT$/omp/**/*.{ts,mts,cts,js,mjs,cjs}",
@@ -218,7 +218,7 @@
     },
     "//#check:publish-config": {
       "inputs": [
-        "$TURBO_ROOT$/scripts/validate-publish-config.mjs",
+        "$TURBO_ROOT$/scripts/guards/validate-publish-config.mjs",
         "$TURBO_ROOT$/packages/**/package.json"
       ],
       "outputs": [],
@@ -233,7 +233,7 @@
     },
     "//#check:action-provenance": {
       "inputs": [
-        "$TURBO_ROOT$/scripts/guard-action-provenance.mjs",
+        "$TURBO_ROOT$/scripts/guards/guard-action-provenance.mjs",
         "$TURBO_ROOT$/.github/**/*.{yml,yaml}"
       ],
       "outputs": [],
@@ -241,7 +241,7 @@
     },
     "//#check:project-references": {
       "inputs": [
-        "$TURBO_ROOT$/scripts/check-project-references.mjs",
+        "$TURBO_ROOT$/scripts/guards/check-project-references.mjs",
         "$TURBO_ROOT$/packages/**/tsconfig*.json",
         "$TURBO_ROOT$/packages/**/src/**",
         "$TURBO_ROOT$/packages/**/dist/**"

@@ -15,17 +15,17 @@
  *   --concurrency  pinned; the default (cpuCount - 1) drifts with the host.
  *
  * Usage:
- *   node scripts/bench-mutation.mjs <pkg>...            # measure named packages
- *   node scripts/bench-mutation.mjs --set bench         # the standard 3-package benchmark
- *   node scripts/bench-mutation.mjs --set bench --concurrency 4 --label exp-003
- *   node scripts/bench-mutation.mjs --set bench --repeat 3
+ *   node scripts/tools/bench-mutation.mjs <pkg>...            # measure named packages
+ *   node scripts/tools/bench-mutation.mjs --set bench         # the standard 3-package benchmark
+ *   node scripts/tools/bench-mutation.mjs --set bench --concurrency 4 --label exp-003
+ *   node scripts/tools/bench-mutation.mjs --set bench --repeat 3
  */
 import { spawn } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 
 /**
  * Overhead-dominated / balanced / scale-dominated. A win has to move all three to be real,

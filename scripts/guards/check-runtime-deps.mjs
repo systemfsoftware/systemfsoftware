@@ -22,7 +22,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseSync } from 'oxc-parser'
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const SEARCH_ROOTS = ['packages', 'omp']
 const SKIP_DIRS = new Set(['node_modules', 'dist', '.turbo', '.stryker-tmp'])
 const BUILTINS = new Set(builtinModules)

@@ -1,5 +1,5 @@
 import { defineConfig } from 'tsdown'
-import { eagerEntryBudget } from '../../../scripts/rolldown-eager-entry-budget.mjs'
+import { eagerEntryBudget } from '../../../scripts/tools/rolldown-eager-entry-budget.mjs'
 
 export default defineConfig({
   entry: { index: './src/index.ts' },

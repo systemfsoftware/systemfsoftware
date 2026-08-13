@@ -96,7 +96,7 @@ The npm publish orchestrator the repo used before adopting intent versioning: tr
 
 ### check-exports
 
-The script at `scripts/check-exports.mjs` that compares each package's `package.json#exports` paths against the actual `dist/` directory. Catches drift where `exports.types` references a file the `build` script never produces. Runs as `pnpm check:exports`, blocking inside `pnpm check`.
+The script at `scripts/guards/check-exports.mjs` that compares each package's `package.json#exports` paths against the actual `dist/` directory. Catches drift where `exports.types` references a file the `build` script never produces. Runs as `pnpm check:exports`, blocking inside `pnpm check`.
 
 ### attw
 
