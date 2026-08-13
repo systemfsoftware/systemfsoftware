@@ -43,7 +43,6 @@
     "typecheck": "tsc --noEmit --incremental",
     "test": "vitest run",
     "test:run": "vitest run",
-    "test:types": "tstyche",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "attw": "attw --pack ."
   },
@@ -58,7 +57,6 @@
     "fast-check": "catalog:",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
-    "tstyche": "catalog:",
     "vitest": "^4.1.10"
   },
   "peerDependencies": {
