@@ -27,6 +27,9 @@
     "test": "vitest run",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}"
   },
+  "dependencies": {
+    "@systemfsoftware/effect-cell-types": "workspace:^"
+  },
   "devDependencies": {
     "@effect/platform": "catalog:",
     "@effect/platform-bun": "catalog:",

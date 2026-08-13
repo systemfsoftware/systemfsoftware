@@ -1,3 +1,4 @@
+import { Workflow } from '@systemfsoftware/effect-cell-types'
 import * as Either from 'effect/Either'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
@@ -100,17 +101,17 @@ const decideFromNonStandardExit = (stderr: string): HookDecision =>
     Match.exhaustive,
   )
 
-export const interpretHookResult = (
-  cmd: InterpretHookCommand,
-): Either.Either<HookDecision, HookVerdictError> =>
-  Match.value(classifyResult(cmd.result)).pipe(
-    Match.tag('ExitBlock', () => Either.right(new Block({ reason: blockReason(cmd.result.stderr, cmd.event) }))),
-    Match.tag('ExitNoDecision', () => Either.right(new Allow({}))),
-    Match.tag('ExitDecisionJson', () =>
-      Either.match(parseHookOutput(cmd.result.stdout), {
-        onLeft: () => Either.left(new HookVerdictError({ raw: cmd.result.stdout })),
-        onRight: (parsed) => Either.right(decideFromParsed(parsed, cmd.event)),
-      })),
-    Match.tag('ExitOther', () => Either.right(decideFromNonStandardExit(cmd.result.stderr))),
-    Match.exhaustive,
-  )
+export const interpretHookResult = Workflow.make(
+  (cmd: InterpretHookCommand): Either.Either<HookDecision, HookVerdictError> =>
+    Match.value(classifyResult(cmd.result)).pipe(
+      Match.tag('ExitBlock', () => Either.right(new Block({ reason: blockReason(cmd.result.stderr, cmd.event) }))),
+      Match.tag('ExitNoDecision', () => Either.right(new Allow({}))),
+      Match.tag('ExitDecisionJson', () =>
+        Either.match(parseHookOutput(cmd.result.stdout), {
+          onLeft: () => Either.left(new HookVerdictError({ raw: cmd.result.stdout })),
+          onRight: (parsed) => Either.right(decideFromParsed(parsed, cmd.event)),
+        })),
+      Match.tag('ExitOther', () => Either.right(decideFromNonStandardExit(cmd.result.stderr))),
+      Match.exhaustive,
+    ),
+)

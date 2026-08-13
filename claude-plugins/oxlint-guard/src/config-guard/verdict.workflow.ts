@@ -1,4 +1,5 @@
 import { parse as parseJsonc } from '@std/jsonc'
+import { Workflow } from '@systemfsoftware/effect-cell-types'
 import * as Either from 'effect/Either'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
@@ -6,8 +7,6 @@ import * as S from 'effect/Schema'
 import { OxlintConfigBasename } from '../edit-command.schema.js'
 import type { ContentPair } from './extraction.workflow.js'
 import { DecideCommand } from './verdict-command.schema.js'
-
-type Workflow<Command, Decision, Error> = (command: Command) => Either.Either<Decision, Error>
 
 const VerdictTypeId: unique symbol = Symbol.for('@systemfsoftware/oxlint-guard/Verdict')
 type VerdictTypeId = typeof VerdictTypeId
@@ -273,7 +272,7 @@ const decideOnConfig = (input: DecideCommand): Either.Either<Verdict, CannotVeri
       ),
   })
 
-export const decide: Workflow<DecideCommand, Verdict, CannotVerify> = (
-  input: DecideCommand,
-): Either.Either<Verdict, UnrecognizedEditShapeError | UnparseableJsonError> =>
-  isConfigTarget(input.targetPath) ? decideOnConfig(input) : Either.right(Allow)
+export const decide = Workflow.make(
+  (input: DecideCommand): Either.Either<Verdict, UnrecognizedEditShapeError | UnparseableJsonError> =>
+    isConfigTarget(input.targetPath) ? decideOnConfig(input) : Either.right(Allow),
+)

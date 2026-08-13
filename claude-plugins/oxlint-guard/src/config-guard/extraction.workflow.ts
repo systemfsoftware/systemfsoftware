@@ -1,11 +1,10 @@
+import { Workflow } from '@systemfsoftware/effect-cell-types'
 import * as Either from 'effect/Either'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as S from 'effect/Schema'
 import type { ToolInput } from '../edit-command.schema.js'
 import { ExtractionCommand } from './extraction-command.schema.js'
-
-type Workflow<Command, Decision, Error> = (command: Command) => Either.Either<Decision, Error>
 
 const ExtractionTypeId: unique symbol = Symbol.for('@systemfsoftware/oxlint-guard/Extraction')
 type ExtractionTypeId = typeof ExtractionTypeId
@@ -265,9 +264,7 @@ const toolShapeOf = (name: string): 'edit' | 'write' | 'create' | 'multi' | 'mor
     Match.orElse(() => 'morph' as const),
   )
 
-export const extractPairs: Workflow<ExtractionCommand, Extractable, UnrecoverableError> = (
-  input: ExtractionCommand,
-): Either.Either<Extractable, UnrecoverableError> =>
+export const extractPairs = Workflow.make((input: ExtractionCommand): Either.Either<Extractable, UnrecoverableError> =>
   Match.value(toolShapeOf(input.command.toolName)).pipe(
     Match.when('edit', () => extractEditShape(input.command.toolInput, input.diskContent)),
     Match.when('write', () => extractWriteShape(input.command.toolInput, input.diskContent)),
@@ -276,3 +273,4 @@ export const extractPairs: Workflow<ExtractionCommand, Extractable, Unrecoverabl
     Match.when('morph', () => extractMorphShape(input.command.toolInput, input.diskContent)),
     Match.exhaustive,
   )
+)

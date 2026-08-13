@@ -33,6 +33,9 @@
     "@effect/sql": "catalog:",
     "@effect/workflow": "catalog:"
   },
+  "dependencies": {
+    "@systemfsoftware/effect-cell-types": "workspace:^"
+  },
   "devDependencies": {
     "@effect/cluster": "catalog:",
     "@effect/platform": "catalog:",

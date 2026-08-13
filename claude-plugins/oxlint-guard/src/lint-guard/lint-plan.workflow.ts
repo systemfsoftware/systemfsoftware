@@ -1,3 +1,4 @@
+import { Workflow } from '@systemfsoftware/effect-cell-types'
 import * as Either from 'effect/Either'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
@@ -85,7 +86,7 @@ const isLintableExtension = (extension: string): boolean => S.is(LintableExtensi
 const isDenoShebang = (firstLine: Option.Option<string>): boolean =>
   Option.exists(firstLine, (line) => /^#!.*\bdeno\b/.test(line))
 
-export const decideLintPlan = (
+export const decideLintPlan = Workflow.make((
   facts: LintFacts,
 ): Either.Either<LintPlan, NoOxlintConfig | NoOxlintBinary> =>
   Match.value(facts).pipe(
@@ -119,3 +120,4 @@ export const decideLintPlan = (
     ),
     Match.orElse((facts) => Either.left(new NoOxlintBinary({ installHint: installHintFor(facts.lockfile) }))),
   )
+)

@@ -1,3 +1,4 @@
+import { Workflow } from '@systemfsoftware/effect-cell-types'
 import * as Either from 'effect/Either'
 import * as Match from 'effect/Match'
 import * as S from 'effect/Schema'
@@ -54,7 +55,7 @@ export class LintViolation extends S.TaggedError<LintViolation>()('LintViolation
 
 export type LintResult = Either.Either<LintOutcome, LintViolation>
 
-export const classifyLintResult = (command: ClassifyCommand): Either.Either<LintOutcome, LintViolation> =>
+export const classifyLintResult = Workflow.make((command: ClassifyCommand): Either.Either<LintOutcome, LintViolation> =>
   Match.value(command).pipe(
     Match.when({ result: { exitCode: 0 } }, () => Either.right(new Clean())),
     Match.when(
@@ -71,3 +72,4 @@ export const classifyLintResult = (command: ClassifyCommand): Either.Either<Lint
     ),
     Match.orElse((command) => Either.left(new LintViolation({ output: stderrOrStdout(command.result) }))),
   )
+)

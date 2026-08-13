@@ -238,6 +238,9 @@ importers:
       oxlint-tsgolint:
         specifier: catalog:oxlint
         version: 0.24.0
+      tstyche-typescript:
+        specifier: npm:typescript@6.0.3
+        version: typescript@6.0.3
       turbo:
         specifier: ^2.10.5
         version: 2.10.5
@@ -246,6 +249,10 @@ importers:
         version: 7.0.2
 
   claude-plugins/oxlint-guard:
+    dependencies:
+      '@systemfsoftware/effect-cell-types':
+        specifier: workspace:^
+        version: link:../../packages/effect-cell-types
     devDependencies:
       '@effect/platform':
         specifier: 'catalog:'
@@ -397,6 +404,10 @@ importers:
         version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1)(vite@8.2.1(@types/node@24.13.2)(esbuild@0.27.7)(jiti@2.7.0)(yaml@2.9.0))
 
   omp/plugins/omp-claude-compat:
+    dependencies:
+      '@systemfsoftware/effect-cell-types':
+        specifier: workspace:^
+        version: link:../../../packages/effect-cell-types
     devDependencies:
       '@effect/cluster':
         specifier: ^0.60.2
@@ -744,11 +755,18 @@ importers:
       tsdown:
         specifier: 'catalog:'
         version: 0.22.14(oxc-resolver@11.24.2)(typescript@7.0.2)(unrun@0.2.39)
+      tstyche:
+        specifier: 'catalog:'
+        version: 7.2.1(typescript@7.0.2)
       vitest:
         specifier: 'catalog:'
         version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1)(vite@8.2.1(@types/node@24.13.2)(esbuild@0.27.7)(jiti@2.7.0)(yaml@2.9.0))
 
   packages/effect-daemon-spec:
+    dependencies:
+      '@systemfsoftware/effect-cell-types':
+        specifier: workspace:^
+        version: link:../effect-cell-types
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
@@ -759,9 +777,6 @@ importers:
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: catalog:attw
         version: 1.1.1
-      '@systemfsoftware/effect-cell-types':
-        specifier: workspace:^
-        version: link:../effect-cell-types
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:^
         version: link:../effect-gherkin-spec
@@ -5850,6 +5865,7 @@ packages:
   '@xmldom/xmldom@0.8.13':
     resolution: {integrity: sha512-KRYzxepc14G/CEpEGc3Yn+JKaAeT63smlDr+vjB8jRfgTBBI9wRj/nkQEO+ucV8p8I9bfKLWp37uHgFrbntPvw==}
     engines: {node: '>=10.0.0'}
+    deprecated: this version has critical issues, please update to the latest version
 
   '@xterm/headless@6.0.0':
     resolution: {integrity: sha512-5Yj1QINYCyzrZtf8OFIHi47iQtI+0qYFPHmouEfG8dHNxbZ9Tb9YGSuLcsEwj9Z+OL75GJqPyJbyoFer80a2Hw==}
