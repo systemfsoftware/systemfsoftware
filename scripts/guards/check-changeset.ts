@@ -7,10 +7,18 @@ type WorkspaceMember = {
   readonly releasable: boolean
 }
 
+type Manifest = Readonly<Record<string, unknown>>
+
+type ManifestChange = {
+  readonly before: Manifest | null
+  readonly after: Manifest | null
+}
+
 type Evidence = {
   readonly changedFiles: readonly string[]
   readonly members: readonly WorkspaceMember[]
   readonly changesets: readonly string[]
+  readonly manifestChanges: Readonly<Record<string, ManifestChange>>
 }
 
 type Verdict = {
@@ -20,6 +28,21 @@ type Verdict = {
 
 const BUMPS = ['none', 'patch', 'minor', 'major'] as const
 const MANIFEST_SUFFIX = '/package.json'
+
+const CONSUMER_BLIND_FIELDS = ['devDependencies', 'scripts'] as const
+
+const CONSUMER_RUN_SCRIPTS = [
+  'preinstall',
+  'install',
+  'postinstall',
+  'prepare',
+  'prepublish',
+  'prepublishOnly',
+  'prepack',
+  'postpack',
+  'publish',
+  'postpublish',
+] as const
 
 const dec = new TextDecoder()
 
@@ -38,10 +61,41 @@ export const declaresBumpFor = (changeset: string, packageName: string): boolean
 export const memberOwning = (file: string, members: readonly WorkspaceMember[]): WorkspaceMember | null =>
   members.find(({ dir }) => file === `${dir}${MANIFEST_SUFFIX}` || file.startsWith(`${dir}/`)) ?? null
 
-export const verdict = ({ changedFiles, members, changesets }: Evidence): Verdict => {
+const differingKeys = (before: Manifest, after: Manifest): string[] =>
+  [...new Set([...Object.keys(before), ...Object.keys(after)])]
+    .filter((key) => JSON.stringify(before[key]) !== JSON.stringify(after[key]))
+
+/**
+ * A manifest edit reaches consumers unless every field it changed is one npm
+ * publishes but nothing installing the package can act on. `scripts` counts only
+ * for the keys npm itself runs; a `format` or `test` script is inert on install.
+ * Anything unrecognised is release-relevant, so a new field fails closed.
+ */
+export const manifestChangeReachesConsumers = ({ before, after }: ManifestChange): boolean => {
+  if (before === null || after === null) return true
+
+  const changed = differingKeys(before, after)
+  const blindFieldsChanged = changed.filter((key) => !(CONSUMER_BLIND_FIELDS as readonly string[]).includes(key))
+  if (blindFieldsChanged.length > 0) return true
+
+  if (!changed.includes('scripts')) return false
+
+  const scriptsBefore = (before.scripts ?? {}) as Readonly<Record<string, unknown>>
+  const scriptsAfter = (after.scripts ?? {}) as Readonly<Record<string, unknown>>
+  return differingKeys(scriptsBefore, scriptsAfter)
+    .some((key) => (CONSUMER_RUN_SCRIPTS as readonly string[]).includes(key))
+}
+
+const demandsIntent = (file: string, manifestChanges: Evidence['manifestChanges']): boolean => {
+  const change = manifestChanges[file]
+  return change === undefined || manifestChangeReachesConsumers(change)
+}
+
+export const verdict = ({ changedFiles, members, changesets, manifestChanges }: Evidence): Verdict => {
   const touched = [
     ...new Set(
       changedFiles
+        .filter((file) => demandsIntent(file, manifestChanges))
         .map((file) => memberOwning(file, members))
         .filter((member): member is WorkspaceMember => member !== null && member.releasable)
         .map(({ name }) => name),
@@ -63,6 +117,34 @@ const readMember = async (manifestPath: string): Promise<WorkspaceMember | null>
       releasable: manifest.private !== true,
     }
     : null
+}
+
+const readManifestAt = async (ref: string, path: string): Promise<Manifest | null> => {
+  const out = await new Deno.Command('git', { args: ['show', `${ref}:${path}`], stdout: 'piped', stderr: 'null' })
+    .output()
+  if (!out.success) return null
+  try {
+    return JSON.parse(dec.decode(out.stdout)) as Manifest
+  } catch {
+    return null
+  }
+}
+
+const readManifestChanges = async (
+  base: string,
+  changedFiles: readonly string[],
+): Promise<Record<string, ManifestChange>> => {
+  const manifestPaths = changedFiles.filter((file) => file.endsWith(MANIFEST_SUFFIX))
+  const changes = await Promise.all(manifestPaths.map(async (path) =>
+    [
+      path,
+      {
+        before: await readManifestAt(base, path),
+        after: await readManifestAt('HEAD', path),
+      },
+    ] as const
+  ))
+  return Object.fromEntries(changes)
 }
 
 const reportMissingIntent = (missingIntent: readonly string[]) => {
@@ -92,7 +174,8 @@ const main = async (baseRef: string | undefined): Promise<number> => {
     return 2
   }
 
-  const range = `origin/${baseRef}...HEAD`
+  const base = `origin/${baseRef}`
+  const range = `${base}...HEAD`
   const changedFiles = await git(['diff', '--name-only', range])
   const manifestPaths = workspaceMembers(await git(['ls-files', '*package.json', ':(exclude)repos/**']))
   const members = (await Promise.all(manifestPaths.map(readMember)))
@@ -104,7 +187,8 @@ const main = async (baseRef: string | undefined): Promise<number> => {
     changesetPaths.map((path) => Deno.readTextFile(path).catch(() => '')),
   )
 
-  const { touched, missingIntent } = verdict({ changedFiles, members, changesets })
+  const manifestChanges = await readManifestChanges(base, changedFiles)
+  const { touched, missingIntent } = verdict({ changedFiles, members, changesets, manifestChanges })
 
   if (touched.length === 0) {
     console.log(`no publishable workspace package touched — skipping (${members.length} member(s) considered)`)
@@ -128,6 +212,12 @@ const MEMBERS: readonly WorkspaceMember[] = [
   { name: '@scope/plugin', dir: 'omp/plugins/plugin', releasable: true },
 ]
 
+const MANIFEST = 'packages/published/package.json'
+
+const manifestEdit = (before: Manifest, after: Manifest): Record<string, ManifestChange> => ({
+  [MANIFEST]: { before, after },
+})
+
 const FIXTURES: readonly { label: string; evidence: Evidence; expect: Verdict }[] = [
   {
     label: 'an intent naming the touched package satisfies the gate',
@@ -135,12 +225,18 @@ const FIXTURES: readonly { label: string; evidence: Evidence; expect: Verdict }[
       changedFiles: ['packages/published/src/a.ts'],
       members: MEMBERS,
       changesets: ['---\n"@scope/published": patch\n---\n'],
+      manifestChanges: {},
     },
     expect: { touched: ['@scope/published'], missingIntent: [] },
   },
   {
     label: 'no changeset at all leaves the touched package unnamed',
-    evidence: { changedFiles: ['packages/published/src/a.ts'], members: MEMBERS, changesets: [] },
+    evidence: {
+      changedFiles: ['packages/published/src/a.ts'],
+      members: MEMBERS,
+      changesets: [],
+      manifestChanges: {},
+    },
     expect: { touched: ['@scope/published'], missingIntent: ['@scope/published'] },
   },
   {
@@ -149,23 +245,29 @@ const FIXTURES: readonly { label: string; evidence: Evidence; expect: Verdict }[
       changedFiles: ['packages/published/src/a.ts'],
       members: MEMBERS,
       changesets: ['---\n"@scope/other": patch\n---\n'],
+      manifestChanges: {},
     },
     expect: { touched: ['@scope/published'], missingIntent: ['@scope/published'] },
   },
   {
     label: 'a package that cannot release is never demanded',
-    evidence: { changedFiles: ['packages/private/src/a.ts'], members: MEMBERS, changesets: [] },
+    evidence: {
+      changedFiles: ['packages/private/src/a.ts'],
+      members: MEMBERS,
+      changesets: [],
+      manifestChanges: {},
+    },
     expect: { touched: [], missingIntent: [] },
   },
   {
     label: 'a publishable package outside packages/ is demanded',
-    evidence: { changedFiles: ['omp/plugins/plugin/src/a.ts'], members: MEMBERS, changesets: [] },
+    evidence: {
+      changedFiles: ['omp/plugins/plugin/src/a.ts'],
+      members: MEMBERS,
+      changesets: [],
+      manifestChanges: {},
+    },
     expect: { touched: ['@scope/plugin'], missingIntent: ['@scope/plugin'] },
-  },
-  {
-    label: 'a manifest touch counts as touching its own package',
-    evidence: { changedFiles: ['packages/published/package.json'], members: MEMBERS, changesets: [] },
-    expect: { touched: ['@scope/published'], missingIntent: ['@scope/published'] },
   },
   {
     label: 'a file outside every member belongs to no package',
@@ -173,6 +275,7 @@ const FIXTURES: readonly { label: string; evidence: Evidence; expect: Verdict }[
       changedFiles: ['README.md', 'scripts/guards/check-changeset.ts'],
       members: MEMBERS,
       changesets: [],
+      manifestChanges: {},
     },
     expect: { touched: [], missingIntent: [] },
   },
@@ -182,6 +285,7 @@ const FIXTURES: readonly { label: string; evidence: Evidence; expect: Verdict }[
       changedFiles: ['packages/published/src/a.ts'],
       members: MEMBERS,
       changesets: ['---\n"@scope/published": none\n---\n'],
+      manifestChanges: {},
     },
     expect: { touched: ['@scope/published'], missingIntent: [] },
   },
@@ -191,6 +295,7 @@ const FIXTURES: readonly { label: string; evidence: Evidence; expect: Verdict }[
       changedFiles: ['packages/published/src/a.ts'],
       members: MEMBERS,
       changesets: ['---\n"@scope/published-extra": patch\n---\n'],
+      manifestChanges: {},
     },
     expect: { touched: ['@scope/published'], missingIntent: ['@scope/published'] },
   },
@@ -200,8 +305,110 @@ const FIXTURES: readonly { label: string; evidence: Evidence; expect: Verdict }[
       changedFiles: ['packages/published/src/a.ts', 'omp/plugins/plugin/src/b.ts'],
       members: MEMBERS,
       changesets: ['---\n"@scope/published": minor\n---\n'],
+      manifestChanges: {},
     },
     expect: { touched: ['@scope/plugin', '@scope/published'], missingIntent: ['@scope/plugin'] },
+  },
+  {
+    label: 'dropping a dev-only script reaches no consumer',
+    evidence: {
+      changedFiles: [MANIFEST],
+      members: MEMBERS,
+      changesets: [],
+      manifestChanges: manifestEdit(
+        { name: '@scope/published', scripts: { build: 'tsdown', format: 'dprint fmt' } },
+        { name: '@scope/published', scripts: { build: 'tsdown' } },
+      ),
+    },
+    expect: { touched: [], missingIntent: [] },
+  },
+  {
+    label: 'adding an install hook reaches every consumer',
+    evidence: {
+      changedFiles: [MANIFEST],
+      members: MEMBERS,
+      changesets: [],
+      manifestChanges: manifestEdit(
+        { name: '@scope/published', scripts: { build: 'tsdown' } },
+        { name: '@scope/published', scripts: { build: 'tsdown', postinstall: 'node patch.mjs' } },
+      ),
+    },
+    expect: { touched: ['@scope/published'], missingIntent: ['@scope/published'] },
+  },
+  {
+    label: 'a dependency bump reaches consumers',
+    evidence: {
+      changedFiles: [MANIFEST],
+      members: MEMBERS,
+      changesets: [],
+      manifestChanges: manifestEdit(
+        { name: '@scope/published', dependencies: { effect: '^3.22.0' } },
+        { name: '@scope/published', dependencies: { effect: '^3.23.0' } },
+      ),
+    },
+    expect: { touched: ['@scope/published'], missingIntent: ['@scope/published'] },
+  },
+  {
+    label: 'a devDependency bump does not',
+    evidence: {
+      changedFiles: [MANIFEST],
+      members: MEMBERS,
+      changesets: [],
+      manifestChanges: manifestEdit(
+        { name: '@scope/published', devDependencies: { vitest: '^4.1.0' } },
+        { name: '@scope/published', devDependencies: { vitest: '^4.2.0' } },
+      ),
+    },
+    expect: { touched: [], missingIntent: [] },
+  },
+  {
+    label: 'an exports change reaches consumers',
+    evidence: {
+      changedFiles: [MANIFEST],
+      members: MEMBERS,
+      changesets: [],
+      manifestChanges: manifestEdit(
+        { name: '@scope/published', exports: { '.': './dist/index.js' } },
+        { name: '@scope/published', exports: { '.': './dist/index.js', './extra': './dist/extra.js' } },
+      ),
+    },
+    expect: { touched: ['@scope/published'], missingIntent: ['@scope/published'] },
+  },
+  {
+    label: 'an unrecognised field fails closed',
+    evidence: {
+      changedFiles: [MANIFEST],
+      members: MEMBERS,
+      changesets: [],
+      manifestChanges: manifestEdit(
+        { name: '@scope/published' },
+        { name: '@scope/published', sideEffects: false },
+      ),
+    },
+    expect: { touched: ['@scope/published'], missingIntent: ['@scope/published'] },
+  },
+  {
+    label: 'a new manifest fails closed',
+    evidence: {
+      changedFiles: [MANIFEST],
+      members: MEMBERS,
+      changesets: [],
+      manifestChanges: { [MANIFEST]: { before: null, after: { name: '@scope/published' } } },
+    },
+    expect: { touched: ['@scope/published'], missingIntent: ['@scope/published'] },
+  },
+  {
+    label: 'a source change beside an inert manifest edit still demands an intent',
+    evidence: {
+      changedFiles: [MANIFEST, 'packages/published/src/a.ts'],
+      members: MEMBERS,
+      changesets: [],
+      manifestChanges: manifestEdit(
+        { name: '@scope/published', scripts: { format: 'dprint fmt' } },
+        { name: '@scope/published', scripts: {} },
+      ),
+    },
+    expect: { touched: ['@scope/published'], missingIntent: ['@scope/published'] },
   },
 ]
 
