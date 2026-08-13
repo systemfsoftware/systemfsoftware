@@ -35,9 +35,6 @@
         "$TURBO_ROOT$/packages/tsconfig/tsc/**"
       ],
       "outputs": [],
-      "dependsOn": [
-        "^build"
-      ],
       "cache": true
     },
     "test": {
