@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Portable native-binary wrapper. Copy to bin/<tool> and set TOOL below.
+# The binary comes from this repo's flake, so the same committed script works
+# inside `nix develop`, under direnv, in CI, and on a bare shell that has nix.
+set -euo pipefail
+
+TOOL="dprint"
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SELF="$ROOT/bin/$TOOL"
+
+# 1. Already on PATH: nix develop, direnv, or CI's flake-built store path.
+while IFS= read -r candidate; do
+  [ "$candidate" = "$SELF" ] && continue
+  exec "$candidate" "$@"
+done < <(type -aP "$TOOL" || true)
+
+# 2. nix is here but the shell was never entered: build it from the flake.
+if command -v nix >/dev/null 2>&1; then
+  exec nix run --no-write-lock-file "$ROOT#$TOOL" -- "$@"
+fi
+
+echo "error: no $TOOL on PATH and no nix to build it from $ROOT/flake.nix" >&2
+echo "enter the dev shell (nix develop), or install nix — see CONTRIBUTING.md" >&2
+exit 1
