@@ -5,6 +5,7 @@ import * as OS from "node:os";
 import * as Path$2 from "node:path";
 import * as NodeUrl from "node:url";
 import * as readline from "node:readline";
+import { Workflow } from "@systemfsoftware/effect-cell-types";
 //#region ../../node_modules/.pnpm/effect@3.22.1/node_modules/effect/dist/esm/Function.js
 /**
 * Tests if a value is a `function`.
@@ -31064,7 +31065,7 @@ const extractMorphShape = (input, diskContent) => {
 	}))))), right([])).pipe(flatMap$9((hunks) => pairFromHunks(diskContent, hunks)))), orElse(() => left(new UnrecoverableError({ reason: `raw morph content (${contentKeys.join(", ")}) cannot be turned into a before/after pair` }))))), tag("None", () => right(new ContentlessDecision())), exhaustive);
 };
 const toolShapeOf = (name) => value({ name }).pipe(when({ name: "Edit" }, () => "edit"), when({ name: "Write" }, () => "write"), when({ name: "Create" }, () => "create"), when({ name: "Update" }, () => "multi"), when({ name: "MultiEdit" }, () => "multi"), orElse(() => "morph"));
-const extractPairs = (input) => value(toolShapeOf(input.command.toolName)).pipe(when("edit", () => extractEditShape(input.command.toolInput, input.diskContent)), when("write", () => extractWriteShape(input.command.toolInput, input.diskContent)), when("create", () => extractWriteShape(input.command.toolInput, input.diskContent)), when("multi", () => extractMultiShape(input.command.toolInput, input.diskContent)), when("morph", () => extractMorphShape(input.command.toolInput, input.diskContent)), exhaustive);
+const extractPairs = Workflow.make((input) => value(toolShapeOf(input.command.toolName)).pipe(when("edit", () => extractEditShape(input.command.toolInput, input.diskContent)), when("write", () => extractWriteShape(input.command.toolInput, input.diskContent)), when("create", () => extractWriteShape(input.command.toolInput, input.diskContent)), when("multi", () => extractMultiShape(input.command.toolInput, input.diskContent)), when("morph", () => extractMorphShape(input.command.toolInput, input.diskContent)), exhaustive));
 //#endregion
 //#region src/config-guard/verdict-command.schema.ts
 var DecideCommand = class extends TaggedClass()("DecideCommand", {
@@ -31318,20 +31319,20 @@ const unparseableJson = (reason) => new UnparseableJsonError({ reason });
 const configBasename = (path) => path.slice(Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\")) + 1);
 const isConfigTarget = (targetPath) => is(OxlintConfigBasename)(configBasename(targetPath));
 const isJsonObject = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
-const topLevelRules = (value$5) => value({ rules: value$5["rules"] }).pipe(when({ rules: void 0 }, () => right([])), when({ rules: isJsonObject }, ({ rules }) => right(Object.entries(rules))), orElse(() => left(unparseableJson("the config content is not a JSON object carrying a rules map"))));
+const topLevelRules = (value$4) => value({ rules: value$4["rules"] }).pipe(when({ rules: void 0 }, () => right([])), when({ rules: isJsonObject }, ({ rules }) => right(Object.entries(rules))), orElse(() => left(unparseableJson("the config content is not a JSON object carrying a rules map"))));
 const overrideEntryRules = (entry) => value({ entry }).pipe(when({ entry: isJsonObject }, ({ entry }) => value({ rules: entry["rules"] }).pipe(when({ rules: void 0 }, () => right(none$4())), when({ rules: isJsonObject }, ({ rules }) => right(some(Object.entries(rules)))), orElse(() => left(unparseableJson("an overrides entry carries a rules key that is not a JSON object"))))), orElse(() => right(none$4())));
-const overrideRules = (value$3) => value({ overrides: value$3["overrides"] }).pipe(when({ overrides: void 0 }, () => right([])), when({ overrides: isArray }, ({ overrides }) => overrides.reduce((acc, entry) => acc.pipe(flatMap$9((entries) => overrideEntryRules(entry).pipe(map$12((candidate) => match$9(candidate, {
+const overrideRules = (value$2) => value({ overrides: value$2["overrides"] }).pipe(when({ overrides: void 0 }, () => right([])), when({ overrides: isArray }, ({ overrides }) => overrides.reduce((acc, entry) => acc.pipe(flatMap$9((entries) => overrideEntryRules(entry).pipe(map$12((candidate) => match$9(candidate, {
 	onNone: () => entries,
 	onSome: (entryEntries) => [...entries, ...entryEntries]
 }))))), right([]))), orElse(() => left(unparseableJson("the config content carries an overrides key that is not an array"))));
-const rulesEntries = (value$4) => value({ value: value$4 }).pipe(when({ value: isJsonObject }, ({ value }) => zipWith$3(topLevelRules(value), overrideRules(value), (top, nested) => [...top, ...nested])), orElse(() => left(unparseableJson("the config content is not a JSON object carrying a rules map"))));
+const rulesEntries = (value$3) => value({ value: value$3 }).pipe(when({ value: isJsonObject }, ({ value }) => zipWith$3(topLevelRules(value), overrideRules(value), (top, nested) => [...top, ...nested])), orElse(() => left(unparseableJson("the config content is not a JSON object carrying a rules map"))));
 const parseRules = (side) => try_$2({
 	try: () => parse(side),
 	catch: () => unparseableJson("the config content is not valid JSON or JSONC")
 }).pipe(flatMap$9(rulesEntries));
 const isArray = (value) => Array.isArray(value);
 const isZeroSeverity = (value) => value === 0;
-const isOffSeverity = (value$2) => value({ value: value$2 }).pipe(when({ value: string }, ({ value }) => value === "off" || value === "allow"), when({ value: isZeroSeverity }, () => true), when({ value: isArray }, ({ value }) => value.length > 0 && isOffSeverity(value[0])), orElse(() => false));
+const isOffSeverity = (value$5) => value({ value: value$5 }).pipe(when({ value: string }, ({ value }) => value === "off" || value === "allow"), when({ value: isZeroSeverity }, () => true), when({ value: isArray }, ({ value }) => value.length > 0 && isOffSeverity(value[0])), orElse(() => false));
 const scanJsonPair = (pair) => zipWith$3(match$9(pair.oldSide, {
 	onNone: () => right([]),
 	onSome: parseRules
@@ -31372,7 +31373,7 @@ const decideOnConfig = (input) => match$7(input.extraction, {
 	onLeft: (error) => left(unrecognizedShape(error.reason)),
 	onRight: (extractable) => value(extractable).pipe(tag("Contentless", () => right(Allow)), tag("Pairs", ({ pairs }) => decidePairs(configBasename(input.targetPath).endsWith(".json"), pairs)), exhaustive)
 });
-const decide = (input) => isConfigTarget(input.targetPath) ? decideOnConfig(input) : right(Allow);
+const decide = Workflow.make((input) => isConfigTarget(input.targetPath) ? decideOnConfig(input) : right(Allow));
 //#endregion
 //#region src/config-guard/main.ts
 const decodeEdit = decodeUnknownEither(parseJson(HookPayloadToEditCommand));
