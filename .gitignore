@@ -18,7 +18,6 @@ repos/**/.gitignore
 repos/**/.codegraph/
 .repos
 .issues
-wiki
 research
 **/__pycache__/
 - Local per-clone hooks (machine-specific: qmd-mcp orphan cleanup, etc.)

@@ -128,7 +128,7 @@ Proof: running only `oxlint-config`'s own lint flipped `effect-memfs#lint` from 
 
 ### Fix 3 — a failing gate chained in front of turbo caches nothing
 
-An untracked `research/` scratch tree held unformatted files, so `pnpm format:check` (`dprint check`, `package.json:14`) failed on every run. The root script chains it ahead of lint — `"lint": "pnpm format:check && turbo ... lint"` (`package.json:10`) — so lint never reached turbo, and turbo does not cache a failed run. Adding `research` to `.gitignore:22` (matching the `wiki` entry already at `.gitignore:21`) fixed it, because dprint respects gitignore.
+An untracked `research/` scratch tree held unformatted files, so `pnpm format:check` (`dprint check`, `package.json:14`) failed on every run. The root script chains it ahead of lint — `"lint": "pnpm format:check && turbo ... lint"` (`package.json:10`) — so lint never reached turbo, and turbo does not cache a failed run. Adding `research` to `.gitignore:21` fixed it, because dprint respects gitignore.
 
 ### Fix 4 — hash source, never generated output (2026-08-10)
 

@@ -11,9 +11,10 @@ date: 2026-08-08
 
 **Product Contract preservation:** no upstream Product Contract existed. Authored fresh with
 `product_contract_source: ce-plan-bootstrap`. This plan is a SPECIFICATION only — it is not
-executed in the session that produced it (the charter was plan-only: research + wiki
-augmentation + this plan, no `packages/` changes). It is `implementation-ready` for a future
-execution pass.
+executed in the session that produced it (the charter was plan-only: research
+
+- this plan, no `packages/` changes). It is `implementation-ready` for a future
+  execution pass.
 
 ---
 
@@ -21,8 +22,8 @@ execution pass.
 
 A hyper-research run across six lint-plugin ecosystems (ESLint, typescript-eslint, oxlint,
 Biome, Stylelint, remark/unified) adjudicated five design questions — plugin scoping, rule
-count, single responsibility, re-export composability, incremental adoption — against this
-repo's wiki. The verdict: **the current architecture is mostly right; the shareable config that
+count, single responsibility, re-export composability, incremental adoption. The verdict:
+**the current architecture is mostly right; the shareable config that
 already does the composition work is under-exposed as the adoption surface, and the repo ships
 no escalating config tiers.**
 
@@ -48,8 +49,8 @@ The plan: **elevate the shareable config (`oxlint-config`) to the primary adopti
 with escalating tiers (`recommended` → `strict`), **keep `effect-dmmf` as an internal
 registration convenience** (one `jsPlugin` to register instead of thirteen, its recommended
 set spread by the config — exactly what it does today), keep granular per-cell packages for
-incremental opt-in, gate rule count on budgets (`N×p` and **runtime**, the latter a measured
-leg the wiki had not addressed), and confirm `error`+baseline severity. Five units; no cell
+incremental opt-in, gate rule count on budgets (`N×p` and measured **runtime**), and confirm
+`error`+baseline severity. Five units; no cell
 package is renamed or merged.
 
 ---
@@ -104,7 +105,7 @@ a consumer dials severity/scope without swapping packages. oxlint has the mechan
 
 ### What the research added (and did not contradict)
 
-**P4 — Rule count has a runtime leg the wiki had not addressed.** [[lint-rules-are-not-instructions]]
+**P4 — Rule count has a runtime leg the N×p analysis had not addressed.** [[lint-rules-are-not-instructions]]
 (`derived`) refuted "too many rules" as a _context_-cost argument; the real ceiling it named is
 `N×p` ([[aggregate-false-positive-budget]]). The research found a _fourth_, non-context cost:
 lint runtime scales with rule count × files scanned — ESLint RFC #104 measured 4m39s → 22s on
@@ -357,7 +358,7 @@ registration aggregator the config consumes, not a public adoption surface; its
 **Approach** — No code change to `effect-dmmf/src/index.ts` (it is already a correct inert,
 enumerated composite). The change is doctrinal: state, in the artifact a consumer reads, that
 the host does not read `configs` ([[composite-plugin-re-export]] A1), so a consumer takes the
-config tier, not the composite's `configs`. Cite the wiki ruling.
+config tier, not the composite's `configs`. Cite the ruling.
 
 **Verification** — review; the README names the host constraint and points at
 `oxlint-config`'s tiers as the adoption path.
@@ -379,10 +380,10 @@ rules are `off`, never `warn`.
 **Files**
 
 - `packages/oxlint-config/src/oxlint-config.strict.ts` (the tier where runtime-sensitive rules live)
-- a measurement note in `packages/oxlint-plugins/AGENTS.md` recording the runtime budget and the wiki ruling it rests on
+- a measurement note in `packages/oxlint-plugins/AGENTS.md` recording the runtime budget and the ruling it rests on
 
 **Approach** — Measure rule runtime on the repo's own tree (oxlint's timing surface, or a
-captured run under `raw/runs/` per the wiki's measurement convention). Gate any rule whose
+captured run under `raw/runs/` per the measurement convention). Gate any rule whose
 runtime is unjustified by its signal at `off` (not `warn`). Record the budget decision with a
 pointer to [[aggregate-false-positive-budget]] and [[lint-rule-count-runtime-cost]]. Introduce
 no fixed count ceiling (it would contradict [[lint-rules-are-not-instructions]]).
@@ -410,7 +411,7 @@ captured and dated; `pnpm check` green.
 
 ## Grounding — every decision names the ruling it rests on
 
-| Decision                                    | Ruling (wiki)                       | Band             | Relationship                 |
+| Decision                                    | Ruling                              | Band             | Relationship                 |
 | ------------------------------------------- | ----------------------------------- | ---------------- | ---------------------------- |
 | KTD1 scope by capability                    | [[package-by-feature-not-layer]]    | convention       | DIRECT                       |
 | KTD1 mint only for a distinct tuple         | [[conventions-ruled-without-cell]]  | axiom/convention | DIRECT                       |
@@ -429,7 +430,7 @@ captured and dated; `pnpm check` green.
 | KTD6 error+baseline, never warn             | [[warn-severity-is-dominated]]      | derived          | DIRECT                       |
 | KTD7 no new package / subtract first        | CONSTITUTION V.7                    | axiom            | DIRECT                       |
 
-**No claim rests on a ruling the wiki contradicts.** The two EXTENDS rulings
+**No claim rests on a ruling the research contradicts.** The two EXTENDS rulings
 ([[composite-plugin-re-export]], [[lint-rule-count-runtime-cost]]) were added by the research
 that produced this plan, grounded in captured primaries (oxlint `load.ts`; oxlint config docs;
 ESLint RFC #104) and derived from existing bedrock; all pass `deno task warrant` with zero
@@ -442,10 +443,10 @@ ordering) it is named as such; the one central architectural decision (KTD2) res
 ## Research provenance
 
 This plan rests on a hyper-research (light tier) report at
-`/tmp/oxlint-plugin-research/notes/final_report_oxlint-plugin-architecture.md` and the wiki
-ground artifact at `local://oxlint-plugin-research-ground.md`. Primary sources captured to
-`wiki/raw/`: oxlint `load.ts` (Plugin interface), oxlint config docs (the `extends` mechanism),
+`/tmp/oxlint-plugin-research/notes/final_report_oxlint-plugin-architecture.md` and the
+ground artifact at `local://oxlint-plugin-research-ground.md`. Primary sources captured:
+oxlint `load.ts` (Plugin interface), oxlint config docs (the `extends` mechanism),
 ESLint RFC #104 (runtime figure), the remark preset aggregate, the typescript-eslint shared-configs
 tiers, and a registry census of 41 `oxlint-plugin-*` packages (single-domain dominates; 1 composite,
 `oxlint-plugin-inhuman`). The one remaining uncaptured primary (Biome's all-or-nothing pole) is
-cited in the Q5 wiki page as a posit atom, primary identified.
+cited in the Q5 page as a posit atom, primary identified.
