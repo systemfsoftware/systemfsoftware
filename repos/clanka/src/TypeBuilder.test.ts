@@ -1,0 +1,509 @@
+/** @effect-diagnostics schemaNumber:off */
+import * as Schema from "effect/Schema"
+import { describe, expect, it } from "vitest"
+import * as TypeBuilder from "./TypeBuilder.ts"
+
+const lines = (...parts: ReadonlyArray<string>): string => parts.join("\n")
+
+const primitiveCases = [
+  ["string", Schema.String, "string"],
+  ["number", Schema.Number, "number"],
+  ["boolean", Schema.Boolean, "boolean"],
+  ["bigint", Schema.BigInt, "bigint"],
+  ["symbol", Schema.Symbol, "symbol"],
+  ["any", Schema.Any, "any"],
+  ["unknown", Schema.Unknown, "unknown"],
+  ["void", Schema.Void, "void"],
+  ["never", Schema.Never, "never"],
+  ["undefined", Schema.Undefined, "undefined"],
+  ["null", Schema.Null, "null"],
+  ["object", Schema.ObjectKeyword, "object"],
+] as const satisfies ReadonlyArray<
+  readonly [name: string, schema: Schema.Top, expected: string]
+>
+
+const literalCases = [
+  ["string literals", Schema.Literal("hello"), '"hello"'],
+  ["number literals", Schema.Literal(42), "42"],
+  ["boolean literals", Schema.Literal(true), "true"],
+  ["bigint literals", Schema.Literal(42n), "42n"],
+  ["negative zero literals", Schema.Literal(-0), "-0"],
+  ["negative number literals", Schema.Literal(-42), "-42"],
+  ["negative bigint literals", Schema.Literal(-42n), "-42n"],
+] as const satisfies ReadonlyArray<
+  readonly [name: string, schema: Schema.Top, expected: string]
+>
+
+describe("TypeBuilder", () => {
+  for (const [name, schema, expected] of primitiveCases) {
+    it(`renders ${name}`, () => {
+      expect(TypeBuilder.render(schema)).toBe(expected)
+    })
+  }
+
+  for (const [name, schema, expected] of literalCases) {
+    it(`renders ${name}`, () => {
+      expect(TypeBuilder.render(schema)).toBe(expected)
+    })
+  }
+
+  it("renders described unique symbols", () => {
+    expect(TypeBuilder.render(Schema.UniqueSymbol(Symbol("token")))).toBe(
+      'typeof Symbol.for("token")',
+    )
+  })
+
+  it("renders anonymous unique symbols", () => {
+    expect(TypeBuilder.render(Schema.UniqueSymbol(Symbol()))).toBe(
+      "unique symbol",
+    )
+  })
+
+  it("renders declarations with identifiers and type parameters", () => {
+    expect(
+      TypeBuilder.render(
+        Schema.Option(Schema.Number).annotate({ identifier: "Option" }),
+      ),
+    ).toBe("Option<number>")
+  })
+
+  it("falls back to unknown for declarations without identifiers", () => {
+    expect(TypeBuilder.render(Schema.URL)).toBe("unknown")
+  })
+
+  it("renders structs", () => {
+    expect(
+      TypeBuilder.render(
+        Schema.Struct({
+          name: Schema.String,
+          age: Schema.Number,
+        }),
+      ),
+    ).toBe(
+      lines(
+        "{",
+        "    readonly name: string;",
+        "    readonly age: number;",
+        "}",
+      ),
+    )
+  })
+
+  it("renders optional properties", () => {
+    expect(
+      TypeBuilder.render(
+        Schema.Struct({
+          nickname: Schema.optionalKey(Schema.String),
+        }),
+      ),
+    ).toBe(lines("{", "    readonly nickname?: string;", "}"))
+  })
+
+  it("renders mutable properties", () => {
+    expect(
+      TypeBuilder.render(
+        Schema.Struct({
+          count: Schema.mutableKey(Schema.Number),
+        }),
+      ),
+    ).toBe(lines("{", "    count: number;", "}"))
+  })
+
+  it("renders symbol property keys", () => {
+    const token = Symbol("token")
+
+    expect(
+      TypeBuilder.render(
+        Schema.Struct({
+          [token]: Schema.String,
+        }),
+      ),
+    ).toBe(lines("{", '    readonly [Symbol.for("token")]: string;', "}"))
+  })
+
+  it("renders records", () => {
+    expect(
+      TypeBuilder.render(Schema.Record(Schema.String, Schema.Number)),
+    ).toBe(lines("{", "    [x: string]: number;", "}"))
+  })
+
+  it("renders structs with rest records", () => {
+    expect(
+      TypeBuilder.render(
+        Schema.StructWithRest(Schema.Struct({ foo: Schema.Boolean }), [
+          Schema.Record(Schema.String, Schema.Boolean),
+        ]),
+      ),
+    ).toBe(
+      lines(
+        "{",
+        "    readonly foo: boolean;",
+        "    [x: string]: boolean;",
+        "}",
+      ),
+    )
+  })
+
+  it("renders nested object types", () => {
+    expect(
+      TypeBuilder.render(
+        Schema.Struct({
+          meta: Schema.Struct({
+            count: Schema.Number,
+          }),
+        }),
+      ),
+    ).toBe(
+      lines(
+        "{",
+        "    readonly meta: {",
+        "        readonly count: number;",
+        "    };",
+        "}",
+      ),
+    )
+  })
+
+  it("renders readonly arrays", () => {
+    expect(TypeBuilder.render(Schema.Array(Schema.String))).toBe(
+      "readonly string[]",
+    )
+  })
+
+  it("renders mutable arrays", () => {
+    expect(
+      TypeBuilder.render(Schema.mutable(Schema.Array(Schema.String))),
+    ).toBe("string[]")
+  })
+
+  it("parenthesizes union element arrays", () => {
+    expect(
+      TypeBuilder.render(
+        Schema.Array(Schema.Union([Schema.Number, Schema.Boolean])),
+      ),
+    ).toBe("readonly (number | boolean)[]")
+  })
+
+  it("parenthesizes nested readonly array element types", () => {
+    expect(TypeBuilder.render(Schema.Array(Schema.Array(Schema.String)))).toBe(
+      "readonly (readonly string[])[]",
+    )
+  })
+
+  it("parenthesizes nested readonly tuple element types", () => {
+    expect(
+      TypeBuilder.render(Schema.Array(Schema.Tuple([Schema.String]))),
+    ).toBe(lines("readonly (readonly [", "    string", "])[]"))
+  })
+
+  it("parenthesizes unique symbol array element types", () => {
+    expect(
+      TypeBuilder.render(Schema.Array(Schema.UniqueSymbol(Symbol()))),
+    ).toBe("readonly (unique symbol)[]")
+    expect(
+      TypeBuilder.render(Schema.Array(Schema.UniqueSymbol(Symbol("token")))),
+    ).toBe('readonly (typeof Symbol.for("token"))[]')
+  })
+
+  it("renders readonly tuples", () => {
+    expect(
+      TypeBuilder.render(Schema.Tuple([Schema.String, Schema.Number])),
+    ).toBe(lines("readonly [", "    string,", "    number", "]"))
+  })
+
+  it("renders mutable tuples", () => {
+    expect(
+      TypeBuilder.render(
+        Schema.mutable(Schema.Tuple([Schema.String, Schema.Number])),
+      ),
+    ).toBe(lines("[", "    string,", "    number", "]"))
+  })
+
+  it("renders optional tuple elements", () => {
+    expect(
+      TypeBuilder.render(
+        Schema.Tuple([Schema.String, Schema.optional(Schema.Number)]),
+      ),
+    ).toBe(lines("readonly [", "    string,", "    number?", "]"))
+  })
+
+  it("renders tuples with rest elements", () => {
+    expect(
+      TypeBuilder.render(
+        Schema.TupleWithRest(Schema.Tuple([Schema.String]), [
+          Schema.Number,
+          Schema.Boolean,
+        ]),
+      ),
+    ).toBe(
+      lines(
+        "readonly [",
+        "    string,",
+        "    ...number[],",
+        "    boolean",
+        "]",
+      ),
+    )
+  })
+
+  it("renders unions", () => {
+    expect(
+      TypeBuilder.render(Schema.Union([Schema.String, Schema.Number])),
+    ).toBe("string | number")
+  })
+
+  it("renders empty unions as never", () => {
+    expect(TypeBuilder.render(Schema.Union([]))).toBe("never")
+  })
+
+  it("renders single-member unions without separators", () => {
+    expect(TypeBuilder.render(Schema.Union([Schema.String]))).toBe("string")
+  })
+
+  it("renders literal unions", () => {
+    expect(TypeBuilder.render(Schema.Literals(["a", "b"]))).toBe('"a" | "b"')
+  })
+
+  it("renders enums as unions of member values", () => {
+    expect(
+      TypeBuilder.render(
+        Schema.Enum({
+          Apple: "apple",
+          Banana: "banana",
+        }),
+      ),
+    ).toBe('"apple" | "banana"')
+  })
+
+  it("renders numeric enums as literal unions", () => {
+    expect(
+      TypeBuilder.render(
+        Schema.Enum({
+          Ok: 200,
+          NotFound: 404,
+        }),
+      ),
+    ).toBe("200 | 404")
+  })
+
+  it("renders numeric enum reverse mappings as literal unions", () => {
+    expect(
+      TypeBuilder.render(
+        Schema.Enum({
+          200: "Ok",
+          404: "NotFound",
+          Ok: 200,
+          NotFound: 404,
+        }),
+      ),
+    ).toBe("200 | 404")
+  })
+
+  it("renders template literals with interpolations", () => {
+    expect(
+      TypeBuilder.render(Schema.TemplateLiteral(["user_", Schema.String])),
+    ).toBe("`user_${string}`")
+  })
+
+  it("renders template literals that start with interpolations", () => {
+    expect(
+      TypeBuilder.render(Schema.TemplateLiteral([Schema.String, "_suffix"])),
+    ).toBe("`${string}_suffix`")
+  })
+
+  it("renders all-literal template literals as string literals", () => {
+    expect(
+      TypeBuilder.render(Schema.TemplateLiteral(["user_", 42n, "_", 7])),
+    ).toBe('"user_42_7"')
+  })
+
+  it("flattens nested template literals", () => {
+    expect(
+      TypeBuilder.render(
+        Schema.TemplateLiteral([
+          "a",
+          Schema.TemplateLiteral(["b", Schema.Number]),
+          "c",
+        ]),
+      ),
+    ).toBe("`ab${number}c`")
+  })
+
+  it("renders unions inside template literal interpolations", () => {
+    expect(
+      TypeBuilder.render(
+        Schema.TemplateLiteral([
+          Schema.String,
+          Schema.Union([Schema.Literal("-"), Schema.Literal("_")]),
+          Schema.Number,
+        ]),
+      ),
+    ).toBe('`${string}${"-" | "_"}${number}`')
+  })
+
+  it("renders optional tuple elements with union members", () => {
+    expect(
+      TypeBuilder.render(
+        Schema.Tuple([
+          Schema.String,
+          Schema.optional(Schema.Union([Schema.Number, Schema.Boolean])),
+        ]),
+      ),
+    ).toBe(lines("readonly [", "    string,", "    (number | boolean)?", "]"))
+  })
+
+  it("renders tuples with composite rest element types", () => {
+    expect(
+      TypeBuilder.render(
+        Schema.TupleWithRest(Schema.Tuple([Schema.String]), [
+          Schema.Union([Schema.Number, Schema.Boolean]),
+          Schema.Boolean,
+        ]),
+      ),
+    ).toBe(
+      lines(
+        "readonly [",
+        "    string,",
+        "    ...(number | boolean)[],",
+        "    boolean",
+        "]",
+      ),
+    )
+  })
+
+  it("renders recursive suspends using identifier annotations", () => {
+    type Category = {
+      readonly child?: Category
+    }
+
+    const Category: Schema.Schema<Category> = Schema.suspend(
+      (): Schema.Schema<Category> =>
+        Schema.Struct({
+          child: Schema.optionalKey(Category),
+        }).annotate({ identifier: "Category" }),
+    )
+
+    expect(TypeBuilder.render(Category)).toBe(
+      lines("{", "    readonly child?: Category;", "}"),
+    )
+  })
+
+  it("renders recursive arrays using identifier annotations", () => {
+    type Category = {
+      readonly children: ReadonlyArray<Category>
+    }
+
+    const Category: Schema.Schema<Category> = Schema.suspend(
+      (): Schema.Schema<Category> =>
+        Schema.Struct({
+          children: Schema.Array(Category),
+        }).annotate({ identifier: "Category" }),
+    )
+
+    expect(TypeBuilder.render(Category)).toBe(
+      lines("{", "    readonly children: readonly Category[];", "}"),
+    )
+  })
+
+  it("renders transformed schemas from the decoded side", () => {
+    expect(TypeBuilder.render(Schema.NumberFromString)).toBe("number")
+  })
+
+  it("ignores brand annotations", () => {
+    expect(TypeBuilder.render(Schema.String.pipe(Schema.brand("UserId")))).toBe(
+      "string",
+    )
+  })
+
+  it("renders documented fields", () => {
+    expect(
+      TypeBuilder.render(
+        Schema.Struct({
+          token: Schema.String.annotate({ documentation: "Primary token" }),
+        }),
+      ),
+    ).toBe(
+      lines(
+        "{",
+        "    /** Primary token */",
+        "    readonly token: string;",
+        "}",
+      ),
+    )
+  })
+
+  it("renders documented primitive schemas at the top level", () => {
+    expect(
+      TypeBuilder.render(
+        Schema.String.annotate({ documentation: "Primary token" }),
+      ),
+    ).toBe(lines("/** Primary token */", "string"))
+  })
+
+  it("renders documented object schemas at the top level", () => {
+    expect(
+      TypeBuilder.render(
+        Schema.Struct({
+          token: Schema.String,
+        }).annotate({ documentation: "Token payload" }),
+      ),
+    ).toBe(
+      lines("/** Token payload */", "{", "    readonly token: string;", "}"),
+    )
+  })
+
+  it("renders documented array schemas at the top level", () => {
+    expect(
+      TypeBuilder.render(
+        Schema.Array(Schema.String).annotate({ documentation: "Token list" }),
+      ),
+    ).toBe(lines("/** Token list */", "readonly string[]"))
+  })
+
+  it("renders documented recursive schemas at the top level", () => {
+    type Category = {
+      readonly child?: Category
+    }
+
+    const Category: Schema.Schema<Category> = Schema.suspend(
+      (): Schema.Schema<Category> =>
+        Schema.Struct({
+          child: Schema.optionalKey(Category),
+        }).annotate({
+          documentation: "Recursive category",
+          identifier: "Category",
+        }),
+    )
+
+    expect(TypeBuilder.render(Category)).toBe(
+      lines(
+        "/** Recursive category */",
+        "{",
+        "    readonly child?: Category;",
+        "}",
+      ),
+    )
+  })
+
+  it("supports custom new lines", () => {
+    expect(
+      TypeBuilder.render(
+        Schema.Struct({
+          token: Schema.String,
+        }),
+        { newLine: "\r\n" },
+      ),
+    ).toBe("{\r\n    readonly token: string;\r\n}")
+  })
+
+  it("supports omitting trailing semicolons", () => {
+    expect(
+      TypeBuilder.render(
+        Schema.Struct({
+          token: Schema.String,
+        }),
+        { omitTrailingSemicolon: true },
+      ),
+    ).toBe(lines("{", "    readonly token: string", "}"))
+  })
+})

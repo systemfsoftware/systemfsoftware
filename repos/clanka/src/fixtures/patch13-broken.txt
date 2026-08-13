@@ -1,0 +1,149 @@
+await applyPatch(`*** Begin Patch
+*** Update File: src/AgentTools.ts
+@@
+ import * as ExaSearch from "./ExaSearch.ts"
+ import * as WebToMarkdown from "./WebToMarkdown.ts"
+-import type * as HttpClient from "effect/unstable/http/HttpClient"
++import * as HttpClient from "effect/unstable/http/HttpClient"
+@@
+   Tool.make("fetchMarkdown", {
+     description: "Fetch a web page and convert it to markdown.",
+     parameters: Schema.String.annotate({
+       identifier: "url",
+     }),
+     success: Schema.String,
+   }),
++  Tool.make("fetchJson", {
++    description: "Fetch a URL and parse the response body as JSON.",
++    parameters: Schema.String.annotate({
++      identifier: "url",
++    }),
++    success: Schema.Unknown,
++  }),
+   Tool.make("sleep", {
+     description: "Sleep for a specified number of milliseconds",
+     parameters: Schema.Finite.annotate({
+       identifier: "ms",
+     }),
+@@
+     const pathService = yield* Path.Path
+     const webSearch = yield* ExaSearch.ExaSearch
+     const fetchMarkdown = yield* WebToMarkdown.WebToMarkdown
++    const httpClient = (yield* HttpClient.HttpClient).pipe(
++      HttpClient.followRedirects(),
++      HttpClient.filterStatusOk,
++      HttpClient.retryTransient({
++        times: 3,
++      }),
++    )
+@@
+       fetchMarkdown: Effect.fn("AgentTools.fetchMarkdown")(function* (url) {
+         yield* Effect.logInfo(`Calling "fetchMarkdown"`).pipe(
+           Effect.annotateLogs({ url }),
+         )
+         return yield* fetchMarkdown.convertUrl(url)
+       }, Effect.orDie),
++      fetchJson: Effect.fn("AgentTools.fetchJson")(function* (url) {
++        yield* Effect.logInfo(`Calling "fetchJson"`).pipe(
++          Effect.annotateLogs({ url }),
++        )
++        const response = yield* httpClient.get(url)
++        return yield* response.json
++      }, Effect.orDie),
+       sleep: Effect.fn("AgentTools.sleep")(function* (ms) {
+         yield* Effect.logInfo(`Calling "sleep" for ${ms}ms`)
+         return yield* Effect.sleep(ms)
+       }),
+*** Add File: src/AgentTools.test.ts
++import * as NodeServices from "@effect/platform-node/NodeServices"
++import { assert, describe, it } from "@effect/vitest"
++import * as Effect from "effect/Effect"
++import * as Stream from "effect/Stream"
++import * as Ref from "effect/Ref"
++import {
++  HttpClient,
++  type HttpClientRequest,
++  HttpClientResponse,
++} from "effect/unstable/http"
++import * as AgentTools from "./AgentTools.ts"
++import * as ToolkitRenderer from "./ToolkitRenderer.ts"
++
++describe("AgentTools", () => {
++  it.effect("renders fetchJson in the toolkit dts", () =>
++    Effect.gen(function* () {
++      const renderer = yield* ToolkitRenderer.ToolkitRenderer
++      const output = renderer.render(AgentTools.AgentTools)
++
++      assert.include(
++        output,
++        'declare function fetchJson(url: string): Promise<unknown>',
++      )
++    }).pipe(Effect.provide(ToolkitRenderer.ToolkitRenderer.layer)),
++  )
++
++  it.effect("fetchJson follows redirects and parses json", () =>
++    Effect.gen(function* () {
++      const requests = yield* Ref.make<Array<string>>([])
++      const client = HttpClient.make(
++        (request: HttpClientRequest.HttpClientRequest) =>
++          Effect.gen(function* () {
++            yield* Ref.update(requests, (current) => [...current, request.url])
++
++            if (request.url === "https://example.com/start") {
++              return HttpClientResponse.fromWeb(
++                request,
++                new Response(null, {
++                  status: 302,
++                  headers: { location: "/data" },
++                }),
++              )
++            }
++
++            if (request.url === "https://example.com/data") {
++              return HttpClientResponse.fromWeb(
++                request,
++                new Response('{"message":"hello","count":1}', {
++                  status: 200,
++                  headers: { "content-type": "application/json" },
++                }),
++              )
++            }
++
++            return HttpClientResponse.fromWeb(
++              request,
++              new Response("not found", { status: 404 }),
++            )
++          }),
++      )
++
++      const toolkit = yield* AgentTools.AgentTools.asEffect()
++      const stream = yield* toolkit.handle(
++        "fetchJson",
++        "https://example.com/start",
++      )
++      const results = Array.from(yield* Stream.runCollect(stream))
++      const seen = yield* Ref.get(requests)
++
++      assert.deepStrictEqual(seen, [
++        "https://example.com/start",
++        "https://example.com/data",
++      ])
++      assert.deepStrictEqual(results[0]?.result, {
++        message: "hello",
++        count: 1,
++      })
++    }).pipe(
++      Effect.provide(AgentTools.AgentToolHandlersTest),
++      Effect.provide(NodeServices.layer),
++      Effect.provideService(HttpClient.HttpClient, client),
++    ),
++  )
++})
+*** Add File: .changeset/warm-poets-share.md
++---
++"clanka": patch
++---
++
++Add a built-in `fetchJson` agent tool for fetching and parsing JSON responses.
+*** End Patch`);
+console.log('patch applied');

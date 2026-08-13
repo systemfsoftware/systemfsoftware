@@ -1,0 +1,13 @@
+/target/
+**/*.rs.bk
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+node_modules/
+.direnv/
+.opencode/
+.claude/
+.ralph-auto/
+.autopilot

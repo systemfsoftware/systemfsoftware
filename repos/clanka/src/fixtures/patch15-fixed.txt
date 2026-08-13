@@ -1,0 +1,72 @@
+const patch = `*** Begin Patch
+*** Update File: packages/effect/src/unstable/httpapi/HttpApiClient.ts
+@@
+-/**
+- * Creates a type-safe URL builder keyed by \`${'${method}'} ${'${path}'}\`.
++/**
++ * Creates a type-safe URL builder matching the shape of \`HttpApiClient\`.
+@@
+- * const buildUrl = HttpApiClient.urlBuilder<typeof Api>({
++ * const buildUrl = HttpApiClient.urlBuilder(Api, {
+  *   baseUrl: "https://api.example.com"
+  * })
+  *
+- * buildUrl("users", "GET /users/:id", {
++ * buildUrl.users.getUser({
+  *   params: { id: "123" }
+  * })
+  * //=> "https://api.example.com/users/123"
+  * \`\`\`
+  * @since 4.0.0
+  * @category constructors
+  */
+-export const urlBuilder = <Api extends HttpApi.Any>(options?: {
+-  readonly baseUrl?: URL | string | undefined
+-}): UrlBuilder<Api> => {
+-  return ((_: string, endpoint: string, request?: {
+-    readonly params?: Record<string, string | undefined> | undefined
+-    readonly query?: UrlParams.Input | undefined
+-  }) => {
+-    const path = endpoint.slice(endpoint.indexOf(" ") + 1)
+-    const withParams = request?.params === undefined ? path : compilePath(path)(request.params)
+-    const query = request?.query === undefined ? "" : UrlParams.toString(UrlParams.fromInput(request.query))
+-    const url = query === "" ? withParams : \`${'${withParams}'}?${'${query}'}\`
+-    return options?.baseUrl === undefined ? url : new URL(url, options.baseUrl.toString()).toString()
+-  }) as UrlBuilder<Api>
+-}
++export const urlBuilder = <ApiId extends string, Groups extends HttpApiGroup.Any>(
++  api: HttpApi.HttpApi<ApiId, Groups>,
++  options?: {
++    readonly baseUrl?: URL | string | undefined
++  }
++): UrlBuilder<HttpApi.HttpApi<ApiId, Groups>> => {
++  const client: Record<string, any> = {}
++  HttpApi.reflect(api, {
++    onGroup({ group }) {
++      if (group.topLevel) return
++      client[group.identifier] = {}
++    },
++    onEndpoint({ endpoint, group }) {
++      const makeUrl = compilePath(endpoint.path)
++      const encodeParams = UndefinedOr.map(endpoint.params, Schema.encodeSync)
++      const encodeQuery = UndefinedOr.map(endpoint.query, Schema.encodeSync)
++      const endpointFn = (request?: {
++        readonly params?: unknown
++        readonly query?: unknown
++      }) => {
++        const path = request?.params === undefined || encodeParams === undefined
++          ? endpoint.path
++          : makeUrl(encodeParams(request.params) as Record<string, string | undefined>)
++        const query = request?.query === undefined || encodeQuery === undefined
++          ? ""
++          : UrlParams.toString(UrlParams.fromInput(encodeQuery(request.query) as UrlParams.Input))
++        const url = query === "" ? path : \`${'${path}'}?${'${query}'}\`
++        return options?.baseUrl === undefined ? url : new URL(url, options.baseUrl.toString()).toString()
++      }
++      ;(group.topLevel ? client : client[group.identifier])[endpoint.name] = endpointFn
++    }
++  })
++  return client as any
++}
+*** End Patch`;
+console.log(await applyPatch(patch));

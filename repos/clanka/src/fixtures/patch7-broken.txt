@@ -1,0 +1,12 @@
+await updateTask({
+  taskId:'EFF-736',
+  state:'in-review',
+  description:`Implemented in PR #1805.
+
+Key discoveries for future work:
+- Root cause was in packages/effect/src/internal/effect.ts (cachedInvalidateWithTTL): expiry used a timestamp captured before running the effect (`now + ttlMillis`), so long-running effects could expire immediately after completion.
+- Cache module behavior in packages/effect/src/Cache.ts already bases TTL from completion time (expiry set in onExit using current clock), and cachedWithTTL should match this.
+- Regression test added in packages/effect/test/Effect.test.ts (`cachedWithTTL / starts ttl from value creation`) using TestClock: effect runtime (2s) > TTL (1s), verifies second call immediately after first completion reuses cached value.
+- Validation commands that passed: pnpm lint-fix, pnpm test packages/effect/test/Effect.test.ts, pnpm check:tsgo, pnpm docgen.`
+});
+console.log('task updated');

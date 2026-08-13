@@ -32,3 +32,18 @@ tag_prefix = "v"
 name = "oxc"
 url = "https://github.com/oxc-project/oxc"
 branch = "main"
+
+[[repos]]
+name = "cruster"
+url = "https://github.com/Effectful-Tech/cruster"
+tag_prefix = "v"
+
+[[repos]]
+name = "clanka"
+url = "https://github.com/Effectful-Tech/clanka"
+tag_prefix = "v"
+
+[[repos]]
+name = "effect-torch"
+url = "https://github.com/mikearnaldi/effect-torch"
+branch = "main"

@@ -1,0 +1,5 @@
+error[E0599]: no method named `internal` found for reference `&ProtectedEntityClient` in the current scope
+  --> tests/ui/protected_method_not_on_client.rs:19:20
+   |
+19 |     let _ = client.internal(id);
+   |                    ^^^^^^^^ method not found in `&ProtectedEntityClient`

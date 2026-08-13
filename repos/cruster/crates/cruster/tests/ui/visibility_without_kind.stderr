@@ -1,0 +1,5 @@
+error: visibility modifiers require #[rpc], #[workflow], #[activity], or #[method]
+  --> tests/ui/visibility_without_kind.rs:10:5
+   |
+10 |     async fn helper(&self) -> Result<(), cruster::error::ClusterError> {
+   |     ^^^^^
