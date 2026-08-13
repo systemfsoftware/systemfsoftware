@@ -40,7 +40,7 @@ const defaultRoot = join(repoRoot, '.github')
 const ALLOWED_THIRD_PARTY = new Map([
   [
     'denoland/setup-deno',
-    'Supplies the Deno runtime that scripts/guards/check-changeset.mjs and scripts/tools/tag-released-packages.mjs are written in. The runner image ships no Deno and there is no GitHub-owned equivalent.',
+    'Supplies the Deno runtime that scripts/guards/check-changeset.ts and scripts/tools/tag-released-packages.mjs are written in. The runner image ships no Deno and there is no GitHub-owned equivalent.',
   ],
 ])
 

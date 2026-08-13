@@ -17,5 +17,9 @@ jobs:
         with:
           fetch-depth: 0
       - uses: denoland/setup-deno@v2
+      # The gate's own fixtures first, so a broken gate fails as itself rather
+      # than as a verdict about the PR. No permissions: the selftest is pure.
+      - name: Changeset gate selftest
+        run: deno run scripts/guards/check-changeset.ts --selftest
       - name: Require a changeset for publishable-package changes
-        run: deno run --allow-run=git --allow-read scripts/guards/check-changeset.mjs ${{ github.base_ref }}
+        run: deno run --allow-run=git --allow-read scripts/guards/check-changeset.ts ${{ github.base_ref }}
