@@ -253,6 +253,14 @@
       "outputs": [],
       "cache": true
     },
+    "//#check:hooks": {
+      "inputs": [
+        "$TURBO_ROOT$/.claude/hooks/**",
+        "$TURBO_ROOT$/.claude/deno.jsonc"
+      ],
+      "outputs": [],
+      "cache": true
+    },
     "//#check:project-references": {
       "inputs": [
         "$TURBO_ROOT$/scripts/guards/check-project-references.mjs",
