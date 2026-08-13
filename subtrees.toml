@@ -42,3 +42,8 @@ tag_prefix = "v"
 name = "clanka"
 url = "https://github.com/Effectful-Tech/clanka"
 tag_prefix = "v"
+
+[[repos]]
+name = "effect-torch"
+url = "https://github.com/mikearnaldi/effect-torch"
+branch = "main"
