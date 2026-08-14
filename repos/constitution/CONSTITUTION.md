@@ -173,6 +173,18 @@ rules:
           write    persist · emit · respond                                  (impure)
       wrong: read → decide → read → decide — I/O interleaved; the filling turns impure
       edge: a later read that depends on an earlier decision — pre-fetch it, split into two sandwiches, or keep it openly in the shell; never fake a "pure core" around it
+  - id: CONST-B6
+    title: The Sandwich Order Is Carried by Types
+    gate: type-checker
+    do: express an outside interaction as one phase chain — each phase's return type carries the required member the next phase's parameter demands — so the order is a consequence of the types and the compiler decides it
+    dont:
+      - hand-sequence the phases and state their order beside them; an order asserted in prose is decided by nothing
+      - give the phases a hierarchy — where a later phase's type is assignable to an earlier phase's parameter, an inversion still compiles
+    harm: an order nothing decides permits every permutation while reading as a guarantee, so the interleaved read that turns the filling impure — the defect CONST-B3 names — reaches production with the rule green
+    check: type-checker — composing the phases in the wrong order omits the required member, so the compiler names the phase that must come first; the sentence survives into the published declaration as that member's own name, which is what carries it into a consumer's compiler
+    example:
+      wrong: "write(decide(read(raw))) — hand-sequenced; every permutation type-checks, so the order is a comment"
+      right: "read : Raw -> ReadDone, decode : ReadDone -> DecodeDone, decide : DecodeDone -> DecideDone — decode cannot receive what read has not produced"
   - id: CONST-B4
     title: Dependencies Point Inward
     gate: lint
