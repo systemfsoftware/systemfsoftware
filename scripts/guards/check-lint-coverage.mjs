@@ -27,6 +27,7 @@ const TOOLING = new Map([
   ...[
     'cell-imports',
     'cell-taxonomy',
+    'cell-vocabulary',
     'core',
     'effect-acl',
     'effect-adapter',

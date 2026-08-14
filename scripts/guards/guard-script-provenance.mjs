@@ -158,6 +158,10 @@ const MANIFEST = new Map([
     'local-tooling',
     'Worktrunk git-worktree lifecycle hooks, invoked by .config/wt.toml. Operator workflow.',
   ]],
+  ['tools/f2a-phase-probe.ts', [
+    'local-tooling',
+    'Applies and reverts one extra Cell phase inside packages/effect-cell-types/src/Cell.ts to re-measure which files a phase addition forces edits in. Wired into no chain; a reproducible experiment, never a gate.',
+  ]],
 ])
 
 const lineOf = (source, offset) => {
