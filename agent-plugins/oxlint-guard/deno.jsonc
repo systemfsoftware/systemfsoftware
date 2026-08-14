@@ -1,0 +1,20 @@
+{
+  "nodeModulesDir": "none",
+  "imports": {
+    "@std/assert": "jsr:@std/assert@1.0.19",
+    "@std/jsonc": "jsr:@std/jsonc@1.0.2",
+    "@std/path": "jsr:@std/path@1.1.6",
+  },
+  "tasks": {
+    "check": "deno check src/ && deno lint src/",
+    "test": "deno test src/",
+  },
+  "publish": {
+    "exclude": ["**"],
+  },
+  "lint": {
+    "rules": {
+      "tags": ["recommended"],
+    },
+  },
+}

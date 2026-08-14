@@ -81,6 +81,9 @@ catalogs:
     # through this catalog instead of `workspace:^`; see
     # docs/solutions/tooling-decisions/registry-consumption-of-self-hosted-forks.md
     "@systemfsoftware/arethetypeswrong-cli": ^1.1.1
+  effect-v4:
+    effect: ^4.0.0-rc.108
+    "@effect/vitest": ^4.0.0-rc.108
 minimumReleaseAge: 1440
 overrides:
   # platform-node and platform-node-shared take `@effect/cluster` as a peer
@@ -97,4 +100,3 @@ packages:
   - packages/effect-atom/*
   - omp/packages/*
   - omp/plugins/*
-  - claude-plugins/*

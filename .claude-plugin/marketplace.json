@@ -8,7 +8,7 @@
   "plugins": [
     {
       "name": "oxlint-guard",
-      "source": "./claude-plugins/oxlint-guard",
+      "source": "./agent-plugins/oxlint-guard",
       "description": "Lints every agent edit with oxlint and blocks edits that weaken the oxlint config",
       "category": "linting",
       "keywords": [

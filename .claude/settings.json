@@ -18,7 +18,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "command -v bun >/dev/null 2>&1 || { echo 'oxlint-config-off-guard: bun not found on PATH - install Bun (https://bun.sh) so the guard can run' >&2; exit 1; }; exec bun \"$CLAUDE_PROJECT_DIR/claude-plugins/oxlint-guard/dist/oxlint-config-off-guard.mjs\"",
+            "command": "command -v deno >/dev/null 2>&1 || { echo 'oxlint-config-off-guard: deno not found on PATH - install Deno (https://deno.land) so the guard can run' >&2; exit 1; }; exec deno run --quiet --allow-read \"$CLAUDE_PROJECT_DIR/agent-plugins/oxlint-guard/src/guard-config.ts\"",
             "timeout": 30
           },
           {
@@ -79,7 +79,7 @@
           },
           {
             "type": "command",
-            "command": "command -v bun >/dev/null 2>&1 || { echo 'oxlint-guard: bun not found on PATH - install Bun (https://bun.sh) so the guard can run' >&2; exit 1; }; exec bun \"$CLAUDE_PROJECT_DIR/claude-plugins/oxlint-guard/dist/oxlint-guard.mjs\"",
+            "command": "command -v deno >/dev/null 2>&1 || { echo 'oxlint-guard: deno not found on PATH - install Deno (https://deno.land) so the guard can run' >&2; exit 1; }; exec deno run --quiet --allow-read --allow-run --allow-env \"$CLAUDE_PROJECT_DIR/agent-plugins/oxlint-guard/src/guard-lint.ts\"",
             "timeout": 120
           }
         ]

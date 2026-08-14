@@ -1,0 +1,29 @@
+{
+  "description": "Lint every edited file with oxlint (PostToolUse) and block edits that turn an oxlint rule off (PreToolUse). Both hooks run on Deno with a scoped flag set: read + run + env, never net.",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|Update|MultiEdit|Create|morph_mcp_edit-file|morph_edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v deno >/dev/null 2>&1 || { echo 'oxlint-guard: deno not found on PATH - install Deno (https://deno.land) so the lint guard can run' >&2; exit 1; }; exec deno run --quiet --allow-read --allow-run --allow-env \"${CLAUDE_PLUGIN_ROOT}/src/guard-lint.ts\"",
+            "timeout": 120
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|Update|MultiEdit|Create|morph_mcp_edit-file|morph_edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v deno >/dev/null 2>&1 || { echo 'oxlint-guard: deno not found on PATH - install Deno (https://deno.land) so the config guard can run' >&2; exit 1; }; exec deno run --quiet --allow-read \"${CLAUDE_PLUGIN_ROOT}/src/guard-config.ts\"",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}
