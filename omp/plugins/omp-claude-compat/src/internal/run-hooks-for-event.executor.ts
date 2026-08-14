@@ -1,14 +1,17 @@
+import type { CommandExecutor } from '@effect/platform/CommandExecutor'
+import type { PlatformError } from '@effect/platform/Error'
+import { Cell } from '@systemfsoftware/effect-cell-types'
 import { matchesMatcher, matchesPermissionRule } from '@systemfsoftware/omp-utils'
-import { Context, Effect, Either, Match, Option, Schema as S, type Scope } from 'effect'
+import { Context, Effect, Either, Match, Option, pipe, Schema as S, type Scope } from 'effect'
 import { Blocked, Continue, Warning } from '../hook-dispatcher.schema.js'
-import type { HookOutcome } from '../hook-dispatcher.schema.js'
+import type { HookDecision, HookOutcome, HookResult } from '../hook-dispatcher.schema.js'
 import { analyzeSettings } from '../hook-settings.acl.js'
-import type { HookEntry } from '../hook-settings.acl.js'
-import { InterpretHookCommand, interpretHookResult } from '../hook-verdict.workflow.js'
+import type { CommandHook, HookEntry } from '../hook-settings.acl.js'
+import { type HookVerdictError, InterpretHookCommand, interpretHookResult } from '../hook-verdict.workflow.js'
 import type { HooksForEventResult } from './hook-feedback.kernel.js'
 import { asToolInput, EMPTY_TOOL_INPUT } from './hook-payload.kernel.js'
 import type { HookSession } from './hook-session.kernel.js'
-import { runHookScript } from './run-hook-script.executor.js'
+import { runHookScript, type RunHookScriptExecutorDeps } from './run-hook-script.executor.js'
 import { superviseFork } from './supervise-fork.executor.js'
 
 export class RunHooksForEventExecutorDeps extends Context.Tag('RunHooksForEventExecutorDeps')<
@@ -17,6 +20,30 @@ export class RunHooksForEventExecutorDeps extends Context.Tag('RunHooksForEventE
 >() {}
 
 const AGGREGATE_CEILING_MS = 26_000
+
+/**
+ * The per-hook verdict chain, in one bag so the phase order is carried by
+ * types: run the hook script (read), wrap the raw result for the workflow
+ * (decode), interpret it (decide), fold both channels into the outcome the
+ * site acts on (encode), and sequence the loop from that outcome (write).
+ * The workflow's `Left` — a malformed decision JSON — is folded into a
+ * `Warning` outcome by `encode`, so it reaches the write as a value, exactly
+ * where the hand-sequenced shell put it.
+ */
+interface HookVerdictPhases extends Cell.Phases {
+  readonly command: { readonly hook: CommandHook; readonly input: Record<string, unknown> }
+  readonly raw: HookResult
+  readonly decoded: InterpretHookCommand
+  readonly decision: HookDecision
+  readonly decisionError: HookVerdictError
+  readonly output: HookOutcome
+  readonly response: Option.Option<HooksForEventResult>
+  readonly decodeError: never
+  readonly readError: PlatformError
+  readonly writeError: never
+  readonly readContext: CommandExecutor | RunHookScriptExecutorDeps
+  readonly writeContext: never
+}
 const runHooksForEventUnbounded = Effect.fn('runHooksForEventUnbounded')(function*(
   entries: readonly HookEntry[],
   matchValue: string,
@@ -31,6 +58,51 @@ const runHooksForEventUnbounded = Effect.fn('runHooksForEventUnbounded')(functio
   // A matcher this event cannot evaluate must not behave as a match. U3 already
   // named the hook at session start, so this is a silent skip, not a report.
   const matcherUnreadable = analyzeSettings({ _tag: 'MatcherUnreadable', event }, S.Boolean)
+
+  /**
+   * The verdict chain, as a description applied per hook iteration. The read
+   * is the hook script run; `decode` wraps the raw result for the workflow;
+   * `interpretHookResult` is the decision; `encode` folds the decision's two
+   * channels into the outcome the site acts on; `write` sequences the loop —
+   * a block returns the terminal result, a continue accumulates state. The
+   * write's `currentInput` and `warning` are the same mutable loop state the
+   * shell updated, so each iteration's command carries the input the previous
+   * write produced.
+   */
+  const hookVerdictDescription = pipe(
+    Cell.read<HookVerdictPhases>(({ hook, input }) => runHookScript(hook, input, cwd, event)),
+    Cell.decode<HookVerdictPhases>((raw) => Either.right(new InterpretHookCommand({ result: raw, event }))),
+    Cell.decide<HookVerdictPhases>(interpretHookResult),
+    Cell.encode<HookVerdictPhases>((outcome) =>
+      Match.value(
+        Either.match(outcome, {
+          onLeft: (err) =>
+            new Warning({ message: `Hook exited 0 but produced invalid JSON: ${err.raw.slice(0, 200)}` }),
+          onRight: (d) => d,
+        }),
+      ).pipe(
+        Match.tag('Block', (d) => new Blocked({ reason: d.reason })),
+        Match.tag('Warning', (d) => new Continue({ warning: d.message })),
+        Match.tag('Allow', (d) => new Continue({ updatedInput: d.updatedInput })),
+        Match.exhaustive,
+      )
+    ),
+    Cell.write<HookVerdictPhases>((outcome) =>
+      Effect.sync(() =>
+        Match.value(outcome).pipe(
+          Match.tag('Blocked', (b) => Option.some({ block: true as const, reason: b.reason })),
+          Match.tag('Continue', (c) => {
+            if (c.warning !== undefined && warning === undefined) warning = c.warning
+            if (c.updatedInput !== undefined) {
+              currentInput = { ...currentInput, ...c.updatedInput }
+            }
+            return Option.none()
+          }),
+          Match.exhaustive,
+        )
+      )
+    ),
+  )
 
   for (const entry of entries) {
     if (matcherUnreadable && entry.matcher !== undefined) continue
@@ -51,40 +123,8 @@ const runHooksForEventUnbounded = Effect.fn('runHooksForEventUnbounded')(functio
         continue
       }
 
-      const result = yield* runHookScript(hook, currentInput, cwd, event)
-
-      const verdict = interpretHookResult(new InterpretHookCommand({ result, event }))
-      const decision = Either.match(verdict, {
-        onLeft: (err) =>
-          Match.value(err).pipe(
-            Match.tag('HookVerdictError', (e) =>
-              new Warning({ message: `Hook exited 0 but produced invalid JSON: ${e.raw.slice(0, 200)}` })),
-            Match.exhaustive,
-          ),
-        onRight: (d) => d,
-      })
-
-      const outcome: HookOutcome = Match.value(decision).pipe(
-        Match.tag('Block', (d) => new Blocked({ reason: d.reason })),
-        Match.tag('Warning', (d) => new Continue({ warning: d.message })),
-        Match.tag('Allow', (d) => new Continue({ updatedInput: d.updatedInput })),
-        Match.exhaustive,
-      )
-
-      // Sequence the loop from the outcome; arms perform the effects.
-      const hookExit: Option.Option<HooksForEventResult> = Match.value(outcome).pipe(
-        Match.tag('Blocked', (b) => Option.some({ block: true as const, reason: b.reason })),
-        Match.tag('Continue', (c) => {
-          if (c.warning !== undefined && warning === undefined) warning = c.warning
-          if (c.updatedInput !== undefined) {
-            currentInput = { ...currentInput, ...c.updatedInput }
-          }
-          return Option.none()
-        }),
-        Match.exhaustive,
-      )
-
-      if (Option.isSome(hookExit)) return hookExit.value
+      const exit = yield* Cell.apply(hookVerdictDescription, { hook, input: currentInput })
+      if (Option.isSome(exit)) return exit.value
     }
   }
 

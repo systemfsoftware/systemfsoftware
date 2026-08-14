@@ -4,6 +4,7 @@ import { resolve as resolvePath } from 'node:path'
 
 import * as ValidationError from '@effect/cli/ValidationError'
 import { noopLogger } from '@stryker-mutator/util'
+import { Cell } from '@systemfsoftware/effect-cell-types'
 import type { Mutant, PartialStrykerOptions, StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
 import { schema } from '@systemfsoftware/stryker-js-plugin-api/core'
 import * as Cause from 'effect/Cause'
@@ -12,6 +13,7 @@ import * as Effect from 'effect/Effect'
 import * as Either from 'effect/Either'
 import * as Exit from 'effect/Exit'
 import * as Fiber from 'effect/Fiber'
+import { pipe } from 'effect/Function'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Ref from 'effect/Ref'
@@ -48,7 +50,12 @@ import {
   sourceContentHash,
   survivorMutateSpans,
 } from './survivors.kernel.js'
-import { admitSurvivorsRun, SurvivorsRejection } from './survivors.workflow.js'
+import {
+  admitSurvivorsRun,
+  type AdmitSurvivorsRunInput,
+  type SurvivorsAdmission,
+  SurvivorsRejection,
+} from './survivors.workflow.js'
 
 /**
  * The mutation-testing entry the CLI calls once options are parsed. Injectable
@@ -169,9 +176,133 @@ function hostOptionsOf(mode: ResolvedMode, stream: RunEventStream): StrykerHostO
 }
 
 /**
+ * The context the admission phases carry beside the workflow's decision: the
+ * resolved options the write embeds and the prior report path the restricted
+ * run bookkeeps (KTD7).
+ */
+interface AdmissionRunContext {
+  readonly resolvedOptions: StrykerOptions
+  readonly priorReportPath: string
+}
+
+/** The admission workflow's input plus the run context the later phases need. */
+interface AdmissionDecoded extends AdmissionRunContext {
+  readonly input: AdmitSurvivorsRunInput
+}
+
+/** The admission decision plus the run context the write dispatches on. */
+interface AdmissionOutcome extends AdmissionRunContext {
+  readonly decision: SurvivorsAdmission
+}
+
+/**
+ * The phases of the survivors admission, in one bag so the chain's order is
+ * carried by types: resolve and read (config, prior report, source hashes),
+ * package the workflow input, call the admission workflow, shape nothing, and
+ * dispatch the outcome to the write. A rejection is the decide phase's
+ * `Left` — an outcome, not a fault — so it travels through `encode` into the
+ * write, which fails the run with it exactly where the hand-sequenced shell
+ * did.
+ */
+interface AdmissionPhases extends Cell.Phases {
+  readonly command: PartialStrykerOptions
+  readonly raw: {
+    readonly resolvedOptions: StrykerOptions
+    readonly priorReport: schema.MutationTestResult | undefined
+    readonly priorReportPath: string
+    readonly sourceContentHashes: Readonly<Record<string, string>>
+  }
+  readonly decoded: AdmissionDecoded
+  readonly decision: AdmissionOutcome
+  readonly decisionError: SurvivorsRejection
+  readonly output: Either.Either<AdmissionOutcome, SurvivorsRejection>
+  readonly response: unknown
+  readonly decodeError: never
+  readonly readError: never
+  readonly writeError: SurvivorsRejection
+  readonly readContext: never
+  readonly writeContext: never
+}
+
+/**
+ * The survivors admission, as a description whose phases chain by type and
+ * read in the order they run. The read gathers the admission's whole input
+ * product — resolved options, prior report and the current source hashes —
+ * across its interior; `decode` packages the workflow input; `admitSurvivorsRun`
+ * is the decide phase; `encode` is the identity because the write already
+ * consumes the whole outcome; the write dispatches the decision to the
+ * verdict/run and fails the run with a rejection, the same terminal behaviour
+ * as the shell it replaces.
+ */
+const survivorsAdmissionDescription = (
+  runMutationTest: StrykerRun,
+  stream: RunEventStream,
+  mode: ResolvedMode,
+): Cell.WriteDone<AdmissionPhases> =>
+  pipe(
+    Cell.read<AdmissionPhases>((cliOptions) =>
+      Effect.promise(() => resolveSurvivorsRunOptions(cliOptions)).pipe(
+        Effect.flatMap((resolvedOptions) =>
+          Effect.sync(() => {
+            const priorReportPath = priorReportPathOf(resolvedOptions)
+            const priorReport = readPriorReport(priorReportPath)
+            return {
+              resolvedOptions,
+              priorReport,
+              priorReportPath,
+              sourceContentHashes: sourceContentHashesOf(priorReport),
+            }
+          })
+        ),
+      )
+    ),
+    Cell.decode<AdmissionPhases>(({ resolvedOptions, priorReport, priorReportPath, sourceContentHashes }) =>
+      Either.right({
+        input: {
+          priorReport,
+          currentConfig: resolvedOptions,
+          frameworkVersion: strykerVersion,
+          sourceContentHashes,
+          hashContent,
+          resolveAbsolutePath,
+        },
+        resolvedOptions,
+        priorReportPath,
+      })
+    ),
+    Cell.decide<AdmissionPhases>(({ input, resolvedOptions, priorReportPath }) =>
+      Either.map(admitSurvivorsRun(input), (decision) => ({ decision, resolvedOptions, priorReportPath }))
+    ),
+    Cell.encode<AdmissionPhases>((outcome) => outcome),
+    Cell.write<AdmissionPhases>((outcome) =>
+      Either.match(outcome, {
+        onLeft: (rejection) => Effect.fail(rejection),
+        onRight: ({ decision, resolvedOptions, priorReportPath }) =>
+          Match.value(decision).pipe(
+            Match.tag('NoSurvivors', () => Effect.sync(() => emitEmptySurvivorsVerdict(stream, mode, resolvedOptions))),
+            Match.tag('Admitted', (admitted) => {
+              const restricted: SurvivorsRunOptions = {
+                ...resolvedOptions,
+                survivors: admitted.survivors,
+                mutate: survivorMutateSpans(admitted.survivors),
+                survivorsPriorReport: priorReportPath,
+                // The differ would otherwise reuse the prior run's survived
+                // verdicts.
+                incremental: false,
+              }
+              return Effect.promise(() => runMutationTest(restricted))
+            }),
+            Match.orElse(() => Effect.die('unreachable admission decision variant')),
+          ),
+      })
+    ),
+  )
+
+/**
  * The `--survivors` request: re-test exactly the prior report's survivor set.
  * The survivors flag was parsed as a boolean; the admission decides between
- * running the survivors and the plain pipeline.
+ * running the survivors and the plain pipeline. The chain's order is carried
+ * by the description's phases rather than by hand-sequenced statements.
  */
 function runSurvivorsAdmission(
   runMutationTest: StrykerRun,
@@ -179,39 +310,7 @@ function runSurvivorsAdmission(
   mode: ResolvedMode,
   cliOptions: PartialStrykerOptions,
 ): Effect.Effect<unknown, SurvivorsRejection, never> {
-  return Effect.gen(function*() {
-    const resolvedOptions = yield* Effect.promise(() => resolveSurvivorsRunOptions(cliOptions))
-    const priorReportPath = priorReportPathOf(resolvedOptions)
-    const priorReport = readPriorReport(priorReportPath)
-    const admission = admitSurvivorsRun({
-      priorReport,
-      currentConfig: resolvedOptions,
-      frameworkVersion: strykerVersion,
-      sourceContentHashes: sourceContentHashesOf(priorReport),
-      hashContent,
-      resolveAbsolutePath,
-    })
-    return yield* Either.match(admission, {
-      onLeft: (rejection) => Effect.fail(rejection),
-      onRight: (decision) =>
-        Match.value(decision).pipe(
-          Match.tag('NoSurvivors', () => Effect.sync(() => emitEmptySurvivorsVerdict(stream, mode, resolvedOptions))),
-          Match.tag('Admitted', (admitted) => {
-            const restricted: SurvivorsRunOptions = {
-              ...resolvedOptions,
-              survivors: admitted.survivors,
-              mutate: survivorMutateSpans(admitted.survivors),
-              survivorsPriorReport: priorReportPath,
-              // The differ would otherwise reuse the prior run's survived
-              // verdicts.
-              incremental: false,
-            }
-            return Effect.promise(() => runMutationTest(restricted))
-          }),
-          Match.orElse(() => Effect.die('unreachable admission decision variant')),
-        ),
-    })
-  })
+  return Cell.apply(survivorsAdmissionDescription(runMutationTest, stream, mode), cliOptions)
 }
 
 /**
