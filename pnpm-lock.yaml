@@ -388,6 +388,9 @@ importers:
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
         version: link:../../../packages/oxlint-config
+      '@systemfsoftware/oxlint-plugin-cell-vocabulary':
+        specifier: workspace:^
+        version: link:../../../packages/oxlint-plugins/cell-vocabulary
       '@systemfsoftware/stryker-js-mutation-run':
         specifier: workspace:^
         version: link:../../../packages/stryker-js/mutation-run
@@ -672,6 +675,71 @@ importers:
         specifier: 'catalog:'
         version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1)(vite@8.2.1(@types/node@24.13.2)(esbuild@0.27.7)(jiti@2.7.0)(yaml@2.9.0))
 
+  packages/effect-cell-gen:
+    dependencies:
+      '@systemfsoftware/effect-cell-types':
+        specifier: workspace:^
+        version: link:../effect-cell-types
+    devDependencies:
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 0.30.0(effect@3.22.1)(vitest@4.1.10)
+      '@microsoft/api-extractor':
+        specifier: 'catalog:'
+        version: 7.58.9(@types/node@24.13.2)
+      '@systemfsoftware/arethetypeswrong-cli':
+        specifier: catalog:attw
+        version: 1.1.1
+      '@systemfsoftware/oxlint-config':
+        specifier: workspace:^
+        version: link:../oxlint-config
+      '@systemfsoftware/tsconfig':
+        specifier: workspace:^
+        version: link:../tsconfig
+      '@systemfsoftware/vitest-config':
+        specifier: workspace:^
+        version: link:../vitest-config
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.2
+      effect:
+        specifier: 'catalog:'
+        version: 3.22.1
+      rimraf:
+        specifier: 'catalog:'
+        version: 6.1.3
+      tsdown:
+        specifier: 'catalog:'
+        version: 0.22.14(oxc-resolver@11.24.2)(typescript@7.0.2)(unrun@0.2.39)
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1)(vite@8.2.1(@types/node@24.13.2)(esbuild@0.27.7)(jiti@2.7.0)(yaml@2.9.0))
+
+  packages/effect-cell-type-tests:
+    dependencies:
+      '@systemfsoftware/effect-cell-types':
+        specifier: workspace:^
+        version: link:../effect-cell-types
+    devDependencies:
+      '@systemfsoftware/oxlint-config':
+        specifier: workspace:^
+        version: link:../oxlint-config
+      '@systemfsoftware/tsconfig':
+        specifier: workspace:^
+        version: link:../tsconfig
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.2
+      effect:
+        specifier: 'catalog:'
+        version: 3.22.1
+      tstyche:
+        specifier: 'catalog:'
+        version: 7.2.1(typescript@7.0.2)
+      tstyche-typescript:
+        specifier: npm:typescript@6.0.3
+        version: typescript@6.0.3
+
   packages/effect-cell-types:
     devDependencies:
       '@effect/vitest':
@@ -741,6 +809,9 @@ importers:
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
         version: link:../oxlint-config
+      '@systemfsoftware/oxlint-plugin-cell-vocabulary':
+        specifier: workspace:^
+        version: link:../oxlint-plugins/cell-vocabulary
       '@systemfsoftware/stryker-js-mutation-run':
         specifier: workspace:^
         version: link:../stryker-js/mutation-run
@@ -1208,6 +1279,64 @@ importers:
       '@oxlint/plugins':
         specifier: catalog:oxlint
         version: 1.77.0
+    devDependencies:
+      '@microsoft/api-extractor':
+        specifier: 'catalog:'
+        version: 7.58.9(@types/node@24.13.2)
+      '@systemfsoftware/arethetypeswrong-cli':
+        specifier: catalog:attw
+        version: 1.1.1
+      '@systemfsoftware/stryker-js-mutation-run':
+        specifier: workspace:^
+        version: link:../../stryker-js/mutation-run
+      '@systemfsoftware/stryker-js-typescript-checker':
+        specifier: workspace:^
+        version: link:../../stryker-js/typescript-checker
+      '@systemfsoftware/stryker-js-vitest-runner':
+        specifier: workspace:^
+        version: link:../../stryker-js/vitest-runner
+      '@systemfsoftware/tsconfig':
+        specifier: workspace:^
+        version: link:../../tsconfig
+      '@systemfsoftware/vitest-config':
+        specifier: workspace:^
+        version: link:../../vitest-config
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.2
+      '@vitest/coverage-v8':
+        specifier: 'catalog:'
+        version: 4.1.9(vitest@4.1.10)
+      effect:
+        specifier: 'catalog:'
+        version: 3.22.1
+      oxlint:
+        specifier: catalog:oxlint
+        version: 1.77.0(oxlint-tsgolint@0.24.0)
+      rimraf:
+        specifier: 'catalog:'
+        version: 6.1.3
+      tsdown:
+        specifier: 'catalog:'
+        version: 0.22.14(oxc-resolver@11.24.2)(typescript@7.0.2)(unrun@0.2.39)
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1)(vite@8.2.1(@types/node@24.13.2)(esbuild@0.27.7)(jiti@2.7.0)(yaml@2.9.0))
+
+  packages/oxlint-plugins/cell-vocabulary:
+    dependencies:
+      '@oxc-project/types':
+        specifier: ^0.140.0
+        version: 0.140.0
+      '@oxlint/plugins':
+        specifier: catalog:oxlint
+        version: 1.77.0
+      '@systemfsoftware/effect-cell-types':
+        specifier: workspace:^
+        version: link:../../effect-cell-types
     devDependencies:
       '@microsoft/api-extractor':
         specifier: 'catalog:'
@@ -2505,6 +2634,9 @@ importers:
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
         version: link:../../oxlint-config
+      '@systemfsoftware/oxlint-plugin-cell-vocabulary':
+        specifier: workspace:^
+        version: link:../../oxlint-plugins/cell-vocabulary
       '@systemfsoftware/oxlint-plugin-effect-entrypoint':
         specifier: workspace:^
         version: link:../../oxlint-plugins/effect-entrypoint

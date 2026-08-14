@@ -39,6 +39,7 @@
   "devDependencies": {
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-cell-vocabulary": "workspace:^",
     "@systemfsoftware/oxlint-plugin-effect-entrypoint": "workspace:^",
     "@systemfsoftware/oxlint-plugin-test-placement": "workspace:^",
     "@systemfsoftware/stryker-js-vitest-runner": "workspace:^",

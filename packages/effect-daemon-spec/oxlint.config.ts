@@ -1,10 +1,15 @@
 import base from '@systemfsoftware/oxlint-config/base'
+import cellVocabulary from '@systemfsoftware/oxlint-plugin-cell-vocabulary'
 import { defineConfig } from 'oxlint'
 
 export default defineConfig({
   extends: [base],
 
+  jsPlugins: [import.meta.resolve('@systemfsoftware/oxlint-plugin-cell-vocabulary')],
+
   rules: {
+    ...cellVocabulary.configs.recommended.rules,
+
     // ── Type Safety: largest anti-patterns ──
     'typescript/ban-ts-comment': 'error',
     'typescript/consistent-return': 'error',
