@@ -210,4 +210,144 @@ Feature('Keeping a piece of shared local state in sync across several parts of t
         }),
       ),
     )
+
+    scenario(
+      'A nested view into an item of a shared collection keeps the collection in sync while the item changes, and goes quiet once the item is removed',
+      Gherkin.Do.pipe(
+        Given('a shared collection of object items, with nested views into the first one, being watched by a listener')(
+          'ctx',
+          () =>
+            Effect.sync(() => {
+              const items = AtomRef.collection([
+                { name: 'ada', address: { city: 'london' } },
+                { name: 'grace', address: { city: 'paris' } },
+              ])
+              const firstName = items.value[0]!.prop('name')
+              const city = items.value[0]!.prop('address').prop('city')
+              let notifications = 0
+              const cancel = items.subscribe(() => {
+                notifications++
+              })
+              return { items, firstName, city, getNotifications: () => notifications, cancel }
+            }),
+        ),
+        When('the nested views change the first item, then that item is removed and changed again')(
+          'result',
+          (s) =>
+            Effect.sync(() => {
+              s.ctx.firstName.set('bob')
+              const afterFieldSet = { notifications: s.ctx.getNotifications(), city: s.ctx.city.value }
+              s.ctx.city.update((c) => c.toUpperCase())
+              const afterNestedUpdate = { notifications: s.ctx.getNotifications(), items: s.ctx.items.toArray() }
+              const removed = s.ctx.items.value[0]!
+              s.ctx.items.remove(removed)
+              removed.prop('name').set('zed')
+              const afterRemoval = { notifications: s.ctx.getNotifications(), items: s.ctx.items.toArray() }
+              s.ctx.cancel()
+              return { afterFieldSet, afterNestedUpdate, afterRemoval }
+            }),
+        ),
+        Then(
+          'the collection heard each change while the item was present, the nested views stayed in sync, and silence returned after the removal',
+        )((s) => {
+          expect(s.result.afterFieldSet.notifications).toBe(1)
+          expect(s.result.afterFieldSet.city).toBe('london')
+          expect(s.result.afterNestedUpdate.notifications).toBe(2)
+          expect(s.result.afterNestedUpdate.items).toEqual([
+            { name: 'bob', address: { city: 'LONDON' } },
+            { name: 'grace', address: { city: 'paris' } },
+          ])
+          expect(s.result.afterRemoval.notifications).toBe(3)
+          expect(s.result.afterRemoval.items).toEqual([{ name: 'grace', address: { city: 'paris' } }])
+        }),
+      ),
+    )
+
+    scenario(
+      'Setting a shared value to what it already holds leaves its listeners quiet',
+      Gherkin.Do.pipe(
+        Given('a shared value being watched by a listener')('ctx', () =>
+          Effect.sync(() => {
+            const value = AtomRef.make(5)
+            const heard: Array<number> = []
+            value.subscribe((v) => heard.push(v))
+            return { value, heard }
+          })),
+        When('the value is set to the number it already holds, then set to a different number')(
+          'result',
+          (s) =>
+            Effect.sync(() => {
+              const sameRef = s.ctx.value.set(5)
+              s.ctx.value.set(6)
+              return { heard: s.ctx.heard, sameRef, value: s.ctx.value }
+            }),
+        ),
+        Then('the listener only heard the real change, and setting the same value handed back the same reference')(
+          (s) => {
+            expect(s.result.heard).toEqual([6])
+            expect(s.result.sameRef).toBe(s.result.value)
+          },
+        ),
+      ),
+    )
+
+    scenario(
+      'A view into a field that appears later reflects the field once it exists, and keeps following it',
+      Gherkin.Do.pipe(
+        Given('a shared record that has no name yet, with a view into its name')('ctx', () =>
+          Effect.sync(() => {
+            const record = AtomRef.make<{ name?: string; other?: string }>({ other: 'x' })
+            const name = record.prop('name')
+            const heard: Array<string | undefined> = []
+            name.subscribe((v) => heard.push(v))
+            return { record, name, heard }
+          })),
+        When('the record is updated to add the name, then the name is read and changed')(
+          'result',
+          (s) =>
+            Effect.sync(() => {
+              s.ctx.record.update((r) => ({ ...r, name: 'ada' }))
+              const afterAppearing = s.ctx.name.value
+              s.ctx.record.update((r) => ({ ...r, name: 'bob' }))
+              return { heard: s.ctx.heard, afterAppearing, current: s.ctx.name.value }
+            }),
+        ),
+        Then('the view reported the name when it appeared and always reads the current name')((s) => {
+          expect(s.result.heard).toEqual(['ada', 'bob'])
+          expect(s.result.afterAppearing).toBe('ada')
+          expect(s.result.current).toBe('bob')
+        }),
+      ),
+    )
+
+    scenario(
+      'A view into one field of a shared record stays quiet while other fields change around it',
+      Gherkin.Do.pipe(
+        Given('a shared record with several fields, being watched through a view into one of them')(
+          'ctx',
+          () =>
+            Effect.sync(() => {
+              const record = AtomRef.make({ name: 'ada', other: 'x' })
+              const name = record.prop('name')
+              const heard: Array<string> = []
+              name.subscribe((v) => heard.push(v))
+              return { record, name, heard }
+            }),
+        ),
+        When('the record changes without touching the watched field, then changes the watched field')(
+          'result',
+          (s) =>
+            Effect.sync(() => {
+              s.ctx.record.set({ name: 'ada', other: 'y' })
+              const afterUnrelatedChange = [...s.ctx.heard]
+              s.ctx.record.set({ name: 'bob', other: 'y' })
+              return { afterUnrelatedChange, heard: s.ctx.heard }
+            }),
+        ),
+        Then('the view stayed quiet for the unrelated change and only reported the watched field changing')((s) => {
+          expect(s.result.afterUnrelatedChange).toEqual([])
+          expect(s.result.heard).toEqual(['bob'])
+        }),
+      ),
+    )
   })

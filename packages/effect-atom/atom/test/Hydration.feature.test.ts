@@ -152,4 +152,75 @@ Feature("Saving a page's values so a reloaded page starts with them already fill
         }),
       ),
     )
+
+    scenario(
+      'A still-loading value that is asked to reload while the page is saved still fills in automatically once it finishes',
+      Gherkin.Do.pipe(
+        Given('a page with a still-loading value, saved so a reloaded page receives it once it finishes')(
+          'ctx',
+          () =>
+            Effect.sync(() => {
+              const gate = Atom.make('loading')
+              const stillLoading = Atom.readable<Result.Result<number, never>>((get) =>
+                get(gate) === 'ready' ? Result.success(42) : Result.initial(true)
+              ).pipe(
+                Atom.serializable({
+                  key: 'k-refresh',
+                  schema: Result.Schema({ success: Schema.Number }),
+                }),
+              )
+              const savedPage = Registry.make()
+              savedPage.get(stillLoading)
+              const saved = Hydration.dehydrate(savedPage, { encodeInitialAs: 'deferred' })
+              const reloadedPage = Registry.make()
+              const applied = Hydration.hydrate(reloadedPage, saved)
+              return { savedPage, reloadedPage, stillLoading, gate, applied }
+            }),
+        ),
+        When(
+          'the still-loading value is asked to reload again, then it finishes, and the reloaded page is read before and after',
+        )(
+          'reading',
+          (s) =>
+            Effect.gen(function*() {
+              const beforeItFinishes = s.ctx.reloadedPage.get(s.ctx.stillLoading)
+              s.ctx.savedPage.refresh(s.ctx.stillLoading)
+              s.ctx.savedPage.set(s.ctx.gate, 'ready')
+              yield* Fiber.join(s.ctx.applied)
+              const afterItFinishes = s.ctx.reloadedPage.get(s.ctx.stillLoading)
+              return { beforeItFinishes, afterItFinishes }
+            }),
+        ),
+        Then('the reloaded page starts out loading and then fills in with the finished answer on its own')((s) => {
+          expect(Result.isInitial(s.reading.beforeItFinishes)).toBe(true)
+          expect(Result.isSuccess(s.reading.afterItFinishes) && s.reading.afterItFinishes.value === 42).toBe(true)
+        }),
+      ),
+    )
+
+    scenario(
+      'A value that is not marked for saving is left out of the saved state',
+      Gherkin.Do.pipe(
+        Given('a page holding both a saved value and a plain value')('ctx', () =>
+          Effect.sync(() => {
+            const savedValue = Atom.make(42).pipe(
+              Atom.serializable({
+                key: 'k-plain',
+                schema: Schema.Number,
+              }),
+            )
+            const plainValue = Atom.make('not saved')
+            const page = Registry.make()
+            page.get(savedValue)
+            page.get(plainValue)
+            return { page }
+          })),
+        When('the page is saved')('saved', (s) => Effect.sync(() => Hydration.dehydrate(s.ctx.page))),
+        Then('only the saved value is included')((s) => {
+          expect(s.saved).toHaveLength(1)
+          expect(s.saved[0]!.key).toBe('k-plain')
+          expect(s.saved[0]!.value).toBe(42)
+        }),
+      ),
+    )
   })
