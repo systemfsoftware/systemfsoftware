@@ -24,7 +24,7 @@ const error = (actual: string) =>
     messageId: 'ioInWorkflowArgument',
     data: {
       name: 'confirmOrder',
-      expected: 'a pure filling — every input already read and decoded before the decision',
+      expected: 'a workflow call whose arguments are names bound above it',
       actual,
       fix: 'hoist the read above the workflow call, bind it to a name, and pass that name into the command',
     },
@@ -183,7 +183,7 @@ const decision = Workflow.confirmOrder(new ConfirmOrderCommand({ row: findOrderR
           messageId: 'ioInWorkflowArgument',
           data: {
             name: 'Workflow',
-            expected: 'a pure filling — every input already read and decoded before the decision',
+            expected: 'a workflow call whose arguments are names bound above it',
             actual: IO_CALL,
             fix: 'hoist the read above the workflow call, bind it to a name, and pass that name into the command',
           },
