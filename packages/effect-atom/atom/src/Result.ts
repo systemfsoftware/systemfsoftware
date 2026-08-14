@@ -525,7 +525,7 @@ export const map: {
  */
 export const flatMap: {
   <A, E, B, E2>(
-    f: (a: A, prev: Success<A, E>) => Result<A, E2>,
+    f: (a: A, prev: Success<A, E>) => Result<B, E2>,
   ): (self: Result<A, E>) => Result<B, E | E2>
   <E, A, B, E2>(self: Result<A, E>, f: (a: A, prev: Success<A, E>) => Result<B, E2>): Result<B, E | E2>
 } = dual(
@@ -1100,7 +1100,7 @@ export const Schema = <
       // does not survive it. The schema's input space is therefore the
       // wire-representable subset: Fail of the error schema, or Die of a JSON
       // value.
-      toArbitrary: ([value, _cause]) => (fc) =>
+      toArbitrary: ([value]) => (fc) =>
         fc.oneof(
           fc.record({
             value: value.arbitrary,
@@ -1129,7 +1129,7 @@ export const Schema = <
           case 'Failure':
             return `Result.Failure(${cause(t.cause)}, ${t.waiting})`
           case 'Initial':
-            return `Result.Initial(${t.waiting}, ${t.waiting})`
+            return `Result.Initial(${t.waiting})`
         }
       },
     },
@@ -1139,3 +1139,20 @@ export const Schema = <
     error: error as E,
   })
 }
+
+/**
+ * A `Schema.ConstraintCodec` for `Result<unknown, unknown>` built from the
+ * given success and error schemas.
+ *
+ * @internal
+ */
+export const schemaCodec = (
+  success: Schema_.Top,
+  error: Schema_.Top,
+): Schema_.ConstraintCodec<Result<unknown, unknown>, unknown> =>
+  Schema({ success, error }) as Schema_.ConstraintCodec<
+    Result<unknown, unknown>,
+    unknown,
+    any,
+    any
+  > as Schema_.ConstraintCodec<Result<unknown, unknown>, unknown>

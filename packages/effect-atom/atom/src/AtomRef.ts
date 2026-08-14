@@ -301,6 +301,8 @@ class PropRefImpl<A, K extends keyof A> implements AtomRef<A[K]> {
 }
 
 class CollectionImpl<A> extends ReadonlyRefImpl<Array<AtomRef<A>>> implements Collection<A> {
+  private readonly linked = new Set<AtomRef<A>>()
+
   constructor(items: Iterable<A>) {
     super([])
     for (const item of items) {
@@ -313,7 +315,7 @@ class CollectionImpl<A> extends ReadonlyRefImpl<Array<AtomRef<A>>> implements Co
     let proxy!: AtomRef<A>
     const notify = (value: A) => {
       ref.notify(value)
-      if (this.value.includes(proxy)) {
+      if (this.linked.has(proxy)) {
         this.notify(this.value)
       }
     }
@@ -325,6 +327,7 @@ class CollectionImpl<A> extends ReadonlyRefImpl<Array<AtomRef<A>>> implements Co
         return target[p as keyof AtomRef<A>]
       },
     })
+    this.linked.add(proxy)
     return proxy
   }
 
@@ -346,6 +349,7 @@ class CollectionImpl<A> extends ReadonlyRefImpl<Array<AtomRef<A>>> implements Co
     const index = this.value.indexOf(ref)
     if (index !== -1) {
       this.value.splice(index, 1)
+      this.linked.delete(ref)
       this.notify(this.value)
     }
     return this

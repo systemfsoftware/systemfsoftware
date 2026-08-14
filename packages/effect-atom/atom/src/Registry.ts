@@ -165,10 +165,7 @@ export const layerOptions = (options?: {
     AtomRegistry,
     Effect.gen(function*() {
       const scope = yield* Effect.scope
-      const registry = make({
-        ...options,
-        scheduleTask: options?.scheduleTask,
-      })
+      const registry = make(options)
       yield* Scope.addFinalizer(scope, Effect.sync(() => registry.dispose()))
       return registry
     }),

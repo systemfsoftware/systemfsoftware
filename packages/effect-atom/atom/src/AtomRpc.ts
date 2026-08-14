@@ -214,16 +214,7 @@ export const Service = <Self>() =>
   ): Stream.Stream<unknown, unknown, never> =>
     (client as FlatCall<unknown>)(tag, payload, { headers }) as Stream.Stream<unknown, unknown, never>
 
-  const resultSchema = (
-    success: Schema.Top,
-    error: Schema.Top,
-  ): Schema.ConstraintCodec<AsyncResult.Result<unknown, unknown>, unknown> =>
-    AsyncResult.Schema({ success, error }) as Schema.ConstraintCodec<
-      AsyncResult.Result<unknown, unknown>,
-      unknown,
-      any,
-      any
-    > as Schema.ConstraintCodec<AsyncResult.Result<unknown, unknown>, unknown>
+  const resultSchema = AsyncResult.schemaCodec
 
   const mutationFamily = Atom.family(<Tag extends Rpc.Tag<Rpcs>>(tag: Tag) => {
     const rpc = getRpc(tag)

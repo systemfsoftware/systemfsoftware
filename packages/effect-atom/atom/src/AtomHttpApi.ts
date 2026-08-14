@@ -257,16 +257,7 @@ export const Service =
       },
     ): Effect.Effect<unknown, unknown, never> => (client as LooseClient)[group]![endpoint]!(request)
 
-    const resultSchema = (
-      success: Schema.Top,
-      error: Schema.Top,
-    ): Schema.ConstraintCodec<AsyncResult.Result<unknown, unknown>, unknown> =>
-      AsyncResult.Schema({ success, error }) as Schema.ConstraintCodec<
-        AsyncResult.Result<unknown, unknown>,
-        unknown,
-        any,
-        any
-      > as Schema.ConstraintCodec<AsyncResult.Result<unknown, unknown>, unknown>
+    const resultSchema = AsyncResult.schemaCodec
 
     const mutationFamily = Atom.family(({ endpoint, group, responseMode }: MutationKey) => {
       const fnAtom = runtime.fn<{

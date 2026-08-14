@@ -1,4 +1,4 @@
-import { describe, it } from '@effect/vitest'
+import { describe, expect, it } from '@effect/vitest'
 import { Cause, Equal, Hash, Option, Predicate, Result as EffectResult, Schema } from 'effect'
 import { FastCheck as fc } from 'effect/testing'
 import * as Result from '../src/Result.js'
@@ -412,6 +412,13 @@ describe('Result core laws', () => {
   it.prop('the wire codec roundtrips every state through its encoded form', [arbResult], ([result]) => {
     const codec = Schema.toCodecJson(resultSchema)
     return Equal.equals(Schema.decodeSync(codec)(Schema.encodeSync(codec)(result)), result)
+  })
+
+  it('formatting renders each state to its canonical string', () => {
+    const format = Schema.toFormatter(resultSchema)
+    expect(format(Result.initial(false))).toBe('Result.Initial(false)')
+    expect(format(Result.initial(true))).toBe('Result.Initial(true)')
+    expect(format(Result.success(1, { timestamp: 0 }))).toBe('Result.Success(1, false, 0)')
   })
 
   it.prop('formatting renders every state to a named string', [arbResult], ([result]) => {

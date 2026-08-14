@@ -306,10 +306,12 @@ function atomToPromise<A, E>(
     return promise
   }
   promise = new Promise<void>((resolve) => {
+    let settled = false
     const dispose = registry.subscribe(atom, (result) => {
-      if (result._tag === 'Initial' || (suspendOnWaiting && result.waiting)) {
+      if (settled || result._tag === 'Initial' || (suspendOnWaiting && result.waiting)) {
         return
       }
+      settled = true
       setTimeout(dispose, 1000)
       resolve()
       map.delete(atom)
@@ -396,9 +398,11 @@ export const useAtomSubscribe = <A>(
   options?: { readonly immediate?: boolean },
 ): void => {
   const registry = React.useContext(RegistryContext)
+  const fRef = React.useRef(f)
+  fRef.current = f
   React.useEffect(
-    () => registry.subscribe(atom, f, options),
-    [registry, atom, f, options?.immediate],
+    () => registry.subscribe(atom, (value) => fRef.current(value), options),
+    [registry, atom, options?.immediate],
   )
 }
 
