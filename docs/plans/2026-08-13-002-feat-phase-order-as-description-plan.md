@@ -421,19 +421,20 @@ The type-level contract lands and is proven before any call site migrates. A wro
 - **Test scenarios.** `Test expectation: none -- packaging change; proven by the gate tasks in the Verification Contract.`
 - **Verification.** `pnpm --filter @systemfsoftware/effect-cell-types api:check` and `attw` both pass, and `pnpm check:exports` stays green.
 
-### U10. Rewrite the leaf rules and scope the mutation gate
+### U10. Rewrite the leaf rules and name each surface's observer
 
-- **Goal.** The package's leaf doctrine describes what the package now is, and the mutation gate covers the pure cell alone.
+- **Goal.** The package's leaf doctrine describes what the package now is, and each surface in it names the observer that actually reads it.
 - **Requirements.** Supports R4. Instantiates KTD11.
 - **Dependencies.** U2.
-- **Files.** `packages/effect-cell-types/AGENTS.md` (modify), `packages/effect-cell-types/stryker.config.json` (create), `packages/effect-cell-types/package.json` (modify).
+- **Files.** `packages/effect-cell-types/AGENTS.md` (modify).
 - **Approach.**
-  1. Rewrite `CELL-T1` to describe a package carrying one pure decision and one shell, and state that the mutation gate covers the decision only.
-  2. Rewrite `CELL-T2` so the type observer stays mandatory for the type surface and is not replaced, while behavioural assertions are admitted for the pure cell and the interpreter.
-  3. Add the stryker config scoped to `phase-outcome.kernel.ts`, and update the leaf's Verification block to list the commands that now apply.
+  1. Rewrite `CELL-T1` to describe the package as a type surface plus one interpreter, and state why no mutation gate applies to it.
+  2. Rewrite `CELL-T2` so the type observer stays mandatory for the type surface and is not replaced, while composition assertions are admitted for the interpreter.
+  3. Update the leaf's Verification block to list the commands that now apply.
 - **Execution note.** Write the rules to describe the package as it is after `U2`, not to license the change retrospectively. A rule that reads as permission rather than description is the failure this unit exists to avoid.
-- **Test scenarios.** `Test expectation: none -- doctrine text plus a gate config; proven by the mutation and scope commands in the Verification Contract.`
-- **Verification.** `pnpm --filter @systemfsoftware/effect-cell-types mutation` reports 100% on the pure cell, and `pnpm check:mutate-scope` stays green with the new config present.
+- **Amended once.** The original unit created `stryker.config.json` scoped to `phase-outcome.kernel.ts` and edited `package.json` to add a mutation script. Both are withdrawn, for two independent reasons found by running the gate rather than reasoning about it. First, the file does not exist: `U2`'s own amendment carried the two `Left` rules in the phase types, so no pure cell was ever extracted, and `src/` holds four PascalCase contract modules. Second, the subject was forbidden by name — `scripts/guards/guard-mutate-scope.mjs` lists `kernel` in `FORBIDDEN` and flags any pattern naming a forbidden suffix, stating at its head that mutation observes `*.workflow.ts` and that enrolling a non-workflow cell is a wrong-observer error. So the config the plan asked for would have been rejected by the repo's own gate on the suffix alone. Manufacturing a mutable cell to give the gate a subject would be editing the surface that judges the work, which `CONST-E4` forbids; the corpus states the positive case as well — `wiki/entities/binder-discharged-as-type` A5 (`posit`) holds that a binder whose content is exhausted by its type contributes nothing a mutation tester could change. What is left in `Cell.ts` is a fold plus guards over states the types forbid, whose mutants die by crash. Recorded rather than skipped: gate 3 of the Verification Contract has no subject in this package.
+- **Test scenarios.** `Test expectation: none -- doctrine text; proven by the scope and test commands in the Verification Contract.`
+- **Verification.** `pnpm check:mutate-scope` stays green with no stryker config in this package, `pnpm --filter @systemfsoftware/effect-cell-types test` exits 0 with a description run end to end, and `pnpm exec dprint check` passes.
 
 ---
 
@@ -443,7 +444,7 @@ The type-level contract lands and is proven before any call site migrates. A wro
 - **Type-level contract.** `pnpm --filter @systemfsoftware/effect-cell-types test:types` exits 0, and every assertion added in `U3` was observed failing once with its expect-error directive removed. An assertion never seen red does not count as passing.
 - **Golden API report.** `api:update` is run and its output committed in `U9`; `api:check` then passes without a cached result standing in for a real one.
 - **Rule reach.** `pnpm check:lint-coverage` confirms the new rule reaches every package holding a migrated call site. A rule registered but not opted into by those packages has not been delivered.
-- **Mutation scope.** `pnpm check:mutate-scope` stays green with the new `stryker.config.json` present, and `pnpm --filter @systemfsoftware/effect-cell-types mutation` reports 100% on `phase-outcome.kernel.ts`. The properties must each kill a mutant nothing else kills; a property that restates the cell's dispatch fails this gate rather than passing it.
+- **Mutation scope.** `pnpm check:mutate-scope` stays green, and it stays green because `@systemfsoftware/effect-cell-types` ships no stryker config at all. **Amended once:** this gate originally required `mutation` to report 100% on `phase-outcome.kernel.ts`. That file was never created — `U2`'s amendment carried the two `Left` rules in the phase types instead — and `kernel` is listed in `FORBIDDEN` by `scripts/guards/guard-mutate-scope.mjs`, which rejects any mutate pattern naming a forbidden suffix. The gate therefore has no subject in this package, and the honest verdict is the absence of a config rather than a score over a manufactured one. `U10` carries the derivation.
 - **Release intent.** One `.changeset/` entry exists for `@systemfsoftware/effect-cell-types` at a minor bump, and one for the lint plugin.
 - **Pull request.** `gh pr checks --watch --fail-fast` exits 0. `no checks reported` immediately after create is the registration race — sleep and re-poll rather than re-pushing, since a re-push cancels the run being awaited.
 
@@ -470,4 +471,4 @@ The type-level contract lands and is proven before any call site migrates. A wro
 - `U7` — the rule reports closure-captured I/O in a pure phase body and stays silent on an impure one.
 - `U8` — both doctrine files state only what a channel decides.
 - `U9` — the golden report is regenerated and committed; `attw` and `api:check` pass.
-- `U10` — the leaf rules describe the package as it now is, and the mutation gate covers the pure cell alone.
+- `U10` — the leaf rules describe the package as it now is, each naming the observer that reads its surface, and the withdrawn mutation gate is recorded with the derivation rather than left as an unmet requirement.
