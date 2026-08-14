@@ -150,3 +150,67 @@ describe('the decision error is an outcome, not a fault', () => {
     expect<Cell.DecodePhase<Shape>>().type.toBe<(raw: Raw) => Either<Decoded, DecodeErr>>()
   })
 })
+
+// A bag whose `decode` cannot fail but whose `decide` refuses. This is the sharpest test of
+// the two `Left` rules: `Refusal` must be absent from the derived error channel, because a
+// decide Left travels forward as a value and is never yielded as a failure.
+interface Infallible extends Cell.Phases {
+  readonly command: Cmd
+  readonly raw: Raw
+  readonly decoded: Decoded
+  readonly decision: Decision
+  readonly decisionError: Refusal
+  readonly output: Output
+  readonly response: boolean
+  readonly decodeError: never
+  readonly readError: never
+  readonly writeError: never
+  readonly readContext: never
+  readonly writeContext: never
+}
+
+// A bag whose read and write each require a different service.
+interface Db {
+  readonly query: () => string
+}
+interface Bus {
+  readonly emit: (line: string) => void
+}
+interface Requiring extends Cell.Phases {
+  readonly command: Cmd
+  readonly raw: Raw
+  readonly decoded: Decoded
+  readonly decision: Decision
+  readonly decisionError: Refusal
+  readonly output: Output
+  readonly response: void
+  readonly decodeError: DecodeErr
+  readonly readError: never
+  readonly writeError: never
+  readonly readContext: Db
+  readonly writeContext: Bus
+}
+
+declare const infallible: Cell.WriteDone<Infallible>
+declare const requiring: Cell.WriteDone<Requiring>
+declare const plain: Cell.WriteDone<Shape>
+declare const command: Cmd
+
+describe('the channels the interpreter derives', () => {
+  it('Should_CarryDecodeFailure_When_DecodeCanFail', () => {
+    expect(Cell.apply(plain, command)).type.toBe<Effect<void, DecodeErr, never>>()
+  })
+
+  it('Should_OmitDecisionError_When_DecideReturnsAnErrorVariant', () => {
+    expect(Cell.apply(infallible, command)).type.toBe<Effect<boolean, never, never>>()
+  })
+
+  it('Should_UnionBothServices_When_ReadAndWriteEachRequireOne', () => {
+    expect(Cell.apply(requiring, command)).type.toBe<Effect<void, DecodeErr, Bus | Db>>()
+  })
+
+  it('Should_RequireAWrittenDescription_When_Applying', () => {
+    // @ts-expect-error: call write(output) before applying the description
+    Cell.apply(Cell.read(readPhase), command)
+  })
+})
