@@ -1,43 +1,90 @@
-# Contributing
+# Contributing to oh-my-pi
 
-## Setup
+Pull requests are welcome. Keep them focused, understand the work you submit,
+and be prepared to explain and maintain it.
 
-Requires Node 24+ and pnpm 11 (pinned via `packageManager`; `corepack enable` picks it up).
+> [!NOTE]
+> Pull requests are **temporarily open to everyone** as a trial. We previously
+> required a vouch before accepting PRs; that requirement is lifted for now
+> while we evaluate how open contributions go. Depending on the results, the
+> vouch system may return.
 
-```bash
-pnpm install
-pnpm build        # tsdown, dependency order
-pnpm typecheck    # tsc (TypeScript 7)
-pnpm test         # vitest — property + composition suites
-pnpm lint         # dprint check + self-hosted oxlint
-```
+## Before you start
 
-Read [`CONSTITUTION.md`](CONSTITUTION.md) (the design law) and [`AGENTS.md`](AGENTS.md) (workspace invariants) first.
+### Small changes
 
-## Commits
+Bug fixes, documentation updates, and narrowly scoped improvements can go
+straight to a pull request.
 
-[Conventional Commits](https://www.conventionalcommits.org), enforced by `commitlint` (commit-msg hook). The type drives the release; the scope is a package directory name (or `repo`/`deps`/`release`/`ci`) and is optional but encouraged:
+### Major changes
 
-```
-fix(rx-effect): handle empty observable
-feat(effect-daemon-spec): add jitter backoff
-```
+Discuss major features and broad architectural or behavioral changes in
+[Discord](https://discord.gg/4NMW9cdXZa) **before writing the implementation**.
+This includes new subsystems, large UI changes, new dependencies, and changes
+that span several packages. A GitHub issue is not a substitute for this
+discussion, and prior discussion does not guarantee that a pull request will be
+merged.
 
-## Releasing
+### Do not open an issue for work you are about to submit
 
-Releases are **driven by your commits** — [semantic-release](https://semantic-release.gitbook.io) reads the conventional-commit history, decides each package's next version, tags it, publishes to npm, and writes the GitHub release. No manual version files.
+If you intend to implement a change yourself, **do not create an issue for it
+first**. robomp treats actionable issues as work to pick up and may start the
+same fix in parallel, wasting compute and maintainer time.
 
-Each package is versioned **independently**. A small owned router (`scripts/release.mjs`) runs semantic-release once per published package, scoping each run to the commits that touched that package (`scripts/release-monorepo-filter.mjs`) and tagging as `<package>@vX.Y.Z`. No third-party monorepo-release dependency. The private tooling packages (`tsconfig`, `oxlint-config`, `vitest-config`) are skipped.
+Open an issue when you are reporting a problem or proposing work that you are
+not already turning into a pull request. If a relevant issue already exists,
+link it from your pull request instead of creating another one.
 
-On push to `main`, the **Release** workflow publishes every package that had a releasing commit. Preview locally with `pnpm release:dry`.
+## AI-assisted contributions
 
-### Publishing — OIDC trusted publishing, no token
+AI agents are welcome as tools, not as unattended contributors. Do not give an
+agent a vague goal and submit whatever it produces.
 
-The workflow authenticates to npm with **GitHub OIDC** (`id-token: write`) and publishes with `pnpm publish` on pnpm 11 — which natively does the OIDC handshake, strips the `workspace:` protocol, and emits provenance. There is **no `NPM_TOKEN`**.
+Before opening a pull request, you must:
 
-npm requires a package to exist before OIDC can be configured, so there's a one-time bootstrap per package:
+- constrain the agent to the agreed scope and reject unrelated changes;
+- review every changed file and understand the resulting behavior;
+- run the relevant checks and exercise the changed behavior yourself; and
+- submit the pull request only after that review, rather than letting an agent
+  publish it autonomously.
 
-1. **First publish with a token.** `npm login`, then `pnpm build && pnpm release` once from your machine.
-2. **Add the trusted publisher** at `npmjs.com/package/@systemfsoftware/<name>` → _Settings → Trusted Publisher → GitHub Actions_ — organization `systemfsoftware`, repository `systemfsoftware`, workflow `release.yml`. All packages point at the same workflow.
+You are responsible for the code, regardless of who or what generated it.
 
-After that, pushes to `main` publish automatically over OIDC with no secrets.
+## Pull request requirements
+
+Every pull request body **MUST include at least one sentence written by you, in
+your own words**, explaining what changed and why. A generated summary, pasted
+agent transcript, or checklist alone does not satisfy this requirement.
+
+One honest line is enough:
+
+> I reviewed the full diff; this change fixes duplicate PR reviews by reusing
+> the existing delivery guard.
+
+You **MUST verify that the change works as intended**. `bun check` and automated
+tests are expected where relevant, but they are not proof that the behavior
+works. Exercise the changed path yourself and report the exact scenario and
+result in the pull request:
+
+- for a bug fix, reproduce the bug and confirm the same reproduction no longer
+  fails;
+- for a feature, launch the product and use the feature end to end; and
+- for a UI change, interact with it and inspect the rendered result.
+
+“`bun check` passes” by itself is not sufficient verification. For coding-agent
+development commands and repository structure, see
+[`packages/coding-agent/DEVELOPMENT.md`](packages/coding-agent/DEVELOPMENT.md).
+
+Keep each pull request to one logical change. Avoid unrelated cleanup,
+drive-by refactors, generated noise, or features that were not part of the
+agreed scope.
+
+## Review
+
+Maintainers review the submitted behavior and the contributor's understanding
+of it—not the volume of generated code. Respond to review feedback yourself,
+and only apply suggestions you have checked.
+
+Pull requests may be closed when they skip required prior discussion, lack the
+human-written explanation, contain unreviewed agent output, or mix unrelated
+changes.

@@ -1,6 +1,0 @@
-export type { CorrespondingType, Disposable, Injectable, InjectionToken, Injector } from 'typed-inject'
-export * from './contexts.js'
-export * from './plugin-kind.js'
-export * from './plugins.js'
-export * from './scope.js'
-export * from './tokens.js'

@@ -1,6 +1,0 @@
-key: value
-map:
-  nested: 1
-  seq:
-    - a
-    - b

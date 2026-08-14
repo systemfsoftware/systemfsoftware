@@ -1,112 +1,298 @@
-# systemfsoftware — workspace invariants
+# Development Rules
 
-## Safety
+## Default Context
 
-```yaml
-- id: REPO-S5
-  title: NEVER put a shell cell in a mutation surface
-  do: mutate only pure decisions — `*.workflow.ts` in a cell package, the rule file in a lint plugin, `*.schema.ts` where generated laws do not already cover it
-  dont: add any shell-cell suffix (`*.executor.ts`, `*.kernel.ts`, `*.acl.ts`, `*.store.ts`, `*.handler.ts`, `*.middleware.ts`, `*.state.ts`, `*.adapter.ts`, `*.policy.ts`, `*.shape.ts`, `*.observer.ts`) to a `mutate` glob; leave `mutate` unset so the Stryker default sweeps every source file and auto-enrols each new cell
-  harm: wrong observer. The mutator asks "do the tests notice a changed decision?" — a shell cell decides nothing, so every mutant is equivalent or is killed by a composition test that was proving something else. The score certifies nothing and the package pays hours of runtime for it
-  check: `node scripts/guard-mutate-scope.mjs` exits 0, wired into `pnpm check:local`
+This repo contains multiple packages, but **`packages/coding-agent/`** is the primary focus. Unless otherwise specified, assume work refers to this package.
 
-- id: REPO-S6
-  title: Enforcement for a published concern ships inside the published artifact
-  do: carry the rule in a published oxlint plugin or a published type signature, with the failing fixture in that package's own suite; declare a genuinely repo-local rule (workspace layout, release metadata, vendored trees) in the `scripts/guard-script-provenance.mjs` manifest
-  dont: enforce a doctrine we publish with a `scripts/*.mjs` gate, a `pnpm check` step, `CONSTITUTION.md`, or the wiki — a consumer installs packages, not this repository; read a doctrine artifact from a script, which promotes prose to a spec nobody maintains
-  harm: the rule binds one clone. Everywhere else the same doctrine arrives as prose in a skill, which is the channel restraints do not survive — the design looks enforced here and is advisory for every consumer
-  check: `pnpm check:script-provenance` exits 0. The judgement half stays with the reviewer: name the artifact a stranger installs that carries the rule. `scripts/`, `pnpm check`, `CONSTITUTION.md` and the wiki are not answers
+**Terminology**: When the user says "agent" or asks "why is agent doing X", they mean the **coding-agent package implementation**, not you (the assistant). The coding-agent is a CLI tool — questions about its behavior refer to code in `packages/coding-agent/`, not your current session.
 
-- id: REPO-S7
-  title: A gate earns its place, and the tenth one is not free
-  do: before adding an entry to the gate, name the mistake it prevents — a specific wrong thing that specifically happened here, in the form a leaf must earn its own existence — then retire or subsume something, or give the rule to a published artifact instead (`REPO-S6`); raise `GATE_BUDGET` only in its own commit, with the entry's technique class and the suite's resulting aggregate stated
-  dont: add an entry whose verdict depends on scheduler order, cache state, or which task finished first; gate a regex or substring scan over source and call it enforcement; raise `GATE_BUDGET` in the same commit as the entry that exceeded it
-  harm: for N entries each misfiring independently with probability p a clean run is blocked with probability 1-(1-p)^N, so affordability is N x p and never N — at 2% each, ten entries block 18% of clean runs and twenty block 33%, and the suite is waived long before anyone admits it. Two failures measured here on 2026-08-11 are what the prohibitions name: `//#check:project-references` read built declarations while declaring no dependency on any `build`, and reported 11 projects broken in one CI run and 37 clean in another on the same tree; and a guard arm shipped that morning produced its first false positive within hours, on the first real corpus it met. A gate that is green by luck is worse than none, because it teaches the team to re-run until it passes
-    check: `pnpm check:script-provenance` prints the gate-entry count against `GATE_BUDGET` and exits non-zero when the count exceeds it. The judgement half stays with the reviewer: whether the named mistake is a real event or a class of badness, and whether a technique the table calls a tripwire is being sold as a gate
+### Package Structure
+
+| Package                 | Description                                                                             |
+| ----------------------- | --------------------------------------------------------------------------------------- |
+| `packages/ai`           | Multi-provider LLM client with streaming support                                        |
+| `packages/catalog`      | Model catalog: bundled models.json, provider descriptors, model identity/classification |
+| `packages/agent`        | Agent runtime with tool calling and state management                                    |
+| `packages/coding-agent` | Main CLI application (primary focus)                                                    |
+| `packages/tui`          | Terminal UI library with differential rendering                                         |
+| `packages/natives`      | Bindings for native text/image/grep operations                                          |
+| `packages/stats`        | Local observability dashboard (`omp stats`)                                             |
+| `packages/omptype`      | ArkType-compatible schema validation with a lazy JIT runtime                            |
+| `packages/utils`        | Shared utilities (logger, streams, temp files)                                          |
+| `crates/pi-natives`     | Rust crate for performance-critical text/grep ops                                       |
+
+**Catalog import convention**: code in this repo imports catalog _values_ (bundled models, model-thinking helpers, identity, descriptors, model manager/cache) from `@oh-my-pi/pi-catalog/<module>` — never via `@oh-my-pi/pi-ai`. The pi-ai barrel re-exports only the model/effort _types_ its own signatures use (`Model`, `Api`, `ThinkingConfig`, `Effort`, …); type-only imports of those from `@oh-my-pi/pi-ai` are fine.
+
+## GitHub
+
+Unless user tells you exactly what to write:
+
+- **Never comment on GitHub** (issues, PRs, discussions).
+- **Never create issues on GitHub**.
+
+## Code Quality
+
+- No `any` unless absolutely necessary.
+- **NEVER use `ReturnType<>`** — use the actual type name.
+- **NEVER use inline imports** — no `await import()`, no `import("pkg").Type` in type positions, no dynamic type imports. Always top-level.
+- Check `node_modules` for external API types instead of guessing.
+- **Barrel exports**: prefer `export * from "./module"` over named re-exports, including `export type { ... } from`. In pure `index.ts` barrels, use star re-exports even for single-specifier cases. If stars create ambiguity, remove the redundant export path; do not keep duplicates.
+- **Class privacy**: use ES `#private` fields; leave externally accessible members bare. **No `private`/`protected`/`public` keyword on fields or methods**, except on **constructor parameter properties** where TypeScript requires it (e.g. `constructor(private readonly session: ToolSession)`).
+- **Promises**: use `Promise.withResolvers()` instead of `new Promise((resolve, reject) => ...)`.
+- **Prompts**: never build prompts in code (no inline strings, template literals, or concatenation). Prompts live in static `.md` files; use Handlebars for dynamic content. Import them via `import content from "./prompt.md" with { type: "text" }` — not `readFile`.
+- **Worker scripts**: workers re-enter the CLI entrypoint; never spawn separate worker entry modules. `cli.ts` declares itself as the worker host at startup (`declareWorkerHostEntry()` from `@oh-my-pi/pi-utils/env`) and dispatches hidden argv selectors (`__omp_worker_stats_sync`, `__omp_worker_tab`, `__omp_worker_js_eval`, `__omp_worker_tiny_inference`) before loading the command registry. Spawn sites use:
+  ```ts
+  import { workerHostEntry } from "@oh-my-pi/pi-utils";
+  const hostEntry = workerHostEntry();
+  const worker = hostEntry
+  	? new Worker(hostEntry, { type: "module", argv: ["__omp_worker_<name>"] })
+  	: new Worker(new URL("./<worker>.ts", import.meta.url).href, { type: "module" });
+  ```
+  When the process was started from the omp CLI — source `cli.ts`, npm-bundle `dist/cli.js`, or compiled binary — `workerHostEntry()` is `Bun.main` and the worker re-enters the single entry module, so no per-worker `--compile` entrypoints or bundle entries exist. Outside a CLI host (`bun test`, SDK embedding, standalone `omp-stats`) it returns `null` and the direct-module fallback loads the worker source. New worker kinds MUST add their selector to the dispatch table in `cli.ts` and keep the fallback branch.
+  History: `with { type: "file" }` only copied the entry as a raw asset (workers crashed silently in compiled binaries — issues #1011, #1027), and the later literal-path + extra-entrypoint pattern required keeping spawn literals and two build scripts in sync (issue #1150). The smoke probe below is the live validation of this contract.
+  Validate any new worker with the dedicated smoke probe: `omp --smoke-test` spawns the stats sync worker and the tiny-model subprocess, pings them, and exits — it's wired into `ci:test:smoke` and `scripts/install-tests/run-ci.sh` so binary, source-link, and tarball installs all exercise it. Add a sibling smoke if the new worker is on a different module graph.
+
+## Central Utilities
+
+Before writing a helper, check whether one already exists — `packages/coding-agent/src/utils/`, `@oh-my-pi/pi-utils`, `@oh-my-pi/pi-tui`, and the domain modules next to your callsite. This applies to **everything**: VCS wrappers, formatting/truncation/path-display helpers, image handling, clipboard, streams, temp files, caching. The central versions carry hardening a fresh copy always loses (timeouts, output caps, non-interactive env, lock avoidance, caching, TUI sanitization).
+
+- Search first: `grep` for the operation before implementing it. Two implementations of the same thing is a bug even when both work.
+- Examples of the pattern: `src/utils/git.ts` and `src/utils/jj.ts` are the only sanctioned way to run git/jj (`import * as git from "../utils/git"` — never hand-spawn via `$`/`Bun.spawn`); rendering goes through the helpers in TUI Sanitization below (`replaceTabs`, `truncateToWidth`, `shortenPath`, `PREVIEW_LIMITS`) rather than ad-hoc string math.
+- Missing capability? Extend the central helper (new option, new sub-function on the namespace) and call it — don't fork its logic locally.
+
+## Bun Over Node
+
+Use Bun APIs where they provide a cleaner alternative; fall back to `node:*` only for what Bun doesn't cover. **Never spawn shell commands for operations with proper APIs** (e.g., don't `Bun.spawnSync(["mkdir", "-p", dir])` — use `mkdirSync`).
+
+### Quick reference
+
+| Operation       | Use                                       | Not                                |
+| --------------- | ----------------------------------------- | ---------------------------------- |
+| File read/write | `Bun.file()`, `Bun.write()`               | `readFileSync`, `writeFileSync`    |
+| Spawn process   | `` $`cmd` ``, `Bun.spawn()`               | `child_process`                    |
+| Sleep           | `Bun.sleep(ms)`                           | `setTimeout` promise               |
+| Binary lookup   | `$which("git")` from `@oh-my-pi/pi-utils` | `spawnSync(["which", "git"])`      |
+| HTTP server     | `Bun.serve()`                             | `http.createServer()`              |
+| SQLite          | `bun:sqlite`                              | `better-sqlite3`                   |
+| Hashing         | `Bun.hash()`, `Bun.password.*`, WebCrypto | `node:crypto`                      |
+| Path resolution | `import.meta.dir`, `import.meta.path`     | `fileURLToPath` dance              |
+| JSON5           | `Bun.JSON5.parse()` / `.stringify()`      | `json5` package                    |
+| JSONL           | `Bun.JSONL.parse()` / `.parseChunk()`     | `text.split("\n").map(JSON.parse)` |
+| String width    | `Bun.stringWidth()`                       | `get-east-asian-width`, custom     |
+| Text wrapping   | `Bun.wrapAnsi()`                          | custom ANSI-aware wrappers         |
+
+### Process execution
+
+Prefer Bun Shell (`` $`cmd` ``) for simple commands:
+
+```typescript
+import { $ } from "bun";
+
+const result = await $`git status`.cwd(dir).quiet().nothrow();
+if (result.exitCode === 0) {
+	const text = result.text();
+}
+
+$`do-stuff ${tmpFile}`.quiet().nothrow(); // fire and forget
 ```
 
-- **REPO-S1** — `isolatedDeclarations` stays disabled in every tsconfig; it produces 153 compile errors in idiomatic Effect. Gate: `.claude/hooks/guard-protected-writes.ts`.
-- **REPO-S2** — never modify `minimumReleaseAgeExclude`; pin a young dependency tighter or wait out the 24h cutoff. Gate: `.claude/hooks/guard-protected-writes.ts`.
-- **REPO-S3** — `repos/` is a vendored subtree, read-only; amend upstream. `repos/AGENTS.md` is ours. Gate: `.claude/hooks/guard-protected-writes.ts`.
-- **REPO-S4** — never hand-edit `package.json#exports` or `publishConfig.exports` on a tsdown package; change `tsdown.config.ts`. Gate: `pnpm check:exports`.
+Methods: `.quiet()`, `.nothrow()`, `.text()`, `.cwd(path)`.
 
-## Stack
+Use `Bun.spawn`/`Bun.spawnSync` only for: long-running processes (LSP, kernels), streaming stdin/stdout/stderr (SSE, JSON-RPC), or process control (signals, kill, complex lifecycle).
 
-Not derivable from the manifests:
+When using `pipe` mode, cast the stream:
 
-- `pnpm --filter <pkg> <cmd>` from the root. Never `cd` into a package, never `npx`.
-- Lint is a per-package `oxlint.config.ts` extending `@systemfsoftware/oxlint-config`. Registration is not delivery — a rule reaches only the packages that opt in. Gate: `pnpm check:lint-coverage`, which also defines the production/tooling boundary. Never re-derive that boundary by hand.
-- Mutation runs on pure decisions only (`REPO-S5`), and fails when a `*.property.test.ts` kills no mutant nothing else kills. Opt out with `requireTestContribution: null` in the package's `stryker.config.json`, never by deleting a test.
+```typescript
+const child = Bun.spawn(["cmd"], { stdout: "pipe", stderr: "pipe" });
+const reader = (child.stdout as ReadableStream<Uint8Array>).getReader();
+```
 
-## Surface Classes
+### Node module imports
 
-| Surface              | Examples                                                                                                                        | Rule                                                                                                                                                                                 |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Evaluator**        | `scripts/guard-*.mjs`, `scripts/check-*.mjs`, `packages/stryker-js/mutation-run/src/test-contribution.ts`, `.github/workflows/` | Never change in the same commit as the work it judges. Its own commit, gate observed red before and green after, for the right reason.                                               |
-| **Doctrine**         | `CONSTITUTION.md`, `CONCEPTS.md`, every `AGENTS.md`, `wiki/`, `docs/solutions/`                                                 | Editable, but never an input to a gate. Enforced by `pnpm check:script-provenance`.                                                                                                  |
-| **Editable**         | Everything else, including `packages/*/`, `scripts/`, `docs/`, `tsdown.config.ts`                                               | Edit freely, including the rules that govern you. Never weaken a rule, threshold, budget or glob to make the current change pass; loosening needs its own commit and its own reason. |
-| **Human-controlled** | Merge to `main`, publish, deploy, destructive ops, credentials                                                                  | `REPO-P1`.                                                                                                                                                                           |
+Always use **namespace imports** for `node:fs`, `node:path`, `node:os`:
 
-## Directory Map
+```typescript
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
+import * as os from "node:os";
+```
 
-Directories only; files are discovered with tools.
+- Async-only file → `node:fs/promises`.
+- Needs both sync and async → `node:fs`, then `fs.promises.xxx` for async.
 
-| Directory             | What it is                                                                         | Governance                                                      |
-| --------------------- | ---------------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| `packages/`           | Workspace packages                                                                 | Root invariants plus a hook-delivered leaf                      |
-| `repos/`              | Vendored git subtrees, read-only                                                   | `REPO-S3`; registry in `subtrees.toml`                          |
-| `scripts/`            | Root guards, release and harness tooling                                           | Editable except the Evaluator scripts above                     |
-| `.github/`            | CI workflows and reusable actions                                                  | Evaluator                                                       |
-| `docs/`               | Solutions, plans, audits, decision records                                         | `REPO-E1`                                                       |
-| `docs/cell-taxonomy/` | Gitignored working spec of the cell taxonomy, absent from a fresh clone            | `REPO-W5`                                                       |
-| `omp/`                | OMP plugin packages                                                                | Leaf-governed                                                   |
-| `wiki/`               | Nested standalone repo (`software-wiki`), gitignored here to avoid double-tracking | `REPO-W4` here; its own root `AGENTS.md` governs work inside it |
+### File I/O
 
-## Startup
+Prefer Bun:
 
-1. `pwd` — must be the monorepo root.
-2. `pnpm check:local` — repair a red baseline before adding scope.
-3. Confirm the active task from the task list; `git log --oneline -5` for recent intent.
+```typescript
+const text = await Bun.file(path).text();
+const data = await Bun.file(path).json();
+await Bun.write(path, data); // auto-creates parent dirs
+```
 
-## Working Rules
+Use `node:fs/promises` for directory ops (`fs.mkdir`, `fs.rm`, `fs.readdir`) — Bun has no native directory APIs. Avoid sync APIs in async flows; use sync only when forced by a synchronous interface.
 
-- **REPO-W2** — modify only files belonging to the active task. No unasked retries, validation, telemetry or refactors. Reducing accepted scope needs the user's consent. Gate: review — the reviewer names the active task each changed file belongs to.
-- **REPO-W4** — search the gitignored `wiki/` corpus before writing a plan, choosing between options, settling a design question, or asking the user one. Enter at its `manifest.md`, open at most five candidate slugs, stop as soon as one settles it, and read the per-claim Warrant table rather than the frontmatter band. Never cite a `wiki/` path in a plan, doc, commit or issue — the corpus does not ship with the clone. A nil result names the verbatim query and the corpus-scoped path it ran against, so anyone holding the corpus can re-run it and falsify the claim. Gate: `.claude/hooks/guard-protected-writes.ts` refuses a write under `docs/plans/` until a `-c wiki` query has run this session; it confirms a search happened, not that it was good.
-- **REPO-W5** _(temporary — delete when the taxonomy is folded into the published oxlint plugins and `CONSTITUTION.md`, or when the corpus is abandoned)_ — `docs/cell-taxonomy/` is the working specification of the cell taxonomy and the design authority for every cell decision; it is gitignored and absent from a fresh clone. Read `SPECIFICATION.md` before naming a cell suffix, splitting a module, or placing a test, and open a `references/` file only when that decision needs it. Construction is the griller: where a build contradicts the specification, enter the contradiction in `references/ledger.md` under that file's own protocol — never code around it, and never reword a rule to match what was just written. A sealed entry is retracted only by the owner, so a contradiction with one is surfaced to the user rather than resolved in the diff. Never cite a `docs/cell-taxonomy/` path in a plan, doc, commit, issue or published package; the corpus does not ship with the clone. Gate: review — the reviewer names the specification section the cell choice rests on, or the ledger entry recording where it failed.
-- **REPO-W6** — a claim about this repo is reported with the check that decided it, run this session: a `file:line`, a command's output, or a fixture observed red and then green. Two of these failures are silent and no gate reaches them. A generator produces exactly the declared input type of the function under test — one that carves out a domain no type or schema declares is testing an invention and passes forever. A capability or a rule asserted as blocking shows the call that failed or the clause reread this turn, never the inference that it would have. The rest is already mechanical and is not restated here: `no-assert-in-property` and `no-silent-return` reject a predicate that cannot fail, and `REPO-D1`'s mutation score rejects a test that kills nothing. Gate: review — for each claim the reviewer names the check that ran, and for each new arbitrary the declared type whose domain it reproduces.
-- **REPO-W7** — the repository is the subject under test, never the warrant. Observing what the code, a config, a lint rule or a sibling package does settles a question of fact — whether a gate fires, what a rule rejects, which cells a table names — and settles nothing about what ought to be. A design conclusion drawn from established practice, an installed rule, a shipped default or a prior commit is circular, and it reads as grounding, which is why it survives review. Theory governs: a design question is answered by derivation, and where derivation and the repository disagree the repository is wrong until the derivation is defeated by argument, never the reverse. The count of packages already doing something is not an argument, and neither is the age of the convention. Gate: review — the reviewer names the derivation each design decision rests on, and rejects any warrant whose only support is that the repo already does it.
-- **REPO-W8** — a choice that is costly to reverse is researched before it is made, never defaulted into: a framework, a protocol implementation, a wire format, a runtime boundary, or a dependency that will spread across modules. Establish what comparable projects actually ship by reading their manifests or their source, never by recalling it; name at least two candidates and why the losers lost; and confirm no maintained implementation exists before hand-rolling one. Record the candidates, the deciding criterion and the observation that would reverse the choice with the other decision records under `docs/`. Defaulting is the expensive failure precisely because it is quiet — the first plausible option compiles, passes, and reveals its ceiling only after everything depending on it is written, when replacing it is no longer a dependency swap. This is the outward-facing half of `REPO-W4`, which searches the corpus we hold; neither substitutes for the other. Gate: review — for each new dependency and each hand-rolled protocol in the diff, the reviewer names its record and the alternative it beat.
+**Anti-patterns:**
 
-## Definition of Done
+- `existsSync`/`readFileSync`/`writeFileSync` in async code → `Bun.file()` APIs.
+- `mkdir(dirname(path), …)` before `Bun.write(path, …)` → redundant; `Bun.write` handles it.
+- `if (await file.exists()) { await file.json() }` → two syscalls plus race. Use try-catch with `isEnoent`:
+  ```typescript
+  import { isEnoent } from "@oh-my-pi/pi-utils";
+  try {
+  	return await Bun.file(path).json();
+  } catch (err) {
+  	if (isEnoent(err)) return null;
+  	throw err;
+  }
+  ```
+- Multiple `Bun.file(path)` handles for the same path (including across `checkX`/`loadX` helpers).
+- `Buffer.from(await Bun.file(x).arrayBuffer())` → `await fs.readFile(path)`.
+- Existence check + try-catch around the same read → drop the existence check.
 
-- **REPO-D1** — target behaviour implemented and exercised, `pnpm check:local` run _after_ the last edit, and the work delivered as a pull request watched to green. Tree left restartable. Gate: `pnpm check:local` exits 0; `gh pr checks --watch --fail-fast` exits 0; and where the branch diff names a source file in a package carrying a `stryker.config.json`, `pnpm --filter <pkg> mutation` reports 100% on the changed pure-core files — CI's Mutation workflow is `continue-on-error`, so it never carries that verdict.
-- **REPO-D2** — commit, push a branch and open the PR with the session's commit-push-open-PR skill where one is installed, then watch the checks. `no checks reported` is the post-create registration race, not a failure: sleep and re-poll, never re-push to clear it — `cancel-in-progress: true` means a re-push cancels the run being awaited. Re-push only for a named failing check. Merging stays human (`REPO-P1`). Gate: `gh pr checks --watch --fail-fast` exits 0.
+### Streams
 
-## Verification
+Prefer centralized helpers:
 
-`pnpm check:local` is the agent's gate: `check:ci`'s task list minus `test:contract`. The contract lanes are `cache: false` and 85-92% of `check:ci`'s wall clock; they need a live container runtime, so a change they alone cover is unverified until the PR is green.
+```typescript
+import { readStream, readLines } from "./utils/stream";
+const text = await readStream(child.stdout);
+for await (const line of readLines(stream)) {
+	/* ... */
+}
+```
 
-The `dist/`-reading root checks run in `gate:dist`, which builds in its own turbo invocation before it checks. A root task declares no dependency on any package's `build`, so sharing an invocation with the build it reads makes its verdict scheduler order rather than a fact about the tree.
+Manual reader loops only when the protocol requires it (SSE, streaming JSON-RPC).
 
-- **REPO-A1** — run exactly `pnpm check:local`. No `--skip`, no `--grep`, no filter flags, no individual steps.
-- **REPO-A2** — local evidence from this session, after the last edit; CI evidence from a completed, non-cancelled run whose head SHA is the pushed commit. Never a prior session, never a run predating the last push. Gate: review — the reviewer confirms both.
-- **REPO-A3** — any failure blocks done, local or CI, including one that looks unrelated.
+### Misc
 
-## Release and Commits
+- **Sleep**: `await Bun.sleep(ms)`, never `new Promise(r => setTimeout(r, ms))`.
+- **Password hashing**: `Bun.password.hash(pw, "bcrypt")` / `Bun.password.verify(pw, hash)`.
+- **String width**: `Bun.stringWidth(text, { countAnsiEscapeCodes?: false })`.
+- **Wrapping**: `Bun.wrapAnsi(text, width, { wordWrap, hard, trim })`.
 
-- **REPO-R1** — every package is pre-1.0 ALPHA; API stability is never a design constraint. When a change is cleaner as a break, make the break; accept proposed breaks without resistance and do not wait for a major release. A compatibility objection is rejected unless it names a concrete in-repo consumer migration. Gate: `pnpm exec commitlint` accepts the `api!` marker and the `BREAKING CHANGE:` footer that record the break.
-- **REPO-R2** — a change to a publishable package (`packages/**`) ships with a `.changeset/` intent authored via `pnpm change --bump <none|patch|minor|major>`; use `--bump none` only for a genuinely non-releasable touch. Gate: the changeset check (`.github/workflows/changeset-check.yml`) fails a PR that touches a publishable package without an intent. A `none` on a behavior-visible change is the same silent non-release the gate exists to catch — review consumed `none` intents on the Release PR before merging.
-- **REPO-C1** — `type(scope): subject`, 72 characters or fewer. Gate: `pnpm exec commitlint --edit <msgfile>`.
-- **REPO-C2** — feat, fix, chore, build, ci, deps, docs, perf, refactor, revert, style, test. Config-only changes are not feat or fix. Gate: `pnpm exec commitlint`, run by the `commit-msg` hook on every commit touching a path outside the vendored trees.
+## Generated Files
 
-## Boundaries
+**NEVER edit `packages/catalog/src/models.json` directly.** It is generated from upstream sources (stencil.so, provider catalog discovery, OpenCode docs) by `packages/catalog/scripts/generate-models.ts` and the descriptors/resolvers in `packages/catalog/src/provider-models/`. Hand-edits get overwritten on the next regen.
 
-- **REPO-P1** — ask before merging to `main`, publishing, deploying, destructive operations, or handling credentials. Unmechanizable: a hook able to decide it would already be the approval.
-- **REPO-M1** — each agent owns a disjoint file set. Isolate concurrent work in a git worktree rather than coordinating edits. Gate: review — the reviewer confirms no two agents claim the same file.
-- **REPO-E1** — read `docs/solutions/` before implementing or debugging in an area it documents; it holds solved problems filed with `module`, `tags` and `problem_type` frontmatter. Gate: review — the reviewer names the solution doc the change rests on, or states that none covers the area.
+To change an entry, fix the source:
 
-## Instruction Hierarchy
+- **Resolution rules / per-id overrides** → relevant resolver in `packages/catalog/src/provider-models/openai-compat.ts` (e.g. `createOpenCodeApiResolution`'s id-override map).
+- **Provider catalog entries** (default model, discovery factory/flags) → the `CATALOG_PROVIDERS` table in `packages/catalog/src/provider-models/descriptors.ts`.
+- **Generator-level fixups** (premium multipliers, codex pricing fallback, fallback models, post-processing) → `packages/catalog/scripts/generate-models.ts`.
+- **Thinking metadata / generated policies** → `packages/catalog/src/model-thinking.ts` (`applyGeneratedModelPolicies`); model-id classification (family/version parsing) lives in `packages/catalog/src/identity/classify.ts`.
 
-A rule lives in exactly one file: the highest level it applies to. A leaf carries only its delta and never restates this file. A leaf is earned where a directory has a different toolchain, ownership or risk class _and_ an agent demonstrably got something wrong there — a package manifest is not evidence, symmetry with a sibling is not a reason.
+Regenerate with `bun run gen:models` and commit `models.json` alongside the source change. Add a regression test against the **resolver/descriptor**, not the bundled JSON, so it survives upstream metadata shifts.
 
-`repos/<name>/AGENTS.md` are vendored roots, not leaves; amend upstream. `repos/AGENTS.md` is ours. A fork under `packages/` is ours: we publish it and we gate it, and "upstream" names only where it came from.
+## Logging and CLI Output
+
+Code that may run while the TUI, RPC, SDK, workers, or background runtimes are active MUST NOT use `console.log`/`error`/`warn`; it corrupts rendering or protocols. Use the centralized logger:
+
+```typescript
+import { logger } from "@oh-my-pi/pi-utils";
+
+logger.error("MCP request failed", { url, method });
+logger.warn("Theme file invalid, using fallback", { path });
+logger.debug("LSP fallback triggered", { reason });
+```
+
+Logs go to `~/.omp/logs/omp.YYYY-MM-DD.log` with automatic rotation. Standalone CLI commands that exit without entering the TUI MAY use `console.*` or process streams for intentional user-facing output. Keep structured stdout clean. This exception is semantic, not filename-based; shared code must use `logger` or an explicit output sink.
+
+## TUI Sanitization
+
+All text displayed in tool renderers must be sanitized. Raw content (file contents, error messages, tool output) breaks terminal rendering: tabs → visual holes, long lines → overflow, paths → leak home directory.
+
+**Rules:**
+
+- **Tabs → spaces** via `replaceTabs()` (from `@oh-my-pi/pi-tui` or `../tools/render-utils`).
+- **Truncate** lines with `truncateToWidth()` / `ui.truncate()`. Use `TRUNCATE_LENGTHS` constants.
+- **Shorten paths** with `shortenPath()` (replaces home with `~`).
+- **Preview limits** from `PREVIEW_LIMITS`. No ad-hoc numbers.
+
+**Apply to every render path**, not just the happy one:
+
+- Success output (file previews, command output, search results).
+- **Error messages** — these often embed file content (e.g., patch failure messages include unmatched lines). If a message contains file content, it needs `replaceTabs()`.
+- Diff content (added and removed).
+- Streaming previews.
+
+### Streaming tool previews
+
+Tool-call previews can have **multiple render paths**. If you add preview-only fields or depend on partially streamed args, update every path — not only the final renderer. Streamed argument buffers decode into display args via `decodeStreamedToolArgs` / `ToolArgsRevealController` (`modes/controllers/tool-args-reveal.ts`); both the live event path and transcript rebuilds must go through them — never spread provider-parsed `arguments` next to a raw `__partialJson` (parsed args lag the stream by a throttled parse window).
+
+For the bash tool specifically:
+
+- The pending preview may need raw `partialJson`, not just parsed `arguments`. Parsed args lag until a JSON object closes, which makes inline env assignments appear only at the end.
+- Preserve preview-only fields (e.g. `__partialJson`) through `event-controller.ts`, transcript rebuilds in `ui-helpers.ts`, and merged call/result rendering in `tool-execution.ts`. Missing one path causes inconsistent previews.
+- `ToolExecutionComponent.#buildRenderContext()` for bash must work even before a result exists — the renderer uses call args plus render context to show the command preview while streaming.
+- Verify both live streaming and rebuilt transcript paths after any bash preview change. A fix in one path does not fix the other.
+
+## Commands
+
+- NEVER commit unless asked.
+- Never use `tsc`/`npx tsc` — always `bun check`.
+- Merge commits (maintainer merges of PRs) follow: `Merge PR #<number>: <conventional PR subject> (@<author>)` — e.g. `Merge PR #6386: feat(catalog): add native Meta Model API provider (@eggpeat)`.
+
+## Testing Guidance
+
+Test the contract the system exposes — not the easiest internal detail to assert.
+
+- Every new test must defend one **concrete, externally observable contract**: behavior, output shape, state transition, error mapping, or a regression-prone parsing boundary. If you cannot name the contract, do not add the test.
+
+### Good vs. bad test filter
+
+- **Name the failure mode.** Every test MUST state what a consumer observes if it regresses. Cannot name one? NEVER add it.
+- **Good: transformation.** One fixture MAY prove parse/render/normalize/encode/resolve behavior when output is computed, not echoed.
+- **Good: branch or boundary.** Distinct inputs, empty values, malformed input, version/provider routing, and state transitions MUST prove distinct outcomes.
+- **Good: external contract.** Exact bytes/shape MAY be asserted when a provider, parser, protocol, or persisted consumer reads them.
+- **Good: precedence or negative contract.** Keep explicit `false`/override-wins assertions and required absence only when they prevent a documented leak, downgrade, 400, or incompatible wire field.
+- **Good: regression.** A repro MUST trigger the prior real failure path and assert the corrected observable result.
+- **Bad: static echo.** NEVER test a constructor/builder merely copied a fixture or baked constant into an in-memory config/metadata field.
+- **Bad: success passthrough.** NEVER assert `fn(x) === x` when `x` was already supplied/declared valid; assert a transform, rejection, or downstream effect instead.
+- **Bad: wording/defaults.** NEVER assert prompt/UI boilerplate, a default literal, object existence, non-empty output, or length growth without a consumer contract.
+- **Bad: duplicate rows.** Parameterized/loop rows MUST each cover a distinct branch, provider/model path, or consumer contract; delete same-path duplicates.
+- **Metadata exception.** Exact metadata, identity, ordering, or `undefined` MAY remain only when a downstream consumer depends on it and the test establishes branch, precedence, negative-contract, wire, or regression evidence.
+- **Termination exception.** For cyclic/large inputs, assert a bounded output, surfaced error, or state change; bare `not.toThrow()` is insufficient.
+- No placeholder tests, tautologies, or "the code ran" assertions (`expect(true).toBe(true)`, bare `not.toThrow()`, non-empty string checks, length-grew checks, "prompt exists" checks without semantic assertion).
+- Prefer contract-level tests over implementation details. Avoid asserting internal helper wiring, field assignment, singleton identity, incidental ordering, prompt boilerplate, or passthrough option forwarding unless another component depends on that exact detail.
+- Don't duplicate coverage across abstraction levels. If an integration test already proves the behavior, drop the narrower unit test that restates it through mocks.
+- Tests **must be full-suite safe**, not just file-local safe. No long-lived file-wide mutations of `Bun.*`, `process.platform`, `process.env`, or `Bun.env` when a narrower seam exists. Prefer per-test `vi.spyOn(...)` with `vi.restoreAllMocks()` in `afterEach`. A test that passes alone but poisons later files is broken.
+- **Never use `mock.module()`**. Bun's `mock.module()` mutates the global module registry and leaks across files ([oven-sh/bun#12823](https://github.com/oven-sh/bun/issues/12823)). Use `spyOn` on the imported module object instead. For pass deps, import the pass and spy on `.run`. For package deps, namespace-import and spy on the exported function.
+- For lifecycle/stateful code, prefer one test per invariant or transition over several tiny tests asserting one field each from the same transition.
+- For error handling, trigger the real failure path and assert the surfaced contract — don't instantiate error classes directly or inspect internal metadata.
+- Smoke tests are acceptable only when they catch a failure mode narrower tests would miss. "Package boots" or "command starts" alone is not enough.
+- Assert exact strings, ordering, and formatting only when downstream code parses or depends on the exact bytes. Otherwise assert semantic content.
+- Compile-time guarantees → type checks/type tests, not runtime placeholders.
+- **Never source-grep.** A test that reads an implementation file (`.ts`/`.rs`/build script) and asserts on its _text_ — `expect(src).toContain("someCall()")`, `.toMatch(/import .../)`, `.not.toContain("oldName")`, or "comment must say X" — is banned. It tests how code _looks_, not what it _does_: it breaks on harmless refactors (comment reflow, rename, import reorder) and passes while the behavior is broken. Assert the observable contract instead (run the code, check output/state/error), use the runtime smoke probe for wiring you cannot exercise in-process, and enforce structural invariants (no value-import of X, no self-import) with a type test or a lint/biome rule — never a string scan of the source. (Reading a file your code _wrote_ — apply-patch result, generated bundle, temp fixture — and asserting on that output is fine; that is behavior, not a source grep.)
+- Don't add tests for tiny low-risk changes unless they protect a real contract or fix a regression-prone edge case.
+- Prefer focused package-local verification for the changed area.
+
+## Changelog
+
+Location: `packages/*/CHANGELOG.md` (per package).
+
+**Format** — sections under `## [Unreleased]`:
+
+- `### Breaking Changes` (first if present)
+- `### Added`
+- `### Changed`
+- `### Fixed`
+- `### Removed`
+
+**Rules:**
+
+- New entries always go under `## [Unreleased]`.
+- Never modify already-released sections (e.g., `## [0.12.2]`) — they are immutable.
+- Don't flag changelog section order or formatting in reviews or PRs — `bun run release` runs `fix-changelogs` which normalizes everything automatically.
+
+**Attribution:**
+
+- Internal (from issues): `Fixed foo bar ([#123](https://github.com/can1357/oh-my-pi/issues/123))`.
+- External contributions: `Added feature X ([#456](https://github.com/can1357/oh-my-pi/pull/456) by [@username](https://github.com/username))`.
+
+## Releasing
+
+1. Ensure all changes since last release are in each affected package's `[Unreleased]` section.
+2. Run `bun run release`.
+
+The script handles version bump, CHANGELOG finalization, commit, tag, publish, and adding new `[Unreleased]` sections.
