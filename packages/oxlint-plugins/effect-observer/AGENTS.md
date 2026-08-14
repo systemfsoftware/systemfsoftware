@@ -1,8 +1,6 @@
 # AGENTS.md — `effect-observer/`
 
-> Delta only. Shared rule-authoring conventions: `packages/oxlint-plugins/AGENTS.md`. Universal rules: root `AGENTS.md`.
-
-Rules here gate the `architect-observer` cell spec. Read the cell skill for what observer machinery must be — restating it here would create a second copy that drifts.
+> Shared rule-authoring conventions: `packages/oxlint-plugins/AGENTS.md`.
 
 ```yaml
 - id: OB-P3

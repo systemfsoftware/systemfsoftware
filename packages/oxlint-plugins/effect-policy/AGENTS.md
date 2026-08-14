@@ -1,8 +1,6 @@
 # AGENTS.md — `effect-policy/`
 
-> Delta only. Shared rule-authoring conventions: `packages/oxlint-plugins/AGENTS.md`. Universal rules: root `AGENTS.md`.
-
-Rules here gate the `architect-policy` cell skill — the spec of record for what a `*.policy.ts` must be. Read the cell skill for the non-negotiable gates; restating them here would create a second copy that drifts.
+> Shared rule-authoring conventions: `packages/oxlint-plugins/AGENTS.md`.
 
 - **PP1 — Obligation, not single-export:** keep `policy-combinator-export` requiring ≥1 rank-2 combinator export (generic with an Effect-typed first parameter, or a value annotated with a `*Policy` type). Never ban additional non-function exports — a stateful policy legitimately exports an `Effect<P>` factory, a `Layer`, or Xi error classes alongside the combinator.
 - **PP2 — PO1 import set is closed:** match exactly the skill's enumerated cells (schema, shape, state, workflow, executor, store, acl, handler, middleware, adapter, service, shell, use-case, daemon, repository). Never add `.policy` (composition via `andThen`) or `.kernel` (domain-blind utilities) — their deliberate absence is proven by the suite's valid cases, not a comment.

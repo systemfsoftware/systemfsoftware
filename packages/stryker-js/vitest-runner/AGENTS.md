@@ -1,8 +1,8 @@
 # AGENTS.md — `@systemfsoftware/stryker-js-vitest-runner`
 
-> **Location:** `packages/stryker-js/vitest-runner/` — Vitest test-runner plugin for Stryker. Universal agent rules live in the root `AGENTS.md`; this file carries only `vitest-runner/`-specific deltas.
+> **Location:** `packages/stryker-js/vitest-runner/` — Vitest test-runner plugin for Stryker.
 
-A source-code fork of `@stryker-mutator/vitest-runner` v9.6.1 (upstream commit `e1abfbe`). "Upstream" names where it came from, never a limit on changing it. The tsconfig reproduces upstream's own strictness so the vendored source typechecks unmodified; upstream idioms (`@ts-expect-error` across the vitest 4.0/4.1 hook split, non-null assertions on `this.ctx`) are kept deliberately (CONSTITUTION §V.6).
+A source-code fork of `@stryker-mutator/vitest-runner` v9.6.1 (upstream commit `e1abfbe`). The tsconfig reproduces upstream's own strictness so the vendored source typechecks unmodified; upstream idioms (`@ts-expect-error` across the vitest 4.0/4.1 hook split, non-null assertions on `this.ctx`) are kept deliberately (CONSTITUTION §V.6).
 
 Deltas from root:
 

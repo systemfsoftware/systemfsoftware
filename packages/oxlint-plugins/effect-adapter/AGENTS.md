@@ -1,8 +1,6 @@
 # AGENTS.md — `effect-adapter/`
 
-> Delta only. Shared rule-authoring conventions: `packages/oxlint-plugins/AGENTS.md`. Universal rules: root `AGENTS.md`.
-
-Rules here gate the `architect-adapter` cell — read `skill://architect-adapter` for what a `*.adapter.ts` must be; restating it here would create a second copy that drifts.
+> Shared rule-authoring conventions: `packages/oxlint-plugins/AGENTS.md`.
 
 ```yaml
 - id: EA1

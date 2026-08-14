@@ -1,8 +1,6 @@
 # AGENTS.md — `effect-shape/`
 
-> Delta only. Shared rule-authoring conventions: `packages/oxlint-plugins/AGENTS.md`. Universal rules: root `AGENTS.md`.
-
-Rules here gate the `architect-shape` cell spec — `*.shape.ts`, the foreign-model declaration. Read the cell skill for what a shape must be; restating it here would create a second copy that drifts.
+> Shared rule-authoring conventions: `packages/oxlint-plugins/AGENTS.md`.
 
 ```yaml
 - id: ES1

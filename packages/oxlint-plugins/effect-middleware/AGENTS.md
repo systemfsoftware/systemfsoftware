@@ -1,8 +1,8 @@
 # AGENTS.md — `effect-middleware/`
 
-> Delta only. Shared rule-authoring conventions: `packages/oxlint-plugins/AGENTS.md`. Universal rules: root `AGENTS.md`.
+> Shared rule-authoring conventions: `packages/oxlint-plugins/AGENTS.md`.
 
-Rules here gate the `architect-middleware` cell spec — read `skill://architect-middleware` for what a middleware must be; restating it here would create a second copy that drifts. Only the mechanically lint-gatable gates are implemented: MW2 (no operation imports) and MW3 (decode-failure branches produce `Effect.fail`, never `Effect.succeed` of an Option or nullable). MW1, MW3b, and MW4 stay review-gated.
+Only the mechanically lint-gatable gates are implemented: MW2 (no operation imports) and MW3 (decode-failure branches produce `Effect.fail`, never `Effect.succeed` of an Option or nullable). MW1, MW3b, and MW4 stay review-gated.
 
 ```yaml
 - id: MM1
@@ -23,6 +23,6 @@ Rules here gate the `architect-middleware` cell spec — read `skill://architect
   title: Match Effect and Option by identifier only
   do: match the canonical identifiers Effect and Option directly, like the family matches S
   dont: accept aliases or destructured Option members
-  harm: every rule here hardcodes canonical identifiers; widening one puts it out of step with its siblings
+  harm: every rule here hardcodes canonical identifiers; widening one breaks the canonical-identifier contract its siblings enforce
   check: `grep -q "Other.succeed" src/rules/__tests__/middleware-gate-fails-on-decode-failure.test.ts && grep -q "storefront" src/rules/__tests__/middleware-no-operation-imports.test.ts` — each rule has a near-miss valid case proving the canonical identifier is required
 ```

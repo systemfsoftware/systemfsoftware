@@ -1,6 +1,6 @@
 # AGENTS.md — `effect-schema/`
 
-> Delta only. Shared rule-authoring conventions: `packages/oxlint-plugins/AGENTS.md`. Universal rules: root `AGENTS.md`.
+> Shared rule-authoring conventions: `packages/oxlint-plugins/AGENTS.md`.
 
 This package owns rules for the Effect Schema cell. It exists because those rules were living in `core`, which is a junk drawer under Constitution IV.2; `ban-effect-schema-imports`, `ban-data-taggederror` and `no-manual-tag-property` moved here as the first slice of dismantling it.
 

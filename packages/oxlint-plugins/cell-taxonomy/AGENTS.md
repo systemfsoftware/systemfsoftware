@@ -1,6 +1,6 @@
 # AGENTS.md — `cell-taxonomy/`
 
-> Delta only. Shared rule-authoring conventions: `packages/oxlint-plugins/AGENTS.md`. Universal rules: root `AGENTS.md`.
+> Shared rule-authoring conventions: `packages/oxlint-plugins/AGENTS.md`.
 
 This package mechanizes the positive half of Constitution IV.2 — a source file must carry a suffix a rule keys on. The negative half (banned layer and junk-drawer path segments) is not implemented anywhere yet.
 

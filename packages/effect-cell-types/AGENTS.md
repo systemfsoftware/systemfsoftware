@@ -1,6 +1,6 @@
 # AGENTS.md — `@systemfsoftware/effect-cell-types`
 
-> **Delta**: Contract for `*.workflow.ts` cells — `Workflow<Command, Decision, Error>` plus its two `never`-channel markers and the `make` constructor that guards them. Root AGENTS.md governs.
+> **Delta**: Contract for `*.workflow.ts` cells — `Workflow<Command, Decision, Error>` plus its two `never`-channel markers and the `make` constructor that guards them.
 
 ## What makes this package different
 

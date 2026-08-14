@@ -1,6 +1,6 @@
 # AGENTS.md — `effect-dmmf/`
 
-> Delta only. Shared rule-authoring conventions: `packages/oxlint-plugins/AGENTS.md`. Universal rules: root `AGENTS.md`.
+> Shared rule-authoring conventions: `packages/oxlint-plugins/AGENTS.md`.
 
 This package is the ONE-SHOT bundle: a consumer installs `@systemfsoftware/oxlint-plugin-effect-dmmf`, registers it as the single `jsPlugin`, and gets every architecture rule in the family — cell-taxonomy, property-testing, test-hygiene, test-placement, and all thirteen effect-{workflow,executor,schema,shape,acl,store,state,handler,middleware,adapter,policy,kernel,observer} plugins — under one entrypoint. `src/index.ts` is a plain object spread over the seventeen sources with a `recommendedFrom` helper that re-exports all of a source's `rules` but recommends only the entries that source's own `configs.recommended.rules` carries. It has no rule logic and no AST visitor of its own — see `README.md#development`.
 
