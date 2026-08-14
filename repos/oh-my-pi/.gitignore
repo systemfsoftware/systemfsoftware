@@ -12,6 +12,8 @@ target/
 *.tsbuildinfo
 *.node
 *.b64.js
+/result
+/result-*
 
 # Environment
 .env

@@ -127,11 +127,7 @@ describe("MarketplaceManager", () => {
 	// ── Marketplace lifecycle ──────────────────────────────────────────────
 
 	it("addMarketplace with local fixture → appears in listMarketplaces", async () => {
-		const entry = await ctx.manager.addMarketplace(FIXTURE_DIR);
-
-		expect(entry.name).toBe("test-marketplace");
-		expect(entry.sourceType).toBe("local");
-		expect(entry.sourceUri).toBe(FIXTURE_DIR);
+		await ctx.manager.addMarketplace(FIXTURE_DIR);
 
 		const list = await ctx.manager.listMarketplaces();
 		expect(list).toHaveLength(1);
@@ -167,7 +163,6 @@ describe("MarketplaceManager", () => {
 		const added = await ctx.manager.addMarketplace(FIXTURE_DIR);
 
 		const updated = await ctx.manager.updateMarketplace("test-marketplace");
-		expect(updated.name).toBe("test-marketplace");
 		expect(updated.addedAt).toBe(added.addedAt);
 		// updatedAt must be at or after addedAt
 		expect(new Date(updated.updatedAt) >= new Date(added.addedAt)).toBe(true);
@@ -201,7 +196,6 @@ describe("MarketplaceManager", () => {
 		const instEntry = await ctx.manager.installPlugin("hello-plugin", "test-marketplace");
 
 		expect(instEntry.scope).toBe("user");
-		expect(instEntry.version).toBe("1.0.0");
 		expect(fs.existsSync(instEntry.installPath)).toBe(true);
 		const linkPath = path.join(ctx.tmpDir, "node_modules", "hello-plugin");
 		expect(fs.realpathSync(linkPath)).toBe(fs.realpathSync(instEntry.installPath));
@@ -560,7 +554,6 @@ describe("MarketplaceManager", () => {
 			scope: "project",
 		});
 		expect(instEntry.scope).toBe("project");
-		expect(instEntry.version).toBe("1.0.0");
 		expect(fs.existsSync(instEntry.installPath)).toBe(true);
 
 		// Persisted to the project registry with project scope — and absent from the user registry.

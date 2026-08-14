@@ -29,6 +29,11 @@ const legacyState = {
 	todoPhases: [],
 };
 
+if (Bun.env.MOCK_RPC_EXIT_BEFORE_READY) {
+	process.stderr.write(Bun.env.MOCK_RPC_EXIT_STDERR ?? "");
+	process.exit(Number(Bun.env.MOCK_RPC_EXIT_BEFORE_READY));
+}
+
 let protocolV2Enabled = false;
 process.stdout.write(
 	`${JSON.stringify(
@@ -158,9 +163,7 @@ for await (const raw of console) {
 			) {
 				const data = {
 					...legacyState,
-					...(Bun.env.MOCK_RPC_INVALID_TPS === "1"
-						? { fastModeEnabled: false, fastModeActive: false, tokensPerSecond: "invalid" }
-						: {}),
+					...(Bun.env.MOCK_RPC_INVALID_TPS === "1" ? { tokensPerSecond: "invalid" } : {}),
 				};
 				writeFrame({
 					id,
@@ -177,7 +180,7 @@ for await (const raw of console) {
 				type: "response",
 				command: frame.type,
 				success: true,
-				data: supportsProtocolV2 ? { payload: "😀".repeat(400_000) } : {},
+				data: supportsProtocolV2 ? { payload: "😀".repeat(270_000) } : {},
 			});
 		}
 	} catch {

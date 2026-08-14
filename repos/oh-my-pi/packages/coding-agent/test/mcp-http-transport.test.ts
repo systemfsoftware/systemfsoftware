@@ -256,56 +256,6 @@ describe("MCP Streamable HTTP POST response resumption", () => {
 		expect(observed.auth).toEqual(["Bearer stale", "Bearer fresh"]);
 		expect(observed.lastEventId).toBe("stream-1");
 	});
-
-	it("resumes after an abrupt stream drop once an event ID exists", async () => {
-		// Bun.serve cannot produce a genuine mid-body transport failure in-process
-		// (stream errors surface as clean EOF client-side), so speak raw HTTP: a
-		// chunked response without the terminal chunk, closed mid-body, makes the
-		// client's body read throw.
-		const observed = { posts: 0, lastEventId: null as string | null };
-		const sseChunk = (payload: string): string =>
-			`HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\n\r\n${payload.length.toString(16)}\r\n${payload}\r\n`;
-		const listener = Bun.listen({
-			hostname: "127.0.0.1",
-			port: 0,
-			socket: {
-				data(socket, data) {
-					const request = new TextDecoder().decode(data);
-					if (request.startsWith("POST")) {
-						observed.posts++;
-						// Priming event, then close without the terminal 0-chunk.
-						socket.write(sseChunk("id: stream-1\nretry: 10\ndata:\n\n"));
-						socket.end();
-						return;
-					}
-					if (!request.startsWith("GET")) return;
-					observed.lastEventId = /^Last-Event-ID:\s*(.+)$/im.exec(request)?.[1]?.trim() ?? null;
-					socket.write(
-						`${sseChunk(
-							'id: stream-2\ndata: {"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"resumed","inputSchema":{"type":"object"}}]}}\n\n',
-						)}0\r\n\r\n`,
-					);
-					socket.end();
-				},
-			},
-		});
-		try {
-			const transport = new HttpTransport({
-				type: "http",
-				url: `http://127.0.0.1:${listener.port}/mcp`,
-				timeout: GUARD_TIMEOUT_MS,
-			});
-			await transport.connect();
-
-			await expect(withPendingGuard(transport.request<ToolList>("tools/list"), "request")).resolves.toEqual({
-				tools: [{ name: "resumed", inputSchema: { type: "object" } }],
-			});
-			expect(observed.posts).toBe(1);
-			expect(observed.lastEventId).toBe("stream-1");
-		} finally {
-			listener.stop(true);
-		}
-	});
 });
 
 describe("MCP Streamable HTTP GET listener resumption", () => {

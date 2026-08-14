@@ -319,7 +319,7 @@ describe("Agent hub Enter activation", () => {
 		expect(Bun.stripANSI(hub.render(120).join("\n"))).toContain("Read-only · 0 LoC");
 		hub.dispose();
 	});
-	it("yields to a macrotask while streaming a large session", async () => {
+	it("yields to a macrotask at the configured streaming threshold", async () => {
 		vi.useFakeTimers();
 		using tempDir = TempDir.createSync("@omp-agent-hub-responsive-");
 		const sessionFile = path.join(tempDir.path(), "session.jsonl");
@@ -330,7 +330,8 @@ describe("Agent hub Enter activation", () => {
 			timestamp: "2026-07-30T01:13:30.000Z",
 			message: { role: "user", content: [{ type: "text", text: "small" }] },
 		});
-		await Bun.write(sessionFile, `${entry}\n`.repeat(8_193));
+		await Bun.write(sessionFile, `${entry}\n`.repeat(3));
+		const thresholdVisited = Promise.withResolvers<void>();
 		let complete = false;
 		let yieldedBeforeComplete = false;
 		let visited = 0;
@@ -338,20 +339,21 @@ describe("Agent hub Enter activation", () => {
 			sessionFile,
 			() => {
 				visited++;
-				if (visited !== 8_192) return;
+				if (visited !== 2) return;
 				setTimeout(() => {
 					if (!complete) yieldedBeforeComplete = true;
 				}, 0);
+				thresholdVisited.resolve();
 			},
-			{ yieldEveryBytes: 0, yieldEveryEntries: 8_192 },
+			{ yieldEveryBytes: 0, yieldEveryEntries: 2 },
 		).finally(() => {
 			complete = true;
 		});
 		try {
-			for (let i = 0; i < 20_000 && visited < 8_192 && !complete; i++) await Promise.resolve();
-			expect(visited).toBeGreaterThanOrEqual(8_192);
+			await thresholdVisited.promise;
 			vi.runOnlyPendingTimers();
 			await visit;
+			expect(visited).toBe(3);
 			expect(yieldedBeforeComplete).toBe(true);
 		} finally {
 			vi.useRealTimers();
@@ -470,7 +472,6 @@ describe("Agent hub Enter activation", () => {
 
 		controller.showAgentHub(new SessionObserverRegistry());
 
-		expect(capturedHub).toBeDefined();
 		expect(focusTargets[0]).toBe(capturedHub);
 
 		capturedHub!.handleInput("\r");
@@ -588,7 +589,6 @@ describe("Agent hub double-← gating", () => {
 
 		expect(shown()).toBeUndefined();
 		const shownHub = await shownReady;
-		expect(shownHub).toBeDefined();
 		expect(agents.get("Worker")?.sessionFile).toBe(workerSessionFile);
 		shownHub!.dispose();
 	});

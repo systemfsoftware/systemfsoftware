@@ -29,8 +29,9 @@ describe("extensions discovery", () => {
 		tempDir.removeSync();
 	});
 
-	const discoverForTest = async (configuredPaths: string[] = []) => {
-		const result = await discoverAndLoadExtensions(configuredPaths, tempDir.path());
+	const discoverForTest = async (configuredPaths: string[] = [], ambient = false) => {
+		const paths = ambient ? configuredPaths : [extensionsDir, ...configuredPaths];
+		const result = await discoverAndLoadExtensions(paths, tempDir.path(), undefined, undefined, { ambient });
 		return {
 			...result,
 			extensions: filterUserScoped(result.extensions, [tempDir.path(), ...configuredPaths]),
@@ -452,7 +453,7 @@ describe("extensions discovery", () => {
 		fs.writeFileSync(path.join(realDir, "index.ts"), extensionCode);
 		fs.symlinkSync(realDir, path.join(extensionsDir, "weird.ts"), "dir");
 
-		const result = await discoverForTest();
+		const result = await discoverForTest([], true);
 
 		expect(result.errors).toHaveLength(0);
 		expect(result.extensions).toHaveLength(1);
@@ -690,11 +691,10 @@ describe("extensions discovery", () => {
 			`,
 		);
 
-		const result = await discoverForTest();
+		const result = await discoverForTest([], true);
 		const loadedHook = result.extensions.find(extension => extension.path === hookPath);
 
 		expect(result.errors).toHaveLength(0);
-		expect(loadedHook).toBeDefined();
 		expect(loadedHook?.handlers.has("tool_call")).toBe(true);
 	});
 
@@ -721,12 +721,11 @@ describe("extensions discovery", () => {
 		});
 		initializeWithSettings(settings);
 
-		const result = await discoverForTest();
+		const result = await discoverForTest([], true);
 		const loadedHook = result.extensions.find(extension => extension.path === hookPath);
 
 		expect(result.errors).toHaveLength(0);
 		expect(result.extensions.find(extension => extension.path === extensionPath)).toBeUndefined();
-		expect(loadedHook).toBeDefined();
 		expect(loadedHook?.handlers.has("tool_call")).toBe(true);
 	});
 

@@ -2,6 +2,52 @@
 
 ## [Unreleased]
 
+## [17.3.3] - 2026-08-14
+
+### Fixed
+
+- Distinguished Gemini thought-only `STOP` responses from empty transports, avoiding repeated identical reasoning requests and duplicate Antigravity endpoint streams while surfacing the missing final output for session-level recovery.
+
+## [17.3.2] - 2026-08-13
+
+### Fixed
+
+- Dropped unsigned thinking blocks from Antigravity Claude requests instead of sending them without a signature, preventing HTTP 400 responses when resuming sessions or switching models.
+- Classified Antigravity HTTP 429 responses from structured `google.rpc.ErrorInfo` reasons (`QUOTA_EXHAUSTED`, `RATE_LIMIT_EXCEEDED`, and `INSUFFICIENT_G1_CREDITS_BALANCE`), using retry delays of five minutes or longer to distinguish rotatable quota windows from transient throttling instead of relying only on message regexes.
+
+### Removed
+
+- Removed the Antigravity identity-prompt injection (`ANTIGRAVITY_SYSTEM_INSTRUCTION` and `shouldInjectAntigravitySystemInstruction`): Cloud Code Assist accepts arbitrary system instructions on gemini-3.x and Claude routes (verified live), and the injected stub never matched the real client's system prompt anyway. User system prompts are now sent unmodified (still tagged `role: "user"`).
+- Fixed Antigravity `auto` mode not failing over to the sandbox endpoint when the daily endpoint returned a thinking-only `STOP`, which caused Advisor turns to be falsely recorded as empty-response failures ([#8480](https://github.com/can1357/oh-my-pi/issues/8480)).
+
+## [17.3.0] - 2026-08-13
+
+### Breaking Changes
+
+- Renamed `withGeminiThinkingLoopGuard` to `withThinkingLoopGuard`; the guard applies to Gemini, DeepSeek, and Grok model-id families.
+
+### Changed
+
+- Updated OpenCode Go integration to use the official usage endpoint, removing hardcoded caps, enabling real-time credential validation, and routing multi-key pools based on rolling and weekly headroom.
+- Optimized Anthropic prompt caching with rolling 5-minute breakpoints and idle refreshes to keep the prompt prefix warm.
+
+### Fixed
+
+- Fixed Ollama chat adapter to correctly forward sampling parameters like temperature and topP to the provider.
+- Fixed OpenAI agent turns ending prematurely after a web search with no visible answer, ensuring the agent continues processing the search results.
+- Fixed a resource leak where completed model streams retained provider concurrency permits longer than necessary.
+- Fixed image input support for qwen3.8-max and newer models when using DashScope compatible-mode.
+- Fixed xAI usage reporting falling back to a stale cache when a new weekly cycle starts with 0% consumed credits.
+- Fixed Together AI login validation failures by querying the authenticated models list instead of a hardcoded model.
+- Fixed credential-health probes and usage fetches failing when using reference-stored API keys (such as environment variables or commands) by ensuring secrets are correctly resolved.
+- Fixed Perplexity email-OTP login by preserving the session cookies required for verification.
+- Fixed thinking configuration for OpenAI and Daybreak models to correctly send reasoning.effort: "none" when thinking is disabled.
+- Fixed Grok runaway thinking streams bypassing the thinking-loop guard.
+
+### Removed
+
+- Removed legacy local request-cost estimation machinery and database schemas previously used for OpenCode Go estimates.
+
 ## [17.2.15] - 2026-08-12
 
 ### Fixed

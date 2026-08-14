@@ -228,10 +228,11 @@ use oxc_span::SPAN;
 
 // Temp value tracking. Maps a temporary's declaration to its emitted oxc value
 // (`None` for params/catch bindings that are declared but have no inlinable value).
-// oxc nodes are not `Clone`; the snapshot/restore in block codegen and the per-place
-// read both clone into the arena via [`CloneIn`] (see `ox_clone_temporaries` /
-// `ox_codegen_place`).
-type OxcTemporaries<'a> = FxHashMap<DeclarationId, Option<OxValue<'a>>>;
+// Values are arena-allocated and shared by reference: entries are only ever
+// replaced, never mutated in place, so the block-codegen snapshot/restore is a
+// plain map clone of `Copy` references, and only the per-place read clones the
+// node into the arena via [`CloneIn`] (see `ox_codegen_place`).
+type OxcTemporaries<'a> = FxHashMap<DeclarationId, Option<&'a OxValue<'a>>>;
 
 use oxc_allocator::CloneIn;
 
@@ -262,16 +263,6 @@ impl<'a> OxValue<'a> {
             OxValue::JsxText(t) => OxValue::JsxText(t.clone_in_with_semantic_ids(allocator)),
         }
     }
-}
-
-/// Clone the temporaries map, cloning each oxc value into the arena.
-fn ox_clone_temporaries<'a>(
-    ast: &oxc_ast::builder::AstBuilder<'a>,
-    temp: &OxcTemporaries<'a>,
-) -> OxcTemporaries<'a> {
-    temp.iter()
-        .map(|(id, v)| (*id, v.as_ref().map(|v| v.clone_in_with_semantic_ids(ast.allocator()))))
-        .collect()
 }
 
 struct OxcContext<'a, 'env> {
@@ -458,6 +449,13 @@ fn ox_codegen_reactive_function<'a>(
     cx: &mut OxcContext<'a, '_>,
     func: &ReactiveFunction<'a>,
 ) -> Result<OxcCompiledFunction<'a>, OxcDiagnostic> {
+    // A named function expression declares its private name in its own scope.
+    if let Some(place) = &func.self_binding {
+        let ident = &cx.env.identifiers[place.identifier];
+        cx.temp.insert(ident.declaration_id, None);
+        cx.declare(place.identifier);
+    }
+
     // Register parameters
     for param in &func.params {
         let place = match param {
@@ -617,7 +615,7 @@ fn ox_codegen_block<'a>(
     cx: &mut OxcContext<'a, '_>,
     block: &ReactiveBlock<'a>,
 ) -> Result<oxc_allocator::Vec<'a, oxc::Statement<'a>>, OxcDiagnostic> {
-    let temp_snapshot = ox_clone_temporaries(&cx.ast, &cx.temp);
+    let temp_snapshot = cx.temp.clone();
     let result = ox_codegen_block_no_reset(cx, block)?;
     cx.temp = temp_snapshot;
     Ok(result)
@@ -641,7 +639,7 @@ fn ox_codegen_block_no_reset<'a>(
                 statements.extend(scope_block);
             }
             ReactiveStatement::Scope(ReactiveScopeBlock { scope, instructions }) => {
-                let temp_snapshot = ox_clone_temporaries(&cx.ast, &cx.temp);
+                let temp_snapshot = cx.temp.clone();
                 ox_codegen_reactive_scope(cx, &mut statements, *scope, instructions)?;
                 cx.temp = temp_snapshot;
             }
@@ -1582,7 +1580,8 @@ fn ox_emit_store<'a>(
                 );
                 if !is_store_context {
                     let ident = &cx.env.identifiers[lvalue_place.identifier];
-                    cx.temp.insert(ident.declaration_id, Some(OxValue::Expression(expr)));
+                    let value = &*cx.ast.allocator().alloc(OxValue::Expression(expr));
+                    cx.temp.insert(ident.declaration_id, Some(value));
                     return Ok(None);
                 }
                 let stmt = ox_codegen_instruction(cx, instr, OxValue::Expression(expr))?;
@@ -1640,6 +1639,7 @@ fn ox_codegen_instruction<'a>(
     };
     let ident = &cx.env.identifiers[lvalue.identifier];
     if ident.name.is_none() {
+        let value = &*cx.ast.allocator().alloc(value);
         cx.temp.insert(ident.declaration_id, Some(value));
         return Ok(oxc_ast::ast::Statement::new_empty_statement(SPAN, &cx.ast));
     }
@@ -2855,7 +2855,12 @@ fn ox_codegen_function_expression<'a>(
             }
         }
         _ => {
-            let id = name.as_ref().map(|n| {
+            let renamed_name = reactive_fn
+                .self_binding
+                .as_ref()
+                .map(|place| ox_identifier_name(cx.env, place.identifier))
+                .transpose()?;
+            let id = renamed_name.as_ref().or(name.as_ref()).map(|n| {
                 oxc_ast::ast::BindingIdentifier::new(
                     name_span.unwrap_or(span),
                     ox_str(&cx.ast, n),
@@ -2942,7 +2947,7 @@ fn ox_codegen_inner_function<'a>(
         cx.unique_identifiers.clone(),
         cx.fbt_operands.clone(),
     );
-    inner_cx.temp = ox_clone_temporaries(&cx.ast, &cx.temp);
+    inner_cx.temp = cx.temp.clone();
     ox_codegen_reactive_function(&mut inner_cx, reactive_fn)
 }
 

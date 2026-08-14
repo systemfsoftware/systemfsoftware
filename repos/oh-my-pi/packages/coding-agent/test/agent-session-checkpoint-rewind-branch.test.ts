@@ -110,7 +110,7 @@ async function createHarness(
 	options?: { onAgentEnd?: (willContinue: boolean | undefined) => void },
 ): Promise<Harness & { mock: MockModel }> {
 	const tempDir = TempDir.createSync("@pi-checkpoint-rewind-branch-");
-	const authStorage = await AuthStorage.create(path.join(tempDir.path(), "auth.db"));
+	const authStorage = await AuthStorage.create(":memory:");
 	authStorage.setRuntimeApiKey("mock", "test-key");
 
 	const mock = createMockModel({ responses });

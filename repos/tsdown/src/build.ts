@@ -1,4 +1,3 @@
-import { bold, green } from 'ansis'
 import { clearRequireCache } from 'import-without-cache'
 import {
   build as rolldownBuild,
@@ -33,9 +32,7 @@ import {
 } from './utils/chunks.ts'
 import { debounce, typeAssert } from './utils/general.ts'
 import { globalLogger } from './utils/logger.ts'
-
-const asyncDispose: typeof Symbol.asyncDispose =
-  Symbol.asyncDispose || Symbol.for('Symbol.asyncDispose')
+import { styleText } from './utils/style.ts'
 
 /**
  * Build with tsdown.
@@ -109,7 +106,7 @@ export async function buildWithConfigs(
     // Watch mode with shortcuts
     disposeCbs.push(shortcuts(restart))
     for (const bundle of bundles) {
-      disposeCbs.push(bundle[asyncDispose])
+      disposeCbs.push(bundle[Symbol.asyncDispose])
     }
   } else if (firstDevtoolsConfig) {
     typeAssert(firstDevtoolsConfig.devtools)
@@ -157,7 +154,7 @@ async function buildSingle(
     chunks,
     config,
     inlinedDeps: new Map(),
-    async [asyncDispose]() {
+    async [Symbol.asyncDispose]() {
       debouncedPostBuild.cancel()
       ab?.abort()
       await watcher?.close()
@@ -178,7 +175,7 @@ async function buildSingle(
   if (!watch) {
     logger.success(
       config.nameLabel,
-      `Build complete in ${green(`${Math.round(performance.now() - startTime)}ms`)}`,
+      `Build complete in ${styleText.green(`${Math.round(performance.now() - startTime)}ms`)}`,
     )
     await postBuild()
   }
@@ -243,7 +240,7 @@ async function buildSingle(
           if (changedFile.length) {
             logger.clearScreen('info')
             logger.info(
-              `Found ${bold(changedFile.join(', '))} changed, rebuilding...`,
+              `Found ${styleText.bold(changedFile.join(', '))} changed, rebuilding...`,
             )
           }
           changedFile.length = 0
@@ -289,7 +286,7 @@ async function buildSingle(
     }
 
     const configs: BuildOptions[] = [buildOptions]
-    if (format === 'cjs' && dts && (!isDualFormat || !dts.cjsReexport)) {
+    if (format === 'cjs' && dts) {
       configs.push(
         await getBuildOptions(
           config,

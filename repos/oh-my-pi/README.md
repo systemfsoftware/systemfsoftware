@@ -54,6 +54,31 @@ brew install can1357/tap/omp
 bun install -g @oh-my-pi/pi-coding-agent
 ```
 
+**Nix**
+
+```sh
+# Run without installing
+nix run github:can1357/oh-my-pi
+
+# Or install into the active profile
+nix profile install github:can1357/oh-my-pi
+```
+
+Flake consumers can use `packages.<system>.omp`, `overlays.default`, `nixosModules.default`, or `homeManagerModules.default`. A Home Manager configuration can install OMP and own its settings declaratively:
+
+```nix
+{
+  inputs.omp.url = "github:can1357/oh-my-pi";
+
+  # In your Home Manager module:
+  imports = [ inputs.omp.homeManagerModules.default ];
+  programs.omp = {
+    enable = true;
+    settings.startup.quiet = true;
+  };
+}
+```
+
 **Windows (PowerShell)**
 
 ```powershell
@@ -580,6 +605,22 @@ bun dev
 ```
 
 `bun setup` installs Bun workspaces and builds `@oh-my-pi/pi-natives`. Re-run `bun run build:native` after changing Rust crates or `packages/natives`.
+
+Nix users get the pinned Bun and Rust toolchains plus all native build dependencies:
+
+```sh
+nix develop
+bun setup
+bun dev
+```
+
+Build and smoke-test the distributable Nix package with `nix build .#omp`. Wayland screencast support is off by default (linking libpipewire adds ~750 MB of runtime closure); enable it with `omp.override { withWaylandScreencast = true; }`. `nix/bun.nix` is generated only when `bun.lock` changes; releases regenerate it automatically. For dependency changes, run:
+
+```sh
+bun run gen:nix
+```
+
+The command uses `bun2nix` from `nix develop` when available, otherwise enters the development shell through Nix, then falls back to the pinned `bunx bun2nix@2.1.2`. Do not edit `nix/bun.nix` manually.
 
 For a non-interactive smoke check:
 

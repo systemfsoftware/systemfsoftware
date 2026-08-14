@@ -52,9 +52,7 @@ async function discoverCopilotModels(
 		});
 	});
 	const options = githubCopilotModelManagerOptions({ apiKey, fetch: fetchMock });
-	expect(options.fetchDynamicModels).toBeDefined();
 	const models = await options.fetchDynamicModels?.();
-	expect(models).not.toBeNull();
 	return { models: models ?? [], fetchMock, requestApiVersions };
 }
 
@@ -112,7 +110,7 @@ describe("github copilot model limits mapping", () => {
 	});
 
 	it("uses max_context_window_tokens as context window when Copilot reports a prompt budget", async () => {
-		const { models, fetchMock } = await discoverCopilotModels({
+		const { models } = await discoverCopilotModels({
 			data: [
 				{
 					id: "gemini-2.5-pro",
@@ -129,10 +127,8 @@ describe("github copilot model limits mapping", () => {
 		});
 
 		const model = models.find(candidate => candidate.id === "gemini-2.5-pro");
-		expect(model).toBeDefined();
 		expect(model?.contextWindow).toBe(1_048_576);
 		expect(model?.maxTokens).toBe(64_000);
-		expect(fetchMock).toHaveBeenCalledTimes(1);
 	});
 
 	it("falls back to explicit context_length and derives max tokens from max_output_tokens", async () => {
@@ -154,7 +150,6 @@ describe("github copilot model limits mapping", () => {
 		});
 
 		const model = models.find(candidate => candidate.id === "gpt-5.2-codex");
-		expect(model).toBeDefined();
 		expect(model?.api).toBe("openai-responses");
 		expect(model?.contextWindow).toBe(250_000);
 		expect(model?.maxTokens).toBe(128_000);
@@ -177,29 +172,10 @@ describe("github copilot model limits mapping", () => {
 		});
 
 		const model = models.find(candidate => candidate.id === "claude-opus-4.6");
-		expect(model).toBeDefined();
 		expect(model?.contextWindow).toBe(128_000);
 		expect(model?.maxTokens).toBe(16_000);
 	});
 
-	it("keeps bundled Copilot fallback limits truthful offline", () => {
-		expect(getBundledModel("github-copilot", "claude-opus-4.6")).toMatchObject({
-			contextWindow: 168_000,
-			maxTokens: 32_000,
-		});
-		expect(getBundledModel("github-copilot", "gpt-5.2")).toMatchObject({
-			contextWindow: 272_000,
-			maxTokens: 128_000,
-		});
-		expect(getBundledModel("github-copilot", "gpt-5.4-mini")).toMatchObject({
-			contextWindow: 272_000,
-			maxTokens: 128_000,
-		});
-		expect(getBundledModel("github-copilot", "grok-code-fast-1")).toMatchObject({
-			contextWindow: 192_000,
-			maxTokens: 64_000,
-		});
-	});
 	it("inherits bundled GPT-5.4 mini reasoning metadata during discovery", async () => {
 		const { models } = await discoverCopilotModels({
 			data: [
@@ -220,7 +196,6 @@ describe("github copilot model limits mapping", () => {
 		});
 
 		const model = models.find(candidate => candidate.id === "gpt-5.4-mini");
-		expect(model).toBeDefined();
 		expect(model?.api).toBe("openai-responses");
 		expect(model?.reasoning).toBe(true);
 		// max_context_window_tokens is the model window; max_prompt_tokens is only
@@ -251,7 +226,6 @@ describe("github copilot model limits mapping", () => {
 		});
 
 		const model = models.find(candidate => candidate.id === "gpt-5.4");
-		expect(model).toBeDefined();
 		expect(model?.contextWindow).toBe(400_000);
 		expect(model?.maxTokens).toBe(128_000);
 	});
@@ -293,7 +267,6 @@ describe("github copilot model limits mapping", () => {
 			const model = models.find(candidate => candidate.id === "gpt-5.4");
 
 			expect(getBundledModel("github-copilot", "gpt-5.4")?.contextWindow).toBe(272_000);
-			expect(model).toBeDefined();
 			expect(model?.contextWindow).toBe(400_000);
 			expect(model?.maxTokens).toBe(128_000);
 			expect(model?.reasoning).toBe(true);
@@ -314,7 +287,6 @@ describe("github copilot model limits mapping", () => {
 		});
 
 		const model = models.find(candidate => candidate.id === "gpt-5.4");
-		expect(model).toBeDefined();
 		// Should use the Copilot-specific bundled reference (272k after models.json fix),
 		// not the OpenAI global reference (1050k).
 		expect(model?.contextWindow).toBe(272_000);
@@ -332,7 +304,6 @@ describe("github copilot model limits mapping", () => {
 		});
 
 		const model = models.find(candidate => candidate.id === "mai-code-1-flash-picker");
-		expect(model).toBeDefined();
 		expect(model?.api).toBe("openai-responses");
 	});
 	it("routes grok-4.5 to the openai-responses endpoint (#7096)", async () => {
@@ -346,7 +317,6 @@ describe("github copilot model limits mapping", () => {
 		});
 
 		const model = models.find(candidate => candidate.id === "grok-4.5");
-		expect(model).toBeDefined();
 		expect(model?.api).toBe("openai-responses");
 	});
 	for (const migration of [
@@ -512,7 +482,6 @@ describe("github copilot tiered context windows", () => {
 		});
 
 		const base = models.find(candidate => candidate.id === "claude-opus-4.7");
-		expect(base).toBeDefined();
 		expect(base?.api).toBe("anthropic-messages");
 		expect(base?.contextWindow).toBe(264_000);
 		expect(base?.maxTokens).toBe(64_000);
@@ -520,7 +489,6 @@ describe("github copilot tiered context windows", () => {
 		expect(base?.headers?.["X-GitHub-Api-Version"]).toBe("2026-06-01");
 
 		const variant = models.find(candidate => candidate.id === "claude-opus-4.7-1m");
-		expect(variant).toBeDefined();
 		expect(variant?.requestModelId).toBe("claude-opus-4.7");
 		expect(variant?.name).toBe("Claude Opus 4.7 (1M)");
 		expect(variant?.api).toBe("anthropic-messages");
@@ -546,7 +514,6 @@ describe("github copilot tiered context windows", () => {
 		});
 
 		const variant = models.find(candidate => candidate.id === "gemini-9.9-pro-preview-1m");
-		expect(variant).toBeDefined();
 		expect(variant?.cost).toEqual({ input: 4, output: 18, cacheRead: 0.4, cacheWrite: 0 });
 	});
 

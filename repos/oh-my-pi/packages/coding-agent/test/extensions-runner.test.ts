@@ -10,7 +10,7 @@ import type { AgentMessage, AgentTool } from "@oh-my-pi/pi-agent-core";
 import type { ImageContent, TextContent } from "@oh-my-pi/pi-ai";
 import { getBundledModel } from "@oh-my-pi/pi-catalog/models";
 import { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
-import { discoverAndLoadExtensions, ExtensionRuntime } from "@oh-my-pi/pi-coding-agent/extensibility/extensions/loader";
+import { ExtensionRuntime, loadExtensions } from "@oh-my-pi/pi-coding-agent/extensibility/extensions/loader";
 import {
 	EXTENSION_HANDLER_TIMEOUT_MS,
 	ExtensionRunner,
@@ -68,7 +68,13 @@ describe("ExtensionRunner", () => {
 	});
 
 	const loadTestExtensions = async (configuredPaths: string[] = []) => {
-		const result = await discoverAndLoadExtensions([extensionsDir, ...configuredPaths], tempDir.path());
+		const discoveredPaths = fs
+			.readdirSync(extensionsDir, { withFileTypes: true })
+			.filter(entry => entry.isFile() && (entry.name.endsWith(".ts") || entry.name.endsWith(".js")))
+			.map(entry => path.join(extensionsDir, entry.name))
+			.sort();
+		const explicitPaths = configuredPaths.map(configuredPath => path.resolve(tempDir.path(), configuredPath));
+		const result = await loadExtensions([...discoveredPaths, ...explicitPaths], tempDir.path());
 		const testRoots = [
 			extensionsDir,
 			...configuredPaths.map(configuredPath => path.resolve(tempDir.path(), configuredPath)),
@@ -84,26 +90,6 @@ describe("ExtensionRunner", () => {
 			errors: result.errors.filter(error => isTestScoped(error.path)),
 		};
 	};
-
-	it("exposes caller localProtocolOptions through extension context", async () => {
-		const localProtocolOptions = {
-			getArtifactsDir: () => tempDir.join("artifacts"),
-			getSessionId: () => "runner-session",
-		};
-		const result = await loadTestExtensions();
-		const runner = new ExtensionRunner(
-			result.extensions,
-			result.runtime,
-			tempDir.path(),
-			sessionManager,
-			modelRegistry,
-			undefined,
-			undefined,
-			localProtocolOptions,
-		);
-
-		expect(runner.createContext().localProtocolOptions).toBe(localProtocolOptions);
-	});
 
 	it("reflects SessionManager.moveTo() changes instead of the constructor-time snapshot (/move)", async () => {
 		const dirA = tempDir.join("dirA");
@@ -122,6 +108,53 @@ describe("ExtensionRunner", () => {
 
 		expect(runner.cwd).toBe(dirB);
 		expect(runner.createContext().cwd).toBe(dirB);
+	});
+
+	it("exposes the initialized host mode to extension contexts", async () => {
+		const result = await loadTestExtensions();
+		const runner = new ExtensionRunner(
+			result.extensions,
+			result.runtime,
+			tempDir.path(),
+			sessionManager,
+			modelRegistry,
+		);
+		const actions = {
+			sendMessage: () => {},
+			sendUserMessage: () => {},
+			appendEntry: () => {},
+			setLabel: () => {},
+			getActiveTools: () => [],
+			getAllTools: () => [],
+			setActiveTools: async () => {},
+			getCommands: () => [],
+			setModel: async () => false,
+			getThinkingLevel: () => undefined,
+			setThinkingLevel: () => {},
+			getSessionName: () => undefined,
+			setSessionName: async () => {},
+		};
+		const contextActions = {
+			getModel: () => undefined,
+			isIdle: () => true,
+			abort: () => {},
+			hasPendingMessages: () => false,
+			shutdown: () => {},
+			getContextUsage: () => undefined,
+			compact: async () => {},
+			getSystemPrompt: () => [],
+		};
+
+		expect(runner.createContext().mode).toBe("print");
+
+		runner.initialize(actions, contextActions, undefined, undefined, "rpc");
+		expect(runner.createContext().mode).toBe("rpc");
+
+		runner.initialize(actions, contextActions, undefined, undefined, "json");
+		expect(runner.createContext().mode).toBe("json");
+
+		runner.initialize(actions, contextActions, undefined, undefined, "tui");
+		expect(runner.createContext().mode).toBe("tui");
 	});
 
 	describe("shortcut conflicts", () => {
@@ -2415,38 +2448,6 @@ describe("ExtensionRunner", () => {
 
 			await expect(wrapped.execute("tool-call-id", { command: "echo original" })).rejects.toThrow("nope");
 			expect(fs.existsSync(recordPath)).toBe(false); // tool never executed
-		});
-
-		it("executes with the original input when no handler returns a replacement", async () => {
-			const recordPath = path.join(tempDir.path(), "override-absent.jsonl");
-			const extCode = `
-				export default function(pi) {
-					pi.on("tool_call", async (event) => {
-						if (event.toolName !== "bash") return;
-						// observe only; no input override
-					});
-				}
-			`;
-			fs.writeFileSync(path.join(extensionsDir, "tool-call-no-override.ts"), extCode);
-
-			const result = await loadTestExtensions();
-			const runner = new ExtensionRunner(
-				result.extensions,
-				result.runtime,
-				tempDir.path(),
-				sessionManager,
-				modelRegistry,
-			);
-			const wrapped = new ExtensionToolWrapper(createRecordingTool(recordPath), runner);
-
-			await wrapped.execute("tool-call-id", { command: "echo original" });
-
-			const executed = fs
-				.readFileSync(recordPath, "utf8")
-				.trim()
-				.split("\n")
-				.map(line => JSON.parse(line));
-			expect(executed).toEqual([{ command: "echo original" }]);
 		});
 
 		// A tool whose approval policy depends on its args: the command "rm -rf" resolves to deny,

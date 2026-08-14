@@ -406,11 +406,7 @@ function followedByInterruptedThinking(messages: AgentMessage[], index: number):
 	return next !== undefined && next.role === "custom" && next.customType === INTERRUPTED_THINKING_MESSAGE_TYPE;
 }
 
-/**
- * Drop the demoted trailing thinking run from an assistant message for the LLM
- * view only. The run is incomplete and unsigned, so providers reject it; the
- * continuity message that follows carries the reasoning instead.
- */
+/** Drop an incomplete trailing thinking run from an interrupted assistant in the LLM view. */
 function stripDemotedThinkingForLlm(message: AssistantMessage): AssistantMessage {
 	const demoted = demoteInterruptedThinking(message);
 	return demoted ? { ...message, content: demoted.strippedContent } : message;
@@ -1263,12 +1259,12 @@ function convertOne(m: AgentMessage, interruptedNext: boolean): Message[] {
 			return converted ? [converted] : [];
 		}
 		case "assistant": {
-			// A user-interrupted turn keeps its trailing thinking run on the
-			// persisted/displayed message so reload and display-reset rebuilds still
-			// show it. That run is incomplete/unsigned and gets rejected on
-			// resend, so strip it here — LLM path only — when the hidden
-			// interrupted-thinking continuity message follows.
-			const source = interruptedNext ? stripDemotedThinkingForLlm(m) : m;
+			// Persisted/displayed messages retain interrupted thinking. Signed or
+			// encrypted blocks replay natively; incomplete unsigned runs are
+			// stripped whether or not they were long enough for a continuity note.
+			const userInterrupted = m.stopReason === "aborted" && isUserInterruptAbort(m);
+			const source = interruptedNext || userInterrupted ? stripDemotedThinkingForLlm(m) : m;
+			if (userInterrupted && !interruptedNext && source.content.length === 0) return [];
 			const converted = convertMessageToLlm(source);
 			return converted ? [converted] : [];
 		}

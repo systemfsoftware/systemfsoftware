@@ -33,37 +33,39 @@ async function expectPromptDateFromStartupTimezone(options: {
 	const scenarioPath = path.join(options.tempDir, "prompt-date-timezone.test.ts");
 	await Bun.write(
 		scenarioPath,
-		`import { expect, it, setSystemTime } from "bun:test";
+		`import { setSystemTime } from "bun:test";
 import { buildSystemPrompt } from ${JSON.stringify(path.resolve(import.meta.dir, "../src/system-prompt.ts"))};
 
-it("renders the prompt date in the startup timezone", async () => {
-	setSystemTime(new Date(process.env.OMP_TEST_NOW!));
-	try {
-		const { systemPrompt } = await buildSystemPrompt({
-			cwd: process.cwd(),
-			contextFiles: [],
-			skills: [],
-			rules: [],
-			toolNames: [],
-			workspaceTree: {
-				rootPath: process.cwd(),
-				rendered: "",
-				truncated: false,
-				totalLines: 0,
-				agentsMdFiles: [],
-			},
-			activeRepoContext: null,
-		});
-		const rendered = systemPrompt.join("\\n\\n");
-		expect(rendered).toContain(\`Today: \${process.env.OMP_EXPECTED_DATE}\`);
-		expect(rendered).not.toContain(\`Today: \${process.env.OMP_REJECTED_DATE}\`);
-	} finally {
-		setSystemTime();
+setSystemTime(new Date(process.env.OMP_TEST_NOW!));
+try {
+	const { systemPrompt } = await buildSystemPrompt({
+		cwd: process.cwd(),
+		contextFiles: [],
+		skills: [],
+		rules: [],
+		toolNames: [],
+		workspaceTree: {
+			rootPath: process.cwd(),
+			rendered: "",
+			truncated: false,
+			totalLines: 0,
+			agentsMdFiles: [],
+		},
+		activeRepoContext: null,
+	});
+	const rendered = systemPrompt.join("\\n\\n");
+	if (!rendered.includes(\`Today: \${process.env.OMP_EXPECTED_DATE}\`)) {
+		throw new Error(\`Prompt did not contain expected local date:\\n\${rendered}\`);
 	}
-});
+	if (rendered.includes(\`Today: \${process.env.OMP_REJECTED_DATE}\`)) {
+		throw new Error(\`Prompt contained rejected UTC date:\\n\${rendered}\`);
+	}
+} finally {
+	setSystemTime();
+}
 `,
 	);
-	const child = Bun.spawn([process.execPath, "test", scenarioPath], {
+	const child = Bun.spawn([process.execPath, scenarioPath], {
 		cwd: options.tempDir,
 		env: {
 			...process.env,
@@ -81,8 +83,7 @@ it("renders the prompt date in the startup timezone", async () => {
 		new Response(child.stderr).text(),
 		child.exited,
 	]);
-	expect(`${stdout}\n${stderr}`).toContain("1 pass");
-	expect(exitCode).toBe(0);
+	expect(exitCode, `${stdout}\n${stderr}`).toBe(0);
 }
 
 describe("system prompt model identifier", () => {

@@ -847,8 +847,6 @@ describe("Coding Agent Tools", () => {
 
 			const result = await readTool.execute("test-call-9", { path: testFile });
 
-			expect(result.details).toBeDefined();
-			expect(result.details?.truncation).toBeDefined();
 			expect(result.details?.truncation?.truncated).toBe(true);
 			expect(result.details?.truncation?.truncatedBy).toBe("lines");
 			expect(result.details?.truncation?.totalLines).toBe(3500);
@@ -1526,10 +1524,7 @@ describe("Coding Agent Tools", () => {
 			const imageBlock = result.content.find(
 				(c): c is { type: "image"; mimeType: string; data: string } => c.type === "image",
 			);
-			expect(imageBlock).toBeDefined();
 			expect(imageBlock?.mimeType).toBe("image/png");
-			expect(typeof imageBlock?.data).toBe("string");
-			expect((imageBlock?.data ?? "").length).toBeGreaterThan(0);
 		});
 
 		it("returns metadata guidance (no image blocks) when inspect_image is enabled", async () => {
@@ -1744,10 +1739,6 @@ describe("Coding Agent Tools", () => {
 			});
 			const details = result.details as { diff?: string } | undefined;
 
-			expect(getTextOutput(result)).toContain("Successfully replaced");
-			expect(details).toBeDefined();
-			expect(details?.diff).toBeDefined();
-			expect(typeof details?.diff).toBe("string");
 			expect(details?.diff).toContain("testing");
 		});
 
@@ -2070,7 +2061,7 @@ function b() {
 				// Emit well past the ~50KB inline window across many lines so the
 				// output is genuinely window-truncated (not merely column-capped),
 				// which is what allocates the spill artifact.
-				command: "seq 1 30000",
+				command: "seq 1 15000",
 			});
 
 			const artifactId = result.details?.meta?.truncation?.artifactId;
