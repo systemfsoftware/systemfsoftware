@@ -1,6 +1,6 @@
 # AGENTS.md — `recommended/`
 
-> Delta only. Shared rule-authoring conventions: `packages/oxlint-plugins/AGENTS.md`. Universal rules: root `AGENTS.md`.
+> Shared rule-authoring conventions: `packages/oxlint-plugins/AGENTS.md`.
 
 This package ships settings, not rules: `src/index.ts` declares which **stock** oxlint rules the architecture recommends, and where. It has no rule logic and no plugin dependencies — the custom cell rules live in their own packages and compose with this preset. See `README.md` for the derivation and the refusal ledger.
 

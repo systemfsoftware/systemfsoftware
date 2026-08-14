@@ -1,6 +1,6 @@
 # AGENTS.md — `packages/oxlint-plugins/`
 
-> **Location:** `packages/oxlint-plugins/` — the oxlint plugin family. General: `core/` (general rule set), `test-hygiene/` (test naming), `property-testing/` (property-test contract), `test-placement/` (test location and suffix), `cell-taxonomy/` (source filenames name their cell), `effect-entrypoint/` (`main.ts` is an interpretation edge, not a cell), `recommended/`, `effect-dmmf/` (aggregates all eighteen source plugins under one entrypoint). One package per architecture cell: `effect-{workflow,executor,handler,middleware,acl,adapter,store,state,schema,shape,policy,kernel,observer}/`. Universal agent rules live in the root `AGENTS.md`; this file carries the shared rule-authoring conventions for every plugin in this folder. Package leaves carry only their package's delta.
+> **Location:** `packages/oxlint-plugins/` — the oxlint plugin family. This file carries the shared rule-authoring conventions for every plugin in this folder; each package leaf carries only its own delta.
 
 ## Critical
 
@@ -140,6 +140,9 @@ default, not a delta. Listed here only where a package departs from it.
 | Package                                         | Leaf delta                                                                                                                       |
 | ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
 | `core/`                                         | ESLintUtils template, ESLint migration notes, legacy commands                                                                    |
+| `property-testing/`                             | Property-test contract rules; no leaf — this file's conventions govern                                                           |
+| `test-hygiene/`                                 | DAMP test naming; no leaf — this file's conventions govern                                                                       |
+| `cell-imports/`                                 | Import-boundary rules per cell pair; no leaf — this file's conventions govern                                                    |
 | `effect-dmmf/`                                  | No rules of its own, pure re-export — exempt from OX-MG1, gate + rationale in its own leaf (`ED1`, `ED2`)                        |
 | `cell-taxonomy/`                                | Sole owner of non-test source filenames (`CT1`); default lists are defaults, not law (`CT2`)                                     |
 | `test-placement/`                               | Not enrolled in its own rules (`TP1`), sole owner of test placement (`TP2`)                                                      |

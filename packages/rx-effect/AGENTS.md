@@ -1,6 +1,6 @@
 # AGENTS.md — `@systemfsoftware/rx-effect`
 
-> **Delta**: Bridge RxJS Observables into Effect-TS Streams. Root AGENTS.md governs.
+> **Delta**: Bridge RxJS Observables into Effect-TS Streams.
 
 Converts `Observable<T>` → `Stream<never, Cause, T>` with backpressure and proper interruption via `Scope`.
 

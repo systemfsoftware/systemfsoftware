@@ -4,7 +4,6 @@
 >
 > - `omp/plugins/` — host extension packages (carry `omp.extensions`, loaded per session by the OMP host). **Leaf: `omp/plugins/AGENTS.md`** — read it before editing any entry, handler, or runtime wiring there.
 > - `omp/packages/` — plain libraries consumed by plugins. No leaf: the root plus this file govern them.
->   Universal agent rules live in the root `AGENTS.md`; this file carries only `omp/`-specific deltas.
 
 ## Critical
 
