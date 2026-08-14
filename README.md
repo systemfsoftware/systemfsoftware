@@ -1,49 +1,118 @@
+<p align="center">
+  <br>
+  <br>
+  <a href="https://oxc.rs" target="_blank" rel="noopener noreferrer">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://oxc.rs/oxc-light.svg">
+      <source media="(prefers-color-scheme: light)" srcset="https://oxc.rs/oxc-dark.svg">
+      <img alt="Oxc logo" src="https://oxc.rs/oxc-dark.svg" height="60">
+    </picture>
+  </a>
+  <br>
+  <br>
+  <br>
+</p>
+
 <div align="center">
 
-# systemfsoftware
+[![MIT licensed][license-badge]][license-url]
+[![Build Status][ci-badge]][ci-url]
+[![Code Coverage][code-coverage-badge]][code-coverage-url]
+[![CodSpeed Badge](https://img.shields.io/endpoint?url=https://codspeed.io/badge.json)](https://codspeed.io/oxc-project/oxc)
 
-_Effect-TS libraries and the lint plugin that enforces the [constitution](https://systemfsoftware.com/constitution)_
-
-[![License: Apache 2.0](https://img.shields.io/badge/license-Apache_2.0-blue?style=flat-square)](LICENSE)
-[![CI](https://img.shields.io/github/actions/workflow/status/systemfsoftware/systemfsoftware/release.yml?branch=main&style=flat-square&label=CI)](https://github.com/systemfsoftware/systemfsoftware/actions)
-[![Constitution](https://img.shields.io/badge/built%20to-the%20constitution-black?style=flat-square)](https://systemfsoftware.com/constitution)
+[![Discord chat][discord-badge]][discord-url]
+[![Playground][playground-badge]][playground-url]
+[![Website][website-badge]][website-url]
 
 </div>
 
-A pnpm monorepo of [Effect-TS](https://effect.website) packages — pure functional cores behind thin imperative shells, property-tested and mutation-gated. The `oxlint-plugin` enforces the [System F Software constitution](https://systemfsoftware.com/constitution); the monorepo lints itself with it.
+## ⚓ Oxc
 
-## Packages
+_/oʊ ɛks siː/_
 
-| Package                                                         | npm                                         | What it does                                                                                                                                                                                                     |
-| --------------------------------------------------------------- | ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`effect-gherkin-spec`](packages/effect-gherkin-spec)           | `@systemfsoftware/effect-gherkin-spec`      | `feature`/`scenario`/`outline` DSL for Gherkin-style behaviour tests composed as Effects, with Scenario Outline expansion and typed step errors.                                                                 |
-| [`effect-daemon-spec`](packages/effect-daemon-spec)             | `@systemfsoftware/effect-daemon-spec`       | A typed supervision-tree daemon for Effect — leader election, lock primitives, restart-intensity windows, dynamic children, and health latches.                                                                  |
-| [`oxlint-plugin`](packages/oxlint-plugin)                       | `@systemfsoftware/oxlint-plugin`            | 24 [oxlint](https://oxc.rs) rules enforcing the constitution: ban classes and string errors, forbid native timers/`Promise`/`Date` inside Effect, require pipeable composition, keep tests off the I/O boundary. |
-| [`effect-schema-law`](packages/effect-schema-law)               | `@systemfsoftware/effect-schema-law`        | One call asserts the codec laws of any Effect `Schema` as Vitest property tests — decode∘encode is identity, and encoding is stable under a decode round-trip.                                                   |
-| [`stryker-plugins`](packages/stryker-plugins)                   | `@systemfsoftware/stryker-plugins`          | Stryker mutation-testing plugins for Effect — `effect-schema-ignorer` skips equivalent mutants on Effect `Schema` declarations so the score reflects behaviour, not data.                                        |
-| [`rx-effect`](packages/rx-effect)                               | `@systemfsoftware/rx-effect`                | Bridge RxJS and Effect — turn an Observable into a typed Effect `Stream` with backpressure and proper interruption.                                                                                              |
-| [`effect-schema-extensions`](packages/effect-schema-extensions) | `@systemfsoftware/effect-schema-extensions` | Extra Effect `Schema` codecs — branded hex-string schemas with decode/encode and arbitraries.                                                                                                                    |
+The Oxidation Compiler is a collection of high-performance tools for JavaScript and TypeScript written in Rust.
 
-Supporting internal packages (`tsconfig`, `oxlint-config`, `vitest-config`) are not published.
+Oxc is part of [VoidZero](https://voidzero.dev/)'s vision for a unified, high-performance toolchain for JavaScript. It powers [Rolldown](https://rolldown.rs) ([Vite]'s bundler) and enables the next generation of ultra-fast development tools that work seamlessly together.
 
-## Install
+For more information, check out our website at [oxc.rs](https://oxc.rs).
 
-```bash
-pnpm add @systemfsoftware/effect-gherkin-spec
-pnpm add @systemfsoftware/effect-daemon-spec
-pnpm add -D @systemfsoftware/oxlint-plugin
-```
+<sub>\* Oxidation is the chemical process that creates rust</sub>
 
-Each package's README has a usage example and API reference.
+## 🙋 Who's using Oxc?
 
-> `effect` is a peer dependency of every published package. `effect-gherkin-spec` also peers `@effect/vitest` and `vitest`.
+[Rolldown] and [Nuxt] use Oxc for parsing. [Rolldown] also uses Oxc for transformation and minification. [Nova], [swc-node], and [knip] use [oxc_resolver][docs-resolver-url] for module resolution. [Preact], [Shopify], [ByteDance], and [Shopee] use oxlint for linting.
 
-## Contributing
+[See more projects using Oxc →](https://oxc.rs/docs/guide/projects.html)
 
-Development setup, build, test, and lint commands: [AGENTS.md](AGENTS.md).
+## 🔧 Lint or Format a Codebase
 
-Read the [constitution](https://systemfsoftware.com/constitution) and [`CONSTITUTION.md`](CONSTITUTION.md) before contributing. The constitution is vendored from [systemfsoftware/constitution](https://github.com/systemfsoftware/constitution) as a subtree.
+- **Lint**: [Oxlint](https://oxc.rs/docs/guide/usage/linter) — `npx oxlint@latest`
+- **Format**: [Oxfmt](https://oxc.rs/docs/guide/usage/formatter) — `npx oxfmt@latest`
 
-## License
+## 🧰 Build Tooling on Top of Oxc
 
-Licensed under [Apache 2.0](LICENSE).
+- Parse JavaScript and TypeScript: [Parser](https://oxc.rs/docs/guide/usage/parser)
+- Transform TypeScript, JSX, and modern JavaScript: [Transformer](https://oxc.rs/docs/guide/usage/transformer)
+- Minify JavaScript for production builds: [Minifier](https://oxc.rs/docs/guide/usage/minifier)
+- Resolve modules for JavaScript and TypeScript: [Resolver](https://oxc.rs/docs/guide/usage/resolver)
+
+## ✍️ Contribute
+
+Check out some of the [good first issues](https://github.com/oxc-project/oxc/contribute) or ask us on [Discord][discord-url].
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for guidance, or read the complete [contributing guide on our website →](https://oxc.rs/docs/contribute/introduction.html)
+
+If you are unable to contribute by code, you can still participate by:
+
+- Add a [GitHub Star](https://github.com/oxc-project/oxc/stargazers) to the project
+- Join us on [Discord][discord-url]
+- [Follow me on X](https://x.com/boshen_c) and post about this project
+
+## 📚 Other Resources
+
+- [Troubleshooting](https://oxc.rs/docs/guide/troubleshooting)
+- [Benchmarks](https://oxc.rs/docs/guide/benchmarks)
+- [Talks and media](https://oxc.rs/docs/guide/media)
+- [Team](https://oxc.rs/team)
+- [Endorsements](https://oxc.rs/endorsements)
+- [Releases](https://github.com/oxc-project/oxc/releases)
+
+# [Sponsored By](https://oxc.rs/sponsor)
+
+<p align="center">
+  <a href="https://oxc.rs/sponsor">
+    <img src="https://raw.githubusercontent.com/oxc-project/sponsors/main/sponsors.svg" alt="Our sponsors" />
+  </a>
+</p>
+
+## 📖 License
+
+Oxc is free and open-source software licensed under the [MIT License](./LICENSE).
+
+Thank you to [namespace.so](https://namespace.so) for powering our CI/CD pipelines with fast, free macOS and Linux runners.
+
+Oxc ports or copies code from other open source projects, their licenses are listed in [**Third-party library licenses**](./THIRD-PARTY-LICENSE).
+
+[discord-badge]: https://img.shields.io/discord/1079625926024900739?logo=discord&label=Discord
+[discord-url]: https://discord.gg/9uXCAwqQZW
+[license-badge]: https://img.shields.io/badge/license-MIT-blue.svg
+[license-url]: https://github.com/oxc-project/oxc/blob/main/LICENSE
+[ci-badge]: https://github.com/oxc-project/oxc/actions/workflows/ci.yml/badge.svg?event=push&branch=main
+[ci-url]: https://github.com/oxc-project/oxc/actions/workflows/ci.yml?query=event%3Apush+branch%3Amain
+[code-coverage-badge]: https://codecov.io/gh/oxc-project/oxc/graph/badge.svg?token=FVHEH0BQLJ
+[code-coverage-url]: https://codecov.io/gh/oxc-project/oxc
+[playground-badge]: https://img.shields.io/badge/Playground-blue?color=9BE4E0
+[playground-url]: https://playground.oxc.rs/
+[website-badge]: https://img.shields.io/badge/Website-blue
+[website-url]: https://oxc.rs
+[docs-resolver-url]: https://docs.rs/oxc_resolver
+[rolldown]: https://rolldown.rs
+[vite]: https://vite.dev/
+[nuxt]: https://nuxt.com/
+[nova]: https://trynova.dev/
+[swc-node]: https://github.com/swc-project/swc-node
+[knip]: https://github.com/webpro/knip
+[preact]: https://preactjs.com/
+[shopify]: https://shopify.com/
+[bytedance]: https://www.bytedance.com/
+[shopee]: https://shopee.com/

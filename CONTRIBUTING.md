@@ -1,43 +1,21 @@
 # Contributing
 
-## Setup
+Thank you for your interest in contributing to Oxc!
 
-Requires Node 24+ and pnpm 11 (pinned via `packageManager`; `corepack enable` picks it up).
+> [!IMPORTANT]
+> Please read the complete contributing guide on the [website](https://oxc.rs/docs/contribute/introduction.html).
 
-```bash
-pnpm install
-pnpm build        # tsdown, dependency order
-pnpm typecheck    # tsc (TypeScript 7)
-pnpm test         # vitest — property + composition suites
-pnpm lint         # dprint check + self-hosted oxlint
-```
+Please check out our [good first issues](https://github.com/oxc-project/oxc/contribute) or ask for guidance on [Discord](https://discord.gg/9uXCAwqQZW).
 
-Read [`CONSTITUTION.md`](CONSTITUTION.md) (the design law) and [`AGENTS.md`](AGENTS.md) (workspace invariants) first.
+We welcome and appreciate any form of contributions.
 
-## Commits
+## AI Usage Policy
 
-[Conventional Commits](https://www.conventionalcommits.org), enforced by `commitlint` (commit-msg hook). The type drives the release; the scope is a package directory name (or `repo`/`deps`/`release`/`ci`) and is optional but encouraged:
+When using AI tools (including LLMs like ChatGPT, Claude, Copilot, etc.) to contribute to Oxc:
 
-```
-fix(rx-effect): handle empty observable
-feat(effect-daemon-spec): add jitter backoff
-```
+- **Please disclose AI usage** to reduce maintainer fatigue
+- **You are responsible** for all AI-generated issues or PRs you submit
+- **Low-quality or unreviewed AI content will be closed immediately**
+- **Contributors who submit repeated low-quality ("slop") PRs will be banned without prior warning.** Bans may be lifted if you commit to contributing to Oxc in accordance with this policy. You may request an unban via our [Discord](https://discord.gg/9uXCAwqQZW).
 
-## Releasing
-
-Releases are **driven by your commits** — [semantic-release](https://semantic-release.gitbook.io) reads the conventional-commit history, decides each package's next version, tags it, publishes to npm, and writes the GitHub release. No manual version files.
-
-Each package is versioned **independently**. A small owned router (`scripts/release.mjs`) runs semantic-release once per published package, scoping each run to the commits that touched that package (`scripts/release-monorepo-filter.mjs`) and tagging as `<package>@vX.Y.Z`. No third-party monorepo-release dependency. The private tooling packages (`tsconfig`, `oxlint-config`, `vitest-config`) are skipped.
-
-On push to `main`, the **Release** workflow publishes every package that had a releasing commit. Preview locally with `pnpm release:dry`.
-
-### Publishing — OIDC trusted publishing, no token
-
-The workflow authenticates to npm with **GitHub OIDC** (`id-token: write`) and publishes with `pnpm publish` on pnpm 11 — which natively does the OIDC handshake, strips the `workspace:` protocol, and emits provenance. There is **no `NPM_TOKEN`**.
-
-npm requires a package to exist before OIDC can be configured, so there's a one-time bootstrap per package:
-
-1. **First publish with a token.** `npm login`, then `pnpm build && pnpm release` once from your machine.
-2. **Add the trusted publisher** at `npmjs.com/package/@systemfsoftware/<name>` → _Settings → Trusted Publisher → GitHub Actions_ — organization `systemfsoftware`, repository `systemfsoftware`, workflow `release.yml`. All packages point at the same workflow.
-
-After that, pushes to `main` publish automatically over OIDC with no secrets.
+We encourage the use of AI tools to assist with development, but all contributions must be thoroughly reviewed and tested by the contributor before submission. AI-generated code should be understood, validated, and adapted to meet Oxc's standards.

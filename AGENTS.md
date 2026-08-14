@@ -1,112 +1,333 @@
-# systemfsoftware — workspace invariants
+# AGENTS.md - AI Assistant Guide for Oxc
 
-## Safety
+Oxc is a high-performance JavaScript/TypeScript toolchain written in Rust containing:
 
-```yaml
-- id: REPO-S5
-  title: NEVER put a shell cell in a mutation surface
-  do: mutate only pure decisions — `*.workflow.ts` in a cell package, the rule file in a lint plugin, `*.schema.ts` where generated laws do not already cover it
-  dont: add any shell-cell suffix (`*.executor.ts`, `*.kernel.ts`, `*.acl.ts`, `*.store.ts`, `*.handler.ts`, `*.middleware.ts`, `*.state.ts`, `*.adapter.ts`, `*.policy.ts`, `*.shape.ts`, `*.observer.ts`) to a `mutate` glob; leave `mutate` unset so the Stryker default sweeps every source file and auto-enrols each new cell
-  harm: wrong observer. The mutator asks "do the tests notice a changed decision?" — a shell cell decides nothing, so every mutant is equivalent or is killed by a composition test that was proving something else. The score certifies nothing and the package pays hours of runtime for it
-  check: `node scripts/guard-mutate-scope.mjs` exits 0, wired into `pnpm check:local`
+- Parser (JS/TS with AST), Linter (oxlint), Formatter (oxfmt), Transformer, Minifier
 
-- id: REPO-S6
-  title: Enforcement for a published concern ships inside the published artifact
-  do: carry the rule in a published oxlint plugin or a published type signature, with the failing fixture in that package's own suite; declare a genuinely repo-local rule (workspace layout, release metadata, vendored trees) in the `scripts/guard-script-provenance.mjs` manifest
-  dont: enforce a doctrine we publish with a `scripts/*.mjs` gate, a `pnpm check` step, `CONSTITUTION.md`, or the wiki — a consumer installs packages, not this repository; read a doctrine artifact from a script, which promotes prose to a spec nobody maintains
-  harm: the rule binds one clone. Everywhere else the same doctrine arrives as prose in a skill, which is the channel restraints do not survive — the design looks enforced here and is advisory for every consumer
-  check: `pnpm check:script-provenance` exits 0. The judgement half stays with the reviewer: name the artifact a stranger installs that carries the rule. `scripts/`, `pnpm check`, `CONSTITUTION.md` and the wiki are not answers
+## AI Usage Policy for Contributors
 
-- id: REPO-S7
-  title: A gate earns its place, and the tenth one is not free
-  do: before adding an entry to the gate, name the mistake it prevents — a specific wrong thing that specifically happened here, in the form a leaf must earn its own existence — then retire or subsume something, or give the rule to a published artifact instead (`REPO-S6`); raise `GATE_BUDGET` only in its own commit, with the entry's technique class and the suite's resulting aggregate stated
-  dont: add an entry whose verdict depends on scheduler order, cache state, or which task finished first; gate a regex or substring scan over source and call it enforcement; raise `GATE_BUDGET` in the same commit as the entry that exceeded it
-  harm: for N entries each misfiring independently with probability p a clean run is blocked with probability 1-(1-p)^N, so affordability is N x p and never N — at 2% each, ten entries block 18% of clean runs and twenty block 33%, and the suite is waived long before anyone admits it. Two failures measured here on 2026-08-11 are what the prohibitions name: `//#check:project-references` read built declarations while declaring no dependency on any `build`, and reported 11 projects broken in one CI run and 37 clean in another on the same tree; and a guard arm shipped that morning produced its first false positive within hours, on the first real corpus it met. A gate that is green by luck is worse than none, because it teaches the team to re-run until it passes
-    check: `pnpm check:script-provenance` prints the gate-entry count against `GATE_BUDGET` and exits non-zero when the count exceeds it. The judgement half stays with the reviewer: whether the named mistake is a real event or a class of badness, and whether a technique the table calls a tripwire is being sold as a gate
+**IMPORTANT**: If you are an AI assistant helping a human contributor:
+
+- **Disclose AI usage** - Contributors must disclose when AI tools were used to reduce maintainer fatigue
+- **Full responsibility** - The human contributor is responsible for all AI-generated issues or PRs they submit
+- **Quality standards** - Low-quality or unreviewed AI content will be closed immediately
+
+All AI-generated code must be thoroughly reviewed, tested, and understood by the contributor before submission. Code should meet Oxc's performance and quality standards.
+
+- **Ban policy** - Contributors who submit repeated low-quality ("slop") PRs will be banned without prior warning. Bans may be lifted if you commit to contributing to Oxc in accordance with the policy above. You may request an unban via our Discord.
+
+## Repository Structure
+
+Rust workspace with key directories:
+
+- `crates/` - Core functionality (start here when exploring)
+- `apps/` - Application binaries (oxlint, oxfmt)
+- `napi/` - Node.js bindings
+- `npm/` - npm packages
+- `tasks/` - Development tools/automation
+
+Avoid editing `generated` subdirectories.
+
+### Core Crates
+
+- `oxc_parser` - JS/TS parser
+- `oxc_ast` - AST definitions/utilities
+- `oxc_semantic` - Semantic analysis/symbols/scopes
+- `oxc_linter` - Linting engine/rules
+- `oxc_formatter` - Code formatting (Prettier-like for JS)
+- `oxc_formatter_*` - Code formatting (Prettier-like for other languages)
+- `oxc_transformer` - Code transformation (Babel-like)
+- `oxc_minifier` - Code minification
+- `oxc_codegen` - Code generation
+- `oxc_isolated_declarations` - TypeScript declaration generation
+- `oxc_diagnostics` - Error reporting
+- `oxc_traverse` - AST traversal utilities
+- `oxc_allocator` - Memory management
+- `oxc_language_server` - LSP server for editor integration
+- `oxc` - Main crate
+
+## Development Commands
+
+Prerequisites: Rust (MSRV: 1.95), Node.js, pnpm, just
+
+**Setup Notes:**
+
+- All tools already installed (`cargo-insta`, `typos-cli`, `cargo-shear`, `ast-grep`)
+- Rust components already installed (`clippy`, `rust-docs`, `rustfmt`)
+- Use Conventional Commits for commit messages; `.github/workflows/pr.yml` requires a scoped title like `fix(parser): handle trailing comma`
+- Run `just ready` after commits for final checks
+- You run in an environment where `ast-grep` is available; whenever a search requires syntax-aware or structural matching, default to `ast-grep --lang rust -p '<pattern>'` (or set `--lang` appropriately) and avoid falling back to text-only tools like `rg` or `grep` unless I explicitly request a plain-text search.
+
+### Essential Commands
+
+```bash
+just fmt             # Format code (run after modifications)
+just test            # Run unit/integration tests
+just conformance     # Run conformance tests
+just ready           # Run all checks (use after commits)
+cargo lintgen        # Regenerate linter rules enum and impls after adding/modifying rules
+cargo lint-timings   # Update linter timing data after changing linter rule codegen
+
+# Crate-specific updates
+just ast             # Update generated files (oxc_ast changes)
+just minsize         # Update size snapshots (oxc_minifier changes)
+just allocs          # Update allocation snapshots (oxc_parser changes)
+
+# Useful shortcuts
+just watch "command" # Watch files and re-run command
+just example tool    # Run tool example (e.g., just example linter)
 ```
 
-- **REPO-S1** — `isolatedDeclarations` stays disabled in every tsconfig; it produces 153 compile errors in idiomatic Effect. Gate: `.claude/hooks/guard-protected-writes.ts`.
-- **REPO-S2** — never modify `minimumReleaseAgeExclude`; pin a young dependency tighter or wait out the 24h cutoff. Gate: `.claude/hooks/guard-protected-writes.ts`.
-- **REPO-S3** — `repos/` is a vendored subtree, read-only; amend upstream. `repos/AGENTS.md` is ours. Gate: `.claude/hooks/guard-protected-writes.ts`.
-- **REPO-S4** — never hand-edit `package.json#exports` or `publishConfig.exports` on a tsdown package; change `tsdown.config.ts`. Gate: `pnpm check:exports`.
+More commands can be found in `justfile`.
 
-## Stack
+## Manual Testing & Examples
 
-Not derivable from the manifests:
+Run crate examples for quick testing and debugging:
 
-- `pnpm --filter <pkg> <cmd>` from the root. Never `cd` into a package, never `npx`.
-- Lint is a per-package `oxlint.config.ts` extending `@systemfsoftware/oxlint-config`. Registration is not delivery — a rule reaches only the packages that opt in. Gate: `pnpm check:lint-coverage`, which also defines the production/tooling boundary. Never re-derive that boundary by hand.
-- Mutation runs on pure decisions only (`REPO-S5`), and fails when a `*.property.test.ts` kills no mutant nothing else kills. Opt out with `requireTestContribution: null` in the package's `stryker.config.json`, never by deleting a test.
+```bash
+cargo run -p <crate_name> --example <example_name> -- [args]
 
-## Surface Classes
+# Common examples:
+cargo run -p oxc_parser --example parser -- test.js
+cargo run -p oxc_linter --example linter -- src/
+cargo run -p oxc_transformer --example transformer -- input.js
+cargo run -p oxc --example compiler --features="full" -- test.js
+```
 
-| Surface              | Examples                                                                                                                        | Rule                                                                                                                                                                                 |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Evaluator**        | `scripts/guard-*.mjs`, `scripts/check-*.mjs`, `packages/stryker-js/mutation-run/src/test-contribution.ts`, `.github/workflows/` | Never change in the same commit as the work it judges. Its own commit, gate observed red before and green after, for the right reason.                                               |
-| **Doctrine**         | `CONSTITUTION.md`, `CONCEPTS.md`, every `AGENTS.md`, `wiki/`, `docs/solutions/`                                                 | Editable, but never an input to a gate. Enforced by `pnpm check:script-provenance`.                                                                                                  |
-| **Editable**         | Everything else, including `packages/*/`, `scripts/`, `docs/`, `tsdown.config.ts`                                               | Edit freely, including the rules that govern you. Never weaken a rule, threshold, budget or glob to make the current change pass; loosening needs its own commit and its own reason. |
-| **Human-controlled** | Merge to `main`, publish, deploy, destructive ops, credentials                                                                  | `REPO-P1`.                                                                                                                                                                           |
+Modify examples in `crates/<crate_name>/examples/` to test specific scenarios.
 
-## Directory Map
+## Code Navigation
 
-Directories only; files are discovered with tools.
+### Key Locations
 
-| Directory             | What it is                                                                         | Governance                                                      |
-| --------------------- | ---------------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| `packages/`           | Workspace packages                                                                 | Root invariants plus a hook-delivered leaf                      |
-| `repos/`              | Vendored git subtrees, read-only                                                   | `REPO-S3`; registry in `subtrees.toml`                          |
-| `scripts/`            | Root guards, release and harness tooling                                           | Editable except the Evaluator scripts above                     |
-| `.github/`            | CI workflows and reusable actions                                                  | Evaluator                                                       |
-| `docs/`               | Solutions, plans, audits, decision records                                         | `REPO-E1`                                                       |
-| `docs/cell-taxonomy/` | Gitignored working spec of the cell taxonomy, absent from a fresh clone            | `REPO-W5`                                                       |
-| `omp/`                | OMP plugin packages                                                                | Leaf-governed                                                   |
-| `wiki/`               | Nested standalone repo (`software-wiki`), gitignored here to avoid double-tracking | `REPO-W4` here; its own root `AGENTS.md` governs work inside it |
+- AST: Start with `oxc_ast`, use `oxc_ast_visit` for traversal
+- Linting rules: `crates/oxc_linter/src/rules/` (visitor pattern)
+- Parser: `crates/oxc_parser/src/lib.rs`, lexer in `src/lexer/`
+- Tests: Co-located with source, integration in `tests/`, uses `insta` for snapshots
 
-## Startup
+### Conventions
 
-1. `pwd` — must be the monorepo root.
-2. `pnpm check:local` — repair a red baseline before adding scope.
-3. Confirm the active task from the task list; `git log --oneline -5` for recent intent.
+- Use `oxc_allocator` for memory management
+- Follow rustfmt config in `.rustfmt.toml`
+- Use `oxc_diagnostics` for errors with source locations
+- Performance-critical: avoid unnecessary allocations
 
-## Working Rules
+## Common Tasks
 
-- **REPO-W2** — modify only files belonging to the active task. No unasked retries, validation, telemetry or refactors. Reducing accepted scope needs the user's consent. Gate: review — the reviewer names the active task each changed file belongs to.
-- **REPO-W4** — search the gitignored `wiki/` corpus before writing a plan, choosing between options, settling a design question, or asking the user one. Enter at its `manifest.md`, open at most five candidate slugs, stop as soon as one settles it, and read the per-claim Warrant table rather than the frontmatter band. Never cite a `wiki/` path in a plan, doc, commit or issue — the corpus does not ship with the clone. A nil result names the verbatim query and the corpus-scoped path it ran against, so anyone holding the corpus can re-run it and falsify the claim. Gate: `.claude/hooks/guard-protected-writes.ts` refuses a write under `docs/plans/` until a `-c wiki` query has run this session; it confirms a search happened, not that it was good.
-- **REPO-W5** _(temporary — delete when the taxonomy is folded into the published oxlint plugins and `CONSTITUTION.md`, or when the corpus is abandoned)_ — `docs/cell-taxonomy/` is the working specification of the cell taxonomy and the design authority for every cell decision; it is gitignored and absent from a fresh clone. Read `SPECIFICATION.md` before naming a cell suffix, splitting a module, or placing a test, and open a `references/` file only when that decision needs it. Construction is the griller: where a build contradicts the specification, enter the contradiction in `references/ledger.md` under that file's own protocol — never code around it, and never reword a rule to match what was just written. A sealed entry is retracted only by the owner, so a contradiction with one is surfaced to the user rather than resolved in the diff. Never cite a `docs/cell-taxonomy/` path in a plan, doc, commit, issue or published package; the corpus does not ship with the clone. Gate: review — the reviewer names the specification section the cell choice rests on, or the ledger entry recording where it failed.
-- **REPO-W6** — a claim about this repo is reported with the check that decided it, run this session: a `file:line`, a command's output, or a fixture observed red and then green. Two of these failures are silent and no gate reaches them. A generator produces exactly the declared input type of the function under test — one that carves out a domain no type or schema declares is testing an invention and passes forever. A capability or a rule asserted as blocking shows the call that failed or the clause reread this turn, never the inference that it would have. The rest is already mechanical and is not restated here: `no-assert-in-property` and `no-silent-return` reject a predicate that cannot fail, and `REPO-D1`'s mutation score rejects a test that kills nothing. Gate: review — for each claim the reviewer names the check that ran, and for each new arbitrary the declared type whose domain it reproduces.
-- **REPO-W7** — the repository is the subject under test, never the warrant. Observing what the code, a config, a lint rule or a sibling package does settles a question of fact — whether a gate fires, what a rule rejects, which cells a table names — and settles nothing about what ought to be. A design conclusion drawn from established practice, an installed rule, a shipped default or a prior commit is circular, and it reads as grounding, which is why it survives review. Theory governs: a design question is answered by derivation, and where derivation and the repository disagree the repository is wrong until the derivation is defeated by argument, never the reverse. The count of packages already doing something is not an argument, and neither is the age of the convention. Gate: review — the reviewer names the derivation each design decision rests on, and rejects any warrant whose only support is that the repo already does it.
-- **REPO-W8** — a choice that is costly to reverse is researched before it is made, never defaulted into: a framework, a protocol implementation, a wire format, a runtime boundary, or a dependency that will spread across modules. Establish what comparable projects actually ship by reading their manifests or their source, never by recalling it; name at least two candidates and why the losers lost; and confirm no maintained implementation exists before hand-rolling one. Record the candidates, the deciding criterion and the observation that would reverse the choice with the other decision records under `docs/`. Defaulting is the expensive failure precisely because it is quiet — the first plausible option compiles, passes, and reveals its ceiling only after everything depending on it is written, when replacing it is no longer a dependency swap. This is the outward-facing half of `REPO-W4`, which searches the corpus we hold; neither substitutes for the other. Gate: review — for each new dependency and each hand-rolled protocol in the diff, the reviewer names its record and the alternative it beat.
+### Adding Linting Rule
 
-## Definition of Done
+1. Use rule generator: `just new-rule <name>` (ESLint rules)
+   - Or plugin-specific: `just new-ts-rule`, `just new-jest-rule`, etc.
+2. Implement using visitor pattern
+3. Add tests in same module
+4. Register in appropriate category
 
-- **REPO-D1** — target behaviour implemented and exercised, `pnpm check:local` run _after_ the last edit, and the work delivered as a pull request watched to green. Tree left restartable. Gate: `pnpm check:local` exits 0; `gh pr checks --watch --fail-fast` exits 0; and where the branch diff names a source file in a package carrying a `stryker.config.json`, `pnpm --filter <pkg> mutation` reports 100% on the changed pure-core files — CI's Mutation workflow is `continue-on-error`, so it never carries that verdict.
-- **REPO-D2** — commit, push a branch and open the PR with the session's commit-push-open-PR skill where one is installed, then watch the checks. `no checks reported` is the post-create registration race, not a failure: sleep and re-poll, never re-push to clear it — `cancel-in-progress: true` means a re-push cancels the run being awaited. Re-push only for a named failing check. Merging stays human (`REPO-P1`). Gate: `gh pr checks --watch --fail-fast` exits 0.
+### Parser Changes
 
-## Verification
+1. Research and test grammar changes thoroughly
+2. Update AST definitions in `oxc_ast` if needed
+3. Ensure existing tests pass
+4. Add tests for new features
 
-`pnpm check:local` is the agent's gate: `check:ci`'s task list minus `test:contract`. The contract lanes are `cache: false` and 85-92% of `check:ci`'s wall clock; they need a live container runtime, so a change they alone cover is unverified until the PR is green.
+### Working with Transformations
 
-The `dist/`-reading root checks run in `gate:dist`, which builds in its own turbo invocation before it checks. A root task declares no dependency on any package's `build`, so sharing an invocation with the build it reads makes its verdict scheduler order rather than a fact about the tree.
+1. Understand AST structure first
+2. Use visitor pattern for traversal
+3. Handle node ownership/allocator carefully
+4. Test with various input patterns
 
-- **REPO-A1** — run exactly `pnpm check:local`. No `--skip`, no `--grep`, no filter flags, no individual steps.
-- **REPO-A2** — local evidence from this session, after the last edit; CI evidence from a completed, non-cancelled run whose head SHA is the pushed commit. Never a prior session, never a run predating the last push. Gate: review — the reviewer confirms both.
-- **REPO-A3** — any failure blocks done, local or CI, including one that looks unrelated.
+## Testing
 
-## Release and Commits
+Oxc uses multiple testing approaches tailored to each crate:
 
-- **REPO-R1** — every package is pre-1.0 ALPHA; API stability is never a design constraint. When a change is cleaner as a break, make the break; accept proposed breaks without resistance and do not wait for a major release. A compatibility objection is rejected unless it names a concrete in-repo consumer migration. Gate: `pnpm exec commitlint` accepts the `api!` marker and the `BREAKING CHANGE:` footer that record the break.
-- **REPO-R2** — a change to a publishable package (`packages/**`) ships with a `.changeset/` intent authored via `pnpm change --bump <none|patch|minor|major>`; use `--bump none` only for a genuinely non-releasable touch. Gate: the changeset check (`.github/workflows/changeset-check.yml`) fails a PR that touches a publishable package without an intent. A `none` on a behavior-visible change is the same silent non-release the gate exists to catch — review consumed `none` intents on the Release PR before merging.
-- **REPO-C1** — `type(scope): subject`, 72 characters or fewer. Gate: `pnpm exec commitlint --edit <msgfile>`.
-- **REPO-C2** — feat, fix, chore, build, ci, deps, docs, perf, refactor, revert, style, test. Config-only changes are not feat or fix. Gate: `pnpm exec commitlint`, run by the `commit-msg` hook on every commit touching a path outside the vendored trees.
+- **Unit/Integration tests**: Standard Rust tests in `tests/` directories
+- **Conformance tests**: Against external suites (Test262, Babel, TypeScript)
+- **Snapshot tests**: Track failures and expected outputs using `insta`
 
-## Boundaries
+### Quick Test Commands
 
-- **REPO-P1** — ask before merging to `main`, publishing, deploying, destructive operations, or handling credentials. Unmechanizable: a hook able to decide it would already be the approval.
-- **REPO-M1** — each agent owns a disjoint file set. Isolate concurrent work in a git worktree rather than coordinating edits. Gate: review — the reviewer confirms no two agents claim the same file.
-- **REPO-E1** — read `docs/solutions/` before implementing or debugging in an area it documents; it holds solved problems filed with `module`, `tags` and `problem_type` frontmatter. Gate: review — the reviewer names the solution doc the change rests on, or states that none covers the area.
+```bash
+just test                              # Run all Rust tests
+just conformance                       # Run all conformance tests (alias: cargo coverage)
+cargo test -p <crate_name>             # Test specific crate
 
-## Instruction Hierarchy
+# Conformance for specific tools
+cargo coverage -- parser               # Parser conformance
+cargo coverage -- transformer          # Transformer conformance
+cargo run -p oxc_transform_conformance # Transformer Babel tests
 
-A rule lives in exactly one file: the highest level it applies to. A leaf carries only its delta and never restates this file. A leaf is earned where a directory has a different toolchain, ownership or risk class _and_ an agent demonstrably got something wrong there — a package manifest is not evidence, symmetry with a sibling is not a reason.
+# NAPI packages
+pnpm test                              # Test all Node.js bindings
+```
 
-`repos/<name>/AGENTS.md` are vendored roots, not leaves; amend upstream. `repos/AGENTS.md` is ours. A fork under `packages/` is ours: we publish it and we gate it, and "upstream" names only where it came from.
+### Crate-Specific Testing
+
+Each crate follows distinct testing patterns:
+
+#### oxc_parser
+
+- **Conformance only** via `tasks/coverage`
+- **Command**: `cargo coverage -- parser`
+- **Suites**: Test262, Babel, TypeScript
+- **Special**: `just allocs` for allocation tracking
+
+#### oxc_linter
+
+- **Inline tests** in rule files (`src/rules/**/*.rs`)
+- **Pattern**: Use `Tester` helper with pass/fail cases
+
+```rust
+#[test]
+fn test() {
+    Tester::new(RuleName::NAME, RuleName::PLUGIN, pass, fail)
+        .test_and_snapshot();
+}
+```
+
+#### oxc_formatter (and other `oxc_formatter_*` language crates)
+
+- **Fixture tests** (`tests/fixtures/`) and **Prettier conformance** (`tests/conformance.rs`), both part of `cargo test`
+- **Command**: `cargo test -p <crate>` (conformance only: `--test conformance`)
+- **Debug**: `PRETTIER_FILTER=<name> cargo test -p <crate> --test conformance -- --nocapture`
+- Conformance compares output with Prettier's snapshots (suite self-provisioned by `oxc_formatter_tests`); reports are pinned with `insta`
+
+#### oxc_minifier
+
+- **Unit tests** in `tests/` subdirectories:
+  - `ecmascript/` - Operations
+  - `peephole/` - Optimizations
+  - `mangler/` - Name mangling
+- **Size tracking**: `just minsize`
+
+#### oxc_transformer
+
+- **Multiple approaches**:
+  - Unit tests: `tests/integrations/`
+  - Conformance: `tasks/transform_conformance/`
+  - Babel plugins: `tasks/transform_conformance/tests/babel-plugin-*/`
+- **Commands**:
+
+```bash
+cargo test -p oxc_transformer                    # Unit tests
+cargo run -p oxc_transform_conformance          # Conformance
+just test-transform --filter <path>             # Filter tests
+```
+
+#### oxc_codegen
+
+- **Integration tests** in `tests/integration/`
+- Test files: `js.rs`, `ts.rs`, `sourcemap.rs`, `comments.rs`
+
+#### oxc_isolated_declarations
+
+- **Snapshot testing** with `insta`
+- Input: `tests/fixtures/*.{ts,tsx}`
+- Output: `tests/snapshots/*.snap`
+- Update: `cargo insta review`
+
+#### oxc_semantic
+
+- **Multiple testing approaches**:
+  - **Conformance tests** (`tests/conformance/`) - Contract-as-code tests for symbols and identifier references
+  - **Integration tests** (`tests/integration/`) - Tests for scopes, symbols, modules, classes, CFG
+  - **Snapshot tests** (`tests/main.rs`) - Verifies scoping data correctness (scope trees, bindings, symbols, references) using `insta` snapshots from `fixtures/`
+  - **Coverage tests** - Via `tasks/coverage` using Test262, Babel, TypeScript suites
+- **Command**: `cargo test -p oxc_semantic`
+- **Update snapshots**: `cargo insta review`
+
+#### Other Crates
+
+- **oxc_traverse**: AST traversal - `cargo test -p oxc_traverse`
+- **oxc_ecmascript**: ECMAScript operations - `cargo test -p oxc_ecmascript`
+- **oxc_regular_expression**: Regex parsing - `cargo test -p oxc_regular_expression`
+- **oxc_syntax**: Syntax utilities - `cargo test -p oxc_syntax`
+- **oxc_language_server**: Editor integration - `cargo test -p oxc_language_server`
+
+### Conformance Testing Foundation
+
+**CRITICAL**: These external test suites are the CORE of Oxc's testing strategy, providing thousands of real-world test cases from mature JavaScript ecosystem projects. They ensure Oxc correctly handles the full complexity of JavaScript/TypeScript.
+
+Suites cloned via `just submodules`:
+
+| Submodule            | Description                                                                                                                                        | Location                            | Used by Crates                                           |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- | -------------------------------------------------------- |
+| `test262`            | **ECMAScript Conformance Suite**<br>Official JavaScript test suite from TC39, testing compliance with the ECMAScript specification                 | `tasks/coverage/test262`            | parser, semantic, codegen, transformer, minifier, estree |
+| `babel`              | **Babel Test Suite**<br>Comprehensive transformation and parsing tests from the Babel compiler, covering modern JavaScript features and edge cases | `tasks/coverage/babel`              | parser, semantic, codegen, transformer, minifier         |
+| `typescript`         | **TypeScript Test Suite**<br>Microsoft's TypeScript compiler tests, ensuring correct handling of TypeScript syntax and semantics                   | `tasks/coverage/typescript`         | parser, semantic, codegen, transformer, estree           |
+| `estree-conformance` | **ESTree Conformance Tests**<br>Test262, TypeScript, and acorn-jsx suites adapted for ESTree format validation, ensuring correct AST structure     | `tasks/coverage/estree-conformance` | estree                                                   |
+
+**These suites provide:**
+
+- **Thousands of battle-tested cases** from real-world usage
+- **Edge case coverage** that would be impossible to write manually
+- **Industry standard compliance** ensuring compatibility
+- **Continuous validation** against evolving JavaScript standards
+
+Run all conformance tests with `cargo coverage` or `just conformance`.
+
+### Searching Test Suites
+
+These test suites are pre-cloned and ready to search:
+
+- **Test262** (`tasks/coverage/test262/`) - ECMAScript spec compliance
+- **Babel** (`tasks/coverage/babel/`) - Parsing and transformation edge cases
+- **TypeScript** (`tasks/coverage/typescript/`) - TypeScript syntax and semantics
+- **Prettier** (`crates/oxc_formatter_tests/prettier/`) - Formatting expectations (self-provisioned on first conformance run)
+
+NOTE: These suites are script-cloned and fully gitignored. ripgrep respects `.gitignore`, so a plain `rg` inside them silently returns nothing.
+Use `rg --no-ignore` (or `-u`) when searching them.
+
+### Snapshot Testing
+
+- Uses `insta` crate for snapshot testing
+- Snapshots track **failing** tests, not passing ones
+- Located in `tasks/coverage/snapshots/` and conformance directories
+- Update with `cargo insta review` after changes
+- Formats: `.snap` (counts), `.snap.md` (detailed failures)
+
+### NAPI (Node.js Bindings) Testing
+
+NAPI packages use **Vitest** for testing Node.js bindings:
+
+```bash
+pnpm run build-test   # Build all NAPI packages
+pnpm test             # Run all NAPI tests
+```
+
+**Package-specific commands:**
+
+- `oxc-parser`: `cd napi/parser && pnpm run build-test && pnpm test` (also has `pnpm test-browser`)
+- `oxc-minify`: `cd napi/minify && pnpm run build-test && pnpm test`
+- `oxc-transform`: `cd napi/transform && pnpm run build-test && pnpm test`
+
+Tests are TypeScript files in each package's `test/` directory.
+
+### Where to Add Tests
+
+| Crate                 | Location                                 |
+| --------------------- | ---------------------------------------- |
+| Parser                | `tasks/coverage/misc/pass/` or `fail/`   |
+| Linter                | Inline in rule files                     |
+| Formatter             | `tests/fixtures/` in the formatter crate |
+| Minifier              | `tests/` subdirectories                  |
+| Transformer           | `tests/integrations/` or Babel fixtures  |
+| Codegen               | `tests/integration/`                     |
+| Isolated Declarations | `tests/fixtures/*.ts`                    |
+| Semantic              | `tests/` directory                       |
+| NAPI packages         | `test/` directory (Vitest)               |
+| Language Server       | Inline and `/fixtures`                   |
+
+### Linter Codegen Changes
+
+When changing linter codegen files such as `tasks/linter_codegen/**` or generated linter rule runner files under `crates/oxc_linter/src/generated/`, run `cargo lintgen` and `cargo lint-timings` so generated rule metadata and linter timing data stay in sync.
+
+## Notes
+
+- Rapidly evolving project - APIs may change
+- Performance is critical for all changes
+- Maintain JS/TS standard compatibility
+- Breaking changes need documentation and discussion
+
+---
+
+For human contributors see `CONTRIBUTING.md` and [oxc.rs](https://oxc.rs/docs/contribute/introduction.html)

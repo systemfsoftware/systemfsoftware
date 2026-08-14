@@ -1,2 +1,0 @@
-// THIS IS A MOCK FILE, DO NOT TOUCH
-const Primary = composeStory(stories.Primary, stories.default)

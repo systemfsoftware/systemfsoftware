@@ -1,29 +1,54 @@
-node_modules/
-dist/
-.turbo/
-coverage/
-reports/
-# Test fixtures ship a prior mutation report as tracked input data
-!**/test/**/fixtures/**/reports/
-.stryker-tmp/
-temp/
-*.tsbuildinfo
-.DS_Store
-__pycache__/
-.npmrc
-# Agent scratch — ce-optimize sweeps, audit reports, run logs
-.context/
-# Vendored subtrees — their .gitignore files are inert
-repos/**/.gitignore
-repos/**/.codegraph/
-.repos
-.issues
-wiki
-research
-**/__pycache__/
-- Local per-clone hooks (machine-specific: qmd-mcp orphan cleanup, etc.)
-.claude/settings.local.json
-# Eval scratch — constitution-disclosure arm outputs, graders, results
-.eval/
-# Cell-taxonomy corpus — internal, never published
-docs/cell-taxonomy/
+# Rust
+target/
+**/*.rs.bk
+
+# Wasm
+**/*.wasm
+
+# node_modules
+/node_modules/
+/website/node_modules/
+/benchmark/node_modules/
+/tasks/benchmark/codspeed/node_modules/
+/tasks/codegen_conformance/node_modules/
+/tasks/transform_conformance/node_modules/
+/tasks/compat_data/node_modules/
+/tasks/compat_data/compat-table/
+/tasks/e2e/node_modules/
+/plugins/node_modules/
+/tasks/e2e/tests/nestjs/node_modules/
+/npm/*/node_modules
+/napi/*/npm-dir
+/napi/parser/tsconfig.browser.tsbuildinfo
+
+# Cloned conformance repos
+tasks/coverage/babel/
+tasks/coverage/test262/
+tasks/coverage/typescript/
+tasks/coverage/estree-conformance/
+tasks/coverage/estree-conformance-diff/
+tasks/coverage/node-compat-table/
+crates/oxc_formatter_tests/prettier/
+
+# Ignore accidental files from the root
+/*.js
+/*.jsx
+/*.ts
+/*.tsx
+/*.ast.txt
+/*.cfg.txt
+/*.dot
+
+# https://github.com/oraios/serena cache
+.serena/cache
+.serena/project.yml
+
+.claude/*
+!.claude/commands/
+
+# NOTE: For non-project files such as `.vscode` or `.idea`, please add them to your `.gitignore_global`.
+# In `.gitconfig`, add `[core] excludesfile = ~/.gitignore_global`
+# See also
+# * https://stackoverflow.com/a/7335487
+# * https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files#configuring-ignored-files-for-all-repositories-on-your-computer
+.serena/
