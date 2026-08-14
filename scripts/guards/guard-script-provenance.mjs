@@ -122,13 +122,9 @@ const MANIFEST = new Map([
     'workspace-layout',
     'This file. The set it polices IS the workspace arrangement of scripts/.',
   ]],
-  ['guards/guard-turbo-graph.mjs', [
-    'workspace-layout',
-    'What turbo hashes spans every package: CLI-argument hash poisoning in the root scripts, and env declared per task in turbo.json. Both failures are silent, and no published package can see the run graph it belongs to.',
-  ]],
   ['guards/workspace-members.ts', [
     'workspace-layout',
-    'Defines which tracked manifest is a workspace package and which is a fixture that merely contains one. Shared by guard-turbo-graph.mjs and check-changeset.ts; the rule is the workspace arrangement itself, and one copy is why the two gates cannot drift apart.',
+    'Defines which tracked manifest is a workspace package and which is a fixture that merely contains one. Used by check-changeset.ts; the rule is the workspace arrangement itself.',
   ]],
   ['guards/guard-action-provenance.mjs', [
     'workspace-layout',
@@ -293,10 +289,12 @@ const scan = (root) => {
 //   blocked with probability 1-(1-p)^N, so affordability is N x p and never N. A
 //   ceiling makes growth arrive as a diff instead of as one more plausible guard,
 //   because deletion otherwise produces no artifact and addition always does.
-//   Measured 2026-08-11: nine entries here, and the tenth slot is `check:turbo-graph`
-//   from the in-flight turbo-graph change -- which is why the ceiling is ten rather
-//   than nine, and why raising it again is its own commit stating the new entry's
-//   technique class and the suite's resulting aggregate (REPO-S7).
+//   Measured 2026-08-14: eight entries. Removing `check:turbo-graph` dropped the
+//   count from nine to eight -- all three of its arms were regression gates that
+//   had never caught a defect in normal operation, and the only firing on record
+//   was a false positive its own header documented. Raising the ceiling is its
+//   own commit stating the new entry's technique class and the suite's resulting
+//   aggregate (REPO-S7).
 const GATE_BUDGET = 10
 
 const GATE_CHAIN = ['check:ci', 'check:local']

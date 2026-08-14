@@ -21,8 +21,6 @@ jobs:
         with:
           fetch-depth: 2
       - uses: ./.github/actions/install-deps
-      # `check:turbo-graph` runs a deno-shebang script; the gate job has no deno otherwise.
-      - uses: denoland/setup-deno@v2
       # dprint is a flake package, not an npm dependency; bin/dprint takes the
       # first dprint on PATH.
       - uses: cachix/install-nix-action@v31
