@@ -844,6 +844,30 @@ fn fold_coalesce_on_tracked_non_nullish_binding() {
     );
 }
 
+// https://github.com/rolldown/rolldown/issues/10656
+#[test]
+fn does_not_duplicate_large_tracked_strings_when_folding_addition() {
+    test_same(
+        "const p = 'PAYLOADpayload0123456789PAYLOADpayload0123456789'; export const a = atob(p); export const b = 'y' + p;",
+    );
+    test_same(
+        "const p = 'PAYLOADpayload0123456789PAYLOADpayload0123456789'; export const a = atob(p); export const b = 'x' + ('y' + p);",
+    );
+
+    // A large string with one read can replace that read and drop the binding,
+    // so folding still reduces the total output size.
+    test(
+        "const p = 'PAYLOADpayload0123456789PAYLOADpayload0123456789'; export const b = 'y' + p;",
+        "export const b = 'yPAYLOADpayload0123456789PAYLOADpayload0123456789';",
+    );
+
+    // Small tracked strings remain cheap enough to duplicate.
+    test(
+        "const p = 'abc'; export const a = atob(p); export const b = 'y' + p;",
+        "const p = 'abc'; export const a = atob(p); export const b = 'yabc';",
+    );
+}
+
 // Convergence regression (monitor-oxc, bluebird.js): `try_fold_if` re-extracts
 // the dead branch's `var` names via `KeepVar` on every pass and filters the
 // synthesized statement through the unused-declarator removal. Dropping `x`
@@ -966,6 +990,20 @@ fn dce_remove_unused_class_identifier_heritage_under_assumptions() {
         "export var Base = class {}; export var Keep = class extends Base {}; var REMOVE = class extends Base {};",
         "export var Base = class {}; export var Keep = class extends Base {};",
     );
+}
+
+#[test]
+fn dce_keeps_inferred_class_name_for_executing_class() {
+    // The static block observes the name assigned by `var MyStore = class {}`.
+    // DCE must not turn this into a bare anonymous class expression.
+    test_same("var MyStore = class { static { console.log(this.name) } };");
+    test_same("var MyStore = (class { static { console.log(this.name) } });");
+    test(
+        "var MyStore = (0, class { static { console.log(this.name) } });",
+        // this can be compressed to `class { static { console.log(this.name) } }`
+        "var MyStore = class { static { console.log(this.name) } };",
+    );
+    test_same("var MyStore = class { static foo = console.log(this.name) };");
 }
 
 #[test]
