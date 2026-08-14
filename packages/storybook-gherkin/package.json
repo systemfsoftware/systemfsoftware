@@ -51,7 +51,7 @@
     "type-fest": "catalog:"
   },
   "peerDependencies": {
-    "effect": "catalog:",
+    "effect": "catalog:effect-v4",
     "storybook": ">=10.0.0"
   },
   "devDependencies": {
@@ -64,7 +64,7 @@
     "@types/react-dom": "catalog:",
     "@vitest/browser": "catalog:",
     "@vitest/browser-playwright": "catalog:",
-    "effect": "catalog:",
+    "effect": "catalog:effect-v4",
     "playwright": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",

@@ -1,4 +1,4 @@
-import { Array as Arr, Effect, Either, Match, Schema } from 'effect'
+import { Array as Arr, Effect, Match, Schema } from 'effect'
 import type { screen, UserEventObject, within } from 'storybook/test'
 import type { Simplify, UnionToIntersection } from 'type-fest'
 
@@ -11,7 +11,8 @@ export type ConcreteKeyword = 'Given' | 'When' | 'Then'
 
 export interface CaptureModel {
   readonly name: string
-  readonly schema: Schema.Schema.AnyNoContext | undefined
+  /** Service-free decode view — the v4 counterpart of the removed no-context alias. */
+  readonly schema: Schema.ConstraintDecoder<unknown> | undefined
   readonly default: string | undefined
 }
 
@@ -24,20 +25,19 @@ export interface StepModel {
 
 export type ExampleRow = { readonly name: string } & Readonly<Record<string, string>>
 
-export const displayPattern = (step: StepModel): string =>
+const joinStep = (
+  step: StepModel,
+  renderHole: (cap: CaptureModel) => string,
+): string =>
   [
     step.parts[0] ?? '',
-    ...step.captures.flatMap((cap, i) => [`{${cap.name}}`, step.parts[i + 1] ?? '']),
+    ...step.captures.flatMap((cap, i) => [renderHole(cap), step.parts[i + 1] ?? '']),
   ].join('')
 
+export const displayPattern = (step: StepModel): string => joinStep(step, (cap) => `{${cap.name}}`)
+
 export const renderStepText = (step: StepModel, values: Readonly<Record<string, string>>): string =>
-  [
-    step.parts[0] ?? '',
-    ...step.captures.flatMap((cap, i) => [
-      values[cap.name] ?? cap.default ?? `{${cap.name}}`,
-      step.parts[i + 1] ?? '',
-    ]),
-  ].join('')
+  joinStep(step, (cap) => values[cap.name] ?? cap.default ?? `{${cap.name}}`)
 
 const resolveKeyword = (keyword: Keyword, previous: ConcreteKeyword): ConcreteKeyword =>
   Match.value(keyword).pipe(
@@ -175,7 +175,7 @@ const buildModel = (
   const seen = new Set<string>()
   for (const cap of captures) {
     if (seen.has(cap.name)) {
-      throw new DuplicateCapture({ step: displayPattern(model), name: cap.name })
+      throw DuplicateCapture.make({ step: displayPattern(model), name: cap.name })
     }
     seen.add(cap.name)
   }
@@ -186,16 +186,19 @@ const decodeCapture = (
   cap: CaptureModel,
   values: Readonly<Record<string, string>>,
   model: StepModel,
-): Either.Either<unknown, CaptureDecodeFailed> => {
+): Effect.Effect<unknown, CaptureDecodeFailed> => {
   const raw = values[cap.name] ?? cap.default
-  if (cap.schema === undefined) return Either.right(raw)
-  return Either.mapLeft(Schema.decodeUnknownEither(cap.schema)(raw), (error) =>
-    new CaptureDecodeFailed({
-      step: displayPattern(model),
-      capture: cap.name,
-      value: raw === undefined ? '' : raw,
-      cause: error,
-    }))
+  if (cap.schema === undefined) return Effect.succeed(raw)
+  return Schema.decodeEffect(cap.schema)(raw).pipe(
+    Effect.mapError((error) =>
+      CaptureDecodeFailed.make({
+        step: displayPattern(model),
+        capture: cap.name,
+        value: raw ?? '',
+        cause: error,
+      })
+    ),
+  )
 }
 
 const makeStepCtor = (keyword: Keyword): StepCtor => {

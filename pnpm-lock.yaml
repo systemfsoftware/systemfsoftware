@@ -2430,8 +2430,8 @@ importers:
         specifier: 'catalog:'
         version: 4.1.10(playwright@1.62.1)(vite@8.2.1(@types/node@24.13.2)(esbuild@0.27.7)(jiti@2.7.0)(yaml@2.9.0))(vitest@4.1.10)
       effect:
-        specifier: 'catalog:'
-        version: 3.22.1
+        specifier: catalog:effect-v4
+        version: 4.0.0-rc.108
       playwright:
         specifier: 'catalog:'
         version: 1.62.1

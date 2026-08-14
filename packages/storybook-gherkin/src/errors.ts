@@ -1,6 +1,6 @@
 import { Schema as S } from 'effect'
 
-const ConcreteKeywordSchema = S.Literal('Given', 'When', 'Then')
+const ConcreteKeywordSchema = S.Literals(['Given', 'When', 'Then'])
 
 /**
  * Two channels:
