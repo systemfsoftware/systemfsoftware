@@ -23,7 +23,7 @@ const recommendedRules = {
   [rule('executor-no-escaping-state')]: 'error',
   [rule('executor-no-layer-binding')]: 'error',
   [rule('executor-single-operation-export')]: 'error',
-  [rule('executor-requires-description')]: 'deny',
+  [rule('executor-requires-description')]: 'error',
 } as const
 
 export default {
