@@ -35,6 +35,16 @@ jobs:
           key: turbo-${{ runner.os }}-${{ github.sha }}
           restore-keys: |
             turbo-${{ runner.os }}-
+      # atom-react tests run in Vitest browser mode (playwright chromium).
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            playwright-${{ runner.os }}-
+      - name: Install Playwright chromium
+        run: corepack pnpm --filter @systemfsoftware/effect-atom-react exec playwright install chromium
       # Root package.json `check:ci` is the one definition. Never re-enumerate its steps here.
       - name: Gate
         run: corepack pnpm check:ci
