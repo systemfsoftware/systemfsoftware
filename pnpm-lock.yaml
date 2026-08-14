@@ -674,12 +674,18 @@ importers:
 
   packages/effect-cell-types:
     devDependencies:
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 0.30.0(effect@3.22.1)(vitest@4.1.10)
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: catalog:attw
         version: 1.1.1
+      '@systemfsoftware/effect-gherkin-spec':
+        specifier: workspace:*
+        version: link:../effect-gherkin-spec
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
         version: link:../oxlint-config

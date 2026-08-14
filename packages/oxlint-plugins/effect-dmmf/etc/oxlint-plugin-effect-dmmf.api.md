@@ -32,6 +32,7 @@ const _default: {
         'executor-no-escaping-state': Rule;
         'executor-no-layer-binding': Rule;
         'executor-single-operation-export': Rule;
+        'executor-requires-description': Rule;
         'handler-single-executor': Rule;
         'handler-single-handler-export': Rule;
         'handler-no-casts': Rule;

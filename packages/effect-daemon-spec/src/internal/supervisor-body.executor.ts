@@ -1,5 +1,6 @@
+import { Cell } from '@systemfsoftware/effect-cell-types'
 import { Array as Arr, Cause, Context, Effect, Either, Exit, Fiber, Match, Metric, Option, Ref, Schedule } from 'effect'
-import type { Scope } from 'effect'
+import { pipe, type Scope } from 'effect'
 import { WorkerTypeId } from '../brands.kernel.js'
 import type { SupervisorHealth } from '../daemon-health.schema.js'
 import { healthStateGauge, supervisorExhaustionsCounter, supervisorRestartsCounter } from '../daemon-metrics.kernel.js'
@@ -14,8 +15,13 @@ import { allocateWorkerHealth } from './allocate-worker-health.kernel.js'
 import { buildWorkerLoop } from './build-worker-loop.kernel.js'
 import { type IntensityTracker, make as makeIntensity, neverExceeds } from './intensity.kernel.js'
 import { raceForExit } from './race-for-exit.kernel.js'
-import { type RestartStrategy } from './restart-decision.schema.js'
-import { decideRestart } from './restart-decision.workflow.js'
+import { type DecideInput, type RestartStrategy } from './restart-decision.schema.js'
+import {
+  decideRestart,
+  type RestartDecisionContinue,
+  type RestartDecisionExhausted,
+  type RestartDecisionRestart,
+} from './restart-decision.workflow.js'
 import {
   ContinueSupervision,
   CooldownEpoch,
@@ -60,6 +66,82 @@ const handleRestart = <R>(
     yield* onSignal
     return new RestartEpoch()
   })
+
+/**
+ * The phases of the restart decision, in one bag so the chain's order is carried by types.
+ */
+interface RestartPhases extends Cell.Phases {
+  readonly command: IntensityTracker
+  readonly raw: boolean
+  readonly decoded: DecideInput
+  readonly decision: RestartDecisionContinue | RestartDecisionRestart
+  readonly decisionError: RestartDecisionExhausted
+  readonly output: Either.Either<
+    RestartDecisionContinue | RestartDecisionRestart,
+    RestartDecisionExhausted
+  >
+  readonly response: EpochStep
+  readonly decodeError: never
+  readonly readError: never
+  readonly writeError: never
+  readonly readContext: never
+  readonly writeContext: SupervisorBodyExecutorDeps
+}
+
+/**
+ * The restart decision, as a description whose phases chain by type and read in the order
+ * they run.
+ *
+ * The read is a bump-and-report: recording a restart is how the current rate is obtained, so
+ * the mutation is a product gathered across the read's interior rather than a write standing
+ * before a decision. That is what keeps this one layer instead of two, and it is why
+ * `intensity.record` sits where it does.
+ *
+ * `encode` is the identity because nothing needs shaping — the decision is already what the
+ * write consumes — and the write only dispatches over the tags the decision produced.
+ *
+ * A description is built per failure because the write needs that failure's context, and the
+ * phase signatures hand the command to the read alone. Restarts are rare, so the allocation is
+ * paid only when a supervised child has actually died.
+ */
+const restartDescription = <R>(spec: {
+  readonly strategy: RestartStrategy
+  readonly failedIndex: number
+  readonly totalChildren: number
+  readonly ctx: SupervisionContext<R>
+  readonly cause: Cause.Cause<never>
+  readonly onRestart: (
+    decision: RestartDecisionRestart,
+  ) => Effect.Effect<void, never, SupervisorBodyExecutorDeps>
+}) =>
+  pipe(
+    Cell.read<RestartPhases>((intensity) => Effect.zipRight(intensity.record, intensity.isExceeded)),
+    Cell.decode<RestartPhases>((intensityExceeded) =>
+      Either.right({
+        strategy: spec.strategy,
+        totalChildren: spec.totalChildren,
+        failedIndex: spec.failedIndex,
+        exitSuccess: false,
+        intensityExceeded,
+      })
+    ),
+    Cell.decide<RestartPhases>(decideRestart),
+    Cell.encode<RestartPhases>((outcome) => outcome),
+    Cell.write<RestartPhases>((outcome) =>
+      Either.match(outcome, {
+        onLeft: () => handleExhausted(spec.ctx, spec.cause),
+        onRight: (right) =>
+          Match.value(right).pipe(
+            Match.tag('Continue', () => Effect.succeed<EpochStep>(new StopEpoch())),
+            Match.tag(
+              'Restart',
+              (decision) => handleRestart(spec.ctx, spec.cause, spec.onRestart(decision)),
+            ),
+            Match.exhaustive,
+          ),
+      })
+    ),
+  )
 
 const reopenHealthyAfterCooldown = <R>(ctx: SupervisionContext<R>): Effect.Effect<void, never, never> =>
   Effect.zipRight(
@@ -141,26 +223,17 @@ const superviseChild = <R>(
             if (childIntensityBudgetDone) {
               return new StopEpoch()
             }
-            yield* supIntensity.record
-            const exceeded = yield* supIntensity.isExceeded
-
-            const decision = decideRestart({
-              strategy: 'one_for_one',
-              exitSuccess: false,
-              intensityExceeded: exceeded,
-              failedIndex: idx,
-              totalChildren: ctx.booted.length,
-            })
-
-            return yield* Either.match(decision, {
-              onLeft: () => handleExhausted(ctx, exit.cause),
-              onRight: (right) =>
-                Match.value(right).pipe(
-                  Match.tag('Continue', () => Effect.succeed(new StopEpoch())),
-                  Match.tag('Restart', () => handleRestart(ctx, exit.cause, Effect.void)),
-                  Match.exhaustive,
-                ),
-            })
+            return yield* Cell.apply(
+              restartDescription({
+                strategy: 'one_for_one',
+                failedIndex: idx,
+                totalChildren: ctx.booted.length,
+                ctx,
+                cause: exit.cause,
+                onRestart: () => Effect.void,
+              }),
+              supIntensity,
+            )
           }
           return new StopEpoch()
         })
@@ -240,29 +313,17 @@ const runGroup = <R>(
             if (childIntensityBudgetDone) {
               return new StopEpoch()
             }
-            yield* intensity.record
-            const exceeded = yield* intensity.isExceeded
-            const decision = decideRestart({
-              strategy,
-              exitSuccess: false,
-              intensityExceeded: exceeded,
-              totalChildren: ctx.booted.length,
-              failedIndex: failedIdx,
-            })
-
-            return yield* Either.match(decision, {
-              onLeft: () => handleExhausted(ctx, firstExit.cause),
-              onRight: (right) =>
-                Match.value(right).pipe(
-                  Match.tag('Continue', () => Effect.succeed(new StopEpoch())),
-                  Match.tag(
-                    'Restart',
-                    (restartDecision: { readonly indices: readonly [number, ...number[]] }) =>
-                      handleRestart(ctx, firstExit.cause, Ref.set(cursor, restartDecision.indices[0])),
-                  ),
-                  Match.exhaustive,
-                ),
-            })
+            return yield* Cell.apply(
+              restartDescription({
+                strategy,
+                failedIndex: failedIdx,
+                totalChildren: ctx.booted.length,
+                ctx,
+                cause: firstExit.cause,
+                onRestart: (decision) => Ref.set(cursor, decision.indices[0]),
+              }),
+              intensity,
+            )
           }
           return new StopEpoch()
         })
