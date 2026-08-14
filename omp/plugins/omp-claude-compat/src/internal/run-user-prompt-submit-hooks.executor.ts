@@ -23,8 +23,8 @@ export class RunUserPromptSubmitHooksExecutorDeps extends Context.Tag('RunUserPr
  * workflow while carrying the raw's code and stdout forward (decode),
  * interpret it (decide), fold both channels into the block decision (encode),
  * and act on it (write). The workflow's `Left` — a malformed decision JSON —
- * folds to `blockReason: undefined`, exactly where the hand-sequenced shell
- * put it, so it reaches the write as a value rather than a failure.
+ * folds to `blockReason: undefined`, so it reaches the write as a value rather
+ * than a failure.
  */
 interface SubmitPhases extends Cell.Phases {
   readonly command: { readonly hook: CommandHook; readonly input: Record<string, unknown> }
@@ -70,8 +70,7 @@ export const runUserPromptSubmitHooks = Effect.fn('runUserPromptSubmitHooks')(fu
    * the write still needs them; `interpretHookResult` is the decision, with
    * both channels carrying that forward context; `encode` folds the decision
    * into the block reason; `write` blocks with a notify, skips failed hooks,
-   * or accumulates the trimmed stdout — the same links the hand-sequenced
-   * shell performed.
+   * or accumulates the trimmed stdout.
    */
   const submitDescription = pipe(
     Cell.read<SubmitPhases>(({ hook, input }) => runHookScript(hook, input, cwd, 'UserPromptSubmit')),

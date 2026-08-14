@@ -1,3 +1,4 @@
+import * as Arr from 'effect/Array'
 import * as Effect from 'effect/Effect'
 import * as Either from 'effect/Either'
 import { dual } from 'effect/Function'
@@ -215,19 +216,15 @@ const runLayer = <P extends Phases>(layer: Layer<P>, command: P['command']) =>
  * unrepresentable rather than merely discouraged. Annotating it here would let this module
  * promise a failure that no phase can produce.
  *
- * The fold is a `reduce`, so the sequence is structural rather than an option a caller could
- * pass differently; the description's response is the last layer's. No scope is opened and
- * interruptibility is untouched, so a `Scope.Scope` a phase requires reaches the caller as
- * part of the derived `R`.
+ * `forEach` takes no concurrency option here, so the layers run in declared order and the
+ * sequence is structural rather than something a caller could pass differently; the
+ * description's response is the last layer's. No scope is opened and interruptibility is
+ * untouched, so a `Scope.Scope` a phase requires reaches the caller as part of the derived `R`.
  */
 export const apply = <P extends Phases>(description: WriteDone<P>, command: P['command']) =>
   Effect.gen(function*() {
-    const last = yield* Effect.reduce(
-      description.layers,
-      Option.none<P['response']>(),
-      (_previous, layer) => Effect.map(runLayer(layer, command), Option.some),
-    )
-    return yield* Option.match(last, {
+    const responses = yield* Effect.forEach(description.layers, (layer) => runLayer(layer, command))
+    return yield* Option.match(Arr.last(responses), {
       onNone: () => Effect.dieMessage('effect-cell-types: a description reached the interpreter with no layers'),
       onSome: Effect.succeed,
     })

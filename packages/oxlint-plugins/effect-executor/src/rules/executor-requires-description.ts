@@ -3,8 +3,8 @@ import type { Context, ESTree } from '@oxlint/plugins'
 import { calleeRootName, cellOf, lastSegmentOf } from './cell.js'
 import {
   BARREL_LAST_PARTS,
-  CELL_SOURCE,
   DESCRIPTION_METHODS,
+  DESCRIPTION_SOURCE,
   meta,
   MODULE_EXTENSION,
   REQUIRES_DESCRIPTION_ACTUAL,
@@ -42,7 +42,7 @@ export const executorRequiresDescription = defineRule({
     return {
       ImportDeclaration(node: ESTree.ImportDeclaration) {
         const source = node.source.value
-        if (source === CELL_SOURCE) {
+        if (source === DESCRIPTION_SOURCE) {
           for (const specifier of node.specifiers) {
             if (node.importKind === 'type') continue
             if (specifier.type === 'ImportSpecifier' && specifier.importKind === 'type') continue

@@ -27,8 +27,8 @@ const AGGREGATE_CEILING_MS = 26_000
  * (decode), interpret it (decide), fold both channels into the outcome the
  * site acts on (encode), and sequence the loop from that outcome (write).
  * The workflow's `Left` — a malformed decision JSON — is folded into a
- * `Warning` outcome by `encode`, so it reaches the write as a value, exactly
- * where the hand-sequenced shell put it.
+ * `Warning` outcome by `encode`, so it reaches the write as a value rather than
+ * a failure.
  */
 interface HookVerdictPhases extends Cell.Phases {
   readonly command: { readonly hook: CommandHook; readonly input: Record<string, unknown> }

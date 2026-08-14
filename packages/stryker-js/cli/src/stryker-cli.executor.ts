@@ -201,8 +201,7 @@ interface AdmissionOutcome extends AdmissionRunContext {
  * package the workflow input, call the admission workflow, shape nothing, and
  * dispatch the outcome to the write. A rejection is the decide phase's
  * `Left` — an outcome, not a fault — so it travels through `encode` into the
- * write, which fails the run with it exactly where the hand-sequenced shell
- * did.
+ * write, which fails the run with it.
  */
 interface AdmissionPhases extends Cell.Phases {
   readonly command: PartialStrykerOptions
@@ -231,8 +230,7 @@ interface AdmissionPhases extends Cell.Phases {
  * across its interior; `decode` packages the workflow input; `admitSurvivorsRun`
  * is the decide phase; `encode` is the identity because the write already
  * consumes the whole outcome; the write dispatches the decision to the
- * verdict/run and fails the run with a rejection, the same terminal behaviour
- * as the shell it replaces.
+ * verdict/run and fails the run with a rejection.
  */
 const survivorsAdmissionDescription = (
   runMutationTest: StrykerRun,
@@ -242,18 +240,16 @@ const survivorsAdmissionDescription = (
   pipe(
     Cell.read<AdmissionPhases>((cliOptions) =>
       Effect.promise(() => resolveSurvivorsRunOptions(cliOptions)).pipe(
-        Effect.flatMap((resolvedOptions) =>
-          Effect.sync(() => {
-            const priorReportPath = priorReportPathOf(resolvedOptions)
-            const priorReport = readPriorReport(priorReportPath)
-            return {
-              resolvedOptions,
-              priorReport,
-              priorReportPath,
-              sourceContentHashes: sourceContentHashesOf(priorReport),
-            }
-          })
-        ),
+        Effect.map((resolvedOptions) => {
+          const priorReportPath = priorReportPathOf(resolvedOptions)
+          const priorReport = readPriorReport(priorReportPath)
+          return {
+            resolvedOptions,
+            priorReport,
+            priorReportPath,
+            sourceContentHashes: sourceContentHashesOf(priorReport),
+          }
+        }),
       )
     ),
     Cell.decode<AdmissionPhases>(({ resolvedOptions, priorReport, priorReportPath, sourceContentHashes }) =>
@@ -301,8 +297,8 @@ const survivorsAdmissionDescription = (
 /**
  * The `--survivors` request: re-test exactly the prior report's survivor set.
  * The survivors flag was parsed as a boolean; the admission decides between
- * running the survivors and the plain pipeline. The chain's order is carried
- * by the description's phases rather than by hand-sequenced statements.
+ * running the survivors and the plain pipeline. The chain's order is carried by
+ * the description's phase types.
  */
 function runSurvivorsAdmission(
   runMutationTest: StrykerRun,

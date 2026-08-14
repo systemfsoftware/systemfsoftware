@@ -1,6 +1,6 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
-import { cellOf, isExecutorFile } from './cell.js'
+import { calleeRootName, cellOf, isExecutorFile } from './cell.js'
 import {
   DESCRIPTION_NAMESPACE,
   DESCRIPTION_SOURCE,
@@ -29,12 +29,6 @@ const walk = (value: unknown, visit: (node: Walkable) => void): void => {
     if (SKIPPED_WALK_KEYS.some((skipped) => skipped === key)) continue
     walk(value[key], visit)
   }
-}
-
-const rootNameOf = (value: unknown): string | null => {
-  if (!isWalkable(value)) return null
-  if (nodeType(value) === 'Identifier') return String(value['name'])
-  return rootNameOf(value['object'])
 }
 
 const isCallExpression = (value: Walkable): value is Walkable & ESTree.CallExpression =>
@@ -68,7 +62,7 @@ export const executorNoIoInFilling = defineRule({
     const reportIoInBody = (body: unknown): void => {
       walk(body, (inner) => {
         if (!isCallExpression(inner)) return
-        const innerRoot = rootNameOf(inner['callee'])
+        const innerRoot = calleeRootName(inner.callee)
         if (innerRoot === null) return
         if (!ioNames.has(innerRoot)) return
         context.report({

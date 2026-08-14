@@ -2,7 +2,8 @@ import { Schema as S } from 'effect'
 
 export const Options = S.Struct({})
 
-export const CELL_SOURCE = '@systemfsoftware/effect-cell-types' as const
+/** The description package whose phases chain by type; the same edge the sibling I/O rule reads. */
+export const DESCRIPTION_SOURCE = '@systemfsoftware/effect-cell-types' as const
 
 export const DESCRIPTION_METHODS = ['read', 'decode', 'decide', 'encode', 'write', 'apply'] as const
 
