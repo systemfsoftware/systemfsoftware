@@ -1,6 +1,6 @@
 # AGENTS.md — `@systemfsoftware/effect-daemon-spec`
 
-> **Location:** `packages/effect-daemon-spec/` — supervision-tree daemons for Effect-TS. Universal agent rules live in the root `AGENTS.md`; this file carries only `effect-daemon-spec/`-specific deltas.
+> **Location:** `packages/effect-daemon-spec/` — supervision-tree daemons for Effect-TS.
 
 ## Public API Contract
 
@@ -38,6 +38,10 @@
 - Don't commit `temp/` (api-extractor scratch — gitignored at package level).
 - Don't gitignore `etc/` — the API report is the contract.
 - Don't import internals via subpath (e.g. `@systemfsoftware/effect-daemon-spec/internal/...`); only the `.` entry is exported.
+
+## Codec Laws
+
+- **DS-V1 — no hand-written codec-law properties here.** `grep -rnE 'S\.equivalence' packages/effect-daemon-spec/src` returns nothing; rely on the injected law tests (contract: `packages/effect-schema-vite/AGENTS.md`).
 
 ## Verification
 

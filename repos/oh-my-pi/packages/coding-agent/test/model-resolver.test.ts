@@ -9,6 +9,7 @@ import {
 	parseModelPattern,
 	parseModelString,
 	pickDefaultAvailableModel,
+	resolveAgentAdvisorSelection,
 	resolveAgentModelPatterns,
 	resolveAgentModelSelection,
 	resolveAgentPrewalkPattern,
@@ -843,6 +844,35 @@ describe("resolveAgentPrewalkPattern", () => {
 	test("blank override falls through to the agent definition", () => {
 		expect(resolveAgentPrewalkPattern({ settingsOverride: "  ", agentPrewalk: true })).toBe("@smol");
 		expect(resolveAgentPrewalkPattern({ settingsOverride: "", agentPrewalk: false })).toBeUndefined();
+	});
+});
+describe("resolveAgentAdvisorSelection", () => {
+	test("agent definition alone decides: true → advisor role, pattern → custom model, false/absent → off", () => {
+		expect(resolveAgentAdvisorSelection({ agentAdvisor: true })).toEqual({});
+		expect(resolveAgentAdvisorSelection({ agentAdvisor: "moonshot/k3" })).toEqual({ model: "moonshot/k3" });
+		expect(resolveAgentAdvisorSelection({ agentAdvisor: false })).toBeUndefined();
+		expect(resolveAgentAdvisorSelection({})).toBeUndefined();
+	});
+
+	test("settings override wins over the agent definition", () => {
+		expect(resolveAgentAdvisorSelection({ settingsOverride: "off", agentAdvisor: true })).toBeUndefined();
+		expect(resolveAgentAdvisorSelection({ settingsOverride: "off", agentAdvisor: "moonshot/k3" })).toBeUndefined();
+		expect(resolveAgentAdvisorSelection({ settingsOverride: "on", agentAdvisor: false })).toEqual({});
+		expect(resolveAgentAdvisorSelection({ settingsOverride: "openai/gpt-4o", agentAdvisor: false })).toEqual({
+			model: "openai/gpt-4o",
+		});
+	});
+
+	test("override 'on' keeps the agent's custom advisor model when one is defined", () => {
+		expect(resolveAgentAdvisorSelection({ settingsOverride: "on", agentAdvisor: "moonshot/k3" })).toEqual({
+			model: "moonshot/k3",
+		});
+		expect(resolveAgentAdvisorSelection({ settingsOverride: "on" })).toEqual({});
+	});
+
+	test("blank override falls through to the agent definition", () => {
+		expect(resolveAgentAdvisorSelection({ settingsOverride: "  ", agentAdvisor: true })).toEqual({});
+		expect(resolveAgentAdvisorSelection({ settingsOverride: "", agentAdvisor: false })).toBeUndefined();
 	});
 });
 describe("resolveAgentModelPatterns", () => {

@@ -103,6 +103,18 @@ pub fn infer_mutation_aliasing_effects<'a>(
         initial_state.define(ctx_place.identifier, value_id);
     }
 
+    if let Some(self_binding) = func.self_binding {
+        let value_id = ValueId::new();
+        initial_state.initialize(
+            value_id,
+            AbstractValue {
+                kind: ValueKind::Mutable,
+                reason: ReasonSet::single(ValueReason::Other),
+            },
+        );
+        initial_state.define(self_binding.identifier, value_id);
+    }
+
     let param_kind: AbstractValue = if is_function_expression {
         AbstractValue { kind: ValueKind::Mutable, reason: ReasonSet::single(ValueReason::Other) }
     } else {
@@ -1095,7 +1107,8 @@ fn find_non_mutated_destructure_spreads(
                     // Properties must be frozen since the original value was frozen
                 }
                 InstructionValue::CallExpression { callee, .. }
-                | InstructionValue::MethodCall { property: callee, .. } => {
+                | InstructionValue::MethodCall { property: callee, .. }
+                | InstructionValue::TaggedTemplateExpression { tag: callee, .. } => {
                     let callee_ty = &env.types[env.identifiers[callee.identifier].type_];
                     if get_hook_kind_for_type(env, callee_ty).ok().flatten().is_some() {
                         if !is_ref_or_ref_value_for_id(env, lvalue_id) {

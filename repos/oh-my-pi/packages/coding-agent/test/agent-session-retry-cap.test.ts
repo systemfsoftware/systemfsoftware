@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "bun:test";
 import * as path from "node:path";
 import { scheduler } from "node:timers/promises";
 import { Agent } from "@oh-my-pi/pi-agent-core";
@@ -64,14 +64,24 @@ describe("AgentSession retry delay cap", () => {
 	let modelRegistry: ModelRegistry;
 	let session: AgentSession | undefined;
 
-	beforeEach(async () => {
+	beforeAll(async () => {
 		tempDir = TempDir.createSync("@pi-retry-cap-");
 		authStorage = await AuthStorage.create(path.join(tempDir.path(), "testauth.db"));
+		modelRegistry = new ModelRegistry(authStorage, path.join(tempDir.path(), "models.yml"));
+	});
+
+	beforeEach(async () => {
 		// A live env var now overrides a stored static api_key; these tests rotate stored Anthropic
 		// credentials, so neutralize env resolution (ignores every provider's ambient env key).
 		vi.spyOn(aiStream, "getEnvApiKey").mockReturnValue(undefined);
+		for (const provider of ["anthropic", "openai-codex"]) {
+			await authStorage.remove(provider);
+		}
+		for (const provider of ["anthropic", "openai", "openai-codex", "openrouter", "cursor"]) {
+			authStorage.removeRuntimeApiKey(provider);
+		}
 		authStorage.setRuntimeApiKey("anthropic", "anthropic-test-key");
-		modelRegistry = new ModelRegistry(authStorage, path.join(tempDir.path(), "models.yml"));
+		modelRegistry.clearSuppressedSelectors();
 	});
 
 	afterEach(async () => {
@@ -81,6 +91,9 @@ describe("AgentSession retry delay cap", () => {
 		}
 		unregisterCustomApis(RETRY_CAP_MOCK_API_SOURCE);
 		vi.restoreAllMocks();
+	});
+
+	afterAll(() => {
 		authStorage.close();
 		tempDir.removeSync();
 	});

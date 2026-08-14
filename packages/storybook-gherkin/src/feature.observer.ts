@@ -1,4 +1,4 @@
-import { Cause, Deferred, Effect, Exit, Fiber, Runtime } from 'effect'
+import { Cause, Context, Deferred, Effect, Exit, Fiber } from 'effect'
 import { screen } from 'storybook/test'
 
 import {
@@ -27,11 +27,11 @@ export interface ScenarioOptions {
 
 export interface FeatureOptions {
   /**
-   * Runtime that interprets a scenario's step program at the play edge,
-   * defaulting to `Runtime.defaultRuntime`. Supply a runtime carrying
-   * services or custom scheduling to make them available to step handlers.
+   * Context that interprets a scenario's step program at the play edge,
+   * defaulting to `Context.empty()`. Supply a context carrying services
+   * or a custom scheduler to make them available to the run.
    */
-  readonly runtime?: Runtime.Runtime<never>
+  readonly context?: Context.Context<never>
 }
 
 /**
@@ -93,43 +93,40 @@ const buildStepContext = <TArgs>(ctx: PlayContext<TArgs>): StepContext<TArgs> =>
  * the value, and any other cause is rethrown as the original error instance
  * (`Cause.squash`) so Storybook's panel keeps the matcher diff.
  */
-const squashExit = <A>(exit: Exit.Exit<A, unknown>): A | undefined => {
-  if (Exit.isInterrupted(exit)) return undefined
-  if (Exit.isSuccess(exit)) return exit.value
-  throw Cause.squash(exit.cause)
-}
+const squashExit = <A>(exit: Exit.Exit<A, unknown>): A | undefined =>
+  Exit.match(exit, {
+    onSuccess: (value) => value,
+    onFailure: (cause) => {
+      if (Exit.hasInterrupts(exit)) return undefined
+      throw Cause.squash(cause)
+    },
+  })
 
 /**
  * One scenario step, composed as an Effect. Storybook's instrumented `step`
  * expects a promise whose settlement tracks the step's work, so the body runs
  * in a child fiber that settles a deferred; the bridge promise given to
- * `ctx.step` awaits that deferred and rejects with the step's original error.
+ * `stepCtx.step` awaits that deferred and rejects with the step's original error.
  * The bridge interprets only this pure signalling effect; user code runs in
  * the single play-edge interpretation. The `ensuring` finalizer interrupts
  * the child on every parent exit — success (no-op on a joined fiber),
- * failure, and interruption — so an independently failed `ctx.step` never
+ * failure, and interruption — so an independently failed `stepCtx.step` never
  * orphans a running step body.
  */
 const runStep = <TArgs>(
   step: Step<TArgs>,
   values: Readonly<Record<string, string>>,
   stepCtx: StepContext<TArgs>,
-  ctx: PlayContext<TArgs>,
 ): Effect.Effect<void, CaptureDecodeFailed> => {
   const label = `${displayKeyword(step.model)} ${renderStepText(step.model, values)}`
   return Deferred.make<Exit.Exit<void, CaptureDecodeFailed>>().pipe(
     Effect.flatMap((done) => {
       const bridge = (): Promise<void> =>
         Effect.runPromiseExit(
-          Deferred.await(done).pipe(
-            Effect.flatMap((exit) =>
-              Exit.isSuccess(exit) || Exit.isInterrupted(exit)
-                ? Effect.void
-                : Effect.failCause(exit.cause)
-            ),
-          ),
+          // An Exit is itself an Effect in v4 — yielding it re-raises its cause.
+          Effect.flatten(Deferred.await(done)),
         ).then(squashExit)
-      return Effect.fork(
+      return Effect.forkChild(
         step.run(values, stepCtx).pipe(
           Effect.exit,
           Effect.flatMap((exit) => Deferred.succeed(done, exit)),
@@ -137,7 +134,7 @@ const runStep = <TArgs>(
         ),
       ).pipe(
         Effect.flatMap((fiber) =>
-          Effect.promise(() => Promise.resolve(ctx.step(label, bridge))).pipe(
+          Effect.promise(() => Promise.resolve(stepCtx.step(label, bridge))).pipe(
             Effect.flatMap(() => Fiber.join(fiber)),
             Effect.ensuring(Fiber.interrupt(fiber).pipe(Effect.asVoid)),
           )
@@ -153,15 +150,15 @@ const executeSteps = <TArgs>(
   ctx: PlayContext<TArgs>,
 ): Effect.Effect<void, CaptureDecodeFailed> => {
   const stepCtx = buildStepContext(ctx)
-  return Effect.forEach(ordered, (s) => runStep(s, values, stepCtx, ctx), { discard: true })
+  return Effect.forEach(ordered, (s) => runStep(s, values, stepCtx), { discard: true })
 }
 
 /** The single interpretation edge of the package. */
 const interpretPlay = <A, E>(
-  runtime: Runtime.Runtime<never>,
+  context: Context.Context<never>,
   program: Effect.Effect<A, E>,
   ctx: { readonly abortSignal: AbortSignal },
-): Promise<A | undefined> => Runtime.runPromiseExit(runtime)(program, { signal: ctx.abortSignal }).then(squashExit)
+): Promise<A | undefined> => Effect.runPromiseExitWith(context)(program, { signal: ctx.abortSignal }).then(squashExit)
 
 const rowValuesFor = (row: ExampleRow): Readonly<Record<string, string>> =>
   Object.fromEntries(Object.entries(row).filter(([k]) => k !== 'name'))
@@ -178,17 +175,17 @@ const validateScenarioSteps = (
   withRecord: Readonly<Record<string, string>>,
 ): void => {
   if (models.length === 0) {
-    throw new EmptyScenario({ scenario: fullName })
+    throw EmptyScenario.make({ scenario: fullName })
   }
   if (!resolveKeywords(models).some((r) => r.resolved === 'Then')) {
-    throw new MissingThen({ scenario: fullName })
+    throw MissingThen.make({ scenario: fullName })
   }
   for (const stepModel of models) {
     for (const cap of stepModel.captures) {
       const hasDefault = cap.default !== undefined
       const hasWith = Object.prototype.hasOwnProperty.call(withRecord, cap.name)
       if (!hasDefault && !hasWith) {
-        throw new UnresolvedCapture({
+        throw UnresolvedCapture.make({
           scenario: fullName,
           step: displayPattern(stepModel),
           capture: cap.name,
@@ -230,7 +227,7 @@ const parseScenarioArgs = <TArgs>(
 const makeScenario = <TArgs>(
   background: readonly Step<TArgs>[],
   prefix: string,
-  runtime: Runtime.Runtime<never>,
+  context: Context.Context<never>,
 ): ScenarioFn<TArgs> => {
   function scenario(
     name: string,
@@ -252,7 +249,7 @@ const makeScenario = <TArgs>(
     return {
       name: fullName,
       play: (ctx: PlayContext<TArgs>) =>
-        interpretPlay(runtime, executeSteps([...background, ...steps], withRecord, ctx), ctx),
+        interpretPlay(context, executeSteps([...background, ...steps], withRecord, ctx), ctx),
     }
   }
   return scenario
@@ -263,17 +260,17 @@ const validateOutlineRows = (
   captureNames: ReadonlySet<string>,
   fullName: string,
 ): void => {
-  if (rows.length === 0) throw new OutlineEmpty({ outline: fullName })
+  if (rows.length === 0) throw OutlineEmpty.make({ outline: fullName })
   const seenRowNames = new Set<string>()
   const firstKeys = sortKeys(Object.keys(rows[0] ?? {}).filter((k) => k !== 'name'))
   for (const row of rows) {
     if (seenRowNames.has(row.name)) {
-      throw new OutlineDuplicateRowName({ outline: fullName, name: row.name })
+      throw OutlineDuplicateRowName.make({ outline: fullName, name: row.name })
     }
     seenRowNames.add(row.name)
     const actual = sortKeys(Object.keys(row).filter((k) => k !== 'name'))
     if (actual.length !== firstKeys.length || actual.some((k, i) => k !== firstKeys[i])) {
-      throw new OutlineInconsistentKeys({
+      throw OutlineInconsistentKeys.make({
         outline: fullName,
         row: row.name,
         expected: [...firstKeys],
@@ -282,7 +279,7 @@ const validateOutlineRows = (
     }
     for (const cap of captureNames) {
       if (!Object.prototype.hasOwnProperty.call(row, cap)) {
-        throw new OutlineMissingCapture({
+        throw OutlineMissingCapture.make({
           outline: fullName,
           row: row.name,
           capture: cap,
@@ -295,7 +292,7 @@ const validateOutlineRows = (
 const makeOutline = <TArgs>(
   background: readonly Step<TArgs>[],
   prefix: string,
-  runtime: Runtime.Runtime<never>,
+  context: Context.Context<never>,
 ): OutlineFn<TArgs> => {
   function outline(
     name: string,
@@ -315,23 +312,27 @@ const makeOutline = <TArgs>(
     const withRecord: Readonly<Record<string, string>> = options?.with ?? {}
     const models = steps.map((s) => s.model)
     if (models.length === 0) {
-      throw new EmptyScenario({ scenario: fullName })
+      throw EmptyScenario.make({ scenario: fullName })
     }
     if (!resolveKeywords(models).some((r) => r.resolved === 'Then')) {
-      throw new MissingThen({ scenario: fullName })
+      throw MissingThen.make({ scenario: fullName })
     }
     const captureNames = new Set<string>()
     for (const m of models) for (const c of m.captures) captureNames.add(c.name)
 
-    const buildRowSpec = (row: ExampleRow): StorySpec<TArgs> => ({
-      name: `${fullName} — ${row.name}`,
-      play: (ctx: PlayContext<TArgs>) =>
-        interpretPlay(
-          runtime,
-          executeSteps([...background, ...steps], { ...withRecord, ...rowValuesFor(row) }, ctx),
-          ctx,
-        ),
-    })
+    const buildRowSpec = (row: ExampleRow): StorySpec<TArgs> => {
+      // Row values are fixed at declaration time; merge once, like makeScenario.
+      const values = { ...withRecord, ...rowValuesFor(row) }
+      return {
+        name: `${fullName} — ${row.name}`,
+        play: (ctx: PlayContext<TArgs>) =>
+          interpretPlay(
+            context,
+            executeSteps([...background, ...steps], values, ctx),
+            ctx,
+          ),
+      }
+    }
 
     const examples = (
       rows: readonly ExampleRow[],
@@ -355,7 +356,7 @@ const makeBackground = <TArgs>(background: Step<TArgs>[]) => (...steps: readonly
     const resolvedEntry = resolvedKeywords[i]
     if (step === undefined || resolvedEntry === undefined) continue
     if (resolvedEntry.resolved !== 'Given') {
-      throw new BackgroundNotGiven({
+      throw BackgroundNotGiven.make({
         step: displayPattern(step.model),
         resolved: resolvedEntry.resolved,
       })
@@ -366,18 +367,18 @@ const makeBackground = <TArgs>(background: Step<TArgs>[]) => (...steps: readonly
 
 const makeFeature = <M, TArgs = unknown>(
   meta: M,
-  runtime: Runtime.Runtime<never>,
+  context: Context.Context<never>,
 ): Feature<M, TArgs> => {
   const background: Step<TArgs>[] = []
   const feature: Feature<M, TArgs> = {
     meta,
-    type: <TNext>(): Feature<M, TNext> => makeFeature<M, TNext>(meta, runtime),
+    type: <TNext>(): Feature<M, TNext> => makeFeature<M, TNext>(meta, context),
     background: makeBackground<TArgs>(background),
-    scenario: makeScenario<TArgs>(background, '', runtime),
-    scenarioOutline: makeOutline<TArgs>(background, '', runtime),
+    scenario: makeScenario<TArgs>(background, '', context),
+    scenarioOutline: makeOutline<TArgs>(background, '', context),
     rule: (ruleName: string): RuleScope<TArgs> => ({
-      scenario: makeScenario<TArgs>(background, ruleName, runtime),
-      scenarioOutline: makeOutline<TArgs>(background, ruleName, runtime),
+      scenario: makeScenario<TArgs>(background, ruleName, context),
+      scenarioOutline: makeOutline<TArgs>(background, ruleName, context),
     }),
   }
   return feature
@@ -385,12 +386,12 @@ const makeFeature = <M, TArgs = unknown>(
 
 /**
  * Declare a feature: a story set whose scenarios execute as CSF `play`
- * functions. `options.runtime` (default `Runtime.defaultRuntime`) is the
- * Effect runtime interpreting each scenario's composed step program exactly
- * once, at the play edge.
+ * functions. `options.context` (default `Context.empty()`) is the Effect
+ * context interpreting each scenario's composed step program exactly once,
+ * at the play edge.
  */
 export const feature = <M>(meta: M, options: FeatureOptions = {}): Feature<M> =>
-  makeFeature<M>(meta, options.runtime ?? Runtime.defaultRuntime)
+  makeFeature<M>(meta, options.context ?? Context.empty())
 
 export const Steps = <TArgs>(...steps: readonly Step<TArgs>[]): Step<TArgs>[] => [...steps]
 

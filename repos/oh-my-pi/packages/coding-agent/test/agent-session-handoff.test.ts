@@ -20,7 +20,7 @@ import { AgentSession, type AgentSessionEvent } from "@oh-my-pi/pi-coding-agent/
 import { AuthStorage } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
 import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
 import { EventBus } from "@oh-my-pi/pi-coding-agent/utils/event-bus";
-import { TempDir } from "@oh-my-pi/pi-utils";
+import { TempDir, withTimeout } from "@oh-my-pi/pi-utils";
 import * as snapcompact from "@oh-my-pi/snapcompact";
 
 const HANDOFF_SECRET = "HANDOFF_SECRET_TOKEN_12345";
@@ -1712,10 +1712,11 @@ describe("AgentSession handoff", () => {
 		expect(session.isGeneratingHandoff).toBe(true);
 
 		// dispose must NOT wait for the LLM call to resolve on its own — it must abort it.
-		const disposed = Promise.race([
+		const disposed = withTimeout(
 			session.dispose().then(() => "disposed" as const),
-			Bun.sleep(2_000).then(() => "timeout" as const),
-		]);
+			2_000,
+			"Timed out waiting for session disposal",
+		);
 
 		await expect(disposed).resolves.toBe("disposed");
 		// Releasing after the fact must not leak into other tests.

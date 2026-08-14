@@ -1,8 +1,8 @@
 # AGENTS.md — `effect-store/`
 
-> Delta only. Shared rule-authoring conventions: `packages/oxlint-plugins/AGENTS.md`. Universal rules: root `AGENTS.md`.
+> Shared rule-authoring conventions: `packages/oxlint-plugins/AGENTS.md`.
 
-Rules here gate the `architect-store` cell spec (`*.store.ts` — the persistence leaf: `Effect.fn` functions over ONE aggregate, ACL-seam row↔domain crossings, injected DB port, domain-typed errors). Read the cell skill for what a store must be; restating it here would create a second copy that drifts.
+Rules here gate the `architect-store` cell spec (`*.store.ts` — the persistence leaf: `Effect.fn` functions over ONE aggregate, ACL-seam row↔domain crossings, injected DB port, domain-typed errors).
 
 ```yaml
 - id: ES1
@@ -21,6 +21,6 @@ Rules here gate the `architect-store` cell spec (`*.store.ts` — the persistenc
   title: Effect detection matches the canonical identifier only
   do: recognize `Effect.fn` on the `Effect` namespace only; treat `E.fn`, curried `Effect.fn()(...)`, and computed `Effect['fn']` as documented near-misses (computed still counts as an exported Effect value)
   dont: widen detection to aliases
-  harm: every rule here hardcodes a canonical identifier (EW4); widening one makes its near-miss tests meaningless and puts it out of step with its siblings
+  harm: every rule here hardcodes a canonical identifier (EW4); widening one makes its near-miss tests meaningless and breaks that shared contract
   check: `grep -oE 'Should_Pass_When_Aliased_Effect_Namespace_Is_Used' src/rules/__tests__/store-effect-fn-required.test.ts` returns the aliased-`E.fn` valid case
 ```

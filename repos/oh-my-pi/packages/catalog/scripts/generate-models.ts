@@ -45,6 +45,7 @@ import {
 	META_MUSE_STATIC_MODELS,
 	MODELS_DEV_PROVIDER_DESCRIPTORS,
 	mapModelsDevToModels,
+	OPENAI_DAYBREAK_CURATED_FALLBACK_MODELS,
 	projectOpenAIProReasoningAliases,
 	SAKANA_FUGU_STATIC_MODELS,
 	stripFireworksDeepSeekThinkingToggle,
@@ -546,6 +547,9 @@ async function generateModels() {
 	// persisted `modelRoles.default = "xai-oauth/<id>"` is honored before the
 	// async refresh fires (interactive boot does not await refresh).
 	allModels.push(...buildXaiOAuthStaticSeed());
+	// Daybreak is separately provisioned and absent from stencil.so. Keep its
+	// documented aliases and current Cyber snapshot in every generated bundle.
+	allModels.push(...OPENAI_DAYBREAK_CURATED_FALLBACK_MODELS);
 	// Seed Anthropic models that are live on the first-party API or in limited
 	// release but that stencil.so has not catalogued yet (e.g. Claude Fable 5 /
 	// Mythos 5). Deduped behind upstream entries; metadata is pinned in

@@ -1,7 +1,5 @@
 # AGENTS.md — `effect-memfs/`
 
-> Delta only. Universal rules: root `AGENTS.md`.
-
 A hard fork of `nounder/effect-memfs`, maintained here and published under our name. It is
 NOT vendored — `repos/` is the read-only tree (REPO-S3); this package is edited normally.
 

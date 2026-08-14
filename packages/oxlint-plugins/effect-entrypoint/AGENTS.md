@@ -1,8 +1,8 @@
 # AGENTS.md — `effect-entrypoint/`
 
-> Delta only. Shared rule-authoring conventions: `packages/oxlint-plugins/AGENTS.md`. Universal rules: root `AGENTS.md`.
+> Shared rule-authoring conventions: `packages/oxlint-plugins/AGENTS.md`.
 
-Rules here gate `main.ts` as a real interpretation edge. The spec of record is `skill://design-effect-entrypoint`; read it for which primitive an entrypoint should use. Restating it here would create a second copy that drifts.
+Rules here gate `main.ts` as a real interpretation edge. The spec of record is `skill://design-effect-entrypoint`.
 
 ```yaml
 - id: EP1

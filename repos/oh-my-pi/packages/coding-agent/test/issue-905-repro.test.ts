@@ -112,7 +112,6 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-	await Bun.sleep(0);
 	await tmp.remove();
 });
 

@@ -494,7 +494,6 @@ describe("ModelRegistry runtime discovery", () => {
 
 			const zenmuxModels = getModelsForProvider(registry1, "zenmux");
 			const fable = zenmuxModels.find(m => m.id === "anthropic/claude-fable-5-free");
-			expect(fable).toBeDefined();
 			expect(fable?.api).toBe("anthropic-messages");
 			expect(fable?.baseUrl).toBe("https://zenmux.ai/api/anthropic");
 
@@ -515,7 +514,6 @@ describe("ModelRegistry runtime discovery", () => {
 
 			const offlineZenmuxModels = getModelsForProvider(registry2, "zenmux");
 			const offlineFable = offlineZenmuxModels.find(m => m.id === "anthropic/claude-fable-5-free");
-			expect(offlineFable).toBeDefined();
 			expect(offlineFable?.api).toBe("anthropic-messages");
 			expect(offlineFable?.baseUrl).toBe("https://zenmux.ai/api/anthropic");
 		} finally {
@@ -1039,7 +1037,6 @@ describe("ModelRegistry runtime discovery", () => {
 		expect(llamaModels.some(m => m.id === "llama-3.2:3b")).toBe(true);
 		const apiKey = await registry.getApiKey(llamaModels[0]);
 		expect(apiKey).toBe("test-llama-key");
-		expect(apiKey).not.toBe(kNoAuth);
 	});
 	test("llama.cpp discovery without API key is treated as keyless", async () => {
 		const fetchMock: FetchImpl = async (input, init) => {
@@ -2315,7 +2312,6 @@ providers:
 		const registry = new ModelRegistry(authStorage, modelsJsonPath, { fetch: fetchMock });
 		await registry.refresh();
 		const model = registry.find("proxy-test", "act_two");
-		expect(model).toBeDefined();
 		expect(model?.name).toBe("Act Two");
 	});
 
@@ -2348,7 +2344,6 @@ providers:
 		const registry = new ModelRegistry(authStorage, modelsJsonPath, { fetch: fetchMock });
 		await registry.refresh();
 		const model = registry.find("proxy-test", "gpt-5");
-		expect(model).toBeDefined();
 		expect(model?.name).toBe("GPT-5");
 	});
 
@@ -2575,7 +2570,6 @@ providers:
 		const registry = new ModelRegistry(authStorage, modelsJsonPath);
 
 		const restored = registry.find("github-copilot", "gpt-5.6-sol-1m");
-		expect(restored).toBeDefined();
 		expect(restored?.headers).toEqual(bundledBase.headers);
 	});
 

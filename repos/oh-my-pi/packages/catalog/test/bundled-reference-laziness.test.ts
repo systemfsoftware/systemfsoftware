@@ -1,33 +1,25 @@
 import { describe, expect, test } from "bun:test";
-import { TempDir } from "@oh-my-pi/pi-utils";
 import { createReferenceResolver } from "../src/provider-models/bundled-references";
 import type { ModelSpec } from "../src/types";
 
 const FIXTURE = `${import.meta.dir}/fixtures/bundled-reference-laziness.ts`;
 
-async function runFixture(fixture: string): Promise<string> {
-	const tempDir = TempDir.createSync("@pi-catalog-bundled-reference-laziness-");
-	const resultPath = tempDir.join("result.json");
-	try {
-		const result = Bun.spawnSync({
-			cmd: [process.execPath, fixture],
-			env: { ...process.env, OMP_CATALOG_LAZINESS_RESULT_PATH: resultPath },
-			stdout: "pipe",
-			stderr: "pipe",
-		});
-		expect(result.exitCode, result.stderr.toString()).toBe(0);
-		return await Bun.file(resultPath).text();
-	} finally {
-		tempDir.removeSync();
-	}
+function runFixture(fixture: string): string {
+	const result = Bun.spawnSync({
+		cmd: [process.execPath, fixture],
+		env: process.env,
+		stdout: "pipe",
+		stderr: "pipe",
+	});
+	expect(result.exitCode, result.stderr.toString()).toBe(0);
+	return result.stdout.toString();
 }
 
-describe("bundled reference laziness", () => {
-	test("constructing bundled model-manager options retains less than 8 MiB of RSS", async () => {
-		const { retainedRssBytes } = JSON.parse(await runFixture(FIXTURE)) as { retainedRssBytes: number };
+describe("bundled model laziness", () => {
+	test("provider options and the bundled registry stay lazy", () => {
+		const { retainedRssBytes } = JSON.parse(runFixture(FIXTURE)) as { retainedRssBytes: number };
 		expect(retainedRssBytes).toBeLessThan(8 * 1024 * 1024);
 	}, 60_000);
-
 	test("a lazy provider-reference factory initializes on first resolution and only once", () => {
 		const reference = {
 			id: "fixture-model",

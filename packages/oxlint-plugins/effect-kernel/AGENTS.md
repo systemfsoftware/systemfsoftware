@@ -1,8 +1,8 @@
 # AGENTS.md — `effect-kernel/`
 
-> Delta only. Shared rule-authoring conventions: `packages/oxlint-plugins/AGENTS.md`. Universal rules: root `AGENTS.md`.
+> Shared rule-authoring conventions: `packages/oxlint-plugins/AGENTS.md`.
 
-Rules here gate the `architect-kernel` cell spec — vocabulary-free, domain-blind, PURE behavior. The cell skill (`skill://architect-kernel`, gates KE1–KE6) is the spec of record; read it for what a valid `*.kernel.ts` is. Restating it here would create a second copy that drifts.
+Rules here gate the `architect-kernel` cell spec — vocabulary-free, domain-blind, PURE behavior.
 
 ```yaml
 - id: KK1

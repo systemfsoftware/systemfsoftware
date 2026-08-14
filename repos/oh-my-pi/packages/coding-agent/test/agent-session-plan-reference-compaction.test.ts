@@ -13,7 +13,7 @@
  * MUST carry the approved plan reference again (re-read from disk).
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { Agent, type AgentMessage } from "@oh-my-pi/pi-agent-core";
@@ -111,7 +111,17 @@ function emitHighUsageTurn(session: AgentSession): void {
 
 describe("AgentSession approved-plan reference re-injection after compaction (issue #1246)", () => {
 	let tempDir: TempDir;
+	let fixtureDir: TempDir;
+	let authStorage: AuthStorage;
+	let modelRegistry: ModelRegistry;
 	const cleanups: Array<() => Promise<void>> = [];
+
+	beforeAll(async () => {
+		fixtureDir = TempDir.createSync("@pi-agent-session-plan-ref-compaction-fixture-");
+		authStorage = await AuthStorage.create(path.join(fixtureDir.path(), "testauth.db"));
+		authStorage.setRuntimeApiKey("anthropic", "test-key");
+		modelRegistry = new ModelRegistry(authStorage, path.join(fixtureDir.path(), "models.yml"));
+	});
 
 	beforeEach(() => {
 		tempDir = TempDir.createSync("@pi-agent-session-plan-ref-compaction-");
@@ -123,6 +133,11 @@ describe("AgentSession approved-plan reference re-injection after compaction (is
 		cleanups.length = 0;
 		tempDir.removeSync();
 		vi.restoreAllMocks();
+	});
+
+	afterAll(() => {
+		authStorage.close();
+		fixtureDir.removeSync();
 	});
 
 	async function createHarness(strategy: "context-full" | "snapcompact" = "context-full"): Promise<Harness> {
@@ -140,9 +155,6 @@ describe("AgentSession approved-plan reference re-injection after compaction (is
 		// agent-session-eager-compaction / -auto-compaction-queue.
 		const model = { ...bundled, contextWindow: 200_000, maxTokens: 64_000 };
 
-		const authStorage = await AuthStorage.create(path.join(tempDir.path(), `testauth-${cleanups.length}.db`));
-		authStorage.setRuntimeApiKey("anthropic", "test-key");
-		const modelRegistry = new ModelRegistry(authStorage, path.join(tempDir.path(), `models-${cleanups.length}.yml`));
 		const settings = Settings.isolated({
 			"compaction.enabled": true,
 			"compaction.autoContinue": true,
@@ -193,10 +205,7 @@ describe("AgentSession approved-plan reference re-injection after compaction (is
 			return promise;
 		};
 
-		cleanups.push(async () => {
-			await session.dispose();
-			authStorage.close();
-		});
+		cleanups.push(() => session.dispose());
 		return { session, sessionManager, observedCalls, waitForCall };
 	}
 

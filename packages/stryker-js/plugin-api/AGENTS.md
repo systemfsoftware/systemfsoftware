@@ -1,8 +1,8 @@
 # AGENTS.md — `@systemfsoftware/stryker-js-plugin-api`
 
-> **Location:** `packages/stryker-js/plugin-api/` — the plugin API of the @systemfsoftware Stryker fork. Universal agent rules live in the root `AGENTS.md`; this file carries only `plugin-api/`-specific deltas.
+> **Location:** `packages/stryker-js/plugin-api/` — the plugin API of the @systemfsoftware Stryker fork.
 
-A source-code fork of `@stryker-mutator/api` v9.6.1. "Upstream" names where it came from, never a limit on changing it. The tsconfig reproduces upstream's own strictness so the vendored source typechecks unmodified; upstream idioms are kept deliberately (CONSTITUTION §V.6).
+A source-code fork of `@stryker-mutator/api` v9.6.1. The tsconfig reproduces upstream's own strictness so the vendored source typechecks unmodified; upstream idioms are kept deliberately (CONSTITUTION §V.6).
 
 Deltas from root:
 

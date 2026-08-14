@@ -182,7 +182,17 @@ A workflow is produced by calling the cell's constructor, not by annotating a va
 
 A `make` a cell type exposes so that authors produce that cell by calling it rather than by annotating a value. Its force lives entirely in the parameter type — what the author hands in — and it earns existence only by computing something the author could not write: inferring the cell's channels from the argument and deriving markers from them. A constructor whose rejections all follow from its parameter type alone computes nothing an annotation would not, and is ceremony rather than enforcement.
 
-A constructor and a suffix-keyed rule are disjoint instruments, never substitutes: the constructor binds where the cell is called, while the rule reads the whole file, so shipping one retires none of the other. A constructor types the seam between cells and cannot type a sequence — ordering is not expressible over a value — so the cell types that are shells have none, and the cells whose composer the effect library already supplies do not need one.
+A constructor and a suffix-keyed rule are disjoint instruments, never substitutes: the constructor binds where the cell is called, while the rule reads the whole file, so shipping one retires none of the other. A single constructor types the seam between cells and cannot type a sequence — ordering is not expressible over one value — so the cell types whose composer the effect library already supplies do not need one.
+
+A **chain** of constructors does type the sequence, which is how a shell's order becomes a compile-time fact rather than a claim beside it. Each phase's return type carries a required member whose name is the sentence stating what must be called next, and the next phase's parameter demands that member; composing them in the wrong order omits it, so the compiler reports the missing member and prints the sentence. The stages are siblings rather than a hierarchy — under a hierarchy a later stage is assignable to an earlier parameter, so an inversion compiles — and the sentence survives into the published declaration as the member's own name, which is what carries it into a consumer's compiler.
+
+### Description
+
+A record of named phases in one or more impure/pure layers, where each phase's return type carries the required member the next phase's parameter demands, so its order is a consequence of the types rather than an assertion beside them. A **phase** is one named step — a read, a decode, a decision, an encode, or a write. A **layer** is an impure segment followed by a pure segment; a site whose real order writes before it can classify is one description carrying two layers, never two composed by hand.
+
+An impure phase's interior is not type-visible, so no count of I/O operations is claimed or enforced: a read may gather a product across its interior — bumping a counter and returning the resulting rate is one such product — and fan-in is expressed that way rather than by relaxing the chain. A pure phase is one expression and performs no I/O; the I/O a pure phase's return type cannot see, reached through a closure-captured value, is what the lint rule on phase bodies decides.
+
+The two kinds of `Left` are carried by the phase types rather than chosen by the interpreter. A `decode` `Left` is fatal: nothing consumes it, so its only route is the derived error channel and no write runs. A `decide` `Left` is an outcome, not a fault: the encode phase receives the whole `Either`, so it cannot be unwrapped and both branches travel on to the write. A uniform rule over the two breaks a real call site either way.
 
 ### Verification observer
 

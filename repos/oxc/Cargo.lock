@@ -1694,9 +1694,9 @@ dependencies = [
 
 [[package]]
 name = "oxc-browserslist"
-version = "4.0.0"
+version = "5.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "715b22bd6a58d051301ca633e55c04d8cbede81ae5fe4fb4229260fe07778463"
+checksum = "456720daa870e4f69f8d29fded1c8deea82da4780a6b8553baa160eb0cd8d864"
 dependencies = [
  "js-sys",
  "libc",
@@ -1749,9 +1749,9 @@ checksum = "71bca8630e33e93a38d8dceb0daba6f562f29215b47098a7f05e8d295227ed94"
 
 [[package]]
 name = "oxc-yaml-parser"
-version = "0.0.4"
+version = "0.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3beb95e6d6a3d7217cbcf85e7bf88be7f0c8b6f4c697efe6ff21e3e5d4a44ef5"
+checksum = "6e7217ca01ae9b98ab99c6f7cc59640c85bbc90e341df5743e08a3ecd7d611b2"
 dependencies = [
  "oxc_allocator",
 ]
@@ -1905,6 +1905,22 @@ dependencies = [
  "oxc_syntax",
  "pico-args",
  "rustc-hash",
+]
+
+[[package]]
+name = "oxc_codegen_conformance"
+version = "0.0.0"
+dependencies = [
+ "napi",
+ "napi-build",
+ "napi-derive",
+ "oxc_allocator",
+ "oxc_ast",
+ "oxc_ast_visit",
+ "oxc_codegen",
+ "oxc_napi",
+ "oxc_parser",
+ "oxc_syntax",
 ]
 
 [[package]]
@@ -2510,6 +2526,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "oxc_relay"
+version = "0.144.0"
+dependencies = [
+ "oxc_allocator",
+ "oxc_ast",
+ "oxc_codegen",
+ "oxc_diagnostics",
+ "oxc_parser",
+ "oxc_semantic",
+ "oxc_span",
+ "oxc_str",
+ "oxc_traverse",
+]
+
+[[package]]
 name = "oxc_resolver"
 version = "11.24.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2727,6 +2758,20 @@ dependencies = [
  "oxc",
  "oxc_napi",
  "oxc_react_compiler",
+ "oxc_sourcemap",
+]
+
+[[package]]
+name = "oxc_transform_relay_napi"
+version = "0.144.0"
+dependencies = [
+ "mimalloc-safe",
+ "napi",
+ "napi-build",
+ "napi-derive",
+ "oxc",
+ "oxc_napi",
+ "oxc_relay",
  "oxc_sourcemap",
 ]
 

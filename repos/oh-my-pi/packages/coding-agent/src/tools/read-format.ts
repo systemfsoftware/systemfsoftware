@@ -37,16 +37,17 @@ export interface HashlineHeaderContext {
 }
 
 export function formatReadHashlineHeader(displayPath: string, tag: string): string {
-	// In-workspace reads collapse to the bare filename for brevity: the edit
-	// tool's snapshot-tag recovery rebinds a bare `[name#tag]` onto the in-tree
-	// file it uniquely names. Out-of-workspace reads can't lean on that —
-	// recovery refuses to redirect a write outside the cwd/sandbox
-	// (HashlineFilesystem.allowTagPathRecovery) — so an absolute displayPath
-	// must stay directly resolvable, otherwise the basename resolves against
-	// cwd, misses, and the edit fails with "File not found" (e.g. ~/.claude/*).
-	// `shortenPath` keeps `~/.claude/...` (round-trips through resolveToCwd's ~
-	// expansion) instead of leaking the full home path into the read output.
-	const anchor = path.isAbsolute(displayPath) ? shortenPath(displayPath) : path.basename(displayPath);
+	// In-workspace reads keep their workspace-relative path (e.g.
+	// `src/settings.json`), not just the basename: collapsing to the bare name
+	// made a header ambiguous whenever another same-named file exists at cwd —
+	// the edit tool would resolve the bare name against cwd, hit the wrong
+	// file, and reject the valid edit via the snapshot-tag guard (the authored
+	// path exists, so Patcher's tag-path recovery never runs). The relative
+	// path stays directly resolvable against cwd and names the file uniquely.
+	// Out-of-workspace reads use an absolute displayPath; `shortenPath` keeps
+	// `~/.claude/...` (round-trips through resolveToCwd's ~ expansion) instead
+	// of leaking the full home path into the read output.
+	const anchor = path.isAbsolute(displayPath) ? shortenPath(displayPath) : displayPath;
 	return formatHashlineHeader(anchor, tag);
 }
 

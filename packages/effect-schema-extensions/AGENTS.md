@@ -1,6 +1,6 @@
 # AGENTS.md — `@systemfsoftware/effect-schema-extensions`
 
-> **Location:** `packages/effect-schema-extensions/` — extra Effect Schema codecs (hex-string, prefixed-hex). Universal agent rules live in the root `AGENTS.md`; this file carries only `effect-schema-extensions/`-specific deltas.
+> **Location:** `packages/effect-schema-extensions/` — extra Effect Schema codecs (hex-string, prefixed-hex).
 
 Extends `Schema` with branded hex-string types. Every codec must provide:
 

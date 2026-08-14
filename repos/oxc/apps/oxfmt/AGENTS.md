@@ -68,7 +68,7 @@ A separate string-out channel (the session's `string_embedder` service, NOT the 
   - everything else stays verbatim
   - the embedder carries the caller's effective print width; both branches honor it (native via `PrintWidth` override, Prettier via `printWidth` in the options JSON), so a fence prints at the same width a JS/TS snippet in the same position would (see `upstream-jsdoc-bugs.md` #11 for the deliberate divergence from upstream's flat `printWidth - 4`)
 
-NOTE: The string-out channel outlives the md/html/angular rewrites; its full exit criterion is owned by `oxc_formatter_core`'s AGENTS.md (layer (4)).
+NOTE: The string-out channel outlives the md/html/angular rewrites; its full exit criterion is owned by `oxc_formatter_core`'s AGENTS.md (domain (4)).
 The half owned here: JSDoc's string-out is NOT structural, fences can move to IR-out (session dispatch inside the comment IR) once the printer grows a per-line prefix mechanism for the `*` continuation, deferred for verification time, not by design.
 
 #### Tailwind CSS class sorting
@@ -96,6 +96,21 @@ Oxfmt shares code with Oxlint regarding its CLI implementation.
 - JS implementation: `apps/shared`
 
 Please exercise extra caution when making changes to these files.
+
+### Ignore model
+
+Two independent layers, AND-ed:
+
+- Tool-owned (`.prettierignore` / `--ignore-path`, config `ignorePatterns`, CLI `!` prefixed): hard
+  - blocks even explicitly named files, on every entry point
+- Git-derived (`.gitignore` / `.git/info/exclude`): discovery-only
+  - applies while walking (directory targets, cwd, oxfmt-expanded globs)
+  - An explicitly requested document (named CLI file, stdin, LSP) is formatted even when gitignored
+
+CLI enforcement of the git-derived layer: `oxc_config::GitignoreChecker::is_gitignored_walk_root` (directory-only gate, shared with Oxlint).
+
+NOTE: The git-derived check is pattern-based, not tracking-aware.
+A tracked file matching an ignore pattern is not ignored by git itself; excluding such files is the tool-owned layer's job.
 
 ## Verification
 

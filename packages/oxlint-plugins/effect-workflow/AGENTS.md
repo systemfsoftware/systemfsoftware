@@ -1,12 +1,12 @@
 # AGENTS.md — `effect-workflow/`
 
-> Delta only. Shared rule-authoring conventions: `packages/oxlint-plugins/AGENTS.md`. Universal rules: root `AGENTS.md`.
+> Shared rule-authoring conventions: `packages/oxlint-plugins/AGENTS.md`.
 
-Rules here gate the `architect-workflow` cell spec and `CONSTITUTION.md` Articles I–II. Read the cell skill for what a workflow must be — restating it here would create a second copy that drifts.
+Rules here gate the `architect-workflow` cell spec and `CONSTITUTION.md` Articles I–II.
 
 ```yaml
 - id: EW1
-  title: workflow-schema-required is this cell's OX-OB1 obligation
+  title: workflow-schema-required, this package's OX-OB1 obligation rule
   do: keep a rule that fails a workflow for LACKING something
   dont: relax workflow-schema-required so it fires only when a schema declaration is already present
   harm: typeid-required, no-unconstructed-variant and no-panic-vocabulary all gate on a schema declaration existing — with prohibitions alone, plain TS unions make all three vacuous at once and avoiding Effect Schema becomes the cheapest way to pass

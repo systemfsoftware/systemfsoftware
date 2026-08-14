@@ -1,6 +1,6 @@
 # AGENTS.md — `effect-state/`
 
-> Delta only. Shared rule-authoring conventions: `packages/oxlint-plugins/AGENTS.md`. Universal rules: root `AGENTS.md`.
+> Shared rule-authoring conventions: `packages/oxlint-plugins/AGENTS.md`.
 
 Rules here gate the `architect-state` cell spec — read `skill://architect-state` for what a valid `*.state.ts` is. This leaf never restates it.
 

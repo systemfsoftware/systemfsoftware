@@ -86,19 +86,52 @@ export const manifestChangeReachesConsumers = ({ before, after }: ManifestChange
     .some((key) => (CONSUMER_RUN_SCRIPTS as readonly string[]).includes(key))
 }
 
-const demandsIntent = (file: string, manifestChanges: Evidence['manifestChanges']): boolean => {
+const escapeRegExp = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+/**
+ * Turbo's `inputs` globs, matched against a file path relative to its package
+ * root. `**` crosses path separators, `*` does not; the rest is literal.
+ * `tasks.build.inputs` in turbo.json uses only this subset.
+ */
+const globToRegExp = (glob: string): RegExp =>
+  new RegExp(
+    `^${
+      glob
+        .split('**')
+        .map((part) => part.split('*').map(escapeRegExp).join('[^/]*'))
+        .join('.*')
+    }$`,
+  )
+
+const demandsIntent = (
+  file: string,
+  member: WorkspaceMember,
+  manifestChanges: Evidence['manifestChanges'],
+  buildInputs: readonly string[],
+): boolean => {
   const change = manifestChanges[file]
-  return change === undefined || manifestChangeReachesConsumers(change)
+  if (change !== undefined) return manifestChangeReachesConsumers(change)
+
+  // A non-manifest file reaches consumers only if it feeds the shipped build —
+  // turbo's `build.inputs`, matched against the file's path inside its package.
+  const relative = file.slice(member.dir.length + 1)
+  return buildInputs.some((glob) => globToRegExp(glob).test(relative))
 }
 
-export const verdict = ({ changedFiles, members, changesets, manifestChanges }: Evidence): Verdict => {
+export const verdict = (
+  { changedFiles, members, changesets, manifestChanges }: Evidence,
+  buildInputs: readonly string[],
+): Verdict => {
   const touched = [
     ...new Set(
       changedFiles
-        .filter((file) => demandsIntent(file, manifestChanges))
-        .map((file) => memberOwning(file, members))
-        .filter((member): member is WorkspaceMember => member !== null && member.releasable)
-        .map(({ name }) => name),
+        .map((file) => {
+          const member = memberOwning(file, members)
+          return member !== null && member.releasable && demandsIntent(file, member, manifestChanges, buildInputs)
+            ? member.name
+            : null
+        })
+        .filter((name): name is string => name !== null),
     ),
   ].sort()
 
@@ -168,6 +201,22 @@ const reportMissingIntent = (missingIntent: readonly string[]) => {
   )
 }
 
+/**
+ * The `build` task's `inputs` from turbo.json — the authoritative list of what
+ * changes the shipped `dist/`. A changed file matching none of these reaches no
+ * consumer, so it demands no intent.
+ */
+const readBuildInputs = async (): Promise<readonly string[]> => {
+  const turbo = JSON.parse(await Deno.readTextFile('turbo.json')) as {
+    tasks?: { build?: { inputs?: unknown } }
+  }
+  const inputs = turbo.tasks?.build?.inputs
+  if (!Array.isArray(inputs) || !inputs.every((entry): entry is string => typeof entry === 'string')) {
+    throw new Error('turbo.json#tasks.build.inputs is missing or not a string array — cannot judge which files ship')
+  }
+  return inputs
+}
+
 const main = async (baseRef: string | undefined): Promise<number> => {
   if (!baseRef) {
     console.error('usage: check-changeset.ts <base-ref>')
@@ -188,7 +237,8 @@ const main = async (baseRef: string | undefined): Promise<number> => {
   )
 
   const manifestChanges = await readManifestChanges(base, changedFiles)
-  const { touched, missingIntent } = verdict({ changedFiles, members, changesets, manifestChanges })
+  const buildInputs = await readBuildInputs()
+  const { touched, missingIntent } = verdict({ changedFiles, members, changesets, manifestChanges }, buildInputs)
 
   if (touched.length === 0) {
     console.log(`no publishable workspace package touched — skipping (${members.length} member(s) considered)`)
@@ -217,6 +267,8 @@ const MANIFEST = 'packages/published/package.json'
 const manifestEdit = (before: Manifest, after: Manifest): Record<string, ManifestChange> => ({
   [MANIFEST]: { before, after },
 })
+
+const BUILD_INPUTS: readonly string[] = ['src/**', 'tsdown.config.*']
 
 const FIXTURES: readonly { label: string; evidence: Evidence; expect: Verdict }[] = [
   {
@@ -410,11 +462,31 @@ const FIXTURES: readonly { label: string; evidence: Evidence; expect: Verdict }[
     },
     expect: { touched: ['@scope/published'], missingIntent: ['@scope/published'] },
   },
+  {
+    label: 'a non-source file in a releasable package demands no intent',
+    evidence: {
+      changedFiles: ['packages/published/README.md'],
+      members: MEMBERS,
+      changesets: [],
+      manifestChanges: {},
+    },
+    expect: { touched: [], missingIntent: [] },
+  },
+  {
+    label: 'a build config file still demands its intent',
+    evidence: {
+      changedFiles: ['packages/published/tsdown.config.ts'],
+      members: MEMBERS,
+      changesets: [],
+      manifestChanges: {},
+    },
+    expect: { touched: ['@scope/published'], missingIntent: ['@scope/published'] },
+  },
 ]
 
 const selftest = (): number => {
   const failures = FIXTURES.flatMap(({ label, evidence, expect }) => {
-    const got = verdict(evidence)
+    const got = verdict(evidence, BUILD_INPUTS)
     return JSON.stringify(got) === JSON.stringify(expect)
       ? []
       : [`  ${label}:\n    expected ${JSON.stringify(expect)}\n    got      ${JSON.stringify(got)}`]

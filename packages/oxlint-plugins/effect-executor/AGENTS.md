@@ -1,8 +1,8 @@
 # AGENTS.md — `effect-executor/`
 
-> Delta only. Shared rule-authoring conventions: `packages/oxlint-plugins/AGENTS.md`. Universal rules: root `AGENTS.md`.
+> Shared rule-authoring conventions: `packages/oxlint-plugins/AGENTS.md`.
 
-Rules here gate the `architect-executor` cell spec (`*.executor.ts` — the impure shell around one pure workflow) and `CONSTITUTION.md` Article II. Read the cell skill for what an executor must be; restating it here would create a second copy that drifts.
+Rules here gate the `architect-executor` cell spec (`*.executor.ts` — the impure shell around one pure workflow) and `CONSTITUTION.md` Article II.
 
 ```yaml
 - id: EE1
