@@ -1809,6 +1809,60 @@ Feature('Remembering values in a slower store')
     )
 
     scenario(
+      'A write made before the store answers wins over the slower store read',
+      Gherkin.Do.pipe(
+        Given('a page remembering a value in a store that answers only after a signal')('ctx', () =>
+          Effect.sync(() => {
+            const storage = new Map<string, string>()
+            storage.set('known-key', JSON.stringify(42))
+            const gate = Deferred.makeUnsafe<void>()
+            const DelayedKVS = Layer.succeed(
+              KeyValueStore.KeyValueStore,
+              KeyValueStore.makeStringOnly({
+                get: (key) =>
+                  Effect.sync(() => storage.get(key)).pipe(
+                    Effect.flatMap((stale) => Deferred.await(gate).pipe(Effect.as(stale))),
+                  ),
+                set: (key, value) =>
+                  Effect.sync(() => {
+                    storage.set(key, value)
+                  }),
+                remove: (key) =>
+                  Effect.sync(() => {
+                    storage.delete(key)
+                  }),
+                clear: Effect.sync(() => storage.clear()),
+                size: Effect.sync(() => storage.size),
+              }),
+            )
+            const kvsRuntime = Atom.context()(DelayedKVS)
+            const remembered = Atom.kvs({
+              runtime: kvsRuntime,
+              key: 'known-key',
+              schema: Schema.Number,
+              defaultValue: () => 0,
+            })
+            const page = Registry.make()
+            page.mount(remembered)
+            return { gate, page, remembered }
+          })),
+        When('a write is made, then the store answers')('value', (s) =>
+          Effect.gen(function*() {
+            s.ctx.page.set(s.ctx.remembered, 99)
+            yield* Deferred.succeed(s.ctx.gate, void 0)
+            yield* Effect.yieldNow
+            yield* Effect.yieldNow
+            yield* Effect.yieldNow
+            yield* Effect.yieldNow
+            return s.ctx.page.get(s.ctx.remembered)
+          })),
+        Then('the written value wins over the slower store read')((s) => {
+          expect(s.value).toBe(99)
+        }),
+      ),
+    )
+
+    scenario(
       'A value remembered in loading mode exposes its loading state and accepts writes',
       Gherkin.Do.pipe(
         Given('a page remembering a missing value in a store that answers only after a signal')(

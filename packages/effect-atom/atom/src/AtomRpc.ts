@@ -27,6 +27,7 @@ import type * as RpcGroup from 'effect/unstable/rpc/RpcGroup'
 import type { RequestId } from 'effect/unstable/rpc/RpcMessage'
 import * as RpcSchema from 'effect/unstable/rpc/RpcSchema'
 import * as Atom from './Atom.js'
+import { schemaCodec } from './internal/result-schema.js'
 import * as AsyncResult from './Result.js'
 
 /**
@@ -214,7 +215,7 @@ export const Service = <Self>() =>
   ): Stream.Stream<unknown, unknown, never> =>
     (client as FlatCall<unknown>)(tag, payload, { headers }) as Stream.Stream<unknown, unknown, never>
 
-  const resultSchema = AsyncResult.schemaCodec
+  const resultSchema = schemaCodec
 
   const mutationFamily = Atom.family(<Tag extends Rpc.Tag<Rpcs>>(tag: Tag) => {
     const rpc = getRpc(tag)

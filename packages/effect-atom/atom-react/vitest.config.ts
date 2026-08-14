@@ -6,14 +6,30 @@ export default defineConfig({
   ...sharedConfig,
   test: {
     ...sharedConfig.test,
-    include: ['./test/**/*.test.{ts,tsx}'],
-    setupFiles: ['./vitest-setup.ts'],
-    browser: {
-      enabled: true,
-      provider: playwright(),
-      headless: true,
-      instances: [{ browser: 'chromium' }],
-    },
+    projects: [
+      {
+        extends: true,
+        test: {
+          name: 'browser',
+          include: ['./test/**/*.test.{ts,tsx}', '!./test/ssr.test.tsx'],
+          setupFiles: ['./vitest-setup.ts'],
+          browser: {
+            enabled: true,
+            provider: playwright(),
+            headless: true,
+            instances: [{ browser: 'chromium' }],
+          },
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: 'node',
+          include: ['./test/ssr.test.tsx'],
+          environment: 'node',
+        },
+      },
+    ],
     coverage: {
       ...sharedConfig.test?.coverage,
       provider: 'istanbul',

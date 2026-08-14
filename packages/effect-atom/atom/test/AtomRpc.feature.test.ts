@@ -73,6 +73,46 @@ Feature('Reusing an rpc-fetched user after the page reloads, without calling the
     )
   })
 
+Feature('Reusing the same rpc query without a fresh atom')
+  .body(({ scenario }) => {
+    scenario(
+      'Asking for the same query twice yields the same atom, so the server is called once',
+      Gherkin.Do.pipe(
+        Given('a page that calls an rpc server that counts calls')('ctx', () =>
+          Effect.sync(() => {
+            let callCount = 0
+            const makeEffect = Effect.succeed(
+              ((tag: string, payload: { readonly id: number }) => {
+                callCount++
+                return Effect.succeed({ id: payload.id, name: `user-${payload.id}` })
+              }) as any,
+            )
+            const Client = AtomRpc.Service()('Client', {
+              group: Group,
+              protocol: Layer.empty,
+              makeEffect,
+            })
+            const first = Client.query('getUser', { id: 1 }, { serializationKey: '1' })
+            const second = Client.query('getUser', { id: 1 }, { serializationKey: '1' })
+            const registry = Registry.make()
+            return { first, second, registry, callsMade: () => callCount }
+          })),
+        When('both queries are mounted and read')('result', (s) =>
+          Effect.gen(function*() {
+            s.ctx.registry.mount(s.ctx.first)
+            s.ctx.registry.mount(s.ctx.second)
+            yield* Effect.yieldNow
+            yield* Effect.yieldNow
+            return { sameAtom: s.ctx.first === s.ctx.second, calls: s.ctx.callsMade() }
+          })),
+        Then('both queries share one atom and the server is called once')((s) => {
+          expect(s.result.sameAtom).toBe(true)
+          expect(s.result.calls).toBe(1)
+        }),
+      ),
+    )
+  })
+
 Feature('Submitting a change over rpc')
   .body(({ scenario }) => {
     scenario(

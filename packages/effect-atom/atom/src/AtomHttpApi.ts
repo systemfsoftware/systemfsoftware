@@ -27,6 +27,7 @@ import type * as HttpApiMiddleware from 'effect/unstable/httpapi/HttpApiMiddlewa
 import * as HttpApiSchema from 'effect/unstable/httpapi/HttpApiSchema'
 import * as Reactivity from 'effect/unstable/reactivity/Reactivity'
 import * as Atom from './Atom.js'
+import { schemaCodec } from './internal/result-schema.js'
 import * as AsyncResult from './Result.js'
 // rc.108 does not expose HttpApiEndpoint.getSuccessSchemas/getErrorSchemas (added upstream
 // after rc.108); replicate them against the public .success/.error schema sets.
@@ -257,7 +258,7 @@ export const Service =
       },
     ): Effect.Effect<unknown, unknown, never> => (client as LooseClient)[group]![endpoint]!(request)
 
-    const resultSchema = AsyncResult.schemaCodec
+    const resultSchema = schemaCodec
 
     const mutationFamily = Atom.family(({ endpoint, group, responseMode }: MutationKey) => {
       const fnAtom = runtime.fn<{

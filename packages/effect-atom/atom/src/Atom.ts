@@ -19,13 +19,12 @@ import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
 import * as Fiber from 'effect/Fiber'
 import type { LazyArg } from 'effect/Function'
-import { constant, constTrue, constVoid, dual, pipe } from 'effect/Function'
+import { constTrue, constVoid, dual, pipe } from 'effect/Function'
 import type { Inspectable } from 'effect/Inspectable'
 import * as Layer from 'effect/Layer'
 import * as MutableHashMap from 'effect/MutableHashMap'
 import * as Option from 'effect/Option'
 import type { Pipeable } from 'effect/Pipeable'
-import { hasProperty } from 'effect/Predicate'
 import * as Pull from 'effect/Pull'
 import type { ReadonlyRecord } from 'effect/Record'
 import * as Scheduler from 'effect/Scheduler'
@@ -33,29 +32,33 @@ import * as Schema from 'effect/Schema'
 import * as Scope from 'effect/Scope'
 import * as Stream from 'effect/Stream'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
-import type { Mutable, NoInfer } from 'effect/Types'
+import type { NoInfer } from 'effect/Types'
 import * as KeyValueStore from 'effect/unstable/persistence/KeyValueStore'
 import * as Reactivity from 'effect/unstable/reactivity/Reactivity'
-import { PipeInspectableProto } from './internal/core.js'
+import {
+  AtomProto,
+  isAtom,
+  isWritable,
+  readable,
+  removeTtl,
+  transform,
+  TypeId,
+  writable,
+  WritableTypeId,
+} from './internal/core.js'
+export {
+  isAtom,
+  isWritable,
+  readable,
+  setIdleTTL,
+  transform,
+  TypeId,
+  writable,
+  WritableTypeId,
+} from './internal/core.js'
 import { AtomRegistry } from './Registry.js'
 import * as Registry from './Registry.js'
 import * as AsyncResult from './Result.js'
-
-/**
- * Type-level identifier used to recognize `Atom` values.
- *
- * @category type IDs
- * @since 4.0.0
- */
-export type TypeId = '~effect/reactivity/Atom'
-
-/**
- * Runtime identifier attached to `Atom` values and used by `isAtom`.
- *
- * @category type IDs
- * @since 4.0.0
- */
-export const TypeId: TypeId = '~effect/reactivity/Atom'
 
 /**
  * Reactive value read by an `AtomRegistry`, with metadata controlling caching, laziness, refresh behavior, and initial value targeting.
@@ -74,14 +77,6 @@ export interface Atom<A> extends Pipeable, Inspectable {
   readonly idleTTL?: number
   readonly initialValueTarget?: Atom<A>
 }
-
-/**
- * Returns `true` when a value is an `Atom`.
- *
- * @category guards
- * @since 4.0.0
- */
-export const isAtom = (u: unknown): u is Atom<any> => hasProperty(u, TypeId)
 
 /**
  * Extracts the value type produced by an `Atom`.
@@ -123,22 +118,6 @@ export type Failure<T extends Atom<any>> = T extends Atom<AsyncResult.Result<inf
  */
 export type WithoutSerializable<T extends Atom<any>> = T extends Writable<infer R, infer W> ? Writable<R, W>
   : Atom<Type<T>>
-
-/**
- * Runtime identifier attached to writable atoms and used by `isWritable`.
- *
- * @category type IDs
- * @since 4.0.0
- */
-export const WritableTypeId: WritableTypeId = '~effect/reactivity/Atom/Writable'
-
-/**
- * Type-level identifier used to recognize writable atoms.
- *
- * @category type IDs
- * @since 4.0.0
- */
-export type WritableTypeId = '~effect/reactivity/Atom/Writable'
 
 /**
  * Atom that can also be written to, using a `WriteContext` and an input value to update reactive state.
@@ -204,44 +183,6 @@ export interface WriteContext<A> {
   setSelf(this: WriteContext<A>, a: A): void
   set<R, W>(this: WriteContext<A>, atom: Writable<R, W>, value: W): void
 }
-
-/**
- * Returns a copy of an atom with an idle time-to-live: finite durations dispose it after inactivity, while an infinite duration keeps it alive.
- *
- * @category combinators
- * @since 4.0.0
- */
-export const setIdleTTL: {
-  (duration: Duration.Input): <A extends Atom<any>>(self: A) => A
-  <A extends Atom<any>>(self: A, duration: Duration.Input): A
-} = dual<
-  (duration: Duration.Input) => <A extends Atom<any>>(self: A) => A,
-  <A extends Atom<any>>(self: A, duration: Duration.Input) => A
->(2, (self, durationInput) => {
-  const duration = Duration.fromInputUnsafe(durationInput)
-  const isFinite = Duration.isFinite(duration)
-  return Object.assign(Object.create(Object.getPrototypeOf(self)), {
-    ...self,
-    keepAlive: !isFinite,
-    idleTTL: isFinite ? Duration.toMillis(duration) : undefined,
-  })
-})
-
-const removeTtl = setIdleTTL(0)
-
-const AtomProto = {
-  [TypeId]: TypeId,
-  equals: Object.is,
-  ...PipeInspectableProto,
-  toJSON(this: Atom<any>) {
-    return {
-      _id: 'Atom',
-      keepAlive: this.keepAlive,
-      lazy: this.lazy,
-      label: this.label,
-    }
-  },
-} as const
 
 const RuntimeProto = {
   ...AtomProto,
@@ -348,57 +289,6 @@ const makeFnRuntime = (
     }
     return read(get, runtimeResult.value)
   }, write)
-}
-
-const WritableProto = {
-  ...AtomProto,
-  [WritableTypeId]: WritableTypeId,
-} as const
-
-/**
- * Returns `true` when an atom is writable.
- *
- * @category guards
- * @since 4.0.0
- */
-export const isWritable = <R, W>(atom: Atom<R>): atom is Writable<R, W> => WritableTypeId in atom
-
-/**
- * Creates a read-only atom from a read function and an optional custom refresh registration callback.
- *
- * @category constructors
- * @since 4.0.0
- */
-export const readable = <A>(
-  read: (get: AtomContext) => A,
-  refresh?: (f: <A>(atom: Atom<A>) => void) => void,
-): Atom<A> => {
-  const self = Object.create(AtomProto)
-  self.keepAlive = false
-  self.lazy = true
-  self.read = read
-  self.refresh = refresh
-  return self
-}
-
-/**
- * Creates a writable atom from read and write functions, with an optional custom refresh registration callback.
- *
- * @category constructors
- * @since 4.0.0
- */
-export const writable = <R, W>(
-  read: (get: AtomContext) => R,
-  write: (ctx: WriteContext<R>, value: W) => void,
-  refresh?: (f: <A>(atom: Atom<A>) => void) => void,
-): Writable<R, W> => {
-  const self = Object.create(WritableProto)
-  self.keepAlive = false
-  self.lazy = true
-  self.read = read
-  self.write = write
-  self.refresh = refresh
-  return self
 }
 
 function constSetSelf<A>(ctx: WriteContext<A>, value: A) {
@@ -1377,6 +1267,7 @@ const makeStreamPullEffect = <A, E>(
             items = Arr.appendAll(acc, chunk)
             acc = items
           }
+          if (!Arr.isReadonlyArrayNonEmpty(items)) return pull
           return Effect.succeed({ done: false, items })
         },
       })
@@ -1660,78 +1551,7 @@ export const initialValue: {
 >(2, (self, initialValue) => [self, initialValue])
 
 /**
- * Creates a derived atom by reading another atom with a custom `AtomContext`
- * function.
- *
- * **Details**
- *
- * If the source is writable, the derived atom keeps the source write input and
- * forwards writes to the source. `initialValueTarget` controls which atom receives
- * preloaded initial values for the derived atom.
- *
- * @category combinators
- * @since 4.0.0
- */
-export const transform: {
-  <R extends Atom<any>, B>(
-    f: (get: AtomContext, atom: R) => B,
-    options?: {
-      readonly initialValueTarget?: Atom<B> | undefined
-    },
-  ): (self: R) => [R] extends [Writable<infer _, infer RW>] ? Writable<B, RW> : Atom<B>
-  <R extends Atom<any>, B>(
-    self: R,
-    f: (get: AtomContext, atom: R) => B,
-    options?: {
-      readonly initialValueTarget?: Atom<B> | undefined
-    },
-  ): [R] extends [Writable<infer _, infer RW>] ? Writable<B, RW> : Atom<B>
-} = dual(
-  (args) => isAtom(args[0]),
-  <A, B>(
-    self: Atom<A>,
-    f: (get: AtomContext, atom: Atom<A>, options?: {
-      readonly initialValueTarget?: Atom<B> | undefined
-    }) => B,
-    options?: {
-      readonly initialValueTarget?: Atom<B> | undefined
-    },
-  ): Atom<B> => {
-    const atom = removeTtl(
-      isWritable(self)
-        ? writable(
-          (get) => f(get, self),
-          function(ctx, value) {
-            ctx.set(self, value)
-          },
-          self.refresh ?? function(refresh) {
-            refresh(self)
-          },
-        )
-        : readable(
-          (get) => f(get, self),
-          self.refresh ?? function(refresh) {
-            refresh(self)
-          },
-        ),
-    )
-    if (options?.initialValueTarget) {
-      ;(atom as Mutable<Atom<B>>).initialValueTarget = getInitialValueTarget(options.initialValueTarget)
-    }
-    return atom
-  },
-)
-
-const getInitialValueTarget = <A>(atom: Atom<A>): Atom<A> => {
-  let target = atom
-  while (target.initialValueTarget) {
-    target = target.initialValueTarget
-  }
-  return target
-}
-
-/**
- * Maps the current value of an atom with a pure function.
+ * Maps the value of an atom by reading the source atom, applying the function,
  *
  * **Details**
  *
@@ -2129,78 +1949,8 @@ export const optimisticFn: {
 export const batch: (f: () => void) => void = Registry.batch
 
 // -----------------------------------------------------------------------------
-// Focus
-// -----------------------------------------------------------------------------
-
-/**
- * Creates a browser-only signal atom that increments when the document becomes visible.
- *
- * **Details**
- *
- * It listens for `visibilitychange` events on `window` and removes the listener
- * when the atom is disposed.
- *
- * @category constants
- * @since 4.0.0
- */
-export const windowFocusSignal: Atom<number> = readable((get) => {
-  let count = 0
-  function update() {
-    if (document.visibilityState === 'visible') {
-      get.setSelf(++count)
-    }
-  }
-  window.addEventListener('visibilitychange', update)
-  get.addFinalizer(() => {
-    window.removeEventListener('visibilitychange', update)
-  })
-  return count
-})
-
-/**
- * Creates a combinator that refreshes an atom whenever the supplied signal atom
- * changes.
- *
- * **Details**
- *
- * The derived atom also subscribes to the source atom so normal source updates are
- * forwarded to its own value.
- *
- * @category constructors
- * @since 4.0.0
- */
-export const makeRefreshOnSignal = <_>(signal: Atom<_>) => {
-  function refreshOnSignal<A extends Atom<any>>(self: A): WithoutSerializable<A>
-  function refreshOnSignal<A extends Atom<any>>(self: A): Atom<Type<A>> | Writable<Type<A>, any> {
-    return transform(self, (get) => {
-      get.once(signal)
-      get.subscribe(signal, (_) => get.refresh(self))
-      get.subscribe(self, (value) => get.setSelf(value))
-      return get.once(self)
-    }, { initialValueTarget: self })
-  }
-  return refreshOnSignal
-}
-
-/**
- * Refreshes an atom whenever `windowFocusSignal` changes.
- *
- * **Details**
- *
- * This helper is browser-only because `windowFocusSignal` depends on `window` and
- * `document.visibilityState`.
- *
- * @category combinators
- * @since 4.0.0
- */
-export const refreshOnWindowFocus: <A extends Atom<any>>(self: A) => WithoutSerializable<A> = makeRefreshOnSignal(
-  windowFocusSignal,
-)
-
-// -----------------------------------------------------------------------------
 // KeyValueStore
 // -----------------------------------------------------------------------------
-
 /**
  * Creates a writable atom backed by a `KeyValueStore` entry.
  *
@@ -2209,6 +1959,15 @@ export const refreshOnWindowFocus: <A extends Atom<any>>(self: A) => WithoutSeri
  * Values are encoded and decoded with the supplied schema. In sync mode the atom
  * exposes the decoded value and writes the default value when the key is missing;
  * in async mode it exposes an `AsyncResult` of the decoded value.
+ *
+ * **Gotchas**
+ *
+ * Error surfacing differs by mode. Async mode reports a failed store read as an
+ * `AsyncResult.failure`; sync mode has no error channel on its bare value, so a
+ * failed read renders the default value instead. Writes are optimistic in both
+ * modes: the value is shown immediately and the store write is fired in the
+ * background, so a write the store later refuses is not reflected in the atom.
+ * Use async mode when store failures must be observable.
  *
  * @category constructors
  * @since 4.0.0
@@ -2236,9 +1995,11 @@ export function kvs<S extends Schema.ConstraintCodec<any, any>, const Mode exten
   const resultAtom = options.runtime.atom(
     KeyValueStore.KeyValueStore.use((store) => KeyValueStore.toSchemaStore(store, options.schema).get(options.key)),
   )
+  let written = false
   return writable(
     options.mode === 'async'
       ? (get) => {
+        written = false
         get.mount(setAtom)
         const mapper = AsyncResult.map<Option.Option<S['Type']>, S['Type']>(
           Option.getOrElse(() => {
@@ -2247,13 +2008,18 @@ export function kvs<S extends Schema.ConstraintCodec<any, any>, const Mode exten
             return value
           }),
         )
-        get.subscribe(resultAtom, (result) => get.setSelf(mapper(result)))
+        get.subscribe(resultAtom, (result) => {
+          if (written) return
+          get.setSelf(mapper(result))
+        })
         return mapper(get.once(resultAtom))
       }
       : (get) => {
+        written = false
         get.mount(setAtom)
         get.subscribe(resultAtom, (result) => {
           if (!AsyncResult.isSuccess(result)) return
+          if (written) return
           if (Option.isSome(result.value)) {
             get.setSelf(result.value.value)
           } else {
@@ -2265,107 +2031,11 @@ export function kvs<S extends Schema.ConstraintCodec<any, any>, const Mode exten
         return Option.getOrElse(get.self<S['Type']>(), options.defaultValue)
       },
     (ctx, value: S['Type']) => {
+      written = true
       ctx.set(setAtom, value)
       ctx.setSelf(options.mode === 'async' ? AsyncResult.success(value) : value)
     },
   )
-}
-
-// -----------------------------------------------------------------------------
-// URL search params
-// -----------------------------------------------------------------------------
-
-/**
- * Creates an atom that reads and writes a URL search parameter.
- *
- * **Gotchas**
- *
- * If you pass a schema, it has to be synchronous and have no context.
- *
- * @category constructors
- * @since 4.0.0
- */
-export function searchParam<S extends Schema.ConstraintCodec<any, string> = never>(
-  name: string,
-  options?: {
-    readonly schema?: S | undefined
-  },
-): Writable<[S] extends [never] ? string : Option.Option<S['Type']>>
-export function searchParam<S extends Schema.ConstraintCodec<any, string> = never>(
-  name: string,
-  options?: {
-    readonly schema?: S | undefined
-  },
-): Writable<Option.Option<S['Type'] | undefined> | string, any> {
-  const decode = options?.schema && Schema.decodeExit(options.schema)
-  const encode = options?.schema && Schema.encodeExit(options.schema)
-  return writable(
-    (get) => {
-      if (typeof window === 'undefined') {
-        return decode ? Option.none() : ''
-      }
-      const handleUpdate = () => {
-        if (searchParamState.updating) return
-        const searchParams = new URLSearchParams(window.location.search)
-        const newValue = searchParams.get(name) || ''
-        if (decode) {
-          get.setSelf(Exit.getSuccess(decode(newValue)))
-        } else if (newValue !== Option.getOrUndefined(get.self())) {
-          get.setSelf(newValue)
-        }
-      }
-      window.addEventListener('popstate', handleUpdate)
-      window.addEventListener('pushstate', handleUpdate)
-      get.addFinalizer(() => {
-        window.removeEventListener('popstate', handleUpdate)
-        window.removeEventListener('pushstate', handleUpdate)
-      })
-      const value = new URLSearchParams(window.location.search).get(name) || ''
-      return decode ? Exit.getSuccess(decode(value)) : value
-    },
-    (ctx, value: any) => {
-      if (typeof window === 'undefined') {
-        ctx.setSelf(value)
-        return
-      }
-
-      if (encode) {
-        const encoded = Option.flatMap(value, (v) => Exit.getSuccess(encode(v as S['Type'])))
-        searchParamState.updates.set(name, Option.getOrElse(encoded, () => ''))
-        value = Option.zipRight(encoded, value)
-      } else {
-        searchParamState.updates.set(name, value)
-      }
-      ctx.setSelf(value)
-      if (searchParamState.timeout) {
-        clearTimeout(searchParamState.timeout)
-      }
-      searchParamState.timeout = setTimeout(updateSearchParams, 500)
-    },
-  )
-}
-
-const searchParamState = {
-  timeout: undefined as number | undefined,
-  updates: new Map<string, string>(),
-  updating: false,
-}
-
-function updateSearchParams() {
-  searchParamState.timeout = undefined
-  searchParamState.updating = true
-  const searchParams = new URLSearchParams(window.location.search)
-  for (const [key, value] of searchParamState.updates.entries()) {
-    if (value.length > 0) {
-      searchParams.set(key, value)
-    } else {
-      searchParams.delete(key)
-    }
-  }
-  searchParamState.updates.clear()
-  const newUrl = `${window.location.pathname}?${searchParams.toString()}`
-  window.history.pushState({}, '', newUrl)
-  searchParamState.updating = false
 }
 
 // -----------------------------------------------------------------------------
@@ -2586,75 +2256,6 @@ export const serializable: {
   })
 })
 
-/**
- * The type id used to mark atoms with a server-side read override.
- *
- * @category type IDs
- * @since 4.0.0
- */
-export const ServerValueTypeId = '~effect-atom/atom/Atom/ServerValue' as const
-
-/**
- * Server-side read override attached to an atom by `withServerValue`.
- *
- * @category models
- * @since 4.0.0
- */
-export type ServerValue<A> = {
-  readonly [ServerValueTypeId]: (get: <A>(atom: Atom<A>) => A) => A
-}
-
-const isServerValue = <A>(self: Atom<A>): self is Atom<A> & ServerValue<A> => ServerValueTypeId in self
-
-/**
- * Sets the value of an Atom when read on the server.
- *
- * @category transforming
- * @since 4.0.0
- */
-export const withServerValue: {
-  <A extends Atom<any>>(read: (get: <A>(atom: Atom<A>) => A) => Type<A>): (self: A) => A
-  <A extends Atom<any>>(self: A, read: (get: <A>(atom: Atom<A>) => A) => Type<A>): A
-} = dual(
-  2,
-  <A extends Atom<any>>(self: A, read: (get: <A>(atom: Atom<A>) => A) => Type<A>): A =>
-    Object.assign(Object.create(Object.getPrototypeOf(self)), {
-      ...self,
-      [ServerValueTypeId]: read,
-    }),
-)
-
-/**
- * Sets an `AsyncResult` atom's server-side value to
- * `AsyncResult.initial(true)`.
- *
- * @category transforming
- * @since 4.0.0
- */
-export const withServerValueInitial = <A extends Atom<AsyncResult.Result<any, any>>>(self: A): A =>
-  Object.assign(Object.create(Object.getPrototypeOf(self)), {
-    ...self,
-    [ServerValueTypeId]: constant(AsyncResult.initial(true)),
-  })
-
-/**
- * Reads an atom from a registry, using its server-side read override when one is
- * present.
- *
- * **Details**
- *
- * Nested reads performed by the override are resolved against the same registry.
- *
- * @category getters
- * @since 4.0.0
- */
-export const getServerValue: {
-  (registry: Registry.Registry): <A>(self: Atom<A>) => A
-  <A>(self: Atom<A>, registry: Registry.Registry): A
-} = dual(
-  2,
-  <A>(self: Atom<A>, registry: Registry.Registry): A =>
-    isServerValue(self)
-      ? self[ServerValueTypeId]((atom: Atom<any>) => registry.get(atom))
-      : registry.get(self),
-)
+export { makeRefreshOnSignal, refreshOnWindowFocus, searchParam, windowFocusSignal } from './browser.js'
+export { getServerValue, ServerValueTypeId, withServerValue, withServerValueInitial } from './server.js'
+export type { ServerValue } from './server.js'

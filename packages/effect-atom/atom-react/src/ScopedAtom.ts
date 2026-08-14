@@ -139,10 +139,12 @@ export const make = <A extends Atom.Atom<any>, Input = never>(
   const Provider: React.FC<{ readonly children?: React.ReactNode | undefined; readonly value?: Input }> = (props) => {
     const atom = React.useRef<A | null>(null)
     if (atom.current === null) {
-      if ('value' in props) {
-        atom.current = (f as (input: Input) => A)(props.value as Input)
-      } else {
+      if (f.length === 0) {
         atom.current = (f as () => A)()
+      } else if (props.value !== undefined) {
+        atom.current = (f as (input: Input) => A)(props.value)
+      } else {
+        throw new Error('ScopedAtom Provider requires a value')
       }
     }
     return React.createElement(Context.Provider, { value: atom.current }, props.children)
