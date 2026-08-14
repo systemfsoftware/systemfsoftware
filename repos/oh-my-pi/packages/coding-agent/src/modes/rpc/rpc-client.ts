@@ -62,6 +62,8 @@ export interface RpcClientOptions {
 	sessionDir?: string;
 	/** Additional CLI arguments */
 	args?: string[];
+	/** Grace period before escalating process termination (default: process utility default, 1000ms) */
+	terminationGraceMs?: number;
 	/** Custom tools owned by the embedding host and exposed over the RPC transport */
 	customTools?: RpcClientCustomTool[];
 }
@@ -324,7 +326,7 @@ export class RpcClient {
 			this.#pendingHostToolCalls.clear();
 
 			try {
-				child.kill();
+				child.kill(undefined, this.options.terminationGraceMs);
 			} catch {
 				// The process may already have exited.
 			}
@@ -440,7 +442,7 @@ export class RpcClient {
 
 		const error = new Error("Client stopped");
 		const child = this.#process;
-		child.kill();
+		child.kill(undefined, this.options.terminationGraceMs);
 		this.#abortController.abort(error);
 		this.#process = null;
 		for (const request of this.#pendingRequests.values()) request.reject(error);

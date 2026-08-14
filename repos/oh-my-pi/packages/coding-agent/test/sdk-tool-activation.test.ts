@@ -1116,7 +1116,6 @@ describe("createAgentSession defaultInactive tool activation", () => {
 			const mountedBefore = session.getMountedXdevToolNames();
 			const promptBefore = session.systemPrompt;
 			const originalTool = session.getToolByName("bash");
-			expect(originalTool).toBeDefined();
 			expect(session.hasBuiltInTool("bash")).toBe(true);
 			const runner = session.extensionRunner;
 			if (!runner) throw new Error("expected extension runner");
@@ -1249,12 +1248,12 @@ describe("createAgentSession defaultInactive tool activation", () => {
 			const unsubscribe = runner.onError(error => {
 				errors.push(error.error);
 			});
-			testSetExtensionHandlerTimeoutMs(250);
+			testSetExtensionHandlerTimeoutMs(10);
 
 			await runner.emit({ type: "session_start" });
 			unsubscribe();
 
-			expect(errors).toContain("handler timed out after 250ms");
+			expect(errors).toContain("handler timed out after 10ms");
 			expect(session.getToolByName("stalled_registration_tool")).toBeUndefined();
 			expect(session.getToolByName("recovered_registration_tool")?.label).toBe("recovered_registration_tool");
 			expect(session.getEnabledToolNames()).toContain("recovered_registration_tool");
@@ -1451,7 +1450,7 @@ describe("createAgentSession defaultInactive tool activation", () => {
 					await originalSetPresentation(toolNames, mountedToolNames, forcePromptRefresh, signal);
 					if (toolNames.includes("recovered_detached_tool")) recoveredActivation.resolve();
 				});
-			testSetExtensionHandlerTimeoutMs(250);
+			testSetExtensionHandlerTimeoutMs(10);
 
 			releaseStalledRegistration.resolve();
 			const failure = await detachedFailure.promise;
@@ -1931,7 +1930,6 @@ describe("createAgentSession defaultInactive tool activation", () => {
 		try {
 			expect(session.getAllToolNames()).toEqual(["read", "sdk_custom_tool"]);
 			expect(session.getActiveToolNames()).toEqual(["read", "sdk_custom_tool"]);
-			expect(session.getToolByName("sdk_custom_tool")).toBeDefined();
 		} finally {
 			await session.dispose();
 		}

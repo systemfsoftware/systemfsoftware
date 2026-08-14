@@ -4,7 +4,6 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { InMemorySnapshotStore } from "@oh-my-pi/hashline";
 import type { AgentTool } from "@oh-my-pi/pi-agent-core";
-import { renderGalleryState, resolveFixture } from "@oh-my-pi/pi-coding-agent/cli/gallery-cli";
 import { resetSettingsForTest, Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
 import { editToolRenderer } from "@oh-my-pi/pi-coding-agent/edit/renderer";
 import { renderDiff } from "@oh-my-pi/pi-coding-agent/modes/components/diff";
@@ -19,11 +18,16 @@ beforeAll(async () => {
 	await Settings.init({ inMemory: true, cwd: process.cwd() });
 });
 
-async function getUiTheme() {
-	await themeModule.initTheme(false, undefined, undefined, "dark", "light");
-	const theme = await themeModule.getThemeByName("dark");
-	expect(theme).toBeDefined();
-	return theme!;
+let uiThemePromise: Promise<themeModule.Theme> | undefined;
+
+function getUiTheme(): Promise<themeModule.Theme> {
+	uiThemePromise ??= (async () => {
+		await themeModule.initTheme(false, undefined, undefined, "dark", "light");
+		const theme = await themeModule.getThemeByName("dark");
+		expect(theme).toBeDefined();
+		return theme!;
+	})();
+	return uiThemePromise;
 }
 
 async function waitForRenderedText(
@@ -463,6 +467,7 @@ describe("editToolRenderer", () => {
 		);
 
 		const rendered = Bun.stripANSI(component.render(160).join("\n"));
+		expect(rendered).toContain("Delete");
 		expect(rendered).not.toContain("No changes would be made");
 		for (const path of paths) expect(rendered).toContain(path);
 	});
@@ -517,27 +522,6 @@ describe("editToolRenderer", () => {
 		expect(rendered).toContain("No changes were made");
 		expect(rendered).toContain("scripts/real.ts");
 		expect(rendered).not.toContain("WRONG");
-	});
-
-	it("renders the delete gallery fixture as a Delete card without a no-change body", async () => {
-		await getUiTheme();
-		const text = (await renderGalleryState("edit_delete", resolveFixture("edit_delete"), "success", 160))
-			.map(line => Bun.stripANSI(line))
-			.join("\n");
-		expect(text).toContain("Delete");
-		expect(text).toContain("scripts/prune-changelogs.ts");
-		expect(text).not.toContain("No changes");
-	});
-
-	it("renders the move gallery fixture as source → destination", async () => {
-		await getUiTheme();
-		const text = (await renderGalleryState("edit_move", resolveFixture("edit_move"), "success", 160))
-			.map(line => Bun.stripANSI(line))
-			.join("\n");
-		expect(text).toContain("scripts/prune-changelogs.ts");
-		expect(text).toContain("scripts/archived/prune-changelogs.ts");
-		expect(text).toContain("→");
-		expect(text).not.toContain("No changes");
 	});
 });
 

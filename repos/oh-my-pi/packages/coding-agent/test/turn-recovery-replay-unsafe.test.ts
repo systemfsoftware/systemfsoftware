@@ -56,6 +56,7 @@ function createHost(
 		modelRegistry,
 		configWarnings: [],
 		model: () => model,
+		contextFitsModel: () => true,
 		textOutputCommitted: () => options.textOutputCommitted !== false,
 		thinkingLevel: () => undefined,
 		configuredThinkingLevel: () => undefined,
@@ -508,6 +509,24 @@ describe("TurnRecovery replay-unsafe output classification", () => {
 		it("keeps a refusal with no tool calls retriable (baseline)", () => {
 			const message = makeRefusal([{ type: "thinking", thinking: "reasoning before refusal" }]);
 			expect(recoveryFor(message, []).isRetryableError(message)).toBe(true);
+		});
+
+		it("retries a malformed function call whose tool call provably never executed", () => {
+			const message = makeMessage([toolCall("call-1")], model);
+			message.errorMessage = "Generation failed with finish reason: MALFORMED_FUNCTION_CALL";
+			expect(recoveryFor(message, [syntheticResult("call-1")]).isRetryableError(message)).toBe(true);
+		});
+
+		it("does not retry a malformed function call whose tool call produced a real result", () => {
+			const message = makeMessage([toolCall("call-1")], model);
+			message.errorMessage = "Generation failed with finish reason: MALFORMED_FUNCTION_CALL";
+			expect(recoveryFor(message, [realResult("call-1")]).isRetryableError(message)).toBe(false);
+		});
+
+		it("does not retry a malformed function call that also committed visible text", () => {
+			const message = makeMessage([{ type: "text", text: "Let me fetch that page." }, toolCall("call-1")], model);
+			message.errorMessage = "Generation failed with finish reason: MALFORMED_FUNCTION_CALL";
+			expect(recoveryFor(message, [syntheticResult("call-1")]).isRetryableError(message)).toBe(false);
 		});
 
 		it("keeps a non-refusal error with an unexecuted tool call non-retriable", () => {

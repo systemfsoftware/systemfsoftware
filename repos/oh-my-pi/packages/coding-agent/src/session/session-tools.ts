@@ -379,9 +379,23 @@ export class SessionTools {
 		return this.#toolRegistry.get(name);
 	}
 
-	/** Whether a registry entry came from a built-in factory. */
+	/**
+	 * Whether a registry entry came from a built-in factory.
+	 *
+	 * Resolves `customWireName` aliases too: a built-in tool may present on the
+	 * wire under a different name (e.g. `edit` exposes itself as `apply_patch` in
+	 * apply_patch mode), and tool cards render the call under that wire name. An
+	 * extension registering the literal alias name shadows it — the agent loop
+	 * routes exact-name matches ahead of wire aliases — so a registered non-built-in
+	 * tool with that name wins and the alias no longer counts as built-in.
+	 */
 	hasBuiltInTool(name: string): boolean {
-		return this.#builtInToolNames.has(name);
+		if (this.#builtInToolNames.has(name)) return true;
+		if (this.#toolRegistry.has(name)) return false;
+		for (const builtInName of this.#builtInToolNames) {
+			if (this.#toolRegistry.get(builtInName)?.customWireName === name) return true;
+		}
+		return false;
 	}
 
 	/** Updates source provenance when a live registry entry is replaced or restored. */

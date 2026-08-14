@@ -311,6 +311,7 @@ describe("runSubprocess async quiescence fresh-yield contract", () => {
 		const lateJobGate = Promise.withResolvers<void>();
 		const manager = new AsyncJobManager({});
 		AsyncJobManager.setInstance(manager);
+		const cleanupGraceMs = 0;
 		let lateJobId: string | undefined;
 		let deferredCleanup: Promise<void> | undefined;
 		const harness = createAsyncSession(
@@ -348,18 +349,21 @@ describe("runSubprocess async quiescence fresh-yield contract", () => {
 			index: 0,
 			id: "cleanup-timeout",
 			keepAlive: false,
+			cleanupGraceMs,
 			onCleanupDeferred: completion => {
 				deferredCleanup = completion;
 			},
 		});
 		await abortStarted.promise;
+		// abortStarted synchronizes with the in-flight cleanup; a zero grace
+		// exercises the deadline/deferred-ownership transition without sleeping.
 
 		const result = await run;
 		expect(result.exitCode).toBe(1);
 		expect(result.aborted).toBe(true);
-		expect(result.abortReason).toBe("cleanup exceeded 10000 ms");
+		expect(result.abortReason).toBe("cleanup exceeded 0 ms");
 		expect(result.error).toBe(
-			"Task aborted. Cleanup did not finish within 10000 ms. This task was not isolated, so its changes may remain in the working directory.",
+			"Task aborted. Cleanup did not finish within 0 ms. This task was not isolated, so its changes may remain in the working directory.",
 		);
 		expect(result.output).toContain("yielded output");
 		expect(result.usage?.totalTokens).toBe(7);

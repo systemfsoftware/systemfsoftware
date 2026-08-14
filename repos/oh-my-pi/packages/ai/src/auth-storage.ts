@@ -36,8 +36,6 @@ import type {
 	CredentialRankingContext,
 	CredentialRankingStrategy,
 	ObservedUsageEntry,
-	UsageCostHistoryEntry,
-	UsageCostHistoryQuery,
 	UsageCredential,
 	UsageFetchContext,
 	UsageFetchParams,
@@ -66,7 +64,7 @@ import {
 	listCodexResetCredits,
 	pickSoonestExpiringCredit,
 } from "./usage/openai-codex-reset";
-import { opencodeGoUsageProvider } from "./usage/opencode-go";
+import { opencodeGoRankingStrategy, opencodeGoUsageProvider } from "./usage/opencode-go";
 import { syntheticUsageProvider } from "./usage/synthetic";
 import { umansUsageProvider } from "./usage/umans";
 import { xaiOauthUsageProvider } from "./usage/xai-oauth";
@@ -454,10 +452,6 @@ export interface AuthCredentialStore {
 	 * skipped — the broker host records into its own database instead.
 	 */
 	recordUsageSnapshots?(entries: UsageHistoryEntry[]): void;
-	/** Append observed request costs for providers without upstream usage APIs. */
-	recordUsageCosts?(entries: UsageCostHistoryEntry[]): void;
-	/** Read observed request costs, oldest first. */
-	listUsageCosts?(query?: UsageCostHistoryQuery): UsageCostHistoryEntry[];
 	/** Read recorded usage-limit snapshots, oldest first. */
 	listUsageHistory?(query?: UsageHistoryQuery): UsageHistoryEntry[];
 	/**
@@ -698,6 +692,10 @@ const DEFAULT_USAGE_REQUEST_TIMEOUT_MS = 10_000;
 const USAGE_REPORT_CACHE_KEY_VERSION_OVERRIDES: Partial<Record<Provider, number>> = {
 	"google-antigravity": 2,
 	zai: 2,
+	// v2: retires cached reports from the OMP-observed spend estimator (dollar
+	// units) now that limits come from the upstream percent-based `/usage`
+	// endpoint; the 24h last-good retention would otherwise keep serving them.
+	"opencode-go": 2,
 	// v2: cache identity gained an `org:` component so two subscriptions on one
 	// account email stop sharing a slot. v3 retires parsed reports created before
 	// Anthropic extra-usage rows existed; header ingestion can otherwise keep
@@ -1072,6 +1070,7 @@ const DEFAULT_RANKING_STRATEGIES = new Map<Provider, CredentialRankingStrategy>(
 	["anthropic", claudeRankingStrategy],
 	["google-antigravity", antigravityRankingStrategy],
 	["zai", zaiRankingStrategy],
+	["opencode-go", opencodeGoRankingStrategy],
 ]);
 
 function resolveDefaultRankingStrategy(provider: Provider): CredentialRankingStrategy | undefined {
@@ -3175,7 +3174,6 @@ export class AuthStorage {
 			const report = await providerImpl.fetchUsage(params, {
 				fetch: this.#usageFetch,
 				logger: this.#usageLogger,
-				listUsageCosts: query => this.#store.listUsageCosts?.(query) ?? [],
 			});
 			// Attribute the report to the credential's organization. The orgId and
 			// orgName fallbacks apply independently: Claude's usage endpoint stamps
@@ -3197,6 +3195,13 @@ export class AuthStorage {
 			}
 			return report;
 		} catch (error) {
+			if (error instanceof AIError.ProviderHttpError && (error.status === 401 || error.status === 403)) {
+				// Definitive auth failure (revoked key, lapsed subscription): purge
+				// the last-good report so #fetchUsageCached's failure branch can't
+				// keep rendering and ranking from stale quota the way it does for
+				// transient failures. Mirrors the definitive-OAuth-refresh path.
+				this.#usageCache.set(this.#buildUsageReportCacheKey(request), { value: null, expiresAt: 0 });
+			}
 			logger.debug("AuthStorage usage fetch failed", {
 				provider: request.provider,
 				error: String(error),
@@ -3297,42 +3302,6 @@ export class AuthStorage {
 		return this.#store.listUsageHistory?.(query) ?? [];
 	}
 
-	/** Record one observed provider request cost for later local usage aggregation. */
-	recordUsageCost(
-		provider: Provider,
-		costUsd: number,
-		options?: { sessionId?: string; recordedAt?: number; baseUrl?: string },
-	): boolean {
-		if (!Number.isFinite(costUsd) || costUsd <= 0) return false;
-		const record = this.#store.recordUsageCosts;
-		if (!record) return false;
-		const credential = this.#resolveObservedUsageCredential(provider, options?.sessionId);
-		if (!credential) return false;
-		const entry: UsageCostHistoryEntry = {
-			recordedAt: options?.recordedAt ?? Date.now(),
-			provider,
-			accountKey: this.#buildUsageCacheIdentity(credential),
-			costUsd,
-		};
-		try {
-			record.call(this.#store, [entry]);
-			const cacheKey = this.#buildUsageReportCacheKey({
-				provider,
-				credential,
-				baseUrl: options?.baseUrl,
-			});
-			const existing = this.#usageCache.getStale<UsageReport | null>(cacheKey);
-			this.#usageCache.set(cacheKey, { value: existing?.value ?? null, expiresAt: Date.now() - 1 });
-			return true;
-		} catch (error) {
-			this.#usageLogger?.debug("usage cost record failed", {
-				provider,
-				error: String(error),
-			});
-			return false;
-		}
-	}
-
 	/**
 	 * Forward one completed request's usage to the store's observer hook.
 	 * Broker-backed stores batch these into per-install reports so the broker
@@ -3381,28 +3350,6 @@ export class AuthStorage {
 	/** Broker host: aggregate recorded per-client usage since `sinceMs`. */
 	getClientUsageSummary(sinceMs: number): ClientUsageSummary {
 		return this.#store.getClientUsageSummary?.(sinceMs) ?? { clients: [] };
-	}
-
-	#resolveObservedUsageCredential(provider: Provider, sessionId?: string): UsageCredential | undefined {
-		const entries = this.#getStoredCredentials(provider);
-		const sessionCredential = this.#getSessionCredential(provider, sessionId);
-		if (sessionCredential) {
-			const credential = entries[sessionCredential.index]?.credential;
-			if (credential) {
-				return credential.type === "api_key"
-					? { type: "api_key", apiKey: credential.key }
-					: this.#buildUsageCredential(credential);
-			}
-		}
-		if (entries.length === 1) {
-			const credential = entries[0]!.credential;
-			return credential.type === "api_key"
-				? { type: "api_key", apiKey: credential.key }
-				: this.#buildUsageCredential(credential);
-		}
-		const envKey = getEnvApiKey(provider);
-		if (envKey) return { type: "api_key", apiKey: envKey };
-		return undefined;
 	}
 
 	ingestUsageHeaders(
@@ -3488,9 +3435,9 @@ export class AuthStorage {
 		return true;
 	}
 
-	#collectUsageRequests(options?: {
+	async #collectUsageRequests(options?: {
 		baseUrlResolver?: (provider: Provider) => string | undefined;
-	}): UsageRequestDescriptor[] {
+	}): Promise<UsageRequestDescriptor[]> {
 		const resolver = this.#usageProviderResolver;
 		if (!resolver) return [];
 
@@ -3550,10 +3497,19 @@ export class AuthStorage {
 
 			for (const entry of entries) {
 				const credential = entry.credential;
-				const request =
-					credential.type === "api_key"
-						? this.#buildUsageRequest(provider, { type: "api_key", apiKey: credential.key }, baseUrl)
-						: this.#buildUsageRequestForOauth(provider, credential, baseUrl);
+				let request: UsageRequestDescriptor;
+				if (credential.type === "api_key") {
+					// Stored keys may be references (env var name, "!command") —
+					// resolve to the actual secret before it reaches a provider
+					// fetcher's Authorization header. Unresolvable references are
+					// skipped: probing with the literal reference string would
+					// 401 and flag a working credential as bad.
+					const apiKey = await this.#configValueResolver(credential.key);
+					if (!apiKey) continue;
+					request = this.#buildUsageRequest(provider, { type: "api_key", apiKey }, baseUrl);
+				} else {
+					request = this.#buildUsageRequestForOauth(provider, credential, baseUrl);
+				}
 				if (providerImpl.supports && !providerImpl.supports(request)) continue;
 				requests.push(request);
 			}
@@ -4005,7 +3961,7 @@ export class AuthStorage {
 		}
 		if (!this.#usageProviderResolver) return null;
 
-		const requests = this.#collectUsageRequests(options);
+		const requests = await this.#collectUsageRequests(options);
 		if (requests.length === 0) return [];
 
 		this.#usageLogger?.debug("Usage fetch requested", {
@@ -4101,7 +4057,6 @@ export class AuthStorage {
 		const ctx: UsageFetchContext = {
 			fetch: this.#usageFetch,
 			logger: this.#usageLogger,
-			listUsageCosts: query => this.#store.listUsageCosts?.(query) ?? [],
 		};
 
 		const results: CredentialHealthResult[] = [];
@@ -4123,10 +4078,21 @@ export class AuthStorage {
 
 			const baseUrl = options?.baseUrlResolver?.(row.provider as Provider);
 			const cred = row.credential;
-			const initialRequest: UsageRequestDescriptor =
-				cred.type === "api_key"
-					? this.#buildUsageRequest(row.provider as Provider, { type: "api_key", apiKey: cred.key }, baseUrl)
-					: this.#buildUsageRequestForOauth(row.provider as Provider, cred, baseUrl);
+			let initialRequest: UsageRequestDescriptor;
+			if (cred.type === "api_key") {
+				// Stored keys may be references (env var name, "!command") — probe
+				// with the resolved secret, not the reference string, so both the
+				// usage probe and the completion probe exercise the real bytes.
+				const apiKey = await this.#configValueResolver(cred.key);
+				if (!apiKey) {
+					base.reason = "api key reference could not be resolved";
+					results.push(base);
+					continue;
+				}
+				initialRequest = this.#buildUsageRequest(row.provider as Provider, { type: "api_key", apiKey }, baseUrl);
+			} else {
+				initialRequest = this.#buildUsageRequestForOauth(row.provider as Provider, cred, baseUrl);
+			}
 
 			const timeoutSignal = AbortSignal.timeout(timeoutMs);
 			const probeSignal = options?.signal ? AbortSignal.any([options.signal, timeoutSignal]) : timeoutSignal;

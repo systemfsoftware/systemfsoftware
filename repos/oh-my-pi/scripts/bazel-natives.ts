@@ -25,13 +25,16 @@
  * (packages/natives/scripts/build-bindings.ts) against the installed VS Build
  * Tools; every other target on a win32 host fails fast with guidance.
  *
+ * Set `OMP_NATIVE_BUILD_BACKEND=cargo` to route the host target through the
+ * same local N-API build on systems where Bazel's prebuilt host tools cannot run.
+ *
  * Note: musl addons intentionally reuse the plain linux-<arch> filenames, so a
  * `linux-all` copy overwrites the gnu addon with the musl one (and vice versa);
  * CI jobs that ship files always request an explicit disjoint target set.
  */
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import { detectHostAvx2Support } from "./host-detect";
+import { detectHostAvx2Support, resolveLocalHostAddon } from "./host-detect";
 
 const repoRoot = path.join(import.meta.dir, "..");
 
@@ -221,14 +224,10 @@ async function installAddon(sourcePath: string, destPath: string): Promise<void>
 	}
 }
 
-/**
- * win32-host path for the `host` pseudo-target: the bazel msvc cross toolchain
- * cannot run here, but real MSVC can — build the addon via the napi local
- * build and install it into destDir like the bazel path would.
- */
-async function buildWindowsHostAddon(host: HostInfo, destDir: string): Promise<void> {
+/** Build and install the host addon through the local Cargo/N-API path. */
+async function buildLocalHostAddon(host: HostInfo, destDir: string): Promise<void> {
 	const script = path.join(repoRoot, "packages/natives/scripts/build-bindings.ts");
-	console.log(`win32 host: bazel msvc toolchain is linux/mac-only; building via ${path.relative(repoRoot, script)}`);
+	console.log(`local host build: using ${path.relative(repoRoot, script)}`);
 	const proc = Bun.spawn([process.execPath, script], {
 		cwd: repoRoot,
 		stdout: "inherit",
@@ -237,7 +236,7 @@ async function buildWindowsHostAddon(host: HostInfo, destDir: string): Promise<v
 	const exitCode = await proc.exited;
 	if (exitCode !== 0) process.exit(exitCode || 1);
 
-	const filename = `pi_natives.win32-x64-${host.avx2 ? "modern" : "baseline"}.node`;
+	const filename = resolveLocalHostAddon(host).filename;
 	const builtPath = path.join(repoRoot, "packages/natives/native", filename);
 	if (path.dirname(builtPath) !== destDir) {
 		await fs.mkdir(destDir, { recursive: true });
@@ -251,15 +250,18 @@ async function main(): Promise<void> {
 	const host: HostInfo = { platform: process.platform, arch: process.arch, avx2: detectHostAvx2Support() };
 	const destDir = options.dest ? path.resolve(options.dest) : path.join(repoRoot, "packages/natives/native");
 
-	if (host.platform === "win32" && !options.source) {
+	if ((host.platform === "win32" || Bun.env.OMP_NATIVE_BUILD_BACKEND === "cargo") && !options.source) {
 		if (options.targets.length !== 1 || options.targets[0] !== "host") {
-			throw new Error(
-				`Cannot bazel-build [${options.targets.join(", ")}] on a Windows host: the msvc cross ` +
-					"toolchain (bazel/toolchains/msvc) only runs on linux/mac exec hosts. Use `host` here " +
-					"(local napi build via VS Build Tools), or run this script from WSL/linux for cross targets.",
-			);
+			if (host.platform === "win32") {
+				throw new Error(
+					`Cannot bazel-build [${options.targets.join(", ")}] on a Windows host: the msvc cross ` +
+						"toolchain (bazel/toolchains/msvc) only runs on linux/mac exec hosts. Use `host` here " +
+						"(local napi build via VS Build Tools), or run this script from WSL/linux for cross targets.",
+				);
+			}
+			throw new Error("OMP_NATIVE_BUILD_BACKEND=cargo supports only the host target");
 		}
-		await buildWindowsHostAddon(host, destDir);
+		await buildLocalHostAddon(host, destDir);
 		return;
 	}
 	let outputs: string[];
