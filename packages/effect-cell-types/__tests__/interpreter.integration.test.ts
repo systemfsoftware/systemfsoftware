@@ -5,6 +5,7 @@ import * as Effect from 'effect/Effect'
 import * as Either from 'effect/Either'
 import * as Exit from 'effect/Exit'
 import * as Layer from 'effect/Layer'
+import * as Option from 'effect/Option'
 import { expect } from 'vitest'
 
 const Feature = makeFeature({ it, layer })
@@ -123,6 +124,23 @@ const secondLayerReadsTheFirst = Cell.write(
   write,
 )
 
+/**
+ * A second layer that receives the first layer's response directly rather than observing its
+ * write. This is the mechanism a later layer needs when it must know what an earlier layer
+ * decided: without it the only route is to re-derive that decision, duplicating it in every
+ * layer that follows.
+ */
+const readsThePreviousResponse: Cell.ReadPhase<Bag> = (_command, previous) =>
+  Effect.succeed({ bytes: Option.getOrElse(previous, () => 'none') })
+
+const secondLayerReceivesTheFirst = Cell.write(
+  Cell.encode(
+    Cell.decide(Cell.decode(Cell.read(readsThePreviousResponse, oneLayer), decode), decide),
+    encode,
+  ),
+  write,
+)
+
 Feature('Applying a phase description')
   .withScenarioLayer(LedgerRecording)
   .body(({ scenario }) => {
@@ -220,6 +238,23 @@ Feature('Applying a phase description')
               expect(lines).toEqual(['admitted:4', 'admitted:10'])
             }))
         ),
+      ),
+    )
+
+    scenario(
+      "A later layer receives the earlier layer's response",
+      Gherkin.Do.pipe(
+        Given("a description whose second layer reads the first layer's response")(
+          'description',
+          () => Effect.succeed(secondLayerReceivesTheFirst),
+        ),
+        When('it is applied to a command the first layer admits')(
+          'exit',
+          (s) => Effect.exit(Cell.apply(s.description, { id: 'abcd' })),
+        ),
+        Then("the second layer decided on the first layer's response")((s) => {
+          expect(s.exit).toStrictEqual(Exit.succeed('admitted:10'))
+        }),
       ),
     )
   })

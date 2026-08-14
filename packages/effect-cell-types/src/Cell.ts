@@ -1,4 +1,3 @@
-import * as Arr from 'effect/Array'
 import * as Effect from 'effect/Effect'
 import * as Either from 'effect/Either'
 import * as Option from 'effect/Option'
@@ -29,9 +28,15 @@ export interface Phases {
 /**
  * A read gathers what the decision needs, and may gather a product across its interior;
  * that interior is not type-visible, so no I/O count is claimed or enforced here.
+ *
+ * A layer after the first also receives the previous layer's response. Without it a later
+ * layer could only re-derive what an earlier layer already decided, duplicating the decision
+ * in every layer that follows it — which is worse than carrying it. `None` marks the opening
+ * layer, so the position is type-visible rather than signalled by a sentinel value.
  */
 export type ReadPhase<P extends Phases> = (
   command: P['command'],
+  previous: Option.Option<P['response']>,
 ) => Effect.Effect<P['raw'], P['readError'], P['readContext']>
 
 /** Validation. Its `Left` is fatal: it reaches the derived error channel and no write runs. */
@@ -174,7 +179,11 @@ export const write = <P extends Phases>(
  * never a domain outcome, so it dies. `dieMessage` returns `Effect<never>`, which is why the
  * guard costs the derived `E` and `R` nothing.
  */
-const runLayer = <P extends Phases>(layer: Layer<P>, command: P['command']) =>
+const runLayer = <P extends Phases>(
+  layer: Layer<P>,
+  command: P['command'],
+  previous: Option.Option<P['response']>,
+) =>
   Effect.gen(function*() {
     const { decide, decode, encode: shape, read, write: persist } = layer
     if (!read || !decode || !decide || !shape || !persist) {
@@ -183,7 +192,7 @@ const runLayer = <P extends Phases>(layer: Layer<P>, command: P['command']) =>
       )
     }
 
-    const raw = yield* read(command)
+    const raw = yield* read(command, previous)
     const decoded = yield* Either.match(decode(raw), {
       onLeft: Effect.fail,
       onRight: Effect.succeed,
@@ -197,14 +206,20 @@ const runLayer = <P extends Phases>(layer: Layer<P>, command: P['command']) =>
  * unrepresentable rather than merely discouraged. Annotating it here would let this module
  * promise a failure that no phase can produce.
  *
- * Layers run in sequence and the description's response is the last layer's. No scope is
+ * The fold is a `reduce`, which is sequential by construction and carries each layer's
+ * response into the next layer's read. A `forEach` would run the layers too, but it would
+ * leave the ordering to an option and give a later layer nothing to receive. No scope is
  * opened and interruptibility is untouched, so a `Scope.Scope` a phase requires reaches the
  * caller as part of the derived `R`.
  */
 export const apply = <P extends Phases>(description: WriteDone<P>, command: P['command']) =>
   Effect.gen(function*() {
-    const responses = yield* Effect.forEach(description.layers, (layer) => runLayer(layer, command))
-    return yield* Option.match(Arr.last(responses), {
+    const last = yield* Effect.reduce(
+      description.layers,
+      Option.none<P['response']>(),
+      (previous, layer) => Effect.map(runLayer(layer, command, previous), Option.some),
+    )
+    return yield* Option.match(last, {
       onNone: () => Effect.dieMessage('effect-cell-types: a description reached the interpreter with no layers'),
       onSome: Effect.succeed,
     })
