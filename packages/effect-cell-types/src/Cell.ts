@@ -1,5 +1,7 @@
-import type { Effect } from 'effect/Effect'
-import type { Either } from 'effect/Either'
+import * as Arr from 'effect/Array'
+import * as Effect from 'effect/Effect'
+import * as Either from 'effect/Either'
+import * as Option from 'effect/Option'
 
 /**
  * The type bag. Every phase's input and output type travels in one record so that a
@@ -30,24 +32,26 @@ export interface Phases {
  */
 export type ReadPhase<P extends Phases> = (
   command: P['command'],
-) => Effect<P['raw'], P['readError'], P['readContext']>
+) => Effect.Effect<P['raw'], P['readError'], P['readContext']>
 
 /** Validation. Its `Left` is fatal: it reaches the derived error channel and no write runs. */
-export type DecodePhase<P extends Phases> = (raw: P['raw']) => Either<P['decoded'], P['decodeError']>
+export type DecodePhase<P extends Phases> = (
+  raw: P['raw'],
+) => Either.Either<P['decoded'], P['decodeError']>
 
 /** The decision. Its `Left` is an outcome, not a fault: both branches travel on to the write. */
 export type DecidePhase<P extends Phases> = (
   decoded: P['decoded'],
-) => Either<P['decision'], P['decisionError']>
+) => Either.Either<P['decision'], P['decisionError']>
 
 /** Shapes what the write consumes. Total, so it receives both branches of the decision. */
 export type EncodePhase<P extends Phases> = (
-  outcome: Either<P['decision'], P['decisionError']>,
+  outcome: Either.Either<P['decision'], P['decisionError']>,
 ) => P['output']
 
 export type WritePhase<P extends Phases> = (
   output: P['output'],
-) => Effect<P['response'], P['writeError'], P['writeContext']>
+) => Effect.Effect<P['response'], P['writeError'], P['writeContext']>
 
 /**
  * One impure/pure layer. Every phase slot is optional because a degenerate description is
@@ -155,3 +159,53 @@ export const write = <P extends Phases>(
   [WRITE_DONE]: true,
   layers: intoOpenLayer(previous.layers, { write: run }),
 })
+
+/**
+ * Runs one layer as the sandwich it describes: impure read, pure filling, impure write.
+ *
+ * The two `Left` rules are carried by the phase types rather than chosen here. A `decode`
+ * Left has no downstream consumer — nothing accepts `decodeError` — so its only route is a
+ * failure, which is what puts it in the derived error channel. A `decide` Left cannot be
+ * unwrapped, because `EncodePhase` takes the whole `Either`, so its only route is forward as
+ * a value. Neither is a decision the interpreter makes.
+ *
+ * Every layer reachable from a `WriteDone` was built by the five constructors in order, so
+ * every slot is filled. A layer that is nonetheless incomplete is a defect in this module,
+ * never a domain outcome, so it dies. `dieMessage` returns `Effect<never>`, which is why the
+ * guard costs the derived `E` and `R` nothing.
+ */
+const runLayer = <P extends Phases>(layer: Layer<P>, command: P['command']) =>
+  Effect.gen(function*() {
+    const { decide, decode, encode: shape, read, write: persist } = layer
+    if (!read || !decode || !decide || !shape || !persist) {
+      return yield* Effect.dieMessage(
+        'effect-cell-types: a layer reached the interpreter with an unfilled phase slot',
+      )
+    }
+
+    const raw = yield* read(command)
+    const decoded = yield* Either.match(decode(raw), {
+      onLeft: Effect.fail,
+      onRight: Effect.succeed,
+    })
+    return yield* persist(shape(decide(decoded)))
+  })
+
+/**
+ * Applies a description. The return type is deliberately not annotated: `gen` accumulates
+ * `E` and `R` from the union of what is actually yielded, so an over-claimed channel is
+ * unrepresentable rather than merely discouraged. Annotating it here would let this module
+ * promise a failure that no phase can produce.
+ *
+ * Layers run in sequence and the description's response is the last layer's. No scope is
+ * opened and interruptibility is untouched, so a `Scope.Scope` a phase requires reaches the
+ * caller as part of the derived `R`.
+ */
+export const apply = <P extends Phases>(description: WriteDone<P>, command: P['command']) =>
+  Effect.gen(function*() {
+    const responses = yield* Effect.forEach(description.layers, (layer) => runLayer(layer, command))
+    return yield* Option.match(Arr.last(responses), {
+      onNone: () => Effect.dieMessage('effect-cell-types: a description reached the interpreter with no layers'),
+      onSome: Effect.succeed,
+    })
+  })

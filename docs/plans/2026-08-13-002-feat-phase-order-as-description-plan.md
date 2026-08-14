@@ -279,27 +279,27 @@ The type-level contract lands and is proven before any call site migrates. A wro
 - **Test scenarios.** None here — the contract's proof is `U3`, which is the observer this cell type is assigned. `Test expectation: none -- type-level contract, proven by U3's type tests under tstyche.`
 - **Verification.** `pnpm --filter @systemfsoftware/effect-cell-types typecheck` passes and the new export resolves from `src/mod.ts`.
 
-### U2. Ship the routing decision and the interpreter
+### U2. Ship the interpreter
 
-- **Goal.** Applying a description yields one effect value whose channels are derived, with the two `Left` rules decided by a pure cell the interpreter calls.
-- **Requirements.** R4. Instantiates KTD4, KTD5, KTD9, KTD10.
+- **Goal.** Applying a description yields one effect value whose channels are accumulated by `gen` from what the interpreter actually yields, so the two `Left` rules hold by construction rather than by a rule that inspects them.
+- **Requirements.** R4. Instantiates KTD4, KTD5.
 - **Dependencies.** U1.
-- **Files.** `packages/effect-cell-types/src/phase-outcome.kernel.ts` (create), `packages/effect-cell-types/src/__tests__/phase-outcome.kernel.property.test.ts` (create), `packages/effect-cell-types/src/Cell.ts` (modify), `packages/effect-cell-types/__tests__/interpreter.integration.test.ts` (create).
+- **Amended once.** The original approach put the channel choice in `phase-outcome.kernel.ts` with property tests and a mutation verdict. Two findings killed it. First, `scripts/guards/guard-mutate-scope.mjs` lists `kernel` in `FORBIDDEN` and its header assigns mutation to `*.workflow.ts` only, naming a mutated kernel a wrong-observer error — so the stated verification was not merely unwired but prohibited. Second, there is no decision to extract: the fold's position in the chain is static, and no runtime input can make a `decode` Left travel forward, so a routing cell would manufacture a decision in order to have a mutation target. `KTD9`'s premise — that the routing rule is a pure decision needing an observer — is withdrawn.
+- **Files.** `packages/effect-cell-types/src/Cell.ts` (modify), `packages/effect-cell-types/__tests__/interpreter.integration.test.ts` (create). No kernel, no stryker config, no property test: nothing here decides.
 - **Approach.**
-  1. Put the channel choice in the pure cell: given a phase outcome and the phase that produced it, decide fatal-to-the-error-channel or value-forward. Exhaustive dispatch over a closed tag.
-  2. Fold the layer list in the interpreter — yield impure phases, apply pure ones — and call the cell for every outcome rather than branching inline.
-  3. Add no scope and no interruptibility change; let requirements union and let `Scope.Scope` reach the caller.
-- **Execution note.** The pure cell lands first with its properties; the interpreter is then a fold with no decision left in it. A branch surviving in the interpreter body is the signal the extraction is incomplete.
-- **Patterns to follow.** `repos/effect/packages/effect/src/Effect.ts:2760-2767` — how `gen` accumulates channels. This is the mechanism the derivation depends on, read this session.
+  1. Carry the two `Left` rules in the phase types. `EncodePhase`'s parameter is `Either<decision, decisionError>`, so a `decide` Left cannot be unwrapped and must travel forward; `decodeError` has no downstream consumer, so a `decode` Left can only be yielded as a failure.
+  2. Leave the interpreter's return type un-annotated. `gen` infers `E` and `R` from the union of what is yielded, so an over-claimed channel is unrepresentable rather than merely discouraged.
+  3. Fold the layer list — yield impure phases, apply pure ones. The branches that remain are presence checks over optional slots, not decisions.
+  4. Add no scope and no interruptibility change; let requirements union and let `Scope.Scope` reach the caller.
+- **Patterns to follow.** `repos/effect/packages/effect/src/Effect.ts:2760-2767` — `gen`'s `E` and `R` are `[Eff] extends [YieldWrap<Effect<infer _A, infer E, infer _R>>] ? E : never` over the yielded union, with the same tuple wrap `Workflow.ts` uses. Read this session; this is why leaving the return un-annotated is what makes the derivation honest.
 - **Test scenarios.**
-  - Property: every `decode` outcome that is a `Left` maps to the fatal channel, over generated inputs.
-  - Property: no `decide` or `encode` `Left` maps to the fatal channel; each maps to a value carried forward.
-  - Property: the mapping is total — no outcome-and-phase pair is unhandled.
-  - Covers AE5, composition: a description whose `decide` returns an error variant runs its write phase with that variant, and the derived error channel stays `never`.
-  - Composition: a `decode` failure surfaces in the derived error channel and no write runs.
+  - Type: a description whose `decode` can fail derives an error channel containing that failure.
+  - Type: a description whose `decide` returns an error variant derives an error channel that does **not** contain it.
+  - Type: a description declaring no requirements derives `R = never`; one requiring a service derives exactly that service and nothing more.
+  - Covers AE5, composition: a description whose `decide` returns an error variant runs its write phase with that variant, and the run succeeds.
+  - Composition: a `decode` failure surfaces in the error channel and no write runs.
   - Covers AE6, composition: a two-layer description whose second-layer read fails surfaces that failure, and the first layer's write stays applied.
-  - Composition: a description declaring no requirements derives `R = never`; one requiring a service derives exactly that service and nothing more.
-- **Verification.** `pnpm --filter @systemfsoftware/effect-cell-types test` passes, and `pnpm --filter @systemfsoftware/effect-cell-types mutation` reports 100% on `phase-outcome.kernel.ts`.
+- **Verification.** `pnpm --filter @systemfsoftware/effect-cell-types test` and `test:types` both pass, and the error-channel claims are asserted by type tests rather than by a mutation score.
 
 ### U3. Prove the type-level contract
 
