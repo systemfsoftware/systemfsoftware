@@ -14,7 +14,6 @@ import * as AtomRegistry from '@systemfsoftware/effect-atom/Registry'
 import type * as AsyncResult from '@systemfsoftware/effect-atom/Result'
 import * as Cause from 'effect/Cause'
 import * as Effect from 'effect/Effect'
-import * as Exit from 'effect/Exit'
 import * as React from 'react'
 import { RegistryContext } from './RegistryContext.js'
 
@@ -85,7 +84,7 @@ export const useAtomInitialValues = (initialValues: Iterable<readonly [Atom.Atom
   for (const [atom, value] of initialValues) {
     if (!set.has(atom)) {
       set.add(atom)
-      ;(registry as any).ensureNode(atom).setValue(value)
+      registry.setInitialValue(atom, value)
     }
   }
 }
@@ -126,39 +125,37 @@ function mountAtom<A>(registry: AtomRegistry.Registry, atom: Atom.Atom<A>): void
   React.useEffect(() => registry.mount(atom), [atom, registry])
 }
 
-function setAtom<R, W, Mode extends 'value' | 'promise' | 'promiseExit' = never>(
+type SetAtomResult<R, W> =
+  | ((value: W) => Effect.Effect<unknown, unknown>)
+  | ((value: W | ((value: R) => W)) => void)
+
+function setAtom<R, W, Mode extends 'value' | 'effect' = 'value'>(
   registry: AtomRegistry.Registry,
   atom: Atom.Writable<R, W>,
   options?: {
     readonly mode?: ([R] extends [AsyncResult.Result<any, any>] ? Mode : 'value') | undefined
   },
-): 'promise' extends Mode ? (
-    (value: W) => Promise<AsyncResult.Result.Success<R>>
-  )
-  : 'promiseExit' extends Mode ? (
-      (value: W) => Promise<Exit.Exit<AsyncResult.Result.Success<R>, AsyncResult.Result.Failure<R>>>
-    )
-  : ((value: W | ((value: R) => W)) => void)
-{
-  if (options?.mode === 'promise' || options?.mode === 'promiseExit') {
+): Mode extends 'effect' ? [R] extends [AsyncResult.Result<infer A, infer E>] ? (value: W) => Effect.Effect<A, E>
+  : (value: W | ((value: R) => W)) => void
+  : (value: W | ((value: R) => W)) => void
+function setAtom<R, W, Mode extends 'value' | 'effect' = 'value'>(
+  registry: AtomRegistry.Registry,
+  atom: Atom.Writable<R, W>,
+  options?: {
+    readonly mode?: ([R] extends [AsyncResult.Result<any, any>] ? Mode : 'value') | undefined
+  },
+): SetAtomResult<R, W> {
+  if (options?.mode === 'effect') {
     return React.useCallback((value: W) => {
       registry.set(atom, value)
-      const promise = Effect.runPromiseExit(
-        AtomRegistry.getResult(registry, atom as Atom.Atom<AsyncResult.Result<any, any>>, {
-          suspendOnWaiting: true,
-        }),
-      )
-      return options!.mode === 'promise' ? promise.then(flattenExit) : promise
-    }, [registry, atom, options.mode]) as any
+      return AtomRegistry.getResult(registry, atom as Atom.Atom<AsyncResult.Result<any, any>>, {
+        suspendOnWaiting: true,
+      })
+    }, [registry, atom])
   }
   return React.useCallback((value: W | ((value: R) => W)) => {
-    registry.set(atom, typeof value === 'function' ? (value as any)(registry.get(atom)) : value)
-  }, [registry, atom]) as any
-}
-
-const flattenExit = <A, E>(exit: Exit.Exit<A, E>): A => {
-  if (Exit.isSuccess(exit)) return exit.value
-  throw Cause.squash(exit.cause)
+    registry.set(atom, typeof value === 'function' ? (value as (value: R) => W)(registry.get(atom)) : value)
+  }, [registry, atom])
 }
 
 /**
@@ -195,11 +192,9 @@ export const useAtomMount = <A>(atom: Atom.Atom<A>): void => {
  * Use when a React component needs to update a writable atom without rendering
  * from that atom's value.
  *
- * **Details**
- *
  * The hook mounts the atom and returns a setter. In value mode the setter
- * accepts a write value or updater function; for `AsyncResult` atoms, `promise`
- * and `promiseExit` modes return a promise for the success value or full `Exit`.
+ * accepts a write value or updater function; for `AsyncResult` atoms, `effect`
+ * mode returns a lazy `Effect` that resolves to the settled success value.
  *
  * @see {@link useAtom} for reading and updating the same writable atom
  *
@@ -209,19 +204,15 @@ export const useAtomMount = <A>(atom: Atom.Atom<A>): void => {
 export const useAtomSet = <
   R,
   W,
-  Mode extends 'value' | 'promise' | 'promiseExit' = never,
+  Mode extends 'value' | 'effect' = 'value',
 >(
   atom: Atom.Writable<R, W>,
   options?: {
     readonly mode?: ([R] extends [AsyncResult.Result<any, any>] ? Mode : 'value') | undefined
   },
-): 'promise' extends Mode ? (
-    (value: W) => Promise<AsyncResult.Result.Success<R>>
-  )
-  : 'promiseExit' extends Mode ? (
-      (value: W) => Promise<Exit.Exit<AsyncResult.Result.Success<R>, AsyncResult.Result.Failure<R>>>
-    )
-  : ((value: W | ((value: R) => W)) => void) =>
+): Mode extends 'effect' ? [R] extends [AsyncResult.Result<infer A, infer E>] ? (value: W) => Effect.Effect<A, E>
+  : (value: W | ((value: R) => W)) => void
+  : (value: W | ((value: R) => W)) => void =>
 {
   const registry = React.useContext(RegistryContext)
   mountAtom(registry, atom)
@@ -270,20 +261,16 @@ export const useAtomRefresh = <A>(atom: Atom.Atom<A>): () => void => {
  * @category hooks
  * @since 4.0.0
  */
-export const useAtom = <R, W, const Mode extends 'value' | 'promise' | 'promiseExit' = never>(
+export const useAtom = <R, W, const Mode extends 'value' | 'effect' = 'value'>(
   atom: Atom.Writable<R, W>,
   options?: {
     readonly mode?: ([R] extends [AsyncResult.Result<any, any>] ? Mode : 'value') | undefined
   },
 ): readonly [
   value: R,
-  write: 'promise' extends Mode ? (
-      (value: W) => Promise<AsyncResult.Result.Success<R>>
-    )
-    : 'promiseExit' extends Mode ? (
-        (value: W) => Promise<Exit.Exit<AsyncResult.Result.Success<R>, AsyncResult.Result.Failure<R>>>
-      )
-    : ((value: W | ((value: R) => W)) => void),
+  write: Mode extends 'effect' ? [R] extends [AsyncResult.Result<infer A, infer E>] ? (value: W) => Effect.Effect<A, E>
+    : (value: W | ((value: R) => W)) => void
+    : (value: W | ((value: R) => W)) => void,
 ] => {
   const registry = React.useContext(RegistryContext)
   return [
@@ -380,7 +367,7 @@ export const useAtomSuspense = <A, E, const IncludeFailure extends boolean = fal
   if (result._tag === 'Failure' && !options?.includeFailure) {
     throw Cause.squash(result.cause)
   }
-  return result as any
+  return result as AsyncResult.Success<A, E> | (IncludeFailure extends true ? AsyncResult.Failure<A, E> : never)
 }
 
 /**

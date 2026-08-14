@@ -158,13 +158,13 @@ export const Service = <Self>() =>
     readonly runtime?: Atom.RuntimeFactory | undefined
   },
 ): AtomRpcClient<Self, Id, Rpcs> => {
-  const self: Mutable<AtomRpcClient<Self, Id, Rpcs>> = Context.Service<
+  const service = Context.Service<
     Self,
     RpcClient.RpcClient.Flat<Rpcs, RpcClientError>
-  >()(id) as any
+  >()(id)
 
   const layer = Layer.effect(
-    self,
+    service,
     options.makeEffect ??
       (RpcClient.make(options.group, {
         ...options,
@@ -175,8 +175,7 @@ export const Service = <Self>() =>
         RM
       >),
   )
-  const runtimeFactory = options.runtime ?? Atom.runtime
-  self.runtime = runtimeFactory(
+  const runtime = (options.runtime ?? Atom.runtime)(
     typeof options.protocol === 'function'
       ? (get) =>
         Layer.provide(
@@ -188,10 +187,48 @@ export const Service = <Self>() =>
       : Layer.provide(layer, Layer.orDie(options.protocol)),
   )
 
-  self.mutation = Atom.family(<Tag extends Rpc.Tag<Rpcs>>(tag: Tag) => {
-    const rpc = options.group.requests.get(tag)! as any as Rpc.AnyWithProps
-    return self.runtime.fn<{
-      readonly payload: Rpc.PayloadConstructor<Rpc.ExtractTag<Rpcs, Tag>>
+  const getRpc = (tag: string): Rpc.AnyWithProps => {
+    const rpc: Rpc.Any = options.group.requests.get(tag)!
+    return rpc as Rpc.AnyWithProps
+  }
+
+  type FlatCall<R> = <Tag extends Rpc.Tag<Rpcs>>(
+    tag: Tag,
+    payload: unknown,
+    options: { readonly headers?: Headers.Input | undefined },
+  ) => R
+
+  const callEffect = <Tag extends Rpc.Tag<Rpcs>>(
+    client: RpcClient.RpcClient.Flat<Rpcs, RpcClientError>,
+    tag: Tag,
+    payload: unknown,
+    headers: Headers.Input | undefined,
+  ): Effect.Effect<unknown, unknown, never> =>
+    (client as FlatCall<unknown>)(tag, payload, { headers }) as Effect.Effect<unknown, unknown, never>
+
+  const callStream = <Tag extends Rpc.Tag<Rpcs>>(
+    client: RpcClient.RpcClient.Flat<Rpcs, RpcClientError>,
+    tag: Tag,
+    payload: unknown,
+    headers: Headers.Input | undefined,
+  ): Stream.Stream<unknown, unknown, never> =>
+    (client as FlatCall<unknown>)(tag, payload, { headers }) as Stream.Stream<unknown, unknown, never>
+
+  const resultSchema = (
+    success: Schema.Top,
+    error: Schema.Top,
+  ): Schema.ConstraintCodec<AsyncResult.Result<unknown, unknown>, unknown> =>
+    AsyncResult.Schema({ success, error }) as Schema.ConstraintCodec<
+      AsyncResult.Result<unknown, unknown>,
+      unknown,
+      any,
+      any
+    > as Schema.ConstraintCodec<AsyncResult.Result<unknown, unknown>, unknown>
+
+  const mutationFamily = Atom.family(<Tag extends Rpc.Tag<Rpcs>>(tag: Tag) => {
+    const rpc = getRpc(tag)
+    const fnAtom = runtime.fn<{
+      readonly payload: unknown
       readonly reactivityKeys?:
         | ReadonlyArray<unknown>
         | ReadonlyRecord<string, ReadonlyArray<unknown>>
@@ -199,51 +236,73 @@ export const Service = <Self>() =>
       readonly headers?: Headers.Input | undefined
     }>()(
       Effect.fnUntraced(function*({ headers, payload, reactivityKeys }) {
-        const client = yield* self
-        const effect = client(tag, payload, { headers } as any)
+        const client = yield* service
+        const effect = callEffect(client, tag, payload, headers)
         return yield* (reactivityKeys
-          ? Reactivity.mutation(effect, reactivityKeys) as Effect.Effect<any>
-          : effect as any as Effect.Effect<any>)
-      }),
-    ).pipe(
-      Atom.serializable({
-        key: `AtomRpc:mutation:${tag}`,
-        schema: AsyncResult.Schema({
-          success: rpc.successSchema,
-          error: makeErrorSchema(rpc),
-        }) as any,
+          ? Reactivity.mutation(effect, reactivityKeys)
+          : effect)
       }),
     )
-  }) as any
+    return Atom.serializable(fnAtom, {
+      key: `AtomRpc:mutation:${tag}`,
+      schema: resultSchema(rpc.successSchema, makeErrorSchema(rpc)),
+    })
+  })
+
+  type MutationReturn<Tag extends Rpc.Tag<Rpcs>> = Rpc.ExtractTag<Rpcs, Tag> extends Rpc.Rpc<
+    infer _Tag,
+    infer _Payload,
+    infer _Success,
+    infer _Error,
+    infer _Middleware,
+    infer _Requires
+  > ? [_Success] extends [RpcSchema.Stream<infer _A, infer _E>] ? never
+    : Atom.AtomResultFn<
+      {
+        readonly payload: Rpc.PayloadConstructor<Rpc.ExtractTag<Rpcs, Tag>>
+        readonly reactivityKeys?:
+          | ReadonlyArray<unknown>
+          | ReadonlyRecord<string, ReadonlyArray<unknown>>
+          | undefined
+        readonly headers?: Headers.Input | undefined
+      },
+      _Success['Type'],
+      _Error['Type'] | RpcClientError | _Middleware['error']['Type']
+    >
+    : never
+
+  const mutation = <Tag extends Rpc.Tag<Rpcs>>(arg: Tag): MutationReturn<Tag> =>
+    mutationFamily(arg) as Atom.AtomResultFn<
+      { readonly payload: unknown },
+      unknown,
+      unknown
+    > as MutationReturn<Tag>
 
   const queryFamily = Atom.family(
-    (key: QueryKey) => {
+    (key: QueryKey<Rpcs>) => {
       const { headers, payload, reactivityKeys, tag, timeToLive } = key
-      const rpc = options.group.requests.get(tag)! as any as Rpc.AnyWithProps
+      const rpc = getRpc(tag)
       const isStream = RpcSchema.isStreamSchema(rpc.successSchema)
       let atom = isStream
-        ? self.runtime.pull(
+        ? runtime.pull(
           Stream.unwrap(
-            self.use((client) =>
+            service.use((client) =>
               Effect.succeed(
-                client(tag, payload, { headers } as any) as any,
+                callStream(client, tag, payload, headers),
               )
             ),
           ),
         )
-        : self.runtime.atom(
-          self.use((client) => client(tag, payload, { headers } as any)) as any,
+        : runtime.atom(
+          service.use((client) => callEffect(client, tag, payload, headers)),
         )
       if (reactivityKeys) {
-        atom = self.runtime.factory.withReactivity(reactivityKeys)(atom)
+        atom = runtime.factory.withReactivity(reactivityKeys)(atom)
       }
       if (!isStream && key.serializationKey) {
         atom = Atom.serializable(atom, {
           key: `AtomRpc:${key.tag}:${key.serializationKey}`,
-          schema: AsyncResult.Schema({
-            success: rpc.successSchema,
-            error: makeErrorSchema(rpc),
-          }) as any,
+          schema: resultSchema(rpc.successSchema, makeErrorSchema(rpc)),
         })
       }
       if (timeToLive) {
@@ -255,7 +314,28 @@ export const Service = <Self>() =>
     },
   )
 
-  self.query = <Tag extends Rpc.Tag<Rpcs>>(
+  type QueryReturn<Tag extends Rpc.Tag<Rpcs>> = Rpc.ExtractTag<Rpcs, Tag> extends Rpc.Rpc<
+    infer _Tag,
+    infer _Payload,
+    infer _Success,
+    infer _Error,
+    infer _Middleware
+  > ? [_Success] extends [RpcSchema.Stream<infer _A, infer _E>] ? Atom.Writable<
+        Atom.PullResult<
+          _A['Type'],
+          _E['Type'] | _Error['Type'] | RpcClientError | _Middleware['error']['Type']
+        >,
+        void
+      >
+    : Atom.Atom<
+      AsyncResult.Result<
+        _Success['Type'],
+        _Error['Type'] | RpcClientError | _Middleware['error']['Type']
+      >
+    >
+    : never
+
+  const query = <Tag extends Rpc.Tag<Rpcs>>(
     tag: Tag,
     payload: Rpc.PayloadConstructor<Rpc.ExtractTag<Rpcs, Tag>>,
     options?: {
@@ -267,8 +347,8 @@ export const Service = <Self>() =>
       readonly timeToLive?: Duration.Input | undefined
       readonly serializationKey?: string | undefined
     },
-  ) => {
-    const key: QueryKey = {
+  ): QueryReturn<Tag> => {
+    const key: QueryKey<Rpcs> = {
       tag,
       payload,
       headers: options?.headers
@@ -280,15 +360,21 @@ export const Service = <Self>() =>
         : undefined,
       serializationKey: options?.serializationKey,
     }
-    return queryFamily(key) as any
+    return queryFamily(key) as QueryReturn<Tag>
   }
+
+  const self: Mutable<AtomRpcClient<Self, Id, Rpcs>> = Object.assign(service, {
+    runtime,
+    mutation,
+    query,
+  })
 
   return self as AtomRpcClient<Self, Id, Rpcs>
 }
 
-interface QueryKey {
-  tag: string
-  payload: any
+interface QueryKey<Rpcs extends Rpc.Any> {
+  tag: Rpc.Tag<Rpcs>
+  payload: unknown
   headers: Headers.Headers | undefined
   reactivityKeys:
     | ReadonlyArray<unknown>

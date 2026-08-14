@@ -10,6 +10,7 @@
  * @since 4.0.0
  */
 import * as Equal from 'effect/Equal'
+import type { Equal as EqualType } from 'effect/Equal'
 import * as Hash from 'effect/Hash'
 
 /**
@@ -40,7 +41,7 @@ export const TypeId: TypeId = '~effect/reactivity/AtomRef'
  * @category models
  * @since 4.0.0
  */
-export interface ReadonlyRef<A> extends Equal.Equal {
+export interface ReadonlyRef<A> extends EqualType {
   readonly [TypeId]: TypeId
   readonly key: string
   readonly value: A
@@ -246,7 +247,7 @@ class PropRefImpl<A, K extends keyof A> implements AtomRef<A[K]> {
     return Hash.hash(this.value)
   }
   get value() {
-    if (this.parent.value && this._prop in (this.parent.value as any)) {
+    if (this.parent.value && this._prop in (this.parent.value as object)) {
       this.previous = this.parent.value[this._prop]
     }
     return this.previous
@@ -254,7 +255,7 @@ class PropRefImpl<A, K extends keyof A> implements AtomRef<A[K]> {
   subscribe(f: (a: A[K]) => void): () => void {
     let previous = this.value
     return this.parent.subscribe((a) => {
-      if (!a || !(this._prop in (a as any))) {
+      if (!a || !(this._prop in (a as object))) {
         return
       }
       const next = a[this._prop]
@@ -309,11 +310,14 @@ class CollectionImpl<A> extends ReadonlyRefImpl<Array<AtomRef<A>>> implements Co
 
   makeRef(value: A) {
     const ref = new AtomRefImpl(value)
+    let proxy!: AtomRef<A>
     const notify = (value: A) => {
       ref.notify(value)
-      this.notify(this.value)
+      if (this.value.includes(proxy)) {
+        this.notify(this.value)
+      }
     }
-    return new Proxy(ref, {
+    proxy = new Proxy(ref, {
       get(target, p, _receiver) {
         if (p === 'notify') {
           return notify
@@ -321,6 +325,7 @@ class CollectionImpl<A> extends ReadonlyRefImpl<Array<AtomRef<A>>> implements Co
         return target[p as keyof AtomRef<A>]
       },
     })
+    return proxy
   }
 
   push(item: A) {

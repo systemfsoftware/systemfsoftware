@@ -2,6 +2,11 @@ import { defineConfig } from 'oxlint'
 
 // Vendored fork: effect documents with @category/@since/@internal; teach the tag checker those tags.
 export default defineConfig({
+  categories: {
+    correctness: 'error',
+    perf: 'error',
+  },
+
   plugins: ['typescript', 'import', 'jsdoc', 'unicorn', 'oxc'],
   rules: {
     'import/no-cycle': 'warn',

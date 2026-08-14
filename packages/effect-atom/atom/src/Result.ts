@@ -371,12 +371,8 @@ export const waiting = <R extends Result<any, any>>(self: R, options?: {
   if (self.waiting) {
     return options?.touch ? touch(self) : self
   }
-  const result = Object.assign(Object.create(ResultProto), self)
-  result.waiting = true
-  if (options?.touch && isSuccess(result)) {
-    ;(result as any).timestamp = Date.now()
-  }
-  return result
+  const result = Object.assign(Object.create(ResultProto), self, { waiting: true })
+  return options?.touch ? touch(result) : result
 }
 
 /**
@@ -402,12 +398,13 @@ export const touch = <A extends Result<any, any>>(result: A): A => {
 export const replacePrevious = <R extends Result<any, any>, XE, A>(
   self: R,
   previous: Option.Option<Result<A, XE>>,
-): With<R, A, Result.Failure<R>> => {
-  if (self._tag === 'Failure') {
-    return failureWithPrevious(self.cause, { previous, waiting: self.waiting }) as any
-  }
-  return self as any
-}
+): With<R, A, Result.Failure<R>> => replacePreviousImpl(self, previous) as With<R, A, Result.Failure<R>>
+
+const replacePreviousImpl = (
+  self: Result<any, any>,
+  previous: Option.Option<Result<any, any>>,
+): Result<any, any> =>
+  self._tag === 'Failure' ? failureWithPrevious(self.cause, { previous, waiting: self.waiting }) : self
 
 /**
  * Returns the current success value, or the previous success value stored in a failure, as an `Option`.
@@ -468,7 +465,10 @@ export const error = <A, E>(self: Result<A, E>): Option.Option<E> =>
  * @category combinators
  * @since 4.0.0
  */
-export const toExit = <A, E>(
+export const toExit: {
+  <A, E>(self: Success<A, E> | Failure<A, E>): Exit.Exit<A, E>
+  <A, E>(self: Result<A, E>): Exit.Exit<A, E | Cause.NoSuchElementError>
+} = <A, E>(
   self: Result<A, E>,
 ): Exit.Exit<A, E | Cause.NoSuchElementError> => {
   switch (self._tag) {
@@ -496,7 +496,7 @@ export const map: {
 } = dual(2, <E, A, B>(self: Result<A, E>, f: (a: A) => B): Result<B, E> => {
   switch (self._tag) {
     case 'Initial':
-      return self as any as Result<B, E>
+      return initial(self.waiting)
     case 'Failure':
       return failure(self.cause, {
         previousSuccess: Option.map(self.previousSuccess, (s) => success(f(s.value), s)),
@@ -536,7 +536,7 @@ export const flatMap: {
   ): Result<B, E | E2> => {
     switch (self._tag) {
       case 'Initial':
-        return self as any as Result<B, E>
+        return initial(self.waiting)
       case 'Failure':
         return failure<B, E | E2>(self.cause, {
           previousSuccess: Option.flatMap(self.previousSuccess, (s) => {
@@ -672,43 +672,60 @@ export const matchWithWaiting: {
  * @category combinators
  * @since 4.0.0
  */
-export const all = <const Arg extends Iterable<any> | Record<string, any>>(
-  results: Arg,
-): Result<
-  [Arg] extends [ReadonlyArray<any>] ? {
+type AllSuccess<Arg> = [Arg] extends [ReadonlyArray<any>] ? {
+    -readonly [K in keyof Arg]: [Arg[K]] extends [Result<infer _A, infer _E>] ? _A : Arg[K]
+  }
+  : [Arg] extends [Iterable<infer _A>] ? _A extends Result<infer _AA, infer _E> ? _AA : _A
+  : [Arg] extends [Record<string, any>] ? {
       -readonly [K in keyof Arg]: [Arg[K]] extends [Result<infer _A, infer _E>] ? _A : Arg[K]
     }
-    : [Arg] extends [Iterable<infer _A>] ? _A extends Result<infer _AA, infer _E> ? _AA : _A
-    : [Arg] extends [Record<string, any>] ? {
-        -readonly [K in keyof Arg]: [Arg[K]] extends [Result<infer _A, infer _E>] ? _A : Arg[K]
-      }
-    : never,
-  [Arg] extends [ReadonlyArray<any>] ? Result.Failure<Arg[number]>
-    : [Arg] extends [Iterable<infer _A>] ? Result.Failure<_A>
-    : [Arg] extends [Record<string, any>] ? Result.Failure<Arg[keyof Arg]>
-    : never
-> => {
-  const isIter = isIterable(results)
-  const entries = isIter
-    ? Array.from(results, (result, i) => [i, result] as const)
-    : Object.entries(results)
-  const successes: any = isIter ? [] : {}
+  : never
+
+type AllError<Arg> = [Arg] extends [ReadonlyArray<any>] ? Result.Failure<Arg[number]>
+  : [Arg] extends [Iterable<infer _A>] ? Result.Failure<_A>
+  : [Arg] extends [Record<string, any>] ? Result.Failure<Arg[keyof Arg]>
+  : never
+
+export const all = <const Arg extends Iterable<any> | Record<string, any>>(
+  results: Arg,
+): Result<AllSuccess<Arg>, AllError<Arg>> => allImpl(results) as Result<AllSuccess<Arg>, AllError<Arg>>
+
+const allImpl = (results: Iterable<any> | Record<string, any>): Result<unknown, unknown> => {
   let waiting = false
-  for (let i = 0; i < entries.length; i++) {
-    const entry = entries[i]!
-    const [key, result] = entry
-    if (!isResult(result)) {
-      ;(successes as any)[key] = result
-      continue
-    } else if (!isSuccess(result)) {
-      return result as any
+  if (isIterable(results)) {
+    const list = Array.from(results)
+    const successes: Array<unknown> = []
+    for (let i = 0; i < list.length; i++) {
+      const result = list[i]!
+      if (!isResult(result)) {
+        successes[i] = result
+        continue
+      }
+      if (!isSuccess(result)) {
+        return result
+      }
+      successes[i] = result.value
+      if (result.waiting) {
+        waiting = true
+      }
     }
-    ;(successes as any)[key] = result.value
+    return success(successes, { waiting })
+  }
+  const successes: Record<string, unknown> = {}
+  for (const [key, result] of Object.entries(results)) {
+    if (!isResult(result)) {
+      successes[key] = result
+      continue
+    }
+    if (!isSuccess(result)) {
+      return result
+    }
+    successes[key] = result.value
     if (result.waiting) {
       waiting = true
     }
   }
-  return success(successes, { waiting }) as any
+  return success(successes, { waiting })
 }
 
 /**
@@ -717,13 +734,21 @@ export const all = <const Arg extends Iterable<any> | Record<string, any>>(
  * @category constructors
  * @since 4.0.0
  */
-export const builder = <A extends Result<any, any>>(self: A): Builder<
+type BuilderFor<A extends Result<any, any>> = Builder<
   never,
   A extends Success<infer _A, infer _E> ? _A : never,
   A extends Failure<infer _A, infer _E> ? _E : never,
   A extends Initial<infer _A, infer _E> ? true : never,
   A extends Failure<infer _A, infer _E> ? Defect | Interrupt : never
-> => new BuilderImpl(self) as any
+>
+
+export const builder = <A extends Result<any, any>>(self: A): BuilderFor<A> => {
+  // BuilderImpl is structurally compatible with Builder for any concrete A,
+  // but the conditional members of Builder cannot be verified while A is
+  // unresolved — assert the boundary once, here.
+  const built: unknown = new BuilderImpl(self)
+  return built as BuilderFor<A>
+}
 
 /**
  * Type marker used by `Builder` to track whether defect failures still need to be handled.
@@ -812,7 +837,7 @@ class BuilderImpl<Out, A, E> {
     this.result = result
   }
   readonly result: Result<A, E>
-  public output = Option.none<Out>()
+  private output: Option.Option<unknown> = Option.none()
 
   when<B extends Result<A, E>, C>(
     refinement: Refinement<Result<A, E>, B>,
@@ -829,7 +854,7 @@ class BuilderImpl<Out, A, E> {
     if (Option.isNone(this.output) && refinement(this.result)) {
       const b = f(this.result)
       if (Option.isSome(b)) {
-        ;(this as any).output = b
+        this.output = b
       }
     }
     return this
@@ -860,7 +885,7 @@ class BuilderImpl<Out, A, E> {
   }
 
   onError<B>(f: (error: E, result: Failure<A, E>) => B): BuilderImpl<Out | B, A, never> {
-    return this.onErrorIf(constTrue, f) as any
+    return this.onErrorIf(constTrue, f) as BuilderImpl<Out | B, A, never>
   }
 
   onErrorIf<C, B extends E = E>(
@@ -881,7 +906,7 @@ class BuilderImpl<Out, A, E> {
     return this.onErrorIf(
       (e) => hasProperty(e, '_tag') && (Array.isArray(tag) ? tag.includes(e._tag) : e._tag === tag),
       f,
-    ) as any
+    ) as BuilderImpl<Out | B, A, Types.ExcludeTag<E, any>>
   }
 
   onDefect<B>(f: (defect: unknown, result: Failure<A, E>) => B): BuilderImpl<Out | B, A, E> {
@@ -899,16 +924,16 @@ class BuilderImpl<Out, A, E> {
   }
 
   orElse<B>(orElse: LazyArg<B>): Out | B {
-    return Option.getOrElse(this.output, orElse)
+    return Option.getOrElse(this.output, orElse) as Out | B
   }
 
   orNull(): Out | null {
-    return Option.getOrNull(this.output)
+    return Option.getOrNull(this.output) as Out | null
   }
 
   render(): Out | null {
     if (Option.isSome(this.output)) {
-      return this.output.value
+      return this.output.value as Out
     } else if (isFailure(this.result)) {
       throw Cause.squash(this.result.cause)
     }
@@ -955,13 +980,13 @@ export const Schema = <
     readonly error?: E | undefined
   },
 ): Schema<A, E> => {
-  const success_: A = options.success ?? Schema_.Never as any
-  const error: E = options.error ?? Schema_.Never as any
+  const success_ = options.success ?? Schema_.Never
+  const error = options.error ?? Schema_.Never
   const schema = Schema_.declareConstructor<
     Result<A['Type'], E['Type']>,
     Result<A['Encoded'], E['Encoded']>
   >()(
-    [success_, Schema_.Cause(error, Schema_.Defect())],
+    [success_ as A, Schema_.Cause(error as E, Schema_.Defect())],
     ([value, cause]) => (input, ast, options) => {
       if (!isResult(input)) {
         return Effect.fail(new SchemaIssue.InvalidType(ast, input, options))
@@ -1071,6 +1096,32 @@ export const Schema = <
         )
       },
       toEquivalence: Equal.asEquivalence,
+      // The wire codec is JSON-based: an `undefined` defect — at any depth —
+      // does not survive it. The schema's input space is therefore the
+      // wire-representable subset: Fail of the error schema, or Die of a JSON
+      // value.
+      toArbitrary: ([value, _cause]) => (fc) =>
+        fc.oneof(
+          fc.record({
+            value: value.arbitrary,
+            waiting: fc.boolean(),
+            timestamp: fc.nat(),
+          }).map((r) => success(r.value, { waiting: r.waiting, timestamp: r.timestamp })),
+          fc.record({
+            cause: fc.oneof(
+              Schema_.toArbitrary(error)(fc).map((e) => Cause.fail(e)),
+              fc.jsonValue().map((d) => Cause.die(d)),
+            ),
+            waiting: fc.boolean(),
+            previous: fc.option(value.arbitrary, { nil: undefined }),
+          }).map((r) =>
+            failure(r.cause, {
+              previousSuccess: r.previous === undefined ? Option.none() : Option.some(success(r.previous)),
+              waiting: r.waiting,
+            })
+          ),
+          fc.boolean().map((waiting) => initial(waiting)),
+        ),
       toFormatter: ([value, cause]) => (t) => {
         switch (t._tag) {
           case 'Success':
@@ -1084,7 +1135,7 @@ export const Schema = <
     },
   )
   return Object.assign(schema, {
-    success: success_,
-    error,
+    success: success_ as A,
+    error: error as E,
   })
 }

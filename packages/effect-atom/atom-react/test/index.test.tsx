@@ -1,4 +1,3 @@
-// <reference types="@testing-library/jest-dom" />
 import * as Atom from '@systemfsoftware/effect-atom/Atom'
 import * as Hydration from '@systemfsoftware/effect-atom/Hydration'
 import * as AtomRegistry from '@systemfsoftware/effect-atom/Registry'
@@ -8,7 +7,7 @@ import { Cause, Context, Effect, Latch, Layer } from 'effect'
 import * as Schema from 'effect/Schema'
 import * as React from 'react'
 import { Suspense } from 'react'
-import { renderToString } from 'react-dom/server'
+import { renderToString } from 'react-dom/server.browser'
 import { ErrorBoundary } from 'react-error-boundary'
 import { beforeEach, describe, expect, it, test, vi } from 'vitest'
 import { HydrationBoundary, RegistryContext, RegistryProvider, useAtomSuspense, useAtomValue } from '../src/index.js'
@@ -22,7 +21,7 @@ describe('atom-react', () => {
   })
 
   describe('runtime', () => {
-    test('can inject test layers', () => {
+    test('can inject test layers', async () => {
       class TheNumber extends Context.Service<TheNumber>()('TheNumber', {
         make: Effect.succeed({ n: 42 as number }),
       }) {
@@ -49,12 +48,12 @@ describe('atom-react', () => {
         </RegistryProvider>,
       )
 
-      expect(screen.getByTestId('value')).toHaveTextContent('69')
+      await expect.element(screen.getByTestId('value')).toHaveTextContent('69')
     })
   })
 
   describe('useAtomValue', () => {
-    test('should read value from simple Atom', () => {
+    test('should read value from simple Atom', async () => {
       const atom = Atom.make(42)
 
       function TestComponent() {
@@ -64,10 +63,10 @@ describe('atom-react', () => {
 
       render(<TestComponent />)
 
-      expect(screen.getByTestId('value')).toHaveTextContent('42')
+      await expect.element(screen.getByTestId('value')).toHaveTextContent('42')
     })
 
-    test('should read value with transform function', () => {
+    test('should read value with transform function', async () => {
       const atom = Atom.make(42)
 
       function TestComponent() {
@@ -77,7 +76,7 @@ describe('atom-react', () => {
 
       render(<TestComponent />)
 
-      expect(screen.getByTestId('value')).toHaveTextContent('84')
+      await expect.element(screen.getByTestId('value')).toHaveTextContent('84')
     })
 
     test('should update when Atom value changes', async () => {
@@ -94,18 +93,18 @@ describe('atom-react', () => {
         </RegistryContext.Provider>,
       )
 
-      expect(screen.getByTestId('value')).toHaveTextContent('initial')
+      await expect.element(screen.getByTestId('value')).toHaveTextContent('initial')
 
       act(() => {
         registry.set(atom, 'updated')
       })
 
-      await waitFor(() => {
-        expect(screen.getByTestId('value')).toHaveTextContent('updated')
+      await waitFor(async () => {
+        await expect.element(screen.getByTestId('value')).toHaveTextContent('updated')
       })
     })
 
-    test('should work with computed Atom', () => {
+    test('should work with computed Atom', async () => {
       const baseAtom = Atom.make(10)
       const computedAtom = Atom.make((get) => get(baseAtom) * 2)
 
@@ -116,10 +115,10 @@ describe('atom-react', () => {
 
       render(<TestComponent />)
 
-      expect(screen.getByTestId('value')).toHaveTextContent('20')
+      await expect.element(screen.getByTestId('value')).toHaveTextContent('20')
     })
 
-    test('suspense success', () => {
+    test('suspense success', async () => {
       const atom = Atom.make(Effect.never)
 
       function TestComponent() {
@@ -133,7 +132,7 @@ describe('atom-react', () => {
         </Suspense>,
       )
 
-      expect(screen.getByTestId('loading')).toBeInTheDocument()
+      await expect.element(screen.getByTestId('loading')).toBeInTheDocument()
     })
 
     test('suspense subscriptions are isolated per registry', async () => {
@@ -165,23 +164,23 @@ describe('atom-react', () => {
         secondRegistry.set(atom, AsyncResult.success('second'))
       })
 
-      await waitFor(() => {
-        expect(screen.getByTestId('second-value')).toHaveTextContent('second')
+      await waitFor(async () => {
+        await expect.element(screen.getByTestId('second-value')).toHaveTextContent('second')
       })
-      expect(screen.getByTestId('first-loading')).toBeInTheDocument()
+      await expect.element(screen.getByTestId('first-loading')).toBeInTheDocument()
 
       act(() => {
         firstRegistry.set(atom, AsyncResult.success('first'))
       })
 
-      await waitFor(() => {
-        expect(screen.getByTestId('first-value')).toHaveTextContent('first')
+      await waitFor(async () => {
+        await expect.element(screen.getByTestId('first-value')).toHaveTextContent('first')
       })
     })
   })
 
   describe('ScopedAtom', () => {
-    test('throws when used outside Provider', () => {
+    test('throws when used outside Provider', async () => {
       const counter = ScopedAtom.make(() => Atom.make(0))
 
       function TestComponent() {
@@ -223,14 +222,14 @@ describe('atom-react', () => {
         </div>,
       )
 
-      await waitFor(() => {
+      await waitFor(async () => {
         const values = screen.getAllByTestId('value')
-        expect(values[0]).toHaveTextContent('1')
-        expect(values[1]).toHaveTextContent('2')
+        await expect.element(values[0]).toHaveTextContent('1')
+        await expect.element(values[1]).toHaveTextContent('2')
       })
     })
 
-    test('input factory uses provider value once', () => {
+    test('input factory uses provider value once', async () => {
       const makeAtom = vi.fn((value: number) => Atom.make(value))
       const scoped = ScopedAtom.make(makeAtom)
 
@@ -246,7 +245,7 @@ describe('atom-react', () => {
         </scoped.Provider>,
       )
 
-      expect(screen.getByTestId('value')).toHaveTextContent('10')
+      await expect.element(screen.getByTestId('value')).toHaveTextContent('10')
       expect(makeAtom).toHaveBeenCalledTimes(1)
       expect(makeAtom).toHaveBeenCalledWith(10)
 
@@ -256,7 +255,7 @@ describe('atom-react', () => {
         </scoped.Provider>,
       )
 
-      expect(screen.getByTestId('value')).toHaveTextContent('10')
+      await expect.element(screen.getByTestId('value')).toHaveTextContent('10')
       expect(makeAtom).toHaveBeenCalledTimes(1)
     })
 
@@ -285,13 +284,13 @@ describe('atom-react', () => {
         </scoped.Provider>,
       )
 
-      await waitFor(() => {
-        expect(screen.getByTestId('value')).toHaveTextContent('1')
+      await waitFor(async () => {
+        await expect.element(screen.getByTestId('value')).toHaveTextContent('1')
       })
     })
   })
 
-  test('suspense error', () => {
+  test('suspense error', async () => {
     const atom = Atom.make(Effect.fail(new Error('test')))
     function TestComponent() {
       const value = useAtomSuspense(atom).value
@@ -315,11 +314,11 @@ describe('atom-react', () => {
       },
     )
 
-    expect(screen.getByTestId('error')).toBeInTheDocument()
+    await expect.element(screen.getByTestId('error')).toBeInTheDocument()
   })
 
   describe('hydration', () => {
-    test('basic hydration with number atom and result atoms', () => {
+    test('basic hydration with number atom and result atoms', async () => {
       const atomBasic = Atom.make(0).pipe(
         Atom.serializable({
           key: 'basic',
@@ -404,13 +403,13 @@ describe('atom-react', () => {
         </RegistryContext.Provider>,
       )
 
-      expect(screen.getByTestId('hydration-basic-value')).toHaveTextContent('1')
-      expect(screen.getByTestId('value-1')).toHaveTextContent('123')
-      expect(screen.getByTestId('error-2')).toBeInTheDocument()
-      expect(screen.getByTestId('loading-3')).toBeInTheDocument()
+      await expect.element(screen.getByTestId('hydration-basic-value')).toHaveTextContent('1')
+      await expect.element(screen.getByTestId('value-1')).toHaveTextContent('123')
+      await expect.element(screen.getByTestId('error-2')).toBeInTheDocument()
+      await expect.element(screen.getByTestId('loading-3')).toBeInTheDocument()
     })
 
-    test('hydration streaming with resultPromise', async () => {
+    test('hydration streaming with deferred result', async () => {
       const latch = Latch.makeUnsafe()
       let start = 0
       let stop = 0
@@ -436,7 +435,7 @@ describe('atom-react', () => {
       expect(stop).toBe(0)
 
       const dehydratedState = Hydration.dehydrate(registry, {
-        encodeInitialAs: 'promise',
+        encodeInitialAs: 'deferred',
       })
 
       function TestComponent() {
@@ -453,7 +452,7 @@ describe('atom-react', () => {
         </RegistryContext.Provider>,
       )
 
-      expect(screen.getByTestId('value')).toHaveTextContent('Initial')
+      await expect.element(screen.getByTestId('value')).toHaveTextContent('Initial')
 
       act(() => {
         Effect.runSync(latch.open)
@@ -466,12 +465,12 @@ describe('atom-react', () => {
         expect(result.value).toBe(1)
       }
 
-      expect(screen.getByTestId('value')).toHaveTextContent('Success')
+      await expect.element(screen.getByTestId('value')).toHaveTextContent('Success')
       expect(start).toBe(1)
       expect(stop).toBe(1)
     })
 
-    test('HydrationBoundary splits new vs existing atoms', () => {
+    test('HydrationBoundary splits new vs existing atoms', async () => {
       const newAtom = Atom.make(0).pipe(
         Atom.serializable({ key: 'new-atom', schema: Schema.Number }),
       )
@@ -497,10 +496,10 @@ describe('atom-react', () => {
       )
 
       // New atom should be hydrated immediately during render
-      expect(screen.getByTestId('new')).toHaveTextContent('99')
+      await expect.element(screen.getByTestId('new')).toHaveTextContent('99')
     })
 
-    test('dehydrate with encodeInitialAs ignore (default)', () => {
+    test('dehydrate with encodeInitialAs ignore (default)', async () => {
       const atom = Atom.make(Effect.never as Effect.Effect<number>).pipe(
         Atom.serializable({
           key: 'initial-atom',
@@ -511,13 +510,12 @@ describe('atom-react', () => {
       registry.mount(atom)
 
       // Default behavior: Initial values should be ignored
-      const state = Hydration.dehydrate(registry)
-      const values = Hydration.toValues(state)
+      const values = Hydration.dehydrate(registry)
 
       expect(values.length).toBe(0)
     })
 
-    test('dehydrate with encodeInitialAs value-only', () => {
+    test('dehydrate with encodeInitialAs value-only', async () => {
       const atom = Atom.make(Effect.never as Effect.Effect<number>).pipe(
         Atom.serializable({
           key: 'initial-atom',
@@ -527,18 +525,17 @@ describe('atom-react', () => {
 
       registry.mount(atom)
 
-      // value-only: should encode the Initial value without a resultPromise
-      const state = Hydration.dehydrate(registry, {
+      // value-only: should encode the Initial value without a result Deferred
+      const values = Hydration.dehydrate(registry, {
         encodeInitialAs: 'value-only',
       })
-      const values = Hydration.toValues(state)
 
       expect(values.length).toBe(1)
       expect(values[0].key).toBe('initial-atom')
-      expect(values[0].resultPromise).toBeUndefined()
+      expect(values[0].result).toBeUndefined()
     })
 
-    test('serializable encode/decode survives JSON roundtrip (wire transfer)', () => {
+    test('serializable encode/decode survives JSON roundtrip (wire transfer)', async () => {
       const atom = Atom.make(0 as never).pipe(
         Atom.serializable({
           key: 'wire-test',
@@ -568,7 +565,7 @@ describe('atom-react', () => {
       }
     })
 
-    test('dehydrate + JSON roundtrip + hydrate works (SSR simulation)', () => {
+    test('dehydrate + JSON roundtrip + hydrate works (SSR simulation)', async () => {
       const atom = Atom.make(Effect.never as Effect.Effect<number>).pipe(
         Atom.serializable({
           key: 'ssr-wire',
@@ -605,10 +602,10 @@ describe('atom-react', () => {
         </RegistryContext.Provider>,
       )
 
-      expect(screen.getByTestId('ssr-wire-value')).toHaveTextContent('42')
+      await expect.element(screen.getByTestId('ssr-wire-value')).toHaveTextContent('42')
     })
 
-    test('empty state is a no-op', () => {
+    test('empty state is a no-op', async () => {
       function TestComponent() {
         return <div data-testid='hydration-empty-state'>OK</div>
       }
@@ -619,10 +616,10 @@ describe('atom-react', () => {
         </HydrationBoundary>,
       )
 
-      expect(screen.getByTestId('hydration-empty-state')).toHaveTextContent('OK')
+      await expect.element(screen.getByTestId('hydration-empty-state')).toHaveTextContent('OK')
     })
 
-    test('hydrate with no state is a no-op', () => {
+    test('hydrate with no state is a no-op', async () => {
       function TestComponent() {
         return <div data-testid='hydration-no-state'>OK</div>
       }
@@ -633,12 +630,12 @@ describe('atom-react', () => {
         </HydrationBoundary>,
       )
 
-      expect(screen.getByTestId('hydration-no-state')).toHaveTextContent('OK')
+      await expect.element(screen.getByTestId('hydration-no-state')).toHaveTextContent('OK')
     })
   })
 
   describe('SSR', () => {
-    it("should run atom's during SSR by default", () => {
+    it("should run atom's during SSR by default", async () => {
       const getCount = vi.fn(() => 0)
       const counterAtom = Atom.make(getCount)
 
@@ -659,11 +656,11 @@ describe('atom-react', () => {
       render(<App />)
 
       expect(getCount).toHaveBeenCalled()
-      expect(screen.getByText('0')).toBeInTheDocument()
+      await expect.element(screen.getByText('0')).toBeInTheDocument()
     })
   })
 
-  it('should not execute Atom effects during SSR when using withServerSnapshot', () => {
+  it('should not execute Atom effects during SSR when using withServerSnapshot', async () => {
     const mockFetchData = vi.fn(() => 0)
 
     const userDataAtom = Atom.make(Effect.sync(() => mockFetchData())).pipe(
@@ -688,6 +685,6 @@ describe('atom-react', () => {
     render(<App />)
 
     expect(mockFetchData).toHaveBeenCalled()
-    expect(screen.getByText('Success')).toBeInTheDocument()
+    await expect.element(screen.getByText('Success')).toBeInTheDocument()
   })
 })

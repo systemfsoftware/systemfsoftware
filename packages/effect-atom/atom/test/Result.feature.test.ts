@@ -1,53 +1,55 @@
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec-v4'
-import * as Effect from 'effect/Effect'
-import * as Exit from 'effect/Exit'
+import { Effect, Option } from 'effect'
 import { expect } from 'vitest'
+import * as Atom from '../src/Atom.js'
+import * as Registry from '../src/Registry.js'
 import * as Result from '../src/Result.js'
 
 const Feature = makeFeature({ it, layer })
 
-Feature('Result combinators and states for coverage')
+Feature('Keeping the last good answer on screen when a retry fails')
   .body(({ scenario }) => {
     scenario(
-      'success and failure roundtrip with map and flatMap',
+      'A page keeps showing the previous answer after a refresh fails',
       Gherkin.Do.pipe(
-        Given('success and failure results')('rs', () =>
-          Effect.sync(() => ({
-            s: Result.success(1),
-            f: Result.failure('e' as const),
-          }))),
-        When('map and flatMap are applied')('out', (s) =>
+        Given('a calculation that succeeds the first time and fails on every retry')('ctx', () =>
           Effect.sync(() => {
-            const m1 = Result.map(s.rs.s, (n) => n + 1)
-            const m2 = Result.map(s.rs.f, (n) => n)
-            const fm = Result.flatMap(s.rs.s, (n) => Result.success(n * 2))
-            return { m1, m2, fm }
+            let attempt = 0
+            const atom = Atom.make(Effect.suspend(() => {
+              attempt++
+              return attempt === 1 ? Effect.succeed(10) : Effect.fail('server unavailable' as const)
+            }))
+            const page = Registry.make()
+            return { page, atom }
           })),
-        Then('shapes are correct')((s) => {
-          expect(Result.isSuccess(s.out.m1)).toBe(true)
-          expect(Result.isFailure(s.out.m2)).toBe(true)
-          expect(Result.isSuccess(s.out.fm)).toBe(true)
+        When('the value is read, the page is refreshed, and the value is read again')(
+          'reading',
+          (s) =>
+            Effect.sync(() => {
+              s.ctx.page.get(s.ctx.atom)
+              s.ctx.page.refresh(s.ctx.atom)
+              return s.ctx.page.get(s.ctx.atom)
+            }),
+        ),
+        Then('the refresh reports a failure, but the previous answer is still remembered')((s) => {
+          expect(Result.isFailure(s.reading)).toBe(true)
+          expect(Result.isFailure(s.reading) && Option.isSome(s.reading.previousSuccess)).toBe(true)
         }),
       ),
     )
 
     scenario(
-      'fromExit and toExit roundtrips',
+      'A calculation that has never succeeded has no previous answer to fall back on',
       Gherkin.Do.pipe(
-        Given('exits')('es', () =>
-          Effect.sync(() => ({
-            ok: Exit.succeed(42),
-            fail: Exit.fail('bad'),
-          }))),
-        When('convert to Result and back')('rs', (s) =>
+        Given('a calculation that always fails')('ctx', () =>
           Effect.sync(() => {
-            const r1 = Result.fromExit(s.es.ok)
-            const r2 = Result.fromExit(s.es.fail)
-            return { r1, r2 }
+            const atom = Atom.make(Effect.fail('server unavailable' as const))
+            const page = Registry.make()
+            return { page, atom }
           })),
-        Then('preserve success/failure')((s) => {
-          expect(Result.isSuccess(s.rs.r1)).toBe(true)
-          expect(Result.isFailure(s.rs.r2)).toBe(true)
+        When('the value is read for the first time')('reading', (s) => Effect.sync(() => s.ctx.page.get(s.ctx.atom))),
+        Then('the failure carries no previous answer')((s) => {
+          expect(Result.isFailure(s.reading) && Option.isNone(s.reading.previousSuccess)).toBe(true)
         }),
       ),
     )

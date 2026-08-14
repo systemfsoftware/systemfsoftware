@@ -81,7 +81,7 @@ export const RegistryProvider = (options: {
 }) => {
   const ref = React.useRef<{
     readonly registry: AtomRegistry.Registry
-    timeout?: number | undefined
+    timeout?: ReturnType<typeof setTimeout> | undefined
   }>(null)
   if (ref.current === null) {
     ref.current = {
@@ -101,7 +101,7 @@ export const RegistryProvider = (options: {
       ref.current!.timeout = setTimeout(() => {
         ref.current?.registry.dispose()
         ref.current = null
-      }, 500) as any
+      }, 500)
     }
   }, [ref])
   return React.createElement(RegistryContext.Provider, { value: ref.current.registry }, options?.children)

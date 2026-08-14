@@ -72,6 +72,7 @@ export interface Registry {
   readonly refresh: <A>(atom: Atom.Atom<A>) => void
   readonly set: <R, W>(atom: Atom.Writable<R, W>, value: W) => void
   readonly setSerializable: (key: string, encoded: unknown) => void
+  readonly setInitialValue: <A>(atom: Atom.Atom<A>, value: A) => void
   readonly modify: <R, W, A>(atom: Atom.Writable<R, W>, f: (_: R) => [returnValue: A, nextValue: W]) => A
   readonly update: <R, W>(atom: Atom.Writable<R, W>, f: (_: R) => W) => void
   readonly subscribe: <A>(atom: Atom.Atom<A>, f: (_: A) => void, options?: {
@@ -268,11 +269,11 @@ export const getResult: {
     return Effect.callback((resume) => {
       const result = self.get(atom)
       if (result._tag !== 'Initial' && !(suspendOnWaiting && result.waiting)) {
-        return resume(Result.toExit(result) as any)
+        return resume(Result.toExit(result))
       }
       const cancel = self.subscribe(atom, (value) => {
         if (value._tag !== 'Initial' && !(suspendOnWaiting && value.waiting)) {
-          resume(Result.toExit(value) as any)
+          resume(Result.toExit(value))
           cancel()
         }
       })
@@ -347,18 +348,25 @@ class RegistryImpl implements Registry {
     }
     if (initialValues !== undefined) {
       for (const [atom, value] of initialValues) {
-        let target = atom
-        while (target.initialValueTarget) {
-          target = target.initialValueTarget
-        }
-        this.ensureNode(target).setInitialValue(value)
+        this.setInitialValue(atom, value)
       }
     }
   }
 
+  setInitialValue<A>(atom: Atom.Atom<A>, value: A): void {
+    let target = atom
+    while (target.initialValueTarget) {
+      target = target.initialValueTarget
+    }
+    this.ensureNode(target).setInitialValue(value)
+  }
+
   readonly nodes = new Map<Atom.Atom<any> | string, NodeImpl<any>>()
   readonly preloadedSerializable = new Map<string, unknown>()
-  readonly timeoutBuckets = new Map<number, readonly [nodes: Set<NodeImpl<any>>, handle: number]>()
+  readonly timeoutBuckets = new Map<
+    number,
+    readonly [nodes: Set<NodeImpl<any>>, handle: ReturnType<typeof setTimeout>]
+  >()
   readonly nodeTimeoutBucket = new Map<NodeImpl<any>, number>()
   disposed = false
 
@@ -375,7 +383,27 @@ class RegistryImpl implements Registry {
   }
 
   setSerializable(key: string, encoded: unknown): void {
-    this.preloadedSerializable.set(key, encoded)
+    const node = this.nodes.get(key)
+    if (node === undefined) {
+      this.preloadedSerializable.set(key, encoded)
+      return
+    }
+    this.applySerializableValue(node, encoded)
+  }
+
+  private applySerializableValue(node: NodeImpl<any>, encoded: unknown): void {
+    const atom = node.atom
+    if (!(SerializableTypeId in atom)) return
+    const decoded = (atom as Atom.Serializable<any>)[SerializableTypeId].decode(encoded)
+    let target: Atom.Atom<any> = atom
+    while (target.initialValueTarget) {
+      target = target.initialValueTarget
+    }
+    if (target === atom) {
+      node.setValue(decoded)
+    } else {
+      this.ensureNode(target).setInitialValue(decoded)
+    }
   }
 
   modify<R, W, A>(atom: Atom.Writable<R, W>, f: (_: R) => [returnValue: A, nextValue: W]): A {
@@ -435,23 +463,14 @@ class RegistryImpl implements Registry {
     if (typeof key === 'string' && this.preloadedSerializable.has(key)) {
       const encoded = this.preloadedSerializable.get(key)
       this.preloadedSerializable.delete(key)
-      const decoded = (atom as any as Atom.Serializable<any>)[SerializableTypeId].decode(encoded)
-      let target = atom
-      while (target.initialValueTarget) {
-        target = target.initialValueTarget
-      }
-      if (target === atom) {
-        node.setValue(decoded)
-      } else {
-        this.ensureNode(target).setInitialValue(decoded)
-      }
+      this.applySerializableValue(node, encoded)
     }
     return node
   }
 
   createNode<A>(atom: Atom.Atom<A>): NodeImpl<A> {
     if (this.disposed) {
-      throw new Error(`Cannot access Atom ${atom}: registry is disposed`)
+      throw new Error(`Cannot access Atom ${atom.label?.[0] ?? 'unknown'}: registry is disposed`)
     }
 
     if (!atom.keepAlive) {
@@ -516,7 +535,7 @@ class RegistryImpl implements Registry {
     if (entry === undefined) {
       entry = [
         new Set<NodeImpl<any>>(),
-        setTimeout(() => this.sweepBucket(bucket), bucket - Date.now()) as any,
+        setTimeout(() => this.sweepBucket(bucket), bucket - Date.now()),
       ]
       this.timeoutBuckets.set(bucket, entry)
     }
@@ -638,7 +657,7 @@ class NodeImpl<A> {
     })._tag !== 'Alive'
   }
 
-  _value: A = undefined as any
+  _value!: A
   value(): A {
     if ((this.state & NodeFlags.waitingForValue) !== 0) {
       this.lifetime = makeLifetime(this)
@@ -913,12 +932,12 @@ const LifetimeProto: Omit<Lifetime<any>, 'node' | 'finalizers' | 'disposed' | 'i
     return Effect.callback<A, E>((resume) => {
       const result = this.once(atom)
       if (result._tag !== 'Initial' && !(options?.suspendOnWaiting && result.waiting)) {
-        return resume(Result.toExit(result) as any)
+        return resume(Result.toExit(result))
       }
       const cancel = this.node.registry.subscribe(atom, (result) => {
         if (result._tag === 'Initial' || (options?.suspendOnWaiting && result.waiting)) return
         cancel()
-        resume(Result.toExit(result) as any)
+        resume(Result.toExit(result))
       }, { immediate: false })
       return Effect.sync(cancel)
     })
@@ -963,7 +982,7 @@ const LifetimeProto: Omit<Lifetime<any>, 'node' | 'finalizers' | 'disposed' | 'i
 
   self<A>(this: Lifetime<any>): Option.Option<A> {
     if (this.disposed) return Option.none()
-    return this.node.valueOption() as any
+    return this.node.valueOption()
   },
 
   refresh<A>(this: Lifetime<any>, atom: Atom.Atom<A>): void {
@@ -990,7 +1009,7 @@ const LifetimeProto: Omit<Lifetime<any>, 'node' | 'finalizers' | 'disposed' | 'i
 
   setSelf<A>(this: Lifetime<any>, a: A): void {
     if (this.disposed) return
-    this.node.setValue(a as any)
+    this.node.setValue(a)
   },
 
   set<R, W>(this: Lifetime<any>, atom: Atom.Writable<R, W>, value: W): void {
@@ -1054,7 +1073,7 @@ const makeLifetime = <A>(node: NodeImpl<A>): Lifetime<A> => {
   get.disposed = false
   get.finalizers = undefined
   get.node = node
-  return get as any
+  return get as Lifetime<A>
 }
 
 class WriteContextImpl<A> implements Atom.WriteContext<A> {

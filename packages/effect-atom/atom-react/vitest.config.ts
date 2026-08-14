@@ -1,4 +1,5 @@
 import { defineConfig, sharedConfig } from '@systemfsoftware/vitest-config'
+import { playwright } from '@vitest/browser-playwright'
 import * as path from 'node:path'
 
 export default defineConfig({
@@ -6,10 +7,16 @@ export default defineConfig({
   test: {
     ...sharedConfig.test,
     include: ['./test/**/*.test.{ts,tsx}'],
-    environment: 'jsdom',
     setupFiles: ['./vitest-setup.ts'],
+    browser: {
+      enabled: true,
+      provider: playwright(),
+      headless: true,
+      instances: [{ browser: 'chromium' }],
+    },
     coverage: {
       ...sharedConfig.test?.coverage,
+      provider: 'istanbul',
       include: ['src/**/*.{ts,tsx}'],
       exclude: ['src/**/*.test.{ts,tsx}'],
     },

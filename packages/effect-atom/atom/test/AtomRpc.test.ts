@@ -93,7 +93,7 @@ describe('AtomRpc', () => {
       yield* Effect.yieldNow
       yield* Effect.yieldNow
 
-      const dehydrated = Hydration.toValues(Hydration.dehydrate(registry))
+      const dehydrated = Hydration.dehydrate(registry)
       assert.lengthOf(dehydrated, 1)
       assert.strictEqual(dehydrated[0]!.key, key)
 

@@ -71,7 +71,7 @@ export interface ScopedAtom<A extends Atom.Atom<any>, Input = never> {
   use(): A
   Provider: [Input] extends [never] ? React.FC<{ readonly children?: React.ReactNode | undefined }>
     : React.FC<{ readonly children?: React.ReactNode | undefined; readonly value: Input }>
-  Context: React.Context<A>
+  Context: React.Context<A | undefined>
 }
 
 /**
@@ -126,7 +126,7 @@ export interface ScopedAtom<A extends Atom.Atom<any>, Input = never> {
 export const make = <A extends Atom.Atom<any>, Input = never>(
   f: (() => A) | ((input: Input) => A),
 ): ScopedAtom<A, Input> => {
-  const Context = React.createContext<A>(undefined as unknown as A)
+  const Context = React.createContext<A | undefined>(undefined)
 
   const use = (): A => {
     const atom = React.useContext(Context)
@@ -151,7 +151,7 @@ export const make = <A extends Atom.Atom<any>, Input = never>(
   return {
     [TypeId]: TypeId,
     use,
-    Provider: Provider as any,
+    Provider,
     Context,
   }
 }
