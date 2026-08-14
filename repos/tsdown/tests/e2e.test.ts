@@ -103,25 +103,6 @@ test('cjs default', async (context) => {
   })
 })
 
-test('cjs dts reexport', async (context) => {
-  const files = {
-    'index.ts': `export function hello(): void {
-      console.log('Hello!')
-    }`,
-  }
-  await testBuild({
-    context,
-    files,
-    options: {
-      entry: {
-        'folder/index': 'index.ts',
-      },
-      format: ['esm', 'cjs'],
-      dts: { cjsReexport: true },
-    },
-  })
-})
-
 test('fixed extension', async (context) => {
   const files = {
     'index.ts': `export default 10`,
@@ -155,53 +136,6 @@ test('custom extension', async (context) => {
       "index.some.mjs",
     ]
   `)
-})
-
-test('deprecated custom extension', async (context) => {
-  const files = {
-    'index.ts': `export default 10`,
-  }
-  const warn = vi.fn()
-  const { outputFiles } = await testBuild({
-    context,
-    files,
-    options: {
-      customLogger: {
-        level: 'info',
-        info: vi.fn(),
-        warn,
-        warnOnce: vi.fn(),
-        error: vi.fn(),
-        success: vi.fn(),
-        clearScreen: vi.fn(),
-      },
-      outExtension: () => ({ js: '.some.mjs' }),
-    },
-  })
-  expect(warn).toHaveBeenCalledWith(expect.stringContaining('outExtension'))
-  expect(outputFiles).toMatchInlineSnapshot(`
-    [
-      "index.some.mjs",
-    ]
-  `)
-})
-
-test('deprecated custom extension conflict', async (context) => {
-  const files = {
-    'index.ts': `export default 10`,
-  }
-  await expect(
-    testBuild({
-      context,
-      files,
-      options: {
-        outExtension: () => ({ js: '.old.mjs' }),
-        outExtensions: () => ({ js: '.new.mjs' }),
-      },
-    }),
-  ).rejects.toThrow(
-    '`outExtension` is deprecated. Cannot be used with `outExtensions`',
-  )
 })
 
 test('custom extension with empty string', async (context) => {
@@ -604,6 +538,43 @@ describe('deps', () => {
       )
       expect(pkg.inlinedDependencies).toBeUndefined()
     })
+
+    test('should not include inlined deps from configs without exports', async (context) => {
+      const { testDir } = await testBuild({
+        context,
+        files: {
+          ...node_modules,
+          'index.ts': `export { lib } from 'my-lib'`,
+          'standalone.ts': `import { lib } from 'my-lib'\nconsole.log(lib)`,
+          'package.json': JSON.stringify({
+            name: 'test-pkg',
+            version: '1.0.0',
+            dependencies: { 'my-lib': '1.2.3' },
+          }),
+          'tsdown.config.ts': `export default [
+          { entry: ['index.ts'], format: ['esm'], exports: true, dts: false },
+          {
+            entry: ['standalone.ts'],
+            format: ['cjs'],
+            outDir: 'dist/standalone',
+            dts: false,
+            deps: { alwaysBundle: [/.*/] },
+          },
+        ]`,
+        },
+        options: {
+          entry: undefined,
+          config: 'tsdown.config.ts',
+          dts: false,
+        },
+        snapshot: false,
+      })
+
+      const pkg = JSON.parse(
+        await readFile(path.join(testDir, 'package.json'), 'utf8'),
+      )
+      expect(pkg.inlinedDependencies).toBeUndefined()
+    })
   })
 })
 
@@ -724,7 +695,7 @@ test('resolve paths in tsconfig', async (context) => {
     context,
     files,
     options: {
-      dts: { oxc: true },
+      dts: { generator: 'oxc' },
       tsconfig: 'tsconfig.build.json',
     },
   })
@@ -1436,6 +1407,9 @@ describe('resolve dep subpath without exports field', () => {
           dependencies: { 'my-dep': '^1.0.0' },
         }),
       },
+      options: {
+        deps: { resolveDepSubpath: true },
+      },
     })
 
     expect(fileMap['index.mjs']).toContain('my-dep/functions/lt.js')
@@ -1494,96 +1468,8 @@ describe('resolve dep subpath without exports field', () => {
           dependencies: { 'my-dep': '^1.0.0' },
         }),
       },
-    })
-
-    expect(fileMap['index.mjs']).toContain('my-dep/folder/index.js')
-  })
-
-  test('skipNodeModulesBundle dep/file should resolve to dep/file.js', async (context) => {
-    const node_modules = {
-      'node_modules/my-dep/package.json': JSON.stringify({
-        name: 'my-dep',
-        version: '1.0.0',
-        main: 'index.js',
-      }),
-      'node_modules/my-dep/index.js': `export const main = 1`,
-      'node_modules/my-dep/functions/lt.js': `export const lt = () => {}`,
-    }
-
-    const { fileMap } = await testBuild({
-      context,
-      files: {
-        ...node_modules,
-        'index.ts': `export { lt } from 'my-dep/functions/lt'`,
-        'package.json': JSON.stringify({
-          name: 'test-pkg',
-          version: '1.0.0',
-        }),
-      },
       options: {
-        deps: { skipNodeModulesBundle: true },
-      },
-    })
-
-    expect(fileMap['index.mjs']).toContain('my-dep/functions/lt.js')
-  })
-
-  test('skipNodeModulesBundle should preserve dep/file when resolveDepSubpath is false', async (context) => {
-    const node_modules = {
-      'node_modules/my-dep/package.json': JSON.stringify({
-        name: 'my-dep',
-        version: '1.0.0',
-        main: 'index.js',
-      }),
-      'node_modules/my-dep/index.js': `export const main = 1`,
-      'node_modules/my-dep/functions/lt.js': `export const lt = () => {}`,
-    }
-
-    const { fileMap } = await testBuild({
-      context,
-      files: {
-        ...node_modules,
-        'index.ts': `export { lt } from 'my-dep/functions/lt'`,
-        'package.json': JSON.stringify({
-          name: 'test-pkg',
-          version: '1.0.0',
-        }),
-      },
-      options: {
-        deps: {
-          resolveDepSubpath: false,
-          skipNodeModulesBundle: true,
-        },
-      },
-    })
-
-    expect(fileMap['index.mjs']).toMatch(/from ["']my-dep\/functions\/lt["']/)
-    expect(fileMap['index.mjs']).not.toContain('my-dep/functions/lt.js')
-  })
-
-  test('skipNodeModulesBundle dep/folder should resolve to dep/folder/index.js', async (context) => {
-    const node_modules = {
-      'node_modules/my-dep/package.json': JSON.stringify({
-        name: 'my-dep',
-        version: '1.0.0',
-        main: 'index.js',
-      }),
-      'node_modules/my-dep/index.js': `export const main = 1`,
-      'node_modules/my-dep/folder/index.js': `export const folder = 42`,
-    }
-
-    const { fileMap } = await testBuild({
-      context,
-      files: {
-        ...node_modules,
-        'index.ts': `export { folder } from 'my-dep/folder'`,
-        'package.json': JSON.stringify({
-          name: 'test-pkg',
-          version: '1.0.0',
-        }),
-      },
-      options: {
-        deps: { skipNodeModulesBundle: true },
+        deps: { resolveDepSubpath: true },
       },
     })
 
