@@ -1,112 +1,130 @@
-# systemfsoftware — workspace invariants
+# AGENTS.md — Constitution Repository
 
-## Safety
+Single source of truth for [`CONSTITUTION.md`](CONSTITUTION.md) — the supreme design law of [System F Software](https://systemfsoftware.com). Consumer repos vendor via `git subtree` + symlink. This repo has no production code, no test suite, and no build step — it is a markdown document plus its governance tooling (commit validation, agent harness).
 
-```yaml
-- id: REPO-S5
-  title: NEVER put a shell cell in a mutation surface
-  do: mutate only pure decisions — `*.workflow.ts` in a cell package, the rule file in a lint plugin, `*.schema.ts` where generated laws do not already cover it
-  dont: add any shell-cell suffix (`*.executor.ts`, `*.kernel.ts`, `*.acl.ts`, `*.store.ts`, `*.handler.ts`, `*.middleware.ts`, `*.state.ts`, `*.adapter.ts`, `*.policy.ts`, `*.shape.ts`, `*.observer.ts`) to a `mutate` glob; leave `mutate` unset so the Stryker default sweeps every source file and auto-enrols each new cell
-  harm: wrong observer. The mutator asks "do the tests notice a changed decision?" — a shell cell decides nothing, so every mutant is equivalent or is killed by a composition test that was proving something else. The score certifies nothing and the package pays hours of runtime for it
-  check: `node scripts/guard-mutate-scope.mjs` exits 0, wired into `pnpm check:local`
+## Startup Workflow
 
-- id: REPO-S6
-  title: Enforcement for a published concern ships inside the published artifact
-  do: carry the rule in a published oxlint plugin or a published type signature, with the failing fixture in that package's own suite; declare a genuinely repo-local rule (workspace layout, release metadata, vendored trees) in the `scripts/guard-script-provenance.mjs` manifest
-  dont: enforce a doctrine we publish with a `scripts/*.mjs` gate, a `pnpm check` step, `CONSTITUTION.md`, or the wiki — a consumer installs packages, not this repository; read a doctrine artifact from a script, which promotes prose to a spec nobody maintains
-  harm: the rule binds one clone. Everywhere else the same doctrine arrives as prose in a skill, which is the channel restraints do not survive — the design looks enforced here and is advisory for every consumer
-  check: `pnpm check:script-provenance` exits 0. The judgement half stays with the reviewer: name the artifact a stranger installs that carries the rule. `scripts/`, `pnpm check`, `CONSTITUTION.md` and the wiki are not answers
+Before making changes:
 
-- id: REPO-S7
-  title: A gate earns its place, and the tenth one is not free
-  do: before adding an entry to the gate, name the mistake it prevents — a specific wrong thing that specifically happened here, in the form a leaf must earn its own existence — then retire or subsume something, or give the rule to a published artifact instead (`REPO-S6`); raise `GATE_BUDGET` only in its own commit, with the entry's technique class and the suite's resulting aggregate stated
-  dont: add an entry whose verdict depends on scheduler order, cache state, or which task finished first; gate a regex or substring scan over source and call it enforcement; raise `GATE_BUDGET` in the same commit as the entry that exceeded it
-  harm: for N entries each misfiring independently with probability p a clean run is blocked with probability 1-(1-p)^N, so affordability is N x p and never N — at 2% each, ten entries block 18% of clean runs and twenty block 33%, and the suite is waived long before anyone admits it. Two failures measured here on 2026-08-11 are what the prohibitions name: `//#check:project-references` read built declarations while declaring no dependency on any `build`, and reported 11 projects broken in one CI run and 37 clean in another on the same tree; and a guard arm shipped that morning produced its first false positive within hours, on the first real corpus it met. A gate that is green by luck is worse than none, because it teaches the team to re-run until it passes
-    check: `pnpm check:script-provenance` prints the gate-entry count against `GATE_BUDGET` and exits non-zero when the count exceeds it. The judgement half stays with the reviewer: whether the named mistake is a real event or a class of badness, and whether a technique the table calls a tripwire is being sold as a gate
-```
-
-- **REPO-S1** — `isolatedDeclarations` stays disabled in every tsconfig; it produces 153 compile errors in idiomatic Effect. Gate: `.claude/hooks/guard-protected-writes.ts`.
-- **REPO-S2** — never modify `minimumReleaseAgeExclude`; pin a young dependency tighter or wait out the 24h cutoff. Gate: `.claude/hooks/guard-protected-writes.ts`.
-- **REPO-S3** — `repos/` is a vendored subtree, read-only; amend upstream. `repos/AGENTS.md` is ours. Gate: `.claude/hooks/guard-protected-writes.ts`.
-- **REPO-S4** — never hand-edit `package.json#exports` or `publishConfig.exports` on a tsdown package; change `tsdown.config.ts`. Gate: `pnpm check:exports`.
-
-## Stack
-
-Not derivable from the manifests:
-
-- `pnpm --filter <pkg> <cmd>` from the root. Never `cd` into a package, never `npx`.
-- Lint is a per-package `oxlint.config.ts` extending `@systemfsoftware/oxlint-config`. Registration is not delivery — a rule reaches only the packages that opt in. Gate: `pnpm check:lint-coverage`, which also defines the production/tooling boundary. Never re-derive that boundary by hand.
-- Mutation runs on pure decisions only (`REPO-S5`), and fails when a `*.property.test.ts` kills no mutant nothing else kills. Opt out with `requireTestContribution: null` in the package's `stryker.config.json`, never by deleting a test.
-
-## Surface Classes
-
-| Surface              | Examples                                                                                                                        | Rule                                                                                                                                                                                 |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Evaluator**        | `scripts/guard-*.mjs`, `scripts/check-*.mjs`, `packages/stryker-js/mutation-run/src/test-contribution.ts`, `.github/workflows/` | Never change in the same commit as the work it judges. Its own commit, gate observed red before and green after, for the right reason.                                               |
-| **Doctrine**         | `CONSTITUTION.md`, `CONCEPTS.md`, every `AGENTS.md`, `wiki/`, `docs/solutions/`                                                 | Editable, but never an input to a gate. Enforced by `pnpm check:script-provenance`.                                                                                                  |
-| **Editable**         | Everything else, including `packages/*/`, `scripts/`, `docs/`, `tsdown.config.ts`                                               | Edit freely, including the rules that govern you. Never weaken a rule, threshold, budget or glob to make the current change pass; loosening needs its own commit and its own reason. |
-| **Human-controlled** | Merge to `main`, publish, deploy, destructive ops, credentials                                                                  | `REPO-P1`.                                                                                                                                                                           |
-
-## Directory Map
-
-Directories only; files are discovered with tools.
-
-| Directory             | What it is                                                                         | Governance                                                      |
-| --------------------- | ---------------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| `packages/`           | Workspace packages                                                                 | Root invariants plus a hook-delivered leaf                      |
-| `repos/`              | Vendored git subtrees, read-only                                                   | `REPO-S3`; registry in `subtrees.toml`                          |
-| `scripts/`            | Root guards, release and harness tooling                                           | Editable except the Evaluator scripts above                     |
-| `.github/`            | CI workflows and reusable actions                                                  | Evaluator                                                       |
-| `docs/`               | Solutions, plans, audits, decision records                                         | `REPO-E1`                                                       |
-| `docs/cell-taxonomy/` | Gitignored working spec of the cell taxonomy, absent from a fresh clone            | `REPO-W5`                                                       |
-| `omp/`                | OMP plugin packages                                                                | Leaf-governed                                                   |
-| `wiki/`               | Nested standalone repo (`software-wiki`), gitignored here to avoid double-tracking | `REPO-W4` here; its own root `AGENTS.md` governs work inside it |
-
-## Startup
-
-1. `pwd` — must be the monorepo root.
-2. `pnpm check:local` — repair a red baseline before adding scope.
-3. Confirm the active task from the task list; `git log --oneline -5` for recent intent.
+1. **Read this file** completely.
+2. **Read @CONSTITUTION.md** — every directive in there binds this repo too.
+3. **Confirm the active task** with the user or the agent's task list.
+4. **Review recent commits** with `git log --oneline -5`.
+5. **Ensure current branch is not `main`** — feature branches only. If on main, create one.
 
 ## Working Rules
 
-- **REPO-W2** — modify only files belonging to the active task. No unasked retries, validation, telemetry or refactors. Reducing accepted scope needs the user's consent. Gate: review — the reviewer names the active task each changed file belongs to.
-- **REPO-W4** — search the gitignored `wiki/` corpus before writing a plan, choosing between options, settling a design question, or asking the user one. Enter at its `manifest.md`, open at most five candidate slugs, stop as soon as one settles it, and read the per-claim Warrant table rather than the frontmatter band. Never cite a `wiki/` path in a plan, doc, commit or issue — the corpus does not ship with the clone. A nil result names the verbatim query and the corpus-scoped path it ran against, so anyone holding the corpus can re-run it and falsify the claim. Gate: `.claude/hooks/guard-protected-writes.ts` refuses a write under `docs/plans/` until a `-c wiki` query has run this session; it confirms a search happened, not that it was good.
-- **REPO-W5** _(temporary — delete when the taxonomy is folded into the published oxlint plugins and `CONSTITUTION.md`, or when the corpus is abandoned)_ — `docs/cell-taxonomy/` is the working specification of the cell taxonomy and the design authority for every cell decision; it is gitignored and absent from a fresh clone. Read `SPECIFICATION.md` before naming a cell suffix, splitting a module, or placing a test, and open a `references/` file only when that decision needs it. Construction is the griller: where a build contradicts the specification, enter the contradiction in `references/ledger.md` under that file's own protocol — never code around it, and never reword a rule to match what was just written. A sealed entry is retracted only by the owner, so a contradiction with one is surfaced to the user rather than resolved in the diff. Never cite a `docs/cell-taxonomy/` path in a plan, doc, commit, issue or published package; the corpus does not ship with the clone. Gate: review — the reviewer names the specification section the cell choice rests on, or the ledger entry recording where it failed.
-- **REPO-W6** — a claim about this repo is reported with the check that decided it, run this session: a `file:line`, a command's output, or a fixture observed red and then green. Two of these failures are silent and no gate reaches them. A generator produces exactly the declared input type of the function under test — one that carves out a domain no type or schema declares is testing an invention and passes forever. A capability or a rule asserted as blocking shows the call that failed or the clause reread this turn, never the inference that it would have. The rest is already mechanical and is not restated here: `no-assert-in-property` and `no-silent-return` reject a predicate that cannot fail, and `REPO-D1`'s mutation score rejects a test that kills nothing. Gate: review — for each claim the reviewer names the check that ran, and for each new arbitrary the declared type whose domain it reproduces.
-- **REPO-W7** — the repository is the subject under test, never the warrant. Observing what the code, a config, a lint rule or a sibling package does settles a question of fact — whether a gate fires, what a rule rejects, which cells a table names — and settles nothing about what ought to be. A design conclusion drawn from established practice, an installed rule, a shipped default or a prior commit is circular, and it reads as grounding, which is why it survives review. Theory governs: a design question is answered by derivation, and where derivation and the repository disagree the repository is wrong until the derivation is defeated by argument, never the reverse. The count of packages already doing something is not an argument, and neither is the age of the convention. Gate: review — the reviewer names the derivation each design decision rests on, and rejects any warrant whose only support is that the repo already does it.
-- **REPO-W8** — a choice that is costly to reverse is researched before it is made, never defaulted into: a framework, a protocol implementation, a wire format, a runtime boundary, or a dependency that will spread across modules. Establish what comparable projects actually ship by reading their manifests or their source, never by recalling it; name at least two candidates and why the losers lost; and confirm no maintained implementation exists before hand-rolling one. Record the candidates, the deciding criterion and the observation that would reverse the choice with the other decision records under `docs/`. Defaulting is the expensive failure precisely because it is quiet — the first plausible option compiles, passes, and reveals its ceiling only after everything depending on it is written, when replacing it is no longer a dependency swap. This is the outward-facing half of `REPO-W4`, which searches the corpus we hold; neither substitutes for the other. Gate: review — for each new dependency and each hand-rolled protocol in the diff, the reviewer names its record and the alternative it beat.
+- **One task at a time.** Finish before starting the next.
+- **Conventional commits required.** The commit-msg hook enforces `type(scope): description`. Run `git commit` through the hook — do not bypass with `--no-verify`.
+- **Verification required.** Run the verification commands before claiming done.
+- **Stay in scope.** Don't modify files unrelated to the task. Scope reduction requires explicit user approval.
+- **Leave clean state.** The next session must run verification immediately.
+
+## Amending the Constitution
+
+### Writing a rule
+
+A rule is a fenced YAML block carrying `id`, `title`, `gate`, `do`, `dont`, `harm`, `check`, and — only where wrong and right look alike — `example`, `scope`, or `layers`. Do not restate that list anywhere: `pnpm test` owns it, and rejects a missing field, an unknown one, or an unregistered `gate` value.
+
+### Minting an id
+
+A rule id is `CONST-<family><n>`. Pick the family letter from what the rule is **about**, never from the article it lands in — a family spans articles, which is why `CONST-P3` (purity) lives in Article II. The number is the next free one in that family: mint order, not a position.
+
+| letter | family | fires when you are |
+|---|---|---|
+| `G` | Governance | invoking the constitution, or resolving it against another document |
+| `E` | Enforcement | deciding how a principle is enforced, or claiming done |
+| `P` | Purity | writing or classifying a decision function |
+| `D` | Domain modelling | declaring a domain type |
+| `B` | Boundary | moving data or control between the core and the outside |
+| `T` | Testing | choosing, writing, or judging a test |
+| `N` | Naming & structure | placing or naming a module |
+| `W` | Work discipline | deviating mid-task — shrinking scope, skipping challenge, breaking a rule |
+| `S` | Subtraction | about to add code, copy a pattern, or patch a symptom |
+
+A one-member family is correct; never merge families to balance their sizes. A new letter must be added to `FAMILIES` in the validator in the same change — the gate rejects an unregistered one.
+
+### Changing an existing rule
+
+The identifier tracks the **obligation**, not the sentence. Ask: would an agent that complied with the old text still comply with the new one?
+
+| operation | identifier |
+|---|---|
+| moved to another article | keep — position is not identity |
+| reworded, same obligation | keep, however extensive the rewrite |
+| obligation narrowed or widened | new id; the old number stays vacant |
+| split in two | the part carrying the original obligation keeps the id |
+| merged from two | keep either id; the other number stays vacant |
+| deleted | the number stays vacant, forever |
+
+There is no retirement ledger and no backwards compatibility. Never renumber to close a gap: a gap is free, and a citation into one resolves to nothing — which is loud. A reused number resolves silently, to the wrong rule.
+
+This is gated rather than requested because the remaining defect is the quiet one — an id that survives while its rule changes underneath it. Of the surfaces citing an id, only a gate script fails loudly, so run the reassignment check below after any commit that re-scopes a rule.
+
+## Surface Classes
+
+| Surface | Files | Rule |
+|---|---|---|
+| **Locked** | `AGENTS.md`, `.husky/_/`, verification scripts | Read and propose changes; do not edit to make verification pass. |
+| **Editable** | `package.json`, `pnpm-lock.yaml`, `commitlint.config.cjs`, `.gitignore`, `.husky/` (hooks only, not `_/`) | Edit freely within the active task. |
+| **Human-controlled** | `CONSTITUTION.md`, `README.md`, merging to `main`, pushing, destructive ops | Propose changes; ask the user before acting. |
 
 ## Definition of Done
 
-- **REPO-D1** — target behaviour implemented and exercised, `pnpm check:local` run _after_ the last edit, and the work delivered as a pull request watched to green. Tree left restartable. Gate: `pnpm check:local` exits 0; `gh pr checks --watch --fail-fast` exits 0; and where the branch diff names a source file in a package carrying a `stryker.config.json`, `pnpm --filter <pkg> mutation` reports 100% on the changed pure-core files — CI's Mutation workflow is `continue-on-error`, so it never carries that verdict.
-- **REPO-D2** — commit, push a branch and open the PR with the session's commit-push-open-PR skill where one is installed, then watch the checks. `no checks reported` is the post-create registration race, not a failure: sleep and re-poll, never re-push to clear it — `cancel-in-progress: true` means a re-push cancels the run being awaited. Re-push only for a named failing check. Merging stays human (`REPO-P1`). Gate: `gh pr checks --watch --fail-fast` exits 0.
+A task is done only when ALL of the following are true:
 
-## Verification
+- [ ] Target changes are applied.
+- [ ] Verification commands ran and passed.
+- [ ] Commit uses conventional format (`type(scope): description`).
+- [ ] Evidence recorded via the runtime memory system and task list.
+- [ ] No dirty files left in the working tree.
 
-`pnpm check:local` is the agent's gate: `check:ci`'s task list minus `test:contract`. The contract lanes are `cache: false` and 85-92% of `check:ci`'s wall clock; they need a live container runtime, so a change they alone cover is unverified until the PR is green.
+## Verification Commands
 
-The `dist/`-reading root checks run in `gate:dist`, which builds in its own turbo invocation before it checks. A root task declares no dependency on any package's `build`, so sharing an invocation with the build it reads makes its verdict scheduler order rather than a fact about the tree.
+```bash
+pnpm test                          # schema, coverage, ids, families, dangling citations
+pnpm exec commitlint --from HEAD~1
+```
 
-- **REPO-A1** — run exactly `pnpm check:local`. No `--skip`, no `--grep`, no filter flags, no individual steps.
-- **REPO-A2** — local evidence from this session, after the last edit; CI evidence from a completed, non-cancelled run whose head SHA is the pushed commit. Never a prior session, never a run predating the last push. Gate: review — the reviewer confirms both.
-- **REPO-A3** — any failure blocks done, local or CI, including one that looks unrelated.
+After a commit that deletes, splits, merges, or re-scopes a rule — not after every edit — also run the reassignment check against the revision before it:
 
-## Release and Commits
+```bash
+pnpm test -- --against <rev>
+```
 
-- **REPO-R1** — every package is pre-1.0 ALPHA; API stability is never a design constraint. When a change is cleaner as a break, make the break; accept proposed breaks without resistance and do not wait for a major release. A compatibility objection is rejected unless it names a concrete in-repo consumer migration. Gate: `pnpm exec commitlint` accepts the `api!` marker and the `BREAKING CHANGE:` footer that record the break.
-- **REPO-R2** — a change to a publishable package (`packages/**`) ships with a `.changeset/` intent authored via `pnpm change --bump <none|patch|minor|major>`; use `--bump none` only for a genuinely non-releasable touch. Gate: the changeset check (`.github/workflows/changeset-check.yml`) fails a PR that touches a publishable package without an intent. A `none` on a behavior-visible change is the same silent non-release the gate exists to catch — review consumed `none` intents on the Release PR before merging.
-- **REPO-C1** — `type(scope): subject`, 72 characters or fewer. Gate: `pnpm exec commitlint --edit <msgfile>`.
-- **REPO-C2** — feat, fix, chore, build, ci, deps, docs, perf, refactor, revert, style, test. Config-only changes are not feat or fix. Gate: `pnpm exec commitlint`, run by the `commit-msg` hook on every commit touching a path outside the vendored trees.
+### Anti-Bypass Rules
 
-## Boundaries
+- Run the **full command**, not parts in isolation.
+- Evidence must be from the **current run**, not a prior session.
+- **Any failure blocks done.** Do not bypass with `--no-verify`.
+- Do not suppress, skip, or disable checks to make verification pass.
 
-- **REPO-P1** — ask before merging to `main`, publishing, deploying, destructive operations, or handling credentials. Unmechanizable: a hook able to decide it would already be the approval.
-- **REPO-M1** — each agent owns a disjoint file set. Isolate concurrent work in a git worktree rather than coordinating edits. Gate: review — the reviewer confirms no two agents claim the same file.
-- **REPO-E1** — read `docs/solutions/` before implementing or debugging in an area it documents; it holds solved problems filed with `module`, `tags` and `problem_type` frontmatter. Gate: review — the reviewer names the solution doc the change rests on, or states that none covers the area.
+### Hallucination Prevention
 
-## Instruction Hierarchy
+- **Read before edit:** before editing a file, read it in the current session. Do not edit from memory.
+- **Verify before claim:** before saying "done," the verification command must have run and its output recorded.
+- **Search before write:** before writing code that calls a library API, read the actual API surface. Do not generate from training memory.
 
-A rule lives in exactly one file: the highest level it applies to. A leaf carries only its delta and never restates this file. A leaf is earned where a directory has a different toolchain, ownership or risk class _and_ an agent demonstrably got something wrong there — a package manifest is not evidence, symmetry with a sibling is not a reason.
+## Multi-Agent Ownership
 
-`repos/<name>/AGENTS.md` are vendored roots, not leaves; amend upstream. `repos/AGENTS.md` is ours. A fork under `packages/` is ours: we publish it and we gate it, and "upstream" names only where it came from.
+When multiple agents work in the same repo:
+
+- Each agent owns a disjoint file/module set.
+- An agent must claim a file before editing it.
+- Agents may not recursively delegate to each other.
+- The one-shot verification must pass before any agent claims done.
+
+## End of Session
+
+Before ending a session:
+
+1. Record current state, blockers, and next steps via the runtime memory system and task list.
+2. Commit with a conventional-format message once work is in a safe state.
+3. Leave the repo clean — `git status` should show nothing unexpected.
+
+## Escalation
+
+- **Constitution conflict**: Consult @CONSTITUTION.md. If letter and purpose diverge, purpose governs.
+- **Unclear requirements**: Ask the user.
+- **Verification failure**: Record via memory, flag for review, do not bypass.
+- **Scope ambiguity**: Re-read this file and the Definition of Done.

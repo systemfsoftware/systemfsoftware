@@ -1,57 +1,26 @@
 {
-  "name": "systemfsoftware",
-  "private": true,
-  "description": "System F Software \u2014 Effect-TS libraries and the oxlint plugin that enforces the constitution.",
-  "type": "module",
+  "name": "constitution",
+  "description": "The supreme design law of System F Software — stack-neutral, vendored into every consumer repo via git subtree + symlink.",
+  "main": "index.js",
   "scripts": {
-    "build": "turbo --concurrency=${TURBO_CONCURRENCY:-50%} build",
-    "typecheck": "turbo --concurrency=${TURBO_CONCURRENCY:-50%} --continue typecheck",
-    "test": "turbo --concurrency=${TURBO_CONCURRENCY:-50%} test",
-    "lint": "pnpm format:check && turbo --concurrency=${TURBO_CONCURRENCY:-50%} lint",
-    "api:check": "turbo --concurrency=${TURBO_CONCURRENCY:-50%} api:check",
-    "format": "dprint fmt",
-    "format:check": "dprint check",
-    "precommit": "pnpm exec lint-staged --no-revert --config .lintstagedrc.js",
-    "check": "pnpm install --frozen-lockfile && TURBO_CONCURRENCY=${TURBO_CONCURRENCY:-50%} pnpm check:ci",
-    "gate:tasks": "turbo --concurrency=${TURBO_CONCURRENCY:-50%} --continue lint lint:tsgo typecheck test attw api:check //#check:mutate-scope //#check:lint-coverage //#check:no-hand-rolled-jsonc //#check:publish-config //#check:script-provenance //#check:action-provenance",
-    "gate:dist": "turbo --concurrency=${TURBO_CONCURRENCY:-100%} build && turbo --concurrency=${TURBO_CONCURRENCY:-100%} --continue //#check:project-references //#check:exports //#check:runtime-deps",
-    "check:ci": "s=0; pnpm format:check || s=1; pnpm check:turbo-graph || s=1; TURBO_CONCURRENCY=${TURBO_CONCURRENCY:-100%} pnpm gate:tasks test:contract || s=1; pnpm gate:dist || s=1; exit $s",
-    "check:local": "s=0; dprint check || s=1; pnpm check:turbo-graph || s=1; pnpm gate:tasks || s=1; pnpm gate:dist || s=1; exit $s",
-    "prepare": "concurrently \"husky\" \"node scripts/patch-tsgo-if-needed.mjs\"",
-    "bump:minor": "node scripts/bump-all-minor.mjs",
-    "check:publish-config": "node scripts/validate-publish-config.mjs --selftest && node scripts/validate-publish-config.mjs",
-    "check:runtime-deps": "node scripts/check-runtime-deps.mjs --selftest && node scripts/check-runtime-deps.mjs",
-    "attw": "turbo --concurrency=${TURBO_CONCURRENCY:-50%} attw",
-    "check:exports": "node scripts/check-exports.mjs",
-    "check:mutate-scope": "node scripts/guard-mutate-scope.mjs",
-    "check:lint-coverage": "node scripts/check-lint-coverage.mjs",
-    "check:no-hand-rolled-jsonc": "node scripts/guard-no-hand-rolled-jsonc.mjs --selftest && node scripts/guard-no-hand-rolled-jsonc.mjs",
-    "check:project-references": "node scripts/check-project-references.mjs --selftest && node scripts/check-project-references.mjs",
-    "check:script-provenance": "node scripts/guard-script-provenance.mjs --selftest && node scripts/guard-script-provenance.mjs",
-    "check:action-provenance": "node scripts/guard-action-provenance.mjs --selftest && node scripts/guard-action-provenance.mjs",
-    "check:turbo-graph": "./scripts/guard-turbo-graph.mjs --selftest && ./scripts/guard-turbo-graph.mjs"
+    "test": "python3 scripts/validate-constitution.py",
+    "prepare": "husky"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/systemfsoftware/constitution.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "Apache-2.0",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/systemfsoftware/constitution/issues"
+  },
+  "homepage": "https://github.com/systemfsoftware/constitution#readme",
   "devDependencies": {
     "@commitlint/cli": "^21.2.1",
     "@commitlint/config-conventional": "^21.2.0",
-    "@commitlint/config-pnpm-scopes": "^21.2.0",
-    "@commitlint/types": "^21.2.0",
-    "@effect/tsgo": "^0.36.0",
-
-    "@std/jsonc": "catalog:",
-    "@systemfsoftware/stryker-js-cli": "workspace:^",
-    "concurrently": "^9.2.1",
-    "dprint": "^0.54.0",
-    "estree-walker": "^3",
-    "husky": "^9.1.7",
-    "lint-staged": "^17.1.0",
-    "mutation-testing-elements": "3.7.3",
-    "mutation-testing-metrics": "3.7.3",
-    "oxc-parser": "catalog:",
-    "oxlint": "catalog:oxlint",
-    "oxlint-tsgolint": "catalog:oxlint",
-    "turbo": "^2.10.5",
-    "typescript": "catalog:"
-  },
-  "packageManager": "pnpm@11.21.0"
+    "husky": "^9.1.7"
+  }
 }

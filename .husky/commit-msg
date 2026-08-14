@@ -1,9 +1,1 @@
-#!/usr/bin/env bash
-set -e
-# Vendored content commits are written by commit-tree and never reach this hook;
-# the subtrees.toml registration commit does. Anchor the alternation so real
-# paths match — `^repos/$` matches the literal string and no file under it
-# (git-subtree-vendor G23).
-if git diff --cached --name-only | grep -qvE '^(repos/.*|subtrees\.toml)$'; then
-  pnpm exec commitlint --edit "$1"
-fi
+pnpm exec commitlint --edit $1

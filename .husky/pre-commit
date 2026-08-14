@@ -1,14 +1,1 @@
-#!/usr/bin/env sh
-# Skip during a merge: the staged set is the merge result, not authored work,
-# and lint-staged's stash/restore corrupts in-progress merge state.
-if [ -e "$(git rev-parse --git-path MERGE_HEAD)" ]; then
-  exit 0
-fi
-
-# Skip lint-staged for pure repos/ subtree commits and the subtrees.toml
-# registration commit. The alternation must be anchored per-branch: the earlier
-# `^(repos/|subtrees\.toml)$` matched the literal string `repos/` and therefore
-# never skipped a single vendored path (git-subtree-vendor G23).
-if git diff --cached --name-only | grep -qvE '^(repos/.*|subtrees\.toml)$'; then
-  pnpm precommit
-fi
+python3 scripts/validate-constitution.py
