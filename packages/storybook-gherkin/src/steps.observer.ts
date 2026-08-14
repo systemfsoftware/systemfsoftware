@@ -25,20 +25,19 @@ export interface StepModel {
 
 export type ExampleRow = { readonly name: string } & Readonly<Record<string, string>>
 
-export const displayPattern = (step: StepModel): string =>
+const joinStep = (
+  step: StepModel,
+  renderHole: (cap: CaptureModel) => string,
+): string =>
   [
     step.parts[0] ?? '',
-    ...step.captures.flatMap((cap, i) => [`{${cap.name}}`, step.parts[i + 1] ?? '']),
+    ...step.captures.flatMap((cap, i) => [renderHole(cap), step.parts[i + 1] ?? '']),
   ].join('')
 
+export const displayPattern = (step: StepModel): string => joinStep(step, (cap) => `{${cap.name}}`)
+
 export const renderStepText = (step: StepModel, values: Readonly<Record<string, string>>): string =>
-  [
-    step.parts[0] ?? '',
-    ...step.captures.flatMap((cap, i) => [
-      values[cap.name] ?? cap.default ?? `{${cap.name}}`,
-      step.parts[i + 1] ?? '',
-    ]),
-  ].join('')
+  joinStep(step, (cap) => values[cap.name] ?? cap.default ?? `{${cap.name}}`)
 
 const resolveKeyword = (keyword: Keyword, previous: ConcreteKeyword): ConcreteKeyword =>
   Match.value(keyword).pipe(
@@ -195,7 +194,7 @@ const decodeCapture = (
       CaptureDecodeFailed.make({
         step: displayPattern(model),
         capture: cap.name,
-        value: raw === undefined ? '' : raw,
+        value: raw ?? '',
         cause: error,
       })
     ),

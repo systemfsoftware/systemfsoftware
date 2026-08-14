@@ -106,32 +106,25 @@ const squashExit = <A>(exit: Exit.Exit<A, unknown>): A | undefined =>
  * One scenario step, composed as an Effect. Storybook's instrumented `step`
  * expects a promise whose settlement tracks the step's work, so the body runs
  * in a child fiber that settles a deferred; the bridge promise given to
- * `ctx.step` awaits that deferred and rejects with the step's original error.
+ * `stepCtx.step` awaits that deferred and rejects with the step's original error.
  * The bridge interprets only this pure signalling effect; user code runs in
  * the single play-edge interpretation. The `ensuring` finalizer interrupts
  * the child on every parent exit — success (no-op on a joined fiber),
- * failure, and interruption — so an independently failed `ctx.step` never
+ * failure, and interruption — so an independently failed `stepCtx.step` never
  * orphans a running step body.
  */
 const runStep = <TArgs>(
   step: Step<TArgs>,
   values: Readonly<Record<string, string>>,
   stepCtx: StepContext<TArgs>,
-  ctx: PlayContext<TArgs>,
 ): Effect.Effect<void, CaptureDecodeFailed> => {
   const label = `${displayKeyword(step.model)} ${renderStepText(step.model, values)}`
   return Deferred.make<Exit.Exit<void, CaptureDecodeFailed>>().pipe(
     Effect.flatMap((done) => {
       const bridge = (): Promise<void> =>
         Effect.runPromiseExit(
-          Deferred.await(done).pipe(
-            Effect.flatMap((exit) =>
-              Exit.match(exit, {
-                onSuccess: () => Effect.void,
-                onFailure: (cause) => Exit.hasInterrupts(exit) ? Effect.void : Effect.failCause(cause),
-              })
-            ),
-          ),
+          // An Exit is itself an Effect in v4 — yielding it re-raises its cause.
+          Effect.flatten(Deferred.await(done)),
         ).then(squashExit)
       return Effect.forkChild(
         step.run(values, stepCtx).pipe(
@@ -141,7 +134,7 @@ const runStep = <TArgs>(
         ),
       ).pipe(
         Effect.flatMap((fiber) =>
-          Effect.promise(() => Promise.resolve(ctx.step(label, bridge))).pipe(
+          Effect.promise(() => Promise.resolve(stepCtx.step(label, bridge))).pipe(
             Effect.flatMap(() => Fiber.join(fiber)),
             Effect.ensuring(Fiber.interrupt(fiber).pipe(Effect.asVoid)),
           )
@@ -157,7 +150,7 @@ const executeSteps = <TArgs>(
   ctx: PlayContext<TArgs>,
 ): Effect.Effect<void, CaptureDecodeFailed> => {
   const stepCtx = buildStepContext(ctx)
-  return Effect.forEach(ordered, (s) => runStep(s, values, stepCtx, ctx), { discard: true })
+  return Effect.forEach(ordered, (s) => runStep(s, values, stepCtx), { discard: true })
 }
 
 /** The single interpretation edge of the package. */
@@ -327,15 +320,19 @@ const makeOutline = <TArgs>(
     const captureNames = new Set<string>()
     for (const m of models) for (const c of m.captures) captureNames.add(c.name)
 
-    const buildRowSpec = (row: ExampleRow): StorySpec<TArgs> => ({
-      name: `${fullName} — ${row.name}`,
-      play: (ctx: PlayContext<TArgs>) =>
-        interpretPlay(
-          context,
-          executeSteps([...background, ...steps], { ...withRecord, ...rowValuesFor(row) }, ctx),
-          ctx,
-        ),
-    })
+    const buildRowSpec = (row: ExampleRow): StorySpec<TArgs> => {
+      // Row values are fixed at declaration time; merge once, like makeScenario.
+      const values = { ...withRecord, ...rowValuesFor(row) }
+      return {
+        name: `${fullName} — ${row.name}`,
+        play: (ctx: PlayContext<TArgs>) =>
+          interpretPlay(
+            context,
+            executeSteps([...background, ...steps], values, ctx),
+            ctx,
+          ),
+      }
+    }
 
     const examples = (
       rows: readonly ExampleRow[],
