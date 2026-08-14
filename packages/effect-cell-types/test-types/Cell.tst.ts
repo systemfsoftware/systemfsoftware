@@ -1,6 +1,7 @@
 import { Cell } from '@systemfsoftware/effect-cell-types'
 import type { Effect } from 'effect/Effect'
 import type { Either } from 'effect/Either'
+import { pipe } from 'effect/Function'
 import { describe, expect, it } from 'tstyche'
 
 interface Cmd {
@@ -212,5 +213,33 @@ describe('the channels the interpreter derives', () => {
   it('Should_RequireAWrittenDescription_When_Applying', () => {
     // @ts-expect-error: call write(output) before applying the description
     Cell.apply(Cell.read(readPhase), command)
+  })
+})
+
+describe('the order the chain decides, written in pipe', () => {
+  it('Should_Compile_When_PhasesArePipedInOrder', () => {
+    expect(
+      pipe(
+        Cell.read<Shape>(readPhase),
+        Cell.decode(decodePhase),
+        Cell.decide(decidePhase),
+        Cell.encode(encodePhase),
+        Cell.write(writePhase),
+      ),
+    ).type.toBe<Cell.WriteDone<Shape>>()
+  })
+
+  it('Should_NameTheSkippedPhase_When_DecidePipedAfterRead', () => {
+    // @ts-expect-error: call decode(raw) before decide(decoded)
+    pipe(Cell.read<Shape>(readPhase), Cell.decide(decidePhase))
+  })
+
+  it('Should_NameTheInvertedPhase_When_DecodePipedAfterDecide', () => {
+    // @ts-expect-error: call read(command) before decode(raw)
+    pipe(decideStage, Cell.decode(decodePhase))
+  })
+
+  it('Should_KeepTheDataFirstCallStyle_When_ConsumerDoesNotPipe', () => {
+    expect(Cell.decode(readStage, decodePhase)).type.toBe<Cell.DecodeDone<Shape>>()
   })
 })

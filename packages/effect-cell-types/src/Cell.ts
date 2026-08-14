@@ -1,5 +1,6 @@
 import * as Effect from 'effect/Effect'
 import * as Either from 'effect/Either'
+import { dual } from 'effect/Function'
 import * as Option from 'effect/Option'
 
 /**
@@ -123,43 +124,59 @@ const intoOpenLayer = <P extends Phases>(
  * Opens a layer. Passing a prior `WriteDone` opens a second layer over the same bag, so a
  * call site whose real order writes before it can classify is one description carrying two
  * layers rather than two descriptions composed by hand.
+ *
+ * This one is not dual: it starts the chain, so on the opening layer it has no `self` to
+ * receive. Every phase after it is dual, which is what lets a description be written in the
+ * order it runs.
  */
 export const read = <P extends Phases>(run: ReadPhase<P>, previous?: WriteDone<P>): ReadDone<P> => ({
   [READ_DONE]: true,
   layers: [...(previous?.layers ?? []), { read: run }],
 })
 
-export const decode = <P extends Phases>(
-  previous: ReadDone<P>,
-  run: DecodePhase<P>,
-): DecodeDone<P> => ({
+/**
+ * The chaining phases are dual, data-last overload declared first. Nesting the constructors
+ * reads innermost-first — backwards from the order the phases run — which defeats the point of
+ * a type that exists to make that order legible. In `pipe` the call site reads in phase order,
+ * and the sentence still arrives as a missing member through it.
+ *
+ * A `Do`-notation scope binding each phase's result for later phases to read was measured as
+ * an alternative: the sentence survives it, even with the scope varying per stage, because an
+ * absent member is reported before type arguments are compared. It was not adopted, because a
+ * scope the interpreter folds over is type-erased, and reading a phase back out of it needs an
+ * assertion this design does not.
+ */
+export const decode: {
+  <P extends Phases>(run: DecodePhase<P>): (previous: ReadDone<P>) => DecodeDone<P>
+  <P extends Phases>(previous: ReadDone<P>, run: DecodePhase<P>): DecodeDone<P>
+} = dual(2, <P extends Phases>(previous: ReadDone<P>, run: DecodePhase<P>): DecodeDone<P> => ({
   [DECODE_DONE]: true,
   layers: intoOpenLayer(previous.layers, { decode: run }),
-})
+}))
 
-export const decide = <P extends Phases>(
-  previous: DecodeDone<P>,
-  run: DecidePhase<P>,
-): DecideDone<P> => ({
+export const decide: {
+  <P extends Phases>(run: DecidePhase<P>): (previous: DecodeDone<P>) => DecideDone<P>
+  <P extends Phases>(previous: DecodeDone<P>, run: DecidePhase<P>): DecideDone<P>
+} = dual(2, <P extends Phases>(previous: DecodeDone<P>, run: DecidePhase<P>): DecideDone<P> => ({
   [DECIDE_DONE]: true,
   layers: intoOpenLayer(previous.layers, { decide: run }),
-})
+}))
 
-export const encode = <P extends Phases>(
-  previous: DecideDone<P>,
-  run: EncodePhase<P>,
-): EncodeDone<P> => ({
+export const encode: {
+  <P extends Phases>(run: EncodePhase<P>): (previous: DecideDone<P>) => EncodeDone<P>
+  <P extends Phases>(previous: DecideDone<P>, run: EncodePhase<P>): EncodeDone<P>
+} = dual(2, <P extends Phases>(previous: DecideDone<P>, run: EncodePhase<P>): EncodeDone<P> => ({
   [ENCODE_DONE]: true,
   layers: intoOpenLayer(previous.layers, { encode: run }),
-})
+}))
 
-export const write = <P extends Phases>(
-  previous: EncodeDone<P>,
-  run: WritePhase<P>,
-): WriteDone<P> => ({
+export const write: {
+  <P extends Phases>(run: WritePhase<P>): (previous: EncodeDone<P>) => WriteDone<P>
+  <P extends Phases>(previous: EncodeDone<P>, run: WritePhase<P>): WriteDone<P>
+} = dual(2, <P extends Phases>(previous: EncodeDone<P>, run: WritePhase<P>): WriteDone<P> => ({
   [WRITE_DONE]: true,
   layers: intoOpenLayer(previous.layers, { write: run }),
-})
+}))
 
 /**
  * Runs one layer as the sandwich it describes: impure read, pure filling, impure write.
