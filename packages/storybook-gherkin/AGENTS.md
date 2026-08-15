@@ -1,12 +1,12 @@
 # @systemfsoftware/storybook-gherkin — Feature Specs → Stories
 
-Vendored from WireBlast's `packages/storybook-gherkin` at its `HEAD`, extracted and rescoped under this org.
+Owned under this org. Ported from WireBlast's `packages/storybook-gherkin`.
 
 Binds Gherkin specifications to Storybook 10 CSF-factory stories: specs declared with this DSL in a `.stories.tsx` read like a `.feature` file and execute as play functions under the real browser runner.
 
 ## Delta
 
-- **Not Effect cell code.** This package keeps its own minimal `oxlint.config.ts` and deliberately does **not** extend `@systemfsoftware/oxlint-config`: the cell rules (suffix provenance, workflow purity) are the wrong observer for upstream-shaped library code. That is why `packages/storybook-gherkin/` sits under `TOOLING` in `scripts/guards/check-lint-coverage.mjs`.
+- **Not Effect cell code.** This package keeps its own minimal `oxlint.config.ts` and deliberately does **not** extend `@systemfsoftware/oxlint-config`: the cell rules (suffix provenance, workflow purity) are the wrong observer for library code. That is why `packages/storybook-gherkin/` sits under `TOOLING` in `scripts/guards/check-lint-coverage.mjs`.
 - **Publishable, built by tsdown alone.** Ships `dist` (ESM + dts) and carries `attw`, `check:exports`, and `check:publish-config`. `build` is `tsdown && pnpm dts:check`.
 - **Do not add api-extractor here.** The entry is a flat re-export barrel over the observers; tsdown's per-entry dts is the shipped types. `dts:check` (`node scripts/check-dts.mjs`, driving `tsc --noEmit -p tsconfig.dts.json`) is the only gate that reads the shipped dts — it sets `skipLibCheck: false` to simulate a strict consumer, and it is load-bearing.
 - **`dts:check` is scoped to OUR dist.** The strict check drags third-party declaration files into the program: the `storybook/test` type surface flows through `@vitest/expect`, whose declarations reference an ambient `Chai` namespace they never declare (their own `@types/chai` dependency is installed but not ambient-visible, so `types: ["node"]` fails with TS2503). Adding a `@types/chai` devDependency we do not use would be cope; instead `scripts/check-dts.mjs` fails only on diagnostics whose file is under `dist/` (or is otherwise unattributable — a tsc crash or config error still fails), and treats errors in `node_modules` as third-party noise by construction. Our own dts is checked exactly as strictly as before; the manifest stays honest.

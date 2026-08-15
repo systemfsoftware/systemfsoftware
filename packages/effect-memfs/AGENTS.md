@@ -1,6 +1,6 @@
 # AGENTS.md — `effect-memfs/`
 
-A hard fork of `nounder/effect-memfs`, maintained here and published under our name. It is
+Owned under this org. Ported from `nounder/effect-memfs`, published under our name. It is
 NOT vendored — `repos/` is the read-only tree (REPO-S3); this package is edited normally.
 
 ```yaml

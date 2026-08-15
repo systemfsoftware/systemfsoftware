@@ -56,12 +56,7 @@ rules:
       here is the one edit that can make them all wrong at once while every one of
       them still passes, because they would agree with each other and disagree only
       with the constructors
-    check: add a phase inside `src/Cell.ts` — its closure type, node record, union
-      member, stage brand, constructor and place in `canonical` — then run
-      `pnpm check:local`. Every consumer package stays green and absorbs the phase;
-      the only failures name this package's own oracle, API golden and type spec.
-      A failure naming a consumer package means that consumer holds a copy
-
+    check: review — adding a phase in `src/Cell.ts` propagates cleanly to consumers under `pnpm check:local`; only this package's own golden and type spec fail until updated
   - id: CELL-T4
     title: The integration oracle restates the vocabulary on purpose
     do: keep the hand-written phase list in

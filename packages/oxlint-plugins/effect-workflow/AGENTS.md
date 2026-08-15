@@ -7,7 +7,7 @@ Rules here gate the `architect-workflow` cell spec and `CONSTITUTION.md` Article
 ```yaml
 - id: EW1
   title: workflow-schema-required, this package's OX-OB1 obligation rule
-  do: keep a rule that fails a workflow for LACKING something
+  do: keep a rule that MUST fail a workflow for lacking a schema declaration
   dont: relax workflow-schema-required so it fires only when a schema declaration is already present
   harm: typeid-required, no-unconstructed-variant and no-panic-vocabulary all gate on a schema declaration existing — with prohibitions alone, plain TS unions make all three vacuous at once and avoiding Effect Schema becomes the cheapest way to pass
   check: `grep -q "rule('workflow-schema-required')" src/index.ts && grep -q "'workflow-schema-required': workflowSchemaRequired" src/index.ts` — registered and enabled in configs.recommended

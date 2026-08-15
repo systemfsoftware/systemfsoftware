@@ -79,49 +79,14 @@ rules:
 
 ## Rule APIs
 
-```yaml
-apis:
-  - id: OX-A1
-    title: New packages use defineRule
-    do: write rules with `defineRule` from `@oxlint/plugins` in `test-hygiene/` and `effect-workflow/`
-    dont: import ESLintUtils in these packages
-    harm: two rule APIs in one package doubles the reader's mental model
-    check: "`import { defineRule } from '@oxlint/plugins'` is the only rule constructor in the package"
-  - id: OX-A2
-    title: core/ keeps ESLintUtils until a dedicated migration
-    do: follow the `ESLintUtils.RuleCreator` shape already used by the rules in `core/src/rules/` when editing `core/`
-    dont: rewrite core rules to defineRule inside an unrelated task
-    harm: an opportunistic API migration mixes refactor with behavior change and nothing stays reviewable
-    check: `grep -rn 'ESLintUtils\|createRule' core/src/rules/` returns nothing — the core package has already migrated to `defineRule`; review that no edit rewrites a rule's constructor shape inside an unrelated task
-```
+- **OX-A1** — new packages use `defineRule` from `@oxlint/plugins`. Gate: `import { defineRule }` is the only constructor.
+- **OX-A2** — `core/` has migrated to `defineRule`; no edit rewrites constructor shapes opportunistically. Gate: review.
 
 ## Integration
 
-`oxlint-config/src/oxlint-config.base.ts` registers plugins by package name:
+`oxlint-config/src/oxlint-config.base.ts` registers plugins via `jsPlugins: ['@systemfsoftware/oxlint-plugin', ...]`.
 
-```typescript
-jsPlugins: ['@systemfsoftware/oxlint-plugin', '@systemfsoftware/oxlint-plugin-test-hygiene'],
-rules: { '@systemfsoftware/oxlint-plugin/rule-name': 'error' },
-```
-
-Rule export format (`src/index.ts`):
-
-```typescript
-export default {
-  meta: { name: PLUGIN_NAME },
-  rules: { 'rule-name': rule },
-  configs: { recommended: { rules: { '<PLUGIN_NAME>/rule-name': 'error' } } },
-}
-```
-
-```yaml
-- id: OX-IN1
-  title: configs.recommended is a rules bag and nothing else
-  do: put only `rules` inside `configs.recommended`, keyed `<PLUGIN_NAME>/<rule-name>`
-  dont: add a `plugins` key (or any other key) to `configs.recommended`
-  harm: "oxlint's `Plugin` interface is `{ meta?, rules }` and never reads `configs`; its top-level `plugins` field accepts only built-in namespaces, so a JS plugin name there fails config parsing outright with `Unknown plugin: '<name>'` for every consumer who spreads the preset whole"
-  check: "review — `Object.keys(configs.recommended)` is exactly `['rules']`. A violation is not silent: every consumer spreading the preset fails config parsing at startup."
-```
+- **OX-IN1** — `configs.recommended` contains only `rules: { '<PLUGIN>/rule-name': 'error' }`. Never put `plugins` inside configs. Gate: review — `Object.keys(configs.recommended)` is `['rules']`.
 
 ## Runtime Budget
 

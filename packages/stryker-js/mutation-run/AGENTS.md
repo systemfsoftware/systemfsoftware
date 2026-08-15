@@ -2,7 +2,7 @@
 
 > **Location:** `packages/stryker-js/mutation-run/` — ours, published from this repo.
 
-It began as `@stryker-mutator/core` and has diverged: TS7 deleted APIs it relied on, and it now carries behaviour upstream has no equivalent for (`requireTestContribution`). There is no merge back.
+Ported from `@stryker-mutator/core`; it now carries behaviour the original has no equivalent for (`requireTestContribution`). Ours.
 
 Deltas from root:
 

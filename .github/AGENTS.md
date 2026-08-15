@@ -2,7 +2,7 @@
 
 ## Workflow
 
-`Release` is two-phase pnpm-native: on push to `main`, `pnpm version -r` consumes `.changeset/` intents and opens a Release PR (`changeset-release/main`); on that PR's merge it runs `the gate (pnpm check:ci)` via `reusable-checks.yml`, then builds, publishes via npm OIDC trusted publishing with provenance, and tags each released `name@v<version>`. `changeset-check.yml` fails a PR that touches `packages/**` without a `.changeset/` intent.
+`Release` is two-phase pnpm-native: on push to `main`, `corepack pnpm version -r` consumes `.changeset/` intents and opens a Release PR (`changeset-release/main`); on that PR's merge it runs `the gate (pnpm check:ci)` via `reusable-checks.yml`, then builds, publishes via npm OIDC trusted publishing with provenance, and tags each released `name@v<version>`. `changeset-check.yml` fails a PR that touches `packages/**` without a `.changeset/` intent.
 
 **CI enumerates no steps.** Root `package.json` `check:ci` is the only definition of what the gate runs; `reusable-checks.yml` invokes it. Read that script to learn what is covered — a copy here would drift, which is exactly how `attw` stopped running in CI while three other lists still claimed it.
 

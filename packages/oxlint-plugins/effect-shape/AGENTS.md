@@ -5,11 +5,10 @@
 ```yaml
 - id: ES1
   title: The mechanical subset of the gates, and nothing more
-  do: enforce the single-file-AST fragments of SH3 (no behaviour), SH4 (one foreign system per file), and the SH6 lint list (no junk-drawer path segments); every rule keys on the `.shape.ts` filename suffix and no-ops on other files
+  do: enforce MUST-gate single-file-AST fragments of SH3 (no behaviour), SH4 (one foreign system per file), and the SH6 lint list (no junk-drawer path segments); every rule keys on the `.shape.ts` filename suffix and no-ops on other files
   dont: attempt SH1 (the reverse direction needs cross-file knowledge) or SH5 (permanent review by its own rationale)
   harm: a rule that fires on code the architecture sanctions trains the team to disable it
   check: `grep -rn 'node:fs' src/` returns no hits; review — no rule needs type information: the reviewer confirms every rule decides from the single-file AST oxlint provides, with no type-aware pass
-
 - id: ES2
   title: Behaviour means function or method bodies
   do: report function declarations, function-valued consts, class method bodies, and function default exports; treat interface method signatures and call-expression consts (foreign constructors like pgTable) as declaration

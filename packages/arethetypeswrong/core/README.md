@@ -12,6 +12,6 @@ The runtime dependency `typescript` runs on the **6.x JS bridge** (`catalog:attw
 
 `typescript@6` (the bridge release) keeps the full compiler API, so this package is as close to TypeScript 7 as its architecture allows. Two snapshot fixtures (`moment@2.29.1`, `react@18.2.0`) embed the compiler version in resolution traces and were regenerated when moving 5.9.3 → 6.0.3.
 
-Upstream `arethetypeswrong` pins `typescript@5.6.1-rc` for the same fidelity reason.
+The original `arethetypeswrong` pins `typescript@5.6.1-rc` for the same fidelity reason.
 
 Dependabot is configured to never propose a `typescript` major bump for this repo (see `.github/dependabot.yml`); majors are manual, deliberate migrations. The durable record of this decision lives in `docs/solutions/tooling-decisions/arethetypeswrong-core-requires-js-typescript-api.md`.

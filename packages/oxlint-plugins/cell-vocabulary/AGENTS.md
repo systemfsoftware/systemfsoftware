@@ -33,10 +33,7 @@ rules:
     harm: every predicate here is set membership, so an empty set matches no call — the rule stays
       registered at error and reports on no file, which is protection in the config and silence in
       the run
-    check: emptying the walked pure partition makes
-      `pnpm --filter @systemfsoftware/oxlint-plugin-cell-vocabulary test` exit 1 with
-      `the walked vocabulary reports no pure phase`
-
+    check: review — emptying the walked pure partition makes `pnpm --filter @systemfsoftware/oxlint-plugin-cell-vocabulary test` exit 1 with `the walked vocabulary reports no pure phase`
   - id: CELL-V3
     title: The message states the predicate's exact reach
     do: say "module-level helper" — helpers are collected from the top level of the file, an
