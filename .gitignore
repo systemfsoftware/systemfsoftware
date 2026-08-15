@@ -31,7 +31,3 @@ docs/cell-taxonomy/
 .mcp.json
 # direnv-managed nix dev-shell state — machine-specific
 .direnv/
-
-# Rust build output for the in-repo dprint plugin
-crates/*/target
-crates/*/.falsify

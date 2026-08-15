@@ -30,6 +30,6 @@
 
 Array types are spelled one way. `Array<T>` and `ReadonlyArray<T>` in emitted
 declarations become `T[]` and `readonly T[]`, which the type checker cannot tell
-apart: no exported type changes, only how it is written. The spelling is now
-produced by the formatter rather than chosen per file, so the two forms can no
-longer both appear.
+apart: no exported type changes, only how it is written. The spelling is a
+convention the tree now holds uniformly; no formatter or lint rule enforces it,
+so a reviewer is what keeps a second spelling from reappearing.

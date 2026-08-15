@@ -4,8 +4,7 @@
     "semiColons": "asi",
     "quoteStyle": "preferSingle",
     "trailingCommas": "onlyMultiLine",
-    "binaryExpression.operatorPosition": "sameLine",
-    "arrayType": "shorthand"
+    "binaryExpression.operatorPosition": "sameLine"
   },
   "json": {},
   "markdown": {},
@@ -22,12 +21,10 @@
     "vendor/**",
     "repos/**",
     "packages/stryker-js/typescript-checker/testResources/errors/invalid-tsconfig/tsconfig.json",
-    "**/snapshots/*.md",
-    "crates/*/target",
-    "crates/*/.falsify"
+    "**/snapshots/*.md"
   ],
   "plugins": [
-    "./crates/dprint-plugin-canonical/plugin.wasm",
+    "https://plugins.dprint.dev/typescript-0.96.1.wasm",
     "https://plugins.dprint.dev/json-0.19.3.wasm",
     "https://plugins.dprint.dev/markdown-0.17.8.wasm",
     "https://plugins.dprint.dev/toml-0.6.2.wasm",
