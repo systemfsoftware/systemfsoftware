@@ -63,6 +63,25 @@ The corrupted pattern reproduces against real vendored `.d.ts` types, type-check
 - **AST fingerprint over package origin** — origin is binary, drift is continuous. Governs R6.
 - **Short-circuit over accumulation** _(session-settled: user-approved — chosen over accumulating multi-source
   failures: an aggregate mixing contradictory facts is false, not partial)_. Governs R9.
+- **Reach decides the host, not power** _(session-settled: user-directed — resolve high-stakes decisions
+  against the wiki; the corpus reversed this plan's earlier reading)_. A rule's host determines which
+  consumers ever receive it, and a rule keyed to our authoring harness ships zero bits across the package
+  boundary. Governs R1, R2, R4.
+
+  Candidates for the type-aware arm, and why the losers lost:
+
+  | Host                                           | Decides R1's predicate  | Reaches the vendored consumer                | Cost                                                      |
+  | ---------------------------------------------- | ----------------------- | -------------------------------------------- | --------------------------------------------------------- |
+  | Hand-rolled `tsc` checker in `scripts/guards/` | yes                     | no — our tree only                           | a program to build and maintain                           |
+  | typescript-eslint type-aware rule              | yes                     | only if the consumer adds a second runner    | ESLint alongside oxlint, slow second parse                |
+  | `@ttsc/lint` plugin                            | yes, inside the compile | only if the consumer replaces their compiler | rules authored in Go; a 0.27.0 compiler in the build path |
+  | Emitter-time construction                      | yes, by construction    | yes — the emitted cell carries it            | waits on the emitter                                      |
+
+  The deciding criterion is reach, and it separates the two rules that looked redundant: R1's host does not
+  travel, so **R2 is not scaffolding for a rule that outgrew it** — it is the only arm that crosses the
+  boundary, and it survives even after R1 ships whole. The reversing observation: if the consumer adopts our
+  compiler, or the constraint moves into the rolled type where it needs no host at all, R2's justification
+  expires and it should be deleted.
 
 Where each rule acts, and which rung can decide it:
 
@@ -85,9 +104,11 @@ flowchart LR
 (`.schema.ts`, `.acl.ts`, kernel, workflow) must not name a type whose declaration resolves outside the
 workspace, including through workspace-local aliases and re-exports. _Rung: type-aware check._
 
-**R2 — The direct case is gated in lint.** The import table gains `.schema.ts` and `.acl.ts` keys and a
-type-origin arm, rejecting a declaration cell that imports a bare external specifier as a type. Documentation
-of this rule states that it is a strict subset of R1. _Rung: import-graph lint._
+**R2 — The direct case is gated in lint, because that is the arm that crosses the boundary.** The import table
+gains `.schema.ts` and `.acl.ts` keys and a type-origin arm, rejecting a declaration cell that imports a bare
+external specifier as a type. Documentation states that it decides a strict subset of R1's cases and exists for
+a reason R1 cannot serve: it ships to a consumer who runs our lint plugin but not our compiler.
+_Rung: import-graph lint._
 
 **R3 — Adapter and executor cells may name vendor types.** There the type describes a call, which the existing
 value-origin law already prices. _Rung: the same table._
@@ -95,7 +116,13 @@ value-origin law already prices. _Rung: the same table._
 **Foreign contracts — restatement and drift**
 
 **R4 — One wire declaration per foreign contract, in primitives, scoped by decision surface.** Contracts whose
-fields the domain mostly decides on are restated; a contract carried mostly untouched is not. _Rung: review._
+fields the domain mostly decides on are restated; a contract carried mostly untouched is not.
+_Rung: review — with one mechanism now available._ An obligation gate can enumerate foreign contracts from a
+registry and fail the build for each one no wire cell acknowledges, which converts the omission half of this
+rule from judgement into a compile error. It cannot decide the decision-surface threshold, and it does not
+check whether an acknowledgement is true: a declaration implementing none of a contract satisfies the gate by
+asserting in prose that it does. Adopting it means adopting the compiler that hosts it, so it is bound to the
+host decision above, not to this rule alone.
 
 **R5 — Drift is detected out of band, never on the request path.** Decoding tolerates vendor additions;
 detection is a pinned sample per contract decoded strictly, plus a value-level golden pinning a recorded
@@ -164,8 +191,14 @@ multi-source failures instead of short-circuiting.
 
 ### Dependencies and Assumptions
 
-- **oxlint carries no type information**, so R1 cannot ship as an oxlint rule; it needs a `tsc`-backed checker
-  (the `scripts/guards/` pattern) or emitter-time construction. R2, R7, R8 are syntactic and stay in oxlint.
+- **oxlint carries no type information**, so R1's transitive predicate cannot ship as an oxlint rule. A host
+  that can decide it now exists — `@ttsc/lint` runs rules over the typescript-go `Program` used by the
+  type-check pass — so the checker is an adoption decision, not a construction project. R7 and R8 are
+  syntactic and stay in oxlint. R2's home is settled by reach, not by capability: see the host decision above.
+- **A rule's host decides which consumers it reaches.** A constraint crosses a package boundary only as a
+  rolled type, editor-surfaced metadata, a shipped lint rule, a shipped runtime check, or a shipped tool
+  surface, and the library can count only on the weakest reading. Everything keyed to the authoring harness
+  ships zero bits.
 - **Effect 3.19 semantics, read from `repos/effect` this session.** `.make` validates unless disabled
   (`Schema.ts:3171-3173`, `8897-8903`); `onExcessProperty` defaults to `"ignore"` (`SchemaAST.ts:1883`);
   `ParseResult.Forbidden` is the encode leaf (`ParseResult.ts:198-208`); nominal class constructors re-validate
@@ -175,8 +208,9 @@ multi-source failures instead of short-circuiting.
 
 ### Outstanding Questions
 
-1. **Deferred to Planning** — does the `tsc`-backed checker land before the emitter work, or does R1 ship as
-   emitter-time construction? Cost turns on how long hand-written cells persist.
+1. **Deferred to Planning** — the sequencing question is now adoption, not construction: does the type-aware
+   arm ship by adopting a plugin-bearing compiler, or wait for emitter-time construction? Cost turns on how
+   long hand-written cells persist, and on whether one rule justifies replacing the compile command.
 2. **Deferred to Planning** — what predicate scopes R4's decision surface better than reviewer judgement?
 3. **Deferred to Planning** — where does the ownership annotation live once declarations are the source: a
    field in the declaration DSL, or inferred from what the declaration references?
