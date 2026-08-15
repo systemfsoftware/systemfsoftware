@@ -19,6 +19,7 @@
  * last cell is emitted, never before - an entry added early is the whole gate lying.
  */
 import { emitExecutor, parseExecutor } from '../tools/executor-emit.ts'
+import { emitSchema, parseSchema } from '../tools/schema-emit.ts'
 import { emitWorkflow, parseWorkflow } from '../tools/workflow-emit.ts'
 
 type Emitter = (declaration: unknown) => string
@@ -26,6 +27,7 @@ type Emitter = (declaration: unknown) => string
 const ROLES: Readonly<Record<string, Emitter>> = {
   workflow: (raw) => emitWorkflow(parseWorkflow(raw)),
   executor: (raw) => emitExecutor(parseExecutor(raw)),
+  schema: (raw) => emitSchema(parseSchema(raw)),
 }
 
 /**
@@ -273,8 +275,10 @@ const POPULATION_FIXTURES: readonly { path: string; expect: boolean }[] = [
   { path: 'packages/p/src/fixtures/a.workflow.ts', expect: false },
   { path: 'packages/p/src/internal/falsify-probe.workflow.ts', expect: false },
   { path: 'packages/p/src/a.authorship-probe.workflow.ts', expect: false },
+  { path: 'packages/p/src/a.schema.ts', expect: true },
+  // A role with no emitter is outside the population: the gate governs what it can regenerate.
   { path: 'packages/p/src/a.kernel.ts', expect: false },
-  { path: 'packages/p/src/a.schema.ts', expect: false },
+  { path: 'packages/p/src/a.handler.ts', expect: false },
   { path: 'docs/plans/a.workflow.ts', expect: false },
 ]
 

@@ -166,6 +166,10 @@ const MANIFEST = new Map([
     'workspace-layout',
     'Turns a *.executor.decl.json into an executor cell. Same reason as the workflow emitter: it writes into any package src/ and the authorship gate is its only caller in a chain.',
   ]],
+  ['tools/schema-emit.ts', [
+    'workspace-layout',
+    'Turns a *.schema.decl.json into a schema cell. Same reason as the other emitters: it writes into any package src/ and the authorship gate is its only caller in a chain.',
+  ]],
   ['tools/worktrunk/', [
     'local-tooling',
     'Worktrunk git-worktree lifecycle hooks, invoked by .config/wt.toml. Operator workflow.',
