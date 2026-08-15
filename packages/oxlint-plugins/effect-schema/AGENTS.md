@@ -24,7 +24,8 @@ This package owns rules for the Effect Schema cell. It exists because those rule
   do: keep `no-schema-law-duplicate` as the gate that holds `*.schema.property.test.ts` to rejection only
   dont: relax it to admit a round-trip, equivalence, or encode-stability assertion
   harm: those are exactly what the generated `ruleOfSchemas` pair already covers; re-asserting them is duplicate coverage that drifts, and it is the spam the suffix ban was introduced to stop
-  check: `grep -oE '\b(ruleOfSchemas|equivalence|encodedSchema)\b' packages/effect-schema-law/src/rule-of-schemas.kernel.ts | sort -u` lists exactly ruleOfSchemas, equivalence, encodedSchema — the three symbols `GENERATED_LAW_NAMES` holds
+  check: >-
+    `grep -oE '\b(ruleOfSchemas|equivalence|encodedSchema)\b' packages/effect-schema-law/src/rule-of-schemas.kernel.ts | sort -u` lists exactly ruleOfSchemas, equivalence, encodedSchema — the three symbols `GENERATED_LAW_NAMES` holds
 ```
 
 - Types: `pnpm --filter @systemfsoftware/oxlint-plugin-effect-schema typecheck`

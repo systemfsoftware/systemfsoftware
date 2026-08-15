@@ -11,5 +11,3 @@ Three new exports: `Inhabited`, `UntaggedError` and `Tagged`.
 - `Either<D, never>` — the workflow cannot fail, so it decides nothing. Give it an error variant, or move it to a `*.kernel.ts`.
 - `Either<never, E>` — the workflow can never succeed. Give it a decision variant it can return.
 - `Either<D, Error>` — a bare `Error` carries no `_tag` to dispatch on. Declare the error as an `S.TaggedError`.
-
-`workflow-either-inhabited` stays: two of its defect classes are outside what a type can reach — a fieldless tagged decision class, and a class that is structurally tagged without nominally extending `S.TaggedError`.

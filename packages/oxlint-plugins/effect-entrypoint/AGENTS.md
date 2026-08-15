@@ -38,5 +38,5 @@ Rules here gate `main.ts` as a real interpretation edge. The spec of record is `
   do: leave it ungated by filename — the violation lives in the importer, not the entrypoint
   dont: add a test-file or tooling exemption
   harm: a test importing `main.ts` is the same defect as production importing it, and is how an entrypoint silently becomes a module
-  check: `grep -n 'filename' packages/oxlint-plugins/effect-entrypoint/src/rules/entrypoint-not-imported.ts` returns nothing — the rule's create() is ungated — and `pnpm --filter @systemfsoftware/oxlint-plugin-effect-entrypoint test` keeps Should_Report_When_ATestImportsTheEntrypoint red
+  check: "`grep -n 'filename' packages/oxlint-plugins/effect-entrypoint/src/rules/entrypoint-not-imported.ts` returns nothing — the rule's create() is ungated — and `pnpm --filter @systemfsoftware/oxlint-plugin-effect-entrypoint test` keeps Should_Report_When_ATestImportsTheEntrypoint red"
 ```

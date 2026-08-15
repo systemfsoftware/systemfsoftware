@@ -84,8 +84,7 @@ The forty-two survivors the narrow glob was not looking at sit in `daemon-metric
 `intensity-window.kernel.ts`, `restart-decision.kernel.ts`, three `supervision-*.state.ts` files and
 `mod.ts`. They are pure decisions, which is what the instrument is for.
 
-`check:mutate-scope` forbids enrolling a `*.kernel.ts` file in a mutate glob at all, on the ground
-that kernels are observed instead by colocated K-law property tests. The widened run tested that
+The package's own `stryker.config.json` mutate globs leave `*.kernel.ts` out of the mutated scope — `effect-daemon-spec` mutates `src/**/*.workflow.ts` and `src/**/*.schema.ts`, not `*.kernel.ts` — on the ground that kernels are observed instead by colocated K-law property tests, and `requireTestContribution` names that ground: a `*.kernel.property.test.ts` that kills no mutant nothing else kills fails the run. The widened run tested that
 ground and it failed twice over: the kernel files hold survivors, and `requireTestContribution`
 reported that deleting `src/internal/__tests__/restart-decision.kernel.property.test.ts` would leave
 every mutant just as dead. The named substitute observer contributes nothing that another test does

@@ -16,5 +16,5 @@ NOT vendored — `repos/` is the read-only tree (REPO-S3); this package is edite
   do: keep exactly one driver (`memfs`) behind the FileSystem port
   dont: import a second external system into memory-file-system.adapter.ts
   harm: adapter-single-external-system exempts the @effect/platform PORT scope precisely so the one DRIVER is countable; a second driver silently defeats that
-  check: `pnpm --filter @systemfsoftware/effect-memfs lint` exits 0 with zero adapter-single-external-system reports
+  check: "`pnpm --filter @systemfsoftware/effect-memfs lint` exits 0 with zero adapter-single-external-system reports"
 ```

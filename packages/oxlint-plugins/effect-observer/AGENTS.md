@@ -20,5 +20,5 @@
   do: leave OB1 (serves the observer frame, review-gated) and OB6 (banned file names) to the reviewer and to cell-taxonomy
   dont: invent a rule that approximates either
   harm: a shaky approximation duplicates another capability's gate with worse signal
-  check: `grep -c "^    'observer-" src/index.ts` prints 2
+  check: "`grep -c \"^    'observer-\" src/index.ts` prints 2"
 ```

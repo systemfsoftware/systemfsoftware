@@ -6,7 +6,7 @@
 
 ## What makes this package different
 
-````yaml
+```yaml
 rules:
   - id: CELL-TT1
     title: test-types/ is generated and untracked — never hand-edit it, never commit it
@@ -35,11 +35,11 @@ rules:
     do: keep the generator a Deno script with a shebang and least-privilege flags, checked by
       `pnpm --filter @systemfsoftware/effect-cell-type-tests check:scripts`
       (`deno check` + `deno lint` against `scripts/deno.jsonc`)
-    dont: add `scripts` to `tsconfig.node.json`'s `include`, or drop `nodeModulesDir: "manual"` from
-      `scripts/deno.jsonc`
-    harm: the generator uses `Deno` globals, so pulling it into the node TS program fails
+    dont: "add `scripts` to `tsconfig.node.json`'s `include`, or drop `nodeModulesDir: \"manual\"` from
+      `scripts/deno.jsonc`"
+    harm: "the generator uses `Deno` globals, so pulling it into the node TS program fails
       `check:project-references` with TS2304 — measured, and masked for a while by a turbo cache
-      hit. Without `nodeModulesDir: "manual"` the bare workspace import fails as `not a dependency`
+      hit. Without `nodeModulesDir: \"manual\"` the bare workspace import fails as `not a dependency`"
     check: "`pnpm --filter @systemfsoftware/effect-cell-type-tests check:scripts` exits 0 and
       `pnpm check:project-references` reports this project compiling clean"
 
@@ -52,6 +52,7 @@ rules:
     harm: an oracle that cannot fail is a tautology with a passing badge; this consumer exists
       precisely because its checker is not the runtime fold that produced the value
     check: review — reversing the walk in the generator makes `pnpm --filter @systemfsoftware/effect-cell-type-tests test:types` fail (measured at 7 failing assertions)
+```
 
 ## Dependency edge
 
@@ -67,4 +68,4 @@ pnpm --filter @systemfsoftware/effect-cell-type-tests check:scripts
 pnpm --filter @systemfsoftware/effect-cell-type-tests typecheck
 pnpm --filter @systemfsoftware/effect-cell-type-tests test:types
 pnpm --filter @systemfsoftware/effect-cell-type-tests lint
-````
+```

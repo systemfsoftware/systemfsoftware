@@ -8,18 +8,15 @@ Rules here gate `CONSTITUTION.md` Articles I–II.
 - id: EW1
   title: The obligation is upstream; this package holds prohibitions only
   do: leave "a workflow must declare its Command, Decision and Error as S.TaggedClass /
-    S.TaggedError" to the declaration language and to `Workflow.make`, whose `Inhabited`
-    constraint refuses an uninhabited or untagged channel at the construction site and names
-    the fix in the diagnostic
-  dont: add a rule here that MUST fail a workflow for lacking a declaration, on the argument
-    that prohibitions alone are vacuous against a plain TS union
-  harm: the argument is sound and the instrument is wrong. `typeid-required`,
-    `no-unconstructed-variant` and `no-panic-vocabulary` all keyed on a schema declaration
-    existing, so with prohibitions alone a plain TS union made them vacuous at once and
-    avoiding Effect Schema was the cheapest way to pass. A walker reading the finished text
-    can only report that afterwards; the declaration decides it before the file exists, which
-    is why the obligation belongs there and a second copy here reports a violation the
-    declaration should have refused
-  check: review — whether a proposed rule fails a workflow for lacking a declaration, which
-    the declaration decides before the file exists
+    S.TaggedError" to `Workflow.make`, whose `Inhabited` constraint refuses an uninhabited or
+    untagged channel at the construction site and names the fix in the diagnostic
+  dont: add a rule here that MUST fail a workflow for lacking a `Workflow.make` declaration,
+    on the argument that prohibitions alone are vacuous against a plain TS union
+  harm: the argument is sound and the instrument is wrong. Prohibitions alone are vacuous
+    against a plain TS union, and avoiding Effect Schema was the cheapest way to pass them.
+    A walker reading the finished file can only report the absence afterwards;
+    `Workflow.make` refuses it before the file exists, so the obligation belongs there and a
+    second copy here would report a violation `Workflow.make` should have refused
+  check: "`Workflow.make` decides whether a workflow declares its Command, Decision and
+    Error; review whether a proposed rule would fail a workflow for lacking that declaration"
 ```

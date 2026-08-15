@@ -31,7 +31,7 @@ This package mechanizes the positive half of Constitution IV.2 — a source file
   do: exempt any src/ file whose segment immediately before the extension is `generated` - foo.generated.ts and order.schema.generated.ts
   dont: exempt a bare generated.ts - there the marker is the whole basename, not a suffix marker - or a generated segment anywhere but directly before the extension
   harm: a generated artifact cannot be renamed to name a cell, so a rule demanding the rename is unsatisfiable and every build ships an unfixable violation
-  check: `grep -n 'generated' packages/oxlint-plugins/cell-taxonomy/src/rules/__tests__/cell-suffix-required.test.ts` returns the valid foo.generated.ts and order.schema.generated.ts cases beside the invalid generated.ts and foo.generated.helper.ts near-misses
+  check: "`grep -n 'generated' packages/oxlint-plugins/cell-taxonomy/src/rules/__tests__/cell-suffix-required.test.ts` returns the valid foo.generated.ts and order.schema.generated.ts cases beside the invalid generated.ts and foo.generated.helper.ts near-misses"
 ```
 
 - Types: `pnpm --filter @systemfsoftware/oxlint-plugin-cell-taxonomy typecheck`

@@ -15,8 +15,8 @@ rules:
       and this package holds no decision to change — every source file is a
       contract module whose content is types plus the fold that interprets them,
       so a surviving mutant here reports on the test suite of something else
-    check: `git ls-files packages/effect-cell-types` names no `stryker.config.json`,
-      and `package.json` carries no mutation script
+    check: "`git ls-files packages/effect-cell-types` names no `stryker.config.json`,
+      and `package.json` carries no mutation script"
 
   - id: CELL-T2
     title: The type observer is mandatory; composition covers the interpreter
@@ -35,16 +35,16 @@ rules:
       compiler now accepts; equally, the interpreter is the one place a
       description becomes effects, so a fold that drops a layer or runs a phase
       twice is invisible to every type assertion
-    check: `pnpm --filter @systemfsoftware/effect-cell-types test:types` exits 0
+    check: "`pnpm --filter @systemfsoftware/effect-cell-types test:types` exits 0
       with each assertion observed failing once with its expect-error directive
-      removed, and `test` exits 0 with at least one description run end to end
+      removed, and `test` exits 0 with at least one description run end to end"
 
   - id: CELL-T3
     title: This package is where a phase is described, and the only place
     do:
-      - author a new phase here and nowhere else: its closure type, its node
+      - "author a new phase here and nowhere else: its closure type, its node
         record, its union member, its stage brand, its constructor, and its place
-        in `canonical` — the chain that only type-checks in one order
+        in `canonical` — the chain that only type-checks in one order"
       - let `vocabulary` stay a fold of `canonical`, a description the public
         constructors build, so the table is a walk result rather than a second
         declaration standing beside them

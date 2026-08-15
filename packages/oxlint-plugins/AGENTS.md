@@ -113,8 +113,9 @@ is no fixed rule-count ceiling, only the two budgets above.
 
 ## Package Deltas
 
-Every `effect-<cell>/` package's spec of record is its `architect-<cell>` skill — that is the
-default, not a delta. Listed here only where a package departs from it.
+Each `effect-<cell>/` package's leaf `AGENTS.md` states its own doctrine and is its spec of
+record — the shared conventions in this file are the default, not a delta. Listed here only
+where a package departs from them.
 
 | Package                                         | Leaf delta                                                                                                                             |
 | ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |

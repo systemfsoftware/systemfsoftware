@@ -42,7 +42,7 @@ The cache-bust is what hides it. Each session really does get its own handler cl
   do: call every `pi.on(...)` before the default export resolves, and register the highest-precedence blocker first
   dont: register from a `.then()` you never await, from a timer, or after the returned promise settles
   harm: "unregistered handlers are silently never collected; a late-registered blocker loses because the runner short-circuits on the first `{ block: true }`"
-    check: "run `node omp/scripts/smoke-plugin.mjs omp/plugins/<name>/dist/index.js` — every expected event name appears in the handler list"
+  check: "run `node omp/scripts/smoke-plugin.mjs omp/plugins/<name>/dist/index.js` — every expected event name appears in the handler list"
 
 - id: PLG4
   title: NEVER warm a runtime inside the factory

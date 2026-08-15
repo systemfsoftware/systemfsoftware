@@ -20,13 +20,13 @@ rules:
     dont: add `@systemfsoftware/effect-cell-types` (or any package that depends on this
       one, or on a lint plugin) to this package's `dependencies`, or move the generator
       back into `effect-cell-types`
-    harm: `packages/oxlint-config` declares every lint plugin as a real dependency, so a
+    harm: "`packages/oxlint-config` declares every lint plugin as a real dependency, so a
       back-edge from `effect-cell-types` to this package — or from this package to any
       linted package that itself depends on `effect-cell-types` — closes a turbo
       `#build` cycle the repo fails on. The generator is a sibling of the interpreter by
-      design: the description is the contract, and each consumer walks it for itself
-    check: `pnpm turbo build --dry > /dev/null` reports no `Cyclic dependency detected`,
-      and `grep -rn "effect-cell-gen" packages/effect-cell-types` returns nothing
+      design: the description is the contract, and each consumer walks it for itself"
+    check: "`pnpm turbo build --dry > /dev/null` reports no `Cyclic dependency detected`,
+      and `grep -rn \"effect-cell-gen\" packages/effect-cell-types` returns nothing"
 
   - id: CELL-A2
     title: The five axes come from walking a description, never from literals
@@ -43,7 +43,8 @@ rules:
     harm: the description is the single place a phase is described; a generator that
       declares its own copy drifts from the interpreter it feeds, and a drift makes the
       properties pass over phases the interpreter never runs
-    check: `grep -nE "'read'|'decode'|'validate'|'decide'|'encode'|'write'|'pure'|'impure'|'store'|'adapter'|'effect/Clock'|'effect/System'|call read\\(|call decode\\(|call validate\\(|call decide\\(|call encode\\(|call write\\(" src/Gen.ts`
+    check: >-
+      `grep -nE "'read'|'decode'|'validate'|'decide'|'encode'|'write'|'pure'|'impure'|'store'|'adapter'|'effect/Clock'|'effect/System'|call read\\(|call decode\\(|call validate\\(|call decide\\(|call encode\\(|call write\\(" src/Gen.ts`
       returns nothing — no phase name, kind, I/O cell, I/O source, or stage-brand
       sentence appears anywhere in this package; the only axis this package names is
       the import of the description module itself
@@ -55,17 +56,17 @@ rules:
         execution order equals the order the drawn value declares, and the response is
         the last layer's
       - read every expectation off the drawn description value, never off
-        `Cell.vocabulary`: the generator rebuilds the description from the walked
+      - "`Cell.vocabulary`: the generator rebuilds the description from the walked
         canonical value, so comparing the trace to the generator's own input would be
-        circular
+        circular"
     dont: add a behavioural test that asserts the vocabulary's contents, or a test that
       compares the interpreter's trace against a literal phase list
     harm: the two properties exist to catch an interpreter that interleaves layers,
       skips a phase, or returns the wrong layer's response; a comparison against the
       generator's own input cannot catch any of those
-    check: `pnpm --filter @systemfsoftware/effect-cell-gen test` exits 0 with both
+    check: "`pnpm --filter @systemfsoftware/effect-cell-gen test` exits 0 with both
       properties running, and the expectations in
-      `src/__tests__/interpreter.kernel.property.test.ts` read only the drawn value
+      `src/__tests__/interpreter.kernel.property.test.ts` read only the drawn value"
 ```
 
 ## Verification

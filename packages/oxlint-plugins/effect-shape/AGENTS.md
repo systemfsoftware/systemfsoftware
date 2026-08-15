@@ -21,5 +21,5 @@
   do: treat the first path segment of a non-relative, non-`node:` import source as its foreign package root; count `export * from` re-exports the same way
   dont: maintain a domain-package allowlist — "a domain package" is not mechanically identifiable, so SH2 covers `.schema`-suffix siblings and other DMMF cells only
   harm: a name-based allowlist either misses the repo's domain packages or fires on sanctioned foreign ones
-  check: `grep -l 'data:' src/rules/__tests__/*.test.ts` lists all three rule test files; review — no errors object carries messageId alone: every case pairs it with a data block (name/expected/actual/fix)
+  check: "`grep -l 'data:' src/rules/__tests__/*.test.ts` lists all three rule test files; review — no errors object carries messageId alone: every case pairs it with a data block (name/expected/actual/fix)"
 ```

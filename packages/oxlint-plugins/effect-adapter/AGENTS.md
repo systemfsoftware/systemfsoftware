@@ -26,5 +26,5 @@
   do: keep adapter-layer-required — the obligation rule — matching only the `Layer` namespace with `effect`/`succeed`
   dont: widen to aliased imports (`L.effect`) or bracket access
   harm: the Layer is what the composition root wires; without it the port has no implementation to select
-  check: `grep -rn -A1 "defineRule({" src/rules/*.ts` shows every rule file passing the imported config meta straight
+  check: "`grep -rn -A1 \"defineRule({\" src/rules/*.ts` shows every rule file passing the imported config meta straight"
 ```
