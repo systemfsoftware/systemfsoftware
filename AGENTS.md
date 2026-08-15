@@ -17,6 +17,12 @@
   dont: mint a second projection of a port that already exists
   harm: a projection records which members one operation happened to reach for, so exporting it turns internal composition into a surface commitment and forces every consumer to discover and provide N aggregators where one port serves. It escapes silently, because the tag rides the `R` channel of an exported signature and a consumer meets it only at their own call site
   check: "`pnpm check:exported-wiring`"
+- id: REPO-A4
+  title: A cell constraint lives in the description types or it does not exist
+  do: express it as a member of the description types in `@systemfsoftware/effect-cell-types` — a stage brand whose member name is the sentence a diagnostic reports, or a marker interface whose property type states the fix — so the compiler prints the prescription at the construction site
+  dont: read a filename suffix as an input to any rule, or restate a constraint the types already refuse
+  harm: a suffix is supplied by the same author the rule judges, so the rule cannot fail on the file that declined it, and it imposes its shape on every file that carries one whatever that file does. A type refuses the construction itself, so renaming escapes nothing and the refusal reaches a consumer who installs no lint plugin
+  check: review — whether the constraint was tried as a description-type member before any rule was written, and whether any surviving rule reads a filename suffix
 ```
 
 ## Safety
