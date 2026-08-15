@@ -314,6 +314,34 @@ describe("model thinking derivation", () => {
 		expect(getSupportedEfforts(v32)).toEqual([Effort.High, Effort.Max]);
 	});
 
+	it("grants the low/high/max ladder to OpenRouter deepseek-v4-pro-0813 but not the undated route (issue #8517)", () => {
+		// OpenRouter's /models advertises reasoning.supported_efforts
+		// [low, high, max] for the dated SKU; the discovered ladder is baked
+		// into thinking.efforts.
+		const discovered = { mode: "effort" as const, efforts: [Effort.Low, Effort.High, Effort.Max] };
+		const dated = createModel({
+			id: "deepseek/deepseek-v4-pro-0813",
+			api: "openrouter",
+			provider: "openrouter",
+			baseUrl: "https://openrouter.ai/api/v1",
+			thinking: discovered,
+		});
+		const bare = createModel({
+			id: "deepseek/deepseek-v4-pro",
+			api: "openrouter",
+			provider: "openrouter",
+			baseUrl: "https://openrouter.ai/api/v1",
+			thinking: discovered,
+		});
+
+		// The dated SKU keeps its advertised ladder; :max no longer clamps.
+		expect(getSupportedEfforts(dated)).toEqual([Effort.Low, Effort.High, Effort.Max]);
+		expect(clampThinkingLevelForModel(dated, Effort.Max)).toBe(Effort.Max);
+		// The undated OpenRouter route stays high-only.
+		expect(getSupportedEfforts(bare)).toEqual([Effort.High]);
+		expect(clampThinkingLevelForModel(bare, Effort.Max)).toBe(Effort.High);
+	});
+
 	it("encodes the Gemini 3 Pro effort gap and mandatory reasoning in metadata", () => {
 		const model = createModel({
 			id: "gemini-3-pro-preview",

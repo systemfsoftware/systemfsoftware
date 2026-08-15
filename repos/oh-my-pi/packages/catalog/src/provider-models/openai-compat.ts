@@ -1,6 +1,7 @@
 import { USER_AGENT } from "@oh-my-pi/pi-utils";
 import * as logger from "@oh-my-pi/pi-utils/logger";
 import {
+	DEFAULT_OPENAI_COMPATIBLE_DISCOVERY_TIMEOUT_MS,
 	fetchOpenAICompatibleModels,
 	type OpenAICompatibleModelMapperContext,
 	type OpenAICompatibleModelRecord,
@@ -25,6 +26,7 @@ import { ALIBABA_TOKEN_PLAN_BASE_URL, parseAlibabaTokenPlanCredential } from "..
 import { coreWeaveProjectHeaders } from "../wire/coreweave";
 import {
 	COPILOT_API_HEADERS,
+	discoverGitHubCopilotApiEndpoint,
 	getGitHubCopilotBaseUrl,
 	isPersonalGitHubCopilotBaseUrl,
 	parseGitHubCopilotApiKey,
@@ -5191,6 +5193,7 @@ export function githubCopilotModelManagerOptions(config?: GithubCopilotModelMana
 	const resolveReference = createReferenceResolver(getProviderReferences);
 	return {
 		providerId: "github-copilot",
+		cacheProviderId: resolveModelCacheProviderId("github-copilot", { apiKey: rawApiKey, baseUrl }),
 		dropCachedModelIdsOnStaticMismatch: COPILOT_CACHE_INVALIDATED_MODEL_IDS,
 		// COPILOT_API_HEADERS are compile-time constants (User-Agent + API
 		// version), not credentials. The cache omits all request headers for
@@ -5201,11 +5204,17 @@ export function githubCopilotModelManagerOptions(config?: GithubCopilotModelMana
 		restorableHeaderFallback: { ...COPILOT_API_HEADERS },
 		...(apiKey && {
 			fetchDynamicModels: async () => {
+				const fetchImpl = discoveryFetch(config?.fetch);
+				const requestBaseUrl = isPersonalGitHubCopilotBaseUrl(baseUrl)
+					? ((await withCatalogDiscoveryTimeout(DEFAULT_OPENAI_COMPATIBLE_DISCOVERY_TIMEOUT_MS, signal =>
+							discoverGitHubCopilotApiEndpoint(apiKey, fetchImpl, signal),
+						)) ?? baseUrl)
+					: baseUrl;
 				const longContextVariants: ModelSpec<Api>[] = [];
 				const models = await fetchOpenAICompatibleModels<Api>({
 					api: "openai-completions",
 					provider: "github-copilot",
-					baseUrl,
+					baseUrl: requestBaseUrl,
 					apiKey,
 					headers: COPILOT_API_HEADERS,
 					mapModel: (
@@ -5251,7 +5260,7 @@ export function githubCopilotModelManagerOptions(config?: GithubCopilotModelMana
 						const input: ModelSpec<Api>["input"] =
 							supportsVision === true
 								? ["text", "image"]
-								: supportsVision === false || !isPersonalGitHubCopilotBaseUrl(baseUrl)
+								: supportsVision === false || !isPersonalGitHubCopilotBaseUrl(requestBaseUrl)
 									? ["text"]
 									: (reference?.input ?? defaults.input);
 						// With COPILOT_API_HEADERS the served window is the long-context
@@ -5272,7 +5281,7 @@ export function githubCopilotModelManagerOptions(config?: GithubCopilotModelMana
 									...reference,
 									api,
 									provider: "github-copilot",
-									baseUrl,
+									baseUrl: requestBaseUrl,
 									name,
 									input,
 									contextWindow: defaultTierWindow,
@@ -5294,7 +5303,7 @@ export function githubCopilotModelManagerOptions(config?: GithubCopilotModelMana
 							: {
 									...defaults,
 									api,
-									baseUrl,
+									baseUrl: requestBaseUrl,
 									name,
 									input,
 									contextWindow: defaultTierWindow,
@@ -5340,7 +5349,7 @@ export function githubCopilotModelManagerOptions(config?: GithubCopilotModelMana
 						}
 						return base;
 					},
-					fetch: config?.fetch,
+					fetch: fetchImpl,
 				});
 				if (models === null) {
 					return null;

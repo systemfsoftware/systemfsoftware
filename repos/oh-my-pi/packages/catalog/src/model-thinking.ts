@@ -374,13 +374,20 @@ function getModelDefinedEfforts<TApi extends Api>(
 		// on every first-party/aggregator host — the direct API, aggregators, and
 		// Ollama Cloud alike (medium/xhigh fold into high, max is a real wire
 		// tier). See https://api-docs.deepseek.com/api/create-chat-completion.
-		// OpenRouter's non-Flash V4 route still exposes only high; the older
-		// reasoners (V3.x, R1, deepseek-reasoner) top out at high/max.
+		// OpenRouter's non-Flash V4 route exposes only high, except the dated
+		// `deepseek-v4-pro-0813` SKU: its /models metadata advertises (and the
+		// route accepts) the full low/high/max ladder like every other host.
+		// The older reasoners (V3.x, R1, deepseek-reasoner) top out at high/max.
 		if (isDeepseekV4FlashModelId(spec.id)) {
 			return LOW_HIGH_MAX_REASONING_EFFORTS;
 		}
 		if (bareModelId(spec.id).toLowerCase().includes("deepseek-v4")) {
-			return isOpenRouterThinkingFormat(compat) ? HIGH_ONLY_REASONING_EFFORTS : LOW_HIGH_MAX_REASONING_EFFORTS;
+			if (!isOpenRouterThinkingFormat(compat)) {
+				return LOW_HIGH_MAX_REASONING_EFFORTS;
+			}
+			return bareModelId(spec.id).toLowerCase() === "deepseek-v4-pro-0813"
+				? LOW_HIGH_MAX_REASONING_EFFORTS
+				: HIGH_ONLY_REASONING_EFFORTS;
 		}
 		return isOpenRouterThinkingFormat(compat) ? HIGH_ONLY_REASONING_EFFORTS : HIGH_MAX_REASONING_EFFORTS;
 	}

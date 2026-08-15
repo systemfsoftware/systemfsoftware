@@ -162,11 +162,11 @@ jobs:
               bazelisk --bazelrc="${{ steps.cache.outputs.rc }}" test //crates/...
          # Clippy scope mirrors `cargo clippy --workspace` (libraries only, no
          # test targets) plus the strict/default split: crates with
-         # `[lints] workspace = true` get the workspace policy, the vendored
-         # brush-core fork is exempt (same as run-rs-task.ts's cargo excludes).
+         # `[lints] workspace = true` get the workspace policy, except
+         # brush-core (a vendored fork excluded from the Cargo task too).
          # pi-builtins allows every clippy group in its own manifest (ported
          # brush/uutils/jaq code) but is still held to zero rustc warnings;
-         # cargo honors that via `[lints]`, bazel via the clippy-ported config.
+         # Cargo honors that via `[lints]`, Bazel via the clippy-ported config.
          - name: Clippy (workspace lint policy on opted-in crates)
            run: |
               bazelisk query "kind('rust_library|rust_shared_library', //crates/pi-ast/... + //crates/pi-iso/... + //crates/pi-natives/... + //crates/pi-shell/... + //crates/pi-voice/... + //crates/pi-walker/...)" \
@@ -411,12 +411,6 @@ jobs:
          - name: Test coding-agent native/unit bucket
            env:
               OMP_TEST_CONCURRENCY: "4"
-              # The mupdf/PDF-extraction chunk measures ~7 min on burstable
-              # runners under a full 8-wide fan-out; the default 600 s chunk
-              # watchdog SIGKILLed it (release run 30519992654). The watchdog
-              # exists to catch wedged children, not slow-but-progressing
-              # chunks — give this bucket a wider budget.
-              OMP_TEST_CHUNK_TIMEOUT: "1200"
            run: bun run ci:test:coding-agent:native
 
    test_smoke:

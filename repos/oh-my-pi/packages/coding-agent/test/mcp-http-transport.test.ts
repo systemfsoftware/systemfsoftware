@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
+import { connectToServer } from "@oh-my-pi/pi-coding-agent/mcp/client";
 import { HttpTransport } from "@oh-my-pi/pi-coding-agent/mcp/transports/http";
 
 const encoder = new TextEncoder();
@@ -48,6 +49,58 @@ async function withPendingGuard<T>(promise: Promise<T>, label: string): Promise<
 		}),
 	]);
 }
+
+describe("MCP Streamable HTTP initialization", () => {
+	it("sends initialized before opening the optional GET SSE stream", async () => {
+		const requests: string[] = [];
+		let initialized = false;
+		let sessionValid = true;
+		server = Bun.serve({
+			port: 0,
+			async fetch(req) {
+				if (req.method === "GET") {
+					requests.push("GET");
+					if (initialized) return new Response(null, { status: 405 });
+					sessionValid = false;
+					return new Response("session is not initialized", { status: 400 });
+				}
+				if (req.method === "DELETE") return new Response(null, { status: 204 });
+
+				const body = (await req.json()) as { id?: string | number; method: string };
+				requests.push(body.method);
+				if (body.method === "initialize") {
+					const response = {
+						jsonrpc: "2.0",
+						id: body.id,
+						result: {
+							protocolVersion: "2025-11-25",
+							capabilities: {},
+							serverInfo: { name: "session-order", version: "1.0.0" },
+						},
+					};
+					return new Response(`event: message\ndata: ${JSON.stringify(response)}\n\n`, {
+						headers: {
+							"Content-Type": "text/event-stream",
+							"Mcp-Session-Id": "session-order",
+						},
+					});
+				}
+				if (!sessionValid) return new Response("session terminated", { status: 409 });
+				initialized = true;
+				return new Response(null, { status: 202 });
+			},
+		});
+
+		const connection = await connectToServer("session-order", {
+			type: "http",
+			url: `http://127.0.0.1:${server.port}/mcp`,
+			timeout: GUARD_TIMEOUT_MS,
+		});
+
+		expect(requests).toEqual(["initialize", "notifications/initialized", "GET"]);
+		await connection.transport.close();
+	});
+});
 
 describe("MCP Streamable HTTP transport timeouts", () => {
 	it("keeps the request timeout active until a JSON response body is fully read", async () => {
