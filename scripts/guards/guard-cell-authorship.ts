@@ -20,6 +20,7 @@
  */
 import { emitExecutor, parseExecutor } from '../tools/executor-emit.ts'
 import { emitSchema, parseSchema } from '../tools/schema-emit.ts'
+import { emitShape, parseShape } from '../tools/shape-emit.ts'
 import { emitWorkflow, parseWorkflow } from '../tools/workflow-emit.ts'
 
 type Emitter = (declaration: unknown) => string
@@ -28,6 +29,7 @@ const ROLES: Readonly<Record<string, Emitter>> = {
   workflow: (raw) => emitWorkflow(parseWorkflow(raw)),
   executor: (raw) => emitExecutor(parseExecutor(raw)),
   schema: (raw) => emitSchema(parseSchema(raw)),
+  shape: (raw) => emitShape(parseShape(raw)),
 }
 
 /**

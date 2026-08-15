@@ -22,6 +22,14 @@
  *   one is not emittable until the test moves to a test file.
  */
 
+import {
+  isTypeDeclarationKind,
+  renderTypeDeclaration,
+  renderTypeExpr,
+  type TypeDeclaration,
+  type TypeExpr,
+} from './type-decl.ts'
+
 const SOURCE_TEXT_FIELDS = ['code', 'body', 'raw', 'source', 'text', 'fn', 'predicate'] as const
 
 type Expr =
@@ -95,6 +103,10 @@ type Declaration =
     readonly kind: 'schema'
     readonly name: string
     readonly value: Expr
+    /** An explicit binding type: `const X: Schema.Schema<unknown> = Schema.Any`. */
+    readonly annotation?: TypeExpr
+    /** `= 1 as const` - narrows an inert scalar to its literal type at the binding. */
+    readonly asConst?: boolean
     /**
      * The type alias beside the const. `Type` writes `typeof X.Type`; `schemaType` writes
      * `Schema.Schema.Type<typeof X>`. Both spellings ship in this repo.
@@ -112,12 +124,18 @@ interface ImportSpec {
   readonly typeOnly?: boolean
   /** `import { Schema as S }` - the local name this cell binds Schema to. */
   readonly alias?: Readonly<Record<string, string>>
+  /**
+   * A blank line before this statement, which is how a cell separates its package imports from its
+   * relative ones. The formatter preserves an author's single blank line, so it cannot be recovered
+   * by re-formatting and has to be declared.
+   */
+  readonly blankBefore?: boolean
 }
 
 export interface SchemaDeclaration {
   readonly role: 'schema'
   /** The local name for Effect's `Schema` namespace in this cell: `S` or `Schema`. */
-  readonly namespace: string
+  readonly namespace?: string
   readonly imports: readonly ImportSpec[]
   readonly declarations: readonly Declaration[]
   readonly doc?: readonly string[]
@@ -140,6 +158,14 @@ const isRecord = (v: unknown): v is Record<string, unknown> => v !== null && typ
  */
 const PAYLOAD_KEYS = new Set(['struct', 'fields', 'record', 'annotations'])
 
+/**
+ * `fn` is the one field name that is legitimate in one position and a body in every other: the
+ * shared type language keys a function *type* `fn`, and `{ params, returns }` is a signature with
+ * nowhere for a body to hide. So the check reads the value rather than the name - a `fn` that is a
+ * signature passes, and a `fn` holding anything else is the refinement body this guard exists for.
+ */
+const isFunctionType = (v: unknown): boolean => isRecord(v) && 'params' in v && 'returns' in v
+
 const assertNoSourceText = (node: unknown, path: string, keysArePayload = false): void => {
   if (Array.isArray(node)) {
     node.forEach((v, i) => assertNoSourceText(v, `${path}[${i}]`))
@@ -148,7 +174,7 @@ const assertNoSourceText = (node: unknown, path: string, keysArePayload = false)
   if (!isRecord(node)) return
   if (!keysArePayload) {
     for (const field of SOURCE_TEXT_FIELDS) {
-      if (field in node) {
+      if (field in node && !(field === 'fn' && isFunctionType(node[field]))) {
         reject(
           `${path}.${field}: a declaration carries no source text. A refinement or codec body belongs in a ` +
             `*.kernel.ts export named by \`filter: { by }\` or \`transform: { by }\`.`,
@@ -361,6 +387,12 @@ const classBody = (head: string, args: readonly string[], brand: string | undefi
 
 const renderDeclaration = (d: Declaration, ns: string, index: number): string => {
   const path = `declarations[${index}]`
+  // A schema cell may carry plain type declarations beside its schemas - several in this repo are
+  // type modules with no Schema call at all. Those go to the shared type language rather than being
+  // re-invented here, which is also what keeps the two emitters from disagreeing about a signature.
+  if (isTypeDeclarationKind((d as { kind: unknown }).kind)) {
+    return renderTypeDeclaration(d as unknown as TypeDeclaration, path)
+  }
   switch (d.kind) {
     case 'typeId': {
       if (!IDENT.test(d.name)) reject(`${path}.name: expected an identifier`)
@@ -394,7 +426,13 @@ const renderDeclaration = (d: Declaration, ns: string, index: number): string =>
     case 'schema': {
       if (!IDENT.test(d.name)) reject(`${path}.name: expected an identifier`)
       const value = renderExpr(d.value, ns, `${path}.value`)
-      const lines = [`${exported(d.export)}const ${d.name} = ${value}`]
+      // An annotation widens a schema at its binding - `Schema.Schema<unknown> = Schema.Any` - and is
+      // load-bearing for the consumer, so it is declared rather than inferred away.
+      const annotation = d.annotation === undefined
+        ? ''
+        : `: ${renderTypeExpr(d.annotation, `${path}.annotation`)}`
+      const narrowed = d.asConst === true ? `${value} as const` : value
+      const lines = [`${exported(d.export)}const ${d.name}${annotation} = ${narrowed}`]
       if (d.typeAlias !== undefined) {
         const aliasName = d.typeAlias.name ?? d.name
         const rhs = d.typeAlias.form === 'Type'
@@ -426,12 +464,19 @@ export const parseSchema = (raw: unknown): SchemaDeclaration => {
   const rec = raw as Record<string, unknown>
   assertNoSourceText(rec, 'declaration')
   if (rec.role !== 'schema') reject(`role: expected "schema", got ${JSON.stringify(rec.role)}`)
-  if (typeof rec.namespace !== 'string' || !IDENT.test(rec.namespace)) {
-    reject('namespace: expected the local name this cell binds Effect\'s Schema to, e.g. "S" or "Schema"')
-  }
   if (!Array.isArray(rec.imports)) reject('imports: expected an array')
-  if (!Array.isArray(rec.declarations) || rec.declarations.length === 0) {
+  const declarations: unknown = rec.declarations
+  if (!Array.isArray(declarations) || declarations.length === 0) {
     reject('declarations: expected a non-empty array - a schema cell that declares nothing is not a cell')
+  }
+  // A namespace is required only where a schema construct actually uses one. Several `.schema.ts`
+  // cells in this repo declare types and never call Schema at all, and demanding a binding they do
+  // not have would reject a legitimate cell.
+  const usesSchema = (declarations as readonly unknown[]).some((d) =>
+    !isTypeDeclarationKind(isRecord(d) ? d.kind : undefined)
+  )
+  if (usesSchema && (typeof rec.namespace !== 'string' || !IDENT.test(rec.namespace))) {
+    reject('namespace: expected the local name this cell binds Effect\'s Schema to, e.g. "S" or "Schema"')
   }
   if ('inSourceTest' in rec || 'vitest' in rec) {
     reject(
@@ -443,16 +488,25 @@ export const parseSchema = (raw: unknown): SchemaDeclaration => {
 }
 
 export const emitSchema = (decl: SchemaDeclaration): string => {
-  const ns = decl.namespace
-  const imports = decl.imports.map((spec, i) => renderImport(spec, i)).join('\n')
+  // `Schema` is only a rendering prefix; a type-only cell never reaches a branch that uses it.
+  const ns = decl.namespace ?? 'Schema'
+  const imports = decl.imports
+    .map((spec, i) => `${spec.blankBefore === true && i > 0 ? '\n' : ''}${renderImport(spec, i)}`)
+    .join('\n')
   // A blank doc line is ` *`, never ` * `: the formatter strips the trailing space, so emitting one
   // makes the round-trip differ by exactly that byte.
   const docLine = (l: string): string => l === '' ? ' *' : ` * ${l}`
   const doc = decl.doc === undefined ? '' : `/**\n${decl.doc.map(docLine).join('\n')}\n */\n`
   // Declarations are separated by a blank line: `dprint` preserves the author's blank lines between
   // statements, so joining them tightly would differ from the file on disk by exactly those bytes.
-  const body = decl.declarations.map((d, i) => renderDeclaration(d, ns, i)).join('\n\n')
-  return `${imports}\n\n${doc}${body}\n`
+  // Declarations are blank-line separated unless one asks to sit against its predecessor, which is
+  // how a cell groups a union with the members it unions. `dprint` preserves either.
+  const body = decl.declarations
+    .map((d, i) =>
+      `${i > 0 ? ((d as { tight?: boolean }).tight === true ? '\n' : '\n\n') : ''}${renderDeclaration(d, ns, i)}`
+    )
+    .join('')
+  return imports === '' ? `${doc}${body}\n` : `${imports}\n\n${doc}${body}\n`
 }
 
 const main = async (): Promise<void> => {

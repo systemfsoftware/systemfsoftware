@@ -170,6 +170,14 @@ const MANIFEST = new Map([
     'workspace-layout',
     'Turns a *.schema.decl.json into a schema cell. Same reason as the other emitters: it writes into any package src/ and the authorship gate is its only caller in a chain.',
   ]],
+  ['tools/shape-emit.ts', [
+    'workspace-layout',
+    'Turns a *.shape.decl.json into a shape cell. Same reason as the other emitters: it writes into any package src/ and the authorship gate is its only caller in a chain.',
+  ]],
+  ['tools/type-decl.ts', [
+    'workspace-layout',
+    'The TypeScript type declaration language the shape and schema emitters share. A library for those two, called by no chain of its own.',
+  ]],
   ['tools/worktrunk/', [
     'local-tooling',
     'Worktrunk git-worktree lifecycle hooks, invoked by .config/wt.toml. Operator workflow.',
