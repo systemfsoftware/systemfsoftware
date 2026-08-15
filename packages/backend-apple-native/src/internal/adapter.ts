@@ -1,3 +1,12 @@
+/*
+ * Translation boundary between the backend-neutral RuntimeService contract and
+ * the private Apple Metal napi-rs addon. The adapter keeps all public handles
+ * opaque, validates their provenance before unwrapping native objects, records
+ * the logical input/output contract that the addon exposes only implicitly, and
+ * turns native exceptions into Runtime.BackendError values. Graph construction,
+ * autodiff, and compilation are synchronous; execution and file/readback I/O
+ * use cancellable native promises.
+ */
 import { Runtime } from "@effect-torch/core"
 import { Effect } from "effect"
 import { pipeArguments } from "effect/Pipeable"
@@ -55,7 +64,14 @@ type TensorBinding = Omit<TensorBindingDeclaration, "kind" | "slot">
 
 const numberBits = new DataView(new ArrayBuffer(8))
 
-/** @internal */
+/**
+ * Produces the JSON-safe canonical form used by the structural executable
+ * cache key. Object keys are sorted, byte arrays become numeric arrays, and
+ * non-finite numbers plus negative zero retain their exact IEEE-754 bits rather
+ * than collapsing under `JSON.stringify`.
+ *
+ * @internal
+ */
 export const normalizedStructure = (value: unknown): unknown => {
   if (typeof value === "number") {
     if (Number.isFinite(value) && !Object.is(value, -0)) return value
@@ -76,7 +92,7 @@ export const normalizedStructure = (value: unknown): unknown => {
   return value
 }
 
-/** @internal */
+/** Serializes a value after {@link normalizedStructure} canonicalization. @internal */
 export const structuralCacheKey = (value: unknown): string => JSON.stringify(normalizedStructure(value))
 
 interface KvPoolInfo {
@@ -111,6 +127,9 @@ interface ExecutableInfo {
 }
 
 const handleRecords = new WeakMap<object, HandleRecord>()
+// Every adapter module keeps its records private. The shared weak set only lets
+// independently loaded backend modules distinguish a foreign opaque handle from
+// an arbitrary object without retaining either one.
 const backendHandlesKey = Symbol.for("@effect-torch/backend-handles")
 const existingBackendHandles = Reflect.get(globalThis, backendHandlesKey) as WeakSet<object> | undefined
 const backendHandles = existingBackendHandles ?? new WeakSet<object>()
@@ -144,6 +163,13 @@ const backendError = (
       })
     })()
 
+/**
+ * Bridges Effect interruption to the addon's cooperative cancellation token.
+ * Native work is not assumed to stop immediately: a result that wins after the
+ * fiber is interrupted is passed to `onLateSuccess` so newly returned native
+ * tensors can be cleared. Rejections caused by cancellation remain fiber
+ * interruption; other exceptions enter the typed backend error channel.
+ */
 const cancellable = <A>(
   native: NativeAddon,
   operation: string,
@@ -215,7 +241,15 @@ const cancellable = <A>(
     )
   })
 
-/** @internal */
+/**
+ * Constructs one Metal RuntimeService around an already loaded addon namespace.
+ * The addon object is both runtime identity and the ownership key, so services
+ * made around the same namespace can exchange handles while another backend or
+ * another addon instance cannot. Construction allocates only adapter metadata;
+ * the process-wide Metal device is initialized lazily by native operations.
+ *
+ * @internal
+ */
 export const makeRuntime = (
   native: NativeAddon
 ): Runtime.RuntimeService => {
@@ -363,6 +397,9 @@ export const makeRuntime = (
       }
     }) as unknown as H
   }
+  // `node` calls are synchronous, so these fields safely carry one request's
+  // JavaScript-only structure and declarations through the native constructor
+  // into `lazyHandle`. They are always consumed or reset before control returns.
   let pendingStructure: StructuralNode | undefined
   let pendingDeclarations: ReadonlySet<InputDeclaration> | undefined
   const lazyHandle = (
@@ -488,6 +525,10 @@ export const makeRuntime = (
   }
   const sameBinding = (left: TensorBinding, right: TensorBinding): boolean =>
     left.dtype === right.dtype && sameShape(left.shape, right.shape) && sameStorage(left.storage, right.storage)
+  // Native LazyTensor nodes know their physical graph but do not expose the
+  // shared public slot namespace. Propagating declarations in JavaScript lets
+  // compilation reject gaps and conflicting tensor/scalar declarations before
+  // invocation bindings are separated into native tensor and scalar arrays.
   const declarationsFor = (request: Runtime.NodeRequest): ReadonlySet<InputDeclaration> => {
     const declarations = new Set<InputDeclaration>()
     const source = request.op === "constant" || request.op === "zeros" || request.op === "ones" ||
@@ -578,6 +619,9 @@ export const makeRuntime = (
     }
     return found.value as NativeTensor
   }
+  // Snapshot native diagnostics into recursively frozen public data. These are
+  // static artifact/planner measurements; compile phase timings come from the
+  // artifact and therefore remain those of the original structural-cache entry.
   const executable = (
     value: Executable,
     bindings: ExecutableInfo["bindings"],
@@ -618,6 +662,9 @@ export const makeRuntime = (
     wrapOpaque<Runtime.KvSequenceHandle>("kv-sequence", value, { pool } satisfies KvSequenceInfo)
   const nativeSequence = (handle: Runtime.KvSequenceHandle, operation: string): HandleRecord =>
     record(handle, "kv-sequence", operation, "execute")
+  // Native result arrays transfer one owning wrapper per element. Deduplication
+  // prevents two public handles from claiming the same wrapper, and cleanup is
+  // deliberately best-effort because this path is already discarding a result.
   const clearBuffers = (values: ReadonlyArray<NativeTensor>): void => {
     for (const value of new Set(values)) {
       try {
@@ -639,6 +686,12 @@ export const makeRuntime = (
     }
     return values.map((value, index) => concreteHandle(value, logical?.[index]))
   }
+  // Reconstruct a value-independent graph description for the addon's bounded
+  // structural cache. Materialized leaves contribute signatures, not payloads;
+  // the native cache revalidates generated bindings, and constantWeights makes
+  // native compilation bypass cache reuse because values become executable
+  // constants. Gradients omit structure and therefore intentionally return no
+  // cache key.
   const executableCacheKey = (request: Runtime.CompileRequest): string | undefined => {
     const ids = new Map<object, number>()
     const nodes: Array<unknown> = []
@@ -679,6 +732,10 @@ export const makeRuntime = (
       }
     return structuralCacheKey({ nodes, roots, options, state: request.state })
   }
+  // Translate each discriminated public request to the corresponding native
+  // LazyTensor constructor or method. Public arrays are copied before crossing
+  // N-API, every input is provenance-checked, and native metadata is validated
+  // while the resulting opaque handle is assembled.
   const node = (request: Runtime.NodeRequest): Effect.Effect<Runtime.LazyTensorHandle, Runtime.BackendError> =>
     Effect.try({
       try: () => {
@@ -1180,6 +1237,7 @@ export const makeRuntime = (
       blockSize: state.blockSize,
       kvDtype: state.kvDtype,
       ...(state.window === undefined || !value.allowsWindowEviction ? {} : { window: state.window }),
+      ...(state.lastTokenRow === undefined ? {} : { lastTokenRow: state.lastTokenRow }),
       ...geometry
     })
   }
@@ -1195,6 +1253,9 @@ export const makeRuntime = (
       message,
       details: { device }
     })
+  // Stateful invocation mutably borrows distinct sequences from one compatible
+  // pool. The adapter checks the completed compile schema, token-row shape, and
+  // non-windowed capacity before native execution stages transactional updates.
   const resolveExecutionState = (
     schema: Runtime.DecodeStateSchema | undefined,
     invocation: Runtime.ExecutionStateInvocation | undefined
@@ -1262,6 +1323,51 @@ export const makeRuntime = (
       invocation.tokens.map((row) => [...row])
     ]
   }
+  const resolveExecutableInvocation = (
+    handle: Runtime.ExecutableHandle,
+    invocation: Runtime.ExecutionInvocation
+  ) => {
+    const executableRecord = nativeExecutable(handle, "execute")
+    if (Object.keys(invocation.runtimeValues).length !== 0) {
+      throw executionError(
+        "execute: runtime values are not supported by the Apple Metal backend",
+        "unsupported-operation"
+      )
+    }
+    const info = executableRecord.info as ExecutableInfo
+    if (invocation.bindings.length !== info.bindings.length) {
+      throw executionError(
+        `execute: received ${invocation.bindings.length} tensor bindings, expected ${info.bindings.length}`
+      )
+    }
+    const inputs = invocation.bindings.map((input, index) =>
+      nativeBinding(
+        input,
+        info.bindings[index]!,
+        index,
+        info.state !== undefined && invocation.state !== undefined && index === info.bindings.length - 1
+          ? { compiled: info.state.batch, active: invocation.state.sequences.length }
+          : undefined
+      )
+    )
+    if (info.state !== undefined && invocation.scalars.length !== 0) {
+      throw executionError("execute: stateful executable does not accept scalar inputs")
+    }
+    const [sequences, tokens] = resolveExecutionState(info.state, invocation.state)
+    return {
+      executable: executableRecord.value as Executable,
+      info,
+      inputs,
+      scalars: [...invocation.scalars],
+      sequences,
+      tokens
+    }
+  }
+  // Pools own fixed KV slabs, prefix-cache state, and recurrent geometry;
+  // sequence wrappers retain KV block references and per-sequence recurrent
+  // tensors. releaseSequence invalidates the public sequence and returns its
+  // block references; remaining sequence, pool, and executable storage relies
+  // on native finalization.
   const decode: Runtime.DecodeRuntime = {
     makePool: (options) =>
       Effect.try({
@@ -1331,6 +1437,42 @@ export const makeRuntime = (
         catch: backendErrorFor("releaseSequence", "execute")
       })
   }
+  const sampling: Runtime.SamplingRuntime = {
+    sample: (handle, options) =>
+      cancellableFor(
+        "sample",
+        "execute",
+        (token) =>
+          nativeTensor(handle, "sample").sample(
+            options.temperature,
+            options.topK,
+            options.topP,
+            options.seed,
+            options.counter,
+            token
+          )
+      ),
+    executeDecode: (handle, invocation, options) =>
+      cancellableFor(
+        "executeDecode",
+        "execute",
+        (token) => {
+          const resolved = resolveExecutableInvocation(handle, invocation)
+          return resolved.executable.executeSampled(
+            resolved.inputs,
+            resolved.sequences ?? [],
+            resolved.tokens ?? [],
+            options.map((option) => ({ ...option })),
+            token
+          )
+        }
+      )
+  }
+  // Direct path I/O borrows tensors on save and transfers newly loaded native
+  // tensors to caller-owned concrete handles on success. Safetensors has no
+  // representation for the adapter's logical-f32/packed-u8 GGML storage, so
+  // encoded handles are rejected rather than serialized as misleading u8 data.
+  // Metal rejects archives containing f64 instead of falling back to CPU.
   const pathSafetensors: Runtime.PathSafetensors = {
     save: (path, archive) =>
       archive.entries.some((entry) => entry.tensor.storage !== undefined)
@@ -1399,6 +1541,8 @@ export const makeRuntime = (
         )
       )
   }
+  // GGUF metadata crosses N-API through one populated scalar/array field because
+  // generated object declarations cannot express the native tagged union.
   const metadataValue = (entry: NativeGgufMetadataEntry): Runtime.GgufMetadataEntry => {
     if (typeof entry.key !== "string" || entry.key.length === 0 || typeof entry.kind !== "string") {
       throw new Error("native GGUF metadata entry is invalid")
@@ -1473,6 +1617,12 @@ export const makeRuntime = (
       physicalDtype: value.physicalDtype
     })
   }
+  // Inspection returns validated metadata and logical/physical descriptors but
+  // no payloads. Loading streams supported F32 and K-quant payloads directly to
+  // Metal shared storage; quantized handles retain logical f32 metadata over
+  // packed u8 storage. Interrupted native loading and mapping failures clear
+  // unpublished wrappers; successful mapping transfers them to caller-owned
+  // concrete handles.
   const gguf: Runtime.GgufRuntime = {
     inspect: (path) =>
       cancellableFor("inspectGguf", "io", (token) => native.inspectGguf(path, token), undefined, "io-failed").pipe(
@@ -1488,49 +1638,47 @@ export const makeRuntime = (
         )
       ),
     load: (path) =>
-      Effect.uninterruptibleMask(() =>
-        Effect.interruptible(cancellableFor(
-          "loadGguf",
-          "io",
-          (token) => native.loadGguf(path, token),
-          (archive) => clearBuffers(archive.entries.map((entry) => entry.tensor)),
-          "io-failed"
-        )).pipe(
-          Effect.flatMap((archive) =>
-            Effect.try({
-              try: () => {
-                const values = archive.entries.map((entry) => entry.tensor)
-                try {
-                  if (new Set(values).size !== values.length) {
-                    throw new Error("native runtime returned duplicate tensor ownership")
-                  }
-                  const entries = archive.entries.map((entry) => {
-                    const descriptor = ggufDescriptor(entry.descriptor)
-                    const storage: Runtime.EncodedTensorStorage | undefined = descriptor.format === "F32"
-                      ? undefined
-                      : {
-                        encoding: descriptor.format,
-                        physicalShape: descriptor.physicalShape,
-                        physicalDtype: "u8"
-                      }
-                    return Object.freeze({
-                      descriptor,
-                      tensor: concreteHandle(entry.tensor, {
-                        shape: descriptor.logicalShape,
-                        dtype: "f32",
-                        ...(storage === undefined ? {} : { storage })
-                      })
+      cancellableFor(
+        "loadGguf",
+        "io",
+        (token) => native.loadGguf(path, token),
+        (archive) => clearBuffers(archive.entries.map((entry) => entry.tensor)),
+        "io-failed"
+      ).pipe(
+        Effect.flatMap((archive) =>
+          Effect.try({
+            try: () => {
+              const values = archive.entries.map((entry) => entry.tensor)
+              try {
+                if (new Set(values).size !== values.length) {
+                  throw new Error("native runtime returned duplicate tensor ownership")
+                }
+                const entries = archive.entries.map((entry) => {
+                  const descriptor = ggufDescriptor(entry.descriptor)
+                  const storage: Runtime.EncodedTensorStorage | undefined = descriptor.format === "F32"
+                    ? undefined
+                    : {
+                      encoding: descriptor.format,
+                      physicalShape: descriptor.physicalShape,
+                      physicalDtype: "u8"
+                    }
+                  return Object.freeze({
+                    descriptor,
+                    tensor: concreteHandle(entry.tensor, {
+                      shape: descriptor.logicalShape,
+                      dtype: "f32",
+                      ...(storage === undefined ? {} : { storage })
                     })
                   })
-                  return Object.freeze({ entries: Object.freeze(entries) })
-                } catch (error) {
-                  clearBuffers(values)
-                  throw error
-                }
-              },
-              catch: backendErrorFor("loadGguf", "io", "io-failed")
-            })
-          )
+                })
+                return Object.freeze({ entries: Object.freeze(entries) })
+              } catch (error) {
+                clearBuffers(values)
+                throw error
+              }
+            },
+            catch: backendErrorFor("loadGguf", "io", "io-failed")
+          })
         )
       )
   }
@@ -1561,6 +1709,10 @@ export const makeRuntime = (
           return backendErrorFor("grad", "autodiff")(error)
         }
       }),
+    // Native compilation is synchronous and non-interruptible. It consumes
+    // borrowed lazy roots, compile options, an optional decode specialization,
+    // and the structural key; the returned immutable executable records logical
+    // bindings/outputs and a completed native-inferred state schema.
     compile: (request) =>
       Effect.try({
         try: () => {
@@ -1584,46 +1736,21 @@ export const makeRuntime = (
         },
         catch: backendErrorFor("compile", "compile", "compilation-failed")
       }),
+    // Invocation borrows all inputs and state until the native promise settles.
+    // Successful output wrappers transfer to independent caller-owned handles;
+    // interruption or post-native validation failure clears every unpublished
+    // output. Runtime values are not part of this backend's public contract.
     execute: (handle, invocation) =>
       cancellableFor(
         "execute",
         "execute",
         (token) => {
-          const executableRecord = nativeExecutable(handle, "execute")
-          if (Object.keys(invocation.runtimeValues).length !== 0) {
-            throw executionError(
-              "execute: runtime values are not supported by the Apple Metal backend",
-              "unsupported-operation"
-            )
-          }
-          const info = executableRecord.info as ExecutableInfo
-          if (invocation.bindings.length !== info.bindings.length) {
-            throw executionError(
-              `execute: received ${invocation.bindings.length} tensor bindings, expected ${info.bindings.length}`
-            )
-          }
-          const inputs = invocation.bindings.map((input, index) =>
-            nativeBinding(
-              input,
-              info.bindings[index]!,
-              index,
-              info.state !== undefined && invocation.state !== undefined && index === info.bindings.length - 1
-                ? { compiled: info.state.batch, active: invocation.state.sequences.length }
-                : undefined
-            )
-          )
-          if (info.state !== undefined && invocation.scalars.length !== 0) {
-            throw executionError("execute: stateful executable does not accept scalar inputs")
-          }
-          const [sequences, tokens] = resolveExecutionState(
-            info.state,
-            invocation.state
-          )
-          return (executableRecord.value as Executable).execute(
-            inputs,
-            [...invocation.scalars],
-            sequences,
-            tokens,
+          const resolved = resolveExecutableInvocation(handle, invocation)
+          return resolved.executable.execute(
+            resolved.inputs,
+            resolved.scalars,
+            resolved.sequences,
+            resolved.tokens,
             token
           )
         },
@@ -1649,13 +1776,31 @@ export const makeRuntime = (
         "readback",
         (token) => nativeTensor(handle, "readback", "readback").readback(token)
       ),
+    // Deterministic release clears this concrete wrapper and marks its public
+    // handle invalid for other operations. Releasing it again is a no-op. Native
+    // aliases, executable constants, in-flight work, or exported readback
+    // buffers may still retain the underlying allocation.
     release: (handle) =>
       Effect.try({
         try: () => {
-          const tensor = tensorRecord(handle, "clear", "execute")
+          const tensor = typeof handle === "object" && handle !== null ? handleRecords.get(handle) : undefined
+          if (tensor === undefined) {
+            throw invalidHandle(
+              "clear",
+              "execute",
+              typeof handle === "object" && handle !== null && backendHandles.has(handle)
+                ? "foreign-handle"
+                : "invalid-handle",
+              "concrete-tensor"
+            )
+          }
+          if (tensor.owner !== owner) {
+            throw invalidHandle("clear", "execute", "foreign-handle", "concrete-tensor")
+          }
           if (tensor.kind !== "concrete-tensor" || tensor.value === undefined) {
             throw invalidHandle("clear", "execute", "invalid-handle", "concrete-tensor")
           }
+          if (tensor.disposed) return
           const value = tensor.value as NativeTensor
           value.clear()
           tensor.disposed = true
@@ -1665,8 +1810,11 @@ export const makeRuntime = (
     extensions: {
       pathSafetensors,
       gguf,
+      sampling,
       decode,
       diagnostics: {
+        // This is current native memory attributed to live NativeTensor wrappers,
+        // unlike executable diagnostics, which contain static planned byte totals.
         externalMemoryBytes: Effect.sync(() => native.externalMemoryBytes())
       }
     }

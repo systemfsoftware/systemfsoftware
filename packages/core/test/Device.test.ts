@@ -6,6 +6,8 @@ import { Runtime, Tensor } from "../src/index.ts"
 
 const metalAvailable = Effect.runSync(BackendApple.isAvailable)
 
+// Handle ownership belongs to a runtime identity domain, not merely a device
+// label. Cross-runtime and post-release checks must therefore reject before use.
 layer(BackendCpu.layer)("Runtime", (it) => {
   it.effect("provides the CPU runtime", () =>
     Effect.gen(function*() {
@@ -56,7 +58,7 @@ layer(BackendCpu.layer)("Runtime", (it) => {
       const releasedTensorError = yield* Effect.flip(cpu.readback(value))
       expect(releasedTensorError.reason).toBe("invalid-handle")
 
-      const decode = cpu.extensions.decode!
+      const decode = cpu.extensions.decode
       const pool = yield* decode.makePool({
         layers: 1,
         kvHeads: 1,
@@ -78,6 +80,15 @@ layer(BackendCpu.layer)("Runtime", (it) => {
       expect(releasedSequenceError.reason).toBe("invalid-handle")
     }))
 
+  it.effect("clearAll ignores invalid handles and continues", () =>
+    Effect.gen(function*() {
+      const invalid = (yield* Tensor.ones([1])) as unknown as Tensor.Concrete
+      const second = (yield* Tensor.compute([yield* Tensor.zeros([1])]))[0]
+      yield* Tensor.clearAll([invalid, second])
+      const secondError = yield* Effect.flip(Tensor.toNumberArray(second))
+      expect(secondError.message).toContain("cleared")
+    }))
+
   it.effect("memoizes the runtime service", () =>
     Effect.gen(function*() {
       const runtime = yield* Runtime.Runtime
@@ -88,6 +99,8 @@ layer(BackendCpu.layer)("Runtime", (it) => {
 
 test.effect("the memoized runtime reuses compiled caches", () =>
   Effect.gen(function*() {
+    // Tensor.compile keys native artifacts by runtime identity. makeRuntime must
+    // return the same service object for separately provided layers to share it.
     const compiled = yield* Tensor.compile((inputs) => Effect.map(Tensor.relu(inputs[0]), (output) => [output]))
     const firstRuntime = BackendCpu.makeRuntime()
     const secondRuntime = BackendCpu.makeRuntime()

@@ -6,19 +6,20 @@ import { setFlagsFromString } from "node:v8"
 import { runInNewContext } from "node:vm"
 import { Runtime, Tensor } from "../src/index.ts"
 
+// These CPU-only diagnostics distinguish explicit handle release from V8
+// finalization. Forced GC makes objects eligible; native finalizers remain async.
 setFlagsFromString("--expose-gc")
 const collectGarbage = runInNewContext("gc") as () => void
 
 const externalMemoryBytes = Effect.gen(function*() {
   const runtime = yield* Runtime.Runtime
   const diagnostics = runtime.extensions.diagnostics
-  if (diagnostics === undefined) {
-    return yield* Effect.die(new Error("runtime does not provide memory diagnostics"))
-  }
   return yield* diagnostics.externalMemoryBytes
 })
 
 layer(BackendCpu.layer)("Memory", (it) => {
+  // Exact external-byte deltas are measured around live native handles, not RSS;
+  // allocator caching and process-global runtime memory are outside this counter.
   describe("external memory accounting", () => {
     it.effect("clear releases the bytes immediately, without GC", () =>
       Effect.gen(function*() {
@@ -29,6 +30,15 @@ layer(BackendCpu.layer)("Memory", (it) => {
         assert.strictEqual((yield* externalMemoryBytes) - before, bytes)
         yield* Tensor.clear(t)
         assert.strictEqual(yield* externalMemoryBytes, before)
+      }))
+
+    it.effect("clear is idempotent while cleared handles remain invalid", () =>
+      Effect.gen(function*() {
+        const [tensor] = yield* Tensor.compute([yield* Tensor.ones([4])])
+        yield* Tensor.clear(tensor)
+        yield* Tensor.clear(tensor)
+        const error = yield* Effect.flip(Tensor.toNumberArray(tensor))
+        expect(error.message).toContain("cleared")
       }))
 
     it.effect("clearAll releases every tensor immediately", () =>
@@ -43,6 +53,57 @@ layer(BackendCpu.layer)("Memory", (it) => {
         assert.strictEqual((yield* externalMemoryBytes) - before, bytes)
         yield* Tensor.clearAll(tensors)
         assert.strictEqual(yield* externalMemoryBytes, before)
+      }))
+
+    it.effect("clearAll accepts iterable ownership collections", () =>
+      Effect.gen(function*() {
+        const tensors = yield* Tensor.compute([yield* Tensor.ones([4]), yield* Tensor.zeros([4])])
+        yield* Tensor.clearAll(new Set(tensors))
+        const error = yield* Effect.flip(Tensor.toNumberArray(tensors[0]))
+        expect(error.message).toContain("cleared")
+      }))
+
+    it.effect("clearAll accepts duplicate and already-cleared handles", () =>
+      Effect.gen(function*() {
+        const [tensor] = yield* Tensor.compute([yield* Tensor.ones([4])])
+        yield* Tensor.clearAll([tensor, tensor])
+        yield* Tensor.clearAll([tensor, tensor])
+        const error = yield* Effect.flip(Tensor.toNumberArray(tensor))
+        expect(error.message).toContain("cleared")
+      }))
+
+    it.effect("clearScoped releases an already-owned handle when its scope closes", () =>
+      Effect.gen(function*() {
+        const tensor = yield* Effect.scoped(
+          Effect.gen(function*() {
+            const [owned] = yield* Tensor.compute([yield* Tensor.ones([4])])
+            expect(yield* Tensor.clearScoped(owned)).toBe(owned)
+            assert.deepStrictEqual(yield* Tensor.toNumberArray(owned), [1, 1, 1, 1])
+            return owned
+          })
+        )
+        const error = yield* Effect.flip(Tensor.toNumberArray(tensor))
+        expect(error.message).toContain("cleared")
+      }))
+
+    it.effect("clearAllScoped snapshots iterable identities at registration", () =>
+      Effect.gen(function*() {
+        const [first, second] = yield* Effect.scoped(
+          Effect.gen(function*() {
+            const [first, second] = yield* Tensor.compute([
+              yield* Tensor.ones([4]),
+              yield* Tensor.zeros([4])
+            ])
+            const owned = [first]
+            expect(yield* Tensor.clearAllScoped(owned)).toBe(owned)
+            owned[0] = second
+            return [first, second] as const
+          })
+        )
+        const firstError = yield* Effect.flip(Tensor.toNumberArray(first))
+        expect(firstError.message).toContain("cleared")
+        assert.deepStrictEqual(yield* Tensor.toNumberArray(second), [0, 0, 0, 0])
+        yield* Tensor.clear(second)
       }))
 
     it.effect("use after clear is a typed error, through the handle and the graph", () =>
@@ -65,6 +126,14 @@ layer(BackendCpu.layer)("Memory", (it) => {
         yield* Tensor.clear(copy)
         assert.deepStrictEqual(yield* Tensor.toNumberArray(source), [1, 1, 1, 1])
         yield* Tensor.clear(source)
+      }))
+
+    it.effect("lazy readback releases its private materialization", () =>
+      Effect.gen(function*() {
+        const before = yield* externalMemoryBytes
+        const values = yield* Tensor.toTypedArray(yield* Tensor.ones([4]))
+        assert.deepStrictEqual(Array.from<number | bigint>(values).map(Number), [1, 1, 1, 1])
+        assert.strictEqual(yield* externalMemoryBytes, before)
       }))
 
     it.effect("runtime tensor bytes are reported on compute and released on GC", () =>
@@ -95,6 +164,8 @@ layer(BackendCpu.layer)("Memory", (it) => {
   })
 
   describe("early free during evaluation", () => {
+    // A 512x512 f32 intermediate is 1 MiB. Retaining all 2,000 chain nodes would
+    // exceed 2 GiB; 512 MiB leaves headroom for runtime/JIT and allocator noise.
     it.effect("long chains free intermediates instead of holding the whole walk", () =>
       Effect.gen(function*() {
         const chain = Effect.gen(function*() {
