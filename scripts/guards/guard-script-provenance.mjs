@@ -158,9 +158,9 @@ const MANIFEST = new Map([
     'local-tooling',
     'Worktrunk git-worktree lifecycle hooks, invoked by .config/wt.toml. Operator workflow.',
   ]],
-  ['tools/f2a-phase-probe.ts', [
+  ['tools/f2-propagation-probe.ts', [
     'local-tooling',
-    'Applies and reverts one extra Cell phase inside packages/effect-cell-types/src/Cell.ts to re-measure which files a phase addition forces edits in. Wired into no chain; a reproducible experiment, never a gate.',
+    'Applies and reverts, one half at a time, the two F2 propagation changes inside packages/effect-cell-types/src/Cell.ts: one extra Cell phase (--phase, the default) and one extra I/O cell (--io). Each half re-measures which files the change forces content edits in, and round-trips byte-for-byte with the formatter run on both sides. Wired into no chain; a reproducible experiment, never a gate.',
   ]],
   ['guards/generate-executor-vocabulary.ts', [
     'local-tooling',
