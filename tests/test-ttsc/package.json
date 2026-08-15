@@ -1,0 +1,21 @@
+{
+  "private": true,
+  "name": "@ttsc/test-ttsc",
+  "version": "0.27.0",
+  "description": "Compiler, API, plugin host, platform, and utility plugin integration tests for ttsc.",
+  "type": "module",
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning --import ../../scripts/register-extensionless-ts-loader.mjs --experimental-transform-types src/index.ts"
+  },
+  "devDependencies": {
+    "@ttsc/banner": "workspace:*",
+    "@ttsc/lint": "workspace:*",
+    "@ttsc/paths": "workspace:*",
+    "@ttsc/strip": "workspace:*",
+    "@ttsc/testing": "workspace:*",
+    "@types/node": "catalog:utils",
+    "mocha": "^11",
+    "ttsc": "workspace:*",
+    "typescript": "catalog:typescript"
+  }
+}

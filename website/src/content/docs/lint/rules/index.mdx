@@ -1,0 +1,136 @@
+# Rules
+
+A practical rule catalog by family. Each rule maps to an ESLint name where one exists. Severity in `lint.config.ts` is one of `"error"` (fails the build), `"warning"` (prints, exit code 0), `"off"` (skipped).
+
+> **Authoritative source:** rule typings live under [`packages/lint/src/structures/rules/`](https://github.com/samchon/ttsc/tree/master/packages/lint/src/structures/rules).
+>
+> Each family interface (`ITtscLintCoreRules`, `ITtscLintReactRules`, ...) owns its own rule keys.
+>
+> [`ITtscLintRules.ts`](https://github.com/samchon/ttsc/tree/master/packages/lint/src/structures/rules/ITtscLintRules.ts) is the union accepted by `ITtscLintConfig.rules`.
+>
+> The per-family pages below document what each rule does and when to keep it on.
+
+## Rule families and config types
+
+Rule IDs use ESLint-style kebab-case with slash namespaces.
+
+The exported `ITtscLintRules` type is an intersection of family-specific interfaces, so a complete `rules` object and smaller family objects share the same checked property names and option tuples.
+
+| Family | Type | Rules | Namespace |
+| --- | --- | --- | --- |
+| [Core (ESLint-compatible)](./core) | `ITtscLintCoreRules` | 149 | none |
+| [TypeScript](./typescript) | `ITtscLintTypeScriptRules` | 98 | `typescript/*` |
+| [React](./react) | `ITtscLintReactRules` | 29 | `react/*` |
+| [React performance](./react-perf) | `ITtscLintReactPerfRules` | 4 | `react-perf/*` |
+| [JSX accessibility](./jsx-a11y) | `ITtscLintJsxA11yRules` | 37 | `jsx-a11y/*` |
+| [Next.js](./nextjs) | `ITtscLintNextjsRules` | 21 | `nextjs/*` |
+| [Solid](./solid) | `ITtscLintSolidRules` | 20 | `solid/*` |
+| [Unicorn](./unicorn) | `ITtscLintUnicornRules` | 146 | `unicorn/*` |
+| [Jest](./jest) | `ITtscLintJestRules` | 19 | `jest/*` |
+| [Vitest](./vitest) | `ITtscLintVitestRules` | 13 | `vitest/*` |
+| [Testing Library](./testing-library) | `ITtscLintTestingLibraryRules` | 29 | `testing-library/*` |
+| [Playwright](./playwright) | `ITtscLintPlaywrightRules` | 31 | `playwright/*` |
+| [Cypress](./cypress) | `ITtscLintCypressRules` | 13 | `cypress/*` |
+| [Storybook](./storybook) | `ITtscLintStorybookRules` | 16 | `storybook/*` |
+| [TanStack Query](./tanstack-query) | `ITtscLintTanstackQueryRules` | 8 | `tanstack-query/*` |
+| [Promise](./promise) | `ITtscLintPromiseRules` | 17 | `promise/*` |
+| [Regular expressions](./regexp) | `ITtscLintRegexpRules` | 22 | `regexp/*` |
+| [Security](./security) | `ITtscLintSecurityRules` | 14 | `security/*` |
+| [JSDoc](./jsdoc) | `ITtscLintJsdocRules` | 13 | `jsdoc/*` |
+| [Functional](./functional) | `ITtscLintFunctionalRules` | 20 | `functional/*` |
+| [Architecture boundaries](./boundaries) | `ITtscLintBoundariesRules` | 6 | `boundaries/*` |
+| Contributor plugins | `ITtscLintContributorRules` | user-defined | `<namespace>/*` |
+
+## Claim ownership
+
+To the maintainers of the upstream rule families behind these namespaces: the in-tree rules are Go ports for the TypeScript-Go Checker.
+
+I implemented them first so `ttsc` projects can use the rules without running a separate ESLint process. That is a convenience layer, not a claim over your rule family.
+
+If you want to develop and maintain your family inside the `@ttsc/lint` ecosystem yourself, publish it as a contributor plugin.
+
+You may reuse the in-tree Go rule sources under [`packages/lint/linthost`](https://github.com/samchon/ttsc/tree/master/packages/lint/linthost).
+
+The checked fixtures live under [`tests/test-lint/src/cases`](https://github.com/samchon/ttsc/tree/master/tests/test-lint/src/cases). Use both as a starting point.
+
+Open an issue at [samchon/ttsc](https://github.com/samchon/ttsc/issues) when the package is ready. I will retire the matching in-tree port and point this catalog at your package.
+
+Partial ownership is fine: name the subset you want to maintain, and I will remove just those rules.
+
+The contributor-plugin path is documented in the [`@ttsc/lint` development guide](/docs/development/walkthroughs/lint).
+
+```ts
+import type { ITtscLintConfig, ITtscLintReactRules } from "@ttsc/lint";
+
+const reactRules = {
+  "react/jsx-key": "error",
+  "react/no-danger": "warning",
+} satisfies ITtscLintReactRules;
+
+export default {
+  rules: {
+    "no-var": "error",
+    ...reactRules,
+  },
+} satisfies ITtscLintConfig;
+```
+
+## A common starter set
+
+Most projects start here. Add and remove as you go.
+
+```ts
+// lint.config.ts
+import type { ITtscLintConfig } from "@ttsc/lint";
+
+export default {
+  rules: {
+    // Variables
+    "no-var": "error",
+    "prefer-const": "error",
+
+    // Comparison
+    eqeqeq: "error",
+    "no-self-compare": "error",
+
+    // Suggestions
+    "typescript/no-explicit-any": "warning",
+    "typescript/prefer-as-const": "error",
+    "object-shorthand": "error",
+    "no-useless-rename": "error",
+
+    // Imports
+    "typescript/no-import-type-side-effects": "error",
+    "typescript/consistent-type-imports": "error",
+
+    // Misc safety
+    "no-debugger": "error",
+    "no-throw-literal": "error",
+    "typescript/await-thenable": "error",
+  },
+} satisfies ITtscLintConfig;
+```
+
+Formatter behavior is configured separately through the top-level `format` block (typed as `ITtscLintFormat`). See [Format rules](/docs/lint/format).
+
+## Autofix coverage at a glance
+
+`ttsc fix` autofixes a subset. Native fixers cover:
+
+- `no-var`, single-declaration `prefer-const`, ESLint-safe `eqeqeq`
+- `typescript/no-wrapper-object-types` (primitives only; `Object` is detection-only)
+- `typescript/prefer-as-const` (assertions only; annotation rewrites are editor suggestions), `no-useless-rename`, `object-shorthand`, `typescript/no-extra-non-null-assertion`
+- `typescript/no-unnecessary-type-constraint`, `typescript/prefer-namespace-keyword`, `no-useless-escape`
+- `typescript/no-import-type-side-effects` (hoists inline `type` modifiers)
+- `regexp/sort-flags`, `regexp/no-useless-flag`, `regexp/prefer-d`, `regexp/prefer-w`, and the quantifier shorthands `regexp/prefer-plus-quantifier`, `regexp/prefer-star-quantifier`, `regexp/prefer-question-quantifier`, `regexp/no-useless-two-nums-quantifier`, `regexp/no-useless-quantifier`
+- `security/detect-pseudoRandomBytes` (only for a proven Node `crypto` import or require), `solid/no-react-specific-props` (the `className` and `htmlFor` renames), `solid/imports`
+- Every format rule
+
+Suggestion-only rewrites, including removing an ordinary non-thenable `await`, replacing `@ts-ignore`, adding a Unicode flag for `regexp/require-unicode-regexp` / `regexp/require-unicode-sets-regexp`, choosing a `new Buffer` successor for `security/detect-new-buffer`, renaming an unproven name-only `crypto.pseudoRandomBytes` match, and choosing a framework package for `storybook/no-renderer-packages`, are available through `quickfix.ttsc`; `ttsc fix` and source fix-all do not apply them.
+
+A rule that computes a valid rewrite but refuses to impose it also offers that rewrite as a suggestion rather than dropping it. This covers `no-extra-boolean-cast`, `dot-notation`, `object-shorthand`, `no-useless-rename`, `prefer-template`, and `no-extra-bind` when a comment sits inside the span the edit replaces (the suggestion discards that comment, and its title says so), `dot-notation` on a reserved-word key, and `eqeqeq` when the operands are not provably the same type (the suggestion changes runtime behavior, and its title says so). Nothing in this group is ever applied by `ttsc fix` or source fix-all.
+
+## See also
+
+- [Format](/docs/lint/format): the format rule set (including print-width reflow).
+- [Overview](/docs/lint): the `ttsc fix` / `ttsc format` command summary.

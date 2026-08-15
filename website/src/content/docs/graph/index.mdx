@@ -1,0 +1,108 @@
+import TtscWebsiteBenchmarkGraphCommon from "../../../components/benchmark/graph/TtscWebsiteBenchmarkGraphCommon";
+import TtscWebsiteGraphViewer3D from "../../../components/graph/TtscWebsiteGraphViewer3D";
+
+# Compiler Knowledge Graph
+
+`@ttsc/graph` gives a coding agent a compiler-resolved graph of your TypeScript project, over MCP.
+
+It runs `ttscgraph`, a native binary that keeps the type-checked project and graph shards resident in memory. Before each graph operation it checks the config, root-file set, module-resolution inputs, and source contents. The first request publishes a complete content-addressed shard manifest. An unchanged project sends no graph payload, a private body edit whose declaration shape is unchanged avoids the reverse-dependency closure, and a changed TypeScript declaration shape expands through that resolved closure. Re-export and implementation-source ownership seams are still rebuilt with their source. Config, file-addition, deletion, or resolution changes trigger a safe reload with explicit shard replacements and deletions. The TypeScript client validates the base generation, shard and generation digests, manifest, fact ownership, and every edge endpoint before it replaces the current graph, so a malformed or interrupted transaction never becomes visible. Every relationship it reports is the current compiler's own answer, not a guess from reading text.
+
+A native snapshot request has no deadline. Indexing time belongs to the size of your repository — the three-million-line VS Code fixture takes 29 seconds cold — and a guessed ceiling would eventually call a valid cold compiler stalled. A request still ends the moment its native process does, and programmatic users can pass an `AbortSignal` to `session.graph({ signal })` to end one deliberately; cancellation terminates that process, clears its pending request, and lets the next call start a fresh session.
+
+## Why an agent needs it
+
+What the graph saves an agent, and what that looks like in tokens.
+
+### The crawl it replaces
+
+![A file-by-file source crawl collapsing into a compiler-built graph index](/blog/images/source-crawl-vs-compiler-index.png)
+
+> On the left, the agent is lost in a maze of files, chasing imports dozens deep. On the right, it reads one compiler-built graph of nodes and edges, each with a `file:line` anchor it can open and check.
+
+Ask an agent how something works and, without the graph, it reconstructs the picture by hand: open a file, follow an import, open the next, and repeat. That is slow, it spends tokens, and the relationships it infers are guesses from whatever text it happened to read.
+
+The graph hands it the answer up front through one MCP tool, `inspect_typescript_graph`. The agent chooses one request branch per call: `tour`, `overview`, `entrypoints`, `lookup`, `trace`, `details`, or `escape`. The agent stops fanning out across files.
+
+### The token cost
+
+Here is the median token cost on the shared onboarding question, `@ttsc/graph` against no MCP and the three comparators. Lower is better, and it stays flat as the repository grows.
+
+<TtscWebsiteBenchmarkGraphCommon summary />
+
+The [full benchmark](/docs/benchmark/graph) has every model, the per-repository prompts, the structural coverage, and the method.
+
+## What the graph answers
+
+The questions it resolves, and the edges only a compiler gets right.
+
+### Structure, flow, and impact
+
+The graph answers the questions an agent actually asks, all from the same checker-resolved facts:
+
+- **How is this project laid out?** Entry points, layers, and the symbols the most code leans on: `overview`.
+- **Give me a code tour.** Central flow, nearby paths, tests, and answer anchors: `tour`.
+- **Where should I start?** Ranked code handles for a natural question: `entrypoints` or `lookup`.
+- **What does this reach, and what reaches it?** Forward to callees, reverse to callers, and an impact projection onto the public API and tests: `trace`.
+- **What is this, exactly?** The declaration shape, its range, its dependencies, and its dependents: `details`.
+
+When a handle names several declarations, the graph scores every match by export surface and graph use before it caps the response. Equal scores use the declaration's stable graph id, so compiler visitation order cannot hide a stronger match or reshuffle a tie.
+
+In path mode, tracing a symbol to itself is a complete one-node path with no hops. In an open trace, `truncated` means an eligible node or relationship was left out by the depth, node, or hop bound. Reaching the configured depth on a leaf, or seeing only relationships excluded by the selected focus or external-node policy, remains complete.
+
+When path mode finds nothing, it says which of two things happened. A walk that ran the eligible graph out reports that the graph holds no connection between the two ends. A walk that stopped on the requested `maxDepth` with graph still ahead of it reports the bound and how to continue, because a boundary is a fact about the request, not about the code.
+
+A call that lands on a declaration with no body of its own (an interface member, an abstract method, an ambient declaration) continues into the implementations that run, as a `dispatches` hop cited at the implementation. Bodilessness is read from the declaration, so an implementation that calls nothing is still the code that runs, and a concrete method that has a body is the destination rather than a stop on the way to its own override. Reverse and impact traces cross the same seam the other way, so changing an implementation reaches the declaration it implements and everything that calls that declaration.
+
+A tree-sitter graph has no types and resolves edges by guessing from text. An editor's language server has types but no architecture projection. Only a graph built on the real checker holds the resolved structure and the affected set in one place. Every node and edge is resolved by the compiler, so an agent never mistakes inference for fact.
+
+### What only the compiler can resolve
+
+A text search or a tree-sitter parse stops where the syntax stops. A real type checker does not. So these edges are correct where a text tool can only guess:
+
+- **pnpm / workspace monorepos.** A `workspace:*` dependency is followed into the sibling package's real source. A call across packages lands on the true declaration, not the barrel it passed through.
+- **Path aliases.** A `@app/*` import from `tsconfig` is resolved to the real file, so the edge is right where a text tool sees only the alias string.
+- **Barrel re-exports.** An `index.ts` that only re-exports is unwrapped to the file that actually declares the symbol.
+- **Your code vs the world.** Anything in `node_modules` or a `.d.ts` is reported as an outside boundary, not walked into. This includes packages whose entry point is raw `.ts`: the compiler may load that source for type checking, but the graph still stops at the imported symbol. The graph stays your code.
+- **Generated code stays out of the way.** A source file your `.gitignore` covers, such as a Prisma client or other codegen emitted as `.ts`, is de-ranked: it never dominates a broad or keyword match, though it stays reachable as an edge target and by its exact name. The graph surfaces what you wrote, not what a generator did.
+- **Object-literal ownership.** `details` lists direct, statically named properties in declaration order. Spread properties do not promote names from another object, dynamic computed names are omitted, and nested members stay with their nested object.
+
+Source-derived display text is fail-closed. The snapshot manifest covers every source the checker loaded, including outside `.d.ts` boundary leaves and virtual compiler libraries. The server reuses a disk file only when its raw bytes match the disk snapshot and its compiler-decoded text matches the checker snapshot, so UTF-8 BOM and UTF-16 sources keep their display facts without mixing live-disk content into older graph facts. Its line slicing follows the compiler's ECMAScript LF, CRLF, CR, LS, and PS model, so signatures and JSDoc keep the same coordinates under every valid source spelling. A missing digest, read failure, or mismatch omits the optional text.
+
+Graph identities are portable across checkout directories. Project files remain project-relative; sibling and project-reference files use the same `../` coordinate everywhere; package declarations retain their complete resolution path, including pnpm version and peer-context segments; and compiler libraries retain `bundled:///...`. The producer applies this one mapping to nodes, edges, evidence, diagnostics, and provenance, and refuses a cross-drive source or any identity collision before it writes a snapshot.
+
+## Get started
+
+Install, connect an agent, and where to read next.
+
+### Install and connect
+
+`@ttsc/graph` resolves the native binary from the `ttsc` platform package installed in the project it graphs, so install `ttsc` alongside it. When you launch from an unrelated directory and name the project with `--cwd`, the binary is resolved from that target project, not from the launcher's working directory.
+
+```bash
+npm install -D ttsc @ttsc/graph typescript
+```
+
+Add the server to your MCP client. For Claude Code, a `.mcp.json` in your project root:
+
+```json
+{
+  "mcpServers": {
+    "ttsc-graph": {
+      "command": "npx",
+      "args": ["-y", "@ttsc/graph"]
+    }
+  }
+}
+```
+
+Start the agent from your project root so the server finds your `tsconfig.json`, or point it at a project explicitly with `--cwd` and `--tsconfig`. The server never writes into your `CLAUDE.md`, `AGENTS.md`, or any other agent config file, so installing it has no side effects on your repository.
+
+Your agent picks the tool up from the MCP handshake and calls it when it needs to. The full setup walk-through is in [Setup → Coding Agents](/docs/setup/graph).
+
+### Where to next
+
+- [Comparison](/docs/graph/compare): how it differs from codegraph, codebase-memory-mcp, and serena.
+- [Launch post](/blog/i-made-ts-compiler-graph-mcp): the design story, why it is one tool over an index, and where the numbers hold or break down.
+- [3D Viewer](/docs/graph/viewer): browse the whole graph in your browser, or load your own project. Here it is live, the benchmark repositories rendered as navigable graphs; the [viewer page](/docs/graph/viewer) explains the colors and the reduction:
+
+<TtscWebsiteGraphViewer3D compact />

@@ -1,0 +1,120 @@
+// Library entry for the @ttsc/lint native engine.
+//
+// The native `@ttsc/lint` CLI lives at `packages/lint/plugin` and is a thin
+// wrapper that calls `linthost.Main(os.Args[1:])`. Other consumers (e.g. the
+// ttsc.dev playground wasm) link `linthost` directly and dispatch through the
+// same entrypoint so the subcommand surface stays in one place.
+package linthost
+
+import (
+  "fmt"
+  "io"
+  "os"
+)
+
+// Version is the build banner string the `version` subcommand prints.
+// Overridden at link time via
+// `-ldflags "-X github.com/samchon/ttsc/packages/lint/linthost.Version=..."`.
+// Defaults to `"dev"` so local Go builds and `go test` runs print a
+// distinguishable value without depending on the release pipeline.
+var Version = "dev"
+
+// Main dispatches the lint plugin subcommands. `args` is the argv tail after
+// the binary name (i.e. `os.Args[1:]`). The return value is the exit code the
+// caller should propagate to the OS (`os.Exit`) or the host (`Plugin.Run`).
+//
+// Recognized verbs: `version` / `-v` / `--version`, `check`, `fix`, `format`,
+// `build`, `transform`, and the `lsp-*` protocol commands consumed by
+// ttscserver. Anything else is a usage error (exit code 2).
+func Main(args []string) int {
+  return run(args)
+}
+
+// MainWithIO dispatches the browser-owned project commands without consulting
+// process-global stdout or stderr. Native-only mutation and LSP commands retain
+// Main as their CLI entrypoint.
+func MainWithIO(args []string, stdout, stderr io.Writer) int {
+  if stdout == nil {
+    stdout = io.Discard
+  }
+  if stderr == nil {
+    stderr = io.Discard
+  }
+  if len(args) == 0 {
+    fmt.Fprintln(stderr, "@ttsc/lint: command required (expected check|build|transform|version)")
+    return 2
+  }
+  switch args[0] {
+  case "-v", "--version", "version":
+    fmt.Fprintf(stdout, "@ttsc/lint %s\n", Version)
+    return 0
+  case "check":
+    registerContributorsOnce()
+    return RunCheckWithIO(args[1:], stdout, stderr)
+  case "build":
+    registerContributorsOnce()
+    return RunBuildWithIO(args[1:], stdout, stderr)
+  case "transform":
+    registerContributorsOnce()
+    return RunTransformWithIO(args[1:], stdout, stderr)
+  default:
+    fmt.Fprintf(stderr, "@ttsc/lint: command %q is unavailable in the browser host\n", args[0])
+    return 2
+  }
+}
+
+// run is the package-local dispatcher invoked by Main and by the in-tree
+// test/command corpus, which exercises end-to-end subcommand routing through
+// the same entry point the CLI uses.
+func run(args []string) int {
+  if len(args) == 0 {
+    fmt.Fprintln(os.Stderr, "@ttsc/lint: command required (expected check|fix|format|build|transform|lsp-*|version)")
+    return 2
+  }
+  switch args[0] {
+  case "-v", "--version", "version":
+    // Don't pay contributor-registration cost for the version banner.
+    fmt.Fprintf(os.Stdout, "@ttsc/lint %s\n", Version)
+    return 0
+  case "check", "check-serve", "fix", "format", "build", "transform", "project-inputs", "lsp-command-ids", "lsp-code-action-kinds", "lsp-diagnostics", "lsp-project-diagnostics", "lsp-code-actions", "lsp-execute-command", "lsp-hints", "lsp-serve":
+  default:
+    fmt.Fprintf(os.Stderr, "@ttsc/lint: unknown command %q\n", args[0])
+    return 2
+  }
+  // Wire init-time contributor rules into the engine's dispatch table once,
+  // after every package init has settled. See contrib_adapter.go.
+  registerContributorsOnce()
+  switch args[0] {
+  case "check":
+    return RunCheck(args[1:])
+  case "check-serve":
+    return RunCheckServe(os.Stdin, os.Stdout, args[1:])
+  case "fix":
+    return RunFix(args[1:])
+  case "format":
+    return RunFormat(args[1:])
+  case "build":
+    return RunBuild(args[1:])
+  case "transform":
+    return RunTransform(args[1:])
+  case "project-inputs":
+    return RunProjectInputs(args[1:])
+  case "lsp-command-ids":
+    return RunLSPCommandIDs(args[1:])
+  case "lsp-code-action-kinds":
+    return RunLSPCodeActionKinds(args[1:])
+  case "lsp-diagnostics":
+    return RunLSPDiagnostics(args[1:])
+  case "lsp-project-diagnostics":
+    return RunLSPProjectDiagnostics(args[1:])
+  case "lsp-code-actions":
+    return RunLSPCodeActions(args[1:])
+  case "lsp-execute-command":
+    return RunLSPExecuteCommand(args[1:])
+  case "lsp-hints":
+    return RunLSPHints(args[1:])
+  case "lsp-serve":
+    return RunLSPServe(os.Stdin, os.Stdout, args[1:])
+  }
+  return 2
+}

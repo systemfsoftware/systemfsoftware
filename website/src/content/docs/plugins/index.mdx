@@ -1,0 +1,37 @@
+# Plugin Ecosystem
+
+`ttsc` plugins are npm packages that hook into the compiler. Once installed, every `ttsc` build, `ttsx` run, and `@ttsc/unplugin` bundler pass sees them. Diagnostics flow through the same stream as type errors; the VS Code extension also surfaces diagnostics/actions from plugins that opt into the LSP protocol.
+
+## First-party utility plugins
+
+Small plugins shipped from this repo:
+
+- [`@ttsc/banner`](/docs/plugins/banner): adds a fixed `@packageDocumentation` JSDoc banner to every emitted file.
+- [`@ttsc/paths`](/docs/plugins/paths): rewrites `compilerOptions.paths` aliases into relative imports in the emit.
+- [`@ttsc/strip`](/docs/plugins/strip): removes `console.log`, `debugger`, and other configured patterns from the emit.
+
+For lint and format, see the dedicated [Lint & Prettier](/docs/lint) chapter.
+
+## Third-party plugins
+
+External transforms that ship through the same plugin protocol:
+
+- [`typia`](/docs/plugins/typia): runtime validators, JSON tools, LLM function calling, Protocol Buffer codecs, all generated from your TypeScript types.
+- [`nestia`](/docs/plugins/nestia): NestJS controllers, OpenAPI documents, SDK generation, and E2E test scaffolding, backed by typia.
+
+Each ships on its own release schedule with its own docs. The pages above cover "how does it slot into `ttsc`?"; for the full API surface follow the upstream docs (`typia.io`, `nestia.io`).
+
+PRs adding plugins to this list are welcome. The bar is "installs and works on a current `ttsc` release."
+
+## Finding plugins
+
+Community packages are discoverable by npm keyword rather than by a registry this project owns:
+
+- [`ttsc-plugin`](https://www.npmjs.com/search?q=keywords:ttsc-plugin): top-level compiler plugins.
+- [`ttsc-lint-plugin`](https://www.npmjs.com/search?q=keywords:ttsc-lint-plugin): `@ttsc/lint` rule contributors.
+
+Publishing your own? See [Community package naming](/docs/development/authoring/publishing#community-package-naming) for the recommended names and keywords, and [Publishing rule contributors](/docs/lint/contributing) for the lint-specific surface. The prefixes are conventions, not requirements — branded packages like `typia` and `nestia` stay discoverable through the same keywords.
+
+## Writing your own
+
+→ [Plugin Development](/docs/development), the audience-walled section for plugin authors.

@@ -1,0 +1,55 @@
+{
+  "name": "@ttsc/lint",
+  "version": "0.27.0",
+  "description": "Reference ttsc plugin: ESLint-style lint rules over the TypeScript-Go Program used by the type-check pass.",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "rimraf lib && tsc"
+  },
+  "keywords": [
+    "ttsc",
+    "lint",
+    "eslint",
+    "typescript",
+    "tsgo"
+  ],
+  "ttsc": {
+    "plugin": {
+      "transform": "@ttsc/lint"
+    }
+  },
+  "files": [
+    "README.md",
+    "go.mod",
+    "internal",
+    "lib",
+    "linthost",
+    "plugin",
+    "rule",
+    "src"
+  ],
+  "devDependencies": {
+    "@types/node": "catalog:utils",
+    "rimraf": "catalog:utils",
+    "ttsc": "workspace:*",
+    "typescript": "catalog:typescript"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/samchon/ttsc"
+  },
+  "author": "Jeongho Nam",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/samchon/ttsc/issues"
+  },
+  "homepage": "https://ttsc.dev"
+}

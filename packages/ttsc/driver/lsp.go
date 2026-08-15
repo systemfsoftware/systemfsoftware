@@ -1,0 +1,186 @@
+// lsp.go re-exports the public LSP surface from internal/lspserver so that
+// downstream consumers (plugins, the VS Code extension, tests) import only the
+// driver package rather than reaching into the internal package directly. All
+// symbols are type aliases or var assignments so they are interchangeable with
+// the originals at the call site.
+package driver
+
+import (
+  "encoding/json"
+
+  "github.com/samchon/ttsc/packages/ttsc/internal/lspserver"
+)
+
+// LSPPosition is the driver-level alias for lspserver.LSPPosition.
+type LSPPosition = lspserver.LSPPosition
+
+// LSPRange is the driver-level alias for lspserver.LSPRange.
+type LSPRange = lspserver.LSPRange
+
+// LSPDiagnosticSeverity is the driver-level alias for lspserver.LSPDiagnosticSeverity.
+type LSPDiagnosticSeverity = lspserver.LSPDiagnosticSeverity
+
+// LSP diagnostic severity constants forwarded from lspserver.
+const (
+  LSPDiagnosticSeverityError       = lspserver.LSPDiagnosticSeverityError
+  LSPDiagnosticSeverityWarning     = lspserver.LSPDiagnosticSeverityWarning
+  LSPDiagnosticSeverityInformation = lspserver.LSPDiagnosticSeverityInformation
+  LSPDiagnosticSeverityHint        = lspserver.LSPDiagnosticSeverityHint
+)
+
+// LSPDiagnostic is the driver-level alias for lspserver.LSPDiagnostic.
+type LSPDiagnostic = lspserver.LSPDiagnostic
+
+// LSPCodeAction is the driver-level alias for lspserver.LSPCodeAction.
+type LSPCodeAction = lspserver.LSPCodeAction
+
+// LSPCommand is the driver-level alias for lspserver.LSPCommand.
+type LSPCommand = lspserver.LSPCommand
+
+// LSPCodeActionContext is the driver-level alias for lspserver.LSPCodeActionContext.
+type LSPCodeActionContext = lspserver.LSPCodeActionContext
+
+// LSPWorkspaceEdit is the driver-level alias for lspserver.LSPWorkspaceEdit.
+type LSPWorkspaceEdit = lspserver.LSPWorkspaceEdit
+
+// LSPTextEdit is the driver-level alias for lspserver.LSPTextEdit.
+type LSPTextEdit = lspserver.LSPTextEdit
+
+// LSPDocumentVersion is the driver-level alias for lspserver.LSPDocumentVersion.
+type LSPDocumentVersion = lspserver.LSPDocumentVersion
+
+// LSPProjectDiagnostics is the driver-level alias for a project publication.
+type LSPProjectDiagnostics = lspserver.LSPProjectDiagnostics
+
+// LSPProjectInputSnapshot is the driver-level alias for the set of paths a
+// producer declares its answers depend on.
+type LSPProjectInputSnapshot = lspserver.LSPProjectInputSnapshot
+
+// LSPDiagnosticsResult separates document and project plugin diagnostics.
+type LSPDiagnosticsResult = lspserver.LSPDiagnosticsResult
+
+// LSPCompletionHint is the driver-level alias for lspserver.LSPCompletionHint.
+type LSPCompletionHint = lspserver.LSPCompletionHint
+
+// LSPCompletionItem is the driver-level alias for lspserver.LSPCompletionItem.
+type LSPCompletionItem = lspserver.LSPCompletionItem
+
+// LSPSymbolKind is the driver-level alias for lspserver.LSPSymbolKind.
+type LSPSymbolKind = lspserver.LSPSymbolKind
+
+// LSPDocumentSymbol is the driver-level alias for lspserver.LSPDocumentSymbol.
+type LSPDocumentSymbol = lspserver.LSPDocumentSymbol
+
+// LSPLocation is the driver-level alias for lspserver.LSPLocation.
+type LSPLocation = lspserver.LSPLocation
+
+// SymbolProvider is the driver-level alias for lspserver.SymbolProvider.
+// It is the seam that answers textDocument/documentSymbol and
+// textDocument/references locally from ttsc's compiler-backed code graph.
+type SymbolProvider = lspserver.SymbolProvider
+
+// PluginSource is the driver-level alias for lspserver.PluginSource.
+// It is the public seam downstream pipelines implement to contribute
+// diagnostics, code actions, and workspace commands to the LSP proxy.
+type PluginSource = lspserver.PluginSource
+
+// CompletionHintSource is the optional extension a PluginSource implements to
+// contribute editor completion hints to the LSP proxy.
+type CompletionHintSource interface {
+  CompletionHints() []LSPCompletionHint
+}
+
+// CompletionHintRefresher is the optional extension a CompletionHintSource
+// implements when its corpus can change during a session. The proxy calls it
+// after a saved document, a configuration change, or a watched-file change, and
+// expects the call to return immediately: the source owns the scheduling and the
+// staleness rules, and completion keeps reading the previous corpus until the
+// new one is stored.
+type CompletionHintRefresher interface {
+  RefreshCompletionHints()
+}
+
+// CompletionHintObserverSource is the optional extension a CompletionHintSource
+// implements to tell the proxy that a refresh finished. The proxy uses it to
+// detect a completion trigger character that appeared after the initialize
+// response was already sent.
+type CompletionHintObserverSource interface {
+  SetCompletionHintsObserver(observer func())
+}
+
+// NullPluginSource is the driver-level alias for lspserver.NullPluginSource.
+type NullPluginSource = lspserver.NullPluginSource
+
+// NativePluginManifest is the driver-level alias for lspserver.NativePluginManifest.
+type NativePluginManifest = lspserver.NativePluginManifest
+
+// NativePluginConfigEntry is the driver-level alias for lspserver.NativePluginConfigEntry.
+type NativePluginConfigEntry = lspserver.NativePluginConfigEntry
+
+// NativeLSPPluginEntry is the driver-level alias for lspserver.NativeLSPPluginEntry.
+type NativeLSPPluginEntry = lspserver.NativeLSPPluginEntry
+
+// NativePluginSourceOptions is the driver-level alias for lspserver.NativePluginSourceOptions.
+type NativePluginSourceOptions = lspserver.NativePluginSourceOptions
+
+// NativePluginSource is the driver-level alias for lspserver.NativePluginSource.
+type NativePluginSource = lspserver.NativePluginSource
+
+// ProxyOptions is the driver-level alias for lspserver.ProxyOptions.
+type ProxyOptions = lspserver.ProxyOptions
+
+// Proxy is the driver-level alias for lspserver.Proxy.
+type Proxy = lspserver.Proxy
+
+// FrameReader is the driver-level alias for lspserver.FrameReader.
+type FrameReader = lspserver.FrameReader
+
+// Envelope is the driver-level alias for lspserver.Envelope.
+type Envelope = lspserver.Envelope
+
+// LSPServerOptions is the driver-level alias for lspserver.LSPServerOptions.
+type LSPServerOptions = lspserver.LSPServerOptions
+
+// LSPUpstreamRunner is the driver-level alias for lspserver.LSPUpstreamRunner.
+type LSPUpstreamRunner = lspserver.LSPUpstreamRunner
+
+// LSPUpstreamValidator is the driver-level alias for lspserver.LSPUpstreamValidator.
+type LSPUpstreamValidator = lspserver.LSPUpstreamValidator
+
+// LSPUpstream is the driver-level alias for lspserver.LSPUpstream.
+type LSPUpstream = lspserver.LSPUpstream
+
+// MaxFrameBytes is the maximum byte length of a single JSON-RPC frame
+// the proxy will read without returning ErrFrameTooLarge.
+const MaxFrameBytes = lspserver.MaxFrameBytes
+
+// MaxHeaderBytes is the maximum byte length of a JSON-RPC frame header block
+// the proxy will read without returning ErrFrameTooLarge.
+const MaxHeaderBytes = lspserver.MaxHeaderBytes
+
+// Sentinel errors forwarded from lspserver.
+var ErrCommandNotHandled = lspserver.ErrCommandNotHandled
+var ErrFrameClosed = lspserver.ErrFrameClosed
+var ErrFrameTooLarge = lspserver.ErrFrameTooLarge
+var ErrInvalidJSONRPC = lspserver.ErrInvalidJSONRPC
+var ErrLSPUpstreamPanic = lspserver.ErrLSPUpstreamPanic
+var ErrLSPUpstreamRunnerRequired = lspserver.ErrLSPUpstreamRunnerRequired
+var ErrLSPCwdRequired = lspserver.ErrLSPCwdRequired
+var ErrLSPTsgoBinaryRequired = lspserver.ErrLSPTsgoBinaryRequired
+
+// Constructor and utility functions forwarded from lspserver.
+var NewProxy = lspserver.NewProxy
+var NewNativePluginSource = lspserver.NewNativePluginSource
+var NewFrameReader = lspserver.NewFrameReader
+var WriteFrame = lspserver.WriteFrame
+var ParseEnvelope = lspserver.ParseEnvelope
+var RecoverPanicAs = lspserver.RecoverPanicAs
+var RunLSPServer = lspserver.RunLSPServer
+var DenyNpmInstall = lspserver.DenyNpmInstall
+
+// idKeyFromRaw normalizes a raw JSON-RPC id to a string map key. It is
+// exposed here (unexported) so tests can access it via go:linkname without
+// importing the internal package.
+func idKeyFromRaw(raw json.RawMessage) string {
+  return lspserver.IDKeyFromRaw(raw)
+}

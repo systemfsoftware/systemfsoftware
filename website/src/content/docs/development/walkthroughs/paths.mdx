@@ -1,0 +1,523 @@
+# `@ttsc/paths`: Module Specifier Rewriting
+
+`@ttsc/paths` rewrites `import "@lib/foo"` into something like `import "./modules/foo.js"` by consulting `compilerOptions.paths`, the Program's actual source files, and `rootDir` / `outDir`. It is the most ambitious of the three transform plugins because the rewrite must agree with the _output_ file layout, not just the source, TypeScript paths get resolved relative to the source tree, but the emitted JavaScript has to use a path that the runtime (Node, the bundler) can actually load.
+
+This page is also the canonical reference for **leaf-text AST mutation**, changing a string literal's `Text` field correctly. The invariant lives in three lines of code at the heart of `rewriter.apply`.
+
+If [`@ttsc/strip`](/docs/development/walkthroughs/strip) felt manageable, this should too. The new ideas are: read tsconfig fields through the driver, walk each syntactic shape that can hold a module specifier, confirm that the literal is a module reference in its containing file, and apply the synthesize-flag rule.
+
+## What it does for the consumer
+
+```jsonc
+// tsconfig.json
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "commonjs",
+    "rootDir": "src",
+    "outDir": "dist",
+    "declaration": true,
+    "paths": {
+      "@lib/*": ["./src/modules/*"],
+    },
+    "plugins": [{ "transform": "@ttsc/paths" }],
+  },
+  "include": ["src"],
+}
+```
+
+```ts
+// src/main.ts (before)
+import { hello } from "@lib/greet";
+import type { User } from "@lib/types/user";
+
+export const value = hello();
+export type Owner = User;
+```
+
+```js
+// dist/main.js (after)
+import { hello } from "./modules/greet.js";
+
+export const value = hello();
+```
+
+```ts
+// dist/main.d.ts (after)
+import type { User } from "./modules/types/user.js";
+
+export declare const value: ReturnType<
+  typeof import("./modules/greet.js").hello
+>;
+export type Owner = User;
+```
+
+The same source AST is shared between JavaScript and declaration emit, so the rewrite lands in both outputs in a single pass.
+
+## Directory layout
+
+```text
+packages/paths/
+├── package.json
+├── src/
+│   └── index.cjs        ← JS descriptor (CommonJS)
+├── go.mod
+├── driver/
+│   └── paths.go         ← Linked transform logic
+└── plugin/
+    ├── main.go          ← 36-line dispatcher
+    └── paths.go         ← Blank-imports the linked driver package
+```
+
+Identical shape to strip. The descriptor at `src/index.cjs` points at linked `driver/` source, while `plugin/main.go` is a standalone utility dispatcher with the same shape shown in the [banner walkthrough](/docs/development/walkthroughs/banner#the-standalone-sidecar-pluginmaingo). Skip ahead to the real logic.
+
+## The real logic: `rewriter` in `driver/paths.go`
+
+Everything below is in [`packages/paths/driver/paths.go`](https://github.com/samchon/ttsc/tree/master/packages/paths/driver/paths.go). Six steps:
+
+1. **Build the rewriter** from the loaded Program. This is where tsconfig paths, `rootDir`, `outDir`, and the source-file index get cached.
+2. **Sort patterns by specificity** so `@lib/foo/*` wins before `@lib/*` for the same specifier.
+3. **For each file**, walk every node and select only string literals that are module references in that file.
+4. **Resolve the specifier** to a source file inside the Program.
+5. **Compute the relative output path** from the rewriter's source file to the target's emitted JS.
+6. **Mutate the string literal's `Text`**: with the synthesize-flag invariant.
+
+### 1. Building the rewriter
+
+```go
+type rewriter struct {
+  checker     *shimchecker.Checker
+  basePath    string
+  jsxPreserve bool
+  outDir      string
+  patterns    []pathPattern
+  rootDir     string
+  sourceFiles map[string]string
+}
+
+type pathPattern struct {
+  pattern string
+  targets []string
+}
+
+func newRewriter(prog *driver.Program) *rewriter {
+  out := &rewriter{sourceFiles: map[string]string{}}
+  if prog == nil || prog.ParsedConfig == nil ||
+    prog.ParsedConfig.ParsedConfig == nil ||
+    prog.ParsedConfig.ParsedConfig.CompilerOptions == nil {
+    return out
+  }
+  out.checker = prog.Checker
+  options := prog.ParsedConfig.ParsedConfig.CompilerOptions
+  cwd := prog.Host.GetCurrentDirectory()
+  out.basePath = filepath.Clean(options.GetPathsBasePath(cwd))
+  out.jsxPreserve = options.Jsx == shimcore.JsxEmitPreserve
+  out.outDir = optionalPath(options.OutDir, cwd)
+  out.rootDir = optionalPath(options.RootDir, cwd)
+  files := prog.SourceFiles()
+  fileNames := make([]string, 0, len(files))
+  for _, file := range files {
+    fileNames = append(fileNames, normalizePath(file.FileName()))
+  }
+  if out.rootDir == "" {
+    out.rootDir = inferredRootDir(options.ConfigFilePath, fileNames, cwd, useCaseSensitiveFileNames(prog))
+  }
+  for _, name := range fileNames {
+    out.sourceFiles[name] = name
+  }
+  if options.Paths != nil {
+    for pattern, targets := range options.Paths.Entries() {
+      out.patterns = append(out.patterns, pathPattern{
+        pattern: pattern,
+        targets: append([]string(nil), targets...),
+      })
+    }
+  }
+  orderPatterns(out.patterns)
+  return out
+}
+```
+
+The constructor pulls four facts out of the Program and caches them as an in-memory index. Worth walking each:
+
+**`basePath`**, the directory that paths in `compilerOptions.paths` resolve relative to. Tsgo's `GetPathsBasePath` handles the `baseUrl` vs no-`baseUrl` logic.
+
+**`outDir`** and **`rootDir`**, where emitted JavaScript lands and which subtree owns the source. If `rootDir` is empty, `inferredRootDir` mirrors TypeScript-Go's own `GetCommonSourceDirectory` fallback chain: the tsconfig's directory when the program was loaded from one, else the deepest directory shared by every input file (`commonSourceDir`, a per-component intersection that reports "no common root" for inputs that span two Windows volumes instead of walking forever — the #310 hang). Anchoring exactly where tsgo anchors emit keeps the rewritten specifiers in agreement with the real output layout.
+
+**`sourceFiles`**, a string → string map of every user source file, keyed by its exact normalized path:
+
+```go
+for _, file := range files {
+  name := normalizePath(file.FileName())
+  out.sourceFiles[name] = name
+}
+```
+
+Extensionless targets such as `src/modules/greet` are resolved later by `lookupSource`, which tries known TypeScript extensions first and JavaScript extensions after them in a deterministic order. This keeps ambiguous stems like `foo.ts` plus `foo.tsx` stable instead of depending on program file iteration order while still supporting `allowJs` projects.
+
+**`patterns`**, copied from `options.Paths.Entries()`. Each entry's targets slice is deep-copied with `append([]string(nil), targets...)` so a later mutation in tsgo's options does not leak back into the rewriter.
+
+### Sidebar: Go map iteration order is randomised
+
+Notice the explicit `orderPatterns(out.patterns)` at the end. Without sorting, the order of patterns would depend on Go's map iteration, which is intentionally randomised, different runs of the same plugin would resolve `@lib/foo/bar` against either `@lib/*` or `@lib/foo/*` non-deterministically. The sort makes the resolution stable and follows tsc's own precedence (next section). `SliceStable` preserves the relative order of equal-rank patterns so the final tie-break is "whichever entry tsgo gave us first."
+
+### Sidebar: `filepath.ToSlash` and the Windows path discipline
+
+Notice the helper `normalizePath` (`filepath.ToSlash(filepath.Clean(value))`) that wraps every path before it lands in `sourceFiles`. tsgo normalises filenames to forward slashes internally on every platform; `filepath.Join` and `filepath.Rel` use the OS separator (`\` on Windows). A Windows plugin that compares `prog.SourceFiles()[i].FileName()` against `filepath.Join(cwd, "src/main.ts")` without normalising hits no match and silently no-ops the rewrite. Run every external path through `filepath.ToSlash` before keying any map or comparing strings; see [Pitfalls → Windows Path Failures](/docs/development/reference/pitfalls#windows-path-failures) for the catalogue entry.
+
+### 2. Sort patterns by specificity
+
+```go
+func orderPatterns(patterns []pathPattern) {
+  sort.SliceStable(patterns, func(i, j int) bool {
+    a, b := patterns[i].pattern, patterns[j].pattern
+    aExact, bExact := !strings.Contains(a, "*"), !strings.Contains(b, "*")
+    if aExact != bExact {
+      return aExact
+    }
+    return patternPrefixLength(a) > patternPrefixLength(b)
+  })
+}
+
+func patternPrefixLength(pattern string) int {
+  if i := strings.IndexByte(pattern, '*'); i >= 0 {
+    return i
+  }
+  return len(pattern)
+}
+```
+
+The order is tsc's `matchPatternOrExact` contract: an exact pattern (no `*`) always wins, and among wildcards the longest literal _prefix_ wins — `@lib/foo/*` (prefix 9) beats `@lib/*` (prefix 5). Ranking by total literal length instead would let a long-suffix pattern like `*-styles` capture a specifier that tsc's module resolution routes through `@app/*`, and the rewrite would then disagree with the type checker.
+
+### 3. Walk every node that could hold a module reference
+
+```go
+func (r *rewriter) apply(file *shimast.SourceFile) {
+  if r == nil || file == nil || len(r.patterns) == 0 {
+    return
+  }
+  visitModuleSpecifiers(file, r.checker, func(lit *shimast.Node) {
+    if lit == nil || lit.Kind != shimast.KindStringLiteral {
+      return
+    }
+    spec := lit.Text()
+    rewritten, ok := r.rewrite(file.FileName(), spec)
+    if ok && rewritten != spec {
+      lit.AsStringLiteral().Text = rewritten
+      lit.Flags |= shimast.NodeFlagsSynthesized
+      lit.Loc = shimcore.UndefinedTextRange()
+    }
+  })
+}
+```
+
+This three-line tail is the synthesize-flag rule for leaf-text mutations, the most consequential lines on the page. Discussion in [§6 below](#6-mutating-a-string-literal--the-synthesize-flag-invariant).
+
+The visitor uses syntax to find candidate literals, then the source file and checker to keep only module references:
+
+```go
+func visitModuleSpecifiers(file *shimast.SourceFile, checker *shimchecker.Checker, visit func(*shimast.Node)) {
+  if file == nil {
+    return
+  }
+  var walk func(node *shimast.Node) bool
+  walk = func(node *shimast.Node) bool {
+    if node == nil {
+      return false
+    }
+    switch node.Kind {
+    case shimast.KindImportDeclaration:
+      visit(node.AsImportDeclaration().ModuleSpecifier)
+    case shimast.KindExportDeclaration:
+      visit(node.AsExportDeclaration().ModuleSpecifier)
+    case shimast.KindImportEqualsDeclaration:
+      ref := node.AsImportEqualsDeclaration().ModuleReference
+      if ref != nil && ref.Kind == shimast.KindExternalModuleReference {
+        visit(ref.AsExternalModuleReference().Expression)
+      }
+    case shimast.KindImportType:
+      arg := node.AsImportTypeNode().Argument
+      if arg != nil && arg.Kind == shimast.KindLiteralType {
+        visit(arg.AsLiteralTypeNode().Literal)
+      }
+    case shimast.KindModuleDeclaration:
+      decl := node.AsModuleDeclaration()
+      if file.ExternalModuleIndicator != nil && decl != nil {
+        visit(decl.Name())
+      }
+    case shimast.KindCallExpression:
+      call := node.AsCallExpression()
+      if isModuleSpecifierCall(checker, call) && call.Arguments != nil && len(call.Arguments.Nodes) > 0 {
+        visit(call.Arguments.Nodes[0])
+      }
+    }
+    node.ForEachChild(walk)
+    return false
+  }
+  walk(file.AsNode())
+}
+
+func isModuleSpecifierCall(checker *shimchecker.Checker, call *shimast.CallExpression) bool {
+  if call == nil || call.Expression == nil {
+    return false
+  }
+  switch call.Expression.Kind {
+  case shimast.KindImportKeyword:
+    return true
+  case shimast.KindIdentifier:
+    return call.Expression.Text() == "require" && isModuleLoader(checker, call.Expression)
+  default:
+    return false
+  }
+}
+
+func isModuleLoader(checker *shimchecker.Checker, expression *shimast.Node) bool {
+  if checker == nil || expression == nil {
+    return false
+  }
+  symbol := checker.GetSymbolAtLocation(expression)
+  if symbol == nil {
+    return true
+  }
+  return symbol.Flags&shimast.SymbolFlagsAlias == 0 &&
+    symbol.ValueDeclaration != nil &&
+    symbol.ValueDeclaration.Flags&shimast.NodeFlagsAmbient != 0
+}
+```
+
+Six syntactic positions can contain a module-specifier literal. Syntax locates the candidate; the two marked rows also require semantic classification because TypeScript gives the same shape different meanings in different files and scopes:
+
+| Source | Kind | Literal location | Rewrite condition |
+| --- | --- | --- | --- |
+| `import x from "pkg"` | `ImportDeclaration` | `.ModuleSpecifier` | Always |
+| `export { x } from "pkg"` | `ExportDeclaration` | `.ModuleSpecifier` | Always |
+| `import x = require("pkg")` | `ImportEqualsDeclaration` | `.ModuleReference.AsExternalModuleReference().Expression` | Always |
+| `type T = import("pkg").T` | `ImportType` | `.Argument.AsLiteralTypeNode().Literal` | Always |
+| `declare module "pkg" {}` | `ModuleDeclaration` | `.Name()` | Only when the containing `SourceFile` is an external module, where the declaration augments that module. A global ambient declaration in a script stays unchanged. `namespace foo {}` and `module foo {}` have `Identifier` names and are still filtered out by `apply`. |
+| `import("pkg")` | `CallExpression` | `.Arguments.Nodes[0]` | Always |
+| `require("pkg")` | `CallExpression` | `.Arguments.Nodes[0]` | Only when the identifier resolves to the module loader, not to a parameter, local, or imported binding. |
+
+After the switch, `node.ForEachChild` recurses into every child. This is what makes the visitor catch deeply-nested cases like `function f(x = await import("pkg")) {}`. The `CallExpression` is buried inside parameter default initializers, but every node still gets visited because we always recurse.
+
+### Sidebar: visitor pattern in Go
+
+The closure-based visitor is the simplest way to walk an AST in Go without an explicit interface. The shape:
+
+```go
+var walk func(node *X) bool
+walk = func(node *X) bool {
+  if node == nil { return false }
+  visit(node)
+  node.ForEachChild(walk)
+  return false
+}
+walk(root)
+```
+
+returning `false` keeps the iteration alive. Returning `true` would short-circuit, useful for "find the first node matching predicate," not useful when you want to visit every node. Declare the recursion closure once per walk and hand the same value to every `ForEachChild` call — building a fresh closure at each node allocates once per AST node, which a program-wide pass pays millions of times.
+
+### 4. Resolving a specifier
+
+```go
+func (r *rewriter) rewrite(fromSource string, specifier string) (string, bool) {
+  if specifier == "" || strings.HasPrefix(specifier, ".") || strings.HasPrefix(specifier, "/") {
+    return specifier, false
+  }
+  targetSource, ok := r.resolveSource(specifier)
+  if !ok {
+    return specifier, false
+  }
+  fromOut := r.outputPathForSource(fromSource)
+  targetOut := r.outputPathForSource(targetSource)
+  if fromOut == "" || targetOut == "" {
+    return specifier, false
+  }
+  rel, _ := filepath.Rel(filepath.Dir(fromOut), targetOut)
+  rel = filepath.ToSlash(rel)
+  if !strings.HasPrefix(rel, ".") {
+    rel = "./" + rel
+  }
+  return rel, true
+}
+```
+
+The contract: `rewrite("/proj/src/main.ts", "@lib/greet")` returns `("./modules/greet.js", true)`.
+
+The fast-path bail-outs at the top are important, `.` and `/` prefixes are already relative or absolute paths and never match a path alias. An empty specifier is a parse error in real TypeScript but the visitor still walks it.
+
+The resolution chain:
+
+1. `resolveSource(specifier)`: find the source file that matches the alias.
+2. `outputPathForSource(fromSource)` and `outputPathForSource(targetSource)`: map both to emitted-JS paths.
+3. `filepath.Rel(dir(fromOut), targetOut)`: compute the relative path from one to the other.
+4. Force forward slashes (`filepath.ToSlash`): JavaScript modules use POSIX-style paths on every platform.
+5. Add the leading `./` if missing: Node.js requires it for relative imports.
+
+`resolveSource`:
+
+```go
+func (r *rewriter) resolveSource(specifier string) (string, bool) {
+  for _, pattern := range r.patterns {
+    star, ok := matchPattern(pattern.pattern, specifier)
+    if !ok {
+      continue
+    }
+    for _, target := range pattern.targets {
+      candidate := strings.Replace(target, "*", star, 1)
+      resolved := normalizePath(filepath.Join(r.basePath, candidate))
+      if source, ok := r.lookupSource(resolved); ok {
+        return source, true
+      }
+    }
+    return "", false
+  }
+  return "", false
+}
+
+func matchPattern(pattern string, specifier string) (string, bool) {
+  if !strings.Contains(pattern, "*") {
+    return "", pattern == specifier
+  }
+  parts := strings.SplitN(pattern, "*", 2)
+  if strings.Contains(parts[1], "*") {
+    return "", false
+  }
+  if len(specifier) < len(parts[0])+len(parts[1]) ||
+    !strings.HasPrefix(specifier, parts[0]) ||
+    !strings.HasSuffix(specifier, parts[1]) {
+    return "", false
+  }
+  return specifier[len(parts[0]) : len(specifier)-len(parts[1])], true
+}
+```
+
+For pattern `@lib/*` and specifier `@lib/greet`:
+
+- `parts = ["@lib/", ""]`
+- `specifier` has the prefix `@lib/` and the suffix `""`: match.
+- Return `specifier[5 : 10-0] = "greet"` (length 10 minus suffix length 0).
+
+The two guards mirror tsc: a pattern with more than one `*` is not a pattern at all (`TryParsePattern` discards it), and a specifier shorter than the literal halves combined must not match — it can still satisfy both the prefix and suffix probes (`"@lib/x"` against `"@lib/x*x"`), and slicing the star capture out of it would panic on inverted bounds.
+
+Resolution also _commits_ to the first (best-precedence) matching pattern, exactly like tsc's `tryLoadModuleUsingPaths`: only that pattern's targets are tried, and when none of them names a program source the specifier stays unrewritten. Falling through to a weaker pattern would rewrite the import at a module the type checker never resolved.
+
+The captured `*` substitutes into each target: `./src/modules/*` → `./src/modules/greet`. The candidate is then joined against `basePath` (the tsconfig directory) and looked up in `r.sourceFiles`.
+
+`lookupSource` walks three stages, falling through on each miss: literal match in the `sourceFiles` map → stem with each of `.ts` / `.tsx` / `.mts` / `.cts` / `.js` / `.jsx` / `.mjs` / `.cjs` appended → stem + `/index.<ext>` for directory-style imports. The exact source is in [`driver/paths.go::lookupSource`](https://github.com/samchon/ttsc/tree/master/packages/paths/driver/paths.go).
+
+### 5. Mapping source to emitted-output path
+
+```go
+func (r *rewriter) outputPathForSource(source string) string {
+  if r.outDir == "" || r.rootDir == "" {
+    return ""
+  }
+  rel, err := filepath.Rel(r.rootDir, source)
+  if err != nil || isOutsideRelativePath(rel) {
+    return ""
+  }
+  return normalizePath(filepath.Join(r.outDir, replaceSourceExtension(rel, emittedExtension(rel, r.jsxPreserve))))
+}
+
+func emittedExtension(source string, jsxPreserve bool) string {
+  ext := filepath.Ext(source)
+  switch strings.ToLower(ext) {
+  case ".ts", ".js":
+    return ".js"
+  case ".mts", ".mjs":
+    return ".mjs"
+  case ".cts", ".cjs":
+    return ".cjs"
+  case ".tsx", ".jsx":
+    if jsxPreserve {
+      return ".jsx"
+    }
+    return ".js"
+  default:
+    return ext
+  }
+}
+```
+
+The mapping is tsgo's emit rule, replicated here because the plugin needs to predict the output path the compiler will write. `replaceSourceExtension(rel, ext)` strips the source extension and appends the predicted one. TypeScript/JavaScript-family sources transpile to `.js`, `.mjs`, `.cjs`, or `.jsx` depending on the matched source and `jsx` mode. The `default` branch returns the source's own extension unchanged, so an asset the compiler _copies_ rather than transpiles — a `.json` source pulled in by `resolveJsonModule` — keeps its extension and the rewritten specifier names the file tsgo actually writes (`./data.json`) instead of an invented `./data.js` that never exists on disk.
+
+`isOutsideRelativePath` checks `rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator))`, sources outside the rootDir do not have a well-defined output and the rewriter bails out.
+
+### 6. Mutating a string literal: the synthesize-flag invariant
+
+This is the three-line pattern at the end of `rewriter.apply`:
+
+```go
+lit.AsStringLiteral().Text = rewritten
+lit.Flags |= shimast.NodeFlagsSynthesized
+lit.Loc = shimcore.UndefinedTextRange()
+```
+
+**The trap:** if you set `lit.Text = rewritten` and stop there, the printer silently emits the _old_ specifier. The reason is buried inside tsgo's printer, but the upshot is:
+
+> tsgo's printer reads leaf-token text through `getTextOfNode`, which checks whether the node is "real", has a parent and is not flagged as synthesized, and, if so, slices the original source between `node.Pos()` and `node.End()`. That slice is the original `"@lib/greet"`. The printer never looks at your `Text` field.
+
+The two extra lines detach the node from its parse-tree source span:
+
+- `lit.Flags |= shimast.NodeFlagsSynthesized`: tell the printer this node has no original source position to read from. It now falls back to `lit.Text`.
+- `lit.Loc = shimcore.UndefinedTextRange()`: clear the position range so sourcemap generation does not point at the original literal location.
+
+Set both. Forgetting either is a silent-emit regression. The transform's unit tests pass, but the emitted output is unchanged from the input.
+
+The same invariant applies to:
+
+- `*StringLiteral.Text`
+- `*Identifier.Text`
+- `*NumericLiteral.Text`
+- any other "leaf token whose text is the entire payload."
+
+It does **not** apply to _structural mutations_, filtering `Statements.Nodes`, swapping child pointers, replacing one statement with another. Those round-trip cleanly through the printer because the printer iterates statement lists directly without reading source spans. This is why `@ttsc/strip`'s statement filter does not need the synthesize stamp.
+
+### Sidebar: how to know which mutations need the flag
+
+Three checks:
+
+1. **Are you assigning to a node's `.Text` field?** If yes, you almost certainly need the flag.
+2. **Are you replacing one slice element with another via `list.Nodes[i] = newNode`?** If yes and `newNode` came from `NodeFactory.NewX()`, set the flag on `newNode` (the factory does not set it for you). If `newNode` was extracted from a different parse, you usually want to clone it first.
+3. **Are you `append`-ing or filtering a `NodeList`?** No flag needed.
+
+When in doubt, set both. The cost is zero and the failure mode is silent.
+
+## Pulling it together
+
+`rewriter` is the only shipped transform in this tour that needs project-wide Program facts beyond the source file currently being visited. Its constructor caches the Program's `ParsedConfig.CompilerOptions`, `SourceFiles`, `Checker`, and `Paths` map; everything else is a pure function of those facts and the input specifier string.
+
+The pattern generalizes to any plugin that needs to query _project-level_ information:
+
+- Need `compilerOptions.target` / `module` / `jsx`? Read them from `prog.ParsedConfig.ParsedConfig.CompilerOptions`.
+- Need the resident non-declaration implementation files? `prog.SourceFiles()`; imported raw TypeScript or JavaScript dependencies can be present, so apply an ownership predicate when you need project files only.
+- Need types? `prog.Checker.GetTypeAtLocation(node)`. See [AST & Checker → Checker Basics](/docs/development/concepts/tsgo#checker-basics).
+- Need `tsconfig.json` extends-chain or include paths? `prog.ParsedConfig.ParsedConfig` carries the resolved configuration.
+
+## What to copy, what to ignore
+
+**Copy:**
+
+- The pattern of caching tsconfig facts on a constructor-built struct (`rewriter`). Avoids re-querying for every node.
+- The pattern-precedence sort. Whenever you read a user-supplied map keyed on globs or patterns, copy this idiom: pull entries into a slice, then `sort.SliceStable` into the upstream tool's own precedence order. This makes resolution deterministic across runs and keeps it in agreement with the resolver you are mirroring.
+- The syntax enumeration plus semantic gates. Do not infer a module reference from node kind or identifier text alone. Use `SourceFile` and `Checker` facts when TypeScript gives a construct different meanings.
+- The synthesize-flag invariant. Read it once; tattoo it.
+
+**Do not copy:**
+
+- The `optionalPath` / `normalizePath` / `stripKnownSourceExtension` helpers wholesale: they were tuned to match tsgo's exact behavior and contain edge cases (Windows drive prefixes, `.d.ts` vs `.ts`) that are mostly noise to a plugin that does not rewrite module specifiers. Re-derive them as you need them.
+- The standalone `plugin/paths.go` wrapper when your descriptor points directly at an executable command package.
+- Reading by package name. Linked plugins receive the project plugin entry paired with their registration order through `driver.PluginContext`; executable plugins should parse `--plugins-json` according to their own protocol.
+
+## Test coverage
+
+The path resolver is exercised by [`tests/test-paths/src/features/`](https://github.com/samchon/ttsc/tree/master/tests/test-paths/src/features/), feature tests materialize real temp project layouts from `tests/projects/path-*` fixtures or inline files, run the real `ttsc` launcher, and assert on the emitted JavaScript and declaration output relevant to each scenario.
+
+The synthesize-flag invariant is locked by tests that assert on the printer output text after mutation, search for `lit.Flags` and `NodeFlagsSynthesized` in `packages/paths/driver/` and the end-to-end fixtures above.
+
+## Where to read next
+
+- [`@ttsc/lint`](/docs/development/walkthroughs/lint): the deep-dive on diagnostics, the rule engine, and contributor packages.
+- [AST & Checker → Recognizing Imports and Module Specifiers](/docs/development/concepts/tsgo#recognizing-imports-and-module-specifiers): the same visitor, in the protocol docs.
+- [AST & Checker → Mutating the AST](/docs/development/concepts/tsgo#mutating-the-ast): the synthesize-flag invariant, in the concepts docs.
+- [Recipes → Mutating leaf-text nodes](/docs/development/authoring/recipes#mutating-leaf-text-nodes): copy-paste pattern.

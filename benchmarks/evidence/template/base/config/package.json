@@ -1,0 +1,15 @@
+{
+  "private": true,
+  "name": "{{name}}-config",
+  "version": "0.1.0",
+  "description": "Shared TypeScript and @ttsc/lint configuration for {{name}}",
+  "files": [
+    "lint.config.ts",
+    "lint.config.frontend.ts",
+    "tsconfig.json"
+  ],
+  "devDependencies": {
+    "@ttsc/lint": "catalog:typescript",
+    "typescript": "catalog:typescript"
+  }
+}

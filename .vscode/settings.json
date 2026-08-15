@@ -1,0 +1,25 @@
+{
+  "editor.insertSpaces": true,
+  "editor.tabSize": 2,
+  "[javascript][typescript][json]": {
+    "editor.formatOnSave": true,
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.codeActionsOnSave": {
+      "source.fixAll.eslint": "explicit"
+    }
+  },
+  "[go]": {
+    "editor.defaultFormatter": "golang.go",
+    "editor.detectIndentation": false,
+    "editor.formatOnSave": true,
+    "editor.insertSpaces": true,
+    "editor.tabSize": 2
+  },
+  "go.formatTool": "custom",
+  "go.alternateTools": {
+    "customFormatter": "${workspaceFolder}/.vscode/gofmt-2spaces.sh"
+  },
+  "[mdx]": {
+    "editor.wordWrap": "on"
+  }
+}

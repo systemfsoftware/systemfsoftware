@@ -1,0 +1,84 @@
+# Dependencies and package manager state
+node_modules/
+
+# Build outputs
+lib/
+native/
+# `@ttsc/evidence` ships Go SOURCE from `native/`, not a build output. A lint
+# contributor cannot carry a `go.mod` inside the directory ttsc copies, so the
+# sources sit in a plain directory that happens to collide with the per-platform
+# packages' binary drop. The rule above stays; this package opts back in.
+!packages/evidence/native/
+# The benchmark template ships a frontend whose sources live in `src/lib`, which
+# the `lib/` rule above reads as build output. Dropping them delivers a
+# workspace whose entry cannot resolve `@/lib/client`.
+!benchmarks/evidence/template/**/src/lib/
+
+dist/
+bin/
+!packages/vscode/bin/
+coverage/
+
+# Local caches and package archives
+.cache/
+.turbo/
+.campaign-tmp/
+*.tgz
+*.tsbuildinfo
+*.log
+
+# AI assistant data
+.claude/
+.discussions/
+.playwright-mcp/
+
+# Local Go workspace overlays
+go.work
+go.work.sum
+
+# Reference and experiment checkouts
+.references/
+.wiki/
+.work/
+experimental/typia/
+experimental/nestia/
+
+# Benchmark results — an ephemeral artifact, never committed. Each benchmark
+# package resolves its own work root, so the rule covers the container.
+benchmarks/*/.work/
+
+# Raw evidence benchmark runs and measured workspaces are local measurement
+# output. Upstream a path built without its separator once created a second
+# root beside the real one and nothing ignored it, so `/benchmarkoutput/` is
+# ignored there too. This layout was guessed to malform the same way, as
+# `/benchmarks/evidenceoutput/`, and that guess was wrong: what actually
+# appeared is `/benchmarks/output/`, upstream's `benchmark/output/` pluralized
+# to this repository's `benchmarks/` without the `evidence` segment that now
+# sits between them. A tracked fragment of a measured workspace landed there
+# and broke the format gate, so the observed spelling is ignored instead.
+/benchmarks/evidence/output/
+/benchmarks/output/
+
+# Promotional media. Clips are rendered locally, published as GitHub-hosted
+# attachments, and referenced by URL from the website, so no binary enters the
+# repository. The toolchain that produces them is tracked, because media nobody
+# can regenerate goes stale silently, and the URL map with it.
+/.media/*
+!/.media/tools/
+!/.media/urls.json
+/.media/tools/node_modules/
+/.media/tools/*.exe
+/.media/tools/*.zip
+/.media/tools/ffmpeg-master-latest-win64-gpl/
+/.media/tools/picks.json
+
+# Stray native sanity binary from `go build ./cmd/ttsc-wasm` (host build).
+packages/wasm/ttsc-wasm
+
+# Stray native sanity binary from `go build packages/lint/plugin` invoked from repo root.
+/plugin
+# Stray native sanity binary from `go build website/compiler/cmd/playground` invoked from website/compiler.
+website/compiler/playground
+
+# Compiled Go binaries left by `go build .` in the cmd directory.
+packages/ttsc/cmd/ttsc/ttsc

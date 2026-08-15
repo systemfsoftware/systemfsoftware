@@ -1,0 +1,16 @@
+{
+  "extends": "../../config/tsconfig.json",
+  "compilerOptions": {
+    "declaration": false,
+    "noEmit": true,
+    "plugins": [
+      {
+        "transform": "typia/lib/transform"
+      }
+    ],
+    "rootDir": "src",
+    "sourceMap": false,
+    "types": ["node"]
+  },
+  "include": ["src/**/*.ts"]
+}

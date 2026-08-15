@@ -1,0 +1,46 @@
+{
+  "name": "@ttsc/strip",
+  "version": "0.27.0",
+  "description": "First-party ttsc plugin that removes configured calls and statements from emitted JavaScript.",
+  "main": "src/index.cjs",
+  "types": "src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "default": "./src/index.cjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "keywords": [
+    "ttsc",
+    "strip",
+    "console",
+    "typescript",
+    "tsgo"
+  ],
+  "ttsc": {
+    "plugin": {
+      "transform": "@ttsc/strip"
+    }
+  },
+  "files": [
+    "README.md",
+    "driver/config.go",
+    "driver/strip.go",
+    "src/index.cjs",
+    "src/index.d.ts",
+    "go.mod",
+    "plugin/main.go",
+    "plugin/strip.go"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/samchon/ttsc"
+  },
+  "author": "Jeongho Nam",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/samchon/ttsc/issues"
+  },
+  "homepage": "https://ttsc.dev"
+}
