@@ -20,8 +20,8 @@ Rules here gate the `architect-workflow` cell spec and `CONSTITUTION.md` Article
     can only report that afterwards; the declaration decides it before the file exists, which
     is why the obligation belongs there and a second copy here is a rule that can never fire
     on an emitted cell
-  check: `deno run scripts/guards/guard-workflow-authorship.ts --selftest` passes and
-    `pnpm turbo //#check:workflow-authorship` exits 0 — every workflow cell is emitted, so no
+  check: `deno run scripts/guards/guard-cell-authorship.ts --selftest` passes and
+    `pnpm turbo //#check:cell-authorship` exits 0 — every workflow cell is emitted, so no
     hand-authored union can reach a rule here
 
 - id: EW4

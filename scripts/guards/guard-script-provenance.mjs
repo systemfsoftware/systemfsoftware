@@ -154,13 +154,17 @@ const MANIFEST = new Map([
     'release-metadata',
     'Idempotently tags name@v<version> for released packages; invoked by release.yml after publish, never a package dependency.',
   ]],
-  ['guards/guard-workflow-authorship.ts', [
+  ['guards/guard-cell-authorship.ts', [
     'workspace-layout',
-    "The authorship gate: every *.workflow.ts in any package is its declaration's emission, round-trip clean. Spans every package and compares a generated file against a sibling declaration; no package can see the workspace or the generator.",
+    "The authorship gate: a cell with a declaration beside it is that declaration's emission, round-trip clean, and a role listed complete has no hand-authored cell left. Spans every package; no package can see the workspace or the generators.",
   ]],
   ['tools/workflow-emit.ts', [
     'workspace-layout',
     'Turns a *.workflow.decl.json into a workflow cell. It writes files into any package src/, so no package owns it; the authorship gate above is its only caller in a chain.',
+  ]],
+  ['tools/executor-emit.ts', [
+    'workspace-layout',
+    'Turns a *.executor.decl.json into an executor cell. Same reason as the workflow emitter: it writes into any package src/ and the authorship gate is its only caller in a chain.',
   ]],
   ['tools/worktrunk/', [
     'local-tooling',

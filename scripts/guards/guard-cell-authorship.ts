@@ -1,30 +1,55 @@
 #!/usr/bin/env -S deno run --allow-read --allow-write --allow-run=git,./bin/dprint
 /**
- * The authorship gate for the `workflow` role.
+ * The authorship gate.
  *
  * A type can decide almost everything about a cell, but it cannot decide "this file was
- * generated". That is the one presence check the brief permits to survive, and this is it:
- * every `*.workflow.ts` under a package's `src/` must have a sibling declaration, and
- * re-emitting that declaration must reproduce the file on disk byte for byte.
+ * generated". That is the one presence check the brief permits to survive, and this is it: a
+ * cell with a declaration beside it must be that declaration's emission, byte for byte.
  *
- * Without this gate the workflow rules are unreachable only by discipline, which is not a
- * property of the tree. With it, a hand-authored or hand-edited workflow cell fails the
- * check chain, and the rules whose violations the declaration cannot express become
- * genuinely unreachable rather than merely unreached.
+ * Two guarantees, deliberately separate, because conflating them would let a partly-migrated
+ * role borrow the completed one's authority:
+ *
+ * - **Fidelity**, for every declaration of any role with an emitter: the cell on disk is what
+ *   emitting the declaration produces. A hand-edited generated cell fails here.
+ * - **Completeness**, only for a role named in `COMPLETE_ROLES`: every cell of that role has a
+ *   declaration. A hand-authored cell fails here.
+ *
+ * Deleting a rule because "the declaration cannot express its violation" is licensed only by
+ * completeness, and only for that rule's role. A role is added to `COMPLETE_ROLES` when its
+ * last cell is emitted, never before - an entry added early is the whole gate lying.
  */
+import { emitExecutor, parseExecutor } from '../tools/executor-emit.ts'
 import { emitWorkflow, parseWorkflow } from '../tools/workflow-emit.ts'
 
-const CELL_SUFFIX = '.workflow.ts'
-const DECL_SUFFIX = '.workflow.decl.json'
+type Emitter = (declaration: unknown) => string
+
+const ROLES: Readonly<Record<string, Emitter>> = {
+  workflow: (raw) => emitWorkflow(parseWorkflow(raw)),
+  executor: (raw) => emitExecutor(parseExecutor(raw)),
+}
 
 /**
- * Files the taxonomy places outside the cell population: tests, fixtures and the
- * transient probes a violation prober writes and deletes.
+ * Roles with no hand-authored cell left. Only these carry the completeness guarantee, and
+ * only these license a deletion.
  */
-const OUTSIDE_POPULATION = ['/__tests__/', '/fixtures/', '/test/', 'falsify-probe.', 'exhaustive-probe.']
+const COMPLETE_ROLES: readonly string[] = ['workflow']
+
+/**
+ * Files the taxonomy places outside the cell population: tests, fixtures and the transient
+ * probes a violation prober writes and deletes.
+ */
+const OUTSIDE_POPULATION = [
+  '/__tests__/',
+  '/fixtures/',
+  '/test/',
+  'falsify-probe.',
+  'exhaustive-probe.',
+  'emitprobe.',
+  'authorship-probe.',
+]
 
 type Evidence = {
-  /** Tracked cell paths inside the population. */
+  /** Tracked cell paths inside the population, any role with an emitter. */
   readonly cells: readonly string[]
   /** Tracked declaration paths. */
   readonly declarations: readonly string[]
@@ -35,7 +60,7 @@ type Evidence = {
 }
 
 type Verdict = {
-  /** Cells with no declaration beside them: hand-authored, so the rules must stay. */
+  /** Cells of a complete role with no declaration beside them. */
   readonly undeclared: string[]
   /** Declarations naming no cell: an emission nothing consumes. */
   readonly orphaned: string[]
@@ -43,20 +68,31 @@ type Verdict = {
   readonly drifted: string[]
 }
 
-export const cellOf = (declaration: string): string => `${declaration.slice(0, -DECL_SUFFIX.length)}${CELL_SUFFIX}`
+export const roleOf = (path: string): string | undefined => {
+  const match = /\.([a-z]+)\.(?:ts|decl\.json)$/.exec(path)
+  const role = match?.[1]
+  return role !== undefined && role in ROLES ? role : undefined
+}
 
-export const declarationOf = (cell: string): string => `${cell.slice(0, -CELL_SUFFIX.length)}${DECL_SUFFIX}`
+export const cellOf = (declaration: string): string => declaration.replace(/\.decl\.json$/, '.ts')
+
+export const declarationOf = (cell: string): string => cell.replace(/\.ts$/, '.decl.json')
 
 export const inPopulation = (path: string): boolean =>
-  path.endsWith(CELL_SUFFIX) &&
+  path.endsWith('.ts') &&
+  roleOf(path) !== undefined &&
   path.includes('/src/') &&
   !OUTSIDE_POPULATION.some((fragment) => path.includes(fragment))
+
+export const isDeclaration = (path: string): boolean => path.endsWith('.decl.json') && roleOf(path) !== undefined
 
 export const verdict = (evidence: Evidence): Verdict => {
   const declared = new Set(evidence.declarations)
   const cells = new Set(evidence.cells)
   return {
-    undeclared: evidence.cells.filter((cell) => !declared.has(declarationOf(cell))).sort(),
+    undeclared: evidence.cells
+      .filter((cell) => COMPLETE_ROLES.includes(roleOf(cell) ?? '') && !declared.has(declarationOf(cell)))
+      .sort(),
     orphaned: evidence.declarations.filter((decl) => !cells.has(cellOf(decl))).sort(),
     drifted: evidence.declarations
       .filter((decl) => {
@@ -92,7 +128,7 @@ const run = async (cmd: readonly string[]): Promise<{ code: number; out: string 
  * it selects the cell, and it is removed even when formatting throws.
  */
 const formatted = async (source: string, cell: string): Promise<string> => {
-  const probe = `${cell.slice(0, -CELL_SUFFIX.length)}.authorship-probe.workflow.ts`
+  const probe = cell.replace(/\.([a-z]+)\.ts$/, '.authorship-probe.$1.ts')
   await Deno.writeTextFile(probe, source)
   try {
     const { code } = await run(['./bin/dprint', 'fmt', probe])
@@ -108,12 +144,13 @@ const gather = async (): Promise<Evidence> => {
   if (code !== 0) throw new Error('git ls-files failed')
   const tracked = out.split('\n').filter(Boolean)
   const cells = tracked.filter(inPopulation)
-  const declarations = tracked.filter((path) => path.endsWith(DECL_SUFFIX))
+  const declarations = tracked.filter(isDeclaration)
 
   const emitted: Record<string, string> = {}
   for (const decl of declarations) {
+    const emit = ROLES[roleOf(decl)!]!
     const raw: unknown = JSON.parse(await Deno.readTextFile(decl))
-    emitted[decl] = await formatted(emitWorkflow(parseWorkflow(raw)), cellOf(decl))
+    emitted[decl] = await formatted(emit(raw), cellOf(decl))
   }
   const onDisk: Record<string, string> = {}
   for (const cell of cells) onDisk[cell] = await Deno.readTextFile(cell)
@@ -127,8 +164,9 @@ const main = async (): Promise<number> => {
 
   for (const cell of result.undeclared) {
     console.error(
-      `::error file=${cell}::hand-authored workflow cell. Every ${CELL_SUFFIX} is emitted: write ` +
-        `${declarationOf(cell)} and regenerate with \`deno run scripts/tools/workflow-emit.ts <decl> <out>\`.`,
+      `::error file=${cell}::hand-authored ${roleOf(cell)} cell. Every cell of a complete role is emitted: ` +
+        `write ${declarationOf(cell)} and regenerate with ` +
+        `\`deno run scripts/tools/${roleOf(cell)}-emit.ts <decl> <out>\`.`,
     )
   }
   for (const decl of result.orphaned) {
@@ -143,13 +181,18 @@ const main = async (): Promise<number> => {
 
   const failures = result.undeclared.length + result.orphaned.length + result.drifted.length
   if (failures > 0) {
-    console.error(`guard-workflow-authorship: ${failures} failure(s) across ${evidence.cells.length} cell(s)`)
+    console.error(`guard-cell-authorship: ${failures} failure(s) across ${evidence.cells.length} cell(s)`)
     return 1
   }
-  console.log(
-    `guard-workflow-authorship: ${evidence.cells.length} cell(s) emitted and round-trip clean, ` +
-      `${evidence.declarations.length} declaration(s)`,
-  )
+  const perRole = Object.keys(ROLES)
+    .map((role) => {
+      const cells = evidence.cells.filter((c) => roleOf(c) === role).length
+      const decls = evidence.declarations.filter((d) => roleOf(d) === role).length
+      const mark = COMPLETE_ROLES.includes(role) ? 'complete' : `${decls}/${cells} emitted`
+      return `${role} ${mark}`
+    })
+    .join(', ')
+  console.log(`guard-cell-authorship: ${evidence.declarations.length} declaration(s) round-trip clean — ${perRole}`)
   return 0
 }
 
@@ -165,7 +208,7 @@ const FIXTURES: readonly { label: string; evidence: Evidence; expect: Verdict }[
     expect: { undeclared: [], orphaned: [], drifted: [] },
   },
   {
-    label: 'a hand-authored cell is undeclared',
+    label: 'a hand-authored cell of a complete role is undeclared',
     evidence: {
       cells: ['p/src/a.workflow.ts'],
       declarations: [],
@@ -175,14 +218,24 @@ const FIXTURES: readonly { label: string; evidence: Evidence; expect: Verdict }[
     expect: { undeclared: ['p/src/a.workflow.ts'], orphaned: [], drifted: [] },
   },
   {
-    label: 'a hand-edited cell drifts from its declaration',
+    label: 'a hand-authored cell of an incomplete role is not yet required to be declared',
     evidence: {
-      cells: ['p/src/a.workflow.ts'],
-      declarations: ['p/src/a.workflow.decl.json'],
-      emitted: { 'p/src/a.workflow.decl.json': 'export const a = 1\n' },
-      onDisk: { 'p/src/a.workflow.ts': 'export const a = 2\n' },
+      cells: ['p/src/a.executor.ts'],
+      declarations: [],
+      emitted: {},
+      onDisk: { 'p/src/a.executor.ts': 'export const a = 1\n' },
     },
-    expect: { undeclared: [], orphaned: [], drifted: ['p/src/a.workflow.decl.json'] },
+    expect: { undeclared: [], orphaned: [], drifted: [] },
+  },
+  {
+    label: 'an incomplete role still owes fidelity where a declaration exists',
+    evidence: {
+      cells: ['p/src/a.executor.ts'],
+      declarations: ['p/src/a.executor.decl.json'],
+      emitted: { 'p/src/a.executor.decl.json': 'export const a = 1\n' },
+      onDisk: { 'p/src/a.executor.ts': 'export const a = 2\n' },
+    },
+    expect: { undeclared: [], orphaned: [], drifted: ['p/src/a.executor.decl.json'] },
   },
   {
     label: 'a declaration whose cell was deleted is orphaned, and not also drifted',
@@ -215,11 +268,13 @@ const FIXTURES: readonly { label: string; evidence: Evidence; expect: Verdict }[
 
 const POPULATION_FIXTURES: readonly { path: string; expect: boolean }[] = [
   { path: 'packages/p/src/a.workflow.ts', expect: true },
-  { path: 'packages/p/src/internal/a.workflow.ts', expect: true },
+  { path: 'packages/p/src/internal/a.executor.ts', expect: true },
   { path: 'packages/p/src/__tests__/a.workflow.ts', expect: false },
   { path: 'packages/p/src/fixtures/a.workflow.ts', expect: false },
   { path: 'packages/p/src/internal/falsify-probe.workflow.ts', expect: false },
+  { path: 'packages/p/src/a.authorship-probe.workflow.ts', expect: false },
   { path: 'packages/p/src/a.kernel.ts', expect: false },
+  { path: 'packages/p/src/a.schema.ts', expect: false },
   { path: 'docs/plans/a.workflow.ts', expect: false },
 ]
 
@@ -237,11 +292,11 @@ const selftest = (): number => {
   ]
   const total = FIXTURES.length + POPULATION_FIXTURES.length
   if (failures.length > 0) {
-    console.error(`guard-workflow-authorship: selftest FAILED (${failures.length}/${total})\n`)
+    console.error(`guard-cell-authorship: selftest FAILED (${failures.length}/${total})\n`)
     for (const failure of failures) console.error(failure)
     return 1
   }
-  console.log(`guard-workflow-authorship: selftest ok (${total} fixtures)`)
+  console.log(`guard-cell-authorship: selftest ok (${total} fixtures)`)
   return 0
 }
 
