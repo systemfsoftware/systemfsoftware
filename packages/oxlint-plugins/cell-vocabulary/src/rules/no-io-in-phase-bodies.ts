@@ -66,6 +66,9 @@ export const noIoInPhaseBodies = defineRule({
      * file; a helper already visited is not re-walked, so mutual recursion terminates.
      */
     const reportIoInBody = (body: unknown, visited: ReadonlySet<LocalHelper>): void => {
+      // No early return on an empty `ioNames`. It would be a pure optimisation — every branch below
+      // already ends in a membership test that cannot match — and a branch no observation can
+      // distinguish is a mutant no test can kill (OX-MG1 asks for the restructure, not the ignore).
       walk(body, (inner) => {
         if (!isCallExpression(inner)) return
         const innerRoot = calleeRootName(inner.callee)
@@ -91,9 +94,45 @@ export const noIoInPhaseBodies = defineRule({
       })
     }
 
+    /**
+     * Imports are classified here rather than in an `ImportDeclaration` listener. Listeners fire in
+     * document order, so a phase call written above its own import would be judged against empty
+     * sets — and with no I/O name registered the rule reports nothing at all. That is a silent pass
+     * decided by line order, which is the one failure a guard must not have. `Program` sees every
+     * top-level statement before any call is visited, so the sets are complete when the first call
+     * is judged.
+     */
+    const classifyImport = (node: ESTree.ImportDeclaration): void => {
+      const source = node.source.value
+      if (source === MODULE_SOURCE) {
+        for (const specifier of node.specifiers) {
+          if (specifier.type === 'ImportNamespaceSpecifier') {
+            descriptionNamespaces.add(specifier.local.name)
+          } else if (
+            specifier.type === 'ImportSpecifier' &&
+            specifier.imported.type === 'Identifier' &&
+            specifier.imported.name === DESCRIPTION_NAMESPACE
+          ) {
+            descriptionNamespaces.add(specifier.local.name)
+          }
+        }
+        return
+      }
+      if (IO_SOURCES.some((ioSource) => ioSource === source)) {
+        for (const specifier of node.specifiers) ioNames.add(specifier.local.name)
+        return
+      }
+      if (cellOf(source, IO_CELLS) === null) return
+      for (const specifier of node.specifiers) ioNames.add(specifier.local.name)
+    }
+
     return {
       Program(node: ESTree.Program) {
         for (const statement of node.body) {
+          if (statement.type === 'ImportDeclaration') {
+            classifyImport(statement)
+            continue
+          }
           // `export const helper = …` and `export default function helper() {}` are wrappers
           // around the declaration, and a helper stays callable by name through either. Scanning
           // for bare declarations would follow the unexported half of a module and silently stop
@@ -102,7 +141,10 @@ export const noIoInPhaseBodies = defineRule({
               statement.type === 'ExportDefaultDeclaration'
             ? statement.declaration
             : statement
-          if (declaration === null || declaration === undefined) continue
+          // `null` only: `ExportNamedDeclaration.declaration` is `Declaration | null` in the ESTree
+          // shape oxc emits — `export { x }` carries no declaration — so an `undefined` arm is a
+          // guard against a value the tree cannot hold (OX-GD1).
+          if (declaration === null) continue
           if (declaration.type === 'FunctionDeclaration') {
             if (declaration.id !== null) localHelpers.set(declaration.id.name, declaration)
           } else if (declaration.type === 'VariableDeclaration') {
@@ -116,35 +158,20 @@ export const noIoInPhaseBodies = defineRule({
           }
         }
       },
-      ImportDeclaration(node: ESTree.ImportDeclaration) {
-        const source = node.source.value
-        if (source === MODULE_SOURCE) {
-          for (const specifier of node.specifiers) {
-            if (specifier.type === 'ImportNamespaceSpecifier') {
-              descriptionNamespaces.add(specifier.local.name)
-            } else if (
-              specifier.type === 'ImportSpecifier' &&
-              specifier.imported.type === 'Identifier' &&
-              specifier.imported.name === DESCRIPTION_NAMESPACE
-            ) {
-              descriptionNamespaces.add(specifier.local.name)
-            }
-          }
-          return
-        }
-        if (IO_SOURCES.some((ioSource) => ioSource === source)) {
-          for (const specifier of node.specifiers) ioNames.add(specifier.local.name)
-          return
-        }
-        if (cellOf(source, IO_CELLS) === null) return
-        for (const specifier of node.specifiers) ioNames.add(specifier.local.name)
-      },
       CallExpression(node: ESTree.CallExpression) {
         if (purePhaseNameOf(node.callee, descriptionNamespaces) === null) return
         for (const argument of node.arguments) {
           if (argument.type === 'ArrowFunctionExpression' || argument.type === 'FunctionExpression') {
             reportIoInBody(argument, new Set())
+            continue
           }
+          // A body hoisted to a name and handed over by reference — `Cell.decode(transform)` — is
+          // the same phase body with one indirection. Walking only inline functions would let the
+          // rule pass a file whose I/O sits one rename away, while its message still claims to
+          // follow module-level helpers.
+          if (argument.type !== 'Identifier') continue
+          const helper = localHelpers.get(argument.name)
+          if (helper !== undefined) reportIoInBody(helper, new Set([helper]))
         }
       },
     }

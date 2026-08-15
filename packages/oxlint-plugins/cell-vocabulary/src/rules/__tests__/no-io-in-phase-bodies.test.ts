@@ -246,6 +246,30 @@ const description = Cell.decode((raw) => Either.right(Io.read(raw)))`,
       errors: [error('Io')],
     },
     {
+      // The import sits below the call. Listeners fire in document order, so a rule that
+      // registered its I/O names from an `ImportDeclaration` listener judged this call against
+      // empty sets and reported nothing — a silent pass decided by line order.
+      name: 'Should_Report_IoCellCall_When_ImportFollowsThePhaseCall',
+      code: `${CELL_IMPORT}
+${EITHER_IMPORT}
+const description = Cell.decode((raw) => Either.right(findOrderRow(raw)))
+${STORE_IMPORT}`,
+      filename: 'confirm-order.executor.ts',
+      errors: [error('findOrderRow')],
+    },
+    {
+      // The body is hoisted to a name and handed over by reference. Same phase body, one
+      // indirection — and the message claims module-level helpers are followed.
+      name: 'Should_Report_IoCellCall_When_PhaseBodyIsPassedByReference',
+      code: `${CELL_IMPORT}
+${STORE_IMPORT}
+${EITHER_IMPORT}
+const transform = (raw) => Either.right(findOrderRow(raw))
+const description = Cell.decode(transform)`,
+      filename: 'confirm-order.executor.ts',
+      errors: [error('findOrderRow')],
+    },
+    {
       // The form every production call site actually uses: the phase is reached through an
       // explicit type argument. Without this case the whole suite exercises only the bare
       // call, and a rule that stopped resolving `Cell.decode<Phases>(...)` would still be
@@ -258,6 +282,70 @@ interface Phases extends Cell.Phases {
   readonly raw: { readonly id: string }
 }
 const description = Cell.decode<Phases>((raw) => findOrderRow(raw.id))`,
+      filename: 'confirm-order.executor.ts',
+      errors: [error('findOrderRow')],
+    },
+    {
+      // A helper written as a `function` declaration rather than an arrow. Nothing else in the
+      // suite reaches that branch of the top-level scan.
+      name: 'Should_Report_IoCallInsideHelper_When_HelperIsAFunctionDeclaration',
+      code: `${CELL_IMPORT}
+${STORE_IMPORT}
+${EITHER_IMPORT}
+function loadRow(id) {
+  return findOrderRow(id)
+}
+const description = Cell.decode((raw) => Either.right(loadRow(raw.id)))`,
+      filename: 'confirm-order.executor.ts',
+      errors: [error('findOrderRow')],
+    },
+    {
+      // `export default function` — the other wrapper a helper stays callable through.
+      name: 'Should_Report_IoCallInsideHelper_When_HelperIsDefaultExported',
+      code: `${CELL_IMPORT}
+${STORE_IMPORT}
+${EITHER_IMPORT}
+export default function loadRow(id) {
+  return findOrderRow(id)
+}
+const description = Cell.decode((raw) => Either.right(loadRow(raw.id)))`,
+      filename: 'confirm-order.executor.ts',
+      errors: [error('findOrderRow')],
+    },
+    {
+      // A helper bound to a `function` expression rather than an arrow.
+      name: 'Should_Report_IoCallInsideHelper_When_HelperIsAFunctionExpression',
+      code: `${CELL_IMPORT}
+${STORE_IMPORT}
+${EITHER_IMPORT}
+const loadRow = function (id) {
+  return findOrderRow(id)
+}
+const description = Cell.decode((raw) => Either.right(loadRow(raw.id)))`,
+      filename: 'confirm-order.executor.ts',
+      errors: [error('findOrderRow')],
+    },
+    {
+      // The phase body itself written as a `function` expression, not an arrow.
+      name: 'Should_Report_IoCellCall_When_PhaseBodyIsAFunctionExpression',
+      code: `${CELL_IMPORT}
+${STORE_IMPORT}
+const description = Cell.decode(function (raw) {
+  return findOrderRow(raw)
+})`,
+      filename: 'confirm-order.executor.ts',
+      errors: [error('findOrderRow')],
+    },
+    {
+      // A by-reference body that also calls itself. The walk seeds `visited` with the helper it
+      // entered, so the self-call is not re-walked and the single I/O call reports once. Without
+      // that seeding the recursion re-enters and the same call is reported twice.
+      name: 'Should_ReportOnce_When_ByReferenceHelperCallsItself',
+      code: `${CELL_IMPORT}
+${STORE_IMPORT}
+${EITHER_IMPORT}
+const loadRow = (id) => (id > 0 ? loadRow(id - 1) : Either.right(findOrderRow(id)))
+const description = Cell.decode(loadRow)`,
       filename: 'confirm-order.executor.ts',
       errors: [error('findOrderRow')],
     },

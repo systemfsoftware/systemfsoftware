@@ -147,5 +147,6 @@ default, not a delta. Listed here only where a package departs from it.
 | `cell-taxonomy/`                                | Sole owner of non-test source filenames (`CT1`); default lists are defaults, not law (`CT2`)                                     |
 | `test-placement/`                               | Not enrolled in its own rules (`TP1`), sole owner of test placement (`TP2`)                                                      |
 | `effect-entrypoint/`                            | Not a cell — keyed on the exact filename `main.ts` (`EP1`); the two rules that close cell-taxonomy's `main.ts` exemption (`EP2`) |
-| `effect-executor/`                              | Deliberate non-gates                                                                                                             |
+| `effect-executor/`                              | Deliberate non-gates; its phase vocabulary is a generated module, not a declaration                                              |
+| `cell-vocabulary/`                              | Not a cell — walks a Cell description for its vocabulary (`CELL-V1`); OX-OB1 does not apply (`CELL-V4`)                          |
 | `effect-{acl,handler,adapter,policy,workflow}/` | Each names its OX-OB1 obligation rule                                                                                            |
