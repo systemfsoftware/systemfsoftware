@@ -1,0 +1,146 @@
+# React performance
+
+React JSX performance rules from `eslint-plugin-react-perf`.
+
+Detects freshly-allocated reference values (arrays, objects, functions, JSX elements) passed as JSX props. A new reference invalidates `React.memo` / `useMemo` shallow checks on every render.
+
+Useful for performance-critical render paths; usually unnecessary for top-level pages.
+
+Diagnostics only fire on `.tsx` source files. JSX heuristics rely on the file extension, so `.ts` files are skipped even when they contain JSX-like syntax.
+
+Source: [`eslint-plugin-react-perf`](https://github.com/cvazac/eslint-plugin-react-perf) (MIT).
+
+## Rule index
+
+Each rule name links to the detailed section below.
+
+Examples come from the checked [lint corpus](https://github.com/samchon/ttsc/tree/master/tests/test-lint/src/cases) or package-level rule tests when project layout matters.
+
+- [`react-perf/jsx-no-new-array-as-prop`](#rule-react-perf-jsx-no-new-array-as-prop): Reject array literals passed inline as a JSX prop.
+- [`react-perf/jsx-no-new-function-as-prop`](#rule-react-perf-jsx-no-new-function-as-prop): Reject inline `function` expressions / arrow functions passed as a JSX prop.
+- [`react-perf/jsx-no-new-object-as-prop`](#rule-react-perf-jsx-no-new-object-as-prop): Reject inline object literals passed as a JSX prop.
+- [`react-perf/jsx-no-jsx-as-prop`](#rule-react-perf-jsx-no-jsx-as-prop): Reject JSX expressions and fragments passed as a JSX prop, each evaluation creates a new React element.
+
+## Rules
+
+<a id="rule-react-perf-jsx-no-new-array-as-prop"></a>
+
+### `react-perf/jsx-no-new-array-as-prop`
+
+Reject array literals (`[...]`) passed inline as a JSX prop. Hoist the array outside the render or stabilize it with `useMemo`.
+
+Options:
+
+- `nativeAllowList?: "all" | readonly string[]`
+
+  Controls which intrinsic JSX element props are ignored. `"all"` ignores every prop on lowercase / native elements such as `div`. An array ignores only those prop names on native elements, for example `["style"]`.
+
+  Custom components are still checked. Default: `[ ] (native props are checked)`.
+
+Example:
+
+```tsx
+const Child = (props: { items: number[] }) => <div>{props.items.length}</div>;
+
+// reports: react-perf/jsx-no-new-array-as-prop (error)
+const a = <Child items={[1, 2, 3]} />;
+```
+
+<a id="rule-react-perf-jsx-no-new-function-as-prop"></a>
+
+### `react-perf/jsx-no-new-function-as-prop`
+
+Reject inline `function` expressions / arrow functions passed as a JSX prop. Stabilize with `useCallback`.
+
+Options:
+
+- `nativeAllowList?: "all" | readonly string[]`
+
+  Controls which intrinsic JSX element props are ignored. `"all"` ignores every prop on lowercase / native elements such as `div`. An array ignores only those prop names on native elements, for example `["style"]`.
+
+  Custom components are still checked. Default: `[ ] (native props are checked)`.
+
+Example:
+
+```tsx
+const Child = (props: { onClick: () => void }) => (
+  <button onClick={props.onClick}>Save</button>
+);
+
+// reports: react-perf/jsx-no-new-function-as-prop (error)
+const a = <Child onClick={() => JSON.stringify("click")} />;
+```
+
+<figure className="rule-clip">
+  <video
+    controls
+    muted
+    loop
+    playsInline
+    preload="none"
+    aria-label="react-perf/jsx-no-new-function-as-prop: the diagnostic this rule reports"
+  >
+    <source src="https://github.com/user-attachments/assets/85f20ad6-6cdf-45b9-abc5-eab49400439b" type="video/mp4" />
+  </video>
+</figure>
+
+<a id="rule-react-perf-jsx-no-new-object-as-prop"></a>
+
+### `react-perf/jsx-no-new-object-as-prop`
+
+Reject inline object literals (`{...}`) passed as a JSX prop.
+
+A fresh object on every render invalidates the shallow-equal check used by `React.memo` and `useMemo` consumers, so any downstream memoization keyed on that prop is wasted.
+
+Options:
+
+- `nativeAllowList?: "all" | readonly string[]`
+
+  Controls which intrinsic JSX element props are ignored. `"all"` ignores every prop on lowercase / native elements such as `div`. An array ignores only those prop names on native elements, for example `["style"]`.
+
+  Custom components are still checked. Default: `[ ] (native props are checked)`.
+
+Example:
+
+```tsx
+const Child = (props: { style: object }) => <div style={props.style} />;
+
+// reports: react-perf/jsx-no-new-object-as-prop (error)
+const a = <Child style={{ color: "red" }} />;
+```
+
+<figure className="rule-clip">
+  <video
+    controls
+    muted
+    loop
+    playsInline
+    preload="none"
+    aria-label="react-perf/jsx-no-new-object-as-prop: the diagnostic this rule reports"
+  >
+    <source src="https://github.com/user-attachments/assets/c7e9691a-43e3-44d8-b53b-8f170f8563e5" type="video/mp4" />
+  </video>
+</figure>
+
+<a id="rule-react-perf-jsx-no-jsx-as-prop"></a>
+
+### `react-perf/jsx-no-jsx-as-prop`
+
+Reject JSX expressions and fragments passed as a JSX prop, each evaluation creates a new React element.
+
+Options:
+
+- `nativeAllowList?: "all" | readonly string[]`
+
+  Controls which intrinsic JSX element props are ignored. `"all"` ignores every prop on lowercase / native elements such as `div`. An array ignores only those prop names on native elements, for example `["style"]`.
+
+  Custom components are still checked. Default: `[ ] (native props are checked)`.
+
+Example:
+
+```tsx
+const Child = (props: { content: JSX.Element }) => <section>{props.content}</section>;
+
+// reports: react-perf/jsx-no-jsx-as-prop (error)
+const a = <Child content={<span>hello</span>} />;
+```

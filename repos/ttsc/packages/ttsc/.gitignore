@@ -1,0 +1,7 @@
+bin/ttsc-native
+bin/ttsc-native.exe
+go.work
+go.work.sum
+lib/
+node_modules/
+README.md

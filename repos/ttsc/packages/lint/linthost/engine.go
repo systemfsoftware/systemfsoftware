@@ -1,0 +1,1104 @@
+// The lint plugin hosts the rule registry, the AST-walking engine, and the
+// orchestration glue that the `@ttsc/lint` native plugin uses to run rules
+// against a tsgo Program.
+//
+// Layering:
+//
+//   - `Rule` is the interface every rule implements. Rules are
+//     registered at package init time and never mutated.
+//   - `Engine` walks every user source file once, dispatching each visited
+//     node to the rules that opted in via `Visits()`.
+//   - `Context` is what a rule receives when it fires; it owns the
+//     report channel back to the engine.
+//
+// Rules are stateless across files: each invocation gets a fresh `Context`
+// and may not retain references to the previous file. This keeps the
+// engine concurrent-friendly even though the v0 implementation runs
+// serially.
+package linthost
+
+import (
+  "encoding/json"
+  "errors"
+  "fmt"
+  "os"
+  "runtime"
+  "sort"
+  "sync"
+
+  shimast "github.com/microsoft/typescript-go/shim/ast"
+  shimchecker "github.com/microsoft/typescript-go/shim/checker"
+  shimdw "github.com/microsoft/typescript-go/shim/diagnosticwriter"
+  shimscanner "github.com/microsoft/typescript-go/shim/scanner"
+  publicrule "github.com/samchon/ttsc/packages/lint/rule"
+)
+
+// Rule is the contract every lint rule satisfies.
+type Rule interface {
+  // Name is the identifier that users put in their `rules` map. Use
+  // the same names as `eslint` / `@typescript-eslint` where possible —
+  // this plugin is a host, not a renaming exercise.
+  Name() string
+
+  // Visits returns the AST kinds the rule cares about. The engine only
+  // dispatches to rules that registered for the visited node's kind,
+  // which keeps the per-node hot path linear in active rules rather
+  // than total rules.
+  Visits() []shimast.Kind
+
+  // Check is invoked once per relevant node. Use `ctx.Report` to emit
+  // findings.
+  Check(ctx *Context, node *shimast.Node)
+}
+
+// FormatRule is an optional marker interface that tags a Rule as a
+// formatter. `ttsc fix` is the run-everything entry point — it applies
+// edits from BOTH lint-class rules and FormatRule rules. `ttsc format`
+// is the format-only convenience: it filters to FormatRule findings so
+// lint-class rewrites are skipped. The marker exists so the format
+// filter can pick the right half; fix needs no filter.
+//
+// FormatRule.IsFormat must return true unconditionally — the method
+// exists as a structural marker, not a runtime toggle. Returning false
+// is treated by the engine as "not a format rule" and is equivalent to
+// not implementing the interface at all.
+type FormatRule interface {
+  Rule
+  IsFormat() bool
+}
+
+// typeAwareRule marks rules that need a live TypeScript checker in Context.
+// Rules that do not implement it are assumed AST-only.
+type typeAwareRule interface {
+  NeedsTypeChecker() bool
+}
+
+// ruleOptionsValidator is an optional rule capability for rejecting malformed
+// configuration before the rule enters the dispatch table. The exported method
+// lets rule implementations opt in without coupling the engine to specific rule
+// names; a nil payload represents the rule's default options.
+type ruleOptionsValidator interface {
+  ValidateOptions(json.RawMessage) error
+}
+
+// ruleOptionsAcceptor is the structural declaration that a rule owns an
+// options schema. The engine uses the capability instead of a rule-name list,
+// so adding an options payload to a rule requires the implementation itself to
+// opt in. A false result is equivalent to omitting the interface.
+type ruleOptionsAcceptor interface {
+  AcceptsTtscLintOptions() bool
+}
+
+// optionsRule is embedded by built-in rules whose public configuration accepts
+// an options slot. Keeping the marker next to each implementation makes the
+// registry the runtime source of truth without a parallel name table.
+type optionsRule struct{}
+
+func (optionsRule) AcceptsTtscLintOptions() bool { return true }
+
+// isFormatRule reports whether `r` opts into the format category.
+func isFormatRule(r Rule) bool {
+  fr, ok := r.(FormatRule)
+  return ok && fr.IsFormat()
+}
+
+func ruleNeedsTypeChecker(r Rule) bool {
+  tr, ok := r.(typeAwareRule)
+  return ok && tr.NeedsTypeChecker()
+}
+
+// ruleDiagnosticTags returns the diagnostic tags a rule classifies its findings
+// with, or nil when the rule implements no marker or returns none. Read once per
+// (file, rule) at dispatch and copied onto every finding the rule produces.
+func ruleDiagnosticTags(r Rule) []publicrule.DiagnosticTag {
+  tagged, ok := r.(publicrule.TaggedRule)
+  if !ok {
+    return nil
+  }
+  return tagged.DiagnosticTags()
+}
+
+func ruleAcceptsOptions(r Rule) bool {
+  acceptor, ok := r.(ruleOptionsAcceptor)
+  return ok && acceptor.AcceptsTtscLintOptions()
+}
+
+func validateRuleOptions(r Rule, options json.RawMessage) error {
+  if len(options) > 0 && !ruleAcceptsOptions(r) {
+    return errors.New("rule does not accept options")
+  }
+  validator, ok := r.(ruleOptionsValidator)
+  if !ok {
+    return nil
+  }
+  return validator.ValidateOptions(options)
+}
+
+// Context is the per-(file, rule) handle the engine passes to `Check`.
+//
+// `Options` is the raw JSON payload resolved for this source file from the
+// same config entries as Severity. One option slot preserves its scalar or
+// object shape; multiple positional options are an array. It is nil for a
+// bare severity. Rules decode the payload according to their public option
+// type and fall back to defaults on nil.
+type Context struct {
+  File             *shimast.SourceFile
+  Checker          *shimchecker.Checker
+  CurrentDirectory string
+  Severity         Severity
+  Options          json.RawMessage
+
+  rule           Rule
+  isFormat       bool
+  tags           []publicrule.DiagnosticTag
+  quarantined    bool
+  collect        func(*Finding)
+  projectResults publicrule.ProjectResultReader
+  fileMemo       *fileMemo
+}
+
+// fileMemo caches file-invariant values that rules would otherwise
+// recompute once per visited node. The engine binds one instance per
+// source file and shares it across every Context it builds for that
+// file's rules, so a whole-file table — the security binding table, the
+// set of top-level declared JSX names — is computed once per file
+// instead of once per matching node, collapsing an O(nodes × matches)
+// rule to O(nodes). Each file's walk is serial and gets its own
+// instance, so the map needs no locking.
+//
+// Keys are sentinel zero-size struct values whose distinct types make
+// collisions impossible without a central registry; the engine never
+// inspects them, keeping the hook general.
+type fileMemo struct {
+  values map[any]any
+}
+
+// fileValue returns the cached value stored under key, reporting whether
+// one was present. A nil memo (a Context built outside the engine, e.g.
+// in a focused unit test) always misses, so callers transparently fall
+// back to recomputing.
+func (c *Context) fileValue(key any) (any, bool) {
+  if c == nil || c.fileMemo == nil || c.fileMemo.values == nil {
+    return nil, false
+  }
+  value, ok := c.fileMemo.values[key]
+  return value, ok
+}
+
+// setFileValue records value under key for the rest of this file's walk.
+// A nil memo drops the write, leaving the caller to recompute on the next
+// request — behavior-preserving, just uncached.
+func (c *Context) setFileValue(key, value any) {
+  if c == nil || c.fileMemo == nil {
+    return
+  }
+  if c.fileMemo.values == nil {
+    c.fileMemo.values = map[any]any{}
+  }
+  c.fileMemo.values[key] = value
+}
+
+// DecodeOptions unmarshals the rule's options blob into `out`. Returns
+// nil with no side effect when the rule was configured with severity
+// alone, so callers can write
+//
+//  var opts myRuleOptions
+//  ctx.DecodeOptions(&opts)
+//  // opts now holds either the user's settings or the zero value.
+func (c *Context) DecodeOptions(out interface{}) error {
+  if c == nil || len(c.Options) == 0 {
+    return nil
+  }
+  return json.Unmarshal(c.Options, out)
+}
+
+// Finding is one rule-emitted diagnostic before it gets converted into a
+// driver Diagnostic. `IsFormat` mirrors the dispatching rule's category
+// so the `format` subcommand's filter can route findings without
+// re-querying the registry. The `fix` subcommand applies findings from
+// both categories — no filter — because `ttsc fix` is the
+// run-everything entry point.
+type Finding struct {
+  Rule        string
+  Severity    Severity
+  File        *shimast.SourceFile
+  Pos         int
+  End         int
+  Message     string
+  Fix         []TextEdit
+  Suggestions []Suggestion
+  IsFormat    bool
+  // Tags classify what the finding is (unnecessary, deprecated), for an editor
+  // to render it distinctively. Populated from the rule's TaggedRule marker at
+  // dispatch, so every finding a tagged rule produces carries its tags.
+  Tags []publicrule.DiagnosticTag
+  // RelatedInformation are secondary locations this finding points at, each with
+  // a message. Positions are byte offsets into File — already normalized against
+  // it at report time — so the LSP renderer resolves them against File's text
+  // and attaches File's own URI.
+  RelatedInformation []publicrule.RelatedInformation
+
+  engineFailure bool
+}
+
+// TextEdit is one byte-range source replacement used by a fix or suggestion.
+// Positions use the same byte offsets as shim AST nodes and must point inside
+// the finding's source file.
+type TextEdit struct {
+  Pos  int
+  End  int
+  Text string
+}
+
+// Suggestion is an opt-in editor action attached to a finding. Unlike Fix,
+// suggestion edits are never consumed by `ttsc fix` or source.fixAll.ttsc;
+// the LSP host exposes them as individual quick fixes selected by the user.
+type Suggestion struct {
+  Title string
+  Edits []TextEdit
+}
+
+// Report records a finding at the given node's source range. The pos is
+// trimmed past leading trivia (whitespace + comments) so the renderer's
+// `path:line:col` banner points at the offending token, not the start of
+// the surrounding indentation. A finding is silently dropped if the
+// configured severity is `off` (defensive — the engine already filters
+// by severity before calling Check, but Report is the final gate).
+func (c *Context) Report(node *shimast.Node, message string) {
+  c.ReportFix(node, message)
+}
+
+// ReportFix records a node-scoped finding with optional autofix edits.
+func (c *Context) ReportFix(node *shimast.Node, message string, edits ...TextEdit) {
+  if c.Severity == SeverityOff || node == nil {
+    return
+  }
+  pos, end := c.nodeFindingRange(node)
+  c.collect(&Finding{
+    Rule:     c.rule.Name(),
+    Severity: c.Severity,
+    File:     c.File,
+    Pos:      pos,
+    End:      end,
+    Message:  message,
+    Fix:      cloneTextEdits(edits),
+    IsFormat: c.isFormat,
+    Tags:     c.tags,
+  })
+}
+
+// ReportSuggestion records a node-scoped finding with one opt-in editor
+// action. The diagnostic is still reported when edits is empty, but no quick
+// fix is advertised.
+func (c *Context) ReportSuggestion(node *shimast.Node, message string, title string, edits ...TextEdit) {
+  if c.Severity == SeverityOff || node == nil {
+    return
+  }
+  pos, end := c.nodeFindingRange(node)
+  c.collect(&Finding{
+    Rule:        c.rule.Name(),
+    Severity:    c.Severity,
+    File:        c.File,
+    Pos:         pos,
+    End:         end,
+    Message:     message,
+    Suggestions: newSuggestions(title, edits),
+    IsFormat:    c.isFormat,
+    Tags:        c.tags,
+  })
+}
+
+// ReportFixSuggestions records one node-scoped diagnostic with an optional
+// automatic fix and any number of opt-in editor suggestions. Each slice is
+// cloned before collection so a rule cannot mutate a previously reported
+// finding through retained backing storage.
+func (c *Context) ReportFixSuggestions(
+  node *shimast.Node,
+  message string,
+  fix []TextEdit,
+  suggestions ...Suggestion,
+) {
+  if c.Severity == SeverityOff || node == nil {
+    return
+  }
+  pos, end := c.nodeFindingRange(node)
+  c.collect(&Finding{
+    Rule:        c.rule.Name(),
+    Severity:    c.Severity,
+    File:        c.File,
+    Pos:         pos,
+    End:         end,
+    Message:     message,
+    Fix:         cloneTextEdits(fix),
+    Suggestions: cloneSuggestions(suggestions),
+    IsFormat:    c.isFormat,
+    Tags:        c.tags,
+  })
+}
+
+// nodeFindingRange bounds an arbitrary rule-supplied node before reading the
+// current file's source text. Contributors can accidentally report a node from
+// another file, whose otherwise valid Pos may exceed this Context's source.
+func (c *Context) nodeFindingRange(node *shimast.Node) (int, int) {
+  if node == nil {
+    return shimdw.NormalizeLintRange(c.File, 0, 0)
+  }
+  pos, end := shimdw.NormalizeLintRange(c.File, node.Pos(), node.End())
+  if c.File != nil {
+    pos = shimscanner.SkipTrivia(c.File.Text(), pos)
+  }
+  return shimdw.NormalizeLintRange(c.File, pos, end)
+}
+
+// ReportRange records a finding at an explicit byte range inside the
+// current file. Use this when the rule wants to highlight a sub-token of
+// a node (e.g. an operator inside a BinaryExpression).
+func (c *Context) ReportRange(pos, end int, message string) {
+  c.ReportRangeFix(pos, end, message)
+}
+
+// ReportRangeFix records an explicit-range finding with optional autofix edits.
+func (c *Context) ReportRangeFix(pos, end int, message string, edits ...TextEdit) {
+  if c.Severity == SeverityOff || c.File == nil {
+    return
+  }
+  pos, end = shimdw.NormalizeLintRange(c.File, pos, end)
+  c.collect(&Finding{
+    Rule:     c.rule.Name(),
+    Severity: c.Severity,
+    File:     c.File,
+    Pos:      pos,
+    End:      end,
+    Message:  message,
+    Fix:      cloneTextEdits(edits),
+    IsFormat: c.isFormat,
+    Tags:     c.tags,
+  })
+}
+
+// ReportRangeSuggestion records an explicit-range finding with one opt-in
+// editor action. Suggestion edits stay separate from automatic fixes and are
+// ignored by `ttsc fix` and source.fixAll.ttsc.
+func (c *Context) ReportRangeSuggestion(pos, end int, message string, title string, edits ...TextEdit) {
+  if c.Severity == SeverityOff || c.File == nil {
+    return
+  }
+  pos, end = shimdw.NormalizeLintRange(c.File, pos, end)
+  c.collect(&Finding{
+    Rule:        c.rule.Name(),
+    Severity:    c.Severity,
+    File:        c.File,
+    Pos:         pos,
+    End:         end,
+    Message:     message,
+    Suggestions: newSuggestions(title, edits),
+    IsFormat:    c.isFormat,
+    Tags:        c.tags,
+  })
+}
+
+// ReportRangeSuggestions records a finding at an explicit range with several
+// candidate suggestions. It is the range counterpart of ReportFixSuggestions,
+// added so the public contributor surface can offer a choice at a sub-token
+// range and not only at a whole node.
+func (c *Context) ReportRangeSuggestions(pos, end int, message string, suggestions ...Suggestion) {
+  if c.Severity == SeverityOff || c.File == nil {
+    return
+  }
+  pos, end = shimdw.NormalizeLintRange(c.File, pos, end)
+  c.collect(&Finding{
+    Rule:        c.rule.Name(),
+    Severity:    c.Severity,
+    File:        c.File,
+    Pos:         pos,
+    End:         end,
+    Message:     message,
+    Suggestions: cloneSuggestions(suggestions),
+    IsFormat:    c.isFormat,
+    Tags:        c.tags,
+  })
+}
+
+// ReportRelated records a node-scoped finding with related source locations.
+// Each related location's Pos/End is normalized against the current file — the
+// same bounding a range finding gets — so a rule that miscomputed an offset
+// cannot point the editor outside the file.
+func (c *Context) ReportRelated(node *shimast.Node, message string, related ...publicrule.RelatedInformation) {
+  if c.Severity == SeverityOff || node == nil {
+    return
+  }
+  pos, end := c.nodeFindingRange(node)
+  c.collect(&Finding{
+    Rule:               c.rule.Name(),
+    Severity:           c.Severity,
+    File:               c.File,
+    Pos:                pos,
+    End:                end,
+    Message:            message,
+    RelatedInformation: c.normalizeRelated(related),
+    IsFormat:           c.isFormat,
+    Tags:               c.tags,
+  })
+}
+
+// ReportRangeRelated records an explicit-range finding with related source
+// locations. Both the primary range and each related range are normalized
+// against the current file.
+func (c *Context) ReportRangeRelated(pos, end int, message string, related ...publicrule.RelatedInformation) {
+  if c.Severity == SeverityOff || c.File == nil {
+    return
+  }
+  pos, end = shimdw.NormalizeLintRange(c.File, pos, end)
+  c.collect(&Finding{
+    Rule:               c.rule.Name(),
+    Severity:           c.Severity,
+    File:               c.File,
+    Pos:                pos,
+    End:                end,
+    Message:            message,
+    RelatedInformation: c.normalizeRelated(related),
+    IsFormat:           c.isFormat,
+    Tags:               c.tags,
+  })
+}
+
+// normalizeRelated copies the caller's related locations and bounds each range
+// to the current file, so the stored Finding owns its slice and every position
+// is already safe for the renderer. Returns nil for an empty input, keeping the
+// Finding field nil rather than a zero-length slice.
+func (c *Context) normalizeRelated(related []publicrule.RelatedInformation) []publicrule.RelatedInformation {
+  if len(related) == 0 {
+    return nil
+  }
+  out := make([]publicrule.RelatedInformation, 0, len(related))
+  for _, item := range related {
+    pos, end := shimdw.NormalizeLintRange(c.File, item.Pos, item.End)
+    out = append(out, publicrule.RelatedInformation{
+      Pos:     pos,
+      End:     end,
+      Message: item.Message,
+    })
+  }
+  return out
+}
+
+// cloneTextEdits returns a shallow copy of `edits` so that the caller's
+// variadic slice cannot be mutated through the stored Finding. Returns nil
+// when the input is empty, keeping the Finding.Fix field nil rather than
+// a zero-length slice.
+func cloneTextEdits(edits []TextEdit) []TextEdit {
+  if len(edits) == 0 {
+    return nil
+  }
+  out := make([]TextEdit, len(edits))
+  copy(out, edits)
+  return out
+}
+
+func newSuggestions(title string, edits []TextEdit) []Suggestion {
+  cloned := cloneTextEdits(edits)
+  if title == "" || len(cloned) == 0 {
+    return nil
+  }
+  return []Suggestion{{Title: title, Edits: cloned}}
+}
+
+func cloneSuggestions(suggestions []Suggestion) []Suggestion {
+  if len(suggestions) == 0 {
+    return nil
+  }
+  cloned := make([]Suggestion, 0, len(suggestions))
+  for _, suggestion := range suggestions {
+    edits := cloneTextEdits(suggestion.Edits)
+    if suggestion.Title == "" || len(edits) == 0 {
+      continue
+    }
+    cloned = append(cloned, Suggestion{Title: suggestion.Title, Edits: edits})
+  }
+  if len(cloned) == 0 {
+    return nil
+  }
+  return cloned
+}
+
+// registry stores the package-global rule list keyed by name. Tests can
+// also reach into it via `LookupRule`.
+type registry struct {
+  rules map[string]Rule
+}
+
+var registered = &registry{rules: map[string]Rule{}}
+
+// Register adds a rule to the global registry. Called from each rule's
+// `init()`. Duplicate names are a programmer error and panic.
+func Register(rule Rule) {
+  if rule == nil {
+    panic("@ttsc/lint: Register called with nil rule")
+  }
+  if _, exists := registered.rules[rule.Name()]; exists {
+    panic("@ttsc/lint: rule " + rule.Name() + " registered twice")
+  }
+  name := rule.Name()
+  registered.rules[name] = rule
+  if _, builtIn := builtInRuleCodes[name]; !builtIn {
+    invalidateRuntimeRuleCodes()
+  }
+}
+
+// LookupRule returns the registered rule by name, or nil if missing.
+func LookupRule(name string) Rule { return registered.rules[name] }
+
+// AllRuleNames returns the registry sorted alphabetically. Useful for
+// `--list-rules` style introspection and stable test snapshots.
+func AllRuleNames() []string {
+  names := make([]string, 0, len(registered.rules))
+  for n := range registered.rules {
+    names = append(names, n)
+  }
+  sort.Strings(names)
+  return names
+}
+
+// Engine binds a rule configuration to a Program and walks the AST once
+// per source file, dispatching each visited node to its interested rules.
+//
+// `rules` is a fixed-size slice indexed by `shimast.Kind` value rather
+// than a map. `KindCount` (~350) is small and bounded, and the slice
+// removes a per-node map hash from the hot path — a `walk(node)` over a
+// 50k-node file performs 50k dispatch lookups. The conversion is
+// equivalent in semantics; entries for unused kinds are nil and the
+// per-rule slice still grows by append.
+type Engine struct {
+  config             RuleResolver
+  rules              [][]Rule
+  enabled            map[string]Severity
+  unknown            []string
+  unknownDirectives  map[string]struct{}
+  unknownDirectiveMu sync.Mutex
+  needsTypeChecker   bool
+  serial             bool
+  projectSettings    map[string]ProjectRuleSetting
+  configError        error
+  currentDirectory   string
+}
+
+// SetSerial forces Engine.Run to walk files one at a time. The host calls
+// this when `--singleThreaded` reaches the lint sidecar so the benchmark
+// (and any caller that wants a deterministic, low-overhead pass) can opt
+// out of file-level parallelism. Type-aware rule sets always run serial
+// regardless of this flag because their standalone checker is not concurrent,
+// so callers do not need to force serial execution themselves.
+func (e *Engine) SetSerial(serial bool) {
+  if e == nil {
+    return
+  }
+  e.serial = serial
+}
+
+// SetCurrentDirectory supplies the compiler Program's current directory for
+// rule options whose relative paths are project-rooted.
+func (e *Engine) SetCurrentDirectory(currentDirectory string) {
+  if e != nil {
+    e.currentDirectory = currentDirectory
+  }
+}
+
+// runsSerial reports whether Run must walk files one at a time: either because
+// the caller asked for it or because a type-aware rule uses the standalone
+// checker shared by every linted file.
+func (e *Engine) runsSerial() bool {
+  return e == nil || e.serial || e.needsTypeChecker
+}
+
+// NewEngine returns an engine configured for `config`. Rules whose
+// severity is `off` are skipped entirely. Configuration entries that name
+// an unknown rule are recorded so the caller can surface them as a
+// configuration warning rather than a silent typo.
+func NewEngine(config RuleConfig) *Engine {
+  return NewEngineWithResolver(config)
+}
+
+// NewEngineWithResolver returns an engine configured by a resolver that can
+// vary rule severities per file.
+func NewEngineWithResolver(config RuleResolver) *Engine {
+  if config == nil {
+    config = RuleConfig{}
+  }
+  eng := &Engine{
+    config:            config,
+    rules:             make([][]Rule, int(shimast.KindCount)),
+    enabled:           make(map[string]Severity),
+    unknownDirectives: make(map[string]struct{}),
+  }
+  projectRuleNames := allProjectRuleNames()
+  eng.projectSettings, eng.configError = config.ResolveProjectRules(projectRuleNames)
+  for _, name := range projectRuleNames {
+    setting := eng.projectSettings[name]
+    if setting.Declared && len(setting.Options) > 0 && !registeredProjectRules[name].acceptsOptions {
+      eng.configError = errors.Join(
+        eng.configError,
+        fmt.Errorf("@ttsc/lint: invalid options for rule %q: rule does not accept options", name),
+      )
+    }
+    // A project rule shares the engine-wide checker decision with every file
+    // rule, so one that declines the checker must not drag the whole run onto
+    // the serial walk. An unmarked rule keeps the conservative default.
+    if setting.Declared && setting.Severity != SeverityOff &&
+      projectRuleNeedsTypeChecker(name) {
+      eng.needsTypeChecker = true
+    }
+  }
+  displaySeverities := config.EnabledRuleConfig()
+  invalidRuleOptions := make(map[string]struct{})
+  for _, name := range AllRuleNames() {
+    rule := registered.rules[name]
+    seenOptions := make(map[string]struct{})
+    for _, options := range resolvedRuleOptionsVariants(config, name) {
+      key := string(options)
+      if _, duplicate := seenOptions[key]; duplicate {
+        continue
+      }
+      seenOptions[key] = struct{}{}
+      if err := validateRuleOptions(rule, options); err != nil {
+        eng.configError = errors.Join(
+          eng.configError,
+          fmt.Errorf("@ttsc/lint: invalid options for rule %q: %w", name, err),
+        )
+        invalidRuleOptions[name] = struct{}{}
+      }
+    }
+  }
+  for _, name := range config.ActiveRuleNames() {
+    rule, ok := registered.rules[name]
+    if !ok {
+      if _, isProjectRule := registeredProjectRules[name]; isProjectRule {
+        continue
+      }
+      eng.unknown = append(eng.unknown, name)
+      continue
+    }
+    if _, invalid := invalidRuleOptions[name]; invalid {
+      continue
+    }
+    if ruleNeedsTypeChecker(rule) {
+      eng.needsTypeChecker = true
+    }
+    eng.enabled[name] = displaySeverities.Severity(name)
+    // Dedup kinds per rule so a contributor that accidentally lists the
+    // same Kind twice in `Visits()` doesn't end up firing twice per node.
+    seen := make(map[shimast.Kind]struct{})
+    for _, kind := range rule.Visits() {
+      if _, dup := seen[kind]; dup {
+        continue
+      }
+      seen[kind] = struct{}{}
+      idx := int(kind)
+      if idx < 0 || idx >= len(eng.rules) {
+        // Defensive: a contributor returning a Kind beyond the
+        // shim's KindCount would otherwise panic on dispatch.
+        continue
+      }
+      eng.rules[idx] = append(eng.rules[idx], rule)
+    }
+  }
+  sort.Strings(eng.unknown)
+  return eng
+}
+
+// UnknownRules returns the names of rules that appeared either in the
+// config or in an inline `eslint-disable*` directive but have no
+// registered implementation. Directive-side unknowns are deduped so the
+// same misspelling on every page doesn't flood the warning channel.
+func (e *Engine) UnknownRules() []string {
+  if e == nil {
+    return nil
+  }
+  e.unknownDirectiveMu.Lock()
+  extras := make([]string, 0, len(e.unknownDirectives))
+  for name := range e.unknownDirectives {
+    extras = append(extras, name)
+  }
+  e.unknownDirectiveMu.Unlock()
+  if len(extras) == 0 {
+    return e.unknown
+  }
+  seen := make(map[string]struct{}, len(e.unknown)+len(extras))
+  out := make([]string, 0, len(e.unknown)+len(extras))
+  for _, name := range e.unknown {
+    if _, dup := seen[name]; dup {
+      continue
+    }
+    seen[name] = struct{}{}
+    out = append(out, name)
+  }
+  for _, name := range extras {
+    if _, dup := seen[name]; dup {
+      continue
+    }
+    seen[name] = struct{}{}
+    out = append(out, name)
+  }
+  sort.Strings(out)
+  return out
+}
+
+// collectUnknownDirectiveRules walks every directive's rule list and
+// records names that don't resolve to a registered rule. Called once
+// per file after `parseLintInlineDirectives`.
+func (e *Engine) collectUnknownDirectiveRules(directives *lintInlineDirectives) {
+  if e == nil || directives == nil {
+    return
+  }
+  for _, rec := range directives.records {
+    for _, raw := range rec.ruleList {
+      name := normalizeDirectiveRuleName(raw)
+      if name == "" {
+        continue
+      }
+      if _, ok := registered.rules[name]; ok {
+        continue
+      }
+      e.recordUnknownDirectiveRule(name)
+    }
+  }
+}
+
+// recordUnknownDirectiveRule remembers a rule name referenced by an
+// `// eslint-disable*` directive that does not resolve to a registered
+// rule. Each unique name is recorded once across the engine run.
+func (e *Engine) recordUnknownDirectiveRule(name string) {
+  if e == nil || name == "" {
+    return
+  }
+  e.unknownDirectiveMu.Lock()
+  defer e.unknownDirectiveMu.Unlock()
+  if e.unknownDirectives == nil {
+    e.unknownDirectives = make(map[string]struct{})
+  }
+  e.unknownDirectives[name] = struct{}{}
+}
+
+// NeedsTypeChecker reports whether any active rule requires Context.Checker.
+func (e *Engine) NeedsTypeChecker() bool {
+  return e != nil && e.needsTypeChecker
+}
+
+// ConfigError reports an invalid project-rule declaration or rule option
+// payload discovered while binding the resolver.
+func (e *Engine) ConfigError() error {
+  if e == nil {
+    return nil
+  }
+  return e.configError
+}
+
+// EnabledRules returns the active rule set keyed by name. Mostly for
+// tests + introspection.
+func (e *Engine) EnabledRules() map[string]Severity { return e.enabled }
+
+// Run walks the source files supplied by the caller and returns the collected
+// findings. By default files are processed in parallel, bounded by
+// `runtime.NumCPU()`; the engine falls back to a serial walk when
+// SetSerial(true) was called or when a type-aware rule is active. Findings are
+// merged in source-file order so the diagnostic stream is deterministic across
+// runs even when the per-file work happens out of order.
+func (e *Engine) Run(files []*shimast.SourceFile, checker *shimchecker.Checker) []*Finding {
+  cycle := e.evaluateProject(publicrule.ProjectIdentity{}, files, checker)
+  currentDirectory := e.currentDirectory
+  if currentDirectory == "" {
+    currentDirectory, _ = os.Getwd()
+  }
+  fileFindings := e.runFiles(files, checker, cycle.results, currentDirectory)
+  return append(cycle.finalize(), fileFindings...)
+}
+
+func (e *Engine) runFiles(
+  files []*shimast.SourceFile,
+  checker *shimchecker.Checker,
+  results publicrule.ProjectResultReader,
+  currentDirectory string,
+) []*Finding {
+  if e.runsSerial() {
+    var findings []*Finding
+    for _, file := range files {
+      if file == nil {
+        continue
+      }
+      findings = append(findings, e.runFile(file, checker, results, currentDirectory)...)
+    }
+    return findings
+  }
+
+  perFile := make([][]*Finding, len(files))
+  var wg sync.WaitGroup
+  workers := runtime.NumCPU()
+  if workers < 1 {
+    workers = 1
+  }
+  sem := make(chan struct{}, workers)
+  for i, file := range files {
+    if file == nil {
+      continue
+    }
+    wg.Add(1)
+    sem <- struct{}{}
+    go func(idx int, f *shimast.SourceFile) {
+      defer wg.Done()
+      defer func() { <-sem }()
+      perFile[idx] = e.runFile(f, checker, results, currentDirectory)
+    }(i, file)
+  }
+  wg.Wait()
+
+  total := 0
+  for _, fs := range perFile {
+    total += len(fs)
+  }
+  if total == 0 {
+    return nil
+  }
+  findings := make([]*Finding, 0, total)
+  for _, fs := range perFile {
+    findings = append(findings, fs...)
+  }
+  return findings
+}
+
+// boundRule pairs an active rule with the Context the engine reuses for
+// every node it dispatches to that rule within one file. See runFile.
+type boundRule struct {
+  rule Rule
+  ctx  *Context
+}
+
+// check invokes one bound rule unless an earlier invocation panicked in this
+// file. Context is shared by every kind bucket for the same file/rule pair, so
+// the quarantine covers later nodes and later registered kinds without leaking
+// into the next source file.
+func (b boundRule) check(node *shimast.Node, collect func(*Finding)) {
+  if b.ctx == nil || b.ctx.quarantined {
+    return
+  }
+  if runRuleCheck(b.rule, b.ctx, node, collect) {
+    b.ctx.quarantined = true
+  }
+}
+
+// lintFileWalker drives the per-file AST traversal. The struct exists so
+// the `ForEachChild` callback can be a method value cached in
+// `childCB`. A naive nested-closure walker re-allocates one callback
+// per recursive call (it captures the walking function variable),
+// which on a 50 k-node file is 50 k throwaway closure allocations.
+// Caching the method value reduces that to one allocation per file.
+type lintFileWalker struct {
+  byKind  [][]boundRule
+  collect func(*Finding)
+  childCB func(*shimast.Node) bool
+}
+
+// walk dispatches a single node to every rule that registered for the
+// node's Kind, then recurses into children via the cached childCB.
+func (w *lintFileWalker) walk(node *shimast.Node) {
+  if node == nil {
+    return
+  }
+  if k := int(node.Kind); k >= 0 && k < len(w.byKind) {
+    for _, bound := range w.byKind[k] {
+      bound.check(node, w.collect)
+    }
+  }
+  node.ForEachChild(w.childCB)
+}
+
+// visitChild is the cached ForEachChild callback. It is the method
+// value stored in `childCB` so per-recursion closure allocation is
+// avoided.
+func (w *lintFileWalker) visitChild(child *shimast.Node) bool {
+  w.walk(child)
+  return false
+}
+
+// runFile is the per-file driver. The visitor is allocated once per file
+// to keep the per-node hot path branch-free; it visits children
+// post-order so parents see their already-checked subtrees.
+func (e *Engine) runFile(
+  file *shimast.SourceFile,
+  checker *shimchecker.Checker,
+  results publicrule.ProjectResultReader,
+  currentDirectory string,
+) []*Finding {
+  var collected []*Finding
+  collect := func(f *Finding) { collected = append(collected, f) }
+  resolved := e.config.ResolveRules(file.FileName())
+  if resolved.Ignored {
+    return collected
+  }
+  fileRules := resolved.Rules
+  if !hasEnabledFileRules(fileRules) {
+    return collected
+  }
+
+  // Bind every active rule to a Context once per file. A Context's fields
+  // — File, Checker, the file-resolved Severity, the rule's Options blob,
+  // and the format marker — are all invariant across the file's nodes, so
+  // the engine builds them here. The earlier shape allocated a fresh
+  // Context for every (node, rule) pair, which on a large program meant
+  // millions of short-lived heap allocations and the GC pressure they
+  // carry. Rules never mutate their Context, so reuse is safe.
+  //
+  // Declaration files only bind rules that opt into them (see
+  // declaration_rules.go): value-level rules can never fire on a `.d.ts`,
+  // so dispatching to them is pure overhead on declaration-heavy trees.
+  declarationFile := file.IsDeclarationFile
+  bound := 0
+  byKind := make([][]boundRule, len(e.rules))
+  ctxByRule := make(map[string]*Context, len(e.enabled))
+  // One memo per file, shared by every rule's Context below, so
+  // file-invariant tables (security bindings, declared JSX names) are
+  // built once per file instead of once per visited node.
+  memo := &fileMemo{}
+  for kind, rules := range e.rules {
+    if len(rules) == 0 {
+      continue
+    }
+    for _, rule := range rules {
+      if declarationFile && !ruleVisitsDeclarationFiles(rule) {
+        continue
+      }
+      name := rule.Name()
+      ctx, built := ctxByRule[name]
+      if !built {
+        if severity := fileRules.Severity(name); severity != SeverityOff {
+          options := resolved.RuleOptions(name)
+          if len(options) == 0 && !resolved.OptionsResolved {
+            // Compatibility for custom RuleResolver implementations compiled
+            // against the original contract: until they opt into per-file
+            // options, their file-agnostic RuleOptions method remains active.
+            options = e.config.RuleOptions(name)
+          }
+          ctx = &Context{
+            File:             file,
+            Checker:          checker,
+            CurrentDirectory: currentDirectory,
+            Severity:         severity,
+            Options:          options,
+            rule:             rule,
+            isFormat:         isFormatRule(rule),
+            tags:             ruleDiagnosticTags(rule),
+            collect:          collect,
+            projectResults:   results,
+            fileMemo:         memo,
+          }
+        }
+        // A nil entry memoizes "off for this file" so a rule registered
+        // for several kinds resolves its severity only once.
+        ctxByRule[name] = ctx
+      }
+      if ctx == nil {
+        continue
+      }
+      byKind[kind] = append(byKind[kind], boundRule{rule: rule, ctx: ctx})
+      bound++
+    }
+  }
+
+  // Use a struct-based walker so the per-node ForEachChild callback is
+  // allocated once (stored as `w.childCB`) instead of once per Walk
+  // call. Closures that capture a recursive local function escape to
+  // the heap on every invocation; converting to a method value with a
+  // cached function field removes that allocation from the hot path —
+  // ~38 % of pre-Opt-4 CPU was in the inner ForEachChild closure.
+  //
+  // With no bound rules at all (every active rule was filtered out, e.g.
+  // a declaration file where nothing opted in) the walk cannot produce a
+  // finding, so it is skipped entirely; inline directives are still
+  // parsed below so unknown-directive warnings stay file-complete.
+  if bound != 0 {
+    w := &lintFileWalker{byKind: byKind, collect: collect}
+    w.childCB = w.visitChild
+
+    // SourceFile dispatches into its statement list directly; we walk
+    // statements explicitly so the file node itself can be inspected by
+    // rules (e.g., `ban-ts-comment` scans the file's comment tokens once
+    // per SourceFile).
+    if k := int(shimast.KindSourceFile); k >= 0 && k < len(byKind) {
+      for _, bound := range byKind[k] {
+        bound.check(file.AsNode(), collect)
+      }
+    }
+
+    statements := file.Statements
+    if statements != nil {
+      for _, stmt := range statements.Nodes {
+        w.walk(stmt)
+      }
+    }
+  }
+  directives := parseLintInlineDirectives(file)
+  e.collectUnknownDirectiveRules(directives)
+  // Apply inline-disable filtering even for files with no statement
+  // list. A SourceFile-level rule that fires on a `// ttsc-lint-disable`
+  // comment must still honor the directive; early-returning before
+  // the filter would silently leak those findings into the diagnostic
+  // stream.
+  return filterInlineDisabledFindingsWithDirectives(file, collected, directives)
+}
+
+func hasEnabledFileRules(rules RuleConfig) bool {
+  for _, severity := range rules {
+    if severity != SeverityOff {
+      return true
+    }
+  }
+  return false
+}
+
+// runRuleCheck invokes a rule's `Check` with a `recover()` barrier so a
+// panicking rule does not abort the entire `ttsc fix` / `ttsc check`
+// run. Built-in rules are not expected to panic, but contributor rules
+// crossing into the public `rule.Context` adapter can be authored by
+// anyone; protecting the engine is the only way to bound the blast
+// radius of one bad rule. The recovered panic is surfaced as a
+// SeverityError finding tagged with the rule's name so the user sees
+// the failure in the normal diagnostic stream. The boolean result tells the
+// per-file binding to quarantine the rule after recovery.
+func runRuleCheck(rule Rule, ctx *Context, node *shimast.Node, collect func(*Finding)) (panicked bool) {
+  defer func() {
+    r := recover()
+    if r == nil {
+      return
+    }
+    panicked = true
+    if ctx == nil || ctx.File == nil {
+      // Without source context there is nowhere to anchor the
+      // diagnostic. Surface to stderr so the panic is at least
+      // visible to the operator.
+      fmt.Fprintf(os.Stderr, "@ttsc/lint: rule %q panicked: %v\n", rule.Name(), r)
+      return
+    }
+    pos := 0
+    end := 1
+    if node != nil {
+      pos = node.Pos()
+      end = node.End()
+    }
+    if end <= pos {
+      end = pos + 1
+    }
+    pos, end = shimdw.NormalizeLintRange(ctx.File, pos, end)
+    collect(&Finding{
+      Rule:     rule.Name(),
+      Severity: SeverityError,
+      Pos:      pos,
+      End:      end,
+      Message: fmt.Sprintf(
+        "Rule %q panicked while checking this node: %v. Report this to the rule's author; ttsc skipped the rule on this file.",
+        rule.Name(), r,
+      ),
+      File:          ctx.File,
+      engineFailure: true,
+    })
+  }()
+  rule.Check(ctx, node)
+  return false
+}

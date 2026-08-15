@@ -1,0 +1,28 @@
+{
+  "private": true,
+  "name": "@typia/test-mcp",
+  "version": "13.3.0",
+  "description": "Test suite for @typia/mcp package",
+  "scripts": {
+    "start": "ttsx src/index.ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/samchon/typia"
+  },
+  "author": "Jeongho Nam",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "catalog:utils",
+    "ttsc": "catalog:typescript"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.26.0",
+    "@nestia/e2e": "catalog:utils",
+    "@typia/interface": "workspace:^",
+    "@typia/mcp": "workspace:^",
+    "@typia/utils": "workspace:^",
+    "chalk": "^4.1.2",
+    "typia": "workspace:^"
+  }
+}

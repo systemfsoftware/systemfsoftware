@@ -1,0 +1,8 @@
+/// Lint-only carrier for schema evidence exclusions.
+///
+/// Prisma generation, migration, and ERD inputs do not include this `.schema`
+/// file. Keep real `@evidence` directly above its owning model. Add
+/// decided exclusions here in the form shown below without the `Example:`
+/// prefix.
+///
+/// Example: @evidenceExclude docs/analysis/example.md#section Frontend owns this presentation-only requirement; reject this exclusion if it gains persisted state.

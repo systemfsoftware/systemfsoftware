@@ -1,0 +1,30 @@
+{
+  "private": true,
+  "name": "{{name}}",
+  "version": "0.1.0",
+  "description": "Full-stack application for {{name}}",
+  "packageManager": "pnpm@10.10.0",
+  "engines": {
+    "node": ">=22.15"
+  },
+  "scripts": {
+    "build": "pnpm --filter {{backendPackageName}} --fail-if-no-match build:prisma && pnpm --filter {{backendPackageName}} --fail-if-no-match build:main && pnpm --filter {{backendPackageName}} --fail-if-no-match build:sdk && pnpm --filter {{backendPackageName}} --fail-if-no-match build:test && pnpm --filter {{frontendPackageName}} --fail-if-no-match build",
+    "build:frontend": "pnpm --filter {{frontendPackageName}} --fail-if-no-match build",
+    "build:prisma": "pnpm --filter {{backendPackageName}} --fail-if-no-match build:prisma",
+    "dev:frontend": "pnpm --filter {{frontendPackageName}} --fail-if-no-match dev",
+    "format": "pnpm -r --if-present format",
+    "lint": "pnpm --filter {{backendPackageName}} --fail-if-no-match build:prisma && pnpm -r --if-present lint",
+    "schema:database": "pnpm --filter {{backendPackageName}} --fail-if-no-match schema",
+    "start": "pnpm --filter {{backendPackageName}} --fail-if-no-match start",
+    "test": "pnpm test:backend && pnpm test:frontend",
+    "test:backend": "pnpm --filter {{backendPackageName}} --fail-if-no-match test",
+    "test:frontend": "pnpm --filter {{frontendPackageName}} --fail-if-no-match test:e2e"
+  },
+  "devDependencies": {
+    "@ttsc/lint": "catalog:typescript",
+    "@types/node": "catalog:utils",
+    "rimraf": "catalog:utils",
+    "ttsc": "catalog:typescript",
+    "typescript": "catalog:typescript"
+  }
+}

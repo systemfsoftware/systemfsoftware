@@ -1,0 +1,350 @@
+# Claims and References
+
+`claims` is the whole configuration surface. Everything the graph enforces is declared there, and nothing is inferred from your directory layout.
+
+```ts
+const graph: ITtscEvidenceGraphConfig = {
+  claims: [
+    {
+      type: "typescript",
+      files: ["src/components/**/*.tsx"],
+      symbol: "function",
+      reference: {
+        type: "markdown",
+        files: ["docs/requirements/**/*.md"],
+        symbol: ["h2", "h3"],
+      },
+    },
+  ],
+};
+```
+
+A **claim** selects a population of declaration hosts, the artifacts that owe answers. A **reference** selects a population of evidence units, the questions they owe. Read every claim in that direction: `files` and `symbol` pick who owes, `reference` picks what.
+
+## One obligation per pair
+
+A `reference` array is not a union. Each element is its own 100% obligation, and coverage never crosses between them.
+
+```ts
+{
+  type: "typescript",
+  files: ["test/features/**/*.ts"],
+  symbol: "function",
+  reference: [
+    // Obligation 1: every requirement section is proved by some test.
+    {
+      type: "markdown",
+      files: ["docs/requirements/**/*.md"],
+      symbol: ["h2", "h3"],
+    },
+    // Obligation 2: every exported component is claimed by some test.
+    {
+      type: "typescript",
+      files: ["src/components/**/*.tsx"],
+      symbol: "function",
+    },
+  ],
+}
+```
+
+A test citing a requirement discharges nothing in obligation 2. That separation is the point: one obligation borrowing another's citation is how partial work reads as complete work.
+
+The same holds across claims. Two claims referencing one document set are two obligations, so a section only the backend implements still owes an `@evidenceExclude` in the API package.
+
+## Claim properties
+
+| Property | Meaning |
+| --- | --- |
+| `type` | `"markdown"`, `"prisma"`, or `"typescript"`. Swagger cannot host a claim. |
+| `files` | Glob patterns for the files that owe acknowledgements. Required. |
+| `symbol` | Which declaration kinds may host an `@evidence` tag. It does not restrict `@evidenceExclude`, whose carriers are wider. |
+| `reference` | One reference or an array of them. Must not be empty. |
+| `root` | Directory the `files` patterns resolve against. |
+| `evidenceExcludeCarriers` | Files allowed to host this claim's `@evidenceExclude`. |
+| `name` | Label shown with this claim's diagnostics. It identifies nothing and relates nothing. |
+| `disabled` | Validates the shape and contributes nothing else: no populations, no obligations, no completion hints, no watched inputs. |
+
+## Reference properties
+
+| Property | Applies to | Meaning |
+| --- | --- | --- |
+| `type` | all | `"markdown"`, `"prisma"`, `"swagger"`, or `"typescript"`. |
+| `files` | markdown, prisma, typescript | Glob patterns selecting the population. Required except on a `package` reference. |
+| `file` | swagger | One exact path or one exact `http:`/`https:` URL. Never a glob. |
+| `package` | typescript | An installed package to read from disk instead of from the Program. |
+| `root` | markdown, prisma | Directory the `files` patterns resolve against. |
+| `symbol` | markdown, prisma, typescript | Which unit kinds this obligation covers. |
+| `noEvidenceExclude` | all | Refuse `@evidenceExclude` here. |
+| `uniqueEvidence` | all | At most one claim host may cite each unit. |
+| `singleEvidencePerSymbol` | all | Each selected claim host must cite exactly one unit. |
+| `requireReview` | all | Every acknowledgement owes an unexpired review of its own kind. |
+
+## Symbol selectors
+
+| Kind | `symbol` values | Reference default | Claim default |
+| --- | --- | --- | --- |
+| `"markdown"` | `"file"`, `"h1"`, `"h2"`, `"h3"`, `"h4"` | all five | all five |
+| `"prisma"` | `"model"`, `"column"`, `"relation"` | `["model"]` | all three |
+| `"swagger"` | none; every operation under `paths` is selected | every operation | not applicable |
+| `"typescript"` | `"type"`, `"function"`, `"property"` | `"type"` | all three |
+
+On a reference, `symbol` sets the obligation's denominator. On a claim, it restricts which declaration kinds may carry a tag. The defaults differ for that reason: a reference default promises a count, while a claim default only decides where a tag may sit.
+
+### TypeScript kinds
+
+- `"type"` selects exported interfaces, type aliases, classes, and namespaces. Enums are not type units.
+- `"function"` selects exported callables: a function declaration, a `const` initialized with an arrow or function expression, and every member written as a callable on a class, an interface, or an object-shaped type alias, plus the namespace variants of those forms.
+- `"property"` selects every member of an exported class, interface, or object-shaped type alias that is not written as a callable, plus exported `const`, `let`, and `var` at module or namespace scope. At either scope every variable other than a `const` initialized with a function is a property, including a function-typed declaration, a function-valued `let` or `var`, and every binding leaf of a destructured declaration however it was initialized; a class field is the one place that reads the other way.
+
+A class is the subject and its members are what the subject does and carries, so the three map onto the three kinds directly: the class is a `type`, a method is a `function`, and a field is a `property`. An interface and an object-shaped type alias are subjects in the same sense, and their members classify by the same rule. Instance members are addressed through `prototype` and static members directly, as in `Sale.prototype.price` and `Sale.currency`. Constructors and accessors are not selected: construction is how the subject comes to be, which the class itself answers for, and an accessor is a get/set pair rather than a member variable.
+
+A field **written as** a callable is a `function` rather than a `property`, and it takes either spelling: `handler = () => {}` and `declare charge: () => void` are both callables of the class. This is the opposite of the variable rule above, which holds at module and namespace scope alike: there an annotation never decides and only a `const`'s function-valued initializer does. So `declare const parse: () => void` stays a `property` while the identical annotation on a class field is a `function`, and `export let parse = () => {}` stays a `property` however it is initialized. The two differ because a class field's declared type is its contract, while a variable's is a description of a value that already exists.
+
+"Written as" is literal. These rules read no type checker, so the annotation is judged as it is spelled: `charge: () => void` is a `function`, and `charge: Handler` is a `property` even where `Handler` is `type Handler = () => void`. A constructor type such as `new () => Sale`, and a union with a callable in it, are `property` for the same reason. Only parentheses are seen through.
+
+An interface and an object-shaped type alias answer the same way, because a member is one contract however it is spelled. `charge: () => void` is a `function` on all three containers, `run(): void` is a `function` like a class method, an overload run is one unit, and `label: string` is a `property`. If it were otherwise, a `symbol: "function"` claim over a file of interfaces would select nothing, deactivate, and pass the build with no coverage.
+
+An interface merged with a same-named class declares that class's instance members, so those take the class address rather than the interface one: `interface Sale { rate: number }` beside `class Sale` is `Sale.prototype.rate`, the same address the field written in the class body would take, and a member both halves declare is one unit. A namespace is the other partner and adds statics, so it keeps `Sale.rate`. **Check a citation of a merged interface's member after upgrading.** It used to be addressed from the bare name, so `{@link Sale.rate}` now reports an unreachable target and wants `{@link Sale.prototype.rate}` instead.
+
+A type-only export list in the declaring module withholds the merge's members entirely, `export type { Sale }` and `export { type Sale }` alike, exactly as it does for the class alone, because every member of either is reached through the class value the alias does not expose. A re-export withholds the same thing, so `export type { Sale } from "./sale.js"` publishes the class name and no member, and so do `export { type Sale } from`, `export type * from`, and `export type * as api from`. What survives is type-space: the name itself, every member of an interface no class merges with or of an object-shaped type alias, and every type nested in a namespace.
+
+The quiet direction is the count. A `symbol: "property"` reference stops counting a withheld member, so a build that was red for leaving it uncited goes green with no message, and how much else moves depends on where the export is written, because a claim reads one file at a time while a reference follows the export graph. Written in the declaring module, the member leaves that file's own population as well, so `evidence/documented` stops asking for its block and a tag on it is refused as an unsupported host or carrier. Written as a re-export, the declaring file's own population is untouched, so `evidence/documented` still asks for the block and a claim over that file still accepts a tag on the member. Only what a reference counts moves, and a claim in that same file whose reference points at the barrel moves with it.
+
+Two paths are loud, in both halves. A target naming a withheld member, or naming a scope the withholding emptied, stops resolving, so there is no address to move a citation to and the repair is to widen the export or drop the citation. And a `requireReview` fingerprint of a scope reached through a type-only edge moves, because the scope no longer spans the withheld members, so every review of one expires and has to be rewritten with the value the diagnostic states.
+
+The callable rule above loses in that same quiet way, and adds one shape of its own: a claim declaring `symbol: "property"` over interfaces whose members are all callables selects no host at all, and a claim with no selected host is inactive, which drops its whole obligation with no message. Both are the intended classification arriving in the direction that produces no diagnostic, so read a `property` selector over interface files as the place to check after upgrading: name the kinds the population really holds, or widen the selector to both.
+
+A `private` or `protected` class member is not selected, whichever syntax declared it. A constructor parameter carrying any property modifier declares a field, so it is selected exactly as the same field written in the class body would be, which means a `private` or `protected` one is not selected at all, and it carries its own JSDoc block. The constructor's own visibility does not decide this: a `private constructor` closes construction from outside while `public readonly price` on its parameter is still an instance field.
+
+The property modifiers are TypeScript's own five: `public`, `protected`, `private`, `readonly`, and `override`. The last is the one to know about, because its meaning is about the base class rather than about the field, so it does not read as a field declaration. On a class extending one that declares `rate`, `constructor(override rate: number)` is a public instance field and a selected `property` unit; written on a class that extends nothing it is `TS4112` rather than a parameter property.
+
+The block has to sit on the parameter, not on the constructor. A constructor's own block cannot host a citation for a field it declares, because two parameter properties would leave `@evidence` no way to say which one it means, so `@param price The amount the customer pays.` on the constructor documents the field for a reader and still leaves it unable to cite anything. `evidence/documented` says so directly, and the repair is to move the text onto the parameter.
+
+Only public identities materialize. A top-level declaration needs an export modifier or a local export-list alias, and a namespace member needs to be exported from that namespace unless ambient semantics make it implicitly public.
+
+Qualified identities keep their owner. `Orders.Input.id` is a property below `Orders.Input`, while `Orders.state` is namespace data. Exported object and array binding patterns expose each local binding leaf as a property, and a type-only alias exposes its public type-space descendants, every member an object-shaped type alias declares and every member of an interface no class merges with included, and withholds value-space: namespace data, namespace functions, and every class member, the last on the terms the type-only paragraph above states.
+
+A namespace merged with a same-named function is that function's static side, so nothing inside it materializes. That is the generated SDK accessor shape, `export async function get(...)` beside `export namespace get`, where `get.path` and `get.Output` are the accessor's own machinery rather than authored contract. One operation therefore owes one acknowledgement, cited as `{@link api.functional.health.get}`. A namespace merged with an interface or a class keeps its members, because a companion namespace beside either one is authored contract, and a `const` or `let` cannot merge with a namespace at all.
+
+A class merged with a same-named namespace is one `type` unit, reported from whichever half is written first. That is usually the class, because TypeScript refuses an _instantiated_ namespace written above the class it merges with. The refusal has two gaps, and in both the namespace may legally come first and then be the declaration every diagnostic names: a companion namespace holding only types is not instantiated, and the check is skipped entirely in an ambient context, which is the shape a `.d.ts` presents.
+
+### Hierarchy
+
+Units contain units. A Markdown file contains its heading outline, a heading contains the lower-level headings under it until the next heading of equal or higher level, an interface or an object-shaped type alias contains the members it declares, callables included, a class contains its selected members, a namespace contains every nested public unit, and a Prisma model contains its columns and relations. Swagger operations are independent leaves.
+
+A citation covers its target and every selected descendant. So `symbol: "property"` on a reference can still be satisfied by one `@evidence {@link IShoppingSale} ...`, and one `@evidence prisma:Sale ...` discharges every selected column and relation beneath that model.
+
+An ancestor stays addressable even when its own kind is not in the selector. The selector decides what is counted, not what can be named.
+
+### Withdrawn declarations
+
+A declaration whose documentation comment carries `@internal`, `@hidden`, or `@ignore` is not an evidence unit, and neither is anything nested inside it. The three tags mean the same thing here, and the tag has to open its own line, so prose mentioning `@internal` is describing something rather than declaring it.
+
+This works in both directions: such a declaration owes no acknowledgement, cannot carry one, and is ineligible as an exclusion carrier. It applies to Prisma `///` comments too, where a tagged model takes its columns and relations with it. Citing a withdrawn declaration is reported, and the diagnostic names the tag rather than claiming the target does not exist.
+
+## File patterns
+
+`files` takes globs, not regular expressions.
+
+- `*` matches inside one path segment, `**` crosses segments, `?` matches one character.
+- Both `/` and `\` are accepted as separators. Path identity stays case-sensitive on every operating system.
+- Patterns evaluate left to right. A `!` prefix removes matches, and a later positive pattern can bring them back. At least one positive pattern is required.
+- A bare directory such as `src` does not select its descendants. Write `src/**`.
+
+```ts
+files: [
+  "src/components/*/*-page.tsx",
+  "src/components/SCREEN_EVIDENCE_EXCLUDE.ts",
+  "!src/components/dev/**",
+]
+```
+
+A pattern resolves against its population's base, which is the `ttsc` project root unless the population declares a `root`. A pattern may not escape that base: `..` and absolute paths are refused inside a pattern, because a base spread across every pattern is a base nobody can read off the configuration.
+
+A Markdown population parses every regular file its globs match, whatever extension the file carries. `docs/**` therefore takes in the images and other assets sitting under `docs`, so write `docs/**/*.md` or exclude the assets rather than relying on the suffix.
+
+## Populations above the project
+
+A monorepo usually keeps one requirements set that several packages implement, and each package is its own `ttsc` project with its own `tsconfig.json` and `lint.config.ts`. `root` declares the directory a population resolves against:
+
+```ts
+// packages/backend/lint.config.ts and packages/api/lint.config.ts, identically
+{
+  type: "markdown",
+  root: "../../docs",
+  files: ["requirements/**/*.md"],
+  symbol: "h2",
+}
+```
+
+`root` is one directory, never a glob. It may sit inside the project (`docs`), above it (`../../docs`), or on an absolute path (`/srv/contracts`, `C:/contracts`). A Windows drive-relative path such as `C:docs` is refused, because it resolves against whatever directory that drive currently sits on.
+
+**Moving the root moves the addresses with it.** Under the configuration above a section is cited as `requirements/pricing.md#discounts`, not through the citing package's distance from the documents. That is what lets two packages share one document set: they declare the same base and write the same citation, so adopting the set costs a `root` line and nothing else.
+
+Prisma and TypeScript targets carry no path, so a root there changes which files join the population and where a diagnostic points, never how a model or symbol is cited.
+
+Everything a rooted Markdown or Prisma population reads is published to the `ttsc` host as a watched dependency, so editing a document two directories up starts the next `ttsc --watch` cycle exactly as editing one inside the project does.
+
+A TypeScript claim `root` changes only the base used to match files `ttsc` already supplied. It never scans that directory, follows arbitrary imports, or admits `node_modules`, so the owning `tsconfig.json` must include a sibling source root before the claim can select it. TypeScript references take no `root`; `package` is the channel that reaches a population you do not own.
+
+## TypeScript populations
+
+**`files` selects modules, and the population is what those modules publish.** A matched module contributes its own exports and everything it re-exports, so a barrel carries in the surface it forwards even when the declaring file is outside the globs. A type-only re-export forwards only the type-space half of what it names, on the terms the class paragraph below states.
+
+```ts
+// every type those modules publish, addressed as they publish it
+{ type: "typescript", files: ["src/contracts/**"] }
+
+// everything the SDK barrel exposes, addressed by its accessor path from there
+{ type: "typescript", files: ["src/sdk/index.ts"] }
+
+// the same, for a package a consumer installs
+{ type: "typescript", package: "@ORGANIZATION/PROJECT-api" }
+```
+
+A unit is addressed the way a consumer reaches it, not the way the declaring file spells it. `export * as functional` nests a path segment, `export * from` flattens one, and `export { A as B }` addresses the symbol as `B`. Matching that unit by its local binding finds nothing.
+
+Identity still belongs to the declaring file. A declaration reached through two barrels answers to both addresses and remains one coverage unit rather than two obligations. Containment follows the declaration hierarchy rather than the address text, so a type and a callable sharing one public name never become each other's scope.
+
+The cost of selecting modules is that a glob is only as narrow as what its modules publish. Matching a barrel takes in everything behind it, so narrow by the module whose surface you mean rather than by the directory it sits in.
+
+A local reference must set `files`. There is no implicit project population, and singular `file` belongs to Swagger. It also selects only what the Program already holds, so a file the owning `tsconfig.json` never pulled in is unavailable to the rule and does not count as a match: widen the project before widening the glob.
+
+### Installed packages
+
+A `package` population is read from disk rather than from the `ttsc` Program, which is the point. A symbol nothing imports is absent from the Program by definition, and it is exactly the symbol an obligation needs to name.
+
+Without `files`, the package's declaration entry is the population, resolved through the `types` condition of its `exports` map, then `typesVersions`, then `types` or `typings`. Never `main`, which names the JavaScript a consumer runs rather than the declarations a citation can address.
+
+With `files`, the globs are package-relative and they narrow which units carry the obligation without changing the address those units are cited by. A unit the entry publishes as `functional.health.get` is still cited that way when a glob narrows the population to the subtree declaring it, because the package entry is the only module your import specifier resolves to. A glob matching only modules the entry does not publish selects nothing and says so.
+
+The obligation set of a package belongs to whoever publishes it. A minor release that adds exports adds obligations, so pin the version or narrow the selection when the population is not yours.
+
+## Swagger references
+
+A Swagger reference owns exactly one document through its singular `file`:
+
+```ts
+{
+  type: "typescript",
+  files: ["src/controllers/**/*.ts"],
+  reference: {
+    type: "swagger",
+    file: "api/openapi.yaml",
+  },
+}
+```
+
+`file` is one exact local path or one exact `http:`/`https:` URL, never a glob and never a directory. Use a `reference` array when one claim owes separate coverage to several API documents.
+
+A local path resolves against the `ttsc` project root and may name a document anywhere on the filesystem: inside the project, beside it as `../contracts/swagger.json`, or outside it entirely. A drive-relative Windows path such as `C:openapi.json` is refused.
+
+Swagger 2.0 and OpenAPI 3.0, 3.1, and 3.2 documents in JSON or YAML are normalized through `@typia/utils` before indexing. Failures, non-2xx responses, invalid documents, 30-second remote timeouts, and documents larger than 16 MiB fail the build.
+
+Only operations under `paths` become units. Webhooks and component schemas are outside this reference kind. Standard and additional operation methods share one target identity.
+
+A local document is re-normalized only when its bytes change, keyed on content rather than on a timestamp or size. A remote document is fetched once per process and answered from memory afterwards, because a resident session that refetched on every rebuild would put a network round trip on the edit loop. A served document that changes mid-session is therefore not seen until the session restarts, while a one-shot `ttsc check` is a fresh process and always fetches. A refused URL is never remembered, so a transient outage recovers on the next cycle.
+
+A URL is also the one source that cannot be watched. There is no filesystem event to observe, so nothing wakes the watcher when the served document changes.
+
+## Prisma references and claims
+
+A Prisma schema works in both directions. A model can ground a claim, and the schema itself can carry citations back to the requirements that asked for it:
+
+```ts
+const graph: ITtscEvidenceGraphConfig = {
+  claims: [
+    {
+      name: "Every model justifies itself",
+      type: "prisma",
+      files: ["prisma/schema/**/*.prisma", "prisma/schema/exclude.schema"],
+      symbol: "model",
+      reference: {
+        type: "markdown",
+        files: ["docs/requirements/**/*.md"],
+        symbol: "h2",
+      },
+    },
+    {
+      type: "typescript",
+      files: ["src/providers/**/*.ts"],
+      symbol: "function",
+      reference: {
+        type: "prisma",
+        files: ["prisma/schema/**/*.prisma"],
+      },
+    },
+  ],
+};
+```
+
+`prisma/schema/exclude.schema` sits in that first `files` list on purpose. It is a lint-only file outside the Prisma generation glob, so it adds no model to the schema and exists to hold unattached top-level `/// @evidenceExclude` declarations. [Evidence Tags](/docs/evidence/tags#where-an-exclusion-may-sit) covers that carrier.
+
+Every matched file is parsed together as one schema, because a Prisma schema folder is a single namespace whose files reference each other. Targets carry a `prisma:` prefix and stay one whitespace-free token: `prisma:Sale` for a model, `prisma:Sale.price` for a member. A model name is unique across the folder, so a target never names the file its model sits in and moving a model between files cannot break a citation.
+
+The `model`, `column`, and `relation` split follows Prisma's own resolution rather than the schema text, which is what classifies a relation back-reference such as `Seller.sales` correctly even though it carries no `@relation` attribute. A view arrives among the datamodel's models and is therefore a `model` unit. Enums, composite types, and indexes are outside the unit model.
+
+Selecting `"column"` puts every `id`, `created_at`, and back-reference into the denominator. Turn it on where a claim really does owe an answer per member, and reach for `@evidenceExclude` on the ones it deliberately does not use.
+
+The schema is parsed by Prisma itself, resolved from your project when your project can resolve one and from this package's pinned `@prisma/prisma-schema-wasm` otherwise. A rejection names which of the two judged the schema. A schema Prisma rejects fails the build with Prisma's own message and location; it never becomes an empty population whose obligations are all vacuously satisfied.
+
+An unchanged schema is re-parsed only when its bytes change, keyed on the content of the whole ordered file set, so adding a file, editing one, or moving a model between two of them all miss the cache.
+
+## Reference policies
+
+Ordinary coverage is permissive on purpose. Either tag can acknowledge a unit, one host may cite any number of units, and one citation per unit is enough. That is right for a document several modules honor, and too weak for a proof obligation, where one exclusion or one host citing everything discharges the population without proving anything.
+
+Four opt-in properties tighten a single reference:
+
+```ts
+{
+  type: "typescript",
+  package: "@ORGANIZATION/PROJECT-api",
+  files: ["src/functional/**/*.ts"],
+  symbol: ["function"],
+  noEvidenceExclude: true,
+  singleEvidencePerSymbol: true,
+}
+```
+
+- **`noEvidenceExclude`** refuses `@evidenceExclude` here. The exclusion is reported where it is written and gives this reference no coverage, so its target still owes positive `@evidence`. Set it where non-applicability is not an answer the population accepts: a published operation is exercised by its test suite or the suite is incomplete, and "not applicable" is the sentence that hides the second case.
+- **`uniqueEvidence`** allows at most one claim host to cite each unit, so the unit has one host answerable for it rather than several.
+- **`singleEvidencePerSymbol`** requires exactly one distinct unit from every host the claim's `symbol` selector picks. A host with no `@evidence` counts as zero and fails, as does a host citing two units. One test proving one operation stays reviewable; the same function citing eight operations proves only that eight names appear in its JSDoc.
+- **`requireReview`** makes every acknowledgement here owe a matching [review tag](/docs/evidence/tags) naming the same target and carrying a fingerprint of the cited scope's content. When that content changes the fingerprint stops matching and the build fails again with the new value in the diagnostic. Expiry is the whole point: a review that cannot expire is written once and stays green forever, and on a second pass over a large citation set nothing tells you which reviews were written against content that has since moved. It claims no more than that, since the diagnostic states the expected value and nothing here judges whether prose is sincere.
+
+The fingerprint belongs to the address a citation names, not to the reference that asked for it: it covers the cited unit and its structural subtree, so one tag carries one fingerprint however many references it acknowledges. Every reference kind accepts the option. Swagger and Prisma used to refuse it, because their loaders reported unit identities and nothing else, and the whole-document digest they did report is one value shared by every unit in a document, so one endpoint's change would expire every review in it. Each bridge now digests a unit's content on the side that understands it: an operation's is its normalized definition, and a Prisma model's or member's is its parsed declaration without its documentation comment, which is where a review of it is written. Reordering the keys of a source document therefore changes nothing. Two dialects are a weaker promise: a Swagger 2.0 upgrade and an OpenAPI 3.1 document of the same endpoint agree only where they normalize to the same operation, and the 2.0 path emits properties the 3.1 path omits. An operation's digest also covers the component schemas it names, resolved through `$ref`, because that is where an endpoint's contract actually lives; a schema that refers to itself is followed once. A Prisma model's covers what the parser reports for the model itself, which includes `@@unique` and `@@map` and does not include `@@index`.
+
+A citation written on an inner declarator now reaches the identity it names. Coverage never depended on that, so nothing about which obligations are satisfied changes, but the per-host policies counted such a citation as naming nothing and now count the unit. A green build can therefore fail on upgrade: `uniqueEvidence` reports a host it did not see, and `singleEvidencePerSymbol` counts one where it counted zero. It moves the other way too, because review pairing moves with it, so a review written on the statement now answers a citation on an inner declarator and the reverse, and an `Unreviewed` diagnostic can disappear.
+
+A variable's content is the declarator that names it, not the statement that wraps it. One `const`, `let`, or `var` statement declares every identity written after the keyword, so a fingerprint taken from the wrapper moved when a sibling changed, and a documentation block written on an inner declarator sat inside the very digest that excludes documentation. Both answers are now taken from the declarator alone, and a destructuring pattern's leaves share one because they share the initializer they take their values from. This moves every variable's fingerprint once: on upgrade, a review naming a variable (or naming a scope, such as a namespace, that contains one) expires and has to be rewritten with the value the diagnostic states.
+
+Counting is by identity, not by text. Repeated tags for one unit count once, merged declarations and overload sets remain one host, and an aggregate target contributes every selected descendant in its scope, so citing a parent of two selected units counts as two.
+
+The constraints belong to one reference and never pool. An exclusion the package reference above refuses may still satisfy a Markdown reference in the same claim, and two references over the same files stay independent.
+
+A population that failed to load establishes no cardinality at all: the loader failure is preserved rather than turned into a count. A healthy population that is merely empty is a complete denominator, so a host still truthfully cites zero units against it.
+
+## Exclusion carriers
+
+`noEvidenceExclude` decides whether a reference accepts an exclusion at all. Where it does, `evidenceExcludeCarriers` decides where that exclusion may be written.
+
+```ts
+{
+  name: "screens",
+  type: "typescript",
+  files: ["src/components/**/*.tsx", "src/components/EXCLUSIONS.ts"],
+  evidenceExcludeCarriers: ["src/components/EXCLUSIONS.ts"],
+  symbol: "function",
+  reference: { type: "markdown", files: ["docs/**/*.md"], symbol: "h2" },
+}
+```
+
+Declared, an `@evidenceExclude` is accepted only from a file these globs match. One written elsewhere in the population is reported where it sits, naming these patterns, and gives no coverage, so its target still owes positive `@evidence`. Omit the property and an exclusion stays eligible wherever it already was.
+
+The patterns use the grammar and the `root` that `files` uses, and they narrow rather than widen: a carrier must already be selected by `files` to host anything. A carrier set that selects none of the claim's files is reported against the claim, because a misspelled path would otherwise refuse every exclusion in it and offer a repair nobody can perform.
+
+An exclusion is the one acknowledgement that reports an obligation discharged without anything being built, so reading every exclusion a claim owns is a review that has to happen. Scattered through the population that means reading the population. Gathered in a named ledger it means opening one file.
+
+## Next
+
+→ [Evidence Tags](/docs/evidence/tags) for the grammar that satisfies these obligations, or [Full-Stack Wiring](/docs/evidence/wiring) for a complete monorepo graph built from these pieces.

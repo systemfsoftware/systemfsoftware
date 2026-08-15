@@ -1,0 +1,674 @@
+// gen_shims:hand-maintained
+//
+// This shim file mixes generated re-exports with hand-written `go:linkname`
+// declarations targeting unexported `*Checker` methods that the @ttsc/lint
+// engine relies on. gen_shims detects the marker on the first line and skips
+// this file. Remove the marker only if you are intentionally regenerating and
+// willing to re-add the hand-maintained content.
+
+package checker
+
+import (
+  "sync"
+
+  innerast "github.com/microsoft/typescript-go/internal/ast"
+  innerchecker "github.com/microsoft/typescript-go/internal/checker"
+  innerprinter "github.com/microsoft/typescript-go/internal/printer"
+  _ "unsafe"
+)
+
+type Checker = innerchecker.Checker
+type IndexInfo = innerchecker.IndexInfo
+type Signature = innerchecker.Signature
+type SignatureKind = innerchecker.SignatureKind
+type Type = innerchecker.Type
+type TypeMapper = innerchecker.TypeMapper
+type TypeMapperKind = innerchecker.TypeMapperKind
+type TypeFlags = innerchecker.TypeFlags
+type ObjectFlags = innerchecker.ObjectFlags
+type ElementFlags = innerchecker.ElementFlags
+type Program = innerchecker.Program
+type Tracer = innerchecker.Tracer
+
+//go:linkname checkerNewAnonymousType github.com/microsoft/typescript-go/internal/checker.(*Checker).newAnonymousType
+func checkerNewAnonymousType(
+  recv *innerchecker.Checker,
+  symbol *innerast.Symbol,
+  members innerast.SymbolTable,
+  callSignatures []*innerchecker.Signature,
+  constructSignatures []*innerchecker.Signature,
+  indexInfos []*innerchecker.IndexInfo,
+) *innerchecker.Type
+
+//go:linkname checkerGetTargetSymbol github.com/microsoft/typescript-go/internal/checker.(*Checker).getTargetSymbol
+func checkerGetTargetSymbol(recv *innerchecker.Checker, symbol *innerast.Symbol) *innerast.Symbol
+
+//go:linkname checkerIsPrototypeProperty github.com/microsoft/typescript-go/internal/checker.isPrototypeProperty
+func checkerIsPrototypeProperty(symbol *innerast.Symbol) bool
+
+//go:linkname checkerArePropertiesAbstractOrInterface github.com/microsoft/typescript-go/internal/checker.(*Checker).arePropertiesAbstractOrInterface
+func checkerArePropertiesAbstractOrInterface(
+  recv *innerchecker.Checker,
+  base *innerast.Symbol,
+  baseDeclarationFlags innerast.ModifierFlags,
+) bool
+
+// Checker_isPropertyAssignableTo asks the upstream assignability relater about
+// exactly one source/target property pair. The anonymous types retain the
+// original property symbols, so propertyRelatedTo still enforces instantiated
+// generic types, overloads, optionality, and private/protected declaration
+// origins without an unrelated sibling member participating in the result.
+func Checker_isPropertyAssignableTo(
+  recv *innerchecker.Checker,
+  sourceProperty *innerast.Symbol,
+  targetProperty *innerast.Symbol,
+) bool {
+  if recv == nil || sourceProperty == nil || targetProperty == nil ||
+    sourceProperty.Name == "" || sourceProperty.Name != targetProperty.Name {
+    return false
+  }
+  source := checkerNewAnonymousType(
+    recv,
+    nil,
+    innerast.SymbolTable{sourceProperty.Name: sourceProperty},
+    nil,
+    nil,
+    nil,
+  )
+  target := checkerNewAnonymousType(
+    recv,
+    nil,
+    innerast.SymbolTable{targetProperty.Name: targetProperty},
+    nil,
+    nil,
+    nil,
+  )
+  return source != nil && target != nil && recv.IsTypeAssignableTo(source, target)
+}
+
+// Checker_isValidClassMemberOverridePair applies the class-only member-kind
+// boundary from checkKindsOfPropertyMemberOverrides to one exact pair. Ordinary
+// structural assignability permits more shapes than a class extends clause:
+// notably a concrete property/accessor cannot be replaced by a method, while a
+// base method may be replaced by a function-valued property.
+func Checker_isValidClassMemberOverridePair(
+  recv *innerchecker.Checker,
+  derivedProperty *innerast.Symbol,
+  baseProperty *innerast.Symbol,
+) bool {
+  if recv == nil || derivedProperty == nil || baseProperty == nil {
+    return false
+  }
+  derived := checkerGetTargetSymbol(recv, derivedProperty)
+  base := checkerGetTargetSymbol(recv, baseProperty)
+  if derived == nil || base == nil || derived == base {
+    return false
+  }
+
+  baseDeclarationFlags := innerchecker.GetDeclarationModifierFlagsFromSymbol(base)
+  basePropertyFlags := base.Flags & innerast.SymbolFlagsPropertyOrAccessor
+  derivedPropertyFlags := derived.Flags & innerast.SymbolFlagsPropertyOrAccessor
+  if basePropertyFlags != 0 && derivedPropertyFlags != 0 {
+    // A direct class base member cannot be a mapped property. The upstream
+    // mapped-property exception therefore has no member declaration this
+    // direct-pair API could publish; assignment declarations and abstract /
+    // interface members are the two applicable exceptions.
+    if derived.ValueDeclaration != nil && innerast.IsBinaryExpression(derived.ValueDeclaration) ||
+      checkerArePropertiesAbstractOrInterface(recv, base, baseDeclarationFlags) {
+      return true
+    }
+    overriddenInstanceProperty := basePropertyFlags != innerast.SymbolFlagsProperty &&
+      derivedPropertyFlags == innerast.SymbolFlagsProperty
+    overriddenInstanceAccessor := basePropertyFlags == innerast.SymbolFlagsProperty &&
+      derivedPropertyFlags != innerast.SymbolFlagsProperty
+    return !overriddenInstanceProperty && !overriddenInstanceAccessor
+  }
+  if checkerIsPrototypeProperty(base) {
+    return checkerIsPrototypeProperty(derived) ||
+      derived.Flags&innerast.SymbolFlagsProperty != 0
+  }
+  return false
+}
+
+// NewChecker creates a checker that owns its complete type graph for program.
+// The returned mutex is the upstream checker-pool synchronization primitive;
+// callers that share the checker must serialize access through it.
+func NewChecker(program Program, tracer *Tracer) (*Checker, *sync.Mutex) {
+  return innerchecker.NewChecker(program, tracer)
+}
+
+//go:linkname checkerGetRegularTypeOfLiteralType github.com/microsoft/typescript-go/internal/checker.(*Checker).getRegularTypeOfLiteralType
+func checkerGetRegularTypeOfLiteralType(recv *innerchecker.Checker, t *innerchecker.Type) *innerchecker.Type
+
+// Checker_getRegularTypeOfLiteralType returns the canonical regular form of a
+// literal type. TypeScript's checker uses this before comparing switch case
+// types because a source literal's fresh type and a union member's regular type
+// denote the same runtime value but have different pointers.
+func Checker_getRegularTypeOfLiteralType(recv *innerchecker.Checker, t *innerchecker.Type) *innerchecker.Type {
+  if recv == nil || t == nil {
+    return t
+  }
+  return checkerGetRegularTypeOfLiteralType(recv, t)
+}
+
+// ValueToString renders a literal type's value in TypeScript source form: a
+// string as a double-quoted, escaped literal, a number, boolean, or bigint as
+// the way it is written. It is the checker's own renderer, so a consumer
+// enumerating a literal union reports the values the way the compiler prints
+// them, including numeric formatting and string escaping it should not re-derive.
+//
+// It panics on a value it does not handle — notably the nil a computed enum
+// member carries — so a caller holding a `LiteralType.Value()` must reject nil
+// before calling this.
+func ValueToString(value any) string {
+  return innerchecker.ValueToString(value)
+}
+
+// Checker_typeToStringFullyQualified formats a type with the same stable,
+// alias-aware flags TypeScript uses in diagnostics that name union members.
+// Keeping the flag bundle inside the shim avoids leaking checker-internal enum
+// types through consumer code.
+func Checker_typeToStringFullyQualified(recv *innerchecker.Checker, t *innerchecker.Type, enclosingDeclaration *innerast.Node) string {
+  if recv == nil || t == nil {
+    return ""
+  }
+  return recv.TypeToStringEx(
+    t,
+    enclosingDeclaration,
+    innerchecker.TypeFormatFlagsAllowUniqueESSymbolType|
+      innerchecker.TypeFormatFlagsUseAliasDefinedOutsideCurrentScope|
+      innerchecker.TypeFormatFlagsUseFullyQualifiedType,
+    nil,
+  )
+}
+
+// Checker_symbolToValueString formats a symbol as a value-position expression
+// at enclosingDeclaration. AllowAnyNodeKind lets the checker emit indexed
+// access for enum members whose names cannot use dot notation.
+func Checker_symbolToValueString(recv *innerchecker.Checker, symbol *innerast.Symbol, enclosingDeclaration *innerast.Node) string {
+  if recv == nil || symbol == nil {
+    return ""
+  }
+  return recv.SymbolToStringEx(
+    symbol,
+    enclosingDeclaration,
+    innerast.SymbolFlagsValue,
+    innerchecker.SymbolFormatFlagsAllowAnyNodeKind,
+  )
+}
+
+// Checker_isSymbolAccessibleAsValue verifies that SymbolToStringEx can name a
+// symbol from enclosingDeclaration. Unlike GetAccessibleSymbolChain, the
+// checker also follows containing enum, class, and namespace symbols, so a
+// qualified member such as Domain.Mode.Done is accepted when its container is
+// visible.
+func Checker_isSymbolAccessibleAsValue(recv *innerchecker.Checker, symbol *innerast.Symbol, enclosingDeclaration *innerast.Node) bool {
+  if recv == nil || symbol == nil || enclosingDeclaration == nil {
+    return false
+  }
+  result := recv.IsSymbolAccessible(
+    symbol,
+    enclosingDeclaration,
+    innerast.SymbolFlagsValue,
+    false,
+  )
+  return result.Accessibility == innerprinter.SymbolAccessibilityAccessible
+}
+
+const (
+  SignatureKindCall = innerchecker.SignatureKindCall
+
+  TypeMapperKindUnknown = innerchecker.TypeMapperKindUnknown
+  TypeMapperKindSimple  = innerchecker.TypeMapperKindSimple
+  TypeMapperKindArray   = innerchecker.TypeMapperKindArray
+  TypeMapperKindMerged  = innerchecker.TypeMapperKindMerged
+
+  TypeFlagsAny             = innerchecker.TypeFlagsAny
+  TypeFlagsUnknown         = innerchecker.TypeFlagsUnknown
+  TypeFlagsUndefined       = innerchecker.TypeFlagsUndefined
+  TypeFlagsNull            = innerchecker.TypeFlagsNull
+  TypeFlagsVoid            = innerchecker.TypeFlagsVoid
+  TypeFlagsNever           = innerchecker.TypeFlagsNever
+  TypeFlagsObject          = innerchecker.TypeFlagsObject
+  TypeFlagsTemplateLiteral = innerchecker.TypeFlagsTemplateLiteral
+  TypeFlagsStringMapping   = innerchecker.TypeFlagsStringMapping
+  TypeFlagsUnion           = innerchecker.TypeFlagsUnion
+  TypeFlagsIntersection    = innerchecker.TypeFlagsIntersection
+  TypeFlagsLiteral         = innerchecker.TypeFlagsLiteral
+  TypeFlagsStringLiteral   = innerchecker.TypeFlagsStringLiteral
+  TypeFlagsNumberLiteral   = innerchecker.TypeFlagsNumberLiteral
+  TypeFlagsBigIntLiteral   = innerchecker.TypeFlagsBigIntLiteral
+  TypeFlagsBooleanLiteral  = innerchecker.TypeFlagsBooleanLiteral
+  TypeFlagsStringLike      = innerchecker.TypeFlagsStringLike
+  TypeFlagsNumberLike      = innerchecker.TypeFlagsNumberLike
+  TypeFlagsBigIntLike      = innerchecker.TypeFlagsBigIntLike
+  TypeFlagsBooleanLike     = innerchecker.TypeFlagsBooleanLike
+  TypeFlagsEnum            = innerchecker.TypeFlagsEnum
+  TypeFlagsEnumLiteral     = innerchecker.TypeFlagsEnumLiteral
+  TypeFlagsEnumLike        = innerchecker.TypeFlagsEnumLike
+
+  ObjectFlagsReference        = innerchecker.ObjectFlagsReference
+  ObjectFlagsClass            = innerchecker.ObjectFlagsClass
+  ObjectFlagsInterface        = innerchecker.ObjectFlagsInterface
+  ObjectFlagsClassOrInterface = innerchecker.ObjectFlagsClassOrInterface
+
+  ElementFlagsNone     = innerchecker.ElementFlagsNone
+  ElementFlagsRequired = innerchecker.ElementFlagsRequired
+  ElementFlagsOptional = innerchecker.ElementFlagsOptional
+  ElementFlagsRest     = innerchecker.ElementFlagsRest
+  ElementFlagsVariadic = innerchecker.ElementFlagsVariadic
+)
+
+// IsTupleType reports whether t is a fixed-length tuple type.
+func IsTupleType(t *innerchecker.Type) bool {
+  return innerchecker.IsTupleType(t)
+}
+
+// Checker_getIndexInfosOfType returns the index signatures (string/number/symbol
+// index infos) declared on t.
+func Checker_getIndexInfosOfType(recv *innerchecker.Checker, t *innerchecker.Type) []*innerchecker.IndexInfo {
+  return recv.GetIndexInfosOfType(t)
+}
+
+// Checker_getPropertiesOfType returns the named property symbols of t. For
+// union and intersection types this is the set of properties visible on every
+// member.
+func Checker_getPropertiesOfType(recv *innerchecker.Checker, t *innerchecker.Type) []*innerast.Symbol {
+  return recv.GetPropertiesOfType(t)
+}
+
+// Checker_getApparentProperties returns the properties visible on t after
+// resolving primitive wrapper types (e.g. string to String).
+func Checker_getApparentProperties(recv *innerchecker.Checker, t *innerchecker.Type) []*innerast.Symbol {
+  return recv.GetApparentProperties(t)
+}
+
+// Checker_getTypeArguments returns the type arguments of a generic reference
+// type, or nil when t is not a reference.
+func Checker_getTypeArguments(recv *innerchecker.Checker, t *innerchecker.Type) []*innerchecker.Type {
+  return recv.GetTypeArguments(t)
+}
+
+// Checker_getTypeOfSymbol returns the declared type of symbol, resolving
+// aliases and following late-bound types.
+func Checker_getTypeOfSymbol(recv *innerchecker.Checker, symbol *innerast.Symbol) *innerchecker.Type {
+  return recv.GetTypeOfSymbol(symbol)
+}
+
+// Checker_getTypeOfSymbolAtLocation returns the contextual type of symbol as
+// observed at the given AST node (useful for narrowed types in control flow).
+func Checker_getTypeOfSymbolAtLocation(recv *innerchecker.Checker, symbol *innerast.Symbol, node *innerast.Node) *innerchecker.Type {
+  return recv.GetTypeOfSymbolAtLocation(symbol, node)
+}
+
+// Checker_getTypeOfPropertyOfType looks up the type of the named property on t
+// and returns nil when no such property exists.
+func Checker_getTypeOfPropertyOfType(recv *innerchecker.Checker, t *innerchecker.Type, name string) *innerchecker.Type {
+  return recv.GetTypeOfPropertyOfType(t, name)
+}
+
+//go:linkname checkerGetPropertyNameForKnownSymbolName github.com/microsoft/typescript-go/internal/checker.(*Checker).getPropertyNameForKnownSymbolName
+func checkerGetPropertyNameForKnownSymbolName(recv *innerchecker.Checker, symbolName string) string
+
+// Checker_getPropertyNameForKnownSymbolName returns the late-bound property
+// name the checker uses for a member keyed by the global well-known symbol
+// `Symbol.<symbolName>` (e.g. "asyncIterator", "asyncDispose", "iterator").
+// It resolves the unique-symbol type of that property on the global
+// `SymbolConstructor` — including lib-provided and `declare global` augmented
+// members — so `(*Checker).GetPropertyOfType(t, name)` with the returned name
+// finds exactly the members declared as `[Symbol.<symbolName>]`. This is the
+// same resolution the checker itself performs when it validates `for await`
+// iterability, which is why a lint rule that mirrors typescript-eslint's
+// well-known-symbol protocol checks must go through it instead of matching
+// property-name text. When the global `Symbol` constructor lacks the member,
+// the checker's internal fallback name (a `\xFE@`-prefixed string no
+// source-declared property can late-bind to) is returned, so lookups simply
+// find nothing. Returns "" if recv is nil.
+func Checker_getPropertyNameForKnownSymbolName(recv *innerchecker.Checker, symbolName string) string {
+  if recv == nil {
+    return ""
+  }
+  return checkerGetPropertyNameForKnownSymbolName(recv, symbolName)
+}
+
+//go:linkname checkerGetIterationTypeOfIterable github.com/microsoft/typescript-go/internal/checker.(*Checker).getIterationTypeOfIterable
+func checkerGetIterationTypeOfIterable(
+  recv *innerchecker.Checker,
+  use innerchecker.IterationUse,
+  typeKind innerchecker.IterationTypeKind,
+  inputType *innerchecker.Type,
+  errorNode *innerast.Node,
+) *innerchecker.Type
+
+// Checker_getSynchronousIterationYieldType returns the value type produced by
+// inputType's checked `[Symbol.iterator]` protocol. It delegates to the same
+// TypeScript-Go traversal used for synchronous iteration, including inherited
+// and structural iterables, instantiated iterator returns, intersections, and
+// primitive strings. A nil result means the checker could not derive a valid
+// synchronous iteration type. Diagnostics are intentionally disabled because
+// callers use this as a type query after normal TypeScript checking.
+func Checker_getSynchronousIterationYieldType(recv *innerchecker.Checker, inputType *innerchecker.Type) *innerchecker.Type {
+  if recv == nil || inputType == nil {
+    return nil
+  }
+  return checkerGetIterationTypeOfIterable(
+    recv,
+    innerchecker.IterationUseElement,
+    innerchecker.IterationTypeKindYield,
+    inputType,
+    nil,
+  )
+}
+
+//go:linkname checkerGetAliasSymbolForTypeNode github.com/microsoft/typescript-go/internal/checker.(*Checker).getAliasSymbolForTypeNode
+func checkerGetAliasSymbolForTypeNode(recv *innerchecker.Checker, node *innerast.Node) *innerast.Symbol
+
+// Checker_getAliasSymbolForTypeNode returns the alias symbol that a type node
+// refers to when the node is itself a type alias reference (e.g. `type Foo = ...`).
+func Checker_getAliasSymbolForTypeNode(recv *innerchecker.Checker, node *innerast.Node) *innerast.Symbol {
+  return checkerGetAliasSymbolForTypeNode(recv, node)
+}
+
+//go:linkname checkerGetDeclarationOfAliasSymbol github.com/microsoft/typescript-go/internal/checker.(*Checker).getDeclarationOfAliasSymbol
+func checkerGetDeclarationOfAliasSymbol(recv *innerchecker.Checker, symbol *innerast.Symbol) *innerast.Node
+
+// Checker_getDeclarationOfAliasSymbol resolves an import/export alias symbol to
+// its original declaration node.
+func Checker_getDeclarationOfAliasSymbol(recv *innerchecker.Checker, symbol *innerast.Symbol) *innerast.Node {
+  return checkerGetDeclarationOfAliasSymbol(recv, symbol)
+}
+
+//go:linkname checkerGetTargetOfImportSpecifier github.com/microsoft/typescript-go/internal/checker.(*Checker).getTargetOfImportSpecifier
+func checkerGetTargetOfImportSpecifier(recv *innerchecker.Checker, node *innerast.Node) *innerast.Symbol
+
+// Checker_getTargetOfImportSpecifier resolves an import specifier node to the
+// exported symbol it binds. Returns nil if recv or node is nil.
+func Checker_getTargetOfImportSpecifier(recv *innerchecker.Checker, node *innerast.Node) *innerast.Symbol {
+  if recv == nil || node == nil {
+    return nil
+  }
+  return checkerGetTargetOfImportSpecifier(recv, node)
+}
+
+// Checker_getAliasedSymbol follows an alias chain to its final target symbol.
+// Returns nil if recv or symbol is nil.
+func Checker_getAliasedSymbol(recv *innerchecker.Checker, symbol *innerast.Symbol) *innerast.Symbol {
+  if recv == nil || symbol == nil {
+    return nil
+  }
+  return recv.GetAliasedSymbol(symbol)
+}
+
+// Checker_getExportsOfModule returns the exported symbols of a source-file or
+// namespace module symbol, resolving export-star aggregation the same way the
+// checker does for emit and services.
+func Checker_getExportsOfModule(recv *innerchecker.Checker, symbol *innerast.Symbol) []*innerast.Symbol {
+  if recv == nil || symbol == nil {
+    return nil
+  }
+  return recv.GetExportsOfModule(symbol)
+}
+
+//go:linkname checkerResolveEntityName github.com/microsoft/typescript-go/internal/checker.(*Checker).resolveEntityName
+func checkerResolveEntityName(
+  recv *innerchecker.Checker,
+  name *innerast.Node,
+  meaning innerast.SymbolFlags,
+  ignoreErrors bool,
+  dontResolveAlias bool,
+  location *innerast.Node,
+) *innerast.Symbol
+
+// Checker_resolveEntityName resolves a dotted entity name (identifier or
+// qualified name) to the symbol it denotes, filtered by meaning flags.
+// When ignoreErrors is true, resolution failures are silent. When
+// dontResolveAlias is true, the returned symbol may still be an alias.
+// Returns nil if recv or name is nil.
+func Checker_resolveEntityName(
+  recv *innerchecker.Checker,
+  name *innerast.Node,
+  meaning innerast.SymbolFlags,
+  ignoreErrors bool,
+  dontResolveAlias bool,
+  location *innerast.Node,
+) *innerast.Symbol {
+  if recv == nil || name == nil {
+    return nil
+  }
+  return checkerResolveEntityName(recv, name, meaning, ignoreErrors, dontResolveAlias, location)
+}
+
+//go:linkname checkerGetTypeNameSymbol github.com/microsoft/typescript-go/internal/checker.getTypeNameSymbol
+func checkerGetTypeNameSymbol(t *innerchecker.Type) *innerast.Symbol
+
+// Type_getTypeNameSymbol returns the symbol attached to t's type name field,
+// or nil when t has no name symbol or t is nil. Linked via go:linkname because
+// getTypeNameSymbol is a package-level unexported function in the checker.
+func Type_getTypeNameSymbol(t *innerchecker.Type) *innerast.Symbol {
+  if t == nil {
+    return nil
+  }
+  return checkerGetTypeNameSymbol(t)
+}
+
+//go:linkname checkerIsArrayType github.com/microsoft/typescript-go/internal/checker.(*Checker).isArrayType
+func checkerIsArrayType(recv *innerchecker.Checker, t *innerchecker.Type) bool
+
+// Checker_isArrayType reports whether t is the built-in Array<T> reference type.
+func Checker_isArrayType(recv *innerchecker.Checker, t *innerchecker.Type) bool {
+  return checkerIsArrayType(recv, t)
+}
+
+//go:linkname checkerGetBaseTypes github.com/microsoft/typescript-go/internal/checker.(*Checker).getBaseTypes
+func checkerGetBaseTypes(recv *innerchecker.Checker, t *innerchecker.Type) []*innerchecker.Type
+
+// Checker_getBaseTypes returns the list of base types (from `extends` clauses)
+// for a class or interface type. Returns nil if recv or t is nil.
+func Checker_getBaseTypes(recv *innerchecker.Checker, t *innerchecker.Type) []*innerchecker.Type {
+  if recv == nil || t == nil {
+    return nil
+  }
+  return checkerGetBaseTypes(recv, t)
+}
+
+//go:linkname checkerGetDeclaredTypeOfSymbol github.com/microsoft/typescript-go/internal/checker.(*Checker).getDeclaredTypeOfSymbol
+func checkerGetDeclaredTypeOfSymbol(recv *innerchecker.Checker, symbol *innerast.Symbol) *innerchecker.Type
+
+// Checker_getDeclaredTypeOfSymbol returns the declared (instance) type of a
+// class or interface symbol. Unlike Checker_getTypeOfSymbol, which yields the
+// constructor (static) type of a class symbol, the result IS a
+// ClassOrInterface type and is therefore safe to feed back into
+// Checker_getBaseTypes. This lets a consumer resolve a generic base's symbol to
+// its declared type and keep walking the base chain past the generic boundary
+// where getBaseTypes would otherwise dead-end (a Reference/Anonymous type has a
+// nil AsInterfaceType()). Returns nil if recv or symbol is nil.
+func Checker_getDeclaredTypeOfSymbol(recv *innerchecker.Checker, symbol *innerast.Symbol) *innerchecker.Type {
+  if recv == nil || symbol == nil {
+    return nil
+  }
+  return checkerGetDeclaredTypeOfSymbol(recv, symbol)
+}
+
+//go:linkname checkerGetMinArgumentCount github.com/microsoft/typescript-go/internal/checker.(*Checker).getMinArgumentCount
+func checkerGetMinArgumentCount(recv *innerchecker.Checker, signature *innerchecker.Signature) int
+
+// Checker_getMinArgumentCount returns the minimum number of required arguments
+// a call/construct signature accepts (parameters before the first optional or
+// rest parameter). A type-transform plugin uses this to gate the single-
+// required-parameter constructor strategy (`new C(x)`) and single-arg static
+// factory (`C.from(x)`). Returns 0 if recv or signature is nil.
+func Checker_getMinArgumentCount(recv *innerchecker.Checker, signature *innerchecker.Signature) int {
+  if recv == nil || signature == nil {
+    return 0
+  }
+  return checkerGetMinArgumentCount(recv, signature)
+}
+
+// Checker_getSignaturesOfType returns the call or construct signatures declared
+// on t, selected by kind (SignatureKindCall / SignatureKindConstruct). This is
+// the producer companion to Checker_getMinArgumentCount and
+// Checker_getReturnTypeOfSignature: without it the *Signature those two consume
+// could not be obtained. A type-transform plugin uses the construct signatures
+// of a class's constructor type to detect the `new C(x)` strategy and the call
+// signatures of a static `from` member to detect the `C.from(x)` strategy.
+// Returns nil if recv or t is nil.
+func Checker_getSignaturesOfType(recv *innerchecker.Checker, t *innerchecker.Type, kind innerchecker.SignatureKind) []*innerchecker.Signature {
+  if recv == nil || t == nil {
+    return nil
+  }
+  return recv.GetSignaturesOfType(t, kind)
+}
+
+// Checker_getReturnTypeOfSignature returns the return type of signature, used to
+// verify that a static `from(x)` factory actually returns the class instance
+// type before selecting the `C.from(x)` construction strategy. Returns nil if
+// recv or signature is nil.
+func Checker_getReturnTypeOfSignature(recv *innerchecker.Checker, signature *innerchecker.Signature) *innerchecker.Type {
+  if recv == nil || signature == nil {
+    return nil
+  }
+  return recv.GetReturnTypeOfSignature(signature)
+}
+
+// Signature_parameterCount returns the number of declared value parameters of a
+// call/construct signature. A rest parameter counts as one and the `this`
+// parameter is excluded (it is held separately from the value parameters).
+//
+// Checker_getMinArgumentCount alone cannot tell a zero-parameter signature
+// (`()` minimum 0) from a single-optional-parameter one (`(x?)` also
+// minimum 0). A type-transform plugin needs that distinction to replicate the
+// type-level "single meaningful argument" rule: a FIRST parameter must exist
+// and every later parameter must be optional or rest, as
+// `Signature_parameterCount(sig) >= 1 && Checker_getMinArgumentCount(c, sig) <= 1`.
+// Without it the `new C(x)` / `C.from(x)` strategies silently fall back to field
+// copy for every optional-first constructor or factory. Returns 0 if signature
+// is nil.
+func Signature_parameterCount(signature *innerchecker.Signature) int {
+  if signature == nil {
+    return 0
+  }
+  return len(signature.Parameters())
+}
+
+// Signature_parameters returns the declared value-parameter symbols of a
+// call/construct signature, in declaration order, excluding the synthetic
+// `this` parameter. The first element is the seed parameter of a `new C(seed)`
+// constructor or a `C.from(seed)` factory; feeding it to Checker_getTypeOfSymbol
+// yields the seed TYPE the plugin must decode before constructing the instance.
+//
+// Signature_parameterCount is len() of this slice; the slice itself is needed
+// because detection (count + min-args) is not enough; emission requires the
+// seed parameter's type. Returns nil if signature is nil.
+func Signature_parameters(signature *innerchecker.Signature) []*innerast.Symbol {
+  if signature == nil {
+    return nil
+  }
+  return signature.Parameters()
+}
+
+// Signature_hasRestParameter reports whether the signature's last value
+// parameter is a rest parameter (`...xs: S[]`). It is the signal a from/new
+// transform needs to tell a rest-only single-seed call `(...xs: S[])`, whose
+// seed is the ELEMENT S, from a genuine array-typed parameter `(seed: S[])`,
+// whose seed is the array S[]: getTypeOfSymbol yields `S[]` for BOTH, so without
+// this flag they are indistinguishable and the rest case decodes the wrong
+// shape.
+//
+// The rest ELEMENT is the seed ONLY when the rest parameter is the sole value
+// parameter, i.e. `Signature_hasRestParameter(sig) && Signature_parameterCount(sig) == 1`.
+// A leading-required + rest-tail signature `(s: S, ...r: R[])` also has a rest
+// parameter (this returns true), but its seed is the FIRST parameter S. Read it
+// from Signature_parameters(sig)[0], NOT the rest element, matching
+// ClassifiableSeed, whose `[infer P, ...Rest]` arm picks P=S there. Returns
+// false if signature is nil.
+func Signature_hasRestParameter(signature *innerchecker.Signature) bool {
+  if signature == nil {
+    return false
+  }
+  return signature.HasRestParameter()
+}
+
+// Checker_getRestTypeOfSignature returns the ELEMENT type of the signature's
+// rest parameter (`...xs: S[]` -> S; a tuple rest unwraps to its element too),
+// which is the seed type for a rest-ONLY single-argument constructor/factory,
+// matching ClassifiableSeed, which unwraps the rest to its element. When the
+// signature has NO rest parameter it falls back to `any` upstream; and a
+// leading-required + rest-tail `(s: S, ...r: R[])` has a rest parameter yet its
+// seed is the FIRST parameter S, not the rest element. So take the rest element
+// only when `Signature_hasRestParameter(sig) && Signature_parameterCount(sig) == 1`;
+// otherwise read Signature_parameters(sig)[0]. Returns nil if recv or signature
+// is nil.
+func Checker_getRestTypeOfSignature(recv *innerchecker.Checker, signature *innerchecker.Signature) *innerchecker.Type {
+  if recv == nil || signature == nil {
+    return nil
+  }
+  return recv.GetRestTypeOfSignature(signature)
+}
+
+//go:linkname checkerInstantiateType github.com/microsoft/typescript-go/internal/checker.(*Checker).instantiateType
+func checkerInstantiateType(recv *innerchecker.Checker, t *innerchecker.Type, m *innerchecker.TypeMapper) *innerchecker.Type
+
+//go:linkname checkerNewSimpleTypeMapper github.com/microsoft/typescript-go/internal/checker.newSimpleTypeMapper
+func checkerNewSimpleTypeMapper(source *innerchecker.Type, target *innerchecker.Type) *innerchecker.TypeMapper
+
+//go:linkname checkerNewTypeMapper github.com/microsoft/typescript-go/internal/checker.newTypeMapper
+func checkerNewTypeMapper(sources []*innerchecker.Type, targets []*innerchecker.Type) *innerchecker.TypeMapper
+
+// Checker_instantiateType substitutes the type parameters of `t` with the
+// concrete types in `mapper`, returning the instantiated type. A type-transform
+// plugin uses it to instantiate a generic class's constructor type with the
+// reference's type arguments, so a type parameter nested inside a container
+// (`A[]`, `[A, B]`) is substituted for free. Returns nil if recv or t is nil.
+func Checker_instantiateType(recv *innerchecker.Checker, t *innerchecker.Type, mapper *innerchecker.TypeMapper) *innerchecker.Type {
+  if recv == nil || t == nil {
+    return nil
+  }
+  return checkerInstantiateType(recv, t, mapper)
+}
+
+// Checker_newSimpleTypeMapper builds a single-pair type mapper that substitutes
+// `source` with `target`. It is the building block for instantiating a generic
+// class's constructor type with its reference type arguments. Returns nil if
+// source or target is nil.
+func Checker_newSimpleTypeMapper(source *innerchecker.Type, target *innerchecker.Type) *innerchecker.TypeMapper {
+  if source == nil || target == nil {
+    return nil
+  }
+  return checkerNewSimpleTypeMapper(source, target)
+}
+
+// Checker_newTypeMapper builds a parallel type mapper from corresponding
+// source and target slices. Unlike Checker_combineTypeMappers, it does not feed
+// one substitution's target through later substitutions, so a mapping such as
+// `[A, B] -> [B, A]` preserves both target identities. Returns nil when the
+// slices are empty, differ in length, or contain nil types.
+func Checker_newTypeMapper(sources []*innerchecker.Type, targets []*innerchecker.Type) *innerchecker.TypeMapper {
+  if len(sources) == 0 || len(sources) != len(targets) {
+    return nil
+  }
+  for i := range sources {
+    if sources[i] == nil || targets[i] == nil {
+      return nil
+    }
+  }
+  return checkerNewTypeMapper(sources, targets)
+}
+
+//go:linkname checkerCombineTypeMappers github.com/microsoft/typescript-go/internal/checker.(*Checker).combineTypeMappers
+func checkerCombineTypeMappers(recv *innerchecker.Checker, m1 *innerchecker.TypeMapper, m2 *innerchecker.TypeMapper) *innerchecker.TypeMapper
+
+// Checker_combineTypeMappers composes two mapper stages. The first mapper's
+// substituted target is instantiated through the second mapper, so use
+// Checker_newTypeMapper instead when source and target slices are parallel
+// declaration-parameter mappings. Returns m2 when m1 is nil, including when
+// recv is nil. Returns nil when m1 is non-nil and recv or m2 is nil, because
+// both are required to build a usable composite mapper.
+func Checker_combineTypeMappers(recv *innerchecker.Checker, m1 *innerchecker.TypeMapper, m2 *innerchecker.TypeMapper) *innerchecker.TypeMapper {
+  if m1 == nil {
+    return m2
+  }
+  if recv == nil || m2 == nil {
+    return nil
+  }
+  return checkerCombineTypeMappers(recv, m1, m2)
+}

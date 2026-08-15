@@ -1,0 +1,94 @@
+# Lint Setup
+
+Two steps. Five minutes.
+
+## 1. Install
+
+```bash
+npm install -D ttsc @ttsc/lint typescript
+```
+
+## 2. Write `lint.config.ts`
+
+Drop a `lint.config.ts` next to `tsconfig.json`:
+
+```ts
+// lint.config.ts
+import type { ITtscLintConfig } from "@ttsc/lint";
+
+export default {
+  rules: {
+    "no-var": "error",
+    "prefer-const": "error",
+    "eqeqeq": "error",
+    "typescript/no-explicit-any": "warning",
+  },
+  format: {
+    printWidth: 100,
+    singleQuote: true,
+    trailingComma: "all",
+  },
+} satisfies ITtscLintConfig;
+```
+
+`"error"` fails the build. `"warning"` prints. `"off"` disables the rule.
+
+Rules with options use an ESLint-style tuple such as `["error", { "allowElseIf": false }]`. A built-in rule documented without options accepts only a severity, either bare or in a one-element tuple; adding an object or positional payload is a configuration error instead of a silently ignored setting, including while the rule is `"off"`.
+
+To exclude generated files from linting entirely, add a top-level `ignores` list (e.g. `ignores: [".next/**/*.ts", "next-env.d.ts"]`). Without a `files` filter it is a global ignore: the matched paths are skipped by every rule, including rules inherited through `extends`.
+
+The `format` block configures the formatter, keys mirror `.prettierrc`. Presence of the block (even empty `format: {}`) enables `ttsc format` at Prettier defaults. It does not make `ttsc check` fail on formatting unless you set `format.severity`.
+
+Executable lint configs are evaluated in an isolated process and cached with their complete local module-resolution graph. The cache fingerprints imported files, package manifests, resolution directories, and package files without publishing package contents as recursively watched project data. Editing a helper, changing a package entry point, adding a higher-priority extension candidate, or replacing a symlink therefore invalidates the prior result without touching the config itself. `TTSC_LINT_DISABLE_CONFIG_CACHE=1` remains available when diagnosing evaluation behavior; it is not required for imported helpers. Config and contributor logs are preserved on stderr so they cannot corrupt JSON CLI output or LSP frames.
+
+An executable config is a Node module, and it runs under the module format Node would give it: an explicit `.cts`/`.mts` extension decides on its own, and an ambiguous `.ts` or `.js` config follows the nearest `package.json` `"type"` above it. So `__dirname` works in a CommonJS package and `import.meta.dirname` works in a `"type": "module"` package, each without renaming the file. The config's own Program also sees every `@types` package installed beside it, so Node's globals need no `/// <reference types="node" />` directive. Your `tsconfig.json` does not have to include the config file — it usually should not, since a config in `include` would land in your `outDir`.
+
+By default `@ttsc/lint` discovers `lint.config.{ts,cts,mts,js,cjs,mjs,json}` by walking upward from the tsconfig directory, then — when that walk finds nothing — upward from the working directory. When a build integration compiles through a generated wrapper tsconfig in a temp directory (the bundler adapters do this whenever an alias or a `compilerOptions` overlay is set), the integration declares the real project root (`pluginConfigDir` on `TtscCompiler`) and discovery starts there instead of the temp tree. To override that discovery with an explicit path, pass `configFile` on the plugin entry in `tsconfig.json` (a relative path resolves against the same base directory):
+
+```jsonc
+// tsconfig.json
+{
+  "compilerOptions": {
+    "plugins": [
+      { "name": "@ttsc/lint", "configFile": "./tools/lint.config.ts" }
+    ]
+  }
+}
+```
+
+`configFile` is the only host-owned key beyond `name`, `enabled`, `stage`, and `transform`, every other configuration lives inside the resolved `lint.config.*`.
+
+## See it
+
+```ts
+// src/index.ts
+var x: number = 3;
+let y: number = 4;
+const z: string = 5;
+
+console.log(x + y + z);
+```
+
+```text
+$ npx ttsc --noEmit
+src/index.ts:3:7 - error TS2322: Type 'number' is not assignable to type 'string'.
+
+3 const z: string = 5;
+        ~
+
+src/index.ts:2:5 - error TS17397: [prefer-const] Use const instead of let.
+
+2 let y: number = 4;
+      ~~~~~~~~~~~~~
+
+src/index.ts:1:1 - error TS11966: [no-var] Unexpected var, use let or const instead.
+
+1 var x: number = 3;
+  ~~~~~~~~~~~~~~~~~~
+```
+
+Type errors (`TS2322`) and lint violations (`TS17397`, `TS11966`) come out in the same stream. Your CI step that already runs `ttsc` now gates lint too.
+
+## Next
+
+→ [Format](/docs/lint/format), the `format` block keys and the rules they drive. → [Rules](/docs/lint/rules), the lint rule catalog.

@@ -1,0 +1,32 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "commonjs",
+    "strict": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "paths": {
+      "@/*": ["./src/*"],
+      "@lib/*": ["./src/modules/*"],
+      "exact-message": ["./src/modules/message.ts"]
+    },
+    "outDir": "dist",
+    "rootDir": "src",
+    "plugins": [
+      {
+        "transform": "@ttsc/lint"
+      },
+      {
+        "transform": "@ttsc/banner"
+      },
+      {
+        "transform": "@ttsc/paths"
+      },
+      {
+        "transform": "@ttsc/strip"
+      }
+    ]
+  },
+  "include": ["src"]
+}

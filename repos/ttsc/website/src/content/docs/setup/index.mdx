@@ -1,0 +1,46 @@
+import { Tabs } from "nextra/components";
+
+# Setup
+
+One toolchain, several surfaces. Each page here wires `ttsc` into one of them, and each is individually complete: its own install line, its own config, its own verification.
+
+## The common base
+
+Every surface starts from the same two packages:
+
+<Tabs items={["npm", "pnpm", "yarn", "bun"]}>
+  <Tabs.Tab>
+    ```bash
+    npm install -D ttsc typescript
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash
+    pnpm add -D ttsc typescript
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash
+    yarn add -D ttsc typescript
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash
+    bun add -d ttsc typescript
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+`ttsc` reads the `tsconfig.json` you already have, and `npx ttsc` builds where `npx tsc` did. Each page below adds its own package on top of this base.
+
+## Pick your surface
+
+- [CLI & Scripts](/docs/setup/ttsc): package.json scripts, watch mode, and CI with plugin-binary caching.
+- [Lint & Format](/docs/setup/lint): `lint.config.ts`, severities, and the format block.
+- [Evidence Graph](/docs/setup/evidence): make every requirement demand an acknowledgement from the code that satisfies it.
+- [Compiler Knowledge Graph](/docs/setup/graph): connect a coding agent to the compiler's graph.
+- [VS Code Plugin](/docs/setup/vscode): editor diagnostics that match your build, plus format on save.
+- [Unplugin (Bundlers)](/docs/setup/unplugin): Vite, Rollup, Rolldown, esbuild, webpack, Rspack, Next.js, Turbopack, Farm, and Bun.
+- [Metro (React Native, Expo)](/docs/setup/metro): the Metro transformer for React Native and Expo.
+
+New to `ttsc`? Start from the [Introduction](/docs), which covers the install, the first run, and the flagship features.

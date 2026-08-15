@@ -1,0 +1,171 @@
+import * as template from "@typia/template";
+import { NamingConvention } from "@typia/utils";
+import fs from "fs";
+
+import { TestGlobal } from "../TestGlobal";
+import { TestAutomationMetadata } from "./TestAutomationMetadata";
+import { TestAutomationTemplate } from "./TestAutomationTemplate";
+import { write_common } from "./writers/write_common";
+
+export namespace TestAutomationController {
+  export const iterate = async (
+    visit: (location: string) => Promise<void>,
+  ): Promise<void> => {
+    const location: string = `${TestGlobal.ROOT}/src/features`;
+    if (fs.existsSync(location))
+      await fs.promises.rm(location, { recursive: true, force: true });
+    await fs.promises.mkdir(location, { recursive: true });
+
+    const metadata: TestAutomationMetadata<any>[] = await loadMetadata();
+    const templates: TestAutomationTemplate[] = TestAutomationTemplate.DATA;
+    for (const tpl of templates)
+      if (tpl.createOnly) await generateFeatureSet(visit, tpl, metadata, true);
+      else {
+        await generateFeatureSet(visit, tpl, metadata, false);
+        if (tpl.creatable) await generateFeatureSet(visit, tpl, metadata, true);
+      }
+
+    // Run composite function tests (ObjectSimple only)
+    const compositeLocation: string = `${TestGlobal.ROOT}/src/composite`;
+    if (fs.existsSync(compositeLocation)) await visit(compositeLocation);
+  };
+
+  async function loadMetadata(): Promise<TestAutomationMetadata<any>[]> {
+    const path: string = `${TestGlobal.ROOT}/../template/src/structures`;
+    const output: TestAutomationMetadata<any>[] = [];
+    const metadata: Record<
+      string,
+      TestAutomationMetadata<any>
+    > = template as unknown as Record<string, TestAutomationMetadata<any>>;
+
+    for (const file of await fs.promises.readdir(path)) {
+      if (file === "index.ts") continue;
+
+      const name: string = file.substring(0, file.length - 3);
+      const modulo: TestAutomationMetadata<any> | undefined = metadata[name];
+      if (modulo === undefined) {
+        throw new Error(`@typia/template does not export ${name}`);
+      }
+      output.push({
+        ...modulo,
+        name,
+      });
+    }
+    return output;
+  }
+
+  async function generateFeatureSet(
+    visit: (location: string) => Promise<void>,
+    template: TestAutomationTemplate,
+    metadata: TestAutomationMetadata<any>[],
+    create: boolean,
+  ): Promise<void> {
+    const method: string = TestAutomationTemplate.method(template, create);
+    const path: string = [
+      TestGlobal.ROOT,
+      "src",
+      "features",
+      TestAutomationTemplate.directory(template, create),
+    ].join("/");
+
+    if (fs.existsSync(path))
+      await fs.promises.rm(path, {
+        recursive: true,
+        force: true,
+      });
+    await fs.promises.mkdir(path, { recursive: true });
+
+    for (const s of metadata) {
+      if (s.generate === undefined) continue;
+      else if (template.jsonable && s.JSONABLE === false) continue;
+      else if (template.strict && s.ADDABLE === false) continue;
+      else if (template.module === "protobuf" && s.BINARABLE === false)
+        continue;
+      else if (template.query === true && s.QUERY !== true) continue;
+      else if (template.headers === true && s.HEADERS !== true) continue;
+      else if (template.formData === true && s.FORMDATA !== true) continue;
+      else if (template.primitive && s.PRIMITIVE === false) continue;
+      else if (template.resolved && s.RESOLVABLE === false) continue;
+      else if (template.random && s.RANDOM === false) continue;
+      else if (
+        template.method.toLowerCase().includes("prune") &&
+        s.ADDABLE === false
+      )
+        continue;
+      else if (template.dynamic === false && s.name.startsWith("Dynamic"))
+        continue;
+
+      const location: string = `${path}/test_${TestAutomationTemplate.directory(
+        template,
+        create,
+      )
+        .split(".")
+        .join("_")}_${s.name}.ts`;
+      await fs.promises.writeFile(
+        location,
+        writeScript(template, method, s, create),
+        "utf8",
+      );
+    }
+    await visit(path);
+  }
+
+  function writeScript(
+    feat: TestAutomationTemplate,
+    method: string,
+    struct: TestAutomationMetadata<any>,
+    create: boolean,
+  ): string {
+    const content: string = feat.programmer
+      ? feat.programmer(create)(struct.name)
+      : write_common({
+          module: feat.module,
+          prefix: feat.prefix,
+          method,
+          asynchronous: feat.asynchronous,
+        })(create)(struct.name);
+    if (false === method.toLowerCase().includes("assert")) return content;
+
+    method = method.replace("Async", "");
+    const from: number = content.indexOf("export const");
+    const to: number = content.indexOf("(", content.indexOf("_test", from + 1));
+    const replacer =
+      feat.custom === true
+        ? create === true
+          ? (str: string) =>
+              str.replace(
+                `${method}<${struct.name}>()`,
+                `${method}<${struct.name}>((p) => new CustomGuardError(p))`,
+              )
+          : feat.module === "functional"
+            ? (str: string) =>
+                str.replace(
+                  `${method}(p)`,
+                  `${method}(p, (p) => new CustomGuardError(p))`,
+                )
+            : (str: string) =>
+                str.replace(
+                  `${method}<${struct.name}>(input)`,
+                  `${method}<${struct.name}>(input, (p) => new CustomGuardError(p))`,
+                )
+        : (str: string) => str;
+    return [
+      content.substring(0, from),
+      feat.custom === true
+        ? `import { CustomGuardError } from "../../internal/CustomGuardError";\n\n`
+        : `import { TypeGuardError } from "typia";\n\n`,
+      feat.custom === true
+        ? content
+            .substring(from, to)
+            .replace(
+              create ? NamingConvention.capitalize(feat.method) : feat.method,
+              create
+                ? `${NamingConvention.capitalize(feat.method)}Custom`
+                : `${feat.method}Custom`,
+            )
+        : content.substring(from, to),
+      feat.custom === true ? "(CustomGuardError)" : "(TypeGuardError)",
+      replacer(content.substring(to)),
+    ].join("");
+  }
+}

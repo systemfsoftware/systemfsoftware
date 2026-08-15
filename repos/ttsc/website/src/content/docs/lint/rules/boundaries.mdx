@@ -1,0 +1,288 @@
+# Architecture boundaries
+
+Architecture-boundary rules that enforce import direction and module visibility between configured source-path _elements_ (layers, features, apps in a monorepo).
+
+Every rule operates on the _resolved source file_ of an import. Relative imports are followed to the real `.ts`/`.tsx`/`.d.ts` file before classification.
+
+Source: ported from [`eslint-plugin-boundaries`](https://github.com/javierbrea/eslint-plugin-boundaries) (MIT).
+
+## Rule index
+
+Each rule name links to the detailed section below.
+
+Examples come from the checked [lint corpus](https://github.com/samchon/ttsc/tree/master/tests/test-lint/src/cases) or package-level rule tests when project layout matters.
+
+- [`boundaries/element-types`](#rule-boundaries-element-types): Enforce allowed dependency directions between configured source-path element types.
+- [`boundaries/entry-point`](#rule-boundaries-entry-point): Require imports that cross element boundaries to target the importee element's configured public entry files.
+- [`boundaries/external`](#rule-boundaries-external): Restrict external package imports by package or specifier pattern.
+- [`boundaries/no-private`](#rule-boundaries-no-private): Reject imports of files declared _private_ by a parent element from outside.
+- [`boundaries/no-unknown`](#rule-boundaries-no-unknown): Reject relative imports whose resolved source file falls under no configured element.
+- [`boundaries/dependencies`](#rule-boundaries-dependencies): Unified dependency-direction rule from upstream `eslint-plugin-boundaries`.
+
+## Configuration example
+
+```ts
+// lint.config.ts
+import type { ITtscLintConfig } from "@ttsc/lint";
+
+export default {
+  rules: {
+    "boundaries/element-types": [
+      "error",
+      {
+        elements: [
+          { type: "app", pattern: "src/app/**" },
+          {
+            type: "domain",
+            pattern: "src/domain/**",
+            entry: "index.ts",
+            private: "internal/**",
+          },
+        ],
+        rules: [{ from: "app", disallow: "domain" }],
+      },
+    ],
+    "boundaries/entry-point": [
+      "error",
+      {
+        elements: [
+          { type: "domain", pattern: "src/domain/**", entry: "index.ts" },
+        ],
+      },
+    ],
+    "boundaries/no-private": [
+      "error",
+      {
+        elements: [
+          { type: "domain", pattern: "src/domain/**", private: "internal/**" },
+        ],
+      },
+    ],
+    "boundaries/no-unknown": [
+      "error",
+      {
+        elements: [
+          { type: "app", pattern: "src/app/**" },
+          { type: "domain", pattern: "src/domain/**" },
+        ],
+      },
+    ],
+    "boundaries/external": ["error", { disallow: ["@legacy/sdk"] }],
+  },
+} satisfies ITtscLintConfig;
+```
+
+## Rules
+
+<a id="rule-boundaries-element-types"></a>
+
+### `boundaries/element-types`
+
+Enforce allowed dependency directions between configured source-path element types.
+
+Each `element` entry declares a name, a matching glob, and the other element types it is allowed to import.
+
+Imports that fall outside the allow-list are reported.
+
+Options:
+
+- `elements?: readonly ITtscLintBoundariesElement[]`
+
+  Element definitions. Each entry declares a `type` name, a `pattern` glob matched against the source path, and optionally an `entry` file and a `private` flag. Every rule that takes element definitions resolves a file to an element through this list before any policy is consulted.
+
+- `default?: "allow" | "disallow"`
+
+  Fallback policy when no rule matches. Default: `"allow"`.
+
+- `rules?: readonly ITtscLintBoundariesElementTypesRule[]`
+
+  Ordered dependency policies. First matching policy wins.
+
+Example:
+
+```ts
+// src/app/main.ts
+// reports: boundaries/element-types (error)
+import "../domain/internal";
+import "./local";
+```
+
+<figure className="rule-clip">
+  <video
+    controls
+    muted
+    loop
+    playsInline
+    preload="none"
+    aria-label="boundaries/element-types: the diagnostic this rule reports"
+  >
+    <source src="https://github.com/user-attachments/assets/db2da0ef-4de4-4684-942b-9ae516cd697a" type="video/mp4" />
+  </video>
+</figure>
+
+<a id="rule-boundaries-entry-point"></a>
+
+### `boundaries/entry-point`
+
+Require imports that cross element boundaries to target the importee element's configured public entry files (typically `index.ts`), so the public surface of each element is explicit.
+
+Example:
+
+```ts
+// src/app/main.ts
+import "../domain";
+// reports: boundaries/entry-point (error)
+import "../domain/internal";
+```
+
+<a id="rule-boundaries-external"></a>
+
+### `boundaries/external`
+
+Restrict external package imports by package or specifier pattern.
+
+Useful for forbidding direct imports of an underlying library when a project-local facade exists.
+
+Options:
+
+- `allow?: string | readonly string[]`
+
+  External package/specifier patterns that are allowed. Empty means all.
+
+- `disallow?: string | readonly string[]`
+
+  External package/specifier patterns that are rejected.
+
+- `message?: string`
+
+  Optional diagnostic override.
+
+Example:
+
+```ts
+// src/app/main.ts
+// reports: boundaries/external (error)
+import "@legacy/sdk/client";
+import "react";
+```
+
+<a id="rule-boundaries-no-private"></a>
+
+### `boundaries/no-private`
+
+Reject imports of files declared _private_ by a parent element from outside that element.
+
+Combines with `element-types` to keep implementation details hidden.
+
+Example:
+
+```ts
+// src/app/main.ts
+// reports: boundaries/no-private (error)
+import "../domain/internal/secret";
+```
+
+<figure className="rule-clip">
+  <video
+    controls
+    muted
+    loop
+    playsInline
+    preload="none"
+    aria-label="boundaries/no-private: the diagnostic this rule reports"
+  >
+    <source src="https://github.com/user-attachments/assets/47d68dcc-d1a5-4142-a95a-4a318900d0d9" type="video/mp4" />
+  </video>
+</figure>
+
+<a id="rule-boundaries-no-unknown"></a>
+
+### `boundaries/no-unknown`
+
+Reject relative imports whose resolved source file falls under no configured element.
+
+Catches stray files that escape the project's boundary map.
+
+Example:
+
+```ts
+// src/app/main.ts
+// reports: boundaries/no-unknown (error)
+import "../shared/util";
+```
+
+<a id="rule-boundaries-dependencies"></a>
+
+### `boundaries/dependencies`
+
+Unified, direction-aware dependency policy from upstream `eslint-plugin-boundaries`.
+
+The rule classifies TypeScript-resolved targets, including `paths` aliases and re-exports, before evaluating policy. It recognizes static imports, exports, `import = require`, dynamic `import()`, static `require()`, and `import()` type nodes. Declaration files use the same policy.
+
+Policies are processed in order and the last matching effect wins. Within one policy, `disallow` is checked before `allow`. String selectors remain shorthand for element types; object selectors can also match `origin`, `source`, element-local `path`, and `entry` / `private` / `unknown` classification.
+
+Options:
+
+- `default?: "allow" | "disallow"`
+
+  Fallback policy when no effect matches. Default: `"disallow"`.
+
+- `policies?: readonly ITtscLintBoundariesDependenciesPolicy[]`
+
+  Ordered dependency policies. This is the preferred current name.
+
+- `rules?: readonly ITtscLintBoundariesDependenciesPolicy[]`
+
+  Compatibility alias for `policies`; do not configure both.
+
+- `checkAllOrigins?: boolean`
+
+  Check external and `node:` dependencies as well as local targets. Default: `false`.
+
+- `checkUnknownLocals?: boolean`
+
+  Check resolved or unresolved local targets that match no configured element. Default: `false`.
+
+- `checkInternals?: boolean`
+
+  Check dependencies within the same configured element root. Default: `false`.
+
+- `message?: string`
+
+  Global diagnostic override. Policy messages take precedence. Messages can use `{{from.type}}`, `{{from.path}}`, `{{from.origin}}`, `{{to.type}}`, `{{to.path}}`, `{{to.origin}}`, `{{dependency.source}}`, `{{dependency.kind}}`, `{{dependency.nodeKind}}`, and `{{policy.index}}`.
+
+Example:
+
+```ts
+// src/app/main.ts
+// reports: boundaries/dependencies (error)
+import "../domain/internal/secret";
+import "./local";
+
+// lint.config.ts
+export default {
+  rules: {
+    "boundaries/dependencies": [
+      "error",
+      {
+        elements: [
+          { type: "app", pattern: "src/app/**" },
+          {
+            type: "domain",
+            pattern: "src/domain/**",
+            entry: "index.ts",
+            private: "internal/**",
+          },
+        ],
+        default: "allow",
+        policies: [
+          {
+            from: "app",
+            disallow: { to: { type: "domain", private: true } },
+          },
+        ],
+      },
+    ],
+  },
+} satisfies ITtscLintConfig;
+```

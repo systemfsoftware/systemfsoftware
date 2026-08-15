@@ -1,0 +1,20 @@
+{
+  "name": "@ttsc/win32-x64",
+  "version": "0.27.0",
+  "description": "Windows x64 native ttsc/ttscserver/ttscgraph binaries and bundled Go compiler for ttsc.",
+  "os": ["win32"],
+  "cpu": ["x64"],
+  "scripts": {
+    "build": "node ../../scripts/build-platform-package.cjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/samchon/ttsc"
+  },
+  "author": "Jeongho Nam",
+  "license": "MIT",
+  "files": ["bin", "package.json", "README.md"],
+  "publishConfig": {
+    "access": "public"
+  }
+}

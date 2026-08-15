@@ -1,0 +1,10 @@
+{
+  "private": true,
+  "name": "@typia/config",
+  "version": "13.3.0",
+  "description": "Shared build configuration for typia packages",
+  "devDependencies": {
+    "@ttsc/unplugin": "catalog:typescript",
+    "tinyglobby": "^0.2.12"
+  }
+}

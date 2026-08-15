@@ -1,0 +1,31 @@
+{
+  "private": true,
+  "name": "@typia/test-interface",
+  "version": "13.3.0",
+  "description": "Type tests for @typia/interface.",
+  "scripts": {
+    "start": "ttsc"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/samchon/typia"
+  },
+  "keywords": [
+    "typia",
+    "interface",
+    "test"
+  ],
+  "author": "Jeongho Nam",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/samchon/typia/issues"
+  },
+  "homepage": "https://typia.io",
+  "devDependencies": {
+    "typescript": "catalog:typescript",
+    "ttsc": "catalog:typescript"
+  },
+  "dependencies": {
+    "@typia/interface": "workspace:^"
+  }
+}

@@ -1,0 +1,1352 @@
+"use client";
+
+import { useEffect, useState } from "react";
+
+import type { ITtscWebsiteBenchmark } from "../../structures/ITtscWebsiteBenchmark";
+import TtscWebsiteBenchmarkFormat from "./TtscWebsiteBenchmarkFormat";
+import TtscWebsiteBenchmarkHostPanel from "./TtscWebsiteBenchmarkHostPanel";
+
+const {
+  findMeasurement,
+  formatDuration,
+  formatMultiplier,
+  lintMs,
+  lintPluginMs,
+  measurementMs,
+  transformHostMs,
+} = TtscWebsiteBenchmarkFormat;
+
+type BenchmarkMeasurement = ITtscWebsiteBenchmark.Measurement;
+type BenchmarkProject = ITtscWebsiteBenchmark.Project;
+type BenchmarkReport = ITtscWebsiteBenchmark.Report;
+type BenchmarkThreading = ITtscWebsiteBenchmark.Threading;
+
+type BenchmarkTab = "summary" | "build" | "check" | "lint" | "format";
+type Operation = "build" | "noEmit";
+type Threading = BenchmarkThreading;
+
+const TABS: { id: BenchmarkTab; label: string }[] = [
+  { id: "summary", label: "Summary" },
+  { id: "build", label: "Build" },
+  { id: "check", label: "Type-check" },
+  { id: "lint", label: "Lint" },
+  { id: "format", label: "Format" },
+];
+
+const panelClass =
+  "overflow-hidden rounded-xl border border-[#c7dff4] bg-white shadow-[0_14px_38px_rgba(49,120,198,0.10)]";
+const panelHeaderClass =
+  "flex flex-wrap items-end justify-between gap-2 border-b border-[#c7dff4] bg-[#f2f8fe] px-4 py-3";
+
+export default function TtscWebsiteBenchmarkDashboard() {
+  const [report, setReport] = useState<BenchmarkReport | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<BenchmarkTab>(() =>
+    typeof window === "undefined"
+      ? "summary"
+      : tabFromHash(window.location.hash),
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/benchmark/performance.json")
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json() as Promise<BenchmarkReport>;
+      })
+      .then((data) => {
+        if (!cancelled) setReport(data);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled)
+          setError(err instanceof Error ? err.message : String(err));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    const onHashChange = () => setActiveTab(tabFromHash(window.location.hash));
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
+
+  if (error)
+    return (
+      <p className="not-prose my-6 rounded-xl border border-[#c7dff4] bg-white px-4 py-3 font-mono text-[12px] text-slate-500">
+        Could not load benchmark data ({error}).
+      </p>
+    );
+
+  if (!report)
+    return (
+      <p className="not-prose my-6 rounded-xl border border-[#c7dff4] bg-white px-4 py-3 font-mono text-[12px] text-slate-500">
+        Loading benchmark results…
+      </p>
+    );
+
+  return (
+    <div className="ttsc-benchmark not-prose my-6 space-y-5">
+      <Snapshot report={report} />
+      <nav
+        aria-label="Benchmark views"
+        className="flex gap-1 overflow-x-auto rounded-xl border border-[#c7dff4] bg-white p-1.5 shadow-[0_8px_24px_rgba(49,120,198,0.08)]"
+      >
+        {TABS.map((tab) => {
+          const active = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              className={`shrink-0 rounded px-3 py-1.5 text-[13px] font-medium ${
+                active
+                  ? "bg-[#3178c6] text-white shadow-[0_5px_14px_rgba(49,120,198,0.24)]"
+                  : "text-slate-500 hover:bg-[#eaf4ff] hover:text-[#235a97]"
+              }`}
+              onClick={() => {
+                setActiveTab(tab.id);
+                window.history.replaceState(null, "", `#${tab.id}`);
+              }}
+            >
+              {tab.label}
+            </button>
+          );
+        })}
+      </nav>
+
+      {activeTab === "summary" ? <SummaryTab report={report} /> : null}
+      {activeTab === "build" ? (
+        <OperationTab
+          report={report}
+          op="build"
+          title="Build"
+          description="Each project groups tsc (legacy), ttsc ST/MT, and optional tsgo ST/MT in one chart."
+        />
+      ) : null}
+      {activeTab === "check" ? (
+        <OperationTab
+          report={report}
+          op="noEmit"
+          title="Type-check"
+          description="Each project groups tsc (legacy), ttsc ST/MT, and optional tsgo ST/MT in one noEmit chart."
+        />
+      ) : null}
+      {activeTab === "lint" ? <LintTab report={report} /> : null}
+      {activeTab === "format" ? <FormatTab report={report} /> : null}
+    </div>
+  );
+}
+
+function tabFromHash(hash: string): BenchmarkTab {
+  const id = hash.replace(/^#/, "");
+  return TABS.some((tab) => tab.id === id) ? (id as BenchmarkTab) : "summary";
+}
+
+function Snapshot({ report }: { report: BenchmarkReport }) {
+  const best = bestRatio(report);
+  const stats = [
+    { label: "Projects", value: report.projects.length.toLocaleString() },
+    {
+      label: "Runs per cell",
+      value:
+        report.runs === undefined
+          ? "not recorded"
+          : `${report.runs} measured` +
+            (report.warmup ? ` + ${report.warmup} warmup` : ""),
+    },
+    {
+      label: "Best ratio",
+      value: best ? formatMultiplier(best.factor) : "-",
+      note: best ? `${best.project.name}: ${best.label}` : undefined,
+    },
+    { label: "Measured", value: formatDate(report.date) },
+  ];
+
+  return (
+    <section className={panelClass}>
+      <div className="border-b border-[#c7dff4] bg-[#f2f8fe] px-4 py-3">
+        <h2 className="text-base font-semibold text-[#102a43]">
+          Benchmark Snapshot
+        </h2>
+        <p className="mt-1 text-[13px] text-slate-500">
+          Prepared-clone wall-clock timings. Ratios use the fastest command time
+          per cell from the generated benchmark JSON.
+        </p>
+      </div>
+      <dl className="grid grid-cols-2 gap-px bg-[#c7dff4] xl:grid-cols-4">
+        {stats.map((stat) => (
+          <div key={stat.label} className="bg-white px-4 py-3">
+            <dt className="font-mono text-[11px] uppercase text-slate-500">
+              {stat.label}
+            </dt>
+            <dd className="mt-1 text-sm font-semibold text-[#102a43]">
+              {stat.value}
+            </dd>
+            {stat.note ? (
+              <dd
+                className="mt-1 truncate text-[11px] text-slate-500"
+                title={stat.note}
+              >
+                {stat.note}
+              </dd>
+            ) : null}
+          </div>
+        ))}
+      </dl>
+    </section>
+  );
+}
+
+function SummaryTab({ report }: { report: BenchmarkReport }) {
+  const build = bestOperationProject(report, "build");
+  const check = bestOperationProject(report, "noEmit");
+  const lint = bestLintProject(report, "noEmit");
+  const format = bestFormatProject(report);
+
+  return (
+    <div className="space-y-4">
+      <TtscWebsiteBenchmarkHostPanel host={report.host} date={report.date} />
+      <section className={panelClass}>
+        <TableHeader
+          title="Summary Winners"
+          description="Each row picks the project that posts the biggest measured speedup for that operation."
+          suffix={`${[build, check, lint, format].filter(Boolean).length} fields`}
+        />
+        <div className="divide-y divide-[#d8e7f4]">
+          {build ? (
+            <ProjectOperationRows
+              project={build.project}
+              op="build"
+              title="Build"
+            />
+          ) : null}
+          {check ? (
+            <ProjectOperationRows
+              project={check.project}
+              op="noEmit"
+              title="Type-check"
+            />
+          ) : null}
+          {lint ? (
+            <ProjectLintRows project={lint.project} op="noEmit" title="Lint" />
+          ) : null}
+          {format ? (
+            <ProjectFormatRows project={format.project} title="Format" />
+          ) : null}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function OperationTab({
+  report,
+  op,
+  title,
+  description,
+}: {
+  report: BenchmarkReport;
+  op: Operation;
+  title: string;
+  description: string;
+}) {
+  const projects = report.projects.filter((project) =>
+    hasComparableOperation(project, op),
+  );
+  const hero = bestOperationProject(report, op);
+
+  return (
+    <div className="space-y-4">
+      <HeroRatio winner={hero} scope={title} />
+      <section className={panelClass}>
+        <TableHeader
+          title={`${title} Tool Matrix`}
+          description={description}
+          suffix={`${projects.length.toLocaleString()} projects`}
+        />
+        <div className="divide-y divide-[#d8e7f4]">
+          {projects.length > 0 ? (
+            projects.map((project) => (
+              <ProjectOperationRows
+                key={`${project.name}:${op}`}
+                project={project}
+                op={op}
+              />
+            ))
+          ) : (
+            <p className="px-4 py-4 text-[12px] text-slate-500">
+              No comparable measurements recorded for this view.
+            </p>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function ProjectOperationRows({
+  project,
+  op,
+  title,
+}: {
+  project: BenchmarkProject;
+  op: Operation;
+  title?: string;
+}) {
+  const rows = operationRows(project, op);
+  const baseline = rows.find((row) => row.baseline);
+  const maxMs = Math.max(
+    1,
+    ...rows.map((row) => measurementMs(row.measurement)).filter((ms) => ms > 0),
+  );
+
+  if (!baseline || rows.length <= 1) return null;
+
+  const best = rows
+    .filter(
+      (row) =>
+        !row.baseline &&
+        row.measurement.tool === "ttsc" &&
+        measurementMs(row.measurement) > 0,
+    )
+    .reduce<{ factor: number; label: string } | undefined>((acc, row) => {
+      const factor =
+        measurementMs(baseline.measurement) / measurementMs(row.measurement);
+      return !acc || factor > acc.factor ? { factor, label: row.label } : acc;
+    }, undefined);
+
+  return (
+    <div className="grid gap-3 px-4 py-4 md:grid-cols-[minmax(8rem,13rem)_minmax(0,1fr)]">
+      <ProjectLabel
+        project={project}
+        title={title}
+        baselineMs={measurementMs(baseline.measurement)}
+        bestFactor={best?.factor}
+        bestLabel={best?.label}
+      />
+      <div className="space-y-1.5">
+        {rows.map((row) => (
+          <DurationBar
+            key={`${project.name}:${op}:${row.label}`}
+            label={row.label}
+            ms={measurementMs(row.measurement)}
+            maxMs={maxMs}
+            color={row.color}
+            ratio={
+              row.baseline
+                ? "baseline"
+                : formatMultiplier(
+                    measurementMs(baseline.measurement) /
+                      measurementMs(row.measurement),
+                  )
+            }
+            baseline={row.baseline}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function LintTab({ report }: { report: BenchmarkReport }) {
+  const projects = report.projects.filter((project) =>
+    hasComparableLint(project, "noEmit"),
+  );
+  const hero = bestLintProject(report, "noEmit");
+
+  return (
+    <div className="space-y-4">
+      <HeroRatio winner={hero} scope="Lint" />
+      <LintMatrix
+        title="Lint Tool Matrix"
+        description={
+          "Legacy stacks tsc --noEmit plus ESLint; ttsc-lint reports the " +
+          "measured @ttsc/lint time from ttsc --diagnostics."
+        }
+        projects={projects}
+        op="noEmit"
+      />
+    </div>
+  );
+}
+
+function LintMatrix({
+  title,
+  description,
+  projects,
+  op,
+}: {
+  title: string;
+  description: string;
+  projects: BenchmarkProject[];
+  op: Operation;
+}) {
+  return (
+    <section className={panelClass}>
+      <TableHeader
+        title={title}
+        description={description}
+        suffix={`${projects.length.toLocaleString()} projects`}
+      />
+      <div className="divide-y divide-[#d8e7f4]">
+        {projects.length > 0 ? (
+          projects.map((project) => (
+            <ProjectLintRows
+              key={`${project.name}:${op}:lint`}
+              project={project}
+              op={op}
+            />
+          ))
+        ) : (
+          <p className="px-4 py-4 text-[12px] text-slate-500">
+            No comparable lint measurements recorded for this view.
+          </p>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function ProjectLintRows({
+  project,
+  op,
+  title,
+}: {
+  project: BenchmarkProject;
+  op: Operation;
+  title?: string;
+}) {
+  const rows = lintRowsForProject(project, op);
+  const baseline = rows.find((row) => row.baseline);
+  const maxMs = Math.max(1, ...rows.map((row) => row.totalMs));
+
+  if (!baseline || rows.length <= 1) return null;
+
+  // Lint's "best" is the lint-pass-only ratio (ESLint time vs @ttsc/lint
+  // overhead) — that's the multiplier the dashboard is actually selling.
+  // Total-stack ratio (`tsc + eslint` vs `ttsc + @ttsc/lint`) lives in the
+  // bars on the right; the isolated lint factor can be hundreds of times
+  // larger because eslint alone is the slow side.
+  const best = rows
+    .filter((row) => !row.baseline && (row.lintFactor ?? 0) > 0)
+    .reduce<{ factor: number; label: string } | undefined>((acc, row) => {
+      const factor = row.lintFactor!;
+      return !acc || factor > acc.factor ? { factor, label: row.label } : acc;
+    }, undefined);
+
+  return (
+    <div className="grid gap-3 px-4 py-4 md:grid-cols-[minmax(8rem,13rem)_minmax(0,1fr)]">
+      <ProjectLabel
+        project={project}
+        title={title}
+        baselineMs={baseline.totalMs}
+        bestFactor={best?.factor}
+        bestLabel={best?.label}
+      />
+      <div className="space-y-1.5">
+        {rows.map((row) => (
+          <StackedDurationBar
+            key={`${project.name}:${op}:${row.label}`}
+            label={row.label}
+            totalMs={row.totalMs}
+            maxMs={maxMs}
+            ratio={row.baseline ? "baseline" : undefined}
+            lintRatio={
+              row.baseline ? undefined : lintRatioParts(baseline.totalMs, row)
+            }
+            baseline={row.baseline}
+            estimated={row.estimated}
+            segments={row.segments}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ProjectLabel({
+  project,
+  title,
+  baselineMs,
+  bestFactor,
+  bestLabel,
+}: {
+  project: BenchmarkProject;
+  title?: string;
+  baselineMs: number;
+  bestFactor?: number;
+  bestLabel?: string;
+}) {
+  return (
+    <div>
+      {title ? (
+        <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-sky-300">
+          {title}
+        </p>
+      ) : null}
+      <p className="font-mono text-sm font-semibold text-[#102a43]">
+        {project.name}
+      </p>
+      <p className="mt-1 text-[11px] text-slate-500">
+        {project.files.toLocaleString()} files
+      </p>
+      {project.typescript ? (
+        <p className="mt-1 break-all font-mono text-[10px] text-slate-500">
+          legacy TS {project.typescript}
+        </p>
+      ) : null}
+      <p className="mt-2 font-mono text-[11px] text-slate-600">
+        baseline: {formatDuration(baselineMs)}
+      </p>
+      {bestFactor !== undefined ? (
+        <div className="mt-3" title={bestLabel}>
+          <div
+            className={`font-mono text-3xl font-bold leading-none md:text-4xl ${
+              bestFactor >= 1 ? "text-emerald-300" : "text-rose-300"
+            }`}
+          >
+            {formatMultiplier(bestFactor)}
+          </div>
+          <div className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-slate-500">
+            best
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function DurationBar({
+  label,
+  ms,
+  maxMs,
+  color,
+  ratio,
+  baseline,
+}: {
+  label: string;
+  ms: number;
+  maxMs: number;
+  color: string;
+  ratio: string;
+  baseline?: boolean;
+}) {
+  const widthPct = Math.max(4, (ms / maxMs) * 100);
+
+  return (
+    <div className="py-1.5">
+      <div className="mb-1.5 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <p
+          className="min-w-0 flex-1 break-all font-mono text-[11px] text-slate-600"
+          title={label}
+        >
+          {label}
+        </p>
+        <div className="flex shrink-0 items-baseline gap-2 font-mono text-[11px]">
+          <span className="text-slate-600">{formatDuration(ms)}</span>
+          <span
+            className={
+              baseline ? "text-slate-500" : "font-semibold text-emerald-700"
+            }
+          >
+            {ratio}
+          </span>
+        </div>
+      </div>
+      <div className="h-5 w-full rounded bg-[#e7f0f8]">
+        <div
+          className={`h-full rounded ${color}`}
+          style={{ width: `${widthPct}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function StackedDurationBar({
+  label,
+  totalMs,
+  maxMs,
+  ratio,
+  lintRatio,
+  baseline,
+  estimated,
+  segments,
+}: {
+  label: string;
+  totalMs: number;
+  maxMs: number;
+  ratio?: string;
+  lintRatio?: LintRatioParts;
+  baseline?: boolean;
+  estimated?: boolean;
+  segments: { label: string; ms: number; color: string }[];
+}) {
+  const widthPct = Math.max(4, (totalMs / maxMs) * 100);
+  const labelTooltip = estimated
+    ? [
+        `${label} — estimated from total ttsc-lint minus plain ttsc;`,
+        "rerun the benchmark to use direct @ttsc/lint timing",
+      ].join(" ")
+    : label;
+
+  return (
+    <div className="py-1.5">
+      <div className="mb-1.5 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <p
+          className="min-w-0 flex-1 break-all font-mono text-[11px] text-slate-600"
+          title={labelTooltip}
+        >
+          {label}
+        </p>
+        <div className="flex shrink-0 items-baseline gap-2 font-mono text-[11px]">
+          <span className="text-slate-600">{formatDuration(totalMs)}</span>
+          {lintRatio ? (
+            <>
+              <span className="font-semibold text-sky-300">
+                {lintRatio.total}
+              </span>
+              <span className="font-semibold text-emerald-300">
+                {lintRatio.lint}
+              </span>
+            </>
+          ) : (
+            <span className="text-slate-500">{ratio}</span>
+          )}
+        </div>
+      </div>
+      <p className="mb-1.5 break-words font-mono text-[10px] text-slate-500">
+        (
+        {segments
+          .map((segment) => `${segment.label} ${formatDuration(segment.ms)}`)
+          .join(" + ")}
+        )
+      </p>
+      <div className="h-6 w-full rounded bg-[#e7f0f8]">
+        <div
+          className="flex h-full overflow-hidden rounded"
+          style={{ width: `${widthPct}%` }}
+        >
+          {segments.map((segment) => {
+            const segmentPct =
+              segment.ms > 0 && totalMs > 0
+                ? Math.max(3, (segment.ms / totalMs) * 100)
+                : 0;
+            return (
+              <div
+                key={segment.label}
+                className={`h-full ${segment.color}`}
+                style={{ width: `${segmentPct}%` }}
+              />
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TableHeader({
+  title,
+  description,
+  suffix,
+}: {
+  title: string;
+  description: string;
+  suffix: string;
+}) {
+  return (
+    <div className={panelHeaderClass}>
+      <div>
+        <h2 className="text-base font-semibold text-[#102a43]">{title}</h2>
+        <p className="mt-1 text-[13px] text-slate-500">{description}</p>
+      </div>
+      <p className="font-mono text-[11px] uppercase text-slate-500">{suffix}</p>
+    </div>
+  );
+}
+
+type MeasurementOptions = Partial<
+  Pick<BenchmarkMeasurement, "branch" | "tool" | "op" | "threading">
+>;
+
+interface OperationRow {
+  label: string;
+  measurement: BenchmarkMeasurement;
+  color: string;
+  baseline?: boolean;
+}
+
+interface LintSegment {
+  label: string;
+  ms: number;
+  color: string;
+}
+
+interface LintRow {
+  project: BenchmarkProject;
+  op: Operation;
+  threading: Threading;
+  label: string;
+  totalMs: number;
+  segments: LintSegment[];
+  baseline?: boolean;
+  eslintMs?: number;
+  lintOverheadMs?: number;
+  transformHostMs?: number;
+  lintFactor?: number;
+  estimated?: boolean;
+  directLintTiming?: boolean;
+}
+
+interface LintRatioParts {
+  total: string;
+  lint: string;
+}
+
+interface Winner {
+  project: BenchmarkProject;
+  label: string;
+  factor: number;
+}
+
+function operationRows(
+  project: BenchmarkProject,
+  op: Operation,
+): OperationRow[] {
+  const rows: OperationRow[] = [];
+  const measurements = project.measurements;
+  const baseline = findMeasured(measurements, {
+    branch: "legacy",
+    tool: "tsc",
+    op,
+    threading: "multi",
+  });
+
+  if (baseline)
+    rows.push({
+      label: compilerCliLabel("tsc", op, "multi"),
+      measurement: baseline,
+      color: "bg-neutral-500",
+      baseline: true,
+    });
+
+  for (const threading of TTSC_THREADING_SPECTRUM) {
+    const measurement = findMeasured(measurements, {
+      branch: "ttsc",
+      tool: "ttsc",
+      op,
+      threading,
+    });
+    if (measurement)
+      rows.push({
+        label: compilerCliLabel("ttsc", op, threading),
+        measurement,
+        color: ttscBarColor(threading),
+      });
+  }
+
+  for (const threading of TTSC_THREADING_SPECTRUM) {
+    const measurement = findMeasured(measurements, {
+      branch: "ttsc",
+      tool: "tsgo",
+      op,
+      threading,
+    });
+    if (measurement)
+      rows.push({
+        label: compilerCliLabel("tsgo", op, threading),
+        measurement,
+        color: tsgoBarColor(threading),
+      });
+  }
+
+  return rows;
+}
+
+function lintRowsForProject(
+  project: BenchmarkProject,
+  op: Operation,
+): LintRow[] {
+  const measurements = project.measurements;
+  const rows: LintRow[] = [];
+  const tsc = findMeasured(measurements, {
+    branch: "legacy",
+    tool: "tsc",
+    op,
+    threading: "multi",
+  });
+  const eslint = findLegacyEslint(measurements, op);
+
+  if (tsc && eslint)
+    rows.push({
+      project,
+      op,
+      threading: "multi",
+      label: "tsc + eslint",
+      totalMs: measurementMs(tsc) + measurementMs(eslint),
+      baseline: true,
+      eslintMs: measurementMs(eslint),
+      segments: [
+        { label: "tsc", ms: measurementMs(tsc), color: "bg-neutral-500" },
+        { label: "ESLint", ms: measurementMs(eslint), color: "bg-amber-500" },
+      ],
+    });
+
+  // Newer runs record the native @ttsc/lint and transform-host wall-clock
+  // timings from `ttsc --diagnostics`. Older snapshots recorded only the whole
+  // @ttsc/lint sidecar, which includes TypeScript diagnostics and makes the
+  // compiler segment look implausibly small, so those rows deliberately fall
+  // back to total-minus-plain until the published dataset is refreshed.
+  const ttscByThreading: Partial<
+    Record<
+      Threading,
+      {
+        directLintTiming: boolean;
+        lintMs: number;
+        plainMs: number;
+        transformHostMs: number;
+        totalMs: number;
+        rawOverhead: number;
+      }
+    >
+  > = {};
+  for (const threading of TTSC_THREADING_SPECTRUM) {
+    const total = findTtscLintTotal(measurements, op, threading);
+    const plainTtsc = findMeasured(measurements, {
+      branch: "ttsc",
+      tool: "ttsc",
+      op,
+      threading,
+    });
+    if (!total || !plainTtsc) continue;
+    const directLintMs =
+      lintPluginMs(total) !== undefined && lintPluginMs(total) > 0
+        ? lintPluginMs(total)
+        : undefined;
+    ttscByThreading[threading] = {
+      directLintTiming: directLintMs !== undefined,
+      lintMs: directLintMs ?? measurementMs(total) - measurementMs(plainTtsc),
+      plainMs: measurementMs(plainTtsc),
+      transformHostMs: Math.max(0, transformHostMs(total) ?? 0),
+      totalMs: measurementMs(total),
+      rawOverhead: measurementMs(total) - measurementMs(plainTtsc),
+    };
+  }
+
+  for (const threading of TTSC_THREADING_SPECTRUM) {
+    const current = ttscByThreading[threading];
+    if (!current) continue;
+
+    const { directLintTiming, plainMs, totalMs, rawOverhead, transformHostMs } =
+      current;
+    let lintOverheadMs = directLintTiming
+      ? Math.max(0, current.lintMs)
+      : Math.max(0, rawOverhead);
+    const estimated = !directLintTiming;
+
+    // ST fallback: when a snapshot has no direct @ttsc/lint timing and
+    // total-minus-plain lands below the noise floor, synthesize the ST lint
+    // cost from `checkers8`'s ratio — the fastest spectrum point and the
+    // closest to the former "multi" baseline:
+    //   ST_synthetic = round(ST_plain * (C8_overhead / C8_plain))
+    // The synthetic row is tagged `estimated` so the renderer can mark
+    // it as a derived figure rather than a measurement.
+    if (!directLintTiming && threading === "single" && rawOverhead <= 0) {
+      const fast = ttscByThreading.checkers8 ?? ttscByThreading.multi;
+      const fastLintMs = fast?.directLintTiming
+        ? fast.lintMs
+        : fast?.rawOverhead;
+      if (
+        fast &&
+        fast.plainMs > 0 &&
+        fastLintMs !== undefined &&
+        fastLintMs > 0
+      ) {
+        lintOverheadMs = Math.round(plainMs * (fastLintMs / fast.plainMs));
+      }
+    }
+
+    const boundedTransformHostMs = directLintTiming
+      ? Math.min(transformHostMs, Math.max(0, totalMs - lintOverheadMs))
+      : 0;
+    const ttscMs = directLintTiming
+      ? Math.max(0, totalMs - lintOverheadMs - boundedTransformHostMs)
+      : plainMs;
+    const adjustedTotalMs = directLintTiming
+      ? totalMs
+      : ttscMs + lintOverheadMs;
+    const flagSuffix = formatFlagLabel(threading);
+    const baseLabel = "ttsc + @ttsc/lint";
+    const label = estimated
+      ? `${baseLabel} (${flagSuffix}, delta est.)`
+      : flagSuffix
+        ? `${baseLabel} (${flagSuffix})`
+        : baseLabel;
+
+    rows.push({
+      project,
+      op,
+      threading,
+      label,
+      totalMs: adjustedTotalMs,
+      eslintMs: eslint && measurementMs(eslint),
+      lintOverheadMs,
+      lintFactor:
+        eslint && lintOverheadMs > 0
+          ? measurementMs(eslint) / lintOverheadMs
+          : undefined,
+      transformHostMs: boundedTransformHostMs || undefined,
+      directLintTiming,
+      estimated,
+      segments: [
+        { label: "ttsc", ms: ttscMs, color: "bg-cyan-500" },
+        {
+          label: "@ttsc/lint",
+          ms: lintOverheadMs,
+          color: "bg-emerald-400",
+        },
+        boundedTransformHostMs > 0
+          ? {
+              label: "transform host",
+              ms: boundedTransformHostMs,
+              color: "bg-blue-500",
+            }
+          : undefined,
+      ].filter((segment): segment is LintSegment => segment !== undefined),
+    });
+  }
+
+  return rows;
+}
+
+function hasComparableOperation(project: BenchmarkProject, op: Operation) {
+  const rows = operationRows(project, op);
+  return rows.some((row) => row.baseline) && rows.some((row) => !row.baseline);
+}
+
+function hasComparableLint(project: BenchmarkProject, op: Operation) {
+  const rows = lintRowsForProject(project, op);
+  return rows.some((row) => row.baseline) && rows.some((row) => !row.baseline);
+}
+
+/**
+ * Hero panel: the biggest single speedup across the tab's scope rendered at
+ * oversized point size on the left, with the project + cell label underneath.
+ * Rendered above Build / Type-check / Lint / Format tabs (NOT the Summary tab —
+ * that one's per-project label badges already carry the per-project best).
+ */
+function HeroRatio({
+  winner,
+  scope,
+}: {
+  winner: Winner | undefined;
+  scope: string;
+}) {
+  if (!winner) return null;
+  return (
+    <section
+      className={`${panelClass} flex flex-col gap-3 px-5 py-4 md:flex-row md:items-center`}
+    >
+      <div className="flex-shrink-0">
+        <div
+          className="font-mono text-5xl font-bold leading-none text-emerald-300 md:text-6xl"
+          title={`${winner.project.name}: ${winner.label}`}
+        >
+          {formatMultiplier(winner.factor)}
+        </div>
+        <div className="mt-1 font-mono text-[11px] uppercase tracking-wider text-slate-500">
+          {scope} winner
+        </div>
+      </div>
+      <div className="text-[13px] text-slate-600 md:ml-6">
+        <div className="font-semibold text-[#102a43]">
+          {winner.project.name}
+        </div>
+        <div className="mt-0.5 text-slate-500">{winner.label}</div>
+      </div>
+    </section>
+  );
+}
+
+function bestRatio(report: BenchmarkReport): Winner | undefined {
+  return [
+    bestOperationProject(report, "build"),
+    bestOperationProject(report, "noEmit"),
+    bestLintProject(report, "noEmit"),
+    bestFormatProject(report),
+  ].reduce<Winner | undefined>(
+    (best, current) =>
+      current && (!best || current.factor > best.factor) ? current : best,
+    undefined,
+  );
+}
+
+function bestOperationProject(
+  report: BenchmarkReport,
+  op: Operation,
+): Winner | undefined {
+  return report.projects.reduce<Winner | undefined>((best, project) => {
+    const rows = operationRows(project, op);
+    const baseline = rows.find((row) => row.baseline);
+    if (!baseline) return best;
+
+    const winner = rows
+      .filter((row) => !row.baseline && row.measurement.tool === "ttsc")
+      .reduce<Winner | undefined>((innerBest, row) => {
+        const factor =
+          measurementMs(baseline.measurement) / measurementMs(row.measurement);
+        const current = {
+          project,
+          label: `${op === "build" ? "Build" : "Type-check"} ${row.label}`,
+          factor,
+        };
+        return !innerBest || current.factor > innerBest.factor
+          ? current
+          : innerBest;
+      }, undefined);
+
+    return winner && (!best || winner.factor > best.factor) ? winner : best;
+  }, undefined);
+}
+
+function bestFormatProject(report: BenchmarkReport): Winner | undefined {
+  return report.projects.reduce<Winner | undefined>((best, project) => {
+    const rows = formatRowsForProject(project);
+    const baseline = rows.find((row) => row.baseline);
+    if (!baseline) return best;
+    const winner = rows
+      .filter((row) => !row.baseline)
+      .reduce<Winner | undefined>((innerBest, row) => {
+        const factor =
+          measurementMs(baseline.measurement) / measurementMs(row.measurement);
+        const current = {
+          project,
+          label: `Format ${row.label}`,
+          factor,
+        };
+        return !innerBest || current.factor > innerBest.factor
+          ? current
+          : innerBest;
+      }, undefined);
+    return winner && (!best || winner.factor > best.factor) ? winner : best;
+  }, undefined);
+}
+
+function bestLintProject(
+  report: BenchmarkReport,
+  op: Operation,
+): Winner | undefined {
+  return report.projects.reduce<Winner | undefined>((best, project) => {
+    const winner = lintWinnerForProject(project, op);
+    return winner && (!best || winner.factor > best.factor) ? winner : best;
+  }, undefined);
+}
+
+function lintWinnerForProject(
+  project: BenchmarkProject,
+  op: Operation,
+): Winner | undefined {
+  const rows = lintRowsForProject(project, op);
+  const baseline = rows.find((row) => row.baseline);
+  if (!baseline) return undefined;
+
+  // Use the isolated lint-pass ratio (`eslintMs / lintOverheadMs`) so the
+  // headline number reflects how much faster the lint pass alone is —
+  // not the total-stack ratio which is dragged down by the shared
+  // type-check that both sides pay.
+  return rows
+    .filter((row) => !row.baseline && (row.lintFactor ?? 0) > 0)
+    .reduce<Winner | undefined>((innerBest, row) => {
+      const factor = row.lintFactor!;
+      const current = {
+        project,
+        label: `Lint ${row.label}`,
+        factor,
+      };
+      return !innerBest || current.factor > innerBest.factor
+        ? current
+        : innerBest;
+    }, undefined);
+}
+
+function lintRatioParts(baselineMs: number, row: LintRow): LintRatioParts {
+  const total = formatMultiplier(baselineMs / row.totalMs);
+  const lint = `${formatMultiplier(row.lintFactor ?? 0)} lint`;
+  return { total: `${total} total`, lint };
+}
+
+function findMeasured(
+  measurements: BenchmarkMeasurement[],
+  options: MeasurementOptions,
+): BenchmarkMeasurement | undefined {
+  const measurement = findMeasurement(measurements, options);
+  return measurement && measurementMs(measurement) > 0
+    ? measurement
+    : undefined;
+}
+
+function findLegacyEslint(
+  measurements: BenchmarkMeasurement[],
+  op: Operation,
+): BenchmarkMeasurement | undefined {
+  return (
+    findMeasured(measurements, {
+      branch: "legacy",
+      tool: "eslint",
+      op,
+      threading: "multi",
+    }) ??
+    findMeasured(measurements, {
+      branch: "legacy",
+      tool: "eslint",
+      op: "eslint",
+      threading: "multi",
+    }) ??
+    measurements.find(
+      (measurement) =>
+        measurement.branch === "legacy" &&
+        measurement.tool === "eslint" &&
+        measurementMs(measurement) > 0,
+    )
+  );
+}
+
+function FormatTab({ report }: { report: BenchmarkReport }) {
+  const projects = report.projects.filter(hasComparableFormat);
+  const hero = bestFormatProject(report);
+
+  return (
+    <div className="space-y-4">
+      <HeroRatio winner={hero} scope="Format" />
+      <section className={panelClass}>
+        <TableHeader
+          title="Format Tool Matrix"
+          description="Prettier (legacy) vs ttsc format (ttsc-lint), single-threaded and default."
+          suffix={`${projects.length.toLocaleString()} projects`}
+        />
+        <div className="divide-y divide-[#d8e7f4]">
+          {projects.length > 0 ? (
+            projects.map((project) => (
+              <ProjectFormatRows
+                key={`${project.name}:format`}
+                project={project}
+              />
+            ))
+          ) : (
+            <p className="px-4 py-4 text-[12px] text-slate-500">
+              No comparable format measurements recorded for this view.
+            </p>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function ProjectFormatRows({
+  project,
+  title,
+}: {
+  project: BenchmarkProject;
+  title?: string;
+}) {
+  const rows = formatRowsForProject(project);
+  const baseline = rows.find((row) => row.baseline);
+  const maxMs = Math.max(
+    1,
+    ...rows.map((row) => measurementMs(row.measurement)).filter((ms) => ms > 0),
+  );
+
+  if (!baseline || rows.length <= 1) return null;
+
+  const best = rows
+    .filter((row) => !row.baseline && measurementMs(row.measurement) > 0)
+    .reduce<{ factor: number; label: string } | undefined>((acc, row) => {
+      const factor =
+        measurementMs(baseline.measurement) / measurementMs(row.measurement);
+      return !acc || factor > acc.factor ? { factor, label: row.label } : acc;
+    }, undefined);
+
+  return (
+    <div className="grid gap-3 px-4 py-4 md:grid-cols-[minmax(8rem,13rem)_minmax(0,1fr)]">
+      <ProjectLabel
+        project={project}
+        title={title}
+        baselineMs={measurementMs(baseline.measurement)}
+        bestFactor={best?.factor}
+        bestLabel={best?.label}
+      />
+      <div className="space-y-1.5">
+        {rows.map((row) => (
+          <DurationBar
+            key={`${project.name}:format:${row.label}`}
+            label={row.label}
+            ms={measurementMs(row.measurement)}
+            maxMs={maxMs}
+            color={row.color}
+            ratio={
+              row.baseline
+                ? "baseline"
+                : formatMultiplier(
+                    measurementMs(baseline.measurement) /
+                      measurementMs(row.measurement),
+                  )
+            }
+            baseline={row.baseline}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function formatRowsForProject(project: BenchmarkProject): OperationRow[] {
+  const rows: OperationRow[] = [];
+  const measurements = project.measurements;
+  const prettier = measurements.find(
+    (m) =>
+      m.branch === "legacy" &&
+      m.op === "format" &&
+      m.threading === "multi" &&
+      measurementMs(m) > 0,
+  );
+  if (prettier)
+    rows.push({
+      label: "prettier --check",
+      measurement: prettier,
+      color: "bg-amber-500",
+      baseline: true,
+    });
+  for (const threading of FORMAT_THREADING_SPECTRUM) {
+    const ttscFormat = measurements.find(
+      (m) =>
+        m.branch === "ttsc-lint" &&
+        m.op === "format" &&
+        m.threading === threading &&
+        measurementMs(m) > 0,
+    );
+    if (ttscFormat)
+      rows.push({
+        label: `ttsc format ${formatFlagLabel(threading)}`.trim(),
+        measurement: ttscFormat,
+        color: ttscBarColor(threading),
+      });
+  }
+  return rows;
+}
+
+/** CLI flag suffix for a threading variant, used by chart labels. */
+function formatFlagLabel(threading: Threading): string {
+  switch (threading) {
+    case "single":
+      return "--singleThreaded";
+    case "checkers2":
+      return "--checkers 2";
+    case "checkers4":
+      return "--checkers 4";
+    case "checkers8":
+      return "--checkers 8";
+    case "multi":
+      return "";
+  }
+}
+
+function hasComparableFormat(project: BenchmarkProject): boolean {
+  const rows = formatRowsForProject(project);
+  return rows.some((row) => row.baseline) && rows.some((row) => !row.baseline);
+}
+
+function findTtscLintTotal(
+  measurements: BenchmarkMeasurement[],
+  op: Operation,
+  threading: Threading,
+): BenchmarkMeasurement | undefined {
+  return (
+    findMeasured(measurements, {
+      branch: "ttsc-lint",
+      tool: "ttsc+@ttsc/lint",
+      op,
+      threading,
+    }) ??
+    measurements.find(
+      (measurement) =>
+        measurement.branch === "ttsc-lint" &&
+        measurement.op === op &&
+        measurement.threading === threading &&
+        measurement.tool !== "@ttsc/lint" &&
+        measurement.tool !== "eslint" &&
+        measurement.tool !== "prettier" &&
+        measurementMs(measurement) > 0,
+    )
+  );
+}
+
+function compilerCliLabel(
+  tool: "tsc" | "ttsc" | "tsgo",
+  op: Operation,
+  threading: Threading,
+) {
+  const parts: string[] = [tool];
+  if (op === "noEmit") parts.push("--noEmit");
+  if (tool === "tsc") return parts.join(" ");
+  if (threading === "single") parts.push("--singleThreaded");
+  else if (threading === "checkers2") parts.push("--checkers 2");
+  else if (threading === "checkers4") parts.push("--checkers 4");
+  else if (threading === "checkers8") parts.push("--checkers 8");
+  // legacy "multi" had no extra flag — render bare so older snapshots
+  // keep rendering without a stale flag in the chart label.
+  return parts.join(" ");
+}
+
+/** Threading variants the ttsc/tsgo rows iterate, in display order. */
+const TTSC_THREADING_SPECTRUM: readonly Threading[] = [
+  "single",
+  "checkers2",
+  "checkers4",
+  "checkers8",
+];
+
+/** Format rows render the only formatter-sensitive axis: serial vs default. */
+const FORMAT_THREADING_SPECTRUM: readonly Threading[] = ["single", "multi"];
+
+/**
+ * Tailwind class for the bar of a threading variant. The spectrum reads
+ * dark→light from `single` (most-constrained, slowest) to `checkers8`
+ * (most-parallel, fastest), so a glance at the chart shows the
+ * diminishing-returns curve as a colour gradient.
+ */
+function ttscBarColor(threading: Threading): string {
+  switch (threading) {
+    case "single":
+      return "bg-cyan-700";
+    case "checkers2":
+      return "bg-cyan-600";
+    case "checkers4":
+      return "bg-cyan-500";
+    case "checkers8":
+    case "multi":
+      return "bg-cyan-400";
+  }
+}
+
+function tsgoBarColor(threading: Threading): string {
+  switch (threading) {
+    case "single":
+      return "bg-violet-700";
+    case "checkers2":
+      return "bg-violet-600";
+    case "checkers4":
+      return "bg-violet-500";
+    case "checkers8":
+    case "multi":
+      return "bg-violet-400";
+  }
+}
+
+function formatDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toISOString().slice(0, 10);
+}

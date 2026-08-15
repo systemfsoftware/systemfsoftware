@@ -1,0 +1,31 @@
+# Playground
+
+Reader: TypeScript library authors and maintainers who want to try ttsc in a browser before wiring it into a project.
+
+The hosted playground at [/playground](/playground) runs the same wasm-backed compiler worker as the website. Paste TypeScript source directly into the editor. When the source imports a package that is not bundled with the playground, the browser resolves the package from npm, downloads the package tarball, unpacks the files, and mounts them into the in-memory `node_modules` tree before compiling.
+
+While package files are being resolved, downloaded, unpacked, and installed, the playground shows a progress modal. Declaration files from the package are also registered with Monaco so editor diagnostics and completions can see the same type surface that the compiler sees.
+
+## Package Support
+
+The dependency loader starts from static quoted specifiers in imports, exports, dynamic imports, `require("package")`, and direct `require?.("package")` calls in executable source, including template substitutions and cooked JavaScript string escapes. It installs the imported package, its registry dependencies, non-optional peer dependencies, and a matching `@types/*` package when the package itself does not ship declarations. Every installed version must satisfy its declared npm range. An npm alias resolves its declared target and stays mounted under the alias name.
+
+Incremental additions retain each mounted package's registry target, exact version, and active requester ranges, so a compatible late edge reuses the package without downloading its tarball and an incompatible required edge fails before compilation.
+
+Removing a direct import solves the complete remaining root set before the playground replaces its worker and compiler, Monaco, and Execute maps; aborted or failed replacement solves never publish a partial graph.
+
+Node builtins, in either bare or `node:` form, are never requested from npm. The Execute sandbox treats a package `exports` map as its public boundary and evaluates applicable `require` and `default` conditions in manifest order. It preserves Node's separation between selecting a target and loading its file, validates relative targets after wildcard substitution, and rejects invalid mixed or numeric condition maps. It does not activate Node-only or ESM-only conditions. A package mounted through an npm alias can self-reference its real manifest `name` when it declares exports; a package without exports keeps legacy direct-path resolution and does not gain self-reference behavior.
+
+The `typia` packages used by the default examples remain bundled because the wasm-side typia adapter must match the exact typia source version linked into the playground compiler.
+
+## Embedding the playground
+
+Everything behind the hosted playground ships as the [`@ttsc/playground`](https://github.com/samchon/ttsc/tree/master/packages/playground) package: the worker compiler (`createWorkerCompiler`), the browser-side npm dependency loader (`installPlaygroundDependencies`), and the Monaco-based React UI (`PlaygroundShell`). The website itself consumes the package, so embedding the same playground in another site starts from the package README.
+
+`PlaygroundShell` passes each `executeBundle` call an abort signal. Source or compiler-option changes, a newer Execute, and unmount abort obsolete setup and prevent its messages from committing. Pass that signal to `loadTypiaRuntimePack`; the loader imposes no deadline of its own and removes failed shared loads so a later Execute can retry. Synchronous evaluated code cannot be interrupted by an `AbortSignal`.
+
+The worker's Typia source-pack mount is unbounded across both the response and JSON body for the same reason. Loads for one URL share a request; any caller's signal cancels that shared attempt, and rejection evicts it so the next compiler request retries the mount on the existing WASM runtime instead of inheriting a pending fetch or starting another runtime.
+
+The npm loader authenticates archives with registry SRI (or legacy shasum), confines files below one safe and consistent archive root, and enforces independent compressed and expanded byte limits. Metadata without either digest remains compatible but unauthenticated. These checks protect the install handoff and browser-tab availability; they do not make downloaded code trustworthy.
+
+`createSandboxRequire` is a CommonJS resolver and evaluator, not a browser security boundary. An embedder that accepts untrusted code or packages must provide an `executeBundle` policy with the origin, process, and capability isolation its site requires. Install byte limits do not constrain runtime loops, timers, network access, or globals exposed by that executor.

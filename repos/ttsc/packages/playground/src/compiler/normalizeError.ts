@@ -1,0 +1,25 @@
+/** Best-effort error normalization for tgrid transport. */
+export function normalizeError(error: unknown): unknown {
+  if (error instanceof Error) {
+    const normalized: {
+      code?: string;
+      message: string;
+      name: string;
+      stack?: string;
+    } = {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+    };
+    const code = (error as Error & { code?: unknown }).code;
+    if (typeof code === "string") normalized.code = code;
+    return normalized;
+  }
+  if (
+    error &&
+    typeof error === "object" &&
+    "message" in (error as Record<string, unknown>)
+  )
+    return error;
+  return { name: "Error", message: String(error) };
+}

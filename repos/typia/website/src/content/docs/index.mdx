@@ -1,0 +1,160 @@
+---
+title: Guide Documents > Introduction
+---
+
+import { Callout } from "nextra/components";
+
+## What is typia?
+
+**typia turns your TypeScript types into runtime code at compile time.**
+
+Other libraries make you write your types twice — once in TypeScript and once as a schema, decorators, or guards. typia reads the type you already wrote and emits the validator, JSON serializer, schema, or decoder for you. One line, pure types, no duplication.
+
+Here it is in action — on the left is the source you write, on the right is what typia generates for you at compile time:
+
+![Write a TypeScript type and typia compiles it into a dedicated validator](/images/concepts/transform.svg)
+
+No reflection at runtime, no schema file to maintain — just the exact comparisons your `IMember` type implies, inlined into the build. This is the core trick that every other typia feature builds on; see [Pure TypeScript](/docs/pure) for the long story.
+
+> The right-hand "Compiled Output" is produced by typia's compile-time transform — **stock `tsc` will not produce it**. To enable the transform, install the TypeScript 7 toolchain in [Setup](/docs/setup) and build with `ttsc`, `ttsx`, or `@ttsc/unplugin`. Without setup, your `typia.is<T>()` call sites throw at runtime instead.
+
+![Typia Logo](/logo.png)
+
+<span
+  style={{
+    display: "flex",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: "6px",
+  }}
+>
+  {[
+    [
+      "MIT License",
+      "https://img.shields.io/badge/license-MIT-blue.svg",
+      "https://github.com/samchon/typia/blob/master/LICENSE",
+    ],
+    [
+      "NPM Version",
+      "https://img.shields.io/npm/v/typia.svg",
+      "https://www.npmjs.com/package/typia",
+    ],
+    [
+      "NPM Downloads",
+      "https://img.shields.io/npm/dm/typia.svg",
+      "https://www.npmjs.com/package/typia",
+    ],
+    [
+      "Build Status",
+      "https://github.com/samchon/typia/workflows/test/badge.svg",
+      "https://github.com/samchon/typia/actions?query=workflow%3Atest",
+    ],
+    [
+      "Gurubase",
+      "https://img.shields.io/badge/Gurubase-Document%20Chatbot-006BFF",
+      "https://gurubase.io/g/typia",
+    ],
+    [
+      "Discord",
+      "https://img.shields.io/badge/discord-samchon-d91965?style=flat&labelColor=5866f2&logo=discord&logoColor=white&link=https://discord.gg/E94XhzrUCZ",
+      "https://discord.gg/E94XhzrUCZ",
+    ],
+  ].map(([alt, image, url]) => (
+    <a href={url} style={{ marginTop: "20px" }} key={alt}>
+      <img src={image} alt={alt} />
+    </a>
+  ))}
+</span>
+
+## API surface
+
+typia covers five feature areas, all driven by the same TypeScript-type-to-runtime-code transform:
+
+- **Super-fast runtime validators** — `is` / `assert` / `validate` (+ Equals strict variants)
+- **Enhanced JSON** — type-safe `assertParse`, much faster `assertStringify`, OpenAPI / JSON Schema generation
+- **LLM function calling harness** — class → tool schemas with lenient JSON parsing, type coercion, and validation feedback baked in
+- **Protocol Buffer codec** — encode / decode + `.proto` text emission from a TypeScript type
+- **Random data generator** — produce a value that satisfies the type, tags and all
+
+```ts
+// Runtime validators — write a type, get a checker
+typia.is<T>(input); // boolean
+typia.assert<T>(input); // throws TypeGuardError, otherwise returns input
+typia.assertGuard<T>(input); // narrows the variable (`asserts input is T`)
+typia.validate<T>(input); // returns IValidation<T> with every error path
+
+// JSON — same idea, plus performance
+typia.json.assertParse<T>(text); // safe JSON.parse + assert
+typia.json.assertStringify<T>(obj); // ~10x faster JSON.stringify with type safety
+typia.json.schemas<[T]>(); // emit OpenAPI/JSON Schema
+
+// LLM function calling — turn a TypeScript class into tools
+typia.llm.application<MyService>(); // full ILlmApplication with parse/coerce/validate
+typia.llm.structuredOutput<T>(); // schema + parser + coercer + validator
+typia.llm.parameters<T>(); // just the JSON schema
+
+// Protocol Buffer — same again, in binary
+typia.protobuf.assertEncode<T>(obj);
+typia.protobuf.assertDecode<T>(bytes);
+typia.protobuf.message<T>(); // emit .proto schema text
+
+// Test data
+typia.random<T>(); // generate a value that satisfies T
+```
+
+<br />
+<Callout type="warning">
+  Only **one line** required, with pure TypeScript types
+</Callout>
+
+<Callout type="default">
+  Runtime validator up to **20,000× faster** than `class-validator`
+  ([benchmark](https://github.com/samchon/typia/tree/master/benchmark/results/AMD%20Ryzen%209%207940HS%20w%20Radeon%20780M%20Graphics))
+</Callout>
+
+<Callout type="info">
+  JSON serialization up to **200× faster** than `class-transformer`
+  ([benchmark](https://github.com/samchon/typia/tree/master/benchmark/results/AMD%20Ryzen%209%207940HS%20w%20Radeon%20780M%20Graphics#stringify))
+</Callout>
+
+<Callout type="default">
+  LLM function calling success rate: **6.75% → 100%** with the typia harness
+  ([story](https://github.com/wrtnlabs/autobe))
+</Callout>
+
+## Build setup
+
+<br />
+<iframe
+  src="https://www.youtube.com/embed/WM6LGy2UU6s?si=lZrqbILxHI22QwEE"
+  title="Typia Tutorial Video"
+  width="100%"
+  height="500"
+  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+  referrerPolicy="strict-origin-when-cross-origin"
+  allowFullScreen
+></iframe>
+
+The transformation above happens at compile time, so typia needs to be wired into the TypeScript build. Use [`ttsc`](/docs/setup) for TypeScript 7 builds, [`ttsx`](/docs/setup) when running a TypeScript entrypoint directly, and [`@ttsc/unplugin`](/docs/setup#bundlers) for bundlers such as Vite, Next.js, Webpack, esbuild, Rollup, and Bun.
+
+> Whichever path you pick, the call sites in your code don't change — `typia.is<T>`, `typia.assert<T>`, `typia.json.assertParse<T>`, … always emit the same inline checks shown in [What is typia?](#what-is-typia) above. Setup is something you do once; the rest of the docs assume it's done.
+
+## Where to go next
+
+- **Need to install it now?** See [Setup](/docs/setup) for the TypeScript 7 `ttsc` toolchain.
+- **Looking up an API?** Jump straight to [Validators](/docs/validators/is), [JSON](/docs/json/schema), [LLM](/docs/llm/application), [Protobuf](/docs/protobuf/message), or [Random](/docs/random).
+- **Building an agent?** Start at [LLM function calling](/docs/llm/application) and the [function calling harness](/docs/llm/json).
+- **Adopting on NestJS / Hono / tRPC?** See the [Utilization Cases](/docs/utilization/nestjs) — drop-in recipes for the most common backend frameworks.
+
+## Sponsors
+
+[![Backers](https://opencollective.com/typia/backers.svg?avatarHeight=75&width=600)](https://opencollective.com/typia)
+
+If typia saves you time, please consider [donating to the project](https://opencollective.com/typia).
+
+## References
+
+- Inspired by [`typescript-is`](https://github.com/woutervh-/typescript-is)
+- Source code: [github.com/samchon/typia](https://github.com/samchon/typia)
+- Playground: [typia.io/playground](https://typia.io/playground)
+- Benchmarks: [benchmark/results](https://github.com/samchon/typia/tree/master/benchmark/results/AMD%20Ryzen%209%207940HS%20w%20Radeon%20780M%20Graphics)
