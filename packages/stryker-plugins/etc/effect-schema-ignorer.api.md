@@ -14,6 +14,15 @@ export const ANNOTATION_OBJECT_IGNORED: 'annotations object holding only documen
 export const ANNOTATION_TEXT_IGNORED: 'annotation documentation value is declaration data, not behaviour';
 
 // @public (undocumented)
+export const BRAND_NAME_IGNORED: 'Schema.brand name is identity-only data, not behaviour';
+
+// @public (undocumented)
+export const CLASS_FIELDS_IGNORED: 'Schema.Class field schema is a declaration, not behaviour';
+
+// @public (undocumented)
+export const CLASS_ID_IGNORED: 'Schema.Class identifier is a declaration name, not behaviour';
+
+// @public (undocumented)
 export const decideSchemaDeclarationIgnore: (node: unknown, parent: unknown, grandparent?: unknown, ancestor?: unknown) => string | undefined;
 
 // @public (undocumented)

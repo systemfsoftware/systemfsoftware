@@ -11,6 +11,9 @@ import {
 export const SYMBOL_DESCRIPTION_IGNORED = 'Symbol.for() brand description is identity-only data, not behaviour' as const
 export const TAGGED_TAG_IGNORED = 'TaggedClass/TaggedError _tag is a declaration discriminant, not behaviour' as const
 export const TAGGED_FIELDS_IGNORED = 'TaggedClass/TaggedError field schema is a declaration, not behaviour' as const
+export const CLASS_ID_IGNORED = 'Schema.Class identifier is a declaration name, not behaviour' as const
+export const CLASS_FIELDS_IGNORED = 'Schema.Class field schema is a declaration, not behaviour' as const
+export const BRAND_NAME_IGNORED = 'Schema.brand name is identity-only data, not behaviour' as const
 export const OPTIONAL_DEFAULT_IGNORED = 'optionalWith default value is config, not behaviour' as const
 export const ANNOTATION_OBJECT_IGNORED =
   'annotations object holding only documentation is a declaration, not behaviour' as const
@@ -47,6 +50,17 @@ const DocumentationObject = S.Struct({
 
 const TAGGED_FACTORIES: ReadonlyArray<string> = ['TaggedClass', 'TaggedError']
 
+/**
+ * `Schema.Class` is curried the other way round from `Schema.TaggedClass`.
+ *
+ * `S.TaggedClass<A>()('tag', fields)` puts both the discriminant and the fields on the outer
+ * call, so one callee predicate reaches both. `S.Class<A>('Id')(fields)` puts the identifier on
+ * the *inner* call and the fields on the outer one, so the same declaration data needs two
+ * predicates. Missing that shape is why a class-shaped schema kept fourteen mutants a
+ * tag-shaped one never had.
+ */
+const CLASS_FACTORY = 'Class'
+
 const isIdentifier = S.is(Identifier)
 const isStringLiteral = S.is(StringLiteral)
 const isObjectExpression = S.is(ObjectExpression)
@@ -63,10 +77,29 @@ const isNamedMember = (node: unknown, object: string, property: string): boolean
 
 const isSymbolForCallee = (callee: unknown): boolean => isNamedMember(callee, 'Symbol', 'for')
 
-const isTaggedFactoryReference = (reference: unknown): boolean =>
+const isNamedFactoryReference = (reference: unknown, names: ReadonlyArray<string>): boolean =>
   isMemberExpression(reference) &&
   isIdentifier(reference.property) &&
-  TAGGED_FACTORIES.includes(reference.property.name)
+  names.includes(reference.property.name)
+
+const isTaggedFactoryReference = (reference: unknown): boolean => isNamedFactoryReference(reference, TAGGED_FACTORIES)
+
+/** The inner `S.Class<A>('Id')` call, which carries the identifier. */
+const isClassFactoryReference = (reference: unknown): boolean => isNamedFactoryReference(reference, [CLASS_FACTORY])
+
+/**
+ * There is deliberately no rule for a `Schema.Class` *fields* object, and the reason is measured.
+ *
+ * Stryker's ignorer suppresses a node's whole subtree, so ignoring the fields object also ignores
+ * every literal inside it - and a field's accepted value set is behaviour: emptying
+ * `Schema.Literal('permanent', 'transient')` changes what decodes. Adding that rule turned
+ * fourteen survivors green in one run while hiding the accepted-set decisions the survivors were
+ * pointing at. Those belong to a decode test, not to an ignorer.
+ */
+
+/** `S.brand('Name')` - the brand name is identity data, like a `Symbol.for` description. */
+const isBrandCallee = (callee: unknown): boolean =>
+  isMemberExpression(callee) && isIdentifier(callee.property) && callee.property.name === 'brand'
 
 const isTaggedFactoryCallee = (callee: unknown): boolean =>
   isCallExpression(callee) && isTaggedFactoryReference(callee.callee)
@@ -120,6 +153,8 @@ const RULES: ReadonlyArray<IgnoreRule> = [
   argumentRule(isStringLiteral, 0, isSymbolForCallee, SYMBOL_DESCRIPTION_IGNORED),
   argumentRule(isStringLiteral, 0, isTaggedFactoryCallee, TAGGED_TAG_IGNORED),
   argumentRule(isObjectExpression, 1, isTaggedFactoryCallee, TAGGED_FIELDS_IGNORED),
+  argumentRule(isStringLiteral, 0, isClassFactoryReference, CLASS_ID_IGNORED),
+  argumentRule(isStringLiteral, 0, isBrandCallee, BRAND_NAME_IGNORED),
   argumentRule(isArrowFunctionExpression, 1, isOptionalWithCallee, OPTIONAL_DEFAULT_IGNORED),
   argumentRule(isDocumentationObject, 0, isAnnotationsCallee, ANNOTATION_OBJECT_IGNORED),
   documentationValueRule,

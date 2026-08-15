@@ -28,6 +28,17 @@ export const taggedCall = (factory: string, tag: AstNode, fields: AstNode): Call
 export const bareFactoryCall = (factory: string, tag: AstNode, fields: AstNode): CallExpression =>
   callOf(callOf(identifier(factory), []), [tag, fields])
 
+/**
+ * `Schema.Class<A>('Id')(fields)` - the identifier rides the inner call and the fields the
+ * outer one, which is the opposite of `taggedCall`'s arrangement and the shape the ignorer
+ * missed until the class rules were added.
+ */
+export const classCall = (id: AstNode, fields: AstNode): CallExpression =>
+  callOf(callOf(memberOf('Schema', 'Class'), [id]), [fields])
+
+/** `X.pipe(S.brand('Name'))`'s inner call - the brand name is identity data. */
+export const brandCall = (name: AstNode): CallExpression => callOf(memberOf('S', 'brand'), [name])
+
 export const taggedFactory = fc.constantFrom('TaggedClass', 'TaggedError')
 
 export const nonTaggedFactory = fc.constantFrom('Struct', 'Class', 'Union', 'TaggedRequest', 'tag', 'Literal')
