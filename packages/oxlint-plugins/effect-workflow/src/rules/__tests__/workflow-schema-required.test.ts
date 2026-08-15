@@ -253,7 +253,7 @@ class DecisionError extends S.TaggedError<DecisionError>()('DecisionError', {}) 
       ],
     },
     {
-      name: 'Should_Report_MissingErrorChannel_And_TooFewDecisionVariants_When_Only_One_Non_Command_Variant_Exists',
+      name: 'Should_Report_MissingErrorChannel_When_Only_One_Non_Command_Variant_Exists',
       code: oneCommandAndOneDecision,
       filename: 'cancel-order.workflow.ts',
       errors: [
@@ -268,20 +268,10 @@ class DecisionError extends S.TaggedError<DecisionError>()('DecisionError', {}) 
               'if the decision is total, relocate the file out of *.workflow.ts — a bare union is not a workflow; do not invent an S.TaggedError to satisfy this rule',
           },
         },
-        {
-          messageId: 'tooFewDecisionVariants',
-          data: {
-            name: 'cancel-order.workflow.ts',
-            expected: 'at least 2 decision or error variants',
-            actual: '1',
-            fix:
-              'mint the missing outcome as a variant, or convert this to an S.transform — a one-outcome computation is a shape conversion, not a decision',
-          },
-        },
       ],
     },
     {
-      name: 'Should_Report_MissingErrorChannel_And_TooFewDecisionVariants_When_Only_One_Variant_Exists_And_No_Command',
+      name: 'Should_Report_MissingErrorChannel_When_Only_One_Variant_Exists_And_No_Command',
       code: oneDecisionOnly,
       filename: 'one-outcome.workflow.ts',
       errors: [
@@ -296,20 +286,10 @@ class DecisionError extends S.TaggedError<DecisionError>()('DecisionError', {}) 
               'if the decision is total, relocate the file out of *.workflow.ts — a bare union is not a workflow; do not invent an S.TaggedError to satisfy this rule',
           },
         },
-        {
-          messageId: 'tooFewDecisionVariants',
-          data: {
-            name: 'one-outcome.workflow.ts',
-            expected: 'at least 2 decision or error variants',
-            actual: '1',
-            fix:
-              'mint the missing outcome as a variant, or convert this to an S.transform — a one-outcome computation is a shape conversion, not a decision',
-          },
-        },
       ],
     },
     {
-      name: 'Should_Report_MissingErrorChannel_And_TooFewDecisionVariants_When_Only_A_Command_Exists',
+      name: 'Should_Report_MissingErrorChannel_When_Only_A_Command_Exists',
       code: onlyCommand,
       filename: 'only-command.workflow.ts',
       errors: [
@@ -324,21 +304,10 @@ class DecisionError extends S.TaggedError<DecisionError>()('DecisionError', {}) 
               'if the decision is total, relocate the file out of *.workflow.ts — a bare union is not a workflow; do not invent an S.TaggedError to satisfy this rule',
           },
         },
-        {
-          messageId: 'tooFewDecisionVariants',
-          data: {
-            name: 'only-command.workflow.ts',
-            expected: 'at least 2 decision or error variants',
-            actual: '0',
-            fix:
-              'mint the missing outcome as a variant, or convert this to an S.transform — a one-outcome computation is a shape conversion, not a decision',
-          },
-        },
       ],
     },
     {
-      name:
-        'Should_Report_MissingErrorChannel_And_TooFewDecisionVariants_When_Schema_Namespace_Near_Miss_Is_Not_Counted',
+      name: 'Should_Report_MissingErrorChannel_When_Schema_Namespace_Near_Miss_Is_Not_Counted',
       code: nearMissSchemaNotCounted,
       filename: 'schema-near-miss.workflow.ts',
       errors: [
@@ -353,21 +322,10 @@ class DecisionError extends S.TaggedError<DecisionError>()('DecisionError', {}) 
               'if the decision is total, relocate the file out of *.workflow.ts — a bare union is not a workflow; do not invent an S.TaggedError to satisfy this rule',
           },
         },
-        {
-          messageId: 'tooFewDecisionVariants',
-          data: {
-            name: 'schema-near-miss.workflow.ts',
-            expected: 'at least 2 decision or error variants',
-            actual: '1',
-            fix:
-              'mint the missing outcome as a variant, or convert this to an S.transform — a one-outcome computation is a shape conversion, not a decision',
-          },
-        },
       ],
     },
     {
-      name:
-        'Should_Report_MissingErrorChannel_And_TooFewDecisionVariants_When_Other_Namespace_Near_Miss_Is_Not_Counted',
+      name: 'Should_Report_MissingErrorChannel_When_Other_Namespace_Near_Miss_Is_Not_Counted',
       code: nearMissOtherNotCounted,
       filename: 'other-near-miss.workflow.ts',
       errors: [
@@ -382,20 +340,10 @@ class DecisionError extends S.TaggedError<DecisionError>()('DecisionError', {}) 
               'if the decision is total, relocate the file out of *.workflow.ts — a bare union is not a workflow; do not invent an S.TaggedError to satisfy this rule',
           },
         },
-        {
-          messageId: 'tooFewDecisionVariants',
-          data: {
-            name: 'other-near-miss.workflow.ts',
-            expected: 'at least 2 decision or error variants',
-            actual: '1',
-            fix:
-              'mint the missing outcome as a variant, or convert this to an S.transform — a one-outcome computation is a shape conversion, not a decision',
-          },
-        },
       ],
     },
     {
-      name: 'Should_Report_MissingErrorChannel_And_TooFewDecisionVariants_When_Direct_Near_Misses_Leave_Only_One_Valid',
+      name: 'Should_Report_MissingErrorChannel_When_Direct_Near_Misses_Leave_Only_One_Valid',
       code: directNearMissesLeaveOne,
       filename: 'direct-near-misses.workflow.ts',
       errors: [
@@ -408,16 +356,6 @@ class DecisionError extends S.TaggedError<DecisionError>()('DecisionError', {}) 
             actual: 'no S.TaggedError declaration',
             fix:
               'if the decision is total, relocate the file out of *.workflow.ts — a bare union is not a workflow; do not invent an S.TaggedError to satisfy this rule',
-          },
-        },
-        {
-          messageId: 'tooFewDecisionVariants',
-          data: {
-            name: 'direct-near-misses.workflow.ts',
-            expected: 'at least 2 decision or error variants',
-            actual: '1',
-            fix:
-              'mint the missing outcome as a variant, or convert this to an S.transform — a one-outcome computation is a shape conversion, not a decision',
           },
         },
       ],

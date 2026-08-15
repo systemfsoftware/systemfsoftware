@@ -2,9 +2,9 @@ import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
 import { Array as A, Schema as S } from 'effect'
 import { getExportedWorkflowFunction, workflowFunctionInit } from './exported-workflow-fn.js'
-import { COMMAND_SUFFIX, EITHER_TYPE_NAME, meta, WORKFLOW_SUFFIX } from './workflow-schema-required.config.js'
+import { EITHER_TYPE_NAME, meta, WORKFLOW_SUFFIX } from './workflow-schema-required.config.js'
 
-export type MessageIds = 'noSchemaVariants' | 'tooFewDecisionVariants' | 'missingErrorChannel'
+export type MessageIds = 'noSchemaVariants' | 'missingErrorChannel'
 
 const WorkflowFileName = S.NonEmptyArray(S.String)
 
@@ -146,21 +146,6 @@ export const workflowSchemaRequired = defineRule({
               actual: missingErrorActual,
               fix:
                 'if the decision is total, relocate the file out of *.workflow.ts — a bare union is not a workflow; do not invent an S.TaggedError to satisfy this rule',
-            },
-          })
-        }
-
-        const nonCommandCount = variantNames.filter((name) => !name.endsWith(COMMAND_SUFFIX)).length
-        if (nonCommandCount < 2) {
-          context.report({
-            node: reportNode,
-            messageId: 'tooFewDecisionVariants',
-            data: {
-              name: baseName,
-              expected: 'at least 2 decision or error variants',
-              actual: String(nonCommandCount),
-              fix:
-                'mint the missing outcome as a variant, or convert this to an S.transform — a one-outcome computation is a shape conversion, not a decision',
             },
           })
         }
