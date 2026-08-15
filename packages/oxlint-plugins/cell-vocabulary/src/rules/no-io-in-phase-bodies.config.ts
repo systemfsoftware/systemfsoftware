@@ -50,16 +50,18 @@ if (IO_CELLS.length === 0 && IO_SOURCES.length === 0) {
 
 export const SKIPPED_WALK_KEYS = ['parent', 'range', 'loc', 'start', 'end'] as const
 
-// "module-level helper" is the exact reach of the predicate, not a softening of it: helpers are
-// collected from the top level of the file, so a function declared inside another function, and a
-// binding captured from an enclosing closure, are not followed. Saying "a local helper" would
-// promise a decision the walker does not make, and the first nested helper doing I/O would pass
-// while the message claimed it had been checked.
+// The predicate's exact reach, stated so the message promises no decision the walker does not make.
+// The walk descends through the phase body's own subtree, so an I/O call written in a function
+// declared inside the body is reported — invoked or not, because syntax cannot decide invocation.
+// Helpers are additionally collected from the top level of the file, so a call into one of those is
+// followed too. What is genuinely not followed: a binding captured from an enclosing closure, and a
+// helper imported from another module. "Written inside" is therefore the honest verb; "reached"
+// would claim a reachability analysis, and the never-invoked nested closure would make it a lie.
 export const IO_IN_PHASE_BODY_EXPECTED =
-  'a {{phases}} phase body that only transforms the value it receives, with no I/O calls — directly or through a module-level helper it calls' as const
+  'a {{phases}} phase body that only transforms the value it receives, with no I/O call written inside it or in a module-level helper it calls' as const
 
 export const IO_IN_PHASE_BODY_ACTUAL =
-  'an I/O call reached from the body of a {{phases}} phase, directly or through a module-level helper' as const
+  'an I/O call written inside the body of a {{phases}} phase — at any depth within that body, or in a module-level helper the body calls' as const
 
 export const IO_IN_PHASE_BODY_FIX =
   'hoist the I/O into a phase whose kind permits it and pass the value in as the body receives it; when nothing consumes the call, delete it' as const

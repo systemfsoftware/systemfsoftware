@@ -25,8 +25,15 @@ export const REQUIRES_DESCRIPTION_ACTUAL = 'a call to a workflow decision outsid
 export const REQUIRES_DESCRIPTION_EXPECTED =
   'every call site that reaches a workflow to express the sandwich as a Cell description' as const
 
-export const REQUIRES_DESCRIPTION_FIX =
-  "import { Cell } from '@systemfsoftware/effect-cell-types' and express this call site as a description whose phases chain by type: Cell.read(...) -> Cell.decode(...) -> Cell.decide(...) -> Cell.encode(...) -> Cell.write(...), then apply it with Cell.apply, so the sandwich order is type-carried instead of hand-sequenced" as const
+/**
+ * The sentence a reader is handed is the chain the walk reports, in the order it reports it. Spelling
+ * it here would be a second declaration of the phase-name and order axes, and it would keep saying
+ * five phases after the description grew a sixth.
+ */
+const PHASE_CHAIN: string = Cell.vocabulary.phases.map((phase) => `Cell.${phase.name}(...)`).join(' -> ')
+
+export const REQUIRES_DESCRIPTION_FIX: string =
+  `import { Cell } from '${DESCRIPTION_SOURCE}' and express this call site as a description whose phases chain by type: ${PHASE_CHAIN}, then apply it with Cell.${Cell.vocabulary.applier}, so the sandwich order is type-carried instead of hand-sequenced`
 
 export const REQUIRES_DESCRIPTION_MESSAGE =
   '{{name}} is forbidden. Expected: {{expected}}. Actual: {{actual}}. Fix: {{fix}}.' as const
@@ -35,7 +42,9 @@ export const meta = {
   type: 'problem',
   docs: {
     description:
-      'Require every call site that calls a workflow module decision to be expressed as a Cell description from @systemfsoftware/effect-cell-types: a file that calls a workflow decision without chaining Cell.read/decode/decide/encode/write and applying with Cell.apply is an unmigrated sandwich whose phase order nothing decides.',
+      `Require every call site that calls a workflow module decision to be expressed as a Cell description from ${DESCRIPTION_SOURCE}: a file that calls a workflow decision without chaining ${
+        Cell.vocabulary.phases.map((phase) => phase.name).join('/')
+      } and applying with ${Cell.vocabulary.applier} is an unmigrated sandwich whose phase order nothing decides.`,
   },
   schema: [Options],
   messages: {

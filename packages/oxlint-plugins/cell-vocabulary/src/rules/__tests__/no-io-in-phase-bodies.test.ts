@@ -23,11 +23,11 @@ const ruleTester = new RuleTester({
 })
 
 // Every axis value in the fixtures below is derived from the walked vocabulary at
-// runtime, never spelled: the fixture's I/O cell suffix and I/O module source come
-// from Cell.vocabulary.ioCells, and the message's phase list comes from the same
-// fold the rule uses. If the derivation is severed, the expected data no longer
-// matches the rendered message and the invalid fixtures stop reporting.
-const CELL_IMPORT = `import { Cell } from '@systemfsoftware/effect-cell-types'`
+// runtime, never spelled: the import's module name, the fixture's I/O cell suffix and
+// I/O module source all come from Cell.vocabulary, and the message's phase list comes
+// from the same fold the rule uses. If the derivation is severed, the expected data no
+// longer matches the rendered message and the invalid fixtures stop reporting.
+const CELL_IMPORT = `import { Cell } from '${Cell.vocabulary.module}'`
 const storeCell = Cell.vocabulary.ioCells.cells[0]
 const ioSource = Cell.vocabulary.ioCells.sources[0]
 const STORE_IMPORT = `import { findOrderRow } from './order.${storeCell}.js'`
@@ -346,6 +346,22 @@ ${STORE_IMPORT}
 ${EITHER_IMPORT}
 const loadRow = (id) => (id > 0 ? loadRow(id - 1) : Either.right(findOrderRow(id)))
 const description = Cell.decode(loadRow)`,
+      filename: 'confirm-order.executor.ts',
+      errors: [error('findOrderRow')],
+    },
+    {
+      // An I/O call inside a closure declared in the body and never invoked. The walk descends the
+      // body's whole subtree, so this reports — and the message says "written inside ... at any
+      // depth" rather than "reached", because syntax cannot decide invocation. This fixture is what
+      // makes that wording falsifiable: narrow the walk to stop at nested functions and it fails.
+      name: 'Should_Report_IoCall_When_WrittenInNeverInvokedNestedClosure',
+      code: `${CELL_IMPORT}
+${STORE_IMPORT}
+${EITHER_IMPORT}
+const description = Cell.decode((raw) => {
+  const unused = () => findOrderRow(raw.id)
+  return Either.right(raw)
+})`,
       filename: 'confirm-order.executor.ts',
       errors: [error('findOrderRow')],
     },
