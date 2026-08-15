@@ -18,12 +18,12 @@ export const runLifecycleHooks = Effect.fn('runLifecycleHooks')(
     const input: Record<string, unknown> = { ...sessionIds(() => ctx.sessionManager.getSessionId()) }
     const matcherUnreadable = analyzeSettings({ _tag: 'MatcherUnreadable', event: event }, S.Boolean)
     yield* Effect.forEach(
-      Arr.filter(entries, (entry) => !(matcherUnreadable && (entry.matcher !== undefined))),
+      Arr.filter(entries, (entry) => !(matcherUnreadable && entry.matcher !== undefined)),
       (entry) =>
         Effect.forEach(
-          Arr.filter(entry.hooks, (hook): hook is CommandHook => (hook.type === 'command') && (hook.if === undefined)),
+          Arr.filter(entry.hooks, (hook): hook is CommandHook => hook.type === 'command' && hook.if === undefined),
           (hook) =>
-            Effect.if((hook.async === true) || (hook.asyncRewake === true), {
+            Effect.if(hook.async === true || hook.asyncRewake === true, {
               onTrue: () =>
                 Effect.forkDaemon(superviseFork(runHookScript(hook, input, cwd, event, false), ctx, hook.command)),
               onFalse: () => runHookScript(hook, input, cwd, event),

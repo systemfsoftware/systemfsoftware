@@ -73,7 +73,7 @@ The gate found two defects before it was even wired. The combinator change that 
 
 Then it stops, and the stopping point is measured rather than judged. Parsing all 25 executor cells counts **58 distinct AST node kinds**. The three emitted cells needed **21**, and those 21 reach **exactly 3 of the 25** — every remaining cell requires a node kind the language does not have. The 37 unmet kinds are not exotic: `ForOfStatement`, `AssignmentExpression`, `TryStatement`, `CatchClause`, `ThrowStatement`, `ContinueStatement`, `FunctionDeclaration`, `TemplateLiteral`, `RegExpLiteral`, `NewExpression`, `ObjectPattern`. The next cell up, `load-settings`, needs five including `ForOfStatement`, because its body accumulates into a mutable array inside a loop.
 
-**The demonstration that the language must accept source text is definitional, not aesthetic.** Ten of the executor language's 34 keys already alias an AST node kind one-for-one — `read` is a member expression, `call` a call, `yield` a yield, `cond` a conditional, `object` an object, `spread` a spread, `thunk` an arrow, `bind` a declarator, `result` a return, `guard` an `if`. Covering the role means adding 37 more of the same, at which point the declaration is a TypeScript AST with the node names changed, and a declaration is defined here as carrying "no TypeScript statement, expression or function body". The workflow role's vocabulary contrasts exactly here: `command`, `decision`, `error`, `channel`, `dispatch`, `arms`, `fallback`, `variants`, `aliases`, `construct` name roles in the cell taxonomy, and not one of them is a node kind. That is the difference between describing a cell and transcribing it.
+**The demonstration that a _data-description_ language must accept source text is definitional. The conclusion drawn from it was wrong, and running code refuted it.** Ten of the executor language's 34 keys already alias an AST node kind one-for-one — `read` is a member expression, `call` a call, `yield` a yield, `cond` a conditional, `object` an object, `spread` a spread, `thunk` an arrow, `bind` a declarator, `result` a return, `guard` an `if`. Covering the role _that way_ means adding 37 more of the same, at which point the declaration is a TypeScript AST with the node names changed. All of that holds. What does not follow is that the role is unemittable: it establishes that one family of languages cannot reach it, and the inference to "therefore accept source text or stop" skipped the family that can. A description of data cannot describe a computation; a _program_ can. `scripts/tools/term-compile.ts` is that language, and `run-lifecycle-hooks.executor.ts` — a nested `for...of` with three `continue` guards, an early return and an `if`/`else` over two effects, the exact shape called out as out of reach — is now compiled from a term and passes the package's lint, typecheck and 200 tests unchanged. The counterexample discharge is withdrawn; the ownership branch is back in force.
 
 **One instrument reads against this conclusion and is recorded that way.** Emitted-over-declaration bytes come out at 0.66, 0.55 and 0.67 for the executor cells and aggregate 0.85 for the workflow role: every declaration here is _larger_ than the code it produces, and the brief calls a role approaching 1 an echo. Derived-per-key is worse still, favouring the executor language (0.79) over the workflow one (0.42). Both instruments are size-based and both are weak — the workflow declarations carry per-cell domain payload that inflates their key count, and JSON is more verbose per decision than TypeScript. What separates a declaration from a transcript is refusal, not size: an echo cannot reject a violation, and these two emitters reject thirteen classes by name with zero escapes.
 
@@ -93,12 +93,15 @@ The software wiki was consulted before this pass and it had already adjudicated 
 - **`enforceability-is-not-an-axis.md`** - `warrant: posit`. A suffix-keyed rule naming an _edge_ constraint inherits the edge's near-zero false-positive rate; one naming an _interior_ property inherits the interior's much worse rate. It classifies `kernel-no-throw`, `kernel-no-effect-runtime`, `kernel-no-ambient-impurity` and `observer-no-escaping-state` as interior, and records that `observer-no-escaping-state` "misses the same state one indirection away behind a wrapper call - an interior rule failing at exactly the boundary the analysis predicts, the first indirection."
 - **`axis-mechanizability-verdict.md`** - `warrant: posit`, `status: draft`. In unannotated TypeScript the purity predicate "is not mechanically decidable at enforcement grade at all"; three of four kernel rules key on the general form of purity, and under this verdict "those rules are documentation wearing a gate's clothes." The axes that would carry enforcement - import direction and export surface - are the ones no suffix keys on.
 - **`window-mediated-versus-emission-gated.md`** - `warrant: derived`, grounded in captured canon papers. A consumer type checker is window-mediated, not a gate: it returns a diagnostic and an exit code, and "the file, the commit, and the emission stand." It becomes gate-class only when a harness refuses until the check passes.
+- **`doctrine-overreach.md`** - `warrant: posit`, `status: draft`. Its A6: the subtractive direction is gated under the same cost criterion as the additive one. "It removes something" is not evidence that removal is safe - it is evidence only that less will be enforced. This is a deletion brief, so the ruling bites: unreachability licences a deletion, it does not price one.
 
-Three of these four are `posit`, so none of them binds as law and this brief is not entitled to cite them as warrant. What they are is a prior derivation, and under the repository's own rule a derivation stands until it is defeated by argument. It was not defeated; it was corroborated. This brief's earlier passes engineered an elaborate mechanism to keep the existing body-interior walkers firing on generated output, and two successive review passes found two successive escapes from it - a helper arriving as an import, then a helper called only by another helper. Those are the first and second indirection, which is exactly the failure `enforceability-is-not-an-axis` predicts for interior rules as a class. The mechanism was chasing indirections down a channel the corpus ranks last.
+Four of these five are `posit`, so none of them binds as law and this brief is not entitled to cite them as warrant. What they are is a prior derivation, and under the repository's own rule a derivation stands until it is defeated by argument. It was not defeated; it was corroborated. This brief's earlier passes engineered an elaborate mechanism to keep the existing body-interior walkers firing on generated output, and two successive review passes found two successive escapes from it - a helper arriving as an import, then a helper called only by another helper. Those are the first and second indirection, which is exactly the failure `enforceability-is-not-an-axis` predicts for interior rules as a class. The mechanism was chasing indirections down a channel the corpus ranks last.
 
 **The departure recorded.** An earlier pass of this brief sealed "bodies must remain governed; free is not exempt", and instrumented it first by glob extension and then by inlining bodies and their helpers into the emitted cell so the walkers would still fire. That seal is reopened here, which this brief's own rule permits only for a materially different mechanism - and module resolution plus the type system is exactly that. The refinement: a body is governed by the channel that can actually decide its class. Where a type can carry the obligation, the type carries it. Where nothing can decide it in unannotated TypeScript, the rule is documentation and is not preserved as a gate. Arming an undecidable rule is not governance.
 
 `window-mediated-versus-emission-gated` carries the one qualification that survives at `derived` band: `tsc` failing is not by itself a gate. It becomes one here because `pnpm check:local` and CI block on it, and that blocking is named in Verification rather than assumed.
+
+**The obligation, not the record.** Consulting the corpus is a step in the run, not something this document did once on the run's behalf. Before assigning a constraint to a channel, naming a predicate undecidable, or reopening a seal, the worker queries the corpus itself with typed sub-queries and a stated intent - it starts blank, and this section is a summary it may not inherit. Silence is a result, not an absence: the verbatim query and the scope it ran against are recorded. Gated by Verification, which takes the query as the evidence and the citation as the claim.
 
 ## The mechanism
 
@@ -163,6 +166,7 @@ A regex classifier over the 121 rule sources partitions them 109 shape / 6 body 
 6. Each constraint no channel can decide at enforcement grade is named **undecidable here**, with the corpus page and the reason, and its rule is dropped as a gate rather than preserved by making the walker reach further.
 7. Every rule whose class is now unreachable or undecidable is deleted, each with its demonstration. Every survivor is attributed to a class no stronger channel can carry.
 8. The before-and-after count is measured and stated: 121 and the survivor set.
+9. Every rule dropped over an **undecidable here** predicate, and every deletion whose class stays reachable by hand - a kernel cell, a test, a role still authored - names the cost of being wrong in the subtractive direction: the defect class that returns, and what catches it now.
 
 ## Expected survivors
 
@@ -192,6 +196,8 @@ Interior purity rules are **not** on this list. They are either carried by a pha
 - Green reached by deleting fixtures, lowering severity, narrowing a glob, or dropping a package from a gate's population.
 - Counting rules deleted or files touched in place of classes moved or made unreachable, or citing the 109/6/6 partition as a result.
 - Citing this repository as warrant, or citing a `posit`-band wiki page as law.
+- A corpus claim carried from memory, or from this document, rather than from a query run in the session - including a report of silence with no verbatim query behind it.
+- A deletion argued from simplification, or from the count going down, rather than from the cost of being wrong in the subtractive direction.
 
 ## Auditor hunt list
 
@@ -213,6 +219,8 @@ Interior purity rules are **not** on this list. They are either carried by a pha
 - A cost claim with no before-and-after count.
 - Green by deletion of the test rather than of the thing; a cell quietly reclassified out of the population.
 - A counterexample naming no declaration language, which is abandonment wearing a result's clothes.
+- A corpus page cited with no session query behind it, or its ruling taken from this brief's summary rather than read at its own warrant band.
+- An undecidable predicate dropped as a gate with no under-constraint cost named, where its class is still reachable by hand.
 
 ## Sealed decisions and the open surface
 
@@ -243,6 +251,8 @@ A pass returning findings only against sealed decisions has found nothing, and t
 
 Heuristics, not quotas. Register approach families by channel - resolution fence, constructor obligation, manifest edge rule, retained AST analysis - never by plugin name. Keep early workers blind to the favoured declaration shape. Mark a mechanism blocked when it can only own a role by accepting source text, and reopen only for a materially different construct. Cross-pollinate late. Every dispatch carries objective, output shape, tool guidance and boundaries. Every verification is re-run by the orchestrator; a worker's report is never evidence, and unanimity among workers is a diversity failure to investigate. Auditors receive the hunt list and the corpus pages with their warrant bands, never a generic quality instruction.
 
+Each worker queries the corpus itself before it decides. The orchestrator does not hand early workers the corpus's favoured approach: a shared prior is what collapses a portfolio, and the corpus is the strongest shared prior available.
+
 ## Verification
 
 - Round-trip: regenerate all cells, `git diff --exit-code` clean.
@@ -254,6 +264,7 @@ Heuristics, not quotas. Register approach families by channel - resolution fence
 - Behaviour preservation: each package's existing tests pass unchanged.
 - `pnpm check:local` exits 0, run after the last edit, and the chain blocks on `tsc` - which is what makes a compiler witness gate-class.
 - Mutation verdict unchanged or better on every package the diff touches.
+- Per corpus citation: the query run this session, the page, and its warrant band. Per nil result: the verbatim query and the scope it ran against.
 
 ## Return condition
 
@@ -271,6 +282,8 @@ Assume the roles carrying real cells today have emittable shape until a countere
 
 ## Contamination and authority
 
-The software wiki is the first oracle and binds only to its declared warrant band. This brief's four load-bearing pages are `cell-compiler` (`posit`), `enforceability-is-not-an-axis` (`posit`), `axis-mechanizability-verdict` (`posit`, `draft`) and `window-mediated-versus-emission-gated` (`derived`). None of the three posits is law; they are prior derivations this brief follows because they were corroborated rather than defeated, and where a per-rule demonstration contradicts one, the demonstration wins and the departure is recorded. `repos/` and `.repos/` are read-only grounding for how upstream generates and constrains code; a census over them is inadmissible as practice evidence unless the sample is registry-enumerated. Never this repo as warrant.
+The software wiki is the first oracle and binds only to its declared warrant band. This brief's five load-bearing pages are `cell-compiler` (`posit`), `enforceability-is-not-an-axis` (`posit`), `axis-mechanizability-verdict` (`posit`, `draft`), `window-mediated-versus-emission-gated` (`derived`) and `doctrine-overreach` (`posit`, `draft`). No posit is law; they are prior derivations this brief follows because they were corroborated rather than defeated, and where a per-rule demonstration contradicts one, the demonstration wins and the departure is recorded. `repos/` and `.repos/` are read-only grounding for how upstream generates and constrains code; a census over them is inadmissible as practice evidence unless the sample is registry-enumerated. Never this repo as warrant.
+
+Those page names are corpus-local: they do not resolve from a clone, so a worker re-queries them rather than citing this document. The ladder below the corpus is fixed - the corpus, then the primary the claim is about (`repos/`, a `tsc` run, a probe), then library documentation, then the open web - and no rung is skipped silently. A page is a report about a terminal, never the terminal: where a page and the primary disagree, the primary wins.
 
 Everything else is in scope to rewrite or delete: packages, plugins, rules, configs, gates, guards, hooks, tsconfigs, package layouts, every leaf `AGENTS.md` and `CONCEPTS.md`. Merge to `main`, publish, deploy, destructive operations and credentials stay human. Hard time and token budgets live in the harness, not in this brief.

@@ -33,6 +33,8 @@ export type TypeExpr =
   /** `readonly T[]` rather than `ReadonlyArray<T>`. */
   | { readonly readonlyArrayOf: TypeExpr }
   | { readonly tuple: readonly TypeExpr[] }
+  /** `readonly [A, ...ReadonlyArray<B>]` - the non-empty tuple a total dispatch returns. */
+  | { readonly readonlyTuple: readonly TypeExpr[]; readonly rest?: TypeExpr }
   /** A literal type: `'info'`, `42`, `true`. */
   | { readonly literal: string | number | boolean }
   /** An inline object type. `multiline` pre-breaks it, which the formatter then preserves. */
@@ -175,6 +177,13 @@ export const renderTypeExpr = (e: TypeExpr, path: string): string => {
   if ('tuple' in e) {
     if (!Array.isArray(e.tuple)) reject(`${path}.tuple: expected an array`)
     return `[${e.tuple.map((m, i) => renderTypeExpr(m, `${path}.tuple[${i}]`)).join(', ')}]`
+  }
+  if ('readonlyTuple' in e) {
+    if (!Array.isArray(e.readonlyTuple)) reject(`${path}.readonlyTuple: expected an array`)
+    const head = e.readonlyTuple.map((m, i) => renderTypeExpr(m, `${path}.readonlyTuple[${i}]`))
+    const rest = (e as { rest?: TypeExpr }).rest
+    const tail = rest === undefined ? [] : [`...${renderTypeExpr(rest, `${path}.rest`)}`]
+    return `readonly [${[...head, ...tail].join(', ')}]`
   }
   if ('object' in e) {
     if (!Array.isArray(e.object)) reject(`${path}.object: expected an array of members`)

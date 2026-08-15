@@ -70,6 +70,9 @@ export interface Arm {
   readonly body: Term
 }
 
+/** A list element, or a spread of another list into this one. */
+export type ListItem = Term | { readonly spreadOf: Term }
+
 export interface Step {
   /** Omitted for a step run only for its effect. */
   readonly bind?: string
@@ -115,13 +118,30 @@ export type Term =
    * precisely to unify two arms' A, E and R channels, so the effect-world branch is its own node.
    */
   | { readonly branch: { readonly if: Term; readonly then: Term; readonly else: Term } }
-  /** Exhaustive dispatch over a tagged union. The expansion is not optional about exhaustiveness. */
-  | { readonly match: { readonly on: Term; readonly arms: readonly Arm[] } }
+  /**
+   * Exhaustive dispatch. The expansion is not optional about exhaustiveness.
+   *
+   * `by` picks the combinator, because the subject decides it rather than the author: a tagged
+   * union matches on `_tag` (`Match.tag`), a literal union matches on the value itself
+   * (`Match.when`), and a named discriminant uses `Match.discriminator`. All three place
+   * `Match.exhaustive` themselves.
+   */
+  | {
+    readonly match: {
+      readonly on: Term
+      readonly arms: readonly Arm[]
+      readonly by?: 'tag' | 'when' | 'discriminator'
+      /** The field name, required by and only meaningful for `discriminator`. */
+      readonly on_field?: string
+    }
+  }
+  /** `x as const` - the narrowing a literal tuple or object needs to keep its literal type. */
+  | { readonly asConst: Term }
   | { readonly tagged: { readonly tag: string; readonly fields?: Readonly<Record<string, Term>> } }
   | { readonly record: Readonly<Record<string, Term>>; readonly spread?: readonly Term[] }
   | { readonly field: { readonly of: Term; readonly name: string } }
   | { readonly op: { readonly name: BinOp; readonly args: readonly [Term, Term] } }
-  | { readonly list: readonly Term[] }
+  | { readonly list: readonly ListItem[] }
   /**
    * The only way to consume a list. A loop accumulating into a mutable binding has no node here;
    * this is what it becomes, and the expansion is `Arr.reduce`.
@@ -281,6 +301,46 @@ const isAtomic = (t: Term): boolean =>
   ('lit' in t || 'var' in t || 'ref' in t || 'record' in t || 'list' in t || 'app' in t || 'field' in t ||
     'tagged' in t || 'match' in t || 'pipe' in t || 'do' in t || 'fold' in t)
 
+/** JavaScript's binding power for the operators this language has, tighter binding first. */
+const PRECEDENCE: Readonly<Record<string, number>> = {
+  '*': 5,
+  '/': 5,
+  '%': 5,
+  '+': 4,
+  '-': 4,
+  '<': 3,
+  '<=': 3,
+  '>': 3,
+  '>=': 3,
+  '===': 2,
+  '!==': 2,
+  '&&': 1,
+  '||': 0,
+  '??': 0,
+}
+
+/**
+ * An operand of a binary operator, bracketed only where JavaScript would read it differently.
+ *
+ * Every operator here is left-associative, so a same-precedence child needs brackets on the right
+ * and not on the left: `a - b - c` means `(a - b) - c`, and writing the left bracket changes
+ * nothing while writing the right one changes everything.
+ */
+const operandAt = (
+  child: Term,
+  path: string,
+  scope: Scope,
+  parent: string,
+  side: 'left' | 'right',
+): string => {
+  const rendered = compile(child, path, scope)
+  if (!isRecord(child) || !('op' in child)) return isAtomic(child) ? rendered : `(${rendered})`
+  const inner = PRECEDENCE[(child.op as { name: string }).name] ?? 0
+  const outer = PRECEDENCE[parent] ?? 0
+  const needs = inner < outer || (inner === outer && side === 'right')
+  return needs ? `(${rendered})` : rendered
+}
+
 const atom = (t: Term, path: string, scope: Scope): string => {
   const rendered = compile(t, path, scope)
   return isAtomic(t) ? rendered : `(${rendered})`
@@ -390,13 +450,24 @@ export const compile = (t: Term, path: string, scope: Scope): string => {
   if ('match' in t) {
     const m = t.match
     if (!Array.isArray(m.arms) || m.arms.length === 0) reject(`${path}.match.arms: expected at least one arm`)
+    const by = m.by ?? 'tag'
+    if (by === 'discriminator' && (typeof m.on_field !== 'string' || m.on_field === '')) {
+      reject(`${path}.match.on_field: \`discriminator\` matches a named field, so the name is required`)
+    }
+    const combinator = by === 'tag'
+      ? 'Match.tag'
+      : by === 'when'
+      ? 'Match.when'
+      : `Match.discriminator(${str(m.on_field!)})`
     const arms = m.arms.map((arm, i) => {
       const at = `${path}.match.arms[${i}]`
       if (!isRecord(arm) || typeof arm.tag !== 'string' || arm.tag === '') reject(`${at}.tag: expected a tag`)
-      const bind = arm.bind ?? '_'
-      if (!IDENT.test(bind)) reject(`${at}.bind: expected a name`)
+      // An arm that binds nothing takes no parameter: `() =>`, not `(_) =>`. The matched value is
+      // already known from the tag, and a bound-but-unused name is noise the formatter keeps.
+      const bind = arm.bind ?? ''
+      if (bind !== '' && !IDENT.test(bind)) reject(`${at}.bind: expected a name`)
       const inner = arm.bind === undefined ? scope : extend(scope, arm.bind)
-      return `  Match.tag(${str(arm.tag)}, (${bind}) => ${compile(arm.body, `${at}.body`, inner)}),`
+      return `  ${combinator}(${str(arm.tag)}, (${bind}) => ${compile(arm.body, `${at}.body`, inner)}),`
     })
     // `Match.exhaustive` is placed by the compiler, never by the author: a term cannot describe an
     // inexhaustive dispatch, so the rule about exhaustiveness has nothing left to catch.
@@ -436,13 +507,27 @@ export const compile = (t: Term, path: string, scope: Scope): string => {
       reject(`${path}.op.name: ${JSON.stringify(o.name)} is not an operator here. Available: ${[...BIN_OPS].join(' ')}`)
     }
     if (!Array.isArray(o.args) || o.args.length !== 2) reject(`${path}.op.args: expected exactly two operands`)
-    return `${atom(o.args[0], `${path}.op.args[0]`, scope)} ${o.name} ${atom(o.args[1], `${path}.op.args[1]`, scope)}`
+    // Parenthesise only where precedence demands it. Emitting `(a - b) - c` for a left-associative
+    // chain is correct and unreadable, and it makes the round-trip differ from every hand-written
+    // expression in the tree - so the compiler carries the precedence table rather than bracketing
+    // defensively.
+    const left = operandAt(o.args[0], `${path}.op.args[0]`, scope, o.name, 'left')
+    const right = operandAt(o.args[1], `${path}.op.args[1]`, scope, o.name, 'right')
+    return `${left} ${o.name} ${right}`
   }
 
   if ('list' in t) {
     if (!Array.isArray(t.list)) reject(`${path}.list: expected an array`)
-    return `[${t.list.map((x, i) => compile(x, `${path}.list[${i}]`, scope)).join(', ')}]`
+    const items = t.list.map((x, i) => {
+      const at = `${path}.list[${i}]`
+      return isRecord(x) && 'spreadOf' in x
+        ? `...${compile(x.spreadOf as Term, `${at}.spreadOf`, scope)}`
+        : compile(x as Term, at, scope)
+    })
+    return `[${items.join(', ')}]`
   }
+
+  if ('asConst' in t) return `${atom(t.asConst, `${path}.asConst`, scope)} as const`
 
   if ('fold' in t) {
     const f = t.fold

@@ -28,7 +28,7 @@
  * gen(bind('user', fetchUser, (user) => ret(field(user, 'name'))))
  * ```
  */
-import type { Arm, BinOp, Step, Term, TermParam } from './term-compile.ts'
+import type { Arm, BinOp, ListItem, Step, Term, TermParam } from './term-compile.ts'
 import type { TypeExpr } from './type-decl.ts'
 
 export type { Term, TypeExpr }
@@ -80,7 +80,12 @@ export const app = (fn: Term, ...args: readonly Term[]): Term => ({ app: { fn, a
 /** `Effect.succeed(x)` and friends: a qualified callee applied to arguments. */
 export const call = (callee: string, ...args: readonly Term[]): Term => app(ref(callee), ...args)
 
-export const list = (...items: readonly Term[]): Term => ({ list: items })
+export const list = (...items: readonly ListItem[]): Term => ({ list: items })
+
+/** A list element that spreads another list into this one. */
+export const spreadOf = (of: Term): { readonly spreadOf: Term } => ({ spreadOf: of })
+
+export const asConst = (of: Term): Term => ({ asConst: of })
 
 export const record = (
   fields: Readonly<Record<string, Term>>,
@@ -115,6 +120,14 @@ export const arm = (tag: string, bind: string, body: (value: Term) => Term): Arm
 export const armOf = (tag: string, body: Term): Arm => ({ tag, body })
 
 export const match = (on: Term, ...arms: readonly Arm[]): Term => ({ match: { on, arms } })
+
+/** Dispatch over a *literal* union - `Match.when('one_for_one', …)` - rather than over `_tag`. */
+export const matchWhen = (on: Term, ...arms: readonly Arm[]): Term => ({ match: { on, arms, by: 'when' } })
+
+/** Dispatch over a named discriminant field rather than `_tag`. */
+export const matchOn = (on: Term, on_field: string, ...arms: readonly Arm[]): Term => ({
+  match: { on, arms, by: 'discriminator', on_field },
+})
 
 // ---------------------------------------------------------------- binders
 
@@ -270,6 +283,12 @@ export const t = {
   record: (key: TypeExpr, value: TypeExpr): TypeExpr => ({ generic: { of: 'Record', args: [key, value] } }),
   arrayOf: (of: TypeExpr): TypeExpr => ({ arrayOf: of }),
   readonlyArrayOf: (of: TypeExpr): TypeExpr => ({ readonlyArrayOf: of }),
+  readonlyTuple: (head: readonly TypeExpr[], rest?: TypeExpr): TypeExpr =>
+    rest === undefined ? { readonlyTuple: head } : { readonlyTuple: head, rest },
+  object: (
+    members: readonly { readonly name: string; readonly type: TypeExpr }[],
+    options?: { readonly multiline?: boolean },
+  ): TypeExpr => options?.multiline === true ? { object: members, multiline: true } : { object: members },
   union: (...members: readonly TypeExpr[]): TypeExpr => ({ union: members }),
   literal: (value: string | number | boolean): TypeExpr => ({ literal: value }),
 } as const

@@ -26,7 +26,12 @@ import { emitWorkflow, parseWorkflow } from '../tools/workflow-emit.ts'
 
 type Emitter = (declaration: unknown) => string
 
-const ROLES: Readonly<Record<string, Emitter>> = {
+/**
+ * The roles a data-description emitter covers. A `.decl.json` is only meaningful for one of these,
+ * because a data description's vocabulary *is* the role's vocabulary — a schema cell's constructs
+ * are Schema's, and there is no such vocabulary for a role whose cells compute.
+ */
+const EMITTERS: Readonly<Record<string, Emitter>> = {
   workflow: (raw) => emitWorkflow(parseWorkflow(raw)),
   executor: (raw) => emitExecutor(parseExecutor(raw)),
   schema: (raw) => emitSchema(parseSchema(raw)),
@@ -34,13 +39,29 @@ const ROLES: Readonly<Record<string, Emitter>> = {
 }
 
 /**
- * The term language, which is not keyed by role.
+ * Every sanctioned role, which is what a cell may be and what a term may compile to.
  *
- * `ROLES` above is one emitter per role because a data description's vocabulary *is* the role's
- * vocabulary - a schema cell's constructs are Schema's. A term is a program, and programs do not
- * come in roles: one compiler serves every cell, and the role survives only in the filename
- * because the lint rules read the cell's suffix.
+ * A term is a program and programs do not come in roles, so one compiler serves all of them. The
+ * role is a *type* at the authoring site — `kernel()` in `scripts/tools/cell.ts` admits only terms
+ * requiring nothing — and by the time the compiler runs, that obligation is already discharged.
+ * It survives in the filename because the cell's consumers read the suffix.
  */
+const ROLES: readonly string[] = [
+  'acl',
+  'adapter',
+  'executor',
+  'handler',
+  'kernel',
+  'middleware',
+  'observer',
+  'policy',
+  'schema',
+  'shape',
+  'state',
+  'store',
+  'workflow',
+]
+
 const compileTerm: Emitter = (raw) => compileProgram(parseProgram(raw))
 
 /**
@@ -86,7 +107,7 @@ type Verdict = {
 export const roleOf = (path: string): string | undefined => {
   const match = /\.([a-z]+)\.(?:term\.ts|ts|decl\.json)$/.exec(path)
   const role = match?.[1]
-  return role !== undefined && role in ROLES ? role : undefined
+  return role !== undefined && ROLES.includes(role) ? role : undefined
 }
 
 /**
@@ -120,8 +141,13 @@ export const inPopulation = (path: string): boolean =>
   path.includes('/src/') &&
   !OUTSIDE_POPULATION.some((fragment) => path.includes(fragment))
 
-export const isDeclaration = (path: string): boolean =>
-  (path.endsWith('.decl.json') || path.endsWith('.term.ts')) && roleOf(path) !== undefined
+export const isDeclaration = (path: string): boolean => {
+  const role = roleOf(path)
+  if (role === undefined) return false
+  // A data description is only meaningful where an emitter owns the role's vocabulary; a term
+  // compiles for every role, because a program has no vocabulary to own.
+  return path.endsWith('.term.ts') || (path.endsWith('.decl.json') && role in EMITTERS)
+}
 
 export const verdict = (evidence: Evidence): Verdict => {
   const declared = new Set(evidence.declarations)
@@ -187,7 +213,7 @@ const gather = async (): Promise<Evidence> => {
 
   const emitted: Record<string, string> = {}
   for (const decl of declarations) {
-    const emit = isTerm(decl) ? compileTerm : ROLES[roleOf(decl)!]!
+    const emit = isTerm(decl) ? compileTerm : EMITTERS[roleOf(decl)!]!
     const raw: unknown = isTerm(decl)
       ? await loadProgram(decl)
       : JSON.parse(await Deno.readTextFile(decl))
@@ -250,13 +276,16 @@ const main = async (): Promise<number> => {
     console.error(`guard-cell-authorship: ${failures} failure(s) across ${evidence.cells.length} cell(s)`)
     return 1
   }
-  const perRole = Object.keys(ROLES)
+  // Roles with no cell in the tree are omitted: a role is an inventory entry, so reporting `0/0`
+  // for one nobody uses states a fact about the list rather than about the repository.
+  const perRole = ROLES
     .map((role) => {
       const cells = evidence.cells.filter((c) => roleOf(c) === role).length
       const decls = evidence.declarations.filter((d) => roleOf(d) === role).length
-      const mark = COMPLETE_ROLES.includes(role) ? 'complete' : `${decls}/${cells} emitted`
-      return `${role} ${mark}`
+      if (cells === 0 && decls === 0) return undefined
+      return `${role} ${COMPLETE_ROLES.includes(role) ? 'complete' : `${decls}/${cells}`}`
     })
+    .filter((entry) => entry !== undefined)
     .join(', ')
   console.log(`guard-cell-authorship: ${evidence.declarations.length} declaration(s) round-trip clean — ${perRole}`)
   return 0
@@ -370,9 +399,11 @@ const POPULATION_FIXTURES: readonly { path: string; expect: boolean }[] = [
   { path: 'packages/p/src/internal/falsify-probe.workflow.ts', expect: false },
   { path: 'packages/p/src/a.authorship-probe.workflow.ts', expect: false },
   { path: 'packages/p/src/a.schema.ts', expect: true },
-  // A role with no emitter is outside the population: the gate governs what it can regenerate.
-  { path: 'packages/p/src/a.kernel.ts', expect: false },
-  { path: 'packages/p/src/a.handler.ts', expect: false },
+  // Every sanctioned role is in the population, because one compiler regenerates any of them. The
+  // gate governed only the four data-emitter roles while a data description was the only input.
+  { path: 'packages/p/src/a.kernel.ts', expect: true },
+  { path: 'packages/p/src/a.handler.ts', expect: true },
+  { path: 'packages/p/src/a.nonsense.ts', expect: false },
   { path: 'docs/plans/a.workflow.ts', expect: false },
 ]
 
