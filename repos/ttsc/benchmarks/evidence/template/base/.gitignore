@@ -1,0 +1,48 @@
+# Dependencies and compiler state
+node_modules/
+.build-cache/
+*.tsbuildinfo
+# The packed toolchain this workspace installs from. It is delivered material,
+# not authored work, and it is large: the platform package alone is ~47 MB, so
+# committing it puts those bytes in the baseline, in every checkpoint snapshot
+# that copies and hashes the workspace, and in the `.git` tree holding both.
+.benchmark-deps/
+# ttsc extracts its platform package here when it repairs a missing native
+# binary. One cell of eight hit it, most likely install contention while eight
+# workspaces pulled the same 47 MB archive at once. It is 3.7k extracted files
+# of compiler, so counting it as authored work misreports the cell by two
+# orders of magnitude, and committing it would put it in the retained record.
+.ttsc-repair-*/
+# Nestia writes its debug dump and a per-process runtime scratch file into the
+# package it is generating from. Both are tooling output: the dump landed 420
+# files and 110k lines in one measured tree, counted as authored work, and the
+# scratch file lives for milliseconds and lost a race with the dashboard.
+packages/*/.nestia-debug-out/
+.nestia.runtime.*.json
+
+# Local environment
+.env
+.env.*
+!.env.example
+
+# Package outputs
+packages/api/lib/
+packages/backend/bin/
+packages/backend/lib/
+packages/backend/src/prisma/
+packages/frontend/dist/
+
+# Local SQLite state
+packages/backend/prisma/db.sqlite
+packages/backend/prisma/db.sqlite-journal
+packages/backend/prisma/db.sqlite-shm
+packages/backend/prisma/db.sqlite-wal
+
+# Browser diagnostics
+packages/frontend/playwright-report/
+packages/frontend/test-results/
+
+# Process output. A watcher or dev server redirected to a file is tooling
+# noise, not authored work, and counting it as a source change misreports how
+# much of the product exists.
+*.log

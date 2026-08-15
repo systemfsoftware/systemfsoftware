@@ -1,0 +1,3106 @@
+# Core
+
+Generic ESLint-compatible rules that apply to both JavaScript and TypeScript source.
+
+Every rule listed here corresponds 1-to-1 with an ESLint core rule of the same kebab-case id.
+
+TypeScript-only rules and `@typescript-eslint` extension rules do **not** live here. They belong to [TypeScript](./typescript).
+
+Keeping the core family namespace-free means projects migrating from ESLint can paste their rule severities into a `ttsc.lint.config.ts` file without renaming anything.
+
+The fix availability noted in each rule's JSDoc applies when `ttsc fix` or the LSP code action is invoked; a rule marked _Autofixable_ may still produce diagnostics that require human review for edge cases.
+
+Source: [ESLint core rules](https://eslint.org/docs/latest/rules/) (MIT).
+
+## Rule index
+
+Each rule name links to the detailed section below.
+
+Examples come from the checked [lint corpus](https://github.com/samchon/ttsc/tree/master/tests/test-lint/src/cases) or package-level rule tests when project layout matters.
+
+### Disallow
+
+- [`no-alert`](#rule-no-alert): Reject calls to `alert`, `confirm`, and `prompt`.
+- [`no-array-constructor`](#rule-no-array-constructor): Reject `Array(...)` and `new Array(...)` constructor calls.
+- [`no-async-promise-executor`](#rule-no-async-promise-executor): Reject `new Promise(async (resolve, reject) => { ... })`.
+- [`no-await-in-loop`](#rule-no-await-in-loop): Reject explicit and implicit awaits evaluated in repeated loop positions.
+- [`no-bitwise`](#rule-no-bitwise): Reject bitwise operators.
+- [`no-caller`](#rule-no-caller): Reject `arguments.caller` and `arguments.callee`, both deprecated properties forbidden in strict mode.
+- [`no-case-declarations`](#rule-no-case-declarations): Reject lexical declarations inside `case` or `default` clauses.
+- [`no-class-assign`](#rule-no-class-assign): Reject reassigning a class binding.
+- [`no-compare-neg-zero`](#rule-no-compare-neg-zero): Reject comparisons against `-0`.
+- [`no-cond-assign`](#rule-no-cond-assign): Reject assignment expressions inside conditions.
+- [`no-console`](#rule-no-console): Reject calls to `console.*`.
+- [`no-constant-condition`](#rule-no-constant-condition): Reject conditions whose value can be determined statically.
+- [`no-continue`](#rule-no-continue): Reject `continue` statements.
+- [`no-constructor-return`](#rule-no-constructor-return): Reject `return X;` (with a value) inside a class constructor.
+- [`no-control-regex`](#rule-no-control-regex): Reject ASCII control characters inside regular expression literals and `RegExp` strings.
+- [`no-debugger`](#rule-no-debugger): Reject `debugger` statements.
+- [`no-delete-var`](#rule-no-delete-var): Reject `delete` applied to plain variable bindings.
+- [`no-dupe-args`](#rule-no-dupe-args): Reject `function f(a, a)` and similar parameter lists.
+- [`no-dupe-class-members`](#rule-no-dupe-class-members): Reject two declarations of the same member on a single class.
+- [`no-dupe-else-if`](#rule-no-dupe-else-if): Reject `if (a) {} else if (a) {}`, the second branch is unreachable.
+- [`no-dupe-keys`](#rule-no-dupe-keys): Reject `{ a: 1, a: 2 }`, duplicate property keys in an object literal silently overwrite earlier values.
+- [`no-duplicate-case`](#rule-no-duplicate-case): Reject the same `case` label appearing twice in a `switch`, later duplicates are unreachable.
+- [`no-duplicate-imports`](#rule-no-duplicate-imports): Reject a repeated module specifier when the import declarations could be merged into one legal declaration.
+- [`no-else-return`](#rule-no-else-return): Reject an `else` block whose preceding `if` branch already ends in a `return`.
+- [`no-empty`](#rule-no-empty): Reject uncommented empty blocks and switches.
+- [`no-empty-character-class`](#rule-no-empty-character-class): Reject empty regex character classes.
+- [`no-empty-function`](#rule-no-empty-function): Reject uncommented empty function and method bodies unless their category is allowed.
+- [`no-empty-named-blocks`](#rule-no-empty-named-blocks): Reject empty named import or export clauses, `import {} from "x"`, `import name, {} from "x"`, and `export {}`.
+- [`no-empty-pattern`](#rule-no-empty-pattern): Reject empty destructuring patterns.
+- [`no-empty-static-block`](#rule-no-empty-static-block): Reject uncommented empty `static {}` class initialization blocks.
+- [`no-eq-null`](#rule-no-eq-null): Reject loose null comparisons.
+- [`no-eval`](#rule-no-eval): Reject `eval(...)` and indirect `eval` calls, almost always a security or correctness bug.
+- [`no-ex-assign`](#rule-no-ex-assign): Reject reassigning the parameter of a `catch` clause.
+- [`no-extend-native`](#rule-no-extend-native): Reject assignments to a built-in prototype such as `Array.prototype.foo = bar`.
+- [`no-extra-bind`](#rule-no-extra-bind): Reject `.bind(thisArg)` when the function cannot use the bound receiver.
+- [`no-extra-boolean-cast`](#rule-no-extra-boolean-cast): Reject redundant boolean casts such as `!!Boolean(x)`, `if (Boolean(x))`, or `Boolean(!!x)`.
+- [`no-fallthrough`](#rule-no-fallthrough): Reject `switch` cases that can reach the next label without an intentional `// falls through` comment.
+- [`no-func-assign`](#rule-no-func-assign): Reject reassignment of function declarations.
+- [`no-implicit-coercion`](#rule-no-implicit-coercion): Reject common implicit-coercion idioms.
+- [`no-import-assign`](#rule-no-import-assign): Reject writes to a binding introduced by an `import` declaration, assignment (`x = ...`), compound assignment.
+- [`no-inner-declarations`](#rule-no-inner-declarations): Reject block functions with legacy sloppy semantics; `"both"` also checks nested `var` declarations.
+- [`no-invalid-this`](#rule-no-invalid-this): Reject `this` references outside any function-like, class method, or class-static-block context.
+- [`no-irregular-whitespace`](#rule-no-irregular-whitespace): Reject irregular whitespace characters in source.
+- [`no-iterator`](#rule-no-iterator): Reject the legacy `__iterator__` property, a SpiderMonkey-only extension predating ES2015 iterators.
+- [`no-labels`](#rule-no-labels): Reject labeled statements.
+- [`no-lone-blocks`](#rule-no-lone-blocks): Reject standalone `{ ... }` blocks that introduce no lexical scope distinct from the surrounding block.
+- [`no-lonely-if`](#rule-no-lonely-if): Reject `if (cond) { if (...) { ... } }`.
+- [`no-loop-func`](#rule-no-loop-func): Reject loop-created closures that capture bindings which can change between iterations.
+- [`no-loss-of-precision`](#rule-no-loss-of-precision): Reject numeric literals whose source text cannot round-trip through `Number`.
+- [`no-magic-numbers`](#rule-no-magic-numbers): Reject inline numeric literals outside `const` initializer position.
+- [`no-misleading-character-class`](#rule-no-misleading-character-class): Reject regex character classes that contain combined Unicode sequences (e.g. surrogate pairs).
+- [`no-mixed-operators`](#rule-no-mixed-operators): Reject mixing different operators from one precedence group (e.g. `a && b || c`, `a + b * c`) without parentheses.
+- [`no-multi-assign`](#rule-no-multi-assign): Reject chained assignment such as `a = b = 0`.
+- [`no-multi-str`](#rule-no-multi-str): Reject backslash-newline multiline string literals.
+- [`no-negated-condition`](#rule-no-negated-condition): Reject `if (!cond) { ... } else { ... }`, flip the branches.
+- [`no-nested-ternary`](#rule-no-nested-ternary): Reject ternary expressions nested in other ternaries.
+- [`no-new`](#rule-no-new): Reject `new` expressions whose return value is not assigned or used.
+- [`no-new-func`](#rule-no-new-func): Reject `new Function(...)` and `Function(...)` calls.
+- [`no-new-wrappers`](#rule-no-new-wrappers): Reject primitive wrapper constructors `new String(...)`, `new Number(...)`, `new Boolean(...)`.
+- [`no-new-symbol`](#rule-no-new-symbol): Reject `new Symbol(...)`.
+- [`no-obj-calls`](#rule-no-obj-calls): Reject calling global non-callable objects as functions.
+- [`no-object-constructor`](#rule-no-object-constructor): Reject `new Object()` and `Object()` constructor calls.
+- [`no-octal`](#rule-no-octal): Reject legacy octal literals.
+- [`no-octal-escape`](#rule-no-octal-escape): Reject octal escape sequences in string literals.
+- [`no-param-reassign`](#rule-no-param-reassign): Reject writes to parameter bindings and, optionally, their properties.
+- [`no-plusplus`](#rule-no-plusplus): Reject `++` and `--` operators.
+- [`no-promise-executor-return`](#rule-no-promise-executor-return): Reject values returned by global Promise executors.
+- [`no-proto`](#rule-no-proto): Reject access to `obj.__proto__`; use `Object.getPrototypeOf` / `Object.setPrototypeOf`.
+- [`no-prototype-builtins`](#rule-no-prototype-builtins): Reject `obj.hasOwnProperty(key)` and other direct `Object.prototype` builtins on user objects.
+- [`no-redeclare`](#rule-no-redeclare): Reject declaring the same binding more than once in the same scope.
+- [`no-regex-spaces`](#rule-no-regex-spaces): Reject more than one consecutive literal space in a regex.
+- [`no-restricted-imports`](#rule-no-restricted-imports): Reject static imports and re-exports selected by configured exact paths, gitignore-style groups, or regular expressions.
+- [`no-restricted-syntax`](#rule-no-restricted-syntax): Reject only syntax matching configured TypeScript-Go AST selectors.
+- [`no-return-assign`](#rule-no-return-assign): Reject assignment expressions used as the operand of `return` , almost always a typo for `===`.
+- [`no-script-url`](#rule-no-script-url): Reject `javascript:` URLs in string literals, they execute their body as code on browser navigation.
+- [`no-self-assign`](#rule-no-self-assign): Reject `x = x` and destructuring forms.
+- [`no-self-compare`](#rule-no-self-compare): Reject comparing a value to itself.
+- [`no-sequences`](#rule-no-sequences): Reject comma expressions outside the heads of `for` statements.
+- [`no-setter-return`](#rule-no-setter-return): Reject explicit `return` from a setter, setters' return values are ignored.
+- [`no-shadow`](#rule-no-shadow): Reject a variable declaration that shadows a same-name binding in an enclosing scope.
+- [`no-shadow-restricted-names`](#rule-no-shadow-restricted-names): Reject redeclaring restricted globals.
+- [`no-sparse-arrays`](#rule-no-sparse-arrays): Reject array literals with elision.
+- [`no-template-curly-in-string`](#rule-no-template-curly-in-string): Reject `${expr}` inside ordinary single- or double-quoted strings, almost always a missing template-literal backtick.
+- [`no-this-before-super`](#rule-no-this-before-super): Reject `this` references that precede the first `super()` call in a derived constructor.
+- [`no-throw-literal`](#rule-no-throw-literal): Reject throwing non-Error operands.
+- [`no-undef-init`](#rule-no-undef-init): Reject initializing a variable to the literal `undefined` , declaring.
+- [`no-undefined`](#rule-no-undefined): Reject use of the global `undefined` identifier.
+- [`no-unneeded-ternary`](#rule-no-unneeded-ternary): Reject `cond ? true : false` and similar ternaries.
+- [`no-unreachable`](#rule-no-unreachable): Reject statements that follow an unconditional `return`, `throw`, `break`, or `continue` in the same block.
+- [`no-unsafe-finally`](#rule-no-unsafe-finally): Reject `return` and `throw` inside a `finally` block.
+- [`no-unsafe-negation`](#rule-no-unsafe-negation): Reject `!key in obj` and `!a instanceof B`.
+- [`no-unsafe-optional-chaining`](#rule-no-unsafe-optional-chaining): Reject member access or call expressions that chain off an optional chain.
+- [`no-unused-expressions`](#rule-no-unused-expressions): Reject expression statements with no observable effect, like a bare `x;`, `a === b;`, or a tagged template literal statement.
+- [`no-unused-labels`](#rule-no-unused-labels): Reject labels that no `break` or `continue` statement references.
+- [`no-useless-assignment`](#rule-no-useless-assignment): Reject an assignment whose value is immediately overwritten by the very next statement.
+- [`no-useless-call`](#rule-no-useless-call): Reject unnecessary `.call()` / `.apply()` calls.
+- [`no-useless-catch`](#rule-no-useless-catch): Reject `catch (e) { throw e }` patterns that only rethrow the caught error.
+- [`no-useless-computed-key`](#rule-no-useless-computed-key): Reject computed property keys whose expression is a literal identifier.
+- [`no-useless-concat`](#rule-no-useless-concat): Reject `"a" + "b"` and similar concatenations.
+- [`no-useless-constructor`](#rule-no-useless-constructor): Reject empty constructor bodies that add nothing over the implicit constructor.
+- [`no-useless-escape`](#rule-no-useless-escape): Reject unnecessary escape sequences in strings and regex literals.
+- [`no-useless-rename`](#rule-no-useless-rename): Reject `{ x: x }` destructuring renames.
+- [`no-useless-return`](#rule-no-useless-return): Reject a bare `return;` whose only effect is to end a function body.
+- [`no-var`](#rule-no-var): Reject `var` declarations.
+- [`no-with`](#rule-no-with): Reject `with (...)` statements.
+
+### Prefer
+
+- [`prefer-arrow-callback`](#rule-prefer-arrow-callback): Reject `function() { ... }` expressions passed as callback arguments, prefer the arrow form.
+- [`prefer-const`](#rule-prefer-const): Require `const` for variables that are never reassigned after declaration.
+- [`prefer-destructuring`](#rule-prefer-destructuring): Reject single-property and single-index variable declarations.
+- [`prefer-exponentiation-operator`](#rule-prefer-exponentiation-operator): Prefer the `**` operator over `Math.pow(base, exp)`.
+- [`prefer-for-of`](#rule-prefer-for-of): Prefer `for..of` over a traditional `for (let i = 0; i < arr.length; i++)` loop.
+- [`prefer-object-has-own`](#rule-prefer-object-has-own): Prefer `Object.hasOwn(obj, key)` over `Object.prototype.hasOwnProperty.call(obj, key)`.
+- [`prefer-object-spread`](#rule-prefer-object-spread): Prefer object-spread `{ ...a, ...b }` over `Object.assign({}, a, b)`.
+- [`prefer-named-capture-group`](#rule-prefer-named-capture-group): Reject regex literals with unnamed capturing groups `(...)`, prefer named groups `(?<name>...)`.
+- [`prefer-numeric-literals`](#rule-prefer-numeric-literals): Prefer ES2015+ numeric literal forms over `parseInt(string, 2 | 8 | 16)`.
+- [`prefer-rest-params`](#rule-prefer-rest-params): Reject reading from `arguments` in a non-arrow function body, prefer the ES2015 rest-parameter form `(...args)`.
+- [`prefer-spread`](#rule-prefer-spread): Prefer spread arguments `f(...args)` over `f.apply(null, args)`.
+- [`prefer-template`](#rule-prefer-template): Prefer template literals over string concatenation.
+
+### Require
+
+- [`require-yield`](#rule-require-yield): Require generator functions to contain at least one `yield`.
+
+### Consistency
+
+- [`consistent-return`](#rule-consistent-return): Reject functions where some `return` statements return a value and others do not.
+- [`sort-imports`](#rule-sort-imports): Reject import specifiers within a single `import` declaration.
+- [`sort-keys`](#rule-sort-keys): Reject object-literal property keys.
+
+### Validation
+
+- [`valid-typeof`](#rule-valid-typeof): Restrict the right-hand operand of `typeof` to the documented strings.
+
+### Other checks
+
+- [`curly`](#rule-curly): Require block statements for every `if`, `else`, `while`, `for`, and `do` body, reject the single-statement shorthand.
+- [`default-case`](#rule-default-case): Require `switch` statements to include a `default` clause unless a `// no default` marker comment opts out.
+- [`default-case-last`](#rule-default-case-last): Require the `default` clause of a `switch` statement.
+- [`camelcase`](#rule-camelcase): Reject identifier declarations that aren't camelCase or PascalCase, snake_case bindings are flagged.
+- [`complexity`](#rule-complexity): Reject function bodies whose cyclomatic complexity exceeds twenty (default ESLint threshold).
+- [`default-param-last`](#rule-default-param-last): Reject `(req, opt = 1, req2)` and similar parameter lists.
+- [`dot-notation`](#rule-dot-notation): Prefer dot access over bracket access.
+- [`eqeqeq`](#rule-eqeqeq): Require strict equality operators `===` / `!==` over `==` / `!=`.
+- [`for-direction`](#rule-for-direction): Reject `for` statements whose update clause moves the counter away from the termination condition.
+- [`getter-return`](#rule-getter-return): Require a `get` accessor's body to return a value on every reachable exit.
+- [`grouped-accessor-pairs`](#rule-grouped-accessor-pairs): Require the `get` and `set` accessors of a single property.
+- [`guard-for-in`](#rule-guard-for-in): Require the body of every `for (key in obj)` loop to begin with an `if` statement that can filter inherited keys.
+- [`id-length`](#rule-id-length): Reject identifier names shorter than two characters.
+- [`init-declarations`](#rule-init-declarations): Require every `var` / `let` declaration.
+- [`max-classes-per-file`](#rule-max-classes-per-file): Reject a source file that declares more than one class.
+- [`max-depth`](#rule-max-depth): Reject block-statement nesting deeper than four levels inside a function.
+- [`max-lines`](#rule-max-lines): Reject a source file whose total line count exceeds three hundred.
+- [`max-lines-per-function`](#rule-max-lines-per-function): Reject a function whose body spans more than fifty lines.
+- [`max-nested-callbacks`](#rule-max-nested-callbacks): Reject callback nesting deeper than ten inside a single function.
+- [`max-params`](#rule-max-params): Reject function declarations whose parameter list grows beyond three.
+- [`max-statements`](#rule-max-statements): Reject function bodies whose statement count exceeds ten.
+- [`object-shorthand`](#rule-object-shorthand): Reject `{ foo: foo }` and similar object-literal shorthand candidates.
+- [`operator-assignment`](#rule-operator-assignment): Prefer compound assignment over the long form.
+- [`radix`](#rule-radix): Require an explicit radix argument for `parseInt(str, radix)`.
+- [`use-isnan`](#rule-use-isnan): Require `Number.isNaN` / `isNaN` for `NaN` checks.
+- [`vars-on-top`](#rule-vars-on-top): Require `var` declarations to be hoisted to the top of their scope by hand, mirroring how the engine treats them.
+- [`yoda`](#rule-yoda): Reject Yoda-style comparisons ; use `if (x === 42)`.
+
+## Rules
+
+<a id="rule-curly"></a>
+
+### `curly`
+
+Require block statements for every `if`, `else`, `while`, `for`, and `do` body, reject the single-statement shorthand.
+
+Example:
+
+```ts
+const flag: boolean = Math.random() > 0.5;
+// reports: curly (error)
+if (flag) console.log("if");
+```
+
+<a id="rule-default-case"></a>
+
+### `default-case`
+
+Require `switch` statements to include a `default` clause.
+
+A switch without `default` silently drops every discriminant value that no `case` label matched.
+
+The rule forces the catch-all branch to be written out so unhandled cases become an intentional decision instead of a hidden fall-through. An empty switch (`switch (x) {}`) is skipped, matching ESLint. A switch may opt out by placing a marker comment whose trimmed text matches `commentPattern` (default `/^no default$/i`, for example `// no default`) as the last comment after its final clause.
+
+Example:
+
+```ts
+function classify(kind: string): string {
+  // reports: default-case (error)
+  switch (kind) {
+    case "a":
+      return "letter-a";
+    case "b":
+      return "letter-b";
+  }
+  return "unknown";
+}
+
+function classifyMarked(kind: string): string {
+  switch (kind) {
+    case "a":
+      return "letter-a";
+    // no default
+  }
+  return "unknown";
+}
+```
+
+Options:
+
+- `commentPattern?: string`
+
+  Regular expression the opt-out marker comment must match. Replaces the default `/^no default$/i` pattern entirely.
+
+<a id="rule-default-case-last"></a>
+
+### `default-case-last`
+
+Require the `default` clause of a `switch` statement to appear after every explicit `case` label.
+
+Placing `default` ahead of a `case` reverses the visual order of the labels and changes the fall-through path, running `default` and then falling into the next `case` is almost always a misordering rather than intent.
+
+Example:
+
+```ts
+function classify(kind: string): string {
+  switch (kind) {
+    // reports: default-case-last (error)
+    default:
+      return "unknown";
+    case "a":
+      return "letter-a";
+    case "b":
+      return "letter-b";
+  }
+}
+```
+
+<a id="rule-camelcase"></a>
+
+### `camelcase`
+
+Reject identifier declarations that aren't camelCase or PascalCase, snake_case bindings are flagged.
+
+Example:
+
+```ts
+// reports: camelcase (error)
+const snake_value: number = 1;
+const camelValue: number = 2;
+const PascalValue: number = 3;
+const _private: number = 4;
+const MAX_VALUE: number = 5;
+function goodName(): void {}
+// reports: camelcase (error)
+function bad_name(): void {}
+class GoodClass {}
+// reports: camelcase (error)
+class bad_class {}
+function take(good: number, _ignored: number): void {
+  void good;
+}
+```
+
+<a id="rule-complexity"></a>
+
+### `complexity`
+
+Reject function bodies whose cyclomatic complexity exceeds twenty (default ESLint threshold).
+
+Example:
+
+```ts
+// reports: complexity (error)
+function tooComplex(input: number): string {
+  // Base complexity is 1. The body below adds 21 more branching points,
+  // enough to exceed ESLint's default limit of 20.
+  if (input === 0) return "zero";
+  if (input === 1) return "one";
+  if (input === 2) return "two";
+  if (input === 3) return "three";
+  if (input === 4) return "four";
+  if (input === 5) return "five";
+  if (input === 6) return "six";
+  if (input === 7) return "seven";
+  if (input === 8) return "eight";
+  if (input === 9) return "nine";
+  if (input === 10) return "ten";
+  if (input === 11) return "eleven";
+  if (input === 12) return "twelve";
+  if (input === 13) return "thirteen";
+  if (input === 14) return "fourteen";
+  if (input === 15) return "fifteen";
+  if (input === 16) return "sixteen";
+  if (input === 17) return "seventeen";
+  if (input === 18) return "eighteen";
+  if (input === 19) return "nineteen";
+  if (input === 20) return "twenty";
+  return "many";
+}
+```
+
+<a id="rule-consistent-return"></a>
+
+### `consistent-return`
+
+Reject functions where some `return` statements return a value and others (explicit bare `return;` or implicit fall-through) do not.
+
+Example:
+
+```ts
+// reports: consistent-return (error)
+function mixed(flag: boolean): number | undefined {
+  if (flag) {
+    return 1;
+  }
+  return;
+}
+```
+
+<a id="rule-default-param-last"></a>
+
+### `default-param-last`
+
+Reject `(req, opt = 1, req2)` and similar parameter lists where a required parameter follows an optional or default-valued one.
+
+The call site cannot omit the trailing required parameter, so the optional becomes positionally required too, almost always an accidental ordering.
+
+Example:
+
+```ts
+function bad(
+  // reports: default-param-last (error)
+  a?: number,
+  b: number,
+): number {
+  return (a ?? 0) + b;
+}
+function trailing(b: number, a?: number): number {
+  return (a ?? 0) + b;
+}
+```
+
+<a id="rule-dot-notation"></a>
+
+### `dot-notation`
+
+Prefer dot access (`obj.value`) over bracket access (`obj["value"]`) when the string key is a valid JavaScript identifier.
+
+Bracket access remains accepted for dynamic keys or keys containing characters that cannot appear in an identifier.
+
+The autofix inserts a space after a bare decimal-integer receiver (`5["toString"]` becomes `5 .toString`) so the dot is not lexed as the number's decimal point.
+
+Two cases are reported without an autofix and offer the rewrite as an editor suggestion instead: a comment inside the bracket span (applying the suggestion deletes that comment), and a reserved-word key such as `box["class"]` (valid on modern targets, but bracket access is kept by default because minifiers and older engines can break on it).
+
+Example:
+
+```ts
+const box = { name: "ttsc", "not-valid-key": "kept" };
+
+// reports: dot-notation (error)
+const value = box["name"];
+const kept = box["not-valid-key"];
+```
+
+<a id="rule-eqeqeq"></a>
+
+### `eqeqeq`
+
+Require strict equality operators `===` / `!==` over `==` / `!=`.
+
+Loose equality performs implicit type coercion that frequently hides bugs.
+
+The operator is autofixed only when both operands are provably the same type (two same-kind literals, or a `typeof` comparison). Otherwise tightening the comparison can change what the program computes, so the rewrite is offered as an editor suggestion the author opts into rather than being applied by `ttsc fix`.
+
+Example:
+
+```ts
+function f(left: number | string, right: number | string) {
+  // reports: eqeqeq (error)
+  return left == right;
+}
+```
+
+<a id="rule-for-direction"></a>
+
+### `for-direction`
+
+Reject `for` statements whose update clause moves the counter away from the termination condition, such as `for (let i = 0; i < 10; i--)`. Such loops either never run or never terminate.
+
+Example:
+
+```ts
+// reports: for-direction (error)
+for (let i = 0; i < 10; i--) {}
+```
+
+<a id="rule-getter-return"></a>
+
+### `getter-return`
+
+Require a `get` accessor's body to return a value on every reachable exit.
+
+A getter that falls through returns `undefined` to the caller, which is almost never the intent and turns into a silent bug that only surfaces when the property is finally read.
+
+Example:
+
+```ts
+class MissingReturn {
+  // reports: getter-return (error)
+  get value(): number {
+    const x = 1 + 1;
+  }
+}
+```
+
+<a id="rule-grouped-accessor-pairs"></a>
+
+### `grouped-accessor-pairs`
+
+Require the `get` and `set` accessors of a single property to be declared next to each other, in either a class body or an object literal.
+
+When the read and write halves of a property are split apart by unrelated members, a reader scanning the declaration has to chase the pair across the body, and patches to one half are easy to make without noticing the other.
+
+The optional order argument (`"anyOrder"`, the default, `"getBeforeSet"`, or `"setBeforeGet"`) also fixes the relative order of an already adjacent pair.
+
+Example:
+
+```ts
+class SplitAccessor {
+  private state = 0;
+
+  get value(): number {
+    return this.state;
+  }
+
+  other(): void {
+    this.state += 1;
+  }
+
+  // reports: grouped-accessor-pairs (error)
+  set value(next: number) {
+    this.state = next;
+  }
+}
+```
+
+<a id="rule-guard-for-in"></a>
+
+### `guard-for-in`
+
+Require the body of every `for (key in obj)` loop to begin with an `if` statement, so inherited keys walked in from the prototype chain can be filtered out. Following ESLint, the check is purely structural: it never inspects what the `if` tests, so any guard satisfies it — `Object.hasOwn(obj, key)`, `obj.hasOwnProperty(key)`, or an arbitrary predicate.
+
+The body is accepted when it is an empty statement, an `if` statement, an empty block, a block whose only statement is an `if`, or a block whose leading `if` skips inherited keys with `continue` (for example `if (!Object.hasOwn(obj, key)) continue;`). Any other body is reported.
+
+Without a guard the loop processes every enumerable name on the prototype chain, including monkey-patches someone else attached to `Object.prototype`, so an unguarded body silently leaks work onto inherited entries.
+
+Example:
+
+```ts
+function dumpAll(obj: Record<string, unknown>): void {
+  // reports: guard-for-in (error)
+  for (const key in obj) {
+    console.log(key, obj[key]);
+  }
+}
+```
+
+<a id="rule-id-length"></a>
+
+### `id-length`
+
+Reject identifier names shorter than two characters.
+
+Example:
+
+```ts
+// reports: id-length (error)
+const a: number = 1;
+const ab: number = 2;
+const longer: number = 3;
+// reports: id-length (error)
+function f(): void {}
+function go(): void {}
+// reports: id-length (error)
+class C {}
+class Foo {}
+function take(
+  // reports: id-length (error)
+  x: number,
+  yy: number,
+  longParam: number,
+): void {
+  void yy;
+  void longParam;
+}
+```
+
+<a id="rule-init-declarations"></a>
+
+### `init-declarations`
+
+Require every `var` / `let` declaration to be initialized at its declaration site.
+
+Example:
+
+```ts
+// reports: init-declarations (error)
+let pending: number | undefined;
+pending = 1;
+```
+
+<a id="rule-max-classes-per-file"></a>
+
+### `max-classes-per-file`
+
+Reject a source file that declares more than one class.
+
+Example:
+
+```ts
+class First {
+  value(): number {
+    return 1;
+  }
+}
+
+// reports: max-classes-per-file (error)
+class Second {
+  value(): number {
+    return 2;
+  }
+}
+```
+
+<a id="rule-max-depth"></a>
+
+### `max-depth`
+
+Reject block-statement nesting deeper than four levels inside a function.
+
+Example:
+
+```ts
+function deep(values: ReadonlyArray<number>): number {
+  let total = 0;
+  if (values.length > 0) {
+    for (const value of values) {
+      while (total < 100) {
+        if (value > 0) {
+          // reports: max-depth (error)
+          if (value % 2 === 0) {
+            total += value;
+          }
+        }
+        total += 1;
+      }
+    }
+  }
+  return total;
+}
+```
+
+<a id="rule-max-lines"></a>
+
+### `max-lines`
+
+Reject a source file whose total line count exceeds three hundred.
+
+Example:
+
+```ts
+void 290;
+void 291;
+void 292;
+void 293;
+void 294;
+void 295;
+void 296;
+void 297;
+void 298;
+void 299;
+// reports: max-lines (error)
+void 301;
+void 302;
+void 303;
+void 304;
+void 305;
+```
+
+<a id="rule-max-lines-per-function"></a>
+
+### `max-lines-per-function`
+
+Reject a function whose body spans more than fifty lines.
+
+Example:
+
+```ts
+// With max set to 10.
+// reports: max-lines-per-function (error)
+function longBody(): number {
+  let total = 0;
+  total += 1;
+  total += 1;
+  total += 1;
+  total += 1;
+  total += 1;
+  total += 1;
+  total += 1;
+  total += 1;
+  total += 1;
+  total += 1;
+  total += 1;
+  total += 1;
+  return total;
+}
+```
+
+<a id="rule-max-nested-callbacks"></a>
+
+### `max-nested-callbacks`
+
+Reject callback nesting deeper than ten inside a single function.
+
+Example:
+
+```ts
+schedule(() =>
+  schedule(() =>
+    schedule(() =>
+      schedule(() =>
+        schedule(() =>
+          schedule(() =>
+            schedule(() =>
+              schedule(() =>
+                schedule(() =>
+                  schedule(() =>
+                    // reports: max-nested-callbacks (error)
+                    schedule(() => {
+                      void 0;
+                    }),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+  ),
+);
+```
+
+<a id="rule-max-params"></a>
+
+### `max-params`
+
+Reject function declarations whose parameter list grows beyond three.
+
+Long parameter lists are hard to read at the call site because positional arguments lose their names; folding them into an options object recovers the names and lets callers pass a subset.
+
+Every function-like declaration is checked: function declarations, function expressions, arrow functions, methods, accessors, and constructors.
+
+The threshold is fixed at three to match the ESLint default; rule options are deferred.
+
+Example:
+
+```ts
+// reports: max-params (error)
+function four(a: number, b: number, c: number, d: number): number {
+  return a + b + c + d;
+}
+```
+
+<a id="rule-max-statements"></a>
+
+### `max-statements`
+
+Reject function bodies whose statement count exceeds ten.
+
+Example:
+
+```ts
+// reports: max-statements (error)
+function eleven(): number {
+  const a = 1;
+  const b = 2;
+  const c = 3;
+  const d = 4;
+  const e = 5;
+  const f = 6;
+  const g = 7;
+  const h = 8;
+  const i = 9;
+  const j = 10;
+  return a + b + c + d + e + f + g + h + i + j;
+}
+```
+
+<a id="rule-no-alert"></a>
+
+### `no-alert`
+
+Reject calls to `alert`, `confirm`, and `prompt`.
+
+These browser dialogs block the main thread and are almost always debugging leftovers or placeholders for a proper UI component.
+
+Example:
+
+```ts
+// reports: no-alert (error)
+alert("hi");
+```
+
+<a id="rule-no-array-constructor"></a>
+
+### `no-array-constructor`
+
+Reject `Array(...)` and `new Array(...)` constructor calls in favor of array literals.
+
+`Array(n)` and `[n]` behave differently for a single numeric argument, and the array literal is uniformly clearer.
+
+Example:
+
+```ts
+// reports: no-array-constructor (error)
+const a = new Array();
+```
+
+<a id="rule-no-async-promise-executor"></a>
+
+### `no-async-promise-executor`
+
+Reject `new Promise(async (resolve, reject) => { ... })`.
+
+Promises thrown asynchronously inside the executor are dropped silently because the constructor has already returned the outer Promise. Use a regular function and call `reject` explicitly.
+
+Example:
+
+```ts
+// reports: no-async-promise-executor (error)
+new Promise(async (resolve) => {
+  resolve(1);
+});
+```
+
+<a id="rule-no-await-in-loop"></a>
+
+### `no-await-in-loop`
+
+Reject explicit `await` expressions and implicit awaits from `for await ... of` or `await using` when they execute in a repeated loop position. A `for` initializer and the right-hand side of `for...in` or `for...of` run once and are allowed; loop tests, updates, and bodies repeat and are checked.
+
+The loop runs strictly serially because each iteration blocks on the previous one's microtask hop; when the operations are independent the equivalent `Promise.all([...])` is dramatically faster.
+
+The rule treats a `for await ... of` as a boundary for its own body because asynchronous iteration is intentional. The same statement is reported when nested in an ordinary loop, where creating and consuming the async iterator becomes part of each outer iteration.
+
+Example:
+
+```ts
+async function inForLoop(): Promise<number> {
+  let total = 0;
+  for (let i = 0; i < 3; i++) {
+    // reports: no-await-in-loop (error)
+    total += await getPromise();
+  }
+  return total;
+}
+```
+
+<a id="rule-no-bitwise"></a>
+
+### `no-bitwise`
+
+Reject bitwise operators (`&`, `|`, `^`, `~`, `<<`, `>>`, `>>>`).
+
+Bitwise operators are almost always typos for the logical operators (`&&`, `||`); enable when the codebase has no legitimate bit-twiddling.
+
+Example:
+
+```ts
+function f(a: number, b: number) {
+  // reports: no-bitwise (error)
+  return a & b;
+}
+```
+
+<a id="rule-no-caller"></a>
+
+### `no-caller`
+
+Reject `arguments.caller` and `arguments.callee`, both deprecated properties forbidden in strict mode.
+
+They defeat engine optimizations and break under ES modules, where strict mode is implicit.
+
+Example:
+
+```ts
+function f() {
+  // reports: no-caller (error)
+  return arguments.callee;
+}
+```
+
+<a id="rule-no-case-declarations"></a>
+
+### `no-case-declarations`
+
+Reject lexical declarations (`let`, `const`, `class`, `function`) inside `case` or `default` clauses without their own block, since the declaration shares the whole `switch` scope and leaks into sibling clauses.
+
+Wrap the case body in `{ ... }` to introduce a fresh block.
+
+Example:
+
+```ts
+function f(x: number) {
+  switch (x) {
+    case 1:
+      // reports: no-case-declarations (error)
+      let y = 1;
+      return y;
+  }
+  return 0;
+}
+```
+
+<a id="rule-no-class-assign"></a>
+
+### `no-class-assign`
+
+Reject every write to a binding introduced by a class declaration or named class expression.
+
+The rule follows lexical binding identity rather than matching names. Same-spelled parameter, catch, block, and sibling bindings remain independent, while direct and compound assignments, updates, destructuring targets, and `for-in`/`for-of` targets all report writes to the actual class binding.
+
+Example:
+
+```ts
+class A {}
+// reports: no-class-assign (error)
+A = class Replacement {};
+```
+
+<a id="rule-no-compare-neg-zero"></a>
+
+### `no-compare-neg-zero`
+
+Reject comparisons against `-0` (`x === -0`, `x < -0`, etc.).
+
+`===` treats `+0` and `-0` as equal, so the comparison never distinguishes them; use `Object.is(x, -0)` when the sign of zero actually matters.
+
+Example:
+
+```ts
+function f(x: number) {
+  // reports: no-compare-neg-zero (error)
+  return x === -0;
+}
+```
+
+<a id="rule-no-cond-assign"></a>
+
+### `no-cond-assign`
+
+Reject assignment expressions inside conditions, such as `if (x = y)`, almost always a typo for `==` / `===`.
+
+Example:
+
+```ts
+let a = 0;
+let b = 1;
+// reports: no-cond-assign (error)
+if ((a = b)) {
+  console.log(a);
+}
+```
+
+<a id="rule-no-console"></a>
+
+### `no-console`
+
+Reject calls to `console.*`.
+
+Typically configured as `"warning"` so leftover logging stays visible without breaking the build.
+
+Example:
+
+```ts
+// reports: no-console (error)
+console.log("hi");
+```
+
+<a id="rule-no-constant-condition"></a>
+
+### `no-constant-condition`
+
+Reject conditions whose value can be determined statically, such as `while (true)` or `if (false)`, in `if`, `while`, `do/while`, `for`, and ternary expressions.
+
+The default `checkLoops` configuration still permits intentional infinite loops in a few forms; see upstream for the matrix.
+
+Example:
+
+```ts
+// reports: no-constant-condition (error)
+if (1) {
+  console.log("always");
+}
+```
+
+<a id="rule-no-continue"></a>
+
+### `no-continue`
+
+Reject `continue` statements.
+
+Stylistic policy preferring early returns or restructured loops over `continue`.
+
+Example:
+
+```ts
+for (let i = 0; i < 3; i++) {
+  // reports: no-continue (error)
+  if (i === 1) continue;
+  console.log(i);
+}
+```
+
+<a id="rule-no-constructor-return"></a>
+
+### `no-constructor-return`
+
+Reject `return X;` (with a value) inside a class constructor.
+
+The returned value is ignored when the constructor is invoked with `new` unless it happens to be an object; relying on that behavior is always a misunderstanding of the constructor protocol.
+
+Example:
+
+```ts
+class Returning {
+  value: number;
+  constructor(initial: number) {
+    this.value = initial;
+    // reports: no-constructor-return (error)
+    return { handled: true };
+  }
+}
+```
+
+<a id="rule-no-control-regex"></a>
+
+### `no-control-regex`
+
+Reject ASCII control characters (`\x00`-`\x1F`) inside regular expression literals and `RegExp` strings.
+
+They render invisibly in source and almost always indicate an accidental paste or a missed `\t` / `\n` escape.
+
+Example:
+
+```ts
+// reports: no-control-regex (error)
+const r = /\x1f/;
+```
+
+<a id="rule-no-debugger"></a>
+
+### `no-debugger`
+
+Reject `debugger` statements.
+
+Typically configured as `"error"` so accidental debugger leftovers fail CI.
+
+Example:
+
+```ts
+function f(): void {
+  // reports: no-debugger (error)
+  debugger;
+}
+f();
+```
+
+<a id="rule-no-delete-var"></a>
+
+### `no-delete-var`
+
+Reject `delete` applied to plain variable bindings (`delete x`).
+
+The operation is forbidden in strict mode (and therefore in ES modules) and never has the intended effect on `let` / `const` / `var` declarations.
+
+Example:
+
+```ts
+let value = 1;
+// reports: no-delete-var (error)
+delete value;
+```
+
+<a id="rule-no-dupe-args"></a>
+
+### `no-dupe-args`
+
+Reject `function f(a, a)` and similar parameter lists that declare the same name twice.
+
+The function cannot bind both arguments and fails in strict mode.
+
+Example:
+
+```ts
+// reports: no-dupe-args (error)
+function f(a: number, b: number, a: number) {
+  return a + b;
+}
+f(1, 2, 3);
+```
+
+<a id="rule-no-dupe-class-members"></a>
+
+### `no-dupe-class-members`
+
+Reject two declarations of the same member on a single class. The later declaration silently overwrites the earlier one at runtime; the syntax permits it but the result is never what the author intended.
+
+A getter and a setter for the same property coexist; an instance member and a static member with the same name coexist.
+
+Example:
+
+```ts
+class Methods {
+  run(): number {
+    return 1;
+  }
+
+  // reports: no-dupe-class-members (error)
+  run(): number {
+    return 2;
+  }
+}
+```
+
+<a id="rule-no-dupe-else-if"></a>
+
+### `no-dupe-else-if`
+
+Reject `if (a) {} else if (a) {}`, the second branch is unreachable because the first condition already handled it.
+
+Example:
+
+```ts
+function chooseCacheMode(isReady: boolean, isCached: boolean) {
+  if (isReady) {
+    return "ready";
+  } else if (isCached) {
+    return "cached";
+  }
+  // reports: no-dupe-else-if (error)
+  else if (isReady) {
+    return "still-ready";
+  }
+  return "cold";
+}
+```
+
+<a id="rule-no-dupe-keys"></a>
+
+### `no-dupe-keys`
+
+Reject `{ a: 1, a: 2 }`, duplicate property keys in an object literal silently overwrite earlier values. A computed key is resolved to its static literal value, so `["a"]` duplicates the identifier key `a`; a non-constant computed key such as `[f()]` or `[x]` is not statically known and is never treated as a duplicate.
+
+Example:
+
+```ts
+const o = {
+  a: 1,
+  // reports: no-dupe-keys (error)
+  a: 2,
+  // reports: no-dupe-keys (error)
+  ["a"]: 3,
+};
+```
+
+<a id="rule-no-duplicate-case"></a>
+
+### `no-duplicate-case`
+
+Reject the same `case` label appearing twice in a `switch`, later duplicates are unreachable.
+
+Example:
+
+```ts
+function f(x: number) {
+  switch (x) {
+    case 1:
+      return "a";
+    // reports: no-duplicate-case (error)
+    case 1:
+      return "b";
+  }
+  return "";
+}
+```
+
+<a id="rule-no-duplicate-imports"></a>
+
+### `no-duplicate-imports`
+
+Reject an import declaration whose module specifier already appeared above when the two declarations could be merged into one legal declaration. Same-module pairs TypeScript cannot consolidate, such as named next to namespace bindings or a type-only default next to type-only named bindings, are not duplicates.
+
+Options:
+
+- `allowSeparateTypeImports?: boolean`
+
+  Keep clause-level `import type` declarations out of the comparison with value imports of the same module, so one runtime import plus one type-only import may coexist. Inline type specifiers such as `import { type Foo }` stay on the value side because the whole import clause is not type-only. Default: `false`.
+
+- `includeExports?: boolean`
+
+  Also treat `export … from` declarations of an already imported or re-exported module as duplicates when the declarations could be merged. Default: `false`.
+
+Example:
+
+```ts
+import { first } from "some-module";
+// reports: no-duplicate-imports (error)
+import { second } from "some-module";
+
+// Not duplicates: named and namespace bindings cannot share one declaration.
+import { named } from "unmergeable-namespace";
+import * as namespace from "unmergeable-namespace";
+```
+
+<a id="rule-no-else-return"></a>
+
+### `no-else-return`
+
+Reject an `else` block whose preceding `if` branch already ends in a `return`, so its body can be flattened into the surrounding scope for one less level of nesting. Only `return` counts as leaving the branch; `throw`, `break`, and `continue` keep the `else` in place.
+
+Options:
+
+- `allowElseIf?: boolean`
+
+  When `true` (the default), a `return` followed by an `else if` chain that does not end in a plain `else` is left alone, so the common early-return chain stays valid. Set it to `false` to also reject the `else if`. Default: `true`.
+
+Example:
+
+```ts
+function describe(kind: string): string {
+  if (kind === "a") {
+    return "letter-a";
+    // reports: no-else-return (error)
+  } else {
+    return "other";
+  }
+}
+
+// Allowed by default (`allowElseIf: true`): a `return` + `else if` chain.
+function classifySign(n: number): string {
+  if (n > 0) {
+    return "positive";
+  } else if (n < 0) {
+    return "negative";
+  }
+  return "zero";
+}
+```
+
+<a id="rule-no-empty"></a>
+
+### `no-empty`
+
+Reject empty blocks and switches that have no interior comment. Empty catch clauses are reported by default; set `allowEmptyCatch` to `true` when silently ignoring caught errors is an established project convention.
+
+Options:
+
+- `allowEmptyCatch?: boolean`
+
+  Accept uncommented empty catch clauses while continuing to report every other uncommented empty block. Default: `false`.
+
+Example:
+
+```ts
+function f(x: number) {
+  // reports: no-empty (error)
+  if (x === 0) {
+  }
+}
+```
+
+```ts filename="ttsc.lint.config.ts"
+import type { ITtscLintConfig } from "@ttsc/lint";
+
+export default {
+  rules: {
+    "no-empty": ["error", { allowEmptyCatch: true }],
+  },
+} satisfies ITtscLintConfig;
+```
+
+<a id="rule-no-empty-character-class"></a>
+
+### `no-empty-character-class`
+
+Reject non-negated empty regex character classes (`[]`), including nested classes in Unicode Sets (`v`) mode. An empty class never matches a character, so its containing alternative cannot match through that class; the negated form `[^]` matches any character and is allowed.
+
+Example:
+
+```ts
+// reports: no-empty-character-class (error)
+const r = /[]/;
+```
+
+<a id="rule-no-empty-function"></a>
+
+### `no-empty-function`
+
+Reject empty function bodies that have no interior comment. The `allow` option accepts the same function, arrow, generator, method, accessor, constructor, async, decorator, and override categories as ESLint. TypeScript parameter-property constructors are always accepted because their parameters initialize fields.
+
+Options:
+
+- `allow?: TtscLintCoreNoEmptyFunctionAllow[]`
+
+  Accept the selected categories: `functions`, `arrowFunctions`, `generatorFunctions`, `methods`, `generatorMethods`, `getters`, `setters`, `constructors`, `asyncFunctions`, `asyncMethods`, `privateConstructors`, `protectedConstructors`, `decoratedFunctions`, and `overrideMethods`. Default: `[]`.
+
+Example:
+
+```ts
+// reports: no-empty-function (error)
+function f(): void {}
+f();
+```
+
+```ts filename="ttsc.lint.config.ts"
+import type { ITtscLintConfig } from "@ttsc/lint";
+
+export default {
+  rules: {
+    "no-empty-function": [
+      "error",
+      { allow: ["constructors", "overrideMethods"] },
+    ],
+  },
+} satisfies ITtscLintConfig;
+```
+
+<a id="rule-no-empty-named-blocks"></a>
+
+### `no-empty-named-blocks`
+
+Reject empty named import or export clauses, `import {} from "x"`, `import name, {} from "x"`, and `export {}`, which bind nothing.
+
+The empty-only import shape leaves just the side-effect load and is better written as `import "x"`; the default-plus-empty form should drop the empty clause.
+
+And a bare `export {}` either restates module-ness redundantly or marks an otherwise non-module file in a way that has cleaner alternatives.
+
+The stricter sibling rule `typescript/no-useless-empty-export` fires only when another module-syntax statement is already present.
+
+Example:
+
+```ts
+// reports: no-empty-named-blocks (error)
+import "x";
+```
+
+<a id="rule-no-empty-pattern"></a>
+
+### `no-empty-pattern`
+
+Reject empty destructuring patterns (`const {} = obj`, `function f([]) {}`), which bind nothing and are usually mid-edit typos.
+
+Example:
+
+```ts
+// reports: no-empty-pattern (error)
+function f({}: { a?: number }): void {}
+f({ a: 1 });
+```
+
+<a id="rule-no-empty-static-block"></a>
+
+### `no-empty-static-block`
+
+Reject empty `static {}` class initialization blocks unless an interior comment documents why the block is intentionally empty.
+
+Example:
+
+```ts
+class Holder {
+  // reports: no-empty-static-block (error)
+  static {}
+}
+```
+
+<a id="rule-no-eq-null"></a>
+
+### `no-eq-null`
+
+Reject loose null comparisons (`x == null`).
+
+Use `x === null` or the explicit `x === null || x === undefined`.
+
+Pairs with `eqeqeq` but kept separate so the loose null shortcut can be allowed under `"smart"`-style `eqeqeq` exceptions.
+
+Example:
+
+```ts
+function f(value: string | null) {
+  // reports: no-eq-null (error)
+  return value == null;
+}
+```
+
+<a id="rule-no-eval"></a>
+
+### `no-eval`
+
+Reject `eval(...)` and indirect `eval` calls, almost always a security or correctness bug.
+
+Example:
+
+```ts
+// reports: no-eval (error)
+eval("1");
+```
+
+<a id="rule-no-ex-assign"></a>
+
+### `no-ex-assign`
+
+Reject reassigning the parameter of a `catch` clause (`catch (e) { e = ... }`), which loses the original error reference.
+
+Example:
+
+```ts
+try {
+  throw new Error("x");
+} catch (e) {
+  // reports: no-ex-assign (error)
+  e = "boom";
+  console.log(e);
+}
+```
+
+<a id="rule-no-extend-native"></a>
+
+### `no-extend-native`
+
+Reject extending a built-in prototype such as `Array.prototype.foo = bar`. Every shape that adds to a native prototype is flagged: dotted (`X.prototype.y = ...`) and computed (`X.prototype["y"] = ...`) member assignment, plus `Object.defineProperty` / `Object.defineProperties` whose target is a native prototype. Assigning to `Object.foo = ...` (a static property) is left alone. The `exceptions` option lists builtins to allow.
+
+Example:
+
+```ts
+// reports: no-extend-native (error)
+Array.prototype.firstItem = 1;
+// reports: no-extend-native (error)
+String.prototype.upper = function (): void {};
+// reports: no-extend-native (error)
+Array.prototype["lastItem"] = 2;
+// reports: no-extend-native (error)
+Object.defineProperty(Number.prototype, "half", { value: 3 });
+Object.debugLabel = 1;
+```
+
+Allow specific builtins with the `exceptions` option:
+
+```json
+{ "rules": { "no-extend-native": ["error", { "exceptions": ["Array"] }] } }
+```
+
+<a id="rule-no-extra-bind"></a>
+
+### `no-extra-bind`
+
+Reject `.bind(thisArg)` on an arrow function or on a regular function whose own scope never reads `this`. A nested arrow inherits the enclosing regular function's receiver and therefore counts as a use, while a nested regular function owns a separate receiver. Calls with arguments after `thisArg` and calls that spread their arguments remain unchanged because they can perform partial application.
+
+Dot, static computed, and optional member/call forms are recognized. The autofix removes the bind syntax only when evaluating `thisArg` is side-effect-free and no comment lies inside the discarded ranges. A comment in those ranges downgrades the removal to an editor suggestion (applying it deletes the comment), while an effectful `thisArg` stays diagnostic-only because removing the bind would also remove an evaluation the program performs.
+
+Example:
+
+```ts
+// reports: no-extra-bind (error)
+const f = (() => 1).bind({});
+
+const partial = ((value: number) => value).bind(null, 1);
+```
+
+<a id="rule-no-extra-boolean-cast"></a>
+
+### `no-extra-boolean-cast`
+
+Reject redundant boolean casts such as `!!Boolean(x)`, `if (Boolean(x))`, or `Boolean(!!x)`.
+
+The autofix splices the inner expression over the whole cast, parenthesizing it where precedence requires. When a comment sits inside the replaced span the splice would delete it, so the rewrite is offered as an editor suggestion instead of being applied automatically.
+
+Example:
+
+```ts
+function f(isReady: boolean) {
+  // reports: no-extra-boolean-cast (error)
+  if (!!isReady) {
+    return 1;
+  }
+  return 0;
+}
+```
+
+<a id="rule-no-fallthrough"></a>
+
+### `no-fallthrough`
+
+Reject `switch` cases that can reach the next label without an intentional `// falls through` comment.
+
+Reachability follows statement completion, matching the ESLint rule: a case whose every path ends in `break`, `continue`, `return`, or `throw` (composed through blocks, `if/else`, loops, labeled statements, and `try/catch/finally`) needs no `break`. A catch contributes only when its try block has a reachable throw path, so a bare or literal `return` does not enter it while an explicit `throw` or an evaluated identifier, member access, call, or construction can. Parenthesized primitive literals are folded for loop tests, including zero and nonzero BigInt literals in every radix with separators, but unary expressions remain dynamic. Nested functions, class field initializers, and static blocks keep separate code paths, so their internal completions do not terminate the enclosing case. An intentional fallthrough is marked by the last comment before the next label (or before the closing brace when the case body is a single block) matching `/falls?\s?through/i`; directive comments such as `// eslint-disable-next-line ...` never count as markers.
+
+Example:
+
+```ts
+function f(x: number) {
+  switch (x) {
+    case 1:
+      console.log("one");
+    case 2: // reports: no-fallthrough (error)
+      console.log("two");
+      // falls through
+    case 3:
+      if (x > 1) {
+        return;
+      } else {
+        throw new Error("stop");
+      }
+    case 4: // no report: case 3 terminates on every path
+      console.log("four");
+      break;
+  }
+}
+```
+
+Options:
+
+- `commentPattern?: string`
+
+  Regular expression an intentional-fallthrough comment must match. Replaces the default `/falls?\s?through/i` pattern entirely.
+
+- `allowEmptyCase?: boolean`
+
+  Allow an empty case separated from the next label by blank lines. Adjacent labels (`case 0: case 1:`) are always allowed. Default: `false`.
+
+- `reportUnusedFallthroughComment?: boolean`
+
+  Report a fallthrough marker on a case that cannot fall through (for example after a `break`). Default: `false`.
+
+<a id="rule-no-func-assign"></a>
+
+### `no-func-assign`
+
+Reject writes to bindings introduced by function declarations and named function expressions.
+
+The rule follows lexical binding identity, so same-spelled parameters, block variables, catch variables, and sibling bindings remain independent. Direct and compound assignments, updates, destructuring targets, and for-in/of targets all count as writes.
+
+Example:
+
+```ts
+function g() {
+  return 1;
+}
+// reports: no-func-assign (error)
+g = function () {
+  return 2;
+};
+```
+
+<a id="rule-no-implicit-coercion"></a>
+
+### `no-implicit-coercion`
+
+Reject common implicit-coercion idioms (`!!x`, `+x`, `"" + x`) in favor of the explicit `Boolean(x)` / `Number(x)` / `String(x)` conversions.
+
+The explicit forms are more readable and avoid surprise around primitive edge cases.
+
+Example:
+
+```ts
+const value: unknown = "ready";
+
+// reports: no-implicit-coercion (error)
+const asBool = !!value;
+```
+
+<a id="rule-no-import-assign"></a>
+
+### `no-import-assign`
+
+Reject assignments, updates, destructuring writes, and `for-in` / `for-of` targets that resolve to an imported binding. Same-spelled local shadows remain independent because the rule follows binding identity rather than identifier text.
+
+For namespace imports, the rule also rejects direct member assignment, update, deletion, and the standard mutating `Object` / `Reflect` calls such as `Object.assign(ns, value)`. Objects exported below a namespace member remain mutable (`ns.value.property = next`).
+
+Imported bindings are read-only at runtime; mutating them either throws under strict mode or silently desynchronises the module's view of its own exports.
+
+Example:
+
+```ts
+import { x } from "y";
+import * as ns from "y";
+
+// reports: no-import-assign (error)
+x = 5;
+
+// reports: no-import-assign (error)
+Object.assign(ns, { x: 5 });
+```
+
+<a id="rule-no-inner-declarations"></a>
+
+### `no-inner-declarations`
+
+By default, reject function declarations in nested blocks when the enclosing code is sloppy and legacy function-hoisting semantics apply. Strict scripts and function bodies, ECMAScript modules, and class code use ES2015 block-scoped functions and are allowed by default.
+
+Use the canonical `"both"` positional mode to check nested `var` declarations too. Set `blockScopedFunctions` to `"disallow"` when strict block functions should be rejected as a style policy:
+
+```ts
+const config = {
+  rules: {
+    "no-inner-declarations": [
+      "error",
+      "both",
+      { blockScopedFunctions: "disallow" },
+    ],
+  },
+};
+```
+
+Example:
+
+```ts
+function outer() {
+  if (1) {
+    // reports: no-inner-declarations (error)
+    function inner() {}
+    inner();
+  }
+}
+outer();
+```
+
+<a id="rule-no-invalid-this"></a>
+
+### `no-invalid-this`
+
+Reject `this` references outside any function-like, class method, or class-static-block context.
+
+Example:
+
+```ts
+// reports: no-invalid-this (error)
+const value = this;
+```
+
+<a id="rule-no-irregular-whitespace"></a>
+
+### `no-irregular-whitespace`
+
+Reject irregular whitespace characters (zero-width space, non-breaking space, etc.) in source, typically copy-paste artifacts from rich-text editors.
+
+Example:
+
+```ts
+// reports: no-irregular-whitespace (error)
+const a = 1;
+```
+
+<a id="rule-no-iterator"></a>
+
+### `no-iterator`
+
+Reject the legacy `__iterator__` property, a SpiderMonkey-only extension predating ES2015 iterators.
+
+Use `Symbol.iterator` or a generator.
+
+Example:
+
+```ts
+const legacyObject = {};
+// reports: no-iterator (error)
+legacyObject.__iterator__ = function* () {};
+```
+
+<a id="rule-no-labels"></a>
+
+### `no-labels`
+
+Reject labeled statements (`outer: for (...) { break outer; }`).
+
+Labels obscure control flow; prefer extracting the inner loop into a function and using `return`, or refactoring with a flag variable.
+
+Example:
+
+```ts
+// reports: no-labels (error)
+outer: for (let i = 0; i < 3; i++) {
+  break outer;
+}
+```
+
+<a id="rule-no-lone-blocks"></a>
+
+### `no-lone-blocks`
+
+Reject standalone `{ ... }` blocks that introduce no lexical scope distinct from the surrounding block.
+
+Blocks that actually declare `let`, `const`, `class`, or `function` (in strict mode) are exempt, since those declarations need the inner scope.
+
+Example:
+
+```ts
+// reports: no-lone-blocks (error)
+{
+  console.log("hi");
+}
+```
+
+<a id="rule-no-lonely-if"></a>
+
+### `no-lonely-if`
+
+Reject `if (cond) { if (...) { ... } }` where the inner `if` is the only statement in an `else`, prefer `else if`.
+
+Example:
+
+```ts
+function chooseMode(isPrimary: boolean, isFallback: boolean) {
+  if (isPrimary) {
+    return "primary";
+  } else {
+    // reports: no-lonely-if (error)
+    if (isFallback) {
+      return "fallback";
+    }
+  }
+  return "none";
+}
+```
+
+<a id="rule-no-loop-func"></a>
+
+### `no-loop-func`
+
+Reject loop-created closures that capture bindings which can change between iterations.
+
+The rule follows binding identity and write locations instead of rejecting every function beneath a loop. A shared `var` counter or an outer binding written after the loop starts is unsafe. Constants, per-iteration `let` bindings, functions with no upper-scope references, and unreferenced synchronous IIFEs are safe.
+
+Example:
+
+```ts
+function inForLoop(): void {
+  for (var i = 0; i < 3; i++) {
+    // reports: no-loop-func (error)
+    function inner() {
+      return i;
+    }
+    inner();
+  }
+}
+
+for (let i = 0; i < 3; i++) {
+  const safe = () => i;
+  safe();
+}
+```
+
+<a id="rule-no-loss-of-precision"></a>
+
+### `no-loss-of-precision`
+
+Reject decimal, binary, octal, and hexadecimal numeric literals whose requested significant digits cannot survive `Number` conversion. This includes fractions, exponents, numeric separators, underflow, and overflow. BigInt literals are excluded.
+
+Example:
+
+```ts
+// reports: no-loss-of-precision (error)
+const big = 9007199254740993;
+
+// reports: no-loss-of-precision (error)
+const roundedHex = 0x20000000000001;
+```
+
+<a id="rule-no-magic-numbers"></a>
+
+### `no-magic-numbers`
+
+Reject inline numeric literals outside `const` initializer position. `0`, `1`, `-1`, array indices, and enum values are exempt.
+
+Example:
+
+```ts
+const items = [zero, one];
+const first = items[0];
+
+// reports: no-magic-numbers (error)
+const total = SECONDS_PER_MINUTE * 60;
+```
+
+<a id="rule-no-misleading-character-class"></a>
+
+### `no-misleading-character-class`
+
+Reject regex character classes that contain combined Unicode sequences (e.g. surrogate pairs) which most readers will not realize represent multiple code units.
+
+Example:
+
+```ts
+// reports: no-misleading-character-class (error)
+const r = /[👍]/;
+```
+
+<a id="rule-no-mixed-operators"></a>
+
+### `no-mixed-operators`
+
+Reject mixing two different operators from one precedence group without parentheses when the operators do not share a precedence. The groups mirror ESLint's defaults — arithmetic (`+ - * / % **`), bitwise (`& | ^ ~ << >> >>>`), comparison (`== != === !== > >= < <=`), logical (`&& ||`), and relational (`in instanceof`) — and the rule fires only when both operators fall in the same group.
+
+The famous case is `a && b || c`: readers expect left-to-right grouping but the parser sees `(a && b) || c` because `&&` binds tighter than `||`. Arithmetic mixes such as `a + b * c` are reported for the same reason. Cross-group pairs (`a | b && c`) and same-precedence pairs (`a + b - c`) are left alone.
+
+Wrapping the inner sub-expression in parens suppresses the report. The `groups` and `allowSamePrecedence` options tune the groups and the same-precedence allowance exactly as they do in ESLint.
+
+Example:
+
+```ts
+// reports: no-mixed-operators (error)
+const m1 = a && b || c;
+// ok — the grouping is explicit
+const m2 = (a && b) || c;
+```
+
+<a id="rule-no-multi-assign"></a>
+
+### `no-multi-assign`
+
+Reject chained assignment such as `a = b = 0`, which obscures intent and surprises readers who expect comparison.
+
+Example:
+
+```ts
+let left: number;
+let right: number;
+// reports: no-multi-assign (error)
+left = right = 1;
+```
+
+<a id="rule-no-multi-str"></a>
+
+### `no-multi-str`
+
+Reject backslash-newline multiline string literals; use template literals instead.
+
+Example:
+
+```ts
+const s: string =
+  // reports: no-multi-str (error)
+  "line1 \
+line2";
+```
+
+<a id="rule-no-negated-condition"></a>
+
+### `no-negated-condition`
+
+Reject `if (!cond) { ... } else { ... }`, flip the branches so the positive condition reads first.
+
+Example:
+
+```ts
+function f(isReady: boolean) {
+  // reports: no-negated-condition (error)
+  if (!isReady) {
+    return 1;
+  } else {
+    return 2;
+  }
+}
+```
+
+<a id="rule-no-nested-ternary"></a>
+
+### `no-nested-ternary`
+
+Reject ternary expressions nested in other ternaries (`a ? b : c ? d : e`), which are hard to read at a glance.
+
+Example:
+
+```ts
+function label(value: number): string {
+  // reports: no-nested-ternary (error)
+  return value === 0 ? "zero" : value > 0 ? "positive" : "negative";
+}
+```
+
+<a id="rule-no-new"></a>
+
+### `no-new`
+
+Reject `new` expressions whose return value is not assigned or used, the object is created only for its constructor side effects.
+
+Example:
+
+```ts
+class Thing {}
+// reports: no-new (error)
+new Thing();
+```
+
+<a id="rule-no-new-func"></a>
+
+### `no-new-func`
+
+Reject `new Function(...)` and `Function(...)` calls, which effectively evaluate a string and have the same risks as `eval`.
+
+Example:
+
+```ts
+// reports: no-new-func (error)
+const f = new Function("a", "return a");
+```
+
+<a id="rule-no-new-wrappers"></a>
+
+### `no-new-wrappers`
+
+Reject primitive wrapper constructors `new String(...)`, `new Number(...)`, `new Boolean(...)`.
+
+The resulting objects compare unequal to their primitive counterparts.
+
+Example:
+
+```ts
+// reports: no-new-wrappers (error)
+const s = new String("a");
+```
+
+<a id="rule-no-new-symbol"></a>
+
+### `no-new-symbol`
+
+Reject `new Symbol(...)`. `Symbol` is a function but not a constructor; calling it with `new` throws a TypeError at runtime.
+
+The upstream rule was renamed `no-new-native-nonconstructor`; the legacy name remains the more readable pointer for this specific Symbol check.
+
+Example:
+
+```ts
+// reports: no-new-symbol (error)
+const bad = new Symbol("desc");
+```
+
+<a id="rule-no-obj-calls"></a>
+
+### `no-obj-calls`
+
+Reject calling global non-callable objects as functions, such as `Math()` or `JSON()`.
+
+Example:
+
+```ts
+// reports: no-obj-calls (error)
+Math();
+```
+
+<a id="rule-no-object-constructor"></a>
+
+### `no-object-constructor`
+
+Reject `new Object()` and `Object()` constructor calls; use an object literal `{}` instead.
+
+Example:
+
+```ts
+// reports: no-object-constructor (error)
+const o = new Object();
+```
+
+<a id="rule-no-octal"></a>
+
+### `no-octal`
+
+Reject legacy octal literals (`0123`).
+
+Use the `0o123` prefix when an octal literal is actually intended.
+
+Example:
+
+```ts
+// reports: no-octal (error)
+const n = 010;
+```
+
+<a id="rule-no-octal-escape"></a>
+
+### `no-octal-escape`
+
+Reject octal escape sequences in string literals (`"\251"`, `"\07"`).
+
+Deprecated and forbidden in strict mode; use Unicode (`©`) or hex (`\xA9`) escapes.
+
+Example:
+
+```ts
+// reports: no-octal-escape (error)
+const s: string = "\251";
+```
+
+<a id="rule-no-param-reassign"></a>
+
+### `no-param-reassign`
+
+Reject writes to a function parameter binding, including destructured parameters and writes from nested closures. Shadowing locals are independent bindings and are not reported.
+
+Property mutations (`param.foo = ...`) are accepted by default. Set `props` to `true` to report them. With `props: true`, `ignorePropertyModificationsFor` accepts exact parameter names and `ignorePropertyModificationsForRegex` accepts regular-expression strings for parameters whose property writes should remain allowed.
+
+Example:
+
+```ts
+function reassignSimple(x: number): number {
+  // reports: no-param-reassign (error)
+  x = 1;
+  return x;
+}
+
+function mutateDraft(draft: { value: number }): void {
+  // reports with { props: true }: no-param-reassign (error)
+  draft.value = 1;
+}
+```
+
+<a id="rule-no-plusplus"></a>
+
+### `no-plusplus`
+
+Reject `++` and `--` operators.
+
+Prefer `+= 1` / `-= 1` to keep statements expression-only and avoid ASI surprises.
+
+Example:
+
+```ts
+let i = 0;
+// reports: no-plusplus (error)
+i++;
+```
+
+<a id="rule-no-promise-executor-return"></a>
+
+### `no-promise-executor-return`
+
+Reject values returned by the global `Promise` constructor's executor because the constructor ignores them. The rule checks concise arrow bodies and every explicit value return in block arrows or function expressions without crossing nested function boundaries. A locally shadowed `Promise` constructor is not checked.
+
+Set `allowVoid` to `true` to accept concise `void expression` bodies and explicit `return void expression` statements. It defaults to `false`.
+
+Example:
+
+```ts
+// reports: no-promise-executor-return (error)
+new Promise((resolve) => resolve(1));
+
+new Promise(() => {
+  // reports: no-promise-executor-return (error)
+  return 1;
+});
+```
+
+```ts filename="ttsc.lint.config.ts"
+import type { ITtscLintConfig } from "@ttsc/lint";
+
+export default {
+  rules: {
+    "no-promise-executor-return": ["error", { allowVoid: true }],
+  },
+} satisfies ITtscLintConfig;
+```
+
+<a id="rule-no-proto"></a>
+
+### `no-proto`
+
+Reject access to `obj.__proto__`; use `Object.getPrototypeOf` / `Object.setPrototypeOf`.
+
+Example:
+
+```ts
+const legacyObject = {};
+// reports: no-proto (error)
+const prototype = legacyObject.__proto__;
+```
+
+<a id="rule-no-prototype-builtins"></a>
+
+### `no-prototype-builtins`
+
+Reject `obj.hasOwnProperty(key)` and other direct `Object.prototype` builtins on user objects, since the property may be shadowed.
+
+Use `Object.prototype.hasOwnProperty.call(obj, key)` or `Object.hasOwn`.
+
+Example:
+
+```ts
+const user = { id: 1 };
+// reports: no-prototype-builtins (error)
+user.hasOwnProperty("id");
+```
+
+<a id="rule-no-redeclare"></a>
+
+### `no-redeclare`
+
+Reject declaring the same binding more than once in the same scope (`var x = 1; var x = 2;`, two `function foo()` declarations side by side, or a parameter rebound by a later `var` in the body).
+
+The second declaration silently overwrites the first; shadowing the binding in a nested scope is left alone.
+
+Example:
+
+```ts
+var sample: number = 1;
+// reports: no-redeclare (error)
+var sample: number = 2;
+```
+
+<a id="rule-no-regex-spaces"></a>
+
+### `no-regex-spaces`
+
+Reject more than one consecutive literal space in a regex; use `{N}` quantifiers for clarity.
+
+Example:
+
+```ts
+// reports: no-regex-spaces (error)
+const r = /a  b/;
+```
+
+<a id="rule-no-restricted-imports"></a>
+
+### `no-restricted-imports`
+
+Reject static imports and re-exports selected by user-configured exact paths, gitignore-style groups, or regular expressions. A severity-only setting, an empty `paths` list, and an empty `patterns` list are all no-ops; the rule never infers a project denylist.
+
+Exact-path and structured-pattern entries can restrict or allow selected source names, append a custom message, and permit type-only imports and re-exports. Pattern entries also support case-sensitive matching and source-name regular expressions.
+
+Options:
+
+- `paths?: (string | { name, message?, importNames?, allowImportNames?, allowTypeImports? })[]`
+- `patterns?: string[] | ({ group } | { regex })[]`
+
+  Structured pattern entries also accept `message`, `caseSensitive`, `importNames`, `allowImportNames`, `importNamePattern`, `allowImportNamePattern`, and `allowTypeImports`. Each entry uses either deny-name controls or allow-name controls, not both.
+
+Example:
+
+```ts
+// reports: no-restricted-imports (error)
+import legacy from "legacy-package";
+
+// reports: no-restricted-imports (error)
+export { privateApi } from "internal/private";
+```
+
+```ts filename="ttsc.lint.config.ts"
+import type { ITtscLintConfig } from "@ttsc/lint";
+
+export default {
+  rules: {
+    "no-restricted-imports": [
+      "error",
+      {
+        paths: [
+          {
+            name: "legacy-package",
+            importNames: ["default"],
+            message: "Use the supported package.",
+            allowTypeImports: true,
+          },
+        ],
+        patterns: [
+          {
+            group: ["internal/*", "!internal/public"],
+            allowImportNames: ["publicApi"],
+          },
+        ],
+      },
+    ],
+  },
+} satisfies ITtscLintConfig;
+```
+
+<a id="rule-no-restricted-syntax"></a>
+
+### `no-restricted-syntax`
+
+Reject only syntax matching selectors supplied after the severity. The rule has no default denylist: `"no-restricted-syntax": "error"` and `["error"]` are both silent.
+
+```ts
+export default {
+  rules: {
+    "no-restricted-syntax": [
+      "error",
+      "WithStatement",
+      {
+        selector: "CallExpression[callee.name='eval']",
+        message: "Do not evaluate source text.",
+      },
+      "TSAsExpression > Literal.expression",
+    ],
+  },
+};
+```
+
+The selector grammar follows esquery and supports:
+
+- native TypeScript-Go node kinds without the `Kind` prefix, plus `*`;
+- attribute presence, equality/inequality, numeric comparisons, `type(...)`, nested paths, and `/pattern/imsu` regular expressions;
+- child (`>`), descendant (space), following-sibling (`~`), and adjacent (`+`) combinators;
+- `:not`, `:is`/`:matches`, `:has`, `:first-child`, `:last-child`, `:nth-child(n)`, `:nth-last-child(n)`, and `!` subjects;
+- the `:statement`, `:expression`, `:declaration`, `:function`, and `:pattern` classes; and
+- field selectors such as `FunctionDeclaration > Identifier.id`.
+
+Native names are case-insensitive. Supported ESTree aliases are `Program`, `ArrowFunctionExpression`, `ObjectExpression`, `ArrayExpression`, `ObjectPattern`, `ArrayPattern`, `VariableDeclarator`, `MemberExpression`, `AssignmentExpression`, `LogicalExpression`, `UpdateExpression`, `UnaryExpression`, `Literal`, `Property`, `SpreadElement`, `RestElement`, `ThisExpression`, `Super`, `TemplateLiteral`, and the `TSAsExpression`/`TSTypeAssertion`/`TSSatisfiesExpression`/ `TSNonNullExpression` family are aliases for their TypeScript-Go equivalents.
+
+Attribute paths expose `type`, `name`, `value`/`raw`, `operator`, variable `kind`, `async`, `generator`, `static`, `readonly`, `declare`, `optional`, `computed`, `prefix`, and the usual structural fields (`id`, `params`, `body`, `callee`, `arguments`, `object`, `property`, `left`, `right`, `argument`, `expression`, `test`, `consequent`, `alternate`, `init`, `update`, `declarations`, `elements`, `members`, `properties`, `key`, `source`, and `statements`). Regular expressions use Go's linear-time RE2 syntax; `i`, `m`, and `s` change matching and `u` is accepted as an explicit no-op because Go strings are already UTF-8. Numeric segments index node-list paths, so selectors such as `[params.0.name='value']` are supported. Boolean properties are absent on node kinds that do not define them, rather than appearing as a synthetic `false` on every node.
+
+Tree descent and parent relationships use TypeScript-Go's `ForEachChild` and `Parent` surfaces. Sibling and child-position selectors stay within one of the exposed node-list fields above, matching esquery's array-field semantics. This makes TypeScript-only nodes selectable without constructing or monkeypatching a second ESTree.
+
+Example:
+
+```ts
+function runWith(target: { value: number }): number {
+  let total = 0;
+  // reports: no-restricted-syntax (error)
+  with (target) {
+    total = value;
+  }
+  return total;
+}
+```
+
+<a id="rule-no-return-assign"></a>
+
+### `no-return-assign`
+
+Reject assignment expressions used as the operand of `return` (`return x = 1`), almost always a typo for `===`.
+
+Follows ESLint's default `except-parens` option: an assignment wrapped in explicit parentheses (`return (count = 1)`) is treated as intentional and left alone. Pass the `"always"` option to flag the parenthesized form as well.
+
+Example:
+
+```ts
+let count = 0;
+
+function f() {
+  // reports: no-return-assign (error)
+  return count = 1;
+}
+```
+
+<a id="rule-no-script-url"></a>
+
+### `no-script-url`
+
+Reject `javascript:` URLs in string literals, they execute their body as code on browser navigation, and security scanners treat them as an `eval` equivalent.
+
+Example:
+
+```ts
+// reports: no-script-url (error)
+const u: string = "javascript:alert(1)";
+```
+
+<a id="rule-no-self-assign"></a>
+
+### `no-self-assign`
+
+Reject `x = x` and destructuring forms that copy a value to itself, almost always a typo.
+
+Example:
+
+```ts
+let x = 1;
+console.log(x);
+// reports: no-self-assign (error)
+x = x;
+console.log(x);
+```
+
+<a id="rule-no-self-compare"></a>
+
+### `no-self-compare`
+
+Reject comparing a value to itself (`x === x`). Use `Number.isNaN(x)` to test for `NaN`.
+
+Example:
+
+```ts
+function f(a: number) {
+  // reports: no-self-compare (error)
+  return a === a;
+}
+```
+
+<a id="rule-no-sequences"></a>
+
+### `no-sequences`
+
+Reject comma expressions (`a, b`) outside the heads of `for` statements.
+
+Example:
+
+```ts
+function f(index: number) {
+  // reports: no-sequences (error)
+  return (index++, index);
+}
+```
+
+<a id="rule-no-setter-return"></a>
+
+### `no-setter-return`
+
+Reject explicit `return` from a setter, setters' return values are ignored.
+
+Example:
+
+```ts
+class Holder {
+  set value(input: string) {
+    // reports: no-setter-return (error)
+    return "ignored";
+  }
+}
+```
+
+<a id="rule-no-shadow"></a>
+
+### `no-shadow`
+
+Reject a variable declaration that shadows a same-name binding in an enclosing scope.
+
+Example:
+
+```ts
+let outer: number = 1;
+function f(): number {
+  // reports: no-shadow (error)
+  let outer: number = 2;
+  return outer;
+}
+```
+
+<a id="rule-no-shadow-restricted-names"></a>
+
+### `no-shadow-restricted-names`
+
+Reject redeclaring restricted globals (`NaN`, `Infinity`, `undefined`, etc.).
+
+Example:
+
+```ts
+// reports: no-shadow-restricted-names (error)
+function f(undefined: number) {
+  return undefined;
+}
+f(1);
+```
+
+<a id="rule-no-sparse-arrays"></a>
+
+### `no-sparse-arrays`
+
+Reject array literals with elision (`[, 1, , 3]`), which read surprisingly and rarely express intent.
+
+Example:
+
+```ts
+// reports: no-sparse-arrays (error)
+const a = [1, , 3];
+```
+
+<a id="rule-no-template-curly-in-string"></a>
+
+### `no-template-curly-in-string`
+
+Reject `${expr}` inside ordinary single- or double-quoted strings, almost always a missing template-literal backtick.
+
+Example:
+
+```ts
+// reports: no-template-curly-in-string (error)
+const s: string = "hello ${name}";
+```
+
+<a id="rule-no-this-before-super"></a>
+
+### `no-this-before-super`
+
+Reject `this` (or `super.x`) references that precede the first `super()` call in a derived constructor.
+
+The runtime throws a ReferenceError on the first such access; catching it at lint time avoids a class of bugs that only surface after the constructor is actually called.
+
+Example:
+
+```ts
+class UsesThisFirst extends Base {
+  constructor() {
+    // reports: no-this-before-super (error)
+    this.value = 1;
+    super(0);
+  }
+}
+```
+
+<a id="rule-no-throw-literal"></a>
+
+### `no-throw-literal`
+
+Reject throwing non-Error operands (`throw "boom"`, `throw 1`).
+
+Example:
+
+```ts
+function f() {
+  // reports: no-throw-literal (error)
+  throw "literal";
+}
+```
+
+<a id="rule-no-undef-init"></a>
+
+### `no-undef-init`
+
+Reject initializing a variable to the literal `undefined` (`let x = undefined`), declaring without an initializer has the same effect.
+
+Example:
+
+```ts
+// reports: no-undef-init (error)
+let value = undefined;
+```
+
+<a id="rule-no-undefined"></a>
+
+### `no-undefined`
+
+Reject use of the global `undefined` identifier; use the `void 0` expression or omit the value.
+
+Example:
+
+```ts
+// reports: no-undefined (error)
+const x = undefined;
+```
+
+<a id="rule-no-unneeded-ternary"></a>
+
+### `no-unneeded-ternary`
+
+Reject `cond ? true : false` and similar ternaries that can be simplified to a boolean coercion or the condition itself.
+
+Example:
+
+```ts
+function f(isReady: boolean) {
+  // reports: no-unneeded-ternary (error)
+  return isReady ? true : false;
+}
+```
+
+<a id="rule-no-unreachable"></a>
+
+### `no-unreachable`
+
+Reject statements that follow an unconditional `return`, `throw`, `break`, or `continue` in the same block, control flow has already left the block, so any later statement is dead code.
+
+The conservative baseline scans the immediate statement list of a block (or the top-level source / module body) only.
+
+Hoistable function declarations following the terminator are exempt because they are hoisted above the unreachable point.
+
+Example:
+
+```ts
+function afterReturn(): number {
+  return 1;
+  // reports: no-unreachable (error)
+  console.log("dead");
+}
+```
+
+<a id="rule-no-unsafe-finally"></a>
+
+### `no-unsafe-finally`
+
+Reject `return` and `throw` inside a `finally` block, which override any earlier `return`/`throw` from the corresponding `try`/`catch`.
+
+Example:
+
+```ts
+function f() {
+  try {
+    throw new Error("x");
+  } finally {
+    // reports: no-unsafe-finally (error)
+    return 1;
+  }
+}
+```
+
+<a id="rule-no-unsafe-negation"></a>
+
+### `no-unsafe-negation`
+
+Reject `!key in obj` and `!a instanceof B` where the `!` binds tighter than the relational operator and silently coerces the left operand to a boolean.
+
+Wrap in parens (`!(key in obj)`) when the negation is genuinely intended.
+
+Example:
+
+```ts
+function hasUnsafeNegation(key: string, object: Record<string, unknown>) {
+  // reports: no-unsafe-negation (error)
+  return !key in object;
+}
+```
+
+<a id="rule-no-unsafe-optional-chaining"></a>
+
+### `no-unsafe-optional-chaining`
+
+Reject member access or call expressions that chain off an optional chain without continuing the chain. `(obj?.foo).bar` throws a TypeError if obj is null/undefined; the chain must continue with `?.` to remain safe.
+
+Example:
+
+```ts
+const obj: { profile?: { name: string } } | undefined = {};
+
+// reports: no-unsafe-optional-chaining (error)
+const name = (obj?.profile).name;
+```
+
+<a id="rule-no-unused-expressions"></a>
+
+### `no-unused-expressions`
+
+Reject expression statements with no observable effect, like a bare `x;`, `a === b;`, or a tagged template literal statement.
+
+Directive prologues are determined by AST position, not by recognized text: the leading run of string-literal statements at the top of a script, module, namespace body, or function body is accepted whatever it says (`"use strict"`, `"use client"`, and any future directive), and the same strings anywhere else are rejected. Productive expressions (calls, `new`, assignments, updates, `delete`, `void`, `await`, `yield`) are accepted, so the `void promise()` opt-out idiom keeps working, and JSX statements are accepted by default. TypeScript wrappers (`as`, angle assertions, non-null `!`, instantiation expressions) inherit the classification of the expression they wrap.
+
+Options:
+
+- `allowShortCircuit?: boolean`
+
+  Allow short-circuit statements such as `a && b()` whose right-hand side is a productive expression.
+
+- `allowTernary?: boolean`
+
+  Allow ternary statements such as `a ? b() : c()` whose result branches are both productive expressions.
+
+- `allowTaggedTemplates?: boolean`
+
+  Allow tagged template literal statements such as `` tag`value` ``.
+
+- `enforceForJSX?: boolean`
+
+  Report JSX elements and fragments standing alone as statements.
+
+- `ignoreDirectives?: boolean`
+
+  Also exempt statements that positionally look like directive-prologue members under the loose ESTree view upstream ESLint uses, in which parentheses are invisible. Real (unparenthesized) directive prologues are always exempt regardless of this flag.
+
+Example:
+
+```ts
+"use client";
+
+declare function work(): Promise<void>;
+declare const tag: (strings: TemplateStringsArray) => string;
+
+void work();
+
+// reports: no-unused-expressions (error)
+tag`value`;
+
+function misplacedDirective(): void {
+  "use totally custom prologue";
+  console.log("before");
+  // reports: no-unused-expressions (error)
+  "use strict";
+}
+```
+
+<a id="rule-no-unused-labels"></a>
+
+### `no-unused-labels`
+
+Reject labels that no `break` or `continue` statement references.
+
+Usually the targeted statement was renamed or removed but the label was left behind.
+
+Example:
+
+```ts
+// reports: no-unused-labels (error)
+unused: {
+}
+```
+
+<a id="rule-no-useless-assignment"></a>
+
+### `no-useless-assignment`
+
+Reject an assignment whose value is immediately overwritten by the very next statement without an intervening read of the same identifier.
+
+The conservative baseline only fires on two syntactically adjacent `x = <expr>;` statements where the left-hand sides are the same bare identifier and the second statement's right-hand side does not reference `x` itself.
+
+Almost always a leftover from refactoring.
+
+Example:
+
+```ts
+function deadStore(): number {
+  let x = 0;
+  // reports: no-useless-assignment (error)
+  x = 1;
+  x = 2;
+  return x;
+}
+```
+
+<a id="rule-no-useless-call"></a>
+
+### `no-useless-call`
+
+Reject unnecessary `.call()` / `.apply()` calls (such as `f.call(undefined, x)`).
+
+Example:
+
+```ts
+function f() {}
+// reports: no-useless-call (error)
+f.call(undefined, 1);
+```
+
+<a id="rule-no-useless-catch"></a>
+
+### `no-useless-catch`
+
+Reject `catch (e) { throw e }` patterns that only rethrow the caught error without adding context or handling.
+
+Example:
+
+```ts
+function f() {
+  try {
+    return 1;
+    // reports: no-useless-catch (error)
+  } catch (e) {
+    throw e;
+  }
+}
+```
+
+<a id="rule-no-useless-computed-key"></a>
+
+### `no-useless-computed-key`
+
+Reject computed property keys whose expression is a literal identifier (`{ ["foo"]: 1 }`).
+
+Example:
+
+```ts
+// reports: no-useless-computed-key (error)
+const user = { ["displayName"]: "Ada" };
+```
+
+<a id="rule-no-useless-concat"></a>
+
+### `no-useless-concat`
+
+Reject `"a" + "b"` and similar concatenations where every operand is a literal string.
+
+Example:
+
+```ts
+// reports: no-useless-concat (error)
+const s = "a" + "b";
+```
+
+<a id="rule-no-useless-constructor"></a>
+
+### `no-useless-constructor`
+
+Reject empty constructor bodies (`class X { constructor() {} }`) that add nothing over the implicit constructor.
+
+Example:
+
+```ts
+class Empty {
+  // reports: no-useless-constructor (error)
+  constructor() {}
+}
+```
+
+<a id="rule-no-useless-escape"></a>
+
+### `no-useless-escape`
+
+Reject unnecessary escape sequences in strings and regex literals, such as `"\."` or `/\,/`. Autofixable.
+
+Example:
+
+```ts
+// reports: no-useless-escape (error)
+const value = "ab\cdef";
+```
+
+<a id="rule-no-useless-rename"></a>
+
+### `no-useless-rename`
+
+Reject `{ x: x }` destructuring renames that bind back to the same name. Autofixable, except when a comment sits between the two names: deleting the rename tail would delete the comment, so the collapse is offered as an editor suggestion instead.
+
+Example:
+
+```ts
+const user = { displayName: "Ada" };
+// reports: no-useless-rename (error)
+const { displayName: displayName } = user;
+```
+
+<a id="rule-no-useless-return"></a>
+
+### `no-useless-return`
+
+Reject a bare `return;` whose only effect is to end a function body that would have returned anyway.
+
+The conservative baseline only fires on the last statement of a function-like's immediate body, earlier `return;` inside a branch or loop may still be load-bearing.
+
+Example:
+
+```ts
+function trailing(): void {
+  console.log("work");
+  // reports: no-useless-return (error)
+  return;
+}
+```
+
+<a id="rule-no-var"></a>
+
+### `no-var`
+
+Reject `var` declarations.
+
+Use `let` for mutable bindings and `const` for immutable ones. Autofixable to `let`.
+
+Every `var` declaration list reports, whether it appears as a statement or directly in a `for`, `for...in`, or `for...of` header.
+
+The fix only fires when the rewrite cannot change behavior, mirroring ESLint's `no-var` fix conditions: the name binds exactly once in the file, is never read before the declaration or inside its own initializer, every reference stays inside the declaring block scope (a `var` declared in a block but read after it would stop compiling as `let`; a loop-header `var` read after its loop likewise), a loop `var` — declared in the body or in the header itself — is not captured by a function or arrow created inside the loop (those closures share one `var` binding but would capture a fresh per-iteration `let` binding), and the declaration does not sit under a `with` statement. A `for...in`/`for...of` header additionally declines when its declarator carries an Annex-B initializer (`for (var i = 0 in o)`, a SyntaxError under `let`) or when the head expression reads the loop variable (`for (var x of x)`, a TDZ ReferenceError under `let`). Anything else reports without a fix.
+
+Example:
+
+```ts
+// reports: no-var (error)
+var legacy = 1;
+
+// reports: no-var (error)
+for (var index = 0; index < 1; index += 1) {
+  JSON.stringify(index);
+}
+```
+
+<figure className="rule-clip">
+  <video
+    controls
+    muted
+    loop
+    playsInline
+    preload="none"
+    aria-label="no-var: the diagnostic this rule reports"
+  >
+    <source src="https://github.com/user-attachments/assets/63f28f5a-0280-4d74-8939-dc6ceb90db19" type="video/mp4" />
+  </video>
+</figure>
+
+<a id="rule-no-with"></a>
+
+### `no-with`
+
+Reject `with (...)` statements.
+
+`with` is forbidden in strict mode (and therefore in modules), defeats lexical scoping, and blocks engine optimization.
+
+Example:
+
+```ts
+function f(scope: Record<string, unknown>) {
+  // reports: no-with (error)
+  with (scope) {
+    console.log("hi");
+  }
+}
+```
+
+<a id="rule-object-shorthand"></a>
+
+### `object-shorthand`
+
+Reject `{ foo: foo }` and similar object-literal shorthand candidates in favor of `{ foo }`. Autofixable, except when a comment sits between the key and the value: deleting the `: value` tail would delete the comment, so the collapse is offered as an editor suggestion instead.
+
+Example:
+
+```ts
+const x = 1;
+// reports: object-shorthand (error)
+const o = { x: x };
+```
+
+<figure className="rule-clip">
+  <video
+    controls
+    muted
+    loop
+    playsInline
+    preload="none"
+    aria-label="object-shorthand: the diagnostic this rule reports"
+  >
+    <source src="https://github.com/user-attachments/assets/f8fe3019-df00-4cbe-b8fc-1cac36493d06" type="video/mp4" />
+  </video>
+</figure>
+
+<a id="rule-operator-assignment"></a>
+
+### `operator-assignment`
+
+Prefer compound assignment (`x += y`) over the long form (`x = x + y`) where the two are equivalent.
+
+Example:
+
+```ts
+let x = 1;
+console.log(x);
+// reports: operator-assignment (error)
+x = x + 1;
+console.log(x);
+```
+
+<a id="rule-prefer-arrow-callback"></a>
+
+### `prefer-arrow-callback`
+
+Reject `function() { ... }` expressions passed as callback arguments, prefer the arrow form.
+
+Example:
+
+```ts
+const list: readonly number[] = [1, 2, 3];
+
+list.map(
+  // reports: prefer-arrow-callback (error)
+  function (n: number) {
+    return n * 2;
+  },
+);
+```
+
+<a id="rule-prefer-const"></a>
+
+### `prefer-const`
+
+Require `const` for lexical bindings that are never reassigned after their initial value is established. Same-spelled bindings in sibling, nested, and shadowing scopes are analyzed independently. A declaration followed by one assignment in the same scope is reported without an automatic rewrite.
+
+The default options match ESLint:
+
+```json
+{
+  "destructuring": "any",
+  "ignoreReadBeforeAssign": false
+}
+```
+
+`destructuring: "any"` reports each const-eligible leaf of a destructuring pattern. Set it to `"all"` to report the pattern only when every leaf is const-eligible. Set `ignoreReadBeforeAssign` to `true` to keep declaration-only bindings that are read before their first assignment out of the findings.
+
+The fixer changes the shared `let` keyword only for a single initialized declaration when every binding affected by that keyword is const-eligible. Findings that would require moving an assignment, splitting a declaration, or preserving comments across statements are diagnostic-only.
+
+Example:
+
+```ts
+// reports: prefer-const (error)
+let stable = 1;
+let changing = 1;
+changing = 2;
+
+let assignedLater: number;
+// reports: prefer-const (error, diagnostic-only)
+assignedLater = 1;
+
+const input = { first: 1, second: 2 };
+let { first, second } = input; // reports `second`
+first += 1;
+```
+
+<a id="rule-prefer-destructuring"></a>
+
+### `prefer-destructuring`
+
+Reject single-property and single-index variable declarations (`const a = obj.a`, `const x = arr[0]`) that destructuring would replace verbatim.
+
+Example:
+
+```ts
+const obj = { a: 1, b: 2 };
+
+// reports: prefer-destructuring (error)
+const a = obj.a;
+```
+
+<a id="rule-prefer-exponentiation-operator"></a>
+
+### `prefer-exponentiation-operator`
+
+Prefer the `**` operator over `Math.pow(base, exp)`.
+
+Example:
+
+```ts
+// reports: prefer-exponentiation-operator (error)
+const a = Math.pow(2, 3);
+```
+
+<a id="rule-prefer-for-of"></a>
+
+### `prefer-for-of`
+
+Prefer `for..of` over a traditional `for (let i = 0; i < arr.length; i++)` loop when the index is never used inside the body.
+
+Example:
+
+```ts
+const arr: number[] = [1, 2, 3];
+// reports: prefer-for-of (error)
+for (let i = 0; i < arr.length; i++) {
+  console.log(arr[i]);
+}
+```
+
+<a id="rule-prefer-object-has-own"></a>
+
+### `prefer-object-has-own`
+
+Prefer `Object.hasOwn(obj, key)` over `Object.prototype.hasOwnProperty.call(obj, key)`. The new helper is shorter, less error-prone, and matches the form linters elsewhere recommend.
+
+Example:
+
+```ts
+const target = { x: 1 };
+
+// reports: prefer-object-has-own (error)
+const a = Object.prototype.hasOwnProperty.call(target, "x");
+```
+
+<a id="rule-prefer-object-spread"></a>
+
+### `prefer-object-spread`
+
+Prefer object-spread `{ ...a, ...b }` over `Object.assign({}, a, b)`.
+
+Only fires when the first argument is an empty object literal, mutating `Object.assign(target, ...)` calls are left alone because the spread form does not preserve their observable side effects.
+
+Example:
+
+```ts
+const source = { x: 1 };
+
+// reports: prefer-object-spread (error)
+const merged = Object.assign({}, source);
+```
+
+<a id="rule-prefer-named-capture-group"></a>
+
+### `prefer-named-capture-group`
+
+Reject regex literals with unnamed capturing groups `(...)`, prefer named groups `(?<name>...)`.
+
+Example:
+
+```ts
+// reports: prefer-named-capture-group (error)
+const yearOnly = /(\d{4})/;
+```
+
+<a id="rule-prefer-numeric-literals"></a>
+
+### `prefer-numeric-literals`
+
+Prefer ES2015+ numeric literal forms (`0b...`, `0o...`, `0x...`) over `parseInt(string, 2 | 8 | 16)`. The literal form is shorter, type- safe at lint time, and not subject to runtime radix mismatches.
+
+Example:
+
+```ts
+// reports: prefer-numeric-literals (error)
+const bin = parseInt("11", 2);
+```
+
+<a id="rule-prefer-rest-params"></a>
+
+### `prefer-rest-params`
+
+Reject reading from `arguments` in a non-arrow function body, prefer the ES2015 rest-parameter form `(...args)`, which declares the variadic contract on the signature and yields a real array.
+
+Example:
+
+```ts
+function sumLegacy() {
+  // reports: prefer-rest-params (error)
+  return Array.prototype.slice
+    .call(arguments)
+    .reduce((a: number, b: number) => a + b, 0);
+}
+```
+
+<a id="rule-prefer-spread"></a>
+
+### `prefer-spread`
+
+Prefer spread arguments `f(...args)` over `f.apply(null, args)`.
+
+Only flags `apply` calls whose `this` argument is provably the same receiver (or `null` / `undefined`); calls that genuinely rebind `this` are left alone.
+
+Example:
+
+```ts
+function f(a: number, b: number) {
+  return a + b;
+}
+const args: [number, number] = [1, 2];
+// reports: prefer-spread (error)
+f.apply(null, args);
+```
+
+<a id="rule-prefer-template"></a>
+
+### `prefer-template`
+
+Prefer template literals over string concatenation when any operand is non-literal.
+
+The autofix rewrites the whole `+` chain as one template literal. A comment in an operator seam has nowhere to go in the rebuilt literal, so that case is reported without an autofix and the rendered literal is offered as an editor suggestion (applying it discards the seam comment).
+
+Example:
+
+```ts
+const name = "world";
+// reports: prefer-template (error)
+const s = "hi " + name + "!";
+```
+
+<a id="rule-radix"></a>
+
+### `radix`
+
+Require an explicit radix argument for `parseInt(str, radix)`.
+
+Without it, `"0123"` parses as decimal or octal depending on the engine.
+
+Example:
+
+```ts
+// reports: radix (error)
+const n = parseInt("42");
+```
+
+<a id="rule-require-yield"></a>
+
+### `require-yield`
+
+Require generator functions to contain at least one `yield`. A `yield`-less generator is almost always a typo.
+
+Example:
+
+```ts
+// reports: require-yield (error)
+function* gen() {
+  return 1;
+}
+```
+
+<a id="rule-sort-imports"></a>
+
+### `sort-imports`
+
+Reject import specifiers within a single `import` declaration that aren't alphabetically sorted.
+
+Example:
+
+```ts
+// reports: sort-imports (error)
+import { a, b } from "first";
+```
+
+<a id="rule-sort-keys"></a>
+
+### `sort-keys`
+
+Reject object-literal property keys that aren't alphabetically sorted.
+
+Example:
+
+```ts
+const unsorted = {
+  b: 1,
+  // reports: sort-keys (error)
+  a: 2,
+};
+```
+
+<a id="rule-use-isnan"></a>
+
+### `use-isnan`
+
+Require `Number.isNaN` / `isNaN` for `NaN` checks; restrict `typeof` comparisons to the documented strings.
+
+Example:
+
+```ts
+function f(x: number) {
+  // reports: use-isnan (error)
+  return x === NaN;
+}
+```
+
+<a id="rule-valid-typeof"></a>
+
+### `valid-typeof`
+
+Restrict the right-hand operand of `typeof` to the documented strings (`"number"`, `"object"`, ...) so `typeof x === "undefiend"` typos are caught.
+
+Only equality comparisons (`==`, `===`, `!=`, `!==`) are checked. A relational comparison such as `typeof x < "m"` orders two strings instead of naming a type, so it is left alone.
+
+Example:
+
+```ts
+function f(value: unknown) {
+  // reports: valid-typeof (error)
+  return typeof value === "stirng";
+}
+```
+
+<a id="rule-vars-on-top"></a>
+
+### `vars-on-top`
+
+Require `var` declarations to be hoisted to the top of their scope by hand, mirroring how the engine treats them.
+
+Has no effect when `no-var` forbids `var` altogether.
+
+Example:
+
+```ts
+function f() {
+  console.log("hi");
+  // reports: vars-on-top (error)
+  var a = 1;
+}
+f();
+```
+
+<a id="rule-yoda"></a>
+
+### `yoda`
+
+Reject Yoda-style comparisons (`if (42 === x)`); use `if (x === 42)` so the variable comes first.
+
+Example:
+
+```ts
+function f(x: number) {
+  // reports: yoda (error)
+  return 1 === x;
+}
+```

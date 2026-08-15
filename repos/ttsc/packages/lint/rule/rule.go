@@ -1,0 +1,573 @@
+// Package rule is the public API for `@ttsc/lint` rule contributors.
+//
+// Third-party lint rule packages ("contributors") import this package and
+// register their rules in an `init()`. At build time, ttsc copies a
+// contributor's Go source into a sub-package of the `@ttsc/lint` Go module
+// and synthesizes a blank-import in the host binary, which triggers the
+// contributor's `init()` and populates the registry below.
+//
+// The host (`@ttsc/lint`) walks this registry during engine bootstrap and
+// adapts each contributor rule onto the same dispatch table that drives
+// the built-in rules.
+//
+// Contributors operate on the same shim AST the host and linked transform
+// plugins use (`github.com/microsoft/typescript-go/shim/ast` and friends)
+// — there is no facade layer in between. The shim packages are the
+// publicly maintained boundary ttsc already exposes; adding another
+// wrapper here would duplicate that maintenance burden without earning
+// any extra stability. Contributors get the full AST surface the host
+// has, so authoring a contributor rule and authoring a built-in rule are
+// the same exercise.
+//
+// Example contributor:
+//
+//  package myrules
+//
+//  import (
+//      shimast "github.com/microsoft/typescript-go/shim/ast"
+//      "github.com/samchon/ttsc/packages/lint/rule"
+//  )
+//
+//  func init() { rule.Register(noTodoComment{}) }
+//
+//  type noTodoComment struct{}
+//
+//  func (noTodoComment) Name() string             { return "demo/no-todo-comment" }
+//  func (noTodoComment) Visits() []shimast.Kind   { return []shimast.Kind{shimast.KindSourceFile} }
+//  func (noTodoComment) Check(ctx *rule.Context, node *shimast.Node) {
+//      // ctx.File, ctx.Checker, ctx.Severity available; ctx.Report(node, msg)
+//      // or ctx.ReportRange(pos, end, msg) push a finding through the engine.
+//  }
+package rule
+
+import (
+  "encoding/json"
+
+  shimast "github.com/microsoft/typescript-go/shim/ast"
+  shimchecker "github.com/microsoft/typescript-go/shim/checker"
+)
+
+// Severity mirrors the engine's three-level severity ladder. The
+// constants are kept value-compatible with the engine's internal
+// `Severity` type so the adapter layer can cast safely.
+type Severity int
+
+const (
+  // SeverityOff means the rule is disabled. Engine skips dispatch.
+  SeverityOff Severity = iota
+  // SeverityWarn produces a warning diagnostic (does not change exit
+  // code).
+  SeverityWarn
+  // SeverityError produces an error diagnostic and fails the command.
+  SeverityError
+)
+
+// Rule is the contract every contributor rule satisfies. Mirrors the
+// internal host interface so the host can dispatch via a thin adapter
+// without re-implementing the engine.
+type Rule interface {
+  // Name is the identifier users put in their `rules` map.
+  // Conventionally namespaced as "<plugin-namespace>/<rule-name>" to
+  // avoid colliding with built-in rule names.
+  Name() string
+
+  // Visits returns the AST kinds the rule cares about. The engine only
+  // dispatches to rules that registered for the visited node's kind.
+  Visits() []shimast.Kind
+
+  // Check is invoked once per relevant node. Use `ctx.Report` /
+  // `ctx.ReportRange` to emit findings.
+  Check(ctx *Context, node *shimast.Node)
+}
+
+// FormatRule is an optional marker contributors implement when a rule
+// belongs to the "format" category instead of the default "lint"
+// category. `ttsc fix` is the run-everything entry point and applies
+// edits from BOTH lint-class and format-class rules. `ttsc format` is
+// the format-only convenience: it filters to FormatRule findings so
+// lint-class rewrites are skipped. Lint rules (rules that do not
+// implement FormatRule) participate only in `ttsc fix` (and in
+// diagnostics during `ttsc check`).
+//
+// `IsFormat` exists as a structural marker, not a runtime toggle:
+// returning `false` is equivalent to not implementing the interface at
+// all, and the host treats either form the same way.
+type FormatRule interface {
+  Rule
+  IsFormat() bool
+}
+
+// DeclarationFileRule is an optional marker contributors implement to
+// control whether their rule runs on declaration-file inputs (`.d.ts`,
+// `.d.mts`, `.d.cts`). The engine skips most built-in rules on declaration
+// files because value-level grammar cannot appear there; contributor rules
+// keep the conservative default — they DO run on declaration files — since
+// the host cannot infer a third-party rule's shape (mirror of the implicit
+// checker default). A contributor whose rule inspects executable code only
+// can implement this with `return false` to skip declaration files and
+// save the dispatch on declaration-heavy projects; returning `true` is
+// equivalent to not implementing the interface at all.
+type DeclarationFileRule interface {
+  Rule
+  VisitsDeclarationFiles() bool
+}
+
+// DiagnosticTag classifies what a finding IS, orthogonally to how severe it is.
+// The values match the LSP DiagnosticTag enum, and an editor renders them
+// distinctively: unnecessary code is greyed out, deprecated code struck through.
+type DiagnosticTag int
+
+const (
+  // DiagnosticTagUnnecessary marks code that is safe to delete — an unused
+  // import, an unreachable branch. The editor fades it.
+  //
+  // This is a claim about what the code is, not how bad it is, and the
+  // distinction bites: "unnecessary" says "remove this." A finding that means
+  // "this is not done yet" is the opposite and must never carry it, or the
+  // editor tells the author to delete the work they have not finished. Tag by
+  // what deletion would mean, never by severity.
+  DiagnosticTagUnnecessary DiagnosticTag = 1
+  // DiagnosticTagDeprecated marks code that still works but should be migrated
+  // away from. The editor strikes it through.
+  DiagnosticTagDeprecated DiagnosticTag = 2
+)
+
+// TaggedRule is an optional marker a rule implements to classify its findings
+// with DiagnosticTags. Every finding the rule produces carries the returned
+// tags — the rule-level grain fits the rules that want this, since a rule that
+// flags unused code flags only unused code.
+//
+// It is separate from severity on purpose. Severity is how much a finding
+// matters and is the user's to configure; a tag is what the finding is and is
+// the rule's to state. A host that does not read tags loses the greying, not the
+// diagnostic — the same graceful degradation the other optional markers give.
+//
+// Return nil, or do not implement it, for a rule whose findings are neither
+// unnecessary nor deprecated. Most findings are neither, and guessing wrong is
+// worse than saying nothing: a spurious Unnecessary tells the author to delete
+// correct code.
+type TaggedRule interface {
+  DiagnosticTags() []DiagnosticTag
+}
+
+// TypeAwareRule is an optional marker contributors implement to declare
+// whether their rule reads `Context.Checker`. The host cannot infer a
+// third-party rule's shape, so a contributor that does not implement this
+// marker keeps the conservative default: it is treated as type-aware and
+// receives a live checker.
+//
+// Being treated as type-aware is not free. The host creates a standalone
+// checker spanning every source file, and the engine walks files serially so
+// that checker is never accessed concurrently. A purely syntactic rule that
+// never touches `Context.Checker` pays both costs for nothing.
+//
+// A contributor whose rule is AST-only can implement this with
+// `NeedsTypeChecker() bool { return false }` to opt out of the checker path,
+// preserving the engine's parallel file walk. Returning `true` is equivalent
+// to not implementing the interface at all. A rule that returns `false` must
+// not read `Context.Checker`: the host is free to leave it nil.
+//
+// The method name is domain-specific so an unrelated generic method on an
+// existing contributor cannot opt out by accident. ProjectRule implementations
+// may use the same marker; the serial walk it governs is engine-wide, so one
+// type-aware project rule serializes every file rule in the run.
+type TypeAwareRule interface {
+  NeedsTypeChecker() bool
+}
+
+// OptionsRule is an optional marker contributors implement to declare whether
+// their rule accepts an options slot in its `[severity, options]` setting.
+// Contributor rules default to accepting options for backward compatibility
+// with the original public Context.Options contract. Return false for a
+// genuinely optionless rule so the host can reject accidental payloads before
+// linting. The domain-specific method name prevents an unrelated generic
+// AcceptsOptions method on an existing contributor from opting in by accident.
+// ProjectRule implementations may use the same marker.
+type OptionsRule interface {
+  AcceptsTtscLintOptions() bool
+}
+
+// Reporter is the engine-supplied callback that records a finding. The
+// host implements this and passes it to `NewContext` when invoking a
+// contributor rule.
+type Reporter interface {
+  // Report records a finding at the given node's source range.
+  Report(node *shimast.Node, message string)
+  // ReportRange records a finding at an explicit byte range inside the
+  // current file. Use this when the rule wants to highlight a
+  // sub-token.
+  ReportRange(pos, end int, message string)
+}
+
+// FixReporter is the optional extension a host implements to receive
+// autofix edits alongside a finding. The public `rule.Context`
+// type-asserts against this shape so any host whose reporter exposes
+// both methods opts into fix support without depending on a private
+// interface name.
+//
+// Rule production code does NOT touch FixReporter directly — call
+// `ctx.ReportFix` / `ctx.ReportRangeFix`, and the host's reporter
+// receives the edits. The only place a contributor sees this interface
+// is in test code that fakes the reporter: such a fake must implement
+// BOTH `Reporter` (`Report` + `ReportRange`) AND `FixReporter`
+// (`ReportFix` + `ReportRangeFix`), because Go interface satisfaction
+// is all-or-nothing. Declaring `var _ rule.FixReporter = &myFake{}`
+// compile-checks the fake covers the fix surface.
+type FixReporter interface {
+  ReportFix(node *shimast.Node, message string, edits ...TextEdit)
+  ReportRangeFix(pos, end int, message string, edits ...TextEdit)
+}
+
+// RelatedReporter is the optional extension a host implements to receive a
+// finding's related source locations. Like FixReporter, the public
+// `rule.Context` type-asserts against this shape, so any host whose reporter
+// exposes both methods opts into related locations without depending on a
+// private interface name. A host that does not implement it loses the related
+// locations, not the diagnostic — the same graceful degradation the other
+// optional reporter extensions give.
+//
+// Rule production code does NOT touch RelatedReporter directly — call
+// `ctx.ReportRelated` / `ctx.ReportRangeRelated`, and the host's reporter
+// receives the locations. The only place a contributor sees this interface is in
+// test code that fakes the reporter: such a fake must implement BOTH `Reporter`
+// AND `RelatedReporter` to observe the locations, because Go interface
+// satisfaction is all-or-nothing. Declaring `var _ rule.RelatedReporter =
+// &myFake{}` compile-checks the fake covers the related surface.
+type RelatedReporter interface {
+  ReportRelated(node *shimast.Node, message string, related ...RelatedInformation)
+  ReportRangeRelated(pos, end int, message string, related ...RelatedInformation)
+}
+
+// RelatedInformation is a secondary source location a finding points at, paired
+// with a message naming the connection. LSP renders each as its own clickable
+// line beneath the diagnostic, so "'x' is already defined." can lead the reader
+// to the first definition instead of only naming it.
+//
+// Pos/End are byte offsets into the CURRENT file — the same offsets a shim AST
+// node exposes and `ReportRange` consumes — so a related location lives in the
+// file the finding is in, and the host fills in that file's URI. A location in
+// ANOTHER file would need a URI this API does not yet carry, and is a separate
+// extension left deliberately out of scope so the same-file case ships without
+// waiting on it.
+type RelatedInformation struct {
+  Pos     int
+  End     int
+  Message string
+}
+
+// TextEdit is one byte-range replacement offered by an autofixable finding.
+// Positions use the same byte offsets as shim AST nodes and must point inside
+// the current source file. An empty `Text` deletes the range; positions are
+// in lexer byte order, not visual order, so a UTF-8 multi-byte sequence must
+// be replaced as a whole.
+//
+// Application policy: a rule may emit several `TextEdit`s in one
+// `ReportFix` / `ReportRangeFix` call, in any order. The unit the host
+// resolves conflicts on is the FINDING, not the individual edit. Within one
+// fix pass the host considers each finding's edits as one group, earliest
+// group first, and accepts a group only when every member coexists with the
+// edits already accepted. If any member would be dropped, the whole group is
+// skipped, so a multi-edit fix never half-applies. The skipped finding is not
+// lost: the next cascade pass re-runs the rule against the rewritten source
+// and the fix applies then, or the cascade converges without it.
+//
+// A finding's own edits must therefore not overlap each other either, or the
+// finding can never apply. Exact duplicates within one finding are collapsed
+// rather than treated as a conflict, so repeating an identical edit is
+// harmless. Nothing diagnoses a skipped group, and the host does not report
+// when a comment falls inside a deletion range.
+//
+// Emit the narrowest edits that express the rewrite. Several small
+// non-overlapping edits contend for less source than one wide replacement and
+// are the shape the atomic applier exists to support. Built-ins that ship
+// multi-edit fixes include `typescript/no-import-type-side-effects`,
+// `format/whitespace`, `format/indent`, `unicorn/prevent-abbreviations`, and
+// `unicorn/template-indent`.
+type TextEdit struct {
+  Pos  int
+  End  int
+  Text string
+}
+
+// Suggestion is one of several candidate fixes offered for a finding, each with
+// its own title. It exists for the case `ReportFix` cannot serve: when a rule
+// knows more than one valid repair and cannot pick among them for the author.
+//
+// The distinction is the same one the built-in rules already draw and, until
+// now, kept to themselves. A fix is imposed; a suggestion is chosen. A rule that
+// found three valid renames must either impose one arbitrarily through
+// `ReportFix` or describe the three in prose and offer none — both worse than
+// letting the editor present the choice, which is what the built-ins do through
+// this shape and contributors could not reach.
+//
+// Edits within one Suggestion follow the same non-overlap policy as `TextEdit`
+// in a `ReportFix` call.
+type Suggestion struct {
+  // Title is what the editor shows for this choice, e.g. "Rename to `frames`".
+  Title string
+  // Edits apply this suggestion. Empty means the suggestion is a label with no
+  // edit — a "did you mean" the author acts on by hand.
+  Edits []TextEdit
+}
+
+// SuggestionReporter is the optional half of the reporter a host implements to
+// carry suggestions. A host that does not implement it still receives the
+// finding through `Reporter`, without the choices — the same graceful
+// degradation `FixReporter` gives autofixes.
+//
+// It is separate from `FixReporter` rather than folded into it because the two
+// answer different questions: `ReportFix` offers the one right rewrite, this
+// offers a choice among several. A rule reaches it through
+// `Context.ReportSuggestion` / `ReportRangeSuggestion`; it is not called
+// directly.
+type SuggestionReporter interface {
+  ReportSuggestion(node *shimast.Node, message string, suggestions ...Suggestion)
+  ReportRangeSuggestion(pos, end int, message string, suggestions ...Suggestion)
+}
+
+// Context is the per-(file, rule) handle the engine passes to `Check`.
+// The `Reporter` is supplied by the host when constructing the context;
+// contributors call `ctx.Report` / `ctx.ReportRange` directly through
+// this Context rather than touching the reporter.
+type Context struct {
+  // File is the source file currently being walked. Always non-nil
+  // when `Check` is invoked.
+  File *shimast.SourceFile
+
+  // Checker is the host's tsgo type checker. Available for type-aware
+  // rules; nil-safe enough that AST-only rules can ignore it.
+  Checker *shimchecker.Checker
+
+  // Severity is the rule's resolved severity for this file. Already
+  // filtered by the engine — rules do not need to check for
+  // SeverityOff.
+  Severity Severity
+
+  // Options is the raw JSON blob the user wrote in the second slot of
+  // their `[severity, options]` rule configuration tuple. Nil when the
+  // rule was configured with a bare severity literal. Contributors that
+  // accept options decode the blob into their own struct via
+  // `(*Context).DecodeOptions`.
+  Options json.RawMessage
+
+  reporter Reporter
+  results  ProjectResultReader
+}
+
+// NewContext constructs a Context for the engine to pass into a
+// contributor rule's `Check`. Reserved for host code; contributors
+// should not need to call this.
+func NewContext(
+  file *shimast.SourceFile,
+  checker *shimchecker.Checker,
+  severity Severity,
+  options json.RawMessage,
+  reporter Reporter,
+) *Context {
+  return NewContextWithProjectResults(file, checker, severity, options, reporter, nil)
+}
+
+// NewContextWithProjectResults constructs a file-rule Context with the live
+// project results for the same loaded Program cycle.
+func NewContextWithProjectResults(
+  file *shimast.SourceFile,
+  checker *shimchecker.Checker,
+  severity Severity,
+  options json.RawMessage,
+  reporter Reporter,
+  results ProjectResultReader,
+) *Context {
+  return &Context{
+    File:     file,
+    Checker:  checker,
+    Severity: severity,
+    Options:  append(json.RawMessage(nil), options...),
+    reporter: reporter,
+    results:  results,
+  }
+}
+
+// ProjectResult returns a current snapshot for a named project rule in this
+// file's Program cycle. Missing registrations return ProjectRuleAbsent.
+func (c *Context) ProjectResult(name string) ProjectRuleResult {
+  if c == nil || c.results == nil {
+    return ProjectRuleResult{Status: ProjectRuleAbsent}
+  }
+  return c.results.ProjectResult(name)
+}
+
+// DecodeOptions unmarshals the rule's options blob into `out`. Returns
+// nil with no side effect when the rule was configured with severity
+// alone, so contributors can write:
+//
+//  var opts myRuleOptions
+//  _ = ctx.DecodeOptions(&opts)
+//  // opts now holds either the user's settings or the zero value.
+func (c *Context) DecodeOptions(out interface{}) error {
+  if c == nil || len(c.Options) == 0 {
+    return nil
+  }
+  return json.Unmarshal(c.Options, out)
+}
+
+// Report records a finding at the given node's source range. Silently
+// ignored when severity is `off` (defensive — the engine already filters
+// by severity before invoking Check) or when no reporter is attached.
+func (c *Context) Report(node *shimast.Node, message string) {
+  if c == nil || c.reporter == nil || c.Severity == SeverityOff || node == nil {
+    return
+  }
+  c.reporter.Report(node, message)
+}
+
+// ReportFix records a finding at the given node's source range with optional
+// autofix edits. Older hosts that do not implement fix reporting receive the
+// diagnostic without edits.
+// Treat edits as best-effort: design the rule so the diagnostic alone is useful.
+func (c *Context) ReportFix(node *shimast.Node, message string, edits ...TextEdit) {
+  if c == nil || c.reporter == nil || c.Severity == SeverityOff || node == nil {
+    return
+  }
+  if len(edits) == 0 {
+    c.reporter.Report(node, message)
+    return
+  }
+  fixer, ok := c.reporter.(FixReporter)
+  if !ok {
+    c.reporter.Report(node, message)
+    return
+  }
+  fixer.ReportFix(node, message, edits...)
+}
+
+// ReportRange records a finding at an explicit byte range inside the
+// current file.
+func (c *Context) ReportRange(pos, end int, message string) {
+  if c == nil || c.reporter == nil || c.Severity == SeverityOff {
+    return
+  }
+  c.reporter.ReportRange(pos, end, message)
+}
+
+// ReportRangeFix records a finding at an explicit byte range with optional
+// autofix edits. Older hosts that do not implement fix reporting receive the
+// diagnostic without edits.
+// Treat edits as best-effort: design the rule so the diagnostic alone is useful.
+func (c *Context) ReportRangeFix(pos, end int, message string, edits ...TextEdit) {
+  if c == nil || c.reporter == nil || c.Severity == SeverityOff {
+    return
+  }
+  if len(edits) == 0 {
+    c.reporter.ReportRange(pos, end, message)
+    return
+  }
+  fixer, ok := c.reporter.(FixReporter)
+  if !ok {
+    c.reporter.ReportRange(pos, end, message)
+    return
+  }
+  fixer.ReportRangeFix(pos, end, message, edits...)
+}
+
+// ReportSuggestion records a finding at the node's range with a choice of
+// candidate fixes. A host that does not implement `SuggestionReporter` receives
+// the diagnostic without the choices, so design the rule so the message alone is
+// useful — the same best-effort contract as `ReportFix`.
+//
+// Use this over `ReportFix` only when there genuinely is a choice. One correct
+// rewrite is a fix; imposing it is the right thing. Several valid rewrites is a
+// suggestion; imposing one arbitrarily is not.
+func (c *Context) ReportSuggestion(node *shimast.Node, message string, suggestions ...Suggestion) {
+  if c == nil || c.reporter == nil || c.Severity == SeverityOff || node == nil {
+    return
+  }
+  if len(suggestions) == 0 {
+    c.reporter.Report(node, message)
+    return
+  }
+  suggester, ok := c.reporter.(SuggestionReporter)
+  if !ok {
+    c.reporter.Report(node, message)
+    return
+  }
+  suggester.ReportSuggestion(node, message, suggestions...)
+}
+
+// ReportRangeSuggestion records a finding at an explicit byte range with a
+// choice of candidate fixes. See `ReportSuggestion`.
+func (c *Context) ReportRangeSuggestion(pos, end int, message string, suggestions ...Suggestion) {
+  if c == nil || c.reporter == nil || c.Severity == SeverityOff {
+    return
+  }
+  if len(suggestions) == 0 {
+    c.reporter.ReportRange(pos, end, message)
+    return
+  }
+  suggester, ok := c.reporter.(SuggestionReporter)
+  if !ok {
+    c.reporter.ReportRange(pos, end, message)
+    return
+  }
+  suggester.ReportRangeSuggestion(pos, end, message, suggestions...)
+}
+
+// ReportRelated records a finding at the given node's source range with related
+// source locations. Older hosts that do not implement RelatedReporter receive
+// the diagnostic without them, so design the rule to read well from the message
+// alone. With no related locations it is exactly `Report`.
+func (c *Context) ReportRelated(node *shimast.Node, message string, related ...RelatedInformation) {
+  if c == nil || c.reporter == nil || c.Severity == SeverityOff || node == nil {
+    return
+  }
+  if len(related) == 0 {
+    c.reporter.Report(node, message)
+    return
+  }
+  reporter, ok := c.reporter.(RelatedReporter)
+  if !ok {
+    c.reporter.Report(node, message)
+    return
+  }
+  reporter.ReportRelated(node, message, related...)
+}
+
+// ReportRangeRelated records a finding at an explicit byte range with related
+// source locations. Falls back to a plain range finding on a host without
+// RelatedReporter, and equals `ReportRange` when no related locations are given.
+func (c *Context) ReportRangeRelated(pos, end int, message string, related ...RelatedInformation) {
+  if c == nil || c.reporter == nil || c.Severity == SeverityOff {
+    return
+  }
+  if len(related) == 0 {
+    c.reporter.ReportRange(pos, end, message)
+    return
+  }
+  reporter, ok := c.reporter.(RelatedReporter)
+  if !ok {
+    c.reporter.ReportRange(pos, end, message)
+    return
+  }
+  reporter.ReportRangeRelated(pos, end, message, related...)
+}
+
+var registry []Rule
+
+// Register adds a contributor rule to the global registry. Called from a
+// contributor package's `init()`. Duplicate names are NOT checked here
+// — the host's adapter layer surfaces collisions with a clearer error
+// than a raw panic.
+func Register(r Rule) {
+  if r == nil {
+    panic("rule: Register called with nil rule")
+  }
+  registry = append(registry, r)
+}
+
+// Registered returns every contributor rule registered via `Register`.
+// Called once by the host during engine bootstrap. The returned slice is
+// a defensive copy so the host cannot mutate the registry.
+func Registered() []Rule {
+  out := make([]Rule, len(registry))
+  copy(out, registry)
+  return out
+}

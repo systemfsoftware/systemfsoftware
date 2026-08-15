@@ -1,0 +1,118 @@
+{
+  "cohort": "round two, campaign/evidence-luna-0.26.0",
+  "subject": "shopping",
+  "arm": "plain",
+  "runId": "d8a3e4a6-f559-4148-8199-749581292fd0",
+  "state": "counted",
+  "method": {
+    "read": "The completed Plain workspace, read-only. No requirement identifier appears anywhere in it, so every reach is decided by an artifact carrying an obligation, never by a tag.",
+    "requirementRooted": "Each of the six was counted twice and the lower rate kept. The broad pass called an anchor eligible if satisfying it depends on that artifact kind at all, over all 427 anchors; the narrow pass only when the anchor names that artifact kind's own obligation.",
+    "populations": "427 requirement anchors, being 73 `##` and 354 `###` headings across the five frozen documents — the largest corpus in the cohort."
+  },
+  "populations": {
+    "requirementAnchors": 427,
+    "models": 29,
+    "scalarColumns": 231,
+    "accessors": 114,
+    "hooks": 39,
+    "screens": 27,
+    "backendTestFunctions": 12,
+    "journeyCases": 7
+  },
+  "cells": [
+    {
+      "model": "gpt-5.6-luna",
+      "subject": "shopping",
+      "edges": {
+        "requirementToModel": {
+          "eligible": 310,
+          "reached": 310
+        },
+        "requirementToOperation": {
+          "eligible": 427,
+          "reached": 426
+        },
+        "requirementToDto": {
+          "eligible": 215,
+          "reached": 212
+        },
+        "requirementToTest": {
+          "eligible": 354,
+          "reached": 240
+        },
+        "requirementToScreen": {
+          "eligible": 427,
+          "reached": 416
+        },
+        "requirementToJourney": {
+          "eligible": 427,
+          "reached": 59
+        },
+        "modelToOperation": {
+          "eligible": 29,
+          "reached": 29
+        },
+        "modelToDto": {
+          "eligible": 29,
+          "reached": 28
+        },
+        "accessorToTest": {
+          "eligible": 114,
+          "reached": 113
+        },
+        "accessorToHook": {
+          "eligible": 114,
+          "reached": 114
+        },
+        "hookToScreen": {
+          "eligible": 39,
+          "reached": 38
+        },
+        "screenToJourney": {
+          "eligible": 27,
+          "reached": 21
+        },
+        "columnToProperty": {
+          "eligible": 231,
+          "reached": 142
+        }
+      }
+    }
+  ],
+  "unreached": {
+    "requirementToOperation": [
+      "REQ-ADMIN-GOVERNANCE-POLICIES-5: the initial super administrator is provisioned by a setup wizard in the backend, not by any published operation"
+    ],
+    "requirementToDto": [
+      "REQ-INVENTORY-DOMAIN-5, REQ-INVENTORY-FUNCTIONS-3, and REQ-SELLER-ACCOUNT-FUNCTIONS-3: their response rows are declared as anonymous inline types on the controller rather than in the published structures"
+    ],
+    "requirementToTest": [
+      "114 of 354. Whole families are unproven: the order lifecycle, wishlist and cart domains, shipment and review domains, and sixty-two of the business-rule anchors. The suite is twelve exported test functions across four files, carrying 78 concrete outcome assertions and 16 refusal checks"
+    ],
+    "requirementToScreen": [
+      "11 of 427, including both session-continuation anchors, which live in a lib module and App.tsx rather than in any component"
+    ],
+    "requirementToJourney": [
+      "368 of 427. The seven cases reach registration, login, logout, session restore, profile and address management, the administrator application, the seller desk, and a set of empty-state renders. Nothing in checkout, payment, shipping, delivery, cancellation, refund, review publication, category curation, inventory, variants, images, wishlist mutation, bans, or grades is walked; all fifteen non-functional anchors and all but four of the hundred and eleven business-rule anchors are unreached"
+    ],
+    "modelToDto": [
+      "shopping_checkout_holds: nothing published carries a hold"
+    ],
+    "accessorToTest": [
+      "adminReviewSnapshots"
+    ],
+    "hookToScreen": [
+      "useAdminOrder, defined and called nowhere"
+    ]
+  },
+  "unsettled": {
+    "accessorToHook": "114/114 rests on one aggregator, `useShoppingOperations`, which binds every accessor as a deferred closure; only 38 accessors also have a dedicated query hook. If a call had to be an immediate invocation the figure would be 38/114. The bind was counted as a call.",
+    "accessorToTest": "The edge counts naming, not proof, which is its definition — and it is why this reads 113/114 while requirementToTest reads 240/354.",
+    "modelToDto": "shopping_payment_transactions is the borderline call: its payment rows reach an order's payment input type, its refund rows reach no published type. It was counted reached.",
+    "narrowDenominators": "For model, operation, DTO, and screen the narrow pass judged eligibility by section rather than by anchor. Only the test edge's narrow denominator, all 354 `###` anchors, is exact. Two of those four kept the broad pass anyway."
+  },
+  "settled": {
+    "columnToProperty": "Settled at the per-model reading, 142 of 231. The script that first said 67 could not see a property declared inline — this subject writes its whole published surface in 243 lines holding 76 interfaces, so a line-anchored scan found 26 property names where there are 131. Corrected to see them, the script says 178, and that is now too generous for the opposite reason: it credits a column whenever any published type declares the name, so a session created_at is credited by a post createdAt. The edge asks whether that model reaches the surface, which is what the reading counted. The same two rules agreed exactly on todo and reddit, where few models and distinctive names made global and per-model the same question.",
+    "screenToJourney": "Settled at the reading, 21 of 27 distinct exported page components. The file-stem rule that said 13 is the same rule that missed reddit profile page, which a journey reaches by clicking a username rather than by URL; it compares names where the question is about reach."
+  }
+}

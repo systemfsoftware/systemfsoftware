@@ -1,0 +1,17 @@
+{
+  "private": true,
+  "name": "@ttsc/test-strip",
+  "version": "0.27.0",
+  "description": "@ttsc/strip project-shape feature tests.",
+  "type": "module",
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning --import ../../scripts/register-extensionless-ts-loader.mjs --experimental-transform-types src/index.ts"
+  },
+  "devDependencies": {
+    "@ttsc/strip": "workspace:*",
+    "@ttsc/testing": "workspace:*",
+    "@types/node": "catalog:utils",
+    "ttsc": "workspace:*",
+    "typescript": "catalog:typescript"
+  }
+}

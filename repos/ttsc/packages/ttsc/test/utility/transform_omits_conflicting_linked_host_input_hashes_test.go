@@ -1,0 +1,69 @@
+package ttsc_test
+
+import (
+  "encoding/json"
+  "path/filepath"
+  "strings"
+  "testing"
+
+  "github.com/samchon/ttsc/packages/ttsc/driver"
+  "github.com/samchon/ttsc/packages/ttsc/utility"
+)
+
+type conflictingHostInputPlugin struct {
+  input string
+}
+
+func (plugin conflictingHostInputPlugin) SourcePreamble(ctx driver.PluginContext) (string, error) {
+  ctx.ReportHostInputHash(plugin.input, stringPointer(strings.Repeat("a", 64)))
+  ctx.ReportHostInputHash(plugin.input, stringPointer(strings.Repeat("b", 64)))
+  ctx.ReportHostInputRealpath(plugin.input, stringPointer(filepath.Join(filepath.Dir(plugin.input), "old")))
+  ctx.ReportHostInputRealpath(plugin.input, stringPointer(filepath.Join(filepath.Dir(plugin.input), "new")))
+  return "", nil
+}
+
+// TestUtilityTransformOmitsConflictingLinkedHostInputHashes verifies a native
+// plugin cannot authorize cache reuse after observing two states for one input.
+//
+// Native config evaluation can race an editor write. The path must remain in
+// hostInputs for invalidation, while its contradictory hashes must be omitted
+// so a persistent adapter falls back to conservative validation.
+//
+//  1. Register a linked plugin that reports two hashes for one config path.
+//  2. Run the real utility transform entrypoint.
+//  3. Assert the path is retained and no stable hash is published for it.
+func TestUtilityTransformOmitsConflictingLinkedHostInputHashes(t *testing.T) {
+  resetLinkedPluginRegistry()
+  root := t.TempDir()
+  input := filepath.Join(root, "strip.config.cjs")
+  driver.RegisterPlugin(conflictingHostInputPlugin{input: input})
+  writeProjectFile(t, root, "tsconfig.json", `{
+  "compilerOptions": { "module": "commonjs", "target": "es2020" },
+  "files": ["index.ts"]
+}
+`)
+  writeProjectFile(t, root, "index.ts", "export const value = 1;\n")
+
+  code, out, errOut := captureUtilityOutput(t, func() int {
+    return utility.RunTransform([]string{
+      "--cwd", root,
+      "--plugins-json", `[{"name":"conflict","stage":"transform","config":{}}]`,
+    })
+  })
+  if code != 0 || errOut != "" {
+    t.Fatalf("RunTransform mismatch: code=%d stdout=%q stderr=%q", code, out, errOut)
+  }
+  var result utilityTransformResult
+  if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &result); err != nil {
+    t.Fatal(err)
+  }
+  if len(result.HostInputs) != 1 || result.HostInputs[0] != input {
+    t.Fatalf("host inputs mismatch: %#v", result.HostInputs)
+  }
+  if _, ok := result.HostInputHashes[input]; ok {
+    t.Fatalf("conflicting hash must be omitted: %#v", result.HostInputHashes)
+  }
+  if _, ok := result.HostInputRealpaths[input]; ok {
+    t.Fatalf("conflicting realpath must be omitted: %#v", result.HostInputRealpaths)
+  }
+}

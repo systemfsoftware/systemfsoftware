@@ -1,0 +1,69 @@
+"use client";
+
+import type { ITtscWebsiteBenchmark } from "../../structures/ITtscWebsiteBenchmark";
+
+/**
+ * The machine the published numbers were measured on.
+ *
+ * Speedups are only meaningful next to the hardware and toolchain versions that
+ * produced them, so this panel sits directly above the project cards.
+ */
+export default function TtscWebsiteBenchmarkHostPanel({
+  host,
+  date,
+}: {
+  host: ITtscWebsiteBenchmark.Host;
+  date: string;
+}) {
+  const measured = new Date(date);
+  const measuredLabel = Number.isNaN(measured.getTime())
+    ? date
+    : measured.toISOString().slice(0, 10);
+
+  const specs: { label: string; value: string }[] = [
+    { label: "CPU", value: fallback(host.cpu) },
+    {
+      label: "Cores",
+      value: host.cores ? `${host.cores} logical` : "not recorded",
+    },
+    {
+      label: "Memory",
+      value: host.ramGB ? `${host.ramGB} GB` : "not recorded",
+    },
+    { label: "OS", value: fallback(host.os) },
+    { label: "Kernel", value: fallback(host.kernel) },
+    { label: "Node.js", value: fallback(host.node) },
+    { label: "ttsc", value: fallback(host.ttsc) },
+    { label: "tsgo", value: fallback(host.tsgo) },
+    { label: "Legacy TypeScript", value: fallback(host.typescript) },
+  ];
+
+  return (
+    <section className="not-prose overflow-hidden rounded-xl border border-[#c7dff4] bg-white shadow-[0_14px_38px_rgba(49,120,198,0.10)]">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-[#c7dff4] bg-[#f2f8fe] px-4 py-3">
+        <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-sky-300">
+          Measurement host
+        </p>
+        <p className="font-mono text-[11px] text-slate-500">
+          measured {measuredLabel}
+        </p>
+      </div>
+      <dl className="grid grid-cols-2 gap-px bg-[#c7dff4] sm:grid-cols-4">
+        {specs.map((spec) => (
+          <div key={spec.label} className="bg-white px-4 py-3">
+            <dt className="font-mono text-[10px] uppercase tracking-[0.12em] text-slate-500">
+              {spec.label}
+            </dt>
+            <dd className="mt-1 text-sm font-semibold text-[#102a43]">
+              {spec.value}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </section>
+  );
+}
+
+function fallback(value: string | undefined) {
+  return value && value.length > 0 ? value : "not recorded";
+}

@@ -1,0 +1,594 @@
+# Plugin Protocol Reference
+
+This page is the contract between `ttsc` and a plugin package. It is one page on purpose: linked transform packages, `composes`, `contributors`, factory generics, and the wire JSON are all validated in one pipeline, and splitting them would force forward references between two co-canonical files. Most readers can start with **Manifest**, **Stages**, and **CLI Commands**; skip linked packages / composes / contributors / factory generics on the first read.
+
+> Looking for the two-halves model, vocabulary, or the stage/subcommand matrix? Start at [Concepts](/docs/development/concepts).
+
+## Manifest
+
+The consumer points `compilerOptions.plugins[]` at a JavaScript module:
+
+```jsonc
+{
+  "compilerOptions": {
+    "plugins": [
+      { "transform": "my-plugin", "mode": "strict", "enabled": true },
+    ],
+  },
+}
+```
+
+The module exports either a plugin object or a factory:
+
+```js
+const path = require("node:path");
+
+module.exports = (context) => ({
+  name: "my-plugin",
+  source: path.resolve(context.dirname, "go-plugin"),
+  stage: "transform",
+});
+```
+
+`context` contains:
+
+```ts
+{
+  binary: string;
+  cwd: string;
+  dirname: string;
+  filename: string;
+  plugin: ITtscProjectPluginConfig;
+  projectRoot: string;
+  tsconfig: string;
+}
+```
+
+`context.plugin` is the original tsconfig plugin entry. If you want stronger typing, specialize the context type in your factory:
+
+`context.binary` is the absolute `ttsc` native helper selected for this invocation. It is not the plugin sidecar binary and not the JavaScript launcher. Most descriptors do not need it; it exists for advanced factories that need to inspect the active native host.
+
+`context.filename` is the absolute path to the resolved descriptor module `ttsc` loaded for this entry, and `context.dirname` is its containing directory. They are the load-mode-independent replacement for `__filename`/`__dirname` (see ESM-safety below).
+
+Keep executable descriptor setup synchronous and lightweight. `ttsc` evaluates descriptors in an isolated child, using the programmatic compiler instance's effective environment when one was supplied. Node children install ttsc's source-runtime hooks, while a Bun host uses Bun's native TypeScript loader in the same process boundary. It bounds neither how long the evaluator may take nor how much it may print: both were the compiler deciding, on numbers nobody chose for the machine running the build, that your own descriptor had gone too far. Direct evaluator output is held until the retry decision: retained-attempt diagnostics are replayed to the host's stderr, while all captured output from an attempt discarded for a `ttsx` retry is suppressed, including the expected loader stack. The fallback `ttsx` evaluator instead streams its own output directly to the host's stderr as it writes. In both lanes descriptor output cannot corrupt CLI, API, LSP, or watch protocol stdout. A launch failure, signal, non-zero exit, missing result, or invalid JSON stops setup with a cause-specific error; move long-running work into the native plugin command instead. A `.ts` descriptor whose isolated runtime reports a supported loader incompatibility is retried through `ttsx`, but user exceptions from module initialization or the factory are not retried.
+
+**Descriptors must be ESM-safe.** A descriptor compiled to CommonJS and loaded by `ttsc`'s direct `require()` keeps `__dirname`/`__filename`/`require`. But when `ttsc` loads a descriptor shipped as `.ts` source — through `ttsx` — or as ESM, those ambient globals are **undefined**, so a `source` derived from `__dirname` silently mis-resolves. Use `context.dirname`/`context.filename` instead — `ttsc` populates them in every load mode, so they are the direct drop-in for `__dirname`/`__filename`:
+
+```ts
+import path from "node:path";
+
+// source: path.resolve(context.dirname, "go-plugin")
+```
+
+If you instead need to locate your package by name (for example to read its installed `package.json`), anchor a `node:module` resolver on `context.projectRoot`, which also works in both CommonJS and ESM:
+
+```ts
+import { createRequire } from "node:module";
+import path from "node:path";
+
+const requireFrom = createRequire(path.join(context.projectRoot, "package.json"));
+const pkgRoot = path.dirname(requireFrom.resolve("my-plugin/package.json"));
+// source: path.resolve(pkgRoot, "go-plugin")
+```
+
+```ts
+import * as path from "node:path";
+import type { ITtscPluginFactoryContext } from "ttsc";
+
+type MyPluginEntry = {
+  transform: string;
+  mode?: string;
+};
+
+export function createTtscPlugin(
+  context: ITtscPluginFactoryContext<MyPluginEntry>,
+) {
+  return {
+    name: "my-plugin",
+    source: path.resolve(context.dirname, "go-plugin"),
+    stage: "transform",
+  };
+}
+```
+
+### Shape
+
+```ts
+interface ITtscPlugin {
+  name?: string;
+  hostInputs?: string[];
+  hostInputHashes?: Record<string, string | null>;
+  hostInputRealpaths?: Record<string, string | null>;
+  source: string;
+  composes?: string[];
+  stage?: "transform" | "check";
+  capabilities?: {
+    diagnosticsTiming?: boolean;
+    lsp?: boolean;
+    projectContextArgs?: boolean;
+    projectDiagnostics?: boolean;
+    projectInputs?: boolean;
+    residentCheck?: boolean;
+    threadingArgs?: boolean;
+  };
+  reportsTypeScriptDiagnostics?: boolean;
+  contributors?: ITtscPluginContributor[];
+}
+
+interface ITtscPluginContributor {
+  name: string;
+  source: string;
+}
+```
+
+Field rules:
+
+- `name`: optional display label for diagnostics and build messages. Routing is not based on package identity.
+- `source`: Go package directory or `go.mod` file. A `package main` source builds as an executable sidecar. A non-`main` transform source is linked into the selected native host and must register itself through `driver.RegisterPlugin`. Relative paths are resolved from the consumer project root; package descriptors should usually return an absolute path. A compiled-CommonJS descriptor can base it on `__dirname`, but a `.ts`-source or ESM descriptor must base it on `context.dirname` (or resolve from `context.projectRoot`) instead (see [ESM-safety](#manifest) above), since `__dirname` is undefined there.
+- `composes`: optional list of other plugin names (or original `transform` specifiers) whose source build should be redirected to this descriptor's `source`. Composition is **one hop only**: `A.composes = ["B"]` sends B to A's binary, but if `B.composes = ["C"]` then C is sent to B's original binary, not A's. Reciprocal entries (`A.composes = ["B"]` and `B.composes = ["A"]`) are rejected as a cycle.
+- `hostInputs`: optional absolute paths whose content or presence universally affects the descriptor or native transform. Missing paths are valid resolution candidates. Ttsc already records tsconfig ancestry, package manifests inspected by auto-discovery, the descriptor's loaded CommonJS graph, and an explicit plugin `configFile`; use this field for implicit config discovery or other native inputs outside the TypeScript reference graph. A linked native plugin that discovers inputs only while it evaluates configuration calls `PluginContext.ReportHostInput(absolutePath)` instead. Native transform envelopes return that generation-wide union and the JavaScript host merges it with descriptor inputs.
+- `hostInputHashes`: optional evaluation-time fingerprints for `hostInputs`. Use a lowercase SHA-256 digest for an observed file and `null` for a missing candidate. Ttsc-generated resolution loaders use the same shape for an existing directory candidate by hashing a stable directory-kind marker, so replacing that directory with a file invalidates the generation. Capture the fingerprint when the descriptor reads or probes the input, before module/config resolution can select a result. Ttsc still watches an input without a fingerprint, but persistent bundler adapters decline narrow cache reuse because they cannot prove which state produced the descriptor. A linked native plugin reports the same evidence with `PluginContext.ReportHostInputHash(absolutePath, &digest)` or a nil digest for a missing candidate; contradictory observations keep the path in `hostInputs` and omit its fingerprint.
+- `hostInputRealpaths`: optional evaluation-time physical identities paired with `hostInputHashes`. Use `fs.realpathSync.native(path)` for an observed input and `null` for a missing candidate. This prevents a symlink or junction from being retargeted to equal bytes with different relative dependencies while retaining output from the earlier target. A native plugin reports the same evidence with `PluginContext.ReportHostInputRealpath`; contradictory identities remain watched but are omitted from reusable proof.
+- `stage`: plugin kind. Omit for `"transform"`.
+- `capabilities`: optional host behaviors a strict sidecar would otherwise reject or not understand. Set `threadingArgs` only when the sidecar accepts `--singleThreaded` and `--checkers`; set `diagnosticsTiming` only when it accepts `--diagnostics`/`--extendedDiagnostics` and may print timing detail to stdout. Set `lsp` only when the sidecar implements the `ttscserver` LSP verbs below. Set `projectContextArgs` only when it accepts `--project-context-json` and preserves the supplied project identity. Set `projectDiagnostics` only when it implements the standalone `lsp-project-diagnostics` command. Set `projectInputs` only when it implements the separate `project-inputs` snapshot command. Set `residentCheck` only when a check-stage sidecar implements the `check-serve` protocol below.
+- `reportsTypeScriptDiagnostics`: check-stage capability flag. Set this only when the sidecar's `check` subcommand loads the project Program and reports normal TypeScript diagnostics itself; `ttsc` then skips the redundant `tsc --noEmit` guard. Ordinary check plugins should leave it unset so TypeScript diagnostics are still merged after their own output.
+- `contributors`: optional list of additional Go source packages to statically link into this plugin's binary at build time. Each entry's `source` is copied into the scratch build tree as `<scratch>/contrib/<name>/`, and a synthesized blank import in the entry package triggers the contributor's `init()` before `main`. See [Contributors](#contributors) below.
+
+`ttsc` accepts Go source only. It builds the source with the pinned Go toolchain and TypeScript-Go shim overlay, then caches the resulting executable.
+
+## Stages
+
+Public stages are deliberately small:
+
+| Stage | Host behavior | Subcommands the host invokes |
+| --- | --- | --- |
+| omitted / `"transform"` | participates in the TypeScript-Go transform path | `check`, `transform`, `build` |
+| `"check"` | reports diagnostics before emit | `check`; opt-in `fix`, `format` |
+
+There is no public `output` stage. Plugins do not receive generated JavaScript text or emitted file text for post-processing.
+
+When the user runs `ttsc fix`, `ttsc` invokes check-stage plugins with the `fix` subcommand and keeps JavaScript/declaration emit disabled. `fix` is the run-everything entry point: edits from every enabled rule flow through it, lint-class and format-class together. See [CLI Commands → `fix`](#fix) for the subcommand contract.
+
+When the user runs `ttsc format`, `ttsc` invokes the same check-stage plugins with the `format` subcommand. `ttsc format` is the format-only convenience that filters to format-class rule edits so lint rewrites are skipped. Pick this subcommand when you want to reshape source without applying lint rewrites. See [CLI Commands → `format`](#format) for the subcommand contract.
+
+**Transform-stage plugins do not see `fix` or `format`.** The host only spawns those subcommands against `stage: "check"` plugins; a transform-stage plugin's `default` branch will never receive them.
+
+## Project input snapshot
+
+A check-stage sidecar with `capabilities.projectInputs: true` must implement:
+
+```text
+project-inputs --cwd=<physical-root> --tsconfig=<physical-config> --plugins-json=<manifest> [--project-context-json=<identity>]
+```
+
+It prints one JSON object:
+
+```json
+{
+  "root": "/physical/project",
+  "files": [
+    "/physical/project/docs/spec.md",
+    "/physical/project/lint.config.cjs"
+  ],
+  "globs": ["/physical/project/openapi/**/*.json"],
+  "reloadFiles": ["/physical/project/lint.config.cjs"],
+  "reloadDirectories": ["/physical/project/config-deps"]
+}
+```
+
+All entries are normalized absolute local filesystem patterns. `root` must resolve to the same physical filesystem identity as `--cwd`; consumers reject a snapshot rooted in a different project instead of redirecting a long-lived watcher. `files` are retained while missing; `globs` describe populations and are retained while matching nothing. Optional `reloadFiles` are exact paths whose content or identity can alter plugin or contributor selection. Optional `reloadDirectories` identify directories whose immediate entry topology can alter that selection, including package lookup, package-manifest discovery, extension priority, and symlink retargeting. The topology fingerprint contains each immediate entry's raw name, kind, and symlink target, not ordinary child contents or nested descendants. Producers also publish reload files in `files`, preserving older decoders; directory topology is a distinct non-recursive surface so broad resolution ancestors are never traversed as data globs.
+
+Both the CLI watcher and native LSP host treat either reload lane as a cold execution transition instead of a warm external-data update, and classify a project-input event against those lanes as follows. A reload file always selects that lane. A reload directory selects it whenever an event names the directory itself, regardless of the event's change type, or an entry it holds directly; a directory whose own topology digest moved selects it as well, since the entry that moved may not be a declared match and so may not be named anywhere else. One case is data rather than selection: an entry lying inside the literal root of a declared glob, where the population that root describes is simply appearing. That exemption holds only strictly below the reload directory, so a glob rooted on a reload directory, or above it, never exempts what that directory exists to classify. A reload file is never exempt, wherever it sits. Exemption is a property of glob-root territory alone. A delta on the directory's own digest yields only to an event naming exempt data among that same directory's immediate entries, since only an immediate entry can move that digest; a delta on an immediate entry always stands. One consequence is worth planning for: a glob rooted on a reload directory rather than below it exempts nothing, so every immediate entry of that directory, including an editor's atomic-save temporary, selects the cold lane. The JavaScript `ttscserver` launcher evaluates `project-inputs` twice with the same canonical argv and environment, accepts only matching snapshots whose reload fingerprints remain current, and writes the deduplicated result to a private manifest file rather than the process environment. It names that file with the explicit `--lsp-plugins-file` flag, and only when the project actually resolved LSP-capable plugins, so a native host too old to know the flag refuses to start instead of serving the project without them. The host consumes that file once: it removes the flag-named manifest as soon as it has been read and clears `TTSC_LSP_PLUGINS_FILE` and `TTSC_LSP_PLUGINS_JSON` from its own environment, so neither the payload nor a path to it reaches any sidecar spawned later. Both variables remain accepted as an out-of-band transport for an editor pointed straight at a native binary, and a manifest supplied that way is read without being removed, because it belongs to whoever wrote it. The native host retains that selection-time baseline while ordinary project-input refreshes update data watchers. It dynamically registers both the exact reload-directory identity and its immediate children, then checks the baseline again after the client confirms registration; changes before registration are covered by that check and changes after registration by watcher events. Before an intentional close it sends the `ttsc/pluginSelectionChanged` notification with `{ "reason": "projectInputChanged" }`. The bundled VS Code client consumes that notification and restarts the JavaScript launcher without spending its crash-restart budget. Other LSP clients that supervise `ttscserver` should treat the notification as the same expected lifecycle transition; clients that ignore it may account the following close as a crash. Ordinary project inputs and unchanged reload-directory content continue through resident invalidation.
+
+The portable glob grammar is `*` within one path segment, `?` for one character, and a complete `**` segment across directories; brackets and braces are literal filename characters. Windows drive, UNC, and their extended-length file forms are local paths, while device namespaces and HTTP(S) resources are outside this protocol. The command declares topology without loading a TypeScript Program or reading the external content. Hosts call it only when the capability is explicitly enabled, so older strict sidecars are never probed with an unknown command. A failing refresh leaves the consumer's last successful snapshot in force.
+
+The CLI watcher retains one recursive `fs.watch` root per declaration, deduplicating declarations that share an ancestor. An input inside the project is owned by the physical project root, so deleting, renaming, or atomically replacing a declared directory cannot strand a child handle on the old filesystem object. A missing external input is owned by the nearest existing ancestor of its declared parent; replacement above that explicit boundary requires restarting the watch. That boundary never rises to a directory holding the project, because such a root outranks the project's own in the active set and would leave one handle over a shared system directory to carry every declaration. An external declaration that can only be owned that way is instead owned by its own tree, and a declaration whose every candidate owner holds the project — a resolution ancestor such as a searched `node_modules` level — is not watched at all. A declaration is anchored under both its declared spelling and its normalized physical identity, because a declaration reached through a symlink resolves to its target's directory: the physical anchor observes an edit to the bytes the fingerprint was taken from, and only the declared anchor observes the link itself being retargeted or replaced. Both go through the same root selection, so the ownership rules above bound each of them, and the active set drops one again whenever they coincide or share an ancestor. Recovery follows the same ceiling: one bounded recovery pass walks the failed root's safe parent candidates and still refuses any owner that would hold the project. When no candidate remains, the watcher reports that project-input observation is unavailable, then expires the rejection so a later synchronization — including an unchanged snapshot republication — can retry the original root. Each root is reported only when it becomes uncovered; successful coverage clears that state so a later outage is reported again. This keeps watcher count bounded by declarations and avoids per-file polling. Every watcher is registered under its physical path so the platform backend compares two canonical spellings, while classification, containment, and notification stay in the declared spelling. Events compare the declared population and its content fingerprints before scheduling a debounced rebuild, so an unrelated file or a filename-less event with unchanged content stays quiet.
+
+Observation is event-driven after one bounded registration handoff. Immediately after a project-input topology is published and its watcher roots are synchronized, the launcher queues one microtask to compare the live population with the pre-registration fingerprint. Repeated publications coalesce into that scan, and a real watcher event that arrives first updates the same fingerprint so the scan stays silent. This closes only the startup window; it is not a timer or recurring poll. After that reconciliation, a change is observable only when the filesystem backend emits an `fs.watch` event at the declared path or within its retained owner ancestor. Physical normalization makes symlink spellings share that watched identity, and retained ancestors keep atomic replacement of a declared path observable; neither guarantee follows a hard link to an alias outside the retained boundary. Editing through such a hard-link alias is not guaranteed to rebuild, and neither is a later change hidden by a filesystem or network backend that does not deliver the corresponding event. There is no polling fallback.
+
+## Resident check watch
+
+A check-stage sidecar with `capabilities.residentCheck: true` must implement `check-serve`. The command accepts the same fixed project, plugin, compiler, and threading arguments as `check`, then exchanges one JSON object per newline over stdin and stdout:
+
+```json
+{ "changed": ["/physical/project/src/main.ts"], "external": [] }
+```
+
+```json
+{
+  "status": 0,
+  "stdout": "",
+  "stderr": "",
+  "telemetry": {
+    "pid": 1234,
+    "programLoads": 1,
+    "programUpdates": 1,
+    "reused": true
+  }
+}
+```
+
+`changed` lists local filesystem inputs changed since the prior cycle. `external` is its subset declared by the project-input snapshot. A known Program source is updated incrementally even when a plugin also declares it; an unknown external data path leaves the Program resident. A config, compiler root-set, selected plugin, Go contributor, or project-input topology transition restarts the sidecar instead of sending a data update.
+
+Each response constructs fresh rule-engine, project-rule, reporter, and output state around the resident Program. Transport failure, malformed framing, or an absent capability falls back to the ordinary one-shot `check` command for correctness. Hosts use this protocol only for no-emit analysis watch sessions whose selected plugins are all check-stage, whether no emit comes from `check`, `--noEmit`, or the project config; transform, fix, format, and emitting flows remain one-shot. `programLoads` counts initial loads and full Program reconstructions, `programUpdates` counts updates that reused the existing Program graph, and `reused` describes the current response. The telemetry is part of the ordinary protocol so diagnostics mode and tests can verify residency without benchmark-only behavior.
+
+## LSP sidecar verbs
+
+`ttscserver` loads the same project plugin descriptors as `ttsc`, then keeps only plugins whose descriptor sets `capabilities.lsp: true`. Those sidecars implement the core subcommands below. `lsp-project-diagnostics` is an additional opt-in command gated by `capabilities.projectDiagnostics`.
+
+| Verb | Purpose |
+| --- | --- |
+| `lsp-command-ids` | Print a JSON string array of `workspace/executeCommand` ids the sidecar owns. |
+| `lsp-code-action-kinds` | Print a JSON string array of CodeActionKind values the sidecar may return. |
+| `lsp-diagnostics` | Print separate document and project diagnostic sets for `--uri`. |
+| `lsp-project-diagnostics` | Optional with `capabilities.projectDiagnostics`. Print one project diagnostic publication without requiring a document URI. |
+| `lsp-code-actions` | Print LSP code actions for `--uri`, `--range-json`, and `--context-json`. |
+| `lsp-execute-command` | Print a `changes`-map `WorkspaceEdit` or JSON `null` for `--command` and `--arguments-json`. |
+| `lsp-hints` | Print a JSON array of completion hints the sidecar's rules published. Takes no `--uri`: a corpus describes the Program, not a document. |
+| `lsp-serve` | Optional. Answer a newline-delimited stream of `lsp-diagnostics` / `lsp-project-diagnostics` / `lsp-code-actions` / `lsp-hints` requests over stdin, holding a warm Program across them. |
+
+The host also passes `--cwd`, `--tsconfig`, and `--plugins-json` to each LSP verb. LSP sidecars compute diagnostics, code actions, and commands from the saved project state. Document verbs receive a URI; `lsp-project-diagnostics` evaluates only project rules and works when no TypeScript document is open. The host never infers that command from `projectInputs`: topology discovery and project diagnostics may be implemented independently, and a missing capability is never probed. Commands still return a `WorkspaceEdit`; the editor applies that edit only if the touched documents remain clean. While a document is dirty, `ttscserver` suppresses plugin diagnostics and code actions. For owned commands, the proxy also records the document generation when the request starts and returns JSON `null` if a dirty, saved, or closed document changed before the sidecar returned an edit for it.
+
+Every position on the wire counts `character` in UTF-16 code units: a diagnostic range, a related location, a fix, suggestion, or formatting edit range, and the range a code-action request carries. LSP 3.17 lets a client and server negotiate a `PositionEncodingKind` per session, and the wrapped tsgo language server selects `utf-8` whenever a client offers it, so `ttscserver` settles that negotiation instead of tracking it: it narrows the client's `general.positionEncodings` offer to `utf-16` before the `initialize` request is forwarded upstream. UTF-16 is the LSP default and the encoding every conforming client supports, so no client loses a capability, and a client whose offer names no other encoding reaches tsgo byte for byte as before. Because one encoding governs the whole session, the sidecar protocol carries no encoding field: a sidecar always emits UTF-16 columns and always receives them.
+
+A sidecar that does not implement `lsp-hints` rejects it as an unknown command, and the host treats that as "no hints" rather than a failure — every sidecar predating the verb answers that way, so logging it would print an error per plugin per session. A sidecar that answers with invalid JSON is logged, because it implemented the verb and got it wrong. Unlike `lsp-command-ids` and `lsp-code-action-kinds`, which ignore their arguments and never build a Program, `lsp-hints` may load one — a corpus is a projection of what a project rule's `Check` found. It loads one only when the resolved config actually declares a rule that publishes hints, since that is decidable from the rule registry and the config before any Program exists; a project that declares none answers with an empty corpus and never parses anything. When it does load one, it asks for a type checker only if a hint-publishing rule needs one, rather than because some unrelated file rule is type-aware. The host fetches the corpus in the background rather than on the `initialize` path, and answers from memory until then. It re-runs the verb after a saved document, a configuration change, or a watched-file change, since a corpus that projects the Program goes stale when the Program's inputs do. Concurrent refreshes coalesce into one queued rerun, each run carries an increasing generation so a slow one cannot overwrite a newer one, and a sidecar whose refresh fails keeps serving the corpus it last published.
+
+When `capabilities.projectContextArgs` is enabled, the host also passes `--project-context-json`. The JSON object separates `invocationCwd`, `logicalConfigPath`, and `logicalProjectRoot` from `physicalConfigPath` and `physicalProjectRoot`; it may also contain `explicitProjectRoot` and `pluginConfigOrigin`. A project lifecycle id is minted by the native Program host.
+
+The `lsp-diagnostics` result is `{ "document": [...], "project": { "uri": "file:///logical/tsconfig.json", "diagnostics": [...] } }`; omit `project` when the sidecar owns no project result. `lsp-project-diagnostics` returns the project object directly and returns an empty `diagnostics` array when a prior publication must be cleared. `ttscserver` keeps each producer's last successful project publication and merges them in manifest order, so one producer's failed refresh cannot clear another producer or erase its own previous findings. A successful empty publication clears only that producer. The merged project set is published separately from upstream and document diagnostics at its config URI with a zero range and no document version. A newer saved-document or declared-input generation replaces the prior set, clears an old URI before publishing a new one, and suppresses stale asynchronous results. Project diagnostics do not participate in code actions or fixes.
+
+Each diagnostic carries `range`, `severity`, `code`, `source`, and `message`, plus an optional `codeDescription` of the form `{ "href": "https://…" }`. `codeDescription` is a documentation URL for `code`; editors render the code as a link to it, so a rule name in the Problems panel can lead to that rule's docs. `ttscserver` preserves whatever a sidecar supplies and never synthesizes the URL: only the sidecar knows what its own `code` values mean, so mapping them to pages is the producer's job. A sidecar that sets no `codeDescription` omits the key entirely and produces diagnostics byte-for-byte as before.
+
+`@ttsc/lint` fills the field for its built-in rules, deriving the URL from the rule name's family rather than from a per-rule table. Unprefixed core rules resolve against `https://eslint.org/docs/latest/rules/<name>`, `unicorn/` and `typescript/` rules resolve against their own upstream references, and the remaining ported families resolve against the [rule catalog](/docs/lint/rules) on this site. Two cases stay unset on purpose: `format/` rules, whose configuration keys have no per-rule page, and third-party rules contributed through the public `rule` package, whose documentation their own plugin owns.
+
+A diagnostic may also carry `tags`, an array of the LSP `DiagnosticTag` values `1` (unnecessary) and `2` (deprecated). An editor fades unnecessary code and strikes deprecated code through. A tag is a claim about what the code is, not how severe the finding is: `unnecessary` means the code is safe to delete, so a rule attaches it only to findings that deletion would resolve — an unused import, an unreachable branch — never to a finding that means work is not yet done, which would tell the author to delete what they have not finished. The proxy carries the tags through unchanged, and unknown tag values are dropped before the wire so a newer rule cannot ship an integer no editor understands. A diagnostic with no tags omits the field.
+
+A diagnostic may also carry `relatedInformation`, an array of secondary locations the finding points at, each of the form `{ "location": { "uri", "range" }, "message" }`. An editor renders each as a clickable line beneath the diagnostic, so `no-redeclare`'s "'x' is already defined." can lead the reader to where `x` was first declared instead of only naming it. Unlike the other optional fields, a rule sets these through a first-class API rather than a bare wire field: `ctx.ReportRelated` and `ctx.ReportRangeRelated` take `rule.RelatedInformation{ Pos, End, Message }` values whose byte offsets index the file being linted, and the host fills in that file's URI. The related locations therefore stay within the finding's own file; a location in another file would need a URI the rule API does not yet carry, and is left as a separate extension. A host that predates the field still delivers the diagnostic — `ReportRelated` degrades to a plain `Report` — and the proxy carries the locations through unread. A diagnostic with no related locations omits the field.
+
+The last optional field is `data`: opaque JSON a producer attaches to a diagnostic, which the editor stores and hands back on a codeAction request whose context includes that diagnostic. The proxy carries it through byte-for-byte and never reads it. Note that `@ttsc/lint` does not itself consume `data`: its own codeActions are recomputed from findings on each request rather than resolved from a prior diagnostic's payload, so the round trip is for consumers outside ttsc — an editor extension or another tool that reads the field to drive its own UI. The field is a wire pass-through only; there is no rule-facing API to set it yet, because the producing side and a ttsc-internal consumer would need to land together, and only the pass-through is unambiguously useful on its own. A diagnostic with no data omits the field.
+
+No LSP verb has a deadline: a rule that takes a long time is running the user's own code, and how long that takes is not the host's call. The host reads at most 4 MiB from stdout and 1 MiB from stderr; oversized stdout is rejected before JSON decoding, and oversized failure stderr is truncated in the server log. Those two are message limits rather than a budget for the work — the reply is bounded, never the rule.
+
+When a sidecar implements the optional `lsp-serve` verb, `ttscserver` keeps one long-lived child per sidecar and sends the four verbs that load a Program (`lsp-diagnostics`, `lsp-project-diagnostics`, `lsp-code-actions`, and `lsp-hints`) as newline-delimited JSON requests over its stdin — `{ "verb": "lsp-diagnostics", "uri": "…" }` — reading one `{ "result": …, "code": … }` reply per line. The daemon builds its Program once and reuses it across verbs, instead of the host respawning the sidecar and rebuilding the Program per verb. A staged sidecar may advertise the direct `lsp-project-diagnostics` command while its older resident loop still rejects that verb; the host retries the advertised one-shot command, following the same compatibility fallback as `lsp-hints`. The base `--cwd`, `--tsconfig`, `--plugins-json`, and `--project-context-json` options travel as the daemon's argv; only the per-verb fields (`uri`, `rangeJson`, `contextJson`) travel per request. A warm Program may answer a verb only while its text for the project is the text on disk, so every editor notification that reports an on-disk change refreshes it. A save, and an open whose buffer already equals disk, each carry `{ "changed": ["<uri>"] }` on the next request, and the daemon updates the warm Program incrementally rather than rebuilding from scratch: tsgo re-parses only the changed file and reuses every other file's AST, and the standalone lint checker is rebuilt over the new Program. A change the host cannot localize carries `{ "invalidate": true }` and drops the whole Program instead; a changed file the daemon does not already hold as a source (a config edit, or a new or removed file) triggers a full reload of that entry for the same reason.
+
+`workspace/didChangeWatchedFiles` is the only notification that reports a file the editor does not have open (a `tsconfig.json` edit, a generated file, a branch switch), and it reaches the daemon the same way. A batch of plain `changed` events on ordinary sources travels as changed URIs. A created or deleted file reshapes the root set, and a `tsconfig`/`jsconfig` edit changes the compiler options and the file selection at once, so either drops the whole Program. A batch the host cannot decode is treated the same way, because an unread change is indistinguishable from an unlocalizable one. A URI that matches the last successful project-input snapshot is different: the request carries it in both `changed` and `external`, the resident sidecar retains its TypeScript Program and Checker, and only a fresh Engine and ProjectRule cycle are built. The proxy debounces those events, runs `lsp-project-diagnostics`, and replaces or clears the config-URI publication even when no source document is open. It skips that refresh while any TypeScript buffer is dirty, then resumes it when the final dirty buffer is saved or closed. The direct refresh remains pending until its generation publishes or a newer project publication succeeds, so a document-diagnostics generation that omits project data cannot strand an older config-URI diagnostic.
+
+Two signals deliberately send nothing. A `didChange` while the buffer is dirty leaves disk unchanged, and plugin diagnostics and code actions are suppressed until save. An open whose buffer differs from disk publishes an empty diagnostic set and reports nothing until the buffer reaches disk, so there is no stale answer to prevent.
+
+A sidecar that does not implement `lsp-serve` rejects the subcommand, and the host falls back to the spawn-per-verb path with no change in behavior; `lsp-command-ids`, `lsp-code-action-kinds`, and `lsp-execute-command` always use that path. A resident request is unbounded for the same reason a spawned one is; it ends the moment the sidecar dies, because closing its stdout surfaces as a read error.
+
+`lsp-hints` and `lsp-project-diagnostics` join the daemon on a weaker condition than the original document verbs: their resident answers are used only when the reply carries no error. A sidecar built after `lsp-serve` landed but before one of these verbs joined it answers the stream and rejects that verb as unknown, which reaches the host as a nonzero code — indistinguishable over this protocol from a rule that failed. Falling back to the spawn path on any nonzero reply keeps the advertised direct command working, and a project whose command genuinely fails pays one extra spawn to fail there too.
+
+Command ids are single-owner. If two LSP sidecars return the same `lsp-command-ids` entry, the first discovered owner wins and later duplicates are logged and ignored. `lsp-code-actions` should return command-backed actions whose `command.command` appears in that same sidecar's command id list. Actions without a command, with unowned commands, or with direct `edit` payloads are dropped by the host. A missing `edit` field or explicit `edit: null` is accepted. Use `lsp-execute-command` to return the final `WorkspaceEdit`; today ttscserver supports the minimal `changes` map shape, not `documentChanges`. Print JSON `null` when the command is handled but has no edit.
+
+## Composition
+
+Projects can enable multiple plugin entries. `check` entries run before emit and compose with transform entries.
+
+Transform entries can share one compiler host in two ways:
+
+- Several entries resolve to the same executable native binary, usually because one descriptor uses `composes`.
+- One or more entries point at non-`main` Go packages. `ttsc` links those packages into the selected executable host. If there is no executable transform host, `ttsc` builds a generic host and links the packages there.
+
+This is how linked transform packages compose:
+
+```jsonc
+{
+  "compilerOptions": {
+    "plugins": [
+      { "transform": "@ttsc/banner" },
+      { "transform": "@ttsc/strip" },
+    ],
+  },
+}
+```
+
+Distinct executable compiler hosts cannot be chained blindly, because each one would need to own `Program` creation and emit. If several transform modes must cooperate, expose them from one native binary, redirect with `composes`, or ship non-`main` linked packages that register against the driver host.
+
+### Combining plugins from different vendors
+
+Before the host invokes any transform plugin, `assertSharedHostCompatibility` (`packages/ttsc/src/compiler/internal/sharedHostHelpers.ts`) checks the resolved plugin binaries after linked packages are removed from the compiler-owner set. If more than one distinct executable binary remains active, the host aborts with one of:
+
+```text
+ttsc: multiple compiler native backends cannot share one emit pass;
+      compose transform libraries through one aggregate native host
+ttsc: multiple transform native backends cannot share one source-to-source pass;
+      compose transform libraries through one aggregate native host
+```
+
+The first fires during `ttsc build` / `ttsc check`; the second when a bundler adapter or `TtscCompiler.transform()` requests source-to-source transformation. To combine transform libraries from different vendors (`typia` + `nestia`-style), pick one aggregate executable plugin and list the others in its `composes: [...]` array, or make the additional transforms linked packages that implement the driver plugin hooks. See [Reference → Pitfalls](/docs/development/reference/pitfalls#combining-plugins) for the full failure catalogue.
+
+### Composing across binaries
+
+Executable plugins that want to share one compiler host can opt in through the `composes` field on their descriptor:
+
+```ts
+module.exports = (context) => ({
+  name: "my-aggregate-plugin",
+  source: path.resolve(context.dirname, "go-plugin"),
+  stage: "transform",
+  composes: ["my-feature-a", "my-feature-b"],
+});
+```
+
+When ttsc loads the descriptors of `my-feature-a` and `my-feature-b` from the project's `compilerOptions.plugins`, it reroutes their build target to the aggregate's `source`. All three names remain in the `--plugins-json` payload so the aggregate sidecar can dispatch by `name`. The aggregate must implement the dispatch logic itself; ttsc only redirects the binary.
+
+Rules enforced at load time:
+
+- **One hop only.** ttsc does not transitively follow `composes` arrays of composed plugins. `A.composes = ["B"]` sends B to A's binary; if `B.composes = ["C"]` then C is sent to B's original binary, not A's.
+- **Cycle rejected.** Two plugins each listing the other in `composes` is a hard error (`plugin composes cycle detected between "<A>" and "<B>"`).
+- **Multi-aggregate rejected.** A plugin claimed by two different aggregates is a hard error (`plugin "<name>" is composed by multiple aggregate plugins`).
+- **Empty-string target rejected.** Each entry in `composes` must be a non-empty string matching the target's `name` or its tsconfig `transform` specifier.
+- **No void aggregates.** The aggregate's own descriptor still needs a real `source` directory; ttsc never composes a plugin into nothing.
+
+See [Reference → Pitfalls](/docs/development/reference/pitfalls#composition-failures) for the exact error strings and recovery steps.
+
+## Contributors
+
+`composes` is horizontal. It lets multiple top-level plugin entries dispatch to one binary by name. `contributors` is vertical. It lets one binary statically link **additional Go sources that never appear as `compilerOptions.plugins[]` entries**. The contributing npm packages are discovered through the host plugin's own configuration (for `@ttsc/lint`, that is `lint.config.ts`'s `plugins` map).
+
+A host plugin populates `contributors` from its factory:
+
+```ts
+import path from "node:path";
+
+module.exports = (context) => ({
+  name: "@ttsc/lint",
+  source: path.resolve(context.dirname, "plugin"),
+  stage: "check",
+  contributors: [
+    { name: "demo", source: "/abs/path/to/lint-contributor-demo/rules" },
+  ],
+});
+```
+
+ttsc's plugin builder then:
+
+1. Copies the host plugin's source to a scratch directory.
+2. Copies each contributor's `source` into `<scratch>/contrib/<contributor.name>/`.
+3. Synthesizes a `ttsc_contributions.go` next to the host's entry package with one blank import per contributor: `import _ "<host-module-path>/contrib/<name>"`.
+4. Hashes every contributor source directory into the binary cache key (so swapping a contributor invalidates the cache).
+5. Runs `go build`. The resulting binary has every contributor's `init()` already executed by the time `main` starts.
+
+Constraints enforced at load time:
+
+- **Package, not module.** Contributors ship Go source as a package. A contributor with its own `go.mod` is rejected at build time, not silently pruned. Embed the contributor's source as a sub-package, not a separate Go module. The host plugin's `go.mod` supplies every transitive Go dependency, which also closes the supply-chain hole where a contributor could otherwise pull in arbitrary Go modules at build time.
+- **At least one non-test `.go` file.** A contributor directory with only `*_test.go` files (or no `.go` files at all) is rejected at load time. Test fixtures alone are not a contributor.
+- **Host plugin must have a resolvable Go module path.** The aggregate plugin's source directory must resolve to a `go.mod` module path (or be co-located with one through the workspace overlay); the builder errors out if it cannot derive one.
+- **Name regex.** `contributor.name` must match `/^[a-z][a-z0-9_]*$/` (it forms the final import-path suffix and must be a valid Go identifier). The lint factory derives this by mapping the user-facing namespace's hyphens to underscores, namespace `react-hooks` becomes contributor name `react_hooks`. Distinct namespaces that normalize to the same name, such as `react-hooks` and `react_hooks`, are rejected with the config path and every conflicting name. The Go source's `package` declaration must match the post-transform name.
+- **Absolute source path.** `contributor.source` must be an absolute path to an existing directory.
+- **Unique names per build.** Contributor names must be unique within one plugin build.
+- **Reserved scratch paths.** The host plugin's source must not already ship a `contrib/` directory or a `ttsc_contributions.go` file at its entry root; both are scratch-space reserved for the build pipeline.
+- **Not on composed plugins.** A composed plugin (one redirected by another's `composes`) cannot declare its own `contributors`. Move them onto the aggregate, or drop the `composes` redirect.
+
+See [Reference → Pitfalls](/docs/development/reference/pitfalls#contributor-merge-failures) for the exact rejection error strings.
+
+Contributor source hashes fold into the plugin cache key, so consumers with the same logical set of contributors share one cached binary regardless of declaration order. The full cache-key formula (Go binary identity, `GO_BUILD_ENV_KEYS`, overlay hashes) lives in [Architecture → Cache key inputs](/docs/development/reference/architecture#cache-key-inputs).
+
+## Plugin Config Keys
+
+`ttsc` owns `transform` and `enabled`. Every other key on a `compilerOptions.plugins[]` entry is plugin-owned config, passed through unchanged via `--plugins-json` (see [below](#--plugins-json) for the verbatim-passthrough rule). Ts-patch words such as `before`, `after`, or `phase` carry no special meaning to `ttsc`. Descriptors choose only between the public `"transform"` and `"check"` stages.
+
+## Disabled Entries
+
+`enabled: false` disables a plugin entry before loading:
+
+```jsonc
+{
+  "compilerOptions": {
+    "plugins": [
+      { "transform": "my-plugin", "enabled": false },
+      { "transform": "other-plugin" },
+    ],
+  },
+}
+```
+
+Disabled entries are not resolved, built, or included in `--plugins-json`.
+
+## CLI Commands
+
+Executable `package main` plugin sources receive subcommands directly. Linked non-`main` transform packages do not see argv; they run inside the selected native host through `driver.RegisterPlugin`. Unknown flags should be ignored so future `ttsc` minors can add optional flags. The host emits flags in **equals form** when spawning plugin binaries (`--cwd=/abs/path`, `--tsconfig=/abs/path`, `--plugins-json=[...]`); space-form (`--cwd /abs/path`) appears only in tsgo's own arg list and never reaches a plugin. Go's `flag.NewFlagSet` accepts both forms; hand-rolled parsers should accept equals-form at minimum.
+
+> `ttsc` never spawns the `version` / `-v` / `--version` subcommand on a plugin process. First-party plugins implement it as a smoke verb for `go run ./plugin version`; third-party plugins may but are not required to.
+
+### `version`
+
+```bash
+my-plugin version
+my-plugin -v
+my-plugin --version
+```
+
+Print a human-readable version and exit `0`. Smoke verb only, the host never invokes it.
+
+### `check`
+
+```bash
+my-plugin check \
+  --cwd=/project \
+  --tsconfig=/project/tsconfig.json \
+  --plugins-json='[...]'
+```
+
+Run diagnostics only. Write diagnostics to stderr. Exit non-zero for errors.
+
+### `fix`
+
+```bash
+my-plugin fix \
+  --cwd=/project \
+  --tsconfig=/project/tsconfig.json \
+  --plugins-json='[...]'
+```
+
+Optional for check-stage plugins. Invoked when the user runs `ttsc fix`. Apply autofixes to source files in place, then render any remaining diagnostics through the same renderer contract as `check`. Emit stays disabled, fix plugins must not write JavaScript or declaration output.
+
+Found nothing to apply? Exit `0` with empty stderr. Do not support `fix`? Exit non-zero with a human-readable stderr message. See [Unsupported `fix`/`format`](#unsupported-fix-format) below.
+
+### `format`
+
+```bash
+my-plugin format \
+  --cwd=/project \
+  --tsconfig=/project/tsconfig.json \
+  --plugins-json='[...]'
+```
+
+Optional for check-stage plugins. Invoked when the user runs `ttsc format`. Apply formatter-class edits (whitespace, punctuation, ordering) to source files in place. Write-only by contract: format subcommands must not print diagnostics and must keep JavaScript / declaration emit disabled.
+
+The split between `fix` and `format` is the apply-time filter, not a plugin boundary. A check-stage plugin may host both lint and format rules in one binary: `fix` applies every category's edits; `format` filters to format-class only. The two subcommands share the engine and the protocol; only the post-engine filter differs.
+
+#### Unsupported `fix` / `format`
+
+A check-stage plugin that does not implement `fix` or `format` should exit non-zero with a human-readable stderr message. `ttsc` does **not** parse any specific phrase. The host prints `stderr` verbatim and aborts. The `@ttsc/lint` convention of `<plugin-name>: fix not supported` / `format not supported` and exit `2` is a project convention, not a host contract; any non-zero exit suffices.
+
+### `transform`
+
+```bash
+my-plugin transform \
+  --cwd=/project \
+  --tsconfig=/project/tsconfig.json \
+  --plugins-json='[...]'
+```
+
+Project-wide source transform used by `TtscCompiler.transform()` and in-memory callers. Write JSON to stdout:
+
+```json
+{
+  "diagnostics": [],
+  "typescript": {
+    "src/main.ts": "export const value = 1;\n"
+  },
+  "dependencies": {
+    "src/main.ts": ["src/types.ts"]
+  },
+  "dependenciesComplete": ["src/main.ts"],
+  "graph": {
+    "edges": { "src/main.ts": ["src/types.ts"] },
+    "globals": ["src/ambient.d.ts"],
+    "configs": ["tsconfig.json", "tsconfig.base.json"],
+    "candidates": { "src/main.ts": ["src/generated.ts"] },
+    "inputHashes": { "src/generated.ts": null },
+    "inputRealpaths": { "src/generated.ts": null }
+  },
+  "volatile": ["src/generated-from-env.ts"]
+}
+```
+
+Each value in `typescript` is written to disk **verbatim**. The host does not re-parse or re-render. If your plugin mutated the AST, you must run a printer over the file before placing its text in the map; the canonical path is `shimprinter.NewPrinter(...)` → `shimprinter.EmitSourceFile(printer, file)`. Returning `file.Text()` after AST mutation will silently round-trip the original source. See `packages/ttsc/utility/host.go::RunTransform` for the reference implementation.
+
+`dependencies` is optional advisory metadata: per transformed file (same keys as `typescript`), the source files whose content influenced that output beyond the file itself — for a type-driven generator, the declaration files it read through the Checker. Paths may be project-relative or absolute; the host passes them through verbatim on `TtscCompiler.transform()` results, and `@ttsc/unplugin` registers them as bundler watch files so type-only inputs invalidate the module in HMR. Dev-mode bundlers erase type-only imports from their module graph, so without this field an edit to a consulted type serves stale generated code until a cold restart. Omit the field (or a file's entry) when there is nothing to report; malformed entries are dropped, never fatal. A producer whose list is exhaustive for a file can additionally declare it [complete](#dependency-completeness), which narrows invalidation instead of widening it.
+
+`graph` is the host-owned reference graph of the loaded program — the language-semantic input bound of any type-driven transform under `tsc --incremental` semantics (any symbol a file can reference is reachable through its import/reference closure or is ambient). Unlike `dependencies`, it requires no per-plugin reporting: `driver.NewTransformGraph(prog, cwd)` computes it from the Program, the built-in native host and the linked-plugin generic host stamp it automatically, and an executable sidecar adds the one field to its own envelope (see [Reference → Driver API](/docs/development/reference/driver-api#reference-graph)). Keys and values follow the `typescript` key convention:
+
+- `edges`: per file, its **direct** resolved references — imports, re-exports, `/// <reference>` targets, type reference directives, type-only edges included. A source with no references has an empty list, keeping the complete source-node universe available for compiler-time input proof. Direct edges are the minimal sufficient statistic (`tsbuildinfo` stores `referencedMap` the same way); consumers that need a flat per-file list compute the reachability closure themselves.
+- `globals`: files contributing to the global scope (ambient declaration files, script files, global augmentations, `typeRoots` entries); a change to any of them can affect every file.
+- `configs`: the project tsconfig followed by its `extends` ancestry.
+- `candidates`: per importer, resolution probes that precede its selected module target in TypeScript-Go's resolution order. A probe can be absent or already exist without resolving; its creation or change can change an unchanged import's meaning, so consumers watch and hash it. When the compiler reports a selected target by physical realpath, the list also retains that selected candidate's lexical spelling so retargeting its symlink or junction invalidates the generation. Paths below the selected target are omitted and do not invalidate a cache. A host with nothing to report leaves the key out entirely rather than sending an empty object, and `TtscCompiler.transform()` decodes it the same way.
+- `inputHashes` and `inputRealpaths`: optional, paired compiler-time proof for graph members. A lowercase SHA-256 of the text returned by the compiler filesystem plus an absolute physical path records an existing file; this follows TypeScript-Go's UTF-8/UTF-16 BOM decoding rather than hashing the encoded file bytes. The shared directory-kind digest records an existing directory candidate, and paired `null` values record a missing candidate. `driver.NewTransformGraph` stamps these from the filesystem observations that constructed the resident Program. A persistent host compares every graph member's generation proof with the post-compile state before it authorizes narrow reuse, so an in-project or external input that changes during compilation and returns to its original bytes cannot bless transient output. An executable sidecar that omits the section remains watch-correct: persistent adapters retain their pre/post snapshot for ordinary in-project members and conservatively decline narrow reuse when that graph reaches outside the project walk.
+
+For each transformed file, `@ttsc/unplugin` also registers the `candidates` of every importer in its `edges` reachability closure. Candidates remain host-owned even when a plugin declares complete dependencies because a plugin cannot vouch for a compiler-resolution change that occurs without any plugin input changing.
+
+`@ttsc/unplugin` registers, per transformed file `F`, `reach(edges, F) ∪ globals ∪ configs ∪ dependencies[F]` as watch files — union semantics, so a plugin's `dependencies` can only widen the host-owned bound unless the same envelope declares that file's list [complete](#dependency-completeness). This is what makes webpack filesystem caches (what Next.js persists under `.next/cache`), watch graphs, and Turbopack `fileDependencies` invalidate soundly by default when a type-only input changes. Malformed sections degrade to fewer registrations, never a failed build.
+
+`volatile` is the hermeticity declaration: the transformed files (same keys as `typescript`) whose output depends on non-file inputs — environment variables, time, network. No file-dependency scheme can represent such inputs, so consumers exclude these files from caching instead of watching more paths: `@ttsc/unplugin` bypasses its project transform cache for them and marks the module uncacheable where the bundler exposes that control (webpack/rspack loader `cacheable(false)`). Declare volatility only when the output genuinely is non-hermetic; a spurious declaration disables caching for that file on every build. Malformed entries are dropped, never fatal.
+
+For leaf-text mutations (string-literal, identifier, numeric-literal `.Text`), the printer reads original source text via `getTextOfNode` when the node is non-synthesized and has a parent. See [Recipes → Mutating leaf-text nodes](/docs/development/authoring/recipes#mutating-leaf-text-nodes) for the synthesize-flag invariant the rewrite must follow.
+
+#### Dependency completeness
+
+`dependenciesComplete` is the opt-in narrowing contract. It lists transformed files (same keys as `typescript`) for which the envelope's `dependencies[F]` entry is **complete**: every input to `typescript[F]` beyond `F` itself and the universal `graph.configs` chain appears in that entry. For a listed file a consumer derives `dependencies[F] ∪ graph.configs` rather than the default `reach(edges, F) ∪ globals ∪ configs ∪ dependencies[F]`. Nothing else changes: the field is per file, so an envelope may list some files and not others, and every unlisted file keeps the union.
+
+The narrowing exists because the host-owned bound is sound but coarse. Any file reachable through `F`'s import closure re-runs `F`'s loader, even when the transform never consulted it. A plugin that knows exactly which declarations it read (a Checker-driven generator's per-file consulted-declaration list) can report that set precisely, and this field is how it tells consumers the set is exhaustive.
+
+**The declaration transfers responsibility.** This is the Bazel declared-inputs model: an input missing from a complete list is not registered, so the consumer serves stale generated code after that input changes, and the defect belongs to the declaring plugin rather than to the host. Only declare a file complete when the reported list is derived from what the transform actually consulted, never from a hand-maintained list. No producer needs the field for correctness. Omitting it keeps the sound host-owned bound, which is why it is the default and why deleting one line restores it.
+
+The rules a producer must satisfy:
+
+- **Configs stay universal.** `graph.configs` remains an input of every file, listed or not. Compiler options reach generated code through the host, not through any file a plugin reads, so no consulted-declaration list can represent them. The chain comes from this same envelope's `graph` section, so stamp `graph` when you declare completeness. An envelope that declares a file complete without a graph leaves nothing universal behind, and a tsconfig edit stops invalidating it.
+- **Globals do not stay universal.** For a listed file the `graph.globals` set is dropped like `reach(edges, F)`. Global-scope files are ordinary declaration files that a Checker-driven producer lists like any other, so a complete list must contain every ambient file it consulted. Keeping them universal would leave `@types/*` churn re-running every listed file, which is most of what the narrowing is for.
+- **Completeness is per (plugin, file).** One `transform` invocation produces one envelope even when several plugin entries share the host, so the declaration is the envelope author's aggregate claim. When more than one entry contributes to a file, list it only if every contributing entry declared its own list complete for it; the consumer cannot attribute entries in `dependencies[F]` back to the entry that reported them, and it honors the envelope's claim as written.
+- **Volatile wins.** A file in both `dependenciesComplete` and `volatile` claims both "my inputs are exactly these files" and "my inputs include something that is not a file". Consumers keep the union for it and bypass caching. Declare one or the other.
+
+Malformed members are dropped, never fatal. Dropping is safe in one direction only, and this is that direction: an unlisted file falls back to the host-owned bound, so a garbled declaration costs over-invalidation instead of stale output.
+
+There is no host-side audit of a complete list. Verifying it would require computing the reachability the declaration exists to avoid, which would cost exactly what it saves. Diagnose a suspected under-declaration by removing the field: if the stale output goes away, the reported list is missing an input.
+
+### `build`
+
+```bash
+my-plugin build \
+  --cwd=/project \
+  --tsconfig=/project/tsconfig.json \
+  --plugins-json='[...]' \
+  --emit \
+  --outDir=/project/dist
+```
+
+Project-wide transform build. Run diagnostics and write TypeScript-Go outputs.
+
+## `--plugins-json`
+
+`--plugins-json` is a JSON array of loaded plugin descriptors for the current command:
+
+```json
+[
+  {
+    "name": "my-plugin",
+    "stage": "transform",
+    "config": {
+      "transform": "my-plugin",
+      "mode": "strict"
+    }
+  }
+]
+```
+
+`config` is the consumer's `compilerOptions.plugins[i]` entry passed through **verbatim**, modulo JSON normalization. Every key the consumer wrote, including ttsc-owned `transform` and `enabled`, will appear. Plugins should ignore `transform` and `enabled`: ttsc owns them. (`enabled: false` plugins are filtered before serialization, so plugins will only ever see `enabled: true` or absent, but should not depend on it.) Read user options from any other key in `config`.
+
+When multiple entries resolve to the same binary, `ttsc` sends them together. Select the entry you need by `name`, `mode`, or plugin-owned option fields.
+
+**Plugin order.** The array is deterministically ordered: all `check`-stage plugins first, in their tsconfig order, then all `transform`-stage plugins, in their tsconfig order. A plugin that needs to know its position in the pipeline can rely on this rule (see `packages/ttsc/src/plugin/internal/loadProjectPlugins.ts::orderNativePlugins`).
+
+## Environment
+
+Some payloads reach a sidecar through the environment rather than argv, because argv is not a safe place to add anything to a protocol that shipped without it: Go's `flag.FlagSet` treats an undeclared flag as fatal under `flag.ContinueOnError`, so a host built before the addition exits `2` before its build starts. An unknown environment variable is inert.
+
+| Variable | Meaning |
+| --- | --- |
+| `TTSC_TSGO_ARGS` | JSON array of the tsgo CLI flags the user forwarded (`--strict`, `--declaration`, `--target es2020`, …) plus any output containment the launcher itself needs. `driver.LoadProgram` reads it whenever the caller passed no explicit `LoadProgramOptions.TsgoArgs`, so a plugin built on the driver honors forwarded compiler flags without parsing anything. A plugin that builds its own `CompilerOptions` should decode the array and merge it last, so the user's flag wins over the tsconfig. |
+| `TTSC_LINKED_PLUGINS_JSON` | JSON manifest of the linked transform packages compiled into this host binary. `driver.ApplyLinkedPlugins` consumes it; hosts that emit through the driver need no special handling. |
+| `TTSC_PLUGIN_CONFIG_DIR` | Directory that plugin config-file discovery and relative `configFile` resolution anchor at, when the compiled tsconfig is a generated wrapper outside the project. Read it through `driver.PluginConfigBaseDir`. |
+| `TTSC_TSGO_BINARY`, `TTSC_TTSX_BINARY` | Absolute paths to the compiler and runner this invocation resolved, for a plugin that has to shell out to either. |
+
+`TTSC_TSGO_ARGS` and `TTSC_PLUGIN_CONFIG_DIR` describe one invocation, so a spawn that has nothing to say clears whatever an ancestor `ttsc` process left behind rather than passing it on: a nested build never inherits the outer run's forwarded flags or project anchor. The two binary paths are the opposite — an inherited value wins, because it is how an embedder pins the toolchain for a whole process tree.
+
+## Exit and Output
+
+- `0`: success.
+- `2`: argument/config/diagnostic failure.
+- Any other non-zero: runtime failure.
+- `stderr` is shown to users; format errors for humans.
+- `transform` stdout must be the JSON shape above.
+- `build` writes project outputs through TypeScript-Go emit.
+
+**Unrecovered Go panics in a plugin process surface as a normal exit-2 with the panic stack on stderr.** The host does not catch or symbolize the panic, but it preserves the plugin's stderr and exit code. After plugin discovery/build fails or a check/build sidecar exits unsuccessfully, `ttsc` also runs an independent `tsgo --noEmit` pass and appends TypeScript diagnostics the plugin did not already report, so a plugin failure cannot hide unrelated source errors. Format and internal emit-only modes keep their diagnostics-free contracts. Wrap rule bodies in `recover()` when you need graceful per-rule reporting. See `packages/lint/linthost/engine.go` for the reference pattern.
+
+## Compatibility Rules
+
+Within the current protocol:
+
+- `ttsc` may add optional flags.
+- `ttsc` may add JSON fields.
+- `ttsc` will not rename or remove current fields without a protocol bump.
+
+So plugin binaries should ignore unknown flags and unknown JSON fields.
+
+## See also
+
+- [Concepts](/docs/development/concepts): two-halves model, stages/subcommands, vocabulary.
+- [AST & Checker](/docs/development/concepts/tsgo): Program, Checker, printer, leaf-text mutation invariant.
+- [Reference → Driver API](/docs/development/reference/driver-api): the Go façade plugin authors should call.
+- [Reference → Architecture](/docs/development/reference/architecture): cache, build environment, Go toolchain resolution.
+- [Reference → Pitfalls](/docs/development/reference/pitfalls): `composes` / `contributors` / Go toolchain failure catalogue.

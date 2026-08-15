@@ -1,0 +1,97 @@
+{
+  "name": "ttsc",
+  "version": "0.27.0",
+  "description": "General-purpose TypeScript-Go compiler, runtime, plugin host, and LSP host.",
+  "main": "lib/index.js",
+  "types": "src/index.ts",
+  "bin": {
+    "ttsc": "lib/launcher/ttsc.js",
+    "ttscserver": "lib/launcher/ttscserver.js",
+    "ttsx": "lib/launcher/ttsx.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./lib/index.js"
+    },
+    "./path-identity": {
+      "types": "./src/internal/projectInputPathIdentity.ts",
+      "default": "./lib/internal/projectInputPathIdentity.js"
+    },
+    "./register": {
+      "types": "./src/register.ts",
+      "default": "./lib/register.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "main": "lib/index.js",
+    "types": "lib/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./lib/index.d.ts",
+        "default": "./lib/index.js"
+      },
+      "./path-identity": {
+        "types": "./lib/internal/projectInputPathIdentity.d.ts",
+        "default": "./lib/internal/projectInputPathIdentity.js"
+      },
+      "./register": {
+        "types": "./lib/register.d.ts",
+        "default": "./lib/register.js"
+      },
+      "./package.json": "./package.json"
+    }
+  },
+  "scripts": {
+    "build": "rimraf lib && tsc && node -e \"require('node:fs').copyFileSync('../../README.md', 'README.md')\"",
+    "go:build": "node ../../scripts/go.cjs build-native",
+    "go:vet": "node ../../scripts/go.cjs vet ./...",
+    "shim:audit": "node ../../scripts/shim-audit.cjs",
+    "shim:audit:test": "node ../../scripts/shim-audit-test.cjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/samchon/ttsc"
+  },
+  "author": "Jeongho Nam",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.15.0"
+  },
+  "bugs": {
+    "url": "https://github.com/samchon/ttsc/issues"
+  },
+  "homepage": "https://ttsc.dev",
+  "devDependencies": {
+    "@types/node": "catalog:utils",
+    "rimraf": "catalog:utils",
+    "typescript": "catalog:typescript"
+  },
+  "optionalDependencies": {
+    "@ttsc/linux-x64": "workspace:*",
+    "@ttsc/linux-arm": "workspace:*",
+    "@ttsc/linux-arm64": "workspace:*",
+    "@ttsc/darwin-x64": "workspace:*",
+    "@ttsc/darwin-arm64": "workspace:*",
+    "@ttsc/win32-x64": "workspace:*",
+    "@ttsc/win32-arm64": "workspace:*"
+  },
+  "sideEffects": ["./lib/register.js", "./src/register.ts"],
+  "files": [
+    "README.md",
+    "cmd",
+    "driver",
+    "go.mod",
+    "go.sum",
+    "internal",
+    "package.json",
+    "lib",
+    "shim",
+    "src",
+    "tools",
+    "utility"
+  ],
+  "keywords": ["tsgo", "runner", "transformer", "plugin-host", "ttsc"],
+  "packageManager": "pnpm@10.6.4"
+}

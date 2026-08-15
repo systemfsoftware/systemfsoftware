@@ -1,0 +1,83 @@
+{
+  "cohort": "round two, campaign/evidence-luna-0.26.0",
+  "subject": "todo",
+  "arm": "plain",
+  "runId": "48d1c3b9-e64f-4096-a169-7d5794b262e9",
+  "state": "counted",
+  "method": {
+    "read": "The completed Plain workspace, read-only. No requirement identifier appears anywhere in it, because a Plain codebase carries no citations; every reach is decided by one artifact carrying another's obligation, never by a tag.",
+    "structural": "The seven structural edges were counted twice by independent derivations and agreed exactly, including columnToProperty arrived at column by column.",
+    "requirementRooted": "Each of the six was counted twice, broad and narrow, and the lower rate kept. Both passes used one reach standard — an anchor is reached when an artifact of the target kind carries its central obligation — and differed only in eligibility. Where both returned 1.000 the narrower denominator was kept, because it claims less measured surface for the same rate.",
+    "populations": "73 requirement anchors, being 19 `##` and 54 `###` headings across the five frozen documents."
+  },
+  "populations": {
+    "requirementAnchors": 73,
+    "models": 7,
+    "scalarColumns": 50,
+    "accessors": 24,
+    "hooks": 24,
+    "screens": 4,
+    "backendTests": 48,
+    "journeyCases": 13
+  },
+  "cells": [
+    {
+      "model": "gpt-5.6-luna",
+      "subject": "todo",
+      "edges": {
+        "requirementToModel": { "eligible": 42, "reached": 42 },
+        "requirementToOperation": { "eligible": 25, "reached": 25 },
+        "requirementToDto": { "eligible": 31, "reached": 30 },
+        "requirementToTest": { "eligible": 54, "reached": 54 },
+        "requirementToScreen": { "eligible": 44, "reached": 44 },
+        "requirementToJourney": { "eligible": 44, "reached": 40 },
+        "modelToOperation": { "eligible": 7, "reached": 7 },
+        "modelToDto": { "eligible": 7, "reached": 6 },
+        "accessorToTest": { "eligible": 24, "reached": 24 },
+        "accessorToHook": { "eligible": 24, "reached": 24 },
+        "hookToScreen": { "eligible": 24, "reached": 22 },
+        "screenToJourney": { "eligible": 4, "reached": 4 },
+        "columnToProperty": { "eligible": 50, "reached": 28 }
+      }
+    }
+  ],
+  "eligibilityRules": {
+    "requirementToModel": "The anchor names information, a relationship, or a lifecycle value the database must hold. Request-time rules and read-only operations are outside it.",
+    "requirementToOperation": "The anchor names a user-invocable capability that must be published as one operation. Overviews, domain definitions, and rules enforced inside another operation are outside it.",
+    "requirementToDto": "The anchor defines an operation's request or response payload, or a domain entity's published shape.",
+    "requirementToTest": "Every `###` anchor. The 19 `##` overviews restate their children and are outside it.",
+    "requirementToScreen": "The anchor names a capability or view a user must see or perform in a browser. Overviews, domain-relationship definitions, server-only rules, and non-functional policies are outside it.",
+    "requirementToJourney": "The same population as the screen rule: an anchor a browser journey can walk end to end."
+  },
+  "unreached": {
+    "requirementToDto": [
+      "REQ-RULE-BROWSE-1, whose pagination payload is declared in packages/api/src/typings/IPage.ts rather than in structures; the totals it requires, `records` and `pages`, appear only there"
+    ],
+    "requirementToJourney": [
+      "REQ-AUTH-MANAGE-2: the recovery journey walks the non-disclosing request and the mode switch, never a delivered proof",
+      "REQ-RULE-CREDENTIAL-2: no journey submits an out-of-range password",
+      "REQ-RULE-CONTENT-1: no journey submits an over-length title or description; the date rule is walked, the content rule is not",
+      "REQ-RULE-BROWSE-4: no journey asserts the omitted-sort default or a tie-break"
+    ],
+    "modelToDto": [
+      "todo_delivery_effects: no published type carries a recipient, kind, or payload"
+    ],
+    "hookToScreen": [
+      "useHealth, called only by the layout shell",
+      "useRefreshSession, called only by the auth provider in lib"
+    ],
+    "columnToProperty": [
+      "foreign keys: todo_profiles.todo_user_id, todo_sessions.todo_user_id, todo_todos.todo_user_id, todo_todo_histories.todo_todo_id, todo_recovery_requests.todo_user_id, todo_delivery_effects.todo_user_id",
+      "secrets: todo_users.password_hash, todo_sessions.refresh_hash, todo_recovery_requests.proof_hash",
+      "internal lifecycle: todo_sessions.expires_at, todo_sessions.revoked_at, todo_todos.updated_at, todo_todos.content_version, todo_recovery_requests.expires_at, todo_recovery_requests.consumed_at",
+      "history change flags: title_changed, description_changed, start_date_changed, due_date_changed",
+      "delivery internals: recipient, kind, payload"
+    ]
+  },
+  "unsettled": {
+    "screenDefinition": "A screen was taken to be a route-rendered page outside components/dev: AuthPage, TodoPage, TrashPage, SettingsPage. Counting the layout shell as a screen would make screenToJourney 5/5 — the same rate — and hookToScreen 23/24 rather than 22/24. The choice is arguable and was not settled on principle.",
+    "requirementToDto": "If packages/api/src/typings counts as published — the SDK does re-export it — pagination is declared and the edge is 31/31 rather than 30/31. The edge definition was applied literally.",
+    "requirementToTest": "The figure is 1.000 under a central-obligation standard. Under a per-clause standard it would be near 47/54: unproven anywhere are the default page size and default sort, registration refusing a malformed email, title and description bounds on edit as opposed to creation, and account deletion removing history entries specifically. The per-clause standard was not used, because applying it to one edge and not the other five would not be a measurement.",
+    "publishedBounds": "ITodo.ICreate.title, ITodo.IUpdate.title, IUser.IJoin.displayName, and IUser.IUpdateProfile.displayName carry a minimum without the maximum their output types carry. The field was judged declared."
+  }
+}

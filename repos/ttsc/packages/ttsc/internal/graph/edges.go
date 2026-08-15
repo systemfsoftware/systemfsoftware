@@ -1,0 +1,963 @@
+package graph
+
+import (
+  shimast "github.com/microsoft/typescript-go/shim/ast"
+  shimchecker "github.com/microsoft/typescript-go/shim/checker"
+
+  "github.com/samchon/ttsc/packages/ttsc/driver"
+)
+
+// addEdges is the checker pass over the declaration nodes Build recorded. It
+// walks each source file again and, for every class or interface, resolves its
+// heritage bases through the checker (unwrapping barrel re-exports to the real
+// declaration) and links the declaration to that base, materializing an external
+// boundary-leaf node when the base lives in node_modules or a `.d.ts`.
+//
+// Not everything it resolves is an edge. A fact that belongs to one declaration
+// rather than to a pair of them rides on its own node: a decorator on the target
+// it annotates, a literal value set on the type that admits it. Both need the
+// same checker and the same walk, so they are resolved here and written to the
+// node the build pass keyed.
+func (g *Graph) addEdges(prog *driver.Program, selected map[string]bool, partial bool) {
+  checker := prog.Checker
+  for _, file := range prog.SourceFiles() {
+    if !IsWorkspaceSourceFile(file) {
+      continue
+    }
+    if partial && !selected[file.FileName()] {
+      continue
+    }
+    g.markExports(checker, file)
+    g.collectHeritage(checker, file)
+    g.collectCalls(checker, file)
+    g.collectTypeRefs(checker, file)
+    g.collectLiterals(checker, file)
+    if file.Statements != nil {
+      g.collectDecorators(file.FileName(), file.Statements.Nodes)
+    }
+  }
+}
+
+// addEdge records a from->to edge of the given kind, skipping a duplicate so a
+// caller that invokes the same function several times yields one edge, not one
+// per call site. The dedup is an O(1) set lookup, so building N edges is O(N).
+func (g *Graph) addEdge(from, to string, kind EdgeKind) {
+  g.addEdgeAt(from, to, kind, "", -1, -1)
+}
+
+func (g *Graph) addEdgeAt(from, to string, kind EdgeKind, origin string, pos, end int) {
+  // Key on the emitted wire kind, not the internal kind, so two uses of one
+  // target that surface as different relationships (a call and a `new`, an
+  // `extends` and an `implements` of the same base) are both kept, while
+  // repeated uses of the same form collapse to one edge.
+  //
+  // The key is a struct, not a concatenation. Concatenating allocated a fresh
+  // string per *candidate* edge — including the duplicates thrown away on the
+  // next line, which on a large program are most of them — and a comparable
+  // struct of the three fields hashes just as well for nothing.
+  key := edgeKey{from: from, to: to, kind: wireEdgeKind(kind, origin)}
+  if _, exists := g.seen[key]; exists {
+    return
+  }
+  g.seen[key] = struct{}{}
+  file := g.edgeEvidenceFiles[from]
+  g.Edges = append(g.Edges, &Edge{From: from, To: to, Kind: kind, Origin: origin, File: file, Pos: pos, End: end})
+}
+
+// collectHeritage adds a heritage edge for every base of every class and
+// interface in file, descending into namespace bodies so a namespaced class's
+// bases are resolved too.
+func (g *Graph) collectHeritage(checker *shimchecker.Checker, file *shimast.SourceFile) {
+  if file.Statements == nil {
+    return
+  }
+  g.collectHeritageIn(checker, file.FileName(), file.Statements.Nodes)
+}
+
+// collectHeritageIn adds heritage edges for the class/interface statements in a
+// list — the file's top level, or a namespace body it recurses into.
+func (g *Graph) collectHeritageIn(checker *shimchecker.Checker, path string, statements []*shimast.Node) {
+  for _, statement := range statements {
+    switch statement.Kind {
+    case shimast.KindClassDeclaration:
+      decl := statement.AsClassDeclaration()
+      if decl != nil && decl.HeritageClauses != nil {
+        g.heritageEdges(checker, path, statement, NodeClass, decl.HeritageClauses.Nodes)
+      }
+    case shimast.KindInterfaceDeclaration:
+      decl := statement.AsInterfaceDeclaration()
+      if decl != nil && decl.HeritageClauses != nil {
+        g.heritageEdges(checker, path, statement, NodeInterface, decl.HeritageClauses.Nodes)
+      }
+    case shimast.KindModuleDeclaration:
+      g.collectHeritageIn(checker, path, moduleStatements(statement))
+    }
+  }
+}
+
+// heritageEdges resolves each base expression of node's heritage clauses and
+// records a heritage edge from node to the resolved base node.
+func (g *Graph) heritageEdges(checker *shimchecker.Checker, path string, node *shimast.Node, kind NodeKind, clauses []*shimast.Node) {
+  symbol := node.Symbol()
+  if symbol == nil || symbol.Name == "" {
+    return
+  }
+  from := nodeID(path, qualifiedName(symbol), kind)
+  for _, clauseNode := range clauses {
+    clause := clauseNode.AsHeritageClause()
+    if clause == nil || clause.Types == nil {
+      continue
+    }
+    // The clause keyword splits one internal heritage kind into the schema's
+    // `extends` vs `implements`: an interface's bases and a class's superclass
+    // are `extends`; a class's interface list is `implements`.
+    origin := "implements"
+    if clause.Token == shimast.KindExtendsKeyword {
+      origin = "extends"
+    }
+    for _, typeNode := range clause.Types.Nodes {
+      base := typeNode.AsExpressionWithTypeArguments()
+      if base == nil || base.Expression == nil {
+        continue
+      }
+      target := g.resolve(checker, base.Expression)
+      if target == nil || target.Symbol == nil {
+        continue
+      }
+      to := g.ensureTargetNode(target)
+      if to == "" {
+        continue
+      }
+      g.addEdgeAt(from, to, EdgeHeritage, origin, base.Expression.Pos(), base.Expression.End())
+      g.memberRelationEdges(checker, node, kind, typeNode, target, origin)
+    }
+  }
+}
+
+// memberRelationEdges records the directly declared member pairs that a
+// heritage clause makes checker-valid. The TypeScript loader used to infer
+// these from equal names after the dump was built. That made an authoritative
+// edge even when the checker rejected the container relation, and a method /
+// property kind guard could not repair it: same-kind signatures can be
+// incompatible while a method can validly satisfy a function-valued property.
+//
+// Each pair is checked independently. A whole-container assignability gate
+// would let one broken sibling erase a valid relation in the same partially
+// edited class. The pair query retains the checker's instantiated property
+// symbols, so optionality, overloads, and private/protected declaration origins
+// still use upstream propertyRelatedTo semantics.
+func (g *Graph) memberRelationEdges(
+  checker *shimchecker.Checker,
+  derivedDeclaration *shimast.Node,
+  derivedKind NodeKind,
+  baseTypeNode *shimast.Node,
+  baseTarget *Target,
+  heritageOrigin string,
+) {
+  if checker == nil || derivedDeclaration == nil || baseTypeNode == nil || baseTarget == nil || baseTarget.External {
+    return
+  }
+  derivedSymbol := derivedDeclaration.Symbol()
+  if derivedSymbol == nil || baseTarget.Symbol == nil {
+    return
+  }
+  derivedType := checker.GetDeclaredTypeOfSymbol(derivedSymbol)
+  baseType := checker.GetTypeFromTypeNode(baseTypeNode)
+  if derivedType == nil || baseType == nil {
+    return
+  }
+
+  derivedMembers := declaredTypeMembers(derivedSymbol)
+  baseMembers := declaredTypeMembers(baseTarget.Symbol)
+
+  relation := "overrides"
+  if heritageOrigin == "implements" {
+    relation = "implements"
+  }
+  for _, derivedMember := range derivedMembers {
+    derivedMemberSymbol := derivedMember.Symbol()
+    if derivedMemberSymbol == nil || derivedMemberSymbol.Name == "" ||
+      shimast.GetCombinedModifierFlags(derivedMember)&shimast.ModifierFlagsStatic != 0 ||
+      derivedMember.Kind == shimast.KindConstructor {
+      continue
+    }
+
+    derivedProperty := checker.GetPropertyOfType(derivedType, derivedMemberSymbol.Name)
+    baseProperty := checker.GetPropertyOfType(baseType, derivedMemberSymbol.Name)
+    if derivedProperty == nil || baseProperty == nil ||
+      !propertyRootsAt(checker, derivedProperty, derivedMemberSymbol) {
+      continue
+    }
+    baseMember := directMemberForProperty(checker, baseProperty, baseMembers)
+    if baseMember == nil {
+      // The heritage clause names one type; the member may live further up.
+      // `interface Child extends Root {}` with `class W implements Child`
+      // resolves `W.execute` against `Root.execute`, and the program compiles
+      // with no diagnostic — but the immediate base declares nothing, so
+      // requiring a directly declared member dropped a relation the checker
+      // had already established. Execution tracing follows these edges to
+      // reach an implementation, so the missing edge ends the trace at the
+      // abstract declaration.
+      baseMember = inheritedMemberForProperty(checker, baseProperty)
+    }
+    if baseMember == nil ||
+      !shimchecker.Checker_isPropertyAssignableTo(checker, derivedProperty, baseProperty) {
+      continue
+    }
+    if relation == "overrides" && derivedKind == NodeClass &&
+      !shimchecker.Checker_isValidClassMemberOverridePair(checker, derivedProperty, baseProperty) {
+      continue
+    }
+
+    from := graphMemberNodeID(g, derivedMember)
+    to := graphMemberNodeID(g, baseMember)
+    if from == "" || to == "" {
+      continue
+    }
+    evidence := derivedMember.Name()
+    if evidence == nil {
+      evidence = derivedMember
+    }
+    g.addEdgeAt(from, to, EdgeMemberRelation, relation, evidence.Pos(), evidence.End())
+  }
+}
+
+// declaredTypeMembers returns the members written on every class/interface
+// declaration merged into symbol. The checker sees that merged type as one
+// surface, so choosing one representative declaration would omit valid pairs
+// contributed by another declaration even though both graph nodes already
+// exist.
+func declaredTypeMembers(symbol *shimast.Symbol) []*shimast.Node {
+  if symbol == nil {
+    return nil
+  }
+  var members []*shimast.Node
+  for _, declaration := range symbol.Declarations {
+    members = append(members, classMembers(declaration)...)
+  }
+  return members
+}
+
+// inheritedMemberForProperty resolves the declaration a base type inherits
+// rather than declares, by following the property to the symbol it roots at.
+//
+// It is the fallback for what directMemberForProperty below cannot see. A
+// heritage clause names one type and the member may be declared further up:
+// `interface Child extends Root {}` with `class W implements Child` roots
+// `W.execute` at `Root.execute`, which `Child`'s own member list does not hold.
+// Static members and constructors are skipped for the same reason the direct
+// scan skips them — neither participates in a member relation.
+func inheritedMemberForProperty(
+  checker *shimchecker.Checker,
+  property *shimast.Symbol,
+) *shimast.Node {
+  if checker == nil || property == nil {
+    return nil
+  }
+  for _, root := range checker.GetRootSymbols(property) {
+    if root == nil {
+      continue
+    }
+    for _, declaration := range root.Declarations {
+      if declaration == nil ||
+        shimast.GetCombinedModifierFlags(declaration)&shimast.ModifierFlagsStatic != 0 ||
+        declaration.Kind == shimast.KindConstructor {
+        continue
+      }
+      return declaration
+    }
+  }
+  return nil
+}
+
+// directMemberForProperty maps an instantiated or transient checker property
+// back to the declaration the named base type itself owns. It answers nothing
+// for a property the base only inherits, which is what
+// inheritedMemberForProperty above then resolves.
+func directMemberForProperty(
+  checker *shimchecker.Checker,
+  property *shimast.Symbol,
+  members []*shimast.Node,
+) *shimast.Node {
+  for _, member := range members {
+    symbol := member.Symbol()
+    if symbol == nil || symbol.Name == "" ||
+      shimast.GetCombinedModifierFlags(member)&shimast.ModifierFlagsStatic != 0 ||
+      member.Kind == shimast.KindConstructor {
+      continue
+    }
+    if propertyRootsAt(checker, property, symbol) {
+      return member
+    }
+  }
+  return nil
+}
+
+func propertyRootsAt(checker *shimchecker.Checker, property, declaration *shimast.Symbol) bool {
+  if checker == nil || property == nil || declaration == nil {
+    return false
+  }
+  for _, root := range checker.GetRootSymbols(property) {
+    if root == declaration {
+      return true
+    }
+  }
+  return false
+}
+
+// graphMemberNodeID returns the existing graph node for a class or interface
+// member. It never materializes a new endpoint: member relations stay within
+// the same workspace-owned member surface Build already records.
+func graphMemberNodeID(g *Graph, member *shimast.Node) string {
+  if g == nil || member == nil || member.Symbol() == nil {
+    return ""
+  }
+  kind := NodeKind("")
+  switch {
+  case isMethodMember(member.Kind):
+    kind = NodeMethod
+  case isPropertyMember(member.Kind):
+    kind = NodeVariable
+  default:
+    return ""
+  }
+  file := shimast.GetSourceFileOfNode(member)
+  name := methodName(member.Symbol())
+  if file == nil || name == "" {
+    return ""
+  }
+  id := nodeID(file.FileName(), name, kind)
+  stored, ok := g.lookupNode(id)
+  if !ok {
+    return ""
+  }
+  for _, declaration := range member.Symbol().Declarations {
+    declarationFile := shimast.GetSourceFileOfNode(declaration)
+    if declarationFile != nil && declarationFile.FileName() == stored.File &&
+      declaration.Pos() == stored.Pos && declaration.End() == stored.End {
+      return id
+    }
+  }
+  return ""
+}
+
+// collectCalls records a value-call edge from each declaration to every function,
+// method, or constructor it invokes. The reference walk is attributed to the
+// nearest enclosing graph node: a top-level function, a class/interface method, a
+// top-level variable binding, or the class itself for a member that is not a
+// method (a property initializer).
+func (g *Graph) collectCalls(checker *shimchecker.Checker, file *shimast.SourceFile) {
+  forEachContainer(file.FileName(), file, func(from string, node *shimast.Node) {
+    g.callsWithin(checker, from, node)
+  })
+}
+
+// forEachContainer calls fn(nodeID, subtree) for every graph node that can hold
+// call or type references, paired with the subtree to walk for it. A class or
+// interface is split: each method member is attributed to its own method node, and
+// every other member (a property initializer) to the type node, so a call made
+// inside one method is not confused with another's.
+func forEachContainer(path string, file *shimast.SourceFile, fn func(string, *shimast.Node)) {
+  if file.Statements == nil {
+    return
+  }
+  forEachContainerIn(path, file.Statements.Nodes, fn)
+}
+
+// forEachContainerIn pairs each graph node with its subtree for a statement list
+// — the file's top level, or a namespace body it recurses into, so a call or
+// type reference made inside a namespace member is attributed to that member.
+func forEachContainerIn(path string, statements []*shimast.Node, fn func(string, *shimast.Node)) {
+  for _, statement := range statements {
+    switch statement.Kind {
+    case shimast.KindFunctionDeclaration:
+      if id := topLevelID(path, statement, NodeFunction); id != "" {
+        fn(id, statement)
+      }
+      // Closure nodes are not indexed (build.go): what a function body runs is
+      // implementation, and implementation is read from the file. The walker
+      // stays for the day the caller asks for them.
+      forEachClosureIn(path, statement, fn)
+    case shimast.KindTypeAliasDeclaration:
+      if id := topLevelID(path, statement, NodeTypeAlias); id != "" {
+        fn(id, statement)
+      }
+    case shimast.KindEnumDeclaration:
+      // An enum is a recorded node (build.go), and a member initializer can call a
+      // function (`enum E { A = base() }`) or reference a type, so walk its body
+      // too or those edges are silently dropped.
+      if id := topLevelID(path, statement, NodeEnum); id != "" {
+        fn(id, statement)
+      }
+    case shimast.KindClassDeclaration:
+      forEachMember(path, statement, NodeClass, fn)
+    case shimast.KindInterfaceDeclaration:
+      forEachMember(path, statement, NodeInterface, fn)
+    case shimast.KindVariableStatement:
+      forEachVariable(path, statement, fn)
+    case shimast.KindModuleDeclaration:
+      forEachContainerIn(path, moduleStatements(statement), fn)
+    default:
+      // A statement that declares nothing still runs: a test suite's
+      // `describe(() => it(() => schema.parse(x)))`, an entry file's
+      // `bootstrap()`, a registration side effect. No declaration owns those
+      // calls, so attributing edges to owners alone dropped every one of them,
+      // and with them every test the graph could have pointed at. The module
+      // runs them, so the module owns them.
+      fn(moduleID(path), statement)
+    }
+  }
+}
+
+// moduleID is the node id of the file's module — the owner of what its top-level
+// statements do.
+func moduleID(path string) string {
+  return nodeID(path, path, NodeModule)
+}
+
+// topLevelID returns the node id for a named declaration, or "". The name is
+// namespace-qualified, so a namespaced declaration lands on the node the build
+// pass recorded.
+func topLevelID(path string, statement *shimast.Node, kind NodeKind) string {
+  symbol := statement.Symbol()
+  if symbol == nil || symbol.Name == "" {
+    return ""
+  }
+  return nodeID(path, qualifiedName(symbol), kind)
+}
+
+// forEachMember attributes a class/interface's callable members to their method
+// node. Property members are additive: their initializer/type subtree is walked
+// once for the property node, and once for the owner type node, so precise member
+// queries can land on `Class.prop` without making coarse class/interface queries
+// lose dependency edges they historically owned.
+func forEachMember(path string, statement *shimast.Node, kind NodeKind, fn func(string, *shimast.Node)) {
+  containerID := topLevelID(path, statement, kind)
+  for _, member := range classMembers(statement) {
+    forEachClosureIn(path, member, fn)
+    if isMethodMember(member.Kind) {
+      if name := methodName(member.Symbol()); name != "" {
+        fn(nodeID(path, name, NodeMethod), member)
+        continue
+      }
+    }
+    if isPropertyMember(member.Kind) {
+      if name := methodName(member.Symbol()); name != "" {
+        fn(nodeID(path, name, NodeVariable), member)
+      }
+    }
+    if containerID != "" {
+      fn(containerID, member)
+    }
+  }
+  if containerID == "" {
+    return
+  }
+  // The references that live on the declaration itself rather than in a member
+  // belong to the type node: a decorator factory call (`@Injectable()`), a type
+  // parameter constraint (`<T extends Base>`), and a heritage type argument
+  // (`extends Base<Payload>`). The per-member walk above never sees these, so
+  // attribute each class-level subtree here or the edge is silently dropped.
+  for _, decorator := range statement.Decorators() {
+    fn(containerID, decorator)
+  }
+  for _, typeParam := range statement.TypeParameters() {
+    fn(containerID, typeParam)
+  }
+  for _, clause := range heritageClauses(statement) {
+    fn(containerID, clause)
+  }
+}
+
+// heritageClauses returns the heritage clause nodes (`extends` / `implements`)
+// of a class or interface declaration, or nil for anything else. Their type
+// arguments are type references attributed to the declaration; the base
+// expressions themselves become heritage edges in collectHeritage.
+func heritageClauses(statement *shimast.Node) []*shimast.Node {
+  switch statement.Kind {
+  case shimast.KindClassDeclaration:
+    if decl := statement.AsClassDeclaration(); decl != nil && decl.HeritageClauses != nil {
+      return decl.HeritageClauses.Nodes
+    }
+  case shimast.KindInterfaceDeclaration:
+    if decl := statement.AsInterfaceDeclaration(); decl != nil && decl.HeritageClauses != nil {
+      return decl.HeritageClauses.Nodes
+    }
+  }
+  return nil
+}
+
+// forEachVariable attributes each binding of a top-level variable statement to
+// its variable node, so a call or type reference inside `const fn = () => …` is
+// an edge from fn.
+func forEachVariable(path string, statement *shimast.Node, fn func(string, *shimast.Node)) {
+  variables := statement.AsVariableStatement()
+  if variables == nil || variables.DeclarationList == nil {
+    return
+  }
+  list := variables.DeclarationList.AsVariableDeclarationList()
+  if list == nil || list.Declarations == nil {
+    return
+  }
+  for _, binding := range list.Declarations.Nodes {
+    symbol := binding.Symbol()
+    if symbol == nil || symbol.Name == "" {
+      continue
+    }
+    fn(nodeID(path, qualifiedName(symbol), NodeVariable), binding)
+    forEachClosureIn(path, binding, fn)
+  }
+}
+
+// forEachClosureIn pairs each function a declaration's body declares with its
+// own node, and recurses: the renderer's `patch` owns the calls it makes, not the
+// factory it closes over. `callsWithin` stops at the same boundary, so no call is
+// attributed twice.
+func forEachClosureIn(path string, declaration *shimast.Node, fn func(string, *shimast.Node)) {
+  for _, closure := range ClosuresIn(declaration) {
+    if id := closureID(path, closure); id != "" {
+      fn(id, closure)
+    }
+    forEachClosureIn(path, closure, fn)
+  }
+}
+
+// closureID is the node id build.go recorded for a closure.
+func closureID(path string, closure *shimast.Node) string {
+  name, ok := ClosureName(closure)
+  if !ok {
+    return ""
+  }
+  kind := NodeFunction
+  if closure.Kind == shimast.KindVariableDeclaration {
+    kind = NodeVariable
+  }
+  return nodeID(path, name, kind)
+}
+
+// callsWithin walks node's subtree and records runtime value-use edges from
+// `from` to the resolved target: calls/new/tagged templates/JSX components as
+// value-call edges, and property or element access as value-access edges.
+func (g *Graph) callsWithin(checker *shimchecker.Checker, from string, node *shimast.Node) {
+  node.ForEachChild(func(child *shimast.Node) bool {
+    // With closures unindexed, a body's calls belong to the declaration that
+    // owns the body — the walk does not stop at one. (When they are indexed, it
+    // must: a closure that is its own node owns the calls it makes.)
+    switch child.Kind {
+    case shimast.KindCallExpression:
+      // A decorator's own factory call (`@Column()`, `@Entity()`) is metadata,
+      // not a runtime call: the decoration is already a fact on the node's
+      // decorators. Emitting a calls edge to the decorator function instead
+      // makes ubiquitous decorators (every entity field is `@Column`) the
+      // busiest nodes in the graph and buries the real architecture, so skip
+      // the factory call itself while still walking its arguments below.
+      if child.Parent != nil && child.Parent.Kind == shimast.KindDecorator {
+        break
+      }
+      if call := child.AsCallExpression(); call != nil && call.Expression != nil {
+        g.callEdge(checker, from, call.Expression, "call")
+        g.handedOffValues(checker, from, call)
+      }
+    case shimast.KindNewExpression:
+      if newExpr := child.AsNewExpression(); newExpr != nil && newExpr.Expression != nil {
+        g.callEdge(checker, from, newExpr.Expression, "new")
+      }
+    case shimast.KindTaggedTemplateExpression:
+      // A tagged template (styled`…`, gql`…`) is a call to its tag function.
+      if tagged := child.AsTaggedTemplateExpression(); tagged != nil && tagged.Tag != nil {
+        g.callEdge(checker, from, tagged.Tag, "tagged")
+      }
+    case shimast.KindPropertyAccessExpression:
+      // Accessor/property reads are runtime uses too. Without this edge the
+      // graph shows the constructor or method call but not the state or lazy
+      // property resolution that agents then reopen files to inspect.
+      if !isInvokedAccess(child) {
+        g.accessEdge(checker, from, child)
+      }
+    case shimast.KindElementAccessExpression:
+      // String-literal bracket access (`this["metadata"]`) can resolve to the
+      // same property/accessor symbol as dotted access. Dynamic indexes resolve
+      // to nothing or to external library members and are filtered below.
+      if !isInvokedAccess(child) {
+        g.accessEdge(checker, from, child)
+      }
+    case shimast.KindBinaryExpression:
+      if target := g.assignedFunctionTarget(checker, from, child); target != "" {
+        file := g.recordImplementation(target, child)
+        g.withEdgeEvidenceFile(target, file, func() {
+          g.callsWithin(checker, target, child.AsBinaryExpression().Right)
+        })
+      }
+    case shimast.KindJsxSelfClosingElement:
+      // `<Component />` is a use of the component; an intrinsic tag (`<div />`)
+      // resolves to nothing and is dropped by callEdge.
+      if jsx := child.AsJsxSelfClosingElement(); jsx != nil && jsx.TagName != nil {
+        g.callEdge(checker, from, jsx.TagName, "jsx")
+      }
+    case shimast.KindJsxOpeningElement:
+      if jsx := child.AsJsxOpeningElement(); jsx != nil && jsx.TagName != nil {
+        g.callEdge(checker, from, jsx.TagName, "jsx")
+      }
+    }
+    g.callsWithin(checker, from, child)
+    return false
+  })
+}
+
+// assignedFunctionTarget returns the graph node an `x.y = function` assignment
+// implements, or "" when the assignment implements no node this graph owns.
+//
+// A declaration outside the workspace is not such a node. `globalThis.assert =
+// …` against a `declare global { function assert(…) }`, or a patched member of
+// a dependency's `@types`, resolves to a symbol whose only declaration is in a
+// declaration file — which has no body, holds no facts, and enters the graph as
+// an external boundary leaf. Re-attributing the assigned body to it moved the
+// implementation's calls and type references onto a node that never ran them,
+// under offsets read against the wrong file: `recordImplementation` already
+// refuses an external node, so the evidence file stayed unset and the spans
+// pointed at neither the declaration nor the implementation. And the edge
+// itself was unassemblable, so every request against such a project failed at
+// shard partition.
+func (g *Graph) assignedFunctionTarget(checker *shimchecker.Checker, from string, node *shimast.Node) string {
+  binary := node.AsBinaryExpression()
+  if binary == nil ||
+    binary.OperatorToken == nil ||
+    binary.Right == nil ||
+    binary.OperatorToken.Kind != shimast.KindEqualsToken ||
+    !shimast.IsFunctionLike(binary.Right) {
+    return ""
+  }
+  target := g.resolve(checker, binary.Left)
+  if target == nil || target.Symbol == nil || target.External {
+    return ""
+  }
+  to := g.ensureTargetNode(target)
+  if to == "" || to == from {
+    return ""
+  }
+  return to
+}
+
+func (g *Graph) recordImplementation(id string, assignment *shimast.Node) string {
+  node, ok := g.lookupNode(id)
+  if !ok || node.External {
+    return ""
+  }
+  file := shimast.GetSourceFileOfNode(assignment)
+  if file == nil {
+    return ""
+  }
+  sources := g.ImplementationSources[id]
+  if sources == nil {
+    sources = map[string]bool{}
+    g.ImplementationSources[id] = sources
+  }
+  sources[file.FileName()] = true
+  current := g.Nodes[id]
+  if current != nil && current.ImplementationFile == "" {
+    current.ImplementationFile = file.FileName()
+    current.ImplementationPos = assignment.Pos()
+    current.ImplementationEnd = assignment.End()
+  }
+  return file.FileName()
+}
+
+func (g *Graph) withEdgeEvidenceFile(from, file string, visit func()) {
+  if file == "" {
+    visit()
+    return
+  }
+  previous, existed := g.edgeEvidenceFiles[from]
+  g.edgeEvidenceFiles[from] = file
+  defer func() {
+    if existed {
+      g.edgeEvidenceFiles[from] = previous
+    } else {
+      delete(g.edgeEvidenceFiles, from)
+    }
+  }()
+  visit()
+}
+
+func isInvokedAccess(access *shimast.Node) bool {
+  parent := access.Parent
+  if parent == nil {
+    return false
+  }
+  switch parent.Kind {
+  case shimast.KindCallExpression:
+    call := parent.AsCallExpression()
+    return call != nil && call.Expression == access
+  case shimast.KindNewExpression:
+    newExpr := parent.AsNewExpression()
+    return newExpr != nil && newExpr.Expression == access
+  case shimast.KindTaggedTemplateExpression:
+    tagged := parent.AsTaggedTemplateExpression()
+    return tagged != nil && tagged.Tag == access
+  default:
+    return false
+  }
+}
+
+// callEdge resolves a callee expression to its declaration and records a
+// value-call edge, skipping an unresolved callee and a self-call. origin records
+// the call form ("call", "new", "jsx", "tagged") so the dump can split it into
+// the schema's calls / instantiates / renders kinds.
+func (g *Graph) callEdge(checker *shimchecker.Checker, from string, callee *shimast.Node, origin string) {
+  g.valueUseEdge(checker, from, callee, EdgeValueCall, origin)
+}
+
+// handedOffValues records the workspace functions a call is handed, as uses of
+// them.
+//
+// `React.memo(ExcalidrawBase)`, `forwardRef(Impl)`, `app.use(handler)`,
+// `pipe(map(project))` — the argument is not called here and is not a property
+// read, so the collector saw neither a call nor an access and recorded nothing.
+// The wrapper became a dead end: Excalidraw's public export, `export const
+// Excalidraw = React.memo(ExcalidrawBase)`, reached zero files in the graph while
+// the component behind it reached forty-four, so a tour of the public API opened
+// on an app-level export dialog instead, and the model went looking for the real
+// component by hand.
+//
+// A function handed to another function is a use of it, and it is the one the
+// runtime will run. Bounded to argument position: this is the callback, the
+// wrapped component, the registered handler — not every identifier in every
+// expression.
+func (g *Graph) handedOffValues(checker *shimchecker.Checker, from string, call *shimast.CallExpression) {
+  if call.Arguments == nil {
+    return
+  }
+  for _, argument := range call.Arguments.Nodes {
+    switch argument.Kind {
+    case shimast.KindIdentifier, shimast.KindPropertyAccessExpression:
+      g.valueUseEdge(checker, from, argument, EdgeValueAccess, "")
+    }
+  }
+}
+
+// accessEdge resolves a property or element access to its declaration and
+// records a value-access edge, skipping unresolved/external/self targets.
+func (g *Graph) accessEdge(checker *shimchecker.Checker, from string, access *shimast.Node) {
+  g.valueUseEdge(checker, from, access, EdgeValueAccess, "")
+}
+
+func (g *Graph) valueUseEdge(checker *shimchecker.Checker, from string, targetExpr *shimast.Node, kind EdgeKind, origin string) {
+  if targetExpr == nil {
+    return
+  }
+  target := g.resolve(checker, targetExpr)
+  if target == nil || target.Symbol == nil {
+    return
+  }
+  to := g.ensureTargetNode(target)
+  if to == "" || to == from {
+    return
+  }
+  g.addEdgeAt(from, to, kind, origin, targetExpr.Pos(), targetExpr.End())
+}
+
+// collectTypeRefs records a type-ref edge from each top-level function, class,
+// interface, or type alias to every named type it references in a type position
+// (parameter, return, property, and alias right-hand-side types). Type
+// references are first-class edges, which fits the ttsc thesis that types are
+// the unit of truth: an `import type` or annotation-only dependency relates two
+// symbols without any runtime call.
+func (g *Graph) collectTypeRefs(checker *shimchecker.Checker, file *shimast.SourceFile) {
+  forEachContainer(file.FileName(), file, func(from string, node *shimast.Node) {
+    g.typeRefsWithin(checker, from, node)
+  })
+}
+
+// typeRefsWithin walks node's subtree and records a type-ref edge from `from` to
+// the resolved target of every type reference it finds. A plain named type is a
+// KindTypeReference; the two other type-position shapes that name a symbol are a
+// `typeof value` query and an `import("./m").Foo` type, whose name is an
+// EntityName rather than a TypeReference, so each is matched explicitly. A
+// surrounding `as` / `satisfies` expression needs no case of its own: the type
+// it carries is itself one of these nodes, which the recursion reaches.
+func (g *Graph) typeRefsWithin(checker *shimchecker.Checker, from string, node *shimast.Node) {
+  node.ForEachChild(func(child *shimast.Node) bool {
+    switch child.Kind {
+    case shimast.KindTypeReference:
+      if ref := child.AsTypeReferenceNode(); ref != nil && ref.TypeName != nil {
+        g.typeRefEdge(checker, from, ref.TypeName)
+      }
+    case shimast.KindTypeQuery:
+      // `typeof value` in a type position depends on that value's type.
+      if query := child.AsTypeQueryNode(); query != nil && query.ExprName != nil {
+        g.typeRefEdge(checker, from, query.ExprName)
+      }
+    case shimast.KindImportType:
+      // `import("./m").Foo` references Foo through a dynamic import type; the
+      // module argument is a string literal and resolves to nothing.
+      if imp := child.AsImportTypeNode(); imp != nil && imp.Qualifier != nil {
+        g.typeRefEdge(checker, from, imp.Qualifier)
+      }
+    case shimast.KindBinaryExpression:
+      if target := g.assignedFunctionTarget(checker, from, child); target != "" {
+        file := ""
+        if source := shimast.GetSourceFileOfNode(child); source != nil {
+          file = source.FileName()
+        }
+        g.withEdgeEvidenceFile(target, file, func() {
+          g.typeRefsWithin(checker, target, child.AsBinaryExpression().Right)
+        })
+      }
+    }
+    g.typeRefsWithin(checker, from, child)
+    return false
+  })
+}
+
+// typeRefEdge resolves a type name to its declaration and records a type-ref
+// edge, skipping an unresolved name and a self-reference.
+func (g *Graph) typeRefEdge(checker *shimchecker.Checker, from string, typeName *shimast.Node) {
+  if typeName == nil {
+    return
+  }
+  target := g.resolve(checker, typeName)
+  if target == nil || target.Symbol == nil {
+    return
+  }
+  to := g.ensureTargetNode(target)
+  if to == "" || to == from {
+    return
+  }
+  g.addEdgeAt(from, to, EdgeTypeRef, "", typeName.Pos(), typeName.End())
+}
+
+// ensureTargetNode returns the node id for a resolved edge target, creating the
+// node when the resolution pass reached a symbol Build did not record: an
+// external boundary leaf (node_modules / `.d.ts`), kept as a leaf so the graph
+// stays "your code" without descending into a dependency's internals. Returns ""
+// when the symbol is not a kind the graph models as a node.
+func (g *Graph) ensureTargetNode(target *Target) string {
+  kind := symbolNodeKind(target.Symbol)
+  if kind == "" {
+    return ""
+  }
+  // A synthesized symbol without a declaration file would key a fileless ghost
+  // node ("#name:kind") that could collide across distinct symbols; skip it.
+  if target.File == "" {
+    return ""
+  }
+  if kind == NodeMethod {
+    // A method node is class-qualified and only modeled when it belongs to the
+    // workspace (Build recorded it). A call into a dependency's method stops at
+    // the boundary rather than spawning an external method leaf for every
+    // `.map` / `.push` into a library type.
+    name := methodName(target.Symbol)
+    if name == "" {
+      return ""
+    }
+    id := nodeID(target.File, name, NodeMethod)
+    if _, exists := g.lookupNode(id); exists {
+      return id
+    }
+    return ""
+  }
+  if kind == NodeVariable && target.External && target.Symbol.Flags&shimast.SymbolFlagsProperty != 0 {
+    return ""
+  }
+  name := qualifiedName(target.Symbol)
+  id := nodeID(target.File, name, kind)
+  if _, exists := g.lookupNode(id); exists {
+    return id
+  }
+  if !target.External {
+    // A closure Build recorded is keyed by its scoped name
+    // (`baseCreateRenderer.patch`), which the symbol alone does not spell, so
+    // resolve it from the declaration the checker pointed at.
+    if id := g.closureTargetID(target); id != "" {
+      return id
+    }
+    // Any other workspace target Build did not record is body-scoped and
+    // unnameable without collisions (a local of an anonymous callback), so its
+    // name would key the same id as a same-named local of another scope and
+    // merge two nodes into one that is neither. Drop it — the same
+    // workspace-only discipline the NodeMethod branch already applies.
+    return ""
+  }
+  g.Nodes[id] = &Node{
+    ID:       id,
+    Name:     name,
+    Simple:   simpleName(target.Symbol),
+    Kind:     kind,
+    File:     target.File,
+    External: true,
+    Pos:      target.Pos,
+    End:      target.End,
+  }
+  return id
+}
+
+// closureTargetID returns the node id of a closure the checker resolved to, or ""
+// when the target is not one Build recorded.
+func (g *Graph) closureTargetID(target *Target) string {
+  for _, declaration := range target.Symbol.Declarations {
+    if !IsClosure(declaration) {
+      continue
+    }
+    name, ok := ClosureName(declaration)
+    if !ok {
+      continue
+    }
+    kind := NodeFunction
+    if declaration.Kind == shimast.KindVariableDeclaration {
+      kind = NodeVariable
+    }
+    id := nodeID(target.File, name, kind)
+    if _, exists := g.lookupNode(id); exists {
+      return id
+    }
+  }
+  return ""
+}
+
+// symbolNodeKind maps a resolved symbol's declarations/flags to a NodeKind, or
+// "" when the symbol is not a kind the graph records as a node. Declaration kind
+// wins over flags because property-like accessor symbols can otherwise be
+// resolved as NodeVariable even though Build recorded the getter/setter as a
+// NodeMethod.
+func symbolNodeKind(symbol *shimast.Symbol) NodeKind {
+  for _, declaration := range symbol.Declarations {
+    switch declaration.Kind {
+    case shimast.KindClassDeclaration:
+      return NodeClass
+    case shimast.KindInterfaceDeclaration:
+      return NodeInterface
+    case shimast.KindTypeAliasDeclaration:
+      return NodeTypeAlias
+    case shimast.KindEnumDeclaration:
+      return NodeEnum
+    case shimast.KindFunctionDeclaration:
+      return NodeFunction
+    case shimast.KindMethodDeclaration, shimast.KindMethodSignature,
+      shimast.KindConstructor, shimast.KindGetAccessor, shimast.KindSetAccessor:
+      return NodeMethod
+    case shimast.KindPropertyDeclaration, shimast.KindPropertySignature,
+      shimast.KindVariableDeclaration:
+      return NodeVariable
+    }
+  }
+  switch {
+  case symbol.Flags&shimast.SymbolFlagsClass != 0:
+    return NodeClass
+  case symbol.Flags&shimast.SymbolFlagsInterface != 0:
+    return NodeInterface
+  case symbol.Flags&shimast.SymbolFlagsTypeAlias != 0:
+    return NodeTypeAlias
+  case symbol.Flags&shimast.SymbolFlagsEnum != 0:
+    return NodeEnum
+  case symbol.Flags&shimast.SymbolFlagsFunction != 0:
+    return NodeFunction
+  case symbol.Flags&(shimast.SymbolFlagsMethod|shimast.SymbolFlagsConstructor|shimast.SymbolFlagsGetAccessor|shimast.SymbolFlagsSetAccessor) != 0:
+    return NodeMethod
+  case symbol.Flags&shimast.SymbolFlagsProperty != 0:
+    return NodeVariable
+  case symbol.Flags&shimast.SymbolFlagsVariable != 0:
+    return NodeVariable
+  default:
+    return ""
+  }
+}

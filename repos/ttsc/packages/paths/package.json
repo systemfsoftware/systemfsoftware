@@ -1,0 +1,39 @@
+{
+  "name": "@ttsc/paths",
+  "version": "0.27.0",
+  "description": "First-party ttsc plugin that rewrites emitted module specifiers from tsconfig paths.",
+  "main": "src/index.cjs",
+  "exports": {
+    ".": "./src/index.cjs",
+    "./package.json": "./package.json"
+  },
+  "keywords": [
+    "ttsc",
+    "paths",
+    "typescript",
+    "tsgo"
+  ],
+  "ttsc": {
+    "plugin": {
+      "transform": "@ttsc/paths"
+    }
+  },
+  "files": [
+    "README.md",
+    "driver/paths.go",
+    "src/index.cjs",
+    "go.mod",
+    "plugin/main.go",
+    "plugin/paths.go"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/samchon/ttsc"
+  },
+  "author": "Jeongho Nam",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/samchon/ttsc/issues"
+  },
+  "homepage": "https://ttsc.dev"
+}

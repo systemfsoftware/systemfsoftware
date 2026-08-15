@@ -1,0 +1,17 @@
+{
+  "extends": "../../config/tsconfig.json",
+  "compilerOptions": {
+    "outDir": "lib",
+    "rootDir": "src",
+    "declaration": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "plugins": [
+      {
+        "transform": "@ttsc/lint",
+        "configFile": "./lint.config.ts"
+      }
+    ]
+  },
+  "include": ["src"]
+}
