@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>What we built: one list of words, written down once</title>
+<style>
+  :root {
+    --ink: #16181d;
+    --dim: #5b6270;
+    --rule: #dfe3ea;
+    --bg: #fbfbfc;
+    --card: #ffffff;
+    --add: #0f6d3d;
+    --addbg: #eaf7ef;
+    --del: #9a2c2c;
+    --delbg: #fdeeee;
+    --accent: #1f4fd8;
+    --warn: #8a5a00;
+    --warnbg: #fff6e5;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 2.4rem 1.4rem 5rem;
+    background: var(--bg);
+    color: var(--ink);
+    font: 16px/1.62 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  .wrap { max-width: 62rem; margin: 0 auto; }
+  .measure { max-width: 34rem; }
+  h1 { font-size: 1.85rem; line-height: 1.22; margin: 0 0 1rem; letter-spacing: -0.015em; }
+  h2 {
+    font-size: 1.16rem; margin: 3rem 0 0.7rem; padding-top: 0.9rem;
+    border-top: 1px solid var(--rule); letter-spacing: -0.008em;
+  }
+  h3 { font-size: 0.99rem; margin: 1.7rem 0 0.5rem; }
+  p, li { max-width: 34rem; }
+  .lede { font-size: 1.08rem; color: #2b3040; }
+  dl.meta {
+    display: grid; grid-template-columns: max-content 1fr; gap: 0.3rem 1rem;
+    margin: 0 0 2rem; padding: 0.9rem 1.1rem; background: var(--card);
+    border: 1px solid var(--rule); border-radius: 7px; font-size: 0.86rem; max-width: 44rem;
+  }
+  dl.meta dt { color: var(--dim); }
+  dl.meta dd { margin: 0; }
+  code, pre { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; }
+  code { font-size: 0.88em; background: #f1f3f7; padding: 0.1em 0.32em; border-radius: 3px; }
+  pre {
+    background: var(--card); border: 1px solid var(--rule); border-radius: 7px;
+    padding: 0.85rem 1rem; overflow-x: auto; font-size: 0.815rem; line-height: 1.5; margin: 0.7rem 0;
+  }
+  pre code { background: none; padding: 0; font-size: inherit; }
+  .k { color: #8a2ea8; } .s { color: var(--add); } .c { color: var(--dim); font-style: italic; }
+  .f { color: var(--accent); }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1rem 0; }
+  @media (max-width: 760px) { .cols { grid-template-columns: 1fr; } }
+  .panel { border: 1px solid var(--rule); border-radius: 7px; background: var(--card); padding: 0.2rem 1rem 0.9rem; }
+  .panel h4 { margin: 0.9rem 0 0.2rem; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--dim); }
+  .panel.bad { border-left: 3px solid var(--del); }
+  .panel.good { border-left: 3px solid var(--add); }
+  .panel pre { border: none; background: transparent; padding: 0.3rem 0; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.87rem; }
+  th, td { text-align: left; padding: 0.5rem 0.7rem; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--dim); }
+  td code { font-size: 0.85em; }
+  figure { margin: 1.4rem 0; }
+  figcaption { font-size: 0.83rem; color: var(--dim); margin-top: 0.5rem; max-width: 34rem; }
+  .note {
+    background: var(--warnbg); border-left: 3px solid var(--warn); border-radius: 0 6px 6px 0;
+    padding: 0.75rem 1rem; margin: 1.2rem 0; font-size: 0.9rem; max-width: 40rem;
+  }
+  .note strong { color: var(--warn); }
+  .run { background: #14161b; color: #e6e9ef; border: none; }
+  .run .c { color: #8b93a3; } .run .s { color: #7fd39b; } .run .f { color: #8fb6ff; }
+  footer { margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--rule); font-size: 0.82rem; color: var(--dim); }
+  .tag { display: inline-block; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.07em;
+         padding: 0.1rem 0.42rem; border-radius: 3px; background: #eceff5; color: var(--dim); vertical-align: 0.12em; }
+  ul.tight li { margin: 0.28rem 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>What we built: one list of words, written down once</h1>
+
+<dl class="meta">
+  <dt>Date</dt><dd>2026-08-15</dd>
+  <dt>Input shape</dt><dd>diff</dd>
+  <dt>Subject</dt><dd><code>origin/main..feat/cell-description-derived-consumers</code> — 16 commits, 77 files (PR #165)</dd>
+</dl>
+
+<p class="lede measure">
+  Strip away every abstraction and this change is about a list of five words:
+  <code>read</code>, <code>decode</code>, <code>decide</code>, <code>encode</code>,
+  <code>write</code>. Before, that list — plus which of those are allowed to touch
+  the outside world — was typed out by hand in five different packages. Now it is
+  typed once, and the other four read it off a value at runtime.
+</p>
+
+<p class="measure">
+  That's the whole idea. Everything below is why it mattered, what it cost, and how
+  to watch it work.
+</p>
+
+<h2>1. The thing being described</h2>
+
+<p class="measure">
+  A <strong>Cell description</strong> is a recipe for one operation, written as a
+  chain. You read something, decode it, make a decision, encode the result, write it
+  back. Five steps, always that order.
+</p>
+
+<p class="measure">
+  Two of those steps are allowed to touch the world — <code>read</code> and
+  <code>write</code> do I/O. The three in the middle are pure: they take a value and
+  return a value, no database, no clock, no filesystem. That split is the point of
+  the whole shape, because it means all the messy parts are at the two ends and the
+  decision logic in the middle is testable in isolation.
+</p>
+
+<p class="measure">
+  You build one by calling constructors that only fit together in one order:
+</p>
+
+<pre><code><span class="c">// each call's return type is the next call's required argument type,</span>
+<span class="c">// so a wrong order does not compile — the order is a type fact</span>
+Cell.<span class="f">write</span>(
+  Cell.<span class="f">encode</span>(
+    Cell.<span class="f">decide</span>(
+      Cell.<span class="f">decode</span>(
+        Cell.<span class="f">read</span>(fetchTheRow),
+        parseIt),
+      decideWhatToDo),
+    formatTheAnswer),
+  saveIt)</code></pre>
+
+<h2>2. What was actually wrong</h2>
+
+<p class="measure">
+  The chain worked. The problem was everything <em>else</em> that needed to know
+  those five words.
+</p>
+
+<p class="measure">
+  A lint rule enforces "no database calls inside a pure step". To do that it must
+  know which steps are pure. On <code>main</code>, it knew by having the answer typed
+  into it:
+</p>
+
+<div class="cols">
+  <div class="panel bad">
+    <h4>Before — a lint rule's own file</h4>
+<pre><code><span class="k">export const</span> DESCRIPTION_SOURCE =
+  <span class="s">'@systemfsoftware/effect-cell-types'</span>
+
+<span class="k">export const</span> PURE_PHASES =
+  [<span class="s">'decode'</span>, <span class="s">'decide'</span>, <span class="s">'encode'</span>]
+
+<span class="k">export const</span> IO_CELLS =
+  [<span class="s">'store'</span>, <span class="s">'adapter'</span>]
+
+<span class="k">export const</span> IO_SOURCES =
+  [<span class="s">'effect/Clock'</span>, <span class="s">'effect/System'</span>]</code></pre>
+  </div>
+  <div class="panel good">
+    <h4>After — the same file</h4>
+<pre><code><span class="k">export const</span> DESCRIPTION_SOURCE =
+  Cell.vocabulary.module
+
+<span class="k">export const</span> PURE_PHASES =
+  Cell.vocabulary.byKind.pure
+
+<span class="k">export const</span> IO_CELLS =
+  Cell.vocabulary.ioCells.cells
+
+<span class="k">export const</span> IO_SOURCES =
+  Cell.vocabulary.ioCells.sources</code></pre>
+  </div>
+</div>
+
+<p class="measure">
+  Four facts, hand-copied on the left, read from the source on the right. Same
+  values today — that's exactly why the left version was dangerous. Nothing was
+  broken, nothing failed, and no test could tell you the copy existed.
+</p>
+
+<p class="measure">
+  <strong>Here is the failure mode, concretely.</strong> Suppose you add a sixth
+  step called <code>validate</code>, and it's pure. The description now has four pure
+  steps. The lint rule still has three in its list. So a developer writes a database
+  call inside a <code>validate</code> body and the rule says nothing — it isn't
+  watching that step, because nobody told it the step exists. The build is green. The
+  guarantee is gone. You find out when something breaks in production, and the reason
+  is a list in a file nobody thought to update.
+</p>
+
+<p class="measure">
+  That copy existed in five places: the description itself, two lint rules, and two
+  more consumers added along the way. Five places to update, no alarm if you miss
+  one.
+</p>
+
+<h2>3. What replaced it</h2>
+
+<p class="measure">
+  The description now carries its own vocabulary as data. You can print it:
+</p>
+
+<pre class="run"><code><span class="c">$ node -e "import {Cell} from '@systemfsoftware/effect-cell-types';
+           console.log(Cell.vocabulary)"</span>
+
+{
+  module: <span class="s">'@systemfsoftware/effect-cell-types'</span>,
+  ioCells: { cells: [<span class="s">'store'</span>, <span class="s">'adapter'</span>],
+             sources: [<span class="s">'effect/Clock'</span>, <span class="s">'effect/System'</span>] },
+  byKind:  { pure:   [<span class="s">'decode'</span>, <span class="s">'decide'</span>, <span class="s">'encode'</span>],
+             impure: [<span class="s">'read'</span>, <span class="s">'write'</span>] },
+  applier: <span class="s">'apply'</span>,
+  phases:  [ [<span class="s">'read'</span>,   <span class="s">'impure'</span>, <span class="s">'effect'</span>],
+             [<span class="s">'decode'</span>, <span class="s">'pure'</span>,   <span class="s">'either-fail'</span>],
+             [<span class="s">'decide'</span>, <span class="s">'pure'</span>,   <span class="s">'either-pass'</span>],
+             [<span class="s">'encode'</span>, <span class="s">'pure'</span>,   <span class="s">'total'</span>],
+             [<span class="s">'write'</span>,  <span class="s">'impure'</span>, <span class="s">'effect'</span>] ]
+}</code></pre>
+
+<p class="measure">
+  That output is not a table someone typed. It is computed by walking a real
+  description built with the public constructors — the same constructors any caller
+  uses. The walk reads the phase records out of the built value and groups them.
+</p>
+
+<p class="measure">
+  This is the part worth slowing down on, because it's the difference between this
+  change and a cosmetic one. If the vocabulary were a hand-written table sitting next
+  to the constructors, it would be <em>a sixth copy</em> — better organised, still a
+  copy, still able to disagree with the constructors. Because it is a fold of a value
+  the constructors produced, it cannot disagree with them. There is nothing to keep
+  in sync.
+</p>
+
+<h3>The five things it carries</h3>
+
+<table>
+  <thead><tr><th>Axis</th><th>What it answers</th><th>Who needs it</th></tr></thead>
+  <tbody>
+    <tr><td><code>phases[].name</code></td><td>What are the steps called?</td><td>every consumer</td></tr>
+    <tr><td><code>byKind</code></td><td>Which steps are pure vs do I/O?</td><td>the lint rules</td></tr>
+    <tr><td><code>phases[]</code> order</td><td>What order do they run in?</td><td>the type-test generator</td></tr>
+    <tr><td><code>module</code></td><td>Which package are they imported from?</td><td>the lint rules, to recognise the import</td></tr>
+    <tr><td><code>ioCells</code></td><td>Which calls count as touching the world?</td><td>the lint rules</td></tr>
+  </tbody>
+</table>
+
+<h2>4. Who reads it</h2>
+
+<figure>
+<svg viewBox="0 0 900 330" width="100%" role="img" aria-labelledby="digramtitle">
+  <title id="digramtitle">One description value, folded into a vocabulary, read by four consumers in four packages</title>
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#5b6270"/>
+    </marker>
+  </defs>
+  <rect x="16" y="16" width="250" height="86" rx="8" fill="#fff" stroke="#16181d" stroke-width="2"/>
+  <text x="141" y="44" text-anchor="middle" font-size="14" font-weight="700" fill="#16181d">the constructors</text>
+  <text x="141" y="64" text-anchor="middle" font-size="12" fill="#5b6270">read → decode → decide</text>
+  <text x="141" y="80" text-anchor="middle" font-size="12" fill="#5b6270">→ encode → write</text>
+  <text x="141" y="95" text-anchor="middle" font-size="11" fill="#5b6270">build a real value</text>
+
+  <rect x="16" y="132" width="250" height="72" rx="8" fill="#eaf7ef" stroke="#0f6d3d" stroke-width="2"/>
+  <text x="141" y="159" text-anchor="middle" font-size="14" font-weight="700" fill="#0f6d3d">Cell.vocabulary</text>
+  <text x="141" y="178" text-anchor="middle" font-size="12" fill="#0f6d3d">a fold of that value</text>
+  <text x="141" y="194" text-anchor="middle" font-size="11" fill="#0f6d3d">five axes, as data</text>
+  <line x1="141" y1="102" x2="141" y2="130" stroke="#5b6270" stroke-width="2" marker-end="url(#ar)"/>
+
+  <rect x="16" y="234" width="250" height="62" rx="8" fill="#fff" stroke="#dfe3ea" stroke-width="2"/>
+  <text x="141" y="258" text-anchor="middle" font-size="13" font-weight="600" fill="#5b6270">Cell.apply</text>
+  <text x="141" y="276" text-anchor="middle" font-size="11" fill="#5b6270">the interpreter — already existed,</text>
+  <text x="141" y="290" text-anchor="middle" font-size="11" fill="#5b6270">runs the phases in declared order</text>
+  <line x1="141" y1="204" x2="141" y2="232" stroke="#5b6270" stroke-width="2" marker-end="url(#ar)"/>
+
+  <g font-size="12.5">
+    <rect x="470" y="14" width="414" height="60" rx="7" fill="#fff" stroke="#1f4fd8" stroke-width="1.6"/>
+    <text x="486" y="36" font-weight="700" fill="#1f4fd8">effect-cell-gen</text>
+    <text x="486" y="56" fill="#5b6270">makes random valid descriptions to test the interpreter</text>
+
+    <rect x="470" y="86" width="414" height="60" rx="7" fill="#fff" stroke="#1f4fd8" stroke-width="1.6"/>
+    <text x="486" y="108" font-weight="700" fill="#1f4fd8">effect-cell-type-tests</text>
+    <text x="486" y="128" fill="#5b6270">generates type assertions from the walked order</text>
+
+    <rect x="470" y="158" width="414" height="60" rx="7" fill="#fff" stroke="#1f4fd8" stroke-width="1.6"/>
+    <text x="486" y="180" font-weight="700" fill="#1f4fd8">oxlint-plugin-cell-vocabulary</text>
+    <text x="486" y="200" fill="#5b6270">forbids I/O inside a pure step</text>
+
+    <rect x="470" y="230" width="414" height="60" rx="7" fill="#fff" stroke="#1f4fd8" stroke-width="1.6"/>
+    <text x="486" y="252" font-weight="700" fill="#1f4fd8">oxlint-plugin-effect-executor</text>
+    <text x="486" y="272" fill="#5b6270">requires call sites to use a description at all</text>
+  </g>
+
+  <path d="M 266 168 C 360 168 370 44 468 44" fill="none" stroke="#1f4fd8" stroke-width="1.6" marker-end="url(#ar)"/>
+  <path d="M 266 168 C 360 168 370 116 468 116" fill="none" stroke="#1f4fd8" stroke-width="1.6" marker-end="url(#ar)"/>
+  <path d="M 266 168 C 380 168 390 188 468 188" fill="none" stroke="#1f4fd8" stroke-width="1.6" marker-end="url(#ar)"/>
+  <path d="M 266 168 C 360 168 370 260 468 260" fill="none" stroke="#1f4fd8" stroke-width="1.6" marker-end="url(#ar)"/>
+</svg>
+<figcaption>
+  The constructors build a value; one fold turns it into the vocabulary; four
+  consumers in four separate packages read the vocabulary. The interpreter
+  (<code>Cell.apply</code>) sits inside the description package and was already
+  there — it is not one of the four.
+</figcaption>
+</figure>
+
+<p class="measure">
+  Four consumers, four packages, four different jobs, none of which types out a phase
+  name. The generator draws random-but-valid descriptions by substituting random
+  functions into the walked shape. The type-test package emits compiler assertions
+  from the walked order. The two lint plugins decide what they forbid from the walked
+  purity and I/O sets.
+</p>
+
+<h2>5. The test that this is real</h2>
+
+<p class="measure">
+  Claiming "it's all derived now" is cheap. The experiment that makes it falsifiable:
+  <strong>add a sixth step and change nothing else.</strong> If a consumer is genuinely
+  derived, it stays green <em>and its output changes</em>. If it stays green with
+  unchanged output, it never saw the new step. If it breaks, it was holding a copy.
+</p>
+
+<p class="measure">
+  That was run. A sixth pure step named <code>validate</code> was added inside the
+  description file only. Result:
+</p>
+
+<ul class="tight measure">
+  <li>Every consumer package stayed green with a step it had never heard of.</li>
+  <li>Their output changed: the generated type-test suite grew assertions for
+      <code>validate</code>, and the lint rules' pure set gained it.</li>
+  <li>The only failures were inside the description package itself — its own
+      hand-written check, its API snapshot, and its type spec. Those are supposed to
+      fail: they are the things that exist to disagree.</li>
+</ul>
+
+<p class="measure">
+  Reclassifying an I/O cell was tested the same way: one file changed, the rules'
+  forbidden-call set changed, whole build green.
+</p>
+
+<div class="note">
+  <strong>Honest limit.</strong> That experiment was performed and recorded; the
+  script that automated it was deleted along with a mechanism it was built beside, so
+  repeating it means making the edit by hand. The measurement is dated, not
+  re-runnable on demand.
+</div>
+
+<h2>6. The one hard problem, and what it cost</h2>
+
+<p class="measure">
+  A lint rule reading the description means the lint package must <em>import</em> the
+  description package. That created a dependency loop:
+</p>
+
+<pre><code>effect-executor  →  effect-cell-types  →  effect-gherkin-spec
+       ↑                                          ↓
+   effect-dmmf   ←──────────  oxlint-config  ←────┘</code></pre>
+
+<p class="measure">
+  Read it as: the lint plugin wants the description; the description package lints
+  itself using the shared lint config; the shared lint config bundles the lint
+  plugin. Circular. The build tool refuses.
+</p>
+
+<p class="measure">
+  The fix was to stop bundling that plugin in the shared config, and have each
+  package that needs it load the plugin itself. The loop opens, the direct import
+  becomes legal, and no generated intermediate file is needed.
+</p>
+
+<p class="measure">
+  <strong>That trade has a hidden cost, and it's the most useful thing in this whole
+  change to understand.</strong> When the shared config bundled the plugin, every
+  package that used the shared config got those rules automatically — forgetting was
+  impossible. Now each package opts in by hand. So a package created next month with
+  one of these files in it simply does not get the rules, and nothing complains. The
+  guarantee didn't move; it evaporated.
+</p>
+
+<p class="measure">
+  So a check was added: the lint-coverage guard now fails when a package owns one of
+  those files and its own config doesn't load the matching plugin. It was watched
+  failing with one package's entry deleted, and passing with it restored.
+</p>
+
+<p class="measure">
+  The general lesson, worth more than the specific fix: <em>trading an automatic
+  guarantee for a convention is not a simplification.</em> It only becomes one once
+  something fails when the convention is broken.
+</p>
+
+<h2>7. What also changed that you'd notice</h2>
+
+<p class="measure">
+  The description's internal shape changed, and this part is a real breaking change:
+</p>
+
+<div class="cols">
+  <div class="panel bad">
+    <h4>Before — five optional slots</h4>
+<pre><code><span class="k">interface</span> Layer&lt;P&gt; {
+  <span class="k">readonly</span> read?:   ReadPhase&lt;P&gt;
+  <span class="k">readonly</span> decode?: DecodePhase&lt;P&gt;
+  <span class="k">readonly</span> decide?: DecidePhase&lt;P&gt;
+  <span class="k">readonly</span> encode?: EncodePhase&lt;P&gt;
+  <span class="k">readonly</span> write?:  WritePhase&lt;P&gt;
+}</code></pre>
+  </div>
+  <div class="panel good">
+    <h4>After — an ordered list</h4>
+<pre><code><span class="k">interface</span> Layer&lt;P&gt; {
+  <span class="k">readonly</span> phases:
+    <span class="k">readonly</span> Phase&lt;P&gt;[]
+}
+
+<span class="c">// each Phase carries its own</span>
+<span class="c">// name, kind, convention, run</span></code></pre>
+  </div>
+</div>
+
+<p class="measure">
+  The left shape cannot be walked usefully: to find out what's in it you must already
+  know the five field names, which is the same as having the list written down. The
+  right shape can be walked by anything — that single change is what made every
+  consumer possible.
+</p>
+
+<p class="measure">
+  If you built descriptions with the constructors, nothing breaks. If any code read
+  <code>layer.decode</code> by name, it now reads the array instead.
+</p>
+
+<h2>8. Does it work — the evidence</h2>
+
+<ul class="tight measure">
+  <li><code>pnpm check:local</code> — 281 tasks, all pass, run after the last edit.</li>
+  <li>All four CI workflows green on the pushed head, including the 30-job mutation
+      matrix and the full gate.</li>
+  <li>Mutation testing at 100% on both lint plugins: every deliberately-introduced
+      bug in the rules is caught by a test. Zero survivors, zero uncovered, zero
+      ignored.</li>
+  <li>No dependency cycle: the build tool reports a clean graph.</li>
+  <li>A nine-lens review ran over the diff. Seven reviewers independently found the
+      same gap — the missing delivery check from section 6 — which is now closed.</li>
+</ul>
+
+<h3>Things you can run yourself</h3>
+
+<pre class="run"><code><span class="c"># print the vocabulary — this is the value everything reads</span>
+cd packages/oxlint-plugins/cell-vocabulary
+node -e <span class="s">"import {Cell} from '@systemfsoftware/effect-cell-types';
+        console.log(Cell.vocabulary)"</span>
+
+<span class="c"># prove the lint rules actually fire</span>
+pnpm --filter @systemfsoftware/oxlint-plugin-cell-vocabulary test
+
+<span class="c"># prove the delivery check has teeth: delete the plugin line from</span>
+<span class="c"># packages/effect-daemon-spec/oxlint.config.ts, then</span>
+pnpm check:lint-coverage   <span class="c"># fails, naming the package and the missing plugin</span>
+
+<span class="c"># the whole gate</span>
+pnpm check:local</code></pre>
+
+<h2>9. What is still open</h2>
+
+<ul class="tight measure">
+  <li><span class="tag">known</span> The generated type suite has one blind spot: a
+      step added to the types but never registered in the real chain produces no
+      assertion. It is written down in that package's own notes.</li>
+  <li><span class="tag">known</span> In packages that load both lint plugins, one
+      violation is reported twice, because the newer rule's reach is a superset of
+      the older one's. Retiring the older one would lose coverage in the single
+      package that loads only it — so this needs a decision, not a quick edit.</li>
+  <li><span class="tag">known</span> The lint rules read the vocabulary from the
+      description's built output. Editing the description and linting a single
+      package without rebuilding judges against the previous build.</li>
+</ul>
+
+<h2>The one-sentence version</h2>
+
+<p class="lede measure">
+  A list of step names and which of them may touch the world used to be typed into
+  five packages; now the description computes it from the value its own constructors
+  build, four packages read it from there, and a new check makes sure those packages
+  actually receive the rules that depend on it.
+</p>
+
+<footer>Composed 2026-08-15 by ce-explain</footer>
+
+</div>
+</body>
+</html>
