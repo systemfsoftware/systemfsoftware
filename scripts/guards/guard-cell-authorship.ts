@@ -103,35 +103,49 @@ type Verdict = {
 }
 
 export const roleOfPath = (path: string): string | undefined => {
-  const match = /\.([a-z]+)\.(?:term\.ts|ts|decl\.json)$/.exec(path)
+  // Longest first: `survivors.workflow.decl.ts` must read its role as `workflow`, and a bare `ts`
+  // alternative matching first would read it as `decl` — a name no role carries, so the declaration
+  // would be silently invisible to the gate rather than reported.
+  const match = /\.([a-z]+)\.(?:term\.ts|decl\.ts|decl\.json|ts)$/.exec(path)
   const role = match?.[1]
   return role !== undefined && ROLES.includes(role) ? role : undefined
 }
 
 /**
- * A term lives under `terms/` rather than beside its cell, because `cell-suffix-required` governs
- * every file under `src/`: a term is not a cell, so `src/` is exactly where it may not go. The
- * `terms/` tree mirrors `src/`, and these two functions are the mapping.
+ * A declaration lives under `terms/` rather than beside its cell, because `cell-suffix-required`
+ * governs every file under `src/`: a declaration is not a cell, so `src/` is exactly where a
+ * TypeScript one may not go. The `terms/` tree mirrors `src/`, and these functions are the mapping.
+ *
+ * A `.decl.json` is the exception and sits beside its cell, because JSON carries no suffix the rule
+ * reads. That is the whole of its advantage and it is not worth the cost: a JSON declaration is
+ * unchecked until an emitter runs, so every field name and every `kind` string is a spelling with no
+ * checker behind it. Its TypeScript form is checked where it is written.
  */
 export const cellOf = (declaration: string): string =>
-  declaration.endsWith('.term.ts')
-    ? declaration.replace('/terms/', '/src/').replace(/\.term\.ts$/, '.ts')
-    : declaration.replace(/\.decl\.json$/, '.ts')
+  declaration.endsWith('.decl.json')
+    ? declaration.replace(/\.decl\.json$/, '.ts')
+    : declaration.replace('/terms/', '/src/').replace(/\.(term|decl)\.ts$/, '.ts')
 
 /**
- * The two authorship forms a cell may have.
+ * The three authorship forms a cell may have.
  *
- * A `.decl.json` is a data description, emitted by the role's own emitter. A `.term.ts` is a
- * program in the term language, compiled by one compiler for every role - which is why the role
- * appears in the filename but nowhere in the language. A cell has at most one; either satisfies
- * completeness, and both present is an orphan the gate reports.
+ * A `.decl.ts` is a data description in TypeScript, typechecked as it is written and handed to the
+ * emitter that owns its role's vocabulary. A `.decl.json` is the same description with no checker,
+ * kept only while a role is mid-migration. A `.term.ts` is a program in the term language, compiled by
+ * one compiler for every role — which is why the role appears in its filename but nowhere in the
+ * language. A cell has at most one; any satisfies completeness, and two present is an orphan the gate
+ * reports.
  */
 export const declarationsOf = (cell: string): readonly string[] => [
   cell.replace(/\.ts$/, '.decl.json'),
+  cell.replace('/src/', '/terms/').replace(/\.ts$/, '.decl.ts'),
   cell.replace('/src/', '/terms/').replace(/\.ts$/, '.term.ts'),
 ]
 
 export const isTerm = (path: string): boolean => path.endsWith('.term.ts')
+
+/** A data description in TypeScript: loaded as a module, then handed to its role's emitter. */
+export const isTypedDeclaration = (path: string): boolean => path.endsWith('.decl.ts')
 
 export const inPopulation = (path: string): boolean =>
   path.endsWith('.ts') &&
@@ -142,9 +156,10 @@ export const inPopulation = (path: string): boolean =>
 export const isDeclaration = (path: string): boolean => {
   const role = roleOfPath(path)
   if (role === undefined) return false
-  // A data description is only meaningful where an emitter owns the role's vocabulary; a term
-  // compiles for every role, because a program has no vocabulary to own.
-  return path.endsWith('.term.ts') || (path.endsWith('.decl.json') && role in EMITTERS)
+  // A data description is only meaningful where an emitter owns the role's vocabulary, in either
+  // spelling; a term compiles for every role, because a program has no vocabulary to own.
+  return path.endsWith('.term.ts') ||
+    ((path.endsWith('.decl.json') || path.endsWith('.decl.ts')) && role in EMITTERS)
 }
 
 export const verdict = (evidence: Evidence): Verdict => {
@@ -237,9 +252,16 @@ const gather = async (): Promise<Evidence> => {
         // A term goes through `loadProgram`, which parses it against the role its filename names; a
         // data description goes to the emitter that owns that role's vocabulary. Compiling the loaded
         // program directly rather than re-parsing it keeps one precondition check per declaration.
+        //
+        // A TypeScript description is a module, so it arrives by import rather than by reading text.
+        // The path is absolutised because a dynamic import resolves against this module, not the cwd.
         const source = isTerm(decl)
           ? compileProgram(await loadProgram(decl))
-          : EMITTERS[roleOfPath(decl)!]!(JSON.parse(await Deno.readTextFile(decl)))
+          : EMITTERS[roleOfPath(decl)!]!(
+            isTypedDeclaration(decl)
+              ? ((await import(new URL(decl, `file://${Deno.cwd()}/`).href)) as { default: unknown }).default
+              : JSON.parse(await Deno.readTextFile(decl)),
+          )
         outcomes[index] = { emitted: await formatted(source, decl) }
       } catch (error) {
         outcomes[index] = { error }

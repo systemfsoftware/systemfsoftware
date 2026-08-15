@@ -1,10 +1,11 @@
 #!/usr/bin/env -S deno run --allow-read --allow-run=deno --allow-write=. --allow-env
 /**
- * Typechecks every term file and every probe, so the requirement channel is a gate.
+ * Typechecks every declaration authored in TypeScript, so the checking a declaration claims is a gate.
  *
- * Without this the channel enforces nothing. A term file lives under `terms/`, which no package
- * `tsconfig.json` includes — they list `src` and `__tests__` — so `pnpm typecheck` never sees one,
- * and a role's refusal of an impure term fired only when someone ran `deno check` by hand. The
+ * Without this the claim enforces nothing. A `.term.ts` or a `.decl.ts` lives under `terms/`, which no
+ * package `tsconfig.json` includes — they list `src` and `__tests__` — so `pnpm typecheck` never sees
+ * one. A term's role refusal and a declaration's field types both fired only when someone ran
+ * `deno check` by hand. The
  * corpus's ruling on this is explicit and it is the one band above `posit` among the pages this work
  * rests on: a consumer type checker is window-mediated, not a gate, because it returns a diagnostic
  * and "the file, the commit, and the emission stand". It becomes gate-class only when something
@@ -28,11 +29,19 @@ const run = async (args: readonly string[]): Promise<{ readonly code: number; re
   return { code, out: decode.decode(stdout) + decode.decode(stderr) }
 }
 
-/** Every tracked term file, plus the probes that assert the refusals still fire. */
+/**
+ * Every tracked declaration authored in TypeScript, plus the probes that assert the refusals fire.
+ *
+ * Both authorship forms are here for one reason: a declaration whose types nothing checks is a
+ * declaration whose types are a comment. A `.term.ts` carries a role's requirement channel and a
+ * `.decl.ts` carries a role's field vocabulary, and each is only as binding as this gate.
+ */
 const targets = async (): Promise<readonly string[]> => {
   const { code, out } = await run(['git', 'ls-files'])
   if (code !== 0) throw new Error('git ls-files failed')
-  return out.split('\n').filter((path) => path.endsWith('.term.ts') || path.endsWith('.probe.ts') || isRunProbe(path))
+  return out.split('\n').filter((path) =>
+    path.endsWith('.term.ts') || path.endsWith('.decl.ts') || path.endsWith('.probe.ts') || isRunProbe(path)
+  )
 }
 
 /**
@@ -48,7 +57,7 @@ const isRunProbe = (path: string): boolean => path.endsWith('.run.ts')
 const main = async (): Promise<number> => {
   const files = await targets()
   if (files.length === 0) {
-    console.error('check-term-types: no term files or probes found, which means this gate is checking nothing')
+    console.error('check-term-types: no declarations or probes found, which means this gate is checking nothing')
     return 1
   }
   // One `deno check` over the whole set: it resolves the shared graph once, and a single invocation
@@ -74,7 +83,7 @@ const main = async (): Promise<number> => {
     if (result.code !== 0) failed = true
   }
   if (failed) return 1
-  console.log(`check-term-types: ${files.length} term file(s) and probe(s) typecheck clean`)
+  console.log(`check-term-types: ${files.length} declaration(s) and probe(s) typecheck clean`)
   return 0
 }
 
