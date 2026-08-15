@@ -292,9 +292,9 @@ class Node<A> {
   lifetime: Lifetime<A> | undefined
   writeContext: WriteContextImpl<A>
 
-  parents: Array<Node<any>> = []
-  previousParents: Array<Node<any>> | undefined
-  children: Array<Node<any>> = []
+  parents: Node<any>[] = []
+  previousParents: Node<any>[] | undefined
+  children: Node<any>[] = []
   listeners: Set<() => void> = new Set()
   skipInvalidation = false
 
@@ -486,12 +486,12 @@ class Node<A> {
   }
 }
 
-function childrenAreActive(children: Array<Node<any>>): boolean {
+function childrenAreActive(children: Node<any>[]): boolean {
   if (children.length === 0) {
     return false
   }
-  let current: Array<Node<any>> | undefined = children
-  let stack: Array<Array<Node<any>>> | undefined
+  let current: Node<any>[] | undefined = children
+  let stack: Node<any>[][] | undefined
   let stackIndex = 0
   while (current !== undefined) {
     for (let i = 0, len = current.length; i < len; i++) {
@@ -514,7 +514,7 @@ function childrenAreActive(children: Array<Node<any>>): boolean {
 interface Lifetime<A> extends Atom.Context {
   isFn: boolean
   readonly node: Node<A>
-  finalizers: Array<() => void> | undefined
+  finalizers: (() => void)[] | undefined
   disposed: boolean
   readonly dispose: () => void
 }
@@ -789,7 +789,7 @@ export const enum BatchPhase {
 export const batchState = globalValue('@systemfsoftware/effect-atom/Registry/batchState', () => ({
   phase: BatchPhase.disabled,
   depth: 0,
-  stale: [] as Array<Node<any>>,
+  stale: [] as Node<any>[],
   notify: new Set<Node<any>>(),
 }))
 

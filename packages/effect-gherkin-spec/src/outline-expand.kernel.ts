@@ -2,7 +2,7 @@ import * as Either from 'effect/Either'
 
 export type TemplateToken = { tag: string; rest: string }
 
-export const tokenizeTemplate = (template: string): ReadonlyArray<TemplateToken> => {
+export const tokenizeTemplate = (template: string): readonly TemplateToken[] => {
   const tokens: TemplateToken[] = []
   let remainder = template
   while (remainder.length > 0) {
@@ -47,9 +47,9 @@ export const renderTitle = (
 
 export const expandOutline = <Row extends Record<string, unknown>>(
   name: string,
-  rows: ReadonlyArray<Row>,
+  rows: readonly Row[],
   stringify: (value: unknown) => string = stringifyForTitle,
-): Either.Either<ReadonlyArray<OutlineRow<Row>>, string> => {
+): Either.Either<readonly OutlineRow<Row>[], string> => {
   if (rows.length === 0) return Either.right([])
 
   const templateTokens = tokenizeTemplate(name)

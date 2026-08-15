@@ -25,7 +25,7 @@ type Conditional = {
   readonly consequent: Expr
   readonly alternate: Expr
 }
-type Call = { readonly _tag: 'Call'; readonly callee: Expr; readonly args: ReadonlyArray<Expr> }
+type Call = { readonly _tag: 'Call'; readonly callee: Expr; readonly args: readonly Expr[] }
 
 type Expr = Lit | Id | Binary | Member | Conditional | Call
 
@@ -92,7 +92,7 @@ const VARIANT_COUNT = BASE.length + RECUR.length
 const EVEN_BRANCH_SHARE = 1 / (1 + RECUR.length)
 const SHARE_TOLERANCE = 0.15
 
-const sampleAt = (seed: number): ReadonlyArray<Expr> => fc.sample(Arbitrary.make(Expr), { numRuns: SAMPLE_SIZE, seed })
+const sampleAt = (seed: number): readonly Expr[] => fc.sample(Arbitrary.make(Expr), { numRuns: SAMPLE_SIZE, seed })
 
 const nestingDepth = (expr: Expr): number => {
   switch (expr._tag) {
@@ -114,10 +114,10 @@ const nestingDepth = (expr: Expr): number => {
   }
 }
 
-const deepestOf = (samples: ReadonlyArray<Expr>): number =>
+const deepestOf = (samples: readonly Expr[]): number =>
   samples.reduce((deepest, sample) => Math.max(deepest, nestingDepth(sample)), 0)
 
-const distinctTagsOf = (samples: ReadonlyArray<Expr>): number => {
+const distinctTagsOf = (samples: readonly Expr[]): number => {
   const tags = new Set<Expr['_tag']>()
   for (const sample of samples) tags.add(sample._tag)
   return tags.size
@@ -130,7 +130,7 @@ const isBaseTag = (tag: Expr['_tag']): boolean => tag === 'Lit' || tag === 'Id'
  * never drew at all scores maximal drift rather than being skipped, so a
  * starved branch cannot hide by being absent from the tally.
  */
-const widestBranchDriftOf = (samples: ReadonlyArray<Expr>): number => {
+const widestBranchDriftOf = (samples: readonly Expr[]): number => {
   const drawn = new Map<string, number>()
   for (const sample of samples) {
     const branch = isBaseTag(sample._tag) ? 'base' : sample._tag

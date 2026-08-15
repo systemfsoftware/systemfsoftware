@@ -16,8 +16,8 @@ export const neverExceeds: IntensityTracker = {
 export const make = (restarts: number, window: Duration.Duration): Effect.Effect<IntensityTracker> =>
   Effect.gen(function*() {
     const windowMillis = Duration.toMillis(window)
-    const timestamps = yield* Ref.make<ReadonlyArray<number>>([])
-    const prune = (now: number): Effect.Effect<ReadonlyArray<number>> =>
+    const timestamps = yield* Ref.make<readonly number[]>([])
+    const prune = (now: number): Effect.Effect<readonly number[]> =>
       Ref.modify(timestamps, (ts) => {
         const active = pruneTimestamps(ts, now, windowMillis)
         return [active, active]

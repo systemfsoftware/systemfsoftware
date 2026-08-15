@@ -20,7 +20,7 @@ export const restartIndicesFor = (
   strategy: RestartStrategyName,
   failedIndex: number,
   total: number,
-): readonly [number, ...ReadonlyArray<number>] =>
+): readonly [number, ...readonly number[]] =>
   Match.value(strategy).pipe(
     Match.when('one_for_one', () => [failedIndex] as const),
     Match.when('one_for_all', () => [0, ...Array.from({ length: Math.max(0, total - 1) }, (_, i) => i + 1)] as const),

@@ -91,7 +91,7 @@ export class CommandTestRunner implements TestRunner {
   }): Promise<DryRunResult> {
     const timerInstance = new Timer()
     return new Promise((res, rej) => {
-      const output: Array<Buffer | string> = []
+      const output: (Buffer | string)[] = []
       const env = activeMutantId === undefined
         ? process.env
         : {

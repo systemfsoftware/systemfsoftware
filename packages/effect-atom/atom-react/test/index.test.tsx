@@ -180,7 +180,7 @@ describe('atom-react', () => {
     const atomResult2 = makeAtomResult('errored')
     const atomResult3 = makeAtomResult('pending')
 
-    const dehydratedState: Array<Hydration.DehydratedAtomValue> = [
+    const dehydratedState: Hydration.DehydratedAtomValue[] = [
       {
         '~@systemfsoftware/effect-atom/DehydratedAtom': true,
         key: 'basic',

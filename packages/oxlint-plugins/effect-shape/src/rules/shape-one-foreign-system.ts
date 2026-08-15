@@ -28,7 +28,7 @@ export const shapeOneForeignSystem = defineRule({
   create(context: Context) {
     if (!isShapeFile(context.filename)) return {}
 
-    const imported: Array<{ node: ESTree.Node; source: string }> = []
+    const imported: { node: ESTree.Node; source: string }[] = []
 
     const collect = (node: ESTree.Node, source: string): void => {
       imported.push({ node, source })
@@ -43,8 +43,8 @@ export const shapeOneForeignSystem = defineRule({
       },
       'Program:exit'() {
         let firstRoot: string | null = null
-        const allRoots: Array<string> = []
-        const violations: Array<{ node: ESTree.Node; source: string }> = []
+        const allRoots: string[] = []
+        const violations: { node: ESTree.Node; source: string }[] = []
         for (const entry of imported) {
           const root = packageRoot(entry.source)
           if (root === null) continue

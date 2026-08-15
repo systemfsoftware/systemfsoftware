@@ -5,7 +5,7 @@ export const Options = S.Struct({})
 export const ACL_SUFFIX = '.acl.ts' as const
 
 /** The ACL5 lint list — the broader technology-layer ban (entities/, components/, routes/, ...) is convention-only. */
-export const BANNED_PATH_SEGMENTS: ReadonlyArray<string> = [
+export const BANNED_PATH_SEGMENTS: readonly string[] = [
   'core',
   'shell',
   'util',

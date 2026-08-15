@@ -116,10 +116,10 @@ export const problemKindInfo: Record<ProblemKind, ProblemKindInfo> = {
   },
 }
 
-export const allProblemKinds: ReadonlyArray<ProblemKind> = Object.keys(problemKindInfo) as ProblemKind[]
+export const allProblemKinds: readonly ProblemKind[] = Object.keys(problemKindInfo) as ProblemKind[]
 
 export interface ProblemFilter {
-  readonly kind?: ReadonlyArray<ProblemKind>
+  readonly kind?: readonly ProblemKind[]
   readonly entrypoint?: string
   readonly resolutionKind?: ResolutionKind
   readonly resolutionOption?: ResolutionOption
@@ -179,10 +179,10 @@ const problemAffectsEntrypointResolution = (
 }
 
 export const filterProblems = (
-  problems: ReadonlyArray<Problem>,
+  problems: readonly Problem[],
   analysis: Analysis,
   filter: ProblemFilter,
-): ReadonlyArray<Problem> => {
+): readonly Problem[] => {
   return problems.filter((p) => {
     if (filter.kind && !filter.kind.includes(p.kind)) return false
     if (filter.entrypoint !== undefined && filter.resolutionKind !== undefined) {
@@ -205,15 +205,15 @@ export const filterProblems = (
 }
 
 export const groupProblemsByKind = <K extends ProblemKind>(
-  problems: ReadonlyArray<Problem & { kind: K }>,
-): Partial<Record<K, ReadonlyArray<Problem & { kind: K }>>> => {
-  const result: Partial<Record<K, ReadonlyArray<Problem & { kind: K }>>> = {}
+  problems: readonly (Problem & { kind: K })[],
+): Partial<Record<K, readonly (Problem & { kind: K })[]>> => {
+  const result: Partial<Record<K, readonly (Problem & { kind: K })[]>> = {}
   for (const problem of problems) {
     const list = result[problem.kind]
     if (list === undefined) {
       result[problem.kind] = [problem] as never
     } else {
-      ;(list as Array<Problem & { kind: K }>).push(problem)
+      ;(list as (Problem & { kind: K })[]).push(problem)
     }
   }
   return result

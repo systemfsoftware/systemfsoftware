@@ -213,7 +213,7 @@ const RuntimeProto = {
 
   fn(this: AtomRuntime<any, any>, arg: any, options?: {
     readonly initialValue?: unknown
-    readonly reactivityKeys?: ReadonlyArray<unknown> | ReadonlyRecord<string, ReadonlyArray<unknown>> | undefined
+    readonly reactivityKeys?: readonly unknown[] | ReadonlyRecord<string, readonly unknown[]> | undefined
   }) {
     if (arguments.length === 0) {
       return (arg: any, options?: {}) => makeFnRuntime(this, arg, options)
@@ -223,7 +223,7 @@ const RuntimeProto = {
 
   pull(this: AtomRuntime<any, any>, arg: any, options?: {
     readonly disableAccumulation?: boolean
-    readonly initialValue?: ReadonlyArray<any>
+    readonly initialValue?: readonly any[]
   }) {
     const pullSignal = removeTtl(state(0))
     const pullAtom = readable((get) => {
@@ -293,7 +293,7 @@ const makeFnRuntime = (
     | Stream.Stream<any, any, AtomRegistry>,
   options?: {
     readonly initialValue?: unknown
-    readonly reactivityKeys?: ReadonlyArray<unknown> | ReadonlyRecord<string, ReadonlyArray<unknown>> | undefined
+    readonly reactivityKeys?: readonly unknown[] | ReadonlyRecord<string, readonly unknown[]> | undefined
   },
 ) => {
   const [read, write, argAtom] = makeResultFn(
@@ -559,7 +559,7 @@ export interface AtomRuntime<R, ER = never> extends Atom<Result.Result<Runtime.R
         fn: (arg: Arg, get: FnContext) => Effect.Effect<A, E, Scope.Scope | AtomRegistry | Reactivity.Reactivity | R>,
         options?: {
           readonly initialValue?: A | undefined
-          readonly reactivityKeys?: ReadonlyArray<unknown> | ReadonlyRecord<string, ReadonlyArray<unknown>> | undefined
+          readonly reactivityKeys?: readonly unknown[] | ReadonlyRecord<string, readonly unknown[]> | undefined
           readonly concurrent?: boolean | undefined
         },
       ): AtomResultFn<Arg, A, E | ER>
@@ -567,7 +567,7 @@ export interface AtomRuntime<R, ER = never> extends Atom<Result.Result<Runtime.R
         fn: (arg: Arg, get: FnContext) => Stream.Stream<A, E, AtomRegistry | Reactivity.Reactivity | R>,
         options?: {
           readonly initialValue?: A | undefined
-          readonly reactivityKeys?: ReadonlyArray<unknown> | ReadonlyRecord<string, ReadonlyArray<unknown>> | undefined
+          readonly reactivityKeys?: readonly unknown[] | ReadonlyRecord<string, readonly unknown[]> | undefined
           readonly concurrent?: boolean | undefined
         },
       ): AtomResultFn<Arg, A, E | ER | NoSuchElementException>
@@ -576,7 +576,7 @@ export interface AtomRuntime<R, ER = never> extends Atom<Result.Result<Runtime.R
       fn: (arg: Arg, get: FnContext) => Effect.Effect<A, E, Scope.Scope | AtomRegistry | Reactivity.Reactivity | R>,
       options?: {
         readonly initialValue?: A | undefined
-        readonly reactivityKeys?: ReadonlyArray<unknown> | ReadonlyRecord<string, ReadonlyArray<unknown>> | undefined
+        readonly reactivityKeys?: readonly unknown[] | ReadonlyRecord<string, readonly unknown[]> | undefined
         readonly concurrent?: boolean | undefined
       },
     ): AtomResultFn<Arg, A, E | ER>
@@ -584,7 +584,7 @@ export interface AtomRuntime<R, ER = never> extends Atom<Result.Result<Runtime.R
       fn: (arg: Arg, get: FnContext) => Stream.Stream<A, E, AtomRegistry | Reactivity.Reactivity | R>,
       options?: {
         readonly initialValue?: A | undefined
-        readonly reactivityKeys?: ReadonlyArray<unknown> | ReadonlyRecord<string, ReadonlyArray<unknown>> | undefined
+        readonly reactivityKeys?: readonly unknown[] | ReadonlyRecord<string, readonly unknown[]> | undefined
         readonly concurrent?: boolean | undefined
       },
     ): AtomResultFn<Arg, A, E | ER | NoSuchElementException>
@@ -596,7 +596,7 @@ export interface AtomRuntime<R, ER = never> extends Atom<Result.Result<Runtime.R
       | Stream.Stream<A, E, R | AtomRegistry | Reactivity.Reactivity>,
     options?: {
       readonly disableAccumulation?: boolean
-      readonly initialValue?: ReadonlyArray<A>
+      readonly initialValue?: readonly A[]
     },
   ) => Writable<PullResult<A, E | ER>, void>
 
@@ -643,7 +643,7 @@ export interface RuntimeFactory {
    * the keys change.
    */
   readonly withReactivity: (
-    keys: ReadonlyArray<unknown> | ReadonlyRecord<string, ReadonlyArray<unknown>>,
+    keys: readonly unknown[] | ReadonlyRecord<string, readonly unknown[]>,
   ) => <A extends Atom<any>>(atom: A) => A
 }
 
@@ -697,8 +697,7 @@ export const context: (options: {
     )
   }))
   factory.withReactivity =
-    (keys: ReadonlyArray<unknown> | ReadonlyRecord<string, ReadonlyArray<unknown>>) =>
-    <A extends Atom<any>>(atom: A): A =>
+    (keys: readonly unknown[] | ReadonlyRecord<string, readonly unknown[]>) => <A extends Atom<any>>(atom: A): A =>
       transform(atom, (get) => {
         const reactivity = Result.getOrThrow(get(reactivityAtom))
         get.addFinalizer(reactivity.unsafeRegister(keys, () => {
@@ -736,7 +735,7 @@ export const runtime: RuntimeFactory = globalValue(
  * @category Reactivity
  */
 export const withReactivity: (
-  keys: ReadonlyArray<unknown> | ReadonlyRecord<string, ReadonlyArray<unknown>>,
+  keys: readonly unknown[] | ReadonlyRecord<string, readonly unknown[]>,
 ) => <A extends Atom<any>>(atom: A) => A = runtime.withReactivity
 
 // -----------------------------------------------------------------------------
@@ -1012,7 +1011,7 @@ export const fnSync: {
     f: (arg: Arg, get: FnContext) => A,
     options: { readonly initialValue: A },
   ): Writable<A, Arg>
-} = function(...args: ReadonlyArray<any>) {
+} = function(...args: readonly any[]) {
   if (args.length === 0) {
     return makeFnSync
   }
@@ -1089,7 +1088,7 @@ export const fn: {
     readonly initialValue?: A | undefined
     readonly concurrent?: boolean | undefined
   }) => AtomResultFn<Arg, A, E | NoSuchElementException>
-} = function(...args: ReadonlyArray<any>) {
+} = function(...args: readonly any[]) {
   if (args.length === 0) {
     return makeFn
   }
@@ -1169,7 +1168,7 @@ function makeResultFn<Arg, E, A>(
   return [read, write, argAtom] as const
 }
 
-const joinAll = <A, E>(fibers: ReadonlyArray<Fiber.RuntimeFiber<A, E>>) =>
+const joinAll = <A, E>(fibers: readonly Fiber.RuntimeFiber<A, E>[]) =>
   Effect.async<A, E>((resume) => {
     let i = 0
     let cause: Cause.Cause<E> | undefined
@@ -1265,7 +1264,7 @@ const makeStreamPullEffect = <A, E>(
             { done: boolean; items: Arr.NonEmptyArray<A> },
             NoSuchElementException
           > => {
-            const items = Chunk.toReadonlyArray(acc) as Array<A>
+            const items = Chunk.toReadonlyArray(acc) as A[]
             if (!Arr.isNonEmptyArray(items)) {
               return Effect.fail(new Cause.NoSuchElementException(`Atom.pull: no items`))
             }
@@ -1279,7 +1278,7 @@ const makeStreamPullEffect = <A, E>(
               items = Chunk.appendAll(acc, chunk)
               acc = items
             }
-            const arr = Chunk.toReadonlyArray(items) as Array<A>
+            const arr = Chunk.toReadonlyArray(items) as A[]
             if (!Arr.isNonEmptyArray(arr)) {
               return pull
             }

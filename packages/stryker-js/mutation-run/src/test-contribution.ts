@@ -15,7 +15,7 @@ export interface TestFileContribution {
 }
 
 export interface TestContributionInput {
-  readonly suffixes: ReadonlyArray<string>
+  readonly suffixes: readonly string[]
   /**
    * Whether the run recorded every killing test rather than stopping at the first.
    *
@@ -46,7 +46,7 @@ const testFileById = (
 // killer: the one file we did place never claims the mutant alone, and the unplaced key is
 // not a test file, so no real file is credited for it.
 const killersOf = (
-  killedBy: ReadonlyArray<string>,
+  killedBy: readonly string[],
   fileById: ReadonlyMap<string, string>,
 ): ReadonlySet<string> => new Set(killedBy.map((testId) => fileById.get(testId) ?? testId))
 
@@ -94,7 +94,7 @@ export const contributionByTestFile = (
 export const toothlessTestFiles = (
   contribution: ReadonlyMap<string, TestFileContribution>,
   { suffixes, everyKillerRecorded }: TestContributionInput,
-): ReadonlyArray<string> => {
+): readonly string[] => {
   const toothless: string[] = []
   for (const [fileName, { soleKills, totalKills, coversUnattributedKill }] of contribution) {
     const defends = everyKillerRecorded ? soleKills > 0 : totalKills > 0
@@ -106,7 +106,7 @@ export const toothlessTestFiles = (
   return toothless.sort()
 }
 
-export const suffixesToRequire = (value: unknown): ReadonlyArray<string> | undefined => {
+export const suffixesToRequire = (value: unknown): readonly string[] | undefined => {
   if (!Array.isArray(value)) return undefined
   const suffixes = value.filter((entry): entry is string => typeof entry === 'string')
   // An empty list is off, not on-matching-nothing: a guarantee that can never fire is worse

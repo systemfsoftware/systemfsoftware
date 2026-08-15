@@ -59,7 +59,7 @@ The shipped fix introduces a pure classification cell that picks a destination f
 `omp/plugins/omp-claude-compat/src/prompt-destination.kernel.ts:19-32` declares the sigil list that mirrors the host's dispatch:
 
 ```ts
-const HOST_COMMAND_PREFIXES: ReadonlyArray<string> = [
+const HOST_COMMAND_PREFIXES: readonly string[] = [
   '/',
   '!',
   '->',
@@ -93,7 +93,7 @@ const hostBound = isHostBound(event.text)
 // Left undrained for a host-bound prompt: an async note is one-shot, so it
 // has to survive this command and reach the next model-bound prompt.
 const pending = Match.value(hostBound).pipe(
-  Match.when(true, (): ReadonlyArray<string> => []),
+  Match.when(true, (): readonly string[] => []),
   Match.when(false, () => drainAsyncHookOutput()),
   Match.exhaustive,
 )

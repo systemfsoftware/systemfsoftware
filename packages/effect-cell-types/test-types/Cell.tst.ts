@@ -262,7 +262,7 @@ describe('the description value is a foldable record', () => {
 
   it('Should_CarryOrderedPhaseRecords_When_ReadingALayer', () => {
     expect<Cell.Description<Shape>['layers'][number]['phases']>().type.toBe<
-      ReadonlyArray<Cell.Phase<Shape>>
+      readonly Cell.Phase<Shape>[]
     >()
   })
 

@@ -14,7 +14,7 @@ export interface BootedChild<R> {
 
 export interface SupervisionContext<R> {
   readonly name: string
-  readonly booted: ReadonlyArray<BootedChild<R>>
+  readonly booted: readonly BootedChild<R>[]
   readonly health: SupervisorHealth
   readonly policy: SupervisionPolicy
   readonly reportRestart: (cause: Cause.Cause<never>) => Effect.Effect<void, never, SupervisorBodyExecutorDeps>

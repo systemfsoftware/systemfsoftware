@@ -4,7 +4,7 @@ type SupervisorRecord<CH, SP, LCK, RP, STRATEGY extends string> = {
   readonly [SupervisorTypeId]: SupervisorTypeId
   readonly name: string
   readonly strategy: STRATEGY
-  readonly children: ReadonlyArray<CH>
+  readonly children: readonly CH[]
   readonly supervision: SP
   readonly lock: LCK
   readonly reporter: RP | Record<never, never>
@@ -17,7 +17,7 @@ export const oneForAll = <
   RP,
   O extends {
     readonly name: string
-    readonly children: ReadonlyArray<CH>
+    readonly children: readonly CH[]
     readonly supervision: SP
     readonly lock: LCK
     readonly reporter?: RP

@@ -11,10 +11,10 @@ import * as Either from 'effect/Either'
  * against the generator's own input would be circular; the interpreter's contract is the
  * value's declared order.
  */
-const declaredOrderOf = (description: Cell.WriteDone<Gen.Bag>): ReadonlyArray<string> =>
+const declaredOrderOf = (description: Cell.WriteDone<Gen.Bag>): readonly string[] =>
   description.layers.flatMap((layer) => layer.phases.map((phase) => phase.name))
 
-const sameOrder = (a: ReadonlyArray<string>, b: ReadonlyArray<string>): boolean =>
+const sameOrder = (a: readonly string[], b: readonly string[]): boolean =>
   a.length === b.length && a.every((entry, index) => entry === b[index])
 
 /**

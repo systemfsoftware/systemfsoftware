@@ -17,7 +17,7 @@ export type CliFormat = 'auto' | 'table' | 'table-flipped' | 'ascii' | 'json'
 
 export interface RenderOptions {
   readonly format: CliFormat
-  readonly ignoreRules: ReadonlyArray<string>
+  readonly ignoreRules: readonly string[]
   readonly useEmoji: boolean
   readonly color: boolean
   readonly summary: boolean
@@ -31,7 +31,7 @@ const isUntyped = (r: CheckResult): r is Extract<CheckResult, { types: false }> 
 const visibleProblems = (
   analysis: Analysis,
   options: RenderOptions,
-): ReadonlyArray<Problem> => analysis.problems.filter((p) => !options.ignoreRules.includes(problemFlagForKind(p.kind)))
+): readonly Problem[] => analysis.problems.filter((p) => !options.ignoreRules.includes(problemFlagForKind(p.kind)))
 
 const renderDoc = (doc: Doc.Doc<never>): string => Doc.render(doc, { style: 'pretty' })
 
@@ -99,7 +99,7 @@ const resolveFormat = (options: RenderOptions): 'table' | 'table-flipped' | 'asc
   return 'ascii'
 }
 
-const renderSummary = (problems: ReadonlyArray<Problem>): string => {
+const renderSummary = (problems: readonly Problem[]): string => {
   if (problems.length === 0) return 'No problems found.'
   const grouped: Record<string, Problem[]> = {}
   for (const p of problems) {

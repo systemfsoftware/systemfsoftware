@@ -48,7 +48,7 @@ const DocumentationObject = S.Struct({
   properties: S.NonEmptyArray(DocumentationProperty),
 })
 
-const TAGGED_FACTORIES: ReadonlyArray<string> = ['TaggedClass', 'TaggedError']
+const TAGGED_FACTORIES: readonly string[] = ['TaggedClass', 'TaggedError']
 
 /**
  * `Schema.Class` is curried the other way round from `Schema.TaggedClass`.
@@ -77,7 +77,7 @@ const isNamedMember = (node: unknown, object: string, property: string): boolean
 
 const isSymbolForCallee = (callee: unknown): boolean => isNamedMember(callee, 'Symbol', 'for')
 
-const isNamedFactoryReference = (reference: unknown, names: ReadonlyArray<string>): boolean =>
+const isNamedFactoryReference = (reference: unknown, names: readonly string[]): boolean =>
   isMemberExpression(reference) &&
   isIdentifier(reference.property) &&
   names.includes(reference.property.name)
@@ -149,7 +149,7 @@ const documentationValueRule: IgnoreRule = {
   reason: ANNOTATION_TEXT_IGNORED,
 }
 
-const RULES: ReadonlyArray<IgnoreRule> = [
+const RULES: readonly IgnoreRule[] = [
   argumentRule(isStringLiteral, 0, isSymbolForCallee, SYMBOL_DESCRIPTION_IGNORED),
   argumentRule(isStringLiteral, 0, isTaggedFactoryCallee, TAGGED_TAG_IGNORED),
   argumentRule(isObjectExpression, 1, isTaggedFactoryCallee, TAGGED_FIELDS_IGNORED),

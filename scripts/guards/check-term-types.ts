@@ -75,7 +75,11 @@ const main = async (): Promise<number> => {
       'run',
       '--allow-read',
       '--allow-write=.',
-      '--allow-run=deno,./bin/dprint',
+      // `pnpm` is here for one probe: a rule-reachability demonstration emits a violating cell and
+      // has to run the real linter over it, because the whole claim is what the plugin does or does
+      // not report. Asserting a rule fires without running it is the thing the demonstration exists
+      // to avoid.
+      '--allow-run=deno,./bin/dprint,pnpm',
       '--allow-env',
       probe,
     ])

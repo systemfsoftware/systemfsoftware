@@ -34,7 +34,7 @@ export interface MemberExpression {
 export interface CallExpression {
   readonly type: 'CallExpression'
   readonly callee: AstNode
-  readonly arguments: ReadonlyArray<AstNode>
+  readonly arguments: readonly AstNode[]
 }
 
 export type AstNode =

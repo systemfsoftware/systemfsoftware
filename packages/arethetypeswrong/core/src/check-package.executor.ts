@@ -74,5 +74,5 @@ export const CheckPackageLive: Layer.Layer<
   }),
 )
 
-export const _resolutionKindsUsed: ReadonlyArray<ResolutionKind> = ['node10', 'node16-cjs', 'node16-esm', 'bundler']
-export const _resolutionOptionsUsed: ReadonlyArray<ResolutionOption> = ['node10', 'node16', 'bundler']
+export const _resolutionKindsUsed: readonly ResolutionKind[] = ['node10', 'node16-cjs', 'node16-esm', 'bundler']
+export const _resolutionOptionsUsed: readonly ResolutionOption[] = ['node10', 'node16', 'bundler']

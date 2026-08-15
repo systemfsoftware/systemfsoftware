@@ -352,7 +352,7 @@ export interface Supervisor<E, R, L extends LockConfig = LockConfig> {
     // (undocumented)
     readonly [SupervisorTypeId]: SupervisorTypeId;
     // (undocumented)
-    readonly children: ReadonlyArray<Worker_2<E, R> | Supervisor<E, R>>;
+    readonly children: readonly (Worker_2<E, R> | Supervisor<E, R>)[];
     // (undocumented)
     readonly lock: L;
     // (undocumented)
@@ -385,7 +385,7 @@ export const supervisorExhaustionsCounter: Metric.Metric.Counter<number>;
 // @public (undocumented)
 export interface SupervisorHealth {
     // (undocumented)
-    readonly children: ReadonlyArray<DaemonHealth | SupervisorHealth>;
+    readonly children: readonly (DaemonHealth | SupervisorHealth)[];
     // (undocumented)
     readonly healthy: Effect.Latch;
     // (undocumented)
@@ -399,7 +399,7 @@ export interface SupervisorHealth {
 // @public (undocumented)
 export interface SupervisorOpts<E, R, L extends LockConfig> {
     // (undocumented)
-    readonly children: ReadonlyArray<Child<E, R>>;
+    readonly children: readonly Child<E, R>[];
     // (undocumented)
     readonly lock: L;
     // (undocumented)

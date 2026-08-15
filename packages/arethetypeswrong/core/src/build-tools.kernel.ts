@@ -1,6 +1,6 @@
 import { type BuildTool, BuildToolSchema } from './analysis.schema.js'
 
-export const allBuildTools: ReadonlyArray<BuildTool> = BuildToolSchema.literals
+export const allBuildTools: readonly BuildTool[] = BuildToolSchema.literals
 
 const KNOWN_BUILD_TOOLS: Record<string, true> = Object.fromEntries(
   allBuildTools.map((tool) => [tool, true]),

@@ -11,7 +11,7 @@ export interface TarballFile {
 export interface ExtractedTarball {
   readonly packageName: string
   readonly packageVersion: string
-  readonly files: ReadonlyArray<TarballFile>
+  readonly files: readonly TarballFile[]
 }
 
 export class TarballAdapterError extends Error {
@@ -41,7 +41,7 @@ export const TarballAdapterLive: Layer.Layer<TarballAdapter, never, never> = Lay
 )
 
 export const TarballAdapterStub = (
-  files: ReadonlyArray<TarballFile>,
+  files: readonly TarballFile[],
 ): Layer.Layer<TarballAdapter, never, never> =>
   Layer.succeed(TarballAdapter, {
     extract: () =>

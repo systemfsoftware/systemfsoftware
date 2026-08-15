@@ -66,7 +66,7 @@ export const aclSingleTransformExport = defineRule({
     let transformExportCount = 0
     let lastTransformExportNode: ESTree.Node | null = null
     const pendingSpecifierExports: ESTree.ExportNamedDeclaration[] = []
-    const disallowedExports: Array<{ node: ESTree.Node; name: string }> = []
+    const disallowedExports: { node: ESTree.Node; name: string }[] = []
 
     const reportDisallowed = (node: ESTree.Node, name: string): void => {
       disallowedExports.push({ node, name })

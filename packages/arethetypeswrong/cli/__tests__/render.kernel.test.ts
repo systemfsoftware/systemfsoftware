@@ -16,7 +16,7 @@ const defaultOptions = (overrides: Partial<RenderOptions> = {}): RenderOptions =
 })
 
 const typedResult = (
-  problems: ReadonlyArray<{ kind: string; resolutionKind?: string }> = [{ kind: 'FalseCJS', resolutionKind: 'node10' }],
+  problems: readonly { kind: string; resolutionKind?: string }[] = [{ kind: 'FalseCJS', resolutionKind: 'node10' }],
 ) => ({
   types: true as const,
   packageName: 'pkg',
@@ -79,7 +79,7 @@ describe('renderAnalysis workflow', () => {
     const output = renderAnalysis(result, defaultOptions({ format: 'json', ignoreRules: ['false-cjs'] }))
     const parsed = JSON.parse(output) as {
       analysis: { packageName: string }
-      problems: Array<{ kind: string }>
+      problems: { kind: string }[]
       summary?: string
     }
     expect(parsed.analysis.packageName).toBe('pkg')
@@ -90,7 +90,7 @@ describe('renderAnalysis workflow', () => {
   it('json output with everything ignored has an empty problems array', () => {
     const result = typedResult([{ kind: 'NoResolution' }])
     const output = renderAnalysis(result, defaultOptions({ format: 'json', ignoreRules: ['no-resolution'] }))
-    const parsed = JSON.parse(output) as { problems: Array<{ kind: string }> }
+    const parsed = JSON.parse(output) as { problems: { kind: string }[] }
     expect(parsed.problems).toEqual([])
   })
 

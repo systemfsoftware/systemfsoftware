@@ -173,7 +173,7 @@ export class ChildProcessProxyWorker {
    * See issue 350: https://github.com/stryker-mutator/stryker-js/issues/350
    */
   private handlePromiseRejections() {
-    const unhandledRejections: Array<Promise<unknown>> = []
+    const unhandledRejections: Promise<unknown>[] = []
     process.on('unhandledRejection', (reason, promise) => {
       const unhandledPromiseId = unhandledRejections.push(promise)
       this.log?.debug(

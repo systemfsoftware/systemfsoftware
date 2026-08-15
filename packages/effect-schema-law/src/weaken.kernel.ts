@@ -39,7 +39,7 @@ export const armsOf = (schema: S.Schema.Any): readonly Arm[] => {
 
 type Rebuild = (replacement: AST.AST) => AST.AST
 
-const replaceAt = <A>(items: ReadonlyArray<A>, index: number, item: A): ReadonlyArray<A> =>
+const replaceAt = <A>(items: readonly A[], index: number, item: A): readonly A[] =>
   items.map((existing, i) => (i === index ? item : existing))
 
 const walk = (

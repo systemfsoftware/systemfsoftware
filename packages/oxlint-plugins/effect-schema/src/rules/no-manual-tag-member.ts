@@ -107,7 +107,7 @@ const unionMember = (literal: ESTree.TSTypeLiteral): ESTree.TSUnionType | null =
 }
 
 const prescriptionFor = (
-  members: ReadonlyArray<ESTree.TSSignature>,
+  members: readonly ESTree.TSSignature[],
   typeParams: ReadonlySet<string>,
 ): Prescription => {
   const fields = members
@@ -166,7 +166,7 @@ export const noManualTagMember = defineRule({
 
     const reportTag = (
       tag: ESTree.TSPropertySignature,
-      members: ReadonlyArray<ESTree.TSSignature>,
+      members: readonly ESTree.TSSignature[],
       enclosing: EnclosingDeclaration | null,
     ) => {
       const annotation = tag.typeAnnotation

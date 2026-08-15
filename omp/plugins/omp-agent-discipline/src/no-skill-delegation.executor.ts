@@ -138,7 +138,7 @@ function matchesPattern(pattern: string, prompt: string): boolean {
   return new RegExp(pattern, 'i').test(prompt)
 }
 
-function firstMatch(patterns: ReadonlyArray<string>, prompt: string): RegExpExecArray | null {
+function firstMatch(patterns: readonly string[], prompt: string): RegExpExecArray | null {
   return patterns
     .map((pattern) => new RegExp(pattern, 'i').exec(prompt))
     .find((match): match is RegExpExecArray => match !== null) ?? null
@@ -190,7 +190,7 @@ const matchedMentionedSkills = (guard: CompiledGuard, prompt: string): Option.Op
     .filter(([, pattern]) => matchesPattern(pattern, prompt))
     .map(([name]) => name)
   return Option.liftPredicate(
-    (xs: ReadonlyArray<string>): xs is [string, ...string[]] => xs.length > 0,
+    (xs: readonly string[]): xs is [string, ...string[]] => xs.length > 0,
   )(mentioned)
 }
 const analyzePrompt = (guard: CompiledGuard, prompt: string): PromptAnalysis =>

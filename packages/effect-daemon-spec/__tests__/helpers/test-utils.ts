@@ -9,9 +9,9 @@ export const CounterRef = {
 } as const
 
 export const BufferedRef = {
-  make: <T>() => Ref.make<Array<T>>([]),
-  append: <T>(ref: Ref.Ref<Array<T>>, value: T) => Ref.update(ref, (arr) => [...arr, value]),
-  readAll: <T>(ref: Ref.Ref<Array<T>>) => Ref.get(ref),
+  make: <T>() => Ref.make<T[]>([]),
+  append: <T>(ref: Ref.Ref<T[]>, value: T) => Ref.update(ref, (arr) => [...arr, value]),
+  readAll: <T>(ref: Ref.Ref<T[]>) => Ref.get(ref),
 } as const
 
 export const FailingWork = (failCount: number): Worker<string, never> =>

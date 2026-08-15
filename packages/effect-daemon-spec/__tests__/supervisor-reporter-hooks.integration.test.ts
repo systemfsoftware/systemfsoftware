@@ -24,7 +24,7 @@ Feature('Per-supervisor reporter hooks')
         Given('a global reporter spy')('spy', () => ReporterSpyContext),
         Given('a supervisor-local restart hook tracker')(
           'localRestarts',
-          () => Ref.make<ReadonlyArray<Cause.Cause<unknown>>>([]),
+          () => Ref.make<readonly Cause.Cause<unknown>[]>([]),
         ),
         When('a restartable child fails once under a oneForOne supervisor')('result', (s) =>
           Effect.gen(function*() {
@@ -97,7 +97,7 @@ Feature('Per-supervisor reporter hooks')
         Given('a global reporter spy')('spy', () => ReporterSpyContext),
         Given('a supervisor-local exhaustion hook tracker')(
           'localExhaustions',
-          () => Ref.make<ReadonlyArray<Cause.Cause<unknown>>>([]),
+          () => Ref.make<readonly Cause.Cause<unknown>[]>([]),
         ),
         When('a child exhausts a oneForOne supervisor')('result', (s) =>
           Effect.gen(function*() {

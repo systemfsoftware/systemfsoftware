@@ -16,8 +16,8 @@ export interface FilesystemService {
   readonly readUtf8: (filePath: string) => Effect.Effect<string, FileNotFoundError>
   readonly readBytes: (filePath: string) => Effect.Effect<Uint8Array, FileNotFoundError>
   readonly deleteFile: (filePath: string) => Effect.Effect<void, never>
-  readonly resolve: (...segments: ReadonlyArray<string>) => string
-  readonly join: (...segments: ReadonlyArray<string>) => string
+  readonly resolve: (...segments: readonly string[]) => string
+  readonly join: (...segments: readonly string[]) => string
 }
 
 export class CliFilesystem extends Context.Tag('@systemfsoftware/arethetypeswrong-cli/filesystem.adapter/Filesystem')<

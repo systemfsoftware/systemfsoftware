@@ -49,7 +49,7 @@ export const SCHEMA_SUFFIX = '.schema.test.ts' as const
  */
 export const COLOCATABLE_CELLS = ['workflow', 'policy', 'schema', 'kernel'] as const
 
-export const SHELL_CELL_SUFFIXES: ReadonlyArray<string> = [
+export const SHELL_CELL_SUFFIXES: readonly string[] = [
   '.executor',
   '.handler',
   '.adapter',

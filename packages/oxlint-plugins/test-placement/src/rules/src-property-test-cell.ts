@@ -17,7 +17,7 @@ import {
 
 export type MessageIds = 'unsanctionedCell' | 'missingCellTest'
 
-const carriesInSourceBlock = (body: ReadonlyArray<ESTree.Statement | ESTree.ModuleDeclaration>): boolean =>
+const carriesInSourceBlock = (body: readonly (ESTree.Statement | ESTree.ModuleDeclaration)[]): boolean =>
   body.some((statement) => statement.type === 'IfStatement' && isVitestGuard(statement.test))
 
 export const srcPropertyTestCell = defineRule({

@@ -82,7 +82,7 @@ export const middlewareSingleMiddlewareExport = defineRule({
     const pendingSpecifierExports: ESTree.ExportNamedDeclaration[] = []
     let functionExportCount = 0
     let lastFunctionExportNode: ESTree.Node | null = null
-    const disallowedExports: Array<{ node: ESTree.Node; name: string }> = []
+    const disallowedExports: { node: ESTree.Node; name: string }[] = []
 
     const reportDisallowed = (node: ESTree.Node, name: string): void => {
       disallowedExports.push({ node, name })

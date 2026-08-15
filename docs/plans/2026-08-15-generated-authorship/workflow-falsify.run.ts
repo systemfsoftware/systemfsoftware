@@ -1,4 +1,4 @@
-#!/usr/bin/env -S deno run --allow-read=.,../../../packages --allow-write=../../../packages --allow-run=pnpm
+#!/usr/bin/env -S deno run --allow-read --allow-write=. --allow-run=pnpm
 
 /**
  * Attempts every violation the `effect-workflow` plugin polices, through the declaration.
@@ -13,19 +13,47 @@
  * A crash is not a verdict, so the emitter validates its input and names every rejection.
  */
 
+import { ROLE } from '../../../scripts/tools/role-brand.ts'
 import { emitWorkflow, parseWorkflow } from '../../../scripts/tools/workflow-emit.ts'
 
-const PKG = '../../../packages/effect-daemon-spec'
+/**
+ * Resolved against this module rather than the working directory, because the check chain runs it from
+ * the repository root and a relative `../../../` then points outside the repository entirely — which
+ * Deno refuses, correctly, as a write beyond the permission it was granted.
+ */
+const PKG = new URL('../../../packages/effect-daemon-spec/', import.meta.url).pathname
 const PROBE_REL = 'src/internal/falsify-probe.workflow.ts'
-const PROBE = `${PKG}/${PROBE_REL}`
+const PROBE = `${PKG}${PROBE_REL}`
 
-const BASE = JSON.parse(
-  await Deno.readTextFile(`${PKG}/src/internal/restart-decision.workflow.decl.json`),
-) as Record<
-  string,
-  unknown
->
-const clone = (): Record<string, unknown> => JSON.parse(JSON.stringify(BASE))
+/**
+ * The declaration every attempt mutates, imported as the module it now is.
+ *
+ * Each clone is re-branded because a role stamps the brand non-enumerably, so the structured clone
+ * that gives each attempt its own copy drops it — and an unbranded declaration is refused for that
+ * reason rather than for the violation under test, which would make every verdict below vacuous.
+ */
+const BASE = (await import(
+  '../../../packages/effect-daemon-spec/terms/internal/restart-decision.workflow.decl.ts'
+)).default
+
+/**
+ * A channel's variant list, in whichever spelling the declaration uses.
+ *
+ * A channel may be written as a bare array of variants or as `{ variants, typeId }`, and the emitter
+ * takes both. An attempt that assumed one spelling stopped reaching the field it mutates the moment the
+ * declaration used the other — which is a broken attempt, not a passing one, so it is read rather than
+ * assumed.
+ */
+const variantsOf = (channel: unknown): Record<string, unknown>[] =>
+  Array.isArray(channel)
+    ? channel as Record<string, unknown>[]
+    : (channel as { variants: Record<string, unknown>[] }).variants
+
+const clone = (): Record<string, unknown> => {
+  const copy = JSON.parse(JSON.stringify(BASE)) as Record<string, unknown>
+  Object.defineProperty(copy, ROLE, { value: 'workflow', enumerable: false })
+  return copy
+}
 
 interface Attempt {
   readonly rule: string
@@ -42,7 +70,7 @@ interface Attempt {
   readonly undecidableAtRungFour?: string
 }
 
-const ATTEMPTS: ReadonlyArray<Attempt> = [
+const ATTEMPTS: readonly Attempt[] = [
   {
     rule: 'workflow-single-function-export',
     violation: 'export two functions from one workflow',
@@ -82,16 +110,14 @@ const ATTEMPTS: ReadonlyArray<Attempt> = [
     rule: 'workflow-typeid-required',
     violation: 'omit the union TypeId from a variant',
     mutate: (d) => {
-      const decision = d.decision as Array<Record<string, unknown>>
-      decision[0].typeId = null
+      variantsOf(d.decision)[0]!.typeId = null
     },
   },
   {
     rule: 'workflow-typeid-shared-per-union',
     violation: 'give one variant a different TypeId',
     mutate: (d) => {
-      const decision = d.decision as Array<Record<string, unknown>>
-      decision[0].typeId = { namespace: '@other', name: 'Other' }
+      variantsOf(d.decision)[0]!.typeId = { namespace: '@other', name: 'Other' }
     },
   },
   {
@@ -105,8 +131,7 @@ const ATTEMPTS: ReadonlyArray<Attempt> = [
     rule: 'workflow-no-unconstructed-variant',
     violation: 'declare a variant no dispatch arm constructs',
     mutate: (d) => {
-      const decision = d.decision as Array<Record<string, unknown>>
-      decision.push({ class: 'RestartDecisionDead', tag: 'Dead', fields: {} })
+      variantsOf(d.decision).push({ class: 'RestartDecisionDead', tag: 'Dead', fields: {} })
     },
   },
   {
@@ -114,7 +139,7 @@ const ATTEMPTS: ReadonlyArray<Attempt> = [
     violation: 'throw instead of returning the error channel',
     mutate: (d) => {
       const dispatch = d.dispatch as Record<string, unknown>
-      const arms = dispatch.arms as Array<Record<string, unknown>>
+      const arms = dispatch.arms as Record<string, unknown>[]
       arms[0].throws = 'RestartDecisionExhausted'
     },
   },
@@ -201,12 +226,11 @@ const ATTEMPTS: ReadonlyArray<Attempt> = [
     rule: 'workflow-no-panic-vocabulary',
     violation: 'name the error variant with pure panic vocabulary',
     mutate: (d) => {
-      const error = d.error as Array<Record<string, unknown>>
       // `Failure` is not in GENERIC_SUFFIXES, so `UnexpectedFailure` reads as a domain noun
       // and the rule correctly permits it. `Error` is generic, so this is the real violation.
-      error[0] = { class: 'UnexpectedError', tag: 'UnexpectedError', fields: {} }
+      variantsOf(d.error)[0] = { class: 'UnexpectedError', tag: 'UnexpectedError', fields: {} }
       const dispatch = d.dispatch as Record<string, unknown>
-      const arms = dispatch.arms as Array<Record<string, unknown>>
+      const arms = dispatch.arms as Record<string, unknown>[]
       arms[1].construct = 'UnexpectedError'
     },
   },
@@ -230,7 +254,7 @@ const ATTEMPTS: ReadonlyArray<Attempt> = [
   },
 ]
 
-const run = async (cmd: ReadonlyArray<string>, cwd: string): Promise<{ code: number; out: string }> => {
+const run = async (cmd: readonly string[], cwd: string): Promise<{ code: number; out: string }> => {
   const p = new Deno.Command(cmd[0], { args: cmd.slice(1), cwd, stdout: 'piped', stderr: 'piped' })
   const r = await p.output()
   return { code: r.code, out: new TextDecoder().decode(r.stdout) + new TextDecoder().decode(r.stderr) }
@@ -317,7 +341,19 @@ for (const attempt of ATTEMPTS) {
 
 console.log('\n--- workflow role verdict, all shipped rules')
 for (const [verdict, count] of Object.entries(tally).sort()) console.log(`${verdict} ${count}`)
-if ((tally.CRASH ?? 0) > 0) {
-  console.log(`\n${tally.CRASH} refusal(s) by crash rather than by language - fix before citing.`)
+
+/**
+ * The two verdicts that are failures, and they exit non-zero rather than printing a warning.
+ *
+ * This script runs in the check chain, so a verdict it merely narrates is a verdict nothing acts on. An
+ * UNREACHED is a violation that is still expressible and no longer caught — the regression a deletion
+ * would have to be re-argued against — and a CRASH is a refusal by accident, which stops a violation
+ * without ever stating what a declaration may contain.
+ */
+const crashes = tally.CRASH ?? 0
+const regressions = tally.UNREACHED ?? 0
+if (crashes > 0) console.error(`\n${crashes} refusal(s) by crash rather than by language - fix before citing.`)
+if (regressions > 0) {
+  console.error(`\n${regressions} regression(s): expressible and uncaught. A deletion's licence is withdrawn.`)
 }
-if ((tally.UNREACHED ?? 0) > 0) console.log(`\n${tally.UNREACHED} regression(s): expressible and uncaught.`)
+Deno.exitCode = crashes + regressions > 0 ? 1 : 0

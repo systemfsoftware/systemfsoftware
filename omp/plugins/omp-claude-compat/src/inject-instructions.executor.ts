@@ -25,7 +25,7 @@ export class InjectInstructionsExecutorDeps extends Context.Tag('InjectInstructi
  * `AGENTS.md` the host already delivers, while a downward
  * `@packages/foo/AGENTS.md` still injects.
  */
-const DEFAULT_NO_INJECT_REFS: ReadonlyArray<string> = ['AGENTS.md']
+const DEFAULT_NO_INJECT_REFS: readonly string[] = ['AGENTS.md']
 
 interface Ref {
   readonly sourcePath: string

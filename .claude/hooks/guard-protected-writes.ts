@@ -13,7 +13,7 @@ export interface WritePayload {
     readonly path?: string
     readonly content?: string
     readonly new_string?: string
-    readonly edits?: ReadonlyArray<{ readonly new_string?: string }>
+    readonly edits?: readonly { readonly new_string?: string }[]
   }
   readonly session_id?: string
 }

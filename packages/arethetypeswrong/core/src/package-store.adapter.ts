@@ -11,7 +11,7 @@ export interface PackageStoreTarballRef {
 
 export class PackageNotFoundError extends Error {
   readonly _tag = 'PackageNotFoundError'
-  constructor(readonly specs: ReadonlyArray<ParsedPackageSpec>) {
+  constructor(readonly specs: readonly ParsedPackageSpec[]) {
     super(`Failed to find a matching version for ${specs[0].name}`)
   }
 }
@@ -28,7 +28,7 @@ export interface PackageStoreOptions {
 
 export interface PackageStoreAdapterService {
   readonly resolveTarballRef: (
-    specs: ReadonlyArray<ParsedPackageSpec>,
+    specs: readonly ParsedPackageSpec[],
     options?: PackageStoreOptions,
   ) => Effect.Effect<PackageStoreTarballRef, PackageNotFoundError | PackageStoreError>
   readonly fetchTarball: (tarballUrl: string) => Effect.Effect<Uint8Array, PackageStoreError>
@@ -67,7 +67,7 @@ export const PackageStoreAdapterStub = (
   })
 
 async function resolveTarballRef(
-  packageSpecs: ReadonlyArray<ParsedPackageSpec>,
+  packageSpecs: readonly ParsedPackageSpec[],
   { before, allowDeprecated, registryBaseUrl }: PackageStoreOptions = {},
 ): Promise<PackageStoreTarballRef> {
   const baseUrl = registryBaseUrl ?? 'https://registry.npmjs.org'

@@ -10,14 +10,14 @@ const ansiRegex = new RegExp(pattern, 'g')
 export class LoggingEvent {
   readonly startTime
   readonly categoryName: string
-  readonly data: Array<unknown>
+  readonly data: unknown[]
   readonly level: LogLevel
   readonly pid: number
 
   private constructor(
     categoryName: string,
     level: LogLevel,
-    data: Array<unknown>,
+    data: unknown[],
     startTime: Date,
     pid: number,
   ) {
@@ -28,7 +28,7 @@ export class LoggingEvent {
     this.pid = pid
   }
 
-  static create(categoryName: string, level: LogLevel, data: Array<unknown>) {
+  static create(categoryName: string, level: LogLevel, data: unknown[]) {
     return new LoggingEvent(categoryName, level, data, new Date(), process.pid)
   }
 

@@ -360,7 +360,7 @@ const intensityTracker = (intensity: Intensity): Effect.Effect<IntensityTracker>
 const buildSupervisorBody = <E, R>(
   sup: Supervisor<E, R>,
   health: SupervisorHealth,
-  booted: ReadonlyArray<BootedChild<R | SupervisorBodyExecutorDeps | Scope.Scope>>,
+  booted: readonly BootedChild<R | SupervisorBodyExecutorDeps | Scope.Scope>[],
 ): Effect.Effect<void, never, R | SupervisorBodyExecutorDeps | Scope.Scope> =>
   Effect.gen(function*() {
     const policy = yield* sup.supervision

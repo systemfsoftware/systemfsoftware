@@ -59,7 +59,7 @@ export type ExemptPrefix = {
   readonly reason: string
 }
 
-export const EXEMPT: ReadonlyArray<ExemptPrefix> = []
+export const EXEMPT: readonly ExemptPrefix[] = []
 
 export const EXPECTED = 'a path whose directory segments name the capability they hold' as const
 

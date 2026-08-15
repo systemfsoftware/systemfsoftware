@@ -320,7 +320,7 @@ export function make(contents?: Contents, opts?: { cwd: string }): FileSystem.Fi
   const readDirectory = (
     path: string,
     _options?: FileSystem.ReadDirectoryOptions,
-  ): Effect.Effect<Array<string>, Error.PlatformError> =>
+  ): Effect.Effect<string[], Error.PlatformError> =>
     Effect.tryPromise({
       try: () => nfs.promises.readdir(path).then((entries) => entries.map(String)),
       catch: toPlatformError('readDirectory'),

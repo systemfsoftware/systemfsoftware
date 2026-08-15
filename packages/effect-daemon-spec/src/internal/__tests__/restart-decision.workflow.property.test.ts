@@ -14,7 +14,7 @@ const tagOf = (
 
 const indicesOf = (
   e: ReturnType<RestartDecisionWorkflow>,
-): ReadonlyArray<number> | null =>
+): readonly number[] | null =>
   Match.value(e).pipe(
     Match.tag(
       'Right',

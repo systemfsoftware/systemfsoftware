@@ -26,7 +26,7 @@ import { fromObservable } from '../src/mod.js'
 
 const Feature = makeFeature({ it, layer })
 
-const collectValues = <A, E>(stream: Stream.Stream<A, E>): Effect.Effect<ReadonlyArray<A>, E, never> =>
+const collectValues = <A, E>(stream: Stream.Stream<A, E>): Effect.Effect<readonly A[], E, never> =>
   Stream.runCollect(stream).pipe(Effect.map((chunk) => Array.from(chunk)))
 
 Feature('fromObservable — RxJS-to-Effect stream bridge').body(({ scenario }) => {
@@ -148,7 +148,7 @@ Feature('fromObservable — RxJS-to-Effect stream bridge').body(({ scenario }) =
     Gherkin.Do.pipe(
       Given('an observable emitting the integers 0..9 and an unsubscribe spy')('subject', () =>
         Effect.sync(() => {
-          const calls: Array<unknown> = []
+          const calls: unknown[] = []
           const spy = () => {
             calls.push(undefined)
           }
@@ -179,7 +179,7 @@ Feature('fromObservable — RxJS-to-Effect stream bridge').body(({ scenario }) =
     Gherkin.Do.pipe(
       Given('an observable emitting the integers 0..9 and an unsubscribe spy')('subject', () =>
         Effect.sync(() => {
-          const calls: Array<unknown> = []
+          const calls: unknown[] = []
           const spy = () => {
             calls.push(undefined)
           }

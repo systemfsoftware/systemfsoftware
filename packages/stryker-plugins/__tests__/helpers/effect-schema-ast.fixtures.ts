@@ -14,7 +14,7 @@ export const memberOf = (object: string, property: string): MemberExpression => 
   property: identifier(property),
 })
 
-export const callOf = (callee: AstNode, args: ReadonlyArray<AstNode>): CallExpression => ({
+export const callOf = (callee: AstNode, args: readonly AstNode[]): CallExpression => ({
   type: 'CallExpression',
   callee,
   arguments: args,
@@ -58,7 +58,7 @@ export interface PropertyNode {
 
 export interface ObjectNode {
   readonly type: 'ObjectExpression'
-  readonly properties: ReadonlyArray<PropertyNode>
+  readonly properties: readonly PropertyNode[]
 }
 
 export const propertyOf = (key: AstNode, value: AstNode, computed = false): PropertyNode => ({
@@ -70,7 +70,7 @@ export const propertyOf = (key: AstNode, value: AstNode, computed = false): Prop
 
 export const namedProperty = (key: string, value: AstNode): PropertyNode => propertyOf(identifier(key), value)
 
-export const objectOf = (properties: ReadonlyArray<PropertyNode>): ObjectNode => ({
+export const objectOf = (properties: readonly PropertyNode[]): ObjectNode => ({
   type: 'ObjectExpression',
   properties,
 })

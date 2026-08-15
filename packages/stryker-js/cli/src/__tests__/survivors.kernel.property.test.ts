@@ -221,7 +221,7 @@ describe('extractSurvivors', () => {
   it.prop('∀r_Extracted_≡SurvivedEntriesInOrder', [reportArb], ([report]) => {
     const abs = (file: string): string => `/work/${file}`
     const survivors = extractSurvivors(report, abs)
-    const survivedEntries: Array<{ readonly file: string; readonly mutant: schema.MutantResult }> = []
+    const survivedEntries: { readonly file: string; readonly mutant: schema.MutantResult }[] = []
     for (const [file, fileResult] of Object.entries(report.files)) {
       for (const mutant of fileResult.mutants) {
         if (mutant.status === 'Survived') {

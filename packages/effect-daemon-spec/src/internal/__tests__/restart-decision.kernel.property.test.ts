@@ -13,11 +13,10 @@ const tree = fc.integer({ min: 1, max: 32 }).chain((total) =>
 
 const STRATEGIES = ['one_for_one', 'one_for_all', 'rest_for_one'] as const
 
-const ascendingDistinct = (xs: ReadonlyArray<number>): boolean =>
+const ascendingDistinct = (xs: readonly number[]): boolean =>
   xs.every((x, i) => i === 0 || x > (xs[i - 1] ?? Number.NEGATIVE_INFINITY))
 
-const subset = (inner: ReadonlyArray<number>, outer: ReadonlyArray<number>): boolean =>
-  inner.every((x) => outer.includes(x))
+const subset = (inner: readonly number[], outer: readonly number[]): boolean => inner.every((x) => outer.includes(x))
 
 /**
  * Whatever the strategy, a restart set is a set of real child indices in a stable order: a

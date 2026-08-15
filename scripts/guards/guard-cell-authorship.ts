@@ -241,7 +241,7 @@ const gather = async (): Promise<Evidence> => {
   // Emission is the slow part - a dynamic module load and a dprint subprocess per declaration -
   // so it runs in a bounded pool of 8. Results are collected and re-raised in declaration order,
   // so a concurrent run reports exactly the error the sequential path would have reported.
-  const outcomes: Array<{ emitted?: string; error?: unknown }> = new Array(declarations.length)
+  const outcomes: { emitted?: string; error?: unknown }[] = new Array(declarations.length)
   let cursor = 0
   const pool = Array.from({ length: 8 }, async () => {
     for (;;) {

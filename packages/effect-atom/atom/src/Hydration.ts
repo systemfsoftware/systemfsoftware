@@ -45,9 +45,9 @@ export const dehydrate = (
      */
     readonly encodeInitialAs?: 'ignore' | 'promise' | 'value-only' | undefined
   },
-): Array<DehydratedAtom> => {
+): DehydratedAtom[] => {
   const encodeInitialResultMode = options?.encodeInitialAs ?? 'ignore'
-  const arr: Array<DehydratedAtomValue> = Arr.empty<DehydratedAtomValue>()
+  const arr: DehydratedAtomValue[] = Arr.empty<DehydratedAtomValue>()
   const now = performance.now()
   registry.getNodes().forEach((node, key) => {
     if (!Atom.isSerializable(node.atom)) return
@@ -86,8 +86,7 @@ export const dehydrate = (
  * @since 1.0.0
  * @category dehydration
  */
-export const toValues = (state: ReadonlyArray<DehydratedAtom>): Array<DehydratedAtomValue> =>
-  state as Array<DehydratedAtomValue>
+export const toValues = (state: readonly DehydratedAtom[]): DehydratedAtomValue[] => state as DehydratedAtomValue[]
 
 /**
  * @since 1.0.0

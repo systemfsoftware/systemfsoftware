@@ -41,7 +41,7 @@ interface Malformed {
  */
 class Ledger extends Context.Tag('Ledger')<Ledger, {
   readonly append: (line: string) => Effect.Effect<void>
-  readonly lines: Effect.Effect<ReadonlyArray<string>>
+  readonly lines: Effect.Effect<readonly string[]>
 }>() {}
 
 /**
@@ -51,7 +51,7 @@ class Ledger extends Context.Tag('Ledger')<Ledger, {
  * order anyway and the ordering scenario cannot fail on a bug it should catch.
  */
 const LedgerRecording = Layer.sync(Ledger, () => {
-  const written: Array<string> = []
+  const written: string[] = []
   return Ledger.of({
     append: (line) => Effect.map(Effect.yieldNow(), () => void written.push(line)),
     lines: Effect.sync(() => [...written]),

@@ -251,7 +251,7 @@ const configBasename = (targetPath: string): string =>
 const isConfigTarget = (targetPath: string): boolean =>
   (OXLINT_CONFIG_BASENAMES as readonly string[]).includes(configBasename(targetPath))
 
-type RulesEntries = Array<readonly [string, unknown]>
+type RulesEntries = (readonly [string, unknown])[]
 
 // Every map is read with Object.entries on the parsed value instead of being
 // decoded into a record, because record decoders silently drop a key literally
@@ -415,8 +415,8 @@ const RULES_MAP_OPENER = /(?:^|[{,;\s])(?:["']?rules["']?)\s*:\s*\{/g
 // Brace-matched spans of every rules map in the source — the top-level map and
 // each overrides[].rules map alike. An opener whose braces never close yields no
 // span: a span that cannot be located is scanned as nothing, never as the whole file.
-const ruleSpansOf = (masked: string): ReadonlyArray<readonly [number, number]> => {
-  const spans: Array<readonly [number, number]> = []
+const ruleSpansOf = (masked: string): readonly (readonly [number, number])[] => {
+  const spans: (readonly [number, number])[] = []
   for (const match of masked.matchAll(RULES_MAP_OPENER)) {
     const open = (match.index ?? 0) + match[0].length - 1
     const close = matchBraceClose(masked, open)
