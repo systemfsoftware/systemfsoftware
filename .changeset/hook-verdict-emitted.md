@@ -2,7 +2,7 @@
 '@systemfsoftware/omp-claude-compat': patch
 ---
 
-`hook-verdict.workflow.ts` is now emitted from a declaration, and its pure decisions live in `hook-verdict.kernel.ts`.
+`hook-verdict.workflow.ts` keeps its pure decisions in `hook-verdict.kernel.ts`.
 
 A blank block reason now yields a stated fallback instead of an empty one. `parsed.reason ?? fallback` guards only nullish, so a hook emitting `"reason": ""` produced a block with no explanation at all. Blankness is decided on the trimmed value and a stated reason is returned verbatim, spacing included, so the hook's own words reach the user unchanged — the three existing workflow property tests pin exactly that and pass unchanged.
 

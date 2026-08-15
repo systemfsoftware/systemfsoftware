@@ -35,12 +35,10 @@ export const SCHEMA_SUFFIX = '.schema.test.ts' as const
  *
  * `kernel` is admitted because a kernel is domain-blind pure behaviour whose
  * laws are algebraic: every mutant is either a broken law or genuinely
- * equivalent, which is the ideal property-test target. The root mutation
- * rule (`check:mutate-scope`) already gates kernels "by colocated K-law
- * property tests" — omitting the
- * suffix here made that sanctioned path unreachable, so kernel properties were
- * written inside `import.meta.vitest` blocks instead, where the mutation
- * contribution gate (which judges by filename) cannot see them.
+ * equivalent, which is the ideal property-test target. A kernel property test
+ * that kills no mutant another test file does not also kill fails the mutation
+ * run: `requireTestContribution` in the package's `stryker.config.json` names
+ * the suffix it judges, and this list is what makes that path reachable.
  *
  * `schema` is admitted for ONE purpose: refusal. The generated laws draw from
  * each schema's own arbitrary, so every input already satisfies the refinement

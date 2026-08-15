@@ -1,11 +1,10 @@
 /**
  * The two directions of the `0x`-prefix codec.
  *
- * They live here rather than inline in `Schema.transform` because a codec direction is a
- * function body, and a declaration carries none. Naming them also puts each direction within
- * reach of a property test, which an inline arrow inside a combinator is not - though per
- * HEX-V1 the codec laws for the schema itself stay with the injected law tests rather than
- * being hand-written here.
+ * They live here rather than inline in `Schema.transform` because naming each direction puts
+ * it within reach of a property test, which an inline arrow inside a combinator is not -
+ * though per HEX-V1 the codec laws for the schema itself stay with the injected law tests
+ * rather than being hand-written here.
  */
 
 /** Drops the `0x` marker, leaving the bare hex digits the domain schema validates. */
