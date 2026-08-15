@@ -74,10 +74,11 @@ const gather = async (): Promise<Evidence> => {
     f.endsWith('.ts') && !vendored(f) && f.includes('/src/') &&
     !f.includes('/src/internal/') && !f.includes('__tests__') && !/\.test\.ts$/.test(f)
   )
-  return {
-    reports: await Promise.all(reportPaths.map(read)),
-    sources: await Promise.all(sourcePaths.map(read)),
-  }
+  const [reports, sources] = await Promise.all([
+    Promise.all(reportPaths.map(read)),
+    Promise.all(sourcePaths.map(read)),
+  ])
+  return { reports, sources }
 }
 
 const selftest = (): number => {
