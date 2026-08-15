@@ -227,21 +227,6 @@
       "outputs": [],
       "cache": true
     },
-    "//#check:cell-authorship": {
-      "inputs": [
-        "$TURBO_ROOT$/scripts/guards/guard-cell-authorship.ts",
-        "$TURBO_ROOT$/scripts/tools/*-emit.ts",
-        "$TURBO_ROOT$/**/*.workflow.ts",
-        "$TURBO_ROOT$/**/*.executor.ts",
-        "$TURBO_ROOT$/**/*.decl.json",
-        "$TURBO_ROOT$/dprint.json",
-        "$TURBO_ROOT$/**/*.term.ts",
-        "$TURBO_ROOT$/scripts/tools/cell.ts",
-        "$TURBO_ROOT$/scripts/tools/role-brand.ts"
-      ],
-      "outputs": [],
-      "cache": true
-    },
     "//#check:action-provenance": {
       "inputs": [
         "$TURBO_ROOT$/scripts/guards/guard-action-provenance.mjs",
@@ -274,20 +259,6 @@
       "dependsOn": [
         "build"
       ]
-    },
-    "//#check:term-types": {
-      "inputs": [
-        "$TURBO_ROOT$/**/*.term.ts",
-        "$TURBO_ROOT$/**/*.probe.ts",
-        "$TURBO_ROOT$/scripts/tools/cell.ts",
-        "$TURBO_ROOT$/scripts/tools/term.ts",
-        "$TURBO_ROOT$/scripts/tools/term-compile.ts",
-        "$TURBO_ROOT$/scripts/tools/role-brand.ts",
-        "$TURBO_ROOT$/scripts/tools/type-decl.ts",
-        "$TURBO_ROOT$/scripts/guards/check-term-types.ts",
-        "$TURBO_ROOT$/docs/plans/2026-08-15-generated-authorship/escapes.run.ts"
-      ],
-      "outputs": []
     }
   }
 }
