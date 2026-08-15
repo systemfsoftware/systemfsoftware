@@ -77,7 +77,7 @@ Then it stops, and the stopping point is measured rather than judged. Parsing al
 
 **One instrument reads against this conclusion and is recorded that way.** Emitted-over-declaration bytes come out at 0.66, 0.55 and 0.67 for the executor cells and aggregate 0.85 for the workflow role: every declaration here is _larger_ than the code it produces, and the brief calls a role approaching 1 an echo. Derived-per-key is worse still, favouring the executor language (0.79) over the workflow one (0.42). Both instruments are size-based and both are weak — the workflow declarations carry per-cell domain payload that inflates their key count, and JSON is more verbose per decision than TypeScript. What separates a declaration from a transcript is refusal, not size: an echo cannot reject a violation, and these two emitters reject thirteen classes by name with zero escapes.
 
-**Scope of the claim.** Two roles, seven cells, 22 rules examined and 13 deleted. The workflow role is complete; the executor role is 3 of 25 and stopped on measurement. The remaining 87 rules and 10 roles are unexamined.
+**Scope of the claim.** Two roles, six emitted cells, 22 rules examined and 13 deleted. The workflow role is complete at 3 of 3; the executor role is 3 of 25 and stopped on measurement. The remaining 87 rules and 10 roles are unexamined.
 
 ## What the corpus already settled, and where this brief departs
 
