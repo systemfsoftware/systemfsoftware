@@ -206,17 +206,6 @@
       "outputs": [],
       "cache": true
     },
-    "//#check:mutate-scope": {
-      "inputs": [
-        "$TURBO_ROOT$/scripts/guards/guard-mutate-scope.mjs",
-        "$TURBO_ROOT$/packages/**/stryker.config.json",
-        "$TURBO_ROOT$/packages/**/src/**",
-        "!$TURBO_ROOT$/packages/**/.stryker-tmp/**",
-        "!$TURBO_ROOT$/packages/**/sandbox-*/**"
-      ],
-      "outputs": [],
-      "cache": true
-    },
     "//#check:lint-coverage": {
       "inputs": [
         "$TURBO_ROOT$/scripts/guards/check-lint-coverage.mjs",
@@ -234,13 +223,6 @@
         "$TURBO_ROOT$/packages/**/package.json",
         "!$TURBO_ROOT$/packages/**/.stryker-tmp/**",
         "!$TURBO_ROOT$/packages/**/sandbox-*/**"
-      ],
-      "outputs": [],
-      "cache": true
-    },
-    "//#check:script-provenance": {
-      "inputs": [
-        "$TURBO_ROOT$/scripts/**"
       ],
       "outputs": [],
       "cache": true

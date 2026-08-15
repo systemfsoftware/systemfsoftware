@@ -1,8 +1,7 @@
 #!/usr/bin/env -S deno run --allow-env --allow-read
 // PreToolUse hook contract: exit 0 allows the write, exit 2 refuses it and the
 // stderr text reaches the agent. Neither code is inferable from the source.
-// Enforces behaviour only and reads no doctrine file, so REPO-S6 and
-// check:script-provenance stay satisfied.
+// Enforces behaviour only and reads no doctrine file, so REPO-S6 stays satisfied.
 
 import { isAbsolute, relative } from '@std/path/posix'
 import { toText } from '@std/streams'

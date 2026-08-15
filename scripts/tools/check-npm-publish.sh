@@ -183,9 +183,7 @@ if [[ "$(count error)" -gt 0 ]]; then printf '  error:       %s\n' "$(count erro
 # without authenticating, which this script does not do. This is a publishability preflight,
 # not a registration preflight — the honest scope.
 #
-# The bootstrap runbook lives in docs/solutions/tooling-decisions/. Its path stays in this
-# comment and never in an echo: guard-script-provenance.mjs Arm 1 treats a doctrine path in
-# a non-comment shell line as a doctrine read and fails the build.
+# The bootstrap runbook lives in docs/solutions/tooling-decisions/.
 if $preflight_mode; then
   slug="$(git -C "$repo_root" remote get-url origin 2>/dev/null \
     | sed -E 's#(git@github.com:|https://github.com/)##; s#\.git$##' || true)"

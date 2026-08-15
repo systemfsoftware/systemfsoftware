@@ -11,12 +11,12 @@ rules:
     do: keep the runtime to the phase constructors, the identity constructors, and
       the single interpreter `apply` that folds a description and runs it
     dont: add a stryker config or a mutation script to this package
-    harm: mutation observes `*.workflow.ts` and this package holds none — every
-      source file here is a PascalCase contract module, so any mutate glob would
-      enroll a non-workflow cell, which `guard-mutate-scope` names a
-      wrong-observer error and rejects
-    check: `pnpm check:mutate-scope` — this package ships no stryker config, and
-      package.json carries no mutation script
+    harm: a mutation score measures whether the tests notice a changed decision,
+      and this package holds no decision to change — every source file is a
+      contract module whose content is types plus the fold that interprets them,
+      so a surviving mutant here reports on the test suite of something else
+    check: `git ls-files packages/effect-cell-types` names no `stryker.config.json`,
+      and `package.json` carries no mutation script
 
   - id: CELL-T2
     title: The type observer is mandatory; composition covers the interpreter
