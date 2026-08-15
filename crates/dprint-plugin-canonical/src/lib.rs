@@ -52,7 +52,7 @@ fn format_once(path: &Path, source: &str, config: &Configuration) -> anyhow::Res
 pub fn format_text(path: &Path, source: &str, config: &Configuration) -> anyhow::Result<Option<String>> {
   let formatted = format_once(path, source, config)?;
   let text = formatted.as_deref().unwrap_or(source);
-  let Some(canonical) = canonicalize(path, text, config)? else {
+  let Some(canonical) = canonicalize(path, text, config.array_type, config.max_passes)? else {
     // Nothing to canonicalise, so the answer is whatever the formatter decided.
     return Ok(formatted);
   };

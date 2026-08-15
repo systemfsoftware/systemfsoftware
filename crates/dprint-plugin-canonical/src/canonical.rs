@@ -18,7 +18,6 @@ use oxc_span::SourceType;
 use oxc_span::Span;
 
 use crate::configuration::ArrayTypeStyle;
-use crate::configuration::Configuration;
 
 /// One rewrite: replace `span` with `text`.
 struct Edit {
@@ -185,12 +184,20 @@ fn apply(source: &str, mut edits: Vec<Edit>) -> String {
 /// `Array<T[]>`, whose inner shorthand is only reachable on the next parse. The
 /// loop is what makes nesting depth irrelevant, and the cap is what makes a
 /// rewrite that fails to converge a reported failure rather than a hang.
-pub fn canonicalize(path: &std::path::Path, source: &str, config: &Configuration) -> anyhow::Result<Option<String>> {
+/// Takes the two values it actually uses rather than the plugin's whole
+/// configuration: the rewrite is a pure function of text, style and a pass cap,
+/// so it is testable without constructing the upstream formatter's config.
+pub fn canonicalize(
+  path: &std::path::Path,
+  source: &str,
+  style: ArrayTypeStyle,
+  max_passes: u32,
+) -> anyhow::Result<Option<String>> {
   let Ok(source_type) = SourceType::from_path(path) else {
     return Ok(None);
   };
   let mut current = source.to_string();
-  for _ in 0..config.max_passes {
+  for _ in 0..max_passes {
     let allocator = Allocator::default();
     let parsed = Parser::new(&allocator, &current, source_type).parse();
     // A file the parser cannot read is not this plugin's to repair: return it
@@ -200,7 +207,7 @@ pub fn canonicalize(path: &std::path::Path, source: &str, config: &Configuration
     }
     let mut pass = ArrayTypes {
       source: &current,
-      style: config.array_type,
+      style,
       edits: Vec::new(),
       claimed: Vec::new(),
     };
@@ -214,6 +221,117 @@ pub fn canonicalize(path: &std::path::Path, source: &str, config: &Configuration
   anyhow::bail!(
     "canonical: {} still changing after {} passes",
     path.display(),
-    config.max_passes
+    max_passes
   )
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use ArrayTypeStyle::Generic;
+  use ArrayTypeStyle::Shorthand;
+
+  /// One type written two ways. The type checker cannot tell the pair apart,
+  /// which is why something upstream used to record which one an author picked,
+  /// and what this rewrite removes.
+  ///
+  /// The parenthesis rows are the asymmetric ones: `[]` binds tighter than
+  /// `|`, so the shorthand of a union needs parentheses the generic form does
+  /// not. A direction that forgets them changes the type, which is what the
+  /// round trip catches.
+  const PAIRS: &[(&str, &str)] = &[
+    ("Array<Alpha>", "Alpha[]"),
+    ("ReadonlyArray<Alpha>", "readonly Alpha[]"),
+    ("Array<Array<Alpha>>", "Alpha[][]"),
+    ("ReadonlyArray<Array<Alpha>>", "readonly Alpha[][]"),
+    ("Array<Alpha | Beta>", "(Alpha | Beta)[]"),
+    ("Array<Alpha & Beta>", "(Alpha & Beta)[]"),
+    ("Array<(x: Alpha) => Beta>", "((x: Alpha) => Beta)[]"),
+    ("Array<keyof Alpha>", "(keyof Alpha)[]"),
+    ("Array<Map<Alpha, Beta>>", "Map<Alpha, Beta>[]"),
+  ];
+
+  /// Neither spelling applies: a tuple has no generic form and `Map` is not an
+  /// array. A rewrite that touches these is over-reaching.
+  const UNTOUCHED: &[&str] = &[
+    "readonly [Alpha, Beta]",
+    "Map<Alpha, Beta>",
+    "Alpha",
+  ];
+
+  fn decl(spelling: &str) -> String {
+    format!("export type T = {spelling}")
+  }
+
+  fn run(source: &str, style: ArrayTypeStyle) -> Option<String> {
+    canonicalize(std::path::Path::new("t.ts"), source, style, 16).expect("converges")
+  }
+
+  /// What comes out is the configured spelling, entered from the other one, so a
+  /// rewrite that does nothing cannot pass.
+  #[test]
+  fn rewrites_each_pair_both_directions() {
+    for (generic, shorthand) in PAIRS {
+      assert_eq!(run(&decl(shorthand), Generic).as_deref(), Some(decl(generic).as_str()), "{shorthand} -> generic");
+      assert_eq!(run(&decl(generic), Shorthand).as_deref(), Some(decl(shorthand).as_str()), "{generic} -> shorthand");
+    }
+  }
+
+  /// A second pass changes nothing. Without this the output is not a fixed point,
+  /// so `dprint check` could never pass on a file the plugin just wrote.
+  #[test]
+  fn already_canonical_is_left_alone() {
+    for (generic, shorthand) in PAIRS {
+      assert_eq!(run(&decl(generic), Generic), None, "{generic} under generic");
+      assert_eq!(run(&decl(shorthand), Shorthand), None, "{shorthand} under shorthand");
+    }
+  }
+
+  /// There and back is identity. This is the law that catches a direction which
+  /// loses `readonly`, drops a nesting level, or eats a parenthesis: such a
+  /// rewrite still looks plausible on its own and cannot come back.
+  #[test]
+  fn round_trip_is_identity() {
+    for (generic, _) in PAIRS {
+      let there = run(&decl(generic), Shorthand).expect("rewrites");
+      let back = run(&there, Generic).expect("rewrites back");
+      assert_eq!(back, decl(generic), "round trip via shorthand");
+    }
+  }
+
+  #[test]
+  fn leaves_types_with_no_second_spelling() {
+    for spelling in UNTOUCHED {
+      assert_eq!(run(&decl(spelling), Generic), None, "{spelling} under generic");
+      assert_eq!(run(&decl(spelling), Shorthand), None, "{spelling} under shorthand");
+    }
+  }
+
+  /// The payoff of parsing rather than matching text: the same characters inside
+  /// a string or a comment are not a type.
+  #[test]
+  fn leaves_array_syntax_that_is_not_a_type() {
+    let source = "const s = 'Alpha[] in a string'
+// Alpha[] in a comment
+";
+    assert_eq!(run(source, Generic), None);
+  }
+
+  /// A file the parser cannot read is not this plugin's to repair.
+  #[test]
+  fn declines_unparseable_source() {
+    assert_eq!(run("export type T = ", Generic), None);
+  }
+
+  /// Nesting is what consumes passes, so the cap is a real bound and not
+  /// decoration: one pass cannot finish a doubly nested rewrite, and the failure
+  /// is reported rather than silently truncated.
+  #[test]
+  fn pass_cap_reports_rather_than_truncates() {
+    let deep = decl("Alpha[][][]");
+    let one = canonicalize(std::path::Path::new("t.ts"), &deep, Generic, 1);
+    assert!(one.is_err(), "one pass should not converge on triple nesting");
+    let enough = canonicalize(std::path::Path::new("t.ts"), &deep, Generic, 16).expect("converges");
+    assert_eq!(enough.as_deref(), Some(decl("Array<Array<Array<Alpha>>>").as_str()));
+  }
 }
