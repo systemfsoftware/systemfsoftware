@@ -14,11 +14,12 @@ rules:
       `typecheck` and `test:types` run that generation first, so a stale suite cannot be checked
     dont: edit a file under `test-types/`, commit one, or "repair" the gitignore entry that keeps it
       out of the tree
-    harm: the suite is the walk's output. A hand edit is a second declaration wearing a generated
-      file's name, and it survives every gate that only reads what is on disk
-    check: "`pnpm check:generated` exits 1 when a rendered byte differs from a fresh walk, naming
-      regeneration as the remedy; `git check-ignore -v test-types/Vocabulary.tst.ts` reports the
-      ignore rule"
+    harm: the suite is the walk's output. A committed one could be hand-edited into a second
+      declaration wearing a generated file's name, and a drift gate comparing bytes is the wrong
+      instrument for it — there is no artifact to compare when the artifact is never stored
+    check: "`git check-ignore -v test-types/Vocabulary.tst.ts` reports the ignore rule, and a hand
+      edit to a file under `test-types/` is gone after the next `test:types` — the regeneration
+      overwrites it rather than reporting it"
 
   - id: CELL-TT2
     title: Every emitted claim is a function of the walk
@@ -67,7 +68,6 @@ the description package may import this one; a back-edge closes a turbo `#build`
 
 ```bash
 pnpm --filter @systemfsoftware/effect-cell-type-tests generate
-pnpm --filter @systemfsoftware/effect-cell-type-tests check:generated
 pnpm --filter @systemfsoftware/effect-cell-type-tests check:scripts
 pnpm --filter @systemfsoftware/effect-cell-type-tests typecheck
 pnpm --filter @systemfsoftware/effect-cell-type-tests test:types
