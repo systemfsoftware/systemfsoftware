@@ -589,11 +589,11 @@ export const role = <R = never, K extends DeclarationKind = DeclarationKind>(
  * purity: by the time a declaration reaches this function the only open question is whether the role
  * declares that *kind* of thing at all, which is data rather than a type the caller supplies.
  */
-const member = (d: unknown, index: number, role: string, admitted: ReadonlySet<string>): CellMember => {
+const member = (d: unknown, index: number, roleName: string, admitted: ReadonlySet<string>): CellMember => {
   const kind = kindOf(d)
   if (!admitted.has(kind)) {
     throw new Error(
-      `${role} declares ${[...admitted].join(', ')}; declarations[${index}] is a ${kind}. ` +
+      `${roleName} declares ${[...admitted].join(', ')}; declarations[${index}] is a ${kind}. ` +
         `A role admits the declaration kinds it names and no others.`,
     )
   }
