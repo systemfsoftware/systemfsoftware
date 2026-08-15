@@ -1,0 +1,17 @@
+{
+  "editor.tabSize": 2,
+  "[javascript][typescript][typescriptreact][json]": {
+    "editor.formatOnSave": true,
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.codeActionsOnSave": {
+      "source.fixAll.eslint": "explicit"
+    }
+  },
+  "[go]": {
+    "editor.tabSize": 2,
+    "editor.insertSpaces": true
+  },
+  "[mdx]": {
+    "editor.wordWrap": "on"
+  },
+}

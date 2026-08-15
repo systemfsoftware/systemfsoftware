@@ -1,0 +1,33 @@
+{
+  "private": true,
+  "name": "@typia/test-vercel",
+  "version": "13.3.0",
+  "description": "Test suite for @typia/vercel package",
+  "scripts": {
+    "start": "ttsx src/index.ts",
+    "tool-calling": "ttsx src/experimental/tool-calling.ts",
+    "structured-output": "ttsx src/experimental/structured-output.ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/samchon/typia"
+  },
+  "author": "Jeongho Nam",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "catalog:utils",
+    "ttsc": "catalog:typescript"
+  },
+  "dependencies": {
+    "@ai-sdk/openai-compatible": "^2.0.35",
+    "@nestia/e2e": "catalog:utils",
+    "@typia/interface": "workspace:^",
+    "@typia/utils": "workspace:^",
+    "@typia/vercel": "workspace:^",
+    "ai": "^6.0.116",
+    "chalk": "^4.1.2",
+    "dotenv": "^16.4.5",
+    "dotenv-expand": "^11.0.6",
+    "typia": "workspace:^"
+  }
+}

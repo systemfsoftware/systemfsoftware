@@ -1,0 +1,145 @@
+---
+title: Guide Documents > Protobuf > encode() functions
+---
+
+import { Tabs } from "nextra/components";
+
+import LocalSource from "../../../components/LocalSource";
+
+# `typia.protobuf.*Encode` — TypeScript object → Protocol Buffer bytes
+
+```typescript copy filename="signatures"
+namespace protobuf {
+  function encode<T>(input: T): Uint8Array; // no validation
+  function isEncode<T>(input: T): Uint8Array | null; // is + encode
+  function assertEncode<T>(input: T): Uint8Array; // assert + encode
+  function validateEncode<T>(input: T): IValidation<Uint8Array>; // validate + encode
+}
+```
+
+The encoder reads your type at compile time and emits a hand-rolled binary writer for that exact shape — no separate `.proto` schema is needed. You only need [`protobuf.message`](/docs/protobuf/message) when another service has to read the schema.
+
+## First example
+
+```typescript copy filename="hello-encode.ts"
+import typia from "typia";
+
+interface User {
+  id: string;
+  age: number;
+  hobbies: string[];
+}
+
+const bytes: Uint8Array = typia.protobuf.assertEncode<User>({
+  id: "1",
+  age: 25,
+  hobbies: ["reading"],
+});
+```
+
+<Tabs items={["TypeScript Source", "Compiled JavaScript"]}>
+  <Tabs.Tab>
+    <LocalSource
+      path="examples/src/protobuf/encode.ts"
+      filename="examples/src/protobuf/encode.ts"
+      showLineNumbers
+    />
+  </Tabs.Tab>
+  <Tabs.Tab>
+    <LocalSource
+      path="examples/bin/protobuf/encode.js"
+      filename="examples/bin/protobuf/encode.js"
+      showLineNumbers
+    />
+  </Tabs.Tab>
+</Tabs>
+
+## Variants
+
+| Function                     | Validates input?                              | On failure                                                |
+| ---------------------------- | --------------------------------------------- | --------------------------------------------------------- |
+| `protobuf.encode<T>`         | **No**                                        | output is undefined — typically the bytes will not decode |
+| `protobuf.isEncode<T>`       | Yes ([`is`](/docs/validators/is))             | returns `null`                                            |
+| `protobuf.assertEncode<T>`   | Yes ([`assert`](/docs/validators/assert))     | throws `TypeGuardError`                                   |
+| `protobuf.validateEncode<T>` | Yes ([`validate`](/docs/validators/validate)) | returns `IValidation<Uint8Array>`                         |
+
+> [!CAUTION]
+>
+> **`protobuf.encode<T>` trusts you completely.**
+>
+> If `input` doesn't actually match `T`, the encoder writes whatever bytes its emitted code happens to produce — and the decoder on the other end will likely fail or produce garbage. Use it only when the input was constructed inside the same call frame from typed values. Otherwise, pick `assertEncode` or `validateEncode`.
+
+<Tabs items={[<code>typia</code>, <code>IValidation.ts</code>, <code>TypeGuardError.ts</code>, <code>Resolved.ts</code>]}>
+  <Tabs.Tab>
+```typescript showLineNumbers
+export namespace protobuf {
+  export function encode<T>(input: T): Uint8Array;
+  export function isEncode<T>(input: T): Uint8Array | null;
+  export function assertEncode<T>(input: T): Uint8Array;
+  export function validateEncode<T>(input: T): IValidation<Uint8Array>;
+}
+```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    <LocalSource
+      path="packages/interface/src/schema/IValidation.ts"
+      filename="@typia/interface"
+      showLineNumbers />
+  </Tabs.Tab>
+  <Tabs.Tab>
+    <LocalSource
+      path="packages/typia/src/TypeGuardError.ts"
+      filename="typia/TypeGuardError.ts"
+      showLineNumbers />
+  </Tabs.Tab>
+  <Tabs.Tab>
+    <LocalSource
+      path="packages/interface/src/typings/Resolved.ts"
+      filename="@typia/interface"
+      showLineNumbers />
+  </Tabs.Tab>
+</Tabs>
+
+## Reusable factories
+
+Same pattern as the other namespaces — hoist the per-type code once:
+
+```typescript copy
+const encodeUser = typia.protobuf.createAssertEncode<User>();
+```
+
+<Tabs items={["TypeScript Source", "Compiled JavaScript"]}>
+  <Tabs.Tab>
+    <LocalSource
+      path="examples/src/protobuf/createEncode.ts"
+      filename="examples/src/protobuf/createEncode.ts"
+      showLineNumbers
+    />
+  </Tabs.Tab>
+  <Tabs.Tab>
+    <LocalSource
+      path="examples/bin/protobuf/createEncode.js"
+      filename="examples/bin/protobuf/createEncode.js"
+      showLineNumbers
+    />
+  </Tabs.Tab>
+</Tabs>
+
+## Restrictions
+
+The encoder follows the same type restrictions as [`protobuf.message`](/docs/protobuf/message#restrictions): top-level type must be a single static object, no two-dimensional containers, no `any`/`Date`/`Set`/etc.
+
+If you need numeric types Protocol Buffer specifies but TypeScript doesn't (e.g. `uint32`, `int64`), pick them with [type tags](/docs/validators/tags) on the property:
+
+```typescript
+interface Pricing {
+  cents: number & tags.Type<"uint32">;
+  customerCount: bigint & tags.Type<"uint64">;
+}
+```
+
+## Where to go next
+
+- Decoding the bytes back into a value → [`protobuf.decode`](/docs/protobuf/decode)
+- Sharing the schema with another language → [`protobuf.message`](/docs/protobuf/message)
+- Numeric tags → [Special Tags](/docs/validators/tags)

@@ -1,0 +1,46 @@
+---
+title: Guide Documents > Utilization Cases > Hono
+---
+
+# Hono
+
+[Hono](https://hono.dev) is a small, fast web framework that runs everywhere — Node, Bun, Cloudflare Workers, Deno, edge runtimes. With typia you get one-line request validation that doesn't ship `class-validator` or a schema library to the edge.
+
+The integration is [`@hono/typia-validator`](https://github.com/honojs/middleware/tree/main/packages/typia-validator). You pass it a [`createValidate`](/docs/validators/validate#reusable-factories) factory result and Hono runs the validator before your handler:
+
+```typescript copy showLineNumbers {7-8, 13}
+import { Hono } from "hono";
+import { typiaValidator } from "@hono/typia-validator";
+import typia, { type tags } from "typia";
+
+import { IBbsArticle } from "../structures/IBbsArticle";
+
+// build a reusable validator from the type
+const validate = typia.createValidate<IBbsArticle>();
+
+const app = new Hono();
+
+app.post("/",
+  typiaValidator("json", validate),
+  (c) => {
+    const data = c.req.valid("json"); // typed as IBbsArticle
+    return c.json({
+      id: data.id,
+      title: data.title,
+      body: data.body,
+      created_at: data.created_at,
+    });
+  });
+
+export default app;
+```
+
+That's it. Hono parses the request body, the validator checks it against `IBbsArticle` (including any `tags.Format`/`tags.MinLength`/etc. you attached to the type), and `c.req.valid("json")` returns the typed value on success.
+
+`@hono/typia-validator` works for `"json"`, `"form"`, `"query"`, `"param"`, and `"header"` targets — anywhere Hono accepts a validator.
+
+## Where to go next
+
+- The underlying validator → [`validate`](/docs/validators/validate)
+- Tags for constraints (lengths, formats, ranges) → [Special Tags](/docs/validators/tags)
+- Hono docs → [hono.dev](https://hono.dev)

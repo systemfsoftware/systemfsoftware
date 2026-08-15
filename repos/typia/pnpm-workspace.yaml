@@ -1,0 +1,37 @@
+packages:
+  - 'benchmark'
+  - 'config'
+  - 'examples'
+  - 'packages/*'
+  - 'tests/*'
+  - 'website'
+overrides:
+  # nextra 4.6 (the website's docs theme) breaks on zod 4.4.x with
+  # "Invalid input: expected nonoptional". Pin the 4.x line to 4.1.12 — the
+  # version the website's former npm `overrides` pinned. Scoped to `zod@4` so
+  # the monorepo's langchain / mcp / vercel integrations keep their zod 3.x.
+  zod@4: 4.1.12
+catalogs:
+  typescript:
+    # The ttsc family releases in lockstep, so the whole family takes its
+    # version from the &ttsc anchor: set it on ttsc alone. @ttsc/unplugin peers
+    # on its exact matching ttsc, and website.yml clones the ttsc sibling at
+    # the installed @ttsc/wasm version to build the browser-playground host
+    # that website/compiler/cmd/playground implements.
+    ttsc: &ttsc ^0.19.2
+    '@ttsc/unplugin': *ttsc
+    '@ttsc/playground': *ttsc
+    '@ttsc/wasm': *ttsc
+    ts-node: ^10.9.2
+    typescript: ^7.0.2
+  rolldown:
+    rolldown: ^1.1.5
+  utils:
+    '@nestia/e2e': ^10.0.2
+    '@types/node': ^25.3.0
+    '@types/uuid': ^11.0.0
+    openai: ^6.16.0
+    rimraf: ^6.1.2
+    uuid: ^13.0.0
+    tstl: ^3.0.0
+    tgrid: ^1.2.1

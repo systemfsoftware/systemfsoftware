@@ -1,0 +1,154 @@
+---
+title: Guide Documents > Protobuf > decode() functions
+---
+
+import { Tabs } from "nextra/components";
+
+import LocalSource from "../../../components/LocalSource";
+
+# `typia.protobuf.*Decode` — Protocol Buffer bytes → TypeScript object
+
+```typescript copy filename="signatures"
+namespace protobuf {
+  function decode<T>(buffer: Uint8Array): Resolved<T>;
+  function isDecode<T>(buffer: Uint8Array): Resolved<T> | null;
+  function assertDecode<T>(buffer: Uint8Array): Resolved<T>;
+  function validateDecode<T>(buffer: Uint8Array): IValidation<Resolved<T>>;
+}
+```
+
+The decoder reads `T` at compile time and emits a hand-rolled binary reader for that shape — same model as the encoder, in reverse.
+
+## First example
+
+```typescript copy filename="hello-decode.ts"
+import typia from "typia";
+
+interface User {
+  id: string;
+  age: number;
+  hobbies: string[];
+}
+
+const bytes: Uint8Array = await fetchBytesSomehow();
+const user = typia.protobuf.assertDecode<User>(bytes);
+// → User, with type tag constraints validated. Throws on mismatch.
+```
+
+<Tabs items={["TypeScript Source", "Compiled JavaScript"]}>
+  <Tabs.Tab>
+    <LocalSource
+      path="examples/src/protobuf/decode.ts"
+      filename="examples/src/protobuf/decode.ts"
+      showLineNumbers
+    />
+  </Tabs.Tab>
+  <Tabs.Tab>
+    <LocalSource
+      path="examples/bin/protobuf/decode.js"
+      filename="examples/bin/protobuf/decode.js"
+      showLineNumbers
+    />
+  </Tabs.Tab>
+</Tabs>
+
+## Variants
+
+| Function                     | Validates result?                             | On failure                                       |
+| ---------------------------- | --------------------------------------------- | ------------------------------------------------ |
+| `protobuf.decode<T>`         | **No**                                        | output is whatever fell out of the binary reader |
+| `protobuf.isDecode<T>`       | Yes ([`is`](/docs/validators/is))             | returns `null`                                   |
+| `protobuf.assertDecode<T>`   | Yes ([`assert`](/docs/validators/assert))     | throws `TypeGuardError`                          |
+| `protobuf.validateDecode<T>` | Yes ([`validate`](/docs/validators/validate)) | returns `IValidation<Resolved<T>>`               |
+
+> [!IMPORTANT]
+>
+> **What the `*Decode` validators actually verify.**
+>
+> They check **custom tag constraints** — `tags.Format<"uuid">`, `tags.Minimum<0>`, etc. They do **not** re-verify that the bytes were structurally valid Protocol Buffer for `T` — the decoder already did that decoding work. So you can rely on these to catch "the producer encoded a UUID that's actually not a UUID", but not to tell you that someone fed you random bytes that happen to parse.
+>
+> The safe pattern is: producer uses `protobuf.assertEncode` (or `validateEncode`), consumer uses `protobuf.assertDecode` (or `validateDecode`). Then both ends of the wire are checked.
+
+<Tabs items={[<code>typia</code>, <code>IValidation.ts</code>, <code>TypeGuardError.ts</code>, <code>Resolved.ts</code>]}>
+  <Tabs.Tab>
+```typescript
+export namespace protobuf {
+  export function decode<T>(buffer: Uint8Array): Resolved<T>;
+  export function isDecode<T>(buffer: Uint8Array): Resolved<T> | null;
+  export function assertDecode<T>(buffer: Uint8Array): Resolved<T>;
+  export function validateDecode<T>(
+    buffer: Uint8Array,
+  ): IValidation<Resolved<T>>;
+}
+```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    <LocalSource
+      path="packages/interface/src/schema/IValidation.ts"
+      filename="@typia/interface"
+      showLineNumbers />
+  </Tabs.Tab>
+  <Tabs.Tab>
+    <LocalSource
+      path="packages/typia/src/TypeGuardError.ts"
+      filename="typia/TypeGuardError.ts"
+      showLineNumbers />
+  </Tabs.Tab>
+  <Tabs.Tab>
+    <LocalSource
+      path="packages/interface/src/typings/Resolved.ts"
+      filename="@typia/interface"
+      showLineNumbers />
+  </Tabs.Tab>
+</Tabs>
+
+## Wire errors
+
+The table above describes what happens when **validation** fails. A malformed payload is different: the binary reader raises an `Error` while reading the bytes, before any validator runs. That error propagates out of every variant, including `isDecode` and `validateDecode`, so it is not reported as a `null` or as an unsuccessful `IValidation`.
+
+Wrap the call in `try`/`catch` when the bytes come from an untrusted producer.
+
+```typescript copy
+try {
+  const user = typia.protobuf.assertDecode<User>(bytes);
+} catch (error) {
+  // malformed wire bytes, or a failed tag constraint
+}
+```
+
+`string` fields are one source of these errors. proto3 requires a `string` to hold valid UTF-8, so typia rejects a payload containing a lone continuation byte, an overlong encoding, a truncated multi-byte sequence, an encoded surrogate, or an out-of-range code point, instead of substituting `U+FFFD` replacement characters and returning text the producer never sent.
+
+Use `Uint8Array` when a field must carry arbitrary octets. It maps to proto3 `bytes`, which has no encoding requirement and accepts the same octets a `string` field rejects.
+
+## Reusable factories
+
+```typescript copy
+const decodeUser = typia.protobuf.createAssertDecode<User>();
+```
+
+<Tabs items={["TypeScript Source", "Compiled JavaScript"]}>
+  <Tabs.Tab>
+    <LocalSource
+      path="examples/src/protobuf/createDecode.ts"
+      filename="examples/src/protobuf/createDecode.ts"
+      showLineNumbers
+    />
+  </Tabs.Tab>
+  <Tabs.Tab>
+    <LocalSource
+      path="examples/bin/protobuf/createDecode.js"
+      filename="examples/bin/protobuf/createDecode.js"
+      showLineNumbers
+    />
+  </Tabs.Tab>
+</Tabs>
+
+## Restrictions
+
+Same as the rest of the protobuf surface — see [`protobuf.message`](/docs/protobuf/message#restrictions).
+
+## Where to go next
+
+- Encoding values → [`protobuf.encode`](/docs/protobuf/encode)
+- Sharing the schema with other services → [`protobuf.message`](/docs/protobuf/message)
+- Numeric and string tags → [Special Tags](/docs/validators/tags)

@@ -1,0 +1,153 @@
+---
+title: Guide Documents > JSON > parse() functions
+---
+import { Tabs } from "nextra/components";
+
+import LocalSource from "../../../components/LocalSource";
+
+# `typia.json.*Parse` — JSON.parse with built-in validation
+
+Native `JSON.parse(text)` happily returns `any`. There's no way to be sure the parsed object matches the type you expect. typia closes that gap by combining `JSON.parse` with one of the validators in a single call.
+
+```typescript copy filename="signatures"
+namespace json {
+  function isParse<T>(input: string): Primitive<T> | null;        // is + JSON.parse
+  function assertParse<T>(input: string): Primitive<T>;            // assert + JSON.parse
+  function validateParse<T>(input: string): IValidation<Primitive<T>>; // validate + JSON.parse
+}
+```
+
+Each function maps to one of the [runtime validators](/docs/validators/is), but validation starts only after native `JSON.parse` succeeds:
+
+| Function | Valid JSON matching `T` | Valid JSON not matching `T` | Malformed JSON |
+|----------|-------------------------|-----------------------------|----------------|
+| `json.isParse<T>` | returns the parsed value | returns `null` | throws `SyntaxError` |
+| `json.assertParse<T>` | returns the parsed value | throws `TypeGuardError` | throws `SyntaxError` |
+| `json.validateParse<T>` | returns `IValidation.ISuccess<T>` | returns `IValidation.IFailure` | throws `SyntaxError` |
+
+The factory functions `createIsParse`, `createAssertParse`, and `createValidateParse` produce parsers with the same outcomes.
+
+## First example
+
+```typescript copy filename="hello-assertParse.ts"
+import typia, { tags } from "typia";
+
+interface User {
+  id: string & tags.Format<"uuid">;
+  name: string;
+}
+
+const text: string = await fetch("/me").then((r) => r.text());
+const user = typia.json.assertParse<User>(text);
+// → parsed User when text is valid JSON matching User.
+// Throws SyntaxError for malformed JSON or TypeGuardError for a type mismatch.
+```
+
+<Tabs items={['TypeScript Source', 'Compiled JavaScript']}>
+  <Tabs.Tab>
+    <LocalSource
+      path="examples/src/json/assertParse.ts"
+      filename="examples/src/json/assertParse.ts"
+      showLineNumbers />
+  </Tabs.Tab>
+  <Tabs.Tab>
+    <LocalSource
+      path="examples/bin/json/assertParse.js"
+      filename="examples/bin/json/assertParse.js"
+      showLineNumbers />
+  </Tabs.Tab>
+</Tabs>
+
+## Return type
+
+JSON can't represent everything TypeScript can. `Primitive<T>` is the projection of `T` into the "what survives a JSON round-trip" world:
+
+| In `T` | In `Primitive<T>` |
+|--------|-------------------|
+| methods (functions) | removed |
+| `Date` | `string & tags.Format<"date-time">` (because `JSON.stringify(date)` returns an ISO string) |
+| `Set<U>`, `Map<K,V>`, `Uint8Array`, … other native classes | `never` (i.e. you'll get a compile error on use) |
+| `bigint` | `never` |
+| `class Foo { … }` | the plain object form |
+
+The error from `Primitive<T>` collapsing to `never` is the type system telling you: *this field cannot survive JSON parsing.* Choose a JSON-representable type, or use [`typia.protobuf`](/docs/protobuf/encode) for binary data, or [`typia.plain.clone`](/docs/misc) when you don't actually need JSON.
+
+For example:
+
+```typescript copy
+import typia, { Primitive } from "typia";
+
+interface Original {
+  id: string;
+  joinedAt: Date;
+  tags: Set<string>;
+}
+
+// Primitive<Original> is, conceptually:
+// {
+//   id: string;
+//   joinedAt: string & tags.Format<"date-time">;
+//   tags: never;   // → compile error if you call assertParse<Original> here
+// }
+```
+
+<Tabs items={['typia', <code>IValidation.ts</code>, <code>Primitive.ts</code>, <code>TypeGuardError.ts</code>]}>
+  <Tabs.Tab>
+```typescript copy
+export namespace json {
+  export function isParse<T>(input: string): Primitive<T> | null;
+  export function assertParse<T>(input: string): Primitive<T>;
+  export function validateParse<T>(input: string): IValidation<Primitive<T>>;
+}
+```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    <LocalSource
+      path="packages/interface/src/schema/IValidation.ts"
+      filename="@typia/interface"
+      showLineNumbers />
+  </Tabs.Tab>
+  <Tabs.Tab>
+    <LocalSource
+      path="packages/interface/src/typings/Primitive.ts"
+      filename="@typia/interface"
+      showLineNumbers />
+  </Tabs.Tab>
+  <Tabs.Tab>
+    <LocalSource
+      path="packages/typia/src/TypeGuardError.ts"
+      filename="typia/TypeGuardError.ts"
+      showLineNumbers />
+  </Tabs.Tab>
+</Tabs>
+
+## Reusable factories
+
+If you parse the same `T` from many places, hoist the parser once:
+
+```typescript copy
+const parseUser = typia.json.createAssertParse<User>();
+const tryParseUser = typia.json.createIsParse<User>();
+const validateParseUser = typia.json.createValidateParse<User>();
+```
+
+<Tabs items={['TypeScript Source', 'Compiled JavaScript']}>
+  <Tabs.Tab>
+    <LocalSource
+      path="examples/src/json/createIsParse.ts"
+      filename="examples/src/json/createIsParse.ts"
+      showLineNumbers />
+  </Tabs.Tab>
+  <Tabs.Tab>
+    <LocalSource
+      path="examples/bin/json/createIsParse.js"
+      filename="examples/bin/json/createIsParse.js"
+      showLineNumbers />
+  </Tabs.Tab>
+</Tabs>
+
+## Where to go next
+
+- The matching faster stringifier → [`json.stringify*`](/docs/json/stringify)
+- Generate JSON Schema from `T` → [`json.schemas`](/docs/json/schema)
+- Underlying validators — [`is`](/docs/validators/is), [`assert`](/docs/validators/assert), [`validate`](/docs/validators/validate)

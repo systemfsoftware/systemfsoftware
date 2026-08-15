@@ -1,0 +1,150 @@
+---
+title: Guide Documents > JSON > stringify() functions
+---
+
+import { Tabs } from "nextra/components";
+
+import LocalSource from "../../../components/LocalSource";
+
+# `typia.json.*Stringify` — JSON.stringify, but much faster (and type-safe)
+
+`JSON.stringify(value)` is general-purpose: it walks the value at runtime, asking each property "are you a number? a string? an array?". typia replaces that runtime walk with a hand-written stringifier generated from the TypeScript type at compile time. The result is **up to ~10× faster** than `JSON.stringify` — and, because the stringifier only knows how to serialize `T`, you can also opt into validating `T` before serialization.
+
+```typescript copy filename="signatures"
+namespace json {
+  function stringify<T>(input: T): string; // dedicated stringifier
+  function isStringify<T>(input: T | unknown): string | null; // is + stringify
+  function assertStringify<T>(input: T | unknown): string; // assert + stringify
+  function validateStringify<T>(input: T | unknown): IValidation<string>; // validate + stringify
+}
+```
+
+## First example
+
+```typescript copy filename="hello-stringify.ts"
+import typia from "typia";
+
+interface User {
+  id: string;
+  age: number;
+  hobbies: string[];
+}
+
+const text: string = typia.json.stringify<User>({
+  id: "1",
+  age: 25,
+  hobbies: ["reading"],
+});
+// → '{"id":"1","age":25,"hobbies":["reading"]}'
+```
+
+The output is identical to `JSON.stringify({ id, age, hobbies })`. The speed comes from the compiled code: instead of "for each property, dispatch to the right encoder," the emitted JS just concatenates strings in the order your type declares.
+
+## Variants
+
+| Function                    | Validates input?                              | On failure                                         |
+| --------------------------- | --------------------------------------------- | -------------------------------------------------- |
+| `json.stringify<T>`         | **No**                                        | undefined behavior (don't pass wrong-typed values) |
+| `json.isStringify<T>`       | Yes ([`is`](/docs/validators/is))             | returns `null`                                     |
+| `json.assertStringify<T>`   | Yes ([`assert`](/docs/validators/assert))     | throws `TypeGuardError`                            |
+| `json.validateStringify<T>` | Yes ([`validate`](/docs/validators/validate)) | returns `IValidation<string>`                      |
+
+> [!CAUTION]
+>
+> **`json.stringify<T>` skips validation by design.**
+>
+> The generated code assumes its input already matches `T`. If you hand it a wrong-typed value, the output will be garbage (missing fields, fields with the wrong contents). Use it only when the type of the input is statically guaranteed — for example, you just built the object inside the same function. Otherwise, pick `isStringify` / `assertStringify` / `validateStringify`.
+
+<Tabs items={["TypeScript Source", "Compiled JavaScript"]}>
+  <Tabs.Tab>
+    <LocalSource
+      path="examples/src/json/isStringify.ts"
+      filename="examples/src/json/isStringify.ts"
+      showLineNumbers
+    />
+  </Tabs.Tab>
+  <Tabs.Tab>
+    <LocalSource
+      path="examples/bin/json/isStringify.js"
+      filename="examples/bin/json/isStringify.js"
+      showLineNumbers
+    />
+  </Tabs.Tab>
+</Tabs>
+
+<Tabs items={[<code>typia</code>, <code>IValidation.ts</code>, <code>TypeGuardError.ts</code>]}>
+  <Tabs.Tab>
+```typescript copy
+export namespace json {
+  export function stringify<T>(input: T): string;
+  export function isStringify<T>(input: T | unknown): string | null;
+  export function assertStringify<T>(input: T | unknown): string;
+  export function validateStringify<T>(input: T | unknown): IValidation<string>;
+}
+```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    <LocalSource
+      path="packages/interface/src/schema/IValidation.ts"
+      filename="@typia/interface"
+      showLineNumbers />
+  </Tabs.Tab>
+  <Tabs.Tab>
+    <LocalSource
+      path="packages/typia/src/TypeGuardError.ts"
+      filename="typia/TypeGuardError.ts"
+      showLineNumbers />
+  </Tabs.Tab>
+</Tabs>
+
+## Reusable factories
+
+Same shape as the parsers — hoist the per-type code once if you stringify the same `T` from many places:
+
+```typescript copy
+const stringifyUser = typia.json.createStringify<User>();
+const safeStringifyUser = typia.json.createAssertStringify<User>();
+```
+
+<Tabs items={["TypeScript Source", "Compiled JavaScript"]}>
+  <Tabs.Tab>
+    <LocalSource
+      path="examples/src/json/createAssertStringify.ts"
+      filename="examples/src/json/createAssertStringify.ts"
+      showLineNumbers
+    />
+  </Tabs.Tab>
+  <Tabs.Tab>
+    <LocalSource
+      path="examples/bin/json/createAssertStringify.js"
+      filename="examples/bin/json/createAssertStringify.js"
+      showLineNumbers
+    />
+  </Tabs.Tab>
+</Tabs>
+
+## Performance
+
+Up to **~200× faster than `class-transformer`**, ~10× faster than native `JSON.stringify`:
+
+![Stringify Function Benchmark](https://github.com/samchon/typia/raw/master/benchmark/results/AMD%20Ryzen%209%207940HS%20w%20Radeon%20780M%20Graphics/images/stringify.svg)
+
+> Measured on [AMD Ryzen 9 7940HS, Rog Flow x13](https://github.com/samchon/typia/tree/master/benchmark/results/AMD%20Ryzen%209%207940HS%20w%20Radeon%20780M%20Graphics#stringify)
+
+## Server impact
+
+A common reaction: "isn't JSON serialization a tiny fraction of request time?"
+
+It's not. Node.js handles most I/O asynchronously, but `JSON.stringify` is synchronous and runs on the main thread. While it's running, no other request is being routed, no socket is being read, nothing else happens. On a busy server, that synchronous time is the cost you actually pay.
+
+`typia.json.stringify` cuts that time substantially. The end-to-end request benchmark below shows the difference at server scope (not just the serializer in isolation):
+
+![Server Benchmark](https://raw.githubusercontent.com/samchon/typia/master/benchmark/results/AMD%20Ryzen%209%207940HS%20w%20Radeon%20780M%20Graphics/images/server-stringify.svg)
+
+> Measured on [AMD Ryzen 9 7940HS, Rog Flow x13](https://github.com/samchon/typia/tree/master/benchmark/results/AMD%20Ryzen%209%207940HS%20w%20Radeon%20780M%20Graphics#server-stringify)
+
+## Where to go next
+
+- Reading JSON safely → [`json.*Parse`](/docs/json/parse)
+- Emitting JSON Schema or OpenAPI from `T` → [`json.schemas`](/docs/json/schema)
+- Underlying validators — [`is`](/docs/validators/is), [`assert`](/docs/validators/assert), [`validate`](/docs/validators/validate)
