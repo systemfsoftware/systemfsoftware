@@ -3,6 +3,7 @@ import {
   isReviewSummaryPath,
 } from '../../../shared/review/routes.ts';
 import { REVIEW_CHANGES_URL } from './constants.ts';
+import type { ReviewState } from './review-state.ts';
 
 export { REVIEW_COLLECTION_QUERY_PARAM, isReviewSummaryPath };
 
@@ -57,6 +58,17 @@ export const parseReviewStoryHref = (href: string): ReviewNavEntry | null => {
     return null;
   }
   return { storyId, collectionIndex };
+};
+
+/** Walk collections in order, pushing every story occurrence. */
+export const buildFlattenedNavEntries = (state: ReviewState): ReviewNavEntry[] => {
+  const entries: ReviewNavEntry[] = [];
+  state.collections.forEach((collection, collectionIndex) => {
+    for (const storyId of collection.storyIds) {
+      entries.push({ storyId, collectionIndex });
+    }
+  });
+  return entries;
 };
 
 /** True when a manager search string points back at a review route (not a canvas). */

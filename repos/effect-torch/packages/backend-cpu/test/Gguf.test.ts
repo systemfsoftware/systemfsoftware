@@ -25,6 +25,8 @@ const string = (value: string): Buffer => {
   return Buffer.concat([u64(bytes.length), bytes])
 }
 
+// The hand-built GGUF v3 artifact mixes dense F32 with Q2_K and Q4_K payloads
+// that have the same packed shape, proving codec identity is not shape-derived.
 const fixture = (): Buffer => {
   const header = Buffer.concat([
     Buffer.from("GGUF"),
@@ -81,7 +83,7 @@ it.effect("loads GGUF payloads directly and rejects cross-codec physical collisi
   withFixture((file) =>
     Effect.gen(function*() {
       const runtime = makeRuntime()
-      const archive = yield* runtime.extensions.gguf!.load(file)
+      const archive = yield* runtime.extensions.gguf.load(file)
       const dense = archive.entries.find((entry) => entry.descriptor.name === "dense")!
       const q2 = archive.entries.find((entry) => entry.descriptor.name === "q2")!
       const q4 = archive.entries.find((entry) => entry.descriptor.name === "q4")!
@@ -93,7 +95,7 @@ it.effect("loads GGUF payloads directly and rejects cross-codec physical collisi
       expect(q2.descriptor.physicalShape).toEqual([1, 1008])
       expect(q4.descriptor.physicalShape).toEqual([1, 1008])
 
-      const saveError = yield* Effect.flip(runtime.extensions.pathSafetensors!.save(
+      const saveError = yield* Effect.flip(runtime.extensions.pathSafetensors.save(
         path.join(path.dirname(file), "encoded.safetensors"),
         { entries: [{ name: "q2", tensor: q2.tensor }], metadata: {} }
       ))
@@ -179,6 +181,8 @@ it.effect("loads GGUF payloads directly and rejects cross-codec physical collisi
     })
   ))
 
+// Injected addons isolate adapter ownership from native I/O: each raw wrapper
+// must either become one public handle or be cleared exactly once.
 it.effect("rejects duplicate raw GGUF tensor ownership and clears it once", () => {
   const clear = vi.fn()
   const tensor = { shape: [1, 1008], dtype: "u8", device: "cpu", clear } as unknown as NativeTensor
@@ -205,7 +209,7 @@ it.effect("rejects duplicate raw GGUF tensor ownership and clears it once", () =
   const runtime = makeRuntimeAdapter(native)
 
   return Effect.gen(function*() {
-    const error = yield* Effect.flip(runtime.extensions.gguf!.load("duplicate.gguf"))
+    const error = yield* Effect.flip(runtime.extensions.gguf.load("duplicate.gguf"))
     expect(error.message).toContain("duplicate tensor ownership")
     expect(clear).toHaveBeenCalledTimes(1)
   })
@@ -241,7 +245,7 @@ it.effect("clears a late native GGUF success after interruptible I/O is cancelle
       }
     } as unknown as NativeAddon
     const runtime = makeRuntimeAdapter(native)
-    const fiber = yield* runtime.extensions.gguf!.load("late.gguf").pipe(
+    const fiber = yield* runtime.extensions.gguf.load("late.gguf").pipe(
       Effect.forkChild({ startImmediately: true })
     )
     yield* Deferred.await(started)

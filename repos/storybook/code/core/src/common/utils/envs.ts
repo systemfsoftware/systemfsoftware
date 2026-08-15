@@ -14,7 +14,8 @@ export async function loadEnvs(options: { production?: boolean } = {}): Promise<
   const defaultNodeEnv = options.production ? 'production' : 'development';
 
   const baseEnv: Record<string, string> = {
-    NODE_ENV: process.env.NODE_ENV || defaultNodeEnv,
+    // eslint-disable-next-line @typescript-eslint/dot-notation
+    NODE_ENV: process.env['NODE_ENV'] || defaultNodeEnv,
     NODE_PATH: process.env['NODE_PATH'] || '',
     STORYBOOK: process.env['STORYBOOK'] || 'true',
     // This is to support CRA's public folder feature.

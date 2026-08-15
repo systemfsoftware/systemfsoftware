@@ -161,36 +161,6 @@ describe('docgen open service', () => {
     });
   });
 
-  describe('extractAllDocgen command', () => {
-    it('records one component`s failure without dropping every other component`s payload', async () => {
-      const service = registerDocgenService({
-        getIndex: makeGetIndex([
-          makeStoryEntry('button--primary', 'Button'),
-          makeStoryEntry('card--default', 'Card'),
-        ]),
-        docgenProvider: async ({ entry }) => {
-          if (entry.importPath.includes('button')) {
-            throw new TypeError('provider blew up');
-          }
-          return makeDocgenPayload({ id: 'card', name: 'Card', path: entry.importPath });
-        },
-      });
-
-      await service.commands.extractAllDocgen(undefined);
-
-      expect(service.queries.docgen.get({ id: 'card' })).toEqual(
-        makeDocgenPayload({ id: 'card', name: 'Card', path: './card.stories.tsx' })
-      );
-      expect(service.queries.docgen.get({ id: 'button' })).toEqual({
-        id: 'button',
-        name: 'Button',
-        path: './button.stories.tsx',
-        jsDocTags: {},
-        error: { name: 'TypeError', message: 'provider blew up' },
-      });
-    });
-  });
-
   describe('docgen query', () => {
     it('returns undefined synchronously when nothing has been extracted yet', async () => {
       const service = registerDocgenService({
@@ -242,7 +212,7 @@ describe('docgen open service', () => {
 
       await service.queries.docgen.loaded({ id: 'button' });
 
-      const moduleGraph = getService('core/module-graph', { internal: true });
+      const moduleGraph = getService('core/module-graph');
       await moduleGraph.commands._applyGraphUpdate({
         storiesByFile: {},
         bumpedStoryFiles: ['./button.stories.tsx', './card.stories.tsx'],
@@ -273,7 +243,7 @@ describe('docgen open service', () => {
 
       await service.queries.docgen.loaded({ id: 'button' });
 
-      const moduleGraph = getService('core/module-graph', { internal: true });
+      const moduleGraph = getService('core/module-graph');
       await moduleGraph.commands._applyGraphUpdate({
         storiesByFile: {},
         bumpedStoryFiles: ['./button.stories.tsx'],

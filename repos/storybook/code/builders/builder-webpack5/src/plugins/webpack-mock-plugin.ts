@@ -70,9 +70,9 @@ export class WebpackMockPlugin {
     const updateMocks = () => {
       const mTimePreviewConfig = this.getPreviewConfigMtime(compiler);
       if (
-        this.lastPreviewMtime !== undefined &&
-        mTimePreviewConfig !== undefined &&
-        mTimePreviewConfig === this.lastPreviewMtime
+        this.lastPreviewMtime &&
+        mTimePreviewConfig &&
+        mTimePreviewConfig <= this.lastPreviewMtime
       ) {
         return; // unchanged
       }

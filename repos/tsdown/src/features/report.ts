@@ -2,12 +2,12 @@ import { Buffer } from 'node:buffer'
 import path from 'node:path'
 import { promisify } from 'node:util'
 import { brotliCompress, gzip } from 'node:zlib'
+import { bold, dim, green } from 'ansis'
 import { createDebug } from 'obug'
 import { RE_DTS } from 'rolldown-plugin-dts/internal'
 import { formatBytes } from '../utils/format.ts'
 import { noop } from '../utils/general.ts'
 import { prettyFormat } from '../utils/logger.ts'
-import { styleText } from '../utils/style.ts'
 import type { ResolvedConfig } from '../config/types.ts'
 import type { OutputAsset, OutputChunk, Plugin } from 'rolldown'
 
@@ -49,21 +49,12 @@ export interface ReportOptions {
    * @default 1_000_000 // 1 MB
    */
   maxCompressSize?: number
-
-  /**
-   * Only report the total size, skipping the per-file breakdown.
-   * Useful for libraries that emit many files in unbundle mode.
-   *
-   * @default false
-   */
-  summary?: boolean
 }
 
 const defaultOptions = {
   gzip: true,
   brotli: false,
   maxCompressSize: 1_000_000,
-  summary: false,
 } as const satisfies Required<ReportOptions>
 
 export function ReportPlugin(
@@ -140,26 +131,20 @@ export async function outputReport(
   const formatLabel =
     isDualFormat && prettyFormat(cjsDts ? 'cjs' : config.format)
 
-  if (!options.summary) {
-    for (const size of sizes) {
-      const filenameColor = size.dts ? styleText.green : noop
-      const filename = path.normalize(size.filename)
+  for (const size of sizes) {
+    const filenameColor = size.dts ? green : noop
+    const filename = path.normalize(size.filename)
 
-      config.logger.info(
-        config.nameLabel,
-        formatLabel,
-        styleText.dim(outDir + path.sep) +
-          filenameColor(size.isEntry ? styleText.bold(filename) : filename),
-        ` `.repeat(filenameLength - size.filename.length),
-        styleText.dim(size.rawText),
-        options.gzip &&
-          size.gzipText &&
-          styleText.dim(`│ gzip: ${size.gzipText}`),
-        options.brotli &&
-          size.brotliText &&
-          styleText.dim(`│ brotli: ${size.brotliText}`),
-      )
-    }
+    config.logger.info(
+      config.nameLabel,
+      formatLabel,
+      dim(outDir + path.sep) +
+        filenameColor((size.isEntry ? bold : noop)(filename)),
+      ` `.repeat(filenameLength - size.filename.length),
+      dim(size.rawText),
+      options.gzip && size.gzipText && dim`│ gzip: ${size.gzipText}`,
+      options.brotli && size.brotliText && dim`│ brotli: ${size.brotliText}`,
+    )
   }
 
   const totalSizeText = formatBytes(totalRaw)

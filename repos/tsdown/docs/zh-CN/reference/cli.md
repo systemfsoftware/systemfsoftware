@@ -33,7 +33,7 @@ tsdown src/index.ts src/util.ts
 
 ## `--config-loader <loader>`
 
-指定要使用的配置加载器：`auto`（默认）、`native`、`tsx` 或 `unrun`。
+指定要使用的配置加载器。
 
 另请参阅 [配置文件](../options/config-file.md)。
 
@@ -51,7 +51,7 @@ tsdown src/index.ts src/util.ts
 tsdown --tsconfig tsconfig.build.json
 ```
 
-## `-f, --format <format>`
+## `--format <format>`
 
 定义打包格式。支持的格式包括：
 
@@ -64,13 +64,19 @@ tsdown --tsconfig tsconfig.build.json
 
 ## `--clean`
 
-在构建之前清理输出目录。这会删除输出目录中的所有文件，以确保干净的构建。默认启用；使用 `--no-clean` 可禁用。
+在构建之前清理输出目录。这会删除输出目录中的所有文件，以确保干净的构建。
 
 另请参阅 [清理](../options/cleaning.md)。
 
 ## `--deps.never-bundle <module>`
 
 将模块标记为外部依赖。这会阻止指定的模块被包含在打包文件中。
+
+另请参阅 [依赖处理](../options/dependencies.md)。
+
+## `--deps.skip-node-modules-bundle`
+
+跳过解析和打包所有来自 `node_modules` 的依赖。
 
 另请参阅 [依赖处理](../options/dependencies.md)。
 
@@ -101,23 +107,25 @@ tsdown --tsconfig tsconfig.build.json
 
 另请参阅 [构建目标](../options/target.md)。
 
-## `-l, --log-level <level>`
+## `--log-level <level>`
 
-设置日志级别，以控制构建过程中日志的详细程度。可用级别：`info`、`warn`、`error`、`silent`。
+设置日志级别，以控制构建过程中日志的详细程度。
 
 另请参阅 [日志级别](../options/log-level.md)。
+
+### ~~`--silent`~~
+
+::: warning 已废弃
+请使用 `--log-level error` 代替。
+:::
+
+在构建过程中屏蔽非错误日志，仅显示错误信息。
 
 ## `-d, --out-dir <dir>`
 
 指定打包文件的输出目录。使用此选项自定义输出文件的存放位置。
 
 另请参阅 [输出目录](../options/output-directory.md)。
-
-## `--root <dir>`
-
-指定输入文件的根目录。
-
-另请参阅 [根目录](../options/root.md)。
 
 ## `--treeshake`, `--no-treeshake`
 
@@ -189,10 +197,6 @@ tsdown --tsconfig tsconfig.build.json
 
 启用或禁用构建报告的生成。默认情况下，报告是启用的，会在控制台输出构建产物列表及其大小，帮助您快速了解构建结果并发现潜在优化空间。在需要极简控制台输出的场景下可以关闭报告。
 
-## `--devtools`
-
-启用 Vite DevTools 集成进行打包分析。
-
 ## `--env.* <value>`
 
 定义编译时环境变量，例如：
@@ -247,11 +251,19 @@ tsdown --copy public
 
 `public` 目录中的所有内容将被复制到您的输出目录（如 `dist`）。
 
+## `--public-dir <dir>`
+
+::: warning 已废弃
+请使用 `--copy` 代替。
+:::
+
+`--copy` 的别名。
+
 ## `--exe`
 
 **[实验性]** 使用 [Node.js 单个可执行程序](https://nodejs.org/api/single-executable-applications.html)将输出打包为独立可执行文件。
 
-此选项会将输出打包为单个可执行文件。需要 Node.js 25.7.0 或更高版本（实际上需要 Node.js 26+，因为 tsdown 本身不支持 Node.js 25），不支持 Bun 和 Deno 环境。通过 `@tsdown/exe` 包支持跨平台构建。
+此选项会将输出打包为单个可执行文件。需要 Node.js 25.7.0 或更高版本，不支持 Bun 和 Deno 环境。通过 `@tsdown/exe` 包支持跨平台构建。
 
 启用 `exe` 时：
 
@@ -267,7 +279,7 @@ tsdown --copy public
 
 ## `--concurrency <count>`
 
-同时运行的 Rolldown 构建任务数量上限。默认不限制并发数。监听模式下不支持此选项，会被忽略。
+同时运行的 Rolldown 构建任务数量上限。默认不限制并发数。
 
 ## `-F, --filter <pattern>`
 
@@ -284,10 +296,6 @@ tsdown --copy public
 遇到警告时使构建失败。默认启用。
 
 另请参阅 [CI 环境](../advanced/ci.md)。
-
-## `--no-write`
-
-禁止将输出文件写入磁盘。与监听模式不兼容。
 
 ## `--exports`
 

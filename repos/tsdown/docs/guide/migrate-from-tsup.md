@@ -28,29 +28,12 @@ npx tsdown-migrate packages/foo packages/bar
 > [!TIP]
 > The migration tool will automatically install dependencies after migration. Make sure to run the command from within your project directory.
 
-> [!IMPORTANT]
-> Migration is a **two-stage** process. The migration tool installs **tsdown v0.22.14**, the last version that still accepts deprecated tsup-compatible options (with warnings). Newer versions of tsdown have removed these options entirely — they fail type checking and are silently ignored at runtime.
->
-> 1. Run your build on v0.22.14 and resolve **every** deprecation warning — zero warnings means your config is fully migrated.
-> 2. Only then upgrade `tsdown` to the latest version (`^0.23.0` or later).
-
 ### Migration Options
 
 The `migrate` command supports the following options to customize the migration process:
 
 - `[...dirs]`: Specify directories to migrate. Supports glob patterns (e.g., `packages/*`). Defaults to the current directory if not specified.
 - `--dry-run` (or `-d`): Perform a dry run to preview the migration without making any changes.
-- `--yes` (or `-y`): Skip the migration confirmation prompt. This is required in non-interactive environments.
-- `--package-manager <name>`: Override package manager auto-detection for dependency installation.
-- `--no-install`: Skip dependency installation, for example when another migration tool will install dependencies afterward.
-
-For non-interactive environments, explicitly confirm the migration:
-
-```bash
-npx tsdown-migrate --yes --no-install
-```
-
-When installation is enabled, the migration tool detects the package manager from the project's `packageManager` field or lockfile. If detection fails in a non-interactive environment, pass `--package-manager <name>` or `--no-install`.
 
 With these options, you can easily tailor the migration process to fit your specific project setup.
 
@@ -71,28 +54,26 @@ While `tsdown` aims to be highly compatible with `tsup`, there are some differen
 
 Some options have been renamed for clarity:
 
-| tsup                       | tsdown                        | Notes                              |
-| -------------------------- | ----------------------------- | ---------------------------------- |
-| `entryPoints`              | `entry`                       | Also deprecated in tsup itself     |
-| `cjsInterop`               | `cjsDefault`                  | CJS default export handling        |
-| `esbuildPlugins`           | `plugins`                     | Now uses Rolldown/Unplugin plugins |
-| `outExtension`             | `outExtensions`               | Custom output extensions           |
-| `skipNodeModulesBundle`    | `deps: { neverBundle: true }` | Externalize all dependencies       |
-| `publicDir`                | `copy`                        | Copy static files to output        |
-| `bundle: false`            | `unbundle: true`              | Inverted to positive form          |
-| `removeNodeProtocol: true` | `nodeProtocol: 'strip'`       | More flexible with multiple modes  |
-| `injectStyle: true`        | `css: { inject: true }`       | Moved into CSS namespace           |
-
-None of the old names work in the latest tsdown — they fail type checking and are silently ignored at runtime. Those that previously emitted deprecation warnings (`entryPoints`, `outExtension`, `skipNodeModulesBundle`, `publicDir`, `bundle`, `removeNodeProtocol`, `injectStyle`) were accepted up to tsdown v0.22.14 — if your config still uses any of them, migrate on v0.22.14 first.
+| tsup             | tsdown          | Notes                              |
+| ---------------- | --------------- | ---------------------------------- |
+| `cjsInterop`     | `cjsDefault`    | CJS default export handling        |
+| `esbuildPlugins` | `plugins`       | Now uses Rolldown/Unplugin plugins |
+| `outExtension`   | `outExtensions` | Custom output extensions           |
 
 ### Deprecated but Compatible Options
 
 The following tsup options still work in tsdown for backward compatibility, but they emit deprecation warnings and **will be removed in a future version**. Migrate them to the preferred alternatives immediately.
 
-| tsup (deprecated)   | tsdown (preferred)              | Notes                   |
-| ------------------- | ------------------------------- | ----------------------- |
-| `external: [...]`   | `deps: { neverBundle: [...] }`  | Moved to deps namespace |
-| `noExternal: [...]` | `deps: { alwaysBundle: [...] }` | Moved to deps namespace |
+| tsup (deprecated)          | tsdown (preferred)              | Notes                             |
+| -------------------------- | ------------------------------- | --------------------------------- |
+| `entryPoints`              | `entry`                         | Also deprecated in tsup itself    |
+| `publicDir`                | `copy`                          | Copy static files to output       |
+| `bundle: false`            | `unbundle: true`                | Inverted to positive form         |
+| `removeNodeProtocol: true` | `nodeProtocol: 'strip'`         | More flexible with multiple modes |
+| `injectStyle: true`        | `css: { inject: true }`         | Moved into CSS namespace          |
+| `external: [...]`          | `deps: { neverBundle: [...] }`  | Moved to deps namespace           |
+| `noExternal: [...]`        | `deps: { alwaysBundle: [...] }` | Moved to deps namespace           |
+| `skipNodeModulesBundle`    | `deps: { neverBundle: true }`   | Externalize all dependencies      |
 
 tsdown also adds `deps.onlyBundle` for whitelisting allowed bundled packages.
 

@@ -174,16 +174,13 @@ export function CssPlugin(
             typeof cssConfig.css.modules === 'object'
               ? cssConfig.css.modules
               : undefined
-          if (cssConfig.css.transformer === 'lightningcss') {
-            if (modulesConfig?.localsConvention) {
-              modules = applyLocalsConvention(
-                modules,
-                modulesConfig.localsConvention,
-                cleanId,
-              )
-            }
-            modulesConfig?.getJSON?.(cleanId, modules, cleanId)
+          if (modulesConfig?.localsConvention) {
+            modules = applyLocalsConvention(
+              modules,
+              modulesConfig.localsConvention,
+            )
           }
+          modulesConfig?.getJSON?.(cleanId, modules, cleanId)
           modulesMap.set(id, modules)
         }
 

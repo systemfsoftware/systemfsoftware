@@ -1,7 +1,0 @@
-{
-  "name": "806-browse-request",
-  "type": "module",
-  "evals": {
-    "template": "reshaped-storybook"
-  }
-}

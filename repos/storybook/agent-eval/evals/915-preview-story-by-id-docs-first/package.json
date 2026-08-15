@@ -1,7 +1,0 @@
-{
-  "name": "915-preview-story-by-id-docs-first",
-  "type": "module",
-  "evals": {
-    "template": "reshaped-storybook"
-  }
-}

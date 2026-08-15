@@ -1,4 +1,3 @@
-import type { CSSModulesLocalsConvention } from './options.ts'
 import type { CSSModuleExports } from 'lightningcss'
 
 export function modulesToEsm(modules: Record<string, string>): string {
@@ -24,16 +23,10 @@ function dashToCamel(str: string): string {
 
 export function applyLocalsConvention(
   modules: Record<string, string>,
-  convention: CSSModulesLocalsConvention,
-  inputFile: string,
+  convention: 'camelCase' | 'camelCaseOnly' | 'dashes' | 'dashesOnly',
 ): Record<string, string> {
   const result: Record<string, string> = {}
   for (const [key, value] of Object.entries(modules)) {
-    if (typeof convention === 'function') {
-      result[convention(key, value, inputFile)] = value
-      continue
-    }
-
     const camelized = dashToCamel(key)
     switch (convention) {
       case 'camelCase':

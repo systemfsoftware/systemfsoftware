@@ -1,9 +1,12 @@
 /**
- * Dev-only napi build that regenerates the TypeScript bindings
- * (native/index.d.ts) and the runtime enum exports. Shipping addons are built
- * by Bazel (`bun run build` → scripts/bazel-natives.ts); run this
- * (`bun run build:bindings`) only when the Rust API changes its exported
- * typedefs. Host target only, local cargo profile — no cross-compilation.
+ * Local napi build: regenerates the TypeScript bindings (native/index.d.ts)
+ * and the runtime enum exports, then installs the host addon. Release addons
+ * come from Bazel (`bun run build` → scripts/bazel-natives.ts); this path also
+ * serves hosts Bazel cannot run on (Windows, the Docker image) via
+ * `OMP_NATIVE_BUILD_BACKEND=cargo`. Host target only — no cross-compilation.
+ *
+ * `OMP_NATIVE_CARGO_PROFILE` selects the cargo profile (default `local`:
+ * incremental, unstripped). Image builds set `ci` for a stripped addon.
  */
 
 import * as fsSync from "node:fs";
@@ -203,6 +206,10 @@ if (!napiBinEntry) {
 }
 const napiBin = path.join(path.dirname(napiManifestPath), napiBinEntry);
 
+// Profiles live in the root Cargo.toml; `local` trades size for iteration
+// speed, `ci` strips and drops incremental state.
+const cargoProfile = Bun.env.OMP_NATIVE_CARGO_PROFILE?.trim() || "local";
+
 const napiArgs = [
 	"build",
 	"--manifest-path",
@@ -216,7 +223,7 @@ const napiArgs = [
 	"-o",
 	buildOutputDir,
 	"--profile",
-	"local",
+	cargoProfile,
 ];
 
 // napi-rs / cargo route much failure detail to stdout (e.g. `cargo metadata`

@@ -1,7 +1,0 @@
-{
-  "name": "913-run-all-tests-final-verification",
-  "type": "module",
-  "evals": {
-    "template": "reshaped-storybook"
-  }
-}

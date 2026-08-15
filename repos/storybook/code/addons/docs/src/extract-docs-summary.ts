@@ -1,10 +1,9 @@
 /**
- * Derives a short docs summary from MDX so ref-based docs manifests can expose `summary` in the
- * same shape `@storybook/mcp` expects.
+ * Ported from Storybook MCP's manifest formatter so ref-based docs manifests expose summaries in
+ * the same shape MCP previously derived itself.
  *
- * Keep in sync with the fallback copy at
- * `code/lib/mcp/src/utils/manifest-formatter/extract-docs-summary.ts`. Dual copy is intentional:
- * addon-docs must not depend on `@storybook/mcp`, and mcp must not depend on addon-docs.
+ * Source:
+ * https://github.com/storybookjs/mcp/blob/main/packages/mcp/src/utils/manifest-formatter/extract-docs-summary.ts
  */
 export const MAX_SUMMARY_LENGTH = 90;
 

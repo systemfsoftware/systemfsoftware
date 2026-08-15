@@ -22,8 +22,9 @@ export = hello;
 
 ```mts
 //#region index.d.ts
-export default function hello(): void;
+declare function hello(): void;
 //#endregion
+export { hello as default };
 ```
 
 ## index.mjs

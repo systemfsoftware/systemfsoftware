@@ -7,7 +7,7 @@ import {
 } from 'storybook/internal/docs-tools';
 import type { SBType, StrictArgTypes, StrictInputType } from 'storybook/internal/types';
 
-import type { VueDocgenInfo, VueDocgenInfoEntry, VueDocgenPlugin } from './types.ts';
+import type { VueDocgenInfo, VueDocgenInfoEntry, VueDocgenPlugin } from '@storybook/vue3-vite';
 
 type PropertyMetaSchema = VueDocgenInfoEntry<'vue-component-meta', 'props'>['schema'];
 
@@ -165,20 +165,12 @@ export const extractFromVueComponentMeta = (
   if (section === 'props') {
     const propInfo = docgenInfo as VueDocgenInfoEntry<'vue-component-meta', 'props'>;
     const defaultValue = propInfo.default ? { summary: propInfo.default } : undefined;
-    const type = convertVueComponentMetaProp(propInfo);
-    const enumLabels = getEnumMemberLabels(propInfo.schema);
 
     return {
       name: propInfo.name,
       description: formatDescriptionWithTags(propInfo.description, propInfo.tags),
       defaultValue,
-      type,
-      // A TS enum member is selected by its runtime value, so the qualified name it is written
-      // as can only be a label. "control.type" is left to inferControls, which picks radio or
-      // select by option count just like it does for a plain literal union.
-      ...(enumLabels && type.name === 'enum'
-        ? { options: type.value, control: { labels: enumLabels } }
-        : {}),
+      type: convertVueComponentMetaProp(propInfo),
       table: {
         type: tableType,
         defaultValue,
@@ -222,16 +214,10 @@ export const convertVueComponentMetaProp = (
         return { name: 'boolean', required };
       }
 
-      if (isSelectableUnionSchema(definedSchemas)) {
-        return { name: 'enum', value: definedSchemas.map(selectableValue), required };
-      }
-
-      // Some unresolved type references stringify with a dot ("typeof Config.alpha") without
-      // standing for any value, and an enum sbType would make Controls inject that name
-      // verbatim. Keep them documented via the table but not selectable. TS enum members no
-      // longer reach this branch - they arrive as "literal" schemas carrying their value.
-      if (isEnumSchema(definedSchemas)) {
-        return fallbackSbType;
+      if (isLiteralUnionSchema(definedSchemas) || isEnumSchema(definedSchemas)) {
+        // remove quotes from literals
+        const literals = definedSchemas.map((literal) => literal.replace(/"/g, ''));
+        return { name: 'enum', value: literals, required };
       }
 
       if (definedSchemas.length === 1) {
@@ -338,54 +324,20 @@ const formatDescriptionWithTags = (
 };
 
 /**
- * A TS enum member. It stringifies to its qualified name ("Severity.Info"), which says nothing
- * about what gets passed to the component, so vue-component-meta carries the runtime value it
- * stands for alongside - JSON-encoded, as `"info"` or `0`.
+ * Checks whether the given schemas are all literal union schemas.
  *
- * @see https://github.com/vuejs/language-tools/pull/6131 (vue-component-meta >= 3.3.9)
+ * @example Foo | "bar" | "baz"
  */
-type LiteralSchema = Extract<PropertyMetaSchema, { kind: 'literal' }>;
-
-const isLiteralSchema = (schema: PropertyMetaSchema): schema is LiteralSchema =>
-  typeof schema === 'object' && schema.kind === 'literal';
-
-/** A quoted string literal, e.g. `"bar"` from `Foo | "bar" | "baz"`. */
-const isQuotedLiteral = (schema: PropertyMetaSchema): schema is `"${string}"` =>
-  typeof schema === 'string' && schema.startsWith('"') && schema.endsWith('"');
-
-type SelectableSchema = `"${string}"` | LiteralSchema;
-
-/**
- * Checks whether every schema stands for one concrete value, which is what makes the union
- * offerable as a set of Controls options. Both string literals and TS enum members qualify, and
- * they can mix (`Severity | "custom"`).
- */
-const isSelectableUnionSchema = (schemas: PropertyMetaSchema[]): schemas is SelectableSchema[] =>
-  schemas.every((schema) => isQuotedLiteral(schema) || isLiteralSchema(schema));
-
-/** The runtime value a selectable schema stands for. */
-const selectableValue = (schema: SelectableSchema): string | number =>
-  isLiteralSchema(schema) ? JSON.parse(schema.value) : schema.replace(/"/g, '');
-
-/**
- * Maps each TS enum member's runtime value to the qualified name it is written as, so Controls
- * can label the option `Severity.Info` while passing `'info'` to the component. Returns undefined
- * when the schema holds no enum members, which is every plain literal union.
- */
-const getEnumMemberLabels = (schema: PropertyMetaSchema): Record<string, string> | undefined => {
-  if (typeof schema !== 'object' || schema.kind !== 'enum') {
-    return undefined;
-  }
-  const members = (schema.schema ?? []).filter(isLiteralSchema);
-  return members.length
-    ? Object.fromEntries(members.map((member) => [selectableValue(member), member.type]))
-    : undefined;
+const isLiteralUnionSchema = (schemas: PropertyMetaSchema[]): schemas is `"${string}"`[] => {
+  return schemas.every(
+    (schema) => typeof schema === 'string' && schema.startsWith('"') && schema.endsWith('"')
+  );
 };
 
 /**
- * Checks whether the given schemas are all qualified type names.
+ * Checks whether the given schemas are all enums.
  *
- * @example MyNamespace.Foo, MyNamespace.Bar
+ * @example MyEnum.Foo, MyEnum.Bar
  */
 const isEnumSchema = (schemas: PropertyMetaSchema[]): schemas is string[] => {
   return schemas.every((schema) => typeof schema === 'string' && schema.includes('.'));

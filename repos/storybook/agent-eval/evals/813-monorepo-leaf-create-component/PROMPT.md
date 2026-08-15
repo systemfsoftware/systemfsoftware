@@ -1,1 +1,0 @@
-Create a `Callout` component in the `@acme/ui` package (`packages/ui/src/components/Callout.tsx`) with `info`, `warning`, and `error` variants and a `children` prop, following the package's existing conventions.

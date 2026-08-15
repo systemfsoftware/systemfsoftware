@@ -1,3 +1,0 @@
-<template>
-  <DefineExpose label="Increment" />
-</template>
