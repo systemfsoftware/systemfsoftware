@@ -162,7 +162,7 @@ It exists because a class of properties is process-level by category and admits 
 
 ### Cell
 
-The unit this codebase is organized in: one source file doing one job, with a suffix that names that job. The suffix is not decoration — rules key on it, so the name is what grants and denies a file its powers. Which imports it may take, whether it may perform I/O, whether the mutator covers it, and what kind of test it may carry are all decided by the suffix rather than by the file's contents or its directory.
+The unit this codebase is organized in: one source file doing one job, with a suffix that names that job. Rules key on the suffix, so the name is what grants and denies a file its powers: which imports it may take, whether it may perform I/O, whether the mutator covers it, and what kind of test it may carry. That the key is the name and not the contents is the taxonomy's mechanism and also its limit — the assignment is an unverified claim, so a rule keyed on a suffix cannot fire on a file whose author declined the suffix. See **Drifted key**, which governs where the two readings meet.
 
 A file whose suffix does not match the job it performs is therefore not a naming problem but a permissions problem: it is being governed as something it is not.
 
@@ -342,3 +342,5 @@ A mutant killed because the mutation corrupted a schema's derived arbitrary and 
 
 - "observer" named two different things: one of the sanctioned cell suffixes, and the verification instrument that reads a cell. These are distinct — the instrument is **Verification observer**, and the bare word stays with the suffix.
 - "window" is not minted as an entry, because it already names the model's token budget. The reading surface a constraint must occupy to bind an author is defined inside **Reach** as one of its two mechanisms; the bare word stays with the token budget.
+- "dependency rejection" is Seemann's phrase and every model reaches for his post first, where the ruling is a slogan with no selection criterion. This repo takes Wlaschin's reading, which supplies the test — manage a dependency only where it is impure or a strategy — and `REPO-A2` carries the precedence. Cite the test, never the slogan.
+- **Cell** and **Drifted key** disagree about the suffix: the first makes it the key that grants a file its powers, the second names an unverified key that a rename silently reassigns. **Drifted key** takes precedence, because the disagreement was measured rather than argued — two byte-identical files, one suffixed `kernel` and one `executor`, put the purity rule loud on the first and silent on the second (`docs/solutions/architecture-patterns/label-routed-rules-are-unfalsifiable.md`). A suffix therefore describes a file and never scopes a check; a new rule keys on the type or the import edge.

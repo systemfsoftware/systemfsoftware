@@ -1,5 +1,24 @@
 # systemfsoftware — workspace invariants
 
+## Purpose
+
+- **REPO-A1** — this repository exists to make an agent produce the impure/pure/impure sandwich by construction — gather at the edge, decide in the pure middle, act on the returned decision at the edge. A `kernel` cell is the pure core and takes data; an `executor` cell is the shell and does the I/O. Every other mechanism here is instrumentation for that shape.
+
+```yaml
+- id: REPO-A2
+  title: The dependency test is Wlaschin's, never Seemann's slogan
+  do: price each requirement against Wlaschin's two categories at https://fsharpforfunandprofit.com/posts/dependencies/ — impure, meaning non-deterministic or I/O, or strategy, meaning a second real implementation — and call everything else directly, because "if there is only one implementation ... and it is pure ... there is no need to mock or add extra abstraction if it is not needed"
+  dont: mandate a requirement anywhere, or let a Seemann citation stand where the test was the question
+  harm: Seemann gives the doctrine as a slogan and no selection criterion, so an agent holding it fails in one of two opposite directions and both are in this tree — it demands zero requirements everywhere, or finds Effect's `R` unavoidable and drops the doctrine whole. His own post declines the universal, calling rejection "not a universal solution", so neither direction is licensed by the text every model reaches for first
+  check: review — whether each requirement names impurity or a second implementation, and whether a mandate is being read as a shape to satisfy rather than a cost to justify
+- id: REPO-A3
+  title: Rejection is internal wiring, so wiring is never exported
+  do: export the capability ports a package needs from outside and the service it offers, the way `@effect/platform` exports `FileSystem.FileSystem`; collapse a per-operation projection back into the port it came from and prove the collapse by assignment, since `{ a, b }` is assignable to `{ a }`
+  dont: mint a second projection of a port that already exists
+  harm: a projection records which members one operation happened to reach for, so exporting it turns internal composition into a surface commitment and forces every consumer to discover and provide N aggregators where one port serves. It escapes silently, because the tag rides the `R` channel of an exported signature and a consumer meets it only at their own call site
+  check: `pnpm check:exported-wiring`
+```
+
 ## Safety
 
 - **REPO-S3** — `repos/` is a vendored third-party reference subtree, read-only — never edit it. Gate: `.claude/hooks/guard-protected-writes.ts`.
