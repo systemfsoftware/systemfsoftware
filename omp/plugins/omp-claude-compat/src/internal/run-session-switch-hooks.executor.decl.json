@@ -1,0 +1,30 @@
+{
+  "role": "executor",
+  "operation": "runSessionSwitchHooks",
+  "deps": { "type": "Scope.Scope" },
+  "imports": [
+    { "module": "effect", "values": ["Context", "Effect"], "types": ["Scope"] },
+    { "module": "../hook-settings.acl.js", "typeOnly": true, "types": ["HookSettings"] },
+    { "module": "./hook-session.kernel.js", "typeOnly": true, "types": ["HookSession"] },
+    { "module": "./run-session-start-hooks.executor.js", "values": ["runSessionStartHooks"] }
+  ],
+  "params": [
+    { "name": "settings", "type": "HookSettings" },
+    { "name": "reason", "type": "string" },
+    { "name": "ctx", "type": "HookSession" }
+  ],
+  "body": {
+    "steps": [
+      { "guard": { "read": ["reason"], "notIn": ["resume", "fork"] } },
+      {
+        "effect": {
+          "yield": {
+            "call": "runSessionStartHooks",
+            "from": "./run-session-start-hooks.executor.js",
+            "args": [{ "read": ["settings"] }, { "read": ["reason"] }, { "read": ["ctx"] }]
+          }
+        }
+      }
+    ]
+  }
+}

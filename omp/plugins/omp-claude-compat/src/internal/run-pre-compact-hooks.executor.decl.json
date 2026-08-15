@@ -1,0 +1,56 @@
+{
+  "role": "executor",
+  "operation": "runPreCompactHooks",
+  "deps": { "type": "Scope.Scope" },
+  "imports": [
+    { "module": "@systemfsoftware/omp-utils", "values": ["sessionIds"] },
+    { "module": "effect", "values": ["Context", "Effect"], "types": ["Scope"] },
+    { "module": "../hook-settings.acl.js", "typeOnly": true, "types": ["HookSettings"] },
+    { "module": "./hook-session.kernel.js", "typeOnly": true, "types": ["HookSession"] },
+    { "module": "./run-hooks-for-event.executor.js", "values": ["runHooksForEvent"] }
+  ],
+  "params": [
+    { "name": "settings", "type": "HookSettings" },
+    { "name": "ctx", "type": "HookSession" }
+  ],
+  "doc": [
+    "The matcher this event documents is `trigger` (manual vs auto), which OMP's",
+    "payload does not carry — U4's gate skips any hook that declares one, so only",
+    "unscoped hooks reach here and `matchValue` is never consulted."
+  ],
+  "body": {
+    "steps": [
+      {
+        "bind": { "name": "input", "type": "Record<string, unknown>" },
+        "value": {
+          "object": {
+            "spread": [
+              {
+                "call": "sessionIds",
+                "from": "@systemfsoftware/omp-utils",
+                "args": [
+                  { "thunk": { "invoke": ["ctx", "sessionManager", "getSessionId"], "args": [] } }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      {
+        "result": {
+          "yield": {
+            "call": "runHooksForEvent",
+            "from": "./run-hooks-for-event.executor.js",
+            "args": [
+              { "read": ["settings", "hooks", "PreCompact"] },
+              { "literal": "" },
+              { "read": ["input"] },
+              { "read": ["ctx"] },
+              { "literal": "PreCompact" }
+            ]
+          }
+        }
+      }
+    ]
+  }
+}

@@ -21,6 +21,5 @@ export const runPreCompactHooks = Effect.fn('runPreCompactHooks')(function*(
   const input: Record<string, unknown> = {
     ...sessionIds(() => ctx.sessionManager.getSessionId()),
   }
-
   return yield* runHooksForEvent(settings.hooks.PreCompact, '', input, ctx, 'PreCompact')
 })

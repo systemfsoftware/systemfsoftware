@@ -1,0 +1,46 @@
+{
+  "role": "executor",
+  "operation": "runToolResultHooks",
+  "deps": { "type": "Scope.Scope" },
+  "imports": [
+    { "module": "effect", "values": ["Context", "Effect"], "types": ["Scope"] },
+    { "module": "../hook-settings.acl.js", "typeOnly": true, "types": ["HookSettings"] },
+    { "module": "./hook-feedback.kernel.js", "typeOnly": true, "types": ["FeedbackOnlyResult"] },
+    { "module": "./hook-session.kernel.js", "typeOnly": true, "types": ["HookSession", "HookToolResult"] },
+    {
+      "module": "./run-post-tool-use-failure-hooks.executor.js",
+      "values": ["runPostToolUseFailureHooks"]
+    },
+    { "module": "./run-post-tool-use-hooks.executor.js", "values": ["runPostToolUseHooks"] }
+  ],
+  "params": [
+    { "name": "settings", "type": "HookSettings" },
+    { "name": "event", "type": "HookToolResult" },
+    { "name": "ctx", "type": "HookSession" }
+  ],
+  "body": {
+    "steps": [
+      {
+        "bind": { "name": "feedback", "type": "FeedbackOnlyResult" },
+        "value": {
+          "cond": { "read": ["event", "isError"], "is": true },
+          "then": {
+            "yield": {
+              "call": "runPostToolUseFailureHooks",
+              "from": "./run-post-tool-use-failure-hooks.executor.js",
+              "args": [{ "read": ["settings"] }, { "read": ["event"] }, { "read": ["ctx"] }]
+            }
+          },
+          "otherwise": {
+            "yield": {
+              "call": "runPostToolUseHooks",
+              "from": "./run-post-tool-use-hooks.executor.js",
+              "args": [{ "read": ["settings"] }, { "read": ["event"] }, { "read": ["ctx"] }]
+            }
+          }
+        }
+      },
+      { "result": { "read": ["feedback"] } }
+    ]
+  }
+}
