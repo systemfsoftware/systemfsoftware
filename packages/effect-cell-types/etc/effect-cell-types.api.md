@@ -15,6 +15,11 @@ export namespace Policy {
 }
 
 // @public (undocumented)
+export namespace Wire {
+    export { AnyMinted, Fields, Mark, Minted, MintedField, array, boolean, integer, literal, mint, nullOr, nullishOr, number, optional, record, refine, string, suspend, tuple, undefinedOr, union, wire };
+}
+
+// @public (undocumented)
 export namespace Workflow {
     export { Inhabited, Tagged, UninhabitedDecision, UninhabitedError, UntaggedError, Workflow, make };
 }

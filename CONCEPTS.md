@@ -190,6 +190,12 @@ A constructor and a suffix-keyed rule are disjoint instruments, never substitute
 
 A **chain** of constructors does type the sequence, which is how a shell's order becomes a compile-time fact rather than a claim beside it. Each phase's return type carries a required member whose name is the sentence stating what must be called next, and the next phase's parameter demands that member; composing them in the wrong order omits it, so the compiler reports the missing member and prints the sentence. The stages are siblings rather than a hierarchy — under a hierarchy a later stage is assignable to an earlier parameter, so an inversion compiles — and the sentence survives into the published declaration as the member's own name, which is what carries it into a consumer's compiler.
 
+### Wire declaration
+
+A schema for a payload the workspace does not own, restated in members it does. Its members carry a mark, and a marked member is one this workspace declares the type of, so naming a vendor's type inside a declaration — or a workspace-local alias of one, which defeats any specifier-keyed predicate — is a compile error at the authoring site rather than a lint finding elsewhere. The refusal travels to consumers through the published declaration file, which is the one channel a library controls.
+
+The mark is a phantom on the schema and never on the decoded value, because a brand on the value forces nothing: a schema's own escape hatch and a bare cast each produce a branded value with every refinement skipped. What the mark cannot do is refuse a determined author. TypeScript is structural, so any value legitimately carrying the phantom donates it to any other type by intersection, and that route names nothing — no constructor, no alias, no marker. A wire declaration therefore refuses the accidental case, and deciding admissibility for the rest belongs to a checker that resolves where a member's type was declared, never how it came to be marked.
+
 ### Description
 
 A record of named phases in one or more impure/pure layers, where each phase's return type carries the required member the next phase's parameter demands, so its order is a consequence of the types rather than an assertion beside them. A **phase** is one named step — a read, a decode, a decision, an encode, or a write. A **layer** is an impure segment followed by a pure segment; a site whose real order writes before it can classify is one description carrying two layers, never two composed by hand.
