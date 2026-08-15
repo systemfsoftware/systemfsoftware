@@ -170,4 +170,6 @@ console.log(
     `${tally['SURVIVES-INTERIOR']} survive as interior classes emission does not touch; ` +
     `${tally.UNPROBED} await emitter capability.`,
 )
-if (tally.REACHABLE > 0) console.log(`${tally.REACHABLE} rule(s) must stay: the violation reached emitted output.`)
+if (tally.REACHABLE > 0) {
+  console.log(`${tally.REACHABLE} rule(s) must stay: the violation reached emitted output.`)
+}

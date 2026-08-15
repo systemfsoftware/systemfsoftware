@@ -1,0 +1,141 @@
+{
+  "role": "workflow",
+  "operation": "interpretHookResult",
+  "command": {
+    "declare": {
+      "class": "InterpretHookCommand",
+      "tag": "InterpretHookCommand",
+      "typeId": { "namespace": "@systemfsoftware/omp-claude-compat", "name": "InterpretHookCommand" },
+      "fields": {
+        "result": { "kind": "ref", "name": "HookResult", "from": "./hook-dispatcher.schema.js" },
+        "event": { "kind": "string" }
+      }
+    }
+  },
+  "decision": {
+    "imported": { "type": "HookDecision", "from": "./hook-dispatcher.schema.js" },
+    "constructors": ["Allow", "Block", "Warning"]
+  },
+  "error": {
+    "typeId": { "namespace": "@systemfsoftware/omp-claude-compat", "name": "HookVerdictError" },
+    "variants": [
+      { "class": "HookVerdictError", "tag": "HookVerdictError", "fields": { "raw": { "kind": "string" } } }
+    ]
+  },
+  "dispatch": {
+    "on": {
+      "call": "exitKindOf",
+      "from": "./hook-verdict.kernel.js",
+      "args": [{ "path": ["result", "code"] }, { "path": ["result", "stdout"] }]
+    },
+    "arms": [
+      {
+        "pattern": "ExitBlock",
+        "channel": "right",
+        "construct": "Block",
+        "with": {
+          "reason": {
+            "call": "blockReason",
+            "from": "./hook-verdict.kernel.js",
+            "args": [{ "path": ["result", "stderr"] }, "event"]
+          }
+        }
+      },
+      { "pattern": "ExitNoDecision", "channel": "right", "construct": "Allow", "with": {} },
+      {
+        "pattern": "ExitDecisionJson",
+        "either": {
+          "call": "parseHookOutput",
+          "from": "./hook-output.acl.js",
+          "args": [{ "path": ["result", "stdout"] }],
+          "bind": "parsed"
+        },
+        "onLeft": {
+          "channel": "left",
+          "construct": "HookVerdictError",
+          "with": { "raw": { "field": { "path": ["result", "stdout"] } } }
+        },
+        "onRight": {
+          "on": {
+            "call": "parsedVerdict",
+            "from": "./hook-verdict.kernel.js",
+            "args": [
+              {
+                "path": ["parsed", "hookSpecificOutput", { "name": "permissionDecision", "optional": true }]
+              },
+              { "path": ["parsed", "decision"] }
+            ]
+          },
+          "arms": [
+            {
+              "pattern": "block",
+              "channel": "right",
+              "construct": "Block",
+              "with": {
+                "reason": {
+                  "call": "parsedBlockReason",
+                  "from": "./hook-verdict.kernel.js",
+                  "args": [
+                    {
+                      "path": [
+                        "parsed",
+                        "hookSpecificOutput",
+                        { "name": "permissionDecision", "optional": true }
+                      ]
+                    },
+                    {
+                      "path": [
+                        "parsed",
+                        "hookSpecificOutput",
+                        { "name": "permissionDecisionReason", "optional": true }
+                      ]
+                    },
+                    { "path": ["parsed", "reason"] },
+                    "event"
+                  ]
+                }
+              }
+            },
+            {
+              "pattern": "allow",
+              "channel": "right",
+              "construct": "Allow",
+              "with": {
+                "updatedInput": {
+                  "field": {
+                    "path": ["parsed", "hookSpecificOutput", { "name": "updatedInput", "optional": true }]
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "pattern": "ExitOther",
+        "onRight": {
+          "on": {
+            "call": "stderrVerdict",
+            "from": "./hook-verdict.kernel.js",
+            "args": [{ "path": ["result", "stderr"] }]
+          },
+          "arms": [
+            {
+              "pattern": "warning",
+              "channel": "right",
+              "construct": "Warning",
+              "with": {
+                "message": {
+                  "call": "spokenStderr",
+                  "from": "./hook-verdict.kernel.js",
+                  "args": [{ "path": ["result", "stderr"] }]
+                }
+              }
+            },
+            { "pattern": "allow", "channel": "right", "construct": "Allow", "with": {} }
+          ]
+        }
+      }
+    ]
+  }
+}

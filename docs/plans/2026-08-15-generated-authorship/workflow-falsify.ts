@@ -19,7 +19,10 @@ const PKG = '../../../packages/effect-daemon-spec'
 const PROBE_REL = 'src/internal/falsify-probe.workflow.ts'
 const PROBE = `${PKG}/${PROBE_REL}`
 
-const BASE = JSON.parse(await Deno.readTextFile('restart-decision.workflow.decl.json')) as Record<string, unknown>
+const BASE = JSON.parse(await Deno.readTextFile('restart-decision.workflow.decl.json')) as Record<
+  string,
+  unknown
+>
 const clone = (): Record<string, unknown> => JSON.parse(JSON.stringify(BASE))
 
 interface Attempt {
@@ -30,6 +33,11 @@ interface Attempt {
   readonly outsidePopulation?: string
   /** Set when the rule is registered but never recommended, so no package can run it. */
   readonly shippedOff?: string
+  /**
+   * Set when the emitted cell carries the violation and no AST walker can decide it, with the
+   * channel that can. Distinct from UNREACHED, which is a regression with no such argument.
+   */
+  readonly undecidableAtRungFour?: string
 }
 
 const ATTEMPTS: ReadonlyArray<Attempt> = [
@@ -126,14 +134,35 @@ const ATTEMPTS: ReadonlyArray<Attempt> = [
   {
     rule: 'workflow-match-exhaustive',
     violation: 'fall back with Match.orElse over a closed literal union',
+    undecidableAtRungFour:
+      'the walker stays silent because it cannot tell a closed literal union from an open record ' +
+      'without types - measured here on the three strategies. The exhaustiveness half rides rung 2: ' +
+      'covering all three strategies under Match.exhaustive compiles at exit 0, and dropping one arm ' +
+      'fails TS2345 with no suppression. What is left at rung 4 is the orElse-versus-exhaustive ' +
+      'preference, which the type system cannot see and the walker cannot decide.',
     mutate: (d) => {
       const dispatch = d.dispatch as Record<string, unknown>
       // orElse over a record of booleans is legal by the rule's own carve-out, so the
       // violation has to dispatch on a closed literal union - the three strategies.
       dispatch.arms = [
-        { pattern: { strategy: 'one_for_one' }, channel: 'right', construct: 'RestartDecisionContinue', with: {} },
-        { pattern: { strategy: 'one_for_all' }, channel: 'right', construct: 'RestartDecisionContinue', with: {} },
-        { pattern: { strategy: 'rest_for_one' }, channel: 'left', construct: 'RestartDecisionExhausted', with: {} },
+        {
+          pattern: { strategy: 'one_for_one' },
+          channel: 'right',
+          construct: 'RestartDecisionContinue',
+          with: {},
+        },
+        {
+          pattern: { strategy: 'one_for_all' },
+          channel: 'right',
+          construct: 'RestartDecisionContinue',
+          with: {},
+        },
+        {
+          pattern: { strategy: 'rest_for_one' },
+          channel: 'left',
+          construct: 'RestartDecisionExhausted',
+          with: {},
+        },
       ]
       dispatch.fallback = {
         channel: 'right',
@@ -254,7 +283,9 @@ for (const attempt of ATTEMPTS) {
     console.log(`  ${attempt.violation}`)
     console.log(`  the emitted cell carries the violation and the rule stays silent: ${attempt.shippedOff}`)
     if (tsc.code !== 0) {
-      console.log(`  (tsc also fails here, on the probe's absent sibling module - an artifact, not a refusal)`)
+      console.log(
+        `  (tsc also fails here, on the probe's absent sibling module - an artifact, not a refusal)`,
+      )
     }
     record('SHIPPED-OFF')
     continue
@@ -267,9 +298,18 @@ for (const attempt of ATTEMPTS) {
     record('COMPILER-REFUSED')
     continue
   }
+  if (attempt.undecidableAtRungFour !== undefined) {
+    console.log(`UNDECIDABLE-AT-RUNG-4 ${attempt.rule}`)
+    console.log(`  ${attempt.violation}`)
+    console.log(`  ${attempt.undecidableAtRungFour}`)
+    record('UNDECIDABLE-AT-RUNG-4')
+    continue
+  }
   console.log(`UNREACHED ${attempt.rule}`)
   console.log(`  ${attempt.violation}`)
-  console.log(`  emitted cell carries the violation; neither the rule nor tsc caught it - a regression, not a licence`)
+  console.log(
+    `  emitted cell carries the violation; neither the rule nor tsc caught it - a regression, not a licence`,
+  )
   record('UNREACHED')
 }
 
