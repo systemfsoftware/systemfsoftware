@@ -1,8 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/tsconfig",
   "extends": [
-    "@systemfsoftware/tsconfig/tsc/dom/library-monorepo",
-    "@systemfsoftware/tsconfig/effect"
+    "@systemfsoftware/tsconfig/tsc/dom/library-monorepo"
   ],
   "compilerOptions": {
     "customConditions": ["@systemfsoftware/source"],

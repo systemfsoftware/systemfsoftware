@@ -1,46 +1,128 @@
 /**
- * @since 1.0.0
+ * React helpers for creating Atom instances that belong to one component
+ * subtree. `make` returns a scoped atom with a provider, context, and `use`
+ * accessor. Each provider creates its own Atom once, so different subtrees can
+ * use the same scoped atom definition without sharing state.
+ *
+ * @since 4.0.0
  */
 'use client'
+
 import type * as Atom from '@systemfsoftware/effect-atom/Atom'
 import * as React from 'react'
 
 /**
- * @since 1.0.0
- * @category Type IDs
+ * Literal type used as the `ScopedAtom` type identifier.
+ *
+ * **Details**
+ *
+ * Used as the computed property key and marker value stored on `ScopedAtom`
+ * objects.
+ *
+ * @category type IDs
+ * @since 4.0.0
  */
-export type TypeId = '~@systemfsoftware/effect-atom-react/ScopedAtom'
+export type TypeId = '~@effect/atom-react/ScopedAtom'
 
 /**
- * @since 1.0.0
- * @category Type IDs
+ * Type identifier for ScopedAtom.
+ *
+ * **Details**
+ *
+ * Used as the computed property key and marker value stored on `ScopedAtom`
+ * objects.
+ *
+ * @category type IDs
+ * @since 4.0.0
  */
-export const TypeId: TypeId = '~@systemfsoftware/effect-atom-react/ScopedAtom'
-
-interface ProviderChildren {
-  readonly children?: React.ReactNode | undefined
-}
-
-type ProviderProps<Input> = [Input] extends [never] ? ProviderChildren
-  : ProviderChildren & { readonly value: Input }
+export const TypeId: TypeId = '~@effect/atom-react/ScopedAtom'
 
 /**
- * @since 1.0.0
+ * Scoped Atom interface with a provider-backed instance.
+ *
+ * **Example** (Providing and reading a scoped atom)
+ *
+ * ```ts import.meta.vitest
+ * import { make, useAtomValue } from "@effect/atom-react"
+ * import { Atom } from "effect/unstable/reactivity"
+ * import * as React from "react"
+ * import { renderToStaticMarkup } from "react-dom/server"
+ *
+ * const Counter = make(() => Atom.make(0))
+ *
+ * function View() {
+ *   const atom = Counter.use()
+ *   const value = useAtomValue(atom)
+ *   return React.createElement("div", null, value)
+ * }
+ *
+ * export function App() {
+ *   return React.createElement(Counter.Provider, null, React.createElement(View))
+ * }
+ *
+ * renderToStaticMarkup(React.createElement(App)) // => "<div>0</div>"
+ * ```
+ *
  * @category models
+ * @since 4.0.0
  */
 export interface ScopedAtom<A extends Atom.Atom<any>, Input = never> {
   readonly [TypeId]: TypeId
   use(): A
-  Provider: React.FC<ProviderProps<Input>>
+  Provider: [Input] extends [never] ? React.FC<{ readonly children?: React.ReactNode | undefined }>
+    : React.FC<{ readonly children?: React.ReactNode | undefined; readonly value: Input }>
   Context: React.Context<A | undefined>
 }
 
 /**
- * @since 1.0.0
+ * Creates a ScopedAtom from a factory function.
+ *
+ * **When to use**
+ *
+ * Use to create an atom instance that is owned by a React provider and scoped
+ * to a component subtree.
+ *
+ * **Details**
+ *
+ * The returned scoped atom includes a `Provider`, `Context`, and `use`
+ * accessor. The provider creates the atom once for its lifetime, passing the
+ * `value` prop to the factory when the scoped atom expects input.
+ *
+ * **Gotchas**
+ *
+ * `use` must run under the matching provider. Changing the provider `value`
+ * prop after mount does not recreate the atom.
+ *
+ * **Example** (Creating a scoped atom with input)
+ *
+ * ```ts import.meta.vitest
+ * import { make, useAtomValue } from "@effect/atom-react"
+ * import { Atom } from "effect/unstable/reactivity"
+ * import * as React from "react"
+ * import { renderToStaticMarkup } from "react-dom/server"
+ *
+ * const User = make((name: string) => Atom.make(name))
+ *
+ * function UserName() {
+ *   const atom = User.use()
+ *   const value = useAtomValue(atom)
+ *   return React.createElement("span", null, value)
+ * }
+ *
+ * export function App() {
+ *   return React.createElement(
+ *     User.Provider,
+ *     { value: "Ada" },
+ *     React.createElement(UserName)
+ *   )
+ * }
+ *
+ * renderToStaticMarkup(React.createElement(App)) // => "<span>Ada</span>"
+ * ```
+ *
  * @category constructors
+ * @since 4.0.0
  */
-const takesNoInput = <A>(factory: (() => A) | ((input: never) => A)): factory is () => A => factory.length === 0
-
 export const make = <A extends Atom.Atom<any>, Input = never>(
   f: (() => A) | ((input: Input) => A),
 ): ScopedAtom<A, Input> => {
@@ -54,13 +136,13 @@ export const make = <A extends Atom.Atom<any>, Input = never>(
     return atom
   }
 
-  const Provider: React.FC<ProviderChildren | (ProviderChildren & { readonly value: Input })> = (props) => {
+  const Provider: React.FC<{ readonly children?: React.ReactNode | undefined; readonly value?: Input }> = (props) => {
     const atom = React.useRef<A | null>(null)
     if (atom.current === null) {
-      if ('value' in props) {
-        atom.current = f(props.value)
-      } else if (takesNoInput(f)) {
-        atom.current = f()
+      if (f.length === 0) {
+        atom.current = (f as () => A)()
+      } else if (props.value !== undefined) {
+        atom.current = (f as (input: Input) => A)(props.value)
       } else {
         throw new Error('ScopedAtom Provider requires a value')
       }

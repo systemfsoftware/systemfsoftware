@@ -1,17 +1,45 @@
 /**
- * @since 1.0.0
+ * Mutable reactive references for local, in-memory state.
+ *
+ * `AtomRef` provides small observable state cells that can be read, updated,
+ * mapped, and subscribed to without going through an `AtomRegistry`. Mutable
+ * refs can also create refs for nested properties. The module also provides a
+ * collection helper that stores item refs and notifies subscribers when items are
+ * inserted, removed, or changed.
+ *
+ * @since 4.0.0
  */
 import * as Equal from 'effect/Equal'
-import { type Equal as EqualType } from 'effect/Equal'
-import { globalValue } from 'effect/GlobalValue'
+import type { Equal as EqualType } from 'effect/Equal'
 import * as Hash from 'effect/Hash'
 
-const TypeId: TypeId = '~effect-atom/atom/AtomRef'
-type TypeId = '~effect-atom/atom/AtomRef'
+/**
+ * The literal type used to identify `AtomRef` values.
+ *
+ * @category type IDs
+ * @since 4.0.0
+ */
+export type TypeId = '~effect/reactivity/AtomRef'
 
 /**
- * @since 1.0.0
+ * The runtime type id used to identify `AtomRef` values.
+ *
+ * @category type IDs
+ * @since 4.0.0
+ */
+export const TypeId: TypeId = '~effect/reactivity/AtomRef'
+
+/**
+ * A read-only reactive reference.
+ *
+ * **Details**
+ *
+ * It exposes a stable key, the current value, subscriptions to value changes, and
+ * `map` for creating derived read-only references. Equality and hashing are based
+ * on the current value.
+ *
  * @category models
+ * @since 4.0.0
  */
 export interface ReadonlyRef<A> extends EqualType {
   readonly [TypeId]: TypeId
@@ -22,8 +50,15 @@ export interface ReadonlyRef<A> extends EqualType {
 }
 
 /**
- * @since 1.0.0
+ * A mutable reactive reference.
+ *
+ * **Details**
+ *
+ * It supports replacing the whole value, updating it from the current value, and
+ * creating mutable references to nested properties.
+ *
  * @category models
+ * @since 4.0.0
  */
 export interface AtomRef<A> extends ReadonlyRef<A> {
   readonly prop: <K extends keyof A>(prop: K) => AtomRef<A[K]>
@@ -32,8 +67,15 @@ export interface AtomRef<A> extends ReadonlyRef<A> {
 }
 
 /**
- * @since 1.0.0
+ * A reactive collection of mutable item references.
+ *
+ * **Details**
+ *
+ * The collection can push, insert, and remove item refs, and `toArray` returns the
+ * current raw item values.
+ *
  * @category models
+ * @since 4.0.0
  */
 export interface Collection<A> extends ReadonlyRef<readonly AtomRef<A>[]> {
   readonly push: (item: A) => Collection<A>
@@ -43,29 +85,40 @@ export interface Collection<A> extends ReadonlyRef<readonly AtomRef<A>[]> {
 }
 
 /**
- * @since 1.0.0
+ * Creates a mutable reactive reference initialized with the supplied value.
+ *
  * @category constructors
+ * @since 4.0.0
  */
 export const make = <A>(value: A): AtomRef<A> => new AtomRefImpl(value)
 
 /**
- * @since 1.0.0
+ * Creates a reactive collection from an iterable of initial item values.
+ *
+ * **Details**
+ *
+ * Each item is wrapped in an `AtomRef`, and changes to item refs notify the
+ * collection subscribers.
+ *
  * @category constructors
+ * @since 4.0.0
  */
 export const collection = <A>(items: Iterable<A>): Collection<A> => new CollectionImpl(items)
 
-const keyState = globalValue('@systemfsoftware/effect-atom/AtomRef/keyState', () => ({
+const keyState = {
   count: 0,
   generate() {
     return `AtomRef-${this.count++}`
   },
-}))
+}
 
 class ReadonlyRefImpl<A> implements ReadonlyRef<A> {
   readonly [TypeId]: TypeId
   readonly key = keyState.generate()
-  constructor(public value: A) {
+  public value: A
+  constructor(value: A) {
     this[TypeId] = TypeId
+    this.value = value
   }
 
   [Equal.symbol](that: Equal.Equal) {
@@ -76,25 +129,36 @@ class ReadonlyRefImpl<A> implements ReadonlyRef<A> {
     return Hash.hash(this.value)
   }
 
-  listeners: ((a: A) => void)[] = []
-  listenerCount = 0
+  listeners: Listener<A> | null = null
 
   notify(a: A) {
-    for (let i = 0; i < this.listenerCount; i++) {
-      this.listeners[i]!(a)
+    let listener = this.listeners
+    while (listener !== null) {
+      listener.f(a)
+      listener = listener.next
     }
   }
 
   subscribe(f: (a: A) => void): () => void {
-    this.listeners.push(f)
-    this.listenerCount++
+    const listener: Listener<A> = {
+      f,
+      prev: null,
+      next: this.listeners,
+    }
+    if (this.listeners) {
+      this.listeners.prev = listener
+    }
+    this.listeners = listener
 
     return () => {
-      const index = this.listeners.indexOf(f)
-      if (index !== -1) {
-        this.listeners[index] = this.listeners[this.listenerCount - 1]!
-        this.listeners.pop()
-        this.listenerCount--
+      if (this.listeners === listener) {
+        this.listeners = listener.next
+      }
+      if (listener.prev) {
+        listener.prev.next = listener.next
+      }
+      if (listener.next) {
+        listener.next.prev = listener.prev
       }
     }
   }
@@ -102,6 +166,12 @@ class ReadonlyRefImpl<A> implements ReadonlyRef<A> {
   map<B>(f: (a: A) => B): ReadonlyRef<B> {
     return new MapRefImpl(this, f)
   }
+}
+
+type Listener<A> = {
+  readonly f: (a: A) => void
+  prev: Listener<A> | null
+  next: Listener<A> | null
 }
 
 class AtomRefImpl<A> extends ReadonlyRefImpl<A> implements AtomRef<A> {
@@ -125,8 +195,12 @@ class AtomRefImpl<A> extends ReadonlyRefImpl<A> implements AtomRef<A> {
 class MapRefImpl<A, B> implements ReadonlyRef<B> {
   readonly [TypeId]: TypeId
   readonly key = keyState.generate()
-  constructor(readonly parent: ReadonlyRef<A>, readonly transform: (a: A) => B) {
+  readonly parent: ReadonlyRef<A>
+  readonly transform: (a: A) => B
+  constructor(parent: ReadonlyRef<A>, transform: (a: A) => B) {
     this[TypeId] = TypeId
+    this.parent = parent
+    this.transform = transform
   }
   [Equal.symbol](that: Equal.Equal) {
     return Equal.equals(this.value, (that as ReadonlyRef<B>).value)
@@ -157,8 +231,13 @@ class PropRefImpl<A, K extends keyof A> implements AtomRef<A[K]> {
   readonly [TypeId]: TypeId
   readonly key = keyState.generate()
   private previous: A[K]
-  constructor(readonly parent: AtomRef<A>, readonly _prop: K) {
+  readonly parent: AtomRef<A>
+  readonly _prop: K
+
+  constructor(parent: AtomRef<A>, _prop: K) {
     this[TypeId] = TypeId
+    this.parent = parent
+    this._prop = _prop
     this.previous = parent.value[_prop]
   }
   [Equal.symbol](that: Equal.Equal) {
@@ -168,8 +247,7 @@ class PropRefImpl<A, K extends keyof A> implements AtomRef<A[K]> {
     return Hash.hash(this.value)
   }
   get value() {
-    const parentValue = this.parent.value
-    if (parentValue != null && Object.hasOwn(parentValue, this._prop)) {
+    if (this.parent.value && this._prop in (this.parent.value as object)) {
       this.previous = this.parent.value[this._prop]
     }
     return this.previous
@@ -177,14 +255,15 @@ class PropRefImpl<A, K extends keyof A> implements AtomRef<A[K]> {
   subscribe(f: (a: A[K]) => void): () => void {
     let previous = this.value
     return this.parent.subscribe((a) => {
-      if (a != null && Object.hasOwn(a, this._prop)) {
-        const next = a[this._prop]
-        if (Equal.equals(next, previous)) {
-          return
-        }
-        previous = next
-        f(next)
+      if (!a || !(this._prop in (a as object))) {
+        return
       }
+      const next = a[this._prop]
+      if (Equal.equals(next, previous)) {
+        return
+      }
+      previous = next
+      f(next)
     })
   }
   map<C>(f: (a: A[K]) => C): ReadonlyRef<C> {
@@ -222,6 +301,8 @@ class PropRefImpl<A, K extends keyof A> implements AtomRef<A[K]> {
 }
 
 class CollectionImpl<A> extends ReadonlyRefImpl<AtomRef<A>[]> implements Collection<A> {
+  private readonly linked = new Set<AtomRef<A>>()
+
   constructor(items: Iterable<A>) {
     super([])
     for (const item of items) {
@@ -231,11 +312,14 @@ class CollectionImpl<A> extends ReadonlyRefImpl<AtomRef<A>[]> implements Collect
 
   makeRef(value: A) {
     const ref = new AtomRefImpl(value)
+    let proxy!: AtomRef<A>
     const notify = (value: A) => {
       ref.notify(value)
-      this.notify(this.value)
+      if (this.linked.has(proxy)) {
+        this.notify(this.value)
+      }
     }
-    return new Proxy(ref, {
+    proxy = new Proxy(ref, {
       get(target, p, _receiver) {
         if (p === 'notify') {
           return notify
@@ -243,6 +327,8 @@ class CollectionImpl<A> extends ReadonlyRefImpl<AtomRef<A>[]> implements Collect
         return target[p as keyof AtomRef<A>]
       },
     })
+    this.linked.add(proxy)
+    return proxy
   }
 
   push(item: A) {
@@ -263,6 +349,7 @@ class CollectionImpl<A> extends ReadonlyRefImpl<AtomRef<A>[]> implements Collect
     const index = this.value.indexOf(ref)
     if (index !== -1) {
       this.value.splice(index, 1)
+      this.linked.delete(ref)
       this.notify(this.value)
     }
     return this

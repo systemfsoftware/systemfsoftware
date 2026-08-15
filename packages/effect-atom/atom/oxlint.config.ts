@@ -1,6 +1,11 @@
 import { defineConfig } from 'oxlint'
 
 export default defineConfig({
+  categories: {
+    correctness: 'error',
+    perf: 'error',
+  },
+
   plugins: ['typescript', 'import', 'jsdoc', 'unicorn', 'oxc'],
 
   jsPlugins: [import.meta.resolve('@systemfsoftware/oxlint-plugin-effect-schema')],

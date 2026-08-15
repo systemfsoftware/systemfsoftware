@@ -1,126 +1,147 @@
 /**
- * @since 1.0.0
+ * Saves and restores serializable atom state.
+ *
+ * `dehydrate` reads atoms marked with `Atom.serializable` from an
+ * `AtomRegistry` and returns encoded entries keyed by their serialization keys.
+ * `hydrate` preloads those entries into another registry before the atoms are
+ * read. Initial `AsyncResult` values can be ignored, encoded as values, or
+ * represented by a `Deferred` that updates the target registry once the result
+ * is no longer initial.
+ *
+ * @since 4.0.0
  */
-import * as Arr from 'effect/Array'
+import * as Deferred from 'effect/Deferred'
+import * as Effect from 'effect/Effect'
+import type * as Fiber from 'effect/Fiber'
 import * as Atom from './Atom.js'
-import type * as Registry from './Registry.js'
-import * as Result from './Result.js'
-
-// Mirror of the inline `Node<A>` shape declared inside Registry.ts
-// (Registry.ts:52-55). Kept local because Registry's Node is not exported;
-// structurally identical to what `registry.getNodes()` returns.
-interface PublicNode<A> {
-  readonly atom: Atom.Atom<A>
-  readonly value: () => A
-}
+import type * as AtomRegistry from './Registry.js'
+import * as AsyncResult from './Result.js'
 
 /**
- * @since 1.0.0
+ * Marker interface for entries in a dehydrated atom registry state.
+ *
  * @category models
+ * @since 4.0.0
  */
 export interface DehydratedAtom {
-  readonly '~@systemfsoftware/effect-atom/DehydratedAtom': true
+  readonly '~effect/reactivity/DehydratedAtom': true
 }
 
 /**
- * @since 1.0.0
+ * A dehydrated serializable atom value.
+ *
+ * **Details**
+ *
+ * It stores the atom serialization key, encoded value, dehydration timestamp,
+ * and an optional `Deferred` used when an `AsyncResult.Initial` value is
+ * encoded as a future non-initial value.
+ *
  * @category models
+ * @since 4.0.0
  */
 export interface DehydratedAtomValue extends DehydratedAtom {
   readonly key: string
   readonly value: unknown
   readonly dehydratedAt: number
-  readonly resultPromise?: Promise<unknown> | undefined
+  readonly result?: Deferred.Deferred<unknown> | undefined
 }
 
 /**
- * @since 1.0.0
+ * Encodes the serializable atoms currently stored in a registry into dehydrated
+ * state.
+ *
+ * **Details**
+ *
+ * Only atoms marked with `Atom.serializable` are included. `encodeInitialAs`
+ * controls whether `AsyncResult.Initial` values are ignored, encoded as values,
+ * or represented by a `Deferred` that completes when the atom leaves the
+ * initial state.
+ *
  * @category dehydration
+ * @since 4.0.0
  */
 export const dehydrate = (
-  registry: Registry.Registry,
+  registry: AtomRegistry.Registry,
   options?: {
     /**
-     * How to encode `Result.Initial` values. Default is "ignore".
+     * How to encode `AsyncResult.Initial` values. Default is "ignore".
      */
-    readonly encodeInitialAs?: 'ignore' | 'promise' | 'value-only' | undefined
+    readonly encodeInitialAs?: 'ignore' | 'deferred' | 'value-only' | undefined
   },
-): DehydratedAtom[] => {
+): DehydratedAtomValue[] => {
   const encodeInitialResultMode = options?.encodeInitialAs ?? 'ignore'
-  const arr: DehydratedAtomValue[] = Arr.empty<DehydratedAtomValue>()
-  const now = performance.now()
+  const arr: DehydratedAtomValue[] = []
+  const now = Date.now()
   registry.getNodes().forEach((node, key) => {
     if (!Atom.isSerializable(node.atom)) return
     const atom = node.atom
     const value = node.value()
-    const isInitial = Result.isResult(value) && Result.isInitial(value)
+    const isInitial = AsyncResult.isAsyncResult(value) && AsyncResult.isInitial(value)
     if (encodeInitialResultMode === 'ignore' && isInitial) return
     const encodedValue = atom[Atom.SerializableTypeId].encode(value)
 
-    // Deferred that resolves when the atom leaves Initial; the resolver is
-    // captured for the subscription callback below.
-    let resultPromise: Promise<unknown> | undefined
-    if (encodeInitialResultMode === 'promise' && isInitial) {
-      const { promise, resolve } = Promise.withResolvers<unknown>()
+    // Create a Deferred that completes when the atom moves out of Initial state
+    let result: Deferred.Deferred<unknown> | undefined
+    if (encodeInitialResultMode === 'deferred' && isInitial) {
+      const deferred = Deferred.makeUnsafe<unknown>()
       const unsubscribe = registry.subscribe(atom, (newValue) => {
-        if (Result.isResult(newValue) && !Result.isInitial(newValue)) {
-          resolve(atom[Atom.SerializableTypeId].encode(newValue))
+        if (AsyncResult.isAsyncResult(newValue) && !AsyncResult.isInitial(newValue)) {
+          Deferred.doneUnsafe(deferred, Effect.succeed(atom[Atom.SerializableTypeId].encode(newValue)))
           unsubscribe()
         }
       })
-      resultPromise = promise
+      result = deferred
     }
 
     arr.push({
-      '~@systemfsoftware/effect-atom/DehydratedAtom': true,
+      '~effect/reactivity/DehydratedAtom': true,
       key: key as string,
       value: encodedValue,
       dehydratedAt: now,
-      resultPromise,
+      result,
     })
   })
   return arr
 }
 
 /**
- * @since 1.0.0
- * @category dehydration
- */
-export const toValues = (state: readonly DehydratedAtom[]): DehydratedAtomValue[] => state as DehydratedAtomValue[]
-
-/**
- * @since 1.0.0
+ * Applies dehydrated atom state to a registry.
+ *
+ * **When to use**
+ *
+ * Use to preload serialized atom values into a target registry before those
+ * atoms are read.
+ *
+ * **Details**
+ *
+ * Encoded values are preloaded by serialization key. Entries with a `result`
+ * Deferred update the matching registry node, or preload the resolved value,
+ * when the Deferred completes.
+ *
+ * Returns a fiber that completes once every pending `result` Deferred has been
+ * applied to the registry. Callers that need the state fully settled — tests,
+ * SSR flushes — can join it; fire-and-forget callers can ignore it.
+ *
  * @category hydration
+ * @since 4.0.0
  */
 export const hydrate = (
-  registry: Registry.Registry,
-  dehydratedState: Iterable<DehydratedAtom>,
-): void => {
-  for (const datom of dehydratedState as Iterable<DehydratedAtomValue>) {
+  registry: AtomRegistry.Registry,
+  dehydratedState: Iterable<DehydratedAtomValue>,
+): Fiber.Fiber<void, never> => {
+  const pending: Effect.Effect<void>[] = []
+  for (const datom of dehydratedState) {
     registry.setSerializable(datom.key, datom.value)
 
-    // If there's a resultPromise, it means this was in Initial state when dehydrated
-    // and we should wait for it to resolve to a non-Initial state, then update the registry
-    if (!datom.resultPromise) continue
-    void datom.resultPromise.then((resolvedValue) => {
-      // Try to update the existing node directly instead of using setSerializable
-      const nodes = registry.getNodes()
-      const node = nodes.get(datom.key)
-      if (node) {
-        // Decode the resolved value using the node's atom serializable decoder
-        const atom = node.atom
-        if (Atom.isSerializable(atom)) {
-          const decoded = atom[Atom.SerializableTypeId].decode(resolvedValue) // The public Node interface in Registry.ts omits the internal
-           // Node.setValue method, but every Node created by the registry
-          // implementation exposes it. A typed concrete cast to a
-          // structural shape (concrete non-Effect type) is the last-resort
-          // for accessing this internal contract.
-          ;(node as PublicNode<unknown> & { readonly setValue: (value: unknown) => void }).setValue(decoded)
-        }
-      } else {
-        // Fallback to setSerializable if node doesn't exist yet
-        registry.setSerializable(datom.key, resolvedValue)
-      }
-    })
+    // If there's a result Deferred, it means this was in Initial state when
+    // dehydrated — update the registry once it completes
+    if (!datom.result) continue
+    pending.push(
+      Effect.flatMap(Deferred.await(datom.result), (resolvedValue) =>
+        Effect.sync(() => {
+          registry.setSerializable(datom.key, resolvedValue)
+        })),
+    )
   }
+  return Effect.runFork(Effect.forEach(pending, (effect) => effect, { discard: true }))
 }

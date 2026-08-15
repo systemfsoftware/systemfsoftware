@@ -1,99 +1,119 @@
 /**
- * @since 1.0.0
+ * Connects typed `HttpApi` clients to atoms.
+ *
+ * The service created here exposes the generated HTTP API client plus
+ * atom-based query and mutation helpers. Query atoms call endpoints and track
+ * their asynchronous result, while mutations run endpoint calls that can
+ * invalidate reactivity keys after a successful request. Query atoms can also be
+ * cached, serialized for hydration, and kept alive with a time-to-live.
+ *
+ * @since 4.0.0
  */
-import * as Reactivity from '@effect/experimental/Reactivity'
-import type * as HttpApi from '@effect/platform/HttpApi'
-import * as HttpApiClient from '@effect/platform/HttpApiClient'
-import type * as HttpApiEndpoint from '@effect/platform/HttpApiEndpoint'
-import type * as HttpApiGroup from '@effect/platform/HttpApiGroup'
-import type * as HttpApiMiddleware from '@effect/platform/HttpApiMiddleware'
-import type * as HttpClient from '@effect/platform/HttpClient'
-import type * as HttpClientError from '@effect/platform/HttpClientError'
-import type { HttpClientResponse } from '@effect/platform/HttpClientResponse'
 import * as Context from 'effect/Context'
-import * as Data from 'effect/Data'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
-import * as Equal from 'effect/Equal'
-import { pipe } from 'effect/Function'
-import * as Hash from 'effect/Hash'
 import * as Layer from 'effect/Layer'
-import type * as ParseResult from 'effect/ParseResult'
 import type { ReadonlyRecord } from 'effect/Record'
-import type { Mutable, NoInfer, Simplify } from 'effect/Types'
+import * as Schema from 'effect/Schema'
+import type { Simplify } from 'effect/Types'
+import type * as HttpClient from 'effect/unstable/http/HttpClient'
+import * as HttpClientError from 'effect/unstable/http/HttpClientError'
+import type { HttpClientResponse } from 'effect/unstable/http/HttpClientResponse'
+import type * as HttpApi from 'effect/unstable/httpapi/HttpApi'
+import * as HttpApiClient from 'effect/unstable/httpapi/HttpApiClient'
+import * as HttpApiEndpoint from 'effect/unstable/httpapi/HttpApiEndpoint'
+import type * as HttpApiGroup from 'effect/unstable/httpapi/HttpApiGroup'
+import type * as HttpApiMiddleware from 'effect/unstable/httpapi/HttpApiMiddleware'
+import * as HttpApiSchema from 'effect/unstable/httpapi/HttpApiSchema'
+import * as Reactivity from 'effect/unstable/reactivity/Reactivity'
 import * as Atom from './Atom.js'
-import { wrapReactivityKeys } from './internal/data.js'
-import type * as Result from './Result.js'
+import { schemaCodec } from './internal/result-schema.js'
+import * as AsyncResult from './Result.js'
+// rc.108 does not expose HttpApiEndpoint.getSuccessSchemas/getErrorSchemas (added upstream
+// after rc.108); replicate them against the public .success/.error schema sets.
+const getSuccessSchemas = (endpoint: HttpApiEndpoint.Top): readonly [Schema.Top, ...Array<Schema.Top>] => {
+  const [first, ...rest] = Array.from(endpoint.success)
+  return first === undefined ? [HttpApiSchema.NoContent] : [first, ...rest]
+}
+const getErrorSchemas = (endpoint: HttpApiEndpoint.Top): readonly Schema.Top[] => Array.from(endpoint.error)
 
 /**
- * @since 1.0.0
- * @category Models
+ * A `Context.Service` for an HTTP API client integrated with atom reactivity.
+ *
+ * **Details**
+ *
+ * It exposes the generated HTTP API client, an atom runtime, mutation helpers that
+ * return `AtomResultFn`s, and query helpers that return atoms of endpoint results.
+ *
+ * @category services
+ * @since 4.0.0
  */
-export interface AtomHttpApiClient<Self, Id extends string, Groups extends HttpApiGroup.HttpApiGroup.Any, ApiE, E>
-  extends Context.Tag<Self, Simplify<HttpApiClient.Client<Groups, ApiE, never>>>
+export interface AtomHttpApiClient<Self, Id extends string, Groups extends HttpApiGroup.Constraint>
+  extends Context.Service<Self, HttpApiClient.Client<Groups, never, never>>
 {
-  new(_: never): Context.TagClassShape<Id, Simplify<HttpApiClient.Client<Groups, ApiE, never>>>
+  new(_: never): Context.ServiceClass.Shape<Id, HttpApiClient.Client<Groups, never, never>>
 
-  readonly layer: Layer.Layer<Self, E>
-  readonly runtime: Atom.AtomRuntime<Self, E>
+  readonly runtime: Atom.AtomRuntime<Self>
 
   readonly mutation: <
-    GroupName extends HttpApiGroup.HttpApiGroup.Name<Groups>,
-    Name extends HttpApiEndpoint.HttpApiEndpoint.Name<HttpApiGroup.HttpApiGroup.Endpoints<Group>>,
-    Group extends HttpApiGroup.HttpApiGroup.Any = HttpApiGroup.HttpApiGroup.WithName<Groups, GroupName>,
-    Endpoint extends HttpApiEndpoint.HttpApiEndpoint.Any = HttpApiEndpoint.HttpApiEndpoint.WithName<
-      HttpApiGroup.HttpApiGroup.Endpoints<Group>,
-      Name
+    GroupIdentifier extends HttpApiGroup.Identifier<Groups>,
+    EndpointIdentifier extends HttpApiEndpoint.Identifier<HttpApiGroup.Endpoints<Group>>,
+    Group extends HttpApiGroup.Constraint = HttpApiGroup.WithIdentifier<Groups, GroupIdentifier>,
+    Endpoint extends HttpApiEndpoint.Constraint = HttpApiEndpoint.WithIdentifier<
+      HttpApiGroup.Endpoints<Group>,
+      EndpointIdentifier
     >,
-    const WithResponse extends boolean = false,
+    const ResponseMode extends HttpApiEndpoint.ClientResponseMode = HttpApiEndpoint.ClientResponseMode,
   >(
-    group: GroupName,
-    endpoint: Name,
+    group: GroupIdentifier,
+    endpoint: EndpointIdentifier,
     options?: {
-      readonly withResponse?: WithResponse | undefined
+      readonly responseMode?: ResponseMode | undefined
     },
   ) => [Endpoint] extends [
     HttpApiEndpoint.HttpApiEndpoint<
-      infer _Name,
+      infer _Identifier,
       infer _Method,
       infer _Path,
-      infer _UrlParams,
+      infer _Params,
+      infer _Query,
       infer _Payload,
       infer _Headers,
       infer _Success,
       infer _Error,
-      infer _R,
+      infer _Middleware,
       infer _RE
     >,
   ] ? Atom.AtomResultFn<
       Simplify<
-        HttpApiEndpoint.HttpApiEndpoint.ClientRequest<_Path, _UrlParams, _Payload, _Headers, false> & {
+        HttpApiEndpoint.ClientRequest<_Params, _Query, _Payload, _Headers, 'decoded-only'> & {
           readonly reactivityKeys?: readonly unknown[] | ReadonlyRecord<string, readonly unknown[]> | undefined
         }
       >,
-      WithResponse extends true ? [_Success, HttpClientResponse] : _Success,
-      _Error | HttpApiGroup.HttpApiGroup.Error<Group> | E | HttpClientError.HttpClientError | ParseResult.ParseError
+      ResponseByMode<Extract<_Success, Schema.Top>['Type'], ResponseMode>,
+      ErrorByMode<_Error, _Middleware, ResponseMode>
     >
     : never
 
   readonly query: <
-    GroupName extends HttpApiGroup.HttpApiGroup.Name<Groups>,
-    Name extends HttpApiEndpoint.HttpApiEndpoint.Name<HttpApiGroup.HttpApiGroup.Endpoints<Group>>,
-    Group extends HttpApiGroup.HttpApiGroup.Any = HttpApiGroup.HttpApiGroup.WithName<Groups, GroupName>,
-    Endpoint extends HttpApiEndpoint.HttpApiEndpoint.Any = HttpApiEndpoint.HttpApiEndpoint.WithName<
-      HttpApiGroup.HttpApiGroup.Endpoints<Group>,
-      Name
+    GroupIdentifier extends HttpApiGroup.Identifier<Groups>,
+    EndpointIdentifier extends HttpApiEndpoint.Identifier<HttpApiGroup.Endpoints<Group>>,
+    Group extends HttpApiGroup.Constraint = HttpApiGroup.WithIdentifier<Groups, GroupIdentifier>,
+    Endpoint extends HttpApiEndpoint.Constraint = HttpApiEndpoint.WithIdentifier<
+      HttpApiGroup.Endpoints<Group>,
+      EndpointIdentifier
     >,
-    const WithResponse extends boolean = false,
+    const ResponseMode extends HttpApiEndpoint.ClientResponseMode = 'decoded-only',
   >(
-    group: GroupName,
-    endpoint: Name,
+    group: GroupIdentifier,
+    endpoint: EndpointIdentifier,
     request: [Endpoint] extends [
       HttpApiEndpoint.HttpApiEndpoint<
-        infer _Name,
+        infer _Identifier,
         infer _Method,
         infer _Path,
-        infer _UrlParams,
+        infer _Params,
+        infer _Query,
         infer _Payload,
         infer _Headers,
         infer _Success,
@@ -102,32 +122,34 @@ export interface AtomHttpApiClient<Self, Id extends string, Groups extends HttpA
         infer _RE
       >,
     ] ? Simplify<
-        HttpApiEndpoint.HttpApiEndpoint.ClientRequest<_Path, _UrlParams, _Payload, _Headers, WithResponse> & {
+        HttpApiEndpoint.ClientRequest<_Params, _Query, _Payload, _Headers, ResponseMode> & {
           readonly reactivityKeys?:
             | readonly unknown[]
             | ReadonlyRecord<string, readonly unknown[]>
             | undefined
-          readonly timeToLive?: Duration.DurationInput | undefined
+          readonly timeToLive?: Duration.Input | undefined
+          readonly serializationKey?: string | undefined
         }
       >
       : never,
   ) => [Endpoint] extends [
     HttpApiEndpoint.HttpApiEndpoint<
-      infer _Name,
+      infer _Identifier,
       infer _Method,
       infer _Path,
-      infer _UrlParams,
+      infer _Params,
+      infer _Query,
       infer _Payload,
       infer _Headers,
       infer _Success,
       infer _Error,
-      infer _R,
+      infer _Middleware,
       infer _RE
     >,
   ] ? Atom.Atom<
-      Result.Result<
-        WithResponse extends true ? [_Success, HttpClientResponse] : _Success,
-        _Error | HttpApiGroup.HttpApiGroup.Error<Group> | E | HttpClientError.HttpClientError | ParseResult.ParseError
+      AsyncResult.Result<
+        ResponseByMode<Extract<_Success, Schema.Top>['Type'], ResponseMode>,
+        ErrorByMode<_Error, _Middleware, ResponseMode>
       >
     >
     : never
@@ -140,176 +162,346 @@ declare global {
 }
 
 /**
- * @since 1.0.0
- * @category Constructors
+ * Creates a `Context.Service` class for an HTTP API client backed by an atom
+ * runtime.
+ *
+ * **Details**
+ *
+ * The options provide the API definition, HTTP client layer, optional client and
+ * response transforms, base URL, and runtime factory used by the query and
+ * mutation helpers.
+ *
+ * @category constructors
+ * @since 4.0.0
  */
-export const Tag =
+export const Service =
   <Self>() =>
-  <const Id extends string, ApiId extends string, Groups extends HttpApiGroup.HttpApiGroup.Any, ApiE, E, R>(
+  <const Id extends string, ApiId extends string, Groups extends HttpApiGroup.Constraint>(
     id: Id,
     options: {
-      readonly api: HttpApi.HttpApi<ApiId, Groups, ApiE, R>
-      readonly httpClient: Layer.Layer<
-        | HttpApiMiddleware.HttpApiMiddleware.Without<
-          NoInfer<R> | HttpApiGroup.HttpApiGroup.ClientContext<NoInfer<Groups>>
+      readonly api: HttpApi.HttpApi<ApiId, Groups>
+      readonly httpClient:
+        | Layer.Layer<
+          | HttpApiGroup.ClientServices<Groups>
+          | HttpClient.HttpClient
         >
-        | HttpClient.HttpClient,
-        E
-      >
+        | ((get: Atom.AtomContext) => Layer.Layer<
+          | HttpApiGroup.ClientServices<Groups>
+          | HttpClient.HttpClient
+        >)
       readonly transformClient?: ((client: HttpClient.HttpClient) => HttpClient.HttpClient) | undefined
       readonly transformResponse?:
-        | ((effect: Effect.Effect<unknown, unknown>) => Effect.Effect<unknown, unknown>)
+        | ((effect: Effect.Effect<unknown, unknown, unknown>) => Effect.Effect<unknown, unknown, unknown>)
         | undefined
       readonly baseUrl?: URL | string | undefined
       readonly runtime?: Atom.RuntimeFactory | undefined
     },
-  ): AtomHttpApiClient<Self, Id, Groups, ApiE, E> => {
-    const self: Mutable<AtomHttpApiClient<Self, Id, Groups, ApiE, E>> = Context.Tag(id)<
+  ): AtomHttpApiClient<Self, Id, Groups> => {
+    const service = Context.Service<
       Self,
-      HttpApiClient.Client<Groups, E, R>
-    >() as any
+      HttpApiClient.Client<Groups, never, never>
+    >()(id)
 
-    self.layer = Layer.scoped(
-      self,
+    const layer = Layer.effect(
+      service,
       HttpApiClient.make(options.api, options),
-    ).pipe(Layer.provide(options.httpClient)) as Layer.Layer<Self, E>
-    const runtimeFactory = options.runtime ?? Atom.runtime
-    self.runtime = runtimeFactory(self.layer)
+    )
+    const runtime = (options.runtime ?? Atom.runtime)(
+      typeof options.httpClient === 'function'
+        ? (get) =>
+          Layer.provide(
+            layer,
+            (options.httpClient as (get: Atom.AtomContext) => Layer.Layer<
+              | HttpApiGroup.ClientServices<Groups>
+              | HttpClient.HttpClient
+            >)(get),
+          ) as Layer.Layer<Self>
+        : Layer.provide(layer, options.httpClient) as Layer.Layer<Self>,
+    )
 
-    const mutationFamily = Atom.family(({ endpoint, group, withResponse }: MutationKey) =>
-      self.runtime.fn<{
-        path: any
-        urlParams: any
-        headers: any
-        payload: any
+    const catchErrors = Effect.catch((e: unknown) =>
+      Schema.isSchemaError(e) || HttpClientError.isHttpClientError(e) ? Effect.die(e) : Effect.fail(e)
+    )
+
+    interface EndpointCall {
+      (request: {
+        readonly params?: unknown
+        readonly query?: unknown
+        readonly payload?: unknown
+        readonly headers?: unknown
+        readonly responseMode?: HttpApiEndpoint.ClientResponseMode | undefined
+      }): Effect.Effect<unknown, unknown, never>
+    }
+    interface LooseClient {
+      readonly [group: string]: { readonly [endpoint: string]: EndpointCall }
+    }
+    const groupFor = <GroupIdentifier extends HttpApiGroup.Identifier<Groups>>(
+      id: GroupIdentifier,
+    ): HttpApiGroup.WithIdentifier<Groups, GroupIdentifier> =>
+      options.api.groups[id] as HttpApiGroup.WithIdentifier<Groups, GroupIdentifier>
+
+    const endpointFor = (group: string, endpoint: string): HttpApiEndpoint.Top =>
+      groupFor(group as HttpApiGroup.Identifier<Groups>).endpoints[
+        endpoint as HttpApiEndpoint.Identifier<HttpApiGroup.Endpoints<Groups>>
+      ] as HttpApiEndpoint.Top
+
+    const callEndpoint = (
+      client: HttpApiClient.Client<Groups, never, never>,
+      group: string,
+      endpoint: string,
+      request: {
+        readonly params?: unknown
+        readonly query?: unknown
+        readonly payload?: unknown
+        readonly headers?: unknown
+        readonly responseMode?: HttpApiEndpoint.ClientResponseMode | undefined
+      },
+    ): Effect.Effect<unknown, unknown, never> => (client as LooseClient)[group]![endpoint]!(request)
+
+    const resultSchema = schemaCodec
+
+    const mutationFamily = Atom.family(({ endpoint, group, responseMode }: MutationKey) => {
+      const fnAtom = runtime.fn<{
+        params: unknown
+        query: unknown
+        headers: unknown
+        payload: unknown
         reactivityKeys?: readonly unknown[] | ReadonlyRecord<string, readonly unknown[]> | undefined
       }>()(
         Effect.fnUntraced(function*(opts) {
-          const client = (yield* self) as Record<string, Record<string, (opts: any) => Effect.Effect<any, any, any>>>
-          const effect = client[group]![endpoint]!({
+          const client = yield* service
+          const effect = catchErrors(callEndpoint(client, group, endpoint, {
             ...opts,
-            withResponse,
-          })
+            responseMode,
+          }))
           return yield* opts.reactivityKeys
             ? Reactivity.mutation(effect, opts.reactivityKeys)
             : effect
         }),
       )
-    ) as any
+      if (responseMode === 'decoded-only') {
+        const definition = endpointFor(group, endpoint)
+        return Atom.serializable(fnAtom, {
+          key: `AtomHttpApi:mutation:${group}:${endpoint}`,
+          schema: resultSchema(
+            Schema.Union(getSuccessSchemas(definition)),
+            Schema.Union(getErrorSchemas(definition)),
+          ),
+        })
+      }
+      return fnAtom
+    })
 
-    self.mutation = ((group: string, endpoint: string, options?: {
-      readonly withResponse?: boolean | undefined
-    }) =>
-      mutationFamily(
-        new MutationKey({
-          group,
-          endpoint,
-          withResponse: options?.withResponse ?? false,
-        }),
-      )) as any
+    type MutationReturn<
+      Endpoint extends HttpApiEndpoint.Constraint,
+      ResponseMode extends HttpApiEndpoint.ClientResponseMode,
+    > = [Endpoint] extends [
+      HttpApiEndpoint.HttpApiEndpoint<
+        infer _Identifier,
+        infer _Method,
+        infer _Path,
+        infer _Params,
+        infer _Query,
+        infer _Payload,
+        infer _Headers,
+        infer _Success,
+        infer _Error,
+        infer _Middleware,
+        infer _RE
+      >,
+    ] ? Atom.AtomResultFn<
+        Simplify<
+          HttpApiEndpoint.ClientRequest<_Params, _Query, _Payload, _Headers, 'decoded-only'> & {
+            readonly reactivityKeys?:
+              | readonly unknown[]
+              | ReadonlyRecord<string, readonly unknown[]>
+              | undefined
+          }
+        >,
+        ResponseByMode<Extract<_Success, Schema.Top>['Type'], ResponseMode>,
+        ErrorByMode<_Error, _Middleware, ResponseMode>
+      >
+      : never
+
+    const mutation = <
+      GroupIdentifier extends HttpApiGroup.Identifier<Groups>,
+      EndpointIdentifier extends HttpApiEndpoint.Identifier<HttpApiGroup.Endpoints<Group>>,
+      Group extends HttpApiGroup.Constraint = HttpApiGroup.WithIdentifier<Groups, GroupIdentifier>,
+      Endpoint extends HttpApiEndpoint.Constraint = HttpApiEndpoint.WithIdentifier<
+        HttpApiGroup.Endpoints<Group>,
+        EndpointIdentifier
+      >,
+      const ResponseMode extends HttpApiEndpoint.ClientResponseMode = HttpApiEndpoint.ClientResponseMode,
+    >(
+      group: GroupIdentifier,
+      endpoint: EndpointIdentifier,
+      options?: {
+        readonly responseMode?: ResponseMode | undefined
+      },
+    ): MutationReturn<Endpoint, ResponseMode> =>
+      mutationFamily({
+        group,
+        endpoint,
+        responseMode: options?.responseMode ?? 'decoded-only',
+      }) as Atom.AtomResultFn<
+        {
+          params: unknown
+          query: unknown
+          headers: unknown
+          payload: unknown
+        },
+        unknown,
+        unknown
+      > as MutationReturn<Endpoint, ResponseMode>
 
     const queryFamily = Atom.family((opts: QueryKey) => {
-      let atom = self.runtime.atom(
-        Effect.flatMap(self, (client_) => {
-          const client = client_ as Record<string, Record<string, (opts: any) => Effect.Effect<any, any, any>>>
-          return client[opts.group]![opts.endpoint]!(opts)
-        }),
+      let atom = runtime.atom(
+        service.use((client) => catchErrors(callEndpoint(client, opts.group, opts.endpoint, opts))),
       )
+      if (opts.reactivityKeys) {
+        atom = runtime.factory.withReactivity(opts.reactivityKeys)(atom)
+      }
+      if (opts.responseMode === 'decoded-only' && opts.serializationKey) {
+        const endpoint = endpointFor(opts.group, opts.endpoint)
+        atom = Atom.serializable(atom, {
+          key: `AtomHttpApi:${opts.group}:${opts.endpoint}:${opts.serializationKey}`,
+          schema: resultSchema(
+            Schema.Union(getSuccessSchemas(endpoint)),
+            Schema.Union(getErrorSchemas(endpoint)),
+          ),
+        })
+      }
       if (opts.timeToLive) {
         atom = Duration.isFinite(opts.timeToLive)
           ? Atom.setIdleTTL(atom, opts.timeToLive)
           : Atom.keepAlive(atom)
       }
-      return opts.reactivityKeys
-        ? self.runtime.factory.withReactivity(opts.reactivityKeys)(atom)
-        : atom
+      return atom
     })
 
-    self.query = ((
-      group: string,
-      endpoint: string,
-      request: {
-        readonly path?: any
-        readonly urlParams?: any
-        readonly payload?: any
-        readonly headers?: any
-        readonly withResponse?: boolean
-        readonly reactivityKeys?: readonly unknown[] | ReadonlyRecord<string, readonly unknown[]> | undefined
-        readonly timeToLive?: Duration.DurationInput | undefined
-      },
-    ) =>
-      queryFamily(
-        new QueryKey({
-          group,
-          endpoint,
-          path: request.path && Data.struct(request.path),
-          urlParams: request.urlParams && Data.struct(request.urlParams),
-          payload: request.payload && Data.struct(request.payload),
-          headers: request.headers && Data.struct(request.headers),
-          withResponse: request.withResponse ?? false,
-          reactivityKeys: request.reactivityKeys
-            ? wrapReactivityKeys(request.reactivityKeys)
-            : undefined,
-          timeToLive: request.timeToLive
-            ? Duration.decode(request.timeToLive)
-            : undefined,
-        }),
-      )) as any
+    type QueryRequest<
+      Endpoint extends HttpApiEndpoint.Constraint,
+      ResponseMode extends HttpApiEndpoint.ClientResponseMode,
+    > = [Endpoint] extends [
+      HttpApiEndpoint.HttpApiEndpoint<
+        infer _Identifier,
+        infer _Method,
+        infer _Path,
+        infer _Params,
+        infer _Query,
+        infer _Payload,
+        infer _Headers,
+        infer _Success,
+        infer _Error,
+        infer _R,
+        infer _RE
+      >,
+    ] ? Simplify<
+        HttpApiEndpoint.ClientRequest<_Params, _Query, _Payload, _Headers, ResponseMode> & {
+          readonly reactivityKeys?:
+            | readonly unknown[]
+            | ReadonlyRecord<string, readonly unknown[]>
+            | undefined
+          readonly timeToLive?: Duration.Input | undefined
+          readonly serializationKey?: string | undefined
+        }
+      >
+      : never
 
-    return self as AtomHttpApiClient<Self, Id, Groups, ApiE, E>
+    type QueryReturn<
+      Endpoint extends HttpApiEndpoint.Constraint,
+      ResponseMode extends HttpApiEndpoint.ClientResponseMode,
+    > = [Endpoint] extends [
+      HttpApiEndpoint.HttpApiEndpoint<
+        infer _Identifier,
+        infer _Method,
+        infer _Path,
+        infer _Params,
+        infer _Query,
+        infer _Payload,
+        infer _Headers,
+        infer _Success,
+        infer _Error,
+        infer _Middleware,
+        infer _RE
+      >,
+    ] ? Atom.Atom<
+        AsyncResult.Result<
+          ResponseByMode<Extract<_Success, Schema.Top>['Type'], ResponseMode>,
+          ErrorByMode<_Error, _Middleware, ResponseMode>
+        >
+      >
+      : never
+
+    const query = <
+      GroupIdentifier extends HttpApiGroup.Identifier<Groups>,
+      EndpointIdentifier extends HttpApiEndpoint.Identifier<HttpApiGroup.Endpoints<Group>>,
+      Group extends HttpApiGroup.Constraint = HttpApiGroup.WithIdentifier<Groups, GroupIdentifier>,
+      Endpoint extends HttpApiEndpoint.Constraint = HttpApiEndpoint.WithIdentifier<
+        HttpApiGroup.Endpoints<Group>,
+        EndpointIdentifier
+      >,
+      const ResponseMode extends HttpApiEndpoint.ClientResponseMode = 'decoded-only',
+    >(
+      group: GroupIdentifier,
+      endpoint: EndpointIdentifier,
+      request: QueryRequest<Endpoint, ResponseMode>,
+    ): QueryReturn<Endpoint, ResponseMode> => {
+      const key: QueryKey = {
+        group,
+        endpoint,
+        params: request.params,
+        query: request.query,
+        payload: request.payload,
+        headers: request.headers,
+        responseMode: request.responseMode ?? 'decoded-only',
+        reactivityKeys: request.reactivityKeys,
+        timeToLive: request.timeToLive
+          ? Duration.fromInputUnsafe(request.timeToLive)
+          : undefined,
+        serializationKey: request.serializationKey,
+      }
+      return queryFamily(key) as QueryReturn<Endpoint, ResponseMode>
+    }
+
+    const self = Object.assign(service, {
+      runtime,
+      mutation,
+      query,
+    })
+
+    return self as AtomHttpApiClient<Self, Id, Groups>
   }
 
-class MutationKey extends Data.Class<{
+interface MutationKey {
   group: string
   endpoint: string
-  withResponse: boolean
-}> {
-  [Equal.symbol](that: QueryKey) {
-    return this.group === that.group && this.endpoint === that.endpoint && this.withResponse === that.withResponse
-  }
-  [Hash.symbol]() {
-    return pipe(
-      Hash.string(`${this.group}/${this.endpoint}/${this.withResponse}`),
-      Hash.cached(this),
-    )
-  }
+  responseMode: HttpApiEndpoint.ClientResponseMode
 }
 
-class QueryKey extends Data.Class<{
+interface QueryKey {
   group: string
   endpoint: string
-  path: any
-  urlParams: any
-  headers: any
-  payload: any
-  withResponse: boolean
-  reactivityKeys?: readonly unknown[] | ReadonlyRecord<string, readonly unknown[]> | undefined
-  timeToLive?: Duration.Duration | undefined
-}> {
-  [Equal.symbol](that: QueryKey) {
-    return (
-      this.group === that.group &&
-      this.endpoint === that.endpoint &&
-      Equal.equals(this.path, that.path) &&
-      Equal.equals(this.urlParams, that.urlParams) &&
-      Equal.equals(this.payload, that.payload) &&
-      Equal.equals(this.headers, that.headers) &&
-      Equal.equals(this.withResponse, that.withResponse) &&
-      Equal.equals(this.reactivityKeys, that.reactivityKeys) &&
-      Equal.equals(this.timeToLive, that.timeToLive)
-    )
-  }
-  [Hash.symbol]() {
-    return pipe(
-      Hash.string(`${this.group}/${this.endpoint}`),
-      Hash.combine(Hash.hash(this.path)),
-      Hash.combine(Hash.hash(this.urlParams)),
-      Hash.combine(Hash.hash(this.payload)),
-      Hash.combine(Hash.hash(this.headers)),
-      Hash.combine(Hash.hash(this.withResponse)),
-      Hash.combine(Hash.hash(this.reactivityKeys)),
-      Hash.combine(Hash.hash(this.timeToLive)),
-      Hash.cached(this),
-    )
-  }
+  params: unknown
+  query: unknown
+  headers: unknown
+  payload: unknown
+  responseMode: HttpApiEndpoint.ClientResponseMode
+  reactivityKeys: readonly unknown[] | ReadonlyRecord<string, readonly unknown[]> | undefined
+  timeToLive: Duration.Duration | undefined
+  serializationKey: string | undefined
 }
+
+type ResponseByMode<Success, ResponseMode extends HttpApiEndpoint.ClientResponseMode> = [ResponseMode] extends
+  ['decoded-and-response'] ? [Success, HttpClientResponse]
+  : [ResponseMode] extends ['response-only'] ? HttpClientResponse
+  : Success
+
+type ErrorByMode<
+  Error extends Schema.Constraint,
+  Middleware,
+  ResponseMode extends HttpApiEndpoint.ClientResponseMode,
+> =
+  | HttpApiMiddleware.Error<Middleware>
+  | HttpApiMiddleware.ClientError<Middleware>
+  | ([ResponseMode] extends ['response-only'] ? never : Error['Type'])

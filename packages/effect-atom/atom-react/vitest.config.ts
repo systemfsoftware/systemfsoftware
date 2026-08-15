@@ -1,18 +1,50 @@
+import { defineConfig, sharedConfig } from '@systemfsoftware/vitest-config'
+import { playwright } from '@vitest/browser-playwright'
 import * as path from 'node:path'
-import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
+  ...sharedConfig,
   test: {
-    include: ['./test/**/*.test.{ts,tsx}'],
-    environment: 'jsdom',
-    setupFiles: ['./vitest-setup.ts'],
+    ...sharedConfig.test,
+    projects: [
+      {
+        extends: true,
+        test: {
+          name: 'browser',
+          include: ['./test/**/*.test.{ts,tsx}', '!./test/ssr.test.tsx'],
+          setupFiles: ['./vitest-setup.ts'],
+          browser: {
+            enabled: true,
+            provider: playwright(),
+            headless: true,
+            instances: [{ browser: 'chromium' }],
+          },
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: 'node',
+          include: ['./test/ssr.test.tsx'],
+          environment: 'node',
+        },
+      },
+    ],
+    coverage: {
+      ...sharedConfig.test?.coverage,
+      provider: 'istanbul',
+      include: ['src/**/*.{ts,tsx}'],
+      exclude: ['src/**/*.test.{ts,tsx}'],
+    },
   },
   resolve: {
+    conditions: ['@systemfsoftware/source', 'source', 'import', 'node', 'default'],
     alias: {
       '@systemfsoftware/effect-atom/test': path.join(__dirname, '../atom/test'),
       '@systemfsoftware/effect-atom': path.join(__dirname, '../atom/src'),
       '@systemfsoftware/effect-atom-react/test': path.join(__dirname, 'test'),
       '@systemfsoftware/effect-atom-react': path.join(__dirname, 'src'),
+      '@systemfsoftware/effect-gherkin-spec-v4': path.join(__dirname, '../../effect-gherkin-spec-v4/src/mod.ts'),
     },
   },
 })

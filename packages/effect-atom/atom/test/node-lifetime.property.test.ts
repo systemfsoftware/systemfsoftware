@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@effect/vitest'
-import * as fc from 'effect/FastCheck'
+import * as fc from 'effect/testing/FastCheck'
 import { decideNodeFate, type NodeLifetimeInput } from '../src/internal/node-lifetime.observer.js'
 
 const arbInput: fc.Arbitrary<NodeLifetimeInput> = fc.record({
