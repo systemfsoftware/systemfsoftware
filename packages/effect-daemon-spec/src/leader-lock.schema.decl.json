@@ -1,0 +1,48 @@
+{
+  "role": "schema",
+  "namespace": "S",
+  "imports": [
+    {
+      "module": "effect",
+      "values": [
+        "Schema"
+      ],
+      "alias": {
+        "Schema": "S"
+      }
+    }
+  ],
+  "declarations": [
+    {
+      "kind": "taggedError",
+      "name": "LeaderLockNotAcquired",
+      "tag": "LeaderLockNotAcquired",
+      "fields": {
+        "key": {
+          "ref": "String"
+        }
+      }
+    },
+    {
+      "kind": "taggedError",
+      "name": "LeaderLockInfraError",
+      "tag": "LeaderLockInfraError",
+      "fields": {
+        "key": {
+          "ref": "String"
+        },
+        "cause": {
+          "ref": "Unknown"
+        }
+      }
+    },
+    {
+      "kind": "typeAlias",
+      "name": "LeaderLockAcquireError",
+      "union": [
+        "LeaderLockNotAcquired",
+        "LeaderLockInfraError"
+      ]
+    }
+  ]
+}

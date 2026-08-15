@@ -37,3 +37,16 @@ export const restartIndicesFor = (
     ),
     Match.exhaustive,
   )
+
+/**
+ * The cross-field invariant the decode input carries: a failed child's index addresses one of
+ * the children that exist.
+ *
+ * It lives here rather than inline in `Schema.filter` because a refinement predicate is a
+ * function body, and a declaration carries none. Naming it also makes it reachable by a
+ * property test, which an inline arrow is not.
+ */
+export const failedIndexAddressesAChild = (input: {
+  readonly failedIndex: number
+  readonly totalChildren: number
+}): boolean => input.failedIndex < input.totalChildren

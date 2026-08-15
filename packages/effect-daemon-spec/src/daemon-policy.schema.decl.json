@@ -1,0 +1,194 @@
+{
+  "role": "schema",
+  "namespace": "Schema",
+  "imports": [
+    {
+      "module": "effect",
+      "values": [
+        "Schema"
+      ]
+    },
+    {
+      "module": "./supervisor-dynamic.kernel.js",
+      "values": [
+        "MAX_CHILDREN_CEILING"
+      ]
+    }
+  ],
+  "declarations": [
+    {
+      "kind": "schema",
+      "name": "IntensityConfig",
+      "value": {
+        "struct": {
+          "restarts": {
+            "pipe": [
+              {
+                "ref": "Int"
+              },
+              {
+                "greaterThanOrEqualTo": {
+                  "value": 0
+                }
+              }
+            ]
+          },
+          "window": {
+            "ref": "DurationFromSelf"
+          }
+        }
+      },
+      "typeAlias": {
+        "form": "Type"
+      }
+    },
+    {
+      "kind": "typeId",
+      "name": "IntensityTypeId",
+      "symbol": "@systemfsoftware/effect-daemon-spec/Intensity",
+      "exportType": true
+    },
+    {
+      "kind": "taggedClass",
+      "name": "BoundedIntensity",
+      "tag": "Bounded",
+      "fields": {
+        "fieldsOf": "IntensityConfig"
+      },
+      "brand": "IntensityTypeId"
+    },
+    {
+      "kind": "taggedClass",
+      "name": "UnboundedIntensity",
+      "tag": "Unbounded",
+      "fields": {},
+      "brand": "IntensityTypeId"
+    },
+    {
+      "kind": "schema",
+      "name": "Intensity",
+      "value": {
+        "union": [
+          {
+            "name": "BoundedIntensity"
+          },
+          {
+            "name": "UnboundedIntensity"
+          }
+        ]
+      },
+      "typeAlias": {
+        "form": "Type"
+      }
+    },
+    {
+      "kind": "class",
+      "name": "ChildPolicyConfig",
+      "id": "ChildPolicyConfig",
+      "fields": {
+        "restart": {
+          "optional": {
+            "literal": [
+              "permanent",
+              "transient",
+              "temporary"
+            ]
+          }
+        },
+        "intensity": {
+          "optional": {
+            "name": "IntensityConfig"
+          }
+        }
+      }
+    },
+    {
+      "kind": "class",
+      "name": "SupervisorPolicyConfig",
+      "id": "SupervisorPolicyConfig",
+      "fields": {
+        "intensity": {
+          "optional": {
+            "name": "IntensityConfig"
+          }
+        },
+        "cooldown": {
+          "optional": {
+            "ref": "DurationFromSelf"
+          }
+        }
+      }
+    },
+    {
+      "kind": "class",
+      "name": "LockPolicyConfig",
+      "id": "LockPolicyConfig",
+      "fields": {
+        "mode": {
+          "optional": {
+            "literal": [
+              "none",
+              "required",
+              "optional"
+            ]
+          }
+        },
+        "key": {
+          "optional": {
+            "ref": "String"
+          }
+        }
+      }
+    },
+    {
+      "kind": "class",
+      "name": "TickPolicyConfig",
+      "id": "TickPolicyConfig",
+      "fields": {
+        "spanName": {
+          "optional": {
+            "ref": "String"
+          }
+        },
+        "tickTimeout": {
+          "ref": "DurationFromSelf"
+        },
+        "startLogLevel": {
+          "optional": {
+            "literal": [
+              "debug",
+              "info"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "kind": "schema",
+      "name": "MaxChildren",
+      "value": {
+        "pipe": [
+          {
+            "ref": "Int"
+          },
+          {
+            "between": [
+              {
+                "value": 1
+              },
+              {
+                "name": "MAX_CHILDREN_CEILING"
+              }
+            ]
+          },
+          {
+            "brand": "MaxChildren"
+          }
+        ]
+      },
+      "typeAlias": {
+        "form": "Type"
+      }
+    }
+  ]
+}

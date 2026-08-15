@@ -1,0 +1,30 @@
+{
+  "role": "schema",
+  "namespace": "S",
+  "imports": [
+    {
+      "module": "effect",
+      "values": [
+        "Schema"
+      ],
+      "alias": {
+        "Schema": "S"
+      }
+    }
+  ],
+  "declarations": [
+    {
+      "kind": "taggedError",
+      "name": "LockPrimitiveError",
+      "tag": "LockPrimitiveError",
+      "fields": {
+        "key": {
+          "ref": "String"
+        },
+        "cause": {
+          "ref": "Unknown"
+        }
+      }
+    }
+  ]
+}

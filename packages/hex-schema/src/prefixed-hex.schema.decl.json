@@ -1,0 +1,68 @@
+{
+  "role": "schema",
+  "namespace": "S",
+  "imports": [
+    {
+      "module": "effect",
+      "values": [
+        "Schema"
+      ],
+      "alias": {
+        "Schema": "S"
+      }
+    },
+    {
+      "module": "./prefixed-hex.kernel.js",
+      "values": [
+        "addHexPrefix",
+        "stripHexPrefix"
+      ]
+    },
+    {
+      "module": "./strict-hex.schema.js",
+      "values": [
+        "StrictHex"
+      ]
+    }
+  ],
+  "declarations": [
+    {
+      "kind": "schema",
+      "name": "PrefixedHex",
+      "value": {
+        "pipe": [
+          {
+            "transform": {
+              "from": {
+                "template": [
+                  "0x",
+                  {
+                    "ref": "String"
+                  }
+                ]
+              },
+              "to": {
+                "name": "StrictHex"
+              },
+              "decode": "stripHexPrefix",
+              "encode": "addHexPrefix"
+            }
+          },
+          {
+            "annotations": {
+              "identifier": "PrefixedHex",
+              "description": "A 0x-prefixed hex string on the wire — decodes to a plain lowercase hex string",
+              "title": "Prefixed Hex String"
+            }
+          },
+          {
+            "brand": "PrefixedHex"
+          }
+        ]
+      },
+      "typeAlias": {
+        "form": "schemaType"
+      }
+    }
+  ]
+}

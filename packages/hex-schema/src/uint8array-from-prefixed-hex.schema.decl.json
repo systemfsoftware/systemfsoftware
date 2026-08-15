@@ -1,0 +1,57 @@
+{
+  "role": "schema",
+  "namespace": "S",
+  "imports": [
+    {
+      "module": "effect",
+      "values": [
+        "Schema"
+      ],
+      "alias": {
+        "Schema": "S"
+      }
+    },
+    {
+      "module": "./hex-bytes.schema.js",
+      "values": [
+        "HexBytes"
+      ]
+    },
+    {
+      "module": "./prefixed-hex.schema.js",
+      "values": [
+        "PrefixedHex"
+      ]
+    }
+  ],
+  "declarations": [
+    {
+      "kind": "schema",
+      "name": "Uint8ArrayFromPrefixedHex",
+      "value": {
+        "pipe": [
+          {
+            "composeWith": [
+              {
+                "name": "PrefixedHex"
+              },
+              {
+                "name": "HexBytes"
+              }
+            ]
+          },
+          {
+            "annotations": {
+              "identifier": "Uint8ArrayFromPrefixedHex",
+              "description": "Uint8Array encoded as a 0x-prefixed hex string",
+              "title": "Uint8Array from Prefixed Hex"
+            }
+          }
+        ]
+      },
+      "typeAlias": {
+        "form": "schemaType"
+      }
+    }
+  ]
+}

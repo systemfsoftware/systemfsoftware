@@ -18,9 +18,7 @@ export class CooldownEpoch extends S.TaggedClass<CooldownEpoch>()('CooldownEpoch
 export const EpochStep = S.Union(StopEpoch, RestartEpoch, CooldownEpoch)
 export type EpochStep = typeof EpochStep.Type
 
-const SupervisionEpochResultTypeId: unique symbol = Symbol.for(
-  '@systemfsoftware/effect-daemon/SupervisionEpochResult',
-)
+const SupervisionEpochResultTypeId: unique symbol = Symbol.for('@systemfsoftware/effect-daemon/SupervisionEpochResult')
 type SupervisionEpochResultTypeId = typeof SupervisionEpochResultTypeId
 
 export class StopSupervision extends S.TaggedClass<StopSupervision>()('StopSupervision', {}) {
