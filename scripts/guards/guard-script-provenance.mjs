@@ -170,6 +170,14 @@ const MANIFEST = new Map([
     'workspace-layout',
     'Turns a *.schema.decl.json into a schema cell. Same reason as the other emitters: it writes into any package src/ and the authorship gate is its only caller in a chain.',
   ]],
+  ['tools/term.ts', [
+    'workspace-layout',
+    'The TypeScript authoring front-end for the term language. A library the term sources import; called by no chain of its own.',
+  ]],
+  ['tools/term-compile.ts', [
+    'workspace-layout',
+    'Compiles a *.term.json into a cell. One compiler for every role, so it writes into any package src/ and the authorship gate is its only caller in a chain.',
+  ]],
   ['tools/shape-emit.ts', [
     'workspace-layout',
     'Turns a *.shape.decl.json into a shape cell. Same reason as the other emitters: it writes into any package src/ and the authorship gate is its only caller in a chain.',

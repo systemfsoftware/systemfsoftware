@@ -21,6 +21,7 @@
 import { emitExecutor, parseExecutor } from '../tools/executor-emit.ts'
 import { emitSchema, parseSchema } from '../tools/schema-emit.ts'
 import { emitShape, parseShape } from '../tools/shape-emit.ts'
+import { compileProgram, loadProgram, parseProgram } from '../tools/term-compile.ts'
 import { emitWorkflow, parseWorkflow } from '../tools/workflow-emit.ts'
 
 type Emitter = (declaration: unknown) => string
@@ -31,6 +32,16 @@ const ROLES: Readonly<Record<string, Emitter>> = {
   schema: (raw) => emitSchema(parseSchema(raw)),
   shape: (raw) => emitShape(parseShape(raw)),
 }
+
+/**
+ * The term language, which is not keyed by role.
+ *
+ * `ROLES` above is one emitter per role because a data description's vocabulary *is* the role's
+ * vocabulary - a schema cell's constructs are Schema's. A term is a program, and programs do not
+ * come in roles: one compiler serves every cell, and the role survives only in the filename
+ * because the lint rules read the cell's suffix.
+ */
+const compileTerm: Emitter = (raw) => compileProgram(parseProgram(raw))
 
 /**
  * Roles with no hand-authored cell left. Only these carry the completeness guarantee, and
@@ -73,14 +84,35 @@ type Verdict = {
 }
 
 export const roleOf = (path: string): string | undefined => {
-  const match = /\.([a-z]+)\.(?:ts|decl\.json)$/.exec(path)
+  const match = /\.([a-z]+)\.(?:term\.ts|ts|decl\.json)$/.exec(path)
   const role = match?.[1]
   return role !== undefined && role in ROLES ? role : undefined
 }
 
-export const cellOf = (declaration: string): string => declaration.replace(/\.decl\.json$/, '.ts')
+/**
+ * A term lives under `terms/` rather than beside its cell, because `cell-suffix-required` governs
+ * every file under `src/`: a term is not a cell, so `src/` is exactly where it may not go. The
+ * `terms/` tree mirrors `src/`, and these two functions are the mapping.
+ */
+export const cellOf = (declaration: string): string =>
+  declaration.endsWith('.term.ts')
+    ? declaration.replace('/terms/', '/src/').replace(/\.term\.ts$/, '.ts')
+    : declaration.replace(/\.decl\.json$/, '.ts')
 
-export const declarationOf = (cell: string): string => cell.replace(/\.ts$/, '.decl.json')
+/**
+ * The two authorship forms a cell may have.
+ *
+ * A `.decl.json` is a data description, emitted by the role's own emitter. A `.term.json` is a
+ * program in the term language, compiled by one compiler for every role - which is why the role
+ * appears in the filename but nowhere in the language. A cell has at most one; either satisfies
+ * completeness, and both present is an orphan the gate reports.
+ */
+export const declarationsOf = (cell: string): readonly string[] => [
+  cell.replace(/\.ts$/, '.decl.json'),
+  cell.replace('/src/', '/terms/').replace(/\.ts$/, '.term.ts'),
+]
+
+export const isTerm = (path: string): boolean => path.endsWith('.term.ts')
 
 export const inPopulation = (path: string): boolean =>
   path.endsWith('.ts') &&
@@ -88,14 +120,17 @@ export const inPopulation = (path: string): boolean =>
   path.includes('/src/') &&
   !OUTSIDE_POPULATION.some((fragment) => path.includes(fragment))
 
-export const isDeclaration = (path: string): boolean => path.endsWith('.decl.json') && roleOf(path) !== undefined
+export const isDeclaration = (path: string): boolean =>
+  (path.endsWith('.decl.json') || path.endsWith('.term.ts')) && roleOf(path) !== undefined
 
 export const verdict = (evidence: Evidence): Verdict => {
   const declared = new Set(evidence.declarations)
   const cells = new Set(evidence.cells)
   return {
     undeclared: evidence.cells
-      .filter((cell) => COMPLETE_ROLES.includes(roleOf(cell) ?? '') && !declared.has(declarationOf(cell)))
+      .filter((cell) =>
+        COMPLETE_ROLES.includes(roleOf(cell) ?? '') && !declarationsOf(cell).some((d) => declared.has(d))
+      )
       .sort(),
     orphaned: evidence.declarations.filter((decl) => !cells.has(cellOf(decl))).sort(),
     drifted: evidence.declarations
@@ -152,8 +187,10 @@ const gather = async (): Promise<Evidence> => {
 
   const emitted: Record<string, string> = {}
   for (const decl of declarations) {
-    const emit = ROLES[roleOf(decl)!]!
-    const raw: unknown = JSON.parse(await Deno.readTextFile(decl))
+    const emit = isTerm(decl) ? compileTerm : ROLES[roleOf(decl)!]!
+    const raw: unknown = isTerm(decl)
+      ? await loadProgram(decl)
+      : JSON.parse(await Deno.readTextFile(decl))
     emitted[decl] = await formatted(emit(raw), cellOf(decl))
   }
   const onDisk: Record<string, string> = {}
@@ -167,10 +204,11 @@ const main = async (): Promise<number> => {
   const result = verdict(evidence)
 
   for (const cell of result.undeclared) {
+    const [decl, term] = declarationsOf(cell)
     console.error(
       `::error file=${cell}::hand-authored ${roleOf(cell)} cell. Every cell of a complete role is emitted: ` +
-        `write ${declarationOf(cell)} and regenerate with ` +
-        `\`deno run scripts/tools/${roleOf(cell)}-emit.ts <decl> <out>\`.`,
+        `write ${decl} and regenerate with \`deno run scripts/tools/${roleOf(cell)}-emit.ts <decl> <out>\`, ` +
+        `or write ${term} and compile it with \`deno run scripts/tools/term-compile.ts <term> <out>\`.`,
     )
   }
   for (const decl of result.orphaned) {
@@ -220,6 +258,36 @@ const FIXTURES: readonly { label: string; evidence: Evidence; expect: Verdict }[
       onDisk: { 'p/src/a.workflow.ts': 'export const a = 1\n' },
     },
     expect: { undeclared: ['p/src/a.workflow.ts'], orphaned: [], drifted: [] },
+  },
+  {
+    label: 'a term satisfies completeness for a cell of a complete role, exactly as a declaration does',
+    evidence: {
+      cells: ['p/src/a.workflow.ts'],
+      declarations: ['p/terms/a.workflow.term.ts'],
+      emitted: { 'p/terms/a.workflow.term.ts': 'export const a = 1\n' },
+      onDisk: { 'p/src/a.workflow.ts': 'export const a = 1\n' },
+    },
+    expect: { undeclared: [], orphaned: [], drifted: [] },
+  },
+  {
+    label: 'a term owes the same fidelity: a cell edited after compilation has drifted',
+    evidence: {
+      cells: ['p/src/a.executor.ts'],
+      declarations: ['p/terms/a.executor.term.ts'],
+      emitted: { 'p/terms/a.executor.term.ts': 'export const a = 1\n' },
+      onDisk: { 'p/src/a.executor.ts': 'export const a = 2\n' },
+    },
+    expect: { undeclared: [], orphaned: [], drifted: ['p/terms/a.executor.term.ts'] },
+  },
+  {
+    label: 'a term whose cell was deleted is orphaned, so the two forms cannot hide each other',
+    evidence: {
+      cells: [],
+      declarations: ['p/terms/a.workflow.term.ts'],
+      emitted: { 'p/terms/a.workflow.term.ts': 'export const a = 1\n' },
+      onDisk: {},
+    },
+    expect: { undeclared: [], orphaned: ['p/terms/a.workflow.term.ts'], drifted: [] },
   },
   {
     label: 'a hand-authored cell of an incomplete role is not yet required to be declared',
