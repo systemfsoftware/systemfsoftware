@@ -1,5 +1,5 @@
 import { getComponentIdFromEntry } from 'storybook/internal/common';
-import { extractComponentDescription, extractDescription } from 'storybook/internal/csf-tools';
+import { extractDescription } from 'storybook/internal/csf-tools';
 import type {
   ComponentManifest,
   ComponentSubcomponentManifest,
@@ -10,6 +10,7 @@ import type {
 import path from 'pathe';
 
 import type { ComponentDoc, PropItem } from './componentMeta/componentMetaExtractor.ts';
+import { extractComponentDescription } from './extractComponentDescription.ts';
 import { type ComponentRef, getImports } from './getComponentImports.ts';
 import { type DocObj } from './reactDocgen.ts';
 import { type ComponentDocWithExportName } from './reactDocgenTypescript.ts';

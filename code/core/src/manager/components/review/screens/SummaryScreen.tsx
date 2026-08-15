@@ -40,8 +40,8 @@ import {
   buildReviewStoryHref,
   buildSummaryBackHref,
 } from '../review-navigation.ts';
-import type { ReviewBanner } from '../review-context.ts';
 import type { ReviewState } from '../review-state.ts';
+import type { ReviewBanner } from '../review-store.ts';
 import type { StoryInfo } from '../review-types.ts';
 
 const MarkdownWrapper = styled(DocumentWrapper)(({ theme }) => ({
@@ -239,18 +239,17 @@ const CollectionLandmark: FC<{ titleId: string; children: ReactNode }> = ({
   );
 };
 
-// A `contentinfo` landmark must stay top-level, but this footer sits inside the
-// `main` landmark, so it is exposed as a named `region` instead. It renders as a
-// `section` because `region` is not an allowed role on `footer` (aria-allowed-role),
-// and a `<footer>` nested in `<main>` has no implicit `contentinfo` role anyway.
+// A `contentinfo` landmark must stay top-level, but this footer is rendered
+// inside the `main` landmark, so it is exposed as a named `region` instead
+// (a `<footer>` nested in `<main>` has no implicit `contentinfo` role).
 const FooterLandmark: FC<{ children: ReactNode }> = ({ children }) => {
   const regionRef = useRef<HTMLDivElement>(null);
   const { landmarkProps } = useLandmark(
-    { role: 'contentinfo', 'aria-label': 'About this review' },
+    { role: 'region', 'aria-label': 'About this review' },
     regionRef
   );
   return (
-    <Footer as="section" ref={regionRef} {...landmarkProps}>
+    <Footer as="footer" ref={regionRef} {...landmarkProps}>
       {children}
     </Footer>
   );

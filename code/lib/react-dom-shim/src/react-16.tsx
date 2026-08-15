@@ -1,4 +1,4 @@
-/* oxlint-disable react-classic/no-deprecated -- this shim intentionally targets the legacy react-dom 16 APIs */
+/* eslint-disable react/no-deprecated */
 import type { ReactElement } from 'react';
 import * as ReactDOM from 'react-dom';
 

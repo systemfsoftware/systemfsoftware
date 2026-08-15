@@ -59,13 +59,7 @@ export class ComponentMetaProject {
       string,
       [number | undefined, ts.IScriptSnapshot | undefined]
     > = new Map(),
-    private getCommandLineFn?: () => ts.ParsedCommandLine,
-    /**
-     * Shared by ComponentMetaManager so projects with matching compiler options reuse parsed+bound
-     * SourceFiles. The snapshot cache above dedupes the file *reads*, not the ASTs: without a shared
-     * registry each LanguageService re-parses lib.d.ts, React's types and node_modules from scratch.
-     */
-    private documentRegistry?: ts.DocumentRegistry
+    private getCommandLineFn?: () => ts.ParsedCommandLine
   ) {
     // Adapted from:
     // https://github.com/volarjs/volar.js/blob/882cd56d46a13d272f34e451f495d3d62251969a/packages/kit/lib/createChecker.ts#L110-L141
@@ -130,7 +124,7 @@ export class ComponentMetaProject {
       projectHost
     );
 
-    this.ls = typescript.createLanguageService(languageServiceHost, this.documentRegistry);
+    this.ls = typescript.createLanguageService(languageServiceHost);
   }
 
   getCommandLine(): ts.ParsedCommandLine {
@@ -183,12 +177,8 @@ export class ComponentMetaProject {
     }
   }
 
-  getSourceFile(fileName: string): ts.SourceFile | undefined {
-    return this.ls.getProgram()?.getSourceFile(fileName);
-  }
-
   hasSourceFile(fileName: string): boolean {
-    return !!this.getSourceFile(fileName);
+    return !!this.ls.getProgram()?.getSourceFile(fileName);
   }
 
   /**

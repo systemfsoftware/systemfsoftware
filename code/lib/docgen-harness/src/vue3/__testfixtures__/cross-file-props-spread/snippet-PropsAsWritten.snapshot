@@ -1,3 +1,0 @@
-<template>
-  <CrossFilePropsSpread label="Text label" :optional="false" value="hello" />
-</template>

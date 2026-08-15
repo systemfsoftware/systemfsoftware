@@ -1,10 +1,8 @@
 import MagicString from 'magic-string';
 import type { Plugin } from 'vite';
+import { parse } from 'vue-docgen-api';
 
-import type { VueDocgenEngine } from './vue-component-meta.ts';
-
-export async function vueDocgen(engine: VueDocgenEngine): Promise<Plugin> {
-  const { parse } = await engine.vueDocgenApi();
+export async function vueDocgen(): Promise<Plugin> {
   const { createFilter } = await import('vite');
 
   const include = /\.(vue)$/;
@@ -30,7 +28,7 @@ export async function vueDocgen(engine: VueDocgenEngine): Promise<Plugin> {
 
         return {
           code: s.toString(),
-          map: s.generateMap({ hires: true, source: id }).toString(),
+          map: s.generateMap({ hires: true, source: id }),
         };
       },
     },

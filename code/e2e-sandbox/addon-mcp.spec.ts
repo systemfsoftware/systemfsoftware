@@ -1,3 +1,4 @@
+/* eslint-disable local-rules/no-uncategorized-errors */
 import path from 'node:path';
 
 import type { APIRequestContext } from '@playwright/test';

@@ -1,4 +1,6 @@
 import React from 'react';
+
+// eslint-disable-next-line react/prop-types
 export const Tag = ({
   title = 'Beta'
 }) => /*#__PURE__*/React.createElement("div", null, title);

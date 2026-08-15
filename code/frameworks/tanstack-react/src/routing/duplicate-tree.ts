@@ -3,7 +3,6 @@ import {
   createRoute,
   RootRoute,
   createRootRouteWithContext,
-  interpolatePath,
   joinPaths,
 } from '@tanstack/react-router';
 
@@ -61,13 +60,6 @@ function initSourceTree(route: AnyRoute, counter: { i: number }): void {
   }
 }
 
-/**
- * if it routeId ends with a trailing slash, strip the slash to get the enclosing layout's id (/_app).
- */
-function layoutIdFor(id: string): string {
-  return id.length > 1 && id.endsWith('/') ? id.slice(0, -1) : id;
-}
-
 function cloneChild(
   oldRoute: AnyRoute,
   parent: AnyRoute,
@@ -95,18 +87,13 @@ function cloneChild(
   // identity from; its explicit id IS its identity, so preserve it. The falsy
   // check also treats `path: ''` as pathless.
   const cloned = createRoute({
-    ...(!merged.path && explicitId != null ? { id: layoutIdFor(explicitId) } : {}),
+    ...(!merged.path && explicitId != null ? { id: explicitId } : {}),
     ...merged,
     getParentRoute: () => parent as any,
   } as any);
 
   if (merged.path && explicitId != null) {
     (cloned as any).update({ id: explicitId });
-  }
-
-  const lazyFn = (oldRoute as any).lazyFn;
-  if (lazyFn) {
-    (cloned as any).lazy(lazyFn);
   }
 
   byId.set(oldRoute.id, cloned as unknown as AnyRoute);
@@ -148,25 +135,11 @@ export function duplicateRouteTree(
   // one story is mounted in the same browser session (e.g. HMR, navigation).
   // We strip `id` from spread options so TanStack assigns the canonical
   // `__root__` id itself.
-  // `shellComponent` is also stripped: it is TanStack Start's document shell
-  // (`html`/`head`/`body`), which React refuses to nest inside the story
-  // canvas and whose head content hoists into the page, hijacking the
-  // document title from inside a story. All other root behavior (component,
-  // notFoundComponent, errorComponent, beforeLoad context) is kept.
-  const {
-    id: _rootId,
-    getParentRoute: _rootGetParent,
-    shellComponent: _rootShell,
-    ...restRoot
-  } = rootOptions;
+  const { id: _rootId, getParentRoute: _rootGetParent, ...restRoot } = rootOptions;
   const newRoot = createRootRouteWithContext()({
     ...restRoot,
     ...rootOverride,
   } as any);
-  const rootLazyFn = (rootRoute as any).lazyFn;
-  if (rootLazyFn) {
-    (newRoot as any).lazy(rootLazyFn);
-  }
   byId.set('__root__', newRoot as unknown as AnyRoute);
 
   const children = (rootRoute as any).children as AnyRoute[] | undefined;
@@ -223,58 +196,25 @@ export function originalRouteId(tree: DuplicatedTree, route: AnyRoute): string |
  *
  * Resolution order:
  *
- * 1. The route whose mount path matches the explicit `path` parameter,
- *    literally or after interpolating `params`.
+ * 1. The route whose `fullPath` exactly matches the explicit `path` parameter.
  * 2. The route bound to the story (`boundRouteId`), if it is present in the cloned tree.
  * 3. The first top-level child of the root.
  * 4. The root itself.
  */
 export function resolveStoryLeaf(
   tree: DuplicatedTree,
-  {
-    path,
-    boundRouteId,
-    params,
-  }: {
-    path?: string | undefined;
-    boundRouteId?: string | undefined;
-    params?: Record<string, unknown> | undefined;
-  }
+  { path, boundRouteId }: { path?: string | undefined; boundRouteId?: string | undefined }
 ): AnyRoute {
   const { root, byId } = tree;
 
   if (path) {
-    const bound = boundRouteId ? byId.get(boundRouteId) : undefined;
-    if (bound) {
-      const boundCandidate = mountPathFor(bound);
-      const boundInterpolated = params
-        ? interpolatePath({ path: boundCandidate, params }).interpolatedPath
-        : boundCandidate;
-      if (boundCandidate === path || boundInterpolated === path) {
-        return bound;
-      }
-    }
-
     let bestMatch: AnyRoute | undefined;
-    let bestLiteral = false;
     let bestMatchLength = -1;
     for (const route of byId.values()) {
-      if (route === (root as unknown as AnyRoute)) {
-        continue;
-      }
-      const candidate = mountPathFor(route);
-      const isLiteral = candidate === path;
-      const interpolated = params
-        ? interpolatePath({ path: candidate, params }).interpolatedPath
-        : candidate;
-      if (!isLiteral && interpolated !== path) {
-        continue;
-      }
-      const better = isLiteral === bestLiteral ? candidate.length > bestMatchLength : isLiteral;
-      if (better) {
+      const fullPath = (route as any).fullPath as string | undefined;
+      if (fullPath && fullPath === path && fullPath.length > bestMatchLength) {
         bestMatch = route;
-        bestLiteral = isLiteral;
-        bestMatchLength = candidate.length;
+        bestMatchLength = fullPath.length;
       }
     }
     if (bestMatch) {

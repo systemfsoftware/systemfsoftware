@@ -1,7 +1,0 @@
-{
-  "name": "805-non-visual-refactor",
-  "type": "module",
-  "evals": {
-    "template": "reshaped-storybook"
-  }
-}

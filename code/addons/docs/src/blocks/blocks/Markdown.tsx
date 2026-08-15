@@ -1,4 +1,4 @@
-/* oxlint-disable react-classic/destructuring-assignment */
+/* eslint-disable react/destructuring-assignment */
 import React from 'react';
 
 import PureMarkdown from 'markdown-to-jsx';

@@ -1,4 +1,4 @@
-/* oxlint-disable react-classic/destructuring-assignment */
+/* eslint-disable react/destructuring-assignment */
 import type { FC, PropsWithChildren, ReactElement, ReactNode, SyntheticEvent } from 'react';
 import React, { Component, forwardRef, memo, useMemo } from 'react';
 
@@ -228,7 +228,6 @@ export const Tabs: FC<TabsProps> = memo(
               const indexId = `index-${index}`;
 
               return (
-                // oxlint-disable-next-line jsx-a11y/interactive-supports-focus -- deprecated code, no need to maintain it
                 <TabButton
                   id={`tabbutton-${sanitize(id) ?? indexId}`}
                   ref={(ref: HTMLButtonElement) => {

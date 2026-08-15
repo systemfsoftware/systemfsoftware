@@ -7,6 +7,5 @@
     "emitDecoratorMetadata": true,
     "strict": false
   },
-  "include": ["src/**/*", "./src/typings.d.ts"],
-  "exclude": ["src/docgen/__testfixtures__/**"]
+  "include": ["src/**/*", "./src/typings.d.ts"]
 }
