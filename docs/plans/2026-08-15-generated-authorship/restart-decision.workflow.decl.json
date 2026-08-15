@@ -1,0 +1,53 @@
+{
+  "role": "workflow",
+  "operation": "decideRestart",
+  "typeId": {
+    "namespace": "@systemfsoftware/effect-daemon",
+    "name": "RestartDecision"
+  },
+  "command": {
+    "type": "DecideInput",
+    "from": "./restart-decision.schema.js"
+  },
+  "decision": [
+    { "class": "RestartDecisionContinue", "tag": "Continue", "fields": {} },
+    {
+      "class": "RestartDecisionRestart",
+      "tag": "Restart",
+      "fields": {
+        "indices": { "kind": "nonEmptyArray", "of": { "kind": "int" } }
+      }
+    }
+  ],
+  "error": [
+    { "class": "RestartDecisionExhausted", "tag": "Exhausted", "fields": {} }
+  ],
+  "dispatch": {
+    "on": "command",
+    "arms": [
+      {
+        "pattern": { "exitSuccess": true },
+        "channel": "right",
+        "construct": "RestartDecisionContinue",
+        "with": {}
+      },
+      {
+        "pattern": { "exitSuccess": false, "intensityExceeded": true },
+        "channel": "left",
+        "construct": "RestartDecisionExhausted",
+        "with": {}
+      }
+    ],
+    "fallback": {
+      "channel": "right",
+      "construct": "RestartDecisionRestart",
+      "with": {
+        "indices": {
+          "call": "restartIndicesFor",
+          "from": "./restart-decision.kernel.js",
+          "args": ["strategy", "failedIndex", "totalChildren"]
+        }
+      }
+    }
+  }
+}
