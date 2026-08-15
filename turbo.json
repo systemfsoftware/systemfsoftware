@@ -259,6 +259,14 @@
       "dependsOn": [
         "build"
       ]
+    },
+    "//#check:canonical": {
+      "inputs": [
+        "$TURBO_ROOT$/crates/dprint-plugin-canonical/plugin.wasm",
+        "$TURBO_ROOT$/crates/dprint-plugin-canonical/falsify.ts"
+      ],
+      "outputs": [],
+      "cache": true
     }
   }
 }
