@@ -16,7 +16,7 @@
   do: export the capability ports a package needs from outside and the service it offers, the way `@effect/platform` exports `FileSystem.FileSystem`; collapse a per-operation projection back into the port it came from and prove the collapse by assignment, since `{ a, b }` is assignable to `{ a }`
   dont: mint a second projection of a port that already exists
   harm: a projection records which members one operation happened to reach for, so exporting it turns internal composition into a surface commitment and forces every consumer to discover and provide N aggregators where one port serves. It escapes silently, because the tag rides the `R` channel of an exported signature and a consumer meets it only at their own call site
-  check: `pnpm check:exported-wiring`
+  check: "`pnpm check:exported-wiring`"
 ```
 
 ## Safety
