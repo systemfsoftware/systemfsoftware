@@ -175,6 +175,14 @@ describe('the combinators', () => {
     expect(Wire.refine(Wire.string, (a) => a.length > 0)).type.toBeAssignableTo<Wire.AnyMinted>()
   })
 
+  it('Should_PreserveTheDecodedType_When_Refined', () => {
+    // Assignability to `AnyMinted` is satisfied vacuously by `any`, so it cannot on its own show
+    // that a refined member kept its type. Naming the decoded type is what makes the claim
+    // falsifiable: a refinement that widened to `any` would pass the assertion above and fail here.
+    const refined = Wire.refine(Wire.string, (a) => a.length > 0)
+    expect<S.Schema.Type<typeof refined>>().type.toBe<string>()
+  })
+
   it('Should_PreserveTheMark_When_Nested', () => {
     expect(Wire.array(Wire.nullOr(Wire.integer))).type.toBeAssignableTo<Wire.AnyMinted>()
   })
