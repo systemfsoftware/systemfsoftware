@@ -1,33 +1,33 @@
-## index.cjs
+## folder/index.cjs
 
 ```cjs
+Object.defineProperty(exports, Symbol.toStringTag, { value: "Module" });
 //#region index.ts
 function hello() {
 	console.log("Hello!");
 }
 //#endregion
-module.exports = hello;
+exports.hello = hello;
 
 ```
 
-## index.d.cts
+## folder/index.d.cts
 
 ```cts
-//#region index.d.ts
-declare function hello(): void;
-export = hello;
+export type * from './index.d.mts'
+
 ```
 
-## index.d.mts
+## folder/index.d.mts
 
 ```mts
 //#region index.d.ts
 declare function hello(): void;
 //#endregion
-export { hello as default };
+export { hello };
 ```
 
-## index.mjs
+## folder/index.mjs
 
 ```mjs
 //#region index.ts
@@ -35,6 +35,6 @@ function hello() {
 	console.log("Hello!");
 }
 //#endregion
-export { hello as default };
+export { hello };
 
 ```
