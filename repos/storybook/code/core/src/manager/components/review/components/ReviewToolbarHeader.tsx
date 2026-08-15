@@ -10,7 +10,7 @@ import {
   buildReviewStoryHref,
   type ReviewNavEntry,
 } from '../review-navigation.ts';
-import { useReviewContext } from '../review-context.ts';
+import { useReview } from '../review-store.ts';
 import { AttentionBanner } from './AttentionBanner.tsx';
 import { ReviewCollectionPicker } from './ReviewCollectionPicker.tsx';
 import { ReviewHeader } from './ReviewHeader.tsx';
@@ -93,20 +93,20 @@ const componentName = (componentTitle: string): string =>
 
 export const ReviewToolbarHeader: FC = () => {
   const {
-    review,
+    state,
     banner,
     storyInfo,
     flattenedEntries,
     newlyAddedStoryIds,
     activeEntry,
     activeIndex,
-  } = useReviewContext();
+  } = useReview();
 
-  if (!review || !activeEntry || activeIndex < 0) {
+  if (!state || !activeEntry || activeIndex < 0) {
     return null;
   }
 
-  const collection = review.collections[activeEntry.collectionIndex];
+  const collection = state.collections[activeEntry.collectionIndex];
   const collectionTitle = collection?.title ?? 'Review';
   const totalStories = flattenedEntries.length;
   // Prev/next are disabled (not wrapping) at the ends of the flattened sequence.

@@ -24,7 +24,7 @@ export function useServiceStory<TSelected>(
   selector: (payload: StoryDocsPayload | undefined, storyId: string) => TSelected
 ): QueryState<TSelected> {
   const componentId = storyId.split('--')[0]!;
-  const service = getService('core/story-docs', { internal: true });
+  const service = getService('core/story-docs');
 
   // Kept stable (selectors are compared by reference on the subscription) so we don't re-subscribe
   // every render.

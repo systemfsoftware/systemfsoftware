@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
-  createLazyRoute,
   createMemoryHistory,
   createRootRoute,
   createRoute,
@@ -33,25 +32,6 @@ function buildAuthedTree(layoutOptions: Record<string, unknown> = {}) {
   root.addChildren([layout]);
   return { root, layout, dashboard };
 }
-
-describe('duplicateRouteTree root options', () => {
-  it('copies root behavior but never the document shell', () => {
-    const RootComponent = () => null;
-    const rootBeforeLoad = vi.fn();
-    const Shell = ({ children }: { children: unknown }) => children;
-    const root = createRootRoute({
-      component: RootComponent,
-      beforeLoad: rootBeforeLoad,
-      shellComponent: Shell,
-    } as any);
-
-    const { root: cloned } = duplicateRouteTree(root as any);
-
-    expect((cloned as any).options.component).toBe(RootComponent);
-    expect((cloned as any).options.beforeLoad).toBe(rootBeforeLoad);
-    expect((cloned as any).options.shellComponent).toBeUndefined();
-  });
-});
 
 describe('duplicateRouteTree with pathless layout routes', () => {
   it('preserves a code-based pathless layout (explicit id, no path)', async () => {
@@ -233,39 +213,5 @@ describe('duplicateRouteTree matrix (code-based and file-based trees)', () => {
 
     expect(override).toHaveBeenCalled();
     expect(original).not.toHaveBeenCalled();
-  });
-
-  it('carries lazy route bindings onto clones', async () => {
-    const marker = () => null;
-    const root = createRootRoute();
-    const page = createRoute({ path: '/lazy', getParentRoute: () => root });
-    page.lazy(() => Promise.resolve(createLazyRoute('/lazy')({ component: marker })));
-    root.addChildren([page]);
-
-    const { root: cloned } = duplicateRouteTree(root as any);
-    const router = createRouter({
-      routeTree: cloned,
-      history: createMemoryHistory({ initialEntries: ['/lazy'] }),
-    });
-    await router.load();
-
-    expect((router as any).routesById['/lazy'].options.component).toBe(marker);
-  });
-
-  it('carries a lazy binding on the root route onto the clone', async () => {
-    const marker = () => null;
-    const root = createRootRoute();
-    (root as any).lazy(() => Promise.resolve(createLazyRoute('__root__')({ component: marker })));
-    const child = createRoute({ path: '/child', getParentRoute: () => root });
-    root.addChildren([child]);
-
-    const { root: cloned } = duplicateRouteTree(root as any);
-    const router = createRouter({
-      routeTree: cloned as any,
-      history: createMemoryHistory({ initialEntries: ['/child'] }),
-    });
-    await router.load();
-
-    expect((router as any).routesById['__root__'].options.component).toBe(marker);
   });
 });

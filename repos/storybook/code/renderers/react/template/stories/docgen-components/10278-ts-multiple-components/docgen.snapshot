@@ -1,4 +1,4 @@
-/* oxlint-disable react-classic/destructuring-assignment */
+/* eslint-disable react/destructuring-assignment */
 import React from 'react';
 /** A component */
 const A = props => {

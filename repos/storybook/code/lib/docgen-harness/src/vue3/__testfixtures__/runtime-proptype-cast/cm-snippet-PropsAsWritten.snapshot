@@ -1,3 +1,0 @@
-<template>
-  <RuntimePropTypeCast kind="secondary" :measure="42" />
-</template>

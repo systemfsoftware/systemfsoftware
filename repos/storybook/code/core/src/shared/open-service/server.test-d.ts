@@ -166,18 +166,14 @@ describe('open-service registration types', () => {
 
 describe('typed core getService (server)', () => {
   it('types known core service ids without an explicit generic', () => {
-    expectTypeOf(getService('core/docgen', { internal: true }).queries.docgen.get)
-      .parameter(0)
-      .toEqualTypeOf<{
-        id: string;
-      }>();
-    expectTypeOf(getService('core/story-docs', { internal: true }).queries.storyDocs.get)
-      .parameter(0)
-      .toEqualTypeOf<{
-        id: string;
-      }>();
+    expectTypeOf(getService('core/docgen').queries.docgen.get).parameter(0).toEqualTypeOf<{
+      id: string;
+    }>();
+    expectTypeOf(getService('core/story-docs').queries.storyDocs.get).parameter(0).toEqualTypeOf<{
+      id: string;
+    }>();
     expectTypeOf(
-      getService('core/module-graph', { internal: true }).queries.latestStoryChanges.subscribe
+      getService('core/module-graph').queries.latestStoryChanges.subscribe
     ).toBeFunction();
   });
 
@@ -186,8 +182,6 @@ describe('typed core getService (server)', () => {
   });
 
   it('honors an explicit generic over a known core id', () => {
-    expectTypeOf(
-      getService<RuntimeService>('core/docgen', { internal: true })
-    ).toEqualTypeOf<RuntimeService>();
+    expectTypeOf(getService<RuntimeService>('core/docgen')).toEqualTypeOf<RuntimeService>();
   });
 });

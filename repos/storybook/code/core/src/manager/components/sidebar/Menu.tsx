@@ -6,7 +6,6 @@ import { ActionList, Button, PopoverProvider, ToggleButton } from 'storybook/int
 import { CloseIcon, CogIcon } from '@storybook/icons';
 
 import { transparentize } from 'polished';
-import { useStorybookApi } from 'storybook/manager-api';
 import { type Theme, css, styled } from 'storybook/theming';
 
 import type { useMenu } from '../../container/Menu.tsx';
@@ -163,8 +162,7 @@ export interface SidebarMenuProps {
 
 export const SidebarMenu: FC<SidebarMenuProps> = ({ menu, isHighlighted, onClick }) => {
   const [isTooltipVisible, setIsTooltipVisible] = useState(false);
-  const { isMobile } = useLayout();
-  const api = useStorybookApi();
+  const { isMobile, setMobileMenuOpen } = useLayout();
 
   if (isMobile) {
     return (
@@ -190,7 +188,7 @@ export const SidebarMenu: FC<SidebarMenuProps> = ({ menu, isHighlighted, onClick
           variant="ghost"
           ariaLabel="Close menu"
           highlighted={false}
-          onClick={() => api.setMobileNavigation(false)}
+          onClick={() => setMobileMenuOpen(false)}
           isMobile={true}
         >
           <CloseIcon />

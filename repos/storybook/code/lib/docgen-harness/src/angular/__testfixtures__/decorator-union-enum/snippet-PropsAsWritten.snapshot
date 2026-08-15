@@ -1,1 +1,0 @@
-<sb-decorator-union-enum [size]="'large'" [tone]="'warn'" [kind]="'secondary'"></sb-decorator-union-enum>

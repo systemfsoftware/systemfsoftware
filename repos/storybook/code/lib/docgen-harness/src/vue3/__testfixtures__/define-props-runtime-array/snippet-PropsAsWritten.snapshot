@@ -1,3 +1,0 @@
-<template>
-  <RuntimeArrayProps appearance="primary" label="Go" />
-</template>

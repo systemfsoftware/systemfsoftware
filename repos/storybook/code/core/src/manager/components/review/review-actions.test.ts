@@ -1,26 +1,24 @@
 // @vitest-environment happy-dom
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { logger } from 'storybook/internal/client-logger';
 import type { NavigateFunction } from 'storybook/internal/router';
-import type { StoryIndex } from 'storybook/internal/types';
 import type { API } from 'storybook/manager-api';
 
-import { clearChannel, installNoopChannel } from '../../../channels/channel-slot.ts';
-import { clearRegistry, getService } from '../../../shared/open-service/server.ts';
-import { registerReviewService } from '../../../shared/open-service/services/review/server.ts';
 import {
+  EVENTS,
   NOTIFIED_REVIEW_CREATED_AT_KEY,
+  PRE_REVIEW_RETURN_KEY,
   VISITED_REVIEW_CREATED_AT_KEY,
   reviewAvailableNotificationId,
 } from './constants.ts';
 import { acceptPendingReview, dismissReview, navigateOutOfReview } from './review-actions.ts';
-import { enterReviewMode, type ReviewModeHandle } from './review-mode.ts';
+import { enterReviewMode, isReviewModeActive } from './review-mode.ts';
 import {
   REVIEW_COLLECTION_QUERY_PARAM,
   buildReviewChangesSummaryHref,
 } from './review-navigation.ts';
 import type { ReviewState } from './review-state.ts';
+import { reviewStore } from './review-store.ts';
 
 const review: ReviewState = {
   title: 'Example review',
@@ -35,9 +33,6 @@ const emptyFilters = {
   includedTagFilters: [],
   excludedTagFilters: [],
 };
-
-const emptyIndex = { v: 5, entries: {} } as StoryIndex;
-const getIndex = vi.fn<() => Promise<StoryIndex>>();
 
 const makeApi = () => {
   const setAllStatusFilters = vi.fn(async () => {});
@@ -56,38 +51,29 @@ const makeApi = () => {
   };
 };
 
-const makeMode = (initial = false): ReviewModeHandle => {
-  let active = initial;
-  return {
-    isActive: () => active,
-    setActive: (next: boolean) => {
-      active = next;
-    },
-  };
-};
-
 beforeEach(() => {
-  installNoopChannel();
-  clearRegistry();
-  getIndex.mockResolvedValue(emptyIndex);
-  registerReviewService({ getIndex });
   sessionStorage.clear();
-});
-
-afterEach(() => {
-  clearRegistry();
-  clearChannel();
-  vi.restoreAllMocks();
+  reviewStore.reset();
 });
 
 describe('navigateOutOfReview', () => {
   it('restores filters before navigating back to the canvas', async () => {
     const { api, setAllStatusFilters, setAllTagFilters } = makeApi();
-    const mode = makeMode();
     const navigate = vi.fn();
     const order: string[] = [];
 
-    await enterReviewMode(api, emptyFilters, mode);
+    setAllTagFilters.mockImplementation(async () => {
+      order.push('restore-tag-filters');
+    });
+    setAllStatusFilters.mockImplementation(async () => {
+      order.push('restore-status-filters');
+    });
+    navigate.mockImplementation(() => {
+      order.push('navigate');
+    });
+
+    await enterReviewMode(api, emptyFilters);
+    order.length = 0;
     vi.clearAllMocks();
     setAllTagFilters.mockImplementation(async () => {
       order.push('restore-tag-filters');
@@ -102,23 +88,21 @@ describe('navigateOutOfReview', () => {
     await navigateOutOfReview(
       api,
       navigate as unknown as NavigateFunction,
-      '?path=/story/example--default',
-      mode
+      '?path=/story/example--default'
     );
 
     expect(order).toEqual(['restore-tag-filters', 'restore-status-filters', 'navigate']);
     expect(api.setQueryParams).toHaveBeenCalledWith({ [REVIEW_COLLECTION_QUERY_PARAM]: null });
     expect(api.selectFirstStory).not.toHaveBeenCalled();
-    expect(mode.isActive()).toBe(false);
   });
 
-  it('marks the visited review so the arrival toast does not re-fire', async () => {
+  it('marks the displayed review as visited so the arrival toast does not re-fire', async () => {
     const { api } = makeApi();
     const navigate = vi.fn() as unknown as NavigateFunction;
 
-    await navigateOutOfReview(api, navigate, '?path=/story/example--default', makeMode(), {
-      visitCreatedAt: review.createdAt,
-    });
+    reviewStore.displayReview(review);
+
+    await navigateOutOfReview(api, navigate, '?path=/story/example--default');
 
     expect(sessionStorage.getItem(VISITED_REVIEW_CREATED_AT_KEY)).toBe(String(review.createdAt));
     expect(api.clearNotification).toHaveBeenCalledWith(
@@ -126,11 +110,15 @@ describe('navigateOutOfReview', () => {
     );
   });
 
-  it('does not record a visit when no visited review is passed', async () => {
+  it('does not record a visit when dismissing the review', async () => {
     const { api } = makeApi();
     const navigate = vi.fn() as unknown as NavigateFunction;
 
-    await navigateOutOfReview(api, navigate, '?path=/story/example--default', makeMode());
+    reviewStore.displayReview(review);
+
+    await navigateOutOfReview(api, navigate, '?path=/story/example--default', {
+      recordVisit: false,
+    });
 
     expect(sessionStorage.getItem(VISITED_REVIEW_CREATED_AT_KEY)).toBeNull();
     expect(sessionStorage.getItem(NOTIFIED_REVIEW_CREATED_AT_KEY)).toBeNull();
@@ -138,39 +126,20 @@ describe('navigateOutOfReview', () => {
 
   it('does not mark the review as visited when filter restoration fails', async () => {
     const { api, setAllTagFilters } = makeApi();
-    const mode = makeMode();
     const navigate = vi.fn() as unknown as NavigateFunction;
 
-    await enterReviewMode(api, emptyFilters, mode);
+    await enterReviewMode(api, emptyFilters);
     vi.clearAllMocks();
     setAllTagFilters.mockRejectedValueOnce(new Error('restore failed'));
 
+    reviewStore.displayReview(review);
+
     await expect(
-      navigateOutOfReview(api, navigate, '?path=/story/example--default', mode, {
-        visitCreatedAt: review.createdAt,
-      })
+      navigateOutOfReview(api, navigate, '?path=/story/example--default')
     ).rejects.toThrow('restore failed');
 
     expect(sessionStorage.getItem(VISITED_REVIEW_CREATED_AT_KEY)).toBeNull();
     expect(api.clearNotification).not.toHaveBeenCalled();
-  });
-
-  it('signals the exit transition around the navigation, including on failure', async () => {
-    const { api, setAllTagFilters } = makeApi();
-    const mode = makeMode();
-    const navigate = vi.fn() as unknown as NavigateFunction;
-    const onExitingChange = vi.fn();
-
-    await enterReviewMode(api, emptyFilters, mode);
-    setAllTagFilters.mockRejectedValueOnce(new Error('restore failed'));
-
-    await expect(
-      navigateOutOfReview(api, navigate, '?path=/story/example--default', mode, {
-        onExitingChange,
-      })
-    ).rejects.toThrow('restore failed');
-
-    expect(onExitingChange.mock.calls).toEqual([[true], [false]]);
   });
 
   it('falls back to the first story when the return search points at a review route', async () => {
@@ -180,8 +149,7 @@ describe('navigateOutOfReview', () => {
     await navigateOutOfReview(
       api,
       navigate,
-      `?path=/story/story--default&${REVIEW_COLLECTION_QUERY_PARAM}=0`,
-      makeMode()
+      `?path=/story/story--default&${REVIEW_COLLECTION_QUERY_PARAM}=0`
     );
 
     expect(navigate).not.toHaveBeenCalled();
@@ -190,27 +158,13 @@ describe('navigateOutOfReview', () => {
 });
 
 describe('dismissReview', () => {
-  it('clears the review through the service command', async () => {
-    const dismiss = vi
-      .spyOn(getService('core/review', { internal: true }).commands, 'dismissReview')
-      .mockResolvedValue(undefined);
+  it('emits the dismiss event with the pre-review return search', () => {
+    sessionStorage.setItem(PRE_REVIEW_RETURN_KEY, '?path=/story/example--default');
+    const emit = vi.fn();
 
-    await dismissReview();
+    dismissReview({ emit } as unknown as API);
 
-    expect(dismiss).toHaveBeenCalledWith(undefined);
-  });
-
-  it('handles command failure without an unhandled rejection', async () => {
-    const failure = new Error('remote dismissal timed out');
-    vi.spyOn(
-      getService('core/review', { internal: true }).commands,
-      'dismissReview'
-    ).mockRejectedValue(failure);
-    const logError = vi.spyOn(logger, 'error').mockImplementation(() => {});
-
-    await expect(dismissReview()).resolves.toBeUndefined();
-
-    expect(logError).toHaveBeenCalledWith('Failed to dismiss review', failure);
+    expect(emit).toHaveBeenCalledWith(EVENTS.DISMISS_REVIEW, '?path=/story/example--default');
   });
 });
 
@@ -221,58 +175,31 @@ describe('acceptPendingReview', () => {
     createdAt: review.createdAt! + 60_000,
   };
 
-  it('is a no-op when nothing is pending', async () => {
+  it('is a no-op when nothing is pending', () => {
     const { api } = makeApi();
     const navigate = vi.fn() as unknown as NavigateFunction;
-    const acceptPending = vi.spyOn(
-      getService('core/review', { internal: true }).commands,
-      'acceptPending'
-    );
 
-    await acceptPendingReview(api, navigate, emptyFilters, makeMode(), null);
+    acceptPendingReview(api, navigate, emptyFilters);
 
-    expect(acceptPending).not.toHaveBeenCalled();
     expect(navigate).not.toHaveBeenCalled();
     expect(api.clearNotification).not.toHaveBeenCalled();
   });
 
-  it('promotes the pending review through the service, enters review mode and navigates', async () => {
+  it('displays the pending review, enters review mode and navigates to the summary', () => {
     const { api } = makeApi();
-    const mode = makeMode();
     const navigate = vi.fn() as unknown as NavigateFunction;
-    const acceptPending = vi.spyOn(
-      getService('core/review', { internal: true }).commands,
-      'acceptPending'
-    );
+    reviewStore.displayReview(review);
+    reviewStore.deferReview(pending);
 
-    await acceptPendingReview(api, navigate, emptyFilters, mode, pending);
+    acceptPendingReview(api, navigate, emptyFilters);
 
-    expect(acceptPending).toHaveBeenCalledWith(undefined);
-    expect(mode.isActive()).toBe(true);
+    expect(reviewStore.getState().state).toBe(pending);
+    expect(reviewStore.getState().pendingReview).toBeNull();
+    expect(isReviewModeActive()).toBe(true);
     expect(api.clearNotification).toHaveBeenCalledWith(
       reviewAvailableNotificationId(pending.createdAt!)
     );
     expect(sessionStorage.getItem(VISITED_REVIEW_CREATED_AT_KEY)).toBe(String(pending.createdAt));
     expect(navigate).toHaveBeenCalledWith(buildReviewChangesSummaryHref(), { plain: true });
-  });
-
-  it('does not enter review mode or navigate when the accept command fails', async () => {
-    const failure = new Error('remote accept timed out');
-    const { api } = makeApi();
-    const mode = makeMode();
-    const navigate = vi.fn() as unknown as NavigateFunction;
-    vi.spyOn(
-      getService('core/review', { internal: true }).commands,
-      'acceptPending'
-    ).mockRejectedValue(failure);
-    const logError = vi.spyOn(logger, 'error').mockImplementation(() => {});
-
-    await expect(
-      acceptPendingReview(api, navigate, emptyFilters, mode, pending)
-    ).resolves.toBeUndefined();
-
-    expect(mode.isActive()).toBe(false);
-    expect(navigate).not.toHaveBeenCalled();
-    expect(logError).toHaveBeenCalledWith('Failed to accept pending review', failure);
   });
 });

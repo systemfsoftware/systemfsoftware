@@ -52,11 +52,6 @@ const config: BuildEntries = {
         entryPoint: './src/builders/build-storybook/index.ts',
         dts: false,
       },
-      {
-        exportEntries: ['./internal/docgen-worker'],
-        entryPoint: './src/docgen/docgen-worker.ts',
-        dts: false,
-      },
     ],
   },
 };

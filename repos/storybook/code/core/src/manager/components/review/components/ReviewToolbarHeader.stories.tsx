@@ -9,9 +9,10 @@ import {
 } from 'storybook/manager-api';
 
 import preview from '../../../../../../.storybook/preview.tsx';
+import { EVENTS } from '../constants.ts';
 import { buildReviewChangesSummaryHref, buildReviewStoryHref } from '../review-navigation.ts';
-import { reviewServiceForStories as reviewService } from '../review-service-story-helpers.ts';
 import type { ReviewState } from '../review-state.ts';
+import { reviewStore } from '../review-store.ts';
 import { ReviewProvider } from './ReviewProvider.tsx';
 import { ReviewToolbarHeader } from './ReviewToolbarHeader.tsx';
 
@@ -55,7 +56,10 @@ const reviewState: ReviewState = {
   ],
 };
 
-const applyReviewState = () => reviewService.commands.setReview(reviewState);
+const applyReviewState = () => {
+  expect(onMock).toHaveBeenCalledWith(EVENTS.DISPLAY_REVIEW, expect.any(Function));
+  emitMock(EVENTS.DISPLAY_REVIEW, reviewState);
+};
 
 const managerStateBase: State = {
   index: {
@@ -122,8 +126,8 @@ const meta = preview.meta({
       </ManagerContext.Provider>
     ),
   ],
-  beforeEach: async () => {
-    await reviewService.commands.dismissReview(undefined);
+  beforeEach: () => {
+    reviewStore.reset();
     eventListeners.clear();
     onMock.mockReset();
     offMock.mockReset();
@@ -145,7 +149,7 @@ export const OnReviewedStory = meta.story({
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await applyReviewState();
+    applyReviewState();
 
     const counter = await canvas.findByRole('button', { name: /Select story/ });
     await expect(counter).toHaveTextContent('2/3');
@@ -173,7 +177,7 @@ export const Progress = meta.story({
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await applyReviewState();
+    applyReviewState();
 
     const counter = await canvas.findByRole('button', { name: /Select story/ });
     await expect(counter).toHaveTextContent('3/3');
@@ -212,7 +216,7 @@ export const NewStory = meta.story({
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await applyReviewState();
+    applyReviewState();
 
     await expect(await canvas.findByText('New')).toBeInTheDocument();
     await expect(await canvas.findByRole('link', { name: 'Next story' })).toHaveAttribute(

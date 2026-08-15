@@ -33,17 +33,7 @@ type TSObjectSigType = TSBaseType & {
 };
 
 type TSScalarType = TSBaseType & {
-  name: 'any' | 'boolean' | 'number' | 'void' | 'string' | 'symbol';
-};
-
-// `undefined` and `null` get their own members (rather than being scalar names) so that
-// `Extract<TSType, { name: '...' }>` can narrow to them.
-type TSUndefinedType = TSBaseType & {
-  name: 'undefined';
-};
-
-type TSNullType = TSBaseType & {
-  name: 'null';
+  name: 'any' | 'boolean' | 'number' | 'void' | 'string' | 'symbol' | 'undefined';
 };
 
 type TSLiteralType = TSBaseType & {
@@ -58,11 +48,4 @@ type TSArrayType = TSBaseType & {
 
 export type TSSigType = TSObjectSigType | TSFuncSigType;
 
-export type TSType =
-  | TSScalarType
-  | TSUndefinedType
-  | TSNullType
-  | TSLiteralType
-  | TSCombinationType
-  | TSSigType
-  | TSArrayType;
+export type TSType = TSScalarType | TSLiteralType | TSCombinationType | TSSigType | TSArrayType;
