@@ -21,7 +21,7 @@
 import { emitExecutor, parseExecutor } from '../tools/executor-emit.ts'
 import { emitSchema, parseSchema } from '../tools/schema-emit.ts'
 import { emitShape, parseShape } from '../tools/shape-emit.ts'
-import { compileProgram, loadProgram, parseProgram } from '../tools/term-compile.ts'
+import { compileProgram, loadProgram } from '../tools/term-compile.ts'
 import { emitWorkflow, parseWorkflow } from '../tools/workflow-emit.ts'
 
 type Emitter = (declaration: unknown) => string
@@ -61,8 +61,6 @@ const ROLES: readonly string[] = [
   'store',
   'workflow',
 ]
-
-const compileTerm: Emitter = (raw) => compileProgram(parseProgram(raw))
 
 /**
  * Roles with no hand-authored cell left. Only these carry the completeness guarantee, and
@@ -104,7 +102,7 @@ type Verdict = {
   readonly drifted: string[]
 }
 
-export const roleOf = (path: string): string | undefined => {
+export const roleOfPath = (path: string): string | undefined => {
   const match = /\.([a-z]+)\.(?:term\.ts|ts|decl\.json)$/.exec(path)
   const role = match?.[1]
   return role !== undefined && ROLES.includes(role) ? role : undefined
@@ -123,7 +121,7 @@ export const cellOf = (declaration: string): string =>
 /**
  * The two authorship forms a cell may have.
  *
- * A `.decl.json` is a data description, emitted by the role's own emitter. A `.term.json` is a
+ * A `.decl.json` is a data description, emitted by the role's own emitter. A `.term.ts` is a
  * program in the term language, compiled by one compiler for every role - which is why the role
  * appears in the filename but nowhere in the language. A cell has at most one; either satisfies
  * completeness, and both present is an orphan the gate reports.
@@ -137,12 +135,12 @@ export const isTerm = (path: string): boolean => path.endsWith('.term.ts')
 
 export const inPopulation = (path: string): boolean =>
   path.endsWith('.ts') &&
-  roleOf(path) !== undefined &&
+  roleOfPath(path) !== undefined &&
   path.includes('/src/') &&
   !OUTSIDE_POPULATION.some((fragment) => path.includes(fragment))
 
 export const isDeclaration = (path: string): boolean => {
-  const role = roleOf(path)
+  const role = roleOfPath(path)
   if (role === undefined) return false
   // A data description is only meaningful where an emitter owns the role's vocabulary; a term
   // compiles for every role, because a program has no vocabulary to own.
@@ -155,7 +153,7 @@ export const verdict = (evidence: Evidence): Verdict => {
   return {
     undeclared: evidence.cells
       .filter((cell) =>
-        COMPLETE_ROLES.includes(roleOf(cell) ?? '') && !declarationsOf(cell).some((d) => declared.has(d))
+        COMPLETE_ROLES.includes(roleOfPath(cell) ?? '') && !declarationsOf(cell).some((d) => declared.has(d))
       )
       .sort(),
     orphaned: evidence.declarations.filter((decl) => !cells.has(cellOf(decl))).sort(),
@@ -192,8 +190,16 @@ const run = async (cmd: readonly string[]): Promise<{ code: number; out: string 
  * the emission. The file is placed beside the cell so dprint's config selects it the same way
  * it selects the cell, and it is removed even when formatting throws.
  */
-const formatted = async (source: string, cell: string): Promise<string> => {
-  const probe = cell.replace(/\.([a-z]+)\.ts$/, '.authorship-probe.$1.ts')
+const formatted = async (source: string, declaration: string): Promise<string> => {
+  const cell = cellOf(declaration)
+  // The probe name comes from the declaration, not the cell, because a cell may have two
+  // declarations beside it (`X.<role>.decl.json` and `terms/X.<role>.term.ts`) and the two probes
+  // must be distinct files. It still sits beside the cell, so dprint's config selects it the same
+  // way it selects the cell, and keeps the `.ts` extension.
+  const leaf = declaration.slice(declaration.lastIndexOf('/') + 1)
+  const stem = leaf.slice(0, leaf.indexOf('.'))
+  const rest = leaf.slice(leaf.indexOf('.') + 1).replace(/\.json$/, '.ts')
+  const probe = `${cell.slice(0, cell.lastIndexOf('/') + 1)}${stem}.authorship-probe.${rest}`
   await Deno.writeTextFile(probe, source)
   try {
     const { code } = await run(['./bin/dprint', 'fmt', probe])
@@ -208,19 +214,57 @@ const gather = async (): Promise<Evidence> => {
   const { code, out } = await run(['git', 'ls-files'])
   if (code !== 0) throw new Error('git ls-files failed')
   const tracked = out.split('\n').filter(Boolean)
-  const cells = tracked.filter(inPopulation)
-  const declarations = tracked.filter(isDeclaration)
 
-  const emitted: Record<string, string> = {}
-  for (const decl of declarations) {
-    const emit = isTerm(decl) ? compileTerm : EMITTERS[roleOf(decl)!]!
-    const raw: unknown = isTerm(decl)
-      ? await loadProgram(decl)
-      : JSON.parse(await Deno.readTextFile(decl))
-    emitted[decl] = await formatted(emit(raw), cellOf(decl))
+  // One pass over the tracked paths fills both arrays, keeping `git ls-files` order.
+  const cells: string[] = []
+  const declarations: string[] = []
+  for (const path of tracked) {
+    if (inPopulation(path)) cells.push(path)
+    if (isDeclaration(path)) declarations.push(path)
   }
+
+  // Emission is the slow part - a dynamic module load and a dprint subprocess per declaration -
+  // so it runs in a bounded pool of 8. Results are collected and re-raised in declaration order,
+  // so a concurrent run reports exactly the error the sequential path would have reported.
+  const outcomes: Array<{ emitted?: string; error?: unknown }> = new Array(declarations.length)
+  let cursor = 0
+  const pool = Array.from({ length: 8 }, async () => {
+    for (;;) {
+      const index = cursor++
+      if (index >= declarations.length) return
+      const decl = declarations[index]!
+      try {
+        // A term goes through `loadProgram`, which parses it against the role its filename names; a
+        // data description goes to the emitter that owns that role's vocabulary. Compiling the loaded
+        // program directly rather than re-parsing it keeps one precondition check per declaration.
+        const source = isTerm(decl)
+          ? compileProgram(await loadProgram(decl))
+          : EMITTERS[roleOfPath(decl)!]!(JSON.parse(await Deno.readTextFile(decl)))
+        outcomes[index] = { emitted: await formatted(source, decl) }
+      } catch (error) {
+        outcomes[index] = { error }
+      }
+    }
+  })
+  await Promise.all(pool)
+  const emitted: Record<string, string> = {}
+  for (let i = 0; i < declarations.length; i++) {
+    const outcome = outcomes[i]!
+    if (outcome.error !== undefined) throw outcome.error
+    emitted[declarations[i]!] = outcome.emitted!
+  }
+
+  // `verdict` only ever compares cells that have a declaration beside them, so those are the only
+  // cells read from disk.
+  const declared = new Set(declarations.map(cellOf))
   const onDisk: Record<string, string> = {}
-  for (const cell of cells) onDisk[cell] = await Deno.readTextFile(cell)
+  await Promise.all(
+    cells
+      .filter((cell) => declared.has(cell))
+      .map(async (cell) => {
+        onDisk[cell] = await Deno.readTextFile(cell)
+      }),
+  )
 
   return { cells, declarations, emitted, onDisk }
 }
@@ -256,8 +300,8 @@ const main = async (): Promise<number> => {
   for (const cell of result.undeclared) {
     const [decl, term] = declarationsOf(cell)
     console.error(
-      `::error file=${cell}::hand-authored ${roleOf(cell)} cell. Every cell of a complete role is emitted: ` +
-        `write ${decl} and regenerate with \`deno run scripts/tools/${roleOf(cell)}-emit.ts <decl> <out>\`, ` +
+      `::error file=${cell}::hand-authored ${roleOfPath(cell)} cell. Every cell of a complete role is emitted: ` +
+        `write ${decl} and regenerate with \`deno run scripts/tools/${roleOfPath(cell)}-emit.ts <decl> <out>\`, ` +
         `or write ${term} and compile it with \`deno run scripts/tools/term-compile.ts <term> <out>\`.`,
     )
   }
@@ -280,8 +324,8 @@ const main = async (): Promise<number> => {
   // for one nobody uses states a fact about the list rather than about the repository.
   const perRole = ROLES
     .map((role) => {
-      const cells = evidence.cells.filter((c) => roleOf(c) === role).length
-      const decls = evidence.declarations.filter((d) => roleOf(d) === role).length
+      const cells = evidence.cells.filter((c) => roleOfPath(c) === role).length
+      const decls = evidence.declarations.filter((d) => roleOfPath(d) === role).length
       if (cells === 0 && decls === 0) return undefined
       return `${role} ${COMPLETE_ROLES.includes(role) ? 'complete' : `${decls}/${cells}`}`
     })
