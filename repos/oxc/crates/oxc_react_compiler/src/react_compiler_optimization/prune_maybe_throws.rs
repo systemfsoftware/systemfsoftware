@@ -15,7 +15,7 @@ use oxc_index::{IndexSlice, IndexVec};
 
 use oxc_diagnostics::OxcDiagnostic;
 
-use crate::diagnostics::ErrorCategory;
+use crate::diagnostics;
 use crate::react_compiler_hir::{
     ArrayElement, BlockId, FunctionId, HirFunction, InstructionValue, ObjectPropertyKey,
     ObjectPropertyOrSpread, Terminal,
@@ -54,14 +54,14 @@ pub fn prune_maybe_throws<'a>(
                 for (predecessor, _) in &phi.operands {
                     if !preds.contains(predecessor) {
                         let mapped_terminal =
-                            terminal_mapping.get(*predecessor).copied().flatten().ok_or_else(|| {
-                                ErrorCategory::Invariant
-                                    .diagnostic("Expected non-existing phi operand's predecessor to have been mapped to a new terminal")
-                                    .with_help(format!(
-                                        "Could not find mapping for predecessor bb{} in block bb{}",
-                                        predecessor.index(), block.id.index(),
-                                    ))
-                            })?;
+                            terminal_mapping.get(*predecessor).copied().flatten().ok_or_else(
+                                || {
+                                    diagnostics::missing_phi_predecessor_mapping(
+                                        predecessor.index(),
+                                        block.id.index(),
+                                    )
+                                },
+                            )?;
                         updates.push((*predecessor, mapped_terminal));
                     }
                 }
@@ -99,7 +99,7 @@ fn prune_maybe_throws_impl(func: &mut HirFunction) -> Option<IndexVec<BlockId, O
         let can_throw = block
             .instructions
             .iter()
-            .any(|instr_id| value_may_throw(&instructions[instr_id.index()].value));
+            .any(|instr_id| value_may_throw_when_pruning(&instructions[instr_id.index()].value));
 
         if !can_throw {
             let source = terminal_mapping[block.id].unwrap_or(block.id);
@@ -116,6 +116,16 @@ fn prune_maybe_throws_impl(func: &mut HirFunction) -> Option<IndexVec<BlockId, O
     }
 
     if mapped_any { Some(terminal_mapping) } else { None }
+}
+
+/// Returns whether a `MaybeThrow` edge must be retained during CFG pruning.
+///
+/// Local stores cannot throw by themselves, but value blocks end with a store.
+/// Removing that final handler edge can reorder the catch block ahead of the
+/// successful fallthrough, causing reactive scopes to span both paths.
+fn value_may_throw_when_pruning(value: &InstructionValue) -> bool {
+    matches!(value, InstructionValue::StoreLocal { .. } | InstructionValue::StoreContext { .. })
+        || value_may_throw(value)
 }
 
 /// Returns whether evaluating an instruction value can throw.
