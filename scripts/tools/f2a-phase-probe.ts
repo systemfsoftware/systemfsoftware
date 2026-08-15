@@ -32,14 +32,6 @@ export type ValidatePhase<P extends Phases> = (
 `,
   },
   {
-    find: `export interface DecodeNode<P extends Phases> {
-  readonly name: 'decode'
-  readonly kind: 'pure'
-  readonly convention: 'either-fail'
-`,
-    add: '',
-  },
-  {
     find: `export type Phase<P extends Phases> =
   | ReadNode<P>
   | DecodeNode<P>
@@ -120,27 +112,35 @@ const CANONICAL_AFTER = `      validate(
         () => Either.right(undefined),
       ),`
 
+/**
+ * Every anchor is checked before it is used. An unchecked `String.replace` that misses silently
+ * no-ops while its siblings still apply, which leaves a half-patched module and an exit 0 — the
+ * one failure mode a probe must not have, because the measurement it feeds would be of a state
+ * nobody authored.
+ */
+const swap = (source: string, from: string, to: string, label: string): string => {
+  if (!source.includes(from)) throw new Error(`f2a-probe: anchor drifted, ${label} not found:\n${from}`)
+  return source.replace(from, to)
+}
+
 const apply = (source: string): string => {
   let out = source
   for (const { find, add } of EDITS) {
-    if (add === '') continue
-    if (!out.includes(find)) throw new Error(`f2a-probe: anchor drifted, not found:\n${find}`)
-    out = out.replace(find, `${find}${add}`)
+    out = swap(out, find, `${find}${add}`, 'edit')
   }
-  out = out.replace(NODE_ANCHOR, `${NODE_ADD}${NODE_ANCHOR}`)
-  out = out.replace(DECIDE_BEFORE, DECIDE_AFTER).replace(DECIDE_TAIL_BEFORE, DECIDE_TAIL_AFTER)
-  out = out.replace(CANONICAL_BEFORE, CANONICAL_AFTER)
-  return out
+  out = swap(out, NODE_ANCHOR, `${NODE_ADD}${NODE_ANCHOR}`, 'node anchor')
+  out = swap(out, DECIDE_BEFORE, DECIDE_AFTER, 'decide signature')
+  out = swap(out, DECIDE_TAIL_BEFORE, DECIDE_TAIL_AFTER, 'decide tail')
+  return swap(out, CANONICAL_BEFORE, CANONICAL_AFTER, 'canonical chain')
 }
 
 const revert = (source: string): string => {
-  let out = source
-  out = out.replace(CANONICAL_AFTER, CANONICAL_BEFORE)
-  out = out.replace(DECIDE_TAIL_AFTER, DECIDE_TAIL_BEFORE).replace(DECIDE_AFTER, DECIDE_BEFORE)
-  out = out.replace(NODE_ADD, '')
+  let out = swap(source, CANONICAL_AFTER, CANONICAL_BEFORE, 'canonical chain')
+  out = swap(out, DECIDE_TAIL_AFTER, DECIDE_TAIL_BEFORE, 'decide tail')
+  out = swap(out, DECIDE_AFTER, DECIDE_BEFORE, 'decide signature')
+  out = swap(out, NODE_ADD, '', 'node anchor')
   for (const { find, add } of EDITS) {
-    if (add === '') continue
-    out = out.replace(`${find}${add}`, find)
+    out = swap(out, `${find}${add}`, find, 'edit')
   }
   return out
 }
