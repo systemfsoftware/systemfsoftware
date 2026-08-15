@@ -80,21 +80,17 @@ export default defineConfig({
 
 ## Supported Targets
 
-tsdown (Rolldown) uses [Oxc](https://oxc.rs/docs/guide/usage/transformer/lowering#target) for syntax lowering. The following environment names are supported (with version numbers, e.g. `chrome100`, `node18`, `es2020`):
+### ECMAScript Versions
 
-- **ECMAScript versions**: `es2015`, `es2016`, ..., `es2025`, `esnext`
-- **Browsers**: `chrome`, `edge`, `firefox`, `ie`, `ios`, `opera`, `safari`, `samsung`
-- **Runtimes**: `node`, `deno`, `hermes`, `rhino`
+- `es2015`, `es2016`, `es2017`, `es2018`, `es2019`, `es2020`, `es2021`, `es2022`, `es2023`, `esnext`
 
-### Baseline Widely Available
+### Browser Versions
 
-The special target `'baseline-widely-available'` expands to the browser versions covered by [Baseline Widely Available](https://web.dev/baseline) (e.g. `chrome111`, `edge111`, `firefox114`, `safari16.4`, `ios16.4`):
+- `chrome100`, `safari18`, `firefox110`, `edge100`, etc.
 
-```ts
-export default defineConfig({
-  target: 'baseline-widely-available',
-})
-```
+### Node.js Versions
+
+- `node16`, `node18`, `node20`, `node20.18`, etc.
 
 ## Examples
 

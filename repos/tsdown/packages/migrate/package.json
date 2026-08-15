@@ -1,7 +1,7 @@
 {
   "name": "tsdown-migrate",
   "type": "module",
-  "version": "0.23.0-rc.0",
+  "version": "0.22.14",
   "description": "A CLI tool to help migrate your project to tsdown.",
   "author": "Kevin Deng <sxzz@sxzz.moe>",
   "license": "MIT",
@@ -26,6 +26,15 @@
     },
     "./package.json": "./package.json"
   },
+  "types": "./dist/index.d.mts",
+  "typesVersions": {
+    "*": {
+      "*": [
+        "./dist/*.d.mts",
+        "./*"
+      ]
+    }
+  },
   "bin": {
     "tsdown-migrate": "./src/run.ts"
   },
@@ -44,7 +53,7 @@
     }
   },
   "engines": {
-    "node": "^22.18.0 || ^24.11.0 || >=26.0.0"
+    "node": "^22.18.0 || >=24.11.0"
   },
   "scripts": {
     "dev": "node ./src/run.ts",
@@ -53,6 +62,7 @@
   "dependencies": {
     "@antfu/ni": "catalog:migrate",
     "@ast-grep/napi": "catalog:migrate",
+    "ansis": "catalog:prod",
     "cac": "catalog:prod",
     "consola": "catalog:migrate",
     "diff": "catalog:migrate",

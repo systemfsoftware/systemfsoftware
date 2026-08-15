@@ -2,8 +2,9 @@
 
 ```mts
 //#region mod.d.ts
-export declare const mod = 42;
+declare const mod = 42;
 //#endregion
+export { mod };
 ```
 
 ## index.mjs
