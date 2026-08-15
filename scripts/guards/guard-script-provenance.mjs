@@ -160,7 +160,11 @@ const MANIFEST = new Map([
   ]],
   ['tools/workflow-emit.ts', [
     'workspace-layout',
-    'Turns a *.workflow.decl.json into a workflow cell. It writes files into any package src/, so no package owns it; the authorship gate above is its only caller in a chain.',
+    'Turns a workflow declaration into a workflow cell. It writes files into any package src/, so no package owns it; the authorship gate above is its only caller in a chain.',
+  ]],
+  ['tools/workflow.ts', [
+    'workspace-layout',
+    'The typed surface a *.workflow.decl.ts is authored against. A library imported by declarations in any package terms/, called by no chain of its own; check:term-types is what makes its types binding.',
   ]],
   ['tools/executor-emit.ts', [
     'workspace-layout',
