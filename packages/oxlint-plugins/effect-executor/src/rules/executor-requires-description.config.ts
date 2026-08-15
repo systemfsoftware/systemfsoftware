@@ -2,10 +2,11 @@ import { Schema as S } from 'effect'
 
 export const Options = S.Struct({})
 
-/** The description package whose phases chain by type; the same edge the sibling I/O rule reads. */
-export const DESCRIPTION_SOURCE = '@systemfsoftware/effect-cell-types' as const
-
-export const DESCRIPTION_METHODS = ['read', 'decode', 'decide', 'encode', 'write', 'apply'] as const
+// Walked, not declared: `vocabulary.generated.ts` is rendered from the Cell description, and
+// `pnpm check:executor-vocabulary` fails when it does not reproduce from a fresh walk. The method
+// list is every phase name plus the applier, all read off the description's own vocabulary — adding
+// a phase moves this rule with no edit here.
+export { DESCRIPTION_METHODS, DESCRIPTION_SOURCE } from './vocabulary.generated.js'
 
 export const BARREL_LAST_PARTS = ['index', 'mod'] as const
 

@@ -2,20 +2,16 @@ import { Schema as S } from 'effect'
 
 export const Options = S.Struct({})
 
-/** The description package whose phases chain by type; its pure middle is decode/decide/encode. */
-export const DESCRIPTION_SOURCE = '@systemfsoftware/effect-cell-types' as const
+// The phase/purity/I/O vocabulary is not declared here. It is rendered from a walk of the Cell
+// description into `vocabulary.generated.ts`, and `pnpm check:executor-vocabulary` fails when that
+// file does not reproduce byte-for-byte from a fresh walk. This package cannot import the
+// description directly: turbo reports the cycle `effect-executor -> effect-cell-types ->
+// effect-gherkin-spec -> oxlint-config -> effect-dmmf -> effect-executor` and names that first edge
+// as the only breakable one, so the value arrives as a generated module instead of an import.
+export { DESCRIPTION_SOURCE, IO_CELLS, IO_SOURCES, PURE_PHASES } from './vocabulary.generated.js'
 
 /** The package export that carries the phase constructors. */
 export const DESCRIPTION_NAMESPACE = 'Cell' as const
-
-/** Phase constructors whose bodies are pure: a store, adapter or clock call inside one is a violation. */
-export const PURE_PHASES = ['decode', 'decide', 'encode'] as const
-
-/** Cells whose calls are I/O, classified by the import edge (EE1). */
-export const IO_CELLS = ['store', 'adapter'] as const
-
-/** Non-cell module sources whose calls are I/O, classified by the import edge (EE1). */
-export const IO_SOURCES = ['effect/Clock', 'effect/System'] as const
 
 export const SKIPPED_WALK_KEYS = ['parent', 'range', 'loc', 'start', 'end'] as const
 
