@@ -51,13 +51,16 @@ rules:
     dont: hand-write a phase table, duplicate an axis into a constant beside the
       constructors, or import a consumer — no package that walks this value may
       appear in this package's dependencies
-    harm: three consumers in three packages derive their whole behaviour from this
-      value. A second declaration here is the one edit that can make them all
-      wrong at once while every one of them still passes, because they would agree
-      with each other and disagree only with the constructors
-    check: adding a phase inside `src/Cell.ts` leaves every consumer package green
-      and fails only this package's own oracle, API golden and type spec —
-      re-measurable with `scripts/tools/f2a-phase-probe.ts`
+    harm: every derived consumer — the arbitrary, the type-test generator, and both
+      lint plugins — takes its whole behaviour from this value. A second declaration
+      here is the one edit that can make them all wrong at once while every one of
+      them still passes, because they would agree with each other and disagree only
+      with the constructors
+    check: add a phase inside `src/Cell.ts` — its closure type, node record, union
+      member, stage brand, constructor and place in `canonical` — then run
+      `pnpm check:local`. Every consumer package stays green and absorbs the phase;
+      the only failures name this package's own oracle, API golden and type spec.
+      A failure naming a consumer package means that consumer holds a copy
 
   - id: CELL-T4
     title: The integration oracle restates the vocabulary on purpose

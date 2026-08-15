@@ -320,9 +320,9 @@ Feature('Applying a phase description')
         ),
         Then('every axis is read from the value')((s) => {
           expect(s.axes.module).toBe(Cell.DESCRIPTION_MODULE)
-          // Identity, not a third copy of the literals: this fails if the fold rebuilds the
+          // Identity, not a second copy of the literals: this fails if the fold rebuilds the
           // classification instead of carrying the one the constructors wrote. The values
-          // themselves are stated once, in the oracle scenario below.
+          // themselves are stated once, at the `IO_CELLS` declaration in the description module.
           expect(s.axes.ioCells).toBe(Cell.IO_CELLS)
           expect(s.axes.phaseNames).toEqual(['read', 'decode', 'decide', 'encode', 'write'])
           expect(s.axes.phaseKinds).toEqual({
