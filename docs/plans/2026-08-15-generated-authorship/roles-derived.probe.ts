@@ -26,11 +26,20 @@ import {
   op,
   ref,
   role,
-  translation,
 } from '../../../scripts/tools/cell.ts'
 import { t } from '../../../scripts/tools/term.ts'
 
-// ---------------------------------------------------------------- the three named roles differ
+/**
+ * A role named inside this probe rather than exported from the tooling.
+ *
+ * The corpus's derivation procedure treats an exported role as a *cell proposal* and requires a
+ * complete five-tuple for one — coordinates, keyed rule, invariant, enforcement proof, cop-out
+ * audit — holding that anything less is a folder wanting a name. A role named here proposes nothing,
+ * so no tuple is owed and the repository's vocabulary is unchanged.
+ */
+const reading = role<Ambient, 'term' | 'type'>('reading', ['term', 'type'])
+
+// ---------------------------------------------------------------- the named roles differ
 
 /** A closed computation: admitted by every role, since `never` is below all of them. */
 export const pureInKernel = kernel({
@@ -58,8 +67,8 @@ export const effectInKernel = kernel({
   ],
 })
 
-/** An ambient read: admitted by `translation`, whose set contains `Ambient` and not `Effectful`. */
-export const ambientInTranslation = translation({
+/** An ambient read: admitted by `reading`, whose set contains `Ambient` and not `Effectful`. */
+export const ambientInReading = reading({
   declarations: [{ name: 'now', term: lam([], () => invoke('Date.now')) }],
 })
 
@@ -71,10 +80,10 @@ export const ambientInKernel = kernel({
   ],
 })
 
-/** An effect in `translation`, which reaches outside itself but runs nothing. */
-export const effectInTranslation = translation({
+/** An effect in `reading`, which reaches outside itself but runs nothing. */
+export const effectInReading = reading({
   declarations: [
-    // @ts-expect-error Effectful is not in translation's requirement set; Ambient alone is.
+    // @ts-expect-error Effectful is not in reading's requirement set; Ambient alone is.
     { name: 'run', term: lam([], () => gen(last(lit(1)))) },
   ],
 })

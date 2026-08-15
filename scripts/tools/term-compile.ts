@@ -30,6 +30,8 @@
  * loop because `fold` is the only way to consume a list.
  */
 
+import { docBlock, IDENT, isRecord, key, literal, rejecting } from './render.ts'
+import { roleOf } from './role-brand.ts'
 import { renderTypeDeclaration, renderTypeExpr, type TypeDeclaration, type TypeExpr } from './type-decl.ts'
 
 export type BinOp = '+' | '-' | '*' | '/' | '%' | '===' | '!==' | '<' | '<=' | '>' | '>=' | '&&' | '||' | '??'
@@ -244,18 +246,9 @@ export interface CellProgram {
   readonly doc?: readonly string[]
 }
 
-const reject = (message: string): never => {
-  throw new Error(`term rejected: ${message}`)
-}
-
-const isRecord = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v)
-
-const IDENT = /^[A-Za-z_$][A-Za-z0-9_$]*$/
 const QUALIFIED = /^[A-Za-z_$][A-Za-z0-9_$]*(\.[A-Za-z_$][A-Za-z0-9_$]*)*$/
 
-const str = (s: string): string => `'${s.replaceAll('\\', '\\\\').replaceAll("'", "\\'")}'`
-
-const key = (k: string): string => IDENT.test(k) ? k : str(k)
+const reject = rejecting('term')
 
 /**
  * Field names that would carry source text. There is no legitimate position for any of them: the
@@ -371,7 +364,7 @@ export const compile = (t: Term, path: string, scope: Scope): string => {
 
   if ('lit' in t) {
     const v: unknown = t.lit
-    if (typeof v === 'string') return str(v)
+    if (typeof v === 'string') return literal(v)
     if (typeof v === 'number' || typeof v === 'boolean' || v === null) return String(v)
     return reject(`${path}.lit: expected a string, number, boolean or null`)
   }
@@ -380,7 +373,7 @@ export const compile = (t: Term, path: string, scope: Scope): string => {
     if (typeof t.var !== 'string' || !IDENT.test(t.var)) reject(`${path}.var: expected a name`)
     if (!scope.has(t.var)) {
       reject(
-        `${path}.var: ${str(t.var)} is not in scope. A name from outside the term is \`ref\`; ` +
+        `${path}.var: ${literal(t.var)} is not in scope. A name from outside the term is \`ref\`; ` +
           `in scope here: ${[...scope].sort().join(', ') || '(nothing)'}`,
       )
     }
@@ -458,7 +451,7 @@ export const compile = (t: Term, path: string, scope: Scope): string => {
       ? 'Match.tag'
       : by === 'when'
       ? 'Match.when'
-      : `Match.discriminator(${str(m.on_field!)})`
+      : `Match.discriminator(${literal(m.on_field!)})`
     const arms = m.arms.map((arm, i) => {
       const at = `${path}.match.arms[${i}]`
       if (!isRecord(arm) || typeof arm.tag !== 'string' || arm.tag === '') reject(`${at}.tag: expected a tag`)
@@ -467,7 +460,7 @@ export const compile = (t: Term, path: string, scope: Scope): string => {
       const bind = arm.bind ?? ''
       if (bind !== '' && !IDENT.test(bind)) reject(`${at}.bind: expected a name`)
       const inner = arm.bind === undefined ? scope : extend(scope, arm.bind)
-      return `  ${combinator}(${str(arm.tag)}, (${bind}) => ${compile(arm.body, `${at}.body`, inner)}),`
+      return `  ${combinator}(${literal(arm.tag)}, (${bind}) => ${compile(arm.body, `${at}.body`, inner)}),`
     })
     // `Match.exhaustive` is placed by the compiler, never by the author: a term cannot describe an
     // inexhaustive dispatch, so the rule about exhaustiveness has nothing left to catch.
@@ -480,7 +473,7 @@ export const compile = (t: Term, path: string, scope: Scope): string => {
     const fields = Object.entries(g.fields ?? {}).map(([k, v]) =>
       `${key(k)}: ${compile(v, `${path}.tagged.fields.${k}`, scope)}`
     )
-    return `{ _tag: ${str(g.tag)}${fields.length === 0 ? '' : `, ${fields.join(', ')}`} }`
+    return `{ _tag: ${literal(g.tag)}${fields.length === 0 ? '' : `, ${fields.join(', ')}`} }`
   }
 
   if ('record' in t) {
@@ -498,7 +491,7 @@ export const compile = (t: Term, path: string, scope: Scope): string => {
     if (typeof f.name !== 'string') reject(`${path}.field.name: expected a name`)
     return IDENT.test(f.name)
       ? `${atom(f.of, `${path}.field.of`, scope)}.${f.name}`
-      : `${atom(f.of, `${path}.field.of`, scope)}[${str(f.name)}]`
+      : `${atom(f.of, `${path}.field.of`, scope)}[${literal(f.name)}]`
   }
 
   if ('op' in t) {
@@ -606,7 +599,7 @@ export const compile = (t: Term, path: string, scope: Scope): string => {
     const f = t.effectFn
     if (typeof f.span !== 'string' || f.span === '') reject(`${path}.effectFn.span: expected the span name`)
     const inner = extend(scope, ...paramNames(f.params))
-    return `Effect.fn(${str(f.span)})(function* (${params(f.params, `${path}.effectFn`)}) {\n${
+    return `Effect.fn(${literal(f.span)})(function* (${params(f.params, `${path}.effectFn`)}) {\n${
       generatorBody(f.steps, f.result, `${path}.effectFn`, inner)
     }\n})`
   }
@@ -644,12 +637,6 @@ const renderImport = (spec: ImportSpec, index: number): string => {
   return `${prefix} { ${names.join(', ')} } from '${spec.module}'`
 }
 
-const docBlock = (doc: readonly string[] | undefined): string => {
-  if (doc === undefined || doc.length === 0) return ''
-  if (doc.length === 1) return `/** ${doc[0]} */\n`
-  return `/**\n${doc.map((l) => (l === '' ? ' *' : ` * ${l}`)).join('\n')}\n */\n`
-}
-
 const isTermDeclaration = (d: CellMember): d is TermDeclaration => (d as { kind?: unknown }).kind === 'term'
 
 const isClassTag = (d: CellMember): d is ClassTagDeclaration => (d as { kind?: unknown }).kind === 'class-tag'
@@ -658,8 +645,8 @@ const renderClassTag = (d: ClassTagDeclaration, path: string): string => {
   if (typeof d.name !== 'string' || !IDENT.test(d.name)) reject(`${path}.name: expected an identifier`)
   const tag = d.tag ?? d.name
   const service = renderTypeExpr(d.service, `${path}.service`)
-  return `${docBlock(d.doc)}${d.export === false ? '' : 'export '}class ${d.name} extends Context.Tag(${
-    str(tag)
+  return `${docBlock(d.doc, '')}${d.export === false ? '' : 'export '}class ${d.name} extends Context.Tag(${
+    literal(tag)
   })<\n  ${d.name},\n  ${service}\n>() {}`
 }
 
@@ -678,8 +665,37 @@ const topLevelScope = (program: CellProgram): ReadonlySet<string> => {
   return names
 }
 
-export const parseProgram = (raw: unknown): CellProgram => {
+/**
+ * Parses a program, refusing one that no role built or that a different role built.
+ *
+ * `expected` is the role the cell's own filename claims. Checking presence alone leaves the brand
+ * decorative: a `.kernel.term.ts` built with the executor constructor carries a valid brand, admits
+ * `Effectful` and `Ambient`, and emits a kernel cell that reads the clock — verified end to end
+ * before this comparison existed. The name is what ties the requirement set the author opted into to
+ * the role the tree says the file has, so passing it is not optional for a caller that knows it.
+ *
+ * A brand is still forgeable: `ROLE` is importable and one `defineProperty` satisfies the presence
+ * check. With the name compared, forging it also means naming the role whose constraints are being
+ * escaped, in a file whose suffix must agree — which is a visible lie rather than a silent bypass.
+ * That residue belongs to review, and it is named here rather than left implied.
+ */
+export const parseProgram = (raw: unknown, expected?: string): CellProgram => {
   if (!isRecord(raw)) reject('the program must be an object')
+  const built = roleOf(raw)
+  if (built === undefined) {
+    reject(
+      'this program was not built by a role. Wrap the cell in a role constructor from ' +
+        'scripts/tools/cell.ts — that is what decides which requirements its terms may carry, ' +
+        'and a hand-built program names no role, so nothing decided it',
+    )
+  }
+  if (expected !== undefined && built !== expected) {
+    reject(
+      `this program was built by the ${String(built)} role, and the cell it emits is a ${expected}. ` +
+        `A role's requirement set is the reason its cells are what they are, so the constructor ` +
+        `must be the one the cell's own role names`,
+    )
+  }
   const rec = raw as Record<string, unknown>
   assertNoSourceText(rec, 'program')
   if (!Array.isArray(rec.imports)) reject('imports: expected an array (empty is allowed)')
@@ -706,12 +722,12 @@ export const compileProgram = (program: CellProgram): string => {
       // A `fix` at the top level is already a named function, so binding it to a const of the same
       // name would shadow it. It is emitted as the declaration itself.
       if (isRecord(d.term) && 'fix' in d.term && (d.term.fix as { name: string }).name === d.name) {
-        return `${docBlock(d.doc)}${d.export === false ? '' : 'export '}${value}`
+        return `${docBlock(d.doc, '')}${d.export === false ? '' : 'export '}${value}`
       }
-      return `${docBlock(d.doc)}${d.export === false ? '' : 'export '}const ${d.name}${annotation} = ${value}`
+      return `${docBlock(d.doc, '')}${d.export === false ? '' : 'export '}const ${d.name}${annotation} = ${value}`
     })
     .join('\n\n')
-  const doc = docBlock(program.doc)
+  const doc = docBlock(program.doc, '')
   return imports === '' ? `${doc}${body}\n` : `${imports}\n\n${doc}${body}\n`
 }
 
@@ -726,8 +742,19 @@ export const loadProgram = async (inPath: string): Promise<CellProgram> => {
   const url = new URL(inPath, `file://${Deno.cwd()}/`).href
   const mod = await import(url) as { readonly default?: unknown }
   if (mod.default === undefined) reject(`${inPath}: a .term.ts module must default-export its CellProgram`)
-  return parseProgram(mod.default)
+  return parseProgram(mod.default, roleNamedBy(inPath))
 }
+
+/**
+ * The role a term file's own name claims, read off the suffix.
+ *
+ * Derived rather than taken as an argument: an expected role a caller may pass is a check a caller
+ * may omit, which puts the same optional-obligation hole one level up from the one it closes. No
+ * inventory of role names is needed, because nothing here decides whether a name is a sanctioned
+ * role — the comparison is against the brand the author's own constructor wrote, and a file naming
+ * no role at all yields `undefined`, which only skips the comparison rather than passing it.
+ */
+const roleNamedBy = (path: string): string | undefined => /\.([a-z][a-z-]*)\.term\.ts$/.exec(path)?.[1]
 
 const main = async (): Promise<void> => {
   const [inPath, outPath] = Deno.args

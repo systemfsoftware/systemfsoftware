@@ -13,7 +13,7 @@
  * ever stating what a declaration may contain, which makes it useless as a verdict.
  */
 
-const IDENT = /^[A-Za-z_$][A-Za-z0-9_$]*$/
+import { IDENT, isRecord, rejecting } from './render.ts'
 
 type FieldType =
   | { readonly kind: 'string' | 'number' | 'boolean' | 'int' | 'unknown' }
@@ -135,11 +135,7 @@ const DERIVED = [
 ] as const
 const DECLARED = ['role', 'operation', 'typeId', 'command', 'decision', 'error', 'aliases', 'dispatch'] as const
 
-const reject = (message: string): never => {
-  throw new Error(`declaration rejected: ${message}`)
-}
-
-const isRecord = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v)
+const reject = rejecting('declaration')
 
 const at = (raw: Record<string, unknown>, key: string): unknown => (key in raw ? raw[key] : undefined)
 
@@ -212,6 +208,7 @@ const parseFieldType = (raw: unknown, path: string): FieldType => {
     )
   }
   const rec = raw as Record<string, unknown>
+  closed(rec, ['kind', 'of', 'name', 'from', 'fields'], path, 'a field type field')
   const kind = at(rec, 'kind')
   if (kind === 'nonEmptyArray' || kind === 'array') {
     return { kind, of: parseFieldType(at(rec, 'of'), `${path}.of`) }
@@ -769,14 +766,13 @@ const renderDispatch = (
    * `Match.when`, where its literal is the value rather than a name.
    */
   const combinator = (p: Pattern): string => {
-    if (typeof p !== 'string') {
-      const keys = Object.keys(p)
-      const [only] = keys
-      if (keys.length === 1 && only !== undefined && typeof p[only] === 'string') {
-        return only === '_tag'
-          ? `${indent}  Match.tag('${p[only]}', `
-          : `${indent}  Match.discriminator('${only}')('${p[only]}', `
-      }
+    if (typeof p === 'string') return `${indent}  Match.when(${renderPattern(p)}, `
+    const keys = Object.keys(p)
+    const [only] = keys
+    if (keys.length === 1 && only !== undefined && typeof p[only] === 'string') {
+      return only === '_tag'
+        ? `${indent}  Match.tag('${p[only]}', `
+        : `${indent}  Match.discriminator('${only}')('${p[only]}', `
     }
     return `${indent}  Match.when(${renderPattern(p)}, `
   }

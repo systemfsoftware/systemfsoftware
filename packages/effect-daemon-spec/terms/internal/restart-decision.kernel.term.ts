@@ -21,6 +21,7 @@ import {
   lit,
   lt,
   matchWhen,
+  nothing,
   op,
   record,
   spreadOf,
@@ -35,7 +36,7 @@ const range = (length: Term, at: (i: Term) => Term): Term =>
   call('Array.from', record({ length }), lam(['_', 'i'], (_, i) => at(i)))
 
 const cell = kernel({
-  imports: [{ module: 'effect/Match', namespace: 'Match' }],
+  imports: [{ module: 'effect/Match', namespace: 'Match', requires: nothing }],
   declarations: [
     {
       kind: 'type',

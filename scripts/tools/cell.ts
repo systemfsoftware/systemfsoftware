@@ -26,7 +26,8 @@
  * widens into impurity and never the reverse. That is the same variance Effect gives `R`, and it is
  * why this composes instead of needing a cast at each boundary.
  */
-import type { CellMember, CellProgram, Term as RawTerm, TermParam } from './term-compile.ts'
+import { ROLE } from './role-brand.ts'
+import type { BinOp, CellMember, CellProgram, Term as RawTerm, TermParam } from './term-compile.ts'
 import type { TypeDeclaration, TypeExpr } from './type-decl.ts'
 
 declare const RequirementId: unique symbol
@@ -58,16 +59,35 @@ export const ambient: Ambient = { _tag: 'Ambient' }
 
 export const effectful: Effectful = { _tag: 'Effectful' }
 
-/** A term and the requirements it carries. `R = never` is a closed, pure computation. */
+/**
+ * A term and the requirements it carries. `R = never` is a closed, pure computation.
+ *
+ * The phantom field is **required**, and that is the whole of its load-bearing behaviour. Optional,
+ * the interface is structurally satisfiable without it: `{ raw: { ref: 'Date.now' } }` is a
+ * well-typed `Term<never>` with no cast and no combinator, so the ambient read reaches a kernel
+ * through a plain object literal. Required, `of` below is the only thing that can produce one, and
+ * `of` is module-private — so every term in existence came from a combinator that decided its
+ * requirements.
+ *
+ * A deliberate `as Term` still launders one, because `Term<never>` is a supertype of `Term<Ambient>`
+ * and no type system refuses a cast. That is the sanctioned escape: it is one token, it is visible
+ * in review, and the repository already bans casts in cells by rule.
+ */
 export interface Term<out R = never> {
   readonly raw: RawTerm
-  readonly [RequirementId]?: (_: never) => R
+  readonly [RequirementId]: (_: never) => R
 }
 
-const of = <R = never>(raw: RawTerm): Term<R> => ({ raw }) as Term<R>
+const of = <R = never>(raw: RawTerm): Term<R> => ({ raw }) as unknown as Term<R>
 
-/** Erases the requirement channel for the compiler, which only ever sees the raw term. */
-export const raw = <R>(t: Term<R>): RawTerm => t.raw
+/**
+ * Erases the requirement channel for the compiler, which only ever sees the raw term.
+ *
+ * Module-private: exported, it is an unbolted door out of the channel — `{ raw: raw(impure) } as
+ * Term` reconstructs a pure-typed term from an impure one, which is the escape the required phantom
+ * above exists to close.
+ */
+const raw = <R>(t: Term<R>): RawTerm => t.raw
 
 // ---------------------------------------------------------------- closed leaves
 
@@ -125,8 +145,6 @@ export const undef: Term = pure('undefined')
 
 // ---------------------------------------------------------------- propagating combinators
 
-export type BinOp = '+' | '-' | '*' | '/' | '%' | '===' | '!==' | '<' | '<=' | '>' | '>=' | '&&' | '||' | '??'
-
 export const op = <A, B>(name: BinOp, left: Term<A>, right: Term<B>): Term<A | B> =>
   of<A | B>({ op: { name, args: [left.raw, right.raw] } })
 
@@ -143,25 +161,95 @@ export const field = <A>(target: Term<A>, name: string): Term<A> => of<A>({ fiel
 export const cond = <A, B, C>(test: Term<A>, then: Term<B>, otherwise: Term<C>): Term<A | B | C> =>
   of<A | B | C>({ cond: { if: test.raw, then: then.raw, else: otherwise.raw } })
 
-export const app = <F, A>(fn: Term<F>, ...args: readonly Term<A>[]): Term<F | A> =>
-  of<F | A>({ app: { fn: fn.raw, args: args.map(raw) } })
+/**
+ * The requirements a tuple of terms carries, unioned.
+ *
+ * A plain `...args: readonly Term<A>[]` infers one `A` for every argument, and TypeScript resolves
+ * that to the best common supertype rather than the union — so mixing an `Ambient` argument with an
+ * `Effectful` one is rejected at the second, in a role that admits both. That is a false positive,
+ * and a false positive in a mechanism like this is worse than a small gap: the only way past it is a
+ * cast, so over-rejecting teaches authors to reach for the one escape the design cannot close.
+ *
+ * Each signature below defaults its tuple to `[]`. Without the default a call with no arguments has
+ * nothing to infer from, so the parameter resolves to its own constraint — `readonly Term<unknown>[]`
+ * — and the requirement widens to `unknown`, which is assignable to nothing and rejects the call in
+ * every role. `invoke('Date.now')` is exactly that shape, so the default is load-bearing rather than
+ * tidy.
+ */
+/**
+ * The requirement one term carries.
+ *
+ * The naked type parameter is the load-bearing part: a conditional over a bare parameter distributes,
+ * so a union of terms maps to the union of their requirements and `never` maps to `never`. Written
+ * inline as `As[number] extends Term<infer R> ? R : never` the check type is an indexed access
+ * rather than a bare parameter, so nothing distributes — and matching `never` against `Term<infer R>`
+ * infers `R = unknown`, which every role rejects. A zero-argument call is exactly that case, so this
+ * indirection is the difference between `invoke('Date.now')` working and failing everywhere.
+ */
+type RequirementOf<T> = T extends Term<infer R> ? R : never
+
+type RequirementsOf<As extends readonly Term<unknown>[]> = RequirementOf<As[number]>
+
+export const app = <F, const As extends readonly Term<unknown>[] = []>(
+  fn: Term<F>,
+  ...args: As
+): Term<F | RequirementsOf<As>> => of({ app: { fn: fn.raw, args: args.map(raw) } })
 
 /** `Math.max(0, n)` — a pure host call, which stays pure only because `pure` vetted the callee. */
-export const call = <N extends PureGlobal, A>(callee: N, ...args: readonly Term<A>[]): Term<A> =>
-  of<A>({ app: { fn: { ref: callee }, args: args.map(raw) } })
+export const call = <N extends PureGlobal, const As extends readonly Term<unknown>[] = []>(
+  callee: N,
+  ...args: As
+): Term<RequirementsOf<As>> => of({ app: { fn: { ref: callee }, args: args.map(raw) } })
 
 /** A call to anything else, which requires `Ambient` for the same reason `ref` does. */
-export const invoke = <A>(callee: string, ...args: readonly Term<A>[]): Term<Ambient | A> =>
-  of<Ambient | A>({ app: { fn: { ref: callee }, args: args.map(raw) } })
+export const invoke = <const As extends readonly Term<unknown>[] = []>(
+  callee: string,
+  ...args: As
+): Term<Ambient | RequirementsOf<As>> => of({ app: { fn: { ref: callee }, args: args.map(raw) } })
 
-export const list = <A>(...items: readonly Term<A>[]): Term<A> => of<A>({ list: items.map(raw) })
+export const list = <const As extends readonly Term<unknown>[] = []>(
+  ...items: As
+): Term<RequirementsOf<As>> => of({ list: items.map(raw) })
 
 export const spreadOf = <A>(target: Term<A>): Term<A> => of<A>({ spreadOf: target.raw } as unknown as RawTerm)
 
 export const asConst = <A>(target: Term<A>): Term<A> => of<A>({ asConst: target.raw })
 
-export const record = <A>(fields: Readonly<Record<string, Term<A>>>): Term<A> =>
-  of<A>({ record: Object.fromEntries(Object.entries(fields).map(([k, v]) => [k, v.raw])) })
+/**
+ * An object literal, optionally spreading other records into it.
+ *
+ * A spread's requirement is the record's own: spreading an impure value in makes the literal impure,
+ * which is why `spread` is threaded through `A` rather than accepted as opaque raw terms.
+ */
+export const record = <A>(
+  fields: Readonly<Record<string, Term<A>>>,
+  options?: { readonly spread?: readonly Term<A>[] },
+): Term<A> =>
+  of<A>({
+    record: Object.fromEntries(Object.entries(fields).map(([k, v]) => [k, v.raw])),
+    ...(options?.spread === undefined ? {} : { spread: options.spread.map(raw) }),
+  })
+
+/**
+ * A tagged data constructor: `{ _tag: 'Name', …fields }`.
+ *
+ * Inert data, so it requires only what its fields require — the tag is a string the emitter writes.
+ */
+export const tagged = <A>(tag: string, fields?: Readonly<Record<string, Term<A>>>): Term<A> =>
+  of<A>({
+    tagged: fields === undefined
+      ? { tag }
+      : { tag, fields: Object.fromEntries(Object.entries(fields).map(([k, v]) => [k, v.raw])) },
+  })
+
+/**
+ * A nullary arrow: `() => body`.
+ *
+ * The requirement is kept rather than discharged. Wrapping an effect in an arrow defers *when* it
+ * runs and changes nothing about whether it does, so a thunk over an impure body is impure — the
+ * one place this is easy to get wrong, because the arrow reads like a boundary.
+ */
+export const thunk = <R>(body: Term<R>): Term<R> => of<R>({ lam: { params: [], body: body.raw } })
 
 // ---------------------------------------------------------------- binders
 
@@ -420,6 +508,19 @@ export type DeclOf<R, K extends DeclarationKind> =
   | (K extends 'class-tag' ? TagDecl : never)
 
 /**
+ * The claim an import makes about a value import that brings no requirement with it.
+ *
+ * A word rather than an omission, because an omitted field is a claim nobody made. `requires` is the
+ * one place in this file where the author asserts instead of deriving — an import's body is not in
+ * scope, so nothing can infer what a foreign module does — and an optional assertion defaults to the
+ * most permissive reading every time it is forgotten. Spelling it makes forgetting a type error and
+ * leaves understating it a visible lie.
+ */
+export type Pure = 'requires-nothing'
+
+export const nothing: Pure = 'requires-nothing'
+
+/**
  * An import and the requirements it brings with it.
  *
  * This replaces a suffix test, and it is the sounder mechanism rather than a smaller one. A module
@@ -427,11 +528,23 @@ export type DeclOf<R, K extends DeclarationKind> =
  * reaches outside itself, and the ban was carried by the filename because nothing else was
  * available to carry it. Here the import states what it requires, the role admits it or does not,
  * and a rename cannot change the verdict.
+ *
+ * What this does **not** decide is whether the claim is true. An author who writes `nothing`
+ * over `node:fs` has said something false, and no signature over this file can catch it — the module
+ * is not in scope. That residue belongs to `cell-import-boundary`, which keys its verdict on the
+ * specifier and is therefore immune to what the author claims: the two mechanisms are complementary
+ * rather than redundant, and the rule is a survivor for exactly this reason.
  */
 export interface ImportOf<R> {
   readonly module: string
-  /** Omitted for an import that requires nothing — a type, a pure combinator, a constant. */
-  readonly requires?: R
+  /**
+   * What this import brings. `nothing` for a type, a pure combinator or a constant.
+   *
+   * Required even where the role admits nothing else: for a role whose requirement set is empty the
+   * only well-typed value is `nothing`, so the field costs one word and buys the
+   * difference between a stated claim and a default.
+   */
+  readonly requires: R | Pure
   readonly values?: readonly string[]
   readonly types?: readonly string[]
   readonly typeOnly?: boolean
@@ -461,11 +574,12 @@ export const role = <R = never, K extends DeclarationKind = DeclarationKind>(
 ) =>
 (cell: CellOf<R, K>): CellProgram => {
   const admitted: ReadonlySet<string> = new Set(kinds)
-  return {
+  const program: CellProgram = {
     imports: (cell.imports ?? []).map(withoutRequirements),
     declarations: cell.declarations.map((d, i) => member(d, i, name, admitted)),
     ...(cell.doc === undefined ? {} : { doc: cell.doc }),
   }
+  return Object.defineProperty(program, ROLE, { value: name, enumerable: false })
 }
 
 /**
@@ -523,14 +637,6 @@ export const executor = role<Effectful | Ambient, 'term' | 'type' | 'class-tag'>
   'executor',
   ['term', 'type', 'class-tag'],
 )
-
-/**
- * A cell that reaches outside itself but runs nothing — a total translation over foreign data.
- *
- * The third role, and the reason the pair is the right abstraction: it is neither of the other two,
- * it needed no new machinery, and no table had to be amended to admit it.
- */
-export const translation = role<Ambient, 'term' | 'type'>('translation', ['term', 'type'])
 
 /** A declaration's optional fields, omitted rather than set to `undefined`. */
 const optional = <R>(d: TermDecl<R>): { doc?: readonly string[]; annotation?: TypeExpr; export?: boolean } => ({

@@ -12,7 +12,23 @@
  *
  * Run: `deno check roles-as-types.probe.ts` — exit 0 means every violation was refused.
  */
-import { and, call, field, fold, invoke, kernel, lam, lit, lt, op, pure, ref, t } from './probe-imports.ts'
+import {
+  ambient,
+  and,
+  call,
+  field,
+  fold,
+  invoke,
+  kernel,
+  lam,
+  lit,
+  lt,
+  nothing,
+  op,
+  pure,
+  ref,
+  t,
+} from './probe-imports.ts'
 
 // ---------------------------------------------------------------- accepted: a closed kernel
 
@@ -114,7 +130,22 @@ export const unvettedCallee = kernel({
  */
 export const cellTypeImport = kernel({
   imports: [
-    { module: '../hook-settings.acl.js', types: ['HookEntry'], typeOnly: true },
+    { module: '../hook-settings.acl.js', types: ['HookEntry'], typeOnly: true, requires: nothing },
+  ],
+  declarations: [{ name: 'identity', term: lam(['x'], (x) => x) }],
+})
+
+/**
+ * An import with no claim at all — refused because the claim is not optional.
+ *
+ * An optional `requires` defaults to the most permissive reading every time an author forgets it,
+ * which is the same silent-default shape as the phantom's `?`: the mechanism reads as sound and the
+ * omission is invisible. Mandatory, forgetting is a type error and only lying still works.
+ */
+export const unclaimedImport = kernel({
+  imports: [
+    // @ts-expect-error `requires` is required: an omitted claim is a claim nobody made.
+    { module: 'effect/Match', namespace: 'Match' },
   ],
   declarations: [{ name: 'identity', term: lam(['x'], (x) => x) }],
 })

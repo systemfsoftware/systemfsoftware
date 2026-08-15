@@ -17,6 +17,8 @@
  * for the cells that mix Effect Schema with plain type declarations.
  */
 
+import { docBlock, IDENT, isRecord, literal, rejecting } from './render.ts'
+
 const SOURCE_TEXT_FIELDS = ['code', 'body', 'raw', 'source', 'text', 'fn_body', 'statements'] as const
 
 export type TypeExpr =
@@ -100,15 +102,10 @@ export type TypeDeclaration =
     readonly doc?: readonly string[]
   }
 
-const reject = (message: string): never => {
-  throw new Error(`declaration rejected: ${message}`)
-}
-
-const isRecord = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v)
-
 /** Type names carry generics and qualifiers, so this is deliberately looser than an identifier. */
 const TYPE_NAME = /^[A-Za-z_$][A-Za-z0-9_$.]*$/
-const IDENT = /^[A-Za-z_$][A-Za-z0-9_$]*$/
+
+const reject = rejecting('declaration')
 
 export const assertNoTypeSourceText = (node: unknown, path: string): void => {
   if (Array.isArray(node)) {
@@ -126,9 +123,6 @@ export const assertNoTypeSourceText = (node: unknown, path: string): void => {
   }
   for (const [k, v] of Object.entries(node)) assertNoTypeSourceText(v, `${path}.${k}`)
 }
-
-const literal = (v: string | number | boolean): string =>
-  typeof v === 'string' ? `'${v.replaceAll('\\', '\\\\').replaceAll("'", "\\'")}'` : String(v)
 
 /**
  * A type-expression operand for a postfix operator, parenthesised where TypeScript's precedence
@@ -223,13 +217,6 @@ const renderParam = (p: Param, path: string): string => {
   }
   if (!isRecord(p.type)) reject(`${path}.type: expected a type expression`)
   return `${p.name}${p.optional === true ? '?' : ''}: ${renderTypeExpr(p.type, `${path}.type`)}`
-}
-
-const docBlock = (doc: readonly string[] | undefined, indent: string): string => {
-  if (doc === undefined || doc.length === 0) return ''
-  if (doc.length === 1) return `${indent}/** ${doc[0]} */\n`
-  const lines = doc.map((l) => (l === '' ? `${indent} *` : `${indent} * ${l}`)).join('\n')
-  return `${indent}/**\n${lines}\n${indent} */\n`
 }
 
 const renderMember = (m: Member, path: string, inline = false): string => {

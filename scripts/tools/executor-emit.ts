@@ -14,16 +14,12 @@
  * `code` field.
  */
 
-const IDENT = /^[A-Za-z_$][A-Za-z0-9_$]*$/
+import { IDENT, isRecord, rejecting } from './render.ts'
 
 /** A TypeScript type reference, written as data: a name, never an expression. */
 const TYPE_REF = /^[A-Za-z_$][A-Za-z0-9_$.<>,[\]| ]*$/
 
-const reject = (message: string): never => {
-  throw new Error(`declaration rejected: ${message}`)
-}
-
-const isRecord = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v)
+const reject = rejecting('declaration')
 
 const at = (raw: Record<string, unknown>, key: string): unknown => (key in raw ? raw[key] : undefined)
 

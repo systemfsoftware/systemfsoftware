@@ -34,5 +34,5 @@ export function ackermann(m: number, n: number): number {
  * at all is one where non-termination is expressible - which is what Turing complete means.
  */
 export function collatzLength(n: number): number {
-  return (n <= 1) ? 0 : 1 + collatzLength(((n % 2) === 0) ? n / 2 : (3 * n) + 1)
+  return (n <= 1) ? 0 : 1 + collatzLength((n % 2 === 0) ? n / 2 : 3 * n + 1)
 }

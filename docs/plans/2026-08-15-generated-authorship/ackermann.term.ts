@@ -5,11 +5,17 @@
  * brackets there and is `ackermann(m - 1, ackermann(m, n - 1))` here, with `ackermann`, `m` and `n`
  * bound by the enclosing arrow rather than by a string that had to match one. Getting a name wrong
  * is now a type error at the name.
+ *
+ * It is a `kernel`, which is the honest role for it: general recursion over numbers requires nothing
+ * — no clock, no I/O, no Effect — so `Term<never>` is exactly what these two terms are, and the
+ * constructor that admits them is the one whose requirement set is empty. The witness does not
+ * depend on the choice; a language reaches Ackermann or it does not, and the role only records what
+ * the computation needs.
  */
-import type { CellProgram } from '../../../scripts/tools/term-compile.ts'
-import { app, cond, eq, fix, le, lit, op, t } from '../../../scripts/tools/term.ts'
+import { app, cond, eq, fix, kernel, le, lit, op } from '../../../scripts/tools/cell.ts'
+import { t } from '../../../scripts/tools/term.ts'
 
-const program: CellProgram = {
+const program = kernel({
   doc: [
     "Ackermann's function, as a term.",
     '',
@@ -23,10 +29,8 @@ const program: CellProgram = {
     'for the arithmetic, and `app` for the calls. Nothing in the language names a loop, a mutable',
     'counter, or a statement, and none is needed.',
   ],
-  imports: [],
   declarations: [
     {
-      kind: 'term',
       name: 'ackermann',
       doc: [
         '`A(m, n)`, defined the standard way:',
@@ -56,7 +60,6 @@ const program: CellProgram = {
       ),
     },
     {
-      kind: 'term',
       name: 'collatzLength',
       doc: [
         'The number of steps `n` takes to reach 1 under the Collatz map.',
@@ -89,6 +92,6 @@ const program: CellProgram = {
       ),
     },
   ],
-}
+})
 
 export default program

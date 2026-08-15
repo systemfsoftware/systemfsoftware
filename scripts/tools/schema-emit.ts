@@ -22,6 +22,7 @@
  *   one is not emittable until the test moves to a test file.
  */
 
+import { IDENT, isRecord, literal, rejecting } from './render.ts'
 import {
   isTypeDeclarationKind,
   renderTypeDeclaration,
@@ -141,11 +142,7 @@ export interface SchemaDeclaration {
   readonly doc?: readonly string[]
 }
 
-const reject = (message: string): never => {
-  throw new Error(`declaration rejected: ${message}`)
-}
-
-const isRecord = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v)
+const reject = rejecting('declaration')
 
 /**
  * Rejects a field whose value would be source text.
@@ -185,13 +182,6 @@ const assertNoSourceText = (node: unknown, path: string, keysArePayload = false)
   for (const [k, v] of Object.entries(node)) assertNoSourceText(v, `${path}.${k}`, PAYLOAD_KEYS.has(k))
 }
 
-const IDENT = /^[A-Za-z_$][A-Za-z0-9_$]*$/
-const KEY_OK = /^[A-Za-z_$][A-Za-z0-9_$]*$/
-
-const str = (s: string): string => `'${s.replaceAll('\\', '\\\\').replaceAll("'", "\\'")}'`
-
-const scalar = (v: string | number | boolean): string => typeof v === 'string' ? str(v) : String(v)
-
 /** Renders one expression of the Schema algebra. `ns` is the cell's local Schema alias. */
 const renderExpr = (e: Expr, ns: string, path: string): string => {
   if (!isRecord(e)) reject(`${path}: expected an expression object, got ${JSON.stringify(e)}`)
@@ -205,16 +195,18 @@ const renderExpr = (e: Expr, ns: string, path: string): string => {
   }
   if ('value' in e) {
     const v: unknown = (e as { value: unknown }).value
-    if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') return scalar(v)
+    if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') return literal(v)
     return reject(`${path}.value: expected a string, number or boolean operand`)
   }
   if ('literal' in e) {
     if (!Array.isArray(e.literal) || e.literal.length === 0) reject(`${path}.literal: expected a non-empty array`)
-    return `${ns}.Literal(${e.literal.map(scalar).join(', ')})`
+    return `${ns}.Literal(${e.literal.map(literal).join(', ')})`
   }
   if ('template' in e) {
     if (!Array.isArray(e.template)) reject(`${path}.template: expected an array`)
-    const parts = e.template.map((p, i) => typeof p === 'string' ? str(p) : renderExpr(p, ns, `${path}.template[${i}]`))
+    const parts = e.template.map((p, i) =>
+      typeof p === 'string' ? literal(p) : renderExpr(p, ns, `${path}.template[${i}]`)
+    )
     return `${ns}.TemplateLiteral(${parts.join(', ')})`
   }
   if ('struct' in e) {
@@ -283,7 +275,7 @@ const renderExpr = (e: Expr, ns: string, path: string): string => {
 }
 
 const renderAnnotations = (a: Readonly<Record<string, string>>): string =>
-  Object.entries(a).map(([k, v]) => `${k}: ${str(v)}`).join(', ')
+  Object.entries(a).map(([k, v]) => `${k}: ${literal(v)}`).join(', ')
 
 const renderCombinator = (c: Combinator, ns: string, path: string): string => {
   if (!isRecord(c)) reject(`${path}: expected a combinator object`)
@@ -304,7 +296,7 @@ const renderCombinator = (c: Combinator, ns: string, path: string): string => {
   }
   if ('brand' in c) {
     if (typeof c.brand !== 'string') reject(`${path}.brand: expected a brand name`)
-    return `${ns}.brand(${str(c.brand)})`
+    return `${ns}.brand(${literal(c.brand)})`
   }
   if ('compose' in c) return `${ns}.compose(${renderExpr(c.compose, ns, `${path}.compose`)})`
   if ('annotations' in c) {
@@ -323,7 +315,7 @@ const renderCombinator = (c: Combinator, ns: string, path: string): string => {
     if (f.message !== undefined && typeof f.message !== 'string') reject(`${path}.filter.message: expected a string`)
     return f.message === undefined
       ? `${ns}.filter(${by})`
-      : `${ns}.filter(${by}, { message: () => ${str(f.message as string)} })`
+      : `${ns}.filter(${by}, { message: () => ${literal(f.message as string)} })`
   }
   return reject(`${path}: unknown combinator ${JSON.stringify(Object.keys(c))}`)
 }
@@ -331,7 +323,7 @@ const renderCombinator = (c: Combinator, ns: string, path: string): string => {
 const renderFields = (fields: Readonly<Record<string, Expr>>, ns: string, path: string): string =>
   Object.entries(fields)
     .map(([k, v]) => {
-      if (!KEY_OK.test(k)) reject(`${path}: field name ${JSON.stringify(k)} is not an identifier`)
+      if (!IDENT.test(k)) reject(`${path}: field name ${JSON.stringify(k)} is not an identifier`)
       return `${k}: ${renderExpr(v, ns, `${path}.${k}`)}`
     })
     .join(', ')
@@ -398,7 +390,7 @@ const renderDeclaration = (d: Declaration, ns: string, index: number): string =>
       if (!IDENT.test(d.name)) reject(`${path}.name: expected an identifier`)
       if (typeof d.symbol !== 'string' || d.symbol === '') reject(`${path}.symbol: expected the symbol description`)
       const constLine = `${d.export === true ? 'export ' : ''}const ${d.name}: unique symbol = Symbol.for(${
-        str(d.symbol)
+        literal(d.symbol)
       })`
       const typeLine = `${d.exportType === true ? 'export ' : ''}type ${d.name} = typeof ${d.name}`
       return `${constLine}\n${typeLine}`
@@ -410,7 +402,7 @@ const renderDeclaration = (d: Declaration, ns: string, index: number): string =>
       const fields = renderFieldsArg(d.fields, ns, `${path}.fields`)
       return classBody(
         `${exported(d.export)}class ${d.name} extends ${ns}.${ctor}<${d.name}>()`,
-        [str(d.tag), fields],
+        [literal(d.tag), fields],
         d.brand,
       )
     }
@@ -418,7 +410,7 @@ const renderDeclaration = (d: Declaration, ns: string, index: number): string =>
       if (!IDENT.test(d.name)) reject(`${path}.name: expected an identifier`)
       const fields = renderFieldsArg(d.fields, ns, `${path}.fields`)
       return classBody(
-        `${exported(d.export)}class ${d.name} extends ${ns}.Class<${d.name}>(${str(d.id)})`,
+        `${exported(d.export)}class ${d.name} extends ${ns}.Class<${d.name}>(${literal(d.id)})`,
         [fields],
         d.brand,
       )

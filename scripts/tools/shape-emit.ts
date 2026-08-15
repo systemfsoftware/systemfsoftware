@@ -14,6 +14,7 @@
  *   value, so a `const` or a function has no field here and never will.
  * - no source text, checked by the shared guard.
  */
+import { docBlock, IDENT, isRecord, key, literal, rejecting } from './render.ts'
 import {
   assertNoTypeSourceText,
   isTypeDeclarationKind,
@@ -81,11 +82,7 @@ export interface ShapeDeclaration {
   readonly doc?: readonly string[]
 }
 
-const reject = (message: string): never => {
-  throw new Error(`declaration rejected: ${message}`)
-}
-
-const isRecord = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v)
+const reject = rejecting('declaration')
 
 /**
  * A shape cell's imports are type-only by construction.
@@ -105,7 +102,7 @@ const renderImport = (spec: ImportSpec, index: number): string => {
     )
   }
   if (spec.namespace !== undefined) {
-    if (typeof spec.namespace !== 'string' || !/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(spec.namespace)) {
+    if (typeof spec.namespace !== 'string' || !IDENT.test(spec.namespace)) {
       reject(`imports[${index}].namespace: expected a local identifier`)
     }
     if (spec.types !== undefined) {
@@ -121,18 +118,11 @@ const renderImport = (spec: ImportSpec, index: number): string => {
   return `import type { ${names.join(', ')} } from '${spec.module}'`
 }
 
-const IDENT = /^[A-Za-z_$][A-Za-z0-9_$]*$/
-
-const quoted = (s: string): string => `'${s.replaceAll('\\', '\\\\').replaceAll("'", "\\'")}'`
-
-/** An object key needs quoting exactly when the vendor's own key is not an identifier. */
-const renderKey = (k: string): string => IDENT.test(k) ? k : quoted(k)
-
 const renderData = (e: DataExpr, path: string, indent = ''): string => {
   if (!isRecord(e)) return reject(`${path}: expected a data value, got ${JSON.stringify(e)}`)
   if ('literal' in e) {
     const v: unknown = e.literal
-    if (typeof v === 'string') return quoted(v)
+    if (typeof v === 'string') return literal(v)
     if (typeof v === 'number' || typeof v === 'boolean' || v === null) return String(v)
     return reject(`${path}.literal: expected a string, number, boolean or null`)
   }
@@ -161,14 +151,8 @@ const renderData = (e: DataExpr, path: string, indent = ''): string => {
     const entries = (e.object as DataEntry[]).map((entry, i) => {
       const at = `${path}.object[${i}]`
       if (!isRecord(entry) || typeof entry.key !== 'string') reject(`${at}.key: expected a key`)
-      const doc = entry.doc === undefined || entry.doc.length === 0
-        ? ''
-        : entry.doc.length === 1
-        ? `${inner}/** ${entry.doc[0]} */\n`
-        : `${inner}/**\n${
-          entry.doc.map((l) => (l === '' ? `${inner} *` : `${inner} * ${l}`)).join('\n')
-        }\n${inner} */\n`
-      return `${doc}${inner}${renderKey(entry.key)}: ${renderData(entry.value, `${at}.value`, inner)},`
+      const doc = docBlock(entry.doc, inner)
+      return `${doc}${inner}${key(entry.key)}: ${renderData(entry.value, `${at}.value`, inner)},`
     })
     return entries.length === 0 ? '{}' : `{\n${entries.join('\n')}\n${indent}}`
   }
@@ -177,11 +161,7 @@ const renderData = (e: DataExpr, path: string, indent = ''): string => {
 
 const renderConst = (d: ConstDeclaration, path: string): string => {
   if (typeof d.name !== 'string' || !IDENT.test(d.name)) reject(`${path}.name: expected an identifier`)
-  const doc = d.doc === undefined || d.doc.length === 0
-    ? ''
-    : d.doc.length === 1
-    ? `/** ${d.doc[0]} */\n`
-    : `/**\n${d.doc.map((l) => (l === '' ? ' *' : ` * ${l}`)).join('\n')}\n */\n`
+  const doc = docBlock(d.doc, '')
   const value = renderData(d.value, `${path}.value`)
   const narrowed = d.asConst === true ? `${value} as const` : value
   const checked = d.satisfies === undefined

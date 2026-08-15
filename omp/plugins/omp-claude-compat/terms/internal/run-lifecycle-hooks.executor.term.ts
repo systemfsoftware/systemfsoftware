@@ -21,47 +21,54 @@
  * every file under `src/`: a term is not a cell, so `src/` is exactly where it may not go. The tree
  * mirrors `src/`, and the authorship gate maps between the two.
  */
-import type { CellProgram } from '../../../../../scripts/tools/term-compile.ts'
 import {
+  ambient,
   and,
   branch,
-  call,
   effectFn,
   eq,
+  executor,
   field,
   filter,
   forEach,
+  invoke,
   last,
   let_,
   lit,
   ne,
   not,
+  nothing,
   or,
+  record,
   ref,
-  t,
   tagged,
   thunk,
   undef,
-} from '../../../../../scripts/tools/term.ts'
+} from '../../../../../scripts/tools/cell.ts'
+import { t } from '../../../../../scripts/tools/term.ts'
 
 const HookEntry = t.ref('HookEntry')
 const CommandHook = t.ref('CommandHook')
 const HookSession = t.ref('HookSession')
 
-const program: CellProgram = {
+const program = executor({
   imports: [
-    { module: '@systemfsoftware/omp-utils', values: ['sessionIds'] },
-    { module: 'effect', values: ['Array as Arr', 'Context', 'Effect', 'Schema as S'], types: ['Scope'] },
-    { module: '../hook-settings.acl.js', values: ['analyzeSettings'], blankBefore: true },
-    { module: '../hook-settings.acl.js', types: ['CommandHook', 'HookEntry'], typeOnly: true },
-    { module: './hook-session.kernel.js', types: ['HookSession'], typeOnly: true },
-    { module: './run-hook-script.executor.js', values: ['runHookScript'] },
-    { module: './supervise-fork.executor.js', values: ['superviseFork'] },
+    { module: '@systemfsoftware/omp-utils', values: ['sessionIds'], requires: ambient },
+    {
+      module: 'effect',
+      values: ['Array as Arr', 'Context', 'Effect', 'Schema as S'],
+      types: ['Scope'],
+      requires: nothing,
+    },
+    { module: '../hook-settings.acl.js', values: ['analyzeSettings'], requires: ambient, blankBefore: true },
+    { module: '../hook-settings.acl.js', types: ['CommandHook', 'HookEntry'], typeOnly: true, requires: nothing },
+    { module: './hook-session.kernel.js', types: ['HookSession'], typeOnly: true, requires: nothing },
+    { module: './run-hook-script.executor.js', values: ['runHookScript'], requires: ambient },
+    { module: './supervise-fork.executor.js', values: ['superviseFork'], requires: ambient },
   ],
   declarations: [
     { kind: 'class-tag', name: 'RunLifecycleHooksExecutorDeps', service: t.ref('Scope.Scope') },
     {
-      kind: 'term',
       name: 'runLifecycleHooks',
       term: effectFn(
         'runLifecycleHooks',
@@ -72,14 +79,14 @@ const program: CellProgram = {
               'input',
               // The original spreads the session identifiers into a fresh record. The annotation is
               // load-bearing for `runHookScript`'s parameter, so it is declared rather than inferred.
-              { record: {}, spread: [call('sessionIds', thunk(call('ctx.sessionManager.getSessionId')))] },
+              record({}, { spread: [invoke('sessionIds', thunk(invoke('ctx.sessionManager.getSessionId')))] }),
               (input) =>
                 let_(
                   'matcherUnreadable',
                   // The matcher axis is the same refusal `runHooksForEvent` makes: an event whose
                   // matcher this bridge cannot read must not run a matcher'd hook as though the
                   // matcher had matched.
-                  call('analyzeSettings', tagged('MatcherUnreadable', { event }), ref('S.Boolean')),
+                  invoke('analyzeSettings', tagged('MatcherUnreadable', { event }), ref('S.Boolean')),
                   (matcherUnreadable) =>
                     last(
                       forEach(
@@ -101,16 +108,16 @@ const program: CellProgram = {
                             (hook) =>
                               branch(
                                 or(eq(field(hook, 'async'), lit(true)), eq(field(hook, 'asyncRewake'), lit(true))),
-                                call(
+                                invoke(
                                   'Effect.forkDaemon',
-                                  call(
+                                  invoke(
                                     'superviseFork',
-                                    call('runHookScript', hook, input, cwd, event, lit(false)),
+                                    invoke('runHookScript', hook, input, cwd, event, lit(false)),
                                     ctx,
                                     field(hook, 'command'),
                                   ),
                                 ),
-                                call('runHookScript', hook, input, cwd, event),
+                                invoke('runHookScript', hook, input, cwd, event),
                               ),
                           ),
                       ),
@@ -121,6 +128,6 @@ const program: CellProgram = {
       ),
     },
   ],
-}
+})
 
 export default program
