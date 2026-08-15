@@ -15,10 +15,16 @@ declare const vendorSchema: S.Schema<Vendor.Invoice, unknown>
 type LocalInvoice = Vendor.Invoice
 declare const aliasedSchema: S.Schema<LocalInvoice, unknown>
 
-// Two forged members, written the way an author would write them: no cast, no `mint`. A phantom
-// is nameable, so it can be attached to any type by an annotation alone.
+// Forged members, written the way an author would write them: no cast, no `mint`. A phantom is
+// nameable, so it can be attached to any type by an annotation alone — and it is derivable even
+// without naming it, which is why the last two exist.
 declare const forgedByIntersection: S.Schema<Vendor.Invoice, unknown> & Wire.Mark
 declare const forgedByAlias: Wire.Minted<Vendor.Invoice, unknown>
+interface ForgedByInterface extends S.Schema<Vendor.Invoice, unknown>, Wire.Mark {}
+declare const forgedByInterface: ForgedByInterface
+// The phantom lifted off a legitimate member by inference, never naming `Mark` at all.
+type StolenMark = typeof Wire.string extends S.Schema<string, string> & infer M ? M : never
+declare const forgedByInference: S.Schema<Vendor.Invoice, unknown> & StolenMark
 
 describe('the mark', () => {
   it('Should_BeAbsentFromTheDecodedValue_When_TheSchemaIsMinted', () => {
@@ -93,6 +99,17 @@ describe('forging the mark', () => {
     expect(Wire.wire).type.toBeCallableWith({ invoice: forgedByAlias })
   })
 
+  it('Should_Accept_When_AnInterfaceExtendsBothTheSchemaAndTheMark', () => {
+    expect(Wire.wire).type.toBeCallableWith({ invoice: forgedByInterface })
+  })
+
+  it('Should_Accept_When_TheMarkIsStolenByInference', () => {
+    // Names nothing from this module in a type position — the phantom is lifted off a legitimate
+    // member. An invariant, payload-parameterised mark was built and measured against this suite:
+    // it closes exactly this route and leaves the derived one below open, so it was not shipped.
+    expect(Wire.wire).type.toBeCallableWith({ invoice: forgedByInference })
+  })
+
   it('Should_Accept_When_TheMarkIsDerivedFromALegitimateMember', () => {
     // The route that names nothing from this module but a primitive, and so is invisible to any
     // rule keyed on a call site or an identifier. This is the reason the module's claim is scoped
@@ -106,6 +123,10 @@ describe('the combinators', () => {
   // member would launder a vendor type into a marked result in one call. The module claims this
   // of *every* combinator, so every combinator is named here — a claim covering more ground than
   // its assertions is a claim that fails silently when a maintainer widens one parameter.
+
+  it('Should_CarryTheMark_When_ThePrimitiveIsTakenFromTheAlphabet', () => {
+    expect(Wire.boolean).type.toBeAssignableTo<Wire.AnyMinted>()
+  })
 
   it('Should_PreserveTheMark_When_TheLiteralSetIsBuilt', () => {
     expect(Wire.literal('draft', 'open')).type.toBeAssignableTo<Wire.AnyMinted>()
