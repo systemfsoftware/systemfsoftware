@@ -1,0 +1,122 @@
+# author: elliot-huffman
+name: release
+on:
+  push:
+    tags:
+      - "v*.*.*"
+      - "!v*-*"
+      - '!v*\+*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "prerelease npm dist-tag to publish"
+        required: true
+        type: choice
+        options:
+          - rc
+          - next
+      version:
+        description: "Exact prerelease version. rc: x.y.z-rc.n, next: x.y.z-next.n"
+        required: true
+permissions:
+  id-token: write
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 #v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.x
+          registry-url: https://registry.npmjs.org/
+      - name: Validate release context
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: node .github/workflows/release-guard.cjs validate-context
+      - uses: actions/setup-go@v5
+        with:
+          go-version: 1.26.x
+      - uses: pnpm/action-setup@v4
+      - name: Install dependencies
+        run: pnpm install
+      - name: Bump versions
+        if: github.event_name == 'workflow_dispatch'
+        run: node .github/workflows/release-guard.cjs bump-if-needed
+      - name: Validate bumped versions
+        if: github.event_name == 'workflow_dispatch'
+        run: node .github/workflows/release-guard.cjs validate-package-versions
+      - name: Commit bumped versions
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json pnpm-lock.yaml ":(glob)**/package.json"
+          if git diff --cached --quiet; then
+            echo "No version changes to commit."
+          else
+            git commit -m "chore(release): bump ${NPM_TAG} to ${RELEASE_VERSION} [skip ci]"
+            git push origin HEAD:${GITHUB_REF_NAME}
+          fi
+      - name: Publish to npm
+        run: pnpm run "package:${NPM_TAG}" --no-git-checks --provenance
+  release:
+    runs-on: ubuntu-latest
+    needs: publish
+    if: github.event_name == 'push'
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - run: pnpm dlx changelogithub
+        env:
+          GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+  website:
+    runs-on: ubuntu-latest
+    needs: release
+    if: github.event_name == 'push'
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.x
+          registry-url: https://registry.npmjs.org/
+      - uses: actions/setup-go@v5
+        with:
+          go-version: 1.26.x
+      - uses: pnpm/action-setup@v4
+
+      # Mirror website.yml: the wasm playground links against samchon/ttsc
+      # through packages/typia/native/go.work, and the website is a pnpm
+      # workspace member consuming catalog: versions, so it must be installed
+      # from the workspace root (a standalone npm install cannot resolve it).
+      - name: Install Dependencies
+        run: pnpm install
+
+      # Match the sibling source to the installed browser host. Cloning latest
+      # ttsc master can select a different Go plugin interface than the locked
+      # @ttsc/wasm package used by the website.
+      - name: Checkout ttsc sibling
+        run: |
+          TTSC_VERSION="$(node -p "require('./website/node_modules/@ttsc/wasm/package.json').version")"
+          test -n "${TTSC_VERSION}"
+          git clone --branch "v${TTSC_VERSION}" --depth 1 https://github.com/samchon/ttsc.git ../ttsc
+
+      - name: Build Packages
+        run: |
+          pnpm run build
+          pnpm run package:tgz
+      - name: Website Build
+        working-directory: website
+        run: pnpm run build
+      - name: Deploy
+        uses: JamesIves/github-pages-deploy-action@4.1.3
+        with:
+          branch: gh-pages
+          folder: ./website/out

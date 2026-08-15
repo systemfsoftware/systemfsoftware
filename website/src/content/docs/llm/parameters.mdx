@@ -1,0 +1,279 @@
+---
+title: Guide Documents > Large Language Model > parameters() function
+---
+import { Callout, Tabs } from "nextra/components";
+
+import LocalSource from "../../../components/LocalSource";
+
+# `typia.llm.parameters` — JSON Schema for one type, no helpers
+
+If all you need is the **JSON Schema** for `T` (so you can put it in `response_format` or wherever your LLM SDK accepts a schema), `typia.llm.parameters<T>()` is the minimum tool. It returns the schema and nothing else — no `parse`, no `coerce`, no `validate`.
+
+```typescript copy filename="signature"
+namespace llm {
+  function parameters<
+    Parameters extends Record<string, any>,
+    Config extends Partial<ILlmSchema.IConfig> = {},
+  >(): ILlmSchema.IParameters;
+}
+```
+
+## First example
+
+```typescript copy filename="hello-parameters.ts"
+import typia, { tags } from "typia";
+
+interface IMember {
+  email: string & tags.Format<"email">;
+  name: string;
+  age: number;
+  hobbies: string[];
+}
+
+const schema = typia.llm.parameters<IMember>();
+// → ILlmSchema.IParameters (an object schema with $defs)
+```
+
+You hand `schema` to your LLM SDK and the model knows the expected JSON shape. The full pattern with OpenAI:
+
+```typescript copy filename="src/examples/llm.parameters.ts" {4-10, 36}
+import OpenAI from "openai";
+import typia, { tags } from "typia";
+
+interface IMember {
+  email: string & tags.Format<"email">;
+  name: string;
+  age: number;
+  hobbies: string[];
+  joined_at: string & tags.Format<"date">;
+}
+
+const main = async (): Promise<void> => {
+  const client: OpenAI = new OpenAI({
+    apiKey: "<YOUR_OPENAI_API_KEY>",
+  });
+  const completion: OpenAI.ChatCompletion =
+    await client.chat.completions.create({
+      model: "gpt-4o",
+      messages: [
+        {
+          role: "user",
+          content: [
+            "I am a new member of the community.",
+            "",
+            "My name is John Doe, and I am 25 years old.",
+            "I like playing basketball and reading books,",
+            "and joined to this community at 2022-01-01.",
+          ].join("\n"),
+        },
+      ],
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "member",
+          schema: typia.llm.parameters<IMember>() as any,
+        },
+      },
+    });
+  console.log(JSON.parse(completion.choices[0].message.content!));
+};
+main().catch(console.error);
+```
+
+> ```bash filename="Terminal output"
+> {
+>   email: 'john.doe@example.com',
+>   name: 'John Doe',
+>   age: 25,
+>   hobbies: [ 'playing basketball', 'reading books' ],
+>   joined_at: '2022-01-01'
+> }
+> ```
+
+<Tabs items={[<code>typia</code>, <code>ILlmSchema</code>]}>
+  <Tabs.Tab>
+```typescript filename="typia" showLineNumbers
+export namespace llm {
+  export function parameters<
+    Parameters extends Record<string, any>,
+    Config extends Partial<ILlmSchema.IConfig> = {},
+  >(): ILlmSchema.IParameters;
+}
+```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    <LocalSource
+      path="packages/interface/src/schema/ILlmSchema.ts"
+      filename="@typia/interface"
+      showLineNumbers />
+  </Tabs.Tab>
+</Tabs>
+
+<Tabs items={["TypeScript Source", "Compiled JavaScript"]}>
+  <Tabs.Tab>
+    <LocalSource
+      path="examples/src/llm/parameters.ts"
+      filename="examples/src/llm/parameters.ts"
+      showLineNumbers />
+  </Tabs.Tab>
+  <Tabs.Tab>
+    <LocalSource
+      path="examples/bin/llm/parameters.js"
+      filename="examples/bin/llm/parameters.js"
+      showLineNumbers />
+  </Tabs.Tab>
+</Tabs>
+
+[📖 Open in Playground](/playground/?script=JYWwDg9gTgLgBAbzgSQDIBsQGUDGALAUxAEM4BfOAMyghDgCIABAZ2JHwgDsB6CMAzsTDB6AbgBQoSLDgwAnsOIAaRLOIBzZuSo069eYrHi4kzjAJRKxHARQBZIgCMLiY3CLFg6AFxxmMKGBOdTgAMjVNADoAMWgSGAAeeg8vegA+CTg4QRACX39A4My4DTzsgFcQZyhivAhHR2ACZnyAoPUAbQBdYoArCCCCABMAfWIYVsKQ8JgNZhi48aSh8YJ0iTJxHC5-ODBfNExcQhJI5AAFYig2AnMoLQBeWQVgYkj0TEiwK5u75gTkA4qhY0gAKACUEm2nGYEHQBHeEHUoLAkKAA)
+
+## When to use this
+
+| What you need | Use |
+|---------------|-----|
+| Just the schema (your code does the parsing) | `parameters<T>()` |
+| Schema **plus** parse/coerce/validate helpers | [`structuredOutput<T>()`](/docs/llm/structuredOutput) |
+| Multiple functions, LLM picks one to call | [`application<Class>()`](/docs/llm/application) |
+
+`structuredOutput<T>()` is essentially `parameters<T>()` + the parse/coerce/validate methods bundled together. If you don't need those methods (or you'll wire them up yourself from [`LlmJson`](/docs/llm/json)), `parameters` is the leaner choice.
+
+## Function calling harness
+
+`parameters` is schema-only by design, but you can still get the parse/coerce/validate behavior by composing manually:
+
+| Goal | Use |
+|------|-----|
+| Parse messy LLM JSON text + coerce types | [`LlmJson.parse<T>(text, schema)`](/docs/llm/json#llmjsonparse) |
+| Coerce types on an already-parsed object | [`LlmJson.coerce<T>(obj, schema)`](/docs/llm/json#llmjsoncoerce) |
+| Validate against the type | [`typia.validate<T>(obj)`](/docs/validators/validate) |
+| Format errors back to the LLM | [`LlmJson.stringify(failure)`](/docs/llm/json#llmjsonstringify) |
+
+<Tabs items={[
+    "Parsing Example",
+    "Coercing Example",
+    <code>ILlmSchema.IParameters</code>,
+  ]}>
+  <Tabs.Tab>
+    <LocalSource
+      path="examples/src/llm/parameters-parse.ts"
+      filename="examples/src/llm/parameters-parse.ts"
+      showLineNumbers
+      highlight="30-31" />
+  </Tabs.Tab>
+  <Tabs.Tab>
+    <LocalSource
+      path="examples/src/llm/parameters-coerce.ts"
+      filename="examples/src/llm/parameters-coerce.ts"
+      showLineNumbers
+      highlight="17-18" />
+  </Tabs.Tab>
+  <Tabs.Tab>
+    <LocalSource
+      path="packages/interface/src/schema/ILlmSchema.ts"
+      filename="@typia/interface"
+      showLineNumbers
+      highlight="43-68" />
+  </Tabs.Tab>
+</Tabs>
+
+<Callout type="warning">
+**Double-stringified objects fail every time without coercion**
+
+LLMs frequently emit `"{\"x\":1}"` (a JSON-stringified value) where the schema expects an object. Without coercion, validation rejects those responses outright. With `parse`/`coerce` it descends through the string-wrapped layers and produces typed data. See [`application`](/docs/llm/application#the-function-calling-harness) for the full picture.
+</Callout>
+
+### Validation feedback
+
+<LocalSource
+  path="examples/src/llm/parameters-validate.ts"
+  filename="examples/src/llm/parameters-validate.ts"
+  showLineNumbers />
+
+When validation fails, format the errors with `LlmJson.stringify` and send them back to the LLM. The formatted output:
+
+```json
+{
+  "name": "John Doe",
+  "age": -5, // ❌ [{"path":"$input.age","expected":"number & Minimum<0>"}]
+  "email": "invalid-email", // ❌ [{"path":"$input.email","expected":"string & Format<\"email\">"}]
+  "hobbies": "reading", // ❌ [{"path":"$input.hobbies","expected":"Array<string>"}]
+  "joined_at": "not-a-date", // ❌ [{"path":"$input.joined_at","expected":"string & Format<\"date\">"}]
+  "metadata": {
+    "level": "platinum", // ❌ [{"path":"$input.metadata","expected":"(IMetadata & { level: \"gold\"; }) | (IMetadata & { level: \"silver\"; })"}]
+    "points": 1500
+  }
+}
+```
+
+In [AutoBe](https://github.com/wrtnlabs/autobe), the same pattern took `qwen3-coder-next` from **6.75% → 100%** correct on compiler AST types. Compiler ASTs are the hardest possible target — unlimited unions, unlimited depth, recursive references — so if the harness works there, it works on anything realistic.
+
+```typescript filename="AutoBeTest.IExpression" showLineNumbers
+export type IExpression =
+  | IBooleanLiteral
+  | INumericLiteral
+  | IStringLiteral
+  | IArrayLiteralExpression   // recursive
+  | IObjectLiteralExpression  // recursive
+  | INullLiteral
+  | IUndefinedKeyword
+  | IIdentifier
+  | IPropertyAccessExpression // recursive
+  | IElementAccessExpression  // recursive
+  | ITypeOfExpression         // recursive
+  | IPrefixUnaryExpression    // recursive
+  | IPostfixUnaryExpression   // recursive
+  | IBinaryExpression         // recursive
+  | IArrowFunction            // recursive
+  | ICallExpression           // recursive
+  | INewExpression            // recursive
+  | IConditionalPredicate     // recursive
+  | ... // 30+ expression types total
+```
+
+## Restrictions
+
+LLMs use keyworded arguments. typia enforces this at compile time:
+
+- `T` must be an **object type** with **static keys**
+- No dynamic keys (`Record<string, V>`)
+- `T` may not be nullable or optional
+
+`T` is also constrained by the signature itself (`Parameters extends Record<string, any>`), so a primitive such as `typia.llm.parameters<string>()` is rejected by TypeScript with `TS2344` before the transform runs, and no typia diagnostic appears for it.
+
+<Tabs items={["Source That Won't Compile", "Compiler Errors"]}>
+  <Tabs.Tab>
+```typescript filename="src/examples/llm.parameters.violation.ts" showLineNumbers
+import typia from "typia";
+
+typia.llm.parameters<Record<string, boolean>>();
+typia.llm.parameters<Array<number>>();
+```
+  </Tabs.Tab>
+  <Tabs.Tab>
+```bash filename="Terminal"
+src/examples/llm.parameters.violation.ts:3:1 - error TS(typia.llm.parameters): typia transform error: unsupported type detected
+
+- Recordstringboolean
+  - LLM parameters must not have dynamic keys.
+
+3 typia.llm.parameters<Record<string, boolean>>();
+  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+src/examples/llm.parameters.violation.ts:4:1 - error TS(typia.llm.parameters): typia transform error: unsupported type detected
+
+- Arraynumber
+  - LLM parameters must be an object type.
+
+4 typia.llm.parameters<Array<number>>();
+  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+```
+  </Tabs.Tab>
+</Tabs>
+
+For deeper type-level rules (recursion handling, anyOf/$ref behavior) see [`llm.schema`](/docs/llm/schema).
+
+## Where to go next
+
+- All-in-one helper bundle → [`structuredOutput`](/docs/llm/structuredOutput)
+- Multiple methods on a class → [`application`](/docs/llm/application)
+- Inner-type schemas with `$defs` → [`schema`](/docs/llm/schema)
+- Parsing / coercion / validation utilities → [`LlmJson`](/docs/llm/json)

@@ -1,0 +1,272 @@
+---
+title: Guide Documents > Utilization Cases > Vercel AI SDK
+---
+import { Callout, Tabs } from "nextra/components";
+
+import LocalSource from "../../../components/LocalSource";
+
+# Vercel AI SDK
+
+[`@typia/vercel`](https://github.com/samchon/typia/tree/master/packages/vercel) plugs typia controllers into the [Vercel AI SDK](https://github.com/vercel/ai). Every method on your TypeScript class — or every endpoint in an OpenAPI document — becomes a `Tool` ready for `generateText`/`streamText`, with the same parse/coerce/validate/feedback machinery as [`typia.llm.application`](/docs/llm/application#the-function-calling-harness) wired in automatically.
+
+```typescript copy filename="signature"
+import { toVercelTools } from "@typia/vercel";
+
+export function toVercelTools(
+  controller: ILlmController | IHttpLlmController,
+  options?: { prefix?: boolean },
+): Record<string, Tool>;
+export function toVercelTools(
+  controllers: Array<ILlmController | IHttpLlmController>,
+  options?: { prefix?: boolean },
+): Record<string, Tool>;
+export function toVercelTools(props: {
+  controllers: Array<ILlmController | IHttpLlmController>;
+  prefix?: boolean;   // default false; if true, tool names are "{controller}_{method}"
+}): Record<string, Tool>;
+```
+
+<Tabs items={[
+    <code>@typia/vercel</code>,
+    <code>ILlmController</code>,
+    <code>IHttpLlmController</code>,
+    <code>HttpLlm.controller</code>,
+  ]}>
+  <Tabs.Tab>
+```typescript filename="@typia/vercel" showLineNumbers
+export function toVercelTools(
+  controller: ILlmController | IHttpLlmController,
+  options?: { prefix?: boolean },
+): Record<string, Tool>;
+export function toVercelTools(
+  controllers: Array<ILlmController | IHttpLlmController>,
+  options?: { prefix?: boolean },
+): Record<string, Tool>;
+export function toVercelTools(props: {
+  controllers: Array<ILlmController | IHttpLlmController>;
+  prefix?: boolean | undefined;
+}): Record<string, Tool>;
+```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    <LocalSource
+      path="packages/interface/src/schema/ILlmController.ts"
+      filename="@typia/interface"
+      showLineNumbers />
+  </Tabs.Tab>
+  <Tabs.Tab>
+    <LocalSource
+      path="packages/interface/src/http/IHttpLlmController.ts"
+      filename="@typia/interface"
+      showLineNumbers />
+  </Tabs.Tab>
+  <Tabs.Tab>
+    <LocalSource
+      path="packages/utils/src/http/HttpLlm.ts"
+      filename="@typia/utils"
+      showLineNumbers />
+  </Tabs.Tab>
+</Tabs>
+
+## Setup
+
+```bash filename="Terminal"
+npm install @typia/vercel ai
+npm install typia
+npm install -D ttsc typescript
+```
+
+## From a TypeScript class
+
+```typescript filename="src/Calculator.ts"
+export class Calculator {
+  /** Add two numbers. Returns their sum. */
+  add(props: { x: number; y: number }): { value: number } {
+    return { value: props.x + props.y };
+  }
+  /** Multiply two numbers. Returns their product. */
+  multiply(props: { x: number; y: number }): { value: number } {
+    return { value: props.x * props.y };
+  }
+}
+```
+
+```typescript filename="src/main.ts" showLineNumbers {1-3, 7-11}
+import { openai } from "@ai-sdk/openai";
+import { toVercelTools } from "@typia/vercel";
+import { generateText, GenerateTextResult, Tool } from "ai";
+import typia from "typia";
+
+import { Calculator } from "./Calculator";
+
+const tools: Record<string, Tool> = toVercelTools(
+  typia.llm.controller<Calculator>("calculator", new Calculator()),
+);
+
+const result: GenerateTextResult = await generateText({
+  model: openai("gpt-4o"),
+  prompt: "What is 10 + 5?",
+  tools,
+});
+```
+
+The JSDoc on each method becomes the tool description; the parameter type becomes the JSON schema. Every method on `Calculator` is now a Vercel `Tool`. Tool names default to the bare method name; pass `{ prefix: true }` as the second argument to `toVercelTools` to get `{controllerName}_{methodName}` instead. Final tool names must be unique even with prefixes enabled, so controllers that still emit the same name are rejected before registration. The older `toVercelTools({ controllers: [...] })` form still works when that shape is clearer for multiple controllers. When a method has a reflected return type, the tool also advertises an `outputSchema` for the `{ success, data/error }` result wrapper returned by `execute`.
+
+`execute` validates each controller result against the reflected return schema before using the success branch. Missing fields, wrong nested types, additional properties, and non-object values return `{ success: false, error }` with annotated output paths, so every result still conforms to the advertised wrapper schema. A method declared as `void` keeps the schema-free `{ success: true }` result.
+
+<Tabs items={[
+    <code>Calculator</code>,
+    <code>BbsArticleService</code>,
+    <code>IBbsArticle</code>,
+  ]}>
+  <Tabs.Tab>
+    <LocalSource
+      path="tests/test-vercel/src/structures/Calculator.ts"
+      filename="Calculator.ts"
+      showLineNumbers />
+  </Tabs.Tab>
+  <Tabs.Tab>
+    <LocalSource
+      path="examples/src/llm/BbsArticleService.ts"
+      filename="BbsArticleService.ts"
+      showLineNumbers />
+  </Tabs.Tab>
+  <Tabs.Tab>
+    <LocalSource
+      path="examples/src/llm/IBbsArticle.ts"
+      filename="IBbsArticle.ts"
+      showLineNumbers />
+  </Tabs.Tab>
+</Tabs>
+
+<Callout type="warning">
+**Method type rules.** Every method's parameter type must be a keyworded object with static keys (no primitives, arrays, or unions). The return type must be an object or `void`. See [`typia.llm.application` restrictions](/docs/llm/application#restrictions) for the full list.
+</Callout>
+
+## From an OpenAPI document
+
+For REST APIs documented with Swagger / OpenAPI, swap [`HttpLlm.controller`](/docs/llm/http) in:
+
+```typescript filename="src/main.ts" showLineNumbers {1-3, 5-16}
+import { toVercelTools } from "@typia/vercel";
+import { HttpLlm } from "@typia/utils";
+import { Tool } from "ai";
+
+const tools: Record<string, Tool> = toVercelTools(
+  HttpLlm.controller({
+    name: "shopping",
+    document: await fetch(
+      "https://shopping-be.wrtn.ai/editor/swagger.json",
+    ).then((r) => r.json()),
+    connection: {
+      host: "https://shopping-be.wrtn.ai",
+      headers: { Authorization: "Bearer ********" },
+    },
+  }),
+);
+```
+
+Every API operation becomes a tool with parameters, descriptions, and the same harness wrapping each call.
+
+## The function calling harness
+
+Every tool produced by `toVercelTools` carries lenient JSON parsing, type coercion, and validation feedback. When validation fails, the tool returns the original input annotated with inline `// ❌` markers — the LLM reads it and self-corrects on the next turn:
+
+```json
+{
+  "name": "John",
+  "age": "twenty",      // ❌ [{"path":"$input.age","expected":"number"}]
+  "email": "not-an-email", // ❌ [{"path":"$input.email","expected":"string & Format<\"email\">"}]
+  "hobbies": "reading"  // ❌ [{"path":"$input.hobbies","expected":"Array<string>"}]
+}
+```
+
+For the mechanics of `parse` / `coerce` / `validate` / `stringify`, see [`LlmJson`](/docs/llm/json).
+
+## Structured output
+
+For Vercel's `generateObject` (i.e. structured output, no function-picking involved), use [`typia.llm.parameters<T>()`](/docs/llm/parameters) plus a `validate` callback that runs [`typia.validate`](/docs/validators/validate):
+
+```typescript filename="src/main.ts" copy showLineNumbers {1, 3-4, 14-30}
+import { openai } from "@ai-sdk/openai";
+import { dedent, LlmJson } from "@typia/utils";
+import { generateObject, jsonSchema } from "ai";
+import typia, { tags } from "typia";
+
+interface IMember {
+  email: string & tags.Format<"email">;
+  name: string;
+  age: number & tags.Minimum<0> & tags.Maximum<100>;
+  hobbies: string[];
+  joined_at: string & tags.Format<"date">;
+}
+
+const { object } = await generateObject({
+  model: openai("gpt-4o"),
+  schema: jsonSchema<IMember>(typia.llm.parameters<IMember>(), {
+    validate: (value) => {
+      const result = typia.validate<IMember>(value);
+      if (result.success) return { success: true, value: result.data };
+      return {
+        success: false,
+        error: new Error(LlmJson.stringify(result)),
+      };
+    },
+  }),
+  prompt: dedent`
+    I am a new member of the community.
+
+    My name is John Doe, and I am 25 years old.
+    I like playing basketball and reading books,
+    and joined to this community at 2022-01-01.
+  `,
+});
+```
+
+> ```bash filename="Terminal"
+> {
+>   email: 'john.doe@example.com',
+>   name: 'John Doe',
+>   age: 25,
+>   hobbies: [ 'playing basketball', 'reading books' ],
+>   joined_at: '2022-01-01'
+> }
+> ```
+
+The `IMember` interface is the single source of truth. `typia.llm.parameters<IMember>()` produces the schema, `typia.validate<IMember>()` checks the result, and `LlmJson.stringify` formats any validation failure for the LLM to self-correct on retry.
+
+## Runtime errors
+
+There are two distinct failure modes:
+
+- **Validation error** — the LLM passed arguments that don't match the schema. Tool returns the annotated input so the model can fix it.
+- **Runtime error** — the tool itself threw (e.g. divide-by-zero, network error, business-rule violation).
+
+`@typia/vercel` catches the runtime error and surfaces it as `{ success: false, error: "..." }`. That keeps the conversation alive — the model can see the failure and either retry with different inputs or apologize to the user.
+
+<Tabs items={[
+    "Error handling test",
+    <code>Calculator</code>,
+  ]}>
+  <Tabs.Tab>
+    <LocalSource
+      path="tests/test-vercel/src/features/test_vercel_class_controller_error_handling.ts"
+      filename="test_vercel_class_controller_error_handling.ts"
+      showLineNumbers
+      highlight="22-26, 29-36" />
+  </Tabs.Tab>
+  <Tabs.Tab>
+    <LocalSource
+      path="tests/test-vercel/src/structures/Calculator.ts"
+      filename="Calculator.ts"
+      showLineNumbers />
+  </Tabs.Tab>
+</Tabs>
+
+## Where to go next
+
+- Source TypeScript class for the tools → [`typia.llm.application`](/docs/llm/application)
+- Source OpenAPI document for the tools → [`HttpLlm`](/docs/llm/http)
+- Harness internals (`parse`, `coerce`, `validate`, `stringify`) → [`LlmJson`](/docs/llm/json)
+- Same idea, different framework → [LangChain](/docs/utilization/langchain) · [MCP](/docs/utilization/mcp)
+- Full agent loop on top → [Agentica](/docs/llm/chat)

@@ -1,0 +1,44 @@
+---
+title: Guide Documents > Utilization Cases > tRPC
+---
+
+# tRPC
+
+[tRPC](https://trpc.io) lets you call server procedures from the client with full type safety. By default, you wire up `input` and `output` validation with a schema library (`zod`, `valibot`, …). typia replaces that with [`createAssert`](/docs/validators/assert#reusable-factories) — same one-line validator, generated from the TypeScript type directly.
+
+```typescript copy showLineNumbers {11-12}
+import { initTRPC } from "@trpc/server";
+import { v4 } from "uuid";
+import typia from "typia";
+
+import { IBbsArticle } from "../structures/IBbsArticle";
+
+const server = initTRPC.create();
+
+export const appRouter = server.router({
+  store: server.procedure
+    .input(typia.createAssert<IBbsArticle.IStore>())
+    .output(typia.createAssert<IBbsArticle>())
+    .query(({ input }) => {
+      return {
+        id: v4(),
+        writer: input.writer,
+        title: input.title,
+        body: input.body,
+        created_at: new Date().toString(),
+      };
+    }),
+});
+export type AppRouter = typeof appRouter;
+```
+
+`typia.createAssert<T>()` returns `(input: unknown, errorFactory?) => T`, which satisfies the one-parameter validator tRPC's `.input()` and `.output()` expect. On a mismatch the procedure rejects the call with a `TypeGuardError` carrying the path of the bad field. The [`errorFactory` parameter](/docs/validators/assert#reusable-factories) is optional and tRPC never fills it.
+
+If you want a Standard Schema-compliant validator (so the same definition also slots into other tools), use [`typia.createValidate`](/docs/validators/validate#reusable-factories) instead.
+
+## Where to go next
+
+- Validator that throws → [`assert`](/docs/validators/assert)
+- Validator that returns errors → [`validate`](/docs/validators/validate)
+- Constraint tags → [Special Tags](/docs/validators/tags)
+- tRPC docs → [trpc.io](https://trpc.io)

@@ -1,0 +1,225 @@
+package metadata
+
+import "strings"
+
+type IMetadataSchema_IObjectType struct {
+  Name        string
+  Properties  []*IMetadataSchema_IProperty
+  Description *string
+  JsDocTags   []IJsDocTagInfo
+  Index       int
+  Recursive   bool
+  Nullables   []bool
+}
+
+type MetadataObjectType struct {
+  Name        string
+  DisplayName string
+  // Source is the absolute-or-as-declared path of the file declaring a named
+  // class, captured at analysis time so plain.classify can value-import a
+  // cross-module class it reconstructs (Object.create / new / from). nil for
+  // anonymous/literal shapes and types with no locatable declaration. Read
+  // in-process by the classify programmer; not serialized (classify is
+  // single-pass), and ignored by clone/prune.
+  Source *string
+  // SourceDefault is true when the class is the default export of Source, so a
+  // cross-module classify value-import uses a default (not named) import.
+  SourceDefault bool
+  // PrivateFields is true when the named class declaration carries at least one
+  // ES `#private` member (a member named with a PrivateIdentifier). Such slots
+  // are installed only by running the constructor; plain.classify's field-copy
+  // (Object.create + assign) cannot restore them, so classify rejects any such
+  // class at a field-copied position. Read in-process by the classify
+  // programmer; ignored by clone/prune, not serialized.
+  PrivateFields bool
+  // IsClass is true when this object's declaration is a `class` (declaration or
+  // expression), so it has a runtime VALUE binding plain.classify can
+  // `Object.create(<name>.prototype)`/`new` against. False for an interface, a
+  // type alias, or an anonymous object literal — none of which is a runtime
+  // value, so classify field-copies a plain {} instead of referencing a
+  // type-only name. Read in-process by the classify programmer; ignored by
+  // clone/prune, not serialized.
+  IsClass bool
+  // ValueRef overrides the runtime VALUE-binding name plain.classify uses when
+  // the class's metadata Name is not a usable runtime constructor reference —
+  // namely a NAMED class EXPRESSION (`const X = class Beast {...}`), whose Name
+  // is the inner `Beast` that binds only inside the class body. Holds the
+  // enclosing variable binding ("X"). Empty for a class DECLARATION (Name binds)
+  // and for an unnamed class expression (Name is already the variable binding).
+  // Read in-process by the classify programmer; not serialized, ignored by
+  // clone/prune.
+  ValueRef          string
+  Properties        []*MetadataProperty
+  Description       *string
+  JsDocTags         []IJsDocTagInfo
+  Index             int
+  Validated         bool
+  Recursive         bool
+  Nullables         []bool
+  Parent_objects_   []*MetadataObject
+  Check_properties_ []*MetadataProperty
+  Tagged_           bool
+  literal_          *bool
+  required_literal_ *bool
+}
+
+func MetadataObjectType_create(props MetadataObjectType) *MetadataObjectType {
+  name := strings.ToValidUTF8(props.Name, "__")
+  name = strings.ReplaceAll(name, "\uFFFD", "__")
+  return &MetadataObjectType{
+    Name:        name,
+    DisplayName: props.DisplayName,
+    Properties:  props.Properties,
+    Description: props.Description,
+    JsDocTags:   append([]IJsDocTagInfo{}, props.JsDocTags...),
+    Index:       props.Index,
+    Validated:   props.Validated,
+    Recursive:   props.Recursive,
+    Nullables:   append([]bool{}, props.Nullables...),
+    Tagged_:     false,
+  }
+}
+
+func MetadataObjectType__From_without_properties(obj IMetadataSchema_IObjectType) *MetadataObjectType {
+  return MetadataObjectType_create(MetadataObjectType{
+    Name:        obj.Name,
+    Properties:  []*MetadataProperty{},
+    Description: obj.Description,
+    JsDocTags:   obj.JsDocTags,
+    Index:       obj.Index,
+    Validated:   false,
+    Recursive:   obj.Recursive,
+    Nullables:   obj.Nullables,
+  })
+}
+
+// GetDisplayName returns the human-facing rendering of the type: the
+// structural form for anonymous (inline) types, the identifier name otherwise.
+// Identity-sensitive logic (function keys, deduplication) must keep using Name.
+func (obj *MetadataObjectType) GetDisplayName() string {
+  if obj.DisplayName != "" {
+    return obj.DisplayName
+  }
+  return obj.Name
+}
+
+func (obj *MetadataObjectType) CheckProperties() []*MetadataProperty {
+  if obj.Check_properties_ != nil {
+    return obj.Check_properties_
+  }
+  return obj.Properties
+}
+
+func (obj *MetadataObjectType) HasRequiredLiteralProperty() bool {
+  if obj.required_literal_ != nil {
+    return *obj.required_literal_
+  }
+  value := false
+  for _, parent := range obj.Parent_objects_ {
+    if parent.Type.HasRequiredLiteralProperty() {
+      value = true
+      break
+    }
+  }
+  for _, property := range obj.CheckProperties() {
+    if property.Key.IsSoleLiteral() && property.Value.IsRequired() {
+      value = true
+      break
+    }
+  }
+  obj.required_literal_ = &value
+  return value
+}
+
+func (obj *MetadataObjectType) IsPlain(level ...int) bool {
+  lv := 0
+  if len(level) > 0 {
+    lv = level[0]
+  }
+  if obj.Recursive || len(obj.Properties) >= 10 {
+    return false
+  }
+  for _, property := range obj.Properties {
+    if property.Key.IsSoleLiteral() == false ||
+      property.Value.Size() != 1 ||
+      property.Value.IsRequired() == false ||
+      property.Value.Nullable {
+      return false
+    }
+    if len(property.Value.Atomics) == 1 {
+      continue
+    }
+    if lv < 1 && len(property.Value.Objects) == 1 && property.Value.Objects[0].Type.IsPlain(lv+1) {
+      continue
+    }
+    return false
+  }
+  return true
+}
+
+func (obj *MetadataObjectType) IsLiteral() bool {
+  if obj.literal_ != nil {
+    return *obj.literal_
+  }
+  value := false
+  if obj.Recursive == false {
+    name := strings.ToValidUTF8(obj.Name, "__")
+    name = strings.ReplaceAll(name, "\uFFFD", "__")
+    value = metadataObjectType_isAnonymousName(name, "__type") ||
+      metadataObjectType_isAnonymousName(name, "__object") ||
+      strings.Contains(name, "readonly [")
+  }
+  obj.literal_ = &value
+  return value
+}
+
+// metadataObjectType_isAnonymousName reports whether an allocated id names an
+// anonymous type literal, which the schema generators inline instead of
+// emitting as a component.
+//
+// A second anonymous type is a duplicate of the first, so its id carries the
+// collection's disambiguating counter and the bare marker is not enough to
+// recognize it. This reads that counter back out of an id, which is why it must
+// track `metadataCollection_duplicateSuffix` rather than spell the separator
+// again: when the two disagreed, every anonymous type after the first stopped
+// being recognized and was emitted as a `__type`-keyed component.
+func metadataObjectType_isAnonymousName(name string, marker string) bool {
+  return name == marker ||
+    strings.HasPrefix(name, marker+metadataCollection_duplicateSuffix)
+}
+
+func (obj *MetadataObjectType) ToJSON() IMetadataSchema_IObjectType {
+  properties := make([]*IMetadataSchema_IProperty, 0, len(obj.Properties))
+  for _, property := range obj.Properties {
+    json := property.ToJSON()
+    properties = append(properties, &json)
+  }
+  return IMetadataSchema_IObjectType{
+    Name:        obj.Name,
+    Properties:  properties,
+    Description: obj.Description,
+    JsDocTags:   append([]IJsDocTagInfo{}, obj.JsDocTags...),
+    Index:       obj.Index,
+    Recursive:   obj.Recursive,
+    Nullables:   append([]bool{}, obj.Nullables...),
+  }
+}
+
+func MetadataObjectType_covers(x *MetadataObjectType, y *MetadataObjectType) bool {
+  if len(x.Properties) < len(y.Properties) {
+    return false
+  }
+  for _, prop := range x.Properties {
+    found := false
+    for _, oppo := range y.Properties {
+      if prop.Key.GetName() == oppo.Key.GetName() {
+        found = true
+        break
+      }
+    }
+    if found == false {
+      return false
+    }
+  }
+  return true
+}

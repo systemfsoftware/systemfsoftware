@@ -1,0 +1,662 @@
+---
+title: Guide Documents > Pure TypeScript Type
+---
+import { Tabs } from 'nextra/components'
+
+# Pure TypeScript
+
+## One line. Pure types. Done.
+
+```ts copy filename="check.ts"
+typia.assert<IBbsArticle>(article);
+```
+
+Every other validator library in the JavaScript ecosystem makes you describe your data twice. typia doesn't. The single line above is the entire validator definition. The type `IBbsArticle` is everything typia needs to know.
+
+## Why this matters
+
+Most validator libraries can't see TypeScript types — at runtime, types are gone. So they ask you to re-encode the type in a form they *can* see:
+
+- **`class-validator`** wants a class with stacked decorators. For NestJS apps, you usually maintain a *third* parallel definition for `@nestjs/swagger`. A typical request DTO ends up triple-duplicated.
+- **`ajv`** wants a JSON Schema object. Hundreds of lines of `{ "type": "...", "properties": {...} }` for what's a 30-line TypeScript interface.
+- **`zod`** wants you to build the schema with its own builder API (`z.object({...})`). The TypeScript type comes from `z.infer`, so the schema is the source of truth — your TypeScript types are downstream.
+
+All three approaches share two problems:
+
+1. **Drift.** When you change a field on the TS side, nothing forces you to update the schema. The compiler can't catch it. The mistake shows up only when production traffic hits.
+2. **Effort.** Mechanical, joyless typing of the same thing in two notations.
+
+typia removes both. It is a **compile-time transformer**: it reads your TypeScript type at build time and writes the runtime code for you. The TypeScript type is the only source of truth.
+
+## Three approaches
+
+The example below is the same data model — a BBS article with files — written for `class-validator`, `ajv`, and typia. Look at the highlighted `files` property in each.
+
+<Tabs items={[
+  <span>
+    <code>class-validator</code> <sub>(triple definition)</sub>
+  </span>,
+  <span>
+    <code>ajv</code> <sub>(JSON Schema)</sub>
+  </span>,
+  <span>
+    <code>typia</code> <sub>(pure type)</sub>
+  </span>
+]}>
+  <Tabs.Tab>
+```typescript filename="BbsArticle.ts" showLineNumbers {24-35}
+import { ApiProperty } from "@nestjs/swagger";
+import {
+  ArrayNotEmpty,
+  IsArray,
+  IsObject,
+  IsOptional,
+  IsString,
+  Matches,
+  MaxLength,
+  Type,
+  ValidateNested,
+} from "class-validator";
+
+export class BbsArticle {
+  @ApiProperty({
+    format: "uuid",
+  })
+  @IsString()
+  id!: string;
+
+  // Seven decorator calls just to say
+  // "files is either null or an array of AttachmentFile."
+  // Forget any one of them and you'll find out at runtime.
+  @ApiProperty({
+    type: () => AttachmentFile,
+    nullable: true,
+    isArray: true,
+    description: "List of attached files.",
+  })
+  @Type(() => AttachmentFile)
+  @IsArray()
+  @IsOptional()
+  @IsObject({ each: true })
+  @ValidateNested({ each: true })
+  files!: AttachmentFile[] | null;
+
+  @ApiProperty({
+    type: "string",
+    nullable: true,
+    minLength: 5,
+    maxLength: 100,
+    description: "Title of the article.",
+  })
+  @IsOptional()
+  @IsString()
+  title!: string | null;
+
+  @ApiProperty({
+    description: "Main content body of the article.",
+  })
+  @IsString()
+  body!: string;
+
+  @ApiProperty({
+    format: "date-time",
+    description: "Creation time of article",
+  })
+  @IsString()
+  created_at!: string;
+}
+
+export class AttachmentFile {
+  @ApiProperty({
+    type: "string",
+    maxLength: 255,
+    pattern: "^[a-zA-Z0-9-_]+$",
+    description: "File name.",
+  })
+  @Matches(/^[a-z0-9]+$/)
+  @MaxLength(255)
+  @IsString()
+  name!: string | null;
+
+  @ApiProperty({
+    type: "string",
+    nullable: true,
+    maxLength: 255,
+    pattern: "^[a-zA-Z0-9-_]+$",
+    description: "File extension.",
+  })
+  @Matches(/^[a-z0-9]+$/)
+  @MaxLength(8)
+  @IsOptional()
+  @IsString()
+  extension!: string | null;
+
+  @ApiProperty({
+    format: "url",
+    description: "URL of the file.",
+  })
+  @IsString()
+  url!: string;
+}
+```
+  </Tabs.Tab>
+  <Tabs.Tab>
+```json filename="BbsArticle.json" showLineNumbers {18-26}
+{
+  "schemas": [
+    {
+      "$ref": "#/components/schemas/IBbsArticle"
+    }
+  ],
+  "components": {
+    "schemas": {
+      "IBbsArticle": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Primary Key",
+            "description": "Primary Key."
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IAttachmentFile"
+            },
+            "nullable": true,
+            "title": "List of attached files",
+            "description": "List of attached files."
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 5,
+            "nullable": true,
+            "title": "Title of the article",
+            "description": "Title of the article."
+          },
+          "body": {
+            "type": "string",
+            "title": "Main content body of the article",
+            "description": "Main content body of the article."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Creation time of article",
+            "description": "Creation time of article."
+          }
+        },
+        "nullable": false,
+        "required": [
+          "id",
+          "files",
+          "title",
+          "body",
+          "created_at"
+        ]
+      },
+      "IAttachmentFile": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 255,
+            "pattern": "^[a-z0-9]+$",
+            "title": "File name",
+            "description": "File name."
+          },
+          "extension": {
+            "type": "string",
+            "maxLength": 8,
+            "pattern": "^[a-z0-9]+$",
+            "nullable": true,
+            "title": "File extension",
+            "description": "File extension."
+          },
+          "url": {
+            "type": "string",
+            "title": "URL of the file",
+            "description": "URL of the file."
+          }
+        },
+        "nullable": false,
+        "required": [
+          "name",
+          "extension",
+          "url"
+        ]
+      }
+    }
+  },
+  "purpose": "swagger",
+  "surplus": false
+}
+```
+  </Tabs.Tab>
+  <Tabs.Tab>
+```typescript filename="IBbsArticle.ts" showLineNumbers {9-12}
+import typia, { tags } from "typia";
+
+export interface IBbsArticle {
+  /**
+   * Primary Key.
+   */
+  id: string & tags.Format<"uuid">;
+
+  /**
+   * List of attached files.
+   */
+  files: null | IAttachmentFile[];
+
+  /**
+   * Title of the article.
+   */
+  title: null | (string & tags.MinLength<5> & tags.MaxLength<100>);
+
+  /**
+   * Main content body of the article.
+   */
+  body: string;
+
+  /**
+   * Creation time of article.
+   */
+  created_at: string & tags.Format<"date-time">;
+}
+
+export interface IAttachmentFile {
+  /**
+   * File name.
+   */
+  name: string & tags.Pattern<"^[a-z0-9]+$"> & tags.MaxLength<255>;
+
+  /**
+   * File extension.
+   */
+  extension: null | (string & tags.Pattern<"^[a-z0-9]+$"> & tags.MaxLength<8>);
+
+  /**
+   * URL of the file.
+   */
+  url: string;
+}
+```
+  </Tabs.Tab>
+</Tabs>
+
+Same data. Same constraints. Three very different costs to maintain.
+
+The typia version is a normal TypeScript interface. The validation rules live in [type tags](/docs/validators/tags) like `tags.Format<"uuid">` and `tags.MaxLength<255>` that intersect with the base type. Rename `files` and TypeScript drags every reference along with it. Forget a constraint and you change the type once.
+
+## How can types validate at runtime?
+
+That's a fair objection. If types don't exist at runtime, how does typia validate anything?
+
+**At compile time, typia rewrites your code.** The `typia.assert<T>` call site is replaced inline with a hand-written validator specialized to `T`. There is no schema object at runtime because there is no general-purpose validator at runtime — only the specific check your code needs.
+
+This is called AOT (Ahead-of-Time) compilation. Look at what the compiler actually produces:
+
+<Tabs
+  items={[
+    <code>IBbsArticle.ts</code>,
+    <code>assertArticle.ts</code>,
+    'Compiled JavaScript'
+  ]}
+  defaultIndex={1}>
+  <Tabs.Tab>
+```typescript copy filename="IBbsArticle.ts" showLineNumbers
+import typia, { tags } from "typia";
+
+export interface IBbsArticle {
+  /** Primary Key. */
+  id: string & tags.Format<"uuid">;
+
+  /** List of attached files. */
+  files: null | IAttachmentFile[];
+
+  /** Title of the article. */
+  title: null | (string & tags.MinLength<5> & tags.MaxLength<100>);
+
+  /** Main content body of the article. */
+  body: string;
+
+  /** Creation time of article. */
+  created_at: string & tags.Format<"date-time">;
+}
+
+export interface IAttachmentFile {
+  /** File name. */
+  name: string & tags.Pattern<"^[a-z0-9]+$"> & tags.MaxLength<255>;
+
+  /** File extension. */
+  extension: null | (string & tags.Pattern<"^[a-z0-9]+$"> & tags.MaxLength<8>);
+
+  /** URL of the file. */
+  url: string;
+}
+```
+    </Tabs.Tab>
+    <Tabs.Tab>
+```typescript filename="assertArticle.ts" showLineNumbers
+import typia from "typia";
+
+import { IBbsArticle } from "./IBbsArticle";
+
+export const assertArticle = typia.createAssert<IBbsArticle>();
+```
+  </Tabs.Tab>
+  <Tabs.Tab>
+```javascript filename="assertArticle.js" showLineNumbers
+import * as __typia_transform__isFormatUuid from "typia/lib/_isFormatUuid.js";
+import * as __typia_transform__isFormatDateTime from "typia/lib/_isFormatDateTime.js";
+import * as __typia_transform__assertGuard from "typia/lib/_assertGuard.js";
+import typia from "typia";
+export const assertArticle = (() => {
+  const _io0 = (input) =>
+    "string" === typeof input.id &&
+    __typia_transform__isFormatUuid._isFormatUuid(input.id) &&
+    (null === input.files ||
+      (Array.isArray(input.files) &&
+        input.files.every(
+          (elem) => "object" === typeof elem && null !== elem && _io1(elem),
+        ))) &&
+    (null === input.title ||
+      ("string" === typeof input.title &&
+        5 <= input.title.length &&
+        input.title.length <= 100)) &&
+    "string" === typeof input.body &&
+    "string" === typeof input.created_at &&
+    __typia_transform__isFormatDateTime._isFormatDateTime(input.created_at);
+  const _io1 = (input) =>
+    "string" === typeof input.name &&
+    RegExp("^[a-z0-9]+$").test(input.name) &&
+    input.name.length <= 255 &&
+    (null === input.extension ||
+      ("string" === typeof input.extension &&
+        RegExp("^[a-z0-9]+$").test(input.extension) &&
+        input.extension.length <= 8)) &&
+    "string" === typeof input.url;
+  const _ao0 = (input, _path, _exceptionable = true) =>
+    (("string" === typeof input.id &&
+      (__typia_transform__isFormatUuid._isFormatUuid(input.id) ||
+        __typia_transform__assertGuard._assertGuard(
+          _exceptionable,
+          {
+            method: "typia.createAssert",
+            path: _path + ".id",
+            expected: 'string & Format<"uuid">',
+            value: input.id,
+          },
+          _errorFactory,
+        ))) ||
+      __typia_transform__assertGuard._assertGuard(
+        _exceptionable,
+        {
+          method: "typia.createAssert",
+          path: _path + ".id",
+          expected: '(string & Format<"uuid">)',
+          value: input.id,
+        },
+        _errorFactory,
+      )) &&
+    (null === input.files ||
+      ((Array.isArray(input.files) ||
+        __typia_transform__assertGuard._assertGuard(
+          _exceptionable,
+          {
+            method: "typia.createAssert",
+            path: _path + ".files",
+            expected: "(Array<IAttachmentFile> | null)",
+            value: input.files,
+          },
+          _errorFactory,
+        )) &&
+        input.files.every(
+          (elem, _index2) =>
+            ((("object" === typeof elem && null !== elem) ||
+              __typia_transform__assertGuard._assertGuard(
+                _exceptionable,
+                {
+                  method: "typia.createAssert",
+                  path: _path + ".files[" + _index2 + "]",
+                  expected: "IAttachmentFile",
+                  value: elem,
+                },
+                _errorFactory,
+              )) &&
+              _ao1(
+                elem,
+                _path + ".files[" + _index2 + "]",
+                true && _exceptionable,
+              )) ||
+            __typia_transform__assertGuard._assertGuard(
+              _exceptionable,
+              {
+                method: "typia.createAssert",
+                path: _path + ".files[" + _index2 + "]",
+                expected: "IAttachmentFile",
+                value: elem,
+              },
+              _errorFactory,
+            ),
+        )) ||
+      __typia_transform__assertGuard._assertGuard(
+        _exceptionable,
+        {
+          method: "typia.createAssert",
+          path: _path + ".files",
+          expected: "(Array<IAttachmentFile> | null)",
+          value: input.files,
+        },
+        _errorFactory,
+      )) &&
+    (null === input.title ||
+      ("string" === typeof input.title &&
+        (5 <= input.title.length ||
+          __typia_transform__assertGuard._assertGuard(
+            _exceptionable,
+            {
+              method: "typia.createAssert",
+              path: _path + ".title",
+              expected: "string & MinLength<5>",
+              value: input.title,
+            },
+            _errorFactory,
+          )) &&
+        (input.title.length <= 100 ||
+          __typia_transform__assertGuard._assertGuard(
+            _exceptionable,
+            {
+              method: "typia.createAssert",
+              path: _path + ".title",
+              expected: "string & MaxLength<100>",
+              value: input.title,
+            },
+            _errorFactory,
+          ))) ||
+      __typia_transform__assertGuard._assertGuard(
+        _exceptionable,
+        {
+          method: "typia.createAssert",
+          path: _path + ".title",
+          expected: "((string & MinLength<5> & MaxLength<100>) | null)",
+          value: input.title,
+        },
+        _errorFactory,
+      )) &&
+    ("string" === typeof input.body ||
+      __typia_transform__assertGuard._assertGuard(
+        _exceptionable,
+        {
+          method: "typia.createAssert",
+          path: _path + ".body",
+          expected: "string",
+          value: input.body,
+        },
+        _errorFactory,
+      )) &&
+    (("string" === typeof input.created_at &&
+      (__typia_transform__isFormatDateTime._isFormatDateTime(
+        input.created_at,
+      ) ||
+        __typia_transform__assertGuard._assertGuard(
+          _exceptionable,
+          {
+            method: "typia.createAssert",
+            path: _path + ".created_at",
+            expected: 'string & Format<"date-time">',
+            value: input.created_at,
+          },
+          _errorFactory,
+        ))) ||
+      __typia_transform__assertGuard._assertGuard(
+        _exceptionable,
+        {
+          method: "typia.createAssert",
+          path: _path + ".created_at",
+          expected: '(string & Format<"date-time">)',
+          value: input.created_at,
+        },
+        _errorFactory,
+      ));
+  const _ao1 = (input, _path, _exceptionable = true) =>
+    (("string" === typeof input.name &&
+      (RegExp("^[a-z0-9]+$").test(input.name) ||
+        __typia_transform__assertGuard._assertGuard(
+          _exceptionable,
+          {
+            method: "typia.createAssert",
+            path: _path + ".name",
+            expected: 'string & Pattern<"^[a-z0-9]+$">',
+            value: input.name,
+          },
+          _errorFactory,
+        )) &&
+      (input.name.length <= 255 ||
+        __typia_transform__assertGuard._assertGuard(
+          _exceptionable,
+          {
+            method: "typia.createAssert",
+            path: _path + ".name",
+            expected: "string & MaxLength<255>",
+            value: input.name,
+          },
+          _errorFactory,
+        ))) ||
+      __typia_transform__assertGuard._assertGuard(
+        _exceptionable,
+        {
+          method: "typia.createAssert",
+          path: _path + ".name",
+          expected: '(string & Pattern<"^[a-z0-9]+$"> & MaxLength<255>)',
+          value: input.name,
+        },
+        _errorFactory,
+      )) &&
+    (null === input.extension ||
+      ("string" === typeof input.extension &&
+        (RegExp("^[a-z0-9]+$").test(input.extension) ||
+          __typia_transform__assertGuard._assertGuard(
+            _exceptionable,
+            {
+              method: "typia.createAssert",
+              path: _path + ".extension",
+              expected: 'string & Pattern<"^[a-z0-9]+$">',
+              value: input.extension,
+            },
+            _errorFactory,
+          )) &&
+        (input.extension.length <= 8 ||
+          __typia_transform__assertGuard._assertGuard(
+            _exceptionable,
+            {
+              method: "typia.createAssert",
+              path: _path + ".extension",
+              expected: "string & MaxLength<8>",
+              value: input.extension,
+            },
+            _errorFactory,
+          ))) ||
+      __typia_transform__assertGuard._assertGuard(
+        _exceptionable,
+        {
+          method: "typia.createAssert",
+          path: _path + ".extension",
+          expected: '((string & Pattern<"^[a-z0-9]+$"> & MaxLength<8>) | null)',
+          value: input.extension,
+        },
+        _errorFactory,
+      )) &&
+    ("string" === typeof input.url ||
+      __typia_transform__assertGuard._assertGuard(
+        _exceptionable,
+        {
+          method: "typia.createAssert",
+          path: _path + ".url",
+          expected: "string",
+          value: input.url,
+        },
+        _errorFactory,
+      ));
+  const __is = (input) =>
+    "object" === typeof input && null !== input && _io0(input);
+  let _errorFactory;
+  return (input, errorFactory) => {
+    if (false === __is(input)) {
+      _errorFactory = errorFactory;
+      ((input, _path, _exceptionable = true) =>
+        ((("object" === typeof input && null !== input) ||
+          __typia_transform__assertGuard._assertGuard(
+            true,
+            {
+              method: "typia.createAssert",
+              path: _path + "",
+              expected: "IBbsArticle",
+              value: input,
+            },
+            _errorFactory,
+          )) &&
+          _ao0(input, _path + "", true)) ||
+        __typia_transform__assertGuard._assertGuard(
+          true,
+          {
+            method: "typia.createAssert",
+            path: _path + "",
+            expected: "IBbsArticle",
+            value: input,
+          },
+          _errorFactory,
+        ))(input, "$input", true);
+    }
+    return input;
+  };
+})();
+```
+  </Tabs.Tab>
+</Tabs>
+
+That's hand-rolled JavaScript with no dynamic dispatch and no schema interpretation. Just a sequence of `typeof` checks and string comparisons that the V8 JIT loves.
+
+**That's why typia is fast.**
+
+- Runtime validation: up to **20,000× faster** than `class-validator`
+- JSON serialization: up to **200× faster** than `class-transformer`
+
+![Assert Function Benchmark](https://github.com/samchon/typia/raw/master/benchmark/results/AMD%20Ryzen%209%207940HS%20w%20Radeon%20780M%20Graphics/images/assert.svg)
+
+> Measured on [AMD Ryzen 9 7940HS, Rog Flow x13](https://github.com/samchon/typia/tree/master/benchmark/results/AMD%20Ryzen%209%207940HS%20w%20Radeon%20780M%20Graphics#assert)
+
+## Summary
+
+- **No schema files.** You will not check a `*.schema.ts` file into your repo.
+- **No drift.** Rename a field — every validator updates automatically because the type is the validator.
+- **No reflection.** The runtime cost is whatever your compiled JavaScript already costs. Bundle it for the browser. Run it on the edge. It just works.
+- **Tags are real types.** `tags.MaxLength<100>` lives in the TypeScript type system. The compiler will flag you if you intersect it with the wrong base type.
+
+## Where to go next
+
+- [Setup](/docs/setup) — install the TypeScript 7 `ttsc` toolchain and you can paste the code above into a fresh project right now.
+- [Validators](/docs/validators/is) — `is`, `assert`, `validate`, and when to pick which.
+- [Type Tags](/docs/validators/tags) — the full list of constraints you can intersect into a type.
