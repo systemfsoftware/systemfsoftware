@@ -12,13 +12,6 @@ Every rule keys on the `*.acl.ts` filename suffix and no-ops on every other file
   harm: with only prohibitions, an empty .acl.ts passes and the cell collapses into a naming convention
   check: "`grep -n \"acl-transform-orfail-required\" src/index.ts` shows the rule in `rules` and as 'error' in `configs.recommended`"
 
-- id: EA2
-  title: transformOrFail detection matches the S namespace only
-  do: match the S identifier and the transformOrFail member property
-  dont: also accept Schema., an alias, or a computed member
-  harm: the near-miss valid cases exist to prove `Schema.transformOrFail` does NOT satisfy a transform-detecting rule; widen the match and every one of them passes vacuously, so the suite stops distinguishing the two forms it was written to separate
-  check: "`grep -n \"Schema.transformOrFail\" src/rules/__tests__/acl-transform-orfail-required.test.ts` returns the aliased-namespace near-miss the S-namespace match must still report"
-
 - id: EA3
   title: Cast detection is AST-only, no type information
   do: report every TSAsExpression in an .acl.ts file
@@ -31,7 +24,7 @@ Every rule keys on the `*.acl.ts` filename suffix and no-ops on every other file
   do: check directory segments against the ACL5 lint list (core, shell, util, utils, helper, manager, service)
   dont: extend the list — the broader technology-layer ban (entities/, components/, helpers/, routes/) is convention-only
   harm: widening beyond the gate's lint check makes the rule un-gateable and collides with cell-taxonomy's ownership of basenames
-  check: `grep -n "helpers" src/rules/__tests__/acl-no-anti-pattern-path.test.ts` returns the `Should_Pass_When_SegmentIsConventionOnlyHelpers` valid case
+  check: "`grep -n \"helpers\" src/rules/__tests__/acl-no-anti-pattern-path.test.ts` returns the `Should_Pass_When_SegmentIsConventionOnlyHelpers` valid case"
 ```
 
 Review-gated ACL gates (ACL1 unidirectionality, ACL3 `strict: true`, ACL4 no business logic in decode/encode) are not lint rules here — they are enforced by the store's composition tests and code review, per the cell skill.

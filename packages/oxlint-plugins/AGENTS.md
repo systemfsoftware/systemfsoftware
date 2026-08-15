@@ -74,7 +74,14 @@ rules:
     do: when a plugin under packages/oxlint-plugins/ needs `@systemfsoftware/effect-cell-types` as a dependency, deliver it by adding it to each consuming package's own `jsPlugins` and `rules`, exactly as `cell-vocabulary` is delivered
     dont: add such a plugin to `effect-dmmf/src/index.ts` re-exports, `effect-dmmf/package.json` dependencies, or `oxlint-config/package.json` dependencies — declaring it there closes the turbo cycle `effect-executor -> effect-cell-types -> oxlint-config -> effect-dmmf -> effect-executor`, and the only workaround is a committed generated vocabulary with a drift gate
     harm: the cycle forces a hack (generated constants + regenerate-and-compare gate) that a later reader deletes as cargo cult, leaving the rules frozen on stale constants with no gate; measured on 2026-08-15 when `vocabulary.generated.ts` existed solely because `effect-executor` sat in the aggregate
-    check: `grep -rn 'effect-cell-types' packages/oxlint-plugins/effect-dmmf/src/index.ts` returns nothing, and the remedy is `docs/solutions/build-errors/turbo-build-cycle-from-self-hosted-devdeps.md`
+    check: "`grep -rn 'effect-cell-types' packages/oxlint-plugins/effect-dmmf/src/index.ts` returns nothing, and the remedy is `docs/solutions/build-errors/turbo-build-cycle-from-self-hosted-devdeps.md`"
+
+  - id: OX-CI1
+    title: A rule matches the canonical identifier only, and its suite proves the alias does not fire
+    do: declare each thing a rule matches in its canonical spelling — in this family `S`, `Effect`, `Option`, `Context`, or `Match`, imported under that name
+    dont: widen any matcher to an alias (E.fn, C.Tag), another namespace (Schema.TaggedClass, Other.succeed), or a computed member, and never drop the near-miss fixture that keeps such a widening red
+    harm: a rule that matches a canonical identifier (`S`, `Effect`, `Option`) rather than an alias is verified by its suite's near-miss valid cases, which exist to prove the non-canonical spelling does NOT fire the rule; widen the match and every one of them passes vacuously, so the suite stops distinguishing the canonical form from the alias it was written to separate
+    check: "`grep -rE '(Alias|Aliased|NearMiss|GenericTag|Other\\.)' packages/oxlint-plugins/*/src/rules/__tests__/` returns, per plugin whose rules match a canonical identifier, a fixture naming the non-canonical spelling, and `pnpm --filter <pkg> test` exits 0 in each such plugin"
 ```
 
 ## Rule APIs

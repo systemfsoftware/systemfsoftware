@@ -19,13 +19,6 @@ These rule blocks are this leaf's whole doctrine: a valid `*.state.ts` construct
   harm: the skill's granularity rule is the load-bearing distinction; blurring it manufactures shallow state cells
   check: "`pnpm --filter @systemfsoftware/oxlint-plugin-effect-state test` exits 0 — holds-state keeps Should_Report_NoStatePrimitive_When_StateInsideArrowFunction and Should_Report_NoStatePrimitive_When_StateInsideFunctionDeclaration red and Should_Pass_When_FunctionDeclarationBesideModuleScopeMap green"
 
-- id: ES3
-  title: Tag detection matches the Context namespace only
-  do: match the identifier Context.Tag in both the class-extends and const call-chain forms
-  dont: also accept Context.GenericTag or an aliased Context import
-  harm: mirror of EW4 — widening one detection rule makes its near-miss tests meaningless
-  check: "`pnpm --filter @systemfsoftware/oxlint-plugin-effect-state test` exits 0 — state-single-tag-export keeps Should_Pass_When_GenericTagNearMiss green"
-
 - id: ES4
   title: Adapter imports are value imports only
   do: flag only non-type imports of *.adapter.* sources in state files; `import type` is erased and harmless

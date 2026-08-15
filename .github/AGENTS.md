@@ -8,16 +8,16 @@
 
 ### Failure patterns by task
 
-| Task                   | Failure pattern                                                   |
-| ---------------------- | ----------------------------------------------------------------- |
-| `install-deps`         | Lockfile drift → `pnpm install` locally and commit the lockfile   |
-| `build`                | tsdown / TypeScript errors                                        |
-| `typecheck`            | tsc errors                                                        |
-| `test`                 | Vitest failures                                                   |
-| `lint`, `format:check` | oxlint / dprint failures                                          |
-| `api:check`            | api-extractor (effect-daemon-spec only)                           |
-| `//#check:*` guards    | each prints its own remedy on stderr; run the one script it names |
-| `actions/checkout@v7`  | git exit 128 → usually a cascade from an earlier failure          |
+| Task                   | Failure pattern                                                                                                                      |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `install-deps`         | Lockfile drift → `pnpm install` locally and commit the lockfile                                                                      |
+| `build`                | tsdown / TypeScript errors                                                                                                           |
+| `typecheck`            | tsc errors                                                                                                                           |
+| `test`                 | Vitest failures                                                                                                                      |
+| `lint`, `format:check` | oxlint / dprint failures                                                                                                             |
+| `api:check`            | api-extractor drift in any package with a committed `etc/*.api.md` golden → `pnpm --filter <pkg> api:update`, then commit the report |
+| `//#check:*` guards    | each prints its own remedy on stderr; run the one script it names                                                                    |
+| `actions/checkout@v7`  | git exit 128 → usually a cascade from an earlier failure                                                                             |
 
 ## Local reproduction
 

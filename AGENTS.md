@@ -18,11 +18,11 @@
   harm: a projection records which members one operation happened to reach for, so exporting it turns internal composition into a surface commitment and forces every consumer to discover and provide N aggregators where one port serves. It escapes silently, because the tag rides the `R` channel of an exported signature and a consumer meets it only at their own call site
   check: "`pnpm check:exported-wiring`"
 - id: REPO-A4
-  title: A suffix keys an edge rule, never an interior one
-  do: let the suffix supply the left operand of an edge rule — which unit may import which — and express an interior constraint as a member of the description types in `@systemfsoftware/effect-cell-types`, a stage brand whose member name is the sentence a diagnostic reports or a marker interface whose property type states the fix, so the compiler prints the prescription at the construction site
-  dont: key a rule on a suffix to reach an interior property, or restate a constraint the types already refuse
-  harm: mechanical readability and unit membership are anti-correlated. A relation between units — an import, an export, a call edge — is what a static analyser reads most reliably and is not a property of a unit at all, while the interior facts that do belong to a unit are the ones it reads worst. So a suffix-keyed edge rule inherits the edge's near-zero false-positive rate, and a suffix-keyed interior rule inherits the interior's and fails at the first indirection — state behind a wrapper call, a declaration the author simply does not write. A type refuses the construction itself, so renaming escapes nothing and the refusal reaches a consumer who installs no lint plugin
-  check: review — for each rule, whether what it reads after the suffix is an edge or an interior fact, and whether an interior constraint was tried as a description-type member first
+  title: A type binds only where something forces the constructor
+  do: put an interior constraint in the description types where they can express it — a stage brand whose member name is the sentence a diagnostic reports, a marker interface whose property type states the fix — and land it together with the instrument that forces the construction
+  dont: retire a rule into the types without naming what forces the constructor, or give a rule a message claiming a property its predicate does not read
+  harm: a marker refuses a call that is made. The annotation form type-checks while deriving no marker at all, so an unforced constructor leaves the constraint stated and unenforced while the rule it replaced is already gone — and a decider that throws or reads the clock satisfies the channel markers untouched, because they constrain the channels and nothing else. A rule whose message outruns its predicate fails from the other side, silently admitting the spelling it exists to catch
+  check: review — for each constraint held in the types, what forces the constructor and what the markers do not cover; for each rule, whether its predicate decides the property its message names
 ```
 
 ## Safety

@@ -7,10 +7,9 @@
 
 ## Critical
 
-- Touching `omp/plugins/<pkg>/src/<name>.workflow.ts` (or `omp/packages/<pkg>/src/` for shared libraries) or designing a new decision cell → **load `skill://architect-dmmf-application`** first; it routes to the right cell suffix and rejects category errors. The workflow cells in this workspace follow the DMMF (Decision-Module-Mechanism-Feature) composition pattern, not a bespoke architecture.
+- Touching `omp/plugins/<pkg>/src/<name>.workflow.ts` (or `omp/packages/<pkg>/src/` for shared libraries) or designing a new decision cell: the workflow cells in this workspace follow the DMMF (Decision-Module-Mechanism-Feature) composition pattern, not a bespoke architecture. Choose the cell suffix with the decision tree below; wrong suffix is a category error.
 
 - Authoring/modifying a plugin manifest, `pi.on` handler, link flow, or release pipeline → **load `skill://omp-plugin-development`** first.
-- Deciding what a single cell type (workflow, executor, schema, acl, handler, store, policy, state, shape, middleware) should look like → load the matching `skill://architect-*`.
 
 ## Cell Architecture (DMMF in this workspace)
 
@@ -31,7 +30,7 @@
 2. Does it do subprocess execution, file reads, or other impure I/O? → `*.executor.ts` (the workflow is the filling).
 3. Does it decode JSON from an external shape into a domain type? → `*.acl.ts`.
 4. Does it register a `pi.on(...)` handler? → `*.handler.ts`.
-5. None of the above? → re-read the cell taxonomy in `skill://architect-dmmf-application`. Wrong suffix is a category error.
+5. None of the above? → re-read the Cell Architecture table above. Wrong suffix is a category error.
 
 ## Workflow Gates (S.TaggedError rule)
 

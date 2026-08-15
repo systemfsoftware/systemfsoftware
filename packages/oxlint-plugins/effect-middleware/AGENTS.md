@@ -18,11 +18,4 @@ Only the mechanically lint-gatable gates are implemented: no operation imports i
   dont: ban Effect.succeed(Option|null) everywhere — the else of an absence check is the success path
   harm: an unconditional ban reports success-path code and drowns real violations
   check: valid cases prove `if (session) { … }` consequents and `else` branches pass
-
-- id: MM3
-  title: Match Effect and Option by identifier only
-  do: match the canonical identifiers Effect and Option directly, like the family matches S
-  dont: accept aliases or destructured Option members
-  harm: every rule here hardcodes canonical identifiers; widening one breaks the canonical-identifier contract its siblings enforce
-  check: "`grep -q \"Other.succeed\" src/rules/__tests__/middleware-gate-fails-on-decode-failure.test.ts && grep -q \"storefront\" src/rules/__tests__/middleware-no-operation-imports.test.ts` — each rule has a near-miss valid case proving the canonical identifier is required"
 ```

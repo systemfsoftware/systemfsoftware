@@ -62,9 +62,13 @@ rules:
 Delivered **consumer-side** through each consuming package's own `jsPlugins`, never through
 `@systemfsoftware/oxlint-config`. The aggregate declares every plugin as a real dependency, so an
 aggregate that declared this one would close the turbo cycle `effect-executor -> effect-cell-types
--> effect-gherkin-spec -> oxlint-config -> effect-dmmf -> effect-executor` — measured, and turbo
-names that first edge as the only breakable one. `scripts/guards/check-lint-coverage.mjs` classifies
-this package accordingly.
+-> oxlint-config -> effect-dmmf -> effect-executor` — measured 2026-08-15 with `pnpm turbo build
+--dry=json`: `effect-executor#build` depends on `effect-cell-types#build`, which dev-depends on
+`oxlint-config#build` directly, which depends on `effect-dmmf#build`; the aggregate adds the closing
+`effect-dmmf -> effect-executor` edge. The longer lane through `effect-gherkin-spec` also exists —
+`effect-cell-types` dev-depends on `effect-gherkin-spec`, which dev-depends on `oxlint-config` —
+and sits in the same cycle, but the direct edge is the minimal one. `scripts/guards/check-lint-coverage.mjs`
+classifies this package accordingly.
 
 The sibling rule `effect-executor/executor-no-io-in-filling` walks the same `Cell.vocabulary` directly and is delivered consumer-side for the same reason (OX-DL1); neither restates.
 

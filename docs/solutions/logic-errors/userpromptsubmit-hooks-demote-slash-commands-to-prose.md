@@ -141,5 +141,5 @@ Merge state as of this run: pending. The fix is uncommitted; no SHAs are recorde
 
 ## Related Issues
 
-- [`docs/solutions/architecture-patterns/workflow-error-channel-gates.md`](../architecture-patterns/workflow-error-channel-gates.md) — same plugin and same `.workflow.ts` cell type; shares the architect-workflow gates and the `pbt-naming` prevention rule. Moderate overlap (referenced files, prevention rules); distinct problem and root cause.
+- [`docs/solutions/architecture-patterns/workflow-error-channel-gates.md`](../architecture-patterns/workflow-error-channel-gates.md) — same plugin and same `.workflow.ts` cell type; shares the workflow error-channel gates and the `pbt-naming` prevention rule. Moderate overlap (referenced files, prevention rules); distinct problem and root cause.
 - No related GitHub issues (`gh issue list` over hook / UserPromptSubmit / slash-command / omp-claude-compat returned zero rows).
