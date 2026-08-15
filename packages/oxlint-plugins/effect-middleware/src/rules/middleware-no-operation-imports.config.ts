@@ -15,7 +15,7 @@ export const meta = {
   type: 'problem',
   docs: {
     description:
-      'Ban import bindings named *Executor/*Workflow/*Store — in *.middleware.ts files. A middleware is the transport front-half: it decodes and attaches facts at the edge and must never reach into the operation (architect-middleware MW2).',
+      'Ban import bindings named *Executor/*Workflow/*Store — in *.middleware.ts files. A middleware is the transport front-half: it decodes and attaches facts at the edge and must never reach into the operation.',
   },
   schema: [Options],
   messages: {

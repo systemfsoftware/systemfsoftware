@@ -11,21 +11,21 @@ rules:
     do: kill every mutant with a distinguishing test or eliminate it with a restructure
     dont: reach the number by ignoring a killable mutant
     harm: the score excludes Ignored from its denominator, so a package can report a passing score while an ignorer absorbs mutants no test kills
-    check: `pnpm --filter <pkg> mutation` exits 0 and `jq '[.. | .status? // empty | select(. == "Ignored" or . == "Survived" or . == "NoCoverage")] | length' reports/mutation-report.json` returns 0
+    check: "`pnpm --filter <pkg> mutation` exits 0 and `jq '[.. | .status? // empty | select(. == \"Ignored\" or . == \"Survived\" or . == \"NoCoverage\")] | length' reports/mutation-report.json` returns 0"
 
   - id: OX-MG2
     title: Ignores are declaration data only
     do: register exactly `effect-schema-declarations` in stryker.config.json#ignorers for III.4 declaration data — Symbol.for descriptions, TaggedClass/TaggedError _tag and fields, optionalWith defaults
     dont: author new ignore plugins, add ignore rules for logic mutants, or use `// Stryker disable` comments
     harm: ignore rules pattern-match text, not proofs — they silently suppress mutants that tests would have killed
-    check: `grep -rn 'Stryker disable' src/` returns nothing, and `jq -r '.ignorers // [] | join(",")' stryker.config.json` reports an empty list or exactly `effect-schema-declarations`
+    check: "`grep -rn 'Stryker disable' src/` returns nothing, and `jq -r '.ignorers // [] | join(\",\")' stryker.config.json` reports an empty list or exactly `effect-schema-declarations`"
 
   - id: OX-CS1
     title: Static config lives in *.config.ts
     do: place meta, messages, schema, Options, constants, regexes, and message templates in `src/rules/<rule>.config.ts`; keep guards, predicates, selectors, and `create()` in the rule file; pass the imported config `meta` to `defineRule` directly without spread
     dont: declare static config inside the rule file
     harm: static data inflates the mutation surface with equivalent mutants no test can kill; behavior and declaration stop being distinguishable (III.4)
-    check: `jq -r '.mutate | join("\n")' stryker.config.json` lists a `!*.config.ts` exclusion, and `grep -rn '\.config\.js' src/rules/` shows a `meta` import for every rule with a static config
+    check: "`jq -r '.mutate | join(\"\\n\")' stryker.config.json` lists a `!*.config.ts` exclusion, and `grep -rn '\\.config\\.js' src/rules/` shows a `meta` import for every rule with a static config"
 
   - id: OX-EF1
     title: AI-native error message format
@@ -53,14 +53,14 @@ rules:
     do: drive `oxlint/plugins-dev` RuleTester with vitest bindings; name tests `Should_[Behavior]_When_[Condition]` in strict PascalCase; assert with `expect()` including report `data` fields; cover every conditional with distinguishing cases per side — operator direction, computed access, aliasing, near-misses (`Object.for`, `X.TaggedClass`)
     dont: return booleans from plain `it()`; assert messageId only; assert on path prefixes; spawn oxlint as a subprocess, import `dist/`, or assert on `configs`/`meta` shape
     harm: boolean returns are vacuous passes; messageId-only assertions let data-field mutants survive; the RuleTester resolves filenames to absolute paths inside node_modules so path-shape assertions never fire
-    check: `pnpm --filter <pkg> test` exits 0, and `pnpm check:lint-coverage` gates the self-hosted `@systemfsoftware/test-hygiene(damp-test-naming)` rule's delivery to every production package — the zero-violation run over the repo's own tests is review
+    check: "`pnpm --filter <pkg> test` exits 0, and `pnpm check:lint-coverage` gates the self-hosted `@systemfsoftware/test-hygiene(damp-test-naming)` rule's delivery to every production package — the zero-violation run over the repo's own tests is review"
 
   - id: OX-TS2
     title: A rule may only depend on facts RuleTester can supply
     do: take project knowledge through `options` or `settings` and read everything else from the linted file's own AST; check such a declaration against a real tree in the plugin's own suite, where the filesystem legally lives
     dont: make a verdict depend on a fact only the disk carries — a sibling file's existence, a directory listing, another package's contents
     harm: RuleTester cannot create a sibling, so a disk-dependent arm never gets a passing valid case and cannot meet OX-MG1. Stating that as a platform limit is false — `Context` carries `cwd`, `physicalFilename`, and `settings`, and a rule runs in Node — and the false version pushes the next author off the lint channel for a rule that was always writable
-    check: `grep -rn 'existsSync\|statSync\|readdirSync' src/rules/` returns nothing, and every arm's reachability from a RuleTester case built out of `code`, `filename`, `options`, and `settings` alone is review — `src-property-test-cell`'s `cellsRequiringTest` arm is the worked example
+    check: "`grep -rn 'existsSync\\|statSync\\|readdirSync' src/rules/` returns nothing, and every arm's reachability from a RuleTester case built out of `code`, `filename`, `options`, and `settings` alone is review — `src-property-test-cell`'s `cellsRequiringTest` arm is the worked example"
 
   - id: OX-OB1
     title: Keep an obligation, not only prohibitions

@@ -33,7 +33,7 @@ rules:
     harm: ambient nondeterminism reaches a pure phase behind an import and nothing
       notices; the interpreter's order and response laws still pass, because they never
       ask whether a phase declared pure is pure
-    check: `pnpm --filter @systemfsoftware/effect-purity-law test` exits 0
+    check: "`pnpm --filter @systemfsoftware/effect-purity-law test` exits 0"
 
   - id: PURE-L2
     title: Constant-returning I/O is out of reach — say so rather than imply coverage

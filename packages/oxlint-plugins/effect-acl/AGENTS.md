@@ -10,21 +10,21 @@ Every rule keys on the `*.acl.ts` filename suffix and no-ops on every other file
   do: keep acl-transform-orfail-required registered — a .acl.ts with no S.transformOrFail call is not an ACL
   dont: relax acl-transform-orfail-required so it fires only when a transform is already present
   harm: with only prohibitions, an empty .acl.ts passes and the cell collapses into a naming convention
-  check: `grep -n "acl-transform-orfail-required" src/index.ts` shows the rule in `rules` and as 'error' in `configs.recommended`
+  check: "`grep -n \"acl-transform-orfail-required\" src/index.ts` shows the rule in `rules` and as 'error' in `configs.recommended`"
 
 - id: EA2
   title: transformOrFail detection matches the S namespace only
   do: match the S identifier and the transformOrFail member property
   dont: also accept Schema., an alias, or a computed member
   harm: the near-miss valid cases exist to prove `Schema.transformOrFail` does NOT satisfy a transform-detecting rule; widen the match and every one of them passes vacuously, so the suite stops distinguishing the two forms it was written to separate
-  check: `grep -n "Schema.transformOrFail" src/rules/__tests__/acl-transform-orfail-required.test.ts` returns the aliased-namespace near-miss the S-namespace match must still report
+  check: "`grep -n \"Schema.transformOrFail\" src/rules/__tests__/acl-transform-orfail-required.test.ts` returns the aliased-namespace near-miss the S-namespace match must still report"
 
 - id: EA3
   title: Cast detection is AST-only, no type information
   do: report every TSAsExpression in an .acl.ts file
   dont: distinguish cast targets by anything but the AST annotation node
   harm: a rule needing type information cannot be tested by RuleTester and fails the mutation gate
-  check: `grep -rn "node:fs" src/` returns nothing, `grep -L "RuleTester" src/rules/__tests__/*.test.ts` returns nothing, and `pnpm test` exits 0 — every suite runs RuleTester alone
+  check: "`grep -rn \"node:fs\" src/` returns nothing, `grep -L \"RuleTester\" src/rules/__tests__/*.test.ts` returns nothing, and `pnpm test` exits 0 — every suite runs RuleTester alone"
 
 - id: EA4
   title: Path rules read '/' segments only

@@ -134,9 +134,7 @@ written there, not because a rule reports it afterwards.
 
 There is still **no** complexity rule for `*.workflow.ts`, and none is wanted. No
 stock rule can express "one guard, first statement, converging": `complexity: max 1`
-would fire on a sanctioned guard and `max 2` would wave through an `if`. That gate
-is upstream — `guard-workflow-authorship` requires every workflow cell to be its
-declaration's emission, and the emitter's dispatch is a `Match` table.
+would fire on a sanctioned guard and `max 2` would wave through an `if`.
 
 The purity row does cover `*.workflow.ts`, and it is the only thing that does:
 `effect-workflow` ships no ambient-impurity rule, because a declaration cannot name
