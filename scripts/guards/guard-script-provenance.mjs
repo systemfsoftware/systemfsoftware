@@ -154,6 +154,14 @@ const MANIFEST = new Map([
     'release-metadata',
     'Idempotently tags name@v<version> for released packages; invoked by release.yml after publish, never a package dependency.',
   ]],
+  ['guards/guard-workflow-authorship.ts', [
+    'workspace-layout',
+    "The authorship gate: every *.workflow.ts in any package is its declaration's emission, round-trip clean. Spans every package and compares a generated file against a sibling declaration; no package can see the workspace or the generator.",
+  ]],
+  ['tools/workflow-emit.ts', [
+    'workspace-layout',
+    'Turns a *.workflow.decl.json into a workflow cell. It writes files into any package src/, so no package owns it; the authorship gate above is its only caller in a chain.',
+  ]],
   ['tools/worktrunk/', [
     'local-tooling',
     'Worktrunk git-worktree lifecycle hooks, invoked by .config/wt.toml. Operator workflow.',

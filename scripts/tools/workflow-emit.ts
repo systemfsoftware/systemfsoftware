@@ -757,19 +757,22 @@ const renderDispatch = (
    */
   const param = (used: boolean): string => (d.bind !== undefined && used ? d.bind : '')
   /**
-   * The narrowest combinator the pattern admits. A single-key pattern is a discriminant, and
-   * both `Match.tag` and `Match.discriminator` take the tag as a *string* argument - so,
-   * unlike `Match.when({ kind: 'x' })`, there is no object literal for `ObjectLiteral` to
-   * widen to `{}`. Measured on this cell: the widened pattern survived mutation, because by
-   * elimination the last arm before `Match.exhaustive` only ever sees the one kind it names,
-   * which makes the mutant equivalent and unkillable. `_tag` gets `Match.tag`; any other
-   * single key gets `Match.discriminator`, which is the same guarantee on a named field.
+   * The narrowest combinator the pattern admits. A single key whose value is a *string* is a
+   * discriminant, and `Match.tag` / `Match.discriminator` take that tag as a string argument -
+   * so, unlike `Match.when({ kind: 'x' })`, there is no object literal for `ObjectLiteral` to
+   * widen to `{}`. Measured: the widened pattern survived mutation on a dispatch closed by
+   * `Match.exhaustive`, because by elimination the last arm only ever sees the kind it names,
+   * which makes that mutant equivalent and unkillable.
+   *
+   * A non-string value is not a tag. `Match.discriminator('exitSuccess')('true', …)` would
+   * match the string `'true'` against a boolean field and never fire; that pattern keeps
+   * `Match.when`, where its literal is the value rather than a name.
    */
   const combinator = (p: Pattern): string => {
     if (typeof p !== 'string') {
       const keys = Object.keys(p)
       const [only] = keys
-      if (keys.length === 1 && only !== undefined) {
+      if (keys.length === 1 && only !== undefined && typeof p[only] === 'string') {
         return only === '_tag'
           ? `${indent}  Match.tag('${p[only]}', `
           : `${indent}  Match.discriminator('${only}')('${p[only]}', `

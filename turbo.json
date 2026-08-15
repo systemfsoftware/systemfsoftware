@@ -245,6 +245,17 @@
       "outputs": [],
       "cache": true
     },
+    "//#check:workflow-authorship": {
+      "inputs": [
+        "$TURBO_ROOT$/scripts/guards/guard-workflow-authorship.ts",
+        "$TURBO_ROOT$/scripts/tools/workflow-emit.ts",
+        "$TURBO_ROOT$/**/*.workflow.ts",
+        "$TURBO_ROOT$/**/*.workflow.decl.json",
+        "$TURBO_ROOT$/dprint.json"
+      ],
+      "outputs": [],
+      "cache": true
+    },
     "//#check:action-provenance": {
       "inputs": [
         "$TURBO_ROOT$/scripts/guards/guard-action-provenance.mjs",
