@@ -293,31 +293,45 @@ declaration inside the workspace? Governs R1. That is `GetSymbolAtLocation` → 
 `Symbol.Declarations` → `GetSourceFileOfNode`, the traversal `@ttsc/lint`'s own `boundaries/dependencies`
 rule already performs.
 
-KTD4. **`ttsc` enters as an added gate on one package, never as the repository's compiler**
-_(session-settled: user-approved — the user priced the Go cost as worth paying and proposed forking the
-Effect language service to remove the forfeit; research showed the forfeit is avoidable without a fork)_.
-Replacing `tsc` deletes the Effect policy silently, because 79 error-severity diagnostics arrive through
-`typecheck` itself. Two binaries checking one package cost duplicated analysis and nothing else; the rule sets
-are disjoint, so no diagnostic is reported twice. Governs R1, R4, R5, R6. The reversing observation is named
-in Outstanding Question 4: if the two typescript-go descendants converge, this becomes one invocation.
+KTD4. **The declaration-site rule ships as an ordinary ttsc contributor, needing no fork and no patched
+compiler** _(session-settled: user-directed — the user instructed the ttsc route and rejected two
+successive objections of mine, both of which measurement then refuted)_. The predicate needs
+`GetSymbolAtLocation`, `GetAliasedSymbol`, `Symbol.Declarations` and `GetSourceFileOfNode` — stock exported
+APIs that `@ttsc/lint`'s own `boundaries/dependencies` rule already uses. It needs no `Program`, no patched
+checker surface, and no change to ttsc. Governs R1.
 
-KTD5. **The fork is not the price of entry, and this plan does not pay it.** `@effect/language-service` is
-already native Go against the same shim modules ttsc `replace()`s, so the port the user proposed has upstream
-already done it. What remains is host adaptation — Effect's rules want `Program` and its `TypeParser` layer
-(~9,788 LOC) which `@ttsc/lint`'s `Context` does not expose. Paying that to move rules that already run is
-work with no defect behind it. Governs the sequencing, not a requirement.
+KTD5. **ttsc's shim is an extension mechanism, not a fixed surface — this corrects two claims this plan made
+earlier.** `packages/ttsc/shim/checker/shim.go` is a hand-maintained `go:linkname` bridge with 22 linknames
+over `github.com/microsoft/typescript-go/internal/checker`, declaring `type Checker = innerchecker.Checker`
+so every method is inherited, plus `extra-shim.json` which exposes _unexported_ methods and fields by name
+(`isTypeAssignableTo`, `getExportsOfModule`, `getApparentType`, the `globalRegExpType` field). ttsc also keeps
+its own typescript-go checkout under `third_party/typescript-go` wired through `go.work`, with a mechanical
+`shim_audit` gate for completeness across bumps — the same architecture Effect's fork uses.
 
-KTD6. **R4, R5 and R6 are configuration, because the gate that decides them already ships.** `@ttsc/evidence`
-enforces a bijection between two enumerable populations in both directions, with each OpenAPI operation under
-`paths` as one digest-carrying unit; `singleEvidencePerSymbol` is literally one declaration per contract, and
-`requireReview` expires an acknowledgement when the cited operation's bytes change. Measured across four
-stages with real exit codes in `wiki/raw/runs/2026-08-15-evidence-graph-obligation.md`. Governs R4, R5, R6.
+Two claims this plan previously made are withdrawn: that the port would be 95 rule rewrites, and that Effect's
+patched surface is categorically out of reach. Effect's whole-file `Run(ctx) []*ast.Diagnostic` maps one to one
+onto a ttsc rule declaring `Visits() → [KindSourceFile]`, which the host fires once per file root and which
+`@ttsc/evidence` already ships. And of the surface patch `002-checker-checker.patch` adds, `Program()` and
+`AddDiagnostic` are accessors over unexported state that `extra-shim.json` is built to expose.
 
-KTD7. **The gate is truth-blind and the plan says so where it matters.** Stage 3 measured exit 0 for a
-declaration that implements none of a section while asserting in prose that it does. For R4 this is nearly
-harmless — one-declaration-per-contract is a counting property and counting is what the gate does correctly —
-and for R6 it is irrelevant, because the fingerprint is recomputed from bytes rather than read from an
-author's field. No requirement in this plan rests on the gate adjudicating a sentence.
+What survives as a real cost, should the full Effect engine ever be hosted here: `GetRelationErrors` reads
+relation errors that stock typescript-go does not collect — patch `004-checker-relater.patch` adds the
+collection — and patch `023` adds `EffectLinks`. Those are modifications, not exposures, and they bound the
+subset of Effect's 95 rules that could run unmodified. Diagnostic codes are also host-assigned
+(`FNV-1a(name) % 9000 + 9000`), so TS377xxx is not reproducible by a plugin. None of this blocks R1.
+
+KTD6. **R4, R5 and R6 have no subject in this repository, so no gate for them is built here.** The obligation
+gate is real and measured — four stages, real exit codes, in
+`wiki/raw/runs/2026-08-15-evidence-graph-obligation.md` — but a search of `packages/`, `omp/` and
+`agent-plugins/` finds no OpenAPI or Swagger document anywhere in the tree. Standing a gate over an empty
+population is the defect PR #166 repaired in `check-exported-wiring`, where an empty scan printed
+`0 finding(s)` and exited 0, so a broken predicate read as a clean repository. These requirements are enforced
+where the vendor contracts live, which is the consuming application.
+
+KTD7. **Where the gate does run, it is truth-blind, and no requirement rests on its judgement.** Stage 3
+measured exit 0 for a declaration that implements none of a section while asserting in prose that it does.
+Cardinality and correspondence are what it decides correctly; the fingerprint is recomputed from bytes rather
+than read from an author's field, which is what `CHK1` requires.
 
 ### Implementation Constraints
 
@@ -337,10 +351,10 @@ author's field. No requirement in this plan rests on the gate adjudicating a sen
 
 ### Sequencing
 
-U1 is independent and reaches every consumer on its own; it is the whole law for the accidental case. U2
-repairs the exemplar the contract cites, which C-05 sealed as a precondition for citing it at all. U3 adds the
-evidence gate by configuration. U4 closes the residual with the Go rule and depends on U3 having stood the
-toolchain up. U5 is the release intent and is independent.
+U1 is independent and is the whole law for every case an author reaches accidentally; it shipped first and
+alone. U2 repairs the exemplar the contract cites, which C-05 sealed as a precondition for citing it at all.
+U4 closes the deliberate residual and depends on U1 having created the call site — nothing else. U5 is the
+release intent. U3 was planned and is withdrawn; see below.
 
 ## Implementation Units
 
@@ -416,81 +430,64 @@ permissive default.
 **Verification.** The consumer repository's own test suite. Until this lands, no plan document may cite this
 file as a reference implementation.
 
-### U3. The evidence gate over the vendor contract
+### U3. Withdrawn — the evidence gate has no subject here
 
-**Goal.** Every operation in a pinned vendor OpenAPI document is acknowledged by exactly one declaration in
-this tree, every citation resolves, and a vendor byte change expires the acknowledgement.
+Planned as an obligation gate binding each operation in a pinned vendor OpenAPI document to exactly one
+declaration, with `singleEvidencePerSymbol` for R4's cardinality and `requireReview` for R5's drift expiry.
+The mechanism is real and measured, but a search of `packages/`, `omp/` and `agent-plugins/` finds no OpenAPI
+or Swagger document in this repository, and no vendor contract of any kind: the foreign edges here are the
+Claude Code hook protocol and a TOML loader, neither of which publishes a machine-readable contract to bind
+against.
 
-**Requirements.** R4, R5, R6.
-
-**Dependencies.** None, but it stands up the toolchain U4 needs.
-
-**Files.** `packages/effect-schema-extensions/lint.config.ts`,
-`packages/effect-schema-extensions/tsconfig.ttsc.json`, `packages/effect-schema-extensions/package.json`
-(a `check:evidence` script), `turbo.json` (the task), a pinned contract under
-`packages/effect-schema-extensions/contracts/`.
-
-**Approach.**
-
-1. Add `ttsc` and `@ttsc/evidence` as dev dependencies of this one package. Never a peer dependency.
-2. Configure one claim: TypeScript symbols in `src/**` reference a Swagger population — the pinned contract
-   file — with `singleEvidencePerSymbol` for R4's cardinality and `requireReview` for R5's drift expiry.
-3. Add `check:evidence` as its own turbo task so it never displaces `typecheck`, which keeps running
-   `tsc`(=`@effect/tsgo`) and keeps the 79 Effect diagnostics.
-4. Commit the pinned contract with its provenance. The fingerprint is recomputed by the gate from those bytes,
-   never declared by an author — `CHK1`.
-
-**Test scenarios.** The gate is the test; each case is an exit code from a fixture.
-
-- An operation in the pinned contract with no acknowledging declaration fails, naming the operation. Measured
-  shape: `TS16411 … Missing acknowledgement for …`. `Covers R4.`
-- A declaration citing an operation absent from the contract fails as an unresolved target. `Covers R4.`
-- Two declarations citing one operation fail under `singleEvidencePerSymbol`. `Covers R4.`
-- Editing the pinned contract's operation expires the acknowledgement and fails until re-reviewed.
-  `Covers R5, R6.`
-- A clean tree exits 0.
-
-**Verification.** `pnpm --filter @systemfsoftware/effect-schema-extensions check:evidence` exits 0 on the clean
-tree and non-zero for each of the four failure fixtures, with the exit codes recorded.
+Building it anyway would stand a gate over an empty population, which is the defect PR #166 repaired in
+`check-exported-wiring` — an empty scan printed `0 finding(s)` and exited 0, so a broken discovery predicate
+read as a clean repository. R4, R5 and R6 are enforced where the vendor contracts live. The U-ID is retained
+and the gap is deliberate, per the plan's own U-ID stability rule.
 
 ### U4. The declaration-site rule
 
 **Goal.** Marking a foreign schema is refused by the compile pass, closing U1's measured residual.
 
-**Requirements.** R1 (deliberate case).
+**Requirements.** R1, the deliberate case.
 
-**Dependencies.** U1 (the call site must exist), U3 (the toolchain must be standing).
+**Dependencies.** U1 — the call site must exist. Nothing else; KTD4 establishes that no fork, no `Program`
+access and no patched checker surface is required.
 
 **Files.** `packages/ttsc-plugin-cell-boundary/` — `package.json`, `src/index.ts` (descriptor only),
-`native/boundary.go`, `native/boundary_test.go`, `native/go.mod`; plus the `plugins` entry in
-`packages/effect-schema-extensions/lint.config.ts` and an end-to-end fixture.
+`native/boundary.go`, `native/boundary_test.go`; plus a `lint.config.ts` and a `check:boundary` task wherever
+the rule is to run, and an end-to-end fixture.
 
 **Approach.**
 
 1. The npm package exports the descriptor — `meta`, `rules`, and `source` resolving to `native/`. No rule
-   logic in TypeScript; the descriptor's `rules` array is advisory.
-2. `native/boundary.go` registers one rule in `init()` via `rule.Register`. It visits call expressions,
-   matches the marking constructor by resolved symbol rather than by identifier text so an alias cannot dodge
-   it (`OX-CI1`'s reasoning, in the other host), reads the type argument, and resolves the declaration through
-   `GetSymbolAtLocation` → `GetAliasedSymbol` → `Symbol.Declarations` → `GetSourceFileOfNode`.
+   logic in TypeScript; the descriptor's `rules` array is advisory and registration happens in Go `init()`.
+2. `native/boundary.go` registers one rule via `rule.Register`. It visits call expressions, matches the
+   marking constructor **by resolved symbol rather than identifier text** so a local rebinding cannot dodge it,
+   reads the type argument, and resolves its declaration through `GetSymbolAtLocation` → `GetAliasedSymbol` →
+   `Symbol.Declarations` → `GetSourceFileOfNode`.
 3. A declaration whose source file resolves outside the workspace root, and is not on the configured
-   allowlist, is reported. The allowlist is options-carried so the rule takes project knowledge through
-   configuration rather than the disk (`OX-TS2`'s reasoning).
-4. The message follows this repo's four-field shape — name, expected, actual, fix — and the fix names deletion
-   as a reachable end, per `OX-EF1` and `OX-EF2`.
+   allowlist, is reported. The allowlist is options-carried, so the rule takes project knowledge through
+   configuration rather than off the disk.
+4. The message follows the repository's four-field shape — name, expected, actual, fix — with the fix naming
+   deletion as a reachable end.
+
+**Scope.** The rule runs wherever `mint` can be called. That is the seven packages depending on
+`@systemfsoftware/effect-cell-types` today and any package that adopts the alphabet later — never one package
+by hand, which would be a gate that fires only where someone opted in.
 
 **Test scenarios.**
 
 - Marking a workspace-declared schema passes. `Covers R1.`
 - Marking a vendor type directly is reported, naming the declaring file.
-- Marking a workspace-local alias of a vendor type is reported — the transitive case
-  `GetAliasedSymbol` exists for, and the one a specifier-keyed rule cannot see. `Covers R1, AE11.`
+- Marking a workspace-local alias of a vendor type is reported — the transitive case `GetAliasedSymbol`
+  exists for, and the one a specifier-keyed rule cannot see. `Covers R1, AE11.`
 - Marking a re-export of a re-export of a vendor type is reported.
 - An allowlisted external declaration passes, and removing it from the allowlist makes the same file fail.
-- A near-miss: a locally defined function also named `mint` does not fire the rule.
+- A locally defined function also named `mint` does not fire the rule.
 
-**Execution note.** Write the Go unit tests first — there is no RuleTester to lean on, and the end-to-end
-fixture is slow enough (109 s cold, 1.3–1.8 s warm) that it is a gate, not an inner loop.
+**Execution note.** Write the Go unit tests first — no RuleTester ships, `@ttsc/testing` is private to that
+repo, and the end-to-end fixture is slow enough cold (109 s measured, 1.3–1.8 s warm) to be a gate rather than
+an inner loop.
 
 **Verification.** `go test ./native/...` green; the end-to-end fixture exits non-zero for each reported case
 with the diagnostic text asserted, and 0 for both passing cases.
