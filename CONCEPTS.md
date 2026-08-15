@@ -144,6 +144,10 @@ An index key whose assignment nothing verifies. Where a suffix, tag, or path dec
 
 A drifted key is worse than a missing one. Retrieving nothing leaves the author still looking; retrieving the wrong doctrine leaves the author confident. The same drift un-enrols the file from whatever Verification observer the old key selected. That loss surfaces only if the instrument happens to object to an empty selection, and even then the cheapest repair is to delete the selection — which ends the objection and the observation together, leaving the file with no observer and nothing complaining.
 
+### Constitution watchdog
+
+A `WATCHDOG.md` that `@import`s `CONSTITUTION.md` into the omp advisor's system prompt, making the advisor — a separate model reviewing transcript deltas — police code changes against the 21 `gate: review` rules no command enforces. The 13 rules with lint/type-checker/mutation gates are excluded; the advisor does not re-check what the toolchain already catches. Not a gate: the advisor raises `concern`/`nit`/silent, never pass/fail. The mechanism that gives `gate: review` rules Reach — the constitution was present in neither the window (the primary agent does not read it) nor a gate (no command checks it) until the watchdog put it in the advisor's window.
+
 ## Test execution
 
 ### Run class
