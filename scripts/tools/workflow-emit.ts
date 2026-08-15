@@ -14,6 +14,7 @@
  */
 
 import { IDENT, isRecord, rejecting } from './render.ts'
+import { roleOf } from './role-brand.ts'
 
 type FieldType =
   | { readonly kind: 'string' | 'number' | 'boolean' | 'int' | 'unknown' }
@@ -485,6 +486,13 @@ export const parseWorkflow = (raw: unknown): Declaration => {
   closed(rec, [...DECLARED], '', 'a declaration field')
   if (at(rec, 'role') !== 'workflow') {
     reject(`role: expected "workflow", got ${JSON.stringify(at(rec, 'role'))}.`)
+  }
+  if (roleOf(raw) !== 'workflow') {
+    reject(
+      'this declaration was not built by the workflow role constructor. Wrap it in workflow(...) from ' +
+        'scripts/tools/workflow.ts, which is what decides the shape is a workflow one. The `role` field is ' +
+        'a string the author types; without the constructor it is a label nothing checks.',
+    )
   }
 
   const operation = at(rec, 'operation')
