@@ -13,13 +13,15 @@
  * A crash is not a verdict, so the emitter validates its input and names every rejection.
  */
 
-import { emitWorkflow, parseWorkflow } from './workflow-emit.ts'
+import { emitWorkflow, parseWorkflow } from '../../../scripts/tools/workflow-emit.ts'
 
 const PKG = '../../../packages/effect-daemon-spec'
 const PROBE_REL = 'src/internal/falsify-probe.workflow.ts'
 const PROBE = `${PKG}/${PROBE_REL}`
 
-const BASE = JSON.parse(await Deno.readTextFile('restart-decision.workflow.decl.json')) as Record<
+const BASE = JSON.parse(
+  await Deno.readTextFile(`${PKG}/src/internal/restart-decision.workflow.decl.json`),
+) as Record<
   string,
   unknown
 >

@@ -6,11 +6,23 @@ Rules here gate the `architect-workflow` cell spec and `CONSTITUTION.md` Article
 
 ```yaml
 - id: EW1
-  title: workflow-schema-required, this package's OX-OB1 obligation rule
-  do: keep a rule that MUST fail a workflow for lacking a schema declaration
-  dont: relax workflow-schema-required so it fires only when a schema declaration is already present
-  harm: typeid-required, no-unconstructed-variant and no-panic-vocabulary all gate on a schema declaration existing — with prohibitions alone, plain TS unions make all three vacuous at once and avoiding Effect Schema becomes the cheapest way to pass
-  check: `grep -q "rule('workflow-schema-required')" src/index.ts && grep -q "'workflow-schema-required': workflowSchemaRequired" src/index.ts` — registered and enabled in configs.recommended
+  title: The obligation is upstream; this package holds prohibitions only
+  do: leave "a workflow must declare its Command, Decision and Error as S.TaggedClass /
+    S.TaggedError" to the declaration language and `guard-workflow-authorship` — the
+    declaration cannot express a cell without them, and the gate requires every
+    `*.workflow.ts` to be a declaration's emission
+  dont: add a rule here that MUST fail a workflow for lacking a declaration, on the argument
+    that prohibitions alone are vacuous against a plain TS union
+  harm: the argument is sound and the instrument is wrong. `typeid-required`,
+    `no-unconstructed-variant` and `no-panic-vocabulary` all keyed on a schema declaration
+    existing, so with prohibitions alone a plain TS union made them vacuous at once and
+    avoiding Effect Schema was the cheapest way to pass. A walker reading the finished text
+    can only report that afterwards; the declaration decides it before the file exists, which
+    is why the obligation belongs there and a second copy here is a rule that can never fire
+    on an emitted cell
+  check: `deno run scripts/guards/guard-workflow-authorship.ts --selftest` passes and
+    `pnpm turbo //#check:workflow-authorship` exits 0 — every workflow cell is emitted, so no
+    hand-authored union can reach a rule here
 
 - id: EW4
   title: Schema detection matches the S namespace only
