@@ -23,16 +23,6 @@ const _default: {
         'adapter-no-cast': Rule;
         'adapter-layer-required': Rule;
         'adapter-single-layer-export': Rule;
-        'executor-owns-context-tag': Rule;
-        'executor-deps-tag-name': Rule;
-        'executor-requires-deps-tag': Rule;
-        'executor-deps-borrowed-types': Rule;
-        'executor-no-domain-branch': Rule;
-        'executor-no-io-in-filling': Rule;
-        'executor-no-escaping-state': Rule;
-        'executor-no-layer-binding': Rule;
-        'executor-single-operation-export': Rule;
-        'executor-requires-description': Rule;
         'handler-single-executor': Rule;
         'handler-single-handler-export': Rule;
         'handler-no-casts': Rule;

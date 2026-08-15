@@ -3,7 +3,6 @@ import cellImports from '@systemfsoftware/oxlint-plugin-cell-imports'
 import cellTaxonomy from '@systemfsoftware/oxlint-plugin-cell-taxonomy'
 import effectAcl from '@systemfsoftware/oxlint-plugin-effect-acl'
 import effectAdapter from '@systemfsoftware/oxlint-plugin-effect-adapter'
-import effectExecutor from '@systemfsoftware/oxlint-plugin-effect-executor'
 import effectHandler from '@systemfsoftware/oxlint-plugin-effect-handler'
 import effectKernel from '@systemfsoftware/oxlint-plugin-effect-kernel'
 import effectMiddleware from '@systemfsoftware/oxlint-plugin-effect-middleware'
@@ -45,7 +44,6 @@ export default {
   rules: {
     ...propertyTesting.rules,
     ...cellImports.rules,
-    ...effectExecutor.rules,
     ...effectWorkflow.rules,
     ...cellTaxonomy.rules,
     ...testHygiene.rules,
@@ -67,7 +65,6 @@ export default {
       rules: {
         ...recommendedFrom(propertyTesting),
         ...recommendedFrom(cellImports),
-        ...recommendedFrom(effectExecutor),
         ...recommendedFrom(effectWorkflow),
         ...recommendedFrom(cellTaxonomy),
         ...recommendedFrom(testHygiene),

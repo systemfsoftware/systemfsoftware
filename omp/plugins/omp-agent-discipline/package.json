@@ -42,6 +42,7 @@
     "@systemfsoftware/effect-memfs": "workspace:^",
     "@systemfsoftware/omp-utils": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-effect-executor": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@types/node": "catalog:",
     "effect": "catalog:",

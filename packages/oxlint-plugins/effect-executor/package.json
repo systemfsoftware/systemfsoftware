@@ -51,7 +51,8 @@
   },
   "dependencies": {
     "@oxc-project/types": "^0.140.0",
-    "@oxlint/plugins": "catalog:oxlint"
+    "@oxlint/plugins": "catalog:oxlint",
+    "@systemfsoftware/effect-cell-types": "workspace:^"
   },
   "devDependencies": {
     "@microsoft/api-extractor": "catalog:",

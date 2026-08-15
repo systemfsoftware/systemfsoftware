@@ -35,7 +35,6 @@
     "@commitlint/config-pnpm-scopes": "^21.2.0",
     "@commitlint/types": "^21.2.0",
     "@effect/tsgo": "^0.36.0",
-
     "@std/jsonc": "catalog:",
     "@systemfsoftware/stryker-js-cli": "workspace:^",
     "concurrently": "^9.2.1",

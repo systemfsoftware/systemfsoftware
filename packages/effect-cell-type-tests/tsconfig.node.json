@@ -1,0 +1,5 @@
+{
+  "extends": "@systemfsoftware/tsconfig/node",
+  "//": "scripts/ is Deno's, not tsc's: the generator uses Deno globals and is checked by `deno check` in this package's check:scripts. Listing it here puts it in the node program, where `Deno` is TS2304.",
+  "include": ["oxlint.config.ts"]
+}

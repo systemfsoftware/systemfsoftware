@@ -123,6 +123,28 @@ const secondLayerReadsTheFirst = Cell.write(
   write,
 )
 
+/**
+ * The vocabulary fold a consumer performs on the description value alone: phase names,
+ * kinds, intra-layer order, the module name, and the I/O-cell classification all come
+ * off the value — nothing is re-declared here except the expected assertions.
+ */
+const axesOf = (description: Cell.WriteDone<Bag>) => {
+  const phaseNames: string[] = []
+  const phaseKinds: Record<string, 'pure' | 'impure'> = {}
+  const intraLayerOrder = description.layers.map((layer) =>
+    layer.phases.map((phase) => {
+      phaseKinds[phase.name] = phase.kind
+      return phase.name
+    })
+  )
+  for (const names of intraLayerOrder) {
+    for (const name of names) {
+      if (!phaseNames.includes(name)) phaseNames.push(name)
+    }
+  }
+  return { module: description.module, ioCells: description.ioCells, phaseNames, phaseKinds, intraLayerOrder }
+}
+
 Feature('Applying a phase description')
   .withScenarioLayer(LedgerRecording)
   .body(({ scenario }) => {
@@ -220,6 +242,126 @@ Feature('Applying a phase description')
               expect(lines).toEqual(['admitted:4', 'admitted:10'])
             }))
         ),
+      ),
+    )
+
+    scenario(
+      'A description runs its phases in the order the value declares',
+      Gherkin.Do.pipe(
+        When('a description declaring the phases out of canonical order is applied')(
+          'outcome',
+          () => {
+            const trace: string[] = []
+            // The declared order is what is under test, so each traced phase ignores
+            // its input: out of canonical order, a phase receives whatever the fold
+            // threaded, which is not its usual input type.
+            const tracedRead: Cell.ReadPhase<Bag> = () =>
+              Effect.sync(() => {
+                trace.push('read')
+                return { bytes: 'traced' }
+              })
+            const tracedDecode: Cell.DecodePhase<Bag> = () => {
+              trace.push('decode')
+              return Either.right({ length: 0 })
+            }
+            const tracedDecide: Cell.DecidePhase<Bag> = () => {
+              trace.push('decide')
+              return Either.right({ kind: 'Admitted', length: 0 })
+            }
+            const tracedEncode: Cell.EncodePhase<Bag> = () => {
+              trace.push('encode')
+              return { line: 'declared' }
+            }
+            const tracedWrite: Cell.WritePhase<Bag> = (output) =>
+              Effect.sync(() => {
+                trace.push('write')
+                return output.line
+              })
+
+            // Hand-built description value: the phases array is the execution order, so
+            // this declared order — decode before read, decide before decode — is what
+            // the interpreter must run. The name-keyed layer the interpreter replaced
+            // had no order to read, so it would have run the canonical sequence instead.
+            const declared: Cell.WriteDone<Bag> = {
+              'call write(output) before applying the description': true,
+              module: Cell.DESCRIPTION_MODULE,
+              ioCells: Cell.IO_CELLS,
+              layers: [
+                {
+                  phases: [
+                    { name: 'decode', kind: 'pure', convention: 'either-fail', run: tracedDecode },
+                    { name: 'read', kind: 'impure', convention: 'effect', run: tracedRead },
+                    { name: 'decide', kind: 'pure', convention: 'either-pass', run: tracedDecide },
+                    { name: 'encode', kind: 'pure', convention: 'total', run: tracedEncode },
+                    { name: 'write', kind: 'impure', convention: 'effect', run: tracedWrite },
+                  ],
+                },
+              ],
+            }
+            return Cell.apply(declared, { id: 'abc' }).pipe(
+              Effect.exit,
+              Effect.map((exit) => ({ exit, trace })),
+            )
+          },
+        ),
+        Then('the phases ran exactly in the declared order')((s) => {
+          expect(s.outcome.trace).toEqual(['decode', 'read', 'decide', 'encode', 'write'])
+          expect(s.outcome.exit).toStrictEqual(Exit.succeed('declared'))
+        }),
+      ),
+    )
+
+    scenario(
+      'The description value carries the whole vocabulary',
+      Gherkin.Do.pipe(
+        When('the one-layer description is folded')(
+          'axes',
+          () => Effect.succeed(axesOf(oneLayer)),
+        ),
+        Then('every axis is read from the value')((s) => {
+          expect(s.axes.module).toBe(Cell.DESCRIPTION_MODULE)
+          // Identity, not a second copy of the literals: this fails if the fold rebuilds the
+          // classification instead of carrying the one the constructors wrote. The values
+          // themselves are stated once, at the `IO_CELLS` declaration in the description module.
+          expect(s.axes.ioCells).toBe(Cell.IO_CELLS)
+          expect(s.axes.phaseNames).toEqual(['read', 'decode', 'decide', 'encode', 'write'])
+          expect(s.axes.phaseKinds).toEqual({
+            read: 'impure',
+            decode: 'pure',
+            decide: 'pure',
+            encode: 'pure',
+            write: 'impure',
+          })
+          expect(s.axes.intraLayerOrder).toEqual([['read', 'decode', 'decide', 'encode', 'write']])
+        }),
+      ),
+    )
+
+    /**
+     * `Cell.vocabulary` is folded off a canonical description at module load, and three
+     * packages outside this one now read their phase names, purity and order from it. The
+     * expected vocabulary is written out here so the derivation has something to disagree
+     * with: this fails if the canonical description stops covering a phase, if the fold
+     * drops one, or if someone replaces the fold with a literal that then drifts.
+     */
+    scenario(
+      'The exported vocabulary is the one the constructors build',
+      Gherkin.Do.pipe(
+        When('the derived vocabulary is read')(
+          'derived',
+          () => Effect.succeed(Cell.vocabulary),
+        ),
+        Then('it states every phase, its purity and its invocation shape, in order')((s) => {
+          expect(s.derived.phases).toEqual([
+            { name: 'read', kind: 'impure', convention: 'effect' },
+            { name: 'decode', kind: 'pure', convention: 'either-fail' },
+            { name: 'decide', kind: 'pure', convention: 'either-pass' },
+            { name: 'encode', kind: 'pure', convention: 'total' },
+            { name: 'write', kind: 'impure', convention: 'effect' },
+          ])
+          expect(s.derived.module).toBe(Cell.DESCRIPTION_MODULE)
+          expect(s.derived.ioCells).toBe(Cell.IO_CELLS)
+        }),
       ),
     )
   })

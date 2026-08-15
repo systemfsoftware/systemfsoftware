@@ -190,9 +190,33 @@ A **chain** of constructors does type the sequence, which is how a shell's order
 
 A record of named phases in one or more impure/pure layers, where each phase's return type carries the required member the next phase's parameter demands, so its order is a consequence of the types rather than an assertion beside them. A **phase** is one named step — a read, a decode, a decision, an encode, or a write. A **layer** is an impure segment followed by a pure segment; a site whose real order writes before it can classify is one description carrying two layers, never two composed by hand.
 
-An impure phase's interior is not type-visible, so no count of I/O operations is claimed or enforced: a read may gather a product across its interior — bumping a counter and returning the resulting rate is one such product — and fan-in is expressed that way rather than by relaxing the chain. A pure phase is one expression and performs no I/O; the I/O a pure phase's return type cannot see, reached through a closure-captured value, is what the lint rule on phase bodies decides.
+An impure phase's interior is not type-visible, so no count of I/O operations is claimed or enforced: a read may gather a product across its interior — bumping a counter and returning the resulting rate is one such product — and fan-in is expressed that way rather than by relaxing the chain. A pure phase is one expression and performs no I/O. That last sentence is a design rule, and only part of it is machine-decided: the lint rule on phase bodies reads the call graph reachable from the body through module-level helpers, so an I/O call written in the body or in a helper beside it is caught, while one reached through a closure-captured binding is not. The undecided half stays a rule the author keeps, not a claim the gate has checked.
 
 The two kinds of `Left` are carried by the phase types rather than chosen by the interpreter. A `decode` `Left` is fatal: nothing consumes it, so its only route is the derived error channel and no write runs. A `decide` `Left` is an outcome, not a fault: the encode phase receives the whole `Either`, so it cannot be unwrapped and both branches travel on to the write. A uniform rule over the two breaks a real call site either way.
+
+### Vocabulary
+
+What a description states about itself, recovered by folding the description rather than declared beside it: the phase names, each phase's purity and invocation shape, their order within a layer, the module that owns them, and which of that module's exports perform I/O. It is a value, not a table — the fold reads the same records the phase constructors wrote, so it cannot describe a description that was never built.
+
+A vocabulary is the unit of agreement between packages. Where several packages must decide the same question the same way, each reads the vocabulary instead of restating it, and the disagreement they would otherwise have becomes impossible rather than merely unlikely.
+
+### Derived consumer
+
+A package whose behaviour is a function of a vocabulary it reads from elsewhere, carrying none of that vocabulary's words in its own source. The test is one addition at the source: a derived consumer stays correct while its output changes, and a consumer whose output does not change was reading something else.
+
+Derivation is a property of the consumer's source, not of its intent, so it is audited by counting: a census for the vocabulary's own words across the consumer's sources returns zero, and any non-zero count names a copy that will drift. The cheapest and default carrier is a direct runtime import; when a lint plugin depends on a core description package, the dependency graph stays acyclic by delivering the plugin consumer-side via `jsPlugins` rather than aggregating it into a monorepo-wide lint preset.
+
+### Drift gate
+
+A check that re-renders a committed generated artifact from its source and fails when any byte differs, so the artifact is a derivation rather than a copy that happens to agree today. Its remedy is regeneration, never an edit to the artifact.
+
+A drift gate is only as honest as its comparison: cached against an incomplete input set it returns a stale pass, and pointed at an artifact the formatter also rewrites it fights the formatter instead of the drift. The renderer's output must therefore be stable under the repository's formatter, and the comparison must re-run whenever the source moves. Where direct runtime imports are achievable by adjusting delivery topology, direct imports are strictly preferred over generated-artifact drift gates.
+
+### Independent oracle
+
+A deliberate restatement kept so that a derivation has something to disagree with. A derived checker validated only against inputs the same derivation produced cannot fail — an error in the derivation appears identically in the checker and its fixture, and they agree — so exactly one hand-written statement of the truth must survive.
+
+It belongs in the package that owns the value, beside the constructors it checks, never in a consumer: a consumer holding one would be carrying the copy that derivation exists to eliminate. It reads as duplication, which is the hazard — the case for deleting it is always available and always wrong, so the reason it exists is recorded next to it.
 
 ### Verification observer
 
