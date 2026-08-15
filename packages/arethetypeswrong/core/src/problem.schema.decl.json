@@ -1,0 +1,605 @@
+{
+  "role": "schema",
+  "namespace": "Schema",
+  "imports": [
+    {
+      "module": "effect",
+      "values": [
+        "Schema"
+      ]
+    }
+  ],
+  "declarations": [
+    {
+      "kind": "schema",
+      "name": "ResolutionKindSchema",
+      "value": {
+        "literal": [
+          "node10",
+          "node16-cjs",
+          "node16-esm",
+          "bundler"
+        ]
+      },
+      "typeAlias": {
+        "form": "schemaType",
+        "name": "ResolutionKind",
+        "export": true
+      }
+    },
+    {
+      "kind": "schema",
+      "name": "ResolutionOptionSchema",
+      "value": {
+        "literal": [
+          "node10",
+          "node16",
+          "bundler"
+        ]
+      },
+      "typeAlias": {
+        "form": "schemaType",
+        "name": "ResolutionOption",
+        "export": true
+      }
+    },
+    {
+      "kind": "schema",
+      "name": "ProblemKindSchema",
+      "value": {
+        "literal": [
+          "NoResolution",
+          "UntypedResolution",
+          "FalseESM",
+          "FalseCJS",
+          "CJSResolvesToESM",
+          "NamedExports",
+          "FallbackCondition",
+          "FalseExportDefault",
+          "MissingExportEquals",
+          "UnexpectedModuleSyntax",
+          "InternalResolutionError",
+          "CJSOnlyExportsDefault"
+        ]
+      },
+      "typeAlias": {
+        "form": "schemaType",
+        "name": "ProblemKind",
+        "export": true
+      }
+    },
+    {
+      "kind": "schema",
+      "name": "ModuleKindReasonSchema",
+      "value": {
+        "literal": [
+          "extension",
+          "type",
+          "no:type"
+        ]
+      },
+      "typeAlias": {
+        "form": "schemaType",
+        "name": "ModuleKindReason",
+        "export": true
+      }
+    },
+    {
+      "kind": "schema",
+      "name": "ModuleKindSyntaxSchema",
+      "value": {
+        "literal": [
+          1,
+          99
+        ]
+      },
+      "typeAlias": {
+        "form": "schemaType",
+        "name": "ModuleKindSyntax",
+        "export": true
+      }
+    },
+    {
+      "kind": "schema",
+      "name": "CommonJSModuleKind",
+      "value": {
+        "value": 1
+      },
+      "asConst": true,
+      "export": true
+    },
+    {
+      "kind": "schema",
+      "name": "ESNextModuleKind",
+      "value": {
+        "value": 99
+      },
+      "asConst": true,
+      "export": true,
+      "tight": true
+    },
+    {
+      "kind": "schema",
+      "name": "ModuleKindSchema",
+      "value": {
+        "struct": {
+          "detectedKind": {
+            "name": "ModuleKindSyntaxSchema"
+          },
+          "detectedReason": {
+            "name": "ModuleKindReasonSchema"
+          },
+          "reasonFileName": {
+            "ref": "String"
+          }
+        }
+      },
+      "typeAlias": {
+        "form": "schemaType",
+        "name": "ModuleKind",
+        "export": true
+      }
+    },
+    {
+      "kind": "schema",
+      "name": "ResolutionSchema",
+      "value": {
+        "struct": {
+          "fileName": {
+            "ref": "String"
+          },
+          "isTypeScript": {
+            "ref": "Boolean"
+          },
+          "isJson": {
+            "ref": "Boolean"
+          },
+          "trace": {
+            "array": {
+              "ref": "String"
+            }
+          }
+        }
+      },
+      "typeAlias": {
+        "form": "schemaType",
+        "name": "Resolution",
+        "export": true
+      }
+    },
+    {
+      "kind": "schema",
+      "name": "EntrypointResolutionAnalysisSchema",
+      "value": {
+        "struct": {
+          "name": {
+            "ref": "String"
+          },
+          "resolutionKind": {
+            "name": "ResolutionKindSchema"
+          },
+          "isWildcard": {
+            "optional": {
+              "ref": "Boolean"
+            }
+          },
+          "resolution": {
+            "optional": {
+              "name": "ResolutionSchema"
+            }
+          },
+          "implementationResolution": {
+            "optional": {
+              "name": "ResolutionSchema"
+            }
+          },
+          "files": {
+            "optional": {
+              "array": {
+                "ref": "String"
+              }
+            }
+          },
+          "visibleProblems": {
+            "optional": {
+              "array": {
+                "ref": "Number"
+              }
+            }
+          }
+        }
+      },
+      "typeAlias": {
+        "form": "schemaType",
+        "name": "EntrypointResolutionAnalysis",
+        "export": true
+      }
+    },
+    {
+      "kind": "schema",
+      "name": "NoResolutionProblemSchema",
+      "value": {
+        "struct": {
+          "kind": {
+            "literal": [
+              "NoResolution"
+            ]
+          },
+          "entrypoint": {
+            "ref": "String"
+          },
+          "resolutionKind": {
+            "name": "ResolutionKindSchema"
+          }
+        }
+      },
+      "typeAlias": {
+        "form": "schemaType",
+        "name": "NoResolutionProblem",
+        "export": true
+      }
+    },
+    {
+      "kind": "schema",
+      "name": "UntypedResolutionProblemSchema",
+      "value": {
+        "struct": {
+          "kind": {
+            "literal": [
+              "UntypedResolution"
+            ]
+          },
+          "entrypoint": {
+            "ref": "String"
+          },
+          "resolutionKind": {
+            "name": "ResolutionKindSchema"
+          }
+        }
+      },
+      "typeAlias": {
+        "form": "schemaType",
+        "name": "UntypedResolutionProblem",
+        "export": true
+      }
+    },
+    {
+      "kind": "schema",
+      "name": "FalseESMProblemSchema",
+      "value": {
+        "struct": {
+          "kind": {
+            "literal": [
+              "FalseESM"
+            ]
+          },
+          "typesFileName": {
+            "ref": "String"
+          },
+          "implementationFileName": {
+            "ref": "String"
+          },
+          "typesModuleKind": {
+            "name": "ModuleKindSchema"
+          },
+          "implementationModuleKind": {
+            "name": "ModuleKindSchema"
+          }
+        }
+      },
+      "typeAlias": {
+        "form": "schemaType",
+        "name": "FalseESMProblem",
+        "export": true
+      }
+    },
+    {
+      "kind": "schema",
+      "name": "FalseCJSProblemSchema",
+      "value": {
+        "struct": {
+          "kind": {
+            "literal": [
+              "FalseCJS"
+            ]
+          },
+          "typesFileName": {
+            "ref": "String"
+          },
+          "implementationFileName": {
+            "ref": "String"
+          },
+          "typesModuleKind": {
+            "name": "ModuleKindSchema"
+          },
+          "implementationModuleKind": {
+            "name": "ModuleKindSchema"
+          }
+        }
+      },
+      "typeAlias": {
+        "form": "schemaType",
+        "name": "FalseCJSProblem",
+        "export": true
+      }
+    },
+    {
+      "kind": "schema",
+      "name": "CJSResolvesToESMProblemSchema",
+      "value": {
+        "struct": {
+          "kind": {
+            "literal": [
+              "CJSResolvesToESM"
+            ]
+          },
+          "entrypoint": {
+            "ref": "String"
+          },
+          "resolutionKind": {
+            "name": "ResolutionKindSchema"
+          }
+        }
+      },
+      "typeAlias": {
+        "form": "schemaType",
+        "name": "CJSResolvesToESMProblem",
+        "export": true
+      }
+    },
+    {
+      "kind": "schema",
+      "name": "NamedExportsProblemSchema",
+      "value": {
+        "struct": {
+          "kind": {
+            "literal": [
+              "NamedExports"
+            ]
+          },
+          "typesFileName": {
+            "ref": "String"
+          },
+          "implementationFileName": {
+            "ref": "String"
+          },
+          "isMissingAllNamed": {
+            "ref": "Boolean"
+          },
+          "missing": {
+            "array": {
+              "ref": "String"
+            }
+          }
+        }
+      },
+      "typeAlias": {
+        "form": "schemaType",
+        "name": "NamedExportsProblem",
+        "export": true
+      }
+    },
+    {
+      "kind": "schema",
+      "name": "FallbackConditionProblemSchema",
+      "value": {
+        "struct": {
+          "kind": {
+            "literal": [
+              "FallbackCondition"
+            ]
+          },
+          "entrypoint": {
+            "ref": "String"
+          },
+          "resolutionKind": {
+            "name": "ResolutionKindSchema"
+          }
+        }
+      },
+      "typeAlias": {
+        "form": "schemaType",
+        "name": "FallbackConditionProblem",
+        "export": true
+      }
+    },
+    {
+      "kind": "schema",
+      "name": "FalseExportDefaultProblemSchema",
+      "value": {
+        "struct": {
+          "kind": {
+            "literal": [
+              "FalseExportDefault"
+            ]
+          },
+          "typesFileName": {
+            "ref": "String"
+          },
+          "implementationFileName": {
+            "ref": "String"
+          }
+        }
+      },
+      "typeAlias": {
+        "form": "schemaType",
+        "name": "FalseExportDefaultProblem",
+        "export": true
+      }
+    },
+    {
+      "kind": "schema",
+      "name": "MissingExportEqualsProblemSchema",
+      "value": {
+        "struct": {
+          "kind": {
+            "literal": [
+              "MissingExportEquals"
+            ]
+          },
+          "typesFileName": {
+            "ref": "String"
+          },
+          "implementationFileName": {
+            "ref": "String"
+          }
+        }
+      },
+      "typeAlias": {
+        "form": "schemaType",
+        "name": "MissingExportEqualsProblem",
+        "export": true
+      }
+    },
+    {
+      "kind": "schema",
+      "name": "InternalResolutionErrorProblemSchema",
+      "value": {
+        "struct": {
+          "kind": {
+            "literal": [
+              "InternalResolutionError"
+            ]
+          },
+          "fileName": {
+            "ref": "String"
+          },
+          "pos": {
+            "ref": "Number"
+          },
+          "end": {
+            "ref": "Number"
+          },
+          "resolutionOption": {
+            "name": "ResolutionOptionSchema"
+          },
+          "moduleSpecifier": {
+            "ref": "String"
+          },
+          "resolutionMode": {
+            "ref": "Number"
+          },
+          "trace": {
+            "array": {
+              "ref": "String"
+            }
+          }
+        }
+      },
+      "typeAlias": {
+        "form": "schemaType",
+        "name": "InternalResolutionErrorProblem",
+        "export": true
+      }
+    },
+    {
+      "kind": "schema",
+      "name": "UnexpectedModuleSyntaxProblemSchema",
+      "value": {
+        "struct": {
+          "kind": {
+            "literal": [
+              "UnexpectedModuleSyntax"
+            ]
+          },
+          "fileName": {
+            "ref": "String"
+          },
+          "pos": {
+            "ref": "Number"
+          },
+          "end": {
+            "ref": "Number"
+          },
+          "syntax": {
+            "name": "ModuleKindSyntaxSchema"
+          },
+          "moduleKind": {
+            "name": "ModuleKindSchema"
+          }
+        }
+      },
+      "typeAlias": {
+        "form": "schemaType",
+        "name": "UnexpectedModuleSyntaxProblem",
+        "export": true
+      }
+    },
+    {
+      "kind": "schema",
+      "name": "CJSOnlyExportsDefaultProblemSchema",
+      "value": {
+        "struct": {
+          "kind": {
+            "literal": [
+              "CJSOnlyExportsDefault"
+            ]
+          },
+          "fileName": {
+            "ref": "String"
+          },
+          "pos": {
+            "ref": "Number"
+          },
+          "end": {
+            "ref": "Number"
+          }
+        }
+      },
+      "typeAlias": {
+        "form": "schemaType",
+        "name": "CJSOnlyExportsDefaultProblem",
+        "export": true
+      }
+    },
+    {
+      "kind": "schema",
+      "name": "ProblemSchema",
+      "value": {
+        "union": [
+          {
+            "name": "NoResolutionProblemSchema"
+          },
+          {
+            "name": "UntypedResolutionProblemSchema"
+          },
+          {
+            "name": "FalseESMProblemSchema"
+          },
+          {
+            "name": "FalseCJSProblemSchema"
+          },
+          {
+            "name": "CJSResolvesToESMProblemSchema"
+          },
+          {
+            "name": "NamedExportsProblemSchema"
+          },
+          {
+            "name": "FallbackConditionProblemSchema"
+          },
+          {
+            "name": "FalseExportDefaultProblemSchema"
+          },
+          {
+            "name": "MissingExportEqualsProblemSchema"
+          },
+          {
+            "name": "InternalResolutionErrorProblemSchema"
+          },
+          {
+            "name": "UnexpectedModuleSyntaxProblemSchema"
+          },
+          {
+            "name": "CJSOnlyExportsDefaultProblemSchema"
+          }
+        ]
+      },
+      "typeAlias": {
+        "form": "schemaType",
+        "name": "Problem",
+        "export": true
+      }
+    }
+  ]
+}

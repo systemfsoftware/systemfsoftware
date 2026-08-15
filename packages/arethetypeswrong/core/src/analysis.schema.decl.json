@@ -1,0 +1,287 @@
+{
+  "role": "schema",
+  "namespace": "Schema",
+  "imports": [
+    {
+      "module": "effect",
+      "values": [
+        "Schema"
+      ]
+    },
+    {
+      "module": "./problem.schema.js",
+      "values": [
+        "ProblemSchema"
+      ],
+      "types": [
+        "Problem"
+      ],
+      "blankBefore": true
+    },
+    {
+      "module": "./resolution.schema.js",
+      "values": [
+        "EntrypointInfoSchema"
+      ],
+      "types": [
+        "EntrypointInfo"
+      ]
+    },
+    {
+      "module": "./resolution.schema.js",
+      "values": [
+        "ResolutionOptionSchema"
+      ]
+    }
+  ],
+  "declarations": [
+    {
+      "kind": "schema",
+      "name": "BuildToolSchema",
+      "value": {
+        "literal": [
+          "@systemfsoftware/arethetypeswrong-cli",
+          "typescript",
+          "rollup",
+          "@rollup/plugin-typescript",
+          "@rollup/plugin-typescript2",
+          "webpack",
+          "esbuild",
+          "parcel-bundler",
+          "@preconstruct/cli",
+          "vite",
+          "snowpack",
+          "microbundle",
+          "@microsoft/api-extractor",
+          "tshy",
+          "@rspack/cli",
+          "tsup",
+          "tsdown"
+        ]
+      },
+      "typeAlias": {
+        "form": "schemaType",
+        "name": "BuildTool",
+        "export": true
+      }
+    },
+    {
+      "kind": "schema",
+      "name": "IncludedTypesSchema",
+      "value": {
+        "struct": {
+          "kind": {
+            "literal": [
+              "included"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "kind": "schema",
+      "name": "TypesPackageSchema",
+      "value": {
+        "struct": {
+          "kind": {
+            "literal": [
+              "@types"
+            ]
+          },
+          "packageName": {
+            "ref": "String"
+          },
+          "packageVersion": {
+            "ref": "String"
+          },
+          "definitelyTypedUrl": {
+            "optional": {
+              "ref": "String"
+            }
+          }
+        }
+      },
+      "tight": true
+    },
+    {
+      "kind": "schema",
+      "name": "AnalysisTypesSchema",
+      "value": {
+        "union": [
+          {
+            "name": "IncludedTypesSchema"
+          },
+          {
+            "name": "TypesPackageSchema"
+          }
+        ]
+      },
+      "typeAlias": {
+        "form": "schemaType",
+        "name": "AnalysisTypes",
+        "export": true
+      },
+      "tight": true
+    },
+    {
+      "kind": "schema",
+      "name": "AnyProgramInfoSchema",
+      "export": false,
+      "annotation": {
+        "generic": {
+          "of": "Schema.Schema",
+          "args": [
+            {
+              "ref": "unknown"
+            }
+          ]
+        }
+      },
+      "value": {
+        "ref": "Any"
+      }
+    },
+    {
+      "kind": "schema",
+      "name": "AnalysisSchema",
+      "value": {
+        "struct": {
+          "packageName": {
+            "ref": "String"
+          },
+          "packageVersion": {
+            "ref": "String"
+          },
+          "buildTools": {
+            "record": {
+              "key": {
+                "ref": "String"
+              },
+              "value": {
+                "ref": "String"
+              }
+            }
+          },
+          "types": {
+            "name": "AnalysisTypesSchema"
+          },
+          "entrypoints": {
+            "record": {
+              "key": {
+                "ref": "String"
+              },
+              "value": {
+                "name": "EntrypointInfoSchema"
+              }
+            }
+          },
+          "programInfo": {
+            "record": {
+              "key": {
+                "name": "ResolutionOptionSchema"
+              },
+              "value": {
+                "name": "AnyProgramInfoSchema"
+              }
+            }
+          },
+          "problems": {
+            "array": {
+              "name": "ProblemSchema"
+            }
+          }
+        }
+      },
+      "typeAlias": {
+        "form": "schemaType",
+        "name": "Analysis",
+        "export": true
+      }
+    },
+    {
+      "kind": "schema",
+      "name": "UntypedResultSchema",
+      "value": {
+        "struct": {
+          "packageName": {
+            "ref": "String"
+          },
+          "packageVersion": {
+            "ref": "String"
+          },
+          "types": {
+            "literal": [
+              false
+            ]
+          }
+        }
+      },
+      "typeAlias": {
+        "form": "schemaType",
+        "name": "UntypedResult",
+        "export": true
+      }
+    },
+    {
+      "kind": "schema",
+      "name": "CheckResultSchema",
+      "value": {
+        "union": [
+          {
+            "name": "AnalysisSchema"
+          },
+          {
+            "name": "UntypedResultSchema"
+          }
+        ]
+      },
+      "typeAlias": {
+        "form": "schemaType",
+        "name": "CheckResult",
+        "export": true
+      }
+    },
+    {
+      "kind": "type",
+      "name": "Analysis_",
+      "value": {
+        "intersection": [
+          {
+            "ref": "Analysis"
+          },
+          {
+            "object": [
+              {
+                "name": "entrypoints",
+                "type": {
+                  "generic": {
+                    "of": "Record",
+                    "args": [
+                      {
+                        "ref": "string"
+                      },
+                      {
+                        "ref": "EntrypointInfo"
+                      }
+                    ]
+                  }
+                },
+                "mutable": true
+              },
+              {
+                "name": "problems",
+                "type": {
+                  "readonlyArray": {
+                    "ref": "Problem"
+                  }
+                },
+                "mutable": true
+              }
+            ],
+            "multiline": true
+          }
+        ]
+      }
+    }
+  ]
+}

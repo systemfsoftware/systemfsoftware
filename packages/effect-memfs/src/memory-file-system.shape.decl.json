@@ -1,0 +1,415 @@
+{
+  "role": "shape",
+  "imports": [
+    {
+      "module": "memfs",
+      "namespace": "memfs"
+    }
+  ],
+  "declarations": [
+    {
+      "kind": "interface",
+      "name": "Stat",
+      "members": [
+        {
+          "name": "isFile",
+          "type": {
+            "fn": {
+              "params": [],
+              "returns": {
+                "ref": "boolean"
+              }
+            }
+          },
+          "method": true
+        },
+        {
+          "name": "isDirectory",
+          "type": {
+            "fn": {
+              "params": [],
+              "returns": {
+                "ref": "boolean"
+              }
+            }
+          },
+          "method": true
+        },
+        {
+          "name": "isSymbolicLink",
+          "type": {
+            "fn": {
+              "params": [],
+              "returns": {
+                "ref": "boolean"
+              }
+            }
+          },
+          "method": true
+        },
+        {
+          "name": "isBlockDevice",
+          "type": {
+            "fn": {
+              "params": [],
+              "returns": {
+                "ref": "boolean"
+              }
+            }
+          },
+          "method": true
+        },
+        {
+          "name": "isCharacterDevice",
+          "type": {
+            "fn": {
+              "params": [],
+              "returns": {
+                "ref": "boolean"
+              }
+            }
+          },
+          "method": true
+        },
+        {
+          "name": "isFIFO",
+          "type": {
+            "fn": {
+              "params": [],
+              "returns": {
+                "ref": "boolean"
+              }
+            }
+          },
+          "method": true
+        },
+        {
+          "name": "isSocket",
+          "type": {
+            "fn": {
+              "params": [],
+              "returns": {
+                "ref": "boolean"
+              }
+            }
+          },
+          "method": true
+        },
+        {
+          "name": "mode",
+          "type": {
+            "ref": "number"
+          }
+        },
+        {
+          "name": "size",
+          "type": {
+            "ref": "number"
+          }
+        },
+        {
+          "name": "blocks",
+          "type": {
+            "ref": "number"
+          }
+        },
+        {
+          "name": "blksize",
+          "type": {
+            "ref": "number"
+          }
+        },
+        {
+          "name": "dev",
+          "type": {
+            "ref": "number"
+          }
+        },
+        {
+          "name": "ino",
+          "type": {
+            "ref": "number"
+          }
+        },
+        {
+          "name": "nlink",
+          "type": {
+            "ref": "number"
+          }
+        },
+        {
+          "name": "uid",
+          "type": {
+            "ref": "number"
+          }
+        },
+        {
+          "name": "gid",
+          "type": {
+            "ref": "number"
+          }
+        },
+        {
+          "name": "rdev",
+          "type": {
+            "ref": "number"
+          }
+        },
+        {
+          "name": "mtime",
+          "type": {
+            "ref": "Date"
+          }
+        },
+        {
+          "name": "atime",
+          "type": {
+            "ref": "Date"
+          }
+        },
+        {
+          "name": "birthtime",
+          "type": {
+            "ref": "Date"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "interface",
+      "name": "FileHandle",
+      "members": [
+        {
+          "name": "fd",
+          "type": {
+            "ref": "number"
+          }
+        },
+        {
+          "name": "stat",
+          "type": {
+            "fn": {
+              "params": [],
+              "returns": {
+                "generic": {
+                  "of": "Promise",
+                  "args": [
+                    {
+                      "ref": "Stat"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "method": true
+        },
+        {
+          "name": "sync",
+          "type": {
+            "fn": {
+              "params": [],
+              "returns": {
+                "generic": {
+                  "of": "Promise",
+                  "args": [
+                    {
+                      "ref": "void"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "method": true
+        },
+        {
+          "name": "read",
+          "type": {
+            "fn": {
+              "params": [
+                {
+                  "name": "buffer",
+                  "type": {
+                    "ref": "Uint8Array"
+                  }
+                },
+                {
+                  "name": "offset",
+                  "type": {
+                    "ref": "number"
+                  }
+                },
+                {
+                  "name": "length",
+                  "type": {
+                    "ref": "number"
+                  }
+                },
+                {
+                  "name": "position",
+                  "type": {
+                    "ref": "number"
+                  }
+                }
+              ],
+              "returns": {
+                "generic": {
+                  "of": "Promise",
+                  "args": [
+                    {
+                      "object": [
+                        {
+                          "name": "bytesRead",
+                          "type": {
+                            "ref": "number"
+                          },
+                          "mutable": true
+                        },
+                        {
+                          "name": "buffer",
+                          "type": {
+                            "ref": "Buffer"
+                          },
+                          "mutable": true
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "method": true
+        },
+        {
+          "name": "write",
+          "type": {
+            "fn": {
+              "params": [
+                {
+                  "name": "buffer",
+                  "type": {
+                    "ref": "Uint8Array"
+                  }
+                },
+                {
+                  "name": "offset",
+                  "type": {
+                    "union": [
+                      {
+                        "ref": "number"
+                      },
+                      {
+                        "ref": "undefined"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "name": "length",
+                  "type": {
+                    "ref": "number"
+                  }
+                },
+                {
+                  "name": "position",
+                  "optional": true,
+                  "type": {
+                    "union": [
+                      {
+                        "ref": "number"
+                      },
+                      {
+                        "ref": "null"
+                      }
+                    ]
+                  }
+                }
+              ],
+              "returns": {
+                "generic": {
+                  "of": "Promise",
+                  "args": [
+                    {
+                      "object": [
+                        {
+                          "name": "bytesWritten",
+                          "type": {
+                            "ref": "number"
+                          },
+                          "mutable": true
+                        },
+                        {
+                          "name": "buffer",
+                          "type": {
+                            "ref": "Buffer"
+                          },
+                          "mutable": true
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "method": true
+        },
+        {
+          "name": "truncate",
+          "type": {
+            "fn": {
+              "params": [
+                {
+                  "name": "len",
+                  "optional": true,
+                  "type": {
+                    "ref": "number"
+                  }
+                }
+              ],
+              "returns": {
+                "generic": {
+                  "of": "Promise",
+                  "args": [
+                    {
+                      "ref": "void"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "method": true
+        },
+        {
+          "name": "close",
+          "type": {
+            "fn": {
+              "params": [],
+              "returns": {
+                "generic": {
+                  "of": "Promise",
+                  "args": [
+                    {
+                      "ref": "void"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "method": true
+        }
+      ]
+    },
+    {
+      "kind": "type",
+      "name": "Contents",
+      "value": {
+        "ref": "memfs.DirectoryJSON"
+      }
+    }
+  ]
+}

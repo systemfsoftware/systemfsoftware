@@ -1,0 +1,175 @@
+{
+  "role": "shape",
+  "imports": [
+    {
+      "module": "@oh-my-pi/pi-coding-agent",
+      "types": [
+        "InputEvent"
+      ]
+    }
+  ],
+  "declarations": [
+    {
+      "kind": "interface",
+      "name": "HookSession",
+      "doc": [
+        "The slice of the harness these operations actually depend on. Narrowing here",
+        "keeps the executor off the full `ExtensionContext` union surface and lets a",
+        "caller — production or test — supply exactly what is used, with no cast."
+      ],
+      "members": [
+        {
+          "name": "cwd",
+          "type": {
+            "ref": "string"
+          }
+        },
+        {
+          "name": "sessionManager",
+          "type": {
+            "object": [
+              {
+                "name": "getSessionId",
+                "type": {
+                  "fn": {
+                    "params": [],
+                    "returns": {
+                      "ref": "string"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "ui",
+          "type": {
+            "object": [
+              {
+                "name": "notify",
+                "type": {
+                  "fn": {
+                    "params": [
+                      {
+                        "name": "message",
+                        "type": {
+                          "ref": "string"
+                        }
+                      },
+                      {
+                        "name": "type",
+                        "optional": true,
+                        "type": {
+                          "union": [
+                            {
+                              "literal": "info"
+                            },
+                            {
+                              "literal": "warning"
+                            },
+                            {
+                              "literal": "error"
+                            }
+                          ]
+                        }
+                      }
+                    ],
+                    "returns": {
+                      "ref": "void"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "kind": "interface",
+      "name": "HookToolCall",
+      "members": [
+        {
+          "name": "toolName",
+          "type": {
+            "ref": "string"
+          }
+        },
+        {
+          "name": "toolCallId",
+          "type": {
+            "ref": "string"
+          }
+        },
+        {
+          "name": "input",
+          "type": {
+            "ref": "object"
+          },
+          "doc": [
+            "The harness types this per tool, so it is decoded rather than asserted."
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "interface",
+      "name": "HookToolResult",
+      "extends": [
+        "HookToolCall"
+      ],
+      "members": [
+        {
+          "name": "content",
+          "type": {
+            "ref": "unknown"
+          }
+        },
+        {
+          "name": "isError",
+          "optional": true,
+          "orUndefined": true,
+          "type": {
+            "ref": "boolean"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "interface",
+      "name": "HookPrompt",
+      "members": [
+        {
+          "name": "text",
+          "type": {
+            "ref": "string"
+          }
+        },
+        {
+          "name": "source",
+          "type": {
+            "indexed": {
+              "of": {
+                "ref": "InputEvent"
+              },
+              "index": "source"
+            }
+          }
+        },
+        {
+          "name": "images",
+          "optional": true,
+          "type": {
+            "indexed": {
+              "of": {
+                "ref": "InputEvent"
+              },
+              "index": "images"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
