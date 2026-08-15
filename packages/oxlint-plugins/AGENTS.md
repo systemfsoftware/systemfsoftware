@@ -68,6 +68,13 @@ rules:
     dont: reduce a cell's rule set to conditional prohibitions
     harm: with prohibitions alone an empty or degenerate file passes every rule, and the cell collapses into a naming convention — avoiding the cell's own vocabulary becomes the cheapest way to pass
     check: review — each cell plugin registers at least one rule whose report fires on absence, and the leaf names which rule that is
+
+  - id: OX-DL1
+    title: A plugin that imports effect-cell-types is delivered consumer-side, never through the effect-dmmf aggregate
+    do: when a plugin under packages/oxlint-plugins/ needs `@systemfsoftware/effect-cell-types` as a dependency, deliver it by adding it to each consuming package's own `jsPlugins` and `rules`, exactly as `cell-vocabulary` is delivered
+    dont: add such a plugin to `effect-dmmf/src/index.ts` re-exports, `effect-dmmf/package.json` dependencies, or `oxlint-config/package.json` dependencies — declaring it there closes the turbo cycle `effect-executor -> effect-cell-types -> oxlint-config -> effect-dmmf -> effect-executor`, and the only workaround is a committed generated vocabulary with a drift gate
+    harm: the cycle forces a hack (generated constants + regenerate-and-compare gate) that a later reader deletes as cargo cult, leaving the rules frozen on stale constants with no gate; measured on 2026-08-15 when `vocabulary.generated.ts` existed solely because `effect-executor` sat in the aggregate
+    check: `grep -rn 'effect-cell-types' packages/oxlint-plugins/effect-dmmf/src/index.ts` returns nothing, and the remedy is `docs/solutions/build-errors/turbo-build-cycle-from-self-hosted-devdeps.md`
 ```
 
 ## Rule APIs
@@ -137,16 +144,16 @@ is no fixed rule-count ceiling, only the two budgets above.
 Every `effect-<cell>/` package's spec of record is its `architect-<cell>` skill — that is the
 default, not a delta. Listed here only where a package departs from it.
 
-| Package                                         | Leaf delta                                                                                                                       |
-| ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `core/`                                         | ESLintUtils template, ESLint migration notes, legacy commands                                                                    |
-| `property-testing/`                             | Property-test contract rules; no leaf — this file's conventions govern                                                           |
-| `test-hygiene/`                                 | DAMP test naming; no leaf — this file's conventions govern                                                                       |
-| `cell-imports/`                                 | Import-boundary rules per cell pair; no leaf — this file's conventions govern                                                    |
-| `effect-dmmf/`                                  | No rules of its own, pure re-export — exempt from OX-MG1, gate + rationale in its own leaf (`ED1`, `ED2`)                        |
-| `cell-taxonomy/`                                | Sole owner of non-test source filenames (`CT1`); default lists are defaults, not law (`CT2`)                                     |
-| `test-placement/`                               | Not enrolled in its own rules (`TP1`), sole owner of test placement (`TP2`)                                                      |
-| `effect-entrypoint/`                            | Not a cell — keyed on the exact filename `main.ts` (`EP1`); the two rules that close cell-taxonomy's `main.ts` exemption (`EP2`) |
-| `effect-executor/`                              | Deliberate non-gates; its phase vocabulary is a generated module, not a declaration                                              |
-| `cell-vocabulary/`                              | Not a cell — walks a Cell description for its vocabulary (`CELL-V1`); OX-OB1 does not apply (`CELL-V4`)                          |
-| `effect-{acl,handler,adapter,policy,workflow}/` | Each names its OX-OB1 obligation rule                                                                                            |
+| Package                                         | Leaf delta                                                                                                                             |
+| ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `core/`                                         | ESLintUtils template, ESLint migration notes, legacy commands                                                                          |
+| `property-testing/`                             | Property-test contract rules; no leaf — this file's conventions govern                                                                 |
+| `test-hygiene/`                                 | DAMP test naming; no leaf — this file's conventions govern                                                                             |
+| `cell-imports/`                                 | Import-boundary rules per cell pair; no leaf — this file's conventions govern                                                          |
+| `effect-dmmf/`                                  | No rules of its own, pure re-export — exempt from OX-MG1, gate + rationale in its own leaf (`ED1`, `ED2`)                              |
+| `cell-taxonomy/`                                | Sole owner of non-test source filenames (`CT1`); default lists are defaults, not law (`CT2`)                                           |
+| `test-placement/`                               | Not enrolled in its own rules (`TP1`), sole owner of test placement (`TP2`)                                                            |
+| `effect-entrypoint/`                            | Not a cell — keyed on the exact filename `main.ts` (`EP1`); the two rules that close cell-taxonomy's `main.ts` exemption (`EP2`)       |
+| `effect-executor/`                              | Deliberate non-gates; its phase vocabulary is walked off @systemfsoftware/effect-cell-types directly; delivered consumer-side (OX-DL1) |
+| `cell-vocabulary/`                              | Not a cell — walks a Cell description for its vocabulary (`CELL-V1`); OX-OB1 does not apply (`CELL-V4`)                                |
+| `effect-{acl,handler,adapter,policy,workflow}/` | Each names its OX-OB1 obligation rule                                                                                                  |

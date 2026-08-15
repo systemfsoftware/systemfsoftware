@@ -1,14 +1,19 @@
 import base from '@systemfsoftware/oxlint-config/base'
 import cellVocabulary from '@systemfsoftware/oxlint-plugin-cell-vocabulary'
+import effectExecutor from '@systemfsoftware/oxlint-plugin-effect-executor'
 import { defineConfig } from 'oxlint'
 
 export default defineConfig({
   extends: [base],
 
-  jsPlugins: [import.meta.resolve('@systemfsoftware/oxlint-plugin-cell-vocabulary')],
+  jsPlugins: [
+    import.meta.resolve('@systemfsoftware/oxlint-plugin-cell-vocabulary'),
+    import.meta.resolve('@systemfsoftware/oxlint-plugin-effect-executor'),
+  ],
 
   rules: {
     ...cellVocabulary.configs.recommended.rules,
+    ...effectExecutor.configs.recommended.rules,
 
     // ── Type Safety: largest anti-patterns ──
     'typescript/ban-ts-comment': 'error',

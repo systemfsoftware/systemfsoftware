@@ -1,12 +1,16 @@
+import { Cell } from '@systemfsoftware/effect-cell-types'
 import { Schema as S } from 'effect'
 
 export const Options = S.Struct({})
 
-// Walked, not declared: `vocabulary.generated.ts` is rendered from the Cell description, and
-// `pnpm check:executor-vocabulary` fails when it does not reproduce from a fresh walk. The method
-// list is every phase name plus the applier, all read off the description's own vocabulary — adding
-// a phase moves this rule with no edit here.
-export { DESCRIPTION_METHODS, DESCRIPTION_SOURCE } from './vocabulary.generated.js'
+/**
+ * The description source and method names are walked off `Cell.vocabulary` directly at load time.
+ */
+export const DESCRIPTION_SOURCE: string = Cell.vocabulary.module
+export const DESCRIPTION_METHODS: readonly string[] = [
+  ...Cell.vocabulary.phases.map((phase) => phase.name),
+  Cell.vocabulary.applier,
+]
 
 export const BARREL_LAST_PARTS = ['index', 'mod'] as const
 

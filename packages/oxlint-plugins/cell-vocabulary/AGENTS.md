@@ -69,9 +69,7 @@ aggregate that declared this one would close the turbo cycle `effect-executor ->
 names that first edge as the only breakable one. `scripts/guards/check-lint-coverage.mjs` classifies
 this package accordingly.
 
-The sibling rule `effect-executor/executor-no-io-in-filling` decides the same property from a
-vocabulary rendered by `scripts/guards/generate-executor-vocabulary.ts`, because that package cannot
-import the description either. Both are derived; neither restates.
+The sibling rule `effect-executor/executor-no-io-in-filling` walks the same `Cell.vocabulary` directly and is delivered consumer-side for the same reason (OX-DL1); neither restates.
 
 ## Verification
 

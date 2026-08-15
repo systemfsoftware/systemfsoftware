@@ -327,6 +327,9 @@ importers:
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
         version: link:../../../packages/oxlint-config
+      '@systemfsoftware/oxlint-plugin-effect-executor':
+        specifier: workspace:^
+        version: link:../../../packages/oxlint-plugins/effect-executor
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../../packages/tsconfig
@@ -391,6 +394,9 @@ importers:
       '@systemfsoftware/oxlint-plugin-cell-vocabulary':
         specifier: workspace:^
         version: link:../../../packages/oxlint-plugins/cell-vocabulary
+      '@systemfsoftware/oxlint-plugin-effect-executor':
+        specifier: workspace:^
+        version: link:../../../packages/oxlint-plugins/effect-executor
       '@systemfsoftware/stryker-js-mutation-run':
         specifier: workspace:^
         version: link:../../../packages/stryker-js/mutation-run
@@ -812,6 +818,9 @@ importers:
       '@systemfsoftware/oxlint-plugin-cell-vocabulary':
         specifier: workspace:^
         version: link:../oxlint-plugins/cell-vocabulary
+      '@systemfsoftware/oxlint-plugin-effect-executor':
+        specifier: workspace:^
+        version: link:../oxlint-plugins/effect-executor
       '@systemfsoftware/stryker-js-mutation-run':
         specifier: workspace:^
         version: link:../stryker-js/mutation-run
@@ -1175,9 +1184,6 @@ importers:
       '@systemfsoftware/oxlint-plugin-effect-dmmf':
         specifier: workspace:^
         version: link:../oxlint-plugins/effect-dmmf
-      '@systemfsoftware/oxlint-plugin-effect-executor':
-        specifier: workspace:^
-        version: link:../oxlint-plugins/effect-executor
       '@systemfsoftware/oxlint-plugin-effect-schema':
         specifier: workspace:^
         version: link:../oxlint-plugins/effect-schema
@@ -1566,9 +1572,6 @@ importers:
       '@systemfsoftware/oxlint-plugin-effect-adapter':
         specifier: workspace:^
         version: link:../effect-adapter
-      '@systemfsoftware/oxlint-plugin-effect-executor':
-        specifier: workspace:^
-        version: link:../effect-executor
       '@systemfsoftware/oxlint-plugin-effect-handler':
         specifier: workspace:^
         version: link:../effect-handler
@@ -1694,6 +1697,9 @@ importers:
       '@oxlint/plugins':
         specifier: catalog:oxlint
         version: 1.77.0
+      '@systemfsoftware/effect-cell-types':
+        specifier: workspace:^
+        version: link:../../effect-cell-types
     devDependencies:
       '@microsoft/api-extractor':
         specifier: 'catalog:'
@@ -2640,12 +2646,12 @@ importers:
       '@systemfsoftware/oxlint-plugin-effect-entrypoint':
         specifier: workspace:^
         version: link:../../oxlint-plugins/effect-entrypoint
+      '@systemfsoftware/oxlint-plugin-effect-executor':
+        specifier: workspace:^
+        version: link:../../oxlint-plugins/effect-executor
       '@systemfsoftware/oxlint-plugin-test-placement':
         specifier: workspace:^
         version: link:../../oxlint-plugins/test-placement
-      '@systemfsoftware/stryker-js-vitest-runner':
-        specifier: workspace:^
-        version: link:../vitest-runner
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../tsconfig

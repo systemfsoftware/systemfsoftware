@@ -49,6 +49,7 @@
     "@systemfsoftware/omp-utils": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/oxlint-plugin-cell-vocabulary": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-effect-executor": "workspace:^",
     "@systemfsoftware/stryker-js-mutation-run": "workspace:^",
     "@systemfsoftware/stryker-js-typescript-checker": "workspace:^",
     "@systemfsoftware/stryker-js-vitest-runner": "workspace:^",

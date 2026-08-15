@@ -1,14 +1,27 @@
+import { Cell } from '@systemfsoftware/effect-cell-types'
 import { Schema as S } from 'effect'
 
 export const Options = S.Struct({})
 
-// The phase/purity/I/O vocabulary is not declared here. It is rendered from a walk of the Cell
-// description into `vocabulary.generated.ts`, and `pnpm check:executor-vocabulary` fails when that
-// file does not reproduce byte-for-byte from a fresh walk. This package cannot import the
-// description directly: turbo reports the cycle `effect-executor -> effect-cell-types ->
-// effect-gherkin-spec -> oxlint-config -> effect-dmmf -> effect-executor` and names that first edge
-// as the only breakable one, so the value arrives as a generated module instead of an import.
-export { DESCRIPTION_SOURCE, IO_CELLS, IO_SOURCES, PURE_PHASES } from './vocabulary.generated.js'
+/**
+ * The pure phase set, the I/O classifications and the description package's module name
+ * are all projected off `Cell.vocabulary` directly at load time.
+ */
+export const PURE_PHASES: readonly string[] = Cell.vocabulary.byKind.pure
+export const IO_CELLS: readonly string[] = Cell.vocabulary.ioCells.cells
+export const IO_SOURCES: readonly string[] = Cell.vocabulary.ioCells.sources
+export const DESCRIPTION_SOURCE: string = Cell.vocabulary.module
+
+if (PURE_PHASES.length === 0) {
+  throw new Error(
+    'effect-executor: the walked vocabulary reports no pure phase, so executor-no-io-in-filling would decide nothing',
+  )
+}
+if (IO_CELLS.length === 0 && IO_SOURCES.length === 0) {
+  throw new Error(
+    'effect-executor: the walked I/O classification is empty, so executor-no-io-in-filling would decide nothing',
+  )
+}
 
 /** The package export that carries the phase constructors. */
 export const DESCRIPTION_NAMESPACE = 'Cell' as const

@@ -204,13 +204,13 @@ A vocabulary is the unit of agreement between packages. Where several packages m
 
 A package whose behaviour is a function of a vocabulary it reads from elsewhere, carrying none of that vocabulary's words in its own source. The test is one addition at the source: a derived consumer stays correct while its output changes, and a consumer whose output does not change was reading something else.
 
-Derivation is a property of the consumer's source, not of its intent, so it is audited by counting: a census for the vocabulary's own words across the consumer's sources returns zero, and any non-zero count names a copy that will drift. The cheapest carrier is a direct import; where a direct edge would close a cycle in the build graph, the vocabulary arrives as a generated artifact under a drift gate instead, and the generator then belongs to neither package.
+Derivation is a property of the consumer's source, not of its intent, so it is audited by counting: a census for the vocabulary's own words across the consumer's sources returns zero, and any non-zero count names a copy that will drift. The cheapest and default carrier is a direct runtime import; when a lint plugin depends on a core description package, the dependency graph stays acyclic by delivering the plugin consumer-side via `jsPlugins` rather than aggregating it into a monorepo-wide lint preset.
 
 ### Drift gate
 
 A check that re-renders a committed generated artifact from its source and fails when any byte differs, so the artifact is a derivation rather than a copy that happens to agree today. Its remedy is regeneration, never an edit to the artifact.
 
-A drift gate is only as honest as its comparison: cached against an incomplete input set it returns a stale pass, and pointed at an artifact the formatter also rewrites it fights the formatter instead of the drift. The renderer's output must therefore be stable under the repository's formatter, and the comparison must re-run whenever the source moves.
+A drift gate is only as honest as its comparison: cached against an incomplete input set it returns a stale pass, and pointed at an artifact the formatter also rewrites it fights the formatter instead of the drift. The renderer's output must therefore be stable under the repository's formatter, and the comparison must re-run whenever the source moves. Where direct runtime imports are achievable by adjusting delivery topology, direct imports are strictly preferred over generated-artifact drift gates.
 
 ### Independent oracle
 

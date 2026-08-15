@@ -158,18 +158,6 @@ const MANIFEST = new Map([
     'local-tooling',
     'Worktrunk git-worktree lifecycle hooks, invoked by .config/wt.toml. Operator workflow.',
   ]],
-  ['tools/f2-propagation-probe.ts', [
-    'local-tooling',
-    'Applies and reverts, one half at a time, the two F2 propagation changes inside packages/effect-cell-types/src/Cell.ts: one extra Cell phase (--phase, the default) and one extra I/O cell (--io). Each half re-measures which files the change forces content edits in, and round-trips byte-for-byte with the formatter run on both sides. Wired into no chain; a reproducible experiment, never a gate.',
-  ]],
-  ['guards/generate-executor-vocabulary.ts', [
-    'local-tooling',
-    'Renders the executor rules\u0027 phase/purity/I/O vocabulary from a walk of the Cell description, and with --check fails when the committed result does not reproduce byte-for-byte. It cannot live in a package: effect-executor importing the description closes the turbo cycle effect-executor -> effect-cell-types -> effect-gherkin-spec -> oxlint-config -> effect-dmmf -> effect-executor, which turbo names as the only breakable edge.',
-  ]],
-  ['guards/deno.jsonc', [
-    'local-tooling',
-    'Deno config for the guards above: maps the description import to its source, because nothing in scripts/ declares workspace dependencies and a root script must acquire no package edge.',
-  ]],
 ])
 
 const lineOf = (source, offset) => {
