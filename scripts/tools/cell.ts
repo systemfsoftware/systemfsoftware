@@ -28,7 +28,7 @@
  */
 import { ROLE } from './role-brand.ts'
 import type { BinOp, CellMember, CellProgram, Term as RawTerm, TermParam } from './term-compile.ts'
-import type { TypeDeclaration, TypeExpr } from './type-decl.ts'
+import type { TypeDeclaration, TypeExpr, TypeParam } from './type-decl.ts'
 
 declare const RequirementId: unique symbol
 
@@ -128,6 +128,39 @@ export type PureGlobal =
   | 'Boolean'
   | 'JSON.stringify'
   | 'JSON.parse'
+  /**
+   * `Symbol.for` — deterministic in its key, so it belongs here on the derivation rather than by
+   * analogy to the other entries.
+   *
+   * It does touch a process-global registry, which is what makes the call worth arguing rather than
+   * assuming. What the requirement channel tracks is whether a term's result depends on anything
+   * beyond its arguments: `Symbol.for('x')` returns the same symbol for the same key, in any order,
+   * at any time, with no clock, no I/O and no randomness. The registry write is not observable
+   * except through another `Symbol.for` with the same key, which is the definition of the identity
+   * it returns. `Symbol()` is a different matter and is deliberately absent — it returns a fresh
+   * symbol each call, so its result is not a function of its arguments.
+   */
+  | 'Symbol.for'
+  /**
+   * Effect's pure constructors: they build a description of work, they do not perform any.
+   *
+   * The line is between a constructor and a runner, and it is a real one rather than a convenient
+   * one. `Effect.succeed(x)` allocates a value whose result is a function of `x` alone — nothing is
+   * scheduled, nothing is read, and calling it twice with the same argument yields equivalent
+   * descriptions. `Effect.runSync` and `Effect.runPromise` are what execute, and they are absent for
+   * exactly that reason: a kernel that runs an Effect has reached outside itself, which is the
+   * `Effectful` requirement the `gen` and `effectFn` combinators carry.
+   *
+   * A kernel importing `effect` therefore states `requires: nothing` honestly, because what it takes
+   * from the module is a set of data constructors.
+   */
+  | 'Effect.succeed'
+  | 'Effect.fail'
+  | 'Effect.void'
+  | 'Option.some'
+  | 'Option.none'
+  | 'Either.right'
+  | 'Either.left'
   | 'undefined'
   | 'null'
 
@@ -201,6 +234,17 @@ export const call = <N extends PureGlobal, const As extends readonly Term<unknow
   ...args: As
 ): Term<RequirementsOf<As>> => of({ app: { fn: { ref: callee }, args: args.map(raw) } })
 
+/**
+ * The same call with its arguments pre-broken, one per line.
+ *
+ * A separate constructor rather than an options argument, because `call` is variadic and there is
+ * nowhere in its signature for an options object to go without becoming another argument.
+ */
+export const callBroken = <N extends PureGlobal, const As extends readonly Term<unknown>[] = []>(
+  callee: N,
+  ...args: As
+): Term<RequirementsOf<As>> => of({ app: { fn: { ref: callee }, args: args.map(raw), multiline: true } })
+
 /** A call to anything else, which requires `Ambient` for the same reason `ref` does. */
 export const invoke = <const As extends readonly Term<unknown>[] = []>(
   callee: string,
@@ -269,13 +313,14 @@ const varsOf = <N extends readonly ParamSpec[]>(params: N): Vars<N> =>
 export const lam = <const N extends readonly ParamSpec[], R>(
   params: N,
   body: (...vars: Vars<N>) => Term<R>,
-  options?: { readonly returns?: TypeExpr },
+  options?: { readonly returns?: TypeExpr; readonly typeParams?: readonly TypeParam[] },
 ): Term<R> =>
   of<R>({
     lam: {
       params: params.map(paramOf),
       body: body(...varsOf(params)).raw,
       ...(options?.returns === undefined ? {} : { returns: options.returns }),
+      ...(options?.typeParams === undefined ? {} : { typeParams: options.typeParams }),
     },
   })
 
@@ -479,6 +524,8 @@ export interface TermDecl<R> {
   readonly doc?: readonly string[]
   readonly annotation?: TypeExpr
   readonly export?: boolean
+  /** `false` sits this declaration tight under its predecessor, with no blank line between. */
+  readonly blankBefore?: boolean
 }
 
 /**
@@ -537,6 +584,8 @@ export const nothing: Pure = 'requires-nothing'
  */
 export interface ImportOf<R> {
   readonly module: string
+  /** A default import: `import runtime from './runtime.kernel.js'`. */
+  readonly default?: string
   /**
    * What this import brings. `nothing` for a type, a pure combinator or a constant.
    *
@@ -639,10 +688,13 @@ export const executor = role<Effectful | Ambient, 'term' | 'type' | 'class-tag'>
 )
 
 /** A declaration's optional fields, omitted rather than set to `undefined`. */
-const optional = <R>(d: TermDecl<R>): { doc?: readonly string[]; annotation?: TypeExpr; export?: boolean } => ({
+const optional = <R>(
+  d: TermDecl<R>,
+): { doc?: readonly string[]; annotation?: TypeExpr; export?: boolean; blankBefore?: boolean } => ({
   ...(d.doc === undefined ? {} : { doc: d.doc }),
   ...(d.annotation === undefined ? {} : { annotation: d.annotation }),
   ...(d.export === undefined ? {} : { export: d.export }),
+  ...(d.blankBefore === undefined ? {} : { blankBefore: d.blankBefore }),
 })
 
 /**

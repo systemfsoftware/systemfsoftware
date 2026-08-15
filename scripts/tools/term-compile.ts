@@ -32,7 +32,14 @@
 
 import { docBlock, IDENT, isRecord, key, literal, rejecting } from './render.ts'
 import { roleOf } from './role-brand.ts'
-import { renderTypeDeclaration, renderTypeExpr, type TypeDeclaration, type TypeExpr } from './type-decl.ts'
+import {
+  renderTypeDeclaration,
+  renderTypeExpr,
+  renderTypeParams,
+  type TypeDeclaration,
+  type TypeExpr,
+  type TypeParam,
+} from './type-decl.ts'
 
 export type BinOp = '+' | '-' | '*' | '/' | '%' | '===' | '!==' | '<' | '<=' | '>' | '>=' | '&&' | '||' | '??'
 
@@ -94,8 +101,22 @@ export type Term =
   | { readonly var: string }
   /** A name from outside the term: an import, or another declaration in this file. */
   | { readonly ref: string }
-  | { readonly lam: { readonly params: readonly TermParam[]; readonly body: Term; readonly returns?: TypeExpr } }
-  | { readonly app: { readonly fn: Term; readonly args: readonly Term[] } }
+  | {
+    readonly lam: {
+      readonly typeParams?: readonly TypeParam[]
+      readonly params: readonly TermParam[]
+      readonly body: Term
+      readonly returns?: TypeExpr
+    }
+  }
+  /**
+   * A call. `multiline` pre-breaks the argument list, one per line with a trailing comma.
+   *
+   * Both forms are formatter fixed points below the print width, so no re-format recovers the
+   * author's pick and guessing silently changes a file the authorship gate then reads as drift. The
+   * spelling belongs to the declaration for the same reason the pre-broken object type does.
+   */
+  | { readonly app: { readonly fn: Term; readonly args: readonly Term[]; readonly multiline?: boolean } }
   | { readonly let: { readonly binds: readonly Bind[]; readonly body: Term } }
   /**
    * General recursion: `name` is bound inside `body`, so the function may call itself. This is the
@@ -206,6 +227,15 @@ export type Term =
 
 export interface ImportSpec {
   readonly module: string
+  /**
+   * A default import: `import runtime from './runtime.kernel.js'`.
+   *
+   * Distinct from `namespace` rather than a spelling of it — a namespace import binds the module
+   * object and a default import binds one exported value, and the two resolve differently under
+   * `esModuleInterop`. A cell that reads a type off a default-exported object needs this form and
+   * nothing else expresses it.
+   */
+  readonly default?: string
   readonly values?: readonly string[]
   readonly types?: readonly string[]
   readonly typeOnly?: boolean
@@ -221,6 +251,15 @@ export interface TermDeclaration {
   readonly annotation?: TypeExpr
   readonly export?: boolean
   readonly doc?: readonly string[]
+  /**
+   * `false` puts this declaration on the line after its predecessor with no blank line between.
+   *
+   * Declarations are separated by a blank line by default, which is what a cell of independent
+   * exports wants. A cell that pairs a `const` with the `typeof` alias naming its type is stating one
+   * fact twice, and the author writes the pair tight to say so. The formatter preserves either, so
+   * the grouping is the declaration's to state.
+   */
+  readonly blankBefore?: boolean
 }
 
 /**
@@ -391,14 +430,17 @@ export const compile = (t: Term, path: string, scope: Scope): string => {
     const l = t.lam
     const inner = extend(scope, ...paramNames(l.params))
     const returns = l.returns === undefined ? '' : `: ${renderTypeExpr(l.returns, `${path}.lam.returns`)}`
-    return `(${params(l.params, `${path}.lam`)})${returns} => ${compile(l.body, `${path}.lam.body`, inner)}`
+    const generics = renderTypeParams(l.typeParams, `${path}.lam.typeParams`)
+    return `${generics}(${params(l.params, `${path}.lam`)})${returns} => ${compile(l.body, `${path}.lam.body`, inner)}`
   }
 
   if ('app' in t) {
     const a = t.app
     if (!Array.isArray(a.args)) reject(`${path}.app.args: expected an array (empty is allowed)`)
     const args = a.args.map((x, i) => compile(x, `${path}.app.args[${i}]`, scope))
-    return `${atom(a.fn, `${path}.app.fn`, scope)}(${args.join(', ')})`
+    const callee = atom(a.fn, `${path}.app.fn`, scope)
+    if (a.multiline === true) return `${callee}(\n${args.map((x) => `  ${x},`).join('\n')}\n)`
+    return `${callee}(${args.join(', ')})`
   }
 
   if ('let' in t) {
@@ -622,6 +664,11 @@ const renderImport = (spec: ImportSpec, index: number): string => {
     const prefix = spec.typeOnly === true ? 'import type' : 'import'
     return `${prefix} * as ${spec.namespace} from '${spec.module}'`
   }
+  if (spec.default !== undefined) {
+    if (!IDENT.test(spec.default)) reject(`imports[${index}].default: expected an identifier`)
+    const prefix = spec.typeOnly === true ? 'import type' : 'import'
+    return `${prefix} ${spec.default} from '${spec.module}'`
+  }
   const named = (spec.values ?? []).map((v) => {
     const renamed = spec.alias?.[v]
     return renamed === undefined ? v : `${v} as ${renamed}`
@@ -726,7 +773,14 @@ export const compileProgram = (program: CellProgram): string => {
       }
       return `${docBlock(d.doc, '')}${d.export === false ? '' : 'export '}const ${d.name}${annotation} = ${value}`
     })
-    .join('\n\n')
+    .reduce((text, rendered, i) => {
+      if (i === 0) return rendered
+      // A blank line separates declarations by default; `blankBefore: false` puts this one directly
+      // under its predecessor, which is how a cell writes a `const` and the alias naming its type as
+      // one group.
+      const tight = (program.declarations[i] as { blankBefore?: boolean }).blankBefore === false
+      return `${text}${tight ? '\n' : '\n\n'}${rendered}`
+    }, '')
   const doc = docBlock(program.doc, '')
   return imports === '' ? `${doc}${body}\n` : `${imports}\n\n${doc}${body}\n`
 }

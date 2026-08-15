@@ -41,12 +41,28 @@ export type TypeExpr =
   | { readonly literal: string | number | boolean }
   /** An inline object type. `multiline` pre-breaks it, which the formatter then preserves. */
   | { readonly object: readonly Member[]; readonly multiline?: boolean }
-  /** A function *type* - parameters and a return, never a body. */
-  | { readonly fn: { readonly params: readonly Param[]; readonly returns: TypeExpr } }
-  /** `InputEvent['source']`, and with a type index, `typeof EVENTS[number]`. */
-  | { readonly indexed: { readonly of: TypeExpr; readonly index: string | TypeExpr } }
+  /** A function *type* - parameters and a return, never a body. Generic where `typeParams` is set. */
+  | {
+    readonly fn: {
+      readonly typeParams?: readonly TypeParam[]
+      readonly params: readonly Param[]
+      readonly returns: TypeExpr
+    }
+  }
+  /** `InputEvent['source']`, a tuple position `Parameters<F>[0]`, or a type index `typeof EVENTS[number]`. */
+  | { readonly indexed: { readonly of: TypeExpr; readonly index: string | number | TypeExpr } }
   /** `typeof X`. */
   | { readonly typeOf: string }
+  /**
+   * `unique symbol`, which is a form rather than a name.
+   *
+   * It cannot be a `ref`: TypeScript accepts `unique symbol` only as the annotation of a `const`
+   * whose initializer is a direct `Symbol()` or `Symbol.for()` call, so it is not a type that can
+   * appear wherever a type can. Giving it a node keeps the identifier check on `ref` strict — a name
+   * with a space in it is a defect everywhere else — instead of loosening that check to admit one
+   * special case.
+   */
+  | { readonly uniqueSymbol: true }
   | { readonly keyOf: TypeExpr }
 
 export interface Member {
@@ -77,6 +93,14 @@ export interface Param {
   readonly optional?: boolean
 }
 
+/**
+ * A type parameter: `A`, `A extends string`, `A = never`.
+ *
+ * A generic signature is a declaration rather than a computation — `<A, E>(effect: Effect<A, E>) => A`
+ * names types and returns one, and there is nowhere in it for a statement to hide. So it sits inside
+ * the line this language draws, and a cell whose whole content is a generic type alias is declarable
+ * rather than an exception carved out of the definition.
+ */
 export interface TypeParam {
   readonly name: string
   readonly extends?: TypeExpr
@@ -191,17 +215,34 @@ export const renderTypeExpr = (e: TypeExpr, path: string): string => {
     return `{ ${members.join('; ')} }`
   }
   if ('fn' in e) {
-    const f = e.fn as { params?: unknown; returns?: unknown }
+    const f = e.fn as { typeParams?: unknown; params?: unknown; returns?: unknown }
     if (!Array.isArray(f.params)) reject(`${path}.fn.params: expected an array (empty is allowed)`)
     if (!isRecord(f.returns)) reject(`${path}.fn.returns: expected a return type`)
     const params = (f.params as Param[]).map((p, i) => renderParam(p, `${path}.fn.params[${i}]`))
-    return `(${params.join(', ')}) => ${renderTypeExpr(f.returns as TypeExpr, `${path}.fn.returns`)}`
+    const generics = renderTypeParams(f.typeParams as readonly TypeParam[] | undefined, `${path}.fn.typeParams`)
+    return `${generics}(${params.join(', ')}) => ${renderTypeExpr(f.returns as TypeExpr, `${path}.fn.returns`)}`
   }
   if ('indexed' in e) {
     const ix = e.indexed as { of?: unknown; index?: unknown }
     if (!isRecord(ix.of)) reject(`${path}.indexed.of: expected a type expression`)
-    if (typeof ix.index !== 'string') reject(`${path}.indexed.index: expected the key as a string`)
-    return `${renderTypeExpr(ix.of as TypeExpr, `${path}.indexed.of`)}[${literal(ix.index as string)}]`
+    const target = renderTypeExpr(ix.of as TypeExpr, `${path}.indexed.of`)
+    // A tuple position and an object key are different indices and TypeScript writes them
+    // differently: `Parameters<F>[0]` is a position, `InputEvent['source']` is a key. A number is the
+    // position and stays bare; a string is the key and is quoted. Rendering both as quoted strings
+    // compiles but is not the text the author wrote, which the authorship gate reads as drift.
+    if (typeof ix.index === 'number') {
+      if (!Number.isInteger(ix.index) || ix.index < 0) {
+        reject(`${path}.indexed.index: expected a non-negative integer position`)
+      }
+      return `${target}[${ix.index}]`
+    }
+    if (typeof ix.index === 'string') return `${target}[${literal(ix.index)}]`
+    if (isRecord(ix.index)) return `${target}[${renderTypeExpr(ix.index as TypeExpr, `${path}.indexed.index`)}]`
+    reject(`${path}.indexed.index: expected a key, a tuple position, or a type expression`)
+  }
+  if ('uniqueSymbol' in e) {
+    if (e.uniqueSymbol !== true) reject(`${path}.uniqueSymbol: expected true`)
+    return 'unique symbol'
   }
   if ('typeOf' in e) {
     if (typeof e.typeOf !== 'string' || !TYPE_NAME.test(e.typeOf)) reject(`${path}.typeOf: expected a name`)
@@ -252,7 +293,8 @@ const renderMember = (m: Member, path: string, inline = false): string => {
   return inline ? line : `${docBlock(m.doc, '  ')}  ${line}`
 }
 
-const renderTypeParams = (params: readonly TypeParam[] | undefined, path: string): string => {
+/** `<A, E extends Error>`, or nothing at all for an empty list rather than `<>`. */
+export const renderTypeParams = (params: readonly TypeParam[] | undefined, path: string): string => {
   if (params === undefined || params.length === 0) return ''
   const rendered = params.map((p, i) => {
     if (!isRecord(p) || typeof p.name !== 'string' || !IDENT.test(p.name)) {
