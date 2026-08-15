@@ -286,12 +286,24 @@ cast both minting a branded value with every refinement skipped, so a value bran
 the schema is only obtainable from a constructor this workspace owns. Governs R2, R7. The reversing
 observation: if Effect ever makes schema identity forgeable, the mark moves to a nominal wrapper class.
 
-KTD3. **The residual hole is one call site, so the type-aware rule is one predicate — not a rule fleet.**
-Marking a foreign schema deliberately compiles (probe 5). Everything else the law forbids is already refused
-by KTD1, so the compile-pass rule has exactly one question: does the type argument at this call site have a
-declaration inside the workspace? Governs R1. That is `GetSymbolAtLocation` → `GetAliasedSymbol` →
-`Symbol.Declarations` → `GetSourceFileOfNode`, the traversal `@ttsc/lint`'s own `boundaries/dependencies`
-rule already performs.
+KTD3. **The residual is not one call site, so the rule reads the member type rather than the marking
+call** _(session-settled: user-directed — the user asked whether a structurally identical value can be
+passed, and the measurement says yes)_. This withdraws the earlier reading. Marking a foreign schema
+deliberately compiles, and so do four other routes, measured in `packages/effect-cell-types/.forge/`
+this session: writing `Schema<Vendor, unknown> & Mark`, writing `Minted<Vendor, unknown>`, declaring an
+interface extending both, stealing the phantom by conditional inference, and — the decisive one —
+`Object.assign(vendorSchema, Wire.string)`, which names nothing from the module but a legitimate
+primitive. TypeScript has no nominal types, so any value that legitimately carries a phantom donates it
+to any other type by intersection. Parameterising the mark by its payload in an invariant position was
+built and measured: it closes the inference route and leaves `Object.assign` open, so it was not shipped.
+
+The consequence is a design constraint, not a defeat. A rule keyed on the marking call would catch the
+one route an author takes on purpose and miss every derived one. So the predicate is over the declaration
+instead: for each member of a struct passed to `wire`, resolve the member's `Schema.Type` to its
+declaration site and report one declared outside the workspace. That reads the type that arrived and
+never how it came to be marked, which is what makes it immune to all five routes. Governs R1. The
+traversal is still `GetSymbolAtLocation` → `GetAliasedSymbol` → `Symbol.Declarations` →
+`GetSourceFileOfNode`, as `@ttsc/lint`'s own `boundaries/dependencies` rule performs it.
 
 KTD4. **The declaration-site rule ships as an ordinary ttsc contributor, needing no fork and no patched
 compiler** _(session-settled: user-directed — the user instructed the ttsc route and rejected two
@@ -446,12 +458,13 @@ and the gap is deliberate, per the plan's own U-ID stability rule.
 
 ### U4. The declaration-site rule
 
-**Goal.** Marking a foreign schema is refused by the compile pass, closing U1's measured residual.
+**Goal.** A wire declaration naming a foreign type is refused by the compile pass, closing the five forge
+routes U1 measured and cannot close.
 
-**Requirements.** R1, the deliberate case.
+**Requirements.** R1, every deliberate case.
 
-**Dependencies.** U1 — the call site must exist. Nothing else; KTD4 establishes that no fork, no `Program`
-access and no patched checker surface is required.
+**Dependencies.** U1 — the declaration form must exist. Nothing else; KTD4 establishes that no fork, no
+`Program` access and no patched checker surface is required.
 
 **Files.** `packages/ttsc-plugin-cell-boundary/` — `package.json`, `src/index.ts` (descriptor only),
 `native/boundary.go`, `native/boundary_test.go`; plus a `lint.config.ts` and a `check:boundary` task wherever
@@ -461,29 +474,37 @@ the rule is to run, and an end-to-end fixture.
 
 1. The npm package exports the descriptor — `meta`, `rules`, and `source` resolving to `native/`. No rule
    logic in TypeScript; the descriptor's `rules` array is advisory and registration happens in Go `init()`.
-2. `native/boundary.go` registers one rule via `rule.Register`. It visits call expressions, matches the
-   marking constructor **by resolved symbol rather than identifier text** so a local rebinding cannot dodge it,
-   reads the type argument, and resolves its declaration through `GetSymbolAtLocation` → `GetAliasedSymbol` →
-   `Symbol.Declarations` → `GetSourceFileOfNode`.
-3. A declaration whose source file resolves outside the workspace root, and is not on the configured
-   allowlist, is reported. The allowlist is options-carried, so the rule takes project knowledge through
-   configuration rather than off the disk.
+2. `native/boundary.go` registers one rule via `rule.Register`. It visits calls to `wire` matched **by
+   resolved symbol rather than identifier text**, and for each member of the fields object resolves that
+   member's schema payload type to its declaration through `GetSymbolAtLocation` → `GetAliasedSymbol` →
+   `Symbol.Declarations` → `GetSourceFileOfNode`. It reads the type that arrived and never how the member
+   came to be marked, which is the property that makes it immune to all five routes — `mint`, the two
+   written intersections, the inferred phantom, and `Object.assign`, none of which change the payload type.
+3. A payload whose declaration resolves outside the workspace root, and is not on the configured
+   allowlist, is reported against the member's own field name. The allowlist is options-carried, so the
+   rule takes project knowledge through configuration rather than off the disk.
 4. The message follows the repository's four-field shape — name, expected, actual, fix — with the fix naming
    deletion as a reachable end.
 
-**Scope.** The rule runs wherever `mint` can be called. That is the seven packages depending on
+**Scope.** The rule runs wherever a wire declaration can be written. That is the seven packages depending on
 `@systemfsoftware/effect-cell-types` today and any package that adopts the alphabet later — never one package
-by hand, which would be a gate that fires only where someone opted in.
+by hand, which would be a gate that fires only where someone opted in. It does **not** close the adoption
+hole: a file that never imports the alphabet writes `S.Struct` and is not a subject of this rule. Closing
+that needs an obligation over declaration cells and is not in this plan.
 
 **Test scenarios.**
 
-- Marking a workspace-declared schema passes. `Covers R1.`
-- Marking a vendor type directly is reported, naming the declaring file.
-- Marking a workspace-local alias of a vendor type is reported — the transitive case `GetAliasedSymbol`
-  exists for, and the one a specifier-keyed rule cannot see. `Covers R1, AE11.`
-- Marking a re-export of a re-export of a vendor type is reported.
+- A declaration whose members are all workspace-declared passes. `Covers R1.`
+- A member minted from a vendor type directly is reported, naming the declaring file and the field.
+- A member minted from a workspace-local alias of a vendor type is reported — the transitive case
+  `GetAliasedSymbol` exists for, and the one a specifier-keyed rule cannot see. `Covers R1, AE11.`
+- A member whose type is a re-export of a re-export of a vendor type is reported.
+- Each of the three forge routes pinned in `test-types/Wire.tst.ts` is reported: the written intersection,
+  the parameterised `Minted` alias, and the `Object.assign` derivation. These are the cases that fail if
+  the rule is ever keyed on the marking call instead of the member type, so each must observe its own
+  failure against a call-site-keyed implementation before the type-keyed one is accepted.
 - An allowlisted external declaration passes, and removing it from the allowlist makes the same file fail.
-- A locally defined function also named `mint` does not fire the rule.
+- A locally defined function also named `wire` does not fire the rule.
 
 **Execution note.** Write the Go unit tests first — no RuleTester ships, `@ttsc/testing` is private to that
 repo, and the end-to-end fixture is slow enough cold (109 s measured, 1.3–1.8 s warm) to be a gate rather than
