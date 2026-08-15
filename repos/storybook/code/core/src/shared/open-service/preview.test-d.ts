@@ -5,16 +5,12 @@ import { getService } from './preview.ts';
 
 describe('typed core getService (preview)', () => {
   it('types known core service ids without an explicit generic', () => {
-    expectTypeOf(getService('core/docgen', { internal: true }).queries.docgen.get)
-      .parameter(0)
-      .toEqualTypeOf<{
-        id: string;
-      }>();
-    expectTypeOf(getService('core/story-docs', { internal: true }).queries.storyDocs.get)
-      .parameter(0)
-      .toEqualTypeOf<{
-        id: string;
-      }>();
+    expectTypeOf(getService('core/docgen').queries.docgen.get).parameter(0).toEqualTypeOf<{
+      id: string;
+    }>();
+    expectTypeOf(getService('core/story-docs').queries.storyDocs.get).parameter(0).toEqualTypeOf<{
+      id: string;
+    }>();
   });
 
   it('falls back to RuntimeService for unknown ids', () => {
@@ -22,8 +18,6 @@ describe('typed core getService (preview)', () => {
   });
 
   it('honors an explicit generic over a known core id', () => {
-    expectTypeOf(
-      getService<RuntimeService>('core/docgen', { internal: true })
-    ).toEqualTypeOf<RuntimeService>();
+    expectTypeOf(getService<RuntimeService>('core/docgen')).toEqualTypeOf<RuntimeService>();
   });
 });

@@ -1,4 +1,40 @@
-import { Data, Deferred, Effect, Exit } from "effect"
+/**
+ * Backend-neutral tensor graph construction, materialization, and compilation.
+ *
+ * Most operations in this module are lazy in two senses: calling one returns an
+ * Effect, and running that Effect asks the active {@link Runtime.Runtime}
+ * service to create immutable semantic graph nodes rather than execute kernels.
+ * Static metadata is available immediately on the resulting {@link Lazy}
+ * handle. {@link compute}, readback, saving, and compiled-program execution are
+ * the materialization boundaries.
+ *
+ * A tensor belongs to one runtime identity and exact placement. Shapes are
+ * logical non-negative integer dimensions (`[]` is a scalar and zero extents
+ * are valid); dtypes do not generally promote; dense layouts expose no public
+ * strides. Encoded tensors remain logically shaped `f32` values while their
+ * `storage` describes packed bytes accepted only by dedicated operations.
+ * Runtime methods remain authoritative for native handle ownership, liveness,
+ * physical layout, and backend-specific support.
+ *
+ * Lazy handles need no explicit disposal, but they can retain concrete leaves.
+ * Concrete handles carry independent ownership and should be released with
+ * {@link clear} or {@link clearAll}; both operations are idempotent, so repeated
+ * cleanup is valid. Native finalization is a nondeterministic fallback.
+ * Releasing a concrete leaf invalidates lazy graphs that captured that handle.
+ * Compilation can retain authorized concrete leaves independently as
+ * executable constants.
+ *
+ * Compilation has three distinct reuse layers: {@link compile} owns a
+ * JavaScript signature LRU and single-flights traces, runtimes may structurally
+ * reuse immutable native executables, and backends may separately cache kernels
+ * or pipelines. Clearing the JavaScript cache does not flush native caches.
+ * Immutable executables support concurrent calls with independent outputs;
+ * interruption requests native cancellation and late native results are never
+ * transferred to the interrupted caller.
+ *
+ * @since 0.1.0
+ */
+import { Data, Deferred, Effect, Exit, type Scope } from "effect"
 import { dual } from "effect/Function"
 import * as Runtime from "./Runtime.ts"
 
@@ -11,7 +47,14 @@ import * as Runtime from "./Runtime.ts"
  */
 export type DType = Runtime.DType
 
-/** GGML K-quant storage encodings accepted by native tensor operations. */
+/**
+ * GGML K-quant storage encodings accepted by dedicated packed tensor
+ * operations. An encoded handle still has logical dtype `f32`; ordinary dense
+ * operations may reject its layout until it is explicitly dequantized.
+ *
+ * @since 0.1.0
+ * @category models
+ */
 export type GgmlKQuant = Runtime.TensorStorageEncoding
 
 /**
@@ -39,7 +82,9 @@ export interface TensorOptions {
 
 /**
  * Error type raised by tensor operations, both at graph construction time
- * (shape, dtype and device validation) and at evaluation time.
+ * (shape, dtype, placement, storage, and handle validation) and at compilation,
+ * execution, transfer, or I/O time. Effect interruption is not wrapped as a
+ * `TensorError`.
  *
  * @since 0.1.0
  * @category errors
@@ -55,8 +100,9 @@ export class TensorError extends Data.TaggedError("TensorError")<{
 
 /**
  * Common supertype of {@link Lazy} and {@link Concrete}. Graph-building
- * operations generally accept either form, subject to matching runtime,
- * placement, shape, and dtype requirements.
+ * operations generally accept either form, subject to matching live runtime
+ * ownership, placement, shape, dtype, and storage-layout requirements. Public
+ * metadata is descriptive and does not prove that a handle is live.
  *
  * @since 0.1.0
  * @category models
@@ -64,9 +110,11 @@ export class TensorError extends Data.TaggedError("TensorError")<{
 export type Any = Runtime.TensorHandle
 
 /**
- * A tensor described by an immutable semantic graph. Graph-building operations
- * do not run tensor kernels. Materialization occurs when the graph is submitted
- * through {@link compute}, readback, saving, or as a lazy executable input.
+ * A tensor described by an immutable semantic graph. Running graph-building
+ * Effects creates graph nodes but does not run tensor kernels. Materialization
+ * occurs when the graph is submitted through {@link compute}, readback, saving,
+ * or as a lazy executable input. A lazy handle has no release obligation but
+ * can retain concrete dependencies that must remain live until no longer used.
  *
  * @since 0.1.0
  * @category models
@@ -74,10 +122,12 @@ export type Any = Runtime.TensorHandle
 export type Lazy = Runtime.LazyTensorHandle
 
 /**
- * A materialized tensor whose data is owned by its backend handle, obtained
- * through evaluation, compiled execution, or loading. The handle keeps that
- * storage alive until {@link clear} succeeds or native finalization runs;
- * using a cleared handle fails.
+ * A materialized tensor whose ownership capability was returned by evaluation,
+ * compiled execution, or loading. Clear owned handles for deterministic
+ * cleanup; repeated cleanup of the same handle is valid. Physical storage may
+ * be shared and outlive the handle because of aliases, executable constants,
+ * readback exports, in-flight work, or allocator caches. Using a successfully
+ * cleared handle, or a lazy graph that captured it, still fails.
  *
  * @since 0.1.0
  * @category models
@@ -87,9 +137,11 @@ export type Concrete = Runtime.ConcreteTensorHandle
 /**
  * A backend-owned immutable executable and the metadata expected for its
  * outputs. The opaque handle retains its typed lowered program, static plans,
- * prepared artifacts, captured generated bindings or constants, and diagnostics.
- * There is no explicit program-release operation; drop JavaScript and cache
- * references to make the wrapper eligible for native finalization.
+ * prepared artifacts, captured generated bindings or constants, and
+ * diagnostics. It may be called concurrently; each invocation owns its output
+ * handles and workspace independently. There is no explicit program-release
+ * operation; drop JavaScript and cache references to make the wrapper eligible
+ * for native finalization.
  *
  * @since 0.1.0
  * @category compilation
@@ -111,8 +163,9 @@ export interface CompiledProgram {
 }
 
 /**
- * Refines a handle by its lazy tag. This does not validate runtime ownership or
- * whether concrete dependencies captured by the graph remain usable.
+ * Refines a handle by its public lazy tag. This performs no structural,
+ * ownership, placement, or liveness validation and does not prove that
+ * concrete dependencies captured by the graph remain usable.
  *
  * @since 0.1.0
  * @category refinements
@@ -120,8 +173,9 @@ export interface CompiledProgram {
 export const isLazyTensor = (self: Any): self is Lazy => self._tag === "LazyTensor"
 
 /**
- * Refines a handle by its concrete tag. This is not a liveness check: a cleared
- * concrete handle retains its tag but fails when used.
+ * Refines a handle by its public concrete tag. This is not an ownership or
+ * liveness check: a cleared or forged value can retain the tag but fail at the
+ * runtime boundary.
  *
  * @since 0.1.0
  * @category refinements
@@ -215,6 +269,9 @@ const sameStorage = (
       sameShape(a.physicalShape, b.physicalShape)
 
 const encodedRowBytes = (encoding: Runtime.TensorStorageEncoding, columns: number): number | undefined => {
+  // Every supported K-quant format packs 256 logical f32 values per block;
+  // only the encoded block size differs. Leading dimensions are flattened
+  // into rows by `validStorage` below.
   if (columns % 256 !== 0) return undefined
   const blockBytes = encoding === "Q2_K"
     ? 84
@@ -292,6 +349,8 @@ const graphTry = (
     const runtime = yield* Runtime.Runtime
     const result = yield* Effect.try({ try: () => evaluate(runtime), catch: (error) => caughtTensorError(op, error) })
     const handle = yield* fromBackend(op, runtime.node(result.request))
+    // Runtime brands are compile-time only. Validate all backend-visible
+    // metadata before exposing a native result to the public tensor API.
     return yield* Effect.try({
       try: () => validateTensorHandle(op, runtime, handle, { _tag: "LazyTensor", ...result }),
       catch: (error) => caughtTensorError(op, error)
@@ -303,10 +362,11 @@ const numel = (shape: ReadonlyArray<number>): number => shape.reduce((a, b) => a
 const isFloatDtype = (dtype: string): boolean => dtype === "f32" || dtype === "f64"
 
 /**
- * Creates a 0-d constant tensor. Native backends use a bounded process-local
- * pool keyed by value bits, dtype, and device, so a resident entry may be
- * reused; graph-node identity is not a public guarantee. Use {@link full} for
- * non-scalar shapes. Runtime-varying values must be declared as inputs: use
+ * Creates a lazy 0-d constant tensor. Running the Effect snapshots `value` into
+ * a semantic leaf but executes no tensor kernel. Native backends use a bounded
+ * process-local pool keyed by value bits, dtype, and device, so a resident entry
+ * may be reused; graph-node identity is not a public guarantee. Use {@link full}
+ * for non-scalar shapes. Runtime-varying values must be declared as inputs: use
  * {@link makeScalarInput} for a plain number or {@link makeInput}/{@link compile}
  * for tensor bindings.
  *
@@ -328,8 +388,8 @@ export const constant = (
   })
 
 /**
- * Creates a shared 0-d constant tensor with the same dtype and device as
- * `self` — the scalar counterpart of {@link zerosLike} / {@link onesLike}
+ * Creates a lazy 0-d constant tensor with the same dtype and placement as
+ * `self`, the scalar counterpart of {@link zerosLike} / {@link onesLike}
  * / {@link fullLike}, and the way to lift a numeric constant next to an
  * existing tensor (custom losses, optimizer updates) without threading a
  * device through the environment. Native runtimes may pool the leaf as
@@ -631,9 +691,11 @@ const dtypeOfTypedArray = (data: TypedArray): DType => {
 }
 
 /**
- * Creates a lazy tensor by copying the addressed bytes of `data` when this
- * graph-building Effect runs. Later source-array mutation does not change the
- * tensor. The dtype is inferred and shape defaults to `[data.length]`. This
+ * Creates a lazy tensor by snapshotting the addressed bytes of `data` when this
+ * graph-building Effect runs. The runtime must copy the bytes before successful
+ * completion, so later source-array mutation does not change the tensor. The
+ * dtype is inferred and shape defaults to `[data.length]`; the element count
+ * must match exactly, including for a view with nonzero `byteOffset`. This
  * semantic leaf lowers as an executable constant independently of
  * `constantWeights`; use an input placeholder for runtime-varying data.
  *
@@ -708,7 +770,8 @@ export const fullLike = (
   }))
 
 /**
- * Returns the shape of a tensor.
+ * Returns the immutable logical shape metadata without materializing the
+ * tensor. This is not the physical packed shape of an encoded handle.
  *
  * @since 0.1.0
  * @category getters
@@ -716,7 +779,9 @@ export const fullLike = (
 export const shape = (self: Any): ReadonlyArray<number> => self.shape
 
 /**
- * Returns the dtype of a tensor.
+ * Returns the logical dtype metadata without materializing the tensor. Encoded
+ * tensors report `f32`; their packed bytes are described separately by storage
+ * metadata.
  *
  * @since 0.1.0
  * @category getters
@@ -724,7 +789,9 @@ export const shape = (self: Any): ReadonlyArray<number> => self.shape
 export const dtype = (self: Any): DType => self.dtype
 
 /**
- * Returns the device a tensor lives on.
+ * Returns the backend-neutral device family from the handle's placement
+ * metadata without materializing the tensor. This does not include ordinal or
+ * memory-space details and is not sufficient for compatibility checks.
  *
  * @since 0.1.0
  * @category getters
@@ -1347,8 +1414,10 @@ export interface KdaChunkOptions {
  *
  * The implementation computes in f32 (f64 stays f64) with chunk size 64
  * and sub-chunk 16, using the pivot-factored decay and sequential
- * triangular substitution of the reference algorithm — no reciprocal
- * cumulative decay is ever formed. Not yet differentiable.
+ * triangular substitution of the reference algorithm; no reciprocal
+ * cumulative decay is ever formed. Its closed-form backward differentiates all
+ * five inputs but is not itself differentiable, so second-order derivatives are
+ * unavailable.
  *
  * @since 0.1.0
  * @category neural network
@@ -1415,8 +1484,9 @@ export const kdaChunk = (
  * (a left zero-padding of `K - 1` tokens). The output has the input's
  * shape. This is the KDA-style local mixing convolution; kept semantic so
  * compiled generation can carry the `K - 1`-token window as per-sequence
- * state instead of re-deriving it from composed ops. Not yet
- * differentiable.
+ * state instead of re-deriving it from composed ops. Dedicated first-order
+ * gradients are provided for input and weight, but their backward nodes are not
+ * differentiable, so second-order derivatives are unavailable.
  *
  * @since 0.1.0
  * @category neural network
@@ -1702,7 +1772,9 @@ export const pow: {
 
 /**
  * Batched matrix multiplication over the last two dimensions, with
- * broadcasting of the leading batch dimensions.
+ * broadcasting of the leading batch dimensions. Both operands must have rank
+ * at least 2, matching inner dimensions, dtype, and exact placement. This API
+ * intentionally does not apply vector/matrix rank promotion.
  *
  * @since 0.1.0
  * @category operations
@@ -1725,7 +1797,8 @@ export const matmul: {
 )
 
 /**
- * Options for reduction operations.
+ * Options for reduction operations. Dimensions are logical axes, independent
+ * of any backend physical layout.
  *
  * @since 0.1.0
  * @category models
@@ -2090,7 +2163,9 @@ export const prod = reduceOp("prod", (self, dims, keepdims) => ({
 }))
 
 /**
- * Reshapes a tensor. The total number of elements must stay the same.
+ * Reshapes a tensor in logical row-major element order. The total number of
+ * elements must stay the same; no `-1` inferred dimension or stride/view
+ * guarantee is provided.
  *
  * @since 0.1.0
  * @category shape operations
@@ -2120,8 +2195,10 @@ export const reshape: {
 )
 
 /**
- * Reorders the dimensions of a tensor. `dims` must be a permutation of the
- * tensor's rank; negative dimensions count from the end.
+ * Reorders the logical dimensions of a tensor. `dims` must be a permutation of
+ * the tensor's rank; negative dimensions count from the end. Whether the
+ * backend represents the result as a view or materializes a layout is not part
+ * of the API.
  *
  * @since 0.1.0
  * @category shape operations
@@ -2181,8 +2258,10 @@ export interface SliceOptions {
 }
 
 /**
- * Extracts a per-dimension range from a tensor. Negative indices resolve
- * against the dimension size; `stride` selects every n-th element.
+ * Extracts a per-dimension logical range from a tensor. Negative indices
+ * resolve against the dimension size, bounds are clamped to `[0, extent]`, and
+ * `stride` selects every n-th element. Only positive strides are supported, so
+ * this operation does not reverse dimensions.
  *
  * @since 0.1.0
  * @category shape operations
@@ -2227,8 +2306,8 @@ export const slice: {
 
 /**
  * Concatenates two or more tensors along an existing dimension. All tensors
- * must have the same rank, dtype and device, and match on every dimension
- * except the concatenated one.
+ * must have the same rank, dtype and exact placement, and match on every
+ * dimension except the concatenated one.
  *
  * @since 0.1.0
  * @category shape operations
@@ -2396,7 +2475,7 @@ export const unsqueeze: {
 
 /**
  * Stacks tensors along a new dimension inserted at `dim` (default `0`).
- * All tensors must have the same shape, dtype and device.
+ * All tensors must have the same shape, dtype, and exact placement.
  *
  * @since 0.1.0
  * @category shape operations
@@ -2520,6 +2599,9 @@ export const tile = (
       : reps
     for (let i = 0; i < rank; i++) {
       if (fullReps[i] === 1) continue
+      // Insert a repetition axis immediately before the source axis, broadcast
+      // it, then merge the adjacent axes. This preserves tile ordering without
+      // requiring a backend-specific repeat operation.
       const widened = yield* unsqueeze(cur, i)
       const broadcastShape = [...widened.shape]
       broadcastShape[i] = fullReps[i]
@@ -2934,6 +3016,8 @@ const triangleMask = (
     }
     const m = self.shape[self.shape.length - 2]
     const n = self.shape[self.shape.length - 1]
+    // Broadcasting column coordinates against shifted row coordinates builds
+    // one rank-2 mask that then broadcasts over every leading batch dimension.
     const rows = yield* reshape(yield* arange(m, undefined, { dtype: "i64" }), [m, 1])
     const cols = yield* reshape(yield* arange(n, undefined, { dtype: "i64" }), [1, n])
     const shifted = yield* add(rows, yield* constantLike(rows, diagonal))
@@ -3289,8 +3373,9 @@ const convTranspose2dImpl = (
         message: `${op}: ${cIn} input channels are not divisible into ${groups} groups`
       })
     }
-    // equivalent conv: dilated input, flipped channel-swapped kernel,
-    // padding' = dilation * (k - 1) - padding
+    // A transposed convolution is an ordinary convolution over a zero-inserted
+    // input with output/input kernel channels swapped and spatial axes flipped:
+    // padding' = dilation * (kernel - 1) - requested padding.
     const padY = opts.dilation * (kh - 1) - userPadding[0]
     const padX = opts.dilation * (kw - 1) - userPadding[1]
     if (padY < 0 || padX < 0) {
@@ -3464,6 +3549,9 @@ const pool2d = (
       })
     }
     const windows: Array<Lazy> = []
+    // Each kernel offset contributes one strided view of all output windows.
+    // Stacking those views turns pooling into a single reduction axis and keeps
+    // both the forward and adjoint in the ordinary graph vocabulary.
     for (let ky = 0; ky < kh; ky++) {
       for (let kx = 0; kx < kw; kx++) {
         windows.push(
@@ -3628,14 +3716,17 @@ export const cast: {
     }))
 )
 /**
- * Materializes all roots together and returns concrete handles in root order.
+ * Materializes all roots together and returns owned concrete handles in root
+ * order, including duplicates. An empty call performs no compilation or
+ * execution but still requires a runtime service.
  * A nonempty call submits one compile request, possibly served by the native
  * structural cache, and executes one immutable lowered plan. Shared subgraphs
  * run once and each shared random source has one draw across roots. Interruption
- * requests backend cancellation; already-submitted work may be retired safely
- * before resources are reclaimed. Returned outputs retain their escaping
- * storage across later invocations until cleared or finalized. Concrete roots
- * are accepted, but JavaScript identity and storage aliasing are unspecified;
+ * requests backend cancellation; the runtime must retire already-submitted work
+ * and release partial or late outputs rather than transferring them. Returned
+ * outputs retain their escaping storage across later invocations until cleared
+ * or finalized. Concrete roots are accepted, but JavaScript identity and
+ * storage aliasing are unspecified;
  * every returned handle has independent ownership and may be cleared without
  * consuming its concrete root.
  *
@@ -3651,40 +3742,43 @@ export const compute = <Roots extends ReadonlyArray<Any>>(
       return [] as unknown as { readonly [K in keyof Roots]: Concrete }
     }
     const runtime = yield* Runtime.Runtime
-    const executable = yield* fromBackend("compile", runtime.compile({ roots }))
-    const values = yield* fromBackend(
-      "execute",
-      runtime.execute(executable, { bindings: [], scalars: [], runtimeValues: {} })
+    let owned: ReadonlyArray<Concrete> = []
+    return yield* Effect.onExit(
+      Effect.gen(function*() {
+        const executable = yield* fromBackend("compile", runtime.compile({ roots }))
+        const values = yield* fromBackend(
+          "execute",
+          runtime.execute(executable, { bindings: [], scalars: [], runtimeValues: {} })
+        )
+        owned = values
+        if (values.length !== roots.length) {
+          return yield* new TensorError({
+            op: "execute",
+            message: `execute: backend returned ${values.length} tensors for ${roots.length} roots`
+          })
+        }
+        return (yield* Effect.forEach(values, (value, index) =>
+          Effect.try({
+            try: () =>
+              validateTensorHandle("execute", runtime, value, {
+                _tag: "Tensor",
+                shape: roots[index].shape,
+                dtype: roots[index].dtype,
+                ...(roots[index].storage === undefined ? {} : { storage: roots[index].storage }),
+                placement: roots[index].placement
+              }),
+            catch: (error) => caughtTensorError("execute", error)
+          }))) as { readonly [K in keyof Roots]: Concrete }
+      }),
+      (exit) => Exit.isFailure(exit) ? releaseTensors(runtime, owned) : Effect.void
     )
-    if (values.length !== roots.length) {
-      yield* releaseTensors(runtime, values)
-      return yield* new TensorError({
-        op: "execute",
-        message: `execute: backend returned ${values.length} tensors for ${roots.length} roots`
-      })
-    }
-    const checked = Effect.forEach(values, (value, index) =>
-      Effect.try({
-        try: () =>
-          validateTensorHandle("execute", runtime, value, {
-            _tag: "Tensor",
-            shape: roots[index].shape,
-            dtype: roots[index].dtype,
-            ...(roots[index].storage === undefined ? {} : { storage: roots[index].storage }),
-            placement: roots[index].placement
-          }),
-        catch: (error) => caughtTensorError("execute", error)
-      }))
-    return (yield* preserveOnFailure(checked, releaseTensors(runtime, values))) as {
-      readonly [K in keyof Roots]: Concrete
-    }
   })
 
 const typedArrayConstructor = (dtype: DType) => {
   switch (dtype) {
     case "f32":
-    // f16/bf16 read back as f32: the native side converts before the
-    // readback since JS has no half typed arrays we can rely on
+    // The public readback contract widens both half formats to portable f32;
+    // it does not expose their physical bit representation.
     case "f16":
     case "bf16":
       return Float32Array
@@ -3700,43 +3794,221 @@ const typedArrayConstructor = (dtype: DType) => {
 }
 
 /**
- * Deterministically releases this concrete handle's ownership and invalidates
- * it and lazy graphs that captured it. Call exactly once. This does not
- * guarantee immediate physical deallocation: aliases, in-flight invocations,
- * exported readback buffers, retained generated bindings or constants, and
- * allocator caches may still retain backing storage. Independently owned
- * handles remain valid.
+ * Controls one stateless native token draw from a concrete `[vocab]` logits
+ * row. Temperature defaults to `1`; `0` selects greedy argmax. `topK` defaults
+ * to `0` (disabled), and `topP` defaults to `1` (disabled). `seed` and
+ * `counter` identify the random draw without mutable global sampler state. The
+ * Metal GPU sampler requires `topK` in `1..=64` when positive-temperature
+ * `topP` filtering is enabled and rejects positive-temperature `topK > 64`.
+ *
+ * @since 0.1.0
+ * @category models
+ */
+export interface SamplingOptions {
+  readonly temperature?: number
+  readonly topK?: number
+  readonly topP?: number
+  readonly seed: number
+  readonly counter?: number
+}
+
+const MAX_SAMPLING_VOCABULARY = 1_048_576
+
+type SamplingLogits = Pick<CompiledProgram["outputs"][number], "shape" | "dtype" | "storage">
+
+const normalizeSamplingOptions = (
+  op: string,
+  logits: SamplingLogits,
+  options: SamplingOptions
+): Effect.Effect<Runtime.SamplingOptions, TensorError> =>
+  Effect.gen(function*() {
+    if (logits.shape.length !== 1 || logits.shape[0] === 0) {
+      return yield* new TensorError({
+        op,
+        message: `${op}: logits must have non-empty rank-one shape, got [${logits.shape}]`
+      })
+    }
+    const vocabulary = logits.shape[0]!
+    if (vocabulary > MAX_SAMPLING_VOCABULARY) {
+      return yield* new TensorError({
+        op,
+        message: `${op}: vocabulary ${vocabulary} exceeds limit ${MAX_SAMPLING_VOCABULARY}`
+      })
+    }
+    if (logits.storage !== undefined || !["f16", "bf16", "f32", "f64"].includes(logits.dtype)) {
+      return yield* new TensorError({
+        op,
+        message: `${op}: logits must be a dense floating-point tensor, got ${logits.dtype}`
+      })
+    }
+    const temperature = options.temperature ?? 1
+    const requestedTopK = options.topK ?? 0
+    const topP = options.topP ?? 1
+    const counter = options.counter ?? 0
+    if (!Number.isFinite(temperature) || temperature < 0) {
+      return yield* new TensorError({
+        op,
+        message: `${op}: temperature must be finite and non-negative, got ${temperature}`
+      })
+    }
+    if (!Number.isSafeInteger(requestedTopK) || requestedTopK < 0 || requestedTopK > vocabulary) {
+      return yield* new TensorError({
+        op,
+        message: `${op}: topK must be an integer in [0, ${vocabulary}], got ${requestedTopK}`
+      })
+    }
+    const topK = requestedTopK === vocabulary ? 0 : requestedTopK
+    if (!Number.isFinite(topP) || topP <= 0 || topP > 1) {
+      return yield* new TensorError({
+        op,
+        message: `${op}: topP must be finite and in (0, 1], got ${topP}`
+      })
+    }
+    if (!Number.isSafeInteger(options.seed) || options.seed < 0) {
+      return yield* new TensorError({
+        op,
+        message: `${op}: seed must be a non-negative safe integer, got ${options.seed}`
+      })
+    }
+    if (!Number.isSafeInteger(counter) || counter < 0) {
+      return yield* new TensorError({
+        op,
+        message: `${op}: counter must be a non-negative safe integer, got ${counter}`
+      })
+    }
+    return { temperature, topK, topP, seed: options.seed, counter }
+  })
+
+const validateSampledToken = (
+  op: string,
+  token: number,
+  logits: SamplingLogits
+): Effect.Effect<number, TensorError> => {
+  const vocabulary = logits.shape[0]!
+  return !Number.isSafeInteger(token) || token < 0 || token >= vocabulary
+    ? new TensorError({
+      op,
+      message: `${op}: backend returned invalid token ${token} for vocabulary ${vocabulary}`
+    })
+    : Effect.succeed(token)
+}
+
+/**
+ * Selects one token natively from a live, dense, rank-one floating-point logits
+ * tensor and returns its u32 offset as a JavaScript number. Sampling borrows the
+ * tensor and transfers no ownership. Top-k filtering is applied before top-p;
+ * equal greedy logits select the lower token id. Rows wider than 1,048,576 are
+ * rejected to bound candidate storage and cancellation latency. Identical
+ * tensor values, options, seed, and counter replay on the same backend.
  *
  * @since 0.1.0
  * @category destructors
  */
-export const clear = (self: Concrete): Effect.Effect<void, TensorError, Runtime.Runtime> =>
+export const sample = (
+  logits: Concrete,
+  options: SamplingOptions
+): Effect.Effect<number, TensorError, Runtime.Runtime> =>
   Effect.gen(function*() {
     const runtime = yield* Runtime.Runtime
-    yield* fromBackend("clear", runtime.release(self))
+    const normalized = yield* normalizeSamplingOptions("sample", logits, options)
+    const extension = runtime.extensions.sampling
+    const token = yield* fromBackend(
+      "sample",
+      extension.sample(logits, normalized)
+    )
+    return yield* validateSampledToken("sample", token, logits)
   })
 
 /**
- * Deterministically releases every concrete handle in input order. Each handle
- * must have independent ownership and must be supplied exactly once.
+ * Deterministically releases this concrete handle's ownership and invalidates
+ * it and lazy graphs that captured it. Cleanup is idempotent: clearing an
+ * already-cleared handle succeeds, while trying to use that handle still fails.
+ * The effect is non-failing; backend rejection of an invalid, foreign, or
+ * wrong-kind value is ignored. This does not guarantee immediate physical
+ * deallocation: aliases, in-flight invocations, exported readback buffers,
+ * retained generated bindings or constants, and allocator caches may still
+ * retain backing storage. Independently owned handles remain valid.
+ *
+ * @since 0.1.0
+ * @category destructors
+ */
+export const clear = (self: Concrete): Effect.Effect<void, never, Runtime.Runtime> =>
+  Effect.gen(function*() {
+    const runtime = yield* Runtime.Runtime
+    yield* Effect.ignore(runtime.release(self))
+  })
+
+const clearAllWithRuntime = (
+  runtime: Runtime.RuntimeService,
+  tensors: Iterable<Concrete>
+): Effect.Effect<void> => Effect.forEach(tensors, (tensor) => Effect.ignore(runtime.release(tensor)), { discard: true })
+
+/**
+ * Attempts to release every concrete handle in input order. Cleanup is
+ * non-failing and idempotent: duplicate, already-cleared, invalid, foreign, or
+ * wrong-kind handles do not fail the effect. Ordinary interruption stops
+ * processing.
  *
  * @since 0.1.0
  * @category destructors
  */
 export const clearAll = (
-  tensors: ReadonlyArray<Concrete>
-): Effect.Effect<void, TensorError, Runtime.Runtime> =>
+  tensors: Iterable<Concrete>
+): Effect.Effect<void, never, Runtime.Runtime> =>
   Effect.gen(function*() {
     const runtime = yield* Runtime.Runtime
-    yield* Effect.forEach(
-      tensors,
-      (tensor) => fromBackend("clearAll", runtime.release(tensor)),
-      { discard: true }
-    )
+    yield* clearAllWithRuntime(runtime, tensors)
   })
 
 /**
- * Evaluates a tensor and returns its values in a host typed array.
+ * Registers an arbitrary already-owned concrete handle for best-effort cleanup
+ * when the current Effect scope closes, then returns the same handle for
+ * composition. This only registers cleanup: it does not compute, acquire, or
+ * validate the tensor. Finalizer errors are ignored, and clearing the handle
+ * before scope closure is valid because cleanup is idempotent. This is an
+ * application ownership helper; library combinators should release tensors at
+ * their actual operation boundary rather than extending them to an ambient
+ * scope.
+ *
+ * @since 0.1.0
+ * @category destructors
+ */
+export const clearScoped = <A extends Concrete>(
+  self: A
+): Effect.Effect<A, never, Runtime.Runtime | Scope.Scope> =>
+  Effect.gen(function*() {
+    const runtime = yield* Runtime.Runtime
+    yield* Effect.addFinalizer(() => Effect.ignore(runtime.release(self)))
+    return self
+  })
+
+/**
+ * Registers arbitrary already-owned concrete handles for best-effort cleanup
+ * when the current Effect scope closes, then returns the original iterable for
+ * composition. The iterable's handle identities, order, and duplicates are
+ * snapshotted when this registration Effect runs, so later iterable mutation
+ * does not change the finalizer. This does not compute or acquire tensors, and
+ * finalizer errors are ignored. This is intended for application-owned resource
+ * scopes, not as internal lifetime management for streams or library
+ * combinators.
+ *
+ * @since 0.1.0
+ * @category destructors
+ */
+export const clearAllScoped = <Tensors extends Iterable<Concrete>>(
+  tensors: Tensors
+): Effect.Effect<Tensors, never, Runtime.Runtime | Scope.Scope> =>
+  Effect.gen(function*() {
+    const snapshot = Array.from(tensors)
+    const runtime = yield* Runtime.Runtime
+    yield* Effect.addFinalizer(() => clearAllWithRuntime(runtime, snapshot))
+    return tensors
+  })
+
+/**
+ * Evaluates a dense tensor and returns its logical row-major values in a host
+ * typed array. A lazy input is first materialized for readback; a concrete input
+ * is borrowed and remains caller-owned.
  * `f16` and `bf16` are widened to `Float32Array`; `f32`, `f64`, `i64`, `u8`,
  * and `u32` return `Float32Array`, `Float64Array`, `BigInt64Array`,
  * `Uint8Array`, and `Uint32Array`, respectively. The returned array remains
@@ -3757,17 +4029,25 @@ export const toTypedArray = (self: Any): Effect.Effect<TypedArray, TensorError, 
       })
     }
     const runtime = yield* Runtime.Runtime
-    const evaluated = isTensor(self) ? self : (yield* compute([self]))[0]
-    const buffer = yield* fromBackend("toTypedArray", runtime.readback(evaluated))
-    const Ctor = typedArrayConstructor(evaluated.dtype)
-    return new Ctor(buffer)
+    if (isTensor(self)) {
+      const buffer = yield* fromBackend("toTypedArray", runtime.readback(self))
+      return new (typedArrayConstructor(self.dtype))(buffer)
+    }
+    const [evaluated] = yield* compute([self])
+    return yield* Effect.ensuring(
+      Effect.map(
+        fromBackend("toTypedArray", runtime.readback(evaluated)),
+        (buffer) => new (typedArrayConstructor(evaluated.dtype))(buffer)
+      ),
+      Effect.ignore(runtime.release(evaluated))
+    )
   })
 
 /**
  * Evaluates a tensor and reads its values back as a plain JavaScript number
- * array. Fails with a `TensorError` for `i64` tensors, whose values may not
- * be representable as numbers — use {@link toTypedArray} there and handle
- * bigints explicitly.
+ * array in logical row-major order. Fails with a `TensorError` for `i64`
+ * tensors, whose values may not be representable as numbers; use
+ * {@link toTypedArray} there and handle bigints explicitly.
  *
  * @since 0.1.0
  * @category destructors
@@ -3797,13 +4077,57 @@ const validateMetadata = (op: string, metadata: Readonly<Record<string, string>>
 const releaseTensors = (
   runtime: Runtime.RuntimeService,
   values: ReadonlyArray<Concrete>
-): Effect.Effect<void> => Effect.ignore(Effect.forEach(values, (value) => runtime.release(value), { discard: true }))
+): Effect.Effect<void> => Effect.forEach(values, (value) => Effect.ignore(runtime.release(value)), { discard: true })
 
-const preserveOnFailure = <A, E, R>(
-  effect: Effect.Effect<A, E, R>,
-  cleanup: Effect.Effect<void>
-): Effect.Effect<A, E, R> => Effect.onExit(effect, (exit) => Exit.isFailure(exit) ? cleanup : Effect.void)
+const withMaterializedInputs = <A, E, R>(
+  runtime: Runtime.RuntimeService,
+  inputs: ReadonlyArray<Any>,
+  use: (inputs: ReadonlyArray<Concrete>) => Effect.Effect<A, E, R>
+): Effect.Effect<A, E | TensorError, R | Runtime.Runtime> => {
+  const lazy = inputs.filter((input) => !isTensor(input))
+  if (lazy.length === 0) return use(inputs as ReadonlyArray<Concrete>)
+  return Effect.gen(function*() {
+    const materialized = yield* compute(lazy)
+    let index = 0
+    const concrete = inputs.map((input) => isTensor(input) ? input : materialized[index++]!)
+    return yield* Effect.ensuring(
+      use(concrete),
+      releaseTensors(runtime, materialized)
+    )
+  })
+}
 
+const executeProgram = (
+  runtime: Runtime.RuntimeService,
+  op: string,
+  program: CompiledProgram,
+  invocation: Runtime.ExecutionInvocation
+): Effect.Effect<Array<Concrete>, TensorError> =>
+  Effect.suspend(() => {
+    let owned: ReadonlyArray<Concrete> = []
+    return Effect.onExit(
+      Effect.gen(function*() {
+        const values = yield* fromBackend(op, runtime.execute(program.handle, invocation))
+        owned = values
+        if (values.length !== program.outputs.length) {
+          return yield* new TensorError({
+            op,
+            message: `${op}: backend returned ${values.length} tensors for ${program.outputs.length} program outputs`
+          })
+        }
+        return yield* Effect.forEach(values, (value, index) =>
+          Effect.try({
+            try: () => validateTensorHandle(op, runtime, value, { _tag: "Tensor", ...program.outputs[index] }),
+            catch: (error) => caughtTensorError(op, error)
+          }))
+      }),
+      (exit) => Exit.isFailure(exit) ? releaseTensors(runtime, owned) : Effect.void
+    )
+  })
+
+// Result-validation failures occur after the backend transferred output
+// ownership. Pair validation with ordered best-effort cleanup that attempts
+// every release independently.
 /**
  * Options for direct safetensors writes.
  *
@@ -3834,10 +4158,14 @@ export interface SafetensorsArchive {
 }
 
 /**
- * Saves tensors through the runtime's optional direct path. All entries are
+ * Saves tensors through the runtime's direct path. All entries are
  * compiled and materialized together before the transfer service serializes
- * the resulting concrete tensors. Encoded tensors are rejected because
- * safetensors cannot preserve their logical storage metadata.
+ * the resulting concrete tensors. After the save attempt, the wrapper attempts
+ * to release every temporary in input order, independently ignoring release
+ * failures. Original concrete inputs remain caller-owned. Encoded
+ * tensors are rejected because safetensors cannot preserve their logical
+ * storage metadata. Interruption requests cancellation of compilation,
+ * execution, or I/O and transfers no ownership.
  *
  * @since 0.1.0
  * @category destructors
@@ -3862,12 +4190,6 @@ export const save = (
   return Effect.gen(function*() {
     const runtime = yield* Runtime.Runtime
     const extension = runtime.extensions.pathSafetensors
-    if (extension === undefined) {
-      return yield* new TensorError({
-        op: "save",
-        message: `save: backend ${runtime.backend.name} does not support path-based safetensors`
-      })
-    }
     const metadata = yield* Effect.try({
       try: () => validateMetadata("save", options.metadata ?? {}),
       catch: (error) => caughtTensorError("save", error)
@@ -3887,9 +4209,13 @@ export const save = (
 }
 
 /**
- * Loads tensors and archive metadata through the runtime's optional direct
- * path. Returned concrete handles own runtime storage; release them with
- * {@link clear} when deterministic cleanup is required.
+ * Loads tensors and archive metadata through the runtime's direct path.
+ * Returned concrete handles are validated against the active runtime and
+ * independently own runtime storage; release each with {@link clear} when
+ * deterministic cleanup is required. The extension owns partial/late cleanup
+ * for failed or interrupted loads. If a successful archive fails wrapper
+ * validation, every discoverable handle receives an independent best-effort
+ * release attempt in archive order.
  *
  * @since 0.1.0
  * @category constructors
@@ -3897,54 +4223,67 @@ export const save = (
 export const loadArchive = (
   path: string
 ): Effect.Effect<SafetensorsArchive, TensorError, Runtime.Runtime> =>
-  Effect.gen(function*() {
-    const runtime = yield* Runtime.Runtime
-    const extension = runtime.extensions.pathSafetensors
-    if (extension === undefined) {
-      return yield* new TensorError({
-        op: "loadArchive",
-        message: `loadArchive: backend ${runtime.backend.name} does not support path-based safetensors`
-      })
-    }
-    const archive = yield* fromBackend("loadArchive", extension.load(path))
-    const candidates: Array<Concrete> = []
-    if (typeof archive === "object" && archive !== null && Array.isArray(archive.entries)) {
-      for (const entry of archive.entries) {
-        if (
-          typeof entry === "object" && entry !== null && typeof entry.tensor === "object" && entry.tensor !== null &&
-          entry.tensor._tag === "Tensor"
-        ) candidates.push(entry.tensor)
-      }
-    }
-    const checked = yield* preserveOnFailure(
-      Effect.try({
-        try: () => {
-          if (typeof archive !== "object" || archive === null || !Array.isArray(archive.entries)) {
-            throw new TensorError({ op: "loadArchive", message: "loadArchive: backend returned an invalid archive" })
-          }
-          const metadata = validateMetadata("loadArchive", archive.metadata)
-          const names = new Set<string>()
-          const tensors = Object.create(null) as Record<string, Concrete>
+  Effect.suspend(() => {
+    let runtime: Runtime.RuntimeService | undefined
+    let candidates: ReadonlyArray<Concrete> = []
+    return Effect.onExit(
+      Effect.gen(function*() {
+        runtime = yield* Runtime.Runtime
+        const extension = runtime.extensions.pathSafetensors
+        const archive = yield* fromBackend("loadArchive", extension.load(path))
+        const discovered = new Set<Concrete>()
+        if (typeof archive === "object" && archive !== null && Array.isArray(archive.entries)) {
           for (const entry of archive.entries) {
             if (
-              typeof entry !== "object" || entry === null || typeof entry.name !== "string" ||
-              entry.name === "__metadata__" || names.has(entry.name)
+              typeof entry === "object" && entry !== null && typeof entry.tensor === "object" &&
+              entry.tensor !== null
             ) {
-              throw new TensorError({
-                op: "loadArchive",
-                message: "loadArchive: backend returned invalid tensor names"
-              })
+              discovered.add(entry.tensor as Concrete)
             }
-            names.add(entry.name)
-            tensors[entry.name] = validateTensorHandle("loadArchive", runtime, entry.tensor, { _tag: "Tensor" })
           }
-          return Object.freeze({ tensors: Object.freeze(tensors), metadata })
-        },
-        catch: (error) => caughtTensorError("loadArchive", error)
+        }
+        candidates = Array.from(discovered)
+        const checked = yield* Effect.try({
+          try: () => {
+            if (typeof archive !== "object" || archive === null || !Array.isArray(archive.entries)) {
+              throw new TensorError({ op: "loadArchive", message: "loadArchive: backend returned an invalid archive" })
+            }
+            const metadata = validateMetadata("loadArchive", archive.metadata)
+            const names = new Set<string>()
+            const handles = new Set<Concrete>()
+            const tensors = Object.create(null) as Record<string, Concrete>
+            for (const entry of archive.entries) {
+              if (
+                typeof entry !== "object" || entry === null || typeof entry.name !== "string" ||
+                entry.name === "__metadata__" || names.has(entry.name)
+              ) {
+                throw new TensorError({
+                  op: "loadArchive",
+                  message: "loadArchive: backend returned invalid tensor names"
+                })
+              }
+              names.add(entry.name)
+              const tensor = validateTensorHandle("loadArchive", runtime!, entry.tensor, { _tag: "Tensor" })
+              if (handles.has(tensor)) {
+                throw new TensorError({
+                  op: "loadArchive",
+                  message: "loadArchive: backend returned duplicate tensor ownership"
+                })
+              }
+              handles.add(tensor)
+              tensors[entry.name] = tensor
+            }
+            return Object.freeze({ tensors: Object.freeze(tensors), metadata })
+          },
+          catch: (error) => caughtTensorError("loadArchive", error)
+        })
+        return checked
       }),
-      releaseTensors(runtime, candidates)
+      (exit) =>
+        Exit.isFailure(exit) && runtime !== undefined
+          ? releaseTensors(runtime, candidates)
+          : Effect.void
     )
-    return checked
   })
 
 /**
@@ -3970,9 +4309,9 @@ export const load = (
 /**
  * Diagnostics for one JavaScript {@link ProgramCache}. `cached` is the current
  * cache-map size, including ready and pending traces that have not been cleared;
- * `compiled` counts builder trace attempts,
- * including failures and retraces after eviction. Neither field counts native
- * structural-cache misses, native compilations, or backend pipeline entries.
+ * `compiled` counts builder trace attempts, including failures and retraces
+ * after eviction. Neither field counts native structural-cache misses, native
+ * compilations, or backend pipeline entries.
  *
  * @since 0.1.0
  * @category compilation
@@ -3998,7 +4337,8 @@ export interface CompileStats {
 export interface CompileOptions extends Runtime.ExecutableCompileOptions {
   /**
    * Capacity for this function's ready JavaScript LRU entries. Signatures
-   * include runtime identity and each input's shape, dtype, and placement.
+   * include runtime identity and each input's shape, dtype, encoded-storage
+   * metadata, and placement id.
    * In-flight entries can temporarily exceed the capacity. Defaults to `32`.
    * This does not bound native structural or pipeline caches.
    */
@@ -4007,19 +4347,21 @@ export interface CompileOptions extends Runtime.ExecutableCompileOptions {
 
 /**
  * A lazily traced, signature-specialized compiled function. The first call for
- * a runtime and input metadata signature traces placeholders and obtains an
- * immutable native executable; later calls reuse its typed lowered instructions
- * and static plans. Lazy arguments are materialized before invocation. Every
- * call has independent workspace, random state, and outputs, so one executable
- * is concurrently callable and later calls do not overwrite live results.
+ * a runtime and ordered input metadata signature traces placeholders and
+ * obtains an immutable native executable; later calls reuse its typed lowered
+ * instructions and static plans. Lazy arguments are materialized before
+ * invocation. Every call has independent workspace, random state, and outputs,
+ * so one executable is concurrently callable and later calls do not overwrite
+ * live results.
  *
  * @since 0.1.0
  * @category compilation
  */
 export interface CompiledFn<E = never, R = never> {
   /**
-   * Executes the program selected by the inputs' runtime and metadata
-   * signature.
+   * Executes the program selected by the active runtime identity and the
+   * inputs' ordered metadata signature. All inputs must be owned by that
+   * runtime; lazy inputs are materialized together before execution.
    */
   readonly call: (
     inputs: ReadonlyArray<Any>
@@ -4129,9 +4471,11 @@ const evictProgramCache = (cache: ProgramCacheState): void => {
  * The thunk is only invoked on a miss — cache hits never build a
  * trace effect. Concurrent misses on the same key share one trace
  * (single-flight): the first caller traces, the rest await the same
- * deferred. A failed trace is removed from `entries` but still increments
- * `compiled` and remains in signature history until clear. Ready entries are
- * evicted after successful traces; pending entries can exceed capacity.
+ * deferred. Waiter interruption does not cancel the owner fiber's trace; the
+ * shared attempt continues for remaining waiters. A failed trace is removed
+ * from `entries` but still increments `compiled` and remains in signature
+ * history until clear. Ready entries are evicted after successful traces;
+ * pending entries can exceed capacity.
  *
  * @since 0.1.0
  * @category compilation
@@ -4181,9 +4525,12 @@ const runtimeSignatureIds = new WeakMap<object, number>()
 let nextRuntimeSignatureId = 0
 
 /**
- * Builds a process-local cache key from the object identity of
- * `runtime.identity` and each input's placement id, shape, and dtype. Tensor
- * values and handle identities are not part of the key.
+ * Builds a process-local, delimiter-joined cache key from the object identity
+ * of `runtime.identity` and each ordered input's placement id, logical shape,
+ * dtype, and complete encoded-storage metadata. Placement ids are not escaped
+ * or length-prefixed, so custom ids containing `|` can make distinct ordered
+ * input lists collide. Tensor values and handle identities are excluded, and
+ * ownership validation remains the backend's responsibility.
  *
  * @since 0.1.0
  * @category compilation
@@ -4204,11 +4551,14 @@ export const signatureOf = (inputs: ReadonlyArray<Any>, runtime: Runtime.Runtime
 }
 
 /**
- * Creates a tensor placeholder whose exemplar contributes metadata but not its
- * value. Tensor and scalar declarations share one unsigned slot namespace and
+ * Creates a lazy tensor placeholder whose exemplar contributes its logical
+ * shape, dtype, encoded storage, and placement but not its value. The exemplar
+ * is borrowed while the node is created and need not be the eventual binding.
+ * Tensor and scalar declarations share one unsigned slot namespace and
  * must form a contiguous range from zero. A slot may appear repeatedly only
- * when every declaration agrees on kind, shape, dtype, and device. Runtime
- * tensor bindings are supplied in ascending slot order with scalar slots omitted.
+ * when every declaration agrees on kind, shape, dtype, storage, and placement.
+ * Runtime tensor bindings are supplied in ascending slot order with scalar
+ * slots omitted.
  *
  * @since 0.1.0
  * @category compilation
@@ -4232,7 +4582,7 @@ export const makeInput = (slot: number, exemplar: Any): Effect.Effect<Lazy, Tens
   }))
 
 /**
- * Creates a 0-d runtime-scalar placeholder. It shares {@link makeInput}'s
+ * Creates a lazy 0-d runtime-scalar placeholder. It shares {@link makeInput}'s
  * contiguous slot namespace and repeated-declaration rules. {@link runProgram}
  * receives scalar values separately in ascending scalar-slot order.
  * `CompiledFn.call` has no scalar argument; use the manual placeholder,
@@ -4253,13 +4603,16 @@ export const makeScalarInput = (
   }))
 
 /**
- * Compiles nonempty traced roots into an immutable, concurrently callable
- * executable. Preparation validates the roots and contiguous tensor/scalar
- * slot contract and indexes the semantic graph once. With optimization enabled,
- * fusion, epilogue, and optimizer choices are recorded as side-table regions;
- * compilation does not insert fused semantic nodes or rebuild the graph.
- * Backend lowering then creates the authoritative typed instruction, memory,
- * and physical plans and prepares required artifacts.
+ * Compiles nonempty, active-runtime-owned traced roots into an immutable,
+ * concurrently callable executable. Preparation validates the roots and
+ * contiguous tensor/scalar slot contract and indexes the semantic graph once.
+ * With optimization enabled, fusion, epilogue, and optimizer choices are
+ * recorded as side-table regions; compilation does not insert fused semantic
+ * nodes or rebuild the graph. Backend lowering then creates the authoritative
+ * typed instruction, memory, and physical plans and prepares required
+ * artifacts. Compilation borrows roots; `constantWeights` may additionally
+ * retain eligible concrete storage in the executable. Root order and duplicates
+ * define output order. There is no explicit executable release operation.
  *
  * @since 0.1.0
  * @category compilation
@@ -4283,13 +4636,19 @@ export const freezeProgram = (
   })
 
 /**
- * Executes an immutable lowered plan; execution performs no graph traversal,
- * optimization, kernel selection, or allocation discovery. Lazy tensor inputs
- * are materialized together and those temporary handles are released after the
- * call. Tensor inputs and scalars bind their declarations in ascending slot
- * order within their separate arrays. The backend validates counts, metadata,
- * layout, placement, and ownership. Inputs are borrowed, while returned outputs
- * retain escaping storage until cleared or finalized; aliasing is unspecified.
+ * Executes an active-runtime-owned immutable lowered plan; execution performs
+ * no graph traversal, optimization, kernel selection, or allocation discovery.
+ * Lazy tensor inputs are materialized together and every temporary receives an
+ * independent best-effort release after the call. Tensor inputs and scalars
+ * bind their declarations in
+ * ascending slot order within their separate arrays. The backend validates
+ * counts, metadata, layout, placement, ownership, and liveness. Inputs are
+ * borrowed through completion, while every returned output independently owns
+ * its handle and retains escaping storage until cleared or finalized; aliasing
+ * is unspecified. Invocation interruption cancels or safely retires native
+ * work, and the backend owns partial or late output cleanup. The wrapper still
+ * performs the ordered temporary-input cleanup described above and transfers no
+ * result ownership.
  *
  * @since 0.1.0
  * @category compilation
@@ -4301,34 +4660,15 @@ export const runProgram = (
 ): Effect.Effect<Array<Concrete>, TensorError, Runtime.Runtime> =>
   Effect.gen(function*() {
     const runtime = yield* Runtime.Runtime
-    const materialized = inputs.every(isTensor) ? [] : yield* compute(inputs.filter((input) => !isTensor(input)))
-    let index = 0
-    const concrete = inputs.map((input) => isTensor(input) ? input : materialized[index++]!)
-    const values = yield* Effect.ensuring(
-      fromBackend(
-        "run",
-        runtime.execute(program.handle, { bindings: concrete, scalars, runtimeValues: {} })
-      ),
-      releaseTensors(runtime, materialized)
-    )
-    if (values.length !== program.outputs.length) {
-      yield* releaseTensors(runtime, values)
-      return yield* new TensorError({
-        op: "run",
-        message: `run: backend returned ${values.length} tensors for ${program.outputs.length} program outputs`
-      })
-    }
-    const checked = Effect.forEach(values, (value, index) =>
-      Effect.try({
-        try: () => validateTensorHandle("run", runtime, value, { _tag: "Tensor", ...program.outputs[index] }),
-        catch: (error) => caughtTensorError("run", error)
-      }))
-    return yield* preserveOnFailure(checked, releaseTensors(runtime, values))
+    return yield* withMaterializedInputs(runtime, inputs, (concrete) =>
+      executeProgram(runtime, "run", program, { bindings: concrete, scalars, runtimeValues: {} }))
   })
 
 /**
- * A backend-owned decode program with fixed batch width, attention geometry,
- * and output metadata.
+ * A backend-owned immutable decode program with fixed batch width, attention
+ * and recurrent geometry, and output metadata. The executable can be called
+ * concurrently only when invocations use disjoint live sequences from
+ * compatible pools.
  *
  * @since 0.1.0
  * @category compilation
@@ -4366,9 +4706,11 @@ export interface DecodeProgram extends Runtime.DecodeStateSchema {
 }
 
 /**
- * A backend-owned KV sequence: a mutable block table and logical token cursor
- * over one {@link KvPool}. Release live sequences deterministically with
- * {@link releaseKvSequence}; native finalization is a fallback.
+ * A backend-owned KV sequence: a mutable block table, logical token cursor, and
+ * recurrent state over one {@link KvPool}. Operations on one sequence must be
+ * serialized; do not execute, match, inspect, or release it concurrently.
+ * Release live sequences deterministically with {@link releaseKvSequence};
+ * native finalization is a fallback.
  *
  * @since 0.1.0
  * @category compilation
@@ -4379,9 +4721,12 @@ export interface KvSequence {
 }
 
 /**
- * A backend-owned KV pool containing the per-layer key/value arenas and prefix
- * cache. There is no explicit pool-release operation; its native storage is
- * finalized after the pool and all sequences backed by it become unreachable.
+ * A backend-owned decode-state pool containing fixed-capacity per-layer
+ * key/value arenas and a prefix cache. Each child sequence owns its mutable
+ * recurrent state; hybrid cache entries may retain recurrent snapshots at
+ * completed block boundaries. There is no explicit pool-release operation;
+ * child sequences retain it, and native storage is finalized after the pool and
+ * all sequences backed by it become unreachable.
  *
  * @since 0.1.0
  * @category compilation
@@ -4410,12 +4755,15 @@ export interface KvRecurrentGeometry {
 }
 
 /**
- * Allocates a fixed-capacity state pool. `maxTokens` and `blockSize` must be
- * positive integers with exact divisibility. Attention geometry must be either
- * entirely zero, for stateless or recurrent-only programs, or entirely positive. Each
- * recurrent family follows {@link KvRecurrentGeometry}'s corresponding rule.
+ * Allocates a fixed-capacity state pool in the active runtime. `maxTokens` and
+ * `blockSize` must be positive integers with exact divisibility. Attention
+ * geometry must be either entirely zero, for stateless or recurrent-only
+ * programs, or entirely positive. Each recurrent family follows
+ * {@link KvRecurrentGeometry}'s corresponding rule.
  * KV storage supports `f32`, `f16`, `bf16`, or quantized `u8`; recurrent state
- * remains `f32`. The pool must exactly match the compiled decode schema.
+ * remains `f32`. The pool must exactly match the compiled decode schema. The
+ * returned pool owns native storage but has no explicit release operation;
+ * release all child sequences and drop references to make it finalizable.
  *
  * @since 0.1.0
  * @category compilation
@@ -4440,12 +4788,6 @@ export const makeKvPool = (
   Effect.gen(function*() {
     const runtime = yield* Runtime.Runtime
     const extension = runtime.extensions.decode
-    if (extension === undefined) {
-      return yield* new TensorError({
-        op: "makeKvPool",
-        message: `makeKvPool: backend ${runtime.backend.name} does not support compiled inference`
-      })
-    }
     const handle = yield* fromBackend(
       "makeKvPool",
       extension.makePool({ layers, kvHeads, headDim, maxTokens, blockSize, dtype, ...recurrent })
@@ -4457,13 +4799,15 @@ export const makeKvPool = (
  * Creates an independent live sequence in `pool`.
  *
  * A sequence owns a block table, cursor, and recurrent state. It starts empty;
- * {@link kvPrefillMatch} may attach a resident prefix only for programs without
- * KDA or short-convolution recurrent state. Then execute prefill or decode with {@link runDecodeProgram} or
+ * {@link kvPrefillMatch} may attach a resident KV prefix and, for hybrid pools,
+ * the recurrent snapshot published at the same completed block boundary. Then
+ * execute prefill or decode with {@link runDecodeProgram} or
  * {@link runBatchedDecodeProgram}. Release it exactly once with
  * {@link releaseKvSequence} when it leaves the scheduler.
  *
- * Fails when the current runtime has no decode extension or when `pool` is not
- * owned by that runtime.
+ * Fails when `pool` is not owned by the current runtime. Sequence operations,
+ * including creation from the same pool, do not transfer or consume pool
+ * ownership.
  *
  * @since 0.1.0
  * @category compilation
@@ -4472,21 +4816,15 @@ export const makeKvSequence = (pool: KvPool): Effect.Effect<KvSequence, TensorEr
   Effect.gen(function*() {
     const runtime = yield* Runtime.Runtime
     const extension = runtime.extensions.decode
-    if (extension === undefined) {
-      return yield* new TensorError({
-        op: "makeKvSequence",
-        message: "makeKvSequence: inference extension is unavailable"
-      })
-    }
     const handle = yield* fromBackend("makeKvSequence", extension.makeSequence(pool.handle))
     return { handle }
   })
 
 /**
  * On a newly created empty sequence, attaches the longest resident whole-block
- * proper KV prefix of `tokens` and returns the matched length. For non-empty input, at
- * least one token is left for execution even when the complete sequence is
- * resident; empty input returns zero.
+ * proper KV prefix of `tokens` and returns the matched length. For non-empty
+ * input, at least one token is left for execution even when the complete
+ * sequence is resident; empty input returns zero.
  *
  * The result is the offset at which prefill should begin. A return value of
  * zero means no reusable prefix was found. Matching updates the sequence's
@@ -4495,10 +4833,11 @@ export const makeKvSequence = (pool: KvPool): Effect.Effect<KvSequence, TensorEr
  * completed block boundaries. Purely recurrent pools without KV blocks return
  * zero.
  *
- * Token values are expected to be non-negative integers representable as
- * `u32`; this wrapper leaves validation to the backend. Fails when the current
- * runtime has no decode extension or when `sequence` is invalid, released, or
- * owned by another runtime.
+ * This mutates the sequence and must not overlap execution, cursor inspection,
+ * another match, or release on the same handle. Token values are expected to be
+ * non-negative integers representable as `u32`; this wrapper leaves validation
+ * to the backend. Fails when `sequence` is invalid, released, or owned by
+ * another runtime.
  *
  * @since 0.1.0
  * @category compilation
@@ -4510,21 +4849,19 @@ export const kvPrefillMatch = (
   Effect.gen(function*() {
     const runtime = yield* Runtime.Runtime
     const extension = runtime.extensions.decode
-    return yield* extension === undefined
-      ? new TensorError({ op: "prefillMatch", message: "prefillMatch: inference extension is unavailable" })
-      : fromBackend("prefillMatch", extension.prefillMatch(sequence.handle, tokens))
+    return yield* fromBackend("prefillMatch", extension.prefillMatch(sequence.handle, tokens))
   })
 
 /**
- * Returns the current token cursor of `sequence`.
+ * Returns the current token cursor of `sequence`. Do not call this concurrently
+ * with another operation that mutates or releases the same sequence.
  *
  * The cursor includes tokens supplied by a matched prefix and tokens committed
  * by subsequent prefill or decode runs. It is independent of any active
  * attention window: window eviction may release old blocks without rewinding
  * the logical sequence position.
  *
- * Fails when the current runtime has no decode extension or when `sequence` is
- * invalid, released, or owned by another runtime.
+ * Fails when `sequence` is invalid, released, or owned by another runtime.
  *
  * @since 0.1.0
  * @category compilation
@@ -4533,20 +4870,19 @@ export const kvSequenceCursor = (sequence: KvSequence): Effect.Effect<number, Te
   Effect.gen(function*() {
     const runtime = yield* Runtime.Runtime
     const extension = runtime.extensions.decode
-    return yield* extension === undefined
-      ? new TensorError({ op: "sequenceCursor", message: "sequenceCursor: inference extension is unavailable" })
-      : fromBackend("sequenceCursor", extension.sequenceCursor(sequence.handle))
+    return yield* fromBackend("sequenceCursor", extension.sequenceCursor(sequence.handle))
   })
 
 /**
  * Releases `sequence` and returns every block reference it owns to its pool.
  *
- * The handle is invalid after this Effect succeeds. Callers that manage live
+ * The handle is invalid after this Effect succeeds. It must not be in-flight in
+ * an execution or another sequence operation. Callers that manage live
  * generation sessions should release each sequence exactly once; native
  * finalization is only a fallback for abandoned handles.
  *
- * Fails when the current runtime has no decode extension or when `sequence` is
- * invalid, already released, or owned by another runtime.
+ * Fails when `sequence` is invalid, already released, or owned by another
+ * runtime.
  *
  * @since 0.1.0
  * @category compilation
@@ -4555,9 +4891,7 @@ export const releaseKvSequence = (sequence: KvSequence): Effect.Effect<void, Ten
   Effect.gen(function*() {
     const runtime = yield* Runtime.Runtime
     const extension = runtime.extensions.decode
-    return yield* extension === undefined
-      ? new TensorError({ op: "releaseSequence", message: "releaseSequence: inference extension is unavailable" })
-      : fromBackend("releaseSequence", extension.releaseSequence(sequence.handle))
+    return yield* fromBackend("releaseSequence", extension.releaseSequence(sequence.handle))
   })
 
 /**
@@ -4567,13 +4901,15 @@ export const releaseKvSequence = (sequence: KvSequence): Effect.Effect<void, Ten
  * operations are converted to their incremental state or cursor forms when
  * present; every attention operation must be causal, and runtime scalar inputs
  * are rejected. Specialization creates one new semantic graph before ordinary
- * single-index compilation; later fusion remains side-table planning. State capacities and
- * `batch` must be positive unsigned 32-bit integers, `blockSize` must divide
- * `maxTokens`, and `window` must be an unsigned 32-bit integer in
- * `1..=maxTokens`. With `state.lastTokenRow`, every root must be
- * `[batch, T, V]` and the program outputs become advance-selected `[V]`
- * rows: one for batch 1, otherwise `batch` rows in row order. Compilation retains captured concrete leaves as
- * constants and therefore bypasses native structural executable caching.
+ * single-index compilation; later fusion remains side-table planning. State
+ * capacities and `batch` must be positive unsigned 32-bit integers, `blockSize`
+ * must divide `maxTokens`, and `window` must be an unsigned 32-bit integer in
+ * `1..=maxTokens`. With `state.lastTokenRow`, every root must be `[batch, T, V]`
+ * and the program outputs become advance-selected `[V]` rows: one for batch 1,
+ * otherwise `batch` rows in row order. Compilation retains captured concrete
+ * leaves as constants independently of their source handles and therefore
+ * bypasses bundled runtimes' native structural executable cache. The returned
+ * program has no explicit release operation.
  *
  * @since 0.1.0
  * @category compilation
@@ -4584,13 +4920,6 @@ export const compileDecodeProgram = (
 ): Effect.Effect<DecodeProgram, TensorError, Runtime.Runtime> =>
   Effect.gen(function*() {
     const runtime = yield* Runtime.Runtime
-    const extension = runtime.extensions.decode
-    if (extension === undefined) {
-      return yield* new TensorError({
-        op: "compileDecode",
-        message: `compileDecode: backend ${runtime.backend.name} does not support compiled inference`
-      })
-    }
     const handle = yield* fromBackend(
       "compileDecode",
       runtime.compile({
@@ -4619,15 +4948,19 @@ export const compileDecodeProgram = (
   })
 
 /**
- * Runs one sequence through an immutable decode executable. Lazy inputs are materialized
- * first, then one native call binds the input slots and executes against the
+ * Runs one sequence through an immutable decode executable. Lazy inputs are
+ * materialized first, then one native call binds the input slots and executes against the
  * sequence's pool. Program, sequence, pool geometry, runtime, input count, and
  * input metadata must agree. `tokens` contains the real, unpadded token ids
  * represented by the query rows; on success its length advances the cursor
  * and its values feed prefix-cache hashes. Token values and advance limits are
- * backend-validated. Failure or cancellation before commit rolls back cursor,
- * block, and recurrent-state changes. Returned outputs retain their storage
- * independently of the sequence and later invocations.
+ * backend-validated. The sequence is exclusively mutably borrowed for the call
+ * and must not participate in any concurrent sequence operation. Failure or
+ * cancellation before commit rolls back cursor, block, and recurrent-state
+ * changes, and the backend owns partial or late output cleanup. The wrapper
+ * independently attempts to release every lazy-input temporary. Returned
+ * outputs each own their handles and retain storage independently of the
+ * sequence and later invocations.
  *
  * @since 0.1.0
  * @category compilation
@@ -4640,37 +4973,64 @@ export const runDecodeProgram = (
 ): Effect.Effect<Array<Concrete>, TensorError, Runtime.Runtime> =>
   Effect.gen(function*() {
     const runtime = yield* Runtime.Runtime
-    if (runtime.extensions.decode === undefined) {
-      return yield* new TensorError({ op: "decode", message: "decode: inference extension is unavailable" })
-    }
-    const materialized = inputs.every(isTensor) ? [] : yield* compute(inputs.filter((input) => !isTensor(input)))
-    let index = 0
-    const concrete = inputs.map((input) => isTensor(input) ? input : materialized[index++]!)
-    const values = yield* Effect.ensuring(
-      fromBackend(
-        "decode",
-        runtime.execute(program.handle, {
-          bindings: concrete,
-          scalars: [],
-          runtimeValues: {},
-          state: { sequences: [seq.handle], tokens: [tokens] }
-        })
-      ),
-      releaseTensors(runtime, materialized)
-    )
-    if (values.length !== program.outputs.length) {
-      yield* releaseTensors(runtime, values)
+    return yield* withMaterializedInputs(runtime, inputs, (concrete) =>
+      executeProgram(runtime, "decode", program, {
+        bindings: concrete,
+        scalars: [],
+        runtimeValues: {},
+        state: { sequences: [seq.handle], tokens: [tokens] }
+      }))
+  })
+
+/**
+ * Runs one sequence through a decode program and samples its first active
+ * rank-one output in the same stateful native execution. Sampling options use
+ * the defaults and validation of {@link sample}. Lazy inputs are materialized
+ * and cleaned up exactly as in {@link runDecodeProgram}; no output tensor is
+ * published or requires cleanup because the call returns only the token id.
+ * Sequence mutation, cancellation, and rollback follow the ordinary decode
+ * execution contract.
+ *
+ * @since 0.1.0
+ * @category compilation
+ */
+export const runDecodeProgramSampled = (
+  program: DecodeProgram,
+  inputs: ReadonlyArray<Any>,
+  seq: KvSequence,
+  tokens: ReadonlyArray<number>,
+  sampling: SamplingOptions
+): Effect.Effect<number, TensorError, Runtime.Runtime> =>
+  Effect.gen(function*() {
+    const runtime = yield* Runtime.Runtime
+    const executeDecode = runtime.extensions.sampling.executeDecode
+    const output = program.outputs[0]
+    if (output === undefined) {
       return yield* new TensorError({
-        op: "decode",
-        message: `decode: backend returned ${values.length} tensors for ${program.outputs.length} program outputs`
+        op: "decodeSampled",
+        message: "decodeSampled: program has no active output to sample"
       })
     }
-    const checked = Effect.forEach(values, (value, index) =>
-      Effect.try({
-        try: () => validateTensorHandle("decode", runtime, value, { _tag: "Tensor", ...program.outputs[index] }),
-        catch: (error) => caughtTensorError("decode", error)
+    const normalized = yield* normalizeSamplingOptions("decodeSampled", output, sampling)
+    return yield* withMaterializedInputs(runtime, inputs, (concrete) =>
+      Effect.gen(function*() {
+        const sampled = yield* fromBackend(
+          "decodeSampled",
+          executeDecode(program.handle, {
+            bindings: concrete,
+            scalars: [],
+            runtimeValues: {},
+            state: { sequences: [seq.handle], tokens: [tokens] }
+          }, [normalized])
+        )
+        if (sampled.length !== 1) {
+          return yield* new TensorError({
+            op: "decodeSampled",
+            message: `decodeSampled: backend returned ${sampled.length} tokens for 1 active output`
+          })
+        }
+        return yield* validateSampledToken("decodeSampled", sampled[0]!, output)
       }))
-    return yield* preserveOnFailure(checked, releaseTensors(runtime, values))
   })
 
 /**
@@ -4684,7 +5044,10 @@ export const runDecodeProgram = (
  * when remaining dimensions match; the backend zero-pads that dimension to the
  * compiled width. Every other input must exactly match its declaration.
  * Returned outputs retain the fixed compiled batch width, so padded rows must
- * be ignored. Constraint or execution failure commits none of the sequences.
+ * be ignored. All sequences are exclusively borrowed and must be absent from
+ * every concurrent invocation or sequence operation. Constraint, execution,
+ * or cancellation failure commits none of the sequences and transfers no
+ * output ownership.
  *
  * @since 0.1.0
  * @category compilation
@@ -4697,44 +5060,85 @@ export const runBatchedDecodeProgram = (
 ): Effect.Effect<Array<Concrete>, TensorError, Runtime.Runtime> =>
   Effect.gen(function*() {
     const runtime = yield* Runtime.Runtime
-    if (runtime.extensions.decode === undefined) {
-      return yield* new TensorError({
-        op: "decodeBatched",
-        message: "decodeBatched: inference extension is unavailable"
-      })
-    }
-    const materialized = inputs.every(isTensor) ? [] : yield* compute(inputs.filter((input) => !isTensor(input)))
-    let index = 0
-    const concrete = inputs.map((input) => isTensor(input) ? input : materialized[index++]!)
-    const values = yield* Effect.ensuring(
-      fromBackend(
-        "decodeBatched",
-        runtime.execute(program.handle, {
-          bindings: concrete,
-          scalars: [],
-          runtimeValues: {},
-          state: {
-            sequences: seqs.map((sequence) => sequence.handle),
-            tokens
-          }
-        })
-      ),
-      releaseTensors(runtime, materialized)
-    )
-    if (values.length !== program.outputs.length) {
-      yield* releaseTensors(runtime, values)
-      return yield* new TensorError({
-        op: "decodeBatched",
-        message:
-          `decodeBatched: backend returned ${values.length} tensors for ${program.outputs.length} program outputs`
-      })
-    }
-    const checked = Effect.forEach(values, (value, index) =>
-      Effect.try({
-        try: () => validateTensorHandle("decodeBatched", runtime, value, { _tag: "Tensor", ...program.outputs[index] }),
-        catch: (error) => caughtTensorError("decodeBatched", error)
+    return yield* withMaterializedInputs(runtime, inputs, (concrete) =>
+      executeProgram(runtime, "decodeBatched", program, {
+        bindings: concrete,
+        scalars: [],
+        runtimeValues: {},
+        state: {
+          sequences: seqs.map((sequence) =>
+            sequence.handle
+          ),
+          tokens
+        }
       }))
-    return yield* preserveOnFailure(checked, releaseTensors(runtime, values))
+  })
+
+/**
+ * Runs a fixed-width batched decode program for its active sequences and
+ * samples one corresponding rank-one output per active row in the same native
+ * execution. `sampling` must contain one options object per active sequence;
+ * each object uses {@link sample}'s normalization and validation against that
+ * output's vocabulary metadata. The returned array contains only active token
+ * ids in sequence order. The backend publishes no output tensors, while lazy
+ * input cleanup and state transaction semantics match
+ * {@link runBatchedDecodeProgram}.
+ *
+ * @since 0.1.0
+ * @category compilation
+ */
+export const runBatchedDecodeProgramSampled = (
+  program: DecodeProgram,
+  inputs: ReadonlyArray<Any>,
+  seqs: ReadonlyArray<KvSequence>,
+  tokens: ReadonlyArray<ReadonlyArray<number>>,
+  sampling: ReadonlyArray<SamplingOptions>
+): Effect.Effect<Array<number>, TensorError, Runtime.Runtime> =>
+  Effect.gen(function*() {
+    const runtime = yield* Runtime.Runtime
+    const executeDecode = runtime.extensions.sampling.executeDecode
+    if (sampling.length !== seqs.length) {
+      return yield* new TensorError({
+        op: "decodeBatchedSampled",
+        message:
+          `decodeBatchedSampled: expected one sampling options object per active sequence, got ${sampling.length} for ${seqs.length}`
+      })
+    }
+    const normalized = yield* Effect.forEach(sampling, (options, index) => {
+      const output = program.outputs[index]
+      return output === undefined
+        ? new TensorError({
+          op: "decodeBatchedSampled",
+          message: `decodeBatchedSampled: program has no output for active index ${index}`
+        })
+        : normalizeSamplingOptions("decodeBatchedSampled", output, options)
+    })
+    return yield* withMaterializedInputs(runtime, inputs, (concrete) =>
+      Effect.gen(function*() {
+        const sampled = yield* fromBackend(
+          "decodeBatchedSampled",
+          executeDecode(program.handle, {
+            bindings: concrete,
+            scalars: [],
+            runtimeValues: {},
+            state: {
+              sequences: seqs.map((sequence) => sequence.handle),
+              tokens
+            }
+          }, normalized)
+        )
+        if (sampled.length !== normalized.length) {
+          return yield* new TensorError({
+            op: "decodeBatchedSampled",
+            message:
+              `decodeBatchedSampled: backend returned ${sampled.length} tokens for ${normalized.length} active outputs`
+          })
+        }
+        return yield* Effect.forEach(
+          sampled,
+          (token, index) => validateSampledToken("decodeBatchedSampled", token, program.outputs[index]!)
+        )
+      }))
   })
 
 /**
@@ -4793,7 +5197,9 @@ export const linear = (
  * Applies a row-oriented weight `[N, K]` to an input `[..., K]`. Dense
  * weights are transposed into the existing linear/matmul path; encoded
  * weights dispatch to a native packed operation. Bias is optional and may be
- * `[N]` or `[1, N]`.
+ * `[N]` or `[1, N]`. Packed weights are logically `f32` with validated GGML
+ * row geometry; the packed path returns logical `f32` regardless of the input's
+ * physical representation.
  *
  * @since 0.1.0
  * @category neural network
@@ -4995,9 +5401,10 @@ export const rotaryEmbedding = (
   })
 
 /**
- * Creates a lazily traced compiled function; calling `compile` itself does not
- * run `build` or perform native compilation. On the first call for each runtime
- * and ordered input metadata signature, the builder receives
+ * Creates a lazily traced compiled function; calling `compile` itself creates
+ * only its JavaScript cache and does not run `build` or perform native
+ * compilation. On the first call for each runtime and ordered input metadata
+ * signature, the builder receives
  * lazy placeholders carrying the call inputs' metadata, not their values, and
  * runs for each trace attempt on a cache miss. Its graph, including
  * differentiation or optimizer updates already built into it, is frozen into
@@ -5007,15 +5414,18 @@ export const rotaryEmbedding = (
  * before program execution. Random nodes in the semantic graph draw afresh on
  * each run.
  *
- * Retracing is automatic when runtime identity, placement, shape, or dtype
- * differs from every cached signature. Ready programs use least-recently-used
- * eviction at `cacheCapacity`; an evicted signature is traced again if used.
+ * Retracing occurs when runtime or input metadata produces a different cache
+ * key. Because {@link signatureOf} delimiter-joins unescaped placement ids,
+ * arbitrary custom ids can collide. Ready programs
+ * use least-recently-used eviction at `cacheCapacity`; an evicted signature is
+ * traced again if used.
  * Materializing a tensor inside `build` fails at trace time — a compiled
  * builder is a pure graph builder over its placeholders. Runtime-varying
  * scalars require the manual {@link makeScalarInput}, {@link freezeProgram},
  * and {@link runProgram} path because `CompiledFn.call` binds tensors only.
  * The JavaScript signature LRU, native structural executable cache, and backend
- * pipeline caches are distinct; `CompiledFn.clear` clears only the first.
+ * pipeline caches are distinct; `CompiledFn.clear` clears only the first and
+ * cannot prevent an already in-flight trace from inserting its result later.
  *
  * @since 0.1.0
  * @category compilation

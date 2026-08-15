@@ -68,8 +68,8 @@ export interface AtomRpcClient<Self, Id extends string, Rpcs extends Rpc.Any> ex
       {
         readonly payload: Rpc.PayloadConstructor<Rpc.ExtractTag<Rpcs, Tag>>
         readonly reactivityKeys?:
-          | ReadonlyArray<unknown>
-          | ReadonlyRecord<string, ReadonlyArray<unknown>>
+          | readonly unknown[]
+          | ReadonlyRecord<string, readonly unknown[]>
           | undefined
         readonly headers?: Headers.Input | undefined
       },
@@ -84,8 +84,8 @@ export interface AtomRpcClient<Self, Id extends string, Rpcs extends Rpc.Any> ex
     options?: {
       readonly headers?: Headers.Input | undefined
       readonly reactivityKeys?:
-        | ReadonlyArray<unknown>
-        | ReadonlyRecord<string, ReadonlyArray<unknown>>
+        | readonly unknown[]
+        | ReadonlyRecord<string, readonly unknown[]>
         | undefined
       readonly timeToLive?: Duration.Input | undefined
       readonly serializationKey?: string | undefined
@@ -222,8 +222,8 @@ export const Service = <Self>() =>
     const fnAtom = runtime.fn<{
       readonly payload: unknown
       readonly reactivityKeys?:
-        | ReadonlyArray<unknown>
-        | ReadonlyRecord<string, ReadonlyArray<unknown>>
+        | readonly unknown[]
+        | ReadonlyRecord<string, readonly unknown[]>
         | undefined
       readonly headers?: Headers.Input | undefined
     }>()(
@@ -253,8 +253,8 @@ export const Service = <Self>() =>
       {
         readonly payload: Rpc.PayloadConstructor<Rpc.ExtractTag<Rpcs, Tag>>
         readonly reactivityKeys?:
-          | ReadonlyArray<unknown>
-          | ReadonlyRecord<string, ReadonlyArray<unknown>>
+          | readonly unknown[]
+          | ReadonlyRecord<string, readonly unknown[]>
           | undefined
         readonly headers?: Headers.Input | undefined
       },
@@ -333,8 +333,8 @@ export const Service = <Self>() =>
     options?: {
       readonly headers?: Headers.Input | undefined
       readonly reactivityKeys?:
-        | ReadonlyArray<unknown>
-        | ReadonlyRecord<string, ReadonlyArray<unknown>>
+        | readonly unknown[]
+        | ReadonlyRecord<string, readonly unknown[]>
         | undefined
       readonly timeToLive?: Duration.Input | undefined
       readonly serializationKey?: string | undefined
@@ -369,8 +369,8 @@ interface QueryKey<Rpcs extends Rpc.Any> {
   payload: unknown
   headers: Headers.Headers | undefined
   reactivityKeys:
-    | ReadonlyArray<unknown>
-    | ReadonlyRecord<string, ReadonlyArray<unknown>>
+    | readonly unknown[]
+    | ReadonlyRecord<string, readonly unknown[]>
     | undefined
   timeToLive: Duration.Duration | undefined
   serializationKey: string | undefined

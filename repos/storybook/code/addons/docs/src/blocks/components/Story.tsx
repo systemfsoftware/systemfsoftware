@@ -1,4 +1,4 @@
-/* oxlint-disable react-classic/destructuring-assignment */
+/* eslint-disable react/destructuring-assignment */
 import type { FunctionComponent } from 'react';
 import React, { useEffect, useRef, useState } from 'react';
 

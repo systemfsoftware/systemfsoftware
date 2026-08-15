@@ -59,7 +59,7 @@ The shipped fix introduces a pure classification cell that picks a destination f
 `omp/plugins/omp-claude-compat/src/prompt-destination.kernel.ts:19-32` declares the sigil list that mirrors the host's dispatch:
 
 ```ts
-const HOST_COMMAND_PREFIXES: ReadonlyArray<string> = [
+const HOST_COMMAND_PREFIXES: readonly string[] = [
   '/',
   '!',
   '->',
@@ -93,7 +93,7 @@ const hostBound = isHostBound(event.text)
 // Left undrained for a host-bound prompt: an async note is one-shot, so it
 // has to survive this command and reach the next model-bound prompt.
 const pending = Match.value(hostBound).pipe(
-  Match.when(true, (): ReadonlyArray<string> => []),
+  Match.when(true, (): readonly string[] => []),
   Match.when(false, () => drainAsyncHookOutput()),
   Match.exhaustive,
 )
@@ -141,5 +141,5 @@ Merge state as of this run: pending. The fix is uncommitted; no SHAs are recorde
 
 ## Related Issues
 
-- [`docs/solutions/architecture-patterns/workflow-error-channel-gates.md`](../architecture-patterns/workflow-error-channel-gates.md) — same plugin and same `.workflow.ts` cell type; shares the architect-workflow gates and the `pbt-naming` prevention rule. Moderate overlap (referenced files, prevention rules); distinct problem and root cause.
+- [`docs/solutions/architecture-patterns/workflow-error-channel-gates.md`](../architecture-patterns/workflow-error-channel-gates.md) — same plugin and same `.workflow.ts` cell type; shares the workflow error-channel gates and the `pbt-naming` prevention rule. Moderate overlap (referenced files, prevention rules); distinct problem and root cause.
 - No related GitHub issues (`gh issue list` over hook / UserPromptSubmit / slash-command / omp-claude-compat returned zero rows).

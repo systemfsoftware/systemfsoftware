@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import process from 'node:process'
 import { pathToFileURL } from 'node:url'
+import { underline } from 'ansis'
 import { depsStore, init, isSupported } from 'import-without-cache'
 import { createDebug } from 'obug'
 import { createConfigCoreLoader } from 'unconfig-core'
@@ -9,7 +10,6 @@ import { isInCI } from '../utils/ci.ts'
 import { fsStat } from '../utils/fs.ts'
 import { importWithError, toArray } from '../utils/general.ts'
 import { globalLogger } from '../utils/logger.ts'
-import { styleText } from '../utils/style.ts'
 import type { InlineConfig, UserConfig, UserConfigExport } from './types.ts'
 import type {
   ConfigEnv,
@@ -45,7 +45,7 @@ export async function loadViteConfig(
     config: [exported, deps],
     source,
   } = result
-  globalLogger.info(`Using Vite config: ${styleText.underline(source)}`)
+  globalLogger.info(`Using Vite config: ${underline(source)}`)
 
   exported = await exported
   if (typeof exported === 'function') {
@@ -130,7 +130,7 @@ export async function loadConfigFile(
     } = result)
 
     globalLogger.info(
-      `config file: ${styleText.underline(file)}`,
+      `config file: ${underline(file)}`,
       loader === 'native' ? '' : `(${loader})`,
     )
 

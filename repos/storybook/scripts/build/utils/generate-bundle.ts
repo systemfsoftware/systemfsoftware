@@ -1,3 +1,4 @@
+/* eslint-disable local-rules/no-uncategorized-errors */
 import { existsSync, watch } from 'node:fs';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 
@@ -89,11 +90,6 @@ export async function generateBundle({
     treeShaking: true,
     color: true,
     external,
-    loader: {
-      // The MCP packages import markdown/html instruction and template files as text
-      '.md': 'text',
-      '.html': 'text',
-    },
     minifySyntax: true,
     define: {
       /*

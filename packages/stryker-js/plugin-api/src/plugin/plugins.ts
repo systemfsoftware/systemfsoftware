@@ -13,8 +13,8 @@ import { PluginKind } from './plugin-kind.js'
  * Represents a StrykerPlugin
  */
 export type Plugin<TPluginKind extends PluginKind> =
-  | ClassPlugin<TPluginKind, Array<InjectionToken<PluginContext>>>
-  | FactoryPlugin<TPluginKind, Array<InjectionToken<PluginContext>>>
+  | ClassPlugin<TPluginKind, InjectionToken<PluginContext>[]>
+  | FactoryPlugin<TPluginKind, InjectionToken<PluginContext>[]>
   | ValuePlugin<TPluginKind>
 
 /**
@@ -22,7 +22,7 @@ export type Plugin<TPluginKind extends PluginKind> =
  */
 export interface FactoryPlugin<
   TPluginKind extends PluginKind,
-  Tokens extends Array<InjectionToken<PluginContext>>,
+  Tokens extends InjectionToken<PluginContext>[],
 > {
   readonly kind: TPluginKind
   readonly name: string
@@ -50,7 +50,7 @@ export interface ValuePlugin<TPluginKind extends PluginKind> {
  */
 export interface ClassPlugin<
   TPluginKind extends PluginKind,
-  Tokens extends Array<InjectionToken<PluginContext>>,
+  Tokens extends InjectionToken<PluginContext>[],
 > {
   readonly kind: TPluginKind
   readonly name: string
@@ -73,7 +73,7 @@ export interface ClassPlugin<
  */
 export function declareClassPlugin<
   TPluginKind extends PluginKind,
-  Tokens extends Array<InjectionToken<PluginContext>>,
+  Tokens extends InjectionToken<PluginContext>[],
 >(
   kind: TPluginKind,
   name: string,
@@ -98,7 +98,7 @@ export function declareClassPlugin<
  */
 export function declareFactoryPlugin<
   TPluginKind extends PluginKind,
-  Tokens extends Array<InjectionToken<PluginContext>>,
+  Tokens extends InjectionToken<PluginContext>[],
 >(
   kind: TPluginKind,
   name: string,

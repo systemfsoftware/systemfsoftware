@@ -38,7 +38,7 @@ const isDualCall = (init: ESTree.Expression | null | undefined): boolean => {
 // `Effect.fn` initialiser IS the single operation export — not a bare value beside it.
 // Two call shapes reach the same API: `Effect.fn(impl)` and the named
 // `Effect.fn('span')(impl)`, whose callee is itself the `Effect.fn(...)` call.
-// Detection is pinned to the canonical `Effect` namespace (EW4, as in
+// Detection is pinned to the canonical `Effect` namespace (OX-CI1, as in
 // store-effect-fn-required), so `E.fn`, `Effect['fn']`, and any other alias stay
 // documented near-misses rather than silently counting as an operation.
 const isEffectFnMember = (callee: ESTree.Expression): boolean =>

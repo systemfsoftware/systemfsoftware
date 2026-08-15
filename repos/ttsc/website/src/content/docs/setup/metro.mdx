@@ -1,0 +1,95 @@
+import { Tabs } from "nextra/components";
+
+# Metro (React Native)
+
+React Native and Expo bundle with Metro, which transpiles each file with Babel. Babel strips TypeScript types and never runs TypeScript transformers, so neither the `ttsc` CLI nor `@ttsc/unplugin` can reach the build. `@ttsc/metro` is the adapter for that world: a Metro custom transformer that runs the `ttsc` plugin pass (typia, nestia, ...) on each TypeScript file, then hands the result to your existing Expo or React-Native Babel transformer.
+
+## Install
+
+<Tabs items={["npm", "pnpm", "yarn", "bun"]}>
+  <Tabs.Tab>
+    ```bash
+    npm install -D ttsc typescript @ttsc/metro
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash
+    pnpm add -D ttsc typescript @ttsc/metro
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash
+    yarn add -D ttsc typescript @ttsc/metro
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash
+    bun add -d ttsc typescript @ttsc/metro
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+## Wrap your Metro config
+
+For Expo:
+
+```js
+// metro.config.js
+const { getDefaultConfig } = require("expo/metro-config");
+const { withTtsc } = require("@ttsc/metro");
+
+module.exports = withTtsc(getDefaultConfig(__dirname));
+```
+
+For bare React Native, the only change is where the default config comes from:
+
+```js
+// metro.config.js
+const { getDefaultConfig } = require("@react-native/metro-config");
+const { withTtsc } = require("@ttsc/metro");
+
+module.exports = withTtsc(getDefaultConfig(__dirname));
+```
+
+`withTtsc` sets `transformer.babelTransformerPath` and leaves the rest of your config untouched. It auto-detects the upstream Babel transformer to delegate to: `@expo/metro-config/babel-transformer` for Expo, then `@react-native/metro-babel-transformer`, then the legacy `metro-react-native-babel-transformer`.
+
+## Options
+
+By default `@ttsc/metro` finds the nearest `tsconfig.json` from the file being transformed and runs the plugins configured there, the standard `ttsc` model. If that is what you want, wrapping the default config is the whole setup.
+
+Options are the second argument and mirror `@ttsc/unplugin`, plus a few Metro-specific knobs:
+
+```js
+module.exports = withTtsc(getDefaultConfig(__dirname), {
+  project: "tsconfig.build.json",
+  plugins: [{ transform: "typia/lib/transform" }],
+  exclude: ["__tests__"],
+});
+```
+
+- `project`: the `tsconfig.json` the transformer should read, resolved from `process.cwd()`.
+- `compilerOptions`: a temporary overlay layered on the selected project config.
+- `plugins`: an explicit plugin list override, or `false` to disable project plugins.
+- `upstreamTransformer`: an explicit module path for the Babel transformer to delegate to, when auto-detection is not what you want.
+- `include` / `exclude`: substring patterns against the project-relative path, selecting which files run through the `ttsc` pass. Only `.ts`/`.tsx`/`.cts`/`.mts` are candidates; declaration and JavaScript files always pass straight through.
+
+Options travel from the Metro config process to its worker processes through an environment variable, so they must stay JSON-serialisable: substring patterns, not `RegExp`.
+
+## Cache invalidation
+
+A module-resolution candidate that would outrank a selected target is recorded as a fingerprint input. A missing candidate remains recorded even when it lies under the project root, so creating it changes the next Metro cache key even though the first project walk could not hash a path that did not yet exist. Existing unsuccessful probes are already part of the ordinary project walk or the recorded out-of-walk set.
+
+Metro keys its transform cache on each file's own content plus one static transformer key evaluated once per run, and its babel-transformer contract offers no per-file dependency registration. A `ttsc` transform can depend on a type declared in another file, so `@ttsc/metro` folds a project fingerprint into the static key: every regular file reached by the non-following project walk, plus [reference-graph](/docs/development/reference/driver-api#reference-graph) inputs outside that walk (`node_modules` declarations, monorepo sibling sources, files reached through symlinks or Windows junctions, and out-of-root tsconfig `extends` ancestry), which the transformer records under `node_modules/.cache/ttsc-metro` as it runs. Editing any fingerprinted input re-keys the next run, so `metro bundle` and dev-server starts pick up cross-file type changes, `tsconfig` edits, and plugin configuration changes without `--reset-cache`.
+
+The recorded out-of-walk set follows what the transform core derives per file, so a plugin that declares its reported dependency list [complete](/docs/development/concepts/protocol#dependency-completeness) for a file narrows what that file contributes to the fingerprint. Files under the project root are walked regardless of any declaration.
+
+The granularity is project-level because Metro's contract admits nothing finer: one key per run means any fingerprinted change re-transforms every file on the next run. Two behaviors sit outside the mechanism's reach:
+
+- **Within a running dev server**, Metro re-transforms only files its watcher reports changed, so editing a type in file B refreshes a dependent file A on A's next transform. Save A, or restart the dev server; no `--reset-cache` is needed in either case.
+- **Files a plugin declares [`volatile`](/docs/development/concepts/protocol#transform)** depend on non-file inputs no fingerprint can represent; while a volatile declaration is recorded, cross-run cache reuse is disabled entirely.
+- **If snapshot persistence fails**, a recovery document beside `node_modules/.cache/ttsc-metro` makes every later key non-reusable until the pending observations are compacted under a fresh epoch; if an older readable snapshot exists and neither the snapshot nor recovery location is writable, the transform fails instead of authorizing stale reuse.
+
+## Caveats (v1)
+
+- **Cost model.** The transform core type-checks the whole project and caches the result per process. Metro runs a multi-process worker pool, so the project compiles once per worker, on that worker's first file. A resident incremental compiler shared across workers is the planned fix, tracked in [#255](https://github.com/samchon/ttsc/issues/255).
+- **Type errors fail the build.** The pass type-checks, and a project type error surfaces as a Metro build error, matching every other `ttsc` integration.

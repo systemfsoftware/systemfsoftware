@@ -1,0 +1,29 @@
+{
+  "private": true,
+  "name": "@ttsc/benchmark-evidence",
+  "version": "0.27.0",
+  "description": "Minimal Codex runner for the Evidence benchmark.",
+  "exports": {
+    "./runner": "./src/EvidenceBenchmarkRunner.ts",
+    "./workspace": "./src/EvidenceBenchmarkWorkspace.ts"
+  },
+  "scripts": {
+    "audit-suspensions": "node ../../packages/ttsc/lib/launcher/ttsx.js --project tsconfig.json src/executable/EvidenceBenchmarkSuspensionAudit.ts",
+    "start": "node ../../packages/ttsc/lib/launcher/ttsx.js --project tsconfig.json src/executable/EvidenceBenchmarkCommandLine.ts",
+    "supervise": "node ../../packages/ttsc/lib/launcher/ttsx.js --project tsconfig.json src/executable/EvidenceBenchmarkSupervision.ts",
+    "warn": "node ../../packages/ttsc/lib/launcher/ttsx.js --project tsconfig.json src/executable/EvidenceBenchmarkWarning.ts",
+    "dashboard": "node ../../packages/ttsc/lib/launcher/ttsx.js --project tsconfig.json src/executable/EvidenceBenchmarkDashboard.ts",
+    "coverage": "node ../../packages/ttsc/lib/launcher/ttsx.js --project tsconfig.json src/executable/EvidenceBenchmarkCoverage.ts",
+    "report": "node ../../packages/ttsc/lib/launcher/ttsx.js --project tsconfig.json src/executable/EvidenceBenchmarkReport.ts",
+    "charts": "node ../../packages/ttsc/lib/launcher/ttsx.js --project tsconfig.json src/executable/EvidenceBenchmarkChart.ts",
+    "reconcile": "node ../../packages/ttsc/lib/launcher/ttsx.js --project tsconfig.json src/executable/EvidenceBenchmarkReconcile.ts",
+    "check": "tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:utils",
+    "ttsc": "workspace:*",
+    "typescript": "catalog:typescript",
+    "typia": "catalog:samchon",
+    "yaml": "catalog:utils"
+  }
+}

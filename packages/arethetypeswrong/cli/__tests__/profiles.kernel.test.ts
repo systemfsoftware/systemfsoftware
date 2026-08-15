@@ -4,7 +4,7 @@ import { describe, expect } from 'vitest'
 
 import { applyProfile, ApplyProfileCommand, ApplyProfileDecision } from '../src/profiles.kernel.js'
 
-const commandFor = (profileName: 'strict' | 'node16' | 'esm-only', ignoreResolutions?: ReadonlyArray<string>) =>
+const commandFor = (profileName: 'strict' | 'node16' | 'esm-only', ignoreResolutions?: readonly string[]) =>
   new ApplyProfileCommand({
     profileName,
     request: ignoreResolutions === undefined ? {} : { ignoreResolutions },

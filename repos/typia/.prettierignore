@@ -1,0 +1,7 @@
+bin/
+lib/
+node_modules/
+
+tests/test-typia-generate/src/output
+tests/test-typia-automated/src/features
+website/.next

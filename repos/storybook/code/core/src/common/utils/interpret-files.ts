@@ -1,8 +1,9 @@
 import { existsSync } from 'node:fs';
 import { extname } from 'node:path';
 
+import { ResolverFactory } from 'oxc-resolver';
+
 import { storybookConfigExtensions } from '../../shared/constants/extensions.ts';
-import { createModuleResolver } from './module-resolver.ts';
 
 const typescriptFallbackExtensions: Record<string, string[]> = {
   '.js': ['.ts', '.tsx'],
@@ -19,7 +20,7 @@ export function getInterpretedFile(pathToFile: string) {
     .find((candidate) => existsSync(candidate));
 }
 
-const importResolver = createModuleResolver({
+const importResolver = new ResolverFactory({
   extensions: [...supportedExtensions],
   mainFields: ['module', 'main'],
 });
@@ -60,5 +61,9 @@ export function resolveImport(id: string, options: ResolveImportOptions): string
 }
 
 function resolveSync(id: string, basedir: string): string {
-  return importResolver.resolveSync(basedir, id);
+  const result = importResolver.sync(basedir, id);
+  if (result.path) {
+    return result.path;
+  }
+  throw new Error(result.error ?? `Cannot resolve module '${id}' from '${basedir}'`);
 }

@@ -1,0 +1,29 @@
+import type { BinaryExpression, Expression } from "../../ast";
+import { SyntaxKind } from "../../syntax";
+import { createBinaryExpression } from "./createBinaryExpression";
+
+/**
+ * Create a {@link BinaryExpression} with the `,` operator: the comma operator,
+ * which evaluates both operands and yields the right one.
+ *
+ * Shorthand for {@link createBinaryExpression} with the `CommaToken` operator.
+ * The comma attaches to the operand before it, the way every other producer
+ * writes it — {@link createCommaListExpression}, the legacy printer, and
+ * Prettier all emit `a, b`.
+ *
+ * Given operands `a` and `b`, the printer emits:
+ *
+ * ```ts
+ * (a, b);
+ * ```
+ *
+ * @author Jeongho Nam - https://github.com/samchon
+ * @param left The left-hand operand.
+ * @param right The right-hand operand.
+ * @returns The created {@link BinaryExpression}.
+ */
+export const createComma = (
+  left: Expression,
+  right: Expression,
+): BinaryExpression =>
+  createBinaryExpression(left, SyntaxKind.CommaToken, right);

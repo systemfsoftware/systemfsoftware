@@ -68,9 +68,9 @@ export const dehydrate = (
      */
     readonly encodeInitialAs?: 'ignore' | 'deferred' | 'value-only' | undefined
   },
-): Array<DehydratedAtomValue> => {
+): DehydratedAtomValue[] => {
   const encodeInitialResultMode = options?.encodeInitialAs ?? 'ignore'
-  const arr: Array<DehydratedAtomValue> = []
+  const arr: DehydratedAtomValue[] = []
   const now = Date.now()
   registry.getNodes().forEach((node, key) => {
     if (!Atom.isSerializable(node.atom)) return
@@ -129,7 +129,7 @@ export const hydrate = (
   registry: AtomRegistry.Registry,
   dehydratedState: Iterable<DehydratedAtomValue>,
 ): Fiber.Fiber<void, never> => {
-  const pending: Array<Effect.Effect<void>> = []
+  const pending: Effect.Effect<void>[] = []
   for (const datom of dehydratedState) {
     registry.setSerializable(datom.key, datom.value)
 

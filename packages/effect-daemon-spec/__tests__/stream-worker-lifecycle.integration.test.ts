@@ -138,7 +138,7 @@ Feature('Stream Worker Lifecycle')
     scenario(
       'Each stream worker span starts a new trace, ignoring the caller trace',
       Gherkin.Do.pipe(
-        Given('a rooted probe')('streamSpanRooted', () => Ref.make<Array<boolean>>([])),
+        Given('a rooted probe')('streamSpanRooted', () => Ref.make<boolean[]>([])),
         When('a stream worker runs while a caller trace is active')('health', (s) =>
           Effect.gen(function*() {
             const worker = Daemon.stream({

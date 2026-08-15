@@ -2,22 +2,22 @@
 
 ## Workflow
 
-`Release` is two-phase pnpm-native: on push to `main`, `pnpm version -r` consumes `.changeset/` intents and opens a Release PR (`changeset-release/main`); on that PR's merge it runs `the gate (pnpm check:ci)` via `reusable-checks.yml`, then builds, publishes via npm OIDC trusted publishing with provenance, and tags each released `name@v<version>`. `changeset-check.yml` fails a PR that touches `packages/**` without a `.changeset/` intent.
+`Release` is two-phase pnpm-native: on push to `main`, `corepack pnpm version -r` consumes `.changeset/` intents and opens a Release PR (`changeset-release/main`); on that PR's merge it runs `the gate (pnpm check:ci)` via `reusable-checks.yml`, then builds, publishes via npm OIDC trusted publishing with provenance, and tags each released `name@v<version>`. `changeset-check.yml` fails a PR that touches `packages/**` without a `.changeset/` intent.
 
 **CI enumerates no steps.** Root `package.json` `check:ci` is the only definition of what the gate runs; `reusable-checks.yml` invokes it. Read that script to learn what is covered — a copy here would drift, which is exactly how `attw` stopped running in CI while three other lists still claimed it.
 
 ### Failure patterns by task
 
-| Task                   | Failure pattern                                                   |
-| ---------------------- | ----------------------------------------------------------------- |
-| `install-deps`         | Lockfile drift → `pnpm install` locally and commit the lockfile   |
-| `build`                | tsdown / TypeScript errors                                        |
-| `typecheck`            | tsc errors                                                        |
-| `test`                 | Vitest failures                                                   |
-| `lint`, `format:check` | oxlint / dprint failures                                          |
-| `api:check`            | api-extractor (effect-daemon-spec only)                           |
-| `//#check:*` guards    | each prints its own remedy on stderr; run the one script it names |
-| `actions/checkout@v7`  | git exit 128 → usually a cascade from an earlier failure          |
+| Task                   | Failure pattern                                                                                                                      |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `install-deps`         | Lockfile drift → `pnpm install` locally and commit the lockfile                                                                      |
+| `build`                | tsdown / TypeScript errors                                                                                                           |
+| `typecheck`            | tsc errors                                                                                                                           |
+| `test`                 | Vitest failures                                                                                                                      |
+| `lint`, `format:check` | oxlint / dprint failures                                                                                                             |
+| `api:check`            | api-extractor drift in any package with a committed `etc/*.api.md` golden → `pnpm --filter <pkg> api:update`, then commit the report |
+| `//#check:*` guards    | each prints its own remedy on stderr; run the one script it names                                                                    |
+| `actions/checkout@v7`  | git exit 128 → usually a cascade from an earlier failure                                                                             |
 
 ## Local reproduction
 

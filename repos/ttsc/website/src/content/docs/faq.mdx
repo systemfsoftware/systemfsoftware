@@ -1,0 +1,135 @@
+# FAQ
+
+## Is `ttsc` a fork of TypeScript?
+
+No. `ttsc` is a separate binary built on top of `typescript` (the official TypeScript-Go native compiler). It uses the upstream compiler and adds a plugin model around it.
+
+## How does this differ from `ttypescript` / `ts-patch`?
+
+`ttypescript` and `ts-patch` patch the TypeScript JavaScript compiler to enable transformer plugins. They work, but they're patches. They have to chase every TS release.
+
+`ttsc` is its own compiler. Plugins run inside the binary, not as hot patches over someone else's compiler. The plugin contract is stable across TypeScript-Go updates.
+
+## How fast is `ttsc` compared to `tsc`?
+
+`ttsc` runs on the native TypeScript-Go compiler, and `@ttsc/lint` adds a marginal cost (a single AST pass shared with the type-check, so no second parse) rather than the separate `tsc + eslint + prettier --check` stack. Speedups are measured against the legacy stack on real repositories; see the [benchmark guide](/docs/benchmark/performance) for per-project ratios.
+
+## Can I use `ttsc` with my existing `tsc` setup?
+
+Yes. `ttsc` reads `tsconfig.json`, supports the same flags, and emits the same JS. Drop `npx ttsc` in place of `npx tsc` and CI will keep working. Add plugins one at a time as you adopt them.
+
+## Can I use both `tsc` and `ttsc`?
+
+Yes, though it's usually unnecessary. The most common case is keeping `tsc` for a legacy CI matrix while running `ttsc` locally and in newer pipelines. Both produce equivalent emit for the same `tsconfig.json`.
+
+## Do I have to install `@ttsc/lint`?
+
+No, `ttsc` works without it. But the whole point of the toolchain is the pair. Without `@ttsc/lint` you keep `eslint`+`prettier` as separate tools and lose the "single compile pass" benefit. The recommended install is `npm install -D ttsc @ttsc/lint typescript`.
+
+## How do I migrate from `eslint` + `prettier`?
+
+1. Install `@ttsc/lint`: `npm install -D @ttsc/lint`.
+2. Create `lint.config.ts` with the rules and `format` block you want. The `format` keys mirror `.prettierrc`. See the [Setup](/docs/lint/setup) page for a starter.
+3. Run `npx ttsc fix` once to apply all autofixes (lint and format) across the project.
+4. Commit, then delete `.eslintrc.*` and `.prettierrc.*` and the `eslint` / `prettier` devDependencies.
+
+Most ESLint stylistic rules have direct `@ttsc/lint` equivalents (`no-var`, `prefer-const`, `eqeqeq`, etc.). Plugin-shipped ESLint rules (`eslint-plugin-react-hooks`, `eslint-plugin-import`, etc.) don't yet have `@ttsc/lint` counterparts. For those, the native rule set is being built out rule by rule.
+
+## Will my existing `eslint` plugins work?
+
+Not directly. `@ttsc/lint` is a separate engine. Third-party rule packages can ship as `@ttsc/lint` contributor plugins. See the [`@ttsc/lint` deep dive](/docs/development/walkthroughs/lint#how-a-contributor-package-ships) for the Go API authors implement.
+
+## What about `prettier`'s plugin ecosystem?
+
+The format subset of `@ttsc/lint` covers Prettier's core rewrites: semis, quotes, trailing commas, print-width reflow, import ordering, and JSDoc normalization. Prettier ecosystem plugins (`prettier-plugin-svelte`, `prettier-plugin-tailwindcss`, etc.) aren't supported; they're Prettier-specific.
+
+## Do I need Go installed?
+
+No. `ttsc` bundles its own Go toolchain and uses it to compile plugin binaries on first run. Plugin **authors** may want Go locally for `go test` and `go vet`. See [Local Development](/docs/development/authoring/local-dev). Consumers don't.
+
+## Why is the first build slow?
+
+On a fresh checkout, `ttsc` compiles each plugin binary into the **project-local** cache the first time you run it. The cache lives in the workspace's `node_modules/.cache/ttsc` (the `find-cache-dir` convention); in a monorepo it resolves to the workspace root's `node_modules`, so every package builds a given plugin once and shares it. A small transform compiles in seconds, but a plugin that links a full native host (such as `typia`, which bundles the TypeScript-Go checker alongside its own transform) can take several minutes on a cold Go cache: a fresh CI worker, or a machine that has never built it. Either way it happens once per source-plugin content key, and it recurs on every build unless you persist the cache (see [Persisting the cache in containers](/docs/ttsc/compile#plugin-cache)). Pre-warm with `npx ttsc prepare`. Drop the cache with `npx ttsc clean`. See [Compile → Plugin cache](/docs/ttsc/compile#plugin-cache) for cache locations and overrides.
+
+## Does `ttsx` replace `tsx` / `ts-node`?
+
+For most projects, yes. Same ergonomics, real type-check, plugins apply. See [TTSC · Execute](/docs/ttsc/execute).
+
+The one place `ttsx` will trip you up: when you actually **wanted** to run code with type errors (rare but happens, e.g., a script that probes incomplete code). Use `tsx` for that.
+
+## What about Deno / Bun?
+
+- **Bun**: supported as a bundler integration via `@ttsc/unplugin/bun`. See [Bundlers](/docs/setup/unplugin).
+- **Deno**: not directly supported. Deno has its own type-check pipeline.
+
+## What's the relationship to `typia` and `nestia`?
+
+Both are independent projects that ship as `ttsc` plugins. `typia` produces runtime validators from your TypeScript types; `nestia` wraps NestJS with `typia`-backed controllers and SDK generation. Neither is part of `ttsc`; they live in their own repos and follow their own release schedules.
+
+## Does the VS Code extension work without a Marketplace install?
+
+Yes. Run:
+
+```bash
+npx @ttsc/vscode
+```
+
+It installs the bundled `.vsix` through the `code` CLI. Marketplace install is still available from the Extensions view or:
+
+```bash
+code --install-extension samchon.ttsc
+```
+
+## VS Code doesn't show TypeScript-Go or plugin diagnostics: what's wrong?
+
+1. Confirm `ttsc` is installed in the project: `npx ttsc --version`.
+2. Confirm the same plugin diagnostics appear in the CLI: `npx ttsc --noEmit -p <selected tsconfig>`.
+3. Make sure the plugin config is discoverable from the selected project root or set `configFile` in the tsconfig plugin entry.
+4. Save the file before checking plugin diagnostics or running `ttsc: Fix all lint issues` / `ttsc: Format document`. TypeScript-Go diagnostics are live; plugin diagnostics and those commands use the saved project state. Format-on-save is the exception: it formats the live editor buffer.
+5. Open **View → Output**, pick **ttsc** from the dropdown, and read the server log.
+6. Run **ttsc: Restart language server** from the command palette.
+7. Set `ttsc.trace.server` to `"verbose"` in VS Code settings, then read **View → Output → ttsc (trace)** if the server log is empty.
+
+## VS Code shows lint diagnostics but no lint completion: what's wrong?
+
+1. Confirm the rule that owns the completion is enabled globally. To test the built-in path, set `"jsdoc/check-tag-names": "error"` in the top-level `rules` map.
+2. Put the cursor inside a real `/** ... */` block in a TypeScript file. Decorators, line comments, and Markdown files are outside the supported scope.
+3. Press Ctrl+Space after `@` to request completion explicitly.
+4. Save the file after changing the lint config or the project inputs a contributor rule indexes. The corpus is rediscovered in the background on every save, configuration change, and watched-file change, so the new items appear shortly after the save. **ttsc: Restart language server** is still needed for one case: a completion trigger character the session never advertised, which the **ttsc** output channel names when it appears.
+5. Open **View → Output → ttsc** and enable `ttsc.trace.server: "verbose"` if completion still stays empty.
+
+The [Lint in VS Code](/docs/lint/editor) guide explains which features use the live buffer and which use saved project state.
+
+## Does it work in a monorepo?
+
+Yes. Each package has its own `tsconfig.json` and its own `lint.config.ts`. `ttsc` reads from the directory it's invoked in (or `-p path/to/tsconfig.json`). `pnpm` / `npm` / `yarn` workspaces all work.
+
+What does not work is `tsc --build` / `-b` solution mode. `ttsc` resolves and pins one project per run — its plugin, cache, and emit layers are built around that single resolved project — so it refuses the flag rather than compiling the wrong thing. Drive the packages yourself instead: a workspace `run -r` script, or one `ttsc -p <package>/tsconfig.json` per package in dependency order.
+
+For VS Code, add packages as workspace folders when each package should keep its own `ttsc`, `typescript`, and plugin config. Save files before relying on plugin diagnostics, lint fixes, or format edits.
+
+## Source maps and declaration maps?
+
+Standard `compilerOptions`. Set `sourceMap: true` and `declarationMap: true` in `tsconfig.json`. `ttsc` honors them the same way `tsc` does.
+
+## Is the playground running my code on a server?
+
+No. Everything runs in the browser. The editor is Monaco; a Web Worker boots `playground.wasm`, the same `ttsc` engine the CLI uses, compiled to WebAssembly. Your source never leaves the tab.
+
+## Can I publish my own plugin?
+
+Yes. That's the point of the protocol being public. See [Plugin Development · Publishing](/docs/development/authoring/publishing).
+
+## Is `ttsc` production-ready?
+
+It's the build tool for `typia` and `nestia`, both of which are. It's still v1. There are still moving parts, especially around the playground and a few rule edge cases. If you're shipping a library, do not publish `ttsc` as a peer dependency yet; treat it as a build-time dependency.
+
+## Where do I report bugs?
+
+[GitHub Issues](https://github.com/samchon/ttsc/issues). Include `ttsc --version`, your Node version, your `tsconfig.json`, your `lint.config.ts`, and a minimal reproduction.
+
+## See also
+
+- [Introduction](/docs): get a working `ttsc` install first.
+- [TTSC · Compile](/docs/ttsc/compile): every flag and subcommand.
+- [Lint & Format](/docs/lint): the rule catalog and `lint.config.ts` reference.

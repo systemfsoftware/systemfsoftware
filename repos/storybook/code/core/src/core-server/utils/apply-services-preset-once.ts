@@ -1,6 +1,7 @@
 import type { Presets } from 'storybook/internal/types';
 
 declare global {
+  // eslint-disable-next-line no-var
   var STORYBOOK_SERVICES_PRESET_PROMISE: Promise<void> | undefined;
 }
 

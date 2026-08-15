@@ -1,7 +1,8 @@
 import { sessionIds } from '@systemfsoftware/omp-utils'
-import { Context, Effect, Schema as S, type Scope } from 'effect'
+import { Array as Arr, Context, Effect, Schema as S, type Scope } from 'effect'
+
 import { analyzeSettings } from '../hook-settings.acl.js'
-import type { HookEntry } from '../hook-settings.acl.js'
+import type { CommandHook, HookEntry } from '../hook-settings.acl.js'
 import type { HookSession } from './hook-session.kernel.js'
 import { runHookScript } from './run-hook-script.executor.js'
 import { superviseFork } from './supervise-fork.executor.js'
@@ -11,36 +12,25 @@ export class RunLifecycleHooksExecutorDeps extends Context.Tag('RunLifecycleHook
   Scope.Scope
 >() {}
 
-export const runLifecycleHooks = Effect.fn('runLifecycleHooks')(function*(
-  entries: readonly HookEntry[],
-  ctx: HookSession,
-  event: string,
-) {
-  if (entries.length === 0) return
-
-  const cwd = ctx.cwd
-
-  const input: Record<string, unknown> = {
-    ...sessionIds(() => ctx.sessionManager.getSessionId()),
-  }
-
-  // The matcher axis is the same refusal `runHooksForEvent` makes: an event
-  // whose matcher this bridge cannot read must not run a matcher'd hook as
-  // though the matcher had matched.
-  const matcherUnreadable = analyzeSettings({ _tag: 'MatcherUnreadable', event }, S.Boolean)
-
-  for (const entry of entries) {
-    if (matcherUnreadable && entry.matcher !== undefined) continue
-    for (const hook of entry.hooks) {
-      if (hook.type !== 'command') continue
-      if (hook.if !== undefined) continue
-      if (hook.async === true || hook.asyncRewake === true) {
-        yield* Effect.forkDaemon(
-          superviseFork(runHookScript(hook, input, cwd, event, false), ctx, hook.command),
-        )
-      } else {
-        yield* runHookScript(hook, input, cwd, event)
-      }
-    }
-  }
-})
+export const runLifecycleHooks = Effect.fn('runLifecycleHooks')(
+  function*(entries: readonly HookEntry[], ctx: HookSession, event: string) {
+    const cwd = ctx.cwd
+    const input: Record<string, unknown> = { ...sessionIds(() => ctx.sessionManager.getSessionId()) }
+    const matcherUnreadable = analyzeSettings({ _tag: 'MatcherUnreadable', event: event }, S.Boolean)
+    yield* Effect.forEach(
+      Arr.filter(entries, (entry) => !(matcherUnreadable && entry.matcher !== undefined)),
+      (entry) =>
+        Effect.forEach(
+          Arr.filter(entry.hooks, (hook): hook is CommandHook => hook.type === 'command' && hook.if === undefined),
+          (hook) =>
+            Effect.if(hook.async === true || hook.asyncRewake === true, {
+              onTrue: () =>
+                Effect.forkDaemon(superviseFork(runHookScript(hook, input, cwd, event, false), ctx, hook.command)),
+              onFalse: () => runHookScript(hook, input, cwd, event),
+            }),
+          { discard: true },
+        ),
+      { discard: true },
+    )
+  },
+)

@@ -90,7 +90,6 @@ const meta = {
       updateTestProviderState: fn(),
       emit: fn(),
       experimental_setFilter: fn(),
-      experimental_setFilters: fn(),
       getChannel: fn(),
       getElements: fn(() => ({})),
     } as any as API,

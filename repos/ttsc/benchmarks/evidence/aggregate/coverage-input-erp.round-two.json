@@ -1,0 +1,121 @@
+{
+  "cohort": "round two, campaign/evidence-luna-0.26.0",
+  "subject": "erp",
+  "arm": "plain",
+  "runId": "0b9deae2-9926-49f4-9b6c-d454844a4470",
+  "state": "counted",
+  "method": {
+    "read": "The completed workspace, frozen after the cell reached `overall-final`. Two earlier snapshots of the same cell were counted while it was still running and are retained for comparison; the counting inventories are byte-identical between the second and third, so the three counts read very nearly the same artefact.",
+    "grouping": "The six requirement-rooted edges are counted per family, the 253 `##` anchors, not per requirement.",
+    "requirementRooted": "Each of the six was counted twice in independent passes and the lower rate kept."
+  },
+  "populations": {
+    "requirementAnchors": 1487,
+    "requirementFamilies": 253,
+    "models": 135,
+    "scalarColumns": 1357,
+    "accessors": 446,
+    "publishedTypes": 352,
+    "hooks": 439,
+    "screens": 13,
+    "backendTests": 177,
+    "journeyCases": 3
+  },
+  "cells": [
+    {
+      "model": "gpt-5.6-luna",
+      "subject": "erp",
+      "runId": "0b9deae2-9926-49f4-9b6c-d454844a4470",
+      "edges": {
+        "requirementToModel": { "eligible": 101, "reached": 99 },
+        "requirementToOperation": { "eligible": 98, "reached": 97 },
+        "requirementToDto": { "eligible": 192, "reached": 190 },
+        "requirementToTest": { "eligible": 252, "reached": 247 },
+        "requirementToScreen": { "eligible": 98, "reached": 20 },
+        "requirementToJourney": { "eligible": 105, "reached": 11 },
+        "modelToOperation": { "eligible": 135, "reached": 135 },
+        "modelToDto": { "eligible": 135, "reached": 133 },
+        "accessorToTest": { "eligible": 446, "reached": 433 },
+        "accessorToHook": { "eligible": 446, "reached": 424 },
+        "hookToScreen": { "eligible": 439, "reached": 24 },
+        "screenToJourney": { "eligible": 13, "reached": 13 },
+        "columnToProperty": { "eligible": 1357, "reached": 966 }
+      }
+    }
+  ],
+  "eligibilityRules": {
+    "requirementToModel": "The family declares organizational state the system must persist. The set of 101 reconstructs exactly as the 94 REQ-DOM families plus the 7 REQ-AUTH families.",
+    "requirementToOperation": "The family describes an action a principal performs or a result the system returns on request. The set of 98 reconstructs exactly as the 91 REQ-FUN families plus the 7 REQ-AUTH families.",
+    "requirementToDto": "The family's information crosses the HTTP boundary as a request or response payload. The set of 192 reconstructs exactly as REQ-DOM plus REQ-FUN plus REQ-AUTH.",
+    "requirementToTest": "The family's obligation is decidable through the backend API. One family is outside it, REQ-NFR-DELIVERY, whose REQ-NFR-DELIVERY-001 asserts the delivered product runs as a production-grade backend. The set of 252 is all 253 families less that one.",
+    "requirementToScreen": "The family names a capability a human performs in the browser. The set of 98 reconstructs exactly as REQ-FUN plus REQ-AUTH.",
+    "requirementToJourney": "The family owes a browser-observable flow. The set of 105 reconstructs exactly as REQ-FUN plus REQ-JRN plus REQ-AUTH."
+  },
+  "unreached": {
+    "requirementToModel": [
+      "REQ-DOM-ASSET-CATEGORY: no asset_categories model among the 135, assets carries no category column and no category-derived default asset, accumulated-depreciation, or expense account, and the only category columns in the schema belong to units and items",
+      "REQ-DOM-BUDGET: budgets persists {id, organization_id, name, version, status, created_at} and nothing else; there is no budget_lines table and no fiscal-year, dimension, or planned, committed, actual, and remaining amount column"
+    ],
+    "requirementToOperation": [
+      "REQ-FUN-BUDGET: the budget namespace publishes only budgetCreate, budgetIndex, budgetActivate, and budgetClose, and IBudget.ICreate is {name}, so REQ-FUN-BUDGET-001, creates and edits a draft budget and lines, and -007, views planned, committed, actual, have no accessor"
+    ],
+    "requirementToDto": [
+      "REQ-DOM-ASSET-CATEGORY: no IAssetCategory type and IAsset publishes id, tag, name, acquisitionCost, sourceType, sourceId, residualValue, usefulLifeMonths, depreciationMethod, and status with no category reference",
+      "REQ-DOM-LOT: no ILot type; a lot crosses only as the opaque uuid lotId on IStockBalance, IStockMovement, IQuarantine, and the line bodies, while the lots columns code, status, and item_id are published nowhere"
+    ],
+    "requirementToTest": [
+      "5 of 252. REQ-DOM-ASSET-CATEGORY: the concept has no model, no type, and no accessor, so no feature test can reference one",
+      "REQ-RULE-CONCURRENCY: no feature test issues a concurrent command; Promise.all appears nowhere under packages/backend/test/features, and document numbering is asserted with two strictly sequential numberIssue calls",
+      "REQ-RULE-PROJECT: the timelog tests only create a timelog on an active project the employee is assigned to; no test attempts a timelog without an assignment or on a completed or archived project",
+      "REQ-NFR-AUTOMATION: the string automation occurs nowhere under packages/backend/test/features, control_ops.automation.index and .retry are called by no test, and automation_runs is never read",
+      "REQ-AUTH-PRINCIPAL: organizations.system_user_id and system_membership_id are never read by any test, the automation accessors are untested, and the party test asserts only that kind is not vendor, never that an external party cannot obtain credentials"
+    ],
+    "requirementToScreen": [
+      "78 of 98 families. The reached twenty are REQ-AUTH-PROVISION, REQ-AUTH-SESSION, REQ-AUTH-ACCOUNT, REQ-AUTH-MEMBERSHIP, REQ-FUN-ORG, REQ-FUN-ACCOUNT, REQ-FUN-JOURNAL, REQ-FUN-STOCK-VIEW, REQ-FUN-INVENTORY-ADJUSTMENT, REQ-FUN-MRP, REQ-FUN-MRP-RECOMMENDATION, REQ-FUN-APPROVAL, REQ-FUN-AUDIT, and the seven REQ-FUN-REPORT-* families",
+      "Procurement, sales, inventory master data, manufacturing, quality, service, projects, payroll, and every finance master family reach no screen; role composition, the acting-principal catalog, and manager positions reach none either",
+      "REQ-FUN-PROJECT is individually notable: screen-plan.md claims people-page.tsx owns it, but that page calls only useReport('headcount'), useReport('contract_history'), and useReport('timesheet_status') and renders label-and-value tiles, delivering no project capability"
+    ],
+    "requirementToJourney": [
+      "94 of 105 families. The reached eleven are REQ-AUTH-PROVISION, REQ-AUTH-SESSION, REQ-AUTH-ACCOUNT, REQ-AUTH-MEMBERSHIP, REQ-FUN-ACCOUNT, REQ-FUN-JOURNAL, REQ-FUN-REPORT-FIN, REQ-FUN-STOCK-VIEW, REQ-FUN-INVENTORY-ADJUSTMENT, REQ-FUN-APPROVAL, REQ-FUN-AUDIT",
+      "All seven REQ-JRN-* end-to-end families are unwalked",
+      "REQ-FUN-MRP and REQ-FUN-MRP-RECOMMENDATION remain notable: planning-page.tsx implements Run MRP and the accept and dismiss commands, and the journey waits only for the 'Recommendations' and 'Maintenance backlog' tile labels without pressing any of them. People and Planning are visited but only waited on for static Metric labels, so REQ-FUN-EMPLOYEE, REQ-FUN-CONTRACT, REQ-FUN-TIMESHEET, REQ-FUN-MAINTENANCE-ORDER, and the six non-financial report families stay unreached"
+    ],
+    "modelToDto": [
+      "recovery_deliveries: recoveryRequest deliberately returns { id: randomUUID() } and recoveryComplete returns IUser.IAuthorized, so no column of the row reaches a response",
+      "vendor_credit_refunds: still written and never read back; VendorCreditProvider.refund holds the only reference and it is a create returning the vendor_credits row, and IVendorCredit.IRefund is a request type of {amount, bankAccountId}"
+    ],
+    "accessorToTest": [
+      "13 of 446: the whole automation pair, three of six credit-memo accessors, the three MRP recommendation decisions, the two asset transitions, projects.department.departmentUpdate, tax_return.reject, and auth.organization, which is named only by helpers/ErpFixtures.ts and by no feature test"
+    ],
+    "accessorToHook": [
+      "22 of 446: the automation pair, four credit-memo accessors, the six asset transitions, the three production cost postings, projects.department.departmentUpdate, quarantine.approve, the four service-order accessors, and tax_return.reject"
+    ],
+    "hookToScreen": [
+      "415 of 439. All 17 authored hooks are called by a screen; of the 422 generated per-accessor wrappers 7 are, the five inventory-adjustment and catalog wrappers plus the two stock balance and movement wrappers the traceability panel added"
+    ],
+    "columnToProperty": [
+      "391 of 1357: 116 created_at, 99 organization_id, 39 updated_at, and 137 domain columns. recovery_deliveries publishes no column at all, and production_reservations publishes none either, its quantity and consumed_quantity reaching only the derived IAvailability.allocated aggregate"
+    ]
+  },
+  "unsettled": {
+    "judgementDominance": "Four of the six requirement-rooted edges read byte-identical evidence across the second and third counts, yet every one of them moved. On unchanged bytes requirementToModel has now been counted 100, 98, and 99; requirementToDto 186 and now 190, the second count naming six unreached families where both passes here name two; requirementToOperation 95 and now 97. These are re-judgements of the same evidence by different judges, not changes in the artefact. The published figures are the lower of the two passes as the method requires, but this spread is the dominant uncertainty in this cell and is larger than any supplementation the cell performed. Read the score as a whole percent and read the per-edge populations as the durable result.",
+    "evidenceBase": "The counting inventories are byte-identical between the second and third snapshots: the model, published-type, accessor, and anchor inventories all match exactly, as do packages/api/src, packages/backend/prisma, and docs/analysis. Only 12 files under packages/backend/src, 3 backend test files, packages/frontend/src/components/controls/controls-page.tsx, and packages/frontend/tests/journeys/workspace.spec.ts differ.",
+    "eligibility": "docs/analysis/**, packages/frontend/wiki/screen-plan.md, and packages/frontend/wiki/omissions.md are byte-identical across all three snapshots, verified by digest, so the six eligible sets are held at 101, 98, 192, 252, 98, and 105. Unlike the second count, they were reconstructed to exact member lists, and every reconstruction hits the held number exactly and is consistent with every member the earlier counts named, so both passes worked on the same denominators.",
+    "requirementToModel": "The passes disagreed. Pass A named only REQ-DOM-ASSET-CATEGORY for 100; pass B added REQ-DOM-BUDGET for 99. Neither named REQ-DOM-ROUTING, which the second count named, and routings is byte-identical: {id, organization_id, finished_item_id, version, status, created_at} with no operation-sequence table, against boms which does have bom_lines. Carrying it would make this 98.",
+    "requirementToOperation": "The passes disagreed. Pass A named nothing for 98; pass B named REQ-FUN-BUDGET for 97. Neither named REQ-FUN-ROUTING or REQ-AUTH-PRINCIPAL, both of which the second count counted unreached, and packages/api/src is byte-identical. Carrying both would make this 95.",
+    "requirementToDto": "The passes agreed exactly, both reaching 190 and naming the same two families. Neither reproduced the second count's four budget and routing families, though IBudget is still {id, name, version, status} and IRouting still {id, finishedItemId, version, status} against IBom which publishes ILine[]. Neither named REQ-DOM-SERIAL, whose serials.code escapes only as serialCode; adding it would make this 189.",
+    "requirementToTest": "The passes disagreed on both count and membership: pass A 247, pass B 248, sharing three members. Pass A additionally names REQ-RULE-CONCURRENCY and REQ-RULE-PROJECT; pass B additionally names REQ-NFR-TENANT. The union of both is 246. Direct evidence supports both disjoint additions: no test function calls create_owner twice or names auth.organization outside the fixture helper, so no second organization ever exists, and Promise.all appears nowhere under packages/backend/test/features. This edge carries the only real movement from the cell's last supplementation: a new test settles REQ-RULE-BOM-003 against an implementation that does enforce it, and a changed credit-memo test asserts a return-reason memo reaching settled.",
+    "requirementToScreen": "Both passes independently reached 20 and named the identical twenty families. The one family beyond the second count's nineteen is REQ-AUTH-MEMBERSHIP, credited to a page byte-identical to both earlier snapshots; this is a re-judgement, not a new screen.",
+    "requirementToJourney": "Both passes independently reached 11 and named the identical eleven. The two beyond the second count's nine are REQ-AUTH-SESSION and REQ-AUTH-MEMBERSHIP, judged from journey steps unchanged since the second snapshot, so this too is re-judgement rather than new walking.",
+    "screenToJourney": "13 of 13 remains a source-level count, and the executable count moves from 9 to 13. The blocker the second count flagged is fixed: the Operations step no longer waits for a string the screens never render but for a status role matching the markup the page emits, and the provider writes exactly the draft and posted states it waits on. Both passes checked every remaining wait against the rendered markup and found none that targets absent text. Two residual risks are data-dependent rather than source-level: one wait needs an audit event still inside an eight-row window, and one click needs a prepared pending approval of a matching target type.",
+    "columnToProperty": "966 reproduces the second count exactly, column for column, which is expected because packages/backend/prisma and packages/api/src are byte-identical. The three readings give 963 strict, 966 three-signal, and 972 root-namespace-expanded.",
+    "modelToDto": "133 of 135 under either reading. Under the response rule the unreached pair is recovery_deliveries and vendor_credit_refunds; under the column rule it is recovery_deliveries and production_reservations.",
+    "accessorToTest": "433 applies the rule that an accessor named only by a fixture helper is not settled by a test; the mechanical count is 434. The gain of one over the second count is real: credit_memo.creditMemoIndex is now called by a test asserting a sales-return refund settles the linked memo.",
+    "codeShape": "The second count's caveat has expired. Three providers were committed as transpiled JavaScript under a .ts extension with @ts-nocheck in the second snapshot; here 0 of 41 provider files carry @ts-nocheck and all are TypeScript source."
+  },
+  "moved": {
+    "backendTests": "175 to 177, plus 2, and none removed.",
+    "executableScreens": "9 to 13. The journey no longer times out at the Operations step.",
+    "unchanged": "requirementAnchors 1487, requirementFamilies 253, models 135, scalarColumns 1357, accessors 446, publishedTypes 352, hooks 439, screens 13, journeyCases 3. Every one was re-derived from the completed workspace rather than carried."
+  }
+}

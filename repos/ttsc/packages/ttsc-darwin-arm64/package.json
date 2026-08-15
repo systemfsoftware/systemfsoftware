@@ -1,0 +1,27 @@
+{
+  "name": "@ttsc/darwin-arm64",
+  "version": "0.27.0",
+  "description": "macOS arm64 native ttsc/ttscserver/ttscgraph binaries and bundled Go compiler for ttsc.",
+  "os": ["darwin"],
+  "cpu": ["arm64"],
+  "scripts": {
+    "build": "node ../../scripts/build-platform-package.cjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/samchon/ttsc"
+  },
+  "author": "Jeongho Nam",
+  "license": "MIT",
+  "files": ["bin", "package.json", "README.md"],
+  "publishConfig": {
+    "access": "public",
+    "executableFiles": [
+      "./bin/ttsc",
+      "./bin/ttscserver",
+      "./bin/ttscgraph",
+      "./bin/go/bin/go",
+      "./bin/go/bin/gofmt"
+    ]
+  }
+}

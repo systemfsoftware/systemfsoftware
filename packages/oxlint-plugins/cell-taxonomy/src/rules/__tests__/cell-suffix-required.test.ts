@@ -4,15 +4,15 @@ import { createRuleTester } from './_tester.js'
 
 const ruleTester = createRuleTester()
 
-const expectedFor = (cells: ReadonlyArray<string>, exempt: ReadonlyArray<string>): string =>
+const expectedFor = (cells: readonly string[], exempt: readonly string[]): string =>
   `<name>.<cell>.ts with <cell> one of ${
     cells.join(', ')
   }, a PascalCase contract module naming the symbol it exports, or exactly one of ${exempt.join(', ')}`
 
 const unsanctioned = (
   name: string,
-  cells: ReadonlyArray<string> = CELLS,
-  exempt: ReadonlyArray<string> = EXEMPT,
+  cells: readonly string[] = CELLS,
+  exempt: readonly string[] = EXEMPT,
 ) => [{
   messageId: 'unsanctionedCell',
   data: {

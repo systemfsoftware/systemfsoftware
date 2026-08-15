@@ -1,5 +1,5 @@
 import { Cell } from '@systemfsoftware/effect-cell-types'
-import { Array as Arr, Cause, Context, Effect, Either, Exit, Fiber, Match, Metric, Option, Ref, Schedule } from 'effect'
+import { Array as Arr, Cause, Effect, Either, Exit, Fiber, Match, Metric, Option, Ref, Schedule } from 'effect'
 import { pipe, type Scope } from 'effect'
 import { WorkerTypeId } from '../brands.kernel.js'
 import type { SupervisorHealth } from '../daemon-health.schema.js'
@@ -7,8 +7,6 @@ import { healthStateGauge, supervisorExhaustionsCounter, supervisorRestartsCount
 import type { Intensity, IntensityConfig } from '../daemon-policy.schema.js'
 import type { DaemonReporter } from '../daemon-reporter.adapter.js'
 import type { Child, LockConfig, Supervisor, Worker } from '../daemon-spec.schema.js'
-import { isModeNone } from '../leader-lock.kernel.js'
-import type { LeaderLockAcquireError } from '../leader-lock.schema.js'
 import type { BootedChild, Supervision, SupervisionContext } from '../supervision.schema.js'
 import { allocateSupervisorHealth } from './allocate-supervisor-health.kernel.js'
 import { allocateWorkerHealth } from './allocate-worker-health.kernel.js'
@@ -31,22 +29,12 @@ import {
   StopSupervision,
   type SupervisionEpochResultType,
 } from './supervision-epoch.schema.js'
-import { withLeaderLock, WithLeaderLockExecutorDeps } from './with-leader-lock.executor.js'
-
-export class SupervisorBodyExecutorDeps extends Context.Tag(
-  '@systemfsoftware/effect-daemon-spec/internal/supervisor-body.executor/SupervisorBodyExecutorDeps',
-)<
-  SupervisorBodyExecutorDeps,
-  {
-    readonly onRestart: DaemonReporter['Type']['onRestart']
-    readonly onExhausted: DaemonReporter['Type']['onExhausted']
-  }
->() {}
+import { type LockBinding, withLockByMode } from './with-lock-by-mode.executor.js'
 
 const handleExhausted = <R>(
   ctx: SupervisionContext<R>,
   cause: Cause.Cause<never>,
-): Effect.Effect<CooldownEpoch, never, SupervisorBodyExecutorDeps> =>
+): Effect.Effect<CooldownEpoch, never, never> =>
   Effect.gen(function*() {
     yield* Effect.zipRight(
       ctx.health.healthy.close,
@@ -59,8 +47,8 @@ const handleExhausted = <R>(
 const handleRestart = <R>(
   ctx: SupervisionContext<R>,
   cause: Cause.Cause<never>,
-  onSignal: Effect.Effect<void, never, SupervisorBodyExecutorDeps>,
-): Effect.Effect<RestartEpoch, never, SupervisorBodyExecutorDeps> =>
+  onSignal: Effect.Effect<void, never, never>,
+): Effect.Effect<RestartEpoch, never, never> =>
   Effect.gen(function*() {
     yield* ctx.reportRestart(cause)
     yield* onSignal
@@ -85,7 +73,7 @@ interface RestartPhases extends Cell.Phases {
   readonly readError: never
   readonly writeError: never
   readonly readContext: never
-  readonly writeContext: SupervisorBodyExecutorDeps
+  readonly writeContext: never
 }
 
 /**
@@ -112,7 +100,7 @@ const restartDescription = <R>(spec: {
   readonly cause: Cause.Cause<never>
   readonly onRestart: (
     decision: RestartDecisionRestart,
-  ) => Effect.Effect<void, never, SupervisorBodyExecutorDeps>
+  ) => Effect.Effect<void, never, never>
 }) =>
   pipe(
     Cell.read<RestartPhases>((intensity) => Effect.zipRight(intensity.record, intensity.isExceeded)),
@@ -360,8 +348,9 @@ const intensityTracker = (intensity: Intensity): Effect.Effect<IntensityTracker>
 const buildSupervisorBody = <E, R>(
   sup: Supervisor<E, R>,
   health: SupervisorHealth,
-  booted: ReadonlyArray<BootedChild<R | SupervisorBodyExecutorDeps | Scope.Scope>>,
-): Effect.Effect<void, never, R | SupervisorBodyExecutorDeps | Scope.Scope> =>
+  booted: readonly BootedChild<R | Scope.Scope>[],
+  reporter: DaemonReporter['Type'],
+): Effect.Effect<void, never, R | Scope.Scope> =>
   Effect.gen(function*() {
     const policy = yield* sup.supervision
     // One tracker per supervisor: `make` builds a fresh Ref-backed tracker on every
@@ -371,9 +360,8 @@ const buildSupervisorBody = <E, R>(
     const intensityEff = Effect.succeed(tracker)
     const reportRestart = (
       cause: Cause.Cause<never>,
-    ): Effect.Effect<void, never, SupervisorBodyExecutorDeps> =>
+    ): Effect.Effect<void, never, never> =>
       Effect.gen(function*() {
-        const reporter = yield* SupervisorBodyExecutorDeps
         yield* Metric.increment(Metric.tagged(supervisorRestartsCounter, 'supervisor', sup.name))
         yield* reporter.onRestart(sup.name, cause)
         yield* Option.match(Option.fromNullable(sup.reporter.onRestart), {
@@ -384,9 +372,8 @@ const buildSupervisorBody = <E, R>(
 
     const reportExhausted = (
       cause: Cause.Cause<never>,
-    ): Effect.Effect<void, never, SupervisorBodyExecutorDeps> =>
+    ): Effect.Effect<void, never, never> =>
       Effect.gen(function*() {
-        const reporter = yield* SupervisorBodyExecutorDeps
         yield* Metric.increment(Metric.tagged(supervisorExhaustionsCounter, 'supervisor', sup.name))
         yield* reporter.onExhausted(sup.name, cause)
         yield* Option.match(Option.fromNullable(sup.reporter.onExhausted), {
@@ -395,7 +382,7 @@ const buildSupervisorBody = <E, R>(
         })
       })
 
-    const runStrategy = superviseTree<R | SupervisorBodyExecutorDeps | Scope.Scope>(
+    const runStrategy = superviseTree<R | Scope.Scope>(
       sup.strategy,
       {
         name: sup.name,
@@ -405,7 +392,7 @@ const buildSupervisorBody = <E, R>(
         reportRestart,
         reportExhausted,
         intensityEff,
-      } satisfies SupervisionContext<R | SupervisorBodyExecutorDeps | Scope.Scope>,
+      } satisfies SupervisionContext<R | Scope.Scope>,
     )
 
     yield* Effect.andThen(health.paused.await, runStrategy)
@@ -415,52 +402,36 @@ const isWorker = <E, R>(x: Child<E, R>): x is Worker<E, R> => WorkerTypeId in x
 
 const bootChild = <E, R>(
   child: Child<E, R>,
-): Effect.Effect<BootedChild<R | SupervisorBodyExecutorDeps | Scope.Scope>, never, R> =>
+  reporter: DaemonReporter['Type'],
+): Effect.Effect<BootedChild<R | Scope.Scope>, never, R> =>
   Effect.gen(function*() {
     if (isWorker(child)) {
       const health = yield* allocateWorkerHealth(child.name)
       const loop = buildWorkerLoop(child, health, healthStateGauge).pipe(Effect.orDie)
       return { name: child.name, health, run: loop, childPolicy: child.child }
     }
-    const bootedChildren = yield* Effect.forEach(child.children, bootChild<E, R>)
+    const bootedChildren = yield* Effect.forEach(child.children, (c) => bootChild<E, R>(c, reporter))
     const health = yield* allocateSupervisorHealth(
       child.name,
       bootedChildren.map((b) => b.health),
     )
-    const body = buildSupervisorBody(child, health, bootedChildren).pipe(Effect.orDie)
+    const body = buildSupervisorBody(child, health, bootedChildren, reporter).pipe(Effect.orDie)
     return { name: child.name, health, run: body, childPolicy: {} }
   })
 
 export const supervisor = <E, R>(
   s: Supervisor<E, R, LockConfig>,
-): Effect.Effect<
-  SupervisorHealth,
-  never,
-  R | SupervisorBodyExecutorDeps | WithLeaderLockExecutorDeps | Scope.Scope
-> =>
+  reporter: DaemonReporter['Type'],
+  binding: LockBinding,
+): Effect.Effect<SupervisorHealth, never, R | Scope.Scope> =>
   Effect.gen(function*() {
-    const booted = yield* Effect.forEach(s.children, bootChild<E, R>)
+    const booted = yield* Effect.forEach(s.children, (child) => bootChild<E, R>(child, reporter))
     const health = yield* allocateSupervisorHealth(
       s.name,
       booted.map((b) => b.health),
     )
-    const body = buildSupervisorBody(s, health, booted).pipe(Effect.orDie)
-    let locked: Effect.Effect<
-      void,
-      E | LeaderLockAcquireError,
-      R | SupervisorBodyExecutorDeps | WithLeaderLockExecutorDeps | Scope.Scope
-    >
-    if (isModeNone(s.lock)) {
-      locked = body
-    } else if (s.lock.mode === 'required') {
-      locked = withLeaderLock(body, {
-        key: s.lock.key,
-        mode: 'required',
-        acquireRetryBackoff: s.lock.acquireRetryBackoff,
-      })
-    } else {
-      locked = withLeaderLock(body, { key: s.lock.key, mode: 'optional' })
-    }
+    const body = buildSupervisorBody(s, health, booted, reporter).pipe(Effect.orDie)
+    const locked = withLockByMode(body, binding)
     yield* Effect.forkScoped(locked.pipe(Effect.orDie))
     return health
   })

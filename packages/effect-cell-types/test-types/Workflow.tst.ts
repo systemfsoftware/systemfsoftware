@@ -85,4 +85,20 @@ describe('the constructor compiled evidence', () => {
   it('Should_RejectBareValueDecider_When_ParameterRequiresEitherReturn', () => {
     expect<typeof Workflow.make>().type.not.toBeCallableWith(decideValue)
   })
+
+  it('Should_CollapseToUnknown_When_BothChannelsInhabitedAndErrorTagged', () => {
+    expect<Workflow.Inhabited<Dec, Err>>().type.toBe<unknown>()
+  })
+
+  it('Should_DemandUninhabitedErrorMarker_When_ErrorChannelIsNever', () => {
+    expect<Workflow.Inhabited<Dec, never>>().type.toBe<Workflow.UninhabitedError>()
+  })
+
+  it('Should_DemandUninhabitedDecisionMarker_When_DecisionChannelIsNever', () => {
+    expect<Workflow.Inhabited<never, Err>>().type.toBe<Workflow.UninhabitedDecision>()
+  })
+
+  it('Should_DemandUntaggedErrorMarker_When_ErrorChannelCarriesNoTag', () => {
+    expect<Workflow.Inhabited<Dec, Error>>().type.toBe<Workflow.UntaggedError>()
+  })
 })

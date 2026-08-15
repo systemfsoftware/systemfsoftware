@@ -52,7 +52,7 @@ export const runUserPromptSubmitHooks = Effect.fn('runUserPromptSubmitHooks')(fu
   // Left undrained for a host-bound prompt: an async note is one-shot, so it
   // has to survive this command and reach the next model-bound prompt.
   const pending = Match.value(hostBound).pipe(
-    Match.when(true, (): ReadonlyArray<string> => []),
+    Match.when(true, (): readonly string[] => []),
     Match.when(false, () => drainAsyncHookContext()),
     Match.exhaustive,
   )

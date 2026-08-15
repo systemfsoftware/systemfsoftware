@@ -8,7 +8,7 @@ import type { OAuthCredentials } from "@oh-my-pi/pi-ai/oauth/types";
 import { buildModel } from "@oh-my-pi/pi-catalog/build";
 import { writeModelCache } from "@oh-my-pi/pi-catalog/model-cache";
 import { getBundledModel } from "@oh-my-pi/pi-catalog/models";
-import { resolveOllamaModelCacheProviderId } from "@oh-my-pi/pi-catalog/provider-models";
+import { resolveModelCacheProviderId, resolveOllamaModelCacheProviderId } from "@oh-my-pi/pi-catalog/provider-models";
 import type { ModelSpec, OpenAICompat } from "@oh-my-pi/pi-catalog/types";
 import {
 	applyLlamaCppQwenThinking,
@@ -2562,9 +2562,10 @@ providers:
 		});
 		// Emulate a legacy write: the variant has no same-id static header source,
 		// so it is flagged unrestorable even though its base carries the headers.
-		writeModelCache("github-copilot", Date.now(), [cachedVariant], true, "", cacheDbPath);
+		const cacheProviderId = resolveModelCacheProviderId("github-copilot");
+		writeModelCache(cacheProviderId, Date.now(), [cachedVariant], true, "", cacheDbPath);
 		const db = new Database(cacheDbPath);
-		db.run("UPDATE model_cache SET header_restore_version = 0 WHERE provider_id = ?", ["github-copilot"]);
+		db.run("UPDATE model_cache SET header_restore_version = 0 WHERE provider_id = ?", [cacheProviderId]);
 		db.close();
 
 		const registry = new ModelRegistry(authStorage, modelsJsonPath);
@@ -2585,7 +2586,8 @@ providers:
 			requestModelId: "gpt-5.6-sol",
 			headers: { "X-Tenant-Route": "tenant-a" },
 		});
-		writeModelCache("github-copilot", Date.now(), [cachedAlias], true, "", cacheDbPath, [bundledBase]);
+		const cacheProviderId = resolveModelCacheProviderId("github-copilot");
+		writeModelCache(cacheProviderId, Date.now(), [cachedAlias], true, "", cacheDbPath, [bundledBase]);
 
 		const registry = new ModelRegistry(authStorage, modelsJsonPath);
 

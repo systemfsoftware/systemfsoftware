@@ -1,0 +1,16 @@
+{
+  "private": true,
+  "name": "@ttsc/test-lint",
+  "version": "0.27.0",
+  "description": "@ttsc/lint descriptor, config, and rule corpus tests.",
+  "type": "module",
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning --import ../../scripts/register-extensionless-ts-loader.mjs --experimental-transform-types src/index.ts"
+  },
+  "devDependencies": {
+    "@ttsc/lint": "workspace:*",
+    "@ttsc/testing": "workspace:*",
+    "@types/node": "catalog:utils",
+    "ttsc": "workspace:*"
+  }
+}

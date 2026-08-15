@@ -65,7 +65,7 @@ const restartIndicesFor = (
   strategy: RestartStrategy,
   failedIndex: number,
   total: number,
-): readonly [number, ...ReadonlyArray<number>] =>
+): readonly [number, ...readonly number[]] =>
   Match.value(strategy).pipe(
     Match.when('one_for_one', () => [failedIndex] as const),
     Match.when(

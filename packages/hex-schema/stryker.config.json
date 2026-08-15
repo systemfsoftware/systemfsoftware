@@ -4,7 +4,8 @@
     "src/**/*.ts",
     "!src/**/*.test.ts",
     "!src/**/*.d.ts",
-    "!src/mod.ts"
+    "!src/mod.ts",
+    "!src/**/*.kernel.ts"
   ],
   "plugins": [
     "@systemfsoftware/stryker-js-vitest-runner",

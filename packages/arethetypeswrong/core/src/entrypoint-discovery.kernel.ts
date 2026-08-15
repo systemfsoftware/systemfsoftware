@@ -1,4 +1,4 @@
-export const getSubpaths = (exportsObject: unknown): ReadonlyArray<string> => {
+export const getSubpaths = (exportsObject: unknown): readonly string[] => {
   if (!exportsObject || typeof exportsObject !== 'object' || Array.isArray(exportsObject)) {
     return []
   }

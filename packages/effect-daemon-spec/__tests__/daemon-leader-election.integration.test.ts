@@ -5,7 +5,7 @@ import { expect } from 'vitest'
 import { Noop } from '../src/daemon-reporter.adapter.js'
 import type { LockConfig } from '../src/mod.js'
 
-import { run, SupervisorBodyExecutorLive, WithLeaderLockExecutorLive } from '../src/mod.js'
+import { run } from '../src/mod.js'
 import { Daemon } from '../src/mod.js'
 import { LeaderLock } from '../src/mod.js'
 import { LeaderLockFake } from './helpers/leader-lock-fake.js'
@@ -18,8 +18,7 @@ Feature('Daemon Leader Election')
     Layer.mergeAll(
       LeaderLockFake,
       TestClock.defaultTestClock,
-      WithLeaderLockExecutorLive.pipe(Layer.provide(LeaderLockFake)),
-      SupervisorBodyExecutorLive,
+      Noop,
     ),
   )
   .body(({ scenario, scenarioOutline }) => {

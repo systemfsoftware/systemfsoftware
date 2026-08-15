@@ -33,8 +33,8 @@ function notFoundResult(tool: string): Record<string, unknown> {
 }
 
 function createMockGuard() {
-  const recordedLogs: Array<{ level: string; message: unknown; context?: unknown }> = []
-  const handlers = new Map<string, Array<(event: unknown, ctx: unknown) => unknown>>()
+  const recordedLogs: { level: string; message: unknown; context?: unknown }[] = []
+  const handlers = new Map<string, ((event: unknown, ctx: unknown) => unknown)[]>()
   const mockCtx = { cwd: '/tmp', sessionManager: { getSessionId: () => 'test-session' } } as unknown
 
   function fire(event: string, payload: Record<string, unknown>): unknown {

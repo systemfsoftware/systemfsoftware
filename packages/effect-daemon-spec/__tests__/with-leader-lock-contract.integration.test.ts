@@ -3,8 +3,18 @@ import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/e
 import { Effect, Either, Fiber, Layer, TestClock } from 'effect'
 import { expect } from 'vitest'
 import { Noop } from '../src/daemon-reporter.adapter.js'
-import { LeaderLockNotAcquired, withLeaderLock, WithLeaderLockExecutorLive } from '../src/mod.js'
+import { LeaderLock, LeaderLockNotAcquired, withLeaderLock } from '../src/mod.js'
+import type { LeaderLockAcquireError, LeaderLockOptions } from '../src/mod.js'
 import { LeaderLockFake } from './helpers/leader-lock-fake.js'
+
+const withLock = <A, E, R>(
+  self: Effect.Effect<A, E, R>,
+  options: LeaderLockOptions,
+): Effect.Effect<A | void, E | LeaderLockAcquireError, R | LeaderLock> =>
+  Effect.gen(function*() {
+    const lock = yield* LeaderLock
+    return yield* withLeaderLock(self, options, lock)
+  })
 
 const Feature = makeFeature({ it, layer })
 
@@ -14,7 +24,6 @@ Feature('withLeaderLock Combinator Contract')
     Layer.mergeAll(
       LeaderLockFake,
       TestClock.defaultTestClock,
-      WithLeaderLockExecutorLive.pipe(Layer.provide(LeaderLockFake)),
     ),
   )
   .body(({ scenario }) => {
@@ -23,7 +32,7 @@ Feature('withLeaderLock Combinator Contract')
       Gherkin.Do.pipe(
         When('the application acquires the lock on key "task" in required mode and runs work returning 42')(
           'result',
-          () => withLeaderLock(Effect.succeed(42), { key: 'task', mode: 'required' }),
+          () => withLock(Effect.succeed(42), { key: 'task', mode: 'required' }),
         ),
         Then('the result is 42')((s) =>
           Effect.sync(() => {
@@ -38,7 +47,7 @@ Feature('withLeaderLock Combinator Contract')
       Gherkin.Do.pipe(
         When('the application acquires the lock on key "task" in optional mode and runs work returning 42')(
           'result',
-          () => withLeaderLock(Effect.succeed(42), { key: 'task', mode: 'optional' }),
+          () => withLock(Effect.succeed(42), { key: 'task', mode: 'optional' }),
         ),
         Then('the result is 42')((s) =>
           Effect.sync(() => {
@@ -54,14 +63,14 @@ Feature('withLeaderLock Combinator Contract')
         Given('another fiber holds the lock for key "task"')('holder', () =>
           Effect.gen(function*() {
             const fiber = yield* Effect.fork(
-              withLeaderLock(Effect.never, { key: 'task', mode: 'required' }),
+              withLock(Effect.never, { key: 'task', mode: 'required' }),
             )
             yield* Effect.yieldNow()
             return fiber
           })),
         When('the application attempts to acquire the lock on key "task" in required mode')(
           'error',
-          () => Effect.either(withLeaderLock(Effect.succeed(42), { key: 'task', mode: 'required' })),
+          () => Effect.either(withLock(Effect.succeed(42), { key: 'task', mode: 'required' })),
         ),
         Then('the call fails because the lock could not be acquired for key "task"')((s) =>
           Effect.sync(() => {
@@ -78,14 +87,14 @@ Feature('withLeaderLock Combinator Contract')
         Given('another fiber holds the lock for key "task"')('holder', () =>
           Effect.gen(function*() {
             const fiber = yield* Effect.fork(
-              withLeaderLock(Effect.never, { key: 'task', mode: 'required' }),
+              withLock(Effect.never, { key: 'task', mode: 'required' }),
             )
             yield* Effect.yieldNow()
             return fiber
           })),
         When('the application attempts to acquire the lock on key "task" in optional mode')(
           'result',
-          () => withLeaderLock(Effect.succeed(42), { key: 'task', mode: 'optional' }),
+          () => withLock(Effect.succeed(42), { key: 'task', mode: 'optional' }),
         ),
         Then('the result is undefined (void)')((s) =>
           Effect.sync(() => {
@@ -101,7 +110,7 @@ Feature('withLeaderLock Combinator Contract')
       Gherkin.Do.pipe(
         When('the application acquires the lock and the guarded work fails with "boom"')(
           'error',
-          () => Effect.either(withLeaderLock(Effect.fail('boom'), { key: 'task', mode: 'required' })),
+          () => Effect.either(withLock(Effect.fail('boom'), { key: 'task', mode: 'required' })),
         ),
         Then('the call fails with the original "boom" value')((s) =>
           Effect.sync(() => {

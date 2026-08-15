@@ -1,0 +1,727 @@
+package graph
+
+import (
+  "bufio"
+  "encoding/json"
+  "io"
+  "sort"
+  "strings"
+)
+
+// dump.go projects a built graph onto the JSON wire contract `ttscgraph dump`
+// prints: the IGraphDump shape the @ttsc/graph engine loads (and the 3D viewer
+// reduces). The internal Node/Edge model stays narrow (so the resident MCP path
+// is untouched); the richer schema is produced here:
+//
+//   - internal node kinds map straight through (NodeTypeAlias is already "type");
+//   - one EdgeValueCall splits by Origin into "calls" / "instantiates" /
+//     "renders", EdgeHeritage into "extends" / "implements", and
+//     EdgeMemberRelation into "implements" / "overrides";
+//   - byte spans become 1-based line/col Evidence ranges;
+//   - decorator facts ride on their target node;
+//   - file paths use one portable, injective project coordinate and the output
+//     is sorted, so the dump is deterministic and diffable.
+//
+// Structural derivations the schema also defines (file nodes, contains/exports
+// edges) are left to the TypeScript loader, which has the node set in hand and
+// is where the redesign keeps that logic.
+
+// DumpEvidence is a 1-based source span grounding a node declaration or an edge
+// expression. It is display/expansion only, never identity.
+//
+// File is omitted when the reader reconstructs it exactly: a node's span is in
+// the node's file, and an ordinary edge's span is in the file its `from` id
+// names. Cross-file assigned implementations keep the actual evidence file. The
+// path is long, it rode the wire once per node and once per edge, and on VS Code
+// those two copies are 55 MB of a 323 MB document that then has to be encoded,
+// piped, parsed and validated. An `implementation` span keeps its file — that one
+// can genuinely live in another file from the declaration that owns it.
+type DumpEvidence struct {
+  File      string `json:"file,omitempty"`
+  StartLine int    `json:"startLine"`
+  StartCol  int    `json:"startCol,omitempty"`
+  EndLine   int    `json:"endLine,omitempty"`
+  EndCol    int    `json:"endCol,omitempty"`
+}
+
+// DumpDecoratorArgument is one decorator argument; Literal is set only for a
+// statically-resolved string or boolean literal.
+type DumpDecoratorArgument struct {
+  Literal any `json:"literal,omitempty"`
+}
+
+// DumpDecorator is a decorator as written on a declaration, carried on its
+// target node for a consumer to interpret.
+type DumpDecorator struct {
+  Name      string                  `json:"name"`
+  Arguments []DumpDecoratorArgument `json:"arguments"`
+}
+
+// DumpEnumMember is one member of an enum on the wire: the name a caller writes
+// and the value it carries. `value` is omitted for a member the checker could
+// not fold to a constant — the name still stands, and the name is what a caller
+// asking about the enum came for.
+type DumpEnumMember struct {
+  Name  string `json:"name"`
+  Value string `json:"value,omitempty"`
+}
+
+// DumpObjectMember is one direct object-literal member carried on its variable
+// node. Line and Signature are rendered from the same Program-owned source text
+// as the node evidence, so the outline cannot race a later disk write.
+type DumpObjectMember struct {
+  Name      string `json:"name"`
+  Kind      string `json:"kind"`
+  Line      int    `json:"line,omitempty"`
+  Signature string `json:"signature,omitempty"`
+}
+
+// DumpNode is the wire shape of a graph node. Lowercase json keys are the
+// contract; the Go field names are not.
+type DumpNode struct {
+  ID            string `json:"id"`
+  Kind          string `json:"kind"`
+  Name          string `json:"name"`
+  QualifiedName string `json:"qualifiedName,omitempty"`
+  // Signature is the declaration head, cut where the compiler says the body
+  // opens. A consumer that reconstructed it by scanning physical lines both
+  // leaked implementation text when a declaration shared its line with its body
+  // and stopped early when the head itself contained a brace — a type-literal
+  // parameter, an object return type, a destructured parameter. Neither is a
+  // guess the consumer can win, so the producer renders it here.
+  Signature      string             `json:"signature,omitempty"`
+  File           string             `json:"file"`
+  External       bool               `json:"external"`
+  Ignored        bool               `json:"ignored,omitempty"`
+  Exported       bool               `json:"exported,omitempty"`
+  Closure        bool               `json:"closure,omitempty"`
+  Modifiers      []string           `json:"modifiers,omitempty"`
+  Literals       []string           `json:"literals,omitempty"`
+  EnumMembers    []DumpEnumMember   `json:"enumMembers,omitempty"`
+  ObjectMembers  []DumpObjectMember `json:"objectMembers,omitempty"`
+  Evidence       *DumpEvidence      `json:"evidence,omitempty"`
+  Implementation *DumpEvidence      `json:"implementation,omitempty"`
+  Decorators     []DumpDecorator    `json:"decorators,omitempty"`
+}
+
+// DumpEdge is the wire shape of a graph edge. Lowercase json keys are the
+// contract; the Go field names are not.
+type DumpEdge struct {
+  From     string        `json:"from"`
+  To       string        `json:"to"`
+  Kind     string        `json:"kind"`
+  Evidence *DumpEvidence `json:"evidence,omitempty"`
+}
+
+// Dump is the IGraphDump envelope: the project it was built for, the evidence
+// about the program that produced it, and the full node and edge sets with none
+// of the MCP response caps.
+type Dump struct {
+  Project  string `json:"project"`
+  Tsconfig string `json:"tsconfig"`
+  // Provenance proves the rest of this dump came from one Program. It rides the
+  // body rather than the serve envelope so a dump written to a file by the
+  // one-shot command keeps its evidence, and so a consumer holding only the
+  // parsed dump never has to ask where it came from.
+  Provenance Provenance `json:"provenance"`
+  // Diagnostics are the compiler's findings for the same program generation
+  // that produced Nodes and Edges. Empty means the program had none, not that
+  // they were not collected; the producer states that in its capabilities.
+  Diagnostics []Diagnostic `json:"diagnostics"`
+  Nodes       []DumpNode   `json:"nodes"`
+  Edges       []DumpEdge   `json:"edges"`
+}
+
+// DumpFacts is the path-normalized fact payload of one graph shard. It omits
+// project-wide provenance and diagnostics so an incremental producer can
+// project one invalidated closure without reconstructing a complete Dump.
+type DumpFacts struct {
+  Nodes []DumpNode `json:"nodes"`
+  Edges []DumpEdge `json:"edges"`
+}
+
+// DumpOrigin is the snapshot evidence a caller attaches to a dump: who built it
+// and what the same program generation had to say about the code. It is a
+// separate struct because only the commands that own a compiler session can
+// produce it, while the graph projection below is pure.
+type DumpOrigin struct {
+  // Provenance identifies the producing program. NewDump always stamps the
+  // schema version itself, so a caller cannot publish a wrong one.
+  Provenance Provenance
+
+  // Diagnostics are the compiler findings for the producing generation, or nil
+  // when the caller did not collect them.
+  Diagnostics []Diagnostic
+}
+
+// NewDump projects a built graph onto the export shape. project is the absolute
+// root of the portable path coordinate; ignored is the git-ignored source set
+// (nil for a non-git project); sources maps a source file's physical path to its
+// text so byte spans become line/col evidence (nil omits evidence); origin is
+// the snapshot evidence that proves where the facts came from. It returns an
+// error before serialization when a path is on another filesystem root or two
+// physical sources would collide at one wire identity.
+func NewDump(g *Graph, project, tsconfig string, ignored map[string]bool, sources map[string]string, origin DumpOrigin) (Dump, error) {
+  facts, ctx, err := newDumpFacts(g, project, ignored, sources)
+  if err != nil {
+    return Dump{}, err
+  }
+
+  // The schema version describes this code, not the caller's belief about it,
+  // so stamp it here rather than trusting what came in.
+  provenance := ctx.provenance(origin.Provenance)
+  provenance.SchemaVersion = DumpSchemaVersion
+
+  // A nil slice encodes as JSON null, and null is not an empty list: a reader
+  // validating `string[]` rejects it, and a reader that does not would have to
+  // guess which of the two the producer meant. Every list on the wire is a list.
+  if provenance.Capabilities == nil {
+    provenance.Capabilities = []string{}
+  }
+  if provenance.Sources == nil {
+    provenance.Sources = []SourceDigest{}
+  }
+  if provenance.Universe.Configs == nil {
+    provenance.Universe.Configs = []FileDigest{}
+  }
+  if provenance.Universe.Roots == nil {
+    provenance.Universe.Roots = []RootFile{}
+  }
+
+  diagnostics := ctx.diagnostics(origin.Diagnostics)
+  if diagnostics == nil {
+    diagnostics = []Diagnostic{}
+  }
+  target := ctx.rel(tsconfig)
+  if err := ctx.pathError(); err != nil {
+    return Dump{}, err
+  }
+
+  return Dump{
+    Project:     ctx.paths.project,
+    Tsconfig:    target,
+    Provenance:  provenance,
+    Diagnostics: diagnostics,
+    Nodes:       facts.Nodes,
+    Edges:       facts.Edges,
+  }, nil
+}
+
+// NewDumpFacts projects only one graph's nodes and edges through the complete
+// dump path/evidence codec. The caller may pass a partial graph produced by
+// BuildFiles; no project-wide provenance, diagnostic walk or full Dump is
+// constructed.
+func NewDumpFacts(g *Graph, project string, ignored map[string]bool, sources map[string]string) (DumpFacts, error) {
+  facts, _, err := newDumpFacts(g, project, ignored, sources)
+  return facts, err
+}
+
+func newDumpFacts(g *Graph, project string, ignored map[string]bool, sources map[string]string) (DumpFacts, *dumpContext, error) {
+  ctx := newDumpContext(project, sources)
+
+  // Decorators ride on their target node; group by the internal node id before
+  // ids are relativized for output.
+  decByNode := make(map[string][]DumpDecorator, len(g.Decorators))
+  for _, d := range g.Decorators {
+    args := make([]DumpDecoratorArgument, 0, len(d.Arguments))
+    for _, a := range d.Arguments {
+      if a.Literal == nil {
+        continue
+      }
+      args = append(args, DumpDecoratorArgument{Literal: a.Literal})
+    }
+    decByNode[d.Target] = append(decByNode[d.Target], DumpDecorator{Name: d.Name, Arguments: args})
+  }
+
+  nodes := make([]DumpNode, 0, len(g.Nodes))
+  for _, n := range g.Nodes {
+    name, qualified := nodeNames(n)
+    // A module is named by its file, so its name relativizes like a path; every
+    // other node is named by a symbol.
+    if n.Kind == NodeModule {
+      name, qualified = ctx.rel(name), ""
+    }
+    nodes = append(nodes, DumpNode{
+      ID:            ctx.relID(n.ID),
+      Kind:          string(n.Kind),
+      Name:          name,
+      QualifiedName: qualified,
+      File:          ctx.rel(n.File),
+      External:      n.External,
+      Ignored:       ignored[n.File],
+      Exported:      n.Exported,
+      Closure:       n.Closure,
+      Modifiers:     n.Modifiers,
+      // Uncapped, like every other fact here: the dump is the whole graph and
+      // the MCP layer is what applies a response cap and marks it.
+      Literals:       n.Literals,
+      EnumMembers:    dumpEnumMembers(n.EnumMembers),
+      ObjectMembers:  ctx.objectMembers(n),
+      Signature:      ctx.declarationSignature(n),
+      Evidence:       withoutFile(ctx.evidence(n.File, n.Pos, n.End)),
+      Implementation: ctx.evidence(n.ImplementationFile, n.ImplementationPos, n.ImplementationEnd),
+      Decorators:     decByNode[n.ID],
+    })
+  }
+  sort.Slice(nodes, func(i, j int) bool { return nodes[i].ID < nodes[j].ID })
+
+  edges := make([]DumpEdge, 0, len(g.Edges))
+  for _, e := range g.Edges {
+    includeEvidenceFile := e.File != "" && e.File != nodeFile(e.From)
+    evidence := ctx.edgeEvidence(e, includeEvidenceFile)
+    edges = append(edges, DumpEdge{
+      From:     ctx.relID(e.From),
+      To:       ctx.relID(e.To),
+      Kind:     dumpEdgeKind(e),
+      Evidence: evidence,
+    })
+  }
+  sort.Slice(edges, func(i, j int) bool {
+    if edges[i].From != edges[j].From {
+      return edges[i].From < edges[j].From
+    }
+    if edges[i].To != edges[j].To {
+      return edges[i].To < edges[j].To
+    }
+    return edges[i].Kind < edges[j].Kind
+  })
+
+  if err := ctx.pathError(); err != nil {
+    return DumpFacts{}, ctx, err
+  }
+  return DumpFacts{Nodes: nodes, Edges: edges}, ctx, nil
+}
+
+// dumpEnumMembers projects an enum's members onto the wire shape, nil for a
+// node that declares none so the key stays off every other kind.
+func dumpEnumMembers(members []EnumMember) []DumpEnumMember {
+  if len(members) == 0 {
+    return nil
+  }
+  out := make([]DumpEnumMember, 0, len(members))
+  for _, member := range members {
+    out = append(out, DumpEnumMember{Name: member.Name, Value: member.Value})
+  }
+  return out
+}
+
+// objectMembers projects AST-owned object member identity and snapshot-owned
+// display text. A missing source omits only line/signature; identity still came
+// from the AST and therefore remains sound.
+func (c *dumpContext) objectMembers(node *Node) []DumpObjectMember {
+  if len(node.ObjectMembers) == 0 {
+    return nil
+  }
+  out := make([]DumpObjectMember, 0, len(node.ObjectMembers))
+  for _, member := range node.ObjectMembers {
+    dumped := DumpObjectMember{
+      Name: member.Name,
+      Kind: objectMemberWireKind(member.Kind),
+    }
+    if evidence := c.evidence(node.File, member.Pos, member.End); evidence != nil {
+      dumped.Line = evidence.StartLine
+    }
+    dumped.Signature = c.objectMemberSignature(node.File, member)
+    out = append(out, dumped)
+  }
+  return out
+}
+
+func objectMemberWireKind(kind NodeKind) string {
+  if kind == NodeMethod {
+    return "method"
+  }
+  return "property"
+}
+
+// MarshalDump serializes a built graph to the export JSON, indented when pretty.
+// See NewDump for the parameters.
+func MarshalDump(g *Graph, project, tsconfig string, ignored map[string]bool, sources map[string]string, origin DumpOrigin, pretty bool) ([]byte, error) {
+  d, err := NewDump(g, project, tsconfig, ignored, sources, origin)
+  if err != nil {
+    return nil, err
+  }
+  if pretty {
+    return json.MarshalIndent(d, "", "  ")
+  }
+  return json.Marshal(d)
+}
+
+// EncodeDump writes the export JSON straight to w, one buffered pass, ending it
+// with the newline the one-shot protocol expects.
+//
+// The alternative is what the dump command used to do: marshal the whole
+// document into a byte slice, convert that slice into a string, and print the
+// string. On VS Code the document is 323 MB, so the conversion was a second full
+// copy of it held live beside the first — half a gigabyte of peak heap that
+// bought nothing, because the bytes were already exactly what stdout wanted.
+func EncodeDump(w io.Writer, g *Graph, project, tsconfig string, ignored map[string]bool, sources map[string]string, origin DumpOrigin, pretty bool) error {
+  dump, err := NewDump(g, project, tsconfig, ignored, sources, origin)
+  if err != nil {
+    return err
+  }
+  buffered := bufio.NewWriterSize(w, 1<<20)
+  encoder := json.NewEncoder(buffered)
+  if pretty {
+    encoder.SetIndent("", "  ")
+  }
+  if err := encoder.Encode(dump); err != nil {
+    return err
+  }
+  return buffered.Flush()
+}
+
+// dumpEdgeKind maps an internal edge kind, refined by Edge.Origin, onto the
+// schema's finer relationship kind.
+func dumpEdgeKind(e *Edge) string {
+  return wireEdgeKind(e.Kind, e.Origin)
+}
+
+// wireEdgeKind maps an internal edge kind, refined by its origin, onto the
+// schema's finer relationship kind. It is the edge's emitted identity, so the
+// dedup keys on it: two uses of one target that differ only in a form mapping to
+// the same wire kind (a plain call and a tagged-template call, both `calls`)
+// collapse to one edge, while forms that mean distinct relationships (`calls` vs
+// `instantiates`, `extends` vs `implements`) are each kept.
+func wireEdgeKind(kind EdgeKind, origin string) string {
+  switch kind {
+  case EdgeValueCall:
+    switch origin {
+    case "new":
+      return "instantiates"
+    case "jsx":
+      return "renders"
+    default:
+      return "calls"
+    }
+  case EdgeValueAccess:
+    return "accesses"
+  case EdgeTypeRef:
+    return "type_ref"
+  case EdgeHeritage:
+    if origin == "extends" {
+      return "extends"
+    }
+    return "implements"
+  case EdgeMemberRelation:
+    return origin
+  default:
+    return string(kind)
+  }
+}
+
+// nodeNames returns a node's simple name and, when it is owner-qualified, its
+// full qualified form for the wire. The simple name is the symbol's own name
+// recorded at build time, so a quoted member whose name contains a dot
+// (`"a.b"` becomes Name `C.a.b`) splits exactly; the qualified form is the full Name
+// when it differs from the simple name, and "" for a top-level declaration.
+// A node without a recorded simple name (a future virtual node) falls back to
+// the last dot-separated segment.
+func nodeNames(n *Node) (simple, qualified string) {
+  if n.Simple == "" {
+    if dot := strings.LastIndex(n.Name, "."); dot >= 0 {
+      return n.Name[dot+1:], n.Name
+    }
+    return n.Name, ""
+  }
+  if n.Simple == n.Name {
+    return n.Simple, ""
+  }
+  return n.Simple, n.Name
+}
+
+// dumpContext maps paths and turns byte spans into line/col evidence, caching a
+// per-file line index so a large file's many edges cost O(log n) each instead
+// of a re-scan.
+type dumpContext struct {
+  paths   *dumpPathMapper
+  sources map[string]string
+  lines   map[string]lineStarts
+}
+
+func newDumpContext(project string, sources map[string]string) *dumpContext {
+  return &dumpContext{
+    paths:   newDumpPathMapper(project),
+    sources: sources,
+    lines:   map[string]lineStarts{},
+  }
+}
+
+// rel delegates every identity-bearing path to the dump's one cached mapper.
+func (c *dumpContext) rel(file string) string {
+  return c.paths.mapPath(file)
+}
+
+func (c *dumpContext) pathError() error { return c.paths.err() }
+
+// relID relativizes the path portion of a node id ("path#qualifiedName:kind").
+// An id with no path (a future virtual node) is returned unchanged.
+//
+// A module is named by its own file path, so both halves of its id are paths and
+// both relativize. Every other node is named by a symbol, which passes through
+// untouched.
+func (c *dumpContext) relID(id string) string {
+  parts, ok := parseNodeID(id)
+  if !ok {
+    return id
+  }
+  name := parts.name
+  if parts.kind == NodeModule {
+    name = c.rel(name)
+  }
+  return nodeID(c.rel(parts.path), name, parts.kind)
+}
+
+// evidence builds the line/col span for a byte range in file, or nil when the
+// span is absent or no source is available.
+func (c *dumpContext) evidence(file string, pos, end int) *DumpEvidence {
+  return c.evidenceWithFile(file, pos, end, true)
+}
+
+func (c *dumpContext) evidenceWithFile(file string, pos, end int, includeFile bool) *DumpEvidence {
+  if pos < 0 || c.sources == nil {
+    return nil
+  }
+  text, ok := c.sources[file]
+  if !ok {
+    return nil
+  }
+  ls := c.lines[file]
+  if ls == nil {
+    ls = newLineStarts(text)
+    c.lines[file] = ls
+  }
+  if pos > len(text) {
+    return nil
+  }
+  // Node.Pos() and an expression's Pos() are the full-start: they include the
+  // leading whitespace and doc comments before the token. Advance to the first
+  // code character so the line/column point at the declaration, not its banner
+  // or its indentation.
+  pos = FirstCodeOffset(text, pos)
+  sl, sc := ls.at(pos)
+  ev := &DumpEvidence{StartLine: sl, StartCol: sc}
+  if includeFile {
+    ev.File = c.rel(file)
+  }
+  if end > pos && end <= len(text) {
+    ev.EndLine, ev.EndCol = ls.at(end)
+  }
+  return ev
+}
+
+// declarationSignature renders a declaration's head from the same
+// Program-owned source text as its evidence, so the outline cannot race a later
+// disk write. Empty when the producer could not bound the head, which leaves the
+// consumer on its existing line scan rather than handing it a wrong cut.
+func (c *dumpContext) declarationSignature(n *Node) string {
+  if n == nil || n.SignatureEnd <= n.Pos || c.sources == nil {
+    return ""
+  }
+  text, ok := c.sources[n.File]
+  if !ok {
+    return ""
+  }
+  pos := FirstCodeOffset(text, n.Pos)
+  end := min(n.SignatureEnd, len(text))
+  if pos >= end {
+    return ""
+  }
+  return strings.TrimSpace(text[pos:end])
+}
+
+// objectMemberSignature reproduces the compact outline details has historically
+// returned, but slices it from Program-owned text while the dump is built
+// instead of reopening the live file later.
+func (c *dumpContext) objectMemberSignature(file string, member ObjectMember) string {
+  pos, end := member.Pos, member.SignatureEnd
+  if pos < 0 || end <= pos || c.sources == nil {
+    return ""
+  }
+  text, ok := c.sources[file]
+  if !ok || pos > len(text) {
+    return ""
+  }
+  pos = FirstCodeOffset(text, pos)
+  if end > len(text) {
+    end = len(text)
+  }
+  if member.SignatureTokenLen > 0 {
+    end = FirstCodeOffset(text, end)
+    end = min(end+member.SignatureTokenLen, len(text))
+  }
+  if pos >= end {
+    return ""
+  }
+  if pos >= end {
+    return ""
+  }
+  signature := strings.TrimSuffix(compactObjectMemberSignature(text[pos:end]), ",")
+  const maxObjectMemberSignatureRunes = 160
+  runes := []rune(signature)
+  if len(runes) > maxObjectMemberSignatureRunes {
+    signature = string(runes[:maxObjectMemberSignatureRunes-3]) + "..."
+  }
+  return signature
+}
+
+// compactObjectMemberSignature collapses trivia outside lexical values while
+// leaving quoted strings, template literals, regular expressions, and comments
+// byte-for-byte intact. A display outline may be compact, but changing literal
+// whitespace would change the declaration it claims to quote.
+func compactObjectMemberSignature(text string) string {
+  var out strings.Builder
+  pendingSpace := false
+  for i := 0; i < len(text); {
+    if width := sourceWhitespaceWidth(text, i); width > 0 {
+      pendingSpace = out.Len() > 0
+      i += width
+      continue
+    }
+    if pendingSpace {
+      out.WriteByte(' ')
+      pendingSpace = false
+    }
+
+    end := i + 1
+    switch text[i] {
+    case '\'', '"':
+      end = quotedSourceEnd(text, i, text[i])
+    case '`':
+      end = templateSourceEnd(text, i)
+    case '/':
+      switch {
+      case i+1 < len(text) && text[i+1] == '/':
+        end = LineCommentEnd(text, i)
+      case i+1 < len(text) && text[i+1] == '*':
+        end = blockCommentEnd(text, i)
+      default:
+        if candidate := regularExpressionEnd(text, i); candidate > i {
+          end = candidate
+        }
+      }
+    }
+    out.WriteString(text[i:end])
+    i = end
+  }
+  return strings.TrimSpace(out.String())
+}
+
+func quotedSourceEnd(text string, start int, quote byte) int {
+  escaped := false
+  for i := start + 1; i < len(text); i++ {
+    if escaped {
+      escaped = false
+      continue
+    }
+    if text[i] == '\\' {
+      escaped = true
+      continue
+    }
+    if text[i] == quote {
+      return i + 1
+    }
+  }
+  return len(text)
+}
+
+// templateSourceEnd returns the last unescaped backtick in the member span.
+// This deliberately treats substitutions and nested templates as one protected
+// lexical region: preserving a little extra spacing is safer than compacting
+// whitespace that belongs to either template's value.
+func templateSourceEnd(text string, start int) int {
+  end := len(text)
+  for i := len(text) - 1; i > start; i-- {
+    if text[i] == '`' && !sourceByteEscaped(text, i) {
+      return i + 1
+    }
+  }
+  return end
+}
+
+func sourceByteEscaped(text string, pos int) bool {
+  slashes := 0
+  for i := pos - 1; i >= 0 && text[i] == '\\'; i-- {
+    slashes++
+  }
+  return slashes%2 == 1
+}
+
+func blockCommentEnd(text string, start int) int {
+  if end := strings.Index(text[start+2:], "*/"); end >= 0 {
+    return start + 2 + end + 2
+  }
+  return len(text)
+}
+
+// regularExpressionEnd conservatively protects a slash-delimited region when
+// one closes on the same source line. Division can look the same without parser
+// context; preserving its spaces is harmless, while compacting a real regular
+// expression would change its pattern.
+func regularExpressionEnd(text string, start int) int {
+  escaped := false
+  inClass := false
+  for i := start + 1; i < len(text); i++ {
+    switch {
+    case lineTerminatorWidth(text, i) > 0:
+      return start
+    case escaped:
+      escaped = false
+    case text[i] == '\\':
+      escaped = true
+    case text[i] == '[':
+      inClass = true
+    case text[i] == ']':
+      inClass = false
+    case text[i] == '/' && !inClass:
+      i++
+      for i < len(text) && ((text[i] >= 'a' && text[i] <= 'z') || (text[i] >= 'A' && text[i] <= 'Z')) {
+        i++
+      }
+      return i
+    }
+  }
+  return start
+}
+
+// edgeEvidence is the evidence range for an edge's source expression.
+func (c *dumpContext) edgeEvidence(e *Edge, includeFile bool) *DumpEvidence {
+  file := e.File
+  if file == "" {
+    file = nodeFile(e.From)
+  }
+  if file == "" {
+    return nil
+  }
+  return c.evidenceWithFile(file, e.Pos, e.End, includeFile)
+}
+
+// withoutFile drops a span file the reader reconstructs from the node or edge
+// that carries the span. It never touches an implementation span.
+func withoutFile(ev *DumpEvidence) *DumpEvidence {
+  if ev == nil {
+    return nil
+  }
+  ev.File = ""
+  return ev
+}
+
+// lineStarts holds the byte offset of each line's start, so an offset maps to a
+// 1-based line/column by binary search.
+type lineStarts []int
+
+func newLineStarts(text string) lineStarts {
+  return lineStarts(ECMALineStarts(text))
+}
+
+// at returns the 1-based line and column of a byte offset.
+func (ls lineStarts) at(offset int) (line, col int) {
+  if offset < 0 || len(ls) == 0 {
+    return 0, 0
+  }
+  i := sort.Search(len(ls), func(i int) bool { return ls[i] > offset }) - 1
+  if i < 0 {
+    i = 0
+  }
+  return i + 1, offset - ls[i] + 1
+}

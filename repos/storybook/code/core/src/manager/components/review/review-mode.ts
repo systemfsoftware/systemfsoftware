@@ -3,6 +3,7 @@ import type { API } from 'storybook/manager-api';
 
 import { REVIEW_NAMESPACE } from '../../../shared/review/index.ts';
 import { REVIEWING_STATUS_VALUE } from './review-status.ts';
+import { reviewStore } from './review-store.ts';
 import { sessionStore } from './session-store.ts';
 
 // Snapshot of the sidebar filters taken when review mode is entered, so the
@@ -17,16 +18,6 @@ export interface ReviewModeFilters {
   excludedTagFilters: string[];
 }
 
-/**
- * Access to the per-tab review-mode flag, owned by ReviewProvider (which persists it so review mode
- * survives reloads). `isActive` is a fresh read, not a render-time snapshot, so rapid successive
- * entries stay idempotent.
- */
-export interface ReviewModeHandle {
-  isActive: () => boolean;
-  setActive: (active: boolean) => void;
-}
-
 type ReviewModeApi = Pick<API, 'setAllStatusFilters' | 'setAllTagFilters' | 'removeStatusFilters'>;
 
 /** Reviewing is owned by review mode and must never be restored after exit. */
@@ -39,6 +30,9 @@ const stripReviewingStatusFilter = (filters: ReviewModeFilters): ReviewModeFilte
     (value) => value !== REVIEWING_STATUS_VALUE
   ),
 });
+
+/** Whether the manager is currently in review mode (persisted across reloads). */
+export const isReviewModeActive = (): boolean => reviewStore.getState().isInReviewMode;
 
 const readJson = <T>(key: string): T | null => {
   const raw = sessionStore.read(key);
@@ -58,10 +52,9 @@ const readJson = <T>(key: string): T | null => {
  */
 export const enterReviewMode = async (
   api: ReviewModeApi,
-  filters: ReviewModeFilters,
-  mode: ReviewModeHandle
+  filters: ReviewModeFilters
 ): Promise<void> => {
-  if (mode.isActive()) {
+  if (isReviewModeActive()) {
     return;
   }
 
@@ -71,12 +64,12 @@ export const enterReviewMode = async (
   );
 
   // Enter optimistically so the UI flips before the async filter setters land.
-  mode.setActive(true);
+  reviewStore.setReviewMode(true);
   try {
     await api.setAllTagFilters([], []);
     await api.setAllStatusFilters([REVIEWING_STATUS_VALUE], []);
   } catch (error) {
-    mode.setActive(false);
+    reviewStore.setReviewMode(false);
     sessionStore.remove(FILTERS_SNAPSHOT_SESSION_KEY);
     throw error;
   }
@@ -84,9 +77,9 @@ export const enterReviewMode = async (
 
 /**
  * Exit review mode: restore the filters captured on entry and clear the
- * review-mode flag.
+ * persisted review-mode flag.
  */
-export const exitReviewMode = async (api: ReviewModeApi, mode: ReviewModeHandle): Promise<void> => {
+export const exitReviewMode = async (api: ReviewModeApi): Promise<void> => {
   const filters = readJson<ReviewModeFilters>(FILTERS_SNAPSHOT_SESSION_KEY);
   if (filters) {
     const restored = stripReviewingStatusFilter(filters);
@@ -97,5 +90,5 @@ export const exitReviewMode = async (api: ReviewModeApi, mode: ReviewModeHandle)
   }
 
   sessionStore.remove(FILTERS_SNAPSHOT_SESSION_KEY);
-  mode.setActive(false);
+  reviewStore.setReviewMode(false);
 };

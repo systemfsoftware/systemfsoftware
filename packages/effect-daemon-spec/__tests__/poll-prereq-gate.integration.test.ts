@@ -10,12 +10,12 @@ const Feature = makeFeature({ it, layer })
 
 const SPAN_NAME = 'test.work.span' as const
 
-const recordPrereqSpan = (seen: Ref.Ref<Array<boolean>>) =>
+const recordPrereqSpan = (seen: Ref.Ref<boolean[]>) =>
   Effect.option(Effect.currentSpan).pipe(
     Effect.flatMap((span) => Ref.update(seen, (arr) => [...arr, Option.isSome(span)])),
   )
 
-const recordWorkSpan = (names: Ref.Ref<Array<string>>) =>
+const recordWorkSpan = (names: Ref.Ref<string[]>) =>
   Effect.currentSpan.pipe(
     Effect.flatMap((span) => Ref.update(names, (arr) => [...arr, span.name])),
   )
@@ -41,8 +41,8 @@ Feature('Poll Prereq Gate')
       Gherkin.Do.pipe(
         Given('span probes')('probes', () =>
           Effect.all({
-            prereqSpanSeen: Ref.make<Array<boolean>>([]),
-            workSpanNames: Ref.make<Array<string>>([]),
+            prereqSpanSeen: Ref.make<boolean[]>([]),
+            workSpanNames: Ref.make<string[]>([]),
           })),
         When('a poll worker whose prereq finds no work runs')('health', (s) =>
           Effect.gen(function*() {
@@ -88,9 +88,9 @@ Feature('Poll Prereq Gate')
       Gherkin.Do.pipe(
         Given('span probes')('probes', () =>
           Effect.all({
-            prereqSpanSeen: Ref.make<Array<boolean>>([]),
-            workSpanNames: Ref.make<Array<string>>([]),
-            workData: Ref.make<Array<number>>([]),
+            prereqSpanSeen: Ref.make<boolean[]>([]),
+            workSpanNames: Ref.make<string[]>([]),
+            workData: Ref.make<number[]>([]),
           })),
         When('a poll worker whose prereq finds work runs')('health', (s) =>
           Effect.gen(function*() {
@@ -145,7 +145,7 @@ Feature('Poll Prereq Gate')
     scenario(
       'Each work span starts a new trace, ignoring the caller trace',
       Gherkin.Do.pipe(
-        Given('a rooted probe')('workSpanRooted', () => Ref.make<Array<boolean>>([])),
+        Given('a rooted probe')('workSpanRooted', () => Ref.make<boolean[]>([])),
         When('a poll worker with work runs while a caller trace is active')('health', (s) =>
           Effect.gen(function*() {
             const worker = Daemon.poll({
@@ -248,7 +248,7 @@ Feature('Poll Prereq Gate')
     scenario(
       'Omitting the prereq runs work inside the span on every tick',
       Gherkin.Do.pipe(
-        Given('a span probe')('workSpanNames', () => Ref.make<Array<string>>([])),
+        Given('a span probe')('workSpanNames', () => Ref.make<string[]>([])),
         When('a poll worker without a prereq runs')('health', (s) =>
           Effect.gen(function*() {
             const worker = Daemon.poll({
@@ -278,7 +278,7 @@ Feature('Poll Prereq Gate')
     scenario(
       'A failure inside work propagates and stops the worker',
       Gherkin.Do.pipe(
-        Given('a span probe')('workSpanNames', () => Ref.make<Array<string>>([])),
+        Given('a span probe')('workSpanNames', () => Ref.make<string[]>([])),
         When('a poll worker whose work fails after the prereq runs')('health', (s) =>
           Effect.gen(function*() {
             const worker = Daemon.poll({

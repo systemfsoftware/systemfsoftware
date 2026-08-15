@@ -1,3 +1,0 @@
-<template>
-  <PropsBasicTypes :count="2" enabled label="Hello" />
-</template>

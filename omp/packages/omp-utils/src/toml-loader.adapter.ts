@@ -33,7 +33,7 @@ export class TomlLoader extends Context.Tag('@systemfsoftware/omp-utils/toml-loa
  * adapter cell may not import the kernel cell.
  */
 const mergeLayers = <V>(
-  layers: ReadonlyArray<Readonly<Record<string, readonly V[]>>>,
+  layers: readonly Readonly<Record<string, readonly V[]>>[],
 ): Record<string, readonly V[]> => {
   const out: Record<string, readonly V[]> = {}
   for (const layer of layers) {

@@ -228,7 +228,7 @@ function findRefutedIdentities(dir: string, schemas: readonly FoundSchema[]): Re
 
   const refuted = new Set<string>()
   const walk = (current: string): void => {
-    let entries: ReadonlyArray<Dirent>
+    let entries: readonly Dirent[]
     try {
       entries = readdirSync(current, { withFileTypes: true })
     } catch {

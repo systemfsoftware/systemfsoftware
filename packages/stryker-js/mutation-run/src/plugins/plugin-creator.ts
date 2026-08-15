@@ -23,7 +23,7 @@ export class PluginCreator {
     commonTokens.injector,
   )
   constructor(
-    private readonly pluginsByKind: Map<PluginKind, Array<Plugin<PluginKind>>>,
+    private readonly pluginsByKind: Map<PluginKind, Plugin<PluginKind>[]>,
     private readonly injector: Injector<PluginContext>,
   ) {}
 
@@ -37,7 +37,7 @@ export class PluginCreator {
         plugin.factory as InjectableFunction<
           PluginContext,
           PluginInterfaces[TPlugin],
-          Array<InjectionToken<PluginContext>>
+          InjectionToken<PluginContext>[]
         >,
       )
     } else if (isClassPlugin(plugin)) {
@@ -45,7 +45,7 @@ export class PluginCreator {
         plugin.injectableClass as InjectableClass<
           PluginContext,
           PluginInterfaces[TPlugin],
-          Array<InjectionToken<PluginContext>>
+          InjectionToken<PluginContext>[]
         >,
       )
     } else if (isValuePlugin(plugin)) {
@@ -85,17 +85,17 @@ export class PluginCreator {
 
 function isFactoryPlugin(
   plugin: Plugin<PluginKind>,
-): plugin is FactoryPlugin<PluginKind, Array<InjectionToken<PluginContext>>> {
+): plugin is FactoryPlugin<PluginKind, InjectionToken<PluginContext>[]> {
   return Boolean(
-    (plugin as FactoryPlugin<PluginKind, Array<InjectionToken<PluginContext>>>)
+    (plugin as FactoryPlugin<PluginKind, InjectionToken<PluginContext>[]>)
       .factory,
   )
 }
 function isClassPlugin(
   plugin: Plugin<PluginKind>,
-): plugin is ClassPlugin<PluginKind, Array<InjectionToken<PluginContext>>> {
+): plugin is ClassPlugin<PluginKind, InjectionToken<PluginContext>[]> {
   return Boolean(
-    (plugin as ClassPlugin<PluginKind, Array<InjectionToken<PluginContext>>>)
+    (plugin as ClassPlugin<PluginKind, InjectionToken<PluginContext>[]>)
       .injectableClass,
   )
 }

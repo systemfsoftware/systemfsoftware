@@ -52,3 +52,13 @@ branch = "main"
 name = "effect-v4"
 url = "https://github.com/Effect-TS/effect"
 branch = "main"
+
+[[repos]]
+name = "typia"
+url = "https://github.com/samchon/typia"
+tag_prefix = "v"
+
+[[repos]]
+name = "ttsc"
+url = "https://github.com/samchon/ttsc"
+tag_prefix = "v"

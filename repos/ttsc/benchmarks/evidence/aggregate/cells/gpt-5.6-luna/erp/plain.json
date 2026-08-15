@@ -1,0 +1,423 @@
+{
+  "engine": "codex",
+  "subject": "erp",
+  "arm": "plain",
+  "runId": "0b9deae2-9926-49f4-9b6c-d454844a4470",
+  "benchmarkRevision": "dfb684279b79e623fcc3210bbea54eb04cf132b6",
+  "model": "gpt-5.6-luna",
+  "effort": "high",
+  "status": "completed",
+  "stage": "overall-final",
+  "launchedAt": "2026-08-09T18:17:34.421Z",
+  "tokens": 5449487580,
+  "tokenUsage": {
+    "totalTokens": 5449487580,
+    "inputTokens": 5441307460,
+    "cachedInputTokens": 5326763264,
+    "cacheWriteInputTokens": 0,
+    "outputTokens": 8180120,
+    "reasoningOutputTokens": 1870305
+  },
+  "inspection": {
+    "attempts": 15,
+    "failures": 0,
+    "tokenUsage": {
+      "totalTokens": 53117910,
+      "inputTokens": 52926638,
+      "cachedInputTokens": 49844992,
+      "cacheWriteInputTokens": 0,
+      "outputTokens": 191272,
+      "reasoningOutputTokens": 99716
+    },
+    "elapsedMs": 5649526.665999999
+  },
+  "apiCost": {
+    "provider": "openrouter",
+    "pricingAsOf": "2026-08-01",
+    "priceSource": "https://openrouter.ai/api/v1/models",
+    "currency": "USD",
+    "amountUsd": 68.71837608,
+    "requests": 40359,
+    "shortContextRequests": 40358,
+    "longContextRequests": 1,
+    "longContextThresholdTokens": 272000,
+    "replayedUpdates": 0
+  },
+  "suspendedMs": 0,
+  "suspensions": [],
+  "workElapsedMs": 367882103.4479,
+  "worktree": {
+    "files": 452,
+    "additions": 88511,
+    "deletions": 136
+  },
+  "reviewVerdicts": [
+    {
+      "scope": "backend",
+      "attempt": 0,
+      "decision": "fail",
+      "action": "retry",
+      "goalIndex": 1,
+      "terminalTurnId": "1b6beae6-6478-46f7-8bb0-8926840068c4",
+      "rationale": "Question 1: No. Review skill lines 48-55 require complete per-file reads, but the claimed qualifying round at backend-review.log:549235 was followed at 549236-549561 only by manifest enumeration (COUNT=180 at 549237) and no file-content reads; 549568-549576 are diff/status/search commands, and the next substantive command is pnpm test at 549785. Later diagnostic reads at 551048 read three files in one command and 551234 reads multiple files with MyGlobal.ts truncated, which also violates the rule. That test gate failed at 549866; pnpm schema then mutated the database at 552222, and no new full round occurred before the final watcher at 552409, contrary to review skill lines 71-75. Question 2: No. Backend testing.md lines 26-39 require at least one test per published operation with one primary operation per test. The generated inventory reports 421 paths/routes at backend-review.log:549130-549131, while the workspace feature suite exports only 143 test functions (the dynamic runner executes exported feature tests per packages/backend/test/helpers/TestAutomation.ts:17-33), so the required operation coverage cannot exist under the one-primary rule. Additionally, test_api_erp_operation_coverage.ts:23-30 documents item erasure as deactivation but asserts only the returned ID, without the observable follow-up state required by testing.md:132-145 and 151-160. The attempt itself acknowledged insufficient operation coverage at backend-review.log:483045. Both required questions therefore fail.",
+      "pausedAt": "2026-08-10T21:07:13.967Z",
+      "decidedAt": "2026-08-10T21:17:42.975Z",
+      "resumedAt": "2026-08-10T21:17:42.987Z",
+      "verdictRelativePath": "supervision/00-backend-0-verdict.json",
+      "verdictSha256": "97aa76a0a6e02369c59f7c5e6076e1a1967c7fa987b8fd43298e51e867a61c56",
+      "workspaceMaterialSha256": "e9de56937e64047f1dca4f5d137053a8d58f5d1e3e86208121c6a590f52a284f"
+    },
+    {
+      "scope": "backend",
+      "attempt": 1,
+      "decision": "fail",
+      "action": "retry",
+      "goalIndex": 2,
+      "terminalTurnId": "55c4b97a-7de1-4e13-9fea-c7dbf3358399",
+      "rationale": "Question 1: fail. The review skill requires complete file contents to be returned (workspace/.agents/skills/review/SKILL.md:48-55). In the claimed final round, the 181-file manifest is recorded at backend-remind-1.log stream 39978-39989, but requirement reads use `Get-Content ... | Out-Null` and emit only `READ_OK` (39946-39949), while the first manifest-file read assigns `$c` and emits only `READ_OK ... LINES=9` (40571-40574), not the file contents. The final report’s dry claim is at stream 45587, contradicted by that record. Question 2: fail. Testing instructions require persisted mutations to have observable follow-up state and every test to assert a business fact (workspace/.agents/skills/backend/testing.md:132-158). `test_api_erp_item_erase` claims deactivation but only checks the returned ID (workspace/packages/backend/test/features/api/erp/test_api_erp_operation_coverage.ts:23-30); organization and warehouse erasure tests likewise only check returned identity (lines 110-115, 179-185). The item requirements explicitly require deactivation/reactivation and preservation semantics (workspace/docs/analysis/03-functional-requirements.md:1555, 1589-1592), so these tests do not prove the promised outcome. Unverified: the remaining tests were not individually assessed.",
+      "pausedAt": "2026-08-10T22:18:43.506Z",
+      "decidedAt": "2026-08-10T22:24:50.522Z",
+      "resumedAt": "2026-08-10T22:24:50.532Z",
+      "verdictRelativePath": "supervision/01-backend-1-verdict.json",
+      "verdictSha256": "4fe13199c2a52287c5758d05cbea65009cc7607e559fda5dc650a40dead247c4",
+      "workspaceMaterialSha256": "a5b55073ed49ed14cfef6ebf886a1b2688bba8797e3b61360de3830eef281638"
+    },
+    {
+      "scope": "backend",
+      "attempt": 2,
+      "decision": "fail",
+      "action": "retry",
+      "goalIndex": 3,
+      "terminalTurnId": "8552f4ef-2021-45c3-a340-42ed8adf2657",
+      "rationale": "Both requirements fail. Review SKILL.md says a file counts only when full contents are returned (workspace/.agents/skills/review/SKILL.md:48-54) and requires mutation calibration before a dry round (lines 77-80). The stream’s requirement reads at backend-remind-2.log:118-139 and scope reads at :847-2283 emit only LINES= summaries, not file contents; no calibration command/text appears in the full stream. The sole pnpm check:watch at :2482 completed status failed, exitCode 124, with null output; :2502 only lists a process, so a clean rebuild is unverified despite the dry claim at :2524. Tests also violate backend/testing.md:34-41 and 92,158. test_api_erp_operations.ts:118 and :121 each bundle many independently published operations into one test, contrary to one primary operation. test_api_erp_operation_coverage.ts:23-30 claims item erasure deactivates but asserts only returned identity and never observes deactivated state. The stream’s ACCESSORS=421/TEST_FILES=23/MISSING=0 check at :2350 is only a string-presence scan, and EXECUTIONS=146/FAILED_COUNT=0 at :2372 does not prove business behavior. Unverified: whether additional tests independently satisfy every requirement; the cited violations are sufficient for failure.",
+      "pausedAt": "2026-08-10T22:33:12.067Z",
+      "decidedAt": "2026-08-10T22:39:07.474Z",
+      "resumedAt": "2026-08-10T22:39:07.483Z",
+      "verdictRelativePath": "supervision/02-backend-2-verdict.json",
+      "verdictSha256": "a395353b3d1615ba78f46043764cd736ee32af5021d68fa6128ba8c73c9903d1",
+      "workspaceMaterialSha256": "abf99f3eb8213476f4fe66c08edf2cf34c5d412d71ef1bccc8e1262f9ccd056d"
+    },
+    {
+      "scope": "backend",
+      "attempt": 3,
+      "decision": "fail",
+      "action": "retry",
+      "goalIndex": 4,
+      "terminalTurnId": "fe2d99d2-1e58-4843-8f83-24eefd38a2d8",
+      "rationale": "The review loop is not proven. The stream’s manifest command at backend-remind-3.log:18395 is followed by reads beginning with schema-01 at :18716, although the sorted manifest begins with docs/analysis; the requirements were read before the manifest. After the scope reads, requirements were reread out of order at :28024-28029 (00, 04, 01, 05, 03, 02), followed by gates and no complete scope reread; the dry-round claim at :50479 is therefore contradicted by the command record. Tests also fail the workspace rules: testing.md:158 requires a business assertion, but test_api_erp_operations.ts:28 only calls movement/balance indexes and typia.assert, proving shape/reachability only. testing.md:34 requires one primary operation, while test_api_erp_operations.ts:40 exercises asset, production, inspection, maintenance, and service operations in one test. No relevant facts were left unverified.",
+      "pausedAt": "2026-08-10T23:04:54.846Z",
+      "decidedAt": "2026-08-10T23:10:02.059Z",
+      "resumedAt": "2026-08-10T23:10:02.071Z",
+      "verdictRelativePath": "supervision/03-backend-3-verdict.json",
+      "verdictSha256": "c55fd8a7754bca234094247ca54d194728663879e7e037385cbcd01bff68a390",
+      "workspaceMaterialSha256": "06ad0861cfb09de0c4d0798ce2d772ce5f3e61b2462f07e5465017754a1a99f2"
+    },
+    {
+      "scope": "backend",
+      "attempt": 4,
+      "decision": "fail",
+      "action": "final",
+      "goalIndex": 5,
+      "terminalTurnId": "5b455569-9b37-4122-bf31-8ad3050f369d",
+      "rationale": "Question 1 is not proven: the restarted first round read its 182-file manifest (backend-remind-4.log lines 144247–145246), then performed calibration (file changes at 145414 and 145455; tests at 145420 and 145484), but the stream contains no clean packages/backend pnpm check:watch gate closing that round. The later post-calibration round did read 182 files (145899–146811) and had a successful watch gate (146896–146903, exit 0), but that does not establish every round’s gate. Question 2 fails the workspace testing rules: testing.md lines 151–158 require a business assertion beyond type validation. test_api_erp_operations.ts lines 27–28 only call typia.assert on stock movement and balance responses, with no business assertion. test_api_erp_operation_coverage.ts lines 23–30 documents item erasure deactivation but asserts only the returned ID, not deactivation or follow-up state. These facts are verified; no unverified claims are relied upon.",
+      "pausedAt": "2026-08-11T00:52:33.282Z",
+      "decidedAt": "2026-08-11T01:00:23.329Z",
+      "resumedAt": "2026-08-11T01:00:23.344Z",
+      "verdictRelativePath": "supervision/04-backend-4-verdict.json",
+      "verdictSha256": "f22e8ca564130493159699db078d0b7bf5f1f1f1602e7f6ffa163ed16eca15ad",
+      "workspaceMaterialSha256": "cbeacf80029054bc724c1edb43b3302dbc3c5909d7267e677fa6dc7eb26ca4d5"
+    },
+    {
+      "scope": "frontend",
+      "attempt": 0,
+      "decision": "fail",
+      "action": "retry",
+      "goalIndex": 8,
+      "terminalTurnId": "95233950-85a2-4a19-8201-6cd6a157024c",
+      "rationale": "Q1 fails. The review rule requires complete contents returned in sorted manifest order (workspace/.agents/skills/review/SKILL.md:48-54). In Round 7, all six requirement reads were started out of order/concurrently (frontend-review.log:L29078-L29083), completed in order 03,01,00,02,04,05 (L29090-L29102), and each output only `READ ... CHARS=...`, not the file contents (also API/frontend reads at L29730 and L31312-L31319). Therefore the claimed dry round (L31947; final report L32187) was not a qualifying full read. Q2 fails. Frontend verification requires no backend seeding, one complete live journey per requirement-backed flow, every screen walked, and concrete effect assertions (workspace/.agents/skills/frontend/verification.md:24,28-46,54-63). The sole substantive journey directly seeds through `page.request.post` (workspace/packages/frontend/tests/journeys/workspace.spec.ts:10), and its Reports/Operations/People/Controls/Planning/Settings coverage only clicks links and waits for headings (lines 44-48); the only other journey test is a generic onboarding refusal (lines 51-59). The screen plan names ten distinct journeys (workspace/packages/frontend/wiki/screen-plan.md:9-18) that are not registered, while the stream reports 420 generated accessors (frontend-review.log:L31818). The contract test asserts only that `main` is visible (workspace/packages/frontend/tests/contract/scaffold.spec.ts:44-50), which cannot compensate for missing live requirement journeys. No additional unverified fact is needed.",
+      "pausedAt": "2026-08-11T03:32:19.156Z",
+      "decidedAt": "2026-08-11T03:40:02.252Z",
+      "resumedAt": "2026-08-11T03:40:02.278Z",
+      "verdictRelativePath": "supervision/05-frontend-0-verdict.json",
+      "verdictSha256": "e6f1644ac2a51eca1b71c6d0ce4abeb3017df9c798818f46a0ade05a6721fb8d",
+      "workspaceMaterialSha256": "d90f137d25094324760931aa7d62a5b827416f00df071042969c7976b04096bf"
+    },
+    {
+      "scope": "frontend",
+      "attempt": 1,
+      "decision": "fail",
+      "action": "retry",
+      "goalIndex": 9,
+      "terminalTurnId": "add464c8-4125-4d23-bab7-9ce2ee7bec95",
+      "rationale": "Question 1: fail. The review rule requires exactly one manifest file read per command, and a multi-file command counts as reading none (workspace/.agents/skills/review/SKILL.md:48-55). The claimed final rounds instead used one PowerShell command with `foreach ($file in $scope) { Get-Content ... }`: ROUND=FINAL-DRY at frontend-remind-1.log:65947-65951 and ROUND=FINAL-DRY-LAST-RESTART at :66742-66749 (348 files reported, but one command read them all). Scoped edits at :66310, :66553, and :66734 preceded further restarts, which also used the invalid multi-file command. The final assertion of dryness at :67119 is therefore unproven and contradicted by the retained command record. Question 2: fail. The workspace requires one exported/registering journey per requirement-backed flow, every screen walked by a journey, and concrete live-effect assertions (packages/frontend/.agents/skills/frontend/verification.md:24, 28-46, 54-63, 126-136). workspace.spec.ts has only two registered tests (:63-71), one journey covering account/journal behavior (:21-54) and merely waiting for headings on six other screens (:56-60). The screen plan lists those screen families and numerous child requirements with distinct journey obligations (packages/frontend/wiki/screen-plan.md:7-18, 25-77), none represented by corresponding journey functions. The live test also directly seeds the backend with page.request.post (:10), contrary to the testing instructions (:24). The added assertions are real for the two exercised lifecycles, but the suite does not properly cover the documented frontend behavior. No additional relied-upon facts were unverified.",
+      "pausedAt": "2026-08-11T04:46:40.762Z",
+      "decidedAt": "2026-08-11T04:50:21.746Z",
+      "resumedAt": "2026-08-11T04:50:21.763Z",
+      "verdictRelativePath": "supervision/06-frontend-1-verdict.json",
+      "verdictSha256": "6ae16d43c145731d7a6d175028c980c98b9262569ea11ba959a7cb956e10b72f",
+      "workspaceMaterialSha256": "7bf4a112bd3a7b9871136db3115dbfa5f40400812120a8cce313e891ac6149d0"
+    },
+    {
+      "scope": "frontend",
+      "attempt": 2,
+      "decision": "fail",
+      "action": "retry",
+      "goalIndex": 10,
+      "terminalTurnId": "0f5aa1e2-1de8-47b3-919d-dfb80cc2c3c7",
+      "rationale": "Question 1: No. At frontend-remind-2.log:60063 the attempt claimed dry while recording two unresolved strict findings, then restarted at :60116. The subsequent round reads at :62358-62379 and the final-dry command at :82872 assign Get-Content -Raw to variables but emit only CHARS summaries; its completion at :83573 likewise contains only CHARS output, and one command loops over all 347 files rather than one file per command. The final claim at :84844 is contradicted by this record, so no valid full-content final dry round is verified. Question 2: No. packages/frontend/tests/ui-review.spec.ts:41-57 visits nine routes and asserts only shared navigation visibility, proving reachability rather than page/business behavior; packages/frontend/tests/journeys/workspace.spec.ts:88-106 similarly only waits for static headings/labels for several screens. The contract test's shape-only purpose is explicitly documented as allowed in packages/frontend/tests/contract/scaffold.spec.ts:41-46. Any additional runtime behavior not shown by these assertions is unverified.",
+      "pausedAt": "2026-08-11T07:07:18.597Z",
+      "decidedAt": "2026-08-11T07:13:26.548Z",
+      "resumedAt": "2026-08-11T07:13:26.567Z",
+      "verdictRelativePath": "supervision/07-frontend-2-verdict.json",
+      "verdictSha256": "ddf767feaf75b95609d79d7e72371e6ee0867ee5196d77641b86fabd6efcc29f",
+      "workspaceMaterialSha256": "8c2e332c67257ea4f74dd0f75e1f562b4d1827c4a9b1c6df379bb5993a40ba31"
+    },
+    {
+      "scope": "frontend",
+      "attempt": 3,
+      "decision": "fail",
+      "action": "retry",
+      "goalIndex": 11,
+      "terminalTurnId": "83b7b1e6-124c-413d-a85a-8f391d1cb14e",
+      "rationale": "Both checks fail. The review skill requires complete contents returned, exactly one manifest file per command, and full reads (.agents/skills/review/SKILL.md:46-59). frontend-remind-3.log:161-860 and :2015-2714 use one loop command per round and emit only path/character counts; the purported final per-file pass at :21912 and :21922-23478 likewise emits only index/path/length, not file contents. The last final-round read is :23476; no backend/frontend dev reload gate follows it (the 200 health checks at :20221-20224 precede that manifest), so a dry round with closing gates is unverified despite the claim at :23944. Tests also fail the workspace contract: backend/testing.md:26-41 requires every published operation to have a named primary test, and :151-160 requires business assertions beyond type checks. test_api_erp_operations.ts:19 combines create, list, detail, and transitions in one test, while :28 only calls typia.assert on movement and balance responses, proving shape but no business outcome.",
+      "pausedAt": "2026-08-11T08:20:06.759Z",
+      "decidedAt": "2026-08-11T08:25:37.490Z",
+      "resumedAt": "2026-08-11T08:25:37.508Z",
+      "verdictRelativePath": "supervision/08-frontend-3-verdict.json",
+      "verdictSha256": "85d86f0f4e74d714e80ea7d9b282a9a111a74cfee905f05e31debdf10b6be23a",
+      "workspaceMaterialSha256": "a6b32591d180a508f24a031880c6505d100428d000bef8ec39eeabdc18090d17"
+    },
+    {
+      "scope": "frontend",
+      "attempt": 4,
+      "decision": "fail",
+      "action": "final",
+      "goalIndex": 12,
+      "terminalTurnId": "6e45e5b0-8b75-4e70-80c6-f62109ad25c6",
+      "rationale": "Q1: The stream evidences a final edit-free review round: the last scoped edit is at frontend-remind-4.log:26735; a new manifest/read pass follows at :26857, clean gates and reloads are recorded through :30312, and a post-gate 347-file manifest is created at :30385 with the final read/range completion through :33011. Q1 is therefore verified as yes. Q2: The workspace requires one live spec per requirement-backed journey and concrete business-effect assertions (workspace/.agents/skills/frontend/verification.md:9,42,54,132). The plan reports 1487/1487 requirements (frontend-remind-4.log:30041), but only one journey file exists and registers three live tests (workspace/packages/frontend/tests/journeys/workspace.spec.ts:141-168). The remaining suites include reachability/visibility-only checks (workspace/packages/frontend/tests/ui-review.spec.ts:20-56; workspace/packages/frontend/tests/readme.spec.ts:3-6) and the simulation contract smoke test explicitly only checks rendering (workspace/packages/frontend/tests/contract/scaffold.spec.ts:46-53). Thus the tests do not provide a concrete business-outcome journey for the published requirement surface; Q2 is no.",
+      "pausedAt": "2026-08-11T09:14:13.736Z",
+      "decidedAt": "2026-08-11T09:20:48.234Z",
+      "resumedAt": "2026-08-11T09:20:48.254Z",
+      "verdictRelativePath": "supervision/09-frontend-4-verdict.json",
+      "verdictSha256": "da3c09825f389cd3131eabfa5bd42b82b8626bc94e4465fdf15b0c10afd9f625",
+      "workspaceMaterialSha256": "9aed0b6ef324d93db55ec5a04c28689b5775bac6e77ce792dc197a6bc616f0f5"
+    },
+    {
+      "scope": "overall",
+      "attempt": 0,
+      "decision": "fail",
+      "action": "retry",
+      "goalIndex": 14,
+      "terminalTurnId": "b5b3cca4-384f-4e81-9cb3-0200160e3429",
+      "rationale": "Question 1: No. The workspace rule requires complete contents to be returned and exactly one manifest file per command (workspace/.agents/skills/review/SKILL.md:48-54). Round 1 commands at overall-review.log:1879-1905 only emitted character counts, while later reads such as overall-review.log:3975 read multiple files and overall-review.log:4029/5025 used searches or ranges. After calibration, the Round 2 manifest command failed with exit 124 at overall-review.log:26220; the replacement per-file commands at overall-review.log:26266-28285 used `ReadAllText(...) | Out-Null; Write-Output READ_COMPLETE`, discarding contents. The final dry-round claim at overall-review.log:30674 is therefore contradicted by the stream. Question 2: No. Backend testing requires persisted mutations to have observable follow-up proof (workspace/.agents/skills/backend/testing.md:92, 132-145). `workspace/packages/backend/test/features/api/erp/test_api_erp_operation_coverage.ts:23-30` labels item erasure as deactivation but only checks that the returned ID matches; an implementation that did not deactivate anything would pass. Its refusal helper at lines 5-11 accepts any exception without distinguishing the specified refusal. Unverified: whether the remaining tests satisfy their individual requirements; the verified failures above are sufficient to fail.",
+      "pausedAt": "2026-08-11T10:54:09.956Z",
+      "decidedAt": "2026-08-11T10:58:46.369Z",
+      "resumedAt": "2026-08-11T10:58:46.392Z",
+      "verdictRelativePath": "supervision/10-overall-0-verdict.json",
+      "verdictSha256": "77fd3407109fe438c27d455545a82f96dc44adfb3985857991690aad068a7229",
+      "workspaceMaterialSha256": "ae785cd377d8702a73a577a086e8902272d4ca68aa828d273f0ee675522510cf"
+    },
+    {
+      "scope": "overall",
+      "attempt": 1,
+      "decision": "fail",
+      "action": "retry",
+      "goalIndex": 15,
+      "terminalTurnId": "1b40eb7e-394f-4aa8-8968-6dd7c889b84b",
+      "rationale": "The review loop did not reach a valid dry round. The stream’s purported final-dry report still says the backend development gate could not bind and that backend tests failed (overall-remind-1.log:5238872); its final report explicitly lists remaining findings—failed backend integration tests, missing live E2E fixtures, @ts-nocheck providers, and an in-memory pagination path (overall-remind-1.log:5239148). Any remaining finding or failed required gate invalidates dryness. A complete one-file-per-command manifest/read is unverified; the stream describes seven bounded ranges rather than proving the required command discipline (overall-remind-1.log:5236760). The tests also fail the workspace testing rules: testing.md requires persisted mutations to have observable follow-up state, list/search tests to prove filter/order/pagination, and every test to assert business behavior (lines 138-139, 158). Yet test_api_erp_operation_coverage.ts claims item erasure deactivates while only checking the returned ID (lines 23-30), claims a listing while only checking pagination.current (lines 32-37), and tests invitation acceptance only with an unknown token/refusal and no successful acceptance path (lines 39-42).",
+      "pausedAt": "2026-08-13T14:56:18.037Z",
+      "decidedAt": "2026-08-13T15:02:30.757Z",
+      "resumedAt": "2026-08-13T15:02:30.786Z",
+      "verdictRelativePath": "supervision/11-overall-1-verdict.json",
+      "verdictSha256": "ee85b9b74f755d4de0aadf87e7c3b19902e7301ea3c63bd6574830680af0cbc2",
+      "workspaceMaterialSha256": "ec1821b136367368c83feb8e93fca697cbbf7197a147c20f2b388a97670e2250"
+    },
+    {
+      "scope": "overall",
+      "attempt": 2,
+      "decision": "fail",
+      "action": "retry",
+      "goalIndex": 16,
+      "terminalTurnId": "498cdb7a-b167-4273-a839-f28fe42074f3",
+      "rationale": "Both questions fail. The review procedure requires each file’s full contents to be returned, one manifest file per command (`workspace/.agents/skills/review/SKILL.md:39-45`). In the final traversal, stream positions 1009033-1009177 and 1009591-1009735 show four commands each looping over 125 manifest files, assigning every chunk to `$null` and emitting only batch markers; this is neither one-file-per-command nor content reaching the reviewer. The completion claim at stream position 1010140 therefore does not prove a dry round. Tests also violate the workspace contract: `workspace/.agents/skills/backend/testing.md:26-39` requires a proving test for every published operation and one primary operation per test. The generated API publishes 12 ERP accessors with no occurrence in `workspace/packages/backend/test`: automation index/retry (`packages/api/src/functional/erp/control_ops/automation/index.ts:16,78`), three credit-memo operations (`.../credit_memo/{_void,apply,refund}/index.ts:16`), three MRP recommendation operations (`.../mrp/recommendation/{dismiss,accept_production,accept_purchase}/index.ts:16`), asset activate/submit (`.../operations/asset/{activate,submit}/index.ts:16`), department update (`.../projects/department/index.ts:141`), and tax-return reject (`.../tax_return/index.ts:240`). `test_api_erp_operations.ts:73-85` further bundles multiple published operations into single tests, contrary to the one-primary-operation rule. All cited facts were verified; no cited fact is unverified.",
+      "pausedAt": "2026-08-14T00:10:49.218Z",
+      "decidedAt": "2026-08-14T00:16:41.165Z",
+      "resumedAt": "2026-08-14T00:16:41.188Z",
+      "verdictRelativePath": "supervision/12-overall-2-verdict.json",
+      "verdictSha256": "e5f17216420ec48d17efe5bfbef76905ab2a9b1b5f24af14bd246c4f1879ce84",
+      "workspaceMaterialSha256": "a0942de6faee66236b6ee7f999949bba3a14b87e3487b3b80a71c728432d85c7"
+    },
+    {
+      "scope": "overall",
+      "attempt": 3,
+      "decision": "fail",
+      "action": "retry",
+      "goalIndex": 17,
+      "terminalTurnId": "ca079773-7605-4b00-b9c5-ae6091646683",
+      "rationale": "Question 1 is not established. The stream shows a 506-entry sorted manifest at overall-remind-3.log:50412 and 506 distinct full-read commands at :50420–:55008, after earlier edits at :30522–:31564 and restart at :31890; :55059 records the traversal, followed only by health/process checks at :55297 and :55337. However the final report at :55536 explicitly says the prepared live journey could not run because LIVE_E2E_* was absent. The file-read portion is verified, but the required live-journey portion of the full scope is unverified, so a genuinely complete dry round is not proven. Question 2 is no. Backend testing requires every published operation and one primary operation per test (.agents/skills/backend/testing.md:26,34–39), business assertions (:158), and forbids direct Prisma proof (:166–176). test_api_erp_operations.ts:50–69 combines asset create/update/transfer/impair/dispose/retire in one test and directly queries MyGlobal.prisma at :59–67; :72–75 likewise groups multiple operations. The published accessor packages/api/src/functional/erp/tax_return/index.ts:240 (tax_return.reject) has no matching backend test occurrence. Frontend verification requires every requirement journey and screen (.agents/skills/frontend/verification.md:42–44,130–133), while packages/frontend/tests/journeys/workspace.spec.ts:168–192 registers only the workspace, invitation, and self-registration checks, and the live journey was unavailable. Thus the tests do not satisfy the workspace’s testing instructions.",
+      "pausedAt": "2026-08-14T01:13:36.114Z",
+      "decidedAt": "2026-08-14T01:20:10.798Z",
+      "resumedAt": "2026-08-14T01:20:10.830Z",
+      "verdictRelativePath": "supervision/13-overall-3-verdict.json",
+      "verdictSha256": "4c2fef2ba4c8b710710da73727af6193c90c21ff4bc1d58a51ae869d43e38fe7",
+      "workspaceMaterialSha256": "7328883c99394515f6f1fe948ede7b04ed9c116eef8a9c0662d8fe29c9d6b3c0"
+    },
+    {
+      "scope": "overall",
+      "attempt": 4,
+      "decision": "fail",
+      "action": "final",
+      "goalIndex": 18,
+      "terminalTurnId": "e23bd05d-4adb-405f-b7e3-4de4cbdced08",
+      "rationale": "The final traversal is evidenced in overall-remind-4.log:87675-103892 (requirements reread, MANIFEST_COUNT=507, and one-file FULL_READ commands through the final file), with no later file changes before the completion message at :104219. However, the required AGENTS.md read is not evidenced; the new review setup reads only SKILL.md/backend.md/frontend.md/overall.md at :95, :250, :434, and :629. More decisively, tests are not proper: testing instructions require every published operation and persisted-mutation follow-up assertions (.agents/skills/backend/testing.md:132-145, 158; 138 specifically requires observable follow-up state). Twelve published accessors have no references anywhere under packages/backend/test, including control_ops automation (packages/api/src/functional/erp/control_ops/automation/index.ts:16,78), credit-memo apply/refund/void, MRP recommendation actions, asset activate/submit, departmentUpdate, and tax_return.reject (their generated files/lines are present, but no matching test calls exist). Additionally, test_api_erp_operation_coverage.ts:23-30 claims item erasure but only checks returned identity, not the required deactivation state.",
+      "pausedAt": "2026-08-14T02:45:59.188Z",
+      "decidedAt": "2026-08-14T02:53:29.955Z",
+      "resumedAt": "2026-08-14T02:53:29.992Z",
+      "verdictRelativePath": "supervision/14-overall-4-verdict.json",
+      "verdictSha256": "9bb704b9f3ddcc8d0ae6daf3324ba47342cf854d6bbbafba25a46181500754ce",
+      "workspaceMaterialSha256": "19edc1d59b1ec37a0218d8b7233c0c5ec334d5bee3a54f5a4057e00e6a3e2d2f"
+    }
+  ],
+  "stages": [
+    {
+      "name": "backend-start",
+      "tokens": 544228917,
+      "elapsedMs": 55644610.90895567,
+      "tokenPercent": 10,
+      "timePercent": 15
+    },
+    {
+      "name": "backend-review",
+      "tokens": 523010157,
+      "elapsedMs": 42421020.73663378,
+      "tokenPercent": 10,
+      "timePercent": 12
+    },
+    {
+      "name": "backend-remind-1",
+      "tokens": 44991625,
+      "elapsedMs": 3984161.357087488,
+      "tokenPercent": 1,
+      "timePercent": 1
+    },
+    {
+      "name": "backend-remind-2",
+      "tokens": 8627055,
+      "elapsedMs": 786806.182749587,
+      "tokenPercent": 0,
+      "timePercent": 0
+    },
+    {
+      "name": "backend-remind-3",
+      "tokens": 18968106,
+      "elapsedMs": 1808341.6341287338,
+      "tokenPercent": 0,
+      "timePercent": 0
+    },
+    {
+      "name": "backend-remind-4",
+      "tokens": 132029222,
+      "elapsedMs": 6660301.763394102,
+      "tokenPercent": 2,
+      "timePercent": 2
+    },
+    {
+      "name": "backend-final",
+      "tokens": 8656428,
+      "elapsedMs": 1081173.7501767299,
+      "tokenPercent": 0,
+      "timePercent": 0
+    },
+    {
+      "name": "frontend-start",
+      "tokens": 28836461,
+      "elapsedMs": 3039602.391953439,
+      "tokenPercent": 1,
+      "timePercent": 1
+    },
+    {
+      "name": "frontend-review",
+      "tokens": 61761807,
+      "elapsedMs": 4515596.572636039,
+      "tokenPercent": 1,
+      "timePercent": 1
+    },
+    {
+      "name": "frontend-remind-1",
+      "tokens": 67847130,
+      "elapsedMs": 3720655.6545996885,
+      "tokenPercent": 1,
+      "timePercent": 1
+    },
+    {
+      "name": "frontend-remind-2",
+      "tokens": 140351522,
+      "elapsedMs": 8627226.50175815,
+      "tokenPercent": 3,
+      "timePercent": 2
+    },
+    {
+      "name": "frontend-remind-3",
+      "tokens": 60326958,
+      "elapsedMs": 4328238.646344096,
+      "tokenPercent": 1,
+      "timePercent": 1
+    },
+    {
+      "name": "frontend-remind-4",
+      "tokens": 39029924,
+      "elapsedMs": 3307995.760367711,
+      "tokenPercent": 1,
+      "timePercent": 1
+    },
+    {
+      "name": "frontend-final",
+      "tokens": 15335215,
+      "elapsedMs": 2309734.3981366553,
+      "tokenPercent": 0,
+      "timePercent": 1
+    },
+    {
+      "name": "overall-review",
+      "tokens": 36725780,
+      "elapsedMs": 3571239.645924204,
+      "tokenPercent": 1,
+      "timePercent": 1
+    },
+    {
+      "name": "overall-remind-1",
+      "tokens": 2955860040,
+      "elapsedMs": 179035385.11732876,
+      "tokenPercent": 54,
+      "timePercent": 49
+    },
+    {
+      "name": "overall-remind-2",
+      "tokens": 606699282,
+      "elapsedMs": 30541967.09945603,
+      "tokenPercent": 11,
+      "timePercent": 8
+    },
+    {
+      "name": "overall-remind-3",
+      "tokens": 39772933,
+      "elapsedMs": 3805615.411610623,
+      "tokenPercent": 1,
+      "timePercent": 1
+    },
+    {
+      "name": "overall-remind-4",
+      "tokens": 74025948,
+      "elapsedMs": 5598314.560511272,
+      "tokenPercent": 1,
+      "timePercent": 2
+    },
+    {
+      "name": "overall-final",
+      "tokens": 42403070,
+      "elapsedMs": 3094115.3541472238,
+      "tokenPercent": 1,
+      "timePercent": 1
+    }
+  ]
+}

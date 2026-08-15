@@ -6,7 +6,7 @@
 
 // @public (undocumented)
 export namespace Cell {
-    export { DecideDone, DecidePhase, DecodeDone, DecodePhase, EncodeDone, EncodePhase, Layer, Phases, ReadDone, ReadPhase, WriteDone, WritePhase, apply, decide, decode, encode, read, write };
+    export { Convention, DESCRIPTION_MODULE, DecideDone, DecideNode, DecidePhase, DecodeDone, DecodeNode, DecodePhase, Description, EncodeDone, EncodeNode, EncodePhase, IO_CELLS, IoCellClassification, Layer, Phase, PhaseFact, Phases, ReadDone, ReadNode, ReadPhase, Vocabulary, WriteDone, WriteNode, WritePhase, apply, canonical, decide, decode, encode, read, vocabulary, write };
 }
 
 // @public (undocumented)
@@ -16,7 +16,7 @@ export namespace Policy {
 
 // @public (undocumented)
 export namespace Workflow {
-    export { UninhabitedDecision, UninhabitedError, Workflow, make };
+    export { Inhabited, Tagged, UninhabitedDecision, UninhabitedError, UntaggedError, Workflow, make };
 }
 
 // (No @packageDocumentation comment for this package)

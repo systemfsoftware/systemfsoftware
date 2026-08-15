@@ -6,7 +6,7 @@ export interface ResolverResolution {
   readonly fileName: string | undefined
   readonly isTypeScript: boolean
   readonly isJson: boolean
-  readonly trace: ReadonlyArray<string>
+  readonly trace: readonly string[]
 }
 
 export interface ResolverAdapterService {

@@ -46,7 +46,7 @@ interface StreamLine {
   readonly remediation?: string | undefined
   readonly help?: string | undefined
   readonly manifest?: string | undefined
-  readonly mutants?: ReadonlyArray<DecodedMutant> | undefined
+  readonly mutants?: readonly DecodedMutant[] | undefined
   readonly [field: string]: unknown
 }
 
@@ -54,7 +54,7 @@ interface Observed {
   readonly exitCode: number
   readonly stdout: string
   readonly stderr: string
-  readonly lines: ReadonlyArray<StreamLine>
+  readonly lines: readonly StreamLine[]
 }
 
 const LocationSchema = S.Struct({
@@ -112,7 +112,7 @@ const ManifestSchema = S.Struct({
 
 const decodeStreamLine = S.decodeUnknownSync(S.parseJson(StreamLineSchema))
 
-const parseStream = (stdout: string): ReadonlyArray<StreamLine> =>
+const parseStream = (stdout: string): readonly StreamLine[] =>
   stdout
     .split('\n')
     .filter((line) => line.trim().startsWith('{'))
@@ -123,7 +123,7 @@ const anyNumberMatcher: unknown = expect.any(Number)
 
 const invoke = (
   fixture: string,
-  args: ReadonlyArray<string>,
+  args: readonly string[],
   env?: Record<string, string>,
 ): Effect.Effect<Observed, never, StrykerCli> =>
   Effect.gen(function*() {
@@ -154,7 +154,7 @@ interface CorePurityProbe {
   readonly nodeVersion: string
   readonly enginesFloor: string
   readonly nodeUnsupported: boolean
-  readonly entries: ReadonlyArray<CoreEntryImport>
+  readonly entries: readonly CoreEntryImport[]
   readonly cliVersion: CliResult
 }
 
@@ -183,7 +183,7 @@ const corePurityProbe = (fixture: string): Effect.Effect<CorePurityProbe, never,
     const entries = (
       yield* S.decodeUnknown(S.parseJson(S.Array(S.String)))(manifestResult.stdout).pipe(Effect.orDie)
     ).filter((entry) => entry !== './package.json')
-    const imports: Array<CoreEntryImport> = []
+    const imports: CoreEntryImport[] = []
     for (const entry of entries) {
       const specifier = `@systemfsoftware/stryker-js-mutation-run${entry.slice(1)}`
       // The specifier travels in the environment so a future entry's spelling
@@ -205,7 +205,7 @@ const corePurityProbe = (fixture: string): Effect.Effect<CorePurityProbe, never,
     }
   })
 
-const kindsOf = (observed: Observed): ReadonlyArray<string> => observed.lines.map((line) => line.kind)
+const kindsOf = (observed: Observed): readonly string[] => observed.lines.map((line) => line.kind)
 
 const terminal = (observed: Observed): StreamLine => {
   const last = observed.lines.at(-1)
@@ -219,8 +219,8 @@ const terminal = (observed: Observed): StreamLine => {
  * about which mutations survived rather than about which finished first.
  */
 const byMutatorName = <T extends { readonly mutator?: string | undefined }>(
-  lines: ReadonlyArray<T>,
-): ReadonlyArray<T> => [...lines].sort((left, right) => String(left['mutator']).localeCompare(String(right['mutator'])))
+  lines: readonly T[],
+): readonly T[] => [...lines].sort((left, right) => String(left['mutator']).localeCompare(String(right['mutator'])))
 
 const TERMINAL_KINDS = ['verdict', 'error', 'help', 'manifest']
 

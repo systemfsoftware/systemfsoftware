@@ -69,7 +69,7 @@ export interface Supervisor<E, R, L extends LockConfig = LockConfig> {
   readonly [SupervisorTypeId]: SupervisorTypeId
   readonly name: string
   readonly strategy: 'one_for_one' | 'one_for_all' | 'rest_for_one'
-  readonly children: ReadonlyArray<Worker<E, R> | Supervisor<E, R>>
+  readonly children: readonly (Worker<E, R> | Supervisor<E, R>)[]
   readonly supervision: Effect.Effect<SupervisionPolicy>
   readonly lock: L
   readonly reporter: ReporterPolicyHooks
@@ -98,7 +98,7 @@ export interface SupervisionConfig {
 
 export interface SupervisorOpts<E, R, L extends LockConfig> {
   readonly name: string
-  readonly children: ReadonlyArray<Child<E, R>>
+  readonly children: readonly Child<E, R>[]
   readonly supervision: Effect.Effect<SupervisionPolicy>
   readonly lock: L
   readonly reporter?: ReporterPolicyHooks

@@ -74,13 +74,13 @@ const buildScenarioWithFresh = <RShared, RFresh, RFreshReq>(
 }
 
 type OutlineCallable<RShared = never, RFresh = never, RFreshReq = never> = {
-  <const Rows extends ReadonlyArray<Record<string, unknown>>, RPipe extends RShared | RFresh | RFreshReq | Scope.Scope>(
+  <const Rows extends readonly Record<string, unknown>[], RPipe extends RShared | RFresh | RFreshReq | Scope.Scope>(
     name: string,
     examples: Rows,
     stepFactory: (row: Rows[number]) => Effect.Effect<unknown, StepError, RPipe>,
   ): void
   <
-    const Rows extends ReadonlyArray<Record<string, unknown>>,
+    const Rows extends readonly Record<string, unknown>[],
     RExtra,
     RPipe extends RShared | RFresh | RFreshReq | Scope.Scope | RExtra,
   >(
@@ -103,13 +103,13 @@ const makeOutlineCallableNoFresh = <R = never>(
   getBackground: () => Effect.Effect<unknown, StepError, R> | null,
   mode: RegisterMode,
 ): OutlineCallable<R, never, never> => {
-  function outlineFn<const Rows extends ReadonlyArray<Record<string, unknown>>, RPipe extends R | Scope.Scope>(
+  function outlineFn<const Rows extends readonly Record<string, unknown>[], RPipe extends R | Scope.Scope>(
     name: string,
     examples: Rows,
     stepFactory: (row: Rows[number]) => Effect.Effect<unknown, StepError, RPipe>,
   ): void
   function outlineFn<
-    const Rows extends ReadonlyArray<Record<string, unknown>>,
+    const Rows extends readonly Record<string, unknown>[],
     RExtra,
     RPipe extends R | Scope.Scope | RExtra,
   >(
@@ -118,7 +118,7 @@ const makeOutlineCallableNoFresh = <R = never>(
     stepFactory: (row: Rows[number]) => Effect.Effect<unknown, StepError, RPipe>,
     opts: ScenarioOptions<R, RExtra>,
   ): void
-  function outlineFn<const Rows extends ReadonlyArray<Record<string, unknown>>>(
+  function outlineFn<const Rows extends readonly Record<string, unknown>[]>(
     name: string,
     examples: Rows,
     stepFactory: (row: Rows[number]) => Effect.Effect<unknown, StepError, R>,
@@ -159,7 +159,7 @@ const makeOutlineCallableWithFresh = <RShared, RFresh, RFreshReq>(
   mode: RegisterMode,
 ): OutlineCallable<RShared, RFresh, RFreshReq> => {
   function outlineFn<
-    const Rows extends ReadonlyArray<Record<string, unknown>>,
+    const Rows extends readonly Record<string, unknown>[],
     RPipe extends RShared | RFresh | RFreshReq | Scope.Scope,
   >(
     name: string,
@@ -167,7 +167,7 @@ const makeOutlineCallableWithFresh = <RShared, RFresh, RFreshReq>(
     stepFactory: (row: Rows[number]) => Effect.Effect<unknown, StepError, RPipe>,
   ): void
   function outlineFn<
-    const Rows extends ReadonlyArray<Record<string, unknown>>,
+    const Rows extends readonly Record<string, unknown>[],
     RExtra,
     RPipe extends RShared | RFresh | RFreshReq | Scope.Scope | RExtra,
   >(
@@ -176,7 +176,7 @@ const makeOutlineCallableWithFresh = <RShared, RFresh, RFreshReq>(
     stepFactory: (row: Rows[number]) => Effect.Effect<unknown, StepError, RPipe>,
     opts: ScenarioOptions<RShared | RFresh | RFreshReq, RExtra>,
   ): void
-  function outlineFn<const Rows extends ReadonlyArray<Record<string, unknown>>>(
+  function outlineFn<const Rows extends readonly Record<string, unknown>[]>(
     name: string,
     examples: Rows,
     stepFactory: (row: Rows[number]) => Effect.Effect<unknown, StepError, RShared | RFresh | RFreshReq>,
@@ -479,7 +479,7 @@ if (import.meta.vitest !== void 0) {
 
   describe('createScenarioNoFresh', () => {
     const record = () => {
-      const registered: Array<{ name: string; mode: RegisterMode }> = []
+      const registered: { name: string; mode: RegisterMode }[] = []
       return {
         registered,
         scenario: createScenarioNoFresh(
@@ -517,7 +517,7 @@ if (import.meta.vitest !== void 0) {
 
   describe('createOutlineFnNoFresh', () => {
     it('Should_RegisterOneTestPerExample_When_ExamplesProvided', () => {
-      const registered: Array<{ name: string; mode: RegisterMode }> = []
+      const registered: { name: string; mode: RegisterMode }[] = []
       const outline = createOutlineFnNoFresh(
         (name, _effect, mode) => {
           registered.push({ name, mode })
@@ -531,14 +531,14 @@ if (import.meta.vitest !== void 0) {
 
     it('Should_PassTypedRow_When_ExamplesExpand', () => {
       type Row = { role: string; id: string }
-      const receivedRows: Array<Row> = []
+      const receivedRows: Row[] = []
       const outline = createOutlineFnNoFresh(
         () => void 0,
         () => null,
       )
       outline(
         'test',
-        [{ role: 'admin', id: '1' }, { role: 'user', id: '2' }] satisfies ReadonlyArray<Row>,
+        [{ role: 'admin', id: '1' }, { role: 'user', id: '2' }] satisfies readonly Row[],
         (row: Row) => {
           receivedRows.push(row)
           return EffectModule.void
@@ -548,7 +548,7 @@ if (import.meta.vitest !== void 0) {
     })
 
     it('Should_ExpandTemplateTitles_When_NameHasPlaceholders', () => {
-      const registered: Array<string> = []
+      const registered: string[] = []
       const outline = createOutlineFnNoFresh(
         (name) => {
           registered.push(name)
@@ -560,7 +560,7 @@ if (import.meta.vitest !== void 0) {
     })
 
     it('Should_CallRegisterWithSkipMode_When_SkipCalled', () => {
-      const registered: Array<{ name: string; mode: RegisterMode }> = []
+      const registered: { name: string; mode: RegisterMode }[] = []
       const outline = createOutlineFnNoFresh(
         (name, _effect, mode) => registered.push({ name, mode }),
         () => null,
@@ -570,7 +570,7 @@ if (import.meta.vitest !== void 0) {
     })
 
     it('Should_CallRegisterWithOnlyMode_When_OnlyCalled', () => {
-      const registered: Array<{ name: string; mode: RegisterMode }> = []
+      const registered: { name: string; mode: RegisterMode }[] = []
       const outline = createOutlineFnNoFresh(
         (name, _effect, mode) => registered.push({ name, mode }),
         () => null,

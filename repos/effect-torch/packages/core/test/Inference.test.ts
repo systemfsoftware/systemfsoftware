@@ -21,8 +21,8 @@ const makeGpt = (options: { readonly causal?: boolean } = {}) =>
     return yield* Model.chain(embeddings, attn, head)
   })
 
-// The RoPE variant: relative positions, no position table — the model
-// sliding-window attention is trained for.
+// The RoPE variant has no absolute position table. Resetting a retained window
+// to positions 0..window-1 preserves its relative offsets.
 const makeRopeGpt = Effect.gen(function*() {
   const wte = yield* Model.embedding("wte", VOCAB, EMBED)
   const attn = yield* Model.multiHeadAttention("attn", EMBED, HEADS, { causal: true, rope: 10000 })
@@ -116,6 +116,93 @@ const cachedGenerate = (
 
 onDevices("Inference", () => (it) => {
   describe("Model.inference", () => {
+    it.effect("preserves the last-token-row policy in the completed decode schema", () =>
+      Effect.gen(function*() {
+        const root = yield* Tensor.zeros([1, 2, 3])
+        const compile = (lastTokenRow?: boolean) =>
+          Tensor.compileDecodeProgram([root], {
+            maxTokens: 4,
+            blockSize: 2,
+            kvDtype: "f32",
+            batch: 1,
+            ...(lastTokenRow === undefined ? {} : { lastTokenRow })
+          })
+
+        const selected = yield* compile(true)
+        expect(selected.lastTokenRow).toBe(true)
+        expect(selected.handle.state?.lastTokenRow).toBe(true)
+        expect(selected.outputs[0]?.shape).toEqual([3])
+
+        const retained = yield* compile(false)
+        expect(retained.lastTokenRow).toBe(false)
+        expect(retained.handle.state?.lastTokenRow).toBe(false)
+        expect(retained.outputs[0]?.shape).toEqual([1, 2, 3])
+
+        const omitted = yield* compile()
+        expect(omitted.lastTokenRow).toBeUndefined()
+        expect(omitted.handle.state?.lastTokenRow).toBeUndefined()
+      }))
+
+    it.effect("samples add/step without publishing logits", () =>
+      Effect.gen(function*() {
+        const model = yield* makeGpt()
+        const params = yield* Tensor.compute(yield* model.init)
+        const program = yield* Model.inference(model, params, {
+          maxTokens: 64,
+          blockSize: 4,
+          prefillChunk: 4,
+          decodeBatch: 2
+        })
+        const generation = yield* program.generation()
+        const reference = yield* program.generation()
+        const prompts = [
+          [1, 5, 3, 8, 2, 11, 4, 7, 6],
+          [2, 4, 6, 8, 10, 0]
+        ]
+        const sampling: ReadonlyArray<Tensor.SamplingOptions> = [
+          { temperature: 0, seed: 7 },
+          { temperature: 0, seed: 11 }
+        ]
+        const referenceEntries: Array<Model.GenerationEntry> = []
+        const sampledEntries: Array<Model.GenerationSampledEntry> = []
+        const expectedAdd: Array<number> = []
+        for (const [index, prompt] of prompts.entries()) {
+          const expected = yield* reference.add(yield* ids(prompt))
+          referenceEntries.push(expected)
+          expectedAdd.push(yield* Tensor.sample(expected.logits, sampling[index]!))
+          yield* Tensor.clear(expected.logits)
+
+          const actual = yield* generation.addSampled(yield* ids(prompt), sampling[index]!)
+          sampledEntries.push(actual)
+          expect("logits" in actual).toBe(false)
+          expect(actual.token).toBe(expectedAdd[index])
+          expect(yield* actual.seq.cursor()).toBe(prompt.length)
+        }
+
+        const inputTokens = [7, 3]
+        const referenceLogits = yield* reference.step(
+          referenceEntries.map(({ seq }, index) => ({ seq, token: inputTokens[index]! }))
+        )
+        const expectedStep: Array<number> = []
+        for (const [index, logits] of referenceLogits.entries()) {
+          expectedStep.push(yield* Tensor.sample(logits, sampling[index]!))
+          yield* Tensor.clear(logits)
+        }
+        const actualStep = yield* generation.stepSampled(
+          sampledEntries.map(({ seq }, index) => ({
+            seq,
+            token: inputTokens[index]!,
+            sampling: sampling[index]!
+          }))
+        )
+        expect(actualStep).toEqual(expectedStep)
+        for (const [index, entry] of sampledEntries.entries()) {
+          expect(yield* entry.seq.cursor()).toBe(prompts[index]!.length + 1)
+        }
+        yield* reference.close()
+        yield* generation.close()
+      }))
+
     it.effect("legacy window retains history for mixed local/full attention", () =>
       Effect.gen(function*() {
         const qExemplar = yield* Tensor.zeros([1, 4, 4, 1])
@@ -251,8 +338,8 @@ onDevices("Inference", () => (it) => {
         const gen = yield* program.generation()
         yield* gen.add(yield* ids(Array.from({ length: 16 }, (_, i) => i % VOCAB))) // all 4 blocks
         expect(yield* gen.live()).toBe(1)
-        // The failed run allocated nothing; after finishing the first
-        // sequence, the same prompt fits the pool.
+        // A failed admission must roll back its temporary sequence and blocks;
+        // the original live sequence remains the sole pool owner.
         const error = yield* Effect.flip(gen.add(yield* ids([1, 2, 3, 4, 5, 6, 7, 8])))
         expect(error.message).toMatch(/pool exhausted/)
         expect(yield* gen.live()).toBe(1)
@@ -415,9 +502,10 @@ onDevices("Inference", () => (it) => {
         expect(sequentialA).toEqual(sequentialB)
       }))
 
-    // Half-precision pools (RFC 0012): rows quantized on write, widened
-    // on read. Teacher-forced — both sides see the same context — so
-    // the comparison is logits closeness, not argmax luck.
+    // Reduced-precision pools quantize rows on write and widen on read. Both
+    // sides are teacher-forced through identical contexts, avoiding argmax
+    // instability; bounds widen from f16 through bf16 to per-row int8 as cache
+    // quantization error accumulates in later logits.
     const halfPoolParity = (kvDtype: "f16" | "bf16" | "int8", tol: number) =>
       Effect.gen(function*() {
         const model = yield* makeGpt()
@@ -745,11 +833,11 @@ onDevices("Inference", () => (it) => {
       Effect.gen(function*() {
         const runtime = yield* Runtime.Runtime
         const diagnostics = runtime.extensions.diagnostics
-        if (diagnostics === undefined) {
-          return yield* Effect.die(new Error("runtime does not provide memory diagnostics"))
-        }
         const model = yield* makeGpt({ causal: false })
         const params = yield* Tensor.compute(yield* model.init)
+        // The baseline includes caller-owned params. Returning to it proves the
+        // failed artifact released only its retained generation; readability
+        // below proves it did not consume the caller's handles.
         const before = yield* diagnostics.externalMemoryBytes
         yield* Effect.flip(Model.inference(model, params, { maxTokens: 16, blockSize: 4 }))
         expect(yield* diagnostics.externalMemoryBytes).toBe(before)
@@ -760,11 +848,10 @@ onDevices("Inference", () => (it) => {
       Effect.gen(function*() {
         const runtime = yield* Runtime.Runtime
         const diagnostics = runtime.extensions.diagnostics
-        if (diagnostics === undefined) {
-          return yield* Effect.die(new Error("runtime does not provide memory diagnostics"))
-        }
         const model = yield* makeGpt({ causal: false })
         const params = yield* model.init
+        // Lazy params own no storage at this baseline; inference materializes a
+        // private generation that must be wholly released on construction error.
         const before = yield* diagnostics.externalMemoryBytes
         yield* Effect.flip(Model.inference(model, params, { maxTokens: 16, blockSize: 4 }))
         expect(yield* diagnostics.externalMemoryBytes).toBe(before)

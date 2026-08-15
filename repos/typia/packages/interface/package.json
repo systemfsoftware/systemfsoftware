@@ -1,0 +1,86 @@
+{
+  "name": "@typia/interface",
+  "version": "13.3.0",
+  "description": "Superfast runtime validators with only one line",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "rimraf lib && ttsc",
+    "dev": "ttsc --watch",
+    "prepack": "pnpm run build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/samchon/typia"
+  },
+  "author": "Jeongho Nam",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/samchon/typia/issues"
+  },
+  "homepage": "https://typia.io",
+  "devDependencies": {
+    "typescript": "catalog:typescript",
+    "rimraf": "catalog:utils",
+    "ttsc": "catalog:typescript"
+  },
+  "sideEffects": false,
+  "files": [
+    "README.md",
+    "package.json",
+    "lib",
+    "src"
+  ],
+  "keywords": [
+    "fast",
+    "json",
+    "stringify",
+    "transform",
+    "ajv",
+    "io-ts",
+    "zod",
+    "schema",
+    "json-schema",
+    "generator",
+    "assert",
+    "clone",
+    "is",
+    "validate",
+    "equal",
+    "runtime",
+    "type",
+    "typebox",
+    "checker",
+    "validator",
+    "safe",
+    "parse",
+    "prune",
+    "random",
+    "protobuf",
+    "llm",
+    "llm-function-calling",
+    "structured-output",
+    "openai",
+    "chatgpt",
+    "claude",
+    "gemini",
+    "llama"
+  ],
+  "packageManager": "pnpm@10.6.4",
+  "publishConfig": {
+    "access": "public",
+    "main": "lib/index.js",
+    "types": "lib/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./lib/index.d.ts",
+        "default": "./lib/index.js"
+      },
+      "./package.json": "./package.json"
+    }
+  }
+}

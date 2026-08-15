@@ -1,0 +1,397 @@
+# Regular expressions
+
+Regular-expression rules from `eslint-plugin-regexp`.
+
+These rules check regex literal structure: emptiness, uselessness, flag ordering, shorthand classes, and Unicode support.
+
+Some rules duplicate (and supersede) the regex-related rules in [Core](./core); both ids exist so projects can keep the legacy ESLint names alongside the regexp-plugin variants.
+
+Source: [`eslint-plugin-regexp`](https://github.com/ota-meshi/eslint-plugin-regexp) (MIT).
+
+## Corrections
+
+A rule in this family offers an automatic fix only where the rewrite provably matches the same strings — reordering flags, swapping a count quantifier for its shorthand, deleting a flag the pattern cannot exercise. Where the correction changes what the literal matches, or where more than one repair is valid, the rule offers editor suggestions instead; `ttsc fix` and `source.fixAll.ttsc` never apply those.
+
+Every candidate rewrite is re-parsed by the compiler's own regexp parser before it is offered. A regex repair is a splice into live syntax, so an edit that is locally right can still leave a pattern the engine rejects: `/{1,}/` has no atom in front of the brace run, which makes it four literal characters rather than a quantifier, and rewriting it would produce `/+/`. Such a literal keeps its diagnostic and is left untouched. A rule may also decline an individual edit whose neighbours make it unsafe even though the result would parse — see [`regexp/no-useless-quantifier`](#rule-regexp-no-useless-quantifier).
+
+## Rule index
+
+Each rule name links to the detailed section below.
+
+Examples come from the checked [lint corpus](https://github.com/samchon/ttsc/tree/master/tests/test-lint/src/cases) or package-level rule tests when project layout matters.
+
+- [`regexp/no-control-character`](#rule-regexp-no-control-character): Reject ASCII control characters in regex literals.
+- [`regexp/no-dupe-characters-character-class`](#rule-regexp-no-dupe-characters-character-class): Reject duplicate literal characters inside simple regex character classes.
+- [`regexp/no-empty-alternative`](#rule-regexp-no-empty-alternative): Reject empty alternatives in a disjunction.
+- [`regexp/no-empty-capturing-group`](#rule-regexp-no-empty-capturing-group): Reject empty capturing groups such as `/()/`.
+- [`regexp/no-empty-character-class`](#rule-regexp-no-empty-character-class): Reject empty regex character classes.
+- [`regexp/no-empty-group`](#rule-regexp-no-empty-group): Reject empty non-capturing groups such as `/(?:)/`.
+- [`regexp/no-empty-lookarounds-assertion`](#rule-regexp-no-empty-lookarounds-assertion): Reject empty lookaround assertions such as `/(?=)/` or `/(?!)/`.
+- [`regexp/no-misleading-unicode-character`](#rule-regexp-no-misleading-unicode-character): Reject misleading Unicode characters in regex classes.
+- [`regexp/no-useless-character-class`](#rule-regexp-no-useless-character-class): Reject single-character character classes such as `/[x]/`, `/x/` is equivalent.
+- [`regexp/no-useless-escape`](#rule-regexp-no-useless-escape): Reject unnecessary escapes inside regex literals.
+- [`regexp/no-useless-flag`](#rule-regexp-no-useless-flag): Reject regex flags that the literal does not exercise, `i` with nothing to re-case or `m` with nothing to re-anchor.
+- [`regexp/no-useless-quantifier`](#rule-regexp-no-useless-quantifier): Reject quantifiers that do not change the match, constant-one counts (`/a{1}/`).
+- [`regexp/no-useless-two-nums-quantifier`](#rule-regexp-no-useless-two-nums-quantifier): Reject equal min/max quantifiers in favor of `/a{2}/`.
+- [`regexp/no-zero-quantifier`](#rule-regexp-no-zero-quantifier): Reject zero-repeat quantifiers , the atom never matches.
+- [`regexp/prefer-d`](#rule-regexp-prefer-d): Prefer `\d` over `[0-9]` in regex literals.
+- [`regexp/prefer-plus-quantifier`](#rule-regexp-prefer-plus-quantifier): Prefer `+` over `{1,}` in regex literals.
+- [`regexp/prefer-question-quantifier`](#rule-regexp-prefer-question-quantifier): Prefer `?` over `{0,1}` in regex literals.
+- [`regexp/prefer-star-quantifier`](#rule-regexp-prefer-star-quantifier): Prefer `*` over `{0,}` in regex literals.
+- [`regexp/prefer-w`](#rule-regexp-prefer-w): Prefer `\w` over `[A-Za-z0-9_]` in regex literals.
+- [`regexp/require-unicode-regexp`](#rule-regexp-require-unicode-regexp): Require regex literals to use the `u` or `v` flag.
+- [`regexp/require-unicode-sets-regexp`](#rule-regexp-require-unicode-sets-regexp): Require regex literals to use the `v` flag specifically, the stricter Unicode-sets mode.
+- [`regexp/sort-flags`](#rule-regexp-sort-flags): Require regex flags to appear in canonical alphabetical order.
+
+## Rules
+
+<a id="rule-regexp-no-control-character"></a>
+
+### `regexp/no-control-character`
+
+Reject ASCII control characters in regex literals. Alias of the bare core check.
+
+Example:
+
+```ts
+// reports: regexp/no-control-character (error)
+const control = /\x1f/;
+```
+
+<a id="rule-regexp-no-dupe-characters-character-class"></a>
+
+### `regexp/no-dupe-characters-character-class`
+
+Reject duplicate literal characters inside simple regex character classes (`/[aa]/`).
+
+Example:
+
+```ts
+// reports: regexp/no-dupe-characters-character-class (error)
+const duplicate = /[aba]/;
+```
+
+<a id="rule-regexp-no-empty-alternative"></a>
+
+### `regexp/no-empty-alternative`
+
+Reject empty alternatives in a disjunction (`/a||b/`), which silently match the empty string.
+
+Example:
+
+```ts
+// reports: regexp/no-empty-alternative (error)
+const emptyAlt = /a||b/;
+```
+
+<a id="rule-regexp-no-empty-capturing-group"></a>
+
+### `regexp/no-empty-capturing-group`
+
+Reject empty capturing groups such as `/()/`.
+
+The group shifts the numbering of every later backreference and capture slot while only ever capturing the empty string, almost always a leftover from an unfinished edit.
+
+Example:
+
+```ts
+// reports: regexp/no-empty-capturing-group (error)
+const emptyCap = /()/;
+```
+
+<a id="rule-regexp-no-empty-character-class"></a>
+
+### `regexp/no-empty-character-class`
+
+Reject non-negated empty regex character classes (`[]`), including nested classes in Unicode Sets (`v`) mode. The negated form `[^]` matches any character and is allowed. Alias of the bare core check.
+
+Example:
+
+```ts
+// reports: regexp/no-empty-character-class (error)
+const empty = /[]/;
+```
+
+<a id="rule-regexp-no-empty-group"></a>
+
+### `regexp/no-empty-group`
+
+Reject empty non-capturing groups such as `/(?:)/`.
+
+The group contributes nothing to the match and is virtually always a leftover from a deleted inner pattern.
+
+Example:
+
+```ts
+// reports: regexp/no-empty-group (error)
+const emptyGroup = /(?:)/;
+```
+
+<a id="rule-regexp-no-empty-lookarounds-assertion"></a>
+
+### `regexp/no-empty-lookarounds-assertion`
+
+Reject empty lookaround assertions such as `/(?=)/` or `/(?!)/`.
+
+An empty positive lookaround always matches; an empty negative lookaround never matches. The assertion either collapses to a no-op or breaks the surrounding pattern.
+
+Example:
+
+```ts
+// reports: regexp/no-empty-lookarounds-assertion (error)
+const emptyLook = /(?=)/;
+```
+
+<a id="rule-regexp-no-misleading-unicode-character"></a>
+
+### `regexp/no-misleading-unicode-character`
+
+Reject misleading Unicode characters in regex classes. Alias of the bare misleading-character check.
+
+Example:
+
+```ts
+// reports: regexp/no-misleading-unicode-character (error)
+const unicode = /[👍]/;
+```
+
+<a id="rule-regexp-no-useless-character-class"></a>
+
+### `regexp/no-useless-character-class`
+
+Reject single-character character classes such as `/[x]/`, `/x/` is equivalent.
+
+Example:
+
+```ts
+// reports: regexp/no-useless-character-class (error)
+const single = /[x]/;
+```
+
+<a id="rule-regexp-no-useless-escape"></a>
+
+### `regexp/no-useless-escape`
+
+Reject unnecessary escapes inside regex literals. Alias of core `no-useless-escape` for regex contexts.
+
+Example:
+
+```ts
+// reports: regexp/no-useless-escape (error)
+const escape = /\a/;
+```
+
+<a id="rule-regexp-no-useless-flag"></a>
+
+### `regexp/no-useless-flag`
+
+Reject regex flags that the literal does not exercise: `i` on a pattern with no case-variable character, and `m` on a pattern with no `^`/`$` assertion.
+
+Cleans up flag combos that suggest behavior the pattern can never trigger.
+
+A character is case-variable when the `i` flag widens what it matches, wherever it sits: `/[a-z]/i`, `/[abc]/i` and `/^[a-z]+$/i` all keep their flag, as do escapes that decode to a cased character (`/[\x41]/i`), non-ASCII case pairs, and `\w`/`\b` under `u` or `v`. A `^` or `$` inside a character class is a plain character, so it does not save the `m` flag.
+
+Undecidable patterns are left alone rather than reported: a Unicode property escape (`/\p{Nd}/iu`), a backreference (`i` makes the backreference comparison itself case-insensitive, so `/(.)\1/i` genuinely needs the flag), and a `v`-mode set-notation class all count as using the flag.
+
+The diagnostic names the dead flags, and the autofix deletes exactly those, leaving the live flags in place (`/\d+/gim` becomes `/\d+/g`). Because the analysis is one-sided — anything it cannot settle counts as using the flag — a flag it does report is provably inert.
+
+Example:
+
+```ts
+// reports: regexp/no-useless-flag (error)
+const deadIgnoreCase = /\d+/i;
+
+// not reported: `i` is what extends the class to A-Z
+const liveLowercaseRange = /[a-z]/i;
+```
+
+<a id="rule-regexp-no-useless-quantifier"></a>
+
+### `regexp/no-useless-quantifier`
+
+Reject quantifiers that do not change the match, constant-one counts (`/a{1}/`), `?` on patterns already matching the empty string (`/(?:a+|b*)?/`), and quantifiers on non-consuming atoms (`/(?:\b)+/`).
+
+Autofixable for the constant-one count: `/a{1}b/` becomes `/ab/`. Two following characters make the deletion unsafe, and both still parse afterwards, so the rule declines the edit and reports only:
+
+- A lazy or nested marker (`?`, `*`, `+`, `{`). `/a{1}?/` is "exactly one, lazily"; dropping the braces would leave the optional `/a?/`.
+- A digit. `/\1{1}2/` would fuse into `\12`, backreference twelve rather than backreference one followed by a literal `2`.
+
+Example:
+
+```ts
+// reports: regexp/no-useless-quantifier (error)
+const value = /a{1}/;
+```
+
+<a id="rule-regexp-no-useless-two-nums-quantifier"></a>
+
+### `regexp/no-useless-two-nums-quantifier`
+
+Reject equal min/max quantifiers (`/a{2,2}/`) in favor of `/a{2}/`. Autofixable; the braces stay in place, so the count collapses without exposing the atom to its neighbours.
+
+Example:
+
+```ts
+// reports: regexp/no-useless-two-nums-quantifier (error)
+const value = /a{2,2}/;
+```
+
+<a id="rule-regexp-no-zero-quantifier"></a>
+
+### `regexp/no-zero-quantifier`
+
+Reject zero-repeat quantifiers (`/a{0}/`, `/a{0,0}/`), the atom never matches, so the quantifier is either dead code or a typo for `{1,...}`.
+
+Diagnostic-only, unlike the rest of the quantifier family. The correction is to delete the atom or repair the bound, and which one was meant is not recoverable from the source; deleting only the braces would turn "never" into "once".
+
+Example:
+
+```ts
+// reports: regexp/no-zero-quantifier (error)
+const value = /a{0}/;
+```
+
+<a id="rule-regexp-prefer-d"></a>
+
+### `regexp/prefer-d`
+
+Prefer `\d` over `[0-9]` in regex literals. Autofixable; every spelled-out digit class in the literal is rewritten in one edit. `\d` is defined as exactly `[0-9]` under every flag combination.
+
+The fix is located by walking real character classes, so a literal whose bracket is escaped (`/\[0-9]/`, which contains no class at all) keeps its diagnostic without being rewritten.
+
+Example:
+
+```ts
+// reports: regexp/prefer-d (error)
+const digit = /[0-9]/;
+```
+
+<figure className="rule-clip">
+  <video
+    controls
+    muted
+    loop
+    playsInline
+    preload="none"
+    aria-label="regexp/prefer-d: the diagnostic this rule reports"
+  >
+    <source src="https://github.com/user-attachments/assets/4483ee19-0e26-4127-a9bf-35938e972639" type="video/mp4" />
+  </video>
+</figure>
+
+<a id="rule-regexp-prefer-plus-quantifier"></a>
+
+### `regexp/prefer-plus-quantifier`
+
+Prefer `+` over `{1,}` in regex literals. Autofixable; `+` and `{1,}` bind identically, so a trailing lazy marker survives the swap (`/a{1,}?/` becomes `/a+?/`).
+
+Example:
+
+```ts
+// reports: regexp/prefer-plus-quantifier (error)
+const value = /a{1,}/;
+```
+
+<a id="rule-regexp-prefer-question-quantifier"></a>
+
+### `regexp/prefer-question-quantifier`
+
+Prefer `?` over `{0,1}` in regex literals. Autofixable. `?` is both the shorthand and the lazy marker, so a lazy `{0,1}` correctly stutters: `/a{0,1}?/` becomes `/a??/`.
+
+Example:
+
+```ts
+// reports: regexp/prefer-question-quantifier (error)
+const value = /a{0,1}/;
+```
+
+<a id="rule-regexp-prefer-star-quantifier"></a>
+
+### `regexp/prefer-star-quantifier`
+
+Prefer `*` over `{0,}` in regex literals. Autofixable, on the same terms as [`regexp/prefer-plus-quantifier`](#rule-regexp-prefer-plus-quantifier).
+
+Example:
+
+```ts
+// reports: regexp/prefer-star-quantifier (error)
+const value = /a{0,}/;
+```
+
+<a id="rule-regexp-prefer-w"></a>
+
+### `regexp/prefer-w`
+
+Prefer `\w` over `[A-Za-z0-9_]` in regex literals. Autofixable for both accepted spellings (`[A-Za-z0-9_]` and `[a-zA-Z0-9_]`). `\w` matches the same set under every flag combination, including `iu`, where the flag widens the shorthand and the spelled-out class to the same two extra code points.
+
+Example:
+
+```ts
+// reports: regexp/prefer-w (error)
+const word = /[A-Za-z0-9_]/;
+```
+
+<a id="rule-regexp-require-unicode-regexp"></a>
+
+### `regexp/require-unicode-regexp`
+
+Require regex literals to use the `u` or `v` flag, so Unicode-property escapes and surrogate-pair handling stay predictable.
+
+Offers `u` and `v` as editor suggestions rather than an automatic fix: both satisfy the rule, and both change what the pattern matches, since a surrogate pair stops being two independent code units. The flag is inserted at its canonical position instead of appended, so adding it does not leave a run that [`regexp/sort-flags`](#rule-regexp-sort-flags) immediately re-reports. A pattern that is only legal without a Unicode flag (`/\-/`, whose `\-` is an identity escape the stricter modes reject) is reported with no suggestion at all.
+
+Example:
+
+```ts
+// reports: regexp/require-unicode-regexp (error)
+const value = /a/;
+```
+
+<figure className="rule-clip">
+  <video
+    controls
+    muted
+    loop
+    playsInline
+    preload="none"
+    aria-label="regexp/require-unicode-regexp: the diagnostic this rule reports"
+  >
+    <source src="https://github.com/user-attachments/assets/3c063122-290a-4124-a633-d2ba8eb35dcd" type="video/mp4" />
+  </video>
+</figure>
+
+<a id="rule-regexp-require-unicode-sets-regexp"></a>
+
+### `regexp/require-unicode-sets-regexp`
+
+Require regex literals to use the `v` flag specifically, the stricter Unicode-sets mode that enables set notation, string properties, and stricter escape rules on top of `u`.
+
+Choose this over `require-unicode-regexp` only on engines that ship ES2024-era regex.
+
+Offers one editor suggestion, for the same reason as its sibling: `v` is a stricter matching mode, not a respelling. Because `u` and `v` are mutually exclusive, the suggestion replaces an existing `u` (`/a/giu` becomes `/a/giv`) rather than appending.
+
+Example:
+
+```ts
+// reports: regexp/require-unicode-sets-regexp (error)
+const value = /a/u;
+```
+
+<a id="rule-regexp-sort-flags"></a>
+
+### `regexp/sort-flags`
+
+Require regex flags to appear in canonical alphabetical order (`dgimsuvy`).
+
+Stable ordering keeps diffs small and lets readers compare flag sets at a glance.
+
+Autofixable: the sorted run the check already built to decide the finding is what gets written back. A permutation of a flag run cannot change what the literal matches.
+
+Example:
+
+```ts
+// reports: regexp/sort-flags (error)
+const value = /a/mi;
+
+// not reported: `im` is already the canonical order
+const sorted = /a/im;
+```

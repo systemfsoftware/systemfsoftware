@@ -17,8 +17,5 @@ interface Props {
   kind?: Kind;
   inlinedNumericLiteralUnion: 0 | 1;
   enumUnion: EnumUnion;
-  nullableLiteralUnion: 'red' | 'blue' | null;
-  nullableLiteralUnionWithUndefined: 'top' | 'bottom' | null | undefined;
-  nullableScalarUnion: string | number | null;
 }
 export const Component: FC<Props> = (props: Props) => <>JSON.stringify(props)</>;

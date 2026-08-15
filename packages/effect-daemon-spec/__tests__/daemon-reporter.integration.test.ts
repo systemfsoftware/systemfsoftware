@@ -2,7 +2,7 @@ import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoft
 import { Cause, Duration, Effect, Layer, Option, Schedule, TestClock } from 'effect'
 import { expect } from 'vitest'
 import { BoundedIntensity } from '../src/mod.js'
-import { run, SupervisorBodyExecutorDeps, WithLeaderLockExecutorLive } from '../src/mod.js'
+import { DaemonReporter, run } from '../src/mod.js'
 import { Daemon } from '../src/mod.js'
 import { LeaderLock } from '../src/mod.js'
 import { Supervision } from '../src/mod.js'
@@ -25,8 +25,7 @@ Feature('Supervisor exhaustion via DaemonReporter')
             const spy = yield* ReporterSpyContext
             const reporterLayer = Layer.mergeAll(
               LeaderLock.Noop,
-              WithLeaderLockExecutorLive.pipe(Layer.provide(LeaderLock.Noop)),
-              Layer.succeed(SupervisorBodyExecutorDeps, {
+              Layer.succeed(DaemonReporter, {
                 onRestart: spy.reporter.onRestart,
                 onExhausted: spy.reporter.onExhausted,
               }),

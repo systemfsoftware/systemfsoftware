@@ -1,0 +1,113 @@
+{
+  "name": "@ttsc/vscode",
+  "displayName": "ttsc",
+  "description": "TypeScript-Go and ttsc plugin diagnostics, completions, lint actions, and formatting for VS Code.",
+  "version": "0.27.0",
+  "publisher": "samchon",
+  "icon": "images/icon.png",
+  "license": "MIT",
+  "author": "Jeongho Nam",
+  "publishConfig": {
+    "access": "public"
+  },
+  "homepage": "https://ttsc.dev",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/samchon/ttsc",
+    "directory": "packages/vscode"
+  },
+  "bugs": {
+    "url": "https://github.com/samchon/ttsc/issues"
+  },
+  "engines": {
+    "vscode": "^1.94.0",
+    "node": ">=18"
+  },
+  "categories": [
+    "Programming Languages",
+    "Linters",
+    "Formatters"
+  ],
+  "keywords": [
+    "typescript",
+    "typescript-go",
+    "tsgo",
+    "lint",
+    "linter",
+    "formatter",
+    "prettier",
+    "lsp",
+    "ttsc"
+  ],
+  "extensionKind": [
+    "workspace"
+  ],
+  "main": "./lib/extension.js",
+  "bin": {
+    "ttsc-vscode": "./bin/install.js"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "images",
+    "lib",
+    "LICENSE",
+    "README.md"
+  ],
+  "activationEvents": [
+    "onLanguage:typescript",
+    "onLanguage:typescriptreact",
+    "onLanguage:javascript",
+    "onLanguage:javascriptreact"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "ttsc.lint.fixAll",
+        "title": "ttsc: Fix all lint issues"
+      },
+      {
+        "command": "ttsc.format.document",
+        "title": "ttsc: Format document"
+      },
+      {
+        "command": "ttsc.server.restart",
+        "title": "ttsc: Restart language server"
+      }
+    ],
+    "configuration": {
+      "title": "ttsc",
+      "properties": {
+        "ttsc.serverPath": {
+          "type": "string",
+          "default": "",
+          "description": "Absolute path to a ttscserver launcher, native binary, or Windows .cmd/.bat command shim. Leave empty to use the project ttsc launcher, which passes the resolved plugin manifest through --lsp-plugins-file for plugin diagnostics/actions; direct native paths need that manifest supplied out of band via TTSC_LSP_PLUGINS_FILE.",
+          "scope": "resource"
+        },
+        "ttsc.trace.server": {
+          "type": "string",
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
+          "default": "off",
+          "description": "Trace LSP messages between VS Code and ttscserver when the ttsc (trace) output channel log level is Trace."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsc --noEmit && rimraf lib dist && node build/build.cjs"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:utils",
+    "@types/vscode": "^1.94.0",
+    "@vscode/vsce": "^3.9.2",
+    "esbuild": "^0.25.12",
+    "rimraf": "catalog:utils",
+    "ttsc": "workspace:*",
+    "typescript": "catalog:typescript",
+    "vscode-languageclient": "^10.1.0"
+  }
+}

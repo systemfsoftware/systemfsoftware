@@ -189,7 +189,7 @@ Feature('Reading and changing shared values from on-screen widgets')
         Given('a listener watching a shared value')('ctx', () =>
           Effect.sync(() => {
             const volume = Atom.make(3)
-            const heard: Array<number> = []
+            const heard: number[] = []
             const registry = AtomRegistry.make()
             function Listener() {
               useAtomSubscribe(volume, (v) => heard.push(v), { immediate: true })
@@ -661,7 +661,7 @@ Feature('Seeding and listening to shared values')
         Given('a listener watching a value without asking for the current value')('ctx', () =>
           Effect.sync(() => {
             const volume = Atom.make(3)
-            const heard: Array<number> = []
+            const heard: number[] = []
             const registry = AtomRegistry.make()
             function Listener() {
               useAtomSubscribe(volume, (v) => heard.push(v))
@@ -819,7 +819,7 @@ Feature('Keeping a shared registry alive')
         Given('a page under a strict provider that can be re-rendered')('ctx', () =>
           Effect.sync(() => {
             const count = Atom.make(0)
-            const seenRegistries: Array<AtomRegistry.Registry> = []
+            const seenRegistries: AtomRegistry.Registry[] = []
             let tick!: () => void
             function Page() {
               seenRegistries.push(React.useContext(RegistryContext))

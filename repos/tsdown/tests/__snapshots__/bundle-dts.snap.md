@@ -2,11 +2,12 @@
 
 ```mts
 //#region src/utils/types.d.ts
-export declare let str: string;
+declare let str: string;
 //#endregion
 //#region src/utils/shared.d.ts
-export declare let shared: number;
+declare let shared: number;
 //#endregion
+export { shared, str };
 ```
 
 ## index.mjs

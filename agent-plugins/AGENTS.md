@@ -20,7 +20,7 @@
   title: Links survive standalone install
   do: reference the repo from shipped plugin files with absolute URLs; only files shipped inside the plugin folder (LICENSE) link relatively
   dont: reference anything outside the plugin folder (repo root, sibling plugins) with a relative path
-  harm: "Measured 2026-08-13: `../../AGENTS.md` in git-subtrees' README resolved to nothing once the plugin was installed standalone; nothing validates links at commit, so the break surfaces only in the consumer's context"
+  harm: "Measured 2026-08-13: a relative link to the repo root in git-subtrees' README resolved to nothing once the plugin was installed standalone; nothing validates links at commit, so the break surfaces only in the consumer's context"
   check: review — the reviewer opens each link from the plugin folder as a consumer would and rejects dead targets
 ```
 
@@ -29,7 +29,7 @@
 ```yaml
 - id: AGT-H1
   title: The hybrid layout is intentional
-  do: keep the root `plugin.json` (agent-plugins.org manifest) and `hooks/hooks.json` at the plugin root
+  do: keep the root `plugin.json` (agent-plugins.org manifest) and `hooks.json` at the plugin root
   dont: move hooks into a reverse-domain namespaced directory — no client reads one today, so a namespaced copy is inert
   harm: unmeasured — derived from the loader's read paths (repos/oh-my-pi/packages/coding-agent/src/discovery/agent-plugin-format.ts reads standard-governed roots), not from a measured break; a spec-pure move would silently disable the guard for every consumer
   check: review — the reviewer confirms hooks stay at the plugin root and no namespaced copy was added

@@ -277,7 +277,7 @@ function childrenAreActive(children: Set<NodeImpl<any>>): boolean {
     return false
   }
   let current: Set<NodeImpl<any>> | undefined = children
-  let stack: Array<Set<NodeImpl<any>>> | undefined
+  let stack: Set<NodeImpl<any>>[] | undefined
   let stackIndex = 0
   while (current !== undefined) {
     for (const child of current) {
@@ -299,7 +299,7 @@ function childrenAreActive(children: Set<NodeImpl<any>>): boolean {
 interface Lifetime<A> extends Atom.AtomContext {
   isFn: boolean
   readonly node: NodeImpl<A>
-  finalizers: Array<() => void> | undefined
+  finalizers: (() => void)[] | undefined
   disposed: boolean
   readonly dispose: () => void
 }
@@ -540,7 +540,7 @@ export type BatchPhase = typeof BatchPhase[keyof typeof BatchPhase]
 export const batchState = {
   phase: BatchPhase.disabled as BatchPhase,
   depth: 0,
-  stale: [] as Array<NodeImpl<any>>,
+  stale: [] as NodeImpl<any>[],
   notify: new Set<NodeImpl<any>>(),
 }
 

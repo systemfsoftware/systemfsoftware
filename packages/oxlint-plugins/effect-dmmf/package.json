@@ -53,7 +53,6 @@
     "@systemfsoftware/oxlint-plugin-cell-taxonomy": "workspace:^",
     "@systemfsoftware/oxlint-plugin-effect-acl": "workspace:^",
     "@systemfsoftware/oxlint-plugin-effect-adapter": "workspace:^",
-    "@systemfsoftware/oxlint-plugin-effect-executor": "workspace:^",
     "@systemfsoftware/oxlint-plugin-effect-handler": "workspace:^",
     "@systemfsoftware/oxlint-plugin-effect-kernel": "workspace:^",
     "@systemfsoftware/oxlint-plugin-effect-middleware": "workspace:^",

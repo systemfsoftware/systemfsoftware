@@ -11,7 +11,7 @@ export class ApplyProfileDecision extends S.TaggedClass<ApplyProfileDecision>()(
   ignoreResolutions: S.Array(S.Literal('node10', 'node16-cjs', 'node16-esm', 'bundler')),
 }) {}
 
-const profileIgnoreResolutions: Record<'strict' | 'node16' | 'esm-only', ReadonlyArray<ResolutionKind>> = {
+const profileIgnoreResolutions: Record<'strict' | 'node16' | 'esm-only', readonly ResolutionKind[]> = {
   strict: [],
   node16: ['node10'],
   'esm-only': ['node10', 'node16-cjs'],
@@ -20,9 +20,9 @@ const profileIgnoreResolutions: Record<'strict' | 'node16' | 'esm-only', Readonl
 export type CliProfileName = 'strict' | 'node16' | 'esm-only'
 
 export const applyProfile = (command: ApplyProfileCommand): ApplyProfileDecision => {
-  const request = command.request as { ignoreResolutions?: ReadonlyArray<ResolutionKind> }
+  const request = command.request as { ignoreResolutions?: readonly ResolutionKind[] }
   const fromProfile = profileIgnoreResolutions[command.profileName]
-  const merged: ReadonlyArray<ResolutionKind> = [
+  const merged: readonly ResolutionKind[] = [
     ...(request.ignoreResolutions ?? []),
     ...fromProfile,
   ]

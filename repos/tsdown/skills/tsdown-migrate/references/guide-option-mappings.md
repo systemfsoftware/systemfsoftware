@@ -40,23 +40,11 @@ Note: All `unplugin-*/esbuild` imports must change to `unplugin-*/rolldown`.
 
 ### outExtension → outExtensions
 
-```ts
-// Before (tsup)
-export default defineConfig({
-  outExtension: ({ format }) => ({ js: format === 'cjs' ? '.cjs' : '.mjs' }),
-})
+`outExtension` was renamed to `outExtensions`.
 
-// After (tsdown)
-export default defineConfig({
-  outExtensions: ({ format }) => ({ js: format === 'cjs' ? '.cjs' : '.mjs' }),
-})
-```
+## Deprecated but Compatible
 
-The callback shape is compatible for the `js` key; tsdown's version can additionally return a `dts` extension.
-
-## Removed Compatibility Options
-
-tsdown v0.23 removed these previously-deprecated tsup compatibility options entirely. They are no longer recognized — TypeScript reports them as unknown properties and they are **silently ignored at runtime**, so leftovers make builds misbehave without any error. Always replace them with the tsdown equivalents, and verify on `tsdown@0.22.14` (the last version that flags each of them with a deprecation warning): a zero-warning build confirms the mapping is complete before upgrading to v0.23+ (see SKILL.md's two-stage flow).
+These options still work in tsdown for backward compatibility but emit deprecation warnings. Migrate them immediately — they will be removed in a future version.
 
 ### entryPoints → entry
 
@@ -141,26 +129,6 @@ export default defineConfig({
 ```
 
 `injectStyle: false` should be removed (it's the default).
-
-### skipNodeModulesBundle → deps.neverBundle
-
-```ts
-// Before (tsup)
-export default defineConfig({
-  skipNodeModulesBundle: true,
-})
-
-// After (tsdown)
-export default defineConfig({
-  deps: { neverBundle: true },
-})
-```
-
-`deps.neverBundle: true` externalizes **all** dependencies; use `deps.alwaysBundle` to opt specific imports back into the bundle.
-
-## Deprecated but Still Accepted
-
-`external` and `noExternal` are the only tsup option names tsdown v0.23 still accepts. They emit deprecation warnings and will be removed in a future version — always emit the replacements. Combining the old and new forms (e.g. `external` together with `deps.neverBundle`) throws an error.
 
 ### external → deps.neverBundle
 

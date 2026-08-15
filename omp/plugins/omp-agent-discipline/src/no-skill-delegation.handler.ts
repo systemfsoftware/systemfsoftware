@@ -1,16 +1,7 @@
 import type { ExtensionAPI } from '@oh-my-pi/pi-coding-agent'
-import { TomlLoader } from '@systemfsoftware/omp-utils'
 import { Effect, Either } from 'effect'
-import { NoSkillDelegationExecutorDeps, runNoSkillDelegation } from './no-skill-delegation.executor.js'
+import { runNoSkillDelegation } from './no-skill-delegation.executor.js'
 import type { RunSafe } from './run-safe.kernel.js'
-
-const provideNoSkillDelegationDeps = Effect.provideServiceEffect(
-  NoSkillDelegationExecutorDeps,
-  Effect.gen(function*() {
-    const loader = yield* TomlLoader
-    return loader
-  }),
-)
 
 const isRecord = (input: unknown): input is Record<string, unknown> =>
   typeof input === 'object' && input !== null && !Array.isArray(input)
@@ -31,9 +22,7 @@ export const NoSkillDelegationExtension = (pi: ExtensionAPI, runSafe: RunSafe): 
     const subagentType = readString(input, 'subagent_type', 'agent')
     const prompt = readString(input, 'prompt', 'task', 'description')
     const either = await runSafe(
-      Effect.either(runNoSkillDelegation(ctx.cwd, event.toolName, subagentType, prompt)).pipe(
-        provideNoSkillDelegationDeps,
-      ),
+      Effect.either(runNoSkillDelegation(ctx.cwd, event.toolName, subagentType, prompt)),
     )
     if (Either.isLeft(either)) throw either.left
     return either.right

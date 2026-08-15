@@ -1,3 +1,0 @@
-<template>
-  <DestructuredProps label="Sized" size="large" />
-</template>

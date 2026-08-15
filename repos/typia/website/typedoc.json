@@ -1,0 +1,12 @@
+{
+  "entryPointStrategy": "packages",
+  "entryPoints": [
+    "../packages/typia",
+    "../packages/interface",
+    "../packages/utils",
+    "../packages/mcp",
+    "../packages/langchain",
+    "../packages/vercel",
+  ],
+  "out": "./public/api"
+}

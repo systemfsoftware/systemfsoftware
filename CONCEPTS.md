@@ -32,7 +32,7 @@ A `bundledPackages` array entry in `api-extractor.json` listing workspace depend
 
 A mutual dev-dependency between two of this repo's own tooling packages, arising because the repo self-hosts what it publishes: a lint plugin governs the mutation tooling, while that same mutation tooling exercises the plugin's own tests. The class is legitimate at the package level — each edge exists because the depending package's _verification_ needs it — but false at the build level: a devDependency is not a build input, and a package-level mutual devDependency turns the topological build dependency into an unschedulable loop that masks every other fault in the tree behind a single graph error.
 
-The repo's instance is resolved at the package level (2026-08-10): the lint plugin is loaded by its consumers via a filesystem path into its built bundle, so the fork packages carry no workspace edge into the plugin and the graph holds only one-way edges out of it. The real artifact ordering (fork lint consumes the plugin's `dist`) is expressed as an explicit task edge in the consumers' `turbo.json` rather than a package edge. A reintroduced mutual devDependency returns loudly but non-fatally — turbo's package-graph validation and pnpm's install check both print stderr warnings on every command (`pnpm check` still exits 0; the retained plugin build override also keeps the hard task-graph error from returning), and pnpm's `ignore-workspace-cycles` silences only pnpm's own warning. Distinct from an externalized dependency, which concerns what a published tarball needs at runtime; this concept concerns only what must be built before what.
+The repo's instance is resolved at the package level (2026-08-10): the lint plugin is loaded by its consumers via a filesystem path into its built bundle, so the ported packages carry no workspace edge into the plugin and the graph holds only one-way edges out of it. The real artifact ordering (fork lint consumes the plugin's `dist`) is expressed as an explicit task edge in the consumers' `turbo.json` rather than a package edge. A reintroduced mutual devDependency returns loudly but non-fatally — turbo's package-graph validation and pnpm's install check both print stderr warnings on every command (`pnpm check` still exits 0; the retained plugin build override also keeps the hard task-graph error from returning), and pnpm's `ignore-workspace-cycles` silences only pnpm's own warning. Distinct from an externalized dependency, which concerns what a published tarball needs at runtime; this concept concerns only what must be built before what.
 
 ### Bin target
 
@@ -144,6 +144,10 @@ An index key whose assignment nothing verifies. Where a suffix, tag, or path dec
 
 A drifted key is worse than a missing one. Retrieving nothing leaves the author still looking; retrieving the wrong doctrine leaves the author confident. The same drift un-enrols the file from whatever Verification observer the old key selected. That loss surfaces only if the instrument happens to object to an empty selection, and even then the cheapest repair is to delete the selection — which ends the objection and the observation together, leaving the file with no observer and nothing complaining.
 
+### Constitution watchdog
+
+A `WATCHDOG.md` that `@import`s `CONSTITUTION.md` into the omp advisor's system prompt, making the advisor — a separate model reviewing transcript deltas — police code changes against the 21 `gate: review` rules no command enforces. The 13 rules with lint/type-checker/mutation gates are excluded; the advisor does not re-check what the toolchain already catches. Not a gate: the advisor raises `concern`/`nit`/silent, never pass/fail. The mechanism that gives `gate: review` rules Reach — the constitution was present in neither the window (the primary agent does not read it) nor a gate (no command checks it) until the watchdog put it in the advisor's window.
+
 ## Test execution
 
 ### Run class
@@ -162,7 +166,7 @@ It exists because a class of properties is process-level by category and admits 
 
 ### Cell
 
-The unit this codebase is organized in: one source file doing one job, with a suffix that names that job. The suffix is not decoration — rules key on it, so the name is what grants and denies a file its powers. Which imports it may take, whether it may perform I/O, whether the mutator covers it, and what kind of test it may carry are all decided by the suffix rather than by the file's contents or its directory.
+The unit this codebase is organized in: one source file doing one job, with a suffix that names that job. Rules key on the suffix, so the name is what grants and denies a file its powers: which imports it may take, whether it may perform I/O, whether the mutator covers it, and what kind of test it may carry. That the key is the name and not the contents is the taxonomy's mechanism and also its limit — the assignment is an unverified claim, so a rule keyed on a suffix cannot fire on a file whose author declined the suffix. See **Drifted key**, which governs where the two readings meet.
 
 A file whose suffix does not match the job it performs is therefore not a naming problem but a permissions problem: it is being governed as something it is not.
 
@@ -174,7 +178,7 @@ A cell earns a slot only when something about it cannot be reached from above: a
 
 ### workflow
 
-The pure-decision cell type, named `*.workflow.ts`. One business decision as a pure function: typed command in, `Either<Decision, Error>` out, no I/O. Decision variants are `S.TaggedClass`; error variants are `S.TaggedError`. Dispatch over closed unions uses `Match.value` + `Match.tag` + `Match.exhaustive`; primitives use terminal `Match.orElse`. The `never` error channel is forbidden except for total decisions (`Allow | Block` with no other outcomes). Imported only from sibling workflows and the pure Effect data modules (`Either`, `Match`, `Schema`, `Option`, `ParseResult`) — never the Effect runtime. See `skill://architect-workflow` for the nine non-negotiable gates.
+The pure-decision cell type, named `*.workflow.ts`. One business decision as a pure function: typed command in, `Either<Decision, Error>` out, no I/O. Decision variants are `S.TaggedClass`; error variants are `S.TaggedError`. Dispatch over closed unions uses `Match.value` + `Match.tag` + `Match.exhaustive`; primitives use terminal `Match.orElse`. The `never` error channel is forbidden except for total decisions (`Allow | Block` with no other outcomes). Imported only from sibling workflows and the pure Effect data modules (`Either`, `Match`, `Schema`, `Option`, `ParseResult`) — never the Effect runtime. The gates are enforced, not documented: `Workflow.make` refuses an uninhabited (`never`) or untagged error channel at the construction site via the `Inhabited` / `UninhabitedError` / `UntaggedError` markers (`packages/effect-cell-types/src/Workflow.ts`), the `effect-workflow` plugin's `workflow-no-effect-import` keeps the runtime out of the file, and `workflow-match-exhaustive` makes closed-union dispatch terminate exhaustively.
 
 A workflow is produced by calling the cell's constructor, not by annotating a value with the cell's type. The annotation form type-checks while deriving none of the channel markers, so it silently forfeits the guarantee the type exists to provide; only the constructor infers the decision and error channels from the decider it is handed and derives the markers that make a total decision uncallable.
 
@@ -190,9 +194,33 @@ A **chain** of constructors does type the sequence, which is how a shell's order
 
 A record of named phases in one or more impure/pure layers, where each phase's return type carries the required member the next phase's parameter demands, so its order is a consequence of the types rather than an assertion beside them. A **phase** is one named step — a read, a decode, a decision, an encode, or a write. A **layer** is an impure segment followed by a pure segment; a site whose real order writes before it can classify is one description carrying two layers, never two composed by hand.
 
-An impure phase's interior is not type-visible, so no count of I/O operations is claimed or enforced: a read may gather a product across its interior — bumping a counter and returning the resulting rate is one such product — and fan-in is expressed that way rather than by relaxing the chain. A pure phase is one expression and performs no I/O; the I/O a pure phase's return type cannot see, reached through a closure-captured value, is what the lint rule on phase bodies decides.
+An impure phase's interior is not type-visible, so no count of I/O operations is claimed or enforced: a read may gather a product across its interior — bumping a counter and returning the resulting rate is one such product — and fan-in is expressed that way rather than by relaxing the chain. A pure phase is one expression and performs no I/O. That last sentence is a design rule, and only part of it is machine-decided: the lint rule on phase bodies reads the call graph reachable from the body through module-level helpers, so an I/O call written in the body or in a helper beside it is caught, while one reached through a closure-captured binding is not. The undecided half stays a rule the author keeps, not a claim the gate has checked.
 
 The two kinds of `Left` are carried by the phase types rather than chosen by the interpreter. A `decode` `Left` is fatal: nothing consumes it, so its only route is the derived error channel and no write runs. A `decide` `Left` is an outcome, not a fault: the encode phase receives the whole `Either`, so it cannot be unwrapped and both branches travel on to the write. A uniform rule over the two breaks a real call site either way.
+
+### Vocabulary
+
+What a description states about itself, recovered by folding the description rather than declared beside it: the phase names, each phase's purity and invocation shape, their order within a layer, the module that owns them, and which of that module's exports perform I/O. It is a value, not a table — the fold reads the same records the phase constructors wrote, so it cannot describe a description that was never built.
+
+A vocabulary is the unit of agreement between packages. Where several packages must decide the same question the same way, each reads the vocabulary instead of restating it, and the disagreement they would otherwise have becomes impossible rather than merely unlikely.
+
+### Derived consumer
+
+A package whose behaviour is a function of a vocabulary it reads from elsewhere, carrying none of that vocabulary's words in its own source. The test is one addition at the source: a derived consumer stays correct while its output changes, and a consumer whose output does not change was reading something else.
+
+Derivation is a property of the consumer's source, not of its intent, so it is audited by counting: a census for the vocabulary's own words across the consumer's sources returns zero, and any non-zero count names a copy that will drift. The cheapest and default carrier is a direct runtime import; when a lint plugin depends on a core description package, the dependency graph stays acyclic by delivering the plugin consumer-side via `jsPlugins` rather than aggregating it into a monorepo-wide lint preset.
+
+### Drift gate
+
+A check that re-renders a committed generated artifact from its source and fails when any byte differs, so the artifact is a derivation rather than a copy that happens to agree today. Its remedy is regeneration, never an edit to the artifact.
+
+A drift gate is only as honest as its comparison: cached against an incomplete input set it returns a stale pass, and pointed at an artifact the formatter also rewrites it fights the formatter instead of the drift. The renderer's output must therefore be stable under the repository's formatter, and the comparison must re-run whenever the source moves. Where direct runtime imports are achievable by adjusting delivery topology, direct imports are strictly preferred over generated-artifact drift gates.
+
+### Independent oracle
+
+A deliberate restatement kept so that a derivation has something to disagree with. A derived checker validated only against inputs the same derivation produced cannot fail — an error in the derivation appears identically in the checker and its fixture, and they agree — so exactly one hand-written statement of the truth must survive.
+
+It belongs in the package that owns the value, beside the constructors it checks, never in a consumer: a consumer holding one would be carrying the copy that derivation exists to eliminate. It reads as duplication, which is the hazard — the case for deleting it is always available and always wrong, so the reason it exists is recorded next to it.
 
 ### Verification observer
 
@@ -318,3 +346,5 @@ A mutant killed because the mutation corrupted a schema's derived arbitrary and 
 
 - "observer" named two different things: one of the sanctioned cell suffixes, and the verification instrument that reads a cell. These are distinct — the instrument is **Verification observer**, and the bare word stays with the suffix.
 - "window" is not minted as an entry, because it already names the model's token budget. The reading surface a constraint must occupy to bind an author is defined inside **Reach** as one of its two mechanisms; the bare word stays with the token budget.
+- "dependency rejection" is Seemann's phrase and every model reaches for his post first, where the ruling is a slogan with no selection criterion. This repo takes Wlaschin's reading, which supplies the test — manage a dependency only where it is impure or a strategy — and `REPO-A2` carries the precedence. Cite the test, never the slogan.
+- **Cell** and **Drifted key** disagree about the suffix: the first makes it the key that grants a file its powers, the second names an unverified key that a rename silently reassigns. **Drifted key** takes precedence, because the disagreement was measured rather than argued — two byte-identical files, one suffixed `kernel` and one `executor`, put the purity rule loud on the first and silent on the second (`docs/solutions/architecture-patterns/label-routed-rules-are-unfalsifiable.md`). A suffix therefore describes a file and never scopes a check; a new rule keys on the type or the import edge.

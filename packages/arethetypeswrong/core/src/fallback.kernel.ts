@@ -1,4 +1,4 @@
-export const resolvedThroughFallback = (traces: ReadonlyArray<string>): boolean => {
+export const resolvedThroughFallback = (traces: readonly string[]): boolean => {
   let i = 0
   while (i < traces.length) {
     i = traces.indexOf('Entering conditional exports.', i)

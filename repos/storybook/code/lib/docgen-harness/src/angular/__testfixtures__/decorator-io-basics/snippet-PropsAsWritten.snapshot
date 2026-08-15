@@ -1,1 +1,0 @@
-<sb-decorator-io-basics [label]="'Save'" [count]="3" (clicked)="clicked($event)"></sb-decorator-io-basics>

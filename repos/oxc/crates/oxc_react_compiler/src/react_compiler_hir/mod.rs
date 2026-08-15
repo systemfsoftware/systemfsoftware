@@ -585,6 +585,9 @@ pub enum InstructionValue<'a> {
     LoadContext {
         place: Place,
         span: Option<Span>,
+        /// This load materializes the value of a preceding compound assignment.
+        /// Keep it through analysis, but omit it during codegen when its result is unused.
+        is_compound_assignment_result: bool,
     },
     DeclareLocal {
         lvalue: LValue,
@@ -787,6 +790,15 @@ pub enum InstructionValue<'a> {
     Debugger {
         span: Option<Span>,
     },
+    /// A TypeScript enum declaration preserved as an opaque pass-through node.
+    ///
+    /// This is the oxc-specific equivalent of upstream's `UnsupportedNode`:
+    /// the compiler retains the runtime statement without modeling its binding
+    /// or initializer expressions in HIR.
+    TSEnumDeclaration {
+        declaration: &'a oxc_ast::ast::TSEnumDeclaration<'a>,
+        span: Option<Span>,
+    },
     StartMemoize {
         manual_memo_id: u32,
         deps: Option<ArenaVec<'a, ManualMemoDependency<'a>>>,
@@ -856,6 +868,7 @@ impl<'a> InstructionValue<'a> {
             | InstructionValue::PrefixUpdate { span, .. }
             | InstructionValue::PostfixUpdate { span, .. }
             | InstructionValue::Debugger { span, .. }
+            | InstructionValue::TSEnumDeclaration { span, .. }
             | InstructionValue::StartMemoize { span, .. }
             | InstructionValue::FinishMemoize { span, .. } => span.as_ref(),
         }
@@ -1748,8 +1761,12 @@ impl<'a> CloneIn<'a> for InstructionValue<'a> {
             InstructionValue::LoadLocal { place, span } => {
                 InstructionValue::LoadLocal { place: *place, span: *span }
             }
-            InstructionValue::LoadContext { place, span } => {
-                InstructionValue::LoadContext { place: *place, span: *span }
+            InstructionValue::LoadContext { place, span, is_compound_assignment_result } => {
+                InstructionValue::LoadContext {
+                    place: *place,
+                    span: *span,
+                    is_compound_assignment_result: *is_compound_assignment_result,
+                }
             }
             InstructionValue::DeclareLocal { lvalue, span } => {
                 InstructionValue::DeclareLocal { lvalue: *lvalue, span: *span }
@@ -1902,6 +1919,14 @@ impl<'a> CloneIn<'a> for InstructionValue<'a> {
                 }
             }
             // --- Arena-carrying variants: recurse ---
+            InstructionValue::TSEnumDeclaration { declaration, span } => {
+                InstructionValue::TSEnumDeclaration {
+                    // Keep the preserved AST reference so semantic reference IDs
+                    // survive ordinary HIR clones, matching `TypeCast` above.
+                    declaration,
+                    span: *span,
+                }
+            }
             InstructionValue::Destructure { lvalue, value, span } => {
                 InstructionValue::Destructure {
                     lvalue: lvalue.clone_in_impl(sem, alloc),

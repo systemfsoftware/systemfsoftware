@@ -10,11 +10,11 @@
  * project → local` gives `local` the final word.
  */
 export const mergeByOverride = <V>(
-  layers: ReadonlyArray<Readonly<Record<string, readonly V[]>>>,
+  layers: readonly Readonly<Record<string, readonly V[]>>[],
 ): Record<string, readonly V[]> => {
   const out: Record<string, readonly V[]> = {}
   for (const layer of layers) {
-    for (const [key, value] of Object.entries(layer) as ReadonlyArray<readonly [string, readonly V[]]>) {
+    for (const [key, value] of Object.entries(layer) as readonly (readonly [string, readonly V[]])[]) {
       out[key] = value
     }
   }

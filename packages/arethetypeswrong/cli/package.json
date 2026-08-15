@@ -1,8 +1,8 @@
 {
   "name": "@systemfsoftware/arethetypeswrong-cli",
   "version": "1.1.1",
-  "description": "A CLI tool for arethetypeswrong.github.io — forked under systemfsoftware",
-  "author": "Andrew Branch & ej-shafran (forked by systemfsoftware)",
+  "description": "A CLI tool for arethetypeswrong.github.io — owned and maintained by systemfsoftware",
+  "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",

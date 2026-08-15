@@ -5,7 +5,7 @@ export const Options = S.Struct({})
 export const SHAPE_SUFFIX = '.shape.ts' as const
 
 /** The SH6 lint list; the broader technology-layer ban (entities/, components/, routes/, ...) stays review-gated. */
-export const BANNED_PATH_SEGMENTS: ReadonlyArray<string> = [
+export const BANNED_PATH_SEGMENTS: readonly string[] = [
   'core',
   'shell',
   'util',

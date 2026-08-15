@@ -4,7 +4,7 @@ import { Duration, Effect, Layer, Match, Schedule, TestClock } from 'effect'
 import { expect } from 'vitest'
 import { BoundedIntensity } from '../src/mod.js'
 import { run } from '../src/mod.js'
-import { SupervisorBodyExecutorDeps, WithLeaderLockExecutorLive } from '../src/mod.js'
+import { DaemonReporter } from '../src/mod.js'
 import { Daemon } from '../src/mod.js'
 import { LeaderLock } from '../src/mod.js'
 import { Supervision } from '../src/mod.js'
@@ -164,8 +164,7 @@ Feature('Per-child restart policy')
                 const spy = yield* ReporterSpyContext
                 const reporterLayer = Layer.mergeAll(
                   LeaderLock.Noop,
-                  WithLeaderLockExecutorLive.pipe(Layer.provide(LeaderLock.Noop)),
-                  Layer.succeed(SupervisorBodyExecutorDeps, {
+                  Layer.succeed(DaemonReporter, {
                     onRestart: spy.reporter.onRestart,
                     onExhausted: spy.reporter.onExhausted,
                   }),
@@ -218,8 +217,7 @@ Feature('Per-child restart policy')
               const spy = yield* ReporterSpyContext
               const reporterLayer = Layer.mergeAll(
                 LeaderLock.Noop,
-                WithLeaderLockExecutorLive.pipe(Layer.provide(LeaderLock.Noop)),
-                Layer.succeed(SupervisorBodyExecutorDeps, {
+                Layer.succeed(DaemonReporter, {
                   onRestart: spy.reporter.onRestart,
                   onExhausted: spy.reporter.onExhausted,
                 }),

@@ -27,9 +27,9 @@ export const sharedConfig = {
     silent: isAgent ? 'passed-only' : false,
     ...(isAgent ? { bail: 1 } : {}),
 
-    reporters: (isGithubActions
+    reporters: isGithubActions
       ? ['default', 'github-actions']
-      : ['default', ['json', { outputFile: './reports/vitest-output.json' }]]),
+      : ['default', ['json', { outputFile: './reports/vitest-output.json' }]],
 
     coverage: {
       enabled: isCI || process.env['COVERAGE'] === 'true',

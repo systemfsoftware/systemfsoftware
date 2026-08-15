@@ -284,9 +284,7 @@ export class MutantTestPlanner {
   }
 
   private async readAllOriginalFiles(
-    ...thingsWithFileNamesOrFileNames: Array<
-      Iterable<string | { fileName?: string }>
-    >
+    ...thingsWithFileNamesOrFileNames: Iterable<string | { fileName?: string }>[]
   ): Promise<Map<string, string>> {
     const uniqueFileNames = [
       ...new Set(

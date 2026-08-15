@@ -16,7 +16,7 @@
  * host-bound takes its context one turn late, while one wrongly called
  * model-bound loses the command outright. Widen the list on doubt.
  */
-const HOST_COMMAND_PREFIXES: ReadonlyArray<string> = [
+const HOST_COMMAND_PREFIXES: readonly string[] = [
   '/',
   '!',
   '->',

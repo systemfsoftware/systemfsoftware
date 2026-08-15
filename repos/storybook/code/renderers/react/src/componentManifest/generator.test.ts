@@ -44,6 +44,7 @@ test('manifests generates correct id, name, description and examples ', async ()
     (entry) => entry.tags?.includes(Tag.MANIFEST) ?? false
   );
   const result = await runManifests(manifestEntries);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- destructure to omit meta
   const { meta: _meta, ...components } = result?.components ?? {};
 
   expect(components).toMatchInlineSnapshot(`
@@ -1059,6 +1060,7 @@ test('should create component manifest when only attached-mdx docs have manifest
   ] satisfies ManifestEntries;
 
   const result = await runManifests(manifestEntries);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- destructure to omit meta
   const { meta: _meta, ...components } = result?.components ?? {};
   expect({ components }).toMatchInlineSnapshot(`
     {

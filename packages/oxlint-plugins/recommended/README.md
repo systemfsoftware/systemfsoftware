@@ -127,22 +127,22 @@ theory's own G2 hardening bans ternaries in core cells; extending that
 repo-wide is a project decision about having exactly one branching form, and
 it is recorded as such rather than dressed up as an invariant.
 
-Its consequence in the decision cell is real: `workflow-single-path` permits
-one converging ternary — the transient CC=2 edge (B4) — and this rule removes
-it. Since `if` is already banned there, `*.workflow.ts` becomes `Match`-only.
-That is tighter than the theory requires, and coherent.
+Its consequence in the decision cell is moot rather than tight: a `*.workflow.ts`
+is emitted from a declaration, and the declaration has nowhere to put a ternary,
+an `if`, or a loop. `*.workflow.ts` is `Match`-only because nothing else can be
+written there, not because a rule reports it afterwards.
 
-There is still **no** complexity rule for `*.workflow.ts`. No stock rule can
-express "one guard, first statement, converging": `complexity: max 1` would
-fire on a sanctioned guard and `max 2` would wave through an `if`.
-`effect-workflow`'s `workflow-single-path` is where that gate lives.
+There is still **no** complexity rule for `*.workflow.ts`, and none is wanted. No
+stock rule can express "one guard, first statement, converging": `complexity: max 1`
+would fire on a sanctioned guard and `max 2` would wave through an `if`.
 
-The purity row does cover `*.workflow.ts`, which overlaps
-`workflow-no-ambient-impurity` and `workflow-no-effect-import` for projects
-that also register `effect-workflow`. That overlap is deliberate: a workflow
-is a pure cell, and a preset that gates purity everywhere _except_ the
-decision cell has a hole no reader would expect. Registering both packages
-reports such a violation twice.
+The purity row does cover `*.workflow.ts`, and it is the only thing that does:
+`effect-workflow` ships no ambient-impurity rule, because a declaration cannot name
+`Date.now` and an emitted cell cannot call it. The row overlaps
+`workflow-no-effect-import` for projects that also register `effect-workflow`, and
+that overlap is deliberate: a workflow is a pure cell, and a preset that gates
+purity everywhere _except_ the decision cell has a hole no reader would expect.
+Registering both packages reports such a violation twice.
 
 ## The refusal ledger
 

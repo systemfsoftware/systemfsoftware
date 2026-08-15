@@ -2,7 +2,7 @@ import { Schema as S } from 'effect'
 
 export const Options = S.Struct({})
 
-export const ERROR_REWRITING_METHODS: ReadonlyArray<string> = [
+export const ERROR_REWRITING_METHODS: readonly string[] = [
   'mapError',
   'mapErrorCause',
   'mapBoth',

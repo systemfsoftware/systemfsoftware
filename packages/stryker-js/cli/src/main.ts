@@ -8,7 +8,6 @@ import { strykerEngines } from '@systemfsoftware/stryker-js-mutation-run/stryker
 
 import { OutputModeProbe, OutputModeProbeLive } from './output-mode.adapter.js'
 import { RunEventStreamLive, RunEventStreamPort } from './run-event-stream.adapter.js'
-import { StrykerCliExecutorDeps } from './stryker-cli.executor.js'
 import { strykerCliEffect } from './stryker-cli.handler.js'
 
 const EXIT_CODE_RUN_NEVER_REACHED_ITS_FINALIZER = 1
@@ -21,25 +20,24 @@ if (!semver.satisfies(process.version, strykerEngines.node)) {
   )
 }
 
-const StrykerCliExecutorDepsLive: Layer.Layer<StrykerCliExecutorDeps> = Layer
-  .effect(
-    StrykerCliExecutorDeps,
-    Effect.gen(function*() {
-      const outputMode = yield* OutputModeProbe
-      const runEvents = yield* RunEventStreamPort
-      return {
-        detectMode: outputMode.detectMode,
-        createRunEventStream: runEvents.createRunEventStream,
-      }
-    }),
-  )
-  .pipe(Layer.provide(Layer.merge(OutputModeProbeLive, RunEventStreamLive)))
-
 const resolvedExitCode: { current: number } = { current: EXIT_CODE_RUN_NEVER_REACHED_ITS_FINALIZER }
 
-const program = strykerCliEffect(process.argv, undefined, (code) => {
-  resolvedExitCode.current = code
-}).pipe(Effect.provide(StrykerCliExecutorDepsLive))
+// The composition root: resolve the two port layers once and pass the members
+// the CLI needs down as plain parameters (REPO-A2 — dependency
+// parameterization, not a requirement channel).
+const program = Effect.gen(function*() {
+  const outputMode = yield* OutputModeProbe
+  const runEvents = yield* RunEventStreamPort
+  return yield* strykerCliEffect(
+    process.argv,
+    undefined,
+    (code) => {
+      resolvedExitCode.current = code
+    },
+    outputMode.detectMode,
+    runEvents.createRunEventStream,
+  )
+}).pipe(Effect.provide(Layer.merge(OutputModeProbeLive, RunEventStreamLive)))
 
 NodeRuntime.runMain(program, {
   disableErrorReporting: true,

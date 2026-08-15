@@ -765,7 +765,7 @@ Feature('Stopping and restarting a requested computation')
       Gherkin.Do.pipe(
         Given('a page with a computation that can run several times at once')('ctx', () =>
           Effect.sync(() => {
-            const latches: Array<Latch.Latch> = []
+            const latches: Latch.Latch[] = []
             let done = 0
             const task = Atom.fn((_: number) => {
               const latch = Latch.makeUnsafe()

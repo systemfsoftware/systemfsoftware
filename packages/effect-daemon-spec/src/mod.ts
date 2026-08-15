@@ -1,5 +1,5 @@
-import { Duration, Effect, Layer } from 'effect'
-import type { Stream } from 'effect'
+import { Duration, Effect } from 'effect'
+import type { Scope, Stream } from 'effect'
 export * from './backoff.kernel.js'
 export * from './brands.kernel.js'
 export * from './daemon-health.schema.js'
@@ -16,9 +16,11 @@ export {
 } from './daemon-policy.schema.js'
 export * from './daemon-reporter.adapter.js'
 export * from './daemon-spec.schema.js'
+import type { DaemonHealth, SupervisorHealth } from './daemon-health.schema.js'
 import { MaxChildren } from './daemon-policy.schema.js'
 import type { ChildPolicyConfig, TickPolicyConfig } from './daemon-policy.schema.js'
 import { poll as pollKernel } from './daemon-poll.kernel.js'
+import { DaemonReporter } from './daemon-reporter.adapter.js'
 import type {
   Child,
   CommonOpts,
@@ -34,6 +36,8 @@ import type {
 } from './daemon-spec.schema.js'
 import { stream as streamKernel } from './daemon-stream.kernel.js'
 import { subscription as subscriptionKernel } from './daemon-subscription.kernel.js'
+import { LeaderLock } from './leader-lock.adapter.js'
+import { isModeNone } from './leader-lock.kernel.js'
 export const poll = <A, E, R, L extends LockConfig>(opts: PollOpts<A, E, R, L>): Worker<E, R, L> =>
   pollKernel<
     Effect.Effect<A, E, R>,
@@ -92,10 +96,70 @@ export const Daemon = {
 export * from './leader-lock.adapter.js'
 export * from './leader-lock.schema.js'
 export { LockPrimitiveError } from './lock-primitive.schema.js'
-import { worker } from './daemon-worker.executor.js'
+import { worker as workerImpl } from './daemon-worker.executor.js'
 import { dynamic as dynamicRuntime } from './internal/build-dynamic.executor.js'
-import { supervisor } from './internal/supervisor-body.executor.js'
-export { supervisor, worker }
+import { supervisor as supervisorImpl } from './internal/supervisor-body.executor.js'
+import type { LockBinding } from './internal/with-lock-by-mode.executor.js'
+
+/**
+ * Boots a worker. The leader-lock capability is acquired here, at the composition
+ * root, and handed down as part of the lock binding: the executor behind this
+ * entry point never sees the tag. A worker whose lock is `{ mode: 'none' }`
+ * takes no lock at all.
+ */
+export const worker: {
+  <E, R>(w: Worker<E, R, { mode: 'none' }>): Effect.Effect<
+    DaemonHealth,
+    never,
+    R | Scope.Scope
+  >
+  <E, R>(w: Worker<E, R, LockConfig>): Effect.Effect<
+    DaemonHealth,
+    never,
+    R | LeaderLock | Scope.Scope
+  >
+} = <E, R>(
+  w: Worker<E, R, LockConfig>,
+): Effect.Effect<
+  DaemonHealth,
+  never,
+  R | LeaderLock | Scope.Scope
+> =>
+  Effect.gen(function*() {
+    let binding: LockBinding
+    if (isModeNone(w.lock)) {
+      binding = { kind: 'unlocked' }
+    } else {
+      const lock = yield* LeaderLock
+      binding = { kind: 'locked', spec: w.lock, lock }
+    }
+    return yield* workerImpl(w, binding)
+  })
+
+/**
+ * The supervisor: acquires the `DaemonReporter` and — unless the lock mode is none —
+ * the `LeaderLock` capabilities at the composition root, then hands them down to the
+ * supervisor body via the lock binding. The body itself only ever sees the service
+ * values.
+ */
+export const supervisor = <E, R>(
+  s: Supervisor<E, R, LockConfig>,
+): Effect.Effect<
+  SupervisorHealth,
+  never,
+  R | DaemonReporter | LeaderLock | Scope.Scope
+> =>
+  Effect.gen(function*() {
+    const reporter = yield* DaemonReporter
+    let binding: LockBinding
+    if (isModeNone(s.lock)) {
+      binding = { kind: 'unlocked' }
+    } else {
+      const lock = yield* LeaderLock
+      binding = { kind: 'locked', spec: s.lock, lock }
+    }
+    return yield* supervisorImpl(s, reporter, binding)
+  })
 export { withLeaderLock } from './internal/with-leader-lock.executor.js'
 export type { LeaderLockOptions } from './internal/with-leader-lock.executor.js'
 export const run = {
@@ -153,25 +217,3 @@ export const restForOne = <E, R, L extends LockConfig = LockConfig>(
   opts: SupervisorOpts<E, R, L>,
 ): Supervisor<E, R, L> =>
   restForOneKernel<Child<E, R>, Effect.Effect<SupervisionPolicy>, L, ReporterPolicyHooks, SupervisorOpts<E, R, L>>(opts)
-import { DaemonReporter } from './daemon-reporter.adapter.js'
-import { SupervisorBodyExecutorDeps } from './internal/supervisor-body.executor.js'
-import { WithLeaderLockExecutorDeps } from './internal/with-leader-lock.executor.js'
-import { LeaderLock } from './leader-lock.adapter.js'
-
-export { SupervisorBodyExecutorDeps, WithLeaderLockExecutorDeps }
-
-export const WithLeaderLockExecutorLive: Layer.Layer<WithLeaderLockExecutorDeps, never, LeaderLock> = Layer.effect(
-  WithLeaderLockExecutorDeps,
-  Effect.gen(function*() {
-    const lock = yield* LeaderLock
-    return { withLock: lock.withLock }
-  }),
-)
-
-export const SupervisorBodyExecutorLive: Layer.Layer<SupervisorBodyExecutorDeps, never, DaemonReporter> = Layer.effect(
-  SupervisorBodyExecutorDeps,
-  Effect.gen(function*() {
-    const reporter = yield* DaemonReporter
-    return { onRestart: reporter.onRestart, onExhausted: reporter.onExhausted }
-  }),
-)

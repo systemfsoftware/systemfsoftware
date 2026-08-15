@@ -43,7 +43,9 @@ Three lint rules in one plugin shared a helper that answered "which function doe
 
 ## Solution
 
-Fix the shape recognition at the single shared point, so all three consumers agree by construction. `packages/oxlint-plugins/effect-workflow/src/rules/exported-workflow-fn.ts:9-28` now unwraps one level of `.make(…)` call before asking whether the argument is a function:
+Fix the shape recognition at the single shared point, so every consumer agrees by
+construction. The helper unwrapped one level of `.make(…)` call before asking whether the
+argument is a function:
 
 ```ts
 const makeCallArgument = (init: ESTree.Node): ESTree.Node | undefined => {
@@ -65,7 +67,17 @@ export const workflowFunctionInit = (decl: ESTree.VariableDeclarator): ESTree.No
 }
 ```
 
-All three rules consume it — `workflow-command-object.ts:55`, `workflow-schema-required.ts:115`, `workflow-single-function-export.ts:120` — so the shape is defined once and a disagreement is unconstructable.
+One exported predicate, three consumers reading it: the shape is defined once and a
+disagreement between them is unconstructable.
+
+The durable half is the diagnosis, not the patch. Every rule that suffered this defect keyed
+on a hand-authored initializer, and the initializer is now a `Workflow.make(...)` call, so the
+shape is decided by the constructor's signature before any rule reads it — the three rules
+that keyed on a bare function initializer no longer need to. The async leg of the same class
+is carried by the shared `@effect/language-service` policy's `diagnosticSeverity` map, where
+`asyncFunction` is `error`; the throw leg is unowned and recorded as an orphan in
+`docs/2026-08-15-orphaned-cell-constraints.md`. A shared matcher is still the reach of every
+rule that imports it, wherever the next one lives.
 
 ## Why This Works
 
@@ -83,6 +95,6 @@ The deeper property is the asymmetry between how the three rules fail. A rule th
 ## Related
 
 - `docs/solutions/integration-issues/comment-checker-hook-silently-bypasses-on-patch-mode-edit.md` — the same class in a different instrument: a check handed a payload shape it did not recognise, reporting success while inspecting nothing.
-- `docs/solutions/architecture-patterns/constructor-rule-boundary.md` — the migration that changed the initializer shape, and why the rules could not be retired in favour of the type.
+- `docs/solutions/architecture-patterns/constructor-rule-boundary.md` — the migration that changed the initializer shape, why a type alone could not retire the rules, and the compiler channel — the constructor's channel markers and the language-service `diagnosticSeverity` map — that now carries the obligation.
 - `docs/solutions/architecture-patterns/provenance-ritual-gates.md` — a green run that teaches a later reader something was verified when nothing was.
 - PR #135 — carries the helper fix and the three consumers.

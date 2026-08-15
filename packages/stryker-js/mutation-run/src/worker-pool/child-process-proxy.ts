@@ -104,7 +104,7 @@ export class ChildProcessProxy<T> implements Disposable {
    */
   public static create<
     R,
-    Tokens extends Array<InjectionToken<ChildProcessContext>>,
+    Tokens extends InjectionToken<ChildProcessContext>[],
   >(
     modulePath: string,
     loggingServerAddress: LoggingServerAddress,

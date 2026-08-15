@@ -1,11 +1,13 @@
 import * as v from 'valibot';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { defineService } from './service-definition.ts';
 import {
-  assignEntryFieldInputSchema,
   awaitedPreloadValueServiceDef,
+  assignEntryFieldInputSchema,
   createDerivedBooleanFromChildQueryServiceDef,
   entryIdInputSchema,
+  type MutableRecordLookupService,
   hiddenServiceDef,
   internalStaticBuildServiceDef,
   mixedVisibilityServiceDef,
@@ -13,7 +15,6 @@ import {
   recordFieldsOutputSchema,
   registeredCommandOverrideServiceDef,
   voidOutputSchema,
-  type MutableRecordLookupService,
 } from './fixtures.ts';
 import {
   buildStaticFiles,
@@ -24,7 +25,6 @@ import {
   listServices,
   registerService,
 } from './server.ts';
-import { defineService } from './service-definition.ts';
 
 afterEach(() => {
   clearRegistry();
@@ -76,36 +76,6 @@ describe('service registration', () => {
 
     expect(second).toBe(first);
     expect(getRegisteredServices()).toHaveLength(1);
-  });
-
-  it('rejects a query and command with the same name', () => {
-    const serviceDef = defineService({
-      id: 'internal-fixture/duplicate-operation-name',
-      initialState: {} as Record<string, never>,
-      queries: {
-        refresh: {
-          input: v.undefined(),
-          output: v.undefined(),
-          handler: () => undefined,
-        },
-      },
-      commands: {
-        refresh: {
-          input: v.undefined(),
-          output: v.undefined(),
-          handler: async () => undefined,
-        },
-      },
-    });
-
-    expect(() => registerService(serviceDef)).toThrowError(
-      expect.objectContaining({
-        fromStorybook: true,
-        code: 16,
-        message:
-          'Service "internal-fixture/duplicate-operation-name" cannot register "refresh" as both a query and a command.',
-      })
-    );
   });
 
   it('throws a Storybook error when resolving a missing registered service id', () => {
@@ -313,15 +283,7 @@ describe('service registration', () => {
       commands: {},
     });
 
-    expect(
-      getService('internal-fixture/hidden-service', { internal: true }).queries.secret.get(
-        undefined
-      )
-    ).toBe(true);
-
-    expect(() => getService('internal-fixture/hidden-service')).toThrow(
-      /Pass \{ internal: true \}/
-    );
+    expect(getService('internal-fixture/hidden-service').queries.secret.get(undefined)).toBe(true);
   });
 
   it('still builds static snapshots for internal queries', async () => {

@@ -197,7 +197,7 @@ Feature('Hearing the current value right away when listening')
           })),
         When('a listener attaches asking for the current value immediately')('heard', (s) =>
           Effect.sync(() => {
-            const heard: Array<number> = []
+            const heard: number[] = []
             s.ctx.page.subscribe(s.ctx.value, (v) => heard.push(v), { immediate: true })
             return heard
           })),
@@ -315,7 +315,7 @@ Feature('Streaming the current value and every change')
           'heard',
           (s) =>
             Effect.gen(function*() {
-              const heard: Array<number> = []
+              const heard: number[] = []
               const first = Latch.makeUnsafe()
               const second = Latch.makeUnsafe()
               const fiber = yield* Effect.forkChild(
@@ -357,7 +357,7 @@ Feature('Streaming settled results')
           'outcome',
           (s) =>
             Effect.gen(function*() {
-              const heard: Array<number> = []
+              const heard: number[] = []
               const first = Latch.makeUnsafe()
               const second = Latch.makeUnsafe()
               const fiber = yield* Effect.forkChild(
@@ -432,7 +432,7 @@ Feature('Streaming settled results')
           })),
         When('both streams are collected')('outcome', (s) =>
           Effect.gen(function*() {
-            const heard: Array<number> = []
+            const heard: number[] = []
             const got = Latch.makeUnsafe()
             const successFiber = yield* Effect.forkChild(
               Effect.scoped(
@@ -534,7 +534,7 @@ Feature('Batching writes so listeners hear the final value once')
           })),
         When('several writes happen inside one batch')('heard', (s) =>
           Effect.sync(() => {
-            const heard: Array<number> = []
+            const heard: number[] = []
             s.ctx.page.subscribe(s.ctx.value, (v) => heard.push(v))
             Registry.batch(() => {
               s.ctx.page.set(s.ctx.value, 2)
@@ -655,7 +655,7 @@ Feature('Preloading values before their first read')
           })),
         When('an initial value is set before the value is ever read')('result', (s) =>
           Effect.sync(() => {
-            const heard: Array<number> = []
+            const heard: number[] = []
             s.ctx.page.subscribe(s.ctx.value, (v) => heard.push(v))
             s.ctx.page.setInitialValue(s.ctx.value, 10)
             return { heard, read: s.ctx.page.get(s.ctx.value) }
@@ -1189,7 +1189,7 @@ Feature('Stopping work when a value is invalidated')
             const failed = Atom.make<Result.Result<number, string>>(Result.failure<number, string>(Cause.fail('boom')))
             const settledOption = Atom.make<Option.Option<number>>(Option.some(1))
             const noOption = Atom.make<Option.Option<number>>(Option.none())
-            const fibers: Array<Fiber.Fiber<number, never>> = []
+            const fibers: Fiber.Fiber<number, never>[] = []
             const value = Atom.keepAlive(Atom.readable((get) => {
               void get.result(settled)
               void get.result(failed)

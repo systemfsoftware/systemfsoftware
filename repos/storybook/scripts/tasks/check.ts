@@ -22,15 +22,12 @@ const CI_CONCURRENCY = 4;
 const HEAVY_WORKSPACES = [
   'storybook',
   '@storybook/vue3',
-  '@storybook/docgen-harness',
   '@storybook/svelte',
   '@storybook/angular',
 ];
 
 function getCheckCommand(name: string, cwd: string) {
-  // The docgen-harness needs vue-tsc for its .vue fixtures, mirroring its project.json
-  // check override (plain tsc cannot load SFCs and fails with TS2307 on every import).
-  if (name === '@storybook/vue3' || name === '@storybook/docgen-harness') {
+  if (name === '@storybook/vue3') {
     return `npx vue-tsc --noEmit --project ${join(cwd, 'tsconfig.json')}`;
   }
   if (name === '@storybook/svelte') {

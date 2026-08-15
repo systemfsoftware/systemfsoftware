@@ -6,34 +6,6 @@ import { createPackageFromTarballData } from './createPackage.js'
 import { PackageStoreAdapter } from './package-store.adapter.js'
 import type { ResolutionKind, ResolutionOption } from './problem.schema.js'
 
-export interface CheckPackageExecutorInput {
-  readonly packageSpec: string
-  readonly definitelyTyped?: string | boolean
-}
-
-export interface CheckPackageExecutorDepsService {
-  readonly execute: (
-    input: CheckPackageExecutorInput,
-  ) => Effect.Effect<CheckResult, never, never>
-}
-
-export class CheckPackageExecutorDeps extends Context.Tag(
-  '@systemfsoftware/arethetypeswrong-core/check-package.executor/CheckPackageExecutorDeps',
-)<CheckPackageExecutorDeps, CheckPackageExecutorDepsService>() {}
-
-export const CheckPackageExecutorDepsStub: Layer.Layer<
-  CheckPackageExecutorDeps,
-  never,
-  never
-> = Layer.succeed(CheckPackageExecutorDeps, {
-  execute: () =>
-    Effect.succeed({
-      packageName: 'stub-package',
-      packageVersion: '0.0.0',
-      types: false,
-    }),
-})
-
 export interface CheckPackageService {
   readonly execute: (
     pkgSpec: string,
@@ -74,5 +46,5 @@ export const CheckPackageLive: Layer.Layer<
   }),
 )
 
-export const _resolutionKindsUsed: ReadonlyArray<ResolutionKind> = ['node10', 'node16-cjs', 'node16-esm', 'bundler']
-export const _resolutionOptionsUsed: ReadonlyArray<ResolutionOption> = ['node10', 'node16', 'bundler']
+export const _resolutionKindsUsed: readonly ResolutionKind[] = ['node10', 'node16-cjs', 'node16-esm', 'bundler']
+export const _resolutionOptionsUsed: readonly ResolutionOption[] = ['node10', 'node16', 'bundler']

@@ -35,7 +35,7 @@ const getSuccessSchemas = (endpoint: HttpApiEndpoint.Top): readonly [Schema.Top,
   const [first, ...rest] = Array.from(endpoint.success)
   return first === undefined ? [HttpApiSchema.NoContent] : [first, ...rest]
 }
-const getErrorSchemas = (endpoint: HttpApiEndpoint.Top): ReadonlyArray<Schema.Top> => Array.from(endpoint.error)
+const getErrorSchemas = (endpoint: HttpApiEndpoint.Top): readonly Schema.Top[] => Array.from(endpoint.error)
 
 /**
  * A `Context.Service` for an HTTP API client integrated with atom reactivity.
@@ -87,7 +87,7 @@ export interface AtomHttpApiClient<Self, Id extends string, Groups extends HttpA
   ] ? Atom.AtomResultFn<
       Simplify<
         HttpApiEndpoint.ClientRequest<_Params, _Query, _Payload, _Headers, 'decoded-only'> & {
-          readonly reactivityKeys?: ReadonlyArray<unknown> | ReadonlyRecord<string, ReadonlyArray<unknown>> | undefined
+          readonly reactivityKeys?: readonly unknown[] | ReadonlyRecord<string, readonly unknown[]> | undefined
         }
       >,
       ResponseByMode<Extract<_Success, Schema.Top>['Type'], ResponseMode>,
@@ -124,8 +124,8 @@ export interface AtomHttpApiClient<Self, Id extends string, Groups extends HttpA
     ] ? Simplify<
         HttpApiEndpoint.ClientRequest<_Params, _Query, _Payload, _Headers, ResponseMode> & {
           readonly reactivityKeys?:
-            | ReadonlyArray<unknown>
-            | ReadonlyRecord<string, ReadonlyArray<unknown>>
+            | readonly unknown[]
+            | ReadonlyRecord<string, readonly unknown[]>
             | undefined
           readonly timeToLive?: Duration.Input | undefined
           readonly serializationKey?: string | undefined
@@ -266,7 +266,7 @@ export const Service =
         query: unknown
         headers: unknown
         payload: unknown
-        reactivityKeys?: ReadonlyArray<unknown> | ReadonlyRecord<string, ReadonlyArray<unknown>> | undefined
+        reactivityKeys?: readonly unknown[] | ReadonlyRecord<string, readonly unknown[]> | undefined
       }>()(
         Effect.fnUntraced(function*(opts) {
           const client = yield* service
@@ -313,8 +313,8 @@ export const Service =
         Simplify<
           HttpApiEndpoint.ClientRequest<_Params, _Query, _Payload, _Headers, 'decoded-only'> & {
             readonly reactivityKeys?:
-              | ReadonlyArray<unknown>
-              | ReadonlyRecord<string, ReadonlyArray<unknown>>
+              | readonly unknown[]
+              | ReadonlyRecord<string, readonly unknown[]>
               | undefined
           }
         >,
@@ -399,8 +399,8 @@ export const Service =
     ] ? Simplify<
         HttpApiEndpoint.ClientRequest<_Params, _Query, _Payload, _Headers, ResponseMode> & {
           readonly reactivityKeys?:
-            | ReadonlyArray<unknown>
-            | ReadonlyRecord<string, ReadonlyArray<unknown>>
+            | readonly unknown[]
+            | ReadonlyRecord<string, readonly unknown[]>
             | undefined
           readonly timeToLive?: Duration.Input | undefined
           readonly serializationKey?: string | undefined
@@ -487,7 +487,7 @@ interface QueryKey {
   headers: unknown
   payload: unknown
   responseMode: HttpApiEndpoint.ClientResponseMode
-  reactivityKeys: ReadonlyArray<unknown> | ReadonlyRecord<string, ReadonlyArray<unknown>> | undefined
+  reactivityKeys: readonly unknown[] | ReadonlyRecord<string, readonly unknown[]> | undefined
   timeToLive: Duration.Duration | undefined
   serializationKey: string | undefined
 }

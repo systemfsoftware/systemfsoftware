@@ -5,8 +5,8 @@ import { describe, expect } from 'vitest'
 import { computeExitCode, ComputeExitCodeCommand, ComputeExitCodeDecision } from '../src/getExitCode.kernel.js'
 
 const typed = (
-  problems: ReadonlyArray<{ kind: string; resolutionKind?: string }>,
-  options: { ignoreRules?: ReadonlyArray<string>; ignoreResolutions?: ReadonlyArray<string> } = {},
+  problems: readonly { kind: string; resolutionKind?: string }[],
+  options: { ignoreRules?: readonly string[]; ignoreResolutions?: readonly string[] } = {},
 ) =>
   new ComputeExitCodeCommand({
     result: {

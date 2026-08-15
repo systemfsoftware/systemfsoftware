@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [17.3.4] - 2026-08-14
+
+### Fixed
+
+- Fixed Codex-compatible V2 remote compaction with an explicit `v2Endpoint` by sending the required feature-negotiation header ([#8524](https://github.com/can1357/oh-my-pi/issues/8524)).
+
 ## [17.3.0] - 2026-08-13
 
 ### Fixed

@@ -17,7 +17,7 @@ export interface ExecOptions {
 export class StrykerCli extends Context.Tag(
   '@systemfsoftware/stryker-js-cli/__tests__/stryker-cli.adapter/StrykerCli',
 )<StrykerCli, {
-  readonly run: (args: ReadonlyArray<string>, options?: ExecOptions) => Effect.Effect<CliResult>
+  readonly run: (args: readonly string[], options?: ExecOptions) => Effect.Effect<CliResult>
   readonly sh: (script: string, options?: ExecOptions) => Effect.Effect<CliResult>
 }>() {}
 
@@ -31,7 +31,7 @@ export const layerStrykerCli: Layer.Layer<StrykerCli> = Layer.effect(
       }))
     ),
     ({ client, container }) => {
-      const exec = (command: ReadonlyArray<string>, options?: ExecOptions) =>
+      const exec = (command: readonly string[], options?: ExecOptions) =>
         Effect.map(
           Effect.promise(() =>
             client.container.exec(container, [...command], {
@@ -43,7 +43,7 @@ export const layerStrykerCli: Layer.Layer<StrykerCli> = Layer.effect(
         )
 
       return {
-        run: (args: ReadonlyArray<string>, options?: ExecOptions) => exec([CLI_BIN, ...args], options),
+        run: (args: readonly string[], options?: ExecOptions) => exec([CLI_BIN, ...args], options),
         sh: (script: string, options?: ExecOptions) => exec(['sh', '-c', script], options),
       }
     },

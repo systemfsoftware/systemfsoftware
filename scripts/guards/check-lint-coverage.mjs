@@ -27,6 +27,7 @@ const TOOLING = new Map([
   ...[
     'cell-imports',
     'cell-taxonomy',
+    'cell-vocabulary',
     'core',
     'effect-acl',
     'effect-adapter',
@@ -57,15 +58,15 @@ const TOOLING = new Map([
   // here, because we authored it and chartered it for full cell compliance.
   ...['mutation-run', 'typescript-checker', 'vitest-runner'].map((name) => [
     `packages/stryker-js/${name}`,
-    'our Stryker fork: upstream-shaped, not Effect cell code, so cell rules are the wrong observer; carries its own oxlint baseline and mutation gate',
+    'our Stryker packages: library/tooling code, not Effect cell code, so cell rules are the wrong observer; carries its own oxlint baseline and mutation gate',
   ]),
   [
     'packages/stryker-js/mutation-report',
-    'our Stryker fork: upstream-shaped reporter adapters, not Effect cell code, so cell rules are the wrong observer; carries its own oxlint baseline (REPO-S5 forbids its own mutation gate)',
+    'our Stryker packages: reporter adapters, not Effect cell code, so cell rules are the wrong observer; carries its own oxlint baseline (REPO-S5 forbids its own mutation gate)',
   ],
   [
     'packages/stryker-js/plugin-api',
-    'our Stryker fork: 40 of its 42 source files are verbatim @stryker-mutator/api@9.6.1, not Effect cell code, so cell rules are the wrong observer (56 errors under base); carries its own oxlint baseline (REPO-S5 forbids a mutation gate for an API cell)',
+    'our Stryker packages: 40 of its 42 source files are verbatim @stryker-mutator/api@9.6.1, not Effect cell code, so cell rules are the wrong observer (56 errors under base); carries its own oxlint baseline (REPO-S5 forbids a mutation gate for an API cell)',
   ],
   ...[
     'packages/stryker-js/typescript-checker/testResources/nodenext-project',
@@ -75,11 +76,11 @@ const TOOLING = new Map([
 
   ...['atom', 'atom-react'].map((name) => [
     `packages/effect-atom/${name}`,
-    'vendored effect-atom fork: upstream-shaped library code, not Effect cell code; carries its own oxlint baseline',
+    'effect-atom: library code, not Effect cell code; carries its own oxlint baseline',
   ]),
   [
     'packages/storybook-gherkin',
-    'vendored storybook-gherkin DSL: upstream-shaped library code, not Effect cell code; carries its own oxlint baseline',
+    'storybook-gherkin: library code, not Effect cell code; carries its own oxlint baseline',
   ],
   ['packages/stryker-plugins', 'mutation tooling, not shipped product code'],
   ...['cli', 'core'].map((name) => [`packages/arethetypeswrong/${name}`, 'port of arethetypeswrong, tooling']),
@@ -149,4 +150,59 @@ if (uncovered.length > 0) {
   process.exit(1)
 }
 
-console.log(`check-lint-coverage: ${production} production package(s) linted, ${exempt} tooling package(s) exempt`)
+// Consumer-side delivery. A plugin the aggregate config cannot carry — depending on it there closes
+// a turbo build cycle — reaches a package only through that package's own oxlint.config.ts. The
+// aggregate used to deliver these rules to everything that extended it, so forgetting the entry used
+// to be impossible; now it is merely invisible. A cell whose rules are delivered this way must have
+// a check that fails when a package owning that cell does not deliver them, or the reach is a
+// convention rather than a guarantee. Keys are cell suffixes, values the package that must appear.
+const CONSUMER_DELIVERED = new Map([
+  ['executor', '@systemfsoftware/oxlint-plugin-effect-executor'],
+])
+
+const ownersOfCell = (suffix) => {
+  const owners = new Set()
+  for (const file of tracked) {
+    if (!file.endsWith(`.${suffix}.ts`)) continue
+    if (/\.(test|spec)\.ts$/.test(file)) continue
+    const owner = ownerOf(file)
+    if (owner !== null) owners.add(owner)
+  }
+  return owners
+}
+
+const delivers = (dir, plugin) => {
+  const config = join(root, dir, 'oxlint.config.ts')
+  return existsSync(config) && readFileSync(config, 'utf8').includes(plugin)
+}
+
+const undelivered = []
+let delivered = 0
+for (const [suffix, plugin] of CONSUMER_DELIVERED) {
+  for (const dir of [...ownersOfCell(suffix)].sort()) {
+    if (toolingReason(dir) !== undefined) continue
+    if (delivers(dir, plugin)) delivered++
+    else undelivered.push({ dir, suffix, plugin })
+  }
+}
+
+if (undelivered.length > 0) {
+  console.error(
+    `check-lint-coverage: ${undelivered.length} package(s) own a consumer-delivered cell but do NOT load its plugin, so those rules are silently absent there:\n`,
+  )
+  for (const { dir, suffix, plugin } of undelivered) {
+    console.error(`  ${dir}  owns *.${suffix}.ts, missing ${plugin}`)
+  }
+  const [first] = undelivered
+  console.error(
+    `\nFix: in ${first.dir}/oxlint.config.ts add '${first.plugin}' to jsPlugins and spread its configs.recommended.rules, and declare the devDependency.`,
+  )
+  console.error(
+    `The aggregate config cannot carry it: depending on it there closes a turbo build cycle, which is why delivery is consumer-side and why this check exists.`,
+  )
+  process.exit(1)
+}
+
+console.log(
+  `check-lint-coverage: ${production} production package(s) linted, ${exempt} tooling package(s) exempt, ${delivered} consumer-side plugin delivery(ies) verified`,
+)

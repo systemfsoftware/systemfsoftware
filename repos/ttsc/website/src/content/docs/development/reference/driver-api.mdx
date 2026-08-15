@@ -1,0 +1,261 @@
+# Driver API
+
+`github.com/samchon/ttsc/packages/ttsc/driver` is the Go façade plugin authors should call instead of building a tsgo `Program` themselves. Most shipped consumers in this repo use this path: `packages/ttsc/cmd/*`, `packages/wasm/host/api.go`, and the `tests/projects/go-source-plugin*` fixtures are driver-backed. `@ttsc/lint` owns a dedicated engine and exports driver-compatible LSP sidecar verbs through `linthost/lsp.go`; `ttscserver` embeds the driver LSP host instead of building a Program directly.
+
+This page is the curated, plugin-relevant surface. For the raw shim path (custom checker pool, in-memory-only Program, no `tsconfig.json`), see [AST & Checker → If you cannot use the driver](/docs/development/concepts/tsgo#if-you-cannot-use-the-driver).
+
+## Program lifecycle
+
+```go
+import "github.com/samchon/ttsc/packages/ttsc/driver"
+
+prog, parseDiags, err := driver.LoadProgram(cwd, "tsconfig.json", driver.LoadProgramOptions{
+    ForceEmit:    false,
+    ForceNoEmit:  false,
+    OutDir:       "",
+    SourcePreamble: "",
+})
+if err != nil { /* parse-time failure */ }
+if len(parseDiags) > 0 { /* tsconfig errors */ }
+defer prog.Close() // releases the leased Checker back to the pool
+
+for _, file := range prog.SourceFiles() { /* walk */ }
+diags := prog.Diagnostics()              // pre-deduped, pre-filtered
+checker := prog.Checker                  // type-aware queries
+```
+
+`LoadProgram`:
+
+- parses `tsconfig.json` (relative paths resolve against `cwd`).
+- applies `LoadProgramOptions` overrides: `ForceEmit` / `ForceNoEmit` flip the emit decision; `OutDir` overrides the parsed `outDir`; `SourcePreamble` overlays a JSDoc preamble before parsing (the seam `@ttsc/banner` uses).
+- builds the tsgo `Program` through `shim/compiler.NewProgram` and leases a `*shimchecker.Checker` from the pool.
+- returns a `*driver.Program` carrying the parsed config, the host, the FS, and the lease release function.
+
+`Program.SourceFiles()` returns the Program's resident non-declaration implementation files. Imported raw TypeScript or JavaScript dependencies can be present, so a consumer that needs project-owned files must apply its own root predicate. `Program.Diagnostics()` runs `GetDiagnosticsOfAnyProgram` + `SortAndDeduplicateDiagnostics` and drops the unused-overload-signature noise that tsgo emits internally. **Always `defer prog.Close()`**, without it the checker pool fills up and subsequent loads stall.
+
+## Emit
+
+```go
+// Build-stage: tsgo owns JS, d.ts, and source-map printing.
+emitted, emitDiags, err := prog.EmitAllRaw(nil)
+
+// Transform-stage: render per-file source through the printer to drive
+// downstream callers (bundlers, in-memory transformers).
+text := shimprinter.EmitSourceFile(printer, file)
+```
+
+| Function | Use it when… |
+| --- | --- |
+| `EmitAllRaw` | You want tsgo's full output (JS, d.ts, source maps) with default write-file handling. |
+| `EmitAll(rs, fn)` | You want to layer a `*RewriteSet` over emit and intercept each write through `fn`. |
+| `EmitFile(...)` | You only need one file's emit (rarely used outside the utility host). |
+| `DefaultWriteFile` | The default `WriteFileFunc`. Writes through the program's FS. Pass to `EmitAll` when you don't need interception. |
+
+For the `transform` subcommand, the host treats `typescript[fileName]` as opaque text. See [Plugin protocol → Transform](/docs/development/concepts/protocol#transform). Run a printer before placing AST-mutated source in the map.
+
+### Emit-concurrency contract
+
+TypeScript-Go emits source files in parallel. One emitter goroutine per source. Ttsc nonetheless **guarantees your `WriteFile` callback runs single-threaded**: both `EmitAll` and `EmitAllRaw` funnel every invocation through one internal mutex, so the callback never executes on two goroutines at once. A plugin's output rewriter is therefore free to carry per-file state. Rewrite cursors, an output map, a runtime-alias cache, in a plain Go map without locking it yourself; ttsc owns the serialization. The callback body is cheap I/O, so serializing it costs effectively nothing while parsing, type-checking, and emit-text generation still parallelize.
+
+This is the one ttsc-layered phase that observes emit at all; everything else a plugin does (`SourcePreamble`, `ApplyProgram`, rewrite collection against the pooled `Checker`) already runs on ttsc's own serial path.
+
+### Output containment
+
+When the project configures `outDir`, every driver emit lane (`EmitAll`, `EmitAllRaw`, `EmitFile`, `EmitWithPluginTransformers`) skips any output whose computed path would land outside it (outside `declarationDir` too, when set; `.tsbuildinfo` is exempt because its default home is next to the tsconfig). A forced emit past the `TS6059` rootDir check would otherwise resolve an out-of-`rootDir` source (typically a dependency package's raw `.ts` entry reached by package self-reference) to a `.js` right next to the dependency's own source, polluting a sibling package's tree. Skipped files behave exactly like `node_modules` externals: no write, no diagnostic, and your `WriteFile` callback never sees them.
+
+## Reference graph
+
+```go
+// Compute the graph before plugin hooks mutate ASTs; edges must describe
+// the transform's inputs, not its output.
+graph := driver.NewTransformGraph(prog, cwd)
+
+printer := shimprinter.NewPrinter(shimprinter.PrinterOptions{}, shimprinter.PrintHandlers{}, nil)
+out := transformResult{TypeScript: map[string]string{}, Graph: graph}
+for _, file := range prog.SourceFiles() {
+    out.TypeScript[driver.TransformOutputKey(cwd, file.FileName())] =
+        shimprinter.EmitSourceFile(printer, file)
+}
+```
+
+`NewTransformGraph(prog, cwd)` computes the loaded program's reference graph under `tsc --incremental` semantics and returns the `graph` envelope section (`edges`, `globals`, `configs`) documented in [Plugin protocol → Transform](/docs/development/concepts/protocol#transform):
+
+- `Edges` maps each file to its direct resolved references — imports, re-exports, `/// <reference>` targets, type reference directives, type-only edges included. A leaf source remains present with an empty list so its compiler-time input proof cannot be omitted.
+- `Globals` lists the files contributing to the global scope (ambient declaration files, script files, global augmentations, `typeRoots` entries).
+- `Configs` lists the project tsconfig followed by its `extends` ancestry.
+- `Candidates` maps each importing file to resolution probes that would outrank its selected module target. Bundlers watch and hash these paths so creating or changing one reloads an otherwise unchanged program. Lower-priority paths are excluded.
+
+Keys use `TransformOutputKey(cwd, fileName)` — the same convention as the envelope's `typescript` map (project-relative slash paths, absolute slash paths outside the project root) — so consumers can join the sections by key. The embedded `bundled:///` standard library is excluded; it is not a filesystem input.
+
+Stamp the returned struct into your `transform` stdout envelope. The built-in native host (`ttsc api-transform`) and the linked-plugin generic host already do, so linked transform packages inherit graph emission for free; an executable sidecar that encodes its own envelope adds the one field above. `@ttsc/unplugin` consumes the section to register bundler watch files, which is what keeps webpack filesystem caches and watch graphs from serving stale generated code when a type-only input changes.
+
+## Diagnostics
+
+```go
+// Three-line canonical lint-style flow.
+var diags []driver.Diagnostic
+diags = append(diags, driver.NewLintDiagnostic(
+    file, start, end,
+    /*code*/ 9001, driver.SeverityError,
+    "[my-rule] explanation here",
+))
+driver.WritePrettyDiagnostics(os.Stderr, diags, cwd)
+if driver.CountErrors(diags) > 0 { os.Exit(1) }
+```
+
+| Symbol | Notes |
+| --- | --- |
+| `NewLintDiagnostic(file, pos, end, code, sev, msg)` | Wraps the offset pair into a `Diagnostic` with the file's path. |
+| `Diagnostic` | The struct the host's renderer accepts. |
+| `Severity` + `SeverityError` / `SeverityWarning` | Constants the host's exit-code logic understands. `SeverityError` fails the build; `SeverityWarning` prints with warning coloring but keeps the exit code at zero. |
+| `CountErrors(diags []Diagnostic) int` | Returns the number of diagnostics that should fail the build (every diagnostic except explicit warnings). |
+| `WritePrettyDiagnostics(w io.Writer, diags, cwd)` | Renders to `w` using the same colorful format `ttsc` itself uses. No return value. |
+
+## Rewrites
+
+```go
+rs := driver.NewRewriteSet()
+rs.Add(driver.Rewrite{
+    File:        file,                 // *ast.SourceFile from prog.SourceFiles()
+    RootName:    "console",
+    Method:      "log",
+    Replacement: "/* console.log */",
+})
+prog.EmitAll(rs, driver.DefaultWriteFile)
+```
+
+`RewriteSet` is the path the engine uses to splice replacements over plugin-owned call expressions in the emitted JavaScript text. Pair with `EmitAll`; pass `DefaultWriteFile` unless you need to intercept.
+
+For a default or namespace import, set `RootName` to its source-local binding. When CommonJS lowering creates a `require` declaration, the driver matches the import's module specifier to that actual emitted declaration, so TypeScript-Go remains free to choose any collision suffix without redirecting the rewrite to a similar local identifier. Retained ESM imports and non-import roots keep their source spelling.
+
+The `RewriteSentinel` constant (`/* @ttsc-rewritten */`) is the idempotency marker inserted at the top of a patched file so re-emitting an already-rewritten file is a no-op.
+
+## Source preambles
+
+```go
+text = driver.ApplySourcePreamble(text, "/* @license MIT */")
+```
+
+`ApplySourcePreamble` keeps a BOM or hashbang at the physical start of the file while inserting generated text after it. `@ttsc/banner` computes the preamble through `driver.SourcePreamblePlugin`; the generic host applies it when source text or declaration output needs the banner.
+
+## Linked Plugins
+
+Non-`main` transform packages register with the driver instead of owning a process:
+
+```go
+func init() {
+    driver.RegisterPlugin(plugin{})
+}
+
+type plugin struct{}
+
+func (plugin) ApplyProgram(prog *driver.Program, ctx driver.PluginContext) error {
+    // mutate prog.SourceFiles()
+    return nil
+}
+```
+
+Implement `SourcePreamble(ctx)` when the plugin needs text before parsing, and `ApplyProgram(prog, ctx)` when it mutates the loaded Program. `ctx.Entry.Config` is the original `compilerOptions.plugins[]` object for this linked entry.
+
+A linked plugin that reads or probes configuration calls `ctx.ReportHostInputHash(path, &digest)` at the observation point, using a lowercase SHA-256 digest for a file and nil for a missing candidate. It pairs this with `ctx.ReportHostInputRealpath(path, &physicalPath)`, or nil when the candidate was missing, so a symlink or junction retarget cannot reuse output from the earlier target. The path is also added to the transformation's `hostInputs`. If the plugin cannot capture either proof at evaluation time, call `ctx.ReportHostInput(path)`; persistent adapters keep watching it but decline narrow generation reuse. Conflicting reports omit the affected proof and preserve the path.
+
+The driver runs these hooks itself; a host binary never has to know which linked packages ttsc compiled into it. `SourcePreamble` applies inside `LoadProgram`. `ApplyProgram` runs once per Program, triggered by the first call to `SourceFiles()` / `SourceFile()` or by any driver emit lane — including `EmitWithPluginTransformers`, so a host that emits with only its own transforms (the typia shape) still honors linked plugins. `EmitTransform` transforms join the per-file chain after the host's own transforms, in registration order. Calling `ApplyLinkedPlugins()` by hand remains valid and idempotent.
+
+An `EmitTransform` that injects an import must allocate one file-level unique identifier and reuse that node for the import binding and every reference:
+
+```go
+importName := ec.Factory.NewUniqueNameEx("dep", shimprinter.AutoGenerateOptions{
+    Flags: shimprinter.GeneratedIdentifierFlagsOptimistic |
+        shimprinter.GeneratedIdentifierFlagsFileLevel,
+})
+namespaceImport := ec.Factory.NewNamespaceImport(importName)
+reference := ec.Factory.NewPropertyAccessExpression(
+    importName,
+    nil,
+    ec.Factory.NewIdentifier("foo"),
+    shimast.NodeFlagsNone,
+)
+```
+
+Do not derive an injected import binding with `NewGeneratedNameForNode(moduleSpecifier)` when `moduleSpecifier` is a string literal. Tsgo routes that node kind through its temp-name channel (`_a`, `_b`, and so on). ES2015-ES2019 lowering can allocate the same names inside a nested function for optional chaining or nullish coalescing, shadowing the module-level import at runtime. `NewUniqueNameEx` uses the non-conflicting unique-name channel; `FileLevel` checks source bindings and `Optimistic` keeps the unsuffixed base name when it is available.
+
+## Hosting `ttscserver`
+
+These symbols are for embedders of `ttscserver`, **not for plugin authors**. Skip this section unless you are building a `ttsc`-aware editor extension.
+
+`ttscserver` is a process wrapper around the project-selected `tsc --lsp --stdio` binary. Resolve `typescript` in the user project, pass its absolute executable path as `TsgoBinary`, and keep plugin diagnostics, code actions, and `executeCommand` handlers in your `PluginSource`. `CommandIDs()` is the ownership gate: the proxy calls `ExecuteCommand()` only for ids returned there. Returning a nil `WorkspaceEdit` is a valid handled no-op. `ErrCommandNotHandled` is only for commands not listed by `CommandIDs()`; if `ExecuteCommand()` returns it for an advertised id, the proxy returns an LSP error instead of forwarding upstream. Implement an optional `CodeActionKinds() []string` method on the same source when your actions should be advertised in the initialize result. Implement `driver.CompletionHintSource` when the source also publishes an in-memory completion corpus. The shipped VS Code extension is the reference client for TypeScript-Go plus the built-in lint/format command bridge; it suppresses those two wrapper-owned command ids while leaving other plugin command ids advertised through `vscode-languageclient`. Because VS Code command ids are global, the extension also sets `ExecuteCommandIDPrefix` per project root so custom plugin commands from multiple roots do not collide; the proxy maps prefixed ids back before calling `ExecuteCommand()`. If an embedder relies on `vscode-languageclient` to register advertised plugin commands, it must still apply any returned `changes`-map `WorkspaceEdit`; the languageclient command handler only invokes `workspace/executeCommand`.
+
+An embedder's client has to answer the requests TypeScript-Go sends to it. The proxy forwards a server-initiated request such as `client/registerCapability` or `workspace/applyEdit` to the editor untouched, and forwards the editor's response back untouched. TypeScript-Go issues `client/registerCapability` from inside its `initialized` handler, on the loop that dispatches every later request, and waits there until the response arrives. A client that ignores server-initiated requests still receives the `initialize` result and everything ttsc publishes on its own, while every request the proxy forwards (hover, completion, document symbols) waits forever. `vscode-languageclient` answers them for you; a hand-written JSON-RPC client must answer them itself.
+
+Once the editor sends the `exit` notification, `RunLSPServer` returns nil even if the upstream process ends with a failure status. After `exit` the upstream is required to terminate, and TypeScript-Go's own exit code at that moment depends on whether its `exit` handler or the closed stdin reaches its process group first, so the status carries no information about the session. Errors raised by the proxy itself still surface, and an upstream failure before any `exit` is still reported.
+
+`CompletionHintSource.CompletionHints()` returns `[]driver.LSPCompletionHint`. Each group names a JSDoc-scoped literal in `After` and an ordered list of `LSPCompletionItem` values. The proxy matches the corpus against the live document, appends the matching items to TypeScript-Go's completion response, and keeps TypeScript-Go's own items. The items are fully resolved plain-text insertions with optional labels and short details; they do not use `completionItem/resolve`.
+
+Implement `driver.CompletionHintRefresher` when the corpus can change during a session. The proxy calls `RefreshCompletionHints()` after `textDocument/didSave`, after `workspace/didChangeConfiguration`, and after a `workspace/didChangeWatchedFiles` that reports at least one change or params the proxy cannot read. It never calls it on `textDocument/didChange`, and never for a watched-file notification whose `changes` array is empty. The call must return immediately and rediscover in the background; `CompletionHints()` keeps answering the previous corpus until the new one is stored, so completion is never blocked and never sees a partially rebuilt corpus. `NativePluginSource` implements this by re-running `lsp-hints`, coalescing concurrent requests into one queued rerun, stamping each run with an increasing generation so a slow run cannot overwrite a newer one, and keeping each plugin's last successful corpus when that plugin's refresh fails.
+
+Trigger characters are the one part of the corpus a refresh cannot deliver. They are merged into the `initialize` response, so a character discovered later never reaches a client that already received it. `client/registerCapability` is not used for this: `vscode-languageclient` implements a dynamic completion registration as a second provider beside the static one, which would offer every TypeScript-Go item twice. The proxy instead sends one `window/logMessage` naming the character, and the hint stays reachable through explicit completion. Implement `driver.CompletionHintObserverSource` if your source wants the proxy to perform that check after its own refreshes.
+
+```go
+type source struct {
+    driver.NullPluginSource
+}
+
+var _ driver.CompletionHintSource = (*source)(nil)
+
+func (s *source) CompletionHints() []driver.LSPCompletionHint {
+    return []driver.LSPCompletionHint{{
+        Scope: "jsdoc",
+        After: "@",
+        Items: []driver.LSPCompletionItem{{
+            Insert: "example",
+            Detail: "project tag",
+        }},
+    }}
+}
+```
+
+`LSPServerOptions.Upstream` is an invocation-scoped dependency for controlled embedders and tests. Its zero value selects the production runner and enforces the absolute `TsgoBinary` contract. A custom `LSPUpstream` carries its runner and optional validator together; a custom validator without a custom runner is rejected with `ErrLSPUpstreamRunnerRequired`. `RunLSPServer` captures that pair before it starts the proxy and upstream goroutines, so concurrent servers cannot replace each other's execution path.
+
+```go
+err := driver.RunLSPServer(context.Background(), driver.LSPServerOptions{
+    In:         os.Stdin,
+    Out:        os.Stdout,
+    Err:        os.Stderr,
+    Cwd:        projectRoot,
+    TsgoBinary: tsgoBinary,
+    Source:     source,             // your driver.PluginSource impl
+    SuppressExecuteCommandProvider: false,
+    SuppressedExecuteCommandIDs: []string{"ttsc.lint.fixAll", "ttsc.format.document"},
+    ExecuteCommandIDPrefix: "ttsc.my-editor.project-a.",
+})
+```
+
+| Symbol | Purpose |
+| --- | --- |
+| `PluginSource` interface, `NullPluginSource` | The seam downstream pipelines implement to feed ttsc plugins into the LSP. |
+| `CompletionHintSource`, `LSPCompletionHint`, `LSPCompletionItem` | Optional completion corpus contributed alongside a `PluginSource`. |
+| `CompletionHintRefresher`, `CompletionHintObserverSource` | Optional mid-session rediscovery of that corpus and its completion callback. |
+| `NativePluginSource`, `NewNativePluginSource`, `NativePluginManifest` | Sidecar-backed `PluginSource` implementation used by the shipped `ttscserver` launcher. |
+| `RunLSPServer`, `LSPServerOptions`, `LSPUpstream`, `ErrLSPUpstreamRunnerRequired`, `ErrCommandNotHandled` | Host-side entry points and invocation-scoped upstream dependency. |
+| `LSPDocumentVersion`, `LSPDiagnostic`, `LSPCodeAction`, `LSPRange`, `LSPWorkspaceEdit` | Wire types in the LSP envelope. |
+| `FrameReader`, `NewFrameReader`, `WriteFrame`, `MaxFrameBytes`, `MaxHeaderBytes`, `ErrFrameClosed`, `ErrFrameTooLarge` | Lower-level JSON-RPC framing helpers and safety caps for embedders that test or wrap the byte stream directly. |
+| `Envelope`, `ParseEnvelope`, `ErrInvalidJSONRPC` | JSON-RPC envelope parsing helpers for embedders that need to inspect LSP payloads outside the proxy. |
+
+`DenyNpmInstall` remains for older in-process embedders, but the shipped `ttscserver` no longer embeds tsgo and cannot override tsgo's internal ATA callback.
+
+Set `SuppressExecuteCommandProvider` when your editor extension registers its own user-facing wrapper commands and does not want ttsc-owned command ids advertised directly in the upstream initialize response. The proxy still handles owned `workspace/executeCommand` requests either way. Prefer `SuppressedExecuteCommandIDs` when only some command ids are editor-owned; other plugin command ids remain advertised and registered by the language client. Set `ExecuteCommandIDPrefix` when one editor process may host more than one `ttscserver` client and advertised plugin command ids would otherwise collide in the editor's global command registry.
+
+## Lower-level helpers
+
+Use when `LoadProgram`'s defaults don't fit.
+
+| Symbol | Notes |
+| --- | --- |
+| `DefaultFS()` | The OS-backed VFS wrapped with the bundled library files. |
+| `DefaultHost(cwd, fs)` | A tsgo compiler host pre-wired with the FS and the bundled `lib.*.d.ts` paths. |
+| `ParseTSConfig(path, host)` | Parses a `tsconfig.json` without building a Program. |
+| `CreateProgramFromConfig(...)` | Builds a Program from a parsed config without going through `LoadProgram`'s convenience overrides. |
+
+## Stability
+
+The driver surface is the closest thing `ttsc` has to a stable plugin SDK. Symbols listed here have Go doc-comments and are exercised by the in-repo test suite on every CI run. Lower-level shim symbols may move between releases; the driver insulates plugin authors from that churn. When you must reach below the driver, see [AST & Checker](/docs/development/concepts/tsgo) for the supported escape hatches.

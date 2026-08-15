@@ -1,0 +1,248 @@
+import { Tabs } from "nextra/components";
+
+# Unplugin (Bundlers)
+
+When a bundler owns your build, the `ttsc` CLI never runs, and neither would your plugins. `@ttsc/unplugin` runs the same plugin pass from inside the bundler. It reads the same `tsconfig.json` and the same `lint.config.ts`, so there is no second configuration to drift out of date.
+
+Adapters ship for Vite, Rollup, Rolldown, esbuild, webpack, Rspack, Next.js, Turbopack, Farm, and Bun. The import path is always `@ttsc/unplugin/<bundler>`. React Native and Expo bundle with Metro, which is not an unplugin target; that is a separate package with its own page, [Metro (React Native)](/docs/setup/metro).
+
+## Install
+
+<Tabs items={["npm", "pnpm", "yarn", "bun"]}>
+  <Tabs.Tab>
+    ```bash
+    npm install -D ttsc typescript @ttsc/unplugin
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash
+    pnpm add -D ttsc typescript @ttsc/unplugin
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash
+    yarn add -D ttsc typescript @ttsc/unplugin
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash
+    bun add -d ttsc typescript @ttsc/unplugin
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+Then register the adapter that matches your bundler.
+
+## Keep the two versions together
+
+`@ttsc/unplugin` declares `ttsc` as a peer dependency pinned to the minor it was published with. Both packages are released from one repository at one version, and the adapter compiles against `ttsc`'s exported compiler surface, so a `0.x` minor is allowed to change what it imports. The pin is what turns that into an install error instead of a runtime failure in your bundler.
+
+The consequence shows up with automated updates. A bot that opens one pull request per package will raise `ttsc` alone, and the install fails:
+
+```text
+npm error While resolving: @ttsc/unplugin@0.25.0
+npm error Found: ttsc@0.26.0
+```
+
+Nothing is wrong with either package. The two updates are one update, so tell the bot that.
+
+```yaml
+# .github/dependabot.yml
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      ttsc:
+        patterns:
+          - "ttsc"
+          - "@ttsc/*"
+```
+
+That raises one pull request carrying every `ttsc` package your project installs, which is the only shape that can pass. Renovate expresses the same thing as a `packageRules` entry with `groupName` over the same patterns.
+
+Pin both to the same version in `package.json` for the same reason. If you upgrade by hand, upgrade them in one commit.
+
+## Vite
+
+```ts
+// vite.config.ts
+import ttsc from "@ttsc/unplugin/vite";
+import { defineConfig } from "vite";
+
+export default defineConfig({
+  plugins: [ttsc()],
+});
+```
+
+## Rollup
+
+```ts
+// rollup.config.ts
+import ttsc from "@ttsc/unplugin/rollup";
+
+export default {
+  input: "src/index.ts",
+  output: { dir: "dist", format: "esm" },
+  plugins: [ttsc()],
+};
+```
+
+One caveat worth knowing before it costs you an afternoon: the adapter emits transformed **TypeScript**, not JavaScript, and plain Rollup does not compile TypeScript itself. Add an esbuild- or swc-based plugin after `ttsc()`, or the build fails parsing type syntax. Bundlers that strip types on their own (Vite, Rolldown, esbuild, Bun) need no such step.
+
+## Rolldown
+
+```ts
+// rolldown.config.ts
+import ttsc from "@ttsc/unplugin/rolldown";
+
+export default {
+  input: "src/index.ts",
+  output: { dir: "dist", format: "esm" },
+  plugins: [ttsc()],
+};
+```
+
+Same shape as Rollup, but Rolldown ships its own TypeScript transform, so the downstream compile step Rollup needs does not apply here.
+
+## esbuild
+
+```ts
+import { build } from "esbuild";
+import ttsc from "@ttsc/unplugin/esbuild";
+
+await build({
+  entryPoints: ["src/index.ts"],
+  outdir: "dist",
+  bundle: true,
+  plugins: [ttsc()],
+});
+```
+
+## webpack
+
+```js
+// webpack.config.mjs
+import ttsc from "@ttsc/unplugin/webpack";
+
+export default {
+  entry: "./src/index.ts",
+  plugins: [ttsc()],
+};
+```
+
+## Rspack
+
+```js
+import ttsc from "@ttsc/unplugin/rspack";
+
+export default { entry: "./src/index.ts", plugins: [ttsc()] };
+```
+
+## Next.js
+
+```js
+// next.config.mjs
+import withTtsc from "@ttsc/unplugin/next";
+
+export default withTtsc({
+  /* your Next config */
+});
+```
+
+`withTtsc` covers the webpack path. On Turbopack (`next dev --turbopack`), use the loader rules below instead.
+
+## Turbopack
+
+Turbopack has no JS plugin API, but it runs webpack loaders through `turbopack.rules`, and a ttsc transform is loader-shaped: TypeScript source in, transformed source out. Reference the standalone loader by module name (do not call it):
+
+```js
+// next.config.mjs
+export default {
+  turbopack: {
+    rules: {
+      "*.ts": { loaders: ["@ttsc/unplugin/turbopack"] },
+      "*.tsx": { loaders: ["@ttsc/unplugin/turbopack"] },
+    },
+  },
+};
+```
+
+Options go through the rule's `options` object: `{ loader: "@ttsc/unplugin/turbopack", options: { project: "tsconfig.build.json" } }`.
+
+## Farm
+
+```ts
+import ttsc from "@ttsc/unplugin/farm";
+import { defineConfig } from "@farmfe/core";
+
+export default defineConfig({ plugins: [ttsc()] });
+```
+
+## Bun
+
+```ts
+import ttsc from "@ttsc/unplugin/bun";
+
+await Bun.build({
+  entrypoints: ["./src/index.ts"],
+  outdir: "./dist",
+  plugins: [ttsc()],
+});
+```
+
+Under `Bun.build`, the adapter yields to the next loader for declarations, `node_modules`, source that `ttsc` leaves unchanged, and entries supplied through `Bun.build({ files })`. In-memory entries remain with Bun because ttsc transforms filesystem-backed project inputs. Bun's runtime `onLoad` contract does not accept an undefined result, so `Bun.plugin()` returns excluded and unchanged filesystem files with their original source and does not chain another overlapping runtime loader. NUL-prefixed virtual ids remain outside the adapter's filesystem filter. `Bun.build` clears the project generation through its `onStart` lifecycle on every build.
+
+For the Bun **runtime**, `bun run`, `bun test`, or any `bun <entry>.ts` with no bundling step, register the transform on Bun's module loader with `@ttsc/unplugin/bun-register`. Add a `bunfig.toml` preload once:
+
+```toml
+preload = ["@ttsc/unplugin/bun-register"]
+```
+
+Now every `bun run` / `bun test` applies your `ttsc` plugins as files are imported, with plugin options from the nearest `tsconfig.json`. To pass options, or register imperatively, call it from your own preload module instead:
+
+```ts
+// bun-preload.ts   (bunfig.toml: preload = ["./bun-preload.ts"])
+import { register } from "@ttsc/unplugin/bun-register";
+
+register({ project: "tsconfig.build.json" });
+```
+
+One runtime registration is one immutable module-loading session. Restart the Bun process after changing source, tsconfig, or plugin inputs.
+
+## Options
+
+Most projects need none: the adapter finds `tsconfig.json` on its own, and your plugins and `lint.config.ts` apply unchanged. Three options layer on top:
+
+- `project` points at a non-default config file, resolved from `process.cwd()`:
+
+```ts
+ttsc({
+  project: "tsconfig.build.json",
+});
+```
+
+- `compilerOptions` overrides compiler settings for this build without another config file.
+- `plugins` replaces the project's plugin list entirely; `plugins: false` disables them.
+
+## Cache and watch invalidation
+
+The compiler also reports module-resolution candidates that would outrank a selected target. `@ttsc/unplugin` registers candidates belonging to importers in a transformed file's reference closure, so creating or changing a higher-priority probe invalidates the transform even when neither the importer nor its tsconfig changed.
+
+Under a running Vite dev server the adapter splits that registration by existence. Vite serve resolves every watch registration made during a transform as if the module imported it, so a candidate that does not exist yet — which is the normal state for a higher-priority probe — would fail the request that just transformed correctly. Existing inputs keep the ordinary watch registration; missing ones are polled on the filesystem instead (Vite's own watcher does not look inside `node_modules`, where these probes usually point), and when one is created the adapter invalidates the modules that registered it and triggers a full reload, so the resident server picks up the new resolution without a restart. Production builds and every other bundler keep the single registration path.
+
+Bundlers invalidate a module only when its registered inputs change, and they erase type-only imports from their module graphs — but a type-driven transform's output depends on the files where the consulted types are declared. `@ttsc/unplugin` closes that gap by registering, per transformed file, the compiler-reported reference closure (type-only edges included), the files contributing to the global scope, and the tsconfig `extends` chain as watch files. The JavaScript host also registers the descriptor's loaded CommonJS graph, every package manifest inspected by auto-discovery, and plugin-declared `hostInputs`; first-party plugins use that declaration for implicit config discovery and evaluated config dependencies. Arbitrary project assets do not become universal inputs. Webpack filesystem caches (what Next.js persists under `.next/cache`), watch-mode rebuilds, and Turbopack `fileDependencies` all consume that registration, so editing a type another file's generated code depends on rebuilds the consumer without deleting any cache.
+
+This works for every adapter automatically when the transform host emits the envelope's `graph` section — the built-in host and linked plugins always do; executable sidecar plugins adopt through the [driver SDK](/docs/development/reference/driver-api#reference-graph). Plugins whose output additionally depends on non-file inputs declare those files [`volatile`](/docs/development/concepts/protocol#transform), which excludes them from caching entirely.
+
+A plugin that knows exactly which declarations it consulted can go the other way and declare its reported list [complete](/docs/development/concepts/protocol#dependency-completeness) for a file. The adapter then registers only that list plus the tsconfig chain for it, so a change to a file the transform never read stops re-running the loader. Nothing is required of you: the field is per file and opt-in per plugin, and a plugin that never declares it keeps the sound default above.
+
+The transform cache snapshots every regular file reached by the non-following project walk plus graph-reported inputs outside that walk. One whole-project compile already contains every module's output. Adapters with a guaranteed build boundary clear the previous generation there, then check only the supplied source on each module's first delivery in that build. Later deliveries of a graph-bearing generation validate that file's reference closure, globals, configs, resolution candidates, plugin dependencies, and exact host inputs. Generation-scoped directory notifications detect new, removed, or renamed project inputs without repeating a directory-stat pass per module; Windows isolates those notifications so deletion of a watched temporary tree cannot crash the host. The project is snapshotted before and after compilation, and only a complete, unchanged pair may authorize narrow reuse. `dependenciesComplete` narrows file inputs by the same contract as watch registration. Envelopes without a graph or an available watcher, or with an unstable/incomplete generation, retain complete-snapshot validation. Bun runtime setup defines one process-scoped module-loading session; restart the Bun process after changing source, tsconfig, or plugin inputs. Its runtime `onLoad` contract requires an object, so unchanged or excluded TypeScript is returned explicitly; `Bun.build` can instead yield to the next loader. Long-lived hosts without either boundary (Metro workers, the Turbopack loader, and Vite's development server, whose initial `buildStart` spans later HMR edits) apply the file-specific validation on every generation hit.
+
+This section is about the **transform** cache (which files a rebuild depends on), not the **source-plugin binary** cache (the compiled Go plugin ttsc builds on first use). They are independent: persisting a bundler cache such as Next.js `.next/cache` does not carry the plugin binary across builds, and a fresh CI or container build recompiles the plugin (the `ttsc: building source plugin ...` line) even with a warm bundler cache. To keep that first-build compile from recurring on every build, persist the binary cache as described in [Build cache](/docs/ttsc/cache). In a monorepo, run `ttsc prepare` from the same project directory the bundler builds, so the warmed binary matches the cache key the bundler build looks up.
+
+## CLI or bundler?
+
+Whichever tool owns the build runs the pass. A plain Node library builds with `npx ttsc`. A frontend behind Vite or webpack builds through `@ttsc/unplugin`. A monorepo with both uses both, one per package. The plugin pass is identical everywhere, and diagnostics show up wherever the bundler surfaces them.

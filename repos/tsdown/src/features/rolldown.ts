@@ -21,6 +21,7 @@ import pkg from '../../package.json' with { type: 'json' }
 import { mergeUserOptions } from '../config/options.ts'
 import { importWithError, pkgExists, toArray } from '../utils/general.ts'
 import { createSuppressWarnings, LogLevels } from '../utils/logger.ts'
+import { CjsDtsReexportPlugin } from './cjs.ts'
 import { DepsPlugin } from './deps.ts'
 import { NodeProtocolPlugin } from './node-protocol.ts'
 import { resolveChunkAddon, resolveChunkFilename } from './output.ts'
@@ -33,7 +34,7 @@ import type {
   NormalizedFormat,
   ResolvedConfig,
   TsdownBundle,
-} from '../config/types.ts'
+} from '../config/index.ts'
 
 const debug = createDebug('tsdown:rolldown')
 
@@ -120,6 +121,7 @@ async function resolveInputOptions(
 
   if (
     config.pkg ||
+    config.deps.skipNodeModulesBundle ||
     config.deps.neverBundle === true ||
     config.deps.dts.neverBundle === true
   ) {
@@ -128,10 +130,11 @@ async function resolveInputOptions(
 
   if (dts) {
     const { dts: dtsPlugin } = await import('rolldown-plugin-dts')
+    const { cjsReexport: _, ...dtsPluginOptions } = dts
     const options: DtsOptions = {
       tsconfig,
       logger,
-      ...dts,
+      ...dtsPluginOptions,
     }
 
     if (format === 'es') {
@@ -144,6 +147,8 @@ async function resolveInputOptions(
           cjsDefault,
         }),
       )
+    } else if (dts.cjsReexport && isDualFormat) {
+      plugins.push(CjsDtsReexportPlugin())
     }
   }
   let cssPostPlugins: Plugin[] | undefined

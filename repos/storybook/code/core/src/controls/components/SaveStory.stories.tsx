@@ -49,6 +49,7 @@ export const Created: Story = {
 
 export const CreatingFailed: Story = {
   args: {
+    // eslint-disable-next-line local-rules/no-uncategorized-errors
     createStory: fn((...args) => Promise.reject<any>(new Error('Story already exists.'))),
   },
   play: Created.play,

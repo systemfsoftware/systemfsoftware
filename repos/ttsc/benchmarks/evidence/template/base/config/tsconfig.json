@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "lib": ["DOM", "ESNext"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "types": ["*"],
+    "resolveJsonModule": true,
+    "sourceMap": true,
+    "newLine": "lf",
+    "noErrorTruncation": true,
+    "strict": true,
+    "noImplicitReturns": true,
+    "noUncheckedIndexedAccess": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true
+  }
+}

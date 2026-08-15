@@ -199,6 +199,6 @@ export const SelectControl: FC<SelectProps> = (props) => {
     return <>-</>;
   }
 
-  // oxlint-disable-next-line react-classic/destructuring-assignment
+  // eslint-disable-next-line react/destructuring-assignment
   return props.isMulti ? <MultiSelect {...props} /> : <SingleSelect {...props} />;
 };

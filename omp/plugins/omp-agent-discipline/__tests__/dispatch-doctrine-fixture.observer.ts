@@ -49,7 +49,7 @@ export function buildSession(opts: {
   readonly cwd?: string
 } = { sessionId: SESSION_A }): RecordingHarness {
   const recordedLogs: LoggedEvent[] = []
-  const handlers = new Map<string, Array<(event: unknown, ctx: unknown) => unknown>>()
+  const handlers = new Map<string, ((event: unknown, ctx: unknown) => unknown)[]>()
   const sessionId = opts.sessionId
   const cwd = opts.cwd ?? '/test'
   const mockCtx = {

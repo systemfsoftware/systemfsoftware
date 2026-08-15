@@ -1,0 +1,77 @@
+{
+  "cohort": "round two, campaign/evidence-luna-0.26.0",
+  "subject": "reddit",
+  "arm": "plain",
+  "runId": "8e9cc1b8-0d4c-408d-8baf-905d8acd4fe4",
+  "state": "counted",
+  "method": {
+    "read": "The completed Plain workspace, read-only. No requirement identifier appears anywhere in it, so every reach is decided by an artifact carrying an obligation, never by a tag.",
+    "requirementRooted": "Each of the six was counted twice and the lower rate kept. The generous pass called an anchor eligible when the artifact is implied by anything it says; the demanding pass only when the anchor's own text names that artifact's subject. Reach rules were held fixed across both.",
+    "populations": "194 requirement anchors, being 44 `##` and 150 `###` headings."
+  },
+  "populations": {
+    "requirementAnchors": 194,
+    "models": 14,
+    "scalarColumns": 103,
+    "accessors": 43,
+    "hooks": 19,
+    "screens": 7,
+    "backendTests": 79,
+    "journeyCases": 4
+  },
+  "cells": [
+    {
+      "model": "gpt-5.6-luna",
+      "subject": "reddit",
+      "edges": {
+        "requirementToModel": { "eligible": 185, "reached": 185 },
+        "requirementToOperation": { "eligible": 189, "reached": 189 },
+        "requirementToDto": { "eligible": 169, "reached": 160 },
+        "requirementToTest": { "eligible": 147, "reached": 136 },
+        "requirementToScreen": { "eligible": 174, "reached": 172 },
+        "requirementToJourney": { "eligible": 190, "reached": 97 },
+        "modelToOperation": { "eligible": 14, "reached": 14 },
+        "modelToDto": { "eligible": 14, "reached": 13 },
+        "accessorToTest": { "eligible": 43, "reached": 43 },
+        "accessorToHook": { "eligible": 43, "reached": 43 },
+        "hookToScreen": { "eligible": 19, "reached": 18 },
+        "screenToJourney": { "eligible": 7, "reached": 7 },
+        "columnToProperty": { "eligible": 103, "reached": 68 }
+      }
+    }
+  ],
+  "corrections": {
+    "screenToJourney": "First recorded as 6/7 by a script that matched a screen's file stem against the journey source. That rule cannot see a screen a journey reaches by clicking rather than by URL: the profile page is walked from a username link and asserted on its `Authored posts` heading at tests/journeys/account-discussion.spec.ts:107. Every one of the seven routed screens is navigated and asserted, so the edge is 7/7. The stem rule failed the same way the name-stem rule failed `modelToDto` — it compared names where the question was about reach."
+  },
+  "unreached": {
+    "requirementToDto": [
+      "the nine moderator-assignment anchors: assignModerator and removeModerator take path parameters and return a boolean, and no published type carries a moderator assignment. IUserTarget is declared and imported by nothing"
+    ],
+    "requirementToTest": [
+      "REQ-DOM-COMMUNITY-LIFE-004: no test refuses anything in an archived community",
+      "REQ-DOM-BAN-003: resolved ban history is never asserted",
+      "REQ-RULE-FEED-001 through -004 and REQ-RULE-COMMENT-003 through -005: tests pass sort values but never assert an ordering, and `controversial` appears in no test at all",
+      "REQ-RULE-VOTE-004: no test asserts score or karma reversal after content deletion",
+      "REQ-RULE-REPORT-004: no second decision is attempted on a decided report"
+    ],
+    "requirementToScreen": [
+      "REQ-DOM-REPORT-LIFE-004: the resolved-history card renders kind, subject, and time; reason, actor, and target are fetched and dropped",
+      "REQ-DOM-BAN-003: no surface pairs a ban's end time with its unbanning moderator"
+    ],
+    "requirementToJourney": [
+      "93 of 190. The four cases never subscribe or unsubscribe, change a feed sort or Top range, paginate, sort comments, reply, edit or delete a post, delete a comment, use a moderator-remove action, ban, unban, assign or remove a moderator, approve a report, downvote or change a vote, edit a profile, complete a recovery, or touch an archived community"
+    ],
+    "modelToDto": [
+      "moderators: its id, user_id, community_id, and created_at reach no published shape, and a moderator surfaces only as a username inside a moderation-history row"
+    ],
+    "hookToScreen": ["useHealth, called only by the layout frame"],
+    "columnToProperty": [
+      "35 of 103, by model: users email_normalized, username_normalized, password_hash, deleted_at, updated_at; profiles avatar_media_id, updated_at; sessions last_used_at, revoked_at; recovery_proofs proof_hash, proof_payload, expires_at, used_at, recipient_email; media thumbnail_data; communities name_normalized, icon_media_id, owner_id, updated_at; subscriptions ended_at; bans actor_id, ended_at; posts image_media_id, author_id, deleted_at; comments author_id, deleted_at; reports reporter_id, decided_at, decided_by_id; moderation_histories target_description, target_post_id, target_comment_id, subject_id, actor_id"
+    ]
+  },
+  "unsettled": {
+    "columnToProperty": "A column is credited when any published type declares its name under either spelling, which is the edge as defined. That credits sessions.created_at from a post's createdAt even though no type publishes a session's creation time. A per-model reading would score lower and was not computed.",
+    "modelToDto": "IUserTarget is declared and documented as used by role and ban operations, but no operation, controller, or hook imports it. It was treated as dead and moderators as unreached; counting it as a publication would make the edge 14/14.",
+    "requirementRootedReach": "Reach on a partially satisfied anchor used a material-part standard. A stricter one would lower requirementToTest by roughly ten and requirementToScreen by four — case-insensitive identity is never tested case-insensitively, two render one field short of what their anchor names, and the selected vote state is rendered nowhere."
+  }
+}

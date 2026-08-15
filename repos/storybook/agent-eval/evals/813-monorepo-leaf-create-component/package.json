@@ -1,7 +1,0 @@
-{
-  "name": "813-monorepo-leaf-create-component",
-  "type": "module",
-  "evals": {
-    "template": "monorepo"
-  }
-}

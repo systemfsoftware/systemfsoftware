@@ -9,7 +9,7 @@ export const meta = {
   type: 'problem',
   docs: {
     description:
-      'In *.middleware.ts files, a decode-failure branch must produce Effect.fail — the gate short-circuits at the edge — never Effect.succeed of an Option or nullable, which would force every downstream handler to re-check the invalid state (architect-middleware MW3).',
+      'In *.middleware.ts files, a decode-failure branch must produce Effect.fail — the gate short-circuits at the edge — never Effect.succeed of an Option or nullable, which would force every downstream handler to re-check the invalid state.',
   },
   schema: [Options],
   messages: {

@@ -1,21 +1,30 @@
+import { Cell } from '@systemfsoftware/effect-cell-types'
 import { Schema as S } from 'effect'
 
 export const Options = S.Struct({})
 
-/** The description package whose phases chain by type; its pure middle is decode/decide/encode. */
-export const DESCRIPTION_SOURCE = '@systemfsoftware/effect-cell-types' as const
+/**
+ * The pure phase set, the I/O classifications and the description package's module name
+ * are all projected off `Cell.vocabulary` directly at load time.
+ */
+export const PURE_PHASES: readonly string[] = Cell.vocabulary.byKind.pure
+export const IO_CELLS: readonly string[] = Cell.vocabulary.ioCells.cells
+export const IO_SOURCES: readonly string[] = Cell.vocabulary.ioCells.sources
+export const DESCRIPTION_SOURCE: string = Cell.vocabulary.module
+
+if (PURE_PHASES.length === 0) {
+  throw new Error(
+    'effect-executor: the walked vocabulary reports no pure phase, so executor-no-io-in-filling would decide nothing',
+  )
+}
+if (IO_CELLS.length === 0 && IO_SOURCES.length === 0) {
+  throw new Error(
+    'effect-executor: the walked I/O classification is empty, so executor-no-io-in-filling would decide nothing',
+  )
+}
 
 /** The package export that carries the phase constructors. */
 export const DESCRIPTION_NAMESPACE = 'Cell' as const
-
-/** Phase constructors whose bodies are pure: a store, adapter or clock call inside one is a violation. */
-export const PURE_PHASES = ['decode', 'decide', 'encode'] as const
-
-/** Cells whose calls are I/O, classified by the import edge (EE1). */
-export const IO_CELLS = ['store', 'adapter'] as const
-
-/** Non-cell module sources whose calls are I/O, classified by the import edge (EE1). */
-export const IO_SOURCES = ['effect/Clock', 'effect/System'] as const
 
 export const SKIPPED_WALK_KEYS = ['parent', 'range', 'loc', 'start', 'end'] as const
 

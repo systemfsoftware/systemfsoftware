@@ -16,7 +16,7 @@ Feature('Keeping a piece of shared local state in sync across several parts of t
             Effect.sync(() => {
               const count = AtomRef.make(0)
               const isOverFive = count.map((n) => n > 5)
-              const notifications: Array<boolean> = []
+              const notifications: boolean[] = []
               const cancel = isOverFive.subscribe((v) => notifications.push(v))
               return { count, notifications, cancel }
             }),
@@ -99,9 +99,9 @@ Feature('Keeping a piece of shared local state in sync across several parts of t
         Given('a shared value being watched by three listeners')('ctx', () =>
           Effect.sync(() => {
             const value = AtomRef.make(0)
-            const first: Array<number> = []
-            const second: Array<number> = []
-            const third: Array<number> = []
+            const first: number[] = []
+            const second: number[] = []
+            const third: number[] = []
             value.subscribe((v) => first.push(v))
             const cancelSecond = value.subscribe((v) => second.push(v))
             value.subscribe((v) => third.push(v))
@@ -128,7 +128,7 @@ Feature('Keeping a piece of shared local state in sync across several parts of t
           Effect.sync(() => {
             const record = AtomRef.make<{ name?: string; other?: string }>({ other: 'o' })
             const name = record.prop('name')
-            const heard: Array<string | undefined> = []
+            const heard: (string | undefined)[] = []
             name.subscribe((v) => heard.push(v))
             return { record, heard }
           })),
@@ -269,7 +269,7 @@ Feature('Keeping a piece of shared local state in sync across several parts of t
         Given('a shared value being watched by a listener')('ctx', () =>
           Effect.sync(() => {
             const value = AtomRef.make(5)
-            const heard: Array<number> = []
+            const heard: number[] = []
             value.subscribe((v) => heard.push(v))
             return { value, heard }
           })),
@@ -298,7 +298,7 @@ Feature('Keeping a piece of shared local state in sync across several parts of t
           Effect.sync(() => {
             const record = AtomRef.make<{ name?: string; other?: string }>({ other: 'x' })
             const name = record.prop('name')
-            const heard: Array<string | undefined> = []
+            const heard: (string | undefined)[] = []
             name.subscribe((v) => heard.push(v))
             return { record, name, heard }
           })),
@@ -329,7 +329,7 @@ Feature('Keeping a piece of shared local state in sync across several parts of t
             Effect.sync(() => {
               const record = AtomRef.make({ name: 'ada', other: 'x' })
               const name = record.prop('name')
-              const heard: Array<string> = []
+              const heard: string[] = []
               name.subscribe((v) => heard.push(v))
               return { record, name, heard }
             }),

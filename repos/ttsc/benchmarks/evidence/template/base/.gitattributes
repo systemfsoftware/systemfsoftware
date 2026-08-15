@@ -1,0 +1,2 @@
+# Keep generated project text deterministic across development platforms.
+* text=auto eol=lf

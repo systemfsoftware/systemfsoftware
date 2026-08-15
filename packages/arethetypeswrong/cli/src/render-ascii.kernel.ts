@@ -4,16 +4,16 @@ import { renderTable } from './render-table.kernel.js'
 import { resolutionKindOrder, symbolForProblem } from './render-typed.kernel.js'
 
 export const renderAsciiAnalysis = (
-  entrypoints: ReadonlyArray<string>,
-  problems: ReadonlyArray<Problem>,
+  entrypoints: readonly string[],
+  problems: readonly Problem[],
   opts: { readonly useEmoji: boolean },
 ): Doc.Doc<never> => {
   if (entrypoints.length === 0) {
     return Doc.text('No entrypoints found.')
   }
-  const header: ReadonlyArray<string> = ['Entrypoint', ...resolutionKindOrder]
+  const header: readonly string[] = ['Entrypoint', ...resolutionKindOrder]
   const rows = entrypoints.map((entrypoint) => {
-    const row: Array<string> = [entrypoint]
+    const row: string[] = [entrypoint]
     for (const rk of resolutionKindOrder) {
       const relevant = problems.filter((p) => {
         if ('entrypoint' in p && p.entrypoint !== entrypoint) return false

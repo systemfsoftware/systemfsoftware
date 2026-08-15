@@ -1,10 +1,11 @@
-import React, { useCallback, useLayoutEffect, useRef, type FC } from 'react';
+import React, { useCallback, useLayoutEffect, type FC } from 'react';
 
 import { WandIcon } from '@storybook/icons';
 
+import { useNavigate } from 'storybook/internal/router';
 import { useStorybookApi, useStorybookState } from 'storybook/manager-api';
 import { reviewAvailableNotificationId } from '../constants.ts';
-import { useReviewContext, type ReviewBanner } from '../review-context.ts';
+import { navigateToReviewSummary } from '../review-actions.ts';
 import {
   acceptReviewNotification,
   claimNotificationSlot,
@@ -13,34 +14,33 @@ import {
   shouldAutoAcceptOnRoute,
   shouldSkipArrivalNotification,
 } from '../review-notification.ts';
-import type { ReviewState } from '../review-state.ts';
+import { reviewStore, useReview } from '../review-store.ts';
+import { useReviewFiltersRef } from '../useReviewFiltersRef.ts';
 
 /** Sidebar notification for unseen review pushes. Does not auto-navigate. */
 export const ReviewNotification: FC = () => {
   const api = useStorybookApi();
+  const navigate = useNavigate();
   const { path, customQueryParams } = useStorybookState();
-  const { review: displayed, pendingReview: deferred, banner, openSummary } = useReviewContext();
+  const { state: displayed, pendingReview: deferred } = useReview();
+  const filtersRef = useReviewFiltersRef();
   const collectionIndex = readCollectionIndex(customQueryParams);
 
-  // Notification clicks fire long after the closure was created, so they read
-  // the latest pending/banner through refs instead of a render-time snapshot.
-  const deferredRef = useRef<ReviewState | null>(deferred);
-  deferredRef.current = deferred;
-  const bannerRef = useRef<ReviewBanner>(banner);
-  bannerRef.current = banner;
+  const openReview = useCallback(() => {
+    navigateToReviewSummary(api, navigate, filtersRef.current);
+  }, [api, navigate, filtersRef]);
 
   const handleNotificationClick = useCallback(
     (createdAt: number) => {
-      const pendingReview = deferredRef.current;
-      const currentBanner = bannerRef.current;
-      if (pendingReview?.createdAt === createdAt && currentBanner?.kind === 'pending-update') {
-        currentBanner.onAccept();
+      const { pendingReview, banner } = reviewStore.getState();
+      if (pendingReview?.createdAt === createdAt && banner?.kind === 'pending-update') {
+        banner.onAccept();
         return;
       }
       acceptReviewNotification(api, createdAt);
-      openSummary();
+      openReview();
     },
-    [api, openSummary]
+    [api, openReview]
   );
 
   useLayoutEffect(() => {

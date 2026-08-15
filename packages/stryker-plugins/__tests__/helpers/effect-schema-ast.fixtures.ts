@@ -14,7 +14,7 @@ export const memberOf = (object: string, property: string): MemberExpression => 
   property: identifier(property),
 })
 
-export const callOf = (callee: AstNode, args: ReadonlyArray<AstNode>): CallExpression => ({
+export const callOf = (callee: AstNode, args: readonly AstNode[]): CallExpression => ({
   type: 'CallExpression',
   callee,
   arguments: args,
@@ -27,6 +27,17 @@ export const taggedCall = (factory: string, tag: AstNode, fields: AstNode): Call
 
 export const bareFactoryCall = (factory: string, tag: AstNode, fields: AstNode): CallExpression =>
   callOf(callOf(identifier(factory), []), [tag, fields])
+
+/**
+ * `Schema.Class<A>('Id')(fields)` - the identifier rides the inner call and the fields the
+ * outer one, which is the opposite of `taggedCall`'s arrangement and the shape the ignorer
+ * missed until the class rules were added.
+ */
+export const classCall = (id: AstNode, fields: AstNode): CallExpression =>
+  callOf(callOf(memberOf('Schema', 'Class'), [id]), [fields])
+
+/** `X.pipe(S.brand('Name'))`'s inner call - the brand name is identity data. */
+export const brandCall = (name: AstNode): CallExpression => callOf(memberOf('S', 'brand'), [name])
 
 export const taggedFactory = fc.constantFrom('TaggedClass', 'TaggedError')
 
@@ -47,7 +58,7 @@ export interface PropertyNode {
 
 export interface ObjectNode {
   readonly type: 'ObjectExpression'
-  readonly properties: ReadonlyArray<PropertyNode>
+  readonly properties: readonly PropertyNode[]
 }
 
 export const propertyOf = (key: AstNode, value: AstNode, computed = false): PropertyNode => ({
@@ -59,7 +70,7 @@ export const propertyOf = (key: AstNode, value: AstNode, computed = false): Prop
 
 export const namedProperty = (key: string, value: AstNode): PropertyNode => propertyOf(identifier(key), value)
 
-export const objectOf = (properties: ReadonlyArray<PropertyNode>): ObjectNode => ({
+export const objectOf = (properties: readonly PropertyNode[]): ObjectNode => ({
   type: 'ObjectExpression',
   properties,
 })

@@ -1,0 +1,31 @@
+import TtscWebsiteBenchmarkEvidenceCoverage from "../../../components/benchmark/evidence/TtscWebsiteBenchmarkEvidenceCoverage";
+import TtscWebsiteBenchmarkGraphCommon from "../../../components/benchmark/graph/TtscWebsiteBenchmarkGraphCommon";
+import TtscWebsiteBenchmarkPerformanceSummary from "../../../components/benchmark/TtscWebsiteBenchmarkPerformanceSummary";
+
+# Benchmark
+
+`ttsc` publishes three benchmark tracks. One measures a coding agent against itself. The other two measure `ttsc` against competing tools.
+
+## Evidence Graph
+
+[The Evidence Graph benchmark](/docs/benchmark/evidence) has one coding engine build the same application twice from the same frozen requirements: once with [`@ttsc/evidence`](/docs/evidence) and its guidance in the workspace, once with neither. Both arms get an overlay, the same instruction sequence, and the same model and effort, so the only variable is the graph.
+
+Coverage is the axis the other two cannot stand in for: how much of the provenance graph each delivered codebase actually satisfies. The detailed page adds token, work time, and API cost per subject.
+
+<TtscWebsiteBenchmarkEvidenceCoverage />
+
+## Compiler Knowledge Graph
+
+[The Compiler Knowledge Graph benchmark](/docs/benchmark/graph) measures whether an agent spends fewer tokens and tool calls when `@ttsc/graph` is available. It also checks structural coverage: how completely the graph resolves cross-file relationships in a real TypeScript project.
+
+The overview below uses the same shared onboarding prompt across every project with Codex GPT-5.6 terra. The detailed page follows with model tabs, project-specific prompts, and structural coverage.
+
+<TtscWebsiteBenchmarkGraphCommon summary />
+
+## Compiler Performance
+
+[The compiler-performance benchmark](/docs/benchmark/performance) measures wall-clock time when a real TypeScript project moves from the legacy `tsc` + `eslint` path to TypeScript-Go backed builds, checks, and linting. The dashboard covers build, type-check, lint, and format across real open-source repositories, single-threaded and multi-threaded.
+
+vscode, 6,093 TypeScript files across a large application monorepo, is the flagship example. At 8 checker workers, `ttsc` builds vscode in around 8 s versus roughly 94 s for legacy `tsc`, and type-checks it in around 6.5 s versus roughly 73 s. The full dashboard covers nestjs, vue, zod, typeorm, rxjs, and shopping-backend as well.
+
+<TtscWebsiteBenchmarkPerformanceSummary />

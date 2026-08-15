@@ -77,11 +77,11 @@ export interface AtomRef<A> extends ReadonlyRef<A> {
  * @category models
  * @since 4.0.0
  */
-export interface Collection<A> extends ReadonlyRef<ReadonlyArray<AtomRef<A>>> {
+export interface Collection<A> extends ReadonlyRef<readonly AtomRef<A>[]> {
   readonly push: (item: A) => Collection<A>
   readonly insertAt: (index: number, item: A) => Collection<A>
   readonly remove: (ref: AtomRef<A>) => Collection<A>
-  readonly toArray: () => Array<A>
+  readonly toArray: () => A[]
 }
 
 /**
@@ -300,7 +300,7 @@ class PropRefImpl<A, K extends keyof A> implements AtomRef<A[K]> {
   }
 }
 
-class CollectionImpl<A> extends ReadonlyRefImpl<Array<AtomRef<A>>> implements Collection<A> {
+class CollectionImpl<A> extends ReadonlyRefImpl<AtomRef<A>[]> implements Collection<A> {
   private readonly linked = new Set<AtomRef<A>>()
 
   constructor(items: Iterable<A>) {

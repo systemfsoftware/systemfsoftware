@@ -104,11 +104,11 @@ const isTooling = matchesAny(
   /(^|\/)\.npmrc$/,
 )
 
-const ALLOWED_BY_SHAPE: ReadonlyArray<{
+const ALLOWED_BY_SHAPE: readonly {
   readonly name: string
   readonly match: (path: string) => boolean
   readonly allowed: Readonly<Record<string, true>>
-}> = [
+}[] = [
   { name: 'docs', match: isDoc, allowed: { docs: true, chore: true, ai: true } },
   { name: 'test', match: isTest, allowed: { test: true, chore: true } },
   { name: 'CI', match: isCI, allowed: { ci: true, chore: true } },
