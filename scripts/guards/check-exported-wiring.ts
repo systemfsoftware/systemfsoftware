@@ -111,6 +111,16 @@ const selftest = (): number => {
 const main = async (args: readonly string[]): Promise<number> => {
   if (args.includes('--selftest')) return selftest()
   const evidence = await gather()
+  // A gate that discovers nothing must not report success. `check:mutate-scope` was retired for
+  // exactly this: it printed `0 stryker config(s) clean` and exited 0 on a tree with no configs,
+  // so a broken discovery predicate read as a clean repo. Both populations are non-empty in any
+  // checkout of this workspace, so an empty one means the walk failed, never that the repo is clean.
+  if (evidence.reports.length === 0 || evidence.sources.length === 0) {
+    console.error(
+      `check-exported-wiring: discovered ${evidence.reports.length} api report(s) and ${evidence.sources.length} public source file(s) — one population is empty, so the scan found nothing to judge rather than nothing wrong`,
+    )
+    return 1
+  }
   const findings = verdict(evidence)
   for (const f of findings) {
     const what = f.kind === 'report' ? 'reached the published surface' : 'is exported outside src/internal/'
