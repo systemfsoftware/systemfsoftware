@@ -1,59 +1,38 @@
-import { Context, Effect, Scope } from 'effect'
+import { Effect, Scope } from 'effect'
 import type { DaemonHealth } from './daemon-health.schema.js'
 import { healthStateGauge } from './daemon-metrics.kernel.js'
-import type { DaemonReporter } from './daemon-reporter.adapter.js'
 import type { LockConfig, Worker } from './daemon-spec.schema.js'
 import { allocateWorkerHealth } from './internal/allocate-worker-health.kernel.js'
 import { buildWorkerLoop } from './internal/build-worker-loop.kernel.js'
-import { withLeaderLock, WithLeaderLockExecutorDeps } from './internal/with-leader-lock.executor.js'
+import { withLeaderLock } from './internal/with-leader-lock.executor.js'
 import type { LeaderLock } from './leader-lock.adapter.js'
 import { isModeNone } from './leader-lock.kernel.js'
 import type { LeaderLockAcquireError } from './leader-lock.schema.js'
 
-export interface DaemonWorkerExecutorDepsService {
-  readonly withLock: LeaderLock['Type']['withLock']
-  readonly onRestart: DaemonReporter['Type']['onRestart']
-  readonly onExhausted: DaemonReporter['Type']['onExhausted']
-}
-
-export class DaemonWorkerExecutorDeps extends Context.Tag(
-  '@systemfsoftware/effect-daemon-spec/daemon-worker.executor/DaemonWorkerExecutorDeps',
-)<DaemonWorkerExecutorDeps, DaemonWorkerExecutorDepsService>() {}
-
-export const worker: {
-  <E, R>(w: Worker<E, R, { mode: 'none' }>): Effect.Effect<
-    DaemonHealth,
-    never,
-    R | Scope.Scope
-  >
-  <E, R>(w: Worker<E, R, LockConfig>): Effect.Effect<
-    DaemonHealth,
-    never,
-    R | WithLeaderLockExecutorDeps | Scope.Scope
-  >
-} = <E, R>(
+export const worker = <E, R>(
   w: Worker<E, R, LockConfig>,
-): Effect.Effect<
-  DaemonHealth,
-  never,
-  R | WithLeaderLockExecutorDeps | Scope.Scope
-> =>
+  lock: LeaderLock['Type'] | null,
+): Effect.Effect<DaemonHealth, never, R | Scope.Scope> =>
   Effect.gen(function*() {
     const health = yield* allocateWorkerHealth(w.name)
     const loop = buildWorkerLoop(w, health, healthStateGauge).pipe(Effect.orDie)
-    const lockNone = isModeNone(w.lock)
-    const required = !lockNone && w.lock.mode === 'required'
-    let locked: Effect.Effect<void, E | LeaderLockAcquireError, R | WithLeaderLockExecutorDeps | Scope.Scope>
-    if (lockNone) {
+    let locked: Effect.Effect<void, E | LeaderLockAcquireError, R | Scope.Scope>
+    if (lock === null) {
       locked = loop
-    } else if (required) {
-      locked = withLeaderLock(loop, {
-        key: w.lock.key,
-        mode: 'required',
-        acquireRetryBackoff: w.lock.acquireRetryBackoff,
-      })
+    } else if (isModeNone(w.lock)) {
+      locked = loop
+    } else if (w.lock.mode === 'required') {
+      locked = withLeaderLock(
+        loop,
+        {
+          key: w.lock.key,
+          mode: 'required',
+          acquireRetryBackoff: w.lock.acquireRetryBackoff,
+        },
+        lock,
+      )
     } else {
-      locked = withLeaderLock(loop, { key: w.lock.key, mode: 'optional' })
+      locked = withLeaderLock(loop, { key: w.lock.key, mode: 'optional' }, lock)
     }
     yield* Effect.forkScoped(locked.pipe(Effect.orDie))
     return health

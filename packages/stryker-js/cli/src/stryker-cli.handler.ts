@@ -23,9 +23,10 @@ import { emitLLMSManifest } from './llms-manifest.kernel.js'
 import { STREAM_SCHEMA_VERSION } from './stream-protocol.kernel.js'
 import {
   type CliRequest,
+  type CreateRunEventStreamCapability,
+  type DetectModeCapability,
   runStrykerCli,
   strykerCliConsoleLayers,
-  StrykerCliExecutorDeps,
   type StrykerRun,
 } from './stryker-cli.executor.js'
 
@@ -512,12 +513,13 @@ export function strykerCliEffect(
   argv: string[],
   runMutationTest: StrykerRun | undefined,
   recordExitCode: (code: number) => void,
-): Effect.Effect<number, never, StrykerCliExecutorDeps> {
+  detectMode: DetectModeCapability,
+  createRunEventStream: CreateRunEventStreamCapability,
+): Effect.Effect<number, never, never> {
   return Effect.gen(function*() {
-    const deps = yield* StrykerCliExecutorDeps
     // One resolved mode decides the Console layer and the stream, from the
     // same detection inputs the reporters use (U3) — never a second probe.
-    const mode = deps.detectMode()
+    const mode = detectMode()
     const requestRef = yield* Ref.make<Option.Option<CliRequest>>(Option.none())
     const command = makeStrykerCommand(requestRef)
     // The framework renders help/error documents through the `Console`
@@ -536,7 +538,10 @@ export function strykerCliEffect(
       ),
     )
     const outcome = yield* Effect.either(
-      runStrykerCli({ program: cliEffect, requestRef, mode, runMutationTest, recordExitCode }),
+      runStrykerCli(
+        { program: cliEffect, requestRef, mode, runMutationTest, recordExitCode },
+        createRunEventStream,
+      ),
     )
     return Either.isLeft(outcome) ? outcome.left : outcome.right
   })

@@ -4,7 +4,7 @@ import { Duration, Effect, Layer, Ref, Schedule, Schema as S, Stream, TestClock 
 import { expect } from 'vitest'
 import { BoundedIntensity } from '../src/mod.js'
 import { run } from '../src/mod.js'
-import { SupervisorBodyExecutorDeps, WithLeaderLockExecutorLive } from '../src/mod.js'
+import { DaemonReporter } from '../src/mod.js'
 import { Daemon } from '../src/mod.js'
 import { LeaderLock } from '../src/mod.js'
 import { Supervision } from '../src/mod.js'
@@ -51,8 +51,7 @@ Feature('Stream child supervision')
               })
               const reporterLayer = Layer.mergeAll(
                 LeaderLock.Noop,
-                WithLeaderLockExecutorLive.pipe(Layer.provide(LeaderLock.Noop)),
-                Layer.succeed(SupervisorBodyExecutorDeps, {
+                Layer.succeed(DaemonReporter, {
                   onRestart: s.spy.reporter.onRestart,
                   onExhausted: s.spy.reporter.onExhausted,
                 }),
@@ -120,8 +119,7 @@ Feature('Stream child supervision')
               })
               const reporterLayer = Layer.mergeAll(
                 LeaderLock.Noop,
-                WithLeaderLockExecutorLive.pipe(Layer.provide(LeaderLock.Noop)),
-                Layer.succeed(SupervisorBodyExecutorDeps, {
+                Layer.succeed(DaemonReporter, {
                   onRestart: s.spy.reporter.onRestart,
                   onExhausted: s.spy.reporter.onExhausted,
                 }),

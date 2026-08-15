@@ -3,7 +3,7 @@ import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/e
 import { Duration, Effect, Fiber, Layer, Match, Ref, Schedule, TestClock } from 'effect'
 import { expect } from 'vitest'
 import { Noop } from '../src/daemon-reporter.adapter.js'
-import { run, SupervisorBodyExecutorLive, WithLeaderLockExecutorLive } from '../src/mod.js'
+import { run } from '../src/mod.js'
 import { Daemon } from '../src/mod.js'
 import { LeaderLock } from '../src/mod.js'
 import { Supervision } from '../src/mod.js'
@@ -26,8 +26,7 @@ Feature('Lock acquisition retry on contention')
     Layer.mergeAll(
       LeaderLockFake,
       TestClock.defaultTestClock,
-      WithLeaderLockExecutorLive.pipe(Layer.provide(LeaderLockFake)),
-      SupervisorBodyExecutorLive,
+      Noop,
     ),
   )
   .body(({ scenarioOutline }) => {
