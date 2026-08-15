@@ -172,11 +172,27 @@ const MANIFEST = new Map([
   ]],
   ['tools/term.ts', [
     'workspace-layout',
-    'The TypeScript authoring front-end for the term language. A library the term sources import; called by no chain of its own.',
+    'The type-expression builder the term sources import. A library; called by no chain of its own.',
   ]],
   ['tools/term-compile.ts', [
     'workspace-layout',
-    'Compiles a *.term.json into a cell. One compiler for every role, so it writes into any package src/ and the authorship gate is its only caller in a chain.',
+    'Compiles a *.term.ts into a cell. One compiler for every role, so it writes into any package src/ and the authorship gate is its only caller in a chain.',
+  ]],
+  ['tools/cell.ts', [
+    'workspace-layout',
+    'The role constructors: a role is a pair of the requirements its terms may carry and the declaration kinds it admits. Nothing publishable can own it, because a role governs cells across every package at once.',
+  ]],
+  ['tools/role-brand.ts', [
+    'workspace-layout',
+    'The brand the compiler requires and the role constructors apply. Its own module because a value import between those two closes a cycle through a top-level await, and no package can own a constraint that spans them.',
+  ]],
+  ['tools/render.ts', [
+    'workspace-layout',
+    'The source-text primitives every emitter shares: identifier validation, literal escaping, doc blocks. A library for the emitters, called by no chain of its own.',
+  ]],
+  ['guards/check-term-types.ts', [
+    'workspace-layout',
+    'Typechecks every *.term.ts and probe and runs the *.run.ts falsifications. No package tsconfig includes terms/, so without this gate the type-level role constraints are diagnostics nothing blocks on.',
   ]],
   ['tools/shape-emit.ts', [
     'workspace-layout',
