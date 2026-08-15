@@ -421,6 +421,12 @@ export interface Vocabulary {
   readonly ioCells: IoCellClassification
   readonly phases: ReadonlyArray<PhaseFact>
   readonly byKind: Readonly<Record<PhaseFact['kind'], ReadonlyArray<PhaseFact['name']>>>
+  /**
+   * The export that runs a finished description. A consumer deciding which calls on this module
+   * belong to a description needs the phases *and* the applier; without it the applier is the one
+   * name it has to write down for itself, and one restated name is enough to drift.
+   */
+  readonly applier: 'apply'
 }
 
 /**
@@ -465,4 +471,7 @@ export const vocabulary: Vocabulary = {
     pure: WALKED_PHASES.filter((phase) => phase.kind === 'pure').map((phase) => phase.name),
     impure: WALKED_PHASES.filter((phase) => phase.kind === 'impure').map((phase) => phase.name),
   },
+  // The one place this name is written. `apply` is defined in this module, so naming it here is a
+  // declaration at its definition site, not a restatement beside one.
+  applier: 'apply',
 }

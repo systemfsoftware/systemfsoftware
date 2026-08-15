@@ -36,6 +36,30 @@ export interface Bag extends Cell.Phases {
 }
 
 /**
+ * The layer the drawn descriptions are built from, and the phases at which a failure can be
+ * drawn. Both are functions of `Cell.canonical` alone, which never changes after load, so they
+ * are derived once here rather than per generated value.
+ *
+ * A canonical description carrying no layers is a load-time error on purpose: every draw would
+ * fail the same way, and failing here names the description instead of the draw that tripped over
+ * it.
+ */
+const [TEMPLATE] = Cell.canonical.layers
+if (TEMPLATE === undefined) {
+  throw new Error('effect-cell-gen: the canonical description carried no layers')
+}
+
+/** The phases whose convention admits a `Left`, walked rather than listed. */
+const FAILABLE: ReadonlyArray<{
+  readonly phaseIndex: number
+  readonly convention: 'either-fail' | 'either-pass'
+}> = TEMPLATE.phases.flatMap((phase, phaseIndex) =>
+  phase.convention === 'either-fail' || phase.convention === 'either-pass'
+    ? [{ phaseIndex, convention: phase.convention }]
+    : []
+)
+
+/**
  * Rebuilds one layer by substituting drawn `run`s into the walked canonical description.
  * The phase records — their names, kinds, conventions and order — come from
  * `Cell.canonical`'s layer template, never from this file; the only thing this function
@@ -74,13 +98,9 @@ const substituteLayer = (
   response: number,
   failure: DrawnFailure | undefined,
 ): Cell.Layer<Bag> => {
-  const [template] = Cell.canonical.layers
-  if (template === undefined) {
-    throw new Error('effect-cell-gen: the canonical description carried no layers')
-  }
-  const lastPhaseIndex = template.phases.length - 1
+  const lastPhaseIndex = TEMPLATE.phases.length - 1
   return {
-    phases: template.phases.map((phase, phaseIndex) => {
+    phases: TEMPLATE.phases.map((phase, phaseIndex) => {
       const convention = phase.convention
       switch (convention) {
         case 'effect':
@@ -95,17 +115,10 @@ const substituteLayer = (
                 return response
               }),
           }
+        // One arm for both Either conventions. Their difference is what the interpreter does with
+        // a `Left`, not how the run produces one, so a generator that told them apart here would
+        // assert a distinction it does not make. The switch stays exhaustive either way.
         case 'either-fail':
-          return {
-            ...phase,
-            run: (input: number): Either.Either<number, number> => {
-              trace.push(phase.name)
-              if (failure !== undefined && failure.phaseIndex === phaseIndex) {
-                return Either.left(failure.error)
-              }
-              return Either.right(input)
-            },
-          }
         case 'either-pass':
           return {
             ...phase,
@@ -194,42 +207,38 @@ export const description: fc.Arbitrary<DescriptionCase> = fc
     layers: fc.array(fc.record({ writeResponse: fc.integer() }), { minLength: 1, maxLength: 3 }),
   })
   .chain((drawn) => {
-    const [template] = Cell.canonical.layers
-    if (template === undefined) {
-      throw new Error('effect-cell-gen: the canonical description carried no layers')
-    }
-    const failing = template.phases.flatMap((phase, phaseIndex) =>
-      phase.convention === 'either-fail' || phase.convention === 'either-pass'
-        ? [{ phaseIndex, convention: phase.convention }]
-        : []
-    )
-    const failureArb: fc.Arbitrary<DrawnFailure> = fc
-      .record({
-        layerIndex: fc.nat({ max: drawn.layers.length - 1 }),
-        failingIndex: fc.nat({ max: failing.length - 1 }),
-        error: fc.integer(),
-      })
-      .map(({ layerIndex, failingIndex, error }) => {
-        const chosen = failing[failingIndex]
-        if (chosen === undefined) {
-          throw new Error('effect-cell-gen: a drawn failing index had no matching phase')
-        }
-        const phase = template.phases[chosen.phaseIndex]
-        if (phase === undefined) {
-          throw new Error('effect-cell-gen: a drawn phase index had no phase record')
-        }
-        return {
-          layerIndex,
-          phaseIndex: chosen.phaseIndex,
-          name: phase.name,
-          convention: chosen.convention,
-          error,
-        }
-      })
-    const maybeFailure: fc.Arbitrary<DrawnFailure | undefined> = failing.length === 0
+    // Built only when a failable phase exists. `fc.nat` rejects a negative `max` at construction
+    // time, not at draw time, so constructing this unconditionally would make the empty-`FAILABLE`
+    // branch below unreachable: a walked description with no Either phase would die inside
+    // fast-check instead of drawing no failure.
+    const drawFailure = (): fc.Arbitrary<DrawnFailure> =>
+      fc
+        .record({
+          layerIndex: fc.nat({ max: drawn.layers.length - 1 }),
+          failingIndex: fc.nat({ max: FAILABLE.length - 1 }),
+          error: fc.integer(),
+        })
+        .map(({ layerIndex, failingIndex, error }) => {
+          const chosen = FAILABLE[failingIndex]
+          if (chosen === undefined) {
+            throw new Error('effect-cell-gen: a drawn failing index had no matching phase')
+          }
+          const phase = TEMPLATE.phases[chosen.phaseIndex]
+          if (phase === undefined) {
+            throw new Error('effect-cell-gen: a drawn phase index had no phase record')
+          }
+          return {
+            layerIndex,
+            phaseIndex: chosen.phaseIndex,
+            name: phase.name,
+            convention: chosen.convention,
+            error,
+          }
+        })
+    const maybeFailure: fc.Arbitrary<DrawnFailure | undefined> = FAILABLE.length === 0
       ? fc.constant(undefined)
       : fc.oneof(
-        { arbitrary: failureArb, weight: 1 },
+        { arbitrary: drawFailure(), weight: 1 },
         { arbitrary: fc.constant(undefined), weight: 2 },
       )
     return maybeFailure.map((failure) => {

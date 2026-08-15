@@ -38,6 +38,38 @@ rules:
     check: `pnpm --filter @systemfsoftware/effect-cell-types test:types` exits 0
       with each assertion observed failing once with its expect-error directive
       removed, and `test` exits 0 with at least one description run end to end
+
+  - id: CELL-T3
+    title: This package is where a phase is described, and the only place
+    do:
+      - author a new phase here and nowhere else: its closure type, its node
+        record, its union member, its stage brand, its constructor, and its place
+        in `canonical` — the chain that only type-checks in one order
+      - let `vocabulary` stay a fold of `canonical`, a description the public
+        constructors build, so the table is a walk result rather than a second
+        declaration standing beside them
+    dont: hand-write a phase table, duplicate an axis into a constant beside the
+      constructors, or import a consumer — no package that walks this value may
+      appear in this package's dependencies
+    harm: three consumers in three packages derive their whole behaviour from this
+      value. A second declaration here is the one edit that can make them all
+      wrong at once while every one of them still passes, because they would agree
+      with each other and disagree only with the constructors
+    check: adding a phase inside `src/Cell.ts` leaves every consumer package green
+      and fails only this package's own oracle, API golden and type spec —
+      re-measurable with `scripts/tools/f2a-phase-probe.ts`
+
+  - id: CELL-T4
+    title: The integration oracle restates the vocabulary on purpose
+    do: keep the hand-written phase list in
+      `__tests__/interpreter.integration.test.ts` — it is an independent oracle,
+      and its whole job is to disagree with the fold when the fold is wrong
+    dont: derive it from `Cell.vocabulary`, and do not delete it as duplication
+    harm: a derived checker validated only against fixtures the same walk produced
+      cannot fail; the restatement is what makes the walk falsifiable, and it is
+      inside this package precisely so a consumer never carries an axis literal
+    check: review — the phase list in that file is written out, and the comment
+      above it says why
 ```
 
 ## Verification
