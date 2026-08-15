@@ -57,3 +57,8 @@ branch = "main"
 name = "typia"
 url = "https://github.com/samchon/typia"
 tag_prefix = "v"
+
+[[repos]]
+name = "ttsc"
+url = "https://github.com/samchon/ttsc"
+tag_prefix = "v"
