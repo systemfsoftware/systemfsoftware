@@ -8,8 +8,6 @@ import type { Intensity, IntensityConfig } from '../daemon-policy.schema.js'
 import type { DaemonReporter } from '../daemon-reporter.adapter.js'
 import type { Child, LockConfig, Supervisor, Worker } from '../daemon-spec.schema.js'
 import type { LeaderLock } from '../leader-lock.adapter.js'
-import { isModeNone } from '../leader-lock.kernel.js'
-import type { LeaderLockAcquireError } from '../leader-lock.schema.js'
 import type { BootedChild, Supervision, SupervisionContext } from '../supervision.schema.js'
 import { allocateSupervisorHealth } from './allocate-supervisor-health.kernel.js'
 import { allocateWorkerHealth } from './allocate-worker-health.kernel.js'
@@ -32,7 +30,7 @@ import {
   StopSupervision,
   type SupervisionEpochResultType,
 } from './supervision-epoch.schema.js'
-import { withLeaderLock } from './with-leader-lock.executor.js'
+import { withLockByMode } from './with-lock-by-mode.executor.js'
 
 const handleExhausted = <R>(
   ctx: SupervisionContext<R>,
@@ -434,24 +432,7 @@ export const supervisor = <E, R>(
       booted.map((b) => b.health),
     )
     const body = buildSupervisorBody(s, health, booted, reporter).pipe(Effect.orDie)
-    let locked: Effect.Effect<
-      void,
-      E | LeaderLockAcquireError,
-      R | Scope.Scope
-    >
-    if (lock === null) {
-      locked = body
-    } else if (isModeNone(s.lock)) {
-      locked = body
-    } else if (s.lock.mode === 'required') {
-      locked = withLeaderLock(body, {
-        key: s.lock.key,
-        mode: 'required',
-        acquireRetryBackoff: s.lock.acquireRetryBackoff,
-      }, lock)
-    } else {
-      locked = withLeaderLock(body, { key: s.lock.key, mode: 'optional' }, lock)
-    }
+    const locked = withLockByMode(body, s.lock, lock)
     yield* Effect.forkScoped(locked.pipe(Effect.orDie))
     return health
   })

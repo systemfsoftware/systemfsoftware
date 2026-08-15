@@ -17,13 +17,10 @@ export {
 export * from './daemon-reporter.adapter.js'
 export * from './daemon-spec.schema.js'
 import type { DaemonHealth, SupervisorHealth } from './daemon-health.schema.js'
-import { DaemonReporter } from './daemon-reporter.adapter.js'
-import { LeaderLock } from './leader-lock.adapter.js'
-import { isModeNone } from './leader-lock.kernel.js'
-export * from './leader-lock.schema.js'
 import { MaxChildren } from './daemon-policy.schema.js'
 import type { ChildPolicyConfig, TickPolicyConfig } from './daemon-policy.schema.js'
 import { poll as pollKernel } from './daemon-poll.kernel.js'
+import { DaemonReporter } from './daemon-reporter.adapter.js'
 import type {
   Child,
   CommonOpts,
@@ -39,6 +36,8 @@ import type {
 } from './daemon-spec.schema.js'
 import { stream as streamKernel } from './daemon-stream.kernel.js'
 import { subscription as subscriptionKernel } from './daemon-subscription.kernel.js'
+import { LeaderLock } from './leader-lock.adapter.js'
+import { isModeNone } from './leader-lock.kernel.js'
 export const poll = <A, E, R, L extends LockConfig>(opts: PollOpts<A, E, R, L>): Worker<E, R, L> =>
   pollKernel<
     Effect.Effect<A, E, R>,
