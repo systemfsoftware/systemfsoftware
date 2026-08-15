@@ -96,11 +96,35 @@ export interface Step {
 }
 
 export type Term =
-  | { readonly lit: string | number | boolean | null }
+  | {
+    readonly lit: string | number | boolean | null
+    /**
+     * The numeral as the author wrote it, when its value does not determine its text.
+     *
+     * `10_000`, `0x1f` and `1e6` are all numbers whose `String` form is a different string, and no
+     * formatter puts the separators back. The value stays authoritative — it is what the term means —
+     * and this is the spelling, checked against the value so the two cannot disagree.
+     */
+    readonly as?: string
+  }
   /** A local name: a parameter, a `let` bind, a `fix` name, a fold accumulator. */
   | { readonly var: string }
   /** A name from outside the term: an import, or another declaration in this file. */
-  | { readonly ref: string }
+  | {
+    readonly ref: string
+    /**
+     * The name is in this program's pure scope, and the compiler checks that it is.
+     *
+     * Pure scope is this program's own declarations together with the members its imports assert pure.
+     * Both were already accounted for — a declaration by the role that built the program, an import
+     * member by the author on the import — so naming one reads nothing further and requires nothing.
+     *
+     * Without the flag the name comes from nowhere the program has described, which is why the bare
+     * form carries `Ambient`. The flag does not weaken that: it says the name is one of the two kinds
+     * the program has already spoken for.
+     */
+    readonly scoped?: boolean
+  }
   | {
     readonly lam: {
       readonly typeParams?: readonly TypeParam[]
@@ -117,6 +141,46 @@ export type Term =
    * spelling belongs to the declaration for the same reason the pre-broken object type does.
    */
   | { readonly app: { readonly fn: Term; readonly args: readonly Term[]; readonly multiline?: boolean } }
+  /**
+   * A template literal: alternating literal text and interpolated terms.
+   *
+   * `quasis` holds the text between interpolations and always has one more entry than `exprs`, which
+   * is the invariant a template has by construction — `\`a${x}b${y}c\`` is three quasis and two
+   * expressions. Stating it that way rather than as a flat list of parts makes an unbalanced template
+   * unrepresentable instead of a runtime rejection.
+   *
+   * It is a distinct node rather than sugar for string concatenation because the two produce different
+   * bytes, and the formatter converts neither into the other.
+   */
+  | { readonly template: { readonly quasis: readonly string[]; readonly exprs: readonly Term[] } }
+  /**
+   * `new C(…)` — construction, which is not application.
+   *
+   * A separate node because `new` is not a call: it binds tighter, it cannot be omitted, and a
+   * constructor invoked as a function is a different program. The requirement it carries is its
+   * arguments', since allocating an object reads nothing outside them.
+   */
+  | {
+    readonly new: {
+      readonly of: string
+      readonly args: readonly Term[]
+      readonly multiline?: boolean
+      /**
+       * The constructor is a name this program has in scope, and the compiler checks that it is.
+       *
+       * Scope is this program's own declarations together with its imports, which is the whole of what
+       * a cell can name. Both are already accounted for: a declaration was admitted by the role that
+       * built the program, and an import states its requirement explicitly, which is the one place an
+       * author asserts rather than derives. Construction adds nothing to either claim — allocating from
+       * a name reads no more than the name already brought.
+       *
+       * Without the flag the name is a global, whose purity the *type* vetted against a closed set
+       * before the compiler saw it. That is the same division of labour as `ref`: the type owns what
+       * may be named from nowhere, the compiler owns what is actually in scope.
+       */
+      readonly scoped?: boolean
+    }
+  }
   | { readonly let: { readonly binds: readonly Bind[]; readonly body: Term } }
   /**
    * General recursion: `name` is bound inside `body`, so the function may call itself. This is the
@@ -242,6 +306,26 @@ export interface ImportSpec {
   readonly namespace?: string
   readonly alias?: Readonly<Record<string, string>>
   readonly blankBefore?: boolean
+  /**
+   * The members of this import a term may call or name, asserted by the author.
+   *
+   * Purity is a property of a member, not of a module: `Effect.succeed` allocates a description and
+   * `Effect.runSync` performs it, and both arrive through one import. A module-wide claim cannot be the
+   * check — it would admit the runner along with the constructor — so the claim is listed where it is
+   * true and the rest of the module stays unreachable.
+   *
+   * A member absent from the list is not refused as impure; it is refused as *unasserted*, which is a
+   * different and better failure: the author has not said, so the compiler does not guess. Reaching an
+   * unasserted member is what `invoke` is for, and it carries `Ambient` precisely because nothing
+   * vetted it.
+   *
+   * For a namespace import the entries are member names (`'when'` for `Match.when`); for a named or
+   * default import they are the bound names themselves.
+   *
+   * Authorship metadata, like `requires`: it constrains what the program may do and leaves no trace in
+   * the emitted import line.
+   */
+  readonly pure?: readonly string[]
 }
 
 export interface TermDeclaration {
@@ -296,14 +380,20 @@ const reject = rejecting('term')
  */
 const SOURCE_TEXT_FIELDS = ['code', 'body_text', 'raw', 'source', 'statements', 'js', 'ts', 'expr'] as const
 
-/** Node names the language deliberately has no term for, reported by name rather than as "unknown". */
+/**
+ * Node names the language deliberately has no term for, reported by name rather than as "unknown".
+ *
+ * Every entry is a *statement*, and each names the expression that carries the same meaning — which is
+ * the derivation: the language is expression-only, so a form that exists to sequence or to mutate has
+ * nowhere to land. `new` was once listed here and is not a statement; it is an expression whose value
+ * is a function of its arguments, and it has a node.
+ */
 const REFUSED: Readonly<Record<string, string>> = {
   while: 'a `while` loop has no term. An unbounded repetition is `fix`, and a list is `fold`.',
   for: 'a `for` loop has no term. Consuming a list is `fold`; counting is `fix`.',
   assign: 'assignment has no term. A value that changes across steps is a `fold` accumulator or a `do` bind.',
   throw: 'a `throw` has no term. A failure is a value: `Effect.fail` through `ref`, inside `do`.',
   try: 'a `try` has no term. Recovering from a failure is a combinator applied through `pipe`.',
-  new: '`new` has no term. Construct through a named factory, which is what the cell should export anyway.',
   block: 'a statement block has no term. Sequencing effects is `do`; naming intermediates is `let`.',
   return: 'a `return` has no term. A term *is* its value; `do` carries the result in `result`.',
   yield: 'a bare `yield` has no term. `do` places every `yield*` itself, one per step.',
@@ -382,9 +472,26 @@ const atom = (t: Term, path: string, scope: Scope): string => {
  * The names a term may mention. A `var` outside it is a compile error rather than a TypeScript one,
  * which is the difference between a language and a template: the scope is checked before emission.
  */
-type Scope = ReadonlySet<string>
+/**
+ * The names a term may mention, and which of them it may mention purely.
+ *
+ * Two sets rather than one, because the language asks two different questions. `var` asks whether a
+ * name exists at all — a name outside `names` is a typo, and saying so beats emitting it and letting
+ * `tsc` find it later. A scoped reference asks whether naming it asserts anything, which is a narrower
+ * question with a different answer for an import whose member was never vetted.
+ *
+ * A binder is in both. A lambda's parameter is pure by construction: the body cannot see past the
+ * binding, so whatever the caller passes, naming the parameter reads nothing the term did not receive.
+ */
+interface Scope {
+  readonly names: ReadonlySet<string>
+  readonly pure: ReadonlySet<string>
+}
 
-const extend = (scope: Scope, ...names: readonly string[]): Scope => new Set([...scope, ...names])
+const extend = (scope: Scope, ...names: readonly string[]): Scope => ({
+  names: new Set([...scope.names, ...names]),
+  pure: new Set([...scope.pure, ...names]),
+})
 
 const params = (list: readonly TermParam[], path: string): string =>
   list
@@ -404,16 +511,28 @@ export const compile = (t: Term, path: string, scope: Scope): string => {
   if ('lit' in t) {
     const v: unknown = t.lit
     if (typeof v === 'string') return literal(v)
-    if (typeof v === 'number' || typeof v === 'boolean' || v === null) return String(v)
+    if (typeof v === 'number') {
+      const spelling: unknown = (t as { as?: unknown }).as
+      if (spelling === undefined) return String(v)
+      if (typeof spelling !== 'string') return reject(`${path}.as: expected the numeral as a string`)
+      if (Number(spelling) !== v) {
+        reject(
+          `${path}.as: the spelling '${spelling}' reads as ${Number(spelling)}, and the literal is ${v}. ` +
+            `A spelling that disagrees with its value is two different numbers`,
+        )
+      }
+      return spelling
+    }
+    if (typeof v === 'boolean' || v === null) return String(v)
     return reject(`${path}.lit: expected a string, number, boolean or null`)
   }
 
   if ('var' in t) {
     if (typeof t.var !== 'string' || !IDENT.test(t.var)) reject(`${path}.var: expected a name`)
-    if (!scope.has(t.var)) {
+    if (!scope.names.has(t.var)) {
       reject(
         `${path}.var: ${literal(t.var)} is not in scope. A name from outside the term is \`ref\`; ` +
-          `in scope here: ${[...scope].sort().join(', ') || '(nothing)'}`,
+          `in scope here: ${[...scope.names].sort().join(', ') || '(nothing)'}`,
       )
     }
     return t.var
@@ -422,6 +541,13 @@ export const compile = (t: Term, path: string, scope: Scope): string => {
   if ('ref' in t) {
     if (typeof t.ref !== 'string' || !QUALIFIED.test(t.ref)) {
       reject(`${path}.ref: expected a name, optionally qualified`)
+    }
+    if (t.scoped === true && !scope.pure.has(t.ref)) {
+      reject(
+        `${path}.ref: '${t.ref}' is named as part of this program's pure scope, and it is not there. ` +
+          `Declare it in this program, or list it in the \`pure\` members of the import that brings it. ` +
+          `In pure scope here: ${[...scope.pure].join(', ') || '(nothing)'}`,
+      )
     }
     return t.ref
   }
@@ -432,6 +558,48 @@ export const compile = (t: Term, path: string, scope: Scope): string => {
     const returns = l.returns === undefined ? '' : `: ${renderTypeExpr(l.returns, `${path}.lam.returns`)}`
     const generics = renderTypeParams(l.typeParams, `${path}.lam.typeParams`)
     return `${generics}(${params(l.params, `${path}.lam`)})${returns} => ${compile(l.body, `${path}.lam.body`, inner)}`
+  }
+
+  if ('template' in t) {
+    const tpl = t.template
+    if (!Array.isArray(tpl.quasis) || !Array.isArray(tpl.exprs)) {
+      reject(`${path}.template: expected quasis and exprs arrays`)
+    }
+    if (tpl.quasis.length !== tpl.exprs.length + 1) {
+      reject(
+        `${path}.template: expected ${tpl.exprs.length + 1} quasis for ${tpl.exprs.length} ` +
+          `expression(s) — a template alternates text and interpolation, so there is always one ` +
+          `more piece of text than there are holes`,
+      )
+    }
+    const parts = tpl.quasis.map((q, i) => {
+      if (typeof q !== 'string') reject(`${path}.template.quasis[${i}]: expected a string`)
+      const escaped = q.replaceAll('\\', '\\\\').replaceAll('`', '\\`').replaceAll('${', '\\${')
+      const hole = i < tpl.exprs.length
+        ? `\${${compile(tpl.exprs[i]!, `${path}.template.exprs[${i}]`, scope)}}`
+        : ''
+      return `${escaped}${hole}`
+    })
+    return `\`${parts.join('')}\``
+  }
+
+  if ('new' in t) {
+    const n = t.new
+    if (typeof n.of !== 'string' || !QUALIFIED.test(n.of)) reject(`${path}.new.of: expected a constructor name`)
+    if (n.scoped === true) {
+      // A qualified name is in scope through its root: `Cause.TimeoutException` through `Cause`.
+      const root = n.of.split('.')[0]!
+      if (!scope.names.has(root)) {
+        reject(
+          `${path}.new.of: '${n.of}' is constructed from scope, and '${root}' is neither declared here ` +
+            `nor imported. Declare it, import it, or name a vetted global constructor`,
+        )
+      }
+    }
+    if (!Array.isArray(n.args)) reject(`${path}.new.args: expected an array (empty is allowed)`)
+    const args = n.args.map((x, i) => compile(x, `${path}.new.args[${i}]`, scope))
+    if (n.multiline === true) return `new ${n.of}(\n${args.map((x) => `  ${x},`).join('\n')}\n)`
+    return `new ${n.of}(${args.join(', ')})`
   }
 
   if ('app' in t) {
@@ -523,7 +691,23 @@ export const compile = (t: Term, path: string, scope: Scope): string => {
     // the record's own fields authoritative - which is what a caller reading it expects.
     const spread = ((t as { spread?: readonly Term[] }).spread ?? [])
       .map((s, i) => `...${compile(s, `${path}.spread[${i}]`, scope)}`)
-    const entries = Object.entries(t.record).map(([k, v]) => `${key(k)}: ${compile(v, `${path}.record.${k}`, scope)}`)
+    // A key wrapped in brackets is computed: `'[WorkerTypeId]'` emits `[WorkerTypeId]`, and the name
+    // inside it is resolved in pure scope like any other reference. Spelling it in the key rather than
+    // as a separate node keeps a record one map from keys to terms.
+    const entries = Object.entries(t.record).map(([k, v]) => {
+      const value = compile(v, `${path}.record.${k}`, scope)
+      const computed = k.startsWith('[') && k.endsWith(']')
+      if (!computed) return `${key(k)}: ${value}`
+      const name = k.slice(1, -1)
+      if (!QUALIFIED.test(name)) reject(`${path}.record: '${k}' is a computed key, and '${name}' is not a name`)
+      if (!scope.pure.has(name)) {
+        reject(
+          `${path}.record: the computed key '${name}' is not in this program's pure scope. Declare it, ` +
+            `or list it in the \`pure\` members of the import that brings it`,
+        )
+      }
+      return `[${name}]: ${value}`
+    })
     const all = [...spread, ...entries]
     return all.length === 0 ? '{}' : `{ ${all.join(', ')} }`
   }
@@ -657,6 +841,8 @@ export const compile = (t: Term, path: string, scope: Scope): string => {
 }
 
 const renderImport = (spec: ImportSpec, index: number): string => {
+  // `pure` and `requires` are claims about the import, not part of it. They constrain what the
+  // program may do and leave no trace in the emitted line.
   if (!isRecord(spec) || typeof spec.module !== 'string' || spec.module === '') {
     reject(`imports[${index}].module: expected a specifier`)
   }
@@ -702,6 +888,29 @@ const renderClassTag = (d: ClassTagDeclaration, path: string): string => {
  * declaration in the file. A `ref` to anything else compiles, and then fails to typecheck - so the
  * check is here, where the message can name the term rather than the emitted line.
  */
+/**
+ * The names a term may call or name without asserting anything further.
+ *
+ * Two sources, and they are admitted for different reasons. A declaration of this program was admitted
+ * by the role that built it, so naming it adds nothing. An import's member was asserted pure by the
+ * author on the import, which is the one place in this language where an author asserts rather than
+ * derives.
+ *
+ * A namespace import contributes `Ns.member` for each asserted member rather than `Ns` itself: the
+ * namespace object is not a value a pure term has any use for, and admitting it would admit every
+ * member through it.
+ */
+const pureScope = (program: CellProgram): ReadonlySet<string> => {
+  const names = new Set<string>()
+  for (const spec of program.imports) {
+    for (const member of spec.pure ?? []) {
+      names.add(spec.namespace === undefined ? member : `${spec.namespace}.${member}`)
+    }
+  }
+  for (const d of program.declarations) if (isTermDeclaration(d) || isClassTag(d)) names.add(d.name)
+  return names
+}
+
 const topLevelScope = (program: CellProgram): ReadonlySet<string> => {
   const names = new Set<string>()
   for (const spec of program.imports) {
@@ -757,7 +966,7 @@ export const compileProgram = (program: CellProgram): string => {
   const imports = program.imports
     .map((spec, i) => `${spec.blankBefore === true && i > 0 ? '\n' : ''}${renderImport(spec, i)}`)
     .join('\n')
-  const outer = topLevelScope(program)
+  const outer: Scope = { names: topLevelScope(program), pure: pureScope(program) }
   const body = program.declarations
     .map((d, i) => {
       const path = `declarations[${i}]`

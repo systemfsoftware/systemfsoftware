@@ -235,6 +235,57 @@ export const call = <N extends PureGlobal, const As extends readonly Term<unknow
 ): Term<RequirementsOf<As>> => of({ app: { fn: { ref: callee }, args: args.map(raw) } })
 
 /**
+ * A template literal. `strings` is the text around the holes, `values` the terms in them.
+ *
+ * Written as two lists rather than as a tagged-template function, because a tag receives the pieces
+ * already split by TypeScript's own parser and the term has to carry them as data. The compiler
+ * rejects an unbalanced pair, so `strings` is always one longer than `values`.
+ */
+export const tpl = <const As extends readonly Term<unknown>[]>(
+  strings: readonly [string, ...string[]],
+  ...values: As
+): Term<RequirementsOf<As>> => of({ template: { quasis: strings, exprs: values.map(raw) } })
+
+/**
+ * Constructors whose result is a function of their arguments.
+ *
+ * `new Date()` is the reason this is a closed set rather than any name: it reads the clock, exactly as
+ * `Date.now` does, and the two are the same impurity spelled differently. The collections here
+ * allocate and nothing more; the errors carry only the message given to them.
+ */
+export type PureConstructor =
+  | 'Map'
+  | 'Set'
+  | 'WeakMap'
+  | 'WeakSet'
+  | 'Array'
+  | 'Error'
+  | 'TypeError'
+  | 'RangeError'
+  | 'RegExp'
+
+/** `new C(…)` for a vetted constructor. Requirements are the arguments'. */
+export const construct = <N extends PureConstructor, const As extends readonly Term<unknown>[] = []>(
+  of_: N,
+  ...args: As
+): Term<RequirementsOf<As>> => of({ new: { of: of_, args: args.map(raw) } })
+
+/**
+ * `new C(…)` where `C` is a name this program has in scope — its own declaration, or an import.
+ *
+ * There is no set to vet the name against and there should not be, because both halves of scope have
+ * already been accounted for. A declaration was admitted by the role that built this program. An
+ * import stated its requirement, which is the assertion `ImportSpec.requires` exists to carry, and a
+ * role admits or refuses the import on it. Constructing from either reads nothing the name did not
+ * already bring, so the requirement is the arguments' and the compiler checks only that the name is
+ * really there — the part a type cannot see.
+ */
+export const constructIn = <const As extends readonly Term<unknown>[] = []>(
+  of_: string,
+  ...args: As
+): Term<RequirementsOf<As>> => of({ new: { of: of_, args: args.map(raw), scoped: true } })
+
+/**
  * The same call with its arguments pre-broken, one per line.
  *
  * A separate constructor rather than an options argument, because `call` is variadic and there is
