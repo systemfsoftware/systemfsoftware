@@ -39,12 +39,6 @@ export class SurvivorsRejection extends S.TaggedError<SurvivorsRejection>()('Sur
   readonly [SurvivorsAdmissionTypeId] = SurvivorsAdmissionTypeId
 }
 
-export type SurvivorsAdmissionWorkflow = Workflow.Workflow<
-  AdmitSurvivorsRunInput,
-  SurvivorsAdmission,
-  SurvivorsRejection
->
-
 export const admitSurvivorsRun = Workflow.make(
   (command: AdmitSurvivorsRunInput): Either.Either<SurvivorsAdmission, SurvivorsRejection> =>
     Match.value(admissionVerdict(command)).pipe(
