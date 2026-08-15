@@ -44,18 +44,14 @@ import type { RunEventStream, RunEventStreamPort } from './run-event-stream.adap
 import { STREAM_SCHEMA_VERSION } from './stream-protocol.kernel.js'
 import { SURVIVORS_REJECT_EXIT_CLASS } from './survivors-exit.kernel.js'
 import {
+  type AdmitSurvivorsRunInput,
   DEFAULT_SURVIVORS_PRIOR_REPORT,
   type HashContent,
   type ResolveAbsolutePath,
   sourceContentHash,
   survivorMutateSpans,
 } from './survivors.kernel.js'
-import {
-  admitSurvivorsRun,
-  type AdmitSurvivorsRunInput,
-  type SurvivorsAdmission,
-  SurvivorsRejection,
-} from './survivors.workflow.js'
+import { admitSurvivorsRun, type SurvivorsAdmission, SurvivorsRejection } from './survivors.workflow.js'
 
 /**
  * The mutation-testing entry the CLI calls once options are parsed. Injectable

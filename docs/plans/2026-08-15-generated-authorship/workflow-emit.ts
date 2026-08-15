@@ -19,6 +19,8 @@ type FieldType =
   | { readonly kind: 'string' | 'number' | 'boolean' | 'int' | 'unknown' }
   | { readonly kind: 'nonEmptyArray' | 'array'; readonly of: FieldType }
   | { readonly kind: 'ref'; readonly name: string; readonly from?: string }
+  | { readonly kind: 'struct'; readonly fields: Readonly<Record<string, FieldType>> }
+  | { readonly kind: 'literal'; readonly of: ReadonlyArray<string> }
 
 /**
  * A read off a bound value: `command`, or a name an enclosing arm bound.
@@ -39,6 +41,7 @@ interface Path {
 type FieldValue =
   | { readonly call: string; readonly from: string; readonly args: ReadonlyArray<Path> }
   | { readonly read: Path }
+  | { readonly const: string; readonly from: string }
 
 interface Variant {
   readonly class: string
@@ -49,6 +52,8 @@ interface Variant {
 interface TypeId {
   readonly namespace: string
   readonly name: string
+  /** Whether the cell exports the symbol and its type. A consumer that names the brand needs both. */
+  readonly export?: boolean
 }
 
 interface Construction {
@@ -85,6 +90,11 @@ type Arm =
 
 interface Dispatch {
   readonly on: Subject
+  /**
+   * Names the matched value so arms may read fields off it. Without it an arm sees only
+   * `command`, which is wrong whenever the subject computes a value the outcome carries.
+   */
+  readonly bind?: string
   readonly arms: ReadonlyArray<Arm>
   readonly fallback?: Construction
 }
@@ -96,12 +106,22 @@ interface Declaration {
     readonly declare: Variant
     readonly typeId: TypeId
   }
-  readonly decision: { readonly variants: ReadonlyArray<Variant>; readonly typeId: TypeId } | {
+  readonly decision: {
+    readonly variants: ReadonlyArray<Variant>
+    readonly typeId: TypeId
+    /**
+     * The exported schema union over the variants. Present only when a consumer names the
+     * union itself; the workflow's own signature needs no name for it.
+     */
+    readonly union?: { readonly name: string }
+  } | {
     readonly importedType: string
     readonly from: string
     readonly constructors: ReadonlyArray<string>
   }
   readonly error: { readonly variants: ReadonlyArray<Variant>; readonly typeId: TypeId }
+  /** Exported unions of string literals. A field's literal set, named for consumers. */
+  readonly aliases?: ReadonlyArray<{ readonly name: string; readonly literals: ReadonlyArray<string> }>
   readonly dispatch: Dispatch
 }
 
@@ -113,7 +133,7 @@ const DERIVED = [
   'decisionUnion',
   'errorUnion',
 ] as const
-const DECLARED = ['role', 'operation', 'typeId', 'command', 'decision', 'error', 'dispatch'] as const
+const DECLARED = ['role', 'operation', 'typeId', 'command', 'decision', 'error', 'aliases', 'dispatch'] as const
 
 const reject = (message: string): never => {
   throw new Error(`declaration rejected: ${message}`)
@@ -204,6 +224,31 @@ const parseFieldType = (raw: unknown, path: string): FieldType => {
       ...(from === undefined ? {} : { from: moduleSpecifier(from, `${path}.from`) }),
     }
   }
+  if (kind === 'literal') {
+    const of = at(rec, 'of')
+    if (!Array.isArray(of) || of.length === 0) {
+      reject(`${path}.of: expected a non-empty array of string literals. A literal of nothing types nothing.`)
+    }
+    return {
+      kind: 'literal',
+      of: (of as ReadonlyArray<unknown>).map((l, i) => {
+        if (typeof l !== 'string') reject(`${path}.of[${i}]: expected a string, got ${JSON.stringify(l)}.`)
+        return l as string
+      }),
+    }
+  }
+  if (kind === 'struct') {
+    const fields = at(rec, 'fields')
+    if (!isRecord(fields)) reject(`${path}.fields: expected an object of field types, got ${JSON.stringify(fields)}.`)
+    const entries = Object.entries(fields as Record<string, unknown>)
+    if (entries.length === 0) reject(`${path}.fields: a struct with no fields is S.Struct({}) - state the fields.`)
+    return {
+      kind: 'struct',
+      fields: Object.fromEntries(
+        entries.map(([n, f]) => [ident(n, `${path}.fields key`), parseFieldType(f, `${path}.fields.${n}`)]),
+      ),
+    }
+  }
   if (kind === 'string' || kind === 'number' || kind === 'boolean' || kind === 'int' || kind === 'unknown') {
     return { kind }
   }
@@ -240,10 +285,18 @@ const parseVariant = (raw: unknown, path: string): Variant => {
 const parseTypeId = (raw: unknown, path: string): TypeId => {
   if (!isRecord(raw)) reject(`${path}: expected { namespace, name }, got ${JSON.stringify(raw)}.`)
   const rec = raw as Record<string, unknown>
-  closed(rec, ['namespace', 'name'], path, 'a TypeId field')
+  closed(rec, ['namespace', 'name', 'export'], path, 'a TypeId field')
   const ns = at(rec, 'namespace')
   if (typeof ns !== 'string' || ns === '') reject(`${path}.namespace: expected a namespace string.`)
-  return { namespace: ns as string, name: ident(at(rec, 'name'), `${path}.name`) }
+  const exported = at(rec, 'export')
+  if (exported !== undefined && typeof exported !== 'boolean') {
+    reject(`${path}.export: expected true or false, got ${JSON.stringify(exported)}.`)
+  }
+  return {
+    namespace: ns as string,
+    name: ident(at(rec, 'name'), `${path}.name`),
+    ...(exported === undefined ? {} : { export: exported as boolean }),
+  }
 }
 
 const parseCall = (
@@ -263,13 +316,20 @@ const parseFieldValue = (raw: unknown, path: string): FieldValue => {
   if (!isRecord(raw)) {
     reject(
       `${path}: expected a value reference, got ${JSON.stringify(raw)}. Write { call, from, args } for a kernel ` +
-        `export or { field } for a read off a bound value.`,
+        `export, { const, from } for an imported constant, or { field } for a read off a bound value.`,
     )
   }
   const rec = raw as Record<string, unknown>
   if ('call' in rec) {
     closed(rec, ['call', 'from', 'args'], path, 'a call field')
     return parseCall(rec, path)
+  }
+  if ('const' in rec) {
+    closed(rec, ['const', 'from'], path, 'a const field')
+    return {
+      const: ident(at(rec, 'const'), `${path}.const`),
+      from: moduleSpecifier(at(rec, 'from'), `${path}.from`),
+    }
   }
   closed(rec, ['field'], path, 'a value field')
   return { read: parsePath(at(rec, 'field'), `${path}.field`) }
@@ -357,12 +417,18 @@ const parseArm = (raw: unknown, path: string): Arm => {
 const parseDispatch = (raw: unknown, path: string): Dispatch => {
   if (!isRecord(raw)) reject(`${path}: expected { on, arms, fallback? }.`)
   const rec = raw as Record<string, unknown>
-  closed(rec, ['on', 'arms', 'fallback'], path, 'a dispatch field')
+  closed(rec, ['on', 'bind', 'arms', 'fallback'], path, 'a dispatch field')
   const arms = at(rec, 'arms')
   if (!Array.isArray(arms) || arms.length === 0) reject(`${path}.arms: expected a non-empty array of arms.`)
   const fallbackRaw = at(rec, 'fallback')
+  const bindRaw = at(rec, 'bind')
+  const on = parseSubject(at(rec, 'on'), `${path}.on`)
+  if (bindRaw !== undefined && 'command' in on) {
+    reject(`${path}.bind: the command is already in scope as \`command\`. Only a computed subject needs a name.`)
+  }
   return {
-    on: parseSubject(at(rec, 'on'), `${path}.on`),
+    on,
+    ...(bindRaw === undefined ? {} : { bind: ident(bindRaw, `${path}.bind`) }),
     arms: (arms as ReadonlyArray<unknown>).map((a, i) => parseArm(a, `${path}.arms[${i}]`)),
     ...(fallbackRaw === undefined ? {} : { fallback: parseConstruction(fallbackRaw, `${path}.fallback`) }),
   }
@@ -372,7 +438,7 @@ const parseChannel = (
   raw: unknown,
   key: 'decision' | 'error',
   top: TypeId | undefined,
-): { variants: ReadonlyArray<Variant>; typeId: TypeId } => {
+): { variants: ReadonlyArray<Variant>; typeId: TypeId; union?: { name: string } } => {
   const list = Array.isArray(raw)
     ? raw
     : isRecord(raw)
@@ -384,14 +450,27 @@ const parseChannel = (
         `inhabited; a workflow with no ${key} variant decides nothing.`,
     )
   }
-  const own = Array.isArray(raw) ? undefined : at(raw as Record<string, unknown>, 'typeId')
+  const rec = Array.isArray(raw) ? undefined : (raw as Record<string, unknown>)
+  if (rec !== undefined) closed(rec, ['variants', 'typeId', 'union'], key, `a ${key} field`)
+  const own = rec === undefined ? undefined : at(rec, 'typeId')
   const typeId = own === undefined ? top : parseTypeId(own, `${key}.typeId`)
   if (typeId === undefined) {
     reject(`${key}: no TypeId. Declare one on the channel or a top-level typeId every declared union shares.`)
   }
+  const unionRaw = rec === undefined ? undefined : at(rec, 'union')
+  if (unionRaw !== undefined && key === 'error') {
+    reject(`error.union: the error channel's union is derived. Only a decision union is nameable.`)
+  }
+  if (unionRaw !== undefined && !isRecord(unionRaw)) {
+    reject(`${key}.union: expected { name }, got ${JSON.stringify(unionRaw)}.`)
+  }
+  if (unionRaw !== undefined) closed(unionRaw as Record<string, unknown>, ['name'], `${key}.union`, 'a union field')
   return {
     variants: (list as ReadonlyArray<unknown>).map((v, i) => parseVariant(v, `${key}[${i}]`)),
     typeId: typeId as TypeId,
+    ...(unionRaw === undefined
+      ? {}
+      : { union: { name: ident(at(unionRaw as Record<string, unknown>, 'name'), `${key}.union.name`) } }),
   }
 }
 
@@ -542,12 +621,35 @@ export const parseWorkflow = (raw: unknown): Declaration => {
     }
   }
 
+  const aliasesRaw = at(rec, 'aliases')
+  if (aliasesRaw !== undefined && (!Array.isArray(aliasesRaw) || aliasesRaw.length === 0)) {
+    reject('aliases: expected a non-empty array of { name, literals }; omit the field rather than declaring none.')
+  }
+  const aliases = ((aliasesRaw ?? []) as ReadonlyArray<unknown>).map((a, i) => {
+    const path = `aliases[${i}]`
+    if (!isRecord(a)) reject(`${path}: expected { name, literals }, got ${JSON.stringify(a)}.`)
+    const arec = a as Record<string, unknown>
+    closed(arec, ['name', 'literals'], path, 'an alias field')
+    const lits = at(arec, 'literals')
+    if (!Array.isArray(lits) || lits.length === 0) {
+      reject(`${path}.literals: expected a non-empty array of strings. A union of nothing names nothing.`)
+    }
+    return {
+      name: ident(at(arec, 'name'), `${path}.name`),
+      literals: (lits as ReadonlyArray<unknown>).map((l, j) => {
+        if (typeof l !== 'string') reject(`${path}.literals[${j}]: expected a string, got ${JSON.stringify(l)}.`)
+        return l as string
+      }),
+    }
+  })
+
   return {
     operation: operation as string,
     ...(topTypeId === undefined ? {} : { typeId: topTypeId }),
     command,
     decision,
     error,
+    ...(aliases.length === 0 ? {} : { aliases }),
     dispatch,
   }
 }
@@ -556,6 +658,11 @@ const renderFieldType = (t: FieldType): string => {
   if (t.kind === 'ref') return t.name
   if (t.kind === 'nonEmptyArray') return `S.NonEmptyArray(${renderFieldType(t.of)})`
   if (t.kind === 'array') return `S.Array(${renderFieldType(t.of)})`
+  if (t.kind === 'struct') {
+    const fields = Object.entries(t.fields).map(([n, f]) => `${n}: ${renderFieldType(f)}`)
+    return `S.Struct({ ${fields.join(', ')} })`
+  }
+  if (t.kind === 'literal') return `S.Literal(${t.of.map((l) => `'${l}'`).join(', ')})`
   if (t.kind === 'int') return 'S.Int'
   return `S.${t.kind[0]!.toUpperCase()}${t.kind.slice(1)}`
 }
@@ -583,8 +690,11 @@ const renderPath = (p: Path, roots: ReadonlySet<string>): string => {
   return rest.reduce((acc, seg) => `${acc}${seg.optional ? '?.' : '.'}${seg.name}`, base)
 }
 
-const renderValue = (v: FieldValue, roots: ReadonlySet<string>): string =>
-  'call' in v ? `${v.call}(${v.args.map((a) => renderPath(a, roots)).join(', ')})` : renderPath(v.read, roots)
+const renderValue = (v: FieldValue, roots: ReadonlySet<string>): string => {
+  if ('call' in v) return `${v.call}(${v.args.map((a) => renderPath(a, roots)).join(', ')})`
+  if ('const' in v) return v.const
+  return renderPath(v.read, roots)
+}
 
 /**
  * The payload is omitted only for a variant this declaration declares with no fields. An
@@ -613,6 +723,25 @@ const renderPattern = (p: Pattern): string =>
 const renderSubject = (s: Subject, roots: ReadonlySet<string>): string =>
   'command' in s ? 'command' : `${s.call}(${s.args.map((a) => renderPath(a, roots)).join(', ')})`
 
+/** Whether a construction reads anything rooted at `name`. */
+const readsRoot = (t: Construction, name: string | undefined): boolean =>
+  name !== undefined &&
+  Object.values(t.with).some((v) => 'read' in v && v.read.segments[0]?.name === name)
+
+/** Whether a dispatch, at any depth, reads anything rooted at `name`. */
+const dispatchReadsRoot = (d: Dispatch, name: string | undefined): boolean => {
+  if (name === undefined) return false
+  if (!('command' in d.on) && d.on.args.some((a) => a.segments[0]?.name === name)) return true
+  if (d.fallback !== undefined && readsRoot(d.fallback, name)) return true
+  return d.arms.some((arm) => {
+    if (arm.kind === 'construct') return readsRoot(arm.target, name)
+    if (arm.kind === 'dispatch') return dispatchReadsRoot(arm.inner, name)
+    return arm.subject.args.some((a) => a.segments[0]?.name === name) ||
+      readsRoot(arm.onLeft, name) ||
+      ('on' in arm.onRight ? dispatchReadsRoot(arm.onRight, name) : readsRoot(arm.onRight, name))
+  })
+}
+
 const renderDispatch = (
   d: Dispatch,
   roots: ReadonlySet<string>,
@@ -620,25 +749,58 @@ const renderDispatch = (
   fieldless: ReadonlySet<string>,
 ): string => {
   const lines = [`Match.value(${renderSubject(d.on, roots)}).pipe(`]
+  const scope = d.bind === undefined ? roots : new Set([...roots, d.bind])
+  /**
+   * The parameter is named only on the arms that read it. Emitting it everywhere leaves an
+   * unused binding on every other arm, which `no-unused-vars` rejects - an arm that does not
+   * read the subject has no business naming it.
+   */
+  const param = (used: boolean): string => (d.bind !== undefined && used ? d.bind : '')
+  /**
+   * The narrowest combinator the pattern admits. A single-key pattern is a discriminant, and
+   * both `Match.tag` and `Match.discriminator` take the tag as a *string* argument - so,
+   * unlike `Match.when({ kind: 'x' })`, there is no object literal for `ObjectLiteral` to
+   * widen to `{}`. Measured on this cell: the widened pattern survived mutation, because by
+   * elimination the last arm before `Match.exhaustive` only ever sees the one kind it names,
+   * which makes the mutant equivalent and unkillable. `_tag` gets `Match.tag`; any other
+   * single key gets `Match.discriminator`, which is the same guarantee on a named field.
+   */
+  const combinator = (p: Pattern): string => {
+    if (typeof p !== 'string') {
+      const keys = Object.keys(p)
+      const [only] = keys
+      if (keys.length === 1 && only !== undefined) {
+        return only === '_tag'
+          ? `${indent}  Match.tag('${p[only]}', `
+          : `${indent}  Match.discriminator('${only}')('${p[only]}', `
+      }
+    }
+    return `${indent}  Match.when(${renderPattern(p)}, `
+  }
   for (const arm of d.arms) {
-    const head = `${indent}  Match.when(${renderPattern(arm.pattern)}, `
+    const head = combinator(arm.pattern)
     if (arm.kind === 'construct') {
-      lines.push(`${head}() => ${renderConstruction(arm.target, roots, fieldless)}),`)
+      lines.push(
+        `${head}(${param(readsRoot(arm.target, d.bind))}) => ${renderConstruction(arm.target, scope, fieldless)}),`,
+      )
       continue
     }
     if (arm.kind === 'dispatch') {
-      lines.push(`${head}() =>`)
-      lines.push(`${indent}    ${renderDispatch(arm.inner, roots, `${indent}    `, fieldless)}),`)
+      lines.push(`${head}(${param(dispatchReadsRoot(arm.inner, d.bind))}) =>`)
+      lines.push(`${indent}    ${renderDispatch(arm.inner, scope, `${indent}    `, fieldless)}),`)
       continue
     }
-    const bound = new Set([...roots, arm.subject.bind])
-    lines.push(`${head}() =>`)
+    const bound = new Set([...scope, arm.subject.bind])
+    const armUses = arm.subject.args.some((a) => a.segments[0]?.name === d.bind) ||
+      readsRoot(arm.onLeft, d.bind) ||
+      ('on' in arm.onRight ? dispatchReadsRoot(arm.onRight, d.bind) : readsRoot(arm.onRight, d.bind))
+    lines.push(`${head}(${param(armUses)}) =>`)
     lines.push(
       `${indent}    Either.match(${arm.subject.call}(${
-        arm.subject.args.map((a) => renderPath(a, roots)).join(', ')
+        arm.subject.args.map((a) => renderPath(a, scope)).join(', ')
       }), {`,
     )
-    lines.push(`${indent}      onLeft: () => ${renderConstruction(arm.onLeft, roots, fieldless)},`)
+    lines.push(`${indent}      onLeft: () => ${renderConstruction(arm.onLeft, scope, fieldless)},`)
     if ('on' in arm.onRight) {
       lines.push(`${indent}      onRight: (${arm.subject.bind}) =>`)
       lines.push(`${indent}        ${renderDispatch(arm.onRight, bound, `${indent}        `, fieldless)},`)
@@ -652,7 +814,7 @@ const renderDispatch = (
   lines.push(
     d.fallback === undefined
       ? `${indent}  Match.exhaustive,`
-      : `${indent}  Match.orElse(() => ${renderConstruction(d.fallback, roots, fieldless)}),`,
+      : `${indent}  Match.orElse(() => ${renderConstruction(d.fallback, scope, fieldless)}),`,
   )
   lines.push(`${indent})`)
   return lines.join('\n')
@@ -665,7 +827,10 @@ const collectCalls = (d: Dispatch, into: Map<string, Set<string>>): void => {
     into.set(from, set)
   }
   const fromValues = (t: Construction): void => {
-    for (const v of Object.values(t.with)) if ('call' in v) add(v.from, v.call)
+    for (const v of Object.values(t.with)) {
+      if ('call' in v) add(v.from, v.call)
+      else if ('const' in v) add(v.from, v.const)
+    }
   }
   if (!('command' in d.on)) add(d.on.from, d.on.call)
   for (const arm of d.arms) {
@@ -693,19 +858,17 @@ export const emitWorkflow = (decl: Declaration): string => {
   const commandType = 'declare' in decl.command ? decl.command.declare.class : decl.command.type
   if (!('declare' in decl.command)) add(types, decl.command.from, decl.command.type)
 
-  const declaredVariantTypes = (variants: ReadonlyArray<Variant>): void => {
-    for (const v of variants) {
-      for (const t of Object.values(v.fields)) {
-        const seen = t.kind === 'ref'
-          ? t
-          : t.kind === 'array' || t.kind === 'nonEmptyArray'
-          ? t.of
-          : undefined
-        if (seen !== undefined && seen.kind === 'ref' && seen.from !== undefined) {
-          add(values, seen.from, seen.name)
-        }
-      }
+  /** Every `ref` a field type reaches, at any nesting depth: arrays of structs of refs all count. */
+  const walkFieldType = (t: FieldType): void => {
+    if (t.kind === 'ref') {
+      if (t.from !== undefined) add(values, t.from, t.name)
+      return
     }
+    if (t.kind === 'array' || t.kind === 'nonEmptyArray') return walkFieldType(t.of)
+    if (t.kind === 'struct') { for (const f of Object.values(t.fields)) walkFieldType(f) }
+  }
+  const declaredVariantTypes = (variants: ReadonlyArray<Variant>): void => {
+    for (const v of variants) for (const t of Object.values(v.fields)) walkFieldType(t)
   }
   if ('declare' in decl.command) declaredVariantTypes([decl.command.declare])
   if ('variants' in decl.decision) declaredVariantTypes(decl.decision.variants)
@@ -719,9 +882,11 @@ export const emitWorkflow = (decl: Declaration): string => {
     ].filter((v) => Object.keys(v.fields).length === 0).map((v) => v.class),
   )
 
-  const decisionType = 'variants' in decl.decision
-    ? decl.decision.variants.map((v) => v.class).join(' | ')
-    : decl.decision.importedType
+  const decisionType = !('variants' in decl.decision)
+    ? decl.decision.importedType
+    : decl.decision.union !== undefined
+    ? decl.decision.union.name
+    : decl.decision.variants.map((v) => v.class).join(' | ')
   if (!('variants' in decl.decision)) {
     add(types, decl.decision.from, decl.decision.importedType)
     for (const c of decl.decision.constructors) add(values, decl.decision.from, c)
@@ -743,11 +908,14 @@ export const emitWorkflow = (decl: Declaration): string => {
     ),
   ]
 
-  const typeIdBlock = (id: TypeId): ReadonlyArray<string> => [
-    `const ${id.name}TypeId: unique symbol = Symbol.for('${id.namespace}/${id.name}')`,
-    `type ${id.name}TypeId = typeof ${id.name}TypeId`,
-    ``,
-  ]
+  const typeIdBlock = (id: TypeId): ReadonlyArray<string> => {
+    const prefix = id.export === true ? 'export ' : ''
+    return [
+      `${prefix}const ${id.name}TypeId: unique symbol = Symbol.for('${id.namespace}/${id.name}')`,
+      `${prefix}type ${id.name}TypeId = typeof ${id.name}TypeId`,
+      ``,
+    ]
+  }
 
   const body: Array<string> = []
   const emitted = new Set<string>()
@@ -757,6 +925,9 @@ export const emitWorkflow = (decl: Declaration): string => {
     body.push(...typeIdBlock(id))
   }
 
+  for (const a of decl.aliases ?? []) {
+    body.push(`export type ${a.name} = ${a.literals.map((l) => `'${l}'`).join(' | ')}`, ``)
+  }
   if ('declare' in decl.command) {
     pushTypeId(decl.command.typeId)
     body.push(renderVariant(decl.command.declare, `${decl.command.typeId.name}TypeId`, 'TaggedClass'), ``)
@@ -765,6 +936,14 @@ export const emitWorkflow = (decl: Declaration): string => {
     pushTypeId(decl.decision.typeId)
     for (const v of decl.decision.variants) {
       body.push(renderVariant(v, `${decl.decision.typeId.name}TypeId`, 'TaggedClass'))
+    }
+    if (decl.decision.union !== undefined) {
+      const { name } = decl.decision.union
+      body.push(
+        ``,
+        `export const ${name} = S.Union(${decl.decision.variants.map((v) => v.class).join(', ')})`,
+        `export type ${name} = S.Schema.Type<typeof ${name}>`,
+      )
     }
   }
   pushTypeId(decl.error.typeId)
