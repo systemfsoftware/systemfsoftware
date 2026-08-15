@@ -26,6 +26,8 @@ const writeF64Archive = (file: string): Promise<void> => {
   return writeFile(file, archive)
 }
 
+// Real artifact coverage runs only with Metal available and never substitutes
+// CPU behavior; concrete execution and loaded handles are explicitly released.
 suite("Apple Metal tensor handles and direct safetensors", () => {
   it.effect("round trips direct Metal tensors and metadata", () =>
     withTempFile("effect-torch-metal-safetensors-", (file) =>
@@ -46,12 +48,12 @@ suite("Apple Metal tensor handles and direct safetensors", () => {
           runtimeValues: {}
         })
 
-        yield* runtime.extensions.pathSafetensors!.save(file, {
+        yield* runtime.extensions.pathSafetensors.save(file, {
           entries: [{ name: "values", tensor: concrete }],
           metadata: { framework: "effect-torch" }
         })
         yield* runtime.release(concrete)
-        const archive = yield* runtime.extensions.pathSafetensors!.load(file)
+        const archive = yield* runtime.extensions.pathSafetensors.load(file)
         expect(archive.metadata).toEqual({ framework: "effect-torch" })
         const loaded = archive.entries[0]!.tensor
         expect(loaded).toMatchObject({ _tag: "Tensor", shape: [2], dtype: "u8", device: "metal" })
@@ -64,7 +66,7 @@ suite("Apple Metal tensor handles and direct safetensors", () => {
       Effect.gen(function*() {
         const runtime = makeRuntime()
         yield* Effect.tryPromise(() => writeF64Archive(file))
-        const error = yield* Effect.flip(runtime.extensions.pathSafetensors!.load(file))
+        const error = yield* Effect.flip(runtime.extensions.pathSafetensors.load(file))
         expect(error.reason).toBe("unsupported-placement")
       })))
 })

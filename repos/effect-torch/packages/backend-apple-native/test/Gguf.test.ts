@@ -25,6 +25,8 @@ const string = (value: string): Buffer => {
   return Buffer.concat([u64(bytes.length), bytes])
 }
 
+// The hand-built GGUF v3 artifact mixes dense F32 with Q2_K and Q4_K payloads
+// that have the same packed shape, proving codec identity is not shape-derived.
 const fixture = (): Buffer => {
   const header = Buffer.concat([
     Buffer.from("GGUF"),
@@ -79,12 +81,14 @@ const withFixture = <A, E, R>(use: (file: string) => Effect.Effect<A, E, R>) =>
 
 const suite = Effect.runSync(isAvailable) ? describe : describe.skip
 
+// Real-file cases require Metal. Adapter ownership cases below inject a fake
+// addon and therefore remain platform-independent.
 suite("Metal direct GGUF", () => {
   it.effect("loads exact payloads and rejects cross-codec physical collisions", () =>
     withFixture((file) =>
       Effect.gen(function*() {
         const runtime = makeRuntime()
-        const archive = yield* runtime.extensions.gguf!.load(file)
+        const archive = yield* runtime.extensions.gguf.load(file)
         const dense = archive.entries.find((entry) => entry.descriptor.name === "dense")!
         const q2 = archive.entries.find((entry) => entry.descriptor.name === "q2")!
         const q4 = archive.entries.find((entry) => entry.descriptor.name === "q4")!
@@ -96,7 +100,7 @@ suite("Metal direct GGUF", () => {
         expect(q2.descriptor.physicalShape).toEqual([1, 1008])
         expect(q4.descriptor.physicalShape).toEqual([1, 1008])
 
-        const saveError = yield* Effect.flip(runtime.extensions.pathSafetensors!.save(
+        const saveError = yield* Effect.flip(runtime.extensions.pathSafetensors.save(
           path.join(path.dirname(file), "encoded.safetensors"),
           { entries: [{ name: "q2", tensor: q2.tensor }], metadata: {} }
         ))
@@ -183,6 +187,8 @@ suite("Metal direct GGUF", () => {
     ))
 })
 
+// Each raw native wrapper must either become one public handle or be cleared
+// exactly once, including a success that races interruption.
 it.effect("rejects duplicate raw Metal GGUF ownership and clears it once", () => {
   const clear = vi.fn()
   const tensor = { shape: [1, 1008], dtype: "u8", device: "metal", clear } as unknown as NativeTensor
@@ -209,7 +215,7 @@ it.effect("rejects duplicate raw Metal GGUF ownership and clears it once", () =>
   const runtime = makeRuntimeAdapter(native)
 
   return Effect.gen(function*() {
-    const error = yield* Effect.flip(runtime.extensions.gguf!.load("duplicate.gguf"))
+    const error = yield* Effect.flip(runtime.extensions.gguf.load("duplicate.gguf"))
     expect(error.message).toContain("duplicate tensor ownership")
     expect(clear).toHaveBeenCalledTimes(1)
   })
@@ -245,7 +251,7 @@ it.effect("clears a late native Metal GGUF success after interruptible I/O is ca
       }
     } as unknown as NativeAddon
     const runtime = makeRuntimeAdapter(native)
-    const fiber = yield* runtime.extensions.gguf!.load("late.gguf").pipe(
+    const fiber = yield* runtime.extensions.gguf.load("late.gguf").pipe(
       Effect.forkChild({ startImmediately: true })
     )
     yield* Deferred.await(started)
