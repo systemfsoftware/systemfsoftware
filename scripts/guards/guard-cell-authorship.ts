@@ -199,9 +199,33 @@ const gather = async (): Promise<Evidence> => {
   return { cells, declarations, emitted, onDisk }
 }
 
+/**
+ * Regenerates every drifted cell from its declaration instead of reporting it.
+ *
+ * The gate already computes the bytes each declaration produces, so the only thing standing
+ * between "your cell is stale" and a fixed tree was writing them out. This is the whole
+ * ergonomic loop: edit the term, run this, the cell follows. It writes only cells the gate would
+ * have failed on, so a clean tree is untouched and the command is safe to run at any time.
+ */
+const regenerate = async (evidence: Evidence, drifted: readonly string[]): Promise<void> => {
+  for (const decl of drifted) {
+    const cell = cellOf(decl)
+    await Deno.writeTextFile(cell, evidence.emitted[decl]!)
+    console.log(`regenerated ${cell} from ${decl}`)
+  }
+}
+
 const main = async (): Promise<number> => {
   const evidence = await gather()
   const result = verdict(evidence)
+
+  if (Deno.args.includes('--write')) {
+    if (result.drifted.length === 0) console.log('guard-cell-authorship: every cell already matches its declaration')
+    else await regenerate(evidence, result.drifted)
+    // Orphans and hand-authored cells are not drift and cannot be fixed by writing bytes: one needs
+    // a cell that does not exist, the other needs a declaration nobody has written.
+    return result.orphaned.length + result.undeclared.length === 0 ? 0 : 1
+  }
 
   for (const cell of result.undeclared) {
     const [decl, term] = declarationsOf(cell)
