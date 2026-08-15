@@ -1,4 +1,3 @@
-import { FileSystem } from '@effect/platform/FileSystem'
 import * as PathModule from '@effect/platform/Path'
 import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
@@ -6,29 +5,16 @@ import { MemoryFileSystem } from '@systemfsoftware/effect-memfs'
 import { TomlLoader, TomlLoaderLive } from '@systemfsoftware/omp-utils'
 import { Effect, Layer } from 'effect'
 import { expect } from 'vitest'
-import { InjectInstructionsExecutorDeps, loadReferencedContent } from '../src/inject-instructions.executor.js'
+import { loadReferencedContent } from '../src/inject-instructions.executor.js'
 
 const Feature = makeFeature({ it, layer })
 
 function makeFsLayer(contents: Record<string, string>) {
-  return Layer.effect(
-    InjectInstructionsExecutorDeps,
-    Effect.gen(function*() {
-      const fileSystem = yield* FileSystem
-      const path = yield* PathModule.Path
-      const tomlLoader = yield* TomlLoader
-      return { fileSystem, path, tomlLoader }
-    }),
-  ).pipe(
-    Layer.provideMerge(
-      TomlLoaderLive.pipe(
-        Layer.provideMerge(
-          MemoryFileSystem.layerWith(contents).pipe(
-            Layer.provideMerge(PathModule.layer),
-          ),
-        ),
-      ),
-    ),
+  const includingPath = MemoryFileSystem.layerWith(contents).pipe(
+    Layer.provideMerge(PathModule.layer),
+  )
+  return TomlLoaderLive.pipe(
+    Layer.provideMerge(includingPath),
   )
 }
 

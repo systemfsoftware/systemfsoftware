@@ -6,34 +6,6 @@ import { createPackageFromTarballData } from './createPackage.js'
 import { PackageStoreAdapter } from './package-store.adapter.js'
 import type { ResolutionKind, ResolutionOption } from './problem.schema.js'
 
-export interface CheckPackageExecutorInput {
-  readonly packageSpec: string
-  readonly definitelyTyped?: string | boolean
-}
-
-export interface CheckPackageExecutorDepsService {
-  readonly execute: (
-    input: CheckPackageExecutorInput,
-  ) => Effect.Effect<CheckResult, never, never>
-}
-
-export class CheckPackageExecutorDeps extends Context.Tag(
-  '@systemfsoftware/arethetypeswrong-core/check-package.executor/CheckPackageExecutorDeps',
-)<CheckPackageExecutorDeps, CheckPackageExecutorDepsService>() {}
-
-export const CheckPackageExecutorDepsStub: Layer.Layer<
-  CheckPackageExecutorDeps,
-  never,
-  never
-> = Layer.succeed(CheckPackageExecutorDeps, {
-  execute: () =>
-    Effect.succeed({
-      packageName: 'stub-package',
-      packageVersion: '0.0.0',
-      types: false,
-    }),
-})
-
 export interface CheckPackageService {
   readonly execute: (
     pkgSpec: string,

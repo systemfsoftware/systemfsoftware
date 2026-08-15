@@ -1,20 +1,7 @@
 import { FileSystem } from '@effect/platform/FileSystem'
 import * as PathModule from '@effect/platform/Path'
 import { TomlLoader } from '@systemfsoftware/omp-utils'
-import { Context, Effect, Either } from 'effect'
-
-// ═══════════════════════════════════════════════════════════
-// 0. DEPENDENCIES — consumer-owned tag
-// ═══════════════════════════════════════════════════════════
-
-export class InjectInstructionsExecutorDeps extends Context.Tag('InjectInstructionsExecutorDeps')<
-  InjectInstructionsExecutorDeps,
-  {
-    readonly fileSystem: FileSystem
-    readonly path: PathModule.Path
-    readonly tomlLoader: Context.Tag.Service<TomlLoader>
-  }
->() {}
+import { Effect, Either } from 'effect'
 
 /**
  * Refs the host already delivers, keyed by project-relative path.
@@ -33,7 +20,8 @@ interface Ref {
 }
 
 const extractRefs = Effect.fn('extractRefs')(function*(content: string, baseDir: string, projectDir: string) {
-  const { fileSystem: fs, path } = yield* InjectInstructionsExecutorDeps
+  const fs = yield* FileSystem
+  const path = yield* PathModule.Path
   const refs: Ref[] = []
   for (const rawLine of content.split('\n')) {
     const noMarker = rawLine.trim().replace(/^[-*+]\s+/, '')
@@ -67,7 +55,9 @@ const extractRefs = Effect.fn('extractRefs')(function*(content: string, baseDir:
  * already deliver, skipping any ref the project's no_inject_refs list names.
  */
 export const loadReferencedContent = Effect.fn('loadReferencedContent')(function*(projectDir: string) {
-  const { fileSystem: fs, path, tomlLoader } = yield* InjectInstructionsExecutorDeps
+  const fs = yield* FileSystem
+  const path = yield* PathModule.Path
+  const tomlLoader = yield* TomlLoader
 
   const claudeMdPaths = [
     path.resolve(projectDir, 'CLAUDE.md'),

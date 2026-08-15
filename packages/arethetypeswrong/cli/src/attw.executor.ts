@@ -9,7 +9,7 @@ import {
   type ProblemKind,
   type ResolutionKind,
 } from '@systemfsoftware/arethetypeswrong-core'
-import { Context, Data, Effect, Layer } from 'effect'
+import { Data, Effect, Layer } from 'effect'
 
 import { CliFilesystem as Filesystem } from './filesystem.adapter.js'
 import { computeExitCode, ComputeExitCodeCommand } from './getExitCode.kernel.js'
@@ -42,21 +42,6 @@ export interface CliRequest {
   readonly moduleKinds?: readonly string[]
   readonly registry: string
 }
-
-export interface AttwCliExecutorDepsService {
-  readonly run: (request: CliRequest) => Effect.Effect<number, never>
-}
-
-export class AttwCliExecutorDeps extends Context.Tag(
-  '@systemfsoftware/arethetypeswrong-cli/attw.executor/AttwCliExecutorDeps',
-)<AttwCliExecutorDeps, AttwCliExecutorDepsService>() {}
-
-export const AttwCliExecutorDepsStub: Layer.Layer<AttwCliExecutorDeps, never, never> = Layer.succeed(
-  AttwCliExecutorDeps,
-  {
-    run: () => Effect.succeed(0),
-  },
-)
 
 export const prepareAnalysis = (
   request: CliRequest,

@@ -21,19 +21,10 @@
 import type { PlatformError } from '@effect/platform/Error'
 import { TomlLoader } from '@systemfsoftware/omp-utils'
 import type { TomlConfig } from '@systemfsoftware/omp-utils'
-import { Context, Effect, Match } from 'effect'
+import { Effect, Match } from 'effect'
 import * as S from 'effect/Schema'
 
 import { extractSpecShape, isDelegatorTool, matchesDoctrineSkillPath } from './dispatch-doctrine.kernel.js'
-
-// ═══════════════════════════════════════════════════════════
-// 0. DEPENDENCIES — consumer-owned tag
-// ═══════════════════════════════════════════════════════════
-
-export class DispatchDoctrineExecutorDeps extends Context.Tag('DispatchDoctrineExecutorDeps')<
-  DispatchDoctrineExecutorDeps,
-  Context.Tag.Service<TomlLoader>
->() {}
 
 // ═══════════════════════════════════════════════════════════
 // 1. COMMAND + VERDICT — decision core (private)
@@ -108,9 +99,9 @@ const gateResult = (verdict: DispatchDoctrineVerdict): DispatchGateResult =>
 
 const readDoctrineSkills = (
   cwd: string,
-): Effect.Effect<readonly string[], PlatformError, DispatchDoctrineExecutorDeps> =>
+): Effect.Effect<readonly string[], PlatformError, TomlLoader> =>
   Effect.gen(function*() {
-    const loader = yield* DispatchDoctrineExecutorDeps
+    const loader = yield* TomlLoader
     const config: TomlConfig = yield* loader.load(cwd)
     return config['dispatch_doctrine_skills'] ?? []
   })
@@ -128,7 +119,7 @@ export function runDispatchDoctrineCheck(
   cwd: string,
   toolName: string,
   doctrineLoaded: boolean,
-): Effect.Effect<DispatchDoctrineCheck, PlatformError, DispatchDoctrineExecutorDeps> {
+): Effect.Effect<DispatchDoctrineCheck, PlatformError, TomlLoader> {
   return Effect.gen(function*() {
     const skills = yield* readDoctrineSkills(cwd)
     const cmd = new CheckDispatchCommand({
