@@ -99,11 +99,13 @@ export { LockPrimitiveError } from './lock-primitive.schema.js'
 import { worker as workerImpl } from './daemon-worker.executor.js'
 import { dynamic as dynamicRuntime } from './internal/build-dynamic.executor.js'
 import { supervisor as supervisorImpl } from './internal/supervisor-body.executor.js'
+import type { LockBinding } from './internal/with-lock-by-mode.executor.js'
 
 /**
  * Boots a worker. The leader-lock capability is acquired here, at the composition
- * root, and handed down: the executor behind this entry point never sees the tag.
- * A worker whose lock is `{ mode: 'none' }` takes no lock at all.
+ * root, and handed down as part of the lock binding: the executor behind this
+ * entry point never sees the tag. A worker whose lock is `{ mode: 'none' }`
+ * takes no lock at all.
  */
 export const worker: {
   <E, R>(w: Worker<E, R, { mode: 'none' }>): Effect.Effect<
@@ -124,17 +126,21 @@ export const worker: {
   R | LeaderLock | Scope.Scope
 > =>
   Effect.gen(function*() {
+    let binding: LockBinding
     if (isModeNone(w.lock)) {
-      return yield* workerImpl(w, null)
+      binding = { kind: 'unlocked' }
+    } else {
+      const lock = yield* LeaderLock
+      binding = { kind: 'locked', spec: w.lock, lock }
     }
-    const lock = yield* LeaderLock
-    return yield* workerImpl(w, lock)
+    return yield* workerImpl(w, binding)
   })
 
 /**
  * The supervisor: acquires the `DaemonReporter` and — unless the lock mode is none —
  * the `LeaderLock` capabilities at the composition root, then hands them down to the
- * supervisor body. The body itself only ever sees the service values.
+ * supervisor body via the lock binding. The body itself only ever sees the service
+ * values.
  */
 export const supervisor = <E, R>(
   s: Supervisor<E, R, LockConfig>,
@@ -145,11 +151,14 @@ export const supervisor = <E, R>(
 > =>
   Effect.gen(function*() {
     const reporter = yield* DaemonReporter
+    let binding: LockBinding
     if (isModeNone(s.lock)) {
-      return yield* supervisorImpl(s, reporter, null)
+      binding = { kind: 'unlocked' }
+    } else {
+      const lock = yield* LeaderLock
+      binding = { kind: 'locked', spec: s.lock, lock }
     }
-    const lock = yield* LeaderLock
-    return yield* supervisorImpl(s, reporter, lock)
+    return yield* supervisorImpl(s, reporter, binding)
   })
 export { withLeaderLock } from './internal/with-leader-lock.executor.js'
 export type { LeaderLockOptions } from './internal/with-leader-lock.executor.js'

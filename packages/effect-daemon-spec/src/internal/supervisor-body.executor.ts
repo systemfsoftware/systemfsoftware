@@ -7,7 +7,6 @@ import { healthStateGauge, supervisorExhaustionsCounter, supervisorRestartsCount
 import type { Intensity, IntensityConfig } from '../daemon-policy.schema.js'
 import type { DaemonReporter } from '../daemon-reporter.adapter.js'
 import type { Child, LockConfig, Supervisor, Worker } from '../daemon-spec.schema.js'
-import type { LeaderLock } from '../leader-lock.adapter.js'
 import type { BootedChild, Supervision, SupervisionContext } from '../supervision.schema.js'
 import { allocateSupervisorHealth } from './allocate-supervisor-health.kernel.js'
 import { allocateWorkerHealth } from './allocate-worker-health.kernel.js'
@@ -30,7 +29,7 @@ import {
   StopSupervision,
   type SupervisionEpochResultType,
 } from './supervision-epoch.schema.js'
-import { withLockByMode } from './with-lock-by-mode.executor.js'
+import { type LockBinding, withLockByMode } from './with-lock-by-mode.executor.js'
 
 const handleExhausted = <R>(
   ctx: SupervisionContext<R>,
@@ -423,7 +422,7 @@ const bootChild = <E, R>(
 export const supervisor = <E, R>(
   s: Supervisor<E, R, LockConfig>,
   reporter: DaemonReporter['Type'],
-  lock: LeaderLock['Type'] | null,
+  binding: LockBinding,
 ): Effect.Effect<SupervisorHealth, never, R | Scope.Scope> =>
   Effect.gen(function*() {
     const booted = yield* Effect.forEach(s.children, (child) => bootChild<E, R>(child, reporter))
@@ -432,7 +431,7 @@ export const supervisor = <E, R>(
       booted.map((b) => b.health),
     )
     const body = buildSupervisorBody(s, health, booted, reporter).pipe(Effect.orDie)
-    const locked = withLockByMode(body, s.lock, lock)
+    const locked = withLockByMode(body, binding)
     yield* Effect.forkScoped(locked.pipe(Effect.orDie))
     return health
   })
