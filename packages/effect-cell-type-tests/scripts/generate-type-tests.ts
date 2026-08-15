@@ -24,7 +24,7 @@ const OUT = new URL('../test-types/Vocabulary.tst.ts', import.meta.url)
 /** A phase name is the prefix its node, phase and stage types are spelled with. */
 const typePrefix = (name: string): string => `${name.slice(0, 1).toUpperCase()}${name.slice(1)}`
 
-const quoted = (values: ReadonlyArray<string>): string => values.map((value) => `'${value}'`).join(' | ')
+const quoted = (values: readonly string[]): string => values.map((value) => `'${value}'`).join(' | ')
 
 const { byKind, ioCells, module, phases } = Cell.vocabulary
 
@@ -34,7 +34,7 @@ if (phases.length === 0) {
   )
 }
 
-const names: ReadonlyArray<string> = phases.map((phase) => phase.name)
+const names: readonly string[] = phases.map((phase) => phase.name)
 const opener = names[0]
 if (opener === undefined) throw new Error('effect-cell-type-tests: the walked vocabulary has no opening phase')
 

@@ -6,7 +6,7 @@ describe('AtomRef', () => {
     test('notifies', () => {
       const ref = AtomRef.make(0)
 
-      const updates: Array<number> = []
+      const updates: number[] = []
       const cancel = ref.subscribe((_) => updates.push(_))
 
       ref.set(-1)
@@ -30,7 +30,7 @@ describe('AtomRef', () => {
     })
     const ref = parent.prop('a')
 
-    const updates: Array<number> = []
+    const updates: number[] = []
     const cancel = ref.subscribe((_) => updates.push(_))
 
     parent.update((_) => ({ ..._, a: -1 }))
@@ -58,7 +58,7 @@ describe('AtomRef', () => {
     })
     const ref = parent.prop('c').prop('d').prop(0).prop('e')
 
-    const updates: Array<any> = []
+    const updates: any[] = []
     const cancel = parent.subscribe((_) => updates.push(_))
 
     ref.set(3)

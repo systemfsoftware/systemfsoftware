@@ -52,8 +52,8 @@ export interface AtomRpcClient<Self, Id extends string, Rpcs extends Rpc.Any, E>
       {
         readonly payload: Rpc.PayloadConstructor<Rpc.ExtractTag<Rpcs, Tag>>
         readonly reactivityKeys?:
-          | ReadonlyArray<unknown>
-          | ReadonlyRecord<string, ReadonlyArray<unknown>>
+          | readonly unknown[]
+          | ReadonlyRecord<string, readonly unknown[]>
           | undefined
         readonly headers?: Headers.Input | undefined
       },
@@ -67,7 +67,7 @@ export interface AtomRpcClient<Self, Id extends string, Rpcs extends Rpc.Any, E>
     payload: Rpc.PayloadConstructor<Rpc.ExtractTag<Rpcs, Tag>>,
     options?: {
       readonly headers?: Headers.Input | undefined
-      readonly reactivityKeys?: ReadonlyArray<unknown> | ReadonlyRecord<string, ReadonlyArray<unknown>> | undefined
+      readonly reactivityKeys?: readonly unknown[] | ReadonlyRecord<string, readonly unknown[]> | undefined
       readonly timeToLive?: Duration.DurationInput | undefined
     },
   ) => Rpc.ExtractTag<Rpcs, Tag> extends Rpc.Rpc<
@@ -148,8 +148,8 @@ export const Tag = <Self>() =>
     self.runtime.fn<{
       readonly payload: Rpc.PayloadConstructor<Rpc.ExtractTag<Rpcs, Tag>>
       readonly reactivityKeys?:
-        | ReadonlyArray<unknown>
-        | ReadonlyRecord<string, ReadonlyArray<unknown>>
+        | readonly unknown[]
+        | ReadonlyRecord<string, readonly unknown[]>
         | undefined
       readonly headers?: Headers.Input | undefined
     }>()(
@@ -192,7 +192,7 @@ export const Tag = <Self>() =>
     payload: Rpc.PayloadConstructor<Rpc.ExtractTag<Rpcs, Tag>>,
     options?: {
       readonly headers?: Headers.Input | undefined
-      readonly reactivityKeys?: ReadonlyArray<unknown> | ReadonlyRecord<string, ReadonlyArray<unknown>> | undefined
+      readonly reactivityKeys?: readonly unknown[] | ReadonlyRecord<string, readonly unknown[]> | undefined
       readonly timeToLive?: Duration.DurationInput | undefined
     },
   ) =>
@@ -219,7 +219,7 @@ class QueryKey extends Data.Class<{
   tag: string
   payload: any
   headers?: Headers.Headers | undefined
-  reactivityKeys?: ReadonlyArray<unknown> | ReadonlyRecord<string, ReadonlyArray<unknown>> | undefined
+  reactivityKeys?: readonly unknown[] | ReadonlyRecord<string, readonly unknown[]> | undefined
   timeToLive?: Duration.Duration | undefined
 }> {
   [Equal.symbol](that: QueryKey) {

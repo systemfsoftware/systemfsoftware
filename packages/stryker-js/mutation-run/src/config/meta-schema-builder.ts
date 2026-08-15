@@ -15,7 +15,7 @@ export class MetaSchemaBuilder {
   ) {}
 
   public buildMetaSchema(
-    pluginSchemaContributions: Array<Record<string, unknown>>,
+    pluginSchemaContributions: Record<string, unknown>[],
   ): JSONSchema7 {
     this.log.debug(
       'Contributing %s schemas from plugins to options validation.',

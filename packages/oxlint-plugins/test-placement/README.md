@@ -1,6 +1,6 @@
 # @systemfsoftware/oxlint-plugin-test-placement
 
-Oxlint rules enforcing test placement and sanctioned suffixes, derived from the `architect-general-theory` B20 ruling and the `place-tests` permission matrix.
+Oxlint rules enforcing test placement and sanctioned suffixes, following the `place-tests` permission matrix.
 
 ## Rules
 

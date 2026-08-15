@@ -8,6 +8,7 @@ import { isDeepStrictEqual } from 'node:util'
 import { toRelativeNormalizedFileName } from '@systemfsoftware/stryker-js-mutation-run/mutants/incremental-differ'
 
 import {
+  admissionVerdict,
   extractSurvivors,
   type HashContent,
   reportMutantToMutant,
@@ -220,7 +221,7 @@ describe('extractSurvivors', () => {
   it.prop('∀r_Extracted_≡SurvivedEntriesInOrder', [reportArb], ([report]) => {
     const abs = (file: string): string => `/work/${file}`
     const survivors = extractSurvivors(report, abs)
-    const survivedEntries: Array<{ readonly file: string; readonly mutant: schema.MutantResult }> = []
+    const survivedEntries: { readonly file: string; readonly mutant: schema.MutantResult }[] = []
     for (const [file, fileResult] of Object.entries(report.files)) {
       for (const mutant of fileResult.mutants) {
         if (mutant.status === 'Survived') {
@@ -303,5 +304,70 @@ describe('survivorMutateSpans', () => {
         numberFrom(endLineText) === source.location.end.line + 1 &&
         numberFrom(endColText) === source.location.end.column
     })
+  })
+})
+
+/**
+ * `admissionVerdict` is the classification the workflow dispatches on, so the order of its
+ * checks is a decision rather than a detail. A report can satisfy two rejecting conditions at
+ * once, and only the order says which wins.
+ *
+ * One law, not a suite: measured defect by defect, reordering the hash check, dropping a file
+ * from `priorSourceHashes` and losing the `no-report` precedence are each already red in
+ * `survivors.workflow.property.test.ts`, so laws for those would restate existing coverage.
+ * Hoisting the emptiness check above the provenance check is the one defect that leaves that
+ * whole suite green.
+ */
+describe('admissionVerdict', () => {
+  const survivorsProducedReport = (
+    sources: Readonly<Record<string, string>>,
+    survived: boolean,
+  ): schema.MutationTestResult => ({
+    config: { survivorsPriorReport: 'reports/prior.json' },
+    schemaVersion: '1',
+    thresholds: { high: 100, low: 100 },
+    framework: { name: 'stryker', version: '1.0.0' },
+    files: Object.fromEntries(
+      Object.entries(sources).map(([name, source]) => [
+        name,
+        {
+          language: 'javascript',
+          source,
+          mutants: [{
+            id: 'm1',
+            mutatorName: 'ObjectLiteral',
+            location: { start: { line: 1, column: 1 }, end: { line: 1, column: 2 } },
+            status: survived ? ('Survived' as const) : ('Killed' as const),
+          }],
+        },
+      ]),
+    ),
+  })
+
+  const sourcesArb = fc.dictionary(fc.string({ minLength: 1, maxLength: 5 }), fc.string({ maxLength: 12 }), {
+    minKeys: 1,
+    maxKeys: 3,
+  })
+
+  /**
+   * Provenance pre-empts emptiness (KTD7): a report produced by a survivors run is invalid
+   * whatever it contains, so a self-consistent one with zero survivors still rejects rather
+   * than succeeding with `no-survivors`.
+   *
+   * The hashes are deliberately absent: the provenance check must reject before anything
+   * compares them, so supplying none both states that and keeps the per-case cost flat.
+   */
+  it.prop('∀r_SurvivorsSourced_→MismatchReject', [sourcesArb, fc.boolean()], ([sources, survived]) => {
+    const prior = survivorsProducedReport(sources, survived)
+    const verdict = admissionVerdict({
+      priorReport: prior,
+      currentConfig: prior.config ?? {},
+      frameworkVersion: prior.framework?.version ?? '',
+      sourceContentHashes: {},
+      hashContent: sha256Hex,
+      resolveAbsolutePath: (file) => `/work/${file}`,
+    })
+    return verdict.kind === 'reject' && verdict.reason === 'mismatch' &&
+      verdict.remediation.includes('itself produced by a --survivors run')
   })
 })

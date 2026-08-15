@@ -29,7 +29,7 @@ const isContextTagCallee = (callee: ESTree.Node): boolean => {
 }
 
 const shapeLiteralFromParams = (
-  params: ReadonlyArray<ESTree.Node>,
+  params: readonly ESTree.Node[],
 ): ESTree.TSTypeLiteral | null => {
   for (const param of params) {
     if (param.type === 'TSTypeLiteral') return param

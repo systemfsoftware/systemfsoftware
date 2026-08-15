@@ -2,8 +2,7 @@ import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Duration, Effect, Layer, Schema as S, TestClock } from 'effect'
 import { expect } from 'vitest'
-import { LeaderLock, SupervisorBodyExecutorDeps } from '../src/mod.js'
-import { WithLeaderLockExecutorLive } from '../src/mod.js'
+import { DaemonReporter, LeaderLock } from '../src/mod.js'
 import { run } from '../src/mod.js'
 import { Daemon } from '../src/mod.js'
 import { Supervision } from '../src/mod.js'
@@ -41,8 +40,7 @@ Feature('Leader daemon never surrenders under sustained failure')
               })
               const reporterLayer = Layer.mergeAll(
                 LeaderLock.Noop,
-                WithLeaderLockExecutorLive.pipe(Layer.provide(LeaderLock.Noop)),
-                Layer.succeed(SupervisorBodyExecutorDeps, {
+                Layer.succeed(DaemonReporter, {
                   onRestart: s.spy.reporter.onRestart,
                   onExhausted: s.spy.reporter.onExhausted,
                 }),

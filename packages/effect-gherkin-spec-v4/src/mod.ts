@@ -13,7 +13,7 @@ export { pairwiseFor } from './extensions/pairwise.kernel.js'
 export { resolveScenarioArgs } from './feature-runtime.kernel.js'
 export type { OutlineFn, ScenarioBody, ScenarioFn, ScenarioOptions } from './feature-runtime.kernel.js'
 export {
-  type EffectVitestDeps,
+  type EffectVitestBindings,
   type FeatureBody,
   type FeatureBuilder,
   type FeatureBuilderBoth,

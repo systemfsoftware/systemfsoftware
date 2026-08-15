@@ -4,7 +4,7 @@ import type { AnsiAnnotation } from './render-ansi.kernel.js'
 import { colorizeCell } from './render-ansi.kernel.js'
 import { renderFlippedTable, renderTable } from './render-table.kernel.js'
 
-export const resolutionKindOrder: ReadonlyArray<ResolutionKind> = [
+export const resolutionKindOrder: readonly ResolutionKind[] = [
   'node10',
   'node16-cjs',
   'node16-esm',
@@ -53,8 +53,8 @@ export type RenderOptions = {
 const groupProblemsByEntrypoint = (
   entrypoint: string,
   resolutionKind: ResolutionKind,
-  problems: ReadonlyArray<Problem>,
-): ReadonlyArray<Problem> =>
+  problems: readonly Problem[],
+): readonly Problem[] =>
   problems.filter((p) => {
     if ('entrypoint' in p && p.entrypoint !== entrypoint) return false
     if ('resolutionKind' in p && p.resolutionKind !== resolutionKind) return false
@@ -62,19 +62,19 @@ const groupProblemsByEntrypoint = (
   })
 
 export const renderTypedAnalysis = (
-  entrypoints: ReadonlyArray<string>,
-  problems: ReadonlyArray<Problem>,
+  entrypoints: readonly string[],
+  problems: readonly Problem[],
   opts: RenderOptions,
   annotations: Record<string, AnsiAnnotation> = {},
 ): Doc.Doc<never> => {
   if (entrypoints.length === 0) {
     return Doc.text('No entrypoints found.')
   }
-  const header: ReadonlyArray<string> = opts.color
+  const header: readonly string[] = opts.color
     ? ['Entrypoint', ...resolutionKindOrder]
     : ['Entrypoint', ...resolutionKindOrder]
   const rows = entrypoints.map((entrypoint) => {
-    const row: Array<string> = [entrypoint]
+    const row: string[] = [entrypoint]
     for (const rk of resolutionKindOrder) {
       const relevant = groupProblemsByEntrypoint(entrypoint, rk, problems)
       if (relevant.length === 0) {

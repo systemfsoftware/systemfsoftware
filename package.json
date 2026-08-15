@@ -1,7 +1,7 @@
 {
   "name": "systemfsoftware",
   "private": true,
-  "description": "System F Software \u2014 Effect-TS libraries and the oxlint plugin that enforces the constitution.",
+  "description": "System F Software — Effect-TS libraries and the oxlint plugin that enforces the constitution.",
   "type": "module",
   "scripts": {
     "build": "turbo --concurrency=${TURBO_CONCURRENCY:-50%} build",
@@ -13,7 +13,7 @@
     "format:check": "./bin/dprint check",
     "precommit": "pnpm exec lint-staged --no-revert --config .lintstagedrc.js",
     "check": "pnpm install --frozen-lockfile && TURBO_CONCURRENCY=${TURBO_CONCURRENCY:-50%} pnpm check:ci",
-    "gate:tasks": "turbo --concurrency=${TURBO_CONCURRENCY:-50%} --continue lint lint:tsgo typecheck test test:types attw api:check //#check:mutate-scope //#check:lint-coverage //#check:publish-config //#check:script-provenance //#check:action-provenance",
+    "gate:tasks": "turbo --concurrency=${TURBO_CONCURRENCY:-50%} --continue lint lint:tsgo typecheck test test:types attw api:check //#check:lint-coverage //#check:exported-wiring //#check:publish-config //#check:action-provenance",
     "gate:dist": "turbo --concurrency=${TURBO_CONCURRENCY:-100%} build && turbo --concurrency=${TURBO_CONCURRENCY:-100%} --continue //#check:project-references //#check:exports //#check:runtime-deps",
     "check:ci": "s=0; pnpm format:check || s=1; TURBO_CONCURRENCY=${TURBO_CONCURRENCY:-100%} pnpm gate:tasks test:contract || s=1; pnpm gate:dist || s=1; exit $s",
     "check:local": "s=0; ./bin/dprint check || s=1; TURBO_CONCURRENCY=${TURBO_CONCURRENCY:-100%} pnpm gate:tasks || s=1; pnpm gate:dist || s=1; exit $s",
@@ -23,11 +23,10 @@
     "check:runtime-deps": "node scripts/guards/check-runtime-deps.mjs --selftest && node scripts/guards/check-runtime-deps.mjs",
     "attw": "turbo --concurrency=${TURBO_CONCURRENCY:-50%} attw",
     "check:exports": "node scripts/guards/check-exports.mjs",
-    "check:mutate-scope": "node scripts/guards/guard-mutate-scope.mjs",
     "check:lint-coverage": "node scripts/guards/check-lint-coverage.mjs",
     "check:project-references": "node scripts/guards/check-project-references.mjs --selftest && node scripts/guards/check-project-references.mjs",
-    "check:script-provenance": "node scripts/guards/guard-script-provenance.mjs --selftest && node scripts/guards/guard-script-provenance.mjs",
-    "check:action-provenance": "node scripts/guards/guard-action-provenance.mjs --selftest && node scripts/guards/guard-action-provenance.mjs"
+    "check:action-provenance": "node scripts/guards/guard-action-provenance.mjs --selftest && node scripts/guards/guard-action-provenance.mjs",
+    "check:exported-wiring": "deno run --allow-run=git --allow-read scripts/guards/check-exported-wiring.ts --selftest && deno run --allow-run=git --allow-read scripts/guards/check-exported-wiring.ts"
   },
   "devDependencies": {
     "@commitlint/cli": "^21.2.1",

@@ -1,3 +1,5 @@
+import { Schema } from 'effect'
+
 /**
  * Schema: TOML config — the inner vocabulary of `systemfsoftware.toml`.
  *
@@ -10,11 +12,7 @@
  * Pure declaration. No behavior, no `@std/toml`, no I/O. The ACL owns the
  * boundary crossing; the executor owns the I/O.
  */
-import { Schema } from 'effect'
-
-export const TomlConfig = Schema.Record({
-  key: Schema.String,
-  value: Schema.Array(Schema.String),
-}).pipe(Schema.brand('TomlConfig'))
-
+export const TomlConfig = Schema.Record({ key: Schema.String, value: Schema.Array(Schema.String) }).pipe(
+  Schema.brand('TomlConfig'),
+)
 export type TomlConfig = Schema.Schema.Type<typeof TomlConfig>

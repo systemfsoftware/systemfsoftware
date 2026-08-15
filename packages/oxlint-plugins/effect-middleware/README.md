@@ -52,10 +52,10 @@ To adopt gradually, drop the spread and name rules individually as `'@systemfsof
 
 ## Rules
 
-| Rule                                      | Reports                                                                                                                                                                                                                                                                          |
-| ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `middleware-no-operation-imports`         | An import binding named `*Executor`/`*Workflow`/`*Store` — the middleware is the front-half and must never reach into the operation (architect-middleware MW2). Sibling-cell module edges are covered by `cell-import-boundary` in `@systemfsoftware/oxlint-plugin-cell-imports` |
-| `middleware-gate-fails-on-decode-failure` | A decode-failure branch (an `if` on `!x`, `x == null`, `x === undefined`, `typeof x === 'undefined'`, or `Option.isNone(x)`) that produces `Effect.succeed(null                                                                                                                  |
+| Rule                                      | Reports                                                                                                                                                                                                                                               |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `middleware-no-operation-imports`         | An import binding named `*Executor`/`*Workflow`/`*Store` — the middleware is the front-half and must never reach into the operation. Sibling-cell module edges are covered by `cell-import-boundary` in `@systemfsoftware/oxlint-plugin-cell-imports` |
+| `middleware-gate-fails-on-decode-failure` | A decode-failure branch (an `if` on `!x`, `x == null`, `x === undefined`, `typeof x === 'undefined'`, or `Option.isNone(x)`) that produces `Effect.succeed(null                                                                                       |
 
 ## FAQ
 
@@ -69,7 +69,7 @@ A: Every rule is filename-gated. Only `*.middleware.ts` files are examined.
 A: Yes — middleware is impure transport behavior and may run effects at the edge. The operation-import ban covers operation bindings only, not the Effect runtime; sibling-cell module edges are handled by `cell-import-boundary` in `@systemfsoftware/oxlint-plugin-cell-imports`.
 
 **Q: Why does `Effect.succeed(Option.some(x))` in a failure branch fire?**
-A: The success channel is still `Option<T>`, so every handler behind the gate must re-check for `None` — the exact deferred-gate harm MW3 exists to close.
+A: The success channel is still `Option<T>`, so every handler behind the gate must re-check for `None` — the exact deferred-gate harm this rule exists to close.
 
 ## Requirements
 

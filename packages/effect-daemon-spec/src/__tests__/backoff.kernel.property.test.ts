@@ -7,7 +7,7 @@ const STEPS_MIN_UNTIL_EXPONENTIAL_EXCEEDS_CAP = 6
 const STEPS_MAX = 12
 const BASE_MS_MAX = 50
 
-const delaysMs = (baseMs: number, capMs: number, steps: number): ReadonlyArray<number> =>
+const delaysMs = (baseMs: number, capMs: number, steps: number): readonly number[] =>
   Chunk.toReadonlyArray(
     Effect.runSync(
       Schedule.run(

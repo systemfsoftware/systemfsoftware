@@ -129,7 +129,7 @@ export type Phase<P extends Phases> =
  * order.
  */
 export interface Layer<P extends Phases> {
-  readonly phases: ReadonlyArray<Phase<P>>
+  readonly phases: readonly Phase<P>[]
 }
 
 /** The description package's own module name — what an import edge would match. */
@@ -160,7 +160,7 @@ export type IoCellClassification = typeof IO_CELLS
 export interface Description<P extends Phases> {
   readonly module: typeof DESCRIPTION_MODULE
   readonly ioCells: IoCellClassification
-  readonly layers: ReadonlyArray<Layer<P>>
+  readonly layers: readonly Layer<P>[]
 }
 
 /**
@@ -419,8 +419,8 @@ export interface PhaseFact {
 export interface Vocabulary {
   readonly module: typeof DESCRIPTION_MODULE
   readonly ioCells: IoCellClassification
-  readonly phases: ReadonlyArray<PhaseFact>
-  readonly byKind: Readonly<Record<PhaseFact['kind'], ReadonlyArray<PhaseFact['name']>>>
+  readonly phases: readonly PhaseFact[]
+  readonly byKind: Readonly<Record<PhaseFact['kind'], readonly PhaseFact['name'][]>>
   /**
    * The export that runs a finished description. A consumer deciding which calls on this module
    * belong to a description needs the phases *and* the applier; without it the applier is the one
@@ -458,7 +458,7 @@ export const canonical: WriteDone<Phases> = write(
  * from here instead of restating them, so there is one place a phase is described and the
  * description is the place.
  */
-const WALKED_PHASES: ReadonlyArray<PhaseFact> = Arr.flatMap(
+const WALKED_PHASES: readonly PhaseFact[] = Arr.flatMap(
   canonical.layers,
   (layer) => layer.phases.map(({ convention, kind, name }): PhaseFact => ({ convention, kind, name })),
 )

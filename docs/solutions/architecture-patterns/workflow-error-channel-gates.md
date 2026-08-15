@@ -1,5 +1,5 @@
 ---
-title: Workflow Error Channel Gates (architect-workflow)
+title: Workflow Error Channel Gates
 module: omp-claude-compat
 component: hook-verdict.workflow.ts
 tags: [effect-ts, constitution, workflow, tagged-error, match-exhaustive]
@@ -9,12 +9,12 @@ applies_when:
   symptoms:
     - A `*.workflow.ts` file returns `Either<Decision, never>` and was accepted as a workflow
     - A workflow's error variant extends `S.TaggedClass` instead of `S.TaggedError`
-    - `Match.value(primitive).pipe(Match.when, Match.orElse)` is used where `Match.exhaustive` would suffice
-  root_cause: workflow implementation drift from the nine non-negotiable gates in the architect-workflow skill (G3, G9, plus the error-channel rule)
+    - '`Match.value(primitive).pipe(Match.when, Match.orElse)` is used where `Match.exhaustive` would suffice'
+  root_cause: workflow implementation drift from the workflow error-channel gates (inhabited, tagged error variants via exhaustive closed-union dispatch and one producer per variant)
   resolution_type: pattern-alignment
 ---
 
-# Workflow Error Channel Gates (architect-workflow)
+# Workflow Error Channel Gates
 
 ## Context
 
@@ -48,7 +48,7 @@ The hook-verdict workflow has BOTH shapes layered: `result.code` (primitive → 
 
 ## Why This Matters
 
-The skill `architect-workflow` enforces Constitution §I.1 (Purity) and §I.3 (Each Error Its Own Variant) by structural gates. A workflow with `never` in the error channel can still typecheck and still pass `pnpm check` — the violation is invisible to the compiler and to the test suite. The next contributor who adds a real failure mode will either smuggle it into a `Warning` (silently collapsing two distinct failures) or add it as a `boolean` field on a decision (violating §I.3). The mistake reproduces because nothing in the build chain catches it.
+Constitution §I.1 (Purity) and §I.3 (Each Error Its Own Variant) are carried by construction and lint, not by a skill: `Workflow.make` refuses an uninhabited or untagged error channel at the construction site (`Inhabited` / `UninhabitedError` / `UntaggedError` become the compiler diagnostics), and the `effect-workflow` plugin's `workflow-no-effect-import` and `workflow-match-exhaustive` rules bind the file at lint time. The remaining gates — the `S.TaggedError`-over-`S.TaggedClass` choice and one producer per variant — are held by review, not by a deterministic gate. A workflow with `never` in the error channel that bypasses the constructor can still typecheck and still pass `pnpm check` — the violation is invisible to the compiler and to the test suite. The next contributor who adds a real failure mode will either smuggle it into a `Warning` (silently collapsing two distinct failures) or add it as a `boolean` field on a decision (violating §I.3). The mistake reproduces because nothing in the build chain catches it.
 
 The 100% mutation gate is the other failure mode this prevents: a workflow that swallows `Either.left` to `null` is unfalsifiable. The mutator changes the parse path to always succeed and the test still passes because the workflow never branched on the failure in the first place.
 
@@ -136,6 +136,6 @@ const decision = Either.match(verdict, {
 
 ## See Also
 
-- `skill://architect-workflow` — the source of the nine non-negotiable gates
+- The `Workflow` constructor's `Inhabited` / `UninhabitedError` / `UntaggedError` refusals — the enforcement that gives this document its gates
 - `CONSTITUTION.md` §I.3 (Each Error Its Own Variant) and §III.3 (Mutation Is the Measure)
 - `packages/effect-daemon-spec/src/leader-lock.schema.ts` — reference usage of `S.TaggedError` in the monorepo

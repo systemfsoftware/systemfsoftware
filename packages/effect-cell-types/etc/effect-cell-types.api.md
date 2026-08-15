@@ -16,7 +16,7 @@ export namespace Policy {
 
 // @public (undocumented)
 export namespace Workflow {
-    export { UninhabitedDecision, UninhabitedError, Workflow, make };
+    export { Inhabited, Tagged, UninhabitedDecision, UninhabitedError, UntaggedError, Workflow, make };
 }
 
 // (No @packageDocumentation comment for this package)

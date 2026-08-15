@@ -2,6 +2,9 @@ import { declareValuePlugin, PluginKind } from '@systemfsoftware/stryker-js-plug
 import {
   ANNOTATION_OBJECT_IGNORED,
   ANNOTATION_TEXT_IGNORED,
+  BRAND_NAME_IGNORED,
+  CLASS_FIELDS_IGNORED,
+  CLASS_ID_IGNORED,
   decideSchemaDeclarationIgnore,
   OPTIONAL_DEFAULT_IGNORED,
   SYMBOL_DESCRIPTION_IGNORED,
@@ -29,6 +32,9 @@ export const strykerPlugins = [
 export {
   ANNOTATION_OBJECT_IGNORED,
   ANNOTATION_TEXT_IGNORED,
+  BRAND_NAME_IGNORED,
+  CLASS_FIELDS_IGNORED,
+  CLASS_ID_IGNORED,
   decideSchemaDeclarationIgnore,
   OPTIONAL_DEFAULT_IGNORED,
   SYMBOL_DESCRIPTION_IGNORED,

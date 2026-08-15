@@ -15,7 +15,7 @@ export class CheckerFacade extends ResourceDecorator<CheckerResource> {
   public async check(
     checkerName: string,
     mutantRunPlans: MutantRunPlan[],
-  ): Promise<Array<[MutantRunPlan, CheckResult]>> {
+  ): Promise<[MutantRunPlan, CheckResult][]> {
     const innerCheckerResult = Object.entries(
       await this.innerResource.check(
         checkerName,

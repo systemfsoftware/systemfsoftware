@@ -5,8 +5,8 @@ import type { ModuleKind } from './problem.schema.js'
 
 export interface ResolveModuleNameResult {
   readonly resolution: ts.ResolvedModuleFull | undefined
-  readonly failedLookupLocations: ReadonlyArray<string>
-  readonly trace: ReadonlyArray<string>
+  readonly failedLookupLocations: readonly string[]
+  readonly trace: readonly string[]
 }
 
 export interface TypescriptHostHandle {

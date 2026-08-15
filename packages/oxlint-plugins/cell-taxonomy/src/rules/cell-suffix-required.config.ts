@@ -1,7 +1,7 @@
 import type { RuleMeta } from '@oxlint/plugins'
 
 /** A default, not a closed world - a project's own suffixes extend it through the `cells` option. */
-export const CELLS: ReadonlyArray<string> = [
+export const CELLS: readonly string[] = [
   'acl',
   'adapter',
   'executor',
@@ -17,7 +17,7 @@ export const CELLS: ReadonlyArray<string> = [
   'workflow',
 ]
 
-export const EXEMPT: ReadonlyArray<string> = ['index.ts', 'main.ts', 'mod.ts']
+export const EXEMPT: readonly string[] = ['index.ts', 'main.ts', 'mod.ts']
 
 export const SRC_DIR = 'src' as const
 

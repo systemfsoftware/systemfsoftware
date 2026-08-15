@@ -1,4 +1,4 @@
-import { Context, Effect, Fiber, HashMap, Metric, Option, Ref } from 'effect'
+import { Effect, Fiber, HashMap, Metric, Option, Ref } from 'effect'
 import type { Scope } from 'effect'
 import type { ChildRef, DynamicHandle, SupervisorHealth } from '../daemon-health.schema.js'
 import { DynamicLimitExceeded } from '../daemon-health.schema.js'
@@ -9,8 +9,6 @@ import type { LeaderLock } from '../leader-lock.adapter.js'
 import { allocateSupervisorHealth } from './allocate-supervisor-health.kernel.js'
 import { allocateWorkerHealth } from './allocate-worker-health.kernel.js'
 import { buildWorkerLoop } from './build-worker-loop.kernel.js'
-import { SupervisorBodyExecutorDeps } from './supervisor-body.executor.js'
-import { WithLeaderLockExecutorDeps } from './with-leader-lock.executor.js'
 
 interface DynamicChildState<E> {
   readonly fiber: Option.Option<Fiber.RuntimeFiber<void, E>>
@@ -22,23 +20,13 @@ interface DynamicState<E> {
   readonly children: HashMap.HashMap<number, DynamicChildState<E>>
 }
 
-export interface BuildDynamicExecutorDepsService {
-  readonly withLock: LeaderLock['Type']['withLock']
-  readonly onRestart: DaemonReporter['Type']['onRestart']
-  readonly onExhausted: DaemonReporter['Type']['onExhausted']
-}
-
-export class BuildDynamicExecutorDeps extends Context.Tag(
-  '@systemfsoftware/effect-daemon-spec/internal/build-dynamic.executor/BuildDynamicExecutorDeps',
-)<BuildDynamicExecutorDeps, BuildDynamicExecutorDepsService>() {}
-
 const buildDynamic = <E, R, Args>(
   spec: DynamicSpec<E, R, Args>,
   health: SupervisorHealth,
 ): Effect.Effect<
-  DynamicHandle<Args, R | WithLeaderLockExecutorDeps | SupervisorBodyExecutorDeps | Scope.Scope>,
+  DynamicHandle<Args, R | LeaderLock | DaemonReporter | Scope.Scope>,
   never,
-  R | WithLeaderLockExecutorDeps | SupervisorBodyExecutorDeps | Scope.Scope
+  R | LeaderLock | DaemonReporter | Scope.Scope
 > =>
   Effect.gen(function*() {
     const state = yield* Ref.make<DynamicState<E>>({
@@ -49,7 +37,7 @@ const buildDynamic = <E, R, Args>(
     const startChildImpl = (args: Args): Effect.Effect<
       ChildRef,
       DynamicLimitExceeded,
-      R | WithLeaderLockExecutorDeps | SupervisorBodyExecutorDeps | Scope.Scope
+      R | LeaderLock | DaemonReporter | Scope.Scope
     > =>
       Effect.gen(function*() {
         const childWorker = spec.child(args)
@@ -159,9 +147,9 @@ const buildDynamic = <E, R, Args>(
 export const dynamic = <E, R, Args>(
   spec: DynamicSpec<E, R, Args>,
 ): Effect.Effect<
-  DynamicHandle<Args, R | WithLeaderLockExecutorDeps | SupervisorBodyExecutorDeps | Scope.Scope>,
+  DynamicHandle<Args, R | LeaderLock | DaemonReporter | Scope.Scope>,
   never,
-  R | WithLeaderLockExecutorDeps | SupervisorBodyExecutorDeps | Scope.Scope
+  R | LeaderLock | DaemonReporter | Scope.Scope
 > =>
   Effect.gen(function*() {
     const health = yield* allocateSupervisorHealth(spec.name, [])

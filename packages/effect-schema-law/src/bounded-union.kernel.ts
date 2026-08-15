@@ -1,8 +1,8 @@
 import { Arbitrary, type FastCheck, Schema as S } from 'effect'
 
 export const boundedUnion = <
-  Base extends readonly [S.Schema.Any, ...ReadonlyArray<S.Schema.Any>],
-  Recur extends readonly [S.Schema.Any, ...ReadonlyArray<S.Schema.Any>],
+  Base extends readonly [S.Schema.Any, ...readonly S.Schema.Any[]],
+  Recur extends readonly [S.Schema.Any, ...readonly S.Schema.Any[]],
 >(
   identifier: string,
   options: {

@@ -9,7 +9,7 @@ import {
   type ProblemKind,
   type ResolutionKind,
 } from '@systemfsoftware/arethetypeswrong-core'
-import { Context, Data, Effect, Layer } from 'effect'
+import { Data, Effect, Layer } from 'effect'
 
 import { CliFilesystem as Filesystem } from './filesystem.adapter.js'
 import { computeExitCode, ComputeExitCodeCommand } from './getExitCode.kernel.js'
@@ -28,43 +28,28 @@ export interface CliRequest {
   readonly definitelyTyped?: string | boolean
   readonly format?: CliFormat
   readonly quiet?: boolean
-  readonly entrypoints?: ReadonlyArray<string>
-  readonly includeEntrypoints?: ReadonlyArray<string>
-  readonly excludeEntrypoints?: ReadonlyArray<string>
+  readonly entrypoints?: readonly string[]
+  readonly includeEntrypoints?: readonly string[]
+  readonly excludeEntrypoints?: readonly string[]
   readonly entrypointsLegacy?: boolean
-  readonly ignoreRules?: ReadonlyArray<string>
-  readonly ignoreResolutions?: ReadonlyArray<ResolutionKind>
+  readonly ignoreRules?: readonly string[]
+  readonly ignoreResolutions?: readonly ResolutionKind[]
   readonly profile?: CliProfileName
   readonly summary?: boolean
   readonly emoji?: boolean
   readonly color?: boolean
   readonly configPath?: string
-  readonly moduleKinds?: ReadonlyArray<string>
+  readonly moduleKinds?: readonly string[]
   readonly registry: string
 }
-
-export interface AttwCliExecutorDepsService {
-  readonly run: (request: CliRequest) => Effect.Effect<number, never>
-}
-
-export class AttwCliExecutorDeps extends Context.Tag(
-  '@systemfsoftware/arethetypeswrong-cli/attw.executor/AttwCliExecutorDeps',
-)<AttwCliExecutorDeps, AttwCliExecutorDepsService>() {}
-
-export const AttwCliExecutorDepsStub: Layer.Layer<AttwCliExecutorDeps, never, never> = Layer.succeed(
-  AttwCliExecutorDeps,
-  {
-    run: () => Effect.succeed(0),
-  },
-)
 
 export const prepareAnalysis = (
   request: CliRequest,
   result: CheckResult,
 ): {
   result: CheckResult
-  ignoreRules: ReadonlyArray<string>
-  ignoreResolutions: ReadonlyArray<ResolutionKind>
+  ignoreRules: readonly string[]
+  ignoreResolutions: readonly ResolutionKind[]
 } => {
   const profileDecision = request.profile !== undefined
     ? applyProfile(new ApplyProfileCommand({ profileName: request.profile, request }))

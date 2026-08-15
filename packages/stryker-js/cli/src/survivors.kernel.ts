@@ -223,3 +223,102 @@ export function survivorMutateSpans(survivors: readonly Mutant[]): string[] {
   }
   return spans
 }
+
+/**
+ * The command of the admission workflow. It lives here rather than in the workflow
+ * because every field is a kernel type or a capability the kernel already names, and the
+ * workflow imports its kernel rather than the reverse.
+ */
+export interface AdmitSurvivorsRunInput {
+  /**
+   * The prior run's mutation report. `undefined` when no usable report
+   * exists — the run cannot be admitted without one ('no-report').
+   */
+  readonly priorReport: schema.MutationTestResult | undefined
+  /** The current run's resolved options (defaults + config file + CLI). */
+  readonly currentConfig: Record<string, unknown>
+  /** The current CLI/framework version (`strykerVersion`). */
+  readonly frameworkVersion: string
+  /**
+   * Per-file content hashes of the current source, keyed by the prior
+   * report's relative file keys. The prior side is hashed from the sources
+   * the report embeds, so an editor save that shifts line ranges — which
+   * would silently re-test a different mutant than the one that survived —
+   * is caught here.
+   */
+  readonly sourceContentHashes: Readonly<Record<string, string>>
+  /** The sha256 digest capability the admission hash needs. */
+  readonly hashContent: HashContent
+  /** The relative-to-absolute path capability the mutant conversion needs. */
+  readonly resolveAbsolutePath: ResolveAbsolutePath
+}
+
+const NO_REPORT_DETAIL = 'No prior mutation report found — a --survivors run needs the report of a previous run.'
+const SURVIVORS_RUN_SOURCE_DETAIL =
+  'The prior mutation report was itself produced by a --survivors run, so it is not a valid input for another one.'
+const MISMATCH_DETAIL =
+  'The prior mutation report does not match the current run (resolved options, framework version, or source content differ).'
+
+/** The per-file source hashes of the sources the prior report embeds. */
+export function priorSourceHashes(
+  priorReport: schema.MutationTestResult,
+  hashContent: HashContent,
+): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(priorReport.files).map(([file, fileResult]) => [
+      file,
+      sourceContentHash(fileResult.source, hashContent),
+    ]),
+  )
+}
+
+/**
+ * Whether the admission hashes agree: the prior report's embedded resolved
+ * options, framework version and source content against the current run's.
+ */
+export function hashesMatch(
+  priorReport: schema.MutationTestResult,
+  input: AdmitSurvivorsRunInput,
+): boolean {
+  const priorHash = structuralHash({
+    resolvedOptions: stripSurvivorsKeys(priorReport.config),
+    frameworkVersion: priorReport.framework?.version,
+    sourceContentHashes: priorSourceHashes(priorReport, input.hashContent),
+  }, input.hashContent)
+  const currentHash = structuralHash({
+    resolvedOptions: stripSurvivorsKeys(input.currentConfig),
+    frameworkVersion: input.frameworkVersion,
+    sourceContentHashes: input.sourceContentHashes,
+  }, input.hashContent)
+  return priorHash === currentHash
+}
+
+/**
+ * The admission classification, over primitives and kernel types only.
+ *
+ * The three rejecting kinds already carry the reason and the composed remediation, so the
+ * workflow assigns channels rather than re-deciding: one arm per kind, no guard chain. The
+ * order is the order of consequence - a missing report cannot be inspected for provenance,
+ * a survivors-sourced report is invalid whatever it contains, an empty survivor set is a
+ * success rather than a mismatch, and only a non-empty set is worth hashing.
+ */
+export type AdmissionVerdict =
+  | { readonly kind: 'reject'; readonly reason: 'no-report' | 'mismatch'; readonly remediation: string }
+  | { readonly kind: 'no-survivors' }
+  | { readonly kind: 'admit'; readonly survivors: readonly Mutant[] }
+
+const rejection = (reason: 'no-report' | 'mismatch', detail: string): AdmissionVerdict => ({
+  kind: 'reject',
+  reason,
+  remediation: `${detail} ${SURVIVORS_RUN_FIRST_REMEDIATION}`,
+})
+
+export function admissionVerdict(input: AdmitSurvivorsRunInput): AdmissionVerdict {
+  const priorReport = input.priorReport
+  if (priorReport === undefined) return rejection('no-report', NO_REPORT_DETAIL)
+  if (wasProducedBySurvivorsRun(priorReport)) return rejection('mismatch', SURVIVORS_RUN_SOURCE_DETAIL)
+  const survivors = extractSurvivors(priorReport, input.resolveAbsolutePath)
+  if (survivors.length === 0) return { kind: 'no-survivors' }
+  if (!hashesMatch(priorReport, input)) return rejection('mismatch', MISMATCH_DETAIL)
+  return { kind: 'admit', survivors }
+}

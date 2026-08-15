@@ -34,7 +34,7 @@ export type FeatureLayerOptions = {
 
 export type FeatureSuiteOptions = Pick<TestOptions, 'tags'> & Partial<TestOptions>
 
-export type EffectVitestDeps = Pick<typeof EffectVitest, 'layer'> & {
+export type EffectVitestBindings = Pick<typeof EffectVitest, 'layer'> & {
   readonly it: Vitest.Methods
 }
 
@@ -145,7 +145,7 @@ export type FeatureFn = FeatureStarter & {
   readonly only: FeatureStarter
 }
 
-export const makeFeature = (deps: EffectVitestDeps): FeatureFn => {
+export const makeFeature = (deps: EffectVitestBindings): FeatureFn => {
   const { it: effectIt, layer: effectVitestLayer } = deps
 
   const runNothing = <S extends ScopeMap>(

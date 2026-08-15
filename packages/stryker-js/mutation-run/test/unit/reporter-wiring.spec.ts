@@ -51,7 +51,7 @@ function createBroadcastReporter(
     reporters: ['clear-text', 'progress', 'json'],
   }
   const pluginCreator = new PluginCreator(
-    new Map<PluginKind, Array<Plugin<PluginKind>>>([
+    new Map<PluginKind, Plugin<PluginKind>[]>([
       [
         PluginKind.Reporter,
         [
@@ -303,7 +303,7 @@ describe('the reporter plugin module seam (U4)', () => {
       // @ts-expect-error pluginsByKind is provided at runtime, not declared on MutantInstrumenterContext
       const pluginsByKind = injector.resolve(injectionTokens.pluginsByKind) as Map<
         PluginKind,
-        Array<Plugin<PluginKind>>
+        Plugin<PluginKind>[]
       >
       expect(pluginsByKind.get(PluginKind.Reporter)).toBeUndefined()
       // The configured clear-text reporter cannot be created: the run's
@@ -387,7 +387,7 @@ describe('the reporter plugin module seam (U4)', () => {
       // @ts-expect-error pluginsByKind is provided at runtime, not declared on MutantInstrumenterContext
       const pluginsByKind = injector.resolve(injectionTokens.pluginsByKind) as Map<
         PluginKind,
-        Array<Plugin<PluginKind>>
+        Plugin<PluginKind>[]
       >
       expect(
         pluginsByKind.get(PluginKind.Reporter)?.map((plugin) => plugin.name),

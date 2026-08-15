@@ -50,10 +50,10 @@ if (TEMPLATE === undefined) {
 }
 
 /** The phases whose convention admits a `Left`, walked rather than listed. */
-const FAILABLE: ReadonlyArray<{
+const FAILABLE: readonly {
   readonly phaseIndex: number
   readonly convention: 'either-fail' | 'either-pass'
-}> = TEMPLATE.phases.flatMap((phase, phaseIndex) =>
+}[] = TEMPLATE.phases.flatMap((phase, phaseIndex) =>
   phase.convention === 'either-fail' || phase.convention === 'either-pass'
     ? [{ phaseIndex, convention: phase.convention }]
     : []
@@ -92,9 +92,9 @@ const FAILABLE: ReadonlyArray<{
  * description.
  */
 const substituteLayer = (
-  trace: Array<string>,
-  writeObserved: Array<number>,
-  encodeObserved: Array<Either.Either<number, number>>,
+  trace: string[],
+  writeObserved: number[],
+  encodeObserved: Either.Either<number, number>[],
   response: number,
   failure: DrawnFailure | undefined,
 ): Cell.Layer<Bag> => {
@@ -180,9 +180,9 @@ export interface DrawnFailure {
 export interface DescriptionCase {
   readonly description: Cell.WriteDone<Bag>
   readonly command: number
-  readonly trace: ReadonlyArray<string>
-  readonly writeObserved: ReadonlyArray<number>
-  readonly encodeObserved: ReadonlyArray<Either.Either<number, number>>
+  readonly trace: readonly string[]
+  readonly writeObserved: readonly number[]
+  readonly encodeObserved: readonly Either.Either<number, number>[]
   readonly failure: DrawnFailure | undefined
   readonly lastResponse: number
 }
@@ -242,9 +242,9 @@ export const description: fc.Arbitrary<DescriptionCase> = fc
         { arbitrary: fc.constant(undefined), weight: 2 },
       )
     return maybeFailure.map((failure) => {
-      const trace: Array<string> = []
-      const writeObserved: Array<number> = []
-      const encodeObserved: Array<Either.Either<number, number>> = []
+      const trace: string[] = []
+      const writeObserved: number[] = []
+      const encodeObserved: Either.Either<number, number>[] = []
       const [firstLayer, ...furtherLayers] = drawn.layers
       if (firstLayer === undefined) {
         throw new Error('effect-cell-gen: a generated recipe drew no layers')

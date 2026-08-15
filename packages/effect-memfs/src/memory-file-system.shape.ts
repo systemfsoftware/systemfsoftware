@@ -1,3 +1,5 @@
+import type * as memfs from 'memfs'
+
 export interface Stat {
   isFile(): boolean
   isDirectory(): boolean
@@ -41,5 +43,4 @@ export interface FileHandle {
   close(): Promise<void>
 }
 
-import type * as memfs from 'memfs'
 export type Contents = memfs.DirectoryJSON

@@ -23,7 +23,7 @@ const splitOn = (separator: string) => (value: string): A.NonEmptyReadonlyArray<
 
 const pathSegmentsOf = splitOn('/')
 
-const isUnderExemptPrefix = (prefix: string, pathSegments: ReadonlyArray<string>): boolean => {
+const isUnderExemptPrefix = (prefix: string, pathSegments: readonly string[]): boolean => {
   const prefixSegments = pathSegmentsOf(prefix)
   return pathSegments.some((_, offset) =>
     prefixSegments.every((segment, index) => pathSegments[offset + index] === segment)

@@ -2,7 +2,7 @@ import { Context, Effect, Layer } from 'effect'
 
 export interface LexerAdapterService {
   readonly init: () => Effect.Effect<void, Error>
-  readonly parseCjsExports: (source: string) => Effect.Effect<ReadonlyArray<string>, Error>
+  readonly parseCjsExports: (source: string) => Effect.Effect<readonly string[], Error>
 }
 
 export class LexerAdapter extends Context.Tag('@systemfsoftware/arethetypeswrong-core/LexerAdapter')<

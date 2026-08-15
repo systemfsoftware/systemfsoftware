@@ -13,7 +13,7 @@ export const CliProblemFlags = [
   'missing-export-equals',
   'unexpected-module-syntax',
   'internal-resolution-error',
-] as const satisfies ReadonlyArray<string>
+] as const satisfies readonly string[]
 
 export type CliProblemFlag = typeof CliProblemFlags[number]
 
@@ -51,7 +51,7 @@ export const CliResolutionKinds = [
   'node16-cjs',
   'node16-esm',
   'bundler',
-] as const satisfies ReadonlyArray<ResolutionKind>
+] as const satisfies readonly ResolutionKind[]
 
 export type CliResolutionKind = typeof CliResolutionKinds[number]
 
@@ -63,7 +63,7 @@ export const CliFormat = ['auto', 'table', 'table-flipped', 'ascii', 'json'] as 
 
 export const CliProfile = ['strict', 'node16', 'esm-only'] as const
 
-export const _problemKinds: ReadonlyArray<ProblemKind> = [
+export const _problemKinds: readonly ProblemKind[] = [
   'NoResolution',
   'UntypedResolution',
   'FalseCJS',

@@ -5,7 +5,7 @@ import { BoundedIntensity } from '../src/mod.js'
 import { run } from '../src/mod.js'
 import { Daemon } from '../src/mod.js'
 import { dynamic } from '../src/mod.js'
-import { SupervisorBodyExecutorDeps, WithLeaderLockExecutorLive } from '../src/mod.js'
+import { DaemonReporter } from '../src/mod.js'
 import { LeaderLock } from '../src/mod.js'
 import { MaxChildren } from '../src/mod.js'
 import { Supervision } from '../src/mod.js'
@@ -20,8 +20,7 @@ type SpyHandle = Effect.Effect.Success<typeof ReporterSpyContext>
 const IntensitySpyLayer = (spy: SpyHandle) =>
   Layer.mergeAll(
     LeaderLock.Noop,
-    WithLeaderLockExecutorLive.pipe(Layer.provide(LeaderLock.Noop)),
-    Layer.succeed(SupervisorBodyExecutorDeps, {
+    Layer.succeed(DaemonReporter, {
       onRestart: spy.reporter.onRestart,
       onExhausted: spy.reporter.onExhausted,
     }),

@@ -34,22 +34,9 @@
  */
 
 import type { ExtensionAPI, ExtensionContext } from '@oh-my-pi/pi-coding-agent'
-import { TomlLoader } from '@systemfsoftware/omp-utils'
 import { Effect, Either } from 'effect'
-import {
-  DispatchDoctrineExecutorDeps,
-  dispatchDoctrinePure,
-  runDispatchDoctrineCheck,
-} from './dispatch-doctrine.executor.js'
+import { dispatchDoctrinePure, runDispatchDoctrineCheck } from './dispatch-doctrine.executor.js'
 import type { RunSafe } from './run-safe.kernel.js'
-
-const provideDispatchDoctrineDeps = Effect.provideServiceEffect(
-  DispatchDoctrineExecutorDeps,
-  Effect.gen(function*() {
-    const loader = yield* TomlLoader
-    return loader
-  }),
-)
 
 const FLAG_MAP_MAX = 50
 const PENDING_READS_MAX = 200
@@ -105,7 +92,7 @@ const rememberPendingRead = (toolCallId: string, path: string): void => {
 }
 
 const warmSkills = (runSafe: RunSafe, cwd: string): Promise<void> => {
-  const pending = runSafe(runDispatchDoctrineCheck(cwd, 'read', false).pipe(provideDispatchDoctrineDeps))
+  const pending = runSafe(runDispatchDoctrineCheck(cwd, 'read', false))
     .then(({ skills }) => {
       skillsCache.set(cwd, skills)
     })
@@ -164,9 +151,7 @@ export const DispatchDoctrineExtension = (pi: ExtensionAPI, runSafe: RunSafe): v
     const doctrineLoaded = sessionId === '' ? false : (flagStore.get(sessionId) ?? false)
 
     const check = await runSafe(
-      Effect.either(runDispatchDoctrineCheck(ctx.cwd, event.toolName, doctrineLoaded)).pipe(
-        provideDispatchDoctrineDeps,
-      ),
+      Effect.either(runDispatchDoctrineCheck(ctx.cwd, event.toolName, doctrineLoaded)),
     )
     if (Either.isLeft(check)) throw check.left
     const { skills, gate } = check.right

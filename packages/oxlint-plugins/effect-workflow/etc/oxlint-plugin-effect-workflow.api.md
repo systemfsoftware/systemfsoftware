@@ -12,23 +12,10 @@ const _default: {
         name: string;
     };
     rules: {
-        'workflow-command-object': Rule;
-        'workflow-declaration-form': Rule;
-        'workflow-schema-required': Rule;
-        'workflow-either-inhabited': Rule;
         'workflow-inline-schemas': Rule;
-        'workflow-typeid-required': Rule;
-        'workflow-typeid-shared-per-union': Rule;
-        'workflow-union-schema-declared': Rule;
-        'workflow-no-unconstructed-variant': Rule;
         'workflow-no-panic-vocabulary': Rule;
         'workflow-match-exhaustive': Rule;
-        'workflow-single-path': Rule;
-        'workflow-no-throw': Rule;
-        'workflow-no-async': Rule;
-        'workflow-no-ambient-impurity': Rule;
         'workflow-no-effect-import': Rule;
-        'workflow-single-function-export': Rule;
         'workflow-property-test-shape': Rule;
     };
     configs: {

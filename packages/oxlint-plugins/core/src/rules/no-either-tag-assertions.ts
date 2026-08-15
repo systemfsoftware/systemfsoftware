@@ -15,7 +15,7 @@ export type MessageIds =
   | 'computedTagAccess'
   | 'callbackTagAccess'
 
-const TEST_EXTENSIONS: ReadonlyArray<string> = ['.test.ts', '.test.tsx', '.spec.ts', '.spec.tsx']
+const TEST_EXTENSIONS: readonly string[] = ['.test.ts', '.test.tsx', '.spec.ts', '.spec.tsx']
 
 const isTestFile = (filename: string): boolean => TEST_EXTENSIONS.some((ext) => filename.endsWith(ext))
 

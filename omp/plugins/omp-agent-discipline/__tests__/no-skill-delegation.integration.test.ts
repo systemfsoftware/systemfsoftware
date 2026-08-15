@@ -2,10 +2,10 @@ import * as PathModule from '@effect/platform/Path'
 import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { MemoryFileSystem } from '@systemfsoftware/effect-memfs'
-import { TomlLoader, TomlLoaderLive } from '@systemfsoftware/omp-utils'
+import { TomlLoaderLive } from '@systemfsoftware/omp-utils'
 import { Effect, Layer } from 'effect'
 import { expect } from 'vitest'
-import { NoSkillDelegationExecutorDeps, runNoSkillDelegation } from '../src/no-skill-delegation.executor.js'
+import { runNoSkillDelegation } from '../src/no-skill-delegation.executor.js'
 
 function present<A>(value: A | null | undefined): A {
   if (value === null || value === undefined) throw new Error('expected a value, got none')
@@ -15,17 +15,9 @@ function present<A>(value: A | null | undefined): A {
 const Feature = makeFeature({ it, layer })
 
 function seededLayer(contents: Record<string, string>) {
-  return Layer.effect(
-    NoSkillDelegationExecutorDeps,
-    Effect.gen(function*() {
-      const loader = yield* TomlLoader
-      return loader
-    }),
-  ).pipe(
-    Layer.provide(TomlLoaderLive.pipe(
-      Layer.provide(MemoryFileSystem.layerWith(contents)),
-      Layer.provide(PathModule.layer),
-    )),
+  return TomlLoaderLive.pipe(
+    Layer.provide(MemoryFileSystem.layerWith(contents)),
+    Layer.provide(PathModule.layer),
   )
 }
 
@@ -142,19 +134,11 @@ Feature('No-skill-delegation — executor integration')
       Gherkin.Do.pipe(
         Given('a filesystem with toml at /project-a but not /project-b')('dirs', () =>
           Effect.succeed({
-            layer: Layer.effect(
-              NoSkillDelegationExecutorDeps,
-              Effect.gen(function*() {
-                const loader = yield* TomlLoader
-                return loader
-              }),
-            ).pipe(
-              Layer.provide(TomlLoaderLive.pipe(
-                Layer.provide(MemoryFileSystem.layerWith({
-                  '/project-a/systemfsoftware.toml': 'no_delegate_skills = ["ce-work"]',
-                })),
-                Layer.provide(PathModule.layer),
-              )),
+            layer: TomlLoaderLive.pipe(
+              Layer.provide(MemoryFileSystem.layerWith({
+                '/project-a/systemfsoftware.toml': 'no_delegate_skills = ["ce-work"]',
+              })),
+              Layer.provide(PathModule.layer),
             ),
           })),
         When('runNoSkillDelegation is called for both directories')(

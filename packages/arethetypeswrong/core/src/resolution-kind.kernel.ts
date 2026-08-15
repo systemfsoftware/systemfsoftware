@@ -4,9 +4,9 @@ import {
   type ResolutionOption,
   ResolutionOptionSchema,
 } from './problem.schema.js'
-export const allResolutionOptions: ReadonlyArray<ResolutionOption> = ['node10', 'node16', 'bundler']
+export const allResolutionOptions: readonly ResolutionOption[] = ['node10', 'node16', 'bundler']
 
-export const allResolutionKinds: ReadonlyArray<ResolutionKind> = [
+export const allResolutionKinds: readonly ResolutionKind[] = [
   'node10',
   'node16-cjs',
   'node16-esm',
@@ -25,7 +25,7 @@ export const getResolutionOption = (kind: ResolutionKind): ResolutionOption => {
   }
 }
 
-export const getResolutionKinds = (option: ResolutionOption): ReadonlyArray<ResolutionKind> => {
+export const getResolutionKinds = (option: ResolutionOption): readonly ResolutionKind[] => {
   switch (option) {
     case 'node10':
       return ['node10']

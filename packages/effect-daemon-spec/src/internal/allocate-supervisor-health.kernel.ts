@@ -3,13 +3,13 @@ import { healthStateGauge } from '../daemon-metrics.kernel.js'
 
 export const allocateSupervisorHealth = <C>(
   name: string,
-  children: ReadonlyArray<C>,
+  children: readonly C[],
 ): Effect.Effect<{
   readonly name: string
   readonly ready: Effect.Latch
   readonly healthy: Effect.Latch
   readonly paused: Effect.Latch
-  readonly children: ReadonlyArray<C>
+  readonly children: readonly C[]
 }> =>
   Effect.gen(function*() {
     const ready = yield* Effect.makeLatch(false)

@@ -196,7 +196,7 @@ Feature('In-source Vitest test guard — the if-statement shape and the ancestor
     scenario(
       'Should_NotIgnore_When_ThereAreNoAncestors',
       Gherkin.Do.pipe(
-        Given('an empty ancestor chain')('ancestors', () => Effect.sync(() => [] as ReadonlyArray<unknown>)),
+        Given('an empty ancestor chain')('ancestors', () => Effect.sync(() => [] as readonly unknown[])),
         When('decideInSourceTestIgnore walks the chain')(
           'reason',
           (s) => Effect.sync(() => decideInSourceTestIgnore(s.ancestors)),

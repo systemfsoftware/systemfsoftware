@@ -2,7 +2,7 @@
 
 > Shared rule-authoring conventions: `packages/oxlint-plugins/AGENTS.md`.
 
-Rules here gate the `architect-executor` cell spec (`*.executor.ts` — the impure shell around one pure workflow) and `CONSTITUTION.md` Article II.
+Rules here gate `*.executor.ts` — the impure shell around one pure workflow — and `CONSTITUTION.md` Article II.
 
 ```yaml
 - id: EE1
@@ -24,12 +24,12 @@ Rules here gate the `architect-executor` cell spec (`*.executor.ts` — the impu
   do: let the executor dispatch over the decision a workflow RETURNED; flag only dispatch over a value that came out of an ACL or store call
   dont: ban `Match` outright in `*.executor.ts`
   harm: the executor's sanctioned job is to translate the decision, which requires dispatching on it — a blanket ban flags the correct implementation
-  check: `pnpm --filter @systemfsoftware/oxlint-plugin-effect-executor test` exits 0 — it pins the valid workflow-dispatch case and the invalid decoded-dispatch case of executor-no-domain-branch
+  check: "`pnpm --filter @systemfsoftware/oxlint-plugin-effect-executor test` exits 0 — it pins the valid workflow-dispatch case and the invalid decoded-dispatch case of executor-no-domain-branch"
 
 - id: EE5
   title: Deliberate non-gates
-  do: leave sandwich ORDERING (EX3c), read completeness (EX3b), the data-integrity allowlist (EX4b), and anti-pattern FILE NAMES (EX5) to review
+  do: leave statement ordering in the sandwich, completeness of the reads, the data-integrity allowlist, and anti-pattern filename bans to review
   dont: add a rule for them here
-  harm: ordering needs a READ/WRITE distinction the AST cannot supply — the writing methods arrive through Context.Tag destructuring, so no import edge names their cell; read completeness and the allowlist need cross-module type resolution or a domain judgment; EX5 is family-wide and belongs to a naming rule in the shared plugin, not to twelve per-cell copies
+  harm: ordering needs a READ/WRITE distinction the AST cannot supply — the writing methods arrive through Context.Tag destructuring, so no import edge names their cell; read completeness and the allowlist need cross-module type resolution or a domain judgment; filename bans are family-wide and belong to a naming rule in the shared plugin, not to twelve per-cell copies
   check: review — no rule in `src/rules/` claims to enforce statement order, read completeness, or filename bans
 ```

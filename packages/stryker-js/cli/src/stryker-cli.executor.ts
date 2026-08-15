@@ -8,7 +8,6 @@ import { Cell } from '@systemfsoftware/effect-cell-types'
 import type { Mutant, PartialStrykerOptions, StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
 import { schema } from '@systemfsoftware/stryker-js-plugin-api/core'
 import * as Cause from 'effect/Cause'
-import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as Either from 'effect/Either'
 import * as Exit from 'effect/Exit'
@@ -44,18 +43,14 @@ import type { RunEventStream, RunEventStreamPort } from './run-event-stream.adap
 import { STREAM_SCHEMA_VERSION } from './stream-protocol.kernel.js'
 import { SURVIVORS_REJECT_EXIT_CLASS } from './survivors-exit.kernel.js'
 import {
+  type AdmitSurvivorsRunInput,
   DEFAULT_SURVIVORS_PRIOR_REPORT,
   type HashContent,
   type ResolveAbsolutePath,
   sourceContentHash,
   survivorMutateSpans,
 } from './survivors.kernel.js'
-import {
-  admitSurvivorsRun,
-  type AdmitSurvivorsRunInput,
-  type SurvivorsAdmission,
-  SurvivorsRejection,
-} from './survivors.workflow.js'
+import { admitSurvivorsRun, type SurvivorsAdmission, SurvivorsRejection } from './survivors.workflow.js'
 
 /**
  * The mutation-testing entry the CLI calls once options are parsed. Injectable
@@ -71,18 +66,18 @@ const defaultRunMutationTest = (hostOptions: StrykerHostOptions): StrykerRun => 
   new Stryker(options, hostOptions).runMutationTest()
 
 /**
- * The capabilities the run needs, provided by the composition root (mod.ts)
- * from the two port layers. Members are borrowed from the port service types
- * so the executor never hand-writes a signature the ports could drift from.
+ * The mode probe the CLI resolves its mode with (U3): a single detection of
+ * the environment, shared by the reporters. Borrowed from the port service
+ * type so the handler never hand-writes a signature the port could drift from.
  */
-export interface StrykerCliExecutorDepsService {
-  readonly detectMode: OutputModeProbe['detectMode']
-  readonly createRunEventStream: RunEventStreamPort['createRunEventStream']
-}
+export type DetectModeCapability = OutputModeProbe['detectMode']
 
-export class StrykerCliExecutorDeps extends Context.Tag(
-  '@systemfsoftware/stryker-js-cli/stryker-cli.executor/StrykerCliExecutorDeps',
-)<StrykerCliExecutorDeps, StrykerCliExecutorDepsService>() {}
+/**
+ * The run-event-stream factory a run executes with: opens a run's NDJSON
+ * stream from the resolved mode. Borrowed from the port service type so the
+ * executor never hand-writes a signature the port could drift from.
+ */
+export type CreateRunEventStreamCapability = RunEventStreamPort['createRunEventStream']
 
 /**
  * The request a command handler leaves for the executor to run: the parsed
@@ -634,10 +629,10 @@ function resolveCliExitCode(exit: Exit.Exit<unknown, unknown>): number {
  */
 export const runStrykerCli = (
   input: RunStrykerCliInput,
-): Effect.Effect<number, never, StrykerCliExecutorDeps> =>
+  createRunEventStream: CreateRunEventStreamCapability,
+): Effect.Effect<number, never, never> =>
   Effect.gen(function*() {
-    const deps = yield* StrykerCliExecutorDeps
-    const stream = yield* deps.createRunEventStream(input.mode)
+    const stream = yield* createRunEventStream(input.mode)
     const runMutationTest = input.runMutationTest ?? defaultRunMutationTest(hostOptionsOf(input.mode, stream))
 
     // The signal and last-signal cells both the signal handler and the

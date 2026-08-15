@@ -20,7 +20,7 @@ export interface ExecOptions {
 }
 
 export interface ContainerService {
-  readonly run: (args: ReadonlyArray<string>, options?: ExecOptions) => Effect.Effect<CliResult>
+  readonly run: (args: readonly string[], options?: ExecOptions) => Effect.Effect<CliResult>
   readonly sh: (script: string, options?: ExecOptions) => Effect.Effect<CliResult>
 }
 
@@ -34,7 +34,7 @@ export const ContainerLive: Layer.Layer<Container> = Layer.effect(
   Effect.promise(async () => {
     const client = await getContainerRuntimeClient()
     const container = client.container.getById(inject('attwContainerId'))
-    const exec = (command: ReadonlyArray<string>, options?: ExecOptions) =>
+    const exec = (command: readonly string[], options?: ExecOptions) =>
       Effect.promise(() =>
         client.container.exec(container, [...command], {
           workingDir: options?.cwd ?? WORKDIR,

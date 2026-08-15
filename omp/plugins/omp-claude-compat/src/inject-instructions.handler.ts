@@ -1,16 +1,19 @@
+import type { FileSystem } from '@effect/platform/FileSystem'
+import type * as PathModule from '@effect/platform/Path'
 import type {
   BeforeAgentStartEvent,
   BeforeAgentStartEventResult,
   ExtensionAPI,
   ExtensionContext,
 } from '@oh-my-pi/pi-coding-agent'
+import type { TomlLoader } from '@systemfsoftware/omp-utils'
 import { Config, Effect, Either } from 'effect'
 import type { HookRunner } from './hook-runner.kernel.js'
-import { InjectInstructionsExecutorDeps, loadReferencedContent } from './inject-instructions.executor.js'
+import { loadReferencedContent } from './inject-instructions.executor.js'
 
 export const InjectInstructionsTask = (
   pi: ExtensionAPI,
-  runner: HookRunner<InjectInstructionsExecutorDeps>,
+  runner: HookRunner<FileSystem | PathModule.Path | TomlLoader>,
 ): void => {
   pi.on('before_agent_start', async (event: BeforeAgentStartEvent, _ctx: ExtensionContext) => {
     const injected = await runner.runSafe(

@@ -2,8 +2,8 @@ import { Cause, Effect, Layer, Ref } from 'effect'
 import { DaemonReporter } from '../../src/daemon-reporter.adapter.js'
 
 export const ReporterSpyContext = Effect.gen(function*() {
-  const restartsRef = yield* Ref.make<Array<{ name: string; cause: Cause.Cause<unknown> }>>([])
-  const exhaustionsRef = yield* Ref.make<Array<{ name: string; cause: Cause.Cause<unknown> }>>([])
+  const restartsRef = yield* Ref.make<{ name: string; cause: Cause.Cause<unknown> }[]>([])
+  const exhaustionsRef = yield* Ref.make<{ name: string; cause: Cause.Cause<unknown> }[]>([])
   return {
     reporter: DaemonReporter.of({
       onRestart: (name, cause) => Ref.update(restartsRef, (r) => [...r, { name, cause }]).pipe(Effect.as(void 0)),

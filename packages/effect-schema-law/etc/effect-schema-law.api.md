@@ -46,7 +46,7 @@ export interface BlindArm {
 }
 
 // @public (undocumented)
-export const boundedUnion: <Base extends readonly [Schema.Schema.Any, ...ReadonlyArray<Schema.Schema.Any>], Recur extends readonly [Schema.Schema.Any, ...ReadonlyArray<Schema.Schema.Any>]>(identifier: string, options: {
+export const boundedUnion: <Base extends readonly [Schema.Schema.Any, ...readonly Schema.Schema.Any[]], Recur extends readonly [Schema.Schema.Any, ...readonly Schema.Schema.Any[]]>(identifier: string, options: {
     readonly base: Base;
     readonly recur: Recur;
     readonly maxDepth?: number;

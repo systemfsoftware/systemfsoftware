@@ -9,14 +9,14 @@ const segmentsOf = (filename: string): A.NonEmptyReadonlyArray<string> =>
 export const basenameOf = (filename: string): string => A.lastNonEmpty(segmentsOf(filename))
 
 /** Directory segments only — the basename never counts as a directory. */
-export const directoriesOf = (filename: string): ReadonlyArray<string> => A.initNonEmpty(segmentsOf(filename))
+export const directoriesOf = (filename: string): readonly string[] => A.initNonEmpty(segmentsOf(filename))
 
 export const isUnderSrc = (filename: string): boolean => directoriesOf(filename).includes('src')
 
 export const isInSanctionedTestDir = (filename: string): boolean =>
   directoriesOf(filename).some((segment) => SANCTIONED_TEST_DIRS.has(segment))
 
-export const isInConfiguredTestDir = (filename: string, dirs: ReadonlyArray<string>): boolean =>
+export const isInConfiguredTestDir = (filename: string, dirs: readonly string[]): boolean =>
   directoriesOf(filename).some((segment) => dirs.includes(segment))
 
 export const isTestFile = (basename: string): boolean => TEST_BASENAME.test(basename)

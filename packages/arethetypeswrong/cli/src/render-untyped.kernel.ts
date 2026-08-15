@@ -7,7 +7,7 @@ export type UntypedContext = {
 }
 
 export const renderUntyped = (ctx: UntypedContext): Doc.Doc<never> => {
-  const lines: Array<Doc.Doc<never>> = []
+  const lines: Doc.Doc<never>[] = []
   lines.push(Doc.text(`Package ${ctx.packageName}@${ctx.packageVersion} has no types.`))
   if (ctx.typesPackageName !== null) {
     lines.push(Doc.text(`Install @types/${ctx.typesPackageName} for TypeScript support.`))

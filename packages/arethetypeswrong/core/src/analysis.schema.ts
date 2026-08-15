@@ -60,5 +60,5 @@ export type CheckResult = Schema.Schema.Type<typeof CheckResultSchema>
 
 export type Analysis_ = Analysis & {
   entrypoints: Record<string, EntrypointInfo>
-  problems: ReadonlyArray<Problem>
+  problems: readonly Problem[]
 }

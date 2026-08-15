@@ -15,7 +15,7 @@ export interface EntrypointResolutionsInput {
 
 export const detectEntrypointResolutions = (
   input: EntrypointResolutionsInput,
-): ReadonlyArray<Problem> => {
+): readonly Problem[] => {
   const { subpath, entrypoint, node16ModuleKinds } = input
   const problems: Problem[] = []
   if (entrypoint.isWildcard) {

@@ -576,7 +576,7 @@ export const matchWithWaiting: {
 export const all = <const Arg extends Iterable<any> | Record<string, any>>(
   results: Arg,
 ): Result<
-  [Arg] extends [ReadonlyArray<any>] ? {
+  [Arg] extends [readonly any[]] ? {
       -readonly [K in keyof Arg]: [Arg[K]] extends [Result<infer _A, infer _E>] ? _A : Arg[K]
     }
     : [Arg] extends [Iterable<infer _A>] ? _A extends Result<infer _AA, infer _E> ? _AA : _A
@@ -584,7 +584,7 @@ export const all = <const Arg extends Iterable<any> | Record<string, any>>(
         -readonly [K in keyof Arg]: [Arg[K]] extends [Result<infer _A, infer _E>] ? _A : Arg[K]
       }
     : never,
-  [Arg] extends [ReadonlyArray<any>] ? Result.Failure<Arg[number]>
+  [Arg] extends [readonly any[]] ? Result.Failure<Arg[number]>
     : [Arg] extends [Iterable<infer _A>] ? Result.Failure<_A>
     : [Arg] extends [Record<string, any>] ? Result.Failure<Arg[keyof Arg]>
     : never
@@ -592,7 +592,7 @@ export const all = <const Arg extends Iterable<any> | Record<string, any>>(
   const isIter = isIterable(results)
   const entries = isIter
     ? Array.from(results, (result, i) => [i, result] as const)
-    : Object.entries(results) as Array<[string, unknown]>
+    : Object.entries(results) as [string, unknown][]
   const successes: any = isIter ? [] : {}
   let waiting = false
   for (let i = 0; i < entries.length; i++) {
@@ -665,7 +665,7 @@ export type Builder<Out, A, E, I> =
       f: (error: E, result: Failure<A, E>) => C,
     ): Builder<Out | C, A, E, I>
 
-    onErrorTag<const Tags extends ReadonlyArray<Types.Tags<E>>, B>(
+    onErrorTag<const Tags extends readonly Types.Tags<E>[], B>(
       tags: Tags,
       f: (error: Types.ExtractTag<E, Tags[number]>, result: Failure<A, E>) => B,
     ): Builder<Out | B, A, Types.ExcludeTag<E, Tags[number]>, I>
@@ -743,7 +743,7 @@ class BuilderImpl<Out, A, E> {
   }
 
   onErrorTag<B>(
-    tag: string | ReadonlyArray<string>,
+    tag: string | readonly string[],
     f: (error: Types.ExtractTag<E, any>, result: Failure<A, E>) => B,
   ): BuilderImpl<Out | B, A, Types.ExcludeTag<E, any>> {
     return this.onErrorIf(

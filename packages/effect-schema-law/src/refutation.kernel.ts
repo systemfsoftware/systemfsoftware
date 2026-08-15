@@ -37,7 +37,7 @@ export interface ObligationScan {
  */
 export const WITNESS_BUDGET = 256
 
-const REJECTION_GENERIC_POOL: ReadonlyArray<unknown> = [
+const REJECTION_GENERIC_POOL: readonly unknown[] = [
   '',
   ' ',
   'g',
@@ -74,7 +74,7 @@ const buildArbitrary = (schema: S.Schema.AnyNoContext): FastCheck.Arbitrary<unkn
 const sample = (
   arbitrary: FastCheck.Arbitrary<unknown>,
   budget: number,
-): ReadonlyArray<unknown> | undefined => {
+): readonly unknown[] | undefined => {
   try {
     return fc.sample(arbitrary, { numRuns: budget, seed: 1 })
   } catch {

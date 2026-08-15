@@ -24,9 +24,9 @@ interface Iteration {
 
 const isNode = (value: unknown): value is ESTree.Node => value !== null && typeof value === 'object' && 'type' in value
 
-const elementsOf = (value: unknown): ReadonlyArray<unknown> | null => Array.isArray(value) ? value : null
+const elementsOf = (value: unknown): readonly unknown[] | null => Array.isArray(value) ? value : null
 
-const entriesOf = (node: object): ReadonlyArray<readonly [string, unknown]> => Object.entries(node)
+const entriesOf = (node: object): readonly (readonly [string, unknown])[] => Object.entries(node)
 
 const visit = (value: unknown, onNode: (node: ESTree.Node) => void): void => {
   const elements = elementsOf(value)

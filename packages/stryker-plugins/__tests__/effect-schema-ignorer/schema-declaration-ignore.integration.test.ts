@@ -5,6 +5,8 @@ import { expect } from 'vitest'
 import {
   ANNOTATION_OBJECT_IGNORED,
   ANNOTATION_TEXT_IGNORED,
+  BRAND_NAME_IGNORED,
+  CLASS_ID_IGNORED,
   decideSchemaDeclarationIgnore,
   OPTIONAL_DEFAULT_IGNORED,
 } from '../../src/effect-schema-ignorer/index.js'
@@ -12,7 +14,9 @@ import {
 import {
   annotationsCall,
   bareFactoryCall,
+  brandCall,
   callOf,
+  classCall,
   memberOf,
   namedProperty,
   objectOf,
@@ -310,6 +314,84 @@ Feature('Effect Schema declarations — ignored mutants on tags, brands, optiona
           (s) => Effect.sync(() => decideSchemaDeclarationIgnore(s.node.documentation, s.node.call)),
         ),
         Then('it returns undefined (callee is not `S.annotations`)')((s) =>
+          Effect.sync(() => {
+            expect(s.result).toBeUndefined()
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'Should_IgnoreClassIdButNotItsFields_When_FactoryIsSchemaClass',
+      Gherkin.Do.pipe(
+        Given('a `Schema.Class<A>("ChildPolicyConfig")({ … })` call, whose id rides the inner call')(
+          'node',
+          () =>
+            Effect.sync(() => {
+              const id = { type: 'StringLiteral', value: 'ChildPolicyConfig' }
+              const fields = { type: 'ObjectExpression', properties: [] }
+              const outer = classCall(id, fields)
+              return { id, fields, outer, inner: outer.callee }
+            }),
+        ),
+        When('decideSchemaDeclarationIgnore examines the identifier and the fields object')(
+          'results',
+          (s) =>
+            Effect.sync(() => ({
+              id: decideSchemaDeclarationIgnore(s.node.id, s.node.inner),
+              fields: decideSchemaDeclarationIgnore(s.node.fields, s.node.outer),
+            })),
+        ),
+        Then('the id is ignored and the fields object is not: a fields subtree carries accepted value sets')((s) =>
+          Effect.sync(() => {
+            expect(s.results.id).toBe(CLASS_ID_IGNORED)
+            expect(s.results.fields).toBeUndefined()
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'Should_IgnoreBrandName_When_CalleeIsSchemaBrand',
+      Gherkin.Do.pipe(
+        Given('an `S.brand("MaxChildren")` call')('node', () =>
+          Effect.sync(() => {
+            const name = { type: 'StringLiteral', value: 'MaxChildren' }
+            return { name, call: brandCall(name) }
+          })),
+        When('decideSchemaDeclarationIgnore examines the brand name')(
+          'result',
+          (s) => Effect.sync(() => decideSchemaDeclarationIgnore(s.node.name, s.node.call)),
+        ),
+        Then('it is ignored: the brand name is identity data, like a Symbol.for description')((s) =>
+          Effect.sync(() => {
+            expect(s.result).toBe(BRAND_NAME_IGNORED)
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'Should_NotIgnoreLiteralMembers_When_TheyRideASchemaLiteralInsideClassFields',
+      Gherkin.Do.pipe(
+        Given('a `Schema.Literal("permanent", "transient")` inside a `Schema.Class` fields object')(
+          'node',
+          () =>
+            Effect.sync(() => {
+              const member = { type: 'StringLiteral', value: 'permanent' }
+              const literal = callOf(memberOf('Schema', 'Literal'), [member, {
+                type: 'StringLiteral',
+                value: 'transient',
+              }])
+              const fields = objectOf([namedProperty('restart', literal)])
+              return { member, literal, outer: classCall({ type: 'StringLiteral', value: 'C' }, fields) }
+            }),
+        ),
+        When('decideSchemaDeclarationIgnore examines one accepted literal')(
+          'result',
+          (s) => Effect.sync(() => decideSchemaDeclarationIgnore(s.node.member, s.node.literal)),
+        ),
+        Then('it is NOT ignored: which values decode is behaviour, not declaration identity')((s) =>
           Effect.sync(() => {
             expect(s.result).toBeUndefined()
           })

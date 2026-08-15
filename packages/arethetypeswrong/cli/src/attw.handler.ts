@@ -24,7 +24,7 @@ const profileOptions = (): Options.Options<typeof CliProfile[number]> =>
     Options.withDefault('strict' as typeof CliProfile[number]),
   )
 
-const ignoreRulesOptions = (): Options.Options<Option.Option<ReadonlyArray<string>>> =>
+const ignoreRulesOptions = (): Options.Options<Option.Option<readonly string[]>> =>
   Options.optional(
     Options.repeated(Options.text('ignore-rules').pipe(Options.withAlias('ignore-rule'))),
   )

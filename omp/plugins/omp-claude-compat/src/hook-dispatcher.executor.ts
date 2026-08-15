@@ -6,7 +6,7 @@ import type {
   ToolResultEvent,
   ToolResultEventResult,
 } from '@oh-my-pi/pi-coding-agent'
-import { Context, Effect, Match, type Scope } from 'effect'
+import { Effect, Match, type Scope } from 'effect'
 import { homedir } from 'node:os'
 import { collectSettingsGapsWithPaths } from './internal/collect-settings-gaps.executor.js'
 import { CollectSettingsGapsExecutorDeps } from './internal/collect-settings-gaps.executor.js'
@@ -33,11 +33,6 @@ import { RunUserPromptSubmitHooksExecutorDeps } from './internal/run-user-prompt
 import { runUserPromptSubmitHooks } from './internal/run-user-prompt-submit-hooks.executor.js'
 import { settingsPaths } from './internal/settings-paths.kernel.js'
 import { SuperviseForkExecutorDeps } from './internal/supervise-fork.executor.js'
-
-export class HookDispatcherExecutorDeps extends Context.Tag('HookDispatcherExecutorDeps')<
-  HookDispatcherExecutorDeps,
-  Scope.Scope
->() {}
 
 export type HookToolCallCommand = {
   readonly _tag: 'ToolCall'
@@ -110,7 +105,7 @@ export type HookDispatchResult =
 export type HookDispatchContext =
   | FileSystem
   | CommandExecutor
-  | HookDispatcherExecutorDeps
+  | Scope.Scope
   | LoadSettingsExecutorDeps
   | CollectSettingsGapsExecutorDeps
   | RunHookScriptExecutorDeps

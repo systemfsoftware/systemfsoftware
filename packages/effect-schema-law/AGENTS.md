@@ -12,7 +12,7 @@ rules:
     dont: ship a codec that loses information in either direction
     harm: encode-then-decode produces a different value than the input; downstream
       code acts on a value that never existed in the input
-    check: `pnpm --filter @systemfsoftware/effect-schema-law test` exits 0
+    check: "`pnpm --filter @systemfsoftware/effect-schema-law test` exits 0"
 
   - id: LAW-L2
     title: Encode stability — encode(decode(encoded)) matches the original encoded form
@@ -20,7 +20,7 @@ rules:
     dont: claim wire-format stability for a subtractive transform without verifying
     harm: encoded output from the codec differs from input the caller provided;
       persisted data shifts format on every read-write cycle
-    check: `pnpm --filter @systemfsoftware/effect-schema-law test` exits 0
+    check: "`pnpm --filter @systemfsoftware/effect-schema-law test` exits 0"
 
   - id: LAW-L3
     title: Errors are exempt — a failure value is not a codec

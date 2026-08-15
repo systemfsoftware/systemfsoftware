@@ -68,7 +68,7 @@ export interface AtomHttpApiClient<Self, Id extends string, Groups extends HttpA
   ] ? Atom.AtomResultFn<
       Simplify<
         HttpApiEndpoint.HttpApiEndpoint.ClientRequest<_Path, _UrlParams, _Payload, _Headers, false> & {
-          readonly reactivityKeys?: ReadonlyArray<unknown> | ReadonlyRecord<string, ReadonlyArray<unknown>> | undefined
+          readonly reactivityKeys?: readonly unknown[] | ReadonlyRecord<string, readonly unknown[]> | undefined
         }
       >,
       WithResponse extends true ? [_Success, HttpClientResponse] : _Success,
@@ -104,8 +104,8 @@ export interface AtomHttpApiClient<Self, Id extends string, Groups extends HttpA
     ] ? Simplify<
         HttpApiEndpoint.HttpApiEndpoint.ClientRequest<_Path, _UrlParams, _Payload, _Headers, WithResponse> & {
           readonly reactivityKeys?:
-            | ReadonlyArray<unknown>
-            | ReadonlyRecord<string, ReadonlyArray<unknown>>
+            | readonly unknown[]
+            | ReadonlyRecord<string, readonly unknown[]>
             | undefined
           readonly timeToLive?: Duration.DurationInput | undefined
         }
@@ -182,7 +182,7 @@ export const Tag =
         urlParams: any
         headers: any
         payload: any
-        reactivityKeys?: ReadonlyArray<unknown> | ReadonlyRecord<string, ReadonlyArray<unknown>> | undefined
+        reactivityKeys?: readonly unknown[] | ReadonlyRecord<string, readonly unknown[]> | undefined
       }>()(
         Effect.fnUntraced(function*(opts) {
           const client = (yield* self) as Record<string, Record<string, (opts: any) => Effect.Effect<any, any, any>>>
@@ -234,7 +234,7 @@ export const Tag =
         readonly payload?: any
         readonly headers?: any
         readonly withResponse?: boolean
-        readonly reactivityKeys?: ReadonlyArray<unknown> | ReadonlyRecord<string, ReadonlyArray<unknown>> | undefined
+        readonly reactivityKeys?: readonly unknown[] | ReadonlyRecord<string, readonly unknown[]> | undefined
         readonly timeToLive?: Duration.DurationInput | undefined
       },
     ) =>
@@ -283,7 +283,7 @@ class QueryKey extends Data.Class<{
   headers: any
   payload: any
   withResponse: boolean
-  reactivityKeys?: ReadonlyArray<unknown> | ReadonlyRecord<string, ReadonlyArray<unknown>> | undefined
+  reactivityKeys?: readonly unknown[] | ReadonlyRecord<string, readonly unknown[]> | undefined
   timeToLive?: Duration.Duration | undefined
 }> {
   [Equal.symbol](that: QueryKey) {

@@ -1,18 +1,9 @@
 import type { PlatformError } from '@effect/platform/Error'
 import { TomlLoader } from '@systemfsoftware/omp-utils'
 import type { TomlConfig } from '@systemfsoftware/omp-utils'
-import { Context, Effect, Match } from 'effect'
+import { Effect, Match } from 'effect'
 import * as Option from 'effect/Option'
 import * as S from 'effect/Schema'
-
-// ═══════════════════════════════════════════════════════════
-// 0. DEPENDENCIES — consumer-owned tag
-// ═══════════════════════════════════════════════════════════
-
-export class NoSkillDelegationExecutorDeps extends Context.Tag('NoSkillDelegationExecutorDeps')<
-  NoSkillDelegationExecutorDeps,
-  Context.Tag.Service<TomlLoader>
->() {}
 
 const How = S.Literal('subagent_type', 'prompt')
 
@@ -138,7 +129,7 @@ function matchesPattern(pattern: string, prompt: string): boolean {
   return new RegExp(pattern, 'i').test(prompt)
 }
 
-function firstMatch(patterns: ReadonlyArray<string>, prompt: string): RegExpExecArray | null {
+function firstMatch(patterns: readonly string[], prompt: string): RegExpExecArray | null {
   return patterns
     .map((pattern) => new RegExp(pattern, 'i').exec(prompt))
     .find((match): match is RegExpExecArray => match !== null) ?? null
@@ -190,7 +181,7 @@ const matchedMentionedSkills = (guard: CompiledGuard, prompt: string): Option.Op
     .filter(([, pattern]) => matchesPattern(pattern, prompt))
     .map(([name]) => name)
   return Option.liftPredicate(
-    (xs: ReadonlyArray<string>): xs is [string, ...string[]] => xs.length > 0,
+    (xs: readonly string[]): xs is [string, ...string[]] => xs.length > 0,
   )(mentioned)
 }
 const analyzePrompt = (guard: CompiledGuard, prompt: string): PromptAnalysis =>
@@ -292,9 +283,9 @@ function blockResult(verdict: DelegationVerdict): BlockResult | undefined {
   )
 }
 
-function loadGuard(cwd: string): Effect.Effect<CompiledGuard | null, PlatformError, NoSkillDelegationExecutorDeps> {
+function loadGuard(cwd: string): Effect.Effect<CompiledGuard | null, PlatformError, TomlLoader> {
   return Effect.gen(function*() {
-    const loader = yield* NoSkillDelegationExecutorDeps
+    const loader = yield* TomlLoader
     const config: TomlConfig = yield* loader.load(cwd)
     const names = config['no_delegate_skills'] ?? []
     return compileGuard(names)
@@ -306,7 +297,7 @@ export function runNoSkillDelegation(
   toolName: string,
   subagentType: string,
   prompt: string,
-): Effect.Effect<NoSkillDelegationResult, PlatformError, NoSkillDelegationExecutorDeps> {
+): Effect.Effect<NoSkillDelegationResult, PlatformError, TomlLoader> {
   return Effect.gen(function*() {
     const guard = yield* loadGuard(cwd)
     const cmd = new CheckDelegationCommand({ toolName, subagentType, prompt, guard })

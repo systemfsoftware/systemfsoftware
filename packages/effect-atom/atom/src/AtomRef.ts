@@ -35,11 +35,11 @@ export interface AtomRef<A> extends ReadonlyRef<A> {
  * @since 1.0.0
  * @category models
  */
-export interface Collection<A> extends ReadonlyRef<ReadonlyArray<AtomRef<A>>> {
+export interface Collection<A> extends ReadonlyRef<readonly AtomRef<A>[]> {
   readonly push: (item: A) => Collection<A>
   readonly insertAt: (index: number, item: A) => Collection<A>
   readonly remove: (ref: AtomRef<A>) => Collection<A>
-  readonly toArray: () => Array<A>
+  readonly toArray: () => A[]
 }
 
 /**
@@ -76,7 +76,7 @@ class ReadonlyRefImpl<A> implements ReadonlyRef<A> {
     return Hash.hash(this.value)
   }
 
-  listeners: Array<(a: A) => void> = []
+  listeners: ((a: A) => void)[] = []
   listenerCount = 0
 
   notify(a: A) {
@@ -221,7 +221,7 @@ class PropRefImpl<A, K extends keyof A> implements AtomRef<A[K]> {
   }
 }
 
-class CollectionImpl<A> extends ReadonlyRefImpl<Array<AtomRef<A>>> implements Collection<A> {
+class CollectionImpl<A> extends ReadonlyRefImpl<AtomRef<A>[]> implements Collection<A> {
   constructor(items: Iterable<A>) {
     super([])
     for (const item of items) {

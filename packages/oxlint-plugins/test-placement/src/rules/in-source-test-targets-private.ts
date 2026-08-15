@@ -55,7 +55,7 @@ const collectDeclaration = (node: CollectableNode, out: Set<string>): void => {
 }
 
 const collectPrivateNames = (
-  body: ReadonlyArray<ESTree.Statement | ESTree.ModuleDeclaration>,
+  body: readonly (ESTree.Statement | ESTree.ModuleDeclaration)[],
   out: Set<string>,
 ): void => {
   for (const node of body) {
@@ -93,7 +93,7 @@ export const inSourceTestTargetsPrivate = defineRule({
     const inTestFile = isTestFile(basename)
     if (!underSrc || inTestFile) return {}
     const privateNames = new Set<string>()
-    const guards: Array<GuardRecord> = []
+    const guards: GuardRecord[] = []
 
     return {
       Program(node: ESTree.Program) {

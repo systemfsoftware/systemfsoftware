@@ -33,7 +33,7 @@ export const executorRequiresDescription = defineRule({
   create(context: Context) {
     if (isTestFile(context.filename)) return {}
 
-    const workflowCalls: Array<{ node: ESTree.CallExpression; name: string }> = []
+    const workflowCalls: { node: ESTree.CallExpression; name: string }[] = []
     const workflowBindingNames = new Set<string>()
     const workflowNamespaceNames = new Set<string>()
     const cellBindings = new Set<string>()

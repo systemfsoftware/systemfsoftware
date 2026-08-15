@@ -8,8 +8,8 @@ import base from '../oxlint-config.base.js'
  * plugin imports `effect-cell-types` directly and sits outside the aggregate to keep the
  * graph acyclic — OX-DL1) are exempt from base registration.
  */
-const CONSUMER_DELIVERED_CELLS: ReadonlyArray<string> = ['executor']
-const cellsUnderTaxonomy = (): ReadonlyArray<string> => {
+const CONSUMER_DELIVERED_CELLS: readonly string[] = ['executor']
+const cellsUnderTaxonomy = (): readonly string[] => {
   const options: unknown = cellTaxonomy.rules['cell-suffix-required']?.meta?.defaultOptions
   if (!Array.isArray(options) || options.length === 0) {
     throw new TypeError('cell-suffix-required exposes no defaultOptions to read the cell list from')

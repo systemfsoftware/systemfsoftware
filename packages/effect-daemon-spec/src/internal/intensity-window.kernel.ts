@@ -2,20 +2,20 @@ export const isWithinWindow = (now: number, windowMillis: number) => (t: number)
 
 const keepWithin = (now: number, windowMillis: number) =>
 (
-  ts: ReadonlyArray<number>,
-): ReadonlyArray<number> => ts.filter(isWithinWindow(now, windowMillis))
+  ts: readonly number[],
+): readonly number[] => ts.filter(isWithinWindow(now, windowMillis))
 
 export const pruneTimestamps = (
-  ts: ReadonlyArray<number>,
+  ts: readonly number[],
   now: number,
   windowMillis: number,
-): ReadonlyArray<number> => keepWithin(now, windowMillis)(ts)
+): readonly number[] => keepWithin(now, windowMillis)(ts)
 
 export const recordTimestamp = (
-  ts: ReadonlyArray<number>,
+  ts: readonly number[],
   now: number,
   windowMillis: number,
-): ReadonlyArray<number> => [now, ...pruneTimestamps(ts, now, windowMillis)]
+): readonly number[] => [now, ...pruneTimestamps(ts, now, windowMillis)]
 
 export const exceedsRestarts = (count: number, restarts: number): boolean => count > restarts
 

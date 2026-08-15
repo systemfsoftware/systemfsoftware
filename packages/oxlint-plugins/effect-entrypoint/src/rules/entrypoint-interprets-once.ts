@@ -39,7 +39,7 @@ export const entrypointInterpretsOnce = defineRule({
   create(context: Context) {
     if (!isEntrypointFile(context.filename)) return {}
 
-    const edges: Array<{ node: ESTree.Node; name: string }> = []
+    const edges: { node: ESTree.Node; name: string }[] = []
 
     return {
       CallExpression(node: ESTree.CallExpression) {

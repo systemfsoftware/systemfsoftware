@@ -33,6 +33,6 @@ export default defineConfig({
 | `state-no-raw-primitive-exports` | An exported `Map`/`Set`/`Ref`/`Deferred`/`Semaphore`/`TRef` — the surface must be domain-typed (`withLock`, `joinInFlight`, `ask`, `tell`) |
 | `state-single-tag-export`        | Zero or more than one exported `Context.Tag` — the Tag is the cell's identity; competing Tags defeat the quarantine                        |
 
-Spec of record: `skill://architect-state` (gates STA1–STA5). STA3 and STA5 are review-gated and out of mechanical reach for this package; STA3 is owned by the importing pure cell, STA5 by `cell-taxonomy`.
+Two constraints stay review-gated and out of mechanical reach for this package: how an importing pure cell depends on the state surface (owned by that cell), and the `*.state.ts` suffix itself (owned by `cell-taxonomy`).
 
 [Apache 2.0](https://github.com/systemfsoftware/systemfsoftware/blob/main/LICENSE)

@@ -18,7 +18,7 @@ export interface SupervisorHealth {
   readonly ready: Effect.Latch
   readonly healthy: Effect.Latch
   readonly paused: Effect.Latch
-  readonly children: ReadonlyArray<DaemonHealth | SupervisorHealth>
+  readonly children: readonly (DaemonHealth | SupervisorHealth)[]
 }
 
 export interface DynamicHandle<Args, R = never> {

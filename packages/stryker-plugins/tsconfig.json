@@ -5,9 +5,7 @@
     "customConditions": [
       "@systemfsoftware/source"
     ],
-    "types": [
-      "node"
-    ]
+    "types": []
   },
   "include": [
     "src",

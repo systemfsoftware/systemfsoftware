@@ -101,7 +101,7 @@ export const runFileOrEmpty = (path: string): Effect.Effect<string, PlatformErro
     return yield* fs.readFileString(path).pipe(Effect.orElseSucceed(() => ''))
   })
 
-export const runInvocations = (dir: string): Effect.Effect<ReadonlyArray<string>, PlatformError, FileSystem> =>
+export const runInvocations = (dir: string): Effect.Effect<readonly string[], PlatformError, FileSystem> =>
   Effect.map(runFileOrEmpty(`${dir}/ran.log`), (text) => text.split('\n').filter((line) => line !== ''))
 
 /** Write a `claude/settings.json` that wires a path guard on Edit|Write. */

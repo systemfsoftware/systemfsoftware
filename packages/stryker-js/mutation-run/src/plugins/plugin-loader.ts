@@ -12,7 +12,7 @@ import { defaultOptions } from '../config/options-validator.js'
 const IGNORED_PACKAGES = ['core', 'api', 'util', 'instrumenter']
 
 interface PluginModule {
-  strykerPlugins: Array<Plugin<PluginKind>>
+  strykerPlugins: Plugin<PluginKind>[]
 }
 
 interface SchemaValidationContribution {
@@ -26,11 +26,11 @@ export interface LoadedPlugins {
   /**
    * The JSON schema contributions loaded
    */
-  schemaContributions: Array<Record<string, unknown>>
+  schemaContributions: Record<string, unknown>[]
   /**
    * The actual Stryker plugins loaded, sorted by type
    */
-  pluginsByKind: Map<PluginKind, Array<Plugin<PluginKind>>>
+  pluginsByKind: Map<PluginKind, Plugin<PluginKind>[]>
   /**
    * The import specifiers or full URL paths to the actual plugins
    */
@@ -71,7 +71,7 @@ export class PluginLoader {
 
     const result: LoadedPlugins = {
       schemaContributions: [],
-      pluginsByKind: new Map<PluginKind, Array<Plugin<PluginKind>>>(),
+      pluginsByKind: new Map<PluginKind, Plugin<PluginKind>[]>(),
       pluginModulePaths: [],
     }
 
@@ -155,7 +155,7 @@ export class PluginLoader {
 
   private async loadPlugin(descriptor: string): Promise<
     | {
-      plugins: Array<Plugin<PluginKind>> | undefined
+      plugins: Plugin<PluginKind>[] | undefined
       schemaContribution: Record<string, unknown> | undefined
     }
     | undefined
