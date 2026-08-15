@@ -238,6 +238,16 @@
       "outputs": [],
       "cache": true
     },
+    "//#check:executor-vocabulary": {
+      "inputs": [
+        "$TURBO_ROOT$/scripts/guards/generate-executor-vocabulary.ts",
+        "$TURBO_ROOT$/scripts/guards/deno.jsonc",
+        "$TURBO_ROOT$/packages/effect-cell-types/src/**",
+        "$TURBO_ROOT$/packages/oxlint-plugins/effect-executor/src/rules/vocabulary.generated.ts"
+      ],
+      "outputs": [],
+      "cache": true
+    },
     "//#check:script-provenance": {
       "inputs": [
         "$TURBO_ROOT$/scripts/**"

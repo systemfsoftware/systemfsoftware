@@ -162,6 +162,14 @@ const MANIFEST = new Map([
     'local-tooling',
     'Applies and reverts one extra Cell phase inside packages/effect-cell-types/src/Cell.ts to re-measure which files a phase addition forces edits in. Wired into no chain; a reproducible experiment, never a gate.',
   ]],
+  ['guards/generate-executor-vocabulary.ts', [
+    'local-tooling',
+    'Renders the executor rules\u0027 phase/purity/I/O vocabulary from a walk of the Cell description, and with --check fails when the committed result does not reproduce byte-for-byte. It cannot live in a package: effect-executor importing the description closes the turbo cycle effect-executor -> effect-cell-types -> effect-gherkin-spec -> oxlint-config -> effect-dmmf -> effect-executor, which turbo names as the only breakable edge.',
+  ]],
+  ['guards/deno.jsonc', [
+    'local-tooling',
+    'Deno config for the guards above: maps the description import to its source, because nothing in scripts/ declares workspace dependencies and a root script must acquire no package edge.',
+  ]],
 ])
 
 const lineOf = (source, offset) => {

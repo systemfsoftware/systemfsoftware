@@ -1,0 +1,22 @@
+{
+  // Guards run under Deno, and one of them walks a Cell description to render the executor rules'
+  // vocabulary. The import is mapped to the description's source rather than a bare specifier:
+  // nothing in `scripts/` declares workspace dependencies, so there is no `node_modules` entry to
+  // resolve, and a root script must not acquire a package edge — `effect-executor` already cannot
+  // depend on the description without closing a turbo build cycle.
+  "imports": {
+    "@systemfsoftware/effect-cell-types": "../../packages/effect-cell-types/src/Cell.ts",
+  },
+  "nodeModulesDir": "manual",
+  // No lockfile. Deno writes `deno.lock` beside the config it happened to read, duplicating
+  // versions `pnpm-lock.yaml` already owns.
+  "lock": false,
+  "lint": {
+    "rules": { "include": ["no-sync-fn-in-async-fn"] },
+  },
+  "compilerOptions": {
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+  },
+}
