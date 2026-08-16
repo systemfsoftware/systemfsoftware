@@ -4,7 +4,7 @@
  * probe (memcached never logs on startup and the port forwarder accepts
  * before the guest listens), carried as a `ProtocolReply` readiness step.
  */
-import type { ModulePreset } from '../preset.schema.js'
+import type { ModulePreset } from '../preset.js'
 import { memcachedVersionProbeStep } from '../readiness.js'
 
 export const MemcachedPreset: ModulePreset = {

@@ -28,8 +28,8 @@ import { expect } from 'vitest'
 import { readLedgerEntries } from '../src/lifecycle/hygiene/ledger.js'
 import { _resetForTests, syncCleanupIds } from '../src/lifecycle/hygiene/sync-exit.js'
 import { _resetReaperForTests } from '../src/lifecycle/hygiene/watchdog.js'
-import { launchContainer, type LaunchOptions } from '../src/lifecycle/launch.executor.js'
-import type { ContainerSpec } from '../src/model/container-spec.schema.js'
+import { launchContainer, type LaunchOptions } from '../src/lifecycle/launch.js'
+import type { ContainerSpec } from '../src/model/container-spec.js'
 import { BackendError } from '../src/model/errors.js'
 import {
   newContainerSpec,
@@ -39,7 +39,7 @@ import {
   withNetwork,
   withTmpfsRoot,
 } from '../src/model/spec-combinators.js'
-import { issuedView } from '../src/runtime/free-ports.kernel.js'
+import { issuedView } from '../src/runtime/free-ports.js'
 import { RunId } from '../src/runtime/run-id.js'
 import { SandboxRuntime, VirtualNetworks } from '../src/runtime/runtime.js'
 import {

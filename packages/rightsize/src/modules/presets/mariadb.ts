@@ -5,7 +5,7 @@
  * the same line as `port: 3306` — the temp init server prints `port: 0`
  * and can never false-match.
  */
-import type { ModulePreset } from '../preset.schema.js'
+import type { ModulePreset } from '../preset.js'
 
 export const MariaDBPreset: ModulePreset = {
   id: 'mariadb',

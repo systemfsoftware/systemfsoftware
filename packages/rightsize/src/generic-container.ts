@@ -10,7 +10,7 @@
  * above it is pure data transformation (R2: no I/O at construction).
  *
  * `start()` applies the launch CELL description (see
- * `launch.executor.ts`) through the library interpreter: pre-I/O
+ * `launch.ts`) through the library interpreter: pre-I/O
  * validation short-circuits with zero backend calls; a successful launch
  * returns a `RunningContainer` whose backend ops (exec/logs/followOutput/
  * copy) read through the `SandboxRuntime` service — the carrier — and
@@ -38,8 +38,8 @@ import {
   launchContainer,
   type LaunchOptions,
   type RunningHandle,
-} from './lifecycle/launch.executor.js'
-import type { ContainerSpec, ExecRequest, ExecResult } from './model/container-spec.schema.js'
+} from './lifecycle/launch.js'
+import type { ContainerSpec, ExecRequest, ExecResult } from './model/container-spec.js'
 import { BackendError, RelativeContainerPathError } from './model/errors.js'
 import {
   newContainerSpec,
@@ -62,7 +62,7 @@ import {
   withWaitStrategy,
   withWorkingDir,
 } from './model/spec-combinators.js'
-import type { WaitStrategy } from './model/wait.schema.js'
+import type { WaitStrategy } from './model/wait.js'
 import type { RightsizeConfig } from './runtime/config.js'
 import { SandboxRuntime } from './runtime/runtime.js'
 import type { BackendName, FollowHandle, SandboxHandle } from './runtime/runtime.js'

@@ -20,7 +20,7 @@ import type {
   HealthStatus,
   HttpBodyMatcher,
   HttpMethod,
-} from '../model/wait.schema.js'
+} from '../model/wait.js'
 
 /** Ready once every exposed port accepts a read probe. The default strategy. */
 export const forPort = (): ForPort => ({ _tag: 'ForPort' })

@@ -6,7 +6,7 @@
  * X Plugin prints `33060`, both of which would false-match an unanchored
  * pattern or a naive occurrence count.
  */
-import type { ModulePreset } from '../preset.schema.js'
+import type { ModulePreset } from '../preset.js'
 
 export const MySQLPreset: ModulePreset = {
   id: 'mysql',

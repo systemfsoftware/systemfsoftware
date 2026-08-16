@@ -5,7 +5,7 @@
  * before the guest boots; overriding it to an empty string is a no-op for
  * docker builds and safety for msb. Heap sized down, 2560 MB floor.
  */
-import type { ModulePreset } from '../preset.schema.js'
+import type { ModulePreset } from '../preset.js'
 
 export const CassandraPreset: ModulePreset = {
   id: 'cassandra',

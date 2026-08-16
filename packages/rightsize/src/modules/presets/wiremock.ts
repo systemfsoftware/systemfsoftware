@@ -3,7 +3,7 @@
  * (`WireMockContainer`): a real WireMock server for the TypeScript
  * ecosystem, readiness on the dependency-free `/__admin/health` endpoint.
  */
-import type { ModulePreset } from '../preset.schema.js'
+import type { ModulePreset } from '../preset.js'
 
 export const WireMockPreset: ModulePreset = {
   id: 'wiremock',

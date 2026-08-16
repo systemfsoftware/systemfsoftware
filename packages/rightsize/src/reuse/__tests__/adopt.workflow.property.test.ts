@@ -9,7 +9,7 @@ import { it } from '@effect/vitest'
 import { Result, Schema as S } from 'effect'
 import { FastCheck as fc } from 'effect/testing'
 
-import { ContainerSpec } from '../../model/container-spec.schema.js'
+import { ContainerSpec } from '../../model/container-spec.js'
 import { decideReuseAdopt } from '../adopt.workflow.js'
 import type { RegistryReadResult } from '../registry.js'
 

@@ -6,7 +6,7 @@
  * the accessors are the only way code reaches into it.
  */
 import { Option } from 'effect'
-import type { ModulePreset } from './preset.schema.js'
+import type { ModulePreset } from './preset.js'
 import { ArangoPreset } from './presets/arango.js'
 import { CassandraPreset } from './presets/cassandra.js'
 import { ClickHousePreset } from './presets/clickhouse.js'

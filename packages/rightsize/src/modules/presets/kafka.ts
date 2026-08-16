@@ -5,7 +5,7 @@
  * `customizeSpec`, declared here as the `TemplateEnv` transform. The
  * `KAFKA_HEAP_OPTS` override keeps the JVM inside msb's default RAM.
  */
-import type { ModulePreset } from '../preset.schema.js'
+import type { ModulePreset } from '../preset.js'
 
 export const KafkaPreset: ModulePreset = {
   id: 'kafka',

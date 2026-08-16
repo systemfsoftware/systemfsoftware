@@ -5,7 +5,7 @@
  * strips as a registry host. Health lives on the management port (9000) in
  * 26.x, so readiness probes `/health/ready` there.
  */
-import type { ModulePreset } from '../preset.schema.js'
+import type { ModulePreset } from '../preset.js'
 
 export const KeycloakPreset: ModulePreset = {
   id: 'keycloak',

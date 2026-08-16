@@ -5,7 +5,7 @@
  * "ready to accept connections" lines — the entrypoint boots once to run
  * initdb, then again for real; the second listen is the durable one.
  */
-import type { ModulePreset } from '../preset.schema.js'
+import type { ModulePreset } from '../preset.js'
 
 export const PostgresPreset: ModulePreset = {
   id: 'postgres',

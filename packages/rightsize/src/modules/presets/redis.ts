@@ -4,7 +4,7 @@
  * line, not a TCP probe: the port forwarder can accept before the guest
  * serves, and the log line sees through that window.
  */
-import type { ModulePreset } from '../preset.schema.js'
+import type { ModulePreset } from '../preset.js'
 
 export const RedisPreset: ModulePreset = {
   id: 'redis',

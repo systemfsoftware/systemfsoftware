@@ -33,7 +33,7 @@ import * as readline from 'node:readline'
 
 import { Effect, Match } from 'effect'
 
-import type { ExecResult } from '../model/container-spec.schema.js'
+import type { ExecResult } from '../model/container-spec.js'
 import { BackendError } from '../model/errors.js'
 
 /** A spawned msb child exactly as the CLI driver consumes it: raw streams, an exit promise, a kill. */

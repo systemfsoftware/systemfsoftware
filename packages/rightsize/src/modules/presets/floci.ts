@@ -5,7 +5,7 @@
  * upstream class has no bare constructor — the factory choice is data here:
  * three rows in the registry, each with its own image-compat gate.
  */
-import type { ModulePreset } from '../preset.schema.js'
+import type { ModulePreset } from '../preset.js'
 
 const flociPreset = (
   id: string,

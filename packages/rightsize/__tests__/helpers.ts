@@ -6,8 +6,8 @@
  */
 import { Effect, Layer } from 'effect'
 
-import type { RuntimeCapabilities } from '../src/model/capabilities.schema.js'
-import type { ContainerSpec } from '../src/model/container-spec.schema.js'
+import type { RuntimeCapabilities } from '../src/model/capabilities.js'
+import type { ContainerSpec } from '../src/model/container-spec.js'
 import type { BackendError, PortBindConflictError } from '../src/model/errors.js'
 import { RightsizeConfig } from '../src/runtime/config.js'
 import type { RightsizeConfigService } from '../src/runtime/config.js'

@@ -25,17 +25,12 @@ import {
   VirtualNetworks,
   type VirtualNetworksService,
 } from '../runtime/runtime.js'
-import { createMsbCheckpoints } from './checkpoint.adapter.js'
+import { createMsbCheckpoints } from './checkpoint.js'
 import { type CommandRunnerService, createCommandRunner } from './command-runner.js'
-import { createMsbImages } from './images.adapter.js'
-import { createMsbNetworks } from './networks.tunnel.js'
-import { type ProvisionerOptions, provisionMsb } from './provisioner.adapter.js'
-import {
-  createMsbBackendState,
-  createMsbRuntime,
-  defaultMsbRuntimeOptions,
-  type MsbRuntimeOptions,
-} from './runtime.adapter.js'
+import { createMsbImages } from './images.js'
+import { createMsbNetworks } from './networks.js'
+import { type ProvisionerOptions, provisionMsb } from './provisioning.js'
+import { createMsbBackendState, createMsbRuntime, defaultMsbRuntimeOptions, type MsbRuntimeOptions } from './runtime.js'
 
 /** The four services one msb backend instance provides. */
 export interface MsbBackendServices {

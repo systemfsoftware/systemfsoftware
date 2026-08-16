@@ -22,7 +22,7 @@ import * as path from 'node:path'
 
 import { Effect } from 'effect'
 
-import type { ContainerSpec } from '../model/container-spec.schema.js'
+import type { ContainerSpec } from '../model/container-spec.js'
 import { BackendError, InvalidCheckpointNameError } from '../model/errors.js'
 import type { CheckpointRegistryEntry, CheckpointRegistrySpec } from './checkpoint.js'
 

@@ -4,7 +4,7 @@
  * The image bakes `-Xmx4G` into its launch scripts, so 4096 MB is a hard
  * floor, not a tunable default — measured upstream.
  */
-import type { ModulePreset } from '../preset.schema.js'
+import type { ModulePreset } from '../preset.js'
 
 export const PinotPreset: ModulePreset = {
   id: 'pinot',

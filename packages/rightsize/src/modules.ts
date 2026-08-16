@@ -9,10 +9,10 @@
  */
 export * from './modules/helpers.js'
 export * from './modules/index.js'
-export * from './modules/preset.schema.js'
+export * from './modules/preset.js'
 export * from './modules/readiness.js'
 export * from './modules/spec-builder.js'
 // Payload types the modules surface's signatures reference — re-exported so
 // the ./modules rollup is self-contained (the instal interior stays sealed).
-export type { ContainerSpec, EnvPair } from './model/container-spec.schema.js'
-export type { PortBinding } from './model/ports.schema.js'
+export type { ContainerSpec, EnvPair } from './model/container-spec.js'
+export type { PortBinding } from './model/ports.js'

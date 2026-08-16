@@ -19,15 +19,15 @@ import { Context, Effect, Layer } from 'effect'
 import { BackendError } from '../model/errors.js'
 import { CheckpointStore, ImageRegistry, SandboxRuntime, VirtualNetworks } from '../runtime/runtime.js'
 import { Selection } from '../runtime/selection.workflow.js'
-import { makeDockerCheckpoints } from './checkpoint.adapter.js'
+import { makeDockerCheckpoints } from './checkpoint.js'
 import { makeDockerClient } from './client.js'
 import type { DockerClient } from './client.js'
-import { makeDockerImages } from './images.adapter.js'
-import { makeDockerNetworks } from './networks.adapter.js'
-import { makeDockerRuntime } from './runtime.adapter.js'
+import { makeDockerImages } from './images.js'
+import { makeDockerNetworks } from './networks.js'
+import { makeDockerRuntime } from './runtime.js'
 
-export { registerDockerCleanupSync } from './cli.shellout.js'
-export type { DockerCleanupSync } from './cli.shellout.js'
+export { registerDockerCleanupSync } from './cli.js'
+export type { DockerCleanupSync } from './cli.js'
 
 /** The client as a context member the four adapter layers resolve against. */
 export class DockerClientContext extends Context.Service<DockerClientContext, DockerClient>()(

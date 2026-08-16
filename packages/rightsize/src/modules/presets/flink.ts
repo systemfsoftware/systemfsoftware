@@ -8,7 +8,7 @@
  * pre-I/O — the declared row below covers the JobManager alone, which runs
  * on both backends.
  */
-import type { ModulePreset } from '../preset.schema.js'
+import type { ModulePreset } from '../preset.js'
 
 export const FlinkPreset: ModulePreset = {
   id: 'flink',

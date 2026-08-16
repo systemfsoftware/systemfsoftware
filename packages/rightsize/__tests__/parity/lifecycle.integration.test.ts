@@ -10,7 +10,7 @@ import { Effect } from 'effect'
 import { expect } from 'vitest'
 
 import { fromImage } from '../../src/generic-container.js'
-import { launchContainer } from '../../src/lifecycle/launch.executor.js'
+import { launchContainer } from '../../src/lifecycle/launch.js'
 import { Wait } from '../../src/wait/strategies.js'
 import { laneOutcome } from './helpers.js'
 import { containerExists, noExec, portIsReachable } from './probes.js'
@@ -69,17 +69,29 @@ Feature('the lifecycle contract runs real containers through the docker backend'
   scenario(
     'Should_publish_a_port_to_the_host_loopback_When_the_workload_listens',
     Gherkin.Do.pipe(
-      Given('a python http server starts with an exposed port')('container', () => startPython()),
+      When('a python http server starts with an exposed port, timed')('trial', () =>
+        Effect.gen(function*() {
+          const startedAt = performance.now()
+          const outcome = yield* startPython()
+          const readyMs = performance.now() - startedAt
+          return { outcome, readyMs }
+        })),
       When('the mapped port is probed over 127.0.0.1')('reachable', (s) => {
-        const port = s.container.ok && s.container.value !== undefined
-          ? s.container.value.getMappedPort(8000)
+        const port = s.trial.outcome.ok && s.trial.outcome.value !== undefined
+          ? s.trial.outcome.value.getMappedPort(8000)
           : undefined
         return port === undefined
           ? Effect.succeed(false)
           : Effect.promise(() => portIsReachable(port))
       }),
-      Then('the probe succeeded')((s) => {
-        expect(s.container.ok).toBe(true)
+      Then('the wait resolved within the ready-budget class and the probe succeeded')((s) => {
+        expect(s.trial.outcome.ok).toBe(true)
+        // Ready-latency timing class: the port wait (R11's interpreter) must
+        // resolve inside the same order of magnitude the whole suite's starts
+        // occupy — a regressed wait loop (or a broken poll interval) surfaces
+        // here as a launch that took an order of magnitude longer than the
+        // other start-to-ready observations in this lane.
+        expect(s.trial.readyMs).toBeLessThan(60_000)
         expect(s.reachable).toBe(true)
       }),
     ),

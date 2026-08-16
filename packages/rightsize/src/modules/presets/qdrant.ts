@@ -4,7 +4,7 @@
  * Readiness is a plain HTTP 200 on `/readyz` — answered on the very first
  * poll in the verified boot; no floor or timeout override warranted.
  */
-import type { ModulePreset } from '../preset.schema.js'
+import type { ModulePreset } from '../preset.js'
 
 export const QdrantPreset: ModulePreset = {
   id: 'qdrant',

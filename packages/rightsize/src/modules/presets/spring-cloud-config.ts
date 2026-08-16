@@ -3,7 +3,7 @@
  * (`SpringCloudConfigContainer`). Paketo's memory calculator sizes this JVM
  * image above msb's default microVM RAM, so the 1024 MB floor is declared.
  */
-import type { ModulePreset } from '../preset.schema.js'
+import type { ModulePreset } from '../preset.js'
 
 export const SpringCloudConfigPreset: ModulePreset = {
   id: 'spring-cloud-config',

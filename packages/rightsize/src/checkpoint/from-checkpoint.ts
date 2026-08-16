@@ -19,7 +19,7 @@
  * `CheckpointBackendMismatchError` before any backend call, and a
  * `keepAlive` restore is `ReuseFromCheckpointError` under active reuse.
  */
-import type { ContainerSpec } from '../model/container-spec.schema.js'
+import type { ContainerSpec } from '../model/container-spec.js'
 import type { Checkpoint } from './checkpoint.js'
 
 /** A restore-ready launch: the spec to start, and the option seam its source backend rides on. */

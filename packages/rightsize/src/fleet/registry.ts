@@ -15,7 +15,7 @@
  * reconstructed by id that then `remove()` their container drop it from the
  * registry (the same row a launch's scope teardown would leave behind).
  */
-import type { PortBinding } from '../model/ports.schema.js'
+import type { PortBinding } from '../model/ports.js'
 import type { BackendName } from '../runtime/runtime.js'
 
 /** One live container as the fleet sees it. */

@@ -7,7 +7,7 @@
  * verdict kernel the interpreter keys on.
  */
 import { Match } from 'effect'
-import type { ReadinessStep } from './preset.schema.js'
+import type { ReadinessStep } from './preset.js'
 
 /** memcached's upstream `MemcachedRespondsStrategy` as declared data (readiness.ts owns the behavior's data shape). */
 export const memcachedVersionProbeStep = (): ReadinessStep => ({

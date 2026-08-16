@@ -73,21 +73,31 @@ rules:
       with the mutation-ready units) is the only scoping instrument"
 
   - id: RS-BOUNDARY
-    title: The Workflow.make boundary is the sandwich, names are convention
+    title: The Workflow.make boundary is the sandwich; names carry no taxonomy
     do: |
       author the package's decisions through the repo's architecture boundary —
       read impure at the edge, decide pure inside `Workflow.make` (the
       brand-checked constructor from `@systemfsoftware/effect-cell-types`),
       write impure on the returned decision. Decisions that upstream made by
       throwing in constructors or in `start()` pre-I/O guards travel as typed
-      validation inside the launch workflow, before any I/O
+      validation inside the launch workflow, before any I/O. Files are named
+      by domain, the clanka/effect-torch shape (repos/clanka/src/Agent.ts,
+      repos/effect-torch/packages/core/src/Tensor.ts): exactly three suffixed
+      shapes exist — `*.workflow.ts` (a decision), `*.workflow.property.test.ts`
+      (its laws), and `__tests__/**/*.integration.test.ts` (behaviour) — and
+      nothing else carries a cell suffix
     dont: put I/O inside a `Workflow.make` body; mint a second projection of a
-      port (REPO-A3); or treat `*.kernel.ts` / `*.workflow.ts` suffixes as a
-      rule key — the suffix is convention, the *make* boundary is doctrine
-    harm: a decision with an I/O edge is not a decision, and a rule keyed on a
-      filename never fires when the violation lands in a differently-named file
-    check: "«decision cells hold no import/export/process edge — the pnpm root
-      policy and review both verify impure calls stay outside `Workflow.make`"
+      port (REPO-A3); or reintroduce a `.kernel`/`.schema`/`.adapter`/
+      `.executor` style cell suffix on any file — the taxonomy was dismantled
+      2026-08-16 (user-settled; structure rides the cell library's brand
+      checks, not filenames)
+    harm: a decision with an I/O edge is not a decision; and a suffix taxonomy
+      re-created one file at a time re-imports every rule the dismantle
+      removed, until the filenames again outrank the brands as the taxonomy
+    check: "review + `pnpm --filter @systemfsoftware/rightsize lint` — the
+      no-test-file-in-src(plain-stem), property-file-purity(plain-stem), and
+      behaviour-exercises-use-case(src-import) options in oxlint.config.ts are
+      the taxonomy-free knobs; any new dotted cell suffix fails review"
 
   - id: RS-SURFACE
     title: The surface is a carrier; exports stay partitioned and internals sealed

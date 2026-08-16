@@ -38,8 +38,8 @@
 import { Workflow } from '@systemfsoftware/effect-cell-types'
 import { Match, Result, Schema as S } from 'effect'
 
-import type { RuntimeCapabilities } from '../model/capabilities.schema.js'
-import type { ContainerSpec } from '../model/container-spec.schema.js'
+import type { RuntimeCapabilities } from '../model/capabilities.js'
+import type { ContainerSpec } from '../model/container-spec.js'
 import { requireCompatibleImage } from '../model/docker-image-name.js'
 import {
   CheckpointBackendMismatchError,

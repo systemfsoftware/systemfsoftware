@@ -36,7 +36,7 @@ import * as http from 'node:http'
 import type { IncomingMessage } from 'node:http'
 import { BackendError } from '../model/errors.js'
 import { UnsupportedDockerHostError } from '../runtime/discovery/discovery.adapter.js'
-import { classifyDockerHost } from '../runtime/discovery/probe.kernel.js'
+import { classifyDockerHost } from '../runtime/discovery/probe.js'
 
 /** The daemon's default unix socket path (mirrors `DEFAULT_DOCKER_SOCKET` in the probe kernel). */
 const DEFAULT_SOCKET_PATH = '/var/run/docker.sock'

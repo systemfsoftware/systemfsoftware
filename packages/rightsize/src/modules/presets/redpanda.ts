@@ -5,7 +5,7 @@
  * transform (EXTERNAL carries the mapped host port; INTERNAL stays on the
  * alias:port siblings resolve on a library network).
  */
-import type { ModulePreset } from '../preset.schema.js'
+import type { ModulePreset } from '../preset.js'
 
 export const RedpandaPreset: ModulePreset = {
   id: 'redpanda',

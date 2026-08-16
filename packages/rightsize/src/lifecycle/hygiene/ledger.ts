@@ -51,7 +51,7 @@ import type { SpawnSyncReturns } from 'node:child_process'
 import * as fsp from 'node:fs/promises'
 import * as path from 'node:path'
 
-import { DOCKER_REAPER_KILL_COMMAND } from '../../backend-docker/cli.shellout.js'
+import { DOCKER_REAPER_KILL_COMMAND } from '../../backend-docker/cli.js'
 import type { BackendName } from '../../runtime/runtime.js'
 
 // =============================================================================

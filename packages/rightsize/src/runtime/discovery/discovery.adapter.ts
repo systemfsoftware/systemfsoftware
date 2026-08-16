@@ -14,12 +14,7 @@
  */
 import { Context, Effect, Layer, Schema as S } from 'effect'
 import * as net from 'node:net'
-import {
-  classifyDockerHost,
-  orderedSocketCandidates,
-  type ProbeEnvironment,
-  type SocketProbeVerdict,
-} from './probe.kernel.js'
+import { classifyDockerHost, orderedSocketCandidates, type ProbeEnvironment, type SocketProbeVerdict } from './probe.js'
 
 /** Ceiling on one connect probe. A live daemon connects in microseconds; a wedged backlog must fail the probe instead of hanging discovery. */
 export const PROBE_TIMEOUT_MS = 2_000

@@ -5,7 +5,7 @@
  * readiness steps: rs.initiate, then await a PRIMARY — so
  * `connectionString` is usable the moment start() returns.
  */
-import type { ModulePreset } from '../preset.schema.js'
+import type { ModulePreset } from '../preset.js'
 import { mongodbReplicaSetSteps } from '../readiness.js'
 
 const replicaSetSteps = mongodbReplicaSetSteps()

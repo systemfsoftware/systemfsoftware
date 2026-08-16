@@ -18,7 +18,7 @@
  */
 import { Effect, Option } from 'effect'
 
-import { type DiagnosticsContainer, DiagnosticsReport } from '../model/diagnostics.schema.js'
+import { type DiagnosticsContainer, DiagnosticsReport } from '../model/diagnostics.js'
 import { newContainerSpec } from '../model/spec-combinators.js'
 import { SandboxRuntime } from '../runtime/runtime.js'
 import { boundedTail, FLEET_HOST } from './fleet.js'

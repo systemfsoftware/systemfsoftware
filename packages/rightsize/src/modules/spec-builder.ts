@@ -11,10 +11,10 @@
  * spec-build time without touching a backend.
  */
 import { Match, Option, Result } from 'effect'
-import type { ContainerSpec } from '../model/container-spec.schema.js'
+import type { ContainerSpec } from '../model/container-spec.js'
 import { requireCompatibleImage } from '../model/docker-image-name.js'
 import { IncompatibleImageError } from '../model/errors.js'
-import type { PortBinding } from '../model/ports.schema.js'
+import type { PortBinding } from '../model/ports.js'
 import {
   newContainerSpec,
   waitingFor,
@@ -26,7 +26,7 @@ import {
   withStartupTimeout,
 } from '../model/spec-combinators.js'
 import { hostPortFor } from './helpers.js'
-import type { ModulePreset, SpecTransform } from './preset.schema.js'
+import type { ModulePreset, SpecTransform } from './preset.js'
 
 /** The float-in default image of a row; `none` means an explicit image is required (elasticsearch). */
 export const defaultImageOf = (preset: ModulePreset): Option.Option<string> =>

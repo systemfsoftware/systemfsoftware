@@ -4,7 +4,7 @@
  * mainstream client parses `redis://` and Valkey speaks the same wire
  * protocol.
  */
-import type { ModulePreset } from '../preset.schema.js'
+import type { ModulePreset } from '../preset.js'
 
 export const ValkeyPreset: ModulePreset = {
   id: 'valkey',

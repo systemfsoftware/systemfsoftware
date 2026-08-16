@@ -12,7 +12,7 @@ import { Effect, Layer, type Scope } from 'effect'
 import { expect } from 'vitest'
 
 import { fromImage, GenericContainer, type RunningContainer, toRunningContainer } from '../src/generic-container.js'
-import { launchContainer } from '../src/lifecycle/launch.executor.js'
+import { launchContainer } from '../src/lifecycle/launch.js'
 import { withCommand, withEnv, withNetwork } from '../src/model/spec-combinators.js'
 import { SandboxRuntime, VirtualNetworks } from '../src/runtime/runtime.js'
 import {

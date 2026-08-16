@@ -14,7 +14,7 @@
  * `undefined` — JSON has no `undefined`), `exposedPorts` as guest ports
  * only.
  */
-import type { ContainerSpec } from '../model/container-spec.schema.js'
+import type { ContainerSpec } from '../model/container-spec.js'
 
 /** The reduced spec subset a checkpoint persists — see the module doc. */
 export interface CheckpointRegistrySpec {

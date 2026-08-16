@@ -12,7 +12,7 @@
  * values (KTD6).
  */
 import { Schema as S } from 'effect'
-import { FiniteNumber } from './container-spec.schema.js'
+import { FiniteNumber } from './container-spec.js'
 
 /**
  * A requested capability is not supported by the active backend.

@@ -7,7 +7,7 @@
  * TLS/auth; 2560 MB floor; readiness is a plain HTTP 200 on `/` — cluster
  * health stays `yellow` on one node and would hang a green-wait forever.
  */
-import type { ModulePreset } from '../preset.schema.js'
+import type { ModulePreset } from '../preset.js'
 
 export const ElasticsearchPreset: ModulePreset = {
   id: 'elasticsearch',

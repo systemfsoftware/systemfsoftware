@@ -6,7 +6,7 @@
  * connectors listen; memory floor 1024 makes Neo4j's memory calculator
  * (page cache + heap sized off visible RAM) accept the guest.
  */
-import type { ModulePreset } from '../preset.schema.js'
+import type { ModulePreset } from '../preset.js'
 
 export const Neo4jPreset: ModulePreset = {
   id: 'neo4j',

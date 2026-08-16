@@ -43,12 +43,12 @@ import { Effect, Result, Schema as S } from 'effect'
 
 import { makeDockerClient } from '../backend-docker/client.js'
 import type { DockerClient } from '../backend-docker/client.js'
-import { makeDockerNetworks } from '../backend-docker/networks.adapter.js'
-import { makeDockerRuntime } from '../backend-docker/runtime.adapter.js'
+import { makeDockerNetworks } from '../backend-docker/networks.js'
+import { makeDockerRuntime } from '../backend-docker/runtime.js'
 import { createCommandRunner } from '../backend-msb/command-runner.js'
 import type { CommandRunnerService } from '../backend-msb/command-runner.js'
 import { msbInstallPaths, platformFor } from '../backend-msb/platform.js'
-import { resolveCacheDir } from '../backend-msb/provisioner/env.kernel.js'
+import { resolveCacheDir } from '../backend-msb/provisioner/env.js'
 import {
   copyInto,
   copyOutOf,
@@ -60,10 +60,10 @@ import {
   logsOf,
   removeIn,
   stopSandbox,
-} from '../backend-msb/runtime.adapter.js'
-import type { ContainerSpec, ExecRequest, ExecResult } from '../model/container-spec.schema.js'
+} from '../backend-msb/runtime.js'
+import type { ContainerSpec, ExecRequest, ExecResult } from '../model/container-spec.js'
 import { BackendError } from '../model/errors.js'
-import { PortBinding } from '../model/ports.schema.js'
+import { PortBinding } from '../model/ports.js'
 import { newContainerSpec } from '../model/spec-combinators.js'
 import { RightsizeConfig } from '../runtime/config.js'
 import type { RightsizeConfigService } from '../runtime/config.js'

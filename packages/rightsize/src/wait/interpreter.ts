@@ -42,7 +42,7 @@ import { Clock, Duration, Effect, Match, Result } from 'effect'
 import * as http from 'node:http'
 import * as net from 'node:net'
 import { setTimeout as nodeSetTimeout } from 'node:timers'
-import type { ContainerSpec } from '../model/container-spec.schema.js'
+import type { ContainerSpec } from '../model/container-spec.js'
 import { ContainerLaunchError, UnsupportedByBackendError } from '../model/errors.js'
 import type {
   ForHealthCheck,
@@ -52,7 +52,7 @@ import type {
   HttpBodyMatcher,
   HttpMethod,
   WaitStrategy,
-} from '../model/wait.schema.js'
+} from '../model/wait.js'
 import type { SandboxHandle, SandboxRuntimeService } from '../runtime/runtime.js'
 import { SandboxRuntime } from '../runtime/runtime.js'
 import {
@@ -63,7 +63,7 @@ import {
   isTriviallyReady,
   validateWaitSetup,
   type WaitVerdict,
-} from './verdict.kernel.js'
+} from './verdict.js'
 
 // =============================================================================
 // Probe plumbing — parseable, injectable I/O

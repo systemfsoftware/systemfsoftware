@@ -5,7 +5,7 @@
  * `MINIO_ROOT_USER`/`MINIO_ROOT_PASSWORD` default to testuser/testpassword —
  * the image rejects a root password shorter than 8 characters.
  */
-import type { ModulePreset } from '../preset.schema.js'
+import type { ModulePreset } from '../preset.js'
 
 export const MinIOPreset: ModulePreset = {
   id: 'minio',

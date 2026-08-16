@@ -3,7 +3,7 @@
  * (`RabbitMQContainer`): `rabbitmq:management` (the management plugin image
  * the readiness log line comes from), guest/guest credentials by default.
  */
-import type { ModulePreset } from '../preset.schema.js'
+import type { ModulePreset } from '../preset.js'
 
 export const RabbitMQPreset: ModulePreset = {
   id: 'rabbitmq',

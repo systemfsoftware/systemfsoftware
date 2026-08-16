@@ -7,9 +7,9 @@
  * host of a published container (upstream's `host`, always `127.0.0.1`).
  */
 import { Match, Option } from 'effect'
-import type { EnvPair } from '../model/container-spec.schema.js'
-import type { PortBinding } from '../model/ports.schema.js'
-import type { PresetHelper } from './preset.schema.js'
+import type { EnvPair } from '../model/container-spec.js'
+import type { PortBinding } from '../model/ports.js'
+import type { PresetHelper } from './preset.js'
 
 /** The host every published container is reachable on (`127.0.0.1` upstream). */
 export const containerHost = '127.0.0.1' as const

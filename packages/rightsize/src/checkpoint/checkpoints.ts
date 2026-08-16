@@ -19,7 +19,7 @@ import * as os from 'node:os'
 
 import { Clock, Effect } from 'effect'
 
-import { resolveCacheDir } from '../backend-msb/provisioner/env.kernel.js'
+import { resolveCacheDir } from '../backend-msb/provisioner/env.js'
 import {
   BackendError,
   CheckpointArtifactMissingError,
@@ -36,7 +36,7 @@ import { CheckpointStore, SandboxRuntime } from '../runtime/runtime.js'
 import type { SandboxHandle } from '../runtime/runtime.js'
 import { Selection } from '../runtime/selection.workflow.js'
 import { waitForReady, type WaitOptions } from '../wait/interpreter.js'
-import { InvalidWaitStrategyError } from '../wait/verdict.kernel.js'
+import { InvalidWaitStrategyError } from '../wait/verdict.js'
 import { type CheckpointArchiveMetadata, readCheckpointArchive, writeCheckpointArchive } from './archive.js'
 import { checkpointRef } from './checkpoint-ref.js'
 import type { Checkpoint, CheckpointRegistryEntry } from './checkpoint.js'

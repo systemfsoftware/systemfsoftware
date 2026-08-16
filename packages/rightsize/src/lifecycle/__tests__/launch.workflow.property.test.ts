@@ -16,8 +16,8 @@ import { it } from '@effect/vitest'
 import { Result, Schema as S } from 'effect'
 import { FastCheck as fc } from 'effect/testing'
 
-import { RuntimeCapabilities } from '../../model/capabilities.schema.js'
-import { ContainerSpec, type ContainerSpec as ContainerSpecType } from '../../model/container-spec.schema.js'
+import { RuntimeCapabilities } from '../../model/capabilities.js'
+import { ContainerSpec, type ContainerSpec as ContainerSpecType } from '../../model/container-spec.js'
 import type { BackendName } from '../../runtime/runtime.js'
 import { decideLaunch } from '../launch.workflow.js'
 

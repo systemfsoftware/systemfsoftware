@@ -34,7 +34,7 @@ import { Workflow } from '@systemfsoftware/effect-cell-types'
 import { Context, Effect, Layer, Match, Result, Schema as S } from 'effect'
 import { type BackendPreference, RightsizeConfig } from './config.js'
 import { RuntimeDiscovery, UnsupportedDockerHostError } from './discovery/discovery.adapter.js'
-import { type SocketProbeVerdict } from './discovery/probe.kernel.js'
+import { type SocketProbeVerdict } from './discovery/probe.js'
 import type { BackendName } from './runtime.js'
 
 // =============================================================================

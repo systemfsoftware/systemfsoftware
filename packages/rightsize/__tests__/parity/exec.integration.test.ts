@@ -10,8 +10,8 @@ import { Effect } from 'effect'
 import { expect } from 'vitest'
 
 import { fromImage, toRunningContainer } from '../../src/generic-container.js'
-import { launchContainer } from '../../src/lifecycle/launch.executor.js'
-import type { ExecResult } from '../../src/model/container-spec.schema.js'
+import { launchContainer } from '../../src/lifecycle/launch.js'
+import type { ExecResult } from '../../src/model/container-spec.js'
 import { laneOutcome, outcomeFailure } from './helpers.js'
 
 const Feature = makeFeature({ it, layer })

@@ -5,7 +5,7 @@
  * entrypoint's user/database provisioning runs a second server pass, hence
  * the 180s startup timeout.
  */
-import type { ModulePreset } from '../preset.schema.js'
+import type { ModulePreset } from '../preset.js'
 
 export const ClickHousePreset: ModulePreset = {
   id: 'clickhouse',

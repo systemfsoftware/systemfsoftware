@@ -5,7 +5,7 @@
  * the no-auth default — the two env vars are mutually exclusive on the
  * image (upstream's `customizeSpec` hook as data).
  */
-import type { ModulePreset } from '../preset.schema.js'
+import type { ModulePreset } from '../preset.js'
 
 export const ArangoPreset: ModulePreset = {
   id: 'arango',

@@ -10,10 +10,10 @@
  * last-write-wins — re-setting a key drops its prior entry and pushes the new
  * one, preserving the position of first-set untouched keys.
  */
-import type { ContainerSpec, EnvPair } from './container-spec.schema.js'
-import type { FileMount } from './container-spec.schema.js'
-import type { PortBinding } from './ports.schema.js'
-import type { WaitStrategy } from './wait.schema.js'
+import type { ContainerSpec, EnvPair } from './container-spec.js'
+import type { FileMount } from './container-spec.js'
+import type { PortBinding } from './ports.js'
+import type { WaitStrategy } from './wait.js'
 
 /**
  * A fresh spec: image and name required, every other field at its unset

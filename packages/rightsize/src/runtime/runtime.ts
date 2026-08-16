@@ -21,10 +21,10 @@
  * identical key semantics (yieldable as an Effect, `Layer.effect`-compatible).
  */
 import { Context, Effect } from 'effect'
-import type { RuntimeCapabilities } from '../model/capabilities.schema.js'
-import type { ContainerSpec, ExecRequest, ExecResult } from '../model/container-spec.schema.js'
+import type { RuntimeCapabilities } from '../model/capabilities.js'
+import type { ContainerSpec, ExecRequest, ExecResult } from '../model/container-spec.js'
 import type { BackendError, PortBindConflictError } from '../model/errors.js'
-import type { HealthStatus } from '../model/wait.schema.js'
+import type { HealthStatus } from '../model/wait.js'
 
 /** The two backends this library can select between. */
 export type BackendName = 'docker' | 'msb'

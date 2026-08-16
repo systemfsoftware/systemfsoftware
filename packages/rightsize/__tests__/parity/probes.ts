@@ -73,8 +73,6 @@ export const waitUntil = (
  */
 export const noExec = (): undefined => undefined
 
-/** The `{ exitCode, output }` twin of {@link noExec}. */
-export const noExecResult = (): { exitCode: number; output: string } | undefined => undefined
 /** One out-of-band `docker <args>` query (test-side daemon observation; the library under test never sees it). */
 export const dockerCli = (
   args: readonly string[],

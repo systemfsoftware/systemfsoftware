@@ -9,15 +9,15 @@
  *
  * @since 0.1.0
  */
-export { createMsbCheckpoints } from './backend-msb/checkpoint.adapter.js'
+export { createMsbCheckpoints } from './backend-msb/checkpoint.js'
 export { type CliChild, type CommandRunnerService, createCommandRunner } from './backend-msb/command-runner.js'
-export { createMsbImages } from './backend-msb/images.adapter.js'
+export { createMsbImages } from './backend-msb/images.js'
 export { createMsbBackend, layerMsb, type MsbBackendInstance, type MsbBackendServices } from './backend-msb/index.js'
-export { createMsbNetworks, createTunnel, type TunnelHandle } from './backend-msb/networks.tunnel.js'
-export { type ProvisionerOptions, provisionMsb, resolveProvisionerOptions } from './backend-msb/provisioner.adapter.js'
+export { createMsbNetworks, createTunnel, type TunnelHandle } from './backend-msb/networks.js'
+export { type ProvisionerOptions, provisionMsb, resolveProvisionerOptions } from './backend-msb/provisioning.js'
 export {
   createMsbRuntime,
   defaultMsbRuntimeOptions,
   type MsbRuntimeOptions,
   registerMsbCleanupSync,
-} from './backend-msb/runtime.adapter.js'
+} from './backend-msb/runtime.js'
