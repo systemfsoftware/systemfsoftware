@@ -1,0 +1,62 @@
+{
+  "name": "@systemfsoftware/omp-leaf-context",
+  "license": "Apache-2.0",
+  "version": "0.1.0",
+  "author": "Ryan Lee <drdgvhbh@gmail.com>",
+  "description": "OMP leaf AGENTS.md delivery: injects a governing leaf's AGENTS.md into the first tool result touching that leaf, non-blocking, once per leaf per session.",
+  "type": "module",
+  "exports": {
+    ".": {
+      "@systemfsoftware/source": "./src/index.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "rimraf dist && tsdown",
+    "clean": "rimraf dist",
+    "typecheck": "tsc --noEmit --incremental",
+    "test": "vitest run",
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}"
+  },
+  "peerDependencies": {
+    "@oh-my-pi/pi-coding-agent": "catalog:"
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "@oh-my-pi/pi-coding-agent": "catalog:",
+    "@systemfsoftware/effect-gherkin-spec": "workspace:^",
+    "@systemfsoftware/effect-memfs": "workspace:^",
+    "@systemfsoftware/oxlint-config": "workspace:^",
+    "@systemfsoftware/tsconfig": "workspace:^",
+    "@types/node": "catalog:",
+    "effect": "catalog:",
+    "rimraf": "catalog:",
+    "tsdown": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "omp": {
+    "extensions": [
+      "./dist/index.js"
+    ]
+  },
+  "publishConfig": {
+    "exports": {
+      ".": "./dist/index.js",
+      "./package.json": "./package.json"
+    },
+    "provenance": true
+  },
+  "inlinedDependencies": {
+    "effect": "4.0.0-rc.108"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
+    "directory": "omp/plugins/omp-leaf-context"
+  }
+}
