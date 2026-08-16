@@ -3,7 +3,7 @@
  *
  * Registers two `pi.on` handlers:
  *   - `tool_call`: ACL-decode the tool input to a `TargetPath`; when a target
- *     is present, record `toolCallId → { toolName, target }`. Never blocks,
+ *     is present, record `toolCallId → target`. Never blocks,
  *     never revises — this delivery is advisory (decision, not gate).
  *   - `tool_result`: consume the recorded call, resolve the target against
  *     `ctx.cwd`, run the workflow, and on `Inject` append the leaf block to
@@ -25,15 +25,15 @@
 import type { ExtensionAPI, ExtensionContext } from '@oh-my-pi/pi-coding-agent'
 import { Match, Result } from 'effect'
 import { decodeTarget, type TargetPath } from './leaf-context.acl.js'
-import { type LeafFs, nodeLeafFs, relativeToRoot, runLeafContext } from './leaf-context.executor.js'
+import { describeError, type LeafFs, nodeLeafFs, relativeToRoot, runLeafContext } from './leaf-context.executor.js'
 import { leafBlock } from './leaf-context.workflow.js'
 import type { RunSafe } from './run-safe.kernel.js'
 
 const PENDING_TARGETS_MAX = 1000
 const SESSION_SETS_MAX = 1000
 
-/** toolCallId → recorded target, consumed at `tool_result` time. */
-const pathByCallId = new Map<string, { readonly toolName: string; readonly target: TargetPath }>()
+/** toolCallId → target, consumed at `tool_result` time. */
+const pathByCallId = new Map<string, TargetPath>()
 /** sessionId → leaves already injected this session. */
 const injectedBySession = new Map<string, Set<string>>()
 
@@ -42,15 +42,12 @@ const readSessionId = (ctx: ExtensionContext): string => {
   return typeof id === 'string' ? id : ''
 }
 
-const rememberTarget = (
-  toolCallId: string,
-  record: { readonly toolName: string; readonly target: TargetPath },
-): void => {
+const rememberTarget = (toolCallId: string, target: TargetPath): void => {
   if (pathByCallId.size >= PENDING_TARGETS_MAX) {
     const oldest = pathByCallId.keys().next().value
     if (typeof oldest === 'string') pathByCallId.delete(oldest)
   }
-  pathByCallId.set(toolCallId, record)
+  pathByCallId.set(toolCallId, target)
 }
 
 const sessionInjected = (sessionId: string): Set<string> => {
@@ -66,26 +63,15 @@ const sessionInjected = (sessionId: string): Set<string> => {
   return set
 }
 
-const describeError = (error: unknown): string => {
-  if (error instanceof Error) return error.message
-  if (typeof error === 'string') return error
-  return 'unknown failure'
-}
-
 const logFault = (logger: ExtensionAPI['logger'] | undefined, event: string, error: unknown): void => {
-  if (logger !== undefined) {
-    try {
-      const fn = logger.warn
-      if (typeof fn === 'function') {
-        fn.call(logger, 'leaf_context.handler_fault', {
-          plugin: 'leaf_context',
-          event,
-          detail: describeError(error),
-        })
-      }
-    } catch {
-      // Telemetry must never throw — see runSafe contract.
-    }
+  try {
+    logger?.warn('leaf_context.handler_fault', {
+      plugin: 'leaf_context',
+      event,
+      detail: describeError(error),
+    })
+  } catch {
+    // Telemetry must never throw — see runSafe contract.
   }
 }
 
@@ -94,19 +80,19 @@ export const LeafContextExtension = (pi: ExtensionAPI, runSafe: RunSafe, fs: Lea
     await runSafe(async () => {
       const target = decodeTarget(event.input)
       if (Result.isFailure(target)) return
-      rememberTarget(event.toolCallId, { toolName: event.toolName, target: target.success })
+      rememberTarget(event.toolCallId, target.success)
     }, (error) => logFault(pi.logger, 'tool_call', error))
   })
 
   pi.on('tool_result', async (event, ctx) => {
     return runSafe(async () => {
-      const record = pathByCallId.get(event.toolCallId)
+      const target = pathByCallId.get(event.toolCallId)
       pathByCallId.delete(event.toolCallId)
-      if (record === undefined) return undefined
+      if (target === undefined) return undefined
 
       const sessionId = readSessionId(ctx)
       const injected = sessionInjected(sessionId)
-      const relTarget = relativeToRoot(record.target, ctx.cwd)
+      const relTarget = relativeToRoot(target, ctx.cwd)
       const outcome = await runLeafContext({ root: ctx.cwd, relTarget, injected, fs })
 
       if (Result.isFailure(outcome)) {

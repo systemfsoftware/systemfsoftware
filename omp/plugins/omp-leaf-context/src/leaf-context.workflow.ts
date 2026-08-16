@@ -48,12 +48,13 @@ export const decide = (args: DecideArgs): Result.Result<Inject | Skip, LeafConte
 }
 
 export const leafBlock = (leaf: string, content: string): string => {
-  if (content.length > INLINE_THRESHOLD) {
+  const bytes = new TextEncoder().encode(content).length
+  if (bytes > INLINE_THRESHOLD) {
     return (
       `\n\n<leaf-agents-md path="${leaf}" pointer="true">` +
-      `Leaf governance not inlined (over 6 KiB) — read ${leaf} before further changes under ${
-        dirname(leaf)
-      }/.</leaf-agents-md>`
+      `Leaf governance not inlined (over ${
+        Math.round(INLINE_THRESHOLD / 1024)
+      } KiB) — read ${leaf} before further changes under ${dirname(leaf)}/.</leaf-agents-md>`
     )
   }
   return `\n\n<leaf-agents-md path="${leaf}">\n${content}\n</leaf-agents-md>`

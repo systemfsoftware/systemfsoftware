@@ -21,6 +21,12 @@ export interface LeafFs {
   readonly readFile: (absolutePath: string) => Promise<string>
 }
 
+export const describeError = (error: unknown): string => {
+  if (error instanceof Error) return error.message
+  if (typeof error === 'string') return error
+  return 'unknown failure'
+}
+
 export const nodeLeafFs: LeafFs = {
   exists: async (p) => {
     try {
@@ -50,8 +56,9 @@ export const relativeToRoot = (target: string, root: string): string | null => {
 /**
  * Ordered, existing leaf candidates for a root-relative target: walk
  * `dirname(relTarget)` upward while `dir !== '.'`, skipping anything equal to
- * or under `repos/`, probing each `<dir>/AGENTS.md`. The walk bound means the
- * root `AGENTS.md` is never a candidate, exactly as in the hook.
+ * or under `repos/`, probing each `<dir>/AGENTS.md`. The first hit is the
+ * governing leaf (deepest first), matching the hook's early return; the walk
+ * bound means the root `AGENTS.md` is never a candidate.
  */
 export const findExistingLeafCandidates = async (
   relTarget: string,
@@ -61,9 +68,10 @@ export const findExistingLeafCandidates = async (
   const found: string[] = []
   let dir = dirname(relTarget)
   while (dir !== '.' && dir !== '/' && dir.length > 0) {
-    const vendored = dir.startsWith('repos/') && dir.length > 'repos/'.length
+    const vendored = dir === 'repos' || dir.startsWith('repos/')
     if (!vendored && (await fs.exists(join(root, dir, 'AGENTS.md')))) {
       found.push(`${dir}/AGENTS.md`)
+      break
     }
     dir = dirname(dir)
   }
@@ -84,10 +92,12 @@ export const runLeafContext = async (
     if (args.relTarget === null) return Result.succeed(new Skip())
     const candidates = await findExistingLeafCandidates(args.relTarget, args.root, args.fs)
     const leaf = governingLeaf(candidates)
-    const content = leaf === null ? '' : await args.fs.readFile(join(args.root, leaf))
+    // Eligibility before I/O: a repeat touch under an already-injected leaf is
+    // the steady-state case, and must not re-read the leaf file just to Skip.
+    if (leaf === null || args.injected.has(leaf)) return Result.succeed(new Skip())
+    const content = await args.fs.readFile(join(args.root, leaf))
     return decide({ relTarget: args.relTarget, leaf, content, injected: args.injected })
   } catch (error) {
-    const detail = error instanceof Error ? error.message : typeof error === 'string' ? error : 'unknown failure'
-    return Result.fail(new LeafContextError({ detail }))
+    return Result.fail(new LeafContextError({ detail: describeError(error) }))
   }
 }

@@ -18,32 +18,27 @@ export type TargetPath = S.Schema.Type<typeof TargetPath>
 /** Foreign shape: the `tool_call` input record, opened at the boundary. */
 const ForeignToolInput = S.Record(S.String, S.Unknown)
 
-const decodePathValue = (
-  input: Readonly<Record<string, unknown>>,
-  key: 'file_path' | 'path',
-): Effect.Effect<TargetPath, SchemaIssue.Issue> => {
-  const value = input[key]
-  if (typeof value === 'string' && value.length > 0) {
-    return S.decodeEffect(TargetPath)(value).pipe(
-      Effect.mapError((error) => (S.isSchemaError(error) ? error.issue : error)),
-    )
-  }
-  return Effect.fail(
-    new SchemaIssue.InvalidValue({ message: `key '${key}' is absent or not a non-empty string` }),
-  )
+const readTargetPath = (input: Readonly<Record<string, unknown>>): string | null => {
+  const filePath = input['file_path']
+  if (typeof filePath === 'string' && filePath.length > 0) return filePath
+  const path = input['path']
+  if (typeof path === 'string' && path.length > 0) return path
+  return null
 }
 
 export const ToolCallTargetFromInput: S.Codec<TargetPath, Readonly<Record<string, unknown>>> = ForeignToolInput.pipe(
   S.decodeTo(TargetPath, {
     decode: SchemaGetter.transformOrFail((input) => {
-      const filePath = input['file_path']
-      if (typeof filePath === 'string' && filePath.length > 0) return decodePathValue(input, 'file_path')
-      const path = input['path']
-      if (typeof path === 'string' && path.length > 0) return decodePathValue(input, 'path')
-      return Effect.fail(
-        new SchemaIssue.InvalidValue({
-          message: "input carries neither a non-empty 'file_path' nor a non-empty 'path'",
-        }),
+      const value = readTargetPath(input)
+      if (value === null) {
+        return Effect.fail(
+          new SchemaIssue.InvalidValue({
+            message: "input carries neither a non-empty 'file_path' nor a non-empty 'path'",
+          }),
+        )
+      }
+      return S.decodeEffect(TargetPath)(value).pipe(
+        Effect.mapError((error) => (S.isSchemaError(error) ? error.issue : error)),
       )
     }),
     encode: SchemaGetter.forbidden(() => 'ToolCallTargetFromInput is decode-only'),
