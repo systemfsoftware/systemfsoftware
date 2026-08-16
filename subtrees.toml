@@ -49,11 +49,6 @@ url = "https://github.com/mikearnaldi/effect-torch"
 branch = "main"
 
 [[repos]]
-name = "effect-v4"
-url = "https://github.com/Effect-TS/effect"
-branch = "main"
-
-[[repos]]
 name = "typia"
 url = "https://github.com/samchon/typia"
 tag_prefix = "v"
