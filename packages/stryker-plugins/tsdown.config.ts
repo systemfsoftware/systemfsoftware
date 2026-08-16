@@ -5,6 +5,7 @@ type ExportEntry = string | Record<string, string | undefined>
 const apiExtractorRollups: Record<string, string> = {
   '.': './dist/stryker-plugins.d.ts',
   './effect-schema-ignorer': './dist/effect-schema-ignorer.d.ts',
+  './workflow-make-ignorer': './dist/workflow-make-ignorer.d.ts',
 }
 
 const shapeExports = (exports: Record<string, ExportEntry>): Record<string, ExportEntry> => {
@@ -25,6 +26,7 @@ export default defineConfig({
   entry: {
     index: './src/mod.ts',
     'effect-schema-ignorer': './src/effect-schema-ignorer/index.ts',
+    'workflow-make-ignorer': './src/workflow-make-ignorer/index.ts',
   },
   format: 'esm',
   dts: true,
