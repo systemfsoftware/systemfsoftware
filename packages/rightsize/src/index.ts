@@ -85,3 +85,12 @@ export * from './reuse/adopt.workflow.js'
 export * from './reuse/hash.adapter.js'
 export * from './reuse/hash.kernel.js'
 export * from './reuse/registry.js'
+
+// U12: testcontainers-parity alias exports (R16) — append-only; each name
+// re-exports an EXISTING canonical member so the canonical symbol never
+// forks. The parity matrix (docs/parity-matrix.md) enumerates the installed
+// testcontainers@12.1.0 surface and every alias here resolves to its
+// canonical member (type-identity pinned by test-types/Aliases.tst.ts).
+// U12 fabricates NO new behavior: dropping one of these aliases later is a
+// mechanical export-prune, never a semantics change.
+export { withEnvPairs as withEnvironment } from './model/spec-combinators.js'
