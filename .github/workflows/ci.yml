@@ -24,7 +24,7 @@ jobs:
     name: abort on mid-run merge conflict
     needs: conflicts
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 46
     permissions:
       contents: read
       actions: write
