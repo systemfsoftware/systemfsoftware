@@ -1,48 +1,80 @@
-#!/usr/bin/env -S deno run --allow-run=git --allow-read
-import { workspaceMembers } from './workspace-members.ts'
+#!/usr/bin/env -S deno run --allow-read --allow-write=/tmp
+// Run it as:  deno run --allow-run=git,"$PWD/node_modules/.bin/turbo" --allow-read --allow-write=/tmp \
+//             scripts/guards/check-changeset.ts <base-sha>
+// The gate writes exactly one throwaway worktree under the OS temp dir and
+// removes it after the verdict; a failed cleanup is logged, not fatal
+// (`--allow-write=/tmp` is the entire write budget). The turbo it spawns is
+// the lockfile's shim at the absolute path `$PWD/node_modules/.bin/turbo` —
+// the same object the lstat and the pin check see — so the grant is the
+// exact path and nothing earlier on PATH can stand in.
+// LOCKED SURFACE — evaluation script (AGENTS.md Surface Classes).
+// Never edit this file to make a PR pass; change the PR.
+//
+// The changeset requirement keys on the per-package turbo `build` task hash,
+// compared between the PR's pinned base commit and its head (REPO-R2). A
+// publishable package whose hash differs demands an intent file; one whose
+// hash is identical demands nothing, no matter which files were touched.
+// The hash is turbo's own verdict over every input of the shipped `dist/`:
+// input files, manifest, task definition, auto-included config files, and the
+// hashes of dependency build tasks.
+//
+// Determinism contract (probes 2026-08-16, turbo 2.10.5):
+//   - identical trees -> identical per-task hashes
+//   - any manifest edit, build-script edit, src edit, or dependency-task
+//     change re-hashes (manifest and command are part of the verdict)
+//   - lockfile / pnpm-workspace.yaml / root package.json edits hash nothing
+//   - `scripts/tools/patch-tsgo-if-needed.mjs` (a globalDependency) and
+//     `turbo.json` edits re-hash every task
+//   - a file inside a nested-workspace fixture (testResources) re-hashes every
+//     task through the internal-dependencies global input
+//   - per-task hashes are env-invariant; `globalPassThroughEnv` values live
+//     only in `globalCacheInputs` and never in a task hash
+//   - a package without a `build` script still carries a `#build` task
+//     (command <NONEXISTENT>), so removing a build script re-hashes instead
+//     of vanishing; task absence at head means the package left the workspace
+//   - the dry-run `inputs` display is not the whole hash; the verdict follows
+//     the hash, never a file list
+//
+// The binary that computes the verdict is the lockfile-installed one —
+// `node_modules/.bin/turbo` after `pnpm install --frozen-lockfile`. No npx,
+// no registry fetch, no ephemeral runner: the installed binary is verified
+// against `pnpm-lock.yaml` before any run, and the selftest recomputes the
+// same pair.
 
 type WorkspaceMember = {
   readonly name: string
   readonly dir: string
-  readonly releasable: boolean
+  readonly publishable: boolean
 }
 
-type Manifest = Readonly<Record<string, unknown>>
-
-type ManifestChange = {
-  readonly before: Manifest | null
-  readonly after: Manifest | null
-}
+type HashMatrix = Readonly<Record<string, string>> // package name -> build-task hash
 
 type Evidence = {
-  readonly changedFiles: readonly string[]
+  readonly base: HashMatrix
+  readonly head: HashMatrix
   readonly members: readonly WorkspaceMember[]
+  readonly changedFiles: readonly string[]
   readonly changesets: readonly string[]
-  readonly manifestChanges: Readonly<Record<string, ManifestChange>>
 }
 
 type Verdict = {
-  readonly touched: string[]
-  readonly missingIntent: string[]
+  readonly touched: readonly string[]
+  readonly missingIntent: readonly string[]
+}
+
+type DryRun = {
+  readonly packages: readonly string[]
+  readonly matrix: HashMatrix
+  readonly dirs: Readonly<Record<string, string>> // package name -> package directory
+  readonly engineVersion: string | null // turbo's own self-report; null when absent
 }
 
 const BUMPS = ['none', 'patch', 'minor', 'major'] as const
 const MANIFEST_SUFFIX = '/package.json'
-
-const CONSUMER_BLIND_FIELDS = ['devDependencies', 'scripts'] as const
-
-const CONSUMER_RUN_SCRIPTS = [
-  'preinstall',
-  'install',
-  'postinstall',
-  'prepare',
-  'prepublish',
-  'prepublishOnly',
-  'prepack',
-  'postpack',
-  'publish',
-  'postpublish',
-] as const
+const LOCKFILE = 'pnpm-lock.yaml'
+const TURBO_MANIFEST = 'node_modules/turbo/package.json'
+const TURBO = `${Deno.cwd()}/node_modules/.bin/turbo`
+const BUILD_TASK_SUFFIX = '#build'
 
 const dec = new TextDecoder()
 
@@ -52,137 +84,208 @@ const git = async (args: string[]): Promise<string[]> => {
   return dec.decode(out.stdout).split('\n').filter(Boolean)
 }
 
-export const declaresBumpFor = (changeset: string, packageName: string): boolean =>
+const declaresBumpFor = (changeset: string, packageName: string): boolean =>
   new RegExp(
-    `^\\s*["']?${packageName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}["']?\\s*:\\s*(?:${BUMPS.join('|')})\\s*$`,
+    `^\\s*["']?${RegExp.escape(packageName)}["']?\\s*:\\s*(?:${BUMPS.join('|')})\\s*$`,
     'im',
   ).test(changeset)
 
-export const memberOwning = (file: string, members: readonly WorkspaceMember[]): WorkspaceMember | null =>
+const memberOwning = (file: string, members: readonly WorkspaceMember[]): WorkspaceMember | null =>
   members.find(({ dir }) => file === `${dir}${MANIFEST_SUFFIX}` || file.startsWith(`${dir}/`)) ?? null
 
-const differingKeys = (before: Manifest, after: Manifest): string[] =>
-  [...new Set([...Object.keys(before), ...Object.keys(after)])]
-    .filter((key) => JSON.stringify(before[key]) !== JSON.stringify(after[key]))
-
 /**
- * A manifest edit reaches consumers unless every field it changed is one npm
- * publishes but nothing installing the package can act on. `scripts` counts only
- * for the keys npm itself runs; a `format` or `test` script is inert on install.
- * Anything unrecognised is release-relevant, so a new field fails closed.
+ * The effect of a difference between two per-package hash maps:
+ * - head-absent: the package left the workspace; no release record is possible
+ *   or needed (removal is a source-control decision visible in the PR diff)
+ * - base-absent: the package is new; it counts as changed
+ * - both present and different: changed — demands an intent
+ * - both present and equal: unchanged — demands nothing
+ *
+ * The fallback (R6) covers a publishable member with no `#build` task in
+ * either run — impossible today (turbo tasks every workspace package) but
+ * fail-safe: any changed file under its directory demands an intent. This
+ * per-file rule is deliberately coarser than the old gate's globs; it is a
+ * floor, not a philosophy.
  */
-export const manifestChangeReachesConsumers = ({ before, after }: ManifestChange): boolean => {
-  if (before === null || after === null) return true
-
-  const changed = differingKeys(before, after)
-  const blindFieldsChanged = changed.filter((key) => !(CONSUMER_BLIND_FIELDS as readonly string[]).includes(key))
-  if (blindFieldsChanged.length > 0) return true
-
-  if (!changed.includes('scripts')) return false
-
-  const scriptsBefore = (before.scripts ?? {}) as Readonly<Record<string, unknown>>
-  const scriptsAfter = (after.scripts ?? {}) as Readonly<Record<string, unknown>>
-  return differingKeys(scriptsBefore, scriptsAfter)
-    .some((key) => (CONSUMER_RUN_SCRIPTS as readonly string[]).includes(key))
-}
-
-const escapeRegExp = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-
-/**
- * Turbo's `inputs` globs, matched against a file path relative to its package
- * root. `**` crosses path separators, `*` does not; the rest is literal.
- * `tasks.build.inputs` in turbo.json uses only this subset.
- */
-const globToRegExp = (glob: string): RegExp =>
-  new RegExp(
-    `^${
-      glob
-        .split('**')
-        .map((part) => part.split('*').map(escapeRegExp).join('[^/]*'))
-        .join('.*')
-    }$`,
-  )
-
-const demandsIntent = (
-  file: string,
-  member: WorkspaceMember,
-  manifestChanges: Evidence['manifestChanges'],
-  buildInputs: readonly string[],
-): boolean => {
-  const change = manifestChanges[file]
-  if (change !== undefined) return manifestChangeReachesConsumers(change)
-
-  // A non-manifest file reaches consumers only if it feeds the shipped build —
-  // turbo's `build.inputs`, matched against the file's path inside its package.
-  const relative = file.slice(member.dir.length + 1)
-  return buildInputs.some((glob) => globToRegExp(glob).test(relative))
-}
-
-export const verdict = (
-  { changedFiles, members, changesets, manifestChanges }: Evidence,
-  buildInputs: readonly string[],
+const verdict = (
+  { base, head, members, changedFiles, changesets }: Evidence,
 ): Verdict => {
-  const touched = [
-    ...new Set(
-      changedFiles
-        .map((file) => {
-          const member = memberOwning(file, members)
-          return member !== null && member.releasable && demandsIntent(file, member, manifestChanges, buildInputs)
-            ? member.name
-            : null
-        })
-        .filter((name): name is string => name !== null),
-    ),
-  ].sort()
+  const touched = new Set<string>()
 
+  for (const member of members) {
+    if (!member.publishable) continue
+    const atBase = Object.hasOwn(base, member.name) ? base[member.name] : undefined
+    const atHead = Object.hasOwn(head, member.name) ? head[member.name] : undefined
+
+    if (atHead === undefined) continue // package or task gone at head
+    if (atBase === undefined || atBase !== atHead) touched.add(member.name)
+  }
+
+  for (const member of members) {
+    if (!member.publishable) continue
+    if (Object.hasOwn(base, member.name) || Object.hasOwn(head, member.name)) continue
+    if (changedFiles.some((file) => memberOwning(file, [member]))) touched.add(member.name)
+  }
+
+  const sorted = [...touched].sort()
   return {
-    touched,
-    missingIntent: touched.filter((name) => !changesets.some((changeset) => declaresBumpFor(changeset, name))),
+    touched: sorted,
+    missingIntent: sorted.filter((name) => !changesets.some((changeset) => declaresBumpFor(changeset, name))),
   }
 }
 
-const readMember = async (manifestPath: string): Promise<WorkspaceMember | null> => {
-  const manifest = JSON.parse(await Deno.readTextFile(manifestPath)) as { name?: unknown; private?: unknown }
-  return typeof manifest.name === 'string' && manifest.name.length > 0
-    ? {
-      name: manifest.name,
-      dir: manifestPath.slice(0, -MANIFEST_SUFFIX.length),
-      releasable: manifest.private !== true,
-    }
-    : null
-}
-
-const readManifestAt = async (ref: string, path: string): Promise<Manifest | null> => {
-  const out = await new Deno.Command('git', { args: ['show', `${ref}:${path}`], stdout: 'piped', stderr: 'null' })
-    .output()
-  if (!out.success) return null
+/**
+ * `turbo run build --dry=json` stdout is one JSON document; stderr may carry
+ * progress noise and is discarded. Every build task must carry a hash — a task
+ * without one is a verdict nobody can judge, so it fails closed.
+ */
+const parseDryRunOutput = (stdout: string, context: string): DryRun => {
+  let doc: { packages?: unknown; tasks?: unknown; turboVersion?: unknown }
   try {
-    return JSON.parse(dec.decode(out.stdout)) as Manifest
+    doc = JSON.parse(stdout) as typeof doc
   } catch {
-    return null
+    throw new Error(`unparsable ${context} output — expected JSON from 'turbo run build --dry=json'`)
+  }
+  if (!Array.isArray(doc.packages) || !Array.isArray(doc.tasks)) {
+    throw new Error(`${context} output missing the packages/tasks arrays — is this turbo's dry-run JSON?`)
+  }
+
+  const matrix: Record<string, string> = {}
+  const dirs: Record<string, string> = {}
+  for (const task of doc.tasks) {
+    const { taskId, hash, directory, package: name } = task as {
+      taskId?: unknown
+      hash?: unknown
+      directory?: unknown
+      package?: unknown
+    }
+    if (typeof taskId !== 'string' || !taskId.endsWith(BUILD_TASK_SUFFIX)) continue
+    if (typeof name !== 'string' || name.length === 0) {
+      throw new Error(`${context} output: a build task without a package name`)
+    }
+    if (typeof hash !== 'string' || hash.length === 0) {
+      throw new Error(`${context} output: ${name}${BUILD_TASK_SUFFIX} has no hash`)
+    }
+    if (Object.hasOwn(matrix, name)) throw new Error(`${context} output: duplicate task for ${name}`)
+    matrix[name] = hash
+    if (typeof directory === 'string' && directory.length > 0) dirs[name] = directory
+  }
+  // Packages enumerated but no #build task parsed is task-format drift, not
+  // an empty verdict — an empty matrix must never read as "nothing changed".
+  if (doc.packages.length > 0 && Object.keys(matrix).length === 0) {
+    throw new Error(
+      `${context} output: ${doc.packages.length} package(s) enumerated but no ${BUILD_TASK_SUFFIX} task parsed — turbo's task format drifted`,
+    )
+  }
+  return {
+    packages: doc.packages as string[],
+    matrix,
+    dirs,
+    engineVersion: typeof doc.turboVersion === 'string' ? doc.turboVersion : null,
   }
 }
 
-const readManifestChanges = async (
-  base: string,
-  changedFiles: readonly string[],
-): Promise<Record<string, ManifestChange>> => {
-  const manifestPaths = changedFiles.filter((file) => file.endsWith(MANIFEST_SUFFIX))
-  const changes = await Promise.all(manifestPaths.map(async (path) =>
-    [
-      path,
-      {
-        before: await readManifestAt(base, path),
-        after: await readManifestAt('HEAD', path),
-      },
-    ] as const
-  ))
-  return Object.fromEntries(changes)
+const engineSelfReportMatches = (run: DryRun, pinned: string): boolean =>
+  run.engineVersion === null || run.engineVersion === pinned
+
+const dryRun = async (cwd: string, pinnedVersion: string): Promise<DryRun> => {
+  try {
+    await Deno.lstat(TURBO)
+  } catch {
+    throw new Error(
+      `turbo not present at ${TURBO} — run 'pnpm install --frozen-lockfile' (the gate runs the lockfile-installed binary, nothing else)`,
+    )
+  }
+  const out = await new Deno.Command(TURBO, {
+    args: ['run', 'build', '--dry=json'],
+    cwd,
+    stdout: 'piped',
+    stderr: 'piped',
+  }).output()
+  if (!out.success) {
+    const tail = dec.decode(out.stderr).trim().split('\n').slice(-5).join('\n')
+    throw new Error(`turbo dry run failed in ${cwd}:\n${tail}`)
+  }
+  const run = parseDryRunOutput(dec.decode(out.stdout), cwd)
+  if (!engineSelfReportMatches(run, pinnedVersion)) {
+    throw new Error(
+      `turbo in ${cwd} self-reports version ${run.engineVersion}, not the lockfile pin ${pinnedVersion} — ` +
+        `run 'pnpm install --frozen-lockfile'`,
+    )
+  }
+  return run
+}
+
+/**
+ * The lockfile is the engine-of-record: the resolved turbo version it names is
+ * the version `pnpm install --frozen-lockfile` puts in node_modules, and the
+ * selftest recomputes this exact value from these exact bytes. A pnpm major
+ * bump that changes the schema breaks the assertion here before it can
+ * silently redirect the verdict.
+ */
+const lockfileIsV9 = (lockfile: string): boolean => /^lockfileVersion:\s*['"]?9\.0['"]?\s*$/m.test(lockfile)
+
+const lockfileTurboEntry = (lockfile: string): { specifier: string; version: string } | null => {
+  const importers = lockfile.slice(lockfile.indexOf('\nimporters:'))
+  if (importers.length === 0) return null
+  const rootStart = importers.indexOf('\n  .:')
+  if (rootStart === -1) return null
+  const root = importers.slice(rootStart + 1)
+  const nextRoot = root.search(/^\n[ ]{2}(?!\.)/m)
+  const block = (nextRoot === -1 ? root : root.slice(0, nextRoot)) + '\n'
+  const match = /^ {6}turbo:\n {8}specifier: (\S+)\n {8}version: ([^\s'\n]+)/m.exec(block)
+  return match ? { specifier: match[1], version: match[2] } : null
+}
+
+/**
+ * Verdict-time and selftest-time authority check: recompute from source bytes
+ * whether the installed binary is the lockfile's binary. Throws with the fix
+ * instruction so a stale install cannot masquerade as a verdict.
+ */
+const assertTurboPin = (
+  lockfile: string,
+  resolvedTurboPackageJson: string,
+  context: string,
+): string => {
+  if (!lockfileIsV9(lockfile)) {
+    throw new Error(`${context}: ${LOCKFILE} is not lockfileVersion 9.0 — the pin parser is schema-bound`)
+  }
+  const pinned = lockfileTurboEntry(lockfile)
+  if (pinned === null) {
+    throw new Error(`${context}: no 'turbo' devDependency in the root importer of ${LOCKFILE}`)
+  }
+  let resolved: { version?: unknown }
+  try {
+    resolved = JSON.parse(resolvedTurboPackageJson) as typeof resolved
+  } catch {
+    throw new Error(`${context}: ${TURBO_MANIFEST} is not parseable JSON`)
+  }
+  if (resolved.version !== pinned.version) {
+    throw new Error(
+      `${context}: installed turbo ${String(resolved.version)} does not match the lockfile pin ${pinned.version} — ` +
+        `run 'pnpm install --frozen-lockfile'`,
+    )
+  }
+  return pinned.version
+}
+
+/**
+ * The live pair, recomputed from source bytes wherever the gate or its
+ * selftest runs: the lockfile's pin and the installed engine manifest must
+ * agree (CI runs the selftest right after the frozen install). Returns the
+ * pinned version so the spawns can also check the engine's own self-report.
+ */
+const assertLiveTurboPin = async (context: string): Promise<string> => {
+  const [lockfile, resolvedTurbo] = await Promise.all([
+    Deno.readTextFile(LOCKFILE),
+    Deno.readTextFile(TURBO_MANIFEST).catch(() => '{}'),
+  ])
+  return assertTurboPin(lockfile, resolvedTurbo, context)
 }
 
 const reportMissingIntent = (missingIntent: readonly string[]) => {
   console.error(
-    `::error::This PR changes ${missingIntent.length} publishable package(s) that no changeset in it names: ${
+    `::error::This PR changes the turbo build hash of ${missingIntent.length} publishable package(s) that no changeset in it names: ${
       missingIntent.join(', ')
     }`,
   )
@@ -196,52 +299,116 @@ const reportMissingIntent = (missingIntent: readonly string[]) => {
   console.error('  <one line saying what changed for a consumer>')
   console.error('')
   console.error(
-    `Bumps are ${BUMPS.join(' | ')}. \`none\` records a touch that releases nothing; on a ` +
-      'behaviour-visible change it is the silent non-release this gate exists to catch (REPO-R2).',
+    `Bumps are ${
+      BUMPS.join(' | ')
+    }. \`none\` intentionally records a touch that releases nothing; a devDependency-only or ` +
+      'script-only bump is the canonical `none` class (REPO-R2).',
   )
+}
+
+const readMember = async (manifestPath: string): Promise<WorkspaceMember | null> => {
+  let manifest: { name?: unknown; private?: unknown }
+  try {
+    manifest = JSON.parse(await Deno.readTextFile(manifestPath)) as typeof manifest
+  } catch {
+    return null
+  }
+  return typeof manifest.name === 'string' && manifest.name.length > 0
+    ? {
+      name: manifest.name,
+      dir: manifestPath.slice(0, -MANIFEST_SUFFIX.length),
+      publishable: manifest.private !== true,
+    }
+    : null
 }
 
 /**
- * The `build` task's `inputs` from turbo.json — the authoritative list of what
- * changes the shipped `dist/`. A changed file matching none of these reaches no
- * consumer, so it demands no intent.
+ * Membership is turbo's: the union of the two dry-runs' tasks' directories,
+ * with the head manifest's `private` bit deciding publishability. A taskless
+ * turbo member (none exists today) still needs a directory for the R6
+ * fallback, so only then are tracked manifests consulted to map its name to a
+ * directory — and only names turbo enumerates qualify. A tracked manifest
+ * turbo does not enumerate (a testResources fixture) is not a member, so it
+ * can never demand an intent (R11).
  */
-const readBuildInputs = async (): Promise<readonly string[]> => {
-  const turbo = JSON.parse(await Deno.readTextFile('turbo.json')) as {
-    tasks?: { build?: { inputs?: unknown } }
+const readMembers = async (runs: readonly DryRun[]): Promise<readonly WorkspaceMember[]> => {
+  const dirs = new Map<string, string>()
+  for (const run of runs) {
+    for (const [name, dir] of Object.entries(run.dirs)) dirs.set(name, dir)
   }
-  const inputs = turbo.tasks?.build?.inputs
-  if (!Array.isArray(inputs) || !inputs.every((entry): entry is string => typeof entry === 'string')) {
-    throw new Error('turbo.json#tasks.build.inputs is missing or not a string array — cannot judge which files ship')
+  const turboMembers = new Set(runs.flatMap((run) => run.packages))
+  if ([...turboMembers].some((name) => !dirs.has(name))) {
+    for (const manifestPath of await git(['ls-files', '*package.json', ':(exclude)repos/**'])) {
+      const member = await readMember(manifestPath)
+      if (member === null || !turboMembers.has(member.name) || dirs.has(member.name)) continue
+      dirs.set(member.name, member.dir)
+    }
   }
-  return inputs
+  return (await Promise.all(
+    [...dirs.entries()].map(([, dir]) => readMember(`${dir}${MANIFEST_SUFFIX}`)),
+  )).filter((member): member is WorkspaceMember => member !== null && dirs.get(member.name) === member.dir)
 }
 
-const main = async (baseRef: string | undefined): Promise<number> => {
-  if (!baseRef) {
-    console.error('usage: check-changeset.ts <base-ref>')
+const main = async (baseArg: string | undefined): Promise<number> => {
+  if (!baseArg) {
+    console.error('usage: check-changeset.ts <base-sha-or-ref>')
     return 2
   }
 
-  const base = `origin/${baseRef}`
-  const range = `${base}...HEAD`
-  const changedFiles = await git(['diff', '--name-only', range])
-  const manifestPaths = workspaceMembers(await git(['ls-files', '*package.json', ':(exclude)repos/**']))
-  const members = (await Promise.all(manifestPaths.map(readMember)))
-    .filter((member): member is WorkspaceMember => member !== null)
+  const pinnedVersion = await assertLiveTurboPin('check-changeset')
 
-  const changesetPaths = (await git(['diff', '--name-only', '--diff-filter=AM', range, '--', '.changeset/*.md']))
-    .filter((path) => path !== '.changeset/README.md')
+  const [baseSha] = await git(['rev-parse', '--verify', `${baseArg}^{commit}`])
+
+  const baseDir = await Deno.makeTempDir({ prefix: 'changeset-base-' })
+  try {
+    await git(['worktree', 'add', '--detach', '--force', baseDir, baseSha])
+  } catch (error) {
+    await Deno.remove(baseDir, { recursive: true }).catch(() => {})
+    throw error
+  }
+  let baseRun: DryRun
+  let headRun: DryRun
+  try {
+    ;[baseRun, headRun] = await Promise.all([
+      dryRun(baseDir, pinnedVersion),
+      dryRun(Deno.cwd(), pinnedVersion),
+    ])
+  } finally {
+    await git(['worktree', 'remove', '--force', baseDir]).catch(() => {
+      console.error(`warning: could not remove the base worktree ${baseDir} — run 'git worktree prune'`)
+    })
+  }
+  // A dry run that enumerates no workspace packages is a broken premise, not
+  // an empty verdict (R9) — it must never read as "nothing changed".
+  for (const side of [['base', baseRun], ['head', headRun]] as const) {
+    if (side[1].packages.length === 0) {
+      throw new Error(`turbo enumerated no workspace packages in the ${side[0]} run — refusing the empty verdict`)
+    }
+  }
+
+  const [members, changedFiles, changesetPaths] = await Promise.all([
+    readMembers([baseRun, headRun]),
+    git(['diff', '--name-only', `${baseSha}...HEAD`]),
+    git(['diff', '--name-only', '--diff-filter=AM', `${baseSha}...HEAD`, '--', '.changeset/*.md']),
+  ])
   const changesets = await Promise.all(
-    changesetPaths.map((path) => Deno.readTextFile(path).catch(() => '')),
+    changesetPaths.filter((path) => path !== '.changeset/README.md').map((path) =>
+      Deno.readTextFile(path).catch(() => '')
+    ),
   )
 
-  const manifestChanges = await readManifestChanges(base, changedFiles)
-  const buildInputs = await readBuildInputs()
-  const { touched, missingIntent } = verdict({ changedFiles, members, changesets, manifestChanges }, buildInputs)
+  const { touched, missingIntent } = verdict({
+    base: baseRun.matrix,
+    head: headRun.matrix,
+    members,
+    changedFiles,
+    changesets,
+  })
 
   if (touched.length === 0) {
-    console.log(`no publishable workspace package touched — skipping (${members.length} member(s) considered)`)
+    console.log(
+      `changeset gate: no publishable package changed its turbo build hash — skipping (${members.length} member(s))`,
+    )
     return 0
   }
 
@@ -251,259 +418,435 @@ const main = async (baseRef: string | undefined): Promise<number> => {
   }
 
   console.log(
-    `changeset gate: ${touched.length} publishable package(s) touched, each named by an intent — ${touched.join(', ')}`,
+    `changeset gate: ${touched.length} publishable package(s) changed their turbo build hash, each named by an intent — ${
+      touched.join(', ')
+    }`,
   )
   return 0
 }
 
 const MEMBERS: readonly WorkspaceMember[] = [
-  { name: '@scope/published', dir: 'packages/published', releasable: true },
-  { name: '@scope/private', dir: 'packages/private', releasable: false },
-  { name: '@scope/plugin', dir: 'omp/plugins/plugin', releasable: true },
+  { name: '@scope/published', dir: 'packages/published', publishable: true },
+  { name: '@scope/private', dir: 'packages/private', publishable: false },
+  { name: '@scope/plugin', dir: 'omp/plugins/plugin', publishable: true },
+  { name: '@scope/other', dir: 'packages/other', publishable: true },
+  { name: '@scope/taskless', dir: 'packages/taskless', publishable: true },
 ]
 
-const MANIFEST = 'packages/published/package.json'
+const H = {
+  before: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+  after: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+}
 
-const manifestEdit = (before: Manifest, after: Manifest): Record<string, ManifestChange> => ({
-  [MANIFEST]: { before, after },
+const FIXTURE_V9 = `lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+
+importers:
+
+  .:
+    devDependencies:
+      turbo:
+        specifier: ^2.10.5
+        version: 2.10.5
+`
+
+const DRY_FIXTURE = JSON.stringify({
+  turboVersion: '2.10.5',
+  packages: ['@scope/published'],
+  tasks: [{
+    taskId: '@scope/published#build',
+    package: '@scope/published',
+    hash: H.before,
+    directory: 'packages/published',
+  }],
 })
 
-const BUILD_INPUTS: readonly string[] = ['src/**', 'tsdown.config.*']
+const DRY_BROKEN = JSON.stringify({
+  packages: ['@scope/published'],
+  tasks: [{ taskId: '@scope/published#build', package: '@scope/published', directory: 'packages/published' }],
+})
 
 const FIXTURES: readonly { label: string; evidence: Evidence; expect: Verdict }[] = [
   {
     label: 'an intent naming the touched package satisfies the gate',
     evidence: {
-      changedFiles: ['packages/published/src/a.ts'],
+      base: { '@scope/published': H.before },
+      head: { '@scope/published': H.after },
       members: MEMBERS,
+      changedFiles: ['packages/published/src/a.ts'],
       changesets: ['---\n"@scope/published": patch\n---\n'],
-      manifestChanges: {},
     },
     expect: { touched: ['@scope/published'], missingIntent: [] },
   },
   {
     label: 'no changeset at all leaves the touched package unnamed',
     evidence: {
-      changedFiles: ['packages/published/src/a.ts'],
+      base: { '@scope/published': H.before },
+      head: { '@scope/published': H.after },
       members: MEMBERS,
       changesets: [],
-      manifestChanges: {},
+      changedFiles: ['packages/published/src/a.ts'],
     },
     expect: { touched: ['@scope/published'], missingIntent: ['@scope/published'] },
   },
   {
     label: 'an intent for another package is not cover',
     evidence: {
-      changedFiles: ['packages/published/src/a.ts'],
+      base: { '@scope/published': H.before },
+      head: { '@scope/published': H.after },
       members: MEMBERS,
       changesets: ['---\n"@scope/other": patch\n---\n'],
-      manifestChanges: {},
+      changedFiles: ['packages/published/src/a.ts'],
     },
     expect: { touched: ['@scope/published'], missingIntent: ['@scope/published'] },
   },
   {
-    label: 'a package that cannot release is never demanded',
+    label: 'a package whose hash does not change demands nothing',
     evidence: {
-      changedFiles: ['packages/private/src/a.ts'],
+      base: { '@scope/published': H.before },
+      head: { '@scope/published': H.before },
       members: MEMBERS,
       changesets: [],
-      manifestChanges: {},
+      changedFiles: ['packages/published/README.md'],
+    },
+    expect: { touched: [], missingIntent: [] },
+  },
+  {
+    label: 'a private package is never demanded',
+    evidence: {
+      base: { '@scope/private': H.before },
+      head: { '@scope/private': H.after },
+      members: MEMBERS,
+      changesets: [],
+      changedFiles: ['packages/private/src/a.ts'],
     },
     expect: { touched: [], missingIntent: [] },
   },
   {
     label: 'a publishable package outside packages/ is demanded',
     evidence: {
-      changedFiles: ['omp/plugins/plugin/src/a.ts'],
+      base: { '@scope/plugin': H.before },
+      head: { '@scope/plugin': H.after },
       members: MEMBERS,
       changesets: [],
-      manifestChanges: {},
+      changedFiles: ['omp/plugins/plugin/src/a.ts'],
     },
     expect: { touched: ['@scope/plugin'], missingIntent: ['@scope/plugin'] },
   },
   {
     label: 'a file outside every member belongs to no package',
     evidence: {
-      changedFiles: ['README.md', 'scripts/guards/check-changeset.ts'],
+      base: { '@scope/published': H.after },
+      head: { '@scope/published': H.after },
       members: MEMBERS,
       changesets: [],
-      manifestChanges: {},
+      changedFiles: ['README.md', 'scripts/guards/check-changeset.ts'],
     },
     expect: { touched: [], missingIntent: [] },
   },
   {
     label: 'none is an intent, not an absence',
     evidence: {
-      changedFiles: ['packages/published/src/a.ts'],
+      base: { '@scope/published': H.before },
+      head: { '@scope/published': H.after },
       members: MEMBERS,
       changesets: ['---\n"@scope/published": none\n---\n'],
-      manifestChanges: {},
+      changedFiles: ['packages/published/src/a.ts'],
     },
     expect: { touched: ['@scope/published'], missingIntent: [] },
   },
   {
     label: 'a name that prefixes another is not mistaken for it',
     evidence: {
-      changedFiles: ['packages/published/src/a.ts'],
+      base: { '@scope/published': H.before },
+      head: { '@scope/published': H.after },
       members: MEMBERS,
       changesets: ['---\n"@scope/published-extra": patch\n---\n'],
-      manifestChanges: {},
+      changedFiles: ['packages/published/src/a.ts'],
     },
     expect: { touched: ['@scope/published'], missingIntent: ['@scope/published'] },
+  },
+  // The next two rows share a shape on purpose: they pin the VERDICT's rule
+  // that any observed hash difference demands a record, whatever the file
+  // class. The re-hash semantics themselves (a devDependencies edit re-hashes;
+  // a removed build script keeps a NONEXISTENT-command task and re-hashes)
+  // are pinned only by the live probe matrix — a fixture cannot observe them.
+  {
+    label: 'a devDependencies-only edit changes the hash and demands its record',
+    evidence: {
+      base: { '@scope/published': H.before },
+      head: { '@scope/published': H.after },
+      members: MEMBERS,
+      changesets: [],
+      changedFiles: ['packages/published/package.json'],
+    },
+    expect: { touched: ['@scope/published'], missingIntent: ['@scope/published'] },
+  },
+  {
+    label: 'removing the build script keeps the task (its hash changed) and demands',
+    evidence: {
+      base: { '@scope/published': H.before },
+      head: { '@scope/published': H.after },
+      members: MEMBERS,
+      changesets: [],
+      changedFiles: ['packages/published/package.json'],
+    },
+    expect: { touched: ['@scope/published'], missingIntent: ['@scope/published'] },
+  },
+  {
+    label: 'a new package demands an intent',
+    evidence: {
+      base: {},
+      head: { '@scope/published': H.before },
+      members: MEMBERS,
+      changesets: [],
+      changedFiles: ['packages/published/src/a.ts'],
+    },
+    expect: { touched: ['@scope/published'], missingIntent: ['@scope/published'] },
+  },
+  {
+    label: 'a package gone at head demands nothing',
+    evidence: {
+      base: { '@scope/published': H.before },
+      head: {},
+      members: MEMBERS,
+      changesets: [],
+      changedFiles: ['packages/published/src/a.ts'],
+    },
+    expect: { touched: [], missingIntent: [] },
+  },
+  {
+    label: 'a propagated hash change (a dependency change) demands its intent',
+    evidence: {
+      base: { '@scope/published': H.before, '@scope/other': H.before },
+      head: { '@scope/published': H.after, '@scope/other': H.after },
+      members: MEMBERS,
+      changesets: ['---\n"@scope/other": minor\n---\n'],
+      changedFiles: ['packages/other/src/b.ts'],
+    },
+    expect: { touched: ['@scope/other', '@scope/published'], missingIntent: ['@scope/published'] },
   },
   {
     label: 'two touched packages need two names',
     evidence: {
-      changedFiles: ['packages/published/src/a.ts', 'omp/plugins/plugin/src/b.ts'],
+      base: { '@scope/published': H.before, '@scope/plugin': H.before },
+      head: { '@scope/published': H.after, '@scope/plugin': H.after },
       members: MEMBERS,
       changesets: ['---\n"@scope/published": minor\n---\n'],
-      manifestChanges: {},
+      changedFiles: ['packages/published/src/a.ts', 'omp/plugins/plugin/src/b.ts'],
     },
     expect: { touched: ['@scope/plugin', '@scope/published'], missingIntent: ['@scope/plugin'] },
   },
   {
-    label: 'dropping a dev-only script reaches no consumer',
+    label: 'a taskless publishable member falls back to its directory',
     evidence: {
-      changedFiles: [MANIFEST],
+      base: {},
+      head: {},
       members: MEMBERS,
       changesets: [],
-      manifestChanges: manifestEdit(
-        { name: '@scope/published', scripts: { build: 'tsdown', format: 'dprint fmt' } },
-        { name: '@scope/published', scripts: { build: 'tsdown' } },
-      ),
+      changedFiles: ['packages/taskless/src/a.ts'],
+    },
+    expect: { touched: ['@scope/taskless'], missingIntent: ['@scope/taskless'] },
+  },
+  {
+    label: 'a taskless publishable member with no changed file under it is not demanded',
+    evidence: {
+      base: { '@scope/published': H.before },
+      head: { '@scope/published': H.before },
+      members: MEMBERS,
+      changesets: [],
+      changedFiles: ['packages/published/src/a.ts'],
     },
     expect: { touched: [], missingIntent: [] },
   },
   {
-    label: 'adding an install hook reaches every consumer',
+    label: 'a multi-package intent frontmatter covers each name it lists',
     evidence: {
-      changedFiles: [MANIFEST],
+      base: { '@scope/published': H.before, '@scope/other': H.before },
+      head: { '@scope/published': H.after, '@scope/other': H.after },
       members: MEMBERS,
-      changesets: [],
-      manifestChanges: manifestEdit(
-        { name: '@scope/published', scripts: { build: 'tsdown' } },
-        { name: '@scope/published', scripts: { build: 'tsdown', postinstall: 'node patch.mjs' } },
-      ),
+      changesets: ['---\n"@scope/other": minor\n"@scope/published": patch\n---\n'],
+      changedFiles: ['packages/other/src/b.ts', 'packages/published/src/a.ts'],
     },
-    expect: { touched: ['@scope/published'], missingIntent: ['@scope/published'] },
+    expect: { touched: ['@scope/other', '@scope/published'], missingIntent: [] },
   },
   {
-    label: 'a dependency bump reaches consumers',
+    label: 'a package un-privated in the PR is publishable at head and its re-hash demands its first record',
     evidence: {
-      changedFiles: [MANIFEST],
-      members: MEMBERS,
+      base: { '@scope/unprivated': H.before },
+      head: { '@scope/unprivated': H.after },
+      members: [...MEMBERS, { name: '@scope/unprivated', dir: 'packages/unprivated', publishable: true }],
       changesets: [],
-      manifestChanges: manifestEdit(
-        { name: '@scope/published', dependencies: { effect: '^3.22.0' } },
-        { name: '@scope/published', dependencies: { effect: '^3.23.0' } },
-      ),
+      changedFiles: ['packages/unprivated/package.json'],
     },
-    expect: { touched: ['@scope/published'], missingIntent: ['@scope/published'] },
-  },
-  {
-    label: 'a devDependency bump does not',
-    evidence: {
-      changedFiles: [MANIFEST],
-      members: MEMBERS,
-      changesets: [],
-      manifestChanges: manifestEdit(
-        { name: '@scope/published', devDependencies: { vitest: '^4.1.0' } },
-        { name: '@scope/published', devDependencies: { vitest: '^4.2.0' } },
-      ),
-    },
-    expect: { touched: [], missingIntent: [] },
-  },
-  {
-    label: 'an exports change reaches consumers',
-    evidence: {
-      changedFiles: [MANIFEST],
-      members: MEMBERS,
-      changesets: [],
-      manifestChanges: manifestEdit(
-        { name: '@scope/published', exports: { '.': './dist/index.js' } },
-        { name: '@scope/published', exports: { '.': './dist/index.js', './extra': './dist/extra.js' } },
-      ),
-    },
-    expect: { touched: ['@scope/published'], missingIntent: ['@scope/published'] },
-  },
-  {
-    label: 'an unrecognised field fails closed',
-    evidence: {
-      changedFiles: [MANIFEST],
-      members: MEMBERS,
-      changesets: [],
-      manifestChanges: manifestEdit(
-        { name: '@scope/published' },
-        { name: '@scope/published', sideEffects: false },
-      ),
-    },
-    expect: { touched: ['@scope/published'], missingIntent: ['@scope/published'] },
-  },
-  {
-    label: 'a new manifest fails closed',
-    evidence: {
-      changedFiles: [MANIFEST],
-      members: MEMBERS,
-      changesets: [],
-      manifestChanges: { [MANIFEST]: { before: null, after: { name: '@scope/published' } } },
-    },
-    expect: { touched: ['@scope/published'], missingIntent: ['@scope/published'] },
-  },
-  {
-    label: 'a source change beside an inert manifest edit still demands an intent',
-    evidence: {
-      changedFiles: [MANIFEST, 'packages/published/src/a.ts'],
-      members: MEMBERS,
-      changesets: [],
-      manifestChanges: manifestEdit(
-        { name: '@scope/published', scripts: { format: 'dprint fmt' } },
-        { name: '@scope/published', scripts: {} },
-      ),
-    },
-    expect: { touched: ['@scope/published'], missingIntent: ['@scope/published'] },
-  },
-  {
-    label: 'a non-source file in a releasable package demands no intent',
-    evidence: {
-      changedFiles: ['packages/published/README.md'],
-      members: MEMBERS,
-      changesets: [],
-      manifestChanges: {},
-    },
-    expect: { touched: [], missingIntent: [] },
-  },
-  {
-    label: 'a build config file still demands its intent',
-    evidence: {
-      changedFiles: ['packages/published/tsdown.config.ts'],
-      members: MEMBERS,
-      changesets: [],
-      manifestChanges: {},
-    },
-    expect: { touched: ['@scope/published'], missingIntent: ['@scope/published'] },
+    expect: { touched: ['@scope/unprivated'], missingIntent: ['@scope/unprivated'] },
   },
 ]
 
-const selftest = (): number => {
-  const failures = FIXTURES.flatMap(({ label, evidence, expect }) => {
-    const got = verdict(evidence, BUILD_INPUTS)
-    return JSON.stringify(got) === JSON.stringify(expect)
-      ? []
-      : [`  ${label}:\n    expected ${JSON.stringify(expect)}\n    got      ${JSON.stringify(got)}`]
-  })
+const expectsThrow = (fn: () => unknown): boolean => {
+  try {
+    fn()
+    return false
+  } catch {
+    return true
+  }
+}
+
+const selftest = async (): Promise<number> => {
+  const failures: string[] = []
+
+  for (const { label, evidence, expect } of FIXTURES) {
+    const got = verdict(evidence)
+    if (JSON.stringify(got) !== JSON.stringify(expect)) {
+      failures.push(`  ${label}:\n    expected ${JSON.stringify(expect)}\n    got      ${JSON.stringify(got)}`)
+    }
+  }
+
+  const checks: readonly [string, boolean][] = [
+    ['lockfileVersion 9.0 recognized', lockfileIsV9(FIXTURE_V9)],
+    ['lockfileVersion 8.0 rejected', !lockfileIsV9("lockfileVersion: '8.0'\n")],
+    [
+      'turbo entry parsed from the live importer structure',
+      JSON.stringify(lockfileTurboEntry(FIXTURE_V9)) === JSON.stringify({ specifier: '^2.10.5', version: '2.10.5' }),
+    ],
+    [
+      'no turbo entry in a non-root importer',
+      lockfileTurboEntry(`
+importers:
+
+  packages/foo:
+    devDependencies:
+      turbo:
+        specifier: ^1
+        version: 1.2.3
+`) === null,
+    ],
+    [
+      'dry-run JSON parses into a matrix',
+      JSON.stringify(parseDryRunOutput(DRY_FIXTURE, 'fixture').matrix) ===
+        JSON.stringify({ '@scope/published': H.before }),
+    ],
+    ['a task without a hash fails closed', expectsThrow(() => parseDryRunOutput(DRY_BROKEN, 'fixture'))],
+    ['non-JSON dry-run output fails closed', expectsThrow(() => parseDryRunOutput('turbo: not json', 'fixture'))],
+    [
+      'a dry run missing a tasks array fails closed',
+      expectsThrow(() => parseDryRunOutput('{"packages":[]}', 'fixture')),
+    ],
+    [
+      'a build task without a package name fails closed',
+      expectsThrow(() =>
+        parseDryRunOutput(
+          JSON.stringify({
+            packages: ['@scope/published'],
+            tasks: [{ taskId: '@scope/#build', hash: H.before, directory: 'packages/published' }],
+          }),
+          'fixture',
+        )
+      ),
+    ],
+    [
+      'a duplicate build task fails closed',
+      expectsThrow(() =>
+        parseDryRunOutput(
+          JSON.stringify({
+            packages: ['@scope/published'],
+            tasks: [
+              {
+                taskId: '@scope/published#build',
+                package: '@scope/published',
+                hash: H.before,
+                directory: 'packages/published',
+              },
+              {
+                taskId: '@scope/published#build',
+                package: '@scope/published',
+                hash: H.after,
+                directory: 'packages/published',
+              },
+            ],
+          }),
+          'fixture',
+        )
+      ),
+    ],
+    [
+      'non-build tasks are skipped while build rows are kept',
+      JSON.stringify(
+        parseDryRunOutput(
+          JSON.stringify({
+            turboVersion: '2.10.5',
+            packages: ['@scope/published'],
+            tasks: [
+              {
+                taskId: '@scope/published#test',
+                package: '@scope/published',
+                hash: 'deadbeef',
+                directory: 'packages/published',
+              },
+              {
+                taskId: '@scope/published#build',
+                package: '@scope/published',
+                hash: H.before,
+                directory: 'packages/published',
+              },
+            ],
+          }),
+          'fixture',
+        ).matrix,
+      ) === JSON.stringify({ '@scope/published': H.before }),
+    ],
+    [
+      'packages without any build task fail closed as task-format drift',
+      expectsThrow(() =>
+        parseDryRunOutput(
+          JSON.stringify({
+            packages: ['@scope/published'],
+            tasks: [{ taskId: '@scope/published#test', package: '@scope/published', hash: H.before }],
+          }),
+          'fixture',
+        )
+      ),
+    ],
+    [
+      'engine self-report is carried and checked against the pin',
+      parseDryRunOutput(DRY_FIXTURE, 'fixture').engineVersion === '2.10.5' &&
+      engineSelfReportMatches(parseDryRunOutput(DRY_FIXTURE, 'fixture'), '2.10.5') &&
+      !engineSelfReportMatches({ ...parseDryRunOutput(DRY_FIXTURE, 'fixture'), engineVersion: '9.9.9' }, '2.10.5') &&
+      engineSelfReportMatches({ packages: [], matrix: {}, dirs: {}, engineVersion: null }, '2.10.5'),
+    ],
+    [
+      'pin check accepts a matching lockfile+install',
+      expectsThrow(() => assertTurboPin(FIXTURE_V9, JSON.stringify({ version: '9.9.9' }), 'selftest-fixture')) &&
+      !expectsThrow(() => assertTurboPin(FIXTURE_V9, JSON.stringify({ version: '2.10.5' }), 'selftest-fixture')),
+    ],
+  ] as const
+  for (const [label, ok] of checks) {
+    if (!ok) failures.push(`  ${label}`)
+  }
+
+  // The live pair, recomputed from source bytes: the lockfile's pin and the
+  // installed engine manifest must agree wherever the selftest runs (CI runs
+  // it right after the frozen install). This is the same assertion main()
+  // enforces before any verdict.
+  try {
+    await assertLiveTurboPin('selftest')
+  } catch (error) {
+    failures.push(`  live pin check: ${error instanceof Error ? error.message : String(error)}`)
+  }
 
   if (failures.length > 0) {
-    console.error(`check-changeset: selftest FAILED (${failures.length}/${FIXTURES.length})\n`)
+    console.error(`check-changeset: selftest FAILED (${failures.length}/${FIXTURES.length + checks.length + 1})\n`)
     for (const failure of failures) console.error(failure)
     return 1
   }
-
-  console.log(`check-changeset: selftest ok (${FIXTURES.length} fixtures)`)
+  console.log(`check-changeset: selftest ok (${FIXTURES.length} verdict rows + ${checks.length + 1} mechanism rows)`)
   return 0
 }
 
 try {
-  Deno.exitCode = Deno.args.includes('--selftest') ? selftest() : await main(Deno.args[0])
+  Deno.exitCode = Deno.args.includes('--selftest') ? await selftest() : await main(Deno.args[0])
 } catch (error) {
   console.error(`::error::${error instanceof Error ? error.message : String(error)}`)
   Deno.exitCode = 1
