@@ -9,6 +9,5 @@
     "repos/": false
   },
   "deno.enable": true,
-  "deno.enablePaths": [".claude"],
-  "deno.config": "./.claude/deno.jsonc"
+  "deno.enablePaths": [".claude", "scripts"]
 }

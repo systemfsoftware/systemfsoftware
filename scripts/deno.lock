@@ -1,0 +1,23 @@
+{
+  "version": "5",
+  "specifiers": {
+    "jsr:@std/yaml@^1.2.0": "1.2.0",
+    "npm:@toon-format/toon@^4.1.1": "4.1.1"
+  },
+  "jsr": {
+    "@std/yaml@1.2.0": {
+      "integrity": "20beb41e4983ba3437dbefac62b14061ab058e8a187596f19d28ff9035f6e6cf"
+    }
+  },
+  "npm": {
+    "@toon-format/toon@4.1.1": {
+      "integrity": "sha512-SGCkS7IjVpwRmGPgnY8ENKpAf0EdAnZDOQkvFW0d2cgOpdn9FEFl7sTgryESyypXrWr0YajHGpwsAUX4zw9ZvA=="
+    }
+  },
+  "workspace": {
+    "dependencies": [
+      "jsr:@std/yaml@^1.2.0",
+      "npm:@toon-format/toon@^4.1.1"
+    ]
+  }
+}
