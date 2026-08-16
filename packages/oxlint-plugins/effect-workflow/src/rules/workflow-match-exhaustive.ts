@@ -1,6 +1,7 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
-import { EMPTY_VISITOR, identifierName, MATCH_ARM_KINDS, meta } from './workflow-match-exhaustive.config.js'
+import { boundariesContaining, collectMakeBoundaries, type MakeBoundary } from './make-boundary.kernel.js'
+import { identifierName, MATCH_ARM_KINDS, meta } from './workflow-match-exhaustive.config.js'
 
 export type MessageIds = 'orElseOnClosedUnion' | 'orElseOnOpenDispatch' | 'missingExhaustive'
 
@@ -35,11 +36,17 @@ const isRecordWhenArm = (node: ESTree.Node): boolean => {
 export const workflowMatchExhaustive = defineRule({
   meta,
   create(context: Context) {
-    const filename = context.filename
-    if (!filename.endsWith('.workflow.ts')) return EMPTY_VISITOR
+    let boundaries: readonly MakeBoundary[] = []
 
     return {
+      Program() {
+        boundaries = collectMakeBoundaries(context)
+      },
       CallExpression(node: ESTree.CallExpression) {
+        // The one-path obligation binds where the decision is constructed: a
+        // dispatch outside every Workflow.make body is other code and judged
+        // by nothing here — the suffix is not a key (R2).
+        if (boundariesContaining(node, boundaries).length === 0) return
         const callee = node.callee
         if (callee.type !== 'MemberExpression') return
         const pipeName = identifierName(callee.property)

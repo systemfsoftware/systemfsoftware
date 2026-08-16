@@ -17,6 +17,7 @@ const _default: {
         'workflow-match-exhaustive': Rule;
         'workflow-no-effect-import': Rule;
         'workflow-property-test-shape': Rule;
+        'make-body-purity': Rule;
     };
     configs: {
         recommended: {

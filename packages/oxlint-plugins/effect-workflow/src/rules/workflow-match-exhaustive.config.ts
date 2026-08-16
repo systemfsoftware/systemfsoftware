@@ -30,7 +30,7 @@ export const meta = {
   type: 'problem',
   docs: {
     description:
-      'Match dispatch in *.workflow.ts must terminate with Match.exhaustive. Match.orElse is legal only over a small open record of booleans.',
+      'Match dispatch inside a Workflow.make decision body must terminate with Match.exhaustive. Match.orElse is legal only over a small open record of booleans.',
   },
   schema: [Options],
   messages: {
