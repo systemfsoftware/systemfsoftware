@@ -40,11 +40,11 @@ export default defineConfig({
   resolve: {
     conditions: ['@systemfsoftware/source', 'source', 'import', 'node', 'default'],
     alias: {
-      '@systemfsoftware/effect-atom/test': path.join(__dirname, '../atom/test'),
-      '@systemfsoftware/effect-atom': path.join(__dirname, '../atom/src'),
-      '@systemfsoftware/effect-atom-react/test': path.join(__dirname, 'test'),
-      '@systemfsoftware/effect-atom-react': path.join(__dirname, 'src'),
-      '@systemfsoftware/effect-gherkin-spec': path.join(__dirname, '../../effect-gherkin-spec/src/mod.ts'),
+      '@systemfsoftware/effect-atom/test': path.join(import.meta.dirname, '../atom/test'),
+      '@systemfsoftware/effect-atom': path.join(import.meta.dirname, '../atom/src'),
+      '@systemfsoftware/effect-atom-react/test': path.join(import.meta.dirname, 'test'),
+      '@systemfsoftware/effect-atom-react': path.join(import.meta.dirname, 'src'),
+      '@systemfsoftware/effect-gherkin-spec': path.join(import.meta.dirname, '../../effect-gherkin-spec/src/mod.ts'),
     },
   },
 })

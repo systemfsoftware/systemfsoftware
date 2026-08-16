@@ -81,5 +81,3 @@ pnpm --filter @systemfsoftware/oxlint-plugin-cell-vocabulary test
 pnpm --filter @systemfsoftware/oxlint-plugin-cell-vocabulary lint
 pnpm --filter @systemfsoftware/oxlint-plugin-cell-vocabulary api:check
 ```
-
-The mutation gate is the Mutation workflow's report for this package; no agent starts a run (root `AGENTS.md` REPO-D3).

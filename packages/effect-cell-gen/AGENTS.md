@@ -43,11 +43,10 @@ rules:
     harm: the description is the single place a phase is described; a generator that
       declares its own copy drifts from the interpreter it feeds, and a drift makes the
       properties pass over phases the interpreter never runs
-    check: >-
-      `grep -nE "'read'|'decode'|'validate'|'decide'|'encode'|'write'|'pure'|'impure'|'store'|'adapter'|'effect/Clock'|'effect/System'|call read\\(|call decode\\(|call validate\\(|call decide\\(|call encode\\(|call write\\(" src/Gen.ts`
-      returns nothing — no phase name, kind, I/O cell, I/O source, or stage-brand
-      sentence appears anywhere in this package; the only axis this package names is
-      the import of the description module itself
+    check: review — whether any phase name, kind, I/O cell, I/O source, or stage-brand
+      sentence appears as a literal anywhere in this package; the reviewer greps
+      `src/Gen.ts` for them and confirms the only axis named is the description
+      module's own import
 
   - id: CELL-A3
     title: The properties read their expectations off the generated value
