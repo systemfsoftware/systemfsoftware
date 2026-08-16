@@ -24,9 +24,19 @@ jobs:
         with:
           fetch-depth: 0
       - uses: denoland/setup-deno@v2
+      # The gate's verdict is computed by the lockfile-installed turbo —
+      # the same binary `pnpm check` uses. No registry fetch at verdict time.
+      - uses: ./.github/actions/install-deps
       # The gate's own fixtures first, so a broken gate fails as itself rather
-      # than as a verdict about the PR. No permissions: the selftest is pure.
+      # than as a verdict about the PR. No subprocesses and no writes: the
+      # selftest reads the lockfile and the installed turbo manifest only.
       - name: Changeset gate selftest
-        run: deno run scripts/guards/check-changeset.ts --selftest
+        run: deno run --allow-read scripts/guards/check-changeset.ts --selftest
+      # The base argument is the event's pinned base SHA, never a moving ref:
+      # a merge landing on the base branch between event and check cannot
+      # change what this PR is judged against.
       - name: Require a changeset for publishable-package changes
-        run: deno run --allow-run=git --allow-read scripts/guards/check-changeset.ts ${{ github.base_ref }}
+        run: >-
+          PATH="$PWD/node_modules/.bin:$PATH" deno run
+          --allow-run=git,turbo --allow-read --allow-write=/tmp
+          scripts/guards/check-changeset.ts ${{ github.event.pull_request.base.sha }}
