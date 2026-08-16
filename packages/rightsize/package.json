@@ -56,7 +56,7 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "tsdown && pnpm api:check",
+    "build": "tsdown && pnpm parity:check && pnpm api:check",
     "clean": "rimraf dist",
     "typecheck": "tsc --noEmit --incremental",
     "test": "vitest run",
@@ -68,7 +68,9 @@
     "attw": "attw --pack .",
     "api:check": "concurrently --kill-others-on-fail \"api-extractor run\" \"api-extractor run --config api-extractor.modules.json\" \"api-extractor run --config api-extractor.backend-docker.json\" \"api-extractor run --config api-extractor.backend-msb.json\"",
     "api:update": "concurrently --kill-others-on-fail \"api-extractor run --local\" \"api-extractor run --local --config api-extractor.modules.json\" \"api-extractor run --local --config api-extractor.backend-docker.json\" \"api-extractor run --local --config api-extractor.backend-msb.json\"",
-    "parity:check": "exit 0"
+    "parity:check": "node scripts/parity-enumerate.mjs --check",
+    "parity:write": "node scripts/parity-enumerate.mjs --write",
+    "parity:update-surface": "node scripts/parity-enumerate.mjs --update-surface"
   },
   "dependencies": {
     "@systemfsoftware/effect-cell-types": "workspace:^"

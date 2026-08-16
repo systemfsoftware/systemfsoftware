@@ -81,7 +81,7 @@ export function defaultMsbRuntimeOptions(): MsbRuntimeOptions;
 export function layerMsb(options?: {
     readonly provisioner?: ProvisionerOptions | undefined;
     readonly runtime?: MsbRuntimeOptions | undefined;
-}): Layer.Layer<typeof SandboxRuntime | typeof VirtualNetworks | typeof CheckpointStore | typeof ImageRegistry, ProvisionError, RightsizeConfig>;
+}): Layer.Layer<SandboxRuntime | VirtualNetworks | CheckpointStore | ImageRegistry, ProvisionError, RightsizeConfig>;
 
 // @public
 export interface MsbBackendInstance {

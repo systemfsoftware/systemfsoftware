@@ -1540,7 +1540,9 @@ export const withEntrypoint: (spec: ContainerSpec, ...entrypoint: string[]) => C
 export const withEnv: (spec: ContainerSpec, key: string, value: string) => ContainerSpec;
 
 // @public
-export const withEnvPairs: (spec: ContainerSpec, pairs: ReadonlyArray<readonly [string, string]>) => ContainerSpec;
+const withEnvPairs: (spec: ContainerSpec, pairs: ReadonlyArray<readonly [string, string]>) => ContainerSpec;
+export { withEnvPairs }
+export { withEnvPairs as withEnvironment }
 
 // @public
 export const withExposedPorts: (spec: ContainerSpec, ...guestPorts: number[]) => ContainerSpec;
@@ -1595,8 +1597,8 @@ export const writeRegistryAtomic: (cacheDir: string, hash: string, entry: ReuseR
 
 // Warnings were encountered during analysis:
 //
-// dist/index.d.ts:220:5 - (ae-forgotten-export) The symbol "ReaperKillCommands" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:223:5 - (ae-forgotten-export) The symbol "ProcessTimeSource" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:549:5 - (ae-forgotten-export) The symbol "ReaperKillCommands" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:552:5 - (ae-forgotten-export) The symbol "ProcessTimeSource" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 
