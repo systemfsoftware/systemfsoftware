@@ -21,7 +21,7 @@ tag_prefix = "release-"
 [[repos]]
 name = "effect"
 url = "https://github.com/Effect-TS/effect"
-tag_prefix = "effect@3."
+tag_prefix = "effect@4."
 
 [[repos]]
 name = "storybook"
@@ -46,11 +46,6 @@ tag_prefix = "v"
 [[repos]]
 name = "effect-torch"
 url = "https://github.com/mikearnaldi/effect-torch"
-branch = "main"
-
-[[repos]]
-name = "effect-v4"
-url = "https://github.com/Effect-TS/effect"
 branch = "main"
 
 [[repos]]
