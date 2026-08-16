@@ -15,6 +15,7 @@ const basePreset: PartialStrykerOptions = {
     '@systemfsoftware/stryker-js-vitest-runner',
     '@systemfsoftware/stryker-js-typescript-checker',
     '@systemfsoftware/stryker-plugins/effect-schema-ignorer',
+    '@systemfsoftware/stryker-plugins/workflow-make-ignorer',
   ],
   reporters: ['progress', 'html', 'json', 'progress-stream'],
   htmlReporter: { fileName: 'reports/mutation-report.html' },
@@ -25,7 +26,8 @@ const basePreset: PartialStrykerOptions = {
   incremental: true,
   incrementalFile: 'reports/stryker-incremental.json',
   ignorePatterns: ['reports', 'coverage'],
-  ignorers: ['effect-schema-declarations'],
+  disableBail: true,
+  ignorers: ['effect-schema-declarations', 'workflow-make-boundary'],
   thresholds: { high: 100, low: 80, break: 100 },
 }
 

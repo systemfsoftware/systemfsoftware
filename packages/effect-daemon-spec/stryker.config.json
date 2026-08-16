@@ -1,8 +1,11 @@
 {
   "extends": "@systemfsoftware/stryker-js-mutation-run/config/base",
   "mutate": [
-    "src/**/*.workflow.ts",
-    "src/**/*.schema.ts"
+    "src/**/*.ts",
+    "!src/**/*.test.ts",
+    "!src/**/*.property.test.ts",
+    "!src/**/*.d.ts",
+    "!src/**/__tests__/**"
   ],
   "plugins": [
     "@systemfsoftware/stryker-js-vitest-runner",
@@ -11,7 +14,8 @@
   ],
   "ignorers": [
     "effect-schema-declarations",
-    "in-source-vitest-block"
+    "in-source-vitest-block",
+    "workflow-make-boundary"
   ],
   "thresholds": {
     "high": 100,

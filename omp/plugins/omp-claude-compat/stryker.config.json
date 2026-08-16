@@ -1,8 +1,17 @@
 {
   "extends": "@systemfsoftware/stryker-js-mutation-run/config/base",
   "mutate": [
-    "src/*.workflow.ts"
+    "src/**/*.ts",
+    "!src/**/*.test.ts",
+    "!src/**/*.property.test.ts",
+    "!src/**/*.d.ts",
+    "!src/**/__tests__/**"
   ],
+  "thresholds": {
+    "high": 100,
+    "low": 100,
+    "break": 100
+  },
   "ignorePatterns": [
     "reports",
     "coverage",

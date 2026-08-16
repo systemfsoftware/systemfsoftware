@@ -386,4 +386,38 @@ describe('the shipped base preset', () => {
     expect(out['incremental']).toBe(true)
     expect(out['incrementalFile']).toBe('reports/stryker-incremental.json')
   })
+
+  it('loads both ignorer plugin modules and activates both ignorers for every inheriting config', async () => {
+    const child = await writeJson('stryker.config.json', {
+      extends: '@systemfsoftware/stryker-js-mutation-run/config/base',
+      mutate: ['src/only-this.ts'],
+    })
+    const out = await resolveExtendsChain(child) as Record<string, unknown>
+    expect(out['plugins']).toEqual(
+      expect.arrayContaining([
+        '@systemfsoftware/stryker-plugins/effect-schema-ignorer',
+        '@systemfsoftware/stryker-plugins/workflow-make-ignorer',
+      ]),
+    )
+    expect(out['ignorers']).toEqual(['effect-schema-declarations', 'workflow-make-boundary'])
+  })
+
+  it('carries disableBail: true so killer recording is structural for every inheriting config', async () => {
+    const child = await writeJson('stryker.config.json', {
+      extends: '@systemfsoftware/stryker-js-mutation-run/config/base',
+      mutate: ['src/only-this.ts'],
+    })
+    const out = await resolveExtendsChain(child) as Record<string, unknown>
+    expect(out['disableBail']).toBe(true)
+  })
+
+  it('lets a package override the inherited thresholds without touching the base', async () => {
+    const child = await writeJson('stryker.config.json', {
+      extends: '@systemfsoftware/stryker-js-mutation-run/config/base',
+      mutate: ['src/only-this.ts'],
+      thresholds: { high: 100, low: 100, break: 100 },
+    })
+    const out = await resolveExtendsChain(child) as Record<string, unknown>
+    expect(out['thresholds']).toEqual({ high: 100, low: 100, break: 100 })
+  })
 })
