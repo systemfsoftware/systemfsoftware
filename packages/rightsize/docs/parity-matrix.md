@@ -18,7 +18,7 @@
 
 | member                            | status        | rightsize symbol / replacement                                                                                                      | note                                                                                                                                                                         |
 | --------------------------------- | ------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `IntervalRetry`                   | superseded-by | `Effect.retry` / `Effect.schedule` (Effect dependency)                                                                              | Upstream's bounded-retry helper class; the port-bind conflict loop retries with the same bounded semantics via Effect combinators (src/lifecycle/launch.executor.ts).        |
+| `IntervalRetry`                   | superseded-by | `Effect.retry` / `Effect.schedule` (Effect dependency)                                                                              | Upstream's bounded-retry helper class; the port-bind conflict loop retries with the same bounded semantics via Effect combinators (src/lifecycle/launch.ts).                 |
 | `RandomUuid`                      | superseded-by | `RunId` (src/runtime/run-id.ts)                                                                                                     | One per-process run identity labels containers/ledger entries; no per-call UUID objects.                                                                                     |
 | `Retry`                           | superseded-by | `Effect.retry` / `Effect.schedule`                                                                                                  | Retry is an Effect combinator, not a class.                                                                                                                                  |
 | `Uuid`                            | superseded-by | `RunId` (src/runtime/run-id.ts)                                                                                                     | Session-scoped identity replaces UUID classes.                                                                                                                               |
@@ -235,10 +235,10 @@
 
 ## `SocatContainer` members (`build/socat/socat-container.d.ts`)
 
-| member       | status        | rightsize symbol / replacement                              | note                                            |
-| ------------ | ------------- | ----------------------------------------------------------- | ----------------------------------------------- |
-| `withTarget` | superseded-by | network aliases / tunnel emulation (backend-msb)            | No socat helper; see `SocatContainer`.          |
-| `start`      | superseded-by | `GenericContainer.start` (src/lifecycle/launch.executor.ts) | The socat-specific start is the generic launch. |
+| member       | status        | rightsize symbol / replacement                     | note                                            |
+| ------------ | ------------- | -------------------------------------------------- | ----------------------------------------------- |
+| `withTarget` | superseded-by | network aliases / tunnel emulation (backend-msb)   | No socat helper; see `SocatContainer`.          |
+| `start`      | superseded-by | `GenericContainer.start` (src/lifecycle/launch.ts) | The socat-specific start is the generic launch. |
 
 ## `Wait` statics (`build/wait-strategies/wait.d.ts`)
 

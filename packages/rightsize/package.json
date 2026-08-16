@@ -90,7 +90,6 @@
     "rimraf": "catalog:",
     "tsdown": "catalog:",
     "tstyche": "catalog:",
-    "testcontainers": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },
