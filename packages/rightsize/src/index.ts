@@ -21,7 +21,30 @@
  * over the launch/teardown workflows, the fluent `GenericContainer` facade
  * over the pure spec combinators, and the hygiene (R6): the on-disk ledger,
  * the sync-exit registry, and the detached watchdog reaper.
+ *
+ * U8: the agent-native surface (R15, KTD7) — the durable by-id handle
+ * (`ContainerHandle.byId`, JSON-threadable, fingerprint-validated
+ * reconstruction without a fresh launch), the fleet introspection listing
+ * (`listFleetContainers`), structured diagnostics (`reportDiagnostics` +
+ * the pure renderer), and the explicit reaper (`reap`). The fleet's
+ * errors (MalformedHandleError, HandleBackendMismatchError,
+ * UnreachableMsbAgentError) join the taxonomy here; U12 folds them into
+ * its matrix pass. The registry module stays sealed (internal).
+ *
+ * U10: reuse + checkpoints (R14) — the reuse-adoption seam (`adoptRunningSeam`,
+ * a Cell description over the content-hash identity, the on-disk reuse
+ * registry, and the double opt-in) consumed as `LaunchOptions.adoptRunning`,
+ * and the `Checkpoints` surface: named-checkpoint registry
+ * find/list/remove, portable export/import archives (a `checkpoint.json`
+ * manifest validated against the active backend before import), the
+ * container-side capture (`checkpointContainer`), and the
+ * `fromCheckpoint`/`restoreFromCheckpoint` restore wiring.
  */
+export type { CommandRunnerService } from './backend-msb/command-runner.js'
+export * from './fleet/diagnostics.js'
+export * from './fleet/fleet.js'
+export * from './fleet/handle.js'
+export * from './fleet/reap.js'
 export * from './generic-container.js'
 export * from './lifecycle/launch.executor.js'
 export type { LaunchError } from './lifecycle/launch.workflow.js'
@@ -44,3 +67,21 @@ export * from './runtime/run-id.js'
 export * from './runtime/runtime.js'
 export * from './runtime/selection.workflow.js'
 export type { WaitOptions } from './wait/interpreter.js'
+
+// U10: reuse + checkpoints (R14) — the reuse-adoption seam (content-hash
+// identity, on-disk reuse registry, the adopt cell) and the Checkpoints
+// surface (named-checkpoint registry CRUD, portable export/import archives,
+// capture + restore wiring). Append-only block; U12 folds the additions
+// into its matrix pass.
+export * from './checkpoint/archive.js'
+export * from './checkpoint/checkpoint-ref.js'
+export * from './checkpoint/checkpoint.js'
+export * from './checkpoint/checkpoints.js'
+export * from './checkpoint/from-checkpoint.js'
+export * from './checkpoint/registry.js'
+export * from './checkpoint/tar.js'
+export * from './reuse/adopt.js'
+export * from './reuse/adopt.workflow.js'
+export * from './reuse/hash.adapter.js'
+export * from './reuse/hash.kernel.js'
+export * from './reuse/registry.js'
