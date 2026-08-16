@@ -92,7 +92,7 @@ Directories and the root doctrine file `CONCEPTS.md`; directory contents are dis
 
 - **REPO-R1** — every package is pre-1.0 ALPHA; API stability is never a design constraint. When a change is cleaner as a break, make the break; never wait for a major release. A compatibility objection is rejected unless it names a concrete in-repo consumer migration. Gate: `pnpm exec commitlint` accepts the `api!` marker and the `BREAKING CHANGE:` footer.
 - **REPO-R2** — a change to a publishable package (`packages/**`) ships with a `.changeset/` intent via `pnpm change --bump <none|patch|minor|major>`; `--bump none` only for a genuinely non-releasable touch — on a behavior-visible change it is the silent non-release the gate exists to catch, and review consumes `none` intents before merging. Gate: `.github/workflows/changeset-check.yml` fails a PR that touches a publishable package without an intent.
-- **REPO-C1** — `type(scope): subject`, 72 characters or fewer. Gate: `pnpm exec commitlint --edit <msgfile>`.
+- **REPO-C1** — `type(scope): subject`, and the subject carries no trailing period. Length is a convention, not a constraint: `header-max-length` is deliberately `[0]` because a retry loop over a cosmetic costs more than a long subject does, so nothing rejects one and a rule claiming otherwise would name a gate that never fires. Keep subjects short because a reader scans them. Gate: `pnpm exec commitlint --edit <msgfile>` — it decides the shape, the type and the full stop, never the count.
 - **REPO-C2** — feat, fix, chore, build, ci, deps, docs, perf, refactor, revert, style, test. Config-only changes are not feat or fix. Gate: `pnpm exec commitlint`, run by the `commit-msg` hook on every commit touching a path outside the vendored trees.
 
 ## Boundaries
