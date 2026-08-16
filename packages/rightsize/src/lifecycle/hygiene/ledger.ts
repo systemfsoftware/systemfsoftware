@@ -506,8 +506,8 @@ export const UNPARSEABLE_FRESH_AGE_MS = 60 * 60 * 1_000
 /** The module-load snapshot of «now» — the sweep's default clock, captured once so no live `Date.now()` call sits in a sweep path. */
 const sweepClock: () => number = Date.now
 
-/** What one sweep pass needs: where the ledger lives, which run to exempt, and how to actually remove things by name/id. */
-export interface SweepDeps {
+/** What one sweep pass needs: where the ledger lives, which run to exempt, and how to actually remove things by name/id (module seam, never a published projection). */
+interface SweepDeps {
   readonly cacheDir: string
   /** This process's own run id — always skipped. */
   readonly thisRunId: string

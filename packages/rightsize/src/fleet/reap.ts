@@ -154,8 +154,8 @@ interface ReapGathered {
   readonly runs: ReadonlyArray<ReapRunFacts>
 }
 
-/** The kill runner + liveness seams the sweep runs on (all injectable). */
-export interface ReapDeps {
+/** The kill runner + liveness seams the sweep runs on (all injectable; module seam, never a published projection). */
+interface ReapDeps {
   readonly cacheDir: string
   readonly thisRunId: string
   readonly kill: ReaperKillCommands

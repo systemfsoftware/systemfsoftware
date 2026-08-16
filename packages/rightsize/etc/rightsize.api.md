@@ -1006,19 +1006,6 @@ export type ReapCommand = {
 export type ReapDecision = ReapSkipped | ReapRuns;
 
 // @public
-export interface ReapDeps {
-    // (undocumented)
-    readonly cacheDir: string;
-    // (undocumented)
-    readonly kill: ReaperKillCommands;
-    readonly now?: (() => number) | undefined;
-    readonly runKill?: ((argv: ReadonlyArray<string>) => void) | undefined;
-    // (undocumented)
-    readonly thisRunId: string;
-    readonly timeSource?: ProcessTimeSource | undefined;
-}
-
-// @public
 export type ReaperMode = 'on' | 'sweep' | 'off';
 
 // Warning: (ae-forgotten-export) The symbol "ReapFactContradictionError_base" needs to be exported by the entry point index.d.ts
@@ -1597,8 +1584,8 @@ export const writeRegistryAtomic: (cacheDir: string, hash: string, entry: ReuseR
 
 // Warnings were encountered during analysis:
 //
-// dist/index.d.ts:549:5 - (ae-forgotten-export) The symbol "ReaperKillCommands" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:552:5 - (ae-forgotten-export) The symbol "ProcessTimeSource" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:537:5 - (ae-forgotten-export) The symbol "ReaperKillCommands" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:540:5 - (ae-forgotten-export) The symbol "ProcessTimeSource" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

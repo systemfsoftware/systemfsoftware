@@ -264,8 +264,8 @@ export const spawnWatchdog = (
 // The reaper bring-up + active-ledger state
 // =============================================================================
 
-/** The one-time init gate's deps — everything the ledger/sweep/watchdog need, resolved by the caller from config + selection. */
-export interface ReaperInitDeps {
+/** The one-time init gate's deps — everything the ledger/sweep/watchdog need, resolved by the caller from config + selection (module seam, never a published projection). */
+interface ReaperInitDeps {
   readonly cacheDir: string
   /** The backend this process resolves to — the sweep only ever reaps runs on it. */
   readonly backend: BackendName
