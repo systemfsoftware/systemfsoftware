@@ -191,3 +191,44 @@ it.prop('∀n_SharedRefinement_≡OneNode', [fc.integer({ min: 2, max: 5 })], ([
   const arms = armsOf(S.Struct(fields)).filter((a) => a.kind === 'drop-refinement')
   return arms.length === positions && new Set(arms.map((a) => a.node)).size === 1
 })
+
+/**
+ * R3, subtree side: arms emitted BELOW a shared node are per-node — the
+ * subtree is walked only on the first visit, so N struct fields holding the
+ * SAME `S.suspend` instance yield exactly one arm for the suspended inner
+ * chain, not N. A `Suspend` node cannot carry node-local arms of its own (v4
+ * forbids checks on suspend wrappers and `S.suspend` attaches no encoding),
+ * so the count below is the whole contract. Expected numbers: the inner
+ * check contributes one drop-refinement arm on one distinct node, and the
+ * field count does not move it — written out from the R3 rule above, not
+ * measured from the walk.
+ */
+it.prop('∀n_SharedSuspend_≡OneArm', [fc.integer({ min: 2, max: 5 })], ([positions]) => {
+  const inner = S.String.pipe(S.check(S.makeFilter((s: string) => s.length > 0)))
+  const sharedSuspend = S.suspend(() => inner)
+  const fields: Record<string, S.Codec<unknown, unknown>> = {}
+  for (let i = 0; i < positions; i++) fields[`f${i}`] = sharedSuspend
+  const arms = armsOf(S.Struct(fields)).filter((a) => a.kind === 'drop-refinement')
+  return arms.length === 1 && new Set(arms.map((a) => a.node)).size === 1 && arms[0]?.node === inner.ast
+})
+
+/**
+ * R3, both halves at once: the shared node carries its OWN guard (per-path —
+ * N visits, N arms on the one node, N distinct paths) while the guards BELOW
+ * it (the inner check under property `g`) are per-node — exactly one arm no
+ * matter how many fields reach the shared node. Expected, again from R3:
+ * N own arms plus 1 subtree arm, keyed by node identity.
+ */
+it.prop('∀n_SharedCheckedStruct_≡NPlusOne', [fc.integer({ min: 2, max: 5 })], ([positions]) => {
+  const inner = S.String.pipe(S.check(S.makeFilter((s: string) => s.length > 0)))
+  const shared = S.Struct({ g: inner }).pipe(S.check(S.makeFilter((o: { readonly g: string }) => o.g.length > 0)))
+  const fields: Record<string, S.Codec<unknown, unknown>> = {}
+  for (let i = 0; i < positions; i++) fields[`f${i}`] = shared
+  const arms = armsOf(S.Struct(fields)).filter((a) => a.kind === 'drop-refinement')
+  const ownOnShared = arms.filter((a) => a.node === shared.ast)
+  const ownOnInner = arms.filter((a) => a.node === inner.ast)
+  return ownOnShared.length === positions &&
+    new Set(ownOnShared.map((a) => a.path)).size === positions &&
+    ownOnInner.length === 1 &&
+    arms.length === positions + 1
+})

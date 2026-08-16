@@ -92,14 +92,21 @@ const walk = (
   visited: Set<AST.AST>,
 ): void => {
   // v4 shares AST nodes (a suspended union referenced from several fields is
-  // one node reached down many paths). R3 holds that a node's identity is its
-  // obligation key, so arms are keyed per node (Reference equality is the
-  // mechanism) while each path still contributes its own arm (the path and
-  // the enclosing rebuild differ). The subtree below a node is walked once —
-  // revisits only re-enter the same tree, whose arms are already collected —
-  // which is what terminates v4's shared-union recursion. Keeping the first
-  // subtree visit keeps `armsOf` output deterministic; tree-shaped recipes
-  // (the v3 world) never share nodes, so this dedup is a no-op there.
+  // one node reached down many paths). R3 splits obligations by visit:
+  // - Node-local arms — drop-refinement for `node.checks`, and the
+  //   drop-to/drop-from pair for `node.encoding` — emit on EVERY visit:
+  //   N struct fields sharing one checked node still yield N arms on that one
+  //   node (`∀n_SharedRefinement_≡OneNode`). Each arm's path and enclosing
+  //   rebuild differ, so the arms stay distinct even though they remove the
+  //   same node.
+  // - Subtree arms — everything the walk emits below the node's child edges —
+  //   are collected ONCE, on the first visit; a revisit emits the node-local
+  //   arms above and then returns. A shared `Suspend` therefore contributes
+  //   its inner refinement chain exactly once, no matter how many paths reach
+  //   it (`∀n_SharedSuspend_≡OneArm`, `∀n_SharedCheckedStruct_≡NPlusOne`).
+  // Walking each subtree once is what terminates v4's shared-union recursion
+  // and keeps `armsOf` output deterministic; tree-shaped recipes (the v3
+  // world) never share nodes, so this dedup is a no-op there.
   const isNewNode = !visited.has(node)
   if (isNewNode) visited.add(node)
   // Drop-refinement arms: v4 refinements are per-node checks, and `S.check`
