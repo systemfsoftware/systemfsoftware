@@ -16,6 +16,11 @@ export const MISSING_EXHAUSTIVE_MESSAGE =
 
 export const EMPTY_VISITOR = {} as const
 
+/** Test files exercise decisions as fixtures; the regime binds production code. */
+export const TEST_FILE_PATTERN = /\.(test|spec|property\.test|tst)\.[cm]?tsx?$/u
+
+export const isTestFile = (filename: string): boolean => TEST_FILE_PATTERN.test(filename)
+
 export const isIdentifier = (n: ESTree.Node): n is IdentifierNode => n.type === 'Identifier'
 
 export const identifierName = (n: ESTree.Node): string => isIdentifier(n) ? n.name : ''

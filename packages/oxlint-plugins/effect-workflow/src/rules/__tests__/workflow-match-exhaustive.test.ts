@@ -225,6 +225,14 @@ const decide = (input: unknown): Result.Result<string, never> =>
 
 export const decision = Workflow.make(decide)`,
     },
+    {
+      name: 'Should_Pass_When_AFixtureInATestFileUsesOrElseOnATagChain',
+      code: inMakeBody(`Match.value(input).pipe(
+        Match.tag('A', () => Result.succeed('a')),
+        Match.orElse(() => Result.succeed('fallback'))
+      )`),
+      filename: 'interpreter.integration.test.ts',
+    },
   ],
   invalid: [
     {

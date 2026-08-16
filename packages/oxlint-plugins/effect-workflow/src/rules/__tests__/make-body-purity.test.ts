@@ -248,6 +248,17 @@ export const decide = Workflow.make(
 )`,
       filename: 'cancel-order.executor.ts',
     },
+    {
+      name: 'Should_Pass_When_AFixtureInATestFileUsesATernary',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import * as Result from 'effect/Result'
+
+export const decide = Workflow.make(
+  (command: { readonly ok: boolean }): Result.Result<string, never> =>
+    command.ok ? Result.succeed('yes') : Result.fail('no' as never),
+)`,
+      filename: 'interpreter.integration.test.ts',
+    },
   ],
   invalid: [
     {

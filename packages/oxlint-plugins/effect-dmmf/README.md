@@ -1,12 +1,12 @@
 # @systemfsoftware/oxlint-plugin-effect-dmmf
 
-A combined oxlint plugin aggregating all eighteen source plugins in this
+A combined oxlint plugin aggregating the surviving source plugins in this
 family under one entrypoint: one package, one `jsPlugin`, every rule set
 under one namespace.
 
-This plugin defines no rules of its own. It re-exports the eighteen
-sources' rules under one plugin name and composes `configs.recommended`
-from each source's own recommended set.
+This plugin defines no rules of its own. It re-exports the five surviving
+sources' rules under one plugin name and composes `configs.recommended` from
+each source's own recommended set.
 
 ## Install
 
@@ -33,7 +33,7 @@ export default defineConfig({ extends: [base] })
 
 Standalone use is for a consumer who wants one plugin without adopting a
 config. It is an internal registration convenience — one `jsPlugin` entry
-instead of eighteen — not the recommended adoption surface:
+instead of five — not the recommended adoption surface:
 
 ```ts
 import effectDmmf from '@systemfsoftware/oxlint-plugin-effect-dmmf'
@@ -49,23 +49,15 @@ The hand-spread is load-bearing. oxlint's plugin type is `{ meta?, rules }`:
 `configs` is absent from it and the host never dereferences it, so
 `configs.recommended` is inert metadata that takes effect only because a
 config object spreads it into `rules` — which is exactly what `./base` does.
-This standalone form is equivalent to registering all eighteen source
-plugins and spreading each one's `configs.recommended.rules`, except every
-rule is reported under the
-`@systemfsoftware/oxlint-plugin-effect-dmmf/<rule-name>` namespace instead
-of each source's own.
+This standalone form is equivalent to registering all five source plugins
+and spreading each one's `configs.recommended.rules`, except every rule is
+reported under the `@systemfsoftware/oxlint-plugin-effect-dmmf/<rule-name>`
+namespace instead of each source's own.
 
 ## What "recommended" means here
 
-`configs.recommended.rules` is **not** every rule the eighteen sources
-register — it is exactly the union of what each source itself recommends. A
-source can register a rule for individual opt-in without recommending it by
-default; `effect-workflow`'s `workflow-inline-schemas` is one such rule
-today. That choice survives the merge unchanged: `workflow-inline-schemas`
-is present in `configs.rules` (so
-`'@systemfsoftware/oxlint-plugin-effect-dmmf/workflow-inline-schemas': 'error'`
-still works if you opt in explicitly) but absent from
-`configs.recommended.rules`.
+`configs.recommended.rules` is **not** every rule the five sources register
+— it is exactly the union of what each source itself recommends.
 
 To adopt gradually, drop the spread and name a subset of rules individually
 at `'error'`, narrowing blast radius instead of severity: start with fewer
@@ -77,30 +69,19 @@ time.
 ## Rules
 
 See each source plugin's own README for its full rule table. The composite
-re-exports all eighteen sources:
+re-exports all five sources:
 
-- [`cell-imports`](../cell-imports/README.md)
-- [`cell-taxonomy`](../cell-taxonomy/README.md) — `<name>.<cell>.ts` filenames
-- [`effect-acl`](../effect-acl/README.md)
-- [`effect-adapter`](../effect-adapter/README.md)
-- [`effect-executor`](../effect-executor/README.md) — `*.executor.ts` operation shells
-- [`effect-handler`](../effect-handler/README.md)
-- [`effect-kernel`](../effect-kernel/README.md)
-- [`effect-middleware`](../effect-middleware/README.md)
-- [`effect-observer`](../effect-observer/README.md)
-- [`effect-policy`](../effect-policy/README.md)
 - [`effect-schema`](../effect-schema/README.md)
-- [`effect-shape`](../effect-shape/README.md)
-- [`effect-state`](../effect-state/README.md)
-- [`effect-store`](../effect-store/README.md)
-- [`effect-workflow`](../effect-workflow/README.md) — `*.workflow.ts` pure decisions
-- [`property-testing`](../property-testing/README.md) — `*.property.test.ts` predicates
+- [`effect-workflow`](../effect-workflow/README.md) — the `Workflow.make`
+  boundary gates
+- [`property-testing`](../property-testing/README.md) — `*.property.test.ts`
+  predicates
 - `test-hygiene` — no README in this package; its rules live in `src/rules/`
 - [`test-placement`](../test-placement/README.md)
 
 ## Development
 
-`src/index.ts` merges exactly eighteen fixed, already-tested plugins with a
+`src/index.ts` merges exactly five fixed, already-tested plugins with a
 spread and a small rekey — there's no decision surface here for a test suite
 or mutation gate to earn its keep. Verify a change by building and running
 the result against real oxlint:

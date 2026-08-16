@@ -117,16 +117,13 @@ Each `effect-<cell>/` package's leaf `AGENTS.md` states its own doctrine and is 
 record — the shared conventions in this file are the default, not a delta. Listed here only
 where a package departs from them.
 
-| Package                                         | Leaf delta                                                                                                                             |
-| ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `core/`                                         | ESLintUtils template, ESLint migration notes, legacy commands                                                                          |
-| `property-testing/`                             | Property-test contract rules; no leaf — this file's conventions govern                                                                 |
-| `test-hygiene/`                                 | DAMP test naming; no leaf — this file's conventions govern                                                                             |
-| `cell-imports/`                                 | Import-boundary rules per cell pair; no leaf — this file's conventions govern                                                          |
-| `effect-dmmf/`                                  | No rules of its own, pure re-export — exempt from OX-MG1, gate + rationale in its own leaf (`ED1`, `ED2`)                              |
-| `cell-taxonomy/`                                | Sole owner of non-test source filenames (`CT1`); default lists are defaults, not law (`CT2`)                                           |
-| `test-placement/`                               | Not enrolled in its own rules (`TP1`), sole owner of test placement (`TP2`)                                                            |
-| `effect-entrypoint/`                            | Not a cell — keyed on the exact filename `main.ts` (`EP1`); the two rules that close cell-taxonomy's `main.ts` exemption (`EP2`)       |
-| `effect-executor/`                              | Deliberate non-gates; its phase vocabulary is walked off @systemfsoftware/effect-cell-types directly; delivered consumer-side (OX-DL1) |
-| `cell-vocabulary/`                              | Not a cell — walks a Cell description for its vocabulary (`CELL-V1`); OX-OB1 does not apply (`CELL-V4`)                                |
-| `effect-{acl,handler,adapter,policy,workflow}/` | Each names its OX-OB1 obligation rule                                                                                                  |
+| Package              | Leaf delta                                                                                                |
+| -------------------- | --------------------------------------------------------------------------------------------------------- |
+| `core/`              | ESLintUtils template, ESLint migration notes, legacy commands                                             |
+| `property-testing/`  | Property-test contract rules; no leaf — this file's conventions govern                                    |
+| `test-hygiene/`      | DAMP test naming; no leaf — this file's conventions govern                                                |
+| `effect-dmmf/`       | No rules of its own, pure re-export — exempt from OX-MG1, gate + rationale in its own leaf (`ED1`, `ED2`) |
+| `test-placement/`    | Not enrolled in its own rules (`TP1`), sole owner of test placement (`TP2`)                               |
+| `effect-entrypoint/` | Not a cell — keyed on the exact filename `main.ts` (`EP1`)                                                |
+| `cell-vocabulary/`   | Not a cell — walks a Cell description for its vocabulary (`CELL-V1`); OX-OB1 does not apply (`CELL-V4`)   |
+| `effect-workflow/`   | The make-boundary purity and exhaustiveness rules (`EW1`)                                                 |

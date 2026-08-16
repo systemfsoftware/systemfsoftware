@@ -10,7 +10,7 @@
   },
   "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/oxlint-plugins/effect-workflow#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "Oxlint rules enforcing the *.workflow.ts cell — TypeId pattern, inline schemas, Match.exhaustive, purity gate, step extraction, single export.",
+  "description": "Oxlint rules enforcing the purity and exhaustiveness obligations of a Workflow.make decision body.",
   "keywords": [
     "oxlint",
     "oxlint-plugin",

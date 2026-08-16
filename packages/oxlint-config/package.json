@@ -21,7 +21,6 @@
   },
   "dependencies": {
     "@systemfsoftware/oxlint-plugin": "workspace:^",
-    "@systemfsoftware/oxlint-plugin-cell-taxonomy": "workspace:^",
     "@systemfsoftware/oxlint-plugin-effect-dmmf": "workspace:^",
     "@systemfsoftware/oxlint-plugin-effect-schema": "workspace:^",
     "@systemfsoftware/oxlint-plugin-effect-workflow": "workspace:^",

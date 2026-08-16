@@ -22,6 +22,7 @@ import {
 } from './make-body-purity.config.js'
 import { collectMakeBoundaries, type MakeBodyKind, type MakeBoundary } from './make-boundary.kernel.js'
 import { classifyBodyReferences, isFailingVerdict, type ReferenceVerdict } from './reference-classification.kernel.js'
+import { isTestFile } from './workflow-match-exhaustive.config.js'
 
 export type MessageIds =
   | 'ioImportReference'
@@ -143,6 +144,7 @@ const verdictData = (
 export const makeBodyPurity = defineRule({
   meta,
   create(context: Context) {
+    if (isTestFile(context.filename)) return {}
     let boundaries: readonly MakeBoundary[] = []
     const reportedSpans = new Set<string>()
     const reportedReferenceKeys = new Set<string>()

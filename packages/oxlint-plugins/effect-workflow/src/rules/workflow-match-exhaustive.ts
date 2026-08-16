@@ -1,7 +1,7 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
 import { boundariesContaining, collectMakeBoundaries, type MakeBoundary } from './make-boundary.kernel.js'
-import { identifierName, MATCH_ARM_KINDS, meta } from './workflow-match-exhaustive.config.js'
+import { EMPTY_VISITOR, identifierName, isTestFile, MATCH_ARM_KINDS, meta } from './workflow-match-exhaustive.config.js'
 
 export type MessageIds = 'orElseOnClosedUnion' | 'orElseOnOpenDispatch' | 'missingExhaustive'
 
@@ -36,6 +36,7 @@ const isRecordWhenArm = (node: ESTree.Node): boolean => {
 export const workflowMatchExhaustive = defineRule({
   meta,
   create(context: Context) {
+    if (isTestFile(context.filename)) return EMPTY_VISITOR
     let boundaries: readonly MakeBoundary[] = []
 
     return {
