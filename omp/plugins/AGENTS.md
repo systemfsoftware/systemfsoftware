@@ -1,8 +1,8 @@
 # AGENTS.md — `omp/plugins/`
 
 > **Location:** `omp/plugins/` — packages the OMP host loads as extensions.
-> Root `AGENTS.md` is supreme; `omp/AGENTS.md` carries the cell taxonomy, commands, and
-> ACL/workflow gates. This file carries only what the **host's load model** makes true here,
+> Root `AGENTS.md` is supreme; `omp/AGENTS.md` carries the sandwich pattern, commands, and
+> workflow/ACL gates. This file carries only what the **host's load model** makes true here,
 > which nothing in this repo's source can show you.
 
 ## The load model (why every rule below exists)
@@ -28,14 +28,14 @@ The cache-bust is what hides it. Each session really does get its own handler cl
   do: register `process.on`/`process.once` handlers, and construct any process-wide singleton, at the top level of the cached module that owns the resource
   dont: register a signal handler, or construct process-wide state, inside the default-export factory or inside a helper the factory invokes
   harm: the factory runs once per session, so every subagent adds another listener against the one shared instance — measured 2 listeners after 2 loads, and a MaxListenersExceededWarning past ten subagents
-  check: "`grep -n 'process\\.on\\|process\\.once' omp/plugins/*/src/*.ts` — review that every hit sits at module top level, never inside a function the factory calls"
+  check: "`grep -rn 'process\\.on\\|process\\.once' omp/plugins/*/src` — review that every hit sits at module top level, never inside a function the factory calls"
 
 - id: PLG2
   title: NEVER dispose a shared runtime from a per-session event
   do: let a process-cached `ManagedRuntime` be disposed only by a process-level signal, or give it a refcount if a session must be able to release it
   dont: call `runtime.dispose()` from `session_shutdown`, `session_stop`, or any other per-session handler
   harm: "`dispose()` is terminal and the runtime is shared, so one subagent finishing poisons every live session — the main session's next keystroke throws `ManagedRuntime disposed`. This shipped."
-  check: "`grep -rn 'dispose' omp/plugins/*/src/*.handler.ts omp/plugins/*/src/index.ts` — review that no hit sits inside a per-session `pi.on(...)` callback"
+  check: "`grep -rn 'dispose' omp/plugins/*/src` — review that no hit sits inside a per-session `pi.on(...)` callback"
 
 - id: PLG3
   title: Registration must complete before the factory's promise settles — order is load-bearing
