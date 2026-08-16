@@ -20,6 +20,7 @@ export default defineConfig({
           'ImageRegistry',
           'Selection',
           'RuntimeDiscovery',
+          'DockerClientContext',
         ],
       },
     ],

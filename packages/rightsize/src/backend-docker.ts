@@ -1,10 +1,14 @@
 /**
- * `@systemfsoftware/rightsize/backend-docker` — the Docker Engine backend.
+ * `@systemfsoftware/rightsize/backend-docker` — the Docker Engine backend
+ * subpath.
  *
- * U1 scaffold: an intentionally empty named barrel. `layerDocker` (the
- * unix-socket-only Engine API client, caps, networks, pull, `cp`/`save`/`load`
- * shell-outs) arrives in the docker-backend unit and is exported from here.
+ * U6b: `layerDocker` — the four backend Tags (`SandboxRuntime`,
+ * `VirtualNetworks`, `CheckpointStore`, `ImageRegistry`) composed over the
+ * hand-rolled unix-socket-only Engine API client — plus
+ * `registerDockerCleanupSync`, the blocking cleanup primitive the hygiene
+ * unit's sync-exit registry consumes (R6). Everything else in the backend
+ * tree stays sealed behind this barrel (KTD10).
  *
  * @since 0.1.0
  */
-export {}
+export * from './backend-docker/index.js'
