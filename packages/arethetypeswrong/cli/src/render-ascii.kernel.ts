@@ -1,6 +1,11 @@
 import type { Problem, ResolutionKind } from '@systemfsoftware/arethetypeswrong-core'
 import { renderTable } from './render-table.kernel.js'
-import { resolutionKindOrder, symbolForProblem } from './render-typed.kernel.js'
+import {
+  partitionProblemsByCell,
+  problemsForCell,
+  resolutionKindOrder,
+  symbolForProblem,
+} from './render-typed.kernel.js'
 
 export const renderAsciiAnalysis = (
   entrypoints: readonly string[],
@@ -11,14 +16,11 @@ export const renderAsciiAnalysis = (
     return 'No entrypoints found.'
   }
   const header: readonly string[] = ['Entrypoint', ...resolutionKindOrder]
+  const cells = partitionProblemsByCell(entrypoints, problems)
   const rows = entrypoints.map((entrypoint) => {
     const row: string[] = [entrypoint]
     for (const rk of resolutionKindOrder) {
-      const relevant = problems.filter((p) => {
-        if ('entrypoint' in p && p.entrypoint !== entrypoint) return false
-        if ('resolutionKind' in p && p.resolutionKind !== rk) return false
-        return true
-      })
+      const relevant = problemsForCell(cells, entrypoint, rk)
       if (relevant.length === 0) {
         row.push('OK')
         continue

@@ -49,16 +49,36 @@ export type RenderOptions = {
   readonly color: boolean
 }
 
-const groupProblemsByEntrypoint = (
+const cellKey = (entrypoint: string, resolutionKind: ResolutionKind): string => `${entrypoint}\u0000${resolutionKind}`
+
+/**
+ * Bucket every problem into the (entrypoint x resolutionKind) cells it belongs to in one pass.
+ * A problem carrying neither field is global and lands in every cell, which is why the walk is
+ * over the problem's own axes rather than over the cells.
+ */
+export const partitionProblemsByCell = (
+  entrypoints: readonly string[],
+  problems: readonly Problem[],
+): ReadonlyMap<string, readonly Problem[]> => {
+  const cells = new Map<string, Problem[]>()
+  for (const entrypoint of entrypoints) {
+    for (const resolutionKind of resolutionKindOrder) cells.set(cellKey(entrypoint, resolutionKind), [])
+  }
+  for (const problem of problems) {
+    const axisEntrypoints = 'entrypoint' in problem ? [problem.entrypoint] : entrypoints
+    const axisKinds = 'resolutionKind' in problem ? [problem.resolutionKind] : resolutionKindOrder
+    for (const entrypoint of axisEntrypoints) {
+      for (const resolutionKind of axisKinds) cells.get(cellKey(entrypoint, resolutionKind))?.push(problem)
+    }
+  }
+  return cells
+}
+
+export const problemsForCell = (
+  cells: ReadonlyMap<string, readonly Problem[]>,
   entrypoint: string,
   resolutionKind: ResolutionKind,
-  problems: readonly Problem[],
-): readonly Problem[] =>
-  problems.filter((p) => {
-    if ('entrypoint' in p && p.entrypoint !== entrypoint) return false
-    if ('resolutionKind' in p && p.resolutionKind !== resolutionKind) return false
-    return true
-  })
+): readonly Problem[] => cells.get(cellKey(entrypoint, resolutionKind)) ?? []
 
 export const renderTypedAnalysis = (
   entrypoints: readonly string[],
@@ -69,13 +89,12 @@ export const renderTypedAnalysis = (
   if (entrypoints.length === 0) {
     return 'No entrypoints found.'
   }
-  const header: readonly string[] = opts.color
-    ? ['Entrypoint', ...resolutionKindOrder]
-    : ['Entrypoint', ...resolutionKindOrder]
+  const header: readonly string[] = ['Entrypoint', ...resolutionKindOrder]
+  const cells = partitionProblemsByCell(entrypoints, problems)
   const rows = entrypoints.map((entrypoint) => {
     const row: string[] = [entrypoint]
     for (const rk of resolutionKindOrder) {
-      const relevant = groupProblemsByEntrypoint(entrypoint, rk, problems)
+      const relevant = problemsForCell(cells, entrypoint, rk)
       if (relevant.length === 0) {
         row.push(opts.useEmoji ? '✔' : 'OK')
         continue
