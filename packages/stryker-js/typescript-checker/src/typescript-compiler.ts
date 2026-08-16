@@ -7,7 +7,14 @@ import { commonTokens, tokens } from '@systemfsoftware/stryker-js-plugin-api/plu
 import { Result } from 'effect'
 import { type SourceFile, SyntaxKind } from 'typescript/unstable/ast'
 import type { FileSystem } from 'typescript/unstable/fs'
-import { API, type Diagnostic, type DocumentIdentifier, type Program, type Snapshot } from 'typescript/unstable/sync'
+import {
+  API,
+  type Diagnostic,
+  DiagnosticCategory,
+  type DocumentIdentifier,
+  type Program,
+  type Snapshot,
+} from 'typescript/unstable/sync'
 
 import { TSFileNode } from './grouping/ts-file-node.js'
 import * as pluginTokens from './plugin-tokens.js'
@@ -120,12 +127,16 @@ export class TypescriptCompiler implements ITypescriptCompiler, IFileRelationCre
     this.lastMutants = mutants
     this.lastMutatedFileNames = mutatedFileNames
 
-    const programs = this.getPrograms()
-    return programs.flatMap((program) => [
+    // Only error-category diagnostics fail a compile. The pristine tree
+    // carries standing warnings and the Effect language service's suggestions
+    // by design — they surface in `lint:tsgo` and the editor — and a dry run
+    // that counts them would refuse every package whose tree carries one.
+    const programsWithDiagnostics = this.getPrograms()
+    return programsWithDiagnostics.flatMap((program) => [
       ...program.getConfigFileParsingDiagnostics(),
       ...program.getSemanticDiagnostics(),
       ...program.getProgramDiagnostics(),
-    ])
+    ]).filter((diagnostic) => diagnostic.category === DiagnosticCategory.Error)
   }
 
   public get nodes(): Map<string, TSFileNode> {
