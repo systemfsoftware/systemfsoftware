@@ -112,6 +112,14 @@ const typeRegionRangesOf = (
       if (typeof start === 'number' && typeof end === 'number') regions.push([start, end])
       return
     }
+    if (type === 'TSAsExpression') {
+      // `as const` (and any as-cast) puts only its type subtree in type space; the
+      // expression side stays value space and its references keep being checked.
+      const annotation = value['typeAnnotation']
+      const start = isWalkable(annotation) ? annotation['start'] : undefined
+      const end = isWalkable(annotation) ? annotation['end'] : undefined
+      if (typeof start === 'number' && typeof end === 'number') regions.push([start, end])
+    }
     for (const key of visitorKeys[type] ?? []) {
       const child = value[key]
       if (Array.isArray(child)) {
@@ -203,7 +211,18 @@ export const classifyFunctionReferences = (
       }
       const def = variable.defs[0]
       if (def === undefined) {
-        reports.push({ identifier, name: identifier.name, verdict: { kind: 'unresolvable' } })
+        // A builtin global (undefined, NaN, Infinity) resolves to a variable with no
+        // definitions — empty defs is the builtin case, so the same named-global
+        // triage the unresolved path runs applies here too.
+        reports.push({
+          identifier,
+          name: identifier.name,
+          verdict: IO_GLOBAL_NAMES.has(identifier.name)
+            ? { kind: 'ioGlobal' }
+            : BENIGN_GLOBAL_NAMES.has(identifier.name)
+            ? { kind: 'benignGlobal' }
+            : { kind: 'unresolvable' },
+        })
         continue
       }
       if (def.type === 'Parameter') {

@@ -25,6 +25,7 @@ const _default: {
         'no-new-worker-with-wasm-import': Rule;
         'no-direct-tag-access': Rule;
         'no-either-tag-assertions': Rule;
+        'no-domain-branching-density': Rule;
         'no-native-map-in-effect': Rule;
         'no-native-set-in-effect': Rule;
         'no-native-setinterval-in-effect': Rule;

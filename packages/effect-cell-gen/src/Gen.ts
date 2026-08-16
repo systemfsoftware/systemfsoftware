@@ -1,5 +1,6 @@
 import { Cell, Workflow } from '@systemfsoftware/effect-cell-types'
 import * as Effect from 'effect/Effect'
+import * as Match from 'effect/Match'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 import { FastCheck as fc } from 'effect/testing'
@@ -146,17 +147,22 @@ const substituteLayer = (
               return Result.succeed(input)
             },
           }
-        case 'either-pass':
+        case 'either-pass': {
+          // The failure injection is decided before the boundary: the make body
+          // stays one exhaustive path, closing only over const bindings.
+          const injectedCode = failure !== undefined && failure.phaseIndex === phaseIndex ? failure.error : -1
+          const injected = injectedCode !== -1
           return {
             ...phase,
             run: Workflow.make((input: number): Result.Result<number, DrawnDecisionError> => {
               trace.push(phase.name)
-              if (failure !== undefined && failure.phaseIndex === phaseIndex) {
-                return Result.fail(DrawnDecisionError.make({ code: failure.error }))
-              }
-              return Result.succeed(input)
+              return Match.value({ injected, input } as const).pipe(
+                Match.when({ injected: true }, () => Result.fail(DrawnDecisionError.make({ code: injectedCode }))),
+                Match.orElse(() => Result.succeed(input)),
+              )
             }),
           }
+        }
         case 'total':
           return {
             ...phase,

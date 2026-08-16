@@ -259,6 +259,21 @@ export const decide = Workflow.make(
 )`,
       filename: 'interpreter.integration.test.ts',
     },
+    {
+      name: 'Should_Pass_When_BuiltinsAndAsConstAppearInTheBody',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import * as Match from 'effect/Match'
+import * as Result from 'effect/Result'
+
+export const decide = Workflow.make((command: { readonly n: number | undefined }): Result.Result<number, never> => {
+  if (command.n === undefined) return Result.fail('missing' as never)
+  const input = { command } as const
+  return Match.value(input).pipe(
+    Match.when({ command: { n: 0 } }, () => Result.succeed(0)),
+    Match.orElse(() => Result.succeed(command.n)),
+  )
+})`,
+    },
   ],
   invalid: [
     {

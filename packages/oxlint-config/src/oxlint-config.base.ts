@@ -60,6 +60,7 @@ export default defineConfig({
     '@systemfsoftware/oxlint-plugin/no-context-generic-tag': 'error',
     '@systemfsoftware/oxlint-plugin/no-date-now-in-effect': 'error',
     '@systemfsoftware/oxlint-plugin/no-direct-tag-access': 'error',
+    '@systemfsoftware/oxlint-plugin/no-domain-branching-density': 'error',
     '@systemfsoftware/oxlint-plugin/no-either-tag-assertions': 'error',
     '@systemfsoftware/oxlint-plugin/no-io-boundary-tests': 'error',
     '@systemfsoftware/oxlint-plugin/no-logging-in-catch': 'error',

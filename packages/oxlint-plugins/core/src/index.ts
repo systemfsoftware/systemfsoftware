@@ -12,6 +12,7 @@ import { noBodylessStatusAssertion } from './rules/no-bodyless-status-assertion.
 import { noContextGenericTag } from './rules/no-context-generic-tag.js'
 import { noDateNowInEffect } from './rules/no-date-now-in-effect.js'
 import { noDirectTagAccess } from './rules/no-direct-tag-access.js'
+import { noDomainBranchingDensity } from './rules/no-domain-branching-density.js'
 import { noEitherTagAssertions } from './rules/no-either-tag-assertions.js'
 import { noInlineDestructuredType } from './rules/no-inline-destructured-type.js'
 import { noIoBoundaryTests } from './rules/no-io-boundary-tests.js'
@@ -43,6 +44,7 @@ export default {
     'no-new-worker-with-wasm-import': noNewWorkerWithWasmImport,
     'no-direct-tag-access': noDirectTagAccess,
     'no-either-tag-assertions': noEitherTagAssertions,
+    'no-domain-branching-density': noDomainBranchingDensity,
     'no-native-map-in-effect': noNativeMapInEffect,
     'no-native-set-in-effect': noNativeSetInEffect,
     'no-native-setinterval-in-effect': noNativeSetIntervalInEffect,
