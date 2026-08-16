@@ -1,107 +1,89 @@
 ---
-title: Request timeout armed after asynchronous bootstrap creates unbounded wait
+title: "Vite native config loader drops alias maps when CJS globals appear in ESM configs"
 date: 2026-08-16
 category: test-failures
-module: packages/effect-atom
-problem_type: logic_error
+module: effect-atom
+problem_type: test_failure
 component: testing_framework
 symptoms:
-  - "First request against a cold or wedged protocol frame blocked up to five minutes while advertising a 30-second timeout"
-  - "Rejections could not distinguish between a frame that failed to load, a frame stuck in presync, or a dropped RPC reply"
-root_cause: async_timing
-resolution_type: code_fix
-severity: high
+  - "Browser-mode Vitest runs in CI fail with `TypeError: Failed to fetch dynamically imported module` for feature test files while Node-mode tests pass"
+  - "Vite prints `Your Vite config uses features that are unsupported by configLoader: 'native' ... Use import.meta.dirname instead`"
+  - "Local runs pass despite the warning, hiding the failure from non-CI environments"
+root_cause: config_error
+resolution_type: config_change
+severity: medium
 tags:
-  - timeout-budget
-  - async-timing
-  - postmessage-bridge
-  - metrics-integrity
-  - mutation-testing
-  - test-doubles
+  - vitest
+  - vite
+  - esm
+  - config-loader
+  - browser-mode
+  - playwright
+  - effect-atom
 ---
 
-# Request timeout armed after asynchronous bootstrap creates unbounded wait
+# Vite native config loader drops alias maps when CJS globals appear in ESM configs
 
 ## Problem
 
-When an asynchronous client advertises a per-operation timeout but arms its timer only _after_ awaiting an underlying subsystem's readiness, the advertised budget is violated. The total wait becomes the sum of the setup timeout plus the operation timeout, while callers expect a strict bound.
+When a Vitest configuration file in an ESM package relies on CommonJS globals like `__dirname` to define resolution aliases, Vite's native configuration loader (`configLoader: 'native'`) degrades silently. Instead of failing immediately with a fatal syntax error, the loader warns on stderr and drops the un-evaluable alias configuration.
 
-Furthermore, when the timeout eventually fires, the rejection loses context on where the time was spent, and metric histograms that record elapsed time on timeout sample only the residual fraction of the window, distorting service telemetry.
+In Node-based test runners, module resolution frequently succeeds via ambient resolution or parent-directory traversal, masking the dropped configuration. However, when running in browser mode (e.g. Chromium under Playwright), the browser worker requests source files directly over HTTP using package-specifier URLs. Without the alias map, the dev server cannot resolve workspace package imports inside the browser, causing dynamic import fetches to fail with `TypeError: Failed to fetch dynamically imported module`.
 
 ## Mechanism & Failure Modes
 
-### 1. Cumulative Timeout Stacking
+### 1. Silent Configuration Degradation in Native Loaders
 
-If setup carries an initial load allowance and a readiness allowance, placing setup awaits before arming the per-request timer creates a sequential cascade:
-$$\text{Max Latency} = T_{\text{load}} + T_{\text{ready}} + T_{\text{request}}$$
+Under native ESM loading, `__dirname` and `__filename` do not exist on the global scope. When Vite 4.1.10 encounters these symbols during native config evaluation:
 
-Callers programming to a strict deadline hang for multiple combined phases during cold starts or worker stalls.
+- It records a non-fatal diagnostic warning on stderr.
+- The evaluation of the containing object or property (such as `resolve.alias`) aborts or defaults to an empty object.
+- The build or test runner continues execution with an incomplete configuration state rather than halting loudly at bootstrap.
 
-### 2. Loss of Phase Attribution
+### 2. Environment Disparity (Node vs Browser Test Runners)
 
-A single generic `TimeoutError` without phase metadata makes diagnosis impossible. Telemetry cannot distinguish whether the host frame failed to load, the worker hung during presync, or the remote RPC dropped the reply.
+Different Vitest test project runners consume the configuration with different levels of tolerance:
 
-### 3. Metric Inversion on Failure
+- **Node Environment:** Resolves imports through the Node module resolution graph. If dependencies are linked or hoisted in `node_modules`, test execution proceeds normally.
+- **Browser Environment:** The browser execution context requires the Vite dev server to transform and serve all module requests. When the test runner requests `packages/effect-atom/atom-react/test/Hooks.feature.test.tsx`, the server encounters unresolved package specifiers that depended on `resolve.alias`. The browser receives an HTTP 500 or malformed bundle, manifesting as a browser-side fetch rejection.
 
-When a request budget starts at call time but the latency stopwatch begins only when the message is dispatched, measuring duration on timeout records only the leftover fraction of the window, falsely pulling p95/p99 latency metrics downward during outages.
+## Solution
 
-### 4. Teardown Orphan Leaks
+Replace all CommonJS directory references with the standard ECMAScript metadata property `import.meta.dirname` (available in Node 20.11+ and Node 22+).
 
-If the underlying connection or frame is reset while a request is awaiting a reply, failing to drain the pending registry leaves caller promises hanging until their timers expire.
-
-## Architectural Invariants
-
-### 1. Unified Call-Time Budgeting
-
-A single deadline timer must be armed at the public entry point before any setup or dispatch awaits occur. All subsequent asynchronous phases (`load`, `ready`, `reply`) are raced sequentially against that single deadline:
+In `packages/effect-atom/atom/vitest.config.ts` and `packages/effect-atom/atom-react/vitest.config.ts`:
 
 ```ts
-const budget = startRequestBudget(method, timeoutMs)
-try {
-  await budget.guard('load', ensureHostFrame())
-  if (needsProtocolReady) {
-    await budget.guard('ready', ensureProtocolFrame())
-  }
-  const sent = sendRequest(frameWindow, method, payload, onProgress)
-  try {
-    const value = await budget.guard('reply', sent.reply)
-    recordRoundtrip()
-    return value
-  } catch (error) {
-    pendingRequests.delete(sent.id)
-    throw error
-  }
-} finally {
-  budget.release()
+// ❌ Problematic: CJS global inside ESM module causes native loader degradation
+resolve: {
+  alias: {
+    '@systemfsoftware/effect-atom/test': path.join(__dirname, 'test'),
+    '@systemfsoftware/effect-atom': path.join(__dirname, 'src'),
+  },
+}
+
+// ✅ Correct: Standard ESM property natively supported by modern runtimes and Vite
+resolve: {
+  alias: {
+    '@systemfsoftware/effect-atom/test': path.join(import.meta.dirname, 'test'),
+    '@systemfsoftware/effect-atom': path.join(import.meta.dirname, 'src'),
+  },
 }
 ```
 
-### 2. Phase-Attributed Rejections
+## Why This Works
 
-The timeout error must carry the exact phase in flight at the moment the timer fired (`load` | `ready` | `reply`), determined dynamically inside the timer callback.
+`import.meta.dirname` is a built-in property of the module namespace in modern ECMAScript runtimes. Because it evaluates during the native module evaluation phase without accessing CommonJS execution context wrappers, the native configuration loader successfully evaluates the `resolve.alias` mapping.
 
-### 3. Root-Cause Precedence
+When the browser test runner requests test files and internal package dependencies, the dev server's alias resolution pipeline finds the correct physical source paths on disk, transforms the TypeScript JSX modules on the fly, and serves them to the Chromium worker.
 
-Explicit domain errors (such as peer crashes or session resets) must take precedence over budget expiration when settling first.
+## Prevention & Detection
 
-### 4. Immediate Teardown Drain
+1. **Treat Config Loader Warnings as Hard Failures in CI:** Never dismiss `configLoader: 'native'` deprecation notices as cosmetic. A degraded configuration loader causes downstream failures that manifest layers away from the root cause.
+2. **Standardize on `import.meta.dirname` across all Tooling:** In ESM workspaces (`"type": "module"`), audit all configuration files (`vitest.config.ts`, `tsdown.config.ts`, `oxlint.config.ts`) to ensure zero usage of `__dirname` or `__filename`.
+3. **Static Check for CJS Globals in Tooling Configs:** Run an AST or lint check across workspace configuration files to forbid `Identifier[name='__dirname']`.
 
-Any lifecycle transition that invalidates the underlying channel must synchronously drain and reject all in-flight pending requests with an explicit cancellation error.
+## Related Learnings
 
-## Verification & Prevention Rules
-
-- **Enforce Two-Sided Timer Boundaries:** A timeout test must assert not just that a request fails at $T$, but that it remains pending and unresolved at $T - 1\text{ms}$.
-- **Probe Cleanup Invariants with Mutation Gates:** Verify that removing `budget.release()` or `pendingRequests.delete(id)` causes a test to fail.
-- **Dual-Driver Test Harness:** Encapsulate the boundary into a Consumer Driver that sends requests and a Peer Driver that scripts lifecycle transitions (`open`, `ready`, `respond`, `fatal`).
-- **Audit Unbudgeted Setup Awaits:** Disallow unbudgeted setup calls preceding budgeted operations:
-  ```ts
-  // ❌ Defect: Setup is outside the budget
-  await ensureReady()
-  await withTimeout(op, 30_000)
-
-  // ✅ Invariant: Budget wraps setup and operation
-  await withTimeout(async () => {
-    await ensureReady()
-    return op()
-  }, 30_000)
-  ```
+- `docs/solutions/test-failures/contract-lane-stops-at-dead-docker-socket.md` — shares the pattern where an environment-dependent silent failure masks the real root cause until exercised under CI conditions.
+- `docs/plans/2026-08-16-001-fix-vitest-esm-dirname-plan.md` — planning document detailing the migration of the test configuration aliases.
