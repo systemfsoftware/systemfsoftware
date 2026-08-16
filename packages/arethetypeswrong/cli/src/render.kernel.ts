@@ -1,4 +1,3 @@
-import * as Doc from '@effect/printer/Doc'
 import type {
   Analysis,
   CheckResult,
@@ -33,8 +32,6 @@ const visibleProblems = (
   options: RenderOptions,
 ): readonly Problem[] => analysis.problems.filter((p) => !options.ignoreRules.includes(problemFlagForKind(p.kind)))
 
-const renderDoc = (doc: Doc.Doc<never>): string => Doc.render(doc, { style: 'pretty' })
-
 export const renderAnalysis = (
   result: CheckResult,
   options: RenderOptions,
@@ -53,13 +50,11 @@ export const renderAnalysis = (
     )
   }
   if (isUntyped(result)) {
-    return renderDoc(
-      renderUntyped({
-        packageName: result.packageName,
-        packageVersion: result.packageVersion,
-        typesPackageName: null,
-      }),
-    )
+    return renderUntyped({
+      packageName: result.packageName,
+      packageVersion: result.packageVersion,
+      typesPackageName: null,
+    })
   }
   const visible = visibleProblems(result, options)
   if (options.summary) {
@@ -68,24 +63,20 @@ export const renderAnalysis = (
   const entrypointNames = Object.keys(result.entrypoints)
   switch (format) {
     case 'ascii':
-      return renderDoc(renderAsciiAnalysis(entrypointNames, visible, { useEmoji: options.useEmoji }))
+      return renderAsciiAnalysis(entrypointNames, visible, { useEmoji: options.useEmoji })
     case 'table-flipped':
-      return renderDoc(
-        renderTypedAnalysis(
-          entrypointNames,
-          visible,
-          { flipped: true, useEmoji: options.useEmoji, color: options.color },
-          annotations,
-        ),
+      return renderTypedAnalysis(
+        entrypointNames,
+        visible,
+        { flipped: true, useEmoji: options.useEmoji, color: options.color },
+        annotations,
       )
     case 'table':
-      return renderDoc(
-        renderTypedAnalysis(
-          entrypointNames,
-          visible,
-          { flipped: false, useEmoji: options.useEmoji, color: options.color },
-          annotations,
-        ),
+      return renderTypedAnalysis(
+        entrypointNames,
+        visible,
+        { flipped: false, useEmoji: options.useEmoji, color: options.color },
+        annotations,
       )
   }
 }

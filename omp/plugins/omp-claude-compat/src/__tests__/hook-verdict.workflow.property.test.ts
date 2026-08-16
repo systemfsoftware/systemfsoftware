@@ -1,5 +1,6 @@
 import { describe, it } from '@effect/vitest'
-import { Either, FastCheck as fc } from 'effect'
+import { Result } from 'effect'
+import { FastCheck as fc } from 'effect/testing'
 import { InterpretHookCommand, interpretHookResult } from '../hook-verdict.workflow.js'
 
 const event = fc.constantFrom('PreToolUse', 'PostToolUse', 'SessionStart', 'UserPromptSubmit', 'SessionEnd')
@@ -37,7 +38,7 @@ describe('interpretHookResult (PBT)', () => {
       const verdict = interpretHookResult(
         new InterpretHookCommand({ result: { code: 0, stdout, stderr: '' }, event: ev }),
       )
-      return Either.isRight(verdict) && verdict.right._tag === 'Allow'
+      return Result.isSuccess(verdict) && verdict.success._tag === 'Allow'
     },
   )
 
@@ -48,7 +49,7 @@ describe('interpretHookResult (PBT)', () => {
       const verdict = interpretHookResult(
         new InterpretHookCommand({ result: { code: 0, stdout, stderr: '' }, event: ev }),
       )
-      return Either.isRight(verdict) && verdict.right._tag === 'Allow'
+      return Result.isSuccess(verdict) && verdict.success._tag === 'Allow'
     },
   )
 
@@ -59,7 +60,7 @@ describe('interpretHookResult (PBT)', () => {
       const verdict = interpretHookResult(
         new InterpretHookCommand({ result: { code: 0, stdout, stderr: '' }, event: ev }),
       )
-      return Either.isLeft(verdict) && verdict.left.raw === stdout
+      return Result.isFailure(verdict) && verdict.failure.raw === stdout
     },
   )
 
@@ -70,7 +71,7 @@ describe('interpretHookResult (PBT)', () => {
       const verdict = interpretHookResult(
         new InterpretHookCommand({ result: { code: 2, stdout: '', stderr }, event: ev }),
       )
-      return Either.isRight(verdict) && verdict.right._tag === 'Block' && verdict.right.reason === stderr.trim()
+      return Result.isSuccess(verdict) && verdict.success._tag === 'Block' && verdict.success.reason === stderr.trim()
     },
   )
 
@@ -81,7 +82,7 @@ describe('interpretHookResult (PBT)', () => {
       const verdict = interpretHookResult(
         new InterpretHookCommand({ result: { code: 2, stdout, stderr: 'denied' }, event: ev }),
       )
-      return Either.isRight(verdict) && verdict.right._tag === 'Block' && verdict.right.reason === 'denied'
+      return Result.isSuccess(verdict) && verdict.success._tag === 'Block' && verdict.success.reason === 'denied'
     },
   )
 
@@ -95,7 +96,7 @@ describe('interpretHookResult (PBT)', () => {
       const verdict = interpretHookResult(
         new InterpretHookCommand({ result: { code: 0, stdout, stderr: '' }, event: ev }),
       )
-      return Either.isRight(verdict) && verdict.right._tag === 'Block' && verdict.right.reason === reason
+      return Result.isSuccess(verdict) && verdict.success._tag === 'Block' && verdict.success.reason === reason
     },
   )
 
@@ -104,7 +105,8 @@ describe('interpretHookResult (PBT)', () => {
     [nonStandardExit, stderrText, event],
     ([code, stderr, ev]) => {
       const verdict = interpretHookResult(new InterpretHookCommand({ result: { code, stdout: '', stderr }, event: ev }))
-      return Either.isRight(verdict) && verdict.right._tag === 'Warning' && verdict.right.message === stderr.trim()
+      return Result.isSuccess(verdict) && verdict.success._tag === 'Warning' &&
+        verdict.success.message === stderr.trim()
     },
   )
 
@@ -113,7 +115,7 @@ describe('interpretHookResult (PBT)', () => {
     [nonStandardExit, blankStdout, event],
     ([code, stderr, ev]) => {
       const verdict = interpretHookResult(new InterpretHookCommand({ result: { code, stdout: '', stderr }, event: ev }))
-      return Either.isRight(verdict) && verdict.right._tag === 'Allow'
+      return Result.isSuccess(verdict) && verdict.success._tag === 'Allow'
     },
   )
 
@@ -125,9 +127,9 @@ describe('interpretHookResult (PBT)', () => {
       const verdict = interpretHookResult(
         new InterpretHookCommand({ result: { code: 0, stdout, stderr: '' }, event: ev }),
       )
-      return Either.isRight(verdict) &&
-        verdict.right._tag === 'Allow' &&
-        JSON.stringify(verdict.right.updatedInput) === JSON.stringify({ tool_input: { content: value } })
+      return Result.isSuccess(verdict) &&
+        verdict.success._tag === 'Allow' &&
+        JSON.stringify(verdict.success.updatedInput) === JSON.stringify({ tool_input: { content: value } })
     },
   )
 
@@ -137,7 +139,7 @@ describe('interpretHookResult (PBT)', () => {
     ([code, value, ev]) => {
       const stdout = JSON.stringify({ hookSpecificOutput: { updatedInput: { tool_input: { content: value } } } })
       const verdict = interpretHookResult(new InterpretHookCommand({ result: { code, stdout, stderr: '' }, event: ev }))
-      return Either.isRight(verdict) && verdict.right._tag === 'Allow' && verdict.right.updatedInput === undefined
+      return Result.isSuccess(verdict) && verdict.success._tag === 'Allow' && verdict.success.updatedInput === undefined
     },
   )
 
@@ -151,7 +153,7 @@ describe('interpretHookResult (PBT)', () => {
       const verdict = interpretHookResult(
         new InterpretHookCommand({ result: { code: 0, stdout, stderr: '' }, event: ev }),
       )
-      return Either.isRight(verdict) && verdict.right._tag === 'Block'
+      return Result.isSuccess(verdict) && verdict.success._tag === 'Block'
     },
   )
 
@@ -165,7 +167,7 @@ describe('interpretHookResult (PBT)', () => {
       const verdict = interpretHookResult(
         new InterpretHookCommand({ result: { code: 0, stdout, stderr: '' }, event: ev }),
       )
-      return Either.isRight(verdict) && verdict.right._tag === 'Block' && verdict.right.reason === reason
+      return Result.isSuccess(verdict) && verdict.success._tag === 'Block' && verdict.success.reason === reason
     },
   )
 
@@ -179,7 +181,7 @@ describe('interpretHookResult (PBT)', () => {
           event: ev,
         }),
       )
-      return Either.isRight(verdict) && verdict.right._tag === 'Block' && verdict.right.reason === reason
+      return Result.isSuccess(verdict) && verdict.success._tag === 'Block' && verdict.success.reason === reason
     },
   )
 
@@ -197,9 +199,9 @@ describe('interpretHookResult (PBT)', () => {
           event: ev,
         }),
       )
-      return Either.isRight(verdict) &&
-        verdict.right._tag === 'Block' &&
-        verdict.right.reason === `Blocked by ${ev} hook`
+      return Result.isSuccess(verdict) &&
+        verdict.success._tag === 'Block' &&
+        verdict.success.reason === `Blocked by ${ev} hook`
     },
   )
 
@@ -213,9 +215,9 @@ describe('interpretHookResult (PBT)', () => {
           event: ev,
         }),
       )
-      return Either.isRight(verdict) &&
-        verdict.right._tag === 'Block' &&
-        verdict.right.reason === `Blocked by ${ev} hook`
+      return Result.isSuccess(verdict) &&
+        verdict.success._tag === 'Block' &&
+        verdict.success.reason === `Blocked by ${ev} hook`
     },
   )
 })

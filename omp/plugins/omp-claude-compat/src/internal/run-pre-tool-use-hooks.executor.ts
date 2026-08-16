@@ -13,10 +13,9 @@ import { asToolInput, EMPTY_TOOL_INPUT } from './hook-payload.kernel.js'
 import type { HookSession, HookToolCall } from './hook-session.kernel.js'
 import { runHooksForEvent } from './run-hooks-for-event.executor.js'
 
-export class RunPreToolUseHooksExecutorDeps extends Context.Tag('RunPreToolUseHooksExecutorDeps')<
-  RunPreToolUseHooksExecutorDeps,
-  Scope.Scope
->() {}
+export class RunPreToolUseHooksExecutorDeps extends Context.Service<RunPreToolUseHooksExecutorDeps, Scope.Scope>()(
+  'RunPreToolUseHooksExecutorDeps',
+) {}
 
 export const runPreToolUseHooks = Effect.fn('runPreToolUseHooks')(function*(
   settings: HookSettings,

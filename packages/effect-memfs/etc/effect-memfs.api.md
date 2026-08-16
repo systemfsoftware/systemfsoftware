@@ -4,7 +4,7 @@
 
 ```ts
 
-import * as FileSystem_2 from '@effect/platform/FileSystem';
+import * as FileSystem_2 from 'effect/FileSystem';
 import { Layer } from 'effect';
 import * as memfs from 'memfs';
 

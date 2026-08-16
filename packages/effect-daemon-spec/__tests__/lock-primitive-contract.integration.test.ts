@@ -1,6 +1,7 @@
 import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Duration, Effect, Either, Fiber, TestClock } from 'effect'
+import { Duration, Effect, Fiber, Result } from 'effect'
+import { TestClock } from 'effect/testing'
 import { expect } from 'vitest'
 import { LockPrimitive } from '../src/leader-lock.adapter.js'
 import { LockPrimitiveError } from '../src/mod.js'
@@ -13,7 +14,7 @@ import {
 const Feature = makeFeature({ it, layer })
 
 Feature('Lock Primitive Contract')
-  .withScenarioLayer(TestClock.defaultTestClock)
+  .withScenarioLayer(TestClock.layer())
   .body(({ scenario }) => {
     scenario(
       'Acquire free lock',
@@ -52,7 +53,7 @@ Feature('Lock Primitive Contract')
         Given('the lock key "task-1" is held by another caller')('holder', () =>
           Effect.gen(function*() {
             const prim = yield* LockPrimitive
-            const fiber = yield* Effect.fork(
+            const fiber = yield* Effect.forkChild(
               Effect.scoped(
                 Effect.gen(function*() {
                   yield* prim.tryAcquire('task-1')
@@ -60,7 +61,7 @@ Feature('Lock Primitive Contract')
                 }),
               ),
             )
-            yield* Effect.yieldNow()
+            yield* Effect.yieldNow
             return fiber
           })),
         When('the caller attempts to acquire key "task-1" within a scope')(
@@ -123,7 +124,7 @@ Feature('Lock Primitive Contract')
               yield* prim.tryAcquire('task-1')
               return yield* Effect.fail('intentional')
             }),
-          ).pipe(Effect.catchAll(() => Effect.void))
+          ).pipe(Effect.ignore)
         ),
         When('another caller attempts to acquire key "task-1"')(
           'acquired',
@@ -148,7 +149,7 @@ Feature('Lock Primitive Contract')
       { layer: mkBlockingStatefulLockPrimitive },
       Gherkin.Do.pipe(
         Given('a fiber holds key "task-1" via a blocking primitive')('holder', () =>
-          Effect.fork(
+          Effect.forkChild(
             Effect.scoped(
               Effect.gen(function*() {
                 const prim = yield* LockPrimitive
@@ -217,7 +218,7 @@ Feature('Lock Primitive Contract')
         When('the caller attempts to acquire any key')(
           'error',
           () =>
-            Effect.either(
+            Effect.result(
               Effect.scoped(
                 Effect.gen(function*() {
                   const prim = yield* LockPrimitive
@@ -229,7 +230,7 @@ Feature('Lock Primitive Contract')
         Then('the call surfaces an infrastructure failure for the requested key')((s) =>
           Effect.sync(() => {
             expect(s.error).toEqual(
-              Either.left(new LockPrimitiveError({ key: 'any-key', cause: 'infrastructure unavailable' })),
+              Result.fail(LockPrimitiveError.make({ key: 'any-key', cause: 'infrastructure unavailable' })),
             )
           })
         ),
@@ -243,7 +244,7 @@ Feature('Lock Primitive Contract')
         Given('the lock key "task-1" is held by another caller')('holder', () =>
           Effect.gen(function*() {
             const prim = yield* LockPrimitive
-            const fiber = yield* Effect.fork(
+            const fiber = yield* Effect.forkChild(
               Effect.scoped(
                 Effect.gen(function*() {
                   yield* prim.tryAcquire('task-1')
@@ -251,13 +252,13 @@ Feature('Lock Primitive Contract')
                 }),
               ),
             )
-            yield* Effect.yieldNow()
+            yield* Effect.yieldNow
             return fiber
           })),
         When('another caller attempts to acquire key "task-1" with a timeout')(
           'result',
           () =>
-            Effect.either(
+            Effect.result(
               Effect.scoped(
                 Effect.gen(function*() {
                   const prim = yield* LockPrimitive
@@ -268,7 +269,7 @@ Feature('Lock Primitive Contract')
         ),
         Then('the acquisition returns false within the timeout')((s) =>
           Effect.sync(() => {
-            expect(s.result).toEqual(Either.right(false))
+            expect(s.result).toEqual(Result.succeed(false))
           })
         ),
         And('the holder fiber is interrupted')((s) => Fiber.interrupt(s.holder)),

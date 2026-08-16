@@ -1,4 +1,4 @@
-import type { Either } from 'effect/Either'
+import type { Result } from 'effect/Result'
 
 /**
  * Marker a workflow resolves to when its decision channel is `never`. The property type is the
@@ -34,11 +34,11 @@ export interface Tagged {
  */
 export type Workflow<Command, Decision, DecisionError> = [Decision] extends [never] ? UninhabitedDecision
   : [DecisionError] extends [never] ? UninhabitedError
-  : (command: Command) => Either<Decision, DecisionError>
+  : (command: Command) => Result<Decision, DecisionError>
 
 /**
  * `unknown` when both channels are inhabited and the error carries a tag, so the intersection in
- * {@link make} collapses to the plain `Either` and neither inference nor the authoring surface
+ * {@link make} collapses to the plain `Result` and neither inference nor the authoring surface
  * changes. Otherwise the marker the author must satisfy, which they cannot, which is the point.
  */
 export type Inhabited<Decision, DecisionError> = [Decision] extends [never] ? UninhabitedDecision
@@ -52,7 +52,7 @@ export type Inhabited<Decision, DecisionError> = [Decision] extends [never] ? Un
  *
  * The markers ride the parameter function's return type, not the parameter as `Workflow<C, D, E>`:
  * a conditional type in parameter position resolves `D` and `E` to `unknown` and the markers become
- * unreachable. On the return type both still infer from the `Either` conjunct while the marker
+ * unreachable. On the return type both still infer from the `Result` conjunct while the marker
  * conjunct is what an uninhabited channel fails to satisfy.
  *
  * `E` carries no constraint on purpose. Constraining it gives inference a fallback: where `E` would
@@ -63,16 +63,16 @@ export type Inhabited<Decision, DecisionError> = [Decision] extends [never] ? Un
  * The narrowing goes through an assertion signature rather than an `as` cast: every narrowing
  * assertion trips `typescript(no-unsafe-type-assertion)`, and a suppression comment would hide the
  * one place this file could lie. It is sound rather than merely permitted — with both channels
- * inhabited `Workflow<C, D, E>` is `(command: C) => Either<D, E>`, and otherwise the return type is
+ * inhabited `Workflow<C, D, E>` is `(command: C) => Result<D, E>`, and otherwise the return type is
  * a marker with no call signature, so the value handed back is unobservable through it.
  */
 export const make = <C, D, E>(
-  decide: (command: C) => Either<D, E> & Inhabited<D, E>,
+  decide: (command: C) => Result<D, E> & Inhabited<D, E>,
 ): Workflow<C, D, E> => {
   assertWorkflow(decide)
   return decide
 }
 
 function assertWorkflow<C, D, E>(
-  _decide: (command: C) => Either<D, E> & Inhabited<D, E>,
-): asserts _decide is Workflow<C, D, E> & ((command: C) => Either<D, E>) {}
+  _decide: (command: C) => Result<D, E> & Inhabited<D, E>,
+): asserts _decide is Workflow<C, D, E> & ((command: C) => Result<D, E>) {}

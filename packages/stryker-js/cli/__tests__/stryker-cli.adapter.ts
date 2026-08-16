@@ -14,12 +14,12 @@ export interface ExecOptions {
   readonly env?: Record<string, string>
 }
 
-export class StrykerCli extends Context.Tag(
-  '@systemfsoftware/stryker-js-cli/__tests__/stryker-cli.adapter/StrykerCli',
-)<StrykerCli, {
+export class StrykerCli extends Context.Service<StrykerCli, {
   readonly run: (args: readonly string[], options?: ExecOptions) => Effect.Effect<CliResult>
   readonly sh: (script: string, options?: ExecOptions) => Effect.Effect<CliResult>
-}>() {}
+}>()(
+  '@systemfsoftware/stryker-js-cli/__tests__/stryker-cli.adapter/StrykerCli',
+) {}
 
 export const layerStrykerCli: Layer.Layer<StrykerCli> = Layer.effect(
   StrykerCli,

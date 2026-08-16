@@ -18,7 +18,7 @@ const ruleTester = new RuleTester({
 const noStatePrimitiveData = {
   name: 'state cell',
   expected:
-    'at least one module-scope construction of an escaping coordination primitive (new Map/Set/WeakMap/WeakSet/Semaphore, Ref.unsafeMake, Deferred.unsafeMake, Semaphore.make, TRef.unsafeMake, ManagedRuntime.make, Layer.toRuntime, or a class extending Context.Reference)',
+    'at least one module-scope construction of an escaping coordination primitive (new Map/Set/WeakMap/WeakSet/Semaphore, Ref.unsafeMake/Ref.makeUnsafe, Deferred.unsafeMake/Deferred.makeUnsafe, Semaphore.make/Semaphore.makeUnsafe, TRef.unsafeMake/TxRef.makeUnsafe, ManagedRuntime.make, Layer.toRuntime, Context.Reference, or a class extending Context.Reference)',
   actual: 'no escaping live state at module scope',
   fix:
     'construct the escaping Map/Ref/Deferred/Semaphore/Runtime at module scope in this *.state.ts, or move the file to the cell that owns its actual content',
@@ -88,6 +88,38 @@ export const AuditInFlightLive = AuditInFlight.of({ joinInFlight: (id: string, e
       name: 'Should_Pass_When_ModuleScopeTRefUnsafeMakeInStateFile',
       code: `const balance = TRef.unsafeMake(0)`,
       filename: 'balance.state.ts',
+    },
+    {
+      name: 'Should_Pass_When_ModuleScopeRefMakeUnsafeInStateFile',
+      code: `const counter = Ref.makeUnsafe(0)`,
+      filename: 'counter.state.ts',
+    },
+    {
+      name: 'Should_Pass_When_ModuleScopeDeferredMakeUnsafeInStateFile',
+      code: `const gate = Deferred.makeUnsafe<Report>()`,
+      filename: 'gate.state.ts',
+    },
+    {
+      name: 'Should_Pass_When_ModuleScopeSemaphoreMakeUnsafeInStateFile',
+      code: `const limiter = Semaphore.makeUnsafe(1)`,
+      filename: 'limiter.state.ts',
+    },
+    {
+      name: 'Should_Pass_When_ModuleScopeTxRefMakeUnsafeInStateFile',
+      code: `const balance = TxRef.makeUnsafe(0)`,
+      filename: 'balance.state.ts',
+    },
+    {
+      name: 'Should_Pass_When_ModuleScopeContextReferenceFunctionFormInStateFile',
+      code:
+        `const LeaderConfig = Context.Reference<SupervisionConfig>('@x/LeaderConfig', { defaultValue: () => defaults })`,
+      filename: 'leader-config.state.ts',
+    },
+    {
+      name: 'Should_Pass_When_ExportedContextReferenceFunctionFormInStateFile',
+      code:
+        `export const LeaderConfig = Context.Reference<SupervisionConfig>('@x/LeaderConfig', { defaultValue: () => defaults })`,
+      filename: 'leader-config.state.ts',
     },
     {
       name: 'Should_Pass_When_ExportDefaultMapInStateFile',
@@ -162,6 +194,12 @@ export const AuditInFlightLive = AuditInFlight.of({
       name: 'Should_Report_NoStatePrimitive_When_RefMakeReturnsEffect',
       code: `const counter = Ref.make(0)`,
       filename: 'counter.state.ts',
+      errors: [{ messageId: 'noStatePrimitive', data: noStatePrimitiveData }],
+    },
+    {
+      name: 'Should_Report_NoStatePrimitive_When_TxRefMakeReturnsEffect',
+      code: `const balance = TxRef.make(0)`,
+      filename: 'balance.state.ts',
       errors: [{ messageId: 'noStatePrimitive', data: noStatePrimitiveData }],
     },
     {

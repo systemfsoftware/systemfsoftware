@@ -1,6 +1,7 @@
 import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Duration, Effect, Layer, Match, Ref, Schedule, Schema as S, TestClock } from 'effect'
+import { Duration, Effect, Layer, Match, Ref, Schedule, Schema as S } from 'effect'
+import { TestClock } from 'effect/testing'
 import { expect } from 'vitest'
 import { BoundedIntensity } from '../src/mod.js'
 import { run } from '../src/mod.js'
@@ -42,10 +43,10 @@ Feature('Uniform Supervisor Behavior')
                 children: [child],
                 lock: { mode: 'none' },
                 supervision: Supervision.custom({
-                  intensity: new BoundedIntensity({ restarts: 5, window: Duration.seconds(60) }),
+                  intensity: BoundedIntensity.make({ restarts: 5, window: Duration.seconds(60) }),
                   backoff: Schedule.exponential(Duration.seconds(10)).pipe(
                     Schedule.jittered,
-                    Schedule.upTo(Duration.minutes(5)),
+                    Schedule.upTo({ duration: Duration.minutes(5) }),
                   ),
                   cooldown: Duration.minutes(30),
                 }),
@@ -77,10 +78,10 @@ Feature('Uniform Supervisor Behavior')
                   lock: { mode: 'none' },
                 })
               const supervision = Supervision.custom({
-                intensity: new BoundedIntensity({ restarts: 5, window: Duration.seconds(60) }),
+                intensity: BoundedIntensity.make({ restarts: 5, window: Duration.seconds(60) }),
                 backoff: Schedule.exponential(Duration.seconds(10)).pipe(
                   Schedule.jittered,
-                  Schedule.upTo(Duration.minutes(5)),
+                  Schedule.upTo({ duration: Duration.minutes(5) }),
                 ),
                 cooldown: Duration.minutes(30),
               })
@@ -151,7 +152,7 @@ Feature('Uniform Supervisor Behavior')
                 name: 'A',
                 work: Effect.gen(function*() {
                   const n = yield* Ref.updateAndGet(tickCount, (x) => x + 1)
-                  if (n > 1) return yield* new SimulatedFailure()
+                  if (n > 1) return yield* SimulatedFailure.make()
                   return void 0
                 }),
                 interval: Duration.millis(1),
@@ -163,9 +164,9 @@ Feature('Uniform Supervisor Behavior')
                 children: [child],
                 lock: { mode: 'none' },
                 supervision: Supervision.custom({
-                  intensity: new BoundedIntensity({ restarts: 1, window: Duration.seconds(60) }),
+                  intensity: BoundedIntensity.make({ restarts: 1, window: Duration.seconds(60) }),
                   backoff: Schedule.exponential(Duration.millis(5)).pipe(
-                    Schedule.upTo(Duration.millis(50)),
+                    Schedule.upTo({ duration: Duration.millis(50) }),
                   ),
                   cooldown: Duration.minutes(30),
                 }),

@@ -1,6 +1,7 @@
 import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Duration, Effect, Layer, Ref, Schedule, Schema as S, Stream, TestClock } from 'effect'
+import { Duration, Effect, Layer, Ref, Schedule, Schema as S, Stream } from 'effect'
+import { TestClock } from 'effect/testing'
 import { expect } from 'vitest'
 import { BoundedIntensity } from '../src/mod.js'
 import { run } from '../src/mod.js'
@@ -31,7 +32,7 @@ Feature('Stream child supervision')
                 Stream.fromEffect(
                   Ref.update(s.streamStarts, (n) => n + 1).pipe(Effect.asVoid),
                 ),
-                Stream.fail(new SimulatedFailure()),
+                Stream.fail(SimulatedFailure.make()),
               )
               const child = Daemon.stream({
                 name: 'stream-restart-child',
@@ -43,8 +44,10 @@ Feature('Stream child supervision')
                 name: 'stream-restart-sup',
                 children: [child],
                 supervision: Supervision.custom({
-                  intensity: new BoundedIntensity({ restarts: 5, window: Duration.seconds(60) }),
-                  backoff: Schedule.exponential(Duration.millis(5)).pipe(Schedule.upTo(Duration.millis(50))),
+                  intensity: BoundedIntensity.make({ restarts: 5, window: Duration.seconds(60) }),
+                  backoff: Schedule.exponential(Duration.millis(5)).pipe(
+                    Schedule.upTo({ duration: Duration.millis(50) }),
+                  ),
                   cooldown: Duration.minutes(30),
                 }),
                 lock: { mode: 'none' },
@@ -99,7 +102,7 @@ Feature('Stream child supervision')
             Effect.gen(function*() {
               const stream = Stream.concat(
                 Stream.fromEffect(Effect.void),
-                Stream.fail(new SimulatedFailure()),
+                Stream.fail(SimulatedFailure.make()),
               )
               const child = Daemon.stream({
                 name: 'stream-exhaust-child',
@@ -111,8 +114,10 @@ Feature('Stream child supervision')
                 name: 'stream-exhaust-sup',
                 children: [child],
                 supervision: Supervision.custom({
-                  intensity: new BoundedIntensity({ restarts: 0, window: Duration.seconds(60) }),
-                  backoff: Schedule.exponential(Duration.millis(5)).pipe(Schedule.upTo(Duration.millis(50))),
+                  intensity: BoundedIntensity.make({ restarts: 0, window: Duration.seconds(60) }),
+                  backoff: Schedule.exponential(Duration.millis(5)).pipe(
+                    Schedule.upTo({ duration: Duration.millis(50) }),
+                  ),
                   cooldown: Duration.hours(1),
                 }),
                 lock: { mode: 'none' },

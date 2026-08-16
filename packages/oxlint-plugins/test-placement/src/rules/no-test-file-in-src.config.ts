@@ -1,12 +1,11 @@
-import { JSONSchema, Schema as S } from 'effect'
+import { Effect, Schema as S } from 'effect'
 import { COLOCATABLE_CELLS, MESSAGE, NESTED_TEST_DIR } from './path.config.js'
 
 const SANCTIONED_CELLS = COLOCATABLE_CELLS.join(', ')
 
 export const Options = S.Struct({
-  sanctionedDirs: S.optionalWith(
-    S.NonEmptyArray(S.String),
-    { default: () => [NESTED_TEST_DIR] as const },
+  sanctionedDirs: S.NonEmptyArray(S.String).pipe(
+    S.withDecodingDefaultType(Effect.succeed([NESTED_TEST_DIR] as const)),
   ),
 })
 
@@ -48,7 +47,7 @@ export const meta = {
     description:
       'Under src/, the only sanctioned test files are a test whose stem names a colocatable cell inside a sanctioned test directory — in whichever form the behaviour needs, a law or a characterization test — and the generated schema-laws.test.ts entry point. A property test beside its source is reported for location alone. *.schema.test.ts is forbidden outright; a test naming no cell must move outside src/ as an integration test or become an in-source vitest block testing private code. The sanctioned directory list is the sanctionedDirs option, defaulting to the one directory this repo runs.',
   },
-  schema: [JSONSchema.make(Options)],
+  schema: [S.toJsonSchemaDocument(Options).schema],
   messages: {
     testFileInSrc: MESSAGE,
     schemaTestInSrc: MESSAGE,

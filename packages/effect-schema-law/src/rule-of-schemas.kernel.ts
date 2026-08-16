@@ -1,5 +1,6 @@
 import { it } from '@effect/vitest'
-import { Either, Schema, Schema as S } from 'effect'
+import { Exit, Schema, Schema as S } from 'effect'
+import { FastCheck as fc } from 'effect/testing'
 
 /**
  * Property-test the round-trip and encode-stability laws of any Effect Schema.
@@ -12,32 +13,33 @@ import { Either, Schema, Schema as S } from 'effect'
  */
 export const ruleOfSchemas = <A, I>(
   name: string,
-  schema: S.Schema<A, I, never>,
+  schema: S.Codec<A, I>,
 ): void => {
-  const decodeEither = Schema.decodeEither(schema)
+  const decodeExit = Schema.decodeExit(schema)
   const encodeSync = Schema.encodeSync(schema)
-  const typeEq = S.equivalence(schema)
-  const encodedEq = S.equivalence(S.encodedSchema(schema))
+  const typeEq = S.toEquivalence(schema)
+  const encodedEq = S.toEquivalence(S.toEncoded(schema))
+  const arbitrary = S.toArbitrary(schema)(fc)
 
   it.prop(
     `∀x_${name}Enc_=x`,
-    [schema],
+    [arbitrary],
     ([value]) => {
       const encoded = encodeSync(value)
-      const result = decodeEither(encoded)
-      if (Either.isLeft(result)) return false
-      const reencoded = encodeSync(result.right)
+      const result = decodeExit(encoded)
+      if (Exit.isFailure(result)) return false
+      const reencoded = encodeSync(result.value)
       return encodedEq(reencoded, encoded)
     },
   )
 
   it.prop(
     `∀x_${name}_=x`,
-    [schema],
+    [arbitrary],
     ([value]) => {
       const encoded = encodeSync(value)
-      const result = decodeEither(encoded)
-      return Either.isRight(result) && typeEq(result.right, value)
+      const result = decodeExit(encoded)
+      return Exit.isSuccess(result) && typeEq(result.value, value)
     },
   )
 }

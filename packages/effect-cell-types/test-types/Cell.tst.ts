@@ -1,7 +1,7 @@
 import { Cell } from '@systemfsoftware/effect-cell-types'
 import type { Effect } from 'effect/Effect'
-import type { Either } from 'effect/Either'
 import { pipe } from 'effect/Function'
+import type { Result } from 'effect/Result'
 import { describe, expect, it } from 'tstyche'
 
 interface Cmd {
@@ -54,11 +54,11 @@ declare const readStage: Cell.ReadDone<Shape>
 declare const decodeStage: Cell.DecodeDone<Shape>
 declare const decideStage: Cell.DecideDone<Shape>
 
-// An effect handed to each pure slot. A pure slot's return type is a plain value or an
-// `Either`, so an effect in that position fails assignability with no lint rule involved.
+// An effect handed to each pure slot. A pure slot's return type is a plain value or a
+// `Result`, so an effect in that position fails assignability with no lint rule involved.
 declare const decodeReturningEffect: (raw: Raw) => Effect<Decoded, DecodeErr, never>
 declare const decideReturningEffect: (decoded: Decoded) => Effect<Decision, Refusal, never>
-declare const encodeReturningEffect: (outcome: Either<Decision, Refusal>) => Effect<Output, never, never>
+declare const encodeReturningEffect: (outcome: Result<Decision, Refusal>) => Effect<Output, never, never>
 // A read whose interior gathers a product: fan-in, expressed as one read step.
 declare const readGatheringProduct: (command: Cmd) => Effect<Raw, never, never>
 
@@ -99,11 +99,11 @@ describe('the order the chain decides', () => {
 })
 
 describe('the pure slots refuse an effect', () => {
-  it('Should_RejectEffectReturningDecode_When_SlotRequiresEither', () => {
+  it('Should_RejectEffectReturningDecode_When_SlotRequiresResult', () => {
     expect<typeof Cell.decode<Shape>>().type.not.toBeCallableWith(readStage, decodeReturningEffect)
   })
 
-  it('Should_RejectEffectReturningDecide_When_SlotRequiresEither', () => {
+  it('Should_RejectEffectReturningDecide_When_SlotRequiresResult', () => {
     expect<typeof Cell.decide<Shape>>().type.not.toBeCallableWith(decodeStage, decideReturningEffect)
   })
 
@@ -111,7 +111,7 @@ describe('the pure slots refuse an effect', () => {
     expect<typeof Cell.encode<Shape>>().type.not.toBeCallableWith(decideStage, encodeReturningEffect)
   })
 
-  it('Should_AcceptEitherReturningDecode_When_SlotRequiresEither', () => {
+  it('Should_AcceptResultReturningDecode_When_SlotRequiresResult', () => {
     expect<typeof Cell.decode<Shape>>().type.toBeCallableWith(readStage, decodePhase)
   })
 })
@@ -143,12 +143,12 @@ describe('the shapes that stay legal', () => {
 })
 
 describe('the decision error is an outcome, not a fault', () => {
-  it('Should_HandBothBranchesToEncode_When_DecideReturnsEither', () => {
-    expect<Cell.EncodePhase<Shape>>().type.toBe<(outcome: Either<Decision, Refusal>) => Output>()
+  it('Should_HandBothBranchesToEncode_When_DecideReturnsResult', () => {
+    expect<Cell.EncodePhase<Shape>>().type.toBe<(outcome: Result<Decision, Refusal>) => Output>()
   })
 
   it('Should_KeepDecodeErrorSeparate_When_DecisionErrorIsAnOutcome', () => {
-    expect<Cell.DecodePhase<Shape>>().type.toBe<(raw: Raw) => Either<Decoded, DecodeErr>>()
+    expect<Cell.DecodePhase<Shape>>().type.toBe<(raw: Raw) => Result<Decoded, DecodeErr>>()
   })
 })
 

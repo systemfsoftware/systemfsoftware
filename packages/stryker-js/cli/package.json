@@ -25,9 +25,8 @@
     "mutation:full": "stryker run --force"
   },
   "dependencies": {
-    "@effect/cli": "catalog:",
-    "@effect/platform": "catalog:",
     "@effect/platform-node": "catalog:",
+    "@effect/platform-node-shared": "catalog:",
     "@stryker-mutator/util": "catalog:stryker",
     "@systemfsoftware/effect-cell-types": "workspace:^",
     "@systemfsoftware/stryker-js-mutation-report": "workspace:^",

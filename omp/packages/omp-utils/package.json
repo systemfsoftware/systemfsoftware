@@ -28,7 +28,6 @@
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}"
   },
   "devDependencies": {
-    "@effect/platform": "catalog:",
     "@effect/vitest": "catalog:",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/effect-memfs": "workspace:^",
@@ -42,7 +41,6 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@effect/platform": "catalog:",
     "effect": "catalog:"
   },
   "publishConfig": {

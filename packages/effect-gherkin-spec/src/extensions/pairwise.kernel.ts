@@ -1,24 +1,11 @@
 import type { Context } from 'effect'
-import { Cause, Effect, Layer } from 'effect'
+import { Effect, Layer } from 'effect'
 
 import type { GherkinEffect, StepText } from '../do-notation.kernel.js'
-import { StepError } from '../step-error.kernel.js'
+import { resolveText, stepWrap } from '../do-notation.kernel.js'
+import type { StepError } from '../step-error.kernel.js'
 
 type NoInfer<A> = [A][A extends unknown ? 0 : never]
-
-const resolveStepText = (text: StepText, scope: object): string => {
-  if (typeof text === 'function') return text(scope)
-  return text
-}
-
-const stepWrap = <A, E, R>(
-  keyword: string,
-  text: string,
-  body: Effect.Effect<A, E, R>,
-): Effect.Effect<A, StepError, R> =>
-  body.pipe(
-    Effect.catchAllCause((cause) => Effect.fail(new StepError({ keyword, text, cause: Cause.squash(cause) }))),
-  )
 
 export type PairwiseResult<A> = {
   readonly a: A
@@ -34,7 +21,7 @@ export interface PairwiseMatrix<Identifier = unknown, RA = never, RB = never> {
 
 export const pairwiseFor = <Identifier, Service, RA = never, RB = never>(
   matrix: PairwiseMatrix<Identifier, RA, RB>,
-  service: Context.Tag<Identifier, Service>,
+  service: Context.Service<Identifier, Service>,
 ) => {
   type DualReq = RA | RB
   const bindPairwise = (text: StepText) => {
@@ -51,7 +38,7 @@ export const pairwiseFor = <Identifier, Service, RA = never, RB = never>(
       return <E1, R1>(self: GherkinEffect<object, E1, R1>) =>
         self.pipe(
           Effect.flatMap((scope) => {
-            const resolvedText = resolveStepText(text, scope)
+            const resolvedText = resolveText(text, scope)
             const workload = Effect.gen(function*() {
               const svc = yield* service
               return yield* f(scope)(svc)

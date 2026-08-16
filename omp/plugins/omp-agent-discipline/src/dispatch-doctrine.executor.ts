@@ -18,10 +18,10 @@
  * single executor.
  */
 
-import type { PlatformError } from '@effect/platform/Error'
 import { TomlLoader } from '@systemfsoftware/omp-utils'
 import type { TomlConfig } from '@systemfsoftware/omp-utils'
 import { Effect, Match } from 'effect'
+import type { PlatformError } from 'effect/PlatformError'
 import * as S from 'effect/Schema'
 
 import { extractSpecShape, isDelegatorTool, matchesDoctrineSkillPath } from './dispatch-doctrine.kernel.js'
@@ -56,7 +56,7 @@ class DeliverDoctrine extends S.TaggedClass<DeliverDoctrine>()('DeliverDoctrine'
   readonly [DispatchDoctrineVerdictTypeId] = DispatchDoctrineVerdictTypeId
 }
 
-const DispatchDoctrineVerdict = S.Union(Allow, DeliverDoctrine)
+const DispatchDoctrineVerdict = S.Union([Allow, DeliverDoctrine])
 type DispatchDoctrineVerdict = S.Schema.Type<typeof DispatchDoctrineVerdict>
 
 // ═══════════════════════════════════════════════════════════

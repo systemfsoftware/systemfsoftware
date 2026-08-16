@@ -1,11 +1,12 @@
-import { type FastCheck, Schema as S } from 'effect'
-import * as Arbitrary from 'effect/Arbitrary'
+import { Schema as S } from 'effect'
 import * as AST from 'effect/SchemaAST'
+import { FastCheck } from 'effect/testing'
 
 /**
  * One weakening of an Effect schema, produced by `armsOf`. Each arm identifies
  * the AST node it removes; the rebuilt tree is the surrounding schema with
- * that node replaced by its child.
+ * that node replaced by its child or, for a dropped refinement, by the same
+ * node without that check.
  *
  * Two schemas reaching the same `node` share its identity and therefore its
  * obligation key — the deduplication is the entire point of the shape.
@@ -22,18 +23,21 @@ const DEFAULT_SUSPEND_DEPTH_CAP = 16
 
 /**
  * Walk an Effect schema's AST and return every weakenable arm, recursively
- * through `Refinement`, `Transformation`, `TypeLiteral`, `Union`, `TupleType`,
- * `Declaration`, and `Suspend`. The walk terminates on `Suspend` cycles at
- * `depthCap` levels and raises if it meets an AST tag it does not know how
- * to rebuild — that is the R2 signal that a reachable arm is being hidden.
+ * through `Objects`, `Union`, `Arrays`, `Declaration`, and `Suspend`, plus
+ * the v4 per-node `Checks` (refinements) and encoding `Link` chains
+ * (transformations). The walk terminates on `Suspend` cycles at `depthCap`
+ * levels; every other AST tag is a leaf whose children cannot hold a
+ * refinement, and `Union` over structurally identical members is fine because
+ * the walk keys arms by node identity, not shape.
  *
  * The arm's `node` is the AST node its weakening removes; reference identity
  * is the obligation key (R3). `weakened` is the enclosing tree with `node`
  * replaced by its child, ready to be passed to `Schema.make`.
  */
-export const armsOf = (schema: S.Schema.Any): readonly Arm[] => {
+export const armsOf = (schema: S.ConstraintDecoder<unknown>): readonly Arm[] => {
   const out: Arm[] = []
-  walk(schema.ast, 'root', out, 0, DEFAULT_SUSPEND_DEPTH_CAP, (replacement) => replacement)
+  const visited = new Set<AST.AST>()
+  walk(schema.ast, 'root', out, 0, DEFAULT_SUSPEND_DEPTH_CAP, (replacement) => replacement, visited)
   return out
 }
 
@@ -42,6 +46,42 @@ type Rebuild = (replacement: AST.AST) => AST.AST
 const replaceAt = <A>(items: readonly A[], index: number, item: A): readonly A[] =>
   items.map((existing, i) => (i === index ? item : existing))
 
+/**
+ * Clone an AST node, patching selected own properties. This mirrors the v4
+ * `SchemaAST` internals (which rebuild checked nodes the same way on
+ * `Schema.check`) without depending on non-public exports.
+ */
+const cloneWith = <A extends AST.AST>(node: A, patch: Record<string, unknown>): A => {
+  const target = Object.assign({}, node)
+  Object.setPrototypeOf(target, Reflect.getPrototypeOf(node))
+  Object.assign(target, patch)
+  return target
+}
+
+/** The AST with one refinement check removed — dropping a refinement in v4. */
+const dropCheck = (node: AST.AST, check: AST.Check<unknown>): AST.AST => {
+  const checks = node.checks
+  if (checks === undefined) return node
+  const rest = checks.filter((existing) => existing !== check)
+  return cloneWith(node, { checks: rest.length === 0 ? undefined : rest })
+}
+
+/** The AST with its encoding chain removed — the decoded (type-side) view. */
+const withoutEncoding = (node: AST.AST): AST.AST =>
+  node.encoding === undefined
+    ? node
+    : cloneWith(node, { encoding: undefined })
+
+/** The AST with the encoding link at `index` retargeted at `to`. */
+const replaceLinkAt = (node: AST.AST, index: number, to: AST.AST): AST.AST => {
+  const encoding = node.encoding
+  if (encoding === undefined) return node
+  const link = encoding[index]
+  if (link === undefined || link.to === to) return node
+  const next = [...encoding.slice(0, index), new AST.Link(to, link.transformation), ...encoding.slice(index + 1)]
+  return cloneWith(node, { encoding: next })
+}
+
 const walk = (
   node: AST.AST,
   path: string,
@@ -49,51 +89,59 @@ const walk = (
   suspendDepth: number,
   depthCap: number,
   rebuild: Rebuild,
+  visited: Set<AST.AST>,
 ): void => {
-  if (AST.isRefinement(node)) {
-    out.push({
-      kind: 'drop-refinement',
-      path: `${path}/refinement`,
-      node,
-      weakened: rebuild(node.from),
+  // v4 shares AST nodes (a suspended union referenced from several fields is
+  // one node reached down many paths). R3 holds that a node's identity is its
+  // obligation key, so arms are keyed per node (Reference equality is the
+  // mechanism) while each path still contributes its own arm (the path and
+  // the enclosing rebuild differ). The subtree below a node is walked once —
+  // revisits only re-enter the same tree, whose arms are already collected —
+  // which is what terminates v4's shared-union recursion. Keeping the first
+  // subtree visit keeps `armsOf` output deterministic; tree-shaped recipes
+  // (the v3 world) never share nodes, so this dedup is a no-op there.
+  const isNewNode = !visited.has(node)
+  if (isNewNode) visited.add(node)
+  // Drop-refinement arms: v4 refinements are per-node checks, and `S.check`
+  // appends to one node's check array — each check gets its own arm (v3 dealt
+  // each refinement its own AST node), so the paths carry the check index.
+  if (node.checks) {
+    node.checks.forEach((check, index) => {
+      out.push({
+        kind: 'drop-refinement',
+        path: `${path}/refinement/${index}`,
+        node,
+        weakened: rebuild(dropCheck(node, check)),
+      })
     })
-    walk(
-      node.from,
-      `${path}/from`,
-      out,
-      suspendDepth,
-      depthCap,
-      (replacement) => rebuild(new AST.Refinement(replacement, node.filter, node.annotations)),
-    )
-    return
   }
-  if (AST.isTransformation(node)) {
-    out.push({ kind: 'drop-to-arm', path: `${path}/to`, node: node.from, weakened: rebuild(node.to) })
-    out.push({
-      kind: 'drop-from-arm',
-      path: `${path}/from`,
-      node: node.to,
-      weakened: rebuild(node.from),
+  // Drop-transformation arms: v4 transformations are links in the encoding
+  // chain, and chained `decodeTo` calls FLATTEN extra links onto the same
+  // node. The v3 model made each nesting level its own node and therefore its
+  // own arm pair, so each link contributes a pair here.
+  if (node.encoding !== undefined) {
+    node.encoding.forEach((link, index) => {
+      out.push({ kind: 'drop-to-arm', path: `${path}/to/${index}`, node, weakened: rebuild(link.to) })
+      out.push({
+        kind: 'drop-from-arm',
+        path: `${path}/from/${index}`,
+        node,
+        weakened: rebuild(withoutEncoding(node)),
+      })
+      walk(
+        link.to,
+        `${path}/to/${index}`,
+        out,
+        suspendDepth,
+        depthCap,
+        (replacement) => rebuild(replaceLinkAt(node, index, replacement)),
+        visited,
+      )
     })
-    walk(
-      node.from,
-      `${path}/from`,
-      out,
-      suspendDepth,
-      depthCap,
-      (replacement) => rebuild(new AST.Transformation(replacement, node.to, node.transformation, node.annotations)),
-    )
-    walk(
-      node.to,
-      `${path}/to`,
-      out,
-      suspendDepth,
-      depthCap,
-      (replacement) => rebuild(new AST.Transformation(node.from, replacement, node.transformation, node.annotations)),
-    )
-    return
   }
-  if (AST.isTypeLiteral(node)) {
+  // Revisits emitted their node-local arms above; the subtree is walked once.
+  if (!isNewNode) return
+  if (AST.isObjects(node)) {
     node.propertySignatures.forEach((property, i) => {
       walk(
         property.type,
@@ -103,22 +151,17 @@ const walk = (
         depthCap,
         (replacement) =>
           rebuild(
-            new AST.TypeLiteral(
-              replaceAt(
-                node.propertySignatures,
-                i,
-                new AST.PropertySignature(
-                  property.name,
-                  replacement,
-                  property.isOptional,
-                  property.isReadonly,
-                  property.annotations,
-                ),
-              ),
+            new AST.Objects(
+              replaceAt(node.propertySignatures, i, new AST.PropertySignature(property.name, replacement)),
               node.indexSignatures,
               node.annotations,
+              node.checks,
+              node.encoding,
+              node.context,
+              node.encodingChecks,
             ),
           ),
+        visited,
       )
     })
     return
@@ -131,81 +174,123 @@ const walk = (
         out,
         suspendDepth,
         depthCap,
-        (replacement) => rebuild(AST.Union.make(replaceAt(node.types, i, replacement), node.annotations)),
+        (replacement) =>
+          rebuild(
+            new AST.Union(
+              replaceAt(node.types, i, replacement),
+              node.mode,
+              node.annotations,
+              node.checks,
+              node.encoding,
+              node.context,
+              node.encodingChecks,
+            ),
+          ),
+        visited,
       )
     })
     return
   }
-  if (AST.isTupleType(node)) {
+  if (AST.isArrays(node)) {
     node.elements.forEach((element, i) => {
-      walk(element.type, `${path}/element/${i}`, out, suspendDepth, depthCap, (replacement) =>
-        rebuild(
-          new AST.TupleType(
-            replaceAt(
-              node.elements,
-              i,
-              new AST.OptionalType(replacement, element.isOptional, element.annotations),
+      walk(
+        element,
+        `${path}/element/${i}`,
+        out,
+        suspendDepth,
+        depthCap,
+        (replacement) =>
+          rebuild(
+            new AST.Arrays(
+              node.isMutable,
+              replaceAt(node.elements, i, replacement),
+              node.rest,
+              node.annotations,
+              node.checks,
+              node.encoding,
+              node.context,
+              node.encodingChecks,
             ),
-            node.rest,
-            node.isReadonly,
-            node.annotations,
           ),
-        ))
+        visited,
+      )
     })
     node.rest.forEach((rest, i) => {
-      walk(rest.type, `${path}/rest/${i}`, out, suspendDepth, depthCap, (replacement) =>
-        rebuild(
-          new AST.TupleType(
-            node.elements,
-            replaceAt(node.rest, i, new AST.Type(replacement, rest.annotations)),
-            node.isReadonly,
-            node.annotations,
+      walk(
+        rest,
+        `${path}/rest/${i}`,
+        out,
+        suspendDepth,
+        depthCap,
+        (replacement) =>
+          rebuild(
+            new AST.Arrays(
+              node.isMutable,
+              node.elements,
+              replaceAt(node.rest, i, replacement),
+              node.annotations,
+              node.checks,
+              node.encoding,
+              node.context,
+              node.encodingChecks,
+            ),
           ),
-        ))
+        visited,
+      )
     })
     return
   }
   if (AST.isDeclaration(node)) {
     node.typeParameters.forEach((parameter, i) => {
-      walk(parameter, `${path}/typeParameter/${i}`, out, suspendDepth, depthCap, (replacement) =>
-        rebuild(
-          new AST.Declaration(
-            replaceAt(node.typeParameters, i, replacement),
-            node.decodeUnknown,
-            node.encodeUnknown,
-            node.annotations,
+      walk(
+        parameter,
+        `${path}/typeParameter/${i}`,
+        out,
+        suspendDepth,
+        depthCap,
+        (replacement) =>
+          rebuild(
+            new AST.Declaration(
+              replaceAt(node.typeParameters, i, replacement),
+              node.run,
+              node.annotations,
+              node.checks,
+              node.encoding,
+              node.context,
+              node.encodingChecks,
+            ),
           ),
-        ))
+        visited,
+      )
     })
     return
   }
   if (AST.isSuspend(node)) {
     if (suspendDepth >= depthCap) return
     walk(
-      node.f(),
+      node.thunk(),
       `${path}/suspend`,
       out,
       suspendDepth + 1,
       depthCap,
-      (replacement) => rebuild(new AST.Suspend(() => replacement, node.annotations)),
+      (replacement) =>
+        rebuild(new AST.Suspend(() => replacement, node.annotations, node.checks, node.encoding, node.context)),
+      visited,
     )
   }
 }
 
 /**
  * The fast-check arbitrary for the encoded side of a schema, drawn via
- * `either`-style failure isolation: a schema whose arbitrary construction
+ * `throw`-style failure isolation: a schema whose arbitrary construction
  * throws is reported as a thrown error rather than a silent `None`. U2's
  * fallback chain consumes this alongside the type-side arbitrary.
  *
  * @internal
  */
 export const safeEncodedArbitrary = (
-  schema: S.Schema.Any,
-): FastCheck.Arbitrary<unknown> => {
-  const encoded = S.encodedSchema(schema)
-  return Arbitrary.make(encoded)
-}
+  schema: S.ConstraintDecoder<unknown>,
+): FastCheck.Arbitrary<unknown> => S.toArbitrary(S.toEncoded(schema))(FastCheck)
 
 /**
  * The fast-check arbitrary for the type side of a schema. Safe the same way
@@ -214,4 +299,5 @@ export const safeEncodedArbitrary = (
  *
  * @internal
  */
-export const safeTypeArbitrary = (schema: S.Schema.Any): FastCheck.Arbitrary<unknown> => Arbitrary.make(schema)
+export const safeTypeArbitrary = (schema: S.ConstraintDecoder<unknown>): FastCheck.Arbitrary<unknown> =>
+  S.toArbitrary(schema)(FastCheck)

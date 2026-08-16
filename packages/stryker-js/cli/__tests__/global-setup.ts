@@ -1,5 +1,4 @@
 import * as Effect from 'effect/Effect'
-import * as Runtime from 'effect/Runtime'
 import { execFile } from 'node:child_process'
 import { access, mkdtemp, readdir, rm } from 'node:fs/promises'
 import { connect } from 'node:net'
@@ -92,8 +91,7 @@ const selectContainerRuntime = Effect.gen(function*() {
  * through the platform runtime, because vitest's hook API is promise-shaped.
  */
 export function setup(project: TestProject): Promise<void> {
-  return Runtime.runPromise(
-    Runtime.defaultRuntime,
+  return Effect.runPromise(
     Effect.gen(function*() {
       const distEntry = join(CLI_DIR, 'dist', 'main.mjs')
       const distPresent = yield* Effect.promise(() =>
@@ -183,8 +181,7 @@ export function setup(project: TestProject): Promise<void> {
 }
 
 export function teardown(): Promise<void> {
-  return Runtime.runPromise(
-    Runtime.defaultRuntime,
+  return Effect.runPromise(
     Effect.gen(function*() {
       const started = container
       if (started !== undefined) {

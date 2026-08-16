@@ -11,7 +11,7 @@ export interface LeaderLockOptions {
 export function withLeaderLock<A, E, R>(
   self: Effect.Effect<A, E, R>,
   options: LeaderLockOptions,
-  lock: LeaderLock['Type'],
+  lock: LeaderLock['Service'],
 ): Effect.Effect<A | void, E | LeaderLockAcquireError, R> {
   const acquire = Effect.gen(function*() {
     const out = yield* lock.withLock(options.key, self)
@@ -19,7 +19,7 @@ export function withLeaderLock<A, E, R>(
       return out.value
     }
     return yield* Match.value(options.mode).pipe(
-      Match.when('required', () => Effect.fail(new LeaderLockNotAcquired({ key: options.key }))),
+      Match.when('required', () => Effect.fail(LeaderLockNotAcquired.make({ key: options.key }))),
       Match.when('optional', () => Effect.void),
       Match.exhaustive,
     )

@@ -1,6 +1,7 @@
 import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Duration, Effect, Either, Match, Ref, Stream, TestClock } from 'effect'
+import { Duration, Effect, Latch, Match, Ref, Result, Stream } from 'effect'
+import { TestClock } from 'effect/testing'
 import { expect } from 'vitest'
 import { DynamicLimitExceeded } from '../src/mod.js'
 import { run } from '../src/mod.js'
@@ -73,11 +74,11 @@ Feature('Dynamic Supervisor')
           Effect.gen(function*() {
             yield* s.handle.startChild(void 0)
             yield* s.handle.startChild(void 0)
-            return yield* s.handle.startChild(void 0).pipe(Effect.either)
+            return yield* s.handle.startChild(void 0).pipe(Effect.result)
           })),
         Then('the result is Left DynamicLimitExceeded')((s) =>
           Effect.sync(() => {
-            expect(s.result).toEqual(Either.left(new DynamicLimitExceeded({ limit: 2 })))
+            expect(s.result).toEqual(Result.fail(DynamicLimitExceeded.make({ limit: 2 })))
           })
         ),
       ),
@@ -185,7 +186,7 @@ Feature('Dynamic Supervisor')
     scenario(
       'Dynamic child is tracked after start',
       Gherkin.Do.pipe(
-        Given('a child start latch')('started', () => Effect.makeLatch(false)),
+        Given('a child start latch')('started', () => Latch.make(false)),
         When('a dynamic supervisor starts a child')('ctx', (_s) =>
           Effect.gen(function*() {
             const spec = dynamic({
@@ -221,9 +222,9 @@ Feature('Dynamic Supervisor')
           Effect.gen(function*() {
             const results = yield* Effect.all(
               [
-                s.handle.startChild(void 0).pipe(Effect.either),
-                s.handle.startChild(void 0).pipe(Effect.either),
-                s.handle.startChild(void 0).pipe(Effect.either),
+                s.handle.startChild(void 0).pipe(Effect.result),
+                s.handle.startChild(void 0).pipe(Effect.result),
+                s.handle.startChild(void 0).pipe(Effect.result),
               ],
               { concurrency: 'unbounded' },
             )
@@ -231,8 +232,8 @@ Feature('Dynamic Supervisor')
           })),
         Then('at most 2 succeed and at least 1 fails with DynamicLimitExceeded')((s) =>
           Effect.sync(() => {
-            const successes = s.results.results.filter(Either.isRight).length
-            const failures = s.results.results.filter(Either.isLeft).length
+            const successes = s.results.results.filter(Result.isSuccess).length
+            const failures = s.results.results.filter(Result.isFailure).length
             expect(successes).toBeLessThanOrEqual(2)
             expect(failures).toBeGreaterThanOrEqual(1)
             expect(successes + failures).toBe(3)
@@ -248,7 +249,7 @@ Feature('Dynamic Supervisor')
           'ctx',
           () =>
             Effect.gen(function*() {
-              const acquired = yield* Effect.makeLatch(false)
+              const acquired = yield* Latch.make(false)
               const spec = dynamic({
                 name: 'capacity-recovery',
                 child: () =>
@@ -269,8 +270,8 @@ Feature('Dynamic Supervisor')
             const firstRef = yield* s.ctx.handle.startChild(void 0)
             yield* s.ctx.acquired.await
             expect(yield* s.ctx.handle.count).toBe(1)
-            const atCapacity = yield* s.ctx.handle.startChild(void 0).pipe(Effect.either)
-            expect(atCapacity).toEqual(Either.left(new DynamicLimitExceeded({ limit: 1 })))
+            const atCapacity = yield* s.ctx.handle.startChild(void 0).pipe(Effect.result)
+            expect(atCapacity).toEqual(Result.fail(DynamicLimitExceeded.make({ limit: 1 })))
             yield* s.ctx.handle.stopChild(firstRef)
             yield* firstRef.removed
             expect(yield* s.ctx.handle.count).toBe(0)
@@ -452,8 +453,8 @@ Feature('Dynamic Supervisor')
           'ctx',
           () =>
             Effect.gen(function*() {
-              const release = yield* Effect.makeLatch(false)
-              const completed = yield* Effect.makeLatch(false)
+              const release = yield* Latch.make(false)
+              const completed = yield* Latch.make(false)
               const streamSpec = dynamic({
                 name: 'stop-after-done',
                 child: () =>
@@ -504,8 +505,8 @@ Feature('Dynamic Supervisor')
         ),
         And('a 4th child fails with DynamicLimitExceeded')((s) =>
           Effect.gen(function*() {
-            const result = yield* s.handle.startChild(void 0).pipe(Effect.either)
-            expect(result).toEqual(Either.left(new DynamicLimitExceeded({ limit: 3 })))
+            const result = yield* s.handle.startChild(void 0).pipe(Effect.result)
+            expect(result).toEqual(Result.fail(DynamicLimitExceeded.make({ limit: 3 })))
           })
         ),
       ),

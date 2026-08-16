@@ -30,7 +30,7 @@ const isMakeFeatureSpecifier = (specifier: ESTree.ImportSpecifier): boolean => {
  */
 const foreignRunnerNameOf = (specifier: ESTree.ImportSpecifier): string | null => {
   if (specifier.imported.type !== 'Identifier') return null
-  const { name } = S.decodeUnknownSync(ImportedIdentifier)(specifier.imported)
+  const { name } = S.decodeSync(ImportedIdentifier)(specifier.imported)
   return RUNNER_NAMES.has(name) ? name : null
 }
 

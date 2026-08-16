@@ -1,18 +1,18 @@
-import * as NodeCommandExecutor from '@effect/platform-node/NodeCommandExecutor'
+import * as NodeChildProcessSpawner from '@effect/platform-node-shared/NodeChildProcessSpawner'
 import * as NodeFileSystem from '@effect/platform-node/NodeFileSystem'
-import type { PlatformError } from '@effect/platform/Error'
-import { FileSystem } from '@effect/platform/FileSystem'
-import * as PathModule from '@effect/platform/Path'
 import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer } from 'effect'
+import { FileSystem } from 'effect/FileSystem'
+import * as PathModule from 'effect/Path'
+import type { PlatformError } from 'effect/PlatformError'
 import { expect } from 'vitest'
 import { loadSettingsWithPaths } from '../src/internal/load-settings.executor.js'
 import { expectLoaded } from './loaded.observer.js'
 
 const Feature = makeFeature({ it, layer })
 
-const testLayer = NodeCommandExecutor.layer.pipe(
+const testLayer = NodeChildProcessSpawner.layer.pipe(
   Layer.provideMerge(NodeFileSystem.layer),
   Layer.provideMerge(PathModule.layer),
 )

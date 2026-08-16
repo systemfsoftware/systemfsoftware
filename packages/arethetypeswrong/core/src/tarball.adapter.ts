@@ -22,9 +22,9 @@ export interface TarballAdapterService {
   readonly extract: (tarball: Uint8Array) => Effect.Effect<ExtractedTarball, TarballAdapterError>
 }
 
-export class TarballAdapter extends Context.Tag(
+export class TarballAdapter extends Context.Service<TarballAdapter, TarballAdapterService>()(
   '@systemfsoftware/arethetypeswrong-core/TarballAdapter',
-)<TarballAdapter, TarballAdapterService>() {}
+) {}
 
 export const TarballAdapterLive: Layer.Layer<TarballAdapter, never, never> = Layer.succeed(
   TarballAdapter,

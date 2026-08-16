@@ -1,34 +1,36 @@
 import { it } from '@effect/vitest'
-import { Either, FastCheck as fc, Schema as S } from 'effect'
+import { Exit, Schema as S } from 'effect'
 import * as AST from 'effect/SchemaAST'
+import { FastCheck as fc } from 'effect/testing'
 import { expectTypeOf } from 'vitest'
 import { armsOf } from '../weaken.kernel.js'
 
 /**
  * R2 in the only channel that can fire. The walk recurses through exactly the
- * container tags below; every other AST tag is a leaf that cannot hold a
- * refinement. A runtime guard could not state this — it would mirror the walk
- * and never disagree with it. When Effect adds a tag, this stops compiling and
- * someone has to decide which side it belongs on.
+ * container tags below — plus per-node checks and encoding links, which are
+ * attached to any node rather than being AST tags of their own; every other
+ * AST tag is a leaf that cannot hold a refinement. When Effect adds a tag,
+ * this stops compiling and someone has to decide which side it belongs on.
  */
-type WalkedTag = 'Declaration' | 'Refinement' | 'Suspend' | 'Transformation' | 'TupleType' | 'TypeLiteral' | 'Union'
+type WalkedTag = 'Declaration' | 'Suspend' | 'Arrays' | 'Objects' | 'Union'
 
 expectTypeOf<Exclude<AST.AST['_tag'], WalkedTag>>().toEqualTypeOf<
-  | 'AnyKeyword'
-  | 'BigIntKeyword'
-  | 'BooleanKeyword'
-  | 'Enums'
+  | 'Any'
+  | 'BigInt'
+  | 'Boolean'
+  | 'Enum'
   | 'Literal'
-  | 'NeverKeyword'
-  | 'NumberKeyword'
+  | 'Never'
+  | 'Null'
+  | 'Number'
   | 'ObjectKeyword'
-  | 'StringKeyword'
-  | 'SymbolKeyword'
+  | 'String'
+  | 'Symbol'
   | 'TemplateLiteral'
-  | 'UndefinedKeyword'
+  | 'Undefined'
   | 'UniqueSymbol'
-  | 'UnknownKeyword'
-  | 'VoidKeyword'
+  | 'Unknown'
+  | 'Void'
 >()
 
 /**
@@ -55,26 +57,58 @@ const armCountOf = (recipe: Recipe): number => {
   return armCountOf(recipe.inner)
 }
 
-const schemaOf = (recipe: Recipe): S.Schema.AnyNoContext => {
+const schemaOf = (recipe: Recipe): S.Codec<unknown, unknown> => {
   if (recipe.kind === 'leaf') return S.String
-  if (recipe.kind === 'refine') return schemaOf(recipe.inner).pipe(S.filter(() => true))
+  if (recipe.kind === 'refine') return refineInto(recipe.inner, 1)
   if (recipe.kind === 'transform') {
-    return S.transform(schemaOf(recipe.from), schemaOf(recipe.to), {
-      decode: (x: unknown) => x,
-      encode: (x: unknown) => x,
-      strict: false,
-    })
+    // v4 attaches an encoding link to the target node, and a `Suspend` target
+    // carries the link on its wrapper — a shape `Schema.check` cannot refine.
+    // The canonical recursive-transform spelling suspends the WHOLE transform,
+    // putting the link on the inner node where refinement can reach it.
+    if (recipe.to.kind === 'suspend') {
+      const source = schemaOf(recipe.from)
+      const target = schemaOf(recipe.to.inner)
+      return S.suspend(() => source.pipe(S.decodeTo(target)))
+    }
+    return schemaOf(recipe.from).pipe(S.decodeTo(schemaOf(recipe.to)))
   }
   if (recipe.kind === 'struct') {
-    const fields: Record<string, S.Schema.AnyNoContext> = {}
+    const fields: Record<string, S.Codec<unknown, unknown>> = {}
     recipe.fields.forEach((f, i) => {
       fields[`f${i}`] = schemaOf(f)
     })
     return S.Struct(fields)
   }
   if (recipe.kind === 'sequence') return S.Array(schemaOf(recipe.element))
-  if (recipe.kind === 'declaration') return S.OptionFromSelf(schemaOf(recipe.inner))
+  if (recipe.kind === 'declaration') return S.Option(schemaOf(recipe.inner))
   return S.suspend(() => schemaOf(recipe.inner))
+}
+
+/**
+ * A check cannot be attached to a `Suspend` node in v4, so a refinement chain
+ * is pushed down through any suspensions and applied as one check layer on
+ * the bottom-most node. The walk sees the same arm count either way. The
+ * suspension can be recipe-level (`{kind: 'suspend'}`) or codec-level — a
+ * transform whose target is itself suspended carries the whole encoding chain
+ * under a `Suspend` root, and both shapes take the same push-down.
+ */
+const applyChecks = (schema: S.Codec<unknown, unknown>, depth: number): S.Codec<unknown, unknown> => {
+  let checked = schema
+  for (let i = 0; i < depth; i++) {
+    checked = checked.pipe(S.check(S.makeFilter(() => true)))
+  }
+  return checked
+}
+
+const refineInto = (recipe: Recipe, depth: number): S.Codec<unknown, unknown> => {
+  if (recipe.kind === 'refine') return refineInto(recipe.inner, depth + 1)
+  if (recipe.kind === 'suspend') return S.suspend(() => refineInto(recipe.inner, depth))
+  const base = schemaOf(recipe)
+  if (base.ast instanceof AST.Suspend) {
+    const inner = base.ast.thunk()
+    return S.suspend(() => applyChecks(S.make(inner), depth))
+  }
+  return applyChecks(base, depth)
 }
 
 const recipeArb: fc.Arbitrary<Recipe> = fc.letrec<{ node: Recipe }>((tie) => ({
@@ -112,9 +146,9 @@ it.prop('∀r_EveryWeakened_≡Constructible', [recipeArb], ([recipe]) =>
 it.prop('∀n_UnionOfDistinctRefinements_≡NArms', [fc.integer({ min: 2, max: 6 })], ([members]) => {
   const branches = Array.from(
     { length: members },
-    (_, i) => S.String.pipe(S.filter((s: string) => s.length >= i)),
+    (_, i) => S.String.pipe(S.check(S.makeFilter((s: string) => s.length >= i))),
   )
-  const arms = armsOf(S.Union(...branches)).filter((a) => a.kind === 'drop-refinement')
+  const arms = armsOf(S.Union(branches)).filter((a) => a.kind === 'drop-refinement')
   return arms.length === members
 })
 
@@ -133,14 +167,16 @@ const lengthRefinements = fc.array(fc.integer({ min: 0, max: 5 }), { minLength: 
   })
 
 it.prop('∀tv_DropRefinement_⊇Original', [lengthRefinements], ([[thresholds, value]]) => {
-  const schema = thresholds.reduce<S.Schema<string, string, never>>(
-    (acc, min) => acc.pipe(S.filter((s: string) => s.length >= min)),
+  const schema = thresholds.reduce<S.Codec<string, string>>(
+    (acc, min) => acc.pipe(S.check(S.makeFilter((s: string) => s.length >= min))),
     S.String,
   )
-  const originalAccepts = Either.isRight(S.decodeUnknownEither(schema)(value))
+  const originalAccepts = Exit.isSuccess(S.decodeExit(schema)(value))
   const weakenedAllAccept = armsOf(schema)
     .filter((arm) => arm.kind === 'drop-refinement')
-    .every((arm) => Either.isRight(S.decodeUnknownEither(S.make(arm.weakened))(value)))
+    .every((arm) =>
+      Exit.isSuccess(S.decodeUnknownExit(S.make<S.ConstraintCodec<unknown, unknown>>(arm.weakened))(value))
+    )
   return originalAccepts && weakenedAllAccept
 })
 
@@ -149,8 +185,8 @@ it.prop('∀tv_DropRefinement_⊇Original', [lengthRefinements], ([[thresholds, 
  * reached by many paths is one node. Reference equality is the mechanism.
  */
 it.prop('∀n_SharedRefinement_≡OneNode', [fc.integer({ min: 2, max: 5 })], ([positions]) => {
-  const shared = S.String.pipe(S.filter((s: string) => s.length > 0))
-  const fields: Record<string, S.Schema.AnyNoContext> = {}
+  const shared = S.String.pipe(S.check(S.makeFilter((s: string) => s.length > 0)))
+  const fields: Record<string, S.Codec<unknown, unknown>> = {}
   for (let i = 0; i < positions; i++) fields[`f${i}`] = shared
   const arms = armsOf(S.Struct(fields)).filter((a) => a.kind === 'drop-refinement')
   return arms.length === positions && new Set(arms.map((a) => a.node)).size === 1

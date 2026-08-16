@@ -1,6 +1,6 @@
 import { isCI } from '@systemfsoftware/vitest-config'
 import { Match } from 'effect'
-import { FastCheck as fc } from 'effect'
+import { FastCheck as fc } from 'effect/testing'
 
 const mode = Match.value({
   strykerWorker: Boolean(process.env.STRYKER_MUTATOR_WORKER),

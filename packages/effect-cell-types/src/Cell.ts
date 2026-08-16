@@ -1,8 +1,8 @@
 import * as Arr from 'effect/Array'
 import * as Effect from 'effect/Effect'
-import * as Either from 'effect/Either'
 import { dual } from 'effect/Function'
 import * as Option from 'effect/Option'
+import * as Result from 'effect/Result'
 
 /**
  * The type bag. Every phase's input and output type travels in one record so that a
@@ -40,16 +40,16 @@ export type ReadPhase<P extends Phases> = (
 /** Validation. Its `Left` is fatal: it reaches the derived error channel and no write runs. */
 export type DecodePhase<P extends Phases> = (
   raw: P['raw'],
-) => Either.Either<P['decoded'], P['decodeError']>
+) => Result.Result<P['decoded'], P['decodeError']>
 
 /** The decision. Its `Left` is an outcome, not a fault: both branches travel on to the write. */
 export type DecidePhase<P extends Phases> = (
   decoded: P['decoded'],
-) => Either.Either<P['decision'], P['decisionError']>
+) => Result.Result<P['decision'], P['decisionError']>
 
 /** Shapes what the write consumes. Total, so it receives both branches of the decision. */
 export type EncodePhase<P extends Phases> = (
-  outcome: Either.Either<P['decision'], P['decisionError']>,
+  outcome: Result.Result<P['decision'], P['decisionError']>,
 ) => P['output']
 
 export type WritePhase<P extends Phases> = (
@@ -63,8 +63,8 @@ export type WritePhase<P extends Phases> = (
 /**
  * The invocation shape a folding consumer must use to call a phase's `run`:
  * - `'effect'` — `run` returns an `Effect`; yield it. (read, write)
- * - `'either-fail'` — `run` returns an `Either` whose `Left` is fatal; fail on `Left`. (decode)
- * - `'either-pass'` — `run` returns an `Either` that travels forward whole. (decide)
+ * - `'either-fail'` — `run` returns a `Result` whose `Failure` is fatal; fail on `Failure`. (decode)
+ * - `'either-pass'` — `run` returns a `Result` that travels forward whole. (decide)
  * - `'total'` — `run` is a plain total function; call it directly. (encode)
  *
  * This is structural data on the record, not one of the five axes: it lets an executing
@@ -276,30 +276,30 @@ export const write: {
 
 /**
  * What can flow through the interpreter's fold: every phase's input and output type,
- * including the `decide` `Either` that travels forward whole. The value is threaded as
+ * including the `decide` `Result` that travels forward whole. The value is threaded as
  * this union rather than `unknown` so each phase call is sound without an assertion —
  * every member is an indexed access on `Phases` (constrained `unknown`), and the only
- * constructed member, the outcome `Either`, is narrowed by a runtime guard. The phase
+ * constructed member, the outcome `Result`, is narrowed by a runtime guard. The phase
  * input types are not observable, so no narrower claim is possible here.
  */
 type FoldValue<P extends Phases> =
   | P['command']
   | P['raw']
   | P['decoded']
-  | Either.Either<P['decision'], P['decisionError']>
+  | Result.Result<P['decision'], P['decisionError']>
   | P['output']
   | P['response']
 
 /**
  * The runtime guard that lets the `'total'` case call `EncodePhase` soundly: an encode
- * phase is chained only after a decide, so the value reaching it is the outcome `Either`
- * and `Either.isEither` certifies exactly that. The specific `decision`/`decisionError`
+ * phase is chained only after a decide, so the value reaching it is the outcome `Result`
+ * and `Result.isResult` certifies exactly that. The specific `decision`/`decisionError`
  * members are not observable at runtime, so the guard narrows to them by construction —
  * the same trust the fold places in the chain's order.
  */
 const isOutcome = <P extends Phases>(
   value: FoldValue<P>,
-): value is Either.Either<P['decision'], P['decisionError']> => Either.isEither(value)
+): value is Result.Result<P['decision'], P['decisionError']> => Result.isResult(value)
 
 /**
  * Runs one layer as the sandwich the value declares: the phase records run in array
@@ -309,16 +309,16 @@ const isOutcome = <P extends Phases>(
  * exhaustive over the union via its `never` default: a future phase with an invocation
  * shape this module does not know fails at compile time, at this one location.
  *
- * The two `Left` rules are carried by the phase types rather than chosen here. A `decode`
- * Left has no downstream consumer — nothing accepts `decodeError` — so its only route is a
- * failure, which is what puts it in the derived error channel. A `decide` Left cannot be
- * unwrapped, because `EncodePhase` takes the whole `Either`, so its only route is forward as
+ * The two `Failure` rules are carried by the phase types rather than chosen here. A `decode`
+ * Failure has no downstream consumer — nothing accepts `decodeError` — so its only route is a
+ * failure, which is what puts it in the derived error channel. A `decide` Failure cannot be
+ * unwrapped, because `EncodePhase` takes the whole `Result`, so its only route is forward as
  * a value. Neither is a decision the interpreter makes.
  *
  * Every layer reachable from a `WriteDone` was built by the five constructors in order, so
  * its last phase is a write and every slot is filled. A layer that is nonetheless empty or
  * not closed by a write is a defect in this module, never a domain outcome, so it dies —
- * the same guard the name-keyed layer used for unfilled slots. `dieMessage` returns
+ * the same guard the name-keyed layer used for unfilled slots. `Effect.die` returns
  * `Effect<never>`, which is why the guards cost the derived `E` and `R` nothing.
  */
 const runLayer = <P extends Phases>(layer: Layer<P>, command: P['command']) =>
@@ -326,8 +326,8 @@ const runLayer = <P extends Phases>(layer: Layer<P>, command: P['command']) =>
     const phases = layer.phases
     const last = phases[phases.length - 1]
     if (!last || last.name !== 'write') {
-      return yield* Effect.dieMessage(
-        'effect-cell-types: a layer reached the interpreter without a write phase closing it',
+      return yield* Effect.die(
+        new Error('effect-cell-types: a layer reached the interpreter without a write phase closing it'),
       )
     }
 
@@ -338,9 +338,9 @@ const runLayer = <P extends Phases>(layer: Layer<P>, command: P['command']) =>
           value = yield* phase.run(value)
           break
         case 'either-fail':
-          value = yield* Either.match(phase.run(value), {
-            onLeft: Effect.fail,
-            onRight: Effect.succeed,
+          value = yield* Result.match(phase.run(value), {
+            onFailure: Effect.fail,
+            onSuccess: Effect.succeed,
           })
           break
         case 'either-pass':
@@ -348,8 +348,10 @@ const runLayer = <P extends Phases>(layer: Layer<P>, command: P['command']) =>
           break
         case 'total': {
           if (!isOutcome(value)) {
-            return yield* Effect.dieMessage(
-              'effect-cell-types: an encode phase received a value that is not the decide outcome',
+            return yield* Effect.die(
+              new Error(
+                'effect-cell-types: an encode phase received a value that is not the decide outcome',
+              ),
             )
           }
           value = phase.run(value)
@@ -357,8 +359,8 @@ const runLayer = <P extends Phases>(layer: Layer<P>, command: P['command']) =>
         }
         default: {
           const unreachable: never = phase
-          return yield* Effect.dieMessage(
-            `effect-cell-types: unknown phase convention ${String(unreachable)}`,
+          return yield* Effect.die(
+            new Error(`effect-cell-types: unknown phase convention ${String(unreachable)}`),
           )
         }
       }
@@ -391,7 +393,10 @@ export const apply = <P extends Phases>(description: WriteDone<P>, command: P['c
   Effect.gen(function*() {
     const responses = yield* Effect.forEach(description.layers, (layer) => runLayer(layer, command))
     return yield* Option.match(Arr.last(responses), {
-      onNone: () => Effect.dieMessage('effect-cell-types: a description reached the interpreter with no layers'),
+      onNone: () =>
+        Effect.die(
+          new Error('effect-cell-types: a description reached the interpreter with no layers'),
+        ),
       onSome: Effect.succeed,
     })
   })
@@ -444,12 +449,12 @@ export interface Vocabulary {
 export const canonical: WriteDone<Phases> = write(
   encode(
     decide(
-      decode(read<Phases>(() => Effect.succeed(undefined)), () => Either.right(undefined)),
-      () => Either.right(undefined),
+      decode(read<Phases>(() => Effect.void), () => Result.succeed(undefined)),
+      () => Result.succeed(undefined),
     ),
     () => undefined,
   ),
-  () => Effect.succeed(undefined),
+  () => Effect.void,
 )
 
 /**

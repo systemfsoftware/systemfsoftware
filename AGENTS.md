@@ -73,7 +73,7 @@ Directories and the root doctrine file `CONCEPTS.md`; directory contents are dis
 - **Cell taxonomy core** — `effect-cell-types` (Workflow types + the phase chain), `effect-cell-type-tests` (generated tstyche suite), `effect-cell-gen` (generated arbitraries), `effect-daemon-spec` (supervision-tree daemons). Leaf-governed.
 - **Lint & static analysis** — `oxlint-config` (shared oxlint presets; root-governed), `oxlint-plugins/` (cell-specific rule plugins; hub leaf + per-plugin sub-leaves).
 - **Mutation testing** — `stryker-js/` (hub leaf + 6 sub-leaves), `stryker-plugins` (Effect-Schema ignorers for Stryker).
-- **Effect libraries & bridges** — `effect-atom` (owned; atom/atom-react), `effect-memfs` (owned), `rx-effect` (RxJS↔Effect bridge), `storybook-gherkin` (owned; Gherkin as Storybook stories), `effect-gherkin-spec` (Gherkin BDD for Effect 3; root-governed), `effect-gherkin-spec-v4` (Gherkin BDD for Effect 4, `catalog:effect-v4`; root-governed).
+- **Effect libraries & bridges** — `effect-atom` (owned; atom/atom-react), `effect-memfs` (owned), `rx-effect` (RxJS↔Effect bridge), `storybook-gherkin` (owned; Gherkin as Storybook stories), `effect-gherkin-spec` (Gherkin BDD for Effect 4; root-governed).
 - **Tooling & shared config** — `arethetypeswrong` (owned; cli/core; leaf), `tsconfig` (shared TS base; root-governed), `vitest-config` (shared Vitest; root-governed).
 
 ## Working Rules

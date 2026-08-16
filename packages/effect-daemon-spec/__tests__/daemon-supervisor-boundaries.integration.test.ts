@@ -1,5 +1,6 @@
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Duration, Effect, Layer, Schedule, Schema as S, Stream, TestClock } from 'effect'
+import { Duration, Effect, Layer, Schedule, Schema as S, Stream } from 'effect'
+import { TestClock } from 'effect/testing'
 import { expect } from 'vitest'
 import { BoundedIntensity } from '../src/mod.js'
 import { run } from '../src/mod.js'
@@ -15,7 +16,7 @@ import { NoopLayer } from './helpers/shared-layers.js'
 
 class SimulatedFailure extends S.TaggedError<SimulatedFailure>()('SimulatedFailure', {}) {}
 
-type SpyHandle = Effect.Effect.Success<typeof ReporterSpyContext>
+type SpyHandle = Effect.Success<typeof ReporterSpyContext>
 
 const IntensitySpyLayer = (spy: SpyHandle) =>
   Layer.mergeAll(
@@ -144,7 +145,7 @@ Feature('Daemon supervisor boundaries')
           Effect.gen(function*() {
             const child = Daemon.poll({
               name: 'zero-budget-fail',
-              work: new SimulatedFailure(),
+              work: SimulatedFailure.make(),
               interval: Duration.millis(1),
               tick: { tickTimeout: Duration.seconds(90) },
               lock: { mode: 'none' },
@@ -153,8 +154,10 @@ Feature('Daemon supervisor boundaries')
               name: 'zero-budget-sup',
               children: [child],
               supervision: Supervision.custom({
-                intensity: new BoundedIntensity({ restarts: 0, window: Duration.seconds(60) }),
-                backoff: Schedule.exponential(Duration.millis(5)).pipe(Schedule.upTo(Duration.millis(50))),
+                intensity: BoundedIntensity.make({ restarts: 0, window: Duration.seconds(60) }),
+                backoff: Schedule.exponential(Duration.millis(5)).pipe(
+                  Schedule.upTo({ duration: Duration.millis(50) }),
+                ),
                 cooldown: Duration.minutes(30),
               }),
               lock: { mode: 'none' },

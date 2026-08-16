@@ -6,7 +6,7 @@ import { CheckStatus } from '@systemfsoftware/stryker-js-plugin-api/check'
 import type { FailedCheckResult } from '@systemfsoftware/stryker-js-plugin-api/check'
 import type { Location, Mutant, StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
 import type { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
-import { Either } from 'effect'
+import { Result } from 'effect'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { HybridFileSystem } from '../../src/project/hybrid-file-system.js'
@@ -232,10 +232,10 @@ describe('Typescript checker on a single project', () => {
     const tsconfigFile = resolveTestResource('tsconfig.json')
     const content = fs.readFileSync(tsconfigFile, 'utf8')
     const parsed = parseTsConfig(tsconfigFile, content)
-    if (Either.isLeft(parsed)) {
-      throw new Error(`Expected fixture tsconfig to parse, got: ${parsed.left.reason}`)
+    if (Result.isFailure(parsed)) {
+      throw new Error(`Expected fixture tsconfig to parse, got: ${parsed.failure.reason}`)
     }
-    const config = overrideOptions(parsed.right, false)
+    const config = overrideOptions(parsed.success, false)
     expect(config).toContain('"$schema":"https://json.schemastore.org/tsconfig"')
     expect(config).toContain('"include":["src/**/*.ts"]')
   })

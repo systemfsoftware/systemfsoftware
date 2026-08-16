@@ -3,11 +3,11 @@ import { cappedBackoff } from './backoff.kernel.js'
 
 export const worker = <
   INTENSITY,
-  COOLDOWN extends Duration.DurationInput,
-  BACKOFFBASE extends Duration.DurationInput,
+  COOLDOWN extends Duration.Input,
+  BACKOFFBASE extends Duration.Input,
 >(
   config: { readonly intensity: INTENSITY; readonly backoffBase: BACKOFFBASE; readonly cooldown: COOLDOWN },
-  cap: Duration.DurationInput,
+  cap: Duration.Input,
 ): Effect.Effect<
   { readonly intensity: INTENSITY; readonly backoff: Schedule.Schedule<Duration.Duration>; readonly cooldown: COOLDOWN }
 > =>

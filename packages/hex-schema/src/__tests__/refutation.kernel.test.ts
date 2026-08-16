@@ -8,7 +8,7 @@ import { PrefixedHex } from '../prefixed-hex.schema.js'
 import { StrictHex } from '../strict-hex.schema.js'
 import { Uint8ArrayFromPrefixedHex } from '../uint8array-from-prefixed-hex.schema.js'
 
-const EXPORTED_SCHEMAS: Readonly<Record<string, S.Schema.AnyNoContext>> = {
+const EXPORTED_SCHEMAS: Readonly<Record<string, S.ConstraintDecoder<unknown>>> = {
   ColonHex,
   HexBytes,
   HexString,
@@ -18,12 +18,12 @@ const EXPORTED_SCHEMAS: Readonly<Record<string, S.Schema.AnyNoContext>> = {
 }
 
 const RECORDED_MODEL = {
-  ColonHex: { obligations: 2, blind: [] },
-  HexBytes: { obligations: 2, blind: [] },
+  ColonHex: { obligations: 3, blind: [] },
+  HexBytes: { obligations: 1, blind: [] },
   HexString: { obligations: 1, blind: [] },
-  PrefixedHex: { obligations: 2, blind: [] },
+  PrefixedHex: { obligations: 1, blind: [] },
   StrictHex: { obligations: 1, blind: [] },
-  Uint8ArrayFromPrefixedHex: { obligations: 5, blind: [] },
+  Uint8ArrayFromPrefixedHex: { obligations: 2, blind: [] },
 }
 
 it('Should_MatchTheRecordedObligationModel_When_ScanningEveryExportedSchema', () => {

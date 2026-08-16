@@ -1,5 +1,6 @@
 import { describe, expect, it } from '@effect/vitest'
-import { Duration as D, Effect, TestClock } from 'effect'
+import { Duration as D, Effect } from 'effect'
+import { TestClock } from 'effect/testing'
 import { make } from '../intensity.kernel.js'
 
 describe('make', () => {

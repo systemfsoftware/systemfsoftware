@@ -1,10 +1,8 @@
 /// <reference types="vitest/globals" />
 import type * as EffectVitest from '@effect/vitest'
 import type { Vitest } from '@effect/vitest'
-import { Effect } from 'effect'
 import * as Layer from 'effect/Layer'
 import type * as Scope from 'effect/Scope'
-import * as TestServices from 'effect/TestServices'
 import type { TestOptions } from 'vitest'
 import { Gherkin, type ScopeMap } from './do-notation.kernel.js'
 import {
@@ -77,41 +75,26 @@ const pickMode = <R>(
   return family
 }
 
-function selectUnlayeredMode(
-  methodsIt: Vitest.Methods,
-  mode: RegisterMode,
-  useLiveClock: true,
-): Vitest.Test<Scope.Scope>
-function selectUnlayeredMode(
-  methodsIt: Vitest.Methods,
-  mode: RegisterMode,
-  useLiveClock: false,
-): Vitest.Test<TestServices.TestServices | Scope.Scope>
-function selectUnlayeredMode(
+const selectUnlayeredMode = (
   methodsIt: Vitest.Methods,
   mode: RegisterMode,
   useLiveClock: boolean,
-): Vitest.Test<Scope.Scope> | Vitest.Test<TestServices.TestServices | Scope.Scope>
-function selectUnlayeredMode(
-  methodsIt: Vitest.Methods,
-  mode: RegisterMode,
-  useLiveClock: boolean,
-): Vitest.Test<Scope.Scope> | Vitest.Test<TestServices.TestServices | Scope.Scope> {
+): Vitest.Test<Scope.Scope> => {
   if (useLiveClock) {
-    return pickMode(methodsIt.scopedLive, mode)
+    return pickMode(methodsIt.live, mode)
   }
-  return pickMode(methodsIt.scoped, mode)
+  return pickMode(methodsIt.effect, mode)
 }
 
 const selectLayeredMode = <R>(
-  methodsIt: Pick<Vitest.MethodsNonLive<R, boolean>, 'scoped'>,
+  methodsIt: Pick<Vitest.MethodsNonLive<R>, 'effect'>,
   mode: RegisterMode,
-) => pickMode(methodsIt.scoped, mode)
+) => pickMode(methodsIt.effect, mode)
 
 export type FeatureBuilderBoth<
   RShared,
   RFresh,
-  RFreshReq extends RShared | TestServices.TestServices | Scope.Scope,
+  RFreshReq extends RShared | Scope.Scope,
   S extends ScopeMap = EmptyScopeMap,
 > = {
   readonly liveClock: () => FeatureBuilderBoth<RShared, RFresh, RFreshReq, S>
@@ -122,7 +105,7 @@ export type FeatureBuilderBoth<
 export type FeatureBuilderWithLayer<RShared, S extends ScopeMap = EmptyScopeMap> = {
   readonly liveClock: () => FeatureBuilderWithLayer<RShared, S>
   body: (body: FeatureBody<RShared, never, never, S>) => void
-  withScenarioLayer: <RFresh, RFreshReq extends RShared | TestServices.TestServices | Scope.Scope = never>(
+  withScenarioLayer: <RFresh, RFreshReq extends RShared | Scope.Scope = never>(
     layer: Layer.Layer<RFresh, never, RFreshReq>,
   ) => FeatureBuilderBoth<RShared, RFresh, RFreshReq, S>
   withScope: <S2 extends ScopeMap>(map: S2) => FeatureBuilderWithLayer<RShared, S2>
@@ -130,7 +113,7 @@ export type FeatureBuilderWithLayer<RShared, S extends ScopeMap = EmptyScopeMap>
 
 export type FeatureBuilderWithScenarioLayer<
   RFresh,
-  RFreshReq extends TestServices.TestServices | Scope.Scope,
+  RFreshReq extends Scope.Scope,
   S extends ScopeMap = EmptyScopeMap,
 > = {
   readonly liveClock: () => FeatureBuilderWithScenarioLayer<RFresh, RFreshReq, S>
@@ -146,7 +129,7 @@ export type FeatureBuilder<S extends ScopeMap = EmptyScopeMap> = {
   readonly liveClock: () => FeatureBuilder<S>
   body: (body: FeatureBody<never, never, never, S>) => void
   withLayer: <RShared>(layer: Layer.Layer<RShared>, opts?: FeatureLayerOptions) => FeatureBuilderWithLayer<RShared, S>
-  withScenarioLayer: <RFresh, RFreshReq extends TestServices.TestServices | Scope.Scope = never>(
+  withScenarioLayer: <RFresh, RFreshReq extends Scope.Scope = never>(
     layer: Layer.Layer<RFresh, never, RFreshReq>,
   ) => FeatureBuilderWithScenarioLayer<RFresh, RFreshReq, S>
   withScope: <S2 extends ScopeMap>(map: S2) => FeatureBuilder<S2>
@@ -201,7 +184,7 @@ export const makeFeature = (deps: EffectVitestBindings): FeatureFn => {
 
   const runWithFresh = <
     RFresh,
-    RFreshReq extends TestServices.TestServices | Scope.Scope,
+    RFreshReq extends Scope.Scope,
     S extends ScopeMap,
   >(
     name: string,
@@ -216,28 +199,14 @@ export const makeFeature = (deps: EffectVitestBindings): FeatureFn => {
       let bg: ScenarioBody<RFresh | RFreshReq> | null = null
       const scenario = createScenarioWithFresh<never, RFresh, RFreshReq>(
         (scenName, effect, mode) => {
-          if (useLiveClock) {
-            selectUnlayeredMode(effectIt, mode, true)(
-              scenName,
-              () => effect.pipe(Effect.provide(TestServices.liveServices)),
-            )
-            return
-          }
-          selectUnlayeredMode(effectIt, mode, false)(scenName, () => effect)
+          selectUnlayeredMode(effectIt, mode, useLiveClock)(scenName, () => effect)
         },
         () => bg,
         featureScenarioLayer,
       )
       const scenarioOutline = createOutlineFnWithFresh<never, RFresh, RFreshReq>(
         (scenName, effect, mode) => {
-          if (useLiveClock) {
-            selectUnlayeredMode(effectIt, mode, true)(
-              scenName,
-              () => effect.pipe(Effect.provide(TestServices.liveServices)),
-            )
-            return
-          }
-          selectUnlayeredMode(effectIt, mode, false)(scenName, () => effect)
+          selectUnlayeredMode(effectIt, mode, useLiveClock)(scenName, () => effect)
         },
         () => bg,
         featureScenarioLayer,
@@ -264,29 +233,17 @@ export const makeFeature = (deps: EffectVitestBindings): FeatureFn => {
     suiteOpts: FeatureSuiteOptions | undefined,
     useLiveClock: boolean,
   ): void => {
-    const layerSetup = effectVitestLayer(layerDef, { excludeTestServices })
+    const layerSetup = effectVitestLayer(layerDef, {
+      excludeTestServices: excludeTestServices || useLiveClock,
+    })
     let bg: ScenarioBody<RShared> | null = null
 
-    const wireBody = (scopedIt: Vitest.MethodsNonLive<RShared, boolean>): void => {
+    const wireBody = (scopedIt: Vitest.MethodsNonLive<RShared>): void => {
       const scenario = createScenarioNoFresh<RShared>((scenName, effect, mode) => {
-        let wrapped = effect
-        if (useLiveClock) {
-          wrapped = effect.pipe(Effect.provide(TestServices.liveServices))
-        }
-        selectLayeredMode(scopedIt, mode)(
-          scenName,
-          () => wrapped,
-        )
+        selectLayeredMode(scopedIt, mode)(scenName, () => effect)
       }, () => bg)
       const scenarioOutline = createOutlineFnNoFresh<RShared>((scenName, effect, mode) => {
-        let wrapped = effect
-        if (useLiveClock) {
-          wrapped = effect.pipe(Effect.provide(TestServices.liveServices))
-        }
-        selectLayeredMode(scopedIt, mode)(
-          scenName,
-          () => wrapped,
-        )
+        selectLayeredMode(scopedIt, mode)(scenName, () => effect)
       }, () => bg)
       body({
         scenario,
@@ -307,7 +264,7 @@ export const makeFeature = (deps: EffectVitestBindings): FeatureFn => {
   const runWithBoth = <
     RShared,
     RFresh,
-    RFreshReq extends RShared | TestServices.TestServices | Scope.Scope,
+    RFreshReq extends RShared | Scope.Scope,
     S extends ScopeMap,
   >(
     name: string,
@@ -320,34 +277,22 @@ export const makeFeature = (deps: EffectVitestBindings): FeatureFn => {
     useLiveClock: boolean,
     featureScenarioLayer: Layer.Layer<RFresh, never, RFreshReq>,
   ): void => {
-    const layerSetup = effectVitestLayer(layerDef, { excludeTestServices })
+    const layerSetup = effectVitestLayer(layerDef, {
+      excludeTestServices: excludeTestServices || useLiveClock,
+    })
     let bg: ScenarioBody<RShared | RFresh | RFreshReq> | null = null
 
-    const wireBody = (scopedIt: Vitest.MethodsNonLive<RShared, boolean>): void => {
+    const wireBody = (scopedIt: Vitest.MethodsNonLive<RShared>): void => {
       const scenario = createScenarioWithFresh<RShared, RFresh, RFreshReq>(
         (scenName, effect, mode) => {
-          let wrapped = effect
-          if (useLiveClock) {
-            wrapped = effect.pipe(Effect.provide(TestServices.liveServices))
-          }
-          selectLayeredMode(scopedIt, mode)(
-            scenName,
-            () => wrapped,
-          )
+          selectLayeredMode(scopedIt, mode)(scenName, () => effect)
         },
         () => bg,
         featureScenarioLayer,
       )
       const scenarioOutline = createOutlineFnWithFresh<RShared, RFresh, RFreshReq>(
         (scenName, effect, mode) => {
-          let wrapped = effect
-          if (useLiveClock) {
-            wrapped = effect.pipe(Effect.provide(TestServices.liveServices))
-          }
-          selectLayeredMode(scopedIt, mode)(
-            scenName,
-            () => wrapped,
-          )
+          selectLayeredMode(scopedIt, mode)(scenName, () => effect)
         },
         () => bg,
         featureScenarioLayer,
@@ -371,7 +316,7 @@ export const makeFeature = (deps: EffectVitestBindings): FeatureFn => {
   const makeBuilderBoth = <
     RShared,
     RFresh,
-    RFreshReq extends RShared | TestServices.TestServices | Scope.Scope,
+    RFreshReq extends RShared | Scope.Scope,
     S extends ScopeMap,
   >(
     name: string,
@@ -451,7 +396,7 @@ export const makeFeature = (deps: EffectVitestBindings): FeatureFn => {
         useLiveClock,
       )
     },
-    withScenarioLayer: <RFresh, RFreshReq extends RShared | TestServices.TestServices | Scope.Scope = never>(
+    withScenarioLayer: <RFresh, RFreshReq extends RShared | Scope.Scope = never>(
       scenarioLayer: Layer.Layer<RFresh, never, RFreshReq>,
     ) =>
       makeBuilderBoth<RShared, RFresh, RFreshReq, S>(
@@ -478,7 +423,7 @@ export const makeFeature = (deps: EffectVitestBindings): FeatureFn => {
 
   const makeBuilderWithScenarioLayer = <
     RFresh,
-    RFreshReq extends TestServices.TestServices | Scope.Scope,
+    RFreshReq extends Scope.Scope,
     S extends ScopeMap,
   >(
     name: string,
@@ -551,7 +496,7 @@ export const makeFeature = (deps: EffectVitestBindings): FeatureFn => {
         opts?.excludeTestServices ?? false,
         scopeMap,
       ),
-    withScenarioLayer: <RFresh, RFreshReq extends TestServices.TestServices | Scope.Scope = never>(
+    withScenarioLayer: <RFresh, RFreshReq extends Scope.Scope = never>(
       scenarioLayer: Layer.Layer<RFresh, never, RFreshReq>,
     ) =>
       makeBuilderWithScenarioLayer<RFresh, RFreshReq, S>(
@@ -590,36 +535,36 @@ if (import.meta.vitest !== void 0) {
   })
 
   describe('selectUnlayeredMode', () => {
-    it('Should_ReturnScopedSkip_When_ModeIsSkip', () => {
-      expect(selectUnlayeredMode(it, 'skip', false)).toBe(it.scoped.skip)
+    it('Should_ReturnEffectSkip_When_ModeIsSkip', () => {
+      expect(selectUnlayeredMode(it, 'skip', false)).toBe(it.effect.skip)
     })
 
-    it('Should_ReturnScopedOnly_When_ModeIsOnly', () => {
-      expect(selectUnlayeredMode(it, 'only', false)).toBe(it.scoped.only)
+    it('Should_ReturnEffectOnly_When_ModeIsOnly', () => {
+      expect(selectUnlayeredMode(it, 'only', false)).toBe(it.effect.only)
     })
 
-    it('Should_ReturnScoped_When_ModeIsRun', () => {
-      expect(selectUnlayeredMode(it, 'run', false)).toBe(it.scoped)
+    it('Should_ReturnEffect_When_ModeIsRun', () => {
+      expect(selectUnlayeredMode(it, 'run', false)).toBe(it.effect)
     })
 
-    it('Should_UseScopedLive_When_UseLiveClock', () => {
-      expect(selectUnlayeredMode(it, 'run', true)).toBe(it.scopedLive)
+    it('Should_UseLive_When_UseLiveClock', () => {
+      expect(selectUnlayeredMode(it, 'run', true)).toBe(it.live)
     })
   })
 
   describe('selectLayeredMode', () => {
-    const methods = { scoped: it.scoped } satisfies Pick<Vitest.MethodsNonLive<never, boolean>, 'scoped'>
+    const methods = { effect: it.effect } satisfies Pick<Vitest.MethodsNonLive<never>, 'effect'>
 
-    it('Should_ReturnScopedSkip_When_ModeIsSkip', () => {
-      expect(selectLayeredMode(methods, 'skip')).toBe(it.scoped.skip)
+    it('Should_ReturnEffectSkip_When_ModeIsSkip', () => {
+      expect(selectLayeredMode(methods, 'skip')).toBe(it.effect.skip)
     })
 
-    it('Should_ReturnScopedOnly_When_ModeIsOnly', () => {
-      expect(selectLayeredMode(methods, 'only')).toBe(it.scoped.only)
+    it('Should_ReturnEffectOnly_When_ModeIsOnly', () => {
+      expect(selectLayeredMode(methods, 'only')).toBe(it.effect.only)
     })
 
-    it('Should_ReturnScoped_When_ModeIsRun', () => {
-      expect(selectLayeredMode(methods, 'run')).toBe(it.scoped)
+    it('Should_ReturnEffect_When_ModeIsRun', () => {
+      expect(selectLayeredMode(methods, 'run')).toBe(it.effect)
     })
   })
 }

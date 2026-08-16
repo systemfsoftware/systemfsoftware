@@ -1,6 +1,7 @@
 import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Duration, Effect, Ref, Schedule, Schema as S, TestClock } from 'effect'
+import { Duration, Effect, Ref, Schedule, Schema as S } from 'effect'
+import { TestClock } from 'effect/testing'
 import { expect } from 'vitest'
 import { BoundedIntensity } from '../src/mod.js'
 import { run } from '../src/mod.js'
@@ -42,7 +43,7 @@ Feature('RestForOne Strategy')
                 yield* Ref.update(s.counters.b, (n) => n + 1)
                 const shouldFail = yield* Ref.get(s.failOnceB)
                 if (shouldFail) {
-                  return yield* new SimulatedFailure()
+                  return yield* SimulatedFailure.make()
                 }
                 return void 0
               }),
@@ -61,10 +62,10 @@ Feature('RestForOne Strategy')
               name: 'restForOne-middle',
               children: [childA, childB, childC],
               supervision: Supervision.custom({
-                intensity: new BoundedIntensity({ restarts: 5, window: Duration.seconds(60) }),
+                intensity: BoundedIntensity.make({ restarts: 5, window: Duration.seconds(60) }),
                 backoff: Schedule.exponential(Duration.seconds(10)).pipe(
                   Schedule.jittered,
-                  Schedule.upTo(Duration.minutes(5)),
+                  Schedule.upTo({ duration: Duration.minutes(5) }),
                 ),
                 cooldown: Duration.minutes(30),
               }),
@@ -119,7 +120,7 @@ Feature('RestForOne Strategy')
                 yield* Ref.update(s.counters.a, (n) => n + 1)
                 const shouldFail = yield* Ref.get(s.failOnceA)
                 if (shouldFail) {
-                  return yield* new SimulatedFailure()
+                  return yield* SimulatedFailure.make()
                 }
                 return void 0
               }),
@@ -145,10 +146,10 @@ Feature('RestForOne Strategy')
               name: 'restForOne-head',
               children: [childA, childB, childC],
               supervision: Supervision.custom({
-                intensity: new BoundedIntensity({ restarts: 5, window: Duration.seconds(60) }),
+                intensity: BoundedIntensity.make({ restarts: 5, window: Duration.seconds(60) }),
                 backoff: Schedule.exponential(Duration.seconds(10)).pipe(
                   Schedule.jittered,
-                  Schedule.upTo(Duration.minutes(5)),
+                  Schedule.upTo({ duration: Duration.minutes(5) }),
                 ),
                 cooldown: Duration.minutes(30),
               }),
@@ -229,7 +230,7 @@ Feature('RestForOne Strategy')
                 yield* Ref.update(s.counters.c, (n) => n + 1)
                 const shouldFail = yield* Ref.get(s.failOnceC)
                 if (shouldFail) {
-                  return yield* new SimulatedFailure()
+                  return yield* SimulatedFailure.make()
                 }
                 return void 0
               }),
@@ -241,10 +242,10 @@ Feature('RestForOne Strategy')
               name: 'restForOne-last',
               children: [childA, childB, childC],
               supervision: Supervision.custom({
-                intensity: new BoundedIntensity({ restarts: 5, window: Duration.seconds(60) }),
+                intensity: BoundedIntensity.make({ restarts: 5, window: Duration.seconds(60) }),
                 backoff: Schedule.exponential(Duration.seconds(10)).pipe(
                   Schedule.jittered,
-                  Schedule.upTo(Duration.minutes(5)),
+                  Schedule.upTo({ duration: Duration.minutes(5) }),
                 ),
                 cooldown: Duration.minutes(30),
               }),
@@ -312,7 +313,7 @@ Feature('RestForOne Strategy')
               work: Effect.gen(function*() {
                 const n = yield* Ref.updateAndGet(s.tickB, (x) => x + 1)
                 if (n === 1) yield* Ref.update(s.startCounts.b, (x) => x + 1)
-                if (n % 2 === 0) return yield* new SimulatedFailure()
+                if (n % 2 === 0) return yield* SimulatedFailure.make()
                 return void 0
               }),
               interval: Duration.millis(1),
@@ -333,8 +334,8 @@ Feature('RestForOne Strategy')
               name: 'restForOne-repeated',
               children: [childA, childB, childC],
               supervision: Supervision.custom({
-                intensity: new BoundedIntensity({ restarts: 5, window: Duration.seconds(60) }),
-                backoff: Schedule.exponential(Duration.millis(1)).pipe(Schedule.upTo(Duration.millis(5))),
+                intensity: BoundedIntensity.make({ restarts: 5, window: Duration.seconds(60) }),
+                backoff: Schedule.exponential(Duration.millis(1)).pipe(Schedule.upTo({ duration: Duration.millis(5) })),
                 cooldown: Duration.minutes(30),
               }),
               lock: { mode: 'none' },
@@ -375,7 +376,7 @@ Feature('RestForOne Strategy')
                 yield* Ref.update(s.counters.inner, (n) => n + 1)
                 const shouldFail = yield* Ref.get(s.failOnce)
                 if (shouldFail) {
-                  return yield* new SimulatedFailure()
+                  return yield* SimulatedFailure.make()
                 }
                 return void 0
               }),
@@ -387,10 +388,10 @@ Feature('RestForOne Strategy')
               name: 'inner-sup',
               children: [innerChild],
               supervision: Supervision.custom({
-                intensity: new BoundedIntensity({ restarts: 5, window: Duration.seconds(60) }),
+                intensity: BoundedIntensity.make({ restarts: 5, window: Duration.seconds(60) }),
                 backoff: Schedule.exponential(Duration.seconds(10)).pipe(
                   Schedule.jittered,
-                  Schedule.upTo(Duration.minutes(5)),
+                  Schedule.upTo({ duration: Duration.minutes(5) }),
                 ),
                 cooldown: Duration.minutes(30),
               }),
@@ -414,10 +415,10 @@ Feature('RestForOne Strategy')
               name: 'restForOne-nested',
               children: [childA, innerSup, childC],
               supervision: Supervision.custom({
-                intensity: new BoundedIntensity({ restarts: 5, window: Duration.seconds(60) }),
+                intensity: BoundedIntensity.make({ restarts: 5, window: Duration.seconds(60) }),
                 backoff: Schedule.exponential(Duration.seconds(10)).pipe(
                   Schedule.jittered,
-                  Schedule.upTo(Duration.minutes(5)),
+                  Schedule.upTo({ duration: Duration.minutes(5) }),
                 ),
                 cooldown: Duration.minutes(30),
               }),

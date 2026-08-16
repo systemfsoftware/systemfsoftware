@@ -5,10 +5,9 @@ import type { HookSession } from './hook-session.kernel.js'
 import { runHookScript } from './run-hook-script.executor.js'
 import { superviseFork } from './supervise-fork.executor.js'
 
-export class RunSessionStartHooksExecutorDeps extends Context.Tag('RunSessionStartHooksExecutorDeps')<
-  RunSessionStartHooksExecutorDeps,
-  Scope.Scope
->() {}
+export class RunSessionStartHooksExecutorDeps extends Context.Service<RunSessionStartHooksExecutorDeps, Scope.Scope>()(
+  'RunSessionStartHooksExecutorDeps',
+) {}
 
 export const runSessionStartHooks = Effect.fn('runSessionStartHooks')(function*(
   settings: HookSettings,
@@ -31,7 +30,7 @@ export const runSessionStartHooks = Effect.fn('runSessionStartHooks')(function*(
       if (hook.type !== 'command') continue
       if (hook.if !== undefined) continue
       if (hook.async === true || hook.asyncRewake === true) {
-        yield* Effect.forkDaemon(
+        yield* Effect.forkDetach(
           superviseFork(runHookScript(hook, input, cwd, 'SessionStart', false), ctx, hook.command),
         )
         continue

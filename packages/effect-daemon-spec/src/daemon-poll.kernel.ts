@@ -14,18 +14,18 @@ type WorkerRecord<TICK, THOOKS, CHILD, LCK, L> = {
 type PollLoopResult<WE, WR> = {
   readonly _tag: 'Poll'
   readonly gate: Effect.Effect<Option.Option<Effect.Effect<void, WE, WR>>, WE, WR>
-  readonly interval: Duration.DurationInput
+  readonly interval: Duration.Input
 }
 type PollShape<W, D, WE, WR> =
   | {
     readonly name: string
-    readonly interval: Duration.DurationInput
+    readonly interval: Duration.Input
     readonly work: (data: D) => Effect.Effect<void, WE, WR>
     readonly prereq: Effect.Effect<Option.Option<D>, WE, WR>
   }
   | {
     readonly name: string
-    readonly interval: Duration.DurationInput
+    readonly interval: Duration.Input
     readonly work: W
     readonly prereq?: undefined
   }

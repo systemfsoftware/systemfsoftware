@@ -1,5 +1,6 @@
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Duration, Effect, Ref, TestClock } from 'effect'
+import { Duration, Effect, Ref } from 'effect'
+import { TestClock } from 'effect/testing'
 import { expect } from 'vitest'
 import { Daemon } from '../src/mod.js'
 import { run } from '../src/mod.js'
@@ -50,7 +51,7 @@ Feature('Subscription Worker Lifecycle')
             const acquired = yield* Ref.get(s.acquiredRef)
             expect(acquired).toBe(true)
             yield* health.paused.close
-            yield* Effect.yieldNow()
+            yield* Effect.yieldNow
             yield* TestClock.adjust(Duration.millis(5))
             return health
           })),

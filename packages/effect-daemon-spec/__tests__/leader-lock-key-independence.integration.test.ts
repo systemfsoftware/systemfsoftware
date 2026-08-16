@@ -20,9 +20,14 @@ Feature('Leader lock key independence')
           Effect.gen(function*() {
             const lock = yield* LeaderLock
             const keys = ['alpha', 'beta', 'gamma', 'delta']
+            // v4 `forkChild` starts the child on the scheduler by default. Inside a
+            // concurrent `forEach`, a deferred child is torn down with the item fiber
+            // before the joins below can observe it, failing with "All fibers
+            // interrupted". The v3 `fork` this test was ported from started the child
+            // eagerly, so restore that with `startImmediately`.
             const fibers = yield* Effect.forEach(
               keys,
-              (key) => Effect.fork(lock.withLock(key, Effect.succeed(key))),
+              (key) => Effect.forkChild(lock.withLock(key, Effect.succeed(key)), { startImmediately: true }),
               { concurrency: 'unbounded' },
             )
             return yield* Effect.forEach(fibers, (f) => Fiber.join(f), {

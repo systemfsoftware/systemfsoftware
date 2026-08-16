@@ -1,6 +1,6 @@
 import * as Context from 'effect/Context'
-import * as Either from 'effect/Either'
 import * as Layer from 'effect/Layer'
+import * as Result from 'effect/Result'
 
 import type { ResolvedMode } from '@systemfsoftware/stryker-js-mutation-run/output-mode'
 
@@ -23,9 +23,9 @@ export interface OutputModeProbe {
   readonly detectMode: () => ResolvedMode
 }
 
-class OutputModeProbeTag extends Context.Tag(
+class OutputModeProbeTag extends Context.Service<OutputModeProbeTag, OutputModeProbe>()(
   '@systemfsoftware/stryker-js-cli/output-mode.adapter/OutputModeProbeTag',
-)<OutputModeProbeTag, OutputModeProbe>() {}
+) {}
 
 const OutputModeProbe = OutputModeProbeTag
 
@@ -35,11 +35,11 @@ export const OutputModeProbeLive: Layer.Layer<OutputModeProbeTag> = Layer.succee
   OutputModeProbe,
   OutputModeProbe.of({
     // The probe never sets the two mutually-exclusive flags, so the kernel's
-    // `Left` is unreachable; getOrThrow keeps the port total.
+    // `failure` is unreachable; getOrThrow keeps the port total.
     detectMode: () => {
       const envMode = process.env['STRYKER_MODE']
       const agent = process.env['AGENT']
-      return Either.getOrThrow(
+      return Result.getOrThrow(
         resolveMode({
           stdoutIsTTY: process.stdout.isTTY === true,
           ...(envMode !== undefined ? { envMode } : {}),

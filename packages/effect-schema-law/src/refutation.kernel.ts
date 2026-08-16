@@ -1,6 +1,6 @@
-import { Either, type FastCheck, FastCheck as fc, Option, Schema as S } from 'effect'
-import * as Arbitrary from 'effect/Arbitrary'
+import { Exit, Option, Result, Schema as S } from 'effect'
 import * as AST from 'effect/SchemaAST'
+import { FastCheck } from 'effect/testing'
 import { type Arm, armsOf } from './weaken.kernel.js'
 
 /**
@@ -37,6 +37,8 @@ export interface ObligationScan {
  */
 export const WITNESS_BUDGET = 256
 
+type NamedArbitrary = FastCheck.Arbitrary<unknown>
+
 const REJECTION_GENERIC_POOL: readonly unknown[] = [
   '',
   ' ',
@@ -60,53 +62,53 @@ const REJECTION_GENERIC_POOL: readonly unknown[] = [
 ]
 
 /** Decode-side, not validate-side: refusal generators draw wire-form inputs, so this is a question about the Encoded side. */
-const accepts = (schema: S.Schema.AnyNoContext, value: unknown): boolean =>
-  Either.isRight(S.decodeUnknownEither(schema)(value))
+const accepts = (schema: S.ConstraintDecoder<unknown>, value: unknown): boolean =>
+  Exit.isSuccess(S.decodeUnknownExit(schema)(value))
 
-const buildArbitrary = (schema: S.Schema.AnyNoContext): FastCheck.Arbitrary<unknown> | undefined => {
+const buildArbitrary = (schema: S.ConstraintDecoder<unknown>): NamedArbitrary | undefined => {
   try {
-    return Arbitrary.make(schema)
+    return S.toArbitrary(schema)(FastCheck)
   } catch {
     return undefined
   }
 }
 
 const sample = (
-  arbitrary: FastCheck.Arbitrary<unknown>,
+  arbitrary: NamedArbitrary,
   budget: number,
 ): readonly unknown[] | undefined => {
   try {
-    return fc.sample(arbitrary, { numRuns: budget, seed: 1 })
+    return FastCheck.sample(arbitrary, { numRuns: budget, seed: 1 })
   } catch {
     return undefined
   }
 }
 
 const findWitness = (
-  schema: S.Schema.AnyNoContext,
+  schema: S.ConstraintDecoder<unknown>,
   arm: Arm,
-): Either.Either<Option.Option<unknown>, BlindArm> => {
-  const weakened = S.make(arm.weakened)
+): Result.Result<Option.Option<unknown>, BlindArm> => {
+  const weakened = S.make<S.ConstraintCodec<unknown, unknown>>(arm.weakened)
   const isWitness = (value: unknown): boolean => accepts(weakened, value) && !accepts(schema, value)
 
   let schemaDerivedDraws = 0
-  for (const source of [S.encodedSchema(weakened), weakened]) {
+  for (const source of [S.toEncoded(weakened), weakened]) {
     const arbitrary = buildArbitrary(source)
     if (arbitrary === undefined) continue
     const draws = sample(arbitrary, WITNESS_BUDGET)
     if (draws === undefined) continue
     schemaDerivedDraws += draws.length
     for (const value of draws) {
-      if (isWitness(value)) return Either.right(Option.some(value))
+      if (isWitness(value)) return Result.succeed(Option.some(value))
     }
   }
 
   for (const value of REJECTION_GENERIC_POOL) {
-    if (isWitness(value)) return Either.right(Option.some(value))
+    if (isWitness(value)) return Result.succeed(Option.some(value))
   }
 
   if (schemaDerivedDraws === 0) {
-    return Either.left({
+    return Result.fail({
       path: arm.path,
       kind: arm.kind,
       message: `refutation.kernel: witness search failed for arm "${arm.path}" (${arm.kind}); ` +
@@ -115,7 +117,7 @@ const findWitness = (
     })
   }
 
-  return Either.right(Option.none())
+  return Result.succeed(Option.none())
 }
 
 /**
@@ -126,21 +128,21 @@ const findWitness = (
  * obligation" and "could not look" are different answers, and collapsing
  * them is the silent miss this scan exists to prevent.
  */
-export const scanObligations = (schema: S.Schema.AnyNoContext): ObligationScan => {
+export const scanObligations = (schema: S.ConstraintDecoder<unknown>): ObligationScan => {
   const collected = new Map<AST.AST, { paths: string[]; witness: unknown; weakened: AST.AST }>()
   const blind: BlindArm[] = []
 
   for (const arm of armsOf(schema)) {
     const found = findWitness(schema, arm)
-    if (Either.isLeft(found)) {
-      blind.push(found.left)
+    if (Result.isFailure(found)) {
+      blind.push(found.failure)
       continue
     }
-    if (Option.isNone(found.right)) continue
+    if (Option.isNone(found.success)) continue
 
     const existing = collected.get(arm.node)
     if (existing === undefined) {
-      collected.set(arm.node, { paths: [arm.path], witness: found.right.value, weakened: arm.weakened })
+      collected.set(arm.node, { paths: [arm.path], witness: found.success.value, weakened: arm.weakened })
     } else {
       existing.paths.push(arm.path)
     }
@@ -159,15 +161,15 @@ export const scanObligations = (schema: S.Schema.AnyNoContext): ObligationScan =
   return { obligations, blind }
 }
 
-export const obligationsOf = (schema: S.Schema.AnyNoContext): ReadonlyMap<AST.AST, Obligation> =>
+export const obligationsOf = (schema: S.ConstraintDecoder<unknown>): ReadonlyMap<AST.AST, Obligation> =>
   scanObligations(schema).obligations
 
 const discharges = (
-  schema: S.Schema.AnyNoContext,
-  arbitrary: FastCheck.Arbitrary<unknown>,
+  schema: S.ConstraintDecoder<unknown>,
+  arbitrary: NamedArbitrary,
   obligation: Obligation,
 ): boolean => {
-  const weakened = S.make(obligation.weakened)
+  const weakened = S.make<S.ConstraintCodec<unknown, unknown>>(obligation.weakened)
   const draws = sample(arbitrary, WITNESS_BUDGET)
   if (draws === undefined) return false
   for (const value of draws) {
@@ -187,9 +189,9 @@ const discharges = (
  * defined relative to it.
  */
 export const dischargedBy = (
-  schema: S.Schema.AnyNoContext,
+  schema: S.ConstraintDecoder<unknown>,
   obligations: ReadonlyMap<AST.AST, Obligation>,
-  generators: Readonly<Record<string, FastCheck.Arbitrary<unknown>>>,
+  generators: Readonly<Record<string, NamedArbitrary>>,
 ): ReadonlyMap<AST.AST, readonly string[]> => {
   const out = new Map<AST.AST, string[]>()
   for (const [node, obligation] of obligations) {

@@ -12,7 +12,7 @@ Feature('DynamicLimitExceeded error')
       Gherkin.Do.pipe(
         Given('a DynamicLimitExceeded error with limit 42')(
           'err',
-          () => Effect.sync(() => new DynamicLimitExceeded({ limit: 42 })),
+          () => Effect.sync(() => DynamicLimitExceeded.make({ limit: 42 })),
         ),
         Then('limit is 42')((s) =>
           Effect.sync(() => {

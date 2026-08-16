@@ -15,7 +15,7 @@ export const detachIn = <A, E, R>(
   self: Effect.Effect<A, E, R>,
   scope: Scope.Scope,
   options: {
-    readonly deadline: Duration.DurationInput
+    readonly deadline: Duration.Input
     readonly onDeadline: LazyArg<A>
   },
 ): Effect.Effect<A, E, R> =>

@@ -5,8 +5,10 @@ import * as path from 'node:path'
 
 export const AttwConfigSchema = Schema.Struct({
   ignoreRules: Schema.optional(Schema.Array(Schema.String)),
-  ignoreResolutions: Schema.optional(Schema.Array(Schema.Literal('node10', 'node16-cjs', 'node16-esm', 'bundler'))),
-  format: Schema.optional(Schema.Literal('auto', 'table', 'table-flipped', 'ascii', 'json')),
+  ignoreResolutions: Schema.optional(
+    Schema.Array(Schema.Literals(['node10', 'node16-cjs', 'node16-esm', 'bundler'])),
+  ),
+  format: Schema.optional(Schema.Literals(['auto', 'table', 'table-flipped', 'ascii', 'json'])),
   quiet: Schema.optional(Schema.Boolean),
   summary: Schema.optional(Schema.Boolean),
   emoji: Schema.optional(Schema.Boolean),
@@ -37,13 +39,13 @@ const readAttwConfigJson = async (): Promise<unknown> => {
 const configProviderEffect: Effect.Effect<ConfigProvider.ConfigProvider, never, never> = Effect.promise(
   async () => {
     const json = await readAttwConfigJson()
-    if (json === null) return ConfigProvider.fromJson({})
-    return ConfigProvider.fromJson(json)
+    if (json === null) return ConfigProvider.fromUnknown({})
+    return ConfigProvider.fromUnknown(json)
   },
 )
 
-export const AttwConfigFileLayer: Layer.Layer<never, never, never> = Layer.unwrapEffect(
-  Effect.map(configProviderEffect, (provider) => Layer.setConfigProvider(provider.pipe(ConfigProvider.constantCase))),
+export const AttwConfigFileLayer: Layer.Layer<never, never, never> = ConfigProvider.layer(
+  Effect.map(configProviderEffect, (provider) => ConfigProvider.constantCase(provider)),
 )
 
 export const _internal = { readAttwConfigJson }

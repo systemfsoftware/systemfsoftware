@@ -1,5 +1,3 @@
-import type { CommandExecutor } from '@effect/platform/CommandExecutor'
-import type { FileSystem } from '@effect/platform/FileSystem'
 import type {
   InputEventResult,
   ToolCallEventResult,
@@ -7,6 +5,8 @@ import type {
   ToolResultEventResult,
 } from '@oh-my-pi/pi-coding-agent'
 import { Effect, Match, type Scope } from 'effect'
+import type { FileSystem } from 'effect/FileSystem'
+import type { ChildProcessSpawner } from 'effect/unstable/process/ChildProcessSpawner'
 import { homedir } from 'node:os'
 import { collectSettingsGapsWithPaths } from './internal/collect-settings-gaps.executor.js'
 import { CollectSettingsGapsExecutorDeps } from './internal/collect-settings-gaps.executor.js'
@@ -104,7 +104,7 @@ export type HookDispatchResult =
 
 export type HookDispatchContext =
   | FileSystem
-  | CommandExecutor
+  | ChildProcessSpawner
   | Scope.Scope
   | LoadSettingsExecutorDeps
   | CollectSettingsGapsExecutorDeps

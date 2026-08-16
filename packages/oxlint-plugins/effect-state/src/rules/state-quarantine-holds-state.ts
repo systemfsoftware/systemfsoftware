@@ -23,7 +23,7 @@ export const stateQuarantineHoldsState = defineRule({
             data: {
               name: 'state cell',
               expected:
-                'at least one module-scope construction of an escaping coordination primitive (new Map/Set/WeakMap/WeakSet/Semaphore, Ref.unsafeMake, Deferred.unsafeMake, Semaphore.make, TRef.unsafeMake, ManagedRuntime.make, Layer.toRuntime, or a class extending Context.Reference)',
+                'at least one module-scope construction of an escaping coordination primitive (new Map/Set/WeakMap/WeakSet/Semaphore, Ref.unsafeMake/Ref.makeUnsafe, Deferred.unsafeMake/Deferred.makeUnsafe, Semaphore.make/Semaphore.makeUnsafe, TRef.unsafeMake/TxRef.makeUnsafe, ManagedRuntime.make, Layer.toRuntime, Context.Reference, or a class extending Context.Reference)',
               actual: 'no escaping live state at module scope',
               fix:
                 'construct the escaping Map/Ref/Deferred/Semaphore/Runtime at module scope in this *.state.ts, or move the file to the cell that owns its actual content',

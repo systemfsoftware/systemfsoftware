@@ -1,11 +1,11 @@
-import type { PlatformError } from '@effect/platform/Error'
 import { TomlLoader } from '@systemfsoftware/omp-utils'
 import type { TomlConfig } from '@systemfsoftware/omp-utils'
 import { Effect, Match } from 'effect'
 import * as Option from 'effect/Option'
+import type { PlatformError } from 'effect/PlatformError'
 import * as S from 'effect/Schema'
 
-const How = S.Literal('subagent_type', 'prompt')
+const How = S.Literals(['subagent_type', 'prompt'])
 
 const DelegationVerdictTypeId: unique symbol = Symbol.for('@systemfsoftware/omp-agent-discipline/DelegationVerdict')
 class Allow extends S.TaggedClass<Allow>()('Allow', {}) {
@@ -20,17 +20,17 @@ class Block extends S.TaggedClass<Block>()('Block', {
   readonly [DelegationVerdictTypeId] = DelegationVerdictTypeId
 }
 
-const DelegationVerdict = S.Union(Allow, Block)
+const DelegationVerdict = S.Union([Allow, Block])
 type DelegationVerdict = S.Schema.Type<typeof DelegationVerdict>
 
 const CompiledGuard = S.Struct({
   protectedSkills: S.Array(S.String),
   delegationVerbs: S.Array(S.String),
   referenceVerbs: S.Array(S.String),
-  mentionPatterns: S.Record({ key: S.String, value: S.String }),
+  mentionPatterns: S.Record(S.String, S.String),
 }).pipe(
-  S.annotations({
-    arbitrary: () => (fc) =>
+  S.annotate({
+    toArbitrary: () => (fc) =>
       fc.constant({
         protectedSkills: ['ce-work'],
         delegationVerbs: [
@@ -54,7 +54,7 @@ const CompiledGuard = S.Struct({
 
 export type CompiledGuard = typeof CompiledGuard.Type
 
-const MaybeCompiledGuard = S.Union(CompiledGuard, S.Literal(null))
+const MaybeCompiledGuard = S.Union([CompiledGuard, S.Null])
 
 const CheckDelegationCommandTypeId: unique symbol = Symbol.for(
   '@systemfsoftware/omp-agent-discipline/CheckDelegationCommand',
@@ -90,7 +90,7 @@ class Prompted extends S.TaggedClass<Prompted>()('Prompted', {
   readonly [ClassifiedInputTypeId] = ClassifiedInputTypeId
 }
 
-const ClassifiedInput = S.Union(NoGuard, NonDelegatedTool, ProtectedSubagent, EmptyPrompt, Prompted)
+const ClassifiedInput = S.Union([NoGuard, NonDelegatedTool, ProtectedSubagent, EmptyPrompt, Prompted])
 type ClassifiedInput = S.Schema.Type<typeof ClassifiedInput>
 
 const PromptAnalysisTypeId: unique symbol = Symbol.for('@systemfsoftware/omp-agent-discipline/PromptAnalysis')
@@ -107,7 +107,7 @@ class NoDelegation extends S.TaggedClass<NoDelegation>()('NoDelegation', {}) {
   readonly [PromptAnalysisTypeId] = PromptAnalysisTypeId
 }
 
-const PromptAnalysis = S.Union(Delegated, Referenced, NoDelegation)
+const PromptAnalysis = S.Union([Delegated, Referenced, NoDelegation])
 type PromptAnalysis = S.Schema.Type<typeof PromptAnalysis>
 
 function denyMessage(skill: string, how: 'subagent_type' | 'prompt', excerpt: string): string {
@@ -157,7 +157,7 @@ const classifySubagent = (cmd: CheckDelegationCommand, guard: CompiledGuard): Cl
     Match.exhaustive,
   )
 
-const matchedGuard = (cmd: CheckDelegationCommand): Option.Option<CompiledGuard> => Option.fromNullable(cmd.guard)
+const matchedGuard = (cmd: CheckDelegationCommand): Option.Option<CompiledGuard> => Option.fromNullishOr(cmd.guard)
 
 const matchedDelegatorTool = (cmd: CheckDelegationCommand, guard: CompiledGuard): Option.Option<ClassifiedInput> =>
   Option.liftPredicate(

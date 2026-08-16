@@ -14,7 +14,7 @@ const isInsidePropPredicate = (node: ESTree.Node): boolean => {
   if (parent === null) return false
   if (
     (parent.type === 'ArrowFunctionExpression' || parent.type === 'FunctionExpression') &&
-    Option.fromNullable(parent.parent).pipe(
+    Option.fromNullishOr(parent.parent).pipe(
       Option.exists((grandparent) => grandparent.type === 'CallExpression' && isPropCallee(grandparent.callee)),
     )
   ) {

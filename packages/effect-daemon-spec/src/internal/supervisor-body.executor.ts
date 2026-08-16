@@ -1,5 +1,5 @@
 import { Cell } from '@systemfsoftware/effect-cell-types'
-import { Array as Arr, Cause, Effect, Either, Exit, Fiber, Match, Metric, Option, Ref, Schedule } from 'effect'
+import { Array as Arr, Cause, Clock, Effect, Exit, Fiber, Match, Metric, Option, Ref, Result, Schedule } from 'effect'
 import { pipe, type Scope } from 'effect'
 import { WorkerTypeId } from '../brands.kernel.js'
 import type { SupervisorHealth } from '../daemon-health.schema.js'
@@ -36,12 +36,12 @@ const handleExhausted = <R>(
   cause: Cause.Cause<never>,
 ): Effect.Effect<CooldownEpoch, never, never> =>
   Effect.gen(function*() {
-    yield* Effect.zipRight(
+    yield* Effect.andThen(
       ctx.health.healthy.close,
-      Metric.set(Metric.tagged(Metric.tagged(healthStateGauge, 'daemon', ctx.name), 'latch', 'healthy'), 0),
+      Metric.update(Metric.withAttributes(healthStateGauge, { daemon: ctx.name, latch: 'healthy' }), 0),
     )
     yield* ctx.reportExhausted(cause)
-    return new CooldownEpoch()
+    return CooldownEpoch.make()
   })
 
 const handleRestart = <R>(
@@ -52,7 +52,7 @@ const handleRestart = <R>(
   Effect.gen(function*() {
     yield* ctx.reportRestart(cause)
     yield* onSignal
-    return new RestartEpoch()
+    return RestartEpoch.make()
   })
 
 /**
@@ -64,7 +64,7 @@ interface RestartPhases extends Cell.Phases {
   readonly decoded: DecideInput
   readonly decision: RestartDecisionContinue | RestartDecisionRestart
   readonly decisionError: RestartDecisionExhausted
-  readonly output: Either.Either<
+  readonly output: Result.Result<
     RestartDecisionContinue | RestartDecisionRestart,
     RestartDecisionExhausted
   >
@@ -103,9 +103,9 @@ const restartDescription = <R>(spec: {
   ) => Effect.Effect<void, never, never>
 }) =>
   pipe(
-    Cell.read<RestartPhases>((intensity) => Effect.zipRight(intensity.record, intensity.isExceeded)),
+    Cell.read<RestartPhases>((intensity) => Effect.andThen(intensity.record, intensity.isExceeded)),
     Cell.decode<RestartPhases>((intensityExceeded) =>
-      Either.right({
+      Result.succeed({
         strategy: spec.strategy,
         totalChildren: spec.totalChildren,
         failedIndex: spec.failedIndex,
@@ -116,11 +116,11 @@ const restartDescription = <R>(spec: {
     Cell.decide<RestartPhases>(decideRestart),
     Cell.encode<RestartPhases>((outcome) => outcome),
     Cell.write<RestartPhases>((outcome) =>
-      Either.match(outcome, {
-        onLeft: () => handleExhausted(spec.ctx, spec.cause),
-        onRight: (right) =>
+      Result.match(outcome, {
+        onFailure: () => handleExhausted(spec.ctx, spec.cause),
+        onSuccess: (right) =>
           Match.value(right).pipe(
-            Match.tag('Continue', () => Effect.succeed<EpochStep>(new StopEpoch())),
+            Match.tag('Continue', () => Effect.succeed<EpochStep>(StopEpoch.make())),
             Match.tag(
               'Restart',
               (decision) => handleRestart(spec.ctx, spec.cause, spec.onRestart(decision)),
@@ -132,9 +132,9 @@ const restartDescription = <R>(spec: {
   )
 
 const reopenHealthyAfterCooldown = <R>(ctx: SupervisionContext<R>): Effect.Effect<void, never, never> =>
-  Effect.zipRight(
+  Effect.andThen(
     ctx.health.healthy.open,
-    Metric.set(Metric.tagged(Metric.tagged(healthStateGauge, 'daemon', ctx.name), 'latch', 'healthy'), 1),
+    Metric.update(Metric.withAttributes(healthStateGauge, { daemon: ctx.name, latch: 'healthy' }), 1),
   )
 
 const runSupervisionEpochWithBackoff = <R>(
@@ -142,24 +142,38 @@ const runSupervisionEpochWithBackoff = <R>(
   ctx: SupervisionContext<R>,
 ): Effect.Effect<SupervisionEpochResultType, never, R> =>
   Effect.gen(function*() {
-    const driver = yield* Schedule.driver(ctx.policy.backoff)
+    const advance = yield* Schedule.toStep(ctx.policy.backoff)
+    // v3-faithful epoch timing: the v3 `Schedule.driver` slept only
+    // `Intervals.start(decision.intervals) - now` and skipped the sleep when that
+    // was <= 0. For `exponential(base)` the first decision's interval starts AT
+    // `now`, so the first `driver.next()` returned immediately; the backoff delay
+    // applied from the second restart on. `Schedule.toStepWithSleep` (v4) sleeps
+    // the delay on every step, so the first restart would wait a full backoff
+    // interval. `Schedule.toStep` returns the delay for the caller to handle, so
+    // we sleep it on every step after the first, mirroring the v3 driver exactly.
+    let first = true
     const loop = (): Effect.Effect<SupervisionEpochResultType, never, R> =>
       Effect.gen(function*() {
-        const step = yield* attempt.pipe(Effect.scoped)
-        return yield* Match.value(step).pipe(
-          Match.tag('StopEpoch', () => Effect.succeed(new StopSupervision())),
+        const epochStep = yield* attempt.pipe(Effect.scoped)
+        return yield* Match.value(epochStep).pipe(
+          Match.tag('StopEpoch', () => Effect.succeed(StopSupervision.make())),
           Match.tag('CooldownEpoch', () =>
             Effect.gen(function*() {
               yield* Effect.sleep(ctx.policy.cooldown)
               yield* reopenHealthyAfterCooldown(ctx)
-              return new ContinueSupervision()
+              return ContinueSupervision.make()
             })),
           Match.tag('RestartEpoch', () =>
             Effect.gen(function*() {
-              const stepped = yield* Effect.either(driver.next(void 0))
-              if (Either.isLeft(stepped)) {
-                return new StopSupervision()
+              const now = yield* Clock.currentTimeMillis
+              const pulled = yield* Effect.result(advance(now, void 0))
+              if (Result.isFailure(pulled)) {
+                return StopSupervision.make()
               }
+              if (!first) {
+                yield* Effect.sleep(pulled.success[1])
+              }
+              first = false
               return yield* loop()
             })),
           Match.exhaustive,
@@ -170,11 +184,11 @@ const runSupervisionEpochWithBackoff = <R>(
 
 const openAllReady = <R>(ctx: SupervisionContext<R>): Effect.Effect<void, never, never> =>
   Effect.gen(function*() {
-    yield* Effect.yieldNow()
+    yield* Effect.yieldNow
     yield* Effect.forEach(ctx.booted, (b) => b.health.ready.await, { concurrency: 'unbounded' })
-    yield* Effect.zipRight(
+    yield* Effect.andThen(
       ctx.health.ready.open,
-      Metric.set(Metric.tagged(Metric.tagged(healthStateGauge, 'daemon', ctx.name), 'latch', 'ready'), 1),
+      Metric.update(Metric.withAttributes(healthStateGauge, { daemon: ctx.name, latch: 'ready' }), 1),
     )
   })
 
@@ -184,7 +198,7 @@ const superviseChild = <R>(
   idx: number,
 ): Supervision<R> =>
   Effect.gen(function*() {
-    const childIntensityOpt = yield* Option.match(Option.fromNullable(child.childPolicy.intensity), {
+    const childIntensityOpt = yield* Option.match(Option.fromNullishOr(child.childPolicy.intensity), {
       onNone: () => Effect.succeed(Option.none<IntensityTracker>()),
       onSome: (cfg: IntensityConfig) => Effect.map(makeIntensity(cfg.restarts, cfg.window), Option.some),
     })
@@ -193,11 +207,11 @@ const superviseChild = <R>(
         const supIntensity = yield* ctx.intensityEff
         const attempt = Effect.gen(function*() {
           yield* ctx.health.paused.await
-          const fiber = yield* Effect.forkScoped(child.run)
+          const fiber = yield* Effect.forkScoped(child.run, { startImmediately: true })
           const exit = yield* Fiber.await(fiber)
           if (!Exit.isSuccess(exit)) {
             if (child.childPolicy.restart === 'temporary') {
-              return new StopEpoch()
+              return StopEpoch.make()
             }
 
             const childIntensityBudgetDone = yield* Option.match(childIntensityOpt, {
@@ -209,7 +223,7 @@ const superviseChild = <R>(
                 }),
             })
             if (childIntensityBudgetDone) {
-              return new StopEpoch()
+              return StopEpoch.make()
             }
             return yield* Cell.apply(
               restartDescription({
@@ -223,7 +237,7 @@ const superviseChild = <R>(
               supIntensity,
             )
           }
-          return new StopEpoch()
+          return StopEpoch.make()
         })
 
         const epochResult = yield* runSupervisionEpochWithBackoff(attempt, ctx)
@@ -241,13 +255,14 @@ const runIndependent = <R>(ctx: SupervisionContext<R>): Supervision<R> =>
   Effect.gen(function*() {
     const fibers = yield* Effect.forEach(
       ctx.booted,
-      (child: BootedChild<R>, childIdx: number) => Effect.forkScoped(superviseChild(ctx, child, childIdx)),
+      (child: BootedChild<R>, childIdx: number) =>
+        Effect.forkScoped(superviseChild(ctx, child, childIdx), { startImmediately: true }),
     )
-    yield* Effect.yieldNow()
+    yield* Effect.yieldNow
     yield* openAllReady(ctx)
     yield* Effect.forEach(
       fibers,
-      (f: Fiber.RuntimeFiber<void, never>) => Fiber.await(f),
+      (f: Fiber.Fiber<void, never>) => Fiber.await(f),
       { concurrency: 'unbounded' },
     )
   })
@@ -261,7 +276,7 @@ const runGroup = <R>(
       Effect.gen(function*() {
         const intensity = yield* ctx.intensityEff
         const childIntensityTrackers = yield* Effect.forEach(ctx.booted, (b: BootedChild<R>) =>
-          Option.match(Option.fromNullable(b.childPolicy.intensity), {
+          Option.match(Option.fromNullishOr(b.childPolicy.intensity), {
             onNone: () => Effect.succeed(Option.none<IntensityTracker>()),
             onSome: (cfg: IntensityConfig) => Effect.map(makeIntensity(cfg.restarts, cfg.window), Option.some),
           }))
@@ -272,26 +287,27 @@ const runGroup = <R>(
           const slice = ctx.booted.slice(startIdx)
 
           const fibers = yield* Effect.forEach(slice, (c: BootedChild<R>) =>
-            Effect.forkScoped(c.run))
-          yield* Effect.yieldNow()
-          yield* Effect.forkScoped(openAllReady(ctx))
+            Effect.forkScoped(c.run, { startImmediately: true }))
+          yield* Effect.yieldNow
+          yield* Effect.forkScoped(openAllReady(ctx), { startImmediately: true })
 
           const [failedOffset, firstExit] = yield* raceForExit(fibers)
           if (!Exit.isSuccess(firstExit)) {
             const failedIdx = startIdx + failedOffset
-            const failedBootedOpt = Option.fromNullable(ctx.booted[failedIdx])
+            const failedBootedOpt = Option.fromNullishOr(ctx.booted[failedIdx])
             if (Option.isNone(failedBootedOpt)) {
-              return new StopEpoch()
+              return StopEpoch.make()
             }
             const failedBooted = failedBootedOpt.value
 
             if (failedBooted.childPolicy.restart === 'temporary') {
-              return new StopEpoch()
+              return StopEpoch.make()
             }
 
             const cIntForFailed = Option.flatten(Arr.get(childIntensityTrackers, failedIdx))
             const childIntensityBudgetDone = yield* Option.match(cIntForFailed, {
-              onNone: () => Effect.succeed(false),
+              onNone: () =>
+                Effect.succeed(false),
               onSome: (cInt: IntensityTracker) =>
                 Effect.gen(function*() {
                   yield* cInt.record
@@ -299,7 +315,7 @@ const runGroup = <R>(
                 }),
             })
             if (childIntensityBudgetDone) {
-              return new StopEpoch()
+              return StopEpoch.make()
             }
             return yield* Cell.apply(
               restartDescription({
@@ -308,17 +324,19 @@ const runGroup = <R>(
                 totalChildren: ctx.booted.length,
                 ctx,
                 cause: firstExit.cause,
-                onRestart: (decision) => Ref.set(cursor, decision.indices[0]),
+                onRestart: (decision) =>
+                  Ref.set(cursor, decision.indices[0]),
               }),
               intensity,
             )
           }
-          return new StopEpoch()
+          return StopEpoch.make()
         })
 
         const epochResult = yield* runSupervisionEpochWithBackoff(attempt, ctx)
         return yield* Match.value(epochResult).pipe(
-          Match.tag('ContinueSupervision', () => loop()),
+          Match.tag('ContinueSupervision', () =>
+            loop()),
           Match.tag('StopSupervision', () => Effect.void),
           Match.exhaustive,
         )
@@ -349,7 +367,7 @@ const buildSupervisorBody = <E, R>(
   sup: Supervisor<E, R>,
   health: SupervisorHealth,
   booted: readonly BootedChild<R | Scope.Scope>[],
-  reporter: DaemonReporter['Type'],
+  reporter: DaemonReporter['Service'],
 ): Effect.Effect<void, never, R | Scope.Scope> =>
   Effect.gen(function*() {
     const policy = yield* sup.supervision
@@ -362,9 +380,9 @@ const buildSupervisorBody = <E, R>(
       cause: Cause.Cause<never>,
     ): Effect.Effect<void, never, never> =>
       Effect.gen(function*() {
-        yield* Metric.increment(Metric.tagged(supervisorRestartsCounter, 'supervisor', sup.name))
+        yield* Metric.update(Metric.withAttributes(supervisorRestartsCounter, { supervisor: sup.name }), 1)
         yield* reporter.onRestart(sup.name, cause)
-        yield* Option.match(Option.fromNullable(sup.reporter.onRestart), {
+        yield* Option.match(Option.fromNullishOr(sup.reporter.onRestart), {
           onNone: () => Effect.void,
           onSome: (fn: (cause: Cause.Cause<never>) => Effect.Effect<void, never, never>) => fn(cause),
         })
@@ -374,9 +392,9 @@ const buildSupervisorBody = <E, R>(
       cause: Cause.Cause<never>,
     ): Effect.Effect<void, never, never> =>
       Effect.gen(function*() {
-        yield* Metric.increment(Metric.tagged(supervisorExhaustionsCounter, 'supervisor', sup.name))
+        yield* Metric.update(Metric.withAttributes(supervisorExhaustionsCounter, { supervisor: sup.name }), 1)
         yield* reporter.onExhausted(sup.name, cause)
-        yield* Option.match(Option.fromNullable(sup.reporter.onExhausted), {
+        yield* Option.match(Option.fromNullishOr(sup.reporter.onExhausted), {
           onNone: () => Effect.void,
           onSome: (fn: (cause: Cause.Cause<never>) => Effect.Effect<void, never, never>) => fn(cause),
         })
@@ -402,7 +420,7 @@ const isWorker = <E, R>(x: Child<E, R>): x is Worker<E, R> => WorkerTypeId in x
 
 const bootChild = <E, R>(
   child: Child<E, R>,
-  reporter: DaemonReporter['Type'],
+  reporter: DaemonReporter['Service'],
 ): Effect.Effect<BootedChild<R | Scope.Scope>, never, R> =>
   Effect.gen(function*() {
     if (isWorker(child)) {
@@ -421,7 +439,7 @@ const bootChild = <E, R>(
 
 export const supervisor = <E, R>(
   s: Supervisor<E, R, LockConfig>,
-  reporter: DaemonReporter['Type'],
+  reporter: DaemonReporter['Service'],
   binding: LockBinding,
 ): Effect.Effect<SupervisorHealth, never, R | Scope.Scope> =>
   Effect.gen(function*() {
@@ -432,6 +450,6 @@ export const supervisor = <E, R>(
     )
     const body = buildSupervisorBody(s, health, booted, reporter).pipe(Effect.orDie)
     const locked = withLockByMode(body, binding)
-    yield* Effect.forkScoped(locked.pipe(Effect.orDie))
+    yield* Effect.forkScoped(locked.pipe(Effect.orDie), { startImmediately: true })
     return health
   })

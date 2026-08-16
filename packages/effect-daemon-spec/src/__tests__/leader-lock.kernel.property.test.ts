@@ -1,5 +1,5 @@
 import { describe, it } from '@systemfsoftware/effect-gherkin-spec'
-import { FastCheck as fc } from 'effect'
+import { FastCheck as fc } from 'effect/testing'
 import { isModeNone } from '../leader-lock.kernel.js'
 
 describe('isModeNone', () => {

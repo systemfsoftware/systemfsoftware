@@ -8,23 +8,23 @@ declare namespace Vendor {
   type Invoice = { id: string; amount_due: number | null; currency: string }
 }
 
-declare const vendorSchema: S.Schema<Vendor.Invoice, unknown>
+declare const vendorSchema: S.ConstraintDecoder<Vendor.Invoice>
 
 // The laundering hop: a workspace-local alias of the vendor's type. A specifier-keyed rule sees a
 // local import here and reports nothing — this is the case that defeats the textual predicate.
 type LocalInvoice = Vendor.Invoice
-declare const aliasedSchema: S.Schema<LocalInvoice, unknown>
+declare const aliasedSchema: S.ConstraintDecoder<LocalInvoice>
 
 // Forged members, written the way an author would write them: no cast, no `mint`. A phantom is
 // nameable, so it can be attached to any type by an annotation alone — and it is derivable even
 // without naming it, which is why the last two exist.
-declare const forgedByIntersection: S.Schema<Vendor.Invoice, unknown> & Wire.Mark
+declare const forgedByIntersection: S.ConstraintDecoder<Vendor.Invoice> & Wire.Mark
 declare const forgedByAlias: Wire.Minted<Vendor.Invoice, unknown>
-interface ForgedByInterface extends S.Schema<Vendor.Invoice, unknown>, Wire.Mark {}
+interface ForgedByInterface extends S.ConstraintDecoder<Vendor.Invoice>, Wire.Mark {}
 declare const forgedByInterface: ForgedByInterface
 // The phantom lifted off a legitimate member by inference, never naming `Mark` at all.
-type StolenMark = typeof Wire.string extends S.Schema<string, string> & infer M ? M : never
-declare const forgedByInference: S.Schema<Vendor.Invoice, unknown> & StolenMark
+type StolenMark = typeof Wire.string extends S.Schema<string> & infer M ? M : never
+declare const forgedByInference: S.ConstraintDecoder<Vendor.Invoice> & StolenMark
 
 describe('the mark', () => {
   it('Should_BeAbsentFromTheDecodedValue_When_TheSchemaIsMinted', () => {
@@ -38,7 +38,7 @@ describe('the mark', () => {
   })
 
   it('Should_NotBeObtainableByAssertion_When_TheSchemaWasNeverMinted', () => {
-    expect<S.Schema<string, string>>().type.not.toBeAssignableTo<Wire.Minted<string>>()
+    expect<S.Schema<string>>().type.not.toBeAssignableTo<Wire.Minted<string>>()
   })
 })
 
@@ -170,8 +170,8 @@ describe('the combinators', () => {
   })
 
   it('Should_PreserveTheMark_When_Refined', () => {
-    // Effect's own `.pipe(S.minLength(1))` strips the mark; this is why the alphabet carries a
-    // refinement of its own, so a validated member never has to be minted to exist.
+    // Effect's own `.pipe(S.check(S.isMinLength(1)))` strips the mark; this is why the alphabet
+    // carries a refinement of its own, so a validated member never has to be minted to exist.
     expect(Wire.refine(Wire.string, (a) => a.length > 0)).type.toBeAssignableTo<Wire.AnyMinted>()
   })
 

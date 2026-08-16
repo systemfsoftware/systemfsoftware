@@ -180,7 +180,7 @@ const collectGenerators = (value: unknown): ESTree.Function[] => {
 }
 
 const checkFn = (context: Context, fn: PredicateFn): void => {
-  const body = Option.getOrThrow(Option.fromNullable(fn.body))
+  const body = Option.getOrThrow(Option.fromNullishOr(fn.body))
   if (body.type !== 'BlockStatement') {
     if (!isBooleanShaped(body)) {
       report(context, body, 'nonBooleanBody', `predicate body is a non-boolean ${body.type}`)

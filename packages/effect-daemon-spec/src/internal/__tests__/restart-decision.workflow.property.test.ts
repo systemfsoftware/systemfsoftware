@@ -1,5 +1,6 @@
 import { describe, it } from '@systemfsoftware/effect-gherkin-spec'
-import { Array, Match, Option } from 'effect'
+import { Array, Match, Option, Schema } from 'effect'
+import { FastCheck as fc } from 'effect/testing'
 import { DecideInput } from '../restart-decision.schema.js'
 import { decideRestart, type RestartDecisionWorkflow } from '../restart-decision.workflow.js'
 
@@ -7,8 +8,8 @@ const tagOf = (
   e: ReturnType<RestartDecisionWorkflow>,
 ): string | null =>
   Match.value(e).pipe(
-    Match.tag('Right', ({ right }) => right._tag),
-    Match.tag('Left', ({ left }) => left._tag),
+    Match.tag('Success', ({ success }) => success._tag),
+    Match.tag('Failure', ({ failure }) => failure._tag),
     Match.exhaustive,
   )
 
@@ -17,40 +18,40 @@ const indicesOf = (
 ): readonly number[] | null =>
   Match.value(e).pipe(
     Match.tag(
-      'Right',
-      ({ right }) =>
-        Match.value(right).pipe(
+      'Success',
+      ({ success }) =>
+        Match.value(success).pipe(
           Match.tag('Restart', (r) => r.indices),
           Match.tag('Continue', () => null),
           Match.exhaustive,
         ),
     ),
-    Match.tag('Left', () => null),
+    Match.tag('Failure', () => null),
     Match.exhaustive,
   )
 
 describe('decideRestart — invariants', () => {
   it.prop(
     '→Succeeded_Exit_=Continue',
-    [DecideInput],
+    [Schema.toArbitrary(DecideInput)(fc)],
     ([input]) => tagOf(decideRestart({ ...input, exitSuccess: true })) === 'Continue',
   )
 
   it.prop(
     '→Failed∧Exceeded_Decide_=Exhausted',
-    [DecideInput],
+    [Schema.toArbitrary(DecideInput)(fc)],
     ([input]) => tagOf(decideRestart({ ...input, exitSuccess: false, intensityExceeded: true })) === 'Exhausted',
   )
 
   it.prop(
     '→Failed∧¬Exceeded_Decide_=Restart',
-    [DecideInput],
+    [Schema.toArbitrary(DecideInput)(fc)],
     ([input]) => tagOf(decideRestart({ ...input, exitSuccess: false, intensityExceeded: false })) === 'Restart',
   )
 
   it.prop(
     '→Restart_Indices_≠∅',
-    [DecideInput],
+    [Schema.toArbitrary(DecideInput)(fc)],
     ([input]) => {
       const indices = indicesOf(decideRestart({ ...input, exitSuccess: false, intensityExceeded: false }))
       return indices !== null && indices.length > 0
@@ -61,7 +62,7 @@ describe('decideRestart — invariants', () => {
 describe('decideRestart — restart index invariants', () => {
   it.prop(
     '→OneForOne_Indices_={Failed}',
-    [DecideInput],
+    [Schema.toArbitrary(DecideInput)(fc)],
     ([input]) => {
       const indices = indicesOf(
         decideRestart({
@@ -77,7 +78,7 @@ describe('decideRestart — restart index invariants', () => {
 
   it.prop(
     '→OneForAll_Indices_=All',
-    [DecideInput],
+    [Schema.toArbitrary(DecideInput)(fc)],
     ([input]) => {
       const indices = indicesOf(
         decideRestart({
@@ -96,7 +97,7 @@ describe('decideRestart — restart index invariants', () => {
 
   it.prop(
     '→RestForOne_Indices_=Failed..End',
-    [DecideInput],
+    [Schema.toArbitrary(DecideInput)(fc)],
     ([input]) => {
       const indices = indicesOf(
         decideRestart({
@@ -115,7 +116,7 @@ describe('decideRestart — restart index invariants', () => {
 
   it.prop(
     '∀s_Indices_⊇Ascending',
-    [DecideInput],
+    [Schema.toArbitrary(DecideInput)(fc)],
     ([input]) => {
       const indices = indicesOf(decideRestart({ ...input, exitSuccess: false, intensityExceeded: false }))
       if (indices === null) return false

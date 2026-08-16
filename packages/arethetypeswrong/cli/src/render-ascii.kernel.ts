@@ -1,4 +1,3 @@
-import * as Doc from '@effect/printer/Doc'
 import type { Problem, ResolutionKind } from '@systemfsoftware/arethetypeswrong-core'
 import { renderTable } from './render-table.kernel.js'
 import { resolutionKindOrder, symbolForProblem } from './render-typed.kernel.js'
@@ -7,9 +6,9 @@ export const renderAsciiAnalysis = (
   entrypoints: readonly string[],
   problems: readonly Problem[],
   opts: { readonly useEmoji: boolean },
-): Doc.Doc<never> => {
+): string => {
   if (entrypoints.length === 0) {
-    return Doc.text('No entrypoints found.')
+    return 'No entrypoints found.'
   }
   const header: readonly string[] = ['Entrypoint', ...resolutionKindOrder]
   const rows = entrypoints.map((entrypoint) => {

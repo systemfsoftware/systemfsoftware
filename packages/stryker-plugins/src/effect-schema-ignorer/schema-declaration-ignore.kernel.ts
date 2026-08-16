@@ -26,15 +26,15 @@ export const ANNOTATION_TEXT_IGNORED = 'annotation documentation value is declar
  * so a surviving mutant of one is a test gap to close, never an equivalent
  * mutant to ignore.
  */
-const DocumentationKey = S.Literal('identifier', 'description', 'title', 'documentation', 'examples')
+const DocumentationKey = S.Literals(['identifier', 'description', 'title', 'documentation', 'examples'])
 
 const DocumentationProperty = S.Struct({
   type: S.Literal('ObjectProperty'),
   computed: S.Literal(false),
-  key: S.Union(
+  key: S.Union([
     S.Struct({ type: S.Literal('Identifier'), name: DocumentationKey }),
     S.Struct({ type: S.Literal('StringLiteral'), value: DocumentationKey }),
-  ),
+  ]),
   value: S.Unknown,
 })
 

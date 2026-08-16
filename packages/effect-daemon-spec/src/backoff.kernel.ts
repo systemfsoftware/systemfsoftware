@@ -1,12 +1,12 @@
-import { Duration, Schedule } from 'effect'
+import { Duration, Effect, Schedule } from 'effect'
 
 export const cappedBackoff = (
-  base: Duration.DurationInput,
-  cap: Duration.DurationInput,
+  base: Duration.Input,
+  cap: Duration.Input,
 ): Schedule.Schedule<Duration.Duration> => {
-  const ceiling = Duration.decode(cap)
+  const ceiling = Duration.fromInputUnsafe(cap)
   return Schedule.exponential(base).pipe(
     Schedule.jittered,
-    Schedule.modifyDelay((_, delay) => Duration.min(delay, ceiling)),
+    Schedule.modifyDelay(({ duration }) => Effect.succeed(Duration.min(duration, ceiling))),
   )
 }

@@ -21,7 +21,7 @@ import { join, resolve } from 'path'
 import { fileURLToPath } from 'url'
 
 import { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
-import { Either } from 'effect'
+import { Result } from 'effect'
 import { afterEach, describe, expect, it, Mock, vi } from 'vitest'
 
 import { createDefaultOptions } from '../../src/config/options-validator.js'
@@ -46,11 +46,11 @@ const fixtureDir = resolve(
 
 const fixtureTsconfig = resolve(fixtureDir, 'tsconfig.json')
 
-function expectRight<A>(either: Either.Either<A, TsConfigParseError>): A {
-  if (Either.isLeft(either)) {
-    throw new Error(`Expected a Right result, got a Left: ${String(either.left)}`)
+function expectRight<A>(either: Result.Result<A, TsConfigParseError>): A {
+  if (Result.isFailure(either)) {
+    throw new Error(`Expected a Right result, got a Left: ${String(either.failure)}`)
   }
-  return either.right
+  return either.success
 }
 
 // ---------------
@@ -134,11 +134,11 @@ describe('TSConfigPreprocessor – parseTsConfig (upstream replacement)', () => 
 
   it('surfaces an error for empty input', () => {
     const result = parseTsConfig('tsconfig.json', '')
-    expect(Either.isLeft(result)).toBe(true)
-    if (Either.isLeft(result)) {
-      expect(result.left).toBeInstanceOf(TsConfigParseError)
-      expect(result.left.file).toBe('tsconfig.json')
-      expect(result.left.reason.length).toBeGreaterThan(0)
+    expect(Result.isFailure(result)).toBe(true)
+    if (Result.isFailure(result)) {
+      expect(result.failure).toBeInstanceOf(TsConfigParseError)
+      expect(result.failure.file).toBe('tsconfig.json')
+      expect(result.failure.reason.length).toBeGreaterThan(0)
     }
   })
 
@@ -148,11 +148,11 @@ describe('TSConfigPreprocessor – parseTsConfig (upstream replacement)', () => 
     // no fields rewritten, and was written straight back. The schema guard turns
     // this into a Left.
     const result = parseTsConfig('tsconfig.json', '"just a string"')
-    expect(Either.isLeft(result)).toBe(true)
-    if (Either.isLeft(result)) {
-      expect(result.left).toBeInstanceOf(TsConfigParseError)
-      expect(result.left.file).toBe('tsconfig.json')
-      expect(result.left.reason).toContain('does not match the tsconfig shape')
+    expect(Result.isFailure(result)).toBe(true)
+    if (Result.isFailure(result)) {
+      expect(result.failure).toBeInstanceOf(TsConfigParseError)
+      expect(result.failure.file).toBe('tsconfig.json')
+      expect(result.failure.reason).toContain('does not match the tsconfig shape')
     }
   })
 })

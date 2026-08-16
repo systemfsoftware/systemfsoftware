@@ -1,5 +1,3 @@
-import { layer as nodeCommandExecutorLayer } from '@effect/platform-node-shared/NodeCommandExecutor'
-import { CommandExecutor } from '@effect/platform/CommandExecutor'
 import {
   CheckPackage,
   CheckPackageLive,
@@ -10,6 +8,7 @@ import {
   type ResolutionKind,
 } from '@systemfsoftware/arethetypeswrong-core'
 import { Data, Effect, Layer } from 'effect'
+import { ChildProcessSpawner } from 'effect/unstable/process/ChildProcessSpawner'
 
 import { CliFilesystem as Filesystem } from './filesystem.adapter.js'
 import { computeExitCode, ComputeExitCodeCommand } from './getExitCode.kernel.js'
@@ -69,7 +68,7 @@ const acquireTarball = (
 ): Effect.Effect<
   { bytes: Uint8Array; ref: { packageName: string; packageVersion: string; tarballUrl: string } },
   never,
-  Filesystem | PackRunner | CommandExecutor
+  Filesystem | PackRunner | ChildProcessSpawner
 > =>
   Effect.gen(function*() {
     const fs = yield* Filesystem
@@ -133,7 +132,7 @@ const acquireTarball = (
 
 export const runAttw = (
   request: CliRequest,
-): Effect.Effect<number, never, Terminal | Filesystem | Stdin | PackRunner | CommandExecutor> =>
+): Effect.Effect<number, never, Terminal | Filesystem | Stdin | PackRunner | ChildProcessSpawner> =>
   Effect.gen(function*() {
     const terminal = yield* Terminal
 
@@ -151,7 +150,7 @@ export const runAttw = (
       })
     }).pipe(
       Effect.provide(Layer.mergeAll(checkPackageLayer, storeLayer)),
-      Effect.catchAll(() =>
+      Effect.catch(() =>
         Effect.succeed<CheckResult>({
           packageName: request.fileOrDirectory,
           packageVersion: 'error',

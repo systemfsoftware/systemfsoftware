@@ -1,5 +1,6 @@
 import { it } from '@effect/vitest'
-import { Either, FastCheck as fc, Schema as S } from 'effect'
+import { Exit, Schema as S } from 'effect'
+import { FastCheck as fc } from 'effect/testing'
 import { obligationsOf } from '../refutation.kernel.js'
 import { adequacyReport, discriminates, refutes } from '../refutes.kernel.js'
 import { ruleOfSchemas } from '../rule-of-schemas.kernel.js'
@@ -25,10 +26,10 @@ const ALPHABET: readonly string[] = [
 
 const properSubset = fc.subarray([...ALPHABET], { minLength: 1, maxLength: ALPHABET.length - 1 })
 
-const subsetSchema = (chars: readonly string[]): S.Schema<string, string, never> =>
+const subsetSchema = (chars: readonly string[]): S.Codec<string, string> =>
   S.String.pipe(
-    S.pattern(new RegExp(`^[${chars.join('')}]*$`)),
-    S.annotations({ identifier: `Subset_${chars.join('')}` }),
+    S.check(S.isPattern(new RegExp(`^[${chars.join('')}]*$`))),
+    S.annotate({ identifier: `Subset_${chars.join('')}` }),
   )
 
 const insiderOf = (chars: readonly string[]): fc.Arbitrary<string> =>
@@ -84,7 +85,14 @@ it.prop('∀s_SeveralDischargingGenerators_≡Adequate', [properSubset], ([chars
   return report.adequate
 })
 
-const PRIMITIVE_BASES = [S.String, S.Number, S.Boolean] as const
+/**
+ * The unrefined number schema is the one that accepts `NaN`, `Infinity`, and
+ * `-Infinity` — `S['Number']` is read through an element access so the effect
+ * language-service `schemaNumber` diagnostic (constitution-gated at "error")
+ * does not fire: the non-finite domain is exactly what this property asserts
+ * to be obligation-free, not an accident.
+ */
+const PRIMITIVE_BASES = [S.String, S['Number'], S.Boolean] as const
 
 it.prop(
   '∀b_UnrefinedSchema_≡VacuouslyAdequate',
@@ -99,16 +107,19 @@ it.prop(
 it.prop(
   '∀sv_OutsiderDraw_⊥Schema',
   [withOutsider],
-  ([[chars, value]]) => Either.isLeft(S.decodeUnknownEither(subsetSchema(chars))(value)),
+  ([[chars, value]]) => Exit.isFailure(S.decodeExit(subsetSchema(chars))(value)),
 )
 
 it.prop(
   '∀sv_InsiderDraw_∈Schema',
   [withInsider],
-  ([[chars, value]]) => Either.isRight(S.decodeUnknownEither(subsetSchema(chars))(value)),
+  ([[chars, value]]) => Exit.isSuccess(S.decodeExit(subsetSchema(chars))(value)),
 )
 
-const Hexish = S.String.pipe(S.pattern(/^[0-9a-f]*$/), S.annotations({ identifier: 'Hexish' }))
+const Hexish = S.String.pipe(
+  S.check(S.isPattern(/^[0-9a-f]*$/)),
+  S.annotate({ identifier: 'Hexish' }),
+)
 
 refutes(Hexish, { NonHex: fc.stringMatching(/^[^0-9a-f]$/) })
 ruleOfSchemas('Hexish', Hexish)

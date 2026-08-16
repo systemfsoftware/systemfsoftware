@@ -1,6 +1,7 @@
 import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { And, Gherkin, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Effect, Fiber, Layer, TestClock } from 'effect'
+import { Effect, Fiber, Layer } from 'effect'
+import { TestClock } from 'effect/testing'
 import { expect } from 'vitest'
 import { Noop } from '../src/daemon-reporter.adapter.js'
 import { LeaderLock, withLeaderLock } from '../src/mod.js'
@@ -22,7 +23,7 @@ Feature('Noop Contract')
   .withScenarioLayer(
     Layer.mergeAll(
       LeaderLock.Noop,
-      TestClock.defaultTestClock,
+      TestClock.layer(),
     ),
   )
   .body(({ scenario }) => {
@@ -40,10 +41,10 @@ Feature('Noop Contract')
         ),
         When('a second concurrent call with the same key also succeeds')('concurrent', () =>
           Effect.gen(function*() {
-            const a = yield* Effect.fork(
+            const a = yield* Effect.forkChild(
               withLock(Effect.succeed('first'), { key: 'any-key', mode: 'required' }),
             )
-            const b = yield* Effect.fork(
+            const b = yield* Effect.forkChild(
               withLock(Effect.succeed('second'), { key: 'any-key', mode: 'required' }),
             )
             const ra = yield* Fiber.join(a)

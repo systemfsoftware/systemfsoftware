@@ -7,13 +7,23 @@ export const PRIMITIVE_CONSTRUCTORS: Record<string, true> = {
 }
 
 // Sync factories only — Ref.make returns an Effect and cannot hold escaping state at module scope.
+// v4 renames the unsafe-suffixed constructors (`Ref.unsafeMake` -> `Ref.makeUnsafe`, `Deferred.unsafeMake`
+// -> `Deferred.makeUnsafe`) and renames the TRef module to TxRef (`TRef.unsafeMake` -> `TxRef.makeUnsafe`).
+// `Context.Reference` gains a synchronous function form in v4 (`Context.Reference(id, { defaultValue })`)
+// alongside the v3 class-extends form; both construct the escaping reference at module scope. Each row
+// carries the v3 spelling first, then its v4 spelling — v3 recognition stays, v4 recognition is additive.
 export const PRIMITIVE_MAKERS = [
   ['Ref', 'unsafeMake'],
+  ['Ref', 'makeUnsafe'],
   ['Deferred', 'unsafeMake'],
+  ['Deferred', 'makeUnsafe'],
   ['Semaphore', 'make'],
+  ['Semaphore', 'makeUnsafe'],
   ['TRef', 'unsafeMake'],
+  ['TxRef', 'makeUnsafe'],
   ['ManagedRuntime', 'make'],
   ['Layer', 'toRuntime'],
+  ['Context', 'Reference'],
 ] as const
 
 // Class-based quarantine: `class X extends Context.Reference<X>()('id', { defaultValue })`.

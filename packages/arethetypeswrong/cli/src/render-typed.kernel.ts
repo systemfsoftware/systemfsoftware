@@ -1,4 +1,3 @@
-import * as Doc from '@effect/printer/Doc'
 import type { Problem, ResolutionKind } from '@systemfsoftware/arethetypeswrong-core'
 import type { AnsiAnnotation } from './render-ansi.kernel.js'
 import { colorizeCell } from './render-ansi.kernel.js'
@@ -66,9 +65,9 @@ export const renderTypedAnalysis = (
   problems: readonly Problem[],
   opts: RenderOptions,
   annotations: Record<string, AnsiAnnotation> = {},
-): Doc.Doc<never> => {
+): string => {
   if (entrypoints.length === 0) {
-    return Doc.text('No entrypoints found.')
+    return 'No entrypoints found.'
   }
   const header: readonly string[] = opts.color
     ? ['Entrypoint', ...resolutionKindOrder]
@@ -86,8 +85,7 @@ export const renderTypedAnalysis = (
     }
     return row.map((c) => colorizeCell(c, opts.color, annotations))
   })
-  const table = opts.flipped
+  return opts.flipped
     ? renderFlippedTable(header, rows)
     : renderTable(header, rows)
-  return table
 }

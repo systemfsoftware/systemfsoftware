@@ -17,10 +17,12 @@ const ruleTester = new RuleTester({
 
 const dataFor = (name: string) => ({
   name,
-  expected: 'at least one S.transformOrFail call decoding a foreign shape into a branded domain type',
-  actual: 'no S.transformOrFail call',
+  expected:
+    'at least one schema transform decoding a foreign shape into a branded domain type — v3 S.transformOrFail(From, To, …) or v4 From.pipe(S.decodeTo(S.toType(To), { decode: SchemaGetter.transformOrFail(…) }))',
+  actual:
+    'no schema transform — no S.transformOrFail call and no S.decodeTo with a SchemaGetter.transformOrFail / SchemaTransformation.transformOrFail getter',
   fix:
-    'declare the crossing as S.transformOrFail(SourceSchema, DomainSchema, { strict: true, decode, encode }) with the inactive direction returning ParseResult.Forbidden — or rename the file if it is not an ACL',
+    'declare the crossing as S.transformOrFail(SourceSchema, DomainSchema, { strict: true, decode, encode }) with the inactive direction returning ParseResult.Forbidden — or, in effect v4, SourceSchema.pipe(S.decodeTo(S.toType(DomainSchema), { decode: SchemaGetter.transformOrFail(…), encode: SchemaGetter.forbidden(…) })) — or rename the file if it is not an ACL',
 })
 
 const decodeOnlyAcl = `
@@ -98,6 +100,81 @@ const toOrder = () =>
       filename: 'place-order.acl.ts',
     },
     {
+      name: 'Should_Pass_When_V4DecodeToWithGetterTransformOrFailIsDeclared',
+      code: `
+import * as S from 'effect/Schema'
+import { SchemaGetter, Effect } from 'effect'
+
+export const OrderFromText = S.String.pipe(
+  S.decodeTo(S.toType(Order), {
+    decode: SchemaGetter.transformOrFail((raw) => Effect.succeed({ id: raw })),
+    encode: SchemaGetter.forbidden(() => 'OrderFromText is decode-only'),
+  }),
+)
+`,
+      filename: 'place-order.acl.ts',
+    },
+    {
+      name: 'Should_Pass_When_V4SchemaTransformationTransformOrFailIsDeclared',
+      code: `
+import * as S from 'effect/Schema'
+import { SchemaTransformation, Effect } from 'effect'
+
+export const OrderFromText = S.String.pipe(
+  S.decodeTo(S.toType(Order), SchemaTransformation.transformOrFail({
+    decode: (raw) => Effect.succeed({ id: raw }),
+    encode: () => Effect.succeed('raw'),
+  })),
+)
+`,
+      filename: 'place-order.acl.ts',
+    },
+    {
+      name: 'Should_Pass_When_V4TransformOrFailAppearsInsideAFunctionBody',
+      code: `
+const toOrder = () =>
+  S.String.pipe(
+    S.decodeTo(S.toType(Order), {
+      decode: SchemaGetter.transformOrFail((raw) => ({ id: raw })),
+      encode: SchemaGetter.forbidden(() => 'Decode-only ACL'),
+    }),
+  )
+`,
+      filename: 'place-order.acl.ts',
+    },
+    {
+      name: 'Should_Pass_When_V4GetterTransformOrFailIsPiped',
+      code: `
+import * as S from 'effect/Schema'
+import { SchemaGetter, Effect } from 'effect'
+
+export const OrderFromText = S.String.pipe(
+  S.decodeTo(S.toType(Order), {
+    decode: SchemaGetter.transformOrFail((raw) => Effect.succeed({ id: raw })).pipe(
+      SchemaGetter.checkEffect((order) => Effect.succeed(true)),
+    ),
+    encode: SchemaGetter.forbidden(() => 'OrderFromText is decode-only'),
+  }),
+)
+`,
+      filename: 'place-order.acl.ts',
+    },
+    {
+      name: 'Should_Pass_When_V4TransformationIsBuiltViaSchemaTransformationMake',
+      code: `
+import * as S from 'effect/Schema'
+import { SchemaGetter, SchemaTransformation, Effect } from 'effect'
+
+export const OrderFromText = S.String.pipe(
+  S.decodeTo(S.toType(Order), SchemaTransformation.make({
+    decode: SchemaGetter.transformOrFail((raw) => Effect.succeed({ id: raw })),
+    encode: SchemaGetter.forbidden(() => 'OrderFromText is decode-only'),
+  })),
+)
+`,
+      filename: 'place-order.acl.ts',
+    },
+    {
       name: 'Should_Pass_When_ExecutorFileLacksTransformOrFail',
       code: `export const run = (cmd: unknown) => cmd`,
       filename: 'place-order.executor.ts',
@@ -130,6 +207,54 @@ const toOrder = () =>
       code: `
 import * as S from 'effect/Schema'
 export const fromRow = S.transform(OrderRow, Order, { decode: (r) => r, encode: (d) => d })
+`,
+      filename: 'place-order.acl.ts',
+      errors: [{ messageId: 'transformOrFailRequired', data: dataFor('place-order.acl.ts') }],
+    },
+    {
+      name: 'Should_Report_When_OnlyPlainDecodeToIsUsed',
+      code: `
+import * as S from 'effect/Schema'
+export const fromRow = S.String.pipe(S.decodeTo(S.toType(Order)))
+`,
+      filename: 'place-order.acl.ts',
+      errors: [{ messageId: 'transformOrFailRequired', data: dataFor('place-order.acl.ts') }],
+    },
+    {
+      name: 'Should_Report_When_DecodeToUsesTotalTransformationOnly',
+      code: `
+import * as S from 'effect/Schema'
+import { SchemaTransformation } from 'effect'
+export const fromRow = S.String.pipe(S.decodeTo(S.toType(Order), SchemaTransformation.transform({
+  decode: (raw) => ({ id: raw }),
+  encode: (order) => order.id,
+})))
+`,
+      filename: 'place-order.acl.ts',
+      errors: [{ messageId: 'transformOrFailRequired', data: dataFor('place-order.acl.ts') }],
+    },
+    {
+      name: 'Should_Report_When_DecodeToGetterObjectHasNoTransformOrFail',
+      code: `
+import * as S from 'effect/Schema'
+import { SchemaGetter } from 'effect'
+export const fromRow = S.String.pipe(S.decodeTo(S.toType(Order), {
+  decode: SchemaGetter.passthrough(),
+  encode: SchemaGetter.passthrough(),
+}))
+`,
+      filename: 'place-order.acl.ts',
+      errors: [{ messageId: 'transformOrFailRequired', data: dataFor('place-order.acl.ts') }],
+    },
+    {
+      name: 'Should_Report_When_AliasedSchemaGetterIsUsed',
+      code: `
+import * as S from 'effect/Schema'
+import { SchemaGetter as Getter, Effect } from 'effect'
+export const fromRow = S.String.pipe(S.decodeTo(S.toType(Order), {
+  decode: Getter.transformOrFail((raw) => Effect.succeed({ id: raw })),
+  encode: Getter.forbidden(() => 'Decode-only ACL'),
+}))
 `,
       filename: 'place-order.acl.ts',
       errors: [{ messageId: 'transformOrFailRequired', data: dataFor('place-order.acl.ts') }],

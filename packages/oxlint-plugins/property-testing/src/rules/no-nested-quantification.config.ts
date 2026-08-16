@@ -1,14 +1,14 @@
-import { JSONSchema, Schema as S } from 'effect'
+import { Effect, Schema as S } from 'effect'
 
 export const MESSAGE = '{{name}} is forbidden. Expected: {{expected}}. Actual: {{actual}}. Fix: {{fix}}.' as const
 
 export const Options = S.Struct({
-  exempt: S.optionalWith(
-    S.Array(S.String).pipe(S.annotations({
+  exempt: S.Array(S.String).pipe(
+    S.annotate({
       description:
         'File basenames this rule stays silent on (e.g. ["refutation.kernel.property.test.ts"]). An owner who has measured the cost and accepted it names the file here; the property still runs.',
-    })),
-    { default: () => [] },
+    }),
+    S.withDecodingDefaultType(Effect.succeed([])),
   ),
 })
 
@@ -51,7 +51,7 @@ export const meta = {
     description:
       'A property predicate must not quantify over its own generated value and call out again inside that loop. Per-case cost then scales with the drawn size rather than with the draw count, which is the shape Hypothesis reports as nested_given: the suite slows superlinearly as the generator widens, and a CI budget tuned on small draws times out on large ones. Iteration over a bound the generator does not control, and a fold whose body calls nothing, are both fine.',
   },
-  schema: [JSONSchema.make(Options)],
+  schema: [S.toJsonSchemaDocument(Options).schema],
   messages: {
     nestedQuantification: MESSAGE,
   },

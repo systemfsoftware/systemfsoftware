@@ -1,5 +1,5 @@
 import type { ExtensionAPI } from '@oh-my-pi/pi-coding-agent'
-import { Effect, Either } from 'effect'
+import { Effect, Result } from 'effect'
 import { runNoSkillDelegation } from './no-skill-delegation.executor.js'
 import type { RunSafe } from './run-safe.kernel.js'
 
@@ -21,10 +21,10 @@ export const NoSkillDelegationExtension = (pi: ExtensionAPI, runSafe: RunSafe): 
     const input = decodeRecord(event.input)
     const subagentType = readString(input, 'subagent_type', 'agent')
     const prompt = readString(input, 'prompt', 'task', 'description')
-    const either = await runSafe(
-      Effect.either(runNoSkillDelegation(ctx.cwd, event.toolName, subagentType, prompt)),
+    const result = await runSafe(
+      Effect.result(runNoSkillDelegation(ctx.cwd, event.toolName, subagentType, prompt)),
     )
-    if (Either.isLeft(either)) throw either.left
-    return either.right
+    if (Result.isFailure(result)) throw result.failure
+    return result.success
   })
 }

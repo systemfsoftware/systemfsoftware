@@ -1,23 +1,22 @@
-import { FileSystem } from '@effect/platform/FileSystem'
-import { Context, Effect, Either, Schema as S, type Scope } from 'effect'
+import { Context, Effect, Exit, Schema as S, type Scope } from 'effect'
+import { FileSystem } from 'effect/FileSystem'
 import { analyzeSettings, parseSettings, SettingsWrapped } from '../hook-settings.acl.js'
 import type { SettingsSource } from '../hook-settings.acl.js'
 import { MANAGED_SETTINGS_PATH } from './settings-paths.kernel.js'
 
-export class LoadSettingsExecutorDeps extends Context.Tag('LoadSettingsExecutorDeps')<
-  LoadSettingsExecutorDeps,
-  Scope.Scope
->() {}
+export class LoadSettingsExecutorDeps extends Context.Service<LoadSettingsExecutorDeps, Scope.Scope>()(
+  'LoadSettingsExecutorDeps',
+) {}
 
 const loadSettingsFile = Effect.fn('loadSettingsFile')(function*(path: string) {
   const fs = yield* FileSystem
   const content = yield* fs.readFileString(path).pipe(Effect.orElseSucceed(() => ''))
   if (content === '') return null
-  const jsonOrError = S.decodeUnknownEither(S.parseJson(S.Record({ key: S.String, value: S.Unknown })))(content)
-  if (Either.isLeft(jsonOrError)) return null
-  const json = jsonOrError.right
-  const either = parseSettings(json)
-  return Either.isLeft(either) ? null : either.right
+  const jsonOrError = S.decodeUnknownExit(S.fromJsonString(S.Record(S.String, S.Unknown)))(content)
+  if (Exit.isFailure(jsonOrError)) return null
+  const json = jsonOrError.value
+  const exit = parseSettings(json)
+  return Exit.isFailure(exit) ? null : exit.value
 })
 
 export const loadSettingsWithPaths = Effect.fn('loadSettingsWithPaths')(function*(

@@ -1,6 +1,7 @@
 import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Duration, Effect, Layer, Match, Schedule, TestClock } from 'effect'
+import { Duration, Effect, Layer, Match, Schedule } from 'effect'
+import { TestClock } from 'effect/testing'
 import { expect } from 'vitest'
 import { BoundedIntensity } from '../src/mod.js'
 import { run } from '../src/mod.js'
@@ -52,7 +53,7 @@ Feature('Per-child restart policy')
                 name: 'parent',
                 children: [s.worker],
                 supervision: Supervision.custom({
-                  intensity: new BoundedIntensity({ restarts: 1, window: Duration.seconds(1) }),
+                  intensity: BoundedIntensity.make({ restarts: 1, window: Duration.seconds(1) }),
                   backoff: Schedule.exponential(Duration.millis(10), 1),
                   cooldown: Duration.minutes(30),
                 }),
@@ -92,7 +93,7 @@ Feature('Per-child restart policy')
                 name: 'permissive-parent',
                 children: [s.worker],
                 supervision: Supervision.custom({
-                  intensity: new BoundedIntensity({ restarts: 1, window: Duration.seconds(1) }),
+                  intensity: BoundedIntensity.make({ restarts: 1, window: Duration.seconds(1) }),
                   backoff: Schedule.exponential(Duration.millis(10), 1),
                   cooldown: Duration.minutes(30),
                 }),
@@ -174,7 +175,7 @@ Feature('Per-child restart policy')
                   children,
                   lock: { mode: 'none' as const },
                   supervision: Supervision.custom({
-                    intensity: new BoundedIntensity(supervisorIntensity),
+                    intensity: BoundedIntensity.make(supervisorIntensity),
                     backoff: Schedule.exponential(Duration.millis(10), 1),
                     cooldown: Duration.minutes(30),
                   }),
@@ -233,7 +234,7 @@ Feature('Per-child restart policy')
                 name: 'default-policy-parent',
                 children: [worker],
                 supervision: Supervision.custom({
-                  intensity: new BoundedIntensity({ restarts: 0, window: Duration.seconds(1) }),
+                  intensity: BoundedIntensity.make({ restarts: 0, window: Duration.seconds(1) }),
                   backoff: Schedule.exponential(Duration.millis(10), 1),
                   cooldown: Duration.minutes(30),
                 }),

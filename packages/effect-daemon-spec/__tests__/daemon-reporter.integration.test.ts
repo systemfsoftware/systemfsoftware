@@ -1,5 +1,6 @@
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Cause, Duration, Effect, Layer, Option, Schedule, TestClock } from 'effect'
+import { Cause, Duration, Effect, Layer, Option, Schedule } from 'effect'
+import { TestClock } from 'effect/testing'
 import { expect } from 'vitest'
 import { BoundedIntensity } from '../src/mod.js'
 import { DaemonReporter, run } from '../src/mod.js'
@@ -41,7 +42,7 @@ Feature('Supervisor exhaustion via DaemonReporter')
               name: 'exhaust-sup',
               children: [worker],
               supervision: Supervision.custom({
-                intensity: new BoundedIntensity({ restarts: 0, window: Duration.seconds(60) }),
+                intensity: BoundedIntensity.make({ restarts: 0, window: Duration.seconds(60) }),
                 backoff: Schedule.exponential(Duration.millis(1), 1),
                 cooldown: Duration.minutes(30),
               }),
@@ -64,11 +65,11 @@ Feature('Supervisor exhaustion via DaemonReporter')
             expect(s.out.healthyOpen).toBe(false)
             expect(s.out.exhaustions).toHaveLength(1)
             const exhaustion = Option.getOrThrowWith(
-              Option.fromNullable(s.out.exhaustions[0]),
+              Option.fromNullishOr(s.out.exhaustions[0]),
               () => new Error('expected one supervisor exhaustion event'),
             )
             expect(exhaustion.name).toBe('exhaust-sup')
-            expect(Cause.isDie(exhaustion.cause)).toBe(true)
+            expect(Cause.hasDies(exhaustion.cause)).toBe(true)
           })
         ),
       ),

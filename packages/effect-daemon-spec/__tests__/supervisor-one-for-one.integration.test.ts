@@ -1,6 +1,7 @@
 import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Duration, Effect, Layer, Ref, Schedule, Schema as S, TestClock } from 'effect'
+import { Duration, Effect, Layer, Ref, Schedule, Schema as S } from 'effect'
+import { TestClock } from 'effect/testing'
 import { expect } from 'vitest'
 import { BoundedIntensity } from '../src/mod.js'
 import { run } from '../src/mod.js'
@@ -30,7 +31,7 @@ Feature('OneForOne Strategy')
               work: Effect.gen(function*() {
                 const shouldFail = yield* Ref.getAndSet(s.failOnce, false)
                 if (shouldFail) {
-                  return yield* new SimulatedFailure()
+                  return yield* SimulatedFailure.make()
                 }
                 return void 0
               }),
@@ -42,8 +43,10 @@ Feature('OneForOne Strategy')
               name: 'oneForOne-restart',
               children: [child],
               supervision: Supervision.custom({
-                intensity: new BoundedIntensity({ restarts: 5, window: Duration.seconds(60) }),
-                backoff: Schedule.exponential(Duration.millis(5)).pipe(Schedule.upTo(Duration.millis(50))),
+                intensity: BoundedIntensity.make({ restarts: 5, window: Duration.seconds(60) }),
+                backoff: Schedule.exponential(Duration.millis(5)).pipe(
+                  Schedule.upTo({ duration: Duration.millis(50) }),
+                ),
                 cooldown: Duration.minutes(30),
               }),
               lock: { mode: 'none' },
@@ -77,7 +80,7 @@ Feature('OneForOne Strategy')
           Effect.gen(function*() {
             const child = Daemon.poll({
               name: 'A',
-              work: new SimulatedFailure(),
+              work: SimulatedFailure.make(),
               interval: Duration.millis(10),
               tick: { tickTimeout: Duration.seconds(90) },
               lock: { mode: 'none' },
@@ -86,8 +89,10 @@ Feature('OneForOne Strategy')
               name: 'oneForOne-exhaust',
               children: [child],
               supervision: Supervision.custom({
-                intensity: new BoundedIntensity({ restarts: 1, window: Duration.seconds(60) }),
-                backoff: Schedule.exponential(Duration.millis(5)).pipe(Schedule.upTo(Duration.millis(50))),
+                intensity: BoundedIntensity.make({ restarts: 1, window: Duration.seconds(60) }),
+                backoff: Schedule.exponential(Duration.millis(5)).pipe(
+                  Schedule.upTo({ duration: Duration.millis(50) }),
+                ),
                 cooldown: Duration.minutes(30),
               }),
               lock: { mode: 'none' },
@@ -126,7 +131,7 @@ Feature('OneForOne Strategy')
                 yield* Ref.update(s.counters.a, (n) => n + 1)
                 const shouldFail = yield* Ref.get(s.failOnce)
                 if (shouldFail) {
-                  return yield* new SimulatedFailure()
+                  return yield* SimulatedFailure.make()
                 }
                 return void 0
               }),
@@ -145,10 +150,10 @@ Feature('OneForOne Strategy')
               name: 'oneForOne-indep',
               children: [childA, childB],
               supervision: Supervision.custom({
-                intensity: new BoundedIntensity({ restarts: 5, window: Duration.seconds(60) }),
+                intensity: BoundedIntensity.make({ restarts: 5, window: Duration.seconds(60) }),
                 backoff: Schedule.exponential(Duration.seconds(10)).pipe(
                   Schedule.jittered,
-                  Schedule.upTo(Duration.minutes(5)),
+                  Schedule.upTo({ duration: Duration.minutes(5) }),
                 ),
                 cooldown: Duration.minutes(30),
               }),
@@ -199,10 +204,10 @@ Feature('OneForOne Strategy')
                 }),
               ],
               supervision: Supervision.custom({
-                intensity: new BoundedIntensity({ restarts: 5, window: Duration.seconds(60) }),
+                intensity: BoundedIntensity.make({ restarts: 5, window: Duration.seconds(60) }),
                 backoff: Schedule.exponential(Duration.seconds(10)).pipe(
                   Schedule.jittered,
-                  Schedule.upTo(Duration.minutes(5)),
+                  Schedule.upTo({ duration: Duration.minutes(5) }),
                 ),
                 cooldown: Duration.minutes(30),
               }),
@@ -212,10 +217,10 @@ Feature('OneForOne Strategy')
               name: 'outer',
               children: [inner],
               supervision: Supervision.custom({
-                intensity: new BoundedIntensity({ restarts: 5, window: Duration.seconds(60) }),
+                intensity: BoundedIntensity.make({ restarts: 5, window: Duration.seconds(60) }),
                 backoff: Schedule.exponential(Duration.seconds(10)).pipe(
                   Schedule.jittered,
-                  Schedule.upTo(Duration.minutes(5)),
+                  Schedule.upTo({ duration: Duration.minutes(5) }),
                 ),
                 cooldown: Duration.minutes(30),
               }),

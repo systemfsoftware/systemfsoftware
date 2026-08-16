@@ -1,6 +1,7 @@
 import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Duration, Effect, Fiber, Layer, Match, Ref, Schedule, Stream, TestClock } from 'effect'
+import { Duration, Effect, Fiber, Latch, Layer, Match, Ref, Schedule, Stream } from 'effect'
+import { TestClock } from 'effect/testing'
 import { expect } from 'vitest'
 import { Noop } from '../src/daemon-reporter.adapter.js'
 import type { LockConfig } from '../src/mod.js'
@@ -17,7 +18,7 @@ Feature('Daemon Leader Election')
   .withScenarioLayer(
     Layer.mergeAll(
       LeaderLockFake,
-      TestClock.defaultTestClock,
+      TestClock.layer(),
       Noop,
     ),
   )
@@ -31,8 +32,8 @@ Feature('Daemon Leader Election')
             Effect.gen(function*() {
               const counter = yield* Ref.make(0)
               const lock = yield* LeaderLock
-              const holder = yield* Effect.fork(lock.withLock('pipeline', Effect.never))
-              yield* Effect.yieldNow()
+              const holder = yield* Effect.forkChild(lock.withLock('pipeline', Effect.never))
+              yield* Effect.yieldNow
               return { counter, holder }
             }),
         ),
@@ -70,8 +71,8 @@ Feature('Daemon Leader Election')
             Effect.gen(function*() {
               const counter = yield* Ref.make(0)
               const lock = yield* LeaderLock
-              const holder = yield* Effect.fork(lock.withLock('pipeline', Effect.never))
-              yield* Effect.yieldNow()
+              const holder = yield* Effect.forkChild(lock.withLock('pipeline', Effect.never))
+              yield* Effect.yieldNow
               return { counter, holder }
             }),
         ),
@@ -123,9 +124,9 @@ Feature('Daemon Leader Election')
             () =>
               Effect.gen(function*() {
                 const observed = yield* Ref.make(0)
-                const acquired = yield* Effect.makeLatch(false)
+                const acquired = yield* Latch.make(false)
                 const lock = yield* LeaderLock
-                const holder = yield* Effect.fork(
+                const holder = yield* Effect.forkChild(
                   lock.withLock('pipeline', Effect.andThen(acquired.open, Effect.never)),
                 )
                 yield* acquired.await
@@ -186,8 +187,8 @@ Feature('Daemon Leader Election')
             Effect.gen(function*() {
               const counter = yield* Ref.make(0)
               const lock = yield* LeaderLock
-              const holder = yield* Effect.fork(lock.withLock('pipeline', Effect.never))
-              yield* Effect.yieldNow()
+              const holder = yield* Effect.forkChild(lock.withLock('pipeline', Effect.never))
+              yield* Effect.yieldNow
               return { counter, holder }
             }),
         ),

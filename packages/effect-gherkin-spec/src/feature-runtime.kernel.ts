@@ -1,7 +1,7 @@
 /// <reference types="vitest/importMeta" />
 import * as Effect from 'effect/Effect'
-import * as Either from 'effect/Either'
 import * as Layer from 'effect/Layer'
+import * as Result from 'effect/Result'
 import type * as Scope from 'effect/Scope'
 import type { GherkinEffect, ScopeIdentifiers, ScopeMap, ScopeServices } from './do-notation.kernel.js'
 import { expandOutline } from './outline-expand.kernel.js'
@@ -125,15 +125,15 @@ const makeOutlineCallableNoFresh = <R = never>(
     opts?: ScenarioOptions<never, never>,
   ): void {
     const expanded = expandOutline(name, examples)
-    if (Either.isLeft(expanded)) {
+    if (Result.isFailure(expanded)) {
       register(
         name,
-        Effect.fail(new StepError({ keyword: 'scenarioOutline', text: expanded.left, cause: void 0 })),
+        Effect.fail(StepError.make({ keyword: 'scenarioOutline', text: expanded.failure, cause: void 0 })),
         mode,
       )
       return
     }
-    for (const { title, row } of expanded.right) {
+    for (const { title, row } of expanded.success) {
       const pipeline = stepFactory(row)
       const scenarioEffect = buildScenarioNoFresh<R>(pipeline, opts ?? null, getBackground())
       register(title, scenarioEffect, mode)
@@ -183,15 +183,15 @@ const makeOutlineCallableWithFresh = <RShared, RFresh, RFreshReq>(
     opts?: ScenarioOptions<never, never>,
   ): void {
     const expanded = expandOutline(name, examples)
-    if (Either.isLeft(expanded)) {
+    if (Result.isFailure(expanded)) {
       register(
         name,
-        Effect.fail(new StepError({ keyword: 'scenarioOutline', text: expanded.left, cause: void 0 })),
+        Effect.fail(StepError.make({ keyword: 'scenarioOutline', text: expanded.failure, cause: void 0 })),
         mode,
       )
       return
     }
-    for (const { title, row } of expanded.right) {
+    for (const { title, row } of expanded.success) {
       const pipeline = stepFactory(row)
       const scenarioEffect = buildScenarioWithFresh<RShared, RFresh, RFreshReq>(
         pipeline,
@@ -275,7 +275,7 @@ export const resolveScenarioArgs = <R>(
   if (second === void 0) {
     return {
       pipeline: Effect.fail(
-        new StepError({ keyword: 'scenario', text: 'pipeline or options required', cause: void 0 }),
+        StepError.make({ keyword: 'scenario', text: 'pipeline or options required', cause: void 0 }),
       ),
       opts: null,
     }
@@ -286,7 +286,7 @@ export const resolveScenarioArgs = <R>(
   if (third === void 0) {
     return {
       pipeline: Effect.fail(
-        new StepError({ keyword: 'scenario', text: 'pipeline is required when options are provided', cause: void 0 }),
+        StepError.make({ keyword: 'scenario', text: 'pipeline is required when options are provided', cause: void 0 }),
       ),
       opts: null,
     }
@@ -433,9 +433,9 @@ if (import.meta.vitest !== void 0) {
       EffectModule.gen(function*() {
         const trace: string[] = []
         const background = EffectModule.succeed({ bgData: 1 }).pipe(
-          EffectModule.tap(() => {
+          EffectModule.tap(EffectModule.sync(() => {
             trace.push('bg')
-          }),
+          })),
         )
         const pipeline = EffectModule.sync(() => {
           trace.push('scenario')
@@ -446,7 +446,9 @@ if (import.meta.vitest !== void 0) {
 
     it.effect('Should_ApplyLayer_When_OptsHasLayer', () =>
       EffectModule.gen(function*() {
-        class BuildSvc3 extends Context.Tag('BuildSvc3')<BuildSvc3, string>() {}
+        class BuildSvc3 extends Context.Service<BuildSvc3, string>()(
+          '@systemfsoftware/effect-gherkin-spec/feature-runtime.kernel/BuildSvc3',
+        ) {}
         const layer = LayerModule.effect(BuildSvc3, EffectModule.succeed('ok'))
         const pipeline = EffectModule.void
         yield* buildScenarioNoFresh(pipeline, { layer }, null)
@@ -457,7 +459,9 @@ if (import.meta.vitest !== void 0) {
     it.effect('Should_ApplyFreshLayerPerCall_When_FeatureScenarioLayerProvided', () =>
       EffectModule.gen(function*() {
         let counter = 0
-        class BuildSvc4 extends Context.Tag('BuildSvc4')<BuildSvc4, number>() {}
+        class BuildSvc4 extends Context.Service<BuildSvc4, number>()(
+          '@systemfsoftware/effect-gherkin-spec/feature-runtime.kernel/BuildSvc4',
+        ) {}
         const freshLayer = LayerModule.effect(BuildSvc4, EffectModule.sync(() => ++counter))
         const pipeline = EffectModule.void
         yield* buildScenarioWithFresh(pipeline, null, null, freshLayer)
@@ -468,7 +472,9 @@ if (import.meta.vitest !== void 0) {
     it.effect('Should_RunBackgroundAndApplyFresh_When_BothProvided', () =>
       EffectModule.gen(function*() {
         let counter = 0
-        class BuildSvc5 extends Context.Tag('BuildSvc5')<BuildSvc5, number>() {}
+        class BuildSvc5 extends Context.Service<BuildSvc5, number>()(
+          '@systemfsoftware/effect-gherkin-spec/feature-runtime.kernel/BuildSvc5',
+        ) {}
         const freshLayer = LayerModule.effect(BuildSvc5, EffectModule.sync(() => ++counter))
         const background = EffectModule.void
         const pipeline = EffectModule.void

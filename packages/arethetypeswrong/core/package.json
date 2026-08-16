@@ -51,7 +51,6 @@
   },
   "dependencies": {
     "@andrewbranch/untar.js": "^1.0.3",
-    "@effect/platform": "catalog:",
     "@loaderkit/resolve": "^1.0.2",
     "cjs-module-lexer": "^1.2.3",
     "effect": "catalog:",

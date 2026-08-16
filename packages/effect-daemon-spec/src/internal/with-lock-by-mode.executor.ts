@@ -21,7 +21,7 @@ export type KeyedLockConfig = Exclude<LockConfig, { mode: 'none' }>
  */
 export type LockBinding =
   | { readonly kind: 'unlocked' }
-  | { readonly kind: 'locked'; readonly spec: KeyedLockConfig; readonly lock: LeaderLock['Type'] }
+  | { readonly kind: 'locked'; readonly spec: KeyedLockConfig; readonly lock: LeaderLock['Service'] }
 
 /**
  * Runs `self` under whichever lock discipline the binding asks for.

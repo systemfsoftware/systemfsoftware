@@ -12,11 +12,11 @@ import { Context, Effect, Ref } from 'effect'
  */
 const PENDING_CAP = 64
 
-const pending: Ref.Ref<string[]> = Ref.unsafeMake<string[]>([])
+const pending: Ref.Ref<string[]> = Ref.makeUnsafe<string[]>([])
 
-export class AsyncHookContextState extends Context.Tag(
+export class AsyncHookContextState extends Context.Service<AsyncHookContextState, AsyncHookContextState>()(
   '@systemfsoftware/omp-claude-compat/AsyncHookContextState',
-)<AsyncHookContextState, AsyncHookContextState>() {}
+) {}
 
 export function recordAsyncHookContext(context: string): void {
   const text = context.trim()

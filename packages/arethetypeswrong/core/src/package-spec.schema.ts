@@ -1,6 +1,6 @@
 import { Schema } from 'effect'
 
-export const PackageSpecVersionKindSchema = Schema.Literal('none', 'exact', 'range', 'tag')
+export const PackageSpecVersionKindSchema = Schema.Literals(['none', 'exact', 'range', 'tag'])
 export type PackageSpecVersionKind = Schema.Schema.Type<typeof PackageSpecVersionKindSchema>
 
 export const ParsedPackageSpecSchema = Schema.Struct({

@@ -1,32 +1,31 @@
-import type * as Command from '@effect/cli/Command'
 import { PluginKind } from '@systemfsoftware/stryker-js-plugin-api/plugin'
-import { Option } from 'effect'
+import type * as Command from 'effect/unstable/cli/Command'
 
 import { strykerPlugins } from '@systemfsoftware/stryker-js-mutation-report/stryker-plugins'
 
 // =============================================================================
 // U11 — the `--llms` command manifest (R13)
 //
-// `@effect/cli` has no manifest serializer, so the emitter is hand-built —
-// but never from a list maintained alongside the CLI. Every field is read by
-// walking the command's own descriptors: the instruction trees `Command.make`
-// compiled from the option/arg records, i.e. the same values the parser
-// matches against. An option's `Single` node carries its name, aliases,
-// primitive type (kind, and the alternatives for a choice) and description; a
-// `WithDefault` wrapper marks the option optional and carries its default.
-// The framework keeps this tree internal (`Options.Options`, `Args.Args` and
-// `Descriptor.Command` are opaque public types), so the walk narrows the
-// runtime values with `_tag`-discriminated type predicates — never casts.
+// The v4 CLI has no manifest serializer, so the emitter is hand-built — but
+// never from a list maintained alongside the CLI. Every field is read by
+// walking the command's own compiled structures: the config tree
+// (`Command.make`'s processed flag/argument records) and the public
+// `name`/`description`/`subcommands` fields. A `Single` param node carries
+// its name, aliases, primitive type (kind, and the alternatives of a choice)
+// and description; an `Optional` wrapper marks the parameter optional. The
+// framework keeps the compiled tree internal (`Command.Config` is opaque at
+// the type level), so the walk narrows the runtime values with
+// `_tag`-discriminated case switches — never casts.
 //
 // The consequence is the anti-drift property: a newly added option appears in
 // the manifest with no change to any code here, because the manifest is
-// derived from the descriptors, not from a parallel list. The drift guard
+// derived from the compiled config, not from a parallel list. The drift guard
 // test proves it by constructing a command carrying an extra option and
 // asserting the emitter picks it up.
 //
-// The one value the descriptors do not carry — the allowed reporter names —
-// comes from the U9 reporter registry (pruned to the five survivors), never
-// from a literal.
+// The one value the compiled tree does not carry — the allowed reporter
+// names — comes from the U9 reporter registry (pruned to the five
+// survivors), never from a literal.
 // =============================================================================
 
 /** The manifest's schema version, matching the U4 envelope convention. */
@@ -66,8 +65,8 @@ export interface LLMSManifest {
 }
 
 // -----------------------------------------------------------------------------
-// Runtime narrowing: the descriptor shapes are framework-internal, so the
-// walk reads them through `_tag`-discriminated type predicates.
+// Runtime narrowing: the compiled config shapes are framework-internal, so the
+// walk reads them through `_tag`-discriminated case switches.
 // -----------------------------------------------------------------------------
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -93,72 +92,62 @@ function stringArrayField(node: Record<string, unknown>, key: string): readonly 
   return strings
 }
 
-// -----------------------------------------------------------------------------
-// HelpDoc → text. Stored option descriptions are `Paragraph(Text(value))`;
-// the other tags are handled so a richer description is never dropped.
-// -----------------------------------------------------------------------------
-
-function spanToText(span: unknown): string {
-  if (typeof span === 'string') {
-    return span
-  }
-  if (!isObject(span)) {
-    return ''
-  }
-  const tag = span['_tag']
-  if (tag === 'Concat') {
-    return `${spanToText(span['left'])}${spanToText(span['right'])}`
-  }
-  const value = span['value']
-  return typeof value === 'string' ? value : ''
+/** The compiled shapes discriminate on `_tag`; read it once, off the record. */
+function tagOf(node: Record<string, unknown>): unknown {
+  return node['_tag']
 }
 
-function helpDocToText(doc: unknown): string {
-  if (!isObject(doc)) {
-    return ''
+function walkParam(
+  param: unknown,
+  isOptional: boolean,
+  out: { readonly flags: LLMSManifestOption[]; readonly args: LLMSManifestArg[] },
+): void {
+  if (!isObject(param)) {
+    return
   }
-  const tag = doc['_tag']
-  switch (tag) {
-    case 'Empty':
-      return ''
-    case 'Paragraph':
-    case 'Header':
-    case 'Error':
-      return spanToText(doc['value'])
-    case 'Sequence':
-      return [helpDocToText(doc['left']), helpDocToText(doc['right'])].filter(Boolean).join('\n\n')
-    case 'Enumeration':
-      return Array.isArray(doc['elements'])
-        ? doc['elements'].map((element) => helpDocToText(element)).join('\n')
-        : ''
-    case 'CodeBlock':
-      return typeof doc['value'] === 'string' ? doc['value'] : ''
-    case 'DescriptionList':
-      return Array.isArray(doc['definitions'])
-        ? doc['definitions']
-          .map((row) => (Array.isArray(row) ? spanToText(row[0]) : ''))
-          .filter(Boolean)
-          .join(', ')
-        : ''
+  switch (tagOf(param)) {
+    case 'Single':
+      describeSingle(param, isOptional, out)
+      return
+    case 'Map':
+    case 'Transform':
+      walkParam(param['param'], isOptional, out)
+      return
+    case 'Optional':
+      walkParam(param['param'], true, out)
+      return
+    case 'Variadic':
+      walkParam(param['param'], isOptional, out)
+      return
     default:
-      return ''
+      // A param tag this emitter does not know cannot describe a declared
+      // option; the drift guard test fails the day one appears.
+      return
   }
 }
 
 // -----------------------------------------------------------------------------
-// Primitive kinds and choice alternatives.
+// Primitive kinds and choice alternatives. The compiled primitives carry
+// canonical tag names; the map below is the manifest's stable, human-readable
+// kind. The `required` flag must mirror the help renderer's Boolean
+// carve-out (a bare boolean flag has an implicit `false` default, so it is
+// never "required" whatever its wrapper says).
 // -----------------------------------------------------------------------------
 
 const PRIMITIVE_KIND: Readonly<Record<string, string>> = {
-  Bool: 'boolean',
+  Boolean: 'boolean',
   Choice: 'choice',
-  DateTime: 'date',
+  Date: 'date',
+  FileParse: 'file',
+  FileSchema: 'file',
+  FileText: 'file',
   Float: 'float',
   Integer: 'integer',
+  KeyValuePair: 'key=value',
+  None: 'none',
   Path: 'path',
   Redacted: 'redacted',
-  Secret: 'secret',
-  Text: 'text',
+  String: 'text',
 }
 
 function kindOf(primitive: Record<string, unknown>): string {
@@ -167,14 +156,14 @@ function kindOf(primitive: Record<string, unknown>): string {
 }
 
 function choiceValues(primitive: Record<string, unknown>): readonly string[] | undefined {
-  const alternatives = primitive['alternatives']
-  if (!Array.isArray(alternatives)) {
+  const keys = primitive['choiceKeys']
+  if (!Array.isArray(keys)) {
     return undefined
   }
   const values: string[] = []
-  for (const pair of alternatives) {
-    if (Array.isArray(pair) && typeof pair[0] === 'string') {
-      values.push(pair[0])
+  for (const key of keys) {
+    if (typeof key === 'string') {
+      values.push(key)
     }
   }
   return values
@@ -185,196 +174,168 @@ const REPORTER_NAMES: readonly string[] = strykerPlugins
   .filter((plugin) => plugin.kind === PluginKind.Reporter)
   .map((plugin) => plugin.name)
 
-// -----------------------------------------------------------------------------
-// The option walk. Instruction tags: `Single` (a declared option),
-// `Map`/`Both`/`OrElse` (composition), `Variadic`/`KeyValueMap` (repetition),
-// `WithDefault` (optional, with its fallback), `Empty`. The walk carries a
-// context through composition nodes so each option reports its own
-// required/default status; `WithDefault` is what `Options.optional` and
-// `Options.boolean` compile to.
-// -----------------------------------------------------------------------------
-
-interface WalkContext {
-  readonly hasDefault: boolean
-  readonly defaultValue: unknown
-}
-
-function normalizeDefault(fallback: unknown): unknown {
-  if (Option.isOption(fallback)) {
-    return Option.match(fallback, {
-      onNone: () => undefined,
-      onSome: (value) => value,
-    })
+/**
+ * v4 option descriptions are stored as `Option.some(string)` on the compiled
+ * `Single`; the walker unwraps the option.
+ */
+function descriptionOf(single: Record<string, unknown>): string {
+  const description = single['description']
+  if (!isObject(description)) {
+    return ''
   }
-  return fallback
+  switch (tagOf(description)) {
+    case 'Some': {
+      const value = description['value']
+      return typeof value === 'string' ? value : ''
+    }
+    default:
+      return ''
+  }
 }
 
-function describeOptionSingle(node: Record<string, unknown>, ctx: WalkContext): LLMSManifestOption {
-  const name = stringField(node, 'name') ?? ''
-  const primitive = isObject(node['primitiveType']) ? node['primitiveType'] : {}
+function describeSingle(
+  single: Record<string, unknown>,
+  isOptional: boolean,
+  out: { readonly flags: LLMSManifestOption[]; readonly args: LLMSManifestArg[] },
+): void {
+  const name = stringField(single, 'name') ?? ''
+  const primitive = isObject(single['primitiveType']) ? single['primitiveType'] : {}
   const kind = kindOf(primitive)
   // `reporters` is a plain text option, so its allowed value set lives
-  // nowhere in its descriptor — it is the registry, read at module load so
+  // nowhere in its compiled node — it is the registry, read at module load so
   // the manifest and the plugin loader cannot drift.
   const choices = name === 'reporters'
     ? REPORTER_NAMES
     : kind === 'choice'
     ? choiceValues(primitive)
     : undefined
-  return {
+  const description = descriptionOf(single)
+  const required = kind !== 'boolean' && !isOptional
+  const described: LLMSManifestOption = {
     name,
-    aliases: stringArrayField(node, 'aliases'),
+    aliases: stringArrayField(single, 'aliases'),
     kind,
-    required: !ctx.hasDefault,
-    ...(ctx.hasDefault && ctx.defaultValue !== undefined ? { default: ctx.defaultValue } : {}),
+    required,
     ...(choices !== undefined ? { choices } : {}),
-    description: helpDocToText(node['description']),
+    description,
   }
-}
-
-function walkOptions(instruction: unknown, ctx: WalkContext, out: LLMSManifestOption[]): void {
-  if (!isObject(instruction)) {
+  const isArgument = single['kind'] === 'argument'
+  if (isArgument) {
+    out.args.push({
+      name,
+      kind,
+      required,
+      description,
+    })
     return
   }
-  const tag = instruction['_tag']
-  switch (tag) {
-    case 'Empty':
-      return
-    case 'Single':
-      out.push(describeOptionSingle(instruction, ctx))
-      return
-    case 'Map':
-      walkOptions(instruction['options'], ctx, out)
-      return
-    case 'Both':
-    case 'OrElse':
-      walkOptions(instruction['left'], ctx, out)
-      walkOptions(instruction['right'], ctx, out)
-      return
-    case 'Variadic':
-    case 'KeyValueMap':
-      walkOptions(instruction['argumentOption'], ctx, out)
-      return
-    case 'WithDefault':
-      walkOptions(instruction['options'], {
-        hasDefault: true,
-        defaultValue: normalizeDefault(instruction['fallback']),
-      }, out)
-      return
-    case 'WithFallback':
-      walkOptions(instruction['options'], { hasDefault: true, defaultValue: undefined }, out)
-      return
-    default:
-      // An instruction tag this emitter does not know cannot describe a
-      // declared option; the drift guard test fails the day one appears.
-      return
-  }
+  out.flags.push(described)
 }
 
 // -----------------------------------------------------------------------------
-// The positional-arg walk. Same tree shape as options, with the args' field
-// names and no aliases.
+// The config tree walk: one `Param` node per declared flag/argument. The tree
+// preserves the command's declaration shape, so walking it in object-key order
+// keeps the manifest's option/arg order aligned with the declaration.
 // -----------------------------------------------------------------------------
 
-function describeArgSingle(node: Record<string, unknown>, hasDefault: boolean): LLMSManifestArg {
-  const primitive = isObject(node['primitiveType']) ? node['primitiveType'] : {}
-  return {
-    name: stringField(node, 'name') ?? '',
-    kind: kindOf(primitive),
-    required: !hasDefault,
-    description: helpDocToText(node['description']),
-  }
-}
-
-function walkArgs(instruction: unknown, hasDefault: boolean, out: LLMSManifestArg[]): void {
-  if (!isObject(instruction)) {
+function walkConfigNode(
+  node: unknown,
+  orderedParams: readonly unknown[],
+  out: { readonly flags: LLMSManifestOption[]; readonly args: LLMSManifestArg[] },
+): void {
+  if (!isObject(node)) {
     return
   }
-  const tag = instruction['_tag']
-  switch (tag) {
-    case 'Empty':
+  switch (tagOf(node)) {
+    case 'Param': {
+      const index = node['index']
+      const param = typeof index === 'number' ? orderedParams[index] : undefined
+      if (param !== undefined) {
+        walkParam(param, false, out)
+      }
       return
-    case 'Single':
-      out.push(describeArgSingle(instruction, hasDefault))
+    }
+    case 'Array':
+      if (Array.isArray(node['children'])) {
+        for (const child of node['children']) {
+          walkConfigNode(child, orderedParams, out)
+        }
+      }
       return
-    case 'Map':
-      walkArgs(instruction['args'], hasDefault, out)
-      return
-    case 'Both':
-      walkArgs(instruction['left'], hasDefault, out)
-      walkArgs(instruction['right'], hasDefault, out)
-      return
-    case 'Variadic':
-      walkArgs(instruction['argumentOption'], hasDefault, out)
-      return
-    case 'WithDefault':
-      walkArgs(instruction['args'], true, out)
-      return
-    case 'WithFallbackConfig':
-      walkArgs(instruction['args'], true, out)
+    case 'Nested':
+      if (isObject(node['tree'])) {
+        walkConfigTree(node['tree'], orderedParams, out)
+      }
       return
     default:
       return
   }
 }
 
+function walkConfigTree(
+  tree: Record<string, unknown>,
+  orderedParams: readonly unknown[],
+  out: { readonly flags: LLMSManifestOption[]; readonly args: LLMSManifestArg[] },
+): void {
+  for (const key of Object.keys(tree)) {
+    void key
+    walkConfigNode(tree[key], orderedParams, out)
+  }
+}
+
 // -----------------------------------------------------------------------------
-// The command walk. Descriptor tags: `Standard` (a declared command),
-// `Map` (transformed, recurse), `Subcommands` (parent plus children).
+// The command walk: name/description from the public fields, flags/args from
+// the compiled config tree, and subcommands from the grouped `subcommands`
+// list (each group entry is a declared child command).
 // -----------------------------------------------------------------------------
 
 function describeCommandNode(node: unknown): LLMSManifestCommand | undefined {
   if (!isObject(node)) {
     return undefined
   }
-  const tag = node['_tag']
-  switch (tag) {
-    case 'Standard': {
-      const options: LLMSManifestOption[] = []
-      walkOptions(node['options'], { hasDefault: false, defaultValue: undefined }, options)
-      const args: LLMSManifestArg[] = []
-      walkArgs(node['args'], false, args)
-      return {
-        name: stringField(node, 'name') ?? '',
-        description: helpDocToText(node['description']),
-        options,
-        args,
-        subcommands: [],
+  const out: { readonly flags: LLMSManifestOption[]; readonly args: LLMSManifestArg[] } = {
+    flags: [],
+    args: [],
+  }
+  // The compiled config is not part of the public `Command` type, but it is
+  // the object the parser itself reads (`config.tree` + `config.orderedParams`
+  // are assigned by the command constructor).
+  const config = node['config']
+  if (isObject(config) && isObject(config['tree'])) {
+    const orderedParams = Array.isArray(config['orderedParams']) ? config['orderedParams'] : []
+    walkConfigTree(config['tree'], orderedParams, out)
+  }
+  const subcommands: LLMSManifestCommand[] = []
+  const grouped = node['subcommands']
+  if (Array.isArray(grouped)) {
+    for (const group of grouped) {
+      if (!isObject(group) || !Array.isArray(group['commands'])) {
+        continue
       }
-    }
-    case 'Map':
-      return describeCommandNode(node['command'])
-    case 'Subcommands': {
-      const parent = describeCommandNode(node['parent'])
-      if (parent === undefined) {
-        return undefined
-      }
-      const subcommands: LLMSManifestCommand[] = []
-      if (Array.isArray(node['children'])) {
-        for (const child of node['children']) {
-          const described = describeCommandNode(child)
-          if (described !== undefined) {
-            subcommands.push(described)
-          }
+      for (const child of group['commands']) {
+        const described = describeCommandNode(child)
+        if (described !== undefined) {
+          subcommands.push(described)
         }
       }
-      return { ...parent, subcommands }
     }
-    default:
-      return undefined
+  }
+  return {
+    name: stringField(node, 'name') ?? '',
+    description: typeof node['description'] === 'string' ? node['description'] : '',
+    options: out.flags,
+    args: out.args,
+    subcommands,
   }
 }
 
 /**
- * Builds the manifest document for a command, walking its descriptor (the
- * same instruction trees the parser matches against). `version` is the tool
- * version, passed in so this module stays free of package state.
+ * Builds the manifest document for a command, walking its compiled form (the
+ * same structure the parser matches against). `version` is the tool version,
+ * passed in so this module stays free of package state.
  */
-export function buildLLMSManifest<Name extends string, R, E, A>(
-  command: Command.Command<Name, R, E, A>,
-  version: string,
-): LLMSManifest {
-  const root = describeCommandNode(command.descriptor) ?? {
+export function buildLLMSManifest(command: Command.Command.Any, version: string): LLMSManifest {
+  const root = describeCommandNode(command) ?? {
     name: '',
     description: '',
     options: [],
@@ -390,9 +351,6 @@ export function buildLLMSManifest<Name extends string, R, E, A>(
 }
 
 /** The manifest as one JSON document, ready for stdout — the U4 convention. */
-export function emitLLMSManifest<Name extends string, R, E, A>(
-  command: Command.Command<Name, R, E, A>,
-  version: string,
-): string {
+export function emitLLMSManifest(command: Command.Command.Any, version: string): string {
   return JSON.stringify(buildLLMSManifest(command, version))
 }

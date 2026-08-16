@@ -1,20 +1,18 @@
-import { JSONSchema, Schema as S } from 'effect'
+import { Effect, Schema as S } from 'effect'
 
 export const Options = S.Struct({
-  allow: S.optionalWith(
-    S.Array(S.String),
-    { default: () => [] },
+  allow: S.Array(S.String).pipe(
+    S.withDecodingDefaultType(Effect.succeed([])),
   ),
-  expected: S.optionalWith(
-    S.String,
-    { default: () => 'HashSet from effect (HashSet.empty() or HashSet.fromIterable())' },
+  expected: S.String.pipe(
+    S.withDecodingDefaultType(Effect.succeed('HashSet from effect (HashSet.empty() or HashSet.fromIterable())')),
   ),
-  fix: S.optionalWith(
-    S.String,
-    {
-      default: () =>
+  fix: S.String.pipe(
+    S.withDecodingDefaultType(
+      Effect.succeed(
         'Replace with HashSet.empty() for empty sets, or HashSet.fromIterable(iterable) for sets with initial data',
-    },
+      ),
+    ),
   ),
 })
 
@@ -28,7 +26,7 @@ export const meta = {
   docs: {
     description: 'When Effect is imported, ban native Set (new Set). Use HashSet from effect instead.',
   },
-  schema: [JSONSchema.make(Options)],
+  schema: [S.toJsonSchemaDocument(Options).schema],
   messages: {
     forbiddenSet:
       '{{actual}} is forbidden when Effect is imported. Expected: {{expected}}. Actual: {{actual}}. Fix: {{fix}}.',

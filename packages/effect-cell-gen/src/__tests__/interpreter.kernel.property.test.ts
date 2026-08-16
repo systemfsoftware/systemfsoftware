@@ -2,7 +2,7 @@ import { it } from '@effect/vitest'
 import { Gen } from '@systemfsoftware/effect-cell-gen'
 import { Cell } from '@systemfsoftware/effect-cell-types'
 import * as Effect from 'effect/Effect'
-import * as Either from 'effect/Either'
+import * as Result from 'effect/Result'
 
 /**
  * The order the generated description declares, read off the value itself. The trace the
@@ -23,10 +23,10 @@ const sameOrder = (a: readonly string[], b: readonly string[]): boolean =>
  * interpreter that interleaved layers by phase position, skipped a phase, ran one twice,
  * or reordered within a layer leaves a trace that disagrees with the declared order.
  *
- * A draw that placed a `Left` at a fatal-convention phase aborts the run before every
+ * A draw that placed a `Failure` at a fatal-convention phase aborts the run before every
  * phase executes, so its trace is an honest prefix of the declared order, not the whole
  * order; the order claim does not apply to that draw. Every other draw — including one
- * carrying a pass-through `Left` — runs every phase and must match the declared order.
+ * carrying a pass-through `Failure` — runs every phase and must match the declared order.
  */
 it.effect.prop(
   '∀d_Phases_≡Declared',
@@ -46,7 +46,7 @@ it.effect.prop(
  * The description's response is the last layer's. Each layer's write was drawn its own
  * response, so an interpreter that returned the first layer's response, or ran the layers
  * out of declared order, disagrees with the last drawn response whenever the draws differ.
- * A fatal-convention `Left` produces no response at all, so that draw is out of scope.
+ * A fatal-convention `Failure` produces no response at all, so that draw is out of scope.
  */
 it.effect.prop(
   '∀d_Response_=LastWrite',
@@ -62,14 +62,14 @@ it.effect.prop(
 )
 
 /**
- * The fatal convention's routing contract: a drawn `Left` at such a phase fails the whole
+ * The fatal convention's routing contract: a drawn `Failure` at such a phase fails the whole
  * apply — the payload surfaces on the derived error channel — and produces no write
  * response. Only the layers before the failing one may have completed a write: the
  * failing layer's own write, and every later layer's, must never have run. An interpreter
- * that treated the fatal `Left` as a decision and kept writing fails every clause.
+ * that treated the fatal `Failure` as a decision and kept writing fails every clause.
  */
 it.effect.prop(
-  '∀d_LeftEitherFail_⊥Write',
+  '∀d_FailureEitherFail_⊥Write',
   [Gen.description],
   ([drawn]) =>
     Effect.gen(function*() {
@@ -77,25 +77,25 @@ it.effect.prop(
       if (failure === undefined || failure.convention !== 'either-fail') {
         return true
       }
-      const outcome = yield* Effect.either(Cell.apply(drawn.description, drawn.command))
+      const outcome = yield* Effect.result(Cell.apply(drawn.description, drawn.command))
       return (
-        Either.isLeft(outcome) &&
-        outcome.left === failure.error &&
+        Result.isFailure(outcome) &&
+        outcome.failure === failure.error &&
         drawn.writeObserved.length === failure.layerIndex
       )
     }),
 )
 
 /**
- * The pass-through convention's routing contract: a drawn `Left` there is an outcome, not
- * a fault — the successor phase receives the whole `Either` (recorded as the successor's
- * observed input), the write still runs and returns its drawn response, and the `Left`
- * branch's payload travels on to the write (recorded as the write's received input). An
- * interpreter that treated the outcome `Left` as fatal, or unwrapped it before the
- * successor, fails one of the clauses.
+ * The pass-through convention's routing contract: a drawn `Failure` there is an outcome,
+ * not a fault — the successor phase receives the whole `Result` (recorded as the
+ * successor's observed input), the write still runs and returns its drawn response, and
+ * the `Failure` branch's payload travels on to the write (recorded as the write's
+ * received input). An interpreter that treated the outcome `Failure` as fatal, or
+ * unwrapped it before the successor, fails one of the clauses.
  */
 it.effect.prop(
-  '∀d_LeftEitherPass_=Payload',
+  '∀d_FailureEitherPass_=Payload',
   [Gen.description],
   ([drawn]) =>
     Effect.gen(function*() {
@@ -103,16 +103,16 @@ it.effect.prop(
       if (failure === undefined || failure.convention !== 'either-pass') {
         return true
       }
-      const outcome = yield* Effect.either(Cell.apply(drawn.description, drawn.command))
-      if (!Either.isRight(outcome)) {
+      const outcome = yield* Effect.result(Cell.apply(drawn.description, drawn.command))
+      if (!Result.isSuccess(outcome)) {
         return false
       }
       const encodeObserved = drawn.encodeObserved[failure.layerIndex]
       return (
-        outcome.right === drawn.lastResponse &&
+        outcome.success === drawn.lastResponse &&
         encodeObserved !== undefined &&
-        Either.isLeft(encodeObserved) &&
-        encodeObserved.left === failure.error &&
+        Result.isFailure(encodeObserved) &&
+        encodeObserved.failure === failure.error &&
         drawn.writeObserved[failure.layerIndex] === failure.error
       )
     }),

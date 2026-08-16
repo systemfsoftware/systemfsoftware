@@ -17,7 +17,7 @@ export interface CommonOpts<L extends LockConfig> {
 
 export type PollOpts<A, E, R, L extends LockConfig> =
   & CommonOpts<L>
-  & { readonly interval: Duration.DurationInput }
+  & { readonly interval: Duration.Input }
   & (
     | { readonly prereq?: undefined; readonly work: Effect.Effect<A, E, R> }
     | {
@@ -29,7 +29,7 @@ export type PollOpts<A, E, R, L extends LockConfig> =
 export interface TickPolicyHooks {
   readonly spanAttributes?: Effect.Effect<Record<string, string | number | boolean>>
   readonly innerRetry?: Schedule.Schedule<unknown>
-  readonly trackDuration?: Metric.Metric.Histogram<Duration.Duration>
+  readonly trackDuration?: Metric.Histogram<Duration.Duration>
 }
 
 export interface ReporterPolicyHooks {
@@ -40,7 +40,7 @@ export interface ReporterPolicyHooks {
 export type PollLoop<E, R> = {
   readonly _tag: 'Poll'
   readonly gate: Effect.Effect<Option.Option<Effect.Effect<void, E, R>>, E, R>
-  readonly interval: Duration.DurationInput
+  readonly interval: Duration.Input
 }
 
 export type StreamLoop<E, R> = {
@@ -87,13 +87,13 @@ export type Child<E, R> = Worker<E, R> | Supervisor<E, R>
 export interface SupervisionPolicy {
   readonly intensity: Intensity
   readonly backoff: Schedule.Schedule<Duration.Duration>
-  readonly cooldown: Duration.DurationInput
+  readonly cooldown: Duration.Input
 }
 
 export interface SupervisionConfig {
-  readonly backoffBase: Duration.DurationInput
+  readonly backoffBase: Duration.Input
   readonly intensity: Intensity
-  readonly cooldown: Duration.DurationInput
+  readonly cooldown: Duration.Input
 }
 
 export interface SupervisorOpts<E, R, L extends LockConfig> {

@@ -1,6 +1,6 @@
-import * as NodeCommandExecutor from '@effect/platform-node/NodeCommandExecutor'
-import * as NodeFileSystem from '@effect/platform-node/NodeFileSystem'
-import * as PathModule from '@effect/platform/Path'
+import * as NodeChildProcessSpawner from '@effect/platform-node-shared/NodeChildProcessSpawner'
+import * as NodeFileSystem from '@effect/platform-node-shared/NodeFileSystem'
+import * as NodePath from '@effect/platform-node-shared/NodePath'
 import { TomlLoaderLive } from '@systemfsoftware/omp-utils'
 import { Effect, Layer, ManagedRuntime, Scope } from 'effect'
 import { CollectSettingsGapsExecutorDeps } from './internal/collect-settings-gaps.executor.js'
@@ -20,26 +20,26 @@ import { SuperviseForkExecutorDeps } from './internal/supervise-fork.executor.js
 
 /** Released when the runtime is disposed, which OMP triggers on SIGINT/SIGTERM. */
 export const HookScopeLive = Layer.mergeAll(
-  Layer.scoped(Scope.Scope, Effect.scope),
-  Layer.scoped(LoadSettingsExecutorDeps, Effect.scope),
-  Layer.scoped(CollectSettingsGapsExecutorDeps, Effect.scope),
-  Layer.scoped(RunHookScriptExecutorDeps, Effect.scope),
-  Layer.scoped(RunHooksForEventExecutorDeps, Effect.scope),
-  Layer.scoped(RunPreToolUseHooksExecutorDeps, Effect.scope),
-  Layer.scoped(RunPostToolUseHooksExecutorDeps, Effect.scope),
-  Layer.scoped(RunPostToolUseFailureHooksExecutorDeps, Effect.scope),
-  Layer.scoped(RunToolResultHooksExecutorDeps, Effect.scope),
-  Layer.scoped(RunPreCompactHooksExecutorDeps, Effect.scope),
-  Layer.scoped(RunUserPromptSubmitHooksExecutorDeps, Effect.scope),
-  Layer.scoped(RunSessionStartHooksExecutorDeps, Effect.scope),
-  Layer.scoped(RunSessionSwitchHooksExecutorDeps, Effect.scope),
-  Layer.scoped(RunLifecycleHooksExecutorDeps, Effect.scope),
-  Layer.scoped(SuperviseForkExecutorDeps, Effect.scope),
+  Layer.effect(Scope.Scope, Effect.scope),
+  Layer.effect(LoadSettingsExecutorDeps, Effect.scope),
+  Layer.effect(CollectSettingsGapsExecutorDeps, Effect.scope),
+  Layer.effect(RunHookScriptExecutorDeps, Effect.scope),
+  Layer.effect(RunHooksForEventExecutorDeps, Effect.scope),
+  Layer.effect(RunPreToolUseHooksExecutorDeps, Effect.scope),
+  Layer.effect(RunPostToolUseHooksExecutorDeps, Effect.scope),
+  Layer.effect(RunPostToolUseFailureHooksExecutorDeps, Effect.scope),
+  Layer.effect(RunToolResultHooksExecutorDeps, Effect.scope),
+  Layer.effect(RunPreCompactHooksExecutorDeps, Effect.scope),
+  Layer.effect(RunUserPromptSubmitHooksExecutorDeps, Effect.scope),
+  Layer.effect(RunSessionStartHooksExecutorDeps, Effect.scope),
+  Layer.effect(RunSessionSwitchHooksExecutorDeps, Effect.scope),
+  Layer.effect(RunLifecycleHooksExecutorDeps, Effect.scope),
+  Layer.effect(SuperviseForkExecutorDeps, Effect.scope),
 )
 
-const nodeLayer = NodeCommandExecutor.layer.pipe(
+const nodeLayer = NodeChildProcessSpawner.layer.pipe(
   Layer.provideMerge(NodeFileSystem.layer),
-  Layer.provideMerge(PathModule.layer),
+  Layer.provideMerge(NodePath.layer),
 )
 
 const appLayer = HookScopeLive.pipe(
@@ -47,7 +47,7 @@ const appLayer = HookScopeLive.pipe(
   Layer.provideMerge(nodeLayer),
 )
 
-export type HookRuntimeContext = Layer.Layer.Success<typeof appLayer>
+export type HookRuntimeContext = Layer.Success<typeof appLayer>
 
 const runtime = ManagedRuntime.make(appLayer)
 

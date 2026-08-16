@@ -174,11 +174,11 @@ import { custom } from './supervision-custom.kernel.js'
 import { leader as leaderKernel } from './supervision-leader.kernel.js'
 import { task as taskKernel } from './supervision-task.kernel.js'
 import { worker as supervisionKernel } from './supervision-worker.kernel.js'
-export const leader = (cap: Duration.DurationInput): Effect.Effect<SupervisionPolicy> =>
+export const leader = (cap: Duration.Input): Effect.Effect<SupervisionPolicy> =>
   Effect.flatMap(LeaderConfig, (config) => leaderKernel(config, cap))
-export const task = (budget: Duration.DurationInput): Effect.Effect<SupervisionPolicy> =>
+export const task = (budget: Duration.Input): Effect.Effect<SupervisionPolicy> =>
   Effect.flatMap(TaskConfig, (config) => taskKernel(config, budget))
-export const supervision = (cap: Duration.DurationInput): Effect.Effect<SupervisionPolicy> =>
+export const supervision = (cap: Duration.Input): Effect.Effect<SupervisionPolicy> =>
   Effect.flatMap(WorkerConfig, (config) => supervisionKernel(config, cap))
 export { LeaderConfig } from './internal/supervision-leader.state.js'
 export { TaskConfig } from './internal/supervision-task.state.js'

@@ -1,6 +1,7 @@
 import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Cause, Duration, Effect, Layer, Option, Ref, Schedule, Schema as S, TestClock } from 'effect'
+import { Cause, Duration, Effect, Layer, Option, Ref, Schedule, Schema as S } from 'effect'
+import { TestClock } from 'effect/testing'
 import { expect } from 'vitest'
 import { BoundedIntensity } from '../src/mod.js'
 import { run } from '../src/mod.js'
@@ -34,7 +35,7 @@ Feature('Per-supervisor reporter hooks')
               work: Effect.gen(function*() {
                 const shouldFail = yield* Ref.getAndSet(failOnce, false)
                 if (shouldFail) {
-                  return yield* new SimulatedFailure()
+                  return yield* SimulatedFailure.make()
                 }
                 return void 0
               }),
@@ -46,8 +47,10 @@ Feature('Per-supervisor reporter hooks')
               name: 'hook-restart-sup',
               children: [child],
               supervision: Supervision.custom({
-                intensity: new BoundedIntensity({ restarts: 5, window: Duration.seconds(60) }),
-                backoff: Schedule.exponential(Duration.millis(5)).pipe(Schedule.upTo(Duration.millis(50))),
+                intensity: BoundedIntensity.make({ restarts: 5, window: Duration.seconds(60) }),
+                backoff: Schedule.exponential(Duration.millis(5)).pipe(
+                  Schedule.upTo({ duration: Duration.millis(50) }),
+                ),
                 cooldown: Duration.minutes(30),
               }),
               reporter: {
@@ -76,7 +79,7 @@ Feature('Per-supervisor reporter hooks')
         ),
         And('the supervisor-local restart hook recorded the same restart cause')((s) =>
           Effect.sync(() => {
-            const gOpt = Option.fromNullable(
+            const gOpt = Option.fromNullishOr(
               s.result.globalRestarts.find((r) => r.name === 'hook-restart-sup'),
             )
             expect(Option.isSome(gOpt)).toBe(true)
@@ -102,7 +105,7 @@ Feature('Per-supervisor reporter hooks')
           Effect.gen(function*() {
             const child = Daemon.poll({
               name: 'hook-B',
-              work: new SimulatedFailure(),
+              work: SimulatedFailure.make(),
               interval: Duration.millis(10),
               tick: { tickTimeout: Duration.seconds(90) },
               lock: { mode: 'none' },
@@ -111,8 +114,10 @@ Feature('Per-supervisor reporter hooks')
               name: 'hook-exhaust-sup',
               children: [child],
               supervision: Supervision.custom({
-                intensity: new BoundedIntensity({ restarts: 0, window: Duration.seconds(60) }),
-                backoff: Schedule.exponential(Duration.millis(5)).pipe(Schedule.upTo(Duration.millis(50))),
+                intensity: BoundedIntensity.make({ restarts: 0, window: Duration.seconds(60) }),
+                backoff: Schedule.exponential(Duration.millis(5)).pipe(
+                  Schedule.upTo({ duration: Duration.millis(50) }),
+                ),
                 cooldown: Duration.hours(1),
               }),
               reporter: {
@@ -141,7 +146,7 @@ Feature('Per-supervisor reporter hooks')
         ),
         And('the supervisor-local exhaustion hook recorded the same exhaustion cause')((s) =>
           Effect.sync(() => {
-            const gOpt = Option.fromNullable(
+            const gOpt = Option.fromNullishOr(
               s.result.globalExhaustions.find((e) => e.name === 'hook-exhaust-sup'),
             )
             expect(Option.isSome(gOpt)).toBe(true)

@@ -1,6 +1,7 @@
 import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Duration, Effect, Ref, Schedule, Schema as S, TestClock } from 'effect'
+import { Duration, Effect, Ref, Schedule, Schema as S } from 'effect'
+import { TestClock } from 'effect/testing'
 import { expect } from 'vitest'
 import { BoundedIntensity } from '../src/mod.js'
 import { run } from '../src/mod.js'
@@ -28,7 +29,7 @@ Feature('OneForAll Strategy')
                 yield* Ref.update(s.counters.a, (n) => n + 1)
                 const shouldFail = yield* Ref.get(s.failOnce)
                 if (shouldFail) {
-                  return yield* new SimulatedFailure()
+                  return yield* SimulatedFailure.make()
                 }
                 return void 0
               }),
@@ -47,7 +48,7 @@ Feature('OneForAll Strategy')
               name: 'oneForAll-restartAll',
               children: [childA, childB],
               supervision: Supervision.custom({
-                intensity: new BoundedIntensity({ restarts: 5, window: Duration.seconds(60) }),
+                intensity: BoundedIntensity.make({ restarts: 5, window: Duration.seconds(60) }),
                 backoff: Schedule.exponential(Duration.seconds(10)),
                 cooldown: Duration.zero,
               }),
@@ -95,7 +96,7 @@ Feature('OneForAll Strategy')
                   yield* Ref.update(s.counters.a, (n) => n + 1)
                   const shouldFail = yield* Ref.get(s.failOnce)
                   if (shouldFail) {
-                    return yield* new SimulatedFailure()
+                    return yield* SimulatedFailure.make()
                   }
                   return void 0
                 }),
@@ -107,10 +108,10 @@ Feature('OneForAll Strategy')
                 name: 'inner',
                 children: [innerChild],
                 supervision: Supervision.custom({
-                  intensity: new BoundedIntensity({ restarts: 5, window: Duration.seconds(60) }),
+                  intensity: BoundedIntensity.make({ restarts: 5, window: Duration.seconds(60) }),
                   backoff: Schedule.exponential(Duration.seconds(10)).pipe(
                     Schedule.jittered,
-                    Schedule.upTo(Duration.minutes(5)),
+                    Schedule.upTo({ duration: Duration.minutes(5) }),
                   ),
                   cooldown: Duration.minutes(30),
                 }),
@@ -120,10 +121,10 @@ Feature('OneForAll Strategy')
                 name: 'outer-nested',
                 children: [inner],
                 supervision: Supervision.custom({
-                  intensity: new BoundedIntensity({ restarts: 5, window: Duration.seconds(60) }),
+                  intensity: BoundedIntensity.make({ restarts: 5, window: Duration.seconds(60) }),
                   backoff: Schedule.exponential(Duration.seconds(10)).pipe(
                     Schedule.jittered,
-                    Schedule.upTo(Duration.minutes(5)),
+                    Schedule.upTo({ duration: Duration.minutes(5) }),
                   ),
                   cooldown: Duration.minutes(30),
                 }),
@@ -173,7 +174,7 @@ Feature('OneForAll Strategy')
                 yield* Ref.update(s.counters.b, (n) => n + 1)
                 const shouldFail = yield* Ref.get(s.failOnce)
                 if (shouldFail) {
-                  return yield* new SimulatedFailure()
+                  return yield* SimulatedFailure.make()
                 }
                 return void 0
               }),
@@ -185,10 +186,10 @@ Feature('OneForAll Strategy')
               name: 'oneForAll-order',
               children: [childB, childA],
               supervision: Supervision.custom({
-                intensity: new BoundedIntensity({ restarts: 5, window: Duration.seconds(60) }),
+                intensity: BoundedIntensity.make({ restarts: 5, window: Duration.seconds(60) }),
                 backoff: Schedule.exponential(Duration.seconds(10)).pipe(
                   Schedule.jittered,
-                  Schedule.upTo(Duration.minutes(5)),
+                  Schedule.upTo({ duration: Duration.minutes(5) }),
                 ),
                 cooldown: Duration.minutes(30),
               }),

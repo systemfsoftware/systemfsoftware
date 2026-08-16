@@ -3,10 +3,11 @@ import type { HookSettings } from '../hook-settings.acl.js'
 import type { HookSession } from './hook-session.kernel.js'
 import { runSessionStartHooks } from './run-session-start-hooks.executor.js'
 
-export class RunSessionSwitchHooksExecutorDeps extends Context.Tag('RunSessionSwitchHooksExecutorDeps')<
-  RunSessionSwitchHooksExecutorDeps,
-  Scope.Scope
->() {}
+export class RunSessionSwitchHooksExecutorDeps
+  extends Context.Service<RunSessionSwitchHooksExecutorDeps, Scope.Scope>()(
+    'RunSessionSwitchHooksExecutorDeps',
+  )
+{}
 
 export const runSessionSwitchHooks = Effect.fn('runSessionSwitchHooks')(function*(
   settings: HookSettings,

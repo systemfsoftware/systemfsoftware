@@ -1,6 +1,7 @@
 import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Duration, Effect, Fiber, Layer, Match, Ref, Schedule, TestClock } from 'effect'
+import { Duration, Effect, Fiber, Latch, Layer, Match, Ref, Schedule } from 'effect'
+import { TestClock } from 'effect/testing'
 import { expect } from 'vitest'
 import { Noop } from '../src/daemon-reporter.adapter.js'
 import { run } from '../src/mod.js'
@@ -12,20 +13,21 @@ import { LeaderLockFake } from './helpers/leader-lock-fake.js'
 
 const Feature = makeFeature({ it, layer })
 
-const finiteSchedule = Schedule.fromDelays(
-  Duration.millis(1),
-  Duration.millis(1),
-  Duration.millis(1),
+const finiteSchedule = Schedule.duration(Duration.millis(1)).pipe(
+  Schedule.concat(Schedule.duration(Duration.millis(1))),
+  Schedule.concat(Schedule.duration(Duration.millis(1))),
 )
 
-const quickCycleSchedule = Schedule.fromDelays(Duration.millis(1), Duration.millis(1))
+const quickCycleSchedule = Schedule.duration(Duration.millis(1)).pipe(
+  Schedule.concat(Schedule.duration(Duration.millis(1))),
+)
 
 Feature('Lock acquisition retry on contention')
   .withLayer(Noop)
   .withScenarioLayer(
     Layer.mergeAll(
       LeaderLockFake,
-      TestClock.defaultTestClock,
+      TestClock.layer(),
       Noop,
     ),
   )
@@ -41,10 +43,10 @@ Feature('Lock acquisition retry on contention')
               Effect.gen(function*() {
                 const counter = yield* Ref.make(0)
                 const lock = yield* LeaderLock
-                const holder = yield* Effect.fork(
+                const holder = yield* Effect.forkChild(
                   lock.withLock('pipeline', Effect.sleep(Duration.millis(50))),
                 )
-                yield* Effect.yieldNow()
+                yield* Effect.yieldNow
                 return { counter, holder }
               }),
           ),
@@ -129,10 +131,10 @@ Feature('Lock acquisition retry on contention')
               Effect.gen(function*() {
                 const counter = yield* Ref.make(0)
                 const lock = yield* LeaderLock
-                const holder = yield* Effect.fork(
+                const holder = yield* Effect.forkChild(
                   lock.withLock('pipeline', Effect.sleep(Duration.millis(50))),
                 )
-                yield* Effect.yieldNow()
+                yield* Effect.yieldNow
                 return { counter, holder }
               }),
           ),
@@ -216,9 +218,9 @@ Feature('Lock acquisition retry on contention')
             () =>
               Effect.gen(function*() {
                 const counter = yield* Ref.make(0)
-                const acquired = yield* Effect.makeLatch(false)
+                const acquired = yield* Latch.make(false)
                 const lock = yield* LeaderLock
-                const holder = yield* Effect.fork(
+                const holder = yield* Effect.forkChild(
                   lock.withLock('pipeline', Effect.andThen(acquired.open, Effect.never)),
                 )
                 yield* acquired.await

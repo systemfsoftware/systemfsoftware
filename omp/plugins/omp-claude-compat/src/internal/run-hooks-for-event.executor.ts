@@ -1,8 +1,8 @@
-import type { CommandExecutor } from '@effect/platform/CommandExecutor'
-import type { PlatformError } from '@effect/platform/Error'
 import { Cell } from '@systemfsoftware/effect-cell-types'
 import { matchesMatcher, matchesPermissionRule } from '@systemfsoftware/omp-utils'
-import { Context, Effect, Either, Match, Option, pipe, Schema as S, type Scope } from 'effect'
+import { Context, Effect, Match, Option, pipe, Result, Schema as S, type Scope } from 'effect'
+import type { PlatformError } from 'effect/PlatformError'
+import type { ChildProcessSpawner } from 'effect/unstable/process/ChildProcessSpawner'
 import { Blocked, Continue, Warning } from '../hook-dispatcher.schema.js'
 import type { HookDecision, HookOutcome, HookResult } from '../hook-dispatcher.schema.js'
 import { analyzeSettings } from '../hook-settings.acl.js'
@@ -14,10 +14,9 @@ import type { HookSession } from './hook-session.kernel.js'
 import { runHookScript, type RunHookScriptExecutorDeps } from './run-hook-script.executor.js'
 import { superviseFork } from './supervise-fork.executor.js'
 
-export class RunHooksForEventExecutorDeps extends Context.Tag('RunHooksForEventExecutorDeps')<
-  RunHooksForEventExecutorDeps,
-  Scope.Scope
->() {}
+export class RunHooksForEventExecutorDeps extends Context.Service<RunHooksForEventExecutorDeps, Scope.Scope>()(
+  'RunHooksForEventExecutorDeps',
+) {}
 
 const AGGREGATE_CEILING_MS = 26_000
 
@@ -41,7 +40,7 @@ interface HookVerdictPhases extends Cell.Phases {
   readonly decodeError: never
   readonly readError: PlatformError
   readonly writeError: never
-  readonly readContext: CommandExecutor | RunHookScriptExecutorDeps
+  readonly readContext: ChildProcessSpawner | RunHookScriptExecutorDeps
   readonly writeContext: never
 }
 const runHooksForEventUnbounded = Effect.fn('runHooksForEventUnbounded')(function*(
@@ -71,14 +70,14 @@ const runHooksForEventUnbounded = Effect.fn('runHooksForEventUnbounded')(functio
    */
   const hookVerdictDescription = pipe(
     Cell.read<HookVerdictPhases>(({ hook, input }) => runHookScript(hook, input, cwd, event)),
-    Cell.decode<HookVerdictPhases>((raw) => Either.right(new InterpretHookCommand({ result: raw, event }))),
+    Cell.decode<HookVerdictPhases>((raw) => Result.succeed(new InterpretHookCommand({ result: raw, event }))),
     Cell.decide<HookVerdictPhases>(interpretHookResult),
     Cell.encode<HookVerdictPhases>((outcome) =>
       Match.value(
-        Either.match(outcome, {
-          onLeft: (err) =>
+        Result.match(outcome, {
+          onFailure: (err) =>
             new Warning({ message: `Hook exited 0 but produced invalid JSON: ${err.raw.slice(0, 200)}` }),
-          onRight: (d) => d,
+          onSuccess: (d) => d,
         }),
       ).pipe(
         Match.tag('Block', (d) => new Blocked({ reason: d.reason })),
@@ -117,7 +116,7 @@ const runHooksForEventUnbounded = Effect.fn('runHooksForEventUnbounded')(functio
         if (!matchesPermissionRule(hook.if, matchValue, ruleInput, cwd)) continue
       }
       if (hook.async === true || hook.asyncRewake === true) {
-        yield* Effect.forkDaemon(
+        yield* Effect.forkDetach(
           superviseFork(runHookScript(hook, currentInput, cwd, event, false), ctx, hook.command),
         )
         continue
@@ -143,6 +142,6 @@ export const runHooksForEvent = Effect.fn('runHooksForEvent')(function*(
 ) {
   return yield* runHooksForEventUnbounded(entries, matchValue, input, ctx, event).pipe(
     Effect.timeout(AGGREGATE_CEILING_MS),
-    Effect.catchTag('TimeoutException', (): Effect.Effect<HooksForEventResult> => Effect.succeed({})),
+    Effect.catchTag('TimeoutError', (): Effect.Effect<HooksForEventResult> => Effect.succeed({})),
   )
 })

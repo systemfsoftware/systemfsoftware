@@ -1,13 +1,13 @@
-import { Either } from 'effect'
+import { Result } from 'effect'
 import { describe, expect, it } from 'vitest'
 
 import { parseTsConfig, TsConfigParseError } from '../../src/sandbox/parse-config-helper.js'
 
-function expectRight<A>(either: Either.Either<A, TsConfigParseError>): A {
-  if (Either.isLeft(either)) {
-    throw new Error(`Expected a Right result, got a Left: ${String(either.left)}`)
+function expectRight<A>(either: Result.Result<A, TsConfigParseError>): A {
+  if (Result.isFailure(either)) {
+    throw new Error(`Expected a Right result, got a Left: ${String(either.failure)}`)
   }
-  return either.right
+  return either.success
 }
 
 describe('parseTsConfig', () => {
@@ -31,42 +31,42 @@ describe('parseTsConfig', () => {
 
   it('with malformed JSON returns a Left TsConfigParseError', () => {
     const result = parseTsConfig('tsconfig.json', '{ "a": }')
-    expect(Either.isLeft(result)).toBe(true)
-    if (Either.isLeft(result)) {
-      expect(result.left).toBeInstanceOf(TsConfigParseError)
-      expect(result.left.file).toBe('tsconfig.json')
-      expect(result.left.reason.length).toBeGreaterThan(0)
+    expect(Result.isFailure(result)).toBe(true)
+    if (Result.isFailure(result)) {
+      expect(result.failure).toBeInstanceOf(TsConfigParseError)
+      expect(result.failure.file).toBe('tsconfig.json')
+      expect(result.failure.reason.length).toBeGreaterThan(0)
     }
   })
 
   it('with empty input returns a Left TsConfigParseError', () => {
     const result = parseTsConfig('tsconfig.json', '')
-    expect(Either.isLeft(result)).toBe(true)
-    if (Either.isLeft(result)) {
-      expect(result.left).toBeInstanceOf(TsConfigParseError)
-      expect(result.left.file).toBe('tsconfig.json')
-      expect(result.left.reason.length).toBeGreaterThan(0)
+    expect(Result.isFailure(result)).toBe(true)
+    if (Result.isFailure(result)) {
+      expect(result.failure).toBeInstanceOf(TsConfigParseError)
+      expect(result.failure.file).toBe('tsconfig.json')
+      expect(result.failure.reason.length).toBeGreaterThan(0)
     }
   })
 
   it('with a bare string root returns a Left (a tsconfig must be an object)', () => {
     const result = parseTsConfig('tsconfig.json', '"just a string"')
-    expect(Either.isLeft(result)).toBe(true)
-    if (Either.isLeft(result)) {
-      expect(result.left).toBeInstanceOf(TsConfigParseError)
-      expect(result.left.file).toBe('tsconfig.json')
-      expect(result.left.reason).toContain('does not match the tsconfig shape')
+    expect(Result.isFailure(result)).toBe(true)
+    if (Result.isFailure(result)) {
+      expect(result.failure).toBeInstanceOf(TsConfigParseError)
+      expect(result.failure.file).toBe('tsconfig.json')
+      expect(result.failure.reason).toContain('does not match the tsconfig shape')
     }
   })
 
   it('with a number root returns a Left', () => {
     const result = parseTsConfig('tsconfig.json', '42')
-    expect(Either.isLeft(result)).toBe(true)
+    expect(Result.isFailure(result)).toBe(true)
   })
 
   it('with a mismatched shape (references as a string) returns a Left', () => {
     const result = parseTsConfig('tsconfig.json', '{ "references": "nope" }')
-    expect(Either.isLeft(result)).toBe(true)
+    expect(Result.isFailure(result)).toBe(true)
   })
 
   it('accepts an empty object (an empty tsconfig is valid)', () => {

@@ -3,7 +3,7 @@ import path from 'path'
 import { StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
 import { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
 import { commonTokens, tokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
-import { Either } from 'effect'
+import { Result } from 'effect'
 
 import { Project } from '../project/project.js'
 
@@ -67,8 +67,8 @@ export class TSConfigPreprocessor implements FilePreprocessor {
           tsconfigFileName,
           await tsconfigFile.readContent(),
         )
-        if (Either.isRight(parsed)) {
-          const config = parsed.right
+        if (Result.isSuccess(parsed)) {
+          const config = parsed.success
           await this.rewriteExtends(project, config, tsconfigFileName)
           await this.rewriteProjectReferences(
             project,
@@ -80,7 +80,7 @@ export class TSConfigPreprocessor implements FilePreprocessor {
           this.rewriteFileArrayProperty(config, tsconfigFileName, 'files')
           tsconfigFile.setContent(JSON.stringify(config, null, 2))
         } else {
-          const error = parsed.left
+          const error = parsed.failure
           this.log.warn(
             `Could not rewrite tsconfig file "%s": %s. Its extends, project references, and file array properties were not rewritten for the sandbox, so this file still points at paths outside it.`,
             tsconfigFileName,

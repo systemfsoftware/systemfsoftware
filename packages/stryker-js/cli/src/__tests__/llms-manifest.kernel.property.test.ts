@@ -1,7 +1,8 @@
-import * as Command from '@effect/cli/Command'
-import * as Options from '@effect/cli/Options'
 import { describe, it } from '@systemfsoftware/effect-gherkin-spec'
-import { Effect, FastCheck as fc } from 'effect'
+import { Effect } from 'effect'
+import { FastCheck as fc } from 'effect/testing'
+import * as Command from 'effect/unstable/cli/Command'
+import * as Flag from 'effect/unstable/cli/Flag'
 import { isDeepStrictEqual } from 'node:util'
 
 import {
@@ -73,19 +74,19 @@ const KIND_BY_RECIPE = {
   choice: 'choice',
 } as const
 
-const optionOf = (recipe: OptionRecipe): Options.Options<unknown> => {
-  const base: Options.Options<unknown> = recipe.kind === 'text'
-    ? Options.text(recipe.name)
+const optionOf = (recipe: OptionRecipe): Flag.Flag<unknown> => {
+  const base: Flag.Flag<unknown> = recipe.kind === 'text'
+    ? Flag.string(recipe.name)
     : recipe.kind === 'boolean'
-    ? Options.boolean(recipe.name)
+    ? Flag.boolean(recipe.name)
     : recipe.kind === 'integer'
-    ? Options.integer(recipe.name)
-    : Options.choice(recipe.name, ['one', 'two', 'three'])
-  return recipe.optional ? Options.optional(base) : base
+    ? Flag.integer(recipe.name)
+    : Flag.choice(recipe.name, ['one', 'two', 'three'])
+  return recipe.optional ? Flag.optional(base) : base
 }
 
-const configOf = (options: readonly OptionRecipe[]): Record<string, Options.Options<unknown>> => {
-  const config: Record<string, Options.Options<unknown>> = {}
+const configOf = (options: readonly OptionRecipe[]): Record<string, Flag.Flag<unknown>> => {
+  const config: Record<string, Flag.Flag<unknown>> = {}
   for (const option of options) {
     config[option.name] = optionOf(option)
   }

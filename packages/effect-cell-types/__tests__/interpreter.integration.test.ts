@@ -2,9 +2,9 @@ import { Cell } from '@systemfsoftware/effect-cell-types'
 import { And, Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
-import * as Either from 'effect/Either'
 import * as Exit from 'effect/Exit'
 import * as Layer from 'effect/Layer'
+import * as Result from 'effect/Result'
 import { expect } from 'vitest'
 
 const Feature = makeFeature({ it, layer })
@@ -39,10 +39,10 @@ interface Malformed {
  * checkable against something that records the writes that did, and a recording port keeps
  * that observation on the output rather than on interaction history.
  */
-class Ledger extends Context.Tag('Ledger')<Ledger, {
+class Ledger extends Context.Service<Ledger, {
   readonly append: (line: string) => Effect.Effect<void>
   readonly lines: Effect.Effect<readonly string[]>
-}>() {}
+}>()('Ledger') {}
 
 /**
  * `append` suspends before it records. A real ledger is asynchronous, and without a
@@ -52,10 +52,10 @@ class Ledger extends Context.Tag('Ledger')<Ledger, {
  */
 const LedgerRecording = Layer.sync(Ledger, () => {
   const written: string[] = []
-  return Ledger.of({
-    append: (line) => Effect.map(Effect.yieldNow(), () => void written.push(line)),
+  return {
+    append: (line) => Effect.map(Effect.yieldNow, () => void written.push(line)),
     lines: Effect.sync(() => [...written]),
-  })
+  }
 })
 
 interface Bag extends Cell.Phases {
@@ -77,18 +77,18 @@ const read: Cell.ReadPhase<Bag> = (command) => Effect.succeed({ bytes: command.i
 
 const decode: Cell.DecodePhase<Bag> = (raw) =>
   raw.bytes === 'bad'
-    ? Either.left({ kind: 'Malformed', bytes: raw.bytes })
-    : Either.right({ length: raw.bytes.length })
+    ? Result.fail({ kind: 'Malformed', bytes: raw.bytes })
+    : Result.succeed({ length: raw.bytes.length })
 
 const decide: Cell.DecidePhase<Bag> = (decoded) =>
   decoded.length > 3
-    ? Either.right({ kind: 'Admitted', length: decoded.length })
-    : Either.left({ kind: 'Refused', why: 'too short' })
+    ? Result.succeed({ kind: 'Admitted', length: decoded.length })
+    : Result.fail({ kind: 'Refused', why: 'too short' })
 
 const encode: Cell.EncodePhase<Bag> = (outcome) => ({
-  line: Either.match(outcome, {
-    onLeft: (refused) => `refused:${refused.why}`,
-    onRight: (admitted) => `admitted:${admitted.length}`,
+  line: Result.match(outcome, {
+    onFailure: (refused) => `refused:${refused.why}`,
+    onSuccess: (admitted) => `admitted:${admitted.length}`,
   }),
 })
 
@@ -262,11 +262,11 @@ Feature('Applying a phase description')
               })
             const tracedDecode: Cell.DecodePhase<Bag> = () => {
               trace.push('decode')
-              return Either.right({ length: 0 })
+              return Result.succeed({ length: 0 })
             }
             const tracedDecide: Cell.DecidePhase<Bag> = () => {
               trace.push('decide')
-              return Either.right({ kind: 'Admitted', length: 0 })
+              return Result.succeed({ kind: 'Admitted', length: 0 })
             }
             const tracedEncode: Cell.EncodePhase<Bag> = () => {
               trace.push('encode')

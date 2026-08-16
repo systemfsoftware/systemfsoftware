@@ -20,5 +20,14 @@ export default defineConfig({
     ...effectEntrypoint.configs.recommended.rules,
     ...effectExecutor.configs.recommended.rules,
     ...testPlacement.configs.recommended.rules,
+    // The shared ban-classes rule only knows the v3 Context.Tag/Reference
+    // variants; v4's Context.Service keeps class syntax
+    // (`extends Context.Service<Self, Shape>()(id)`), so the package's port
+    // tag classes are whitelisted here (same precedent as
+    // packages/effect-gherkin-spec/oxlint.config.ts).
+    '@systemfsoftware/oxlint-plugin/ban-classes': [
+      'error',
+      { whitelist: ['OutputModeProbeTag', 'RunEventStreamPortTag', 'StrykerCli'] },
+    ],
   },
 })

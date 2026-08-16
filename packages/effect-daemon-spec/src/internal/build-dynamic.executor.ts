@@ -1,4 +1,4 @@
-import { Effect, Fiber, HashMap, Metric, Option, Ref } from 'effect'
+import { Effect, Equal, Fiber, HashMap, Latch, Metric, Option, Ref } from 'effect'
 import type { Scope } from 'effect'
 import type { ChildRef, DynamicHandle, SupervisorHealth } from '../daemon-health.schema.js'
 import { DynamicLimitExceeded } from '../daemon-health.schema.js'
@@ -11,8 +11,8 @@ import { allocateWorkerHealth } from './allocate-worker-health.kernel.js'
 import { buildWorkerLoop } from './build-worker-loop.kernel.js'
 
 interface DynamicChildState<E> {
-  readonly fiber: Option.Option<Fiber.RuntimeFiber<void, E>>
-  readonly removed: Effect.Latch
+  readonly fiber: Option.Option<Fiber.Fiber<void, E>>
+  readonly removed: Latch.Latch
 }
 
 interface DynamicState<E> {
@@ -43,15 +43,19 @@ const buildDynamic = <E, R, Args>(
         const childWorker = spec.child(args)
         const workerHealth = yield* allocateWorkerHealth(childWorker.name)
         const loop = buildWorkerLoop(childWorker, workerHealth, healthStateGauge).pipe(Effect.orDie)
-        const removed = yield* Effect.makeLatch(false)
+        const removed = yield* Latch.make(false)
         const reservedId = yield* Ref.modify(state, (current) => {
           if (HashMap.size(current.children) >= spec.maxChildren) {
             return [Option.none<number>(), current] as const
           }
-          const children = HashMap.set(current.children, current.nextId, {
-            fiber: Option.none<Fiber.RuntimeFiber<void, E>>(),
-            removed,
-          })
+          const children = HashMap.set(
+            current.children,
+            current.nextId,
+            Equal.byReferenceUnsafe({
+              fiber: Option.none<Fiber.Fiber<void, E>>(),
+              removed,
+            }),
+          )
           return [
             Option.some(current.nextId),
             {
@@ -61,10 +65,10 @@ const buildDynamic = <E, R, Args>(
           ] as const
         })
         if (Option.isNone(reservedId)) {
-          return yield* new DynamicLimitExceeded({ limit: spec.maxChildren })
+          return yield* DynamicLimitExceeded.make({ limit: spec.maxChildren })
         }
         const id = reservedId.value
-        yield* Metric.set(
+        yield* Metric.update(
           supervisorChildrenGauge,
           HashMap.size(yield* Ref.get(state).pipe(Effect.map((s) => s.children))),
         )
@@ -74,7 +78,7 @@ const buildDynamic = <E, R, Args>(
             const children = HashMap.remove(current.children, id)
             return [HashMap.size(children), { ...current, children }] as const
           })
-          yield* Metric.set(supervisorChildrenGauge, count)
+          yield* Metric.update(supervisorChildrenGauge, count)
           yield* removed.open
         }).pipe(Effect.asVoid)
 
@@ -87,10 +91,14 @@ const buildDynamic = <E, R, Args>(
           if (Option.isNone(childOpt)) {
             return [HashMap.size(current.children), current] as const
           }
-          const children = HashMap.set(current.children, id, {
-            ...childOpt.value,
-            fiber: Option.some(fiber),
-          })
+          const children = HashMap.set(
+            current.children,
+            id,
+            Equal.byReferenceUnsafe({
+              ...childOpt.value,
+              fiber: Option.some(fiber),
+            }),
+          )
           return [
             HashMap.size(children),
             {
@@ -99,7 +107,7 @@ const buildDynamic = <E, R, Args>(
             },
           ] as const
         })
-        yield* Metric.set(supervisorChildrenGauge, count)
+        yield* Metric.update(supervisorChildrenGauge, count)
 
         return { id, removed: removed.await }
       })
@@ -122,7 +130,7 @@ const buildDynamic = <E, R, Args>(
                 yield* Fiber.await(running)
               }),
           })
-          yield* Metric.set(supervisorChildrenGauge, count)
+          yield* Metric.update(supervisorChildrenGauge, count)
           yield* removed.open
         }
       })
@@ -131,9 +139,9 @@ const buildDynamic = <E, R, Args>(
       Effect.map((current) => HashMap.size(current.children)),
     )
 
-    yield* Effect.zipRight(
+    yield* Effect.andThen(
       health.ready.open,
-      Metric.set(Metric.tagged(Metric.tagged(healthStateGauge, 'daemon', spec.name), 'latch', 'ready'), 1),
+      Metric.update(Metric.withAttributes(healthStateGauge, { daemon: spec.name, latch: 'ready' }), 1),
     )
 
     return {

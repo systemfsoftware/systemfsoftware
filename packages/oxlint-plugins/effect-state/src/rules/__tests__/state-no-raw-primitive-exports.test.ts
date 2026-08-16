@@ -120,6 +120,12 @@ export { runtime }`,
 export { Worker }`,
       filename: 'worker.state.ts',
     },
+    {
+      name: 'Should_Pass_When_ExportedContextReferenceFunctionForm',
+      code:
+        `export const LeaderConfig = Context.Reference<SupervisionConfig>('@x/LeaderConfig', { defaultValue: () => defaults })`,
+      filename: 'leader-config.state.ts',
+    },
   ],
   invalid: [
     {
@@ -163,6 +169,30 @@ export { Worker }`,
       code: `export const balance = TRef.unsafeMake(0)`,
       filename: 'balance.state.ts',
       errors: [{ messageId: 'rawPrimitiveExport', data: rawPrimitiveExportData('balance', 'TRef.unsafeMake') }],
+    },
+    {
+      name: 'Should_Report_RawRefExport_When_ExportedRefMakeUnsafe',
+      code: `export const counter = Ref.makeUnsafe(0)`,
+      filename: 'counter.state.ts',
+      errors: [{ messageId: 'rawPrimitiveExport', data: rawPrimitiveExportData('counter', 'Ref.makeUnsafe') }],
+    },
+    {
+      name: 'Should_Report_RawDeferredExport_When_ExportedDeferredMakeUnsafe',
+      code: `export const gate = Deferred.makeUnsafe<Report>()`,
+      filename: 'gate.state.ts',
+      errors: [{ messageId: 'rawPrimitiveExport', data: rawPrimitiveExportData('gate', 'Deferred.makeUnsafe') }],
+    },
+    {
+      name: 'Should_Report_RawSemaphoreExport_When_ExportedSemaphoreMakeUnsafe',
+      code: `export const limiter = Semaphore.makeUnsafe(1)`,
+      filename: 'limiter.state.ts',
+      errors: [{ messageId: 'rawPrimitiveExport', data: rawPrimitiveExportData('limiter', 'Semaphore.makeUnsafe') }],
+    },
+    {
+      name: 'Should_Report_RawTxRefExport_When_ExportedTxRefMakeUnsafe',
+      code: `export const balance = TxRef.makeUnsafe(0)`,
+      filename: 'balance.state.ts',
+      errors: [{ messageId: 'rawPrimitiveExport', data: rawPrimitiveExportData('balance', 'TxRef.makeUnsafe') }],
     },
     {
       name: 'Should_Report_RawMapExport_When_ExportedViaSpecifier',

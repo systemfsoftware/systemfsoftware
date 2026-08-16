@@ -7,14 +7,16 @@
  * behaviours are covered through the same scenario surface.
  */
 import { it, layer, makeFeature } from '@systemfsoftware/effect-gherkin-spec'
-import { Context, Effect, Either, Layer, Ref } from 'effect'
-import { UnknownException } from 'effect/Cause'
+import { Context, Effect, Layer, Ref, Result } from 'effect'
+import { UnknownError } from 'effect/Cause'
 import { expect } from 'vitest'
 import { Gherkin, pairwiseFor, StepError, Then } from '../src/mod.js'
 
 const Feature = makeFeature({ it, layer })
 
-class Widget extends Context.Tag('test/Widget')<Widget, { readonly value: string }>() {}
+class Widget extends Context.Service<Widget, { readonly value: string }>()(
+  '@systemfsoftware/effect-gherkin-spec/__tests__/pairwise-dual-side-execution.integration.test/Widget',
+) {}
 
 const layerA = Layer.succeed(Widget, { value: 'side-a' })
 const layerB = Layer.succeed(Widget, { value: 'side-b' })
@@ -47,12 +49,12 @@ Feature('pairwiseFor — dual-side execution').body(({ scenario }) => {
         PairwiseAB('boom on B only')('dual', (_s) => (w) =>
           w.value === 'side-a'
             ? Effect.succeed(true)
-            : Effect.fail(new UnknownException(new Error('boom')))),
+            : Effect.fail(new UnknownError(new Error('boom')))),
         Then('unreachable')(() => Effect.void),
       )
-      const result = yield* Effect.either(piped)
-      if (!Either.isLeft(result)) throw new Error('Expected Either.left but got Either.right')
-      expect(result.left).toBeInstanceOf(StepError)
+      const result = yield* Effect.result(piped)
+      if (!Result.isFailure(result)) throw new Error('Expected Result.failure but got Result.success')
+      expect(result.failure).toBeInstanceOf(StepError)
     }),
   )
 

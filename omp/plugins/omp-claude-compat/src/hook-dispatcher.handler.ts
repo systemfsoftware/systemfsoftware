@@ -1,6 +1,6 @@
 import type { ExtensionAPI, InputEvent, ToolCallEvent, ToolResultEvent } from '@oh-my-pi/pi-coding-agent'
 import type { InputEventResult, ToolCallEventResult, ToolResultEventResult } from '@oh-my-pi/pi-coding-agent'
-import { Effect, Either, Option } from 'effect'
+import { Effect, Option, Result } from 'effect'
 import { dispatchHookEvent, type HookDispatchContext } from './hook-dispatcher.executor.js'
 import type {
   HookEventCommand,
@@ -30,9 +30,9 @@ export const HookDispatcherTask = (pi: ExtensionAPI, runner: HookRunner<HookDisp
   async function dispatch(cmd: HookSessionStopCommand): Promise<undefined>
   async function dispatch(cmd: HookEventCommand): Promise<unknown> {
     const timed = Effect.gen(function*() {
-      const outcome = yield* Effect.either(dispatchHookEvent(cmd))
-      if (Either.isLeft(outcome)) throw outcome.left
-      return outcome.right
+      const outcome = yield* Effect.result(dispatchHookEvent(cmd))
+      if (Result.isFailure(outcome)) throw outcome.failure
+      return outcome.success
     }).pipe(Effect.timeoutOption(HANDLER_CEILING_MS))
     return Option.getOrUndefined(await runner.runSafe(timed))
   }

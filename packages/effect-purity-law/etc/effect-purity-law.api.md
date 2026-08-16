@@ -4,7 +4,7 @@
 
 ```ts
 
-import { FastCheck } from 'effect';
+import { FastCheck } from 'effect/testing';
 
 // @public
 export const ruleOfPurity: <A, B>(name: string, fn: (a: A) => B, domain: FastCheck.Arbitrary<A>, equals?: (left: B, right: B) => boolean) => void;

@@ -9,9 +9,9 @@ export interface LeaderLockService {
   ) => Effect.Effect<Option.Option<A>, E | LeaderLockInfraError, R>
 }
 
-export class LeaderLock extends Context.Tag(
+export class LeaderLock extends Context.Service<LeaderLock, LeaderLockService>()(
   '@systemfsoftware/effect-daemon-spec/leader-lock.adapter/LeaderLock',
-)<LeaderLock, LeaderLockService>() {
+) {
   static readonly Noop: Layer.Layer<LeaderLock> = Layer.succeed(
     LeaderLock,
     LeaderLock.of({
@@ -26,10 +26,9 @@ export interface LockPrimitiveService {
   ) => Effect.Effect<boolean, LockPrimitiveError, Scope.Scope>
 }
 
-export class LockPrimitive extends Context.Tag('@systemfsoftware/effect-daemon-spec/leader-lock.adapter/LockPrimitive')<
-  LockPrimitive,
-  LockPrimitiveService
->() {}
+export class LockPrimitive extends Context.Service<LockPrimitive, LockPrimitiveService>()(
+  '@systemfsoftware/effect-daemon-spec/leader-lock.adapter/LockPrimitive',
+) {}
 
 export const LeaderLockFromPrimitive: Layer.Layer<LeaderLock, never, LockPrimitive> = Layer.effect(
   LeaderLock,
@@ -42,8 +41,8 @@ export const LeaderLockFromPrimitive: Layer.Layer<LeaderLock, never, LockPrimiti
           Effect.gen(function*() {
             const scope = yield* Scope.make()
             const acquired = yield* restore(primitive.tryAcquire(key)).pipe(
-              Scope.extend(scope),
-              Effect.mapError((cause) => new LeaderLockInfraError({ key, cause })),
+              Scope.provide(scope),
+              Effect.mapError((cause) => LeaderLockInfraError.make({ key, cause })),
               Effect.onError(() => Scope.close(scope, Exit.void)),
             )
             if (!acquired) {

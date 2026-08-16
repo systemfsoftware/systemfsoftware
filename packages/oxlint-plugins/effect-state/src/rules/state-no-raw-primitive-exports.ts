@@ -11,6 +11,20 @@ const isStateFile = (filename: string): boolean => filename.endsWith('.state.ts'
 
 const moduleExportName = (name: ESTree.ModuleExportName): string => 'name' in name ? name.name : name.value
 
+/**
+ * A runtime-handle export (ManagedRuntime.make, Layer.toRuntime) is the cell's published handle,
+ * not a raw primitive. A v4 `Context.Reference(id, { defaultValue })` const is the cell's identity
+ * key — the v3 `Context.Tag`-equivalent — so exporting it is exporting the Tag, which the rule
+ * allows. The v3 class-extends Reference stays a raw primitive: `class X extends Context.Reference`
+ * carries the escaping value itself, and exporting it bypasses the domain-typed surface
+ * (Should_Report_ClassSuperExport_When_ClassExtendsContextReference).
+ */
+const isPrimitiveExportForbidden = (primitive: ModuleScopePrimitive): boolean => {
+  if (RUNTIME_HANDLE_KINDS.has(primitive.kind)) return false
+  if (primitive.kind !== 'Context.Reference') return true
+  return primitive.node.type === 'ClassDeclaration'
+}
+
 const reportRawExport = (
   context: Context,
   node: ESTree.Node,
@@ -36,9 +50,7 @@ export const stateNoRawPrimitiveExports = defineRule({
 
     return {
       'Program:exit'(node: ESTree.Program) {
-        const primitives = moduleScopeStatePrimitives(node).filter((primitive) =>
-          !RUNTIME_HANDLE_KINDS.has(primitive.kind)
-        )
+        const primitives = moduleScopeStatePrimitives(node)
         const primitiveByName = new Map<string, ModuleScopePrimitive>(
           primitives.map((primitive) => [primitive.name, primitive] as const),
         )
@@ -50,13 +62,13 @@ export const stateNoRawPrimitiveExports = defineRule({
             for (const declarator of declaration.declarations) {
               if (declarator.id.type !== 'Identifier') continue
               const primitive = primitiveByName.get(declarator.id.name)
-              if (primitive === undefined) continue
+              if (primitive === undefined || !isPrimitiveExportForbidden(primitive)) continue
               reportRawExport(context, declarator, primitive)
             }
           }
           for (const specifier of statement.specifiers) {
             const primitive = primitiveByName.get(moduleExportName(specifier.local))
-            if (primitive === undefined) continue
+            if (primitive === undefined || !isPrimitiveExportForbidden(primitive)) continue
             reportRawExport(context, specifier, primitive)
           }
         }
@@ -66,12 +78,17 @@ export const stateNoRawPrimitiveExports = defineRule({
           const declaration = statement.declaration
           if (declaration.type === 'Identifier') {
             const primitive = primitiveByName.get(declaration.name)
-            if (primitive === undefined) continue
+            if (primitive === undefined || !isPrimitiveExportForbidden(primitive)) continue
             reportRawExport(context, declaration, primitive)
             continue
           }
           const kind = statePrimitiveKind(declaration)
-          if (kind === null || RUNTIME_HANDLE_KINDS.has(kind)) continue
+          if (
+            kind === null ||
+            !isPrimitiveExportForbidden({ name: DEFAULT_EXPORT_PRIMITIVE_NAME, kind, node: declaration })
+          ) {
+            continue
+          }
           reportRawExport(context, declaration, { name: DEFAULT_EXPORT_PRIMITIVE_NAME, kind, node: declaration })
         }
       },

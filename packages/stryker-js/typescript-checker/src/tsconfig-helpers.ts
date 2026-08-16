@@ -3,7 +3,7 @@ import { createRequire } from 'module'
 import path from 'path'
 
 import { parse } from '@std/jsonc'
-import { Data, Either, Schema as S } from 'effect'
+import { Data, Result, Schema as S } from 'effect'
 import semver from 'semver'
 
 // Override some compiler options that have to do with code quality. When mutating, we're not interested in the resulting code quality
@@ -59,13 +59,13 @@ export class TsConfigParseError extends Data.TaggedError('TsConfigParseError')<{
   readonly reason: string
 }> {}
 
-const JsonRecord = S.Record({ key: S.String, value: S.Unknown })
-const TsConfigSchema = S.Struct(
-  {
-    references: S.optional(S.Array(S.Struct({ path: S.String }, JsonRecord))),
+const JsonRecord = S.Record(S.String, S.Unknown)
+const TsConfigSchema = S.StructWithRest(
+  S.Struct({
+    references: S.optional(S.Array(S.StructWithRest(S.Struct({ path: S.String }), [JsonRecord]))),
     compilerOptions: S.optional(JsonRecord),
-  },
-  JsonRecord,
+  }),
+  [JsonRecord],
 )
 type TsConfig = S.Schema.Type<typeof TsConfigSchema>
 
@@ -74,7 +74,7 @@ type TsConfig = S.Schema.Type<typeof TsConfigSchema>
  * @param fileName The tsconfig file name, used for error reporting
  * @param jsonText The raw tsconfig content
  */
-export function parseTsConfig(fileName: string, jsonText: string): Either.Either<TsConfig, TsConfigParseError> {
+export function parseTsConfig(fileName: string, jsonText: string): Result.Result<TsConfig, TsConfigParseError> {
   // `@std/jsonc`'s whitespace set excludes U+FEFF, so it rejects a leading BOM, while `tsc` tolerates one.
   try {
     const value = parse(jsonText.replace(/^\uFEFF/, ''))
@@ -84,12 +84,12 @@ export function parseTsConfig(fileName: string, jsonText: string): Either.Either
     // deliberately uses an `S.is` guard instead — it mutates the parsed config and writes
     // it back with `JSON.stringify`, so a rebuild there would reorder the user's tsconfig
     // on disk. Independent boundaries by KTD-2; this note keeps the divergence deliberate.
-    return Either.mapLeft(
-      S.decodeUnknownEither(TsConfigSchema)(value),
-      (issue) => new TsConfigParseError({ file: fileName, reason: issue.message }),
+    return Result.mapError(
+      S.decodeUnknownResult(TsConfigSchema)(value),
+      (error) => new TsConfigParseError({ file: fileName, reason: error.message }),
     )
   } catch (error) {
-    return Either.left(
+    return Result.fail(
       new TsConfigParseError({
         file: fileName,
         reason: error instanceof Error ? error.message : String(error),
@@ -105,9 +105,9 @@ export function parseTsConfig(fileName: string, jsonText: string): Either.Either
 export function determineBuildModeEnabled(tsconfigFileName: string): boolean {
   const tsconfigFile = readFileSync(tsconfigFileName, 'utf-8')
   const parsed = parseTsConfig(tsconfigFileName, tsconfigFile)
-  return Either.match(parsed, {
-    onLeft: () => false,
-    onRight: (config) => config.references !== undefined,
+  return Result.match(parsed, {
+    onFailure: () => false,
+    onSuccess: (config) => config.references !== undefined,
   })
 }
 

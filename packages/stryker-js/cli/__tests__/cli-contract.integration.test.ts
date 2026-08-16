@@ -58,8 +58,8 @@ interface Observed {
 }
 
 const LocationSchema = S.Struct({
-  start: S.Struct({ line: S.Number, column: S.Number }),
-  end: S.Struct({ line: S.Number, column: S.Number }),
+  start: S.Struct({ line: S.Finite, column: S.Finite }),
+  end: S.Struct({ line: S.Finite, column: S.Finite }),
 })
 
 const MutantSchema = S.Struct({
@@ -73,33 +73,33 @@ const MutantSchema = S.Struct({
 
 type DecodedMutant = S.Schema.Type<typeof MutantSchema>
 
-const StreamLineSchema = S.Struct({
+const StreamLineFields = {
   kind: S.String,
   runId: S.optional(S.String),
   schemaVersion: S.optional(S.String),
   mode: S.optional(S.String),
   phase: S.optional(S.String),
-  elapsedMs: S.optional(S.Number),
+  elapsedMs: S.optional(S.Finite),
   id: S.optional(S.String),
   status: S.optional(S.String),
   file: S.optional(S.String),
   location: S.optional(LocationSchema),
   mutator: S.optional(S.String),
   replacement: S.optional(S.NullOr(S.String)),
-  completed: S.optional(S.Number),
-  total: S.optional(S.NullOr(S.Number)),
-  score: S.optional(S.NullOr(S.Number)),
-  thresholds: S.optional(S.Struct({ high: S.Number, low: S.Number, break: S.NullOr(S.Number) })),
+  completed: S.optional(S.Finite),
+  total: S.optional(S.NullOr(S.Finite)),
+  score: S.optional(S.NullOr(S.Finite)),
+  thresholds: S.optional(S.Struct({ high: S.Finite, low: S.Finite, break: S.NullOr(S.Finite) })),
   reportFile: S.optional(S.NullOr(S.String)),
-  code: S.optional(S.Number),
+  code: S.optional(S.Finite),
   error: S.optional(S.String),
   remediation: S.optional(S.String),
   help: S.optional(S.String),
   manifest: S.optional(S.String),
   mutants: S.optional(S.Array(MutantSchema)),
-}).pipe(
-  S.extend(S.Record({ key: S.String, value: S.Unknown })),
-)
+}
+
+const StreamLineSchema = S.StructWithRest(S.Struct(StreamLineFields), [S.Record(S.String, S.Unknown)])
 
 const ManifestSchema = S.Struct({
   tool: S.String,
@@ -110,7 +110,7 @@ const ManifestSchema = S.Struct({
   ),
 })
 
-const decodeStreamLine = S.decodeUnknownSync(S.parseJson(StreamLineSchema))
+const decodeStreamLine = S.decodeUnknownSync(S.fromJsonString(StreamLineSchema))
 
 const parseStream = (stdout: string): readonly StreamLine[] =>
   stdout
@@ -181,7 +181,7 @@ const corePurityProbe = (fixture: string): Effect.Effect<CorePurityProbe, never,
       options,
     )
     const entries = (
-      yield* S.decodeUnknown(S.parseJson(S.Array(S.String)))(manifestResult.stdout).pipe(Effect.orDie)
+      yield* S.decodeUnknownEffect(S.fromJsonString(S.Array(S.String)))(manifestResult.stdout).pipe(Effect.orDie)
     ).filter((entry) => entry !== './package.json')
     const imports: CoreEntryImport[] = []
     for (const entry of entries) {
@@ -496,7 +496,9 @@ Feature('Driving the mutation tester from an agent harness')
         }),
         Then('the description names the tool and the command that runs mutation testing')((s) => {
           expect(terminal(s.observed)).toMatchObject({ kind: 'manifest', code: 0 })
-          const described = S.decodeUnknownSync(S.parseJson(ManifestSchema))(terminal(s.observed)['manifest'] ?? '')
+          const described = S.decodeUnknownSync(S.fromJsonString(ManifestSchema))(
+            terminal(s.observed)['manifest'] ?? '',
+          )
           expect(described.tool).toBe('stryker')
           expect(described.commands[0]?.subcommands).toContainEqual(
             expect.objectContaining({ name: 'run', description: 'Run mutation testing' }),
