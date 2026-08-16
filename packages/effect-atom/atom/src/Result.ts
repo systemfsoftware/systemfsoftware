@@ -11,12 +11,9 @@
  * @since 4.0.0
  */
 import * as Cause from 'effect/Cause'
-import * as Equal from 'effect/Equal'
 import * as Exit from 'effect/Exit'
 import type { LazyArg } from 'effect/Function'
-import { constTrue, dual, identity } from 'effect/Function'
-import * as Hash from 'effect/Hash'
-
+import { constTrue, dual } from 'effect/Function'
 import * as Option from 'effect/Option'
 import { type Pipeable, pipeArguments } from 'effect/Pipeable'
 import type { Predicate, Refinement } from 'effect/Predicate'
@@ -24,76 +21,39 @@ import { hasProperty, isIterable } from 'effect/Predicate'
 import * as Either from 'effect/Result'
 import type * as Types from 'effect/Types'
 
-/**
- * Type-level identifier used to recognize `Result` values.
- *
- * @category type IDs
- * @since 4.0.0
- */
-export type TypeId = '~effect-atom/atom/Result'
+import {
+  type Failure,
+  failure,
+  type Initial,
+  initial,
+  isResult,
+  type Result,
+  ResultProto,
+  type Success,
+  success,
+  TypeId,
+} from './internal/result-values.js'
 
 /**
- * Runtime identifier attached to `Result` values and used by `isResult`.
+ * Re-export the value-side declarations from the shared value module so the
+ * public `Result` namespace keeps its surface. The module exists to
+ * break the import cycle between `Result.ts` and `internal/result-schema.ts`;
+ * see `result-values.ts` for the declarations themselves.
  *
- * @category type IDs
- * @since 4.0.0
+ * The `Result` type re-export below carries the merged namespace declared in
+ * `result-values.ts` (`Result.Proto`, `Result.Success<R>`, `Result.Failure<R>`);
+ * re-exporting the symbol is what keeps those members public.
  */
-export const TypeId: TypeId = '~effect-atom/atom/Result'
-
-/**
- * Represents the state of an asynchronous value as `Initial`, `Success`, or `Failure`, with a `waiting` flag for in-flight refreshes.
- *
- * @category models
- * @since 4.0.0
- */
-export type Result<A, E = never> = Initial<A, E> | Success<A, E> | Failure<A, E>
-
-/**
- * Returns `true` when a value is an `Result`.
- *
- * @category guards
- * @since 4.0.0
- */
-export const isResult = (u: unknown): u is Result<unknown, unknown> => hasProperty(u, TypeId)
-// alias: upstream names this guard `isAsyncResult`
-export { isResult as isAsyncResult }
-
-/**
- * Namespace containing type-level helpers and the shared prototype shape for `Result` values.
- *
- * @since 4.0.0
- */
-export declare namespace Result {
-  /**
-   * Common prototype fields implemented by every `Result` variant, including pipeability, the type marker, phantom type members, and the `waiting` flag.
-   *
-   * @category models
-   * @since 4.0.0
-   */
-  export interface Proto<A, E> extends Pipeable {
-    readonly [TypeId]: {
-      readonly E: (_: never) => E
-      readonly A: (_: never) => A
-    }
-    readonly waiting: boolean
-  }
-
-  /**
-   * Extracts the success value type from an `Result`.
-   *
-   * @category utility types
-   * @since 4.0.0
-   */
-  export type Success<R> = R extends Result<infer A, infer _> ? A : never
-
-  /**
-   * Extracts the failure error type from an `Result`.
-   *
-   * @category utility types
-   * @since 4.0.0
-   */
-  export type Failure<R> = R extends Result<infer _, infer E> ? E : never
+export {
+  failure,
+  initial,
+  isResult,
+  // alias: upstream names this guard `isAsyncResult`
+  isResult as isAsyncResult,
+  success,
+  TypeId,
 }
+export type { Failure, Initial, Result, Success } from './internal/result-values.js'
 
 /**
  * Rebuilds an `Result` with new success and failure types while preserving the variant of another result.
@@ -106,36 +66,6 @@ export type With<R extends Result<any, any>, A, E> = R extends Initial<infer _A,
   : R extends Failure<infer _A, infer _E> ? Failure<A, E>
   : never
 
-const ResultProto = {
-  [TypeId]: {
-    E: identity,
-    A: identity,
-  },
-  pipe() {
-    return pipeArguments(this, arguments)
-  },
-  [Equal.symbol](this: Result<any, any>, that: Result<any, any>): boolean {
-    if (this._tag !== that._tag || this.waiting !== that.waiting) {
-      return false
-    }
-    switch (this._tag) {
-      case 'Initial':
-        return true
-      case 'Success':
-        return Equal.equals(this.value, (that as Success<any, any>).value)
-      case 'Failure':
-        return Equal.equals(this.cause, (that as Failure<any, any>).cause)
-    }
-  },
-  [Hash.symbol](this: Result<any, any>): number {
-    const tagHash = Hash.string(`${this._tag}:${this.waiting}`)
-    if (this._tag === 'Initial') {
-      return tagHash
-    }
-    return Hash.combine(tagHash)(this._tag === 'Success' ? Hash.hash(this.value) : Hash.hash(this.cause))
-  },
-}
-
 /**
  * Returns whether an `Result` is currently waiting for an asynchronous computation or refresh to finish.
  *
@@ -143,16 +73,6 @@ const ResultProto = {
  * @since 4.0.0
  */
 export const isWaiting = <A, E>(result: Result<A, E>): boolean => result.waiting
-
-/**
- * Initial `Result` state before a success value or failure cause is available.
- *
- * @category models
- * @since 4.0.0
- */
-export interface Initial<A, E = never> extends Result.Proto<A, E> {
-  readonly _tag: 'Initial'
-}
 
 /**
  * Converts an `Exit` into a `Success` when it succeeds or a `Failure` carrying the exit cause when it fails.
@@ -206,67 +126,12 @@ export const isNotInitial = <A, E>(result: Result<A, E>): result is Success<A, E
   result._tag !== 'Initial'
 
 /**
- * Creates an `Initial` result, optionally marking it as waiting.
- *
- * @category constructors
- * @since 4.0.0
- */
-export const initial = <A = never, E = never>(waiting = false): Initial<A, E> => {
-  const result = Object.create(ResultProto)
-  result._tag = 'Initial'
-  result.waiting = waiting
-  return result
-}
-
-/**
- * Successful `Result` containing the current value, its timestamp, and the shared waiting flag.
- *
- * @category models
- * @since 4.0.0
- */
-export interface Success<A, E = never> extends Result.Proto<A, E> {
-  readonly _tag: 'Success'
-  readonly value: A
-  readonly timestamp: number
-}
-
-/**
  * Returns `true` when an `Result` is a `Success`.
  *
  * @category guards
  * @since 4.0.0
  */
 export const isSuccess = <A, E>(result: Result<A, E>): result is Success<A, E> => result._tag === 'Success'
-
-/**
- * Creates a `Success` result with a value and optional `waiting` flag or timestamp override.
- *
- * @category constructors
- * @since 4.0.0
- */
-export const success = <A, E = never>(value: A, options?: {
-  readonly waiting?: boolean | undefined
-  readonly timestamp?: number | undefined
-}): Success<A, E> => {
-  const result = Object.create(ResultProto)
-  result._tag = 'Success'
-  result.value = value
-  result.waiting = options?.waiting ?? false
-  result.timestamp = options?.timestamp ?? Date.now()
-  return result
-}
-
-/**
- * Failed `Result` containing a failure cause and the latest previous success when one is available.
- *
- * @category models
- * @since 4.0.0
- */
-export interface Failure<A, E = never> extends Result.Proto<A, E> {
-  readonly _tag: 'Failure'
-  readonly cause: Cause.Cause<E>
-  readonly previousSuccess: Option.Option<Success<A, E>>
-}
 
 /**
  * Returns `true` when an `Result` is a `Failure`.
@@ -284,27 +149,6 @@ export const isFailure = <A, E>(result: Result<A, E>): result is Failure<A, E> =
  */
 export const isInterrupted = <A, E>(result: Result<A, E>): result is Failure<A, E> =>
   result._tag === 'Failure' && Cause.hasInterruptsOnly(result.cause)
-
-/**
- * Creates a `Failure` result from a `Cause`, optionally preserving a previous success and marking the result as waiting.
- *
- * @category constructors
- * @since 4.0.0
- */
-export const failure = <A, E = never>(
-  cause: Cause.Cause<E>,
-  options?: {
-    readonly previousSuccess?: Option.Option<Success<A, E>> | undefined
-    readonly waiting?: boolean | undefined
-  },
-): Failure<A, E> => {
-  const result = Object.create(ResultProto)
-  result._tag = 'Failure'
-  result.cause = cause
-  result.previousSuccess = options?.previousSuccess ?? Option.none()
-  result.waiting = options?.waiting ?? false
-  return result
-}
 
 /**
  * Creates a `Failure` result from a `Cause`, carrying forward the latest success stored in a previous result.
