@@ -4,6 +4,522 @@
 
 ```ts
 
+import { Result } from 'effect';
+import { Schema } from 'effect';
+import { YieldableError } from 'effect/Cause';
+
+// @public
+export const asCompatibleSubstituteFor: (ref: ImageReference, repository: string) => ImageReference;
+
+// Warning: (ae-forgotten-export) The symbol "BackendError_base" needs to be exported by the entry point index.d.ts
+//
+// @public
+export class BackendError extends BackendError_base {}
+
+// Warning: (ae-forgotten-export) The symbol "CheckpointArtifactMissingError_base" needs to be exported by the entry point index.d.ts
+//
+// @public
+export class CheckpointArtifactMissingError extends CheckpointArtifactMissingError_base {}
+
+// Warning: (ae-forgotten-export) The symbol "CheckpointBackendMismatchError_base" needs to be exported by the entry point index.d.ts
+//
+// @public
+export class CheckpointBackendMismatchError extends CheckpointBackendMismatchError_base {}
+
+// @public
+export const CheckpointName: Schema.refine<string, Schema.String>;
+
+// @public (undocumented)
+export type CheckpointName = Schema.Schema.Type<typeof CheckpointName>;
+
+// @public
+export const CheckpointRef: Schema.String;
+
+// @public (undocumented)
+export type CheckpointRef = Schema.Schema.Type<typeof CheckpointRef>;
+
+// Warning: (ae-forgotten-export) The symbol "CheckpointUnsupportedError_base" needs to be exported by the entry point index.d.ts
+//
+// @public
+export class CheckpointUnsupportedError extends CheckpointUnsupportedError_base {}
+
+// @public
+export const CommandArguments: Schema.refine<readonly string[], Schema.$Array<Schema.String>>;
+
+// @public (undocumented)
+export type CommandArguments = Schema.Schema.Type<typeof CommandArguments>;
+
+// Warning: (ae-forgotten-export) The symbol "ContainerLaunchError_base" needs to be exported by the entry point index.d.ts
+//
+// @public
+export class ContainerLaunchError extends ContainerLaunchError_base {}
+
+// @public
+export const ContainerSpec: Schema.Struct<{
+    readonly name: Schema.String;
+    readonly image: Schema.String;
+    readonly env: Schema.$Array<Schema.Tuple<readonly [Schema.String, Schema.String]>>;
+    readonly command: Schema.optionalKey<Schema.refine<readonly string[], Schema.$Array<Schema.String>>>;
+    readonly entrypoint: Schema.optionalKey<Schema.refine<readonly string[], Schema.$Array<Schema.String>>>;
+    readonly workingDir: Schema.optionalKey<Schema.String>;
+    readonly ports: Schema.$Array<Schema.Struct<{
+        readonly hostPort: Schema.refine<number, Schema.Number>;
+        readonly guestPort: Schema.refine<number, Schema.Number>;
+    }>>;
+    readonly mounts: Schema.$Array<Schema.Struct<{
+        readonly hostPath: Schema.String;
+        readonly guestPath: Schema.String;
+        readonly readOnly: Schema.Boolean;
+    }>>;
+    readonly networkId: Schema.optionalKey<Schema.String>;
+    readonly aliases: Schema.$Array<Schema.refine<string, Schema.String>>;
+    readonly runId: Schema.String;
+    readonly memoryLimitMb: Schema.optionalKey<Schema.Finite>;
+    readonly keepAlive: Schema.Boolean;
+    readonly checkpointRef: Schema.optionalKey<Schema.String>;
+    readonly diskLimitMb: Schema.optionalKey<Schema.Finite>;
+    readonly tmpfsRootMb: Schema.optionalKey<Schema.Finite>;
+    readonly networkDisabled: Schema.Boolean;
+    readonly requireIsolation: Schema.Boolean;
+    readonly waitStrategy: Schema.TaggedUnion<{
+        readonly ForHealthCheck: Schema.TaggedStruct<"ForHealthCheck", {
+            readonly _tag: Schema.tag<"ForHealthCheck">;
+            readonly status: Schema.optionalKey<Schema.Literals<readonly ["healthy", "unhealthy", "starting"]>>;
+        }>;
+        readonly ForHttp: Schema.TaggedStruct<"ForHttp", {
+            readonly _tag: Schema.tag<"ForHttp">;
+            readonly path: Schema.String;
+            readonly port: Schema.optionalKey<Schema.Number>;
+            readonly status: Schema.optionalKey<Schema.Number>;
+            readonly method: Schema.optionalKey<Schema.Literals<readonly ["GET", "POST", "PUT", "DELETE", "HEAD", "PATCH", "OPTIONS"]>>;
+            readonly headers: Schema.optionalKey<Schema.$Record<Schema.String, Schema.String>>;
+            readonly body: Schema.optionalKey<Schema.TaggedUnion<{
+                readonly BodyContains: Schema.TaggedStruct<"BodyContains", {
+                    readonly value: Schema.String;
+                }>;
+                readonly BodyMatches: Schema.TaggedStruct<"BodyMatches", {
+                    readonly pattern: Schema.String;
+                }>;
+            }>>;
+        }>;
+        readonly ForLogMessage: Schema.TaggedStruct<"ForLogMessage", {
+            readonly _tag: Schema.tag<"ForLogMessage">;
+            readonly pattern: Schema.String;
+            readonly count: Schema.optionalKey<Schema.Number>;
+        }>;
+        readonly ForPort: Schema.TaggedStruct<"ForPort", {
+            readonly _tag: Schema.tag<"ForPort">;
+        }>;
+        readonly ForShell: Schema.TaggedStruct<"ForShell", {
+            readonly _tag: Schema.tag<"ForShell">;
+            readonly command: Schema.String;
+        }>;
+    }>;
+    readonly startupTimeoutMs: Schema.optionalKey<Schema.Finite>;
+}>;
+
+// @public (undocumented)
+export type ContainerSpec = Schema.Schema.Type<typeof ContainerSpec>;
+
+// @public
+export const declaredRepository: (ref: ImageReference) => string;
+
+// @public
+export const DiagnosticsContainer: Schema.Struct<{
+    readonly name: Schema.String;
+    readonly image: Schema.String;
+    readonly state: Schema.Literal<"running">;
+    readonly host: Schema.String;
+    readonly ports: Schema.$Array<Schema.Struct<{
+        readonly hostPort: Schema.refine<number, Schema.Number>;
+        readonly guestPort: Schema.refine<number, Schema.Number>;
+    }>>;
+    readonly logTailLines: Schema.$Array<Schema.String>;
+}>;
+
+// @public (undocumented)
+export type DiagnosticsContainer = Schema.Schema.Type<typeof DiagnosticsContainer>;
+
+// @public
+export const DiagnosticsReport: Schema.Struct<{
+    readonly containers: Schema.$Array<Schema.Struct<{
+        readonly name: Schema.String;
+        readonly image: Schema.String;
+        readonly state: Schema.Literal<"running">;
+        readonly host: Schema.String;
+        readonly ports: Schema.$Array<Schema.Struct<{
+            readonly hostPort: Schema.refine<number, Schema.Number>;
+            readonly guestPort: Schema.refine<number, Schema.Number>;
+        }>>;
+        readonly logTailLines: Schema.$Array<Schema.String>;
+    }>>;
+}>;
+
+// @public (undocumented)
+export type DiagnosticsReport = Schema.Schema.Type<typeof DiagnosticsReport>;
+
+// @public
+export const EnvPair: Schema.Tuple<readonly [Schema.String, Schema.String]>;
+
+// @public (undocumented)
+export type EnvPair = Schema.Schema.Type<typeof EnvPair>;
+
+// @public
+export const ExecRequest: Schema.Struct<{
+    readonly command: Schema.refine<readonly string[], Schema.$Array<Schema.String>>;
+    readonly workingDir: Schema.optionalKey<Schema.String>;
+    readonly env: Schema.$Array<Schema.Tuple<readonly [Schema.String, Schema.String]>>;
+}>;
+
+// @public (undocumented)
+export type ExecRequest = Schema.Schema.Type<typeof ExecRequest>;
+
+// @public
+export const ExecResult: Schema.Struct<{
+    readonly exitCode: Schema.Finite;
+    readonly stdout: Schema.String;
+    readonly stderr: Schema.String;
+}>;
+
+// @public (undocumented)
+export type ExecResult = Schema.Schema.Type<typeof ExecResult>;
+
+// @public
+export const FileMount: Schema.Struct<{
+    readonly hostPath: Schema.String;
+    readonly guestPath: Schema.String;
+    readonly readOnly: Schema.Boolean;
+}>;
+
+// @public (undocumented)
+export type FileMount = Schema.Schema.Type<typeof FileMount>;
+
+// @public
+export const FiniteNumber: Schema.Finite;
+
+// @public (undocumented)
+export type FiniteNumber = Schema.Schema.Type<typeof FiniteNumber>;
+
+// @public
+export const ForHealthCheck: Schema.Struct<{
+    readonly _tag: Schema.tag<"ForHealthCheck">;
+    readonly status: Schema.optionalKey<Schema.Literals<readonly ["healthy", "unhealthy", "starting"]>>;
+}>;
+
+// @public (undocumented)
+export type ForHealthCheck = Schema.Schema.Type<typeof ForHealthCheck>;
+
+// @public
+export const ForHttp: Schema.Struct<{
+    readonly _tag: Schema.tag<"ForHttp">;
+    readonly path: Schema.String;
+    readonly port: Schema.optionalKey<Schema.Number>;
+    readonly status: Schema.optionalKey<Schema.Number>;
+    readonly method: Schema.optionalKey<Schema.Literals<readonly ["GET", "POST", "PUT", "DELETE", "HEAD", "PATCH", "OPTIONS"]>>;
+    readonly headers: Schema.optionalKey<Schema.$Record<Schema.String, Schema.String>>;
+    readonly body: Schema.optionalKey<Schema.TaggedUnion<{
+        readonly BodyContains: Schema.TaggedStruct<"BodyContains", {
+            readonly value: Schema.String;
+        }>;
+        readonly BodyMatches: Schema.TaggedStruct<"BodyMatches", {
+            readonly pattern: Schema.String;
+        }>;
+    }>>;
+}>;
+
+// @public (undocumented)
+export type ForHttp = Schema.Schema.Type<typeof ForHttp>;
+
+// @public
+export const ForLogMessage: Schema.Struct<{
+    readonly _tag: Schema.tag<"ForLogMessage">;
+    readonly pattern: Schema.String;
+    readonly count: Schema.optionalKey<Schema.Number>;
+}>;
+
+// @public (undocumented)
+export type ForLogMessage = Schema.Schema.Type<typeof ForLogMessage>;
+
+// @public
+export const ForPort: Schema.Struct<{
+    readonly _tag: Schema.tag<"ForPort">;
+}>;
+
+// @public (undocumented)
+export type ForPort = Schema.Schema.Type<typeof ForPort>;
+
+// @public
+export const ForShell: Schema.Struct<{
+    readonly _tag: Schema.tag<"ForShell">;
+    readonly command: Schema.String;
+}>;
+
+// @public (undocumented)
+export type ForShell = Schema.Schema.Type<typeof ForShell>;
+
+// @public
+export const HealthStatus: Schema.Literals<readonly ["healthy", "unhealthy", "starting"]>;
+
+// @public (undocumented)
+export type HealthStatus = Schema.Schema.Type<typeof HealthStatus>;
+
+// @public
+export const HostPort: Schema.refine<number, Schema.Number>;
+
+// @public (undocumented)
+export type HostPort = Schema.Schema.Type<typeof HostPort>;
+
+// @public
+export const HttpBodyMatcher: Schema.TaggedUnion<{
+    readonly BodyContains: Schema.TaggedStruct<"BodyContains", {
+        readonly value: Schema.String;
+    }>;
+    readonly BodyMatches: Schema.TaggedStruct<"BodyMatches", {
+        readonly pattern: Schema.String;
+    }>;
+}>;
+
+// @public (undocumented)
+export type HttpBodyMatcher = Schema.Schema.Type<typeof HttpBodyMatcher>;
+
+// @public
+export const HttpMethod: Schema.Literals<readonly ["GET", "POST", "PUT", "DELETE", "HEAD", "PATCH", "OPTIONS"]>;
+
+// @public (undocumented)
+export type HttpMethod = Schema.Schema.Type<typeof HttpMethod>;
+
+// @public
+export const ImageReference: Schema.Struct<{
+    readonly raw: Schema.String;
+    readonly registry: Schema.optionalKey<Schema.String>;
+    readonly repository: Schema.String;
+    readonly tag: Schema.optionalKey<Schema.String>;
+    readonly digest: Schema.optionalKey<Schema.String>;
+    readonly substituteRepository: Schema.optionalKey<Schema.String>;
+}>;
+
+// @public (undocumented)
+export type ImageReference = Schema.Schema.Type<typeof ImageReference>;
+
+// Warning: (ae-forgotten-export) The symbol "IncompatibleImageError_base" needs to be exported by the entry point index.d.ts
+//
+// @public
+export class IncompatibleImageError extends IncompatibleImageError_base {}
+
+// Warning: (ae-forgotten-export) The symbol "InvalidCheckpointNameError_base" needs to be exported by the entry point index.d.ts
+//
+// @public
+export class InvalidCheckpointNameError extends InvalidCheckpointNameError_base {}
+
+// Warning: (ae-forgotten-export) The symbol "IsolationRequiredError_base" needs to be exported by the entry point index.d.ts
+//
+// @public
+export class IsolationRequiredError extends IsolationRequiredError_base {}
+
+// Warning: (ae-forgotten-export) The symbol "MalformedCheckpointArchiveError_base" needs to be exported by the entry point index.d.ts
+//
+// @public
+export class MalformedCheckpointArchiveError extends MalformedCheckpointArchiveError_base {}
+
+// @public
+export const NetworkAlias: Schema.refine<string, Schema.String>;
+
+// @public (undocumented)
+export type NetworkAlias = Schema.Schema.Type<typeof NetworkAlias>;
+
+// Warning: (ae-forgotten-export) The symbol "NetworkDisabledConflictError_base" needs to be exported by the entry point index.d.ts
+//
+// @public
+export class NetworkDisabledConflictError extends NetworkDisabledConflictError_base {}
+
+// @public
+export const NetworkSpec: Schema.Struct<{
+    readonly id: Schema.String;
+}>;
+
+// @public (undocumented)
+export type NetworkSpec = Schema.Schema.Type<typeof NetworkSpec>;
+
+// @public
+export const newContainerSpec: (image: string, name: string) => ContainerSpec;
+
+// @public
+export const parseImageReference: (image: string) => Result.Result<ImageReference, never>;
+
+// @public
+export const Port: Schema.refine<number, Schema.Number>;
+
+// @public (undocumented)
+export type Port = Schema.Schema.Type<typeof Port>;
+
+// Warning: (ae-forgotten-export) The symbol "PortBindConflictError_base" needs to be exported by the entry point index.d.ts
+//
+// @public
+export class PortBindConflictError extends PortBindConflictError_base {}
+
+// @public
+export const PortBinding: Schema.Struct<{
+    readonly hostPort: Schema.refine<number, Schema.Number>;
+    readonly guestPort: Schema.refine<number, Schema.Number>;
+}>;
+
+// @public (undocumented)
+export type PortBinding = Schema.Schema.Type<typeof PortBinding>;
+
+// Warning: (ae-forgotten-export) The symbol "ProvisionError_base" needs to be exported by the entry point index.d.ts
+//
+// @public
+export class ProvisionError extends ProvisionError_base {}
+
+// Warning: (ae-forgotten-export) The symbol "RelativeContainerPathError_base" needs to be exported by the entry point index.d.ts
+//
+// @public
+export class RelativeContainerPathError extends RelativeContainerPathError_base {}
+
+// @public
+export const requireCompatibleImage: (image: string | ImageReference, expectedRepository: string) => Result.Result<string, IncompatibleImageError>;
+
+// Warning: (ae-forgotten-export) The symbol "ReuseFromCheckpointError_base" needs to be exported by the entry point index.d.ts
+//
+// @public
+export class ReuseFromCheckpointError extends ReuseFromCheckpointError_base {}
+
+// Warning: (ae-forgotten-export) The symbol "ReuseWithNetworkError_base" needs to be exported by the entry point index.d.ts
+//
+// @public
+export class ReuseWithNetworkError extends ReuseWithNetworkError_base {}
+
+// Warning: (ae-forgotten-export) The symbol "RootDiskConflictError_base" needs to be exported by the entry point index.d.ts
+//
+// @public
+export class RootDiskConflictError extends RootDiskConflictError_base {}
+
+// @public
+export const RuntimeCapabilities: Schema.Struct<{
+    readonly hardwareIsolated: Schema.Boolean;
+    readonly checkpoint: Schema.Boolean;
+    readonly checkpointRestartsWorkload: Schema.Boolean;
+    readonly supportsNativeNetworks: Schema.Boolean;
+    readonly healthInspection: Schema.Boolean;
+}>;
+
+// @public (undocumented)
+export type RuntimeCapabilities = Schema.Schema.Type<typeof RuntimeCapabilities>;
+
+// Warning: (ae-forgotten-export) The symbol "TmpfsRootCheckpointError_base" needs to be exported by the entry point index.d.ts
+//
+// @public
+export class TmpfsRootCheckpointError extends TmpfsRootCheckpointError_base {}
+
+// Warning: (ae-forgotten-export) The symbol "TmpfsRootExceedsMemoryError_base" needs to be exported by the entry point index.d.ts
+//
+// @public
+export class TmpfsRootExceedsMemoryError extends TmpfsRootExceedsMemoryError_base {}
+
+// Warning: (ae-forgotten-export) The symbol "UnsupportedByBackendError_base" needs to be exported by the entry point index.d.ts
+//
+// @public
+export class UnsupportedByBackendError extends UnsupportedByBackendError_base {}
+
+// @public
+export const waitingFor: (spec: ContainerSpec, strategy: WaitStrategy) => ContainerSpec;
+
+// @public
+export const WaitStrategy: Schema.TaggedUnion<{
+    readonly ForHealthCheck: Schema.TaggedStruct<"ForHealthCheck", {
+        readonly _tag: Schema.tag<"ForHealthCheck">;
+        readonly status: Schema.optionalKey<Schema.Literals<readonly ["healthy", "unhealthy", "starting"]>>;
+    }>;
+    readonly ForHttp: Schema.TaggedStruct<"ForHttp", {
+        readonly _tag: Schema.tag<"ForHttp">;
+        readonly path: Schema.String;
+        readonly port: Schema.optionalKey<Schema.Number>;
+        readonly status: Schema.optionalKey<Schema.Number>;
+        readonly method: Schema.optionalKey<Schema.Literals<readonly ["GET", "POST", "PUT", "DELETE", "HEAD", "PATCH", "OPTIONS"]>>;
+        readonly headers: Schema.optionalKey<Schema.$Record<Schema.String, Schema.String>>;
+        readonly body: Schema.optionalKey<Schema.TaggedUnion<{
+            readonly BodyContains: Schema.TaggedStruct<"BodyContains", {
+                readonly value: Schema.String;
+            }>;
+            readonly BodyMatches: Schema.TaggedStruct<"BodyMatches", {
+                readonly pattern: Schema.String;
+            }>;
+        }>>;
+    }>;
+    readonly ForLogMessage: Schema.TaggedStruct<"ForLogMessage", {
+        readonly _tag: Schema.tag<"ForLogMessage">;
+        readonly pattern: Schema.String;
+        readonly count: Schema.optionalKey<Schema.Number>;
+    }>;
+    readonly ForPort: Schema.TaggedStruct<"ForPort", {
+        readonly _tag: Schema.tag<"ForPort">;
+    }>;
+    readonly ForShell: Schema.TaggedStruct<"ForShell", {
+        readonly _tag: Schema.tag<"ForShell">;
+        readonly command: Schema.String;
+    }>;
+}>;
+
+// @public (undocumented)
+export type WaitStrategy = Schema.Schema.Type<typeof WaitStrategy>;
+
+// @public
+export const withCommand: (spec: ContainerSpec, ...command: string[]) => ContainerSpec;
+
+// @public
+export const withCopyDirectoryToContainer: (spec: ContainerSpec, hostPath: string, guestPath: string) => ContainerSpec;
+
+// @public
+export const withCopyFileToContainer: (spec: ContainerSpec, hostPath: string, guestPath: string) => ContainerSpec;
+
+// @public
+export const withDiskLimit: (spec: ContainerSpec, megabytes: number) => ContainerSpec;
+
+// @public
+export const withEntrypoint: (spec: ContainerSpec, ...entrypoint: string[]) => ContainerSpec;
+
+// @public
+export const withEnv: (spec: ContainerSpec, key: string, value: string) => ContainerSpec;
+
+// @public
+export const withEnvPairs: (spec: ContainerSpec, pairs: ReadonlyArray<readonly [string, string]>) => ContainerSpec;
+
+// @public
+export const withExposedPorts: (spec: ContainerSpec, ...guestPorts: number[]) => ContainerSpec;
+
+// @public
+export const withKeepAlive: (spec: ContainerSpec, keepAlive?: boolean) => ContainerSpec;
+
+// @public
+export const withMemoryLimit: (spec: ContainerSpec, megabytes: number) => ContainerSpec;
+
+// @public
+export const withNetwork: (spec: ContainerSpec, networkId: string) => ContainerSpec;
+
+// @public
+export const withNetworkAliases: (spec: ContainerSpec, ...aliases: string[]) => ContainerSpec;
+
+// @public
+export const withNetworkDisabled: (spec: ContainerSpec) => ContainerSpec;
+
+// @public
+export const withRequireIsolation: (spec: ContainerSpec) => ContainerSpec;
+
+// @public
+export const withReuse: (spec: ContainerSpec) => ContainerSpec;
+
+// @public
+export const withStartupTimeout: (spec: ContainerSpec, ms: number) => ContainerSpec;
+
+// @public
+export const withTmpfsRoot: (spec: ContainerSpec, megabytes: number) => ContainerSpec;
+
+// @public
+export const withWaitStrategy: typeof waitingFor;
+
+// @public
+export const withWorkingDir: (spec: ContainerSpec, workingDir: string) => ContainerSpec;
+
 // (No @packageDocumentation comment for this package)
 
 ```
