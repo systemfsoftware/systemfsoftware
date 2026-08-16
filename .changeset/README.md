@@ -9,10 +9,11 @@ pnpm change --bump <none|patch|minor|major> --summary "<changelog entry>" [<pkg>
 
 - A PR that changes a publishable package's turbo `build` hash MUST ship with
   an intent here — the `changeset-check` workflow compares each package's
-  `build` task hash between the PR's pinned base and its head, and blocks the
-  PR when a changed hash is not named. The hash is turbo's own verdict: source
-  and config files, the manifest, the build command, and dependency-task
-  changes all re-hash; a README or lockfile-only edit does not.
+  `build` task hash between the PR's pinned base and the run's checked-out
+  head tree, and blocks the PR when a changed hash is not named. The hash is
+  turbo's own verdict: source and config files, the manifest, the build
+  command, and dependency-task changes all re-hash; a README or lockfile-only
+  edit does not.
 - `--bump none` records a change that needs no release. A devDependency-only
   or script-only bump is the canonical `none` class; a `none` on a
   behavior-visible change is the same silent non-release the gate exists to

@@ -1,10 +1,12 @@
-#!/usr/bin/env -S deno run --allow-run=git,turbo --allow-read --allow-write=/tmp
+#!/usr/bin/env -S deno run --allow-read --allow-write=/tmp
+// Run it as:  deno run --allow-run=git,"$PWD/node_modules/.bin/turbo" --allow-read --allow-write=/tmp \
+//             scripts/guards/check-changeset.ts <base-sha>
 // The gate writes exactly one throwaway worktree under the OS temp dir and
-// removes it unconditionally; `--allow-write=/tmp` is the entire write budget.
-// The turbo it spawns is the lockfile's shim at node_modules/.bin/turbo;
-// running the gate therefore requires that directory on PATH (`.github/actions/
-// install-deps` + the workflow prepend it), and the shim's existence is
-// asserted before any spawn.
+// removes it after the verdict; a failed cleanup is logged, not fatal
+// (`--allow-write=/tmp` is the entire write budget). The turbo it spawns is
+// the lockfile's shim at the absolute path `$PWD/node_modules/.bin/turbo` —
+// the same object the lstat and the pin check see — so the grant is the
+// exact path and nothing earlier on PATH can stand in.
 // LOCKED SURFACE — evaluation script (AGENTS.md Surface Classes).
 // Never edit this file to make a PR pass; change the PR.
 //
@@ -64,12 +66,14 @@ type DryRun = {
   readonly packages: readonly string[]
   readonly matrix: HashMatrix
   readonly dirs: Readonly<Record<string, string>> // package name -> package directory
+  readonly engineVersion: string | null // turbo's own self-report; null when absent
 }
 
 const BUMPS = ['none', 'patch', 'minor', 'major'] as const
 const MANIFEST_SUFFIX = '/package.json'
 const LOCKFILE = 'pnpm-lock.yaml'
 const TURBO_MANIFEST = 'node_modules/turbo/package.json'
+const TURBO = `${Deno.cwd()}/node_modules/.bin/turbo`
 const BUILD_TASK_SUFFIX = '#build'
 
 const dec = new TextDecoder()
@@ -136,7 +140,7 @@ const verdict = (
  * without one is a verdict nobody can judge, so it fails closed.
  */
 const parseDryRunOutput = (stdout: string, context: string): DryRun => {
-  let doc: { packages?: unknown; tasks?: unknown }
+  let doc: { packages?: unknown; tasks?: unknown; turboVersion?: unknown }
   try {
     doc = JSON.parse(stdout) as typeof doc
   } catch {
@@ -166,19 +170,30 @@ const parseDryRunOutput = (stdout: string, context: string): DryRun => {
     matrix[name] = hash
     if (typeof directory === 'string' && directory.length > 0) dirs[name] = directory
   }
-  return { packages: doc.packages as string[], matrix, dirs }
+  // Packages enumerated but no #build task parsed is task-format drift, not
+  // an empty verdict — an empty matrix must never read as "nothing changed".
+  if (doc.packages.length > 0 && Object.keys(matrix).length === 0) {
+    throw new Error(
+      `${context} output: ${doc.packages.length} package(s) enumerated but no ${BUILD_TASK_SUFFIX} task parsed — turbo's task format drifted`,
+    )
+  }
+  return {
+    packages: doc.packages as string[],
+    matrix,
+    dirs,
+    engineVersion: typeof doc.turboVersion === 'string' ? doc.turboVersion : null,
+  }
 }
 
-const TURBO_BIN_DIR = `${Deno.cwd()}/node_modules/.bin`
-const TURBO = 'turbo'
+const engineSelfReportMatches = (run: DryRun, pinned: string): boolean =>
+  run.engineVersion === null || run.engineVersion === pinned
 
-const dryRun = async (cwd: string): Promise<DryRun> => {
-  const shim = `${TURBO_BIN_DIR}/${TURBO}`
+const dryRun = async (cwd: string, pinnedVersion: string): Promise<DryRun> => {
   try {
-    await Deno.lstat(shim)
+    await Deno.lstat(TURBO)
   } catch {
     throw new Error(
-      `turbo not present at ${shim} — run 'pnpm install --frozen-lockfile' (the gate runs the lockfile-installed binary, nothing else)`,
+      `turbo not present at ${TURBO} — run 'pnpm install --frozen-lockfile' (the gate runs the lockfile-installed binary, nothing else)`,
     )
   }
   const out = await new Deno.Command(TURBO, {
@@ -191,7 +206,14 @@ const dryRun = async (cwd: string): Promise<DryRun> => {
     const tail = dec.decode(out.stderr).trim().split('\n').slice(-5).join('\n')
     throw new Error(`turbo dry run failed in ${cwd}:\n${tail}`)
   }
-  return parseDryRunOutput(dec.decode(out.stdout), cwd)
+  const run = parseDryRunOutput(dec.decode(out.stdout), cwd)
+  if (!engineSelfReportMatches(run, pinnedVersion)) {
+    throw new Error(
+      `turbo in ${cwd} self-reports version ${run.engineVersion}, not the lockfile pin ${pinnedVersion} — ` +
+        `run 'pnpm install --frozen-lockfile'`,
+    )
+  }
+  return run
 }
 
 /**
@@ -220,7 +242,11 @@ const lockfileTurboEntry = (lockfile: string): { specifier: string; version: str
  * whether the installed binary is the lockfile's binary. Throws with the fix
  * instruction so a stale install cannot masquerade as a verdict.
  */
-const assertTurboPin = (lockfile: string, resolvedTurboPackageJson: string, context: string): void => {
+const assertTurboPin = (
+  lockfile: string,
+  resolvedTurboPackageJson: string,
+  context: string,
+): string => {
   if (!lockfileIsV9(lockfile)) {
     throw new Error(`${context}: ${LOCKFILE} is not lockfileVersion 9.0 — the pin parser is schema-bound`)
   }
@@ -240,19 +266,21 @@ const assertTurboPin = (lockfile: string, resolvedTurboPackageJson: string, cont
         `run 'pnpm install --frozen-lockfile'`,
     )
   }
+  return pinned.version
 }
 
 /**
  * The live pair, recomputed from source bytes wherever the gate or its
  * selftest runs: the lockfile's pin and the installed engine manifest must
- * agree (CI runs the selftest right after the frozen install).
+ * agree (CI runs the selftest right after the frozen install). Returns the
+ * pinned version so the spawns can also check the engine's own self-report.
  */
-const assertLiveTurboPin = async (context: string): Promise<void> => {
+const assertLiveTurboPin = async (context: string): Promise<string> => {
   const [lockfile, resolvedTurbo] = await Promise.all([
     Deno.readTextFile(LOCKFILE),
     Deno.readTextFile(TURBO_MANIFEST).catch(() => '{}'),
   ])
-  assertTurboPin(lockfile, resolvedTurbo, context)
+  return assertTurboPin(lockfile, resolvedTurbo, context)
 }
 
 const reportMissingIntent = (missingIntent: readonly string[]) => {
@@ -327,21 +355,35 @@ const main = async (baseArg: string | undefined): Promise<number> => {
     return 2
   }
 
-  await assertLiveTurboPin('check-changeset')
+  const pinnedVersion = await assertLiveTurboPin('check-changeset')
 
   const [baseSha] = await git(['rev-parse', '--verify', `${baseArg}^{commit}`])
 
   const baseDir = await Deno.makeTempDir({ prefix: 'changeset-base-' })
-  await git(['worktree', 'add', '--detach', '--force', baseDir, baseSha])
+  try {
+    await git(['worktree', 'add', '--detach', '--force', baseDir, baseSha])
+  } catch (error) {
+    await Deno.remove(baseDir, { recursive: true }).catch(() => {})
+    throw error
+  }
   let baseRun: DryRun
   let headRun: DryRun
   try {
     ;[baseRun, headRun] = await Promise.all([
-      dryRun(baseDir),
-      dryRun(Deno.cwd()),
+      dryRun(baseDir, pinnedVersion),
+      dryRun(Deno.cwd(), pinnedVersion),
     ])
   } finally {
-    await git(['worktree', 'remove', '--force', baseDir]).catch(() => {})
+    await git(['worktree', 'remove', '--force', baseDir]).catch(() => {
+      console.error(`warning: could not remove the base worktree ${baseDir} — run 'git worktree prune'`)
+    })
+  }
+  // A dry run that enumerates no workspace packages is a broken premise, not
+  // an empty verdict (R9) — it must never read as "nothing changed".
+  for (const side of [['base', baseRun], ['head', headRun]] as const) {
+    if (side[1].packages.length === 0) {
+      throw new Error(`turbo enumerated no workspace packages in the ${side[0]} run — refusing the empty verdict`)
+    }
   }
 
   const [members, changedFiles, changesetPaths] = await Promise.all([
@@ -526,6 +568,11 @@ const FIXTURES: readonly { label: string; evidence: Evidence; expect: Verdict }[
     },
     expect: { touched: ['@scope/published'], missingIntent: ['@scope/published'] },
   },
+  // The next two rows share a shape on purpose: they pin the VERDICT's rule
+  // that any observed hash difference demands a record, whatever the file
+  // class. The re-hash semantics themselves (a devDependencies edit re-hashes;
+  // a removed build script keeps a NONEXISTENT-command task and re-hashes)
+  // are pinned only by the live probe matrix — a fixture cannot observe them.
   {
     label: 'a devDependencies-only edit changes the hash and demands its record',
     evidence: {
@@ -538,7 +585,7 @@ const FIXTURES: readonly { label: string; evidence: Evidence; expect: Verdict }[
     expect: { touched: ['@scope/published'], missingIntent: ['@scope/published'] },
   },
   {
-    label: 'removing the build script keeps the task and re-hashes',
+    label: 'removing the build script keeps the task (its hash changed) and demands',
     evidence: {
       base: { '@scope/published': H.before },
       head: { '@scope/published': H.after },
@@ -614,6 +661,28 @@ const FIXTURES: readonly { label: string; evidence: Evidence; expect: Verdict }[
     },
     expect: { touched: [], missingIntent: [] },
   },
+  {
+    label: 'a multi-package intent frontmatter covers each name it lists',
+    evidence: {
+      base: { '@scope/published': H.before, '@scope/other': H.before },
+      head: { '@scope/published': H.after, '@scope/other': H.after },
+      members: MEMBERS,
+      changesets: ['---\n"@scope/other": minor\n"@scope/published": patch\n---\n'],
+      changedFiles: ['packages/other/src/b.ts', 'packages/published/src/a.ts'],
+    },
+    expect: { touched: ['@scope/other', '@scope/published'], missingIntent: [] },
+  },
+  {
+    label: 'a package un-privated in the PR is publishable at head and its re-hash demands its first record',
+    evidence: {
+      base: { '@scope/unprivated': H.before },
+      head: { '@scope/unprivated': H.after },
+      members: [...MEMBERS, { name: '@scope/unprivated', dir: 'packages/unprivated', publishable: true }],
+      changesets: [],
+      changedFiles: ['packages/unprivated/package.json'],
+    },
+    expect: { touched: ['@scope/unprivated'], missingIntent: ['@scope/unprivated'] },
+  },
 ]
 
 const expectsThrow = (fn: () => unknown): boolean => {
@@ -661,6 +730,92 @@ importers:
     ],
     ['a task without a hash fails closed', expectsThrow(() => parseDryRunOutput(DRY_BROKEN, 'fixture'))],
     ['non-JSON dry-run output fails closed', expectsThrow(() => parseDryRunOutput('turbo: not json', 'fixture'))],
+    [
+      'a dry run missing a tasks array fails closed',
+      expectsThrow(() => parseDryRunOutput('{"packages":[]}', 'fixture')),
+    ],
+    [
+      'a build task without a package name fails closed',
+      expectsThrow(() =>
+        parseDryRunOutput(
+          JSON.stringify({
+            packages: ['@scope/published'],
+            tasks: [{ taskId: '@scope/#build', hash: H.before, directory: 'packages/published' }],
+          }),
+          'fixture',
+        )
+      ),
+    ],
+    [
+      'a duplicate build task fails closed',
+      expectsThrow(() =>
+        parseDryRunOutput(
+          JSON.stringify({
+            packages: ['@scope/published'],
+            tasks: [
+              {
+                taskId: '@scope/published#build',
+                package: '@scope/published',
+                hash: H.before,
+                directory: 'packages/published',
+              },
+              {
+                taskId: '@scope/published#build',
+                package: '@scope/published',
+                hash: H.after,
+                directory: 'packages/published',
+              },
+            ],
+          }),
+          'fixture',
+        )
+      ),
+    ],
+    [
+      'non-build tasks are skipped while build rows are kept',
+      JSON.stringify(
+        parseDryRunOutput(
+          JSON.stringify({
+            turboVersion: '2.10.5',
+            packages: ['@scope/published'],
+            tasks: [
+              {
+                taskId: '@scope/published#test',
+                package: '@scope/published',
+                hash: 'deadbeef',
+                directory: 'packages/published',
+              },
+              {
+                taskId: '@scope/published#build',
+                package: '@scope/published',
+                hash: H.before,
+                directory: 'packages/published',
+              },
+            ],
+          }),
+          'fixture',
+        ).matrix,
+      ) === JSON.stringify({ '@scope/published': H.before }),
+    ],
+    [
+      'packages without any build task fail closed as task-format drift',
+      expectsThrow(() =>
+        parseDryRunOutput(
+          JSON.stringify({
+            packages: ['@scope/published'],
+            tasks: [{ taskId: '@scope/published#test', package: '@scope/published', hash: H.before }],
+          }),
+          'fixture',
+        )
+      ),
+    ],
+    [
+      'engine self-report is carried and checked against the pin',
+      parseDryRunOutput(DRY_FIXTURE, 'fixture').engineVersion === '2.10.5' &&
+      engineSelfReportMatches(parseDryRunOutput(DRY_FIXTURE, 'fixture'), '2.10.5') &&
+      !engineSelfReportMatches({ ...parseDryRunOutput(DRY_FIXTURE, 'fixture'), engineVersion: '9.9.9' }, '2.10.5') &&
+      engineSelfReportMatches({ packages: [], matrix: {}, dirs: {}, engineVersion: null }, '2.10.5'),
+    ],
     [
       'pin check accepts a matching lockfile+install',
       expectsThrow(() => assertTurboPin(FIXTURE_V9, JSON.stringify({ version: '9.9.9' }), 'selftest-fixture')) &&

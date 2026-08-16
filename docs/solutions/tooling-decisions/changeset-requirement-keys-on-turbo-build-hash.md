@@ -38,9 +38,9 @@ Turbo's `build` task hash, read from a dry-run plan, is a content-addressed iden
 - **Determinism**: identical trees produce identical per-task hashes, regardless of checkout path, temp extraction, or environment (pass-through env values fold into the global cache-inputs block, never into a per-task hash — measured by varying the cache-home variable across runs: the global fingerprint moved, zero task hashes moved).
 - **Totality over reach**: anything that plausibly reaches the artifact — a source edit, a manifest byte, a build-command edit, an upstream dependency's own re-hash — changes the hash. Things that do not reach it — a README, a lockfile-only resolution change, a root-manifest or workspace-config edit that no task input reads — leave it untouched.
 
-The gate therefore compares two dry-run plans: one over the PR's pinned base commit (materialized as a throwaway worktree, removed unconditionally), one over the head. A publishable package (head manifest not private) whose hash differs demands an intent; unchanged demands nothing. A `none` intent is the explicit decline for a hash change that ships nothing — devDependency-only and script-only bumps are its canonical class.
+The gate therefore compares two dry-run plans: one over the PR's pinned base commit (materialized as a throwaway worktree, removed after the verdict — a failed cleanup is logged, not fatal), one over the head. A publishable package (head manifest not private) whose hash differs demands an intent; unchanged demands nothing. A `none` intent is the explicit decline for a hash change that ships nothing — devDependency-only and script-only bumps are its canonical class.
 
-The executor that computes the verdict is itself pinned: the lockfile-resolved build binary, verified before any run against the lockfile's declared version and the installed manifest (`assertTurboPin`). A gate that fetches its own engine from a registry at verdict time has a supply chain its verdict cannot see.
+The executor that computes the verdict is itself pinned: the lockfile-resolved build binary, verified before any run against the lockfile's declared version, the installed manifest, and the engine's own dry-run self-report. A gate that fetches its own engine from a registry at verdict time has a supply chain its verdict cannot see.
 
 ## Architectural Invariants
 
