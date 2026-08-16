@@ -82,7 +82,7 @@ Feature('RestForOne Strategy')
             yield* Ref.set(s.pauseA, true)
             yield* TestClock.adjust(Duration.millis(50))
             yield* Ref.set(s.failOnceB, true)
-            yield* TestClock.adjust(Duration.millis(100))
+            yield* TestClock.adjust(Duration.seconds(13))
 
             const aAfter = yield* Ref.get(s.counters.a)
             const bAfter = yield* Ref.get(s.counters.b)
@@ -164,7 +164,7 @@ Feature('RestForOne Strategy')
             const cBefore = yield* Ref.get(s.counters.c)
 
             yield* Ref.set(s.failOnceA, true)
-            yield* TestClock.adjust(Duration.seconds(2))
+            yield* TestClock.adjust(Duration.seconds(13))
 
             const aAfter = yield* Ref.get(s.counters.a)
             const bAfter = yield* Ref.get(s.counters.b)

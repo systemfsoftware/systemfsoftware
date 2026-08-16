@@ -62,7 +62,7 @@ Feature('OneForAll Strategy')
             const bBefore = yield* Ref.get(s.counters.b)
 
             yield* Ref.set(s.failOnce, true)
-            yield* TestClock.adjust(Duration.seconds(2))
+            yield* TestClock.adjust(Duration.seconds(12))
 
             const aAfter = yield* Ref.get(s.counters.a)
             const bAfter = yield* Ref.get(s.counters.b)
@@ -137,7 +137,7 @@ Feature('OneForAll Strategy')
               const aBefore = yield* Ref.get(s.counters.a)
 
               yield* Ref.set(s.failOnce, true)
-              yield* TestClock.adjust(Duration.millis(500))
+              yield* TestClock.adjust(Duration.seconds(13))
 
               const aAfter = yield* Ref.get(s.counters.a)
               return { aBefore, aAfter }
@@ -203,7 +203,7 @@ Feature('OneForAll Strategy')
             const bBefore = yield* Ref.get(s.counters.b)
 
             yield* Ref.set(s.failOnce, true)
-            yield* TestClock.adjust(Duration.seconds(2))
+            yield* TestClock.adjust(Duration.seconds(13))
 
             const aAfter = yield* Ref.get(s.counters.a)
             const bAfter = yield* Ref.get(s.counters.b)

@@ -143,15 +143,18 @@ const runSupervisionEpochWithBackoff = <R>(
 ): Effect.Effect<SupervisionEpochResultType, never, R> =>
   Effect.gen(function*() {
     const advance = yield* Schedule.toStep(ctx.policy.backoff)
-    // v3-faithful epoch timing: the v3 `Schedule.driver` slept only
-    // `Intervals.start(decision.intervals) - now` and skipped the sleep when that
-    // was <= 0. For `exponential(base)` the first decision's interval starts AT
-    // `now`, so the first `driver.next()` returned immediately; the backoff delay
-    // applied from the second restart on. `Schedule.toStepWithSleep` (v4) sleeps
-    // the delay on every step, so the first restart would wait a full backoff
-    // interval. `Schedule.toStep` returns the delay for the caller to handle, so
-    // we sleep it on every step after the first, mirroring the v3 driver exactly.
-    let first = true
+    // v3-faithful epoch timing: v3's `ScheduleDriver.next` slept
+    // `Intervals.start(decision.intervals) - now` on every step
+    // (repos/effect/packages/effect/src/internal/schedule.ts:165-201), and
+    // `addDelay`/`modifyDelay` raised the next interval's start to
+    // `now + out` on every step (same file, 1116-1137), so the very first step
+    // already slept the base delay. v4 `Schedule.exponential` yields the same
+    // non-zero first step — `base * factor^(attempt - 1)` with attempt starting
+    // at 1 (repos/effect-v4/packages/effect/src/Schedule.ts:850-859) — and the
+    // pure-core property test (backoff.kernel.property.test.ts) treats the
+    // first delay as a real delay. `Schedule.toStep` returns the delay for the
+    // caller to sleep, so we sleep it on every step; a done pull (Result
+    // failure) short-circuits before any sleep, exactly like v3's driver.
     const loop = (): Effect.Effect<SupervisionEpochResultType, never, R> =>
       Effect.gen(function*() {
         const epochStep = yield* attempt.pipe(Effect.scoped)
@@ -170,10 +173,8 @@ const runSupervisionEpochWithBackoff = <R>(
               if (Result.isFailure(pulled)) {
                 return StopSupervision.make()
               }
-              if (!first) {
-                yield* Effect.sleep(pulled.success[1])
-              }
-              first = false
+              const [, delay] = pulled.success
+              yield* Effect.sleep(delay)
               return yield* loop()
             })),
           Match.exhaustive,
@@ -190,6 +191,23 @@ const openAllReady = <R>(ctx: SupervisionContext<R>): Effect.Effect<void, never,
       ctx.health.ready.open,
       Metric.update(Metric.withAttributes(healthStateGauge, { daemon: ctx.name, latch: 'ready' }), 1),
     )
+  })
+
+/**
+ * Records one restart against the child's intensity tracker and reports whether the
+ * child's restart budget is now exceeded. A child without a bounded intensity policy
+ * never hits the budget.
+ */
+const isChildIntensityBudgetDone = (
+  tracker: Option.Option<IntensityTracker>,
+): Effect.Effect<boolean, never, never> =>
+  Option.match(tracker, {
+    onNone: () => Effect.succeed(false),
+    onSome: (ci: IntensityTracker) =>
+      Effect.gen(function*() {
+        yield* ci.record
+        return yield* ci.isExceeded
+      }),
   })
 
 const superviseChild = <R>(
@@ -214,14 +232,7 @@ const superviseChild = <R>(
               return StopEpoch.make()
             }
 
-            const childIntensityBudgetDone = yield* Option.match(childIntensityOpt, {
-              onNone: () => Effect.succeed(false),
-              onSome: (ci: IntensityTracker) =>
-                Effect.gen(function*() {
-                  yield* ci.record
-                  return yield* ci.isExceeded
-                }),
-            })
+            const childIntensityBudgetDone = yield* isChildIntensityBudgetDone(childIntensityOpt)
             if (childIntensityBudgetDone) {
               return StopEpoch.make()
             }
@@ -305,15 +316,7 @@ const runGroup = <R>(
             }
 
             const cIntForFailed = Option.flatten(Arr.get(childIntensityTrackers, failedIdx))
-            const childIntensityBudgetDone = yield* Option.match(cIntForFailed, {
-              onNone: () =>
-                Effect.succeed(false),
-              onSome: (cInt: IntensityTracker) =>
-                Effect.gen(function*() {
-                  yield* cInt.record
-                  return yield* cInt.isExceeded
-                }),
-            })
+            const childIntensityBudgetDone = yield* isChildIntensityBudgetDone(cIntForFailed)
             if (childIntensityBudgetDone) {
               return StopEpoch.make()
             }
@@ -337,7 +340,8 @@ const runGroup = <R>(
         return yield* Match.value(epochResult).pipe(
           Match.tag('ContinueSupervision', () =>
             loop()),
-          Match.tag('StopSupervision', () => Effect.void),
+          Match.tag('StopSupervision', () =>
+            Effect.void),
           Match.exhaustive,
         )
       })

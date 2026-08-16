@@ -250,4 +250,85 @@ Feature('OneForOne Strategy')
         ),
       ),
     )
+
+    scenario(
+      'Every restart waits out the exponential backoff, starting with the base delay',
+      Gherkin.Do.pipe(
+        Given('a reporter spy')('spy', () => ReporterSpyContext),
+        When('a oneForOne supervisor runs an always-failing child with 10ms exponential backoff')(
+          'result',
+          (s) =>
+            Effect.gen(function*() {
+              const child = Daemon.poll({
+                name: 'A',
+                work: SimulatedFailure.make(),
+                interval: Duration.millis(10),
+                tick: { tickTimeout: Duration.seconds(90) },
+                lock: { mode: 'none' },
+              })
+              const sup = oneForOne({
+                name: 'backoff-sequence',
+                children: [child],
+                supervision: Supervision.custom({
+                  intensity: BoundedIntensity.make({ restarts: 100, window: Duration.seconds(60) }),
+                  backoff: Schedule.exponential(Duration.millis(10)),
+                  cooldown: Duration.minutes(30),
+                }),
+                lock: { mode: 'none' },
+              })
+              const reporterLayer = Layer.mergeAll(
+                LeaderLock.Noop,
+                Layer.succeed(DaemonReporter, {
+                  onRestart: s.spy.reporter.onRestart,
+                  onExhausted: s.spy.reporter.onExhausted,
+                }),
+              )
+              yield* run.supervisor(sup).pipe(Effect.provide(reporterLayer))
+              const countRestarts = () =>
+                Effect.map(s.spy.getRestarts(), (rs) => rs.filter((r) => r.name === 'backoff-sequence').length)
+              // Let the first failure's restart decision land before touching the clock.
+              yield* Effect.yieldNow
+              yield* Effect.yieldNow
+              yield* Effect.yieldNow
+              const atStart = yield* countRestarts()
+              yield* TestClock.adjust(Duration.millis(9))
+              const at9 = yield* countRestarts()
+              yield* TestClock.adjust(Duration.millis(1))
+              const at10 = yield* countRestarts()
+              yield* TestClock.adjust(Duration.millis(19))
+              const at29 = yield* countRestarts()
+              yield* TestClock.adjust(Duration.millis(1))
+              const at30 = yield* countRestarts()
+              yield* TestClock.adjust(Duration.millis(39))
+              const at69 = yield* countRestarts()
+              yield* TestClock.adjust(Duration.millis(1))
+              const at70 = yield* countRestarts()
+              return { atStart, at9, at10, at29, at30, at69, at70 }
+            }),
+        ),
+        Then('exactly one restart is reported at the first failure, with none following immediately')((s) =>
+          Effect.sync(() => {
+            expect(s.result.atStart).toBe(1)
+          })
+        ),
+        And('the second restart waited out the 10ms base delay')((s) =>
+          Effect.sync(() => {
+            expect(s.result.at9).toBe(1)
+            expect(s.result.at10).toBe(2)
+          })
+        ),
+        And('the third restart waited out the doubled 20ms delay')((s) =>
+          Effect.sync(() => {
+            expect(s.result.at29).toBe(2)
+            expect(s.result.at30).toBe(3)
+          })
+        ),
+        And('the fourth restart waited out the doubled 40ms delay')((s) =>
+          Effect.sync(() => {
+            expect(s.result.at69).toBe(3)
+            expect(s.result.at70).toBe(4)
+          })
+        ),
+      ),
+    )
   })
