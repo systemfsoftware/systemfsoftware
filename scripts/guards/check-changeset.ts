@@ -610,7 +610,7 @@ const FIXTURES: readonly { label: string; evidence: Evidence; expect: Verdict }[
   },
 ]
 
-const selftest = (): number => {
+const selftest = async (): Promise<number> => {
   const failures: string[] = []
 
   for (const { label, evidence, expect } of FIXTURES) {
@@ -683,6 +683,19 @@ importers:
     // expected red
   }
 
+  // The live pair, recomputed from source bytes: the lockfile's pin and the
+  // installed engine manifest must agree wherever the selftest runs (CI runs
+  // it right after the frozen install). This is the same assertion main()
+  // enforces before any verdict.
+  try {
+    assertTurboPin(
+      await Deno.readTextFile(LOCKFILE),
+      await Deno.readTextFile('node_modules/turbo/package.json'),
+      'selftest',
+    )
+  } catch (error) {
+    failures.push(`  live pin check: ${error instanceof Error ? error.message : String(error)}`)
+  }
   if (failures.length > 0) {
     console.error(`check-changeset: selftest FAILED (${failures.length}/${FIXTURES.length + 9})\n`)
     for (const failure of failures) console.error(failure)
@@ -693,7 +706,7 @@ importers:
 }
 
 try {
-  Deno.exitCode = Deno.args.includes('--selftest') ? selftest() : await main(Deno.args[0])
+  Deno.exitCode = Deno.args.includes('--selftest') ? await selftest() : await main(Deno.args[0])
 } catch (error) {
   console.error(`::error::${error instanceof Error ? error.message : String(error)}`)
   Deno.exitCode = 1
