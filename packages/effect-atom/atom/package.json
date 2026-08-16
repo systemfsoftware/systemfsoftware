@@ -78,16 +78,16 @@
   },
   "dependencies": {},
   "peerDependencies": {
-    "effect": "catalog:effect4"
+    "effect": "catalog:"
   },
   "devDependencies": {
-    "@effect/vitest": "catalog:effect4",
+    "@effect/vitest": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
-    "@systemfsoftware/effect-gherkin-spec-v4": "workspace:^",
+    "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
-    "effect": "catalog:effect4",
+    "effect": "catalog:",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
     "typescript": "catalog:",

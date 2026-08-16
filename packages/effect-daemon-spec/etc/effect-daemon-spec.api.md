@@ -7,8 +7,8 @@
 import { Cause } from 'effect';
 import { Context } from 'effect';
 import { Duration } from 'effect';
-import { Duration as Duration_2 } from 'effect/Duration';
 import { Effect } from 'effect';
+import { Latch } from 'effect';
 import { Layer } from 'effect';
 import { Metric } from 'effect';
 import { Option as Option_2 } from 'effect';
@@ -16,6 +16,7 @@ import { Schedule } from 'effect';
 import { Schema } from 'effect';
 import { Scope } from 'effect';
 import { Stream } from 'effect';
+import { YieldableError } from 'effect/Cause';
 
 // Warning: (ae-forgotten-export) The symbol "BoundedIntensity_base" needs to be exported by the entry point index.d.ts
 //
@@ -28,7 +29,7 @@ export class BoundedIntensity extends BoundedIntensity_base {
 }
 
 // @public (undocumented)
-export const cappedBackoff: (base: Duration.DurationInput, cap: Duration.DurationInput) => Schedule.Schedule<Duration.Duration>;
+export const cappedBackoff: (base: Duration.Input, cap: Duration.Input) => Schedule.Schedule<Duration.Duration>;
 
 // @public (undocumented)
 export type Child<E, R> = Worker_2<E, R> | Supervisor<E, R>;
@@ -68,13 +69,13 @@ export const Daemon: {
 // @public (undocumented)
 export interface DaemonHealth {
     // (undocumented)
-    readonly healthy: Effect.Latch;
+    readonly healthy: Latch.Latch;
     // (undocumented)
     readonly name: string;
     // (undocumented)
-    readonly paused: Effect.Latch;
+    readonly paused: Latch.Latch;
     // (undocumented)
-    readonly ready: Effect.Latch;
+    readonly ready: Latch.Latch;
 }
 
 // Warning: (ae-forgotten-export) The symbol "DaemonReporter_base" needs to be exported by the entry point index.d.ts
@@ -133,30 +134,28 @@ export const DynamicSpecTypeId: unique symbol;
 export type DynamicSpecTypeId = typeof DynamicSpecTypeId;
 
 // @public (undocumented)
-export const healthStateGauge: Metric.Metric.Gauge<number>;
+export const healthStateGauge: Metric.Gauge<number>;
 
 // @public (undocumented)
-export const Intensity: Schema.Union<[typeof BoundedIntensity, typeof UnboundedIntensity]>;
+export const Intensity: Schema.Union<readonly [typeof BoundedIntensity, typeof UnboundedIntensity]>;
 
 // @public (undocumented)
 export type Intensity = typeof Intensity.Type;
 
 // @public (undocumented)
 export const IntensityConfig: Schema.Struct<{
-    restarts: Schema.filter<typeof Schema.Int>;
-    window: typeof Schema.DurationFromSelf;
+    readonly restarts: Schema.Int;
+    readonly window: Schema.Duration;
 }>;
 
 // @public (undocumented)
 export type IntensityConfig = typeof IntensityConfig.Type;
 
 // @public (undocumented)
-export const leader: (cap: Duration.DurationInput) => Effect.Effect<SupervisionPolicy>;
+export const leader: (cap: Duration.Input) => Effect.Effect<SupervisionPolicy>;
 
-// Warning: (ae-forgotten-export) The symbol "LeaderConfig_base" needs to be exported by the entry point index.d.ts
-//
 // @public (undocumented)
-export class LeaderConfig extends LeaderConfig_base {}
+export const LeaderConfig: Context.Reference<SupervisionConfig>;
 
 // Warning: (ae-forgotten-export) The symbol "LeaderLock_base" needs to be exported by the entry point index.d.ts
 //
@@ -235,7 +234,7 @@ export interface LockPrimitiveService {
 export type LoopShape<E, R> = PollLoop<E, R> | StreamLoop<E, R> | SubscriptionLoop<E, R>;
 
 // @public (undocumented)
-export const MaxChildren: Schema.brand<Schema.filter<typeof Schema.Int>, "MaxChildren">;
+export const MaxChildren: Schema.brand<Schema.Int, "MaxChildren">;
 
 // @public (undocumented)
 export type MaxChildren = typeof MaxChildren.Type;
@@ -256,12 +255,12 @@ export const poll: <A, E, R, L extends LockConfig>(opts: PollOpts<A, E, R, L>) =
 export type PollLoop<E, R> = {
     readonly _tag: 'Poll';
     readonly gate: Effect.Effect<Option_2.Option<Effect.Effect<void, E, R>>, E, R>;
-    readonly interval: Duration.DurationInput;
+    readonly interval: Duration.Input;
 };
 
 // @public (undocumented)
 export type PollOpts<A, E, R, L extends LockConfig> = CommonOpts<L> & {
-    readonly interval: Duration.DurationInput;
+    readonly interval: Duration.Input;
 } & ({
     readonly prereq?: undefined;
     readonly work: Effect.Effect<A, E, R>;
@@ -324,14 +323,14 @@ export const Supervision: {
 };
 
 // @public (undocumented)
-export const supervision: (cap: Duration.DurationInput) => Effect.Effect<SupervisionPolicy>;
+export const supervision: (cap: Duration.Input) => Effect.Effect<SupervisionPolicy>;
 
 // @public (undocumented)
 export interface SupervisionConfig {
     // (undocumented)
-    readonly backoffBase: Duration.DurationInput;
+    readonly backoffBase: Duration.Input;
     // (undocumented)
-    readonly cooldown: Duration.DurationInput;
+    readonly cooldown: Duration.Input;
     // (undocumented)
     readonly intensity: Intensity;
 }
@@ -341,7 +340,7 @@ export interface SupervisionPolicy {
     // (undocumented)
     readonly backoff: Schedule.Schedule<Duration.Duration>;
     // (undocumented)
-    readonly cooldown: Duration.DurationInput;
+    readonly cooldown: Duration.Input;
     // (undocumented)
     readonly intensity: Intensity;
 }
@@ -368,23 +367,23 @@ export interface Supervisor<E, R, L extends LockConfig = LockConfig> {
 export const supervisor: <E, R>(s: Supervisor<E, R, LockConfig>) => Effect.Effect<SupervisorHealth, never, R | DaemonReporter | LeaderLock | Scope.Scope>;
 
 // @public (undocumented)
-export const supervisorChildrenGauge: Metric.Metric.Gauge<number>;
+export const supervisorChildrenGauge: Metric.Gauge<number>;
 
 // @public (undocumented)
-export const supervisorExhaustionsCounter: Metric.Metric.Counter<number>;
+export const supervisorExhaustionsCounter: Metric.Counter<number>;
 
 // @public (undocumented)
 export interface SupervisorHealth {
     // (undocumented)
     readonly children: readonly (DaemonHealth | SupervisorHealth)[];
     // (undocumented)
-    readonly healthy: Effect.Latch;
+    readonly healthy: Latch.Latch;
     // (undocumented)
     readonly name: string;
     // (undocumented)
-    readonly paused: Effect.Latch;
+    readonly paused: Latch.Latch;
     // (undocumented)
-    readonly ready: Effect.Latch;
+    readonly ready: Latch.Latch;
 }
 
 // @public (undocumented)
@@ -402,7 +401,7 @@ export interface SupervisorOpts<E, R, L extends LockConfig> {
 }
 
 // @public (undocumented)
-export const supervisorRestartsCounter: Metric.Metric.Counter<number>;
+export const supervisorRestartsCounter: Metric.Counter<number>;
 
 // @public (undocumented)
 export const SupervisorTypeId: unique symbol;
@@ -411,12 +410,10 @@ export const SupervisorTypeId: unique symbol;
 export type SupervisorTypeId = typeof SupervisorTypeId;
 
 // @public (undocumented)
-export const task: (budget: Duration.DurationInput) => Effect.Effect<SupervisionPolicy>;
+export const task: (budget: Duration.Input) => Effect.Effect<SupervisionPolicy>;
 
-// Warning: (ae-forgotten-export) The symbol "TaskConfig_base" needs to be exported by the entry point index.d.ts
-//
 // @public (undocumented)
-export class TaskConfig extends TaskConfig_base {}
+export const TaskConfig: Context.Reference<SupervisionConfig>;
 
 // Warning: (ae-forgotten-export) The symbol "TickPolicyConfig_base" needs to be exported by the entry point index.d.ts
 //
@@ -430,7 +427,7 @@ export interface TickPolicyHooks {
     // (undocumented)
     readonly spanAttributes?: Effect.Effect<Record<string, string | number | boolean>>;
     // (undocumented)
-    readonly trackDuration?: Metric.Metric.Histogram<Duration.Duration>;
+    readonly trackDuration?: Metric.Histogram<Duration.Duration>;
 }
 
 // Warning: (ae-forgotten-export) The symbol "UnboundedIntensity_base" needs to be exported by the entry point index.d.ts
@@ -442,7 +439,7 @@ export class UnboundedIntensity extends UnboundedIntensity_base {
 }
 
 // @public (undocumented)
-export function withLeaderLock<A, E, R>(self: Effect.Effect<A, E, R>, options: LeaderLockOptions, lock: LeaderLock['Type']): Effect.Effect<A | void, E | LeaderLockAcquireError, R>;
+export function withLeaderLock<A, E, R>(self: Effect.Effect<A, E, R>, options: LeaderLockOptions, lock: LeaderLock['Service']): Effect.Effect<A | void, E | LeaderLockAcquireError, R>;
 
 // @public
 export const worker: {
@@ -471,10 +468,8 @@ interface Worker_2<E, R, L extends LockConfig = LockConfig> {
 }
 export { Worker_2 as Worker }
 
-// Warning: (ae-forgotten-export) The symbol "WorkerConfig_base" needs to be exported by the entry point index.d.ts
-//
 // @public (undocumented)
-export class WorkerConfig extends WorkerConfig_base {}
+export const WorkerConfig: Context.Reference<SupervisionConfig>;
 
 // @public (undocumented)
 export const WorkerTypeId: unique symbol;
@@ -484,8 +479,8 @@ export type WorkerTypeId = typeof WorkerTypeId;
 
 // Warnings were encountered during analysis:
 //
-// dist/index.d.ts:335:3 - (ae-forgotten-export) The symbol "dynamic$1" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:344:3 - (ae-forgotten-export) The symbol "custom" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:290:3 - (ae-forgotten-export) The symbol "dynamic$1" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:299:3 - (ae-forgotten-export) The symbol "custom" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

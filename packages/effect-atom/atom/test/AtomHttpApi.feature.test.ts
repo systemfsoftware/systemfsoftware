@@ -1,4 +1,4 @@
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec-v4'
+import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer, Option, Schema } from 'effect'
 import { HttpClient, HttpClientResponse } from 'effect/unstable/http'
 import type * as HttpClientError from 'effect/unstable/http/HttpClientError'

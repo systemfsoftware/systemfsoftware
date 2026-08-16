@@ -46,15 +46,15 @@
     "@systemfsoftware/effect-atom": "workspace:^"
   },
   "peerDependencies": {
-    "effect": "catalog:effect4",
+    "effect": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
     "scheduler": "*"
   },
   "devDependencies": {
-    "@effect/vitest": "catalog:effect4",
+    "@effect/vitest": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
-    "@systemfsoftware/effect-gherkin-spec-v4": "workspace:^",
+    "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
     "@testing-library/dom": "catalog:",
@@ -66,7 +66,7 @@
     "@vitest/browser": "4.1.10",
     "@vitest/browser-playwright": "4.1.10",
     "@vitest/coverage-istanbul": "4.1.10",
-    "effect": "catalog:effect4",
+    "effect": "catalog:",
     "playwright": "1.62.1",
     "react": "catalog:",
     "react-dom": "catalog:",

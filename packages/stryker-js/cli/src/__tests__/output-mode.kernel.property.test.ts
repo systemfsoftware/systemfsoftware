@@ -1,7 +1,7 @@
 import { describe, it } from '@systemfsoftware/effect-gherkin-spec'
 import type { ResolvedMode } from '@systemfsoftware/stryker-js-mutation-run/output-mode'
-import { FastCheck as fc } from 'effect'
-import * as Either from 'effect/Either'
+import * as Result from 'effect/Result'
+import { FastCheck as fc } from 'effect/testing'
 import { isDeepStrictEqual } from 'node:util'
 
 import { isColorEnabled, isProgressEnabled, type ModeInput, resolveMode } from '../output-mode.kernel.js'
@@ -97,16 +97,16 @@ describe('resolveMode — totality over the generated domain', () => {
   it.prop(
     '∀i_ResolveMode_≡LeftIffBothFlags',
     [modeInputArb],
-    ([input]) => Either.isLeft(resolveMode(toModeInput(input))) === (input.text === true && input.json === true),
+    ([input]) => Result.isFailure(resolveMode(toModeInput(input))) === (input.text === true && input.json === true),
   )
 
   it.prop(
     '∀i_ResolvedMode_≡CarriesStdoutTty',
     [modeInputArb],
     ([input]) =>
-      Either.match(resolveMode(toModeInput(input)), {
-        onLeft: () => true,
-        onRight: (resolved) => resolved.stdoutIsTTY === input.stdoutIsTTY,
+      Result.match(resolveMode(toModeInput(input)), {
+        onFailure: () => true,
+        onSuccess: (resolved) => resolved.stdoutIsTTY === input.stdoutIsTTY,
       }),
   )
 
@@ -133,30 +133,30 @@ describe('resolveMode — precedence over every signal combination', () => {
   it.prop(
     '∀i_TextFlag_≡HumanEverywhere',
     [modeInputArb.filter((i) => i.text === true && i.json === false)],
-    ([input]) => Either.getOrThrow(resolveMode(toModeInput(input))).mode === 'human',
+    ([input]) => Result.getOrThrow(resolveMode(toModeInput(input))).mode === 'human',
   )
 
   it.prop(
     '∀i_JsonFlag_≡MachineEverywhere',
     [modeInputArb.filter((i) => i.json === true && i.text === false)],
-    ([input]) => Either.getOrThrow(resolveMode(toModeInput(input))).mode === 'machine',
+    ([input]) => Result.getOrThrow(resolveMode(toModeInput(input))).mode === 'machine',
   )
 
   it.prop('∀i_EnvMode_≡EnvSignalByLiteral', [
     flagFreeInputArb.filter((i) => i.envMode !== undefined && i.envMode.length > 0),
   ], ([input]) => {
-    const resolved = Either.getOrThrow(resolveMode(toModeInput(input)))
+    const resolved = Result.getOrThrow(resolveMode(toModeInput(input)))
     return resolved.signal === 'env' &&
       resolved.mode === (input.envMode === 'machine' ? 'machine' : 'human')
   })
 
   it.prop('∀i_NonTtyNoSignals_≡MachineTtySignal', [noSignalInputArb], ([input]) => {
-    const resolved = Either.getOrThrow(resolveMode(toModeInput(input)))
+    const resolved = Result.getOrThrow(resolveMode(toModeInput(input)))
     return resolved.mode === 'machine' && resolved.signal === 'tty'
   })
 
   it.prop('∀i_CleanTty_≡HumanTtySignal', [cleanTtyInputArb], ([input]) => {
-    const resolved = Either.getOrThrow(resolveMode(toModeInput(input)))
+    const resolved = Result.getOrThrow(resolveMode(toModeInput(input)))
     return resolved.mode === 'human' && resolved.signal === 'tty'
   })
 
@@ -165,7 +165,7 @@ describe('resolveMode — precedence over every signal combination', () => {
       i.envMode === undefined && i.stdoutIsTTY === true && i.agent !== undefined && i.agent.length > 0
     ),
   ], ([input]) => {
-    const resolved = Either.getOrThrow(resolveMode(toModeInput(input)))
+    const resolved = Result.getOrThrow(resolveMode(toModeInput(input)))
     return resolved.mode === 'machine' && resolved.signal === 'agent'
   })
 
@@ -175,7 +175,7 @@ describe('resolveMode — precedence over every signal combination', () => {
       i.toolVars !== undefined && Object.values(i.toolVars).some((value) => value !== undefined && value.length > 0)
     ),
   ], ([input]) => {
-    const resolved = Either.getOrThrow(resolveMode(toModeInput(input)))
+    const resolved = Result.getOrThrow(resolveMode(toModeInput(input)))
     return resolved.mode === 'machine' && resolved.signal === 'tool'
   })
 })

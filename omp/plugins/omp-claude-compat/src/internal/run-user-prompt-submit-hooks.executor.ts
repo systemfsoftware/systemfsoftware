@@ -1,9 +1,9 @@
-import type { CommandExecutor } from '@effect/platform/CommandExecutor'
-import type { PlatformError } from '@effect/platform/Error'
 import type { InputEventResult } from '@oh-my-pi/pi-coding-agent'
 import { Cell } from '@systemfsoftware/effect-cell-types'
 import { sessionIds } from '@systemfsoftware/omp-utils'
-import { Context, Effect, Either, Match, Option, pipe, type Scope } from 'effect'
+import { Context, Effect, Match, Option, pipe, Result, type Scope } from 'effect'
+import type { PlatformError } from 'effect/PlatformError'
+import type { ChildProcessSpawner } from 'effect/unstable/process/ChildProcessSpawner'
 import { drainAsyncHookContext } from '../async-hook-output.state.js'
 import type { HookDecision, HookResult } from '../hook-dispatcher.schema.js'
 import type { CommandHook, HookSettings } from '../hook-settings.acl.js'
@@ -12,10 +12,10 @@ import { isHostBound } from '../prompt-destination.kernel.js'
 import type { HookPrompt, HookSession } from './hook-session.kernel.js'
 import { runHookScript, type RunHookScriptExecutorDeps } from './run-hook-script.executor.js'
 
-export class RunUserPromptSubmitHooksExecutorDeps extends Context.Tag('RunUserPromptSubmitHooksExecutorDeps')<
+export class RunUserPromptSubmitHooksExecutorDeps extends Context.Service<
   RunUserPromptSubmitHooksExecutorDeps,
   Scope.Scope
->() {}
+>()('RunUserPromptSubmitHooksExecutorDeps') {}
 
 /**
  * The per-hook prompt-submission chain, in one bag so the phase order is
@@ -37,7 +37,7 @@ interface SubmitPhases extends Cell.Phases {
   readonly decodeError: never
   readonly readError: PlatformError
   readonly writeError: never
-  readonly readContext: CommandExecutor | RunHookScriptExecutorDeps
+  readonly readContext: ChildProcessSpawner | RunHookScriptExecutorDeps
   readonly writeContext: never
 }
 
@@ -75,22 +75,22 @@ export const runUserPromptSubmitHooks = Effect.fn('runUserPromptSubmitHooks')(fu
   const submitDescription = pipe(
     Cell.read<SubmitPhases>(({ hook, input }) => runHookScript(hook, input, cwd, 'UserPromptSubmit')),
     Cell.decode<SubmitPhases>((raw) =>
-      Either.right({
+      Result.succeed({
         cmd: new InterpretHookCommand({ result: raw, event: 'UserPromptSubmit' }),
         code: raw.code,
         stdout: raw.stdout,
       })
     ),
     Cell.decide<SubmitPhases>(({ cmd, code, stdout }) =>
-      Either.mapBoth(interpretHookResult(cmd), {
-        onLeft: (error) => ({ error, code, stdout }),
-        onRight: (verdict) => ({ verdict, code, stdout }),
+      Result.mapBoth(interpretHookResult(cmd), {
+        onFailure: (error) => ({ error, code, stdout }),
+        onSuccess: (verdict) => ({ verdict, code, stdout }),
       })
     ),
     Cell.encode<SubmitPhases>((outcome) =>
-      Either.match(outcome, {
-        onLeft: ({ code, stdout }) => ({ blockReason: undefined, code, stdout }),
-        onRight: ({ verdict, code, stdout }) => ({
+      Result.match(outcome, {
+        onFailure: ({ code, stdout }) => ({ blockReason: undefined, code, stdout }),
+        onSuccess: ({ verdict, code, stdout }) => ({
           blockReason: Match.value(verdict).pipe(
             Match.tag('Block', (b) => b.reason),
             Match.orElse(() => undefined),

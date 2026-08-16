@@ -1,9 +1,9 @@
-import * as Args from '@effect/cli/Args'
-import * as Command from '@effect/cli/Command'
-import * as Options from '@effect/cli/Options'
 import * as Config from 'effect/Config'
 import * as Effect from 'effect/Effect'
 import * as Option from 'effect/Option'
+import * as Argument from 'effect/unstable/cli/Argument'
+import * as Command from 'effect/unstable/cli/Command'
+import * as Flag from 'effect/unstable/cli/Flag'
 
 import type { CliRequest } from './attw.executor.js'
 import { runAttw } from './attw.executor.js'
@@ -13,20 +13,20 @@ const packageJson = (): { version: string } => ({
   version: '1.1.1',
 })
 
-const formatOptions = (): Options.Options<typeof CliFormat[number]> =>
-  Options.choice('format', CliFormat).pipe(
-    Options.withAlias('f'),
-    Options.withDefault('auto' as typeof CliFormat[number]),
+const formatOptions = (): Flag.Flag<typeof CliFormat[number]> =>
+  Flag.choice('format', CliFormat).pipe(
+    Flag.withAlias('f'),
+    Flag.withDefault('auto' as typeof CliFormat[number]),
   )
 
-const profileOptions = (): Options.Options<typeof CliProfile[number]> =>
-  Options.choice('profile', CliProfile).pipe(
-    Options.withDefault('strict' as typeof CliProfile[number]),
+const profileOptions = (): Flag.Flag<typeof CliProfile[number]> =>
+  Flag.choice('profile', CliProfile).pipe(
+    Flag.withDefault('strict' as typeof CliProfile[number]),
   )
 
-const ignoreRulesOptions = (): Options.Options<Option.Option<readonly string[]>> =>
-  Options.optional(
-    Options.repeated(Options.text('ignore-rules').pipe(Options.withAlias('ignore-rule'))),
+const ignoreRulesOptions = (): Flag.Flag<Option.Option<readonly string[]>> =>
+  Flag.optional(
+    Flag.atLeast<string>(1)(Flag.string('ignore-rules').pipe(Flag.withAlias('ignore-rule'))),
   )
 
 /**
@@ -34,17 +34,17 @@ const ignoreRulesOptions = (): Options.Options<Option.Option<readonly string[]>>
  * Commander parsed this with `new Option('--definitely-typed [version]')` and
  * `default(true)`. We model the decoded value as a tagged union and translate.
  */
-const definitelyTypedOptions = (): Options.Options<Option.Option<string>> =>
-  Options.optional(Options.text('definitely-typed')).pipe(
-    Options.withDescription('Specify the version range of @types to use. Pass `false` to disable.'),
+const definitelyTypedOptions = (): Flag.Flag<Option.Option<string>> =>
+  Flag.optional(Flag.string('definitely-typed')).pipe(
+    Flag.withDescription('Specify the version range of @types to use. Pass `false` to disable.'),
   )
 
-const registryOptions = (): Options.Options<string> =>
-  Options.text('registry').pipe(
-    Options.withDescription(
+const registryOptions = (): Flag.Flag<string> =>
+  Flag.string('registry').pipe(
+    Flag.withDescription(
       'URL of the npm registry to read packages from with --from-npm (default: https://registry.npmjs.org)',
     ),
-    Options.withFallbackConfig(
+    Flag.withFallbackConfig(
       Config.string('registry').pipe(Config.withDefault('https://registry.npmjs.org')),
     ),
   )
@@ -54,36 +54,32 @@ const unwrap = <A>(opt: Option.Option<A>): A | undefined => Option.isSome(opt) ?
 export const attwCommand = Command.make(
   'attw',
   {
-    fileOrDirectory: Args.optional(Args.text({ name: 'file-directory-or-package-spec' })),
-    pack: Options.boolean('pack').pipe(
-      Options.withAlias('P'),
-      Options.withDescription(
+    fileOrDirectory: Argument.optional(Argument.string('file-directory-or-package-spec')),
+    pack: Flag.boolean('pack').pipe(
+      Flag.withAlias('P'),
+      Flag.withDescription(
         'Run `npm pack` in the specified directory and delete the resulting .tgz file afterwards',
       ),
     ),
-    fromNpm: Options.boolean('from-npm').pipe(
-      Options.withAlias('p'),
-      Options.withDescription('Read from the npm registry instead of a local file'),
+    fromNpm: Flag.boolean('from-npm').pipe(
+      Flag.withAlias('p'),
+      Flag.withDescription('Read from the npm registry instead of a local file'),
     ),
     definitelyTyped: definitelyTypedOptions(),
     format: formatOptions(),
-    quiet: Options.boolean('quiet').pipe(
-      Options.withAlias('q'),
-      Options.withDescription("Don't print anything to STDOUT (overrides all other options)"),
+    quiet: Flag.boolean('quiet').pipe(
+      Flag.withAlias('q'),
+      Flag.withDescription("Don't print anything to STDOUT (overrides all other options)"),
     ),
-    entrypoints: Options.optional(Options.repeated(Options.text('entrypoints'))),
-    includeEntrypoints: Options.optional(
-      Options.repeated(Options.text('include-entrypoints')),
-    ),
-    excludeEntrypoints: Options.optional(
-      Options.repeated(Options.text('exclude-entrypoints')),
-    ),
-    entrypointsLegacy: Options.boolean('entrypoints-legacy'),
+    entrypoints: Flag.optional(Flag.atLeast<string>(1)(Flag.string('entrypoints'))),
+    includeEntrypoints: Flag.optional(Flag.atLeast<string>(1)(Flag.string('include-entrypoints'))),
+    excludeEntrypoints: Flag.optional(Flag.atLeast<string>(1)(Flag.string('exclude-entrypoints'))),
+    entrypointsLegacy: Flag.boolean('entrypoints-legacy'),
     ignoreRules: ignoreRulesOptions(),
     profile: profileOptions(),
-    summary: Options.boolean('no-summary', { ifPresent: false }),
-    emoji: Options.boolean('no-emoji', { ifPresent: false }),
-    color: Options.boolean('no-color', { ifPresent: false }),
+    summary: Flag.boolean('summary').pipe(Flag.withDefault(true)),
+    emoji: Flag.boolean('emoji').pipe(Flag.withDefault(true)),
+    color: Flag.boolean('color').pipe(Flag.withDefault(true)),
     registry: registryOptions(),
   } as const,
   (config) =>

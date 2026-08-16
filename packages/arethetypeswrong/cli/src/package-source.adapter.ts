@@ -17,12 +17,9 @@ export interface PackageSourceService {
   ) => Effect.Effect<{ kind: 'npm'; name: string; version: string }, PackageSourceError>
 }
 
-export class PackageSource
-  extends Context.Tag('@systemfsoftware/arethetypeswrong-cli/package-source.adapter/PackageSource')<
-    PackageSource,
-    PackageSourceService
-  >()
-{}
+export class PackageSource extends Context.Service<PackageSource, PackageSourceService>()(
+  '@systemfsoftware/arethetypeswrong-cli/package-source.adapter/PackageSource',
+) {}
 
 export const PackageSourceLive: Layer.Layer<PackageSource, never, never> = Layer.succeed(
   PackageSource,

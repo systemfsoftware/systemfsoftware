@@ -1,5 +1,6 @@
 import { describe, it } from '@systemfsoftware/effect-gherkin-spec'
-import { Array, Chunk, Duration, Effect, FastCheck as fc, Schedule } from 'effect'
+import { Duration, Effect, Result, Schedule } from 'effect'
+import { FastCheck as fc } from 'effect/testing'
 import { cappedBackoff } from '../backoff.kernel.js'
 
 const CAP_MULTIPLIER_MAX = 8
@@ -8,15 +9,21 @@ const STEPS_MAX = 12
 const BASE_MS_MAX = 50
 
 const delaysMs = (baseMs: number, capMs: number, steps: number): readonly number[] =>
-  Chunk.toReadonlyArray(
-    Effect.runSync(
-      Schedule.run(
-        Schedule.delays(cappedBackoff(Duration.millis(baseMs), Duration.millis(capMs))),
-        0,
-        Array.range(1, steps),
-      ),
-    ),
-  ).map(Duration.toMillis)
+  Effect.runSync(
+    Effect.gen(function*() {
+      const step = yield* Schedule.toStep(cappedBackoff(Duration.millis(baseMs), Duration.millis(capMs)))
+      const out: number[] = []
+      let now = 0
+      for (let i = 1; i <= steps; i++) {
+        const stepped = yield* Effect.result(step(now, void 0))
+        if (Result.isFailure(stepped)) break
+        const [, delay] = stepped.success
+        out.push(Duration.toMillis(delay))
+        now += Duration.toMillis(delay)
+      }
+      return out
+    }),
+  )
 
 describe('cappedBackoff', () => {
   it.prop(

@@ -6,10 +6,11 @@ import { asToolInput, EMPTY_TOOL_INPUT } from './hook-payload.kernel.js'
 import type { HookSession, HookToolResult } from './hook-session.kernel.js'
 import { runHooksForEvent } from './run-hooks-for-event.executor.js'
 
-export class RunPostToolUseFailureHooksExecutorDeps extends Context.Tag('RunPostToolUseFailureHooksExecutorDeps')<
-  RunPostToolUseFailureHooksExecutorDeps,
-  Scope.Scope
->() {}
+export class RunPostToolUseFailureHooksExecutorDeps
+  extends Context.Service<RunPostToolUseFailureHooksExecutorDeps, Scope.Scope>()(
+    'RunPostToolUseFailureHooksExecutorDeps',
+  )
+{}
 
 const asTextBlocks = S.decodeUnknownOption(S.Array(S.Struct({ text: S.optional(S.String) })))
 const asPlainText = S.decodeUnknownOption(S.String)

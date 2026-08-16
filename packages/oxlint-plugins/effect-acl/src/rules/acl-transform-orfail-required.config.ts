@@ -11,7 +11,7 @@ export const meta = {
   type: 'problem',
   docs: {
     description:
-      'A .acl.ts file must contain at least one S.transformOrFail call. The ACL cell is a unidirectional Schema.transformOrFail decoding a foreign shape into a branded domain type — a file without one is not an ACL.',
+      'A .acl.ts file must declare the ACL transform — v3 S.transformOrFail(From, To, …) or v4 From.pipe(S.decodeTo(S.toType(To), { decode: SchemaGetter.transformOrFail(…) })). The ACL cell is a unidirectional schema transform decoding a foreign shape into a branded domain type — a file without one is not an ACL.',
   },
   schema: [Options],
   messages: {

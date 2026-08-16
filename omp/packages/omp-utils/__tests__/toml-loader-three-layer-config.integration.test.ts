@@ -6,11 +6,11 @@
  * single project file case with its parse tolerance and per-cwd cache behavior.
  * The merge kernel is reached through the adapter that owns it, as production does.
  */
-import * as PathModule from '@effect/platform/Path'
 import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { MemoryFileSystem } from '@systemfsoftware/effect-memfs'
 import { Effect, Layer } from 'effect'
+import * as PathModule from 'effect/Path'
 import { expect } from 'vitest'
 
 import { TomlLoader, TomlLoaderLive } from '../src/toml-loader.adapter.js'

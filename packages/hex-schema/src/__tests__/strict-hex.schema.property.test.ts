@@ -1,9 +1,10 @@
 import { it } from '@effect/vitest'
 import { refutes } from '@systemfsoftware/effect-schema-law'
-import { Either, FastCheck as fc, Schema as S } from 'effect'
+import { Exit, Schema as S } from 'effect'
+import { FastCheck as fc } from 'effect/testing'
 import { StrictHex } from '../strict-hex.schema.js'
 
-const decode = S.decodeUnknownEither(StrictHex)
+const decode = S.decodeUnknownExit(StrictHex)
 
 const hexPart = fc.stringMatching(/^[0-9a-f]*$/)
 const outsider = fc.stringMatching(/^[^0-9a-f]$/)
@@ -23,7 +24,7 @@ it.prop(
   [fc.stringMatching(/^(?:[0-9a-f]{2})+$/)],
   ([hex]) => {
     const result = decode(hex)
-    return Either.isRight(result) && result.right === hex
+    return Exit.isSuccess(result) && result.value === hex
   },
 )
 

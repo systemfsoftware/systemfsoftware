@@ -1,4 +1,4 @@
-import { JSONSchema, Schema as S } from 'effect'
+import { Effect, Schema as S } from 'effect'
 
 export const DEFAULT_EXPECTED =
   'Effect Match API or type guards — Match.tag(value, { Tag1: () => ... }), Result.isSuccess/Result.isFailure, Either.isLeft/Either.isRight, Exit.isSuccess/Exit.isFailure, Option.isSome/Option.isNone' as const
@@ -6,23 +6,23 @@ export const DEFAULT_FIX =
   'Replace obj._tag === "X" with Match.tag(obj, { X: () => ... }) or use Result.isSuccess/isFailure, Either.isLeft/isRight, Exit.isSuccess/isFailure, Option.isSome/isNone as appropriate' as const
 
 export const OptionsElement = S.Struct({
-  allow: S.optionalWith(
-    S.Array(S.String).pipe(S.annotations({
+  allow: S.Array(S.String).pipe(
+    S.annotate({
       description: 'Allowed _tag access expressions (e.g., ["result._tag"])',
-    })),
-    { default: () => [] },
+    }),
+    S.withDecodingDefaultType(Effect.succeed([])),
   ),
-  expected: S.optionalWith(
-    S.String.pipe(S.annotations({
+  expected: S.String.pipe(
+    S.annotate({
       description: 'Custom expected message',
-    })),
-    { default: () => DEFAULT_EXPECTED },
+    }),
+    S.withDecodingDefaultType(Effect.succeed(DEFAULT_EXPECTED)),
   ),
-  fix: S.optionalWith(
-    S.String.pipe(S.annotations({
+  fix: S.String.pipe(
+    S.annotate({
       description: 'Custom fix message',
-    })),
-    { default: () => DEFAULT_FIX },
+    }),
+    S.withDecodingDefaultType(Effect.succeed(DEFAULT_FIX)),
   ),
 })
 
@@ -34,7 +34,7 @@ export const meta = {
     description: 'Ban direct _tag access. Configurable: expected, fix, allow.',
   },
   schema: [
-    JSONSchema.make(OptionsElement),
+    S.toJsonSchemaDocument(OptionsElement).schema,
   ],
   messages: {
     forbidden: '{{name}} is forbidden. Expected: {{expected}}. Actual: {{actual}}. Fix: {{fix}}.',

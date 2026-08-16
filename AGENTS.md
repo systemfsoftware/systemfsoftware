@@ -73,7 +73,7 @@ Directories and the root doctrine file `CONCEPTS.md`; directory contents are dis
 - **Cell taxonomy core** — `effect-cell-types` (Workflow types + the phase chain), `effect-cell-type-tests` (generated tstyche suite), `effect-cell-gen` (generated arbitraries), `effect-daemon-spec` (supervision-tree daemons). Leaf-governed.
 - **Lint & static analysis** — `oxlint-config` (shared oxlint presets; root-governed), `oxlint-plugins/` (cell-specific rule plugins; hub leaf + per-plugin sub-leaves).
 - **Mutation testing** — `stryker-js/` (hub leaf + 6 sub-leaves), `stryker-plugins` (Effect-Schema ignorers for Stryker).
-- **Effect libraries & bridges** — `effect-atom` (owned; atom/atom-react), `effect-memfs` (owned), `rx-effect` (RxJS↔Effect bridge), `storybook-gherkin` (owned; Gherkin as Storybook stories), `effect-gherkin-spec` (Gherkin BDD for Effect 3; root-governed), `effect-gherkin-spec-v4` (Gherkin BDD for Effect 4, `catalog:effect-v4`; root-governed).
+- **Effect libraries & bridges** — `effect-atom` (owned; atom/atom-react), `effect-memfs` (owned), `rx-effect` (RxJS↔Effect bridge), `storybook-gherkin` (owned; Gherkin as Storybook stories), `effect-gherkin-spec` (Gherkin BDD for Effect 4; root-governed).
 - **Tooling & shared config** — `arethetypeswrong` (owned; cli/core; leaf), `tsconfig` (shared TS base; root-governed), `vitest-config` (shared Vitest; root-governed).
 
 ## Working Rules
@@ -84,8 +84,9 @@ Directories and the root doctrine file `CONCEPTS.md`; directory contents are dis
 
 ## Definition of Done
 
-- **REPO-D1** — target behaviour implemented and exercised, `pnpm check:local` run _after_ the last edit, and the work delivered as a pull request watched to green. Tree left restartable. Gate: `pnpm check:local` exits 0; `gh pr checks --watch --fail-fast` exits 0; and where the diff names a source file in a package carrying a `stryker.config.json`, `pnpm --filter <pkg> mutation` reports 100% on the changed pure-core files — CI's Mutation workflow is `continue-on-error` and never carries that verdict.
+- **REPO-D1** — target behaviour implemented and exercised, `pnpm check:local` run _after_ the last edit, and the work delivered as a pull request watched to green. Tree left restartable. Gate: `pnpm check:local` exits 0; `gh pr checks --watch --fail-fast` exits 0.
 - **REPO-D2** — commit, push a branch and open the PR with the session's commit-push-open-PR skill where one is installed, then watch the checks. `no checks reported` is the post-create registration race: sleep and re-poll, never re-push — `cancel-in-progress: true` means a re-push cancels the run being awaited. Re-push only for a named failing check. Merging stays human (`REPO-P1`). Gate: `gh pr checks --watch --fail-fast` exits 0.
+- **REPO-D3** — no agent starts a mutation run. One costs minutes to hours of every core, and it is the session's own machine that stalls: on 2026-08-16 an agent launched ten package runs in three background batches, they starved each other and the foreground gate, one hit a 3600s timeout, and none produced a verdict before the PR opened. The score lives in the Mutation workflow's merged report, which lists every package's score and its survivors. That workflow is advisory by construction — `merge-mutation-reports.mjs` never exits on a score — so a score below 100 is a human's call on the report, not a check an agent can wait for; a user who wants a local run starts it themselves, in a shell no hook intercepts. Gate: `.claude/hooks/guard-local-mutation.ts`, whose `--selftest` covers 25 command shapes including the loop-and-capture forms that started the ten runs.
 
 ## Release and Commits
 

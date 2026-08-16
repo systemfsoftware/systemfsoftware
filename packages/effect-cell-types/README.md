@@ -1,6 +1,6 @@
 # @systemfsoftware/effect-cell-types
 
-The type-level contract for a `*.workflow.ts` cell. A workflow is a pure decision — a command in, an `Either` out — and `Workflow<Command, Decision, Error>` pins that shape in the type system. The contract is checked by `tsc` from the file's **content** (an exported value that violates the shape stops the build), not by a lint rule keyed on the file's **name**. Beside the types the package ships exactly one runtime value — the identity constructor `make` — and the type tests (`test-types/Workflow.tst.ts`, run by tstyche) prove the channel guards still bind.
+The type-level contract for a `*.workflow.ts` cell. A workflow is a pure decision — a command in, a `Result` out — and `Workflow<Command, Decision, Error>` pins that shape in the type system. The contract is checked by `tsc` from the file's **content** (an exported value that violates the shape stops the build), not by a lint rule keyed on the file's **name**. Beside the types the package ships exactly one runtime value — the identity constructor `make` — and the type tests (`test-types/Workflow.tst.ts`, run by tstyche) prove the channel guards still bind.
 
 ## The contract
 
@@ -8,10 +8,10 @@ The type-level contract for a `*.workflow.ts` cell. A workflow is a pure decisio
 import type { Workflow } from '@systemfsoftware/effect-cell-types'
 
 type Decide = Workflow<Command, Decision, Error>
-//          = (command: Command) => Either<Decision, Error>
+//          = (command: Command) => Result<Decision, Error>
 ```
 
-When both channels are inhabited, `Workflow<Command, Decision, Error>` is exactly the function type `(command: Command) => Either<Decision, Error>`. A `never` channel does not silently collapse to that function: it resolves to a marker interface that no function can satisfy, so the mistake is a compile error with the remediation attached (below).
+When both channels are inhabited, `Workflow<Command, Decision, Error>` is exactly the function type `(command: Command) => Result<Decision, Error>`. A `never` channel does not silently collapse to that function: it resolves to a marker interface that no function can satisfy, so the mistake is a compile error with the remediation attached (below).
 
 ## The constructor
 
@@ -19,13 +19,18 @@ Executors build a workflow from a plain decider with `make` — runtime identity
 
 ```ts
 import { make } from '@systemfsoftware/effect-cell-types'
+import { Result } from 'effect'
 
 export const decide = make<DecideInput, RestartDecision, RestartDecisionExhausted>(
-  (input) => (input.exitSuccess ? right(new RestartDecisionContinue()) : left(new RestartDecisionExhausted())),
+  (
+    input,
+  ) => (input.exitSuccess
+    ? Result.succeed(new RestartDecisionContinue())
+    : Result.fail(new RestartDecisionExhausted())),
 )
 ```
 
-The parameter is the plain function type, not `Workflow<C, D, E>`: the `never`-channel conditional lives on the **return** type, so a total decision (`Either<Decision, never>`) resolves to `UninhabitedError` and the call site fails with "This expression is not callable", while a `Promise`- or bare-value-returning decider is rejected at the argument. `make` is a runtime value, so consumers need it as an ordinary import only where they construct workflows; everywhere else `import type` still erases at compile time.
+The parameter is the plain function type, not `Workflow<C, D, E>`: the `never`-channel conditional lives on the **return** type, so a total decision (`Result<Decision, never>`) resolves to `UninhabitedError` and the call site fails with "This expression is not callable", while a `Promise`- or bare-value-returning decider is rejected at the argument. `make` is a runtime value, so consumers need it as an ordinary import only where they construct workflows; everywhere else `import type` still erases at compile time.
 
 ## Worked example
 
@@ -33,7 +38,7 @@ The parameter is the plain function type, not `Workflow<C, D, E>`: the `never`-c
 
 ```ts
 import type { Workflow } from '@systemfsoftware/effect-cell-types'
-import { type Either, left, right } from 'effect/Either'
+import { Result, type Result as ResultType } from 'effect'
 import * as Match from 'effect/Match'
 import * as S from 'effect/Schema'
 
@@ -56,7 +61,7 @@ export class RestartDecisionExhausted extends S.TaggedError<RestartDecisionExhau
   readonly [RestartDecisionTypeId] = RestartDecisionTypeId
 }
 
-export type RestartDecisionEither = Either<
+export type RestartDecisionResult = ResultType<
   RestartDecisionContinue | RestartDecisionRestart,
   RestartDecisionExhausted
 >
@@ -87,18 +92,18 @@ export const decideRestart: Workflow<
   DecideInput,
   RestartDecisionContinue | RestartDecisionRestart,
   RestartDecisionExhausted
-> = (input: DecideInput): Either<
+> = (input: DecideInput): ResultType<
   RestartDecisionContinue | RestartDecisionRestart,
   RestartDecisionExhausted
 > =>
   Match.value(input).pipe(
-    Match.when({ exitSuccess: true }, () => right(new RestartDecisionContinue())),
+    Match.when({ exitSuccess: true }, () => Result.succeed(new RestartDecisionContinue())),
     Match.when(
       { exitSuccess: false, intensityExceeded: true },
-      () => left(new RestartDecisionExhausted()),
+      () => Result.fail(new RestartDecisionExhausted()),
     ),
     Match.orElse(() =>
-      right(
+      Result.succeed(
         new RestartDecisionRestart({
           indices: restartIndicesFor(input.strategy, input.failedIndex, input.totalChildren),
         }),
@@ -107,16 +112,16 @@ export const decideRestart: Workflow<
   )
 ```
 
-The shape to copy: one exported function annotated `Workflow<…>`, whose body returns `Either` values via `right` and `left`. The error channel is a real variant (`RestartDecisionExhausted`) — giving up is a decision the caller must branch on, so declaring the error channel `never` is rejected, not allowed.
+The shape to copy: one exported function annotated `Workflow<…>`, whose body returns `Result` values via `Result.succeed` and `Result.fail`. The error channel is a real variant (`RestartDecisionExhausted`) — giving up is a decision the caller must branch on, so declaring the error channel `never` is rejected, not allowed.
 
 ## What it rejects at compile time
 
-All four violations fail `tsc`; the messages below are what `tsc` reports (verified against this package and `effect@3.22.0`).
+All four violations fail `tsc`; the messages below are what `tsc` reports (verified against this package and `effect@4.0.0-rc.108`).
 
 | Violation                | `tsc` reports                                                                             | Why it is rejected                                                                                             |
 | ------------------------ | ----------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| A `Promise` return       | `Type 'Promise<Decision>' is not assignable to type 'Either<Decision, Err>'`              | a workflow is a synchronous pure decision; async work belongs in the executor shell around it                  |
-| An `Effect` return       | `Type 'Effect<Decision, never, never>' is not assignable to type 'Either<Decision, Err>'` | the workflow returns a value, not an effect handle; the executor runs effects and hands the workflow its input |
+| A `Promise` return       | `Type 'Promise<Decision>' is not assignable to type 'Result<Decision, Err>'`              | a workflow is a synchronous pure decision; async work belongs in the executor shell around it                  |
+| An `Effect` return       | `Type 'Effect<Decision, never, never>' is not assignable to type 'Result<Decision, Err>'` | the workflow returns a value, not an effect handle; the executor runs effects and hands the workflow its input |
 | `never` decision channel | `Type '...' is not assignable to type 'UninhabitedDecision'`                              | a workflow that can never produce a decision can never succeed                                                 |
 | `never` error channel    | `Type '...' is not assignable to type 'UninhabitedError'`                                 | a workflow that cannot fail decides nothing; move it to a `*.kernel.ts`                                        |
 
@@ -136,13 +141,13 @@ export interface UninhabitedError {
 
 The `never` checks use `[Decision] extends [never]`, not `Decision extends never`: the tuple wrap stops conditional-type distribution, without which `never` satisfies the conditional vacuously and the marker is never reached.
 
-## Either.gen bodies work — and are checked more tightly
+## Result.gen bodies work — and are checked more tightly
 
-A `Workflow` body may be an `Either.gen` generator:
+A `Workflow` body may be a `Result.gen` generator:
 
 ```ts
 import type { Workflow } from '@systemfsoftware/effect-cell-types'
-import { Either } from 'effect'
+import { Result } from 'effect'
 
 class Decision {}
 class Err {
@@ -153,22 +158,22 @@ interface Input {
 }
 
 const decide: Workflow<Input, Decision, Err> = (input) =>
-  Either.gen(function*() {
+  Result.gen(function*() {
     if (!input.valid) {
-      yield* Either.left(new Err('invalid input'))
+      yield* Result.fail(new Err('invalid input'))
     }
     return new Decision()
   })
 ```
 
-`Either.gen` infers its error channel from the union of the `Either`s the body yields, so the failing `yield*` above makes the inference exactly `Err` and the annotation holds. A body with **no** failing yield infers `unknown`, which does not satisfy a declared error type — so an unreachable error channel is rejected rather than silently allowed:
+`Result.gen` infers its error channel from the union of the `Result`s the body yields, so the failing `yield*` above makes the inference exactly `Err` and the annotation holds. A body with **no** failing yield infers `unknown`, which does not satisfy a declared error type — so an unreachable error channel is rejected rather than silently allowed:
 
 ```ts
 const decide: Workflow<Input, Decision, Err> = (input) =>
-  Either.gen(function*() {
+  Result.gen(function*() {
     return new Decision()
   })
-// tsc: Type 'Either<Decision, unknown>' is not assignable to type 'Either<Decision, Err>'
+// tsc: Type 'Result<Decision, unknown>' is not assignable to type 'Result<Decision, Err>'
 ```
 
 If the workflow genuinely cannot fail, the error channel says so — and that is a `*.kernel.ts`, not a workflow.

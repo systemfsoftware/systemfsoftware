@@ -1,11 +1,11 @@
-import { JSONSchema, Schema as S } from 'effect'
+import { Effect, Schema as S } from 'effect'
 
 export const OptionsElement = S.Struct({
-  allowUtilityTypes: S.optionalWith(
-    S.Boolean.pipe(S.annotations({
+  allowUtilityTypes: S.Boolean.pipe(
+    S.annotate({
       description: 'Allow utility types like Pick<T, K> and Omit<T, K>',
-    })),
-    { default: () => true },
+    }),
+    S.withDecodingDefaultType(Effect.succeed(true)),
   ),
 })
 
@@ -16,7 +16,7 @@ export const meta = {
       'Ban inline object type annotations (TSTypeLiteral) on destructured function parameters in favor of named types or utility generics',
   },
   schema: [
-    JSONSchema.make(OptionsElement),
+    S.toJsonSchemaDocument(OptionsElement).schema,
   ],
   messages: {
     noInlineDestructuredType:

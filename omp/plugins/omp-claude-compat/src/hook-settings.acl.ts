@@ -1,4 +1,4 @@
-import { Match, Option, ParseResult, Schema as S } from 'effect'
+import { Effect, Match, Option, Schema as S, SchemaGetter } from 'effect'
 import type { BridgedEvent, MatcherReach } from './hook-catalog.shape.js'
 import {
   ALL_CLAUDE_CODE_EVENTS,
@@ -18,7 +18,7 @@ const CommandHook = S.Struct({
   args: S.optional(S.Array(S.String)),
   async: S.optional(S.Boolean),
   asyncRewake: S.optional(S.Boolean),
-  shell: S.optional(S.Literal('bash', 'powershell')),
+  shell: S.optional(S.Literals(['bash', 'powershell'])),
   timeout: S.optional(S.Number),
   if: S.optional(S.String),
   statusMessage: S.optional(S.String),
@@ -34,12 +34,12 @@ const CommandHook = S.Struct({
  * and the unsupported types are surfaced at session start.
  */
 const UnsupportedHook = S.Struct({
-  type: S.Literal('http', 'mcp_tool', 'prompt', 'agent'),
+  type: S.Literals(['http', 'mcp_tool', 'prompt', 'agent']),
 })
 
 export type CommandHook = S.Schema.Type<typeof CommandHook>
 
-export const HookCommand = S.Union(CommandHook, UnsupportedHook)
+export const HookCommand = S.Union([CommandHook, UnsupportedHook])
 
 export type HookCommand = S.Schema.Type<typeof HookCommand>
 
@@ -51,15 +51,15 @@ export const HookEntry = S.Struct({
 export type HookEntry = S.Schema.Type<typeof HookEntry>
 
 const HookGroups = S.Struct({
-  PreToolUse: S.optionalWith(S.Array(HookEntry), { exact: true, default: () => [] }),
-  PostToolUse: S.optionalWith(S.Array(HookEntry), { exact: true, default: () => [] }),
-  PostToolUseFailure: S.optionalWith(S.Array(HookEntry), { exact: true, default: () => [] }),
-  UserPromptSubmit: S.optionalWith(S.Array(HookEntry), { exact: true, default: () => [] }),
-  Stop: S.optionalWith(S.Array(HookEntry), { exact: true, default: () => [] }),
-  SessionStart: S.optionalWith(S.Array(HookEntry), { exact: true, default: () => [] }),
-  SessionEnd: S.optionalWith(S.Array(HookEntry), { exact: true, default: () => [] }),
-  PreCompact: S.optionalWith(S.Array(HookEntry), { exact: true, default: () => [] }),
-  PostCompact: S.optionalWith(S.Array(HookEntry), { exact: true, default: () => [] }),
+  PreToolUse: S.Array(HookEntry).pipe(S.withDecodingDefaultTypeKey(Effect.succeed([]))),
+  PostToolUse: S.Array(HookEntry).pipe(S.withDecodingDefaultTypeKey(Effect.succeed([]))),
+  PostToolUseFailure: S.Array(HookEntry).pipe(S.withDecodingDefaultTypeKey(Effect.succeed([]))),
+  UserPromptSubmit: S.Array(HookEntry).pipe(S.withDecodingDefaultTypeKey(Effect.succeed([]))),
+  Stop: S.Array(HookEntry).pipe(S.withDecodingDefaultTypeKey(Effect.succeed([]))),
+  SessionStart: S.Array(HookEntry).pipe(S.withDecodingDefaultTypeKey(Effect.succeed([]))),
+  SessionEnd: S.Array(HookEntry).pipe(S.withDecodingDefaultTypeKey(Effect.succeed([]))),
+  PreCompact: S.Array(HookEntry).pipe(S.withDecodingDefaultTypeKey(Effect.succeed([]))),
+  PostCompact: S.Array(HookEntry).pipe(S.withDecodingDefaultTypeKey(Effect.succeed([]))),
 })
 
 export const SettingsWrapped = S.Struct({
@@ -93,16 +93,18 @@ const SettingsFlat = S.Struct({
  * Lift the flat settings shape under `hooks`. Decode-only: the bridge reads
  * settings.json and never writes it back, so encoding has no meaning here.
  */
-const LiftFlatSettingsACL = S.transformOrFail(SettingsFlat, SettingsWrapped, {
-  strict: true,
-  decode: ({ disableAllHooks, ...hooks }) =>
-    ParseResult.succeed(disableAllHooks === undefined ? { hooks } : { hooks, disableAllHooks }),
-  encode: (wrapped, _options, ast) => ParseResult.fail(new ParseResult.Forbidden(ast, wrapped, 'Decode-only')),
-})
+const LiftFlatSettingsACL = SettingsFlat.pipe(
+  S.decodeTo(S.toType(SettingsWrapped), {
+    decode: SchemaGetter.transformOrFail(({ disableAllHooks, ...hooks }) =>
+      Effect.succeed(disableAllHooks === undefined ? { hooks } : { hooks, disableAllHooks })
+    ),
+    encode: SchemaGetter.forbidden(() => 'Decode-only: settings are never encoded'),
+  }),
+)
 
-const SettingsJSON = S.Union(SettingsWrapped, LiftFlatSettingsACL)
+const SettingsJSON = S.Union([SettingsWrapped, LiftFlatSettingsACL])
 
-export const parseSettings = S.decodeUnknownEither(SettingsJSON)
+export const parseSettings = S.decodeUnknownExit(SettingsJSON)
 
 // ── Settings analysis ──
 
@@ -135,7 +137,7 @@ export interface SettingsSource {
 const ALL_HOOK_EVENTS: readonly BridgedEvent[] = BRIDGED_EVENTS
 type HookEvent = BridgedEvent
 
-const asRecord = S.decodeUnknownOption(S.Record({ key: S.String, value: S.Unknown }))
+const asRecord = S.decodeUnknownOption(S.Record(S.String, S.Unknown))
 
 interface HookRow {
   readonly matcher?: string | undefined
@@ -148,10 +150,7 @@ const asHookRows = S.decodeUnknownOption(
   S.Array(
     S.Struct({
       matcher: S.optional(S.String),
-      hooks: S.optionalWith(S.Array(S.Struct({ type: S.optional(S.String) })), {
-        exact: true,
-        default: () => [],
-      }),
+      hooks: S.Array(S.Struct({ type: S.optional(S.String) })).pipe(S.withDecodingDefaultTypeKey(Effect.succeed([]))),
     }),
   ),
 )
@@ -351,14 +350,14 @@ function mergeSettings(sources: readonly SettingsSource[]): HookSettings {
  * DisableSource are plain interfaces); the exported type is hand-declared to
  * keep the real field types. Must not drift into a decode path.
  */
-export const SettingsAnalysisCommandSchema = S.Union(
+export const SettingsAnalysisCommandSchema = S.Union([
   S.TaggedStruct('Merge', { sources: S.Any }),
   S.TaggedStruct('Coverage', { json: S.Any }),
   S.TaggedStruct('DisabledCoverage', { sources: S.Any }),
   S.TaggedStruct('UnsupportedHookTypes', { json: S.Any }),
   S.TaggedStruct('MatcherUnreadable', { event: S.Any }),
   S.TaggedStruct('IfEvaluatingEvent', { event: S.Any }),
-)
+])
 
 type SettingsAnalysisMergeCommand = { readonly _tag: 'Merge'; readonly sources: readonly SettingsSource[] }
 type SettingsAnalysisCoverageCommand = { readonly _tag: 'Coverage'; readonly json: unknown }
@@ -401,9 +400,9 @@ function analyzeSettingsCommand(cmd: SettingsAnalysisCommand): SettingsAnalysisV
  * Run one settings-analysis operation. The caller names the result schema so
  * the command's result type is checked against the value it actually returns.
  */
-export function analyzeSettings<A, I>(
+export function analyzeSettings<A>(
   cmd: SettingsAnalysisCommand,
-  resultSchema: S.Schema<A, I, never>,
+  resultSchema: S.ConstraintDecoder<A>,
 ): A {
   return S.decodeUnknownSync(resultSchema)(analyzeSettingsCommand(cmd))
 }

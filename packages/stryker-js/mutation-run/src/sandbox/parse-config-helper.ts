@@ -8,7 +8,7 @@
  */
 
 import { parse } from '@std/jsonc'
-import { Data, Either, Schema as S } from 'effect'
+import { Data, Result, Schema as S } from 'effect'
 
 /**
  * Error returned when a tsconfig file fails to parse, or parses to a value that does
@@ -19,30 +19,32 @@ export class TsConfigParseError extends Data.TaggedError('TsConfigParseError')<{
   readonly reason: string
 }> {}
 
-const JsonRecord = S.Record({ key: S.String, value: S.Unknown })
+const JsonRecord = S.Record(S.String, S.Unknown)
 
 /**
  * The tsconfig shape this package reads and rewrites in the sandbox.
  *
  * The index signature keeps every key the schema does not declare — including
  * `compilerOptions` and `$schema` — so unknown keys survive the write-back untouched.
- * `S.mutable` keeps the parsed object itself mutable so `TSConfigPreprocessor` can
- * assign rewritten values back onto it, and keeps `references[]` elements mutable
- * because `references[].path` is the one field it rewrites in place.
+ * `S.mutableKey` keeps the fields the preprocessor rewrites writable (v4's `mutable`
+ * only covers arrays), and `S.mutable` keeps the parsed arrays themselves mutable so
+ * `TSConfigPreprocessor` can assign rewritten values back onto the config.
  */
-const TsConfigSchema = S.mutable(
-  S.Struct(
-    {
-      extends: S.optional(S.Union(S.String, S.Array(S.String))),
-      references: S.optional(
-        S.mutable(S.Array(S.mutable(S.Struct({ path: S.String }, JsonRecord)))),
+const TsConfigSchema = S.StructWithRest(
+  S.Struct({
+    extends: S.mutableKey(S.optional(S.Union([S.String, S.Array(S.String)]))),
+    references: S.mutableKey(
+      S.optional(
+        S.mutable(
+          S.Array(S.StructWithRest(S.Struct({ path: S.mutableKey(S.String) }), [JsonRecord])),
+        ),
       ),
-      files: S.optional(S.mutable(S.Array(S.String))),
-      include: S.optional(S.mutable(S.Array(S.String))),
-      exclude: S.optional(S.mutable(S.Array(S.String))),
-    },
-    JsonRecord,
-  ),
+    ),
+    files: S.mutableKey(S.optional(S.mutable(S.Array(S.String)))),
+    include: S.mutableKey(S.optional(S.mutable(S.Array(S.String)))),
+    exclude: S.mutableKey(S.optional(S.mutable(S.Array(S.String)))),
+  }),
+  [JsonRecord],
 )
 
 export type TSConfig = S.Schema.Type<typeof TsConfigSchema>
@@ -52,20 +54,20 @@ export type TSConfig = S.Schema.Type<typeof TsConfigSchema>
  *
  * @param fileName — used only for error message context (mirrors upstream behaviour).
  * @param jsonText — the raw tsconfig text, possibly containing comments.
- * @returns `Either.right(config)` when the text parses and matches the shape,
- *          `Either.left(TsConfigParseError)` on a parse failure or a shape mismatch.
+ * @returns `Result.success(config)` when the text parses and matches the shape,
+ *          `Result.failure(TsConfigParseError)` on a parse failure or a shape mismatch.
  */
 export function parseTsConfig(
   fileName: string,
   jsonText: string,
-): Either.Either<TSConfig, TsConfigParseError> {
+): Result.Result<TSConfig, TsConfigParseError> {
   let parsed: unknown
   try {
     // `@std/jsonc` rejects a leading BOM (its whitespace set is ` \t\r\n`) but
     // `tsc` accepts one, so strip it before parsing.
     parsed = parse(jsonText.replace(/^\uFEFF/, ''))
   } catch (error) {
-    return Either.left(
+    return Result.fail(
       new TsConfigParseError({
         file: fileName,
         reason: error instanceof Error ? error.message : String(error),
@@ -76,9 +78,9 @@ export function parseTsConfig(
     // A type guard, not a decode: it returns the same object reference with the key
     // order untouched, so the preprocessor can mutate the config in place and write
     // it back without reordering or dropping keys.
-    return Either.right(parsed)
+    return Result.succeed(parsed)
   }
-  return Either.left(
+  return Result.fail(
     new TsConfigParseError({
       file: fileName,
       reason: `parsed to ${JSON.stringify(parsed)}, which does not match the tsconfig shape this package consumes`,

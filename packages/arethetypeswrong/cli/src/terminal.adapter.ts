@@ -1,5 +1,5 @@
-import * as PlatformTerminal from '@effect/platform/Terminal'
 import { Context, Effect, Layer } from 'effect'
+import * as PlatformTerminal from 'effect/Terminal'
 
 export interface TerminalWriteSink {
   readonly write: (text: string) => Effect.Effect<void, never>
@@ -13,10 +13,9 @@ export interface TerminalService {
   readonly exit: (code: number) => Effect.Effect<never, never>
 }
 
-export class Terminal extends Context.Tag('@systemfsoftware/arethetypeswrong-cli/terminal.adapter/Terminal')<
-  Terminal,
-  TerminalService
->() {}
+export class Terminal extends Context.Service<Terminal, TerminalService>()(
+  '@systemfsoftware/arethetypeswrong-cli/terminal.adapter/Terminal',
+) {}
 
 export const TerminalLive: Layer.Layer<Terminal, never, PlatformTerminal.Terminal> = Layer.effect(
   Terminal,

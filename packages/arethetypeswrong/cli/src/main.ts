@@ -1,12 +1,13 @@
 #!/usr/bin/env node
-import { defaultLayer as cliConfigDefaultLayer } from '@effect/cli/CliConfig'
-import * as Command from '@effect/cli/Command'
-import { layer as nodeCommandExecutorLayer } from '@effect/platform-node-shared/NodeCommandExecutor'
+import { layer as nodeChildProcessSpawnerLayer } from '@effect/platform-node-shared/NodeChildProcessSpawner'
 import { layer as nodeFileSystemLayer } from '@effect/platform-node-shared/NodeFileSystem'
 import { layer as nodePathLayer } from '@effect/platform-node-shared/NodePath'
-import { runMain as nodeRunMain } from '@effect/platform-node-shared/NodeRuntime'
+import { layer as nodeStdioLayer } from '@effect/platform-node-shared/NodeStdio'
 import { layer as nodeTerminalLayer } from '@effect/platform-node-shared/NodeTerminal'
-import { Effect, Layer, Logger, LogLevel } from 'effect'
+import { runMain as nodeRunMain } from '@effect/platform-node/NodeRuntime'
+import { Effect, Layer } from 'effect'
+import { layer as cliConfigLayerFactory } from 'effect/unstable/cli/CliConfig'
+import * as Command from 'effect/unstable/cli/Command'
 
 import { AttwConfigFileLayer } from './attw-config.schema.js'
 import { attwCommand } from './attw.handler.js'
@@ -15,28 +16,23 @@ import { PackRunnerLive } from './pack-runner.adapter.js'
 import { Stdin, StdinLive } from './stdin.adapter.js'
 import { Terminal, TerminalLive } from './terminal.adapter.js'
 
-const cliConfigLayer = Layer.provideMerge(cliConfigDefaultLayer, AttwConfigFileLayer)
+const cliConfigLayer = Layer.provideMerge(cliConfigLayerFactory(), AttwConfigFileLayer)
 
-const main = Command.run({
-  name: 'attw',
-  version: '1.1.1',
-})(attwCommand)
+const main = Command.runWith(attwCommand, { version: '1.1.1' })
 
 const cliLayer = Layer.mergeAll(TerminalLive, FilesystemLive, StdinLive)
 
+const nodeBase = Layer.mergeAll(nodeFileSystemLayer, nodePathLayer, nodeTerminalLayer, nodeStdioLayer)
+const nodeSpawnerLayer = nodeChildProcessSpawnerLayer.pipe(Layer.provide(nodeBase))
+
 const nodeRuntime = Layer.mergeAll(
-  nodeFileSystemLayer,
-  nodePathLayer,
-  nodeTerminalLayer,
-  nodeCommandExecutorLayer.pipe(Layer.provide(nodeFileSystemLayer)),
-  PackRunnerLive.pipe(
-    Layer.provide(nodeCommandExecutorLayer.pipe(Layer.provide(nodeFileSystemLayer))),
-  ),
+  nodeBase,
+  nodeSpawnerLayer,
+  PackRunnerLive.pipe(Layer.provide(nodeSpawnerLayer)),
 )
 
-const program = main(process.argv).pipe(
+const program = main(process.argv.slice(2)).pipe(
   Effect.withLogSpan('attw'),
-  Logger.withMinimumLogLevel(LogLevel.Info),
 )
 
 const provided = program.pipe(

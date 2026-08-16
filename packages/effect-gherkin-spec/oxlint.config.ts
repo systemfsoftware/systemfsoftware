@@ -5,6 +5,13 @@ export default defineConfig({
   extends: [base],
 
   rules: {
+    // ── v4 migration: Context.Service replaces Context.Tag (class syntax
+    // `extends Context.Service<Self, Shape>()(id)`); the shared ban-classes
+    // rule only knows the v3 Context.Tag/Context.Reference variants.
+    '@systemfsoftware/oxlint-plugin/ban-classes': [
+      'error',
+      { whitelist: ['BuildSvc3', 'BuildSvc4', 'BuildSvc5', 'Widget'] },
+    ],
     // ── Type Safety: largest anti-patterns ──
     'typescript/ban-ts-comment': 'error',
     'typescript/consistent-return': 'error',

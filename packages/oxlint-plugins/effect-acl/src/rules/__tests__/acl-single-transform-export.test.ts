@@ -91,6 +91,53 @@ export interface OrderMeta { readonly createdAt: string }
       filename: 'order.acl.ts',
     },
     {
+      name: 'Should_Pass_When_SingleV4DecodeToTransform_InAcl',
+      code: `
+import * as S from 'effect/Schema'
+import { SchemaGetter, Effect } from 'effect'
+
+export const Order = S.Struct({ id: S.String })
+export const OrderFromText = S.String.pipe(
+  S.decodeTo(S.toType(Order), {
+    decode: SchemaGetter.transformOrFail((raw) => Effect.succeed({ id: raw })),
+    encode: SchemaGetter.forbidden(() => 'OrderFromText is decode-only'),
+  }),
+)
+`,
+      filename: 'order.acl.ts',
+    },
+    {
+      name: 'Should_Pass_When_SingleV4SchemaTransformationTransform_InAcl',
+      code: `
+import * as S from 'effect/Schema'
+import { SchemaTransformation, Effect } from 'effect'
+
+export const OrderFromText = S.String.pipe(
+  S.decodeTo(S.toType(Order), SchemaTransformation.transformOrFail({
+    decode: (raw) => Effect.succeed({ id: raw }),
+    encode: () => Effect.succeed('raw'),
+  })),
+)
+`,
+      filename: 'order.acl.ts',
+    },
+    {
+      name: 'Should_Pass_When_SingleV4TransformViaSpecifierReExport_InAcl',
+      code: `
+import * as S from 'effect/Schema'
+import { SchemaGetter, Effect } from 'effect'
+
+const OrderFromText = S.String.pipe(
+  S.decodeTo(S.toType(Order), {
+    decode: SchemaGetter.transformOrFail((raw) => Effect.succeed({ id: raw })),
+    encode: SchemaGetter.forbidden(() => 'OrderFromText is decode-only'),
+  }),
+)
+export { OrderFromText }
+`,
+      filename: 'order.acl.ts',
+    },
+    {
       name: 'Should_Pass_When_NonAclFile_HasManyTransforms',
       code: nonAclFileWithManyTransforms,
       filename: 'composite.handler.ts',
@@ -235,6 +282,48 @@ export const CFromZ = S.transformOrFail(Z, C, { strict: true, decode: () => Pars
 `,
       filename: 'order.acl.ts',
       errors: [{ messageId: 'tooManyTransformExports', data: dataFor('3 transform exports') }],
+    },
+    {
+      name: 'Should_Report_TwoV4TransformExports',
+      code: `
+import * as S from 'effect/Schema'
+import { SchemaGetter, Effect } from 'effect'
+
+export const AFromX = S.String.pipe(S.decodeTo(S.toType(A), { decode: SchemaGetter.transformOrFail(() => Effect.succeed(a)), encode: SchemaGetter.forbidden(() => 'x') }))
+export const BFromY = S.String.pipe(S.decodeTo(S.toType(B), { decode: SchemaGetter.transformOrFail(() => Effect.succeed(b)), encode: SchemaGetter.forbidden(() => 'y') }))
+`,
+      filename: 'order.acl.ts',
+      errors: [{ messageId: 'tooManyTransformExports', data: dataFor('2 transform exports') }],
+    },
+    {
+      name: 'Should_Report_V3AndV4TransformExportCombination',
+      code: `
+import * as S from 'effect/Schema'
+import { ParseResult, SchemaGetter, Effect } from 'effect'
+
+export const AFromX = S.transformOrFail(X, A, { strict: true, decode: () => ParseResult.succeed(a), encode: (_, __, ast) => ParseResult.fail(new ParseResult.Forbidden(ast, _, 'x')) })
+export const BFromText = S.String.pipe(S.decodeTo(S.toType(B), { decode: SchemaGetter.transformOrFail(() => Effect.succeed(b)), encode: SchemaGetter.forbidden(() => 'y') }))
+`,
+      filename: 'order.acl.ts',
+      errors: [{ messageId: 'tooManyTransformExports', data: dataFor('2 transform exports') }],
+    },
+    {
+      name: 'Should_Report_PlainDecodeToPipeAsDisallowedExport',
+      code: `
+import * as S from 'effect/Schema'
+
+export const NotATransform = S.String.pipe(S.decodeTo(S.toType(Order)))
+`,
+      filename: 'order.acl.ts',
+      errors: [{
+        messageId: 'disallowedExport',
+        data: {
+          name: 'NotATransform',
+          expected: 'only the ACL transform itself, the source/target Schema declarations, and types/interfaces',
+          actual: 'exported value',
+          fix: 'move constants, helpers, and classes out of the ACL file',
+        },
+      }],
     },
     {
       name: 'Should_Report_TransformAndTransformWithS_Transform',

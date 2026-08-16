@@ -1,15 +1,15 @@
-import { JSONSchema, Schema as S } from 'effect'
+import { Effect, Schema as S } from 'effect'
 import { ABSENCE_MESSAGE, COLOCATABLE_CELLS, MESSAGE } from './path.config.js'
 
 const SANCTIONED_CELLS = COLOCATABLE_CELLS.join(', ')
 
 export const Options = S.Struct({
-  cellsRequiringTest: S.optionalWith(
-    S.Array(S.String).pipe(S.annotations({
+  cellsRequiringTest: S.Array(S.String).pipe(
+    S.annotate({
       description:
         'Cell suffixes whose source files must carry a test, named without the leading dot (e.g. ["kernel", "workflow"]). Empty by default: a consumer who declares nothing is never accused. A cell listed here is satisfied by an in-source `if (import.meta.vitest)` block, which is the only form the rule can read from the file it is given.',
-    })),
-    { default: () => [] },
+    }),
+    S.withDecodingDefaultType(Effect.succeed([])),
   ),
 })
 
@@ -34,7 +34,7 @@ export const meta = {
     description:
       'A property test under src/ must be colocated with the pure cell it covers: a workflow, a policy, or a kernel. A schema may carry one only for a `refutes(schema, generators)` refusal — its acceptance laws are generated into schema-laws.test.ts; every other cell is covered at composition altitude. A source file whose suffix names a cell listed in the cellsRequiringTest option must additionally carry an in-source vitest block; that list is empty by default, so the presence arm is opt-in per consumer.',
   },
-  schema: [JSONSchema.make(Options)],
+  schema: [S.toJsonSchemaDocument(Options).schema],
   messages: {
     unsanctionedCell: MESSAGE,
     missingCellTest: ABSENCE_MESSAGE,

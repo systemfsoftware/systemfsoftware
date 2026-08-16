@@ -5,12 +5,12 @@ import { Schema as S } from 'effect'
  * this to produce a `Uint8Array` from that format:
  *
  * ```ts
- * S.compose(PrefixedHex, HexBytes)  // Schema<Uint8Array, `0x${string}`>
- * S.compose(ColonHex, HexBytes)     // Schema<Uint8Array, string>
+ * S.decodeTo(HexBytes)(PrefixedHex)      // Schema<Uint8Array, `0x${string}`>
+ * S.decodeTo(HexBytes)(ColonHex)         // Schema<Uint8Array, string>
  * ```
  */
 export const HexBytes = S.Uint8ArrayFromHex.pipe(
-  S.annotations({
+  S.annotate({
     identifier: 'HexBytes',
     description: 'Uint8Array encoded as a lowercase hex string — compose with any hex schema',
     title: 'Hex Bytes',

@@ -27,9 +27,9 @@ export interface TypescriptAdapterService {
   >
 }
 
-export class TypescriptAdapter extends Context.Tag(
+export class TypescriptAdapter extends Context.Service<TypescriptAdapter, TypescriptAdapterService>()(
   '@systemfsoftware/arethetypeswrong-core/TypescriptAdapter',
-)<TypescriptAdapter, TypescriptAdapterService>() {}
+) {}
 
 export const TypescriptAdapterStub: Layer.Layer<TypescriptAdapter, never, never> = Layer.succeed(
   TypescriptAdapter,

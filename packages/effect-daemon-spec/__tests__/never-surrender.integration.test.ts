@@ -1,6 +1,7 @@
 import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Duration, Effect, Layer, Schema as S, TestClock } from 'effect'
+import { Duration, Effect, Layer, Schema as S } from 'effect'
+import { TestClock } from 'effect/testing'
 import { expect } from 'vitest'
 import { DaemonReporter, LeaderLock } from '../src/mod.js'
 import { run } from '../src/mod.js'
@@ -27,7 +28,7 @@ Feature('Leader daemon never surrenders under sustained failure')
             Effect.gen(function*() {
               const child = Daemon.poll({
                 name: 'always-fails',
-                work: new SimulatedFailure(),
+                work: SimulatedFailure.make(),
                 interval: Duration.millis(10),
                 tick: { tickTimeout: Duration.seconds(90) },
                 lock: { mode: 'none' },

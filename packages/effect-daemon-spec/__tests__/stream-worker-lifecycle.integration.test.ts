@@ -1,5 +1,6 @@
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Duration, Effect, Either, Option, Ref, Stream, TestClock } from 'effect'
+import { Duration, Effect, Option, Ref, Result, Stream } from 'effect'
+import { TestClock } from 'effect/testing'
 import { expect } from 'vitest'
 import { Daemon } from '../src/mod.js'
 import { dynamic } from '../src/mod.js'
@@ -122,9 +123,9 @@ Feature('Stream Worker Lifecycle')
               yield* TestClock.adjust(Duration.seconds(100))
               const stillRunning = yield* ref.removed.pipe(
                 Effect.timeout('0 millis'),
-                Effect.either,
+                Effect.result,
               )
-              return { stillRunning: Either.isLeft(stillRunning) }
+              return { stillRunning: Result.isFailure(stillRunning) }
             }),
           )),
         Then('worker is still running after timeout')((s) =>

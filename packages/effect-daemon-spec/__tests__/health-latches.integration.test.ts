@@ -1,5 +1,6 @@
 import { And, Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Duration, Effect, Either, Metric, MetricState, Ref, Schedule, Stream, TestClock } from 'effect'
+import { Duration, Effect, Latch, Metric, Ref, Result, Schedule, Stream } from 'effect'
+import { TestClock } from 'effect/testing'
 import { expect } from 'vitest'
 import { healthStateGauge } from '../src/mod.js'
 import { BoundedIntensity } from '../src/mod.js'
@@ -32,10 +33,10 @@ Feature('Health Latch Lifecycle')
         Then('ready is closed')((s) =>
           s.health.ready.await.pipe(
             Effect.timeout('0 millis'),
-            Effect.either,
+            Effect.result,
             Effect.tap((result) =>
               Effect.sync(() => {
-                expect(result).toEqual(Either.left(expect.anything()))
+                expect(result).toEqual(Result.fail(expect.anything()))
               })
             ),
             Effect.asVoid,
@@ -87,10 +88,10 @@ Feature('Health Latch Lifecycle')
         Then('ready is closed')((s) =>
           s.health.ready.await.pipe(
             Effect.timeout('0 millis'),
-            Effect.either,
+            Effect.result,
             Effect.tap((result) =>
               Effect.sync(() => {
-                expect(result).toEqual(Either.left(expect.anything()))
+                expect(result).toEqual(Result.fail(expect.anything()))
               })
             ),
             Effect.asVoid,
@@ -139,9 +140,9 @@ Feature('Health Latch Lifecycle')
               lock: { mode: 'none' },
             })
             yield* run.worker(worker)
-            const gr = Metric.tagged(Metric.tagged(healthStateGauge, 'daemon', daemon), 'latch', 'ready')
-            const gh = Metric.tagged(Metric.tagged(healthStateGauge, 'daemon', daemon), 'latch', 'healthy')
-            const gp = Metric.tagged(Metric.tagged(healthStateGauge, 'daemon', daemon), 'latch', 'paused')
+            const gr = Metric.withAttributes(healthStateGauge, { daemon: daemon, latch: 'ready' })
+            const gh = Metric.withAttributes(healthStateGauge, { daemon: daemon, latch: 'healthy' })
+            const gp = Metric.withAttributes(healthStateGauge, { daemon: daemon, latch: 'paused' })
             const sr = yield* Metric.value(gr)
             const sh = yield* Metric.value(gh)
             const sp = yield* Metric.value(gp)
@@ -149,11 +150,8 @@ Feature('Health Latch Lifecycle')
           })),
         Then('ready gauge is zero and healthy and paused are one')((s) =>
           Effect.sync(() => {
-            expect(MetricState.isGaugeState(s.out.sr)).toBe(true)
             expect(s.out.sr.value).toBe(0)
-            expect(MetricState.isGaugeState(s.out.sh)).toBe(true)
             expect(s.out.sh.value).toBe(1)
-            expect(MetricState.isGaugeState(s.out.sp)).toBe(true)
             expect(s.out.sp.value).toBe(1)
           })
         ),
@@ -173,7 +171,7 @@ Feature('Health Latch Lifecycle')
               tick: { tickTimeout: Duration.seconds(90) },
               lock: { mode: 'none' },
             })
-            const gr = Metric.tagged(Metric.tagged(healthStateGauge, 'daemon', daemon), 'latch', 'ready')
+            const gr = Metric.withAttributes(healthStateGauge, { daemon: daemon, latch: 'ready' })
             yield* run.worker(worker).pipe(Effect.provide(NoopLayer))
             yield* TestClock.adjust(Duration.millis(5))
             const st = yield* Metric.value(gr)
@@ -181,7 +179,6 @@ Feature('Health Latch Lifecycle')
           })),
         Then('ready gauge is one')((s) =>
           Effect.sync(() => {
-            expect(MetricState.isGaugeState(s.out.st)).toBe(true)
             expect(s.out.st.value).toBe(1)
           })
         ),
@@ -194,7 +191,7 @@ Feature('Health Latch Lifecycle')
         When('a zero-restart supervisor exhausts')('out', () =>
           Effect.gen(function*() {
             const supName = 'metric-exhaust-sup'
-            const gh = Metric.tagged(Metric.tagged(healthStateGauge, 'daemon', supName), 'latch', 'healthy')
+            const gh = Metric.withAttributes(healthStateGauge, { daemon: supName, latch: 'healthy' })
             const worker = Daemon.poll({
               name: 'metric-exhaust-child',
               work: Effect.fail('boom'),
@@ -206,7 +203,7 @@ Feature('Health Latch Lifecycle')
               name: supName,
               children: [worker],
               supervision: Supervision.custom({
-                intensity: new BoundedIntensity({ restarts: 0, window: Duration.seconds(60) }),
+                intensity: BoundedIntensity.make({ restarts: 0, window: Duration.seconds(60) }),
                 backoff: Schedule.exponential(Duration.millis(1), 1),
                 cooldown: Duration.hours(1),
               }),
@@ -227,7 +224,6 @@ Feature('Health Latch Lifecycle')
         Then('healthy gauge is zero and latch is closed')((s) =>
           Effect.sync(() => {
             expect(s.out.healthyClosed).toBe(true)
-            expect(MetricState.isGaugeState(s.out.st)).toBe(true)
             expect(s.out.st.value).toBe(0)
           })
         ),
@@ -282,10 +278,10 @@ Feature('Health Latch Lifecycle')
                 }),
               ],
               supervision: Supervision.custom({
-                intensity: new BoundedIntensity({ restarts: 5, window: Duration.seconds(60) }),
+                intensity: BoundedIntensity.make({ restarts: 5, window: Duration.seconds(60) }),
                 backoff: Schedule.exponential(Duration.seconds(10)).pipe(
                   Schedule.jittered,
-                  Schedule.upTo(Duration.minutes(5)),
+                  Schedule.upTo({ duration: Duration.minutes(5) }),
                 ),
                 cooldown: Duration.minutes(30),
               }),
@@ -307,7 +303,7 @@ Feature('Health Latch Lifecycle')
           () =>
             Effect.gen(function*() {
               const starts = yield* Ref.make(0)
-              const release = yield* Effect.makeLatch(false)
+              const release = yield* Latch.make(false)
               const child = Daemon.stream({
                 name: 'pausable-restart-child',
                 tick: { tickTimeout: Duration.seconds(90) },
@@ -321,7 +317,7 @@ Feature('Health Latch Lifecycle')
                 name: 'pausable-restart-parent',
                 children: [child],
                 supervision: Supervision.custom({
-                  intensity: new BoundedIntensity({ restarts: 10, window: Duration.seconds(60) }),
+                  intensity: BoundedIntensity.make({ restarts: 10, window: Duration.seconds(60) }),
                   backoff: Schedule.exponential(Duration.millis(1), 1),
                   cooldown: Duration.minutes(30),
                 }),

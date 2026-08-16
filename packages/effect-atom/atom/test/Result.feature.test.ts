@@ -1,4 +1,4 @@
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec-v4'
+import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Option } from 'effect'
 import { expect } from 'vitest'
 import * as Atom from '../src/Atom.js'

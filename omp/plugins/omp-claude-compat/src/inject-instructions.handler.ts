@@ -1,5 +1,3 @@
-import type { FileSystem } from '@effect/platform/FileSystem'
-import type * as PathModule from '@effect/platform/Path'
 import type {
   BeforeAgentStartEvent,
   BeforeAgentStartEventResult,
@@ -7,7 +5,9 @@ import type {
   ExtensionContext,
 } from '@oh-my-pi/pi-coding-agent'
 import type { TomlLoader } from '@systemfsoftware/omp-utils'
-import { Config, Effect, Either } from 'effect'
+import { Config, Effect, Result } from 'effect'
+import type { FileSystem } from 'effect/FileSystem'
+import type * as PathModule from 'effect/Path'
 import type { HookRunner } from './hook-runner.kernel.js'
 import { loadReferencedContent } from './inject-instructions.executor.js'
 
@@ -21,8 +21,8 @@ export const InjectInstructionsTask = (
         const projectDir = yield* Config.string('CLAUDE_PROJECT_DIR').pipe(
           Config.withDefault(process.cwd()),
         )
-        const outcome = yield* Effect.either(loadReferencedContent(projectDir))
-        return Either.getOrThrow(outcome)
+        const outcome = yield* Effect.result(loadReferencedContent(projectDir))
+        return Result.getOrThrow(outcome)
       }),
     )
     if (injected === '') return undefined

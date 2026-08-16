@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import path from 'path'
 
-import { Either } from 'effect'
+import { Result } from 'effect'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import {
@@ -12,11 +12,11 @@ import {
   TsConfigParseError,
 } from '../../src/tsconfig-helpers.js'
 
-function expectRight<A, E>(either: Either.Either<A, E>): A {
-  if (Either.isLeft(either)) {
-    throw new Error(`Expected a Right result, got a Left: ${String(either.left)}`)
+function expectRight<A, E>(result: Result.Result<A, E>): A {
+  if (Result.isFailure(result)) {
+    throw new Error(`Expected a Right result, got a Left: ${String(result.failure)}`)
   }
-  return either.right
+  return result.success
 }
 
 describe('parseTsConfig', () => {
@@ -97,41 +97,41 @@ describe('parseTsConfig', () => {
 
   it('should return a Left for a malformed document', () => {
     const result = parseTsConfig('tsconfig.json', '{ "a": }')
-    expect(Either.isLeft(result)).toBe(true)
-    if (Either.isLeft(result)) {
-      expect(result.left).toBeInstanceOf(TsConfigParseError)
-      expect(result.left.file).toBe('tsconfig.json')
-      expect(result.left.reason.length).toBeGreaterThan(0)
+    expect(Result.isFailure(result)).toBe(true)
+    if (Result.isFailure(result)) {
+      expect(result.failure).toBeInstanceOf(TsConfigParseError)
+      expect(result.failure.file).toBe('tsconfig.json')
+      expect(result.failure.reason.length).toBeGreaterThan(0)
     }
   })
 
   it('should return a Left for truncated input', () => {
     for (const truncated of ['{', '{"a":']) {
-      expect(Either.isLeft(parseTsConfig('tsconfig.json', truncated))).toBe(true)
+      expect(Result.isFailure(parseTsConfig('tsconfig.json', truncated))).toBe(true)
     }
   })
 
   it('should return a Left for an unterminated block comment', () => {
     const result = parseTsConfig('tsconfig.json', '{"a":1,/* never closed')
-    expect(Either.isLeft(result)).toBe(true)
+    expect(Result.isFailure(result)).toBe(true)
   })
 
   it('should return a Left for a bare string root (not a config object)', () => {
     const result = parseTsConfig('tsconfig.json', '"just a string"')
-    expect(Either.isLeft(result)).toBe(true)
-    if (Either.isLeft(result)) {
-      expect(result.left).toBeInstanceOf(TsConfigParseError)
-      expect(result.left.file).toBe('tsconfig.json')
-      expect(result.left.reason.length).toBeGreaterThan(0)
+    expect(Result.isFailure(result)).toBe(true)
+    if (Result.isFailure(result)) {
+      expect(result.failure).toBeInstanceOf(TsConfigParseError)
+      expect(result.failure.file).toBe('tsconfig.json')
+      expect(result.failure.reason.length).toBeGreaterThan(0)
     }
   })
 
   it('should return a Left when references is not an array', () => {
     const result = parseTsConfig('tsconfig.json', '{"references":"nope"}')
-    expect(Either.isLeft(result)).toBe(true)
-    if (Either.isLeft(result)) {
-      expect(result.left).toBeInstanceOf(TsConfigParseError)
-      expect(result.left.reason.length).toBeGreaterThan(0)
+    expect(Result.isFailure(result)).toBe(true)
+    if (Result.isFailure(result)) {
+      expect(result.failure).toBeInstanceOf(TsConfigParseError)
+      expect(result.failure.reason.length).toBeGreaterThan(0)
     }
   })
 })

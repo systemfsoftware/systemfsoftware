@@ -6,10 +6,9 @@ import { asToolInput, EMPTY_TOOL_INPUT } from './hook-payload.kernel.js'
 import type { HookSession, HookToolResult } from './hook-session.kernel.js'
 import { runHooksForEvent } from './run-hooks-for-event.executor.js'
 
-export class RunPostToolUseHooksExecutorDeps extends Context.Tag('RunPostToolUseHooksExecutorDeps')<
-  RunPostToolUseHooksExecutorDeps,
-  Scope.Scope
->() {}
+export class RunPostToolUseHooksExecutorDeps extends Context.Service<RunPostToolUseHooksExecutorDeps, Scope.Scope>()(
+  'RunPostToolUseHooksExecutorDeps',
+) {}
 
 export const runPostToolUseHooks = Effect.fn('runPostToolUseHooks')(function*(
   settings: HookSettings,

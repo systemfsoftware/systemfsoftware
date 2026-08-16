@@ -15,7 +15,7 @@ export class CooldownEpoch extends S.TaggedClass<CooldownEpoch>()('CooldownEpoch
   readonly [EpochStepTypeId] = EpochStepTypeId
 }
 
-export const EpochStep = S.Union(StopEpoch, RestartEpoch, CooldownEpoch)
+export const EpochStep = S.Union([StopEpoch, RestartEpoch, CooldownEpoch])
 export type EpochStep = typeof EpochStep.Type
 
 const SupervisionEpochResultTypeId: unique symbol = Symbol.for('@systemfsoftware/effect-daemon/SupervisionEpochResult')
@@ -29,5 +29,5 @@ export class ContinueSupervision extends S.TaggedClass<ContinueSupervision>()('C
   readonly [SupervisionEpochResultTypeId] = SupervisionEpochResultTypeId
 }
 
-export const SupervisionEpochResult = S.Union(StopSupervision, ContinueSupervision)
+export const SupervisionEpochResult = S.Union([StopSupervision, ContinueSupervision])
 export type SupervisionEpochResultType = typeof SupervisionEpochResult.Type

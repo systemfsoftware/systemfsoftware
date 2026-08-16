@@ -1,7 +1,6 @@
+import { performance } from 'node:perf_hooks'
 import { format as utilFormat, inspect as utilInspect } from 'node:util'
-import type { InspectOptions } from 'node:util'
 
-import * as Clock from 'effect/Clock'
 import * as Console from 'effect/Console'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
@@ -9,15 +8,19 @@ import * as Layer from 'effect/Layer'
 /**
  * U6 — the machine-mode `Console` layer (KTD3, R7).
  *
- * `@effect/cli` renders help and errors through an ANSI renderer and prints
- * them with the `Console` service — `printDocs = error => Console.error(toAnsiText(error))`
- * in cliApp.js — and there is no seam to intercept: the document is written
- * *before* the failure propagates. Machine mode therefore replaces the
- * `Console` service itself with a capturing layer: every write lands in an
- * in-memory buffer instead of the real stdout/stderr, and the terminating
- * bootstrap (stryker-cli.handler.ts) emits the buffer as one JSON envelope at
- * teardown. Human mode keeps the default console so the framework's prose
- * rendering is untouched.
+ * The v4 CLI renders help and errors through an ANSI renderer and prints them
+ * with the `Console` reference — and there is no seam to intercept: the
+ * document is written *before* the failure propagates. Machine mode therefore
+ * replaces the `Console` reference itself with a capturing implementation:
+ * every write lands in an in-memory buffer instead of the real stdout/stderr,
+ * and the terminating bootstrap (stryker-cli.handler.ts) emits the buffer as
+ * one JSON envelope at teardown. Human mode keeps the default console so the
+ * framework's prose rendering is untouched.
+ *
+ * The v4 `Console.Console` interface is the sync `globalThis.console` shape
+ * (the v3 service's effect-returning surface became the module-level
+ * wrapper functions), so the capture implementation needs no `unsafe`
+ * mirror — every method stores into the buffer directly.
  */
 
 const capturedConsoleChunks: string[] = []
@@ -30,10 +33,6 @@ function formatArgs(args: readonly unknown[]): string {
 
 function captureSync(args: readonly unknown[]): void {
   capturedConsoleChunks.push(formatArgs(args))
-}
-
-function captureEffect(args: readonly unknown[]): Effect.Effect<void> {
-  return Effect.sync(() => captureSync(args))
 }
 
 function captureAssert(condition: boolean, args: readonly unknown[]): void {
@@ -63,92 +62,58 @@ function captureTrace(args: readonly unknown[]): void {
 }
 
 const capturingConsole: Console.Console = {
-  [Console.TypeId]: Console.TypeId,
-  assert: (condition: boolean, ...args: readonly unknown[]) => Effect.sync(() => captureAssert(condition, args)),
-  clear: Effect.void,
-  count: (label) => Effect.sync(() => captureCount(label)),
-  countReset: (label) => Effect.sync(() => countByLabel.delete(label ?? 'default')),
-  debug: (...args: readonly unknown[]) => captureEffect(args),
-  dir: (item: unknown, options?: InspectOptions) =>
-    Effect.sync(() => capturedConsoleChunks.push(utilInspect(item, options))),
-  dirxml: (item) => Effect.sync(() => capturedConsoleChunks.push(utilInspect(item))),
-  error: (...args: readonly unknown[]) => captureEffect(args),
-  group: () => Effect.void,
-  groupEnd: Effect.void,
-  info: (...args: readonly unknown[]) => captureEffect(args),
-  log: (...args: readonly unknown[]) => captureEffect(args),
-  table: (tabularData) =>
-    Effect.sync(() => capturedConsoleChunks.push(utilInspect(tabularData, { colors: false, depth: null }))),
-  time: (label) =>
-    Effect.gen(function*() {
-      timeByLabel.set(label ?? 'default', yield* Clock.currentTimeMillis)
-    }),
-  timeEnd: (label) =>
-    Effect.gen(function*() {
-      captureTimeEnd(label, yield* Clock.currentTimeMillis)
-    }),
-  timeLog: (label: string | undefined, ...args: readonly unknown[]) =>
-    Effect.gen(function*() {
-      const key = label ?? 'default'
-      const started = timeByLabel.get(key)
-      if (started !== undefined) {
-        capturedConsoleChunks.push(`${key}: ${(yield* Clock.currentTimeMillis) - started}ms ${formatArgs(args)}`)
-      }
-    }),
-  trace: (...args: readonly unknown[]) => Effect.sync(() => captureTrace(args)),
-  warn: (...args: readonly unknown[]) => captureEffect(args),
-  unsafe: {
-    assert: (condition: boolean, ...args: readonly unknown[]) => captureAssert(condition, args),
-    clear: () => {},
-    count: (label) => captureCount(label),
-    countReset: (label) => countByLabel.delete(label ?? 'default'),
-    debug: (...args: readonly unknown[]) => captureSync(args),
-    dir: (item: unknown, options?: InspectOptions) => capturedConsoleChunks.push(utilInspect(item, options)),
-    dirxml: (item) => capturedConsoleChunks.push(utilInspect(item)),
-    error: (...args: readonly unknown[]) => captureSync(args),
-    group: () => {},
-    groupCollapsed: () => {},
-    groupEnd: () => {},
-    info: (...args: readonly unknown[]) => captureSync(args),
-    log: (...args: readonly unknown[]) => captureSync(args),
-    table: (tabularData) => capturedConsoleChunks.push(utilInspect(tabularData, { colors: false, depth: null })),
-    time: (label) => timeByLabel.set(label ?? 'default', Effect.runSync(Clock.currentTimeMillis)),
-    timeEnd: (label) => captureTimeEnd(label, Effect.runSync(Clock.currentTimeMillis)),
-    timeLog: (label: string | undefined, ...args: readonly unknown[]) => {
-      const key = label ?? 'default'
-      const started = timeByLabel.get(key)
-      if (started !== undefined) {
-        capturedConsoleChunks.push(`${key}: ${Effect.runSync(Clock.currentTimeMillis) - started}ms ${formatArgs(args)}`)
-      }
-    },
-    trace: (...args: readonly unknown[]) => captureTrace(args),
-    warn: (...args: readonly unknown[]) => captureSync(args),
+  assert: (condition: boolean, ...args: readonly unknown[]) => captureAssert(condition, args),
+  clear: () => {},
+  count: (label) => captureCount(label),
+  countReset: (label) => countByLabel.delete(label ?? 'default'),
+  debug: (...args: readonly unknown[]) => captureSync(args),
+  dir: (item: unknown, options?: Record<string, unknown>) => capturedConsoleChunks.push(utilInspect(item, options)),
+  dirxml: (item) => capturedConsoleChunks.push(utilInspect(item)),
+  error: (...args: readonly unknown[]) => captureSync(args),
+  group: () => {},
+  groupCollapsed: () => {},
+  groupEnd: () => {},
+  info: (...args: readonly unknown[]) => captureSync(args),
+  log: (...args: readonly unknown[]) => captureSync(args),
+  table: (tabularData) => capturedConsoleChunks.push(utilInspect(tabularData, { colors: false, depth: null })),
+  time: (label) => timeByLabel.set(label ?? 'default', performance.now()),
+  timeEnd: (label) => captureTimeEnd(label, performance.now()),
+  timeLog: (label, ...args) => {
+    const key = label ?? 'default'
+    const started = timeByLabel.get(key)
+    if (started !== undefined) {
+      capturedConsoleChunks.push(`${key}: ${performance.now() - started}ms ${formatArgs(args)}`)
+    }
   },
+  trace: (...args: readonly unknown[]) => captureTrace(args),
+  warn: (...args: readonly unknown[]) => captureSync(args),
 }
 
 /**
- * The machine-mode `Console` layer. Constructing it clears the capture
- * buffer so every run starts empty; the terminating bootstrap reads the
- * buffer back through `readCapturedConsole` at teardown.
+ * The machine-mode `Console` layer. Building it clears the capture buffer so
+ * every run starts empty; the terminating bootstrap reads the buffer back
+ * through `readCapturedConsole` at teardown. A `Layer` is already lazy, so
+ * the layer is a value: the reset effect runs when the layer is built.
  *
- * The layer must reach `FiberRef.currentServices`, not just the fiber
- * context: `Console.log`/`Console.error` resolve the service from the
- * default-services FiberRef (`consoleWith`), so a plain `Layer.succeed`
- * provide is a silent no-op. `Console.setConsole` is the primitive that
- * rewrites `currentServices` for the provided scope.
+ * The layer must replace the `Console` reference the module-level
+ * `Console.log`/`Console.error` wrappers read through their fiber context;
+ * v4 reads the override the same way it reads any provided service, so a
+ * plain provide is sufficient — no special `setConsole`-style primitive
+ * exists any more. The reference's identifier is `never` (it carries no
+ * requirement), so the layer's type is too.
  *
- * Human mode provides no Console layer at all: effect's own default console
- * delegates every method to the global console, which is exactly the prose
- * rendering a human-mode run uses. Mirroring it here would reimplement the
- * library default (V.7).
+ * Human mode provides no Console binding at all: effect's own default
+ * console delegates every method to the global console, which is exactly the
+ * prose rendering a human-mode run uses. Mirroring it here would reimplement
+ * the library default (V.7).
  */
-export function machineConsoleLayer(): Layer.Layer<Console.Console> {
-  resetCapturedConsole()
-  return Layer.mergeAll(
-    Console.setConsole(capturingConsole),
-    Layer.succeed(Console.Console, capturingConsole),
-  )
-}
+export const machineConsoleLayer: Layer.Layer<never> = Layer.effect(
+  Console.Console,
+  Effect.sync(() => {
+    resetCapturedConsole()
+    return capturingConsole
+  }),
+)
 
 /**
  * The text captured so far by the machine console layer, joined into one

@@ -5,7 +5,7 @@
 ```yaml
 - id: HH1
   title: handler-single-executor — the obligation rule OX-OB1 requires here
-  do: keep handler-single-executor failing a handler that LACKS an executor import or an Effect.either delegation
+  do: keep handler-single-executor failing a handler that LACKS an executor import or an Effect.either (v3) / Effect.result (v4) delegation
   dont: relax handler-single-executor so it fires only when an executor import is already present
   harm: with prohibitions alone, a handler that calls a store directly and never delegates passes every rule and HD1 is vacuous
   check: "`grep -c \"rule('handler-single-executor')]: 'error'\" src/index.ts` prints 1 — its only registration, in configs.recommended"

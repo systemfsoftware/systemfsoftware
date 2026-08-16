@@ -7,7 +7,7 @@ import { TarballAdapter, TarballAdapterStub } from '../src/tarball.adapter.js'
 import { TypescriptAdapter, TypescriptAdapterStub } from '../src/typescript.adapter.ts'
 
 describe('adapters: tag + stub shape', () => {
-  it('TarballAdapter is a Context.Tag with the expected identifier', () => {
+  it('TarballAdapter is a Context.Service with the expected identifier', () => {
     expect(TarballAdapter.key).toBe('@systemfsoftware/arethetypeswrong-core/TarballAdapter')
   })
 

@@ -15,6 +15,14 @@ export default defineConfig({
     ...cellVocabulary.configs.recommended.rules,
     ...effectExecutor.configs.recommended.rules,
 
+    // ── v4 migration: Context.Service replaces Context.Tag (class syntax
+    // `extends Context.Service<Self, Shape>()(id)`); the shared ban-classes
+    // rule only knows the v3 Context.Tag/Context.Reference variants.
+    '@systemfsoftware/oxlint-plugin/ban-classes': [
+      'error',
+      { whitelist: ['LeaderLock', 'LockPrimitive', 'DaemonReporter'] },
+    ],
+
     // ── Type Safety: largest anti-patterns ──
     'typescript/ban-ts-comment': 'error',
     'typescript/consistent-return': 'error',

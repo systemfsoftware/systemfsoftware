@@ -4,7 +4,7 @@ import { type Problem, ProblemSchema } from './problem.schema.js'
 import { type EntrypointInfo, EntrypointInfoSchema } from './resolution.schema.js'
 import { ResolutionOptionSchema } from './resolution.schema.js'
 
-export const BuildToolSchema = Schema.Literal(
+export const BuildToolSchema = Schema.Literals([
   '@systemfsoftware/arethetypeswrong-cli',
   'typescript',
   'rollup',
@@ -22,7 +22,7 @@ export const BuildToolSchema = Schema.Literal(
   '@rspack/cli',
   'tsup',
   'tsdown',
-)
+])
 export type BuildTool = Schema.Schema.Type<typeof BuildToolSchema>
 
 export const IncludedTypesSchema = Schema.Struct({ kind: Schema.Literal('included') })
@@ -32,18 +32,18 @@ export const TypesPackageSchema = Schema.Struct({
   packageVersion: Schema.String,
   definitelyTypedUrl: Schema.optional(Schema.String),
 })
-export const AnalysisTypesSchema = Schema.Union(IncludedTypesSchema, TypesPackageSchema)
+export const AnalysisTypesSchema = Schema.Union([IncludedTypesSchema, TypesPackageSchema])
 export type AnalysisTypes = Schema.Schema.Type<typeof AnalysisTypesSchema>
 
-const AnyProgramInfoSchema: Schema.Schema<unknown> = Schema.Any
+const AnyProgramInfoSchema = Schema.Any
 
 export const AnalysisSchema = Schema.Struct({
   packageName: Schema.String,
   packageVersion: Schema.String,
-  buildTools: Schema.Record({ key: Schema.String, value: Schema.String }),
+  buildTools: Schema.Record(Schema.String, Schema.String),
   types: AnalysisTypesSchema,
-  entrypoints: Schema.Record({ key: Schema.String, value: EntrypointInfoSchema }),
-  programInfo: Schema.Record({ key: ResolutionOptionSchema, value: AnyProgramInfoSchema }),
+  entrypoints: Schema.Record(Schema.String, EntrypointInfoSchema),
+  programInfo: Schema.Record(ResolutionOptionSchema, AnyProgramInfoSchema),
   problems: Schema.Array(ProblemSchema),
 })
 export type Analysis = Schema.Schema.Type<typeof AnalysisSchema>
@@ -55,7 +55,7 @@ export const UntypedResultSchema = Schema.Struct({
 })
 export type UntypedResult = Schema.Schema.Type<typeof UntypedResultSchema>
 
-export const CheckResultSchema = Schema.Union(AnalysisSchema, UntypedResultSchema)
+export const CheckResultSchema = Schema.Union([AnalysisSchema, UntypedResultSchema])
 export type CheckResult = Schema.Schema.Type<typeof CheckResultSchema>
 
 export type Analysis_ = Analysis & {

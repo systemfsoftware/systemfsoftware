@@ -1,13 +1,11 @@
-import { JSONSchema, Schema as S } from 'effect'
+import { Effect, Schema as S } from 'effect'
 
 export const Options = S.Struct({
-  severity: S.optionalWith(
-    S.Literal('error', 'warn', 'off'),
-    { default: () => 'error' },
+  severity: S.Literals(['error', 'warn', 'off']).pipe(
+    S.withDecodingDefaultType(Effect.succeed('error')),
   ),
-  excludeRoot: S.optionalWith(
-    S.Boolean,
-    { default: () => true },
+  excludeRoot: S.Boolean.pipe(
+    S.withDecodingDefaultType(Effect.succeed(true)),
   ),
 })
 
@@ -37,7 +35,7 @@ export const meta = {
     description: 'Detect barrel files (index.ts/mod.ts with re-exports) and barrel imports',
   },
   hasSuggestions: false,
-  schema: [JSONSchema.make(Options)],
+  schema: [S.toJsonSchemaDocument(Options).schema],
   messages: {
     barrelFile:
       'Barrel file detected. Expected: Direct imports from specific modules. Actual: Re-exporting from multiple modules. Fix: Import directly from specific modules.',

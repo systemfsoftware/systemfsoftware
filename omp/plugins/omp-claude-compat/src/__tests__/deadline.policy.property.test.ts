@@ -1,5 +1,6 @@
 import { describe, it } from '@effect/vitest'
-import { Effect, Exit, FastCheck as fc, Fiber, Ref, Scope, TestClock } from 'effect'
+import { Effect, Exit, Fiber, Ref, Scope } from 'effect'
+import { FastCheck as fc, TestClock } from 'effect/testing'
 import { detachIn } from '../deadline.policy.js'
 
 /**
@@ -22,7 +23,7 @@ const workTaking = (millis: number) =>
     const done = yield* Ref.make(false)
     const interrupted = yield* Ref.make(false)
     const work = Effect.sleep(millis).pipe(
-      Effect.zipRight(Ref.set(done, true)),
+      Effect.andThen(Ref.set(done, true)),
       Effect.as('finished'),
       Effect.onInterrupt(() => Ref.set(interrupted, true)),
     )
@@ -33,7 +34,7 @@ const detachedFor = (deadline: number, workMillis: number) =>
   Effect.gen(function*() {
     const scope = yield* Scope.make()
     const { done, interrupted, work } = yield* workTaking(workMillis)
-    const caller = yield* Effect.fork(
+    const caller = yield* Effect.forkChild(
       detachIn(work, scope, { deadline, onDeadline: () => 'gave-up' }),
     )
     return { scope, done, interrupted, caller }
@@ -87,7 +88,7 @@ describe('detachIn', () => {
         const { scope, done, interrupted, caller } = yield* detachedFor(deadline, deadline + overrun)
         yield* TestClock.adjust(deadline)
         yield* Fiber.join(caller)
-        yield* Scope.close(scope, Exit.void)
+        yield* Scope.close(scope, Exit.succeed(undefined))
         yield* TestClock.adjust(overrun)
         return (yield* Ref.get(interrupted)) === true && (yield* Ref.get(done)) === false
       }),

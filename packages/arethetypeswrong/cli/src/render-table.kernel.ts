@@ -1,5 +1,3 @@
-import * as Doc from '@effect/printer/Doc'
-
 export type Cell = string
 
 export const cellWidth = (cell: Cell): number => visibleWidth(cell)
@@ -33,38 +31,38 @@ export const computeColumnWidths = (
   return widths
 }
 
-const renderCell = (cell: Cell, width: number): Doc.Doc<never> => Doc.fill(Doc.text(cell), width)
+const renderCell = (cell: Cell, width: number): string => cell.padEnd(width)
 
 export const renderTable = (
   header: ReadonlyArray<string>,
   rows: ReadonlyArray<ReadonlyArray<Cell>>,
   gap: number = 2,
-): Doc.Doc<never> => {
-  if (header.length === 0) return Doc.empty
+): string => {
+  if (header.length === 0) return ''
   const widths = computeColumnWidths(header, rows)
-  const gapDoc = Doc.spaces(gap)
-  const renderRow = (cells: ReadonlyArray<Cell>): Doc.Doc<never> => {
-    const parts: Array<Doc.Doc<never>> = []
+  const gapText = ' '.repeat(gap)
+  const renderRow = (cells: ReadonlyArray<Cell>): string => {
+    const parts: Array<string> = []
     for (let i = 0; i < cells.length; i++) {
-      if (i > 0) parts.push(gapDoc)
+      if (i > 0) parts.push(gapText)
       parts.push(renderCell(cells[i] ?? '', widths[i] ?? 0))
     }
-    return Doc.hcat(parts)
+    return parts.join('')
   }
   const headerRow = renderRow(header)
   const dataRows = rows.map(renderRow)
-  return Doc.vsep([headerRow, ...dataRows])
+  return [headerRow, ...dataRows].join('\n')
 }
 
 export const renderFlippedTable = (
   header: ReadonlyArray<string>,
   rows: ReadonlyArray<ReadonlyArray<Cell>>,
   gap: number = 2,
-): Doc.Doc<never> => {
-  if (header.length === 0) return Doc.empty
-  if (rows.length === 0) return Doc.vsep(header.map(Doc.text))
+): string => {
+  if (header.length === 0) return ''
+  if (rows.length === 0) return header.join('\n')
   const numCols = rows[0]?.length ?? 0
-  if (numCols === 0) return Doc.vsep(header.map(Doc.text))
+  if (numCols === 0) return header.join('\n')
   const transposed: Array<ReadonlyArray<Cell>> = []
   for (let col = 0; col < numCols; col++) {
     const newRow: Cell[] = []

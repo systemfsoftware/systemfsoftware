@@ -6,7 +6,7 @@ import { IntensityConfig, MaxChildren } from '../daemon-policy.schema.js'
 import { LeaderLockInfraError, LeaderLockNotAcquired } from '../leader-lock.schema.js'
 import { LockPrimitiveError } from '../lock-primitive.schema.js'
 
-const EXPORTED_SCHEMAS: Readonly<Record<string, S.Schema.AnyNoContext>> = {
+const EXPORTED_SCHEMAS: Readonly<Record<string, S.ConstraintDecoder<unknown>>> = {
   DynamicLimitExceeded,
   IntensityConfig,
   LeaderLockInfraError,
@@ -16,12 +16,12 @@ const EXPORTED_SCHEMAS: Readonly<Record<string, S.Schema.AnyNoContext>> = {
 }
 
 const RECORDED_MODEL = {
-  DynamicLimitExceeded: { obligations: 2, blind: [] },
-  IntensityConfig: { obligations: 2, blind: [] },
+  DynamicLimitExceeded: { obligations: 1, blind: [] },
+  IntensityConfig: { obligations: 1, blind: [] },
   LeaderLockInfraError: { obligations: 0, blind: [] },
   LeaderLockNotAcquired: { obligations: 0, blind: [] },
   LockPrimitiveError: { obligations: 0, blind: [] },
-  MaxChildren: { obligations: 2, blind: [] },
+  MaxChildren: { obligations: 1, blind: [] },
 }
 
 it('Should_MatchTheRecordedObligationModel_When_ScanningEveryRefutableSchema', () => {

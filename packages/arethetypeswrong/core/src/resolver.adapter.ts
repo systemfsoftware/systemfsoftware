@@ -17,9 +17,9 @@ export interface ResolverAdapterService {
   ) => Effect.Effect<ResolverResolution, never>
 }
 
-export class ResolverAdapter extends Context.Tag(
+export class ResolverAdapter extends Context.Service<ResolverAdapter, ResolverAdapterService>()(
   '@systemfsoftware/arethetypeswrong-core/ResolverAdapter',
-)<ResolverAdapter, ResolverAdapterService>() {}
+) {}
 
 export const ResolverAdapterStub: Layer.Layer<ResolverAdapter, never, never> = Layer.succeed(
   ResolverAdapter,

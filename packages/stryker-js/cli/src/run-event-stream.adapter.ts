@@ -1,15 +1,12 @@
-import * as Chunk from 'effect/Chunk'
+import * as Cause from 'effect/Cause'
 import * as Clock from 'effect/Clock'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
-import * as Either from 'effect/Either'
 import * as Fiber from 'effect/Fiber'
 import * as Layer from 'effect/Layer'
-import * as Option from 'effect/Option'
+import * as Queue from 'effect/Queue'
 import * as S from 'effect/Schema'
-import * as Sink from 'effect/Sink'
 import * as Stream from 'effect/Stream'
-import type { EmitOpsPush } from 'effect/StreamEmit'
 
 import type { ModeSignal, OutputMode, ResolvedMode } from '@systemfsoftware/stryker-js-mutation-run/output-mode'
 import type { RunEvent, RunEventSink } from '@systemfsoftware/stryker-js-mutation-run/run-event'
@@ -31,7 +28,7 @@ import { STREAM_SCHEMA_VERSION, TICK_INTERVAL_MS } from './stream-protocol.kerne
  *
  * The machinery differs: core pushes events into an unbounded mailbox via a
  * synchronous sink; a time-driven tick stream is merged in inside the Effect
- * fiber (R28); every line drains through a stdout sink that waits on the
+ * fiber (R28); every line drains through a stdout write that waits on the
  * writable's callback (backpressure) and on `'finish'` at the end (R30). The
  * CLI composition root forks the drain before the run, resolves mode once at
  * the edge, and writes the terminal line from an `onExit` finalizer so it
@@ -44,9 +41,9 @@ export interface RunEventStreamPort {
   readonly createRunEventStream: (resolved: ResolvedMode) => Effect.Effect<RunEventStream, never, never>
 }
 
-class RunEventStreamPortTag extends Context.Tag(
+class RunEventStreamPortTag extends Context.Service<RunEventStreamPortTag, RunEventStreamPort>()(
   '@systemfsoftware/stryker-js-cli/run-event-stream.adapter/RunEventStreamPortTag',
-)<RunEventStreamPortTag, RunEventStreamPort>() {}
+) {}
 
 const RunEventStreamPort = RunEventStreamPortTag
 
@@ -62,94 +59,89 @@ class StdoutWriteError extends S.TaggedError<StdoutWriteError>()('stdout-write-e
 const isTerminalEvent = (event: RunEvent): boolean =>
   event.kind === 'verdict' || event.kind === 'error' || event.kind === 'help' || event.kind === 'manifest'
 
+/** The synchronous push side the run-event sink adapts to `Stream.callback`. */
+interface Emit {
+  readonly single: (event: RunEvent) => void
+  readonly end: () => void
+}
+
 /**
- * The stdout sink: writes each line through `process.stdout.write(line, cb)`
- * and resumes when the callback fires — i.e. when the chunk is flushed to the
- * OS, which is real backpressure in place of the old `writeSync`. On
- * end-of-stream it calls `process.stdout.end()` and waits for `'finish'`, so
- * the drain completes only after every byte was handed to the OS (R30).
- *
- * A write failure fails the sink with a typed error instead of throwing; the
- * drain swallows it, which is what keeps a consumer closing the pipe from
- * replacing the run's classed exit code (R31). The persistent `error`
- * listener exists because an unhandled `'error'` event on a process stream
- * throws, and `end()` after a failed write can emit another EPIPE.
+ * The push adapter from the run's synchronous sink to the callback mailbox.
+ * `Queue.offer`/`Queue.end` on an unbounded queue never block or fail, so the
+ * sync sink can drive them with `Effect.runSync`. Defined at module scope,
+ * outside any Effect expression.
  */
-function stdoutSink(): Sink.Sink<void, string, never, StdoutWriteError, never> {
-  return Sink.fromPush<string, StdoutWriteError, void, never, never>(
-    Effect.sync(() => {
-      process.stdout.on('error', () => {})
-      const writeLine = (line: string): Effect.Effect<void, StdoutWriteError, never> =>
-        Effect.async((resume) => {
-          let settled = false
-          const settle = (result: Effect.Effect<void, StdoutWriteError, never>): void => {
-            if (!settled) {
-              settled = true
-              resume(result)
-            }
-          }
-          try {
-            process.stdout.write(line, (error) => {
-              if (error === undefined || error === null) {
-                settle(Effect.void)
-              } else {
-                settle(Effect.fail(new StdoutWriteError({ cause: error })))
-              }
-            })
-          } catch (error) {
-            settle(Effect.fail(new StdoutWriteError({ cause: error })))
-          }
-        })
-      const finish = (): Effect.Effect<void, StdoutWriteError, never> =>
-        Effect.async((resume) => {
-          let settled = false
-          const settle = (result: Effect.Effect<void, StdoutWriteError, never>): void => {
-            if (!settled) {
-              settled = true
-              process.stdout.off('finish', onFinish)
-              process.stdout.off('error', onError)
-              resume(result)
-            }
-          }
-          const onFinish = (): void => settle(Effect.void)
-          const onError = (error: unknown): void => {
-            settle(Effect.fail(new StdoutWriteError({ cause: error })))
-          }
-          process.stdout.once('finish', onFinish)
-          process.stdout.once('error', onError)
-          try {
-            process.stdout.end()
-          } catch (error) {
-            onError(error)
-          }
-        })
-      const writeChunk = (chunk: Chunk.Chunk<string>): Effect.Effect<void, StdoutWriteError, never> =>
-        Chunk.reduce<string, Effect.Effect<void, StdoutWriteError, never>>(
-          chunk,
-          Effect.void,
-          (acc, line) => acc.pipe(Effect.flatMap(() => writeLine(line))),
-        )
-      // Sink.fromPush's push function signals via its error channel: failing
-      // with Either.right(result) completes the sink, Either.left(error)
-      // fails it, and succeeding continues with the next chunk.
-      return (
-        input: Option.Option<Chunk.Chunk<string>>,
-      ): Effect.Effect<void, readonly [Either.Either<void, StdoutWriteError>, Chunk.Chunk<never>], never> => {
-        if (Option.isNone(input)) {
-          // End of input: flush stdout, then complete the sink with the
-          // result handoff. A flush failure still carries the handoff — the
-          // framework destructures it — as a sink failure.
-          return finish().pipe(
-            Effect.mapError((writeError) => [Either.left(writeError), Chunk.empty<never>()] as const),
-            Effect.flatMap(() => Effect.fail([Either.right(void 0), Chunk.empty<never>()] as const)),
-          )
-        }
-        return writeChunk(input.value).pipe(
-          Effect.mapError((writeError) => [Either.left(writeError), Chunk.empty<never>()] as const),
-        )
+function queueEmit(queue: Queue.Queue<RunEvent, Cause.Done<void>>): Emit {
+  return {
+    single: (event) => {
+      Effect.runSync(Queue.offer(queue, event))
+    },
+    end: () => {
+      Effect.runSync(Queue.end(queue))
+    },
+  }
+}
+
+/**
+ * Writes one line through `process.stdout.write(line, cb)` and resumes when
+ * the callback fires — i.e. when the chunk is flushed to the OS, which is
+ * real backpressure in place of the old `writeSync`. A failed write fails
+ * with a typed error instead of throwing; the drain swallows it, which is
+ * what keeps a consumer closing the pipe from replacing the run's classed
+ * exit code (R31). The persistent `error` listener exists because an
+ * unhandled `'error'` event on a process stream throws.
+ */
+function writeLine(line: string): Effect.Effect<void, StdoutWriteError, never> {
+  return Effect.callback((resume) => {
+    let settled = false
+    const settle = (result: Effect.Effect<void, StdoutWriteError, never>): void => {
+      if (!settled) {
+        settled = true
+        resume(result)
       }
-    }),
-  )
+    }
+    try {
+      process.stdout.write(line, (error) => {
+        if (error === undefined || error === null) {
+          settle(Effect.void)
+        } else {
+          settle(Effect.fail(StdoutWriteError.make({ cause: error })))
+        }
+      })
+    } catch (error) {
+      settle(Effect.fail(StdoutWriteError.make({ cause: error })))
+    }
+  })
+}
+
+/**
+ * Ends stdout and waits for `'finish'`, so the drain completes only after
+ * every byte was handed to the OS (R30). A flush failure fails with the typed
+ * error; the drain resolves the same way a write failure does.
+ */
+function finishStdout(): Effect.Effect<void, StdoutWriteError, never> {
+  return Effect.callback((resume) => {
+    let settled = false
+    const settle = (result: Effect.Effect<void, StdoutWriteError, never>): void => {
+      if (!settled) {
+        settled = true
+        process.stdout.off('finish', onFinish)
+        process.stdout.off('error', onError)
+        resume(result)
+      }
+    }
+    const onFinish = (): void => settle(Effect.void)
+    const onError = (error: unknown): void => {
+      settle(Effect.fail(StdoutWriteError.make({ cause: error })))
+    }
+    process.stdout.once('finish', onFinish)
+    process.stdout.once('error', onError)
+    try {
+      process.stdout.end()
+    } catch (error) {
+      onError(error)
+    }
+  })
 }
 
 /**
@@ -216,7 +208,7 @@ const makeRunEventStream = (resolved: ResolvedMode): Effect.Effect<RunEventStrea
     const state: {
       mode: OutputMode
       signal: ModeSignal
-      emit: EmitOpsPush<never, RunEvent> | null
+      emit: Emit | null
       headerWritten: boolean
       terminalWritten: boolean
       progress: { completed: number; total: number | null }
@@ -229,18 +221,18 @@ const makeRunEventStream = (resolved: ResolvedMode): Effect.Effect<RunEventStrea
       progress: { completed: 0, total: null },
     }
 
-    const eventStream = Stream.asyncPush<RunEvent>(
-      (emit) =>
+    // The mailbox the run's synchronous sink pushes into. `Stream.callback`
+    // builds an unbounded queue by default — the same unbounded choice
+    // `Stream.asyncPush` made before it, and the property the mailbox relies
+    // on: a mutation run emits per-mutant events from promise code that
+    // cannot suspend, so a bounded mailbox would stall core's reporter the
+    // moment the bound is reached. The choice is stated here rather than
+    // inherited from a default.
+    const eventStream = Stream.callback<RunEvent>(
+      (queue) =>
         Effect.sync(() => {
-          state.emit = emit
+          state.emit = queueEmit(queue)
         }),
-      // R29: asyncPush's default is an unbounded mailbox, while `Stream.async`
-      // defaults to `Queue.bounded(16)` with suspend semantics. A mutation run
-      // emits per-mutant events from promise code that cannot suspend, so a
-      // bounded mailbox would stall core's reporter the moment sixteen mutants
-      // are in flight. The unbounded choice is stated here rather than
-      // inherited from a default.
-      { bufferSize: 'unbounded' },
     )
 
     // The heartbeat, as a time-driven stream merged inside the fiber (R28).
@@ -287,13 +279,15 @@ const makeRunEventStream = (resolved: ResolvedMode): Effect.Effect<RunEventStrea
       Stream.map((event) => `${JSON.stringify(event)}\n`),
     )
 
-    const drain: Effect.Effect<void, never, never> = Stream.run(framed, stdoutSink()).pipe(
+    const drain: Effect.Effect<void, never, never> = Stream.runForEach(framed, writeLine).pipe(
+      // End-of-stream: flush stdout after the last line (R30).
+      Effect.andThen(finishStdout()),
       // The old writeSync path swallowed every write failure the same way: a
       // consumer that closed the pipe must not replace the run's classed exit
       // code (R31). The writable still has to be ended — a failed write leaves
       // process.stdout with a pending write that holds the event loop open,
       // and a successful run exits by natural means (process.exitCode).
-      Effect.catchAll(() =>
+      Effect.catch(() =>
         Effect.sync(() => {
           state.terminalWritten = true
           process.stdout.end()
@@ -301,7 +295,7 @@ const makeRunEventStream = (resolved: ResolvedMode): Effect.Effect<RunEventStrea
       ),
     )
 
-    let drainFiber: Fiber.RuntimeFiber<void, never> | null = null
+    let drainFiber: Fiber.Fiber<void, never> | null = null
 
     const sink: RunEventSink = (event) => {
       const emit = state.emit
@@ -327,7 +321,7 @@ const makeRunEventStream = (resolved: ResolvedMode): Effect.Effect<RunEventStrea
           return
         case 'phase':
           // R18: a phase boundary carries no progress and is not terminal —
-          // the emit below writes it verbatim, like plan/mutant.
+          // the single below writes it verbatim, like plan/mutant.
           break
         case 'plan':
           state.progress = { ...state.progress, total: event.total }
@@ -363,14 +357,14 @@ const makeRunEventStream = (resolved: ResolvedMode): Effect.Effect<RunEventStrea
       },
       open: Effect.gen(function*() {
         if (drainFiber === null) {
-          // A daemon, not a supervised fork: when the run is interrupted
+          // A detached fork, not a supervised one: when the run is interrupted
           // (SIGINT), the main fiber's scope would interrupt a supervised
-          // child before the onExit finalizer runs — and the terminal event
-          // pushed by that finalizer would never reach stdout. The daemon
-          // survives the interrupt, so closeAndDrain can join it and flush
-          // the terminal line (R30); it ends on its own once the mailbox is
-          // done and drained.
-          drainFiber = yield* Effect.forkDaemon(drain)
+          // child before the onExit finalizer runs — and the terminal line
+          // pushed by that finalizer would never reach stdout. The detached
+          // fiber survives the interrupt, so closeAndDrain can join it and
+          // flush the terminal line (R30); it ends on its own once the
+          // mailbox is done and drained.
+          drainFiber = yield* Effect.forkDetach(drain)
         }
       }),
       closeAndDrain: Effect.gen(function*() {

@@ -1,5 +1,5 @@
 import { it } from '@effect/vitest'
-import type { FastCheck as fc } from 'effect'
+import type { FastCheck as fc } from 'effect/testing'
 
 /**
  * Property-test the determinism law of any function claimed to be pure.
@@ -16,7 +16,7 @@ import type { FastCheck as fc } from 'effect'
  * value every time. Repetition cannot observe that class; interaction observation can, and
  * this package does not do it. See PURE-L2.
  *
- * Equality defaults to `Object.is` rather than `===`, because `Arbitrary.make(S.Number)`
+ * Equality defaults to `Object.is` rather than `===`, because `Schema.toArbitrary(S.Number)`
  * draws `NaN` — measured 3 times in 5000 samples — and `NaN === NaN` is `false`, so a
  * reference comparison reports a pure function as impure in roughly one run in sixteen at
  * the default `numRuns`.

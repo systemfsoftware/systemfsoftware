@@ -1,21 +1,21 @@
 import { Cell } from '@systemfsoftware/effect-cell-types'
-import { FastCheck as fc } from 'effect'
 import * as Effect from 'effect/Effect'
-import * as Either from 'effect/Either'
+import * as Result from 'effect/Result'
+import { FastCheck as fc } from 'effect/testing'
 
 /**
  * The phase bag the generated descriptions instantiate. `command` passes through the pure
- * phases untouched and the decision is `Right` unless a draw places a `Left` — the two
- * error channels a `Left` can inhabit are `number`, so a drawn failure carries a payload,
+ * phases untouched and the decision is `Success` unless a draw places a `Failure` — the two
+ * error channels a `Failure` can inhabit are `number`, so a drawn failure carries a payload,
  * while the read/write error and context channels stay `never`, so no other failure is
  * drawable. The properties this arbitrary feeds are about order, response and failure
- * routing, and the routing properties read which phase drew the `Left` off the drawn value.
+ * routing, and the routing properties read which phase drew the `Failure` off the drawn value.
  *
  * The payload types are this generator's own input choice, not a claim about the
  * description: every value a phase consumes or produces is `number`, so one drawn
  * function satisfies every phase that shares an invocation shape. `raw` and `decoded`
  * being the same type is what lets one `'either-fail'`/`'either-pass'` run serve either
- * `Either`-shaped phase; `command`, `output` and `response` being the same type is what
+ * `Result`-shaped phase; `command`, `output` and `response` being the same type is what
  * lets a single `'effect'` run serve both effect phases. A description whose phases
  * genuinely disagree about a payload type is expressible — this bag just does not draw
  * one, because the properties never observe the payload values.
@@ -49,7 +49,7 @@ if (TEMPLATE === undefined) {
   throw new Error('effect-cell-gen: the canonical description carried no layers')
 }
 
-/** The phases whose convention admits a `Left`, walked rather than listed. */
+/** The phases whose convention admits a `Failure`, walked rather than listed. */
 const FAILABLE: readonly {
   readonly phaseIndex: number
   readonly convention: 'either-fail' | 'either-pass'
@@ -67,24 +67,25 @@ const FAILABLE: readonly {
  *
  * The drawn run's shape is chosen by narrowing on `convention`, and that is legitimate
  * rather than a second declaration: `convention` IS the invocation shape — `'effect'`
- * yields an Effect, `'either-fail'`/`'either-pass'` return an `Either`, `'total'` is a
+ * yields an Effect, `'either-fail'`/`'either-pass'` return a `Result`, `'total'` is a
  * plain function — so the phase record's own field says how its run must be called.
  * Because `convention` discriminates the phase union, the narrowed record keeps its exact
  * `name`/`kind`/`convention` literals, and `{ ...phase, run }` stays assignable with no
  * assertion. The `never` default makes an invocation shape this generator does not know a
  * compile error, exactly as it is in the interpreter's own convention switch.
  *
- * Whether a phase draws a `Left` is chosen the same way, never by `name`: only the two
- * `Either` conventions can return a `Left`, so only those runs consult the drawn failure
- * (already resolved to this layer by the caller). The failing phase returns
- * `Either.left(error)`; every other phase returns `Right`, so a description still succeeds
- * except through the one drawn `Left` — exactly the shape the routing properties need.
+ * Whether a phase draws a `Failure` is chosen the same way, never by `name`: only the two
+ * `Result` conventions can return a `Failure`, so only those runs consult the drawn
+ * failure (already resolved to this layer by the caller). The failing phase returns
+ * `Result.fail(error)`; every other phase returns `Result.succeed`, so a description
+ * still succeeds except through the one drawn `Failure` — exactly the shape the routing
+ * properties need.
  *
  * Two observations ride on the runs so a property can read the interpreter's routing off
  * the value: the layer's last phase records the input its run received (the interpreter
  * itself guards that a closed layer's last phase is its write, so this is a walked
- * position, not a name), and a `'total'` run records the whole `Either` it received —
- * the proof that an outcome `Left` travelled forward whole rather than being unwrapped.
+ * position, not a name), and a `'total'` run records the whole `Result` it received —
+ * the proof that an outcome `Failure` travelled forward whole rather than being unwrapped.
  *
  * The canonical description carries a single layer (the stage brands admit exactly one
  * chain), so the drawn recipe's layer count is what repeats this template — an input
@@ -94,7 +95,7 @@ const FAILABLE: readonly {
 const substituteLayer = (
   trace: string[],
   writeObserved: number[],
-  encodeObserved: Either.Either<number, number>[],
+  encodeObserved: Result.Result<number, number>[],
   response: number,
   failure: DrawnFailure | undefined,
 ): Cell.Layer<Bag> => {
@@ -115,30 +116,30 @@ const substituteLayer = (
                 return response
               }),
           }
-        // One arm for both Either conventions. Their difference is what the interpreter does with
-        // a `Left`, not how the run produces one, so a generator that told them apart here would
+        // One arm for both `Result` conventions. Their difference is what the interpreter does with
+        // a `Failure`, not how the run produces one, so a generator that told them apart here would
         // assert a distinction it does not make. The switch stays exhaustive either way.
         case 'either-fail':
         case 'either-pass':
           return {
             ...phase,
-            run: (input: number): Either.Either<number, number> => {
+            run: (input: number): Result.Result<number, number> => {
               trace.push(phase.name)
               if (failure !== undefined && failure.phaseIndex === phaseIndex) {
-                return Either.left(failure.error)
+                return Result.fail(failure.error)
               }
-              return Either.right(input)
+              return Result.succeed(input)
             },
           }
         case 'total':
           return {
             ...phase,
-            run: (outcome: Either.Either<number, number>): number => {
+            run: (outcome: Result.Result<number, number>): number => {
               trace.push(phase.name)
               encodeObserved.push(outcome)
-              return Either.match(outcome, {
-                onLeft: (error) => error,
-                onRight: (decision) => decision,
+              return Result.match(outcome, {
+                onFailure: (error) => error,
+                onSuccess: (decision) => decision,
               })
             },
           }
@@ -154,10 +155,10 @@ const substituteLayer = (
 }
 
 /**
- * One draw's recorded failure: the phase that returned a `Left`, the walked convention it
+ * One draw's recorded failure: the phase that returned a `Failure`, the walked convention it
  * did so under, and the drawn payload. The properties read this off the drawn value and
  * derive their expectation from `convention` — they never re-derive which phase failed.
- * `convention` is narrowed to the two `Either` shapes because a `Left` only exists at
+ * `convention` is narrowed to the two `Result` shapes because a `Failure` only exists at
  * those phases; the narrowing comes from the walked record, not from a name.
  */
 export interface DrawnFailure {
@@ -172,17 +173,17 @@ export interface DrawnFailure {
  * One draw of the generator: a built description, the command to apply it to, the trace
  * its phases fill in as the interpreter runs them, the response the last layer's write
  * was drawn to produce — the claim the response property checks — and, when a phase drew
- * a `Left`, which phase it was and under which convention. `writeObserved` and
+ * a `Failure`, which phase it was and under which convention. `writeObserved` and
  * `encodeObserved` are filled by the runs as `Cell.apply` executes them: one entry per
  * completed layer for the input its last phase received, and one per layer for the whole
- * `Either` its successor received. The routing properties read those after applying.
+ * `Result` its successor received. The routing properties read those after applying.
  */
 export interface DescriptionCase {
   readonly description: Cell.WriteDone<Bag>
   readonly command: number
   readonly trace: readonly string[]
   readonly writeObserved: readonly number[]
-  readonly encodeObserved: readonly Either.Either<number, number>[]
+  readonly encodeObserved: readonly Result.Result<number, number>[]
   readonly failure: DrawnFailure | undefined
   readonly lastResponse: number
 }
@@ -191,10 +192,10 @@ export interface DescriptionCase {
  * The derived generator. What varies per draw is the command, the number of layers (one to
  * three — multi-layer draws are what make the layer-order and last-layer-response claims
  * refutable), each layer's write response, and at most one drawn failure: which
- * `Either`-convention phase of which layer returns a `Left`, and with what payload. The
+ * `Result`-convention phase of which layer returns a `Failure`, and with what payload. The
  * phase sequence, and the choice of which phases can fail, both come from walking
  * `Cell.canonical`, never from this file — a phase is offered the chance to fail only if
- * its walked `convention` is one of the two `Either` shapes.
+ * its walked `convention` is one of the two `Result` shapes.
  *
  * The terminal brand key, the module name and the I/O-cell classification are carried by
  * spreading the canonical description — `Cell.apply` therefore receives a genuinely
@@ -209,7 +210,7 @@ export const description: fc.Arbitrary<DescriptionCase> = fc
   .chain((drawn) => {
     // Built only when a failable phase exists. `fc.nat` rejects a negative `max` at construction
     // time, not at draw time, so constructing this unconditionally would make the empty-`FAILABLE`
-    // branch below unreachable: a walked description with no Either phase would die inside
+    // branch below unreachable: a walked description with no `Result` phase would die inside
     // fast-check instead of drawing no failure.
     const drawFailure = (): fc.Arbitrary<DrawnFailure> =>
       fc
@@ -244,7 +245,7 @@ export const description: fc.Arbitrary<DescriptionCase> = fc
     return maybeFailure.map((failure) => {
       const trace: string[] = []
       const writeObserved: number[] = []
-      const encodeObserved: Either.Either<number, number>[] = []
+      const encodeObserved: Result.Result<number, number>[] = []
       const [firstLayer, ...furtherLayers] = drawn.layers
       if (firstLayer === undefined) {
         throw new Error('effect-cell-gen: a generated recipe drew no layers')

@@ -1,23 +1,23 @@
-import { Schema as S } from 'effect'
+import { Latch, Schema as S } from 'effect'
 import type { Effect } from 'effect'
 
 export class DynamicLimitExceeded extends S.TaggedError<DynamicLimitExceeded>()(
   'DynamicLimitExceeded',
-  { limit: S.Int.pipe(S.greaterThanOrEqualTo(0)) },
+  { limit: S.Int.pipe(S.check(S.isGreaterThanOrEqualTo(0))) },
 ) {}
 
 export interface DaemonHealth {
   readonly name: string
-  readonly ready: Effect.Latch
-  readonly healthy: Effect.Latch
-  readonly paused: Effect.Latch
+  readonly ready: Latch.Latch
+  readonly healthy: Latch.Latch
+  readonly paused: Latch.Latch
 }
 
 export interface SupervisorHealth {
   readonly name: string
-  readonly ready: Effect.Latch
-  readonly healthy: Effect.Latch
-  readonly paused: Effect.Latch
+  readonly ready: Latch.Latch
+  readonly healthy: Latch.Latch
+  readonly paused: Latch.Latch
   readonly children: readonly (DaemonHealth | SupervisorHealth)[]
 }
 

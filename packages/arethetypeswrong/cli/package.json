@@ -31,10 +31,8 @@
   },
   "type": "module",
   "dependencies": {
-    "@effect/cli": "catalog:",
-    "@effect/platform": "catalog:",
+    "@effect/platform-node": "catalog:",
     "@effect/platform-node-shared": "catalog:",
-    "@effect/printer": "catalog:",
     "@systemfsoftware/arethetypeswrong-core": "workspace:*",
     "effect": "catalog:"
   },

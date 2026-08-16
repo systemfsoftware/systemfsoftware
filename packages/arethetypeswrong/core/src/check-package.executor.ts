@@ -13,12 +13,9 @@ export interface CheckPackageService {
   ) => Effect.Effect<CheckResult, Error, PackageStoreAdapter>
 }
 
-export class CheckPackage
-  extends Context.Tag('@systemfsoftware/arethetypeswrong-core/check-package.executor/CheckPackage')<
-    CheckPackage,
-    CheckPackageService
-  >()
-{}
+export class CheckPackage extends Context.Service<CheckPackage, CheckPackageService>()(
+  '@systemfsoftware/arethetypeswrong-core/check-package.executor/CheckPackage',
+) {}
 
 export const CheckPackageLive: Layer.Layer<
   CheckPackage,

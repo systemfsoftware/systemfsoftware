@@ -1,6 +1,7 @@
 import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Duration, Effect, Layer, Ref, Schedule, Schema as S, TestClock } from 'effect'
+import { Duration, Effect, Layer, Ref, Schedule, Schema as S } from 'effect'
+import { TestClock } from 'effect/testing'
 import { expect } from 'vitest'
 import { BoundedIntensity } from '../src/mod.js'
 import { run } from '../src/mod.js'
@@ -30,7 +31,7 @@ Feature('OneForOne Strategy')
               work: Effect.gen(function*() {
                 const shouldFail = yield* Ref.getAndSet(s.failOnce, false)
                 if (shouldFail) {
-                  return yield* new SimulatedFailure()
+                  return yield* SimulatedFailure.make()
                 }
                 return void 0
               }),
@@ -42,8 +43,10 @@ Feature('OneForOne Strategy')
               name: 'oneForOne-restart',
               children: [child],
               supervision: Supervision.custom({
-                intensity: new BoundedIntensity({ restarts: 5, window: Duration.seconds(60) }),
-                backoff: Schedule.exponential(Duration.millis(5)).pipe(Schedule.upTo(Duration.millis(50))),
+                intensity: BoundedIntensity.make({ restarts: 5, window: Duration.seconds(60) }),
+                backoff: Schedule.exponential(Duration.millis(5)).pipe(
+                  Schedule.upTo({ duration: Duration.millis(50) }),
+                ),
                 cooldown: Duration.minutes(30),
               }),
               lock: { mode: 'none' },
@@ -77,7 +80,7 @@ Feature('OneForOne Strategy')
           Effect.gen(function*() {
             const child = Daemon.poll({
               name: 'A',
-              work: new SimulatedFailure(),
+              work: SimulatedFailure.make(),
               interval: Duration.millis(10),
               tick: { tickTimeout: Duration.seconds(90) },
               lock: { mode: 'none' },
@@ -86,8 +89,10 @@ Feature('OneForOne Strategy')
               name: 'oneForOne-exhaust',
               children: [child],
               supervision: Supervision.custom({
-                intensity: new BoundedIntensity({ restarts: 1, window: Duration.seconds(60) }),
-                backoff: Schedule.exponential(Duration.millis(5)).pipe(Schedule.upTo(Duration.millis(50))),
+                intensity: BoundedIntensity.make({ restarts: 1, window: Duration.seconds(60) }),
+                backoff: Schedule.exponential(Duration.millis(5)).pipe(
+                  Schedule.upTo({ duration: Duration.millis(50) }),
+                ),
                 cooldown: Duration.minutes(30),
               }),
               lock: { mode: 'none' },
@@ -126,7 +131,7 @@ Feature('OneForOne Strategy')
                 yield* Ref.update(s.counters.a, (n) => n + 1)
                 const shouldFail = yield* Ref.get(s.failOnce)
                 if (shouldFail) {
-                  return yield* new SimulatedFailure()
+                  return yield* SimulatedFailure.make()
                 }
                 return void 0
               }),
@@ -145,10 +150,10 @@ Feature('OneForOne Strategy')
               name: 'oneForOne-indep',
               children: [childA, childB],
               supervision: Supervision.custom({
-                intensity: new BoundedIntensity({ restarts: 5, window: Duration.seconds(60) }),
+                intensity: BoundedIntensity.make({ restarts: 5, window: Duration.seconds(60) }),
                 backoff: Schedule.exponential(Duration.seconds(10)).pipe(
                   Schedule.jittered,
-                  Schedule.upTo(Duration.minutes(5)),
+                  Schedule.upTo({ duration: Duration.minutes(5) }),
                 ),
                 cooldown: Duration.minutes(30),
               }),
@@ -199,10 +204,10 @@ Feature('OneForOne Strategy')
                 }),
               ],
               supervision: Supervision.custom({
-                intensity: new BoundedIntensity({ restarts: 5, window: Duration.seconds(60) }),
+                intensity: BoundedIntensity.make({ restarts: 5, window: Duration.seconds(60) }),
                 backoff: Schedule.exponential(Duration.seconds(10)).pipe(
                   Schedule.jittered,
-                  Schedule.upTo(Duration.minutes(5)),
+                  Schedule.upTo({ duration: Duration.minutes(5) }),
                 ),
                 cooldown: Duration.minutes(30),
               }),
@@ -212,10 +217,10 @@ Feature('OneForOne Strategy')
               name: 'outer',
               children: [inner],
               supervision: Supervision.custom({
-                intensity: new BoundedIntensity({ restarts: 5, window: Duration.seconds(60) }),
+                intensity: BoundedIntensity.make({ restarts: 5, window: Duration.seconds(60) }),
                 backoff: Schedule.exponential(Duration.seconds(10)).pipe(
                   Schedule.jittered,
-                  Schedule.upTo(Duration.minutes(5)),
+                  Schedule.upTo({ duration: Duration.minutes(5) }),
                 ),
                 cooldown: Duration.minutes(30),
               }),
@@ -241,6 +246,87 @@ Feature('OneForOne Strategy')
         And('inner child ticked at least once')((s) =>
           Effect.sync(() => {
             expect(s.health.a).toBeGreaterThanOrEqual(1)
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'Every restart waits out the exponential backoff, starting with the base delay',
+      Gherkin.Do.pipe(
+        Given('a reporter spy')('spy', () => ReporterSpyContext),
+        When('a oneForOne supervisor runs an always-failing child with 10ms exponential backoff')(
+          'result',
+          (s) =>
+            Effect.gen(function*() {
+              const child = Daemon.poll({
+                name: 'A',
+                work: SimulatedFailure.make(),
+                interval: Duration.millis(10),
+                tick: { tickTimeout: Duration.seconds(90) },
+                lock: { mode: 'none' },
+              })
+              const sup = oneForOne({
+                name: 'backoff-sequence',
+                children: [child],
+                supervision: Supervision.custom({
+                  intensity: BoundedIntensity.make({ restarts: 100, window: Duration.seconds(60) }),
+                  backoff: Schedule.exponential(Duration.millis(10)),
+                  cooldown: Duration.minutes(30),
+                }),
+                lock: { mode: 'none' },
+              })
+              const reporterLayer = Layer.mergeAll(
+                LeaderLock.Noop,
+                Layer.succeed(DaemonReporter, {
+                  onRestart: s.spy.reporter.onRestart,
+                  onExhausted: s.spy.reporter.onExhausted,
+                }),
+              )
+              yield* run.supervisor(sup).pipe(Effect.provide(reporterLayer))
+              const countRestarts = () =>
+                Effect.map(s.spy.getRestarts(), (rs) => rs.filter((r) => r.name === 'backoff-sequence').length)
+              // Let the first failure's restart decision land before touching the clock.
+              yield* Effect.yieldNow
+              yield* Effect.yieldNow
+              yield* Effect.yieldNow
+              const atStart = yield* countRestarts()
+              yield* TestClock.adjust(Duration.millis(9))
+              const at9 = yield* countRestarts()
+              yield* TestClock.adjust(Duration.millis(1))
+              const at10 = yield* countRestarts()
+              yield* TestClock.adjust(Duration.millis(19))
+              const at29 = yield* countRestarts()
+              yield* TestClock.adjust(Duration.millis(1))
+              const at30 = yield* countRestarts()
+              yield* TestClock.adjust(Duration.millis(39))
+              const at69 = yield* countRestarts()
+              yield* TestClock.adjust(Duration.millis(1))
+              const at70 = yield* countRestarts()
+              return { atStart, at9, at10, at29, at30, at69, at70 }
+            }),
+        ),
+        Then('exactly one restart is reported at the first failure, with none following immediately')((s) =>
+          Effect.sync(() => {
+            expect(s.result.atStart).toBe(1)
+          })
+        ),
+        And('the second restart waited out the 10ms base delay')((s) =>
+          Effect.sync(() => {
+            expect(s.result.at9).toBe(1)
+            expect(s.result.at10).toBe(2)
+          })
+        ),
+        And('the third restart waited out the doubled 20ms delay')((s) =>
+          Effect.sync(() => {
+            expect(s.result.at29).toBe(2)
+            expect(s.result.at30).toBe(3)
+          })
+        ),
+        And('the fourth restart waited out the doubled 40ms delay')((s) =>
+          Effect.sync(() => {
+            expect(s.result.at69).toBe(3)
+            expect(s.result.at70).toBe(4)
           })
         ),
       ),

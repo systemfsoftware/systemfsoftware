@@ -1,19 +1,20 @@
 /// <reference types="vitest/import-meta" />
-import { type Brand, pipe, Schema as S } from 'effect'
+import { type Brand, Schema as S, SchemaTransformation } from 'effect'
 import { HexString } from './hex-string.schema.js'
 
 const hexToColon = (hex: string): string => (hex.match(/.{1,2}/g) ?? []).map((byte) => byte.toUpperCase()).join(':')
 
-export const ColonHex = pipe(
-  S.compose(
-    S.transform(
-      S.String.pipe(S.pattern(/^([0-9A-Fa-f]{1,2}(:[0-9A-Fa-f]{1,2})*)?$/)),
-      S.encodedSchema(HexString),
-      { decode: (colon) => colon.replaceAll(':', ''), encode: hexToColon },
-    ),
-    HexString,
+export const ColonHex = S.String.pipe(
+  S.check(S.isPattern(/^([0-9A-Fa-f]{1,2}(:[0-9A-Fa-f]{1,2})*)?$/)),
+  S.decodeTo(
+    S.toEncoded(HexString),
+    SchemaTransformation.transform({
+      decode: (colon) => colon.replaceAll(':', ''),
+      encode: hexToColon,
+    }),
   ),
-  S.annotations({
+  S.decodeTo(HexString),
+  S.annotate({
     identifier: 'ColonHex',
     description: 'Colon-separated uppercase hex bytes — the fingerprint format',
     title: 'Colon-Separated Hex String',
@@ -28,7 +29,7 @@ if (import.meta.vitest !== void 0) {
   // so this branch is statically dead in the build and the runner never enters
   // the published module graph. A static import would ship it.
   const { it } = await import('@effect/vitest')
-  const { FastCheck: fc } = await import('effect')
+  const { FastCheck: fc } = await import('effect/testing')
   const { refutes } = await import('@systemfsoftware/effect-schema-law')
   const { expectTypeOf } = await import('vitest')
 

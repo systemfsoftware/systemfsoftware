@@ -9,9 +9,9 @@
  * shell directly and wraps the string helpers into the typed objects the
  * shell expects.
  */
-import type { PlatformError } from '@effect/platform/Error'
-import { FileSystem } from '@effect/platform/FileSystem'
 import { Effect } from 'effect'
+import { FileSystem } from 'effect/FileSystem'
+import type { PlatformError } from 'effect/PlatformError'
 
 export function makeShellHookScript(
   dir: string,

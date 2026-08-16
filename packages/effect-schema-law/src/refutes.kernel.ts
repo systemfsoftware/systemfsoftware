@@ -1,6 +1,7 @@
 import { it } from '@effect/vitest'
-import { Either, type FastCheck, Option, Schema as S } from 'effect'
+import { Exit, Schema as S } from 'effect'
 import * as AST from 'effect/SchemaAST'
+import { FastCheck } from 'effect/testing'
 import { expect } from 'vitest'
 import { dischargedBy, type Obligation, obligationsOf, scanObligations } from './refutation.kernel.js'
 
@@ -24,13 +25,14 @@ const renderWitness = (witness: unknown): string => {
 
 /** True when `value` is a witness for some obligation: accepted by that weakening, rejected by the schema. */
 export const discriminates = (
-  schema: S.Schema.AnyNoContext,
+  schema: S.ConstraintDecoder<unknown>,
   obligations: ReadonlyMap<AST.AST, Obligation>,
   value: unknown,
 ): boolean => {
-  if (Either.isRight(S.decodeUnknownEither(schema)(value))) return false
+  if (Exit.isSuccess(S.decodeUnknownExit(schema)(value))) return false
   for (const obligation of obligations.values()) {
-    if (Either.isRight(S.decodeUnknownEither(S.make(obligation.weakened))(value))) return true
+    const weakened = S.make<S.ConstraintCodec<unknown, unknown>>(obligation.weakened)
+    if (Exit.isSuccess(S.decodeUnknownExit(weakened)(value))) return true
   }
   return false
 }
@@ -41,7 +43,7 @@ export const discriminates = (
  * reaching it, and the witness that proves the weakening is permissive.
  */
 export const adequacyReport = (
-  schema: S.Schema.AnyNoContext,
+  schema: S.ConstraintDecoder<unknown>,
   generators: RefusalGenerators,
 ): AdequacyReport => {
   const scan = scanObligations(schema)
@@ -77,13 +79,13 @@ export const adequacyReport = (
  * Names follow the house convention: `∀b_<generator>_⊥`, `∀g_<generator>_discriminates`,
  * `∀s_<schema>_adequate` — disjoint from `ruleOfSchemas`' `∀x_<name>_=x` pair.
  */
-export const refutes = (schema: S.Schema.AnyNoContext, generators: RefusalGenerators): void => {
+export const refutes = (schema: S.ConstraintDecoder<unknown>, generators: RefusalGenerators): void => {
   const obligations = obligationsOf(schema)
-  const name = Option.getOrElse(AST.getIdentifierAnnotation(schema.ast), () => String(schema.ast))
-  const decode = S.decodeUnknownEither(schema)
+  const name = AST.resolveIdentifier(schema.ast) ?? String(schema.ast)
+  const decode = S.decodeUnknownExit(schema)
 
   for (const [generator, arbitrary] of Object.entries(generators)) {
-    it.prop(`∀b_${generator}_⊥`, [arbitrary], ([value]) => Either.isLeft(decode(value)))
+    it.prop(`∀b_${generator}_⊥`, [arbitrary], ([value]) => Exit.isFailure(decode(value)))
     it.prop(
       `∀g_${generator}_discriminates`,
       [arbitrary],

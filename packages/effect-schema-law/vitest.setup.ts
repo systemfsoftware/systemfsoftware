@@ -1,5 +1,5 @@
 import { isCI } from '@systemfsoftware/vitest-config'
-import { FastCheck as fc } from 'effect'
+import { FastCheck as fc } from 'effect/testing'
 
 /**
  * CI draws tenfold while the shared `testTimeout` only loosens from 8s to 30s,

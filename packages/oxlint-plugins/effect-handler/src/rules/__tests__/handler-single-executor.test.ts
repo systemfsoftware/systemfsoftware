@@ -15,17 +15,20 @@ const ruleTester = new RuleTester({
   },
 })
 
-const expectedDelegation = 'exactly one import of a sibling *.executor and one Effect.either(Executor(cmd)) delegation'
+const expectedDelegation =
+  'exactly one import of a sibling *.executor and one delegation call — Effect.either(Executor(cmd)) (v3) or Effect.result(Executor(cmd)) (v4)'
 const expectedOneImport = 'exactly one import of a sibling *.executor'
-const expectedOneEither = 'exactly one Effect.either(Executor(cmd)) call'
+const expectedOneDelegation =
+  'exactly one delegation call — Effect.either(Executor(cmd)) (v3) or Effect.result(Executor(cmd)) (v4)'
 const noImportActual = 'no import of a sibling *.executor.ts'
-const noEitherActual = 'no Effect.either call around the executor call'
+const noDelegationActual = 'no delegation call — neither Effect.either nor Effect.result around the executor call'
 const fixDelegate =
-  'construct the executor command and call yield* Effect.either(Executor(cmd)) — the executor owns the I/O sandwich'
+  'construct the executor command and call yield* Effect.either(Executor(cmd)) (v3) or yield* Effect.result(Executor(cmd)) (v4) — the executor owns the I/O sandwich'
 const fixMerge = 'merge the orchestrations into one executor, or split this handler per executor'
-const fixWrap = 'wrap the single executor call in Effect.either and map the Left to a response'
+const fixWrap =
+  'wrap the single executor call in Effect.either (v3) / Effect.result (v4) and map the Left/failure side to a response'
 const fixMove =
-  'only the single executor call may be wrapped in Effect.either — move the other effects into the executor'
+  'only the single executor call may be wrapped in Effect.either / Effect.result — move the other effects into the executor'
 
 ruleTester.run('handler-single-executor', handlerSingleExecutor, {
   valid: [
@@ -113,6 +116,25 @@ ruleTester.run('handler-single-executor', handlerSingleExecutor, {
       `,
       filename: 'sync-user.executor.ts',
     },
+    {
+      name: 'Should_Pass_When_One_Executor_Import_And_One_EffectResult_Call',
+      code: `
+        import { Effect, Result } from 'effect'
+        import { HttpServerResponse } from '@effect/platform'
+        import { GetUserExecutor } from './get-user.executor.js'
+        import { GetUserCommand } from './get-user-command.js'
+
+        export const getUserHandler = Effect.gen(function*() {
+          const cmd = new GetUserCommand({ id: yield* HttpServerRequest.param('id') })
+          const result = yield* Effect.result(GetUserExecutor(cmd))
+          const cached = cacheClient.result(result.success)
+          return Result.isFailure(result)
+            ? toErrorResponse(result.failure)
+            : HttpServerResponse.schemaJson(UserSchema)(cached)
+        })
+      `,
+      filename: 'get-user.handler.ts',
+    },
   ],
   invalid: [
     {
@@ -133,8 +155,8 @@ ruleTester.run('handler-single-executor', handlerSingleExecutor, {
           messageId: 'noEitherDelegation',
           data: {
             name: 'empty.handler.ts',
-            expected: expectedOneEither,
-            actual: noEitherActual,
+            expected: expectedOneDelegation,
+            actual: noDelegationActual,
             fix: fixWrap,
           },
         },
@@ -202,8 +224,8 @@ ruleTester.run('handler-single-executor', handlerSingleExecutor, {
           messageId: 'noEitherDelegation',
           data: {
             name: 'cancel-order.handler.ts',
-            expected: expectedOneEither,
-            actual: noEitherActual,
+            expected: expectedOneDelegation,
+            actual: noDelegationActual,
             fix: fixWrap,
           },
         },
@@ -226,8 +248,8 @@ ruleTester.run('handler-single-executor', handlerSingleExecutor, {
           messageId: 'multipleEitherDelegations',
           data: {
             name: 'cancel-order.handler.ts',
-            expected: expectedOneEither,
-            actual: '2 Effect.either calls',
+            expected: expectedOneDelegation,
+            actual: '2 Effect.either / Effect.result calls',
             fix: fixMove,
           },
         },
@@ -249,9 +271,80 @@ ruleTester.run('handler-single-executor', handlerSingleExecutor, {
           messageId: 'noEitherDelegation',
           data: {
             name: 'cancel-order.handler.ts',
-            expected: expectedOneEither,
-            actual: noEitherActual,
+            expected: expectedOneDelegation,
+            actual: noDelegationActual,
             fix: fixWrap,
+          },
+        },
+      ],
+    },
+    {
+      name: 'Should_Report_NoEitherDelegation_When_Executor_Is_Called_Directly_In_V4_Handler',
+      code: `
+        import { Effect, Result } from 'effect'
+        import { CancelOrderExecutor } from './cancel-order.executor.js'
+        export const cancelOrderHandler = Effect.gen(function*() {
+          const result = yield* CancelOrderExecutor(new CancelOrderCommand({}))
+          return Result.isFailure(result) ? toErrorResponse(result.failure) : noContent()
+        })
+      `,
+      filename: 'cancel-order.handler.ts',
+      errors: [
+        {
+          messageId: 'noEitherDelegation',
+          data: {
+            name: 'cancel-order.handler.ts',
+            expected: expectedOneDelegation,
+            actual: noDelegationActual,
+            fix: fixWrap,
+          },
+        },
+      ],
+    },
+    {
+      name: 'Should_Report_MultipleEitherDelegations_When_EffectResult_Is_Called_Twice',
+      code: `
+        import { Effect, Result } from 'effect'
+        import { CancelOrderExecutor } from './cancel-order.executor.js'
+        export const cancelOrderHandler = Effect.gen(function*() {
+          const a = yield* Effect.result(CancelOrderExecutor(new CancelOrderCommand({})))
+          const b = yield* Effect.result(CancelOrderExecutor(new CancelOrderCommand({})))
+          return Result.isFailure(a) ? toErrorResponse(a.failure) : noContent()
+        })
+      `,
+      filename: 'cancel-order.handler.ts',
+      errors: [
+        {
+          messageId: 'multipleEitherDelegations',
+          data: {
+            name: 'cancel-order.handler.ts',
+            expected: expectedOneDelegation,
+            actual: '2 Effect.either / Effect.result calls',
+            fix: fixMove,
+          },
+        },
+      ],
+    },
+    {
+      name: 'Should_Report_MultipleEitherDelegations_When_EffectEither_And_EffectResult_Are_Both_Called',
+      code: `
+        import { Effect } from 'effect'
+        import { CancelOrderExecutor } from './cancel-order.executor.js'
+        export const cancelOrderHandler = Effect.gen(function*() {
+          const a = yield* Effect.either(CancelOrderExecutor(new CancelOrderCommand({})))
+          const b = yield* Effect.result(CancelOrderExecutor(new CancelOrderCommand({})))
+          return Either.isLeft(a) ? toErrorResponse(a.left) : noContent()
+        })
+      `,
+      filename: 'cancel-order.handler.ts',
+      errors: [
+        {
+          messageId: 'multipleEitherDelegations',
+          data: {
+            name: 'cancel-order.handler.ts',
+            expected: expectedOneDelegation,
+            actual: '2 Effect.either / Effect.result calls',
+            fix: fixMove,
           },
         },
       ],

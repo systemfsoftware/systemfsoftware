@@ -12,9 +12,9 @@ x @systemfsoftware/effect-acl(acl-no-as-casts): order.acl.ts is forbidden.
   Fix: hand the decoded object to ParseResult.decode(DomainSchema) so branding and refinements apply through the schema contract — never assert the brand.
 
 x @systemfsoftware/effect-acl(acl-transform-orfail-required): order.acl.ts is forbidden.
-  Expected: at least one S.transformOrFail call decoding a foreign shape into a branded domain type.
-  Actual: no S.transformOrFail call.
-  Fix: declare the crossing as S.transformOrFail(SourceSchema, DomainSchema, { strict: true, decode, encode }) with the inactive direction returning ParseResult.Forbidden — or rename the file if it is not an ACL.
+  Expected: at least one schema transform decoding a foreign shape into a branded domain type — v3 S.transformOrFail(From, To, …) or v4 From.pipe(S.decodeTo(S.toType(To), { decode: SchemaGetter.transformOrFail(…) })).
+  Actual: no schema transform — no S.transformOrFail call and no S.decodeTo with a SchemaGetter.transformOrFail / SchemaTransformation.transformOrFail getter.
+  Fix: declare the crossing as S.transformOrFail(SourceSchema, DomainSchema, { strict: true, decode, encode }) with the inactive direction returning ParseResult.Forbidden — or, in effect v4, SourceSchema.pipe(S.decodeTo(S.toType(DomainSchema), { decode: SchemaGetter.transformOrFail(…), encode: SchemaGetter.forbidden(…) })) — or rename the file if it is not an ACL.
 
 Found 0 warnings and 2 errors.
 ```
@@ -25,7 +25,7 @@ pnpm add -D @systemfsoftware/oxlint-plugin-effect-acl
 
 ## The Problem
 
-A `*.acl.ts` is the boundary translation cell: a unidirectional `Schema.transformOrFail` that decodes a foreign shape (DB row, API payload) into a branded domain type. `as` casts still compile, still pass a standard lint config, and produce a branded value that was never verified — the same failure class as SQL injection bypassing parameterised queries. And a `.acl.ts` with no transform at all is not an ACL, it is a naming convention wearing a suffix.
+A `*.acl.ts` is the boundary translation cell: a unidirectional schema transform — v3 `S.transformOrFail(From, To, …)` or v4 `From.pipe(S.decodeTo(S.toType(To), { decode: SchemaGetter.transformOrFail(…) }))` — that decodes a foreign shape (DB row, API payload) into a branded domain type. `as` casts still compile, still pass a standard lint config, and produce a branded value that was never verified — the same failure class as SQL injection bypassing parameterised queries. And a `.acl.ts` with no transform at all is not an ACL, it is a naming convention wearing a suffix.
 
 These rules make that convention executable. Every rule is inert on any file not named `*.acl.ts`.
 
@@ -52,11 +52,12 @@ To adopt gradually, drop the spread and name rules individually as `'@systemfsof
 
 ## Rules
 
-| Rule                            | Reports                                                                                                                                                                                                                        |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `acl-transform-orfail-required` | A `.acl.ts` file with no `S.transformOrFail` call — the ACL cell is a unidirectional `Schema.transformOrFail` decoding a foreign shape into a branded domain type; a file without one is not an ACL (rename it)                |
-| `acl-no-as-casts`               | Any `as` cast in a `.acl.ts` file — branding and typed failures are earned by real decoding through `ParseResult.decode(DomainSchema)`, never asserted (the `S.transformOrFail` options' `ParseResult.decode` call is the fix) |
-| `acl-no-anti-pattern-path`      | A `.acl.ts` file placed under a banned directory segment (`core`, `shell`, `util`, `utils`, `helper`, `manager`, `service`) — the path names the bounded context the ACL translates                                            |
+| Rule                            | Reports                                                                                                                                                                                                                                                                                                        |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `acl-transform-orfail-required` | A `.acl.ts` file with no schema transform — no v3 `S.transformOrFail(From, To, …)` call and no v4 `S.decodeTo(To, { decode: SchemaGetter.transformOrFail(…) })` — the ACL cell is a unidirectional transform decoding a foreign shape into a branded domain type; a file without one is not an ACL (rename it) |
+| `acl-no-as-casts`               | Any `as` cast in a `.acl.ts` file — branding and typed failures are earned by real decoding through `ParseResult.decode(DomainSchema)`, never asserted (the `S.transformOrFail` options' `ParseResult.decode` call is the fix)                                                                                 |
+| `acl-no-anti-pattern-path`      | A `.acl.ts` file placed under a banned directory segment (`core`, `shell`, `util`, `utils`, `helper`, `manager`, `service`) — the path names the bounded context the ACL translates                                                                                                                            |
+| `acl-single-transform-export`   | A `.acl.ts` exporting more than one transform — v3 `S.transformOrFail(From, To, …)` or v4 `From.pipe(S.decodeTo(S.toType(To), { decode: SchemaGetter.transformOrFail(…) }))` — or an exported value that is neither the transform nor a source/target Schema declaration                                       |
 
 ## FAQ
 
@@ -70,7 +71,7 @@ A: Every rule is filename-gated. Only `*.acl.ts` files are examined.
 A: It gates ACL2 of the cell skill, which bans `as` casts specifically. The `!` non-null assertion is covered by oxlint's own `no-non-null-assertion` and is out of this cell's scope.
 
 **Q: Why is my `Schema.transformOrFail` (aliased namespace) reported as missing?**
-A: Detection matches the `S` identifier only, mirroring the sibling cell plugins. Import the namespace as `S` — see the package's `AGENTS.md` leaf (EA2).
+A: Detection matches the canonical spellings only: v3 `S.transformOrFail(...)` and v4 `S.decodeTo(To, { decode: SchemaGetter.transformOrFail(...) })`, using the canonical identifiers `S`, `SchemaGetter`, and `SchemaTransformation`. Aliasing any of those identifiers (or the namespaces) breaks detection — mirroring the sibling cell plugins. Import the Schema namespace as `S` and the getters under their `effect` export names.
 
 ## Requirements
 

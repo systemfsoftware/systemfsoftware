@@ -5,7 +5,7 @@
 ```ts
 
 import * as AST from 'effect/SchemaAST';
-import { FastCheck } from 'effect';
+import { FastCheck } from 'effect/testing';
 import { Schema } from 'effect';
 
 // @public
@@ -19,7 +19,7 @@ export interface AdequacyReport {
 }
 
 // @public
-export const adequacyReport: (schema: Schema.Schema.AnyNoContext, generators: RefusalGenerators) => AdequacyReport;
+export const adequacyReport: (schema: Schema.ConstraintDecoder<unknown>, generators: RefusalGenerators) => AdequacyReport;
 
 // @public
 export interface Arm {
@@ -33,7 +33,7 @@ export interface Arm {
 }
 
 // @public
-export const armsOf: (schema: Schema.Schema.Any) => readonly Arm[];
+export const armsOf: (schema: Schema.ConstraintDecoder<unknown>) => readonly Arm[];
 
 // @public
 export interface BlindArm {
@@ -46,17 +46,19 @@ export interface BlindArm {
 }
 
 // @public (undocumented)
-export const boundedUnion: <Base extends readonly [Schema.Schema.Any, ...readonly Schema.Schema.Any[]], Recur extends readonly [Schema.Schema.Any, ...readonly Schema.Schema.Any[]]>(identifier: string, options: {
+export const boundedUnion: <Base extends readonly [Schema.ConstraintCodec<unknown, unknown>, ...readonly Schema.ConstraintCodec<unknown, unknown>[]], Recur extends readonly [Schema.ConstraintCodec<unknown, unknown>, ...readonly Schema.ConstraintCodec<unknown, unknown>[]]>(identifier: string, options: {
     readonly base: Base;
     readonly recur: Recur;
     readonly maxDepth?: number;
-}) => Schema.Schema<Schema.Schema.Type<Base[number] | Recur[number]>, Schema.Schema.Encoded<Base[number] | Recur[number]>, Schema.Schema.Context<Base[number] | Recur[number]>>;
+}) => Schema.Codec<Base[number]['Type'] | Recur[number]['Type'], Base[number]['Encoded'] | Recur[number]['Encoded']>;
+
+// Warning: (ae-forgotten-export) The symbol "NamedArbitrary" needs to be exported by the entry point index.d.ts
+//
+// @public
+export const dischargedBy: (schema: Schema.ConstraintDecoder<unknown>, obligations: ReadonlyMap<AST.AST, Obligation>, generators: Readonly<Record<string, NamedArbitrary>>) => ReadonlyMap<AST.AST, readonly string[]>;
 
 // @public
-export const dischargedBy: (schema: Schema.Schema.AnyNoContext, obligations: ReadonlyMap<AST.AST, Obligation>, generators: Readonly<Record<string, FastCheck.Arbitrary<unknown>>>) => ReadonlyMap<AST.AST, readonly string[]>;
-
-// @public
-export const discriminates: (schema: Schema.Schema.AnyNoContext, obligations: ReadonlyMap<AST.AST, Obligation>, value: unknown) => boolean;
+export const discriminates: (schema: Schema.ConstraintDecoder<unknown>, obligations: ReadonlyMap<AST.AST, Obligation>, value: unknown) => boolean;
 
 // @public
 export interface Obligation {
@@ -81,19 +83,19 @@ export interface ObligationScan {
 }
 
 // @public (undocumented)
-export const obligationsOf: (schema: Schema.Schema.AnyNoContext) => ReadonlyMap<AST.AST, Obligation>;
+export const obligationsOf: (schema: Schema.ConstraintDecoder<unknown>) => ReadonlyMap<AST.AST, Obligation>;
 
 // @public
 export type RefusalGenerators = Record<string, FastCheck.Arbitrary<unknown>>;
 
 // @public
-export const refutes: (schema: Schema.Schema.AnyNoContext, generators: RefusalGenerators) => void;
+export const refutes: (schema: Schema.ConstraintDecoder<unknown>, generators: RefusalGenerators) => void;
 
 // @public
-export const ruleOfSchemas: <A, I>(name: string, schema: Schema.Schema<A, I, never>) => void;
+export const ruleOfSchemas: <A, I>(name: string, schema: Schema.Codec<A, I>) => void;
 
 // @public
-export const scanObligations: (schema: Schema.Schema.AnyNoContext) => ObligationScan;
+export const scanObligations: (schema: Schema.ConstraintDecoder<unknown>) => ObligationScan;
 
 // @public
 export const WITNESS_BUDGET = 256;

@@ -34,9 +34,9 @@ export interface PackageStoreAdapterService {
   readonly fetchTarball: (tarballUrl: string) => Effect.Effect<Uint8Array, PackageStoreError>
 }
 
-export class PackageStoreAdapter extends Context.Tag(
+export class PackageStoreAdapter extends Context.Service<PackageStoreAdapter, PackageStoreAdapterService>()(
   '@systemfsoftware/arethetypeswrong-core/PackageStoreAdapter',
-)<PackageStoreAdapter, PackageStoreAdapterService>() {}
+) {}
 
 export const PackageStoreAdapterLive: Layer.Layer<PackageStoreAdapter, never, never> = Layer.succeed(
   PackageStoreAdapter,

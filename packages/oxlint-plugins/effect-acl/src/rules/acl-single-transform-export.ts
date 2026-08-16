@@ -1,6 +1,7 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
 import { ACL_SUFFIX, meta } from './acl-single-transform-export.config.js'
+import { isV4DecodeToTransformCall } from './v4-transform-detection.js'
 
 export type MessageIds = 'tooManyTransformExports' | 'disallowedExport'
 
@@ -22,8 +23,19 @@ const isTransformCallee = (callee: ESTree.Expression | ESTree.Super): boolean =>
   return TRANSFORM_NAMES[target.property.name] === true
 }
 
-const isTransformCallExpression = (node: ESTree.Node): boolean =>
-  node.type === 'CallExpression' && isTransformCallee(node.callee)
+const isTransformCallExpression = (node: ESTree.Node): boolean => {
+  if (node.type !== 'CallExpression') return false
+  // v3: S.transformOrFail(from, to, { … }) / S.transform(from, to, { … })
+  if (isTransformCallee(node.callee)) return true
+  // v4 bare spelling: S.decodeTo(to, { decode: SchemaGetter.transformOrFail(…) })
+  if (isV4DecodeToTransformCall(node)) return true
+  // v4 canonical spelling: Source.pipe(S.decodeTo(to, { decode: SchemaGetter.transformOrFail(…) }))
+  const callee = node.callee
+  if (callee.type === 'MemberExpression' && callee.property.type === 'Identifier' && callee.property.name === 'pipe') {
+    return node.arguments.some(isV4DecodeToTransformCall)
+  }
+  return false
+}
 
 const isSchemaCallExpression = (node: ESTree.Node): boolean => {
   if (node.type !== 'CallExpression') return false
@@ -33,6 +45,8 @@ const isSchemaCallExpression = (node: ESTree.Node): boolean => {
 const isSchemaDeclaration = (decl: ESTree.VariableDeclarator): boolean => {
   const init = decl.init
   if (init === null) return false
+  // A v4 decodeTo-with-transform is THE transform, never a plain schema declaration.
+  if (isV4DecodeToTransformCall(init)) return false
   if (isSchemaCallExpression(init)) return true
   if (isSMemberAccess(init)) {
     return TRANSFORM_NAMES[init.property.name] !== true

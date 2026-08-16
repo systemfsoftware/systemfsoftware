@@ -1,4 +1,4 @@
-import { FastCheck as fc } from 'effect'
+import { FastCheck as fc } from 'effect/testing'
 
 const isCi = typeof process !== 'undefined' && process.env['CI'] === 'true'
 

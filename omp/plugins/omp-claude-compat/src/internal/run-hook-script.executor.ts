@@ -1,6 +1,6 @@
-import { Command } from '@effect/platform'
-import { CommandExecutor } from '@effect/platform/CommandExecutor'
 import { Context, Effect, Schema as S, type Scope, Stream } from 'effect'
+import * as ChildProcess from 'effect/unstable/process/ChildProcess'
+import { ChildProcessSpawner } from 'effect/unstable/process/ChildProcessSpawner'
 import { detachIn } from '../deadline.policy.js'
 import type { HookResult } from '../hook-dispatcher.schema.js'
 import type { CommandHook } from '../hook-settings.acl.js'
@@ -35,15 +35,14 @@ const SHELL_INVOCATION = {
   powershell: ['powershell', '-Command'],
 } as const satisfies Record<string, readonly [string, string]>
 
-const ToolInputRecord = S.Record({ key: S.String, value: S.Unknown })
+const ToolInputRecord = S.Record(S.String, S.Unknown)
 
 /** The hook payload's wire contract, declared once and used in both directions. */
-const encodeHookPayload = S.encodeSync(S.parseJson(ToolInputRecord))
+const encodeHookPayload = S.encodeSync(S.fromJsonString(ToolInputRecord))
 
-export class RunHookScriptExecutorDeps extends Context.Tag('RunHookScriptExecutorDeps')<
-  RunHookScriptExecutorDeps,
-  Scope.Scope
->() {}
+export class RunHookScriptExecutorDeps extends Context.Service<RunHookScriptExecutorDeps, Scope.Scope>()(
+  'RunHookScriptExecutorDeps',
+) {}
 
 export const runHookScript = Effect.fn('runHookScript')(function*(
   hook: CommandHook,
@@ -52,7 +51,7 @@ export const runHookScript = Effect.fn('runHookScript')(function*(
   event: string,
   callerIsWaiting: boolean = true,
 ) {
-  const executor = yield* CommandExecutor
+  const executor = yield* ChildProcessSpawner
   const { timeoutMs, capNote } = resolveHookBudget(hook.timeout, event, callerIsWaiting)
   const stdinText = encodeHookPayload(input)
 
@@ -61,17 +60,16 @@ export const runHookScript = Effect.fn('runHookScript')(function*(
   // interpreter, and running a bash hook under `sh` silently changes its
   // meaning wherever /bin/sh is not bash.
   const [shell, evalFlag] = SHELL_INVOCATION[hook.shell ?? 'sh']
-  const base = hook.args === undefined
-    ? Command.make(shell, evalFlag, hook.command)
-    : Command.make(hook.command, ...hook.args)
-
-  const hookCommand = base.pipe(
-    Command.workingDirectory(cwd),
-    Command.env({ OMP_PROJECT_DIR: cwd, CLAUDE_PROJECT_DIR: cwd }),
-    Command.feed(stdinText),
-    Command.stdout('pipe'),
-    Command.stderr('pipe'),
-  )
+  const options = {
+    cwd,
+    env: { OMP_PROJECT_DIR: cwd, CLAUDE_PROJECT_DIR: cwd },
+    stdin: Stream.fromIterable([new TextEncoder().encode(stdinText)]),
+    stdout: 'pipe' as const,
+    stderr: 'pipe' as const,
+  }
+  const hookCommand = hook.args === undefined
+    ? ChildProcess.make(shell, [evalFlag, hook.command], options)
+    : ChildProcess.make(hook.command, hook.args, options)
 
   // Detached whole: the stdout/stderr drain travels with the child, so
   // abandoning the wait never leaves it writing into a pipe nobody reads.
@@ -79,10 +77,10 @@ export const runHookScript = Effect.fn('runHookScript')(function*(
   const run = Effect.scoped(
     Effect.uninterruptibleMask((restore) =>
       Effect.gen(function*() {
-        const process = yield* executor.start(hookCommand)
+        const process = yield* executor.spawn(hookCommand)
 
         yield* Effect.addFinalizer(() =>
-          Effect.interruptible(process.kill('SIGKILL')).pipe(
+          Effect.interruptible(process.kill({ killSignal: 'SIGKILL' })).pipe(
             Effect.timeout(KILL_GRACE_MS),
             Effect.ignore,
           )
@@ -91,8 +89,8 @@ export const runHookScript = Effect.fn('runHookScript')(function*(
         const [stdout, stderr, code] = yield* restore(
           Effect.all(
             [
-              process.stdout.pipe(Stream.decodeText(), Stream.mkString),
-              process.stderr.pipe(Stream.decodeText(), Stream.mkString),
+              Stream.mkString(Stream.decodeText(process.stdout)),
+              Stream.mkString(Stream.decodeText(process.stderr)),
               process.exitCode.pipe(Effect.map(Number), Effect.orElseSucceed(() => -1)),
             ],
             { concurrency: 'unbounded' },
@@ -104,7 +102,7 @@ export const runHookScript = Effect.fn('runHookScript')(function*(
     ),
   ).pipe(
     // Past the deadline no joiner is left to surface a failure.
-    Effect.tapErrorCause((cause) => Effect.logWarning(`hook ${hook.command} failed`, cause)),
+    Effect.tapCause((cause) => Effect.logWarning(`hook ${hook.command} failed`, cause)),
   )
 
   return yield* detachIn(run, hookScope, {

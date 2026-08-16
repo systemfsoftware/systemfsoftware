@@ -1,6 +1,7 @@
 import { Workflow } from '@systemfsoftware/effect-cell-types'
-import * as Either from 'effect/Either'
+import * as Exit from 'effect/Exit'
 import * as Match from 'effect/Match'
+import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 import { Allow, Block, HookResult, Warning } from './hook-dispatcher.schema.js'
 import type { HookDecision } from './hook-dispatcher.schema.js'
@@ -34,20 +35,20 @@ export class HookVerdictError extends S.TaggedError<HookVerdictError>()('HookVer
 }
 
 export const interpretHookResult = Workflow.make(
-  (command: InterpretHookCommand): Either.Either<HookDecision, HookVerdictError> =>
+  (command: InterpretHookCommand): Result.Result<HookDecision, HookVerdictError> =>
     Match.value(exitKindOf(command.result.code, command.result.stdout)).pipe(
       Match.when(
         'ExitBlock',
-        () => Either.right(new Block({ reason: blockReason(command.result.stderr, command.event) })),
+        () => Result.succeed(new Block({ reason: blockReason(command.result.stderr, command.event) })),
       ),
-      Match.when('ExitNoDecision', () => Either.right(new Allow({}))),
+      Match.when('ExitNoDecision', () => Result.succeed(new Allow({}))),
       Match.when('ExitDecisionJson', () =>
-        Either.match(parseHookOutput(command.result.stdout), {
-          onLeft: () => Either.left(new HookVerdictError({ raw: command.result.stdout })),
-          onRight: (parsed) =>
+        Exit.match(parseHookOutput(command.result.stdout), {
+          onFailure: () => Result.fail(new HookVerdictError({ raw: command.result.stdout })),
+          onSuccess: (parsed) =>
             Match.value(parsedVerdict(parsed.hookSpecificOutput?.permissionDecision, parsed.decision)).pipe(
               Match.when('block', () =>
-                Either.right(
+                Result.succeed(
                   new Block({
                     reason: parsedBlockReason(
                       parsed.hookSpecificOutput?.permissionDecision,
@@ -58,14 +59,14 @@ export const interpretHookResult = Workflow.make(
                   }),
                 )),
               Match.when('allow', () =>
-                Either.right(new Allow({ updatedInput: parsed.hookSpecificOutput?.updatedInput }))),
+                Result.succeed(new Allow({ updatedInput: parsed.hookSpecificOutput?.updatedInput }))),
               Match.exhaustive,
             ),
         })),
       Match.when('ExitOther', () =>
         Match.value(stderrVerdict(command.result.stderr)).pipe(
-          Match.when('warning', () => Either.right(new Warning({ message: spokenStderr(command.result.stderr) }))),
-          Match.when('allow', () => Either.right(new Allow({}))),
+          Match.when('warning', () => Result.succeed(new Warning({ message: spokenStderr(command.result.stderr) }))),
+          Match.when('allow', () => Result.succeed(new Allow({}))),
           Match.exhaustive,
         )),
       Match.exhaustive,

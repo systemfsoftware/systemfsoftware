@@ -5,7 +5,7 @@
  * layered live-clock path (no TestClock.withLive) is exercised as a
  * consumer would call it.
  */
-import { it, layer, makeFeature } from '@systemfsoftware/effect-gherkin-spec-v4'
+import { it, layer, makeFeature } from '@systemfsoftware/effect-gherkin-spec'
 import { Clock, Context, Effect, Layer } from 'effect'
 import { expect } from 'vitest'
 import { Gherkin, Given, Then } from '../src/mod.js'
@@ -13,7 +13,7 @@ import { Gherkin, Given, Then } from '../src/mod.js'
 const Feature = makeFeature({ it, layer })
 
 class Widget extends Context.Service<Widget, { readonly label: string }>()(
-  '@systemfsoftware/effect-gherkin-spec-v4/__tests__/feature-builder-surfaces.integration.test/Widget',
+  '@systemfsoftware/effect-gherkin-spec/__tests__/feature-builder-surfaces.integration.test/Widget',
 ) {}
 
 const widgetLayer = Layer.succeed(Widget, { label: 'shared' })

@@ -4,10 +4,9 @@ import type { HookSettings } from '../hook-settings.acl.js'
 import type { HookSession } from './hook-session.kernel.js'
 import { runHooksForEvent } from './run-hooks-for-event.executor.js'
 
-export class RunPreCompactHooksExecutorDeps extends Context.Tag('RunPreCompactHooksExecutorDeps')<
-  RunPreCompactHooksExecutorDeps,
-  Scope.Scope
->() {}
+export class RunPreCompactHooksExecutorDeps extends Context.Service<RunPreCompactHooksExecutorDeps, Scope.Scope>()(
+  'RunPreCompactHooksExecutorDeps',
+) {}
 
 /**
  * The matcher this event documents is `trigger` (manual vs auto), which OMP's

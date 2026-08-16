@@ -1,24 +1,22 @@
 /// <reference types="vitest/import-meta" />
-import { type Brand, pipe, Schema as S } from 'effect'
+import { type Brand, Schema as S, SchemaTransformation } from 'effect'
 import { StrictHex } from './strict-hex.schema.js'
 
 const toStrictHex = (hex: string): string => (hex.startsWith('0x') ? hex.slice(2) : hex).toLowerCase()
 
-export const HexString = pipe(
-  S.transform(
-    S.String.pipe(
-      S.annotations({
-        identifier: 'HexStringInput',
-        description: 'A hex string, optionally prefixed with 0x (empty string allowed)',
-      }),
-    ),
+export const HexString = S.String.pipe(
+  S.annotate({
+    identifier: 'HexStringInput',
+    description: 'A hex string, optionally prefixed with 0x (empty string allowed)',
+  }),
+  S.decodeTo(
     StrictHex,
-    {
+    SchemaTransformation.transform({
       decode: toStrictHex,
       encode: (s) => s,
-    },
+    }),
   ),
-  S.annotations({
+  S.annotate({
     identifier: 'HexString',
     description: 'A string representing hexadecimal data, with or without the 0x prefix',
     title: 'Hex String',
@@ -33,7 +31,7 @@ if (import.meta.vitest !== void 0) {
   // so this branch is statically dead in the build and the runner never enters
   // the published module graph. A static import would ship it.
   const { it } = await import('@effect/vitest')
-  const { FastCheck: fc } = await import('effect')
+  const { FastCheck: fc } = await import('effect/testing')
   const { refutes } = await import('@systemfsoftware/effect-schema-law')
   const { expectTypeOf } = await import('vitest')
 

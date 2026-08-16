@@ -1,5 +1,6 @@
 import { it } from '@effect/vitest'
-import { Either, FastCheck as fc } from 'effect'
+import { Result } from 'effect'
+import { FastCheck as fc } from 'effect/testing'
 import { describe, expect } from 'vitest'
 
 import { allBuildTools, getBuildTools } from '../src/build-tools.kernel.js'
@@ -116,11 +117,11 @@ describe('package-spec kernel', () => {
     [fc.stringMatching(/^[a-z][a-z0-9-]*$/)],
     ([name]) => {
       const result = parsePackageSpec(name)
-      expect(Either.isRight(result)).toBe(true)
-      if (Either.isRight(result)) {
-        expect(result.right.name).toBe(name)
-        expect(result.right.versionKind).toBe('none')
-        expect(result.right.version).toBe('')
+      expect(Result.isSuccess(result)).toBe(true)
+      if (Result.isSuccess(result)) {
+        expect(result.success.name).toBe(name)
+        expect(result.success.versionKind).toBe('none')
+        expect(result.success.version).toBe('')
       }
     },
   )
@@ -130,10 +131,10 @@ describe('package-spec kernel', () => {
     [fc.stringMatching(/^[a-z][a-z0-9-]*$/), fc.constantFrom('1.0.0', '0.0.1', '10.20.30')],
     ([name, version]) => {
       const result = parsePackageSpec(`${name}@${version}`)
-      expect(Either.isRight(result)).toBe(true)
-      if (Either.isRight(result)) {
-        expect(result.right.versionKind).toBe('exact')
-        expect(result.right.version).toBe(version)
+      expect(Result.isSuccess(result)).toBe(true)
+      if (Result.isSuccess(result)) {
+        expect(result.success.versionKind).toBe('exact')
+        expect(result.success.version).toBe(version)
       }
     },
   )
@@ -143,10 +144,10 @@ describe('package-spec kernel', () => {
     [fc.stringMatching(/^[a-z][a-z0-9-]*$/), fc.constantFrom('^1.0.0', '~2.0', '>=3.0.0')],
     ([name, range]) => {
       const result = parsePackageSpec(`${name}@${range}`)
-      expect(Either.isRight(result)).toBe(true)
-      if (Either.isRight(result)) {
-        expect(result.right.versionKind).toBe('range')
-        expect(result.right.version).toBe(range)
+      expect(Result.isSuccess(result)).toBe(true)
+      if (Result.isSuccess(result)) {
+        expect(result.success.versionKind).toBe('range')
+        expect(result.success.version).toBe(range)
       }
     },
   )
@@ -156,9 +157,9 @@ describe('package-spec kernel', () => {
     [fc.stringMatching(/^[a-z][a-z0-9-]*$/), fc.constantFrom('beta', 'latest', 'next')],
     ([name, tag]) => {
       const result = parsePackageSpec(`${name}@${tag}`)
-      expect(Either.isRight(result)).toBe(true)
-      if (Either.isRight(result)) {
-        expect(result.right.versionKind).toBe('tag')
+      expect(Result.isSuccess(result)).toBe(true)
+      if (Result.isSuccess(result)) {
+        expect(result.success.versionKind).toBe('tag')
       }
     },
   )
@@ -167,7 +168,7 @@ describe('package-spec kernel', () => {
     [fc.constantFrom('@/bad', '@', ' leading-space', 'trailing-space ')],
     ([input]) => {
       const result = parsePackageSpec(input)
-      expect(Either.isLeft(result)).toBe(true)
+      expect(Result.isFailure(result)).toBe(true)
     },
   )
 })

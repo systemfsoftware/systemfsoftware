@@ -1,12 +1,12 @@
 import { Schema } from 'effect'
 
-export const ResolutionKindSchema = Schema.Literal('node10', 'node16-cjs', 'node16-esm', 'bundler')
+export const ResolutionKindSchema = Schema.Literals(['node10', 'node16-cjs', 'node16-esm', 'bundler'])
 export type ResolutionKind = Schema.Schema.Type<typeof ResolutionKindSchema>
 
-export const ResolutionOptionSchema = Schema.Literal('node10', 'node16', 'bundler')
+export const ResolutionOptionSchema = Schema.Literals(['node10', 'node16', 'bundler'])
 export type ResolutionOption = Schema.Schema.Type<typeof ResolutionOptionSchema>
 
-export const ProblemKindSchema = Schema.Literal(
+export const ProblemKindSchema = Schema.Literals([
   'NoResolution',
   'UntypedResolution',
   'FalseESM',
@@ -19,13 +19,13 @@ export const ProblemKindSchema = Schema.Literal(
   'UnexpectedModuleSyntax',
   'InternalResolutionError',
   'CJSOnlyExportsDefault',
-)
+])
 export type ProblemKind = Schema.Schema.Type<typeof ProblemKindSchema>
 
-export const ModuleKindReasonSchema = Schema.Literal('extension', 'type', 'no:type')
+export const ModuleKindReasonSchema = Schema.Literals(['extension', 'type', 'no:type'])
 export type ModuleKindReason = Schema.Schema.Type<typeof ModuleKindReasonSchema>
 
-export const ModuleKindSyntaxSchema = Schema.Literal(1, 99)
+export const ModuleKindSyntaxSchema = Schema.Literals([1, 99])
 export type ModuleKindSyntax = Schema.Schema.Type<typeof ModuleKindSyntaxSchema>
 
 export const CommonJSModuleKind = 1 as const
@@ -156,7 +156,7 @@ export const CJSOnlyExportsDefaultProblemSchema = Schema.Struct({
 })
 export type CJSOnlyExportsDefaultProblem = Schema.Schema.Type<typeof CJSOnlyExportsDefaultProblemSchema>
 
-export const ProblemSchema = Schema.Union(
+export const ProblemSchema = Schema.Union([
   NoResolutionProblemSchema,
   UntypedResolutionProblemSchema,
   FalseESMProblemSchema,
@@ -169,5 +169,5 @@ export const ProblemSchema = Schema.Union(
   InternalResolutionErrorProblemSchema,
   UnexpectedModuleSyntaxProblemSchema,
   CJSOnlyExportsDefaultProblemSchema,
-)
+])
 export type Problem = Schema.Schema.Type<typeof ProblemSchema>

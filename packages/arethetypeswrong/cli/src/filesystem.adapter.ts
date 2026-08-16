@@ -1,6 +1,6 @@
-import * as PlatformFs from '@effect/platform/FileSystem'
-import * as PlatformPathMod from '@effect/platform/Path'
 import { Context, Effect, Layer, Schema } from 'effect'
+import * as PlatformFs from 'effect/FileSystem'
+import * as PlatformPathMod from 'effect/Path'
 
 export class FileNotFoundError extends Schema.TaggedError<FileNotFoundError>()('FileNotFoundError', {
   filePath: Schema.String,
@@ -20,10 +20,9 @@ export interface FilesystemService {
   readonly join: (...segments: readonly string[]) => string
 }
 
-export class CliFilesystem extends Context.Tag('@systemfsoftware/arethetypeswrong-cli/filesystem.adapter/Filesystem')<
-  CliFilesystem,
-  FilesystemService
->() {}
+export class CliFilesystem extends Context.Service<CliFilesystem, FilesystemService>()(
+  '@systemfsoftware/arethetypeswrong-cli/filesystem.adapter/Filesystem',
+) {}
 
 const fromPlatform = (
   fs: PlatformFs.FileSystem,

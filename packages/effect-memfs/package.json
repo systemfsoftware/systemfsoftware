@@ -48,7 +48,6 @@
     "memfs": "^4.17.2"
   },
   "devDependencies": {
-    "@effect/platform": "catalog:",
     "@effect/vitest": "catalog:",
     "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
@@ -63,7 +62,6 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@effect/platform": "catalog:",
     "effect": "catalog:",
     "typescript": ">=5.0.0"
   },

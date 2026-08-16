@@ -1,9 +1,8 @@
-import { JSONSchema, Schema as S } from 'effect'
+import { Effect, Schema as S } from 'effect'
 
 export const Options = S.Struct({
-  whitelist: S.optionalWith(
-    S.Array(S.String),
-    { default: () => [] },
+  whitelist: S.Array(S.String).pipe(
+    S.withDecodingDefaultType(Effect.succeed([])),
   ),
 })
 
@@ -23,7 +22,7 @@ export const meta = {
     description:
       'Ban class declarations and class expressions. TaggedError, Service, Class, TaggedClass from effect/Data are the sanctioned replacements.',
   },
-  schema: [JSONSchema.make(Options)],
+  schema: [S.toJsonSchemaDocument(Options).schema],
   messages: {
     noClasses: "'{{name}}' is forbidden. Expected: {{expected}}. Actual: {{actual}}. Fix: {{fix}}.",
   },

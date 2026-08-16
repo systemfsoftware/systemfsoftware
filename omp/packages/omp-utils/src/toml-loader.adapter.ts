@@ -1,8 +1,8 @@
-import type { PlatformError } from '@effect/platform/Error'
-import * as FileSystem from '@effect/platform/FileSystem'
-import * as PathModule from '@effect/platform/Path'
 import { parse } from '@std/toml'
-import { Context, Effect, Layer, MutableHashMap, Option, ParseResult, Ref, Schema } from 'effect'
+import { Context, Effect, Layer, MutableHashMap, Option, Ref, Schema, SchemaIssue } from 'effect'
+import * as FileSystem from 'effect/FileSystem'
+import * as PathModule from 'effect/Path'
+import type { PlatformError } from 'effect/PlatformError'
 import os from 'node:os'
 import { TomlConfig } from './toml-loader.schema.js'
 
@@ -16,12 +16,12 @@ const EMPTY_CONFIG: TomlConfig = Schema.decodeSync(TomlConfig)({})
  * Port: the layered TOML config provider. The adapter implements it and the
  * composition root wires `TomlLoaderLive`.
  */
-export class TomlLoader extends Context.Tag('@systemfsoftware/omp-utils/toml-loader.adapter/TomlLoader')<
+export class TomlLoader extends Context.Service<
   TomlLoader,
   {
     readonly load: (cwd: string) => Effect.Effect<TomlConfig, PlatformError, never>
   }
->() {}
+>()('@systemfsoftware/omp-utils/toml-loader.adapter/TomlLoader') {}
 
 /**
  * Private per-key merge for the layered config.
@@ -50,10 +50,13 @@ const mergeLayers = <V>(
  * `toml-loader.acl.ts`; the adapter cell may not import the ACL cell.
  */
 const parseTomlText = (text: string) =>
-  ParseResult.try({
+  Effect.try({
     try: () => parse(text),
-    catch: (e) => new ParseResult.Unexpected(e, 'TOML parse error'),
-  }).pipe(ParseResult.flatMap((parsed) => ParseResult.decodeUnknown(TomlConfig)(parsed)))
+    catch: (e) =>
+      new SchemaIssue.InvalidValue({
+        message: e instanceof Error ? `TOML parse error: ${e.message}` : 'TOML parse error',
+      }),
+  }).pipe(Effect.flatMap((parsed) => Schema.decodeUnknownEffect(TomlConfig)(parsed)))
 
 const readLayer = (
   fs: FileSystem.FileSystem,
@@ -102,7 +105,7 @@ const makeTomlLoader = (home: string) =>
         const projectLayer = yield* readLayer(fs, pathService, projectPath)
         const localLayer = yield* readLayer(fs, pathService, localPath)
 
-        const merged = yield* Schema.decode(TomlConfig)(
+        const merged = yield* Schema.decodeEffect(TomlConfig)(
           mergeLayers([userLayer, projectLayer, localLayer]),
         ).pipe(Effect.orDie)
 

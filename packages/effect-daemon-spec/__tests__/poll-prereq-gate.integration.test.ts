@@ -1,6 +1,7 @@
 import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Duration, Effect, Either, Option, Ref, TestClock } from 'effect'
+import { Duration, Effect, Option, Ref, Result } from 'effect'
+import { TestClock } from 'effect/testing'
 import { expect } from 'vitest'
 import { run } from '../src/mod.js'
 import { Daemon } from '../src/mod.js'
@@ -23,10 +24,10 @@ const recordWorkSpan = (names: Ref.Ref<string[]>) =>
 const readyStaysClosed = (await_: Effect.Effect<void>) =>
   await_.pipe(
     Effect.timeout('0 millis'),
-    Effect.either,
+    Effect.result,
     Effect.tap((result) =>
       Effect.sync(() => {
-        expect(result).toEqual(Either.left(expect.anything()))
+        expect(result).toEqual(Result.fail(expect.anything()))
       })
     ),
     Effect.asVoid,
@@ -101,7 +102,7 @@ Feature('Poll Prereq Gate')
               ),
               work: (data) =>
                 recordWorkSpan(s.probes.workSpanNames).pipe(
-                  Effect.zipRight(Ref.update(s.probes.workData, (arr) => [...arr, data])),
+                  Effect.andThen(Ref.update(s.probes.workData, (arr) => [...arr, data])),
                 ),
               interval: Duration.millis(1),
               tick: { spanName: SPAN_NAME, tickTimeout: Duration.seconds(90) },
@@ -286,7 +287,7 @@ Feature('Poll Prereq Gate')
               prereq: Effect.succeed(Option.some(7)),
               work: () =>
                 recordWorkSpan(s.workSpanNames).pipe(
-                  Effect.zipRight(Effect.fail('work-boom')),
+                  Effect.andThen(Effect.fail('work-boom')),
                 ),
               interval: Duration.millis(1),
               tick: { spanName: SPAN_NAME, tickTimeout: Duration.seconds(90) },

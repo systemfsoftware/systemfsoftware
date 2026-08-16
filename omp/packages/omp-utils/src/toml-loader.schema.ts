@@ -12,7 +12,7 @@ import { Schema } from 'effect'
  * Pure declaration. No behavior, no `@std/toml`, no I/O. The ACL owns the
  * boundary crossing; the executor owns the I/O.
  */
-export const TomlConfig = Schema.Record({ key: Schema.String, value: Schema.Array(Schema.String) }).pipe(
+export const TomlConfig = Schema.Record(Schema.String, Schema.Array(Schema.String)).pipe(
   Schema.brand('TomlConfig'),
 )
 export type TomlConfig = Schema.Schema.Type<typeof TomlConfig>

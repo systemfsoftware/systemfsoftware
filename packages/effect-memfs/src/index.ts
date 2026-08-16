@@ -1,15 +1,15 @@
-import * as Error from '@effect/platform/Error'
-import * as FileSystem from '@effect/platform/FileSystem'
 import { Layer } from 'effect'
 import * as Effect from 'effect/Effect'
+import * as FileSystem from 'effect/FileSystem'
 import * as Option from 'effect/Option'
+import * as Error from 'effect/PlatformError'
 import * as Random from 'effect/Random'
 import * as Stream from 'effect/Stream'
 import * as memfs from 'memfs'
 import { layer } from './memory-file-system.adapter.js'
 import type { Contents, FileHandle, Stat } from './memory-file-system.shape.js'
 
-const REASON_BY_ERRNO: Record<string, Error.SystemErrorReason> = {
+const REASON_BY_ERRNO: Record<string, Error.SystemErrorTag> = {
   EACCES: 'PermissionDenied',
   EBUSY: 'Busy',
   EEXIST: 'AlreadyExists',
@@ -44,8 +44,8 @@ const toStat = (stat: unknown): Stat => {
 }
 
 const toPlatformError = (method: string) => (err: unknown): Error.PlatformError =>
-  new Error.SystemError({
-    reason: REASON_BY_ERRNO[stringField(err, 'code')] ?? 'Unknown',
+  Error.systemError({
+    _tag: REASON_BY_ERRNO[stringField(err, 'code')] ?? 'Unknown',
     module: 'FileSystem',
     method,
     pathOrDescriptor: stringField(err, 'path'),
@@ -68,25 +68,24 @@ const makeFileInfo = (stat: Stat): FileSystem.File.Info => ({
     : stat.isSocket()
     ? 'Socket'
     : 'Unknown',
-  mtime: Option.fromNullable(stat.mtime),
-  atime: Option.fromNullable(stat.atime),
-  birthtime: Option.fromNullable(stat.birthtime),
+  mtime: Option.fromNullishOr(stat.mtime),
+  atime: Option.fromNullishOr(stat.atime),
+  birthtime: Option.fromNullishOr(stat.birthtime),
   dev: Number(stat.dev),
-  rdev: Option.fromNullable(stat.rdev ? Number(stat.rdev) : null),
-  ino: Option.fromNullable(stat.ino ? Number(stat.ino) : null),
+  rdev: Option.fromNullishOr(stat.rdev ? Number(stat.rdev) : null),
+  ino: Option.fromNullishOr(stat.ino ? Number(stat.ino) : null),
   mode: stat.mode,
-  nlink: Option.fromNullable(stat.nlink ? Number(stat.nlink) : null),
-  uid: Option.fromNullable(stat.uid ? Number(stat.uid) : null),
-  gid: Option.fromNullable(stat.gid ? Number(stat.gid) : null),
+  nlink: Option.fromNullishOr(stat.nlink ? Number(stat.nlink) : null),
+  uid: Option.fromNullishOr(stat.uid ? Number(stat.uid) : null),
+  gid: Option.fromNullishOr(stat.gid ? Number(stat.gid) : null),
   size: FileSystem.Size(Number(stat.size)),
-  blksize: Option.fromNullable(stat.blksize ? FileSystem.Size(Number(stat.blksize)) : null),
-  blocks: Option.fromNullable(stat.blocks ? Number(stat.blocks) : null),
+  blksize: Option.fromNullishOr(stat.blksize ? FileSystem.Size(Number(stat.blksize)) : null),
+  blocks: Option.fromNullishOr(stat.blocks ? Number(stat.blocks) : null),
 })
 
 const makeFile = (handle: FileHandle): FileSystem.File => {
   let position = 0n
   return {
-    fd: FileSystem.FileDescriptor(handle.fd),
     [FileSystem.FileTypeId]: FileSystem.FileTypeId,
     stat: Effect.tryPromise({
       try: () => handle.stat(),
@@ -96,11 +95,12 @@ const makeFile = (handle: FileHandle): FileSystem.File => {
       try: () => handle.sync(),
       catch: toPlatformError('sync'),
     }),
-    seek(offset: FileSystem.SizeInput, _from: FileSystem.SeekMode) {
+    seek(offset: FileSystem.SizeInput, from: FileSystem.SeekMode) {
+      const off = FileSystem.Size(offset)
       return Effect.sync(() => {
-        const off = FileSystem.Size(offset)
-        if (_from === 'start') position = off
-        else if (_from === 'current') position = position + off
+        if (from === 'start') position = off
+        else if (from === 'current') position = position + off
+        return FileSystem.Size(position)
       })
     },
     read(buffer: Uint8Array) {
@@ -164,10 +164,10 @@ const makeFile = (handle: FileHandle): FileSystem.File => {
           Effect.flatMap(({ bytesWritten }) => {
             if (bytesWritten === 0) {
               return Effect.fail(
-                new Error.SystemError({
+                Error.systemError({
+                  _tag: 'WriteZero',
                   module: 'FileSystem',
                   method: 'writeAll',
-                  reason: 'WriteZero',
                   pathOrDescriptor: handle.fd,
                 }),
               )
@@ -192,7 +192,7 @@ export function make(contents?: Contents, opts?: { cwd: string }): FileSystem.Fi
       : memfs.Volume.fromJSON({}),
   )
 
-  const access = (path: string, options?: FileSystem.AccessFileOptions): Effect.Effect<void, Error.PlatformError> => {
+  const access: FileSystem.FileSystem['access'] = (path, options) => {
     let mode = nfs.constants.F_OK
     if (options?.readable) mode |= nfs.constants.R_OK
     if (options?.writable) mode |= nfs.constants.W_OK
@@ -202,11 +202,7 @@ export function make(contents?: Contents, opts?: { cwd: string }): FileSystem.Fi
     })
   }
 
-  const copy = (
-    fromPath: string,
-    toPath: string,
-    options?: FileSystem.CopyOptions,
-  ): Effect.Effect<void, Error.PlatformError> =>
+  const copy: FileSystem.FileSystem['copy'] = (fromPath, toPath, options) =>
     Effect.tryPromise({
       try: () =>
         nfs.promises.cp(fromPath, toPath, {
@@ -217,34 +213,31 @@ export function make(contents?: Contents, opts?: { cwd: string }): FileSystem.Fi
       catch: toPlatformError('copy'),
     })
 
-  const copyFile = (fromPath: string, toPath: string): Effect.Effect<void, Error.PlatformError> =>
+  const copyFile: FileSystem.FileSystem['copyFile'] = (fromPath, toPath) =>
     Effect.tryPromise({
       try: () => nfs.promises.copyFile(fromPath, toPath),
       catch: toPlatformError('copyFile'),
     })
 
-  const chmod = (path: string, mode: number): Effect.Effect<void, Error.PlatformError> =>
+  const chmod: FileSystem.FileSystem['chmod'] = (path, mode) =>
     Effect.tryPromise({
       try: () => nfs.promises.chmod(path, mode),
       catch: toPlatformError('chmod'),
     })
 
-  const chown = (path: string, uid: number, gid: number): Effect.Effect<void, Error.PlatformError> =>
+  const chown: FileSystem.FileSystem['chown'] = (path, uid, gid) =>
     Effect.tryPromise({
       try: () => nfs.promises.chown(path, uid, gid),
       catch: toPlatformError('chown'),
     })
 
-  const link = (existingPath: string, newPath: string): Effect.Effect<void, Error.PlatformError> =>
+  const link: FileSystem.FileSystem['link'] = (existingPath, newPath) =>
     Effect.tryPromise({
       try: () => nfs.promises.link(existingPath, newPath),
       catch: toPlatformError('link'),
     })
 
-  const makeDirectory = (
-    path: string,
-    options?: FileSystem.MakeDirectoryOptions,
-  ): Effect.Effect<void, Error.PlatformError> =>
+  const makeDirectory: FileSystem.FileSystem['makeDirectory'] = (path, options) =>
     Effect.tryPromise({
       try: () =>
         nfs.promises.mkdir(path, {
@@ -254,9 +247,7 @@ export function make(contents?: Contents, opts?: { cwd: string }): FileSystem.Fi
       catch: toPlatformError('makeDirectory'),
     })
 
-  const makeTempDirectory = (
-    options?: FileSystem.MakeTempDirectoryOptions,
-  ): Effect.Effect<string, Error.PlatformError> =>
+  const makeTempDirectory: FileSystem.FileSystem['makeTempDirectory'] = (options) =>
     Effect.suspend(() => {
       const prefix = options?.prefix ?? ''
       const tmpDirParent = (options?.directory ?? '/tmp') + '/.'
@@ -269,25 +260,24 @@ export function make(contents?: Contents, opts?: { cwd: string }): FileSystem.Fi
       })
     })
 
-  const removeFactory =
-    (method: string) => (path: string, options?: FileSystem.RemoveOptions): Effect.Effect<void, Error.PlatformError> =>
-      Effect.tryPromise({
-        try: () =>
-          nfs.promises.rm(path, {
-            recursive: options?.recursive ?? false,
-            force: options?.force ?? false,
-          }),
-        catch: toPlatformError(method),
-      })
+  const removeFactory = (method: string): FileSystem.FileSystem['remove'] => (path, options) =>
+    Effect.tryPromise({
+      try: () =>
+        nfs.promises.rm(path, {
+          recursive: options?.recursive ?? false,
+          force: options?.force ?? false,
+        }),
+      catch: toPlatformError(method),
+    })
 
   const remove = removeFactory('remove')
-  const makeTempDirectoryScoped = (options?: FileSystem.MakeTempDirectoryOptions) =>
+  const makeTempDirectoryScoped: FileSystem.FileSystem['makeTempDirectoryScoped'] = (options) =>
     Effect.acquireRelease(
       makeTempDirectory(options),
       (directory) => Effect.orDie(removeFactory('makeTempDirectoryScoped')(directory, { recursive: true })),
     )
 
-  const openHandler = (path: string, options?: FileSystem.OpenFileOptions) => {
+  const openHandler: FileSystem.FileSystem['open'] = (path, options) => {
     const flag = options?.flag ?? 'r'
     return Effect.acquireRelease(
       Effect.tryPromise({
@@ -302,7 +292,7 @@ export function make(contents?: Contents, opts?: { cwd: string }): FileSystem.Fi
     ).pipe(Effect.map((memfsHandle) => makeFile(toFileHandle(memfsHandle))))
   }
 
-  const readFileFn = (path: string): Effect.Effect<Uint8Array, Error.PlatformError> =>
+  const readFileFn: FileSystem.FileSystem['readFile'] = (path) =>
     Effect.tryPromise({
       try: () =>
         nfs.promises.readFile(path).then((contents) =>
@@ -311,56 +301,49 @@ export function make(contents?: Contents, opts?: { cwd: string }): FileSystem.Fi
       catch: toPlatformError('readFile'),
     })
 
-  const readLink = (path: string): Effect.Effect<string, Error.PlatformError> =>
+  const readLink: FileSystem.FileSystem['readLink'] = (path) =>
     Effect.tryPromise({
       try: () => nfs.promises.readlink(path).then((l) => String(l)),
       catch: toPlatformError('readLink'),
     })
 
-  const readDirectory = (
-    path: string,
-    _options?: FileSystem.ReadDirectoryOptions,
-  ): Effect.Effect<string[], Error.PlatformError> =>
+  const readDirectory: FileSystem.FileSystem['readDirectory'] = (path, _options) =>
     Effect.tryPromise({
       try: () => nfs.promises.readdir(path).then((entries) => entries.map(String)),
       catch: toPlatformError('readDirectory'),
     })
 
-  const realPath = (path: string): Effect.Effect<string, Error.PlatformError> =>
+  const realPath: FileSystem.FileSystem['realPath'] = (path) =>
     Effect.tryPromise({
       try: () => nfs.promises.realpath(path).then((p) => String(p)),
       catch: toPlatformError('realPath'),
     })
 
-  const rename = (oldPath: string, newPath: string): Effect.Effect<void, Error.PlatformError> =>
+  const rename: FileSystem.FileSystem['rename'] = (oldPath, newPath) =>
     Effect.tryPromise({
       try: () => nfs.promises.rename(oldPath, newPath),
       catch: toPlatformError('rename'),
     })
 
-  const pathStat = (path: string): Effect.Effect<FileSystem.File.Info, Error.PlatformError> =>
+  const pathStat: FileSystem.FileSystem['stat'] = (path) =>
     Effect.tryPromise({
       try: () => nfs.promises.stat(path).then(toStat),
       catch: toPlatformError('stat'),
     }).pipe(Effect.map(makeFileInfo))
 
-  const symlink = (target: string, path: string): Effect.Effect<void, Error.PlatformError> =>
+  const symlink: FileSystem.FileSystem['symlink'] = (target, path) =>
     Effect.tryPromise({
       try: () => nfs.promises.symlink(target, path),
       catch: toPlatformError('symlink'),
     })
 
-  const truncate = (path: string, length?: FileSystem.SizeInput): Effect.Effect<void, Error.PlatformError> =>
+  const truncate: FileSystem.FileSystem['truncate'] = (path, length) =>
     Effect.tryPromise({
       try: () => nfs.promises.truncate(path, Number(length ?? 0)),
       catch: toPlatformError('truncate'),
     })
 
-  const writeFile = (
-    path: string,
-    data: Uint8Array,
-    options?: FileSystem.WriteFileOptions,
-  ): Effect.Effect<void, Error.PlatformError> =>
+  const writeFile: FileSystem.FileSystem['writeFile'] = (path, data, options) =>
     Effect.tryPromise({
       try: () =>
         nfs.promises.writeFile(path, data, {
@@ -370,7 +353,7 @@ export function make(contents?: Contents, opts?: { cwd: string }): FileSystem.Fi
       catch: toPlatformError('writeFile'),
     })
 
-  const makeTempFile = (options?: FileSystem.MakeTempFileOptions): Effect.Effect<string, Error.PlatformError> =>
+  const makeTempFile: FileSystem.FileSystem['makeTempFile'] = (options) =>
     Effect.gen(function*() {
       const entropy = yield* Random.next
       const prefix = options?.prefix ?? ''
@@ -383,22 +366,29 @@ export function make(contents?: Contents, opts?: { cwd: string }): FileSystem.Fi
       })
     })
 
-  const makeTempFileScoped = (options?: FileSystem.MakeTempFileOptions) =>
+  const makeTempFileScoped: FileSystem.FileSystem['makeTempFileScoped'] = (options) =>
     Effect.acquireRelease(
       makeTempFile(options),
       (filePath) => Effect.orDie(removeFactory('makeTempFileScoped')(filePath, {})),
     )
 
-  const utimes = (path: string, atime: Date | number, mtime: Date | number): Effect.Effect<void, Error.PlatformError> =>
+  const utimes: FileSystem.FileSystem['utimes'] = (path, atime, mtime) =>
     Effect.tryPromise({
       try: () => nfs.promises.utimes(path, atime, mtime),
       catch: toPlatformError('utimes'),
     })
 
-  const watch = (
-    _path: string,
-    _options?: FileSystem.WatchOptions,
-  ): Stream.Stream<FileSystem.WatchEvent, Error.PlatformError> => Stream.empty
+  const watch: FileSystem.FileSystem['watch'] = (_path, _options) => Stream.empty
+
+  const glob: FileSystem.FileSystem['glob'] = (pattern, options) =>
+    Effect.tryPromise({
+      try: () =>
+        nfs.promises.glob(pattern, {
+          ...(options?.root === undefined ? {} : { cwd: options.root }),
+          ...(options?.exclude === undefined ? {} : { exclude: [...options.exclude] }),
+        }),
+      catch: toPlatformError('glob'),
+    })
 
   return FileSystem.make({
     access,
@@ -406,6 +396,7 @@ export function make(contents?: Contents, opts?: { cwd: string }): FileSystem.Fi
     chown,
     copy,
     copyFile,
+    glob,
     link,
     makeDirectory,
     makeTempDirectory,

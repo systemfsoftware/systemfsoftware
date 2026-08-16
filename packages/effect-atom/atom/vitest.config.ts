@@ -18,7 +18,7 @@ export default defineConfig({
     alias: {
       '@systemfsoftware/effect-atom/test': path.join(__dirname, 'test'),
       '@systemfsoftware/effect-atom': path.join(__dirname, 'src'),
-      '@systemfsoftware/effect-gherkin-spec-v4': path.join(__dirname, '../../effect-gherkin-spec-v4/src/mod.ts'),
+      '@systemfsoftware/effect-gherkin-spec': path.join(__dirname, '../../effect-gherkin-spec/src/mod.ts'),
     },
   },
 })

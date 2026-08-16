@@ -26,9 +26,9 @@ const EDIT_TOOLS: Record<string, true> = { Edit: true, MultiEdit: true, Update: 
 
 const OmpEdits = S.Array(
   S.Struct({ old_text: S.optional(S.Unknown), new_text: S.optional(S.Unknown) }).pipe(
-    S.filter((entry) => 'old_text' in entry || 'new_text' in entry),
+    S.check(S.makeFilter((entry) => 'old_text' in entry || 'new_text' in entry)),
   ),
-).pipe(S.minItems(1))
+).pipe(S.check(S.isNonEmpty()))
 
 const isOmpEditArray = S.is(OmpEdits)
 
@@ -72,13 +72,13 @@ export function normalizeToolInput(toolName: string, input: Record<string, unkno
 
 const ClaudeEdits = S.Array(
   S.Struct({ old_string: S.optional(S.Unknown), new_string: S.optional(S.Unknown) }).pipe(
-    S.filter((entry) => 'old_string' in entry || 'new_string' in entry),
+    S.check(S.makeFilter((entry) => 'old_string' in entry || 'new_string' in entry)),
   ),
 )
 
 const isClaudeEditArray = S.is(ClaudeEdits)
 
-const asRecord = S.decodeUnknownOption(S.Record({ key: S.String, value: S.Unknown }))
+const asRecord = S.decodeUnknownOption(S.Record(S.String, S.Unknown))
 
 /**
  * Re-key a hook's `updatedInput` back to the names the payload arrived with.

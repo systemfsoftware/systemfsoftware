@@ -1,9 +1,9 @@
-import * as NodeCommandExecutor from '@effect/platform-node/NodeCommandExecutor'
-import * as NodeFileSystem from '@effect/platform-node/NodeFileSystem'
-import { FileSystem } from '@effect/platform/FileSystem'
-import * as PathModule from '@effect/platform/Path'
+import * as NodeChildProcessSpawner from '@effect/platform-node-shared/NodeChildProcessSpawner'
+import * as NodeFileSystem from '@effect/platform-node-shared/NodeFileSystem'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer } from 'effect'
+import { FileSystem } from 'effect/FileSystem'
+import * as PathModule from 'effect/Path'
 import { expect } from 'vitest'
 import { HookScopeLive } from '../src/hook-runtime.state.js'
 import { loadSettingsWithPaths } from '../src/internal/load-settings.executor.js'
@@ -14,7 +14,7 @@ const Feature = makeFeature({ it, layer })
 
 const testLayer = HookScopeLive.pipe(
   Layer.provideMerge(
-    NodeCommandExecutor.layer.pipe(
+    NodeChildProcessSpawner.layer.pipe(
       Layer.provideMerge(NodeFileSystem.layer),
       Layer.provideMerge(PathModule.layer),
     ),

@@ -1,6 +1,6 @@
 import { describe, it } from '@systemfsoftware/effect-gherkin-spec'
 import { ExitClass } from '@systemfsoftware/stryker-js-mutation-run/exit-classification'
-import { FastCheck as fc } from 'effect'
+import { FastCheck as fc } from 'effect/testing'
 
 import { SURVIVORS_REJECT_EXIT_CLASS } from '../survivors-exit.kernel.js'
 

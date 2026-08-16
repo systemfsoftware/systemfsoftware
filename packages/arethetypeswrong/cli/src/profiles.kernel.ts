@@ -3,12 +3,12 @@ import * as S from 'effect/Schema'
 import type { ResolutionKind } from '@systemfsoftware/arethetypeswrong-core'
 
 export class ApplyProfileCommand extends S.TaggedClass<ApplyProfileCommand>()('ApplyProfileCommand', {
-  profileName: S.Literal('strict', 'node16', 'esm-only'),
+  profileName: S.Literals(['strict', 'node16', 'esm-only']),
   request: S.Unknown,
 }) {}
 
 export class ApplyProfileDecision extends S.TaggedClass<ApplyProfileDecision>()('ApplyProfileDecision', {
-  ignoreResolutions: S.Array(S.Literal('node10', 'node16-cjs', 'node16-esm', 'bundler')),
+  ignoreResolutions: S.Array(S.Literals(['node10', 'node16-cjs', 'node16-esm', 'bundler'])),
 }) {}
 
 const profileIgnoreResolutions: Record<'strict' | 'node16' | 'esm-only', readonly ResolutionKind[]> = {

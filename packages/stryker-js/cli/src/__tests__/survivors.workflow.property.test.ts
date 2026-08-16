@@ -1,8 +1,10 @@
 import { describe, it } from '@systemfsoftware/effect-gherkin-spec'
 import type { Mutant } from '@systemfsoftware/stryker-js-plugin-api/core'
 import { schema } from '@systemfsoftware/stryker-js-plugin-api/core'
-import { Either, FastCheck as fc } from 'effect'
+import * as Exit from 'effect/Exit'
+import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
+import { FastCheck as fc } from 'effect/testing'
 import { createHash } from 'node:crypto'
 import { isDeepStrictEqual } from 'node:util'
 
@@ -142,8 +144,8 @@ const fingerprint = (mutant: Mutant): string =>
   ])
 
 const rejectionOf = (
-  result: Either.Either<unknown, SurvivorsRejection>,
-): SurvivorsRejection | undefined => (Either.isLeft(result) ? result.left : undefined)
+  result: Result.Result<unknown, SurvivorsRejection>,
+): SurvivorsRejection | undefined => (Result.isFailure(result) ? result.failure : undefined)
 
 describe('admitSurvivorsRun', () => {
   it.prop(
@@ -173,7 +175,7 @@ describe('admitSurvivorsRun', () => {
     [reportWithoutSurvivorsArb],
     ([report]) => {
       const drifted = admitSurvivorsRun(driftedInput(report))
-      return Either.isRight(drifted) && drifted.right._tag === 'NoSurvivors'
+      return Result.isSuccess(drifted) && drifted.success._tag === 'NoSurvivors'
     },
   )
 
@@ -192,11 +194,11 @@ describe('admitSurvivorsRun', () => {
     [reportWithSurvivorsArb],
     ([report]) => {
       const admission = admitSurvivorsRun(matchingInput(report))
-      if (!Either.isRight(admission) || admission.right._tag !== 'Admitted') return false
+      if (!Result.isSuccess(admission) || admission.success._tag !== 'Admitted') return false
       const expected = extractSurvivors(report, absPath)
       return expected.length > 0 &&
         isDeepStrictEqual(
-          admission.right.survivors.map(fingerprint),
+          admission.success.survivors.map(fingerprint),
           expected.map(fingerprint),
         )
     },
@@ -240,8 +242,8 @@ describe('admitSurvivorsRun', () => {
     '∀m_MalformedSurvivor_≡RefusedByAdmissionDecode',
     [fc.record({ id: fc.string(), fileName: fc.string() })],
     ([partial]) =>
-      Either.isLeft(
-        S.decodeUnknownEither(SurvivorsAdmission)({ _tag: 'Admitted', survivors: [partial] }),
+      Exit.isFailure(
+        S.decodeUnknownExit(SurvivorsAdmission)({ _tag: 'Admitted', survivors: [partial] }),
       ),
   )
 
@@ -261,8 +263,8 @@ describe('admitSurvivorsRun', () => {
       }),
     ],
     ([location, fields]) =>
-      Either.isLeft(
-        S.decodeUnknownEither(SurvivorsAdmission)({
+      Exit.isFailure(
+        S.decodeUnknownExit(SurvivorsAdmission)({
           _tag: 'Admitted',
           survivors: [{ ...fields, location }],
         }),
@@ -273,8 +275,8 @@ describe('admitSurvivorsRun', () => {
     '∀r_WellFormedSurvivors_≡AcceptedByAdmissionDecode',
     [reportWithSurvivorsArb],
     ([report]) =>
-      Either.isRight(
-        S.decodeUnknownEither(SurvivorsAdmission)({
+      Exit.isSuccess(
+        S.decodeUnknownExit(SurvivorsAdmission)({
           _tag: 'Admitted',
           survivors: extractSurvivors(report, absPath),
         }),
@@ -289,10 +291,10 @@ describe('admitSurvivorsRun', () => {
       const admitted = admitSurvivorsRun(matchingInput(report))
       const empty = admitSurvivorsRun(matchingInput({ ...report, files: {} }))
       const rejected = admitSurvivorsRun({ ...matchingInput(report), priorReport: undefined })
-      return Either.isRight(admitted) && Either.isRight(empty) && Either.isLeft(rejected) &&
-        crossRealmBrand in admitted.right &&
-        crossRealmBrand in empty.right &&
-        crossRealmBrand in rejected.left
+      return Result.isSuccess(admitted) && Result.isSuccess(empty) && Result.isFailure(rejected) &&
+        crossRealmBrand in admitted.success &&
+        crossRealmBrand in empty.success &&
+        crossRealmBrand in rejected.failure
     },
   )
 })

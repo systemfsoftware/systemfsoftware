@@ -5,10 +5,9 @@ export interface LexerAdapterService {
   readonly parseCjsExports: (source: string) => Effect.Effect<readonly string[], Error>
 }
 
-export class LexerAdapter extends Context.Tag('@systemfsoftware/arethetypeswrong-core/LexerAdapter')<
-  LexerAdapter,
-  LexerAdapterService
->() {}
+export class LexerAdapter extends Context.Service<LexerAdapter, LexerAdapterService>()(
+  '@systemfsoftware/arethetypeswrong-core/LexerAdapter',
+) {}
 
 export const LexerAdapterStub: Layer.Layer<LexerAdapter, never, never> = Layer.succeed(
   LexerAdapter,

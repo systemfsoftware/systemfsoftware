@@ -7,9 +7,9 @@
 
 ```
 x @systemfsoftware/effect-handler(handler-single-executor): get-user.handler.ts is forbidden.
-  Expected: exactly one import of a sibling *.executor and one Effect.either(Executor(cmd)) delegation.
+  Expected: exactly one import of a sibling *.executor and one delegation call — Effect.either(Executor(cmd)) (v3) or Effect.result(Executor(cmd)) (v4).
   Actual: no import of a sibling *.executor.ts.
-  Fix: construct the executor command and call yield* Effect.either(Executor(cmd)) — the executor owns the I/O sandwich.
+  Fix: construct the executor command and call yield* Effect.either(Executor(cmd)) (v3) or yield* Effect.result(Executor(cmd)) (v4) — the executor owns the I/O sandwich.
 
 x @systemfsoftware/effect-handler(handler-no-switch): switch is forbidden.
   Expected: a Match.tag dispatch closed by Match.orElse(() => 500).
@@ -52,12 +52,12 @@ To adopt gradually, drop the spread and name rules individually as `'@systemfsof
 
 ## Rules
 
-| Rule                        | Reports                                                                                                                                                                             |
-| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `handler-single-executor`   | No sibling `*.executor` import, or more than one; no `Effect.either(Executor(cmd))` delegation call, or more than one — the handler owns no I/O and no orchestration                |
-| `handler-no-casts`          | An `as` type assertion (except `as const`) or an angle-bracket `<T>` assertion — the request must be decoded through a Schema codec, never cast                                     |
-| `handler-no-switch`         | Any `switch` — error-to-status mapping goes through `Match.tag` closed by `Match.orElse(() => 500)`, and a switch on `_tag` is easy to leave incomplete when a new variant is added |
-| `handler-match-tag-or-else` | A `Match.tag` dispatch that lacks a `Match.orElse` arm, or that terminates in `Match.exhaustive` — a new error variant must degrade to a 500 at runtime, not fail the build         |
+| Rule                        | Reports                                                                                                                                                                                                         |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `handler-single-executor`   | No sibling `*.executor` import, or more than one; no `Effect.either(Executor(cmd))` (v3) / `Effect.result(Executor(cmd))` (v4) delegation call, or more than one — the handler owns no I/O and no orchestration |
+| `handler-no-casts`          | An `as` type assertion (except `as const`) or an angle-bracket `<T>` assertion — the request must be decoded through a Schema codec, never cast                                                                 |
+| `handler-no-switch`         | Any `switch` — error-to-status mapping goes through `Match.tag` closed by `Match.orElse(() => 500)`, and a switch on `_tag` is easy to leave incomplete when a new variant is added                             |
+| `handler-match-tag-or-else` | A `Match.tag` dispatch that lacks a `Match.orElse` arm, or that terminates in `Match.exhaustive` — a new error variant must degrade to a 500 at runtime, not fail the build                                     |
 
 ## FAQ
 

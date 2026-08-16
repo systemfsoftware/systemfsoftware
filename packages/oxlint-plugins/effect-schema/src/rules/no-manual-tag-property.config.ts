@@ -1,4 +1,4 @@
-import { Schema as S } from 'effect'
+import { Effect, Schema as S } from 'effect'
 
 export const TAG_NAME = '_tag' as const
 
@@ -15,9 +15,15 @@ export const NAME_SUFFIX = 'with manual _tag property' as const
 export const ANONYMOUS_NAME = '<anonymous>' as const
 
 export const Options = S.Struct({
-  allow: S.optionalWith(S.Array(S.String), { default: () => [] }),
-  expected: S.optionalWith(S.String, { default: () => DEFAULT_EXPECTED }),
-  fix: S.optionalWith(S.String, { default: () => DEFAULT_FIX }),
+  allow: S.Array(S.String).pipe(
+    S.withDecodingDefaultType(Effect.succeed([])),
+  ),
+  expected: S.String.pipe(
+    S.withDecodingDefaultType(Effect.succeed(DEFAULT_EXPECTED)),
+  ),
+  fix: S.String.pipe(
+    S.withDecodingDefaultType(Effect.succeed(DEFAULT_FIX)),
+  ),
 })
 
 export type OptionsType = S.Schema.Type<typeof Options>

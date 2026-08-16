@@ -1,6 +1,7 @@
 import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Duration, Effect, Either, Ref, Schedule, TestClock } from 'effect'
+import { Duration, Effect, Ref, Result, Schedule } from 'effect'
+import { TestClock } from 'effect/testing'
 import { expect } from 'vitest'
 import { run } from '../src/mod.js'
 import { Daemon } from '../src/mod.js'
@@ -80,12 +81,12 @@ Feature('Poll Worker Lifecycle')
             yield* TestClock.adjust(Duration.millis(5))
             const countBeforePause = yield* CounterRef.read(s.counterRef)
             yield* health.paused.close
-            yield* Effect.yieldNow()
+            yield* Effect.yieldNow
             yield* TestClock.adjust(Duration.millis(50))
             const countWhilePaused = yield* CounterRef.read(s.counterRef)
             expect(countWhilePaused).toBe(countBeforePause)
             yield* health.paused.open
-            yield* Effect.yieldNow()
+            yield* Effect.yieldNow
             yield* TestClock.adjust(Duration.millis(50))
             const countAfterResume = yield* CounterRef.read(s.counterRef)
             expect(countAfterResume).toBeGreaterThan(countWhilePaused)
@@ -113,10 +114,10 @@ Feature('Poll Worker Lifecycle')
         Then('ready stays closed')((s) =>
           s.health.ready.await.pipe(
             Effect.timeout('0 millis'),
-            Effect.either,
+            Effect.result,
             Effect.tap((result) =>
               Effect.sync(() => {
-                expect(result).toEqual(Either.left(expect.anything()))
+                expect(result).toEqual(Result.fail(expect.anything()))
               })
             ),
             Effect.asVoid,
@@ -144,10 +145,10 @@ Feature('Poll Worker Lifecycle')
         Then('ready stays closed')((s) =>
           s.health.ready.await.pipe(
             Effect.timeout('0 millis'),
-            Effect.either,
+            Effect.result,
             Effect.tap((result) =>
               Effect.sync(() => {
-                expect(result).toEqual(Either.left(expect.anything()))
+                expect(result).toEqual(Result.fail(expect.anything()))
               })
             ),
             Effect.asVoid,
@@ -195,7 +196,7 @@ Feature('Poll Worker Lifecycle')
               work: Effect.sleep(Duration.seconds(5)),
               interval: Duration.millis(1),
               tick: { tickTimeout: Duration.millis(100) },
-              tickHooks: { innerRetry: Schedule.once },
+              tickHooks: { innerRetry: Schedule.recurs(1) },
               lock: { mode: 'none' },
             })
             const health = yield* run.worker(worker)
@@ -205,10 +206,10 @@ Feature('Poll Worker Lifecycle')
         Then('ready stays closed after both retry attempts timeout')((s) =>
           s.health.ready.await.pipe(
             Effect.timeout('0 millis'),
-            Effect.either,
+            Effect.result,
             Effect.tap((result) =>
               Effect.sync(() => {
-                expect(result).toEqual(Either.left(expect.anything()))
+                expect(result).toEqual(Result.fail(expect.anything()))
               })
             ),
             Effect.asVoid,

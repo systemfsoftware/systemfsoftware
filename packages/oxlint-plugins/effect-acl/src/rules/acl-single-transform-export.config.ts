@@ -14,7 +14,7 @@ export const meta = {
   type: 'problem',
   docs: {
     description:
-      '*.acl.ts must export exactly one transform — the ACL itself. Each ACL is one unidirectional crossing; a file exporting two or more is two boundaries sharing a name. Types, interfaces, and the source/target schema declarations the transform composes are public and may be exported.',
+      '*.acl.ts must export exactly one schema transform — the ACL itself (v3 S.transformOrFail(From, To, …) or v4 From.pipe(S.decodeTo(S.toType(To), { decode: SchemaGetter.transformOrFail(…) }))). Each ACL is one unidirectional crossing; a file exporting two or more is two boundaries sharing a name. Types, interfaces, and the source/target schema declarations the transform composes are public and may be exported.',
   },
   schema: [Options],
   messages: {

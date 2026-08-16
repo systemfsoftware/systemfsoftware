@@ -1,5 +1,5 @@
 import type { Workflow } from '@systemfsoftware/effect-cell-types'
-import type { Either } from 'effect/Either'
+import type { Result } from 'effect/Result'
 import { describe, expect, it } from 'tstyche'
 
 // The fixtures are deliberately plain interfaces with a literal `_tag`, and the
@@ -29,18 +29,18 @@ interface Err {
 
 declare const cmd: Cmd
 declare const decision: Dec | Alt
-declare const decideInhabited: (command: Cmd) => Either<Dec, Err>
+declare const decideInhabited: (command: Cmd) => Result<Dec, Err>
 declare const decidePromise: (command: Cmd) => Promise<Dec>
 declare const decideValue: (command: Cmd) => Dec
 declare const totallyDecided: Workflow.Workflow<Cmd, boolean, never>
 
 describe('the four contractual claims', () => {
   it('Should_BeExactDeciderFunction_When_BothChannelsInhabited', () => {
-    expect<Workflow.Workflow<Cmd, Dec, Err>>().type.toBe<(command: Cmd) => Either<Dec, Err>>()
+    expect<Workflow.Workflow<Cmd, Dec, Err>>().type.toBe<(command: Cmd) => Result<Dec, Err>>()
   })
 
   it('Should_SurviveDecisionUnionDistribution_When_DecisionChannelIsAUnion', () => {
-    expect<Workflow.Workflow<Cmd, Dec | Alt, Err>>().type.toBe<(command: Cmd) => Either<Dec | Alt, Err>>()
+    expect<Workflow.Workflow<Cmd, Dec | Alt, Err>>().type.toBe<(command: Cmd) => Result<Dec | Alt, Err>>()
   })
 
   it('Should_DiscriminateUnionMembersByTag_When_NarrowingTheDecision', () => {
@@ -78,11 +78,11 @@ describe('the constructor compiled evidence', () => {
     expect<Workflow.Workflow<Cmd, boolean, Error>>().type.toBeCallableWith(cmd)
   })
 
-  it('Should_RejectPromiseReturningDecider_When_ParameterRequiresEitherReturn', () => {
+  it('Should_RejectPromiseReturningDecider_When_ParameterRequiresResultReturn', () => {
     expect<typeof Workflow.make>().type.not.toBeCallableWith(decidePromise)
   })
 
-  it('Should_RejectBareValueDecider_When_ParameterRequiresEitherReturn', () => {
+  it('Should_RejectBareValueDecider_When_ParameterRequiresResultReturn', () => {
     expect<typeof Workflow.make>().type.not.toBeCallableWith(decideValue)
   })
 

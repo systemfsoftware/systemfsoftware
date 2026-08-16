@@ -36,4 +36,4 @@ This package mechanizes the positive half of Constitution IV.2 — a source file
 
 - Types: `pnpm --filter @systemfsoftware/oxlint-plugin-cell-taxonomy typecheck`
 - Test: `pnpm --filter @systemfsoftware/oxlint-plugin-cell-taxonomy test`
-- Mutation: `pnpm --filter @systemfsoftware/oxlint-plugin-cell-taxonomy mutation`
+- Mutation: the Mutation workflow's report for this package; no agent starts a run (root `AGENTS.md` REPO-D3)

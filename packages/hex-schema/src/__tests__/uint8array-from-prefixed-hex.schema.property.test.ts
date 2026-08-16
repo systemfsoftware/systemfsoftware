@@ -1,5 +1,6 @@
 import { refutes } from '@systemfsoftware/effect-schema-law'
-import { FastCheck as fc, Schema as S } from 'effect'
+import { Schema as S } from 'effect'
+import { FastCheck as fc } from 'effect/testing'
 import { expectTypeOf } from 'vitest'
 import { Uint8ArrayFromPrefixedHex } from '../uint8array-from-prefixed-hex.schema.js'
 
@@ -14,4 +15,4 @@ refutes(Uint8ArrayFromPrefixedHex, {
   Uint8PrefixedHexCase: fc.stringMatching(/^(?:[A-F]{2})+$/).map((upper) => `0x${upper}`),
 })
 
-expectTypeOf<S.Schema.Encoded<typeof Uint8ArrayFromPrefixedHex>>().toEqualTypeOf<`0x${string}`>()
+expectTypeOf<S.Codec.Encoded<typeof Uint8ArrayFromPrefixedHex>>().toEqualTypeOf<`0x${string}`>()

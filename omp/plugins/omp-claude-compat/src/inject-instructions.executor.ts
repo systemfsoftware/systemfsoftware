@@ -1,7 +1,7 @@
-import { FileSystem } from '@effect/platform/FileSystem'
-import * as PathModule from '@effect/platform/Path'
 import { TomlLoader } from '@systemfsoftware/omp-utils'
-import { Effect, Either } from 'effect'
+import { Effect, Result } from 'effect'
+import { FileSystem } from 'effect/FileSystem'
+import * as PathModule from 'effect/Path'
 
 /**
  * Refs the host already delivers, keyed by project-relative path.
@@ -34,8 +34,8 @@ const extractRefs = Effect.fn('extractRefs')(function*(content: string, baseDir:
     const confinedBase = baseResolved.startsWith(projectDir + '/') || baseResolved === projectDir
 
     if (confinedBase) {
-      const baseExists = yield* Effect.either(fs.exists(baseResolved))
-      if (Either.isRight(baseExists) && baseExists.right) {
+      const baseExists = yield* Effect.result(fs.exists(baseResolved))
+      if (Result.isSuccess(baseExists) && baseExists.success) {
         refs.push({ sourcePath: baseDir, resolvedPath: baseResolved })
         continue
       }
@@ -66,11 +66,11 @@ export const loadReferencedContent = Effect.fn('loadReferencedContent')(function
 
   const allRefs: Ref[] = []
   for (const filePath of claudeMdPaths) {
-    const content = yield* Effect.either(
+    const content = yield* Effect.result(
       fs.readFileString(filePath, 'utf-8'),
     )
-    if (Either.isRight(content)) {
-      const refs = yield* extractRefs(content.right, path.dirname(filePath), projectDir)
+    if (Result.isSuccess(content)) {
+      const refs = yield* extractRefs(content.success, path.dirname(filePath), projectDir)
       allRefs.push(...refs)
     }
   }
@@ -94,14 +94,14 @@ export const loadReferencedContent = Effect.fn('loadReferencedContent')(function
     const relativePath = ref.resolvedPath.slice(projectDir.length + 1)
     if (skipList.includes(relativePath)) continue
 
-    const refContent = yield* Effect.either(
+    const refContent = yield* Effect.result(
       fs.readFileString(ref.resolvedPath, 'utf-8'),
     )
-    if (Either.isLeft(refContent)) {
+    if (Result.isFailure(refContent)) {
       continue
     }
 
-    sections.push(`## ${relativePath}\n${refContent.right}\n`)
+    sections.push(`## ${relativePath}\n${refContent.success}\n`)
   }
 
   if (sections.length === 0) return ''

@@ -1,14 +1,13 @@
-import * as PlatformTerminal from '@effect/platform/Terminal'
 import { Context, Effect, Layer } from 'effect'
+import * as PlatformTerminal from 'effect/Terminal'
 
 export interface StdinService {
   readonly confirm: (question: string) => Effect.Effect<boolean, never>
 }
 
-export class Stdin extends Context.Tag('@systemfsoftware/arethetypeswrong-cli/stdin.adapter/Stdin')<
-  Stdin,
-  StdinService
->() {}
+export class Stdin extends Context.Service<Stdin, StdinService>()(
+  '@systemfsoftware/arethetypeswrong-cli/stdin.adapter/Stdin',
+) {}
 
 const fromTerminal = (terminal: PlatformTerminal.Terminal): StdinService => ({
   confirm: (question) =>

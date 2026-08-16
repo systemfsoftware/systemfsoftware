@@ -1,6 +1,7 @@
 import { it } from '@effect/vitest'
 import { refutes } from '@systemfsoftware/effect-schema-law'
-import { Arbitrary, Duration, Either, FastCheck as fc, Schema } from 'effect'
+import { Duration, Exit, Schema } from 'effect'
+import { FastCheck as fc } from 'effect/testing'
 import {
   ChildPolicyConfig,
   LockPolicyConfig,
@@ -11,17 +12,24 @@ import {
 import { MAX_CHILDREN_CEILING } from '../supervisor-dynamic.kernel.js'
 
 const CapOutsideSpan = Schema.Int.pipe(
-  Schema.filter((children) => children < 1 || children > MAX_CHILDREN_CEILING),
+  Schema.check(Schema.makeFilter((children) => children < 1 || children > MAX_CHILDREN_CEILING)),
 )
 
-const FractionalCap = Schema.Number.pipe(
-  Schema.between(1, MAX_CHILDREN_CEILING),
-  Schema.filter((children) => !Number.isInteger(children)),
+const FractionalCap = Schema.Finite.pipe(
+  Schema.check(Schema.isBetween({ minimum: 1, maximum: MAX_CHILDREN_CEILING })),
+  Schema.check(Schema.makeFilter((children) => !Number.isInteger(children))),
+)
+
+// An over- or under-cap integer shares the integer/bound node, so it cannot
+// discriminate under v4's per-node weakening; it is still a refusal contract.
+it.prop(
+  '∀c_CapOutsideSpan_⊥',
+  [Schema.toArbitrary(CapOutsideSpan)(fc)],
+  ([children]) => Exit.isFailure(Schema.decodeExit(MaxChildren)(children)),
 )
 
 refutes(MaxChildren, {
-  CapOutsideSpan: Arbitrary.make(CapOutsideSpan),
-  FractionalCap: Arbitrary.make(FractionalCap),
+  FractionalCap: Schema.toArbitrary(FractionalCap)(fc),
 })
 
 /**
@@ -33,32 +41,32 @@ refutes(MaxChildren, {
  * and the accepted set is a decision rather than declaration data, which is why no ignorer covers
  * it.
  */
-const decodesChildRestart = Schema.decodeUnknownEither(ChildPolicyConfig)
-const decodesLockMode = Schema.decodeUnknownEither(LockPolicyConfig)
-const decodesTickLogLevel = Schema.decodeUnknownEither(TickPolicyConfig)
+const decodesChildRestart = Schema.decodeUnknownExit(ChildPolicyConfig)
+const decodesLockMode = Schema.decodeUnknownExit(LockPolicyConfig)
+const decodesTickLogLevel = Schema.decodeUnknownExit(TickPolicyConfig)
 
 it.prop(
   '∀x_AcceptedChildRestart_→decodes',
   [fc.constantFrom('permanent', 'transient', 'temporary')],
-  ([restart]) => Either.isRight(decodesChildRestart({ restart })),
+  ([restart]) => Exit.isSuccess(decodesChildRestart({ restart })),
 )
 
 it.prop(
   '∀x_AcceptedLockMode_→decodes',
   [fc.constantFrom('none', 'required', 'optional')],
-  ([mode]) => Either.isRight(decodesLockMode({ mode })),
+  ([mode]) => Exit.isSuccess(decodesLockMode({ mode })),
 )
 
 it.prop(
   '∀x_AcceptedStartLogLevel_→decodes',
   [fc.constantFrom('debug', 'info')],
-  ([startLogLevel]) => Either.isRight(decodesTickLogLevel({ startLogLevel, tickTimeout: Duration.seconds(1) })),
+  ([startLogLevel]) => Exit.isSuccess(decodesTickLogLevel({ startLogLevel, tickTimeout: Duration.seconds(1) })),
 )
 
 it.prop(
   '∀x_UnlistedChildRestart_→rejects',
   [fc.string().filter((s) => !['permanent', 'transient', 'temporary'].includes(s))],
-  ([restart]) => Either.isLeft(decodesChildRestart({ restart })),
+  ([restart]) => Exit.isFailure(decodesChildRestart({ restart })),
 )
 
 /**
@@ -68,16 +76,16 @@ it.prop(
  * unknown key - so only a rejection observes the declaration. Measured: without these two, the
  * `{}` mutant on each fields object survives.
  */
-const decodesSupervisorPolicy = Schema.decodeUnknownEither(SupervisorPolicyConfig)
+const decodesSupervisorPolicy = Schema.decodeUnknownExit(SupervisorPolicyConfig)
 
 it.prop(
   '∀x_UnlistedLockMode_→rejects',
   [fc.string().filter((mode) => !['none', 'required', 'optional'].includes(mode))],
-  ([mode]) => Either.isLeft(decodesLockMode({ mode })),
+  ([mode]) => Exit.isFailure(decodesLockMode({ mode })),
 )
 
 it.prop(
   '∀x_NonDurationCooldown_→rejects',
   [fc.oneof(fc.string(), fc.integer(), fc.boolean())],
-  ([cooldown]) => Either.isLeft(decodesSupervisorPolicy({ cooldown })),
+  ([cooldown]) => Exit.isFailure(decodesSupervisorPolicy({ cooldown })),
 )

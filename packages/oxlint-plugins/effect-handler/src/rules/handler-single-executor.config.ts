@@ -22,7 +22,7 @@ export const meta = {
   type: 'problem',
   docs: {
     description:
-      'A .handler.ts must import exactly one sibling *.executor and delegate to it through exactly one Effect.either call. The transport terminus owns no I/O and no orchestration.',
+      'A .handler.ts must import exactly one sibling *.executor and delegate to it through exactly one delegation call — Effect.either(Executor(cmd)) (v3) or Effect.result(Executor(cmd)) (v4). The transport terminus owns no I/O and no orchestration.',
   },
   schema: [Options],
   messages: {

@@ -1,6 +1,6 @@
 import { Workflow } from '@systemfsoftware/effect-cell-types'
-import * as Either from 'effect/Either'
 import * as Match from 'effect/Match'
+import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 import { restartIndicesFor } from './restart-decision.kernel.js'
 import type { DecideInput } from './restart-decision.schema.js'
@@ -27,13 +27,13 @@ export type RestartDecisionWorkflow = Workflow.Workflow<
 >
 
 export const decideRestart = Workflow.make(
-  (command: DecideInput): Either.Either<RestartDecisionContinue | RestartDecisionRestart, RestartDecisionExhausted> =>
+  (command: DecideInput): Result.Result<RestartDecisionContinue | RestartDecisionRestart, RestartDecisionExhausted> =>
     Match.value(command).pipe(
-      Match.when({ exitSuccess: true }, () => Either.right(new RestartDecisionContinue())),
-      Match.when({ exitSuccess: false, intensityExceeded: true }, () => Either.left(new RestartDecisionExhausted())),
+      Match.when({ exitSuccess: true }, () => Result.succeed(RestartDecisionContinue.make())),
+      Match.when({ exitSuccess: false, intensityExceeded: true }, () => Result.fail(RestartDecisionExhausted.make())),
       Match.orElse(() =>
-        Either.right(
-          new RestartDecisionRestart({
+        Result.succeed(
+          RestartDecisionRestart.make({
             indices: restartIndicesFor(command.strategy, command.failedIndex, command.totalChildren),
           }),
         )

@@ -8,7 +8,7 @@
  * exactly as a downstream consumer would import them.
  */
 import { it, layer, makeFeature } from '@systemfsoftware/effect-gherkin-spec'
-import { Effect, Either } from 'effect'
+import { Effect, Result } from 'effect'
 import { expect } from 'vitest'
 import { expandOutline, Gherkin, Given, renderTitle, stringifyForTitle, Then, tokenizeTemplate } from '../src/mod.js'
 
@@ -18,7 +18,7 @@ Feature('Scenario outline — template expansion').body(({ scenario, scenarioOut
   scenario(
     'Should expand rows when rows have matching keys',
     Effect.sync(() => {
-      const rows = Either.getOrThrow(
+      const rows = Result.getOrThrow(
         expandOutline('Valid login for <user>', [{ user: 'alice' }, { user: 'bob' }]),
       )
       expect(rows).toHaveLength(2)
@@ -30,7 +30,7 @@ Feature('Scenario outline — template expansion').body(({ scenario, scenarioOut
   scenario(
     'Should handle multiple tokens when template has several',
     Effect.sync(() => {
-      const rows = Either.getOrThrow(
+      const rows = Result.getOrThrow(
         expandOutline('<user> buys <item> for <price>', [
           { user: 'alice', item: 'book', price: '$10' },
         ]),
@@ -46,14 +46,14 @@ Feature('Scenario outline — template expansion').body(({ scenario, scenarioOut
   scenario(
     'Should return empty when rows empty',
     Effect.sync(() => {
-      expect(expandOutline('some name', [])).toEqual(Either.right([]))
+      expect(expandOutline('some name', [])).toEqual(Result.succeed([]))
     }),
   )
 
   scenario(
     'Should use template name when no tokens present',
     Effect.sync(() => {
-      const rows = Either.getOrThrow(
+      const rows = Result.getOrThrow(
         expandOutline('Static scenario name', [{ user: 'alice' }]),
       )
       expect(rows[0]?.title).toBe('Static scenario name')
@@ -65,7 +65,24 @@ Feature('Scenario outline — template expansion').body(({ scenario, scenarioOut
     Effect.sync(() => {
       const result = expandOutline('<a> and <b>', [{ a: 'only-a' }])
       expect(result).toEqual(
-        Either.left('scenarioOutline: template tag <b> has no matching row key (available: a)'),
+        Result.fail(
+          'scenarioOutline: template tag <b> has no matching row key on row 0 (available: a)',
+        ),
+      )
+    }),
+  )
+
+  scenario(
+    'Should report missing key when a later row omits a template tag',
+    Effect.sync(() => {
+      const result = expandOutline('<user> does <thing>', [
+        { user: 'a', thing: 'x' },
+        { user: 'b' },
+      ])
+      expect(result).toEqual(
+        Result.fail(
+          'scenarioOutline: template tag <thing> has no matching row key on row 1 (available: user)',
+        ),
       )
     }),
   )
@@ -74,7 +91,7 @@ Feature('Scenario outline — template expansion').body(({ scenario, scenarioOut
     'Should preserve row as typed when rows have typed shape',
     Effect.sync(() => {
       type Row = { role: 'admin' | 'user'; count: number }
-      const rows = Either.getOrThrow(
+      const rows = Result.getOrThrow(
         expandOutline<Row>('role=<role> count=<count>', [
           { role: 'admin', count: 3 },
           { role: 'user', count: 1 },
@@ -134,6 +151,15 @@ Feature('Scenario outline — template expansion').body(({ scenario, scenarioOut
     'Should return undefined literal when value is undefined',
     Effect.sync(() => {
       expect(stringifyForTitle(void 0)).toBe('undefined')
+    }),
+  )
+
+  scenario(
+    'Should fall back to String when JSON.stringify returns undefined',
+    Effect.sync(() => {
+      const rendered = stringifyForTitle(() => 'fn')
+      expect(typeof rendered).toBe('string')
+      expect(rendered).not.toBe('undefined')
     }),
   )
 

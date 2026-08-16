@@ -1,4 +1,4 @@
-import { Schema as S } from 'effect'
+import { Effect, Schema as S } from 'effect'
 
 export const TAG_NAME = '_tag' as const
 
@@ -28,7 +28,9 @@ export const FIX_DERIVATION =
   'declare the schema (e.g. S.TaggedStruct union) and derive the type with S.Schema.Type<typeof <Name>>' as const
 
 export const Options = S.Struct({
-  allow: S.optionalWith(S.Array(S.String), { default: () => [] }),
+  allow: S.Array(S.String).pipe(
+    S.withDecodingDefaultType(Effect.succeed([])),
+  ),
 })
 
 export type OptionsType = S.Schema.Type<typeof Options>

@@ -7,7 +7,7 @@
  * step body or options object was supplied where it should not have been.
  */
 import { it, layer, makeFeature } from '@systemfsoftware/effect-gherkin-spec'
-import { Effect, Either, Layer } from 'effect'
+import { Effect, Layer, Result } from 'effect'
 import { expect } from 'vitest'
 import { resolveScenarioArgs, StepError } from '../src/mod.js'
 
@@ -18,10 +18,10 @@ Feature('Scenario registration — argument resolution').body(({ scenario }) => 
     'Should return failing pipeline when second arg undefined',
     Effect.gen(function*() {
       const { pipeline } = resolveScenarioArgs<never>(void 0, void 0)
-      const result = yield* Effect.either(pipeline)
+      const result = yield* Effect.result(pipeline)
       expect(result).toEqual(
-        Either.left(
-          new StepError({ keyword: 'scenario', text: 'pipeline or options required', cause: void 0 }),
+        Result.fail(
+          StepError.make({ keyword: 'scenario', text: 'pipeline or options required', cause: void 0 }),
         ),
       )
     }),
@@ -31,10 +31,10 @@ Feature('Scenario registration — argument resolution').body(({ scenario }) => 
     'Should return failing pipeline when opts provided but no pipeline',
     Effect.gen(function*() {
       const { pipeline } = resolveScenarioArgs<never>({ layer: Layer.empty }, void 0)
-      const result = yield* Effect.either(pipeline)
+      const result = yield* Effect.result(pipeline)
       expect(result).toEqual(
-        Either.left(
-          new StepError({
+        Result.fail(
+          StepError.make({
             keyword: 'scenario',
             text: 'pipeline is required when options are provided',
             cause: void 0,

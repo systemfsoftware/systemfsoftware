@@ -11,18 +11,18 @@ export type GherkinScope<A extends object> = A & {
 
 export type StepText<A extends object = object> = string | ((scope: A) => string)
 
-const resolveText = (text: StepText, scope: object): string => {
+export const resolveText = (text: StepText, scope: object): string => {
   if (typeof text === 'function') return text(scope)
   return text
 }
 
-const stepWrap = <A, E, R>(
+export const stepWrap = <A, E, R>(
   keyword: string,
   text: string,
   body: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, StepError, R> =>
   body.pipe(
-    Effect.catchAllCause((cause) => Effect.fail(new StepError({ keyword, text, cause: Cause.squash(cause) }))),
+    Effect.catchCause((cause) => Effect.fail(StepError.make({ keyword, text, cause: Cause.squash(cause) }))),
   )
 
 export type GherkinEffect<A extends object, E, R> = Effect.Effect<GherkinScope<A>, E, R>
@@ -38,7 +38,7 @@ const tapStep = (keyword: string, text: StepText) =>
     try {
       raw = f(scope)
     } catch (e) {
-      return Effect.fail(new StepError({ keyword, text: resolvedText, cause: e }))
+      return Effect.fail(StepError.make({ keyword, text: resolvedText, cause: e }))
     }
     if (Effect.isEffect(raw)) {
       return stepWrap(keyword, resolvedText, raw).pipe(Effect.as(scope))

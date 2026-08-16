@@ -2,21 +2,21 @@ import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { resolve as resolvePath } from 'node:path'
 
-import * as ValidationError from '@effect/cli/ValidationError'
 import { noopLogger } from '@stryker-mutator/util'
 import { Cell } from '@systemfsoftware/effect-cell-types'
 import type { Mutant, PartialStrykerOptions, StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
 import { schema } from '@systemfsoftware/stryker-js-plugin-api/core'
 import * as Cause from 'effect/Cause'
 import * as Effect from 'effect/Effect'
-import * as Either from 'effect/Either'
 import * as Exit from 'effect/Exit'
 import * as Fiber from 'effect/Fiber'
 import { pipe } from 'effect/Function'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Ref from 'effect/Ref'
+import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
+import * as CliError from 'effect/unstable/cli/CliError'
 
 import { Stryker, type StrykerHostOptions } from '@systemfsoftware/stryker-js-mutation-run'
 import {
@@ -96,10 +96,10 @@ export type CreateRunEventStreamCapability = RunEventStreamPort['createRunEventS
  * decode path. The union is spelled as two lone member aliases because an
  * inline tagged union would itself be flagged by `no-manual-tag-member`.
  */
-export const CliRequest = S.Union(
+export const CliRequest = S.Union([
   S.TaggedStruct('run', { options: S.Any, survivors: S.Boolean }),
   S.TaggedStruct('llms', { document: S.Any }),
-)
+])
 type RunRequest = { readonly _tag: 'run'; readonly options: PartialStrykerOptions; readonly survivors: boolean }
 type LlmsRequest = { readonly _tag: 'llms'; readonly document: ManifestRendered }
 export type CliRequest = RunRequest | LlmsRequest
@@ -111,7 +111,7 @@ export type CliRequest = RunRequest | LlmsRequest
  * the edge, and the injectable run.
  */
 export interface RunStrykerCliInput {
-  readonly program: Effect.Effect<void, ValidationError.ValidationError, never>
+  readonly program: Effect.Effect<void, CliError.CliError, never>
   readonly requestRef: Ref.Ref<Option.Option<CliRequest>>
   readonly mode: ResolvedMode
   readonly runMutationTest: StrykerRun | undefined
@@ -209,7 +209,7 @@ interface AdmissionPhases extends Cell.Phases {
   readonly decoded: AdmissionDecoded
   readonly decision: AdmissionOutcome
   readonly decisionError: SurvivorsRejection
-  readonly output: Either.Either<AdmissionOutcome, SurvivorsRejection>
+  readonly output: Result.Result<AdmissionOutcome, SurvivorsRejection>
   readonly response: unknown
   readonly decodeError: never
   readonly readError: never
@@ -248,7 +248,7 @@ const survivorsAdmissionDescription = (
       )
     ),
     Cell.decode<AdmissionPhases>(({ resolvedOptions, priorReport, priorReportPath, sourceContentHashes }) =>
-      Either.right({
+      Result.succeed({
         input: {
           priorReport,
           currentConfig: resolvedOptions,
@@ -262,13 +262,13 @@ const survivorsAdmissionDescription = (
       })
     ),
     Cell.decide<AdmissionPhases>(({ input, resolvedOptions, priorReportPath }) =>
-      Either.map(admitSurvivorsRun(input), (decision) => ({ decision, resolvedOptions, priorReportPath }))
+      Result.map(admitSurvivorsRun(input), (decision) => ({ decision, resolvedOptions, priorReportPath }))
     ),
     Cell.encode<AdmissionPhases>((outcome) => outcome),
     Cell.write<AdmissionPhases>((outcome) =>
-      Either.match(outcome, {
-        onLeft: (rejection) => Effect.fail(rejection),
-        onRight: ({ decision, resolvedOptions, priorReportPath }) =>
+      Result.match(outcome, {
+        onFailure: (rejection) => Effect.fail(rejection),
+        onSuccess: ({ decision, resolvedOptions, priorReportPath }) =>
           Match.value(decision).pipe(
             Match.tag('NoSurvivors', () => Effect.sync(() => emitEmptySurvivorsVerdict(stream, mode, resolvedOptions))),
             Match.tag('Admitted', (admitted) => {
@@ -457,7 +457,7 @@ function remediationFor(exit: Exit.Exit<unknown, unknown>, code: number): string
   }
   const value = failureValue(exit)
   if (value !== undefined) {
-    if (ValidationError.isValidationError(value)) {
+    if (CliError.isCliError(value)) {
       return 're-run with --help to see the full usage'
     }
     if (value instanceof ConfigError) {
@@ -501,19 +501,20 @@ function describeFailure(exit: Exit.Exit<unknown, unknown>): string {
 /**
  * The first typed error in the exit's cause. The framework fails with
  * `Cause.fail` (usage errors); the run handler is `Effect.promise`, whose
- * rejected promises surface as *defects* (`Cause.die`) rather than failures —
- * so stryker's own ConfigError/StrykerError values arrive there and must be
- * read from `Cause.defects`.
+ * rejected promises surface as *defects* (`Die` reasons) rather than
+ * failures — so stryker's own ConfigError/StrykerError values arrive there
+ * and must be read from the cause's `Die` reasons.
  */
 function failureValue(exit: Exit.Exit<unknown, unknown>): unknown {
   if (!Exit.isFailure(exit)) {
     return undefined
   }
-  const failure = Cause.failureOption(exit.cause)
+  const failure = Cause.findErrorOption(exit.cause)
   if (Option.isSome(failure)) {
     return failure.value
   }
-  return Array.from(Cause.defects(exit.cause))[0]
+  const dieReason = exit.cause.reasons.find(Cause.isDieReason)
+  return dieReason === undefined ? undefined : dieReason.defect
 }
 
 function buildErrorEnvelope(
@@ -577,8 +578,15 @@ function emitMachineModeOutput(
  * it, so both channels are searched and each candidate is unwrapped.
  */
 function carriesConfigError(cause: Cause.Cause<unknown>): boolean {
-  for (const candidate of [...Cause.failures(cause), ...Cause.defects(cause)]) {
-    if (candidate instanceof ConfigError || retrieveCause(candidate) instanceof ConfigError) {
+  for (const reason of cause.reasons) {
+    const candidate = Cause.isFailReason(reason)
+      ? reason.error
+      : Cause.isDieReason(reason)
+      ? reason.defect
+      : undefined
+    if (
+      candidate !== undefined && (candidate instanceof ConfigError || retrieveCause(candidate) instanceof ConfigError)
+    ) {
       return true
     }
   }
@@ -587,24 +595,32 @@ function carriesConfigError(cause: Cause.Cause<unknown>): boolean {
 
 /**
  * Classifies a failed run for the finalizer: usage/parse failures
- * (`ValidationError`), rejected survivors runs (`SurvivorsRejection`) and a
- * rejected config (`ConfigError`) all exit 2, all other failures exit 1 (the
- * framework's default). A successful run exits 0; the verdict gates (U5) then
- * resolve the final classed code.
+ * (`CliError` — except a bare help request, which exits 0), rejected
+ * survivors runs (`SurvivorsRejection`) and a rejected config (`ConfigError`)
+ * all exit 2, all other failures exit 1 (the framework's default). A
+ * successful run exits 0; the verdict gates (U5) then resolve the final
+ * classed code.
  */
 function resolveCliExitCode(exit: Exit.Exit<unknown, unknown>): number {
   if (Exit.isSuccess(exit)) {
     return 0
   }
-  if (Cause.isInterruptedOnly(exit.cause)) {
+  if (Cause.hasInterruptsOnly(exit.cause)) {
     return 1
   }
-  const failure = Cause.failureOption(exit.cause)
+  const failure = Cause.findErrorOption(exit.cause)
   if (Option.isSome(failure)) {
-    if (ValidationError.isValidationError(failure.value)) {
+    const value = failure.value
+    if (S.is(CliError.ShowHelp)(value)) {
+      // An explicit help request (bare `stryker`, `--help`) rendered the
+      // usage document into the capture buffer and exits 0; a parse failure
+      // the runner wrapped into ShowHelp exits 2.
+      return value.errors.length > 0 ? 2 : 0
+    }
+    if (CliError.isCliError(value)) {
       return 2
     }
-    if (S.is(SurvivorsRejection)(failure.value)) {
+    if (S.is(SurvivorsRejection)(value)) {
       return SURVIVORS_REJECT_EXIT_CLASS
     }
   }
@@ -638,7 +654,7 @@ export const runStrykerCli = (
     // The signal and last-signal cells both the signal handler and the
     // finalizer write and read across fiber boundaries. Function-local: the
     // stream and every cell die with the run.
-    let currentFiber: Fiber.RuntimeFiber<unknown, unknown> | null = null
+    let currentFiber: Fiber.Fiber<unknown, unknown> | null = null
     let lastSignal: number | null = null
 
     const resolveClassedExitCode = (exit: Exit.Exit<unknown, unknown>): number => {
@@ -660,7 +676,7 @@ export const runStrykerCli = (
       process.removeListener('SIGINT', onSignal)
       process.removeListener('SIGTERM', onSignal)
       if (currentFiber !== null) {
-        currentFiber.unsafeInterruptAsFork(currentFiber.id())
+        currentFiber.interruptUnsafe(currentFiber.id)
       }
     }
 
@@ -684,7 +700,7 @@ export const runStrykerCli = (
 
     const program = Effect.acquireUseRelease(
       Effect.sync(() => {
-        currentFiber = Option.getOrNull(Fiber.getCurrentFiber())
+        currentFiber = Fiber.getCurrent() ?? null
         process.on('SIGINT', onSignal)
         process.on('SIGTERM', onSignal)
       }),

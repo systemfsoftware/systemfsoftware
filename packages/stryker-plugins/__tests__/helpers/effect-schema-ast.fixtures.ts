@@ -1,4 +1,4 @@
-import { FastCheck as fc } from 'effect'
+import { FastCheck as fc } from 'effect/testing'
 import {
   type AstNode,
   type CallExpression,

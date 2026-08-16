@@ -34,7 +34,7 @@
  */
 
 import type { ExtensionAPI, ExtensionContext } from '@oh-my-pi/pi-coding-agent'
-import { Effect, Either } from 'effect'
+import { Effect, Result } from 'effect'
 import { dispatchDoctrinePure, runDispatchDoctrineCheck } from './dispatch-doctrine.executor.js'
 import type { RunSafe } from './run-safe.kernel.js'
 
@@ -151,10 +151,10 @@ export const DispatchDoctrineExtension = (pi: ExtensionAPI, runSafe: RunSafe): v
     const doctrineLoaded = sessionId === '' ? false : (flagStore.get(sessionId) ?? false)
 
     const check = await runSafe(
-      Effect.either(runDispatchDoctrineCheck(ctx.cwd, event.toolName, doctrineLoaded)),
+      Effect.result(runDispatchDoctrineCheck(ctx.cwd, event.toolName, doctrineLoaded)),
     )
-    if (Either.isLeft(check)) throw check.left
-    const { skills, gate } = check.right
+    if (Result.isFailure(check)) throw check.failure
+    const { skills, gate } = check.success
     skillsCache.set(ctx.cwd, skills)
 
     const size = batchSize(tasksArrayOf(input))

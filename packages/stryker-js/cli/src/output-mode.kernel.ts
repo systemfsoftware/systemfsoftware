@@ -1,6 +1,5 @@
-import * as HelpDoc from '@effect/cli/HelpDoc'
-import * as ValidationError from '@effect/cli/ValidationError'
-import * as Either from 'effect/Either'
+import * as Result from 'effect/Result'
+import * as CliError from 'effect/unstable/cli/CliError'
 
 import type { ResolvedMode } from '@systemfsoftware/stryker-js-mutation-run/output-mode'
 
@@ -29,33 +28,34 @@ export interface ModeInput extends FormatFlags {
 /**
  * Resolves the output mode by R4 precedence. Pure — reads nothing, so it is
  * fully testable; the caller supplies every input once at startup. The
- * mutually-exclusive-flags case is a caller error, returned as `Left` so the
- * function stays total.
+ * mutually-exclusive-flags case is a caller error, returned as a `failure` so
+ * the function stays total.
  */
 export function resolveMode(
   input: ModeInput,
-): Either.Either<ResolvedMode, ValidationError.ValidationError> {
+): Result.Result<ResolvedMode, CliError.CliError> {
   // The two flags contradict each other and are a caller error, never a
   // silent winner.
   if (input.text === true && input.json === true) {
-    return Either.left(
-      ValidationError.invalidValue(
-        HelpDoc.p(
-          'The "--format text" and "--json" flags are mutually exclusive — use one or the other',
-        ),
-      ),
+    return Result.fail(
+      CliError.InvalidValue.make({
+        option: 'json',
+        value: 'text',
+        expected: 'the "--format text" and "--json" flags are mutually exclusive — use one or the other',
+        kind: 'flag',
+      }),
     )
   }
   if (input.text === true) {
-    return Either.right({ mode: 'human', signal: 'flag', stdoutIsTTY: input.stdoutIsTTY })
+    return Result.succeed({ mode: 'human', signal: 'flag', stdoutIsTTY: input.stdoutIsTTY })
   }
   if (input.json === true) {
-    return Either.right({ mode: 'machine', signal: 'flag', stdoutIsTTY: input.stdoutIsTTY })
+    return Result.succeed({ mode: 'machine', signal: 'flag', stdoutIsTTY: input.stdoutIsTTY })
   }
   // Set-but-empty falls through to detection, the same way an empty AGENT
   // does; only the literal 'machine' activates machine mode.
   if (input.envMode !== undefined && input.envMode.length > 0) {
-    return Either.right({
+    return Result.succeed({
       mode: input.envMode === 'machine' ? 'machine' : 'human',
       signal: 'env',
       stdoutIsTTY: input.stdoutIsTTY,
@@ -63,19 +63,19 @@ export function resolveMode(
   }
   // Stdout is the primary signal — it is what the output is written to.
   if (!input.stdoutIsTTY) {
-    return Either.right({ mode: 'machine', signal: 'tty', stdoutIsTTY: false })
+    return Result.succeed({ mode: 'machine', signal: 'tty', stdoutIsTTY: false })
   }
   // AGENT is additive: any non-empty value means machine mode.
   if (input.agent !== undefined && input.agent.length > 0) {
-    return Either.right({ mode: 'machine', signal: 'agent', stdoutIsTTY: true })
+    return Result.succeed({ mode: 'machine', signal: 'agent', stdoutIsTTY: true })
   }
   for (const variable of TOOL_VARIABLES) {
     const value = input.toolVars?.[variable]
     if (value !== undefined && value.length > 0) {
-      return Either.right({ mode: 'machine', signal: 'tool', stdoutIsTTY: true })
+      return Result.succeed({ mode: 'machine', signal: 'tool', stdoutIsTTY: true })
     }
   }
-  return Either.right({ mode: 'human', signal: 'tty', stdoutIsTTY: true })
+  return Result.succeed({ mode: 'human', signal: 'tty', stdoutIsTTY: true })
 }
 
 /**

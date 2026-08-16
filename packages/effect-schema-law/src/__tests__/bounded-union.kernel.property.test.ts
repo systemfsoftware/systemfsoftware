@@ -1,5 +1,6 @@
 import { it } from '@effect/vitest'
-import { Arbitrary, FastCheck as fc, Schema as S } from 'effect'
+import { Schema as S } from 'effect'
+import { FastCheck as fc } from 'effect/testing'
 import { boundedUnion } from '../bounded-union.kernel.js'
 
 /**
@@ -12,10 +13,10 @@ import { boundedUnion } from '../bounded-union.kernel.js'
 /**
  * The recursive members keep explicit type anchors: deriving a recursive type
  * from its schema const (`type Binary = S.Schema.Type<typeof Binary>` with the
- * const annotated `: S.Schema<Binary>`) is circular (TS2502/TS2456), and
- * leaving the const unannotated cannot be inferred (TS7022). The leaf members
- * derive from their consts; the recursive anchors are structurally identical
- * to the interfaces they replaced.
+ * const annotated `: S.Codec<Binary>` and the type named `Binary`) is circular
+ * (TS2502/TS2456), and leaving the const unannotated cannot be inferred
+ * (TS7022). The leaf members derive from their consts; the recursive anchors
+ * are structurally identical to the interfaces they replaced.
  */
 type Binary = { readonly _tag: 'Binary'; readonly op: string; readonly left: Expr; readonly right: Expr }
 type Member = { readonly _tag: 'Member'; readonly object: Expr; readonly property: Expr }
@@ -29,26 +30,26 @@ type Call = { readonly _tag: 'Call'; readonly callee: Expr; readonly args: reado
 
 type Expr = Lit | Id | Binary | Member | Conditional | Call
 
-const Lit = S.TaggedStruct('Lit', { value: S.JsonNumber })
+const Lit = S.TaggedStruct('Lit', { value: S.Finite })
 const Id = S.TaggedStruct('Id', { name: S.String })
 
-const Binary: S.Schema<Binary> = S.suspend((): S.Schema<Binary> =>
+const Binary: S.Codec<Binary> = S.suspend((): S.Codec<Binary> =>
   S.TaggedStruct('Binary', { op: S.String, left: Expr, right: Expr })
 )
-const Member: S.Schema<Member> = S.suspend((): S.Schema<Member> =>
+const Member: S.Codec<Member> = S.suspend((): S.Codec<Member> =>
   S.TaggedStruct('Member', { object: Expr, property: Expr })
 )
-const Conditional: S.Schema<Conditional> = S.suspend((): S.Schema<Conditional> =>
+const Conditional: S.Codec<Conditional> = S.suspend((): S.Codec<Conditional> =>
   S.TaggedStruct('Conditional', { test: Expr, consequent: Expr, alternate: Expr })
 )
-const Call: S.Schema<Call> = S.suspend((): S.Schema<Call> =>
+const Call: S.Codec<Call> = S.suspend((): S.Codec<Call> =>
   S.TaggedStruct('Call', { callee: Expr, args: S.Array(Expr) })
 )
 
 const BASE = [Lit, Id] as const
 const RECUR = [Binary, Member, Conditional, Call] as const
 
-const Expr: S.Schema<Expr> = boundedUnion('Expr', { base: BASE, recur: RECUR })
+const Expr: S.Codec<Expr> = boundedUnion('Expr', { base: BASE, recur: RECUR })
 
 type Lit = S.Schema.Type<typeof Lit>
 type Id = S.Schema.Type<typeof Id>
@@ -92,7 +93,7 @@ const VARIANT_COUNT = BASE.length + RECUR.length
 const EVEN_BRANCH_SHARE = 1 / (1 + RECUR.length)
 const SHARE_TOLERANCE = 0.15
 
-const sampleAt = (seed: number): readonly Expr[] => fc.sample(Arbitrary.make(Expr), { numRuns: SAMPLE_SIZE, seed })
+const sampleAt = (seed: number): readonly Expr[] => fc.sample(S.toArbitrary(Expr)(fc), { numRuns: SAMPLE_SIZE, seed })
 
 const nestingDepth = (expr: Expr): number => {
   switch (expr._tag) {
@@ -151,7 +152,7 @@ const widestBranchDriftOf = (samples: readonly Expr[]): number => {
  * Quantified over `Expr` itself, so fast-check's own bias and shrinking hunt
  * the deep cases rather than a seed deciding whether one appears.
  */
-it.prop('∀e_ExprNesting_≤DepthCap', [Expr], ([expr]) => nestingDepth(expr) <= DEPTH_CAP)
+it.prop('∀e_ExprNesting_≤DepthCap', [S.toArbitrary(Expr)(fc)], ([expr]) => nestingDepth(expr) <= DEPTH_CAP)
 
 /**
  * The cap must bind rather than the generator simply never recursing: a kernel
@@ -185,10 +186,10 @@ it.prop(
  * breaks: starving recursion, or over-weighting the base pair, leaves every
  * tag reachable and the depth cap intact, so the three properties above stay
  * green while generation quietly collapses toward leaves — and every consumer
- * that draws through `ruleOfSchemas` starts exercising shallow values only.
- * The deleted snapshot caught this with a recorded frequency histogram, which
- * could only do it by pinning the RNG stream; a drift bound catches the same
- * regression without naming a seed.
+ * that draws your schema through `ruleOfSchemas` starts exercising shallow
+ * values only. The deleted snapshot caught this with a recorded frequency
+ * histogram, which could only do it by pinning the RNG stream; a drift bound
+ * catches the same regression without naming a seed.
  */
 it.prop(
   '∀s_ExprBranches_≤ShareTolerance',

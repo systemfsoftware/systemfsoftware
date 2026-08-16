@@ -1,5 +1,5 @@
 import { it } from '@effect/vitest'
-import { FastCheck as fc } from 'effect'
+import { FastCheck as fc } from 'effect/testing'
 import { describe, expect } from 'vitest'
 
 import {

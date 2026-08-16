@@ -2,13 +2,13 @@ import { Context, Duration } from 'effect'
 import { UnboundedIntensity } from '../daemon-policy.schema.js'
 import type { SupervisionConfig } from '../daemon-spec.schema.js'
 
-export class TaskConfig extends Context.Reference<TaskConfig>()(
+export const TaskConfig = Context.Reference<SupervisionConfig>(
   '@systemfsoftware/effect-daemon-spec/TaskConfig',
   {
     defaultValue: (): SupervisionConfig => ({
       backoffBase: Duration.seconds(1),
-      intensity: new UnboundedIntensity(),
+      intensity: UnboundedIntensity.make(),
       cooldown: Duration.zero,
     }),
   },
-) {}
+)

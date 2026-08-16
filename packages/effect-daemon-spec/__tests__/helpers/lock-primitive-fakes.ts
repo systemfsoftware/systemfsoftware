@@ -56,6 +56,6 @@ export const mkBlockingStatefulLockPrimitive: Layer.Layer<LockPrimitive> = Layer
 export const mkFailingLockPrimitive: Layer.Layer<LockPrimitive> = Layer.succeed(
   LockPrimitive,
   LockPrimitive.of({
-    tryAcquire: (key) => Effect.fail(new LockPrimitiveError({ key, cause: 'infrastructure unavailable' })),
+    tryAcquire: (key) => Effect.fail(LockPrimitiveError.make({ key, cause: 'infrastructure unavailable' })),
   }),
 )

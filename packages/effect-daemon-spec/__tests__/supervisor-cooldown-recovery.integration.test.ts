@@ -1,6 +1,7 @@
 import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Duration, Effect, Layer, Ref, Schedule, Schema as S, TestClock } from 'effect'
+import { Duration, Effect, Layer, Ref, Schedule, Schema as S } from 'effect'
+import { TestClock } from 'effect/testing'
 import { expect } from 'vitest'
 import { BoundedIntensity } from '../src/mod.js'
 import { run } from '../src/mod.js'
@@ -35,7 +36,7 @@ Feature('Supervisor cooldown recovery')
                 work: Effect.gen(function*() {
                   const n = yield* Ref.modify(s.state.tick, (x) => [x, x + 1])
                   if (n === 0) {
-                    return yield* new SimulatedFailure()
+                    return yield* SimulatedFailure.make()
                   }
                   yield* Ref.update(s.state.runsAfterCooldown, (c) => c + 1)
                   return void 0
@@ -48,9 +49,9 @@ Feature('Supervisor cooldown recovery')
                 name: 'cooldown-recover',
                 children: [child],
                 supervision: Supervision.custom({
-                  intensity: new BoundedIntensity({ restarts: 0, window: Duration.seconds(60) }),
+                  intensity: BoundedIntensity.make({ restarts: 0, window: Duration.seconds(60) }),
                   backoff: Schedule.exponential(Duration.millis(5)).pipe(
-                    Schedule.upTo(Duration.millis(30)),
+                    Schedule.upTo({ duration: Duration.millis(30) }),
                   ),
                   cooldown: Duration.seconds(2),
                 }),
@@ -125,7 +126,7 @@ Feature('Supervisor cooldown recovery')
                 work: Effect.gen(function*() {
                   const n = yield* Ref.modify(s.state.tick, (x) => [x, x + 1])
                   if (n === 0) {
-                    return yield* new SimulatedFailure()
+                    return yield* SimulatedFailure.make()
                   }
                   yield* Ref.update(s.state.runsAfterCooldown, (c) => c + 1)
                   return void 0
@@ -145,9 +146,9 @@ Feature('Supervisor cooldown recovery')
                 name: 'cooldown-recover-oneForAll',
                 children: [childA, childB],
                 supervision: Supervision.custom({
-                  intensity: new BoundedIntensity({ restarts: 0, window: Duration.seconds(60) }),
+                  intensity: BoundedIntensity.make({ restarts: 0, window: Duration.seconds(60) }),
                   backoff: Schedule.exponential(Duration.millis(5)).pipe(
-                    Schedule.upTo(Duration.millis(30)),
+                    Schedule.upTo({ duration: Duration.millis(30) }),
                   ),
                   cooldown: Duration.seconds(2),
                 }),

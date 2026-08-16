@@ -24,10 +24,9 @@ export interface ContainerService {
   readonly sh: (script: string, options?: ExecOptions) => Effect.Effect<CliResult>
 }
 
-export class Container extends Context.Tag('@systemfsoftware/arethetypeswrong-cli/container')<
-  Container,
-  ContainerService
->() {}
+export class Container extends Context.Service<Container, ContainerService>()(
+  '@systemfsoftware/arethetypeswrong-cli/container',
+) {}
 
 export const ContainerLive: Layer.Layer<Container> = Layer.effect(
   Container,

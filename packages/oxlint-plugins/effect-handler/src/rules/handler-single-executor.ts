@@ -28,12 +28,17 @@ const isExecutorImport = (node: ESTree.ImportDeclaration): boolean => {
   return EXECUTOR_IMPORT_REGEX.test(lastSegmentOf(node.source.value))
 }
 
-const isEffectEitherCall = (node: ESTree.CallExpression): boolean => {
+/**
+ * The single delegation slot: `Effect.either(Executor(cmd))` (v3) or the v4
+ * rename `Effect.result(Executor(cmd))`. Both spellings count against the SAME
+ * slot — a handler must have exactly one across the two.
+ */
+const isEffectDelegationCall = (node: ESTree.CallExpression): boolean => {
   const callee = node.callee
   if (callee.type !== 'MemberExpression') return false
   if (callee.object.type !== 'Identifier' || callee.object.name !== 'Effect') return false
-  if (callee.property.type !== 'Identifier' || callee.property.name !== 'either') return false
-  return true
+  if (callee.property.type !== 'Identifier') return false
+  return callee.property.name === 'either' || callee.property.name === 'result'
 }
 
 export const handlerSingleExecutor = defineRule({
@@ -43,7 +48,7 @@ export const handlerSingleExecutor = defineRule({
 
     const baseName = getHandlerBaseName(context.filename)
     let executorImportCount = 0
-    let eitherCallCount = 0
+    let delegationCallCount = 0
 
     return {
       ImportDeclaration(node: ESTree.ImportDeclaration) {
@@ -51,7 +56,7 @@ export const handlerSingleExecutor = defineRule({
       },
 
       CallExpression(node: ESTree.CallExpression) {
-        if (isEffectEitherCall(node)) eitherCallCount += 1
+        if (isEffectDelegationCall(node)) delegationCallCount += 1
       },
 
       'Program:exit'(node: ESTree.Program) {
@@ -63,10 +68,11 @@ export const handlerSingleExecutor = defineRule({
             messageId: 'noExecutorImport',
             data: {
               name: baseName,
-              expected: 'exactly one import of a sibling *.executor and one Effect.either(Executor(cmd)) delegation',
+              expected:
+                'exactly one import of a sibling *.executor and one delegation call — Effect.either(Executor(cmd)) (v3) or Effect.result(Executor(cmd)) (v4)',
               actual: 'no import of a sibling *.executor.ts',
               fix:
-                'construct the executor command and call yield* Effect.either(Executor(cmd)) — the executor owns the I/O sandwich',
+                'construct the executor command and call yield* Effect.either(Executor(cmd)) (v3) or yield* Effect.result(Executor(cmd)) (v4) — the executor owns the I/O sandwich',
             },
           })
         } else if (executorImportCount > 1) {
@@ -82,27 +88,30 @@ export const handlerSingleExecutor = defineRule({
           })
         }
 
-        if (eitherCallCount === 0) {
+        if (delegationCallCount === 0) {
           context.report({
             node: reportNode,
             messageId: 'noEitherDelegation',
             data: {
               name: baseName,
-              expected: 'exactly one Effect.either(Executor(cmd)) call',
-              actual: 'no Effect.either call around the executor call',
-              fix: 'wrap the single executor call in Effect.either and map the Left to a response',
+              expected:
+                'exactly one delegation call — Effect.either(Executor(cmd)) (v3) or Effect.result(Executor(cmd)) (v4)',
+              actual: 'no delegation call — neither Effect.either nor Effect.result around the executor call',
+              fix:
+                'wrap the single executor call in Effect.either (v3) / Effect.result (v4) and map the Left/failure side to a response',
             },
           })
-        } else if (eitherCallCount > 1) {
+        } else if (delegationCallCount > 1) {
           context.report({
             node: reportNode,
             messageId: 'multipleEitherDelegations',
             data: {
               name: baseName,
-              expected: 'exactly one Effect.either(Executor(cmd)) call',
-              actual: `${String(eitherCallCount)} Effect.either calls`,
+              expected:
+                'exactly one delegation call — Effect.either(Executor(cmd)) (v3) or Effect.result(Executor(cmd)) (v4)',
+              actual: `${String(delegationCallCount)} Effect.either / Effect.result calls`,
               fix:
-                'only the single executor call may be wrapped in Effect.either — move the other effects into the executor',
+                'only the single executor call may be wrapped in Effect.either / Effect.result — move the other effects into the executor',
             },
           })
         }
