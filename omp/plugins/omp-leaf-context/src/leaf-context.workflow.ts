@@ -1,19 +1,20 @@
 /**
  * Workflow cell — the pure decision for leaf AGENTS.md delivery.
  *
- * Data in, `Either` out, no I/O. Ported from the deleted
+ * Data in, decision out, no I/O. Ported from the deleted
  * `.claude/hooks/deliver-leaf-agents-md.ts` governing-leaf walk, split along
- * the I/O boundary: the executor probes the filesystem and hands the ordered
- * list of existing candidate leaves here; `governingLeaf` picks the first
- * (deepest) one, and `decide` applies the dedupe (once per leaf per session)
- * and the injection verdict.
+ * the I/O boundary: the executor probes the filesystem, `governingLeaf` picks
+ * the deepest existing candidate, and `decide` — the single source of the
+ * dedupe and self-injection predicates — returns `Select` (inject this leaf)
+ * or `Skip`. The executor reads the leaf's content only after a `Select`, so
+ * a repeat touch never re-reads the file it already delivered.
  *
  * The wrapper text is also pure: an inline block for leaves at or under the
- * size threshold, a pointer for outliers. The error channel is
- * `S.TaggedError`; decision variants are `S.TaggedClass` (Workflow Gates,
- * `omp/AGENTS.md`).
+ * size threshold (measured in UTF-8 bytes), a pointer for outliers. Decision
+ * variants are `S.TaggedClass` (Workflow Gates, `omp/AGENTS.md`); the error
+ * channel belongs to the executor, which materializes `Inject` content.
  */
-import { Result, Schema as S } from 'effect'
+import { Schema as S } from 'effect'
 import { dirname } from 'node:path/posix'
 
 export class LeafContextError extends S.TaggedError<LeafContextError>()('LeafContextError', {
@@ -27,6 +28,11 @@ export class Inject extends S.TaggedClass<Inject>()('Inject', {
 
 export class Skip extends S.TaggedClass<Skip>()('Skip', {}) {}
 
+/** Leaf selected for delivery by `decide`; content is materialized by the executor. */
+export class Select extends S.TaggedClass<Select>()('Select', {
+  leaf: S.String,
+}) {}
+
 /** Inline the leaf up to this many bytes; larger leaves become a pointer. */
 export const INLINE_THRESHOLD = 6144
 
@@ -34,17 +40,19 @@ export const INLINE_THRESHOLD = 6144
 export const governingLeaf = (existingLeaves: readonly string[]): string | null => existingLeaves[0] ?? null
 
 export interface DecideArgs {
-  readonly relTarget: string | null
+  /** The touched target, root-relative; the executor guarantees non-null here. */
+  readonly relTarget: string
+  /** Governing leaf (root-relative AGENTS.md path), or null when none exists. */
   readonly leaf: string | null
-  readonly content: string
+  /** Leaves already delivered in this session. */
   readonly injected: ReadonlySet<string>
 }
 
-export const decide = (args: DecideArgs): Result.Result<Inject | Skip, LeafContextError> => {
-  if (args.relTarget === null || args.leaf === null || args.injected.has(args.leaf)) {
-    return Result.succeed(new Skip())
+export const decide = (args: DecideArgs): Select | Skip => {
+  if (args.leaf === null || args.relTarget === args.leaf || args.injected.has(args.leaf)) {
+    return new Skip()
   }
-  return Result.succeed(new Inject({ leaf: args.leaf, content: args.content }))
+  return new Select({ leaf: args.leaf })
 }
 
 export const leafBlock = (leaf: string, content: string): string => {

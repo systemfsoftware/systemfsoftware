@@ -28,6 +28,12 @@ const TREE: Record<string, string> = {
   [`${PROJECT_ROOT}/packages/effect-memfs/src/index.ts`]: 'export const mem = 1\n',
   [`${PROJECT_ROOT}/packages/oxlint-plugins/AGENTS.md`]: BIG_LEAF,
   [`${PROJECT_ROOT}/packages/oxlint-plugins/core/src/index.ts`]: 'export const core = 1\n',
+  [`${PROJECT_ROOT}/packages/edge-inline/AGENTS.md`]: `${'i'.repeat(6143)}\n`,
+  [`${PROJECT_ROOT}/packages/edge-inline/src/index.ts`]: 'export const edge = 1\n',
+  [`${PROJECT_ROOT}/packages/edge-pointer/AGENTS.md`]: 'p'.repeat(6145),
+  [`${PROJECT_ROOT}/packages/edge-pointer/src/index.ts`]: 'export const edge = 1\n',
+  [`${PROJECT_ROOT}/packages/edge-multibyte/AGENTS.md`]: '—'.repeat(2100),
+  [`${PROJECT_ROOT}/packages/edge-multibyte/src/index.ts`]: 'export const edge = 1\n',
   [`${PROJECT_ROOT}/repos/oh-my-pi/AGENTS.md`]: REPOS_AGENTS,
   [`${PROJECT_ROOT}/repos/oh-my-pi/packages/coding-agent/src/discovery/agents-md.ts`]: 'export const discover = 1\n',
   [`${PROJECT_ROOT}/README.md`]: '# project\n',
@@ -77,7 +83,7 @@ const setupSessions = async (
 ): Promise<ReturnType<typeof buildSession>[]> => {
   vi.resetModules()
   const mod = await import('../src/leaf-context.handler.js')
-  const { runSafe } = await import('../src/run-safe.policy.js')
+  const { runSafe } = await import('../src/run-safe.js')
   const treeFs = memfsLeafFs(TREE)
   return sessionIds.map((id) => {
     const session = buildSession({ sessionId: id, cwd: PROJECT_ROOT })
@@ -133,6 +139,13 @@ Feature('Leaf AGENTS.md delivery — handler integration').body(({ scenario }) =
       ),
       And('the result content ends with the effect-atom leaf wrapper containing its verbatim text')((s) =>
         Effect.sync(() => {
+          const modified = s.verdict.result as
+            | { readonly content: readonly { type: 'text'; text: string }[] }
+            | undefined
+          if (modified === undefined || modified.content.length !== 2) {
+            throw new Error('expected original content preserved plus exactly one injected block')
+          }
+          expect(modified.content[0]).toEqual({ type: 'text', text: 'RESULT' })
           expect(lastText(s.verdict.result)).toBe(
             `\n\n<leaf-agents-md path="packages/effect-atom/AGENTS.md">\n${ATOM_LEAF}\n</leaf-agents-md>`,
           )
@@ -147,7 +160,10 @@ Feature('Leaf AGENTS.md delivery — handler integration').body(({ scenario }) =
       Given('a fresh session after the effect atom leaf was injected')('setup', () =>
         Effect.promise(async () => {
           const session = requireSession(await setupSessions([SESSION_A]), 0, 'session')
-          await fireReadPair(session, 'tc-1', `${PROJECT_ROOT}/packages/effect-atom/src/index.ts`)
+          const first = await fireReadPair(session, 'tc-1', `${PROJECT_ROOT}/packages/effect-atom/src/index.ts`)
+          if (lastText(first.result) === '') {
+            throw new Error('setup failed: the first touch did not inject the leaf')
+          }
           return { session }
         })),
       When('a second read under the same leaf fires')(
@@ -351,6 +367,109 @@ Feature('Leaf AGENTS.md delivery — handler integration').body(({ scenario }) =
         Effect.sync(() => {
           expect(s.verdict.result).toBeUndefined()
           expect(s.setup.session.recordedLogs.some((l) => l.message === 'leaf_context.handler_fault')).toBe(true)
+        })
+      ),
+    ),
+  )
+
+  scenario(
+    'Inlines a leaf at exactly the threshold and pointers one byte over',
+    Gherkin.Do.pipe(
+      Given('a fresh session over the memfs tree')('setup', () =>
+        Effect.promise(async () => ({
+          session: requireSession(await setupSessions([SESSION_A]), 0, 'session'),
+        }))),
+      When('reads fire under both boundary leaves')('verdict', (s) =>
+        Effect.promise(async () => ({
+          inline: await fireReadPair(s.setup.session, 'tc-1', `${PROJECT_ROOT}/packages/edge-inline/src/index.ts`, 'A'),
+          pointer: await fireReadPair(
+            s.setup.session,
+            'tc-2',
+            `${PROJECT_ROOT}/packages/edge-pointer/src/index.ts`,
+            'B',
+          ),
+        }))),
+      Then('the 6144-byte leaf inlines and the 6145-byte leaf pointers')((s) =>
+        Effect.sync(() => {
+          const inlineText = lastText(s.verdict.inline.result)
+          expect(inlineText).toContain(`\n\n<leaf-agents-md path="packages/edge-inline/AGENTS.md">\n`)
+          expect(inlineText).not.toContain('pointer="true"')
+          const pointerText = lastText(s.verdict.pointer.result)
+          expect(pointerText).toContain('<leaf-agents-md path="packages/edge-pointer/AGENTS.md" pointer="true">')
+        })
+      ),
+    ),
+  )
+
+  scenario(
+    'Measures the threshold in UTF-8 bytes, not UTF-16 code units',
+    Gherkin.Do.pipe(
+      Given('a fresh session over the memfs tree')('setup', () =>
+        Effect.promise(async () => ({
+          session: requireSession(await setupSessions([SESSION_A]), 0, 'session'),
+        }))),
+      When('a read under a leaf of 2100 em-dashes (6300 UTF-8 bytes, 2100 code units) fires')(
+        'verdict',
+        (s) =>
+          Effect.promise(() =>
+            fireReadPair(s.setup.session, 'tc-1', `${PROJECT_ROOT}/packages/edge-multibyte/src/index.ts`, 'MULTI')
+          ),
+      ),
+      Then('the leaf pointers despite its small code-unit count')((s) =>
+        Effect.sync(() => {
+          expect(lastText(s.verdict.result)).toContain(
+            '<leaf-agents-md path="packages/edge-multibyte/AGENTS.md" pointer="true">',
+          )
+        })
+      ),
+    ),
+  )
+
+  scenario(
+    'Does not inject when the read target is the governing leaf itself',
+    Gherkin.Do.pipe(
+      Given('a fresh session over the memfs tree')('setup', () =>
+        Effect.promise(async () => ({
+          session: requireSession(await setupSessions([SESSION_A]), 0, 'session'),
+        }))),
+      When('a read of packages/effect-atom/AGENTS.md fires')(
+        'verdict',
+        (s) =>
+          Effect.promise(() =>
+            fireReadPair(s.setup.session, 'tc-1', `${PROJECT_ROOT}/packages/effect-atom/AGENTS.md`, 'SELF')
+          ),
+      ),
+      Then('the result is unmodified (the leaf is already its own content)')((s) =>
+        Effect.sync(() => {
+          expect(s.verdict.result).toBeUndefined()
+        })
+      ),
+    ),
+  )
+
+  scenario(
+    'Rejects traversal targets with .. segments, absolute or relative',
+    Gherkin.Do.pipe(
+      Given('a fresh session over the memfs tree')('setup', () =>
+        Effect.promise(async () => ({
+          session: requireSession(await setupSessions([SESSION_A]), 0, 'session'),
+        }))),
+      When('reads with .. segments fire')('verdict', (s) =>
+        Effect.promise(async () => ({
+          absolute: await fireReadPair(
+            s.setup.session,
+            'tc-1',
+            `${PROJECT_ROOT}/../elsewhere/escape.ts`,
+            'ESCAPE-A',
+          ),
+          relative: await fireReadPair(s.setup.session, 'tc-2', '../elsewhere/escape.ts', 'ESCAPE-R'),
+        }))),
+      Then('neither result is modified')((s) =>
+        Effect.sync(() => {
+          expect(s.verdict.absolute.result).toBeUndefined()
+          expect(s.verdict.relative.result).toBeUndefined()
+          expect(s.verdict.absolute.callReturn).toBeUndefined()
+          expect(s.verdict.relative.callReturn).toBeUndefined()
         })
       ),
     ),

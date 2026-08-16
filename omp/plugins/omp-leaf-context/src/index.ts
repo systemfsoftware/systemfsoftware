@@ -8,7 +8,7 @@
  * imported statically. No runtime is constructed or warmed here.
  */
 import type { ExtensionAPI } from '@oh-my-pi/pi-coding-agent'
-import { runSafe } from './run-safe.policy.js'
+import { runSafe } from './run-safe.js'
 
 export default async function leafContextExtension(pi: ExtensionAPI): Promise<void> {
   const { LeafContextExtension } = await import('./leaf-context.handler.js')

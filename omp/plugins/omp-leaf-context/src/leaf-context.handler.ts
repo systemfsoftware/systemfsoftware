@@ -27,12 +27,12 @@ import { Match, Result } from 'effect'
 import { decodeTarget, type TargetPath } from './leaf-context.acl.js'
 import { describeError, type LeafFs, nodeLeafFs, relativeToRoot, runLeafContext } from './leaf-context.executor.js'
 import { leafBlock } from './leaf-context.workflow.js'
-import type { RunSafe } from './run-safe.kernel.js'
+import type { RunSafe } from './run-safe.js'
 
 const PENDING_TARGETS_MAX = 1000
 const SESSION_SETS_MAX = 1000
 
-/** toolCallId → target, consumed at `tool_result` time. */
+/** sessionId + toolCallId → target, consumed at `tool_result` time. */
 const pathByCallId = new Map<string, TargetPath>()
 /** sessionId → leaves already injected this session. */
 const injectedBySession = new Map<string, Set<string>>()
@@ -42,12 +42,13 @@ const readSessionId = (ctx: ExtensionContext): string => {
   return typeof id === 'string' ? id : ''
 }
 
-const rememberTarget = (toolCallId: string, target: TargetPath): void => {
+const rememberTarget = (sessionId: string, toolCallId: string, target: TargetPath): void => {
+  const key = `${sessionId}:${toolCallId}`
   if (pathByCallId.size >= PENDING_TARGETS_MAX) {
     const oldest = pathByCallId.keys().next().value
     if (typeof oldest === 'string') pathByCallId.delete(oldest)
   }
-  pathByCallId.set(toolCallId, target)
+  pathByCallId.set(key, target)
 }
 
 const sessionInjected = (sessionId: string): Set<string> => {
@@ -76,21 +77,21 @@ const logFault = (logger: ExtensionAPI['logger'] | undefined, event: string, err
 }
 
 export const LeafContextExtension = (pi: ExtensionAPI, runSafe: RunSafe, fs: LeafFs = nodeLeafFs): void => {
-  pi.on('tool_call', async (event, _ctx) => {
+  pi.on('tool_call', async (event, ctx) => {
     await runSafe(async () => {
       const target = decodeTarget(event.input)
       if (Result.isFailure(target)) return
-      rememberTarget(event.toolCallId, target.success)
+      rememberTarget(readSessionId(ctx), event.toolCallId, target.success)
     }, (error) => logFault(pi.logger, 'tool_call', error))
   })
 
   pi.on('tool_result', async (event, ctx) => {
     return runSafe(async () => {
-      const target = pathByCallId.get(event.toolCallId)
-      pathByCallId.delete(event.toolCallId)
+      const sessionId = readSessionId(ctx)
+      const target = pathByCallId.get(`${sessionId}:${event.toolCallId}`)
+      pathByCallId.delete(`${sessionId}:${event.toolCallId}`)
       if (target === undefined) return undefined
 
-      const sessionId = readSessionId(ctx)
       const injected = sessionInjected(sessionId)
       const relTarget = relativeToRoot(target, ctx.cwd)
       const outcome = await runLeafContext({ root: ctx.cwd, relTarget, injected, fs })

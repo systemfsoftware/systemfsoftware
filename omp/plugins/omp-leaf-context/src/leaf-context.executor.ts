@@ -3,8 +3,9 @@
  *
  * Probes the filesystem the same way the deleted hook did (`exists` on
  * `AGENTS.md` up the directory chain), hands the ordered candidate list to
- * the pure workflow, and on a would-inject decision reads the leaf's content
- * to materialize the `Inject` payload. Every I/O failure surfaces as a
+ * the pure workflow, and materializes the `Inject` payload (leaf content)
+ * only after a `Select` verdict — a repeat touch under an already-injected
+ * leaf never re-reads the file. Every I/O failure surfaces as a
  * `LeafContextError` on the error channel — never a silent `Skip`.
  *
  * The filesystem seam (`LeafFs`) keeps the shell testable against
@@ -42,12 +43,14 @@ export const nodeLeafFs: LeafFs = {
 /**
  * Project-root-relative form of a tool target, or `null` when the target is
  * outside the project root. Ported from the hook; hardened against `..`
- * traversal segments (escapee targets are treated as outside the root).
+ * traversal segments anywhere in the path (escapee targets are treated as
+ * outside the root, whether the input was absolute or relative).
  */
 export const relativeToRoot = (target: string, root: string): string | null => {
   if (isAbsolute(target)) {
     if (!target.startsWith(root + '/')) return null
-    return target.slice(root.length + 1)
+    const rel = target.slice(root.length + 1)
+    return rel.split('/').includes('..') ? null : rel
   }
   if (target.length === 0 || target.split('/').includes('..')) return null
   return target
@@ -56,9 +59,11 @@ export const relativeToRoot = (target: string, root: string): string | null => {
 /**
  * Ordered, existing leaf candidates for a root-relative target: walk
  * `dirname(relTarget)` upward while `dir !== '.'`, skipping anything equal to
- * or under `repos/`, probing each `<dir>/AGENTS.md`. The first hit is the
- * governing leaf (deepest first), matching the hook's early return; the walk
- * bound means the root `AGENTS.md` is never a candidate.
+ * or under `repos/` (the top-level `repos` node included — deliberate
+ * tightening over the hook, which probed `<root>/repos/AGENTS.md`), probing
+ * each `<dir>/AGENTS.md`. The first hit is the governing leaf (deepest
+ * first), matching the hook's early return; the walk bound means the root
+ * `AGENTS.md` is never a candidate.
  */
 export const findExistingLeafCandidates = async (
   relTarget: string,
@@ -91,12 +96,10 @@ export const runLeafContext = async (
   try {
     if (args.relTarget === null) return Result.succeed(new Skip())
     const candidates = await findExistingLeafCandidates(args.relTarget, args.root, args.fs)
-    const leaf = governingLeaf(candidates)
-    // Eligibility before I/O: a repeat touch under an already-injected leaf is
-    // the steady-state case, and must not re-read the leaf file just to Skip.
-    if (leaf === null || args.injected.has(leaf)) return Result.succeed(new Skip())
-    const content = await args.fs.readFile(join(args.root, leaf))
-    return decide({ relTarget: args.relTarget, leaf, content, injected: args.injected })
+    const decision = decide({ relTarget: args.relTarget, leaf: governingLeaf(candidates), injected: args.injected })
+    if (decision instanceof Skip) return Result.succeed(decision)
+    const content = await args.fs.readFile(join(args.root, decision.leaf))
+    return Result.succeed(new Inject({ leaf: decision.leaf, content }))
   } catch (error) {
     return Result.fail(new LeafContextError({ detail: describeError(error) }))
   }
