@@ -7,11 +7,11 @@
 import { PluginKind } from '@systemfsoftware/stryker-js-plugin-api/plugin';
 import { ValuePlugin } from '@systemfsoftware/stryker-js-plugin-api/plugin';
 
-// @public
-export const decideInSourceTestIgnore: (nodes: readonly unknown[]) => string | undefined;
+// @public (undocumented)
+export const decideInSourceTestIgnore: (ancestors: Iterable<unknown>) => string | undefined;
 
 // @public (undocumented)
-export const IN_SOURCE_TEST_IGNORED: 'mutant is inside an in-source vitest block';
+export const IN_SOURCE_TEST_IGNORED: 'inside an `if (import.meta.vitest)` block — test code, not production behaviour';
 
 // @public (undocumented)
 export const isInSourceTestGuard: (node: unknown) => boolean;

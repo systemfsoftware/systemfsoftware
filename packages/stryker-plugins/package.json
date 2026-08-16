@@ -59,8 +59,8 @@
     "test:types": "TSTYCHE_TYPESCRIPT_MODULE=tstyche-typescript tstyche",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "attw": "attw --pack .",
-    "api:check": "concurrently --kill-others-on-fail \"api-extractor run\" \"api-extractor run --config api-extractor.effect-schema-ignorer.json\" \"api-extractor run --config api-extractor.workflow-make-ignorer.json\"",
-    "api:update": "concurrently --kill-others-on-fail \"api-extractor run --local\" \"api-extractor run --local --config api-extractor.effect-schema-ignorer.json\" \"api-extractor run --local --config api-extractor.workflow-make-ignorer.json\""
+    "api:check": "concurrently --kill-others-on-fail \"api-extractor run\" \"api-extractor run --config api-extractor.effect-schema-ignorer.json\" \"api-extractor run --config api-extractor.in-source-test-ignorer.json\" \"api-extractor run --config api-extractor.workflow-make-ignorer.json\"",
+    "api:update": "concurrently --kill-others-on-fail \"api-extractor run --local\" \"api-extractor run --local --config api-extractor.effect-schema-ignorer.json\" \"api-extractor run --local --config api-extractor.in-source-test-ignorer.json\" \"api-extractor run --local --config api-extractor.workflow-make-ignorer.json\""
   },
   "devDependencies": {
     "@babel/types": "^7.29.0",
