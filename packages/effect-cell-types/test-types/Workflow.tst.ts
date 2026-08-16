@@ -1,4 +1,4 @@
-import type { Workflow } from '@systemfsoftware/effect-cell-types'
+import { Cell, type Workflow } from '@systemfsoftware/effect-cell-types'
 import type { Result } from 'effect/Result'
 import { describe, expect, it } from 'tstyche'
 
@@ -33,14 +33,30 @@ declare const decideInhabited: (command: Cmd) => Result<Dec, Err>
 declare const decidePromise: (command: Cmd) => Promise<Dec>
 declare const decideValue: (command: Cmd) => Dec
 declare const totallyDecided: Workflow.Workflow<Cmd, boolean, never>
+declare const madeDecide: Workflow.Workflow<Cmd, Dec, Err>
+
+/**
+ * A bag whose decide phase is the exact shape of `decideInhabited`, so the brand is the
+ * only thing `Cell.decide` can be objecting to. `Err` carries a `_tag`, so the channel
+ * check that would otherwise refuse an untagged error is out of the picture.
+ */
+interface Shape extends Cell.Phases {
+  readonly decoded: Cmd
+  readonly decision: Dec
+  readonly decisionError: Err
+}
 
 describe('the four contractual claims', () => {
   it('Should_BeExactDeciderFunction_When_BothChannelsInhabited', () => {
-    expect<Workflow.Workflow<Cmd, Dec, Err>>().type.toBe<(command: Cmd) => Result<Dec, Err>>()
+    expect<Workflow.Workflow<Cmd, Dec, Err>>().type.toBe<
+      ((command: Cmd) => Result<Dec, Err>) & Workflow.WorkflowBrand
+    >()
   })
 
   it('Should_SurviveDecisionUnionDistribution_When_DecisionChannelIsAUnion', () => {
-    expect<Workflow.Workflow<Cmd, Dec | Alt, Err>>().type.toBe<(command: Cmd) => Result<Dec | Alt, Err>>()
+    expect<Workflow.Workflow<Cmd, Dec | Alt, Err>>().type.toBe<
+      ((command: Cmd) => Result<Dec | Alt, Err>) & Workflow.WorkflowBrand
+    >()
   })
 
   it('Should_DiscriminateUnionMembersByTag_When_NarrowingTheDecision', () => {
@@ -100,5 +116,20 @@ describe('the constructor compiled evidence', () => {
 
   it('Should_DemandUntaggedErrorMarker_When_ErrorChannelCarriesNoTag', () => {
     expect<Workflow.Inhabited<Dec, Error>>().type.toBe<Workflow.UntaggedError>()
+  })
+})
+
+describe('the brand Cell.decide demands', () => {
+  it('Should_RefuseBareDecider_When_DecidePhaseIsDemanded', () => {
+    // A bare decider carries no brand, so the diagnostic names the conjunct it lacks —
+    // Workflow.make is the only door.
+    // @ts-expect-error: is not assignable to type 'WorkflowBrand'
+    Cell.decide<Shape>(decideInhabited)
+  })
+
+  it('Should_AcceptMakeValue_When_DecidePhaseIsDemanded', () => {
+    expect<Cell.DecidePhase<Shape>>().type.toBe<((decoded: Cmd) => Result<Dec, Err>) & Workflow.WorkflowBrand>()
+    expect<Cell.DecidePhase<Shape>>().type.toBeCallableWith(cmd)
+    expect<typeof Cell.decide<Shape>>().type.toBeCallableWith(madeDecide)
   })
 })

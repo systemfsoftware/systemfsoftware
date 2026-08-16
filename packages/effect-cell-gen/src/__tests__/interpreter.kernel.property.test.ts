@@ -112,7 +112,7 @@ it.effect.prop(
         outcome.success === drawn.lastResponse &&
         encodeObserved !== undefined &&
         Result.isFailure(encodeObserved) &&
-        encodeObserved.failure === failure.error &&
+        encodeObserved.failure.code === failure.error &&
         drawn.writeObserved[failure.layerIndex] === failure.error
       )
     }),

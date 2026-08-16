@@ -1,6 +1,27 @@
 import type { Result } from 'effect/Result'
 
 /**
+ * The nominal brand a workflow carries. `Workflow.make` is the only door that applies it,
+ * and every surface that runs a decision — `Cell.decide`, and through it `DecideNode.run`
+ * via the `DecidePhase` conjunct — demands it, so a bare decider that skipped `make` is
+ * refused by the compiler at the call site that would have run it.
+ *
+ * The brand is phantom — a readonly TypeId-keyed field that no runtime property ever
+ * backs: `assertWorkflow` narrows the same function value without touching it. The
+ * `Symbol.for` key follows the repo's branded-class idiom (the instance brands in
+ * `restart-decision.workflow.ts`, `hook-verdict.workflow.ts` and `survivors.workflow.ts`)
+ * so it is stable across realms; this is the type-level brand that subsumes those
+ * instance brands on the workflow shapes.
+ */
+const WorkflowTypeId: unique symbol = Symbol.for('@systemfsoftware/effect-cell-types/Workflow')
+type WorkflowTypeId = typeof WorkflowTypeId
+
+/** The phantom property `Workflow<C,D,E>` and `Cell.DecidePhase<P>` carry. */
+export interface WorkflowBrand {
+  readonly [WorkflowTypeId]: WorkflowTypeId
+}
+
+/**
  * Marker a workflow resolves to when its decision channel is `never`. The property type is the
  * fix, so the compiler diagnostic names it.
  */
@@ -31,10 +52,14 @@ export interface Tagged {
  *
  * `[T] extends [never]` rather than `T extends never`: the tuple wrap stops distribution, without
  * which a `never` channel satisfies the conditional vacuously and is never caught.
+ *
+ * The inhabited branch carries the nominal brand: `Workflow.make` is the only constructor that
+ * applies it, so a bare function annotated `Workflow<C, D, E>` is refused wherever the brand
+ * is demanded — which is exactly where a decision gets run.
  */
 export type Workflow<Command, Decision, DecisionError> = [Decision] extends [never] ? UninhabitedDecision
   : [DecisionError] extends [never] ? UninhabitedError
-  : (command: Command) => Result<Decision, DecisionError>
+  : ((command: Command) => Result<Decision, DecisionError>) & WorkflowBrand
 
 /**
  * `unknown` when both channels are inhabited and the error carries a tag, so the intersection in
@@ -63,8 +88,11 @@ export type Inhabited<Decision, DecisionError> = [Decision] extends [never] ? Un
  * The narrowing goes through an assertion signature rather than an `as` cast: every narrowing
  * assertion trips `typescript(no-unsafe-type-assertion)`, and a suppression comment would hide the
  * one place this file could lie. It is sound rather than merely permitted — with both channels
- * inhabited `Workflow<C, D, E>` is `(command: C) => Result<D, E>`, and otherwise the return type is
- * a marker with no call signature, so the value handed back is unobservable through it.
+ * inhabited `Workflow<C, D, E>` is `(command: C) => Result<D, E>` carrying the {@link WorkflowBrand}
+ * conjunct, and otherwise the return type is a marker with no call signature, so the value handed
+ * back is unobservable through it. The brand is applied here and nowhere else: the assertion adds
+ * no runtime property, so `make` stays the identity function it always was, yet a value that did
+ * not pass through this door fails the conjunct wherever a decision is run.
  */
 export const make = <C, D, E>(
   decide: (command: C) => Result<D, E> & Inhabited<D, E>,

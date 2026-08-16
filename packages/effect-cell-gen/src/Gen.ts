@@ -1,21 +1,34 @@
-import { Cell } from '@systemfsoftware/effect-cell-types'
+import { Cell, Workflow } from '@systemfsoftware/effect-cell-types'
 import * as Effect from 'effect/Effect'
 import * as Result from 'effect/Result'
+import * as S from 'effect/Schema'
 import { FastCheck as fc } from 'effect/testing'
+
+/**
+ * The decision error the drawn descriptions carry. Tagged — via the schema, so no manual
+ * `_tag` is declared — because the branded `Workflow.make` demands a tagged error channel
+ * on the decide run it wraps, with the drawn failure code as its payload so the routing
+ * properties can still compare payloads numerically.
+ */
+class DrawnDecisionError extends S.TaggedError<DrawnDecisionError>()('DrawnDecisionError', {
+  code: S.Finite,
+}) {}
 
 /**
  * The phase bag the generated descriptions instantiate. `command` passes through the pure
  * phases untouched and the decision is `Success` unless a draw places a `Failure` — the two
- * error channels a `Failure` can inhabit are `number`, so a drawn failure carries a payload,
- * while the read/write error and context channels stay `never`, so no other failure is
- * drawable. The properties this arbitrary feeds are about order, response and failure
- * routing, and the routing properties read which phase drew the `Failure` off the drawn value.
+ * error channels a `Failure` can inhabit are `number` (decode) and `DrawnDecisionError`
+ * (decide), so a drawn failure carries a payload, while the read/write error and context
+ * channels stay `never`, so no other failure is drawable. The properties this arbitrary
+ * feeds are about order, response and failure routing, and the routing properties read
+ * which phase drew the `Failure` off the drawn value.
  *
  * The payload types are this generator's own input choice, not a claim about the
- * description: every value a phase consumes or produces is `number`, so one drawn
- * function satisfies every phase that shares an invocation shape. `raw` and `decoded`
- * being the same type is what lets one `'either-fail'`/`'either-pass'` run serve either
- * `Result`-shaped phase; `command`, `output` and `response` being the same type is what
+ * description: every value a phase consumes or produces is `number` (with the one tagged
+ * exception above), so one drawn function satisfies every phase that shares an invocation
+ * shape. `raw` and `decoded` being the same type is what lets the `'either-fail'` run
+ * serve the decode phase while the `'either-pass'` run — a branded `Workflow.make` value —
+ * serves the decide phase; `command`, `output` and `response` being the same type is what
  * lets a single `'effect'` run serve both effect phases. A description whose phases
  * genuinely disagree about a payload type is expressible — this bag just does not draw
  * one, because the properties never observe the payload values.
@@ -25,7 +38,7 @@ export interface Bag extends Cell.Phases {
   readonly raw: number
   readonly decoded: number
   readonly decision: number
-  readonly decisionError: number
+  readonly decisionError: DrawnDecisionError
   readonly output: number
   readonly response: number
   readonly decodeError: number
@@ -95,7 +108,7 @@ const FAILABLE: readonly {
 const substituteLayer = (
   trace: string[],
   writeObserved: number[],
-  encodeObserved: Result.Result<number, number>[],
+  encodeObserved: Result.Result<number, DrawnDecisionError>[],
   response: number,
   failure: DrawnFailure | undefined,
 ): Cell.Layer<Bag> => {
@@ -116,11 +129,13 @@ const substituteLayer = (
                 return response
               }),
           }
-        // One arm for both `Result` conventions. Their difference is what the interpreter does with
-        // a `Failure`, not how the run produces one, so a generator that told them apart here would
-        // assert a distinction it does not make. The switch stays exhaustive either way.
+        // The two `Result` conventions are told apart here, and only here, by their
+        // invocation shape: both return a `Result`, but the decide phase's is branded —
+        // `Cell.DecidePhase` demands the `Workflow.make` conjunct, so only the
+        // `'either-pass'` run is handed through the constructor. A generator that
+        // conflated them would hand the interpreter an unbranded decide run and fail to
+        // compile, exactly like any other consumer that skipped `make`.
         case 'either-fail':
-        case 'either-pass':
           return {
             ...phase,
             run: (input: number): Result.Result<number, number> => {
@@ -131,14 +146,25 @@ const substituteLayer = (
               return Result.succeed(input)
             },
           }
+        case 'either-pass':
+          return {
+            ...phase,
+            run: Workflow.make((input: number): Result.Result<number, DrawnDecisionError> => {
+              trace.push(phase.name)
+              if (failure !== undefined && failure.phaseIndex === phaseIndex) {
+                return Result.fail(DrawnDecisionError.make({ code: failure.error }))
+              }
+              return Result.succeed(input)
+            }),
+          }
         case 'total':
           return {
             ...phase,
-            run: (outcome: Result.Result<number, number>): number => {
+            run: (outcome: Result.Result<number, DrawnDecisionError>): number => {
               trace.push(phase.name)
               encodeObserved.push(outcome)
               return Result.match(outcome, {
-                onFailure: (error) => error,
+                onFailure: (error) => error.code,
                 onSuccess: (decision) => decision,
               })
             },
@@ -183,7 +209,7 @@ export interface DescriptionCase {
   readonly command: number
   readonly trace: readonly string[]
   readonly writeObserved: readonly number[]
-  readonly encodeObserved: readonly Result.Result<number, number>[]
+  readonly encodeObserved: readonly Result.Result<number, DrawnDecisionError>[]
   readonly failure: DrawnFailure | undefined
   readonly lastResponse: number
 }
@@ -245,7 +271,7 @@ export const description: fc.Arbitrary<DescriptionCase> = fc
     return maybeFailure.map((failure) => {
       const trace: string[] = []
       const writeObserved: number[] = []
-      const encodeObserved: Result.Result<number, number>[] = []
+      const encodeObserved: Result.Result<number, DrawnDecisionError>[] = []
       const [firstLayer, ...furtherLayers] = drawn.layers
       if (firstLayer === undefined) {
         throw new Error('effect-cell-gen: a generated recipe drew no layers')

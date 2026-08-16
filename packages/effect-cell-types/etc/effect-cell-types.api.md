@@ -21,7 +21,7 @@ export namespace Wire {
 
 // @public (undocumented)
 export namespace Workflow {
-    export { Inhabited, Tagged, UninhabitedDecision, UninhabitedError, UntaggedError, Workflow, make };
+    export { Inhabited, Tagged, UninhabitedDecision, UninhabitedError, UntaggedError, Workflow, WorkflowBrand, make };
 }
 
 // (No @packageDocumentation comment for this package)

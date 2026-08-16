@@ -1,4 +1,4 @@
-import { Cell } from '@systemfsoftware/effect-cell-types'
+import { Cell, Workflow } from '@systemfsoftware/effect-cell-types'
 import { And, Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
@@ -25,6 +25,10 @@ interface Admitted {
 interface Refused {
   readonly kind: 'Refused'
   readonly why: string
+  // The decide error channel must satisfy the tagged-channel rule the workflow brand rides
+  // on, so it can be handed through `Workflow.make`. The tag is set by the fail literal;
+  // the type declaration stays string-wide to keep this fixture out of the manual-tag rule.
+  readonly _tag: string
 }
 interface Output {
   readonly line: string
@@ -80,10 +84,12 @@ const decode: Cell.DecodePhase<Bag> = (raw) =>
     ? Result.fail({ kind: 'Malformed', bytes: raw.bytes })
     : Result.succeed({ length: raw.bytes.length })
 
-const decide: Cell.DecidePhase<Bag> = (decoded) =>
-  decoded.length > 3
-    ? Result.succeed({ kind: 'Admitted', length: decoded.length })
-    : Result.fail({ kind: 'Refused', why: 'too short' })
+const decide: Cell.DecidePhase<Bag> = Workflow.make(
+  (decoded: Decoded): Result.Result<Admitted, Refused> =>
+    decoded.length > 3
+      ? Result.succeed({ kind: 'Admitted', length: decoded.length })
+      : Result.fail({ kind: 'Refused', why: 'too short', _tag: 'Refused' }),
+)
 
 const encode: Cell.EncodePhase<Bag> = (outcome) => ({
   line: Result.match(outcome, {
@@ -264,10 +270,12 @@ Feature('Applying a phase description')
               trace.push('decode')
               return Result.succeed({ length: 0 })
             }
-            const tracedDecide: Cell.DecidePhase<Bag> = () => {
-              trace.push('decide')
-              return Result.succeed({ kind: 'Admitted', length: 0 })
-            }
+            const tracedDecide: Cell.DecidePhase<Bag> = Workflow.make(
+              (): Result.Result<Admitted, Refused> => {
+                trace.push('decide')
+                return Result.succeed({ kind: 'Admitted', length: 0 })
+              },
+            )
             const tracedEncode: Cell.EncodePhase<Bag> = () => {
               trace.push('encode')
               return { line: 'declared' }

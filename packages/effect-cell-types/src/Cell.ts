@@ -3,6 +3,8 @@ import * as Effect from 'effect/Effect'
 import { dual } from 'effect/Function'
 import * as Option from 'effect/Option'
 import * as Result from 'effect/Result'
+import { type WorkflowBrand } from './Workflow.js'
+import * as Workflow from './Workflow.js'
 
 /**
  * The type bag. Every phase's input and output type travels in one record so that a
@@ -42,10 +44,20 @@ export type DecodePhase<P extends Phases> = (
   raw: P['raw'],
 ) => Result.Result<P['decoded'], P['decodeError']>
 
-/** The decision. Its `Left` is an outcome, not a fault: both branches travel on to the write. */
-export type DecidePhase<P extends Phases> = (
-  decoded: P['decoded'],
-) => Result.Result<P['decision'], P['decisionError']>
+/**
+ * The decision. Its `Left` is an outcome, not a fault: both branches travel on to the write.
+ *
+ * The {@link WorkflowBrand} conjunct makes this the one surface a decision must cross
+ * branded: only a `Workflow.make` value satisfies it, so a bare lambda handed here is
+ * refused by the compiler with the brand conjunct named in the diagnostic. The `run` on
+ * a `DecideNode` inherits the conjunct through this type, which keeps the interpreter's
+ * fold sound — a description can only carry decisions that came through `make`.
+ */
+export type DecidePhase<P extends Phases> =
+  & ((
+    decoded: P['decoded'],
+  ) => Result.Result<P['decision'], P['decisionError']>)
+  & WorkflowBrand
 
 /** Shapes what the write consumes. Total, so it receives both branches of the decision. */
 export type EncodePhase<P extends Phases> = (
@@ -450,7 +462,10 @@ export const canonical: WriteDone<Phases> = write(
   encode(
     decide(
       decode(read<Phases>(() => Effect.void), () => Result.succeed(undefined)),
-      () => Result.succeed(undefined),
+      // The canonical's decide never resolves — the description's phases "do nothing" —
+      // but its error channel must still satisfy the tagged channel rule the brand rides
+      // on, so the decider is a `make` value whose phantom error channel is `Tagged`.
+      Workflow.make((_decoded: unknown): Result.Result<undefined, Workflow.Tagged> => Result.succeed(undefined)),
     ),
     () => undefined,
   ),
