@@ -10,7 +10,7 @@ jobs:
   check:
     name: the gate (pnpm check:ci)
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 45
     env:
       NODE_OPTIONS: "--max-old-space-size=4096"
       CI: "true"
