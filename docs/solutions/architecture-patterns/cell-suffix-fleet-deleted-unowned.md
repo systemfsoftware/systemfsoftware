@@ -1,6 +1,7 @@
 ---
 title: Deleted the cell-role suffix rule fleet — the refusing channels are none
 date: 2026-08-16
+last_updated: 2026-08-16
 topic: architecture-patterns
 ---
 
@@ -61,3 +62,11 @@ The `workflow-make-boundary` ignorer resolves named, aliased, and namespace impo
 | effect-store      | driver construction in a store          | none                                                                                      |
 
 **Verdict: unowned, all of them.** This is the honest record, not a coverage claim. The taxonomy's obligations had no mechanical channel behind them — which is the measured reason they were deleted (0 of 44 recorded defects found by any lint rule; 24 by running something, 4 by the type checker). What is owned now: the `make` boundary owns purity and one-path inside decisions (compiler brand + lint rule + mutation gate); the shell's "decides nothing" is owned by the complement complexity ceiling and review, never by a filename.
+
+## The instruction-leaf residue (fixed 2026-08-16, issue #182)
+
+The deletion was not the last place the taxonomy lived. On the same day, `omp/AGENTS.md` still told authors to choose a cell suffix ("wrong suffix is a category error"), carried a decision tree and a role table, audited `*.workflow.ts` / `*.acl.ts` by glob in its `check:` fields, and printed a WRONG example naming three `.acl.ts` files — `tool-input`, `tool-name`, `context-mode` — that the tree no longer contained (they are `*.kernel.ts` now). `omp/plugins/AGENTS.md` routed a rule check over `*.handler.ts`. Each of these was the same unfalsifiable key the fleet existed to delete: an author who declines the suffix declines the rule, and the rule text could not distinguish the three named files from the convention.
+
+The fix re-keyed the leaves onto what owns the obligations now: `Workflow.make`'s `Inhabited` constraint (markers `UninhabitedDecision` / `UninhabitedError` / `UntaggedError`), the `make-body-purity` / `workflow-match-exhaustive` rules delivered by `@systemfsoftware/oxlint-config/strict`, the `Schema.decodeTo` / `SchemaGetter` decode declaration, and `check: review` where no command decides. Rule text no longer names files.
+
+The durable step: **retiring a keyed rule set is a drift event for every instruction leaf.** Run the audit — grep the leaves for the retired vocabulary (suffix tables, decision trees, "category error" mandates), for `check:` fields routed on the retired shape, and for rule text naming files that would now violate it — and re-key each onto commands or review before the retirement is announced complete.

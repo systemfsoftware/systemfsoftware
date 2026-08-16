@@ -20,15 +20,15 @@ Names describe the subject; the suffix is a comment on the role:
 - **workflow** (pure) — typed `Command` → `Result.Result<Decision, Error>` inside `Workflow.make`; decision variants `S.TaggedClass`, error variants `S.TaggedError`, dispatch `Match.value` + `Match.exhaustive`. (`hook-verdict.workflow.ts`)
 - **executor** (impure) — I/O shell: reads inputs, calls the workflow, writes outputs. (`hook-dispatcher.executor.ts`, `inject-instructions.executor.ts`)
 - **handler** (impure) — transport terminus: registers `pi.on(...)` handlers. (`hook-dispatcher.handler.ts`, `inject-instructions.handler.ts`)
-- **acl** (pure) — decode of a foreign shape into a branded domain type, declared as a Schema transform (ACL Gates below). (`packages/omp-utils/src/toml-loader.acl.ts`)
-- **kernel** (pure) — pure helper or transform with no I/O; property laws sit beside it. (`tool-name.kernel.ts`, `hook-verdict.kernel.ts`)
+- **acl** (pure) — decode of a foreign shape into a branded domain type, declared as a Schema transform (ACL Gates below). (`omp/packages/omp-utils/src/toml-loader.acl.ts`)
+- **kernel** (pure) — pure helper or transform with no I/O; decision kernels keep their property laws colocated (`hook-verdict.kernel.ts` ↔ `hook-verdict.kernel.property.test.ts`). (`tool-name.kernel.ts`, `hook-verdict.kernel.ts`)
 - **schema/shape/state/policy** — data and tagging declarations.
 
 ## Workflow Gates (S.TaggedError rule)
 
 Errors in this workspace MUST extend `S.TaggedError`, never `S.TaggedClass` — a `TaggedClass` is data, a `TaggedError` is an error; `catchTag`/`catchTags` need the discriminator plus the metadata `TaggedError` provides. Decision variants (`Block`, `Allow`, `Warning`, `Blocked`, `Continue`) are data and stay `S.TaggedClass`.
 
-What enforces it: `Workflow.make` refuses an uninhabited decision channel, a `never` error channel, or an untagged error channel at the construction site (`Inhabited` / `TaggedErrorChannel` invariants in `packages/effect-workflow`); `make-body-purity` and `workflow-match-exhaustive`, delivered by `@systemfsoftware/oxlint-config/strict` (which every omp package extends), read the decision body at the same boundary, never at a filename:
+What enforces it: `Workflow.make` refuses an uninhabited decision channel, a `never` error channel, or an untagged error channel at the construction site via the `Inhabited` constraint in `@systemfsoftware/effect-cell-types` (markers `UninhabitedDecision` / `UninhabitedError` / `UntaggedError`); `make-body-purity` and `workflow-match-exhaustive`, delivered by `@systemfsoftware/oxlint-config/strict` (which every omp package extends), read the decision body at the same boundary, never at a filename:
 
 ```ts
 // RIGHT — errors are tagged errors
@@ -37,7 +37,7 @@ export class HookVerdictError extends S.TaggedError<HookVerdictError>()('HookVer
 export class MalformedJson extends S.TaggedClass<MalformedJson>()('MalformedJson', { raw: S.String }) {}
 ```
 
-check: review — the reviewer reads a new decider's error channel and rejects a `TaggedClass` standing where a `TaggedError` belongs; the channel refusals are the constructor's and the linter's. Canonical: `plugins/omp-claude-compat/src/hook-verdict.workflow.ts`.
+check: review — the reviewer reads a new decider's error channel and rejects a `TaggedClass` standing where a `TaggedError` belongs; the channel refusals are the constructor's and the linter's. Canonical: `omp/plugins/omp-claude-compat/src/hook-verdict.workflow.ts`.
 
 ## ACL Gates (Schema transform rule)
 
@@ -46,13 +46,13 @@ Constitution II.5 — "Decode, never cast". A decode of outside data (bytes, ser
 ```yaml
 - id: ACL1
   title: Decodes are Schema-declared transforms; a plain mapping is a kernel, not a decode
-  do: "declare a decode as `Schema.decodeTo(Schema.toType(Domain), { decode: SchemaGetter.transformOrFail(...), encode: SchemaGetter.forbidden(...) })`, branding earned by `Schema.decodeUnknownEffect(Domain)`; canonical form: `packages/omp-utils/src/toml-loader.acl.ts`"
+  do: "declare a decode as `Schema.decodeTo(Schema.toType(Domain), { decode: SchemaGetter.transformOrFail(...), encode: SchemaGetter.forbidden(...) })`, branding earned by `Schema.decodeUnknownEffect(Domain)`; canonical form: `omp/packages/omp-utils/src/toml-loader.acl.ts`"
   dont: "write a plain function that maps the foreign value in place of a Schema declaration, or cast (`as`) at the decode position — a `normalize(name)`-style transliteration is a domain transform (a kernel), not a decode"
   harm: "a hand-written decode bypasses Schema's identity contract, silently drifts from the foreign shape on package upgrades, and re-introduces the cast pattern the type checker and lint refuse everywhere else"
   check: "review — the reviewer decides whether a new decode is a Schema-declared transform and whether any `as` sits at a decode position"
 ```
 
-The `no-unsafe-*` / `no-unnecessary-type-assertion` battery in `strict` already refuses the `as`-adjacent holes everywhere.
+The `no-unsafe-*` / `no-unnecessary-type-assertion` battery in the shared `@systemfsoftware/oxlint-config` (`strict` extends `base`) already refuses the `as`-adjacent holes everywhere.
 
 ## Commands
 
