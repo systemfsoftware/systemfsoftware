@@ -60,6 +60,9 @@
     "clean": "rimraf dist",
     "typecheck": "tsc --noEmit --incremental",
     "test": "vitest run",
+    "test:contract": "vitest run --config vitest.parity.config.ts",
+    "test:parity": "vitest run --config vitest.parity.config.ts",
+    "test:contract:msb": "vitest run --config vitest.msb.config.ts",
     "test:types": "TSTYCHE_TYPESCRIPT_MODULE=tstyche-typescript tstyche",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "attw": "attw --pack .",
@@ -85,6 +88,7 @@
     "rimraf": "catalog:",
     "tsdown": "catalog:",
     "tstyche": "catalog:",
+    "testcontainers": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },

@@ -6,7 +6,13 @@ export default defineConfig({
   plugins: [inlineSchemaTests()],
   test: {
     ...sharedConfig.test,
-    include: ['src/**/*.test.ts', '__tests__/**/*.test.ts'],
+    include: [
+      'src/**/*.test.ts',
+      '__tests__/*.test.ts',
+      '__tests__/helpers/**/*.test.ts',
+      '!__tests__/parity/**',
+      '!__tests__/msb/**',
+    ],
     setupFiles: ['vitest-setup.ts'],
   },
 })

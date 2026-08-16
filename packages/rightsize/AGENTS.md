@@ -16,6 +16,8 @@ From the repo root only (never `cd` into the package, never `npx`):
 pnpm --filter @systemfsoftware/rightsize typecheck
 pnpm --filter @systemfsoftware/rightsize test:types
 pnpm --filter @systemfsoftware/rightsize test
+pnpm --filter @systemfsoftware/rightsize test:contract
+pnpm --filter @systemfsoftware/rightsize test:contract:msb
 pnpm --filter @systemfsoftware/rightsize lint
 pnpm --filter @systemfsoftware/rightsize build
 pnpm --filter @systemfsoftware/rightsize api:check
@@ -25,6 +27,13 @@ pnpm --filter @systemfsoftware/rightsize parity:check
 
 Do not run repo-wide suites from this package's work; run only this package's
 own scripts.
+
+The parity lane needs a live docker-compatible socket (`test:contract`,
+`layerDocker`-pinned) AND the `docker` CLI (its cp/save/load shell-outs). On
+a podman-only host both must resolve; the lane's recorded machine facts live
+in `__tests__/parity/env-note.md` (a re-probe of `/dev/kvm` is part of the
+lane setup). Lane wall-clock budget: ~1s per container start plus boot; the
+63s local runs started cold images.
 
 ## What makes this package different
 

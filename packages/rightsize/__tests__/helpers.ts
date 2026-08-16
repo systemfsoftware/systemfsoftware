@@ -55,15 +55,15 @@ export const makeRecordingRuntime = (scripts: RecordingScripts = {}): RecordingR
     },
     start: (handle) => {
       calls.push(`start:${handle.id}`)
-      return scripts.start !== undefined ? scripts.start(handle) : Effect.succeed(undefined)
+      return scripts.start !== undefined ? scripts.start(handle) : Effect.void
     },
     stop: (handle) => {
       calls.push(`stop:${handle.id}`)
-      return scripts.stop !== undefined ? scripts.stop(handle) : Effect.succeed(undefined)
+      return scripts.stop !== undefined ? scripts.stop(handle) : Effect.void
     },
     remove: (handle) => {
       calls.push(`remove:${handle.id}`)
-      return scripts.remove !== undefined ? scripts.remove(handle) : Effect.succeed(undefined)
+      return scripts.remove !== undefined ? scripts.remove(handle) : Effect.void
     },
     exec: (handle, _request) => {
       calls.push(`exec:${handle.id}`)
@@ -75,19 +75,25 @@ export const makeRecordingRuntime = (scripts: RecordingScripts = {}): RecordingR
     },
     followLogs: (handle) => {
       calls.push(`followLogs:${handle.id}`)
-      return Effect.succeed({ close: Effect.succeed(undefined) })
+      return Effect.succeed({ close: Effect.void })
     },
-    copyToContainer: () => Effect.succeed(undefined),
-    copyFromContainer: () => Effect.succeed(undefined),
+    copyToContainer: () => Effect.void,
+    copyFromContainer: () => Effect.void,
     inspect: (handle) => {
       calls.push(`inspect:${handle.id}`)
       return Effect.succeed({ exists: true, running: true, health: undefined })
     },
     removeByName: (name) => {
       calls.push(`removeByName:${name}`)
-      return Effect.succeed(undefined)
+      return Effect.void
     },
-    findRunning: () => Effect.succeed(undefined),
+    findRunning: () => {
+      // `succeed` over a typed `undefined` binding, not the `undefined`
+      // literal: the findRunning channel is `SandboxHandle | undefined`, and
+      // the effect plugin prescribes `Effect.void` only for void outcomes.
+      const none: SandboxHandle | undefined = undefined
+      return Effect.succeed(none)
+    },
   }
   return { service, calls }
 }
@@ -104,15 +110,15 @@ export const makeRecordingNetworks = (): RecordingNetworks => {
     service: {
       ensureNetwork: (id) => {
         calls.push(`ensureNetwork:${id}`)
-        return Effect.succeed(undefined)
+        return Effect.void
       },
       removeNetwork: (id) => {
         calls.push(`removeNetwork:${id}`)
-        return Effect.succeed(undefined)
+        return Effect.void
       },
       installNetworkLinks: (handle, links) => {
         calls.push(`installNetworkLinks:${handle.id}:${links.length}`)
-        return Effect.succeed(undefined)
+        return Effect.void
       },
     },
     calls,

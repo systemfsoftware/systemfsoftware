@@ -158,7 +158,7 @@ Feature('launch and teardown execute a validated, ordered lifecycle over recorde
               conflicted = false
               return Effect.fail(BackendError.make({ message: 'bind: address already in use' }))
             }
-            return Effect.succeed(undefined)
+            return Effect.void
           }
         })),
       When('a port-exposed container is launched with a read-probe wait')('launched', (s) =>
@@ -234,11 +234,15 @@ Feature('launch and teardown execute a validated, ordered lifecycle over recorde
       When('a scoped launch is interrupted while the http wait hangs')('fiberExitTag', (s) =>
         Effect.scoped(
           Effect.gen(function*() {
-            const fiber = Effect.runFork(Effect.scoped(launchScoped(
-              httpWaitSpec(),
-              { hygiene: { cacheDir: s.setup.cacheDir }, wait: { httpProbe: () => Effect.never } },
-              s.setup,
-            )))
+            const fiber = yield* Effect.forkScoped(
+              Effect.scoped(
+                launchScoped(
+                  httpWaitSpec(),
+                  { hygiene: { cacheDir: s.setup.cacheDir }, wait: { httpProbe: () => Effect.never } },
+                  s.setup,
+                ),
+              ),
+            )
             // No Effect.sleep here: the suite runs under vitest fake timers, which
             // would freeze the effect clock. Yielding a few times lets the forked
             // fiber reach create/start/readiness (all recording-double sync steps).

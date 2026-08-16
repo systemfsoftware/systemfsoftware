@@ -11,7 +11,7 @@
  * The layer's release stops and removes every own-run sandbox (keepAlive
  * sandboxes survive by construction — they never enter the cleanup set).
  */
-import { Context, Effect, Layer } from 'effect'
+import { Effect, Layer } from 'effect'
 
 import { ProvisionError } from '../model/errors.js'
 import { RightsizeConfig } from '../runtime/config.js'
@@ -72,42 +72,41 @@ export function createMsbBackend(
   }
 }
 
-/** Assembles the four services into the layer's context. */
-function toContext(services: MsbBackendServices): Context.Context<
-  typeof SandboxRuntime | typeof VirtualNetworks | typeof CheckpointStore | typeof ImageRegistry
-> {
-  return Context.make(SandboxRuntime, services.SandboxRuntime).pipe(
-    Context.add(VirtualNetworks, services.VirtualNetworks),
-    Context.add(CheckpointStore, services.CheckpointStore),
-    Context.add(ImageRegistry, services.ImageRegistry),
-  )
-}
-
 /**
  * The full microsandbox backend layer: provision the pinned msb binary,
  * build the command runner, and compose the four service adapters over one
  * shared state. Requires `RightsizeConfig`; provisioning failures fly as
  * `ProvisionError`, everything else as `BackendError`. The layer finalizer
  * runs the backend close (own-run sandboxes are stopped + removed).
+ *
+ * `Layer.unwrap` over per-tag `Layer.effect`s (the `layerDocker` shape, not
+ * `Layer.effectContext`): one acquireRelease still owns the whole backend —
+ * `unwrap` builds the effect in the layer's own scope, so the release runs
+ * exactly when the layer is released — while the declared output keeps the
+ * bare tag spelling every consumer's `Exclude` subtracts.
  */
 export function layerMsb(
   options: { readonly provisioner?: ProvisionerOptions | undefined; readonly runtime?: MsbRuntimeOptions | undefined } =
     {},
 ): Layer.Layer<
-  typeof SandboxRuntime | typeof VirtualNetworks | typeof CheckpointStore | typeof ImageRegistry,
+  SandboxRuntime | VirtualNetworks | CheckpointStore | ImageRegistry,
   ProvisionError,
   RightsizeConfig
 > {
-  const acquired = Effect.acquireRelease(
-    Effect.map(
-      Effect.gen(function*() {
-        const provisioned = yield* provisionMsb(options.provisioner)
-        const runner = createCommandRunner(provisioned.msbPath)
-        return createMsbBackend(runner, options.runtime ?? defaultMsbRuntimeOptions())
-      }),
-      (backend) => ({ backend, context: toContext(backend.open) }),
-    ),
-    (held) => held.backend.close,
+  return Layer.unwrap(
+    Effect.gen(function*() {
+      const provisioned = yield* provisionMsb(options.provisioner)
+      const runner = createCommandRunner(provisioned.msbPath)
+      const backend = yield* Effect.acquireRelease(
+        Effect.sync(() => createMsbBackend(runner, options.runtime ?? defaultMsbRuntimeOptions())),
+        (opened) => opened.close,
+      )
+      return Layer.mergeAll(
+        Layer.succeed(SandboxRuntime, backend.open.SandboxRuntime),
+        Layer.succeed(VirtualNetworks, backend.open.VirtualNetworks),
+        Layer.succeed(CheckpointStore, backend.open.CheckpointStore),
+        Layer.succeed(ImageRegistry, backend.open.ImageRegistry),
+      )
+    }),
   )
-  return Layer.effectContext(acquired.pipe(Effect.map((held) => held.context)))
 }
