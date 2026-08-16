@@ -1,3 +1,4 @@
+import * as NodeStdio from '@effect/platform-node/NodeStdio'
 import type { LogLevel, PartialStrykerOptions, StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
 import * as Console from 'effect/Console'
 import * as Effect from 'effect/Effect'
@@ -7,13 +8,13 @@ import * as Option from 'effect/Option'
 import * as Path from 'effect/Path'
 import * as Ref from 'effect/Ref'
 import * as Result from 'effect/Result'
-import * as Stdio from 'effect/Stdio'
 import * as Terminal from 'effect/Terminal'
 import * as Argument from 'effect/unstable/cli/Argument'
 import * as CliConfig from 'effect/unstable/cli/CliConfig'
 import * as CliError from 'effect/unstable/cli/CliError'
 import * as Command from 'effect/unstable/cli/Command'
 import * as Flag from 'effect/unstable/cli/Flag'
+import * as GlobalFlag from 'effect/unstable/cli/GlobalFlag'
 import * as ChildProcessSpawner from 'effect/unstable/process/ChildProcessSpawner'
 
 import { defaultOptions } from '@systemfsoftware/stryker-js-mutation-run/config/config-resolution'
@@ -507,19 +508,33 @@ const cliLayer = Layer.mergeAll(
   // v4 matches flags by exact name — commander's case-sensitive behaviour —
   // and exposes no case-normalisation switch; the previous `CliConfig.layer({
   // isCaseSensitive: true })` pin is therefore the framework default now.
-  CliConfig.layer(),
+  // The wire contract's version line is the bare semver (commander's shape);
+  // the framework's built-in renders `stryker v<version>`, so the Version
+  // action is replaced with one that prints the semver alone.
+  CliConfig.layer({
+    builtIns: [
+      GlobalFlag.Help,
+      GlobalFlag.action({
+        flag: Flag.boolean('version').pipe(Flag.withAlias('v'), Flag.withDescription('Show version information')),
+        run: () => Console.log(strykerVersion),
+      }),
+      GlobalFlag.Wizard,
+      GlobalFlag.Completions,
+      GlobalFlag.LogLevel,
+    ],
+  }),
   Path.layer,
   FileSystem.layerNoop({}),
   terminalLayer,
-  // The v4 runner's environment type demands a child-process spawner and a
-  // stdio service even though this CLI's parser never touches them (no flag
-  // reads a file or spawns a process); inert implementations keep the layer
-  // surface total.
+  // The v4 framework renders help and version documents through the `Stdio`
+  // service's sinks, so the CLI provides the real process-backed layer —
+  // `Stdio.layerTest` drains those sinks to nowhere, which swallowed every
+  // framework-rendered document and left the process with nothing to show.
+  NodeStdio.layer,
   Layer.succeed(
     ChildProcessSpawner.ChildProcessSpawner,
     ChildProcessSpawner.make(() => Effect.die('no child processes')),
   ),
-  Stdio.layerTest({}),
 )
 
 /**
@@ -559,7 +574,7 @@ export function strykerCliEffect(
     )
     const outcome = yield* Effect.result(
       runStrykerCli(
-        { program: cliEffect, requestRef, mode, runMutationTest, recordExitCode },
+        { program: cliEffect, requestRef, mode, runMutationTest, recordExitCode, argv },
         createRunEventStream,
       ),
     )

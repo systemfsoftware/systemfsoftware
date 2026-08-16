@@ -1,11 +1,12 @@
 import * as Cause from 'effect/Cause'
 import * as Clock from 'effect/Clock'
 import * as Context from 'effect/Context'
+import * as Deferred from 'effect/Deferred'
 import * as Effect from 'effect/Effect'
 import * as Fiber from 'effect/Fiber'
 import * as Layer from 'effect/Layer'
 import * as Queue from 'effect/Queue'
-import * as S from 'effect/Schema'
+import * as Stdio from 'effect/Stdio'
 import * as Stream from 'effect/Stream'
 
 import type { ModeSignal, OutputMode, ResolvedMode } from '@systemfsoftware/stryker-js-mutation-run/output-mode'
@@ -49,13 +50,6 @@ const RunEventStreamPort = RunEventStreamPortTag
 
 export { RunEventStreamPort }
 
-/**
- * A write to stdout failed — the reader closed the pipe (EPIPE), or the
- * descriptor is gone. Typed so the drain can swallow it without mistaking it
- * for a run failure (R31).
- */
-class StdoutWriteError extends S.TaggedError<StdoutWriteError>()('stdout-write-error', { cause: S.Unknown }) {}
-
 const isTerminalEvent = (event: RunEvent): boolean =>
   event.kind === 'verdict' || event.kind === 'error' || event.kind === 'help' || event.kind === 'manifest'
 
@@ -83,66 +77,17 @@ function queueEmit(queue: Queue.Queue<RunEvent, Cause.Done<void>>): Emit {
 }
 
 /**
- * Writes one line through `process.stdout.write(line, cb)` and resumes when
- * the callback fires — i.e. when the chunk is flushed to the OS, which is
- * real backpressure in place of the old `writeSync`. A failed write fails
- * with a typed error instead of throwing; the drain swallows it, which is
- * what keeps a consumer closing the pipe from replacing the run's classed
- * exit code (R31). The persistent `error` listener exists because an
- * unhandled `'error'` event on a process stream throws.
+ * The drain writes the framed lines through the platform's `Stdio` stdout
+ * sink — `NodeStdio.layer` at the composition root supplies the service, and
+ * the sink owns the writable's backpressure, the scoped `'error'` listener a
+ * closed consumer raises, and the final `'finish'` wait (`endOnDone`). A
+ * write failure surfaces as a `PlatformError` which this catch swallows — a
+ * consumer closing the pipe must not replace the run's classed exit code
+ * (R31) — and the drain still completes only after every byte was handed to
+ * the OS (R30).
  */
-function writeLine(line: string): Effect.Effect<void, StdoutWriteError, never> {
-  return Effect.callback((resume) => {
-    let settled = false
-    const settle = (result: Effect.Effect<void, StdoutWriteError, never>): void => {
-      if (!settled) {
-        settled = true
-        resume(result)
-      }
-    }
-    try {
-      process.stdout.write(line, (error) => {
-        if (error === undefined || error === null) {
-          settle(Effect.void)
-        } else {
-          settle(Effect.fail(StdoutWriteError.make({ cause: error })))
-        }
-      })
-    } catch (error) {
-      settle(Effect.fail(StdoutWriteError.make({ cause: error })))
-    }
-  })
-}
-
-/**
- * Ends stdout and waits for `'finish'`, so the drain completes only after
- * every byte was handed to the OS (R30). A flush failure fails with the typed
- * error; the drain resolves the same way a write failure does.
- */
-function finishStdout(): Effect.Effect<void, StdoutWriteError, never> {
-  return Effect.callback((resume) => {
-    let settled = false
-    const settle = (result: Effect.Effect<void, StdoutWriteError, never>): void => {
-      if (!settled) {
-        settled = true
-        process.stdout.off('finish', onFinish)
-        process.stdout.off('error', onError)
-        resume(result)
-      }
-    }
-    const onFinish = (): void => settle(Effect.void)
-    const onError = (error: unknown): void => {
-      settle(Effect.fail(StdoutWriteError.make({ cause: error })))
-    }
-    process.stdout.once('finish', onFinish)
-    process.stdout.once('error', onError)
-    try {
-      process.stdout.end()
-    } catch (error) {
-      onError(error)
-    }
-  })
-}
+const drainOf = (stdio: Stdio.Stdio, framed: Stream.Stream<string>): Effect.Effect<void, never, never> =>
+  Stream.run(framed, stdio.stdout({ endOnDone: true })).pipe(Effect.ignore)
 
 /**
  * The handle a run's host (the CLI composition root) holds: the sink core
@@ -197,7 +142,10 @@ export interface RunEventStream {
  * per-call probing (R2). The run's clock zero is read from the runtime so
  * the adapter never touches the wall clock directly.
  */
-const makeRunEventStream = (resolved: ResolvedMode): Effect.Effect<RunEventStream, never, never> =>
+const makeRunEventStream = (
+  stdio: Stdio.Stdio,
+  resolved: ResolvedMode,
+): Effect.Effect<RunEventStream, never, never> =>
   Effect.gen(function*() {
     const runId = generateRunId()
     const startedAt = yield* Clock.currentTimeMillis
@@ -228,11 +176,17 @@ const makeRunEventStream = (resolved: ResolvedMode): Effect.Effect<RunEventStrea
     // cannot suspend, so a bounded mailbox would stall core's reporter the
     // moment the bound is reached. The choice is stated here rather than
     // inherited from a default.
+    // Registration gate: the detached drain binds `state.emit` inside its own
+    // first step, and `open` must not return before that binding exists — a
+    // fast run (version, help) can reach `closeAndDrain` first, where
+    // `state.emit?.end()` on an unbound mailbox drops the end signal and the
+    // join below hangs forever on the never-ending merge.
+    const registered = yield* Deferred.make<void>()
     const eventStream = Stream.callback<RunEvent>(
       (queue) =>
         Effect.sync(() => {
           state.emit = queueEmit(queue)
-        }),
+        }).pipe(Effect.andThen(Deferred.succeed(registered, undefined))),
     )
 
     // The heartbeat, as a time-driven stream merged inside the fiber (R28).
@@ -279,21 +233,7 @@ const makeRunEventStream = (resolved: ResolvedMode): Effect.Effect<RunEventStrea
       Stream.map((event) => `${JSON.stringify(event)}\n`),
     )
 
-    const drain: Effect.Effect<void, never, never> = Stream.runForEach(framed, writeLine).pipe(
-      // End-of-stream: flush stdout after the last line (R30).
-      Effect.andThen(finishStdout()),
-      // The old writeSync path swallowed every write failure the same way: a
-      // consumer that closed the pipe must not replace the run's classed exit
-      // code (R31). The writable still has to be ended — a failed write leaves
-      // process.stdout with a pending write that holds the event loop open,
-      // and a successful run exits by natural means (process.exitCode).
-      Effect.catch(() =>
-        Effect.sync(() => {
-          state.terminalWritten = true
-          process.stdout.end()
-        })
-      ),
-    )
+    const drain: Effect.Effect<void, never, never> = drainOf(stdio, framed)
 
     let drainFiber: Fiber.Fiber<void, never> | null = null
 
@@ -365,6 +305,15 @@ const makeRunEventStream = (resolved: ResolvedMode): Effect.Effect<RunEventStrea
           // flush the terminal line (R30); it ends on its own once the
           // mailbox is done and drained.
           drainFiber = yield* Effect.forkDetach(drain)
+          // Registration must complete before the run starts, or a fast run's
+          // closeAndDrain races the mailbox binding and drops the end signal.
+          // The race with the fiber's own await covers a drain that dies
+          // before subscribing — open then resolves on the fiber's exit
+          // instead of hanging on a Deferred nothing will ever complete.
+          yield* Effect.race(
+            Deferred.await(registered),
+            Fiber.await(drainFiber),
+          )
         }
       }),
       closeAndDrain: Effect.gen(function*() {
@@ -377,7 +326,10 @@ const makeRunEventStream = (resolved: ResolvedMode): Effect.Effect<RunEventStrea
     }
   })
 
-export const RunEventStreamLive: Layer.Layer<RunEventStreamPortTag> = Layer.succeed(
+export const RunEventStreamLive: Layer.Layer<RunEventStreamPortTag, never, Stdio.Stdio> = Layer.effect(
   RunEventStreamPort,
-  RunEventStreamPort.of({ createRunEventStream: makeRunEventStream }),
+  Effect.map(Stdio.Stdio, (stdio) =>
+    RunEventStreamPort.of({
+      createRunEventStream: (resolved) => makeRunEventStream(stdio, resolved),
+    })),
 )
