@@ -4,6 +4,152 @@
 
 ```ts
 
+import { Context } from 'effect';
+import { Effect } from 'effect';
+import { Layer } from 'effect';
+import { Schema } from 'effect';
+import { YieldableError } from 'effect/Cause';
+
+// @public
+export interface CliChild {
+    readonly exited: Promise<number | null>;
+    readonly kill: (signal?: NodeJS.Signals) => void;
+    // (undocumented)
+    readonly stderr: NodeJS.ReadableStream;
+    // (undocumented)
+    readonly stdin: NodeJS.WritableStream;
+    // (undocumented)
+    readonly stdout: NodeJS.ReadableStream;
+}
+
+// @public
+export interface CommandRunnerService {
+    readonly fetchStdoutExact: (args: readonly string[], timeoutMs: number) => Effect.Effect<string, BackendError>;
+    // Warning: (ae-forgotten-export) The symbol "ExecResult" needs to be exported by the entry point backend-msb.d.ts
+    // Warning: (ae-forgotten-export) The symbol "BackendError" needs to be exported by the entry point backend-msb.d.ts
+    readonly invoke: (args: readonly string[], timeoutMs: number) => Effect.Effect<ExecResult, BackendError>;
+    readonly invokePromise: (args: readonly string[], timeoutMs: number) => Promise<ExecResult>;
+    readonly spawn: (args: readonly string[], options?: {
+        readonly stdin?: 'ignore' | 'pipe';
+    }) => Effect.Effect<CliChild, BackendError>;
+    readonly spawnSync: (args: readonly string[]) => void;
+}
+
+// @public
+export function createCommandRunner(msbPath: string): CommandRunnerService;
+
+// @public
+export function createMsbBackend(runner: CommandRunnerService, runtimeOptions: MsbRuntimeOptions): MsbBackendInstance;
+
+// Warning: (ae-forgotten-export) The symbol "SandboxRuntimeService" needs to be exported by the entry point backend-msb.d.ts
+// Warning: (ae-forgotten-export) The symbol "CheckpointStoreService" needs to be exported by the entry point backend-msb.d.ts
+//
+// @public
+export function createMsbCheckpoints(runner: CommandRunnerService, runtime: SandboxRuntimeService): CheckpointStoreService;
+
+// Warning: (ae-forgotten-export) The symbol "ImageRegistryService" needs to be exported by the entry point backend-msb.d.ts
+//
+// @public
+export function createMsbImages(runner: CommandRunnerService): ImageRegistryService;
+
+// Warning: (ae-forgotten-export) The symbol "MsbBackendState" needs to be exported by the entry point backend-msb.d.ts
+// Warning: (ae-forgotten-export) The symbol "NetworkLink" needs to be exported by the entry point backend-msb.d.ts
+// Warning: (ae-forgotten-export) The symbol "VirtualNetworksService" needs to be exported by the entry point backend-msb.d.ts
+//
+// @public
+export function createMsbNetworks(runner: CommandRunnerService, runtime: SandboxRuntimeService, state: MsbBackendState, openTunnel?: (handleId: string, link: NetworkLink) => TunnelHandle): VirtualNetworksService;
+
+// Warning: (ae-forgotten-export) The symbol "RuntimeAdapter" needs to be exported by the entry point backend-msb.d.ts
+//
+// @public
+export function createMsbRuntime(runner: CommandRunnerService, state: MsbBackendState, options?: MsbRuntimeOptions): RuntimeAdapter;
+
+// @public
+export function createTunnel(runner: CommandRunnerService, sandboxName: string, guestPort: number, targetHostPort: number, sleep?: (ms: number) => Promise<void>): TunnelHandle;
+
+// @public
+export function defaultMsbRuntimeOptions(): MsbRuntimeOptions;
+
+// Warning: (ae-forgotten-export) The symbol "SandboxRuntime" needs to be exported by the entry point backend-msb.d.ts
+// Warning: (ae-forgotten-export) The symbol "VirtualNetworks" needs to be exported by the entry point backend-msb.d.ts
+// Warning: (ae-forgotten-export) The symbol "CheckpointStore" needs to be exported by the entry point backend-msb.d.ts
+// Warning: (ae-forgotten-export) The symbol "ImageRegistry" needs to be exported by the entry point backend-msb.d.ts
+// Warning: (ae-forgotten-export) The symbol "ProvisionError" needs to be exported by the entry point backend-msb.d.ts
+// Warning: (ae-forgotten-export) The symbol "RightsizeConfig" needs to be exported by the entry point backend-msb.d.ts
+//
+// @public
+export function layerMsb(options?: {
+    readonly provisioner?: ProvisionerOptions | undefined;
+    readonly runtime?: MsbRuntimeOptions | undefined;
+}): Layer.Layer<typeof SandboxRuntime | typeof VirtualNetworks | typeof CheckpointStore | typeof ImageRegistry, ProvisionError, RightsizeConfig>;
+
+// @public
+export interface MsbBackendInstance {
+    // (undocumented)
+    readonly close: Effect.Effect<void>;
+    // (undocumented)
+    readonly open: MsbBackendServices;
+}
+
+// @public
+export interface MsbBackendServices {
+    // (undocumented)
+    readonly CheckpointStore: CheckpointStoreService;
+    // (undocumented)
+    readonly ImageRegistry: ImageRegistryService;
+    // (undocumented)
+    readonly SandboxRuntime: SandboxRuntimeService;
+    // (undocumented)
+    readonly VirtualNetworks: VirtualNetworksService;
+}
+
+// @public (undocumented)
+export interface MsbRuntimeOptions {
+    readonly agentEndpointRetryBudgetMs: number;
+    readonly agentEndpointRetryDelayMs: number;
+    readonly attachedProcStopTimeoutMs: number;
+    readonly copyTimeoutMs: number;
+    readonly execTimeoutMs: number;
+    readonly firstRunPullTimeoutMs: number;
+    readonly installLockRetryBudgetMs: number;
+    readonly installLockRetryDelayMs: number;
+    readonly logsTimeoutMs: number;
+    readonly readinessPollMs: number;
+    readonly stateDbRetryDelayMs: number;
+    readonly stopTimeoutMs: number;
+    readonly tailLines: number;
+}
+
+// @public
+export interface ProvisionerOptions {
+    readonly baseUrl?: string | undefined;
+    readonly fetchBytes?: ((url: string) => Effect.Effect<Uint8Array, ProvisionError>) | undefined;
+    // (undocumented)
+    readonly lockPollMs?: number | undefined;
+    readonly lockWaitMaxMs?: number | undefined;
+    readonly now?: (() => number) | undefined;
+}
+
+// Warning: (ae-forgotten-export) The symbol "ProvisionedMsbService" needs to be exported by the entry point backend-msb.d.ts
+//
+// @public
+export function provisionMsb(options?: ProvisionerOptions): Effect.Effect<ProvisionedMsbService, ProvisionError, RightsizeConfig>;
+
+// @public
+export function registerMsbCleanupSync(msbPath: string, id: string): void;
+
+// Warning: (ae-forgotten-export) The symbol "ResolvedProvisionerOptions" needs to be exported by the entry point backend-msb.d.ts
+//
+// @public
+export function resolveProvisionerOptions(options?: ProvisionerOptions): ResolvedProvisionerOptions;
+
+// @public
+export interface TunnelHandle {
+    // (undocumented)
+    readonly close: Effect.Effect<void>;
+    readonly spawnCount: () => number;
+}
+
 // (No @packageDocumentation comment for this package)
 
 ```
