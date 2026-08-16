@@ -36,7 +36,7 @@ import * as https from 'node:https'
 import * as os from 'node:os'
 import { dirname, join } from 'node:path'
 
-import { Effect, Match, Option, Schema as S } from 'effect'
+import { Effect, Exit, Match, Option, Schema as S } from 'effect'
 
 import { ProvisionError } from '../model/errors.js'
 import { RightsizeConfig } from '../runtime/config.js'
@@ -280,14 +280,20 @@ export function withInstallLock<T>(
               catch: (error) =>
                 provisionFailure(`failed to record the msb install lock at ${lockPath}: ${describeError(error)}`),
             })
-            try {
-              return yield* body
-            } finally {
-              yield* Effect.ignore(Effect.tryPromise(() =>
-                handle.close()
-              ))
-              yield* Effect.ignore(Effect.tryPromise(() => unlink(lockPath)))
+            // Capture the body's outcome instead of a try/finally: an
+            // Effect.gen's `finally` does NOT run when the yielded body
+            // fails in this effect release, so the O_EXCL record would leak
+            // on every failing install. The cleanup below is sequential
+            // code and always runs once the body settles.
+            const outcome = yield* Effect.exit(body)
+            yield* Effect.ignore(Effect.tryPromise(() =>
+              handle.close()
+            ))
+            yield* Effect.ignore(Effect.tryPromise(() => unlink(lockPath)))
+            if (Exit.isFailure(outcome)) {
+              return yield* Effect.failCause(outcome.cause)
             }
+            return outcome.value
           })),
         Match.tag('exists', () =>
           Effect.gen(function*() {
@@ -356,6 +362,10 @@ export function executeInstallPlan(
   manifestUrl: string,
   msbPath: string,
   krunPath: string,
+  /** The release-asset filename for each install slot — a `fetch-verified`
+   * step carries the slot key ('msb'|'krun'), while the checksums manifest
+   * is keyed by the release asset NAME. */
+  assetNames: Readonly<Record<'msb' | 'krun', string>>,
 ): Effect.Effect<void, ProvisionError> {
   return Effect.gen(function*() {
     for (const step of plan.steps) {
@@ -369,7 +379,7 @@ export function executeInstallPlan(
           Effect.gen(function*() {
             const bytes = yield* options.fetchBytes(url)
             const targetPath = asset === 'msb' ? msbPath : krunPath
-            const verdict = verifyPlan({ manifest: manifestText, asset, bytes, targetPath })
+            const verdict = verifyPlan({ manifest: manifestText, asset: assetNames[asset], bytes, targetPath })
             const proceed = Match.value(verdict).pipe(
               Match.tag('proceed', () => true),
               Match.tag('checksum-missing', () => false),
@@ -485,7 +495,17 @@ export function downloadAndInstall(
       if (installedProbe(plan.msbPath, plan.krunPath)) {
         return
       }
-      yield* executeInstallPlan(options, steps, manifestText, manifestUrl, plan.msbPath, plan.krunPath)
+      yield* executeInstallPlan(options, steps, manifestText, manifestUrl, plan.msbPath, plan.krunPath, {
+        msb: plan.msbAsset,
+        krun: plan.krunAsset,
+      })
+    })
+    // The lock lives at `<install-dir>/.lock`; a provisioner starting from a
+    // genuinely empty cache must be able to acquire it, so create the tree
+    // before the lock (not inside the locked body — creation is idempotent).
+    yield* Effect.tryPromise({
+      try: () => mkdir(plan.installDir, { recursive: true }),
+      catch: (error) => provisionFailure(`failed to create ${plan.installDir}: ${describeError(error)}`),
     })
     yield* withInstallLock(
       join(plan.installDir, '.lock'),
