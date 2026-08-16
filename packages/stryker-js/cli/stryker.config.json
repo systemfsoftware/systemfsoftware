@@ -1,7 +1,11 @@
 {
   "extends": "@systemfsoftware/stryker-js-mutation-run/config/base",
   "mutate": [
-    "src/**/*.workflow.ts"
+    "src/**/*.ts",
+    "!src/**/*.test.ts",
+    "!src/**/*.property.test.ts",
+    "!src/**/*.d.ts",
+    "!src/**/__tests__/**"
   ],
   "disableBail": true,
   "plugins": [
@@ -21,8 +25,9 @@
     "low": 100,
     "break": 100
   },
-  "checkers": null,
   "htmlReporter": null,
-  "typescriptChecker": null,
-  "ignorers": null
+  "ignorers": [
+    "effect-schema-declarations",
+    "workflow-make-boundary"
+  ]
 }

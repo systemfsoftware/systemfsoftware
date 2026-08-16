@@ -1,5 +1,4 @@
 ---
-"@systemfsoftware/oxlint-plugin-cell-taxonomy": patch
 "@systemfsoftware/oxlint-plugin": patch
 "@systemfsoftware/oxlint-plugin-effect-schema": patch
 ---

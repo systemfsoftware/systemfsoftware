@@ -8,9 +8,9 @@ Rules here gate `main.ts` as a real interpretation edge. The spec of record is `
 - id: EP1
   title: Keyed on a filename, not a cell suffix
   do: gate the exact basename `main.ts`
-  dont: NEVER add `entrypoint` to the cell-taxonomy CELLS list or invent a `.entrypoint.ts` suffix
-  harm: "`main.ts` is one of cell-taxonomy's EXEMPT names (`CT1`); making it a cell would give the same file two owners"
-  check: "`grep -l 'ENTRYPOINT_FILE' packages/oxlint-plugins/effect-entrypoint/src/rules/*.config.ts` returns exactly the three filename-gated configs and never entrypoint-not-imported; `grep -c \"'entrypoint'\" packages/oxlint-plugins/cell-taxonomy/src/rules/cell-suffix-required.config.ts` returns 0"
+  dont: never key these rules on a cell-role suffix or add `entrypoint` to any sanctioned cell list — the thirteen-role taxonomy was deleted 2026-08-16 and no sanctioned list exists to add it to
+  harm: "`main.ts` is an entry convention, not a cell; making it one would give the same file two owners and resurrect a taxonomy these rules outlived"
+  check: "`grep -l 'ENTRYPOINT_FILE' packages/oxlint-plugins/effect-entrypoint/src/rules/*.config.ts` returns exactly the three filename-gated configs and never entrypoint-not-imported; `grep -rn 'entrypoint' packages/oxlint-plugins/*/src --include='*.config.ts' | grep -v effect-entrypoint` returns nothing"
 
 - id: EP2
   title: The exemption is closed by content, not by name

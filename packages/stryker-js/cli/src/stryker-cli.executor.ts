@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { resolve as resolvePath } from 'node:path'
 
 import { noopLogger } from '@stryker-mutator/util'
-import { Cell } from '@systemfsoftware/effect-cell-types'
+import { Cell, Workflow } from '@systemfsoftware/effect-cell-types'
 import type { Mutant, PartialStrykerOptions, StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
 import { schema } from '@systemfsoftware/stryker-js-plugin-api/core'
 import * as Cause from 'effect/Cause'
@@ -255,8 +255,15 @@ const survivorsAdmissionDescription = (
         priorReportPath,
       })
     ),
-    Cell.decide<AdmissionPhases>(({ input, resolvedOptions, priorReportPath }) =>
-      Result.map(admitSurvivorsRun(input), (decision) => ({ decision, resolvedOptions, priorReportPath }))
+    Cell.decide<AdmissionPhases>(
+      // Every decision must pass through `Workflow.make` before a description may run it;
+      // this adapter maps the admission workflow's outcome into the admission outcome.
+      Workflow.make(
+        (
+          { input, resolvedOptions, priorReportPath }: AdmissionDecoded,
+        ): Result.Result<AdmissionOutcome, SurvivorsRejection> =>
+          Result.map(admitSurvivorsRun(input), (decision) => ({ decision, resolvedOptions, priorReportPath })),
+      ),
     ),
     Cell.encode<AdmissionPhases>((outcome) => outcome),
     Cell.write<AdmissionPhases>((outcome) =>

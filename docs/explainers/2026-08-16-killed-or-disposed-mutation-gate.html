@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Killed-or-Disposed: How a Workflow Reaches 100%</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 2rem 1rem 4rem;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", monospace;
+    background: #faf9f7; color: #1c1a17;
+    line-height: 1.55; font-size: 15px;
+  }
+  .measure { max-width: 70ch; margin: 0 auto; }
+  h1 { font-size: 1.55rem; margin: 0 0 1.2rem; line-height: 1.25; max-width: 34ch; }
+  h2 { font-size: 1.12rem; margin: 2.6rem 0 .8rem; border-bottom: 2px solid #1c1a17; padding-bottom: .3rem; }
+  h3 { font-size: .98rem; margin: 1.6rem 0 .5rem; }
+  p, li { max-width: 70ch; }
+  p { margin: .7rem 0; }
+  ul, ol { padding-left: 1.4rem; margin: .7rem 0; }
+  li { margin: .35rem 0; }
+  header dl {
+    display: grid; grid-template-columns: max-content 1fr; gap: .25rem 1rem;
+    border: 1px solid #c9c4bc; background: #fff; padding: .9rem 1.1rem; margin: 0 0 2rem;
+  }
+  header dt { font-weight: 700; }
+  header dd { margin: 0; }
+  code { background: #efece7; padding: .08rem .3rem; border-radius: 3px; font-size: .92em; }
+  pre {
+    background: #211e1b; color: #e8e4de; padding: 1rem 1.1rem; border-radius: 6px;
+    overflow-x: auto; font-size: 13px; line-height: 1.5; margin: 1rem 0;
+  }
+  pre code { background: none; padding: 0; font-size: inherit; }
+  .kw { color: #c792ea; } .str { color: #a5e075; } .fn { color: #82aaff; }
+  .ty { color: #ffcb6b; } .com { color: #7d766d; font-style: italic; }
+  .num { color: #f78c6c; }
+  .code-note { max-width: 70ch; margin: .5rem 0 1.4rem; padding-left: 1rem; border-left: 3px solid #b8b2a8; font-size: .92rem; color: #44403a; }
+  .zone-label { display: inline-block; font-size: .72rem; font-weight: 700; letter-spacing: .06em;
+    padding: .1rem .5rem; border-radius: 3px; vertical-align: middle; }
+  .zone-dispose { background: #f6e8c8; color: #6b5314; border: 1px solid #d9bd7c; }
+  .zone-kill { background: #dcf0dd; color: #245626; border: 1px solid #a8cf9f; }
+  figure { margin: 1.6rem 0; }
+  figcaption { font-size: .85rem; color: #57524b; margin-top: .4rem; max-width: 70ch; }
+  .verdict { background: #fff; border: 1px solid #c9c4bc; border-left: 5px solid #1c1a17; padding: .8rem 1.1rem; margin: 1.2rem 0; }
+  .banned { text-decoration: line-through; text-decoration-thickness: 2px; color: #8a2020; }
+  footer { margin-top: 3.5rem; border-top: 1px solid #c9c4bc; padding-top: .8rem; font-size: .85rem; color: #57524b; }
+</style>
+</head>
+<body>
+<div class="measure">
+
+<header>
+<h1>Killed-or-Disposed: How a Workflow Reaches 100%</h1>
+<dl>
+  <dt>Date</dt><dd>2026-08-16</dd>
+  <dt>Input shape</dt><dd>concept</dd>
+  <dt>Subject</dt><dd>The mutation gate on workflow files — what a 100% score actually claims, why a literal 100%-killed is impossible, and the four mechanisms in this repo that make the honest score reachable</dd>
+</dl>
+</header>
+
+<figure>
+<svg viewBox="0 0 940 300" width="100%" role="img" aria-label="Mutants from one workflow file flow to three fates: killed by a property test, disposed by a named ignorer rule, or the two banned exits of suppression and gate-lowering.">
+  <style>
+    .box { fill: #fff; stroke: #1c1a17; stroke-width: 1.5; rx: 6; }
+    .lbl { font: bold 13px ui-monospace, Menlo, monospace; fill: #1c1a17; }
+    .sub { font: 11px ui-monospace, Menlo, monospace; fill: #57524b; }
+    .arrow { stroke: #1c1a17; stroke-width: 1.5; fill: none; marker-end: url(#ah); }
+    .badarrow { stroke: #8a2020; stroke-width: 1.5; fill: none; stroke-dasharray: 5 4; marker-end: url(#ahbad); }
+    .bad { fill: #fdf0f0; stroke: #8a2020; stroke-width: 1.5; }
+  </style>
+  <defs>
+    <marker id="ah" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto"><path d="M0,0 L9,3.5 L0,7 z" fill="#1c1a17"/></marker>
+    <marker id="ahbad" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto"><path d="M0,0 L9,3.5 L0,7 z" fill="#8a2020"/></marker>
+  </defs>
+
+  <rect class="box" x="20" y="120" width="170" height="60" rx="6"/>
+  <text class="lbl" x="105" y="146" text-anchor="middle">workflow file</text>
+  <text class="sub" x="105" y="163" text-anchor="middle">Stryker flips one line</text>
+  <text class="sub" x="105" y="177" text-anchor="middle">at a time → mutants</text>
+
+  <rect class="box" x="270" y="20" width="200" height="46" rx="6"/>
+  <text class="lbl" x="370" y="40" text-anchor="middle">behavior mutants</text>
+  <text class="sub" x="370" y="56" text-anchor="middle">flipped Match arm, wrong Result</text>
+
+  <rect class="box" x="270" y="127" width="200" height="46" rx="6"/>
+  <text class="lbl" x="370" y="147" text-anchor="middle">declaration mutants</text>
+  <text class="sub" x="370" y="163" text-anchor="middle">_tag string, field schema, brand</text>
+
+  <rect class="box" x="270" y="234" width="200" height="46" rx="6"/>
+  <text class="lbl" x="370" y="254" text-anchor="middle">equivalent mutants</text>
+  <text class="sub" x="370" y="270" text-anchor="middle">different code, same behavior</text>
+
+  <rect class="box" x="570" y="20" width="250" height="60" rx="6"/>
+  <text class="lbl" x="695" y="43" text-anchor="middle">KILLED</text>
+  <text class="sub" x="695" y="60" text-anchor="middle">a property test fails on the mutant —</text>
+  <text class="sub" x="695" y="73" text-anchor="middle">the arm-flip changed a Result</text>
+
+  <rect class="box" x="570" y="127" width="250" height="60" rx="6"/>
+  <text class="lbl" x="695" y="150" text-anchor="middle">DISPOSED</text>
+  <text class="sub" x="695" y="167" text-anchor="middle">ignorer excises it with a named</text>
+  <text class="sub" x="695" y="180" text-anchor="middle">reason string — reviewable, no comment</text>
+
+  <rect class="bad" x="570" y="234" width="250" height="60" rx="6"/>
+  <text class="lbl" x="695" y="253" text-anchor="middle" fill="#8a2020">BANNED EXITS</text>
+  <text class="sub" x="695" y="270" text-anchor="middle">suppression comment · lowering the gate</text>
+  <text class="sub" x="695" y="284" text-anchor="middle">never legal residue</text>
+
+  <path class="arrow" d="M190,135 C230,110 240,70 270,50"/>
+  <path class="arrow" d="M190,150 L270,150"/>
+  <path class="arrow" d="M190,165 C230,190 240,230 270,252"/>
+
+  <path class="arrow" d="M470,43 L570,45"/>
+  <path class="arrow" d="M470,150 L570,155"/>
+  <path class="badarrow" d="M470,257 L570,260"/>
+
+  <text class="sub" x="845" y="215" text-anchor="middle">score = 100 ⟺</text>
+  <text class="sub" x="845" y="230" text-anchor="middle">every mutant is</text>
+  <text class="sub" x="845" y="245" text-anchor="middle">killed or disposed</text>
+</svg>
+<figcaption>One workflow file's mutant population splits by fate. The score is 100 when the first two boxes are full and the third stays empty by construction — not by comment.</figcaption>
+</figure>
+
+<h2>1. The survivor that cannot die</h2>
+<p>Mutation testing flips small things in your code — a string literal, a boolean, an arm of a match — and runs the tests after each flip. A test that fails <em>killed</em> the mutant. A mutant every test still passes on is a <em>survivor</em>: either a test gap, or dead weight in your code that nothing observes.</p>
+<p>The ceiling problem: some mutants are <strong>equivalent</strong> — the flipped code is syntactically different but does exactly the same thing. No test can kill one, because there is no behavioral difference to observe. Worse, <em>deciding</em> whether a mutant is equivalent is undecidable — no automated technique can identify them all (Papadakis et&nbsp;al. 2019, canon band in the corpus; the finding traces to DeMillo 1978 and Jia&nbsp;&amp;&nbsp;Harman 2011).</p>
+<p>So a literal "100% of mutants killed" is not a number any suite can verifiably reach. That leaves two dishonest exits, and both are banned here:</p>
+<ul>
+  <li><span class="banned">Suppress the survivor</span> — an ignore comment that hides it from the count. The gate goes green while certifying tests that notice nothing.</li>
+  <li><span class="banned">Lower the gate</span> — drop the threshold until the residue stops mattering. The number stops being a claim about anything.</li>
+</ul>
+<div class="verdict">The repo's definition, from the <code>killed-or-disposed-mutation</code> ruling (B5): the gate stays at 100, and 100 means every mutant is <strong>killed</strong> by a test or <strong>disposed</strong> — excised with a named, reviewable reason. Disposition is a proof obligation, not an escape hatch. Suppression comments are banned outright; a threshold is never lowered.</div>
+
+<h2>2. The one file, both fates</h2>
+<p>This is a real workflow — <code>packages/effect-daemon-spec/src/internal/restart-decision.workflow.ts</code>, the entire decision a supervision tree makes when a child dies. One file contains both mutant populations:</p>
+
+<pre><code><span class="com">// disposal zone — declarations and identity, not behavior</span>
+<span class="kw">const</span> RestartDecisionTypeId: <span class="ty">unique symbol</span> = <span class="fn">Symbol.for</span>(<span class="str">'@systemfsoftware/effect-daemon/RestartDecision'</span>)
+<span class="com">//   ^ a mutant flipping this string survives every test — it is identity data</span>
+
+<span class="kw">export class</span> <span class="ty">RestartDecisionRestart</span> <span class="kw">extends</span> S.<span class="fn">TaggedClass</span>&lt;<span class="ty">RestartDecisionRestart</span>&gt;()(<span class="str">'Restart'</span>, {
+  indices: S.<span class="fn">NonEmptyArray</span>(S.Int),
+}) { <span class="com">// the 'Restart' tag and the field schema are declarations, not decisions</span> }
+
+<span class="com">// kill zone — the decision itself</span>
+<span class="kw">export const</span> <span class="fn">decideRestart</span> = Workflow.<span class="fn">make</span>(
+  (command: <span class="ty">DecideInput</span>): <span class="ty">Result</span> ⇒
+    Match.<span class="fn">value</span>(command).<span class="fn">pipe</span>(
+      Match.<span class="fn">when</span>({ exitSuccess: <span class="kw">true</span> }, () ⇒ Result.<span class="fn">succeed</span>(RestartDecisionContinue.<span class="fn">make</span>())),
+      Match.<span class="fn">when</span>({ exitSuccess: <span class="kw">false</span>, intensityExceeded: <span class="kw">true</span> }, () ⇒ Result.<span class="fn">fail</span>(RestartDecisionExhausted.<span class="fn">make</span>())),
+      Match.<span class="fn">orElse</span>(() ⇒
+        Result.<span class="fn">succeed</span>(RestartDecisionRestart.<span class="fn">make</span>({
+          indices: <span class="fn">restartIndicesFor</span>(command.strategy, command.failedIndex, command.totalChildren),
+        })),
+      ),
+    ),
+)</code></pre>
+<div class="code-note">A mutant in the kill zone — say, swapping the first arm's <code>succeed</code> for <code>fail</code> — changes the decision for every input where <code>exitSuccess</code> is true. A property test generating that input kills it. A mutant in the disposal zone — flipping <code>'Restart'</code> to <code>''</code> or emptying the tag string — touches identity data no behavior reads. Those two populations are handled by different mechanisms, and the score is only honest because both are explicit.</div>
+
+<h2>3. The four legs that make 100 reachable</h2>
+
+<h3>Leg 1 — Shape: one path, no hideouts</h3>
+<p>A workflow is core-regime by decree (CONSTITUTION I.6): one path — cyclomatic complexity 1 — choice as exhaustive dispatch over a closed type, iteration as map/fold, no <code>if</code>/<code>?:</code>/<code>&amp;&amp;</code>/<code>for</code>, no runtime import, no clock, no randomness. The corpus ruling <code>two-regimes-core-shell</code> (B4) names the shape's payoff directly: the CC=2 defensive guard is <em>"the canonical breeding ground of equivalent mutants."</em> A dead branch or a vestigial guard is exactly where a mutant survives with no observable difference. One path means every mutant changes observable behavior on some input — there is nowhere to hide.</p>
+<p>The one admitted exception: at most one defensive guard, the first statement, converging immediately, carrying a <em>producer-side property test proving the guard unreachable</em>. The guard and its mutation disposition are one ruling, never two.</p>
+
+<h3>Leg 2 — Killers: the type is the generator</h3>
+<p>The tests that kill the arm mutants are property tests (CONSTITUTION III.2): the input type generates its own inputs. <code>DecideInput</code> is a closed domain — <code>exitSuccess</code> × <code>intensityExceeded</code> × strategy × index bounds — so a property run sweeps every arm. Any behavioral mutant produces a different <code>Result</code> for some generated input and dies. Exhaustive dispatch over a closed domain is the shape a property suite can cover completely; that is the whole reason the two doctrines travel together.</p>
+
+<h3>Leg 3 — Disposal: named reasons, not silence</h3>
+<p>The equivalent-mutant residue inside declarations is removed <em>mechanically</em>, by the ignorers this repo ships (<code>packages/stryker-plugins</code>), each excision carrying a reason string that names the property it rests on:</p>
+<pre><code><span class="com">// packages/stryker-plugins/src/effect-schema-ignorer/schema-declaration-ignore.kernel.ts</span>
+<span class="kw">export const</span> SYMBOL_DESCRIPTION_IGNORED = <span class="str">'Symbol.for() brand description is identity-only data, not behaviour'</span>
+<span class="kw">export const</span> TAGGED_TAG_IGNORED     = <span class="str">'TaggedClass/TaggedError _tag is a declaration discriminant, not behaviour'</span>
+<span class="kw">export const</span> TAGGED_FIELDS_IGNORED  = <span class="str">'TaggedClass/TaggedError field schema is a declaration, not behaviour'</span>
+<span class="kw">export const</span> CLASS_ID_IGNORED       = <span class="str">'Schema.Class identifier is a declaration name, not behaviour'</span></code></pre>
+<div class="code-note">The disposal channel is calibrated, and its history is the proof it is honest in both directions. Annotations that <em>alter</em> behavior — <code>arbitrary</code>, <code>message</code>, <code>jsonSchema</code>, <code>pretty</code>, <code>equivalence</code>, <code>parseIssueTitle</code> — are deliberately not ignored: a surviving mutant of one is a test gap, never an equivalent mutant. And a <code>Schema.Class</code>-fields rule was tried, turned fourteen survivors green in one run, and was removed — it was hiding accepted-value-set decisions the survivors were pointing at. Disposition rules get deleted when they overreach; that is what makes them dispositions rather than suppression.</div>
+
+<h3>Leg 4 — Audit: the killers must have earned their place</h3>
+<p>A kill-count alone certifies nothing — an implementation-mirroring test kills every mutant and tests nothing (the <code>mutation-loop-llm-architecture-fit</code> ruling names this as the oracle's blind channel). So the run is audited after the fact by <code>packages/stryker-js/mutation-run/src/test-contribution.ts</code>, under <code>disableBail: true</code> so every killing test is recorded:</p>
+<ul>
+  <li>A property-test file that kills <em>nothing unique</em> — every mutant it kills, another file also kills — fails the run. Each test must defend something only it defends.</li>
+  <li>A timeout kill arrives with <code>killedBy: []</code> — real, attributable to nobody. The file is ruled <em>unmeasurable</em>, not toothless: nobody is spared on an unplaced kill.</li>
+  <li>Under bail mode the gate refuses a verdict entirely rather than accusing on partial evidence.</li>
+</ul>
+
+<h2>4. What the config actually says</h2>
+<pre><code><span class="com">// packages/effect-daemon-spec/stryker.config.json</span>
+{
+  <span class="str">"mutate"</span>: [ <span class="str">"src/**/*.workflow.ts"</span>, <span class="str">"src/**/*.schema.ts"</span> ],
+  <span class="str">"ignorers"</span>: [ <span class="str">"effect-schema-declarations"</span>, <span class="str">"in-source-vitest-block"</span> ],
+  <span class="str">"thresholds"</span>: { <span class="str">"high"</span>: <span class="num">100</span>, <span class="str">"low"</span>: <span class="num">100</span>, <span class="str">"break"</span>: <span class="num">100</span> },
+  <span class="str">"disableBail"</span>: <span class="kw">true</span>
+}</code></pre>
+<div class="code-note">Read it against the diagram: <code>mutate</code> names the population, <code>ignorers</code> names the disposal channel, <code>break: 100</code> is the killed-or-disposed claim, <code>disableBail: true</code> is what makes the contribution audit possible.</div>
+
+<h2>5. Why the filename suffix was never the mechanism</h2>
+<p>The corpus ruling <code>mutation-score-scope</code> puts the last piece straight: <em>break=100 is a claim about its glob</em>. The score certifies the files inside <code>mutate</code> and says nothing about the complement. The <code>.workflow.ts</code> suffix was only ever the population picker — it chose which files the gate covers, and the gate did the rest.</p>
+<p>That is why deleting the suffix taxonomy costs the mechanism nothing, provided one thing moves with it: the population list. The plan replaces the glob with an enumerated list of exact paths, and — the part your question forced in — the list carries the whole core regime, not just the mutation run. The one-path gate that today reads <code>filename.endsWith('.workflow.ts')</code> re-keys to the same list. Without that re-keying, a listed file could grow an <code>if</code> guard, equivalent mutants would breed in it, 100 would become unreachable, and the gate would get narrowed until it passes — the exact failure the taxonomy's deletion is supposed to make impossible.</p>
+
+<div class="verdict"><strong>The whole mechanism in one sentence:</strong> a one-path shape leaves equivalent mutants nowhere to live, properties over the closed domain kill every mutant that is real, the ignorer disposes the declaration residue by named rule, the contribution audit keeps the killers honest — and 100 means <em>killed-or-disposed</em>, because the literal 100%-killed is a number undecidability will never let you verify.</div>
+
+<footer>
+Composed 2026-08-16 by ce-explain
+</footer>
+
+</div>
+</body>
+</html>

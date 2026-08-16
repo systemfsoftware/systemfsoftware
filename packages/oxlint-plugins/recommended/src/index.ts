@@ -1,123 +1,6 @@
 import type { OxlintConfig, OxlintOverride } from 'oxlint'
 
-const PURE_CELLS = [
-  '**/*.schema.ts',
-  '**/*.shape.ts',
-  '**/*.acl.ts',
-  '**/*.registry.ts',
-  '**/*.workflow.ts',
-] as const
-const KERNEL_CELLS = ['**/*.kernel.ts'] as const
-const FRONT_HALF_CELLS = ['**/*.middleware.ts'] as const
-const TERMINUS_CELLS = ['**/*.handler.ts'] as const
 const OBSERVER_FILES = ['**/*.test.ts', '**/tests/**', '**/__tests__/**'] as const
-
-const IMPURE_GLOBALS = [
-  'fetch',
-  'XMLHttpRequest',
-  'localStorage',
-  'sessionStorage',
-  'setTimeout',
-  'setInterval',
-  'setImmediate',
-  'queueMicrotask',
-  '__dirname',
-  '__filename',
-] as const
-
-const IMPURE_PROPERTIES = [
-  {
-    object: 'Math',
-    property: 'random',
-    message: 'I.1: randomness is ambient impurity. Take it as a command field or through a port.',
-  },
-  {
-    object: 'Date',
-    property: 'now',
-    message: 'I.1: the clock is ambient impurity. Read it in the shell and pass the instant in.',
-  },
-  {
-    object: 'performance',
-    property: 'now',
-    message: 'I.1: the clock is ambient impurity. Read it in the shell and pass the instant in.',
-  },
-  {
-    object: 'crypto',
-    property: 'randomUUID',
-    message: 'I.1: randomness is ambient impurity. Generate the id in the shell.',
-  },
-  {
-    object: 'crypto',
-    property: 'getRandomValues',
-    message: 'I.1: randomness is ambient impurity. Generate the bytes in the shell.',
-  },
-  {
-    object: 'process',
-    property: 'env',
-    message: 'I.1: the environment is ambient impurity. Decode config at the composition root.',
-  },
-] as const
-
-const IO_MODULES = [
-  'node:fs',
-  'node:fs/promises',
-  'node:child_process',
-  'node:net',
-  'node:http',
-  'node:https',
-  'node:dgram',
-  'node:cluster',
-  'node:readline',
-  'node:worker_threads',
-  'node:process',
-] as const
-
-const EFFECT_RUNTIME_IMPORT = {
-  name: 'effect',
-  importNames: ['Effect', 'Layer', 'Runtime', 'Fiber', 'Ref', 'Queue', 'Stream'],
-  allowTypeImports: true,
-  message: 'I.1 / II.2: a pure cell describes no effects. Borrow the type, run it in the shell.',
-}
-
-const ADAPTER_MODULES = ['**/*.adapter', '**/*.adapter.js', '**/*.adapter.ts'] as const
-const WORKFLOW_MODULES = ['**/*.workflow', '**/*.workflow.js', '**/*.workflow.ts'] as const
-const EXECUTOR_MODULES = ['**/*.executor', '**/*.executor.js', '**/*.executor.ts'] as const
-const STORE_MODULES = ['**/*.store', '**/*.store.js', '**/*.store.ts'] as const
-const SCHEMA_MODULES = ['**/*.schema', '**/*.schema.js', '**/*.schema.ts'] as const
-const ACL_MODULES = ['**/*.acl', '**/*.acl.js', '**/*.acl.ts'] as const
-const SHAPE_MODULES = ['**/*.shape', '**/*.shape.js', '**/*.shape.ts'] as const
-const HANDLER_MODULES = ['**/*.handler', '**/*.handler.js', '**/*.handler.ts'] as const
-
-const ADAPTER_GROUP = {
-  group: [...ADAPTER_MODULES],
-  allowTypeImports: true,
-  message: 'The technology cell is bound at the composition root. A domain cell never names a driver.',
-}
-
-const SHELL_GROUP_FOR_FRONT_HALF = {
-  group: [...EXECUTOR_MODULES, ...WORKFLOW_MODULES, ...STORE_MODULES],
-  message: 'Atlas: the transport front-half attaches facts, never decisions. Move the call to the terminus.',
-}
-
-const BYPASS_GROUP_FOR_TERMINUS = {
-  group: [...WORKFLOW_MODULES, ...STORE_MODULES],
-  message: 'Atlas: the terminus calls exactly one executor. Reaching past it splits the I/O sandwich.',
-}
-
-const DOMAIN_GROUP_FOR_KERNEL = {
-  group: [
-    ...SCHEMA_MODULES,
-    ...WORKFLOW_MODULES,
-    ...ACL_MODULES,
-    ...SHAPE_MODULES,
-    ...STORE_MODULES,
-    ...EXECUTOR_MODULES,
-    ...HANDLER_MODULES,
-    ...ADAPTER_MODULES,
-  ],
-  message:
-    'The kernel is domain-blind: it cannot name a domain type. Move the function to the cell that owns the vocabulary.',
-}
 
 /**
  * Built-in namespaces the recommended rules key on. Spread into `plugins`;
@@ -136,39 +19,16 @@ export const plugins = ['typescript', 'import', 'unicorn', 'vitest'] as const
 export const options = { typeAware: true } as const
 
 /**
- * The cell-scoped tiers. Spread into `overrides`.
+ * The test-file hygiene tier. Spread into `overrides`.
  *
- * The two regimes (B4) are the reason these are overrides and not flat rules:
- * the core is one path, the shell is imperative, and a rule that binds one
- * regime fires on correct code in the other.
+ * The former cell-scoped tiers (pure/kernel/front-half/terminus suffix globs and
+ * their importer groups) were removed per KTD5: the cell-role suffix taxonomy is
+ * gone, the boundary rules are keyed to the `Workflow.make` callee by the custom
+ * plugins, and a stock-rule glob cannot outlive the taxonomy that named it.
  *
  * @public
  */
 export const overrides: OxlintOverride[] = [
-  {
-    files: [...PURE_CELLS],
-    rules: {
-      'no-restricted-globals': ['error', ...IMPURE_GLOBALS],
-      'no-restricted-properties': ['error', ...IMPURE_PROPERTIES],
-      'no-restricted-imports': ['error', { paths: [...IO_MODULES, EFFECT_RUNTIME_IMPORT], patterns: [ADAPTER_GROUP] }],
-    },
-  },
-  {
-    files: [...KERNEL_CELLS],
-    rules: {
-      'no-restricted-globals': ['error', ...IMPURE_GLOBALS],
-      'no-restricted-properties': ['error', ...IMPURE_PROPERTIES],
-      'no-restricted-imports': ['error', { paths: [...IO_MODULES], patterns: [DOMAIN_GROUP_FOR_KERNEL] }],
-    },
-  },
-  {
-    files: [...FRONT_HALF_CELLS],
-    rules: { 'no-restricted-imports': ['error', { patterns: [SHELL_GROUP_FOR_FRONT_HALF] }] },
-  },
-  {
-    files: [...TERMINUS_CELLS],
-    rules: { 'no-restricted-imports': ['error', { patterns: [BYPASS_GROUP_FOR_TERMINUS] }] },
-  },
   {
     files: [...OBSERVER_FILES],
     rules: {
@@ -233,7 +93,7 @@ export const rules: NonNullable<OxlintConfig['rules']> = {
 /**
  * The whole preset as one `extends`-consumable config: `extends: [recommended]`
  * delivers the plugins, type awareness, the correctness category, the universal
- * tier, and the cell-scoped tiers together.
+ * tier, and the test-file hygiene tier together.
  *
  * Typed as the host's own `OxlintConfig`, so a shape oxlint would ignore fails
  * this package's typecheck instead of silently under-enforcing in a consumer.

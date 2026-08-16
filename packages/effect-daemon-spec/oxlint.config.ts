@@ -1,6 +1,5 @@
 import base from '@systemfsoftware/oxlint-config/base'
 import cellVocabulary from '@systemfsoftware/oxlint-plugin-cell-vocabulary'
-import effectExecutor from '@systemfsoftware/oxlint-plugin-effect-executor'
 import { defineConfig } from 'oxlint'
 
 export default defineConfig({
@@ -8,12 +7,10 @@ export default defineConfig({
 
   jsPlugins: [
     import.meta.resolve('@systemfsoftware/oxlint-plugin-cell-vocabulary'),
-    import.meta.resolve('@systemfsoftware/oxlint-plugin-effect-executor'),
   ],
 
   rules: {
     ...cellVocabulary.configs.recommended.rules,
-    ...effectExecutor.configs.recommended.rules,
 
     // ── v4 migration: Context.Service replaces Context.Tag (class syntax
     // `extends Context.Service<Self, Shape>()(id)`); the shared ban-classes

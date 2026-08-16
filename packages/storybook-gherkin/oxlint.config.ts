@@ -7,19 +7,10 @@ export default defineConfig({
 
   plugins: ['typescript', 'import', 'jsdoc', 'unicorn', 'oxc'],
 
-  jsPlugins: [import.meta.resolve('@systemfsoftware/oxlint-plugin-effect-schema')],
-
   rules: {
     'import/no-cycle': 'warn',
     'unicorn/prefer-node-protocol': 'error',
     'jsdoc/check-tag-names': ['warn', { definedTags: ['category', 'since', 'internal'] }],
-    // Dated baseline 2026-08-09 (KTD6; warn-severity-is-dominated A2): the
-    // published Capture/Step interfaces keep their manual _tag members until
-    // they migrate; entries shrink only.
-    '@systemfsoftware/oxlint-plugin-effect-schema/no-manual-tag-member': [
-      'error',
-      { allow: ['Capture', 'Step'] },
-    ],
     'typescript/switch-exhaustiveness-check': 'error',
     'typescript/ban-ts-comment': 'error',
     'typescript/no-floating-promises': 'error',

@@ -49,28 +49,29 @@ rules:
     do: leave the obligation rule to the cell plugins; this package judges phase bodies wherever
       they appear, and a file that declares no description is correctly silent here
     dont: add a rule that fails a file for lacking a description in order to satisfy OX-OB1 —
-      `effect-executor/executor-requires-description` already owns that obligation, keyed to the
-      cell that has it
+      `effect-executor/executor-requires-description` owned that obligation until the cell-role
+      fleet was deleted 2026-08-16; the obligation is now recorded unowned in
+      `docs/solutions/architecture-patterns/cell-suffix-fleet-deleted-unowned.md`
     harm: an obligation rule here would fire on every file in every delivered package that does not
       build a description, which is nearly all of them
-    check: review — `configs.recommended` registers prohibitions only, and the obligation for
-      executors lives in `effect-executor`
+    check: review — `configs.recommended` registers prohibitions only, and no obligation rule
+      exists in this package
 ```
 
 ## Delivery
 
 Delivered **consumer-side** through each consuming package's own `jsPlugins`, never through
 `@systemfsoftware/oxlint-config`. The aggregate declares every plugin as a real dependency, so an
-aggregate that declared this one would close the turbo cycle `effect-executor -> effect-cell-types
--> oxlint-config -> effect-dmmf -> effect-executor` — measured 2026-08-15 with `pnpm turbo build
---dry=json`: `effect-executor#build` depends on `effect-cell-types#build`, which dev-depends on
-`oxlint-config#build` directly, which depends on `effect-dmmf#build`; the aggregate adds the closing
-`effect-dmmf -> effect-executor` edge. The longer lane through `effect-gherkin-spec` also exists —
-`effect-cell-types` dev-depends on `effect-gherkin-spec`, which dev-depends on `oxlint-config` —
-and sits in the same cycle, but the direct edge is the minimal one. `scripts/guards/check-lint-coverage.mjs`
-classifies this package accordingly.
+aggregate that declared this one would close a turbo cycle through `effect-cell-types` — measured
+2026-08-15 with `pnpm turbo build --dry=json` in the pre-collapse tree: a plugin rule-package
+(`effect-executor`, since deleted) depended on `effect-cell-types#build`, which dev-depends on
+`oxlint-config#build` directly, which depends on `effect-dmmf#build`; the aggregate adds the
+closing edge. The longer lane through `effect-gherkin-spec` also exists — `effect-cell-types`
+dev-depends on `effect-gherkin-spec`, which dev-depends on `oxlint-config` — and sits in the same
+cycle. `scripts/guards/check-lint-coverage.mjs` classifies this package accordingly.
 
-The sibling rule `effect-executor/executor-no-io-in-filling` walks the same `Cell.vocabulary` directly and is delivered consumer-side for the same reason (OX-DL1); neither restates.
+The delivery rule is the measured general one: any future plugin that needs `effect-cell-types` at
+load walks `Cell.vocabulary` directly and is delivered consumer-side for the same reason (OX-DL1).
 
 ## Verification
 

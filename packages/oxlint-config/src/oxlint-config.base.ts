@@ -26,11 +26,6 @@ export default defineConfig({
   jsPlugins: [
     import.meta.resolve('@systemfsoftware/oxlint-plugin'),
     import.meta.resolve('@systemfsoftware/oxlint-plugin-effect-dmmf'),
-    // Only `capability-named-directory` is switched on below. `cell-suffix-required`
-    // stays opt-in: it keys on a file's cell suffix, which the Stryker fork and the
-    // tooling packages deliberately do not carry. Directory naming has no such
-    // exemption -- a path that answers "of what?" is asked of every package here.
-    import.meta.resolve('@systemfsoftware/oxlint-plugin-cell-taxonomy'),
   ],
 
   rules: {
@@ -42,13 +37,13 @@ export default defineConfig({
     'jest/valid-expect': 'off',
 
     // Constitution I.6 -- exhaustive dispatch over a closed type is the only branch
-    // form the pure core admits. The cell rules enforce that shape; this enforces
-    // that the match is total.
+    // form the pure core admits. `workflow-match-exhaustive` enforces that shape at
+    // the `Workflow.make` boundary; this enforces that the match is total.
     'typescript/switch-exhaustiveness-check': 'error',
 
-    // Constitution II.5 -- decode, never cast. The per-cell cast rules cover the
-    // suffixed cells; these close the same hole everywhere else, including the `any`
-    // leak paths that an `as`-only audit cannot see.
+    // Constitution II.5 -- decode, never cast. The schema plugin's rules close the
+    // `as`-adjacent holes; these close the same hole everywhere else, including the
+    // `any` leak paths that an `as`-only audit cannot see.
     'typescript/ban-ts-comment': 'error',
     'typescript/no-floating-promises': 'error',
     'typescript/no-non-null-assertion': 'error',
@@ -65,6 +60,7 @@ export default defineConfig({
     '@systemfsoftware/oxlint-plugin/no-context-generic-tag': 'error',
     '@systemfsoftware/oxlint-plugin/no-date-now-in-effect': 'error',
     '@systemfsoftware/oxlint-plugin/no-direct-tag-access': 'error',
+    '@systemfsoftware/oxlint-plugin/no-domain-branching-density': 'error',
     '@systemfsoftware/oxlint-plugin/no-either-tag-assertions': 'error',
     '@systemfsoftware/oxlint-plugin/no-io-boundary-tests': 'error',
     '@systemfsoftware/oxlint-plugin/no-logging-in-catch': 'error',
@@ -73,7 +69,6 @@ export default defineConfig({
     '@systemfsoftware/oxlint-plugin/no-native-set-in-effect': 'error',
     '@systemfsoftware/oxlint-plugin/no-native-setinterval-in-effect': 'error',
     '@systemfsoftware/oxlint-plugin/no-native-settimeout-in-effect': 'error',
-    '@systemfsoftware/oxlint-plugin-cell-taxonomy/capability-named-directory': 'error',
     ...effectDmmf.configs.recommended.rules,
     '@systemfsoftware/oxlint-plugin/no-new-worker-with-wasm-import': 'error',
     '@systemfsoftware/oxlint-plugin/no-barrels': 'off',

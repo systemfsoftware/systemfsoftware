@@ -34,9 +34,6 @@ catalogs:
     '@std/jsonc':
       specifier: jsr:^1.0.2
       version: 1.0.2
-    '@std/path':
-      specifier: jsr:^1.0.0
-      version: 1.1.6
     '@std/toml':
       specifier: jsr:^1.0.11
       version: 1.0.11
@@ -277,9 +274,6 @@ importers:
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
         version: link:../../../packages/oxlint-config
-      '@systemfsoftware/oxlint-plugin-effect-executor':
-        specifier: workspace:^
-        version: link:../../../packages/oxlint-plugins/effect-executor
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../../packages/tsconfig
@@ -335,9 +329,6 @@ importers:
       '@systemfsoftware/oxlint-plugin-cell-vocabulary':
         specifier: workspace:^
         version: link:../../../packages/oxlint-plugins/cell-vocabulary
-      '@systemfsoftware/oxlint-plugin-effect-executor':
-        specifier: workspace:^
-        version: link:../../../packages/oxlint-plugins/effect-executor
       '@systemfsoftware/stryker-js-mutation-run':
         specifier: workspace:^
         version: link:../../../packages/stryker-js/mutation-run
@@ -514,9 +505,6 @@ importers:
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:^
         version: link:../../effect-gherkin-spec
-      '@systemfsoftware/oxlint-plugin-effect-schema':
-        specifier: workspace:^
-        version: link:../../oxlint-plugins/effect-schema
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../tsconfig
@@ -758,9 +746,6 @@ importers:
       '@systemfsoftware/oxlint-plugin-cell-vocabulary':
         specifier: workspace:^
         version: link:../oxlint-plugins/cell-vocabulary
-      '@systemfsoftware/oxlint-plugin-effect-executor':
-        specifier: workspace:^
-        version: link:../oxlint-plugins/effect-executor
       '@systemfsoftware/stryker-js-mutation-run':
         specifier: workspace:^
         version: link:../stryker-js/mutation-run
@@ -1118,9 +1103,6 @@ importers:
       '@systemfsoftware/oxlint-plugin':
         specifier: workspace:^
         version: link:../oxlint-plugins/core
-      '@systemfsoftware/oxlint-plugin-cell-taxonomy':
-        specifier: workspace:^
-        version: link:../oxlint-plugins/cell-taxonomy
       '@systemfsoftware/oxlint-plugin-effect-dmmf':
         specifier: workspace:^
         version: link:../oxlint-plugins/effect-dmmf
@@ -1155,119 +1137,6 @@ importers:
       rimraf:
         specifier: 'catalog:'
         version: 6.1.3
-      vitest:
-        specifier: 'catalog:'
-        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-istanbul@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1)(vite@8.2.1(@types/node@24.13.2)(esbuild@0.27.7)(jiti@2.7.0)(yaml@2.9.0))
-
-  packages/oxlint-plugins/cell-imports:
-    dependencies:
-      '@oxc-project/types':
-        specifier: ^0.140.0
-        version: 0.140.0
-      '@oxlint/plugins':
-        specifier: catalog:oxlint
-        version: 1.77.0
-      '@std/path':
-        specifier: 'catalog:'
-        version: '@jsr/std__path@1.1.6'
-    devDependencies:
-      '@microsoft/api-extractor':
-        specifier: 'catalog:'
-        version: 7.58.9(@types/node@24.13.2)
-      '@systemfsoftware/arethetypeswrong-cli':
-        specifier: catalog:attw
-        version: 1.1.1
-      '@systemfsoftware/stryker-js-mutation-run':
-        specifier: workspace:^
-        version: link:../../stryker-js/mutation-run
-      '@systemfsoftware/stryker-js-typescript-checker':
-        specifier: workspace:^
-        version: link:../../stryker-js/typescript-checker
-      '@systemfsoftware/stryker-js-vitest-runner':
-        specifier: workspace:^
-        version: link:../../stryker-js/vitest-runner
-      '@systemfsoftware/tsconfig':
-        specifier: workspace:^
-        version: link:../../tsconfig
-      '@systemfsoftware/vitest-config':
-        specifier: workspace:^
-        version: link:../../vitest-config
-      '@types/node':
-        specifier: 'catalog:'
-        version: 24.13.2
-      '@vitest/coverage-v8':
-        specifier: 'catalog:'
-        version: 4.1.9(vitest@4.1.10)
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.0-rc.108
-      oxlint:
-        specifier: catalog:oxlint
-        version: 1.77.0(oxlint-tsgolint@0.24.0)
-      rimraf:
-        specifier: 'catalog:'
-        version: 6.1.3
-      tsdown:
-        specifier: 'catalog:'
-        version: 0.22.14(oxc-resolver@11.24.2)(typescript@7.0.2)(unrun@0.2.39)
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
-      vitest:
-        specifier: 'catalog:'
-        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-istanbul@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1)(vite@8.2.1(@types/node@24.13.2)(esbuild@0.27.7)(jiti@2.7.0)(yaml@2.9.0))
-
-  packages/oxlint-plugins/cell-taxonomy:
-    dependencies:
-      '@oxc-project/types':
-        specifier: ^0.140.0
-        version: 0.140.0
-      '@oxlint/plugins':
-        specifier: catalog:oxlint
-        version: 1.77.0
-    devDependencies:
-      '@microsoft/api-extractor':
-        specifier: 'catalog:'
-        version: 7.58.9(@types/node@24.13.2)
-      '@systemfsoftware/arethetypeswrong-cli':
-        specifier: catalog:attw
-        version: 1.1.1
-      '@systemfsoftware/stryker-js-mutation-run':
-        specifier: workspace:^
-        version: link:../../stryker-js/mutation-run
-      '@systemfsoftware/stryker-js-typescript-checker':
-        specifier: workspace:^
-        version: link:../../stryker-js/typescript-checker
-      '@systemfsoftware/stryker-js-vitest-runner':
-        specifier: workspace:^
-        version: link:../../stryker-js/vitest-runner
-      '@systemfsoftware/tsconfig':
-        specifier: workspace:^
-        version: link:../../tsconfig
-      '@systemfsoftware/vitest-config':
-        specifier: workspace:^
-        version: link:../../vitest-config
-      '@types/node':
-        specifier: 'catalog:'
-        version: 24.13.2
-      '@vitest/coverage-v8':
-        specifier: 'catalog:'
-        version: 4.1.9(vitest@4.1.10)
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.0-rc.108
-      oxlint:
-        specifier: catalog:oxlint
-        version: 1.77.0(oxlint-tsgolint@0.24.0)
-      rimraf:
-        specifier: 'catalog:'
-        version: 6.1.3
-      tsdown:
-        specifier: 'catalog:'
-        version: 0.22.14(oxc-resolver@11.24.2)(typescript@7.0.2)(unrun@0.2.39)
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
       vitest:
         specifier: 'catalog:'
         version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-istanbul@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1)(vite@8.2.1(@types/node@24.13.2)(esbuild@0.27.7)(jiti@2.7.0)(yaml@2.9.0))
@@ -1385,160 +1254,14 @@ importers:
         specifier: 'catalog:'
         version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-istanbul@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1)(vite@8.2.1(@types/node@24.13.2)(esbuild@0.27.7)(jiti@2.7.0)(yaml@2.9.0))
 
-  packages/oxlint-plugins/effect-acl:
-    dependencies:
-      '@oxc-project/types':
-        specifier: ^0.140.0
-        version: 0.140.0
-      '@oxlint/plugins':
-        specifier: catalog:oxlint
-        version: 1.77.0
-    devDependencies:
-      '@microsoft/api-extractor':
-        specifier: 'catalog:'
-        version: 7.58.9(@types/node@24.13.2)
-      '@systemfsoftware/arethetypeswrong-cli':
-        specifier: catalog:attw
-        version: 1.1.1
-      '@systemfsoftware/stryker-js-mutation-run':
-        specifier: workspace:^
-        version: link:../../stryker-js/mutation-run
-      '@systemfsoftware/stryker-js-typescript-checker':
-        specifier: workspace:^
-        version: link:../../stryker-js/typescript-checker
-      '@systemfsoftware/stryker-js-vitest-runner':
-        specifier: workspace:^
-        version: link:../../stryker-js/vitest-runner
-      '@systemfsoftware/tsconfig':
-        specifier: workspace:^
-        version: link:../../tsconfig
-      '@systemfsoftware/vitest-config':
-        specifier: workspace:^
-        version: link:../../vitest-config
-      '@types/node':
-        specifier: 'catalog:'
-        version: 24.13.2
-      '@vitest/coverage-v8':
-        specifier: 'catalog:'
-        version: 4.1.9(vitest@4.1.10)
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.0-rc.108
-      oxlint:
-        specifier: catalog:oxlint
-        version: 1.77.0(oxlint-tsgolint@0.24.0)
-      rimraf:
-        specifier: 'catalog:'
-        version: 6.1.3
-      tsdown:
-        specifier: 'catalog:'
-        version: 0.22.14(oxc-resolver@11.24.2)(typescript@7.0.2)(unrun@0.2.39)
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
-      vitest:
-        specifier: 'catalog:'
-        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-istanbul@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1)(vite@8.2.1(@types/node@24.13.2)(esbuild@0.27.7)(jiti@2.7.0)(yaml@2.9.0))
-
-  packages/oxlint-plugins/effect-adapter:
-    dependencies:
-      '@oxc-project/types':
-        specifier: ^0.140.0
-        version: 0.140.0
-      '@oxlint/plugins':
-        specifier: catalog:oxlint
-        version: 1.77.0
-    devDependencies:
-      '@microsoft/api-extractor':
-        specifier: 'catalog:'
-        version: 7.58.9(@types/node@24.13.2)
-      '@systemfsoftware/arethetypeswrong-cli':
-        specifier: catalog:attw
-        version: 1.1.1
-      '@systemfsoftware/stryker-js-mutation-run':
-        specifier: workspace:^
-        version: link:../../stryker-js/mutation-run
-      '@systemfsoftware/stryker-js-typescript-checker':
-        specifier: workspace:^
-        version: link:../../stryker-js/typescript-checker
-      '@systemfsoftware/stryker-js-vitest-runner':
-        specifier: workspace:^
-        version: link:../../stryker-js/vitest-runner
-      '@systemfsoftware/tsconfig':
-        specifier: workspace:^
-        version: link:../../tsconfig
-      '@systemfsoftware/vitest-config':
-        specifier: workspace:^
-        version: link:../../vitest-config
-      '@types/node':
-        specifier: 'catalog:'
-        version: 24.13.2
-      '@vitest/coverage-v8':
-        specifier: 'catalog:'
-        version: 4.1.9(vitest@4.1.10)
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.0-rc.108
-      oxlint:
-        specifier: catalog:oxlint
-        version: 1.77.0(oxlint-tsgolint@0.24.0)
-      rimraf:
-        specifier: 'catalog:'
-        version: 6.1.3
-      tsdown:
-        specifier: 'catalog:'
-        version: 0.22.14(oxc-resolver@11.24.2)(typescript@7.0.2)(unrun@0.2.39)
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
-      vitest:
-        specifier: 'catalog:'
-        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-istanbul@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1)(vite@8.2.1(@types/node@24.13.2)(esbuild@0.27.7)(jiti@2.7.0)(yaml@2.9.0))
-
   packages/oxlint-plugins/effect-dmmf:
     dependencies:
       '@oxlint/plugins':
         specifier: catalog:oxlint
         version: 1.77.0
-      '@systemfsoftware/oxlint-plugin-cell-imports':
-        specifier: workspace:^
-        version: link:../cell-imports
-      '@systemfsoftware/oxlint-plugin-cell-taxonomy':
-        specifier: workspace:^
-        version: link:../cell-taxonomy
-      '@systemfsoftware/oxlint-plugin-effect-acl':
-        specifier: workspace:^
-        version: link:../effect-acl
-      '@systemfsoftware/oxlint-plugin-effect-adapter':
-        specifier: workspace:^
-        version: link:../effect-adapter
-      '@systemfsoftware/oxlint-plugin-effect-handler':
-        specifier: workspace:^
-        version: link:../effect-handler
-      '@systemfsoftware/oxlint-plugin-effect-kernel':
-        specifier: workspace:^
-        version: link:../effect-kernel
-      '@systemfsoftware/oxlint-plugin-effect-middleware':
-        specifier: workspace:^
-        version: link:../effect-middleware
-      '@systemfsoftware/oxlint-plugin-effect-observer':
-        specifier: workspace:^
-        version: link:../effect-observer
-      '@systemfsoftware/oxlint-plugin-effect-policy':
-        specifier: workspace:^
-        version: link:../effect-policy
       '@systemfsoftware/oxlint-plugin-effect-schema':
         specifier: workspace:^
         version: link:../effect-schema
-      '@systemfsoftware/oxlint-plugin-effect-shape':
-        specifier: workspace:^
-        version: link:../effect-shape
-      '@systemfsoftware/oxlint-plugin-effect-state':
-        specifier: workspace:^
-        version: link:../effect-state
-      '@systemfsoftware/oxlint-plugin-effect-store':
-        specifier: workspace:^
-        version: link:../effect-store
       '@systemfsoftware/oxlint-plugin-effect-workflow':
         specifier: workspace:^
         version: link:../effect-workflow
@@ -1629,505 +1352,7 @@ importers:
         specifier: 'catalog:'
         version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-istanbul@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1)(vite@8.2.1(@types/node@24.13.2)(esbuild@0.27.7)(jiti@2.7.0)(yaml@2.9.0))
 
-  packages/oxlint-plugins/effect-executor:
-    dependencies:
-      '@oxc-project/types':
-        specifier: ^0.140.0
-        version: 0.140.0
-      '@oxlint/plugins':
-        specifier: catalog:oxlint
-        version: 1.77.0
-      '@systemfsoftware/effect-cell-types':
-        specifier: workspace:^
-        version: link:../../effect-cell-types
-    devDependencies:
-      '@microsoft/api-extractor':
-        specifier: 'catalog:'
-        version: 7.58.9(@types/node@24.13.2)
-      '@systemfsoftware/arethetypeswrong-cli':
-        specifier: catalog:attw
-        version: 1.1.1
-      '@systemfsoftware/stryker-js-mutation-run':
-        specifier: workspace:^
-        version: link:../../stryker-js/mutation-run
-      '@systemfsoftware/stryker-js-typescript-checker':
-        specifier: workspace:^
-        version: link:../../stryker-js/typescript-checker
-      '@systemfsoftware/stryker-js-vitest-runner':
-        specifier: workspace:^
-        version: link:../../stryker-js/vitest-runner
-      '@systemfsoftware/tsconfig':
-        specifier: workspace:^
-        version: link:../../tsconfig
-      '@systemfsoftware/vitest-config':
-        specifier: workspace:^
-        version: link:../../vitest-config
-      '@types/node':
-        specifier: 'catalog:'
-        version: 24.13.2
-      '@vitest/coverage-v8':
-        specifier: 'catalog:'
-        version: 4.1.9(vitest@4.1.10)
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.0-rc.108
-      oxlint:
-        specifier: catalog:oxlint
-        version: 1.77.0(oxlint-tsgolint@0.24.0)
-      rimraf:
-        specifier: 'catalog:'
-        version: 6.1.3
-      tsdown:
-        specifier: 'catalog:'
-        version: 0.22.14(oxc-resolver@11.24.2)(typescript@7.0.2)(unrun@0.2.39)
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
-      vitest:
-        specifier: 'catalog:'
-        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-istanbul@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1)(vite@8.2.1(@types/node@24.13.2)(esbuild@0.27.7)(jiti@2.7.0)(yaml@2.9.0))
-
-  packages/oxlint-plugins/effect-handler:
-    dependencies:
-      '@oxc-project/types':
-        specifier: ^0.140.0
-        version: 0.140.0
-      '@oxlint/plugins':
-        specifier: catalog:oxlint
-        version: 1.77.0
-    devDependencies:
-      '@microsoft/api-extractor':
-        specifier: 'catalog:'
-        version: 7.58.9(@types/node@24.13.2)
-      '@systemfsoftware/arethetypeswrong-cli':
-        specifier: catalog:attw
-        version: 1.1.1
-      '@systemfsoftware/stryker-js-mutation-run':
-        specifier: workspace:^
-        version: link:../../stryker-js/mutation-run
-      '@systemfsoftware/stryker-js-typescript-checker':
-        specifier: workspace:^
-        version: link:../../stryker-js/typescript-checker
-      '@systemfsoftware/stryker-js-vitest-runner':
-        specifier: workspace:^
-        version: link:../../stryker-js/vitest-runner
-      '@systemfsoftware/tsconfig':
-        specifier: workspace:^
-        version: link:../../tsconfig
-      '@systemfsoftware/vitest-config':
-        specifier: workspace:^
-        version: link:../../vitest-config
-      '@types/node':
-        specifier: 'catalog:'
-        version: 24.13.2
-      '@vitest/coverage-v8':
-        specifier: 'catalog:'
-        version: 4.1.9(vitest@4.1.10)
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.0-rc.108
-      oxlint:
-        specifier: catalog:oxlint
-        version: 1.77.0(oxlint-tsgolint@0.24.0)
-      rimraf:
-        specifier: 'catalog:'
-        version: 6.1.3
-      tsdown:
-        specifier: 'catalog:'
-        version: 0.22.14(oxc-resolver@11.24.2)(typescript@7.0.2)(unrun@0.2.39)
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
-      vitest:
-        specifier: 'catalog:'
-        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-istanbul@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1)(vite@8.2.1(@types/node@24.13.2)(esbuild@0.27.7)(jiti@2.7.0)(yaml@2.9.0))
-
-  packages/oxlint-plugins/effect-kernel:
-    dependencies:
-      '@oxc-project/types':
-        specifier: ^0.140.0
-        version: 0.140.0
-      '@oxlint/plugins':
-        specifier: catalog:oxlint
-        version: 1.77.0
-    devDependencies:
-      '@microsoft/api-extractor':
-        specifier: 'catalog:'
-        version: 7.58.9(@types/node@24.13.2)
-      '@systemfsoftware/arethetypeswrong-cli':
-        specifier: catalog:attw
-        version: 1.1.1
-      '@systemfsoftware/stryker-js-mutation-run':
-        specifier: workspace:^
-        version: link:../../stryker-js/mutation-run
-      '@systemfsoftware/stryker-js-typescript-checker':
-        specifier: workspace:^
-        version: link:../../stryker-js/typescript-checker
-      '@systemfsoftware/stryker-js-vitest-runner':
-        specifier: workspace:^
-        version: link:../../stryker-js/vitest-runner
-      '@systemfsoftware/tsconfig':
-        specifier: workspace:^
-        version: link:../../tsconfig
-      '@systemfsoftware/vitest-config':
-        specifier: workspace:^
-        version: link:../../vitest-config
-      '@types/node':
-        specifier: 'catalog:'
-        version: 24.13.2
-      '@vitest/coverage-v8':
-        specifier: 'catalog:'
-        version: 4.1.9(vitest@4.1.10)
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.0-rc.108
-      oxlint:
-        specifier: catalog:oxlint
-        version: 1.77.0(oxlint-tsgolint@0.24.0)
-      rimraf:
-        specifier: 'catalog:'
-        version: 6.1.3
-      tsdown:
-        specifier: 'catalog:'
-        version: 0.22.14(oxc-resolver@11.24.2)(typescript@7.0.2)(unrun@0.2.39)
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
-      vitest:
-        specifier: 'catalog:'
-        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-istanbul@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1)(vite@8.2.1(@types/node@24.13.2)(esbuild@0.27.7)(jiti@2.7.0)(yaml@2.9.0))
-
-  packages/oxlint-plugins/effect-middleware:
-    dependencies:
-      '@oxc-project/types':
-        specifier: ^0.140.0
-        version: 0.140.0
-      '@oxlint/plugins':
-        specifier: catalog:oxlint
-        version: 1.77.0
-    devDependencies:
-      '@microsoft/api-extractor':
-        specifier: 'catalog:'
-        version: 7.58.9(@types/node@24.13.2)
-      '@systemfsoftware/arethetypeswrong-cli':
-        specifier: catalog:attw
-        version: 1.1.1
-      '@systemfsoftware/stryker-js-mutation-run':
-        specifier: workspace:^
-        version: link:../../stryker-js/mutation-run
-      '@systemfsoftware/stryker-js-typescript-checker':
-        specifier: workspace:^
-        version: link:../../stryker-js/typescript-checker
-      '@systemfsoftware/stryker-js-vitest-runner':
-        specifier: workspace:^
-        version: link:../../stryker-js/vitest-runner
-      '@systemfsoftware/tsconfig':
-        specifier: workspace:^
-        version: link:../../tsconfig
-      '@systemfsoftware/vitest-config':
-        specifier: workspace:^
-        version: link:../../vitest-config
-      '@types/node':
-        specifier: 'catalog:'
-        version: 24.13.2
-      '@vitest/coverage-v8':
-        specifier: 'catalog:'
-        version: 4.1.9(vitest@4.1.10)
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.0-rc.108
-      oxlint:
-        specifier: catalog:oxlint
-        version: 1.77.0(oxlint-tsgolint@0.24.0)
-      rimraf:
-        specifier: 'catalog:'
-        version: 6.1.3
-      tsdown:
-        specifier: 'catalog:'
-        version: 0.22.14(oxc-resolver@11.24.2)(typescript@7.0.2)(unrun@0.2.39)
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
-      vitest:
-        specifier: 'catalog:'
-        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-istanbul@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1)(vite@8.2.1(@types/node@24.13.2)(esbuild@0.27.7)(jiti@2.7.0)(yaml@2.9.0))
-
-  packages/oxlint-plugins/effect-observer:
-    dependencies:
-      '@oxc-project/types':
-        specifier: ^0.140.0
-        version: 0.140.0
-      '@oxlint/plugins':
-        specifier: catalog:oxlint
-        version: 1.77.0
-    devDependencies:
-      '@microsoft/api-extractor':
-        specifier: 'catalog:'
-        version: 7.58.9(@types/node@24.13.2)
-      '@systemfsoftware/arethetypeswrong-cli':
-        specifier: catalog:attw
-        version: 1.1.1
-      '@systemfsoftware/stryker-js-mutation-run':
-        specifier: workspace:^
-        version: link:../../stryker-js/mutation-run
-      '@systemfsoftware/stryker-js-typescript-checker':
-        specifier: workspace:^
-        version: link:../../stryker-js/typescript-checker
-      '@systemfsoftware/stryker-js-vitest-runner':
-        specifier: workspace:^
-        version: link:../../stryker-js/vitest-runner
-      '@systemfsoftware/tsconfig':
-        specifier: workspace:^
-        version: link:../../tsconfig
-      '@systemfsoftware/vitest-config':
-        specifier: workspace:^
-        version: link:../../vitest-config
-      '@types/node':
-        specifier: 'catalog:'
-        version: 24.13.2
-      '@vitest/coverage-v8':
-        specifier: 'catalog:'
-        version: 4.1.9(vitest@4.1.10)
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.0-rc.108
-      oxlint:
-        specifier: catalog:oxlint
-        version: 1.77.0(oxlint-tsgolint@0.24.0)
-      rimraf:
-        specifier: 'catalog:'
-        version: 6.1.3
-      tsdown:
-        specifier: 'catalog:'
-        version: 0.22.14(oxc-resolver@11.24.2)(typescript@7.0.2)(unrun@0.2.39)
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
-      vitest:
-        specifier: 'catalog:'
-        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-istanbul@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1)(vite@8.2.1(@types/node@24.13.2)(esbuild@0.27.7)(jiti@2.7.0)(yaml@2.9.0))
-
-  packages/oxlint-plugins/effect-policy:
-    dependencies:
-      '@oxc-project/types':
-        specifier: ^0.140.0
-        version: 0.140.0
-      '@oxlint/plugins':
-        specifier: catalog:oxlint
-        version: 1.77.0
-    devDependencies:
-      '@microsoft/api-extractor':
-        specifier: 'catalog:'
-        version: 7.58.9(@types/node@24.13.2)
-      '@systemfsoftware/arethetypeswrong-cli':
-        specifier: catalog:attw
-        version: 1.1.1
-      '@systemfsoftware/stryker-js-mutation-run':
-        specifier: workspace:^
-        version: link:../../stryker-js/mutation-run
-      '@systemfsoftware/stryker-js-typescript-checker':
-        specifier: workspace:^
-        version: link:../../stryker-js/typescript-checker
-      '@systemfsoftware/stryker-js-vitest-runner':
-        specifier: workspace:^
-        version: link:../../stryker-js/vitest-runner
-      '@systemfsoftware/tsconfig':
-        specifier: workspace:^
-        version: link:../../tsconfig
-      '@systemfsoftware/vitest-config':
-        specifier: workspace:^
-        version: link:../../vitest-config
-      '@types/node':
-        specifier: 'catalog:'
-        version: 24.13.2
-      '@vitest/coverage-v8':
-        specifier: 'catalog:'
-        version: 4.1.9(vitest@4.1.10)
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.0-rc.108
-      oxlint:
-        specifier: catalog:oxlint
-        version: 1.77.0(oxlint-tsgolint@0.24.0)
-      rimraf:
-        specifier: 'catalog:'
-        version: 6.1.3
-      tsdown:
-        specifier: 'catalog:'
-        version: 0.22.14(oxc-resolver@11.24.2)(typescript@7.0.2)(unrun@0.2.39)
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
-      vitest:
-        specifier: 'catalog:'
-        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-istanbul@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1)(vite@8.2.1(@types/node@24.13.2)(esbuild@0.27.7)(jiti@2.7.0)(yaml@2.9.0))
-
   packages/oxlint-plugins/effect-schema:
-    dependencies:
-      '@oxc-project/types':
-        specifier: ^0.140.0
-        version: 0.140.0
-      '@oxlint/plugins':
-        specifier: catalog:oxlint
-        version: 1.77.0
-    devDependencies:
-      '@microsoft/api-extractor':
-        specifier: 'catalog:'
-        version: 7.58.9(@types/node@24.13.2)
-      '@systemfsoftware/arethetypeswrong-cli':
-        specifier: catalog:attw
-        version: 1.1.1
-      '@systemfsoftware/stryker-js-mutation-run':
-        specifier: workspace:^
-        version: link:../../stryker-js/mutation-run
-      '@systemfsoftware/stryker-js-typescript-checker':
-        specifier: workspace:^
-        version: link:../../stryker-js/typescript-checker
-      '@systemfsoftware/stryker-js-vitest-runner':
-        specifier: workspace:^
-        version: link:../../stryker-js/vitest-runner
-      '@systemfsoftware/tsconfig':
-        specifier: workspace:^
-        version: link:../../tsconfig
-      '@systemfsoftware/vitest-config':
-        specifier: workspace:^
-        version: link:../../vitest-config
-      '@types/node':
-        specifier: 'catalog:'
-        version: 24.13.2
-      '@vitest/coverage-v8':
-        specifier: 'catalog:'
-        version: 4.1.9(vitest@4.1.10)
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.0-rc.108
-      oxlint:
-        specifier: catalog:oxlint
-        version: 1.77.0(oxlint-tsgolint@0.24.0)
-      rimraf:
-        specifier: 'catalog:'
-        version: 6.1.3
-      tsdown:
-        specifier: 'catalog:'
-        version: 0.22.14(oxc-resolver@11.24.2)(typescript@7.0.2)(unrun@0.2.39)
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
-      vitest:
-        specifier: 'catalog:'
-        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-istanbul@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1)(vite@8.2.1(@types/node@24.13.2)(esbuild@0.27.7)(jiti@2.7.0)(yaml@2.9.0))
-
-  packages/oxlint-plugins/effect-shape:
-    dependencies:
-      '@oxc-project/types':
-        specifier: ^0.140.0
-        version: 0.140.0
-      '@oxlint/plugins':
-        specifier: catalog:oxlint
-        version: 1.77.0
-    devDependencies:
-      '@microsoft/api-extractor':
-        specifier: 'catalog:'
-        version: 7.58.9(@types/node@24.13.2)
-      '@systemfsoftware/arethetypeswrong-cli':
-        specifier: catalog:attw
-        version: 1.1.1
-      '@systemfsoftware/stryker-js-mutation-run':
-        specifier: workspace:^
-        version: link:../../stryker-js/mutation-run
-      '@systemfsoftware/stryker-js-typescript-checker':
-        specifier: workspace:^
-        version: link:../../stryker-js/typescript-checker
-      '@systemfsoftware/stryker-js-vitest-runner':
-        specifier: workspace:^
-        version: link:../../stryker-js/vitest-runner
-      '@systemfsoftware/tsconfig':
-        specifier: workspace:^
-        version: link:../../tsconfig
-      '@systemfsoftware/vitest-config':
-        specifier: workspace:^
-        version: link:../../vitest-config
-      '@types/node':
-        specifier: 'catalog:'
-        version: 24.13.2
-      '@vitest/coverage-v8':
-        specifier: 'catalog:'
-        version: 4.1.9(vitest@4.1.10)
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.0-rc.108
-      oxlint:
-        specifier: catalog:oxlint
-        version: 1.77.0(oxlint-tsgolint@0.24.0)
-      rimraf:
-        specifier: 'catalog:'
-        version: 6.1.3
-      tsdown:
-        specifier: 'catalog:'
-        version: 0.22.14(oxc-resolver@11.24.2)(typescript@7.0.2)(unrun@0.2.39)
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
-      vitest:
-        specifier: 'catalog:'
-        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-istanbul@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1)(vite@8.2.1(@types/node@24.13.2)(esbuild@0.27.7)(jiti@2.7.0)(yaml@2.9.0))
-
-  packages/oxlint-plugins/effect-state:
-    dependencies:
-      '@oxc-project/types':
-        specifier: ^0.140.0
-        version: 0.140.0
-      '@oxlint/plugins':
-        specifier: catalog:oxlint
-        version: 1.77.0
-    devDependencies:
-      '@microsoft/api-extractor':
-        specifier: 'catalog:'
-        version: 7.58.9(@types/node@24.13.2)
-      '@systemfsoftware/arethetypeswrong-cli':
-        specifier: catalog:attw
-        version: 1.1.1
-      '@systemfsoftware/stryker-js-mutation-run':
-        specifier: workspace:^
-        version: link:../../stryker-js/mutation-run
-      '@systemfsoftware/stryker-js-typescript-checker':
-        specifier: workspace:^
-        version: link:../../stryker-js/typescript-checker
-      '@systemfsoftware/stryker-js-vitest-runner':
-        specifier: workspace:^
-        version: link:../../stryker-js/vitest-runner
-      '@systemfsoftware/tsconfig':
-        specifier: workspace:^
-        version: link:../../tsconfig
-      '@systemfsoftware/vitest-config':
-        specifier: workspace:^
-        version: link:../../vitest-config
-      '@types/node':
-        specifier: 'catalog:'
-        version: 24.13.2
-      '@vitest/coverage-v8':
-        specifier: 'catalog:'
-        version: 4.1.9(vitest@4.1.10)
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.0-rc.108
-      oxlint:
-        specifier: catalog:oxlint
-        version: 1.77.0(oxlint-tsgolint@0.24.0)
-      rimraf:
-        specifier: 'catalog:'
-        version: 6.1.3
-      tsdown:
-        specifier: 'catalog:'
-        version: 0.22.14(oxc-resolver@11.24.2)(typescript@7.0.2)(unrun@0.2.39)
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
-      vitest:
-        specifier: 'catalog:'
-        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-istanbul@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1)(vite@8.2.1(@types/node@24.13.2)(esbuild@0.27.7)(jiti@2.7.0)(yaml@2.9.0))
-
-  packages/oxlint-plugins/effect-store:
     dependencies:
       '@oxc-project/types':
         specifier: ^0.140.0
@@ -2489,9 +1714,6 @@ importers:
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: catalog:attw
         version: 1.1.1
-      '@systemfsoftware/oxlint-plugin-effect-schema':
-        specifier: workspace:^
-        version: link:../oxlint-plugins/effect-schema
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../tsconfig
@@ -2583,9 +1805,6 @@ importers:
       '@systemfsoftware/oxlint-plugin-effect-entrypoint':
         specifier: workspace:^
         version: link:../../oxlint-plugins/effect-entrypoint
-      '@systemfsoftware/oxlint-plugin-effect-executor':
-        specifier: workspace:^
-        version: link:../../oxlint-plugins/effect-executor
       '@systemfsoftware/oxlint-plugin-test-placement':
         specifier: workspace:^
         version: link:../../oxlint-plugins/test-placement
@@ -3948,17 +3167,11 @@ packages:
   '@jsr/std__collections@1.3.0':
     resolution: {integrity: sha512-oJ5V5ZvsWyO5VLdGk3TaRHaVibfVKHvDC8KJdgmxIucHN2QzAXlMt36ApyTUBncfrhXdN/5Q3yMNvloAKym8RA==, tarball: https://npm.jsr.io/~/11/@jsr/std__collections/1.3.0.tgz}
 
-  '@jsr/std__internal@1.0.14':
-    resolution: {integrity: sha512-JT8b/t40WcR9q0GDwRZUooY7aXeXnFal8iidE/5TckdAFtvpVAsaJ71/Xgf1SfoChs41s6CZkuCYM8toaNgdvA==, tarball: https://npm.jsr.io/~/11/@jsr/std__internal/1.0.14.tgz}
-
   '@jsr/std__json@1.1.0':
     resolution: {integrity: sha512-a9Eylh7ox33tFn5RxhESnvI4akpefQP5Qn+ePz3Ih4IJ/EPA8p0SKq0aztRfN1sGDhfyWMPWwlUcwNxONt+Ncg==, tarball: https://npm.jsr.io/~/11/@jsr/std__json/1.1.0.tgz}
 
   '@jsr/std__jsonc@1.0.2':
     resolution: {integrity: sha512-Lva9lY0UPvvgmS8INUHU8Tqijq2SPfdlnSAvofOYUBiB6ALPxo0rTMznRlY5Wt30nMW+rhMTha1x5RGpMBKUoQ==, tarball: https://npm.jsr.io/~/11/@jsr/std__jsonc/1.0.2.tgz}
-
-  '@jsr/std__path@1.1.6':
-    resolution: {integrity: sha512-H1Cmg6z8jFyIsQbVV+vZB4eOx4k6Qg8lyUM6l7nZysj5MZumg89kb0M1bsPBTGQis3fw6mJFkJELo5+AK6oCFA==, tarball: https://npm.jsr.io/~/11/@jsr/std__path/1.1.6.tgz}
 
   '@jsr/std__streams@1.1.2':
     resolution: {integrity: sha512-TNg+Mr/vE2Wg+JDdZpVj9umEyzcmSAOtcp0ildlyVCjHy0/fJ2BJZgO8PQXA/SwJOchvKLaMafZzfFkm9PO13A==, tarball: https://npm.jsr.io/~/11/@jsr/std__streams/1.1.2.tgz}
@@ -9477,8 +8690,6 @@ snapshots:
 
   '@jsr/std__collections@1.3.0': {}
 
-  '@jsr/std__internal@1.0.14': {}
-
   '@jsr/std__json@1.1.0':
     dependencies:
       '@jsr/std__streams': 1.1.2
@@ -9486,10 +8697,6 @@ snapshots:
   '@jsr/std__jsonc@1.0.2':
     dependencies:
       '@jsr/std__json': 1.1.0
-
-  '@jsr/std__path@1.1.6':
-    dependencies:
-      '@jsr/std__internal': 1.0.14
 
   '@jsr/std__streams@1.1.2':
     dependencies:

@@ -25,24 +25,11 @@ const root = process.cwd()
 const TOOLING = new Map([
   // The lint rules themselves; declaring oxlint-config would close a CO4 dependency cycle.
   ...[
-    'cell-imports',
-    'cell-taxonomy',
     'cell-vocabulary',
     'core',
-    'effect-acl',
-    'effect-adapter',
     'effect-dmmf',
     'effect-entrypoint',
-    'effect-executor',
-    'effect-handler',
-    'effect-kernel',
-    'effect-middleware',
-    'effect-observer',
-    'effect-policy',
     'effect-schema',
-    'effect-shape',
-    'effect-state',
-    'effect-store',
     'effect-workflow',
     'property-testing',
     'recommended',
@@ -114,6 +101,10 @@ const sourceBearing = new Set()
 for (const file of tracked) {
   if (!file.endsWith('.ts') || !file.includes('/src/')) continue
   if (/\.(test|spec)\.ts$/.test(file)) continue
+  // A tracked file that no longer exists on disk (uncommitted deletion) holds no
+  // source for a gate to be absent from; skip it so a removal already decided
+  // does not flag its directory as an uncovered production package.
+  if (!existsSync(join(root, file))) continue
   const owner = ownerOf(file)
   if (owner !== null) sourceBearing.add(owner)
 }
@@ -150,59 +141,6 @@ if (uncovered.length > 0) {
   process.exit(1)
 }
 
-// Consumer-side delivery. A plugin the aggregate config cannot carry — depending on it there closes
-// a turbo build cycle — reaches a package only through that package's own oxlint.config.ts. The
-// aggregate used to deliver these rules to everything that extended it, so forgetting the entry used
-// to be impossible; now it is merely invisible. A cell whose rules are delivered this way must have
-// a check that fails when a package owning that cell does not deliver them, or the reach is a
-// convention rather than a guarantee. Keys are cell suffixes, values the package that must appear.
-const CONSUMER_DELIVERED = new Map([
-  ['executor', '@systemfsoftware/oxlint-plugin-effect-executor'],
-])
-
-const ownersOfCell = (suffix) => {
-  const owners = new Set()
-  for (const file of tracked) {
-    if (!file.endsWith(`.${suffix}.ts`)) continue
-    if (/\.(test|spec)\.ts$/.test(file)) continue
-    const owner = ownerOf(file)
-    if (owner !== null) owners.add(owner)
-  }
-  return owners
-}
-
-const delivers = (dir, plugin) => {
-  const config = join(root, dir, 'oxlint.config.ts')
-  return existsSync(config) && readFileSync(config, 'utf8').includes(plugin)
-}
-
-const undelivered = []
-let delivered = 0
-for (const [suffix, plugin] of CONSUMER_DELIVERED) {
-  for (const dir of [...ownersOfCell(suffix)].sort()) {
-    if (toolingReason(dir) !== undefined) continue
-    if (delivers(dir, plugin)) delivered++
-    else undelivered.push({ dir, suffix, plugin })
-  }
-}
-
-if (undelivered.length > 0) {
-  console.error(
-    `check-lint-coverage: ${undelivered.length} package(s) own a consumer-delivered cell but do NOT load its plugin, so those rules are silently absent there:\n`,
-  )
-  for (const { dir, suffix, plugin } of undelivered) {
-    console.error(`  ${dir}  owns *.${suffix}.ts, missing ${plugin}`)
-  }
-  const [first] = undelivered
-  console.error(
-    `\nFix: in ${first.dir}/oxlint.config.ts add '${first.plugin}' to jsPlugins and spread its configs.recommended.rules, and declare the devDependency.`,
-  )
-  console.error(
-    `The aggregate config cannot carry it: depending on it there closes a turbo build cycle, which is why delivery is consumer-side and why this check exists.`,
-  )
-  process.exit(1)
-}
-
 console.log(
-  `check-lint-coverage: ${production} production package(s) linted, ${exempt} tooling package(s) exempt, ${delivered} consumer-side plugin delivery(ies) verified`,
+  `check-lint-coverage: ${production} production package(s) linted, ${exempt} tooling package(s) exempt`,
 )

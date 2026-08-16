@@ -12,11 +12,8 @@ const _default: {
         name: string;
     };
     rules: {
-        'workflow-inline-schemas': Rule;
-        'workflow-no-panic-vocabulary': Rule;
         'workflow-match-exhaustive': Rule;
-        'workflow-no-effect-import': Rule;
-        'workflow-property-test-shape': Rule;
+        'make-body-purity': Rule;
     };
     configs: {
         recommended: {

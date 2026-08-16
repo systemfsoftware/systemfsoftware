@@ -73,8 +73,7 @@
     "tsdown": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
-    "vitest": "catalog:",
-    "@systemfsoftware/oxlint-plugin-effect-schema": "workspace:^"
+    "vitest": "catalog:"
   },
   "publishConfig": {
     "exports": {
