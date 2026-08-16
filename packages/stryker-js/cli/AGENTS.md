@@ -26,6 +26,6 @@ The `stryker` bin's home. Core (`@systemfsoftware/stryker-js-core`) is the mutat
 
 - Types: `pnpm --filter @systemfsoftware/stryker-js-cli typecheck`
 - Tests: `pnpm --filter @systemfsoftware/stryker-js-cli test` (colocated cell tests under `src/__tests__/`)
-- Contract lane: `pnpm --filter @systemfsoftware/stryker-js-cli test:contract` (Gherkin scenarios in real containers via testcontainers)
+- Contract lane: `pnpm --filter @systemfsoftware/stryker-js-cli test:contract` (Gherkin scenarios in real containers via `@systemfsoftware/rightsize`)
 - Mutation gate: the Mutation workflow's report for this package; no agent starts a run (root `AGENTS.md` REPO-D3)
 - Lint: `pnpm --filter @systemfsoftware/stryker-js-cli lint`
