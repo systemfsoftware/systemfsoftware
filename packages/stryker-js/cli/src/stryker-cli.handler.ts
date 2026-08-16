@@ -14,6 +14,7 @@ import * as CliConfig from 'effect/unstable/cli/CliConfig'
 import * as CliError from 'effect/unstable/cli/CliError'
 import * as Command from 'effect/unstable/cli/Command'
 import * as Flag from 'effect/unstable/cli/Flag'
+import * as GlobalFlag from 'effect/unstable/cli/GlobalFlag'
 import * as ChildProcessSpawner from 'effect/unstable/process/ChildProcessSpawner'
 
 import { defaultOptions } from '@systemfsoftware/stryker-js-mutation-run/config/config-resolution'
@@ -507,7 +508,21 @@ const cliLayer = Layer.mergeAll(
   // v4 matches flags by exact name — commander's case-sensitive behaviour —
   // and exposes no case-normalisation switch; the previous `CliConfig.layer({
   // isCaseSensitive: true })` pin is therefore the framework default now.
-  CliConfig.layer(),
+  // The wire contract's version line is the bare semver (commander's shape);
+  // the framework's built-in renders `stryker v<version>`, so the Version
+  // action is replaced with one that prints the semver alone.
+  CliConfig.layer({
+    builtIns: [
+      GlobalFlag.Help,
+      GlobalFlag.action({
+        flag: Flag.boolean('version').pipe(Flag.withAlias('v'), Flag.withDescription('Show version information')),
+        run: () => Console.log(strykerVersion),
+      }),
+      GlobalFlag.Wizard,
+      GlobalFlag.Completions,
+      GlobalFlag.LogLevel,
+    ],
+  }),
   Path.layer,
   FileSystem.layerNoop({}),
   terminalLayer,
@@ -559,7 +574,7 @@ export function strykerCliEffect(
     )
     const outcome = yield* Effect.result(
       runStrykerCli(
-        { program: cliEffect, requestRef, mode, runMutationTest, recordExitCode },
+        { program: cliEffect, requestRef, mode, runMutationTest, recordExitCode, argv },
         createRunEventStream,
       ),
     )

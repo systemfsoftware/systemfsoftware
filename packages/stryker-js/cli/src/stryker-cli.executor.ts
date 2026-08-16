@@ -106,24 +106,18 @@ export type CliRequest = RunRequest | LlmsRequest
 
 /**
  * The frame the handler hands the executor: the already-run `@effect/cli`
- * command effect (with the CLI and Console layers provided), the per-run
- * request cell the command handlers wrote into, the mode resolved once at
- * the edge, and the injectable run.
+ * program, the parsed request, the resolved mode, the optional run, the exit
+ * recorder — and the raw argument tokens, which the error envelope names the
+ * offending argument from when the framework reports one it does not know.
  */
 export interface RunStrykerCliInput {
   readonly program: Effect.Effect<void, CliError.CliError, never>
   readonly requestRef: Ref.Ref<Option.Option<CliRequest>>
   readonly mode: ResolvedMode
   readonly runMutationTest: StrykerRun | undefined
-  /**
-   * Publishes the classed exit code from inside the finalizer. A signal leaves
-   * the fiber interrupted, so the run's value never survives to the caller —
-   * the process would exit 1 while the stream's terminal line said 130. This
-   * is the only channel that outlives an interrupt.
-   */
   readonly recordExitCode: (code: number) => void
+  readonly argv: readonly string[]
 }
-
 /**
  * The machine-mode `Console` layer, bundled so the transport (which resolves
  * the mode) can provide it without importing the state cell. Human mode
@@ -486,6 +480,9 @@ function describeFailure(exit: Exit.Exit<unknown, unknown>): string {
   if (Exit.isFailure(exit)) {
     const value = failureValue(exit)
     if (value !== undefined) {
+      if (S.is(SurvivorsRejection)(value)) {
+        return value.remediation
+      }
       if (value instanceof Error) {
         return value.message
       }
@@ -503,6 +500,38 @@ function describeFailure(exit: Exit.Exit<unknown, unknown>): string {
     return Cause.pretty(exit.cause)
   }
   return ''
+}
+
+/**
+ * The argument the framework reports it does not know, named the way the wire
+ * contract spells it. The v4 parser fails wrapped in a ShowHelp whose errors
+ * carry the offending flag or operand; when the unrecognized flag was given a
+ * separate value (`--format text`), the value is the token the old parser
+ * reported, so the token after the flag is named when one was given.
+ */
+function unrecognizedArgumentOf(exit: Exit.Exit<unknown, unknown>, argv: readonly string[]): string | undefined {
+  if (!Exit.isFailure(exit)) {
+    return undefined
+  }
+  const value = failureValue(exit)
+  if (value === undefined || !CliError.isCliError(value)) {
+    return undefined
+  }
+  const errors = S.is(CliError.ShowHelp)(value) ? value.errors : [value]
+  for (const error of errors) {
+    if (S.is(CliError.UnrecognizedOption)(error)) {
+      const at = argv.indexOf(error.option)
+      const next = at >= 0 ? argv[at + 1] : undefined
+      return next !== undefined && !next.startsWith('-') ? next : error.option
+    }
+    if (S.is(CliError.UnexpectedArgument)(error)) {
+      return error.arguments[0]
+    }
+    if (S.is(CliError.UnknownSubcommand)(error)) {
+      return error.subcommand
+    }
+  }
+  return undefined
 }
 
 /**
@@ -528,11 +557,19 @@ function buildErrorEnvelope(
   exit: Exit.Exit<unknown, unknown>,
   code: number,
   captured: string,
+  argv: readonly string[],
 ): ErrorEnvelope {
+  // An unrecognized argument is the wire contract's own message, not the
+  // framework's usage document: the document is what --help is for.
+  const unrecognized = unrecognizedArgumentOf(exit, argv)
   return {
     schemaVersion: STREAM_SCHEMA_VERSION,
     code,
-    error: captured.length > 0 ? captured : describeFailure(exit),
+    error: unrecognized !== undefined
+      ? `Received unknown argument: '${unrecognized}'`
+      : captured.length > 0
+      ? captured
+      : describeFailure(exit),
     remediation: remediationFor(exit, code),
   }
 }
@@ -555,10 +592,26 @@ function emitMachineModeOutput(
   mode: ResolvedMode,
   exit: Exit.Exit<unknown, unknown>,
   code: number,
+  argv: readonly string[],
 ): void {
   const captured = readCapturedConsole()
+  // A clean help request fails the effect (the runner rethrows the ShowHelp)
+  // while exiting 0 and carrying the rendered document in the capture: it is
+  // the help terminal event, not an error.
+  const value = failureValue(exit)
+  const helpShaped = Exit.isFailure(exit) && S.is(CliError.ShowHelp)(value) && value.errors.length === 0
+  if (helpShaped) {
+    const document: HelpRendered = {
+      kind: 'help',
+      schemaVersion: STREAM_SCHEMA_VERSION,
+      code: 0,
+      help: captured,
+    }
+    stream.sink(document)
+    return
+  }
   if (Exit.isFailure(exit)) {
-    stream.sink({ kind: 'error', ...buildErrorEnvelope(exit, code, captured) })
+    stream.sink({ kind: 'error', ...buildErrorEnvelope(exit, code, captured, argv) })
     return
   }
   if (captured.length > 0) {
@@ -749,7 +802,7 @@ export const runStrykerCli = (
         const code = resolveClassedExitCode(exit)
         input.recordExitCode(code)
         if (input.mode.mode === 'machine') {
-          emitMachineModeOutput(stream, input.mode, exit, code)
+          emitMachineModeOutput(stream, input.mode, exit, code, input.argv)
         }
         yield* stream.closeAndDrain
         return code
