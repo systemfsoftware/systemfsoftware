@@ -29,7 +29,10 @@ const program = Effect.gen(function*() {
   const outputMode = yield* OutputModeProbe
   const runEvents = yield* RunEventStreamPort
   return yield* strykerCliEffect(
-    process.argv,
+    // v4's `Command.runWith` takes the arguments after the program name, not
+    // the full `process.argv` — argv[0] and argv[1] would parse as an unknown
+    // subcommand.
+    process.argv.slice(2),
     undefined,
     (code) => {
       resolvedExitCode.current = code

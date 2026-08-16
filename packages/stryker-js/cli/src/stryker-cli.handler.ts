@@ -1,3 +1,4 @@
+import * as NodeStdio from '@effect/platform-node/NodeStdio'
 import type { LogLevel, PartialStrykerOptions, StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
 import * as Console from 'effect/Console'
 import * as Effect from 'effect/Effect'
@@ -7,7 +8,6 @@ import * as Option from 'effect/Option'
 import * as Path from 'effect/Path'
 import * as Ref from 'effect/Ref'
 import * as Result from 'effect/Result'
-import * as Stdio from 'effect/Stdio'
 import * as Terminal from 'effect/Terminal'
 import * as Argument from 'effect/unstable/cli/Argument'
 import * as CliConfig from 'effect/unstable/cli/CliConfig'
@@ -511,15 +511,15 @@ const cliLayer = Layer.mergeAll(
   Path.layer,
   FileSystem.layerNoop({}),
   terminalLayer,
-  // The v4 runner's environment type demands a child-process spawner and a
-  // stdio service even though this CLI's parser never touches them (no flag
-  // reads a file or spawns a process); inert implementations keep the layer
-  // surface total.
+  // The v4 framework renders help and version documents through the `Stdio`
+  // service's sinks, so the CLI provides the real process-backed layer —
+  // `Stdio.layerTest` drains those sinks to nowhere, which swallowed every
+  // framework-rendered document and left the process with nothing to show.
+  NodeStdio.layer,
   Layer.succeed(
     ChildProcessSpawner.ChildProcessSpawner,
     ChildProcessSpawner.make(() => Effect.die('no child processes')),
   ),
-  Stdio.layerTest({}),
 )
 
 /**

@@ -1,6 +1,7 @@
 import * as Cause from 'effect/Cause'
 import * as Clock from 'effect/Clock'
 import * as Context from 'effect/Context'
+import * as Deferred from 'effect/Deferred'
 import * as Effect from 'effect/Effect'
 import * as Fiber from 'effect/Fiber'
 import * as Layer from 'effect/Layer'
@@ -228,11 +229,17 @@ const makeRunEventStream = (resolved: ResolvedMode): Effect.Effect<RunEventStrea
     // cannot suspend, so a bounded mailbox would stall core's reporter the
     // moment the bound is reached. The choice is stated here rather than
     // inherited from a default.
+    // Registration gate: the detached drain binds `state.emit` inside its own
+    // first step, and `open` must not return before that binding exists — a
+    // fast run (version, help) can reach `closeAndDrain` first, where
+    // `state.emit?.end()` on an unbound mailbox drops the end signal and the
+    // join below hangs forever on the never-ending merge.
+    const registered = yield* Deferred.make<void>()
     const eventStream = Stream.callback<RunEvent>(
       (queue) =>
         Effect.sync(() => {
           state.emit = queueEmit(queue)
-        }),
+        }).pipe(Effect.andThen(Deferred.succeed(registered, undefined))),
     )
 
     // The heartbeat, as a time-driven stream merged inside the fiber (R28).
@@ -365,6 +372,15 @@ const makeRunEventStream = (resolved: ResolvedMode): Effect.Effect<RunEventStrea
           // flush the terminal line (R30); it ends on its own once the
           // mailbox is done and drained.
           drainFiber = yield* Effect.forkDetach(drain)
+          // Registration must complete before the run starts, or a fast run's
+          // closeAndDrain races the mailbox binding and drops the end signal.
+          // The race with the fiber's own await covers a drain that dies
+          // before subscribing — open then resolves on the fiber's exit
+          // instead of hanging on a Deferred nothing will ever complete.
+          yield* Effect.race(
+            Deferred.await(registered),
+            Fiber.await(drainFiber),
+          )
         }
       }),
       closeAndDrain: Effect.gen(function*() {
