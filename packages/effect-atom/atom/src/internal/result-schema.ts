@@ -6,8 +6,8 @@ import * as Schema_ from 'effect/Schema'
 import * as SchemaIssue from 'effect/SchemaIssue'
 import * as SchemaParser from 'effect/SchemaParser'
 import * as SchemaTransformation from 'effect/SchemaTransformation'
-import { failure, initial, isResult, success } from '../Result.js'
-import type { Result } from '../Result.js'
+import { failure, initial, isResult, success } from './result-values.js'
+import type { Result } from './result-values.js'
 
 /**
  * Schema interface for `Result` values, retaining the schemas used for success values and failure errors.
