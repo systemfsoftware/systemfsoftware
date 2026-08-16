@@ -1,0 +1,114 @@
+{
+  "name": "@systemfsoftware/rightsize",
+  "license": "Apache-2.0",
+  "version": "0.1.0",
+  "author": "Ryan Lee <drdgvhbh@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
+    "directory": "packages/rightsize"
+  },
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/rightsize#readme",
+  "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
+  "description": "Testcontainers-style integration-test containers in Effect-TS — microsandbox microVM execution with a Docker Engine fallback — a forked-owned complete rebuild of rightsize-node (behavioral source), agent-native by design.",
+  "keywords": [
+    "effect",
+    "effect-ts",
+    "testcontainers",
+    "microvm",
+    "microsandbox",
+    "docker",
+    "container",
+    "integration-testing",
+    "testing"
+  ],
+  "type": "module",
+  "engines": {
+    "node": ">=22.11"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "exports": {
+    ".": {
+      "@systemfsoftware/source": "./src/index.ts",
+      "types": "./dist/rightsize.d.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./backend-docker": {
+      "@systemfsoftware/source": "./src/backend-docker.ts",
+      "types": "./dist/backend-docker.d.ts",
+      "default": "./dist/backend-docker.mjs"
+    },
+    "./backend-msb": {
+      "@systemfsoftware/source": "./src/backend-msb.ts",
+      "types": "./dist/backend-msb.d.ts",
+      "default": "./dist/backend-msb.mjs"
+    },
+    "./modules": {
+      "@systemfsoftware/source": "./src/modules.ts",
+      "types": "./dist/modules.d.ts",
+      "default": "./dist/modules.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "tsdown && pnpm api:check",
+    "clean": "rimraf dist",
+    "typecheck": "tsc --noEmit --incremental",
+    "test": "vitest run",
+    "test:types": "TSTYCHE_TYPESCRIPT_MODULE=tstyche-typescript tstyche",
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
+    "attw": "attw --pack .",
+    "api:check": "concurrently --kill-others-on-fail \"api-extractor run\" \"api-extractor run --config api-extractor.modules.json\" \"api-extractor run --config api-extractor.backend-docker.json\" \"api-extractor run --config api-extractor.backend-msb.json\"",
+    "api:update": "concurrently --kill-others-on-fail \"api-extractor run --local\" \"api-extractor run --local --config api-extractor.modules.json\" \"api-extractor run --local --config api-extractor.backend-docker.json\" \"api-extractor run --local --config api-extractor.backend-msb.json\"",
+    "parity:check": "exit 0"
+  },
+  "dependencies": {
+    "@systemfsoftware/effect-cell-types": "workspace:^"
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "@microsoft/api-extractor": "catalog:",
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
+    "@systemfsoftware/effect-schema-vite": "workspace:^",
+    "@systemfsoftware/oxlint-config": "workspace:^",
+    "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
+    "@types/node": "catalog:",
+    "effect": "catalog:",
+    "rimraf": "catalog:",
+    "tsdown": "catalog:",
+    "tstyche": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "effect": "catalog:"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/rightsize.d.ts",
+        "default": "./dist/index.mjs"
+      },
+      "./backend-docker": {
+        "types": "./dist/backend-docker.d.ts",
+        "default": "./dist/backend-docker.mjs"
+      },
+      "./backend-msb": {
+        "types": "./dist/backend-msb.d.ts",
+        "default": "./dist/backend-msb.mjs"
+      },
+      "./modules": {
+        "types": "./dist/modules.d.ts",
+        "default": "./dist/modules.mjs"
+      },
+      "./package.json": "./package.json"
+    },
+    "provenance": true
+  }
+}

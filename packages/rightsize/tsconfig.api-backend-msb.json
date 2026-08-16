@@ -1,0 +1,8 @@
+{
+  "extends": "./tsconfig.build.json",
+  "compilerOptions": {
+    "customConditions": [],
+    "resolveJsonModule": false
+  },
+  "include": ["dist/backend-msb.d.ts"]
+}
