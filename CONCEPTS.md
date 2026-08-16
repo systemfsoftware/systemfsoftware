@@ -344,6 +344,35 @@ A mutant that died with no test credited for killing it. It arises when a mutant
 
 A mutant killed because the mutation corrupted a schema's derived arbitrary and some _other_ schema's law then choked on the garbage it generated, rather than because any test observed the mutated contract. It counts toward the score and toward attribution exactly like an observed kill, which is what makes it dangerous: it credits a law that is tautological with respect to the mutated schema, and the credit is then evidence against the hand-authored tests that state the contract properly.
 
+## Container testing
+
+### backend parity lane
+
+The `test:contract` lane of `@systemfsoftware/rightsize`: real containers
+against a pinned backend layer (`layerDocker`), cache-free, failing with a
+named error — never a skip — when no runtime answers the discovery probe.
+Distinct from a consumer package's contract lane, which pins that package's
+own behavior through the library; the parity lane pins the library's parity
+with the incumbent surface it replaced (the drift-gated matrix under the
+package's `docs/` names every member).
+
+### durable handle
+
+The `ContainerHandle` a launch mints and registers: a JSON-codecable record
+(backend, container id, fingerprint) from which `byId` reconstructs
+exec/logs/inspect/stop in a foreign process with no fresh launch. The
+fingerprint is validated, so a mismatch is a typed refusal rather than a
+silent wrong-target exec — the property that makes the handle safe to carry
+across process boundaries (vitest `provide`, agent tool results, CI logs).
+
+### names-only ledger
+
+The on-disk hygiene record `@systemfsoftware/rightsize` keeps per cache dir:
+container names and library-created network ids with owner facts, never
+absolute paths. Names are the stable identity a cross-process sweep (reap)
+can act on; the liveness facts (pid, start time, backend) let a sweep judge
+staleness without trusting the record's freshness.
+
 ## Flagged ambiguities
 
 - "observer" named two different things historically: a retired cell-role suffix, and the verification instrument that reads code. The instrument is **Verification observer**; the suffix was deleted with the taxonomy on 2026-08-16, so the bare word now only ever names the instrument.
