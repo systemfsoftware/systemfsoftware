@@ -124,6 +124,16 @@ it('plain', () => {})
 `,
       filename: '/repo/pkg/tests/foo.test.ts',
     },
+    {
+      name: 'Should_Allow_IntegrationTest_When_ItImportsPlainSrcModule_UnderAdmitSrcImports',
+      code: `${FEATURE_IMPORTS}
+import { fromImage } from '../../src/generic-container.js'
+
+Feature('x', () => {})
+`,
+      filename: '/repo/pkg/__tests__/parity/smoke.integration.test.ts',
+      options: [{ admitSrcImports: true }],
+    },
   ],
   invalid: [
     {
