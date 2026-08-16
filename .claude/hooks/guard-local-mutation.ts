@@ -113,8 +113,29 @@ export interface Segment {
   readonly overridden: boolean
 }
 
+/**
+ * A heredoc body is data, not commands: a commit message or a doc that quotes
+ * `pnpm --filter <pkg> mutation` reaches the shell as one `git`/`cat` call, but
+ * its lines segment exactly like a run. Stripping the body is what keeps this
+ * guard from refusing the sentence that documents it. `… <<EOF | bash` stays out
+ * of reach by construction — this guard refuses accidents, not adversaries.
+ */
+export const withoutHeredocs = (command: string): string => {
+  const start = /<<-?\s*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\1/
+  let out = command
+  for (;;) {
+    const match = start.exec(out)
+    if (match === null) return out
+    const terminator = match[2] ?? ''
+    const after = match.index + match[0].length
+    const rest = out.slice(after)
+    const end = new RegExp(`^\\s*${terminator}\\s*$`, 'm').exec(rest)
+    out = out.slice(0, match.index) + (end === null ? '' : rest.slice(end.index + end[0].length))
+  }
+}
+
 export const segments = (command: string): readonly Segment[] =>
-  command
+  withoutHeredocs(command)
     .split(SEPARATORS)
     .map((raw) => {
       const words = raw.trim().split(/\s+/).filter((word) => word.length > 0)
@@ -201,6 +222,10 @@ const SELFTEST: readonly (readonly [string, boolean])[] = [
   ['pnpm check:local', false],
   ['TURBO_CONCURRENCY=100% pnpm gate:tasks --force', false],
   ['git log --oneline --grep mutation', false],
+  // Observed false positive: the commit message documenting this very guard was
+  // refused, because a heredoc body segments exactly like a command.
+  ['git commit -m "$(cat <<\'EOF\'\ndocs: leaves listed `pnpm --filter <pkg> mutation` as a step\nEOF\n)"', false],
+  ['cat <<EOF > doc.md\nrun pnpm --filter x mutation\nEOF', false],
   ['timeout 30 pnpm --filter x test', false],
   ['for p in a b; do pnpm --filter $p test; done', false],
   ['ALLOW_LOCAL_MUTATION=1 pnpm --filter @systemfsoftware/hex-schema mutation', false],
@@ -239,7 +264,7 @@ if (import.meta.main) {
       `Local mutation run refused: ${verdict.offender}`,
       'A mutation run costs minutes to hours of every core and blocks the machine the session is working on. No agent starts one (AGENTS.md REPO-D3).',
       'The score comes from the Mutation workflow, whose merged report carries every package score and its survivors.',
-      'A human who wants one locally prefixes the command with ALLOW_LOCAL_MUTATION=1.',
+      "This hook only ever sees an agent tool call — the user running the same command in their own shell is never intercepted — so a refusal here is never in the user's way. If the user asked for this run, say it is refused and let them start it; never self-authorize.",
       'Refused by .claude/hooks/guard-local-mutation.ts. Reshaping the command to slip past this guard is never the right response.',
     ].join('\n'),
   )
