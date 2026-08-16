@@ -23,6 +23,8 @@
 //   - lockfile / pnpm-workspace.yaml / root package.json edits hash nothing
 //   - `scripts/tools/patch-tsgo-if-needed.mjs` (a globalDependency) and
 //     `turbo.json` edits re-hash every task
+//   - a file inside a nested-workspace fixture (testResources) re-hashes every
+//     task through the internal-dependencies global input
 //   - per-task hashes are env-invariant; `globalPassThroughEnv` values live
 //     only in `globalCacheInputs` and never in a task hash
 //   - a package without a `build` script still carries a `#build` task
@@ -40,7 +42,7 @@
 type WorkspaceMember = {
   readonly name: string
   readonly dir: string
-  readonly releasable: boolean
+  readonly publishable: boolean
 }
 
 type HashMatrix = Readonly<Record<string, string>> // package name -> build-task hash
@@ -67,6 +69,8 @@ type DryRun = {
 const BUMPS = ['none', 'patch', 'minor', 'major'] as const
 const MANIFEST_SUFFIX = '/package.json'
 const LOCKFILE = 'pnpm-lock.yaml'
+const TURBO_MANIFEST = 'node_modules/turbo/package.json'
+const BUILD_TASK_SUFFIX = '#build'
 
 const dec = new TextDecoder()
 
@@ -76,13 +80,13 @@ const git = async (args: string[]): Promise<string[]> => {
   return dec.decode(out.stdout).split('\n').filter(Boolean)
 }
 
-export const declaresBumpFor = (changeset: string, packageName: string): boolean =>
+const declaresBumpFor = (changeset: string, packageName: string): boolean =>
   new RegExp(
-    `^\\s*["']?${packageName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}["']?\\s*:\\s*(?:${BUMPS.join('|')})\\s*$`,
+    `^\\s*["']?${RegExp.escape(packageName)}["']?\\s*:\\s*(?:${BUMPS.join('|')})\\s*$`,
     'im',
   ).test(changeset)
 
-export const memberOwning = (file: string, members: readonly WorkspaceMember[]): WorkspaceMember | null =>
+const memberOwning = (file: string, members: readonly WorkspaceMember[]): WorkspaceMember | null =>
   members.find(({ dir }) => file === `${dir}${MANIFEST_SUFFIX}` || file.startsWith(`${dir}/`)) ?? null
 
 /**
@@ -93,29 +97,29 @@ export const memberOwning = (file: string, members: readonly WorkspaceMember[]):
  * - both present and different: changed — demands an intent
  * - both present and equal: unchanged — demands nothing
  *
- * The fallback (R6) covers a releasable member with no `#build` task in either
- * run — impossible today (turbo tasks every workspace package) but fail-safe:
- * any changed file under its directory demands an intent. This per-file rule
- * is deliberately coarser than the old gate's globs; it is a floor, not a
- * philosophy.
+ * The fallback (R6) covers a publishable member with no `#build` task in
+ * either run — impossible today (turbo tasks every workspace package) but
+ * fail-safe: any changed file under its directory demands an intent. This
+ * per-file rule is deliberately coarser than the old gate's globs; it is a
+ * floor, not a philosophy.
  */
-export const verdict = (
+const verdict = (
   { base, head, members, changedFiles, changesets }: Evidence,
 ): Verdict => {
   const touched = new Set<string>()
 
   for (const member of members) {
-    if (!member.releasable) continue
-    const atBase = member.name in base ? base[member.name] : undefined
-    const atHead = member.name in head ? head[member.name] : undefined
+    if (!member.publishable) continue
+    const atBase = Object.hasOwn(base, member.name) ? base[member.name] : undefined
+    const atHead = Object.hasOwn(head, member.name) ? head[member.name] : undefined
 
     if (atHead === undefined) continue // package or task gone at head
     if (atBase === undefined || atBase !== atHead) touched.add(member.name)
   }
 
   for (const member of members) {
-    if (!member.releasable) continue
-    if (member.name in base || member.name in head) continue
+    if (!member.publishable) continue
+    if (Object.hasOwn(base, member.name) || Object.hasOwn(head, member.name)) continue
     if (changedFiles.some((file) => memberOwning(file, [member]))) touched.add(member.name)
   }
 
@@ -131,7 +135,7 @@ export const verdict = (
  * progress noise and is discarded. Every build task must carry a hash — a task
  * without one is a verdict nobody can judge, so it fails closed.
  */
-export const parseDryRunOutput = (stdout: string, context: string): DryRun => {
+const parseDryRunOutput = (stdout: string, context: string): DryRun => {
   let doc: { packages?: unknown; tasks?: unknown }
   try {
     doc = JSON.parse(stdout) as typeof doc
@@ -151,14 +155,14 @@ export const parseDryRunOutput = (stdout: string, context: string): DryRun => {
       directory?: unknown
       package?: unknown
     }
-    if (typeof taskId !== 'string' || !taskId.endsWith('#build')) continue
+    if (typeof taskId !== 'string' || !taskId.endsWith(BUILD_TASK_SUFFIX)) continue
     if (typeof name !== 'string' || name.length === 0) {
       throw new Error(`${context} output: a build task without a package name`)
     }
     if (typeof hash !== 'string' || hash.length === 0) {
-      throw new Error(`${context} output: ${name}#build has no hash`)
+      throw new Error(`${context} output: ${name}${BUILD_TASK_SUFFIX} has no hash`)
     }
-    if (name in matrix) throw new Error(`${context} output: duplicate task for ${name}`)
+    if (Object.hasOwn(matrix, name)) throw new Error(`${context} output: duplicate task for ${name}`)
     matrix[name] = hash
     if (typeof directory === 'string' && directory.length > 0) dirs[name] = directory
   }
@@ -197,9 +201,9 @@ const dryRun = async (cwd: string): Promise<DryRun> => {
  * bump that changes the schema breaks the assertion here before it can
  * silently redirect the verdict.
  */
-export const lockfileIsV9 = (lockfile: string): boolean => /^lockfileVersion:\s*['"]?9\.0['"]?\s*$/m.test(lockfile)
+const lockfileIsV9 = (lockfile: string): boolean => /^lockfileVersion:\s*['"]?9\.0['"]?\s*$/m.test(lockfile)
 
-export const lockfileTurboEntry = (lockfile: string): { specifier: string; version: string } | null => {
+const lockfileTurboEntry = (lockfile: string): { specifier: string; version: string } | null => {
   const importers = lockfile.slice(lockfile.indexOf('\nimporters:'))
   if (importers.length === 0) return null
   const rootStart = importers.indexOf('\n  .:')
@@ -216,7 +220,7 @@ export const lockfileTurboEntry = (lockfile: string): { specifier: string; versi
  * whether the installed binary is the lockfile's binary. Throws with the fix
  * instruction so a stale install cannot masquerade as a verdict.
  */
-export const assertTurboPin = (lockfile: string, resolvedTurboPackageJson: string, context: string): void => {
+const assertTurboPin = (lockfile: string, resolvedTurboPackageJson: string, context: string): void => {
   if (!lockfileIsV9(lockfile)) {
     throw new Error(`${context}: ${LOCKFILE} is not lockfileVersion 9.0 — the pin parser is schema-bound`)
   }
@@ -228,7 +232,7 @@ export const assertTurboPin = (lockfile: string, resolvedTurboPackageJson: strin
   try {
     resolved = JSON.parse(resolvedTurboPackageJson) as typeof resolved
   } catch {
-    throw new Error(`${context}: node_modules/turbo/package.json is not parseable JSON`)
+    throw new Error(`${context}: ${TURBO_MANIFEST} is not parseable JSON`)
   }
   if (resolved.version !== pinned.version) {
     throw new Error(
@@ -236,6 +240,19 @@ export const assertTurboPin = (lockfile: string, resolvedTurboPackageJson: strin
         `run 'pnpm install --frozen-lockfile'`,
     )
   }
+}
+
+/**
+ * The live pair, recomputed from source bytes wherever the gate or its
+ * selftest runs: the lockfile's pin and the installed engine manifest must
+ * agree (CI runs the selftest right after the frozen install).
+ */
+const assertLiveTurboPin = async (context: string): Promise<void> => {
+  const [lockfile, resolvedTurbo] = await Promise.all([
+    Deno.readTextFile(LOCKFILE),
+    Deno.readTextFile(TURBO_MANIFEST).catch(() => '{}'),
+  ])
+  assertTurboPin(lockfile, resolvedTurbo, context)
 }
 
 const reportMissingIntent = (missingIntent: readonly string[]) => {
@@ -272,39 +289,31 @@ const readMember = async (manifestPath: string): Promise<WorkspaceMember | null>
     ? {
       name: manifest.name,
       dir: manifestPath.slice(0, -MANIFEST_SUFFIX.length),
-      releasable: manifest.private !== true,
+      publishable: manifest.private !== true,
     }
     : null
 }
 
 /**
  * Membership is turbo's: the union of the two dry-runs' tasks' directories,
- * with the head manifest's `private` bit deciding releasability. The only
- * extra source is a name→dir map for taskless manifests (the R6 fallback needs
- * a directory to judge file ownership); it is consulted only when a member
- * actually has no `#build` task, and it never invents memberships — a manifest
- * turbo skipped stays outside the verdict.
+ * with the head manifest's `private` bit deciding publishability. A taskless
+ * turbo member (none exists today) still needs a directory for the R6
+ * fallback, so only then are tracked manifests consulted to map its name to a
+ * directory — and only names turbo enumerates qualify. A tracked manifest
+ * turbo does not enumerate (a testResources fixture) is not a member, so it
+ * can never demand an intent (R11).
  */
-const membersFromDirs = async (
-  runs: readonly DryRun[],
-  dirs: Map<string, string>,
-): Promise<readonly WorkspaceMember[]> => {
+const readMembers = async (runs: readonly DryRun[]): Promise<readonly WorkspaceMember[]> => {
+  const dirs = new Map<string, string>()
+  for (const run of runs) {
+    for (const [name, dir] of Object.entries(run.dirs)) dirs.set(name, dir)
+  }
   const turboMembers = new Set(runs.flatMap((run) => run.packages))
-  for (const manifestPath of await git(['ls-files', '*package.json', ':(exclude)repos/**'])) {
-    const dir = manifestPath.slice(0, -MANIFEST_SUFFIX.length)
-    if (dirs.has(dir)) continue
-    const text = await Deno.readTextFile(manifestPath).catch(() => '')
-    if (text.length === 0) continue
-    try {
-      const { name } = JSON.parse(text) as { name?: unknown }
-      // The name→dir map exists only for turbo members (packages[]); a tracked
-      // manifest turbo does not enumerate — a testResources fixture — is not a
-      // member, so it can never demand an intent (R11).
-      if (typeof name === 'string' && turboMembers.has(name) && !dirs.get(name)) {
-        dirs.set(name, dir)
-      }
-    } catch {
-      // a malformed manifest is not a member; turbo skipped it and so do we
+  if ([...turboMembers].some((name) => !dirs.has(name))) {
+    for (const manifestPath of await git(['ls-files', '*package.json', ':(exclude)repos/**'])) {
+      const member = await readMember(manifestPath)
+      if (member === null || !turboMembers.has(member.name) || dirs.has(member.name)) continue
+      dirs.set(member.name, member.dir)
     }
   }
   return (await Promise.all(
@@ -318,9 +327,7 @@ const main = async (baseArg: string | undefined): Promise<number> => {
     return 2
   }
 
-  const lockfile = await Deno.readTextFile(LOCKFILE)
-  const resolvedTurbo = await Deno.readTextFile('node_modules/turbo/package.json').catch(() => '{}')
-  assertTurboPin(lockfile, resolvedTurbo, 'check-changeset')
+  await assertLiveTurboPin('check-changeset')
 
   const [baseSha] = await git(['rev-parse', '--verify', `${baseArg}^{commit}`])
 
@@ -337,17 +344,16 @@ const main = async (baseArg: string | undefined): Promise<number> => {
     await git(['worktree', 'remove', '--force', baseDir]).catch(() => {})
   }
 
-  const dirs = new Map<string, string>()
-  for (const run of [baseRun, headRun]) {
-    for (const [name, dir] of Object.entries(run.dirs)) dirs.set(name, dir)
-  }
-  const members = await membersFromDirs([baseRun, headRun], dirs)
-
-  const changedFiles = await git(['diff', '--name-only', `${baseSha}...HEAD`])
-  const changesetPaths =
-    (await git(['diff', '--name-only', '--diff-filter=AM', `${baseSha}...HEAD`, '--', '.changeset/*.md']))
-      .filter((path) => path !== '.changeset/README.md')
-  const changesets = await Promise.all(changesetPaths.map((path) => Deno.readTextFile(path).catch(() => '')))
+  const [members, changedFiles, changesetPaths] = await Promise.all([
+    readMembers([baseRun, headRun]),
+    git(['diff', '--name-only', `${baseSha}...HEAD`]),
+    git(['diff', '--name-only', '--diff-filter=AM', `${baseSha}...HEAD`, '--', '.changeset/*.md']),
+  ])
+  const changesets = await Promise.all(
+    changesetPaths.filter((path) => path !== '.changeset/README.md').map((path) =>
+      Deno.readTextFile(path).catch(() => '')
+    ),
+  )
 
   const { touched, missingIntent } = verdict({
     base: baseRun.matrix,
@@ -378,11 +384,11 @@ const main = async (baseArg: string | undefined): Promise<number> => {
 }
 
 const MEMBERS: readonly WorkspaceMember[] = [
-  { name: '@scope/published', dir: 'packages/published', releasable: true },
-  { name: '@scope/private', dir: 'packages/private', releasable: false },
-  { name: '@scope/plugin', dir: 'omp/plugins/plugin', releasable: true },
-  { name: '@scope/other', dir: 'packages/other', releasable: true },
-  { name: '@scope/taskless', dir: 'packages/taskless', releasable: true },
+  { name: '@scope/published', dir: 'packages/published', publishable: true },
+  { name: '@scope/private', dir: 'packages/private', publishable: false },
+  { name: '@scope/plugin', dir: 'omp/plugins/plugin', publishable: true },
+  { name: '@scope/other', dir: 'packages/other', publishable: true },
+  { name: '@scope/taskless', dir: 'packages/taskless', publishable: true },
 ]
 
 const H = {
@@ -466,7 +472,7 @@ const FIXTURES: readonly { label: string; evidence: Evidence; expect: Verdict }[
     expect: { touched: [], missingIntent: [] },
   },
   {
-    label: 'a package that cannot release is never demanded',
+    label: 'a private package is never demanded',
     evidence: {
       base: { '@scope/private': H.before },
       head: { '@scope/private': H.after },
@@ -587,7 +593,7 @@ const FIXTURES: readonly { label: string; evidence: Evidence; expect: Verdict }[
     expect: { touched: ['@scope/plugin', '@scope/published'], missingIntent: ['@scope/plugin'] },
   },
   {
-    label: 'a taskless releasable member falls back to its directory',
+    label: 'a taskless publishable member falls back to its directory',
     evidence: {
       base: {},
       head: {},
@@ -598,7 +604,7 @@ const FIXTURES: readonly { label: string; evidence: Evidence; expect: Verdict }[
     expect: { touched: ['@scope/taskless'], missingIntent: ['@scope/taskless'] },
   },
   {
-    label: 'a taskless releasable member with no changed file under it is not demanded',
+    label: 'a taskless publishable member with no changed file under it is not demanded',
     evidence: {
       base: { '@scope/published': H.before },
       head: { '@scope/published': H.before },
@@ -609,6 +615,15 @@ const FIXTURES: readonly { label: string; evidence: Evidence; expect: Verdict }[
     expect: { touched: [], missingIntent: [] },
   },
 ]
+
+const expectsThrow = (fn: () => unknown): boolean => {
+  try {
+    fn()
+    return false
+  } catch {
+    return true
+  }
+}
 
 const selftest = async (): Promise<number> => {
   const failures: string[] = []
@@ -640,47 +655,20 @@ importers:
 `) === null,
     ],
     [
-      'archived dry-run JSON parses into a matrix',
+      'dry-run JSON parses into a matrix',
       JSON.stringify(parseDryRunOutput(DRY_FIXTURE, 'fixture').matrix) ===
         JSON.stringify({ '@scope/published': H.before }),
     ],
+    ['a task without a hash fails closed', expectsThrow(() => parseDryRunOutput(DRY_BROKEN, 'fixture'))],
+    ['non-JSON dry-run output fails closed', expectsThrow(() => parseDryRunOutput('turbo: not json', 'fixture'))],
     [
-      'a task without a hash fails closed',
-      (() => {
-        try {
-          parseDryRunOutput(DRY_BROKEN, 'fixture')
-          return false
-        } catch {
-          return true
-        }
-      })(),
-    ],
-    [
-      'non-JSON dry-run output fails closed',
-      (() => {
-        try {
-          parseDryRunOutput('turbo: not json', 'fixture')
-          return false
-        } catch {
-          return true
-        }
-      })(),
+      'pin check accepts a matching lockfile+install',
+      expectsThrow(() => assertTurboPin(FIXTURE_V9, JSON.stringify({ version: '9.9.9' }), 'selftest-fixture')) &&
+      !expectsThrow(() => assertTurboPin(FIXTURE_V9, JSON.stringify({ version: '2.10.5' }), 'selftest-fixture')),
     ],
   ] as const
   for (const [label, ok] of checks) {
     if (!ok) failures.push(`  ${label}`)
-  }
-
-  try {
-    assertTurboPin(FIXTURE_V9, JSON.stringify({ version: '2.10.5' }), 'selftest-fixture')
-  } catch {
-    failures.push('  pin check accepts a matching lockfile+install')
-  }
-  try {
-    assertTurboPin(FIXTURE_V9, JSON.stringify({ version: '9.9.9' }), 'selftest-fixture')
-    failures.push('  pin check rejects a mismatched install')
-  } catch {
-    // expected red
   }
 
   // The live pair, recomputed from source bytes: the lockfile's pin and the
@@ -688,20 +676,17 @@ importers:
   // it right after the frozen install). This is the same assertion main()
   // enforces before any verdict.
   try {
-    assertTurboPin(
-      await Deno.readTextFile(LOCKFILE),
-      await Deno.readTextFile('node_modules/turbo/package.json'),
-      'selftest',
-    )
+    await assertLiveTurboPin('selftest')
   } catch (error) {
     failures.push(`  live pin check: ${error instanceof Error ? error.message : String(error)}`)
   }
+
   if (failures.length > 0) {
-    console.error(`check-changeset: selftest FAILED (${failures.length}/${FIXTURES.length + 9})\n`)
+    console.error(`check-changeset: selftest FAILED (${failures.length}/${FIXTURES.length + checks.length + 1})\n`)
     for (const failure of failures) console.error(failure)
     return 1
   }
-  console.log(`check-changeset: selftest ok (${FIXTURES.length} verdict rows + 9 mechanism rows)`)
+  console.log(`check-changeset: selftest ok (${FIXTURES.length} verdict rows + ${checks.length + 1} mechanism rows)`)
   return 0
 }
 
