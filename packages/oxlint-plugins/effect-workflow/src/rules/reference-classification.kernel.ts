@@ -174,6 +174,21 @@ const isMutableDeclaration = (def: DefinitionLike): boolean =>
   (def.parent.kind === 'let' || def.parent.kind === 'var')
 
 /**
+ * The named-global triage for a reference that resolves to nothing, shared by the
+ * unresolved-reference path and the empty-defs path. A builtin global (undefined, NaN,
+ * Infinity) resolves to a variable with no definitions — empty defs is the builtin case,
+ * so both paths run the same I/O-global / benign-builtin / honest-unknown decision.
+ */
+const reportUnresolved = (reports: ReferenceReport[], identifier: IdentifierLike): void => {
+  const verdict: ReferenceVerdict = IO_GLOBAL_NAMES.has(identifier.name)
+    ? { kind: 'ioGlobal' }
+    : BENIGN_GLOBAL_NAMES.has(identifier.name)
+    ? { kind: 'benignGlobal' }
+    : { kind: 'unresolvable' }
+  reports.push({ identifier, name: identifier.name, verdict })
+}
+
+/**
  * The KTD3 reference reports of a make body: every value reference in the
  * body's scope tree, with module-level helper functions the body calls
  * followed and judged the same way (a shared visited set terminates the
@@ -198,31 +213,12 @@ export const classifyFunctionReferences = (
       if (isInsideRegion(identifier.start, identifier.end, typeRegions)) continue
       const variable = reference.resolved
       if (variable === null) {
-        reports.push({
-          identifier,
-          name: identifier.name,
-          verdict: IO_GLOBAL_NAMES.has(identifier.name)
-            ? { kind: 'ioGlobal' }
-            : BENIGN_GLOBAL_NAMES.has(identifier.name)
-            ? { kind: 'benignGlobal' }
-            : { kind: 'unresolvable' },
-        })
+        reportUnresolved(reports, identifier)
         continue
       }
       const def = variable.defs[0]
       if (def === undefined) {
-        // A builtin global (undefined, NaN, Infinity) resolves to a variable with no
-        // definitions — empty defs is the builtin case, so the same named-global
-        // triage the unresolved path runs applies here too.
-        reports.push({
-          identifier,
-          name: identifier.name,
-          verdict: IO_GLOBAL_NAMES.has(identifier.name)
-            ? { kind: 'ioGlobal' }
-            : BENIGN_GLOBAL_NAMES.has(identifier.name)
-            ? { kind: 'benignGlobal' }
-            : { kind: 'unresolvable' },
-        })
+        reportUnresolved(reports, identifier)
         continue
       }
       if (def.type === 'Parameter') {

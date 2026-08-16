@@ -93,6 +93,11 @@ it.effect.prop(
  * the `Failure` branch's payload travels on to the write (recorded as the write's
  * received input). An interpreter that treated the outcome `Failure` as fatal, or
  * unwrapped it before the successor, fails one of the clauses.
+ *
+ * The payload equality clauses also pin the collision draw: the generator draws the
+ * payload -1 at parity with other integers, because a non-injection sentinel of -1
+ * would swallow exactly that payload and the write would observe a `Success` route —
+ * this property fails on that collision.
  */
 it.effect.prop(
   '∀d_FailureEitherPass_=Payload',

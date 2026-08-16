@@ -33,16 +33,15 @@ export type MessageIds =
   | 'controlFlowBanned'
   | 'unresolvableMakeArgument'
 
-const CONTROL_FLOW_TYPES: ReadonlySet<string> = new Set([
-  'IfStatement',
-  'ConditionalExpression',
-  'ForStatement',
-  'ForInStatement',
-  'ForOfStatement',
-  'WhileStatement',
-  'DoWhileStatement',
-  'SwitchStatement',
-])
+/**
+ * The banned control-flow node kinds, derived from the config's keyword map so the set
+ * is declared once. The logical-expression entry is excluded: `&&`/`||` are scanned
+ * separately (the guard's test may reach for defaults, so the operator decides, not the
+ * node kind).
+ */
+const CONTROL_FLOW_TYPES: ReadonlySet<string> = new Set(
+  Object.keys(CONTROL_FLOW_KEYWORD_OF).filter((type) => type !== 'LogicalExpression'),
+)
 
 const isWalkable = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && 'type' in value

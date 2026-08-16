@@ -208,8 +208,3 @@ export const boundariesContaining = (
   boundaries: readonly MakeBoundary[],
 ): readonly MakeBoundary[] =>
   boundaries.filter((boundary) => boundary.resolvedBody !== null && isWithinBody(node, boundary.resolvedBody))
-
-/** One flat walk over every node of the Program, for the purity rule's body scans. */
-export const walkProgram = (context: Context, visit: (node: ESTree.Node) => void): void => {
-  walk(context.sourceCode.ast, context.sourceCode.visitorKeys, visit)
-}

@@ -33,15 +33,22 @@ const isCallExpression = S.is(CallExpression)
 
 const NO_WORKFLOW_LOCALS: ReadonlySet<string> = new Set()
 
+/** Program -> its workflow local names, so repeated mutant probes never re-walk the body. */
+const WORKFLOW_LOCALS_BY_PROGRAM = new WeakMap<object, ReadonlySet<string>>()
+
 /**
  * The local binding names that resolve to the `Workflow` value of the cell-types module: the
  * canonical `import { Workflow }`, an alias `import { Workflow as W }`, or the namespace form
  * `import * as Workflow`. This is deliberately a file-level import resolution, not a scope
  * analysis — the boundary is a mechanical gate, so a local shadowing the imported name
- * shadows the boundary too (no production site does this).
+ * shadows the boundary too (no production site does this). Memoized keyed by the Program
+ * node: the probe loop visits every mutant in the file, and the import set is a pure
+ * function of the Program.
  */
 const workflowLocalNamesOf = (program: unknown): ReadonlySet<string> => {
   if (!isProgram(program)) return NO_WORKFLOW_LOCALS
+  const cached = WORKFLOW_LOCALS_BY_PROGRAM.get(program)
+  if (cached !== undefined) return cached
   const names = new Set<string>()
   for (const statement of program.body) {
     if (!isImportDeclaration(statement) || !isStringLiteral(statement.source)) continue
@@ -58,6 +65,7 @@ const workflowLocalNamesOf = (program: unknown): ReadonlySet<string> => {
       }
     }
   }
+  WORKFLOW_LOCALS_BY_PROGRAM.set(program, names)
   return names
 }
 

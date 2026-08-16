@@ -149,15 +149,19 @@ const substituteLayer = (
           }
         case 'either-pass': {
           // The failure injection is decided before the boundary: the make body
-          // stays one exhaustive path, closing only over const bindings.
-          const injectedCode = failure !== undefined && failure.phaseIndex === phaseIndex ? failure.error : -1
-          const injected = injectedCode !== -1
+          // stays one exhaustive path, closing only over const bindings. The
+          // decision is a snapshot object, not a sentinel — a drawn payload of
+          // exactly -1 is a legitimate failure code and must not be conflated
+          // with "no injection".
+          const injection = failure !== undefined && failure.phaseIndex === phaseIndex
+            ? { injected: true as const, error: failure.error }
+            : { injected: false as const, error: 0 }
           return {
             ...phase,
             run: Workflow.make((input: number): Result.Result<number, DrawnDecisionError> => {
               trace.push(phase.name)
-              return Match.value({ injected, input } as const).pipe(
-                Match.when({ injected: true }, () => Result.fail(DrawnDecisionError.make({ code: injectedCode }))),
+              return Match.value({ injected: injection.injected, input } as const).pipe(
+                Match.when({ injected: true }, () => Result.fail(DrawnDecisionError.make({ code: injection.error }))),
                 Match.orElse(() => Result.succeed(input)),
               )
             }),
@@ -249,7 +253,10 @@ export const description: fc.Arbitrary<DescriptionCase> = fc
         .record({
           layerIndex: fc.nat({ max: drawn.layers.length - 1 }),
           failingIndex: fc.nat({ max: FAILABLE.length - 1 }),
-          error: fc.integer(),
+          // The payload -1 is drawn at parity: a drawn failure must be able to carry
+          // exactly -1 — the value a non-injection sentinel would collide with — so the
+          // routing properties exercise the injection of that value, not just any integer.
+          error: fc.oneof(fc.constant(-1), fc.integer()),
         })
         .map(({ layerIndex, failingIndex, error }) => {
           const chosen = FAILABLE[failingIndex]

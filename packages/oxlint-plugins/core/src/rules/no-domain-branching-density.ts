@@ -140,10 +140,13 @@ export const noDomainBranchingDensity = defineRule({
     return {
       Program() {
         const boundaries: readonly MakeBoundary[] = collectMakeBoundaries(context)
+        // No boundary in the file: skip the (allocating) containment filter per
+        // function entirely — every function is domain code and judged.
+        const noBoundaries = boundaries.length === 0
         const visitorKeys = context.sourceCode.visitorKeys
         const visit = (node: ESTree.Node): void => {
           if (!isFunctionNode(node)) return
-          if (boundariesContaining(node, boundaries).length > 0) return
+          if (!noBoundaries && boundariesContaining(node, boundaries).length > 0) return
           const complexity = complexityOf(node, visitorKeys)
           if (complexity <= max) return
           context.report({

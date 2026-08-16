@@ -44,6 +44,9 @@ export const workflowMatchExhaustive = defineRule({
         boundaries = collectMakeBoundaries(context)
       },
       CallExpression(node: ESTree.CallExpression) {
+        // No make boundary in the file: the containment filter below would
+        // build an empty array per call site.
+        if (boundaries.length === 0) return
         // The one-path obligation binds where the decision is constructed: a
         // dispatch outside every Workflow.make body is other code and judged
         // by nothing here — the suffix is not a key (R2).

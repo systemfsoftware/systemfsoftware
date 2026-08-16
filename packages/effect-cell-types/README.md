@@ -151,11 +151,14 @@ The `never` checks use `[Decision] extends [never]`, not `Decision extends never
 
 ## Result.gen bodies work — and are checked more tightly
 
-A `Workflow.make` body may be a `Result.gen` generator:
+A `Workflow.make` body may be a `Result.gen` generator, so long as it stays one path:
+the failing outcome rides an arm of an exhaustive dispatch, and the generator yields
+the outcome once:
 
 ```ts
 import { Workflow } from '@systemfsoftware/effect-cell-types'
 import { Result } from 'effect'
+import * as Match from 'effect/Match'
 
 class Decision {}
 class Err {
@@ -168,15 +171,24 @@ interface Input {
 const decide = Workflow.make(
   (input: Input): Result.Result<Decision, Err> =>
     Result.gen(function*() {
-      if (!input.valid) {
-        yield* Result.fail(new Err('invalid input'))
-      }
-      return new Decision()
+      const outcome = Match.value(input).pipe(
+        Match.when({ valid: false }, () => Result.fail(new Err('invalid input'))),
+        Match.orElse(() => Result.succeed(new Decision())),
+      )
+      return yield* outcome
     }),
 )
 ```
 
-`Result.gen` infers its error channel from the union of the `Result`s the body yields, so the failing `yield*` above makes the inference exactly `Err` and the declaration holds. A body with **no** failing yield infers `unknown`, which does not satisfy a declared error type — so an unreachable error channel is rejected rather than silently allowed:
+A conditional `yield*` — an `if` or ternary that places a failing `yield*` on one path —
+opens a second path inside the decision and is refused by the `make-body-purity` lint
+rule; the failure must live on one path of the dispatch (or a first-statement guard that
+converges immediately), never behind a mid-body branch.
+
+`Result.gen` infers its error channel from the union of the `Result`s the body yields,
+so the failing arm above makes the inference exactly `Err` and the declaration holds. A
+body with **no** failing yield infers `unknown`, which does not satisfy a declared error
+type — so an unreachable error channel is rejected rather than silently allowed:
 
 ```ts
 const decide = Workflow.make(
