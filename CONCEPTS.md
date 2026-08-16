@@ -166,9 +166,7 @@ It exists because a class of properties is process-level by category and admits 
 
 ### Cell
 
-The unit this codebase is organized in: one source file doing one job, with a suffix that names that job. Rules key on the suffix, so the name is what grants and denies a file its powers: which imports it may take, whether it may perform I/O, whether the mutator covers it, and what kind of test it may carry. That the key is the name and not the contents is the taxonomy's mechanism and also its limit — the assignment is an unverified claim, so a rule keyed on a suffix cannot fire on a file whose author declined the suffix. See **Drifted key**, which governs where the two readings meet.
-
-A file whose suffix does not match the job it performs is therefore not a naming problem but a permissions problem: it is being governed as something it is not.
+Retired 2026-08-16, and with it the thirteen-role suffix taxonomy: no rule keys on a filename, no config enumerates a sanctioned suffix set, and a file's name grants it nothing. What replaced the suffix as the organizing unit is the **sandwich** — read (impure), decide (pure, inside a `Workflow.make` body), write (impure) — with the `make` boundary, not any name, deciding what the gates bind. See **Drifted key**, whose precedence this retirement makes structural: the measurement (label-routed rules silent on the violating file) is now the shipped state rather than a standing objection.
 
 ### Property cell
 
