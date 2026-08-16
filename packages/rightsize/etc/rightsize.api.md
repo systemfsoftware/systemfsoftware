@@ -19,6 +19,9 @@ import { YieldableError } from 'effect/Cause';
 export type AdoptRunningSeam = (spec: ContainerSpec) => Effect.Effect<SandboxHandle | undefined, BackendError>;
 
 // @public
+export const adoptRunningSeam: (options?: ReuseSeamOptions) => Effect.Effect<AdoptRunningSeam, never, ReuseAdoptServices>;
+
+// @public
 export const allocate: (count?: number, options?: AllocateOptions) => Effect.Effect<ReadonlyArray<number>, FreePortExhaustedError>;
 
 // @public
@@ -29,12 +32,18 @@ export interface AllocateOptions {
 }
 
 // @public
+export const ARCHIVE_TAR_TIMEOUT_MS = 300000;
+
+// @public
 export const asCompatibleSubstituteFor: (ref: ImageReference, repository: string) => ImageReference;
 
 // @public
 export interface AutoSelectionOptions {
     readonly msbSupported?: boolean | undefined;
 }
+
+// @public
+export type Backend = 'docker' | 'msb';
 
 // Warning: (ae-forgotten-export) The symbol "BackendError_base" needs to be exported by the entry point index.d.ts
 //
@@ -58,6 +67,78 @@ export const BIND_HOST = "127.0.0.1";
 // @public
 export type BindCheck = (port: number) => Effect.Effect<boolean>;
 
+// @public
+export const boundedTail: (logsText: string, budget: number) => ReadonlyArray<string>;
+
+// @public
+export interface ByIdOptions {
+    // (undocumented)
+    readonly msb?: {
+        readonly runner?: CommandRunnerService | undefined;
+        readonly probeEndpoint?: ((endpoint: string) => Effect.Effect<boolean>) | undefined;
+    } | undefined;
+}
+
+// @public
+export const cacheDirFromConfig: (config: RightsizeConfigService) => string;
+
+// @public
+export interface CanonicalReuseIdentity {
+    // (undocumented)
+    readonly command: ReadonlyArray<string>;
+    // (undocumented)
+    readonly copies: ReadonlyArray<ReuseCopyDigest>;
+    // (undocumented)
+    readonly diskLimitMb?: number;
+    // (undocumented)
+    readonly env: Record<string, string>;
+    // (undocumented)
+    readonly exposedPorts: ReadonlyArray<number>;
+    // (undocumented)
+    readonly image: string;
+    // (undocumented)
+    readonly memoryLimitMb: number | null;
+    // (undocumented)
+    readonly networkDisabled?: true;
+    // (undocumented)
+    readonly tmpfsRootMb?: number;
+}
+
+// @public
+export const canonicalReuseIdentity: (identity: ReuseIdentity, copyDigests: ReadonlyArray<ReuseCopyDigest>) => CanonicalReuseIdentity;
+
+// @public
+export interface Checkpoint {
+    // (undocumented)
+    readonly backend: string;
+    // (undocumented)
+    readonly ref: string;
+    // (undocumented)
+    readonly spec: ContainerSpec;
+}
+
+// @public
+export const CHECKPOINT_ARCHIVE_VERSION = 1;
+
+// @public
+export const CHECKPOINT_NAME_PATTERN: RegExp;
+
+// @public
+export interface CheckpointArchiveMetadata {
+    // (undocumented)
+    readonly backend: string;
+    // (undocumented)
+    readonly createdIso: string;
+    // (undocumented)
+    readonly name: string | null;
+    // (undocumented)
+    readonly ref: string;
+    // (undocumented)
+    readonly rightsizeArchive: 1;
+    // (undocumented)
+    readonly spec: CheckpointRegistrySpec;
+}
+
 // Warning: (ae-forgotten-export) The symbol "CheckpointArtifactMissingError_base" needs to be exported by the entry point index.d.ts
 //
 // @public
@@ -67,6 +148,17 @@ export class CheckpointArtifactMissingError extends CheckpointArtifactMissingErr
 //
 // @public
 export class CheckpointBackendMismatchError extends CheckpointBackendMismatchError_base {}
+
+// Warning: (ae-forgotten-export) The symbol "InvalidWaitStrategyError" needs to be exported by the entry point index.d.ts
+//
+// @public
+export const checkpointContainer: (handle: SandboxHandle, options?: CheckpointCreateOptions) => Effect.Effect<Checkpoint, InvalidCheckpointNameError | CheckpointUnsupportedError | TmpfsRootCheckpointError | BackendError | ContainerLaunchError | InvalidWaitStrategyError | UnsupportedByBackendError, CheckpointStore | Selection_2 | RightsizeConfig | SandboxRuntime>;
+
+// @public
+export interface CheckpointCreateOptions {
+    readonly name?: string | undefined;
+    readonly wait?: WaitOptions | undefined;
+}
 
 // @public
 export const CheckpointName: Schema.refine<string, Schema.String>;
@@ -79,6 +171,68 @@ export const CheckpointRef: Schema.String;
 
 // @public (undocumented)
 export type CheckpointRef = Schema.Schema.Type<typeof CheckpointRef>;
+
+// @public
+export const checkpointRef: (backend: BackendName, name: string | undefined, cacheDir: string) => string;
+
+// @public
+export interface CheckpointRegistryEntry {
+    readonly backend: string;
+    // (undocumented)
+    readonly createdIso: string;
+    // (undocumented)
+    readonly name: string;
+    // (undocumented)
+    readonly ref: string;
+    // (undocumented)
+    readonly spec: CheckpointRegistrySpec;
+}
+
+// @public
+export const checkpointRegistryPath: (cacheDir: string, name: string) => string;
+
+// @public
+export type CheckpointRegistryReadResult = {
+    readonly kind: 'missing';
+} | {
+    readonly kind: 'corrupt';
+} | {
+    readonly kind: 'found';
+    readonly entry: CheckpointRegistryEntry;
+};
+
+// @public
+export interface CheckpointRegistrySpec {
+    // (undocumented)
+    readonly command: ReadonlyArray<string> | null;
+    // (undocumented)
+    readonly env: Record<string, string>;
+    // (undocumented)
+    readonly exposedPorts: ReadonlyArray<number>;
+    // (undocumented)
+    readonly memoryLimitMb: number | null;
+}
+
+// @public
+export interface CheckpointRestoreLaunch {
+    readonly sourceBackend: string;
+    readonly spec: ContainerSpec;
+}
+
+// @public
+export const Checkpoints: {
+    find: typeof findCheckpoint;
+    list: Effect.Effect<readonly Checkpoint[], InvalidCheckpointNameError, RightsizeConfig>;
+    remove: typeof removeCheckpoint;
+    exportTo: typeof exportCheckpointArchive;
+    importFrom: typeof importCheckpointArchive;
+};
+
+// @public
+export const checkpointsDir: (cacheDir: string) => string;
+
+// @public
+export type CheckpointServices = CheckpointStore | Selection_2 | RightsizeConfig;
 
 // Warning: (ae-forgotten-export) The symbol "CheckpointStore_base" needs to be exported by the entry point index.d.ts
 //
@@ -109,7 +263,38 @@ export const CommandArguments: Schema.refine<readonly string[], Schema.$Array<Sc
 export type CommandArguments = Schema.Schema.Type<typeof CommandArguments>;
 
 // @public
+export interface CommandRunnerService {
+    readonly fetchStdoutExact: (args: readonly string[], timeoutMs: number) => Effect.Effect<string, BackendError>;
+    readonly invoke: (args: readonly string[], timeoutMs: number) => Effect.Effect<ExecResult, BackendError>;
+    readonly invokePromise: (args: readonly string[], timeoutMs: number) => Promise<ExecResult>;
+    // Warning: (ae-forgotten-export) The symbol "CliChild" needs to be exported by the entry point index.d.ts
+    readonly spawn: (args: readonly string[], options?: {
+        readonly stdin?: 'ignore' | 'pipe';
+    }) => Effect.Effect<CliChild, BackendError>;
+    readonly spawnSync: (args: readonly string[]) => void;
+}
+
+// @public
+export const computeHandleFingerprint: (backend: string, containerId: string) => string;
+
+// @public
 export const config: Config.Config<RightsizeConfigService>;
+
+// Warning: (ae-forgotten-export) The symbol "ContainerHandle_base" needs to be exported by the entry point index.d.ts
+//
+// @public
+export class ContainerHandle extends ContainerHandle_base {
+    static byId(handleJson: string, options?: ByIdOptions): Effect.Effect<HandleOps, HandleByidError, Selection_2 | RightsizeConfig>;
+    static fromJson(handleJson: string): Result.Result<ContainerHandle, MalformedHandleError>;
+    static fromRunning(run: {
+        readonly backend: BackendName;
+        readonly handle: SandboxHandle;
+        readonly spec: ContainerSpec;
+    }, options?: {
+        readonly msbAgentEndpoint?: string | undefined;
+    }): ContainerHandle;
+    static toJson(handle: ContainerHandle): string;
+}
 
 // @public
 export interface ContainerInspect {
@@ -194,6 +379,12 @@ export const ContainerSpec: Schema.Struct<{
 export type ContainerSpec = Schema.Schema.Type<typeof ContainerSpec>;
 
 // @public
+export const decideReap: ((command: ReapCommand) => Result.Result<ReapDecision, ReapFactContradictionError>) & Workflow.WorkflowBrand;
+
+// @public
+export const decideReuseAdopt: ((command: ReuseAdoptCommand) => Result.Result<ReuseAdoptDecision, ReuseFromCheckpointError | ReuseWithNetworkError>) & Workflow.WorkflowBrand;
+
+// @public
 export const decideSelection: ((command: SelectionCommand) => Result.Result<SelectionDecision, BackendUnreachableError>) & Workflow.WorkflowBrand;
 
 // @public
@@ -204,6 +395,9 @@ export const DEFAULT_DOCKER_SOCKET = "/var/run/docker.sock";
 
 // @public
 export const defaultProbeEnvironment: () => ProbeEnvironment;
+
+// @public
+export const DIAGNOSTICS_TAIL_LINES = 50;
 
 // @public
 export const DiagnosticsContainer: Schema.Struct<{
@@ -240,6 +434,12 @@ export const DiagnosticsReport: Schema.Struct<{
 export type DiagnosticsReport = Schema.Schema.Type<typeof DiagnosticsReport>;
 
 // @public
+export const digestReuseIdentity: (canonical: CanonicalReuseIdentity) => string;
+
+// @public
+export const DOCKER_CHECKPOINT_REPO = "rightsize/checkpoint";
+
+// @public
 export type DockerHostKind = {
     readonly kind: 'unset';
 } | {
@@ -252,6 +452,16 @@ export type DockerHostKind = {
 
 // @public
 export const emptyFreePortState: () => FreePortState;
+
+// @public
+export type EndpointTarget = {
+    readonly kind: 'tcp';
+    readonly host: string;
+    readonly port: number;
+} | {
+    readonly kind: 'unix';
+    readonly sockPath: string;
+};
 
 // @public
 export const EnvPair: Schema.Tuple<readonly [Schema.String, Schema.String]>;
@@ -280,6 +490,9 @@ export const ExecResult: Schema.Struct<{
 export type ExecResult = Schema.Schema.Type<typeof ExecResult>;
 
 // @public
+export const exportCheckpointArchive: (cp: Checkpoint, destPath: string) => Effect.Effect<undefined, CheckpointBackendMismatchError | CheckpointArtifactMissingError | InvalidCheckpointNameError | BackendError, CheckpointServices>;
+
+// @public
 export const FileMount: Schema.Struct<{
     readonly hostPath: Schema.String;
     readonly guestPath: Schema.String;
@@ -290,6 +503,15 @@ export const FileMount: Schema.Struct<{
 export type FileMount = Schema.Schema.Type<typeof FileMount>;
 
 // @public
+export const findCheckpoint: (name: string) => Effect.Effect<Checkpoint | undefined, InvalidCheckpointNameError | BackendError, CheckpointServices>;
+
+// @public
+export const FINGERPRINT_SCHEME = "rzh1";
+
+// @public
+export const fingerprintMatches: (handle: ContainerHandle) => boolean;
+
+// @public
 export const FiniteNumber: Schema.Finite;
 
 // @public (undocumented)
@@ -297,6 +519,26 @@ export type FiniteNumber = Schema.Schema.Type<typeof FiniteNumber>;
 
 // @public
 export const firstLiveCandidate: (probes: ReadonlyArray<SocketProbeVerdict>) => SocketProbeVerdict | undefined;
+
+// @public
+export const FLEET_HOST = "127.0.0.1";
+
+// @public
+export const FLEET_TAIL_LINES = 50;
+
+// @public
+export interface FleetContainer {
+    // (undocumented)
+    readonly backend: BackendName;
+    readonly host: string;
+    readonly id: string;
+    readonly image: string;
+    readonly logTail: ReadonlyArray<string>;
+    readonly name: string;
+    readonly ports: ReadonlyArray<PortBinding>;
+    readonly source: 'live' | 'ledger';
+    readonly state: 'running' | 'stopped' | 'missing' | 'unknown';
+}
 
 // @public
 export interface FollowHandle {
@@ -379,6 +621,12 @@ export interface FreePortState {
 }
 
 // @public
+export const fromCheckpoint: (cp: Checkpoint) => ContainerSpec;
+
+// @public
+export const fromCheckpointRegistryEntry: (entry: CheckpointRegistryEntry) => ContainerSpec;
+
+// @public
 export const fromImage: (image: string) => GenericContainer;
 
 // @public
@@ -406,6 +654,35 @@ export class GenericContainer {
     withWaitStrategy(strategy: WaitStrategy): GenericContainer;
     withWorkingDir(workingDir: string): GenericContainer;
 }
+
+// Warning: (ae-forgotten-export) The symbol "HandleBackendMismatchError_base" needs to be exported by the entry point index.d.ts
+//
+// @public
+export class HandleBackendMismatchError extends HandleBackendMismatchError_base {}
+
+// @public
+export type HandleByidError = MalformedHandleError | HandleBackendMismatchError | UnreachableMsbAgentError | BackendError;
+
+// @public
+export interface HandleOps {
+    readonly backend: BackendName;
+    readonly containerId: string;
+    copyFromContainer(containerPath: string, hostPath: string): Effect.Effect<void, BackendError>;
+    copyToContainer(hostPath: string, containerPath: string): Effect.Effect<void, BackendError>;
+    exec(request: ExecRequest): Effect.Effect<ExecResult, BackendError>;
+    execCommand(...command: string[]): Effect.Effect<ExecResult, BackendError>;
+    followOutput(consumer: (line: string) => void): Effect.Effect<FollowHandle, BackendError>;
+    getHost(): string;
+    getMappedPort(guestPort: number): number | undefined;
+    readonly handle: ContainerHandle;
+    readonly inspect: Effect.Effect<ContainerInspect, BackendError>;
+    readonly logs: Effect.Effect<string, BackendError>;
+    readonly remove: Effect.Effect<void, BackendError>;
+    readonly stop: Effect.Effect<void, BackendError>;
+}
+
+// @public
+export const hashReuseSpec: (spec: ContainerSpec) => Effect.Effect<string, BackendError>;
 
 // @public
 export const HealthStatus: Schema.Literals<readonly ["healthy", "unhealthy", "starting"]>;
@@ -466,6 +743,9 @@ export interface ImageRegistryService {
     pull(ref: string): Effect.Effect<void, BackendError>;
 }
 
+// @public
+export const importCheckpointArchive: (srcPath: string) => Effect.Effect<Checkpoint, MalformedCheckpointArchiveError | InvalidCheckpointNameError | CheckpointBackendMismatchError | BackendError, CheckpointServices>;
+
 // Warning: (ae-forgotten-export) The symbol "IncompatibleImageError_base" needs to be exported by the entry point index.d.ts
 //
 // @public
@@ -476,6 +756,9 @@ export class IncompatibleImageError extends IncompatibleImageError_base {}
 // @public
 export class InvalidCheckpointNameError extends InvalidCheckpointNameError_base {}
 
+// @public
+export const isCheckpointRegistrySpec: (value: unknown) => value is CheckpointRegistrySpec;
+
 // Warning: (ae-forgotten-export) The symbol "IsolationRequiredError_base" needs to be exported by the entry point index.d.ts
 //
 // @public
@@ -485,10 +768,14 @@ export class IsolationRequiredError extends IsolationRequiredError_base {}
 export const isPortFree: (port: number) => Effect.Effect<boolean>;
 
 // @public
+export const isReuseRegistryEntry: (value: unknown) => value is ReuseRegistryEntry;
+
+// @public
 export const issuedView: () => ReadonlySet<number>;
 
-// Warning: (ae-forgotten-export) The symbol "InvalidWaitStrategyError" needs to be exported by the entry point index.d.ts
-//
+// @public
+export const isValidCheckpointName: (name: string) => boolean;
+
 // @public
 export type LaunchCellError = LaunchError | ContainerLaunchError | BackendError | InvalidWaitStrategyError | UnsupportedByBackendError | FreePortExhaustedError;
 
@@ -550,13 +837,41 @@ export const layerAuto: (options?: AutoSelectionOptions) => Layer.Layer<Selectio
 // @public
 export const layerRuntimeDiscovery: Layer.Layer<RuntimeDiscovery>;
 
+// @public
+export const listCheckpointNames: (cacheDir: string) => Effect.Effect<ReadonlyArray<string>>;
+
+// @public
+export const listCheckpoints: Effect.Effect<ReadonlyArray<Checkpoint>, InvalidCheckpointNameError, RightsizeConfig>;
+
+// @public
+export const listFleetContainers: (options?: {
+    readonly tailLines?: number | undefined;
+}) => Effect.Effect<ReadonlyArray<FleetContainer>, never, SandboxRuntime | RightsizeConfig>;
+
 // Warning: (ae-forgotten-export) The symbol "MalformedCheckpointArchiveError_base" needs to be exported by the entry point index.d.ts
 //
 // @public
 export class MalformedCheckpointArchiveError extends MalformedCheckpointArchiveError_base {}
 
+// Warning: (ae-forgotten-export) The symbol "MalformedHandleError_base" needs to be exported by the entry point index.d.ts
+//
+// @public
+export class MalformedHandleError extends MalformedHandleError_base {}
+
+// @public
+export const mappedRecordToBindings: (record: Record<string, number>) => ReadonlyArray<{
+    readonly guestPort: number;
+    readonly hostPort: number;
+}>;
+
 // @public
 export const MAX_ALLOCATE_ATTEMPTS = 100;
+
+// @public
+export const MSB_CHECKPOINT_PREFIX = "rz-ckpt-";
+
+// @public
+export const msbBinaryFor: (config: RightsizeConfigService, cacheDir: string) => string | undefined;
 
 // @public
 export const NetworkAlias: Schema.refine<string, Schema.String>;
@@ -594,6 +909,12 @@ export const nextCandidate: (candidates: ReadonlyArray<number>, state: FreePortS
 export const orderedSocketCandidates: (env: ProbeEnvironment) => ReadonlyArray<SocketCandidate>;
 
 // @public
+export const parseAgentEndpoint: (endpoint: string) => EndpointTarget | undefined;
+
+// @public
+export const parseCheckpointArchiveMetadata: (text: string, archivePath: string) => Result.Result<CheckpointArchiveMetadata, MalformedCheckpointArchiveError>;
+
+// @public
 export const parseImageReference: (image: string) => Result.Result<ImageReference, never>;
 
 // @public
@@ -617,6 +938,12 @@ export const PortBinding: Schema.Struct<{
 export type PortBinding = Schema.Schema.Type<typeof PortBinding>;
 
 // @public
+export const portsToMappedRecord: (ports: ReadonlyArray<{
+    readonly guestPort: number;
+    readonly hostPort: number;
+}>) => Record<string, number>;
+
+// @public
 export const PROBE_TIMEOUT_MS = 2000;
 
 // @public
@@ -630,6 +957,9 @@ export interface ProbeEnvironment {
     readonly uid?: number | undefined;
     readonly xdgRuntimeDir?: string | undefined;
 }
+
+// @public
+export const probeMsbAgentEndpoint: (endpoint: string) => Effect.Effect<boolean>;
 
 // @public
 export const ProbeRecord: Schema.Struct<{
@@ -650,10 +980,90 @@ export const probeSocket: (socketPath: string) => Effect.Effect<boolean>;
 export class ProvisionError extends ProvisionError_base {}
 
 // @public
+export const readCheckpointArchive: <A, E, R>(srcPath: string, importArtifact: (metadata: CheckpointArchiveMetadata, artifactPath: string) => Effect.Effect<A, E, R>) => Effect.Effect<A, MalformedCheckpointArchiveError | BackendError | E, R>;
+
+// @public
+export const readCheckpointRegistry: (cacheDir: string, name: string) => Effect.Effect<CheckpointRegistryReadResult, InvalidCheckpointNameError>;
+
+// @public
+export const readRegistry: (cacheDir: string, hash: string) => Effect.Effect<RegistryReadResult>;
+
+// @public
 export const realBindCheck: BindCheck;
 
 // @public
+export const reap: (options?: ReapOptions) => Effect.Effect<void, BackendError | ReapFactContradictionError, Selection_2 | RightsizeConfig>;
+
+// @public
+export type ReapCommand = {
+    readonly _tag: 'Reap';
+    readonly thisRunId: string;
+    readonly backend: BackendName;
+    readonly runs: ReadonlyArray<ReapRunFacts>;
+};
+
+// @public
+export type ReapDecision = ReapSkipped | ReapRuns;
+
+// @public
+export interface ReapDeps {
+    // (undocumented)
+    readonly cacheDir: string;
+    // (undocumented)
+    readonly kill: ReaperKillCommands;
+    readonly now?: (() => number) | undefined;
+    readonly runKill?: ((argv: ReadonlyArray<string>) => void) | undefined;
+    // (undocumented)
+    readonly thisRunId: string;
+    readonly timeSource?: ProcessTimeSource | undefined;
+}
+
+// @public
 export type ReaperMode = 'on' | 'sweep' | 'off';
+
+// Warning: (ae-forgotten-export) The symbol "ReapFactContradictionError_base" needs to be exported by the entry point index.d.ts
+//
+// @public
+export class ReapFactContradictionError extends ReapFactContradictionError_base {}
+
+// @public
+export interface ReapOptions {
+    readonly cacheDir?: string | undefined;
+    readonly kill?: ReaperKillCommands | undefined;
+    readonly now?: (() => number) | undefined;
+    readonly runKill?: ((argv: ReadonlyArray<string>) => void) | undefined;
+    readonly timeSource?: ProcessTimeSource | undefined;
+}
+
+// @public
+export interface ReapRunFacts {
+    readonly alive: boolean;
+    // Warning: (ae-forgotten-export) The symbol "RunRecord" needs to be exported by the entry point index.d.ts
+    readonly record: RunRecord | undefined;
+    // (undocumented)
+    readonly runId: string;
+    readonly unparseableFresh: boolean;
+}
+
+// Warning: (ae-forgotten-export) The symbol "ReapRuns_base" needs to be exported by the entry point index.d.ts
+//
+// @public
+export class ReapRuns extends ReapRuns_base {}
+
+// Warning: (ae-forgotten-export) The symbol "ReapSkipped_base" needs to be exported by the entry point index.d.ts
+//
+// @public
+export class ReapSkipped extends ReapSkipped_base {}
+
+// @public
+export type RegistryReadResult = {
+    readonly kind: 'missing';
+} | {
+    readonly kind: 'corrupt';
+} | {
+    readonly kind: 'found';
+    readonly entry: ReuseRegistryEntry;
+};
 
 // Warning: (ae-forgotten-export) The symbol "RelativeContainerPathError_base" needs to be exported by the entry point index.d.ts
 //
@@ -664,7 +1074,25 @@ export class RelativeContainerPathError extends RelativeContainerPathError_base 
 export const release: (port: number) => Effect.Effect<void>;
 
 // @public
+export const removeCheckpoint: (name: string) => Effect.Effect<boolean, InvalidCheckpointNameError | BackendError, CheckpointServices>;
+
+// @public
+export const removeCheckpointRegistryFile: (cacheDir: string, name: string) => Effect.Effect<void>;
+
+// @public
+export const removeRegistry: (cacheDir: string, hash: string) => Effect.Effect<void>;
+
+// @public
+export const renderDiagnostics: (report: DiagnosticsReport) => string;
+
+// @public
+export const reportDiagnostics: Effect.Effect<DiagnosticsReport, never, SandboxRuntime>;
+
+// @public
 export const requireCompatibleImage: (image: string | ImageReference, expectedRepository: string) => Result.Result<string, IncompatibleImageError>;
+
+// @public
+export const requireValidCheckpointName: (name: string) => Effect.Effect<string, InvalidCheckpointNameError>;
 
 // @public
 export interface ResolvedHygiene {
@@ -677,10 +1105,116 @@ export interface ResolvedHygiene {
     readonly reaper: ReaperMode;
 }
 
+// @public
+export const resolveReuseCopyDigests: (spec: ContainerSpec) => Effect.Effect<ReadonlyArray<ReuseCopyDigest>, BackendError>;
+
+// @public
+export const restoreFromCheckpoint: (cp: Checkpoint) => CheckpointRestoreLaunch;
+
+// @public
+export type ReuseAdoptCommand = {
+    readonly _tag: 'DecideReuseAdopt';
+    readonly reuseOptIn: boolean;
+    readonly networkId: string | undefined;
+    readonly checkpointRef: string | undefined;
+    readonly registry: RegistryReadResult | undefined;
+    readonly running: SandboxHandle | undefined;
+    readonly name: string;
+    readonly cacheDir: string;
+    readonly hash: string;
+};
+
+// @public
+export type ReuseAdoptDecision = {
+    readonly _tag: 'Ignored';
+} | {
+    readonly _tag: 'Adopt';
+    readonly handle: SandboxHandle;
+    readonly cacheDir: string;
+    readonly hash: string;
+} | {
+    readonly _tag: 'Cleanup';
+    readonly name: string;
+    readonly cacheDir: string;
+    readonly hash: string;
+    readonly removeByName: boolean;
+    readonly removeRegistry: boolean;
+} | {
+    readonly _tag: 'Fresh';
+};
+
+// @public
+export type ReuseAdoptServices = RightsizeConfig | SandboxRuntime;
+
+// @public
+export interface ReuseCopy {
+    // (undocumented)
+    readonly guestPath: string;
+    // (undocumented)
+    readonly hostPath: string;
+}
+
+// @public
+export interface ReuseCopyDigest {
+    // (undocumented)
+    readonly guestPath: string;
+    // (undocumented)
+    readonly sha256: string;
+}
+
+// @public
+export const reuseDir: (cacheDir: string) => string;
+
 // Warning: (ae-forgotten-export) The symbol "ReuseFromCheckpointError_base" needs to be exported by the entry point index.d.ts
 //
 // @public
 export class ReuseFromCheckpointError extends ReuseFromCheckpointError_base {}
+
+// @public
+export interface ReuseIdentity {
+    readonly command: ReadonlyArray<string> | undefined;
+    readonly copies: ReadonlyArray<ReuseCopy>;
+    readonly diskLimitMb: number | undefined;
+    readonly env: ReadonlyArray<readonly [string, string]>;
+    readonly exposedPorts: ReadonlyArray<number>;
+    // (undocumented)
+    readonly image: string;
+    // (undocumented)
+    readonly memoryLimitMb: number | undefined;
+    readonly networkDisabled: boolean;
+    readonly tmpfsRootMb: number | undefined;
+}
+
+// @public
+export const reuseIdentityHash: (identity: ReuseIdentity, copyDigests: ReadonlyArray<ReuseCopyDigest>) => string;
+
+// @public
+export const reuseIdentityOf: (spec: ContainerSpec) => ReuseIdentity;
+
+// @public
+export const reuseName: (hash: string) => string;
+
+// @public
+export const reusePath: (cacheDir: string, hash: string) => string;
+
+// @public
+export interface ReuseRegistryEntry {
+    readonly backend: string;
+    // (undocumented)
+    readonly createdIso: string;
+    // (undocumented)
+    readonly image: string;
+    // (undocumented)
+    readonly name: string;
+    // (undocumented)
+    readonly ports: Record<string, number>;
+}
+
+// @public
+export interface ReuseSeamOptions {
+    readonly cacheDir?: string | undefined;
+    readonly wait?: WaitOptions | undefined;
+}
 
 // Warning: (ae-forgotten-export) The symbol "ReuseWithNetworkError_base" needs to be exported by the entry point index.d.ts
 //
@@ -743,6 +1277,9 @@ export interface RunningHandle {
     readonly state: LaunchState;
     readonly stop: Effect.Effect<void, never, SandboxRuntime | VirtualNetworks>;
 }
+
+// @public
+export const runTar: (args: readonly string[], timeoutMs: number, cwd: string) => Promise<TarCliResult>;
 
 // @public
 export const RuntimeCapabilities: Schema.Struct<{
@@ -857,6 +1394,25 @@ export interface SocketProbeVerdict {
 // @public
 export const SYSTEM_PODMAN_SOCKET = "/run/podman/podman.sock";
 
+// @public
+export const TarCli: {
+    create(archiveBasename: string, workDir: string, members: readonly string[]): string[];
+    extract(archiveBasename: string, destDir: string): string[];
+};
+
+// @public
+export interface TarCliResult {
+    // (undocumented)
+    readonly exitCode: number;
+    // (undocumented)
+    readonly stderr: string;
+    // (undocumented)
+    readonly stdout: string;
+}
+
+// @public
+export function tarDirArg(dir: string, platform?: NodeJS.Platform): string;
+
 // Warning: (ae-forgotten-export) The symbol "TeardownFactContradictionError" needs to be exported by the entry point index.d.ts
 //
 // @public
@@ -878,7 +1434,15 @@ export class TmpfsRootCheckpointError extends TmpfsRootCheckpointError_base {}
 export class TmpfsRootExceedsMemoryError extends TmpfsRootExceedsMemoryError_base {}
 
 // @public
+export const toCheckpointRegistrySpec: (spec: ContainerSpec) => CheckpointRegistrySpec;
+
+// @public
 export const toRunningContainer: (run: RunningHandle) => RunningContainer;
+
+// Warning: (ae-forgotten-export) The symbol "UnreachableMsbAgentError_base" needs to be exported by the entry point index.d.ts
+//
+// @public
+export class UnreachableMsbAgentError extends UnreachableMsbAgentError_base {}
 
 // Warning: (ae-forgotten-export) The symbol "UnsupportedByBackendError_base" needs to be exported by the entry point index.d.ts
 //
@@ -1020,10 +1584,19 @@ export const withWaitStrategy: typeof waitingFor;
 // @public
 export const withWorkingDir: (spec: ContainerSpec, workingDir: string) => ContainerSpec;
 
+// @public
+export const writeCheckpointArchive: (destPath: string, metadata: CheckpointArchiveMetadata, exportArtifact: (artifactPath: string) => Effect.Effect<void, BackendError>) => Effect.Effect<undefined, BackendError>;
+
+// @public
+export const writeCheckpointRegistryAtomic: (cacheDir: string, name: string, entry: CheckpointRegistryEntry) => Effect.Effect<void, InvalidCheckpointNameError | BackendError>;
+
+// @public
+export const writeRegistryAtomic: (cacheDir: string, hash: string, entry: ReuseRegistryEntry) => Effect.Effect<void, BackendError>;
+
 // Warnings were encountered during analysis:
 //
-// dist/index.d.ts:433:5 - (ae-forgotten-export) The symbol "ReaperKillCommands" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:436:5 - (ae-forgotten-export) The symbol "ProcessTimeSource" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:220:5 - (ae-forgotten-export) The symbol "ReaperKillCommands" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:223:5 - (ae-forgotten-export) The symbol "ProcessTimeSource" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 
