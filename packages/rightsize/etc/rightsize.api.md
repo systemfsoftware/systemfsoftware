@@ -4,17 +4,55 @@
 
 ```ts
 
+import { Config } from 'effect';
+import { Context } from 'effect';
+import { Effect } from 'effect';
+import { HashSet } from 'effect';
+import { Layer } from 'effect';
 import { Result } from 'effect';
 import { Schema } from 'effect';
+import { Workflow } from '@systemfsoftware/effect-cell-types';
 import { YieldableError } from 'effect/Cause';
 
 // @public
+export const allocate: (count?: number, options?: AllocateOptions) => Effect.Effect<ReadonlyArray<number>, FreePortExhaustedError>;
+
+// @public
+export interface AllocateOptions {
+    readonly bindCheck?: BindCheck | undefined;
+    readonly candidates?: ReadonlyArray<number> | undefined;
+    readonly maxAttempts?: number | undefined;
+}
+
+// @public
 export const asCompatibleSubstituteFor: (ref: ImageReference, repository: string) => ImageReference;
+
+// @public
+export interface AutoSelectionOptions {
+    readonly msbSupported?: boolean | undefined;
+}
 
 // Warning: (ae-forgotten-export) The symbol "BackendError_base" needs to be exported by the entry point index.d.ts
 //
 // @public
 export class BackendError extends BackendError_base {}
+
+// @public
+export type BackendName = 'docker' | 'msb';
+
+// @public
+export type BackendPreference = 'auto' | 'docker' | 'msb';
+
+// Warning: (ae-forgotten-export) The symbol "BackendUnreachableError_base" needs to be exported by the entry point index.d.ts
+//
+// @public
+export class BackendUnreachableError extends BackendUnreachableError_base {}
+
+// @public
+export const BIND_HOST = "127.0.0.1";
+
+// @public
+export type BindCheck = (port: number) => Effect.Effect<boolean>;
 
 // Warning: (ae-forgotten-export) The symbol "CheckpointArtifactMissingError_base" needs to be exported by the entry point index.d.ts
 //
@@ -38,16 +76,43 @@ export const CheckpointRef: Schema.String;
 // @public (undocumented)
 export type CheckpointRef = Schema.Schema.Type<typeof CheckpointRef>;
 
+// Warning: (ae-forgotten-export) The symbol "CheckpointStore_base" needs to be exported by the entry point index.d.ts
+//
+// @public (undocumented)
+export class CheckpointStore extends CheckpointStore_base {}
+
+// @public
+export interface CheckpointStoreService {
+    createCheckpoint(handle: SandboxHandle, ref: string): Effect.Effect<void, BackendError>;
+    exportCheckpoint(ref: string, destFile: string): Effect.Effect<void, BackendError>;
+    hasCheckpoint(ref: string): Effect.Effect<boolean, BackendError>;
+    importCheckpoint(srcFile: string, ref: string): Effect.Effect<string, BackendError>;
+    removeCheckpoint(ref: string): Effect.Effect<void, BackendError>;
+}
+
 // Warning: (ae-forgotten-export) The symbol "CheckpointUnsupportedError_base" needs to be exported by the entry point index.d.ts
 //
 // @public
 export class CheckpointUnsupportedError extends CheckpointUnsupportedError_base {}
 
 // @public
+export const classifyDockerHost: (dockerHost: string | undefined) => DockerHostKind;
+
+// @public
 export const CommandArguments: Schema.refine<readonly string[], Schema.$Array<Schema.String>>;
 
 // @public (undocumented)
 export type CommandArguments = Schema.Schema.Type<typeof CommandArguments>;
+
+// @public
+export const config: Config.Config<RightsizeConfigService>;
+
+// @public
+export interface ContainerInspect {
+    readonly exists: boolean;
+    readonly health: HealthStatus | undefined;
+    readonly running: boolean;
+}
 
 // Warning: (ae-forgotten-export) The symbol "ContainerLaunchError_base" needs to be exported by the entry point index.d.ts
 //
@@ -122,7 +187,16 @@ export const ContainerSpec: Schema.Struct<{
 export type ContainerSpec = Schema.Schema.Type<typeof ContainerSpec>;
 
 // @public
+export const decideSelection: ((command: SelectionCommand) => Result.Result<SelectionDecision, BackendUnreachableError>) & Workflow.WorkflowBrand;
+
+// @public
 export const declaredRepository: (ref: ImageReference) => string;
+
+// @public
+export const DEFAULT_DOCKER_SOCKET = "/var/run/docker.sock";
+
+// @public
+export const defaultProbeEnvironment: () => ProbeEnvironment;
 
 // @public
 export const DiagnosticsContainer: Schema.Struct<{
@@ -157,6 +231,20 @@ export const DiagnosticsReport: Schema.Struct<{
 
 // @public (undocumented)
 export type DiagnosticsReport = Schema.Schema.Type<typeof DiagnosticsReport>;
+
+// @public
+export type DockerHostKind = {
+    readonly kind: 'unset';
+} | {
+    readonly kind: 'unix';
+    readonly socketPath: string;
+} | {
+    readonly kind: 'refused';
+    readonly value: string;
+};
+
+// @public
+export const emptyFreePortState: () => FreePortState;
 
 // @public
 export const EnvPair: Schema.Tuple<readonly [Schema.String, Schema.String]>;
@@ -199,6 +287,14 @@ export const FiniteNumber: Schema.Finite;
 
 // @public (undocumented)
 export type FiniteNumber = Schema.Schema.Type<typeof FiniteNumber>;
+
+// @public
+export const firstLiveCandidate: (probes: ReadonlyArray<SocketProbeVerdict>) => SocketProbeVerdict | undefined;
+
+// @public
+export interface FollowHandle {
+    readonly close: Effect.Effect<void>;
+}
 
 // @public
 export const ForHealthCheck: Schema.Struct<{
@@ -257,6 +353,24 @@ export const ForShell: Schema.Struct<{
 // @public (undocumented)
 export type ForShell = Schema.Schema.Type<typeof ForShell>;
 
+// Warning: (ae-forgotten-export) The symbol "FreePortExhaustedError_base" needs to be exported by the entry point index.d.ts
+//
+// @public
+export class FreePortExhaustedError extends FreePortExhaustedError_base {}
+
+// @public
+export const FreePorts: {
+    allocate: typeof allocate;
+    release: typeof release;
+    issuedView: typeof issuedView;
+};
+
+// @public
+export interface FreePortState {
+    readonly busy: HashSet.HashSet<number>;
+    readonly issued: HashSet.HashSet<number>;
+}
+
 // @public
 export const HealthStatus: Schema.Literals<readonly ["healthy", "unhealthy", "starting"]>;
 
@@ -268,6 +382,9 @@ export const HostPort: Schema.refine<number, Schema.Number>;
 
 // @public (undocumented)
 export type HostPort = Schema.Schema.Type<typeof HostPort>;
+
+// @public
+export const hostPortRange: (min: number, max: number) => ReadonlyArray<number>;
 
 // @public
 export const HttpBodyMatcher: Schema.TaggedUnion<{
@@ -301,6 +418,18 @@ export const ImageReference: Schema.Struct<{
 // @public (undocumented)
 export type ImageReference = Schema.Schema.Type<typeof ImageReference>;
 
+// Warning: (ae-forgotten-export) The symbol "ImageRegistry_base" needs to be exported by the entry point index.d.ts
+//
+// @public (undocumented)
+export class ImageRegistry extends ImageRegistry_base {}
+
+// @public
+export interface ImageRegistryService {
+    importImage(archivePath: string): Effect.Effect<void, BackendError>;
+    inspect(ref: string): Effect.Effect<boolean, BackendError>;
+    pull(ref: string): Effect.Effect<void, BackendError>;
+}
+
 // Warning: (ae-forgotten-export) The symbol "IncompatibleImageError_base" needs to be exported by the entry point index.d.ts
 //
 // @public
@@ -316,10 +445,28 @@ export class InvalidCheckpointNameError extends InvalidCheckpointNameError_base 
 // @public
 export class IsolationRequiredError extends IsolationRequiredError_base {}
 
+// @public
+export const isPortFree: (port: number) => Effect.Effect<boolean>;
+
+// @public
+export const issuedView: () => ReadonlySet<number>;
+
+// @public
+export const layer: Layer.Layer<RightsizeConfig, Config.ConfigError, never>;
+
+// @public
+export const layerAuto: (options?: AutoSelectionOptions) => Layer.Layer<Selection_2, BackendUnreachableError | UnsupportedDockerHostError, RightsizeConfig | RuntimeDiscovery>;
+
+// @public
+export const layerRuntimeDiscovery: Layer.Layer<RuntimeDiscovery>;
+
 // Warning: (ae-forgotten-export) The symbol "MalformedCheckpointArchiveError_base" needs to be exported by the entry point index.d.ts
 //
 // @public
 export class MalformedCheckpointArchiveError extends MalformedCheckpointArchiveError_base {}
+
+// @public
+export const MAX_ALLOCATE_ATTEMPTS = 100;
 
 // @public
 export const NetworkAlias: Schema.refine<string, Schema.String>;
@@ -333,6 +480,13 @@ export type NetworkAlias = Schema.Schema.Type<typeof NetworkAlias>;
 export class NetworkDisabledConflictError extends NetworkDisabledConflictError_base {}
 
 // @public
+export interface NetworkLink {
+    readonly alias: string;
+    readonly guestPort: number;
+    readonly targetHostPort: number;
+}
+
+// @public
 export const NetworkSpec: Schema.Struct<{
     readonly id: Schema.String;
 }>;
@@ -342,6 +496,12 @@ export type NetworkSpec = Schema.Schema.Type<typeof NetworkSpec>;
 
 // @public
 export const newContainerSpec: (image: string, name: string) => ContainerSpec;
+
+// @public
+export const nextCandidate: (candidates: ReadonlyArray<number>, state: FreePortState) => number | undefined;
+
+// @public
+export const orderedSocketCandidates: (env: ProbeEnvironment) => ReadonlyArray<SocketCandidate>;
 
 // @public
 export const parseImageReference: (image: string) => Result.Result<ImageReference, never>;
@@ -366,15 +526,52 @@ export const PortBinding: Schema.Struct<{
 // @public (undocumented)
 export type PortBinding = Schema.Schema.Type<typeof PortBinding>;
 
+// @public
+export const PROBE_TIMEOUT_MS = 2000;
+
+// @public
+export const probeBattery: (env: ProbeEnvironment) => Effect.Effect<ReadonlyArray<SocketProbeVerdict>, UnsupportedDockerHostError>;
+
+// @public
+export interface ProbeEnvironment {
+    readonly defaultDockerSocket?: string | undefined;
+    readonly dockerHost?: string | undefined;
+    readonly podmanSystemSocket?: string | undefined;
+    readonly uid?: number | undefined;
+    readonly xdgRuntimeDir?: string | undefined;
+}
+
+// @public
+export const ProbeRecord: Schema.Struct<{
+    readonly id: Schema.String;
+    readonly socketPath: Schema.String;
+    readonly live: Schema.Boolean;
+}>;
+
+// @public (undocumented)
+export type ProbeRecord = Schema.Schema.Type<typeof ProbeRecord>;
+
+// @public
+export const probeSocket: (socketPath: string) => Effect.Effect<boolean>;
+
 // Warning: (ae-forgotten-export) The symbol "ProvisionError_base" needs to be exported by the entry point index.d.ts
 //
 // @public
 export class ProvisionError extends ProvisionError_base {}
 
+// @public
+export const realBindCheck: BindCheck;
+
+// @public
+export type ReaperMode = 'on' | 'sweep' | 'off';
+
 // Warning: (ae-forgotten-export) The symbol "RelativeContainerPathError_base" needs to be exported by the entry point index.d.ts
 //
 // @public
 export class RelativeContainerPathError extends RelativeContainerPathError_base {}
+
+// @public
+export const release: (port: number) => Effect.Effect<void>;
 
 // @public
 export const requireCompatibleImage: (image: string | ImageReference, expectedRepository: string) => Result.Result<string, IncompatibleImageError>;
@@ -389,10 +586,30 @@ export class ReuseFromCheckpointError extends ReuseFromCheckpointError_base {}
 // @public
 export class ReuseWithNetworkError extends ReuseWithNetworkError_base {}
 
+// Warning: (ae-forgotten-export) The symbol "RightsizeConfig_base" needs to be exported by the entry point index.d.ts
+//
+// @public
+export class RightsizeConfig extends RightsizeConfig_base {}
+
+// @public
+export interface RightsizeConfigService {
+    readonly backend: BackendPreference;
+    readonly cacheDir: string | undefined;
+    readonly msbPath: string | undefined;
+    readonly msbSkipDownload: boolean;
+    readonly reaper: ReaperMode;
+    readonly reuse: boolean;
+}
+
 // Warning: (ae-forgotten-export) The symbol "RootDiskConflictError_base" needs to be exported by the entry point index.d.ts
 //
 // @public
 export class RootDiskConflictError extends RootDiskConflictError_base {}
+
+// @public
+export const RunId: {
+    readonly value: string;
+};
 
 // @public
 export const RuntimeCapabilities: Schema.Struct<{
@@ -405,6 +622,105 @@ export const RuntimeCapabilities: Schema.Struct<{
 
 // @public (undocumented)
 export type RuntimeCapabilities = Schema.Schema.Type<typeof RuntimeCapabilities>;
+
+// Warning: (ae-forgotten-export) The symbol "RuntimeDiscovery_base" needs to be exported by the entry point index.d.ts
+//
+// @public
+export class RuntimeDiscovery extends RuntimeDiscovery_base {}
+
+// @public
+export interface RuntimeDiscoveryService {
+    readonly probe: (env?: ProbeEnvironment) => Effect.Effect<ReadonlyArray<SocketProbeVerdict>, UnsupportedDockerHostError>;
+}
+
+// @public
+export interface SandboxHandle {
+    readonly id: string;
+    readonly spec: ContainerSpec;
+}
+
+// Warning: (ae-forgotten-export) The symbol "SandboxRuntime_base" needs to be exported by the entry point index.d.ts
+//
+// @public
+export class SandboxRuntime extends SandboxRuntime_base {}
+
+// @public
+export interface SandboxRuntimeService {
+    readonly capabilities: RuntimeCapabilities;
+    copyFromContainer(handle: SandboxHandle, containerPath: string, hostPath: string): Effect.Effect<void, BackendError>;
+    copyToContainer(handle: SandboxHandle, hostPath: string, containerPath: string): Effect.Effect<void, BackendError>;
+    create(spec: ContainerSpec): Effect.Effect<SandboxHandle, BackendError>;
+    exec(handle: SandboxHandle, request: ExecRequest): Effect.Effect<ExecResult, BackendError>;
+    findRunning(spec: ContainerSpec): Effect.Effect<SandboxHandle | undefined, BackendError>;
+    followLogs(handle: SandboxHandle, consumer: (line: string) => void): Effect.Effect<FollowHandle, BackendError>;
+    inspect(handle: SandboxHandle): Effect.Effect<ContainerInspect, BackendError>;
+    logs(handle: SandboxHandle): Effect.Effect<string, BackendError>;
+    readonly name: BackendName;
+    remove(handle: SandboxHandle): Effect.Effect<void, BackendError>;
+    removeByName(name: string): Effect.Effect<void, BackendError>;
+    start(handle: SandboxHandle): Effect.Effect<void, PortBindConflictError | BackendError>;
+    stop(handle: SandboxHandle): Effect.Effect<void, BackendError>;
+}
+
+// Warning: (ae-forgotten-export) The symbol "Selection_base" needs to be exported by the entry point index.d.ts
+//
+// @public
+class Selection_2 extends Selection_base {}
+export { Selection_2 as Selection }
+
+// @public
+export type SelectionCommand = {
+    readonly _tag: 'PreferMsb';
+} | {
+    readonly _tag: 'PreferDocker';
+    readonly probes: ReadonlyArray<ProbeRecord>;
+    readonly first: SocketProbeVerdict | undefined;
+} | {
+    readonly _tag: 'PreferAuto';
+    readonly probes: ReadonlyArray<ProbeRecord>;
+    readonly first: SocketProbeVerdict | undefined;
+    readonly msbSupported: boolean;
+};
+
+// @public
+export type SelectionDecision = SelectionDocker | SelectionMsb;
+
+// Warning: (ae-forgotten-export) The symbol "SelectionDocker_base" needs to be exported by the entry point index.d.ts
+//
+// @public
+export class SelectionDocker extends SelectionDocker_base {}
+
+// @public
+export const selectionFromDecision: (decision: SelectionDecision) => SelectionService;
+
+// Warning: (ae-forgotten-export) The symbol "SelectionMsb_base" needs to be exported by the entry point index.d.ts
+//
+// @public
+export class SelectionMsb extends SelectionMsb_base {}
+
+// @public
+export interface SelectionService {
+    readonly backend: BackendName;
+    readonly dockerSocketPath: string | undefined;
+}
+
+// @public
+export interface SocketCandidate {
+    readonly id: string;
+    readonly socketPath: string;
+}
+
+// @public
+export interface SocketProbeVerdict {
+    // (undocumented)
+    readonly id: string;
+    readonly live: boolean;
+    // (undocumented)
+    readonly socketPath: string;
+}
+
+// @public
+export const SYSTEM_PODMAN_SOCKET = "/run/podman/podman.sock";
 
 // Warning: (ae-forgotten-export) The symbol "TmpfsRootCheckpointError_base" needs to be exported by the entry point index.d.ts
 //
@@ -420,6 +736,23 @@ export class TmpfsRootExceedsMemoryError extends TmpfsRootExceedsMemoryError_bas
 //
 // @public
 export class UnsupportedByBackendError extends UnsupportedByBackendError_base {}
+
+// Warning: (ae-forgotten-export) The symbol "UnsupportedDockerHostError_base" needs to be exported by the entry point index.d.ts
+//
+// @public
+export class UnsupportedDockerHostError extends UnsupportedDockerHostError_base {}
+
+// Warning: (ae-forgotten-export) The symbol "VirtualNetworks_base" needs to be exported by the entry point index.d.ts
+//
+// @public (undocumented)
+export class VirtualNetworks extends VirtualNetworks_base {}
+
+// @public
+export interface VirtualNetworksService {
+    ensureNetwork(networkId: string): Effect.Effect<void, BackendError>;
+    installNetworkLinks(handle: SandboxHandle, links: ReadonlyArray<NetworkLink>): Effect.Effect<void, BackendError>;
+    removeNetwork(networkId: string): Effect.Effect<void, BackendError>;
+}
 
 // @public
 export const waitingFor: (spec: ContainerSpec, strategy: WaitStrategy) => ContainerSpec;
@@ -464,6 +797,9 @@ export const WaitStrategy: Schema.TaggedUnion<{
 export type WaitStrategy = Schema.Schema.Type<typeof WaitStrategy>;
 
 // @public
+export const withBusy: (state: FreePortState, port: number) => FreePortState;
+
+// @public
 export const withCommand: (spec: ContainerSpec, ...command: string[]) => ContainerSpec;
 
 // @public
@@ -488,6 +824,9 @@ export const withEnvPairs: (spec: ContainerSpec, pairs: ReadonlyArray<readonly [
 export const withExposedPorts: (spec: ContainerSpec, ...guestPorts: number[]) => ContainerSpec;
 
 // @public
+export const withIssued: (state: FreePortState, port: number) => FreePortState;
+
+// @public
 export const withKeepAlive: (spec: ContainerSpec, keepAlive?: boolean) => ContainerSpec;
 
 // @public
@@ -501,6 +840,9 @@ export const withNetworkAliases: (spec: ContainerSpec, ...aliases: string[]) => 
 
 // @public
 export const withNetworkDisabled: (spec: ContainerSpec) => ContainerSpec;
+
+// @public
+export const withReleased: (state: FreePortState, port: number) => FreePortState;
 
 // @public
 export const withRequireIsolation: (spec: ContainerSpec) => ContainerSpec;
