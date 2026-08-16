@@ -2,12 +2,10 @@
   "$schema": "https://json.schemastore.org/tsconfig",
   "extends": ["@systemfsoftware/tsconfig/tsc/dom/library-monorepo", "@systemfsoftware/tsconfig/effect"],
   "compilerOptions": {
-    "customConditions": ["@systemfsoftware/source"],
-    // base-registration.test.ts derives the loaded namespaces from the config's
-    // own jsPlugins (node:fs/path/url); node is the only @types package this leaf installs.
-    "types": ["node"]
+    "customConditions": ["@systemfsoftware/source"]
   },
   "include": ["src"],
+  "exclude": ["src/__tests__"],
   "references": [
     {
       "path": "./tsconfig.node.json"
