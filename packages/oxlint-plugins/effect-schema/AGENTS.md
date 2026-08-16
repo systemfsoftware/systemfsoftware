@@ -30,4 +30,4 @@ This package owns rules for the Effect Schema cell. It exists because those rule
 
 - Types: `pnpm --filter @systemfsoftware/oxlint-plugin-effect-schema typecheck`
 - Test: `pnpm --filter @systemfsoftware/oxlint-plugin-effect-schema test`
-- Mutation: `pnpm --filter @systemfsoftware/oxlint-plugin-effect-schema mutation`
+- Mutation: the Mutation workflow's report for this package; no agent starts a run (root `AGENTS.md` REPO-D3)

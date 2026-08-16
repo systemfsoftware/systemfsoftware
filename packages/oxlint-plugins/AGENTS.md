@@ -11,7 +11,7 @@ rules:
     do: kill every mutant with a distinguishing test or eliminate it with a restructure
     dont: reach the number by ignoring a killable mutant
     harm: the score excludes Ignored from its denominator, so a package can report a passing score while an ignorer absorbs mutants no test kills
-    check: "`pnpm --filter <pkg> mutation` exits 0 and `jq '[.. | .status? // empty | select(. == \"Ignored\" or . == \"Survived\" or . == \"NoCoverage\")] | length' reports/mutation-report.json` returns 0"
+    check: "in the Mutation workflow's merged report for the package, `jq '[.. | .status? // empty | select(. == \"Ignored\" or . == \"Survived\" or . == \"NoCoverage\")] | length' reports/mutation-report.json` returns 0 — reading the report, never starting a run (root `AGENTS.md` REPO-D3)"
 
   - id: OX-MG2
     title: Ignores are declaration data only
