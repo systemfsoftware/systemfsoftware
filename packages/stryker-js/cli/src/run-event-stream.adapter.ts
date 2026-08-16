@@ -1,4 +1,3 @@
-import * as NodeStdio from '@effect/platform-node/NodeStdio'
 import * as Cause from 'effect/Cause'
 import * as Clock from 'effect/Clock'
 import * as Context from 'effect/Context'
@@ -327,10 +326,10 @@ const makeRunEventStream = (
     }
   })
 
-export const RunEventStreamLive: Layer.Layer<RunEventStreamPortTag> = Layer.effect(
+export const RunEventStreamLive: Layer.Layer<RunEventStreamPortTag, never, Stdio.Stdio> = Layer.effect(
   RunEventStreamPort,
   Effect.map(Stdio.Stdio, (stdio) =>
     RunEventStreamPort.of({
       createRunEventStream: (resolved) => makeRunEventStream(stdio, resolved),
     })),
-).pipe(Layer.provide(NodeStdio.layer))
+)

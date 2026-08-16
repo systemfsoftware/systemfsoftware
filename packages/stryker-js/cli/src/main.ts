@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import * as NodeRuntime from '@effect/platform-node/NodeRuntime'
+import * as NodeStdio from '@effect/platform-node/NodeStdio'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import semver from 'semver'
@@ -40,7 +41,9 @@ const program = Effect.gen(function*() {
     outputMode.detectMode,
     runEvents.createRunEventStream,
   )
-}).pipe(Effect.provide(Layer.merge(OutputModeProbeLive, RunEventStreamLive)))
+}).pipe(
+  Effect.provide(Layer.merge(OutputModeProbeLive, RunEventStreamLive).pipe(Layer.provide(NodeStdio.layer))),
+)
 
 NodeRuntime.runMain(program, {
   disableErrorReporting: true,
