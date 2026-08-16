@@ -16,5 +16,9 @@
     "reports",
     "coverage",
     "dist"
+  ],
+  "ignorers": [
+    "effect-schema-declarations",
+    "workflow-make-boundary"
   ]
 }

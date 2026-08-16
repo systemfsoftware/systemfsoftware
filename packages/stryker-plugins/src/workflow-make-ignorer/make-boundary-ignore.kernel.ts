@@ -1,6 +1,8 @@
 import { Schema as S } from 'effect'
 import {
+  ArrowFunctionExpression,
   CallExpression,
+  FunctionExpression,
   Identifier,
   ImportDeclaration,
   ImportNamespaceSpecifier,
@@ -30,8 +32,11 @@ const isIdentifier = S.is(Identifier)
 const isStringLiteral = S.is(StringLiteral)
 const isMemberExpression = S.is(MemberExpression)
 const isCallExpression = S.is(CallExpression)
+const isArrowFunction = S.is(ArrowFunctionExpression)
+const isFunctionExpression = S.is(FunctionExpression)
 
 const NO_WORKFLOW_LOCALS: ReadonlySet<string> = new Set()
+const NO_MAKE_ARGUMENT_BODIES: ReadonlySet<object> = new Set()
 
 /** Program -> its workflow local names, so repeated mutant probes never re-walk the body. */
 const WORKFLOW_LOCALS_BY_PROGRAM = new WeakMap<object, ReadonlySet<string>>()
@@ -79,6 +84,154 @@ const isWorkflowMakeCall = (node: unknown, localNames: ReadonlySet<string>): nod
 
 const isArgumentOf = (node: unknown, call: CallExpression): boolean => call.arguments.includes(node)
 
+// -- module-scope function reference resolution ---------------------------------------------
+// A `Workflow.make(decision)` call whose argument is an identifier resolving to a
+// same-file function keeps that function's body inside the mutation population,
+// mirroring the oxlint kernel's followIdentifier walk (depth-8 cycle bound). This is
+// deliberately a file-level mechanical resolution, not a scope analysis — the boundary
+// is a mechanical gate (see workflowLocalNamesOf), so a same-named local shadowing the
+// module binding shadows the resolution too (no production site does this).
+
+const isFunctionDeclaration = (
+  value: unknown,
+): value is { readonly type: 'FunctionDeclaration'; readonly id: Identifier } => {
+  if (typeof value !== 'object' || value === null) return false
+  if (!('type' in value) || value['type'] !== 'FunctionDeclaration') return false
+  return 'id' in value && isIdentifier(value['id'])
+}
+
+const isVariableDeclaration = (
+  value: unknown,
+): value is {
+  readonly type: 'VariableDeclaration'
+  readonly kind: string
+  readonly declarations: readonly unknown[]
+} => {
+  if (typeof value !== 'object' || value === null) return false
+  if (!('type' in value) || value['type'] !== 'VariableDeclaration') return false
+  return 'kind' in value && 'declarations' in value && Array.isArray(value['declarations'])
+}
+
+const isVariableDeclarator = (
+  value: unknown,
+): value is { readonly type: 'VariableDeclarator'; readonly id: unknown; readonly init: unknown } => {
+  if (typeof value !== 'object' || value === null) return false
+  if (!('type' in value) || value['type'] !== 'VariableDeclarator') return false
+  return 'id' in value && 'init' in value
+}
+
+const isExportWrapper = (
+  value: unknown,
+): value is {
+  readonly type: 'ExportNamedDeclaration' | 'ExportDefaultDeclaration'
+  readonly declaration?: unknown
+} => {
+  if (typeof value !== 'object' || value === null) return false
+  if (!('type' in value)) return false
+  return value['type'] === 'ExportNamedDeclaration' || value['type'] === 'ExportDefaultDeclaration'
+}
+
+const unwrapExport = (value: unknown): unknown =>
+  isExportWrapper(value) && 'declaration' in value &&
+    value.declaration !== undefined && value.declaration !== null
+    ? value.declaration
+    : value
+
+const isFunctionLike = (value: unknown): boolean =>
+  isArrowFunction(value) || isFunctionExpression(value) || isFunctionDeclaration(value)
+
+/** Follow depth bound, mirroring the oxlint kernel's cycle guard. */
+const MAX_FOLLOW_DEPTH = 8
+
+/**
+ * The same-file follow walk: a make argument name resolves through module-scope
+ * `const` bindings (function initializers and identifier aliases) and named
+ * function declarations, with the depth bound breaking alias cycles.
+ */
+const followFunctionReference = (
+  name: string,
+  bindings: ReadonlyMap<string, unknown>,
+  depth: number,
+): unknown => {
+  if (depth > MAX_FOLLOW_DEPTH) return null
+  const binding = bindings.get(name)
+  if (binding === undefined || binding === null) return null
+  if (isFunctionLike(binding)) return binding
+  if (isIdentifier(binding)) return followFunctionReference(binding.name, bindings, depth + 1)
+  return null
+}
+
+/** The module-scope bindings of a file: name -> function-like node, alias identifier, or null. */
+const moduleBindingsOf = (programBody: readonly unknown[]): ReadonlyMap<string, unknown> => {
+  const bindings = new Map<string, unknown>()
+  for (const rawStatement of programBody) {
+    const statement = unwrapExport(rawStatement)
+    if (isFunctionDeclaration(statement)) {
+      bindings.set(statement.id.name, statement)
+      continue
+    }
+    if (!isVariableDeclaration(statement) || statement.kind !== 'const') continue
+    for (const declarator of statement.declarations) {
+      if (!isVariableDeclarator(declarator) || !isIdentifier(declarator.id)) continue
+      const init = declarator.init
+      if (init === null || init === undefined) continue
+      bindings.set(declarator.id.name, isFunctionLike(init) || isIdentifier(init) ? init : null)
+    }
+  }
+  return bindings
+}
+
+const isWalkable = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null
+
+const walkAllNodes = (root: unknown, visit: (node: unknown) => void): void => {
+  const visited = new Set<object>()
+  const walk = (value: unknown): void => {
+    if (!isWalkable(value)) return
+    if (visited.has(value)) return
+    visited.add(value)
+    visit(value)
+    for (const key of Object.keys(value)) {
+      const child = value[key]
+      if (Array.isArray(child)) {
+        for (const entry of child) walk(entry)
+      } else {
+        walk(child)
+      }
+    }
+  }
+  walk(root)
+}
+
+/** Program -> the same-file function bodies a `Workflow.make` identifier argument resolves to. */
+const MAKE_ARGUMENT_BODIES_BY_PROGRAM = new WeakMap<object, ReadonlySet<object>>()
+
+/**
+ * The function nodes a make call names by identifier, memoized keyed by the Program:
+ * the probe loop visits every mutant in the file, and the resolution is a pure
+ * function of the Program. The bodies are the container objects — a mutant whose
+ * ancestor chain includes one stays inside the population.
+ */
+const makeArgumentBodiesOf = (program: unknown): ReadonlySet<object> => {
+  if (!isProgram(program)) return NO_MAKE_ARGUMENT_BODIES
+  const cached = MAKE_ARGUMENT_BODIES_BY_PROGRAM.get(program)
+  if (cached !== undefined) return cached
+  const bodies = new Set<object>()
+  const localNames = workflowLocalNamesOf(program)
+  if (localNames.size > 0) {
+    const bindings = moduleBindingsOf(program.body)
+    walkAllNodes(program, (node) => {
+      if (!isCallExpression(node)) return
+      if (!isWorkflowMakeCallee(node.callee, localNames)) return
+      const firstArgument = node.arguments[0]
+      if (firstArgument === undefined || !isIdentifier(firstArgument)) return
+      const resolved = followFunctionReference(firstArgument.name, bindings, 0)
+      if (resolved !== null && typeof resolved === 'object') bodies.add(resolved)
+    })
+  }
+  MAKE_ARGUMENT_BODIES_BY_PROGRAM.set(program, bodies)
+  return bodies
+}
+
 /**
  * True when the mutant descends from an argument slot of a `Workflow.make` call — babel nests
  * the make body under the call's `arguments` array, so identity containment through the walk
@@ -100,6 +253,15 @@ const insideMakeBoundary = (node: unknown, ancestors: readonly unknown[]): boole
     const ancestor = ancestors[i]
     const child = i === 0 ? node : ancestors[i - 1]
     if (isWorkflowMakeCall(ancestor, localNames) && isArgumentOf(child, ancestor)) return true
+  }
+  // A make argument naming a same-file function keeps that function's body inside
+  // the population even though the call is a sibling statement, not an ancestor:
+  // the resolved body's identity in the mutant's ancestor chain is the containment.
+  const resolvedBodies = makeArgumentBodiesOf(root)
+  if (resolvedBodies.size === 0) return false
+  if (typeof node === 'object' && node !== null && resolvedBodies.has(node)) return true
+  for (const ancestor of ancestors) {
+    if (typeof ancestor === 'object' && ancestor !== null && resolvedBodies.has(ancestor)) return true
   }
   return false
 }

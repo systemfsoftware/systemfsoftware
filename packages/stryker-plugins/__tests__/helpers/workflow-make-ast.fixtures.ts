@@ -70,3 +70,14 @@ export const makeBodyOf = (inner: unknown): ArrowFunctionExpression & { readonly
   type: 'ArrowFunctionExpression',
   body: inner,
 })
+
+/**
+ * `const <name> = <init>` — a module-scope binding a `Workflow.make` identifier
+ * argument can resolve to. The declarator layer is elided: babel's ancestry
+ * goes body -> declarator -> declaration, and the kernels model the statement.
+ */
+export const constBindingOf = (name: string, init: unknown) => ({
+  type: 'VariableDeclaration',
+  kind: 'const',
+  declarations: [{ type: 'VariableDeclarator', id: identifier(name), init }],
+})

@@ -1,3 +1,7 @@
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+
 import effectDmmf from '@systemfsoftware/oxlint-plugin-effect-dmmf'
 import type { OxlintConfig } from 'oxlint'
 import { describe, expect, it } from 'vitest'
@@ -5,14 +9,31 @@ import { describe, expect, it } from 'vitest'
 import base from '../oxlint-config.base.js'
 
 /**
- * The two namespaces the base preset loads: core (`@systemfsoftware/oxlint-plugin`,
- * hand-registered below) and the dmmf aggregate (`effect-dmmf`, whose
- * `configs.recommended.rules` the base spreads). Every `@systemfsoftware/…` rule key
- * the preset configures must live under one of them — a key under any other
- * namespace is an orphaned registration that resolves to a plugin the preset never
- * loads and therefore never fires.
+ * The plugin namespaces the base preset loads, derived from its own `jsPlugins`
+ * instead of a hardcoded parallel list: each resolved plugin URL is walked up to
+ * its owning `package.json`, and the package name is the namespace its rules key
+ * on. A plugin added to `jsPlugins` is covered automatically; a plugin removed
+ * orphans its `@systemfsoftware/…` rule keys and the orphan check fails on them.
  */
-const LOADED_NAMESPACES = ['@systemfsoftware/oxlint-plugin/', '@systemfsoftware/oxlint-plugin-effect-dmmf/'] as const
+const namespaceOf = (resolved: string): string | null => {
+  let dir = path.dirname(fileURLToPath(new URL(resolved)))
+  for (;;) {
+    try {
+      const raw = JSON.parse(readFileSync(path.join(dir, 'package.json'), 'utf8')) as unknown
+      const name = typeof raw === 'object' && raw !== null && 'name' in raw ? raw.name : undefined
+      if (typeof name === 'string') return `${name}/`
+    } catch {
+      // not a package root; keep walking up
+    }
+    const parent = path.dirname(dir)
+    if (parent === dir) return null
+    dir = parent
+  }
+}
+
+const LOADED_NAMESPACES = (base.jsPlugins ?? [])
+  .map(namespaceOf)
+  .filter((namespace): namespace is string => namespace !== null)
 
 const baseRules: NonNullable<OxlintConfig['rules']> = base.rules ?? {}
 

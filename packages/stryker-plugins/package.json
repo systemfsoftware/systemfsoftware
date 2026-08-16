@@ -38,6 +38,11 @@
       "types": "./dist/effect-schema-ignorer.d.ts",
       "default": "./dist/effect-schema-ignorer.mjs"
     },
+    "./in-source-test-ignorer": {
+      "@systemfsoftware/source": "./src/in-source-test-ignorer/index.ts",
+      "types": "./dist/in-source-test-ignorer.d.ts",
+      "default": "./dist/in-source-test-ignorer.mjs"
+    },
     "./workflow-make-ignorer": {
       "@systemfsoftware/source": "./src/workflow-make-ignorer/index.ts",
       "types": "./dist/workflow-make-ignorer.d.ts",
@@ -96,6 +101,10 @@
       "./effect-schema-ignorer": {
         "types": "./dist/effect-schema-ignorer.d.ts",
         "default": "./dist/effect-schema-ignorer.mjs"
+      },
+      "./in-source-test-ignorer": {
+        "types": "./dist/in-source-test-ignorer.d.ts",
+        "default": "./dist/in-source-test-ignorer.mjs"
       },
       "./workflow-make-ignorer": {
         "types": "./dist/workflow-make-ignorer.d.ts",

@@ -75,6 +75,32 @@ describe('mergeConfigs', () => {
     expect(out.x).not.toContain(1)
   })
 
+  it('plugins is the one array that concatenates with the inherited list', () => {
+    const out = mergeConfigs(
+      { plugins: ['@base/a', '@base/b'] },
+      { plugins: ['@child/c'] },
+    )
+    expect(out.plugins).toEqual(['@base/a', '@base/b', '@child/c'])
+  })
+
+  it('plugins keeps the first occurrence when parent and child name the same descriptor', () => {
+    const out = mergeConfigs(
+      { plugins: ['@base/a', '@base/b'] },
+      { plugins: ['@base/b', '@child/c'] },
+    )
+    expect(out.plugins).toEqual(['@base/a', '@base/b', '@child/c'])
+  })
+
+  it('plugins without a parent list starts from the child list', () => {
+    expect(mergeConfigs({ a: 1 }, { plugins: ['@child/c'] }).plugins).toEqual(['@child/c'])
+  })
+
+  it('child null on the plugins key deletes the inherited list', () => {
+    const out = mergeConfigs({ plugins: ['@base/a'] }, { plugins: null })
+    expect(out).toEqual({})
+    expect('plugins' in out).toBe(false)
+  })
+
   it('child object merges one level deep over inherited object', () => {
     expect(
       mergeConfigs({ x: { a: 1, b: 2, c: 3 } }, { x: { b: 9, d: 4 } }),
@@ -387,7 +413,7 @@ describe('the shipped base preset', () => {
     expect(out['incrementalFile']).toBe('reports/stryker-incremental.json')
   })
 
-  it('loads both ignorer plugin modules and activates both ignorers for every inheriting config', async () => {
+  it('activates only the declaration ignorer from the base, while keeping both ignorer loader plugins inherited', async () => {
     const child = await writeJson('stryker.config.json', {
       extends: '@systemfsoftware/stryker-js-mutation-run/config/base',
       mutate: ['src/only-this.ts'],
@@ -399,7 +425,36 @@ describe('the shipped base preset', () => {
         '@systemfsoftware/stryker-plugins/workflow-make-ignorer',
       ]),
     )
+    // KTD1 carve-out: the base activates ONE ignorer, so library packages keep
+    // their declaration populations; workflow-make-boundary is a local opt-in.
+    expect(out['ignorers']).toEqual(['effect-schema-declarations'])
+  })
+
+  it('lets a package add workflow-make-boundary locally without touching the base', async () => {
+    const child = await writeJson('stryker.config.json', {
+      extends: '@systemfsoftware/stryker-js-mutation-run/config/base',
+      mutate: ['src/only-this.ts'],
+      ignorers: ['effect-schema-declarations', 'workflow-make-boundary'],
+    })
+    const out = await resolveExtendsChain(child) as Record<string, unknown>
     expect(out['ignorers']).toEqual(['effect-schema-declarations', 'workflow-make-boundary'])
+  })
+
+  it('a package under-specifying plugins still inherits the base checker and ignorer loaders', async () => {
+    const child = await writeJson('stryker.config.json', {
+      extends: '@systemfsoftware/stryker-js-mutation-run/config/base',
+      mutate: ['src/only-this.ts'],
+      plugins: ['@systemfsoftware/stryker-js-vitest-runner'],
+    })
+    const out = await resolveExtendsChain(child) as Record<string, unknown>
+    expect(out['plugins']).toEqual(
+      expect.arrayContaining([
+        '@systemfsoftware/stryker-js-vitest-runner',
+        '@systemfsoftware/stryker-js-typescript-checker',
+        '@systemfsoftware/stryker-plugins/effect-schema-ignorer',
+        '@systemfsoftware/stryker-plugins/workflow-make-ignorer',
+      ]),
+    )
   })
 
   it('carries disableBail: true so killer recording is structural for every inheriting config', async () => {

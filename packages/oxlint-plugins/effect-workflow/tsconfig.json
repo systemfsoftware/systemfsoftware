@@ -4,6 +4,11 @@
   "compilerOptions": {
     "customConditions": [
       "@systemfsoftware/source"
+    ],
+    // The make-boundary kernel drift test reads both vendored copies from disk
+    // (`node:fs`); node is the only @types package this leaf installs.
+    "types": [
+      "node"
     ]
   },
   "include": [

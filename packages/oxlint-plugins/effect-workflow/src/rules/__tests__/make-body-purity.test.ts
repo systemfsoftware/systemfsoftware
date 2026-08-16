@@ -169,6 +169,20 @@ export const decide = Workflow.make((command: { readonly n?: number }) => {
 })`,
     },
     {
+      name: 'Should_Pass_When_FunctionExpressionBodyHasAConvergingFirstGuard',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import * as Match from 'effect/Match'
+import * as Result from 'effect/Result'
+
+export const decide = Workflow.make(function (command: { readonly n?: number }) {
+  if (command.n === undefined) return Result.fail('missing' as never)
+  return Match.value(command).pipe(
+    Match.when({ n: 0 }, () => Result.succeed('zero')),
+    Match.orElse(() => Result.succeed('other')),
+  )
+})`,
+    },
+    {
       name: 'Should_Pass_When_GuardTestUsesOrAndNullishCoalescing',
       code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
 import * as Match from 'effect/Match'

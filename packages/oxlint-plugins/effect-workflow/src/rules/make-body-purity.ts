@@ -60,10 +60,10 @@ const isConvergingGuard = (node: ESTree.Node): boolean => {
   return consequent.body.length === 1 && convergesImmediately(consequent.body[0])
 }
 
-const firstStatementOf = (body: MakeBodyKind): ESTree.Node | undefined =>
-  body.type === 'ArrowFunctionExpression' && body.body.type === 'BlockStatement'
-    ? body.body.body[0]
-    : undefined
+const firstStatementOf = (body: MakeBodyKind): ESTree.Node | undefined => {
+  const block = body.body
+  return block !== null && block.type === 'BlockStatement' ? block.body[0] : undefined
+}
 
 /** The single allowed `if`: the block's first statement, converging immediately. */
 const isAllowedGuard = (node: ESTree.Node, body: MakeBodyKind): boolean => {

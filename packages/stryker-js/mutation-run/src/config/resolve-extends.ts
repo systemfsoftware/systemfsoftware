@@ -59,8 +59,13 @@ export async function readConfigFile(configFile: string): Promise<PartialStryker
 
 /**
  * Merge a child config over a parent's resolved options.
- * R2: scalars and arrays replace wholesale; objects merge one level deep.
+ * R2: scalars replace wholesale; objects merge one level deep.
  * R3: a child key set to `null` deletes the inherited key.
+ * R4: the `plugins` array is the one exception to wholesale array replacement — the
+ * parent's plugin loaders stay inherited and the child's descriptors are appended,
+ * with the first occurrence of a descriptor winning. A package under-specifies
+ * `plugins` on purpose: the base preset carries the checker and ignorer loader
+ * modules, and a sandwich package adds only what it names locally (KTD1).
  */
 export function mergeConfigs(
   parent: PartialStrykerOptions,
@@ -73,6 +78,15 @@ export function mergeConfigs(
       continue
     }
     const parentValue = (parent as Record<string, unknown>)[key]
+    if (key === 'plugins') {
+      const parentPlugins = Array.isArray(parentValue) ? parentValue : []
+      const childPlugins = Array.isArray(value) ? value : []
+      const merged = [...parentPlugins, ...childPlugins]
+      out[key] = merged.filter(
+        (descriptor, index) => typeof descriptor !== 'string' || !merged.slice(0, index).includes(descriptor),
+      )
+      continue
+    }
     const bothObjects = parentValue !== null &&
       parentValue !== undefined &&
       typeof parentValue === 'object' &&

@@ -1,7 +1,7 @@
 # @systemfsoftware/oxlint-plugin-recommended
 
 The recommended **stock** oxlint settings for the cell architecture: a
-universal defect tier plus cell-scoped overrides, built entirely from rules
+universal defect tier plus a test-file hygiene tier, built entirely from rules
 oxlint already ships. No custom rules, no plugin dependencies.
 
 Every setting here is a built-in rule pointed at an invariant of the
@@ -103,22 +103,20 @@ each one a lesson that the linter is wrong.
 | `import/no-mutable-exports`                                                               | S axis                  | an exported mutable binding is escaping state outside the quarantine cell                                             |
 | `no-var`                                                                                  | scope defects           | cannot fire on modern code that never writes `var`                                                                    |
 
-### Cell-scoped overrides — the two regimes
+### Test-file hygiene
 
-The core is one path; the shell is imperative (B4). A rule that binds one
-regime fires on correct code in the other, so the regime rules are overrides
-keyed on the cell suffix, never flat rules. Shell cells (`*.executor.ts`,
-`*.store.ts`, `*.adapter.ts`, `*.state.ts`, `*.policy.ts`) appear in no tier
-below — `if`, `for`, and `while` are legal there, and this preset says so by
-saying nothing.
+| Files                                   | Rules                                                                                                                                                   | Invariant                                                                     |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `*.test.ts`, `tests/**`, `__tests__/**` | `vitest/expect-expect`, `valid-expect`, `no-standalone-expect`, `no-conditional-in-test`, `no-focused-tests`, `no-disabled-tests`, `no-identical-title` | X5 — a test that asserts nothing passes; `.only` and `.skip` delete observers |
 
-| Files                                                                     | Rules                                                                                                                                                   | Invariant                                                                                           |
-| ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `*.schema.ts`, `*.shape.ts`, `*.acl.ts`, `*.registry.ts`, `*.workflow.ts` | `no-restricted-globals`, `no-restricted-properties`, `no-restricted-imports` (I/O modules, Effect runtime with `allowTypeImports`, adapter modules)     | I.1 — a pure cell has no clock, no randomness, no environment, no runtime, and never names a driver |
-| `*.kernel.ts`                                                             | the same purity set, plus a ban on importing any domain or technology cell                                                                              | kernel is `G = domain-blind`; the Effect runtime stays legal (sanctioned kernel effect helpers)     |
-| `*.middleware.ts`                                                         | no import of executor, workflow, or store                                                                                                               | atlas — the front-half attaches facts, never decisions                                              |
-| `*.handler.ts`                                                            | no import of workflow or store                                                                                                                          | atlas — the terminus calls exactly one executor; reaching past it splits the sandwich               |
-| `*.test.ts`, `tests/**`, `__tests__/**`                                   | `vitest/expect-expect`, `valid-expect`, `no-standalone-expect`, `no-conditional-in-test`, `no-focused-tests`, `no-disabled-tests`, `no-identical-title` | X5 — a test that asserts nothing passes; `.only` and `.skip` delete observers                       |
+The cell-scoped tiers this preset used to carry — pure/kernel/front-half/terminus
+suffix globs and their importer groups — are gone (KTD5). The cell-role suffix
+taxonomy itself was deleted from the tree, and a stock-rule glob cannot outlive
+the taxonomy that named it. The boundary rules are now keyed to the
+`Workflow.make` callee by the custom plugins (`effect-workflow`,
+`effect-executor`, `effect-schema`, …), which take over exactly the purity and
+import restrictions the globs used to encode; register them alongside this
+preset.
 
 `no-ternary` is on everywhere, and it is the one rule here that ships as an
 **operator ruling rather than a derivation**. Admission test 2 is not met: a
@@ -126,23 +124,6 @@ correct shell ternary now reports, and the fix is to write the `if`. The
 theory's own G2 hardening bans ternaries in core cells; extending that
 repo-wide is a project decision about having exactly one branching form, and
 it is recorded as such rather than dressed up as an invariant.
-
-Its consequence in the decision cell is moot rather than tight: a `*.workflow.ts`
-is emitted from a declaration, and the declaration has nowhere to put a ternary,
-an `if`, or a loop. `*.workflow.ts` is `Match`-only because nothing else can be
-written there, not because a rule reports it afterwards.
-
-There is still **no** complexity rule for `*.workflow.ts`, and none is wanted. No
-stock rule can express "one guard, first statement, converging": `complexity: max 1`
-would fire on a sanctioned guard and `max 2` would wave through an `if`.
-
-The purity row does cover `*.workflow.ts`, and it is the only thing that does:
-`effect-workflow` ships no ambient-impurity rule, because a declaration cannot name
-`Date.now` and an emitted cell cannot call it. The row overlaps
-`workflow-no-effect-import` for projects that also register `effect-workflow`, and
-that overlap is deliberate: a workflow is a pure cell, and a preset that gates
-purity everywhere _except_ the decision cell has a hole no reader would expect.
-Registering both packages reports such a violation twice.
 
 ## The refusal ledger
 
@@ -170,7 +151,7 @@ or deleted, never silent prose).
 | Ruling                                                                            | Where it is gated instead                                                                                                                                                                                   |
 | --------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | the cell contracts: workflow, executor, schema, filename taxonomy, test placement | the custom plugins — `effect-workflow`, `effect-executor`, `effect-schema`, `cell-taxonomy`, `test-placement`, `property-testing`, `test-hygiene`, and the core plugin. Register them alongside this preset |
-| terminus calls **exactly one** executor                                           | the import ban here is a sound subset; the count is G11 review                                                                                                                                              |
+| the pure-cell purity bans (I.1) that this preset's cell tiers used to carry       | the boundary rules — `make-body-purity` and `workflow-no-effect-import` in `effect-workflow`, plus the per-regime rules in `effect-executor`, `effect-schema`, and `cell-vocabulary`                        |
 | store owns the transaction primitive                                              | the driver is project-specific; supply a `no-restricted-imports` pattern per project                                                                                                                        |
 | G7 mutation, G6 properties, G8 composition, G9 contract                           | other observers; lint cannot see them                                                                                                                                                                       |
 

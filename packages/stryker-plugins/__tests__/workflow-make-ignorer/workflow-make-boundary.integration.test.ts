@@ -14,6 +14,7 @@ import {
 import { taggedCall } from '../helpers/effect-schema-ast.fixtures.js'
 import {
   callOf,
+  constBindingOf,
   identifier,
   makeBodyOf,
   memberOf,
@@ -143,6 +144,61 @@ Feature('Workflow.make boundary — the inverted mutation-population selector')
           (s) => Effect.sync(() => decideWorkflowMakeBoundaryIgnore(s.fixture.mutant, s.fixture.ancestors)),
         ),
         Then('it returns NOT_INSIDE_WORKFLOW_MAKE — only the cell-types value opens a boundary')((s) =>
+          Effect.sync(() => {
+            expect(s.reason).toBe(NOT_INSIDE_WORKFLOW_MAKE)
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'Should_NotIgnore_When_MakeArgumentIsAModuleScopeFunctionReference',
+      Gherkin.Do.pipe(
+        Given('a `Workflow.make(...)` call whose argument names a same-file function holding the mutant')(
+          'fixture',
+          () =>
+            Effect.sync(() => {
+              const mutant = stringLiteral('decide')
+              const body = makeBodyOf(mutant)
+              const decision = constBindingOf('decision', body)
+              const call = workflowMakeCallOf(identifier('decision'))
+              const program = programOf([workflowNamedImport(), decision, call])
+              // The make call is a sibling statement, not an ancestor: the mutant's
+              // chain runs mutant -> body -> binding -> program, and the resolution
+              // must keep the body inside the population anyway.
+              return makeFixture(mutant, [mutant, body, decision, program])
+            }),
+        ),
+        When('the boundary decision runs on that mutant')(
+          'reason',
+          (s) => Effect.sync(() => decideWorkflowMakeBoundaryIgnore(s.fixture.mutant, s.fixture.ancestors)),
+        ),
+        Then('it returns undefined — the referenced function body stays inside the mutation population')((s) =>
+          Effect.sync(() => {
+            expect(s.reason).toBeUndefined()
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'Should_Ignore_When_MakeArgumentNamesAMissingFunction',
+      Gherkin.Do.pipe(
+        Given('a make call naming an identifier that resolves to no function in the file')(
+          'fixture',
+          () =>
+            Effect.sync(() => {
+              const mutant = stringLiteral('admit')
+              const call = workflowMakeCallOf(identifier('decideElsewhere'))
+              const program = programOf([workflowNamedImport(), call])
+              return makeFixture(mutant, [mutant, program])
+            }),
+        ),
+        When('the boundary decision runs on that mutant')(
+          'reason',
+          (s) => Effect.sync(() => decideWorkflowMakeBoundaryIgnore(s.fixture.mutant, s.fixture.ancestors)),
+        ),
+        Then('it returns NOT_INSIDE_WORKFLOW_MAKE')((s) =>
           Effect.sync(() => {
             expect(s.reason).toBe(NOT_INSIDE_WORKFLOW_MAKE)
           })

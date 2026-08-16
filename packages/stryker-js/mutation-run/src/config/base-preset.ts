@@ -27,7 +27,11 @@ const basePreset: PartialStrykerOptions = {
   incrementalFile: 'reports/stryker-incremental.json',
   ignorePatterns: ['reports', 'coverage'],
   disableBail: true,
-  ignorers: ['effect-schema-declarations', 'workflow-make-boundary'],
+  // KTD1 carve-out: the base activates ONLY the declaration ignorer, so library
+  // packages keep their declaration populations. workflow-make-boundary is a
+  // sandwich-package opt-in listed in the consuming config's own `ignorers`;
+  // its loader plugin stays here so every inheriting config can name it.
+  ignorers: ['effect-schema-declarations'],
   thresholds: { high: 100, low: 80, break: 100 },
 }
 

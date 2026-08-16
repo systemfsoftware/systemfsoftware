@@ -9,8 +9,7 @@
   ],
   "disableBail": true,
   "plugins": [
-    "@systemfsoftware/stryker-js-vitest-runner",
-    "@systemfsoftware/stryker-plugins"
+    "@systemfsoftware/stryker-js-vitest-runner"
   ],
   "reporters": [
     "progress",
@@ -26,9 +25,7 @@
     "low": 100,
     "break": 100
   },
-  "checkers": null,
   "htmlReporter": null,
-  "typescriptChecker": null,
   "ignorers": [
     "effect-schema-declarations",
     "workflow-make-boundary"

@@ -10,7 +10,7 @@
   "plugins": [
     "@systemfsoftware/stryker-js-vitest-runner",
     "@systemfsoftware/stryker-js-typescript-checker",
-    "@systemfsoftware/stryker-plugins"
+    "@systemfsoftware/stryker-plugins/in-source-test-ignorer"
   ],
   "ignorers": [
     "effect-schema-declarations",

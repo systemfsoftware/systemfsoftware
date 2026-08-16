@@ -83,7 +83,7 @@ const isImportDeclaration = (node: ESTree.Node): node is ESTree.ImportDeclaratio
 const walk = (
   root: unknown,
   visitorKeys: Readonly<Record<string, readonly string[]>>,
-  visit: (node: ESTree.Node) => void,
+  visit: (n: ESTree.Node) => void,
 ): void => {
   const node = isNode(root) ? root : null
   if (node === null) return

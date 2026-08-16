@@ -18,6 +18,32 @@ topic: architecture-patterns
 
 For each deleted plugin, one representative violation was re-attempted under workspace `tsc --strict` after the deletion: the violating code compiles clean. No compiler diagnostic, constructor, or import edge refuses any of it.
 
+## The complement ceiling's extraction backlog
+
+`no-domain-branching-density` ships at 17 — the lowest measured per-function McCabe complexity the whole tree passes with zero waivers (1441 branchable functions measured; max 17). The plan's provisional "never above 10" clause was superseded by that measurement: a ceiling the tree cannot pass is a gate that gets narrowed until it passes. The fifteen functions at 11-17 are the recorded extraction backlog — new branching has no legal home above the ceiling, and each incumbent is an extraction work item, never a waiver:
+
+| CC | Location                                                                             | Function                |
+| -- | ------------------------------------------------------------------------------------ | ----------------------- |
+| 17 | packages/effect-schema-vite/src/mod.ts:89                                            | findExportedSchemaNames |
+| 15 | omp/plugins/omp-claude-compat/src/internal/run-hooks-for-event.executor.ts:46        | (anonymous)             |
+| 15 | packages/effect-memfs/src/index.ts:55                                                | makeFileInfo            |
+| 14 | packages/effect-schema-vite/src/mod.ts:230                                           | walk                    |
+| 14 | packages/stryker-js/cli/src/output-mode.kernel.ts:34                                 | resolveMode             |
+| 14 | packages/stryker-js/cli/src/run-event-stream.adapter.ts:300                          | sink                    |
+| 13 | omp/packages/omp-utils/src/tool-input.kernel.ts:40                                   | normalizeToolInput      |
+| 13 | omp/plugins/omp-claude-compat/src/inject-instructions.executor.ts:22                 | (anonymous)             |
+| 13 | packages/effect-schema-vite/src/mod.ts:55                                            | walk                    |
+| 12 | omp/packages/omp-utils/src/tool-input.kernel.ts:90                                   | denormalizeToolInput    |
+| 12 | omp/plugins/omp-claude-compat/src/hook-settings.acl.ts:221                           | onSome                  |
+| 12 | packages/stryker-js/cli/src/llms-manifest.kernel.ts:292                              | describeCommandNode     |
+| 11 | packages/effect-schema-law/src/weaken.kernel.ts:85                                   | walk                    |
+| 11 | packages/stryker-js/cli/src/llms-manifest.kernel.ts:241                              | walkConfigNode          |
+| 11 | packages/stryker-plugins/src/workflow-make-ignorer/make-boundary-ignore.kernel.ts:43 | workflowLocalNamesOf    |
+
+## Known bounds of the make-boundary selector
+
+The `workflow-make-boundary` ignorer resolves named, aliased, and namespace imports whose source is the literal `@systemfsoftware/effect-cell-types` module specifier, and follows same-file module-scope function references. It does not follow re-export chains: a local module that re-exports `Workflow` and a call site importing from that local module are outside the boundary, and the mutation population shrinks accordingly — the re-export prohibition is a convention this records rather than a gate. The `WorkflowBrand` is a phantom: it refuses accidents (a bare function handed to `Cell.decide`), not adversaries — any legitimately branded value can donate the phantom by intersection, which is the documented strength of every phantom mark (`phantom-marks-are-donatable.md`).
+
 | Deleted plugin    | Representative violation re-attempted   | Refusing channel                                                                          |
 | ----------------- | --------------------------------------- | ----------------------------------------------------------------------------------------- |
 | cell-imports      | a banned cross-cell import              | none                                                                                      |

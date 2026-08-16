@@ -64,16 +64,16 @@ rules:
 
   - id: OX-OB1
     title: Keep an obligation, not only prohibitions
-    do: keep at least one rule per cell that fails a file for LACKING something
-    dont: reduce a cell's rule set to conditional prohibitions
-    harm: with prohibitions alone an empty or degenerate file passes every rule, and the cell collapses into a naming convention — avoiding the cell's own vocabulary becomes the cheapest way to pass
-    check: review — each cell plugin registers at least one rule whose report fires on absence, and the leaf names which rule that is
+    do: a rule family that judges a shape keeps at least one rule that fails a file for LACKING something
+    dont: reduce a family's rule set to conditional prohibitions
+    harm: with prohibitions alone an empty or degenerate file passes every rule, and the family collapses into a naming convention — avoiding its own vocabulary becomes the cheapest way to pass. The cell-role form of this rule died with the fleet on 2026-08-16 (its obligations are recorded unowned); `effect-entrypoint`'s `entrypoint-interprets-once` (`EP3`) is the surviving worked example
+    check: review — each family that claims an obligation registers at least one rule whose report fires on absence, and the leaf names which rule that is
 
   - id: OX-DL1
     title: A plugin that imports effect-cell-types is delivered consumer-side, never through the effect-dmmf aggregate
     do: when a plugin under packages/oxlint-plugins/ needs `@systemfsoftware/effect-cell-types` as a dependency, deliver it by adding it to each consuming package's own `jsPlugins` and `rules`, exactly as `cell-vocabulary` is delivered
-    dont: add such a plugin to `effect-dmmf/src/index.ts` re-exports, `effect-dmmf/package.json` dependencies, or `oxlint-config/package.json` dependencies — declaring it there closes the turbo cycle `effect-executor -> effect-cell-types -> oxlint-config -> effect-dmmf -> effect-executor`, and the only workaround is a committed generated vocabulary with a drift gate
-    harm: the cycle forces a hack (generated constants + regenerate-and-compare gate) that a later reader deletes as cargo cult, leaving the rules frozen on stale constants with no gate; measured on 2026-08-15 when `vocabulary.generated.ts` existed solely because `effect-executor` sat in the aggregate
+    dont: add such a plugin to `effect-dmmf/src/index.ts` re-exports, `effect-dmmf/package.json` dependencies, or `oxlint-config/package.json` dependencies — declaring it there closes the turbo cycle `<that plugin> -> effect-cell-types -> oxlint-config -> effect-dmmf -> <that plugin>` (measured 2026-08-15 in the pre-collapse tree with `effect-executor`, since deleted, as the closing edge), and the only workaround is a committed generated vocabulary with a drift gate
+    harm: the cycle forces a hack (generated constants + regenerate-and-compare gate) that a later reader deletes as cargo cult, leaving the rules frozen on stale constants with no gate; measured on 2026-08-15 when `vocabulary.generated.ts` existed solely because a cell-role plugin sat in the aggregate
     check: "`grep -rn 'effect-cell-types' packages/oxlint-plugins/effect-dmmf/src/index.ts` returns nothing, and the remedy is `docs/solutions/build-errors/turbo-build-cycle-from-self-hosted-devdeps.md`"
 
   - id: OX-CI1
