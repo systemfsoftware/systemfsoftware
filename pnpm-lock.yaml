@@ -1666,6 +1666,9 @@ importers:
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: catalog:attw
         version: 1.1.1
+      '@systemfsoftware/effect-gherkin-spec':
+        specifier: workspace:^
+        version: link:../effect-gherkin-spec
       '@systemfsoftware/effect-schema-law':
         specifier: workspace:^
         version: link:../effect-schema-law

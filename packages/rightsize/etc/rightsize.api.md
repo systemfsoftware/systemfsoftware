@@ -11,8 +11,12 @@ import { HashSet } from 'effect';
 import { Layer } from 'effect';
 import { Result } from 'effect';
 import { Schema } from 'effect';
+import * as Scope from 'effect/Scope';
 import { Workflow } from '@systemfsoftware/effect-cell-types';
 import { YieldableError } from 'effect/Cause';
+
+// @public
+export type AdoptRunningSeam = (spec: ContainerSpec) => Effect.Effect<SandboxHandle | undefined, BackendError>;
 
 // @public
 export const allocate: (count?: number, options?: AllocateOptions) => Effect.Effect<ReadonlyArray<number>, FreePortExhaustedError>;
@@ -118,6 +122,9 @@ export interface ContainerInspect {
 //
 // @public
 export class ContainerLaunchError extends ContainerLaunchError_base {}
+
+// @public
+export type ContainerServices = SandboxRuntime | VirtualNetworks | Selection_2 | RightsizeConfig;
 
 // @public
 export const ContainerSpec: Schema.Struct<{
@@ -372,6 +379,35 @@ export interface FreePortState {
 }
 
 // @public
+export const fromImage: (image: string) => GenericContainer;
+
+// @public
+export class GenericContainer {
+    constructor(imageOrSpec: string | ContainerSpec);
+    readonly spec: ContainerSpec;
+    start(options?: LaunchOptions): Effect.Effect<RunningContainer, LaunchCellError, Scope.Scope | LaunchServices>;
+    waitingFor(strategy: WaitStrategy): GenericContainer;
+    withCommand(...cmd: string[]): GenericContainer;
+    withCopyDirectoryToContainer(hostPath: string, containerPath: string): GenericContainer;
+    withCopyFileToContainer(hostPath: string, containerPath: string): GenericContainer;
+    withDiskLimit(megabytes: number): GenericContainer;
+    withEntrypoint(...entrypoint: string[]): GenericContainer;
+    withEnv(key: string, value: string): GenericContainer;
+    withExposedPorts(...ports: number[]): GenericContainer;
+    withKeepAlive(keepAlive?: boolean): GenericContainer;
+    withMemoryLimit(megabytes: number): GenericContainer;
+    withNetwork(networkId: string): GenericContainer;
+    withNetworkAliases(...aliases: string[]): GenericContainer;
+    withNetworkDisabled(): GenericContainer;
+    withRequireIsolation(): GenericContainer;
+    withReuse(): GenericContainer;
+    withStartupTimeout(ms: number): GenericContainer;
+    withTmpfsRoot(megabytes: number): GenericContainer;
+    withWaitStrategy(strategy: WaitStrategy): GenericContainer;
+    withWorkingDir(workingDir: string): GenericContainer;
+}
+
+// @public
 export const HealthStatus: Schema.Literals<readonly ["healthy", "unhealthy", "starting"]>;
 
 // @public (undocumented)
@@ -450,6 +486,60 @@ export const isPortFree: (port: number) => Effect.Effect<boolean>;
 
 // @public
 export const issuedView: () => ReadonlySet<number>;
+
+// Warning: (ae-forgotten-export) The symbol "InvalidWaitStrategyError" needs to be exported by the entry point index.d.ts
+//
+// @public
+export type LaunchCellError = LaunchError | ContainerLaunchError | BackendError | InvalidWaitStrategyError | UnsupportedByBackendError | FreePortExhaustedError;
+
+// @public
+export const launchContainer: (spec: ContainerSpec, options?: LaunchOptions) => Effect.Effect<RunningHandle, LaunchCellError, LaunchServices | Scope.Scope>;
+
+// @public
+export type LaunchError = RootDiskConflictError | TmpfsRootExceedsMemoryError | NetworkDisabledConflictError | CheckpointBackendMismatchError | IsolationRequiredError | ReuseWithNetworkError | ReuseFromCheckpointError | IncompatibleImageError;
+
+// @public
+export interface LaunchOptions {
+    readonly adoptRunning?: AdoptRunningSeam | undefined;
+    readonly checkpointSourceBackend?: string | undefined;
+    readonly expectedRepository?: string | undefined;
+    readonly hygiene?: {
+        readonly cacheDir?: string | undefined;
+        readonly reaper?: ReaperMode | undefined;
+        readonly killCommands?: ReaperKillCommands | undefined;
+        readonly cleanupSync?: ((id: string) => void) | undefined;
+        readonly runKill?: ((argv: ReadonlyArray<string>) => void) | undefined;
+        readonly timeSource?: ProcessTimeSource | undefined;
+        readonly spawnChild?: ((command: string, argv: ReadonlyArray<string>) => {
+            readonly close: () => void;
+        }) | undefined;
+    } | undefined;
+    readonly networkLinks?: ReadonlyArray<NetworkLink> | undefined;
+    readonly wait?: WaitOptions | undefined;
+}
+
+// @public
+export type LaunchServices = Selection_2 | RightsizeConfig | SandboxRuntime | VirtualNetworks;
+
+// @public
+export interface LaunchState {
+    adopted: boolean;
+    allocatedPorts: ReadonlyArray<number>;
+    // (undocumented)
+    readonly backend: BackendName;
+    // (undocumented)
+    readonly cleanupSync: ((id: string) => void) | undefined;
+    completed: ReadonlyArray<TeardownStep>;
+    created: boolean;
+    handle: SandboxHandle | undefined;
+    ledgerTracked: boolean;
+    networkId: string | undefined;
+    portsIssued: boolean;
+    registeredAsMember: boolean;
+    // (undocumented)
+    readonly spec: ContainerSpec;
+    syncCleanupRegistered: boolean;
+}
 
 // @public
 export const layer: Layer.Layer<RightsizeConfig, Config.ConfigError, never>;
@@ -576,6 +666,17 @@ export const release: (port: number) => Effect.Effect<void>;
 // @public
 export const requireCompatibleImage: (image: string | ImageReference, expectedRepository: string) => Result.Result<string, IncompatibleImageError>;
 
+// @public
+export interface ResolvedHygiene {
+    // (undocumented)
+    readonly cacheDir: string;
+    readonly cleanupSync: (id: string) => void;
+    // (undocumented)
+    readonly kill: ReaperKillCommands | undefined;
+    // (undocumented)
+    readonly reaper: ReaperMode;
+}
+
 // Warning: (ae-forgotten-export) The symbol "ReuseFromCheckpointError_base" needs to be exported by the entry point index.d.ts
 //
 // @public
@@ -610,6 +711,38 @@ export class RootDiskConflictError extends RootDiskConflictError_base {}
 export const RunId: {
     readonly value: string;
 };
+
+// @public
+export interface RunningContainer {
+    readonly backend: BackendName;
+    copyFileFromContainer(containerPath: string, hostPath: string): Effect.Effect<void, RelativeContainerPathError | BackendError, RuntimeServices>;
+    copyFileToContainer(hostPath: string, containerPath: string): Effect.Effect<void, RelativeContainerPathError | BackendError, RuntimeServices>;
+    // Warning: (ae-forgotten-export) The symbol "RuntimeServices" needs to be exported by the entry point index.d.ts
+    exec(request: ExecRequest): Effect.Effect<ExecResult, BackendError, RuntimeServices>;
+    exec(request: ExecRequest): Effect.Effect<ExecResult, BackendError, RuntimeServices>;
+    execCommand(...command: string[]): Effect.Effect<ExecResult, BackendError, RuntimeServices>;
+    execCommand(...command: string[]): Effect.Effect<ExecResult, BackendError, RuntimeServices>;
+    followOutput(consumer: (line: string) => void): Effect.Effect<FollowHandle, BackendError, RuntimeServices>;
+    getHost(): string;
+    getMappedPort(guestPort: number): number | undefined;
+    readonly handle: SandboxHandle;
+    readonly host: string;
+    readonly logs: Effect.Effect<string, BackendError, RuntimeServices>;
+    readonly remove: Effect.Effect<void, never, RuntimeNetworks>;
+    readonly spec: ContainerSpec;
+    // Warning: (ae-forgotten-export) The symbol "RuntimeNetworks" needs to be exported by the entry point index.d.ts
+    readonly stop: Effect.Effect<void, never, RuntimeNetworks>;
+}
+
+// @public
+export interface RunningHandle {
+    readonly backend: BackendName;
+    readonly handle: SandboxHandle;
+    readonly remove: Effect.Effect<void, never, SandboxRuntime | VirtualNetworks>;
+    readonly spec: ContainerSpec;
+    readonly state: LaunchState;
+    readonly stop: Effect.Effect<void, never, SandboxRuntime | VirtualNetworks>;
+}
 
 // @public
 export const RuntimeCapabilities: Schema.Struct<{
@@ -661,6 +794,8 @@ export interface SandboxRuntimeService {
     start(handle: SandboxHandle): Effect.Effect<void, PortBindConflictError | BackendError>;
     stop(handle: SandboxHandle): Effect.Effect<void, BackendError>;
 }
+
+export { Scope }
 
 // Warning: (ae-forgotten-export) The symbol "Selection_base" needs to be exported by the entry point index.d.ts
 //
@@ -722,6 +857,16 @@ export interface SocketProbeVerdict {
 // @public
 export const SYSTEM_PODMAN_SOCKET = "/run/podman/podman.sock";
 
+// Warning: (ae-forgotten-export) The symbol "TeardownFactContradictionError" needs to be exported by the entry point index.d.ts
+//
+// @public
+export const teardownRun: (state: LaunchState) => Effect.Effect<void, TeardownFactContradictionError, SandboxRuntime | VirtualNetworks>;
+
+// Warning: (ae-forgotten-export) The symbol "TeardownStepSchema" needs to be exported by the entry point index.d.ts
+//
+// @public (undocumented)
+export type TeardownStep = Schema.Schema.Type<typeof TeardownStepSchema>;
+
 // Warning: (ae-forgotten-export) The symbol "TmpfsRootCheckpointError_base" needs to be exported by the entry point index.d.ts
 //
 // @public
@@ -731,6 +876,9 @@ export class TmpfsRootCheckpointError extends TmpfsRootCheckpointError_base {}
 //
 // @public
 export class TmpfsRootExceedsMemoryError extends TmpfsRootExceedsMemoryError_base {}
+
+// @public
+export const toRunningContainer: (run: RunningHandle) => RunningContainer;
 
 // Warning: (ae-forgotten-export) The symbol "UnsupportedByBackendError_base" needs to be exported by the entry point index.d.ts
 //
@@ -756,6 +904,16 @@ export interface VirtualNetworksService {
 
 // @public
 export const waitingFor: (spec: ContainerSpec, strategy: WaitStrategy) => ContainerSpec;
+
+// @public
+export interface WaitOptions {
+    // Warning: (ae-forgotten-export) The symbol "HttpProbe" needs to be exported by the entry point index.d.ts
+    readonly httpProbe?: HttpProbe | undefined;
+    readonly pollIntervalMs?: number | undefined;
+    // Warning: (ae-forgotten-export) The symbol "PortProbe" needs to be exported by the entry point index.d.ts
+    readonly portProbe?: PortProbe | undefined;
+    readonly startupTimeoutMs?: number | undefined;
+}
 
 // @public
 export const WaitStrategy: Schema.TaggedUnion<{
@@ -861,6 +1019,11 @@ export const withWaitStrategy: typeof waitingFor;
 
 // @public
 export const withWorkingDir: (spec: ContainerSpec, workingDir: string) => ContainerSpec;
+
+// Warnings were encountered during analysis:
+//
+// dist/index.d.ts:433:5 - (ae-forgotten-export) The symbol "ReaperKillCommands" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:436:5 - (ae-forgotten-export) The symbol "ProcessTimeSource" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

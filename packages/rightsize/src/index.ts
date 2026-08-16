@@ -15,7 +15,17 @@
  * connect-probe discovery module (pure kernel + socket adapter), the backend
  * selection workflow with the `Selection` Tag and `layerAuto`, the FreePorts
  * allocator, RunId, and the `RIGHTSIZE_*` config layer.
+ *
+ * U4b: the lifecycle — the launch executor and the teardown executor, both
+ * authored as `Cell` descriptions (read → decode → decide → encode → write)
+ * over the launch/teardown workflows, the fluent `GenericContainer` facade
+ * over the pure spec combinators, and the hygiene (R6): the on-disk ledger,
+ * the sync-exit registry, and the detached watchdog reaper.
  */
+export * from './generic-container.js'
+export * from './lifecycle/launch.executor.js'
+export type { LaunchError } from './lifecycle/launch.workflow.js'
+export type { TeardownStep } from './lifecycle/teardown.workflow.js'
 export * from './model/capabilities.schema.js'
 export * from './model/checkpoint.schema.js'
 export * from './model/container-spec.schema.js'
@@ -33,3 +43,4 @@ export * from './runtime/free-ports.kernel.js'
 export * from './runtime/run-id.js'
 export * from './runtime/runtime.js'
 export * from './runtime/selection.workflow.js'
+export type { WaitOptions } from './wait/interpreter.js'

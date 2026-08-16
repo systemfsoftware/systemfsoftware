@@ -4,6 +4,34 @@
 
 ```ts
 
+import { Context } from 'effect';
+import { Effect } from 'effect';
+import { IncomingMessage } from 'node:http';
+import { Layer } from 'effect';
+import { Schema } from 'effect';
+import { YieldableError } from 'effect/Cause';
+
+// @public
+export type DockerCleanupSync = (id: string) => void;
+
+// Warning: (ae-forgotten-export) The symbol "DockerClientContext_base" needs to be exported by the entry point backend-docker.d.ts
+//
+// @public
+export class DockerClientContext extends DockerClientContext_base {}
+
+// Warning: (ae-forgotten-export) The symbol "SandboxRuntime" needs to be exported by the entry point backend-docker.d.ts
+// Warning: (ae-forgotten-export) The symbol "VirtualNetworks" needs to be exported by the entry point backend-docker.d.ts
+// Warning: (ae-forgotten-export) The symbol "CheckpointStore" needs to be exported by the entry point backend-docker.d.ts
+// Warning: (ae-forgotten-export) The symbol "ImageRegistry" needs to be exported by the entry point backend-docker.d.ts
+// Warning: (ae-forgotten-export) The symbol "BackendError" needs to be exported by the entry point backend-docker.d.ts
+// Warning: (ae-forgotten-export) The symbol "Selection_2" needs to be exported by the entry point backend-docker.d.ts
+//
+// @public
+export const layerDocker: Layer.Layer<SandboxRuntime | VirtualNetworks | CheckpointStore | ImageRegistry, BackendError, Selection_2>;
+
+// @public
+export const registerDockerCleanupSync: (socketPath: string) => (id: string) => void;
+
 // (No @packageDocumentation comment for this package)
 
 ```

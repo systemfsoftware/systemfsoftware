@@ -21,6 +21,7 @@ export default defineConfig({
           'Selection',
           'RuntimeDiscovery',
           'DockerClientContext',
+          'GenericContainer',
         ],
       },
     ],
