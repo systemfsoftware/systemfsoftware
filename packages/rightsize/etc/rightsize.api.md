@@ -1236,8 +1236,6 @@ export interface RunningContainer {
     copyFileToContainer(hostPath: string, containerPath: string): Effect.Effect<void, RelativeContainerPathError | BackendError, RuntimeServices>;
     // Warning: (ae-forgotten-export) The symbol "RuntimeServices" needs to be exported by the entry point index.d.ts
     exec(request: ExecRequest): Effect.Effect<ExecResult, BackendError, RuntimeServices>;
-    exec(request: ExecRequest): Effect.Effect<ExecResult, BackendError, RuntimeServices>;
-    execCommand(...command: string[]): Effect.Effect<ExecResult, BackendError, RuntimeServices>;
     execCommand(...command: string[]): Effect.Effect<ExecResult, BackendError, RuntimeServices>;
     followOutput(consumer: (line: string) => void): Effect.Effect<FollowHandle, BackendError, RuntimeServices>;
     getHost(): string;
