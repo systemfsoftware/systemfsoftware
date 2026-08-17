@@ -59,6 +59,12 @@ ruleTester.run('no-test-file-in-src', noTestFileInSrc, {
       filename: '/repo/pkg/__tests__/confirm-order.integration.test.ts',
     },
     {
+      name: 'Should_Allow_PlainStemTest_When_AdmitPlainStemsOptionIsSet',
+      code: '',
+      filename: '/repo/pkg/src/wait/__tests__/verdict.test.ts',
+      options: [{ admitPlainStems: true }],
+    },
+    {
       name: 'Should_StaySilent_When_TestIsInConfiguredDir',
       code: '',
       filename: '/repo/pkg/src/order/spec/confirm-order.workflow.property.test.ts',
@@ -115,6 +121,12 @@ ruleTester.run('no-test-file-in-src', noTestFileInSrc, {
       code: '',
       filename: '/repo/pkg/src/foo.spec.ts',
       errors: unsanctioned('foo.spec.ts'),
+    },
+    {
+      name: 'Should_Report_PlainStemTest_When_OptionIsUnset',
+      code: '',
+      filename: '/repo/pkg/src/wait/__tests__/verdict.test.ts',
+      errors: unsanctioned('verdict.test.ts'),
     },
     {
       name: 'Should_Report_NestedTestInSrc_When_InsideDeeperDir',

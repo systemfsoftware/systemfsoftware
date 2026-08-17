@@ -1,0 +1,1 @@
+- kvm: absent (observed 2026-08-16T21:56:18.499Z by the lane setup)

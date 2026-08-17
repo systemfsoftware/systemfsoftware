@@ -24,7 +24,7 @@ const violationOf = (basename: string, isPropertyTest: boolean, dir: string): re
 export const noTestFileInSrc = defineRule({
   meta,
   create(context: Context) {
-    const { sanctionedDirs } = S.decodeUnknownSync(Options)(context.options[0] ?? {})
+    const { sanctionedDirs, admitPlainStems } = S.decodeUnknownSync(Options)(context.options[0] ?? {})
     const basename = basenameOf(context.filename)
     if (!isUnderSrc(context.filename)) return {}
     if (!isTestFile(basename)) return {}
@@ -32,7 +32,7 @@ export const noTestFileInSrc = defineRule({
     const isPropertyTest = basename.endsWith(PROPERTY_SUFFIX)
     const isSchemaTest = basename.endsWith(SCHEMA_SUFFIX)
     const colocated = isInConfiguredTestDir(context.filename, sanctionedDirs)
-    if (!isSchemaTest && colocated && namesColocatableCell(testStem(basename))) return {}
+    if (!isSchemaTest && colocated && (namesColocatableCell(testStem(basename)) || admitPlainStems)) return {}
     const [messageId, detail] = violationOf(basename, isPropertyTest, sanctionedDirs[0])
     return {
       Program(node: ESTree.Program) {

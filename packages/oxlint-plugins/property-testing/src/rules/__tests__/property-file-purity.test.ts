@@ -97,6 +97,12 @@ ruleTester.run('property-file-purity', propertyFilePurity, {
       code: `import Schema from 'effect'\nit('t', () => { expect(1).toBe(1) })`,
       filename: SCENARIO_FILE,
     },
+    {
+      name: 'Should_Pass_When_FastCheckAndItProp_InPlainFile_UnderAdmitPlainStems',
+      code: `import { FastCheck as fc } from 'effect/testing'\nit.prop('∀n_X_=x', [fc.integer()], ([n]) => n === n)`,
+      filename: '/repo/pkg/src/wait/__tests__/verdict.test.ts',
+      options: [{ admitPlainStems: true }],
+    },
   ],
   invalid: [
     {

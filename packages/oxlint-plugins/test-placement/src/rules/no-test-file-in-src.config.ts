@@ -7,6 +7,15 @@ export const Options = S.Struct({
   sanctionedDirs: S.NonEmptyArray(S.String).pipe(
     S.withDecodingDefaultType(Effect.succeed([NESTED_TEST_DIR] as const)),
   ),
+  /**
+   * Admits a colocated test whose stem names NO cell — the plain
+   * `<domain>.test.ts` clanka/effect-torch shape. A consumer that has
+   * dismantled its suffix taxonomy (structure carried by the cell library's
+   * brand checks instead of filenames) opts in; every default is unchanged
+   * for consumers that keep the taxonomy. TP4 is untouched: the schema
+   * suffix stays forbidden outright regardless of this option.
+   */
+  admitPlainStems: S.Boolean.pipe(S.withDecodingDefaultType(Effect.succeed(false as const))),
 })
 
 export type Options = S.Schema.Type<typeof Options>
@@ -45,7 +54,7 @@ export const meta = {
   type: 'problem',
   docs: {
     description:
-      'Under src/, the only sanctioned test files are a test whose stem names a colocatable cell inside a sanctioned test directory — in whichever form the behaviour needs, a law or a characterization test — and the generated schema-laws.test.ts entry point. A property test beside its source is reported for location alone. *.schema.test.ts is forbidden outright; a test naming no cell must move outside src/ as an integration test or become an in-source vitest block testing private code. The sanctioned directory list is the sanctionedDirs option, defaulting to the one directory this repo runs.',
+      'Under src/, the only sanctioned test files are a test whose stem names a colocatable cell inside a sanctioned test directory — in whichever form the behaviour needs, a law or a characterization test — and the generated schema-laws.test.ts entry point. A property test beside its source is reported for location alone. *.schema.test.ts is forbidden outright; a test naming no cell must move outside src/ as an integration test or become an in-source vitest block testing private code. The sanctioned directory list is the sanctionedDirs option, defaulting to the one directory this repo runs; admitPlainStems (default false) additionally admits a colocated test whose stem names no cell, for a consumer that has dismantled its suffix taxonomy.',
   },
   schema: [S.toJsonSchemaDocument(Options).schema],
   messages: {

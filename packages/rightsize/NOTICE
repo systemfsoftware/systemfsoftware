@@ -1,0 +1,17 @@
+NOTICE
+Copyright (c) 2026 Ryan Lee (systemfsoftware)
+
+@systemfsoftware/rightsize is a forked-owned, complete Effect-TS rebuild of
+rightsize-node, which is its behavioral source. Observable behavior in this
+package is ported from that project; source structure is not.
+
+  rightsize-node  v0.7.1  (Apache-2.0)
+  https://github.com/ngriaznov/rightsize-node
+  Copyright (c) Mykyta Hriaznov
+
+The rightsize-node release this package's behavior is derived from is pinned
+at commit f3e91bac02ad9824f1687fd860b9b9071da6b128 (v0.7.1).
+
+Both projects are licensed under the Apache License, Version 2.0 — see
+LICENSE. This notice is provided for attribution under section 4(d) of that
+license; it does not modify it.

@@ -1,8 +1,8 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
-import { Array as A, Option } from 'effect'
+import { Array as A, Option, Schema as S } from 'effect'
 import { isPropCallee, PROP_MODIFIERS } from './prop-call.js'
-import { meta, PROPERTY_TEST_SUFFIX } from './property-file-purity.config.js'
+import { meta, Options, PROPERTY_TEST_SUFFIX } from './property-file-purity.config.js'
 
 export type MessageIds = 'plainIt' | 'plainEffectIt' | 'rawFastCheck' | 'fastCheckImport' | 'propCall'
 
@@ -108,11 +108,13 @@ const createScenarioFileVisitors = (context: Context) => ({
 export const propertyFilePurity = defineRule({
   meta,
   create(context: Context) {
+    const { admitPlainStems } = S.decodeUnknownSync(Options)(context.options[0] ?? {})
     const isTestFile = A.last(context.filename.split('/')).pipe(
       Option.exists((base) => base.includes('.test.') || base.includes('.spec.')),
     )
     if (!isTestFile) return {}
     if (context.filename.endsWith(PROPERTY_TEST_SUFFIX)) return createPropertyFileVisitors(context)
+    if (admitPlainStems) return {}
     return createScenarioFileVisitors(context)
   },
 })

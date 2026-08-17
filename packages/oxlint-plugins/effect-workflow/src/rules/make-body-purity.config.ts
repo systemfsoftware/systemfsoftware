@@ -137,6 +137,11 @@ export const LOCAL_PURE_SOURCES: ReadonlySet<string> = new Set([
   './restart-decision.schema.js',
   './survivors.workflow.js',
   '../hook-verdict.workflow.js',
+  // rightsize decision sources, sealed by read 2026-08-16: `errors.js` is 19
+  // `Schema.TaggedError` declarations (data, no I/O); `docker-image-name.js`
+  // is pure `Result`-returning reference parsing (no I/O, no throws).
+  '../model/errors.js',
+  '../model/docker-image-name.js',
 ])
 
 /** The global names whose invocation performs I/O (KTD3's named globals). */

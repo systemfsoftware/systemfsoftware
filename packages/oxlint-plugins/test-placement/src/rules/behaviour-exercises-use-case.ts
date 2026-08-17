@@ -1,11 +1,13 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
+import { Schema as S } from 'effect'
 import {
   meta,
   NO_SHELL_IMPORT_ACTUAL,
   NO_SHELL_IMPORT_EXPECTED,
   NO_SHELL_IMPORT_FIX,
   NO_SHELL_IMPORT_NAME,
+  Options,
 } from './behaviour-exercises-use-case.config.js'
 import {
   FOREIGN_RUNNERS,
@@ -52,12 +54,15 @@ const isShellImport = (source: string): boolean => {
 export const behaviourExercisesUseCase = defineRule({
   meta,
   create(context: Context) {
+    const { admitSrcImports } = S.decodeUnknownSync(Options)(context.options[0] ?? {})
+    const isSatisfied = (source: string): boolean =>
+      isShellImport(source) || (admitSrcImports && source.startsWith('.'))
     return {
       'Program:exit'(node: ESTree.Program) {
         if (!isBehaviourTest(basenameOf(context.filename))) return
         for (const statement of node.body) {
           if (statement.type !== 'ImportDeclaration') continue
-          if (isShellImport(statement.source.value)) return
+          if (isSatisfied(statement.source.value)) return
         }
         context.report({
           node: node.body[0] ?? node,
