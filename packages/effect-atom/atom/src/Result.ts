@@ -574,15 +574,16 @@ type BuilderFor<A extends Result<unknown, unknown>> = Builder<
  */
 export function builder<A extends Result<unknown, unknown>>(self: A): BuilderFor<A>
 /**
- * The implementation signature is erased because no type relates the class to
- * the declaration above. `BuilderFor` reads `A`'s variant, so for an unresolved
- * `A` it stays a deferred conditional that no concrete type inhabits; and the
- * builder accumulates into a single mutable `output` while re-typing itself
- * through each method's return, so its output type exists in no field - the four
- * terminals read `Option<unknown>`. The declaration states what callers get.
+ * The implementation signature is erased because `Builder` is a phantom state
+ * machine and `BuilderImpl` is not. `Builder` records what has been handled in
+ * its own parameters - `onError` returns a builder whose error type is `never`,
+ * `onDefect` drops `Defect` from the outstanding set - while the class keeps one
+ * mutable value and its parameters unchanged, so no instantiation of it relates
+ * to `BuilderFor` (measured: TS2322 through `onWaiting` into `onErrorIf`). The
+ * declaration above is the contract; the class is the mechanism.
  */
 export function builder(self: Result<unknown, unknown>): unknown {
-  return new BuilderImpl(self)
+  return new BuilderImpl<never, unknown, unknown>(self)
 }
 
 /**
@@ -758,14 +759,17 @@ class BuilderImpl<Out, A, E> {
     })
   }
 
-  orElse<B>(orElse: LazyArg<B>): unknown {
+  orElse<B>(orElse: LazyArg<B>): Out | B
+  orElse(orElse: LazyArg<unknown>): unknown {
     return Option.getOrElse(this.output, orElse)
   }
 
+  orNull(): Out | null
   orNull(): unknown {
     return Option.getOrNull(this.output)
   }
 
+  render(): Out | null
   render(): unknown {
     if (Option.isSome(this.output)) {
       return this.output.value
@@ -775,6 +779,7 @@ class BuilderImpl<Out, A, E> {
     return null
   }
 
+  exhaustive(): Out
   exhaustive(): unknown {
     return this.render()
   }

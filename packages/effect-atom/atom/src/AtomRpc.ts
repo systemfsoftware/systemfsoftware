@@ -192,7 +192,7 @@ export const Service = <Self>() =>
     (typeof u === 'object' && u !== null || typeof u === 'function') &&
     'payloadSchema' in u && 'successSchema' in u && 'errorSchema' in u
 
-  const getRpc = (tag: string): Rpc.AnyWithProps => {
+  const getRpc = (tag: Rpc.Tag<Rpcs>): Rpc.AnyWithProps => {
     const rpc = options.group.requests.get(tag)
     if (rpc === undefined || !isAnyWithProps(rpc)) {
       throw new Error(`Unknown RPC tag: ${tag}`)
@@ -200,18 +200,34 @@ export const Service = <Self>() =>
     return rpc
   }
 
+  /** Every payload constructor any RPC in this group accepts. */
+  type AnyPayload = Rpc.PayloadConstructor<Rpcs>
+
+  /** Every value any RPC in this group succeeds with - a stream for a streaming one. */
+  type AnySuccess = Rpc.Success<Rpcs>
+
+  /** Every error any RPC in this group fails with, plus the client's own transport error. */
+  type AnyError = Rpc.Error<Rpcs> | RpcClientError
+
+  /** What a request-shaped call returns once the tag is the whole tag union. */
+  type AnyRequestResult = Effect.Effect<AnySuccess, AnyError, never>
+
+  /** What a streaming call returns: the chunk types and exit errors of the streaming RPCs. */
+  type AnyStreamResult = Stream.Stream<Rpc.SuccessChunk<Rpcs>, Rpc.ErrorExit<Rpcs> | RpcClientError, never>
+
   /**
    * `Flat`'s call with the two parameters that cannot resolve here replaced, and
-   * its per-tag return erased. This service dispatches on a tag that only exists
-   * at runtime - `Atom.family` fixes one `Arg` per family, so the tag arrives
-   * inside a cache key - and `Flat` computes all three from it: the payload
-   * constructor, an options object that differs for streaming requests, and the
-   * return. Deriving the type from `Flat` rather than restating it keeps the tag
-   * parameter exact and makes a change to `Flat`'s parameters break here.
+   * its per-tag return collapsed to the two shapes a tag can select. This service
+   * dispatches on a tag that only exists at runtime - `Atom.family` fixes one
+   * `Arg` per family, so the tag arrives inside a cache key - and `Flat` computes
+   * the payload constructor, an options object that differs for streaming
+   * requests, and the return from it. Deriving the type from `Flat` rather than
+   * restating it keeps the tag parameter exact and makes a change to `Flat`'s
+   * parameters break here.
    */
   type ErasedFlatCall = SetParameterType<
-    SetReturnType<RpcClient.RpcClient.Flat<Rpcs, RpcClientError>, unknown>,
-    { 1: unknown; 2: { readonly headers?: Headers.Input | undefined } }
+    SetReturnType<RpcClient.RpcClient.Flat<Rpcs, RpcClientError>, AnyRequestResult | AnyStreamResult>,
+    { 1: AnyPayload; 2: { readonly headers?: Headers.Input | undefined } }
   >
 
   /** `Flat` is a callable, so this narrowing is a check rather than a claim. */
@@ -220,33 +236,33 @@ export const Service = <Self>() =>
   /**
    * Calls the flat client for a tag known only at runtime.
    *
-   * The two declarations state what the compiler cannot derive: which shape the
-   * tag selects, and that the requirement channel is empty - the client
-   * discharged its own requirements before `service` yielded it, while `Flat`
-   * still reports the schemas' encoding and decoding services for a tag it
+   * The two declarations state what the compiler cannot derive: which of the two
+   * shapes the tag selects, and that the requirement channel is empty - the
+   * client discharged its own requirements before `service` yielded it, while
+   * `Flat` still reports the schemas' encoding and decoding services for a tag it
    * cannot resolve.
    */
   function callFlat(
     client: RpcClient.RpcClient.Flat<Rpcs, RpcClientError>,
     tag: Rpc.Tag<Rpcs>,
-    payload: unknown,
+    payload: AnyPayload,
     headers: Headers.Input | undefined,
     shape: 'effect',
-  ): Effect.Effect<unknown, unknown, never>
+  ): AnyRequestResult
   function callFlat(
     client: RpcClient.RpcClient.Flat<Rpcs, RpcClientError>,
     tag: Rpc.Tag<Rpcs>,
-    payload: unknown,
+    payload: AnyPayload,
     headers: Headers.Input | undefined,
     shape: 'stream',
-  ): Stream.Stream<unknown, unknown, never>
+  ): AnyStreamResult
   function callFlat(
     client: RpcClient.RpcClient.Flat<Rpcs, RpcClientError>,
     tag: Rpc.Tag<Rpcs>,
-    payload: unknown,
+    payload: AnyPayload,
     headers: Headers.Input | undefined,
     _shape: 'effect' | 'stream',
-  ): unknown {
+  ): AnyRequestResult | AnyStreamResult {
     if (!isErasedFlatCall(client)) {
       throw new Error(`RpcClient.Flat is not callable for tag: ${tag}`)
     }
@@ -258,7 +274,7 @@ export const Service = <Self>() =>
   const mutationFamily = Atom.family(<Tag extends Rpc.Tag<Rpcs>>(tag: Tag) => {
     const rpc = getRpc(tag)
     const fnAtom = runtime.fn<{
-      readonly payload: unknown
+      readonly payload: Rpc.PayloadConstructor<Rpc.ExtractTag<Rpcs, Tag>>
       readonly reactivityKeys?:
         | readonly unknown[]
         | ReadonlyRecord<string, readonly unknown[]>
@@ -378,7 +394,7 @@ export const Service = <Self>() =>
   ): QueryReturn<Tag>
   function query(
     tag: Rpc.Tag<Rpcs>,
-    payload: unknown,
+    payload: Rpc.PayloadConstructor<Rpcs>,
     options?: {
       readonly headers?: Headers.Input | undefined
       readonly reactivityKeys?:
@@ -413,7 +429,7 @@ export const Service = <Self>() =>
 
 interface QueryKey<Rpcs extends Rpc.Any> {
   tag: Rpc.Tag<Rpcs>
-  payload: unknown
+  payload: Rpc.PayloadConstructor<Rpcs>
   headers: Headers.Headers | undefined
   reactivityKeys:
     | readonly unknown[]
