@@ -198,13 +198,13 @@ export const decideExtendsStep = (
 }
 
 if (import.meta.vitest !== void 0) {
-  // Dynamic by necessity: tsdown defines `import.meta.vitest` as `undefined`, so this
-  // branch is statically dead in the build and never enters the published module graph;
-  // a static import would ship the test harness into the published module. This module
-  // performs no I/O, so its in-source tests exercise a pure decision as data — no
-  // substitute anywhere (R9).
-  const { it } = await import('@effect/vitest')
-  const { expect } = await import('vitest')
+  // The harness arrives on `import.meta.vitest` itself, so this block imports nothing.
+  // An `await import('vitest')` here reads as harmless because the branch is statically
+  // dead, but the bundler still follows it: it inlined vite, vitest, chai and eleven
+  // more packages into this package's published dependencies. This module performs no
+  // I/O, so its in-source tests exercise a pure decision as data — no substitute
+  // anywhere (R9).
+  const { expect, it } = import.meta.vitest
 
   const unexpected = (tag: string) => (): never => {
     throw new Error(`Unexpected decision tag "${tag}"`)
