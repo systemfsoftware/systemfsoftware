@@ -145,7 +145,12 @@ export class ChildProcessProxyWorker {
     }
     const subjectMember = realSubject[message.methodName]
     if (S.is(CallableSubjectMemberSchema)(subjectMember)) {
-      return subjectMember(...message.args)
+      // `Reflect.apply`, never `subjectMember(...args)`: reading the member out
+      // of the subject and calling the local binding drops the receiver, so the
+      // subject's own method runs with `this === undefined` and fails on its
+      // first field access. The subject is a class instance whose methods are
+      // all receiver-dependent.
+      return Reflect.apply(subjectMember, realSubject, message.args)
     } else {
       return subjectMember
     }
