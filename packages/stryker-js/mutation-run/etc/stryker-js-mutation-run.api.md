@@ -12,6 +12,7 @@ import { MutantResult } from '@systemfsoftware/stryker-js-plugin-api/core';
 import { MutantStatus } from '@systemfsoftware/stryker-js-plugin-api/core';
 import { PartialStrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core';
 import { Reporter } from '@systemfsoftware/stryker-js-plugin-api/report';
+import { Schema } from 'effect';
 import { schema } from '@systemfsoftware/stryker-js-plugin-api/core';
 
 // @public
