@@ -2,4 +2,4 @@
 "@systemfsoftware/stryker-js-cli": patch
 ---
 
-Contract lane migrated from testcontainers to @systemfsoftware/rightsize: durable by-id handles across vitest workers, library-owned runtime discovery (podman probe included), same digest-pinned image and 24 scenarios
+The contract-test lane now runs containers through @systemfsoftware/rightsize instead of testcontainers: containers survive across test-worker restarts, the container runtime is discovered without configuration, and the same digest-pinned images run the same 24 scenarios

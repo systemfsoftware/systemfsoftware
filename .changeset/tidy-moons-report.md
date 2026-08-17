@@ -1,5 +1,6 @@
 ---
 "@systemfsoftware/arethetypeswrong-core": none
+"@systemfsoftware/effect-atom": none
 "@systemfsoftware/effect-atom-react": none
 "@systemfsoftware/effect-cell-types": none
 "@systemfsoftware/effect-daemon-spec": none
@@ -31,4 +32,4 @@
 "@systemfsoftware/tsconfig": none
 ---
 
-Workspace-lockfile churn from removing testcontainers changed these packages' turbo build hashes; nothing they ship changed (the canonical none class, REPO-R2)
+Dependency-graph refresh; no change to anything these packages export
