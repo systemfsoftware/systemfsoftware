@@ -56,6 +56,7 @@
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
     "effect": "catalog:",
+    "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
     "typescript": "catalog:",

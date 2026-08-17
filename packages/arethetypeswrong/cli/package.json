@@ -47,6 +47,7 @@
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
     "fast-check": "catalog:",
+    "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
     "testcontainers": "catalog:",
     "tsdown": "catalog:",

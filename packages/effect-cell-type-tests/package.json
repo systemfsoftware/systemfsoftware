@@ -38,6 +38,7 @@
     "@systemfsoftware/tsconfig": "workspace:^",
     "@types/node": "catalog:",
     "effect": "catalog:",
+    "oxlint": "catalog:oxlint",
     "tstyche": "catalog:",
     "tstyche-typescript": "npm:typescript@6.0.3"
   }

@@ -139,6 +139,7 @@
     "@std/jsonc": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
+    "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/stryker-js-vitest-runner": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
@@ -149,6 +150,7 @@
     "@types/semver": "7.7.1",
     "effect": "catalog:",
     "glob": "13.0.6",
+    "oxlint": "catalog:oxlint",
     "tsdown": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

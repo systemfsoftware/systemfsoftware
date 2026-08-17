@@ -29,7 +29,11 @@ const WORKSPACE_PACKAGES = [
   '@systemfsoftware/effect-cell-types',
 ] as const
 const REPO_ROOT = fileURLToPath(new URL('../../../../../', import.meta.url))
-const CLI_DIR = fileURLToPath(new URL('../../../', import.meta.url))
+// Two levels: this file sits at `cli/tests/__fixtures__/`, so `../../` is `cli/`.
+// `REPO_ROOT` needs five for the same reason. When this file moved from
+// `cli/__tests__/` both constants needed one more level; only `REPO_ROOT` got it,
+// and the lane has died in `setup` - before collecting a single test - ever since.
+const CLI_DIR = fileURLToPath(new URL('../../', import.meta.url))
 const FIXTURES_DIR = fileURLToPath(new URL('./fixtures', import.meta.url))
 const WORKDIR = '/work'
 const TARBALLS_IN_CONTAINER = '/opt/tarballs'

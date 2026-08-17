@@ -55,6 +55,7 @@
     "@types/node": "catalog:",
     "effect": "catalog:",
     "fast-check": "catalog:",
+    "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
     "vitest": "^4.1.10"

@@ -64,6 +64,7 @@
     "@vitest/coverage-v8": "catalog:",
     "effect": "catalog:",
     "fast-check": "catalog:",
+    "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
     "vitest": "catalog:"

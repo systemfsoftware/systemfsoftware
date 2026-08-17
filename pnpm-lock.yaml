@@ -253,6 +253,9 @@ importers:
       effect:
         specifier: 'catalog:'
         version: 4.0.0-rc.108
+      oxlint:
+        specifier: catalog:oxlint
+        version: 1.77.0(oxlint-tsgolint@0.24.0)
       rimraf:
         specifier: 'catalog:'
         version: 6.1.3
@@ -298,12 +301,18 @@ importers:
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../../packages/tsconfig
+      '@systemfsoftware/tsdown-config':
+        specifier: workspace:^
+        version: link:../../../packages/tsdown-config
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.2
       effect:
         specifier: 'catalog:'
         version: 4.0.0-rc.108
+      oxlint:
+        specifier: catalog:oxlint
+        version: 1.77.0(oxlint-tsgolint@0.24.0)
       rimraf:
         specifier: 'catalog:'
         version: 6.1.3
@@ -362,6 +371,9 @@ importers:
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../../packages/tsconfig
+      '@systemfsoftware/tsdown-config':
+        specifier: workspace:^
+        version: link:../../../packages/tsdown-config
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.2
@@ -374,6 +386,9 @@ importers:
       fast-check:
         specifier: ^4
         version: 4.9.0
+      oxlint:
+        specifier: catalog:oxlint
+        version: 1.77.0(oxlint-tsgolint@0.24.0)
       rimraf:
         specifier: 'catalog:'
         version: 6.1.3
@@ -432,6 +447,9 @@ importers:
       fast-check:
         specifier: ^4
         version: 4.9.0
+      oxlint:
+        specifier: catalog:oxlint
+        version: 1.77.0(oxlint-tsgolint@0.24.0)
       rimraf:
         specifier: 'catalog:'
         version: 6.1.3
@@ -508,6 +526,9 @@ importers:
       fast-check:
         specifier: ^4
         version: 4.9.0
+      oxlint:
+        specifier: catalog:oxlint
+        version: 1.77.0(oxlint-tsgolint@0.24.0)
       rimraf:
         specifier: 'catalog:'
         version: 6.1.3
@@ -547,6 +568,9 @@ importers:
       effect:
         specifier: 'catalog:'
         version: 4.0.0-rc.108
+      oxlint:
+        specifier: catalog:oxlint
+        version: 1.77.0(oxlint-tsgolint@0.24.0)
       rimraf:
         specifier: 'catalog:'
         version: 6.1.3
@@ -617,6 +641,9 @@ importers:
       effect:
         specifier: 'catalog:'
         version: 4.0.0-rc.108
+      oxlint:
+        specifier: catalog:oxlint
+        version: 1.77.0(oxlint-tsgolint@0.24.0)
       playwright:
         specifier: 1.62.1
         version: 1.62.1
@@ -675,6 +702,9 @@ importers:
       effect:
         specifier: 'catalog:'
         version: 4.0.0-rc.108
+      oxlint:
+        specifier: catalog:oxlint
+        version: 1.77.0(oxlint-tsgolint@0.24.0)
       rimraf:
         specifier: 'catalog:'
         version: 6.1.3
@@ -703,6 +733,9 @@ importers:
       effect:
         specifier: 'catalog:'
         version: 4.0.0-rc.108
+      oxlint:
+        specifier: catalog:oxlint
+        version: 1.77.0(oxlint-tsgolint@0.24.0)
       tstyche:
         specifier: 'catalog:'
         version: 7.2.1(typescript@7.0.2)
@@ -739,6 +772,9 @@ importers:
       effect:
         specifier: 'catalog:'
         version: 4.0.0-rc.108
+      oxlint:
+        specifier: catalog:oxlint
+        version: 1.77.0(oxlint-tsgolint@0.24.0)
       rimraf:
         specifier: 'catalog:'
         version: 6.1.3
@@ -803,6 +839,9 @@ importers:
       fast-check:
         specifier: ^4
         version: 4.9.0
+      oxlint:
+        specifier: catalog:oxlint
+        version: 1.77.0(oxlint-tsgolint@0.24.0)
       rimraf:
         specifier: 'catalog:'
         version: 6.1.3
@@ -839,6 +878,9 @@ importers:
       fast-check:
         specifier: ^4
         version: 4.9.0
+      oxlint:
+        specifier: catalog:oxlint
+        version: 1.77.0(oxlint-tsgolint@0.24.0)
       rimraf:
         specifier: 'catalog:'
         version: 6.1.3
@@ -879,6 +921,9 @@ importers:
       effect:
         specifier: 'catalog:'
         version: 4.0.0-rc.108
+      oxlint:
+        specifier: catalog:oxlint
+        version: 1.77.0(oxlint-tsgolint@0.24.0)
       rimraf:
         specifier: 'catalog:'
         version: 6.1.3
@@ -921,6 +966,9 @@ importers:
       fast-check:
         specifier: ^4
         version: 4.9.0
+      oxlint:
+        specifier: catalog:oxlint
+        version: 1.77.0(oxlint-tsgolint@0.24.0)
       rimraf:
         specifier: 'catalog:'
         version: 6.1.3
@@ -967,6 +1015,9 @@ importers:
       fast-check:
         specifier: ^4
         version: 4.9.0
+      oxlint:
+        specifier: catalog:oxlint
+        version: 1.77.0(oxlint-tsgolint@0.24.0)
       rimraf:
         specifier: 'catalog:'
         version: 6.1.3
@@ -1009,6 +1060,9 @@ importers:
       fast-check:
         specifier: ^4
         version: 4.9.0
+      oxlint:
+        specifier: catalog:oxlint
+        version: 1.77.0(oxlint-tsgolint@0.24.0)
       rimraf:
         specifier: 'catalog:'
         version: 6.1.3
@@ -1055,6 +1109,9 @@ importers:
       effect:
         specifier: 'catalog:'
         version: 4.0.0-rc.108
+      oxlint:
+        specifier: catalog:oxlint
+        version: 1.77.0(oxlint-tsgolint@0.24.0)
       rimraf:
         specifier: 'catalog:'
         version: 6.1.3
@@ -1106,6 +1163,9 @@ importers:
       fast-check:
         specifier: ^4
         version: 4.9.0
+      oxlint:
+        specifier: catalog:oxlint
+        version: 1.77.0(oxlint-tsgolint@0.24.0)
       rimraf:
         specifier: 'catalog:'
         version: 6.1.3
@@ -1632,6 +1692,9 @@ importers:
       fast-check:
         specifier: ^4
         version: 4.9.0
+      oxlint:
+        specifier: catalog:oxlint
+        version: 1.77.0(oxlint-tsgolint@0.24.0)
       rimraf:
         specifier: 'catalog:'
         version: 6.1.3
@@ -1684,6 +1747,9 @@ importers:
       effect:
         specifier: 'catalog:'
         version: 4.0.0-rc.108
+      oxlint:
+        specifier: catalog:oxlint
+        version: 1.77.0(oxlint-tsgolint@0.24.0)
       playwright:
         specifier: 'catalog:'
         version: 1.62.1
@@ -1778,6 +1844,9 @@ importers:
       '@vitest/coverage-v8':
         specifier: 'catalog:'
         version: 4.1.9(vitest@4.1.10)
+      oxlint:
+        specifier: catalog:oxlint
+        version: 1.77.0(oxlint-tsgolint@0.24.0)
       rimraf:
         specifier: 'catalog:'
         version: 6.1.3
@@ -1848,6 +1917,9 @@ importers:
       effect:
         specifier: 'catalog:'
         version: 4.0.0-rc.108
+      oxlint:
+        specifier: catalog:oxlint
+        version: 1.77.0(oxlint-tsgolint@0.24.0)
       rimraf:
         specifier: 'catalog:'
         version: 6.1.3
@@ -1933,6 +2005,9 @@ importers:
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:^
         version: link:../../effect-gherkin-spec
+      '@systemfsoftware/oxlint-config':
+        specifier: workspace:^
+        version: link:../../oxlint-config
       '@systemfsoftware/stryker-js-vitest-runner':
         specifier: workspace:^
         version: link:../vitest-runner
@@ -1963,6 +2038,9 @@ importers:
       glob:
         specifier: 13.0.6
         version: 13.0.6
+      oxlint:
+        specifier: catalog:oxlint
+        version: 1.77.0(oxlint-tsgolint@0.24.0)
       tsdown:
         specifier: 'catalog:'
         version: 0.22.14(oxc-resolver@11.24.2)(typescript@7.0.2)(unrun@0.2.39)
@@ -1991,12 +2069,18 @@ importers:
         specifier: ~5.0.0
         version: 5.0.0
     devDependencies:
+      '@systemfsoftware/oxlint-config':
+        specifier: workspace:^
+        version: link:../../oxlint-config
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../tsconfig
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.2
+      oxlint:
+        specifier: catalog:oxlint
+        version: 1.77.0(oxlint-tsgolint@0.24.0)
       rimraf:
         specifier: 'catalog:'
         version: 6.1.3
@@ -2034,6 +2118,9 @@ importers:
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:^
         version: link:../../effect-gherkin-spec
+      '@systemfsoftware/oxlint-config':
+        specifier: workspace:^
+        version: link:../../oxlint-config
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../tsconfig
@@ -2046,6 +2133,9 @@ importers:
       '@types/semver':
         specifier: ^7.5.8
         version: 7.7.1
+      oxlint:
+        specifier: catalog:oxlint
+        version: 1.77.0(oxlint-tsgolint@0.24.0)
       rimraf:
         specifier: 'catalog:'
         version: 6.1.3
@@ -2080,6 +2170,9 @@ importers:
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:^
         version: link:../../effect-gherkin-spec
+      '@systemfsoftware/oxlint-config':
+        specifier: workspace:^
+        version: link:../../oxlint-config
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../tsconfig
@@ -2092,9 +2185,15 @@ importers:
       '@types/semver':
         specifier: 7.7.1
         version: 7.7.1
+      '@vitest/browser-playwright':
+        specifier: 'catalog:'
+        version: 4.1.10(playwright@1.62.1)(vite@8.2.1(@types/node@24.13.2)(esbuild@0.27.7)(jiti@2.7.0)(yaml@2.9.0))(vitest@4.1.10)
       effect:
         specifier: 'catalog:'
         version: 4.0.0-rc.108
+      oxlint:
+        specifier: catalog:oxlint
+        version: 1.77.0(oxlint-tsgolint@0.24.0)
       rimraf:
         specifier: 'catalog:'
         version: 6.1.3
@@ -2162,6 +2261,9 @@ importers:
       effect:
         specifier: 'catalog:'
         version: 4.0.0-rc.108
+      oxlint:
+        specifier: catalog:oxlint
+        version: 1.77.0(oxlint-tsgolint@0.24.0)
       rimraf:
         specifier: 'catalog:'
         version: 6.1.3
@@ -2176,6 +2278,8 @@ importers:
         version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-istanbul@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1)(vite@8.2.1(@types/node@24.13.2)(esbuild@0.27.7)(jiti@2.7.0)(yaml@2.9.0))
 
   packages/tsconfig: {}
+
+  packages/tsdown-config: {}
 
   packages/vitest-config:
     devDependencies:

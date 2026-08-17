@@ -42,6 +42,7 @@
     "@types/node": "catalog:",
     "@types/progress": "2.0.7",
     "effect": "catalog:",
+    "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
     "typescript": "catalog:",

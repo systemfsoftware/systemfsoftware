@@ -36,8 +36,10 @@
     "typed-inject": "~5.0.0"
   },
   "devDependencies": {
+    "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@types/node": "catalog:",
+    "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
     "typescript": "catalog:"
