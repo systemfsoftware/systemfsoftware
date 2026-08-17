@@ -158,7 +158,6 @@
   },
   "license": "Apache-2.0",
   "inlinedDependencies": {
-    "@jsr/std__jsonc": "1.0.2",
-    "@types/json-schema": "7.0.15"
+    "@jsr/std__jsonc": "1.0.2"
   }
 }
