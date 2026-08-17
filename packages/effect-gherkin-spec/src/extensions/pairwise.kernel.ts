@@ -3,7 +3,7 @@ import { Effect, Layer } from 'effect'
 
 import type { GherkinEffect, StepText } from '../do-notation.kernel.js'
 import { resolveText, stepWrap } from '../do-notation.kernel.js'
-import type { StepError } from '../step-error.kernel.js'
+import type { StepError } from '../step-error.schema.js'
 
 type NoInfer<A> = [A][A extends unknown ? 0 : never]
 

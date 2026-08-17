@@ -1,16 +1,17 @@
-import { Schema as S } from 'effect'
 import {
-  ArrowFunctionExpression,
   CallExpression,
-  FunctionExpression,
   Identifier,
-  ImportDeclaration,
-  ImportNamespaceSpecifier,
-  ImportSpecifier,
-  MemberExpression,
-  Program,
-  StringLiteral,
-} from './ast-node.kernel.js'
+  isArrowFunction,
+  isCallExpression,
+  isFunctionExpression,
+  isIdentifier,
+  isImportDeclaration,
+  isImportNamespaceSpecifier,
+  isImportSpecifier,
+  isMemberExpression,
+  isProgram,
+  isStringLiteral,
+} from './ast-node.schema.js'
 
 export const NOT_INSIDE_WORKFLOW_MAKE =
   'mutant is outside every Workflow.make decision body; only make bodies are the mutation population' as const
@@ -23,17 +24,6 @@ const WORKFLOW_IMPORT_NAME = 'Workflow' as const
 
 /** The member of the workflow value the boundary call invokes. */
 const MAKE_MEMBER_NAME = 'make' as const
-
-const isProgram = S.is(Program)
-const isImportDeclaration = S.is(ImportDeclaration)
-const isImportSpecifier = S.is(ImportSpecifier)
-const isImportNamespaceSpecifier = S.is(ImportNamespaceSpecifier)
-const isIdentifier = S.is(Identifier)
-const isStringLiteral = S.is(StringLiteral)
-const isMemberExpression = S.is(MemberExpression)
-const isCallExpression = S.is(CallExpression)
-const isArrowFunction = S.is(ArrowFunctionExpression)
-const isFunctionExpression = S.is(FunctionExpression)
 
 const NO_WORKFLOW_LOCALS: ReadonlySet<string> = new Set()
 const NO_MAKE_ARGUMENT_BODIES: ReadonlySet<object> = new Set()

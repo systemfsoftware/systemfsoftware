@@ -1,6 +1,6 @@
 import { editTargetPaths, normalizeToolInput, normalizeToolName, sessionIds } from '@systemfsoftware/omp-utils'
 import { Context, Effect, Option, type Scope } from 'effect'
-import type { HookSettings } from '../hook-settings.acl.js'
+import type { HookSettings } from '../hook-settings.schema.js'
 import { blockAsFeedback, type FeedbackOnlyResult } from './hook-feedback.kernel.js'
 import { asToolInput, EMPTY_TOOL_INPUT } from './hook-payload.kernel.js'
 import type { HookSession, HookToolResult } from './hook-session.kernel.js'

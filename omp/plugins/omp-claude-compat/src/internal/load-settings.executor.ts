@@ -1,7 +1,8 @@
 import { Context, Effect, Exit, Schema as S, type Scope } from 'effect'
 import { FileSystem } from 'effect/FileSystem'
-import { analyzeSettings, parseSettings, SettingsWrapped } from '../hook-settings.acl.js'
-import type { SettingsSource } from '../hook-settings.acl.js'
+import { analyzeSettings, parseSettings } from '../hook-settings.acl.js'
+import { SettingsWrapped } from '../hook-settings.schema.js'
+import type { SettingsSource } from '../hook-settings.schema.js'
 import { MANAGED_SETTINGS_PATH } from './settings-paths.kernel.js'
 
 export class LoadSettingsExecutorDeps extends Context.Service<LoadSettingsExecutorDeps, Scope.Scope>()(

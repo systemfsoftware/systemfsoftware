@@ -4,7 +4,8 @@ export default defineConfig({
   test: {
     globals: true,
     root: import.meta.dirname,
-    include: ['__tests__/**/*.test.ts'],
+    include: ['tests/**/*.test.ts'],
+    includeSource: ['src/**/*.ts'],
     pool: 'forks',
   },
   resolve: {

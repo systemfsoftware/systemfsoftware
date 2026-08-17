@@ -24,7 +24,7 @@ rules:
       - state every claim about the phase types, their order, and the published
         declaration as an assertion in `test-types/*.tst.ts`, run by tstyche — an
         order the types stop rejecting fails there first
-      - verify `apply` with composition tests in `__tests__/` that run a real
+      - verify `apply` with composition tests in `tests/` that run a real
         description and assert which phases ran, in what order, and what reached
         the write
     dont: let a behavioural test stand in for a type assertion, or unit-test a
@@ -60,7 +60,7 @@ rules:
   - id: CELL-T4
     title: The integration oracle restates the vocabulary on purpose
     do: keep the hand-written phase list in
-      `__tests__/interpreter.integration.test.ts` — it is an independent oracle,
+      `tests/interpreter.integration.test.ts` — it is an independent oracle,
       and its whole job is to disagree with the fold when the fold is wrong
     dont: derive it from `Cell.vocabulary`, and do not delete it as duplication
     harm: a derived checker validated only against fixtures the same walk produced

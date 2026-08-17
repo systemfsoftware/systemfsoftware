@@ -1,112 +1,11 @@
 import base from '@systemfsoftware/oxlint-config/base'
-import cellVocabulary from '@systemfsoftware/oxlint-plugin-cell-vocabulary'
 import { defineConfig } from 'oxlint'
 
 export default defineConfig({
   extends: [base],
-
-  jsPlugins: [
-    import.meta.resolve('@systemfsoftware/oxlint-plugin-cell-vocabulary'),
-  ],
-
   rules: {
-    ...cellVocabulary.configs.recommended.rules,
-
-    // ── v4 migration: Context.Service replaces Context.Tag (class syntax
-    // `extends Context.Service<Self, Shape>()(id)`); the shared ban-classes
-    // rule only knows the v3 Context.Tag/Context.Reference variants.
-    '@systemfsoftware/oxlint-plugin/ban-classes': [
-      'error',
-      { whitelist: ['LeaderLock', 'LockPrimitive', 'DaemonReporter'] },
-    ],
-
-    // ── Type Safety: largest anti-patterns ──
-    'typescript/ban-ts-comment': 'error',
-    'typescript/consistent-return': 'error',
-    'typescript/consistent-type-assertions': ['error', { assertionStyle: 'never' }],
-    'typescript/no-base-to-string': 'error',
-    'typescript/no-confusing-void-expression': 'error',
-    'typescript/no-deprecated': 'error',
-    'typescript/no-dynamic-delete': 'error',
-    'typescript/no-empty-object-type': 'error',
-    'typescript/no-extraneous-class': 'error',
-    'typescript/no-floating-promises': 'error',
-    'typescript/no-mixed-enums': 'error',
-    'typescript/no-misused-promises': 'error',
-    'typescript/no-namespace': 'error',
-    'typescript/no-non-null-asserted-nullish-coalescing': 'error',
-    'typescript/no-non-null-assertion': 'error',
-    'typescript/no-require-imports': 'error',
-    'typescript/no-unnecessary-type-assertion': 'error',
-    'typescript/no-unsafe-argument': 'error',
-    'typescript/no-unsafe-assignment': 'error',
-    'typescript/no-unsafe-call': 'error',
-    'typescript/no-unsafe-member-access': 'error',
-    'typescript/no-unsafe-return': 'error',
-    'typescript/no-unsafe-type-assertion': 'error',
-    'typescript/no-var-requires': 'error',
-    'typescript/only-throw-error': 'error',
-    'typescript/prefer-enum-initializers': 'error',
-    'typescript/prefer-includes': 'error',
-    'typescript/prefer-nullish-coalescing': 'error',
-    'typescript/prefer-ts-expect-error': 'error',
-    'typescript/strict-boolean-expressions': 'error',
-    'typescript/switch-exhaustiveness-check': 'error',
-    'typescript/restrict-plus-operands': 'error',
-    'typescript/restrict-template-expressions': 'error',
-    'typescript/return-await': 'error',
-
-    // ── General Correctness ──
-    'eqeqeq': 'error',
-    'jest/no-conditional-expect': 'error',
-    'no-bitwise': 'error',
-    'no-case-declarations': 'error',
-    'no-else-return': 'error',
-    'no-empty': 'error',
-    'no-empty-function': 'error',
-    'no-empty-static-block': 'error',
-    'no-eval': 'error',
-    'no-global-assign': 'error',
-    'no-implied-eval': 'error',
-    'no-implicit-coercion': 'error',
-    'no-label-var': 'error',
-    'no-lone-blocks': 'error',
-    'no-loop-func': 'error',
-    'no-lonely-if': 'error',
-    'no-multi-assign': 'error',
-    'no-new-func': 'error',
-    'no-new-wrappers': 'error',
-    'no-object-constructor': 'error',
-    'no-param-reassign': 'error',
-    'no-proto': 'error',
-    'no-return-assign': 'error',
-    'no-sequences': 'error',
-    'no-shadow': 'error',
-    'no-throw-literal': 'error',
-    'no-undefined': 'error',
-    'no-unneeded-ternary': 'error',
-    'no-useless-call': 'error',
-    'no-useless-computed-key': 'error',
-    'no-useless-concat': 'error',
-    'no-useless-constructor': 'error',
-    'no-useless-rename': 'error',
-    'no-useless-return': 'error',
-    'prefer-const': 'error',
-    'prefer-destructuring': 'error',
-    'prefer-exponentiation-operator': 'error',
-    'prefer-numeric-literals': 'error',
-    'prefer-object-has-own': 'error',
-    'prefer-object-spread': 'error',
-    'prefer-rest-params': 'error',
-    'prefer-spread': 'error',
-    'prefer-template': 'error',
-    'radix': 'error',
-    'require-await': 'error',
-    'require-yield': 'error',
-    'symbol-description': 'error',
-    'yoda': 'error',
+    '@systemfsoftware/oxlint-plugin/no-io-boundary-tests': 'error',
   },
-
   overrides: [
     {
       files: ['src/**'],
@@ -115,7 +14,7 @@ export default defineConfig({
       },
     },
     {
-      files: ['**/*.test.ts', '**/*.spec.ts', '**/__tests__/**'],
+      files: ['**/*.test.ts', '**/*.spec.ts', '**/tests/**'],
       rules: {
         'no-empty-function': 'off',
         'no-shadow': 'off',

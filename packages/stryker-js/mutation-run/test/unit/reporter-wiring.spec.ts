@@ -132,7 +132,7 @@ describe('the reporter dispatch gates', () => {
 // The minimal-project fixture the CLI smoke run uses: a command test runner
 // and a single arithmetic file, so the prepare phase needs no extra runner.
 const fixtureDir = fileURLToPath(
-  new URL('../../../cli/__tests__/fixtures/minimal-project/', import.meta.url),
+  new URL('../../../cli/tests/__fixtures__/fixtures/minimal-project/', import.meta.url),
 )
 // The fork's reporter registry, split out of this package into the sibling
 // mutation-report package (U6). Addressed through its source file; vitest

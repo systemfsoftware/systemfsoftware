@@ -19,3 +19,34 @@ export const STREAM_SCHEMA_VERSION = '1.0'
  * consumer can tell "slow" from "hung" without waiting for a mutant event.
  */
 export const TICK_INTERVAL_MS = 10_000
+
+/** The version shape the law pins. */
+const MAJOR_DOT_MINOR = /^\d+\.\d+$/
+
+if (import.meta.vitest !== void 0) {
+  // Dynamic by necessity: tsdown defines `import.meta.vitest` as `undefined`,
+  // so this branch is statically dead in the build and the runner never enters
+  // the published module graph. A static import would ship it.
+  const { describe, it } = await import('@systemfsoftware/effect-gherkin-spec')
+  const { FastCheck: fc } = await import('effect/testing')
+
+  /**
+   * The kernel exports only the two wire constants, so each law is an invariant
+   * over the single defined value rather than a quantified relation: a value
+   * change (a non-positive tick, a version that stops being `N.N`) is exactly
+   * the bug these pin.
+   */
+  describe('stream-protocol wire constants', () => {
+    it.prop(
+      '∀tick_TickInterval_≡Schedulable',
+      [fc.constant(TICK_INTERVAL_MS)],
+      ([tick]) => Number.isInteger(tick) && tick > 0,
+    )
+
+    it.prop(
+      '∀version_SchemaVersion_≡MajorDotMinor',
+      [fc.constant(STREAM_SCHEMA_VERSION)],
+      ([version]) => MAJOR_DOT_MINOR.test(version),
+    )
+  })
+}

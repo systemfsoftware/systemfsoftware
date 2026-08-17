@@ -1,34 +1,22 @@
 import type { InputEventResult } from '@oh-my-pi/pi-coding-agent'
-import { Cell, Workflow } from '@systemfsoftware/effect-cell-types'
+import { Cell } from '@systemfsoftware/effect-cell-types'
 import { sessionIds } from '@systemfsoftware/omp-utils'
 import { Context, Effect, Match, Option, pipe, Result, type Scope } from 'effect'
 import type { PlatformError } from 'effect/PlatformError'
-import * as S from 'effect/Schema'
 import type { ChildProcessSpawner } from 'effect/unstable/process/ChildProcessSpawner'
 import { drainAsyncHookContext } from '../async-hook-output.state.js'
 import type { HookDecision, HookResult } from '../hook-dispatcher.schema.js'
-import type { CommandHook, HookSettings } from '../hook-settings.acl.js'
-import { HookVerdictError, InterpretHookCommand, interpretHookResult } from '../hook-verdict.workflow.js'
+import type { CommandHook, HookSettings } from '../hook-settings.schema.js'
+import { InterpretHookCommand } from '../hook-verdict.workflow.js'
 import { isHostBound } from '../prompt-destination.kernel.js'
 import type { HookPrompt, HookSession } from './hook-session.kernel.js'
 import { runHookScript, type RunHookScriptExecutorDeps } from './run-hook-script.executor.js'
+import { type SubmitHookVerdictError, submitVerdictAdapter } from './submit-verdict-adapter.workflow.js'
 
 export class RunUserPromptSubmitHooksExecutorDeps extends Context.Service<
   RunUserPromptSubmitHooksExecutorDeps,
   Scope.Scope
 >()('RunUserPromptSubmitHooksExecutorDeps') {}
-
-/**
- * The submit decision's failure: the workflow's verdict error plus the raw's code and
- * stdout, as a schema-derived tagged struct — the error channel of a branded decide run
- * must carry a tag, and the struct derives one instead of declaring a `_tag` by hand.
- */
-const SubmitHookVerdictError = S.TaggedStruct('SubmitHookVerdictError', {
-  error: HookVerdictError,
-  code: S.Finite,
-  stdout: S.String,
-})
-type SubmitHookVerdictError = S.Schema.Type<typeof SubmitHookVerdictError>
 
 /**
  * The per-hook prompt-submission chain, in one bag so the phase order is
@@ -94,19 +82,7 @@ export const runUserPromptSubmitHooks = Effect.fn('runUserPromptSubmitHooks')(fu
         stdout: raw.stdout,
       })
     ),
-    Cell.decide<SubmitPhases>(
-      // Every decision must pass through `Workflow.make` before a description may run it;
-      // this adapter maps the hook-verdict workflow's outcome into the submit outcome.
-      Workflow.make(
-        (
-          { cmd, code, stdout }: SubmitPhases['decoded'],
-        ): Result.Result<SubmitPhases['decision'], SubmitPhases['decisionError']> =>
-          Result.mapBoth(interpretHookResult(cmd), {
-            onFailure: (error) => SubmitHookVerdictError.make({ error, code, stdout }),
-            onSuccess: (verdict) => ({ verdict, code, stdout }),
-          }),
-      ),
-    ),
+    Cell.decide<SubmitPhases>(submitVerdictAdapter),
     Cell.encode<SubmitPhases>((outcome) =>
       Result.match(outcome, {
         onFailure: ({ code, stdout }) => ({ blockReason: undefined, code, stdout }),

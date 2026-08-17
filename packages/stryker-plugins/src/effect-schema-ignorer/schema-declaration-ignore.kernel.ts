@@ -1,12 +1,13 @@
-import { Schema as S } from 'effect'
 import {
-  ArrowFunctionExpression,
-  CallExpression,
-  Identifier,
-  MemberExpression,
-  ObjectExpression,
-  StringLiteral,
-} from './ast-node.kernel.js'
+  isArrowFunctionExpression,
+  isCallExpression,
+  isDocumentationObject,
+  isDocumentationProperty,
+  isIdentifier,
+  isMemberExpression,
+  isObjectExpression,
+  isStringLiteral,
+} from './ast-node.schema.js'
 
 export const SYMBOL_DESCRIPTION_IGNORED = 'Symbol.for() brand description is identity-only data, not behaviour' as const
 export const TAGGED_TAG_IGNORED = 'TaggedClass/TaggedError _tag is a declaration discriminant, not behaviour' as const
@@ -26,27 +27,12 @@ export const ANNOTATION_TEXT_IGNORED = 'annotation documentation value is declar
  * so a surviving mutant of one is a test gap to close, never an equivalent
  * mutant to ignore.
  */
-const DocumentationKey = S.Literals(['identifier', 'description', 'title', 'documentation', 'examples'])
-
-const DocumentationProperty = S.Struct({
-  type: S.Literal('ObjectProperty'),
-  computed: S.Literal(false),
-  key: S.Union([
-    S.Struct({ type: S.Literal('Identifier'), name: DocumentationKey }),
-    S.Struct({ type: S.Literal('StringLiteral'), value: DocumentationKey }),
-  ]),
-  value: S.Unknown,
-})
 
 /**
  * An object literal whose every entry documents. One behaviour-bearing entry -
  * an `arbitrary` beside a `title` - fails the schema, so the object keeps its
  * mutants: emptying it would delete a generator, which a test can observe.
  */
-const DocumentationObject = S.Struct({
-  type: S.Literal('ObjectExpression'),
-  properties: S.NonEmptyArray(DocumentationProperty),
-})
 
 const TAGGED_FACTORIES: readonly string[] = ['TaggedClass', 'TaggedError']
 
@@ -60,15 +46,6 @@ const TAGGED_FACTORIES: readonly string[] = ['TaggedClass', 'TaggedError']
  * tag-shaped one never had.
  */
 const CLASS_FACTORY = 'Class'
-
-const isIdentifier = S.is(Identifier)
-const isStringLiteral = S.is(StringLiteral)
-const isObjectExpression = S.is(ObjectExpression)
-const isArrowFunctionExpression = S.is(ArrowFunctionExpression)
-const isMemberExpression = S.is(MemberExpression)
-const isCallExpression = S.is(CallExpression)
-const isDocumentationProperty = S.is(DocumentationProperty)
-const isDocumentationObject = S.is(DocumentationObject)
 
 const isNamedMember = (node: unknown, object: string, property: string): boolean =>
   isMemberExpression(node) &&

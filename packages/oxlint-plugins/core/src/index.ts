@@ -5,7 +5,6 @@
  * All rules are AST-only (no type-aware features) for maximum compatibility.
  */
 
-import { banClasses } from './rules/ban-classes.js'
 import { banErrorString } from './rules/ban-error-string.js'
 import { noBarrels } from './rules/no-barrels.js'
 import { noBodylessStatusAssertion } from './rules/no-bodyless-status-assertion.js'
@@ -31,7 +30,6 @@ export default {
     name: PLUGIN_NAME,
   },
   rules: {
-    'ban-classes': banClasses,
     'ban-error-string': banErrorString,
     'no-barrels': noBarrels,
     'no-bodyless-status-assertion': noBodylessStatusAssertion,

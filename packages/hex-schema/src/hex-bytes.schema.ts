@@ -1,3 +1,4 @@
+/// <reference types="vitest/import-meta" />
 import { Schema as S } from 'effect'
 
 /**
@@ -16,3 +17,34 @@ export const HexBytes = S.Uint8ArrayFromHex.pipe(
     title: 'Hex Bytes',
   }),
 )
+
+const decode = S.decodeUnknownExit(HexBytes)
+
+if (import.meta.vitest !== void 0) {
+  // Dynamic by necessity: tsdown defines `import.meta.vitest` as `undefined`,
+  // so this branch is statically dead in the build and the runner never enters
+  // the published module graph. A static import would ship it.
+  const { it } = await import('@effect/vitest')
+  const { FastCheck: fc } = await import('effect/testing')
+  const { refutes } = await import('@systemfsoftware/effect-schema-law')
+  const { Exit } = await import('effect')
+  const { expectTypeOf } = await import('vitest')
+
+  const oddLengthHex = fc
+    .tuple(fc.stringMatching(/^(?:[0-9a-f]{2})*$/), fc.stringMatching(/^[0-9a-f]$/))
+    .map(([pairs, odd]) => `${pairs}${odd}`)
+
+  /**
+   * The wire form is a *kind* contract, not a weakened one: no loosening of
+   * `HexBytes` accepts a `Uint8Array`, so a refusal generator for it can state
+   * the rejection half but never a discriminating half. It is stated directly.
+   */
+  it.prop('∀b_HexBytesWireIsString_⊥', [fc.uint8Array()], ([bytes]) => !Exit.isSuccess(decode(bytes)))
+
+  refutes(HexBytes, {
+    HexBytesByteAlignment: oddLengthHex,
+    HexBytesAlphabet: fc.stringMatching(/^[g-z]{2}$/),
+  })
+
+  expectTypeOf<S.Codec.Encoded<typeof HexBytes>>().toEqualTypeOf<string>()
+}

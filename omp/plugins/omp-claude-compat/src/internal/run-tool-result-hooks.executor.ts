@@ -1,5 +1,5 @@
 import { Context, Effect, type Scope } from 'effect'
-import type { HookSettings } from '../hook-settings.acl.js'
+import type { HookSettings } from '../hook-settings.schema.js'
 import type { FeedbackOnlyResult } from './hook-feedback.kernel.js'
 import type { HookSession, HookToolResult } from './hook-session.kernel.js'
 import { runPostToolUseFailureHooks } from './run-post-tool-use-failure-hooks.executor.js'

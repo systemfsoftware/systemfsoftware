@@ -1,14 +1,9 @@
-import { Schema as S } from 'effect'
-import { BinaryExpression, IfStatement, ImportMetaMember } from './ast-node.kernel.js'
+import { isBinaryExpression, isIfStatement, isImportMetaMember } from './ast-node.schema.js'
 
 export const IN_SOURCE_TEST_IGNORED =
   'inside an `if (import.meta.vitest)` block — test code, not production behaviour' as const
 
 export const VITEST_META_PROPERTY = 'vitest' as const
-
-const isImportMetaMember = S.is(ImportMetaMember)
-const isBinaryExpression = S.is(BinaryExpression)
-const isIfStatement = S.is(IfStatement)
 
 const isImportMetaVitest = (node: unknown): boolean =>
   isImportMetaMember(node) &&

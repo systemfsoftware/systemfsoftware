@@ -4,7 +4,7 @@ export default defineConfig({
   test: {
     globals: true,
     root: import.meta.dirname,
-    include: ['__tests__/**/*.test.ts', 'src/**/*.property.test.ts'],
+    include: ['tests/**/*.test.ts', 'src/**/*.property.test.ts'],
     testTimeout: 30000,
   },
   resolve: {

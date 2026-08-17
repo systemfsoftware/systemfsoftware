@@ -5,7 +5,7 @@ import * as Result from 'effect/Result'
 import type * as Scope from 'effect/Scope'
 import type { GherkinEffect, ScopeIdentifiers, ScopeMap, ScopeServices } from './do-notation.kernel.js'
 import { expandOutline } from './outline-expand.kernel.js'
-import { StepError } from './step-error.kernel.js'
+import { StepError } from './step-error.schema.js'
 
 export type ScenarioOptions<RScenario = never, RExtra = never> = {
   readonly scenarioLayer?: Layer.Layer<RScenario>

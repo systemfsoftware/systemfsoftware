@@ -12,7 +12,6 @@ const _default: {
         name: string;
     };
     rules: {
-        'ban-classes': Rule;
         'ban-error-string': Rule;
         'no-barrels': Rule;
         'no-bodyless-status-assertion': Rule;

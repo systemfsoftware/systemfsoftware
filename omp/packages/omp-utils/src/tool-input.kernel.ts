@@ -1,4 +1,5 @@
 import { Option, Schema as S } from 'effect'
+import { isClaudeEditArray, isOmpEditArray } from './tool-input.schema.js'
 
 /**
  * Kernel: translate OMP tool input shapes to Claude Code hook input shapes.
@@ -23,14 +24,6 @@ const FILE_TOOLS: Record<string, true> = {
   Create: true,
 }
 const EDIT_TOOLS: Record<string, true> = { Edit: true, MultiEdit: true, Update: true }
-
-const OmpEdits = S.Array(
-  S.Struct({ old_text: S.optional(S.Unknown), new_text: S.optional(S.Unknown) }).pipe(
-    S.check(S.makeFilter((entry) => 'old_text' in entry || 'new_text' in entry)),
-  ),
-).pipe(S.check(S.isNonEmpty()))
-
-const isOmpEditArray = S.is(OmpEdits)
 
 const patchLines = (input: string, sigil: string): string | undefined => {
   const marked = input.split('\n').filter((line) => line.startsWith(sigil))
@@ -69,14 +62,6 @@ export function normalizeToolInput(toolName: string, input: Record<string, unkno
 
   return out
 }
-
-const ClaudeEdits = S.Array(
-  S.Struct({ old_string: S.optional(S.Unknown), new_string: S.optional(S.Unknown) }).pipe(
-    S.check(S.makeFilter((entry) => 'old_string' in entry || 'new_string' in entry)),
-  ),
-)
-
-const isClaudeEditArray = S.is(ClaudeEdits)
 
 const asRecord = S.decodeUnknownOption(S.Record(S.String, S.Unknown))
 

@@ -1,7 +1,6 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
 import { Schema as S } from 'effect'
-import { isVitestGuard } from './in-source-test-targets-private.js'
 import { PROPERTY_SUFFIX, WORKFLOW_TEST_BASENAME } from './path.config.js'
 import { basenameOf, cellOf, isTestFile, isUnderSrc } from './path.js'
 import {
@@ -14,6 +13,7 @@ import {
   UNSANCTIONED_CELL_EXPECTED,
   UNSANCTIONED_CELL_FIX,
 } from './src-property-test-cell.config.js'
+import { isVitestGuard } from './vitest-guard.js'
 
 export type MessageIds = 'unsanctionedCell' | 'missingCellTest'
 

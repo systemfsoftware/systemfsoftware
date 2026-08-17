@@ -26,4 +26,4 @@ export {
 } from './feature.kernel.js'
 export { expandOutline, renderTitle, stringifyForTitle, tokenizeTemplate } from './outline-expand.kernel.js'
 export type { OutlineRow, TemplateToken } from './outline-expand.kernel.js'
-export { StepError } from './step-error.kernel.js'
+export { StepError } from './step-error.schema.js'

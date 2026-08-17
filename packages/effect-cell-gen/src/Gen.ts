@@ -1,19 +1,9 @@
-import { Cell, Workflow } from '@systemfsoftware/effect-cell-types'
+/// <reference types="vitest/import-meta" />
+import { Cell } from '@systemfsoftware/effect-cell-types'
 import * as Effect from 'effect/Effect'
-import * as Match from 'effect/Match'
 import * as Result from 'effect/Result'
-import * as S from 'effect/Schema'
 import { FastCheck as fc } from 'effect/testing'
-
-/**
- * The decision error the drawn descriptions carry. Tagged — via the schema, so no manual
- * `_tag` is declared — because the branded `Workflow.make` demands a tagged error channel
- * on the decide run it wraps, with the drawn failure code as its payload so the routing
- * properties can still compare payloads numerically.
- */
-class DrawnDecisionError extends S.TaggedError<DrawnDecisionError>()('DrawnDecisionError', {
-  code: S.Finite,
-}) {}
+import { drawnDecision, DrawnDecisionError } from './drawn-decision.workflow.js'
 
 /**
  * The phase bag the generated descriptions instantiate. `command` passes through the pure
@@ -158,13 +148,7 @@ const substituteLayer = (
             : { injected: false as const, error: 0 }
           return {
             ...phase,
-            run: Workflow.make((input: number): Result.Result<number, DrawnDecisionError> => {
-              trace.push(phase.name)
-              return Match.value({ injected: injection.injected, input } as const).pipe(
-                Match.when({ injected: true }, () => Result.fail(DrawnDecisionError.make({ code: injection.error }))),
-                Match.orElse(() => Result.succeed(input)),
-              )
-            }),
+            run: drawnDecision(trace, phase.name, injection),
           }
         }
         case 'total':
@@ -313,3 +297,122 @@ export const description: fc.Arbitrary<DescriptionCase> = fc
       }
     })
   })
+
+/**
+ * The order the generated description declares, read off the value itself. The trace the
+ * phases collect is compared against THIS, never against `Cell.vocabulary` — the
+ * generator rebuilds the description from the walked canonical value, so a comparison
+ * against the generator's own input would be circular; the interpreter's contract is the
+ * value's declared order.  */
+const declaredOrderOf = (description: Cell.WriteDone<Bag>): readonly string[] =>
+  description.layers.flatMap((layer) => layer.phases.map((phase) => phase.name))
+
+if (import.meta.vitest !== void 0) {
+  const { it } = await import('@effect/vitest')
+  const Effect = await import('effect/Effect')
+  const Result = await import('effect/Result')
+
+  const sameOrder = (a: readonly string[], b: readonly string[]): boolean =>
+    a.length === b.length && a.every((entry, index) => entry === b[index])
+
+  /**
+   * The interpreter's whole claim, over generated descriptions: it runs each layer's phases
+   * in exactly the order the value declares, observed through the phases themselves. An
+   * interpreter that interleaved layers by phase position, skipped a phase, ran one twice,
+   * or reordered within a layer leaves a trace that disagrees with the declared order.
+   *
+   * A draw that placed a `Failure` at a fatal-convention phase aborts the run before every
+   * phase executes, so its trace is an honest prefix of the declared order, not the whole
+   * order; the order claim does not apply to that draw. Every other draw — including one
+   * carrying a pass-through `Failure` — runs every phase and must match the declared order.
+   */
+  it.effect.prop(
+    '∀d_Phases_≡Declared',
+    [description],
+    ([drawn]) =>
+      Effect.gen(function*() {
+        if (drawn.failure?.convention === 'either-fail') {
+          return true
+        }
+        const declared = declaredOrderOf(drawn.description)
+        yield* Cell.apply(drawn.description, drawn.command)
+        return sameOrder(drawn.trace, declared)
+      }),
+  )
+
+  /**
+   * The description's response is the last layer's. Each layer's write was drawn its own
+   * response, so an interpreter that returned the first layer's response, or ran the layers
+   * out of declared order, disagrees with the last drawn response whenever the draws differ.
+   * A fatal-convention `Failure` produces no response at all, so that draw is out of scope.
+   */
+  it.effect.prop(
+    '∀d_Response_=LastWrite',
+    [description],
+    ([drawn]) =>
+      Effect.gen(function*() {
+        if (drawn.failure?.convention === 'either-fail') {
+          return true
+        }
+        const response = yield* Cell.apply(drawn.description, drawn.command)
+        return response === drawn.lastResponse
+      }),
+  )
+
+  /**
+   * The fatal convention's routing contract: a drawn `Failure` at such a phase fails the whole
+   * run — the payload surfaces on the derived error channel — and produces no write
+   * response. Only the phases before the failing one may have completed a write: the
+   * failing layer's own write, and every later layer's, must never have run. An interpreter
+   * that treated the fatal `Failure` as a decision and kept writing fails every clause.
+   */
+  it.effect.prop(
+    '∀d_FailureEitherFail_⊥Write',
+    [description],
+    ([drawn]) =>
+      Effect.gen(function*() {
+        const failure = drawn.failure
+        if (failure === undefined || failure.convention !== 'either-fail') {
+          return true
+        }
+        const outcome = yield* Effect.result(Cell.apply(drawn.description, drawn.command))
+        return (
+          Result.isFailure(outcome) &&
+          outcome.failure === failure.error &&
+          drawn.writeObserved.length === failure.layerIndex
+        )
+      }),
+  )
+
+  /**
+   * The pass-through convention's routing contract: a drawn `Failure` there is an outcome,
+   * not a fault — the successor phase receives the whole `Result` (recorded as the
+   * successor's observed input), the write still runs and returns its drawn response, and
+   * the `Failure` branch's payload travels on to the write (recorded as the write's
+   * received input). An interpreter that treated the outcome `Failure` as fatal, or
+   * unwrapped it before the successor, fails one of the clauses.
+   */
+  it.effect.prop(
+    '∀d_FailureEitherPass_=Payload',
+    [description],
+    ([drawn]) =>
+      Effect.gen(function*() {
+        const failure = drawn.failure
+        if (failure === undefined || failure.convention !== 'either-pass') {
+          return true
+        }
+        const outcome = yield* Effect.result(Cell.apply(drawn.description, drawn.command))
+        if (!Result.isSuccess(outcome)) {
+          return false
+        }
+        const encodeObserved = drawn.encodeObserved[failure.layerIndex]
+        return (
+          outcome.success === drawn.lastResponse &&
+          encodeObserved !== undefined &&
+          Result.isFailure(encodeObserved) &&
+          encodeObserved.failure.code === failure.error &&
+          drawn.writeObserved[failure.layerIndex] === failure.error
+        )
+      }),
+  )
+}

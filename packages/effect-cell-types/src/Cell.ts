@@ -3,9 +3,8 @@ import * as Effect from 'effect/Effect'
 import { dual } from 'effect/Function'
 import * as Option from 'effect/Option'
 import * as Result from 'effect/Result'
+import { canonicalDecide } from './canonical-decide.workflow.js'
 import { type WorkflowBrand } from './Workflow.js'
-import * as Workflow from './Workflow.js'
-
 /**
  * The type bag. Every phase's input and output type travels in one record so that a
  * stage's own type arguments are identical across stages, which leaves the sentence
@@ -465,7 +464,7 @@ export const canonical: WriteDone<Phases> = write(
       // The canonical's decide never resolves — the description's phases "do nothing" —
       // but its error channel must still satisfy the tagged channel rule the brand rides
       // on, so the decider is a `make` value whose phantom error channel is `Tagged`.
-      Workflow.make((_decoded: unknown): Result.Result<undefined, Workflow.Tagged> => Result.succeed(undefined)),
+      canonicalDecide,
     ),
     () => undefined,
   ),

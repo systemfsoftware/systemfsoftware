@@ -3,7 +3,8 @@ import * as ChildProcess from 'effect/unstable/process/ChildProcess'
 import { ChildProcessSpawner } from 'effect/unstable/process/ChildProcessSpawner'
 import { detachIn } from '../deadline.policy.js'
 import type { HookResult } from '../hook-dispatcher.schema.js'
-import type { CommandHook } from '../hook-settings.acl.js'
+import type { CommandHook } from '../hook-settings.schema.js'
+import { ToolInputRecord } from './hook-payload.schema.js'
 
 const CLAUDE_EVENT_DEFAULT_SECONDS: Readonly<Record<string, number>> = {
   UserPromptSubmit: 30,
@@ -34,8 +35,6 @@ const SHELL_INVOCATION = {
   bash: ['bash', '-c'],
   powershell: ['powershell', '-Command'],
 } as const satisfies Record<string, readonly [string, string]>
-
-const ToolInputRecord = S.Record(S.String, S.Unknown)
 
 /** The hook payload's wire contract, declared once and used in both directions. */
 const encodeHookPayload = S.encodeSync(S.fromJsonString(ToolInputRecord))

@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { resolve as resolvePath } from 'node:path'
 
 import { noopLogger } from '@stryker-mutator/util'
-import { Cell, Workflow } from '@systemfsoftware/effect-cell-types'
+import { Cell } from '@systemfsoftware/effect-cell-types'
 import type { Mutant, PartialStrykerOptions, StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
 import { schema } from '@systemfsoftware/stryker-js-plugin-api/core'
 import * as Cause from 'effect/Cause'
@@ -36,6 +36,7 @@ import type { HelpRendered, ManifestRendered } from '@systemfsoftware/stryker-js
 import { strykerVersion } from '@systemfsoftware/stryker-js-mutation-run/stryker-package'
 import { buildVerdictEnvelope } from '@systemfsoftware/stryker-js-mutation-run/verdict-envelope'
 
+import { admissionAdapter, type AdmissionDecoded, type AdmissionOutcome } from './admission-adapter.workflow.js'
 import { machineConsoleLayer, readCapturedConsole } from './output-mode-console.state.js'
 import type { OutputModeProbe } from './output-mode.adapter.js'
 import { isColorEnabled, isProgressEnabled } from './output-mode.kernel.js'
@@ -43,14 +44,13 @@ import type { RunEventStream, RunEventStreamPort } from './run-event-stream.adap
 import { STREAM_SCHEMA_VERSION } from './stream-protocol.kernel.js'
 import { SURVIVORS_REJECT_EXIT_CLASS } from './survivors-exit.kernel.js'
 import {
-  type AdmitSurvivorsRunInput,
   DEFAULT_SURVIVORS_PRIOR_REPORT,
   type HashContent,
   type ResolveAbsolutePath,
   sourceContentHash,
   survivorMutateSpans,
 } from './survivors.kernel.js'
-import { admitSurvivorsRun, type SurvivorsAdmission, SurvivorsRejection } from './survivors.workflow.js'
+import { SurvivorsRejection } from './survivors.workflow.js'
 
 /**
  * The mutation-testing entry the CLI calls once options are parsed. Injectable
@@ -165,26 +165,6 @@ function hostOptionsOf(mode: ResolvedMode, stream: RunEventStream): StrykerHostO
 }
 
 /**
- * The context the admission phases carry beside the workflow's decision: the
- * resolved options the write embeds and the prior report path the restricted
- * run bookkeeps (KTD7).
- */
-interface AdmissionRunContext {
-  readonly resolvedOptions: StrykerOptions
-  readonly priorReportPath: string
-}
-
-/** The admission workflow's input plus the run context the later phases need. */
-interface AdmissionDecoded extends AdmissionRunContext {
-  readonly input: AdmitSurvivorsRunInput
-}
-
-/** The admission decision plus the run context the write dispatches on. */
-interface AdmissionOutcome extends AdmissionRunContext {
-  readonly decision: SurvivorsAdmission
-}
-
-/**
  * The phases of the survivors admission, in one bag so the chain's order is
  * carried by types: resolve and read (config, prior report, source hashes),
  * package the workflow input, call the admission workflow, shape nothing, and
@@ -255,16 +235,7 @@ const survivorsAdmissionDescription = (
         priorReportPath,
       })
     ),
-    Cell.decide<AdmissionPhases>(
-      // Every decision must pass through `Workflow.make` before a description may run it;
-      // this adapter maps the admission workflow's outcome into the admission outcome.
-      Workflow.make(
-        (
-          { input, resolvedOptions, priorReportPath }: AdmissionDecoded,
-        ): Result.Result<AdmissionOutcome, SurvivorsRejection> =>
-          Result.map(admitSurvivorsRun(input), (decision) => ({ decision, resolvedOptions, priorReportPath })),
-      ),
-    ),
+    Cell.decide<AdmissionPhases>(admissionAdapter),
     Cell.encode<AdmissionPhases>((outcome) => outcome),
     Cell.write<AdmissionPhases>((outcome) =>
       Result.match(outcome, {

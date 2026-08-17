@@ -32,7 +32,6 @@ const _default: {
         'pbt-naming': Rule;
         'no-test-file-in-src': Rule;
         'src-property-test-cell': Rule;
-        'in-source-test-targets-private': Rule;
         'test-file-outside-tests-dir': Rule;
         'test-suffix-outside-src': Rule;
         'behaviour-test-requires-gherkin': Rule;

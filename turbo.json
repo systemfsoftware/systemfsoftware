@@ -239,6 +239,15 @@
       "outputs": [],
       "cache": true
     },
+    "//#check:workflow-test-adjacency": {
+      "inputs": [
+        "$TURBO_ROOT$/scripts/guards/check-workflow-test-adjacency.mjs",
+        "$TURBO_ROOT$/packages/**/src/**/*.workflow.ts",
+        "$TURBO_ROOT$/omp/**/src/**/*.workflow.ts"
+      ],
+      "outputs": [],
+      "cache": true
+    },
     "//#check:project-references": {
       "inputs": [
         "$TURBO_ROOT$/scripts/guards/check-project-references.mjs",

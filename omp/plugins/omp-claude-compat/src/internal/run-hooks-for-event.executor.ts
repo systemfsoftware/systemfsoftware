@@ -6,7 +6,7 @@ import type { ChildProcessSpawner } from 'effect/unstable/process/ChildProcessSp
 import { Blocked, Continue, Warning } from '../hook-dispatcher.schema.js'
 import type { HookDecision, HookOutcome, HookResult } from '../hook-dispatcher.schema.js'
 import { analyzeSettings } from '../hook-settings.acl.js'
-import type { CommandHook, HookEntry } from '../hook-settings.acl.js'
+import type { CommandHook, HookEntry } from '../hook-settings.schema.js'
 import { type HookVerdictError, InterpretHookCommand, interpretHookResult } from '../hook-verdict.workflow.js'
 import type { HooksForEventResult } from './hook-feedback.kernel.js'
 import { asToolInput, EMPTY_TOOL_INPUT } from './hook-payload.kernel.js'

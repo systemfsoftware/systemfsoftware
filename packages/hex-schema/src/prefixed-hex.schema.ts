@@ -1,4 +1,5 @@
-import { Schema as S, SchemaTransformation } from 'effect'
+/// <reference types="vitest/import-meta" />
+import { type Brand, Schema as S, SchemaTransformation } from 'effect'
 import { addHexPrefix, stripHexPrefix } from './prefixed-hex.kernel.js'
 import { StrictHex } from './strict-hex.schema.js'
 
@@ -18,3 +19,44 @@ export const PrefixedHex = S.TemplateLiteral(['0x', S.String]).pipe(
   S.brand('PrefixedHex'),
 )
 export type PrefixedHex = S.Schema.Type<typeof PrefixedHex>
+
+const decode = S.decodeUnknownExit(PrefixedHex)
+
+if (import.meta.vitest !== void 0) {
+  // Dynamic by necessity: tsdown defines `import.meta.vitest` as `undefined`,
+  // so this branch is statically dead in the build and the runner never enters
+  // the published module graph. A static import would ship it.
+  const { it } = await import('@effect/vitest')
+  const { FastCheck: fc } = await import('effect/testing')
+  const { refutes } = await import('@systemfsoftware/effect-schema-law')
+  const { Exit } = await import('effect')
+  const { expectTypeOf } = await import('vitest')
+
+  const hexBody = fc.stringMatching(/^[0-9a-f]*$/)
+  const outsider = fc.stringMatching(/^[^0-9a-f]$/)
+
+  /**
+   * The `0x` prefix is a *joint* contract with the body in v4's AST — no
+   * weakening of `PrefixedHex` admits an unprefixed string, so an unprefixed
+   * refusal generator can state the rejection half but never a discriminating
+   * half. It is stated directly; the prefixed invalid-body draws below witness
+   * the body obligation.
+   */
+  it.prop('∀b_PrefixedHexPrefix_⊥', [fc.stringMatching(/^[0-9a-f]+$/)], ([bare]) => !Exit.isSuccess(decode(bare)))
+
+  refutes(PrefixedHex, {
+    PrefixedHexCase: fc.stringMatching(/^[A-F]+$/).map((upper) => `0x${upper}`),
+    PrefixedHexAlphabet: fc
+      .tuple(hexBody, outsider, hexBody)
+      .map(([head, out, tail]) => `0x${head}${out}${tail}`),
+  })
+
+  /**
+   * The reason the package exists: a consumer whose API demands `0x${string}`
+   * passes `S.encodeSync` straight in. A false `expectTypeOf` is a `tsc` error,
+   * which is the channel the mutation gate reads.
+   */
+  expectTypeOf<S.Codec.Encoded<typeof PrefixedHex>>().toEqualTypeOf<`0x${string}`>()
+
+  expectTypeOf<S.Schema.Type<typeof PrefixedHex>>().toEqualTypeOf<string & Brand.Brand<'PrefixedHex'>>()
+}

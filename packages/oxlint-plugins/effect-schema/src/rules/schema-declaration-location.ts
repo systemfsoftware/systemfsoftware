@@ -33,6 +33,51 @@ const schemaMemberOf = (node: ESTree.Node | null, locals: ReadonlySet<string>): 
 }
 
 /**
+ * Schema members that consume a schema and return a non-schema value — a
+ * decoder, an encoder, an arbitrary, or a JSON-schema document. A const
+ * initialized to one of these is a *use* of a schema, not a declaration, so
+ * it is out of scope for the placement rule.
+ */
+const SCHEMA_USE_MEMBERS: Record<string, true> = {
+  decodeUnknownResult: true,
+  decodeUnknownSync: true,
+  decodeUnknownExit: true,
+  decodeUnknownEffect: true,
+  decodeUnknownOption: true,
+  decodeUnknownEither: true,
+  decodeUnknownPromise: true,
+  decodeResult: true,
+  decodeSync: true,
+  decodeExit: true,
+  decodeEffect: true,
+  decodeOption: true,
+  decodeEither: true,
+  decodePromise: true,
+  encodeUnknown: true,
+  encodeUnknownSync: true,
+  encodeUnknownEffect: true,
+  encode: true,
+  encodeSync: true,
+  encodeEffect: true,
+  toArbitrary: true,
+  toJsonSchemaDocument: true,
+  isSchema: true,
+  isSchemaError: true,
+  isSchemaAST: true,
+}
+
+/**
+ * True when `node` is a schema *declaration*: its defining `Schema.<member>`
+ * is a schema-producing combinator, not a use combinator.
+ */
+const isSchemaDeclaration = (node: ESTree.Node | null, locals: ReadonlySet<string>): boolean => {
+  const member = schemaMemberOf(node, locals)
+  if (member === null) return false
+  if (member.property.type !== 'Identifier') return false
+  return SCHEMA_USE_MEMBERS[member.property.name] !== true
+}
+
+/**
  * Schema declarations are module-scope only: a class extending a Schema
  * factory, or a module-scope const initialized to a `Schema.<member>(...)`
  * call. Definitions nested in a function or an `if (import.meta.vitest)`
@@ -65,7 +110,7 @@ export const schemaDeclarationLocation = defineRule({
           }
           if (decl === null) continue
           if (decl.type === 'ClassDeclaration') {
-            if (decl.id !== null && schemaMemberOf(decl.superClass, locals) !== null) {
+            if (decl.id !== null && isSchemaDeclaration(decl.superClass, locals)) {
               context.report({
                 node: decl.id,
                 messageId: 'schemaOutsideSchemaFile',
@@ -74,7 +119,7 @@ export const schemaDeclarationLocation = defineRule({
             }
           } else if (decl.type === 'VariableDeclaration') {
             for (const declarator of decl.declarations) {
-              if (declarator.id.type === 'Identifier' && schemaMemberOf(declarator.init, locals) !== null) {
+              if (declarator.id.type === 'Identifier' && isSchemaDeclaration(declarator.init, locals)) {
                 context.report({
                   node: declarator.id,
                   messageId: 'schemaOutsideSchemaFile',

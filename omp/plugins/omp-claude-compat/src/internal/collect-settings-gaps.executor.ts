@@ -1,8 +1,8 @@
 import { Context, Effect, Exit, Schema as S, type Scope } from 'effect'
 import { FileSystem } from 'effect/FileSystem'
 import { analyzeSettings, parseSettings } from '../hook-settings.acl.js'
-import type { DisableSource, HookCoverageRow } from '../hook-settings.acl.js'
-import { HookCoverageRowSchema, HookCoverageSchema } from '../hook-settings.acl.js'
+import type { DisableSource, HookCoverageRow } from '../hook-settings.schema.js'
+import { HookCoverageRowSchema, HookCoverageSchema } from '../hook-settings.schema.js'
 import { MANAGED_SETTINGS_PATH } from './settings-paths.kernel.js'
 
 export class CollectSettingsGapsExecutorDeps extends Context.Service<CollectSettingsGapsExecutorDeps, Scope.Scope>()(

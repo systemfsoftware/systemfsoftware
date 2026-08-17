@@ -48,6 +48,12 @@ export function decode(input: unknown) {
       filename: '/repo/pkg/src/decoder.ts',
     },
     {
+      name: 'Should_Pass_When_ConstIsASchemaUseNotADeclaration',
+      code: `import { Schema as S } from 'effect'
+export const asToolInput = S.decodeUnknownOption(S.Record(S.String, S.Unknown))`,
+      filename: '/repo/pkg/src/hook-payload.kernel.ts',
+    },
+    {
       name: 'Should_Pass_When_AliasedSchemaImportLivesInASchemaFile',
       code: `import { Schema as S } from 'effect'
 export const U = S.Union([S.String, S.Number])`,
