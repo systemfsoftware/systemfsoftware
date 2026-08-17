@@ -237,7 +237,7 @@ The Evaluator change lands in its own commit, never sharing one with the migrati
 - Approach:
   1. Write the loop as a plain `async` function that dispatches on the returned request, performs it, and feeds the result back. No constructor wraps the shell, and no Effect runtime is introduced, per KTD2.
   2. Keep the read as `await fs.promises.readFile` — already non-blocking, so R10 needs no change there — and perform a specifier resolution through node's resolver, which remains the only API that resolves from a caller-chosen base.
-  3. Delete the planted `node_modules` symlink and the temp-directory scaffolding in this unit, not a later one. They existed to make a real install appear, and the resolver-independent shell is what replaces them. U4 cannot otherwise observe its own criterion: "no blocking call and no planted install" is unverifiable while the plant is still in the fixture.
+  3. Update the suite's imports so it exercises the new shell, and leave every one of its 53 scenarios passing. The temp-directory scaffolding stays for now: those scenarios still write config files into it, and they stop needing files only once U5 re-expresses them as data. Deleting the scaffolding here would break the scenarios this unit must keep green — it is one act with the scenario move, and it belongs to U5.
   4. Change `loadOptionsFromConfigFile` in `config-reader.ts` to consume the new shape. It is the only production caller.
   5. Map a refusal to the existing `ConfigError` at the shell boundary so the error surface a caller sees does not change.
 - Execution note: the seven CI-failing scenarios are the reproduction. Record the verdict of every scenario in the suite before the first edit, so U5 can account for each one; then run the seven before the change to see them fail under node's resolver, and after to see them pass for a reason that does not depend on which resolver served the module.
@@ -247,8 +247,8 @@ The Evaluator change lands in its own commit, never sharing one with the migrati
   - A chain whose parent is a bare specifier resolves through the real resolver, in one composition test, against a real installed package.
   - A cyclic chain surfaces a `ConfigError` naming the offending file.
   - A missing parent file surfaces a `ConfigError` and not an unhandled rejection.
-  - No test in the migrated suite constructs a temporary directory or plants a symlink.
-- Verification: `pnpm --filter @systemfsoftware/stryker-js-mutation-run exec vitest run tests/resolve-extends.integration.test.ts` passes, and the same command passes when run through plain node's resolver rather than only under the workspace-aware one.
+  - All 53 scenarios recorded in the baseline still pass; this unit changes how the chain is driven, not what any scenario asserts.
+- Verification: `pnpm --filter @systemfsoftware/stryker-js-mutation-run exec vitest run tests/resolve-extends.integration.test.ts` reports 53 passing, the same count as the pre-change baseline. Resolver-independence is not observable in this unit — the scenarios still resolve real specifiers from a temp directory, so U5 owns that criterion and the CI fix.
 
 ### U5. Re-express the resolver-dependent scenarios at the right altitude
 
@@ -259,7 +259,7 @@ The Evaluator change lands in its own commit, never sharing one with the migrati
 - Approach:
   1. Move every scenario whose subject is a decision — merge precedence, null override, cycle refusal, specifier-versus-path routing — onto the pure decision, as data in and data out.
   2. Keep as composition tests only those whose subject is the real boundary: that an installed package's exports subpath actually resolves.
-- Execution note: U4 removed the scaffolding and recorded the pre-move verdicts. This unit accounts for every scenario against that record, so one that changes verdict during the move is visible rather than absorbed.
+- Execution note: U4 recorded the pre-move verdicts and left all 53 green. This unit accounts for every scenario against that record, so one that changes verdict during the move is visible rather than absorbed, and it is this unit that deletes the temp-directory scaffolding and the planted `node_modules` symlink — deleting them is the same act as moving the scenarios that needed them, and it is what removes the resolver dependence the CI failure comes from.
 - Test scenarios:
   - The scenario count before and after the move is accounted for: each original scenario is either relocated, kept as composition, or deleted with its reason named.
   - A property over the decision holds that a chain with no cycle always terminates in done or a refusal, never a request for a path already visited.
