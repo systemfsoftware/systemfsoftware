@@ -102,6 +102,11 @@ export const RegistryProvider = (options: {
       if (ref.current === null) {
         return
       }
+      // React lifecycle timing, not Effect timing: the dispose is deferred so a
+      // remount - StrictMode's double invoke, or fast refresh - reclaims the same
+      // registry instead of losing it. There is no fiber here to carry an
+      // `Effect.sleep` and none to interrupt it on the remount that cancels this.
+      // @effect-diagnostics-next-line globalTimers:off
       ref.current.timeout = setTimeout(() => {
         ref.current?.registry.dispose()
         ref.current = null

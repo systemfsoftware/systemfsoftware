@@ -109,7 +109,7 @@ export const Schema = <
         const SuccessSchema = Schema_.TaggedStruct('Success', {
           value,
           waiting: Schema_.Boolean,
-          timestamp: Schema_.Number,
+          timestamp: Schema_.Finite,
         })
         return Schema_.link<
           Result<(A | typeof Schema_.Never)['Encoded'], (E | typeof Schema_.Never)['Encoded']>
