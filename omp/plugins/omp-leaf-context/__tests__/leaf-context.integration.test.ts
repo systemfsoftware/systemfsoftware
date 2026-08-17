@@ -8,7 +8,8 @@
  */
 import { And, Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect } from 'effect'
-import type { LeafFs } from '../src/leaf-context.executor.js'
+import leafContextExtension from '../src/index.js'
+import type { LeafFs } from '../src/internal/leaf-fs.js'
 import { buildSession, memfsLeafFs, SESSION_A, SESSION_B } from './leaf-context-fixture.observer.js'
 
 const Feature = makeFeature({ it, layer })
@@ -82,8 +83,8 @@ const setupSessions = async (
   fs?: LeafFs,
 ): Promise<ReturnType<typeof buildSession>[]> => {
   vi.resetModules()
-  const mod = await import('../src/leaf-context.handler.js')
-  const { runSafe } = await import('../src/run-safe.js')
+  const mod = await import('../src/LeafContextExtension.js')
+  const { runSafe } = await import('../src/internal/runSafe.js')
   const treeFs = memfsLeafFs(TREE)
   return sessionIds.map((id) => {
     const session = buildSession({ sessionId: id, cwd: PROJECT_ROOT })
@@ -470,6 +471,32 @@ Feature('Leaf AGENTS.md delivery — handler integration').body(({ scenario }) =
           expect(s.verdict.relative.result).toBeUndefined()
           expect(s.verdict.absolute.callReturn).toBeUndefined()
           expect(s.verdict.relative.callReturn).toBeUndefined()
+        })
+      ),
+    ),
+  )
+
+  scenario(
+    'Registers and delivers through the host-facing entry factory',
+    Gherkin.Do.pipe(
+      Given('a fresh session registered via the default entry factory')('setup', () =>
+        Effect.promise(async () => {
+          const session = buildSession({ sessionId: SESSION_B, cwd: PROJECT_ROOT })
+          await leafContextExtension(session.api as never, memfsLeafFs(TREE))
+          return { session }
+        })),
+      When('a read under packages/effect-atom fires')(
+        'verdict',
+        (s) =>
+          Effect.promise(() =>
+            fireReadPair(s.setup.session, 'tc-1', `${PROJECT_ROOT}/packages/effect-atom/src/index.ts`, 'ENTRY')
+          ),
+      ),
+      Then('the entry delivers the leaf into the result')((s) =>
+        Effect.sync(() => {
+          expect(lastText(s.verdict.result)).toBe(
+            `\n\n<leaf-agents-md path="packages/effect-atom/AGENTS.md">\n${ATOM_LEAF}\n</leaf-agents-md>`,
+          )
         })
       ),
     ),

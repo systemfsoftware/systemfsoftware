@@ -1,16 +1,22 @@
 /**
- * ACL: foreign `tool_call` input → `TargetPath`.
+ * Target — the tool target domain, pure.
  *
  * The host's `tool_call` event ships its input as a generic record; the two
  * keys this plugin reads (`file_path` for edit-family tools, `path` for
- * read/grep/glob) are foreign spelling. The branded `TargetPath` domain type
- * is earned through the Schema decode, never cast (ACL1, `omp/AGENTS.md`):
- * `decodeTo` with a `SchemaGetter.transformOrFail` decode from the foreign
- * record, encode direction `Forbidden` — the tool input is the source, never
- * the destination. Absent/empty/typed-wrong target keys fail the decode,
- * which the handler maps to `NoTarget` (a `TaggedError`, never `null`).
+ * read/grep/glob) are foreign spelling. The branded `TargetPath` is earned
+ * through the Schema decode, never cast: `decodeTo` with a
+ * `SchemaGetter.transformOrFail` decode from the foreign record, encode
+ * direction `Forbidden` — the tool input is the source, never the
+ * destination. Absent/empty/typed-wrong target keys fail the decode to
+ * `NoTarget` (a `TaggedError`, never `null`).
+ *
+ * `relativeToRoot` maps a target onto the project root, returning `null`
+ * when the target is outside the root — hardened against `..` traversal
+ * segments anywhere in the path (escapee targets are treated as outside the
+ * root, absolute or relative).
  */
 import { Effect, Option, Result, Schema as S, SchemaGetter, SchemaIssue } from 'effect'
+import { isAbsolute } from 'node:path/posix'
 
 export const TargetPath = S.String.pipe(S.brand('TargetPath'))
 export type TargetPath = S.Schema.Type<typeof TargetPath>
@@ -52,4 +58,19 @@ export const decodeTarget = (input: unknown): Result.Result<TargetPath, NoTarget
   return Option.isSome(decoded)
     ? Result.succeed(decoded.value)
     : Result.fail(new NoTarget())
+}
+
+/**
+ * Project-root-relative form of a tool target, or `null` when the target is
+ * outside the project root. Ported from the deleted hook; hardened against
+ * `..` traversal segments anywhere in the path.
+ */
+export const relativeToRoot = (target: string, root: string): string | null => {
+  if (isAbsolute(target)) {
+    if (!target.startsWith(root + '/')) return null
+    const rel = target.slice(root.length + 1)
+    return rel.split('/').includes('..') ? null : rel
+  }
+  if (target.length === 0 || target.split('/').includes('..')) return null
+  return target
 }

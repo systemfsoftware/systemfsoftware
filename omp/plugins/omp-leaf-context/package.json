@@ -25,6 +25,9 @@
   "peerDependencies": {
     "@oh-my-pi/pi-coding-agent": "catalog:"
   },
+  "dependencies": {
+    "@systemfsoftware/effect-cell-types": "workspace:^"
+  },
   "devDependencies": {
     "@effect/vitest": "catalog:",
     "@oh-my-pi/pi-coding-agent": "catalog:",

@@ -10,7 +10,7 @@
  */
 import { MemoryFileSystem } from '@systemfsoftware/effect-memfs'
 import { Effect } from 'effect'
-import type { LeafFs } from '../src/leaf-context.executor.js'
+import type { LeafFs } from '../src/internal/leaf-fs.js'
 
 export interface LoggedEvent {
   readonly level: 'info' | 'warn' | 'error' | 'debug'

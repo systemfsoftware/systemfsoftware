@@ -1,33 +1,38 @@
 /**
- * Handler cell — transport terminus for leaf AGENTS.md delivery.
+ * LeafContextExtension — the transport terminus, one I/O operation file.
+ *
+ * The collapse doctrine's sandwich, sequenced by the file that performs I/O:
+ * an eligibility read (the leaf walk), a pure decision through the cell
+ * library's `Workflow.make`, then — only on `Select` — the content read and
+ * the result append, kept openly here rather than interleaved into the
+ * filling. The branch of "which leaf" is the workflow's job; this file only
+ * sequences the sandwich and never decides domain state (R5).
  *
  * Registers two `pi.on` handlers:
  *   - `tool_call`: ACL-decode the tool input to a `TargetPath`; when a target
- *     is present, record `toolCallId → target`. Never blocks,
- *     never revises — this delivery is advisory (decision, not gate).
+ *     is present, record `toolCallId → target`. Never blocks, never revises —
+ *     this delivery is advisory (decision, not gate).
  *   - `tool_result`: consume the recorded call, resolve the target against
- *     `ctx.cwd`, run the workflow, and on `Inject` append the leaf block to
- *     the result content. The session's injected set is marked so each leaf
- *     arrives once per session.
+ *     `ctx.cwd` (I/O files that touch out-of-root targets no-op), walk the
+ *     candidates, run the workflow; on `Select` read the leaf and append the
+ *     block. The session's injected set is marked so each leaf arrives once
+ *     per session.
  *
- * State is process-lifetime module top level (PLG1): the factory re-runs per
- * session and must not re-create process-wide structures. Both maps are
- * bounded — the call map drops its oldest entry above 1000 (the sibling caps
- * at 200; delivery is advisory, so 1000 is safe), and stale session sets are
+ * State is process-lifetime module top level (the factory re-runs per session
+ * and must not re-create process-wide structures). Both maps are bounded —
+ * the call map drops its oldest entry above 1000, and stale session sets are
  * evicted the same way.
  *
- * Failure posture is fail-open contained (`runSafe`): a fault logs through
- * `pi.logger` and no-ops, never blocking or poisoning the tool call. A
- * surfaced `LeafContextError` (I/O failure during the walk/read) is logged
- * and likewise yields no injection — delivery must not corrupt results, but
- * the loss must be observable.
+ * Failure posture is fail-open contained (`internal/runSafe`): a fault logs
+ * through `pi.logger` and no-ops, never blocking or poisoning the tool call.
  */
-import type { ExtensionAPI, ExtensionContext } from '@oh-my-pi/pi-coding-agent'
+import type { ExtensionAPI, ExtensionContext, ToolResultEvent, ToolResultEventResult } from '@oh-my-pi/pi-coding-agent'
 import { Match, Result } from 'effect'
-import { decodeTarget, type TargetPath } from './leaf-context.acl.js'
-import { describeError, type LeafFs, nodeLeafFs, relativeToRoot, runLeafContext } from './leaf-context.executor.js'
-import { leafBlock } from './leaf-context.workflow.js'
-import type { RunSafe } from './run-safe.js'
+import { join } from 'node:path/posix'
+import { findExistingLeafCandidates, type LeafFs, nodeLeafFs } from './internal/leaf-fs.js'
+import { describeError, type RunSafe } from './internal/runSafe.js'
+import { decide, type Decision, governingLeaf, leafBlock } from './LeafContext.js'
+import { decodeTarget, relativeToRoot, type TargetPath } from './Target.js'
 
 const PENDING_TARGETS_MAX = 1000
 const SESSION_SETS_MAX = 1000
@@ -92,24 +97,42 @@ export const LeafContextExtension = (pi: ExtensionAPI, runSafe: RunSafe, fs: Lea
       pathByCallId.delete(`${sessionId}:${event.toolCallId}`)
       if (target === undefined) return undefined
 
-      const injected = sessionInjected(sessionId)
       const relTarget = relativeToRoot(target, ctx.cwd)
-      const outcome = await runLeafContext({ root: ctx.cwd, relTarget, injected, fs })
+      if (relTarget === null) return undefined
+      const candidates = await findExistingLeafCandidates(relTarget, ctx.cwd, fs)
+      const outcome = decide({
+        relTarget,
+        governingLeaf: governingLeaf(candidates),
+        injected: sessionInjected(sessionId),
+      })
 
       if (Result.isFailure(outcome)) {
-        logFault(pi.logger, 'tool_result', outcome.failure.detail)
+        logFault(pi.logger, 'tool_result', outcome.failure)
         return undefined
       }
 
       return Match.value(outcome.success).pipe(
         Match.tag('Skip', () => undefined),
-        Match.tag('Inject', ({ leaf, content }) => {
-          injected.add(leaf)
-          const text = leafBlock(leaf, content)
-          return { content: [...event.content, { type: 'text' as const, text }] }
-        }),
+        Match.tag('Select', ({ leaf }) => deliver(pi, sessionId, leaf, event, ctx, fs)),
         Match.exhaustive,
       )
     }, (error) => logFault(pi.logger, 'tool_result', error))
   })
 }
+
+/** The second sandwich: read the selected leaf, shape the block, append, and mark the session. */
+const deliver = async (
+  pi: ExtensionAPI,
+  sessionId: string,
+  leaf: string,
+  event: Pick<ToolResultEvent, 'content'>,
+  ctx: { readonly cwd: string },
+  fs: LeafFs,
+): Promise<ToolResultEventResult | undefined> => {
+  const content = await fs.readFile(join(ctx.cwd, leaf))
+  sessionInjected(sessionId).add(leaf)
+  const text = leafBlock(leaf, content)
+  return { content: [...event.content, { type: 'text' as const, text }] }
+}
+
+export type { Decision }
