@@ -1,1 +1,1 @@
-export { ruleOfPurity, ruleOfPurityBy } from './rule-of-purity.kernel.js'
+export { ruleOfPurity, ruleOfPurityBy } from './RuleOfPurity.js'

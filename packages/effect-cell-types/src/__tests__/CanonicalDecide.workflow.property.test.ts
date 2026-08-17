@@ -2,7 +2,7 @@ import { describe, it } from '@systemfsoftware/effect-gherkin-spec'
 import * as Result from 'effect/Result'
 import { FastCheck as fc } from 'effect/testing'
 
-import { canonicalDecide } from '../canonical-decide.workflow.js'
+import { canonicalDecide } from '../CanonicalDecide.workflow.js'
 import * as Workflow from '../Workflow.js'
 
 describe('canonicalDecide', () => {

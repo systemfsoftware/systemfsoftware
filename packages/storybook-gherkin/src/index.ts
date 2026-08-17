@@ -1,7 +1,7 @@
-export { capture } from './capture.observer.js'
-export type { Capture } from './capture.observer.js'
-export * from './errors.schema.js'
-export { feature, From, Steps } from './feature.observer.js'
+export { capture } from './Capture.js'
+export type { Capture } from './Capture.js'
+export * from './Errors.schema.js'
+export { feature, From, Steps } from './Feature.js'
 export type {
   Feature,
   FeatureOptions,
@@ -12,8 +12,8 @@ export type {
   ScenarioOptions,
   StepArg,
   StorySpec,
-} from './feature.observer.js'
-export { And, But, Given, Star, Then, When } from './steps.observer.js'
+} from './Feature.js'
+export { And, But, Given, Star, Then, When } from './Steps.js'
 export type {
   Canvas,
   CapsOf,
@@ -32,4 +32,4 @@ export type {
   StepFn,
   StepHandler,
   StepModel,
-} from './steps.observer.js'
+} from './Steps.js'

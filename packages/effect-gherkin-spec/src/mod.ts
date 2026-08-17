@@ -1,17 +1,8 @@
 export * from '@effect/vitest'
-export { And, But, Gherkin, Given, Then, When } from './do-notation.kernel.js'
-export type {
-  GherkinEffect,
-  GherkinScope,
-  ScopeIdentifiers,
-  ScopeMap,
-  ScopeServices,
-  StepText,
-} from './do-notation.kernel.js'
-export type { PairwiseMatrix, PairwiseResult } from './extensions/pairwise.kernel.js'
-export { pairwiseFor } from './extensions/pairwise.kernel.js'
-export { resolveScenarioArgs } from './feature-runtime.kernel.js'
-export type { OutlineFn, ScenarioBody, ScenarioFn, ScenarioOptions } from './feature-runtime.kernel.js'
+export { And, But, Gherkin, Given, Then, When } from './DoNotation.js'
+export type { GherkinEffect, GherkinScope, ScopeIdentifiers, ScopeMap, ScopeServices, StepText } from './DoNotation.js'
+export type { PairwiseMatrix, PairwiseResult } from './extensions/Pairwise.js'
+export { pairwiseFor } from './extensions/Pairwise.js'
 export {
   type EffectVitestBindings,
   type FeatureBody,
@@ -23,7 +14,9 @@ export {
   type FeatureLayerOptions,
   type FeatureSuiteOptions,
   makeFeature,
-} from './feature.kernel.js'
-export { expandOutline, renderTitle, stringifyForTitle, tokenizeTemplate } from './outline-expand.kernel.js'
-export type { OutlineRow, TemplateToken } from './outline-expand.kernel.js'
-export { StepError } from './step-error.schema.js'
+} from './Feature.js'
+export { resolveScenarioArgs } from './FeatureRuntime.js'
+export type { OutlineFn, ScenarioBody, ScenarioFn, ScenarioOptions } from './FeatureRuntime.js'
+export { expandOutline, renderTitle, stringifyForTitle, tokenizeTemplate } from './OutlineExpand.js'
+export type { OutlineRow, TemplateToken } from './OutlineExpand.js'
+export { StepError } from './StepError.schema.js'

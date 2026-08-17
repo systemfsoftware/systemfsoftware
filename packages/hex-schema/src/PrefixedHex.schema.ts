@@ -1,7 +1,7 @@
 /// <reference types="vitest/import-meta" />
 import { type Brand, Schema as S, SchemaTransformation } from 'effect'
-import { addHexPrefix, stripHexPrefix } from './prefixed-hex.kernel.js'
-import { StrictHex } from './strict-hex.schema.js'
+import { addHexPrefix, stripHexPrefix } from './PrefixedHex.js'
+import { StrictHex } from './StrictHex.schema.js'
 
 export const PrefixedHex = S.TemplateLiteral(['0x', S.String]).pipe(
   S.decodeTo(

@@ -3,7 +3,7 @@ import { Exit, Schema as S } from 'effect'
 import * as AST from 'effect/SchemaAST'
 import { FastCheck } from 'effect/testing'
 import { expect } from 'vitest'
-import { dischargedBy, type Obligation, obligationsOf, scanObligations } from './refutation.kernel.js'
+import { dischargedBy, type Obligation, obligationsOf, scanObligations } from './Refutation.js'
 
 /** Named refusal generators: each draws rejection-class inputs the schema must reject. */
 export type RefusalGenerators = Record<string, FastCheck.Arbitrary<unknown>>
@@ -126,7 +126,7 @@ if (import.meta.vitest !== void 0) {
   // purpose — an arbitrary built by one `effect/testing` instance and sampled by another
   // yields values the schema rejects, which silently inverts every adequacy verdict.
   const { it } = await import('@effect/vitest')
-  const { ruleOfSchemas } = await import('./rule-of-schemas.kernel.js')
+  const { ruleOfSchemas } = await import('./RuleOfSchemas.js')
   const fc = FastCheck
 
   const properSubset = fc.subarray([...ALPHABET], { minLength: 1, maxLength: ALPHABET.length - 1 })

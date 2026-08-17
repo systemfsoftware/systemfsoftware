@@ -3,7 +3,7 @@ import { Cell } from '@systemfsoftware/effect-cell-types'
 import * as Effect from 'effect/Effect'
 import * as Result from 'effect/Result'
 import { FastCheck as fc } from 'effect/testing'
-import { drawnDecision, DrawnDecisionError } from './drawn-decision.workflow.js'
+import { drawnDecision, DrawnDecisionError } from './DrawnDecision.workflow.js'
 
 /**
  * The phase bag the generated descriptions instantiate. `command` passes through the pure

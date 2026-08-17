@@ -1,6 +1,6 @@
 /// <reference types="vitest/import-meta" />
 import { type Brand, Schema as S, SchemaTransformation } from 'effect'
-import { StrictHex } from './strict-hex.schema.js'
+import { StrictHex } from './StrictHex.schema.js'
 
 const toStrictHex = (hex: string): string => (hex.startsWith('0x') ? hex.slice(2) : hex).toLowerCase()
 

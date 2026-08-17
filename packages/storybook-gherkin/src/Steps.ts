@@ -2,8 +2,8 @@ import { Array as Arr, Effect, Match, Schema } from 'effect'
 import type { screen, UserEventObject, within } from 'storybook/test'
 import type { Simplify, UnionToIntersection } from 'type-fest'
 
-import type { Capture } from './capture.observer.js'
-import { CaptureDecodeFailed, DuplicateCapture } from './errors.schema.js'
+import type { Capture } from './Capture.js'
+import { CaptureDecodeFailed, DuplicateCapture } from './Errors.schema.js'
 
 export type Keyword = 'Given' | 'When' | 'Then' | 'And' | 'But' | 'Star'
 

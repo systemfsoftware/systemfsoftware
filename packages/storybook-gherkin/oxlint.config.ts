@@ -28,7 +28,7 @@ export default defineConfig({
 
   overrides: [
     {
-      // `Canvas` (declared in src/steps.observer.ts) is inferred from the upstream
+      // `Canvas` (declared in src/Steps.ts) is inferred from the upstream
       // `within()` helper, which the checker resolves to `any` for that generic
       // signature, so `PlayContext.canvas` is `any` and the one read of it here is
       // an unsafe assignment. Naming `Canvas` concretely means putting
@@ -36,7 +36,7 @@ export default defineConfig({
       // because the emitted `.d.ts` would reference its types (TS2883). That is a
       // dependency decision, not a lint one - tracked separately. One site, so
       // scoped to one file rather than the whole package.
-      files: ['src/feature.observer.ts'],
+      files: ['src/Feature.ts'],
       rules: {
         'typescript/no-unsafe-assignment': 'off',
       },

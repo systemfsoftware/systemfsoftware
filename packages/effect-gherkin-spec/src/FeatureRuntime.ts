@@ -3,9 +3,9 @@ import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import * as Result from 'effect/Result'
 import type * as Scope from 'effect/Scope'
-import type { GherkinEffect, ScopeIdentifiers, ScopeMap, ScopeServices } from './do-notation.kernel.js'
-import { expandOutline } from './outline-expand.kernel.js'
-import { StepError } from './step-error.schema.js'
+import type { GherkinEffect, ScopeIdentifiers, ScopeMap, ScopeServices } from './DoNotation.js'
+import { expandOutline } from './OutlineExpand.js'
+import { StepError } from './StepError.schema.js'
 
 export type ScenarioOptions<RScenario = never, RExtra = never> = {
   readonly scenarioLayer?: Layer.Layer<RScenario>
@@ -447,7 +447,7 @@ if (import.meta.vitest !== void 0) {
     it.effect('Should_ApplyLayer_When_OptsHasLayer', () =>
       EffectModule.gen(function*() {
         class BuildSvc3 extends Context.Service<BuildSvc3, string>()(
-          '@systemfsoftware/effect-gherkin-spec/feature-runtime.kernel/BuildSvc3',
+          '@systemfsoftware/effect-gherkin-spec/FeatureRuntime/BuildSvc3',
         ) {}
         const layer = LayerModule.effect(BuildSvc3, EffectModule.succeed('ok'))
         const pipeline = EffectModule.void
@@ -460,7 +460,7 @@ if (import.meta.vitest !== void 0) {
       EffectModule.gen(function*() {
         let counter = 0
         class BuildSvc4 extends Context.Service<BuildSvc4, number>()(
-          '@systemfsoftware/effect-gherkin-spec/feature-runtime.kernel/BuildSvc4',
+          '@systemfsoftware/effect-gherkin-spec/FeatureRuntime/BuildSvc4',
         ) {}
         const freshLayer = LayerModule.effect(BuildSvc4, EffectModule.sync(() => ++counter))
         const pipeline = EffectModule.void
@@ -473,7 +473,7 @@ if (import.meta.vitest !== void 0) {
       EffectModule.gen(function*() {
         let counter = 0
         class BuildSvc5 extends Context.Service<BuildSvc5, number>()(
-          '@systemfsoftware/effect-gherkin-spec/feature-runtime.kernel/BuildSvc5',
+          '@systemfsoftware/effect-gherkin-spec/FeatureRuntime/BuildSvc5',
         ) {}
         const freshLayer = LayerModule.effect(BuildSvc5, EffectModule.sync(() => ++counter))
         const background = EffectModule.void

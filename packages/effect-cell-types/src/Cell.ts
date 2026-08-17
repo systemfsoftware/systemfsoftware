@@ -3,7 +3,7 @@ import * as Effect from 'effect/Effect'
 import { dual } from 'effect/Function'
 import * as Option from 'effect/Option'
 import * as Result from 'effect/Result'
-import { canonicalDecide } from './canonical-decide.workflow.js'
+import { canonicalDecide } from './CanonicalDecide.workflow.js'
 import { type WorkflowBrand } from './Workflow.js'
 /**
  * The type bag. Every phase's input and output type travels in one record so that a

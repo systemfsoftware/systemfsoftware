@@ -4,7 +4,7 @@ import type { Vitest } from '@effect/vitest'
 import * as Layer from 'effect/Layer'
 import type * as Scope from 'effect/Scope'
 import type { TestOptions } from 'vitest'
-import { Gherkin, type ScopeMap } from './do-notation.kernel.js'
+import { Gherkin, type ScopeMap } from './DoNotation.js'
 import {
   createOutlineFnNoFresh,
   createOutlineFnWithFresh,
@@ -13,7 +13,7 @@ import {
   type FeatureBody,
   type RegisterMode,
   type ScenarioBody,
-} from './feature-runtime.kernel.js'
+} from './FeatureRuntime.js'
 
 export {
   type FeatureBody,
@@ -21,12 +21,12 @@ export {
   type ScenarioBody,
   type ScenarioFn,
   type ScenarioOptions,
-} from './feature-runtime.kernel.js'
+} from './FeatureRuntime.js'
 
 type DescribeMode = 'describe' | 'skip' | 'only'
 type EmptyScopeMap = Readonly<Record<string, never>>
 
-export { type RegisterMode } from './feature-runtime.kernel.js'
+export { type RegisterMode } from './FeatureRuntime.js'
 
 export type FeatureLayerOptions = {
   readonly excludeTestServices?: boolean

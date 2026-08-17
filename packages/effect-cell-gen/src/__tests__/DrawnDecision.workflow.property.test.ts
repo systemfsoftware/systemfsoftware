@@ -1,7 +1,7 @@
 import { describe, it } from '@effect/vitest'
 import * as Result from 'effect/Result'
 import { FastCheck as fc } from 'effect/testing'
-import { drawnDecision } from '../drawn-decision.workflow.js'
+import { drawnDecision } from '../DrawnDecision.workflow.js'
 
 describe('drawnDecision', () => {
   it.prop('∀i_DrawnDecision_≡TraceAndRoute', [fc.boolean(), fc.integer()], ([injected, error]) => {

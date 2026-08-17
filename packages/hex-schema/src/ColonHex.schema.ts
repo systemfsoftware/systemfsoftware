@@ -1,6 +1,6 @@
 /// <reference types="vitest/import-meta" />
 import { type Brand, Schema as S, SchemaTransformation } from 'effect'
-import { HexString } from './hex-string.schema.js'
+import { HexString } from './HexString.schema.js'
 
 const hexToColon = (hex: string): string => (hex.match(/.{1,2}/g) ?? []).map((byte) => byte.toUpperCase()).join(':')
 

@@ -11,9 +11,9 @@ import {
   OutlineInconsistentKeys,
   OutlineMissingCapture,
   UnresolvedCapture,
-} from './errors.schema.js'
-import type { ExampleRow, PlayContext, Step, StepContext, StepModel } from './steps.observer.js'
-import { displayPattern, isStep, renderStepText, resolveKeywords } from './steps.observer.js'
+} from './Errors.schema.js'
+import type { ExampleRow, PlayContext, Step, StepContext, StepModel } from './Steps.js'
+import { displayPattern, isStep, renderStepText, resolveKeywords } from './Steps.js'
 
 export interface StorySpec<TArgs = unknown> {
   readonly name: string

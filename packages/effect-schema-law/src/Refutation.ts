@@ -1,7 +1,7 @@
 import { Exit, Option, Result, Schema as S } from 'effect'
 import * as AST from 'effect/SchemaAST'
 import { FastCheck } from 'effect/testing'
-import { type Arm, armsOf } from './weaken.kernel.js'
+import { type Arm, armsOf } from './Weaken.js'
 
 /**
  * One node-keyed refutation obligation: a witness exists that the

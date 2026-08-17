@@ -10,7 +10,7 @@ import { it, layer, makeFeature } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Result } from 'effect'
 import { expect } from 'vitest'
 import { And, But, Gherkin, Given, StepError, Then, When } from '../src/mod.js'
-import { TestDomainError } from './__fixtures__/test-domain-error.schema.js'
+import { TestDomainError } from './__fixtures__/TestDomainError.schema.js'
 
 const Feature = makeFeature({ it, layer })
 

@@ -1,9 +1,9 @@
 import type { Context } from 'effect'
 import { Effect, Layer } from 'effect'
 
-import type { GherkinEffect, StepText } from '../do-notation.kernel.js'
-import { resolveText, stepWrap } from '../do-notation.kernel.js'
-import type { StepError } from '../step-error.schema.js'
+import type { GherkinEffect, StepText } from '../DoNotation.js'
+import { resolveText, stepWrap } from '../DoNotation.js'
+import type { StepError } from '../StepError.schema.js'
 
 type NoInfer<A> = [A][A extends unknown ? 0 : never]
 

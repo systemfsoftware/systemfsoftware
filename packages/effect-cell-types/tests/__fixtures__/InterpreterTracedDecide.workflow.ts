@@ -1,6 +1,6 @@
 import { Workflow } from '@systemfsoftware/effect-cell-types'
 import * as Result from 'effect/Result'
-import type { Admitted, Refused } from './interpreter-decide.workflow.js'
+import type { Admitted, Refused } from './InterpreterDecide.workflow.js'
 
 export const tracedDecide = (trace: string[]) =>
   Workflow.make((): Result.Result<Admitted, Refused> => {

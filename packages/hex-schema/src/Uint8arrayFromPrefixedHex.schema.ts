@@ -1,7 +1,7 @@
 /// <reference types="vitest/import-meta" />
 import { Schema as S } from 'effect'
-import { HexBytes } from './hex-bytes.schema.js'
-import { PrefixedHex } from './prefixed-hex.schema.js'
+import { HexBytes } from './HexBytes.schema.js'
+import { PrefixedHex } from './PrefixedHex.schema.js'
 
 export const Uint8ArrayFromPrefixedHex = S.decodeTo(HexBytes)(PrefixedHex).pipe(
   S.annotate({

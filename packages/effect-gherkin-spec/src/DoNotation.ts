@@ -1,5 +1,5 @@
 import { Cause, Effect } from 'effect'
-import { StepError } from './step-error.schema.js'
+import { StepError } from './StepError.schema.js'
 
 type NoInfer<A> = [A][A extends unknown ? 0 : never]
 

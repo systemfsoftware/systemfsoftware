@@ -22,12 +22,12 @@ if (import.meta.vitest !== void 0) {
   // the published module graph. A static import would ship it.
   const { scanObligations } = await import('@systemfsoftware/effect-schema-law')
   const { expect, it } = await import('vitest')
-  const { ColonHex } = await import('./colon-hex.schema.js')
-  const { HexBytes } = await import('./hex-bytes.schema.js')
-  const { HexString } = await import('./hex-string.schema.js')
-  const { PrefixedHex } = await import('./prefixed-hex.schema.js')
-  const { StrictHex } = await import('./strict-hex.schema.js')
-  const { Uint8ArrayFromPrefixedHex } = await import('./uint8array-from-prefixed-hex.schema.js')
+  const { ColonHex } = await import('./ColonHex.schema.js')
+  const { HexBytes } = await import('./HexBytes.schema.js')
+  const { HexString } = await import('./HexString.schema.js')
+  const { PrefixedHex } = await import('./PrefixedHex.schema.js')
+  const { StrictHex } = await import('./StrictHex.schema.js')
+  const { Uint8ArrayFromPrefixedHex } = await import('./Uint8arrayFromPrefixedHex.schema.js')
 
   const EXPORTED_SCHEMAS = {
     ColonHex,

@@ -11,8 +11,8 @@ import {
   decide as decideFixture,
   type Decoded,
   type Refused,
-} from './__fixtures__/interpreter-decide.workflow.js'
-import { tracedDecide as tracedDecideFixture } from './__fixtures__/interpreter-traced-decide.workflow.js'
+} from './__fixtures__/InterpreterDecide.workflow.js'
+import { tracedDecide as tracedDecideFixture } from './__fixtures__/InterpreterTracedDecide.workflow.js'
 
 const Feature = makeFeature({ it, layer })
 
