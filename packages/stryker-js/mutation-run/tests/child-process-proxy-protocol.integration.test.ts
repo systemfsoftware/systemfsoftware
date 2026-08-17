@@ -83,19 +83,24 @@ const FIXTURE_MODULE_URL = new URL(
  * The Calls this gate dispatches once the subject is initialized. `add` and
  * `describe` are receiver-dependent (constructor state / a second method on
  * `this`), so a dropped receiver cannot produce the expected answers; `stamp`
- * is a plain data member, exercising `doCall`'s raw pass-through branch; and
+ * is a plain data member, exercising `doCall`'s raw pass-through branch;
  * `touch` returns nothing, which is the reply shape whose result member cannot
- * exist on the wire at all.
+ * exist on the wire at all; and `merge` carries an argument shaped like the real
+ * payloads - a plain object with an `undefined` optional member. That last one is
+ * the case this gate did not have, and its absence is why a protocol declaring
+ * the slot as a JSON *value* passed here and then crashed every real dry run:
+ * `JSON.stringify` drops such a member, a JSON-value schema rejects it.
  */
 const CALLS: ReadonlyArray<{
   readonly correlationId: number
   readonly methodName: string
-  readonly args: Json[]
+  readonly args: unknown[]
 }> = [
   { correlationId: 0, methodName: 'add', args: [2] },
   { correlationId: 1, methodName: 'describe', args: [] },
   { correlationId: 2, methodName: 'stamp', args: [] },
   { correlationId: 3, methodName: 'touch', args: [] },
+  { correlationId: 4, methodName: 'merge', args: [{ mutate: 'src', ignore: undefined }] },
 ]
 
 const collectMjsFiles = async (dir: string): Promise<readonly string[]> => {
@@ -533,6 +538,11 @@ Feature('The child-process proxy protocol')
             // could not tell absence from a present `undefined`, which is the
             // round-trip law's own counterexample.
             { correlationId: 3, methodName: 'touch', result: null },
+            // A real payload shape: the `undefined` member is gone by the time the
+            // child sees the object, because that is what `JSON.stringify` does with
+            // it. The protocol has to accept the value the sender holds and carry
+            // what the wire can - not reject the sender for holding it.
+            { correlationId: 4, methodName: 'merge', result: { keys: ['mutate'], base: 40 } },
           ])
         }),
       ),

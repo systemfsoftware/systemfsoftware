@@ -49,4 +49,15 @@ export class ProtocolRoundTripSubject {
   touch() {
     this.touched = true
   }
+
+  /**
+   * Takes an argument shaped like the real ones: a plain object carrying an
+   * `undefined` optional member, exactly what stryker's own payloads look like.
+   * `JSON.stringify` DROPS such a member; a schema declaring the slot as a JSON
+   * *value* rejects it outright, and rejecting it crashed every dry run. Reading
+   * `this.base` keeps the answer receiver-dependent like every member above.
+   */
+  merge(options) {
+    return { keys: Object.keys(options).sort(), base: this.base }
+  }
 }

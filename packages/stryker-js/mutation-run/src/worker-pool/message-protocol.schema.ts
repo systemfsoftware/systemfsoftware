@@ -64,11 +64,14 @@ const InitMessageSchema = S.Struct({
 const CallMessageSchema = S.Struct({
   correlationId: S.Finite,
   kind: S.Literal(WorkerMessageKind.Call),
-  // Call arguments cross `JSON.stringify`, so JSON is exactly what they can be.
-  // `S.Unknown` would claim to model any value while modelling none: measured
-  // over 300 generated cases it fails the round-trip law 207 times here,
-  // because its generator produces values the wire cannot carry.
-  args: S.mutable(S.Array(S.Json)),
+  // The protocol owns `correlationId`, `kind` and `methodName`; the arguments are
+  // the subject's own data and it must not narrow them. `S.Json` models JSON
+  // *values*, which is a different set from what `JSON.stringify` *accepts*: a
+  // real payload carries `undefined` optional members, class instances and dates,
+  // which stringify drops or converts and `S.Json` rejects outright. Declaring
+  // that here crashed every dry run with an encode failure. `S.Any` accepts what
+  // the sender has and emits exactly what the wire carries.
+  args: S.mutable(S.Array(S.Any)),
   methodName: S.String,
 })
 
@@ -99,11 +102,12 @@ const ReadyMessageSchema = S.Struct({
 const WorkResultSchema = S.Struct({
   correlationId: S.Finite,
   kind: S.Literal(ParentMessageKind.CallResult),
-  // A void method - `init`, `dispose` - completes with no value, and `null` is
-  // how JSON says that. An optional key cannot say it: the encoder omits the
-  // member and the decoder cannot tell absence from a present `undefined`, so
-  // the round-trip law fails on `{}` (measured: 138 of 300 generated cases).
-  result: S.Json,
+  // Opaque for the same reason as `args`: the returned value belongs to the
+  // subject, not the protocol. The key is always present because a void method -
+  // `init`, `dispose` - sends `null`, which is how JSON says "no value"; an
+  // omitted key would be indistinguishable from a present `undefined`, and
+  // `JSON.stringify` omits rather than nulls it, so the sender nulls it instead.
+  result: S.Any,
 })
 
 const RejectionResultSchema = S.Struct({

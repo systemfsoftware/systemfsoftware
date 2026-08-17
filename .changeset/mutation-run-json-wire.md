@@ -2,10 +2,9 @@
 '@systemfsoftware/stryker-js-mutation-run': patch
 ---
 
-The worker protocol now describes its payloads as JSON values rather than as
-unknown ones, so the sending side and the receiving side agree about what can
-cross between the runner and its child processes. A method that returns nothing
-reports that as `null`, and a value that cannot be serialised is now rejected
-where it was produced, naming the value, instead of arriving on the other side as
-something quietly different. A reply a process cannot read is reported as a
-failure of that child rather than raised as an unhandled error.
+Mutation runs no longer fail during the initial test run when a call argument
+carries an optional member set to `undefined`, a class instance, or a date. The
+worker protocol now carries the value a caller passes and sends across the wire
+whatever the wire can represent, rather than refusing the call. A method that
+returns nothing still reports no value, and a reply a process cannot read is still
+reported as a failure of that child rather than raised as an unhandled error.
