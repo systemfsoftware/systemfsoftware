@@ -1,8 +1,8 @@
 # AGENTS.md — `omp/plugins/`
 
 > **Location:** `omp/plugins/` — packages the OMP host loads as extensions.
-> Root `AGENTS.md` is supreme; `omp/AGENTS.md` carries the cell taxonomy, commands, and
-> ACL/workflow gates. This file carries only what the **host's load model** makes true here,
+> Root `AGENTS.md` is supreme; `omp/AGENTS.md` carries the sandwich/workflow boundary, commands, and
+> ACL gates. This file carries only what the **host's load model** makes true here,
 > which nothing in this repo's source can show you.
 
 ## The load model (why every rule below exists)
@@ -35,7 +35,7 @@ The cache-bust is what hides it. Each session really does get its own handler cl
   do: let a process-cached `ManagedRuntime` be disposed only by a process-level signal, or give it a refcount if a session must be able to release it
   dont: call `runtime.dispose()` from `session_shutdown`, `session_stop`, or any other per-session handler
   harm: "`dispose()` is terminal and the runtime is shared, so one subagent finishing poisons every live session — the main session's next keystroke throws `ManagedRuntime disposed`. This shipped."
-  check: "`grep -rn 'dispose' omp/plugins/*/src/*.handler.ts omp/plugins/*/src/index.ts` — review that no hit sits inside a per-session `pi.on(...)` callback"
+  check: "`grep -rn 'dispose' omp/plugins/*/src` — review that no hit sits inside a per-session `pi.on(...)` callback (transport modules are named by concept, not by a handler suffix, so the check scans all source)"
 
 - id: PLG3
   title: Registration must complete before the factory's promise settles — order is load-bearing

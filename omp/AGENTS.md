@@ -7,39 +7,35 @@
 
 ## Critical
 
-- Touching `omp/plugins/<pkg>/src/<name>.workflow.ts` (or `omp/packages/<pkg>/src/` for shared libraries) or designing a new decision cell: the workflow cells in this workspace follow the DMMF (Decision-Module-Mechanism-Feature) composition pattern, not a bespoke architecture. Choose the cell suffix with the decision tree below; wrong suffix is a category error.
+- Designing a decision or any load-bearing step of a machine-readable association: the decisions in this workspace follow DMMF (Decision-Module-Mechanism-Feature): a pure decision — a typed command mapped to `Result<Decision, Error>` — is built with `Workflow.make` from `@systemfsoftware/effect-cell-types`, and the shell (the file that performs I/O) wraps it in the impure/pure/impure sandwich. There is no cell-suffix taxonomy and no sanctioned name list: a file's name grants nothing, and every gate binds on the `Workflow.make` boundary or on an import edge — never on a filename. A module renamed or restructured keeps its gates.
 
 - Authoring/modifying a plugin manifest, `pi.on` handler, link flow, or release pipeline → **load `skill://omp-plugin-development`** first.
 
-## Cell Architecture (DMMF in this workspace)
+## Sandwich + Workflow (DMMF in this workspace)
 
-`plugins/omp-claude-compat/src/` is the canonical example. The pattern:
+`plugins/omp-claude-compat/src/` is the canonical example. The pattern — a name-independent skeleton:
 
-| Suffix          | Role                                                      | Purity | Example in this workspace                                        |
-| --------------- | --------------------------------------------------------- | ------ | ---------------------------------------------------------------- |
-| `*.workflow.ts` | Pure decision: typed command → `Either<Decision, Error>`  | Pure   | `hook-verdict.workflow.ts`                                       |
-| `*.executor.ts` | I/O shell — reads inputs, calls workflow, writes outputs  | Impure | `hook-dispatcher.executor.ts`, `inject-instructions.executor.ts` |
-| `*.acl.ts`      | Foreign-shape → domain decode (never cast)                | Pure   | `hook-output.acl.ts`, `hook-settings.acl.ts`, `tool-name.acl.ts` |
-| `*.handler.ts`  | Transport terminus — registers `pi.on(...)` handlers      | Impure | `hook-dispatcher.handler.ts`, `inject-instructions.handler.ts`   |
-| `*.schema.ts`   | Shared tagged unions or branded primitives (≥2 consumers) | Pure   | `hook-dispatcher.schema.ts`                                      |
-| `index.ts`      | Package barrel — extension manifest wiring                | Impure | `plugins/omp-claude-compat/src/index.ts`                         |
+| Role            | Responsibility                                                                                              | Purity |
+| --------------- | ----------------------------------------------------------------------------------------------------------- | ------ |
+| the shell       | sequences the sandwich: reads inputs, classifies, runs the workflow, writes outputs; registers `pi.on(...)` | Impure |
+| `Workflow.make` | the decision: typed command → `Result<Decision, Error>` by exhaustive dispatch over a closed classification | Pure   |
+| decode          | foreign-shape → branded domain type via a `Schema` codec (see ACL Gates below)                              | Pure   |
+| shape           | the output/event built from the decision                                                                    | Pure   |
 
-**Decision tree for a new module under `omp/plugins/*/src/` (or `omp/packages/*/src/` for shared libs):**
+- The decisions, not the files, are the unit. A decision is a `Workflow.make` value; a decision that cannot fail (a total classification) stays a plain function — inventing an error to reach workflow status is forbidden.
+- The `Left` of a decision is an outcome worth an error channel, so the channel carries a tag; the `Left`-of-decision travels onward only where the shell folds it into a value (see `run-user-prompt-submit-hooks.executor.ts` for the fold pattern).
+- A later read that depends on an earlier decision is pre-fetched, split into a second sandwich, or left visibly in the shell — never placed inside the filling.
+- The shell may branch on event/field structure, never on domain state; the domain state mapping happens in the decision body.
+- Pure and impure modules may sit in the same folder. No `core`, `shell`, `pure`, or `io` path segment is introduced.
 
-1. Does it make a domain decision with ≥2 outcome variants across `Decision ∪ Error`? → `*.workflow.ts`.
-2. Does it do subprocess execution, file reads, or other impure I/O? → `*.executor.ts` (the workflow is the filling).
-3. Does it decode JSON from an external shape into a domain type? → `*.acl.ts`.
-4. Does it register a `pi.on(...)` handler? → `*.handler.ts`.
-5. None of the above? → re-read the Cell Architecture table above. Wrong suffix is a category error.
+**Naming** (free): a module is named by the concept it exports (`Target.ts`, `LeafContext.ts`, `LeafContextExtension.ts` like the sibling `leaf-context` plugin), never by a role the file happens to hold. Nothing below this line reads a filename.
 
-## Workflow Gates (S.TaggedError rule)
+## Decision channel (TaggedError) rule
 
-Errors in this workspace MUST extend `S.TaggedError`, not `S.TaggedClass`. A `TaggedClass` is data; a `TaggedError` is an error. The convention exists because errors flow through Effect's `catchTag` / `catchTags` machinery and need the discriminator plus the metadata that `TaggedError` provides. Reference usage: `packages/effect-daemon-spec/src/leader-lock.schema.ts`.
-
-**Pattern in this workspace** — `plugins/omp-claude-compat/src/hook-verdict.workflow.ts` after the 2026-07-20 fix:
+Errors in workspace channels MUST extend `S.TaggedError`, not `S.TaggedClass`. A `TaggedClass` is data; a `TaggedError` is an error. The distinction matters because decisions flow through `Match`/`Result` machinery that dispatches on `_tag`, and the compiler is the only place a mistaken channel can be caught: `Workflow.make` inside `@systemfsoftware/effect-cell-types` refuses an untagged `Error` channel.
 
 ```ts
-// RIGHT
+// RIGHT — the error channel of a decision is a TaggedError
 export class HookVerdictError extends S.TaggedError<HookVerdictError>()('HookVerdictError', {
   raw: S.String,
 }) {}
@@ -50,53 +46,42 @@ export class MalformedJson extends S.TaggedClass<MalformedJson>()('MalformedJson
 }) {}
 ```
 
-**Decision variants** (`Block`, `Allow`, `Warning`, `Blocked`, `Continue` in this workspace) are data and stay `S.TaggedClass`. The rule applies to the **error channel only**. Audit: `grep -n 'extends S.TaggedClass' omp/plugins/*/src/*.workflow.ts` — every match must be a decision/command class. Compare the grep output against the workflow's error type: any `TaggedClass` declared with an `_tag` whose name appears in the `Either<..., Error>` channel is a violation.
+**Decision variants** (e.g. `Block`, `Allow`, `Warning` in this workspace) are data and stay `S.TaggedClass`. Audit (boundary-keyed, not file-keyed): for every `Workflow.make` site under `omp/`, the decision's error channel type is a `TaggedError`; the union of `TaggedError`/`TaggedClass` classes named by a `Result` signature is exactly the decision channel.
 
 ## ACL Gates (Schema.transformOrFail rule)
 
-An `*.acl.ts` decodes foreign bytes (JSON, TOML, a wire DTO) into a branded domain type. Constitution II.5 — "Decode, never cast" — is enforceable here by making the transform a typed Schema, not a hand-written function. The mechanical rule:
+An ACL decodes foreign bytes (JSON, TOML, a wire DTO) into a branded domain type — wherever the decode lives. Constitution II.5 — "Decode, never cast" — is enforced by making the transform a typed `Schema`, not a hand-written function:
 
 ```yaml
 - id: ACL1
   title: ACLs are Schema.transformOrFail with strict:true; no as casts
   do: "declare an ACL as `Schema.transformOrFail(<ForeignSchema>, <DomainSchema>, { strict: true, decode: ..., encode: ... })` where the inactive direction returns `ParseResult.Forbidden`; brand through `ParseResult.decode(DomainSchema)`"
-  dont: "write a plain function `{ return Effect.try({ try: () => parse(raw), catch: ... }).pipe(Effect.flatMap(Schema.decode(TomlConfig))) }` — the parse step is a foreign-side cast outside Schema's contract"
+  dont: "write a DTO→domain mapping as a plain function run directly on `JSON.parse` output — the parse step is a foreign-side cast outside Schema's contract"
   harm: hand-written decode chains bypass Schema's strict identity, drift from the foreign shape on package upgrades, and re-introduce the cast pattern the type system is meant to forbid
-  check: "every ACL file declares `Schema.transformOrFail` with `strict: true`; grep `grep -rL 'export.*transformOrFail' omp/packages/*/src/*.acl.ts omp/plugins/*/src/*.acl.ts` returns zero"
+  check: "search every `omp/` module that decodes a foreign shape: it declares `Schema.transformOrFail` (or a `decodeTo` ACL built on it with a forbidden encode direction); `grep -rn 'as ' omp/plugins/*/src omp/packages/*/src` — zero casts beyond literal assertions"
 ```
 
-**RIGHT — the canonical ACL shape** (this pattern was missing in the existing `.acl.ts` files; the new `toml-loader.acl.ts` resets the convention to canonical):
+**RIGHT — the canonical ACL shape** (the new `leaf` plugin's `Target.ts` resets the convention):
 
 ```ts
-export const TomlConfigFromText = Schema.transformOrFail(
-  Schema.String,
-  Schema.typeSchema(TomlConfig),
-  {
-    strict: true,
-    decode: (raw) =>
-      ParseResult.try({
-        try: () => parse(raw),
-        catch: (e) => new ParseResult.Unexpected(`TOML parse error: ${e instanceof Error ? e.message : String(e)}`),
-      }).pipe(ParseResult.flatMap(ParseResult.decode(TomlConfig))),
-    encode: (_, _d, ast) => ParseResult.fail(new ParseResult.Forbidden(ast, _, 'TomlConfigFromText is decode-only')),
-  },
+export const ToolCallTargetFromInput: S.Codec<TargetPath, Readonly<Record<string, unknown>>> = ForeignToolInput.pipe(
+  S.decodeTo(TargetPath, {
+    decode: SchemaGetter.transformOrFail((input) => parseTarget(input)),
+    encode: SchemaGetter.forbidden(() => 'decode-only'),
+  }),
 )
 ```
 
-**WRONG — hand-written decode outside Schema's contract** (this is what the existing `tool-input.acl.ts`, `tool-name.acl.ts`, and `context-mode.acl.ts` do; flagged as a follow-up to bring into ACL1 compliance):
+**WRONG — hand-written decode outside Schema's contract** (what `tool-input.acl.ts` originally did, re-produced here for detection):
 
 ```ts
 export function normalizeToolName(name: string): string {
-  if (name.length === 0) return name
   return name.charAt(0).toUpperCase() + name.slice(1)
 }
-// → VIOLATION: lowercase→capitalized is a foreign-shape→domain mapping re-implemented in code; the correct shape is a Schema.transformOrFail from `Schema.String` to a branded `NormalizedToolName` brand.
+// → VIOLATION: lowercase→capitalized is a foreign-shape→domain mapping re-implemented
+//   in a plain function; the correct shape is a Schema.transformOrFail to a branded
+//   NormalizedToolName.
 ```
-
-**Audit:**
-
-- `grep -rn 'export.*transformOrFail' omp/packages/*/src/*.acl.ts omp/plugins/*/src/*.acl.ts` — every ACL declares the transform.
-- `grep -rn 'as ' omp/packages/*/src/*.acl.ts omp/plugins/*/src/*.acl.ts` — zero `as` casts (type annotations like `as const` are fine).
 
 ## Commands
 
@@ -115,10 +100,11 @@ node omp/scripts/smoke-plugin.mjs omp/plugins/<name>/dist/index.js
 omp plugin link omp/plugins/<name>
 ```
 
-## Failure Modes (cell-specific)
+## Failure Modes (boundary-specific)
 
-| Symptom                                                                       | Cause                                                                       | Fix                                                                          |
-| ----------------------------------------------------------------------------- | --------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| `error TS2769: No overload matches this call` on `pi.on(...)`                 | OMP installed a stricter `ExtensionHandler` overload than the source pinned | Type-narrow the handler locally; do not change pi.on signature               |
-| Workflow tests pass but `pnpm check` reports `pure-core` mutations unkillable | A workflow swallowed a typed error into `null` (unfalsifiable code path)    | Surface the error variant via `S.TaggedError`; let the executor branch on it |
-| Plugin loads but handlers never fire                                          | Factory threw before `pi.on(...)` calls                                     | Run the smoke tool with `--cwd /tmp/plugin-smoke`; check stderr              |
+| Symptom                                                                       | Cause                                                                       | Fix                                                                                                                                           |
+| ----------------------------------------------------------------------------- | --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `error TS2769: No overload matches this call` on `pi.on(...)`                 | OMP installed a stricter `ExtensionHandler` overload than the source pinned | Type-narrow the handler locally; do not change the `pi.on` signature                                                                          |
+| Decision tests pass but `pnpm check` reports `pure-core` mutations unkillable | A decision swallowed a typed error into `null` (unfalsifiable code path)    | Surface the error variant via `S.TaggedError`; let the shell branch on it                                                                     |
+| Plugin loads but handlers never fire                                          | Factory threw before `pi.on(...)` calls                                     | Run the smoke tool with `--cwd /tmp/plugin-smoke`; check stderr                                                                               |
+| A gate's grep finds nothing after a rename                                    | The rule keys on a filename                                                 | Re-key it on the boundary (make body / import edge). The invariant still holds after the rename; the check lies — fix the check, not the file |
