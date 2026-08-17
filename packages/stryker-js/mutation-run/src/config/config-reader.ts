@@ -14,7 +14,7 @@ import { injectionTokens } from '../plugins/index.js'
 import { SUPPORTED_CONFIG_FILE_NAMES } from './config-file-formats.js'
 import { importModule } from './module-loader.js'
 import { OptionsValidator } from './options-validator.js'
-import { resolveExtendsChain } from './resolve-extends.js'
+import { resolveExtends } from './resolve-extends.js'
 
 export const CONFIG_SYNTAX_HELP = `
 Example of how a config file should look:
@@ -88,10 +88,10 @@ export class ConfigReader {
     const child = path.extname(configFile).toLocaleLowerCase() === '.json'
       ? await this.readJsonConfig(configFile)
       : await this.importJSConfig(configFile)
-    if (!('extends' in (child as Record<string, unknown>))) {
+    if (!('extends' in child)) {
       return child
     }
-    return resolveExtendsChain(configFile)
+    return resolveExtends(configFile, child)
   }
 
   private async findConfigFile(

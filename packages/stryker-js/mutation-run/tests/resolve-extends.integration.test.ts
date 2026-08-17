@@ -1,20 +1,16 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import path from 'path'
 import { dirname, join, resolve } from 'path'
 
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { type PartialStrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
-import { Effect, Schema as S } from 'effect'
+import { Effect, Match, Schema as S } from 'effect'
 import { afterEach, beforeEach, expect } from 'vitest'
 
+import { decideExtendsStep, initialExtendsStepState, mergeConfigs } from '../src/config/extends-step.js'
 import { forkCoreSchema } from '../src/config/fork-schema.js'
-import {
-  mergeConfigs,
-  readConfigFile,
-  resolveExtendsChain,
-  resolveExtendsTarget,
-} from '../src/config/resolve-extends.js'
+import { readConfigFile, resolveExtends } from '../src/config/resolve-extends.js'
 import { ConfigError } from '../src/errors.js'
 import { OptionDocument } from './__fixtures__/option-document.schema.js'
 
@@ -68,7 +64,8 @@ const writeFakePackage = (
 }
 
 /** Resolves an extends chain as the SUT, keeping the declared return type loud. */
-const resolveChain = (file: string): Promise<PartialStrykerOptions> => resolveExtendsChain(file)
+const resolveChain = async (file: string): Promise<PartialStrykerOptions> =>
+  resolveExtends(file, await readConfigFile(file))
 
 /** Captures a rejection as a value so the scenario can assert on it. */
 const rejectionOf = (p: Promise<unknown>): Promise<unknown> =>
@@ -480,7 +477,7 @@ Feature('Resolving a stryker config via its extends chain')
         ),
         When('the chain is resolved')(
           'failure',
-          (s) => Effect.promise(() => rejectionOf(resolveExtendsChain(s.child))),
+          (s) => Effect.promise(() => rejectionOf(resolveChain(s.child))),
         ),
         Then('the error names the missing parent path')((s) => {
           assertConfigError(s.failure, /missing\.json/)
@@ -497,7 +494,7 @@ Feature('Resolving a stryker config via its extends chain')
         }),
         When('the chain is resolved')(
           'failure',
-          (s) => Effect.promise(() => rejectionOf(resolveExtendsChain(s.child))),
+          (s) => Effect.promise(() => rejectionOf(resolveChain(s.child))),
         ),
         Then('the error names the malformed parent file')((s) => {
           assertConfigError(s.failure, /bad\.json/)
@@ -516,8 +513,8 @@ Feature('Resolving a stryker config via its extends chain')
           })),
         When('the chain is resolved from each end')('failures', (s) =>
           Effect.promise(async () => {
-            const fromA = await rejectionOf(resolveExtendsChain(s.files.a))
-            const fromB = await rejectionOf(resolveExtendsChain(s.files.b))
+            const fromA = await rejectionOf(resolveChain(s.files.a))
+            const fromB = await rejectionOf(resolveChain(s.files.b))
             return { fromA, fromB }
           })),
         Then('both ends report the cycle')((s) => {
@@ -534,7 +531,7 @@ Feature('Resolving a stryker config via its extends chain')
           'self',
           () => Effect.succeed(writeJson('self.json', { extends: './self.json' })),
         ),
-        When('the chain is resolved')('failure', (s) => Effect.promise(() => rejectionOf(resolveExtendsChain(s.self)))),
+        When('the chain is resolved')('failure', (s) => Effect.promise(() => rejectionOf(resolveChain(s.self)))),
         Then('the self-cycle is reported')((s) => {
           assertConfigError(s.failure, /cycle/i)
         }),
@@ -633,16 +630,28 @@ Feature('Resolving a stryker config via its extends chain')
       ),
     )
 
-    // resolveExtendsTarget — path and package-specifier resolution
+    // resolveExtendsTarget — path and package-specifier routing
     scenario(
       'Should_ResolveRelativePathsAgainstTheConfigDirectory_When_ResolvingATarget',
       Gherkin.Do.pipe(
-        Given('a relative extends value and a config directory')(
-          'target',
-          () => Effect.succeed(resolveExtendsTarget('./base.json', '/somewhere/pkg')),
+        Given('a relative extends value in a config at the directory')(
+          'read',
+          () =>
+            Effect.sync(() =>
+              Match.value(
+                decideExtendsStep(
+                  initialExtendsStepState,
+                  { extends: './base.json' },
+                  path.join('/somewhere/pkg', 'stryker.config.json'),
+                ),
+              ).pipe(
+                Match.tag('read', (read) => read.path),
+                Match.orElse(() => undefined),
+              )
+            ),
         ),
         Then('the path is resolved against the config directory')((s) => {
-          expect(s.target).toBe(path.resolve('/somewhere/pkg', './base.json'))
+          expect(s.read).toBe(path.resolve('/somewhere/pkg', './base.json'))
         }),
       ),
     )
@@ -650,12 +659,24 @@ Feature('Resolving a stryker config via its extends chain')
     scenario(
       'Should_ResolveAnAbsolutePathUnchanged_When_ResolvingATarget',
       Gherkin.Do.pipe(
-        Given('an absolute extends value')(
-          'target',
-          () => Effect.succeed(resolveExtendsTarget(path.resolve('/somewhere/base.json'), '/elsewhere')),
+        Given('an absolute extends value in a config elsewhere')(
+          'read',
+          () =>
+            Effect.sync(() =>
+              Match.value(
+                decideExtendsStep(
+                  initialExtendsStepState,
+                  { extends: path.resolve('/somewhere/base.json') },
+                  path.join('/elsewhere', 'stryker.config.json'),
+                ),
+              ).pipe(
+                Match.tag('read', (read) => read.path),
+                Match.orElse(() => undefined),
+              )
+            ),
         ),
         Then('the absolute path passes through')((s) => {
-          expect(s.target).toBe(path.resolve('/somewhere/base.json'))
+          expect(s.read).toBe(path.resolve('/somewhere/base.json'))
         }),
       ),
     )
@@ -672,14 +693,15 @@ Feature('Resolving a stryker config via its extends chain')
               })
             ),
         ),
-        When('the scoped specifier is resolved')(
-          'resolved',
-          (s) => Effect.sync(() => resolveExtendsTarget('@fake/preset/base', join(tmpDir, 'pkg'))),
+        When('a chain beside it extends the scoped specifier')(
+          'config',
+          () =>
+            Effect.promise(async () =>
+              resolveChain(writeJson('pkg/stryker.config.json', { extends: '@fake/preset/base', b: 9 }))
+            ),
         ),
-        Then('the node_modules path is returned')((s) => {
-          expect(s.resolved).toBe(
-            path.join(s.pkgDir, 'base.json'),
-          )
+        Then('the node_modules base is inherited through the specifier')((s) => {
+          expect(s.config).toEqual({ a: 1, b: 9 })
         }),
       ),
     )
@@ -695,14 +717,15 @@ Feature('Resolving a stryker config via its extends chain')
               'base.json': { a: 'wrong-file' },
             })),
         ),
-        When('the subpath specifier is resolved')(
-          'resolved',
-          (s) => Effect.sync(() => resolveExtendsTarget('@fake/preset/base', join(tmpDir, 'pkg'))),
+        When('a chain beside it extends the exports-mapped subpath')(
+          'config',
+          () =>
+            Effect.promise(async () =>
+              resolveChain(writeJson('pkg/stryker.config.json', { extends: '@fake/preset/base', b: 9 }))
+            ),
         ),
         Then('the exports-map target wins over the literal subpath')((s) => {
-          expect(s.resolved).toBe(
-            path.join(s.pkgDir, 'dist', 'generated.json'),
-          )
+          expect(s.config).toEqual({ a: 1, b: 9 })
         }),
       ),
     )
@@ -717,13 +740,16 @@ Feature('Resolving a stryker config via its extends chain')
               'near.json': { which: 'near' },
             })),
         ),
-        When('The specifier is resolved from the config directory')(
-          'resolved',
-          (s) => Effect.sync(() => resolveExtendsTarget('@fake/preset/base', join(tmpDir, 'near'))),
+        When('a chain there extends the specifier')(
+          'config',
+          () =>
+            Effect.promise(async () =>
+              resolveChain(writeJson('near/stryker.config.json', { extends: '@fake/preset/base', marker: 1 }))
+            ),
         ),
         Then('the config-directory installation is used, not the cwd one')((s) => {
-          expect(s.resolved.startsWith(path.join(tmpDir, 'near'))).toBe(true)
-          expect(s.resolved.startsWith(process.cwd())).toBe(false)
+          expect(s.config['which']).toBe('near')
+          expect(s.config['marker']).toBe(1)
         }),
       ),
     )
@@ -731,19 +757,11 @@ Feature('Resolving a stryker config via its extends chain')
     scenario(
       'Should_ThrowAConfigErrorNamingTheSpecifier_When_ItCannotBeResolved',
       Gherkin.Do.pipe(
-        Given('an uninstalled package specifier')(
-          'target',
-          () => Effect.succeed({ specifier: '@nope/not-installed', dir: tmpDir }),
+        Given('a config extending an uninstalled package specifier')(
+          'child',
+          () => Effect.sync(() => writeJson('child.json', { extends: '@nope/not-installed' })),
         ),
-        When('the specifier is resolved')('failure', (s) =>
-          Effect.sync(() => {
-            try {
-              resolveExtendsTarget(s.target.specifier, s.target.dir)
-              return undefined
-            } catch (err) {
-              return err
-            }
-          })),
+        When('the chain is resolved')('failure', (s) => Effect.promise(() => rejectionOf(resolveChain(s.child)))),
         Then('a ConfigError naming the specifier is thrown')((s) => {
           assertConfigError(s.failure, /@nope\/not-installed/)
         }),
@@ -813,7 +831,7 @@ Feature('Resolving a stryker config via its extends chain')
             )
             return child
           })),
-        When('the chain resolves')('failure', (s) => Effect.promise(() => rejectionOf(resolveExtendsChain(s.pkgDir)))),
+        When('the chain resolves')('failure', (s) => Effect.promise(() => rejectionOf(resolveChain(s.pkgDir)))),
         Then('the cycle through the package is reported')((s) => {
           assertConfigError(s.failure, /cycle/i)
         }),
@@ -824,15 +842,19 @@ Feature('Resolving a stryker config via its extends chain')
     scenario(
       'Should_ResolveTheShippedBasePreset_When_UsingTheSpecifierPackageConfigsUse',
       Gherkin.Do.pipe(
-        Given('the shipped base-preset specifier')('resolved', () =>
-          Effect.sync(() =>
-            resolveExtendsTarget(
-              '@systemfsoftware/stryker-js-mutation-run/config/base',
-              path.resolve(import.meta.dirname, '..'),
-            )
-          )),
-        Then('the preset file exists on disk')((s) => {
-          expect(existsSync(s.resolved)).toBe(true)
+        Given('a child config extending the shipped base-preset specifier')(
+          'child',
+          () =>
+            Effect.sync(() =>
+              writeJson('stryker.config.json', {
+                extends: '@systemfsoftware/stryker-js-mutation-run/config/base',
+                mutate: ['src/only-this.ts'],
+              })
+            ),
+        ),
+        When('the chain resolves the specifier')('config', (s) => Effect.promise(() => resolveChain(s.child))),
+        Then('the preset shipped with the package is inherited')((s) => {
+          expect(s.config['testRunner']).toBe('vitest')
         }),
       ),
     )
