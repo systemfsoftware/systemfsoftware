@@ -16,6 +16,8 @@ const _default: {
         'ban-data-taggederror': Rule;
         'no-manual-tag-property': Rule;
         'no-schema-law-duplicate': Rule;
+        'schema-declaration-location': Rule;
+        'make-file-location': Rule;
         'workflow-match-exhaustive': Rule;
         'make-body-purity': Rule;
         'no-silent-return': Rule;
@@ -36,6 +38,7 @@ const _default: {
         'behaviour-test-requires-gherkin': Rule;
         'behaviour-exercises-use-case': Rule;
         'behaviour-one-feature-per-file': Rule;
+        'tests-dir-helpers-in-fixtures': Rule;
     };
     configs: {
         recommended: {

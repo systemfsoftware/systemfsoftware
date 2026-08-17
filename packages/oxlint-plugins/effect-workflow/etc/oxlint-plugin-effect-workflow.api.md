@@ -12,6 +12,7 @@ const _default: {
         name: string;
     };
     rules: {
+        'make-file-location': Rule;
         'workflow-match-exhaustive': Rule;
         'make-body-purity': Rule;
     };

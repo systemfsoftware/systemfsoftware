@@ -4,12 +4,13 @@ Oxlint rules for Effect Schema declarations — how a schema is declared, and wh
 
 ## Rules
 
-| Rule                        | What it enforces                                                                                                             |
-| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `ban-effect-schema-imports` | Import `Schema` from `effect`, never from the deprecated `@effect/schema` package.                                           |
-| `ban-data-taggederror`      | Use `Schema.TaggedError`, never `Data.TaggedError`.                                                                          |
-| `no-manual-tag-property`    | A class must not declare its own `_tag`; use `TaggedClass` / `TaggedError`.                                                  |
-| `no-schema-law-duplicate`   | A `*.schema.property.test.ts` may state only refusals — never `ruleOfSchemas`, `Schema.equivalence`, `Schema.encodedSchema`. |
+| Rule                          | What it enforces                                                                                                                                                                                            |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ban-effect-schema-imports`   | Import `Schema` from `effect`, never from the deprecated `@effect/schema` package.                                                                                                                          |
+| `ban-data-taggederror`        | Use `Schema.TaggedError`, never `Data.TaggedError`.                                                                                                                                                         |
+| `no-manual-tag-property`      | A class must not declare its own `_tag`; use `TaggedClass` / `TaggedError`.                                                                                                                                 |
+| `no-schema-law-duplicate`     | A `*.schema.property.test.ts` may state only refusals — never `ruleOfSchemas`, `Schema.equivalence`, `Schema.encodedSchema`.                                                                                |
+| `schema-declaration-location` | A schema declaration (a class extending a Schema factory, or a module-scope const initialized to a `Schema.<member>(...)` call) must live in a `*.schema.ts` file or the `<stem>.workflow.ts` that owns it. |
 
 ## Why a schema property test exists at all
 

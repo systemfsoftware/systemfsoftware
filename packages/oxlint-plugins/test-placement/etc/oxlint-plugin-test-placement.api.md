@@ -20,6 +20,7 @@ const _default: {
         'behaviour-test-requires-gherkin': Rule;
         'behaviour-exercises-use-case': Rule;
         'behaviour-one-feature-per-file': Rule;
+        'tests-dir-helpers-in-fixtures': Rule;
     };
     configs: {
         recommended: {

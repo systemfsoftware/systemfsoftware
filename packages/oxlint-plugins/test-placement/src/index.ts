@@ -6,6 +6,7 @@ import { noTestFileInSrc } from './rules/no-test-file-in-src.js'
 import { srcPropertyTestCell } from './rules/src-property-test-cell.js'
 import { testFileOutsideTestsDir } from './rules/test-file-outside-tests-dir.js'
 import { testSuffixOutsideSrc } from './rules/test-suffix-outside-src.js'
+import { testsDirHelpersInFixtures } from './rules/tests-dir-helpers-in-fixtures.js'
 
 const PLUGIN_NAME = '@systemfsoftware/oxlint-plugin-test-placement'
 
@@ -20,6 +21,7 @@ const recommendedRules = {
   [rule('behaviour-test-requires-gherkin')]: 'error',
   [rule('behaviour-exercises-use-case')]: 'error',
   [rule('behaviour-one-feature-per-file')]: 'error',
+  [rule('tests-dir-helpers-in-fixtures')]: 'error',
 } as const
 
 export default {
@@ -35,6 +37,7 @@ export default {
     'behaviour-test-requires-gherkin': behaviourTestRequiresGherkin,
     'behaviour-exercises-use-case': behaviourExercisesUseCase,
     'behaviour-one-feature-per-file': behaviourOneFeaturePerFile,
+    'tests-dir-helpers-in-fixtures': testsDirHelpersInFixtures,
   },
   configs: {
     recommended: {

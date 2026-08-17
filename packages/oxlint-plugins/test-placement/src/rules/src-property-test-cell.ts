@@ -2,8 +2,8 @@ import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
 import { Schema as S } from 'effect'
 import { isVitestGuard } from './in-source-test-targets-private.js'
-import { PROPERTY_SUFFIX } from './path.config.js'
-import { basenameOf, cellOf, isTestFile, isUnderSrc, namesColocatableCell, propertyStem } from './path.js'
+import { PROPERTY_SUFFIX, WORKFLOW_TEST_BASENAME } from './path.config.js'
+import { basenameOf, cellOf, isTestFile, isUnderSrc } from './path.js'
 import {
   meta,
   MISSING_CELL_TEST_ACTUAL,
@@ -29,7 +29,7 @@ export const srcPropertyTestCell = defineRule({
     if (!isUnderSrc(filename)) return {}
 
     if (basename.endsWith(PROPERTY_SUFFIX)) {
-      if (namesColocatableCell(propertyStem(basename))) return {}
+      if (WORKFLOW_TEST_BASENAME.test(basename)) return {}
       return {
         Program(node: ESTree.Program) {
           context.report({

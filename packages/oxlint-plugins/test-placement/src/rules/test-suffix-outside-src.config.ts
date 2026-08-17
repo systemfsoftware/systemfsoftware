@@ -1,11 +1,9 @@
-import { COLOCATABLE_CELLS, MESSAGE, NESTED_TEST_DIR } from './path.config.js'
-
-const SANCTIONED_CELLS = COLOCATABLE_CELLS.join(', ')
+import { MESSAGE } from './path.config.js'
 
 export const UNSANCTIONED_SUFFIX_EXPECTED = 'exactly *.integration.test.ts outside src/' as const
 export const UNSANCTIONED_SUFFIX_ACTUAL = 'an unsanctioned test suffix outside src/' as const
 export const UNSANCTIONED_SUFFIX_FIX =
-  `name what this file exercises. Every scenario restates a literal from a pure cell (a lookup-table entry, a constant, a mapping) -> it is a change detector, not a test: delete it. It drives the package through its public surface -> rename it *.integration.test.ts, the one behaviour suffix, whether or not a layer doubles at a port. It is a property over a sanctioned cell (${SANCTIONED_CELLS}) -> it does not belong outside src/: move it to src/<dir>/${NESTED_TEST_DIR}/<cell>.property.test.ts`
+  'name what this file exercises. Every scenario restates a literal from a pure cell (a lookup-table entry, a constant, a mapping) -> it is a change detector, not a test: delete it. It drives the package through its public surface -> rename it *.integration.test.ts, the one behaviour suffix, whether or not a layer doubles at a port. It is a property over a pure cell -> it does not belong outside src/: convert it to an in-source if (import.meta.vitest) block in the module it covers' as const
 
 export const meta = {
   type: 'problem',

@@ -9,8 +9,8 @@ import {
   SCHEMA_TEST_DETAIL,
   testFileInSrcDetail,
 } from './no-test-file-in-src.config.js'
-import { PROPERTY_SUFFIX, SCHEMA_LAWS_BASENAME, SCHEMA_SUFFIX } from './path.config.js'
-import { basenameOf, isInConfiguredTestDir, isTestFile, isUnderSrc, namesColocatableCell, testStem } from './path.js'
+import { PROPERTY_SUFFIX, SCHEMA_LAWS_BASENAME, SCHEMA_SUFFIX, WORKFLOW_TEST_BASENAME } from './path.config.js'
+import { basenameOf, isInConfiguredTestDir, isTestFile, isUnderSrc } from './path.js'
 
 export type MessageIds = 'testFileInSrc' | 'schemaTestInSrc' | 'propertyTestOutsideTestsDir'
 
@@ -32,7 +32,7 @@ export const noTestFileInSrc = defineRule({
     const isPropertyTest = basename.endsWith(PROPERTY_SUFFIX)
     const isSchemaTest = basename.endsWith(SCHEMA_SUFFIX)
     const colocated = isInConfiguredTestDir(context.filename, sanctionedDirs)
-    if (!isSchemaTest && colocated && namesColocatableCell(testStem(basename))) return {}
+    if (!isSchemaTest && WORKFLOW_TEST_BASENAME.test(basename) && colocated) return {}
     const [messageId, detail] = violationOf(basename, isPropertyTest, sanctionedDirs[0])
     return {
       Program(node: ESTree.Program) {
