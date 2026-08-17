@@ -1,6 +1,7 @@
 import { behaviourExercisesUseCase } from './rules/behaviour-exercises-use-case.js'
 import { behaviourOneFeaturePerFile } from './rules/behaviour-one-feature-per-file.js'
 import { behaviourTestRequiresGherkin } from './rules/behaviour-test-requires-gherkin.js'
+import { noIoModuleInSourceTest } from './rules/no-io-module-in-source-test.js'
 import { noTestFileInSrc } from './rules/no-test-file-in-src.js'
 import { srcPropertyTestCell } from './rules/src-property-test-cell.js'
 import { testFileOutsideTestsDir } from './rules/test-file-outside-tests-dir.js'
@@ -20,6 +21,7 @@ const recommendedRules = {
   [rule('behaviour-exercises-use-case')]: 'error',
   [rule('behaviour-one-feature-per-file')]: 'error',
   [rule('tests-dir-helpers-in-fixtures')]: 'error',
+  [rule('no-io-module-in-source-test')]: 'error',
 } as const
 
 export default {
@@ -35,6 +37,7 @@ export default {
     'behaviour-exercises-use-case': behaviourExercisesUseCase,
     'behaviour-one-feature-per-file': behaviourOneFeaturePerFile,
     'tests-dir-helpers-in-fixtures': testsDirHelpersInFixtures,
+    'no-io-module-in-source-test': noIoModuleInSourceTest,
   },
   configs: {
     recommended: {
