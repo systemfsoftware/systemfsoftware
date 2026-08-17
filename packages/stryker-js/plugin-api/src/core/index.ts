@@ -7,6 +7,7 @@ export * from './mutant.js'
 export * from './mutation-range.js'
 export type { Position } from './position.js'
 export * from './report-types.js'
+export * from './stryker-core-schema.js'
 export * from './stryker-options.schema.js'
 /**
  * Re-export all members from "mutation-testing-report-schema" under the `schema` key

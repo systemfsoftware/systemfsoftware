@@ -1,7 +1,13 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
 import { SCHEMA_MODULE_SOURCE } from './schema-declaration-location.config.js'
-import { basenameOf, isSchemaDeclaration, SCHEMA_USE_MEMBERS, schemaMemberOf } from './schema-declaration-location.js'
+import {
+  basenameOf,
+  isSchemaDeclaration,
+  SCHEMA_PREDICATE_MEMBERS,
+  SCHEMA_USE_MEMBERS,
+  schemaMemberOf,
+} from './schema-declaration-location.js'
 import {
   CODEC_EXPORT_ACTUAL,
   CODEC_EXPORT_EXPECTED,
@@ -19,6 +25,26 @@ import {
 export type MessageIds = 'codecExport' | 'nonSchemaExport' | 'reexportFromSchemaFile'
 
 type ExportVerdict = 'schema' | 'codec' | 'other'
+
+/**
+ * True when a binding's type annotation names a Schema — `S.Schema<AstNode>`,
+ * `Schema.Codec<A, I>`. It reads the annotation's source text through the type
+ * node's own name chain, so a forward-declared recursive schema, which carries
+ * its type and no initializer, is still classified as schema vocabulary.
+ */
+const annotationNamesSchema = (annotation: ESTree.Node | null | undefined): boolean => {
+  if (annotation === null || annotation === undefined) return false
+  if (annotation.type === 'TSTypeAnnotation') return annotationNamesSchema(annotation.typeAnnotation)
+  if (annotation.type === 'TSTypeReference') {
+    const name = annotation.typeName
+    if (name.type === 'Identifier') return name.name === 'Schema' || name.name.includes('Schema')
+    if (name.type === 'TSQualifiedName') {
+      return name.right.type === 'Identifier' &&
+        (name.right.name === 'Schema' || name.right.name === 'Codec')
+    }
+  }
+  return false
+}
 
 /**
  * A `*.schema.ts` file may export nothing but schemas. This is the converse of
@@ -94,9 +120,18 @@ export const schemaFileExportsSchemasOnly = defineRule({
             case 'VariableDeclaration':
               for (const declarator of declaration.declarations) {
                 if (declarator.id.type === 'Identifier') {
+                  // A recursive schema is forward-declared with its type and assigned
+                  // later - `let AstNodeSchema: S.Schema<AstNode>` above the suspended
+                  // members, `AstNodeSchema = S.Union([...])` below them - so there is
+                  // no initializer to inspect at the declaration. The annotation is
+                  // what says schema there, and reading it is the difference between
+                  // classifying the binding and reporting a legitimate alias of it.
                   bindings.set(
                     declarator.id.name,
-                    isSchemaDeclaration(declarator.init, locals) ? 'schema' : 'value',
+                    isSchemaDeclaration(declarator.init, locals) ||
+                      annotationNamesSchema(declarator.id.typeAnnotation)
+                      ? 'schema'
+                      : 'value',
                   )
                 }
               }
@@ -137,7 +172,11 @@ export const schemaFileExportsSchemasOnly = defineRule({
             member.property.type === 'Identifier' &&
             SCHEMA_USE_MEMBERS[member.property.name] === true
           ) {
-            return 'codec'
+            // A predicate is not a codec. `S.is(X)` returns a type guard over the
+            // shape declared beside it: pure, allocated once, and deciding exactly
+            // this file's vocabulary. Evicting it buys nothing - the same const
+            // reappears in the caller, or the guard is rebuilt on every call.
+            return SCHEMA_PREDICATE_MEMBERS[member.property.name] === true ? 'schema' : 'codec'
           }
           return 'other'
         }

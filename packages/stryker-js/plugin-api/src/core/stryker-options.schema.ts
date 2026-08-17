@@ -191,14 +191,6 @@ export type StrykerOptions = S.Schema.Type<typeof StrykerOptionsSchema>
  */
 export type PartialStrykerOptions = DeepOptional<StrykerOptions>
 
-/** The JSON Schema document derived from `StrykerOptionsSchema`, self-contained. */
-export const strykerCoreSchema: Record<string, unknown> = (() => {
-  const { schema, definitions } = S.toJsonSchemaDocument(StrykerOptionsSchema)
-  return Object.keys(definitions).length === 0
-    ? schema
-    : { ...schema, definitions }
-})()
-
 /**
  * Every option optional, all the way down, and mutable: this is the type a
  * caller CONSTRUCTS by assignment, so `readonly` is stripped. The decoded

@@ -112,6 +112,32 @@ const encode = S.encodeSync(Envelope)`,
       filename: SCHEMA_FILE,
     },
     {
+      // A guard is a predicate over the shape declared beside it, not a boundary
+      // operation on data: pure, allocated once, and deciding exactly this file's
+      // vocabulary. Evicting it mints the same const one file over, or rebuilds
+      // the guard on every call.
+      name: 'Should_Pass_When_SchemaFileExportsAGuardDerivedFromItsOwnSchema',
+      code: `import { Schema as S } from 'effect'
+export const Edits = S.Array(S.Struct({ from: S.String }))
+export const isEditArray = S.is(Edits)`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      // The forward-declared slot is how a RECURSIVE schema has to be written: the
+      // suspended members reference the union before it is constructed, so the
+      // declaration carries the type and the assignment comes after them. There is
+      // no initializer at the declaration, so the annotation is what says schema.
+      // Reported instead of allowed, this rule would refuse every recursive schema
+      // in the tree - `stryker-plugins/src/*/ast-node.schema.ts` are two of them.
+      name: 'Should_Pass_When_ConstAliasesALateAssignedRecursiveSchemaSlot',
+      code: `import { Schema as S } from 'effect'
+let U: S.Schema<string>
+export const Member = S.suspend((): S.Schema<string> => U)
+U = S.String
+export const UAlias = U`,
+      filename: SCHEMA_FILE,
+    },
+    {
       name: 'Should_Pass_When_AliasedNamespaceImportDeclaresASchema',
       code: `import * as S_ from 'effect/Schema'
 export const U = S_.Union([S_.String, S_.Number])`,
@@ -196,15 +222,6 @@ const pair = S.Struct({ a: S.String, b: S.Number })
 export const { a, b } = pair`,
       filename: SCHEMA_FILE,
       errors: [nonSchemaError('an export')],
-    },
-    {
-      name: 'Should_Report_When_ConstAliasesALateAssignedSchemaSlot',
-      code: `import { Schema as S } from 'effect'
-let U: S.Schema<string>
-U = S.String
-export const UAlias = U`,
-      filename: SCHEMA_FILE,
-      errors: [nonSchemaError('UAlias')],
     },
     {
       name: 'Should_Report_When_SchemaFileStarReexports',

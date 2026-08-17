@@ -24,6 +24,7 @@ import path from 'path'
 import semver from 'semver'
 import { fileURLToPath } from 'url'
 
+import * as S from 'effect/Schema'
 import {
   collectTestsFromSuite,
   convertTestToTestResult,
@@ -33,13 +34,30 @@ import {
   VITEST_ERROR_CODES,
 } from './vitest-helpers.js'
 import { VitestRunnerOptionsWithStrykerOptions } from './vitest-runner-options-with-stryker-options.js'
-import { decodeVitestOptions } from './vitest-runner-options.schema.js'
+import type { VitestRunnerOptions } from './vitest-runner-options.schema.js'
+import { VitestSectionSchema } from './vitest-runner-options.schema.js'
 import { resolveVitest, Vitest, VitestResolver } from './vitest-wrapper.js'
 
 type StrykerNamespace = '__stryker__' | '__stryker2__'
 const STRYKER_SETUP = fileURLToPath(
   new URL('./stryker-setup.mjs', import.meta.url),
 )
+
+/**
+ * Applies the section codec at the point of use: the schema module declares the
+ * shape, the caller decodes. `undefined` survives the optional wrapper when the
+ * whole section is absent, so the default is restated here.
+ *
+ * `Sync` is deliberate and is the narrow exemption, not the default: this runs in
+ * a plugin constructor that Stryker calls before any Effect runtime exists, and a
+ * malformed `vitest` section in the user's config must abort the run loudly rather
+ * than be carried forward as a value. Everywhere with a runtime to thread the
+ * failure through, `S.decode(...)` and the error channel are the answer.
+ */
+const decodeVitestOptions = (input: unknown): VitestRunnerOptions => {
+  const options = S.decodeUnknownSync(VitestSectionSchema)(input)
+  return options === undefined ? { related: true } : options
+}
 
 interface RunFilter {
   /**

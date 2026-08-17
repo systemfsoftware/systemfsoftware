@@ -90,14 +90,49 @@ export const SCHEMA_USE_MEMBERS: Record<string, true> = {
 }
 
 /**
+ * A member named exactly `Schema` on any object — `Result.Schema({...})`,
+ * `Atom.Schema(...)`. A module that wraps a domain type in its own schema
+ * constructor names it `Schema` by convention, in this tree and in Effect's own
+ * (`repos/effect/packages/effect/src/unstable/*` follows it), and what it returns
+ * is a schema. Without this the classifier only sees the `effect` Schema
+ * namespace, and a legitimate `Result.Schema({ success, error })` reads as a
+ * non-schema export.
+ */
+const isDomainSchemaConstructor = (node: ESTree.Node | null): boolean => {
+  if (node === null) return false
+  if (node.type === 'CallExpression') return isDomainSchemaConstructor(node.callee)
+  if (node.type === 'MemberExpression') {
+    return node.property.type === 'Identifier' && node.property.name === 'Schema'
+  }
+  return false
+}
+
+/**
  * True when `node` is a schema *declaration*: its defining `Schema.<member>`
  * is a schema-producing combinator, not a use combinator.
  */
 export const isSchemaDeclaration = (node: ESTree.Node | null, locals: ReadonlySet<string>): boolean => {
   const member = schemaMemberOf(node, locals)
-  if (member === null) return false
+  if (member === null) return isDomainSchemaConstructor(node)
   if (member.property.type !== 'Identifier') return false
   return SCHEMA_USE_MEMBERS[member.property.name] !== true
+}
+
+/**
+ * The subset of `SCHEMA_USE_MEMBERS` that returns a *predicate* over a schema
+ * rather than a boundary operation on data. `S.is(X)` yields a type guard: it is
+ * pure, it is allocated once at module scope, and it decides membership of the
+ * shape declared beside it, so it belongs next to that declaration. A guard is
+ * still a use for placement purposes - it imposes no obligation of its own - but
+ * it is not a codec, and a rule that bans codecs from a schema module has no
+ * warrant to evict it: forcing the guard to its caller either mints the same
+ * const one file over, or allocates a fresh guard on every call.
+ */
+export const SCHEMA_PREDICATE_MEMBERS: Record<string, true> = {
+  is: true,
+  isSchema: true,
+  isSchemaError: true,
+  isSchemaAST: true,
 }
 
 /**

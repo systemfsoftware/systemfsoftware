@@ -3,6 +3,7 @@ import { fileURLToPath } from 'url'
 
 import { CheckStatus } from '@systemfsoftware/stryker-js-plugin-api/check'
 import type { CheckResult } from '@systemfsoftware/stryker-js-plugin-api/check'
+import { StrykerOptionsSchema } from '@systemfsoftware/stryker-js-plugin-api/core'
 import type { Mutant, StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
 import type { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
 import { Context, Effect, Layer, Schema as S } from 'effect'
@@ -10,8 +11,6 @@ import { Context, Effect, Layer, Schema as S } from 'effect'
 import { HybridFileSystem } from '../../src/project/hybrid-file-system.js'
 import { TypescriptChecker } from '../../src/typescript-checker.js'
 import { TypescriptCompiler } from '../../src/typescript-compiler.js'
-
-import { CheckerOptionsWithPluginKeys } from './checker-options.schema.js'
 
 export interface CheckerOptionsInput {
   readonly tsconfigFile: string
@@ -75,9 +74,15 @@ const makeCheckerLayer = (
         }),
     ),
   )
-
+/**
+ * The core options schema is itself an open struct: unknown keys - including the
+ * plugin's own `typescriptChecker` option - pass through the rest-record and stay
+ * on the decoded options, matching how the real stryker validator keeps
+ * plugin-specific keys. So this decodes against the core schema directly rather
+ * than through a renamed re-export of it.
+ */
 export const decodeCheckerOptions = (input: CheckerOptionsInput): StrykerOptions =>
-  S.decodeUnknownSync(CheckerOptionsWithPluginKeys)(input)
+  S.decodeUnknownSync(StrykerOptionsSchema)(input)
 
 export const createLogger = (warn: Logger['warn'] = (): void => {}): Logger => ({
   isTraceEnabled: () => false,
