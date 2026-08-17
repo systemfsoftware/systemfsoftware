@@ -1,6 +1,6 @@
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer, Option, Schema } from 'effect'
-import { HttpClient, HttpClientResponse } from 'effect/unstable/http'
+import { HttpClient, HttpClientRequest, HttpClientResponse } from 'effect/unstable/http'
 import type * as HttpClientError from 'effect/unstable/http/HttpClientError'
 import { HttpApi, HttpApiEndpoint, HttpApiGroup } from 'effect/unstable/httpapi'
 import { expect } from 'vitest'
@@ -10,6 +10,19 @@ import * as Registry from '../src/Registry.js'
 import * as Result from '../src/Result.js'
 
 const Feature = makeFeature({ it, layer })
+
+/**
+ * A test double that answers every request through the same preprocess and
+ * postprocess machinery a real client uses.
+ */
+const stubHttpClient = (
+  handle: (request: HttpClientRequest.HttpClientRequest) => Effect.Effect<HttpClientResponse.HttpClientResponse>,
+): HttpClient.HttpClient =>
+  HttpClient.makeWith(
+    (requestEffect: Effect.Effect<HttpClientRequest.HttpClientRequest, HttpClientError.HttpClientError, never>) =>
+      Effect.flatMap(requestEffect, handle),
+    (request: HttpClientRequest.HttpClientRequest) => Effect.succeed(request),
+  )
 
 const Api = HttpApi.make('api').add(
   HttpApiGroup.make('group').add(
@@ -58,14 +71,10 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
         Given('a page that fetches a user profile from a server that always answers')('ctx', () =>
           Effect.sync(() => {
             let callCount = 0
-            const httpClient = HttpClient.makeWith(
-              Effect.fnUntraced(function*(requestEffect) {
-                const request = yield* requestEffect
-                callCount++
-                return HttpClientResponse.fromWeb(request, new Response(null, { status: 204 }))
-              }),
-              Effect.succeed as HttpClient.HttpClient.Preprocess<HttpClientError.HttpClientError, never>,
-            )
+            const httpClient = stubHttpClient((request) => {
+              callCount++
+              return Effect.succeed(HttpClientResponse.fromWeb(request, new Response(null, { status: 204 })))
+            })
             const Client = AtomHttpApi.Service()('Client', {
               api: Api,
               httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),
@@ -84,11 +93,9 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
               yield* Effect.yieldNow
               const savedPage = Hydration.dehydrate(s.ctx.registry)
               unmount()
-
               const freshPage = Registry.make()
               Hydration.hydrate(freshPage, savedPage)
               const secondReading = freshPage.get(s.ctx.profile)
-
               return { secondReading, calls: s.ctx.callsMade() }
             }),
         ),
@@ -97,19 +104,12 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
         }),
       ),
     )
-
     scenario(
       'Two parts of the page reading a profile that never arrives still agree it is loading',
       Gherkin.Do.pipe(
         Given('a page that fetches a user profile from a server that never answers')('ctx', () =>
           Effect.sync(() => {
-            const httpClient = HttpClient.makeWith(
-              Effect.fnUntraced(function*(requestEffect) {
-                yield* requestEffect
-                return yield* Effect.never
-              }),
-              Effect.succeed as HttpClient.HttpClient.Preprocess<HttpClientError.HttpClientError, never>,
-            )
+            const httpClient = stubHttpClient((_request) => Effect.never)
             const Client = AtomHttpApi.Service()('Client', {
               api: Api,
               httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),
@@ -132,28 +132,22 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
         }),
       ),
     )
-  })
-
-Feature('Submitting a change to the server')
-  .body(({ scenario }) => {
     scenario(
       'A submitted change runs the call and reports the created record',
       Gherkin.Do.pipe(
         Given('a page that submits new records to a server that accepts them')('ctx', () =>
           Effect.sync(() => {
-            const httpClient = HttpClient.makeWith(
-              Effect.fnUntraced(function*(requestEffect) {
-                const request = yield* requestEffect
-                return HttpClientResponse.fromWeb(
+            const httpClient = stubHttpClient((request) => {
+              return Effect.succeed(
+                HttpClientResponse.fromWeb(
                   request,
                   new Response(JSON.stringify({ id: 1, name: 'grace' }), {
                     status: 200,
                     headers: { 'content-type': 'application/json' },
                   }),
-                )
-              }),
-              Effect.succeed as HttpClient.HttpClient.Preprocess<HttpClientError.HttpClientError, never>,
-            )
+                ),
+              )
+            })
             const Client = AtomHttpApi.Service()('Client', {
               api: MutationApi,
               httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),
@@ -179,25 +173,22 @@ Feature('Submitting a change to the server')
         }),
       ),
     )
-
     scenario(
       'A submission the server rejects is reported as a failure',
       Gherkin.Do.pipe(
         Given('a page that submits new records to a server that rejects them')('ctx', () =>
           Effect.sync(() => {
-            const httpClient = HttpClient.makeWith(
-              Effect.fnUntraced(function*(requestEffect) {
-                const request = yield* requestEffect
-                return HttpClientResponse.fromWeb(
+            const httpClient = stubHttpClient((request) => {
+              return Effect.succeed(
+                HttpClientResponse.fromWeb(
                   request,
                   new Response(JSON.stringify({ message: 'nope' }), {
                     status: 500,
                     headers: { 'content-type': 'application/json' },
                   }),
-                )
-              }),
-              Effect.succeed as HttpClient.HttpClient.Preprocess<HttpClientError.HttpClientError, never>,
-            )
+                ),
+              )
+            })
             const Client = AtomHttpApi.Service()('Client', {
               api: MutationApi,
               httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),
@@ -220,24 +211,16 @@ Feature('Submitting a change to the server')
         }),
       ),
     )
-  })
-
-Feature('Building an http client from the page context')
-  .body(({ scenario }) => {
     scenario(
       'A client whose http client comes from a function answers the same',
       Gherkin.Do.pipe(
         Given('a page that builds its http client from the page context')('ctx', () =>
           Effect.sync(() => {
             let callCount = 0
-            const httpClient = HttpClient.makeWith(
-              Effect.fnUntraced(function*(requestEffect) {
-                const request = yield* requestEffect
-                callCount++
-                return HttpClientResponse.fromWeb(request, new Response(null, { status: 204 }))
-              }),
-              Effect.succeed as HttpClient.HttpClient.Preprocess<HttpClientError.HttpClientError, never>,
-            )
+            const httpClient = stubHttpClient((request) => {
+              callCount++
+              return Effect.succeed(HttpClientResponse.fromWeb(request, new Response(null, { status: 204 })))
+            })
             const Client = AtomHttpApi.Service()('Client', {
               api: Api,
               httpClient: () => Layer.succeed(HttpClient.HttpClient, httpClient),
@@ -262,10 +245,6 @@ Feature('Building an http client from the page context')
         }),
       ),
     )
-  })
-
-Feature('Refreshing watched queries after an http submission')
-  .body(({ scenario }) => {
     scenario(
       'A submission with reactivity keys refetches the watched profile',
       Gherkin.Do.pipe(
@@ -274,23 +253,21 @@ Feature('Refreshing watched queries after an http submission')
           () =>
             Effect.sync(() => {
               let callCount = 0
-              const httpClient = HttpClient.makeWith(
-                Effect.fnUntraced(function*(requestEffect) {
-                  const request = yield* requestEffect
-                  callCount++
-                  if (request.url === '/users/1') {
-                    return HttpClientResponse.fromWeb(request, new Response(null, { status: 204 }))
-                  }
-                  return HttpClientResponse.fromWeb(
+              const httpClient = stubHttpClient((request) => {
+                callCount++
+                if (request.url === '/users/1') {
+                  return Effect.succeed(HttpClientResponse.fromWeb(request, new Response(null, { status: 204 })))
+                }
+                return Effect.succeed(
+                  HttpClientResponse.fromWeb(
                     request,
                     new Response(JSON.stringify({ id: 1, name: 'grace' }), {
                       status: 200,
                       headers: { 'content-type': 'application/json' },
                     }),
-                  )
-                }),
-                Effect.succeed as HttpClient.HttpClient.Preprocess<HttpClientError.HttpClientError, never>,
-              )
+                  ),
+                )
+              })
               const Client = AtomHttpApi.Service()('Client', {
                 api: QueryAndMutationApi,
                 httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),
@@ -330,28 +307,22 @@ Feature('Refreshing watched queries after an http submission')
         }),
       ),
     )
-  })
-
-Feature('Keeping the raw response from an http submission')
-  .body(({ scenario }) => {
     scenario(
       'A submission that asks for the raw response reports it without decoding',
       Gherkin.Do.pipe(
         Given('a page that submits records and keeps the raw response')('ctx', () =>
           Effect.sync(() => {
-            const httpClient = HttpClient.makeWith(
-              Effect.fnUntraced(function*(requestEffect) {
-                const request = yield* requestEffect
-                return HttpClientResponse.fromWeb(
+            const httpClient = stubHttpClient((request) => {
+              return Effect.succeed(
+                HttpClientResponse.fromWeb(
                   request,
                   new Response(JSON.stringify({ id: 1, name: 'grace' }), {
                     status: 200,
                     headers: { 'content-type': 'application/json' },
                   }),
-                )
-              }),
-              Effect.succeed as HttpClient.HttpClient.Preprocess<HttpClientError.HttpClientError, never>,
-            )
+                ),
+              )
+            })
             const Client = AtomHttpApi.Service()('Client', {
               api: MutationApi,
               httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),
@@ -377,10 +348,6 @@ Feature('Keeping the raw response from an http submission')
         }),
       ),
     )
-  })
-
-Feature('Retaining and hydrating an http profile')
-  .body(({ scenario }) => {
     scenario(
       'A profile fetched with reactivity keys, a minute-long retention, and a hydration key survives reload, while a profile asked to stay alive forever is kept',
       Gherkin.Do.pipe(
@@ -388,13 +355,9 @@ Feature('Retaining and hydrating an http profile')
           'a page that fetches the profile with reactivity keys, a finite retention, and a hydration key, and another profile kept alive forever',
         )('ctx', () =>
           Effect.sync(() => {
-            const httpClient = HttpClient.makeWith(
-              Effect.fnUntraced(function*(requestEffect) {
-                const request = yield* requestEffect
-                return HttpClientResponse.fromWeb(request, new Response(null, { status: 204 }))
-              }),
-              Effect.succeed as HttpClient.HttpClient.Preprocess<HttpClientError.HttpClientError, never>,
-            )
+            const httpClient = stubHttpClient((request) => {
+              return Effect.succeed(HttpClientResponse.fromWeb(request, new Response(null, { status: 204 })))
+            })
             const Client = AtomHttpApi.Service()('Client', {
               api: Api,
               httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),
@@ -444,10 +407,6 @@ Feature('Retaining and hydrating an http profile')
         ),
       ),
     )
-  })
-
-Feature('Surviving a broken response from the server')
-  .body(({ scenario }) => {
     scenario(
       'A submission answered with a body that does not match the contract is reported as a defect rather than a normal failure',
       Gherkin.Do.pipe(
@@ -455,19 +414,17 @@ Feature('Surviving a broken response from the server')
           'ctx',
           () =>
             Effect.sync(() => {
-              const httpClient = HttpClient.makeWith(
-                Effect.fnUntraced(function*(requestEffect) {
-                  const request = yield* requestEffect
-                  return HttpClientResponse.fromWeb(
+              const httpClient = stubHttpClient((request) => {
+                return Effect.succeed(
+                  HttpClientResponse.fromWeb(
                     request,
                     new Response(JSON.stringify({ oops: true }), {
                       status: 200,
                       headers: { 'content-type': 'application/json' },
                     }),
-                  )
-                }),
-                Effect.succeed as HttpClient.HttpClient.Preprocess<HttpClientError.HttpClientError, never>,
-              )
+                  ),
+                )
+              })
               const Client = AtomHttpApi.Service()('Client', {
                 api: MutationApi,
                 httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),
@@ -492,10 +449,6 @@ Feature('Surviving a broken response from the server')
         }),
       ),
     )
-  })
-
-Feature('Reporting a rejection the server describes')
-  .body(({ scenario }) => {
     scenario(
       'A submission the server rejects with a matching error body is reported as a normal failure carrying that error',
       Gherkin.Do.pipe(
@@ -503,19 +456,17 @@ Feature('Reporting a rejection the server describes')
           'ctx',
           () =>
             Effect.sync(() => {
-              const httpClient = HttpClient.makeWith(
-                Effect.fnUntraced(function*(requestEffect) {
-                  const request = yield* requestEffect
-                  return HttpClientResponse.fromWeb(
+              const httpClient = stubHttpClient((request) => {
+                return Effect.succeed(
+                  HttpClientResponse.fromWeb(
                     request,
                     new Response(JSON.stringify({ message: 'nope' }), {
                       status: 500,
                       headers: { 'content-type': 'application/json' },
                     }),
-                  )
-                }),
-                Effect.succeed as HttpClient.HttpClient.Preprocess<HttpClientError.HttpClientError, never>,
-              )
+                  ),
+                )
+              })
               const Client = AtomHttpApi.Service()('Client', {
                 api: ApiWithRejection,
                 httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),

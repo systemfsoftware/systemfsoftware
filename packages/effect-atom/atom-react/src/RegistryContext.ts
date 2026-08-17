@@ -74,7 +74,7 @@ export const RegistryContext = React.createContext<AtomRegistry.Registry>(AtomRe
  */
 export const RegistryProvider = (options: {
   readonly children?: React.ReactNode | undefined
-  readonly initialValues?: Iterable<readonly [Atom.Atom<any>, any]> | undefined
+  readonly initialValues?: Iterable<readonly [Atom.Atom<unknown>, unknown]> | undefined
   readonly scheduleTask?: ((f: () => void) => () => void) | undefined
   readonly timeoutResolution?: number | undefined
   readonly defaultIdleTTL?: number | undefined
@@ -94,11 +94,15 @@ export const RegistryProvider = (options: {
     }
   }
   React.useEffect(() => {
-    if (ref.current?.timeout !== undefined) {
-      clearTimeout(ref.current.timeout)
+    const current = ref.current
+    if (current?.timeout !== undefined) {
+      clearTimeout(current.timeout)
     }
     return () => {
-      ref.current!.timeout = setTimeout(() => {
+      if (ref.current === null) {
+        return
+      }
+      ref.current.timeout = setTimeout(() => {
         ref.current?.registry.dispose()
         ref.current = null
       }, 500)

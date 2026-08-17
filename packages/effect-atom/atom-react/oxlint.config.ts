@@ -1,7 +1,10 @@
+import base from '@systemfsoftware/oxlint-config/base'
 import { defineConfig } from 'oxlint'
 
 // Vendored fork: effect documents with @category/@since/@internal; teach the tag checker those tags.
 export default defineConfig({
+  extends: [base],
+
   categories: {
     correctness: 'error',
     perf: 'error',

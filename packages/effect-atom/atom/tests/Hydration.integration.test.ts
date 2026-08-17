@@ -1,10 +1,7 @@
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Deferred, Effect, Fiber, Schema } from 'effect'
 import { expect, vi } from 'vitest'
-import * as Atom from '../src/Atom.js'
-import * as Hydration from '../src/Hydration.js'
-import * as Registry from '../src/Registry.js'
-import * as Result from '../src/Result.js'
+import { Atom, Hydration, Registry, Result } from '../src/index.js'
 
 const Feature = makeFeature({ it, layer })
 
@@ -50,7 +47,6 @@ Feature("Saving a page's values so a reloaded page starts with them already fill
         }),
       ),
     )
-
     scenario(
       'A value that had already finished loading is restored as finished, not restarted, after reload',
       Gherkin.Do.pipe(
@@ -89,7 +85,6 @@ Feature("Saving a page's values so a reloaded page starts with them already fill
         }),
       ),
     )
-
     scenario(
       'A value that is still loading when the page is saved automatically fills in once it finishes, even after the page already reloaded',
       Gherkin.Do.pipe(
@@ -129,7 +124,6 @@ Feature("Saving a page's values so a reloaded page starts with them already fill
         }),
       ),
     )
-
     scenario(
       'A value still loading when the page is saved is left out of the default saved state',
       Gherkin.Do.pipe(
@@ -152,7 +146,6 @@ Feature("Saving a page's values so a reloaded page starts with them already fill
         }),
       ),
     )
-
     scenario(
       'A still-loading value that is asked to reload while the page is saved still fills in automatically once it finishes',
       Gherkin.Do.pipe(
@@ -197,7 +190,6 @@ Feature("Saving a page's values so a reloaded page starts with them already fill
         }),
       ),
     )
-
     scenario(
       'A value that is not marked for saving is left out of the saved state',
       Gherkin.Do.pipe(
@@ -218,8 +210,8 @@ Feature("Saving a page's values so a reloaded page starts with them already fill
         When('the page is saved')('saved', (s) => Effect.sync(() => Hydration.dehydrate(s.ctx.page))),
         Then('only the saved value is included')((s) => {
           expect(s.saved).toHaveLength(1)
-          expect(s.saved[0]!.key).toBe('k-plain')
-          expect(s.saved[0]!.value).toBe(42)
+          expect(s.saved[0].key).toBe('k-plain')
+          expect(s.saved[0].value).toBe(42)
         }),
       ),
     )

@@ -1,7 +1,7 @@
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect } from 'effect'
 import { expect } from 'vitest'
-import * as AtomRef from '../src/AtomRef.js'
+import { AtomRef } from '../src/index.js'
 
 const Feature = makeFeature({ it, layer })
 
@@ -38,7 +38,6 @@ Feature('Keeping a piece of shared local state in sync across several parts of t
         }),
       ),
     )
-
     scenario(
       'Editing one item in a list of shared items does not affect the others',
       Gherkin.Do.pipe(
@@ -58,7 +57,6 @@ Feature('Keeping a piece of shared local state in sync across several parts of t
         }),
       ),
     )
-
     scenario(
       'Removing an item from a shared collection stops it from affecting the collection, and the remaining items are unchanged',
       Gherkin.Do.pipe(
@@ -75,7 +73,7 @@ Feature('Keeping a piece of shared local state in sync across several parts of t
           'result',
           (s) =>
             Effect.sync(() => {
-              const removed = s.ctx.items.value[1]!
+              const removed = s.ctx.items.value[1]
               s.ctx.items.remove(removed)
               const afterRemoveNotifications = s.ctx.getNotifications()
               removed.set(999)
@@ -92,7 +90,6 @@ Feature('Keeping a piece of shared local state in sync across several parts of t
         ),
       ),
     )
-
     scenario(
       'A listener that leaves the middle of the chain stops hearing, while the others keep hearing',
       Gherkin.Do.pipe(
@@ -120,7 +117,6 @@ Feature('Keeping a piece of shared local state in sync across several parts of t
         }),
       ),
     )
-
     scenario(
       'A view into a key that only appears later stays quiet until the key exists',
       Gherkin.Do.pipe(
@@ -143,7 +139,6 @@ Feature('Keeping a piece of shared local state in sync across several parts of t
         }),
       ),
     )
-
     scenario(
       'Updating one item in a list with a function changes just that item',
       Gherkin.Do.pipe(
@@ -163,14 +158,13 @@ Feature('Keeping a piece of shared local state in sync across several parts of t
         }),
       ),
     )
-
     scenario(
       'Removing an item that is not in the collection leaves the collection untouched',
       Gherkin.Do.pipe(
         Given('a shared collection, being watched by a listener')('ctx', () =>
           Effect.sync(() => {
             const items = AtomRef.collection([1, 2, 3])
-            const stranger = AtomRef.collection([9]).value[0]!
+            const stranger = AtomRef.collection([9]).value[0]
             let notifications = 0
             const cancel = items.subscribe(() => {
               notifications++
@@ -190,7 +184,6 @@ Feature('Keeping a piece of shared local state in sync across several parts of t
         }),
       ),
     )
-
     scenario(
       'Updating one field of a shared record with a function changes just that field',
       Gherkin.Do.pipe(
@@ -210,7 +203,6 @@ Feature('Keeping a piece of shared local state in sync across several parts of t
         }),
       ),
     )
-
     scenario(
       'A nested view into an item of a shared collection keeps the collection in sync while the item changes, and goes quiet once the item is removed',
       Gherkin.Do.pipe(
@@ -222,8 +214,8 @@ Feature('Keeping a piece of shared local state in sync across several parts of t
                 { name: 'ada', address: { city: 'london' } },
                 { name: 'grace', address: { city: 'paris' } },
               ])
-              const firstName = items.value[0]!.prop('name')
-              const city = items.value[0]!.prop('address').prop('city')
+              const firstName = items.value[0].prop('name')
+              const city = items.value[0].prop('address').prop('city')
               let notifications = 0
               const cancel = items.subscribe(() => {
                 notifications++
@@ -239,7 +231,7 @@ Feature('Keeping a piece of shared local state in sync across several parts of t
               const afterFieldSet = { notifications: s.ctx.getNotifications(), city: s.ctx.city.value }
               s.ctx.city.update((c) => c.toUpperCase())
               const afterNestedUpdate = { notifications: s.ctx.getNotifications(), items: s.ctx.items.toArray() }
-              const removed = s.ctx.items.value[0]!
+              const removed = s.ctx.items.value[0]
               s.ctx.items.remove(removed)
               removed.prop('name').set('zed')
               const afterRemoval = { notifications: s.ctx.getNotifications(), items: s.ctx.items.toArray() }
@@ -262,7 +254,6 @@ Feature('Keeping a piece of shared local state in sync across several parts of t
         }),
       ),
     )
-
     scenario(
       'Setting a shared value to what it already holds leaves its listeners quiet',
       Gherkin.Do.pipe(
@@ -290,7 +281,6 @@ Feature('Keeping a piece of shared local state in sync across several parts of t
         ),
       ),
     )
-
     scenario(
       'A view into a field that appears later reflects the field once it exists, and keeps following it',
       Gherkin.Do.pipe(
@@ -319,7 +309,6 @@ Feature('Keeping a piece of shared local state in sync across several parts of t
         }),
       ),
     )
-
     scenario(
       'A view into one field of a shared record stays quiet while other fields change around it',
       Gherkin.Do.pipe(

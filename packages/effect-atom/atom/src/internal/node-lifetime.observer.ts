@@ -1,11 +1,4 @@
-import { Schema as S } from 'effect'
-
-export const NodeFate = S.Union([
-  S.TaggedStruct('Alive', {}),
-  S.TaggedStruct('RemoveNow', {}),
-  S.TaggedStruct('RemoveAfterTtl', { ttlMillis: S.Finite }),
-])
-export type NodeFate = S.Schema.Type<typeof NodeFate>
+import type { NodeFate } from './node-lifetime.schema.js'
 
 export interface NodeLifetimeInput {
   readonly keepAlive: boolean
@@ -17,9 +10,13 @@ export interface NodeLifetimeInput {
   readonly defaultIdleTTL: number | undefined
 }
 
-export const decideNodeFate = (input: NodeLifetimeInput): NodeFate =>
-  input.keepAlive || input.listenerCount > 0 || input.childCount > 0 || !input.isLive || input.isWaiting
-    ? { _tag: 'Alive' }
-    : input.idleTTL !== 0 && (input.idleTTL !== undefined || input.defaultIdleTTL !== undefined)
-    ? { _tag: 'RemoveAfterTtl', ttlMillis: input.idleTTL ?? input.defaultIdleTTL! }
-    : { _tag: 'RemoveNow' }
+export const decideNodeFate = (input: NodeLifetimeInput): NodeFate => {
+  if (input.keepAlive || input.listenerCount > 0 || input.childCount > 0 || !input.isLive || input.isWaiting) {
+    return { _tag: 'Alive' }
+  }
+  if (input.idleTTL === 0) {
+    return { _tag: 'RemoveNow' }
+  }
+  const ttlMillis = input.idleTTL ?? input.defaultIdleTTL
+  return ttlMillis === undefined ? { _tag: 'RemoveNow' } : { _tag: 'RemoveAfterTtl', ttlMillis }
+}

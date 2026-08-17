@@ -12,15 +12,18 @@
  * re-exported from `Result.ts`. `ResultProto` stays leaf-internal and is
  * reached directly by `Result.ts` and by the constructors in this file.
  */
+import * as Cause from 'effect/Cause'
+import * as Clock from 'effect/Clock'
+import * as Effect from 'effect/Effect'
 import * as Equal from 'effect/Equal'
 import { identity } from 'effect/Function'
 import * as Hash from 'effect/Hash'
-import { hasProperty } from 'effect/Predicate'
-
+import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import { type Pipeable, pipeArguments } from 'effect/Pipeable'
+import { hasProperty } from 'effect/Predicate'
 
-import * as Cause from 'effect/Cause'
+const now = () => Effect.runSync(Clock.currentTimeMillis)
 
 /**
  * Type-level identifier used to recognize `Result` values.
@@ -107,25 +110,39 @@ export const ResultProto = {
   pipe() {
     return pipeArguments(this, arguments)
   },
-  [Equal.symbol](this: Result<any, any>, that: Result<any, any>): boolean {
-    if (this._tag !== that._tag || this.waiting !== that.waiting) {
+  [Equal.symbol](this: Result<unknown, unknown>, that: Result<unknown, unknown>): boolean {
+    if (this.waiting !== that.waiting) {
       return false
     }
-    switch (this._tag) {
-      case 'Initial':
-        return true
-      case 'Success':
-        return Equal.equals(this.value, (that as Success<any, any>).value)
-      case 'Failure':
-        return Equal.equals(this.cause, (that as Failure<any, any>).cause)
-    }
+    return Match.value(this).pipe(
+      Match.tag('Initial', () => Match.value(that).pipe(Match.tag('Initial', () => true), Match.orElse(() => false))),
+      Match.tag(
+        'Success',
+        (s) =>
+          Match.value(that).pipe(
+            Match.tag('Success', (t) => Equal.equals(s.value, t.value)),
+            Match.orElse(() => false),
+          ),
+      ),
+      Match.tag(
+        'Failure',
+        (f) =>
+          Match.value(that).pipe(
+            Match.tag('Failure', (g) => Equal.equals(f.cause, g.cause)),
+            Match.orElse(() => false),
+          ),
+      ),
+      Match.exhaustive,
+    )
   },
-  [Hash.symbol](this: Result<any, any>): number {
+  [Hash.symbol](this: Result<unknown, unknown>): number {
     const tagHash = Hash.string(`${this._tag}:${this.waiting}`)
-    if (this._tag === 'Initial') {
-      return tagHash
-    }
-    return Hash.combine(tagHash)(this._tag === 'Success' ? Hash.hash(this.value) : Hash.hash(this.cause))
+    return Match.value(this).pipe(
+      Match.tag('Initial', () => tagHash),
+      Match.tag('Success', (s) => Hash.combine(tagHash)(Hash.hash(s.value))),
+      Match.tag('Failure', (f) => Hash.combine(tagHash)(Hash.hash(f.cause))),
+      Match.exhaustive,
+    )
   },
 }
 
@@ -180,9 +197,11 @@ export const isResult = (u: unknown): u is Result<unknown, unknown> => hasProper
  * @since 4.0.0
  */
 export const initial = <A = never, E = never>(waiting = false): Initial<A, E> => {
-  const result = Object.create(ResultProto)
-  result._tag = 'Initial'
-  result.waiting = waiting
+  const result: Initial<A, E> = {
+    ...ResultProto,
+    _tag: 'Initial',
+    waiting,
+  }
   return result
 }
 
@@ -197,11 +216,13 @@ export const success = <A, E = never>(value: A, options?: {
   readonly waiting?: boolean | undefined
   readonly timestamp?: number | undefined
 }): Success<A, E> => {
-  const result = Object.create(ResultProto)
-  result._tag = 'Success'
-  result.value = value
-  result.waiting = options?.waiting ?? false
-  result.timestamp = options?.timestamp ?? Date.now()
+  const result: Success<A, E> = {
+    ...ResultProto,
+    _tag: 'Success',
+    value,
+    waiting: options?.waiting ?? false,
+    timestamp: options?.timestamp ?? now(),
+  }
   return result
 }
 
@@ -219,10 +240,14 @@ export const failure = <A, E = never>(
     readonly waiting?: boolean | undefined
   },
 ): Failure<A, E> => {
-  const result = Object.create(ResultProto)
-  result._tag = 'Failure'
-  result.cause = cause
-  result.previousSuccess = options?.previousSuccess ?? Option.none()
-  result.waiting = options?.waiting ?? false
+  const result: Failure<A, E> = {
+    ...ResultProto,
+    _tag: 'Failure',
+    cause,
+    ...(options?.previousSuccess === undefined
+      ? { previousSuccess: Option.none() }
+      : { previousSuccess: options.previousSuccess }),
+    waiting: options?.waiting ?? false,
+  }
   return result
 }

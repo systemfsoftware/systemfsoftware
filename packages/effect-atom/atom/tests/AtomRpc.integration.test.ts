@@ -20,6 +20,14 @@ const Group = RpcGroup.make(
   }),
 )
 
+const StreamGroup = RpcGroup.make(
+  Rpc.make('getItems', {
+    payload: Schema.Struct({ count: Schema.Number }),
+    success: Schema.Struct({ id: Schema.Number, name: Schema.String }),
+    stream: true,
+  }),
+)
+
 Feature('Reusing an rpc-fetched user after the page reloads, without calling the server again')
   .body(({ scenario }) => {
     scenario(
@@ -31,13 +39,13 @@ Feature('Reusing an rpc-fetched user after the page reloads, without calling the
             Effect.sync(() => {
               let callCount = 0
               const makeEffect = Effect.succeed(
-                ((tag: string, payload: { readonly id: number }) => {
+                (tag: string, payload: { readonly id: number }) => {
                   callCount++
                   if (tag !== 'getUser') {
                     return Effect.die(`unexpected tag: ${tag}`)
                   }
                   return Effect.succeed({ id: payload.id, name: `user-${payload.id}` })
-                }) as any,
+                },
               )
               const Client = AtomRpc.Service()('Client', {
                 group: Group,
@@ -58,11 +66,9 @@ Feature('Reusing an rpc-fetched user after the page reloads, without calling the
               yield* Effect.yieldNow
               const savedPage = Hydration.dehydrate(s.ctx.registry)
               unmount()
-
               const freshPage = Registry.make()
               Hydration.hydrate(freshPage, savedPage)
               const secondReading = freshPage.get(s.ctx.user)
-
               return { secondReading, calls: s.ctx.callsMade() }
             }),
         ),
@@ -71,10 +77,6 @@ Feature('Reusing an rpc-fetched user after the page reloads, without calling the
         }),
       ),
     )
-  })
-
-Feature('Reusing the same rpc query without a fresh atom')
-  .body(({ scenario }) => {
     scenario(
       'Asking for the same query twice yields the same atom, so the server is called once',
       Gherkin.Do.pipe(
@@ -82,10 +84,10 @@ Feature('Reusing the same rpc query without a fresh atom')
           Effect.sync(() => {
             let callCount = 0
             const makeEffect = Effect.succeed(
-              ((tag: string, payload: { readonly id: number }) => {
+              (tag: string, payload: { readonly id: number }) => {
                 callCount++
                 return Effect.succeed({ id: payload.id, name: `user-${payload.id}` })
-              }) as any,
+              },
             )
             const Client = AtomRpc.Service()('Client', {
               group: Group,
@@ -111,22 +113,18 @@ Feature('Reusing the same rpc query without a fresh atom')
         }),
       ),
     )
-  })
-
-Feature('Submitting a change over rpc')
-  .body(({ scenario }) => {
     scenario(
       'A change submitted over rpc runs the call and reports the created record',
       Gherkin.Do.pipe(
         Given('a page that submits new records over rpc to a server that accepts them')('ctx', () =>
           Effect.sync(() => {
             const makeEffect = Effect.succeed(
-              ((tag: string, payload: { readonly name: string }) => {
+              (tag: string, payload: { readonly name: string }) => {
                 if (tag !== 'createUser') {
                   return Effect.die(`unexpected tag: ${tag}`)
                 }
                 return Effect.succeed({ id: 1, name: payload.name })
-              }) as any,
+              },
             )
             const Client = AtomRpc.Service()('Client', {
               group: Group,
@@ -154,18 +152,6 @@ Feature('Submitting a change over rpc')
         }),
       ),
     )
-  })
-
-const StreamGroup = RpcGroup.make(
-  Rpc.make('getItems', {
-    payload: Schema.Struct({ count: Schema.Number }),
-    success: Schema.Struct({ id: Schema.Number, name: Schema.String }),
-    stream: true,
-  }),
-)
-
-Feature('Watching a live stream of records over rpc')
-  .body(({ scenario }) => {
     scenario(
       'A stream of records from an rpc server is pulled into the page as it arrives',
       Gherkin.Do.pipe(
@@ -173,7 +159,7 @@ Feature('Watching a live stream of records over rpc')
           Effect.sync(() => {
             let callCount = 0
             const makeEffect = Effect.succeed(
-              ((tag: string) => {
+              (tag: string) => {
                 callCount++
                 if (tag !== 'getItems') {
                   return Effect.die(`unexpected tag: ${tag}`)
@@ -182,7 +168,7 @@ Feature('Watching a live stream of records over rpc')
                   { id: 1, name: 'first' },
                   { id: 2, name: 'second' },
                 ])
-              }) as any,
+              },
             )
             const Client = AtomRpc.Service()('Client', {
               group: StreamGroup,
@@ -220,10 +206,6 @@ Feature('Watching a live stream of records over rpc')
         }),
       ),
     )
-  })
-
-Feature('Refreshing watched queries after a change over rpc')
-  .body(({ scenario }) => {
     scenario(
       'A change submitted with reactivity keys refetches the queries watching those keys',
       Gherkin.Do.pipe(
@@ -233,7 +215,7 @@ Feature('Refreshing watched queries after a change over rpc')
             Effect.sync(() => {
               let callCount = 0
               const makeEffect = Effect.succeed(
-                ((tag: string, payload: { readonly id?: number; readonly name?: string }) => {
+                (tag: string, payload: { readonly id?: number; readonly name?: string }) => {
                   callCount++
                   if (tag === 'getUser') {
                     return Effect.succeed({ id: 1, name: 'user-1' })
@@ -242,7 +224,7 @@ Feature('Refreshing watched queries after a change over rpc')
                     return Effect.succeed({ id: 1, name: payload.name ?? '' })
                   }
                   return Effect.die(`unexpected tag: ${tag}`)
-                }) as any,
+                },
               )
               const Client = AtomRpc.Service()('Client', {
                 group: Group,
@@ -284,22 +266,18 @@ Feature('Refreshing watched queries after a change over rpc')
         }),
       ),
     )
-  })
-
-Feature('Preparing an rpc client whose protocol comes from the page')
-  .body(({ scenario }) => {
     scenario(
       'A client built with a protocol function answers the same as one built with a layer',
       Gherkin.Do.pipe(
         Given('a page that builds its rpc client with a protocol function')('ctx', () =>
           Effect.sync(() => {
             const makeEffect = Effect.succeed(
-              ((tag: string, payload: { readonly id: number }) => {
+              (tag: string, payload: { readonly id: number }) => {
                 if (tag !== 'getUser') {
                   return Effect.die(`unexpected tag: ${tag}`)
                 }
                 return Effect.succeed({ id: payload.id, name: `user-${payload.id}` })
-              }) as any,
+              },
             )
             const Client = AtomRpc.Service()('Client', {
               group: Group,
@@ -327,10 +305,6 @@ Feature('Preparing an rpc client whose protocol comes from the page')
         }),
       ),
     )
-  })
-
-Feature('Retaining and hydrating an rpc query')
-  .body(({ scenario }) => {
     scenario(
       'A query asked for headers, a minute-long retention, and a hydration key survives reload, while a query asked to stay alive forever is kept',
       Gherkin.Do.pipe(
@@ -340,13 +314,13 @@ Feature('Retaining and hydrating an rpc query')
           Effect.sync(() => {
             let callCount = 0
             const makeEffect = Effect.succeed(
-              ((tag: string, payload: { readonly id: number }) => {
+              (tag: string, payload: { readonly id: number }) => {
                 callCount++
                 if (tag !== 'getUser') {
                   return Effect.die(`unexpected tag: ${tag}`)
                 }
                 return Effect.succeed({ id: payload.id, name: `user-${payload.id}` })
-              }) as any,
+              },
             )
             const Client = AtomRpc.Service()('Client', {
               group: Group,

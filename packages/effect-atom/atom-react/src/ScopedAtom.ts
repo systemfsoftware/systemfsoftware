@@ -66,7 +66,7 @@ export const TypeId: TypeId = '~@effect/atom-react/ScopedAtom'
  * @category models
  * @since 4.0.0
  */
-export interface ScopedAtom<A extends Atom.Atom<any>, Input = never> {
+export interface ScopedAtom<A extends Atom.Atom<unknown>, Input = never> {
   readonly [TypeId]: TypeId
   use(): A
   Provider: [Input] extends [never] ? React.FC<{ readonly children?: React.ReactNode | undefined }>
@@ -123,7 +123,7 @@ export interface ScopedAtom<A extends Atom.Atom<any>, Input = never> {
  * @category constructors
  * @since 4.0.0
  */
-export const make = <A extends Atom.Atom<any>, Input = never>(
+export const make = <A extends Atom.Atom<unknown>, Input = never>(
   f: (() => A) | ((input: Input) => A),
 ): ScopedAtom<A, Input> => {
   const Context = React.createContext<A | undefined>(undefined)
@@ -136,13 +136,15 @@ export const make = <A extends Atom.Atom<any>, Input = never>(
     return atom
   }
 
+  const hasNoParameters = (factory: (() => A) | ((input: Input) => A)): factory is () => A => factory.length === 0
+
   const Provider: React.FC<{ readonly children?: React.ReactNode | undefined; readonly value?: Input }> = (props) => {
     const atom = React.useRef<A | null>(null)
     if (atom.current === null) {
-      if (f.length === 0) {
-        atom.current = (f as () => A)()
+      if (hasNoParameters(f)) {
+        atom.current = f()
       } else if (props.value !== undefined) {
-        atom.current = (f as (input: Input) => A)(props.value)
+        atom.current = f(props.value)
       } else {
         throw new Error('ScopedAtom Provider requires a value')
       }

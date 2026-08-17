@@ -25,7 +25,6 @@ Feature('Deriving values from other values on a page')
         }),
       ),
     )
-
     scenario(
       'A value computed from another value stays in sync with it',
       Gherkin.Do.pipe(
@@ -42,7 +41,6 @@ Feature('Deriving values from other values on a page')
         }),
       ),
     )
-
     scenario(
       'Two items with different keys get their own independent values',
       Gherkin.Do.pipe(
@@ -63,7 +61,6 @@ Feature('Deriving values from other values on a page')
         }),
       ),
     )
-
     scenario(
       'A value that never finishes loading still reports loading after being asked to refresh',
       Gherkin.Do.pipe(
@@ -89,10 +86,6 @@ Feature('Deriving values from other values on a page')
         }),
       ),
     )
-  })
-
-Feature('Showing a stand-in while a value loads')
-  .body(({ scenario }) => {
     scenario(
       'A value with a stand-in shows the stand-in while the source is still loading',
       Gherkin.Do.pipe(
@@ -112,7 +105,6 @@ Feature('Showing a stand-in while a value loads')
         }),
       ),
     )
-
     scenario(
       'Once the source finishes, its real outcome replaces the stand-in',
       Gherkin.Do.pipe(
@@ -134,10 +126,6 @@ Feature('Showing a stand-in while a value loads')
         }),
       ),
     )
-  })
-
-Feature('Keeping the page responsive while a change is confirmed in the background')
-  .body(({ scenario }) => {
     scenario(
       'A change shows up right away and disappears when the confirmation is rejected',
       Gherkin.Do.pipe(
@@ -189,7 +177,6 @@ Feature('Keeping the page responsive while a change is confirmed in the backgrou
         }),
       ),
     )
-
     scenario(
       'A change that is confirmed stays, refreshed from the store',
       Gherkin.Do.pipe(
@@ -239,10 +226,6 @@ Feature('Keeping the page responsive while a change is confirmed in the backgrou
         }),
       ),
     )
-  })
-
-Feature('Grouping rapid changes into a single update')
-  .body(({ scenario }) => {
     scenario(
       'A burst of quick edits arrives as one final value',
       Gherkin.Do.pipe(
@@ -272,10 +255,6 @@ Feature('Grouping rapid changes into a single update')
         }),
       ),
     )
-  })
-
-Feature('Cleaning up values on their own schedules')
-  .body(({ scenario }) => {
     scenario(
       'A value with a short custom timer is cleaned up even when the page default is long',
       Gherkin.Do.pipe(
@@ -304,7 +283,6 @@ Feature('Cleaning up values on their own schedules')
         }),
       ),
     )
-
     scenario(
       'A family member nobody uses is cleaned up while the family lives on',
       Gherkin.Do.pipe(
@@ -335,10 +313,6 @@ Feature('Cleaning up values on their own schedules')
         }),
       ),
     )
-  })
-
-Feature('Watching a continuous feed of updates')
-  .body(({ scenario }) => {
     scenario(
       'A reader following a feed sees every update arrive in order',
       Gherkin.Do.pipe(
@@ -370,10 +344,6 @@ Feature('Watching a continuous feed of updates')
         }),
       ),
     )
-  })
-
-Feature('A live view that tracks a changing source')
-  .body(({ scenario }) => {
     scenario(
       'A view backed by a shared reference shows every change as it happens',
       Gherkin.Do.pipe(
@@ -399,10 +369,6 @@ Feature('A live view that tracks a changing source')
         }),
       ),
     )
-  })
-
-Feature('Remembering a value in the key-value store')
-  .body(({ scenario }) => {
     scenario(
       'A value remembered in the store is still there on a fresh page',
       Gherkin.Do.pipe(
@@ -441,10 +407,6 @@ Feature('Remembering a value in the key-value store')
         }),
       ),
     )
-  })
-
-Feature('Reading a value from the page address when there is no address bar')
-  .body(({ scenario }) => {
     scenario(
       'A value remembered in the page address reads as empty when there is no address bar',
       Gherkin.Do.pipe(
@@ -470,10 +432,6 @@ Feature('Reading a value from the page address when there is no address bar')
         }),
       ),
     )
-  })
-
-Feature('Refreshing a value that has gone stale')
-  .body(({ scenario }) => {
     scenario(
       'A value past its stale time refreshes itself when read again',
       Gherkin.Do.pipe(
@@ -513,10 +471,6 @@ Feature('Refreshing a value that has gone stale')
         }),
       ),
     )
-  })
-
-Feature('Sharing one member across a family')
-  .body(({ scenario }) => {
     scenario(
       'Asking a family for the same member twice gives the very same member',
       Gherkin.Do.pipe(
@@ -534,10 +488,6 @@ Feature('Sharing one member across a family')
         }),
       ),
     )
-  })
-
-Feature('Reporting progress while a change is confirmed in the background')
-  .body(({ scenario }) => {
     scenario(
       'A change whose confirmation is still running reports itself as in flight',
       Gherkin.Do.pipe(
@@ -590,10 +540,6 @@ Feature('Reporting progress while a change is confirmed in the background')
         }),
       ),
     )
-  })
-
-Feature('Turning a value on the page into a different value')
-  .body(({ scenario }) => {
     scenario(
       'A value derived from another value stays in step even when written through the derived value',
       Gherkin.Do.pipe(
@@ -627,7 +573,6 @@ Feature('Turning a value on the page into a different value')
         }),
       ),
     )
-
     scenario(
       'A value derived from a value that loads shows the mapped outcome once it arrives',
       Gherkin.Do.pipe(
@@ -657,10 +602,6 @@ Feature('Turning a value on the page into a different value')
         }),
       ),
     )
-  })
-
-Feature('Asking the page to compute a value on demand')
-  .body(({ scenario }) => {
     scenario(
       'A value requested on demand stays empty until it is asked for, and a value with a stand-in starts filled in',
       Gherkin.Do.pipe(
@@ -714,10 +655,6 @@ Feature('Asking the page to compute a value on demand')
         }),
       ),
     )
-  })
-
-Feature('Stopping and restarting a requested computation')
-  .body(({ scenario }) => {
     scenario(
       'A computation that is interrupted can be reset and started again',
       Gherkin.Do.pipe(
@@ -759,7 +696,6 @@ Feature('Stopping and restarting a requested computation')
         }),
       ),
     )
-
     scenario(
       'Several runs of a computation proceed side by side and all finish',
       Gherkin.Do.pipe(
@@ -806,10 +742,6 @@ Feature('Stopping and restarting a requested computation')
         }),
       ),
     )
-  })
-
-Feature('Showing a stand-in value while a fetch is still running')
-  .body(({ scenario }) => {
     scenario(
       'A value with a stand-in shows the stand-in until the fetch answers, then the real answer',
       Gherkin.Do.pipe(
@@ -841,10 +773,6 @@ Feature('Showing a stand-in value while a fetch is still running')
         }),
       ),
     )
-  })
-
-Feature('Watching a value that arrives in pieces')
-  .body(({ scenario }) => {
     scenario(
       'A value that streams its result fills in once the pieces arrive',
       Gherkin.Do.pipe(
@@ -879,7 +807,6 @@ Feature('Watching a value that arrives in pieces')
         }),
       ),
     )
-
     scenario(
       'A streamed value shows its stand-in first, then the real answer, and keeps it across a refresh',
       Gherkin.Do.pipe(
@@ -920,7 +847,6 @@ Feature('Watching a value that arrives in pieces')
         }),
       ),
     )
-
     scenario(
       'A streamed value that runs dry, one that fails, and one read from a plain recipe all report their own fate',
       Gherkin.Do.pipe(
@@ -963,10 +889,6 @@ Feature('Watching a value that arrives in pieces')
         }),
       ),
     )
-  })
-
-Feature('Pulling a feed in batches')
-  .body(({ scenario }) => {
     scenario(
       'A feed pulled in batches keeps only the newest batch when asked to',
       Gherkin.Do.pipe(
@@ -1002,7 +924,6 @@ Feature('Pulling a feed in batches')
         }),
       ),
     )
-
     scenario(
       'A feed that runs dry reports that it had nothing more to show',
       Gherkin.Do.pipe(
@@ -1025,7 +946,6 @@ Feature('Pulling a feed in batches')
         }),
       ),
     )
-
     scenario(
       'A feed that fails reports the failure',
       Gherkin.Do.pipe(
@@ -1048,7 +968,6 @@ Feature('Pulling a feed in batches')
         }),
       ),
     )
-
     scenario(
       'Two requests for the next batch at the same time both arrive once the signal comes',
       Gherkin.Do.pipe(
@@ -1084,10 +1003,6 @@ Feature('Pulling a feed in batches')
         }),
       ),
     )
-  })
-
-Feature('Keeping a live view of a shared reference')
-  .body(({ scenario }) => {
     scenario(
       'A live view of a shared reference follows the reference both ways, and a view whose reference cannot start reports it',
       Gherkin.Do.pipe(
@@ -1148,10 +1063,6 @@ Feature('Keeping a live view of a shared reference')
         }),
       ),
     )
-  })
-
-Feature('A page that needs services to answer')
-  .body(({ scenario }) => {
     scenario(
       'A page with services computes values and runs tasks against those services',
       Gherkin.Do.pipe(
@@ -1250,7 +1161,6 @@ Feature('A page that needs services to answer')
         }),
       ),
     )
-
     scenario(
       'A page whose services are built from a recipe answers with the recipe result',
       Gherkin.Do.pipe(
@@ -1271,7 +1181,6 @@ Feature('A page that needs services to answer')
         }),
       ),
     )
-
     scenario(
       'A page whose services fail reports that every value is unavailable',
       Gherkin.Do.pipe(
@@ -1300,10 +1209,6 @@ Feature('A page that needs services to answer')
         }),
       ),
     )
-  })
-
-Feature('Saving a value so a reloaded page can restore it')
-  .body(({ scenario }) => {
     scenario(
       'A saved value starts a fresh page already filled in',
       Gherkin.Do.pipe(
@@ -1326,7 +1231,6 @@ Feature('Saving a value so a reloaded page can restore it')
         }),
       ),
     )
-
     scenario(
       'A saved value arriving while the page already shows the value updates it in place',
       Gherkin.Do.pipe(
@@ -1349,7 +1253,6 @@ Feature('Saving a value so a reloaded page can restore it')
         }),
       ),
     )
-
     scenario(
       'A saved value arriving before the page asks for it is applied when it does',
       Gherkin.Do.pipe(
@@ -1366,7 +1269,6 @@ Feature('Saving a value so a reloaded page can restore it')
         }),
       ),
     )
-
     scenario(
       'A saved derived value restores the value it was derived from, until the derived value refreshes',
       Gherkin.Do.pipe(
@@ -1402,7 +1304,6 @@ Feature('Saving a value so a reloaded page can restore it')
         }),
       ),
     )
-
     scenario(
       'A saved value keeps its own name when given one',
       Gherkin.Do.pipe(
@@ -1427,10 +1328,6 @@ Feature('Saving a value so a reloaded page can restore it')
         }),
       ),
     )
-  })
-
-Feature('Serving a value to the server')
-  .body(({ scenario }) => {
     scenario(
       'A page serves its values to the server, using each value\u2019s own server recipe',
       Gherkin.Do.pipe(
@@ -1460,10 +1357,6 @@ Feature('Serving a value to the server')
         }),
       ),
     )
-  })
-
-Feature('Falling back to a stored copy while a value loads')
-  .body(({ scenario }) => {
     scenario(
       'A writable value with a stored copy shows the copy until it runs, and writes go through to it',
       Gherkin.Do.pipe(
@@ -1505,10 +1398,6 @@ Feature('Falling back to a stored copy while a value loads')
         }),
       ),
     )
-  })
-
-Feature('Refreshing a value when the page regains attention')
-  .body(({ scenario }) => {
     scenario(
       'A value past its fresh time refreshes when the page regains attention, and one set to always refresh does too',
       Gherkin.Do.pipe(
@@ -1556,7 +1445,6 @@ Feature('Refreshing a value when the page regains attention')
         }),
       ),
     )
-
     scenario(
       'A value that is already stale when first shown is not fetched again until something asks for it',
       Gherkin.Do.pipe(
@@ -1588,7 +1476,6 @@ Feature('Refreshing a value when the page regains attention')
         }),
       ),
     )
-
     scenario(
       'A value that failed and one that is still waiting are left alone',
       Gherkin.Do.pipe(
@@ -1611,10 +1498,6 @@ Feature('Refreshing a value when the page regains attention')
         }),
       ),
     )
-  })
-
-Feature('Confirming a change through a working copy')
-  .body(({ scenario }) => {
     scenario(
       'A change confirmed through a working copy reports its progress and then the confirmed value',
       Gherkin.Do.pipe(
@@ -1706,7 +1589,6 @@ Feature('Confirming a change through a working copy')
         }),
       ),
     )
-
     scenario(
       'A change that is accepted right away settles on the confirmed value without waiting',
       Gherkin.Do.pipe(
@@ -1746,10 +1628,6 @@ Feature('Confirming a change through a working copy')
         }),
       ),
     )
-  })
-
-Feature('Remembering values in a slower store')
-  .body(({ scenario }) => {
     scenario(
       'A value remembered in a slower store shows the fallback until the store answers, without overwriting the store',
       Gherkin.Do.pipe(
@@ -1807,7 +1685,6 @@ Feature('Remembering values in a slower store')
         }),
       ),
     )
-
     scenario(
       'A write made before the store answers wins over the slower store read',
       Gherkin.Do.pipe(
@@ -1861,7 +1738,6 @@ Feature('Remembering values in a slower store')
         }),
       ),
     )
-
     scenario(
       'A value remembered in loading mode exposes its loading state and accepts writes',
       Gherkin.Do.pipe(
@@ -1925,10 +1801,6 @@ Feature('Remembering values in a slower store')
         }),
       ),
     )
-  })
-
-Feature('Disposing of a running value')
-  .body(({ scenario }) => {
     scenario(
       'A running value that is no longer needed is stopped, and one that must not be interrupted keeps running quietly',
       Gherkin.Do.pipe(
@@ -1968,10 +1840,6 @@ Feature('Disposing of a running value')
         }),
       ),
     )
-  })
-
-Feature('Working with a value through a page service')
-  .body(({ scenario }) => {
     scenario(
       'A value can be read, written, updated, changed, and refreshed through the page service',
       Gherkin.Do.pipe(
@@ -2005,10 +1873,6 @@ Feature('Working with a value through a page service')
         }),
       ),
     )
-  })
-
-Feature('Building values from other values and from nothing at all')
-  .body(({ scenario }) => {
     scenario(
       'A value built from another value follows it, and values built from nothing keep their own shape',
       Gherkin.Do.pipe(
@@ -2052,10 +1916,6 @@ Feature('Building values from other values and from nothing at all')
         }),
       ),
     )
-  })
-
-Feature('Cleaning up a value that was about to update')
-  .body(({ scenario }) => {
     scenario(
       'A value that was about to update is cleaned up without firing its pending update',
       Gherkin.Do.pipe(

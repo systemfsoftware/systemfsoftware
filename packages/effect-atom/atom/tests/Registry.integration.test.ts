@@ -1,9 +1,7 @@
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Cause, Effect, Exit, Fiber, Latch, Option, Schema, Stream } from 'effect'
 import { expect, vi } from 'vitest'
-import * as Atom from '../src/Atom.js'
-import * as Registry from '../src/Registry.js'
-import * as Result from '../src/Result.js'
+import { Atom, Registry, Result } from '../src/index.js'
 
 const Feature = makeFeature({ it, layer })
 
@@ -50,7 +48,6 @@ Feature('Keeping a value that is still loading available to every reader')
         ),
       ),
     )
-
     scenario(
       'A value marked to always stay available is never dropped or restarted by cleanup',
       Gherkin.Do.pipe(
@@ -86,10 +83,6 @@ Feature('Keeping a value that is still loading available to every reader')
         }),
       ),
     )
-  })
-
-Feature('Letting go of sources a derived value no longer follows')
-  .body(({ scenario }) => {
     scenario(
       'A derived value that switches sources lets the abandoned source be cleaned up',
       Gherkin.Do.pipe(
@@ -133,10 +126,6 @@ Feature('Letting go of sources a derived value no longer follows')
         }),
       ),
     )
-  })
-
-Feature('Waiting for a settled answer instead of a stale one')
-  .body(({ scenario }) => {
     scenario(
       'A reader who asks for a settled answer during a refresh gets the fresh one, not the stale one',
       Gherkin.Do.pipe(
@@ -181,10 +170,6 @@ Feature('Waiting for a settled answer instead of a stale one')
         }),
       ),
     )
-  })
-
-Feature('Hearing the current value right away when listening')
-  .body(({ scenario }) => {
     scenario(
       'A listener who asks to hear the current value immediately hears it before any change',
       Gherkin.Do.pipe(
@@ -206,10 +191,6 @@ Feature('Hearing the current value right away when listening')
         }),
       ),
     )
-  })
-
-Feature('Sharing a cleanup schedule between values')
-  .body(({ scenario }) => {
     scenario(
       'Two values with the same cleanup schedule are swept together',
       Gherkin.Do.pipe(
@@ -236,7 +217,6 @@ Feature('Sharing a cleanup schedule between values')
         }),
       ),
     )
-
     scenario(
       'A value that is used again while its cleanup is pending is not swept',
       Gherkin.Do.pipe(
@@ -273,10 +253,6 @@ Feature('Sharing a cleanup schedule between values')
         }),
       ),
     )
-  })
-
-Feature('Releasing a mounted value when its lifetime ends')
-  .body(({ scenario }) => {
     scenario(
       'A value mounted for a lifetime is released when that lifetime closes',
       Gherkin.Do.pipe(
@@ -298,10 +274,6 @@ Feature('Releasing a mounted value when its lifetime ends')
         }),
       ),
     )
-  })
-
-Feature('Streaming the current value and every change')
-  .body(({ scenario }) => {
     scenario(
       'A stream of a value emits the current value first, then every change until it is released',
       Gherkin.Do.pipe(
@@ -340,10 +312,6 @@ Feature('Streaming the current value and every change')
         }),
       ),
     )
-  })
-
-Feature('Streaming settled results')
-  .body(({ scenario }) => {
     scenario(
       'A stream of settled results skips the loading state, deduplicates, and fails when the result fails',
       Gherkin.Do.pipe(
@@ -392,7 +360,6 @@ Feature('Streaming settled results')
         ),
       ),
     )
-
     scenario(
       'A stream of a failed result fails right away',
       Gherkin.Do.pipe(
@@ -415,7 +382,6 @@ Feature('Streaming settled results')
         }),
       ),
     )
-
     scenario(
       'A stream created through a value reads settled results and failures',
       Gherkin.Do.pipe(
@@ -457,10 +423,6 @@ Feature('Streaming settled results')
         }),
       ),
     )
-  })
-
-Feature('Hearing settled answers without stale reads')
-  .body(({ scenario }) => {
     scenario(
       'A reader asking for a settled answer hears it immediately when one is already available',
       Gherkin.Do.pipe(
@@ -480,7 +442,6 @@ Feature('Hearing settled answers without stale reads')
         }),
       ),
     )
-
     scenario(
       'A reader asking for a settled answer waits through loading and waiting states until a final value arrives',
       Gherkin.Do.pipe(
@@ -519,10 +480,6 @@ Feature('Hearing settled answers without stale reads')
         }),
       ),
     )
-  })
-
-Feature('Batching writes so listeners hear the final value once')
-  .body(({ scenario }) => {
     scenario(
       'A listener hears only the final value when several writes happen inside one batch',
       Gherkin.Do.pipe(
@@ -548,7 +505,6 @@ Feature('Batching writes so listeners hear the final value once')
         }),
       ),
     )
-
     scenario(
       'A value that invalidates itself while building inside a batch is rebuilt once and settles on the new value',
       Gherkin.Do.pipe(
@@ -579,7 +535,6 @@ Feature('Batching writes so listeners hear the final value once')
         }),
       ),
     )
-
     scenario(
       'A batch that invalidates both a value and its source rebuilds the source first',
       Gherkin.Do.pipe(
@@ -609,7 +564,6 @@ Feature('Batching writes so listeners hear the final value once')
         }),
       ),
     )
-
     scenario(
       'A value that refreshes itself while building inside a batch is rebuilt once',
       Gherkin.Do.pipe(
@@ -640,10 +594,6 @@ Feature('Batching writes so listeners hear the final value once')
         }),
       ),
     )
-  })
-
-Feature('Preloading values before their first read')
-  .body(({ scenario }) => {
     scenario(
       'A preloaded value is announced to listeners and kept as the first value',
       Gherkin.Do.pipe(
@@ -666,7 +616,6 @@ Feature('Preloading values before their first read')
         }),
       ),
     )
-
     scenario(
       'Setting a new initial value on an already-built value replaces it',
       Gherkin.Do.pipe(
@@ -687,7 +636,6 @@ Feature('Preloading values before their first read')
         }),
       ),
     )
-
     scenario(
       'Setting an initial value inside a batch still announces it',
       Gherkin.Do.pipe(
@@ -709,7 +657,6 @@ Feature('Preloading values before their first read')
         }),
       ),
     )
-
     scenario(
       'Setting an initial value on a derived value routes it to its source',
       Gherkin.Do.pipe(
@@ -734,16 +681,12 @@ Feature('Preloading values before their first read')
         }),
       ),
     )
-  })
-
-Feature('Restoring serializable values')
-  .body(({ scenario }) => {
     scenario(
       'A stored serializable value is applied directly when the value already exists',
       Gherkin.Do.pipe(
         Given('a serializable value that has already been read')('ctx', () =>
           Effect.sync(() => {
-            const direct = Atom.serializable({ key: 'direct-key', schema: Schema.Number })(Atom.make(2))
+            const direct = Atom.make(2).pipe(Atom.serializable({ key: 'direct-key', schema: Schema.Number }))
             const page = Registry.make()
             return { page, direct }
           })),
@@ -758,15 +701,14 @@ Feature('Restoring serializable values')
         }),
       ),
     )
-
     scenario(
       'A stored serializable value is routed to the source when the value is derived',
       Gherkin.Do.pipe(
         Given('a derived value that stores its initial value on its source')('ctx', () =>
           Effect.sync(() => {
             const source = Atom.make(1)
-            const derived = Atom.serializable({ key: 'derived-key', schema: Schema.Number })(
-              Atom.transform(source, (get) => get(source), { initialValueTarget: source }),
+            const derived = Atom.transform(source, (get) => get(source), { initialValueTarget: source }).pipe(
+              Atom.serializable({ key: 'derived-key', schema: Schema.Number }),
             )
             const page = Registry.make()
             return { page, source, derived }
@@ -785,13 +727,12 @@ Feature('Restoring serializable values')
         }),
       ),
     )
-
     scenario(
       'A stored serializable value is applied even before the value is ever read, and refreshing it rebuilds it from its definition',
       Gherkin.Do.pipe(
         Given('a serializable value that has a listener but has never been read')('ctx', () =>
           Effect.sync(() => {
-            const direct = Atom.serializable({ key: 'unread-key', schema: Schema.Number })(Atom.make(2))
+            const direct = Atom.make(2).pipe(Atom.serializable({ key: 'unread-key', schema: Schema.Number }))
             const page = Registry.make()
             return { page, direct }
           })),
@@ -810,10 +751,6 @@ Feature('Restoring serializable values')
         }),
       ),
     )
-  })
-
-Feature('Using a registry through its service layer')
-  .body(({ scenario }) => {
     scenario(
       'A registry provided by the default layer serves values and honors preloaded options',
       Gherkin.Do.pipe(
@@ -848,10 +785,6 @@ Feature('Using a registry through its service layer')
         }),
       ),
     )
-  })
-
-Feature('Rejecting work after the registry is disposed')
-  .body(({ scenario }) => {
     scenario(
       'A disposed registry refuses to create nodes',
       Gherkin.Do.pipe(
@@ -870,7 +803,11 @@ Feature('Rejecting work after the registry is disposed')
             try {
               s.ctx.page.get(Atom.make(2))
             } catch (error) {
-              message = String(error)
+              message = error instanceof Error
+                ? error.message
+                : typeof error === 'string'
+                ? error
+                : JSON.stringify(error)
             }
             return { remaining, message }
           })),
@@ -880,10 +817,6 @@ Feature('Rejecting work after the registry is disposed')
         }),
       ),
     )
-  })
-
-Feature('Sweeping a parent right after its child')
-  .body(({ scenario }) => {
     scenario(
       'When a child is swept, its idle parent is swept in the same pass instead of waiting for a new window',
       Gherkin.Do.pipe(
@@ -898,7 +831,11 @@ Feature('Sweeping a parent right after its child')
         When('both fall idle and the shared cleanup timer runs')('result', (s) =>
           Effect.sync(() => {
             s.ctx.page.get(s.ctx.derived)
-            const node = s.ctx.page.getNodes().get(s.ctx.derived)!
+            const maybeNode = s.ctx.page.getNodes().get(s.ctx.derived)
+            if (maybeNode === undefined) {
+              throw new Error('expected a node after reading the value')
+            }
+            const node = maybeNode
             const before = node.currentState()
             vi.advanceTimersByTime(100)
             const keys = new Set(s.ctx.page.getNodes().keys())
@@ -919,7 +856,6 @@ Feature('Sweeping a parent right after its child')
         }),
       ),
     )
-
     scenario(
       'A parent that is still in use survives the sweep that removes its child',
       Gherkin.Do.pipe(
@@ -952,7 +888,6 @@ Feature('Sweeping a parent right after its child')
         }),
       ),
     )
-
     scenario(
       'A parent with a longer cleanup schedule is swept in its own window after its child',
       Gherkin.Do.pipe(
@@ -985,10 +920,6 @@ Feature('Sweeping a parent right after its child')
         }),
       ),
     )
-  })
-
-Feature('Clearing pending cleanup when a value is used again')
-  .body(({ scenario }) => {
     scenario(
       'Re-reading values before their cleanup window removes their pending timers',
       Gherkin.Do.pipe(
@@ -1018,10 +949,6 @@ Feature('Clearing pending cleanup when a value is used again')
         }),
       ),
     )
-  })
-
-Feature('Releasing subscriptions')
-  .body(({ scenario }) => {
     scenario(
       'Unsubscribing from a value that was never read removes it entirely',
       Gherkin.Do.pipe(
@@ -1034,7 +961,11 @@ Feature('Releasing subscriptions')
         When('a listener attaches without reading, then releases')('result', (s) =>
           Effect.gen(function*() {
             const cancel = s.ctx.page.subscribe(s.ctx.value, () => {})
-            const before = s.ctx.page.getNodes().get(s.ctx.value)!.currentState()
+            const maybeNode = s.ctx.page.getNodes().get(s.ctx.value)
+            if (maybeNode === undefined) {
+              throw new Error('expected a node after the value was touched')
+            }
+            const before = maybeNode.currentState()
             cancel()
             yield* Effect.yieldNow
             const keys = new Set(s.ctx.page.getNodes().keys())
@@ -1046,10 +977,6 @@ Feature('Releasing subscriptions')
         }),
       ),
     )
-  })
-
-Feature('Invalidating lazy values through their children')
-  .body(({ scenario }) => {
     scenario(
       'A lazy value with an active child rebuilds when refreshed',
       Gherkin.Do.pipe(
@@ -1065,7 +992,11 @@ Feature('Invalidating lazy values through their children')
           Effect.sync(() => {
             s.ctx.page.get(s.ctx.root)
             s.ctx.page.get(s.ctx.activeChild)
-            const node = s.ctx.page.getNodes().get(s.ctx.root)!
+            const maybeNode = s.ctx.page.getNodes().get(s.ctx.root)
+            if (maybeNode === undefined) {
+              throw new Error('expected a node after reading the value')
+            }
+            const node = maybeNode
             s.ctx.page.refresh(s.ctx.root)
             return { state: node.currentState(), value: s.ctx.page.get(s.ctx.root) }
           })),
@@ -1075,7 +1006,6 @@ Feature('Invalidating lazy values through their children')
         }),
       ),
     )
-
     scenario(
       'A lazy value with only inactive descendants stays stale until read again and forgets the skipped invalidation once a new child appears',
       Gherkin.Do.pipe(
@@ -1099,7 +1029,11 @@ Feature('Invalidating lazy values through their children')
               s.ctx.page.get(s.ctx.right)
               s.ctx.page.get(s.ctx.leftChild)
               s.ctx.page.get(s.ctx.rightChild)
-              const node = s.ctx.page.getNodes().get(s.ctx.root)!
+              const maybeNode = s.ctx.page.getNodes().get(s.ctx.root)
+              if (maybeNode === undefined) {
+                throw new Error('expected a node after reading the value')
+              }
+              const node = maybeNode
               s.ctx.page.refresh(s.ctx.root)
               const afterRefresh = node.currentState()
               const newcomer = Atom.readable((get) => get(s.ctx.root))
@@ -1120,10 +1054,6 @@ Feature('Invalidating lazy values through their children')
         ),
       ),
     )
-  })
-
-Feature('Letting go of sources that are still in use')
-  .body(({ scenario }) => {
     scenario(
       'A derived value that stops following a source leaves the source alone while someone still listens',
       Gherkin.Do.pipe(
@@ -1168,10 +1098,6 @@ Feature('Letting go of sources that are still in use')
         }),
       ),
     )
-  })
-
-Feature('Stopping work when a value is invalidated')
-  .body(({ scenario }) => {
     scenario(
       'Work scheduled by a value stops when the value is invalidated',
       Gherkin.Do.pipe(
@@ -1264,7 +1190,11 @@ Feature('Stopping work when a value is invalidated')
               const throughWaiting = yield* Fiber.join(s.ctx.fibers[3])
               const throughNone = yield* Fiber.join(s.ctx.fibers[4])
               s.ctx.registry.refresh(s.ctx.value)
-              const node = s.ctx.registry.getNodes().get(s.ctx.value)!
+              const maybeNode = s.ctx.registry.getNodes().get(s.ctx.value)
+              if (maybeNode === undefined) {
+                throw new Error('expected a node after reading the value')
+              }
+              const node = maybeNode
               return {
                 settledValue,
                 resumedValue,

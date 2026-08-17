@@ -8,10 +8,11 @@
  *
  * @since 4.0.0
  */
+import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
 import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
-import type { Atom, Type, WithoutSerializable, Writable } from './Atom.js'
+import type { Atom, Type, WithoutSerializable, Writable, WriteContext } from './Atom.js'
 import { readable, transform, writable } from './internal/core.js'
 
 // -----------------------------------------------------------------------------
@@ -55,13 +56,15 @@ export const windowFocusSignal: Atom<number> = readable((get) => {
  * @category constructors
  * @since 4.0.0
  */
-export const makeRefreshOnSignal = <_>(signal: Atom<_>) => {
-  function refreshOnSignal<A extends Atom<any>>(self: A): WithoutSerializable<A>
-  function refreshOnSignal<A extends Atom<any>>(self: A): Atom<Type<A>> | Writable<Type<A>, any> {
+export const makeRefreshOnSignal = <S>(signal: Atom<S>) => {
+  function refreshOnSignal<A extends Atom<unknown>>(self: A): WithoutSerializable<A>
+  function refreshOnSignal<A extends Atom<unknown>, V extends Type<A>>(
+    self: A & Atom<V>,
+  ): [A & Atom<V>] extends [Writable<infer _, infer RW>] ? Writable<V, RW> : Atom<V> {
     return transform(self, (get) => {
       get.once(signal)
-      get.subscribe(signal, (_) => get.refresh(self))
-      get.subscribe(self, (value) => get.setSelf(value))
+      get.subscribe(signal, () => get.refresh(self))
+      get.subscribe(self, (value: V) => get.setSelf(value))
       return get.once(self)
     }, { initialValueTarget: self })
   }
@@ -79,7 +82,7 @@ export const makeRefreshOnSignal = <_>(signal: Atom<_>) => {
  * @category combinators
  * @since 4.0.0
  */
-export const refreshOnWindowFocus: <A extends Atom<any>>(self: A) => WithoutSerializable<A> = makeRefreshOnSignal(
+export const refreshOnWindowFocus: <A extends Atom<unknown>>(self: A) => WithoutSerializable<A> = makeRefreshOnSignal(
   windowFocusSignal,
 )
 
@@ -97,22 +100,24 @@ export const refreshOnWindowFocus: <A extends Atom<any>>(self: A) => WithoutSeri
  * @category constructors
  * @since 4.0.0
  */
-export function searchParam<S extends Schema.ConstraintCodec<any, string> = never>(
+export function searchParam<S extends Schema.ConstraintCodec<unknown, string> = never>(
   name: string,
   options?: {
     readonly schema?: S | undefined
   },
 ): Writable<[S] extends [never] ? string : Option.Option<S['Type']>>
-export function searchParam<S extends Schema.ConstraintCodec<any, string> = never>(
+export function searchParam<S extends Schema.ConstraintCodec<unknown, string> = never>(
   name: string,
   options?: {
     readonly schema?: S | undefined
   },
-): Writable<Option.Option<S['Type'] | undefined> | string, any> {
+): Writable<string | Option.Option<S['Type']> | S['Type'], string | Option.Option<S['Type']>> {
+  type R = string | Option.Option<S['Type']> | S['Type']
+  type W = string | Option.Option<S['Type']>
   const decode = options?.schema && Schema.decodeExit(options.schema)
   const encode = options?.schema && Schema.encodeExit(options.schema)
-  return writable(
-    (get) => {
+  return writable<R, W>(
+    (get): R => {
       if (typeof window === 'undefined') {
         return decode ? Option.none() : ''
       }
@@ -135,36 +140,47 @@ export function searchParam<S extends Schema.ConstraintCodec<any, string> = neve
       const value = new URLSearchParams(window.location.search).get(name) || ''
       return decode ? Exit.getSuccess(decode(value)) : value
     },
-    (ctx, value: any) => {
+    (ctx: WriteContext<R>, value: W) => {
       if (typeof window === 'undefined') {
         ctx.setSelf(value)
         return
       }
-
       if (encode) {
-        const encoded = Option.flatMap(value, (v) => Exit.getSuccess(encode(v as S['Type'])))
+        const encoded = Option.flatMap(
+          Option.isOption(value) ? value : Option.none(),
+          (v) => Exit.getSuccess(encode(v)),
+        )
         searchParamState.updates.set(name, Option.getOrElse(encoded, () => ''))
-        value = Option.zipRight(encoded, value)
-      } else {
+        if (Option.isOption(value)) {
+          ctx.setSelf(Option.zipRight(encoded, value))
+        }
+      } else if (typeof value === 'string') {
         searchParamState.updates.set(name, value)
+        ctx.setSelf(value)
       }
-      ctx.setSelf(value)
-      if (searchParamState.timeout) {
-        clearTimeout(searchParamState.timeout)
-      }
-      searchParamState.timeout = setTimeout(updateSearchParams, 500)
+      const generation = ++searchParamState.generation
+      Effect.runFork(
+        Effect.sleep('500 millis').pipe(
+          Effect.andThen(
+            Effect.sync(() => {
+              if (searchParamState.generation === generation) {
+                updateSearchParams()
+              }
+            }),
+          ),
+        ),
+      )
     },
   )
 }
 
 const searchParamState = {
-  timeout: undefined as number | undefined,
+  generation: 0,
   updates: new Map<string, string>(),
   updating: false,
 }
 
 function updateSearchParams() {
-  searchParamState.timeout = undefined
   searchParamState.updating = true
   const searchParams = new URLSearchParams(window.location.search)
   for (const [key, value] of searchParamState.updates.entries()) {

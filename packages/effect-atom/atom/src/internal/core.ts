@@ -1,5 +1,6 @@
 import * as Duration from 'effect/Duration'
 import { dual } from 'effect/Function'
+import { type Inspectable, NodeInspectSymbol } from 'effect/Inspectable'
 import { pipeArguments } from 'effect/Pipeable'
 import { hasProperty } from 'effect/Predicate'
 import type { Mutable } from 'effect/Types'
@@ -50,7 +51,7 @@ export const WritableTypeId: WritableTypeId = '~effect/reactivity/Atom/Writable'
  * @category guards
  * @since 4.0.0
  */
-export const isAtom = (u: unknown): u is Atom<any> => hasProperty(u, TypeId)
+export const isAtom = (u: unknown): u is Atom<unknown> => hasProperty(u, TypeId)
 
 /**
  * Returns a copy of an atom with an idle time-to-live: finite durations dispose it after inactivity, while an infinite duration keeps it alive.
@@ -59,19 +60,21 @@ export const isAtom = (u: unknown): u is Atom<any> => hasProperty(u, TypeId)
  * @since 4.0.0
  */
 export const setIdleTTL: {
-  (duration: Duration.Input): <A extends Atom<any>>(self: A) => A
-  <A extends Atom<any>>(self: A, duration: Duration.Input): A
+  (duration: Duration.Input): <A extends Atom<unknown>>(self: A) => A
+  <A extends Atom<unknown>>(self: A, duration: Duration.Input): A
 } = dual<
-  (duration: Duration.Input) => <A extends Atom<any>>(self: A) => A,
-  <A extends Atom<any>>(self: A, duration: Duration.Input) => A
->(2, (self, durationInput) => {
+  (duration: Duration.Input) => <A extends Atom<unknown>>(self: A) => A,
+  <A extends Atom<unknown>>(self: A, duration: Duration.Input) => A
+>(2, <A extends Atom<unknown>>(self: A, durationInput: Duration.Input): A => {
   const duration = Duration.fromInputUnsafe(durationInput)
   const isFinite = Duration.isFinite(duration)
-  return Object.assign(Object.create(Object.getPrototypeOf(self)), {
+  const copy = {
     ...self,
     keepAlive: !isFinite,
     idleTTL: isFinite ? Duration.toMillis(duration) : undefined,
-  })
+  }
+  Reflect.setPrototypeOf(copy, Reflect.getPrototypeOf(self))
+  return copy
 })
 
 /** @internal */
@@ -82,7 +85,10 @@ export const AtomProto = {
   [TypeId]: TypeId,
   equals: Object.is,
   ...PipeInspectableProto,
-  toJSON(this: Atom<any>) {
+  [NodeInspectSymbol](): Inspectable {
+    return this
+  },
+  toJSON(this: Atom<unknown>) {
     return {
       _id: 'Atom',
       keepAlive: this.keepAlive,
@@ -116,11 +122,13 @@ export const readable = <A>(
   read: (get: AtomContext) => A,
   refresh?: (f: <A>(atom: Atom<A>) => void) => void,
 ): Atom<A> => {
-  const self = Object.create(AtomProto)
-  self.keepAlive = false
-  self.lazy = true
-  self.read = read
-  self.refresh = refresh
+  const self: Atom<A> = {
+    ...AtomProto,
+    keepAlive: false,
+    lazy: true,
+    read,
+    ...(refresh === undefined ? {} : { refresh }),
+  }
   return self
 }
 
@@ -135,12 +143,14 @@ export const writable = <R, W>(
   write: (ctx: WriteContext<R>, value: W) => void,
   refresh?: (f: <A>(atom: Atom<A>) => void) => void,
 ): Writable<R, W> => {
-  const self = Object.create(WritableProto)
-  self.keepAlive = false
-  self.lazy = true
-  self.read = read
-  self.write = write
-  self.refresh = refresh
+  const self: Writable<R, W> = {
+    ...WritableProto,
+    keepAlive: false,
+    lazy: true,
+    read,
+    write,
+    ...(refresh === undefined ? {} : { refresh }),
+  }
   return self
 }
 
@@ -166,13 +176,13 @@ const getInitialValueTarget = <A>(atom: Atom<A>): Atom<A> => {
  * @since 4.0.0
  */
 export const transform: {
-  <R extends Atom<any>, B>(
+  <R extends Atom<unknown>, B>(
     f: (get: AtomContext, atom: R) => B,
     options?: {
       readonly initialValueTarget?: Atom<B> | undefined
     },
   ): (self: R) => [R] extends [Writable<infer _, infer RW>] ? Writable<B, RW> : Atom<B>
-  <R extends Atom<any>, B>(
+  <R extends Atom<unknown>, B>(
     self: R,
     f: (get: AtomContext, atom: R) => B,
     options?: {
@@ -209,7 +219,8 @@ export const transform: {
         ),
     )
     if (options?.initialValueTarget) {
-      ;(atom as Mutable<Atom<B>>).initialValueTarget = getInitialValueTarget(options.initialValueTarget)
+      const mutable: Mutable<Atom<B>> = atom
+      mutable.initialValueTarget = getInitialValueTarget(options.initialValueTarget)
     }
     return atom
   },

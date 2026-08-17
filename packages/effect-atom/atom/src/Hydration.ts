@@ -10,6 +10,7 @@
  *
  * @since 4.0.0
  */
+import * as Clock from 'effect/Clock'
 import * as Deferred from 'effect/Deferred'
 import * as Effect from 'effect/Effect'
 import type * as Fiber from 'effect/Fiber'
@@ -71,14 +72,18 @@ export const dehydrate = (
 ): DehydratedAtomValue[] => {
   const encodeInitialResultMode = options?.encodeInitialAs ?? 'ignore'
   const arr: DehydratedAtomValue[] = []
-  const now = Date.now()
+  const now = Effect.runSync(Clock.currentTimeMillis)
   registry.getNodes().forEach((node, key) => {
     if (!Atom.isSerializable(node.atom)) return
     const atom = node.atom
     const value = node.value()
     const isInitial = AsyncResult.isAsyncResult(value) && AsyncResult.isInitial(value)
     if (encodeInitialResultMode === 'ignore' && isInitial) return
-    const encodedValue = atom[Atom.SerializableTypeId].encode(value)
+    // Serializable atoms are always registered under their serialization key
+    // (see `Registry.atomKey`), so a serializable node's map key is a string.
+    if (typeof key !== 'string') return
+    const serializer = atom[Atom.SerializableTypeId]
+    const encodedValue = serializer.encode(value)
 
     // Create a Deferred that completes when the atom moves out of Initial state
     let result: Deferred.Deferred<unknown> | undefined
@@ -86,7 +91,7 @@ export const dehydrate = (
       const deferred = Deferred.makeUnsafe<unknown>()
       const unsubscribe = registry.subscribe(atom, (newValue) => {
         if (AsyncResult.isAsyncResult(newValue) && !AsyncResult.isInitial(newValue)) {
-          Deferred.doneUnsafe(deferred, Effect.succeed(atom[Atom.SerializableTypeId].encode(newValue)))
+          Deferred.doneUnsafe(deferred, Effect.succeed(serializer.encode(newValue)))
           unsubscribe()
         }
       })
@@ -95,7 +100,7 @@ export const dehydrate = (
 
     arr.push({
       '~effect/reactivity/DehydratedAtom': true,
-      key: key as string,
+      key,
       value: encodedValue,
       dehydratedAt: now,
       result,
