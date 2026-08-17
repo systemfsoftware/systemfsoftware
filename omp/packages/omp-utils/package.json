@@ -12,7 +12,7 @@
       "default": "./dist/index.js"
     },
     "./runtime-lifecycle": {
-      "@systemfsoftware/source": "./src/runtime-lifecycle.middleware.ts",
+      "@systemfsoftware/source": "./src/RuntimeLifecycle.ts",
       "default": "./dist/runtime-lifecycle.js"
     },
     "./package.json": "./package.json"

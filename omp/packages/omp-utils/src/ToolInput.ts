@@ -1,5 +1,5 @@
 import { Option, Schema as S } from 'effect'
-import { isClaudeEditArray, isOmpEditArray } from './tool-input.schema.js'
+import { isClaudeEditArray, isOmpEditArray } from './ToolInput.schema.js'
 
 /**
  * Kernel: translate OMP tool input shapes to Claude Code hook input shapes.

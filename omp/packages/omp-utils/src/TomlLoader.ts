@@ -4,7 +4,7 @@ import * as FileSystem from 'effect/FileSystem'
 import * as PathModule from 'effect/Path'
 import type { PlatformError } from 'effect/PlatformError'
 import os from 'node:os'
-import { TomlConfig } from './toml-loader.schema.js'
+import { TomlConfig } from './TomlLoader.schema.js'
 
 const PROJECT_CONFIG_FILE = 'systemfsoftware.toml'
 const LOCAL_CONFIG_FILE = 'systemfsoftware.local.toml'
@@ -21,7 +21,7 @@ export class TomlLoader extends Context.Service<
   {
     readonly load: (cwd: string) => Effect.Effect<TomlConfig, PlatformError, never>
   }
->()('@systemfsoftware/omp-utils/toml-loader.adapter/TomlLoader') {}
+>()('@systemfsoftware/omp-utils/TomlLoader') {}
 
 /**
  * Private per-key merge for the layered config.

@@ -1,7 +1,7 @@
 import { defineConfig } from 'tsdown'
 
 export default defineConfig({
-  entry: { index: './src/mod.ts', 'runtime-lifecycle': './src/runtime-lifecycle.middleware.ts' },
+  entry: { index: './src/mod.ts', 'runtime-lifecycle': './src/RuntimeLifecycle.ts' },
   format: 'esm',
   dts: false,
   exports: { devExports: '@systemfsoftware/source' },
