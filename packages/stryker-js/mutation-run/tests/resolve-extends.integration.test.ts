@@ -1,5 +1,4 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
-import { tmpdir } from 'os'
 import { dirname, join, resolve } from 'path'
 
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
@@ -19,7 +18,15 @@ const Feature = makeFeature({ it, layer })
 let tmpDir: string
 
 beforeEach(() => {
-  tmpDir = mkdtempSync(join(tmpdir(), 'stryker-extends-'))
+  // Inside the package, never `os.tmpdir()`. A config that extends a package
+  // specifier is resolved by walking up from the config's own directory, so a
+  // fixture in `/tmp` can only resolve if something outside the repository
+  // happens to provide the package — which is exactly the environment
+  // dependence this suite exists to disprove. It passed here through the test
+  // runner's own resolver and failed under plain node in CI. `node_modules` is
+  // already ignored by git, and the walk up from here reaches the workspace
+  // link for real.
+  tmpDir = mkdtempSync(join(import.meta.dirname, '..', 'node_modules', 'stryker-extends-'))
 })
 
 afterEach(() => {
