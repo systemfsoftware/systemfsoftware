@@ -62,16 +62,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - id: discover
-        run: |
-          # A mutation target is a workspace package. A stryker.config.json under
-          # __tests__ belongs to a CLI fixture the contract lane drives on purpose
-          # (broken-config-project is meant to fail), and repos/ is a vendored tree.
-          PACKAGES=$(find . -name "stryker.config.json" -not -path "./node_modules/*" -not -path "*/node_modules/*" -not -path "./repos/*" -not -path "*/__tests__/*" -exec dirname {} \; | sed 's|^\./||' | jq -R -s -c 'split("\n") | map(select(length > 0))')
-          if [ -z "$PACKAGES" ] || [ "$PACKAGES" = "[]" ]; then
-            PACKAGES="[]"
-          fi
-          echo "packages=$PACKAGES" >> "$GITHUB_OUTPUT"
-          echo "package_count=$(echo "$PACKAGES" | jq 'length')" >> "$GITHUB_OUTPUT"
+        run: node scripts/tools/discover-mutation-targets.mjs --github
 
   mutation:
     needs: discover
