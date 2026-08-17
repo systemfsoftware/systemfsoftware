@@ -100,11 +100,12 @@ const JsonReporterOptions = S.Struct({
   fileName: defaulted(S.String, 'reports/mutation/mutation.json'),
 })
 
-const MutationScoreThresholds = S.Struct({
+export const MutationScoreThresholdsSchema = S.Struct({
   high: defaulted(Percentage, 80),
   low: defaulted(Percentage, 60),
   break: defaulted(S.NullOr(Percentage), null),
 })
+export type MutationScoreThresholds = S.Schema.Type<typeof MutationScoreThresholdsSchema>
 
 const MutatorDescriptor = S.Struct({
   plugins: defaulted(S.NullOr(S.Array(S.Union([S.String, S.Array(S.Unknown)]))), null),
@@ -167,7 +168,7 @@ export const StrykerOptionsSchema = S.StructWithRest(
     cleanTempDir: defaulted(S.Literals(['always', false, true]), true),
     testRunner: defaulted(S.String, 'command'),
     testRunnerNodeArgs: defaulted(S.Array(S.String), []),
-    thresholds: defaulted(MutationScoreThresholds, {}),
+    thresholds: defaulted(MutationScoreThresholdsSchema, {}),
     timeoutFactor: defaulted(S.Finite, 1.5),
     timeoutMS: defaulted(S.Finite, 5000),
     dryRunTimeoutMinutes: defaulted(S.Finite.pipe(S.check(S.isGreaterThanOrEqualTo(0))), 5),
@@ -198,7 +199,12 @@ export const strykerCoreSchema: Record<string, unknown> = (() => {
     : { ...schema, definitions }
 })()
 
+/**
+ * Every option optional, all the way down, and mutable: this is the type a
+ * caller CONSTRUCTS by assignment, so `readonly` is stripped. The decoded
+ * `StrykerOptions` keeps it - that side is read, never built.
+ */
 type DeepOptional<T> = {
-  [P in keyof T]?: T[P] extends Record<string, unknown> ? DeepOptional<T[P]> | undefined
+  -readonly [P in keyof T]?: T[P] extends Record<string, unknown> ? DeepOptional<T[P]> | undefined
     : T[P]
 }

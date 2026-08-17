@@ -9,9 +9,9 @@ import type { AdmitSurvivorsRunInput } from '../survivors.kernel.js'
 const hashContent = (content: string): string => content
 const resolveAbsolutePath = (path: string): string => path
 
-// `defaultOptions` is deep-frozen (`Immutable<StrykerOptions>`); the adapter only
-// threads it through, so the readonly wrapper is widened to the mutable type it is.
-const resolvedOptions: StrykerOptions = defaultOptions as StrykerOptions
+// The adapter only threads the resolved options through. They are read-only on the
+// decoded side, so the deep-frozen defaults assign with no widening.
+const resolvedOptions: StrykerOptions = defaultOptions
 
 describe('admissionAdapter', () => {
   it.prop('∀p_AdmissionAdapter_≡NoReport', [fc.string()], ([priorReportPath]) => {
