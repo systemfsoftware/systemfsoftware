@@ -13,7 +13,7 @@ execution: code
 
 ## Goal Capsule
 
-- Objective: unblock the pnpm-native release flow, which aborts on push to `main` because three pending `.changeset/` intents carry bump-target lines for packages the workspace no longer contains. Repair = remove the stale name lines; keep every bump level and body for packages that still exist; delete one intent whose only surviving target repeats a change already recorded elsewhere.
+- Objective: unblock the pnpm-native release flow, which aborts on push to `main` because three pending `.changeset/` intents carry bump-target lines for packages the workspace no longer contains. Repair = remove the stale name lines; keep every bump level and body for packages that still exist; delete one intent whose surviving target's effect is already recorded by a pending higher-bump intent.
 - Product authority: this plan owns exactly the three files `.changeset/array-type-spelling.md` (trim), `.changeset/executor-vocabulary-direct-import.md` (delete), `.changeset/modern-ends-know.md` (trim), and nothing else. It does not own `scripts/guards/check-changeset.ts` (Evaluator surface), `pnpm version -r`, the release workflow, or any package manifest.
 - Verification precondition: branch at `24312aeeee6` (== `main`); the planning artifacts are untracked, but U4's reproductions run in fresh throwaway worktrees, which start clean by construction. `packageManager: pnpm@11.21.0`, corepack 0.35.0 present, no `node_modules/` checked in.
 - Stop conditions: `corepack pnpm version -r` reproduces the failure at HEAD (red) and exits 0 on the repaired tree (green), in throwaway worktrees, with the same pnpm engine for both legs; the workspace-wide no-ghost sweep reports zero; `pnpm check:local` green after the last edit; the PR's own range (changeset files only) passes the changeset gate by a `skipping` verdict and CI is green.
@@ -39,7 +39,7 @@ The release consumer (`pnpm version -r`) is stricter than the PR gate: it reject
 ## Requirements
 
 - R1. Every `.changeset/*.md` pending on `main` declares only names that exist in the workspace at head.
-- R2. The repair is minimal: only deleted-package name lines are removed, one file is deleted whose surviving line (a `patch` for `@systemfsoftware/oxlint-plugin-effect-dmmf`) repeats a change already recorded as `major` in `.changeset/cell-suffix-fleet-deleted.md`, and `array-type-spelling.md`'s body drops a repository-internal review-process sentence that the changesets validator (B8) rejects. All other surviving entries keep their bump levels and bodies byte-identical.
+- R2. The repair is minimal: only deleted-package name lines are removed, one file is deleted whose surviving line (a `patch` for `@systemfsoftware/oxlint-plugin-effect-dmmf`) is shadowed by the `major` already recorded in `.changeset/cell-suffix-fleet-deleted.md` (the executor package is deleted; dmmf's loss of that member is narrated there), and `array-type-spelling.md`'s body drops a repository-internal review-process sentence that the author-changesets changeset-body validator rejects (banned review vocabulary, rule B8 — not a repo gate). All other surviving entries keep their bump levels and bodies byte-identical.
 - R3. `corepack pnpm version -r` exits 0 on the repaired tree with all pending intents consumed — shown red-before-green in throwaway worktrees, same engine for both legs.
 - R4. The PR itself passes the changeset gate (no package `build` hash moves between base and head — changeset-only diff) and `pnpm check:local`.
 - R5. The PR ships no Evaluator changes, no package source/manifest edits, and no version bumps; the release cut itself stays in the release flow on the next push to `main`.
@@ -48,9 +48,9 @@ The release consumer (`pnpm version -r`) is stricter than the PR gate: it reject
 
 ### Key Decisions
 
-- KTD1. **Trim the live intents, delete the subsumed one.** For `array-type-spelling.md` (20 live + 7 dead lines) and `modern-ends-know.md` (25 live + 3 dead): remove only the dead lines — their records describe unreleased changes whose bump levels are still owned. For `executor-vocabulary-direct-import.md`: delete the file outright — its executor target is dead, and its dmmf `patch` line is a duplicate of the `major` in `cell-suffix-fleet-deleted.md` (the removal it records is subsumed by the fleet cut). Deleting a file whose targets are wholly dead or fully recorded elsewhere is the repo's precedent class ("drop the changeset the gate no longer asks for", `86f533e9cd1`; "drop the changeset nothing will consume", `c71de4d2d`).
+- KTD1. **Trim the live intents, delete the subsumed one.** For `array-type-spelling.md` (20 live + 7 dead lines) and `modern-ends-know.md` (25 live + 3 dead): remove only the dead lines — their records describe unreleased changes whose bump levels are still owned. For `executor-vocabulary-direct-import.md`: delete the file outright — its executor target is dead, and its dmmf `patch` line is shadowed by the `major` in `cell-suffix-fleet-deleted.md`: the executor package itself is deleted, so its vocabulary-derivation narrative has no surviving audience, and dmmf's loss of that member is recorded by the fleet cut. Deleting a file whose targets are wholly dead or fully recorded elsewhere is the repo's precedent class ("drop the changeset the gate no longer asks for", `86f533e9cd1`; "drop the changeset nothing will consume", `c71de4d2d`).
 - KTD2. **The verification predicate is the failing command itself, red→green, in throwaway worktrees.** `corepack pnpm version -r` is the terminal ground truth for what the release flow will do; a copied parser ("does every declared name exist in the workspace?") is a second engine that can disagree (REPO-W7). The no-ghost sweep in U4 is an artifact check, not the verdict. No new permanent tests: this is a data repair of release inputs, is not code, has no new observable contract to pin, and the guard's existing selftest stays untouched and green.
-- KTD3. **Never re-classify a living bump.** The repair removes only weightless ghost lines and one subsumed duplicate; the array-spelling `patch`, the v4 cutover `minor`, and the fleet-deletion `major` are untouched. No surviving entry changes level.
+- KTD3. **Never re-classify a living bump.** The repair removes only weightless ghost lines and one subsumed duplicate; the array-spelling `patch`, the v4 cutover `minor`, and the fleet-deletion `major` are untouched in their files. No surviving declaration changes level; where a package is declared in both trimmed intents (17 packages at `patch` in `array-type-spelling.md` and `minor` in `modern-ends-know.md`), pnpm consumes the higher level at release — the fix does not re-classify any declaration.
 
 ### Deferred to Follow-Up Work
 
@@ -61,7 +61,7 @@ The release consumer (`pnpm version -r`) is stricter than the PR gate: it reject
 
 ### U1. Trim `.changeset/array-type-spelling.md`
 
-**Goal:** Remove the seven deleted-package name lines; keep the other 20 entries; trim the body's final repository-internal sentence (the `B8` validator rejects the word `reviewer`), leaving a consumer-voice statement of the observable spelling change.
+**Goal:** Remove the seven deleted-package name lines; keep the other 20 entries; trim the body's final repository-internal sentence (the author-changesets changeset-body validator's B8 rule rejects the word `reviewer`), leaving a consumer-voice statement of the observable spelling change.
 
 **Files:** `.changeset/array-type-spelling.md`
 
@@ -83,7 +83,7 @@ Approach:
 
 ### U2. Delete `.changeset/executor-vocabulary-direct-import.md`
 
-**Goal:** remove the file. Its `@systemfsoftware/oxlint-plugin-effect-executor` line is dead; its `@systemfsoftware/oxlint-plugin-effect-dmmf: patch` line repeats the dmmf aggregate loss already recorded as `major` in `.changeset/cell-suffix-fleet-deleted.md` — keeping it would double-narrate the same change under a weaker bump.
+**Goal:** remove the file. Its `@systemfsoftware/oxlint-plugin-effect-executor` line is dead; its `@systemfsoftware/oxlint-plugin-effect-dmmf: patch` line is shadowed by the `major` in `.changeset/cell-suffix-fleet-deleted.md` — the executor package is deleted, so dmmf's loss of that member is already narrated there; keeping the patch would double-record it under a weaker bump.
 
 **Files:** `.changeset/executor-vocabulary-direct-import.md` (deleted)
 
@@ -116,7 +116,7 @@ Approach: delete exactly these frontmatter lines:
 Approach:
 
 1. `git worktree add` a throwaway scratch dir at current HEAD; mount the tree clean; run `corepack pnpm version -r` there. Expected: exit 1 with `ERR_PNPM_VERSIONING_UNKNOWN_PACKAGE` — the red leg, run BEFORE any edit.
-2. After U1–U3 land in the working tree, create a second throwaway worktree from the branch head and run the identical command with the SAME pnpm executable. Expected: exit 0; the consumed set includes the 20 + 25 surviving names with their authored bump levels; the ghost names appear nowhere in the ledger/changelogs; no second-order complaint (e.g. a private-package target pnpm refuses).
+2. After U1–U3 land in the working tree, create a second throwaway worktree from the branch head and run the identical command with the SAME pnpm executable. Expected: exit 0; the consumed set includes the 28 surviving packages from the two trimmed intents (deduplicated: 20 + 25 minus the 17 declared in both), at the highest authored level per package; the ghost names appear nowhere in the ledger/changelogs; no second-order complaint (e.g. a private-package target pnpm refuses).
 3. If the green run surfaces any further unresolvable target, repair that line the same way (trim or delete) and re-run on a fresh scratch — the criterion is exit 0 on the full pending set.
 4. Workspace-wide no-ghost sweep: a one-off script (ephemeral, not committed) that reads every `.changeset/*.md` (minus `.changeset/README.md`) frontmatter, extracts declared names (the same regex the gate uses), and compares against the workspace name set derived by reading the `name` field of every `git ls-files '*/package.json'` manifest. pnpm resolves members by manifest, so this set is exactly the engine's; stale untracked dirs are not members. Expect zero names outside.
 
