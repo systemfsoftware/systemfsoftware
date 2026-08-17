@@ -1,6 +1,6 @@
 /**
  * Structured failure diagnostics (R15) — the typed `DiagnosticsReport`
- * (model/diagnostics.schema.ts, R2) built from the live registry, plus a
+ * (model/diagnostics.ts, R2) built from the live registry, plus a
  * pure renderer replacing upstream's string-only report.
  *
  * The report invariant (upstream's own at the fork point, recorded in the

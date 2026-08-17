@@ -1,6 +1,6 @@
 /**
  * Property tests for the Docker stream demux kernel
- * (`src/backend-docker/frames.kernel.ts`).
+ * (`src/backend-docker/frames.ts`).
  *
  * The input space here is the docker multiplexed wire format — an 8-byte
  * header (`streamType u8, 0, 0, 0, length u32_be`) followed by `length`

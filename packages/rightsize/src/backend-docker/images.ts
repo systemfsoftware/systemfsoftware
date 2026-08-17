@@ -10,7 +10,7 @@
  * progress stream. The terminal error frame (and any HTTP >= 400) surfaces
  * as a typed {@link BackendError} naming the daemon's text. When an auth
  * config is supplied, the base64 `X-Registry-Auth` header rides along —
- * the wire `image.schema.ts` owns its encoding.
+ * the wire `image.ts` owns its encoding.
  *
  * `inspect` is the same 200/404 contract as the checkpoint probe.
  * `importImage` shells out to `docker load -i` (same argv as the checkpoint

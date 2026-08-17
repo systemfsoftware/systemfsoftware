@@ -18,7 +18,7 @@
  * workload stops, unlike msb's `logs -f`, so no watchdog is needed here.
  *
  * `docker cp` shells out exactly where upstream does (see
- * `cli.shellout.ts`); a nonzero exit surfaces the tool's own stderr.
+ * `cli.ts`); a nonzero exit surfaces the tool's own stderr.
  *
  * @since 0.1.0
  */

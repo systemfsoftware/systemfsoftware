@@ -167,6 +167,31 @@ export class FreePortExhaustedError extends S.TaggedError<FreePortExhaustedError
 // allocation loop and the release edge.
 let pool: FreePortState = emptyFreePortState()
 
+/** The allocator's promise chain — the same withChain pattern as the hygiene ledger. */
+let chain: Promise<void> = Promise.resolve()
+
+/** Runs `fn` behind the process-wide chain: failures do not poison the chain. */
+function withChain<T>(fn: () => Promise<T>): Promise<T> {
+  const result = chain.then(fn, fn)
+  chain = result.then(
+    () => undefined,
+    () => undefined,
+  )
+  return result
+}
+
+/** Runs an effect inside the chain — the allocator's entire check-bind-issue region is one critical section, so two concurrent allocate fibers can never double-issue a port across the bind-check suspension. */
+const withExclusive = (
+  effect: Effect.Effect<ReadonlyArray<number>, FreePortExhaustedError>,
+): Effect.Effect<ReadonlyArray<number>, FreePortExhaustedError> =>
+  Effect.tryPromise({
+    try: () => withChain(() => Effect.runPromise(effect)),
+    catch: (error) =>
+      S.is(FreePortExhaustedError)(error)
+        ? error
+        : FreePortExhaustedError.make({ requested: 1, allocated: [] }),
+  })
+
 /**
  * Allocates `count` host ports, never handing the same port out twice while
  * it is issued. Each port is bind-checked before issue; a busy candidate is
@@ -174,46 +199,53 @@ let pool: FreePortState = emptyFreePortState()
  * On exhaustion the ports already allocated in this call are released back
  * to the pool before the typed failure is returned — a failed batch must not
  * leak allocations (R7: ports release on every failure path).
+ *
+ * The whole body runs under the process-wide chain: the issue-check, the
+ * bind-check's suspension, and the issue itself are serialized, so two
+ * concurrent allocate fibers can never observe the same port un-issued and
+ * both hand it out (the FREEPORTS race).
  */
 export const allocate = (count = 1, options: AllocateOptions = {}): Effect.Effect<
   ReadonlyArray<number>,
   FreePortExhaustedError
 > =>
-  Effect.gen(function*() {
-    const bindCheck = options.bindCheck ?? realBindCheck
-    const maxAttempts = options.maxAttempts ?? MAX_ALLOCATE_ATTEMPTS
-    const allocated: Array<number> = []
-    for (let slot = 0; slot < count; slot++) {
-      let attempts = 0
-      let issued: number | undefined
-      while (issued === undefined) {
-        attempts++
-        if (attempts > maxAttempts) {
-          for (const port of allocated) {
-            pool = withReleased(pool, port)
+  withExclusive(
+    Effect.gen(function*() {
+      const bindCheck = options.bindCheck ?? realBindCheck
+      const maxAttempts = options.maxAttempts ?? MAX_ALLOCATE_ATTEMPTS
+      const allocated: Array<number> = []
+      for (let slot = 0; slot < count; slot++) {
+        let attempts = 0
+        let issued: number | undefined
+        while (issued === undefined) {
+          attempts++
+          if (attempts > maxAttempts) {
+            for (const port of allocated) {
+              pool = withReleased(pool, port)
+            }
+            return yield* FreePortExhaustedError.make({ requested: count, allocated: [...allocated] })
           }
-          return yield* FreePortExhaustedError.make({ requested: count, allocated: [...allocated] })
+          const port = options.candidates === undefined
+            ? yield* ephemeralPort()
+            : nextCandidate(options.candidates, pool)
+          if (port === undefined) {
+            continue // candidate pool drained or ephemeral bind failed; count the attempt
+          }
+          if (HashSet.has(pool.issued, port)) {
+            continue // already issued to a caller; never hand it out twice
+          }
+          if (yield* bindCheck(port)) {
+            pool = withIssued(pool, port)
+            issued = port
+          } else {
+            pool = withBusy(pool, port)
+          }
         }
-        const port = options.candidates === undefined
-          ? yield* ephemeralPort()
-          : nextCandidate(options.candidates, pool)
-        if (port === undefined) {
-          continue // candidate pool drained or ephemeral bind failed; count the attempt
-        }
-        if (HashSet.has(pool.issued, port)) {
-          continue // already issued to a caller; never hand it out twice
-        }
-        if (yield* bindCheck(port)) {
-          pool = withIssued(pool, port)
-          issued = port
-        } else {
-          pool = withBusy(pool, port)
-        }
+        allocated.push(issued)
       }
-      allocated.push(issued)
-    }
-    return allocated
-  })
+      return allocated
+    }),
+  )
 
 /**
  * Releases a port back to the pool. Releasing a port never issued by this

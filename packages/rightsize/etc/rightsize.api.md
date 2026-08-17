@@ -83,6 +83,17 @@ export interface ByIdOptions {
 export const cacheDirFromConfig: (config: RightsizeConfigService) => string;
 
 // @public
+export interface CacheDirInput {
+    readonly homedir: string;
+    readonly localAppData: string | undefined;
+    readonly platform: string;
+    readonly rightsizeCacheDir: string | undefined;
+}
+
+// @public
+export const canonicalPortsJson: (ports: ReadonlyArray<PortBinding>) => string;
+
+// @public
 export interface CanonicalReuseIdentity {
     // (undocumented)
     readonly command: ReadonlyArray<string>;
@@ -274,7 +285,7 @@ export interface CommandRunnerService {
 }
 
 // @public
-export const computeHandleFingerprint: (backend: string, containerId: string) => string;
+export const computeHandleFingerprint: (identity: HandleFingerprintIdentity) => string;
 
 // @public
 export const config: Config.Config<RightsizeConfigService>;
@@ -505,7 +516,7 @@ export type FileMount = Schema.Schema.Type<typeof FileMount>;
 export const findCheckpoint: (name: string) => Effect.Effect<Checkpoint | undefined, InvalidCheckpointNameError | BackendError, CheckpointServices>;
 
 // @public
-export const FINGERPRINT_SCHEME = "rzh1";
+export const FINGERPRINT_SCHEME = "rzh2";
 
 // @public
 export const fingerprintMatches: (handle: ContainerHandle) => boolean;
@@ -663,6 +674,18 @@ export class HandleBackendMismatchError extends HandleBackendMismatchError_base 
 export type HandleByidError = MalformedHandleError | HandleBackendMismatchError | UnreachableMsbAgentError | BackendError;
 
 // @public
+export interface HandleFingerprintIdentity {
+    // (undocumented)
+    readonly backend: string;
+    // (undocumented)
+    readonly containerId: string;
+    // (undocumented)
+    readonly msbAgentEndpoint: string | undefined;
+    // (undocumented)
+    readonly ports: ReadonlyArray<PortBinding>;
+}
+
+// @public
 export interface HandleOps {
     readonly backend: BackendName;
     readonly containerId: string;
@@ -818,6 +841,7 @@ export interface LaunchState {
     completed: ReadonlyArray<TeardownStep>;
     created: boolean;
     handle: SandboxHandle | undefined;
+    isLastNetworkMember: boolean | undefined;
     ledgerTracked: boolean;
     networkId: string | undefined;
     portsIssued: boolean;
@@ -1076,6 +1100,9 @@ export const requireCompatibleImage: (image: string | ImageReference, expectedRe
 
 // @public
 export const requireValidCheckpointName: (name: string) => Effect.Effect<string, InvalidCheckpointNameError>;
+
+// @public
+export function resolveCacheDir(input: CacheDirInput): string;
 
 // @public
 export interface ResolvedHygiene {
@@ -1578,8 +1605,8 @@ export const writeRegistryAtomic: (cacheDir: string, hash: string, entry: ReuseR
 
 // Warnings were encountered during analysis:
 //
-// dist/index.d.ts:533:5 - (ae-forgotten-export) The symbol "ReaperKillCommands" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:536:5 - (ae-forgotten-export) The symbol "ProcessTimeSource" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:553:5 - (ae-forgotten-export) The symbol "ReaperKillCommands" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:556:5 - (ae-forgotten-export) The symbol "ProcessTimeSource" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

@@ -20,6 +20,9 @@ export type AddressHelper = Schema.Schema.Type<typeof AddressHelper>;
 // @public
 export const allPresets: () => ReadonlyArray<ModulePreset>;
 
+// Warning: (ae-forgotten-export) The symbol "ContainerSpec" needs to be exported by the entry point modules.d.ts
+// Warning: (ae-forgotten-export) The symbol "PortBinding" needs to be exported by the entry point modules.d.ts
+//
 // @public
 export const applySpecTransforms: (preset: ModulePreset, spec: ContainerSpec, bindings: ReadonlyArray<PortBinding>) => ContainerSpec;
 
@@ -38,6 +41,8 @@ export type BackendRestriction = Schema.Schema.Type<typeof BackendRestriction>;
 // @public
 export const buildContainerSpec: (preset: ModulePreset, name: string, image: string) => ContainerSpec;
 
+// Warning: (ae-forgotten-export) The symbol "EnvPair" needs to be exported by the entry point modules.d.ts
+//
 // @public
 export const buildHelperValue: (helper: PresetHelper, ports: ReadonlyArray<PortBinding>, env?: ReadonlyArray<EnvPair>, host?: string) => Option_2.Option<string | number>;
 
@@ -59,73 +64,6 @@ export type ConstantHelper = Schema.Schema.Type<typeof ConstantHelper>;
 export const containerHost: '127.0.0.1';
 
 // @public
-export const ContainerSpec: Schema.Struct<{
-    readonly name: Schema.String;
-    readonly image: Schema.String;
-    readonly env: Schema.$Array<Schema.Tuple<readonly [Schema.String, Schema.String]>>;
-    readonly command: Schema.optionalKey<Schema.refine<readonly string[], Schema.$Array<Schema.String>>>;
-    readonly entrypoint: Schema.optionalKey<Schema.refine<readonly string[], Schema.$Array<Schema.String>>>;
-    readonly workingDir: Schema.optionalKey<Schema.String>;
-    readonly ports: Schema.$Array<Schema.Struct<{
-        readonly hostPort: Schema.refine<number, Schema.Number>;
-        readonly guestPort: Schema.refine<number, Schema.Number>;
-    }>>;
-    readonly mounts: Schema.$Array<Schema.Struct<{
-        readonly hostPath: Schema.String;
-        readonly guestPath: Schema.String;
-        readonly readOnly: Schema.Boolean;
-    }>>;
-    readonly networkId: Schema.optionalKey<Schema.String>;
-    readonly aliases: Schema.$Array<Schema.refine<string, Schema.String>>;
-    readonly runId: Schema.String;
-    readonly memoryLimitMb: Schema.optionalKey<Schema.Finite>;
-    readonly keepAlive: Schema.Boolean;
-    readonly checkpointRef: Schema.optionalKey<Schema.String>;
-    readonly diskLimitMb: Schema.optionalKey<Schema.Finite>;
-    readonly tmpfsRootMb: Schema.optionalKey<Schema.Finite>;
-    readonly networkDisabled: Schema.Boolean;
-    readonly requireIsolation: Schema.Boolean;
-    readonly waitStrategy: Schema.TaggedUnion<{
-        readonly ForHealthCheck: Schema.TaggedStruct<"ForHealthCheck", {
-            readonly _tag: Schema.tag<"ForHealthCheck">;
-            readonly status: Schema.optionalKey<Schema.Literals<readonly ["healthy", "unhealthy", "starting"]>>;
-        }>;
-        readonly ForHttp: Schema.TaggedStruct<"ForHttp", {
-            readonly _tag: Schema.tag<"ForHttp">;
-            readonly path: Schema.String;
-            readonly port: Schema.optionalKey<Schema.Number>;
-            readonly status: Schema.optionalKey<Schema.Number>;
-            readonly method: Schema.optionalKey<Schema.Literals<readonly ["GET", "POST", "PUT", "DELETE", "HEAD", "PATCH", "OPTIONS"]>>;
-            readonly headers: Schema.optionalKey<Schema.$Record<Schema.String, Schema.String>>;
-            readonly body: Schema.optionalKey<Schema.TaggedUnion<{
-                readonly BodyContains: Schema.TaggedStruct<"BodyContains", {
-                    readonly value: Schema.String;
-                }>;
-                readonly BodyMatches: Schema.TaggedStruct<"BodyMatches", {
-                    readonly pattern: Schema.String;
-                }>;
-            }>>;
-        }>;
-        readonly ForLogMessage: Schema.TaggedStruct<"ForLogMessage", {
-            readonly _tag: Schema.tag<"ForLogMessage">;
-            readonly pattern: Schema.String;
-            readonly count: Schema.optionalKey<Schema.Number>;
-        }>;
-        readonly ForPort: Schema.TaggedStruct<"ForPort", {
-            readonly _tag: Schema.tag<"ForPort">;
-        }>;
-        readonly ForShell: Schema.TaggedStruct<"ForShell", {
-            readonly _tag: Schema.tag<"ForShell">;
-            readonly command: Schema.String;
-        }>;
-    }>;
-    readonly startupTimeoutMs: Schema.optionalKey<Schema.Finite>;
-}>;
-
-// @public (undocumented)
-export type ContainerSpec = Schema.Schema.Type<typeof ContainerSpec>;
-
-// @public
 export const defaultImageOf: (preset: ModulePreset) => Option_2.Option<string>;
 
 // @public (undocumented)
@@ -139,12 +77,6 @@ export type DropEnvWhenKey = Schema.Schema.Type<typeof DropEnvWhenKey>;
 
 // @public (undocumented)
 export const ElasticsearchPreset: ModulePreset;
-
-// @public
-export const EnvPair: Schema.Tuple<readonly [Schema.String, Schema.String]>;
-
-// @public (undocumented)
-export type EnvPair = Schema.Schema.Type<typeof EnvPair>;
 
 // @public (undocumented)
 export const ExecStdoutEndsWith: Schema.TaggedStruct<"ExecStdoutEndsWith", {
@@ -332,15 +264,6 @@ export const Neo4jPreset: ModulePreset;
 
 // @public (undocumented)
 export const PinotPreset: ModulePreset;
-
-// @public
-export const PortBinding: Schema.Struct<{
-    readonly hostPort: Schema.refine<number, Schema.Number>;
-    readonly guestPort: Schema.refine<number, Schema.Number>;
-}>;
-
-// @public (undocumented)
-export type PortBinding = Schema.Schema.Type<typeof PortBinding>;
 
 // @public (undocumented)
 export const PortValueHelper: Schema.TaggedStruct<"PortValue", {

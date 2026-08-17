@@ -158,6 +158,14 @@ export interface LaunchState {
   networkId: string | undefined
   /** Whether this container was registered as a member of that network. */
   registeredAsMember: boolean
+  /**
+   * The last-member fact, snapshotted at the teardown's FIRST gather —
+   * before the stop step mutates the in-process member registry. Re-plans
+   * read this recorded truth instead of recomputing it, so an
+   * interrupted/resumed teardown keeps `network-remove` in scope (and a
+   * completed network removal never contradicts the initial-segment check).
+   */
+  isLastNetworkMember: boolean | undefined
   /** Whether the sync-exit registry holds this container. */
   syncCleanupRegistered: boolean
   /** Whether the on-disk ledger tracks this container. */
@@ -183,6 +191,7 @@ const makeLaunchState = (
   created: false,
   networkId: undefined,
   registeredAsMember: false,
+  isLastNetworkMember: undefined,
   syncCleanupRegistered: false,
   ledgerTracked: false,
   portsIssued: false,
@@ -482,9 +491,9 @@ const launchAct = (
         }
 
         state.ledgerTracked = isLedgerActive() && !state.spec.keepAlive
+        // bootAttempt records state.handle/state.created at create-success —
+        // teardown visibility exists before this return, not after.
         const handle = yield* bootWithRetryLoop(state)
-        state.handle = handle
-        state.created = true
 
         // Sync-exit registration: only non-keepAlive, and only once
         // booted — a keepAlive container must outlive this process.
@@ -519,17 +528,26 @@ const launchAct = (
     Match.exhaustive,
   )
 
-/** One create+start attempt. A start failure tears the created container down inside the attempt — the retry loop never sees a half-booted handle. The failure channel normalizes to `BackendError` carrying the daemon's message, which is exactly what the retry classifier reads (upstream `isPortBindConflict`). */
+/** One create+start attempt. The handle becomes teardown-visible the MOMENT create succeeds (a start failure still tears the created container down inside the attempt, and the interrupted-mid-boot window covers a created-but-never-returned container via the scope finalizer). The failure channel normalizes to `BackendError` carrying the daemon's message, which is exactly what the retry classifier reads (upstream `isPortBindConflict`). */
 const bootAttempt = (
   runtime: SandboxRuntimeService,
+  state: LaunchState,
   attemptSpec: ContainerSpec,
 ): Effect.Effect<SandboxHandle, BackendError, never> =>
   Effect.gen(function*() {
     const created = yield* runtime.create(attemptSpec)
+    // Boot-window leak fix: the finalizer reads THIS state if the fiber is
+    // interrupted anywhere between create-success and the loop's return —
+    // recording the handle here means stop/remove cover the container.
+    state.handle = created
+    state.created = true
     const started = yield* Effect.result(runtime.start(created))
     if (Result.isFailure(started)) {
       yield* swallow(runtime.stop(created))
       yield* swallow(runtime.remove(created))
+      // The attempt tore itself down; a next attempt re-records its own.
+      state.handle = undefined
+      state.created = false
       return yield* BackendError.make({ message: failureMessage(started.failure) })
     }
     return created
@@ -568,7 +586,7 @@ const bootWithRetryLoop = (state: LaunchState): Effect.Effect<SandboxHandle, Lau
           Effect.catchEager(() => Effect.void),
         )
       }
-      const booted = yield* Effect.result(bootAttempt(runtime, attemptSpec))
+      const booted = yield* Effect.result(bootAttempt(runtime, state, attemptSpec))
       if (Result.isFailure(booted)) {
         if (state.ledgerTracked) {
           untrackSandboxLedger(name)
@@ -641,15 +659,22 @@ interface TeardownFactsSnapshot {
 const gatherTeardownFacts = (state: LaunchState): Effect.Effect<TeardownFactsSnapshot> =>
   Effect.sync(() => {
     const networks = state.networkId
-    const ownsNetwork = networks !== undefined
-    const remainingCount = ownsNetwork ? memberCountFor(networks) - (state.registeredAsMember ? 1 : 0) : 0
+    // The membership fact is snapshotted ONCE, at the first gather — the
+    // stop step mutates the member registry below this gather, so a
+    // re-gather after a resumed teardown must read recorded truth rather
+    // than a registry it already shrank (dropping network-remove, or
+    // contradicting the initial-segment check after the network is gone).
+    if (networks !== undefined && state.isLastNetworkMember === undefined) {
+      const remainingCount = memberCountFor(networks) - (state.registeredAsMember ? 1 : 0)
+      state.isLastNetworkMember = remainingCount === 0
+    }
     return {
       keepAlive: state.spec.keepAlive,
       adopted: state.adopted,
       created: state.created,
       completed: state.completed,
       networkId: networks,
-      isLastNetworkMember: ownsNetwork && remainingCount === 0,
+      isLastNetworkMember: state.isLastNetworkMember === true,
       syncCleanupRegistered: state.syncCleanupRegistered,
       ledgerTracked: state.ledgerTracked,
       portsIssued: state.portsIssued,

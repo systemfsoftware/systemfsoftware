@@ -12,10 +12,9 @@
  * has in its environment must keep meaning the same thing after the swap.
  */
 import * as os from 'node:os'
+import { join } from 'node:path'
 
 import { Config, Context, Layer, Option, Schema as S } from 'effect'
-
-import { resolveCacheDir } from '../backend-msb/provisioner/env.js'
 
 /** What `RIGHTSIZE_BACKEND` may say: an explicit backend, or `auto`. */
 export type BackendPreference = 'auto' | 'docker' | 'msb'
@@ -37,6 +36,46 @@ export interface RightsizeConfigService {
   readonly msbPath: string | undefined
   /** `RIGHTSIZE_MSB_SKIP_DOWNLOAD` — refuse to download the toolchain; default `false`. */
   readonly msbSkipDownload: boolean
+}
+
+/**
+ * The one rightsize runtime cache dir, shared by every part of the library
+ * that needs a place on disk (`<cacheDir>/msb/<version>/...`, the reaping
+ * ledger, watchdog scripts). `%LOCALAPPDATA%` is the Windows-idiomatic
+ * location for a machine-local, non-roaming native toolchain cache; falls
+ * back to `%USERPROFILE%\AppData\Local` if unset (matching `os.homedir()`
+ * on a normal Windows install). Pure function of injected env inputs.
+ */
+export interface CacheDirInput {
+  /** `RIGHTSIZE_CACHE_DIR` — wins when set. */
+  readonly rightsizeCacheDir: string | undefined
+  /** `process.platform` — decides the Windows vs POSIX default. */
+  readonly platform: string
+  /** `os.homedir()` — the base for both defaults. */
+  readonly homedir: string
+  /** `%LOCALAPPDATA%` — the Windows-idiomatic cache root when set. */
+  readonly localAppData: string | undefined
+}
+
+/**
+ * The rightsize cache dir resolved from the config service — the ONE cache
+ * derivation every unit that needs a place on disk shares (launch hygiene,
+ * the reaping ledger, the fleet's by-id driver, the reuse and checkpoint
+ * registries, the msb provisioner). `resolveCacheDir` owns the platform
+ * default (`%LOCALAPPDATA%` on Windows, `~/.cache` elsewhere); this is the
+ * config-shaped entry point. (Relocated here from the msb provisioner so
+ * the runtime layer never depends on a backend subpath — the runtime owns
+ * the cross-cutting cache derivation; the provisioner consumes it.)
+ */
+export function resolveCacheDir(input: CacheDirInput): string {
+  if (input.rightsizeCacheDir !== undefined) {
+    return input.rightsizeCacheDir
+  }
+  if (input.platform === 'win32') {
+    const localAppData = input.localAppData ?? join(input.homedir, 'AppData', 'Local')
+    return join(localAppData, 'rightsize')
+  }
+  return join(input.homedir, '.cache', 'rightsize')
 }
 
 /**

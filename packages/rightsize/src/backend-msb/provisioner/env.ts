@@ -1,14 +1,15 @@
-import { join } from 'node:path'
-
 import { krunAsset, MSB_VERSION, msbAsset, msbInstallPaths, type Platform } from '../platform.js'
 
 /**
  * Provisioning environment resolution for the msb backend. Behavioral
  * source: upstream rightsize-node `src/backend-msb/provisioner.ts`
- * `ensureInstalledAt` (Apache-2.0) and `src/core/cache-dir.ts`. The decision
- * is pure: filesystem probes (executability, both files present) are injected
- * by the adapter (U9b); this kernel orders the overrides and derives every
- * path and asset name.
+ * `ensureInstalledAt` (Apache-2.0); the shared cache-dir kernel
+ * (`src/core/cache-dir.ts` upstream) now lives in the runtime layer
+ * (`src/runtime/config.ts` — `resolveCacheDir`), so the runtime never
+ * depends on a backend subpath. The decision here is pure: filesystem
+ * probes (executability, both files present) are injected by the adapter
+ * (U9b); this kernel orders the overrides and derives every path and asset
+ * name.
  */
 
 /** The pinned msb release this provisioner installs. */
@@ -85,34 +86,4 @@ export function envResolution(input: EnvResolutionInput): EnvResolution {
     msbAsset: msbAsset(input.platform),
     krunAsset: krunAsset(input.platform),
   }
-}
-
-export interface CacheDirInput {
-  /** `RIGHTSIZE_CACHE_DIR` — wins when set. */
-  readonly rightsizeCacheDir: string | undefined
-  /** `process.platform` — decides the Windows vs POSIX default. */
-  readonly platform: string
-  /** `os.homedir()` — the base for both defaults. */
-  readonly homedir: string
-  /** `%LOCALAPPDATA%` — the Windows-idiomatic cache root when set. */
-  readonly localAppData: string | undefined
-}
-
-/**
- * The one rightsize runtime cache dir, shared by every part of the library
- * that needs a place on disk (`<cacheDir>/msb/<version>/...`, the reaping
- * ledger, watchdog scripts). `%LOCALAPPDATA%` is the Windows-idiomatic
- * location for a machine-local, non-roaming native toolchain cache; falls
- * back to `%USERPROFILE%\AppData\Local` if unset (matching `os.homedir()`
- * on a normal Windows install). Pure function of injected env inputs.
- */
-export function resolveCacheDir(input: CacheDirInput): string {
-  if (input.rightsizeCacheDir !== undefined) {
-    return input.rightsizeCacheDir
-  }
-  if (input.platform === 'win32') {
-    const localAppData = input.localAppData ?? join(input.homedir, 'AppData', 'Local')
-    return join(localAppData, 'rightsize')
-  }
-  return join(input.homedir, '.cache', 'rightsize')
 }

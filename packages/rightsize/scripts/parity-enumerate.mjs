@@ -1,33 +1,50 @@
 #!/usr/bin/env node
 /// <reference types="node" />
 /**
- * parity-enumerate.mjs — the installed-testcontainers parity manifest (R16).
+ * parity-enumerate.mjs — the testcontainers parity manifest (R16).
  *
- * The public type surface of the installed `testcontainers@12.1.0` (the
- * pinned version this workspace still installs while the parity lane's
- * differential tests use it) is enumerated from its emitted `.d.ts` and
- * rendered into `docs/parity-matrix.md` — one row per member, each
+ * The public type surface of `testcontainers@12.1.0` is committed FROZEN in
+ * `scripts/parity-surface.mjs` — the record. The workspace no longer
+ * installs testcontainers (removed 2026-08-16); per the W8 reversing
+ * observation (docs/solutions/tooling-decisions/rightsize-own-effect-port.md),
+ * the frozen snapshot pins the incumbent's shape the matrix was proven
+ * against, so a deliberate future re-comparison is one command, not
+ * archaeology. The snapshot was originally enumerated from the installed
+ * package's emitted `.d.ts`; `--update-surface` re-derives it from a live
+ * install when one is re-added. The matrix renders one row per member, each
  * classified `present` (rightsize exports the same contract) or
  * `superseded-by` (an Effect-native replacement exists and the row
  * documents it; nothing is silently absent).
  *
- * Drift gates:
- *   1. `--check` re-enumerates the INSTALLED `.d.ts` (when present) and
- *      byte-compares that enumeration with the committed frozen surface
- *      `scripts/parity-surface.mjs` — a dependency bump that changes the
- *      surface fails here, naming the differing members. The frozen surface
- *      is a generated JS module (not JSON), so the gate never parses.
- *   2. `--check` re-renders the matrix from the frozen surface + the
- *      committed mapping and byte-compares it with the committed
- *      `docs/parity-matrix.md` — any manual edit of a matrix row (or a
- *      mapping/surface edit without a matching render) fails here, naming
- *      the drifting rows.
+ * Drift gates (`--check`, wired into `build`):
+ *   1. When the pinned package IS found in the pnpm virtual store, gate 0
+ *      re-enumerates its `.d.ts` and byte-compares with the committed frozen
+ *      surface `scripts/parity-surface.mjs` — a dependency bump that changes
+ *      the surface fails here, naming the differing members. When absent
+ *      (post-removal), the frozen surface is the record and this gate is
+ *      skipped. The frozen surface is a generated JS module (not JSON), so
+ *      the gate never parses.
+ *   2. Gate 2 re-renders the matrix from the frozen surface + the committed
+ *      mapping and byte-compares it with the committed `docs/parity-matrix.md`
+ *      — any manual edit of a matrix row (or a mapping/surface edit without
+ *      a matching render) fails here, naming the drifting rows.
+ *   3. Gate 3: every `src/...` path a MAPPING row names (in `rs` or
+ *      `note`) must exist on disk — an M mapping renamed-away file fails here,
+ *      so the matrix can never document a dead path.
+ *   4. Gate 4: every `present` row's rightsize symbol (the backticked
+ *      identifiers in `rs`) must exist in the current published surface —
+ *      parsed from the committed api-extractor reports
+ *      (`etc/rightsize.api.md`, `etc/modules.api.md`,
+ *      `etc/backend-docker.api.md`, `etc/backend-msb.api.md`). This kills
+ *      the 'mapping lies green' class: a mapping row cannot name a symbol
+ *      the package does not export.
  *
  * Modes:
- *  --check          (default) both drift gates; exit 1 naming the drift.
+ *  --check          (default) the drift gates; exit 1 naming the drift.
  *  --write          re-render `docs/parity-matrix.md` from current state.
- *  --update-surface re-derive `scripts/parity-surface.mjs` from the
- *                   installed `.d.ts` (intentional surface refresh).
+ *  --update-surface re-derive `scripts/parity-surface.mjs` from an
+ *                   installed `.d.ts` (intentional surface refresh; needs
+ *                   the pinned package present).
  *
  * Every enumerated member MUST have a mapping row; an unmapped member is a
  * hard error (exit 2), so the committed matrix can never silently forget a
@@ -296,7 +313,7 @@ const enumerateSurface = (buildDir) => {
 // A null `rs` means "no counterpart in scope" — the note must still state why.
 
 /** @type {Record<string, MatrixRow>} */
-const MAPPING = {
+export const MAPPING = {
   'index::IntervalRetry': {
     status: 'superseded-by',
     rs: '`Effect.retry` / `Effect.schedule` (Effect dependency)',
@@ -394,7 +411,7 @@ const MAPPING = {
   'index::Network': {
     status: 'superseded-by',
     rs: '`VirtualNetworks.ensureNetwork(id)` (src/runtime/runtime.ts)',
-    note: "The network's identity is the caller-chosen id; `NetworkSpec` (src/model/network.schema.ts) is the data.",
+    note: "The network's identity is the caller-chosen id; `NetworkSpec` (src/model/network.ts) is the data.",
   },
   'index::StartedNetwork': {
     status: 'superseded-by',
@@ -469,23 +486,23 @@ const MAPPING = {
   },
   'index::ExecOptions': {
     status: 'present',
-    rs: '`ExecRequest` (src/model/container-spec.schema.ts)',
+    rs: '`ExecRequest` (src/model/container-spec.ts)',
     note: 'Same field set (`command`, `workingDir`, `env`); the user field remains the image identity user.',
   },
   'index::ExecResult': {
     status: 'present',
-    rs: '`ExecResult` (src/model/container-spec.schema.ts)',
+    rs: '`ExecResult` (src/model/container-spec.ts)',
     note:
-      '`exitCode`/`stdout`/`stderr`; a non-zero exit is a verdict, never an exception; `output` is the joined stdout+stderr.',
+      '`exitCode`/`stdout`/`stderr`; a non-zero exit is a verdict, never an exception; joining the streams is the caller’s `stdout + stderr`.',
   },
   'index::InspectResult': {
     status: 'superseded-by',
-    rs: '`ContainerInspect` (src/runtime/runtime.ts) + `DiagnosticsContainer` (src/model/diagnostics.schema.ts)',
+    rs: '`ContainerInspect` (src/runtime/runtime.ts) + `DiagnosticsContainer` (src/model/diagnostics.ts)',
     note: 'Typed data with JSON codecs replaces the dockerode-derived shape.',
   },
   'index::BoundPorts': {
     status: 'superseded-by',
-    rs: '`ContainerSpec.ports` — `PortBinding[]` (src/model/ports.schema.ts) + `getMappedPort`',
+    rs: '`ContainerSpec.ports` — `PortBinding[]` (src/model/ports.ts) + `getMappedPort`',
     note: 'Host ports are pre-allocated before boot (R7); the binding list is the spec data.',
   },
   'index::LABEL_TESTCONTAINERS_SESSION_ID': {
@@ -495,12 +512,12 @@ const MAPPING = {
   },
   'index::PortWithBinding': {
     status: 'superseded-by',
-    rs: '`PortBinding` (src/model/ports.schema.ts)',
+    rs: '`PortBinding` (src/model/ports.ts)',
     note: 'Decoded as schema data (guestPort/hostPort).',
   },
   'index::PortWithOptionalBinding': {
     status: 'superseded-by',
-    rs: '`PortBinding` with `hostPort: 0` as the unallocated marker (src/model/ports.schema.ts)',
+    rs: '`PortBinding` with `hostPort: 0` as the unallocated marker (src/model/ports.ts)',
     note: 'R7: the launch pre-allocator replaces the marker before any backend call.',
   },
   'index::getContainerPort': {
@@ -515,12 +532,12 @@ const MAPPING = {
   },
   'index::PortGenerator': {
     status: 'present',
-    rs: 'the `FreePorts` allocator kernel (src/runtime/free-ports.kernel.ts)',
+    rs: 'the `FreePorts` allocator kernel (src/runtime/free-ports.ts)',
     note: 'In-process free-port pre-allocation; backends bind what they are given.',
   },
   'index::RandomPortGenerator': {
     status: 'present',
-    rs: '`allocate()` (src/runtime/free-ports.kernel.ts)',
+    rs: '`allocate()` (src/runtime/free-ports.ts)',
     note: 'Same allocator surface.',
   },
   'index::ImagePullPolicy': {
@@ -535,25 +552,24 @@ const MAPPING = {
   },
   'index::HttpWaitStrategyOptions': {
     status: 'present',
-    rs: '`ForHttp` (src/model/wait.schema.ts)',
+    rs: '`ForHttp` (src/model/wait.ts)',
     note:
       "Options superset: status/method/headers/body predicate (HttpBodyMatcher); abortOnContainerExit is the interpreter's exit behavior.",
   },
   'index::StartupCheckStrategy': {
     status: 'superseded-by',
-    rs: 'the `WaitStrategy` data union (src/model/wait.schema.ts)',
+    rs: 'the `WaitStrategy` data union (src/model/wait.ts)',
     note:
       'Readiness is data interpreted by one interpreter; one-shot semantics map to `ForShell` exit-0 or no strategy.',
   },
   'index::StartupStatus': {
     status: 'superseded-by',
-    rs: '`HealthStatus` + interpreter verdicts (src/wait/verdict.kernel.ts)',
+    rs: '`HealthStatus` + interpreter verdicts (src/wait/verdict.ts)',
     note: 'The status enum is replaced by typed verdicts/`_tag`s.',
   },
   'index::Wait': {
     status: 'superseded-by',
-    rs:
-      '`ForPort` / `ForHttp` / `ForLogMessage` / `ForHealthCheck` / `ForShell` constructors (src/model/wait.schema.ts)',
+    rs: '`ForPort` / `ForHttp` / `ForLogMessage` / `ForHealthCheck` / `ForShell` constructors (src/model/wait.ts)',
     note: 'Factories become data; the member rows map 1:1.',
   },
   'index::waitForContainer': {
@@ -563,7 +579,7 @@ const MAPPING = {
   },
   'index::WaitStrategy': {
     status: 'present',
-    rs: '`WaitStrategy` union (src/model/wait.schema.ts)',
+    rs: '`WaitStrategy` union (src/model/wait.ts)',
     note: 'Closed JSON-codecable union — a superset of the upstream interface (no open extensibility).',
   },
   'generic-container::fromDockerfile': {
@@ -588,7 +604,7 @@ const MAPPING = {
   },
   'generic-container::withName': {
     status: 'superseded-by',
-    rs: '`ContainerSpec.name` (src/model/container-spec.schema.ts)',
+    rs: '`ContainerSpec.name` (src/model/container-spec.ts)',
     note: 'The name is carried on the spec (`newContainerSpec(image, name)`); the launch derives one when unset.',
   },
   'generic-container::withLabels': {
@@ -623,7 +639,7 @@ const MAPPING = {
   },
   'generic-container::withAddedCapabilities': {
     status: 'superseded-by',
-    rs: '`RuntimeCapabilities` (src/model/capabilities.schema.ts) + backend defaults',
+    rs: '`RuntimeCapabilities` (src/model/capabilities.ts) + backend defaults',
     note: 'Capability sets are declared data per backend; no additive knob.',
   },
   'generic-container::withDroppedCapabilities': {
@@ -663,7 +679,7 @@ const MAPPING = {
   },
   'generic-container::withHealthCheck': {
     status: 'superseded-by',
-    rs: '`ForHealthCheck` wait (src/model/wait.schema.ts)',
+    rs: '`ForHealthCheck` wait (src/model/wait.ts)',
     note: 'The HEALTHCHECK command is an image property; readiness is the wait.',
   },
   'generic-container::withStartupTimeout': {
@@ -981,7 +997,7 @@ const MAPPING = {
   'started-test-container::copyDirectoriesToContainer': {
     status: 'present',
     rs: '`RunningContainer.copyFileToContainer` dir semantics (src/generic-container.ts)',
-    note: '`cp -r` destination naming.',
+    note: 'Recursive-copy destination naming (docker cp semantics).',
   },
   'started-test-container::copyFilesToContainer': {
     status: 'present',
@@ -1082,12 +1098,12 @@ const MAPPING = {
   },
   'wait::forAll': {
     status: 'superseded-by',
-    rs: 'a single `WaitStrategy` per spec (src/model/wait.schema.ts)',
+    rs: 'a single `WaitStrategy` per spec (src/model/wait.ts)',
     note: 'Composite/all waits are not modeled; pick the strategy that asserts readiness.',
   },
   'wait::forListeningPorts': {
     status: 'superseded-by',
-    rs: '`ForPort` (src/model/wait.schema.ts)',
+    rs: '`ForPort` (src/model/wait.ts)',
     note: 'Read-probes every exposed port (R11) — same readiness contract.',
   },
   'wait::forLogMessage': {
@@ -1107,12 +1123,12 @@ const MAPPING = {
   },
   'wait::forHttp': {
     status: 'superseded-by',
-    rs: '`ForHttp` (src/model/wait.schema.ts)',
+    rs: '`ForHttp` (src/model/wait.ts)',
     note: 'Status/method/headers/body superset of the options object.',
   },
   'wait::forSuccessfulCommand': {
     status: 'superseded-by',
-    rs: '`ForShell` (src/model/wait.schema.ts)',
+    rs: '`ForShell` (src/model/wait.ts)',
     note: 'Exit-0 readiness.',
   },
   'wait-strategy::waitUntilReady': {
@@ -1137,7 +1153,7 @@ const MAPPING = {
   },
   'types::InspectResult': {
     status: 'superseded-by',
-    rs: '`ContainerInspect` (src/runtime/runtime.ts) + `DiagnosticsContainer` (src/model/diagnostics.schema.ts)',
+    rs: '`ContainerInspect` (src/runtime/runtime.ts) + `DiagnosticsContainer` (src/model/diagnostics.ts)',
     note: 'Typed runtime/diagnostics data replaces the dockerode-shaped blob.',
   },
   'types::ContainerRuntime': {
@@ -1148,17 +1164,17 @@ const MAPPING = {
   },
   'types::Environment': {
     status: 'present',
-    rs: '`EnvPair[]` (ContainerSpec.env, src/model/container-spec.schema.ts)',
+    rs: '`EnvPair[]` (ContainerSpec.env, src/model/container-spec.ts)',
     note: 'Record form maps to ordered pairs; `withEnv`/`withEnvPairs` preserve insertion order.',
   },
   'types::BindMode': {
     status: 'superseded-by',
-    rs: '`Mount.readOnly` flag (src/model/container-spec.schema.ts)',
+    rs: '`Mount.readOnly` flag (src/model/container-spec.ts)',
     note: 'rw/ro only; z/Z semantics are SELinux host concerns out of scope.',
   },
   'types::BindMount': {
     status: 'superseded-by',
-    rs: '`ContainerSpec.mounts` entries (src/model/container-spec.schema.ts)',
+    rs: '`ContainerSpec.mounts` entries (src/model/container-spec.ts)',
     note: 'source/target/readOnly as schema data.',
   },
   'types::FileToCopy': {
@@ -1223,12 +1239,12 @@ const MAPPING = {
   },
   'types::HostPortBindings': {
     status: 'superseded-by',
-    rs: '`PortBinding[]` (src/model/ports.schema.ts)',
+    rs: '`PortBinding[]` (src/model/ports.ts)',
     note: 'hostIp fixed to 127.0.0.1 (R9).',
   },
   'types::Ports': {
     status: 'superseded-by',
-    rs: '`PortBinding[]` (src/model/ports.schema.ts)',
+    rs: '`PortBinding[]` (src/model/ports.ts)',
     note: 'Protocol-keyed map reduced to ordered guest/host pairs.',
   },
   'types::RegistryConfig': {
@@ -1243,13 +1259,13 @@ const MAPPING = {
   },
   'types::ExecOptions': {
     status: 'present',
-    rs: '`ExecRequest` (src/model/container-spec.schema.ts)',
-    note: 'workingDir/env carried; `user` follows the image identity.',
+    rs: '`ExecRequest` (src/model/container-spec.ts)',
+    note: 'workingDir/env carried; the workload user follows the image identity.',
   },
   'types::ExecResult': {
     status: 'present',
-    rs: '`ExecResult` (src/model/container-spec.schema.ts)',
-    note: 'exitCode/stdout/stderr; `output` = joined text.',
+    rs: '`ExecResult` (src/model/container-spec.ts)',
+    note: 'exitCode/stdout/stderr; joining is the caller’s `stdout + stderr`.',
   },
   'types::CommitOptions': {
     status: 'superseded-by',
@@ -1258,12 +1274,12 @@ const MAPPING = {
   },
   'types::HealthCheckStatus': {
     status: 'superseded-by',
-    rs: '`HealthStatus` (src/model/wait.schema.ts)',
+    rs: '`HealthStatus` (src/model/wait.ts)',
     note: '"none"/"starting" fold into the interpreter verdicts.',
   },
   'types::NetworkSettings': {
     status: 'superseded-by',
-    rs: '`NetworkSpec` (src/model/network.schema.ts) + handle',
+    rs: '`NetworkSpec` (src/model/network.ts) + handle',
     note: 'networkId/ipAddress live on the spec/lifecycle data, not an inspect blob.',
   },
 }

@@ -1,7 +1,7 @@
 /**
  * The wait interpreter (R11) — one interruptible Effect poller over the
  * wait-strategy data union, driven by the pure verdict kernel
- * (`./verdict.kernel.ts`). Strategy data in, `ContainerLaunchError` out:
+ * (`./verdict.ts`). Strategy data in, `ContainerLaunchError` out:
  * every poll round probes the strategy's condition against the
  * `SandboxRuntime` capability (or the host ports the spec pre-allocated),
  * folds the round through `decideVerdict`, and on the deadline-crossing

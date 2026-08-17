@@ -11,11 +11,13 @@
  * - the allocated port bindings captured at launch (the port map a worker
  *   needs to reach the workload — recorded at create, never re-derived
  *   from a backend query);
- * - a `fingerprint` over (backend, containerId), recorded in the on-disk
- *   hygiene ledger at create (the ledger's per-sandbox `id` field — the
- *   ledger comment names it "the U8 by-id fingerprint"). `byId` validates
- *   the fingerprint on reconstruction, so a tampered or repurposed handle
- *   fails with a typed error before any backend contact — never silent exec.
+ * - a `fingerprint` over (backend, containerId, ports, msb-agent-endpoint),
+ *   recorded in the on-disk hygiene ledger at create (the ledger's
+ *   per-sandbox `id` field — the ledger comment names it "the U8 by-id
+ *   fingerprint"). `byId` validates the fingerprint on reconstruction, so a
+ *   tampered or repurposed handle — including one whose port map was
+ *   rewritten — fails with a typed error before any backend contact, never
+ *   silent exec.
  *
  * `ContainerHandle.byId(handleJson)`:
  * - decodes the JSON (`MalformedHandleError`);
@@ -113,15 +115,48 @@ export type HandleByidError =
 // =============================================================================
 
 /** The fingerprint scheme prefix — a scheme change is a mismatch, never a silent re-dial. */
-export const FINGERPRINT_SCHEME = 'rzh1'
+export const FINGERPRINT_SCHEME = 'rzh2'
 
-/** The pure fingerprint: scheme + 24 hex chars of SHA-256 over backend and id. Deterministic for the same (backend, id). */
-export const computeHandleFingerprint = (backend: string, containerId: string): string =>
-  `${FINGERPRINT_SCHEME}:${createHash('sha256').update(`${backend}\u0000${containerId}`).digest('hex').slice(0, 24)}`
+/** The canonical, order-stable serialization of the port bindings the fingerprint covers. */
+export const canonicalPortsJson = (ports: ReadonlyArray<PortBinding>): string =>
+  JSON.stringify(ports.map((binding) => [binding.guestPort, binding.hostPort]))
 
-/** Whether the handle carries the fingerprint its own identity implies. */
+/** The full identity payload the fingerprint seals: backend, container id, the port map, and the agent endpoint when recorded. */
+export interface HandleFingerprintIdentity {
+  readonly backend: string
+  readonly containerId: string
+  readonly ports: ReadonlyArray<PortBinding>
+  readonly msbAgentEndpoint: string | undefined
+}
+
+/**
+ * The pure fingerprint: scheme + 24 hex chars of SHA-256 over the identity
+ * payload (backend, container id, the canonical JSON of the port bindings,
+ * and the msb agent endpoint when present). Deterministic for the same
+ * identity — a tampered port map or a swapped agent endpoint changes the
+ * hash, so `byId` rejects it before any backend contact.
+ */
+export const computeHandleFingerprint = (identity: HandleFingerprintIdentity): string =>
+  `${FINGERPRINT_SCHEME}:${
+    createHash('sha256')
+      .update(
+        `${identity.backend}\u0000${identity.containerId}\u0000${canonicalPortsJson(identity.ports)}\u0000${
+          identity.msbAgentEndpoint ?? ''
+        }`,
+      )
+      .digest('hex')
+      .slice(0, 24)
+  }`
+
+/** Whether the handle carries the fingerprint its own recorded identity implies. */
 export const fingerprintMatches = (handle: ContainerHandle): boolean =>
-  handle.fingerprint === computeHandleFingerprint(handle.backend, handle.containerId)
+  handle.fingerprint ===
+    computeHandleFingerprint({
+      backend: handle.backend,
+      containerId: handle.containerId,
+      ports: handle.ports,
+      msbAgentEndpoint: handle.msbAgentEndpoint,
+    })
 
 /**
  * The durable, JSON-threadable container identity: backend + backend-native
@@ -139,7 +174,7 @@ export class ContainerHandle extends S.Class<ContainerHandle>('ContainerHandle')
   msbAgentEndpoint: S.optionalKey(S.String),
   /** The host ports allocated to this container at launch, guest → host. */
   ports: S.Array(PortBinding),
-  /** The fingerprint over backend + container id, validated by `byId` before any backend contact. */
+  /** The fingerprint over the handle's identity payload (backend, container id, ports, agent endpoint), validated by `byId` before any backend contact. */
   fingerprint: S.String,
 }) {
   /**
@@ -158,7 +193,12 @@ export class ContainerHandle extends S.Class<ContainerHandle>('ContainerHandle')
       backend: run.backend,
       containerId: run.handle.id,
       ports: [...run.spec.ports],
-      fingerprint: computeHandleFingerprint(run.backend, run.handle.id),
+      fingerprint: computeHandleFingerprint({
+        backend: run.backend,
+        containerId: run.handle.id,
+        ports: run.spec.ports,
+        msbAgentEndpoint: options.msbAgentEndpoint,
+      }),
     }
     const handle = options.msbAgentEndpoint === undefined
       ? ContainerHandle.make(fields)
@@ -218,7 +258,8 @@ export class ContainerHandle extends S.Class<ContainerHandle>('ContainerHandle')
           actual: 'fingerprint-mismatch',
           containerId: handle.containerId,
           reason:
-            'the handle fingerprint does not match its backend + id identity (a tampered, truncated, or fabricated handle)',
+            'the handle fingerprint does not match its recorded identity (backend, container id, ports, agent endpoint) ' +
+            '— a tampered, truncated, or fabricated handle',
         })
       }
       if (handle.backend === 'docker') {

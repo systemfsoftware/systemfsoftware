@@ -28,6 +28,7 @@
  * over. The layer is memoized by Layer composition: every adapter method
  * that awaits it on first use pays the provisioning cost exactly once.
  */
+import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { accessSync, constants as fsConstants, statSync } from 'node:fs'
 import { mkdir, open, readFile, rename, unlink, writeFile } from 'node:fs/promises'
@@ -88,8 +89,16 @@ function errnoCode(error: unknown): string | undefined {
 /** Ceiling on one release fetch (a cold pull of the msb binary can be slow). */
 export const DEFAULT_FETCH_TIMEOUT_MS = 300_000
 
-/** How long a waiter tolerates a held, fresh install lock before giving up. */
-export const LOCK_WAIT_MAX_MS = 30_000
+/**
+ * How long a waiter tolerates a held, fresh install lock before giving up.
+ * Sized for a full cold install (a fresh cache downloads both assets and
+ * verifies them under the lock), not the old 30s poll window: a slow pull
+ * through the 300s fetch ceiling plus the manifest fetch and both renames
+ * comfortably exceeds a minute, and the lock is only held while installation
+ * is genuinely progressing (stale holders are taken over by age/dead-pid
+ * long before this budget matters).
+ */
+export const LOCK_WAIT_MAX_MS = 10 * 60 * 1000
 
 /** The pause between install-lock polls. */
 export const LOCK_POLL_MS = 200
@@ -168,7 +177,7 @@ export function installedProbe(msbPath: string, krunPath: string): boolean {
   return isInstalled({ msbUsable: isExecutableProbe(msbPath), krunPresent: existsSync(krunPath) })
 }
 
-/** Follows a bounded chain of https redirects — the release CDN issues one hop to the actual asset host. */
+/** Follows a bounded chain of https redirects — the release CDN issues one hop to the actual asset host. A redirect to any non-https scheme is refused: the provisioner verifies every asset against the release manifest, but a downgrade (or an exotic scheme) is a supply-chain smell this seam must not paper over. */
 export function defaultFetchBytes(url: string): Effect.Effect<Uint8Array, ProvisionError> {
   const { promise, resolve, reject } = Promise.withResolvers<Uint8Array>()
   const fetch = (target: string, redirectsLeft: number): void => {
@@ -181,7 +190,22 @@ export function defaultFetchBytes(url: string): Effect.Effect<Uint8Array, Provis
           reject(provisionFailure(`too many redirects fetching ${target}`))
           return
         }
-        fetch(new URL(location, target).toString(), redirectsLeft - 1)
+        let next: URL
+        try {
+          next = new URL(location, target)
+        } catch {
+          reject(provisionFailure(`invalid redirect location '${location}' while fetching ${target}`))
+          return
+        }
+        if (next.protocol !== 'https:') {
+          reject(
+            provisionFailure(
+              `refusing redirect from ${target} to non-https ${next.protocol}//${next.host}${next.pathname}`,
+            ),
+          )
+          return
+        }
+        fetch(next.toString(), redirectsLeft - 1)
         return
       }
       if (status !== 200) {
@@ -381,11 +405,30 @@ export function executeInstallPlan(
                 provisionFailure(`failed to write the staged asset ${tempFile}: ${describeError(error)}`),
             })
           })),
-        Match.tag('rename', ({ from, to }) =>
-          Effect.tryPromise({
-            try: () => rename(from, to),
-            catch: (error) =>
-              provisionFailure(`failed to move '${from}' into place as '${to}': ${describeError(error)}`),
+        Match.tag('rename', ({ from, to, expectedSha256, assetName }) =>
+          Effect.gen(function*() {
+            // The bytes were digest-verified in memory at fetch time; the
+            // temp file is a predictable path in a shared cache dir, so
+            // re-check the ON-DISK bytes against the manifest digest
+            // immediately before the rename — a swap (or corruption) after
+            // the write must fail here, never ship as a renamed "verified"
+            // install.
+            const onDisk = yield* Effect.tryPromise({
+              try: () => readFile(from).then((bytes) => createHash('sha256').update(bytes).digest('hex')),
+              catch: (error) => provisionFailure(`failed to re-hash the staged asset ${from}: ${describeError(error)}`),
+            })
+            if (onDisk !== expectedSha256) {
+              return yield* provisionFailure(
+                `SHA-256 mismatch for ${assetName} at rename time (expected ${expectedSha256}, on-disk ${onDisk}) — ` +
+                  `the staged file at ${from} was altered after verification; delete the install dir and retry, ` +
+                  `or set MSB_PATH to a trusted msb binary`,
+              )
+            }
+            yield* Effect.tryPromise({
+              try: () => rename(from, to),
+              catch: (error) =>
+                provisionFailure(`failed to move '${from}' into place as '${to}': ${describeError(error)}`),
+            })
           })),
         Match.exhaustive,
       )
@@ -452,12 +495,14 @@ export function downloadAndInstall(
       assetName: plan.msbAsset,
       tempFile: tempName(dirname(plan.msbPath), 'msb', now),
       finalPath: plan.msbPath,
+      sha256: msbDigest,
     }
     const krunArtifact: InstallArtifact = {
       asset: 'krun',
       assetName: plan.krunAsset,
       tempFile: tempName(dirname(plan.krunPath), 'krun', now),
       finalPath: plan.krunPath,
+      sha256: krunDigest,
     }
     const steps = installPlan(options.baseUrl, msbArtifact, krunArtifact)
     const cleanupTemps = Effect.ignore(Effect.tryPromise(() => unlink(msbArtifact.tempFile))).pipe(

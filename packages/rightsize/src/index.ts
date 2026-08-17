@@ -40,7 +40,7 @@
  * container-side capture (`checkpointContainer`), and the
  * `fromCheckpoint`/`restoreFromCheckpoint` restore wiring.
  */
-export type { CommandRunnerService } from './backend-msb/command-runner.js'
+export type { CommandRunnerService } from './backend-msb.js'
 export * from './fleet/diagnostics.js'
 export * from './fleet/fleet.js'
 export * from './fleet/handle.js'

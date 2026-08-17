@@ -14,8 +14,16 @@ import { Match } from 'effect'
  * means a live process) so this module stays effect-free.
  */
 
-/** A holdable lock predates 5 minutes — beyond that it is reaped even if the PID looks alive. */
-export const STALE_LOCK_AGE_MS = 5 * 60 * 1000
+/**
+ * A holdable lock predates 10 minutes — beyond that it is reaped even if the
+ * PID looks alive. Must stay ABOVE the provisioner's fetch ceiling
+ * (`DEFAULT_FETCH_TIMEOUT_MS`, 300s): a slow COLD pull legitimately holds
+ * the lock longer than the per-request fetch budget (asset + checksum +
+ * retries), and a stale threshold equal to a single fetch would let a waiter
+ * steal a live, in-progress download mid-pull. 2x the fetch ceiling keeps
+ * age-based takeover strictly slower than any live holder's own budget.
+ */
+export const STALE_LOCK_AGE_MS = 10 * 60 * 1000
 
 export interface LockRecord {
   readonly pid: number

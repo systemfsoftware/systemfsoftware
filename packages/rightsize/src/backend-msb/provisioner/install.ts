@@ -24,6 +24,8 @@ export interface InstallArtifact {
   readonly tempFile: string
   /** The final install path (under `bin/` or `lib/`). */
   readonly finalPath: string
+  /** The manifest-pinned SHA-256 of the asset — re-checked against the on-disk temp file immediately before rename. */
+  readonly sha256: string
 }
 
 export type InstallStep =
@@ -34,7 +36,16 @@ export type InstallStep =
     readonly url: string
     readonly tempFile: string
   }
-  | { readonly _tag: 'rename'; readonly asset: 'msb' | 'krun'; readonly from: string; readonly to: string }
+  | {
+    readonly _tag: 'rename'
+    readonly asset: 'msb' | 'krun'
+    readonly from: string
+    readonly to: string
+    /** The manifest digest the on-disk temp bytes must match at rename time. */
+    readonly expectedSha256: string
+    /** The release asset name, for the mismatch failure's message. */
+    readonly assetName: string
+  }
 
 export interface InstallPlan {
   /** The ordered step list the adapter must execute top-to-bottom. */
@@ -60,8 +71,24 @@ export function installPlan(baseUrl: string, msb: InstallArtifact, krun: Install
       tempFile: krun.tempFile,
     },
     // The rename sequence is fixed: krun first, msb last (binary-last).
-    { _tag: 'rename', asset: 'krun', from: krun.tempFile, to: krun.finalPath },
-    { _tag: 'rename', asset: 'msb', from: msb.tempFile, to: msb.finalPath },
+    // Each rename re-verifies the on-disk temp bytes against the manifest
+    // digest immediately before the move (see the adapter's rename step).
+    {
+      _tag: 'rename',
+      asset: 'krun',
+      from: krun.tempFile,
+      to: krun.finalPath,
+      expectedSha256: krun.sha256,
+      assetName: krun.assetName,
+    },
+    {
+      _tag: 'rename',
+      asset: 'msb',
+      from: msb.tempFile,
+      to: msb.finalPath,
+      expectedSha256: msb.sha256,
+      assetName: msb.assetName,
+    },
   ]
   return { steps }
 }

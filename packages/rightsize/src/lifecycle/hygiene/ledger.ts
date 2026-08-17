@@ -73,6 +73,19 @@ export const runEntriesPath = (cacheDir: string, runId: string): string =>
 // Entry model — the legible, JSON-threadable ledger lines
 // =============================================================================
 
+/**
+ * The only container name a ledger line may carry — `rz-<runId>-<seq>`
+ * (launch.ts `finalizeAttemptSpec`, the run id being 8 lowercase hex and
+ * the sequence a positive integer) or `rz-reuse-<hash12>` (reuse/hash.ts,
+ * the deterministic adoption name). Foreign names must never reach a kill
+ * command: a hostile or torn cache dir would otherwise turn the ledger's
+ * write access into arbitrary container deletion through the reaper.
+ */
+export const SANDBOX_NAME_PATTERN = /^rz-(?:[0-9a-f]{8}-\d+|reuse-[0-9a-f]{12})$/
+
+/** The only network identity a network line may carry — `rz-net-<8hex>`, the library-created network identity (model/network.ts). */
+export const NETWORK_ID_PATTERN = /^rz-net-[0-9a-f]{8}$/
+
 /** One tracked container: its backend, its run-scoped name (the kill key), and — once create succeeded — the backend-native id (the U8 by-id fingerprint). */
 export interface SandboxLedgerEntry {
   readonly kind: 'sandbox'
@@ -124,15 +137,21 @@ export const parseLedgerEntry = (line: string): LedgerEntry | undefined => {
     return parseSandboxLine(value)
   }
   if (value.kind === 'network' && 'id' in value) {
-    return typeof value.id === 'string' && value.id.length > 0 ? { kind: 'network', id: value.id } : undefined
+    return typeof value.id === 'string' && NETWORK_ID_PATTERN.test(value.id)
+      ? { kind: 'network', id: value.id }
+      : undefined
   }
   return undefined
 }
 
-/** Parses a sandbox line — `backend` + `name` proven present; the optional `id` is the recorded by-id fingerprint. */
+/** Parses a sandbox line — `backend` + a grammar-proven `name`; the optional `id` is the recorded by-id fingerprint. */
 const parseSandboxLine = (value: Record<'kind' | 'backend' | 'name', unknown>): SandboxLedgerEntry | undefined => {
   const { backend, name } = value
-  if ((backend !== 'docker' && backend !== 'msb') || typeof name !== 'string' || name.length === 0) {
+  if (
+    (backend !== 'docker' && backend !== 'msb') ||
+    typeof name !== 'string' ||
+    !SANDBOX_NAME_PATTERN.test(name)
+  ) {
     return undefined
   }
   if ('id' in value && typeof value.id === 'string' && value.id.length > 0) {
@@ -414,14 +433,24 @@ export const isProcessAlive = (pid: number): boolean => {
 /** The same-pid-reuse tolerance — a run is alive iff its pid exists AND its actual start time matches the recorded one within this window. */
 export const LIVENESS_TOLERANCE_MS = 2_000
 
-/** Judges a recorded (pid, startedIso) against a time source; an undeterminable start time counts as dead (cleanup-biased). */
+/**
+ * Judges a recorded (pid, startedIso) against a time source. The verdict is
+ * conservative — cleanup-biased only on PROOF: a pid that provably does not
+ * exist (or provably started at another instant) is dead; an
+ * undeterminable start time must be read as «cannot confirm» and skipped,
+ * because a failed or mid-flight probe is never evidence to rm -f another
+ * run's containers.
+ */
 export const isRecordAlive = (source: ProcessTimeSource, pid: number, recordedStartedIso: string): Promise<boolean> => {
   if (!source.isAlive(pid)) {
-    return Promise.resolve(false)
+    return Promise.resolve(false) // the pid itself is gone — a confirmed death
   }
   return source.startedIso(pid).then((actual) => {
     if (actual === undefined) {
-      return false
+      // Undeterminable: without a start-time answer there is no way to tell
+      // a dead owner from a probe failure or an unreadable /proc — a wrong
+      // kill is worse than a leaked run, so this pass leaves it alone.
+      return true
     }
     const diff = Math.abs(Date.parse(actual) - Date.parse(recordedStartedIso))
     return Number.isFinite(diff) && diff <= LIVENESS_TOLERANCE_MS
@@ -517,15 +546,28 @@ interface SweepDeps {
   readonly now?: (() => number) | undefined
 }
 
-/** One run's reap: sandboxes through the stop+remove prefixes, networks through the remove-network prefix, then the run's files are deleted. */
+/**
+ * One run's reap, two-phase: phase 1 stops+removes every sandbox (in ledger
+ * order), phase 2 removes every network, then the run's files are deleted.
+ * The ledger's network row precedes its sandbox rows (the network is
+ * ensured before the create/start loop), so a single in-order pass would
+ * `docker network rm` while members still exist and leak the network
+ * forever — every member must be detached before any network removal.
+ */
 const reapRun = (deps: SweepDeps, runId: string): Promise<void> =>
   readLedgerEntries(deps.cacheDir, runId).then((entries) => {
     const runKill = deps.runKill ?? spawnSyncKill
+    // Phase 1: every sandbox — detach the whole member set first.
     for (const entry of entries) {
       if (entry.kind === 'sandbox') {
         runKill([...deps.kill.stop, entry.name])
         runKill([...deps.kill.remove, entry.name])
-      } else {
+      }
+    }
+    // Phase 2: every network — with all members reaped, `docker network rm`
+    // succeeds on the first attempt.
+    for (const entry of entries) {
+      if (entry.kind === 'network') {
         runKill([...deps.kill.removeNetwork, entry.id])
       }
     }

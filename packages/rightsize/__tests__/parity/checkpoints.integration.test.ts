@@ -26,7 +26,7 @@ import type { ExecResult } from '../../src/model/container-spec.js'
 import { SandboxRuntime } from '../../src/runtime/runtime.js'
 import { Wait } from '../../src/wait/strategies.js'
 import { laneOutcome, outcomeFailure } from './helpers.js'
-import { containerExists } from './probes.js'
+import { containerExists, imageExists } from './probes.js'
 
 const Feature = makeFeature({ it, layer })
 
@@ -132,11 +132,35 @@ Feature('the checkpoint contract runs a real docker commit/restore round trip').
         expect(s.read.value?.exitCode).toBe(0)
         expect(s.read.value?.stdout.trim()).toBe('state-marker')
       }),
-      When('the checkpoint is removed')('removed', (s) => laneOutcome(Checkpoints.remove(s.name))),
+      // The checkpoint image cannot be retired while a container created
+      // from it still exists — docker refuses the image-rm with a 409. The
+      // restored container is stopped FIRST so the removal's success path is
+      // actually reachable and observable (this scenario's image-rm outcome
+      // is asserted below — never swallowed).
+      When('the restored container is stopped so the captured image can be retired')('stoppedForReap', (s) => {
+        const restored = s.restored.ok && s.restored.value !== undefined ? s.restored.value : undefined
+        return restored === undefined
+          ? Effect.succeed(outcomeFailure<void>('launch-failed', s.restored.failureMessage))
+          : laneOutcome(restored.stop)
+      }),
+      When('the checkpoint is removed and the daemon is asked whether the image still exists')(
+        'removal',
+        (s) =>
+          Effect.all([
+            laneOutcome(Checkpoints.remove(s.name)),
+            laneOutcome(Effect.sync(() => imageExists(`rightsize/checkpoint:${s.name}`))),
+          ]),
+      ),
+      Then('the registry entry was retired AND the backend artifact is actually gone')((s) => {
+        expect(s.removal[0].ok).toBe(true)
+        expect(s.removal[0].value).toBe(true)
+        expect(s.removal[1].ok).toBe(true)
+        expect(s.removal[1].value).toBe(false)
+      }),
       When('find is retried after the removal')('gone', (s) => laneOutcome(Checkpoints.find(s.name))),
-      Then('the checkpoint is gone from the registry and the backend')((s) => {
-        expect(s.removed.ok).toBe(true)
-        expect(s.removed.value).toBe(true)
+      Then('the checkpoint is gone from the registry')((s) => {
+        expect(s.removal[0].ok).toBe(true)
+        expect(s.removal[0].value).toBe(true)
         if (s.gone.ok && s.gone.value !== undefined) {
           expect(s.gone.value).toBeUndefined()
         } else {

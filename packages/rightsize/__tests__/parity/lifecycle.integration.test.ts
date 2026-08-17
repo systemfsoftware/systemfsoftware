@@ -11,6 +11,7 @@ import { expect } from 'vitest'
 
 import { fromImage } from '../../src/generic-container.js'
 import { launchContainer } from '../../src/lifecycle/launch.js'
+import { SandboxRuntime } from '../../src/runtime/runtime.js'
 import { Wait } from '../../src/wait/strategies.js'
 import { laneOutcome } from './helpers.js'
 import { containerExists, noExec, portIsReachable } from './probes.js'
@@ -129,6 +130,20 @@ Feature('the lifecycle contract runs real containers through the docker backend'
         expect(s.launch.ok).toBe(true)
         if (s.launch.ok && s.launch.value !== undefined) {
           expect(s.launch.value.spec.name).toMatch(/^rz-/)
+        }
+      }),
+      When('the container is stopped and removed by name through the runtime')('removedByName', (s) =>
+        laneOutcome(
+          Effect.gen(function*() {
+            const runtime = yield* SandboxRuntime
+            const name = s.launch.ok && s.launch.value !== undefined ? s.launch.value.spec.name : ''
+            return yield* runtime.removeByName(name)
+          }),
+        )),
+      Then('the daemon no longer sees the container identified only by its name')((s) => {
+        expect(s.removedByName.ok).toBe(true)
+        if (s.launch.ok && s.launch.value !== undefined && s.removedByName.ok) {
+          expect(containerExists(s.launch.value.handle.id)).toBe(false)
         }
       }),
     ),

@@ -86,3 +86,7 @@ export const networkExists = (networkId: string): boolean => dockerCli(['network
 
 /** Does the daemon still see a container with this id? */
 export const containerExists = (id: string): boolean => dockerCli(['inspect', '--format', '{{.Id}}', id]).exitCode === 0
+
+/** Does the daemon still hold an image under this ref? */
+export const imageExists = (ref: string): boolean =>
+  dockerCli(['image', 'inspect', '--format', '{{.Id}}', ref]).exitCode === 0

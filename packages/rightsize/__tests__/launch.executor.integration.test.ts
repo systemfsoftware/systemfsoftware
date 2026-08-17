@@ -270,6 +270,93 @@ Feature('launch and teardown execute a validated, ordered lifecycle over recorde
   )
 
   scenario(
+    'interruption after create resolves but before the boot returns stops the created container',
+    Gherkin.Do.pipe(
+      Given('a fresh recording doubles lineup')('setup', () => freshLineup()),
+      Given('a start that never returns')('_', (s) =>
+        Effect.sync(() => {
+          s.setup.runtime.service.start = () => Effect.never
+        })),
+      When('a scoped launch is interrupted while the boot attempt is suspended')('fiberExitTag', (s) =>
+        Effect.scoped(
+          Effect.gen(function*() {
+            const fiber = yield* Effect.forkScoped(
+              Effect.scoped(
+                launchScoped(plainSpec(), { hygiene: { cacheDir: s.setup.cacheDir } }, s.setup),
+              ),
+            )
+            let ticks = 0
+            while (ticks < 20) {
+              yield* Effect.yieldNow
+              ticks += 1
+            }
+            yield* Fiber.interrupt(fiber)
+            const exit = yield* Fiber.await(fiber)
+            return exit._tag
+          }),
+        )),
+      Then('a container was created and the finalizer stopped and removed it')((s) => {
+        const calls = s.setup.runtime.calls
+        expect(calls.some((call) => call.startsWith('create:'))).toBe(true)
+        // The handle is recorded at create-success, so teardown sees the
+        // created-but-never-returned container even though start never
+        // settled and the retry loop never handed the handle back.
+        expect(calls.some((call) => call.startsWith('stop:'))).toBe(true)
+        expect(calls.some((call) => call.startsWith('remove:'))).toBe(true)
+      }),
+    ),
+  )
+
+  scenario(
+    'an interrupted teardown resumes with the network removal still planned',
+    Gherkin.Do.pipe(
+      Given('a fresh recording doubles lineup')('setup', () => freshLineup()),
+      When('the teardown is interrupted inside its network-remove step and then resumed')(
+        'removeNetworkCalls',
+        (s) =>
+          Effect.scoped(
+            Effect.gen(function*() {
+              const spec = withNetwork(plainSpec(), 'rz-net-int')
+              const handle = yield* launchScoped(spec, { hygiene: { cacheDir: s.setup.cacheDir } }, s.setup)
+              // Stall exactly one removeNetwork call so the interruption lands
+              // AFTER the member-leave (stop) step — the window where a
+              // re-gather would recompute the last-member fact from the
+              // already-shrunk member registry.
+              const gate = Promise.withResolvers<void>()
+              let stalled = false
+              s.setup.networks.service.removeNetwork = (id) => {
+                s.setup.networks.calls.push(`removeNetwork:${id}`)
+                if (stalled) {
+                  return Effect.void
+                }
+                stalled = true
+                return Effect.promise(() => gate.promise.then(() => undefined))
+              }
+
+              const teardownFiber = yield* Effect.forkScoped(handle.stop)
+              let ticks = 0
+              while (ticks < 40 && !s.setup.networks.calls.some((call) => call.startsWith('removeNetwork:'))) {
+                yield* Effect.yieldNow
+                ticks += 1
+              }
+              yield* Fiber.interrupt(teardownFiber)
+              yield* Fiber.await(teardownFiber)
+              gate.resolve()
+
+              // The resumed teardown re-plans from the SNAPSHOTTED last-member
+              // fact, so the network removal runs again and completes.
+              yield* handle.stop
+              return s.setup.networks.calls.filter((call) => call.startsWith('removeNetwork:')).length
+            }),
+          ).pipe(Effect.provide(envLayerFor(s.setup))),
+      ),
+      Then('the resumed teardown still removes the library network')((s) => {
+        expect(s.removeNetworkCalls).toBe(2)
+      }),
+    ),
+  )
+
+  scenario(
     'teardown is idempotent across stop and scope close',
     Gherkin.Do.pipe(
       Given('a fresh lineup of recording doubles')('setup', () => freshLineup()),

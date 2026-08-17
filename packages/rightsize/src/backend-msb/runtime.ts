@@ -721,16 +721,19 @@ export function findRunningIn(
 /**
  * The synchronous, blocking teardown helper for the process-exit path
  * (U4b's hygiene registry consumes this): `stop` + `rm` via `spawnSync`,
- * failures swallowed — there is no caller left to report them.
+ * failures swallowed — there is no caller left to report them. Each step
+ * carries a 5s budget (mirroring the docker twin's `curl --max-time 5`
+ * cleanup): the process is exiting, so a wedged msb CLI must not stall the
+ * exit.
  */
 export function registerMsbCleanupSync(msbPath: string, id: string): void {
   try {
-    spawnSync(msbPath, MsbCommands.stop(id))
+    spawnSync(msbPath, MsbCommands.stop(id), { timeout: 5_000 })
   } catch {
     // Best-effort.
   }
   try {
-    spawnSync(msbPath, MsbCommands.rm(id))
+    spawnSync(msbPath, MsbCommands.rm(id), { timeout: 5_000 })
   } catch {
     // Best-effort.
   }

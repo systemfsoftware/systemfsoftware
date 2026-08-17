@@ -119,6 +119,24 @@ function timeoutFailure(args: readonly string[], timeoutMs: number): BackendErro
 }
 
 /**
+ * Escalates a timed-out child, mirroring `internal/spawn.ts`'s timeout
+ * semantics (the `spawn` `timeout` option's SIGKILL): terminate the process,
+ * drop the outcome listeners the race left behind, and destroy the pipe
+ * streams so no later I/O can touch the killed child. The timeout failure
+ * names the child "force-killed" — it must actually be one.
+ */
+function killTimedOutChild(child: ChildProcess): void {
+  child.removeAllListeners('exit')
+  child.removeAllListeners('error')
+  child.kill('SIGKILL')
+  for (const stream of [child.stdout, child.stderr]) {
+    if (stream !== null && !stream.destroyed) {
+      stream.destroy()
+    }
+  }
+}
+
+/**
  * The live runner over a concrete msb binary path. Every method is a plain
  * function of `msbPath`; the adapter layer supplies it via the provisioner.
  */
@@ -135,7 +153,13 @@ export function createCommandRunner(msbPath: string): CommandRunnerService {
 
       const outcome = yield* exitOutcome(child, timeoutMs)
       const result = Match.value(outcome).pipe(
-        Match.tag('timeout', () => Effect.fail(timeoutFailure(args, timeoutMs))),
+        Match.tag(
+          'timeout',
+          () =>
+            Effect.sync(() => killTimedOutChild(child)).pipe(
+              Effect.andThen(Effect.fail(timeoutFailure(args, timeoutMs))),
+            ),
+        ),
         Match.tag(
           'spawn-error',
           ({ error }) =>
@@ -175,7 +199,13 @@ export function createCommandRunner(msbPath: string): CommandRunnerService {
 
       const outcome = yield* exitOutcome(child, timeoutMs)
       const result = Match.value(outcome).pipe(
-        Match.tag('timeout', () => Effect.fail(timeoutFailure(args, timeoutMs))),
+        Match.tag(
+          'timeout',
+          () =>
+            Effect.sync(() => killTimedOutChild(child)).pipe(
+              Effect.andThen(Effect.fail(timeoutFailure(args, timeoutMs))),
+            ),
+        ),
         Match.tag(
           'spawn-error',
           ({ error }) =>
@@ -228,7 +258,9 @@ export function createCommandRunner(msbPath: string): CommandRunnerService {
 
   const invokeSync = (args: readonly string[]): void => {
     try {
-      spawnSync(msbPath, [...args])
+      // 5s budget, mirroring the docker twin's `curl --max-time 5` cleanup:
+      // the process is exiting, so a wedged msb CLI must not stall the exit.
+      spawnSync(msbPath, [...args], { timeout: 5_000 })
     } catch {
       // Best-effort: the process is exiting regardless; there is no caller
       // left to report to.

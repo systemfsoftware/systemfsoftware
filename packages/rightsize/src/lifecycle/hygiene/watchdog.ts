@@ -64,11 +64,13 @@ import {
 // The watchdog script — a detached Node child, content-addressed
 // =============================================================================
 
-/** The watchdog's argv: the run's three ledger paths, the three kill prefixes, and the owner pid. */
+/** The watchdog's argv: the run's three ledger paths, the three kill prefixes, the owner pid, and the owner's recorded start instant. */
 export interface WatchdogArgs {
   readonly cacheDir: string
   readonly runId: string
   readonly ownerPid: number
+  /** The owner's process-start instant, ISO-8601 — the same-pid-reuse guard's recorded half; the script compares it against `/proc/<pid>`'s start time. */
+  readonly ownerStartedIso: string
   readonly kill: ReaperKillCommands
 }
 
@@ -76,31 +78,26 @@ const joinPrefix = (argv: ReadonlyArray<string>): string => argv.join(' ')
 
 /**
  * The script body. argv: `<sandboxesPath> <networksPath> <recordPath>
- * <stopCmd> <removeCmd> <removeNetCmd> <ownerPid>`; each *Cmd is a single
- * space-joined argv prefix (may be empty); the reaped name is appended as
- * the final argument. The ledger is JSON-lines, so each line is parsed (a
- * torn line is skipped) and sandbox names / network ids are reaped.
- * Deterministic — never hand-edited; a unit test can execute it against a
- * stub recorder command without touching the real backends.
+ * <stopCmd> <removeCmd> <removeNetCmd> <ownerPid> <ownerStartedIso>`; each
+ * *Cmd is a single space-joined argv prefix (may be empty); the reaped name
+ * is appended as the final argument. The ledger is JSON-lines, so each line
+ * is parsed (a torn or foreign line is skipped) and sandbox names / network
+ * ids are reaped — sandboxes first, then networks (the ledger's network row
+ * precedes its sandbox rows, so a single in-order pass would `docker
+ * network rm` while members still exist). Liveness is /proc start-time
+ * comparison, not `process.kill(pid, 0)` alone: a reused pid must not
+ * wedge cleanup. Deterministic — never hand-edited; a unit test can execute
+ * it against a stub recorder command without touching the real backends.
  */
 export const watchdogScriptContent = (): string =>
   `// rightsize reaper watchdog — generated file, named by its own content hash.
-// argv: <sandboxesPath> <networksPath> <recordPath> <stopCmd> <removeCmd> <removeNetCmd> <ownerPid>
+// argv: <sandboxesPath> <networksPath> <recordPath> <stopCmd> <removeCmd> <removeNetCmd> <ownerPid> <ownerStartedIso>
 "use strict";
 const fs = require("fs");
 const { spawnSync } = require("node:child_process");
 
-const [sandboxesPath, networksPath, recordPath, stopCmd, removeCmd, removeNetCmd, ownerPidRaw] = process.argv.slice(2);
+const [sandboxesPath, networksPath, recordPath, stopCmd, removeCmd, removeNetCmd, ownerPidRaw, ownerStartedIso] = process.argv.slice(2);
 const ownerPid = Number(ownerPidRaw);
-
-function ownerAlive() {
-  try {
-    process.kill(ownerPid, 0);
-    return true;
-  } catch (err) {
-    return err && err.code === "EPERM";
-  }
-}
 
 function splitCmd(cmd) {
   return cmd.length === 0 ? [] : cmd.split(" ");
@@ -116,9 +113,65 @@ function runCmd(prefix, name) {
   }
 }
 
+// The read-side grammar, mirrored from the ledger kernel: only library
+//-created names/ids may ever reach a kill command — a hostile or torn
+// cache dir must not become arbitrary container deletion at owner death.
+function isSandboxName(name) {
+  return /^rz-(?:[0-9a-f]{8}-\\d+|reuse-[0-9a-f]{12})$/.test(name);
+}
+
+function isNetworkId(id) {
+  return /^rz-net-[0-9a-f]{8}$/.test(id);
+}
+
+// The owner's start instant in POSIX epoch seconds: /proc/<pid>/stat field
+// 22 (starttime, clock ticks since boot) + /proc/stat's btime. Returns
+// undefined when the evidence is unreadable — the conservative verdict is
+// "unknown, not dead".
+function ownerStartSeconds() {
+  let stat;
+  try {
+    stat = fs.readFileSync("/proc/" + ownerPid + "/stat", "utf8");
+  } catch {
+    return undefined;
+  }
+  const close = stat.lastIndexOf(")");
+  if (close < 0) return undefined;
+  // The comm field (which may itself contain ")") ends at the last ")";
+  // the remainder resumes at field 3 (state), so starttime — overall
+  // field 22 — sits at index 19 of the remainder.
+  const fields = stat.slice(close + 1).trim().split(/\\s+/);
+  const ticks = Number(fields[19]);
+  if (!Number.isFinite(ticks)) return undefined;
+  let boot = null;
+  try {
+    const statLines = fs.readFileSync("/proc/stat", "utf8").split("\\n");
+    for (const line of statLines) {
+      if (line.startsWith("btime ")) boot = line;
+    }
+  } catch {
+    return undefined;
+  }
+  if (boot === null) return undefined;
+  const btime = Number(boot.slice("btime ".length).trim());
+  if (!Number.isFinite(btime)) return undefined;
+  // CLK_TCK is 100 on every POSIX platform this script runs on.
+  return btime + ticks / 100;
+}
+
+function ownerAlive() {
+  const startSeconds = ownerStartSeconds();
+  if (startSeconds === undefined) return true; // unreadable — unknown, skip
+  const recordedMs = Date.parse(ownerStartedIso);
+  if (!Number.isFinite(recordedMs)) return true; // unrecordable stamp — skip
+  return Math.abs(startSeconds * 1000 - recordedMs) <= 2000;
+}
+
 function reapLines(filePath, stopPrefix, removePrefix, removeNetPrefix) {
   if (!fs.existsSync(filePath)) return;
   const lines = fs.readFileSync(filePath, "utf8").split("\\n");
+  const sandboxes = [];
+  const networks = [];
   for (const line of lines) {
     if (line.length === 0) continue;
     let entry;
@@ -127,12 +180,20 @@ function reapLines(filePath, stopPrefix, removePrefix, removeNetPrefix) {
     } catch {
       continue; // torn or foreign line — never trusted
     }
-    if (entry && entry.kind === "sandbox" && typeof entry.name === "string") {
-      runCmd(stopPrefix, entry.name);
-      runCmd(removePrefix, entry.name);
-    } else if (entry && entry.kind === "network" && typeof entry.id === "string") {
-      runCmd(removeNetPrefix, entry.id);
+    if (entry && entry.kind === "sandbox" && typeof entry.name === "string" && isSandboxName(entry.name)) {
+      sandboxes.push(entry.name);
+    } else if (entry && entry.kind === "network" && typeof entry.id === "string" && isNetworkId(entry.id)) {
+      networks.push(entry.id);
     }
+  }
+  // Two phases: every member is detached before any network removal, so
+  // "docker network rm" always sees an empty network.
+  for (const name of sandboxes) {
+    runCmd(stopPrefix, name);
+    runCmd(removePrefix, name);
+  }
+  for (const id of networks) {
+    runCmd(removeNetPrefix, id);
   }
 }
 
@@ -147,8 +208,8 @@ function reap() {
   }
 }
 
-// Block until the owner is gone — cleanly or via SIGKILL; polling every
-// 500ms, the same liveness primitive the sweep uses.
+// Block until the owner is provably gone — cleanly or via SIGKILL; polling
+// every 500ms with the same start-time liveness the sweep uses.
 function poll() {
   if (ownerAlive()) {
     setTimeout(poll, 500);
@@ -213,18 +274,40 @@ export interface DetachedSpawn {
 
 /**
  * Spawns the detached watchdog: `node <script> <paths...> <prefixes...>
- * <ownerPid>`, `detached: true` (outlives this process's death, SIGKILL
- * included), stdio ignored, unref'd — the whole point of the watchdog is
- * that nothing keeps it attached to this process's exit.
+ * <ownerPid> <ownerStartedIso>`, `detached: true` (outlives this process's
+ * death, SIGKILL included), stdio ignored, unref'd — the whole point of the
+ * watchdog is that nothing keeps it attached to this process's exit.
+ *
+ * The cached script is re-read and verified against its content-addressed
+ * name before spawn: the filename is the SHA-256 of the script's own bytes,
+ * so a replaced file is provable tampering — spawning it would run attacker
+ * code at this process's death. On a mismatch the watchdog is skipped with a
+ * typed log (`undefined` handle); the startup sweep remains the only reaper.
  */
 export const spawnWatchdog = (
   args: WatchdogArgs,
   seam?: {
     readonly spawnChild?: ((command: string, argv: ReadonlyArray<string>) => { readonly close: () => void }) | undefined
   },
-): Effect.Effect<WatchdogHandle> =>
+): Effect.Effect<WatchdogHandle | undefined> =>
   Effect.gen(function*() {
+    const content = watchdogScriptContent()
     const scriptPath = yield* Effect.promise(() => ensureWatchdogScript(args.cacheDir))
+    // Re-read the bytes at spawn time: ensureWatchdogScript's existence
+    // check cannot see a script that was replaced AFTER it was written.
+    const verified = yield* Effect.promise(() =>
+      fsp.readFile(scriptPath, 'utf8').then(
+        (text) => text === content,
+        () => false,
+      )
+    )
+    if (!verified) {
+      yield* Effect.logError(
+        `refusing to spawn watchdog script '${scriptPath}': its bytes no longer match the content-addressed name ` +
+          `(tampered or torn write) — orphan reaping for run '${args.runId}' is skipped`,
+      )
+      return undefined
+    }
     const argv = [
       runEntriesPath(args.cacheDir, args.runId),
       // The networks live in the same entries file; the arg is kept so the
@@ -235,6 +318,7 @@ export const spawnWatchdog = (
       joinPrefix(args.kill.remove),
       joinPrefix(args.kill.removeNetwork),
       String(args.ownerPid),
+      args.ownerStartedIso,
     ]
     const spawnChild = seam?.spawnChild
     if (spawnChild !== undefined) {
@@ -321,7 +405,13 @@ const doInit = (deps: ReaperInitDeps): Effect.Effect<void> =>
     if (deps.mode === 'on') {
       const spawnSeam = deps.spawnChild
       heldWatchdog = yield* spawnWatchdog(
-        { cacheDir: deps.cacheDir, runId: RunId.value, ownerPid: process.pid, kill: deps.kill },
+        {
+          cacheDir: deps.cacheDir,
+          runId: RunId.value,
+          ownerPid: process.pid,
+          ownerStartedIso: THIS_PROCESS_STARTED_ISO,
+          kill: deps.kill,
+        },
         { spawnChild: spawnSeam },
       )
     }
@@ -344,16 +434,24 @@ export const ensureReaperInitialized = (deps: ReaperInitDeps): Effect.Effect<voi
   return fresh
 }
 
-/** Appends a sandbox entry to this process's ledger — a no-op unless the reaper is active (mode `off` or a failed bring-up). Returns whether the entry was actually written. */
+/**
+ * Appends a sandbox entry to this process's ledger — a no-op unless the
+ * reaper is active (mode `off` or a failed bring-up). Returns whether the
+ * entry was actually written. The effect RESOLVES only after the append is
+ * durable: the launch awaits it BEFORE the backend's create() (the superset
+ * invariant), so a crash between create and an un-awaited append can never
+ * strand a permanently-untracked container.
+ */
 export const trackSandboxLedger = (
   entry: { readonly kind: 'sandbox'; readonly backend: BackendName; readonly name: string },
 ): Effect.Effect<boolean> =>
-  Effect.sync(() => {
+  Effect.promise(() => {
     if (active === undefined) {
-      return false
+      return Promise.resolve(false)
     }
-    void appendSandboxEntry(active.cacheDir, active.runId, entry).catch(() => {})
-    return true
+    return appendSandboxEntry(active.cacheDir, active.runId, entry)
+      .then(() => true)
+      .catch(() => false)
   })
 
 /** Records the backend-native id on an already-tracked sandbox's line, once create succeeded. */

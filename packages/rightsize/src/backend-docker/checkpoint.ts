@@ -16,7 +16,7 @@
  * exactly where upstream does: `docker save`/`load` preserve the original
  * tag round-trip (loading over an existing tag re-points it), unlike msb's
  * digest-derived import naming, so the effective ref after an import is the
- * ref itself (the shell-out shares `cli.shellout.ts`'s run contract).
+ * ref itself (the shell-out shares `cli.ts`'s run contract).
  *
  * @since 0.1.0
  */

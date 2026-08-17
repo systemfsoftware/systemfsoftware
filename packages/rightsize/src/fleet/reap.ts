@@ -221,15 +221,20 @@ interface ReapPhases extends Cell.Phases {
   readonly writeContext: never
 }
 
-/** One dead run's kill pass: fresh entries → prefixed kills → run files deleted. Never rejects. */
+/** One dead run's kill pass, two-phase (same ordering as the sweep's `reapRun`): every sandbox is stopped+removed before any network removal — the ledger's network row precedes its sandbox rows, so an in-order pass would `docker network rm` while members still exist. Runs files are deleted after the kills. Never rejects. */
 const reapOneRun = (deps: ReapDeps, runId: string): Promise<void> =>
   readLedgerEntries(deps.cacheDir, runId).then((entries) => {
     const runKill = deps.runKill ?? spawnSyncKill
+    // Phase 1: every sandbox — detach the whole member set first.
     for (const entry of entries) {
       if (entry.kind === 'sandbox') {
         runKill([...deps.kill.stop, entry.name])
         runKill([...deps.kill.remove, entry.name])
-      } else {
+      }
+    }
+    // Phase 2: every network — with all members reaped, removal succeeds.
+    for (const entry of entries) {
+      if (entry.kind === 'network') {
         runKill([...deps.kill.removeNetwork, entry.id])
       }
     }

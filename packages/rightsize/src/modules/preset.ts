@@ -4,13 +4,13 @@
  * everything upstream spread across 23 `GenericContainer` subclasses: the
  * default image, the compatibility gate's expected repository, env pairs,
  * command, exposed guest ports, network aliases, the wait-strategy data
- * (from `model/wait.schema.ts`), declared readiness steps (memcached's
+ * (from `model/wait.ts`), declared readiness steps (memcached's
  * version probe, mongodb's replica-set initiation), the memory floor,
  * backend restrictions, post-allocation spec transforms (the upstream
  * `customizeSpec` hooks as data), and helper derivations (the upstream
  * connection-URI getters as data + one interpreter).
  *
- * Schema-law note: like `wait.schema.ts`, these members carry base
+ * Schema-law note: like `wait.ts`, these members carry base
  * `S.Number` where a domain check belongs to the interpreter/table-author,
  * never a refinement — a refinement embedded through the union's copied
  * member nodes cannot be discriminated by the law kernel, and the port/time

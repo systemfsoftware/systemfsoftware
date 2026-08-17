@@ -32,7 +32,7 @@ export default defineConfig({
     globalSetup: ['./__tests__/parity/setup.ts'],
     // R18/RS-LANE: matcher patterns were expanded (test/parity lives outside
     // `src/**`), so the default in-source suite would double-run if left on.
-    includeSource: [],
+
     // Overrides sharedConfig: the lane shares `reports/` with the `test`
     // task beside it; turbo discards both reports anyway.
     coverage: { enabled: false },

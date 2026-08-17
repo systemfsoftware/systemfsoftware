@@ -145,12 +145,15 @@ export const listFleetContainers = (
     const cacheDir = cacheDirFromConfig(config)
     const entries = (yield* Effect.promise(() => readLedgerEntries(cacheDir, RunId.value)))
       .filter((entry): entry is Extract<LedgerEntry, { readonly kind: 'sandbox' }> => entry.kind === 'sandbox')
-      .filter((entry) => entry.id !== undefined && entry.id !== '')
-      .filter((entry) => !HashSet.has(seen, keyFor(entry.backend, entry.id ?? '')))
+      .flatMap((entry): Array<Extract<LedgerEntry, { readonly kind: 'sandbox' }> & { readonly id: string }> => {
+        const id = entry.id
+        return id !== undefined && id !== '' ? [{ ...entry, id }] : []
+      })
+      .filter((entry) => !HashSet.has(seen, keyFor(entry.backend, entry.id)))
     const ledgerPortraits = yield* Effect.forEach(
       entries,
       (entry) => {
-        const handle = shellHandle(entry.id ?? '')
+        const handle = shellHandle(entry.id)
         return Effect.all({
           inspect: safeInspect(runtime.inspect(handle)),
           logTail: safeLogTail(runtime.logs(handle), budget),

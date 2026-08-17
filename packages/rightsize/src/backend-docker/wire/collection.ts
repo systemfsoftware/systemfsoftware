@@ -6,7 +6,7 @@
  * backend reads exactly one member (`Id`) from each entry. Declaring only
  * the owned member keeps decode loud about the one field that matters while
  * staying tolerant of daemon field additions (struct decoding ignores
- * unowned keys — see `wire/container.schema.ts`'s own tolerance note).
+ * unowned keys — see `wire/container.ts`'s own tolerance note).
  *
  * @since 0.1.0
  */
