@@ -126,6 +126,12 @@ An artifact that deliberately contains the violation a gate claims to detect, ru
 
 Without the pair, a gate reporting no findings is indistinguishable between two states: a clean tree, or a check that never ran. The fixture is what converts silence into evidence.
 
+### Asserted-executed split
+
+The state where a guard's identity checks — existence, version pin, checksum — describe one filesystem object while the spawn resolves another, so every green assertion certifies a binary that did not run. Bare-name spawns re-enter ambient lookup at execution time, and the split is silent in both directions: a substituted binary keeps the assertions green, and a correctly pinned spawn under a name-keyed grant fails as a permission error rather than a verdict.
+
+The one-object rule closes it: the verified path, the permission grant, and the spawn all name the same object, leaving no resolution step for the environment to decide. A Ritual gate is the special case where nothing is recomputed at all; here something is, but about the wrong object.
+
 ### Advisory step
 
 A pipeline step permitted to fail without failing its job, because the verdict it contributes is carried by something downstream. The permission is granted with one outcome in mind — the judged work scored below a threshold — and silently extends to every other way the step can fail.

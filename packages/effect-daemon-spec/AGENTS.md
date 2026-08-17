@@ -47,6 +47,5 @@
 
 - Types: `pnpm --filter @systemfsoftware/effect-daemon-spec typecheck`
 - Tests: `pnpm --filter @systemfsoftware/effect-daemon-spec test:run`
-- Mutation: the Mutation workflow's report for this package; no agent starts a run (root `AGENTS.md` REPO-D3)
 - API surface: `pnpm --filter @systemfsoftware/effect-daemon-spec api:check`
 - Update report: `pnpm --filter @systemfsoftware/effect-daemon-spec api:update`

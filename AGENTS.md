@@ -23,6 +23,12 @@
   dont: retire a rule into the types without naming what forces the constructor, or give a rule a message claiming a property its predicate does not read
   harm: a marker refuses a call that is made. The annotation form type-checks while deriving no marker at all, so an unforced constructor leaves the constraint stated and unenforced while the rule it replaced is already gone — and a decider that throws or reads the clock satisfies the channel markers untouched, because they constrain the channels and nothing else. A rule whose message outruns its predicate fails from the other side, silently admitting the spelling it exists to catch
   check: review — for each constraint held in the types, what forces the constructor and what the markers do not cover; for each rule, whether its predicate decides the property its message names
+- id: REPO-A5
+  title: The audience is every adopter; this tree is the first one, never the set
+  do: justify a design against someone who installs the package and shares none of this checkout's conventions, gates or tooling, and name what actually reaches them — the emitted type, the exports map, an imported module's runtime behaviour, and a rule package they install
+  dont: answer a question about audience, reach or consumers by naming who inside this tree consumes the thing
+  harm: every relationship this file names points inward — vendored input, owned packages, in-repo consumers — so an agent asked who consumes a thing answers from the tree and scopes the design to the tree. On 2026-08-16 three consecutive framings in one session did exactly that, concluding the audience was this repo and then a sibling checkout, with REPO-W7 in context throughout — W7 forbids the repo as a warrant but names no audience to reason from, so the agent returns to the only one this file describes. A CI job, a git hook and a repo-local lint rule reach an adopter as zero bits, so a discipline carried only by those is a house rule dressed as a library's
+  check: review — for each design decision, whether its warrant names something an adopter outside this checkout can observe, and whether each instrument it leans on is one that ships to them
 ```
 
 ## Safety
@@ -50,31 +56,20 @@ Not derivable from the manifests:
 
 ## Directory Map
 
-Directories and the root doctrine file `CONCEPTS.md`; directory contents are discovered with tools.
+Directories and the root doctrine file `CONCEPTS.md`; the packages inside them are never listed here, because a hand-written inventory is stale on the next `pnpm add` and reads as complete while it is not — the one this replaced named 20 of 40. Run `pnpm map` when you need the shape of the tree: which packages exist, which carry their own leaf, which publish. It derives every fact from `pnpm-workspace.yaml` and `git ls-files` on each run, and it names what it does not cover.
 
-| Directory         | What it is                                                                                                                           | Governance                                  |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------- |
-| `packages/`       | Workspace packages — see Package Index below                                                                                         | Root invariants plus a hook-delivered leaf  |
-| `repos/`          | One `[[repos]]` entry in `subtrees.toml` ↔ one `repos/<name>` tree: third-party source, tests and git history, read-only             | `REPO-S3` read-only; `REPO-W4`              |
-| `scripts/`        | Root guards (`guards/`, wired into the check chain or CI) and utilities (`tools/`, wired into no chain); release and harness tooling | Editable except the Evaluator scripts above |
-| `.github/`        | CI workflows and reusable actions                                                                                                    | Evaluator                                   |
-| `.claude/`        | Hook scripts that enforce the gates (`hooks/`) and harness settings                                                                  | Evaluator                                   |
-| `docs/`           | Plans, audits, issue notes, explainers, papers — everything outside `docs/solutions/`                                                | Editable                                    |
-| `docs/solutions/` | Documented decisions and learnings, categorized by topic                                                                             | Doctrine                                    |
-| `CONCEPTS.md`     | Project vocabulary — the terms every agent must use identically                                                                      | Doctrine                                    |
-| `omp/`            | OMP plugin packages                                                                                                                  | Leaf-governed                               |
-| `agent-plugins/`  | Distributable agent-plugins.org plugins (Deno, standalone)                                                                           | Leaf-governed                               |
-
-## Package Index
-
-`packages/` groups into six domains. Every package is owned outright (REPO-O1). "Leaf" = its own `AGENTS.md`; "root-governed" = no leaf, the root plus this file govern it.
-
-- **Schema & codec laws** — `effect-schema-law` (codec-law property tests: round-trip identity, encode stability), `effect-schema-vite` (Vite plugin that injects those law tests), `effect-schema-extensions` (extra Schema codecs), `hex-schema` (hex wire-format schemas). Leaf-governed.
-- **Cell taxonomy core** — `effect-cell-types` (Workflow types + the phase chain), `effect-cell-type-tests` (generated tstyche suite), `effect-cell-gen` (generated arbitraries), `effect-daemon-spec` (supervision-tree daemons). Leaf-governed.
-- **Lint & static analysis** — `oxlint-config` (shared oxlint presets; root-governed), `oxlint-plugins/` (cell-specific rule plugins; hub leaf + per-plugin sub-leaves).
-- **Mutation testing** — `stryker-js/` (hub leaf + 6 sub-leaves), `stryker-plugins` (Effect-Schema ignorers for Stryker).
-- **Effect libraries & bridges** — `effect-atom` (owned; atom/atom-react), `effect-memfs` (owned), `rx-effect` (RxJS↔Effect bridge), `storybook-gherkin` (owned; Gherkin as Storybook stories), `effect-gherkin-spec` (Gherkin BDD for Effect 4; root-governed).
-- **Tooling & shared config** — `arethetypeswrong` (owned; cli/core; leaf), `tsconfig` (shared TS base; root-governed), `vitest-config` (shared Vitest; root-governed).
+| Directory         | What it is                                                                                                                            | Governance                                  |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
+| `packages/`       | Workspace packages, published for adopters outside this tree (`REPO-A5`); `pnpm map` derives the inventory and its governance         | Root invariants plus a hook-delivered leaf  |
+| `repos/`          | One `[[repos]]` entry in `subtrees.toml` ↔ one `repos/<name>` tree: third-party source, tests and git history, read-only              | `REPO-S3` read-only; `REPO-W4`              |
+| `scripts/`        | Root guards (`guards/`, wired into the check chain or CI) and utilities (`tools/`, wired into no chain); release and harness tooling  | Editable except the Evaluator scripts above |
+| `.github/`        | CI workflows and reusable actions; `.github/AGENTS.md` is the repo's only CI-failure runbook — read it when a check fails, not before | Evaluator                                   |
+| `.claude/`        | Hook scripts that enforce the gates (`hooks/`) and harness settings                                                                   | Evaluator                                   |
+| `docs/`           | Plans, audits, issue notes, explainers, papers — everything outside `docs/solutions/`                                                 | Editable                                    |
+| `docs/solutions/` | Documented decisions and learnings, categorized by topic                                                                              | Doctrine                                    |
+| `CONCEPTS.md`     | Project vocabulary — the terms every agent must use identically                                                                       | Doctrine                                    |
+| `omp/`            | OMP plugin packages                                                                                                                   | Leaf-governed                               |
+| `agent-plugins/`  | Distributable agent-plugins.org plugins (Deno, standalone)                                                                            | Leaf-governed                               |
 
 ## Working Rules
 
@@ -90,9 +85,11 @@ Directories and the root doctrine file `CONCEPTS.md`; directory contents are dis
 
 ## Release and Commits
 
-- **REPO-R1** — every package is pre-1.0 ALPHA; API stability is never a design constraint. When a change is cleaner as a break, make the break; never wait for a major release. A compatibility objection is rejected unless it names a concrete in-repo consumer migration. Gate: `pnpm exec commitlint` accepts the `api!` marker and the `BREAKING CHANGE:` footer.
-- **REPO-R2** — a change to a publishable package (`packages/**`) ships with a `.changeset/` intent via `pnpm change --bump <none|patch|minor|major>`; `--bump none` only for a genuinely non-releasable touch — on a behavior-visible change it is the silent non-release the gate exists to catch, and review consumes `none` intents before merging. Gate: `.github/workflows/changeset-check.yml` fails a PR that touches a publishable package without an intent.
-- **REPO-C1** — `type(scope): subject`, and the subject carries no trailing period. Length is a convention, not a constraint: `header-max-length` is deliberately `[0]` because a retry loop over a cosmetic costs more than a long subject does, so nothing rejects one and a rule claiming otherwise would name a gate that never fires. Keep subjects short because a reader scans them. Gate: `pnpm exec commitlint --edit <msgfile>` — it decides the shape, the type and the full stop, never the count.
+- **REPO-R1** — every package is pre-1.0 ALPHA; API stability is never a design constraint. When a change is cleaner as a break, make the break; never wait for a major release. A compatibility objection is rejected unless it names a migration someone actually performs — an adopter's or this tree's; "someone might depend on it" is not one, and an adopter's cost counts even though no in-repo caller moves. Gate: `pnpm exec commitlint` accepts the `api!` marker and the `BREAKING CHANGE:` footer.
+- **REPO-R2** — a change that alters a publishable package's turbo `build` task hash ships with a `.changeset/` intent via `pnpm change --bump <none|patch|minor|major>`; a hash that did not move demands no intent, no matter which files were touched — determinism is the point, only the engine decides reach. The bump comes from what a consumer observes from outside the package, never from the diff's size: `none` is exactly the case where shipped sources changed but no exported name, type or behaviour did (devDependency-only and script-only bumps are its canonical class), and review consumes `none` intents before merging — a `none` on a behavior-visible change is the silent non-release the gate exists to catch. Gate: `.github/workflows/changeset-check.yml` (running `scripts/guards/check-changeset.ts`) decides whether an intent is required via the hash verdict — pinned base SHA vs PR head, computed by the lockfile-installed turbo — never which bump is right.
+- **REPO-R3** — a changeset body ships verbatim as the published CHANGELOG entry, read by someone who installed the package from a registry and has never seen this repository; write only what they can observe or must do. Never a module path, a file, a line number, a commit sha, a bundler or type-emitter quirk, a gate or script name, a test count, a `Verification:` line, or a review severity — the commit already carries the mechanism for contributors, and repeating it in the changeset does not preserve it, it publishes it. Gate: review — whether every sentence names something a consumer can observe or must do.
+- **REPO-R3** — a changeset body ships verbatim as the published CHANGELOG entry, read by someone who installed the package from a registry and has never seen this repository; write only what they can observe or must do. Never a module path, a file, a line number, a commit sha, a bundler or type-emitter quirk, a gate or script name, a test count, a `Verification:` line, or a review severity — the commit already carries the mechanism for contributors, and repeating it in the changeset does not preserve it, it publishes it. Gate: review — whether every sentence names something a consumer can observe or must do.
+- **REPO-C1** — `type(scope): subject`, and the subject carries no trailing period. Nothing rejects a long subject — `header-max-length` is deliberately `[0]` — so keep subjects short for the reader, never for a gate, and never write a rule claiming a length limit. Gate: `pnpm exec commitlint --edit <msgfile>` — it decides the shape, the type and the full stop, never the count.
 - **REPO-C2** — feat, fix, chore, build, ci, deps, docs, perf, refactor, revert, style, test. Config-only changes are not feat or fix. Gate: `pnpm exec commitlint`, run by the `commit-msg` hook on every commit touching a path outside the vendored trees.
 
 ## Boundaries

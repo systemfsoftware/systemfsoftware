@@ -17,6 +17,6 @@ Rules here gate `CONSTITUTION.md` Articles I–II.
     A walker reading the finished file can only report the absence afterwards;
     `Workflow.make` refuses it before the file exists, so the obligation belongs there and a
     second copy here would report a violation `Workflow.make` should have refused
-  check: "`Workflow.make` decides whether a workflow declares its Command, Decision and
-    Error; review whether a proposed rule would fail a workflow for lacking that declaration"
+  check: review — whether a proposed rule would fail a workflow for lacking the Command,
+    Decision and Error declaration that `Workflow.make` already refuses at construction
 ```
