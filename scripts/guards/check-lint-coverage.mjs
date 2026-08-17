@@ -1,6 +1,4 @@
 #!/usr/bin/env node
-// LOCKED SURFACE (AGENTS.md Surface Classes).
-// Never edit this file to make a coverage failure pass; opt the package in instead.
 //
 // Answers one question: does every package holding production source actually get
 // linted by the cell rules? A rule registered in @systemfsoftware/oxlint-config reaches

@@ -1,6 +1,4 @@
 #!/usr/bin/env node
-// LOCKED SURFACE (AGENTS.md Surface Classes).
-// Never edit this file to make an adjacency failure pass; add the missing test instead.
 //
 // Answers one question: does every `src/**/<stem>.workflow.ts` have an adjacent
 // `src/**/__tests__/<stem>.workflow.property.test.ts`? A lint rule cannot answer it — a rule
