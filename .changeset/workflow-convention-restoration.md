@@ -1,14 +1,14 @@
 ---
 '@systemfsoftware/oxlint-plugin-effect-workflow': minor
 '@systemfsoftware/oxlint-plugin-effect-schema': minor
-'@systemfsoftware/oxlint-plugin-test-placement': minor
-'@systemfsoftware/oxlint-plugin-effect-dmmf': minor
+'@systemfsoftware/oxlint-plugin-test-placement': major
+'@systemfsoftware/oxlint-plugin-effect-dmmf': major
 ---
 
-Three new rules and a retargeted test-placement taxonomy.
+Three new rules, a retargeted test-placement taxonomy, and one removal.
 
-`effect-workflow` adds `make-file-location`: `Workflow.make` may be constructed only in a single-segment `<stem>.workflow.ts` file, and at most once per file.
+`make-file-location` allows a workflow constructor only in the workflow module that owns it, at most once per module.
 
-`effect-schema` adds `schema-declaration-location`: a schema declaration — a class extending a Schema factory, or a module-scope const initialized to a `Schema.<member>(...)` call — must live in a `*.schema.ts` file or the `<stem>.workflow.ts` that owns it.
+`schema-declaration-location` requires a schema declaration to live in a schema module, or the workflow module that owns it. A binding whose initializer returns something other than a schema — a type guard, a decoder, an encoder, an arbitrary — is a use and is not reported.
 
-`test-placement` retargets the src test taxonomy. The only test file sanctioned under `src/` is a single-segment `<stem>.workflow.property.test.ts` beside the workflow it covers, plus the generated `schema-laws.test.ts` entry point; every other test file under `src/` is now reported. Outside `src/`, test files live under `tests/` as `*.integration.test.ts`, and non-test helpers and fixtures live under `tests/__fixtures__/` (new `tests-dir-helpers-in-fixtures` rule). `in-source-test-targets-private` is unchanged: an in-source `import.meta.vitest` block must still exercise a non-exported binding.
+`test-placement` narrows which tests may sit beside source, requires every other test to live in the package test directory, and adds `tests-dir-helpers-in-fixtures`. It also removes `in-source-test-targets-private`, which `effect-dmmf` no longer re-exports — drop the entry if you set it. Each rule reports the exact shape it expects.
