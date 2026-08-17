@@ -3,6 +3,7 @@ import { banDataTaggedError } from './rules/ban-data-taggederror.js'
 import { noManualTagProperty } from './rules/no-manual-tag-property.js'
 import { noSchemaLawDuplicate } from './rules/no-schema-law-duplicate.js'
 import { schemaDeclarationLocation } from './rules/schema-declaration-location.js'
+import { schemaFileExportsSchemasOnly } from './rules/schema-file-exports-schemas-only.js'
 
 const PLUGIN_NAME = '@systemfsoftware/oxlint-plugin-effect-schema'
 
@@ -14,6 +15,7 @@ const recommendedRules = {
   [rule('no-manual-tag-property')]: 'error',
   [rule('no-schema-law-duplicate')]: 'error',
   [rule('schema-declaration-location')]: 'error',
+  [rule('schema-file-exports-schemas-only')]: 'error',
 } as const
 
 export default {
@@ -26,6 +28,7 @@ export default {
     'no-manual-tag-property': noManualTagProperty,
     'no-schema-law-duplicate': noSchemaLawDuplicate,
     'schema-declaration-location': schemaDeclarationLocation,
+    'schema-file-exports-schemas-only': schemaFileExportsSchemasOnly,
   },
   configs: {
     recommended: {

@@ -17,6 +17,7 @@ const _default: {
         'no-manual-tag-property': Rule;
         'no-schema-law-duplicate': Rule;
         'schema-declaration-location': Rule;
+        'schema-file-exports-schemas-only': Rule;
     };
     configs: {
         recommended: {
