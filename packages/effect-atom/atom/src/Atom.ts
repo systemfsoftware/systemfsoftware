@@ -1851,14 +1851,13 @@ export function mapResult<R extends Atom<AsyncResult.Result<unknown, unknown>>, 
 ): (
   self: R,
 ) => [R] extends [Writable<infer _, infer RW>]
-  ? Writable<AsyncResult.Result<B, unknown> | AsyncResult.Result<unknown, unknown>, RW>
-  : Atom<AsyncResult.Result<B, unknown> | AsyncResult.Result<unknown, unknown>>
+  ? Writable<AsyncResult.Result<B, AsyncResult.Result.Failure<Type<R>>>, RW>
+  : Atom<AsyncResult.Result<B, AsyncResult.Result.Failure<Type<R>>>>
 export function mapResult<R extends Atom<AsyncResult.Result<unknown, unknown>>, B>(
   self: R,
   f: (_: AsyncResult.Result.Success<Type<R>>) => B,
-): [R] extends [Writable<infer _, infer RW>]
-  ? Writable<AsyncResult.Result<B, unknown> | AsyncResult.Result<unknown, unknown>, RW>
-  : Atom<AsyncResult.Result<B, unknown> | AsyncResult.Result<unknown, unknown>>
+): [R] extends [Writable<infer _, infer RW>] ? Writable<AsyncResult.Result<B, AsyncResult.Result.Failure<Type<R>>>, RW>
+  : Atom<AsyncResult.Result<B, AsyncResult.Result.Failure<Type<R>>>>
 export function mapResult(
   selfOrF: unknown,
   f?: unknown,
