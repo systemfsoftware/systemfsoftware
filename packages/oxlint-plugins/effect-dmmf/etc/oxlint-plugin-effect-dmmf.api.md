@@ -39,6 +39,7 @@ const _default: {
         'behaviour-exercises-use-case': Rule;
         'behaviour-one-feature-per-file': Rule;
         'tests-dir-helpers-in-fixtures': Rule;
+        'no-io-module-in-source-test': Rule;
     };
     configs: {
         recommended: {
