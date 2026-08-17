@@ -1452,14 +1452,17 @@ const checkMatrix = (surface) => {
   const committed = fs.existsSync(MATRIX_PATH) ? fs.readFileSync(MATRIX_PATH, 'utf8') : ''
   const raw = renderMatrix(surface)
   const formatted = formatWithDprint(raw, MATRIX_PATH)
-  /** Compare content, not layout: trim line edges and compare table rows cell-by-cell (dprint pads columns; the raw render does not). @param {string} text @returns {string} */
+  /** Compare content, not layout: trim line edges, compare table rows cell-by-cell, and canonicalize separator cells (dprint pads columns and dashes; the raw render does not). @param {string} text @returns {string} */
   const normalize = (text) =>
     text
       .split('\n')
       .map((line) => {
         const trimmed = line.trim()
         if (!trimmed.startsWith('|')) return trimmed
-        return trimmed.split('|').map((cell) => cell.trim()).join('|')
+        return trimmed
+          .split('|')
+          .map((cell) => (/^-+$/.test(cell.trim()) ? '-' : cell.trim()))
+          .join('|')
       })
       .join('\n')
       .replace(/\n{3,}/g, '\n\n')
