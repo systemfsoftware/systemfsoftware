@@ -285,26 +285,32 @@ function typeRefContainsSchema(t: TSType | null | undefined): boolean {
  * produce a schema, so a `/^decode/` test would silently drop a real codec's laws.
  */
 const SCHEMA_USE_MEMBERS: Record<string, true> = {
-  decodeUnknownResult: true,
-  decodeUnknownSync: true,
-  decodeUnknownExit: true,
-  decodeUnknownEffect: true,
-  decodeUnknownOption: true,
-  decodeUnknownEither: true,
-  decodeUnknownPromise: true,
+  decode: true,
+  decodeEffect: true,
+  decodeExit: true,
+  decodeOption: true,
+  decodePromise: true,
   decodeResult: true,
   decodeSync: true,
-  decodeExit: true,
-  decodeEffect: true,
-  decodeOption: true,
-  decodeEither: true,
-  decodePromise: true,
-  encodeUnknown: true,
-  encodeUnknownSync: true,
-  encodeUnknownEffect: true,
+  decodeUnknownEffect: true,
+  decodeUnknownExit: true,
+  decodeUnknownOption: true,
+  decodeUnknownPromise: true,
+  decodeUnknownResult: true,
+  decodeUnknownSync: true,
   encode: true,
-  encodeSync: true,
   encodeEffect: true,
+  encodeExit: true,
+  encodeOption: true,
+  encodePromise: true,
+  encodeResult: true,
+  encodeSync: true,
+  encodeUnknownEffect: true,
+  encodeUnknownExit: true,
+  encodeUnknownOption: true,
+  encodeUnknownPromise: true,
+  encodeUnknownResult: true,
+  encodeUnknownSync: true,
   toArbitrary: true,
   toJsonSchemaDocument: true,
   is: true,
@@ -345,10 +351,16 @@ function memberChainStartsWithS(node: MemberExpression): boolean {
   if (obj.type === 'Identifier') return obj.name === 'S' || obj.name.includes('Schema')
   if (obj.type === 'MemberExpression') return memberChainStartsWithS(obj)
 
-  // `Schema.Struct({...}).pipe(...)` — the chain root is a call, not a member
+  // `Schema.Struct({...}).pipe(...)` — the chain root is a call, not a member.
+  // The use-call guard has to apply here too, not only where the init IS the
+  // call: `S.toJsonSchemaDocument(x).schema` reads a member off a use call, so
+  // without this test it is detected as a schema and the generated suite hands
+  // a plain JSON-Schema object to `toEncoded`, dying at import with
+  // `Cannot read properties of undefined (reading 'encoding')`.
+  // Measured 2026-08-17 on `forkCoreSchema` in `stryker-js-mutation-run`.
   if (obj.type === 'CallExpression') {
     const callee = obj.callee
-    if (callee.type === 'MemberExpression') return memberChainStartsWithS(callee)
+    if (callee.type === 'MemberExpression') return memberChainStartsWithS(callee) && !isSchemaUseCall(callee)
     if (callee.type === 'Identifier') return callee.name === 'S' || callee.name.includes('Schema')
   }
 
