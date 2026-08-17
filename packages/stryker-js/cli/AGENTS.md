@@ -26,5 +26,5 @@ The `stryker` bin's home. Core (`@systemfsoftware/stryker-js-core`) is the mutat
 
 - Types: `pnpm --filter @systemfsoftware/stryker-js-cli typecheck`
 - Tests: `pnpm --filter @systemfsoftware/stryker-js-cli test` (colocated cell tests under `src/__tests__/`)
- @ours
+  @ours
 - Lint: `pnpm --filter @systemfsoftware/stryker-js-cli lint`
