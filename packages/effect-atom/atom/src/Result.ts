@@ -11,13 +11,15 @@
  * @since 4.0.0
  */
 import * as Cause from 'effect/Cause'
+import * as Clock from 'effect/Clock'
+import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
 import type { LazyArg } from 'effect/Function'
 import { constTrue, dual } from 'effect/Function'
 import * as Option from 'effect/Option'
 import { type Pipeable, pipeArguments } from 'effect/Pipeable'
 import type { Predicate, Refinement } from 'effect/Predicate'
-import { hasProperty, isIterable } from 'effect/Predicate'
+import { isIterable, isTagged } from 'effect/Predicate'
 import * as Either from 'effect/Result'
 import type * as Types from 'effect/Types'
 
@@ -28,7 +30,6 @@ import {
   initial,
   isResult,
   type Result,
-  ResultProto,
   type Success,
   success,
   TypeId,
@@ -61,7 +62,7 @@ export type { Failure, Initial, Result, Success } from './internal/result-values
  * @category utility types
  * @since 4.0.0
  */
-export type With<R extends Result<any, any>, A, E> = R extends Initial<infer _A, infer _E> ? Initial<A, E>
+export type With<R extends Result<unknown, unknown>, A, E> = R extends Initial<infer _A, infer _E> ? Initial<A, E>
   : R extends Success<infer _A, infer _E> ? Success<A, E>
   : R extends Failure<infer _A, infer _E> ? Failure<A, E>
   : never
@@ -81,7 +82,7 @@ export const isWaiting = <A, E>(result: Result<A, E>): boolean => result.waiting
  * @since 4.0.0
  */
 export const fromExit = <A, E>(exit: Exit.Exit<A, E>): Success<A, E> | Failure<A, E> =>
-  exit._tag === 'Success' ? success(exit.value) : failure(exit.cause)
+  Exit.isSuccess(exit) ? success(exit.value) : failure(exit.cause)
 
 /**
  * Converts an `Exit` to a result, preserving the latest previous success when the exit is a failure.
@@ -93,7 +94,7 @@ export const fromExitWithPrevious = <A, E>(
   exit: Exit.Exit<A, E>,
   previous: Option.Option<Result<A, E>>,
 ): Success<A, E> | Failure<A, E> =>
-  exit._tag === 'Success' ? success(exit.value) : failureWithPrevious(exit.cause, { previous })
+  Exit.isSuccess(exit) ? success(exit.value) : failureWithPrevious(exit.cause, { previous })
 
 /**
  * Creates a waiting result from an optional previous result, using `Initial(true)` when no previous result exists.
@@ -102,7 +103,7 @@ export const fromExitWithPrevious = <A, E>(
  * @since 4.0.0
  */
 export const waitingFrom = <A, E>(previous: Option.Option<Result<A, E>>): Result<A, E> => {
-  if (previous._tag === 'None') {
+  if (Option.isNone(previous)) {
     return initial(true)
   }
   return waiting(previous.value)
@@ -114,7 +115,7 @@ export const waitingFrom = <A, E>(previous: Option.Option<Result<A, E>>): Result
  * @category guards
  * @since 4.0.0
  */
-export const isInitial = <A, E>(result: Result<A, E>): result is Initial<A, E> => result._tag === 'Initial'
+export const isInitial = <A, E>(result: Result<A, E>): result is Initial<A, E> => isTagged(result, 'Initial')
 
 /**
  * Returns `true` when an `Result` is either `Success` or `Failure`.
@@ -122,8 +123,7 @@ export const isInitial = <A, E>(result: Result<A, E>): result is Initial<A, E> =
  * @category guards
  * @since 4.0.0
  */
-export const isNotInitial = <A, E>(result: Result<A, E>): result is Success<A, E> | Failure<A, E> =>
-  result._tag !== 'Initial'
+export const isNotInitial = <A, E>(result: Result<A, E>): result is Success<A, E> | Failure<A, E> => !isInitial(result)
 
 /**
  * Returns `true` when an `Result` is a `Success`.
@@ -131,7 +131,7 @@ export const isNotInitial = <A, E>(result: Result<A, E>): result is Success<A, E
  * @category guards
  * @since 4.0.0
  */
-export const isSuccess = <A, E>(result: Result<A, E>): result is Success<A, E> => result._tag === 'Success'
+export const isSuccess = <A, E>(result: Result<A, E>): result is Success<A, E> => isTagged(result, 'Success')
 
 /**
  * Returns `true` when an `Result` is a `Failure`.
@@ -139,7 +139,7 @@ export const isSuccess = <A, E>(result: Result<A, E>): result is Success<A, E> =
  * @category guards
  * @since 4.0.0
  */
-export const isFailure = <A, E>(result: Result<A, E>): result is Failure<A, E> => result._tag === 'Failure'
+export const isFailure = <A, E>(result: Result<A, E>): result is Failure<A, E> => isTagged(result, 'Failure')
 
 /**
  * Returns `true` when an `Result` is a `Failure` whose cause contains only interruptions.
@@ -148,7 +148,7 @@ export const isFailure = <A, E>(result: Result<A, E>): result is Failure<A, E> =
  * @since 4.0.0
  */
 export const isInterrupted = <A, E>(result: Result<A, E>): result is Failure<A, E> =>
-  result._tag === 'Failure' && Cause.hasInterruptsOnly(result.cause)
+  isFailure(result) && Cause.hasInterruptsOnly(result.cause)
 
 /**
  * Creates a `Failure` result from a `Cause`, carrying forward the latest success stored in a previous result.
@@ -204,13 +204,13 @@ export const failWithPrevious = <A, E>(
  * @category constructors
  * @since 4.0.0
  */
-export const waiting = <R extends Result<any, any>>(self: R, options?: {
+export const waiting = <R extends Result<unknown, unknown>>(self: R, options?: {
   readonly touch?: boolean | undefined
 }): R => {
   if (self.waiting) {
     return options?.touch ? touch(self) : self
   }
-  const result = Object.assign(Object.create(ResultProto), self, { waiting: true })
+  const result = { ...self, waiting: true }
   return options?.touch ? touch(result) : result
 }
 
@@ -220,9 +220,9 @@ export const waiting = <R extends Result<any, any>>(self: R, options?: {
  * @category combinators
  * @since 4.0.0
  */
-export const touch = <A extends Result<any, any>>(result: A): A => {
+export const touch = <A extends Result<unknown, unknown>>(result: A): A => {
   if (isSuccess(result)) {
-    return success(result.value, { waiting: result.waiting }) as A
+    return { ...result, timestamp: Effect.runSync(Clock.currentTimeMillis) }
   }
   return result
 }
@@ -234,16 +234,16 @@ export const touch = <A extends Result<any, any>>(result: A): A => {
  * @category combinators
  * @since 4.0.0
  */
-export const replacePrevious = <R extends Result<any, any>, XE, A>(
+export function replacePrevious<R extends Result<unknown, unknown>, XE, A>(
   self: R,
   previous: Option.Option<Result<A, XE>>,
-): With<R, A, Result.Failure<R>> => replacePreviousImpl(self, previous) as With<R, A, Result.Failure<R>>
-
-const replacePreviousImpl = (
-  self: Result<any, any>,
-  previous: Option.Option<Result<any, any>>,
-): Result<any, any> =>
-  self._tag === 'Failure' ? failureWithPrevious(self.cause, { previous, waiting: self.waiting }) : self
+): With<R, A, Result.Failure<R>>
+export function replacePrevious(
+  self: Result<unknown, unknown>,
+  previous: Option.Option<Result<unknown, unknown>>,
+): Result<unknown, unknown> {
+  return isFailure(self) ? failureWithPrevious(self.cause, { previous, waiting: self.waiting }) : self
+}
 
 /**
  * Returns the current success value, or the previous success value stored in a failure, as an `Option`.
@@ -252,9 +252,10 @@ const replacePreviousImpl = (
  * @since 4.0.0
  */
 export const value = <A, E>(self: Result<A, E>): Option.Option<A> => {
-  if (self._tag === 'Success') {
+  if (isSuccess(self)) {
     return Option.some(self.value)
-  } else if (self._tag === 'Failure') {
+  }
+  if (isFailure(self)) {
     return Option.map(self.previousSuccess, (s) => s.value)
   }
   return Option.none()
@@ -287,7 +288,7 @@ export const getOrThrow = <A, E>(self: Result<A, E>): A =>
  * @since 4.0.0
  */
 export const cause = <A, E>(self: Result<A, E>): Option.Option<Cause.Cause<E>> =>
-  self._tag === 'Failure' ? Option.some(self.cause) : Option.none()
+  isFailure(self) ? Option.some(self.cause) : Option.none()
 
 /**
  * Returns the first typed error from a failure cause, or `None` for successes, initial results, defects, and interrupt-only causes.
@@ -296,7 +297,7 @@ export const cause = <A, E>(self: Result<A, E>): Option.Option<Cause.Cause<E>> =
  * @since 4.0.0
  */
 export const error = <A, E>(self: Result<A, E>): Option.Option<E> =>
-  self._tag === 'Failure' ? Cause.findErrorOption(self.cause) : Option.none()
+  isFailure(self) ? Cause.findErrorOption(self.cause) : Option.none()
 
 /**
  * Converts a result to an `Exit`, succeeding with a success value, failing with a failure cause, or failing with `NoSuchElementError` for `Initial`.
@@ -310,17 +311,13 @@ export const toExit: {
 } = <A, E>(
   self: Result<A, E>,
 ): Exit.Exit<A, E | Cause.NoSuchElementError> => {
-  switch (self._tag) {
-    case 'Success': {
-      return Exit.succeed(self.value)
-    }
-    case 'Failure': {
-      return Exit.failCause(self.cause)
-    }
-    default: {
-      return Exit.fail(new Cause.NoSuchElementError())
-    }
+  if (isSuccess(self)) {
+    return Exit.succeed(self.value)
   }
+  if (isFailure(self)) {
+    return Exit.failCause(self.cause)
+  }
+  return Exit.fail(new Cause.NoSuchElementError())
 }
 
 /**
@@ -333,17 +330,16 @@ export const map: {
   <A, B>(f: (a: A) => B): <E>(self: Result<A, E>) => Result<B, E>
   <E, A, B>(self: Result<A, E>, f: (a: A) => B): Result<B, E>
 } = dual(2, <E, A, B>(self: Result<A, E>, f: (a: A) => B): Result<B, E> => {
-  switch (self._tag) {
-    case 'Initial':
-      return initial(self.waiting)
-    case 'Failure':
-      return failure(self.cause, {
-        previousSuccess: Option.map(self.previousSuccess, (s) => success(f(s.value), s)),
-        waiting: self.waiting,
-      })
-    case 'Success':
-      return success(f(self.value), self)
+  if (isSuccess(self)) {
+    return success(f(self.value), self)
   }
+  if (isFailure(self)) {
+    return failure(self.cause, {
+      previousSuccess: Option.map(self.previousSuccess, (s) => success(f(s.value), s)),
+      waiting: self.waiting,
+    })
+  }
+  return initial(self.waiting)
 })
 
 /**
@@ -373,20 +369,19 @@ export const flatMap: {
     self: Result<A, E>,
     f: (a: A, prev: Success<A, E>) => Result<B, E2>,
   ): Result<B, E | E2> => {
-    switch (self._tag) {
-      case 'Initial':
-        return initial(self.waiting)
-      case 'Failure':
-        return failure<B, E | E2>(self.cause, {
-          previousSuccess: Option.flatMap(self.previousSuccess, (s) => {
-            const next = f(s.value, s)
-            return isSuccess(next) ? Option.some(next) : Option.none()
-          }),
-          waiting: self.waiting,
-        })
-      case 'Success':
-        return f(self.value, self)
+    if (isSuccess(self)) {
+      return f(self.value, self)
     }
+    if (isFailure(self)) {
+      return failure<B, E | E2>(self.cause, {
+        previousSuccess: Option.flatMap(self.previousSuccess, (s) => {
+          const next = f(s.value, s)
+          return isSuccess(next) ? Option.some(next) : Option.none()
+        }),
+        waiting: self.waiting,
+      })
+    }
+    return initial(self.waiting)
   },
 )
 
@@ -412,14 +407,13 @@ export const match: {
   readonly onFailure: (_: Failure<A, E>) => Y
   readonly onSuccess: (_: Success<A, E>) => Z
 }): X | Y | Z => {
-  switch (self._tag) {
-    case 'Initial':
-      return options.onInitial(self)
-    case 'Failure':
-      return options.onFailure(self)
-    case 'Success':
-      return options.onSuccess(self)
+  if (isSuccess(self)) {
+    return options.onSuccess(self)
   }
+  if (isFailure(self)) {
+    return options.onFailure(self)
+  }
+  return options.onInitial(self)
 })
 
 /**
@@ -447,19 +441,17 @@ export const matchWithError: {
   readonly onDefect: (defect: unknown, _: Failure<A, E>) => Y
   readonly onSuccess: (_: Success<A, E>) => Z
 }): W | X | Y | Z => {
-  switch (self._tag) {
-    case 'Initial':
-      return options.onInitial(self)
-    case 'Failure': {
-      const result = Cause.findError(self.cause)
-      if (Either.isFailure(result)) {
-        return options.onDefect(Cause.squash(result.failure), self)
-      }
-      return options.onError(result.success, self)
-    }
-    case 'Success':
-      return options.onSuccess(self)
+  if (isSuccess(self)) {
+    return options.onSuccess(self)
   }
+  if (isFailure(self)) {
+    const result = Cause.findError(self.cause)
+    if (Either.isFailure(result)) {
+      return options.onDefect(Cause.squash(result.failure), self)
+    }
+    return options.onError(result.success, self)
+  }
+  return options.onInitial(self)
 })
 
 /**
@@ -490,19 +482,17 @@ export const matchWithWaiting: {
   if (self.waiting) {
     return options.onWaiting(self)
   }
-  switch (self._tag) {
-    case 'Initial':
-      return options.onWaiting(self)
-    case 'Failure': {
-      const e = Cause.findError(self.cause)
-      if (Either.isFailure(e)) {
-        return options.onDefect(Cause.squash(e.failure), self)
-      }
-      return options.onError(e.success, self)
-    }
-    case 'Success':
-      return options.onSuccess(self)
+  if (isSuccess(self)) {
+    return options.onSuccess(self)
   }
+  if (isFailure(self)) {
+    const e = Cause.findError(self.cause)
+    if (Either.isFailure(e)) {
+      return options.onDefect(Cause.squash(e.failure), self)
+    }
+    return options.onError(e.success, self)
+  }
+  return options.onWaiting(self)
 })
 
 /**
@@ -511,39 +501,40 @@ export const matchWithWaiting: {
  * @category combinators
  * @since 4.0.0
  */
-type AllSuccess<Arg> = [Arg] extends [readonly any[]] ? {
+type AllSuccess<Arg> = [Arg] extends [readonly unknown[]] ? {
     -readonly [K in keyof Arg]: [Arg[K]] extends [Result<infer _A, infer _E>] ? _A : Arg[K]
   }
   : [Arg] extends [Iterable<infer _A>] ? _A extends Result<infer _AA, infer _E> ? _AA : _A
-  : [Arg] extends [Record<string, any>] ? {
+  : [Arg] extends [Record<string, unknown>] ? {
       -readonly [K in keyof Arg]: [Arg[K]] extends [Result<infer _A, infer _E>] ? _A : Arg[K]
     }
   : never
 
-type AllError<Arg> = [Arg] extends [readonly any[]] ? Result.Failure<Arg[number]>
+type AllError<Arg> = [Arg] extends [readonly unknown[]] ? Result.Failure<Arg[number]>
   : [Arg] extends [Iterable<infer _A>] ? Result.Failure<_A>
-  : [Arg] extends [Record<string, any>] ? Result.Failure<Arg[keyof Arg]>
+  : [Arg] extends [Record<string, unknown>] ? Result.Failure<Arg[keyof Arg]>
   : never
 
-export const all = <const Arg extends Iterable<any> | Record<string, any>>(
+export function all<const Arg extends Iterable<unknown> | Record<string, unknown>>(
   results: Arg,
-): Result<AllSuccess<Arg>, AllError<Arg>> => allImpl(results) as Result<AllSuccess<Arg>, AllError<Arg>>
+): Result<AllSuccess<Arg>, AllError<Arg>>
+export function all(results: Iterable<unknown> | Record<string, unknown>): Result<unknown, unknown> {
+  return allImpl(results)
+}
 
-const allImpl = (results: Iterable<any> | Record<string, any>): Result<unknown, unknown> => {
+const allImpl = (results: Iterable<unknown> | Record<string, unknown>): Result<unknown, unknown> => {
   let waiting = false
   if (isIterable(results)) {
-    const list = Array.from(results)
     const successes: unknown[] = []
-    for (let i = 0; i < list.length; i++) {
-      const result = list[i]!
+    for (const result of results) {
       if (!isResult(result)) {
-        successes[i] = result
+        successes.push(result)
         continue
       }
       if (!isSuccess(result)) {
         return result
       }
-      successes[i] = result.value
+      successes.push(result.value)
       if (result.waiting) {
         waiting = true
       }
@@ -567,13 +558,7 @@ const allImpl = (results: Iterable<any> | Record<string, any>): Result<unknown, 
   return success(successes, { waiting })
 }
 
-/**
- * Creates a typed builder for rendering an `Result` by handling waiting, initial, success, error, defect, interrupt, and failure cases.
- *
- * @category constructors
- * @since 4.0.0
- */
-type BuilderFor<A extends Result<any, any>> = Builder<
+type BuilderFor<A extends Result<unknown, unknown>> = Builder<
   never,
   A extends Success<infer _A, infer _E> ? _A : never,
   A extends Failure<infer _A, infer _E> ? _E : never,
@@ -581,12 +566,23 @@ type BuilderFor<A extends Result<any, any>> = Builder<
   A extends Failure<infer _A, infer _E> ? Defect | Interrupt : never
 >
 
-export const builder = <A extends Result<any, any>>(self: A): BuilderFor<A> => {
-  // BuilderImpl is structurally compatible with Builder for any concrete A,
-  // but the conditional members of Builder cannot be verified while A is
-  // unresolved — assert the boundary once, here.
-  const built: unknown = new BuilderImpl(self)
-  return built as BuilderFor<A>
+/**
+ * Creates a typed builder for rendering an `Result` by handling waiting, initial, success, error, defect, interrupt, and failure cases.
+ *
+ * @category constructors
+ * @since 4.0.0
+ */
+export function builder<A extends Result<unknown, unknown>>(self: A): BuilderFor<A>
+/**
+ * The implementation signature is erased because no type relates the class to
+ * the declaration above. `BuilderFor` reads `A`'s variant, so for an unresolved
+ * `A` it stays a deferred conditional that no concrete type inhabits; and the
+ * builder accumulates into a single mutable `output` while re-typing itself
+ * through each method's return, so its output type exists in no field - the four
+ * terminals read `Option<unknown>`. The declaration states what callers get.
+ */
+export function builder(self: Result<unknown, unknown>): unknown {
+  return new BuilderImpl(self)
 }
 
 /**
@@ -681,15 +677,15 @@ class BuilderImpl<Out, A, E> {
   when<B extends Result<A, E>, C>(
     refinement: Refinement<Result<A, E>, B>,
     f: (result: B) => Option.Option<C>,
-  ): any
+  ): BuilderImpl<Out | C, A, E>
   when<C>(
     refinement: Predicate<Result<A, E>>,
     f: (result: Result<A, E>) => Option.Option<C>,
-  ): any
+  ): BuilderImpl<Out | C, A, E>
   when<C>(
     refinement: Predicate<Result<A, E>>,
     f: (result: Result<A, E>) => Option.Option<C>,
-  ): any {
+  ): BuilderImpl<Out | C, A, E> {
     if (Option.isNone(this.output) && refinement(this.result)) {
       const b = f(this.result)
       if (Option.isSome(b)) {
@@ -715,37 +711,37 @@ class BuilderImpl<Out, A, E> {
     return this.when(isInitial, (r) => Option.some(f(r)))
   }
 
-  onSuccess<B>(f: (value: A, result: Success<A, E>) => B): BuilderImpl<Out | B, never, E> {
+  onSuccess<B>(f: (value: A, result: Success<A, E>) => B): BuilderImpl<Out | B, A, E> {
     return this.when(isSuccess, (r) => Option.some(f(r.value, r)))
   }
 
-  onFailure<B>(f: (cause: Cause.Cause<E>, result: Failure<A, E>) => B): BuilderImpl<Out | B, A, never> {
+  onFailure<B>(f: (cause: Cause.Cause<E>, result: Failure<A, E>) => B): BuilderImpl<Out | B, A, E> {
     return this.when(isFailure, (r) => Option.some(f(r.cause, r)))
   }
 
-  onError<B>(f: (error: E, result: Failure<A, E>) => B): BuilderImpl<Out | B, A, never> {
-    return this.onErrorIf(constTrue, f) as BuilderImpl<Out | B, A, never>
+  onError<B>(f: (error: E, result: Failure<A, E>) => B): BuilderImpl<Out | B, A, E> {
+    return this.onErrorIf(constTrue, f)
   }
 
-  onErrorIf<C, B extends E = E>(
-    refinement: Refinement<E, B> | Predicate<E>,
-    f: (error: B, result: Failure<A, E>) => C,
-  ): BuilderImpl<Out | C, A, Types.EqualsWith<E, B, E, Exclude<E, B>>> {
+  onErrorIf<C>(
+    refinement: Predicate<E>,
+    f: (error: E, result: Failure<A, E>) => C,
+  ): BuilderImpl<Out | C, A, E> {
     return this.when(isFailure, (result) =>
       Cause.findErrorOption(result.cause).pipe(
         Option.filter(refinement),
-        Option.map((error) => f(error as B, result)),
+        Option.map((error) => f(error, result)),
       ))
   }
 
   onErrorTag<B>(
     tag: string | readonly string[],
-    f: (error: Types.ExtractTag<E, any>, result: Failure<A, E>) => B,
-  ): BuilderImpl<Out | B, A, Types.ExcludeTag<E, any>> {
+    f: (error: E, result: Failure<A, E>) => B,
+  ): BuilderImpl<Out | B, A, E> {
     return this.onErrorIf(
-      (e) => hasProperty(e, '_tag') && (Array.isArray(tag) ? tag.includes(e._tag) : e._tag === tag),
+      (e) => typeof tag === 'string' ? isTagged(e, tag) : tag.some((t) => isTagged(e, t)),
       f,
-    ) as BuilderImpl<Out | B, A, Types.ExcludeTag<E, any>>
+    )
   }
 
   onDefect<B>(f: (defect: unknown, result: Failure<A, E>) => B): BuilderImpl<Out | B, A, E> {
@@ -762,25 +758,25 @@ class BuilderImpl<Out, A, E> {
     })
   }
 
-  orElse<B>(orElse: LazyArg<B>): Out | B {
-    return Option.getOrElse(this.output, orElse) as Out | B
+  orElse<B>(orElse: LazyArg<B>): unknown {
+    return Option.getOrElse(this.output, orElse)
   }
 
-  orNull(): Out | null {
-    return Option.getOrNull(this.output) as Out | null
+  orNull(): unknown {
+    return Option.getOrNull(this.output)
   }
 
-  render(): Out | null {
+  render(): unknown {
     if (Option.isSome(this.output)) {
-      return this.output.value as Out
+      return this.output.value
     } else if (isFailure(this.result)) {
       throw Cause.squash(this.result.cause)
     }
     return null
   }
 
-  exhaustive(): Out {
-    return this.render() as Out
+  exhaustive(): unknown {
+    return this.render()
   }
 }
 

@@ -553,6 +553,9 @@ importers:
       tsdown:
         specifier: 'catalog:'
         version: 0.22.14(oxc-resolver@11.24.2)(typescript@7.0.2)(unrun@0.2.39)
+      type-fest:
+        specifier: 'catalog:'
+        version: 5.8.0
       typescript:
         specifier: 'catalog:'
         version: 7.0.2

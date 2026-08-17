@@ -91,6 +91,7 @@
     "effect": "catalog:",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
+    "type-fest": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },
