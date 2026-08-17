@@ -337,4 +337,174 @@ if (import.meta.vitest !== void 0) {
       }),
     )
   })
+
+  // mergeConfigs — the R2/R3/R4 merge rules over a child config, relocated from the
+  // integration suite as data in / data out (U5). None of these need a file.
+  it('Should_ReturnParentVerbatim_When_ChildIsEmpty', () => {
+    expect(mergeConfigs({ a: 1, b: 2 }, {})).toEqual({ a: 1, b: 2 })
+  })
+
+  it('Should_ReplaceTheInheritedScalar_When_TheChildStatesAScalar', () => {
+    expect(mergeConfigs({ a: 1, b: 2 }, { b: 9 })).toEqual({ a: 1, b: 9 })
+  })
+
+  it('Should_ReplaceTheInheritedArray_When_TheChildStatesAnArray', () => {
+    expect(mergeConfigs({ x: [1, 2, 3] }, { x: [9] })).toEqual({ x: [9] })
+  })
+
+  it('Should_NotConcatenateArrays_When_TheChildOverridesAnArray', () => {
+    const merged = mergeConfigs({ x: [1, 2, 3] }, { x: [4, 5] })
+    expect(merged['x']).toEqual([4, 5])
+  })
+
+  it('Should_ConcatenatePluginLists_When_TheChildAddsPluginDescriptors', () => {
+    const merged = mergeConfigs({ plugins: ['@base/a', '@base/b'] }, { plugins: ['@child/c'] })
+    expect(merged['plugins']).toEqual(['@base/a', '@base/b', '@child/c'])
+  })
+
+  it('Should_KeepTheFirstOccurrence_When_ParentAndChildNameTheSamePlugin', () => {
+    const merged = mergeConfigs({ plugins: ['@base/a', '@base/b'] }, { plugins: ['@base/b', '@child/c'] })
+    expect(merged['plugins']).toEqual(['@base/a', '@base/b', '@child/c'])
+  })
+
+  it('Should_StartFromTheChildList_When_TheParentStatesNoPlugins', () => {
+    const merged = mergeConfigs({ a: 1 }, { plugins: ['@child/c'] })
+    expect(merged['plugins']).toEqual(['@child/c'])
+  })
+
+  it('Should_DeleteTheInheritedPluginList_When_TheChildStatesPluginsNull', () => {
+    // The nulling child must be a `Record<string, unknown>`: the narrowed options
+    // type has no null for `plugins`.
+    const child: Record<string, unknown> = { plugins: null }
+    const merged = mergeConfigs({ plugins: ['@base/a'] }, child)
+    expect('plugins' in merged).toBe(false)
+  })
+
+  it('Should_MergeObjectsOneLevelDeep_When_TheChildPartiallyOverrides', () => {
+    const merged = mergeConfigs({ x: { a: 1, b: 2, c: 3 } }, { x: { b: 9, d: 4 } })
+    expect(merged).toEqual({ x: { a: 1, b: 9, c: 3, d: 4 } })
+  })
+
+  it('Should_DeleteAnInheritedKey_When_TheChildSetsItToNull', () => {
+    const child: Record<string, unknown> = { b: null }
+    expect(mergeConfigs({ a: 1, b: 2 }, child)).toEqual({ a: 1 })
+  })
+
+  it('Should_DeleteAnObjectValuedKey_When_TheChildSetsItToNull', () => {
+    const child: Record<string, unknown> = { x: null }
+    const merged = mergeConfigs({ x: { a: 1 } }, child)
+    expect('x' in merged).toBe(false)
+  })
+
+  it('Should_NoOp_When_TheChildNullsAKeyTheParentDoesNotHave', () => {
+    const child: Record<string, unknown> = { b: null }
+    expect(mergeConfigs({ a: 1 }, child)).toEqual({ a: 1 })
+  })
+
+  it('Should_KeepTheInheritedRelativePathValue_When_Merging', () => {
+    const merged = mergeConfigs({ incrementalFile: 'reports/stryker-incremental.json' }, { mutate: ['src/x.ts'] })
+    expect(merged).toEqual({
+      incrementalFile: 'reports/stryker-incremental.json',
+      mutate: ['src/x.ts'],
+    })
+  })
+
+  // Full-chain fold — three documents in read order, nearest ancestor wins.
+  it('Should_WinTheNearestAncestor_When_ThreeLevelChainExists', () => {
+    const state: ExtendsStepState = {
+      visited: ['/app/child.json', '/app/parent.json'],
+      documents: [
+        { path: '/app/child.json', options: { c: 'child' } },
+        { path: '/app/parent.json', options: { b: 'parent', c: 'parent' } },
+      ],
+    }
+    Match.value(decideExtendsStep(state, { a: 'gp', b: 'gp', c: 'gp' }, '/app/grand.json')).pipe(
+      Match.tagsExhaustive({
+        done: (done) => {
+          expect(done.options).toEqual({ a: 'gp', b: 'parent', c: 'child' })
+        },
+        read: unexpected('read'),
+        resolve: unexpected('resolve'),
+        refused: unexpected('refused'),
+      }),
+    )
+  })
+
+  // extends: null is "no extends" exactly as absent — the document folds as-is.
+  it('Should_TreatTopLevelExtendsNull_When_ItMatchesAChainNull', () => {
+    const document: Record<string, unknown> = { a: 1, extends: null }
+    Match.value(decideExtendsStep(initialExtendsStepState, document, '/app/stryker.config.json')).pipe(
+      Match.tagsExhaustive({
+        done: (done) => {
+          expect(done.options).toEqual({ a: 1 })
+          expect(done.options).not.toHaveProperty('extends')
+        },
+        read: unexpected('read'),
+        resolve: unexpected('resolve'),
+        refused: unexpected('refused'),
+      }),
+    )
+  })
+
+  // The fold strips the internal `extends` key from every folded document, so the
+  // `done` options never carry it even when the child declared a string extends.
+  it('Should_StripTheExtendsKey_When_FoldingTheChain', () => {
+    const state: ExtendsStepState = {
+      visited: ['/app/stryker.config.json'],
+      documents: [
+        {
+          path: '/app/stryker.config.json',
+          options: { extends: './base.json', b: 9 },
+        },
+      ],
+    }
+    Match.value(decideExtendsStep(state, { a: 1, b: 2, mutate: ['src/a.ts'] }, '/app/base.json')).pipe(
+      Match.tagsExhaustive({
+        done: (done) => {
+          expect(done.options).toEqual({ a: 1, b: 9, mutate: ['src/a.ts'] })
+          expect(done.options).not.toHaveProperty('extends')
+        },
+        read: unexpected('read'),
+        resolve: unexpected('resolve'),
+        refused: unexpected('refused'),
+      }),
+    )
+  })
+
+  // Routing — a relative target becomes a `read` request resolved against the
+  // declaring document's directory; an absolute target passes through unchanged.
+  it('Should_ResolveRelativePathsAgainstTheConfigDirectory_When_ResolvingATarget', () => {
+    Match.value(
+      decideExtendsStep(
+        initialExtendsStepState,
+        { extends: './base.json' },
+        path.join('/somewhere/pkg', 'stryker.config.json'),
+      ),
+    ).pipe(
+      Match.tagsExhaustive({
+        done: unexpected('done'),
+        read: (read) => {
+          expect(read.path).toBe(path.resolve('/somewhere/pkg', './base.json'))
+          expect(read.state.visited).toEqual([path.join('/somewhere/pkg', 'stryker.config.json')])
+        },
+        resolve: unexpected('resolve'),
+        refused: unexpected('refused'),
+      }),
+    )
+  })
+
+  it('Should_ResolveAnAbsolutePathUnchanged_When_ResolvingATarget', () => {
+    const absolute = path.resolve('/somewhere/base.json')
+    Match.value(decideExtendsStep(initialExtendsStepState, { extends: absolute }, '/elsewhere/stryker.config.json'))
+      .pipe(
+        Match.tagsExhaustive({
+          done: unexpected('done'),
+          read: (read) => {
+            expect(read.path).toBe(absolute)
+          },
+          resolve: unexpected('resolve'),
+          refused: unexpected('refused'),
+        }),
+      )
+  })
 }
