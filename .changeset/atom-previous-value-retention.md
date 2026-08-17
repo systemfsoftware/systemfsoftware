@@ -13,3 +13,4 @@ Surface changes:
 
 - `AtomContext.self` takes the value type as a parameter: `get.self<MyResult>()` returns `Option<MyResult>` where it previously returned `Option<unknown>`.
 - `AtomRuntime.subscriptionRef` declares `Cause.NoSuchElementError` in its error channel, which its implementation always could produce.
+- The HTTP API client's `mutation` and `query` bound their `Group` and `Endpoint` type parameters to any group and any endpoint. Each is now bound to the group and endpoint its identifier arguments select, so a call that passed one of them explicitly and disagreed with the identifiers no longer compiles.
