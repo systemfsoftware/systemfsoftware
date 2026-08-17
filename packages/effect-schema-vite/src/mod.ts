@@ -274,6 +274,29 @@ function typeRefContainsSchema(t: TSType | null | undefined): boolean {
   return false
 }
 
+/**
+ * Schema members whose return value is NOT a schema: a type guard, a decoder, an encoder,
+ * an arbitrary, or a JSON-schema document. A const bound to one of these is a *use* of the
+ * schema it names, so generating round-trip laws for it hands `encodeUnknownEffect` a
+ * predicate and the generated suite dies at import with `Cannot read properties of
+ * undefined (reading 'encoding')`. Measured 2026-08-17 on `S.is` in `stryker-plugins`.
+ */
+const SCHEMA_USE_MEMBERS: Record<string, true> = {
+  is: true,
+  isSchema: true,
+  isSchemaError: true,
+  isSchemaAST: true,
+  toArbitrary: true,
+  toJsonSchemaDocument: true,
+}
+
+/** True when the member call produces a non-schema value, e.g. `S.is(X)` or `S.encodeSync(X)`. */
+function isSchemaUseCall(callee: MemberExpression): boolean {
+  if (callee.property.type !== 'Identifier') return false
+  const name = callee.property.name
+  return SCHEMA_USE_MEMBERS[name] === true || /^(?:decode|encode)/.test(name)
+}
+
 function initRefersToSchema(expr: Expression | null | undefined): boolean {
   if (!expr) return false
 
@@ -284,7 +307,7 @@ function initRefersToSchema(expr: Expression | null | undefined): boolean {
       return expr.arguments.some((arg) => arg.type !== 'SpreadElement' && initRefersToSchema(arg))
     }
 
-    if (callee.type === 'MemberExpression') return memberChainStartsWithS(callee)
+    if (callee.type === 'MemberExpression') return memberChainStartsWithS(callee) && !isSchemaUseCall(callee)
     if (callee.type === 'Identifier') return callee.name.includes('Schema')
 
     return false

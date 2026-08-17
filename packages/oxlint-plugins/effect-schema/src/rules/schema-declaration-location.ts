@@ -61,6 +61,10 @@ const SCHEMA_USE_MEMBERS: Record<string, true> = {
   encodeEffect: true,
   toArbitrary: true,
   toJsonSchemaDocument: true,
+  // `S.is(X)` returns a type guard over X, not a schema. A const bound to one is a *use*
+  // of the schema it names, so it belongs beside the code that branches on it and imposes
+  // no placement obligation of its own.
+  is: true,
   isSchema: true,
   isSchemaError: true,
   isSchemaAST: true,
