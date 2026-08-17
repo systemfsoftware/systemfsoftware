@@ -1,11 +1,16 @@
-import { MutantResult, MutantRunPlan, MutantTestPlan, PlanKind } from '@systemfsoftware/stryker-js-plugin-api/core'
 import {
-  DryRunCompletedEvent,
-  MutationTestingPlanReadyEvent,
-  Reporter,
-  RunTiming,
+  type MutantResult,
+  type MutantRunPlan,
+  type MutantTestPlan,
+  PlanKind,
+} from '@systemfsoftware/stryker-js-plugin-api/core'
+import {
+  type DryRunCompletedEvent,
+  type MutationTestingPlanReadyEvent,
+  type Reporter,
+  type RunTiming,
 } from '@systemfsoftware/stryker-js-plugin-api/report'
-import { TestRunnerCapabilities } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
+import { type TestRunnerCapabilities } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
 
 import { Timer } from '@systemfsoftware/stryker-js-mutation-run/timer'
 

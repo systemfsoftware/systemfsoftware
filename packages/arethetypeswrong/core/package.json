@@ -62,6 +62,7 @@
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
+    "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",

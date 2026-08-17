@@ -38,8 +38,11 @@
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
+    "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/oxlint-plugin-effect-dmmf": "workspace:^",
+    "@systemfsoftware/stryker-js-mutation-run": "workspace:^",
+    "@systemfsoftware/stryker-js-vitest-runner": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
@@ -48,10 +51,7 @@
     "testcontainers": "catalog:",
     "tsdown": "catalog:",
     "vite-tsconfig-paths": "catalog:",
-    "vitest": "catalog:",
-    "@systemfsoftware/effect-gherkin-spec": "workspace:^",
-    "@systemfsoftware/stryker-js-mutation-run": "workspace:^",
-    "@systemfsoftware/stryker-js-vitest-runner": "workspace:^"
+    "vitest": "catalog:"
   },
   "engines": {
     "node": ">=24"

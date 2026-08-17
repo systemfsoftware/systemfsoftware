@@ -8,7 +8,7 @@
   },
   "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/stryker-js/mutation-report#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "The reporter adapters of the @systemfsoftware Stryker fork \u2014 clear-text, progress, HTML, JSON, and NDJSON-stream presentation.",
+  "description": "The reporter adapters of the @systemfsoftware Stryker fork — clear-text, progress, HTML, JSON, and NDJSON-stream presentation.",
   "type": "module",
   "files": [
     "dist"
@@ -35,10 +35,13 @@
   },
   "devDependencies": {
     "@microsoft/api-extractor": "catalog:",
+    "@systemfsoftware/effect-gherkin-spec": "workspace:^",
+    "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
     "@types/progress": "2.0.7",
+    "effect": "catalog:",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
     "typescript": "catalog:",

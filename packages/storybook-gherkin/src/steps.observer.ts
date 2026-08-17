@@ -3,7 +3,7 @@ import type { screen, UserEventObject, within } from 'storybook/test'
 import type { Simplify, UnionToIntersection } from 'type-fest'
 
 import type { Capture } from './capture.observer.js'
-import { CaptureDecodeFailed, DuplicateCapture } from './errors.js'
+import { CaptureDecodeFailed, DuplicateCapture } from './errors.schema.js'
 
 export type Keyword = 'Given' | 'When' | 'Then' | 'And' | 'But' | 'Star'
 

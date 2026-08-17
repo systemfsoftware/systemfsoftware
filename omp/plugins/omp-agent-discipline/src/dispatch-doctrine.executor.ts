@@ -22,42 +22,14 @@ import { TomlLoader } from '@systemfsoftware/omp-utils'
 import type { TomlConfig } from '@systemfsoftware/omp-utils'
 import { Effect, Match } from 'effect'
 import type { PlatformError } from 'effect/PlatformError'
-import * as S from 'effect/Schema'
 
 import { extractSpecShape, isDelegatorTool, matchesDoctrineSkillPath } from './dispatch-doctrine.kernel.js'
-
-// ═══════════════════════════════════════════════════════════
-// 1. COMMAND + VERDICT — decision core (private)
-// ═══════════════════════════════════════════════════════════
-
-const CheckDispatchCommandTypeId: unique symbol = Symbol.for(
-  '@systemfsoftware/omp-agent-discipline/CheckDispatchCommand',
-)
-
-class CheckDispatchCommand extends S.TaggedClass<CheckDispatchCommand>()('CheckDispatchCommand', {
-  toolName: S.String,
-  doctrineLoaded: S.Boolean,
-  gateEnabled: S.Boolean,
-}) {
-  readonly [CheckDispatchCommandTypeId] = CheckDispatchCommandTypeId
-}
-
-const DispatchDoctrineVerdictTypeId: unique symbol = Symbol.for(
-  '@systemfsoftware/omp-agent-discipline/DispatchDoctrineVerdict',
-)
-
-class Allow extends S.TaggedClass<Allow>()('Allow', {}) {
-  readonly [DispatchDoctrineVerdictTypeId] = DispatchDoctrineVerdictTypeId
-}
-
-class DeliverDoctrine extends S.TaggedClass<DeliverDoctrine>()('DeliverDoctrine', {
-  reason: S.String,
-}) {
-  readonly [DispatchDoctrineVerdictTypeId] = DispatchDoctrineVerdictTypeId
-}
-
-const DispatchDoctrineVerdict = S.Union([Allow, DeliverDoctrine])
-type DispatchDoctrineVerdict = S.Schema.Type<typeof DispatchDoctrineVerdict>
+import {
+  Allow,
+  CheckDispatchCommand,
+  DeliverDoctrine,
+  type DispatchDoctrineVerdict,
+} from './dispatch-doctrine.schema.js'
 
 // ═══════════════════════════════════════════════════════════
 // 2. DOCTRINE KERNEL — compile-time constant carried by DeliverDoctrine

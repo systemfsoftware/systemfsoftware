@@ -3,112 +3,24 @@ import type { TomlConfig } from '@systemfsoftware/omp-utils'
 import { Effect, Match } from 'effect'
 import * as Option from 'effect/Option'
 import type { PlatformError } from 'effect/PlatformError'
-import * as S from 'effect/Schema'
 
-const How = S.Literals(['subagent_type', 'prompt'])
-
-const DelegationVerdictTypeId: unique symbol = Symbol.for('@systemfsoftware/omp-agent-discipline/DelegationVerdict')
-class Allow extends S.TaggedClass<Allow>()('Allow', {}) {
-  readonly [DelegationVerdictTypeId] = DelegationVerdictTypeId
-}
-
-class Block extends S.TaggedClass<Block>()('Block', {
-  reason: S.String,
-  how: How,
-  skill: S.String,
-}) {
-  readonly [DelegationVerdictTypeId] = DelegationVerdictTypeId
-}
-
-const DelegationVerdict = S.Union([Allow, Block])
-type DelegationVerdict = S.Schema.Type<typeof DelegationVerdict>
-
-const CompiledGuard = S.Struct({
-  protectedSkills: S.Array(S.String),
-  delegationVerbs: S.Array(S.String),
-  referenceVerbs: S.Array(S.String),
-  mentionPatterns: S.Record(S.String, S.String),
-}).pipe(
-  S.annotate({
-    toArbitrary: () => (fc) =>
-      fc.constant({
-        protectedSkills: ['ce-work'],
-        delegationVerbs: [
-          '\\binvoke\\s+(?:the\\s+)?[`/]?ce-work\\b',
-          '\\bdispatch\\s+(?:to\\s+)?(?:the\\s+)?[`/]?ce-work\\b',
-          '\\buse\\s+(?:the\\s+)?[`/]?ce-work\\b',
-          '\\bspawn\\s+(?:a\\s+)?(?:task|agent|subagent|worker)\\s+(?:with|using)\\s+(?:the\\s+)?[`/]?ce-work\\b',
-          '\\bcall\\s+(?:the\\s+)?[`/]?ce-work\\b',
-          '\\brun\\s+(?:the\\s+)?[`/]?ce-work\\b',
-        ],
-        referenceVerbs: [
-          '\\bsee\\s+(?:the\\s+)?[`/]?ce-work\\b',
-          '\\bread\\s+(?:the\\s+)?[`/]?ce-work\\b',
-        ],
-        mentionPatterns: {
-          'ce-work': '(?:^|[\\s/.`"])ce-work(?=$|[\\s/.`"]|\\b)',
-        },
-      }),
-  }),
-)
-
-export type CompiledGuard = typeof CompiledGuard.Type
-
-const MaybeCompiledGuard = S.Union([CompiledGuard, S.Null])
-
-const CheckDelegationCommandTypeId: unique symbol = Symbol.for(
-  '@systemfsoftware/omp-agent-discipline/CheckDelegationCommand',
-)
-class CheckDelegationCommand extends S.TaggedClass<CheckDelegationCommand>()('CheckDelegationCommand', {
-  toolName: S.String,
-  subagentType: S.String,
-  prompt: S.String,
-  guard: MaybeCompiledGuard,
-}) {
-  readonly [CheckDelegationCommandTypeId] = CheckDelegationCommandTypeId
-}
-
-const ClassifiedInputTypeId: unique symbol = Symbol.for('@systemfsoftware/omp-agent-discipline/ClassifiedInput')
-class NoGuard extends S.TaggedClass<NoGuard>()('NoGuard', {}) {
-  readonly [ClassifiedInputTypeId] = ClassifiedInputTypeId
-}
-class NonDelegatedTool extends S.TaggedClass<NonDelegatedTool>()('NonDelegatedTool', {}) {
-  readonly [ClassifiedInputTypeId] = ClassifiedInputTypeId
-}
-class ProtectedSubagent extends S.TaggedClass<ProtectedSubagent>()('ProtectedSubagent', {
-  skill: S.String,
-}) {
-  readonly [ClassifiedInputTypeId] = ClassifiedInputTypeId
-}
-class EmptyPrompt extends S.TaggedClass<EmptyPrompt>()('EmptyPrompt', {}) {
-  readonly [ClassifiedInputTypeId] = ClassifiedInputTypeId
-}
-class Prompted extends S.TaggedClass<Prompted>()('Prompted', {
-  guard: CompiledGuard,
-  prompt: S.String,
-}) {
-  readonly [ClassifiedInputTypeId] = ClassifiedInputTypeId
-}
-
-const ClassifiedInput = S.Union([NoGuard, NonDelegatedTool, ProtectedSubagent, EmptyPrompt, Prompted])
-type ClassifiedInput = S.Schema.Type<typeof ClassifiedInput>
-
-const PromptAnalysisTypeId: unique symbol = Symbol.for('@systemfsoftware/omp-agent-discipline/PromptAnalysis')
-class Delegated extends S.TaggedClass<Delegated>()('Delegated', {
-  skill: S.String,
-  excerpt: S.String,
-}) {
-  readonly [PromptAnalysisTypeId] = PromptAnalysisTypeId
-}
-class Referenced extends S.TaggedClass<Referenced>()('Referenced', {}) {
-  readonly [PromptAnalysisTypeId] = PromptAnalysisTypeId
-}
-class NoDelegation extends S.TaggedClass<NoDelegation>()('NoDelegation', {}) {
-  readonly [PromptAnalysisTypeId] = PromptAnalysisTypeId
-}
-
-const PromptAnalysis = S.Union([Delegated, Referenced, NoDelegation])
-type PromptAnalysis = S.Schema.Type<typeof PromptAnalysis>
+import {
+  Allow,
+  Block,
+  CheckDelegationCommand,
+  ClassifiedInput,
+  CompiledGuard,
+  Delegated,
+  DelegationVerdict,
+  EmptyPrompt,
+  NoDelegation,
+  NoGuard,
+  NonDelegatedTool,
+  PromptAnalysis,
+  Prompted,
+  ProtectedSubagent,
+  Referenced,
+} from './no-skill-delegation.schema.js'
 
 function denyMessage(skill: string, how: 'subagent_type' | 'prompt', excerpt: string): string {
   return [

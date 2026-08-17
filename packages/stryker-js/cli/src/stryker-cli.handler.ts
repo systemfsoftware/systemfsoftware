@@ -21,10 +21,10 @@ import { defaultOptions } from '@systemfsoftware/stryker-js-mutation-run/config/
 import type { ManifestRendered } from '@systemfsoftware/stryker-js-mutation-run/run-event'
 import { strykerVersion } from '@systemfsoftware/stryker-js-mutation-run/stryker-package'
 
+import type { CliRequest } from './cli-request.schema.js'
 import { emitLLMSManifest } from './llms-manifest.kernel.js'
 import { STREAM_SCHEMA_VERSION } from './stream-protocol.kernel.js'
 import {
-  type CliRequest,
   type CreateRunEventStreamCapability,
   type DetectModeCapability,
   runStrykerCli,

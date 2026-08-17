@@ -11,44 +11,13 @@
  */
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect } from 'effect'
+
 import * as S from 'effect/Schema'
 import semver from 'semver'
 import { expect } from 'vitest'
+import { ManifestSchema, type StreamLine, StreamLineSchema } from './__fixtures__/cli-contract.schema.js'
 import { CLI_BIN, fixtureDir, WORKDIR } from './__fixtures__/stryker-cli-env.js'
 import { type CliResult, layerStrykerCli, StrykerCli } from './__fixtures__/stryker-cli.adapter.js'
-
-/**
- * The stream lines the CLI writes are decoded once, at the parse boundary,
- * against the wire contract the cli package itself emits (run-event.ts and
- * verdict-envelope.ts): a `kind` tag plus a fixed set of typed optional
- * fields, with any further machine fields preserved as `unknown`. Every field
- * a scenario asserts on is declared here so the assertion needs no cast.
- */
-interface StreamLine {
-  readonly kind: string
-  readonly runId?: string | undefined
-  readonly schemaVersion?: string | undefined
-  readonly mode?: string | undefined
-  readonly phase?: string | undefined
-  readonly elapsedMs?: number | undefined
-  readonly id?: string | undefined
-  readonly status?: string | undefined
-  readonly file?: string | undefined
-  readonly mutator?: string | undefined
-  readonly replacement?: string | null | undefined
-  readonly completed?: number | undefined
-  readonly total?: number | null | undefined
-  readonly score?: number | null | undefined
-  readonly thresholds?: { readonly high: number; readonly low: number; readonly break: number | null } | undefined
-  readonly reportFile?: string | null | undefined
-  readonly code?: number | undefined
-  readonly error?: string | undefined
-  readonly remediation?: string | undefined
-  readonly help?: string | undefined
-  readonly manifest?: string | undefined
-  readonly mutants?: readonly DecodedMutant[] | undefined
-  readonly [field: string]: unknown
-}
 
 interface Observed {
   readonly exitCode: number
@@ -56,59 +25,6 @@ interface Observed {
   readonly stderr: string
   readonly lines: readonly StreamLine[]
 }
-
-const LocationSchema = S.Struct({
-  start: S.Struct({ line: S.Finite, column: S.Finite }),
-  end: S.Struct({ line: S.Finite, column: S.Finite }),
-})
-
-const MutantSchema = S.Struct({
-  id: S.String,
-  file: S.String,
-  location: LocationSchema,
-  mutator: S.String,
-  replacement: S.NullOr(S.String),
-  status: S.String,
-})
-
-type DecodedMutant = S.Schema.Type<typeof MutantSchema>
-
-const StreamLineFields = {
-  kind: S.String,
-  runId: S.optional(S.String),
-  schemaVersion: S.optional(S.String),
-  mode: S.optional(S.String),
-  phase: S.optional(S.String),
-  elapsedMs: S.optional(S.Finite),
-  id: S.optional(S.String),
-  status: S.optional(S.String),
-  file: S.optional(S.String),
-  location: S.optional(LocationSchema),
-  mutator: S.optional(S.String),
-  replacement: S.optional(S.NullOr(S.String)),
-  completed: S.optional(S.Finite),
-  total: S.optional(S.NullOr(S.Finite)),
-  score: S.optional(S.NullOr(S.Finite)),
-  thresholds: S.optional(S.Struct({ high: S.Finite, low: S.Finite, break: S.NullOr(S.Finite) })),
-  reportFile: S.optional(S.NullOr(S.String)),
-  code: S.optional(S.Finite),
-  error: S.optional(S.String),
-  remediation: S.optional(S.String),
-  help: S.optional(S.String),
-  manifest: S.optional(S.String),
-  mutants: S.optional(S.Array(MutantSchema)),
-}
-
-const StreamLineSchema = S.StructWithRest(S.Struct(StreamLineFields), [S.Record(S.String, S.Unknown)])
-
-const ManifestSchema = S.Struct({
-  tool: S.String,
-  commands: S.Array(
-    S.Struct({
-      subcommands: S.Array(S.Struct({ name: S.String, description: S.String })),
-    }),
-  ),
-})
 
 const decodeStreamLine = S.decodeUnknownSync(S.fromJsonString(StreamLineSchema))
 

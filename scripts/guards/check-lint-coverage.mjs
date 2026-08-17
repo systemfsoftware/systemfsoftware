@@ -48,10 +48,6 @@ const TOOLING = new Map([
     'our Stryker packages: library/tooling code, not Effect cell code, so cell rules are the wrong observer; carries its own oxlint baseline and mutation gate',
   ]),
   [
-    'packages/stryker-js/mutation-report',
-    'our Stryker packages: reporter adapters, not Effect cell code, so cell rules are the wrong observer; carries its own oxlint baseline (REPO-S5 forbids its own mutation gate)',
-  ],
-  [
     'packages/stryker-js/plugin-api',
     'our Stryker packages: 40 of its 42 source files are verbatim @stryker-mutator/api@9.6.1, not Effect cell code, so cell rules are the wrong observer (56 errors under base); carries its own oxlint baseline (REPO-S5 forbids a mutation gate for an API cell)',
   ],
@@ -65,12 +61,6 @@ const TOOLING = new Map([
     `packages/effect-atom/${name}`,
     'effect-atom: library code, not Effect cell code; carries its own oxlint baseline',
   ]),
-  [
-    'packages/storybook-gherkin',
-    'storybook-gherkin: library code, not Effect cell code; carries its own oxlint baseline',
-  ],
-  ['packages/stryker-plugins', 'mutation tooling, not shipped product code'],
-  ...['cli', 'core'].map((name) => [`packages/arethetypeswrong/${name}`, 'port of arethetypeswrong, tooling']),
 ])
 
 // The one sanctioned prefix. Vendored trees are read-only (REPO-S3), so we never author a

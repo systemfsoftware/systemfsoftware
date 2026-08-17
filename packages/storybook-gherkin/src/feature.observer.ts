@@ -11,7 +11,7 @@ import {
   OutlineInconsistentKeys,
   OutlineMissingCapture,
   UnresolvedCapture,
-} from './errors.js'
+} from './errors.schema.js'
 import type { ExampleRow, PlayContext, Step, StepContext, StepModel } from './steps.observer.js'
 import { displayPattern, isStep, renderStepText, resolveKeywords } from './steps.observer.js'
 

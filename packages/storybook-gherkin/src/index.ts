@@ -1,6 +1,6 @@
 export { capture } from './capture.observer.js'
 export type { Capture } from './capture.observer.js'
-export * from './errors.js'
+export * from './errors.schema.js'
 export { feature, From, Steps } from './feature.observer.js'
 export type {
   Feature,

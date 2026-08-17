@@ -1,5 +1,5 @@
-import { MutantResult } from '@systemfsoftware/stryker-js-plugin-api/core'
-import { MutationTestingPlanReadyEvent } from '@systemfsoftware/stryker-js-plugin-api/report'
+import { type MutantResult } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { type MutationTestingPlanReadyEvent } from '@systemfsoftware/stryker-js-plugin-api/report'
 
 import { progressBarWrapper } from './progress-bar.js'
 import { ProgressKeeper } from './progress-keeper.js'
@@ -7,7 +7,7 @@ import { ProgressKeeper } from './progress-keeper.js'
 export class ProgressBarReporter extends ProgressKeeper {
   private progressBar?: ProgressBar
 
-  public onMutationTestingPlanReady(
+  public override onMutationTestingPlanReady(
     event: MutationTestingPlanReadyEvent,
   ): void {
     super.onMutationTestingPlanReady(event)
@@ -23,7 +23,7 @@ export class ProgressBarReporter extends ProgressKeeper {
     })
   }
 
-  public onMutantTested(result: MutantResult): number {
+  public override onMutantTested(result: MutantResult): number {
     const ticks = super.onMutantTested(result)
 
     const progressBarContent = {

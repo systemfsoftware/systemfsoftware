@@ -463,6 +463,9 @@ importers:
       '@effect/vitest':
         specifier: 'catalog:'
         version: 4.0.0-rc.108(effect@4.0.0-rc.108)(vitest@4.1.10)
+      '@systemfsoftware/oxlint-config':
+        specifier: workspace:^
+        version: link:../../oxlint-config
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../tsconfig
@@ -505,6 +508,9 @@ importers:
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:^
         version: link:../../effect-gherkin-spec
+      '@systemfsoftware/oxlint-config':
+        specifier: workspace:^
+        version: link:../../oxlint-config
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../tsconfig
@@ -545,6 +551,9 @@ importers:
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:^
         version: link:../../effect-gherkin-spec
+      '@systemfsoftware/oxlint-config':
+        specifier: workspace:^
+        version: link:../../oxlint-config
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../tsconfig
@@ -1714,6 +1723,9 @@ importers:
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: catalog:attw
         version: 1.1.1
+      '@systemfsoftware/oxlint-config':
+        specifier: workspace:^
+        version: link:../oxlint-config
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../tsconfig
@@ -1872,6 +1884,12 @@ importers:
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
+      '@systemfsoftware/effect-gherkin-spec':
+        specifier: workspace:^
+        version: link:../../effect-gherkin-spec
+      '@systemfsoftware/oxlint-config':
+        specifier: workspace:^
+        version: link:../../oxlint-config
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../tsconfig
@@ -1884,6 +1902,9 @@ importers:
       '@types/progress':
         specifier: 2.0.7
         version: 2.0.7
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.0-rc.108
       rimraf:
         specifier: 'catalog:'
         version: 6.1.3

@@ -1,16 +1,16 @@
 import os from 'os'
 
-import { Position, schema, StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
-import { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
+import { type Position, schema, type StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { type Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
 import { commonTokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
-import { Reporter } from '@systemfsoftware/stryker-js-plugin-api/report'
-import chalk, { Color } from 'chalk'
+import { type Reporter } from '@systemfsoftware/stryker-js-plugin-api/report'
+import chalk, { type Color } from 'chalk'
 import {
   MetricsResult,
   MutantModel,
-  MutationTestMetricsResult,
+  type MutationTestMetricsResult,
   TestFileModel,
-  TestMetrics,
+  type TestMetrics,
   TestModel,
   TestStatus,
 } from 'mutation-testing-metrics'
@@ -75,7 +75,7 @@ export class ClearTextReporter implements Reporter {
 
   private reportTests(metrics: MutationTestMetricsResult) {
     function indent(depth: number) {
-      return new Array(depth).fill('  ').join('')
+      return Array.from({ length: depth }, () => '  ').join('')
     }
     const formatTestLine = (test: TestModel, state: string): string => {
       return `${
@@ -90,7 +90,10 @@ export class ClearTextReporter implements Reporter {
       ) => {
         const nameParts: string[] = [currentResult.name]
         while (!currentResult.file && currentResult.childResults.length === 1) {
-          ;[currentResult] = currentResult.childResults
+          // `length === 1` guarantees index 0, which the index signature cannot state.
+          const onlyChild = currentResult.childResults[0]
+          if (onlyChild === undefined) break
+          currentResult = onlyChild
           nameParts.push(currentResult.name)
         }
         this.writeLine(`${indent(depth)}${nameParts.join('/')}`)
@@ -144,6 +147,9 @@ export class ClearTextReporter implements Reporter {
             case 'NoCoverage':
               this.reportMutantResult(result, this.writeLine)
               break
+            case 'Ignored':
+            case 'Pending':
+              break
             default:
           }
         })
@@ -193,7 +199,8 @@ export class ClearTextReporter implements Reporter {
         this.logExecutedTests(result.coveredByTests, logImplementation)
       }
     } else if (result.status === 'Killed' && result.killedByTests?.length) {
-      logImplementation(`Killed by: ${result.killedByTests[0].name}`)
+      const firstKiller = result.killedByTests[0]
+      if (firstKiller !== undefined) logImplementation(`Killed by: ${firstKiller.name}`)
     } else if (
       result.status === 'RuntimeError' ||
       result.status === 'CompileError'
