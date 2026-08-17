@@ -15,13 +15,19 @@ The `make` boundary — not a filename — is what the gates bind (see **Workflo
 
 ## Modules by role
 
-Names describe the subject; the suffix is a comment on the role:
+Names describe the subject; the suffix is a comment on the role. Finding the live modules of a role is a grep over behaviour, never a filename listed here — these commands exit non-zero when no module is left (so a vanished canonical fails loudly instead of rotting into a stale path):
 
-- **workflow** (pure) — typed `Command` → `Result.Result<Decision, Error>` inside `Workflow.make`; decision variants `S.TaggedClass`, error variants `S.TaggedError`, dispatch `Match.value` + `Match.exhaustive`. (`hook-verdict.workflow.ts`)
-- **executor** (impure) — I/O shell: reads inputs, calls the workflow, writes outputs. (`hook-dispatcher.executor.ts`, `inject-instructions.executor.ts`)
-- **handler** (impure) — transport terminus: registers `pi.on(...)` handlers. (`hook-dispatcher.handler.ts`, `inject-instructions.handler.ts`)
-- **acl** (pure) — decode of a foreign shape into a branded domain type, declared as a Schema transform (ACL Gates below). (`omp/packages/omp-utils/src/toml-loader.acl.ts`)
-- **kernel** (pure) — pure helper or transform with no I/O; decision kernels keep their property laws colocated (`hook-verdict.kernel.ts` ↔ `hook-verdict.kernel.property.test.ts`). (`tool-name.kernel.ts`, `hook-verdict.kernel.ts`)
+```bash
+grep -rn "Workflow.make(" omp/plugins/*/src              # workflow deciders
+grep -rn "pi.on(" omp/plugins/*/src                      # transport terminuses
+grep -rn "SchemaGetter.forbidden(" omp/packages/*/src omp/plugins/*/src  # ACLs
+```
+
+- **workflow** (pure) — typed `Command` → `Result.Result<Decision, Error>` inside `Workflow.make`; decision variants `S.TaggedClass`, error variants `S.TaggedError`, dispatch `Match.value` + `Match.exhaustive`.
+- **executor** (impure) — I/O shell: reads inputs, calls the workflow, writes outputs.
+- **handler** (impure) — transport terminus: registers `pi.on(...)` handlers.
+- **acl** (pure) — decode of a foreign shape into a branded domain type, declared as a Schema transform (ACL Gates below).
+- **kernel** (pure) — pure helper or transform with no I/O; a decision kernel keeps its property laws colocated with the module.
 - **schema/shape/state/policy** — data and tagging declarations.
 
 ## Workflow Gates (S.TaggedError rule)
@@ -37,7 +43,7 @@ export class HookVerdictError extends S.TaggedError<HookVerdictError>()('HookVer
 export class MalformedJson extends S.TaggedClass<MalformedJson>()('MalformedJson', { raw: S.String }) {}
 ```
 
-check: review — the reviewer reads a new decider's error channel and rejects a `TaggedClass` standing where a `TaggedError` belongs; the channel refusals are the constructor's and the linter's. Canonical: `omp/plugins/omp-claude-compat/src/hook-verdict.workflow.ts`.
+check: review — the reviewer reads a new decider's error channel and rejects a `TaggedClass` standing where a `TaggedError` belongs; the channel refusals are the constructor's and the linter's, and the live deciders are the `Workflow.make` grep above.
 
 ## ACL Gates (Schema transform rule)
 
@@ -46,7 +52,7 @@ Constitution II.5 — "Decode, never cast". A decode of outside data (bytes, ser
 ```yaml
 - id: ACL1
   title: Decodes are Schema-declared transforms; a plain mapping is a kernel, not a decode
-  do: "declare a decode as `Schema.decodeTo(Schema.toType(Domain), { decode: SchemaGetter.transformOrFail(...), encode: SchemaGetter.forbidden(...) })`, branding earned by `Schema.decodeUnknownEffect(Domain)`; canonical form: `omp/packages/omp-utils/src/toml-loader.acl.ts`"
+  do: "declare a decode as `Schema.decodeTo(Schema.toType(Domain), { decode: SchemaGetter.transformOrFail(...), encode: SchemaGetter.forbidden(...) })`, branding earned by `Schema.decodeUnknownEffect(Domain)` — the live ACLs are the `SchemaGetter.forbidden` grep above"
   dont: "write a plain function that maps the foreign value in place of a Schema declaration, or cast (`as`) at the decode position — a `normalize(name)`-style transliteration is a domain transform (a kernel), not a decode"
   harm: "a hand-written decode bypasses Schema's identity contract, silently drifts from the foreign shape on package upgrades, and re-introduces the cast pattern the type checker and lint refuse everywhere else"
   check: "review — the reviewer decides whether a new decode is a Schema-declared transform and whether any `as` sits at a decode position"
