@@ -27,6 +27,7 @@ import { Cell, Workflow } from '@systemfsoftware/effect-cell-types'
 import { Effect, Match, Result, Schema as S } from 'effect'
 import { pipe } from 'effect/Function'
 
+import { msbBinaryFor } from '../backend-msb/platform.js'
 import {
   deleteRunFiles,
   dockerKillCommands,
@@ -44,12 +45,11 @@ import {
   UNPARSEABLE_FRESH_AGE_MS,
 } from '../lifecycle/hygiene/ledger.js'
 import { BackendError } from '../model/errors.js'
-import { RightsizeConfig } from '../runtime/config.js'
+import { cacheDirFromConfig, RightsizeConfig } from '../runtime/config.js'
 import type { RightsizeConfigService } from '../runtime/config.js'
 import { RunId } from '../runtime/run-id.js'
 import type { BackendName } from '../runtime/runtime.js'
 import { Selection } from '../runtime/selection.workflow.js'
-import { cacheDirFromConfig, msbBinaryFor } from './handle.js'
 
 // =============================================================================
 // The decision — which runs to reap

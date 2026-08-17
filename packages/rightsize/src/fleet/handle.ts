@@ -35,9 +35,7 @@
  * same-host by construction.
  */
 import { createHash } from 'node:crypto'
-import { accessSync, constants as fsConstants } from 'node:fs'
 import * as net from 'node:net'
-import * as os from 'node:os'
 
 import { Effect, Result, Schema as S } from 'effect'
 
@@ -47,8 +45,7 @@ import { makeDockerNetworks } from '../backend-docker/networks.js'
 import { makeDockerRuntime } from '../backend-docker/runtime.js'
 import { createCommandRunner } from '../backend-msb/command-runner.js'
 import type { CommandRunnerService } from '../backend-msb/command-runner.js'
-import { msbInstallPaths, platformFor } from '../backend-msb/platform.js'
-import { resolveCacheDir } from '../backend-msb/provisioner/env.js'
+import { msbBinaryFor } from '../backend-msb/platform.js'
 import {
   copyInto,
   copyOutOf,
@@ -65,7 +62,7 @@ import type { ContainerSpec, ExecRequest, ExecResult } from '../model/container-
 import { BackendError } from '../model/errors.js'
 import { PortBinding } from '../model/ports.js'
 import { newContainerSpec } from '../model/spec-combinators.js'
-import { RightsizeConfig } from '../runtime/config.js'
+import { cacheDirFromConfig, RightsizeConfig } from '../runtime/config.js'
 import type { RightsizeConfigService } from '../runtime/config.js'
 import type { BackendName, ContainerInspect, FollowHandle, SandboxHandle } from '../runtime/runtime.js'
 import { Selection } from '../runtime/selection.workflow.js'
@@ -478,47 +475,3 @@ const reconstructMsb = (
     }
     return toMsbOps(handle, createCommandRunner(binary))
   })
-
-// =============================================================================
-// Shared resolution helpers
-// =============================================================================
-
-/** The rightsize cache dir — the shared default the fleet and the by-id driver resolve (same shape as launch hygiene). */
-export const cacheDirFromConfig = (config: RightsizeConfigService): string =>
-  resolveCacheDir({
-    rightsizeCacheDir: config.cacheDir,
-    platform: process.platform,
-    homedir: os.homedir(),
-    localAppData: process.env['LOCALAPPDATA'],
-  })
-
-const isExecutable = (filePath: string): boolean => {
-  try {
-    accessSync(filePath, fsConstants.X_OK)
-    return true
-  } catch {
-    return false
-  }
-}
-
-const isReadable = (filePath: string): boolean => {
-  try {
-    accessSync(filePath, fsConstants.R_OK)
-    return true
-  } catch {
-    return false
-  }
-}
-
-/** MSB_PATH when executable, else the cache-pinned install (the krun half must be readable too — binary-last install). */
-export const msbBinaryFor = (config: RightsizeConfigService, cacheDir: string): string | undefined => {
-  if (config.msbPath !== undefined) {
-    return isExecutable(config.msbPath) ? config.msbPath : undefined
-  }
-  const platform = platformFor(process.platform, process.arch)
-  if (platform === undefined) {
-    return undefined
-  }
-  const install = msbInstallPaths(cacheDir, platform)
-  return isExecutable(install.msbPath) && isReadable(install.krunPath) ? install.msbPath : undefined
-}

@@ -42,17 +42,14 @@
  * backend's contract embeds `spec` verbatim. "Adoption returns the spec
  * verbatim" (upstream contract) holds by construction.
  */
-import * as os from 'node:os'
-
 import { Cell } from '@systemfsoftware/effect-cell-types'
 import { Effect, Layer, Match, Result, Schema as S } from 'effect'
 import { pipe } from 'effect/Function'
 
-import { resolveCacheDir } from '../backend-msb/provisioner/env.js'
 import type { AdoptRunningSeam } from '../lifecycle/launch.js'
 import type { ContainerSpec } from '../model/container-spec.js'
 import { BackendError, ReuseFromCheckpointError, ReuseWithNetworkError } from '../model/errors.js'
-import { RightsizeConfig, type RightsizeConfigService } from '../runtime/config.js'
+import { cacheDirFromConfig, RightsizeConfig } from '../runtime/config.js'
 import type { SandboxHandle } from '../runtime/runtime.js'
 import { SandboxRuntime } from '../runtime/runtime.js'
 import { waitForReady, type WaitOptions } from '../wait/interpreter.js'
@@ -71,15 +68,6 @@ export interface ReuseSeamOptions {
   /** The wait interpreter's knobs for the adopt-readiness re-verification. */
   readonly wait?: WaitOptions | undefined
 }
-
-/** The cache dir the seam resolves from config when no override was given (the same derivation the launch executor uses for hygiene). */
-const defaultSeamCacheDir = (config: RightsizeConfigService): string =>
-  resolveCacheDir({
-    rightsizeCacheDir: config.cacheDir,
-    platform: process.platform,
-    homedir: os.homedir(),
-    localAppData: process.env['LOCALAPPDATA'],
-  })
 
 // ============================================================================
 // The adopt cell phase bag
@@ -151,7 +139,7 @@ const gatherReuseFacts = (
       }
     }
 
-    const cacheDir = command.options.cacheDir ?? defaultSeamCacheDir(config)
+    const cacheDir = command.options.cacheDir ?? cacheDirFromConfig(config)
     const hash = yield* hashReuseSpec(spec)
     const name = reuseName(hash)
     const registry = yield* readRegistry(cacheDir, hash)

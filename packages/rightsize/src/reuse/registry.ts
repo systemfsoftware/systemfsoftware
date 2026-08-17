@@ -15,6 +15,7 @@ import * as path from 'node:path'
 
 import { Effect } from 'effect'
 
+import { writeFileAtomic } from '../internal/atomic-write.js'
 import { BackendError } from '../model/errors.js'
 
 /**
@@ -114,10 +115,10 @@ let tmpCounter = 0
 
 /**
  * Atomically writes `reuse/<hash>.json` (tmp file + rename, the same
- * protocol as the reaping ledger) — called once, after a fresh reuse
- * container's wait strategy has confirmed readiness. A concurrent reader
- * only ever observes either the previous complete file or this one, never
- * a partial write.
+ * protocol as the reaping ledger — shared writer, so a failed write also
+ * unlinks its tmp file) — called once, after a fresh reuse container's wait
+ * strategy has confirmed readiness. A concurrent reader only ever observes
+ * either the previous complete file or this one, never a partial write.
  */
 export const writeRegistryAtomic = (
   cacheDir: string,
@@ -129,11 +130,7 @@ export const writeRegistryAtomic = (
       const dir = reuseDir(cacheDir)
       const target = reusePath(cacheDir, hash)
       tmpCounter += 1
-      const tmp = path.join(dir, `.${hash}.json.tmp-${process.pid}-${tmpCounter}`)
-      return fsp
-        .mkdir(dir, { recursive: true })
-        .then(() => fsp.writeFile(tmp, JSON.stringify(entry)))
-        .then(() => fsp.rename(tmp, target))
+      return writeFileAtomic(dir, target, `.${hash}.json.tmp-${process.pid}-${tmpCounter}`, entry)
     },
     catch: (error) =>
       BackendError.make({

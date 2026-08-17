@@ -33,23 +33,17 @@ import { accessSync, constants as fsConstants, statSync } from 'node:fs'
 import { mkdir, open, readFile, rename, unlink, writeFile } from 'node:fs/promises'
 import type { FileHandle } from 'node:fs/promises'
 import * as https from 'node:https'
-import * as os from 'node:os'
 import { dirname, join } from 'node:path'
 
 import { Effect, Exit, Match, Option, Schema as S } from 'effect'
 
+import { isProcessAlive } from '../lifecycle/hygiene/ledger.js'
 import { ProvisionError } from '../model/errors.js'
-import { RightsizeConfig } from '../runtime/config.js'
-import { MSB_VERSION, type MsbInstallPaths, msbInstallPaths, type Platform, platformFor } from './platform.js'
+import { cacheDirFromConfig, RightsizeConfig } from '../runtime/config.js'
+import { MSB_VERSION, type Platform, platformFor } from './platform.js'
 import { parseChecksums, type VerifyOutcome, verifyPlan } from './provisioner/checksum.js'
-import { defaultReleaseBase, type EnvResolution, envResolution, resolveCacheDir } from './provisioner/env.js'
-import {
-  type InstallArtifact,
-  installPlan,
-  type InstallStep,
-  isInstalled,
-  type RenameStep,
-} from './provisioner/install.js'
+import { defaultReleaseBase, type EnvResolution, envResolution } from './provisioner/env.js'
+import { type InstallArtifact, installPlan, type InstallStep, isInstalled } from './provisioner/install.js'
 import { lockStaleness } from './provisioner/lock.js'
 
 /** The provisioned msb binary path — the single value every adapter needs before it can run anything. */
@@ -174,16 +168,6 @@ export function installedProbe(msbPath: string, krunPath: string): boolean {
   return isInstalled({ msbUsable: isExecutableProbe(msbPath), krunPresent: existsSync(krunPath) })
 }
 
-/** `process.kill(pid, 0)` semantics — any errno other than `ESRCH` means a live process. */
-export function isPidAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0)
-    return true
-  } catch (err) {
-    return errnoCode(err) === 'EPERM'
-  }
-}
-
 /** Follows a bounded chain of https redirects — the release CDN issues one hop to the actual asset host. */
 export function defaultFetchBytes(url: string): Effect.Effect<Uint8Array, ProvisionError> {
   const { promise, resolve, reject } = Promise.withResolvers<Uint8Array>()
@@ -298,7 +282,7 @@ export function withInstallLock<T>(
         Match.tag('exists', () =>
           Effect.gen(function*() {
             const content = yield* readTextOrEmpty(lockPath)
-            const verdict = lockStaleness({ lockContent: content, now: options.now(), isPidAlive })
+            const verdict = lockStaleness({ lockContent: content, now: options.now(), isPidAlive: isProcessAlive })
             const stale = Match.value(verdict).pipe(
               Match.tag('stale', () => true),
               Match.tag('fresh', () => false),
@@ -357,7 +341,7 @@ function verifyFailure(outcome: VerifyOutcome, url: string, manifestUrl: string)
  */
 export function executeInstallPlan(
   options: ResolvedProvisionerOptions,
-  plan: { readonly steps: readonly InstallStep[]; readonly renames: readonly RenameStep[] },
+  plan: { readonly steps: readonly InstallStep[] },
   manifestText: string,
   manifestUrl: string,
   msbPath: string,
@@ -415,11 +399,6 @@ function tempName(dir: string, asset: 'msb' | 'krun', now: number): string {
   return join(dir, `.dl-${process.pid}-${now}-${asset}.part`)
 }
 
-/** The staged install target paths for one platform + download plan. */
-function installTargets(platform: Platform, cacheDir: string): MsbInstallPaths {
-  return msbInstallPaths(cacheDir, platform)
-}
-
 /** The capability gate's named failure, mirroring upstream `provider.unsupportedReason`. */
 function unsupportedReason(platform: Platform | undefined): string {
   if (platform === undefined) {
@@ -446,12 +425,9 @@ function unsupportedReason(platform: Platform | undefined): string {
  */
 export function downloadAndInstall(
   options: ResolvedProvisionerOptions,
-  platform: Platform,
-  cacheDir: string,
   plan: Extract<EnvResolution, { readonly _tag: 'download' }>,
 ): Effect.Effect<ProvisionedMsbService, ProvisionError> {
   return Effect.gen(function*() {
-    void installTargets(platform, cacheDir)
     const manifestUrl = `${options.baseUrl}/checksums.sha256`
     const manifestBytes = yield* options.fetchBytes(manifestUrl)
     const manifestText = Buffer.from(manifestBytes).toString('utf8')
@@ -476,14 +452,12 @@ export function downloadAndInstall(
       assetName: plan.msbAsset,
       tempFile: tempName(dirname(plan.msbPath), 'msb', now),
       finalPath: plan.msbPath,
-      sha256: msbDigest,
     }
     const krunArtifact: InstallArtifact = {
       asset: 'krun',
       assetName: plan.krunAsset,
       tempFile: tempName(dirname(plan.krunPath), 'krun', now),
       finalPath: plan.krunPath,
-      sha256: krunDigest,
     }
     const steps = installPlan(options.baseUrl, msbArtifact, krunArtifact)
     const cleanupTemps = Effect.ignore(Effect.tryPromise(() => unlink(msbArtifact.tempFile))).pipe(
@@ -535,12 +509,7 @@ export function provisionMsb(
     if (platform === undefined) {
       return yield* provisionFailure(unsupportedReason(undefined))
     }
-    const cacheDir = config.cacheDir ?? resolveCacheDir({
-      rightsizeCacheDir: config.cacheDir,
-      platform: process.platform,
-      homedir: os.homedir(),
-      localAppData: opts.localAppData,
-    })
+    const cacheDir = cacheDirFromConfig(config)
     const env: Record<string, string> = {}
     if (config.msbPath !== undefined) {
       env['MSB_PATH'] = config.msbPath
@@ -570,7 +539,7 @@ export function provisionMsb(
               `pre-install it there or point MSB_PATH at an msb binary`,
           ),
         )),
-      Match.tag('download', (plan) => downloadAndInstall(opts, platform, cacheDir, plan)),
+      Match.tag('download', (plan) => downloadAndInstall(opts, plan)),
       Match.exhaustive,
     )
     return yield* outcome

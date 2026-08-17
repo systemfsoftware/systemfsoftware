@@ -51,8 +51,6 @@ export interface CliChild {
 export interface CommandRunnerService {
   /** `msb <args>` to completion: line-drained output, exit-code result, rejection only on spawn failure/timeout. */
   readonly invoke: (args: readonly string[], timeoutMs: number) => Effect.Effect<ExecResult, BackendError>
-  /** The plain-Promise twin of `invoke`, for stream drivers that live outside Effect territory (the follow-logs watchdog). */
-  readonly invokePromise: (args: readonly string[], timeoutMs: number) => Promise<ExecResult>
   /** One invocation's stdout byte-exact (CRLF→LF, trailing newline preserved); rejects on non-zero exit. */
   readonly fetchStdoutExact: (args: readonly string[], timeoutMs: number) => Effect.Effect<string, BackendError>
   /** A raw child for stream consumers — closed unless `stdin: 'pipe'` (the tunnel's bridge). */
@@ -237,8 +235,5 @@ export function createCommandRunner(msbPath: string): CommandRunnerService {
     }
   }
 
-  const invokePromise = (args: readonly string[], timeoutMs: number): Promise<ExecResult> =>
-    Effect.runPromise(invoke(args, timeoutMs))
-
-  return { invoke, fetchStdoutExact, spawn: spawnEffect, spawnSync: invokeSync, invokePromise }
+  return { invoke, fetchStdoutExact, spawn: spawnEffect, spawnSync: invokeSync }
 }

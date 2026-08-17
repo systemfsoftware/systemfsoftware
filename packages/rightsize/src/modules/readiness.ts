@@ -2,9 +2,10 @@
  * Declared readiness behaviors (R13, KTD11 — upstream's `containerIsStarted`
  * hooks as data): memcached's protocol-level `VERSION` probe and mongodb's
  * replica-set initiation + primary election. These builders return the
- * declarative step rows presets embed; the launch workflow interprets them
- * against the runtime's exec/log capabilities. `stepVerdict` is the pure
- * verdict kernel the interpreter keys on.
+ * declarative step rows presets embed. The rows are DATA the catalog
+ * carries: no launch-side interpreter consumes them yet (a recorded
+ * follow-up); `stepVerdict` remains the pure verdict kernel a future
+ * interpreter keys on.
  */
 import { Match } from 'effect'
 import type { ReadinessStep } from './preset.js'

@@ -15,11 +15,8 @@
  * record removed without touching the artifact (remove) — this library
  * never calls a backend that isn't active.
  */
-import * as os from 'node:os'
-
 import { Clock, Effect } from 'effect'
 
-import { resolveCacheDir } from '../backend-msb/provisioner/env.js'
 import {
   BackendError,
   CheckpointArtifactMissingError,
@@ -31,7 +28,7 @@ import {
   TmpfsRootCheckpointError,
   UnsupportedByBackendError,
 } from '../model/errors.js'
-import { RightsizeConfig } from '../runtime/config.js'
+import { cacheDirFromConfig, RightsizeConfig } from '../runtime/config.js'
 import { CheckpointStore, SandboxRuntime } from '../runtime/runtime.js'
 import type { SandboxHandle } from '../runtime/runtime.js'
 import { Selection } from '../runtime/selection.workflow.js'
@@ -55,18 +52,9 @@ import { isValidCheckpointName } from './registry.js'
 export type CheckpointServices = CheckpointStore | Selection | RightsizeConfig
 
 /** The cache dir the registry lives under, resolved from `RightsizeConfig` (the same derivation the launch executor uses for hygiene). */
-const cacheDirOf = (config: { readonly cacheDir: string | undefined }): string =>
-  resolveCacheDir({
-    rightsizeCacheDir: config.cacheDir,
-    platform: process.platform,
-    homedir: os.homedir(),
-    localAppData: process.env['LOCALAPPDATA'],
-  })
-
-/** The cache dir under the ambient config service. */
 const rightCacheDir = Effect.gen(function*() {
   const config = yield* RightsizeConfig
-  return cacheDirOf(config)
+  return cacheDirFromConfig(config)
 })
 
 /** `CheckpointRegistryEntry` → the public `Checkpoint` value (spec reconstructed from the pinned projection). */

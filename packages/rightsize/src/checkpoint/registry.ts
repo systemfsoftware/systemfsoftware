@@ -22,6 +22,7 @@ import * as path from 'node:path'
 
 import { Effect } from 'effect'
 
+import { writeFileAtomic } from '../internal/atomic-write.js'
 import type { ContainerSpec } from '../model/container-spec.js'
 import { BackendError, InvalidCheckpointNameError } from '../model/errors.js'
 import type { CheckpointRegistryEntry, CheckpointRegistrySpec } from './checkpoint.js'
@@ -158,8 +159,10 @@ export const readCheckpointRegistry = (
 let tmpCounter = 0
 
 /**
- * Atomically writes `checkpoints/<name>.json` (tmp file + rename) — called
- * only after the backend checkpoint this entry describes has succeeded.
+ * Atomically writes `checkpoints/<name>.json` (tmp file + rename — shared
+ * writer with the reaping ledger, so a failed write also unlinks its tmp
+ * file) — called only after the backend checkpoint this entry describes
+ * has succeeded.
  */
 export const writeCheckpointRegistryAtomic = (
   cacheDir: string,
@@ -173,11 +176,7 @@ export const writeCheckpointRegistryAtomic = (
           const dir = checkpointsDir(cacheDir)
           const target = checkpointRegistryPath(cacheDir, validated)
           tmpCounter += 1
-          const tmp = path.join(dir, `.${validated}.json.tmp-${process.pid}-${tmpCounter}`)
-          return fsp
-            .mkdir(dir, { recursive: true })
-            .then(() => fsp.writeFile(tmp, JSON.stringify(entry)))
-            .then(() => fsp.rename(tmp, target))
+          return writeFileAtomic(dir, target, `.${validated}.json.tmp-${process.pid}-${tmpCounter}`, entry)
         },
         catch: (error) =>
           BackendError.make({

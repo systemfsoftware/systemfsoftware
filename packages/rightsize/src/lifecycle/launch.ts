@@ -40,20 +40,18 @@
  */
 import { Cell } from '@systemfsoftware/effect-cell-types'
 import type * as Scope from 'effect/Scope'
-import { accessSync, constants as fsConstants } from 'node:fs'
-import * as os from 'node:os'
 
 import { Effect, Match, Result } from 'effect'
 import { pipe } from 'effect/Function'
 
 import { registerDockerCleanupSync } from '../backend-docker/cli.js'
-import { msbInstallPaths, platformFor } from '../backend-msb/platform.js'
-import { resolveCacheDir } from '../backend-msb/provisioner/env.js'
+import { msbBinaryFor } from '../backend-msb/platform.js'
 import { registerMsbCleanupSync } from '../backend-msb/runtime.js'
+import { unregisterContainer } from '../fleet/registry.js'
 import type { RuntimeCapabilities } from '../model/capabilities.js'
 import type { ContainerSpec } from '../model/container-spec.js'
 import { BackendError, ContainerLaunchError, UnsupportedByBackendError } from '../model/errors.js'
-import { RightsizeConfig } from '../runtime/config.js'
+import { cacheDirFromConfig, RightsizeConfig } from '../runtime/config.js'
 import type { RightsizeConfigService } from '../runtime/config.js'
 import type { ReaperMode } from '../runtime/config.js'
 import { FreePortExhaustedError, FreePorts } from '../runtime/free-ports.js'
@@ -348,32 +346,6 @@ const linksTowardMembers = (networkId: string): ReadonlyArray<NetworkLink> => {
 // Hygiene defaults — resolved from Selection + config where options don't override
 // =============================================================================
 
-const defaultCacheDir = (config: { readonly cacheDir: string | undefined }): string =>
-  resolveCacheDir({
-    rightsizeCacheDir: config.cacheDir,
-    platform: process.platform,
-    homedir: os.homedir(),
-    localAppData: process.env['LOCALAPPDATA'],
-  })
-
-const isExecutable = (filePath: string): boolean => {
-  try {
-    accessSync(filePath, fsConstants.X_OK)
-    return true
-  } catch {
-    return false
-  }
-}
-
-const isReadable = (filePath: string): boolean => {
-  try {
-    accessSync(filePath, fsConstants.R_OK)
-    return true
-  } catch {
-    return false
-  }
-}
-
 /** The reaper's resolved surroundings: where the ledger lives, the mode, and the active backend's kill commands + blocking cleanup. */
 export interface ResolvedHygiene {
   readonly cacheDir: string
@@ -383,25 +355,12 @@ export interface ResolvedHygiene {
   readonly cleanupSync: (id: string) => void
 }
 
-/** The msb binary path the reaper can kill with — resolved WITHOUT downloading (MSB_PATH, or the already-installed pinned binary; `undefined` otherwise). */
-const resolveMsbBinary = (config: RightsizeConfigService, cacheDir: string): string | undefined => {
-  if (config.msbPath !== undefined) {
-    return isExecutable(config.msbPath) ? config.msbPath : undefined
-  }
-  const platform = platformFor(process.platform, process.arch)
-  if (platform === undefined) {
-    return undefined
-  }
-  const install = msbInstallPaths(cacheDir, platform)
-  return isExecutable(install.msbPath) && isReadable(install.krunPath) ? install.msbPath : undefined
-}
-
 const resolveHygiene = (
   config: RightsizeConfigService,
   selection: SelectionService,
   overrides: LaunchOptions['hygiene'],
 ): ResolvedHygiene => {
-  const cacheDir = overrides?.cacheDir ?? defaultCacheDir(config)
+  const cacheDir = overrides?.cacheDir ?? cacheDirFromConfig(config)
   const reaper = overrides?.reaper ?? config.reaper
   if (selection.backend === 'docker') {
     return {
@@ -411,7 +370,7 @@ const resolveHygiene = (
       cleanupSync: overrides?.cleanupSync ?? registerDockerCleanupSync(selection.dockerSocketPath ?? ''),
     }
   }
-  const msbPath = resolveMsbBinary(config, cacheDir)
+  const msbPath = msbBinaryFor(config, cacheDir)
   return {
     cacheDir,
     reaper,
@@ -778,7 +737,14 @@ const executeTeardownStep = (
           Effect.sync(() => removeMember(state.networkId ?? '', handle.spec.name)),
         )
     case 'remove':
-      return handle === undefined ? Effect.void : swallow(runtime.remove(handle))
+      // The fleet registry's row dies with the container: a torn-down
+      // container must stop reporting as live (the registry's own
+      // invariant). Absent-key delete is a no-op for never-minted rows.
+      return handle === undefined
+        ? Effect.void
+        : swallow(runtime.remove(handle)).pipe(
+          Effect.andThen(Effect.sync(() => unregisterContainer(state.backend, handle.id))),
+        )
     case 'network-remove':
       return state.networkId === undefined
         ? Effect.void

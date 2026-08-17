@@ -52,6 +52,7 @@ import * as fsp from 'node:fs/promises'
 import * as path from 'node:path'
 
 import { DOCKER_REAPER_KILL_COMMAND } from '../../backend-docker/cli.js'
+import { writeFileAtomic } from '../../internal/atomic-write.js'
 import type { BackendName } from '../../runtime/runtime.js'
 
 // =============================================================================
@@ -209,13 +210,8 @@ const removeFirstOccurrence = (lines: ReadonlyArray<string>, value: string): Rea
 export const writeRunRecord = (cacheDir: string, runId: string, record: RunRecord): Promise<void> => {
   const dir = runsDir(cacheDir)
   const target = runRecordPath(cacheDir, runId)
-  const tmp = path.join(dir, `.${runId}.json.${process.pid}.${tmpCounter++}.tmp`)
-  return withChain(() =>
-    fsp
-      .mkdir(dir, { recursive: true })
-      .then(() => fsp.writeFile(tmp, JSON.stringify(record)))
-      .then(() => fsp.rename(tmp, target))
-  )
+  const tmp = `.${runId}.json.${process.pid}.${tmpCounter++}.tmp`
+  return withChain(() => writeFileAtomic(dir, target, tmp, record))
 }
 
 /** Reads a run's record file raw + its mtime — `undefined` when the file is gone (a clean shutdown or a concurrent sweep already reaped it). */

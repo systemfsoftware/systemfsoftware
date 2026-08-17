@@ -24,8 +24,6 @@ export interface InstallArtifact {
   readonly tempFile: string
   /** The final install path (under `bin/` or `lib/`). */
   readonly finalPath: string
-  /** The SHA-256 the download was verified against. */
-  readonly sha256: string
 }
 
 export type InstallStep =
@@ -35,26 +33,16 @@ export type InstallStep =
     readonly asset: 'msb' | 'krun'
     readonly url: string
     readonly tempFile: string
-    readonly expectedSha256: string
   }
   | { readonly _tag: 'rename'; readonly asset: 'msb' | 'krun'; readonly from: string; readonly to: string }
-
-/** The rename steps of an install plan — always `[krun, msb]` (binary-last). */
-export type RenameStep = Extract<InstallStep, { readonly _tag: 'rename' }>
 
 export interface InstallPlan {
   /** The ordered step list the adapter must execute top-to-bottom. */
   readonly steps: readonly InstallStep[]
-  /** The rename subsequence, pre-derived: krun before msb, by construction. */
-  readonly renames: readonly RenameStep[]
 }
 
 /** Builds the ordered install decision list for both assets of one release. */
 export function installPlan(baseUrl: string, msb: InstallArtifact, krun: InstallArtifact): InstallPlan {
-  const renames: readonly RenameStep[] = [
-    { _tag: 'rename', asset: 'krun', from: krun.tempFile, to: krun.finalPath },
-    { _tag: 'rename', asset: 'msb', from: msb.tempFile, to: msb.finalPath },
-  ]
   const steps: readonly InstallStep[] = [
     { _tag: 'ensure-dir', path: dirname(msb.tempFile) },
     {
@@ -63,7 +51,6 @@ export function installPlan(baseUrl: string, msb: InstallArtifact, krun: Install
       // URL, not a filesystem path — `path.join` would collapse the scheme's `//`.
       url: `${baseUrl}/${msb.assetName}`,
       tempFile: msb.tempFile,
-      expectedSha256: msb.sha256,
     },
     { _tag: 'ensure-dir', path: dirname(krun.tempFile) },
     {
@@ -71,11 +58,12 @@ export function installPlan(baseUrl: string, msb: InstallArtifact, krun: Install
       asset: 'krun',
       url: `${baseUrl}/${krun.assetName}`,
       tempFile: krun.tempFile,
-      expectedSha256: krun.sha256,
     },
-    ...renames,
+    // The rename sequence is fixed: krun first, msb last (binary-last).
+    { _tag: 'rename', asset: 'krun', from: krun.tempFile, to: krun.finalPath },
+    { _tag: 'rename', asset: 'msb', from: msb.tempFile, to: msb.finalPath },
   ]
-  return { steps, renames }
+  return { steps }
 }
 
 /**

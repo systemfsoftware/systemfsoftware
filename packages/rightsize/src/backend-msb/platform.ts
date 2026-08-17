@@ -1,4 +1,7 @@
+import { accessSync, constants as fsConstants } from 'node:fs'
 import { join } from 'node:path'
+
+import type { RightsizeConfigService } from '../runtime/config.js'
 
 /**
  * Platform asset tables and pure platform resolution for the microsandbox
@@ -7,9 +10,11 @@ import { join } from 'node:path'
  * asset names and install names are copied verbatim and MUST be re-verified
  * against the release when the pinned `msb` version is bumped.
  *
- * All functions here are pure data derivations: the `/dev/kvm` probe and the
- * Windows-availability report are EFFECTS that land in the adapter layer
- * (U9b) — this module takes probe results as inputs and decides.
+ * All functions here are pure data derivations — with one named exception:
+ * `msbBinaryFor` performs the two filesystem probes (executability /
+ * readability) the shared no-download binary resolution needs. The `/dev/kvm`
+ * probe and the Windows-availability report remain EFFECTS that land in the
+ * adapter layer (U9b) — this module takes probe results as inputs and decides.
  */
 
 /** The five platforms the pinned microsandbox release ships a build for. */
@@ -147,4 +152,43 @@ export function msbInstallPaths(cacheDir: string, platform: Platform): MsbInstal
     krunPath: join(libDir, krunInstallName(platform)),
     lockPath: join(installDir, '.lock'),
   }
+}
+
+// ---------------------------------------------------------------------------
+// No-download binary resolution — the shared `msbBinaryFor` + its probes
+// ---------------------------------------------------------------------------
+
+const isExecutable = (filePath: string): boolean => {
+  try {
+    accessSync(filePath, fsConstants.X_OK)
+    return true
+  } catch {
+    return false
+  }
+}
+
+const isReadable = (filePath: string): boolean => {
+  try {
+    accessSync(filePath, fsConstants.R_OK)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * The msb binary path this process can run WITHOUT downloading: `MSB_PATH`
+ * when executable, else the cache-pinned install (the krun half must be
+ * readable too — binary-last install); `undefined` when neither resolves.
+ */
+export const msbBinaryFor = (config: RightsizeConfigService, cacheDir: string): string | undefined => {
+  if (config.msbPath !== undefined) {
+    return isExecutable(config.msbPath) ? config.msbPath : undefined
+  }
+  const platform = platformFor(process.platform, process.arch)
+  if (platform === undefined) {
+    return undefined
+  }
+  const install = msbInstallPaths(cacheDir, platform)
+  return isExecutable(install.msbPath) && isReadable(install.krunPath) ? install.msbPath : undefined
 }

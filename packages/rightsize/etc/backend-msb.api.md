@@ -28,7 +28,6 @@ export interface CommandRunnerService {
     // Warning: (ae-forgotten-export) The symbol "ExecResult" needs to be exported by the entry point backend-msb.d.ts
     // Warning: (ae-forgotten-export) The symbol "BackendError" needs to be exported by the entry point backend-msb.d.ts
     readonly invoke: (args: readonly string[], timeoutMs: number) => Effect.Effect<ExecResult, BackendError>;
-    readonly invokePromise: (args: readonly string[], timeoutMs: number) => Promise<ExecResult>;
     readonly spawn: (args: readonly string[], options?: {
         readonly stdin?: 'ignore' | 'pipe';
     }) => Effect.Effect<CliChild, BackendError>;

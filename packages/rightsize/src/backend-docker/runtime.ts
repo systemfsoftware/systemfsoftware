@@ -222,10 +222,23 @@ const drainLogLines = (
     }
   })
 
-const pullIfMissing = (client: DockerClient, image: string): Effect.Effect<void, BackendError> =>
+const pullIfMissing = (
+  client: DockerClient,
+  image: string,
+  knownPresent: Set<string>,
+): Effect.Effect<void, BackendError> =>
   Effect.gen(function*() {
+    // One inspect per ref per runtime instance: the memo skips the daemon
+    // round trip for every later create of a known-present image (the
+    // port-conflict retry loop re-creates per attempt). A create failure
+    // naming the image as missing drops the entry so the next attempt
+    // re-inspects.
+    if (knownPresent.has(image)) {
+      return
+    }
     const inspect = yield* client.request('GET', `/images/${encodeQueryValue(image)}/json`)
     if (inspect.status === 200) {
+      knownPresent.add(image)
       return
     }
     const [repo, tag] = splitRepoTag(image)
@@ -236,22 +249,26 @@ const pullIfMissing = (client: DockerClient, image: string): Effect.Effect<void,
         message: `docker could not pull image '${image}' (HTTP ${resp.status}): ${resp.body.toString()}`,
       })
     }
+    knownPresent.add(image)
   })
 
 const createEffect = (
   client: DockerClient,
   networks: VirtualNetworksService,
   spec: ContainerSpec,
+  knownPresent: Set<string>,
 ): Effect.Effect<SandboxHandle, BackendError> =>
   Effect.gen(function*() {
-    yield* pullIfMissing(client, spec.image)
-
+    yield* pullIfMissing(client, spec.image, knownPresent)
     const resp = yield* client.request(
       'POST',
       `/containers/create?name=${encodeQueryValue(spec.name)}`,
       createRequestBody(spec),
     )
     if (resp.status >= 400) {
+      // A failed create may name a vanished image (external removal mid-run):
+      // drop the memo so the next attempt re-inspects instead of trusting it.
+      knownPresent.delete(spec.image)
       return yield* BackendError.make({
         message: `docker could not create container '${spec.name}' (HTTP ${resp.status}): ${resp.body.toString()}`,
       })
@@ -344,142 +361,146 @@ const followLogsReader = (
  * (the same networks helper `create` consults must be the one the layer
  * provides, so ensure/remove caching stays coherent within a process).
  */
-export const makeDockerRuntime = (client: DockerClient, networks: VirtualNetworksService): SandboxRuntimeService => ({
-  name: 'docker',
-  capabilities: {
-    hardwareIsolated: false,
-    checkpoint: true,
-    checkpointRestartsWorkload: false,
-    supportsNativeNetworks: true,
-    healthInspection: true,
-  },
-  create: (spec: ContainerSpec) => createEffect(client, networks, spec),
-  start: (handle: SandboxHandle) =>
-    Effect.gen(function*() {
-      const resp = yield* client.request('POST', `/containers/${handle.id}/start`)
-      if (resp.status === 204 || resp.status === 304) {
-        return // 304 = already started; treated as success like the daemon intends.
-      }
-      const message = resp.body.toString()
-      if (resp.status === 500 && isPortBindConflictMessage(message)) {
-        return yield* PortBindConflictError.make({
-          message: `docker could not bind a host port for ${handle.id}: ${message}`,
-        })
-      }
-      return yield* BackendError.make({
-        message: `docker could not start container ${handle.id} (HTTP ${resp.status}): ${message}`,
-      })
-    }),
-  stop: (handle: SandboxHandle) =>
-    // Best-effort: teardown callers swallow failures, and 304/already-stopped is success.
-    client.request('POST', `/containers/${handle.id}/stop?t=${STOP_TIMEOUT_SECS}`).pipe(Effect.asVoid, Effect.ignore),
-  remove: (handle: SandboxHandle) =>
-    // Best-effort removal; teardown callers swallow failures.
-    client.request('DELETE', `/containers/${handle.id}?force=true`).pipe(Effect.asVoid, Effect.ignore),
-  exec: (handle: SandboxHandle, request: ExecRequest) => execEffect(client, handle, request),
-  logs: (handle: SandboxHandle) =>
-    Effect.gen(function*() {
-      const path = `/containers/${handle.id}/logs?${
-        encodeLogsQuery({ stdout: true, stderr: true, follow: false, tail: 1000 })
-      }`
-      const response = yield* client.requestStream('GET', path)
-      if (response.status >= 400) {
+export const makeDockerRuntime = (client: DockerClient, networks: VirtualNetworksService): SandboxRuntimeService => {
+  /** Refs already confirmed present on this daemon — one inspect per ref. */
+  const knownPresent = new Set<string>()
+  return {
+    name: 'docker',
+    capabilities: {
+      hardwareIsolated: false,
+      checkpoint: true,
+      checkpointRestartsWorkload: false,
+      supportsNativeNetworks: true,
+      healthInspection: true,
+    },
+    create: (spec: ContainerSpec) => createEffect(client, networks, spec, knownPresent),
+    start: (handle: SandboxHandle) =>
+      Effect.gen(function*() {
+        const resp = yield* client.request('POST', `/containers/${handle.id}/start`)
+        if (resp.status === 204 || resp.status === 304) {
+          return // 304 = already started; treated as success like the daemon intends.
+        }
+        const message = resp.body.toString()
+        if (resp.status === 500 && isPortBindConflictMessage(message)) {
+          return yield* PortBindConflictError.make({
+            message: `docker could not bind a host port for ${handle.id}: ${message}`,
+          })
+        }
         return yield* BackendError.make({
-          message: `docker could not fetch logs for container ${handle.id} (HTTP ${response.status})`,
+          message: `docker could not start container ${handle.id} (HTTP ${resp.status}): ${message}`,
         })
-      }
-      const lines: string[] = []
-      yield* drainLogLines(response, (line) => lines.push(`${line}\n`))
-      return lines.join('')
-    }),
-  followLogs: (handle: SandboxHandle, consumer: (line: string) => void) =>
-    Effect.gen(function*() {
-      const path = `/containers/${handle.id}/logs?${
-        encodeLogsQuery({ stdout: true, stderr: true, follow: true, tail: 'all' })
-      }`
-      const response = yield* client.requestStream('GET', path)
-      if (response.status >= 400) {
-        return yield* BackendError.make({
-          message: `docker could not follow logs for container ${handle.id} (HTTP ${response.status})`,
-        })
-      }
+      }),
+    stop: (handle: SandboxHandle) =>
+      // Best-effort: teardown callers swallow failures, and 304/already-stopped is success.
+      client.request('POST', `/containers/${handle.id}/stop?t=${STOP_TIMEOUT_SECS}`).pipe(Effect.asVoid, Effect.ignore),
+    remove: (handle: SandboxHandle) =>
+      // Best-effort removal; teardown callers swallow failures.
+      client.request('DELETE', `/containers/${handle.id}?force=true`).pipe(Effect.asVoid, Effect.ignore),
+    exec: (handle: SandboxHandle, request: ExecRequest) => execEffect(client, handle, request),
+    logs: (handle: SandboxHandle) =>
+      Effect.gen(function*() {
+        const path = `/containers/${handle.id}/logs?${
+          encodeLogsQuery({ stdout: true, stderr: true, follow: false, tail: 1000 })
+        }`
+        const response = yield* client.requestStream('GET', path)
+        if (response.status >= 400) {
+          return yield* BackendError.make({
+            message: `docker could not fetch logs for container ${handle.id} (HTTP ${response.status})`,
+          })
+        }
+        const lines: string[] = []
+        yield* drainLogLines(response, (line) => lines.push(`${line}\n`))
+        return lines.join('')
+      }),
+    followLogs: (handle: SandboxHandle, consumer: (line: string) => void) =>
+      Effect.gen(function*() {
+        const path = `/containers/${handle.id}/logs?${
+          encodeLogsQuery({ stdout: true, stderr: true, follow: true, tail: 'all' })
+        }`
+        const response = yield* client.requestStream('GET', path)
+        if (response.status >= 400) {
+          return yield* BackendError.make({
+            message: `docker could not follow logs for container ${handle.id} (HTTP ${response.status})`,
+          })
+        }
 
-      let closeRequested = false
-      const reader = followLogsReader(response, consumer, () => closeRequested)
+        let closeRequested = false
+        const reader = followLogsReader(response, consumer, () => closeRequested)
 
-      const close: FollowHandle = {
-        close: Effect.sync(() => {
-          closeRequested = true
-          try {
-            response.body.destroy()
-          } catch {
-            // Best-effort close: the stream may already be gone.
-          }
-        }).pipe(Effect.andThen(Effect.promise(() => reader.done))),
-      }
-      return close
-    }),
-  copyToContainer: (handle: SandboxHandle, hostPath: string, containerPath: string) =>
-    cliEffect(DockerCli.copyIn(hostPath, handle.id, containerPath), `docker cp into ${handle.id}:${containerPath}`),
-  copyFromContainer: (handle: SandboxHandle, containerPath: string, hostPath: string) =>
-    cliEffect(DockerCli.copyOut(handle.id, containerPath, hostPath), `docker cp from ${handle.id}:${containerPath}`),
-  inspect: (handle: SandboxHandle) =>
-    Effect.gen(function*() {
-      const resp = yield* client.request('GET', `/containers/${handle.id}/json`)
-      if (resp.status === 404) {
-        const result: ContainerInspect = { exists: false, running: false, health: undefined }
+        const close: FollowHandle = {
+          close: Effect.sync(() => {
+            closeRequested = true
+            try {
+              response.body.destroy()
+            } catch {
+              // Best-effort close: the stream may already be gone.
+            }
+          }).pipe(Effect.andThen(Effect.promise(() => reader.done))),
+        }
+        return close
+      }),
+    copyToContainer: (handle: SandboxHandle, hostPath: string, containerPath: string) =>
+      cliEffect(DockerCli.copyIn(hostPath, handle.id, containerPath), `docker cp into ${handle.id}:${containerPath}`),
+    copyFromContainer: (handle: SandboxHandle, containerPath: string, hostPath: string) =>
+      cliEffect(DockerCli.copyOut(handle.id, containerPath, hostPath), `docker cp from ${handle.id}:${containerPath}`),
+    inspect: (handle: SandboxHandle) =>
+      Effect.gen(function*() {
+        const resp = yield* client.request('GET', `/containers/${handle.id}/json`)
+        if (resp.status === 404) {
+          const result: ContainerInspect = { exists: false, running: false, health: undefined }
+          return result
+        }
+        if (resp.status >= 400) {
+          return yield* BackendError.make({
+            message: `docker could not inspect container ${handle.id} (HTTP ${resp.status}): ${resp.body.toString()}`,
+          })
+        }
+        const decoded = yield* decodeResponseBody(ContainerInspectResponse, 'containerInspect')(resp.body.toString())
+        const healthStatus = decoded.State.Health?.Status
+        const result: ContainerInspect = {
+          exists: true,
+          running: decoded.State.Running,
+          health: healthStatus === 'healthy' || healthStatus === 'unhealthy' || healthStatus === 'starting'
+            ? healthStatus
+            : undefined,
+        }
         return result
-      }
-      if (resp.status >= 400) {
-        return yield* BackendError.make({
-          message: `docker could not inspect container ${handle.id} (HTTP ${resp.status}): ${resp.body.toString()}`,
-        })
-      }
-      const decoded = yield* decodeResponseBody(ContainerInspectResponse, 'containerInspect')(resp.body.toString())
-      const healthStatus = decoded.State.Health?.Status
-      const result: ContainerInspect = {
-        exists: true,
-        running: decoded.State.Running,
-        health: healthStatus === 'healthy' || healthStatus === 'unhealthy' || healthStatus === 'starting'
-          ? healthStatus
-          : undefined,
-      }
-      return result
-    }),
-  removeByName: (name: string) =>
-    Effect.gen(function*() {
-      const filters = nameFilterQuery(name)
-      const listed = yield* client.request('GET', `/containers/json?all=true&filters=${filters}`).pipe(Effect.option)
-      if (Option.isNone(listed)) {
-        return // best-effort: nothing to remove if even listing fails.
-      }
-      if (listed.value.status !== 200) {
-        return
-      }
-      const ids = yield* decodeCollectionIds(listed.value.body.toString())
-      if (ids.length === 0) {
-        return
-      }
-      yield* client.request('DELETE', `/containers/${ids[0]}?force=true`).pipe(Effect.ignore)
-    }),
-  findRunning: (spec: ContainerSpec) =>
-    Effect.gen(function*() {
-      const filters = nameFilterQuery(spec.name)
-      const listed = yield* client.request('GET', `/containers/json?filters=${filters}`).pipe(Effect.option)
-      if (Option.isNone(listed)) {
-        return undefined
-      }
-      if (listed.value.status !== 200) {
-        return undefined
-      }
-      const ids = yield* decodeCollectionIds(listed.value.body.toString())
-      if (ids.length === 0) {
-        return undefined
-      }
-      const id = ids[0]
-      if (id === undefined) {
-        return undefined
-      }
-      return { id, spec }
-    }),
-})
+      }),
+    removeByName: (name: string) =>
+      Effect.gen(function*() {
+        const filters = nameFilterQuery(name)
+        const listed = yield* client.request('GET', `/containers/json?all=true&filters=${filters}`).pipe(Effect.option)
+        if (Option.isNone(listed)) {
+          return // best-effort: nothing to remove if even listing fails.
+        }
+        if (listed.value.status !== 200) {
+          return
+        }
+        const ids = yield* decodeCollectionIds(listed.value.body.toString())
+        if (ids.length === 0) {
+          return
+        }
+        yield* client.request('DELETE', `/containers/${ids[0]}?force=true`).pipe(Effect.ignore)
+      }),
+    findRunning: (spec: ContainerSpec) =>
+      Effect.gen(function*() {
+        const filters = nameFilterQuery(spec.name)
+        const listed = yield* client.request('GET', `/containers/json?filters=${filters}`).pipe(Effect.option)
+        if (Option.isNone(listed)) {
+          return undefined
+        }
+        if (listed.value.status !== 200) {
+          return undefined
+        }
+        const ids = yield* decodeCollectionIds(listed.value.body.toString())
+        if (ids.length === 0) {
+          return undefined
+        }
+        const id = ids[0]
+        if (id === undefined) {
+          return undefined
+        }
+        return { id, spec }
+      }),
+  }
+}

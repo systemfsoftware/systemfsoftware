@@ -49,20 +49,23 @@ const layerClient: Layer.Layer<DockerClientContext, BackendError, Selection> = L
   }),
 )
 
-const layerRuntime: Layer.Layer<SandboxRuntime, never, DockerClientContext> = Layer.effect(
-  SandboxRuntime,
-  Effect.gen(function*() {
-    const client = yield* DockerClientContext
-    const networks = makeDockerNetworks(client)
-    return makeDockerRuntime(client, networks)
-  }),
-)
-
+// ONE networks instance feeds both the runtime (create consults it) and the
+// public VirtualNetworks Tag — makeDockerRuntime's contract requires the
+// same helper so the ensure/remove caches stay coherent.
 const layerNetworks: Layer.Layer<VirtualNetworks, never, DockerClientContext> = Layer.effect(
   VirtualNetworks,
   Effect.gen(function*() {
     const client = yield* DockerClientContext
     return makeDockerNetworks(client)
+  }),
+)
+
+const layerRuntime: Layer.Layer<SandboxRuntime, never, DockerClientContext | VirtualNetworks> = Layer.effect(
+  SandboxRuntime,
+  Effect.gen(function*() {
+    const client = yield* DockerClientContext
+    const networks = yield* VirtualNetworks
+    return makeDockerRuntime(client, networks)
   }),
 )
 
@@ -93,4 +96,8 @@ export const layerDocker: Layer.Layer<
   SandboxRuntime | VirtualNetworks | CheckpointStore | ImageRegistry,
   BackendError,
   Selection
-> = Layer.mergeAll(layerRuntime, layerNetworks, layerCheckpoints, layerImages).pipe(Layer.provide(layerClient))
+> = Layer.mergeAll(
+  layerRuntime.pipe(Layer.provideMerge(layerNetworks)),
+  layerCheckpoints,
+  layerImages,
+).pipe(Layer.provide(layerClient))

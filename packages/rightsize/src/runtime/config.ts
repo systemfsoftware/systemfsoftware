@@ -11,7 +11,11 @@
  * `microsandbox` as an alias for `msb` — the value an existing deployment
  * has in its environment must keep meaning the same thing after the swap.
  */
+import * as os from 'node:os'
+
 import { Config, Context, Layer, Option, Schema as S } from 'effect'
+
+import { resolveCacheDir } from '../backend-msb/provisioner/env.js'
 
 /** What `RIGHTSIZE_BACKEND` may say: an explicit backend, or `auto`. */
 export type BackendPreference = 'auto' | 'docker' | 'msb'
@@ -44,6 +48,22 @@ export interface RightsizeConfigService {
 export class RightsizeConfig extends Context.Service<RightsizeConfig, RightsizeConfigService>()(
   '@systemfsoftware/rightsize/runtime/config/RightsizeConfig',
 ) {}
+
+/**
+ * The rightsize cache dir resolved from the config service — the ONE cache
+ * derivation every unit that needs a place on disk shares (launch hygiene,
+ * the reaping ledger, the fleet's by-id driver, the reuse and checkpoint
+ * registries, the msb provisioner). `resolveCacheDir` owns the platform
+ * default (`%LOCALAPPDATA%` on Windows, `~/.cache` elsewhere); this is the
+ * config-shaped entry point.
+ */
+export const cacheDirFromConfig = (config: RightsizeConfigService): string =>
+  resolveCacheDir({
+    rightsizeCacheDir: config.cacheDir,
+    platform: process.platform,
+    homedir: os.homedir(),
+    localAppData: process.env['LOCALAPPDATA'],
+  })
 
 /** A backend name as the config may spell it, case-insensitively. */
 const KnownBackendName = S.refine<typeof S.String, string>(

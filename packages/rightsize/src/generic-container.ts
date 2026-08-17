@@ -96,10 +96,6 @@ export interface RunningContainer {
   exec(request: ExecRequest): Effect.Effect<ExecResult, BackendError, RuntimeServices>
   /** Variadic convenience over `exec` — the generic-container one-shot shape. */
   execCommand(...command: string[]): Effect.Effect<ExecResult, BackendError, RuntimeServices>
-  /** Runs a one-shot command inside the container and waits for it to exit — exit code is a verdict, never an exception (F3). */
-  exec(request: ExecRequest): Effect.Effect<ExecResult, BackendError, RuntimeServices>
-  /** Variadic convenience over `exec` — the generic-container one-shot shape. */
-  execCommand(...command: string[]): Effect.Effect<ExecResult, BackendError, RuntimeServices>
   /** The workload's logs so far (a bounded tail), as one string — an Effect value, ready to `yield*`. */
   readonly logs: Effect.Effect<string, BackendError, RuntimeServices>
   /** Streams log lines in order, no duplicates; the returned handle stops delivery without flushing (R12). */

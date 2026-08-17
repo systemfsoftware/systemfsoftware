@@ -24,16 +24,16 @@
 import { Effect, HashSet } from 'effect'
 import { Option } from 'effect'
 
-import { readLedgerEntries } from '../lifecycle/hygiene/ledger.js'
+import { type LedgerEntry, readLedgerEntries } from '../lifecycle/hygiene/ledger.js'
 import type { ContainerSpec } from '../model/container-spec.js'
 import { BackendError } from '../model/errors.js'
 import type { PortBinding } from '../model/ports.js'
 import { newContainerSpec } from '../model/spec-combinators.js'
-import { RightsizeConfig } from '../runtime/config.js'
+import { cacheDirFromConfig, RightsizeConfig } from '../runtime/config.js'
 import { RunId } from '../runtime/run-id.js'
 import type { BackendName, ContainerInspect, SandboxHandle } from '../runtime/runtime.js'
 import { SandboxRuntime } from '../runtime/runtime.js'
-import { cacheDirFromConfig } from './handle.js'
+
 import { listLiveContainers } from './registry.js'
 
 /** The published host address — every port binds loopback-only (R9). */
@@ -85,11 +85,11 @@ const safeInspect = (
 ): Effect.Effect<ContainerInspect | undefined> => effect.pipe(Effect.option, Effect.map(Option.getOrUndefined))
 
 /** A bounded log tail fetch that degrades to `[]` instead of failing the listing. */
-const safeLogTail = (effect: Effect.Effect<string, BackendError>): Effect.Effect<ReadonlyArray<string>> =>
-  effect.pipe(
-    Effect.option,
-    Effect.map((value) => (Option.isNone(value) ? [] : boundedTail(value.value, FLEET_TAIL_LINES))),
-  )
+const safeLogTail = (
+  effect: Effect.Effect<string, BackendError>,
+  budget: number,
+): Effect.Effect<ReadonlyArray<string>> =>
+  effect.pipe(Effect.option, Effect.map((value) => (Option.isNone(value) ? [] : boundedTail(value.value, budget))))
 
 const inspectState = (inspect: ContainerInspect | undefined): FleetContainer['state'] =>
   inspect === undefined
@@ -111,61 +111,69 @@ export const listFleetContainers = (
   Effect.gen(function*() {
     const runtime = yield* SandboxRuntime
     const config = yield* RightsizeConfig
-
-    const rows: FleetContainer[] = []
-    let seen = HashSet.empty<string>()
+    const budget = options.tailLines ?? FLEET_TAIL_LINES
 
     // Live registry rows — full portrait, always 'running' (the registry
-    // holds only started containers; the diagnostics invariant).
-    for (const live of listLiveContainers()) {
-      seen = HashSet.add(seen, keyFor(live.backend, live.id))
-      const logTail = yield* safeLogTail(runtime.logs(shellHandle(live.id)))
-      rows.push({
-        source: 'live',
-        backend: live.backend,
-        name: live.name,
-        id: live.id,
-        image: live.image,
-        host: FLEET_HOST,
-        state: 'running',
-        ports: [...live.ports],
-        logTail: capTail(logTail, options.tailLines ?? FLEET_TAIL_LINES),
-      })
+    // holds only started containers; the diagnostics invariant). Tails are
+    // independent backend reads, so they run concurrently; `forEach`
+    // preserves insertion order for the assembled rows.
+    const live = listLiveContainers()
+    const liveTails = yield* Effect.forEach(
+      live,
+      (row) => safeLogTail(runtime.logs(shellHandle(row.id)), budget),
+      { concurrency: 'unbounded' },
+    )
+    const rows: FleetContainer[] = live.map((row, index) => ({
+      source: 'live',
+      backend: row.backend,
+      name: row.name,
+      id: row.id,
+      image: row.image,
+      host: FLEET_HOST,
+      state: 'running',
+      ports: [...row.ports],
+      logTail: liveTails[index] ?? [],
+    }))
+    let seen = HashSet.empty<string>()
+    for (const row of live) {
+      seen = HashSet.add(seen, keyFor(row.backend, row.id))
     }
 
     // Ledger rows — names + recorded ids from this run's entries, state and
-    // log tail from the backend.
+    // log tail from the backend; the inspect+tail pair per row is an
+    // independent read, so rows resolve concurrently.
     const cacheDir = cacheDirFromConfig(config)
-    const entries = yield* Effect.promise(() => readLedgerEntries(cacheDir, RunId.value))
-    for (const entry of entries) {
-      if (entry.kind !== 'sandbox') {
+    const entries = (yield* Effect.promise(() => readLedgerEntries(cacheDir, RunId.value)))
+      .filter((entry): entry is Extract<LedgerEntry, { readonly kind: 'sandbox' }> => entry.kind === 'sandbox')
+      .filter((entry) => entry.id !== undefined && entry.id !== '')
+      .filter((entry) => !HashSet.has(seen, keyFor(entry.backend, entry.id ?? '')))
+    const ledgerPortraits = yield* Effect.forEach(
+      entries,
+      (entry) => {
+        const handle = shellHandle(entry.id ?? '')
+        return Effect.all({
+          inspect: safeInspect(runtime.inspect(handle)),
+          logTail: safeLogTail(runtime.logs(handle), budget),
+        })
+      },
+      { concurrency: 'unbounded' },
+    )
+    for (const [index, entry] of entries.entries()) {
+      const portrait = ledgerPortraits[index]
+      if (portrait === undefined) {
         continue
       }
-      const id = entry.id
-      if (id === undefined || id === '') {
-        continue // a pre-create ledger marker is not (yet) a container
-      }
-      if (HashSet.has(seen, keyFor(entry.backend, id))) {
-        continue
-      }
-      seen = HashSet.add(seen, keyFor(entry.backend, id))
-      const inspect = yield* safeInspect(runtime.inspect(shellHandle(id)))
-      const logTail = yield* safeLogTail(runtime.logs(shellHandle(id)))
       rows.push({
         source: 'ledger',
         backend: entry.backend,
         name: entry.name,
-        id,
+        id: entry.id ?? '',
         image: '',
         host: FLEET_HOST,
-        state: inspectState(inspect),
+        state: inspectState(portrait.inspect),
         ports: [],
-        logTail: capTail(logTail, options.tailLines ?? FLEET_TAIL_LINES),
+        logTail: portrait.logTail,
       })
     }
     return rows
   })
-
-/** Applies the caller's tail budget to an already-bounded tail. */
-const capTail = (tail: ReadonlyArray<string>, budget: number): ReadonlyArray<string> =>
-  tail.length > budget ? tail.slice(tail.length - budget) : tail

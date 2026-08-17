@@ -7,9 +7,7 @@
  * exists on every platform this library ships for (Linux, macOS, and
  * Windows 10+ as bsdtar's `tar.exe`).
  */
-import { spawn } from 'node:child_process'
-
-import { BackendError } from '../model/errors.js'
+import { runSpawnCli } from '../internal/spawn.js'
 
 /** One `tar <args>` invocation's outcome — never rejects on a nonzero exit, only on spawn failure or timeout. */
 export interface TarCliResult {
@@ -58,43 +56,10 @@ export function tarDirArg(dir: string, platform: NodeJS.Platform = process.platf
  * `docker cp`: the tool already exists on every platform this library
  * ships for. Spawn failure and timeout (the child is killed via `spawn`'s
  * own `timeout` option — no global timers) are the two rejections; a
- * nonzero tar exit is a result, never a rejection.
+ * nonzero tar exit is a result, never a rejection. The
+ * spawn-collect-timeout runner is shared with the docker backend's
+ * `runDockerCli`; `cwd` = the archive's parent directory is the tar
+ * edge's one extra parameter.
  */
-export const runTar = (args: readonly string[], timeoutMs: number, cwd: string): Promise<TarCliResult> => {
-  const { promise, resolve, reject } = Promise.withResolvers<TarCliResult>()
-  const child = spawn('tar', [...args], { stdio: ['ignore', 'pipe', 'pipe'], cwd, timeout: timeoutMs })
-  let stdout = ''
-  let stderr = ''
-  child.stdout.setEncoding('utf8')
-  child.stderr.setEncoding('utf8')
-  child.stdout.on('data', (chunk: string) => {
-    stdout += chunk
-  })
-  child.stderr.on('data', (chunk: string) => {
-    stderr += chunk
-  })
-
-  let settled = false
-  child.once('error', (err) => {
-    if (settled) {
-      return
-    }
-    settled = true
-    if ((err as NodeJS.ErrnoException).code === 'ETIMEDOUT') {
-      reject(
-        BackendError.make({ message: `tar ${args.join(' ')} timed out after ${timeoutMs}ms and was force-killed` }),
-      )
-      return
-    }
-    reject(BackendError.make({ message: `failed to spawn 'tar ${args.join(' ')}': ${err.message}` }))
-  })
-
-  child.once('close', (code) => {
-    if (settled) {
-      return
-    }
-    settled = true
-    resolve({ exitCode: code ?? -1, stdout, stderr })
-  })
-  return promise
-}
+export const runTar = (args: readonly string[], timeoutMs: number, cwd: string): Promise<TarCliResult> =>
+  runSpawnCli('tar', args, timeoutMs, { cwd })

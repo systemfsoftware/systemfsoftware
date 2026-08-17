@@ -17,8 +17,9 @@
  *
  * @since 0.1.0
  */
-import { spawn, spawnSync } from 'node:child_process'
-import { BackendError } from '../model/errors.js'
+import { spawnSync } from 'node:child_process'
+
+import { runSpawnCli } from '../internal/spawn.js'
 
 /** One `docker <args>` invocation's outcome — never rejects on a nonzero exit, only on spawn failure or timeout. */
 export interface DockerCliResult {
@@ -51,46 +52,12 @@ export const DockerCli = {
  * Runs one `docker <args>` invocation to completion over a child process.
  * Spawn failure and timeout (the child is killed via `spawn`'s own `timeout`
  * option — no global timers) are the two rejections; a nonzero exit code is
- * returned as data so the caller can surface the tool's own stderr.
+ * returned as data so the caller can surface the tool's own stderr. The
+ * spawn-collect-timeout runner is shared with the checkpoint archive's
+ * `runTar` (the same contract, the `docker` binary label in the messages).
  */
-export const runDockerCli = (args: readonly string[], timeoutMs: number): Promise<DockerCliResult> => {
-  const { promise, resolve, reject } = Promise.withResolvers<DockerCliResult>()
-  const child = spawn('docker', args, { stdio: ['ignore', 'pipe', 'pipe'], timeout: timeoutMs })
-  let stdout = ''
-  let stderr = ''
-  child.stdout.setEncoding('utf8')
-  child.stderr.setEncoding('utf8')
-  child.stdout.on('data', (chunk: string) => {
-    stdout += chunk
-  })
-  child.stderr.on('data', (chunk: string) => {
-    stderr += chunk
-  })
-
-  let settled = false
-  child.once('error', (err) => {
-    if (settled) {
-      return
-    }
-    settled = true
-    if ((err as NodeJS.ErrnoException).code === 'ETIMEDOUT') {
-      reject(
-        BackendError.make({ message: `docker ${args.join(' ')} timed out after ${timeoutMs}ms and was force-killed` }),
-      )
-      return
-    }
-    reject(BackendError.make({ message: `failed to spawn 'docker ${args.join(' ')}': ${err.message}` }))
-  })
-
-  child.once('close', (code) => {
-    if (settled) {
-      return
-    }
-    settled = true
-    resolve({ exitCode: code ?? -1, stdout, stderr })
-  })
-  return promise
-}
+export const runDockerCli = (args: readonly string[], timeoutMs: number): Promise<DockerCliResult> =>
+  runSpawnCli('docker', args, timeoutMs)
 
 /**
  * The kill-command prefixes the hygiene reaper and watchdog use for a

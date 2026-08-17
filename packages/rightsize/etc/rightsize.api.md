@@ -266,7 +266,6 @@ export type CommandArguments = Schema.Schema.Type<typeof CommandArguments>;
 export interface CommandRunnerService {
     readonly fetchStdoutExact: (args: readonly string[], timeoutMs: number) => Effect.Effect<string, BackendError>;
     readonly invoke: (args: readonly string[], timeoutMs: number) => Effect.Effect<ExecResult, BackendError>;
-    readonly invokePromise: (args: readonly string[], timeoutMs: number) => Promise<ExecResult>;
     // Warning: (ae-forgotten-export) The symbol "CliChild" needs to be exported by the entry point index.d.ts
     readonly spawn: (args: readonly string[], options?: {
         readonly stdin?: 'ignore' | 'pipe';
@@ -869,9 +868,6 @@ export const MAX_ALLOCATE_ATTEMPTS = 100;
 
 // @public
 export const MSB_CHECKPOINT_PREFIX = "rz-ckpt-";
-
-// @public
-export const msbBinaryFor: (config: RightsizeConfigService, cacheDir: string) => string | undefined;
 
 // @public
 export const NetworkAlias: Schema.refine<string, Schema.String>;
@@ -1584,8 +1580,8 @@ export const writeRegistryAtomic: (cacheDir: string, hash: string, entry: ReuseR
 
 // Warnings were encountered during analysis:
 //
-// dist/index.d.ts:537:5 - (ae-forgotten-export) The symbol "ReaperKillCommands" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:540:5 - (ae-forgotten-export) The symbol "ProcessTimeSource" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:533:5 - (ae-forgotten-export) The symbol "ReaperKillCommands" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:536:5 - (ae-forgotten-export) The symbol "ProcessTimeSource" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 
