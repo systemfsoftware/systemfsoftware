@@ -52,8 +52,8 @@ The instrument that should have caught the blend cannot see it. The rule is keye
 **Rule correctness**
 
 - R4. The rule decides "this module performs I/O" from the module's own syntax tree: an import from an I/O-performing specifier whose imported binding is not type-only and appears in a call position.
-- R5. The rule's arm that judges a separate test file is deleted. Whether the module a test imports performs I/O is a cross-file fact, and a rule that sees one file cannot decide it.
-- R6. Each message the rule emits names only what its predicate decided. The current text asserts a semantic verdict the predicate never reaches.
+- R5. The successor carries no arm that judges a separate test file. Whether the module a test imports performs I/O is a cross-file fact, and a rule that sees one file cannot decide it, so the class is recorded unowned rather than reported as covered.
+- R6. Each message the rule emits names only what its predicate decided, and claims no semantic verdict the predicate never reaches.
 
 **The split**
 
@@ -147,25 +147,25 @@ flowchart TB
 
 ### System-Wide Impact
 
-Replacing a filename-keyed rule with a content-triggered one changes behaviour for every consumer, not only this tree. A repo that names files outside `.acl|.store|.adapter|.handler` sees a diagnostic where the old rule was silent; a repo that relied on the filename convention stops seeing one on files that perform no I/O. Both directions are the fix, not a regression, and R6's message wording is what makes the new diagnostic legible when it arrives.
+This plan adds a rule; it removes none. An adopter who has spread the test-placement preset newly sees a diagnostic on a module that performs I/O and carries an in-source test block, whatever the file is named. The opposite direction — a file named to the old suffix convention that performs no I/O ceasing to be flagged — belongs to the release that deletes the filename-keyed rule, not to this one, and R6's message wording is what makes the new diagnostic legible when it arrives.
 
-Measured reach: across 182 vendored files using the in-source test idiom, 5 would receive a diagnostic — all in Effect's `doctest` and `jsdocs` tooling packages, all performing real filesystem I/O. Dropping the separate-test-file judgement removes diagnostics only; it can surface no new ones.
+Measured reach: across 182 vendored files using the in-source test idiom, 5 would receive a diagnostic — all in Effect's `doctest` and `jsdocs` tooling packages, all performing real filesystem I/O. The successor judges only the module it is given, so it surfaces nothing at all on a separate test file.
 
 The successor lands in a plugin that already publishes a recommended preset, so this adds no new public surface of its own. What it does add is one more rule inside an existing preset an adopter has already spread, which is a real cost to them and needs a stated bar rather than an assurance. The bar this rule clears, and the one a later rule must: the predicate is decidable from a single file's syntax tree, and it has been measured quiet on a foreign corpus that did not opt into our conventions — here 394 internal source files and 182 vendored files using the idiom the rule judges, with every diagnostic on both accounted for.
 
 ### Risks and Dependencies
 
-- Risk: the rule fires on adopter code that was previously silent, and an adopter reads it as a regression. Mitigation: R6 requires each message to name what the predicate decided, and U6's changeset states both directions of the behaviour change in terms a consumer can act on.
+- Risk: the rule fires on adopter code that was previously silent, and an adopter reads it as a regression. Mitigation: R6 requires each message to name what the predicate decided, and U6's changeset describes the diagnostic a consumer will newly see.
 - Risk: the I/O specifier set is a judgement call, and a specifier omitted from it is a silent false negative. Mitigation: the predicate keys on a call against a non-type import, so a missing specifier under-reports rather than over-reports — the safe direction at error severity.
 - Risk: `mergeConfigs` turns out to reach ambient state, splitting U3 into two units. Mitigation: the Assumptions entry names it as defaulted and directs a first-read confirmation before the split lands.
-- Dependency, blocking: `docs/plans/2026-08-16-001-refactor-cell-class-collapse-plan.md` deletes the filename-keyed rule this one succeeds. Its R2 deletes every rule keying on a cell-role filename suffix, and its KTD4 enumerates `acl`, `adapter`, `handler` and `store` — all four gates that rule used. Nothing is repaired in place: it is deleted there, and its class is re-owned here.
+- Dependency, non-blocking: `docs/plans/2026-08-16-001-refactor-cell-class-collapse-plan.md` deletes the filename-keyed rule this one succeeds — its R2 removes every rule keying on a cell-role filename suffix and its KTD4 enumerates `acl`, `adapter`, `handler` and `store`, all four gates that rule used. That deletion is a hard gate only under the abandoned framing where this plan retargeted the rule in place. The successor is a different rule, in a different package, under a different name, and touches nothing in `core`, so the two land in either order: until the deletion ships, a doomed rule that reports zero here sits beside a sound one, which is a strict improvement on the status quo. The deletion stays with the plan that owns all thirteen, because splitting one out would fragment a single coordinated breaking release and leave that plan's changeset over-claiming.
 - Dependency: none on the port-discipline plan landing. That plan defers the shell's decision leakage to this one, and states the regex removal belongs to the retirement plan rather than to itself.
 
 ### Sequencing
 
-The Evaluator change lands before the migration it judges, and separately from it.
+The Evaluator change lands in its own commit, never sharing one with the migration. Their order is free: the successor never judges this migration, so nothing is gained by staging one ahead of the other.
 
-1. The retirement plan's deletion of the filename-keyed rule lands first. This plan does not re-register that rule; it supplies the successor for the class the deletion leaves unowned.
+1. Either order. The retirement plan's deletion of the filename-keyed rule is independent of this work: this plan re-registers nothing in `core` and supplies the successor for the class that deletion leaves unowned.
 2. U2 adds the successor rule, with its gate observed red against a planted violation and green after.
 3. U3 and U4 split the decision from the shell. U4 depends on U3's returned request type.
 4. U5 re-expresses the resolver-dependent scenarios against the decision, which is what makes the CI failure go away at its root.
@@ -179,7 +179,7 @@ The Evaluator change lands before the migration it judges, and separately from i
 
 - Goal: a new rule decides from a module's own syntax tree whether it performs I/O, and reports an in-source test block in such a module.
 - Requirements: R1, R2, R3, R4, R5, R6.
-- Dependencies: the retirement plan's deletion of the filename-keyed rule.
+- Dependencies: none. The successor is a new rule in a package this plan does not otherwise touch.
 - Files: `packages/oxlint-plugins/test-placement/src/rules/no-io-module-in-source-test.ts`, `packages/oxlint-plugins/test-placement/src/rules/no-io-module-in-source-test.config.ts`, `packages/oxlint-plugins/test-placement/src/rules/__tests__/no-io-module-in-source-test.test.ts`, `packages/oxlint-plugins/test-placement/src/index.ts`, `packages/oxlint-plugins/test-placement/README.md`.
 - Approach:
   1. Declare the predicate in the config module: the I/O specifier set spanning node builtins and Effect platform modules, and the message pair.
@@ -204,7 +204,7 @@ The Evaluator change lands before the migration it judges, and separately from i
 
 - Goal: a pure function decides the next act; nothing in it reads a file or resolves a specifier.
 - Requirements: R7, R8.
-- Dependencies: U2.
+- Dependencies: none. U2 is an Evaluator change in a different package, and the successor never judges this migration — the migrated modules keep their tests in `tests/` and `__tests__/`, so no in-source block exists for it to report.
 - Files: `packages/stryker-js/mutation-run/src/config/extends-step.ts`, `packages/stryker-js/mutation-run/src/config/resolve-extends.ts`.
 - Approach:
   1. Declare the request the decision can return: done with merged options, read an absolute path, resolve a specifier from a directory, or refuse with a named reason. A cycle and an `extends` that is not a string are refusals, not thrown errors.
@@ -273,7 +273,7 @@ The Evaluator change lands before the migration it judges, and separately from i
 - Dependencies: U2, U3, U4, U5.
 - Files: `.changeset/`, `packages/oxlint-plugins/test-placement/README.md`.
 - Approach:
-  1. A minor changeset for the test-placement plugin: a new rule reports an in-source test block in a module that calls into a filesystem or process API. Repos whose files do not follow the old suffix convention will begin to see it fire; files named per that convention that perform no I/O will stop being flagged; and no rule inspects separate test files for this any more.
+  1. A minor changeset for the test-placement plugin: a new rule reports an in-source test block in a module that calls into a filesystem or process API, whatever the file is named. Say only what this release does — the old filename-keyed rule's removal ships from the plan that owns it, and claiming it here would describe a change the consumer does not receive.
   2. A patch changeset for the mutation-run package: config inheritance no longer depends on which module resolver serves the process.
   3. Verify whether the turbo build hash moved for each package before deciding a bump is required.
 - Test scenarios: `Test expectation: none -- release metadata and prose, no behaviour of its own.`
